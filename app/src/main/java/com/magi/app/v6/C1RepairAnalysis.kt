@@ -175,6 +175,23 @@ object C1RepairAnalysis {
             return total
         }
         val baseline = jointC1()
+        // 焦点職員 i0 の、ある配置における c1 残（rules × i0 のみ）。
+        val fi = m.indexOf(v.staff)
+        fun focusResidualOf(arr: Array<IntArray>): Int {
+            if (fi < 0) return 0
+            var r = 0
+            for (c in rules) {
+                if (!p.canDo(v.staff, c.shiftIdx)) continue
+                var jj = 0
+                while (jj <= p.T - c.day1) {
+                    var z = 0
+                    for (l in 0 until c.day1) if (arr[fi][jj + l] == c.shiftIdx) z++
+                    if (z < c.day2) r++
+                    jj++
+                }
+            }
+            return r
+        }
         if (baseline == 0) return ExactResult(0, 0, null, true, 0)
 
         // 各日 d の M 多重集合（並べ替え対象）と、その日の固定要素（希望ロック職員は自分の希望へ固定）。
@@ -182,6 +199,12 @@ object C1RepairAnalysis {
         var budgetHit = false
         var best = baseline
         var bestRows: Array<IntArray>? = null
+        // [3.274.0 監査で発見・修正] A4 provenWalls 用の焦点残の最小値。探索した全ての葉（=完全配置）で
+        //   焦点残を測り最小を追跡する。旧実装は探索後に「復元されない rows（＝最後の葉）」から焦点残を
+        //   計算しており、①rows が探索の副作用で汚染 ②min-joint と min-focus は別物、の2重の誤りで
+        //   列挙順依存の false wall を生んでいた（provenWallsの「証明つき/誤検知ゼロ」契約違反）。
+        //   葉ごとに測って最小を取ることで、exhaustive時に「coverage入替でも焦点は解消不能」を厳密に証明する。
+        var minFocusResidual = focusResidualOf(rows)   // rows は現時点で元の盤面（=baseline配置）
 
         // DFS: days を1つずつ、その日の多重集合を M へ割り当てる全単射を枚挙。
         fun assignDay(dayIdx: Int, onComplete: () -> Unit) {
@@ -233,29 +256,17 @@ object C1RepairAnalysis {
         assignDay(0) {
             val jc = jointC1()
             if (jc < best) { best = jc; bestRows = Array(m.size) { rows[it].clone() } }
+            // 葉(=完全配置)ごとに焦点残を測り最小を追跡（rows はこの時点で全 days 割当済み）。
+            val fr = focusResidualOf(rows)
+            if (fr < minFocusResidual) minFocusResidual = fr
         }
 
-        val bestArr = bestRows ?: rows   // 改善なしなら現状(=元)配置
-        // 焦点職員 i0 の、最良配置における c1 残（rules × i0 のみ）。
-        val fi = m.indexOf(v.staff)
-        var focusResidual = 0
-        if (fi >= 0) {
-            for (c in rules) {
-                if (!p.canDo(v.staff, c.shiftIdx)) continue
-                var jj = 0
-                while (jj <= p.T - c.day1) {
-                    var z = 0
-                    for (l in 0 until c.day1) if (bestArr[fi][jj + l] == c.shiftIdx) z++
-                    if (z < c.day2) focusResidual++
-                    jj++
-                }
-            }
-        }
         val patch = bestRows?.let { br ->
             val diff = ArrayList<IntArray>()
             for (mi in m.indices) for (d in days) if (br[mi][d] != s[m[mi]][d]) diff.add(intArrayOf(m[mi], d, br[mi][d]))
             if (diff.isEmpty()) null else diff
         }
-        return ExactResult(best, baseline, patch, !budgetHit, focusResidual)
+        // exhaustive のとき minFocusResidual は「coverage入替でどう並べても焦点はこれ以上減らせない」証明値。
+        return ExactResult(best, baseline, patch, !budgetHit, minFocusResidual)
     }
 }

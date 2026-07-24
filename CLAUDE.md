@@ -1707,6 +1707,48 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 3.273.0のA4/診断3件を敵対監査で確認・修正（3.274.0, 実機ログ4fca3273→ユーザー指示「敵対監査」）
+実機ログ（PORTFOLIO 300s×2, 最終 必須=4 合計=166）で 3.271.0（PersonalJointLNS 2591ms/total 174→166・
+C1JointLNS 8006ms＝飢餓解消の実効確認）／3.272.0（MUS「証明つき」が福澤B4・8/1・8/6で発火）／3.273.0
+（C1ExactRepair 実行・改善0＝best-effort予想どおり無害）が意図どおり動くことを確認。HARD=4（covU: Dﾃ×3+
+Aｱ×1）は禁止連続/希望による構造的なもので不具合ではないことを追認。**そのうえで3.273.0の新規コード
+（C1RepairAnalysis）を3本の並列サブエージェントで敵対監査し、自分でコード直読・独立検証して3件を修正**。
+全て A4診断/表示のみ＝**スコアリング・勤務表・本番の `applyC1ExactWindowRepair`（patch/exhaustive のみ
+使用＝元から正しい）に影響なし**。
+- **[CONFIRMED, 正しさ] `C1RepairAnalysis.solveWindow` の focusResidual が未復元の rows から算出**:
+  分枝限定 DFS の `place()` は下降時に `rows[mi][d]=sh` を書くが、バックトラックで復元するのは `used[si]`
+  だけで **`rows` は復元されない**（探索後の `rows` は最後に辿った葉のまま）。旧実装は `bestArr = bestRows ?: rows`
+  で bestRows==null（=元配置が既に最善）のとき**この探索ゴミ配置**から focusResidual を算出しており、
+  `provenWalls`（A4=どう並べ替えても焦点を解消不能と厳密証明する窓）が**列挙順依存の false positive** を
+  出しうる欠陥だった（加えて min-joint 配置の焦点残差 ≠ min-focus 残差＝そもそも別物）。**修正**: `baseline`
+  算出直後に `focusResidualOf(arr)` ヘルパーを新設し、`var minFocusResidual = focusResidualOf(rows)`（=baseline）
+  で初期化。葉コールバックで min-joint（`jointC1`）と min-focus（`focusResidualOf`）を**独立に**追跡し、
+  探索後 rows に依存する `bestArr` ブロックを撤去、`ExactResult(best, baseline, patch, !budgetHit,
+  minFocusResidual)` を返す。`exhaustive && minFocusResidual>0` が「coverage入替でどう並べても焦点はこれ以上
+  減らせない」の**健全な**証明値になる。
+  **[重要] 旧テストが欠陥挙動を固定していた**: `exactSolveProvesCoverageNeutralWall...`（3職員・各日X1個=計3個・
+  i0が2要求）は**Xトークン3個あればi0は2個取れる＝壁でない**構成を、rows未復元バグ由来の false wall で「壁」と
+  誤検出していた。単一トークン構成（窓内 X トークンが1個のみ・i0がX≥2要求＝真の壁）へ再設計
+  （`...WhenTokensAreTrulyScarce`）。旧構成は**壁を出さないこと**を固定する回帰テスト
+  `provenWallsDoesNotFalselyFlagWhenFocusIsCoverageNeutrallySatisfiable` へ転用。
+- **[CONFIRMED, 表示] 需給サマリの covO/covU を月間差から日次 covCell 合計へ**（`V6SanityPort` 検査0）:
+  過剰/不足を月間 `現状−需要`（`Σcnt` − `Σneed1`）で算出・ラベルしていたが、これは**毎日需要のあるシフト
+  （Dﾃ等）でしか実 covO/covU と一致しない**。稀にしか need1 が無いシフト（B4: need1=0/need2=1 等）では
+  「月間の過剰配置数」を covO 件数と誤表示していた（実機ログ「B4 過剰6(covO)」だが実 covO=1）。**修正**:
+  日次 `p.covUCell(k,j,g)`/`p.covOCell(k,j,g)`（source of truth）の全日合計へ置換し、0 のときは note を出さない。
+  golden_state で検証: **B4（需要0/現状25）・休（需要0/現状6）が covO note 非表示**（need2 が全て吸収＝実 covO=0）に
+  なり、**Dﾃ（毎日需要）は正しく過剰4(covO)** を維持。
+- **[CONFIRMED, 表示] 構造HARD下限=0 の文言が過大主張**: 「各シフトは担当者数で需要を満たせる＝データ起因の
+  必須違反なし」は、covU が希望/禁止連続で構造的に発生する局面で誤読を招く（`structuralHardFloor` 自体は
+  hardFloor 用途の担当者数ベースで正しく、文言のみが問題）。「担当者数の観点では各シフトが需要を満たせる。
+  希望/禁止連続による構造的な人員不足は別途 CoverageDiag/設定ミス を参照」へ緩和。
+- **監査で健全確認（変更なし）**: ConstraintMus（検査9）は並列エージェントが6項目全て健全（sound）と確認。
+  本番の `applyC1ExactWindowRepair` は patch/exhaustive のみ使用＝focusResidual バグの影響を受けない
+  （`provenWalls` はテストからのみ呼ばれる A4診断）。
+- 検証: ホストJVM（kotlin-compiler-embeddable 2.0.21）で v6/model/root を実コンパイル・**全271テストgreen**
+  （3.273.0の270＋回帰1）。C1RepairAnalysisTest 6件（再設計2件含む）green。需給修正は golden_state で
+  実出力を目視確認。読取専用の診断・表示のみ＝HF77非該当・スコアリング不変。
+
 ## C1 Repair Analysis + 厳密窓修復（A1-A6, 3.273.0, ユーザー指示「A1からA6を実装する。コスト無視する」）
 残提案一覧のA1〜A6を実装。「評価器は修復を考えない」を核に、C1の解析・修復・ディスパッチを分離。
 - **[技術的再解釈] A3「CP-SATレーン」は OR-Tools でなく純Kotlin厳密ソルバで実装**（コストでなく検証可能性

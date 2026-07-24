@@ -69,19 +69,32 @@ class C1RepairAnalysisTest {
     }
 
     @Test
-    fun exactSolveProvesCoverageNeutralWallWhenTokensAreScarce() {
-        // 各日 X が1つしかない構成で i0 が「X 3日窓≥2」を要求 → どう入れ替えても i0 は窓内 X を2回持てない
-        // （3日で X トークンは3個だが1日1個・他職員も奪い合い）。exhaustive で焦点残>0 を証明.
-        // day: 0 1 2  i0: Y 休 Y  a: X Y X  b: 休 X 休  → 各日 X ちょうど1つ.
-        val s = st(3, 3, listOf(listOf(2, 0, 2), listOf(1, 2, 1), listOf(0, 1, 0)), listOf(C1Row("3", "X", "2")))
+    fun exactSolveProvesCoverageNeutralWallWhenTokensAreTrulyScarce() {
+        // [3.274.0 監査で再設計] 窓内に X トークンが**1個しかない**構成で i0 が「X 3日窓≥2」を要求。
+        //   どう並べ替えても i0 は窓内 X を最大1回しか持てない＝真の壁（minFocusResidual=1>0 を証明）。
+        //   旧テストは「各日 X 1個(計3個)」で i0 が2個取れる＝壁でない構成を、rows未復元バグ由来の
+        //   false wall で「壁」と誤検出していたのを固定していた（本セッションの監査で判明・是正）。
+        // day: 0 1 2  i0: Y Y Y (X=0)  a: X 休 休 (X=1のみ)  → 窓内 X トークンは day0 の1個だけ.
+        val s = st(3, 2, listOf(listOf(2, 2, 2), listOf(1, 0, 0)), listOf(C1Row("3", "X", "2")))
         val p = Problem(s); val sched = s.schedule.toIntArray2D()
         val v = C1RepairAnalysis.analyze(p, sched).first { it.staff == 0 }
         val r = C1RepairAnalysis.solveWindow(p, sched, v)
         assertTrue("探索完了", r.exhaustive)
-        assertTrue("焦点職員の窓は coverage入替でも解消不能(残>0)", r.focusResidual > 0)
-        assertNull("改善する patch は存在しない", r.patch)
+        assertTrue("焦点は coverage入替でも X を2回持てない(残>0を証明)", r.focusResidual > 0)
+        assertNull("焦点のjoint改善patchは存在しない", r.patch)
         val walls = C1RepairAnalysis.provenWalls(p, sched)
-        assertTrue("provenWalls が i0 の壁を検出", walls.any { it.staff == 0 && it.shift == 1 })
+        assertTrue("provenWalls が i0 の真の壁を検出", walls.any { it.staff == 0 && it.shift == 1 })
+    }
+
+    @Test
+    fun provenWallsDoesNotFalselyFlagWhenFocusIsCoverageNeutrallySatisfiable() {
+        // [3.274.0 監査回帰] 各日 X が1個ずつ(計3個)なら i0 は day0,day2 の X を取って窓を充足できる
+        //   ＝壁ではない。min-joint配置では i0 が1個止まりでも、min-focus では0にできる。旧バグは
+        //   これを false wall と誤検出していた。健全化後は wall を出さないことを固定する。
+        val s = st(3, 3, listOf(listOf(2, 0, 2), listOf(1, 2, 1), listOf(0, 1, 0)), listOf(C1Row("3", "X", "2")))
+        val p = Problem(s); val sched = s.schedule.toIntArray2D()
+        val walls = C1RepairAnalysis.provenWalls(p, sched)
+        assertTrue("解消可能な窓を壁と誤検出しない", walls.none { it.staff == 0 })
     }
 
     @Test

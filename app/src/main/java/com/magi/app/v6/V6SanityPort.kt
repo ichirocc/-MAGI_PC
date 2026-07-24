@@ -666,7 +666,7 @@ object V6SanityPort {
             val floor = forced.sumOf { it.amount }
             if (floor > 0) out.add("[W] 構造HARD下限: 担当者不足で covU=$floor が解消不能（配布不可はデータ起因）: " +
                 forced.joinToString(" / ") { "${it.shiftSymbol} ${it.cells}日 不足${it.amount}" })
-            else out.add("[I] 構造HARD下限: 0（各シフトは担当者数で需要を満たせる＝データ起因の必須違反なし）")
+            else out.add("[I] 構造HARD下限: 0（担当者数の観点では各シフトが需要を満たせる。希望/禁止連続による構造的な人員不足は別途 CoverageDiag/設定ミス を参照）")
         }
         fun emit(byFam: Map<String, MutableList<String>>, cap: Int) {
             for ((fam, items) in byFam) {
@@ -701,9 +701,18 @@ object V6SanityPort {
                 val hasApt = aptCnt > 0
                 if (demand == 0 && !hasRange && !hasApt) continue   // 需給の概念が薄いシフトは省略
                 val notes = ArrayList<String>()
-                // 実際の過不足: 最適化結果(現状) vs 日次需要 = covO/covU の方向。
-                if (demand > 0 && cur > demand) notes.add("現状${cur}>需要${demand}→過剰${cur - demand}(covO)")
-                if (demand > 0 && cur < demand) notes.add("現状${cur}<需要${demand}→不足${demand - cur}(covU)")
+                // [3.274.0 監査で修正] 実際の過不足は**日次 covOCell/covUCell の合計**（source of truth）で示す。
+                //   旧実装は月間の `現状 − 需要` を covO/covU とラベルしていたが、毎日需要のあるシフト(Dﾃ 等)
+                //   でしか両者は一致せず、稀にしか需要のないシフト(B4 等: need1=0/need2=1)では「月間の過剰配置数」を
+                //   covO件数と誤表示していた（実機ログ「B4 過剰6(covO)」だが実covO=1）。日次 cov の合計へ統一。
+                var covUreal = 0; var covOreal = 0
+                for (j in 0 until p.T) {
+                    var g = 0; for (i in 0 until p.S) if (s[i][j] == k) g++
+                    covUreal += p.covUCell(k, j, g)
+                    covOreal += p.covOCell(k, j, g)
+                }
+                if (covUreal > 0) notes.add("現状${cur}(需要${demand})→不足${covUreal}(covU)")
+                if (covOreal > 0) notes.add("現状${cur}(需要${demand})→過剰${covOreal}(covO)")
                 // 構造要因(過剰): 各人が下限/適切回数まで埋める圧力(=確実に埋まる量)の合計が需要超過。
                 val pull = maxOf(loSum, aptSum)
                 val pullSrc = if (aptSum >= loSum) "適切回数" else "下限"
