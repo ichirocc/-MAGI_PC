@@ -7,8 +7,8 @@ package com.magi.app.v6
  *
  *  - dayToWindows      : day → その日を含む不足窓（重複窓の同時解消判断に）
  *  - staffRuleWindows  : (staff,ruleIndex) → その職員・規則で不足している窓
- *  - expectedGain      : (staff,day) → その日を「不足窓のシフト」に変えたとき解消する窓不足数の最大
- *                        （希望固定/禁止連続で実際に置けない候補は 0 扱い）
+ *  - expectedGain      : (staff,day,targetShift) → その日を targetShift に変えたとき解消する窓不足数の最大
+ *                        （希望固定/禁止連続で実際に置けない候補は 0 扱い。3.279.0でシフト分離）
  *  - donorMargin       : (staff,day) → 現在そこにある c1シフトを抜いても壊れない余裕（>0=安全ドナー）
  *
  * 本索引は候補生成・枝刈り・診断のための情報のみを提供し、採否には一切関与しない
@@ -34,15 +34,20 @@ object C1RepairIndex {
         fun activeWindows(staff: Int, ruleIndex: Int): List<C1RepairAnalysis.C1WindowViolation> =
             staffRuleWindows[key(staff, ruleIndex)] ?: emptyList()
 
-        /** その日を不足窓シフトへ変えたとき解消する窓不足数の最大（実際に置けない候補は 0）。 */
-        fun expectedGain(staff: Int, day: Int): Int = gain[key(staff, day)] ?: 0
+        /**
+         * その日を targetShift へ変えたとき解消する窓不足数の最大（実際に置けない候補は 0）。
+         * [3.279.0/外部レビューC1-07] 旧 API は (staff,day) のみで、同日に別シフトの不足窓が併存すると
+         * gain が混合されどのシフトへの gain か判別不能だった。targetShift をキーに含めて分離。
+         */
+        fun expectedGain(staff: Int, day: Int, targetShift: Int): Int = gain[key3(staff, day, targetShift)] ?: 0
 
         /** そのセルの c1シフトを抜いても壊れない余裕。c1規則が依存しないセルは無限大（常に安全）。 */
         fun donorMargin(staff: Int, day: Int): Int = donor[key(staff, day)] ?: Int.MAX_VALUE
     }
 
-    // S,T は実運用で高々数十。10万進法で衝突しない一意キー。
+    // S,T,K は実運用で高々数十。10万進法で衝突しない一意キー。
     private fun key(a: Int, b: Int): Long = a.toLong() * 100_000L + b
+    private fun key3(a: Int, b: Int, c: Int): Long = (a.toLong() * 100_000L + b) * 100_000L + c
 
     fun build(p: Problem, schedule: Array<IntArray>): Index {
         val s = normalizeSchedule(schedule, p)
@@ -61,7 +66,8 @@ object C1RepairIndex {
         for (w in windows) {
             for (opp in C1RepairAnalysis.opportunities(p, s, w)) {
                 if (opp.wishConflict || opp.patternRisk) continue
-                val k = key(w.staff, opp.day)
+                // [3.279.0/C1-07] キーに対象シフトを含める（同日別シフトの gain 混合を解消）。
+                val k = key3(w.staff, opp.day, w.shift)
                 if (opp.gain > (gain[k] ?: 0)) gain[k] = opp.gain
             }
         }

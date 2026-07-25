@@ -50,7 +50,10 @@ object C1RepairAnalysis {
         val baselineJointC1: Int,    // 変更前の joint c1
         val patch: List<IntArray>?,  // [[staff,day,newShift],...]（minを達成する差分）。改善なし=null
         val exhaustive: Boolean,     // node予算内で全探索を完了したか（true のとき minJointC1 は証明）
-        val focusResidual: Int,      // 最良配置での焦点職員のc1残（exhaustive && >0 ＝A4: coverage入替でも解消不能）
+        // [3.279.0/外部レビューC1-03] **対象窓（v.ruleIndex/v.start）だけ**の残 fire（0 or 1）の全葉最小。
+        //   旧: 焦点職員の全ルール×全窓の残数だったため、対象窓が解消可能でも別窓（別シフトのルール含む）が
+        //   残るだけで「この窓は壁」と誤認していた（provenWalls の false positive）。
+        val focusResidual: Int,
     )
 
     /** A4: coverage入替（同シフト多重集合の並べ替え）でも解消できないと**証明された**窓（cross-staff の構造的壁）。 */
@@ -65,7 +68,10 @@ object C1RepairAnalysis {
         val out = ArrayList<CoverageNeutralWall>()
         val seen = HashSet<Long>()
         for (v in analyze(p, schedule)) {
-            val f = v.staff.toLong() * 1000 + v.shift
+            // [3.279.0/外部レビューC1-04] 旧: staff×shift のみのキーで、同一職員・同一シフトの**独立した複数の
+            //   不足窓**があっても最初の1窓しか証明探索せず、後続の真の壁を見逃していた。窓単位
+            //   (staff×ruleIndex×start) でデデュープする（provenWalls はテスト/診断専用＝コスト増は許容）。
+            val f = (v.staff.toLong() * 100_000L + v.ruleIndex) * 100_000L + v.start
             if (!seen.add(f)) continue
             val r = solveWindow(p, schedule, v, cfg)
             if (r.exhaustive && r.focusResidual > 0) out.add(CoverageNeutralWall(v.staff, v.shift, v.start, v.windowDays))
@@ -185,22 +191,17 @@ object C1RepairAnalysis {
             return total
         }
         val baseline = jointC1()
-        // 焦点職員 i0 の、ある配置における c1 残（rules × i0 のみ）。
+        // [3.279.0/外部レビューC1-03] 焦点職員 i0 の**対象窓（v.start〜v.start+v.windowDays）だけ**の残 fire。
+        //   旧: 全ルール×全窓の残数＝対象窓が解消可能でも別窓が残るだけで「この窓は壁」と誤認していた。
         val fi = m.indexOf(v.staff)
         fun focusResidualOf(arr: Array<IntArray>): Int {
             if (fi < 0) return 0
-            var r = 0
-            for (c in rules) {
-                if (!p.canDo(v.staff, c.shiftIdx)) continue
-                var jj = 0
-                while (jj <= p.T - c.day1) {
-                    var z = 0
-                    for (l in 0 until c.day1) if (arr[fi][jj + l] == c.shiftIdx) z++
-                    if (z < c.day2) r++
-                    jj++
-                }
+            var z = 0
+            for (l in 0 until v.windowDays) {
+                val d = v.start + l
+                if (d in 0 until p.T && arr[fi][d] == v.shift) z++
             }
-            return r
+            return if (z < v.required) 1 else 0
         }
         if (baseline == 0) return ExactResult(0, 0, null, true, 0)
 
@@ -245,12 +246,18 @@ object C1RepairAnalysis {
                 }
                 val i = m[mi]
                 val wl = if (p.wishLocked(i, d)) p.wish[i][d] else -1
+                // [3.279.0/外部レビューC1-10] 同一シフトが多重集合に複数あるとスロット単位の列挙が同値部分木を
+                //   重複探索し、node予算を浪費して不必要に exhaustive=false になっていた。同じシフト値は
+                //   職員 mi につき1回だけ試す（残り多重集合が同じ＝部分木は同値、の標準的な重複排除）。
+                val tried = HashSet<Int>()
                 for (si in orderedSlots(mi)) {
                     if (used[si]) continue
                     val sh = multiset[si]
+                    if (sh in tried) continue
                     if (!p.canDo(i, sh)) continue
                     if (wl >= 0 && sh != wl) continue
                     if (mi == 0 && branchCount >= cfg.perDayBranchCap) { budgetHit = true; break }
+                    tried.add(sh)
                     used[si] = true
                     rows[mi][d] = sh
                     if (mi == 0) branchCount++

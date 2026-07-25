@@ -98,6 +98,20 @@ class C1RepairAnalysisTest {
     }
 
     @Test
+    fun provenWallsExaminesEveryWindowNotJustTheFirstPerStaffShift() {
+        // [3.279.0/外部レビューC1-04] 同一職員・同一シフトに独立した複数の不足窓。
+        //   i0: [Y,Y,Y,Y,Y]・a: [X,休,休,休,休]・ルール「X 2日窓≥1」。
+        //   窓[0,1]: day0 の X トークンを i0 が取れる＝解消可能（壁でない）。
+        //   窓[1,2]: 列1・2に X トークンが存在しない＝どう並べ替えても解消不能（真の壁）。
+        //   旧: seen が staff×shift のみで最初の窓[0,1]しか探索せず、後続の真の壁を見逃していた。
+        val s = st(5, 2, listOf(listOf(2, 2, 2, 2, 2), listOf(1, 0, 0, 0, 0)), listOf(C1Row("2", "X", "1")))
+        val p = Problem(s); val sched = s.schedule.toIntArray2D()
+        val walls = C1RepairAnalysis.provenWalls(p, sched)
+        assertTrue("2窓目以降の真の壁を検出（旧実装は見逃し）", walls.any { it.staff == 0 && it.start == 1 })
+        assertTrue("解消可能な窓[0,1]は壁と誤検出しない", walls.none { it.staff == 0 && it.start == 0 })
+    }
+
+    @Test
     fun passAppliesExactRepairAndIsKeepBestSafe() {
         val s = st(4, 2, listOf(listOf(1, 1, 2, 2), listOf(2, 2, 1, 1)), listOf(C1Row("2", "X", "1")))
         val sched = s.schedule.toIntArray2D()

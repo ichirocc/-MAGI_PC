@@ -70,22 +70,49 @@ class C1DeltaPrefilterTest {
     }
 
     @Test
-    fun screenCellRejectsBreakingWishButAllowsSatisfyingIt() {
-        // (0,0) の希望=X。盤面は休(=希望未充足)。
+    fun screenCellComparesNetPrefNotJustWishPresence() {
+        // [3.279.0/外部レビューC1-02] (0,0) の希望=X。盤面は休(=既に pref 違反中)。
+        //   別の非希望シフト Y へ変えても pref は 1→1 で不変＝checker は採用し得るので却下しない
+        //   （旧: wishLocked && ≠wish の存在判定で無条件却下し、有効手を落としていた＝反例実証済み）。
         val s = single(2, 1, listOf(listOf(0, 0)), wishes = mapOf("0,0" to 1))
         val p = Problem(s); val sc = s.schedule.toIntArray2D()
-        // 希望Xを破って Y にする候補 → pref(HARD)悪化 → 却下。
-        assertEquals(C1DeltaPrefilter.Verdict.HARD_REJECT, C1DeltaPrefilter.screenCell(p, sc, 0, 0, 2))
+        assertEquals(C1DeltaPrefilter.Verdict.NEUTRAL, C1DeltaPrefilter.screenCell(p, sc, 0, 0, 2))
         // 希望X自体へ寄せる候補 → 却下しない（改善し得る＝checkerに委ねる）。
         assertEquals(C1DeltaPrefilter.Verdict.NEUTRAL, C1DeltaPrefilter.screenCell(p, sc, 0, 0, 1))
+        // 充足済みの希望を破る候補（pref 0→1 の正味悪化）は従来どおり却下。
+        val sat = single(2, 1, listOf(listOf(1, 0)), wishes = mapOf("0,0" to 1))
+        val p2 = Problem(sat); val sc2 = sat.schedule.toIntArray2D()
+        assertEquals(C1DeltaPrefilter.Verdict.HARD_REJECT, C1DeltaPrefilter.screenCell(p2, sc2, 0, 0, 2))
     }
 
     @Test
     fun screenCellRejectsForbiddenRun() {
-        // cons3n=[X,X]。(0,0)=X の隣 (0,1) を X にすると禁止連続。
+        // cons3n=[X,X]。(0,0)=X の隣 (0,1) を X にすると禁止連続（c3n 0→1 の正味悪化）。
         val s = single(2, 1, listOf(listOf(1, 0)), cons3n = listOf(C3Row(listOf("X", "X"))))
         val p = Problem(s); val sc = s.schedule.toIntArray2D()
         assertEquals(C1DeltaPrefilter.Verdict.HARD_REJECT, C1DeltaPrefilter.screenCell(p, sc, 0, 1, 1))
+    }
+
+    @Test
+    fun screenCellAllowsForbiddenRunWhenNetC3nDoesNotIncrease() {
+        // [3.279.0/外部レビューC1-01] 盤面[Y,X,X]・cons3n={XX,YY}。day1→Y は [Y,Y] を1件作るが
+        //   同時に [X,X] を1件壊す＝c3n 正味0。checker は他族(c1等)の改善で採用し得るので却下しない
+        //   （旧: makesForbiddenRun=true の存在判定で無条件却下＝isBetter=true の手を落とす反例を実証済み）。
+        val s = single(
+            3, 1, listOf(listOf(2, 1, 1)),
+            cons3n = listOf(C3Row(listOf("X", "X")), C3Row(listOf("Y", "Y"))),
+        )
+        val p = Problem(s); val sc = s.schedule.toIntArray2D()
+        assertEquals(C1DeltaPrefilter.Verdict.NEUTRAL, C1DeltaPrefilter.screenCell(p, sc, 0, 1, 2))
+    }
+
+    @Test
+    fun screenCellRejectsOutOfRangeCoordinates() {
+        // [3.279.0/外部レビューC1-12] 不正座標は例外でなく HARD_REJECT（防御的境界チェック）。
+        val s = single(2, 1, listOf(listOf(0, 0)))
+        val p = Problem(s); val sc = s.schedule.toIntArray2D()
+        assertEquals(C1DeltaPrefilter.Verdict.HARD_REJECT, C1DeltaPrefilter.screenCell(p, sc, 5, 0, 1))
+        assertEquals(C1DeltaPrefilter.Verdict.HARD_REJECT, C1DeltaPrefilter.screenCell(p, sc, 0, 9, 1))
     }
 
     @Test

@@ -651,12 +651,16 @@ object V6HotfixPasses {
         var applied = 0
         var chainUsed = 0
         var screened = 0
-        var pass = 0
-        while (pass < maxPasses && !shouldStop()) {
+        // [3.279.0/外部レビューC1-08] 旧: pass 開始時の index を採用後も走査し続け、解消済み窓の再処理と
+        //   「採用で新たに生じた窓は次 pass まで不可視」の両方が起きていた（maxPasses=2 の有限 pass で
+        //   改善を取りこぼす）。1手採用するたびに窓ループを抜け、最新盤面から Index を再構築する。
+        //   終了保証は isBetter の厳密改善（hard→total→weighted 辞書式で単調減少）＋採用上限の安全弁。
+        val maxAdoptions = maxPasses * 32
+        while (!shouldStop() && applied < maxAdoptions) {
             val index = C1RepairIndex.build(p, work)
             if (!index.hasActionable) break
-            var improved = false
-            for (w in index.windows.sortedByDescending { it.deficit }) {
+            var adopted = false
+            windowLoop@ for (w in index.windows.sortedByDescending { it.deficit }) {
                 if (shouldStop()) break
                 val staff = w.staff; val shift = w.shift
                 val cands = (w.start until w.start + w.windowDays)
@@ -677,7 +681,7 @@ object V6HotfixPasses {
                     // (a) 直接移動のみで改善（旧シフトに余裕がある場合）。
                     val repDirect = UnifiedViolationChecker.check(state, trial)
                     if (isBetter(repDirect, bestRep) && !exactPinRegression(p, work, trial)) {
-                        work = trial; bestRep = repDirect; applied++; improved = true; break
+                        work = trial; bestRep = repDirect; applied++; adopted = true; break@windowLoop
                     }
                     // (b) 旧シフトを抜いて covU 穴が空くなら玉突き連鎖で埋め直す（exclude=本人で自己選択防止）。
                     val cntOldAfter = (0 until p.S).count { trial[it][d] == old }
@@ -687,14 +691,13 @@ object V6HotfixPasses {
                             for (mv in chain) trial[mv[0]][mv[1]] = mv[2]
                             val repChain = UnifiedViolationChecker.check(state, trial)
                             if (isBetter(repChain, bestRep) && !exactPinRegression(p, work, trial)) {
-                                work = trial; bestRep = repChain; applied++; chainUsed++; improved = true; break
+                                work = trial; bestRep = repChain; applied++; chainUsed++; adopted = true; break@windowLoop
                             }
                         }
                     }
                 }
             }
-            if (!improved) break
-            pass++
+            if (!adopted) break
         }
         val c1After = bestRep.breakdown["c1"] ?: 0
         return CyclicSwapResult(

@@ -1720,6 +1720,36 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 外部レビューC1-01〜C1-12の検証と修正（3.279.0, ユーザー指示「不具合など修正する」）
+外部レビュー12件（対象=3.277 main）を1件ずつ検証（P0の2件は反例をホストJVMで実行して実証）し、推奨5件を修正。
+事実関係は約90%正確・優先度はC1-03/04（provenWalls=本番未配線のテスト専用診断）で過大と評価。C1-05/06は3.278.0
+（PR#83）で先行修正済みだった。**全300テストgreen＋golden/real両データで研磨結果がbaselineとバイト一致**（純粋な
+正しさ/実効性修正・クリーン盤面では挙動不変・スコアリング不変）。
+- **[C1-01/02/12] `screenCell`を全HARD族の正味Δ判定へ全面書き換え**: 旧はper-familyの存在判定
+  （`makesForbiddenRun`=true／wishLocked希望外→無条件HARD_REJECT）で、①新しい禁止連続を作りつつ既存を壊す
+  c3n正味0以下の手 ②既に希望違反中のセルを別シフトへ変えるpref不変の手、まで落としていた（両方とも
+  screenCell=REJECTかつchecker isBetter=trueの反例を実行実証）。新実装は単一セル変更のgroupViol/pref/c3n
+  （行fires差分）＋covU到着側のΔを厳密計算しΔ>0のみ却下＝「HARD_REJECT⇒checkerが必ず却下」契約がsoundに。
+  **[実装中に発見した相互作用]** covU離脱側（正項）を含めるとbranch(b)玉突き連鎖で埋め直す前提の候補まで
+  事前排除され連鎖経路が死ぬ（テストで回帰検出）→離脱側は意図的に除外（正項の省略=under-reject方向＝契約維持）。
+  座標境界チェック（C1-12）も追加。
+- **[C1-03] `focusResidual`を対象窓のみへ**: 旧は焦点職員の全ルール×全窓（別シフトのルール含む）の残数＝対象窓が
+  解消可能でも別窓が残るだけで「この窓は壁」と誤認（provenWallsのfalse positive）。対象窓（v.ruleIndex/v.start）
+  の残fire（0/1）の全葉最小へ。既存wallテスト2件は単一窓構成のため意味論変更後も互換（green確認）。
+- **[C1-04] `provenWalls`のseenを窓単位へ**: 旧はstaff×shiftキーで同一職員・同一シフトの複数不足窓の最初の
+  1窓しか証明探索せず真の壁を見逃し。staff×ruleIndex×startへ（回帰テスト=1窓目解消可能・2窓目真の壁の構成で固定）。
+- **[C1-08] `applyC1IndexChainRepair`を採用直後Index再構築へ**: 旧はpass開始時のindexを採用後もstale走査
+  （解消済み窓の再処理＋新規窓は次passまで不可視）。1手採用ごとに窓ループを抜け最新盤面から再構築。
+  終了保証=isBetterの厳密改善＋採用上限maxPasses*32の安全弁。
+- **[C1-10] `solveWindow`にtriedShift**: 多重集合スロット列挙の同値部分木重複を職員ごとシフト値1回に排除
+  （node予算浪費→不必要なexhaustive=false化を解消）。
+- **[C1-07] `expectedGain(staff,day)`→`(staff,day,targetShift)`**: 同日別シフトのgain混合を解消（診断API）。
+  分離検証テスト追加（X gain1／Y必要2でgain0が別々に引ける）。
+- **[不採用を進言し維持] C1-09の`newC1<=currentC1`採否制約**: PR#82の決定論実験で「この操作への採否ポリシー制約は
+  3方針すべてbaselineをc1で上回れない」と実証済み＝契約文言の明確化のみで対応（採否はisBetterのまま）。
+  **[非バグ確定] day1≤0乖離疑い**=`Problem.cons1`構築時の`d1>0&&d2>0`フィルタで到達不能。
+  **[保留] C1-11のbest-effort関与職員選抜**=新規探索設計＝要grilling。
+
 ## 敵対監査で実証した2クラッシュ＋正しさ/実効性バグの一括修正（3.278.0, ユーザー指示「新しい論理的な不具合などを見つける」→「すべて修正する」）
 本体精読＋並列3監査（EliteIntegration系/runPostOptimization配線/TemporalFlow・Hungarian・DP系）で発見した全件を修正。
 ホストJVMで**全296テストgreen**＋クラッシュ再現ハーネス3種の解消確認＋**golden/real両データで研磨結果がbaselineと

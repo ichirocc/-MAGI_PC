@@ -36,15 +36,66 @@ object C1DeltaPrefilter {
     /**
      * 単一セル候補 (staff,day)→newShift を安く選別する。HARD_REJECT は「適用しても isBetter が必ず false」を
      * 意味する（＝スキップしても採用結果は不変）。
+     *
+     * [3.279.0/外部レビューC1-01/02/12] 旧実装は per-family の存在判定（makesForbiddenRun=true／
+     * wishLocked希望外）で無条件却下していたが、それでは**正味では HARD が悪化しない候補**まで落としていた:
+     *  - C1-01: 新しい禁止連続を1件作りつつ既存の禁止連続を1件以上壊す手（c3n 正味0以下）＝checker は採用しうる。
+     *  - C1-02: 既に希望違反中のセルを別の非希望シフトへ変える手（pref 1→1 不変）＝checker は採用しうる。
+     * 反例をホストJVMで実証済み（screenCell=HARD_REJECT だが isBetter=true）。契約を sound にするため、
+     * **単一セル変更の全 HARD 族（groupViol/pref/c3n/covU）の正味Δを厳密に計算し、Δ>0 のときだけ却下**する
+     * （cand.hard = best.hard + Δ が厳密に成立＝Δ>0 なら isBetter は hard 比較で必ず false）。
+     * per-family の相殺（c3n+1 を covU−2 が打ち消す等）も正しく通す。C1-12 の座標境界チェックも追加。
      */
     fun screenCell(p: Problem, schedule: Array<IntArray>, staff: Int, day: Int, newShift: Int): Verdict {
+        if (staff !in 0 until p.S || day !in 0 until p.T) return Verdict.HARD_REJECT   // [C1-12] 不正座標は非手
         val s = normalizeSchedule(schedule, p)
         if (newShift !in 0 until p.K) return Verdict.HARD_REJECT
-        if (s[staff][day] == newShift) return Verdict.HARD_REJECT            // 無変化＝isBetter は非改善で却下
-        if (!p.canDo(staff, newShift)) return Verdict.HARD_REJECT            // groupViol(HARD 10000) を必ず作る
-        if (p.wishLocked(staff, day) && p.wish[staff][day] != newShift) return Verdict.HARD_REJECT // pref(HARD) を破る
-        if (p.makesForbiddenRun(s, staff, day, newShift)) return Verdict.HARD_REJECT               // c3n(HARD 7000)
-        return Verdict.NEUTRAL
+        val old = s[staff][day]
+        if (old == newShift) return Verdict.HARD_REJECT            // 無変化＝isBetter は非改善で却下
+        var delta = 0
+        // groupViol: checker は範囲内かつ担当外のセルのみ計上（-1 セルは対象外）。
+        if (!p.canDo(staff, newShift)) delta++
+        if (old in 0 until p.K && !p.canDo(staff, old)) delta--
+        // pref: 実現可能希望の未充足（checker と同一）。既に違反中なら別シフトへ変えても不変（C1-02）。
+        if (p.wishLocked(staff, day)) {
+            val w = p.wish[staff][day]
+            delta += (if (newShift != w) 1 else 0) - (if (old != w) 1 else 0)
+        }
+        // c3n: 行内の禁止連続 fire 数の正味差分（生成と破壊の両方を勘定＝C1-01）。
+        delta += run {
+            val row = s[staff].clone()
+            val before = staffC3nFires(p, row)
+            row[day] = newShift
+            staffC3nFires(p, row) - before
+        }
+        // covU: **到着側のみ**勘定（≤0＝改善方向。c3n/pref の正味+1 を covU改善が相殺する候補を正しく通す）。
+        //   離脱側の covU 悪化（≥0）は**意図的に含めない**: applyC1IndexChainRepair の branch(b) が
+        //   「離脱で空いた covU 穴を玉突き連鎖で埋め直す」前提の候補であり、ここで落とすと連鎖経路が死ぬ
+        //   （実テストで回帰確認済み）。正項の省略は Δ_computed ≤ Δ_true ＝ under-reject 方向のため
+        //   「HARD_REJECT ⇒ checker が必ず却下」の契約は保たれる（離脱悪化の最終判定は checker）。
+        val cntNew = (0 until p.S).count { s[it][day] == newShift }
+        delta += p.covUCell(newShift, day, cntNew + 1) - p.covUCell(newShift, day, cntNew)
+        return if (delta > 0) Verdict.HARD_REJECT else Verdict.NEUTRAL
+    }
+
+    /** 職員行 row の cons3n（禁止連続, HARD）fire 数。checker の forbidden 窓完全一致と同一意味論。 */
+    private fun staffC3nFires(p: Problem, row: IntArray): Int {
+        var fires = 0
+        for (c in p.cons3n) {
+            val seq = c.seq
+            val d = seq.size
+            if (d == 0 || d > p.T) continue
+            var j = 0
+            while (j <= p.T - d) {
+                if (row[j] == seq[0]) {
+                    var z = 0
+                    for (l in 1 until d) if (row[j + l] == seq[l]) z++
+                    if (z == d - 1) fires++
+                }
+                j++
+            }
+        }
+        return fires
     }
 
     /**
