@@ -656,7 +656,10 @@ object V6HotfixPasses {
         //   改善を取りこぼす）。1手採用するたびに窓ループを抜け、最新盤面から Index を再構築する。
         //   終了保証は isBetter の厳密改善（hard→total→weighted 辞書式で単調減少）＋採用上限の安全弁。
         val maxAdoptions = maxPasses * 32
-        while (!shouldStop() && applied < maxAdoptions) {
+        var capHit = false
+        while (!shouldStop()) {
+            // [3.279.1/レビューnit] 採用上限は安全弁＝到達を黙って打ち切らずログへ明示する（silent cap 禁止）。
+            if (applied >= maxAdoptions) { capHit = true; break }
             val index = C1RepairIndex.build(p, work)
             if (!index.hasActionable) break
             var adopted = false
@@ -702,8 +705,10 @@ object V6HotfixPasses {
         val c1After = bestRep.breakdown["c1"] ?: 0
         return CyclicSwapResult(
             work, before.total, bestRep.total, applied,
+            // [3.279.1] screened は Index 再構築のたび同一候補を再判定し得る＝「延べ」件数（重複計上あり）。
             listOf(MirrorLog(tag = "C1IndexRepair",
-                message = "index駆動C1修復: c1 ${before.breakdown["c1"] ?: 0}->$c1After 採用$applied(連鎖$chainUsed) prefilter除外$screened")),
+                message = "index駆動C1修復: c1 ${before.breakdown["c1"] ?: 0}->$c1After 採用$applied(連鎖$chainUsed) " +
+                    "prefilter除外(延べ)$screened" + (if (capHit) " 採用上限${maxAdoptions}到達=打ち切り" else ""))),
         )
     }
 

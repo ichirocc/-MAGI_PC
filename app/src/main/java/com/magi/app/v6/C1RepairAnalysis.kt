@@ -195,6 +195,8 @@ object C1RepairAnalysis {
         //   旧: 全ルール×全窓の残数＝対象窓が解消可能でも別窓が残るだけで「この窓は壁」と誤認していた。
         val fi = m.indexOf(v.staff)
         fun focusResidualOf(arr: Array<IntArray>): Int {
+            // [3.279.1] fi<0 は現行構造では到達不能（m は v.staff を先頭に構築される）。将来 m の構築が
+            //   変わった場合に焦点残を誤らせない防御として残置（0=「壁と主張しない」安全側）。
             if (fi < 0) return 0
             var z = 0
             for (l in 0 until v.windowDays) {
@@ -249,15 +251,17 @@ object C1RepairAnalysis {
                 // [3.279.0/外部レビューC1-10] 同一シフトが多重集合に複数あるとスロット単位の列挙が同値部分木を
                 //   重複探索し、node予算を浪費して不必要に exhaustive=false になっていた。同じシフト値は
                 //   職員 mi につき1回だけ試す（残り多重集合が同じ＝部分木は同値、の標準的な重複排除）。
-                val tried = HashSet<Int>()
+                // [3.279.1/レビューnit] HashSet→BooleanArray（boxing/hash 排除。DFS 最深部のホットスポット）。
+                //   multiset には正規化由来の -1 があり得るため index は sh+1（[-1, K-1]→[0, K]）。
+                val tried = BooleanArray(p.K + 1)
                 for (si in orderedSlots(mi)) {
                     if (used[si]) continue
                     val sh = multiset[si]
-                    if (sh in tried) continue
+                    if (tried[sh + 1]) continue
                     if (!p.canDo(i, sh)) continue
                     if (wl >= 0 && sh != wl) continue
                     if (mi == 0 && branchCount >= cfg.perDayBranchCap) { budgetHit = true; break }
-                    tried.add(sh)
+                    tried[sh + 1] = true
                     used[si] = true
                     rows[mi][d] = sh
                     if (mi == 0) branchCount++

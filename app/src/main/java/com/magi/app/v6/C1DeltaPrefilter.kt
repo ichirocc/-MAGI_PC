@@ -48,9 +48,16 @@ object C1DeltaPrefilter {
      */
     fun screenCell(p: Problem, schedule: Array<IntArray>, staff: Int, day: Int, newShift: Int): Verdict {
         if (staff !in 0 until p.S || day !in 0 until p.T) return Verdict.HARD_REJECT   // [C1-12] 不正座標は非手
-        val s = normalizeSchedule(schedule, p)
         if (newShift !in 0 until p.K) return Verdict.HARD_REJECT
-        val old = s[staff][day]
+        // [3.279.1/レビューnit] 旧: normalizeSchedule で全盤面 O(S×T) をコピーしていたが、本判定が読むのは
+        //   staff の1行と day の1列のみ。normalizeSchedule と**同一の意味論**（欠損セル→0=休へパディング・
+        //   範囲外値→-1）を読み取り時に局所適用し、コピーを行1本 O(T) に削減（正規化済み盤面には恒等＝結果同一。
+        //   S×T 未満の不揃い盤面でも normalizeSchedule 経由と同じ判定になり AIOOBE しない）。
+        fun cell(i: Int, j: Int): Int {
+            val v = schedule.getOrNull(i)?.getOrNull(j) ?: 0
+            return if (v in 0 until p.K) v else -1
+        }
+        val old = cell(staff, day)
         if (old == newShift) return Verdict.HARD_REJECT            // 無変化＝isBetter は非改善で却下
         var delta = 0
         // groupViol: checker は範囲内かつ担当外のセルのみ計上（-1 セルは対象外）。
@@ -63,7 +70,7 @@ object C1DeltaPrefilter {
         }
         // c3n: 行内の禁止連続 fire 数の正味差分（生成と破壊の両方を勘定＝C1-01）。
         delta += run {
-            val row = s[staff].clone()
+            val row = IntArray(p.T) { cell(staff, it) }
             val before = staffC3nFires(p, row)
             row[day] = newShift
             staffC3nFires(p, row) - before
@@ -73,7 +80,7 @@ object C1DeltaPrefilter {
         //   「離脱で空いた covU 穴を玉突き連鎖で埋め直す」前提の候補であり、ここで落とすと連鎖経路が死ぬ
         //   （実テストで回帰確認済み）。正項の省略は Δ_computed ≤ Δ_true ＝ under-reject 方向のため
         //   「HARD_REJECT ⇒ checker が必ず却下」の契約は保たれる（離脱悪化の最終判定は checker）。
-        val cntNew = (0 until p.S).count { s[it][day] == newShift }
+        val cntNew = (0 until p.S).count { cell(it, day) == newShift }
         delta += p.covUCell(newShift, day, cntNew + 1) - p.covUCell(newShift, day, cntNew)
         return if (delta > 0) Verdict.HARD_REJECT else Verdict.NEUTRAL
     }

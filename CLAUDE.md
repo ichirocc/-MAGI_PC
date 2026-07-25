@@ -1720,6 +1720,24 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 3.279.0セルフレビュー指摘5件の後始末（3.279.1, ユーザー指示「コードレビューする」→「修正する」）
+genshijin-review形式でPR#85（3.279.0）をセルフレビューし、🟡1＋🔵4を特定して修正。**全306テストgreen＋
+挙動中立を実証**（同条件runでworking==HEADの研磨結果が完全一致。golden benchのrun間揺れ288/99↔289/96は
+HEAD自身も示す既存の非決定性＝JointLNS系の壁時計予算(8s/6s)由来で本修正と無関係と切り分け済み）。
+- **[A] `screenCell`の全盤面コピー排除**: `normalizeSchedule`のO(S×T)コピー→読み取り時の局所`cell(i,j)`へ
+  （読むのはstaff行1本＋day列1本のみ）。`cell`は`getOrNull(i)?.getOrNull(j) ?: 0`＝normalizeScheduleと
+  **同一意味論**（欠損セル→0=休パディング・範囲外値→-1）を厳守。当初`schedule[i][j]`直読みで書いたが
+  S×T未満の不揃い盤面でAIOOBE＋欠損セルの意味が異なると自己検証で発見し出荷前に是正。
+- **[B/🟡] `applyC1IndexChainRepair`のsilent cap解消**: 採用上限`maxPasses*32`到達を黙って打ち切っていた→
+  `capHit`フラグでログに「採用上限N到達=打ち切り」を明示。
+- **[C] screenedの延べ計上を明記**: Index再構築のたび同一候補を再判定し重複計上される→ログを
+  「prefilter除外(延べ)N」表記へ（実装は変えず表記の正直化）。
+- **[D] `solveWindow`のtriedShiftをBooleanArray化**: HashSet<Int>のboxing/hashをDFS最深部から排除。
+  multisetには正規化由来の-1があり得るためindexは`sh+1`（[-1,K-1]→[0,K]、`s`=normalizeSchedule済みを確認）。
+- **[E] `focusResidualOf`のfi<0 dead guard**: 現行構造では到達不能（mはv.staffを先頭に構築）だが、将来の
+  m構築変更に備えた防御として残置し、その旨をコメントで明示（0=「壁と主張しない」安全側）。
+- 残バックログ（指示待ち）: C1-11 best-effort関与職員選抜（要grilling）。
+
 ## 外部レビューC1-01〜C1-12の検証と修正（3.279.0, ユーザー指示「不具合など修正する」）
 外部レビュー12件（対象=3.277 main）を1件ずつ検証（P0の2件は反例をホストJVMで実行して実証）し、推奨5件を修正。
 事実関係は約90%正確・優先度はC1-03/04（provenWalls=本番未配線のテスト専用診断）で過大と評価。C1-05/06は3.278.0
