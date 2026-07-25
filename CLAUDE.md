@@ -1707,6 +1707,30 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## index駆動C1修復オペレータ新設=screenCell/c1Deltaを実駆動する経路（3.276.0, ユーザー指示「接続する」→AskUserQuestionで「screenCellを新規オペレータへ」）
+3.275.0でIndex/Prefilterを「検証済みだが hot path では hasActionableC1 のみ live・screenCell/c1Deltaは部品」と
+した続き。ユーザー「接続する」→対象を確認（AskUserQuestion）→「screenCellを新規オペレータへ」＝**既存オペレータに
+触れず、C1RepairIndex/C1DeltaPrefilter を実駆動する新規C1修復オペレータを新設**。手の種類もgrilling（AskUserQuestion）
+で「玉突き連鎖付き」を確定。
+- **`V6HotfixPasses.applyC1IndexChainRepair`新設**: ①`C1RepairIndex.build`で不足窓を索引化（不足の重い窓順）
+  ②窓内候補日を`expectedGain`降順に並べ`C1DeltaPrefilter.screenCell`がNEUTRALの候補だけ試す（無変化/groupViol/
+  pref破り/c3nは事前除外）③候補日を不足シフトへ直接移動、旧シフトを抜いてcovU穴が空くなら`findCovUChain`
+  （exclude=本人＝3.158.0の自己選択防止）の玉突き連鎖で埋め直す（手Bと同型）④採否は必ず本物の
+  `UnifiedViolationChecker`+`isBetter`(hard→total→weighted)+`exactPinRegression`(3.256.0の厳密ピン保護)＝keep-best・
+  退化不能。maxPasses=2のフィックスポイント。
+- **配線**: `C1RepairOperators.indexChainRepair`（façade 1:1委譲）を新設し、runPostOptimizationの既存
+  `hasActionableC1`ゲート内（window opの直後）へ配置。厳密c1アンカー＝不足窓ゼロで内部no-op（before.c1==0で早期return）
+  のためゲート内で安全。**既存オペレータ（手A/R1/R2/R3/B・flow・beam・exact・joint LNS）には一切触れない**。
+- **正直な位置づけ**: 生成する手は既存の手B/beam/exactと重複しうる（keep-bestで無害）。主眼は「index駆動の候補生成
+  ＋prefilter選別」という図のDelta Prefilter経路を**load-bearingにする**こと。golden_state単独測定で c1 115→98
+  （採用5・連鎖1・hard 0→0非悪化・total 313→294）、**screenCellが1118候補を安く除外**＝Index/Prefilterが実際に
+  効いていることを確認。フルパイプラインでは既存opとkeep-bestで協調するため純増は限定的（残差は3.263.0の
+  構造的壁が支配的）。**退化不能**（新オペレータは改善手のみ採用・既存経路不変）。
+- 検証: ホストJVM（kotlin-compiler-embeddable 2.0.21）で v6/model/root を実コンパイル・**全289テストgreen**
+  （3.275.0の285＋新規4: 直接移動でc1解消/covU穴を連鎖で埋める/c1クリーンでno-op/façade委譲の挙動同一）。
+  chain経路テストは「直接移動がcovU穴を作り却下→findCovUChainがs1:X→Yで埋め採用」を最小盤面で固定。
+  スコアリング不変（重み・採否・既存探索順序いずれも不変、新オペレータ追加のみ）・HF77非該当。
+
 ## C1研磨アーキテクチャを図どおりに寄せる=Index/Operators façade/Delta Prefilter を新設（3.275.0, ユーザー提示のパイプライン図→「賢く実装する。実装コスト無視する」）
 ユーザーがC1研磨の理想アーキ図（UnifiedViolationChecker→C1RepairAnalysis→**C1RepairIndex**→**C1RepairOperators**→
 **C1 Delta Prefilter**→checker→keep-best）を提示。grep実測で「Analysis/両端は実在、中間3層は未実装 or 散在」＝

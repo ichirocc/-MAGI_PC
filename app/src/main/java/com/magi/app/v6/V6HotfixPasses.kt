@@ -241,6 +241,14 @@ object V6HotfixPasses {
                 val rC1 = C1RepairOperators.selfRelocateAndSameDaySwap(state, work, maxPasses = 3, shouldStop = clusterStop, seed = roundSeed(seed, 0x1C1L, round))
                 work = rC1.newSchedule.copy2D(); totalC1 += rC1.applied; roundApplied += rC1.applied
                 if (round == 0) logs.addAll(rC1.logs)
+
+                // [C1IndexRepair / 3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖。C1RepairIndex/
+                //   C1DeltaPrefilter を実駆動する経路。厳密c1アンカー＝不足窓ゼロで no-op のため本ゲート内に配置。
+                //   生成する手は既存手B/beam/exactと重複しうるが keep-best で無害（退化不能）。
+                onPhase("後処理 期間要件(c1)index駆動修復 [巡${round + 1}]")
+                val rC1idx = C1RepairOperators.indexChainRepair(state, work, shouldStop = clusterStop, seed = roundSeed(seed, 0x1C1D2L, round))
+                work = rC1idx.newSchedule.copy2D(); totalC1 += rC1idx.applied; roundApplied += rC1idx.applied
+                if (round == 0) logs.addAll(rC1idx.logs)
             }
 
             // [3.254.0/C1TemporalFlowPolish, C1時系列DP+ジョイント再割当研磨=旧C1TemporalSwapPolish/
@@ -602,6 +610,89 @@ object V6HotfixPasses {
         val applied: Int,
         val logs: List<MirrorLog>,
     )
+
+    /**
+     * [C1 Index-driven Chain Repair / 3.276.0] C1RepairIndex/C1DeltaPrefilter を実際に駆動する新規C1修復
+     * オペレータ（図の Index→Prefilter→Operators→checker 経路を end-to-end に通す）。
+     *
+     *  1. `C1RepairIndex.build` で不足窓を索引化（不足の重い窓から処理）。
+     *  2. 窓内の候補日を `expectedGain` 降順で並べ、`C1DeltaPrefilter.screenCell` が NEUTRAL の候補だけ試す
+     *     （無変化/groupViol/pref破り/c3n は checker が確実に却下＝事前に落とす）。
+     *  3. 候補日を不足シフトへ直接移動。旧シフトを抜いて covU 穴が空くなら `findCovUChain`（exclude=本人）の
+     *     玉突き連鎖で埋め直す（手B と同型）。
+     *  4. 採否は必ず本物の `UnifiedViolationChecker` + `isBetter`（hard→total→weighted）+ `exactPinRegression`
+     *     （3.256.0の厳密ピン保護）＝keep-best・退化不能。
+     *
+     * [位置づけ・正直な限界] 生成する手は既存の手B/beam/exact と重複する（keep-best で無害）。本オペレータの
+     *   主眼は「index駆動の候補生成＋prefilter選別」という図の経路を load-bearing にすること。実C1削減の
+     *   純増は限定的（残差は3.263.0で確認した構造的壁が支配的）。既存オペレータには一切触れない＝退化不能。
+     */
+    fun applyC1IndexChainRepair(
+        state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 2,
+        shouldStop: () -> Boolean = { false }, seed: Long = 0x1C1D2L,
+    ): CyclicSwapResult {
+        val p = Problem(state)
+        var work = normalizeSchedule(schedule, p)
+        val before = UnifiedViolationChecker.check(state, work)
+        if (p.cons1.isEmpty() || (before.breakdown["c1"] ?: 0) == 0) {
+            return CyclicSwapResult(work, before.total, before.total, 0,
+                listOf(MirrorLog(tag = "C1IndexRepair", message = "c1対象なし=スキップ")))
+        }
+        val rng = Random(seed)
+        var bestRep = before
+        var applied = 0
+        var chainUsed = 0
+        var screened = 0
+        var pass = 0
+        while (pass < maxPasses && !shouldStop()) {
+            val index = C1RepairIndex.build(p, work)
+            if (!index.hasActionable) break
+            var improved = false
+            for (w in index.windows.sortedByDescending { it.deficit }) {
+                if (shouldStop()) break
+                val staff = w.staff; val shift = w.shift
+                val cands = (w.start until w.start + w.windowDays)
+                    .filter { d ->
+                        val neutral = C1DeltaPrefilter.screenCell(p, work, staff, d, shift) == C1DeltaPrefilter.Verdict.NEUTRAL
+                        if (!neutral && work[staff][d] != shift) screened++
+                        neutral
+                    }
+                    .sortedByDescending { d -> index.expectedGain(staff, d) }
+                for (d in cands) {
+                    if (shouldStop()) break
+                    val old = work[staff][d]
+                    val trial = work.copy2D()
+                    trial[staff][d] = shift
+                    // (a) 直接移動のみで改善（旧シフトに余裕がある場合）。
+                    val repDirect = UnifiedViolationChecker.check(state, trial)
+                    if (isBetter(repDirect, bestRep) && !exactPinRegression(p, work, trial)) {
+                        work = trial; bestRep = repDirect; applied++; improved = true; break
+                    }
+                    // (b) 旧シフトを抜いて covU 穴が空くなら玉突き連鎖で埋め直す（exclude=本人で自己選択防止）。
+                    val cntOldAfter = (0 until p.S).count { trial[it][d] == old }
+                    if (old in 0 until p.K && p.covUCell(old, d, cntOldAfter) > 0) {
+                        val chain = findCovUChain(p, trial, old, d, rng, exclude = staff)
+                        if (chain != null) {
+                            for (mv in chain) trial[mv[0]][mv[1]] = mv[2]
+                            val repChain = UnifiedViolationChecker.check(state, trial)
+                            if (isBetter(repChain, bestRep) && !exactPinRegression(p, work, trial)) {
+                                work = trial; bestRep = repChain; applied++; chainUsed++; improved = true; break
+                            }
+                        }
+                    }
+                }
+                if (improved) continue
+            }
+            if (!improved) break
+            pass++
+        }
+        val c1After = bestRep.breakdown["c1"] ?: 0
+        return CyclicSwapResult(
+            work, before.total, bestRep.total, applied,
+            listOf(MirrorLog(tag = "C1IndexRepair",
+                message = "index駆動C1修復: c1 ${before.breakdown["c1"] ?: 0}->$c1After 採用$applied(連鎖$chainUsed) prefilter除外$screened")),
+        )
+    }
 
     /**
      * [ソフト研磨・T2] 被覆を保つ循環交換（k=2,3）研磨。各日の (日,シフト) 人数を保ったまま、職員の

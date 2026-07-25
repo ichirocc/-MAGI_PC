@@ -63,6 +63,13 @@ internal object C1RepairOperators {
     ): V6HotfixPasses.CyclicSwapResult =
         V6HotfixPasses.applyC1ExactWindowRepair(state, schedule, cfg, shouldStop)
 
+    /** [3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖のC1修復（Index/Prefilterを実駆動する経路）。 */
+    fun indexChainRepair(
+        state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 2,
+        shouldStop: () -> Boolean = { false }, seed: Long = 0x1C1D2L,
+    ): V6HotfixPasses.CyclicSwapResult =
+        V6HotfixPasses.applyC1IndexChainRepair(state, schedule, maxPasses, shouldStop, seed)
+
     /** Joint LNS（c1 + covU/range-low を同一 goal pool で）。 */
     fun jointLns(
         state: MagiState, schedule: Array<IntArray>, config: C1JointLnsPolish.Config = C1JointLnsPolish.Config(),

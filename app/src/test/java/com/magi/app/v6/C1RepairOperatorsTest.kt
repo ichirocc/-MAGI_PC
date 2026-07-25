@@ -85,6 +85,66 @@ class C1RepairOperatorsTest {
         assertEquals(direct.afterTotal, viaFacade.afterTotal)
     }
 
+    // ---- 3.276.0: index駆動C1修復オペレータ ----
+
+    @Test
+    fun indexChainRepairReducesC1ViaDirectMove() {
+        // s0=[Y,Y], ルール「X 2日窓≥1」, 被覆要件なし → 直接移動 Y→X で c1 1→0（他族悪化なし）。
+        val s = st(2, 1, listOf(listOf(2, 2)), listOf(C1Row("2", "X", "1")))
+        val sc = s.schedule.toIntArray2D()
+        val before = UnifiedViolationChecker.check(s, sc)
+        assertEquals(1, before.breakdown["c1"])
+        val res = V6HotfixPasses.applyC1IndexChainRepair(s, sc)
+        val after = UnifiedViolationChecker.check(s, res.newSchedule)
+        assertEquals("c1解消", 0, after.breakdown["c1"])
+        assertTrue("HARD非悪化", after.hard <= before.hard)
+        assertTrue("total非悪化", after.total <= before.total)
+        assertTrue("入力配列は不変", same(sc, s.schedule.toIntArray2D()))
+    }
+
+    @Test
+    fun indexChainRepairFillsHoleViaChain() {
+        // 被覆要件 X=1・Y=1/日。s0=[Y,Y]・s1=[X,X]。ルール「X 2日窓≥1」で s0 が不足。
+        //   直接移動 s0:Y→X は Y@day0 に covU 穴（Y需要1）を作り却下 → findCovUChain が s1:X→Y で埋め直し採用。
+        val shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "1", ""), Shift("Y", "Y", "1", ""))
+        val s = MagiState(
+            startDate = "2026-01-01", endDate = "2026-01-02",
+            shifts = shifts, groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)), use2Patterns = false,
+            groupShift = listOf(listOf(1, 1, 1)), groupShiftApt = listOf(listOf("", "", "")),
+            schedule = listOf(listOf(2, 2), listOf(1, 1)), wishes = emptyMap(), staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = listOf(C1Row("2", "X", "1")), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val sc = s.schedule.toIntArray2D()
+        val before = UnifiedViolationChecker.check(s, sc)
+        assertTrue("s0がc1不足", (before.breakdown["c1"] ?: 0) >= 1)
+        val res = V6HotfixPasses.applyC1IndexChainRepair(s, sc)
+        val after = UnifiedViolationChecker.check(s, res.newSchedule)
+        assertTrue("c1改善", (after.breakdown["c1"] ?: 0) < (before.breakdown["c1"] ?: 0))
+        assertTrue("HARD非悪化(covU穴を連鎖で埋めた)", after.hard <= before.hard)
+        assertTrue("採用あり", res.applied >= 1)
+    }
+
+    @Test
+    fun indexChainRepairIsNoOpWhenNoC1() {
+        val s = st(3, 1, listOf(listOf(1, 1, 1)), listOf(C1Row("2", "X", "1")))
+        val res = V6HotfixPasses.applyC1IndexChainRepair(s, s.schedule.toIntArray2D())
+        assertEquals(0, res.applied)
+    }
+
+    @Test
+    fun indexChainRepairDelegatesIdentically() {
+        val s = deficientState()
+        val direct = V6HotfixPasses.applyC1IndexChainRepair(s, s.schedule.toIntArray2D(), seed = 0x1C1D2L)
+        val viaFacade = C1RepairOperators.indexChainRepair(s, s.schedule.toIntArray2D(), seed = 0x1C1D2L)
+        assertTrue(same(direct.newSchedule, viaFacade.newSchedule))
+        assertEquals(direct.applied, viaFacade.applied)
+        assertEquals(direct.afterTotal, viaFacade.afterTotal)
+    }
+
     @Test
     fun gateIsSafeOnC1CleanBoard() {
         // c1不足ゼロ盤面: hasActionableC1=false かつ applyC1WindowPolish は正真正銘の no-op。
