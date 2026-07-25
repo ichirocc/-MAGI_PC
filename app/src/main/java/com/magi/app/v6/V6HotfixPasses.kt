@@ -616,7 +616,7 @@ object V6HotfixPasses {
      * オペレータ（図の Index→Prefilter→Operators→checker 経路を end-to-end に通す）。
      *
      *  1. `C1RepairIndex.build` で不足窓を索引化（不足の重い窓から処理）。
-     *  2. 窓内の候補日を `expectedGain` 降順で並べ、`C1DeltaPrefilter.screenCell` が NEUTRAL の候補だけ試す
+     *  2. 窓内の候補日を `C1DeltaPrefilter.c1Delta`（exact net c1 delta）昇順で並べ、`screenCell` が NEUTRAL の候補だけ試す
      *     （無変化/groupViol/pref破り/c3n は checker が確実に却下＝事前に落とす）。
      *  3. 候補日を不足シフトへ直接移動。旧シフトを抜いて covU 穴が空くなら `findCovUChain`（exclude=本人）の
      *     玉突き連鎖で埋め直す（手B と同型）。
@@ -657,7 +657,10 @@ object V6HotfixPasses {
                         if (!neutral && work[staff][d] != shift) screened++
                         neutral
                     }
-                    .sortedByDescending { d -> index.expectedGain(staff, d) }
+                    // [3.277.0] 順位付けを exact net c1 delta へ（旧: index.expectedGain=gainのみの近似）。
+                    //   c1Delta は旧シフト除去で別窓を割る loss も勘定＝自己破壊候補を後回しにする賢い順序。
+                    //   負=改善なので昇順（最も改善する候補を先に試す）。順位のみ＝keep-best採否は不変。
+                    .sortedBy { d -> C1DeltaPrefilter.c1Delta(p, work, staff, d, shift) }
                 for (d in cands) {
                     if (shouldStop()) break
                     val old = work[staff][d]

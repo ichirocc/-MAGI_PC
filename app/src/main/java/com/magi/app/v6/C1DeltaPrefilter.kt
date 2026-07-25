@@ -13,7 +13,8 @@ package com.magi.app.v6
  *    盤面が変わらない候補は checker が辞書式(hard→total→weighted)で必ず却下するため HARD_REJECT を返す。
  *    それ以外は NEUTRAL（判定を checker に委ねる）。**単一セル専用**＝相手の隣接日に触れる bundle には使わない
  *    （その場合 makesForbiddenRun の per-cell 判定が陳腐化するため）。
- *  - c1Delta(...): index を使った c1解消数の見積り。**順位付け/診断専用**（accept を一切ゲートしない）。
+ *  - c1Delta(...): (staff,day)→newShift の**その職員のc1 fire 正味増減**（gain−loss を厳密勘定）。
+ *    **順位付け/診断専用**（accept を一切ゲートしない）。
  *
  * [設計判断] 各オペレータの内側ループ（first-improvement 順に依存）への per候補配線は探索順序を変え得るため
  *   本版では見送り（スコア不変を最優先）。screenCell/c1Delta は新規オペレータ・診断のための検証済み部品として
@@ -46,6 +47,38 @@ object C1DeltaPrefilter {
         return Verdict.NEUTRAL
     }
 
-    /** その日を newShift へ変えたとき解消する c1窓不足数（負=改善）。順位付け専用・accept 非ゲート。 */
-    fun c1Delta(index: C1RepairIndex.Index, staff: Int, day: Int): Int = -index.expectedGain(staff, day)
+    /**
+     * (staff,day)→newShift としたときの、その職員の **c1 fire 数の正味増減**（負=改善）。
+     * newShift追加で解消する窓の gain と、旧シフト除去で新たに割れる窓の loss の**両方**を厳密に勘定する
+     * （index.expectedGain は gain のみの近似＝旧シフトが c1制約を持つと自己破壊を見落とす）。順位付け/診断専用
+     * ＝accept を一切ゲートしない（採否は常に呼出側の checker+keep-best）。
+     */
+    fun c1Delta(p: Problem, schedule: Array<IntArray>, staff: Int, day: Int, newShift: Int): Int {
+        if (staff !in 0 until p.S || day !in 0 until p.T || newShift !in 0 until p.K) return 0
+        val row = schedule[staff].clone()   // 単一行のみ複製（c1 は per-staff）
+        val old = row[day]
+        if (old == newShift) return 0
+        val oldFires = staffC1Fires(p, row, staff)
+        row[day] = newShift
+        val newFires = staffC1Fires(p, row, staff)
+        return newFires - oldFires
+    }
+
+    /** 職員 staff の row における全 cons1 窓の不足 fire 数（checker の c1 走査と同一意味論）。 */
+    private fun staffC1Fires(p: Problem, row: IntArray, staff: Int): Int {
+        var fires = 0
+        for (c in p.cons1) {
+            val x = c.shiftIdx
+            if (x !in 0 until p.K || c.day1 !in 1..p.T || c.day2 < 1) continue
+            if (!p.canDo(staff, x)) continue
+            var j = 0
+            while (j <= p.T - c.day1) {
+                var z = 0
+                for (l in 0 until c.day1) if (row[j + l] == x) z++
+                if (z < c.day2) fires++
+                j++
+            }
+        }
+        return fires
+    }
 }

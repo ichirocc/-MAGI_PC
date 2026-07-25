@@ -95,4 +95,30 @@ class C1DeltaPrefilterTest {
         val p = Problem(s); val sc = s.schedule.toIntArray2D()
         assertEquals(C1DeltaPrefilter.Verdict.NEUTRAL, C1DeltaPrefilter.screenCell(p, sc, 0, 1, 2))
     }
+
+    // ---- 3.277.0: exact net c1 delta ----
+
+    @Test
+    fun c1DeltaIsNegativeWhenMoveResolvesWindow() {
+        // [Y,Y,Y] ルール「X 2日窓≥1」。day0→X で窓[0,1]を解消（[1,2]は残る）→ fires 2→1 = -1。
+        val s = single(3, 1, listOf(listOf(2, 2, 2)), cons1 = listOf(C1Row("2", "X", "1")))
+        val p = Problem(s); val sc = s.schedule.toIntArray2D()
+        assertEquals(-1, C1DeltaPrefilter.c1Delta(p, sc, 0, 0, 1))
+    }
+
+    @Test
+    fun c1DeltaIsPositiveWhenMoveBreaksOwnWindow() {
+        // [X,X,Y] ルール「X 3日窓≥2」。窓[0,2]は z=2 で充足。day0→Y にすると z=1<2 → fires 0→1 = +1。
+        //   （expectedGain=gainのみの近似ではこの自己破壊を見落とすが、c1Deltaは loss を勘定する）。
+        val s = single(3, 1, listOf(listOf(1, 1, 2)), cons1 = listOf(C1Row("3", "X", "2")))
+        val p = Problem(s); val sc = s.schedule.toIntArray2D()
+        assertEquals(1, C1DeltaPrefilter.c1Delta(p, sc, 0, 0, 2))
+    }
+
+    @Test
+    fun c1DeltaIsZeroForNoOp() {
+        val s = single(2, 1, listOf(listOf(1, 0)), cons1 = listOf(C1Row("2", "X", "1")))
+        val p = Problem(s); val sc = s.schedule.toIntArray2D()
+        assertEquals(0, C1DeltaPrefilter.c1Delta(p, sc, 0, 0, 1)) // 既にX＝無変化
+    }
 }

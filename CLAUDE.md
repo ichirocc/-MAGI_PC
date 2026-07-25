@@ -1707,6 +1707,22 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## c1Deltaをload-bearing化=exact net c1 deltaへ格上げし候補順位付けへ接続（3.277.0, ユーザー選択「c1Deltaもload-bearing化」）
+3.276.0でscreenCellは実駆動したが`c1Delta`は`-index.expectedGain`の薄いラッパー＝本番未使用のまま残っていた。
+ユーザー選択を受け、単なる経路差し替えでなく**c1Deltaを意味的に格上げ**して load-bearing 化。
+- **`C1DeltaPrefilter.c1Delta`をexact net deltaへ書き換え**: 旧 `c1Delta(index,staff,day) = -expectedGain`（gainのみ
+  の近似）→ 新 `c1Delta(p,schedule,staff,day,newShift)` = 「(staff,day)→newShiftとしたときの**その職員のc1 fire数の
+  正味増減**」（newShift追加で解消するgain **と** 旧シフト除去で新たに割れるlossの両方を厳密勘定・負=改善）。
+  c1はper-staffのため単一行clone＋全cons1窓走査(checker同一意味論)で厳密計算。**expectedGainは旧シフト除去のloss
+  を見落とす**（旧シフトもc1制約を持つと自己破壊を過小評価）欠点をc1Deltaが補う。
+- **`applyC1IndexChainRepair`の候補順位付けを接続**: `sortedByDescending{index.expectedGain(staff,d)}` →
+  `sortedBy{C1DeltaPrefilter.c1Delta(p,work,staff,d,shift)}`（昇順＝最も改善する候補を先に）。旧シフト除去で別窓を
+  割る自己破壊候補が後回しになる**賢い順序**。**順位のみの変更＝keep-best採否は不変**（採否は常にchecker+isBetter+
+  exactPinRegression）。expectedGain/donorMarginはIndex APIとして温存（診断・図の要素、本番hot pathでは非使用）。
+- 検証: ホストJVMで v6/model/root 実コンパイル・**全292テストgreen**（3.276.0の289＋新規3: net deltaが窓解消で負/
+  自己破壊で正/no-opで0）。**敵対ファズ500件再走で退化0・入力破壊0・改善306件（順序変更前と同数）**＝ordering変更が
+  keep-best安全であることを再実証。スコアリング不変（順位付けのみ・重み/採否/既存探索順序いずれも不変）・HF77非該当。
+
 ## index駆動C1修復オペレータ新設=screenCell/c1Deltaを実駆動する経路（3.276.0, ユーザー指示「接続する」→AskUserQuestionで「screenCellを新規オペレータへ」）
 3.275.0でIndex/Prefilterを「検証済みだが hot path では hasActionableC1 のみ live・screenCell/c1Deltaは部品」と
 した続き。ユーザー「接続する」→対象を確認（AskUserQuestion）→「screenCellを新規オペレータへ」＝**既存オペレータに
