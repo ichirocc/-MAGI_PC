@@ -477,7 +477,19 @@ object V6NativeOptimizer {
                 var iterations = 0L
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
 
-                while (!shouldStop() && nowMs() < deadline && hardZeroWinner.get() < 0) {
+                // [3.278.0/監査修正×2]
+                //   ①勝者継続: 旧条件 `hardZeroWinner.get() < 0` は HARD=0 到達で**勝者自身も**次 epoch 境界で
+                //     停止させ、実行可能データでは残り数百秒のソフト研磨予算を放棄していた（runMultiWorker の
+                //     文書化契約「勝者は自予算でソフト研磨を続ける」と衝突）。勝者だけは deadline まで継続する。
+                //   ②epoch 例外隔離: 旧実装は try がロール実行(runAlns等)だけを包み、adaptiveEpochStart／check／
+                //     archive.register／共有採用が無保護＝そこで例外が出ると Deferred が例外完了し await 再送出で
+                //     **全ワーカーの keep-best 成果ごと optimize() が失敗**していた（runMultiWorker は仮説ごとの
+                //     隔離＋firstError＋全滅時のみフォールバックを採用済みの非対称）。epoch 本体を try で包み、
+                //     例外はこのワーカーの epoch ループだけを終了させて現エリートを成果として返す。
+                while (!shouldStop() && nowMs() < deadline &&
+                    (hardZeroWinner.get() < 0 || hardZeroWinner.get() == i)
+                ) {
+                    try {
                     val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
                     roleRuns.merge(assignment.role, 1, Int::plus)
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
@@ -505,12 +517,17 @@ object V6NativeOptimizer {
                     trajectory = start
                     if (better(startReport, eliteReport)) {
                         elite = start.copy2D(); eliteReport = startReport
+                        // [3.278.0/監査修正] 旧: eliteLogs 未更新＝この入口盤面が最終勝者になると、採用盤面を
+                        //   生成していない古いロール実行のフェーズログが globalLogs としてユーザーに表示されていた。
+                        eliteLogs = listOf(MirrorLog(tag = "AdaptivePortfolio",
+                            message = "W$i epoch${epoch + 1} 入口盤面(${AdaptiveHypothesisEpochPolicy.roleLabel(assignment)})をエリート採用 HARD=${startReport.hard} total=${startReport.total}"))
                     }
                     var startImprovedGlobal = false
                     synchronized(lock) {
                         sharedTrajectories[i] = start.copy2D()
                         if (better(startReport, globalReport)) {
                             globalBest = start.copy2D(); globalReport = startReport
+                            globalLogs = eliteLogs   // [3.278.0] 同上: グローバル側の stale ログも同期
                             startImprovedGlobal = true
                         }
                     }
@@ -626,6 +643,13 @@ object V6NativeOptimizer {
                         improvedPrevious = improvedThisEpoch
                     }
                     epoch++
+                    } catch (ce: kotlinx.coroutines.CancellationException) {
+                        throw ce
+                    } catch (e: Exception) {
+                        // [3.278.0] epoch単位の隔離: このワーカーだけ停止し、蓄積済みエリートを成果として返す。
+                        firstError.compareAndSet(null, e)
+                        break
+                    }
                 }
 
                 AdaptiveWorkerOutcome(

@@ -1707,6 +1707,43 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 敵対監査で実証した2クラッシュ＋正しさ/実効性バグの一括修正（3.278.0, ユーザー指示「新しい論理的な不具合などを見つける」→「すべて修正する」）
+本体精読＋並列3監査（EliteIntegration系/runPostOptimization配線/TemporalFlow・Hungarian・DP系）で発見した全件を修正。
+ホストJVMで**全296テストgreen**＋クラッシュ再現ハーネス3種の解消確認＋**golden/real両データで研磨結果がbaselineと
+バイト一致**（＝純粋な堅牢化・クリーン盤面では挙動不変・スコアリング不変）。
+- **[CONFIRMED CRASH #1・最重要] `MinCostAssignment.solve` 全INF行→`p[-1]` AIOOBE**: ポテンシャル`v[j]`は単調非増加(≤0)
+  のため、ある職員の行が全列INF（＝当日のどのslotも担当不可）だと`cur=INF−u−v≥INF=minv初期値`で厳密更新が構造的に
+  一度も起きず`j1=-1`のまま`p[-1]`を読む（**決定的**）。引き金は正規データ＝**担当可否が全て未チェックの群の職員が1人**
+  いるだけで、`handleOptimize`フル経路(12秒予算)がクラッシュ（5秒だと探索が予算を食い尽くしクラスタskipで偶然無事＝
+  「短い予算では動くのに長いと失敗」という不可解な症状）。-1センチネル残存データ（実データで実測）でも同型。
+  兄弟実装`minCostPerfectAssignment`(手M用)はnull fail-safe装備済みなのにこちらだけ欠けていた非対称。
+  **修正**: `solve`を`IntArray?`化し`j1==-1`でnull返し、呼出2箇所(`applyDayAssignmentPolish`/`applyAlternatingSoftPolish`)
+  は`?: continue`でその日をskip（keep-best不変・退化不能）。
+- **[CONFIRMED CRASH #2] `C1RepairAnalysis.opportunities` が-1セルで`covUCell(-1,…)`＝`need1[-1][j]` AIOOBE**:
+  `hasActionableC1`ゲートと`applyC1IndexChainRepair`の両経路で再現（3.270.0と同型の取り残し。オペレータ本体は
+  `old in 0 until p.K`ガード済みなのにAnalysis層だけ欠落の非対称）。**修正**: 範囲外セルからの離脱は除去項0として扱う。
+- **[正しさ/実効性3件]** ①`C1JointLnsPolish:326`のDP提案オラクルlocked判定だけ生`wish>=0`（3.264/3.270のwishLocked統一
+  retrofit漏れ第3サイト）→`wishLocked`へ ②`EliteIntegrationPolish.fuseGroup`が1セルの候補全滅で`break`し残り全セルの
+  融合を放棄→そのセルだけ`continue`でskip ③PORTFOLIOのHARD=0早期終了が勝者含む全ワーカーを停止し実行可能データで
+  残り数百秒のソフト研磨予算を放棄（`runMultiWorker`の「勝者は自予算でソフト研磨継続」契約と衝突）→勝者だけ
+  deadline まで継続する条件へ（`hardZeroWinner.get() < 0 || == i`）。
+- **[PLAUSIBLE→修正]** 適応ポートフォリオのepoch開始処理(adaptiveEpochStart/check/register/共有採用)がtry外＝例外1つで
+  全ワーカーのkeep-best成果ごと`optimize()`が失敗し得た（`runMultiWorker`は隔離済みの非対称）→epoch本体全体をtryで包み
+  例外はそのワーカーのみ停止・現エリートを成果として返す。**[PLAUSIBLE→非バグ確定]** day1≤0退化cons1ルールの
+  チェッカー/ゲート乖離疑いは、`Problem.cons1`構築時の`d1>0 && d2>0`フィルタで両者とも到達不能＝乖離なし。
+- **[軽微7件]** `opportunities.gain`の2計算誤り（`lo`を`v.windowDays`固定→ルールごと`c.day1`基準へ＝同一シフトの
+  長い別ルール窓の切捨て解消／`z<day2`→`z==day2-1`＝1手で実際に解消する窓のみ計上）・手Mに「希」自由生成ガード追加
+  （兄弟実装と同じ方針の対象漏れ）・手Mの-1トークン日を事前skip（trials上限128の浪費防止）・RangePolish pass0の
+  アンカー陳腐化（groupTargetsループが盤面変更済みなら再検査）・SoftPolishVerify「対象なし」判定にCyclicSwap対象族
+  (c2/c41/c42/c41s/c42s/covO)を追加・後処理タイミングログに「最終検査+HF70」区間追加（区間合計=総時間に）・
+  `applyC1IndexChainRepair`の`if (improved) continue`デッドコード除去。
+- **[デッドコード除去]** `HypothesisDiversityPolicy.algorithmFor`（本番呼出0・実割当は`AdaptiveHypothesisEpochPolicy`側）
+  ・`HypothesisEpochAssignment.safetyFloor`（計算されるだけで未読）＋対応テスト2件を整理。
+- eliteLogsのstale（入口盤面がエリート/グローバル採用されてもログ未更新→古いロール実行のフェーズログが最終表示に付く）
+  も採用時に同期するよう修正。
+- 経緯記録: 直前のPR#82(c1研磨採否guard)はユーザー判断でclose（決定論テストでどの採否ポリシー変種もhard/c1のcleanな
+  純改善にならず、hard=6を守る3.277現状維持が最良と裁定。guardコードは閉PRの履歴に保存）。
+
 ## c1Deltaをload-bearing化=exact net c1 deltaへ格上げし候補順位付けへ接続（3.277.0, ユーザー選択「c1Deltaもload-bearing化」）
 3.276.0でscreenCellは実駆動したが`c1Delta`は`-index.expectedGain`の薄いラッパー＝本番未使用のまま残っていた。
 ユーザー選択を受け、単なる経路差し替えでなく**c1Deltaを意味的に格上げ**して load-bearing 化。

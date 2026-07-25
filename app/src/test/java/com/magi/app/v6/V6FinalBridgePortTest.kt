@@ -53,7 +53,8 @@ class V6FinalBridgePortTest {
             longArrayOf(9, 1, 9),
             longArrayOf(1, 9, 9),
         )
-        val a = MinCostAssignment.solve(cost)
+        // [3.278.0] solve は全INF行の fail-safe で nullable 化（実行可能な行列では常に非null）。
+        val a = MinCostAssignment.solve(cost)!!
         assertEquals(2, a[0]); assertEquals(1, a[1]); assertEquals(0, a[2])
         // 各行・各列が一意（順列）。
         assertEquals(3, a.toSet().size)

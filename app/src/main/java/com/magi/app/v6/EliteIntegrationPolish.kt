@@ -279,7 +279,9 @@ internal object EliteIntegrationPolish {
                     }
                 }
             }
-            if (next.isEmpty()) break
+            // [3.278.0/監査修正] 1セルの候補全滅（wishLocked で希望値が候補に無い・全候補が非canDo 等）で
+            //   break すると**残り全セルの融合を放棄**していた。正しくはこのセルだけ skip して現ビームのまま継続。
+            if (next.isEmpty()) continue
             beam = next.sortedWith(beamComparator).take(config.beamWidth)
         }
         return bestSchedule?.let { it to bestReport }

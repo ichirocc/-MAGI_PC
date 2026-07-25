@@ -323,7 +323,10 @@ internal object C1JointLnsPolish {
                 val i = pair.first; val x = pair.second
                 val rules = p.cons1.filter { it.shiftIdx == x }
                     .map { C1TemporalDp.Rule(it.day1, it.day2) }
-                val locked = BooleanArray(p.T) { day -> p.wish[i][day] >= 0 }
+                // [3.278.0/監査修正] 生 wish>=0 は実現不能な希望（担当外シフトへの希望）まで固定扱いし、
+                //   DP 提案オラクルを過剰ロックしていた（同ファイル他2サイトは 3.264.0 で wishLocked へ統一済みの
+                //   retrofit 漏れ第3サイト）。wishLocked = 実現可能な希望のみ凍結（規約どおり）。
+                val locked = BooleanArray(p.T) { day -> p.wishLocked(i, day) }
                 val proposal = C1TemporalDp.solve(
                     row = schedule[i], targetShift = x, rules = rules, locked = locked,
                     maxRelocations = 6, seed = rng.nextLong(), maxExactWindow = 20,

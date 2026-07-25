@@ -12,11 +12,12 @@ internal enum class HypothesisEpochRole {
     MAX_DISTANCE_RSI_PLUS,
 }
 
+// [3.278.0/デッドコード除去] safetyFloor フィールドは計算されるだけで本番で一度も読まれなかった
+//   （テスト assert のみ）。W0/W4 の安全床という設計意図は assignmentFor の role 分岐(slot==0/4)自体が担う。
 internal data class HypothesisEpochAssignment(
     val role: HypothesisEpochRole,
     val algorithm: V6Algorithm,
     val intensity: Int,
-    val safetyFloor: Boolean,
 )
 
 /**
@@ -65,7 +66,6 @@ internal object AdaptiveHypothesisEpochPolicy {
             role = role,
             algorithm = algorithmFor(role),
             intensity = intensityFor(role, reassignments),
-            safetyFloor = slot == 0 || slot == 4,
         )
     }
 

@@ -369,8 +369,12 @@ object V6HotfixPasses {
             val softAfter = UnifiedViolationChecker.check(state, work)
             fun bd(r: ViolationReport, k: String) = r.breakdown[k] ?: 0
             val adopted = totalCyc + totalC1 + totalC3 + totalC3r + totalC3mn + totalRange + totalC3run + totalC3pat + totalBlockSwap + totalApt + totalFair
+            // [3.278.0/監査修正] CyclicSwap の正当な対象族(c2/c41/c42/c41s/c42s/covO)も対象数に含める
+            //   （旧: c42等のみ違反の盤面で採用0のとき誤って「対象なし」と表示していた）。
             val targets = bd(preSoftRep, "c1") + bd(preSoftRep, "c3") + bd(preSoftRep, "c3m") + bd(preSoftRep, "c3mn") +
-                bd(preSoftRep, "low") + bd(preSoftRep, "high") + bd(preSoftRep, "apt") + bd(preSoftRep, "fair")
+                bd(preSoftRep, "low") + bd(preSoftRep, "high") + bd(preSoftRep, "apt") + bd(preSoftRep, "fair") +
+                bd(preSoftRep, "c2") + bd(preSoftRep, "c41") + bd(preSoftRep, "c42") +
+                bd(preSoftRep, "c41s") + bd(preSoftRep, "c42s") + bd(preSoftRep, "covO")
             val verdict = when {
                 adopted > 0 -> "有効(採用${adopted}手)"
                 targets == 0 -> "対象なし"
@@ -462,7 +466,9 @@ object V6HotfixPasses {
 
         val tHf = System.currentTimeMillis()
         if (shouldStop()) {
-            logs.add(MirrorLog(level = "W", tag = "POST", message = "予算超過のため後処理を短縮しました(残りパスは打ち切り)"))
+            // [3.278.0/文言修正] この時点で残るのは最終検査(HF70)のみ＝「残りパスの打ち切り」は各パス内部の
+            //   shouldStop で既に済んでいる事実に合わせる。
+            logs.add(MirrorLog(level = "W", tag = "POST", message = "予算超過のため後処理は締切で短縮されました(各パスは内部で打ち切り済み・以降は最終検査のみ)"))
         }
 
         onPhase("後処理 HF70 異常検知")
@@ -480,7 +486,9 @@ object V6HotfixPasses {
         logs.add(MirrorLog(level = "I", tag = "POST",
             message = "後処理タイミング 総${tEnd - t0}ms: HF80=${t67 - t80}ms HF67=${t66 - t67}ms HF66=${t66Done - t66}ms" +
                 " 巡回研磨(厳密日割当+c1/c3/range/apt/fair+曜日/交互)=${tC1Lns - t66Done}ms" +
-                " C1共同LNS=${tPersonalLns - tC1Lns}ms 個人共同LNS=${tHf - tPersonalLns}ms"))
+                " C1共同LNS=${tPersonalLns - tC1Lns}ms 個人共同LNS=${tHf - tPersonalLns}ms" +
+                // [3.278.0] 旧: 最終検査(フルcheck+HF70)が無区間で「区間合計 < 総」の不一致を生んでいた。
+                " 最終検査+HF70=${tEnd - tHf}ms"))
 
         val allLogs = ArrayList<MirrorLog>()
         allLogs.addAll(logs)
@@ -684,7 +692,6 @@ object V6HotfixPasses {
                         }
                     }
                 }
-                if (improved) continue
             }
             if (!improved) break
             pass++
@@ -1846,6 +1853,9 @@ object V6HotfixPasses {
                 if (shouldStop() || trials >= maxTrials) break
                 if (work[hi][j] != k || !movable(hi, j)) continue
                 val tokens = IntArray(p.S) { work[it][j] }
+                // [3.278.0/監査修正] -1(正規化センチネル)トークンを含む日は当該列が全行INF＝Hungarianが必ず
+                //   null になるのに、旧実装は receiver 1件ごとに trials(上限128)を浪費していた。日ごと事前スキップ。
+                if (tokens.any { it !in 0 until p.K }) continue
 
                 val rawReceivers = (0 until p.S).filter { r ->
                     r != hi &&
@@ -1876,6 +1886,10 @@ object V6HotfixPasses {
                             if (i == receiver && newK != k) continue
                             if (newK != oldK) {
                                 if (!movable(i, j) || !p.canDo(i, newK)) continue
+                                // [3.278.0/監査修正] 兄弟実装(tryFlexibleDayFlow/C1TemporalFlowPolish)と同じ
+                                //   「『希』は希望セルとしてのみ存在させ、最適化が自由生成しない」ガード。手Mだけ
+                                //   欠けており、既存の「希」トークンを希望していない別職員へ再割当できていた。
+                                if (state.shifts.getOrNull(newK)?.kigou == "希") continue
                                 work[i][j] = newK
                                 val badRun = p.makesForbiddenRun(work, i, j, newK)
                                 work[i][j] = oldK
@@ -2119,7 +2133,9 @@ object V6HotfixPasses {
                 }
             }
 
-            val rep0 = if (pass == 0) before else UnifiedViolationChecker.check(state, work)
+            // [3.278.0/監査修正] pass 0 でも直前の groupTargets ループ(手F)が盤面を変更済み(improved)なら
+            //   before は陳腐＝解消済みターゲットへの空振り・新規違反の見落としを防ぐため再検査する。
+            val rep0 = if (pass == 0 && !improved) before else UnifiedViolationChecker.check(state, work)
             val highTargets = ArrayList<Pair<Int, Int>>()
             val lowTargets = ArrayList<Pair<Int, Int>>()
             for ((key, cls) in rep0.countViolations) {
@@ -3144,7 +3160,8 @@ object V6HotfixPasses {
                     }
                 }
             }
-            val assign = MinCostAssignment.solve(costM)
+            // [3.278.0] 全INF行(担当可否ゼロの職員等)は実行可能な完全割当が無い＝nullでその日をスキップ。
+            val assign = MinCostAssignment.solve(costM) ?: continue
             val cand = work.copy2D()
             var changed = false
             for (r in free.indices) {
@@ -3237,7 +3254,8 @@ object V6HotfixPasses {
                         }
                     }
                 }
-                val assign = MinCostAssignment.solve(costM)
+                // [3.278.0] 全INF行(担当可否ゼロの職員等)は実行可能な完全割当が無い＝nullでその日をスキップ。
+                val assign = MinCostAssignment.solve(costM) ?: continue
                 val cand = work.copy2D()
                 var changed = false
                 for (r in free.indices) {

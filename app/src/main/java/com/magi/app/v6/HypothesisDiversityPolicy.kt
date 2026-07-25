@@ -31,12 +31,8 @@ internal object HypothesisDiversityPolicy {
         else -> HypothesisStartPlan(HypothesisStartMode.MIXED_REPAIR, 2)
     }
 
-    /** RSI++ remains the largest share, while ALNS and RSI see genuinely different landscapes. */
-    fun algorithmFor(index: Int): V6Algorithm = when (Math.floorMod(index, 4)) {
-        1 -> V6Algorithm.ALNS
-        2 -> V6Algorithm.RSI
-        else -> V6Algorithm.RSI_PLUS
-    }
+    // [3.278.0/デッドコード除去] algorithmFor(index) は本番呼出0だった（実際のアルゴリズム割当は
+    //   AdaptiveHypothesisEpochPolicy.algorithmFor が担う）。3.266.0 統合時の残滓のため撤去。
 
     /** Long AUTO runs use an actual heterogeneous portfolio instead of eight RSI++ clones. */
     fun autoAlgorithmForBudget(budgetSec: Int): V6Algorithm = when {

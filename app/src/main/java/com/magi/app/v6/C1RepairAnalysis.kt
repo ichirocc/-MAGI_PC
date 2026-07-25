@@ -104,23 +104,33 @@ object C1RepairAnalysis {
             if (s[v.staff][d] == v.shift) continue
             val wishConflict = p.wishLocked(v.staff, d)
             val patternRisk = p.makesForbiddenRun(s, v.staff, d, v.shift)
-            // gain = この日を shift にすると解消する（この職員の）不足窓数
+            // gain = この日を shift にすると**実際に解消する**（この職員の）不足窓数。
+            //   [3.278.0/監査修正] ①窓開始の下界 lo は**ルールごとの窓幅 c.day1** から取る（旧: v.windowDays
+            //   固定＝同一シフトのより長い別ルール窓（休の5日窓＋15日窓型）が d を含んでいても切り捨てられ過小）。
+            //   ②+1 で充足に変わるのは z == c.day2 - 1 の窓のみ（旧: z < c.day2＝1手では解消しない深い不足窓も
+            //   計上する過大）。checker は不足窓ごとに 1 fire 計上するため「解消数」＝ちょうど閾値未満1の窓数。
             var gain = 0
-            val lo = (d - v.windowDays + 1).coerceAtLeast(0)
             for (c in p.cons1) {
                 if (c.shiftIdx != v.shift || c.day1 !in 1..p.T) continue
+                val lo = (d - c.day1 + 1).coerceAtLeast(0)
                 for (ws in lo..d.coerceAtMost(p.T - c.day1)) {
                     if (d !in ws until ws + c.day1) continue
                     var z = 0
                     for (l in 0 until c.day1) if (s[v.staff][ws + l] == v.shift) z++
-                    if (z < c.day2) gain++
+                    if (z == c.day2 - 1) gain++
                 }
             }
             val old = s[v.staff][d]
             val cntNew = (0 until p.S).count { s[it][d] == v.shift }
-            val cntOld = (0 until p.S).count { s[it][d] == old }
-            val covRisk = (p.covOCell(v.shift, d, cntNew + 1) - p.covOCell(v.shift, d, cntNew)) +
-                (p.covUCell(old, d, cntOld - 1) - p.covUCell(old, d, cntOld))
+            // [3.278.0/監査で実証されたクラッシュの修正] old は -1（normalizeSchedule のセンチネル＝削除済み
+            //   シフト等の残存 index）になり得る。無検証で covUCell(-1,…)＝need1[-1][j] を読むと AIOOBE
+            //   （hasActionableC1 ゲート／applyC1IndexChainRepair の両経路で再現済み・3.270.0 と同型の取り残し）。
+            //   範囲外セルからの離脱は何も不足させないため除去項は 0。
+            val removalRisk = if (old in 0 until p.K) {
+                val cntOld = (0 until p.S).count { s[it][d] == old }
+                p.covUCell(old, d, cntOld - 1) - p.covUCell(old, d, cntOld)
+            } else 0
+            val covRisk = (p.covOCell(v.shift, d, cntNew + 1) - p.covOCell(v.shift, d, cntNew)) + removalRisk
             out.add(RepairOpportunity(d, gain, covRisk, patternRisk, wishConflict))
         }
         return out

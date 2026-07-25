@@ -9,10 +9,10 @@ import org.junit.Test
 class HypothesisEpochPolicyTest {
     @Test
     fun w0RemainsPermanentSafetyFloor() {
+        // [3.278.0] safetyFloor フィールドはデッドコードとして撤去（設計意図は role 分岐自体が担保）。
         for (r in 0..20) {
             val a = AdaptiveHypothesisEpochPolicy.assignmentFor(0, r)
             assertEquals(HypothesisEpochRole.BASELINE_REFINE, a.role)
-            assertTrue(a.safetyFloor)
             assertFalse(AdaptiveHypothesisEpochPolicy.shouldReassign(0, false, 99, 0))
         }
     }

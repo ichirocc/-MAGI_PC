@@ -46,10 +46,10 @@ class HypothesisDiversityPolicyTest {
     }
 
     @Test
-    fun eightRolesContainThreeAlgorithmsAndFourStartShapes() {
-        val algorithms = (0 until 8).map(HypothesisDiversityPolicy::algorithmFor).toSet()
+    fun eightRolesContainFourStartShapes() {
+        // [3.278.0] HypothesisDiversityPolicy.algorithmFor はデッドコードとして撤去
+        //   （実際のアルゴリズム割当は AdaptiveHypothesisEpochPolicy.algorithmFor が担う）。
         val modes = (0 until 8).map { HypothesisDiversityPolicy.startPlanFor(it).mode }.toSet()
-        assertEquals(setOf(V6Algorithm.ALNS, V6Algorithm.RSI, V6Algorithm.RSI_PLUS), algorithms)
         assertEquals(HypothesisStartMode.values().toSet(), modes)
         assertEquals(HypothesisStartMode.BASELINE, HypothesisDiversityPolicy.startPlanFor(0).mode)
         assertEquals(HypothesisStartMode.BASELINE, HypothesisDiversityPolicy.startPlanFor(4).mode)
