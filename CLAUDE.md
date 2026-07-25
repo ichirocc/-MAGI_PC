@@ -22,6 +22,19 @@
   解除は「原始人やめて」「通常モード」の明示指示のみ。
 - 実装: `~/.claude/settings.json` の SessionStart フック（`~/.claude/session-bootstrap.md` を注入）＋本節の二重化。
   リモートコンテナは使い捨てのためフックは環境ごと消えうる＝本節が永続側の正。
+- **プラグイン正規導入済み（2026-07-25, ユーザー指示）**: genshijin@genshijin v1.4.0（サブスキル6種:
+  commit/compress/crew/help/review/stats 付き）・superpowers@superpowers-marketplace v6.2.0（14スキル）・
+  dig@kuu-marketplace v3.0.1 を `claude plugin install`（userスコープ＝`~/.claude/plugins/`）で導入。
+  環境が再構築されて消えた場合の再導入コマンド:
+  ```
+  claude plugin marketplace add InterfaceX-co-jp/genshijin && claude plugin install genshijin
+  claude plugin marketplace add obra/superpowers-marketplace && claude plugin install superpowers@superpowers-marketplace
+  claude plugin marketplace add fumiya-kume/claude-code && claude plugin install dig@kuu-marketplace
+  ```
+  ※fumiya-kume/claude-code の実マーケット名は `kuu-marketplace`。genshijin はソースリポジトリ直接追加
+  （この環境の git proxy では公式ディレクトリ(anthropics系)が解決できないため）。
+  ※`~/.claude/skills/` に前セッションの手動コピー版（genshijin/dig/superpowers系16件）が残存＝プラグインと
+  重複するが無害（一覧ノイズのみ）。掃除する場合はセッション開始直後にバックアップ退避してから削除。
 
 ## プロジェクト概要
 看護師/スタッフのシフト表を最適化する Android ネイティブアプリ（Kotlin + Jetpack Compose）。
