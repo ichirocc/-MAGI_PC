@@ -217,6 +217,9 @@ object V6HotfixPasses {
         //   上限。違反セル指向なので空巡は即終了（コスト0）。
         val c3Anchor = setOf("vio-c3", "vio-c3m", "vio-c3mn")
         val maxRounds = 4
+        // [C1RepairIndex / 3.275.0] c1不足窓の索引用 Problem（state の純関数＝巡回間で不変。各オペレータが
+        //   内部で構築する Problem(state) と同一）。C1DeltaPrefilter のクラスタ前段ゲートに使う。
+        val pC1 = Problem(state)
         var round = 0
         var totalCyc = 0; var totalC1 = 0; var totalC3 = 0; var totalC3r = 0; var totalC3mn = 0; var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0
         while (round < maxRounds && !clusterStop()) {
@@ -227,10 +230,18 @@ object V6HotfixPasses {
             work = rCyc.newSchedule.copy2D(); totalCyc += rCyc.applied; roundApplied += rCyc.applied
             if (round == 0) logs.addAll(rCyc.logs)
 
-            onPhase("後処理 期間要件(c1)研磨 [巡${round + 1}]")
-            val rC1 = applyC1WindowPolish(state, work, maxPasses = 3, shouldStop = clusterStop, seed = roundSeed(seed, 0x1C1L, round))
-            work = rC1.newSchedule.copy2D(); totalC1 += rC1.applied; roundApplied += rC1.applied
-            if (round == 0) logs.addAll(rC1.logs)
+            // [C1RepairOperators façade / 3.275.0] 散在していた C1 オペレータを図の1層へ集約（1:1委譲＝挙動同一）。
+            //   自己内移設+同日swap(applyC1WindowPolish)は c1違反セルに**厳密アンカー**する＝不足窓ゼロなら必ず
+            //   no-op。C1DeltaPrefilter で不足窓の有無を1回判定し、無ければ本オペレータのみ安全にスキップする
+            //   （Index/Prefilter を hot path で実際に使う唯一の provably-safe な地点）。他3op(temporalFlow/
+            //   wideBeam/exact)は c1中立の total改善手を出し得る／独自の内部ゲートを持つため gate せず従来どおり実行。
+            val c1Index = C1RepairIndex.build(pC1, work)
+            if (C1DeltaPrefilter.hasActionableC1(c1Index)) {
+                onPhase("後処理 期間要件(c1)研磨 [巡${round + 1}]")
+                val rC1 = C1RepairOperators.selfRelocateAndSameDaySwap(state, work, maxPasses = 3, shouldStop = clusterStop, seed = roundSeed(seed, 0x1C1L, round))
+                work = rC1.newSchedule.copy2D(); totalC1 += rC1.applied; roundApplied += rC1.applied
+                if (round == 0) logs.addAll(rC1.logs)
+            }
 
             // [3.254.0/C1TemporalFlowPolish, C1時系列DP+ジョイント再割当研磨=旧C1TemporalSwapPolish/
             // C1Rotate/BeamC1PolishV2 を置換] ユーザー指摘「applyC1WindowPolish(単一職員局所)・
@@ -254,7 +265,7 @@ object V6HotfixPasses {
             // CombinatorialRepair(3.249.0)はC1Window/C3mn/Range/Apt/Fairの内部augmentationで
             // C1系の別パスではないため対象外(廃止候補にはしない)。
             onPhase("後処理 期間要件(c1)時系列DP+ジョイント再割当研磨 [巡${round + 1}]")
-            val rC1flow = C1TemporalFlowPolish.apply(
+            val rC1flow = C1RepairOperators.temporalFlow(
                 state, work, maxPasses = 2, maxRelocations = 4, trials = 4,
                 shouldStop = clusterStop, seed = roundSeed(seed, 0xC1F10L, round),
             )
@@ -266,7 +277,7 @@ object V6HotfixPasses {
             // sample_state_v6.json)の両方・全15シードでtotalが真に改善することを確認済み(applyC1BeamPolish
             // のdocを参照)。BeamC1PolishV2で見つからない残差にも届く可能性があるため直後に配線。
             onPhase("後処理 期間要件(c1)広域ビーム研磨 [巡${round + 1}]")
-            val rC1wide = applyC1BeamPolish(state, work, shouldStop = clusterStop, seed = roundSeed(seed, 0xC1BEAL, round))
+            val rC1wide = C1RepairOperators.wideBeam(state, work, shouldStop = clusterStop, seed = roundSeed(seed, 0xC1BEAL, round))
             work = rC1wide.newSchedule.copy2D(); totalC1 += rC1wide.applied; roundApplied += rC1wide.applied
             if (round == 0) logs.addAll(rC1wide.logs)
 
@@ -274,7 +285,7 @@ object V6HotfixPasses {
             //   窓スコープの coverage保存 permutation 厳密探索で拾う（純Kotlin・依存ゼロ）。A1=解析駆動
             //   ディスパッチ: 証明された解消不能スパン(exhaustive && min==base)を memo で二度解かない。
             onPhase("後処理 期間要件(c1)厳密窓修復 [巡${round + 1}]")
-            val rC1exact = applyC1ExactWindowRepair(state, work, shouldStop = clusterStop)
+            val rC1exact = C1RepairOperators.exactWindow(state, work, shouldStop = clusterStop)
             work = rC1exact.newSchedule.copy2D(); totalC1 += rC1exact.applied; roundApplied += rC1exact.applied
             if (round == 0) logs.addAll(rC1exact.logs)
 
@@ -426,7 +437,7 @@ object V6HotfixPasses {
         val tC1Lns = System.currentTimeMillis()
         val remainingForC1Lns = (deadlineMs - tC1Lns).coerceAtLeast(0L).coerceAtMost(100_000L)
         val c1LnsCap = (remainingForC1Lns * 8_000L / 14_000L).coerceAtMost(8_000L)
-        val rC1Lns = C1JointLnsPolish.apply(
+        val rC1Lns = C1RepairOperators.jointLns(
             state, work, config = C1JointLnsPolish.Config(maxMillis = c1LnsCap), shouldStop = shouldStop,
         )
         work = rC1Lns.newSchedule.copy2D()

@@ -1707,6 +1707,40 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## C1研磨アーキテクチャを図どおりに寄せる=Index/Operators façade/Delta Prefilter を新設（3.275.0, ユーザー提示のパイプライン図→「賢く実装する。実装コスト無視する」）
+ユーザーがC1研磨の理想アーキ図（UnifiedViolationChecker→C1RepairAnalysis→**C1RepairIndex**→**C1RepairOperators**→
+**C1 Delta Prefilter**→checker→keep-best）を提示。grep実測で「Analysis/両端は実在、中間3層は未実装 or 散在」＝
+現状コード55-60%一致と回答→「賢く実装する。実装コスト無視する」。**grillingで配線方針を1問確定＝「加算的・
+スコア不変」**（全面再配線は3.254.0で退行を理由に不採用にした"再dispatch統合"の危険が再来するため回避）。
+- **新設3ファイル（全て純関数/読取専用 or 純委譲＝スコアリング不変・退化不能）**:
+  - **`C1RepairIndex.kt`**（読取専用索引）: `C1RepairAnalysis`の出力をO(1)で引ける4ルックアップへ集約
+    （dayToWindows / staffRuleWindows / expectedGain(staff,day) / donorMargin(staff,day)=そのc1シフトを抜いても
+    壊れない余裕・>0=安全ドナー）。各オペレータが個別に再計算していた窓走査・ドナー余裕を1箇所へ。純関数
+    （Problem×盤面）＝副作用なし。
+  - **`C1DeltaPrefilter.kt`**（accept非変更の事前枝刈り）: `hasActionableC1(index)`=不足窓ゼロ判定 /
+    `screenCell(...)`=単一セル候補のHARD_REJECT/NEUTRAL判定（**「checker+isBetterが確実に却下する候補」だけ落とす**
+    ＝退化不能: 無変化・groupViol(canDo外)・希望を破るpref・c3n を HARD_REJECT。**希望"へ寄せる"候補は NEUTRAL
+    ＝落とさない**のが安全性の肝）/ `c1Delta(...)`=順位付け専用(accept非ゲート)。
+  - **`C1RepairOperators.kt`**（既存パスへ1:1委譲する内部façade）: selfRelocateAndSameDaySwap(=applyC1WindowPolish)
+    /temporalFlow/wideBeam/exactWindow/jointLns を**順序・引数・採否を一切変えず委譲**＝挙動完全同一。
+    3.254.0で不採用にした"再dispatch統合"には**しない**（委譲のみ）。共有前段 buildIndex/hasActionableC1/provenWalls も提供。
+- **本番配線（runPostOptimization、挙動同一を厳守）**: C1系5呼出をすべて façade 委譲へ差し替え。
+  **hasActionableC1 ゲートは applyC1WindowPolish(=selfRelocateAndSameDaySwap)のみに適用**＝これは c1違反セルに
+  **厳密アンカー**するため不足窓ゼロなら必ず no-op（コード精読で確認・テストで固定）＝skipしても盤面byte一致。
+  **他3op(temporalFlow/wideBeam/exact)は非gate**（temporalFlowは c1中立でも total改善のcoverage保存手を出し得る／
+  exactは独自の内部c1==0ゲートを持つ＝一括skipは非安全と判明。安全側に倒し1opのみgate）。これがIndex/Prefilterを
+  hot pathで実際に使う唯一のprovably-safeな地点。screenCell/c1Deltaは検証済み公開部品として提供（既存オペレータの
+  内側first-improvement順序を変えぬよう per候補配線は見送り＝スコア不変最優先）。
+- **正直な限界**: 図の「Delta Prefilter=候補ごとにoperator↔checker間で挟む段」の per候補版は、既存オペレータの
+  first-improvement順序を変え得るため本版では未配線（screenCell/c1Deltaは部品として用意・新規オペレータ/診断用）。
+  hasActionableC1のクラスタ前段ゲートは c1=0時に冗長な1回のchecker.checkを省く小さな最適化＝機能的削減効果は小
+  （C1研磨の実削減余地は3.263.0で確認した構造的壁が支配的）。本変更の主眼は**構造を図へ寄せる（散在オペレータの
+  cohesiveな置き場＋共有前段）**こと。
+- 検証: ホストJVM（kotlin-compiler-embeddable 2.0.21）で v6/model/root を実コンパイル・**全285テストgreen**
+  （3.274.0の271＋新規14: Index索引の手計算固定/Prefilterのaccept非変更5判定/façade委譲5本の挙動同一+gate安全性）。
+  委譲は同一seedで direct==façade を assert、gateは c1クリーン盤面で applyC1WindowPolish が no-op(applied=0・盤面一致)
+  を固定。スコアリング不変・HF77非該当（重み・採否・探索順序いずれも不変、構造集約と読取専用前段のみ）。
+
 ## 3.273.0のA4/診断3件を敵対監査で確認・修正（3.274.0, 実機ログ4fca3273→ユーザー指示「敵対監査」）
 実機ログ（PORTFOLIO 300s×2, 最終 必須=4 合計=166）で 3.271.0（PersonalJointLNS 2591ms/total 174→166・
 C1JointLNS 8006ms＝飢餓解消の実効確認）／3.272.0（MUS「証明つき」が福澤B4・8/1・8/6で発火）／3.273.0
