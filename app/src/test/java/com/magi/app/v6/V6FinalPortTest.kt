@@ -1,5 +1,6 @@
 package com.magi.app.v6
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,5 +74,39 @@ class V6FinalPortTest {
                 lastBestImproveMs = 290_000L, effStall = effStall,   // 10秒前に改善
             ),
         )
+    }
+
+    // ==== [3.281.0/停滞レビューA] effectiveStallMs＝c3n構造壁(証明つき)の plateau 移行 ====
+
+    private val stallHard = 37_500L
+    private val stallLong = 270_000L
+
+    @Test fun effectiveStallUsesShortStallForBasePlateau() {
+        // 従来どおり: bestHard<=hardFloor かつ 非covU HARD=0 → 短い閾値（挙動不変の回帰）。
+        assertEquals(stallHard, V6FinalPort.effectiveStallMs(0, 0, 0, false, false, stallHard, stallLong))
+        assertEquals(stallHard, V6FinalPort.effectiveStallMs(2, 2, 0, false, false, stallHard, stallLong))
+    }
+
+    @Test fun effectiveStallUsesShortStallWhenC3nWallProven() {
+        // 実機ログ再現: hardFloor=0・c3n=1のみ残存・ForbiddenDiagが壁を証明 → 短い閾値へ移行
+        //   （旧実装は常に270s＝300s予算では構造的に発火不能だった）。
+        assertEquals(stallHard, V6FinalPort.effectiveStallMs(1, 0, 1, true, true, stallHard, stallLong))
+    }
+
+    @Test fun effectiveStallKeepsLongStallWhenWallUnproven() {
+        // 証明が無い（診断未実行/崩す手が実在する）間は従来どおり長い閾値で粘る＝品質側に倒す。
+        assertEquals(stallLong, V6FinalPort.effectiveStallMs(1, 0, 1, true, false, stallHard, stallLong))
+    }
+
+    @Test fun effectiveStallKeepsLongStallWhenOtherNonCovUHardRemains() {
+        // groupViol/pref が混在（nonCovUAllC3n=false）なら、たとえ壁が証明されていても長い閾値のまま
+        //   ＝解ける可能性のある HARD を早々に諦めない。
+        assertEquals(stallLong, V6FinalPort.effectiveStallMs(2, 0, 2, false, true, stallHard, stallLong))
+    }
+
+    @Test fun effectiveStallKeepsLongStallWhenCovUAboveFloor() {
+        // covU が構造床より高い（まだ下げられる）間は c3n 壁が証明済みでも長い閾値で粘る。
+        //   bestHard(3) > hardFloor(0)+nonCovU(1) ＝ covU 部分が床超過。
+        assertEquals(stallLong, V6FinalPort.effectiveStallMs(3, 0, 1, true, true, stallHard, stallLong))
     }
 }

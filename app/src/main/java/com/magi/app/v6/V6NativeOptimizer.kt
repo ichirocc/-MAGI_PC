@@ -476,6 +476,11 @@ object V6NativeOptimizer {
                 var epoch = 0
                 var iterations = 0L
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
+                // [3.281.0/停滞レビューB] ワーカー専属のHF63をエポック横断で共有。旧: runRsi 呼出ローカルのため
+                //   短いエポック(rounds=2)では「focus 2ラウンドで threshold 到達→即破棄→次エポックで白紙から
+                //   再学習」を全エポックで反復し、解けない族(実機: c3n)へ毎回突撃していた。ワーカー内は逐次
+                //   実行＝並行アクセスなし。ワーカー間では共有しない（役割多様性を汚染しないため）。
+                val workerHf63 = Hf63Infeasibility()
 
                 // [3.278.0/監査修正×2]
                 //   ①勝者継続: 旧条件 `hardZeroWinner.get() < 0` は HARD=0 到達で**勝者自身も**次 epoch 境界で
@@ -574,8 +579,8 @@ object V6NativeOptimizer {
                         }
                         when (assignment.algorithm) {
                             V6Algorithm.ALNS -> runAlns(state, start.copy2D(), roleOptions, quantum, stopRole, progress)
-                            V6Algorithm.RSI -> runRsi(state, start.copy2D(), roleOptions, quantum, stopRole, progress)
-                            else -> runRsiPlus(state, start.copy2D(), roleOptions, quantum, stopRole, progress)
+                            V6Algorithm.RSI -> runRsi(state, start.copy2D(), roleOptions, quantum, stopRole, progress, workerHf63)
+                            else -> runRsiPlus(state, start.copy2D(), roleOptions, quantum, stopRole, progress, workerHf63)
                         }
                     } catch (ce: kotlinx.coroutines.CancellationException) {
                         throw ce
@@ -1454,6 +1459,7 @@ object V6NativeOptimizer {
         budgetSec: Int,
         shouldStop: () -> Boolean = { false },
         onProgress: (String, ViolationReport?, Long, Long) -> Unit,
+        sharedHf63: Hf63Infeasibility? = null,
     ): V6OptimizerResult {
         val started = nowMs()
         val rng = Random(actualSeed(options.seed) xor 0x451L)
@@ -1465,7 +1471,13 @@ object V6NativeOptimizer {
         val logs = ArrayList<MirrorLog>()
         // [HF63] ラウンド境界で改善ストリームを追跡し、構造的に充足困難な族を focus 対象から外す。
         // best-of-rounds のため、回避は「無駄なラウンドを達成可能な族へ振り向ける」だけで悪化は起きない。
-        val hf63 = Hf63Infeasibility()
+        // [3.281.0/停滞レビューB] 適応ポートフォリオの短いエポック(rounds=2)では「focus を2ラウンド投入して
+        //   threshold に達した瞬間に runRsi ごと破棄→次エポックで白紙から再学習」を数十回反復していた
+        //   （実機ログ: W1x32+W2x35=67エポックが毎回 c3n を2ラウンドずつ攻めて学習を捨てる）。呼出元
+        //   （ワーカー）が sharedHf63 を渡すとエポックを跨いで停滞学習が持続する。gBestCurV は全期間min の
+        //   ため、エポック間の摂動で族の件数が一時的に増えても self-correction は誤発火しない（真の改善=
+        //   全期間minの更新のみでリセット）＝クロスエポック共有は意味論的に健全。省略時は従来どおり新規。
+        val hf63 = sharedHf63 ?: Hf63Infeasibility()
         // [HARD=0非到達への配慮 / 静的covU床] 構造的 covU 下限（有資格者を全員就けても埋まらない席=forcedCovU）は
         //   最適化中に不変。covU がこの床に達したら「これ以上 covU は下げられない」と静的に確定するので、HF63 の
         //   動的検知(約3ラウンド無改善を要する)を待たず round 0 から即 focus 除外し、RSI の残ラウンドを解ける族
@@ -1592,6 +1604,7 @@ object V6NativeOptimizer {
         budgetSec: Int,
         shouldStop: () -> Boolean = { false },
         onProgress: (String, ViolationReport?, Long, Long) -> Unit,
+        sharedHf63: Hf63Infeasibility? = null,   // [3.281.0/B] Phase2 RSI へ透過（エポック跨ぎのHF63学習持続）
     ): V6OptimizerResult {
         val started = nowMs()
         val seedSec = max(10, (budgetSec * 0.20).toInt())
@@ -1601,7 +1614,7 @@ object V6NativeOptimizer {
         val logs = ArrayList<MirrorLog>()
         val seed = runV5(state, initial, options, seedSec, shouldStop, onProgress)
         logs.add(MirrorLog(tag = "RSIPlus", message = "Phase1 Seed: HARD=${seed.report.hard} total=${seed.report.total}"))
-        val rsi = if (shouldStop()) seed else runRsi(state, seed.schedule, options, rsiSec, shouldStop, onProgress)
+        val rsi = if (shouldStop()) seed else runRsi(state, seed.schedule, options, rsiSec, shouldStop, onProgress, sharedHf63)
         val base = if (better(rsi.report, seed.report)) rsi else seed
         logs.add(MirrorLog(tag = "RSIPlus", message = "Phase2 Hypothesis: HARD=${base.report.hard} total=${base.report.total}"))
         val refine = if (shouldStop()) base else runAlns(state, base.schedule, options.copy(restarts = max(1, options.restarts)), alnsSec, shouldStop, onProgress)

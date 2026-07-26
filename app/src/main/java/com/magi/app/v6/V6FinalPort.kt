@@ -128,6 +128,24 @@ object V6FinalPort {
             now - lastPhaseChangeMs > phaseGraceMs &&
             now - lastBestImproveMs > effStall
 
+    /** [3.281.0/停滞レビューA] ウォッチドッグの実効停滞閾値の選択を純関数として抽出（ユニットテスト用）。
+     *  従来: 「bestHard<=hardFloor(構造的covU床) かつ 非covU HARD=0」のときだけ短い stallHardMs＝
+     *  c3n が1件でも残ると常に stallMs(=予算9/10)で、300s予算では発火に270s必要＝**構造的に発火不能**
+     *  だった（実機ログ: 125s以降150s無改善のまま探索275sを完走・追加精製0）。covU には structuralHardFloor
+     *  という「解けないHARD」の静的判定があるのに c3n には無い非対称が根本原因。
+     *  新規: 残る非covU HARD が **c3n のみ**で、かつ 3.280.0 ForbiddenDiag が全 run の塞がりを**証明**した
+     *  （c3nWallProven）場合も plateau とみなし stallHardMs へ移行する。証明つきのため誤発火なし・
+     *  早期終了は時間/電池の節約のみで品質は keep-best が担保（退化不能）。 */
+    internal fun effectiveStallMs(
+        bestHard: Int, hardFloor: Int, nonCovUHard: Int, nonCovUAllC3n: Boolean,
+        c3nWallProven: Boolean, stallHardMs: Long, stallMs: Long,
+    ): Long {
+        val basePlateau = bestHard <= hardFloor && nonCovUHard == 0
+        val c3nWallPlateau = nonCovUHard > 0 && nonCovUAllC3n &&
+            bestHard <= hardFloor + nonCovUHard && c3nWallProven
+        return if (basePlateau || c3nWallPlateau) stallHardMs else stallMs
+    }
+
     fun getAlgorithmLabel(seconds: Int): AlgorithmLabel = when {
         seconds <= 10 -> AlgorithmLabel("⚡", "高速", "短時間でサッと作成", "v5")
         seconds <= 30 -> AlgorithmLabel("★", "標準", "速さと品質のバランス", "v5")
@@ -285,6 +303,14 @@ object V6FinalPort {
         //   見かけ上へこませたケースで、解ける groupViol が残っているのに短い stallHardMs へ早期移行してしまう。
         //   非covU HARD が 0（＝残るHARDが構造的covUのみ）を追加条件にし、上記コメント(214行)の設計意図と一致させる。
         val bestNonCovUHard = java.util.concurrent.atomic.AtomicInteger(Int.MAX_VALUE)
+        // [3.281.0/停滞レビューA] c3n構造壁の動的床（covU の structuralHardFloor と対）。
+        //   残る非covU HARD が c3n のみ、かつ ForbiddenDiag(3.280.0) が全 run の塞がりを証明したら、
+        //   その c3n は「解けないHARD」＝plateau として stallHardMs へ移行できる。診断(~20ms)は
+        //   「停滞が stallHardMs を超えた後・best 世代ごとに一度だけ」遅延実行しキャッシュする。
+        val bestNonCovUAllC3n = java.util.concurrent.atomic.AtomicBoolean(false)
+        val bestVersion = java.util.concurrent.atomic.AtomicInteger(0)
+        val c3nWallCheckedVersion = java.util.concurrent.atomic.AtomicInteger(-1)
+        val c3nWallResult = java.util.concurrent.atomic.AtomicBoolean(false)
         var bTotal = Int.MAX_VALUE; var bWeighted = Double.MAX_VALUE; var lastPhase = ""
         val progressLock = Any()   // [競合解消] 並列ワーカーから呼ばれる best 追跡の read-modify-write を直列化
         val progressWatch: (String, ViolationReport?, Long, Long) -> Unit = { phase, report, iters, elapsed ->
@@ -298,8 +324,14 @@ object V6FinalPort {
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())
                         // 非covU HARD(=解けるHARD)件数を best と同時に捕捉（stallHardMs 早期移行の判定に使う）。
-                        val nonCovU = (report.breakdown["groupViol"] ?: 0) + (report.breakdown["pref"] ?: 0) + (report.breakdown["c3n"] ?: 0)
-                        bestNonCovUHard.set(nonCovU)
+                        val gv = report.breakdown["groupViol"] ?: 0
+                        val pf = report.breakdown["pref"] ?: 0
+                        val c3n = report.breakdown["c3n"] ?: 0
+                        bestNonCovUHard.set(gv + pf + c3n)
+                        // [3.281.0/A] 非covU HARD が c3n のみか（c3n構造壁チェックの適用条件）＋best世代を進める
+                        //   （世代が変わると c3n壁キャッシュは無効化＝新しい best 盤面で再証明する）。
+                        bestNonCovUAllC3n.set(gv == 0 && pf == 0 && c3n > 0)
+                        bestVersion.incrementAndGet()
                     }
                 }
             }
@@ -314,6 +346,25 @@ object V6FinalPort {
         //   真の頭打ち検知は effStall/lastBestImproveMs が単独で担う）。stallMs(=予算9/10)のような
         //   長さは不要で、「フェーズがまだ何も試していない」瞬間を除外できれば十分。
         val phaseGraceMs = (budgetMs / 40).coerceIn(2_000L, 15_000L)
+        // [3.281.0/A] c3n構造壁の遅延証明。best 世代ごとに一度だけ ForbiddenDiag を実行しキャッシュする。
+        //   呼出条件（c3nのみ残存＋停滞がstallHardMs超）は呼び出し側でゲート済み＝停滞局面でしか走らない。
+        //   liveBest は publishLiveBest(CAS, better()単調) のグローバル最良スナップショット。best報告との
+        //   僅かな世代ズレはあり得るが、本判定は「停滞閾値の選択」にのみ作用（採否/keep-bestとは無関係）で
+        //   誤っても時間配分が変わるだけ＝品質は不変。並行呼出は同一結果を二重計算するだけで無害。
+        val c3nWallProven = {
+            val v = bestVersion.get()
+            if (c3nWallCheckedVersion.get() != v) {
+                val board = V6NativeOptimizer.liveBest
+                val proven = if (board == null) false else try {
+                    val arr = Array(board.size) { r -> IntArray(board[r].size) { c -> board[r][c] } }
+                    val diag = V6PortAnalyzer.diagnoseForbiddenRuns(state, arr)
+                    diag.hasRuns && diag.allBlocked
+                } catch (_: Exception) { false }
+                c3nWallResult.set(proven)
+                c3nWallCheckedVersion.set(v)
+            }
+            c3nWallResult.get()
+        }
         val shouldStop = {
             val now = System.currentTimeMillis()
             // [賢い早期脱出] bestHard が「解消不能な下限(hardFloor=構造的covU)」以下＝解けるHARDは出し切った状態。
@@ -321,7 +372,16 @@ object V6FinalPort {
             //   ただし非covU HARD(groupViol/pref/c3n=解ける可能性あり)が残る間は long stall で粘る（214行の設計意図）。
             //   担当不可過配置が covU を構造下限より見かけ上へこませ、bestHard<=hardFloor でも groupViol が残るケースを防ぐ。
             //   hardFloor=0 かつ 非covU HARD=0（＝bestHard==0）なら従来の「bestHard==0」と完全一致＝挙動不変。
-            val effStall = if (bestHard.get() <= hardFloor && bestNonCovUHard.get() == 0) stallHardMs else stallMs
+            // [3.281.0/A] 追加: 残る非covU HARD が c3n のみで ForbiddenDiag が全 run の塞がりを証明した場合も
+            //   plateau（解けないHARD）として stallHardMs へ移行（実機ログの「c3n=1のまま150s無改善でも
+            //   270s閾値のため発火不能」を解消）。診断は停滞が stallHardMs を超えてから遅延実行（~20ms/世代1回）。
+            val nonCovU = bestNonCovUHard.get()
+            val wall = nonCovU > 0 && bestNonCovUAllC3n.get() &&
+                bestHard.get() <= hardFloor + nonCovU &&
+                now - lastBestImproveMs.get() > stallHardMs && c3nWallProven()
+            val effStall = effectiveStallMs(
+                bestHard.get(), hardFloor, nonCovU, bestNonCovUAllC3n.get(), wall, stallHardMs, stallMs,
+            )
             when {
                 now >= searchDeadlineMs || !isActive -> true
                 watchdogStagnationFired(now, startMs, minRunMs, lastPhaseChangeMs.get(), phaseGraceMs, lastBestImproveMs.get(), effStall) -> {
@@ -446,7 +506,9 @@ object V6FinalPort {
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
             level = "I", tag = "EarlyStop",
             message = "停滞検知: 改善が無いため早期終了（予算${seconds}s中 ${(tPost1 - startMs) / 1000}sで停止・" +
-                "停滞${stagnationDurationMs.get() / 1000}s無改善・解は最良を維持）",
+                "停滞${stagnationDurationMs.get() / 1000}s無改善・解は最良を維持）" +
+                // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
+                (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と証明済み）" else ""),
         )) else emptyList()
         // [最終番兵/多重防御] 全段 keep-best のため通常は発火しないが、万一パイプラインが入力より
         // 悪い結果を返した場合は入力を採用し退化を防ぐ（checkResultWorse をここで配線）。

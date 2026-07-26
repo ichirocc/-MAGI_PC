@@ -1720,6 +1720,35 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 停滞脱出レビューで確定した2欠陥の修正＝c3n構造壁の動的床＋HF63エポック横断共有（3.281.0, ユーザー指示「停滞脱出は賢く適切かログ解析してコードレビューする」→「新しい不具合を修正しマージする」）
+実機ログ（2026-12・PORTFOLIO 300s・c3n=1残存）とコードの突合レビューで確定した2件を修正。内側の停滞脱出
+（HF80 E10・CombinatorialRepair無駄打ち回避・JointLNS停滞/期限停止）は全て設計どおり機能と確認済み。
+- **[A] 外側ウォッチドッグが「非covU HARD残」で実質発火不能だった欠陥**: effStall選択（V6FinalPort）は
+  `bestHard<=hardFloor && 非covU HARD==0` のときだけ短い stallHardMs(37.5s) で、c3n が1件でも残ると常に
+  stallMs=予算9/10(270s)＝300s予算では発火に270s無改善が必要で**構造的に発火不能**（実機: 125s以降150s
+  無改善のまま探索275s完走・追加精製0）。covU には structuralHardFloor という「解けないHARD」の静的判定が
+  あるのに c3n には無い非対称が根本原因。**修正**: 残る非covU HARD が **c3n のみ**（groupViol=0/pref=0）
+  かつ covU が構造床到達（bestHard<=hardFloor+nonCovU）で、停滞が stallHardMs を超えた時点で
+  **ForbiddenDiag(3.280.0) を遅延実行**（best世代ごと1回・~20ms・`V6NativeOptimizer.liveBest` 盤面）し、
+  **全 run 塞がりを証明できたら** plateau として stallHardMs へ移行（`effectiveStallMs` 純関数へ抽出・
+  テスト5件）。証明つきのため誤発火なし・早期終了は時間/電池の節約のみ（keep-best＝品質不変）。
+  EarlyStop ログに「（残る必須=禁止連続はForbiddenDiagが構造的な壁と証明済み）」を明示。
+- **[B] HF63/E9 の学習がエポック境界で毎回破棄されていた欠陥**: `val hf63 = Hf63Infeasibility()` が
+  runRsi 呼出ローカルのため、適応ポートフォリオの短いエポック（rounds=2→effortIters=2500/round、かつ
+  round1頭は lastFocus=null で加算なし＝**1エポックの学習は2500のみで threshold 5000 に構造的に届かない**）
+  では何十エポック繰り返しても deprioritize が永久に成立しなかった（実機: W1x32+W2x35=67エポックが毎回
+  c3n へ2ラウンドずつ突撃）。**修正**: runRsi/runRsiPlus に `sharedHf63: Hf63Infeasibility? = null` を追加し、
+  `runAdaptivePortfolio` がワーカー専属インスタンス（エポック横断・ワーカー間は非共有=役割多様性を汚染
+  しない・ワーカー内は逐次実行=並行アクセスなし）を注入。2エポック目で threshold 到達→以後の focus 選択が
+  c3n を回避し SOFT へ振り向く。**共有の健全性**: `gBestCurV` は全期間min のため、エポック間の摂動で族の
+  件数が一時的に増減（1→3→1）しても self-correction は誤発火せず、真の改善（全期間min更新）でのみ
+  リセット（テストで固定）。既存呼出（runMultiWorker 経由等）はデフォルト null＝挙動不変。
+- 検証: ホストJVMで**全318テストgreen**（新規7件=effectiveStallMs 5件＋HF63クロスエポック2件）。
+  focus選択/停滞閾値のみの変更＝スコアリング不変・keep-best不変（bench は RSI focus を模擬できないため
+  3.74.0/3.95.0/3.169.0 と同じ原理採否）。
+- **[軽微・未対応]** phaseGrace(7.5s) と8ワーカーのフェーズ文字列交錯（3-10s間隔）による発火ジッタ数秒は
+  A の修正で実害が消えるため据え置き。
+
 ## 禁止連続(c3n)の「なぜ崩せないか」診断＝ForbiddenDiag新設（3.280.0, ユーザー指示「実装する、実装コスト無視する」）
 実機ログ（2026-12データ・PORTFOLIO 300s）で c3n=1（アリフ Cｱ→Aｱ）が HARD 専任ワーカー計67エポックでも
 不動だったのに、「構造的に不能」か「探索漏れ」かをログから判別できなかった穴への対応。covU/covO には
