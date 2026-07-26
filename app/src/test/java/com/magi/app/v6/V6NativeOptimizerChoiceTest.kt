@@ -14,9 +14,11 @@ import java.util.Random
 
 class V6NativeOptimizerChoiceTest {
     @Test fun autoBudgetChoosesExpectedAlgorithm() {
-        // [異種並列ポートフォリオ] ≤30 V5 / ≤90 ALNS / ≤210 RSI / それ以上 PORTFOLIO(適応epoch異種並列)。
+        // [3.284.0/外部レビュー=AUTO帯統一] ≤30 V5 / 31-210 RSI / それ以上 PORTFOLIO(適応epoch異種並列)。
+        //   旧 31-90=ALNS はアプリ経路(optimizationPlan=RSI→ALNS複合)と食い違う二重分岐だったため、
+        //   複合プランの主段= RSI へ寄せて統一（詳細は HypothesisDiversityPolicy.autoAlgorithmForBudget）。
         assertEquals(V6Algorithm.V5, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.AUTO, 10))
-        assertEquals(V6Algorithm.ALNS, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.AUTO, 60))
+        assertEquals(V6Algorithm.RSI, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.AUTO, 60))
         assertEquals(V6Algorithm.RSI, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.AUTO, 150))
         assertEquals(V6Algorithm.PORTFOLIO, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.AUTO, 300))
         assertEquals(V6Algorithm.ALNS, V6NativeOptimizer.chooseAlgorithm(V6Algorithm.ALNS, 10))

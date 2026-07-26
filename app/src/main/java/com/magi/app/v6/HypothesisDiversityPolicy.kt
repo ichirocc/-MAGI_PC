@@ -35,9 +35,12 @@ internal object HypothesisDiversityPolicy {
     //   AdaptiveHypothesisEpochPolicy.algorithmFor が担う）。3.266.0 統合時の残滓のため撤去。
 
     /** Long AUTO runs use an actual heterogeneous portfolio instead of eight RSI++ clones. */
+    // [3.284.0/外部レビュー] AUTO の二重分岐を解消: 旧 31-90秒帯は ALNS で、アプリ経路の
+    //   V6FinalPort.optimizationPlan（31-210秒=RSI(2/3)→ALNS(1/3) の複合）と食い違い、直接APIだけ
+    //   別アルゴリズムになっていた。単一アルゴリズムしか表現できない本関数では複合プランの主段= RSI
+    //   （偶数ラウンドで内部的に ALNS も回る）へ寄せ、帯を 31-210=RSI に統一する。
     fun autoAlgorithmForBudget(budgetSec: Int): V6Algorithm = when {
         budgetSec <= 30 -> V6Algorithm.V5
-        budgetSec <= 90 -> V6Algorithm.ALNS
         budgetSec <= 210 -> V6Algorithm.RSI
         else -> V6Algorithm.PORTFOLIO
     }

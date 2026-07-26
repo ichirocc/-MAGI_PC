@@ -2094,29 +2094,55 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
 
     // cons レイアウト: [n1,(d1,si,d2)*] [n2,(si,c)*] [n41,(g,s,l,u)*] [n42,(g1,s1,g2,s2)*]
     //                  [n41s,(g,s,l,u)*] [n42s,(g1,s1,g2,s2)*]
+    // [3.284.0/外部レビュー=JNI hardening] 可変長領域(cons/c3/bucket)を checked cursor で検証する。
+    //   旧: count/len 未検証で、負の len が (size_t) 変換で巨大 reserve → C++例外が JNI 境界を越えて
+    //   プロセスクラッシュ、巨大 count が 0 埋めの大量 push で異常確保になり得た（正規の Kotlin
+    //   serializer(NativeEval.flatten) 経路では発生しないが、破損入力・将来の呼出し追加への防御）。
+    //   違反時はハンドル生成を拒否（0=native不可→Kotlinへ安全退化＝sgrp検証(監査#7)と同じ確立済みの契約）。
     size_t idx = 0;
-    auto next = [&]() -> int { return idx < cons.size() ? cons[idx++] : 0; };
-    int n1 = next();
+    bool parseOk = true;
+    auto next = [&]() -> int {
+        if (idx < cons.size()) return cons[idx++];
+        parseOk = false; return 0;
+    };
+    // count 読取: 非負かつ「残り要素数 >= count×行幅」を要求（積の overflow は除算形で回避）。
+    auto takeCount = [&](int rowWidth) -> int {
+        if (idx >= cons.size()) { parseOk = false; return 0; }
+        int n = cons[idx++];
+        if (n < 0 || (size_t)n > (cons.size() - idx) / (size_t)rowWidth) { parseOk = false; return 0; }
+        return n;
+    };
+    int n1 = takeCount(3);
     for (int r = 0; r < n1; r++) { C1r c{next(), next(), next()}; p->cons1.push_back(c); }
-    int n2 = next();
+    int n2 = takeCount(2);
     for (int r = 0; r < n2; r++) { C2r c{next(), next()}; p->cons2.push_back(c); }
-    int n41 = next();
+    int n41 = takeCount(4);
     for (int r = 0; r < n41; r++) { C41r c{next(), next(), next(), next()}; p->cons41.push_back(c); }
-    int n42 = next();
+    int n42 = takeCount(4);
     for (int r = 0; r < n42; r++) { C42r c{next(), next(), next(), next()}; p->cons42.push_back(c); }
-    int n41s = next();
+    int n41s = takeCount(4);
     for (int r = 0; r < n41s; r++) { C41r c{next(), next(), next(), next()}; p->cons41s.push_back(c); }
-    int n42s = next();
+    int n42s = takeCount(4);
     for (int r = 0; r < n42s; r++) { C42r c{next(), next(), next(), next()}; p->cons42s.push_back(c); }
+    if (!parseOk) { delete p; return 0; }
 
     // c3 レイアウト: 4族順(c3, c3n, c3m, c3mn) に [count, (len, seq...)*count]
     size_t ci = 0;
-    auto cnext = [&]() -> int { return ci < c3.size() ? c3[ci++] : 0; };
+    bool c3Ok = true;
+    auto cnext = [&]() -> int {
+        if (ci < c3.size()) return c3[ci++];
+        c3Ok = false; return 0;
+    };
     std::vector<C3r>* fams[4] = {&p->cons3, &p->cons3n, &p->cons3m, &p->cons3mn};
     for (auto* fam : fams) {
-        int cnt = cnext();
-        for (int r = 0; r < cnt; r++) {
-            int len = cnext();
+        if (ci >= c3.size()) { c3Ok = false; break; }
+        int cnt = c3[ci++];
+        // 各行は最低1要素(len)を持つため count は残り要素数を超えられない。
+        if (cnt < 0 || (size_t)cnt > c3.size() - ci) { c3Ok = false; break; }
+        for (int r = 0; r < cnt && c3Ok; r++) {
+            if (ci >= c3.size()) { c3Ok = false; break; }
+            int len = c3[ci++];
+            if (len < 0 || (size_t)len > c3.size() - ci) { c3Ok = false; break; }
             C3r row;
             row.seq.reserve((size_t)len);
             for (int l = 0; l < len; l++) row.seq.push_back(cnext());
@@ -2124,17 +2150,26 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
             for (size_t l = 1; l < row.seq.size(); l++) if (row.seq[l] != row.seq[0]) { row.singleRun = false; break; }
             fam->push_back(std::move(row));
         }
+        if (!c3Ok) break;
     }
+    if (!c3Ok) { delete p; return 0; }
 
     // bucket レイアウト: per g: [len, shifts...]。members は sgrp から導出。
     p->bucket.resize((size_t)G);
     size_t bi = 0;
-    auto bnext = [&]() -> int { return bi < bucket.size() ? bucket[bi++] : 0; };
+    bool bOk = true;
+    auto bnext = [&]() -> int {
+        if (bi < bucket.size()) return bucket[bi++];
+        bOk = false; return 0;
+    };
     for (int g = 0; g < G; g++) {
-        int len = bnext();
+        if (bi >= bucket.size()) { bOk = false; break; }
+        int len = bucket[bi++];
+        if (len < 0 || (size_t)len > bucket.size() - bi) { bOk = false; break; }
         p->bucket[g].reserve((size_t)len);
         for (int l = 0; l < len; l++) p->bucket[g].push_back(bnext());
     }
+    if (!bOk) { delete p; return 0; }
     p->members.resize((size_t)G);
     for (int i = 0; i < S; i++) {
         int g = p->sgrp[i];

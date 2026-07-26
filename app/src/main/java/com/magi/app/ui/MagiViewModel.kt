@@ -519,6 +519,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 ) }
                 logOp("I", "違反チェック 必須=${res.report.hard} 合計=${res.report.total}")
             } catch (e: CancellationException) {
+                // [3.284.0/外部レビューHigh③] 停止時の running 固着を解消。新しいチェックによるキャンセル
+                //   （seq != checkSeq＝後続が直後に running=true を立て直す）では触らず、stop() による
+                //   キャンセルのときだけ実行中表示を戻す。
+                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "違反チェックを停止しました") }
                 throw e
             } catch (e: Exception) {
                 if (seq == checkSeq) _ui.update { it.copy(running = false, message = "違反チェック失敗: ${e.message}") }
@@ -1017,6 +1021,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             runCatching { OptimizationWorker.clearFiles(getApplication<Application>()) }
             _ui.update { it.copy(running = false, message = "停止しました（バックグラウンド計算を中断）") }
             logOp("I", "バックグラウンド最適化を停止")
+        } else if (_ui.value.running || _ui.value.fixSearching) {
+            // [3.284.0/外部レビューHigh③] 前景の違反チェック(checkJob)/改善探索(fixJob)を停止した場合、
+            //   それらのコルーチンは running/fixSearching を戻す機会がなく実行中表示が固着していた。
+            //   最適化ジョブ(job)自身は CancellationException 側で keep-best と running=false を行うため、
+            //   ここでの即時リセットは冪等（後からジョブ側の確定メッセージが上書きする）。
+            _ui.update { it.copy(running = false, fixSearching = false, message = "停止しました") }
         }
         clearRunMarker()
     }
@@ -1906,6 +1916,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 if (seq != checkSeq) return@launch
                 pushReport(ns, r.schedule, r.report) { it.copy(running = false, message = "$doneMessage｜必須=${r.report.hard} 合計=${r.report.total}") }
             } catch (e: CancellationException) {
+                // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
+                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Exception) {
                 if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェック失敗: ${e.message}）") }
@@ -2039,6 +2051,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 if (seq != checkSeq) return@launch
                 pushReport(r.state, rep.schedule, rep.report) { it.copy(running = false, message = "$doneMessage｜必須=${rep.report.hard} 合計=${rep.report.total}") }
             } catch (e: CancellationException) {
+                // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
+                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Exception) {
                 if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェック失敗: ${e.message}）") }

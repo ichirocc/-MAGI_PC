@@ -259,7 +259,9 @@ class V6PortAnalyzerTest {
         assertTrue("全セルが受け皿なしで塞がる", run.cells.all { it.escape == ForbiddenCellEscape.BLOCKED })
         assertTrue(run.cells.all { it.detail.contains("受け皿なし") })
         assertTrue(diag.allBlocked)
-        assertTrue(run.hint.contains("どう組んでも"))
+        // [3.284.0] 「証明」の強さを限定: 受け皿なしの塞がりは「探索手の全滅を検証」であり
+        //   全空間の数学的証明ではない＝断定を避けた文言になったことを固定。
+        assertTrue(run.hint.contains("崩せる見込みがありません"))
     }
 
     // 代替が全て新たな禁止連続を作る局面でも、隣接日調整（tryFixForbiddenRunViaAdjacentDay=
