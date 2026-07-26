@@ -456,9 +456,12 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                             key(ui.editRev) { NeedDayCard(ui, vm) }
                         }
                         1 -> {
-                            // [職員管理] 入退職・所属・スキルの随時変更＋個人の回数上下限（職員に紐づく設定を集約）。
+                            // [職員管理] 入退職・所属・スキルの随時変更（人の属性管理に純化。個人の回数上下限は
+                            //   年間マスター「③ 回数（1人あたり）」の StaffRangeCard へ=3.286.0 冗長性A）。
                             key(ui.editRev) { StaffManageCard(ui, vm) }
-                            key(ui.editRev) { StaffRangeCard(ui, vm) }
+                            // [3.286.0 冗長性A] StaffRangeCard は年間マスター「③ 回数（1人あたり）」へ一本化
+                            //   （旧: 職員管理と③の2ドアに同一カード全体が重複＝編集タブ内で唯一のカード丸ごと重複だった。
+                            //   回数設定は③が意味的定位置・職員管理は人の属性管理=入職/退職/改名/所属/スキルに純化）。
                         }
                         else -> {
                             // [見直し候補] 月次の修正から送られたルール見直しメモ（あれば先頭に表示）。
@@ -555,7 +558,10 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     // [見直し/IA重複解消] OverviewDashboard(気になる点=総違反リング / 注意の日リング)を撤去。融合カードが上位代替:
                     //   気になる点(総数)→ヒーロー規模＋要確認一覧ヘッダ件数、注意の日→AttentionCardsSection の日別リスト。
                     //   「違反総数」の三重表示を D2(HARD三重リング撤去)と同方針で解消。composable 定義は残置=無害。
-                    CheckSummaryView(ui, proMode)
+                    // [3.286.0 冗長性D] CheckSummaryView（チェック概要=必須違反数の1行）を撤去。必須違反数は
+                    //   ホームの OperatorNextActionCard と要確認一覧（ConfirmListCard）見出しで既に2重に提示済みで
+                    //   3重目だった（3.83.0 の維持判断は ConfirmListCard ヒーロー化前。違反ゼロ時の達成表示も
+                    //   ConfirmListCard が持つため喪失情報なし）。
                     BreakdownCard(ui, onFocusStaff = { vm.findFixSuggestions(it) }, proMode = proMode)
                     // [★3+4] BottleneckCard(top5テキスト) は AttentionCardsSection(上・全件＋トグル＋タップ修復) が上位互換のため撤去。
                     FixSuggestionCard(ui, onSearch = { vm.findFixSuggestions(null) }, onApply = { vm.applyFixSuggestion(it) }, proMode = proMode)

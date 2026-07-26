@@ -31,8 +31,10 @@ import com.magi.app.v6.V6WebCompat
 
 // [3.86.0 デッドコード撤去] 未描画の合成画面 `V6RemainingScreens` と、そこからのみ実呼出だった
 //   HeaderBar / RingGauge / OverviewDashboard / FlagsView / OperatorLogView / BottomNav を撤去
-//   （外部参照0を確認。並列監査 3.84.0 の報告に基づく）。他画面で live な CheckSummaryView（分析タブ）と
-//   ColorSettingsView（詳細設定）、およびそれらが使う SectionSegment のみ残置。表示のみ・スコアリング不変。
+//   （外部参照0を確認。並列監査 3.84.0 の報告に基づく）。
+// [3.286.0 冗長性D] CheckSummaryView（分析タブの必須違反数1行）も撤去＝ホームのカード・要確認一覧見出しとの
+//   3重表示を解消（呼出0となったため定義ごと削除）。残るのは live な ColorSettingsView（設定タブ）と
+//   それが使う SectionSegment のみ。表示のみ・スコアリング不変。
 
 @Composable
 fun SectionSegment(title: String, subtitle: String? = null, content: @Composable () -> Unit) {
@@ -43,16 +45,6 @@ fun SectionSegment(title: String, subtitle: String? = null, content: @Composable
             Spacer(Modifier.height(10.dp))
             content()
         }
-    }
-}
-
-@Composable
-fun CheckSummaryView(ui: UiState, proMode: Boolean = false) {
-    SectionSegment("チェック概要", if (proMode) null else "問題がないかの確認") {
-        val status = if (ui.bestHard == 0L) (if (proMode) "配れます" else "配れます（守るべき約束はすべて守れています）") else (if (proMode) "未解決 ${ui.bestHard}" else "もう少し（必須違反 ${ui.bestHard}件）")
-        Text(status, fontWeight = FontWeight.Bold,
-            color = if (ui.bestHard == 0L) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-        // [校正] 生の操作ログは「ようす」に出さない（B2 平易/ B8 最小限）。詳細はログ＝詳細設定の「操作ログ」へ集約。
     }
 }
 

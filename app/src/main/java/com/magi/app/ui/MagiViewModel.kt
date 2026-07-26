@@ -1525,51 +1525,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         return rows.sortedWith(compareBy({ it.i }, { it.k }))
     }
 
-    // ---- [回数設定画面] シフト軸 / 個人軸の統合ビュー（apt=月の目標 / staffRange=個人の月 最少・最大）----
-    //   cons41(群の1日人数)は「回数(月)」とは別軸のため本画面では扱わない（制約画面で編集）。
-    data class GroupRule(val g: Int, val groupName: String, val ideal: String)
-    data class IndivRule(val i: Int, val staffName: String, val min: String, val max: String)
-    data class ShiftRuleBlock(val k: Int, val kigou: String, val name: String, val groups: List<GroupRule>, val indivs: List<IndivRule>)
-
-    /** シフトタブ用: 各シフトの「群の回数(最少|理想|最大)」「個人の回数(最少|最大)」を集約。設定のある行のみ。 */
-    fun shiftRuleBlocks(): List<ShiftRuleBlock> {
-        val st = state ?: return emptyList()
-        return st.shifts.mapIndexed { k, sh ->
-            // [apt 0設定] そのシフトを担当できる群(groupShift==1)を全て出す。未設定群は ideal="" のまま渡し、
-            //   UI で「なし」から ＋/− で 0 以上を設定可能にする(従来は設定済みの群しか出ず入口が無かった)。
-            //   apt は canDo 群のみ有効なので担当不可の群は除外。
-            val groups = st.groups.indices.mapNotNull { g ->
-                val canDo = st.groupShift.getOrNull(g)?.getOrNull(k) == 1
-                if (!canDo) null
-                else GroupRule(g, st.groups[g].name, st.groupShiftApt.getOrNull(g)?.getOrNull(k)?.trim() ?: "")
-            }
-            val indivs = st.staff.indices.mapNotNull { i ->
-                val r = st.staffRange["$i,$k"]
-                if (r == null || (r.lo.isBlank() && r.hi.isBlank())) null
-                else IndivRule(i, st.staff[i].name, r.lo, r.hi)
-            }
-            ShiftRuleBlock(k, sh.kigou, sh.name, groups, indivs)
-        }
-            // 設定済みのシフトだけ表示(どれかの群に目標がある or 個人レンジがある)。表示シフト内なら未設定群も 0 から設定可。
-            //   これで休/有のような未設定シフトの雑音を避けつつ、A4 等の表示シフト内で未設定群に ＋/− を出せる。
-            .filter { b -> b.groups.any { it.ideal.isNotBlank() } || b.indivs.isNotEmpty() }
-    }
-
-    data class StaffShiftRule(val k: Int, val kigou: String, val min: String, val max: String)
-    data class StaffRuleBlock(val i: Int, val name: String, val rows: List<StaffShiftRule>)
-
-    /** 個人タブ用: 各職員の「シフトごとの回数(最少|最大)」を集約。設定のある行のみ。 */
-    fun staffRuleBlocks(): List<StaffRuleBlock> {
-        val st = state ?: return emptyList()
-        return st.staff.mapIndexed { i, sf ->
-            val rows = st.shifts.indices.mapNotNull { k ->
-                val r = st.staffRange["$i,$k"]
-                if (r == null || (r.lo.isBlank() && r.hi.isBlank())) null
-                else StaffShiftRule(k, st.shifts[k].kigou, r.lo, r.hi)
-            }
-            StaffRuleBlock(i, sf.name, rows)
-        }.filter { it.rows.isNotEmpty() }
-    }
+    // [3.286.0 冗長性B] 旧「回数設定画面」(CountSettingsCard, 2.60〜2.63世代)の集約ビュー
+    //   （shiftRuleBlocks/staffRuleBlocks/setCons41＋GroupRule等のデータ型）は、画面本体の撤去後も
+    //   呼出0のまま残存していた孤児クラスタのため削除（grep で外部参照0を確認済み）。
 
     // ---- ws3 移植: 希望シフト wishes["i,j"]=シフトindex（採点=pref/hard1。割当やcons3系とは別。UIのみ・モデル/エンジン不変）----
     data class WishView(val i: Int, val j: Int, val staffName: String, val day: Int, val kigou: String, val k: Int)
@@ -1761,16 +1719,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun addCons41(groupKigou: String, shiftKigou: String, l: String, u: String) {
         val st = state ?: return
         logOp("I", "制約追加(群回数): $groupKigou $shiftKigou ${l.trim()}〜${u.trim()}"); mutateConstraints(st.copy(cons41 = st.cons41 + C41Row(groupKigou, shiftKigou, l.trim(), u.trim())))
-    }
-
-    /** [回数設定UI] (群,シフト) を一意キーに cons41 を更新-or-追加。l/u 両方空なら削除。重複行は1本に集約。 */
-    fun setCons41(groupKigou: String, shiftKigou: String, l: String, u: String) {
-        val st = state ?: return
-        val ll = l.trim(); val uu = u.trim()
-        val rest = st.cons41.filterNot { it.groupKigou == groupKigou && it.shiftKigou == shiftKigou }
-        val next = if (ll.isBlank() && uu.isBlank()) rest else rest + C41Row(groupKigou, shiftKigou, ll, uu)
-        logOp("I", "制約更新(群回数): $groupKigou $shiftKigou → ${if (ll.isBlank() && uu.isBlank()) "削除" else "${ll.ifBlank { "?" }}〜${uu.ifBlank { "?" }}"}")
-        mutateConstraints(st.copy(cons41 = next))
     }
 
     fun addCons42(g1: String, g2: String, s1: String, s2: String) {

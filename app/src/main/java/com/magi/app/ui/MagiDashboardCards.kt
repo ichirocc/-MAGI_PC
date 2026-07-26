@@ -564,10 +564,8 @@ internal fun V6DashboardCard(v6: V6PortReport?) {
                 color = if (v6.topRiskShortage > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold,
             )
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                v6.dayRisks.forEach { d -> RiskChip(d.label, d.shortage, d.detail) }
-            }
+            // [3.286.0 冗長性C] 日別リスクチップ列（dayRisks）は AttentionCardsSection（日別リスト＝全件＋
+            //   要確認のみトグル＋タップ修復）が上位互換のため撤去（3.195.0 で保留した次点候補の実施）。
             Spacer(Modifier.height(10.dp))
             Text(
                 "Apt=${"%.2f".format(v6.aptPenalty)} / Equalize=${"%.2f".format(v6.equPenalty)} / Demand=${v6.demand} / covU=${v6.covU}",
@@ -581,14 +579,8 @@ internal fun V6DashboardCard(v6: V6PortReport?) {
                     Text("⚠ $it", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            Text("負荷プロフィール", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            v6.staffProfiles.take(5).forEach { st ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${st.name} ${st.groupSymbol}", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text("違反${st.violationCount} / 出勤${st.workCount} / ${st.workloadText}", fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                }
-            }
+            // [3.286.0 冗長性C] 負荷プロフィール（staffProfiles top5）は AttentionCardsSection（人別リスト）が
+            //   上位互換のため撤去。固有の生指標（充足率/HARD Core/Guard/Apt/Equalize/sanity警告）のみ残す。
         }
     }
 }
@@ -628,30 +620,7 @@ internal fun WeightTableCard() {
 }
 
 
-@Composable
-internal fun RiskChip(label: String, shortage: Int, detail: String) {
-    val cs = MaterialTheme.colorScheme
-    val (warnBg, warnFg) = magiWarnColors()
-    val bg: Color; val fg: Color
-    when {
-        shortage <= 0 -> { bg = cs.tertiaryContainer; fg = cs.onTertiaryContainer }
-        shortage == 1 -> { bg = warnBg; fg = warnFg }
-        else -> { bg = cs.errorContainer; fg = cs.onErrorContainer }
-    }
-    Box(
-        Modifier
-            .width(76.dp)
-            .background(bg, MaterialTheme.shapes.medium)   // [DESIGN.md P4] 任意16dp → tier(medium)。テーマ角丸に追従。
-            .padding(horizontal = 7.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(label, fontSize = 12.sp, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(if (shortage > 0) "不足$shortage" else "OK", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = fg)
-            if (detail.isNotBlank()) Text(detail, fontSize = 12.sp, color = fg.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
+// [3.286.0 冗長性C] RiskChip は dayRisks チップ列の撤去で呼出0となったため削除。
 
 
 /** 内訳の家族キー → 日本語ラベル（BreakdownCard と FixSuggestionCard で共用）。 */
