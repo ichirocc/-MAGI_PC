@@ -414,6 +414,9 @@ object V6NativeOptimizer {
         val epochs: Int,
         val reassignments: Int,
         val roleRuns: Map<HypothesisEpochRole, Int>,
+        /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
+         *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
+        val hf63Avoided: List<String> = emptyList(),
     )
 
     /**
@@ -676,6 +679,7 @@ object V6NativeOptimizer {
                     epochs = epoch,
                     reassignments = reassignments,
                     roleRuns = roleRuns,
+                    hf63Avoided = workerHf63.infeasibleFamilies(),
                 )
             }
         }
@@ -713,7 +717,8 @@ object V6NativeOptimizer {
         val roleNote = outcomes.indices.joinToString(" | ") { i ->
             val o = outcomes[i]
             val used = o.roleRuns.entries.joinToString(",") { "${it.key.name}x${it.value}" }
-            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]"
+            val avoided = if (o.hf63Avoided.isEmpty()) "" else "/HF63回避=${o.hf63Avoided.joinToString("+")}"
+            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided"
         }
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",

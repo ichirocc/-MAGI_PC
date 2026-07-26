@@ -503,6 +503,27 @@ object V6FinalPort {
                 "/ workers設定${workers} 実効仮説${effHypotheses}",
         )
         val integrationLog = integrated.logs
+        // [3.283.0/ログ強化] ウォッチドッグの内部状態を非発火時も1行で可視化。旧: 発火時の EarlyStop 行のみで、
+        //   「なぜ発火しなかったか」（実効閾値の選択・探索終了時点の停滞量・c3n壁診断の結果）がログから読めず、
+        //   実機ログ解析がコード推論頼みだった（2026-12 ログの150s無改善×発火なしの切り分けに実際に必要だった情報）。
+        //   読取専用・表示のみ。
+        val watchdogLog = run {
+            val lastImp = lastBestImproveMs.get()
+            val endStallS = (tChain1 - lastImp).coerceAtLeast(0L) / 1000
+            val nonCovU = bestNonCovUHard.get()
+            val kind = when {
+                bestHard.get() <= hardFloor && nonCovU == 0 -> "plateau=短${stallHardMs / 1000}s"
+                c3nWallResult.get() && bestNonCovUAllC3n.get() -> "c3n壁=短${stallHardMs / 1000}s"
+                else -> "通常=長${stallMs / 1000}s"
+            }
+            val wallNote = if (c3nWallCheckedVersion.get() >= 0)
+                "・c3n壁診断=${if (c3nWallResult.get()) "壁と証明" else "壁ではない（崩す手が実在）"}" else ""
+            listOf(MirrorLog(
+                level = "I", tag = "Watchdog",
+                message = "停滞監視: 最終改善=経過${((lastImp - startMs) / 1000).coerceAtLeast(0)}s・" +
+                    "探索終了時の停滞${endStallS}s・実効閾値($kind)・発火=${if (stagnationFired.get()) "あり" else "なし"}$wallNote",
+            ))
+        }
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
             level = "I", tag = "EarlyStop",
             message = "停滞検知: 改善が無いため早期終了（予算${seconds}s中 ${(tPost1 - startMs) / 1000}sで停止・" +
@@ -557,7 +578,7 @@ object V6FinalPort {
         }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, nativeLog) + sentinelLog + integrationLog + extraLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, post)
     }
 

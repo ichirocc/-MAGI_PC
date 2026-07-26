@@ -783,6 +783,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var livePhase = ""
         val runWall0 = System.currentTimeMillis()   // [N6] 経過表示は壁時計基準（onProgressのelapsedは仮説ローカルで巻き戻る）
         var lastPhaseLogMs = -10_000L
+        val phaseNameLastLogMs = HashMap<String, Long>()   // [3.283.0] 同名フェーズの再ログ抑制（60s窓・スパム対策）
         var lastHardLogMs = -10_000L
         job = viewModelScope.launch {
             try {
@@ -837,8 +838,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     val wallElapsed = System.currentTimeMillis() - runWall0
                     val base = phase.substringAfter("/ ").trim().ifEmpty { phase }
                     if (base != livePhase && wallElapsed - lastPhaseLogMs >= 2_500) {
-                        logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒）")
-                        livePhase = base; lastPhaseLogMs = wallElapsed
+                        // [3.283.0/スパムログ対策] 適応ポートフォリオは V5 SA→RSI→ALNS を数秒周期で循環し、
+                        //   遷移ごとにログすると操作ログが探索フェーズ行で埋まる（実機ログ: 68件中約60件が
+                        //   フェーズ行＝読込/完了/改善などの重要イベントがリングから押し出される）。
+                        //   同名フェーズ（数字を # に正規化: "ALNS restart 1/2" と "2/2" は同一視）は60秒に
+                        //   1回まで。最良更新・改善を含む行は情報価値が高いため窓の対象外（従来どおり）。
+                        val nameKey = base.replace(Regex("[0-9]+"), "#")
+                        val important = base.contains("最良更新") || base.contains("改善")
+                        val lastForName = phaseNameLastLogMs[nameKey] ?: Long.MIN_VALUE
+                        if (important || wallElapsed - lastForName >= 60_000) {
+                            logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒）")
+                            phaseNameLastLogMs[nameKey] = wallElapsed
+                            lastPhaseLogMs = wallElapsed
+                        }
+                        livePhase = base
                     }
                     if (rep != null && rep.hard.toLong() < liveHard) {
                         if (rep.hard == 0 || wallElapsed - lastHardLogMs >= 1_500) {
