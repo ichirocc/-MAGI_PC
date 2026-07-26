@@ -871,4 +871,38 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(1, V6NativeOptimizer.destroyRepairStaffReps(0, 100))
         assertEquals(6, V6NativeOptimizer.destroyRepairStaffReps(1, 1))
     }
+
+    // ---- [3.288.0/ログ強化=回数軸] focus 足跡の連続圧縮 ----
+
+    @Test fun compressFocusTrailCollapsesConsecutiveRepeats() {
+        assertEquals("covU×2→c3n", V6NativeOptimizer.compressFocusTrail(listOf("covU", "covU", "c3n")))
+        assertEquals("c1", V6NativeOptimizer.compressFocusTrail(listOf("c1")))
+        assertEquals("", V6NativeOptimizer.compressFocusTrail(emptyList()))
+    }
+
+    @Test fun compressFocusTrailKeepsMarkersInPlaceAndDoesNotMergeThem() {
+        // マーカー([..])は圧縮対象にせず、発生位置のまま挟む（同じ族が前後に分かれても別区間として残る）。
+        assertEquals(
+            "covU×2→[HF63降格:covU]→c3n",
+            V6NativeOptimizer.compressFocusTrail(listOf("covU", "covU", "[HF63降格:covU]", "c3n")),
+        )
+        assertEquals(
+            "c1→[HF63降格:covU]→c1",
+            V6NativeOptimizer.compressFocusTrail(listOf("c1", "[HF63降格:covU]", "c1")),
+        )
+    }
+
+    // ---- [3.288.0/ログ強化=状態軸] HF63 学習族の実行横断 union ----
+
+    @Test fun recordInfeasibleUnionsAcrossCallsAndClearResets() {
+        V6NativeOptimizer.clearInfeasible()
+        assertEquals(emptySet<String>(), V6NativeOptimizer.lastInfeasibleFamilies)
+        V6NativeOptimizer.recordInfeasible(listOf("covU"))
+        V6NativeOptimizer.recordInfeasible(listOf("c3n", "covU"))
+        assertEquals(setOf("covU", "c3n"), V6NativeOptimizer.lastInfeasibleFamilies)
+        V6NativeOptimizer.recordInfeasible(emptyList())   // 空は no-op
+        assertEquals(setOf("covU", "c3n"), V6NativeOptimizer.lastInfeasibleFamilies)
+        V6NativeOptimizer.clearInfeasible()
+        assertEquals(emptySet<String>(), V6NativeOptimizer.lastInfeasibleFamilies)
+    }
 }

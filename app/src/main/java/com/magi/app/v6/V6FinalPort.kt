@@ -507,6 +507,17 @@ object V6FinalPort {
         //   「なぜ発火しなかったか」（実効閾値の選択・探索終了時点の停滞量・c3n壁診断の結果）がログから読めず、
         //   実機ログ解析がコード推論頼みだった（2026-12 ログの150s無改善×発火なしの切り分けに実際に必要だった情報）。
         //   読取専用・表示のみ。
+        // [3.288.0/ログ強化=時間軸] 「いつ探索全体を切り上げるか」を決める予算配分を1行で開示。
+        //   旧: minRunMs/stallMs/stallHardMs/searchDeadline/postReserve は全てコード内の導出値で、
+        //   ログには結果（発火した/しなかった）しか出ず「なぜその閾値だったか」を追えなかった。
+        //   実行ごと1行のみ＝スパムなし。読取専用・表示のみ。
+        val budgetPlanLog = MirrorLog(
+            level = "I", tag = "TimeBudget",
+            message = "予算配分: 総${seconds}s = 探索${(searchDeadlineMs - startMs) / 1000}s + 後処理予約${postReserveMs / 1000}s" +
+                " / 早期終了の条件: 最短実行${minRunMs / 1000}s経過かつ現フェーズ${phaseGraceMs / 1000}s経過かつ無改善が" +
+                "${stallMs / 1000}s(通常)〜${stallHardMs / 1000}s(頭打ち=HARD下限到達 or c3n構造壁)続いたとき" +
+                " / 構造的HARD下限=${hardFloor}",
+        )
         val watchdogLog = run {
             val lastImp = lastBestImproveMs.get()
             val endStallS = (tChain1 - lastImp).coerceAtLeast(0L) / 1000
@@ -576,9 +587,37 @@ object V6FinalPort {
                 },
             )
         }
+        // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
+        //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁・HF63が学習した充足困難族）
+        //   ②まだ狙える（追えば減る見込み）に仕分ける。旧: 族別件数(UnifiedCheck/違反詳細)は出るが
+        //   「どれを追う価値があるか」の判定はコード推論頼みだった。実行ごと1行のみ＝スパムなし。read-only。
+        val residualLog = run {
+            val bd = finalReport.breakdown
+            val infeasLearned = V6NativeOptimizer.lastInfeasibleFamilies
+            val c3nWall = c3nWallResult.get() && bestNonCovUAllC3n.get()
+            val walls = ArrayList<String>()
+            val open = ArrayList<String>()
+            for (key in MirrorKeys.all) {
+                val n = bd[key] ?: 0
+                if (n <= 0) continue
+                val structural = when {
+                    key == "covU" && hardFloor > 0 && n <= hardFloor -> "構造的下限"
+                    key == "c3n" && c3nWall -> "証明済みの壁"
+                    key in infeasLearned -> "探索が充足困難と学習"
+                    else -> null
+                }
+                if (structural != null) walls.add("$key ${n}件($structural)") else open.add("$key ${n}件")
+            }
+            val wallTxt = if (walls.isEmpty()) "なし" else walls.joinToString(" / ")
+            val openTxt = if (open.isEmpty()) "なし＝これ以上は追っても減りません" else open.joinToString(" / ")
+            listOf(MirrorLog(
+                level = "I", tag = "残存分析",
+                message = "もう直せない: $wallTxt ／ まだ狙える: $openTxt",
+            ))
+        }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, budgetPlanLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, post)
     }
 

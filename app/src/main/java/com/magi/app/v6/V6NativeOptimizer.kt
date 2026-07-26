@@ -184,6 +184,33 @@ object V6NativeOptimizer {
     @Volatile var lastAlternatives: List<Array<IntArray>> = emptyList()
         private set
 
+    // [3.288.0/ログ強化=状態軸] この optimize() 実行中に HF63 が「構造的に充足困難」と学習した族の集合
+    //   （全 runRsi 呼出＝直接RSI/RSI++/適応ポートフォリオの各ワーカーからの union）。エピローグの
+    //   「残存分析」行が読む。optimize() 入口でクリアする。並行ワーカーからの union 更新のため synchronized。
+    @Volatile var lastInfeasibleFamilies: Set<String> = emptySet()
+        private set
+    private val infeasLock = Any()
+    internal fun recordInfeasible(fams: Collection<String>) {
+        if (fams.isEmpty()) return
+        synchronized(infeasLock) { lastInfeasibleFamilies = lastInfeasibleFamilies + fams }
+    }
+    internal fun clearInfeasible() { synchronized(infeasLock) { lastInfeasibleFamilies = emptySet() } }
+
+    /** [3.288.0/ログ強化=回数軸] focus 足跡の連続圧縮（"c3n,c3n,c1" → "c3n×2→c1"）。マーカー([..])はそのまま挟む。 */
+    internal fun compressFocusTrail(trail: List<String>): String {
+        val out = StringBuilder(); var i = 0
+        while (i < trail.size) {
+            val t = trail[i]
+            if (t.startsWith("[")) { if (out.isNotEmpty()) out.append("→"); out.append(t); i++; continue }
+            var j = i + 1
+            while (j < trail.size && trail[j] == t) j++
+            if (out.isNotEmpty()) out.append("→")
+            out.append(t); if (j - i > 1) out.append("×${j - i}")
+            i = j
+        }
+        return out.toString()
+    }
+
     /** [他の案の保全] optimize() は入口で lastAlternatives を空にするため、追加精製(ExtraRefine)等で
      *  optimize() を再呼出しする側が「本走行の他の案」を退避→復元できるようにする（V6FinalPort 専用）。 */
     fun restoreAlternatives(saved: List<Array<IntArray>>) { lastAlternatives = saved }
@@ -231,6 +258,7 @@ object V6NativeOptimizer {
         val started = nowMs()
         lastAlternatives = emptyList()
         lastFusionElites = emptyList()
+        clearInfeasible()   // [3.288.0/状態軸] この実行の HF63 学習をゼロから集約する
         liveBest = null
         liveBestReport.set(null)
         // [敵対的レビュー: 進捗コールバックの直列化] runMultiWorker(仮説横断)・runAlnsChains(チェーン横断)は
@@ -1494,6 +1522,12 @@ object V6NativeOptimizer {
         //   ため、エポック間の摂動で族の件数が一時的に増えても self-correction は誤発火しない（真の改善=
         //   全期間minの更新のみでリセット）＝クロスエポック共有は意味論的に健全。省略時は従来どおり新規。
         val hf63 = sharedHf63 ?: Hf63Infeasibility()
+        // [3.288.0/ログ強化=回数軸] 戦略変更（focus遷移・E9冷却・HF63降格）を1行に集約するための足跡。
+        //   スパム対応: HF63/ピボット行は「内容が変わったときだけ」出す（旧: avoid が立つと毎ラウンド同文を出力）。
+        val focusTrail = ArrayList<String>()
+        var e9Cooldowns = 0
+        var lastLoggedAvoid: Set<String>? = null
+        var lastLoggedPivot: String? = null
         // [HARD=0非到達への配慮 / 静的covU床] 構造的 covU 下限（有資格者を全員就けても埋まらない席=forcedCovU）は
         //   最適化中に不変。covU がこの床に達したら「これ以上 covU は下げられない」と静的に確定するので、HF63 の
         //   動的検知(約3ラウンド無改善を要する)を待たず round 0 から即 focus 除外し、RSI の残ラウンドを解ける族
@@ -1549,12 +1583,17 @@ object V6NativeOptimizer {
             // [E9] 冷却は focus 選択にのみ合流（HF63 ログ・N4 発火条件には混ぜない＝恒久判定と区別）。
             val focusAvoid = if (cooldownFocus != null) avoid + cooldownFocus!! else avoid
             val focus = maxViolatedFamily(bestReport, focusAvoid, round, rounds)
-            if (avoid.isNotEmpty()) {
+            if (avoid.isNotEmpty() && avoid != lastLoggedAvoid) {
+                // [3.288.0/スパム対応] 集合が変化したラウンドのみログ（旧: 毎ラウンド同文）。
                 logs.add(MirrorLog(iter = iters, tag = "HF63", message = "deprioritize ${avoid.joinToString(",")} → focus=$focus (round ${round + 1})"))
+                lastLoggedAvoid = avoid.toSet()
+                focusTrail.add("[HF63降格:${avoid.joinToString("+")}]")
             }
             if (cooldownFocus != null) {
                 logs.add(MirrorLog(iter = iters, tag = "RSIFocus", message = "直前ラウンド空振りのため ${cooldownFocus} を1ラウンド休止 → focus=$focus (round ${round + 1})"))
+                e9Cooldowns++
             }
+            focusTrail.add(focus)
             val focusedBefore = bestReport.breakdown[focus] ?: 0
             lastFocus = focus   // [レビュー#5] 次ラウンド頭の HF63 更新へ「このラウンドの投入先」を渡す
             val hypothesis = rsiGenerateHypothesis(state, best, bestReport, focus, rng)
@@ -1584,7 +1623,13 @@ object V6NativeOptimizer {
                 //   候補が focus 族を減らしていた(=方向は有望だが総合で負けた)場合は冷却しない。
                 cooldownFocus = if (focus != "total" && (candReport.breakdown[focus] ?: 0) >= focusedBefore) focus else null
             }
-            logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "round=${round + 1}/$rounds focus=$focus best HARD=${bestReport.hard} total=${bestReport.total}"))
+            // [3.288.0/スパム対応] ラウンド行は「改善したラウンド」と「最終ラウンド」だけに絞る。
+            //   適応ポートフォリオは 1エポック=2ラウンド×数十エポック×ワーカー数のため、旧・全ラウンド出力では
+            //   この1種類だけで診断ログの大半を占め、重要イベント（HF63降格・早期終了・壁判定）を押し出していた。
+            //   焦点の履歴は末尾の「戦略変更」1行（focus遷移を連続圧縮）が全ラウンド分を保持する＝情報は失わない。
+            if (stagnantRounds == 0 || round == rounds - 1) {
+                logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "round=${round + 1}/$rounds focus=$focus best HARD=${bestReport.hard} total=${bestReport.total}" + if (stagnantRounds > 0) "（無改善${stagnantRounds}R）" else "（改善）"))
+            }
             publishLiveBest(bestReport, best)   // [DefragLiveView] 計算中ライブ盤面を公開
             onProgress("RSI $focus", bestReport, iters, nowMs() - started)
             // [N4改] focus枯渇の早期終了。旧版は「2R無改善」だけで打ち切っていたが、これは達成可能族が
@@ -1607,9 +1652,23 @@ object V6NativeOptimizer {
                     logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "早期終了: 狙える族が枯渇(deprioritize=${avoid.size}族)＋${stagnantRounds}R無改善（残${rounds - round - 1}Rの空転を停止）"))
                     break
                 }
-                logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "HARD残(${dynamicAvoid.joinToString(",")})を回避しSOFTへピボット継続 → 次focus候補=$pivot（HARD非悪化はkeep-bestが担保）"))
+                if (pivot != lastLoggedPivot) {
+                    // [3.288.0/スパム対応] pivot が変わったときだけログ（旧: 停滞が続く限り毎ラウンド同文）。
+                    logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "HARD残(${dynamicAvoid.joinToString(",")})を回避しSOFTへピボット継続 → 次focus候補=$pivot（HARD非悪化はkeep-bestが担保）"))
+                    lastLoggedPivot = pivot
+                }
             }
         }
+        // [3.288.0/ログ強化=回数軸] 戦略変更の1行サマリ（focus遷移を連続圧縮）。2手以上あるときだけ出す＝スパムなし。
+        if (focusTrail.count { !it.startsWith("[") } >= 2) {
+            logs.add(MirrorLog(iter = iters, tag = "戦略変更", message =
+                "RSI focus遷移: ${compressFocusTrail(focusTrail)}" +
+                    (if (e9Cooldowns > 0) " / E9冷却${e9Cooldowns}回" else "") +
+                    (hf63.infeasibleFamilies().takeIf { it.isNotEmpty() }?.let { " / HF63降格={${it.joinToString(",")}}" } ?: "")))
+        }
+        // [3.288.0/ログ強化=状態軸] このRSI実行でHF63が「構造的に充足困難」と学習した族を実行横断で集約
+        //   （エピローグの残存分析行が読む。ワーカー並行呼出があるため synchronized 集約）。
+        recordInfeasible(hf63.infeasibleFamilies())
         return V6OptimizerResult(best, bestReport.copy(logs = logs + bestReport.logs), V6Algorithm.RSI, logs, iters, nowMs() - started)
     }
 
