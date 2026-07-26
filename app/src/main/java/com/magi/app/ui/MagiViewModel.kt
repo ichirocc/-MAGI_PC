@@ -23,6 +23,7 @@ import com.magi.app.v6.FixCell
 import com.magi.app.v6.FixKind
 import com.magi.app.v6.V6PortReport
 import com.magi.app.v6.CoverageDiagnosis
+import com.magi.app.v6.ForbiddenRunDiagnosis
 import com.magi.app.v6.V6Algorithm
 import com.magi.app.v6.V6FinalPort
 import com.magi.app.v6.V6NativeOptimizer
@@ -2489,6 +2490,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val v6: V6PortReport,
         val sanity: V6SanityReport,
         val coverageDiag: CoverageDiagnosis?,
+        val forbiddenDiag: ForbiddenRunDiagnosis?,
         val v6Logs: List<String>,
         val rawDiagLogs: List<String>,
     )
@@ -2512,18 +2514,26 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val coverageD = async(Dispatchers.Default) {
             V6PortAnalyzer.diagnoseCoverage(st, schedule, report).takeIf { it.hasShortage || it.hasSurplus }
         }
+        // [3.280.0] 禁止連続(c3n)が残る場合のみ「なぜ崩せないか」診断（CoverageDiag の c3n 版）。
+        val forbiddenD = async(Dispatchers.Default) {
+            if ((report.breakdown["c3n"] ?: 0) > 0)
+                V6PortAnalyzer.diagnoseForbiddenRuns(st, schedule).takeIf { it.hasRuns }
+            else null
+        }
         // [デバッグ] 制約違反を家族ごとに「場所＋実値(必要/現状, 回数/下限上限, 誰/何日/シフト)」で出力。
         val vioDebugD = async(Dispatchers.Default) { V6SanityPort.buildViolationDebug(st, schedule, report) }
 
-        // v6Logs は sanity/coverageDiag に依存 → 依存先だけ先に await（依存グラフを尊重）
+        // v6Logs は sanity/coverageDiag/forbiddenDiag に依存 → 依存先だけ先に await（依存グラフを尊重）
         val sanity = sanityD.await()
         val coverageDiag = coverageD.await()
-        val v6Logs = listOf("[I] LoadDataBit: ${sanity.loadDataBitSummary}") + sanity.warns.map { "[W] SanityCheck: $it" } + sanity.notes.map { "[I] V6Port: $it" } + sanity.duplicateSeqConstraints.take(4).map { "[W] DuplicateSeq: $it" } + sanity.guidance.take(12).map { "[W] 設定ミス: ${it.where} — ${it.problem} → ${it.fix}" } + (coverageDiag?.logLines() ?: emptyList())
+        val forbiddenDiag = forbiddenD.await()
+        val v6Logs = listOf("[I] LoadDataBit: ${sanity.loadDataBitSummary}") + sanity.warns.map { "[W] SanityCheck: $it" } + sanity.notes.map { "[I] V6Port: $it" } + sanity.duplicateSeqConstraints.take(4).map { "[W] DuplicateSeq: $it" } + sanity.guidance.take(12).map { "[W] 設定ミス: ${it.where} — ${it.problem} → ${it.fix}" } + (coverageDiag?.logLines() ?: emptyList()) + (forbiddenDiag?.logLines() ?: emptyList())
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         Analysis(
             v6 = v6D.await(),
             sanity = sanity,
             coverageDiag = coverageDiag,
+            forbiddenDiag = forbiddenDiag,
             v6Logs = v6Logs,
             rawDiagLogs = v6Logs + mappedDiag + vioDebugD.await(),   // 出力用の全文（非圧縮）。表示は圧縮版を使う。
         )
@@ -2612,6 +2622,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             impossibleWishCount = sanity.impossibleWishes.size,
             // 人員不足(covU)の原因診断（充足不可/充足可能の切り分け）。不足が無ければ null。
             coverageDiag = coverageDiag,
+            // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断。c3n=0 なら null。
+            forbiddenDiag = analysis.forbiddenDiag,
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )

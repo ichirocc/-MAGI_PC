@@ -1720,6 +1720,33 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## 禁止連続(c3n)の「なぜ崩せないか」診断＝ForbiddenDiag新設（3.280.0, ユーザー指示「実装する、実装コスト無視する」）
+実機ログ（2026-12データ・PORTFOLIO 300s）で c3n=1（アリフ Cｱ→Aｱ）が HARD 専任ワーカー計67エポックでも
+不動だったのに、「構造的に不能」か「探索漏れ」かをログから判別できなかった穴への対応。covU/covO には
+CoverageDiag があるのに c3n には対の診断が無かった非対称を解消（ConstraintMus=3.272.0 も希望×需要専用で
+c3n 非対応だった）。**読取専用・スコアリング不変**。
+- **`V6PortAnalyzer.diagnoseForbiddenRuns`新設**: checker の forbidden 窓完全一致と同一意味論で違反 run を
+  列挙（重複ルール=DuplicateSeq 由来の同一 run は1件に集約）し、各セルの脱出可否を HARD 意味論で厳密分類:
+  - **FREE**=安全な代替あり（c3n 行fires正味減=`C1DeltaPrefilter.staffC3nFires`共用・pref非悪化・離脱covU穴
+    なし）＝適用すれば HARD が厳密に減る＝isBetter は必ず採用＝**探索未到達の可能性**という本物のシグナル。
+  - **CHAIN**=離脱元が covU 化するが `findCovUChain`（探索本体と同一関数・8 seed）で埋め直せることを**実証**。
+  - **ADJACENT**=代替が全て新たな禁止連続を作るが `tryFixForbiddenRunViaAdjacentDay`（同・探索本体の関数）で
+    崩せることを実証（隣接日の手＋本セル変更を適用した盤面で離脱covU穴まで連鎖確認）。
+  - **PINNED**=本人希望どおりのセル（動かすと pref9000>c3n7000 で isBetter が正しく却下＝設計どおりの固定。
+    希望が設定されていても現在破っているセルは固定扱いしない=screenCell と同じ正味 pref 判定）。
+  - **BLOCKED**=全代替が「新たな禁止連続」か「covU受け皿なし」＝内訳件数つき。
+  run 単位の hint は 3.263.0 の教訓（「玉突きが必要」と楽観的に言うだけでは壁を誤解させる）どおり、
+  CHAIN/ADJACENT は探索本体の関数で成立を実証してからそう名乗り、全塞がりは「この希望・担当のままでは
+  どう組んでも残ります（希望固定: 日付列挙）」と正直に案内。
+- **配線**: `analyzeParallel`に第5の並列パス（c3n>0 のときのみ算出）→ `Analysis.forbiddenDiag`→
+  `UiState.forbiddenDiag`＋v6Logs へ `[W] ForbiddenDiag:` 行（エクスポートされるMAGIログに載る）。
+  UI=`ForbiddenRunDiagnosisCard`（MagiDashboardCards、CoverageDiagnosisCard と同じ作り・ホームの同カード
+  直後に配置・「崩せない=赤/崩す手あり=青」チップ＋セル別分類＋hint）。
+- 検証: ホストJVMで**全311テストgreen**（新規5件=FREE/PINNED構造壁/CHAIN実証/受け皿なし壁/ADJACENT+FREE
+  同居 run。ADJACENT テストは隣接日調整の成立を手でトレースして設計）。実データ（real_state 2026-08）へ
+  c3n run を注入した実形状駆動で正しい分類・20ms・c3n=0 時は完全 no-op（4ms）を確認。
+  `C1DeltaPrefilter.staffC3nFires`は診断との共用のため private→internal 化。
+
 ## 3.279.0セルフレビュー指摘5件の後始末（3.279.1, ユーザー指示「コードレビューする」→「修正する」）
 genshijin-review形式でPR#85（3.279.0）をセルフレビューし、🟡1＋🔵4を特定して修正。**全306テストgreen＋
 挙動中立を実証**（同条件runでworking==HEADの研磨結果が完全一致。golden benchのrun間揺れ288/99↔289/96は

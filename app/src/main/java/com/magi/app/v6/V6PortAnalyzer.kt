@@ -115,6 +115,84 @@ data class CoverageDiagnosis(
     }
 }
 
+/** 禁止連続(c3n)違反 run の1セルの脱出可否分類。 */
+enum class ForbiddenCellEscape {
+    /** 安全な代替シフトが存在（適用すれば HARD が厳密に減る＝探索未到達の可能性）。 */
+    FREE,
+    /** 直接は離脱元シフトが covU 化するが、玉突き連鎖（findCovUChain）で埋め直せることを実証済み。 */
+    CHAIN,
+    /** 代替は全て新たな禁止連続を作るが、隣接日調整（tryFixForbiddenRunViaAdjacentDay）で崩せることを実証済み。 */
+    ADJACENT,
+    /** 本人の希望で固定（動かすと pref(9000)>c3n(7000) の悪化＝isBetter が正しく却下する）。 */
+    PINNED,
+    /** 全ての代替が塞がっている（新たな禁止連続・covU受け皿なし・代替シフトなし）。 */
+    BLOCKED,
+}
+
+/** 禁止連続(c3n)違反 run 1件ぶんのセル別診断。 */
+data class ForbiddenRunCell(
+    val dayIndex: Int,
+    val dayLabel: String,
+    val shiftSymbol: String,
+    val escape: ForbiddenCellEscape,
+    /** 分類の根拠（代替の内訳件数など）。 */
+    val detail: String,
+)
+
+/** 禁止連続(c3n)違反 run 1件の診断（CoverageShortfall/CoverageSurplus と対の存在）。 */
+data class ForbiddenRunDiag(
+    val staffIndex: Int,
+    val staffName: String,
+    val startDay: Int,
+    /** 例: "Cｱ→Aｱ"（禁止パターンの記号列）。 */
+    val seqLabel: String,
+    val cells: List<ForbiddenRunCell>,
+    /** run 全体の判定と次の一手の案内。 */
+    val hint: String,
+) {
+    val escapable: Boolean get() = cells.any {
+        it.escape == ForbiddenCellEscape.FREE || it.escape == ForbiddenCellEscape.CHAIN ||
+            it.escape == ForbiddenCellEscape.ADJACENT
+    }
+}
+
+/**
+ * [3.280.0] 禁止連続(c3n, HARD)の「なぜ崩せないか」診断。CoverageDiag（covU/covO）と対。
+ * 実機で c3n=1 が HARD 専任ワーカー67エポックでも不動だった事例（2026-12 データ・アリフ Cｱ→Aｱ）で、
+ * 「構造的に不能」か「探索漏れ」かをログから判別できなかった穴を埋める。読取専用・スコア不変。
+ */
+data class ForbiddenRunDiagnosis(
+    val totalRuns: Int,
+    val runs: List<ForbiddenRunDiag>,
+) {
+    val hasRuns: Boolean get() = totalRuns > 0
+    /** 全 run が構造的に塞がっている（＝このデータ・希望のままでは c3n を 0 にできない）。 */
+    val allBlocked: Boolean get() = hasRuns && runs.none { it.escapable }
+
+    /** 診断ログ（エクスポートされる「MAGI ログ」に載る形式の文字列）。 */
+    fun logLines(): List<String> {
+        if (!hasRuns) return emptyList()
+        val out = ArrayList<String>()
+        out.add("[W] ForbiddenDiag: 禁止連続(c3n) ${totalRuns}件 — なぜ崩せないか")
+        for (r in runs.take(6)) {
+            val cellsTxt = r.cells.joinToString(" / ") { c ->
+                val tag = when (c.escape) {
+                    ForbiddenCellEscape.FREE -> "崩せる"
+                    ForbiddenCellEscape.CHAIN -> "玉突きで崩せる"
+                    ForbiddenCellEscape.ADJACENT -> "隣接日調整で崩せる"
+                    ForbiddenCellEscape.PINNED -> "希望固定"
+                    ForbiddenCellEscape.BLOCKED -> "塞がり"
+                }
+                "${c.dayLabel}=${c.shiftSymbol}:${tag}(${c.detail})"
+            }
+            out.add("[W] ForbiddenDiag: ${r.staffName} ${r.seqLabel} — $cellsTxt")
+            out.add("[W] ForbiddenDiag: ${r.staffName} ${r.seqLabel} → ${r.hint}")
+        }
+        if (runs.size > 6) out.add("[W] ForbiddenDiag: ほか${runs.size - 6}件")
+        return out
+    }
+}
+
 object V6PortAnalyzer {
     /**
      * 人員不足(covU)の枠ごとの原因診断。エンジンは変更せず、現在の解だけを読み取り、
@@ -288,6 +366,140 @@ object V6PortAnalyzer {
         }
         surplusList.sortByDescending { it.excess }
         return CoverageDiagnosis(total, infeasible, fixable, list, relaxations, totalSurplus, surplusList)
+    }
+
+    /**
+     * [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断。CoverageDiag と同じ設計思想:
+     * エンジンは変更せず現在の解だけを読み取り、違反 run の各セルについて「単一セル変更で崩せるか」を
+     * HARD 意味論（c3n 正味減・pref・covU 離脱穴）で厳密に分類する。
+     *  - FREE: 安全な代替あり＝適用すれば HARD が厳密に減る（isBetter は必ず採用）＝探索未到達の可能性。
+     *  - CHAIN: 離脱元が covU 化するが findCovUChain（探索本体と同一関数・8 seed）で埋め直せることを実証。
+     *  - ADJACENT: 代替は全て新たな禁止連続を作るが、隣接日調整（tryFixForbiddenRunViaAdjacentDay=
+     *    探索本体と同一関数）で崩せることを実証。
+     *  - PINNED: 本人希望どおりのセル＝動かすと pref(9000)>c3n(7000) で悪化＝isBetter が正しく却下（設計どおり）。
+     *  - BLOCKED: 全代替が「新たな禁止連続」か「covU 受け皿なし」＝この希望・担当のままでは崩せない。
+     * 3.263.0 の教訓（「玉突きが必要」と楽観的に言うだけでは壁を誤解させる）に従い、CHAIN/ADJACENT は
+     * 実際に探索本体の関数で成立を確認してからそう名乗る。読取専用・スコアリング不変。
+     */
+    fun diagnoseForbiddenRuns(
+        state: MagiState,
+        schedule: Array<IntArray> = state.schedule.toIntArray2D(),
+    ): ForbiddenRunDiagnosis {
+        val p = cachedProblem(state)
+        val norm = normalizeSchedule(schedule, p)
+        val cov = coverage(p, norm)
+        fun sym(k: Int) = state.shifts.getOrNull(k)?.kigou ?: k.toString()
+        val runs = ArrayList<ForbiddenRunDiag>()
+        val seen = HashSet<String>()   // 重複ルール（DuplicateSeq）由来の同一 run を1件に集約
+        for (c in p.cons3n) {
+            val seq = c.seq
+            val d = seq.size
+            if (d == 0 || d > p.T) continue
+            val seqLabel = seq.joinToString("→") { sym(it) }
+            for (i in 0 until p.S) {
+                var j0 = 0
+                while (j0 <= p.T - d) {
+                    var z = 0
+                    for (l in 0 until d) if (norm[i][j0 + l] == seq[l]) z++
+                    if (z != d) { j0++; continue }   // checker の forbidden 窓完全一致と同一意味論
+                    val key = "$i,$j0,$seqLabel"
+                    if (!seen.add(key)) { j0++; continue }
+                    val cells = ArrayList<ForbiddenRunCell>()
+                    for (l in 0 until d) {
+                        val j = j0 + l
+                        val cur = norm[i][j]
+                        cells.add(diagnoseForbiddenCell(state, p, norm, cov, i, j, cur))
+                    }
+                    val pinnedDays = cells.filter { it.escape == ForbiddenCellEscape.PINNED }.joinToString("・") { it.dayLabel }
+                    val hint = when {
+                        cells.any { it.escape == ForbiddenCellEscape.FREE } ->
+                            "安全に崩せる手が存在します（適用すれば必須違反が減る＝探索未到達の可能性。勤務表の該当セルから『直し方を探す』で解消を試せます）"
+                        cells.any { it.escape == ForbiddenCellEscape.CHAIN || it.escape == ForbiddenCellEscape.ADJACENT } ->
+                            "単独の1手では崩せず、玉突き連鎖/隣接日調整の多段手でのみ崩せます（探索は候補を持っています＝再実行で解消し得ます）"
+                        else ->
+                            "全セルが塞がっています" +
+                                (if (pinnedDays.isNotEmpty()) "（希望固定: $pinnedDays）" else "") +
+                                "。この希望・担当のままではどう組んでもこの禁止連続は残ります。周辺の希望を1件調整するか、担当を追加してください"
+                    }
+                    runs.add(ForbiddenRunDiag(i, state.staff.getOrNull(i)?.name ?: "#$i", j0, seqLabel, cells, hint))
+                    j0++
+                }
+            }
+        }
+        // 構造的に塞がっている run（＝業務担当者の対処が必要）を先頭へ。
+        runs.sortWith(compareBy { it.escapable })
+        return ForbiddenRunDiagnosis(runs.size, runs)
+    }
+
+    /** run 内の1セル (i,j,cur) の脱出可否を判定する（diagnoseForbiddenRuns 専用の下請け）。 */
+    private fun diagnoseForbiddenCell(
+        state: MagiState, p: Problem, norm: Array<IntArray>, cov: Array<IntArray>,
+        i: Int, j: Int, cur: Int,
+    ): ForbiddenRunCell {
+        val label = dayLabel(state.startDate, j)
+        val curSym = state.shifts.getOrNull(cur)?.kigou ?: cur.toString()
+        // 希望どおりのセル＝動かすと pref(9000) が増え c3n(7000) 減を上回る＝isBetter が却下（設計どおりの固定）。
+        //   希望が設定されていても現在それを破っているセル（cur != wish）は固定でない＝通常判定へ。
+        if (p.wishLocked(i, j) && p.wish[i][j] == cur) {
+            return ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.PINNED, "本人希望=$curSym")
+        }
+        // 行 fires の正味減判定（C1DeltaPrefilter.screenCell と同じ row-local 差分・staffC3nFires を共用）。
+        val row = IntArray(p.T) { norm[i][it] }
+        val firesBefore = C1DeltaPrefilter.staffC3nFires(p, row)
+        fun netC3nSafe(m: Int): Boolean {
+            row[j] = m
+            val after = C1DeltaPrefilter.staffC3nFires(p, row)
+            row[j] = cur
+            return after < firesBefore
+        }
+        // 離脱で (cur, j) に covU 穴が空くか。空くなら findCovUChain（探索本体と同一関数）で埋まるか実証する。
+        val cnt = if (cur in 0 until p.K) cov[j][cur] else 0
+        val departureHole = cur in 0 until p.K && p.covUCell(cur, j, cnt - 1) > p.covUCell(cur, j, cnt)
+        fun chainFills(board: Array<IntArray>): Boolean = (0 until 8).any { seed ->
+            findCovUChain(p, board, cur, j, java.util.Random(seed.toLong()), exclude = i) != null
+        }
+        var c3nBlocked = 0
+        var noReceiver = 0
+        var chainOk: Int? = null      // CHAIN が成立した代替シフト
+        var adjOk: Int? = null        // ADJACENT が成立した代替シフト
+        var alts = 0
+        for (m in p.allowedShiftsForStaff(i)) {
+            if (m == cur) continue
+            alts++
+            if (netC3nSafe(m)) {
+                if (!departureHole) {
+                    return ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.FREE,
+                        "代替「${state.shifts.getOrNull(m)?.kigou ?: m}」へ変更可")
+                }
+                // 離脱穴あり → 実際に動かした盤面で連鎖が埋まるかを実証。
+                if (chainOk == null) {
+                    val tmp = Array(p.S) { norm[it].clone() }
+                    tmp[i][j] = m
+                    if (chainFills(tmp)) chainOk = m else noReceiver++
+                } else noReceiver++   // 既に CHAIN 成立済み＝以降の重い連鎖検証は省略（分類は不変）
+            } else {
+                // この代替は新たな禁止連続を作る → 隣接日調整（探索本体と同一関数）で崩せるか実証。
+                if (adjOk == null && chainOk == null) {
+                    val tmp = Array(p.S) { norm[it].clone() }
+                    val extra = tryFixForbiddenRunViaAdjacentDay(p, tmp, i, j, m, java.util.Random(7L))
+                    if (extra != null) {
+                        // 隣接日の手＋本セルの変更を適用し、本セルの離脱穴が残るなら連鎖で埋まるかまで確認。
+                        for (mv in extra) tmp[mv[0]][mv[1]] = mv[2]
+                        tmp[i][j] = m
+                        if (!departureHole || chainFills(tmp)) adjOk = m else c3nBlocked++
+                    } else c3nBlocked++
+                } else c3nBlocked++
+            }
+        }
+        return when {
+            chainOk != null -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.CHAIN,
+                "「${state.shifts.getOrNull(chainOk)?.kigou ?: chainOk}」へ変更＋玉突き連鎖で成立")
+            adjOk != null -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.ADJACENT,
+                "「${state.shifts.getOrNull(adjOk)?.kigou ?: adjOk}」へ変更＋隣接日調整で成立")
+            alts == 0 -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.BLOCKED, "代替シフトなし")
+            else -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.BLOCKED,
+                "代替${alts}件全滅: 新たな禁止連続${c3nBlocked}・covU受け皿なし${noReceiver}")
+        }
     }
 
     fun analyze(

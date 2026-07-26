@@ -410,6 +410,63 @@ internal fun CoverageDiagnosisCard(ui: UiState) {
 
 
 /**
+ * [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断カード。CoverageDiagnosisCard（人員不足/過剰の原因）の
+ * c3n 版＝同じ作り。必須違反が残っているのに探索が進まないとき、「構造的に不能（希望調整が必要）」か
+ * 「多段手が必要（再実行で解消し得る）」かを違反 run ごとに示す。読取専用・スコア不変。
+ */
+@Composable
+internal fun ForbiddenRunDiagnosisCard(ui: UiState) {
+    val diag = ui.forbiddenDiag ?: return
+    if (!diag.hasRuns) return
+    val cs = MaterialTheme.colorScheme
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("禁止の並びがなぜ崩せないか", style = MaterialTheme.typography.titleMedium)
+            val headline = if (diag.allBlocked) {
+                "残り ${diag.totalRuns} 件は全て塞がっています。今の希望・担当のままでは崩せません。"
+            } else {
+                "残り ${diag.totalRuns} 件 — 崩す手が残っている並びがあります。"
+            }
+            Text(headline, style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            for (r in diag.runs.take(6)) {
+                val blocked = !r.escapable
+                val container = if (blocked) cs.errorContainer else cs.secondaryContainer
+                val onContainer = if (blocked) cs.onErrorContainer else cs.onSecondaryContainer
+                Surface(color = container, shape = MaterialTheme.shapes.medium) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("${r.staffName}  ${r.seqLabel}",
+                                color = onContainer, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            MagiTagChip(
+                                text = if (blocked) "崩せない" else "崩す手あり",
+                                color = if (blocked) MagiAccent.red else MagiAccent.blue,
+                            )
+                        }
+                        val cellsTxt = r.cells.joinToString(" ・ ") { c ->
+                            val tag = when (c.escape) {
+                                com.magi.app.v6.ForbiddenCellEscape.FREE -> "崩せる"
+                                com.magi.app.v6.ForbiddenCellEscape.CHAIN -> "玉突きで崩せる"
+                                com.magi.app.v6.ForbiddenCellEscape.ADJACENT -> "隣接日調整で崩せる"
+                                com.magi.app.v6.ForbiddenCellEscape.PINNED -> "希望固定"
+                                com.magi.app.v6.ForbiddenCellEscape.BLOCKED -> "塞がり"
+                            }
+                            "${c.dayLabel} ${c.shiftSymbol}=$tag"
+                        }
+                        Text(cellsTxt, color = onContainer, style = MaterialTheme.typography.bodySmall)
+                        Text(r.hint, color = onContainer, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            if (diag.runs.size > 6) {
+                Text("ほか ${diag.runs.size - 6} 件（詳細はログ出力を参照）",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+
+/**
  * [設定ミスの誘導修正] 制約・希望シフトの入力間違いを「どこが・なぜ・どう直すか」で具体的に提示する。
  * CoverageDiagnosisCard（人員不足の原因）と同じ作りで、配布前に設定を直せるようにするのが目的。
  */

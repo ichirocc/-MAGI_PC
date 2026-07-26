@@ -85,8 +85,12 @@ object C1DeltaPrefilter {
         return if (delta > 0) Verdict.HARD_REJECT else Verdict.NEUTRAL
     }
 
-    /** 職員行 row の cons3n（禁止連続, HARD）fire 数。checker の forbidden 窓完全一致と同一意味論。 */
-    private fun staffC3nFires(p: Problem, row: IntArray): Int {
+    /**
+     * 職員行 row の cons3n（禁止連続, HARD）fire 数。checker の forbidden 窓完全一致と同一意味論。
+     * [3.280.0] c3n「なぜ崩せないか」診断（V6PortAnalyzer.diagnoseForbiddenRuns）が正味増減の判定に
+     * 共用するため internal 化（screenCell と同じ row-local 差分計算を DRY に保つ）。
+     */
+    internal fun staffC3nFires(p: Problem, row: IntArray): Int {
         var fires = 0
         for (c in p.cons3n) {
             val seq = c.seq

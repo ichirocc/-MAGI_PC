@@ -166,4 +166,121 @@ class V6PortAnalyzerTest {
         assertTrue(sp.reason.contains("希望固定2人"))
         assertTrue(sp.reason.contains("希望"))
     }
+
+    // ==== [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断 ====
+
+    private fun forbiddenState(
+        schedule: List<List<Int>>,
+        cons3n: List<C3Row>,
+        wishes: Map<String, Int> = emptyMap(),
+        shifts: List<Shift> = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", ""), Shift("Y", "Y", "", "")),
+        staff: List<Staff> = listOf(Staff("s0", 0)),
+        groupShift: List<List<Int>> = listOf(List(3) { 1 }),
+    ): MagiState {
+        val days = schedule[0].size
+        return MagiState(
+            startDate = "2026-01-01", endDate = "2026-01-" + days.toString().padStart(2, '0'),
+            shifts = shifts, groups = List(groupShift.size) { Group("G$it", "G$it") },
+            staff = staff, use2Patterns = false,
+            groupShift = groupShift, groupShiftApt = groupShift.map { g -> g.map { "" } },
+            schedule = schedule, wishes = wishes, staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = cons3n, cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+    }
+
+    // 需要も希望も無い盤面の禁止連続は、どのセルも休へ変えるだけで安全に崩せる＝FREE。
+    // FREE を含む run は「探索未到達の可能性」として案内される（もし残っていたら本物のシグナル）。
+    @Test
+    fun diagnoseForbiddenRunsMarksFreelyBreakableRunAsEscapable() {
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1, 0)),               // X X 休 → [X,X] が1件
+            cons3n = listOf(C3Row(listOf("X", "X"))),
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        assertEquals(1, diag.totalRuns)
+        val run = diag.runs.single()
+        assertTrue("安全な代替がある run は escapable", run.escapable)
+        assertTrue(run.cells.any { it.escape == ForbiddenCellEscape.FREE })
+        assertTrue("探索未到達の案内", run.hint.contains("探索未到達"))
+    }
+
+    // 両セルとも本人希望どおり＝動かすと pref(9000)>c3n(7000) の悪化で isBetter が却下する（設計どおり）。
+    // 全セル PINNED → 構造的に崩せないことを正直に案内する（実機 c3n=1 が67エポック不動だった穴の再現）。
+    @Test
+    fun diagnoseForbiddenRunsReportsWishPinnedRunAsStructurallyBlocked() {
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1, 0)),
+            cons3n = listOf(C3Row(listOf("X", "X"))),
+            wishes = mapOf("0,0" to 1, "0,1" to 1),           // 両セルとも X を希望固定
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        val run = diag.runs.single()
+        assertTrue("全セル希望固定", run.cells.all { it.escape == ForbiddenCellEscape.PINNED })
+        assertTrue(diag.allBlocked)
+        assertTrue("希望固定の明示と対処の案内", run.hint.contains("希望固定") && run.hint.contains("残ります"))
+    }
+
+    // 離脱すると covU 穴が空くが、玉突き連鎖（findCovUChain=探索本体と同一関数）で埋め直せる局面は
+    // CHAIN（実証済みの多段手）として案内される。
+    @Test
+    fun diagnoseForbiddenRunsVerifiesChainEscapeWhenDepartureCreatesCovU() {
+        // P(需要1/日)を s0 が2連続（[P,P]禁止）。s0 が抜けた穴は休中の s1 が埋められる。
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1), listOf(0, 0)),
+            cons3n = listOf(C3Row(listOf("P", "P"))),
+            shifts = listOf(Shift("休", "休", "", ""), Shift("P", "P", "1", ""), Shift("Q", "Q", "", "")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+            groupShift = listOf(List(3) { 1 }),
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        val run = diag.runs.single()
+        assertTrue("玉突き連鎖の実在を実証したうえで escapable",
+            run.cells.any { it.escape == ForbiddenCellEscape.CHAIN })
+        assertTrue(run.hint.contains("玉突き") || run.hint.contains("隣接日"))
+    }
+
+    // 同じ局面で唯一の受け皿 s1 が両日とも休へ希望固定されると連鎖が実在しなくなり、
+    // 「covU受け皿なし」として全セル BLOCKED＝構造的な壁を正直に報告する（3.263.0 の教訓の c3n 版）。
+    @Test
+    fun diagnoseForbiddenRunsReportsNoReceiverWallWhenChainCannotFill() {
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1), listOf(0, 0)),
+            cons3n = listOf(C3Row(listOf("P", "P"))),
+            wishes = mapOf("1,0" to 0, "1,1" to 0),           // s1 は両日とも休へ希望固定＝連鎖の受け皿なし
+            shifts = listOf(Shift("休", "休", "", ""), Shift("P", "P", "1", ""), Shift("Q", "Q", "", "")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+            groupShift = listOf(List(3) { 1 }),
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        val run = diag.runs.single()
+        assertTrue("全セルが受け皿なしで塞がる", run.cells.all { it.escape == ForbiddenCellEscape.BLOCKED })
+        assertTrue(run.cells.all { it.detail.contains("受け皿なし") })
+        assertTrue(diag.allBlocked)
+        assertTrue(run.hint.contains("どう組んでも"))
+    }
+
+    // 代替が全て新たな禁止連続を作る局面でも、隣接日調整（tryFixForbiddenRunViaAdjacentDay=
+    // 探索本体と同一関数）で崩せるなら ADJACENT として実証つきで案内される。
+    @Test
+    fun diagnoseForbiddenRunsVerifiesAdjacentDayEscape() {
+        // s0: [Q, P, P, 休]。禁止=[P,P](run@1-2)・[Q,休]・[Q,Q]。
+        //   day1 の代替は 休→[Q,休]@0 / Q→[Q,Q]@0 と全て新たな禁止連続を作るが、
+        //   day0 を Q→休 に隣接日調整すれば day1=休 が安全に置ける＝ADJACENT。
+        //   day2 は休へ変えるだけで安全＝FREE（同一 run 内で両分類が同時に検証される）。
+        val st = forbiddenState(
+            schedule = listOf(listOf(2, 1, 1, 0)),
+            cons3n = listOf(C3Row(listOf("P", "P")), C3Row(listOf("Q", "休")), C3Row(listOf("Q", "Q"))),
+            shifts = listOf(Shift("休", "休", "", ""), Shift("P", "P", "", ""), Shift("Q", "Q", "", "")),
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        val run = diag.runs.single { it.seqLabel == "P→P" }
+        val day1 = run.cells.single { it.dayIndex == 1 }
+        val day2 = run.cells.single { it.dayIndex == 2 }
+        assertEquals(ForbiddenCellEscape.ADJACENT, day1.escape)
+        assertEquals(ForbiddenCellEscape.FREE, day2.escape)
+        assertTrue(run.escapable)
+    }
 }
