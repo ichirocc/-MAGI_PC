@@ -579,6 +579,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                         onSaveStaffCsv = { pendingExportKind = "staff"; saveComponentCsvLauncher.launch("magi_staff_${System.currentTimeMillis()}.csv") },
                         onSaveWishesCsv = { pendingExportKind = "wishes"; saveComponentCsvLauncher.launch("magi_wishes_${System.currentTimeMillis()}.csv") },
                         onSaveConstraintsCsv = { pendingExportKind = "cons"; saveComponentCsvLauncher.launch("magi_constraints_${System.currentTimeMillis()}.csv") },
+                        onRestorePrev = { vm.restorePreviousData() },
                     )
                     SettingsCard(ui, vm, onBgOptimize = onBgOptimize)
                     // [実機指摘/移動] 重み表＝最適化の優先順位の根拠。実行条件（最適化設定）の隣が定位置。

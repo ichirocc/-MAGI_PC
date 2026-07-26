@@ -78,6 +78,8 @@ data class UiState(
     //   生んでいた。applyStructure が毎回これを増やして必ず distinct な UiState を emit＝確実に再構成させる。
     val editRev: Int = 0,
     val message: String? = null,
+    // [判断設計監査 #3] 「データを開く」直前の1世代退避が存在するか（設定タブの復元導線の表示条件）。
+    val prevBackupAvailable: Boolean = false,
     // 操作コパイロット: 満足度(0-100) / 研磨の限界 / ガチャ操作の助言
     val satisfaction: Int = 0,
     val polishExhausted: Boolean = false,

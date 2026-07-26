@@ -558,6 +558,7 @@ internal fun DataActionsCard(
     onOpenJson: () -> Unit, onSample: () -> Unit, onSaveJson: () -> Unit,
     onOpenCsv: () -> Unit, onSaveCsv: () -> Unit, onCheck: () -> Unit,
     onSaveStaffCsv: () -> Unit = {}, onSaveWishesCsv: () -> Unit = {}, onSaveConstraintsCsv: () -> Unit = {},
+    onRestorePrev: () -> Unit = {},
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -565,6 +566,12 @@ internal fun DataActionsCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onOpenJson, enabled = !ui.running, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("データを開く") }
                 OutlinedButton(onClick = onSample, enabled = !ui.running, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("サンプル") }
+            }
+            // [判断設計監査 #3] 開く=現データの置換。置換直前の1世代退避へ戻す導線（押すたび入れ替わる）。
+            if (ui.prevBackupAvailable) {
+                TextButton(onClick = onRestorePrev, enabled = !ui.running, modifier = Modifier.fillMaxWidth()) {
+                    Text("開く前のデータに戻す（もう一度押すと入れ替え）")
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSaveJson, enabled = ui.loaded && !ui.running, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("データを保存") }

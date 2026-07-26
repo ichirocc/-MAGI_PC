@@ -251,6 +251,15 @@ internal fun OperatorNextActionCard(
                 "人手が足りない日：${shortDays}日 ・ できあがり度：${ui.satisfaction}%",
                 style = MaterialTheme.typography.bodyMedium, color = plan.fg,
             )
+            // [判断設計監査 #1/#2] 数字の根拠（できあがり度の意味）と結果採用の意味（承認ステップの
+            //   不在を補う注記: 反映済み・取消可・確定は書き出し時）を1行で明示。
+            if (!ui.running && ui.hasResult) {
+                Text(
+                    "※できあがり度＝最初からの違反の減り具合（必須違反が残る間は最大55%）。" +
+                        "結果は下書きに反映済み・「元に戻す」で取消可・確定は書き出し時です。",
+                    style = MaterialTheme.typography.bodySmall, color = plan.fg.copy(alpha = 0.8f),
+                )
+            }
             if (ui.running) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     CircularProgressIndicator(Modifier.size(22.dp), color = plan.fg)

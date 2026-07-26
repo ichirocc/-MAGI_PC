@@ -90,6 +90,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     // ===== [v2.22] 自動保存・復元（端末内）と「元に戻す」 =====
     private val autosaveFile get() = getApplication<Application>().filesDir.resolve("magi_autosave.json")
+    // [判断設計監査 #3] 「データを開く」直前の状態を1世代だけ退避（開く=取消不能な置換だった穴を塞ぐ）。
+    private val prevBackupFile get() = getApplication<Application>().filesDir.resolve("magi_prev_before_open.json")
     private var hydrated = false           // 復元完了前の自動保存を抑止（Web HF514 と同思想）
     private var saveJob: Job? = null
     private data class UndoSnap(val st: MagiState, val sched: Array<IntArray>)
@@ -153,6 +155,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val c = async(Dispatchers.IO) { runCatching { OptimizationWorker.resultFile(getApplication<Application>()).takeIf { it.exists() }?.readText() }.getOrNull() }
                 Triple(a.await(), b.await(), c.await())
             }
+            // [判断設計監査 #3] 前回「データを開く」時の退避があれば復元導線（設定タブ）を有効化。
+            val hasPrev = withContext(Dispatchers.IO) { runCatching { prevBackupFile.exists() }.getOrDefault(false) }
+            if (hasPrev) _ui.update { it.copy(prevBackupAvailable = true) }
             if (!resultTxt.isNullOrBlank()) {
                 clearRunMarker()
                 OptimizationWorker.clearFiles(getApplication<Application>())
@@ -404,6 +409,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 loaded.fold(
                     onSuccess = { lp ->
+                        // [判断設計監査 #3] 置換直前の状態を1世代退避。「開く前のデータに戻す」
+                        //   （restorePreviousData）で往復できる（戻す操作自体も退避を挟む＝スワップ）。
+                        val prevJson = if (state != null) exportJson() else null
+                        if (prevJson != null) {
+                            viewModelScope.launch(Dispatchers.IO) { runCatching { prevBackupFile.writeText(prevJson) } }
+                        }
                         originalJson = json
                         state = lp.state.withSchedule(lp.schedule)
                         currentSchedule = lp.schedule.copy2D()
@@ -429,6 +440,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 iters = 0,
                                 itersPerSec = 0,
                                 elapsedMs = 0,
+                                prevBackupAvailable = prevJson != null || it.prevBackupAvailable,
                                 message = "読込完了: ${lp.state.staffCount}名 / ${lp.state.dayCount}日 / ${lp.state.shiftCount}シフト",
                             )
                         }
@@ -441,6 +453,23 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Exception) {
                 _ui.update { it.copy(running = false, message = "読込失敗: ${e.message}") }
             }
+        }
+    }
+
+    /** [判断設計監査 #3] 「データを開く」直前に退避した1世代前の状態へ戻す。loadAsync 経由のため
+     *  現在のデータが再び退避される＝もう一度押すと元へ戻る（スワップ）。 */
+    fun restorePreviousData() {
+        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は操作できません") }; return }
+        viewModelScope.launch {
+            val txt = withContext(Dispatchers.IO) {
+                runCatching { prevBackupFile.takeIf { it.exists() }?.readText() }.getOrNull()
+            }
+            if (txt.isNullOrBlank()) {
+                _ui.update { it.copy(message = "開く前のデータの退避がありません") }
+                return@launch
+            }
+            logOp("I", "開く前のデータに戻します（もう一度押すと入れ替わります）")
+            loadAsync(txt)
         }
     }
 
