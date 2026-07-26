@@ -33,6 +33,11 @@ class C1RelocationPolishTest {
      * 手A(同日j=2のみ交換)を手計算すると: i 1→0fire(-1)・i2 1→2fire(+1)=総和±0で不採用（isBetterが拒否）。
      * 手R1(day0とday2を同時に交換)は: i 1→0fire(-1)・i2 1→1fire(±0, 窓[0,1]解消/窓[1,2]新規で相殺)=総和-1で採用。
      * 両職員とも同一グループ・両シフト担当可、needもwishもcons3nも無し＝covU/HARD不変。
+     * [3.287.0 keep-best統一で強化] docstring どおりの「回数固定職員」を staffRange の厳密ピン(X=2固定)で
+     * 実際に表現する。旧盤面はピン未設定で、weighted優先化後は「c1(15)を weekly(1)等と交換する count-changing 手」
+     * が正当な改善として追加採用され、回数保存アサーションが破れた（挙動は正しい）。ピンを立てることで
+     * count-changing 手は low/high(90/45)+exactPinRegression で拒否され、本テストの意図（移設だけが唯一の
+     * 改善手である局面で R1 が機能する）が新旧どちらの比較器でも成立する。
      */
     private fun mirrorState(): MagiState {
         val groups = listOf(Group("G0", "G0"))
@@ -47,7 +52,8 @@ class C1RelocationPolishTest {
             groupShift = listOf(listOf(1, 1)),
             groupShiftApt = List(1) { List(2) { "" } },
             schedule = schedule,
-            wishes = emptyMap(), staffRange = emptyMap(),
+            wishes = emptyMap(),
+            staffRange = mapOf("0,1" to Range("2", "2"), "1,1" to Range("2", "2")),   // X回数を厳密ピン（両職員とも現状=2）
             needDay1 = emptyMap(), needDay2 = emptyMap(),
             cons1 = listOf(C1Row(day1 = "2", shiftKigou = "X", day2 = "1")),
             cons2 = emptyList(), cons3 = emptyList(),

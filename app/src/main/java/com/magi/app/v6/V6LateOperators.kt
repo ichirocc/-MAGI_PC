@@ -72,7 +72,9 @@ object V6LateOperators {
         // 採否ゲート [HF537]: 採用なら cur 更新 + ログ。不採用なら false(呼び元で revert)。
         fun gate(tag: String, detail: String): Boolean {
             val nv = UnifiedViolationChecker.check(state, sched)
-            val base = nv.hard < cur.hard || (nv.hard == cur.hard && nv.soft < cur.soft)
+            // [3.287.0 keep-best統一] 第2キーを soft(生カウント)→weightedScore へ（betterReport と同方針。
+            //   boost 側の soft<= ガードは「生カウントも悪化させない」追加条件として従来どおり残す）。
+            val base = nv.hard < cur.hard || (nv.hard == cur.hard && nv.weightedScore < cur.weightedScore)
             val boost = !base &&
                 c1(nv) < c1(cur) &&
                 nv.hard <= cur.hard &&

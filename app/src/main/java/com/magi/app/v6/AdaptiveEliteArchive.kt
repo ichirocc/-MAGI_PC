@@ -145,10 +145,11 @@ internal class AdaptiveEliteArchive(
             compareReports(a.report, b.report)
         }
 
+        // [3.287.0 keep-best統一] hard→weightedScore→total（MirrorCore.betterReport と同順）。
         internal fun compareReports(a: ViolationReport, b: ViolationReport): Int = when {
             a.hard != b.hard -> a.hard.compareTo(b.hard)
-            a.total != b.total -> a.total.compareTo(b.total)
-            else -> a.weightedScore.compareTo(b.weightedScore)
+            a.weightedScore != b.weightedScore -> a.weightedScore.compareTo(b.weightedScore)
+            else -> a.total.compareTo(b.total)
         }
 
         internal fun better(a: ViolationReport, b: ViolationReport): Boolean = compareReports(a, b) < 0

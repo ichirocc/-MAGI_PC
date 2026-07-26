@@ -208,9 +208,7 @@ internal object C1JointLnsPolish {
             !exactPinRegression(p, root.schedule, node.schedule)
 
     private fun better(a: ViolationReport, b: ViolationReport): Boolean {
-        if (a.hard != b.hard) return a.hard < b.hard
-        if (a.total != b.total) return a.total < b.total
-        return a.weightedScore < b.weightedScore
+        return betterReport(a, b)  // [3.287.0 keep-best統一] hard→weighted→total（MirrorCore.betterReport）
     }
 
     /**
@@ -504,8 +502,8 @@ internal object C1JointLnsPolish {
     ): List<Node> {
         val official = children.sortedWith(
             compareBy<Node> { it.report.hard }
-                .thenBy { it.report.total }
                 .thenBy { it.report.weightedScore }
+                .thenBy { it.report.total }
                 .thenBy { it.c1 }
                 .thenBy { it.changedCells },
         ).take(max(1, width / 2))
@@ -515,8 +513,8 @@ internal object C1JointLnsPolish {
                 .thenBy { (it.c1 - lowerBound).coerceAtLeast(0) }
                 .thenBy { (it.report.total - root.total).coerceAtLeast(0) }
                 .thenBy { it.report.hard }
-                .thenBy { it.report.total }
                 .thenBy { it.report.weightedScore }
+                .thenBy { it.report.total }
                 .thenBy { it.changedCells },
         ).take(max(1, width - official.size))
 

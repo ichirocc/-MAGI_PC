@@ -970,11 +970,11 @@ object V6HotfixPasses {
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
 
-    // 主目的(hard→total→weighted)を悪化させないか。平準化は「悪化させない範囲」で二次最適化する。
+    // 主目的(hard→weighted→total)を悪化させないか。平準化は「悪化させない範囲」で二次最適化する。
     private fun mainNotWorse(rep: ViolationReport, best: ViolationReport): Boolean =
         rep.hard < best.hard ||
-            (rep.hard == best.hard && rep.total < best.total) ||
-            (rep.hard == best.hard && rep.total == best.total && rep.weightedScore <= best.weightedScore + 1e-9)
+            (rep.hard == best.hard && rep.weightedScore < best.weightedScore - 1e-9) ||
+            (rep.hard == best.hard && rep.weightedScore <= best.weightedScore + 1e-9 && rep.total <= best.total)
 
     // グループ内シフト回数のばらつき（群ごと・担当ONシフトごとの分散の総和）。小さいほど平準。
     private fun groupShiftVariance(p: Problem, state: MagiState, counts: Array<IntArray>): Double {
@@ -3096,7 +3096,7 @@ object V6HotfixPasses {
             if (!anyExpanded) break
             beam = nextCandidates
                 .distinctBy { cand -> cand.work.joinToString("|") { row -> row.joinToString(",") } }
-                .sortedWith(compareBy({ it.rep.hard }, { it.rep.total }, { it.rep.weightedScore }))
+                .sortedWith(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total }))
                 .take(beamWidth)
             step++
         }
@@ -3104,7 +3104,7 @@ object V6HotfixPasses {
         //   root は子に置き換わり消える）ため、全展開が真の目的関数的には根より悪化する可能性が
         //   ある。既存の全パスが isBetter で keep-best するのに合わせ、root と厳密に比較し、
         //   勝てない場合は必ず未変更の root へフォールバックする（退化不能）。
-        val candidate = beam.minWithOrNull(compareBy({ it.rep.hard }, { it.rep.total }, { it.rep.weightedScore })) ?: Beam(work0, before, 0)
+        val candidate = beam.minWithOrNull(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total })) ?: Beam(work0, before, 0)
         // [厳密ピン保護] ビーム探索の手A/玉突きも i の自身のシフト回数を変えうるため、根(work0)と比較し
         //   staffRange厳密ピン(lo==hi)を崩す最終候補は不採用にする（keep-best/重みは不変・追加ガードのみ）。
         val best = if (isBetter(candidate.rep, before) && !exactPinRegression(p, work0, candidate.work)) candidate else Beam(work0, before, 0)
@@ -3553,11 +3553,8 @@ object V6HotfixPasses {
         return n
     }
 
-    private fun isBetter(a: ViolationReport, b: ViolationReport): Boolean {
-        if (a.hard != b.hard) return a.hard < b.hard
-        if (a.total != b.total) return a.total < b.total
-        return a.weightedScore < b.weightedScore
-    }
+    // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
+    private fun isBetter(a: ViolationReport, b: ViolationReport): Boolean = betterReport(a, b)
 
     // ============================================================================
     // [#5 差分前フィルタ] 職員 i の「研磨手で動きうる families」の重み付き違反量を checker と同一ロジックで

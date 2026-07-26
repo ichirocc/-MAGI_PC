@@ -2,7 +2,7 @@
 
 > **このファイルの役割**：制約の判定条件・スコア計算・エラーハンドリング方針の**唯一の正解**。最もハルシネーションが起きやすい業務ルールをここに集約する。「上限はいくつか」「違反時にどう振る舞うか」はここを見る。
 > **コード基準**：`v6/MirrorCore.kt`（`MirrorKeys.weights` ＝重みの単一の真実）／`v6/Evaluator.kt`。
-> **最終更新**：2026-07-17
+> **最終更新**：2026-07-26（3.287.0 keep-best比較順の統一を追記）
 
 ---
 
@@ -16,6 +16,11 @@
 
 ## 2. 19 種の違反と重み（HARD 4／SOFT 15）
 
+> **keep-best の比較順（3.287.0 統一）**: 候補どうしの優劣は **hard → weightedScore → total** の辞書式
+> （単一ソース `MirrorCore.betterReport`）。旧来は第2キーが total（重み無視の生カウント）で、この重み表の
+> 階層（low90 > high45 > … > 軽い族1）に反して「重い違反を軽い違反の件数と交換する」採用を許していた。
+> SA/ALNS/C++ の評価器 soft は元々この重み表による重み付き和のため、本統一で探索と keep-best が一致した。
+
 | key | 重み | 区分 | 内容（判定） | 場所キー |
 |---|---:|---|---|---|
 | `groupViol` | 10000 | HARD | 群が就けないシフトを割当（`groupShift` マスク違反） | セル `i,j` |
@@ -24,8 +29,8 @@
 | `c3n` | 7000 | HARD | 禁止の連勤パターン（FORBIDDEN）に一致 | セル `i,j` |
 | `low` | 90 | SOFT | 個人下限割れ（`staffRange.lo`、LimMin） | 回数 `i,k` |
 | `high` | 45 | SOFT | 個人上限超過（`staffRange.hi`、LimMax） | 回数 `i,k` |
-| `c3mn` | 12 | SOFT | 回避（Hate）の連勤パターンに一致 | セル `i,j` |
-| `c1` | 4 | SOFT | 窓ルール不足（C1） | セル `i,j` |
+| `c3mn` | 15 | SOFT | 回避（Hate）の連勤パターンに一致（12→15、2026-07-20 HF77明示指示） | セル `i,j` |
+| `c1` | 15 | SOFT | 窓ルール不足（C1）（4→5→15、2026-07-20 HF77明示指示） | セル `i,j` |
 | `c3` | 3 | SOFT | 必須（MUST）の連勤パターン未充足 | セル `i,j` |
 | `c3m` | 2 | SOFT | 推奨（Want）の連勤パターン未充足 | セル `i,j` |
 | `c2` | 1 | SOFT | 個人合計の目標差（C2） | 回数 `i,k` |
@@ -48,10 +53,10 @@
 
 ## 3. 制約族の意味（cons*）
 
-- **C1（窓）**：`C1Row(day1, shiftKigou, day2)` ＝「day1 日の窓で shiftKigou を day2 回」。SOFT(4)。
+- **C1（窓）**：`C1Row(day1, shiftKigou, day2)` ＝「day1 日の窓で shiftKigou を day2 回」。SOFT(15)。
 - **C2（個人合計）**：`C2Row(shiftKigou, count)` ＝個人の合計目標。SOFT(1)。
 - **C3 族（連勤の列パターン）**：`C3Row(pattern: List<String>)`。
-  - `cons3` ＝ **MUST**（必須・SOFT 3）／`cons3n` ＝ **FORBIDDEN**（禁止・**HARD 7000**）／`cons3m` ＝ **Want**（推奨・SOFT 2）／`cons3mn` ＝ **Hate**（回避・SOFT 12）。
+  - `cons3` ＝ **MUST**（必須・SOFT 3）／`cons3n` ＝ **FORBIDDEN**（禁止・**HARD 7000**）／`cons3m` ＝ **Want**（推奨・SOFT 2）／`cons3mn` ＝ **Hate**（回避・SOFT 15）。
   - 定義は WS4：MUST=r28c4 / Want=r28c13 / FORBIDDEN=r46c4 / Hate=r46c13。
   - **`ws3`（希望シフト＝`wishes`）と C3 族は別物**。混同しない（希望の採点は `pref`、連勤パターンは c3 系）。
 - **被覆（covU/covO）**：シフト×日で必要数に対する過不足。`use2Patterns` 時の P1/P2 は **MIN=OR**（緩い方で充足）＝加算ではない（中間世代 MWS 由来の意図的設計）。被覆は同日のみ（夜勤の翌日繰越なし）。

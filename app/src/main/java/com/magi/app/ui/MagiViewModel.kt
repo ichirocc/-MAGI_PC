@@ -260,7 +260,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (prev != null) {
             val prevReport = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(st0, prev) }
             val newHard = r.report.hard.toLong(); val newTotal = r.report.total
-            val worse = newHard > prevReport.hard.toLong() || (newHard == prevReport.hard.toLong() && newTotal > prevReport.total)
+            // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）で「改善せず」を判定。
+            val worse = newHard > prevReport.hard.toLong() ||
+                (newHard == prevReport.hard.toLong() && r.report.weightedScore > prevReport.weightedScore) ||
+                (newHard == prevReport.hard.toLong() && r.report.weightedScore == prevReport.weightedScore && newTotal > prevReport.total)
             if (worse) {
                 val kept = prev.copy2D()
                 currentSchedule = kept

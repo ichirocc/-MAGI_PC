@@ -2716,11 +2716,8 @@ object V6NativeOptimizer {
         return best
     }
 
-    private fun better(a: ViolationReport, b: ViolationReport): Boolean = when {
-        a.hard != b.hard -> a.hard < b.hard
-        a.total != b.total -> a.total < b.total
-        else -> a.weightedScore < b.weightedScore
-    }
+    // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
+    private fun better(a: ViolationReport, b: ViolationReport): Boolean = betterReport(a, b)
 
     /**
      * [品質向上] エリート解の Path Relinking（Glover, Laguna & Martí 2000 / Scatter Search）。

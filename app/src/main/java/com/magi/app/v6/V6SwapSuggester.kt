@@ -77,8 +77,8 @@ object FixSuggester {
             evals++
             for (idx in ops.indices) s[ops[idx].staff][ops[idx].day] = saved[idx]
             val better = rep.hard < base.hard ||
-                (rep.hard == base.hard && rep.total < base.total) ||
-                (rep.hard == base.hard && rep.total == base.total && rep.weightedScore < base.weightedScore)
+                (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
+                (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
             if (better) {
                 found.add(Quad(FixSuggestion(kind, ops, label, rep.hard - base.hard, rep.total - base.total, diffOf(rep)),
                     rep.hard - base.hard, rep.total - base.total, rep.weightedScore - base.weightedScore))
@@ -185,8 +185,8 @@ object FixSuggester {
                             val rep = UnifiedViolationChecker.check(state, s); evals++
                             s[i][j] = a
                             val take = rep.hard < bestHard ||
-                                (rep.hard == bestHard && rep.total < bestTotal) ||
-                                (rep.hard == bestHard && rep.total == bestTotal && rep.weightedScore < bestW)
+                                (rep.hard == bestHard && rep.weightedScore < bestW) ||
+                                (rep.hard == bestHard && rep.weightedScore == bestW && rep.total < bestTotal)
                             if (take) { improved = true; bestHard = rep.hard; bestTotal = rep.total; bestW = rep.weightedScore; bestJ = j; bestSaved = a }
                         }
                         if (!improved || bestJ < 0) break
@@ -200,8 +200,8 @@ object FixSuggester {
                         val rep = UnifiedViolationChecker.check(state, s); evals++
                         for (idx in picked.indices) s[picked[idx].staff][picked[idx].day] = saved[idx]
                         val better = rep.hard < base.hard ||
-                            (rep.hard == base.hard && rep.total < base.total) ||
-                            (rep.hard == base.hard && rep.total == base.total && rep.weightedScore < base.weightedScore)
+                            (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
+                            (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
                         if (better) found.add(Quad(FixSuggestion(FixKind.CHAIN, picked.toList(),
                             "（連鎖）${nm(i)} の「${sym(x)}」不足を${picked.size}コマ補充", rep.hard - base.hard, rep.total - base.total, diffOf(rep)),
                             rep.hard - base.hard, rep.total - base.total, rep.weightedScore - base.weightedScore))
@@ -238,12 +238,12 @@ object FixSuggester {
                     for (c in 0 until n) s[cells[c]][j] = cellOpts[c][idx[c]]
                     val rep = UnifiedViolationChecker.check(state, s); evals++
                     val better = rep.hard < base.hard ||
-                        (rep.hard == base.hard && rep.total < base.total) ||
-                        (rep.hard == base.hard && rep.total == base.total && rep.weightedScore < base.weightedScore)
+                        (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
+                        (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
                     if (better) {
                         val take = !haveBest || rep.hard < bHard ||
-                            (rep.hard == bHard && rep.total < bTotal) ||
-                            (rep.hard == bHard && rep.total == bTotal && rep.weightedScore < bW)
+                            (rep.hard == bHard && rep.weightedScore < bW) ||
+                            (rep.hard == bHard && rep.weightedScore == bW && rep.total < bTotal)
                         if (take) { haveBest = true; bHard = rep.hard; bTotal = rep.total; bW = rep.weightedScore; bestCombo = IntArray(n) { cellOpts[it][idx[it]] } }
                     }
                     var c = 0
@@ -323,7 +323,7 @@ object FixSuggester {
         }
 
         // 効果順（必須減 > 合計減 > 重み減）。同型の手は1つに絞り多様性確保。
-        found.sortWith(compareBy({ it.dHard }, { it.dTotal }, { it.dWeighted }))
+        found.sortWith(compareBy({ it.dHard }, { it.dWeighted }, { it.dTotal }))  // [3.287.0 keep-best統一] hard→weighted→total
         // [セル限定] focusShift 指定時、押したセル(focus職員×focusシフト)に効く手だけに絞る。
         //   そのセルからシフトを移す(原状=focusShift)か、そのシフトへ移す(toShift=focusShift)手を採用。
         val fShift = focusShift

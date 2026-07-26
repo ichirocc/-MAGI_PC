@@ -320,7 +320,8 @@ object V6FinalPort {
                 if (report != null) {
                     val h = report.hard; val t = report.total; val wgt = report.weightedScore
                     val bh = bestHard.get()
-                    val improved = h < bh || (h == bh && t < bTotal) || (h == bh && t == bTotal && wgt < bWeighted - 1e-6)
+                    // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順。停滞時計の「改善」定義も統一）。
+                    val improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal)
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())
                         // 非covU HARD(=解けるHARD)件数を best と同時に捕捉（stallHardMs 早期移行の判定に使う）。
@@ -477,9 +478,8 @@ object V6FinalPort {
                 )
                 V6NativeOptimizer.restoreAlternatives(savedAlts)
                 V6NativeOptimizer.restoreFusionElites(savedFusionElites)
-                val imp = extra.report.hard < post.report.hard ||
-                    (extra.report.hard == post.report.hard && extra.report.total < post.report.total) ||
-                    (extra.report.hard == post.report.hard && extra.report.total == post.report.total && extra.report.weightedScore < post.report.weightedScore - 1e-6)
+                // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）。
+                val imp = betterReport(extra.report, post.report)
                 if (imp) {
                     refSched = extra.schedule; refReport = extra.report
                     extraLog = listOf(
@@ -584,12 +584,14 @@ object V6FinalPort {
 
     fun checkResultWorse(before: ViolationReport?, after: ViolationReport): String? {
         if (before == null) return null
+        // [3.287.0 keep-best統一] 判定順を hard→weightedScore→total へ（betterReport と同順）。
+        //   旧: total が第2キーで、weighted改善・total悪化の正当な結果（重い族を直し軽い族を差し出す取引）まで
+        //   「違反総数が悪化」として入力へ復帰させ得た。weighted を第2キーに昇格し、total は weighted 非改善時のみ判定。
+        //   [監査修正の維持] hard>= ガード（HARD改善結果を誤って悪化判定しない）は両clauseで維持。
         return when {
             after.hard > before.hard -> "HARDが悪化しました: ${before.hard} -> ${after.hard}"
-            after.total > before.total && after.hard >= before.hard -> "違反総数が悪化しました: ${before.total} -> ${after.total}"
-            // [監査修正] hard 同値ガードを追加。旧: after.hard<before.hard(HARD改善)でも total==・weighted悪化で発火し、
-            //   HARDが改善した結果を「悪化」と誤判定し悪い入力へ復帰し得た（clause2 と同じ hard>= ガードに揃える）。
-            after.hard >= before.hard && after.weightedScore > before.weightedScore && after.total >= before.total -> "重み付きスコアが悪化しました: ${before.weightedScore.toLong()} -> ${after.weightedScore.toLong()}"
+            after.hard >= before.hard && after.weightedScore > before.weightedScore -> "重み付きスコアが悪化しました: ${before.weightedScore.toLong()} -> ${after.weightedScore.toLong()}"
+            after.hard >= before.hard && after.weightedScore >= before.weightedScore && after.total > before.total -> "違反総数が悪化しました: ${before.total} -> ${after.total}"
             else -> null
         }
     }

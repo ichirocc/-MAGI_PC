@@ -19,7 +19,7 @@ import org.junit.Test
  */
 class SessionRegressionTest {
 
-    // ---- checkResultWorse: hard→total→weighted の辞書順で「悪化した時だけ」発火する ----
+    // ---- checkResultWorse: [3.287.0 keep-best統一] hard→weightedScore→total の辞書順で「悪化した時だけ」発火する ----
 
     private fun rep(hard: Int, total: Int, weighted: Double) = ViolationReport(
         violations = emptyMap(), needViolations = emptyMap(), countViolations = emptyMap(),
@@ -29,16 +29,17 @@ class SessionRegressionTest {
     @Test fun checkResultWorse_lexicographic() {
         val base = rep(hard = 2, total = 10, weighted = 100.0)
         // 厳密に良い（各層）→ 発火しない
-        assertNull(V6FinalPort.checkResultWorse(base, rep(1, 99, 9999.0)))   // hard改善は total/weighted 悪化でも良化
-        assertNull(V6FinalPort.checkResultWorse(base, rep(2, 9, 9999.0)))    // total改善は weighted 悪化でも良化
+        assertNull(V6FinalPort.checkResultWorse(base, rep(1, 99, 9999.0)))   // hard改善は weighted/total 悪化でも良化
+        assertNull(V6FinalPort.checkResultWorse(base, rep(2, 999, 99.0)))    // weighted改善は total 悪化でも良化（3.287.0 新順序）
         assertNull(V6FinalPort.checkResultWorse(base, rep(2, 10, 99.0)))     // weighted のみ改善
+        assertNull(V6FinalPort.checkResultWorse(base, rep(2, 9, 100.0)))     // weighted 同値・total 改善（第3キー）
         assertNull(V6FinalPort.checkResultWorse(base, rep(2, 10, 100.0)))    // 完全同値
-        // [3.92.0 ガード] hard改善・total同値・weighted悪化 → 良化（旧実装はここで誤発火していた）
+        // [3.92.0 ガード] hard改善なら weighted/total 悪化でも良化（旧実装はここで誤発火していた）
         assertNull(V6FinalPort.checkResultWorse(base, rep(1, 10, 200.0)))
         // 厳密に悪い（各層）→ 発火する
         assertNotNull(V6FinalPort.checkResultWorse(base, rep(3, 1, 1.0)))    // hard悪化
-        assertNotNull(V6FinalPort.checkResultWorse(base, rep(2, 11, 1.0)))   // 同hard・total悪化
-        assertNotNull(V6FinalPort.checkResultWorse(base, rep(2, 10, 101.0))) // 同hard/total・weighted悪化
+        assertNotNull(V6FinalPort.checkResultWorse(base, rep(2, 9, 101.0)))  // 同hard・weighted悪化（total改善でも悪化＝3.287.0 新順序）
+        assertNotNull(V6FinalPort.checkResultWorse(base, rep(2, 11, 100.0))) // 同hard/weighted・total悪化（第3キー）
         // before=null は常に発火しない
         assertNull(V6FinalPort.checkResultWorse(null, rep(9, 99, 999.0)))
     }

@@ -1720,6 +1720,39 @@ covUも増える」と検証したうえで、「隣接日連動型の複数日�
 - 検証: サンドボックスは Kotlin コンパイル不可＝ブレース/丸括弧/角括弧均衡0を静的確認。
   最終判定は CI（v6-engine-check の testDebugUnitTest／Release Build）。
 
+## keep-best比較順の統一＝第2キーを total→weightedScore へ（3.287.0, ユーザー指示「停滞に至るまでの改善の質を賢く高める」→AskUserQuestionで「isBetterをweighted優先化」を明示選択）
+実機 2026-12 で観測した「total -18 と引き換えに weighted +238・厳密ピン2本(吉江/桒澤の休10-10)が割れる」
+問題（3.283.1で未裁定として記録）の根本治療。ユーザーが3択（ピン復元研磨/最終番兵拡張/isBetter weighted優先化）
+から**根本治療を明示選択**（HF77:「賢く改善する」明示指示＝目的関数統一の承認）。
+- **根本認識（実装前に確定した最重要事実）**: SA/ALNS/LAHC/C++ の評価器 soft は元々**重み付き和**＝探索本体は
+  weighted を最適化している。hard→total→weighted の辞書式は **Kotlin 側 keep-best 比較器だけの乖離**だった。
+  よって本変更は「目的関数統一（チェッカーを正とする）」の最終仕上げで、**C++ は無変更＝パリティ影響なし**。
+- **単一ソース `MirrorCore.betterReport(a,b)` を新設**（hard→weightedScore→total。total は決定性のための
+  第3タイブレークに降格）し、private コピー全14サイトを委譲/並べ替え:
+  `V6NativeOptimizer.better`・`V6HotfixPasses.isBetter`（全研磨パス＋CombinatorialRepair注入）・
+  `mainNotWorse`（平準化の主目的ガード）・applyC1BeamPolish のビームランキング2箇所・
+  `C1JointLnsPolish`/`PersonalBalanceJointLnsPolish`（better＋Nodeコンパレータ2種ずつ）・
+  `C1TemporalFlowPolish`・`LightMirrorOptimizer`・`AdaptiveEliteArchive.compareReports`
+  （EliteIntegrationPolish はこれへ委譲済み）・`V6LateOperators.gate`（第2キー soft生カウント→weighted、
+  boost の soft<= ガードは追加条件として温存）・`V6SwapSuggester`（inline 5箇所＋提案ランキング）・
+  `V6FinalPort`（watchdog改善検知＝停滞時計の「改善」定義・ExtraRefine採否・**checkResultWorse**=最終番兵の
+  判定順も hard→weighted→total へ。hard>=ガードは維持）・`MagiViewModel.applyBgResult`（bg結果の採用判定）。
+  探索デブト境界（totalDebt 等の探索許容幅）は accept でなく探索範囲のため意図的に不変。
+- **テスト2件の是正（total優先前提の設計だった）**: `SessionRegressionTest.checkResultWorse_lexicographic` は
+  新順序へ書換え（「total改善はweighted悪化でも良化」→逆転）。`C1RelocationPolishTest` の鏡像盤面は
+  docstring 自身が「回数固定職員」と謳いながらピン未設定で、新比較器では「c1(15)を weekly(1)と交換する
+  count-changing 手」が正当に追加採用され回数保存アサーションが破れた（挙動は正しい）→ staffRange 厳密ピン
+  Range("2","2") を両職員へ追加し本来意図の盤面に強化。**ホストJVM全324テスト green**。
+- **A/B実測（ホストJVM・runPostOptimization seed=12345・baseline=3.286.0）**:
+  golden: weighted 2656→**2469**（−7.0%）・low 8→**5**・hard 0 不変・total 288→306（軽い族との正当な交換）。
+  real: weighted 51337→**49231**・**low 2→0**（重い下限割れ全解消）・apt 8→6・hard 6 不変・total 173→178。
+  **pin-regressions=両データとも0**。「重い違反を軽い違反の件数と交換する」逆向き採用が消えたことを数値で確認。
+- **docs同期**: business-logic.md に keep-best 比較順の節を追加＋**既存ドリフト2件を発見・修正**
+  （c1=4/c3mn=12 のまま＝実装は 15/15、3.249.0/3.253.0 の HF77 変更が未反映だった）。screen_spec.md／
+  v6_engine_native_port.md の旧順序記述も更新。
+- 実機での full-search 効果（ピン保持・探索全体の質）は次回実機ログで確認。exactPinRegression（3.256.0）は
+  多層防御として残置。
+
 ## 画面間冗長性の解消4件（3.286.0, ユーザー指示「各画面と各オブジェクトの一覧表を作成し、画面間の冗長性をシンプルにする」→「フルコードトレースしてフルコードレビューする」でD追加）
 全5画面×オブジェクトの一覧表をコード実測（MagiApp.kt タブ構成）で作成し、冗長性候補4件（A〜D）を提示。
 初回は A+B+C を適用し D を据え置いたが、ユーザーが続くターンで A〜D を再列挙＝**D も明示指示**と解釈し同PRへ追加。

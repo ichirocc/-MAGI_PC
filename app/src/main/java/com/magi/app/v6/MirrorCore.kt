@@ -41,6 +41,22 @@ data class ViolationReport(
     val logs: List<MirrorLog> = emptyList(),
 )
 
+/**
+ * [3.287.0 keep-best統一＝改善の質] 全 Kotlin keep-best 比較器の単一ソース。
+ * 順序は hard → weightedScore → total（旧: hard → total → weightedScore）。
+ * 根拠: SA/ALNS/C++ の評価器 soft は元々「重み付き和」＝探索本体は weighted を最適化しているのに、
+ * Kotlin 側の keep-best だけが total(重み無視の生カウント)優先で、low90/high45 の厳密ピンを
+ * 軽い族(c3=3等)の件数と交換する「total改善・weighted悪化」の採用を許していた（実機 2026-12 で
+ * 吉江/桒澤の休 lo==hi=10 が割れた実例）。第2キーを weightedScore に揃えることで、keep-best が
+ * チェッカーの重み階層（=業務優先度）と評価器の目的関数の両方に一致する。total は決定性のための
+ * 第3タイブレークに降格。C++ 側は元から weighted のため変更不要（パリティ不変）。
+ */
+fun betterReport(a: ViolationReport, b: ViolationReport): Boolean = when {
+    a.hard != b.hard -> a.hard < b.hard
+    a.weightedScore != b.weightedScore -> a.weightedScore < b.weightedScore
+    else -> a.total < b.total
+}
+
 data class ScheduleRunResult(
     val schedule: Array<IntArray>,
     val report: ViolationReport,

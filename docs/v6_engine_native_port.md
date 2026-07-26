@@ -77,7 +77,7 @@ Each action launches a cancellable `job`; **計算を止める** calls `job?.can
     旧 `runMultiWorker` が各仮説へ一律 `workers=1` を強制していたため 5 を超える設定は完全に
     無駄だった（実機ログ「workers設定8 実効仮説5」で発覚）。`runAlns` にも同型の多チェーン機構
     (`runAlnsChains`)を新設し、`options.workers>1` のとき異なるシードで並列実行し `better()`
-    （hard→total→weighted 辞書式）で最良を採用する（各チェーンは `runAlnsSingle` を直接呼ぶ
+    （hard→weightedScore→total 辞書式・3.287.0 keep-best統一）で最良を採用する（各チェーンは `runAlnsSingle` を直接呼ぶ
     ＝再帰は構造的に不可能）。「高速」(V5)と、おまかせが高速へ解決される短予算(≤30s)は仮説の
     概念が無く `workers` をそのまま SA チェーン数として使うため対象外。
     - 配分は `hypothesisChainPlan`: `min(workers, コア数)` を仮説数で割り、**余りは先頭仮説から

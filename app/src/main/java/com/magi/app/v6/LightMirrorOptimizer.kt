@@ -90,8 +90,6 @@ object LightMirrorOptimizer {
     }
 
     private fun isBetter(a: ViolationReport, b: ViolationReport): Boolean {
-        if (a.hard != b.hard) return a.hard < b.hard
-        if (a.total != b.total) return a.total < b.total
-        return a.weightedScore < b.weightedScore
+        return betterReport(a, b)  // [3.287.0 keep-best統一] hard→weighted→total（MirrorCore.betterReport）
     }
 }

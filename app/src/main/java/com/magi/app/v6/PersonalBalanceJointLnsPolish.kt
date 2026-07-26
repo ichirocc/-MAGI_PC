@@ -508,9 +508,7 @@ internal object PersonalBalanceJointLnsPolish {
     }
 
     private fun better(a: ViolationReport, b: ViolationReport): Boolean {
-        if (a.hard != b.hard) return a.hard < b.hard
-        if (a.total != b.total) return a.total < b.total
-        return a.weightedScore < b.weightedScore
+        return betterReport(a, b)  // [3.287.0 keep-best統一] hard→weighted→total（MirrorCore.betterReport）
     }
 
     private fun selectBeam(
@@ -523,8 +521,8 @@ internal object PersonalBalanceJointLnsPolish {
     ): List<Node> {
         val official = children.sortedWith(
             compareBy<Node> { it.report.hard }
-                .thenBy { it.report.total }
                 .thenBy { it.report.weightedScore }
+                .thenBy { it.report.total }
                 .thenBy { it.focusTotal }
                 .thenBy { it.changedCells },
         ).take(max(1, width / 2))
@@ -533,8 +531,8 @@ internal object PersonalBalanceJointLnsPolish {
                 .thenBy { n -> focus.sumOf { (n.personal[it] - lower[it]).coerceAtLeast(0) } }
                 .thenBy { (it.report.total - root.total).coerceAtLeast(0) }
                 .thenBy { it.report.hard }
-                .thenBy { it.report.total }
                 .thenBy { it.report.weightedScore }
+                .thenBy { it.report.total }
                 .thenBy { it.changedCells },
         ).take(max(1, width - official.size))
         val out = ArrayList<Node>()
