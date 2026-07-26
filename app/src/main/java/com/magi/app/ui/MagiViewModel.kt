@@ -845,8 +845,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         //   1回まで。最良更新・改善を含む行は情報価値が高いため窓の対象外（従来どおり）。
                         val nameKey = base.replace(Regex("[0-9]+"), "#")
                         val important = base.contains("最良更新") || base.contains("改善")
-                        val lastForName = phaseNameLastLogMs[nameKey] ?: Long.MIN_VALUE
-                        if (important || wallElapsed - lastForName >= 60_000) {
+                        // [3.283.1/実機ログで発覚した自己回帰の修正] 旧: 未出フェーズの番兵に Long.MIN_VALUE を
+                        //   使い `wallElapsed - Long.MIN_VALUE` が**負へオーバーフロー**＝初出判定が恒偽で
+                        //   通常フェーズ行が1件も出なくなっていた（意図は同名60秒窓＝20行台、実機は0行）。
+                        //   null 判定へ是正（初出は常にログ・以後は60秒窓）。
+                        val lastForName = phaseNameLastLogMs[nameKey]
+                        if (important || lastForName == null || wallElapsed - lastForName >= 60_000) {
                             logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒）")
                             phaseNameLastLogMs[nameKey] = wallElapsed
                             lastPhaseLogMs = wallElapsed
