@@ -176,7 +176,10 @@ object V6HotfixPasses {
 
         onPhase("後処理 HF67 職員間スワップ")
         val t67 = System.currentTimeMillis()
-        val r67 = applyHF67InterStaffSwap(state, work, maxSwaps = 30, shouldStop = shouldStop)
+        // [3.282.0] HF66 と同型の専用上限（残り予算の半分・絶対上限3s）。実機実測は数十ms＝通常は無影響で、
+        //   大規模データでのフォールバック総当たり暴走だけを防ぐ保険。
+        val hf67Cap = ((deadlineMs - t67).coerceAtLeast(0L) / 2).coerceAtMost(3_000L)
+        val r67 = applyHF67InterStaffSwap(state, work, maxSwaps = 30, shouldStop = shouldStop, deadlineMs = t67 + hf67Cap)
         work = r67.newSchedule.copy2D()
         logs.addAll(r67.logs)
 
@@ -3288,7 +3291,7 @@ object V6HotfixPasses {
         return DayAssignResult(work, before.total, bestRep.total, applied, logs)
     }
 
-    fun applyHF67InterStaffSwap(state: MagiState, schedule: Array<IntArray>, maxSwaps: Int = 30, shouldStop: () -> Boolean = { false }): HF67Result {
+    fun applyHF67InterStaffSwap(state: MagiState, schedule: Array<IntArray>, maxSwaps: Int = 30, shouldStop: () -> Boolean = { false }, deadlineMs: Long = Long.MAX_VALUE): HF67Result {
         val p = Problem(state)
         var work = normalizeSchedule(schedule, p)
         val before = UnifiedViolationChecker.check(state, work)
@@ -3297,13 +3300,19 @@ object V6HotfixPasses {
         var shortage = 0
         var capacity = 0
         var rollback = 0
+        // [3.282.0/新領域ログ監査] 兄弟の HF66 は専用上限(deadlineMs)＋内側スキャンの outOfTime 確認
+        //   （2.65.0/3.161.0 の確立方針）を持つのに、HF67 だけ手ごとの shouldStop のみ＝候補ごとフル check の
+        //   内側スキャン（k×lows×highs）とフォールバック（全ペア×全日の総当たり=実機で rollback=264 の正体）が
+        //   締切後も走り切る非対称だった。同型の締切確認を追加（keep-best のため途中中断でも退化なし）。
+        fun outOfTime() = shouldStop() || System.currentTimeMillis() >= deadlineMs
 
         while (swaps < maxSwaps) {
-            if (shouldStop()) break
+            if (outOfTime()) break
             val counts = countMatrix(p, work)
             var best: SwapCandidate? = null
             var bestReport: ViolationReport? = null
-            for (k in 0 until p.K) {
+            scan@ for (k in 0 until p.K) {
+                if (outOfTime()) break@scan
                 val lows = ArrayList<Int>()
                 val highs = ArrayList<Int>()
                 for (i in 0 until p.S) {
@@ -3311,6 +3320,7 @@ object V6HotfixPasses {
                     if (counts[i][k] > effectiveHi(p, i, k)) highs.add(i)
                 }
                 for (to in lows) {
+                    if (outOfTime()) break@scan
                     for (from in highs) {
                         if (to == from) continue
                         val cand = trySwapShiftBetweenStaff(p, work, from, to, k) ?: continue
@@ -3335,8 +3345,8 @@ object V6HotfixPasses {
             shortage++
             if (current.soft < before.soft) capacity++
         }
-        if (swaps == 0 && !shouldStop()) {
-            val improved = localPairwiseStaffSwap(state, work, maxSwaps, shouldStop)
+        if (swaps == 0 && !outOfTime()) {
+            val improved = localPairwiseStaffSwap(state, work, maxSwaps, { outOfTime() })
             work = improved.first
             swaps = improved.second
             rollback = improved.third

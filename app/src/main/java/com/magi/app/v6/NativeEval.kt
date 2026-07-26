@@ -70,8 +70,13 @@ object NativeEval {
         val handle = runCatching { createHandle(p) }.getOrDefault(0L)
         if (handle == 0L) return null
         try {
+            // [3.282.0/新領域ログ監査] flatten(Kotlin側の盤面コピー)は計測の外へ。旧: t0 が flatten より前に
+            //   取られ、C++側の計測値に flatten＋JNI往復のコールド1回分が混入＝実機ログで「C++ 87µs vs
+            //   Kotlin 47µs」とネイティブが遅く見える誤誘導を生んでいた（実スループットはホストベンチで
+            //   C++ ×1.9〜2.2。単発値である旨のログ限定句は V6FinalPort 側で併記）。
+            val flat = flatten(schedule)
             val t0 = System.nanoTime()
-            val native = NativeBridge.nativeFullEval(handle, flatten(schedule))
+            val native = NativeBridge.nativeFullEval(handle, flat)
             val t1 = System.nanoTime()
             val kotlin = Evaluator(p).fullEvalParts(schedule)
             val t2 = System.nanoTime()

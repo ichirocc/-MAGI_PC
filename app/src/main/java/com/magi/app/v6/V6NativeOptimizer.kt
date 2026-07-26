@@ -496,8 +496,16 @@ object V6NativeOptimizer {
                 ) {
                     try {
                     val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
-                    roleRuns.merge(assignment.role, 1, Int::plus)
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
+                    // [3.282.0/新領域ログ監査] エポック改善の基準線＝エポック開始時点の自己エリート。
+                    //   旧: `better(result, startReport)` で startReport は**破壊摂動済みの入口盤面**（escape系
+                    //   ロールは globalBest を意図的に壊した盤面）＝keep-best のロール実行は入口には
+                    //   ほぼ必ず勝つため improvedThisEpoch が恒真化し、plateau 再配属・強度昇圧
+                    //   （intensityFor=reassignments/2）・役割回転が全 escape ロールで実質死んでいた
+                    //   （実機ログ: W2 が凍結した globalBest を35エポック同一役で摂動し続け再配属0、
+                    //   ~8s/epoch=improving量子が常時選択、グローバル改善は150秒ゼロ）。エリート比なら
+                    //   「ワーカーの過去最良を実際に前進させたか」という文書化された契約どおりの判定になる。
+                    val preEpochEliteReport = eliteReport
                     val snapshot = synchronized(lock) {
                         Triple(
                             globalBest.copy2D(),
@@ -548,6 +556,9 @@ object V6NativeOptimizer {
                         assignment, improvedPrevious, remainingSec,
                     )
                     if (quantum <= 0) break
+                    // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の前に
+                    //   merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
+                    roleRuns.merge(assignment.role, 1, Int::plus)
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
                     val roleOptions = options.copy(
@@ -589,10 +600,7 @@ object V6NativeOptimizer {
                         null
                     }
 
-                    val improvedThisEpoch: Boolean
-                    if (result == null) {
-                        improvedThisEpoch = false
-                    } else {
+                    if (result != null) {
                         if (result.report.hard == 0) hardZeroWinner.compareAndSet(-1, i)
                         iterations += result.iterations
                         archive.register(
@@ -600,7 +608,6 @@ object V6NativeOptimizer {
                             bridge = result.report.hard == snapshot.second.hard + 1,
                         )
                         trajectory = result.schedule.copy2D()
-                        improvedThisEpoch = better(result.report, startReport)
                         if (better(result.report, eliteReport)) {
                             elite = result.schedule.copy2D()
                             eliteReport = result.report
@@ -624,6 +631,10 @@ object V6NativeOptimizer {
                         }
                     }
 
+                    // [3.282.0] エポック改善＝自己エリートの前進（入口盤面の採用・ロール結果の採用いずれも
+                    //   eliteReport 更新経由でここに反映される）。escape ロールが摂動入口に勝っただけでは
+                    //   改善と数えない＝plateau 再配属・強度昇圧・役割回転が文書どおり機能する。
+                    val improvedThisEpoch = better(eliteReport, preEpochEliteReport)
                     stagnantEpochs = AdaptiveHypothesisEpochPolicy.nextStagnantEpochs(
                         stagnantEpochs, improvedThisEpoch,
                     )

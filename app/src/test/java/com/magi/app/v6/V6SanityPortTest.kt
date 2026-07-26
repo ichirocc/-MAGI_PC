@@ -177,8 +177,41 @@ class V6SanityPortTest {
         val lines = V6SanityPort.buildViolationDebug(st, sched, report)
         val summary = lines.firstOrNull { it.contains("c1内訳") }
         assertTrue("c1内訳サマリ行が出力されること", summary != null)
-        assertTrue("s0が休(5日窓≥2)で1件と表示されること", summary!!.contains("s0 休(5日窓≥2)1件"))
+        // [3.282.0] 計数を「違反ラン先頭のみ」→ checker の inc と同じ「違反窓ごと」へ是正。
+        //   この盤面は窓j=0(休0回)とj=1(休1回)の2窓が違反＝breakdown c1=2 と厳密に一致する
+        //   （旧実装は連続窓を1ランとして「1件」と表示し breakdown と食い違う第3の計数だった）。
+        assertEquals("前提: 違反窓は2窓", 2, report.breakdown["c1"])
+        assertTrue("s0が休(5日窓≥2)で2件（=breakdownと同じ窓計上）と表示されること", summary!!.contains("s0 休(5日窓≥2)2件"))
         assertTrue("s1は違反なしのため内訳に出ないこと", !summary.contains("s1 "))
+    }
+
+    /** [3.282.0/新領域ログ監査] 違反詳細ヘッダは「最重クラスで解決済みのセル位置数」で breakdown の
+     *  fire 数と意味が異なり（c3n=1 fireでもパターン全セルをmark等）、実機ログで「c1(11件)」vs
+     *  「UnifiedCheck c1=12」の食い違いとして混乱を生んでいた。fires(breakdown)と位置数が異なるときは
+     *  「件数F・場所N箇所」と両方を明示することを固定する。 */
+    @Test fun violationDebugShowsFiresAndLocationsWhenTheyDiffer() {
+        val st = MagiState(
+            startDate = "2026-06-01", endDate = "2026-06-03",
+            shifts = listOf(Shift("休", "休", "0", ""), Shift("A", "A", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(listOf(1, 1, 0)),   // A A 休 → 禁止連続 [A,A] に1 fire・mark は2セル
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = listOf(com.magi.app.model.C3Row(listOf("A", "A"))),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val sched = st.schedule.toIntArray2D()
+        val report = UnifiedViolationChecker.check(st, sched)
+        assertEquals("前提: c3n は1 fire", 1, report.breakdown["c3n"])
+        val lines = V6SanityPort.buildViolationDebug(st, sched, report)
+        val detail = lines.firstOrNull { it.contains("違反詳細 c3n") }
+        assertTrue("c3n の違反詳細行が出力されること", detail != null)
+        assertTrue("fire数と位置数が異なるときは両方を明示すること: $detail",
+            detail!!.contains("c3n(件数1・場所2箇所)"))
     }
 
     /** [3.234.0→3.236.0/休の適切回数合計チェック誤検知修正→実質的上限へ差替え] 休は「1日に何人休んで

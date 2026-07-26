@@ -383,12 +383,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun loadAsync(rawJson: String, markResult: Boolean = false) {
         val json = MojibakeRepair.repair(rawJson)
-        val repaired = json !== rawJson
+        // [3.282.0/新領域ログ監査] 旧: 参照比較(`!==`)のため BOM 除去だけの健全なファイルでも毎回
+        //   「文字化けを自動修復」と誤警告していた。実際に二重エンコードを復号したときだけ警告し、
+        //   元ファイル自体は直らない（再取込のたび修復が走る）ことも案内する。
+        val repaired = MojibakeRepair.wasDecoded(rawJson, json)
         job?.cancel()
         _ui.update { it.copy(running = true, message = "読込中…") }
         job = viewModelScope.launch {
             try {
-                if (repaired) logOp("W", "文字化け（二重エンコード）を自動修復して読み込みました")
+                if (repaired) logOp("W", "文字化け（二重エンコード）を自動修復して読み込みました。元のファイル自体は修復されません（「データを保存」で保存し直すと次回からこの警告は出ません）")
                 val loaded = withContext(Dispatchers.Default) {
                     val st = StateParser.parse(json)
                     validate(st)?.let { return@withContext Result.failure<LoadedProblem>(IllegalArgumentException(it)) }
@@ -2309,7 +2312,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             _ui.update { it.copy(message = "このCSVを読み込めませんでした。先に『データを開く』で基本データを読み込むか、勤務表テンプレCSVをご利用ください。") }
             return
         }
-        importCsv(rawText)
+        // [3.282.0] 修復済みテキストをそのまま渡す（旧: rawText を渡し importCsv 内で二重に repair＝
+        //   結果は同一だが無駄な再修復と非対称があった）。
+        importCsv(text)
     }
 
     /**
@@ -2342,7 +2347,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(running = true, message = "CSV取込中…") }
         job = viewModelScope.launch {
             try {
-                if (text !== rawText) logOp("W", "文字化け（二重エンコード）を自動修復してCSVを取り込みました")
+                // [3.282.0] JSON 側(loadAsync)と同じ是正: BOM 除去だけの健全な CSV で誤警告しない。
+                if (MojibakeRepair.wasDecoded(rawText, text)) logOp("W", "文字化け（二重エンコード）を自動修復してCSVを取り込みました。元のファイル自体は修復されません")
                 val res = withContext(Dispatchers.Default) { ScheduleCsvBridge.parse(text, st, sched) }
                 // 取込失敗の明示: 氏名が1件も一致しなければ適用せず、オペレーターに原因を表示する。
                 if (res.matched == 0) {

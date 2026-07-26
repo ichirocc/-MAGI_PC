@@ -668,11 +668,18 @@ object V6SanityPort {
                 forced.joinToString(" / ") { "${it.shiftSymbol} ${it.cells}日 不足${it.amount}" })
             else out.add("[I] 構造HARD下限: 0（担当者数の観点では各シフトが需要を満たせる。希望/禁止連続による構造的な人員不足は別途 CoverageDiag/設定ミス を参照）")
         }
-        fun emit(byFam: Map<String, MutableList<String>>, cap: Int) {
+        // [3.282.0/新領域ログ監査] 違反詳細ヘッダの件数は「最重クラスで解決済みのセル位置数」で、
+        //   breakdown の fire 数とは意味が異なる（c1=窓ごと計上だがmarkはrun先頭のみ・c3n=1 fireでも
+        //   パターン全セルをmark・重い族に同一セルを奪われた軽い族は位置ごと消える等）。実機ログで
+        //   「違反詳細 c1(11件)」vs「UnifiedCheck c1=12」の食い違いとして混乱を生んでいたため、
+        //   fires(breakdown)を併記し両者が異なるときは「件数F・場所N箇所」と明示する。表示のみ・スコア不変。
+        fun emit(byFam: Map<String, MutableList<String>>, cap: Int, fires: Map<String, Int>? = null) {
             for ((fam, items) in byFam) {
                 val shown = items.take(cap).joinToString(" ; ")
                 val more = if (items.size > cap) " …他${items.size - cap}件" else ""
-                out.add("[D] 違反詳細 $fam(${items.size}件): $shown$more")
+                val f = fires?.get(fam)
+                val head = if (f != null && f != items.size) "件数${f}・場所${items.size}箇所" else "${items.size}件"
+                out.add("[D] 違反詳細 $fam($head): $shown$more")
             }
         }
 
@@ -826,13 +833,16 @@ object V6SanityPort {
                 if (i !in 0 until p.S || j !in 0 until p.T) continue
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }.add("${nm(i)} ${day(j)}=${sym(s[i][j])}")
             }
-            emit(byFam, DETAIL_CAP)
+            emit(byFam, DETAIL_CAP, report.breakdown)
         }
 
         // 3.5) [c1族の職員×窓ルール別件数] 「違反詳細 c1(N件)」はDETAIL_CAP=8で打ち切られ、特定職員が
         //   どの窓ルールで何件かは埋もれる（例: N件中8件しか見えず職員別内訳が分からない）。全件を
-        //   MirrorCore.checkC1Familyと同じロジック（窓スライド・違反ラン先頭のみ計上）で職員×ルール別に
-        //   再集計し、打ち切りなしの1行サマリとして追加する。読取専用（重み・データ不変）。
+        //   職員×ルール別に再集計し、打ち切りなしの1行サマリとして追加する。読取専用（重み・データ不変）。
+        //   [3.282.0/新領域ログ監査] 旧実装は mark と同じ `!prevViol`（違反ラン先頭のみ）で数えており、
+        //   ラン長>1 のとき breakdown c1（=違反窓ごと計上）と食い違う第3の計数意味論になっていた
+        //   （3.227.0 の意図は「breakdown と突合できる全件件数」）。checker の inc と同一の
+        //   「違反窓ごと」計上へ是正＝本行の合計は常に UnifiedCheck の c1 と一致する。
         if ((report.breakdown["c1"] ?: 0) > 0) {
             val perStaffRule = LinkedHashMap<Int, LinkedHashMap<String, Int>>()
             for (c in p.cons1) {
@@ -840,13 +850,10 @@ object V6SanityPort {
                 for (i in 0 until p.S) {
                     if (!p.canDo(i, c.shiftIdx)) continue
                     var j = 0
-                    var prevViol = false
                     while (j <= p.T - c.day1) {
                         var z = 0
                         for (l in 0 until c.day1) if (s[i][j + l] == c.shiftIdx) z++
-                        val viol = z < c.day2
-                        if (viol && !prevViol) perStaffRule.getOrPut(i) { LinkedHashMap() }.merge(ruleLabel, 1, Int::plus)
-                        prevViol = viol
+                        if (z < c.day2) perStaffRule.getOrPut(i) { LinkedHashMap() }.merge(ruleLabel, 1, Int::plus)
                         j++
                     }
                 }

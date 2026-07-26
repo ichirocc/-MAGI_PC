@@ -1,8 +1,11 @@
 package com.magi.app.model
 
 /**
- * 二重エンコード文字化け（UTF-8 のバイト列を Latin-1/CP1252 として読み、再び UTF-8 で保存した
+ * 二重エンコード文字化け（UTF-8 のバイト列を ISO-8859-1(Latin-1) として読み、再び UTF-8 で保存した
  * いわゆる「å¤æ³…」型）の自動修復。
+ * [3.282.0/監査で訂正] 旧コメントは CP1252 型も対象と主張していたが、CP1252 誤読は 0x80-0x9F 帯が
+ * ƒ''Œ 等の U+00FF 超文字になり下の「本物の多バイト文字」ガードで必ず弾かれる＝構造的に修復対象外
+ * （安全側に不修復で返るだけで破壊はしない）。CP932 型（「縺」パターン）も同様に対象外。
  *
  * MAGI 自身の読み書きは UTF-8 固定なので化けは作らないが、外部ツールや旧 Web 書き出しで
  * 二重エンコードされた JSON/CSV を読み込んだ場合に、表示が文字化けする。これを安全に元へ戻す。
@@ -22,10 +25,11 @@ object MojibakeRepair {
         if (t.none { it.code in 0x80..0xFF }) return t         // ASCII のみ
         return try {
             val decoded = String(t.toByteArray(Charsets.ISO_8859_1), Charsets.UTF_8)
-            val before = t.count { it == '�' }
+            // [3.282.0] 旧: `after <= before` だったが、U+FFFD を含む入力は上の >0xFF ガードで既に return 済み
+            //   ＝before は常に0で実質 `after == 0`。実態どおりに単純化（全バイト列が正しい UTF-8 として
+            //   復元できた場合のみ採用＝1バイトでも不正なら全体を諦める all-or-nothing、部分修復は起きない）。
             val after = decoded.count { it == '�' }
-            // 置換文字が増えない かつ 実際に多バイト文字へ復元できた場合のみ採用
-            if (after <= before && decoded.any { it.code > 0xFF }) decoded else t
+            if (after == 0 && decoded.any { it.code > 0xFF }) decoded else t
         } catch (_: Exception) {
             t
         }
@@ -33,4 +37,13 @@ object MojibakeRepair {
 
     /** 修復が必要(=変化する)かの判定。ログ表示用。 */
     fun looksMojibake(s: String): Boolean = repair(s) != s
+
+    /**
+     * [3.282.0] 「本当に二重エンコードを復号したか」の判定。repair() は BOM 除去だけでも新しい String を
+     * 返すため、呼出側の参照比較(`!==`)では「健全な BOM付きUTF-8 ファイル」でも毎回
+     * 『文字化けを自動修復』という誤った警告が出ていた（BOM は Windows 系エディタ由来で正常なファイル）。
+     * BOM を除いた本文が変化したときだけ true。
+     */
+    fun wasDecoded(original: String, repaired: String): Boolean =
+        repaired != original.removePrefix("\uFEFF")
 }
