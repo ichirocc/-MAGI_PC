@@ -10,6 +10,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class V6FinalBridgePortTest {
+    /**
+     * [3.289.0/外部レビューMedium] 「入力より悪化していない」の共通判定。
+     * 旧: 各テストが hard→total→weighted の辞書式を手書きで複製しており、3.287.0 の keep-best 統一
+     * （hard→weightedScore→total）後もそのまま残っていた＝テストだけが旧目的関数を固定していた。
+     * その結果 (a) weighted が悪化して total が減る結果を「悪化なし」と誤って許し、(b) 正しく採用すべき
+     * 「weighted 改善・total 増」を「悪化」と誤判定する、という二重のドリフトを抱えていた。
+     * 本番と同じ単一ソース `betterReport` に委譲する（after が before より厳密に悪くない＝not worse）。
+     */
+    private fun notWorseThan(after: ViolationReport, before: ViolationReport): Boolean =
+        !betterReport(before, after)
+
     @Test fun algorithmLabelsMatchWebThresholds() {
         // [3.128.0] 31〜210s は複合（RSI違反集中→ALNS研磨）に統一（実機指摘: 60s が ALNS 単発だった）。
         // [3.266.0] 211s〜は異種並列ポートフォリオ（PORTFOLIO、300超は拡張）。
@@ -37,9 +48,7 @@ class V6FinalBridgePortTest {
         val bestRep = UnifiedViolationChecker.check(st, best)
         val (_, rep) = V6NativeOptimizer.elitePathRelink(st, best, listOf(alt)) { false }
         // 退化しない: 結果は best 以上（hard→total→weighted の辞書順で悪化しない）。
-        val notWorse = rep.hard < bestRep.hard ||
-            (rep.hard == bestRep.hard && rep.total < bestRep.total) ||
-            (rep.hard == bestRep.hard && rep.total == bestRep.total && rep.weightedScore <= bestRep.weightedScore + 1e-9)
+        val notWorse = notWorseThan(rep, bestRep)
         assertTrue(notWorse)
         // 精鋭解が無ければ best 不変。
         val (_, r2) = V6NativeOptimizer.elitePathRelink(st, best, emptyList()) { false }
@@ -66,9 +75,7 @@ class V6FinalBridgePortTest {
         val r = V6HotfixPasses.applyDayAssignmentPolish(st, st.schedule.toIntArray2D())
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
         // 退化しない: hard→total→weighted の辞書順で悪化しない。
-        val notWorse = after.hard < before.hard ||
-            (after.hard == before.hard && after.total < before.total) ||
-            (after.hard == before.hard && after.total == before.total && after.weightedScore <= before.weightedScore + 1e-9)
+        val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
         assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))   // 割当は常に妥当（人数=列固定）
     }
@@ -78,9 +85,7 @@ class V6FinalBridgePortTest {
         val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
         val r = V6HotfixPasses.applyCyclicSwapPolish(st, st.schedule.toIntArray2D())
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
-        val notWorse = after.hard < before.hard ||
-            (after.hard == before.hard && after.total < before.total) ||
-            (after.hard == before.hard && after.total == before.total && after.weightedScore <= before.weightedScore + 1e-9)
+        val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
         assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))   // 被覆保存＝割当は常に妥当
     }
@@ -91,9 +96,7 @@ class V6FinalBridgePortTest {
         val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
         val r = V6HotfixPasses.applyC1WindowPolish(st, st.schedule.toIntArray2D())
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
-        val notWorse = after.hard < before.hard ||
-            (after.hard == before.hard && after.total < before.total) ||
-            (after.hard == before.hard && after.total == before.total && after.weightedScore <= before.weightedScore + 1e-9)
+        val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
         assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))
     }
@@ -103,9 +106,7 @@ class V6FinalBridgePortTest {
         val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
         val r = V6HotfixPasses.applyC3SequencePolish(st, st.schedule.toIntArray2D())
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
-        val notWorse = after.hard < before.hard ||
-            (after.hard == before.hard && after.total < before.total) ||
-            (after.hard == before.hard && after.total == before.total && after.weightedScore <= before.weightedScore + 1e-9)
+        val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
         assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))
     }
@@ -119,9 +120,7 @@ class V6FinalBridgePortTest {
         )) {
             val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
             val after = UnifiedViolationChecker.check(st, op(st, st.schedule.toIntArray2D()))
-            val notWorse = after.hard < before.hard ||
-                (after.hard == before.hard && after.total < before.total) ||
-                (after.hard == before.hard && after.total == before.total && after.weightedScore <= before.weightedScore + 1e-9)
+            val notWorse = notWorseThan(after, before)
             assertTrue(notWorse)
         }
     }

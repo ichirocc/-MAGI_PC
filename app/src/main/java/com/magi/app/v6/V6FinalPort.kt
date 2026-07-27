@@ -321,6 +321,10 @@ object V6FinalPort {
                     val h = report.hard; val t = report.total; val wgt = report.weightedScore
                     val bh = bestHard.get()
                     // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順。停滞時計の「改善」定義も統一）。
+                    // [3.289.0/外部レビューへの回答] ここだけ許容誤差(1e-6)付きなのは意図的で、betterReport の
+                    //   厳密比較へは寄せない。本判定は「採否」ではなく**停滞ウォッチドッグの改善検知**であり、
+                    //   厳密比較だと double の 1e-15 級の揺れを改善と数えて lastBestImproveMs が延々リセットされ、
+                    //   早期終了が構造的に発火しなくなる（＝許容誤差がある方が正しい）。採否は betterReport が担う。
                     val improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal)
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())

@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import android.app.Application
 import androidx.lifecycle.viewModelScope
 import com.magi.app.v6.Evaluator
+import com.magi.app.v6.betterReport
 import com.magi.app.v6.LightMirrorOptimizer
 import com.magi.app.v6.MirrorKeys
 import com.magi.app.v6.Problem
@@ -260,10 +261,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (prev != null) {
             val prevReport = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(st0, prev) }
             val newHard = r.report.hard.toLong(); val newTotal = r.report.total
-            // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）で「改善せず」を判定。
-            val worse = newHard > prevReport.hard.toLong() ||
-                (newHard == prevReport.hard.toLong() && r.report.weightedScore > prevReport.weightedScore) ||
-                (newHard == prevReport.hard.toLong() && r.report.weightedScore == prevReport.weightedScore && newTotal > prevReport.total)
+            // [3.287.0 keep-best統一 → 3.289.0 で単一ソースへ委譲] 手書きの3節複製をやめ betterReport
+            //   （hard→weightedScore→total）に一本化。将来の順序変更でここだけ取り残される事故を防ぐ。
+            val worse = betterReport(prevReport, r.report)
             if (worse) {
                 val kept = prev.copy2D()
                 currentSchedule = kept
@@ -414,9 +414,24 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     onSuccess = { lp ->
                         // [判断設計監査 #3] 置換直前の状態を1世代退避。「開く前のデータに戻す」
                         //   （restorePreviousData）で往復できる（戻す操作自体も退避を挟む＝スワップ）。
+                        // [3.289.0/外部レビューMedium] 旧: fire-and-forget の launch で退避していたため、
+                        //   ①「戻す」を連続で押すと退避ファイルの更新前の内容を読み、同じデータが2回出る
+                        //   （＝「もう一度押すと入れ替わる」というUI契約が破れる）②状態切替後・書込前の
+                        //   プロセス終了で退避が消えるのに復元可能表示だけ残る、の2つが起こり得た。
+                        //   状態を切り替える前に **同期で・一時ファイル経由の原子的置換** で書き、
+                        //   書込に成功したときだけ復元可能フラグを立てる。
                         val prevJson = if (state != null) exportJson() else null
-                        if (prevJson != null) {
-                            viewModelScope.launch(Dispatchers.IO) { runCatching { prevBackupFile.writeText(prevJson) } }
+                        val prevSaved = if (prevJson == null) false else withContext(Dispatchers.IO) {
+                            runCatching {
+                                val tmp = java.io.File(prevBackupFile.parentFile, prevBackupFile.name + ".tmp")
+                                tmp.writeText(prevJson)
+                                if (!tmp.renameTo(prevBackupFile)) {
+                                    // rename 不可の環境向けフォールバック（同一FS内なので通常は成立する）。
+                                    prevBackupFile.writeText(prevJson)
+                                    tmp.delete()
+                                }
+                                true
+                            }.getOrDefault(false)
                         }
                         originalJson = json
                         state = lp.state.withSchedule(lp.schedule)
@@ -443,7 +458,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 iters = 0,
                                 itersPerSec = 0,
                                 elapsedMs = 0,
-                                prevBackupAvailable = prevJson != null || it.prevBackupAvailable,
+                                // [3.289.0] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
+                                prevBackupAvailable = prevSaved || it.prevBackupAvailable,
                                 message = "読込完了: ${lp.state.staffCount}名 / ${lp.state.dayCount}日 / ${lp.state.shiftCount}シフト",
                             )
                         }
@@ -901,12 +917,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         liveHard = rep.hard.toLong()
                     }
                 }
-                // [再実行 keep-best] 完了結果が入力より悪化(必須↑ or 同必須で合計↑)なら、入力解を維持して通知する。
+                // [再実行 keep-best] 完了結果が入力より悪化なら、入力解を維持して通知する。
                 //   「もう一度つくる」を繰り返したとき、稀に多様化フェーズ等で入力より悪い解が返り、それを採用して
                 //   良い結果(例 HARD=1)を捨てる事象があった(実機ログで確認)。入力以上の結果のみ採用する。
+                // [3.289.0/自己監査で発見・runSoftPolish と同型] 判定を betterReport（hard→weightedScore→total）へ
+                //   統一。旧: (必須, 合計) のみで weightedScore を見ておらず、3.287.0 で keep-best が正しく採用する
+                //   ようになった「HARD同値・weighted改善・total増」の結果を**メイン最適化経路のこの保険が捨てて
+                //   入力へ戻していた**（外部レビューが指摘した runSoftPolish より影響が大きい経路）。
                 val newHard = res.report.hard.toLong(); val newTotal = res.report.total
                 val baseHard = baseReport.hard.toLong(); val baseTotal = baseReport.total
-                val worseThanInput = newHard > baseHard || (newHard == baseHard && newTotal > baseTotal)
+                val worseThanInput = betterReport(baseReport, res.report)
                 if (worseThanInput) {
                     val kept = sched0.copy2D()
                     currentSchedule = kept
@@ -998,9 +1018,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     V6NativeOptimizer.softPolishOnly(st0, sched0.copy2D(), _ui.value.budgetSec)
                 }
                 val polishedReport = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(st0, polished) }
-                // softPolishOnly は退化防止済みだが、VM側でも (必須, 合計) で入力以上のみ採用（保険）。
-                val worse = polishedReport.hard > baseReport.hard ||
-                    (polishedReport.hard == baseReport.hard && polishedReport.total > baseReport.total)
+                // softPolishOnly は退化防止済みだが、VM側でも入力以上のみ採用（保険）。
+                // [3.289.0/外部レビューHigh] 判定を betterReport（hard→weightedScore→total）へ統一。
+                //   旧: (hard, total) のみを見ており weightedScore を一切参照しなかったため、3.287.0 で
+                //   keep-best が正しく採用するようになった「HARD同値・weighted改善・total増」の結果を
+                //   この保険だけが「悪化」と誤判定して入力へ戻し、ソフト研磨に限り目的関数の統一を打ち消していた。
+                val worse = betterReport(baseReport, polishedReport)
                 val finalSched = if (worse) sched0.copy2D() else polished.copy2D()
                 val finalReport = if (worse) baseReport else polishedReport
                 currentSchedule = finalSched
