@@ -21,7 +21,7 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/v6_engine_native_port.md`](./docs/v6_engine_native_port.md) | エンジン（v6）の移植 |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-07-27（3.289.0 外部レビュー3件＋自己発見1件の修正＝UI層keep-bestの取り残し2経路をbetterReportへ統一・テストの旧不変条件を共通化・「開く前のデータ」退避を原子的に。3.214.0〜3.288.0 の詳細は `CLAUDE.md` の各節に記録）／ **コード基準コミット**：main HEAD（この目次が古いと他が正しくても信頼が崩れるため、改修時は対象文書と本目次を必ず更新）。
+**最終更新**：2026-07-27（3.291.0 ブロック交換の候補生成を「希望固定日は据え置き、動かせる日だけ交換」へ緩和＝実データで候補4件→2,267件・初めて採用が発生。3.214.0〜3.290.0 の詳細は `CLAUDE.md` の各節に記録）／ **コード基準コミット**：main HEAD（この目次が古いと他が正しくても信頼が崩れるため、改修時は対象文書と本目次を必ず更新）。
 
 ## Status
 

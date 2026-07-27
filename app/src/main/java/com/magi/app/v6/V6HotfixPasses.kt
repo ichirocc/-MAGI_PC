@@ -2,6 +2,8 @@ package com.magi.app.v6
 
 import com.magi.app.model.MagiState
 import java.util.Random
+import java.util.PriorityQueue
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -64,6 +66,14 @@ data class V6PostOptimizationResult(
 )
 
 object V6HotfixPasses {
+    /**
+     * 長期ブロック交換の候補長。月次勤務表で「局所交換では越えにくい」谷を越えるための
+     * 非等間隔ポートフォリオで、短い方から順に 11/13/17/19/23/28 日を試す。
+     * 28 は 2月（28日）で「1か月まるごと」の交換を確保するための長さ（素数列ではない点は意図的）。
+     * 15 日固定の旧 BlockSwapPolish は後方互換のため残すが、後処理ではこちらを使う。
+     */
+    private val adaptiveBlockLengths = intArrayOf(11, 13, 17, 19, 23, 28)
+
     /**
      * [頭打ち調査・「なぜゼロにならないのか」] C1Polish/C3mnPolish/RangePolish/C3RunPolish は
      * `runPostOptimization`のフィックスポイント巡回(最大maxRounds=4)から**ラウンドごとに再呼出**
@@ -340,11 +350,13 @@ object V6HotfixPasses {
             work = rC3pat.newSchedule.copy2D(); totalC3pat += rC3pat.applied; roundApplied += rC3pat.applied
             if (round == 0) logs.addAll(rC3pat.logs)
 
-            // [BlockSwapPolish・15日ブロック丸ごと2人交換] 同一担当グループの2人×15日ブロックを
-            //   丸ごと入替える大きな手。1日単位の局所交換が踏めない改善（range/pref/apt/weekly が
-            //   絡む多家族同時トレード）に到達し得る（grilling 2026-07-19、金沢/アリフの検討から）。
-            onPhase("後処理 15日ブロック丸ごと交換研磨 [巡${round + 1}]")
-            val rBlockSwap = applyBlockSwapPolish(state, work, blockLen = 15, maxPasses = 3, shouldStop = clusterStop)
+            // [AdaptiveBlockSwap・長期ブロック丸ごと2人交換] 15日固定の旧手を、11/13/17/19/23/28日の
+            //   非等間隔ポートフォリオへ拡張。同群に限らず、ブロック内の全セルを相互に担当可能な他者も
+            //   候補にし、希望固定・厳密ピン・正式スコアの全ガードを通過した最良の1手だけを採用する。
+            onPhase("後処理 長期ブロック丸ごと交換(11/13/17/19/23/28日) [巡${round + 1}]")
+            val rBlockSwap = applyAdaptiveBlockSwapPolish(
+                state, work, maxPasses = 2, candidatesPerLength = 8, maxEvaluations = 48, shouldStop = clusterStop,
+            )
             work = rBlockSwap.newSchedule.copy2D(); totalBlockSwap += rBlockSwap.applied; roundApplied += rBlockSwap.applied
             if (round == 0) logs.addAll(rBlockSwap.logs)
 
@@ -2987,6 +2999,250 @@ object V6HotfixPasses {
             message = "${blockLen}日ブロック丸ごと交換研磨: total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0) " [頭打ち=改善手なし]" else "") +
                 (if (fixedNames.isNotEmpty()) " 対象: ${fixedNames.joinToString(", ")}" else "")))
+        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
+    }
+
+    /**
+     * 指定した長さの勤務ブロックを、他職員と丸ごと交換する適応ポートフォリオ演算子。
+     *
+     * 旧 [applyBlockSwapPolish] は「同一担当グループ × 15日」に固定されていた。本演算子は
+     * 11/13/17/19/23/28日を独立した候補プールとして持ち、各長さから有望候補を必ず残す。
+     * これにより、短い窓では途中退化して届かない個人回数・apt・週偏り・連続規則の同時改善を、
+     * 期間ごとのまとまりとして探索できる。
+     *
+     * 安全性:
+     * - 同日・同人数のシフトを交換するため、全体の被覆量は保存する。
+     * - 異なる担当グループ間でも、ブロック内の全セルを相手が担当可能な場合だけ候補化する。
+     * - 実現可能な希望で固定されたセル・担当不可の日は**据え置き**（その日は交換しない）、残りの日だけを
+     *   入れ替える。ブロック全体を棄却しないため、希望が多いデータでも長い期間の候補が成立する。
+     * - 厳密回数ピンを破る候補は exactPinRegression で除外する。
+     * - 最終採否は [UnifiedViolationChecker] と [betterReport] の正式順
+     *   （HARD → weightedScore → total）だけで決めるため、探索順にかかわらず退化しない。
+     */
+    fun applyAdaptiveBlockSwapPolish(
+        state: MagiState,
+        schedule: Array<IntArray>,
+        blockLens: IntArray = adaptiveBlockLengths,
+        maxPasses: Int = 2,
+        candidatesPerLength: Int = 8,
+        maxEvaluations: Int = 48,
+        maxFocusStaff: Int = 16,
+        shouldStop: () -> Boolean = { false },
+    ): CyclicSwapResult {
+        val p = Problem(state)
+        val work = normalizeSchedule(schedule, p)
+        val before = UnifiedViolationChecker.check(state, work)
+        val lengths = blockLens.asSequence()
+            .filter { it in 1..p.T }
+            .distinct()
+            .sorted()
+            .toList()
+        if (p.S < 2 || lengths.isEmpty() || maxPasses <= 0 || candidatesPerLength <= 0 || maxEvaluations <= 0 || maxFocusStaff <= 0) {
+            return CyclicSwapResult(work, before.total, before.total, 0,
+                listOf(MirrorLog(tag = "AdaptiveBlockSwap", message = "対象長または職員ペアなし=スキップ")))
+        }
+
+        data class Candidate(
+            val staffA: Int,
+            val staffB: Int,
+            val start: Int,
+            val length: Int,
+            val priority: Long,
+            val differences: Int,
+            /** 実際に入れ替える日（希望固定・担当不可の日は据え置くため、ブロック内の部分集合になる）。 */
+            val days: IntArray,
+        )
+
+        fun name(i: Int) = state.staff.getOrNull(i)?.name ?: "#$i"
+        fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
+        fun swap(candidate: Candidate) {
+            // ブロック全体でなく candidate.days（据え置き分を除いた実交換日）だけを入れ替える。
+            //   各日は2人の値を交換するだけなので、日ごとのシフト多重集合＝被覆量は保存される。
+            for (j in candidate.days) {
+                val tmp = work[candidate.staffA][j]
+                work[candidate.staffA][j] = work[candidate.staffB][j]
+                work[candidate.staffB][j] = tmp
+            }
+        }
+
+        // range/apt は長い交換で動かしたい主対象。ここは候補の順位付け専用であり、採否は必ず正式checkerに委譲する。
+        fun personalBalancePenalty(staff: Int, shift: Int, count: Int): Long {
+            var out = 0L
+            val lo = p.rangeLo[staff][shift]
+            val hi = p.rangeHi[staff][shift]
+            if (lo != Int.MIN_VALUE && count < lo) out += (lo - count).toLong() * 90L
+            if (hi != Int.MAX_VALUE && count > hi) out += (count - hi).toLong() * 45L
+            val apt = p.apt[staff][shift]
+            if (apt >= 0) out += abs(count - apt).toLong()
+            return out
+        }
+
+        fun staffPressure(report: ViolationReport): LongArray {
+            val out = LongArray(p.S)
+            fun add(key: String, cls: String) {
+                val i = key.substringBefore(',').toIntOrNull() ?: return
+                if (i !in 0 until p.S) return
+                val family = cls.removePrefix("vio-")
+                out[i] += MirrorKeys.weightOf(family).toLong().coerceAtLeast(1L)
+            }
+            report.violations.forEach { (key, cls) -> add(key, cls) }
+            report.countViolations.forEach { (key, cls) -> add(key, cls) }
+            report.distLocations.forEach { (family, rows) ->
+                val weight = MirrorKeys.weightOf(family).toLong().coerceAtLeast(1L)
+                for (row in rows) {
+                    val i = row.firstOrNull() ?: continue
+                    if (i in 0 until p.S) out[i] += weight
+                }
+            }
+            return out
+        }
+
+        fun candidateFor(
+            staffA: Int,
+            staffB: Int,
+            start: Int,
+            length: Int,
+            counts: Array<IntArray>,
+            pressure: LongArray,
+        ): Candidate? {
+            val deltaA = IntArray(p.K)
+            val swapDays = ArrayList<Int>(length)
+            for (j in start until start + length) {
+                // [3.291.0 候補生成の緩和] 旧: 希望固定が1つでもあればブロックごと棄却(return null)。
+                //   実データ（希望81件/10名31日）では11日以上の無ロック連続がほぼ存在せず、全探索空間で
+                //   候補が4件しか生成されない＝実質不活性だった（実測）。据え置き（その日は交換しない）へ
+                //   変更すると候補は100箇所超へ増える。交換するのは残りの日だけなので、日ごとの
+                //   シフト多重集合＝被覆量は依然として保存される（安全性は不変）。
+                if (!movable(staffA, j) || !movable(staffB, j)) continue
+                val a = work[staffA][j]
+                val b = work[staffB][j]
+                if (a == b) continue
+                // 異グループの相手でも、相互に担当可能な日だけ交換する（できない日は据え置き）。
+                if (a !in 0 until p.K || b !in 0 until p.K || !p.canDo(staffA, b) || !p.canDo(staffB, a)) continue
+                deltaA[a]--
+                deltaA[b]++
+                swapDays.add(j)
+            }
+            val differences = swapDays.size
+            // 1日だけの交換は既存の同日交換パス(CyclicSwap)と同一＝「期間をまとめて入れ替える」手にならないので除外。
+            if (differences < 2) return null
+
+            var beforeBalance = 0L
+            var afterBalance = 0L
+            for (k in 0 until p.K) {
+                val aNow = counts[staffA][k]
+                val bNow = counts[staffB][k]
+                beforeBalance += personalBalancePenalty(staffA, k, aNow)
+                beforeBalance += personalBalancePenalty(staffB, k, bNow)
+                afterBalance += personalBalancePenalty(staffA, k, aNow + deltaA[k])
+                afterBalance += personalBalancePenalty(staffB, k, bNow - deltaA[k])
+            }
+            // 大きい推定改善を優先しつつ、違反に関与する職員と実際に変わるセル数をタイブレークに使う。
+            val priority = (beforeBalance - afterBalance) * 1_000_000L +
+                (pressure[staffA] + pressure[staffB]) * 16L + differences.toLong()
+            return Candidate(staffA, staffB, start, length, priority, differences, swapDays.toIntArray())
+        }
+
+        var bestRep = before
+        var applied = 0
+        var generated = 0
+        var evaluated = 0
+        val selectedLabels = ArrayList<String>()
+        var pass = 0
+        while (pass < maxPasses && !shouldStop()) {
+            val counts = countMatrix(p, work)
+            val pressure = staffPressure(bestRep)
+            val focus = (0 until p.S)
+                .sortedWith(compareByDescending<Int> { pressure[it] }.thenBy { it })
+                .take(min(maxFocusStaff, p.S))
+            val pairSeen = HashSet<Long>()
+            val pairs = ArrayList<Pair<Int, Int>>()
+            for (focusStaff in focus) for (other in 0 until p.S) {
+                if (focusStaff == other) continue
+                val a = min(focusStaff, other)
+                val b = max(focusStaff, other)
+                val key = (a.toLong() shl 32) xor b.toLong()
+                if (pairSeen.add(key)) pairs.add(a to b)
+            }
+            if (pairs.isEmpty()) break
+
+            // 各長さが候補を失わないよう、長さごとに上位だけを保持する。
+            val byLength = LinkedHashMap<Int, List<Candidate>>()
+            for (length in lengths) {
+                val worstFirst = Comparator<Candidate> { x, y ->
+                    when {
+                        x.priority != y.priority -> x.priority.compareTo(y.priority)
+                        x.differences != y.differences -> x.differences.compareTo(y.differences)
+                        x.start != y.start -> y.start.compareTo(x.start)
+                        x.staffA != y.staffA -> y.staffA.compareTo(x.staffA)
+                        else -> y.staffB.compareTo(x.staffB)
+                    }
+                }
+                val pool = PriorityQueue<Candidate>(worstFirst)
+                for ((staffA, staffB) in pairs) {
+                    if (shouldStop()) break
+                    for (start in 0..(p.T - length)) {
+                        val candidate = candidateFor(staffA, staffB, start, length, counts, pressure) ?: continue
+                        generated++
+                        if (pool.size < candidatesPerLength) {
+                            pool.add(candidate)
+                        } else if (worstFirst.compare(candidate, pool.peek()) > 0) {
+                            pool.poll()
+                            pool.add(candidate)
+                        }
+                    }
+                }
+                byLength[length] = pool.toList().sortedWith(
+                    compareByDescending<Candidate> { it.priority }
+                        .thenByDescending { it.differences }
+                        .thenBy { it.start }
+                        .thenBy { it.staffA }
+                        .thenBy { it.staffB },
+                )
+            }
+
+            // 1位だけを全長から先に評価するラウンドロビン。候補数上限があっても、長い28日案が
+            // 11日案に押し出されず必ず試される。
+            val ranked = ArrayList<Candidate>()
+            var rank = 0
+            while (lengths.any { rank < (byLength[it]?.size ?: 0) }) {
+                for (length in lengths) byLength[length]?.getOrNull(rank)?.let { ranked.add(it) }
+                rank++
+            }
+            if (ranked.isEmpty()) break
+
+            val base = work.copy2D()
+            var chosen: Candidate? = null
+            var chosenRep: ViolationReport? = null
+            var checkedThisPass = 0
+            for (candidate in ranked) {
+                if (shouldStop() || checkedThisPass >= maxEvaluations) break
+                swap(candidate)
+                val report = UnifiedViolationChecker.check(state, work)
+                val pinRegression = exactPinRegression(p, base, work)
+                swap(candidate)
+                checkedThisPass++
+                evaluated++
+                if (!pinRegression && isBetter(report, bestRep) && (chosenRep == null || isBetter(report, chosenRep!!))) {
+                    chosen = candidate
+                    chosenRep = report
+                }
+            }
+            val accepted = chosen ?: break
+            swap(accepted)
+            bestRep = chosenRep ?: break
+            applied++
+            selectedLabels.add("${accepted.length}日:${name(accepted.staffA)}⇔${name(accepted.staffB)} ${accepted.start + 1}〜${accepted.start + accepted.length}日(${accepted.differences}セル)")
+            pass++
+        }
+
+        val lensLabel = lengths.joinToString("/")
+        val logs = listOf(MirrorLog(tag = "AdaptiveBlockSwap",
+            message = "可変長ブロック丸ごと交換[${lensLabel}日]: total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard}" +
+                " score ${before.weightedScore.toLong()}->${bestRep.weightedScore.toLong()} 採用${applied}回" +
+                " 候補${generated}件/正式評価${evaluated}件" +
+                (if (applied == 0) " [頭打ち=改善手なし]" else "") +
+                (if (selectedLabels.isNotEmpty()) " 対象: ${selectedLabels.joinToString(", ")}" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
 
