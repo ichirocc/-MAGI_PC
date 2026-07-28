@@ -111,6 +111,13 @@ internal object C1JointLnsPolish {
         var expanded = 0
         var generated = 0
         var debtRejected = 0
+        // [debt除外の内訳, 3.302.0] 候補の過半が debt 予算で落ちるため、どの予算（必須/合計/c1）で
+        //   切られたのかと、必須超過のとき何を壊したのかをログへ出す（実機ログの「debt除外15689」だけでは
+        //   c1 を下げる手が何と衝突しているのか読めなかった）。判定順＝下の if と同じく 必須→合計→c1。
+        var debtHard = 0
+        var debtTotal = 0
+        var debtC1 = 0
+        val debtCulprits = LinkedHashMap<String, Int>()
         var duplicateRejected = 0
         var restartsDone = 0
 
@@ -139,11 +146,21 @@ internal object C1JointLnsPolish {
                             generated++
                             val report = UnifiedViolationChecker.check(state, next)
                             val c1 = report.breakdown["c1"] ?: 0
-                            if (report.hard > rootReport.hard + config.hardDebt.coerceAtLeast(0) ||
-                                report.total > rootReport.total + config.totalDebt.coerceAtLeast(0) ||
-                                c1 > rootC1 + config.c1Debt.coerceAtLeast(0)
-                            ) {
+                            val overHard = report.hard > rootReport.hard + config.hardDebt.coerceAtLeast(0)
+                            val overTotal = report.total > rootReport.total + config.totalDebt.coerceAtLeast(0)
+                            val overC1 = c1 > rootC1 + config.c1Debt.coerceAtLeast(0)
+                            if (overHard || overTotal || overC1) {
                                 debtRejected++
+                                when {
+                                    overHard -> {
+                                        debtHard++
+                                        worstWorsenedFamily(report, rootReport)?.let {
+                                            debtCulprits[it] = (debtCulprits[it] ?: 0) + 1
+                                        }
+                                    }
+                                    overTotal -> debtTotal++
+                                    else -> debtC1++
+                                }
                                 continue
                             }
                             val child = Node(
@@ -195,7 +212,12 @@ internal object C1JointLnsPolish {
             message = "期間要件(c1)共同LNS: c1 $rootC1->$chosenC1 (構造下限≥$lowerBound, 改善可能幅進捗$progress%, 50%目標=${if (targetReached) "到達" else "未達"})" +
                 " / total ${rootReport.total}->${chosenReport.total} HARD ${rootReport.hard}->${chosenReport.hard}" +
                 " 採用${if (valid) 1 else 0}束 手数${if (valid) best.path.size else 0}" +
-                " restart$restartsDone 展開$expanded 候補$generated debt除外$debtRejected 重複除外$duplicateRejected 停止=$stopReason" +
+                " restart$restartsDone 展開$expanded 候補$generated debt除外$debtRejected" +
+                (if (debtRejected == 0) "" else "(必須$debtHard 合計$debtTotal c1 $debtC1" +
+                    (if (debtCulprits.isEmpty()) "" else " 必須の主因 " +
+                        debtCulprits.entries.sortedByDescending { it.value }.take(2)
+                            .joinToString(" ") { "${it.key}:${it.value}" }) + ")") +
+                " 重複除外$duplicateRejected 停止=$stopReason" +
                 (if (!valid) " [頭打ち=正式目的を改善するC1減少束なし]" else ""),
         )
         return V6HotfixPasses.CyclicSwapResult(

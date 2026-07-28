@@ -1955,6 +1955,18 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * キーは `Problem.resolveC3` と同じ意味論（**最初の空白まで**を本体とする）で作る。
      * `SettingFixAction.DELETE_DUP_SEQ` の空白除去とは意味が違うので流用しない。
      */
+    /**
+     * [目標の検算] シフトごとの「適切回数(apt)の合計 vs それを受け止められる上限」。
+     *
+     * `V6SanityPort.aptBalances` をそのまま返す＝設定ミス診断（検査6-C）と**同じ単一ソース**。
+     * 盤面を参照しないので、勤務表を作る前（未計算）でも目標を触るたびに正しい値が出る
+     * （`settingIssues` は `refreshCheck` 経由＝盤面が無いと更新されないため、設定中は届かない）。
+     */
+    fun aptBalances(): List<V6SanityPort.AptBalance> {
+        val st = state ?: return emptyList()
+        return runCatching { V6SanityPort.aptBalances(st) }.getOrDefault(emptyList())
+    }
+
     fun relaxForbiddenRule(seqLabel: String) {
         if (_ui.value.running) { _ui.update { it.copy(message = "計算中は設定を変更できません（完了後にもう一度お試しください）") }; return }
         val s = state ?: return

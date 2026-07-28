@@ -169,4 +169,35 @@ class RangePolishTest {
         assertEquals("循環に必須のbridge2が希望固定なら不採用", 0, result.applied)
         assertEquals(sched.map { it.toList() }, result.newSchedule.map { it.toList() })
     }
+
+    /**
+     * [不採用の主因, 3.302.0] 「不採用」のときログへ併記する主因族の算出。件数でなく**重み付き**で
+     * 最も増えた族を返すこと（c1=15 が1件増えるより low=90 が1件増えるほうが主因）を固定する。
+     */
+    @Test
+    fun worstWorsenedFamilyPicksHeaviestWeightedIncreaseNotLargestCount() {
+        val before = report(mapOf("c1" to 10, "low" to 0, "c3" to 0))
+        // c3 は +5件(重み3=15)、low は +1件(重み90)、c1 は減少。重み最大の low が主因。
+        val after = report(mapOf("c1" to 9, "low" to 1, "c3" to 5))
+        assertEquals("low", worstWorsenedFamily(after, before))
+    }
+
+    @Test
+    fun worstWorsenedFamilyReturnsNullWhenNothingGotWorse() {
+        val before = report(mapOf("c1" to 10, "low" to 2))
+        val after = report(mapOf("c1" to 8, "low" to 2))
+        assertEquals(null, worstWorsenedFamily(after, before))
+    }
+
+    private fun report(breakdown: Map<String, Int>): ViolationReport =
+        ViolationReport(
+            violations = emptyMap(),
+            needViolations = emptyMap(),
+            countViolations = emptyMap(),
+            breakdown = breakdown,
+            total = breakdown.values.sum(),
+            hard = 0,
+            soft = breakdown.values.sum(),
+            weightedScore = breakdown.entries.sumOf { it.value * MirrorKeys.weightOf(it.key) },
+        )
 }

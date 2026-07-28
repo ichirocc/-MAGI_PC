@@ -199,6 +199,91 @@ object V6SanityPort {
      * そして具体的な直し方）で列挙する。検出済みの構造化データを平易な日本語の指示文に変換するだけで、
      * 重み・データは一切変更しない（読み取り専用＝安全）。表示順は「直すべき度合い」が高い順。
      */
+    /**
+     * [適切回数の検算・単一ソース] シフトごとの「適切回数(apt)の合計」と「それを受け止められる上限」を返す。
+     *
+     * 盤面を一切参照しない（need / apt / staffRange だけで決まる）ため、勤務表を作る**前**でも計算できる。
+     * これが [buildGuidance] の検査6-C の実体で、設定画面（目標カード）もこの同じ関数を読む。
+     * 二重実装にすると「診断は警告を出すのに設定画面は何も言わない」というズレが生まれるため、
+     * 判定は必ずここへ集約する。
+     *
+     * - 通常シフト: capacity = 必要数(上限)の合計 seatsHi。目標の合計がこれを超えると、
+     *   全員の目標は同時に満たせない（目標割れ aptLow か過剰配置 covO/aptHigh が必ず出る）。
+     * - 休(restIdx): 「1日に何人休んでよいか」という座席上限を持たないため、
+     *   capacity = 各職員が他シフトの個人下限を満たしたうえで最大何日休めるかの合計。
+     *
+     * [3.301.0 で直った挙動] 旧実装は検査6-C を「必要人数が1日でも設定されているシフト」のループ内に
+     * 置いていたため、**休に必要人数を設定しない通常運用では休の判定が一度も実行されなかった**
+     * （golden_state で実測: 休の必要人数設定日=0）。3.235.0 で入れた休向け restCapacity 比較が
+     * そのゲートに阻まれて死んでいた潜在バグ。休は必要人数を参照しないので、ここではゲートの外に出す。
+     * 通常シフトのゲート（必要人数が1日も無ければ対象外）は維持する：勤務シフトの必要人数未設定は
+     * 「まだ設定していない」だけの可能性が高く、上限0とみなすと誤検知になる（3.235.0 の指摘と同型）。
+     * なお休の capacity は休自身の個人上限(rangeHi)を見ていない＝実際より大きく見積もる。
+     * 検出漏れ側に倒れるだけで誤検知は増えない。
+     */
+    data class AptBalance(
+        val shiftIdx: Int,
+        val kigou: String,
+        /** 適切回数の合計（担当可能な職員ぶん・staffRange クランプ後の実効値）。 */
+        val aptSum: Int,
+        /** それを受け止められる上限（通常＝必要数の合計 / 休＝最大可能日数の合計）。 */
+        val capacity: Int,
+        val isRest: Boolean,
+    ) {
+        /** 目標の合計が上限を超えている＝何をしても目標割れか過剰配置が出る。 */
+        val overloaded: Boolean get() = aptSum > capacity
+        /** 何回ぶん届かないか。 */
+        val shortfall: Int get() = (aptSum - capacity).coerceAtLeast(0)
+    }
+
+    /**
+     * [適切回数の検算] 目標が設定されているシフトについて [AptBalance] を返す（盤面不要）。
+     *
+     * [p] は既定で state のキャッシュを使うが、[buildGuidance] のように呼び出し元が既に Problem を
+     * 持っている場合はそれを渡す（同じ関数が別の Problem を見て診断と設定画面がズレるのを防ぐ）。
+     */
+    fun aptBalances(state: MagiState, p: Problem = cachedProblem(state)): List<AptBalance> {
+        val out = ArrayList<AptBalance>()
+        for (k in 0 until p.K) {
+            var aptSum = 0
+            var anyApt = false
+            for (i in 0 until p.S) {
+                if (!p.canDo(i, k)) continue
+                val a = p.apt[i][k]
+                if (a >= 0) { aptSum += a; anyApt = true }
+            }
+            if (!anyApt) continue   // 目標が1つも設定されていないシフトは検算対象外
+            val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
+            if (k == p.restIdx) {
+                var restCapacity = 0
+                for (i in 0 until p.S) {
+                    if (!p.canDo(i, k)) continue
+                    var minOther = 0
+                    for (k2 in 0 until p.K) {
+                        if (k2 == k || !p.canDo(i, k2)) continue
+                        val lo2 = p.rangeLo[i][k2]
+                        if (lo2 != Int.MIN_VALUE && lo2 > 0) minOther += lo2
+                    }
+                    restCapacity += maxOf(0, p.T - minOther)
+                }
+                out.add(AptBalance(k, sym, aptSum, restCapacity, isRest = true))
+            } else {
+                var seatsHi = 0
+                var hasDemand = false
+                for (j in 0 until p.T) {
+                    val n1 = p.need1[k][j]
+                    if (n1 < 0) continue
+                    hasDemand = true
+                    val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
+                    seatsHi += maxOf(hi, 0)
+                }
+                if (!hasDemand) continue   // 必要人数が1日も設定されていない＝比較対象がない
+                out.add(AptBalance(k, sym, aptSum, seatsHi, isRest = false))
+            }
+        }
+        return out
+    }
+
     fun buildGuidance(state: MagiState, p: Problem = Problem(state)): List<SettingIssue> {
         val out = ArrayList<SettingIssue>()
 
@@ -414,14 +499,13 @@ object V6SanityPort {
             }
             if (!hasDemand) continue
             val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
-            var capable = 0; var loSum = 0; var capSum = 0; var allCapped = true; var aptSum = 0
+            var capable = 0; var loSum = 0; var capSum = 0; var allCapped = true
             for (i in 0 until p.S) {
                 if (!p.canDo(i, k)) continue
                 capable++
                 val lo = p.rangeLo[i][k]; val hi = p.rangeHi[i][k]
                 if (lo != Int.MIN_VALUE && lo > 0) loSum += lo
                 if (hi != Int.MAX_VALUE) capSum += hi else allCapped = false
-                val a = p.apt[i][k]; if (a >= 0) aptSum += a   // 適切回数(職員別に展開・staffRangeクランプ済)
             }
             // A) 下限の合計 > 必要数(上限)の合計 → 全員の下限を満たすと必要数を超える＝過剰配置/下限割れが不可避。
             if (loSum > seatsHi) {
@@ -435,39 +519,24 @@ object V6SanityPort {
                     "必要数の合計は${seatsLo}回ですが、担当者の上限の合計は${capSum}回しかありません。席を埋めきれず人員不足になります",
                     "「$sym」の個人上限を上げる/担当者を増やすか、必要人数を下げてください"))
             }
-            // C) 適切回数(apt=職員のレパートリー目標)の合計 > 必要数(上限)の合計 → 全員の目標を満たすと過剰配置。
-            //    レパートリーと被覆が両立しない設定ズレ。目標割れ(aptLow)か過剰配置(covO/aptHigh)が必ず出る。
-            // [休(restIdx)専用の比較へ差替え] 休は「1日に何人休んでよいか」という座席上限を持たないため、
-            //   need1/need2の合計(seatsHi、通常0)と比較しても意味を持たない（実機報告「必要数の合計は0回の
-            //   理由」＝旧実装の誤検知）。とはいえ「休の適切回数が本当に過大」なケースは実在し得るため、
-            //   単純に検査対象から除外する（黙って警告を消す）のではなく、休に意味のある実質的な上限＝
-            //   「各職員が他シフトの個人下限を満たしたうえで、最大何日休めるか」の合計(restCapacity)と
-            //   比較する。6b(幻のapt目標)と同じ「担当レパートリーから強制される最低回数」ロジックを
-            //   個人単位でなく全員合計に適用したもの。他シフトの下限が未設定の職員は minOther=0＝ほぼ
-            //   T日まるごと休める計算になり、誤検知はまず起きない（保守的）。
-            if (k == p.restIdx) {
-                var restCapacity = 0
-                for (i in 0 until p.S) {
-                    if (!p.canDo(i, k)) continue
-                    var minOther = 0
-                    for (k2 in 0 until p.K) {
-                        if (k2 == k || !p.canDo(i, k2)) continue
-                        val lo2 = p.rangeLo[i][k2]
-                        if (lo2 != Int.MIN_VALUE && lo2 > 0) minOther += lo2
-                    }
-                    restCapacity += maxOf(0, p.T - minOther)
-                }
-                if (aptSum > restCapacity) {
-                    out.add(SettingIssue(IssueKind.DEMAND, "「$sym」の適切回数の合計",
-                        "適切回数(レパートリー目標)の合計が${aptSum}回ですが、他シフトの個人下限を差し引いた「$sym」の" +
-                            "最大可能日数の合計は${restCapacity}回しかありません。全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます",
-                        "「$sym」の適切回数を下げるか、他シフトの個人下限を見直してください"))
-                }
-            } else if (aptSum > seatsHi) {
-                out.add(SettingIssue(IssueKind.DEMAND, "「$sym」の適切回数の合計",
-                    "適切回数(レパートリー目標)の合計が${aptSum}回ですが、必要数の合計は${seatsHi}回しかありません。全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます",
-                    "「$sym」の適切回数を下げるか、必要人数を増やしてください"))
-            }
+        }
+        // C) 適切回数(apt=職員のレパートリー目標)の合計 > それを受け止められる上限 → 全員の目標を満たすと
+        //    目標割れ(aptLow)か過剰配置(covO/aptHigh)が必ず出る。レパートリーと被覆が両立しない設定ズレ。
+        //    休(restIdx)は「1日に何人休んでよいか」という座席上限を持たないため、必要数の合計ではなく
+        //    「各職員が他シフトの個人下限を満たしたうえで最大何日休めるか」の合計と比較する。
+        //    [3.301.0] 判定は aptBalances() に集約した。設定画面の「目標」カードが同じ関数を読むため、
+        //    「診断は警告を出すのに設定画面は何も言わない」というズレが構造的に起きない。
+        for (b in aptBalances(state, p)) {
+            if (!b.overloaded) continue
+            out.add(SettingIssue(IssueKind.DEMAND, "「${b.kigou}」の適切回数の合計",
+                if (b.isRest)
+                    "適切回数(レパートリー目標)の合計が${b.aptSum}回ですが、他シフトの個人下限を差し引いた「${b.kigou}」の" +
+                        "最大可能日数の合計は${b.capacity}回しかありません。全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます"
+                else
+                    "適切回数(レパートリー目標)の合計が${b.aptSum}回ですが、必要数の合計は${b.capacity}回しかありません。" +
+                        "全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます",
+                if (b.isRest) "「${b.kigou}」の適切回数を下げるか、他シフトの個人下限を見直してください"
+                else "「${b.kigou}」の適切回数を下げるか、必要人数を増やしてください"))
         }
 
         // 6b) [事前診断/幻のapt目標] 担当レパートリーから強制される最低回数 > apt目標 → 目標は構造的に達成不能。

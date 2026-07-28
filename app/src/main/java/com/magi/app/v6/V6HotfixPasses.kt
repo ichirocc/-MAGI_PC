@@ -72,6 +72,19 @@ data class V6PostOptimizationResult(
  */
 object PolishGate {
     /**
+     * [c3n 回避の範囲拡張, 3.303.0] 禁止連続を崩しに行く日を j±1 固定から「パターンがまたぐ全日」へ
+     * 広げる。3連（`Dﾃ→休→A4`）の先頭 j-2 に届くようになる**正しい**一般化だが、
+     * **実データ3件で利得が一貫しなかったため既定 OFF**（golden=中立 / real=weighted −1674 だが
+     * covU 2件を c3n 2件へ付け替え・c1 +14 / user=weighted +73 悪化）。
+     *
+     * 個々の手は keep-best なので退化しないが、候補が増えると探索の経路が変わり、着地する局所解が
+     * データによって良くも悪くもなる（2.55.0 の戦略的振動・3.94.0 の in-loop レバーと同じ結論＝
+     * 「安全であること」と「有益であること」は別）。計測が支持しない既定変更はしない。
+     */
+    @Volatile
+    var wideC3nBreakDays: Boolean = false
+
+    /**
      * ブロック巡回交換で、禁止連続(c3n)が正味増える候補を**候補生成の段階で**捨てるか。既定 false。
      *
      * c3n は HARD なので増える候補は最終的に `isBetter` が必ず却下する＝ON/OFF で**採用結果は変わらない**
@@ -251,7 +264,7 @@ object V6HotfixPasses {
         //   内部で構築する Problem(state) と同一）。C1DeltaPrefilter のクラスタ前段ゲートに使う。
         val pC1 = Problem(state)
         var round = 0
-        var totalCyc = 0; var totalC1 = 0; var totalC3 = 0; var totalC3r = 0; var totalC3mn = 0; var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0
+        var totalCyc = 0; var totalC1 = 0; var totalC3 = 0; var totalC3r = 0; var totalC3mn = 0; var totalC3n = 0; var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0
         while (round < maxRounds && !clusterStop()) {
             var roundApplied = 0
 
@@ -352,6 +365,13 @@ object V6HotfixPasses {
             work = rC3mn.newSchedule.copy2D(); totalC3mn += rC3mn.applied; roundApplied += rC3mn.applied
             if (round == 0) logs.addAll(rC3mn.logs)
 
+            // [C3nPolish, 3.303.0] 禁止連続(c3n, HARD)を、違反パターンが**またぐ全日**（前日・当日・翌日）を
+            //   候補にして崩す。当日1セルしか触らない既存機構では3連の先頭に構造的に届かなかった。
+            onPhase("後処理 禁止連続(c3n)研磨 [巡${round + 1}]")
+            val rC3n = applyC3nPolish(state, work, maxPasses = 3, shouldStop = clusterStop, seed = roundSeed(seed, 0xC3EL, round))
+            work = rC3n.newSchedule.copy2D(); totalC3n += rC3n.applied; roundApplied += rC3n.applied
+            if (round == 0) logs.addAll(rC3n.logs)
+
             // [RangePolish・玉突き連鎖の横展開その2] 個人別回数(low/high)を、交換相手が構造的に存在しない
             //   局面(担当可能シフトが極端に少ない職員等)向けに findCovUChain で研磨（grilling不要・
             //   C3mnPolishと同型のためユーザー承認のうえ直接実装、桒澤美幸のAｱ超過実例）。
@@ -408,7 +428,7 @@ object V6HotfixPasses {
         run {
             val softAfter = UnifiedViolationChecker.check(state, work)
             fun bd(r: ViolationReport, k: String) = r.breakdown[k] ?: 0
-            val adopted = totalCyc + totalC1 + totalC3 + totalC3r + totalC3mn + totalRange + totalC3run + totalC3pat + totalBlockSwap + totalApt + totalFair
+            val adopted = totalCyc + totalC1 + totalC3 + totalC3r + totalC3mn + totalC3n + totalRange + totalC3run + totalC3pat + totalBlockSwap + totalApt + totalFair
             // [3.278.0/監査修正] CyclicSwap の正当な対象族(c2/c41/c42/c41s/c42s/covO)も対象数に含める
             //   （旧: c42等のみ違反の盤面で採用0のとき誤って「対象なし」と表示していた）。
             val targets = bd(preSoftRep, "c1") + bd(preSoftRep, "c3") + bd(preSoftRep, "c3m") + bd(preSoftRep, "c3mn") +
@@ -434,7 +454,7 @@ object V6HotfixPasses {
                     " / apt ${bd(preSoftRep, "apt")}->${bd(softAfter, "apt")}" +
                     " / fair ${bd(preSoftRep, "fair")}->${bd(softAfter, "fair")}" +
                     " | HARD $hardNote / total ${preSoftRep.total}->${softAfter.total}" +
-                    " (採用内訳 循環:${totalCyc} c1:${totalC1} c3:${totalC3} c3回転:${totalC3r} c3mn玉突き:${totalC3mn} range玉突き:${totalRange} c3run玉突き:${totalC3run} c3pattern玉突き:${totalC3pat} ブロック交換:${totalBlockSwap} apt玉突き:${totalApt} fair玉突き:${totalFair})"))
+                    " (採用内訳 循環:${totalCyc} c1:${totalC1} c3:${totalC3} c3回転:${totalC3r} c3mn玉突き:${totalC3mn} c3n:${totalC3n} range玉突き:${totalRange} c3run玉突き:${totalC3run} c3pattern玉突き:${totalC3pat} ブロック交換:${totalBlockSwap} apt玉突き:${totalApt} fair玉突き:${totalFair})"))
         }
 
         // [weekly 研磨の穴を埋める] 曜日平準化(weekly)は同日2者スワップでは動かせない（勤務↔勤務は曜日別の
@@ -1318,8 +1338,15 @@ object V6HotfixPasses {
         //   総合的に拒否した、の2分類（RangePolishと同じ粒度）。休の窓ルールが解消しない理由を
         //   ユーザーがログから直接読めるようにする。
         val blockStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
-        fun recordBlock(i: Int, x: Int, reason: String) {
+        // [不採用の主因, 3.302.0] 「不採用」だけでは何に負けたか読めないため、拒否した候補が重み付きで
+        //   最も増やした族を併記する（実機ログの c1 残存が「不採用×65 / 候補なし×4」＝ほぼ全部が拒否で、
+        //   次に何を緩めるべきかが読めなかった）。AdaptiveBlockSwap と同じ worstWorsenedFamily を共用。
+        val culpritStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
+        fun recordBlock(i: Int, x: Int, reason: String, after: ViolationReport? = null, before: ViolationReport? = null) {
             blockStats.getOrPut(i to x) { HashMap() }.merge(reason, 1, Int::plus)
+            if (after != null && before != null) {
+                worstWorsenedFamily(after, before)?.let { culpritStats.getOrPut(i to x) { HashMap() }.merge(it, 1, Int::plus) }
+            }
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] 手B/手R3が単独では isBetter に不採用だった候補
         //   （chain/repackとも構築自体は成功したもの）を蓄積し、末尾で複数を束ねて再挑戦する。
@@ -1476,7 +1503,13 @@ object V6HotfixPasses {
                                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, x)) + chain, "手B", hint))
                             }
                             work[i][j] = a
-                            recordBlock(i, x, if (chain == null) "候補なし" else "不採用")
+                            // [不採用の主因, 3.302.0] ピン破り（厳密ピンを崩すため却下）は違反自体が
+                            //   悪化していないので主因族を持たない＝別ラベルにして混同を避ける。
+                            when {
+                                chain == null -> recordBlock(i, x, "候補なし")
+                                isBetter(rep, bestRep) -> recordBlock(i, x, "ピン破り")
+                                else -> recordBlock(i, x, "不採用", after = rep, before = bestRep)
+                            }
                         }
                     }
                 }
@@ -1540,7 +1573,7 @@ object V6HotfixPasses {
                         val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(x)?.kigou ?: x})"
                         combinable.add(CombinatorialRepair.Candidate(
                             listOf(intArrayOf(i, bestJx, a), intArrayOf(i, bestJo, x)), "手R3", hint))
-                        recordBlock(i, x, "不採用")
+                        recordBlock(i, x, "不採用", after = rep, before = bestRep)
                     }
                 } else {
                     recordBlock(i, x, "再配置候補なし")
@@ -1566,8 +1599,14 @@ object V6HotfixPasses {
             }
             if (!stillDeficient) return@mapNotNull null
             val lbl = "${state.staff.getOrNull(i)?.name ?: "#$i"} ${state.shifts.getOrNull(x)?.kigou ?: x.toString()}"
-            val top = reasons.maxByOrNull { it.value }
-            if (top != null) "$lbl(${top.key}×${top.value})" else lbl
+            val top = reasons.maxByOrNull { it.value } ?: return@mapNotNull lbl
+            // [不採用の主因, 3.302.0] 「不採用」のときだけ、拒否された候補が重み付きで最も壊した族を
+            //   上位2件まで併記する（何を緩めれば通るのかがログから直接読める）。
+            val culprits = if (top.key != "不採用") "" else
+                culpritStats[key]?.entries?.sortedByDescending { it.value }?.take(2)
+                    ?.joinToString(" ") { "${it.key}:${it.value}" }
+                    ?.let { if (it.isEmpty()) "" else " 主因 $it" } ?: ""
+            "$lbl(${top.key}×${top.value}$culprits)"
         }.distinct()
         val c1CombSummary = c1CombStats.summary()
         val logs = listOf(MirrorLog(tag = "C1Polish",
@@ -1638,6 +1677,7 @@ object V6HotfixPasses {
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
         // [汎用玉突き結合フレームワーク, 3.249.0] 単独では不採用だった候補を蓄積し末尾で束ねる。
         val combinable = ArrayList<CombinatorialRepair.Candidate>()
+        val rejectCulprits = RejectCulpritStats()
         var pass = 0
         while (pass < maxPasses) {
             if (shouldStop()) break
@@ -1674,6 +1714,7 @@ object V6HotfixPasses {
                         val rep = UnifiedViolationChecker.check(state, work)
                         if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) { bestRep = rep; applied++; improved = true; done = true }
                         else {
+                            rejectCulprits.record(rep, bestRep)
                             val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(curK)?.kigou ?: curK})"
                             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, alt)), "C3mnAlt", hint))
                             work[i][j] = curK
@@ -1689,6 +1730,7 @@ object V6HotfixPasses {
                     val rep = UnifiedViolationChecker.check(state, work)
                     if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) { bestRep = rep; applied++; improved = true; done = true }
                     else {
+                        rejectCulprits.record(rep, bestRep)
                         for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
                         work[i][j] = curK
                         val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(curK)?.kigou ?: curK})"
@@ -1711,8 +1753,146 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C3mnPolish",
             message = "回避パターン(c3mn)研磨: c3mn ${before.breakdown["c3mn"] ?: 0}->${bestRep.breakdown["c3mn"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0 && (before.breakdown["c3mn"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
+                rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
                 (if (c3mnCombSummary.isNotEmpty()) " / $c3mnCombSummary" else "")))
+        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
+    }
+
+    /**
+     * [C3nPolish・禁止連続(c3n, HARD重み7000)専用の研磨パス] ユーザー指示「C3nは前後日と当日も他の勤務
+     * シフトに変更できるようにアルゴリズムを賢く昇華する」（3.303.0・AskUserQuestion で「両方＝範囲拡張＋
+     * 当日も可変」を選択）。
+     *
+     * C3mnPolish(3.214.0) と同型だが、決定的に違うのが**候補セルの取り方**:
+     * - C3mnPolish は違反セル (i,j) **その1セルだけ**を別シフトへ変える。
+     * - 本パスは違反パターンが**またぐ全日**（`Dﾃ→休→A4` なら3日ぶん全部＝前日・当日・翌日）を候補にする。
+     *   禁止連続は「並び」なので、どの1日を崩してもパターンは壊れる。にもかかわらず既存機構は
+     *   当日1セルか隣接1日しか触っておらず、3連の先頭に構造的に届いていなかった。
+     *
+     * 候補数は (パターン長 × 担当可能シフト数) 倍に増えるため、フル checker を呼ぶ前に
+     * `C3nBitScan` の popcount で「その手で c3n の正味 fire が実際に減るか」を先に判定して枝刈りする
+     * （枝刈りが見逃しても最終採否は checker + isBetter + exactPinRegression が担保＝安全側）。
+     * 崩した先で被覆が悪化するなら `findCovUChain` の玉突き連鎖で埋め直すのは既存パスと同じ。
+     */
+    fun applyC3nPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0xC3EL): CyclicSwapResult {
+        val p = Problem(state)
+        val work = normalizeSchedule(schedule, p)
+        val before = UnifiedViolationChecker.check(state, work)
+        var bestRep = before
+        var applied = 0
+        if (p.cons3n.isEmpty()) {
+            return CyclicSwapResult(work, before.total, bestRep.total, 0,
+                listOf(MirrorLog(tag = "C3nPolish", message = "cons3nなし=スキップ")))
+        }
+        val rng = Random(seed)
+        fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
+        val combinable = ArrayList<CombinatorialRepair.Candidate>()
+        val rejectCulprits = RejectCulpritStats()
+        var screened = 0          // ビット枝刈りで checker を呼ばずに落とした候補数
+        var evaluated = 0         // 実際に checker を呼んだ候補数
+        var patternDays = 0       // 候補にしたセルの延べ数（当日1セルに留まらないことの実測）
+        var pass = 0
+        while (pass < maxPasses) {
+            if (shouldStop()) break
+            var improved = false
+            val rep0 = if (pass == 0) before else UnifiedViolationChecker.check(state, work)
+            // アンカー = c3n 違反セル。cellFamilies を使うのは violations(最重1クラス)だと同一セルに
+            //   より重い族が乗ったとき取りこぼすため（3.205.0 の anchor-shadowing と同じ理由）。
+            val anchors = ArrayList<Pair<Int, Int>>()
+            for ((key, fams) in rep0.cellFamilies) {
+                if ("vio-c3n" !in fams) continue
+                val parts = key.split(",")
+                val i = parts.getOrNull(0)?.toIntOrNull() ?: continue
+                val j = parts.getOrNull(1)?.toIntOrNull() ?: continue
+                anchors.add(i to j)
+            }
+            if (anchors.isEmpty()) break
+            for ((i, j) in anchors) {
+                if (shouldStop()) break
+                if (i !in 0 until p.S || j !in 0 until p.T) continue
+                var done = false
+                // [当日も可変＋範囲拡張] 違反パターンがまたぐ全日を候補にする（j 自身を含む）。
+                val mask = C3nBitScan.buildRowMask(p, work[i])
+                val firesNow = C3nBitScan.fires(p, mask)
+                if (firesNow == 0) continue
+                val dayBits = if (C3nBitScan.usable(p)) C3nBitScan.coveringRunDays(p, mask, j) else C3nBitScan.rangeMask(j, j)
+                val days = ArrayList<Int>()
+                var rest = dayBits
+                while (rest != 0L) {
+                    days.add(java.lang.Long.numberOfTrailingZeros(rest))
+                    rest = rest and (rest - 1)
+                }
+                if (days.isEmpty()) days.add(j)
+                days.sortBy { kotlin.math.abs(it - j) }   // 当日に近い日から（波及が小さい順）
+                patternDays += days.size
+                for (j2 in days) {
+                    if (done || shouldStop()) break
+                    if (!movable(i, j2)) continue
+                    val curK = work[i][j2]
+                    if (curK !in 0 until p.K) continue
+                    for (alt in p.allowedShiftsForStaff(i)) {
+                        if (done || shouldStop()) break
+                        if (alt == curK) continue
+                        // [ビット枝刈り] この1手で c3n の正味 fire が減らないなら checker を呼ばない。
+                        //   減らない手は hard が下がらず、この HARD 族専用パスとしては意味がない。
+                        if (C3nBitScan.usable(p) &&
+                            C3nBitScan.firesAfterSet(p, mask, j2, curK, alt) >= firesNow
+                        ) { screened++; continue }
+                        var cnt = 0
+                        for (s in 0 until p.S) if (work[s][j2] == curK) cnt++
+                        val needsChain = p.covUCell(curK, j2, cnt - 1) > p.covUCell(curK, j2, cnt)
+                        val workBeforeMove = work.copy2D()
+                        work[i][j2] = alt
+                        val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(curK)?.kigou ?: curK})"
+                        if (!needsChain) {
+                            evaluated++
+                            val rep = UnifiedViolationChecker.check(state, work)
+                            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) {
+                                bestRep = rep; applied++; improved = true; done = true
+                            } else {
+                                rejectCulprits.record(rep, bestRep)
+                                combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j2, alt)), "C3nAlt", hint))
+                                work[i][j2] = curK
+                            }
+                            continue
+                        }
+                        // [玉突き連鎖] 崩した側の被覆が欠けるなら埋め直す（盤面不変・巻き戻し可能）。
+                        val chain = findCovUChain(p, work, curK, j2, rng, exclude = i,
+                            rangeAvoid = { st, fk -> exceedsOwnRangeHi(p, work, st, fk) })
+                        if (chain == null) { work[i][j2] = curK; continue }
+                        val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
+                        chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
+                        evaluated++
+                        val rep = UnifiedViolationChecker.check(state, work)
+                        if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) {
+                            bestRep = rep; applied++; improved = true; done = true
+                        } else {
+                            rejectCulprits.record(rep, bestRep)
+                            for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
+                            work[i][j2] = curK
+                            combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j2, alt)) + chain, "C3nAlt", hint))
+                        }
+                    }
+                }
+            }
+            pass++
+            if (!improved) break
+        }
+        val c3nCombStats = CombinatorialRepair.Stats()
+        bestRep = CombinatorialRepair.combineAndApply(
+            state, work, bestRep, combinable.asReversed(), ::isBetter, shouldStop = shouldStop, stats = c3nCombStats, p = p,
+        )
+        applied += c3nCombStats.combosAccepted
+        val stuckNames = stuckStaffNames(state, bestRep.cellFamilies, "vio-c3n")
+        val c3nCombSummary = c3nCombStats.summary()
+        val logs = listOf(MirrorLog(tag = "C3nPolish",
+            message = "禁止連続(c3n)研磨: c3n ${before.breakdown["c3n"] ?: 0}->${bestRep.breakdown["c3n"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
+                " 候補日延べ$patternDays(パターン全域・当日含む) 正式評価$evaluated ビット枝刈り$screened" +
+                (if (applied == 0 && (before.breakdown["c3n"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
+                rejectCulprits.summary() +
+                (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
+                (if (c3nCombSummary.isNotEmpty()) " / $c3nCombSummary" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
 
@@ -1766,8 +1946,13 @@ object V6HotfixPasses {
         //   range後回し=findCovUChainは成立したが使った候補がrangeAvoid該当(=自身の新規high違反を招く)
         //   だった・不採用=chainは成立したがisBetterに拒否された、の5分類。最も多い理由を「残存:」へ表示。
         val blockStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
-        fun recordBlock(target: Pair<Int, Int>, reason: String) {
+        // [不採用の主因, 3.302.0] C1Polish と同じく、拒否された候補が重み付きで最も壊した族を併記する。
+        val culpritStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
+        fun recordBlock(target: Pair<Int, Int>, reason: String, after: ViolationReport? = null, before: ViolationReport? = null) {
             blockStats.getOrPut(target) { HashMap() }.merge(reason, 1, Int::plus)
+            if (after != null && before != null) {
+                worstWorsenedFamily(after, before)?.let { culpritStats.getOrPut(target) { HashMap() }.merge(it, 1, Int::plus) }
+            }
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] tryRelocate が単独では不採用だった候補を蓄積し
         //   末尾で束ねる（手M/手Fは既にそれ自体が多職員同時最適化のため対象外＝スコープ限定）。
@@ -1791,7 +1976,8 @@ object V6HotfixPasses {
                 work[i][j] = fromK
                 combinable.add(CombinatorialRepair.Candidate(
                     listOf(intArrayOf(i, j, toK)), "tryRelocate", label(target.first, target.second)))
-                recordBlock(target, "不採用")
+                if (isBetter(rep, bestRep)) recordBlock(target, "ピン破り")
+                else recordBlock(target, "不採用", after = rep, before = bestRep)
                 return false
             }
             val chain = findCovUChain(p, work, fromK, j, rng, exclude = i,
@@ -1806,7 +1992,11 @@ object V6HotfixPasses {
             work[i][j] = fromK
             combinable.add(CombinatorialRepair.Candidate(
                 listOf(intArrayOf(i, j, toK)) + chain, "tryRelocate", label(target.first, target.second)))
-            recordBlock(target, if (usedAvoided) "range後回し" else "不採用")
+            when {
+                usedAvoided -> recordBlock(target, "range後回し")
+                isBetter(rep, bestRep) -> recordBlock(target, "ピン破り")
+                else -> recordBlock(target, "不採用", after = rep, before = bestRep)
+            }
             return false
         }
 
@@ -2277,8 +2467,13 @@ object V6HotfixPasses {
                 val i = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
                 val k = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
                 val reasons = blockStats[i to k]
-                val top = reasons?.maxByOrNull { it.value }
-                if (top != null) "${label(i, k)}(${top.key}×${top.value})" else label(i, k)
+                val top = reasons?.maxByOrNull { it.value } ?: return@mapNotNull label(i, k)
+                // [不採用の主因, 3.302.0] C1Polish と同型。「不採用」のときだけ主因族を上位2件併記。
+                val culprits = if (top.key != "不採用") "" else
+                    culpritStats[i to k]?.entries?.sortedByDescending { it.value }?.take(2)
+                        ?.joinToString(" ") { "${it.key}:${it.value}" }
+                        ?.let { if (it.isEmpty()) "" else " 主因 $it" } ?: ""
+                "${label(i, k)}(${top.key}×${top.value}$culprits)"
             }
         val rangeCombSummary = rangeCombStats.summary()
         val logs = listOf(MirrorLog(tag = "RangePolish",
@@ -2329,6 +2524,7 @@ object V6HotfixPasses {
         // [汎用玉突き結合フレームワーク, 3.249.0] tryChainRelocate(手③)が単独では不採用だった候補を
         //   蓄積し末尾で束ねる。
         val combinable = ArrayList<CombinatorialRepair.Candidate>()
+        val rejectCulprits = RejectCulpritStats()
 
         // [玉突きチェーンのavoid述語] 候補がfillShiftを1つ得ると自身のapt目標からちょうど新規に
         //   乖離するか（既に乖離済みなら「まだ動いていない」ので中立扱い＝対象外）。
@@ -2347,6 +2543,7 @@ object V6HotfixPasses {
             work[i][j] = toK
             val rep = UnifiedViolationChecker.check(state, work)
             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep)
             work[i][j] = fromK
             return false
         }
@@ -2378,6 +2575,7 @@ object V6HotfixPasses {
                 work[i][j] = b; work[i2][j] = a
                 val rep = UnifiedViolationChecker.check(state, work)
                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep)
                 work[i][j] = a; work[i2][j] = b
             }
             return false
@@ -2394,6 +2592,7 @@ object V6HotfixPasses {
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep)
                 work[i][j] = fromK
                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)), "AptChain", label(i, fromK)))
                 return false
@@ -2405,6 +2604,7 @@ object V6HotfixPasses {
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][j] = fromK
             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)) + chain, "AptChain", label(i, fromK)))
@@ -2501,6 +2701,7 @@ object V6HotfixPasses {
             message = "適切回数(apt)研磨: apt ${before.breakdown["apt"] ?: 0}->${bestRep.breakdown["apt"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0 && (before.breakdown["apt"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 (if (fixedNames.isNotEmpty()) " 対象: ${fixedNames.joinToString(", ")}" else "") +
+                rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
                 (if (aptCombSummary.isNotEmpty()) " / $aptCombSummary" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
@@ -2537,6 +2738,7 @@ object V6HotfixPasses {
         // [汎用玉突き結合フレームワーク, 3.249.0] tryChainRelocate(手③)が単独では不採用だった候補を
         //   蓄積し末尾で束ねる。
         val combinable = ArrayList<CombinatorialRepair.Candidate>()
+        val rejectCulprits = RejectCulpritStats()
 
         fun fairTarget(g: Int, k: Int, counts: Array<IntArray>): Int {
             val mem = p.groupMembers.getOrNull(g) ?: return 0
@@ -2563,6 +2765,7 @@ object V6HotfixPasses {
             work[i][j] = toK
             val rep = UnifiedViolationChecker.check(state, work)
             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep)
             work[i][j] = fromK
             return false
         }
@@ -2595,6 +2798,7 @@ object V6HotfixPasses {
                 work[i][j] = b; work[i2][j] = a
                 val rep = UnifiedViolationChecker.check(state, work)
                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep)
                 work[i][j] = a; work[i2][j] = b
             }
             return false
@@ -2611,6 +2815,7 @@ object V6HotfixPasses {
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep)
                 work[i][j] = fromK
                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)), "FairChain", label(i, fromK)))
                 return false
@@ -2622,6 +2827,7 @@ object V6HotfixPasses {
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][j] = fromK
             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)) + chain, "FairChain", label(i, fromK)))
@@ -2720,6 +2926,7 @@ object V6HotfixPasses {
             message = "グループ内公平化(fair)研磨: fair ${before.breakdown["fair"] ?: 0}->${bestRep.breakdown["fair"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0 && (before.breakdown["fair"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 (if (fixedNames.isNotEmpty()) " 対象: ${fixedNames.joinToString(", ")}" else "") +
+                rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
                 (if (fairCombSummary.isNotEmpty()) " / $fairCombSummary" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
@@ -2758,6 +2965,7 @@ object V6HotfixPasses {
                 listOf(MirrorLog(tag = "C3RunPolish", message = "対象規則(単一シフト連)なし=スキップ")))
         }
         val rng = Random(seed)
+        val rejectCulprits = RejectCulpritStats()
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
         //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
@@ -2774,6 +2982,7 @@ object V6HotfixPasses {
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeExtend, work)) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep)
                 work[i][extDay] = fromK
                 return false
             }
@@ -2784,6 +2993,7 @@ object V6HotfixPasses {
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeExtend, work)) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][extDay] = fromK
             return false
@@ -2829,6 +3039,7 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C3RunPolish",
             message = "連続規則(c3/c3m単一シフト連)玉突き研磨: c3 ${before.breakdown["c3"] ?: 0}->${bestRep.breakdown["c3"] ?: 0} / c3m ${before.breakdown["c3m"] ?: 0}->${bestRep.breakdown["c3m"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0 && ((before.breakdown["c3"] ?: 0) + (before.breakdown["c3m"] ?: 0)) > 0) " [頭打ち=改善手なし]" else "") +
+                rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
@@ -2866,6 +3077,7 @@ object V6HotfixPasses {
                 listOf(MirrorLog(tag = "C3PatternPolish", message = "複数シフトc3/c3mパターンなし=スキップ")))
         }
         val rng = Random(seed)
+        val rejectCulprits = RejectCulpritStats()
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
         //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
@@ -2929,6 +3141,7 @@ object V6HotfixPasses {
                     val rep = UnifiedViolationChecker.check(state, work)
                     if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforePattern, work)) { bestRep = rep; applied++; improved = true; done = true }
                     else {
+                        rejectCulprits.record(rep, bestRep)
                         for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
                         work[i][j] = curK
                     }
@@ -2945,6 +3158,7 @@ object V6HotfixPasses {
                 " / c3m ${before.breakdown["c3m"] ?: 0}->${bestRep.breakdown["c3m"] ?: 0}" +
                 " / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 (if (applied == 0 && initialCount > 0) " [頭打ち=改善手なし]" else "") +
+                rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
@@ -3430,14 +3644,8 @@ object V6HotfixPasses {
                     }
                     rejectReasons[why] = (rejectReasons[why] ?: 0) + 1
                     if (why == "重み悪化" || why == "必須増") {
-                        // 重み付きで最も増えた族＝この手が壊した本体。
-                        var worstFam: String? = null
-                        var worstDelta = 0.0
-                        for (fam in MirrorKeys.all) {
-                            val d = ((report.breakdown[fam] ?: 0) - (bestRep.breakdown[fam] ?: 0)) * MirrorKeys.weightOf(fam)
-                            if (d > worstDelta) { worstDelta = d; worstFam = fam }
-                        }
-                        worstFam?.let { rejectCulprits[it] = (rejectCulprits[it] ?: 0) + 1 }
+                        // 重み付きで最も増えた族＝この手が壊した本体（共通ヘルパー worstWorsenedFamily）。
+                        worstWorsenedFamily(report, bestRep)?.let { rejectCulprits[it] = (rejectCulprits[it] ?: 0) + 1 }
                     }
                 }
             }

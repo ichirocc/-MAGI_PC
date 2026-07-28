@@ -254,9 +254,41 @@ internal fun acceptWorseScore(a: Long, b: Long, temp: Double, rng: Random): Bool
 }
 
 /**
+ * [3.303.0] 職員 i を day j で [fillShift] にしたとき成立する禁止パターンについて、「崩しに行ける日」を
+ * j に近い順で返す（j 自身は目的のシフトなので除く）。
+ *
+ * 旧実装は j-1 / j+1 の2日**固定**だった。実データの cons3n には `Dﾃ→休→A4` のような3連があり、
+ * 当日が末尾(A4)のときパターンの先頭は j-2 にあるため、**旧実装ではそのパターンを一度も崩せなかった**
+ * （c1 研磨の不採用主因が c3n だと 3.302.0 のログ強化で実測できたことが、この穴を追う入口になった）。
+ * ここでは実際に成立している窓がまたぐ日をビット走査で求め、その全部を候補にする。
+ * T>64 は `C3nBitScan` が使えないので従来どおり j±1 のみ（安全側＝候補が減るだけ）。
+ */
+internal fun breakableDaysFor(p: Problem, sched: Array<IntArray>, i: Int, j: Int, fillShift: Int): IntArray {
+    // [既定 OFF・3.303.0] 一般化として正しいが実データ3件で利得が一貫しなかった（PolishGate の
+    //   docstring に計測値）。既定は従来どおり j±1 のみで、ゲートを ON にしたときだけ広げる。
+    if (!PolishGate.wideC3nBreakDays) return intArrayOf(j - 1, j + 1)
+    if (!C3nBitScan.usable(p) || i !in sched.indices) return intArrayOf(j - 1, j + 1)
+    val row = sched[i]
+    val mask = C3nBitScan.buildRowMask(p, row)
+    val old = if (j in 0 until p.T && j < row.size) row[j] else -1
+    val days = C3nBitScan.coveringRunDaysAfterSet(p, mask, j, old, fillShift)
+    if (days == 0L) return IntArray(0)
+    // j に近い日から試す（当日から遠い日ほど他の制約への波及が読みにくいため、影響の小さい順）。
+    val out = ArrayList<Int>(java.lang.Long.bitCount(days))
+    var rest = days and (1L shl j).inv()
+    while (rest != 0L) {
+        out.add(java.lang.Long.numberOfTrailingZeros(rest))
+        rest = rest and (rest - 1)
+    }
+    out.sortBy { kotlin.math.abs(it - j) }
+    return out.toIntArray()
+}
+
+/**
  * [3.163.0でfindCovUChain内に導入・3.226.0で共通ヘルパーへ汎用化] 職員 i を day j で fillShift へ
- * 動かすと禁止連続(c3n)に触れる場合、隣接日(j-1/j+1)の i 自身の割当を別シフトへ変えてパターンを
- * 崩せないか試す。変更で空くシフト(oldJ2)が covU 悪化を招くなら、findCovUChain を
+ * 動かすと禁止連続(c3n)に触れる場合、パターンがまたぐ日の i 自身の割当を別シフトへ変えて
+ * 崩せないか試す（3.303.0 で j±1 固定 → 実際に成立している窓の全日へ拡張）。
+ * 変更で空くシフト(oldJ2)が covU 悪化を招くなら、findCovUChain を
  * `allowCrossDayFix=false` で1段だけ再帰し玉突き連鎖として埋め直す（無限展開防止）。
  * 見つかれば [(i, j2, alt), ...サブ連鎖]（すべて day j2 のみの手）を返す（盤面は判定中に一時変更するが
  * 必ず復元＝呼び出し側が実際に適用するかを決める）。見つからなければ null。
@@ -269,7 +301,7 @@ internal fun tryFixForbiddenRunViaAdjacentDay(
     allowCrossDayFix: Boolean = true, maxDepth: Int = (p.K - 1).coerceAtLeast(1),
 ): List<IntArray>? {
     if (!allowCrossDayFix) return null
-    for (j2 in intArrayOf(j - 1, j + 1)) {
+    for (j2 in breakableDaysFor(p, sched, i, j, fillShift)) {
         if (j2 !in 0 until p.T || p.wishLocked(i, j2)) continue
         val oldJ2 = sched[i][j2]
         if (oldJ2 !in 0 until p.K) continue
@@ -475,6 +507,51 @@ internal fun diffInto(T: Int, from: Array<IntArray>, to: Array<IntArray>, buf: I
         for (j in 0 until T) if (fr[j] != tr[j]) buf[n++] = i * T + j
     }
     return n
+}
+
+/**
+ * [不採用の主因] 候補盤面 [after] が基準 [before] より「重み付きで最も増えた」族を返す（同点は
+ * MirrorKeys.all の順で先勝ち・悪化が無ければ null）。研磨パスが候補を捨てたとき、ログに
+ * 「何を壊したから捨てたのか」を族名で残すための読み取り専用ヘルパー。
+ *
+ * 動機: 頭打ち理由の分類（RangePolish 3.222.0 / C1Polish 3.236.0）は「候補なし（構造的に手が無い）」と
+ * 「不採用（手はあるが目的関数が拒否）」を区別するが、後者の**理由**までは出していなかった。実機ログの
+ * c1 残存が「不採用×65 / 候補なし×4」＝ほぼ全部が拒否だったため、次に何を緩めるべきかがログから読めない。
+ * AdaptiveBlockSwap（3.293.0）は同じ趣旨の「悪化の主因」を既に出しており、その計算をここへ共通化する。
+ */
+internal fun worstWorsenedFamily(after: ViolationReport, before: ViolationReport): String? {
+    var worstFam: String? = null
+    var worstDelta = 0.0
+    for (fam in MirrorKeys.all) {
+        val d = ((after.breakdown[fam] ?: 0) - (before.breakdown[fam] ?: 0)) * MirrorKeys.weightOf(fam)
+        if (d > worstDelta) { worstDelta = d; worstFam = fam }
+    }
+    return worstFam
+}
+
+/**
+ * [不採用の主因・パス共通の集計, 3.303.0] 研磨パスが候補を捨てたときの「何を壊したか」を族別に数える。
+ *
+ * 3.302.0 で C1Polish / RangePolish に入れた職員別の主因表示を、構造の異なる他パスへも同じ形で
+ * 広げるための最小の受け皿（パス単位の集計＝AdaptiveBlockSwap と同じ粒度）。各パスの不採用地点で
+ * [record] を呼び、ログ末尾に [summary] を足すだけで済む。読み取り専用・採否には一切影響しない。
+ */
+internal class RejectCulpritStats {
+    private val counts = LinkedHashMap<String, Int>()
+    var rejected = 0
+        private set
+
+    fun record(after: ViolationReport, before: ViolationReport) {
+        rejected++
+        worstWorsenedFamily(after, before)?.let { counts[it] = (counts[it] ?: 0) + 1 }
+    }
+
+    fun summary(): String {
+        if (rejected == 0) return ""
+        val culprits = counts.entries.sortedByDescending { it.value }.take(3)
+            .joinToString(" ") { "${it.key}:${it.value}" }
+        return " 不採用${rejected}件" + (if (culprits.isEmpty()) "" else "(主因 $culprits)")
+    }
 }
 
 /**

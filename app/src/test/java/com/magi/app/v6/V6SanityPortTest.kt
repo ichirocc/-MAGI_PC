@@ -250,6 +250,44 @@ class V6SanityPortTest {
             rep.any { it.where.contains("休") && it.where.contains("適切回数の合計") })
     }
 
+    /**
+     * [3.301.0 目標の検算を設定画面へ] `aptBalances` は設定ミス診断（検査6-C）と**同じ単一ソース**。
+     * 目標カードはこの値を直接読んで「目標の合計 N回 ／ 必要人数 M回 → K回は必ず届きません」を出す。
+     * ここがズレると「診断は警告するのに設定画面は何も言わない」状態に戻るため、両者の一致を固定する。
+     *
+     * T=10・X の必要人数は毎日1人＝合計10回。2名に目標6を設定すると合計12回で、2回ぶん届かない。
+     */
+    @Test fun aptBalancesMatchesTheSettingIssueAndReportsShortfall() {
+        val st = aptVsNeedState(days = 10, need1 = "1", aptTarget = "6")
+        val x = V6SanityPort.aptBalances(st).single { it.kigou == "X" }
+        assertEquals("目標の合計は担当2名ぶん", 12, x.aptSum)
+        assertEquals("受け止められる上限は必要人数の合計", 10, x.capacity)
+        assertTrue("超過していること", x.overloaded)
+        assertEquals("何回ぶん届かないか", 2, x.shortfall)
+        assertTrue("非休シフトは isRest=false", !x.isRest)
+
+        // 同じ設定に対し、設定ミス診断も同じ数字で警告すること（単一ソースの確認）。
+        val issue = V6SanityPort.buildGuidance(st).single { it.where.contains("X") && it.where.contains("適切回数の合計") }
+        assertTrue("診断の本文が検算と同じ合計値を使うこと", issue.problem.contains("12") && issue.problem.contains("10"))
+    }
+
+    /** 目標が上限に収まっていれば overloaded=false＝設定画面には何も出さない（誤警告を出さない）。 */
+    @Test fun aptBalancesReportsNoOverloadWhenTargetsFitTheDemand() {
+        val st = aptVsNeedState(days = 10, need1 = "1", aptTarget = "5")
+        val x = V6SanityPort.aptBalances(st).single { it.kigou == "X" }
+        assertEquals(10, x.aptSum)
+        assertEquals(10, x.capacity)
+        assertTrue("ちょうど収まるなら超過ではない", !x.overloaded)
+        assertTrue("診断も出さないこと",
+            V6SanityPort.buildGuidance(st).none { it.where.contains("X") && it.where.contains("適切回数の合計") })
+    }
+
+    /** 目標が1つも設定されていないシフトは検算対象外＝空欄運用のユーザーに何も見せない。 */
+    @Test fun aptBalancesSkipsShiftsWithoutAnyTarget() {
+        val st = aptVsNeedState(days = 10, need1 = "1", aptTarget = "")
+        assertTrue("目標なしなら行そのものを出さない", V6SanityPort.aptBalances(st).isEmpty())
+    }
+
     @Test fun aptSumCheckAccountsForOtherShiftLowerBoundsReducingRestCapacity() {
         // T=10・apt目標3(合計6)だが、他シフトXの個人下限が8(各自)設定済み＝休の実質上限=2人×(10-8)=4 < 6。
         val rep = V6SanityPort.buildGuidance(aptVsNeedState(days = 10, need1 = "0", aptTarget = "3", otherLo = "8"))

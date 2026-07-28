@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -382,6 +383,36 @@ fun AptCard(ui: UiState, vm: MagiViewModel) {
             Text("目標（1人あたり・やわらかい）", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text("「この勤務に1か月で何回くらい入ってほしい」という目安です。最適化が各人をその回数に近づけようとします（必ず守るわけではありません。空欄＝目標なし）。担当ONの勤務にだけ設定できます。",
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            // [目標の検算をその場で] 目標の合計がそれを受け止められる上限を超えていると、何をしても
+            //   目標割れか過剰配置が必ず出る。判定は V6SanityPort.aptBalances（設定ミス診断の検査6-C と
+            //   同じ単一ソース・盤面不要）。診断カードはホーム/分析タブにあり、目標を入力している最中は
+            //   見えないため、ここで直接示して「入れた瞬間に気づける」ようにする。
+            val overloaded = remember(ui.editRev, ui.structureEdited) { vm.aptBalances().filter { it.overloaded } }
+            if (overloaded.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("この目標は達成できません", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer)
+                        overloaded.forEach { b ->
+                            Text(
+                                "${toHankakuKigou(b.kigou)}：目標の合計 ${b.aptSum}回 に対し、" +
+                                    (if (b.isRest) "休める日数の上限は ${b.capacity}日" else "必要人数の合計は ${b.capacity}回") +
+                                    "。${b.shortfall}回ぶんは必ず届きません。",
+                                fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                if (b.isRest)
+                                    "→ ${toHankakuKigou(b.kigou)}の目標を下げるか、ほかの勤務の回数の下限を見直してください。"
+                                else
+                                    "→ ${toHankakuKigou(b.kigou)}の目標を下げるか、必要人数を増やしてください。",
+                                fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+            }
             if (v.groups.isNotEmpty()) {
                 val aptSet = v.groupShiftApt.sumOf { row -> row.count { it.trim().isNotEmpty() } }
                 Spacer(Modifier.height(4.dp))
