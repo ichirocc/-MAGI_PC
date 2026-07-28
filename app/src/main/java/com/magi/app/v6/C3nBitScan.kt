@@ -16,7 +16,8 @@ package com.magi.app.v6
  * オラクルとして温存し、こちらは候補が爆発する新経路だけが使う）。両者の一致は
  * `C3nBitScanTest` のランダムパリティで固定する。
  *
- * T>64 は long に収まらないためスカラーへフォールバックする（3.172.0 の bitmask 導入と同じ方針）。
+ * T>64 は long に収まらないため、呼び出し側は [C3nRowScan] を通じてスカラーへフォールバックする
+ * （3.172.0 の bitmask 導入と同じ方針）。生のビット API は 64 日以内だけに限定する。
  */
 internal object C3nBitScan {
 
@@ -25,6 +26,7 @@ internal object C3nBitScan {
 
     /** 職員行 [row] を「シフト k → k が割り当てられた日のビット集合」へ。範囲外セルはどこにも立てない。 */
     fun buildRowMask(p: Problem, row: IntArray): LongArray {
+        require(usable(p)) { "C3nBitScan requires 1..64 days; use C3nRowScan for scalar fallback" }
         val m = LongArray(p.K)
         val t = minOf(p.T, row.size)
         for (j in 0 until t) {
@@ -71,6 +73,7 @@ internal object C3nBitScan {
 
     /** 日 [j] を [newK] にしたときの行全体の fire 数。[mask] は呼び出し前後で不変。 */
     fun firesAfterSet(p: Problem, mask: LongArray, j: Int, oldK: Int, newK: Int): Int {
+        if (j !in 0 until p.T) return fires(p, mask)
         if (oldK == newK) return fires(p, mask)
         setCell(p, mask, j, oldK, newK)
         val n = fires(p, mask)
@@ -147,5 +150,99 @@ internal object C3nBitScan {
         val width = h - l + 1
         val base = if (width >= 64) -1L else (1L shl width) - 1L
         return base shl l
+    }
+}
+
+/**
+ * C3n の職員行を読む単一の入口。
+ *
+ * 64 日以内は [C3nBitScan] の Long + popcount を使い、65 日以上は既存スカラーの意味論へ退避する。
+ * 呼び出し側が「ビット経路かどうか」を分岐しないことで、Long のシフト距離が 64 で折り返す事故を防ぐ。
+ */
+internal class C3nRowScan(
+    private val p: Problem,
+    private val row: IntArray,
+) {
+    private val bitMask: LongArray? = if (C3nBitScan.usable(p)) C3nBitScan.buildRowMask(p, row) else null
+
+    fun fires(): Int {
+        val mask = bitMask
+        return if (mask != null) C3nBitScan.fires(p, mask) else C1DeltaPrefilter.staffC3nFires(p, row)
+    }
+
+    /** 行 [day] を [newShift] に置き換えた場合の fire 数。行・マスクは呼出前後で不変。 */
+    fun firesAfterSet(day: Int, newShift: Int): Int {
+        if (day !in 0 until p.T || day !in row.indices) return fires()
+        val old = row[day]
+        if (old == newShift) return fires()
+        val mask = bitMask
+        if (mask != null) return C3nBitScan.firesAfterSet(p, mask, day, old, newShift)
+        row[day] = newShift
+        return try {
+            C1DeltaPrefilter.staffC3nFires(p, row)
+        } finally {
+            row[day] = old
+        }
+    }
+
+    /** 現在成立している禁止パターンのうち、[anchorDay] をまたぐ全候補日を返す。 */
+    fun coveringDays(anchorDay: Int): IntArray {
+        if (anchorDay !in 0 until p.T) return IntArray(0)
+        val mask = bitMask
+        if (mask != null) return daysFromBits(C3nBitScan.coveringRunDays(p, mask, anchorDay))
+        return scalarCoveringDays(anchorDay)
+    }
+
+    /** 行 [day] を [newShift] にした後に成立する禁止パターンがまたぐ全候補日を返す。 */
+    fun coveringDaysAfterSet(day: Int, newShift: Int): IntArray {
+        if (day !in 0 until p.T || day !in row.indices) return IntArray(0)
+        val old = row[day]
+        if (old == newShift) return coveringDays(day)
+        val mask = bitMask
+        if (mask != null) {
+            return daysFromBits(C3nBitScan.coveringRunDaysAfterSet(p, mask, day, old, newShift))
+        }
+        row[day] = newShift
+        return try {
+            scalarCoveringDays(day)
+        } finally {
+            row[day] = old
+        }
+    }
+
+    private fun daysFromBits(initialBits: Long): IntArray {
+        var bits = initialBits
+        val out = IntArray(java.lang.Long.bitCount(bits))
+        var n = 0
+        while (bits != 0L) {
+            out[n++] = java.lang.Long.numberOfTrailingZeros(bits)
+            bits = bits and (bits - 1)
+        }
+        return out
+    }
+
+    /** T>64 用。既存チェッカーと同じ完全一致窓をそのまま走査する。 */
+    private fun scalarCoveringDays(anchorDay: Int): IntArray {
+        val selected = BooleanArray(p.T)
+        for (c in p.cons3n) {
+            val width = c.seq.size
+            if (width == 0 || width > p.T) continue
+            val lo = (anchorDay - width + 1).coerceAtLeast(0)
+            val hi = minOf(anchorDay, p.T - width)
+            for (start in lo..hi) {
+                var matches = true
+                for (offset in 0 until width) {
+                    if (row.getOrNull(start + offset) != c.seq[offset]) {
+                        matches = false
+                        break
+                    }
+                }
+                if (matches) for (day in start until start + width) selected[day] = true
+            }
+        }
+        val out = IntArray(selected.count { it })
+        var n = 0
+        for (day in selected.indices) if (selected[day]) out[n++] = day
+        return out
     }
 }

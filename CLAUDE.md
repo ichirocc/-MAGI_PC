@@ -41,6 +41,12 @@
 VBA/Web 版から移植した「MAGI V6」最適化エンジン（SA + ALNS + Tabu + GLS + LNS + VNS + LAHC +
 PathRelinking + ChainSwap + 適応的オペレータ重み + RSI++ 等）を内蔵。
 
+- **規模の上限（業務前提・2026-07-28 ユーザー明示）**: **職員は最大30名 / 期間は最大1か月（=31日）**。
+  この範囲を超えるデータは想定しない。既存のビット化経路はすべてこの範囲に収まる:
+  `C3nBitScan.usable`(T<=64) と C++ `SaChunk` の `useBits`(S<=64 && T<=64) は**実運用では常に真**＝
+  スカラーへのフォールバックは防御であって通常経路ではない。`adaptiveBlockLengths` の最大28日も
+  「2月まるごと」を1ブロックで扱うための上限で、1か月という前提と整合する。
+  新しくビット/固定長配列を使う実装を足すときは 30×31 を基準に見積もってよい。
 - パッケージ/applicationId: `com.magi.app`（namespace も同じ）
 - minSdk=36 (Android 16+), compileSdk/targetSdk=36, java.time ネイティブ可, NDK/desugaring 不使用
   （※Android 17 会話バブル対応済。API 37 の platform SDK は未公開のため compileSdk は 36 のまま＝下記セクション参照）
@@ -5241,6 +5247,40 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   偏り職員を収集→UiState→`breakdownLocations` が「職員（曜日の偏り N）」「職員 「シフト」（偏り N）」で整形・タップで
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
+
+## staffPacked の重みドリフトと比較順序を修正（3.305.0, 外部提示コードを検証のうえ採用）
+ユーザーから3ファイル（`V6HotfixPasses.kt` / `C1JointLnsPolish.kt` / `C3nBitScan.kt`）を受領し
+「参考にできますか？」。receiving-code-review の規律どおり現行と diff を取り、1件ずつ実コードへ照合した。
+**現行側に実バグが2件見つかり、提示版はどちらも直していた**ため採用した。
+- **[実バグ1・重みドリフト] `staffPacked` が古い重みを使っていた**: `MirrorKeys` は **c1=15.0 / c3mn=15.0**
+  なのに、この関数だけ `wgt += 4`（c1）・`c3mnC * 12` とハードコードされたまま。3.249.0（c1 4→5・c3mn 12→15）と
+  3.253.0（c1 5→15）の HF77 重み変更が**この1関数だけ取り残されていた**。3.287.0 で `docs/business-logic.md` の
+  同種ドリフトは直したが、コード側のこのサイトは grep から漏れていた（比較器でも評価器でもなく「パックした Long を
+  返す関数」のため）。提示版は `MirrorKeys.weightOf("c1")` 等へ置換＝**単一ソース化**でドリフトが構造的に起きなくなる。
+- **[実バグ2・比較順序] `staffPacked` のパックが total 優先だった**: `hard*1e15 + total*1e9 + wgt` という
+  エンコードは辞書式 **hard→total→weighted** で、3.287.0 で全サイト統一した **hard→weightedScore→total** と逆。
+  3.289.0 の「keep-best統一の取り残し」棚卸しでもこのサイトは見つかっていなかった。提示版は `StaffObjective`
+  （hard/weighted/total の構造体＋`isBetterThan`）へ置換し統一順序に一致させる。副次的に、パック方式が暗黙に
+  依存していた「各桁が繰り上がらない」前提も消える。
+  **影響範囲**: 呼出は `applyBlockRotationPolish` の事前フィルタ4箇所のみ（2者ブロック交換・3者回転）。最終採否は
+  checker + isBetter が担うため**誤った勤務表は出ない**が、3.287.0 で採用するようにした「weighted 改善・total 増」の
+  候補をこの前フィルタが先に捨てていた＝機会損失。
+- **[効率] `C1JointLnsPolish.generateMoves` に c3n 事前フィルタ**: 全 Move 種の共通効果「i の day j に x を置く」が
+  その時点で禁止連続を作るなら goal 自体を諦める。正しさは従来どおり debt＋最終ゲートが担保するが、hard debt を
+  食うだけの候補で `maxMovesPerGoal` の枠が埋まるのを防ぐ。
+- **[防御] `C1JointLnsPolish` の下界 DP メモリ**: `Array(p.T+1)` → `Array(hi+1)`（cnt>hi は捨てられるので正しい縮小）＋
+  `dpCells > 262144` で `cheapSingleRuleLowerBound` へ退避。現行は d=20 で dp/next 合わせて 134MB を確保しうる
+  （32 × 2^19 × 4byte × 2）。実データの cons1 は d=5/14/15 なので到達しないが、Android の OOM 防御として正当。
+  cheap 版は「月間上限 < 窓必要回数なら全窓違反」「希望固定で物理的に届かない窓を数える」の保守的下界＝過大評価しない。
+- **[防御] `C3nRowScan` 新設**: 3.303.0 の私の実装は `usable(p)` を確認せず `buildRowMask` を呼んでいた。
+  T>64 では `1L shl j` が j%64 へ折り返し**マスクが壊れる**（枝刈りが誤るだけで checker が守るため誤った勤務表は
+  出ないが、正しい候補を落とす）。提示版は `buildRowMask` に `require(usable)` を置き、呼び出し側は
+  `C3nRowScan`（64日以内=popcount / 65日以上=スカラー）経由にして分岐自体を無くす。**3.304.0 で記録した
+  「期間は最大1か月」の前提では到達しない**が、呼び出し側が分岐を忘れる事故を構造的に防ぐ設計として採る。
+- **検証（実データ3件・後処理研磨のみ・同一seed）**: **最終盤面が HEAD と完全一致**
+  （golden 2469/306/c1 104・real 49231/178/c1 58・user 33167/170/c1 54）。正しさを変えずにドリフトと無駄だけを
+  落としている。内部効率は C1JointLNS の候補数が golden で **54,750→35,654（35%減）**。
+  ホストJVM **全332テスト green**。C++ は無変更＝native parity 影響なし。
 
 ## 禁止連続の崩し範囲を設定トグルへ配線＋A/B実測（3.304.0, ユーザー指示「接続する。配線する。仮想的テストする。ABテストを仮想的にする」）
 3.303.0 で入れた `PolishGate.wideC3nBreakDays` は**定義があるだけで誰も切り替えられない**状態だった

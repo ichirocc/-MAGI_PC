@@ -13,13 +13,19 @@ import kotlin.math.max
  * 同日交換・3者回転・自己日交換・クロス日移送・一時的な直接変更を一つの debt 付き beam で束ねる。
  *
  * 中間ノードは root から hard/total/c1 の小さな debt を許す。最終採用は必ず
- * UnifiedViolationChecker の正式順序 hard -> total -> weightedScore で root より良く、かつ C1 が
+ * UnifiedViolationChecker の正式順序 hard -> weightedScore -> total で root より良く、かつ C1 が
  * 狭義減少する状態だけ。root は常に別枠で保持し、engine へ共有配列を渡す方式も使わない。
  *
  * 50% は「構造下限までの改善可能幅」に対する進捗目標であり、終了条件ではない。探索は C1=下限、
  * deadline、shouldStop、または全 restart の停滞まで継続する。
  */
 internal object C1JointLnsPolish {
+    /**
+     * 下界用 suffix-DP の状態セル上限。dp と next を同時に持つため、これを超える窓は
+     * 正確さより探索予算を守る安価な保守的下界へ退避する。
+     */
+    private const val MAX_EXACT_LOWER_BOUND_CELLS = 262_144L
+
     data class Config(
         val targetReductionPercent: Int = 50,
         val beamWidth: Int = 24,
@@ -252,27 +258,32 @@ internal object C1JointLnsPolish {
 
     private fun singleRuleLowerBound(p: Problem, staff: Int, c: C1): Int {
         val d = c.day1
-        // Exact suffix-mask DP is practical for the rules used by MAGI. For an unusually long
-        // rule return zero: zero is a safe (weaker) lower bound, unlike a heuristic overestimate.
-        if (d > 20) return 0
-        val suffixBits = (d - 1).coerceAtLeast(0)
-        val maskLimit = if (suffixBits == 0) 1 else (1 shl suffixBits)
-        val maskKeep = maskLimit - 1
         val lo0 = p.rangeLo[staff][c.shiftIdx]
         val hi0 = p.rangeHi[staff][c.shiftIdx]
         val lo = if (lo0 == Int.MIN_VALUE) 0 else lo0.coerceIn(0, p.T)
         val hi = if (hi0 == Int.MAX_VALUE) p.T else hi0.coerceIn(0, p.T)
         if (lo > hi) return 0
+
+        // Exact suffix-mask DP is valuable for ordinary monthly windows, but its table is
+        // O(min(T,hi) * 2^(d-1)). At d=20,T=31,hi=31 it allocates more than 100MB across dp/next and can
+        // consume the whole LNS budget before a single candidate is explored. A local
+        // impossibility scan is a weaker but still valid lower bound.
+        if (d > 20) return cheapSingleRuleLowerBound(p, staff, c, hi)
+        val suffixBits = (d - 1).coerceAtLeast(0)
+        val maskLimit = if (suffixBits == 0) 1 else (1 shl suffixBits)
+        val dpCells = (hi.toLong() + 1L) * maskLimit.toLong()
+        if (dpCells > MAX_EXACT_LOWER_BOUND_CELLS) return cheapSingleRuleLowerBound(p, staff, c, hi)
+        val maskKeep = maskLimit - 1
         val inf = 1_000_000
-        var dp = Array(p.T + 1) { IntArray(maskLimit) { inf } }
+        var dp = Array(hi + 1) { IntArray(maskLimit) { inf } }
         dp[0][0] = 0
         for (day in 0 until p.T) {
-            val next = Array(p.T + 1) { IntArray(maskLimit) { inf } }
+            val next = Array(hi + 1) { IntArray(maskLimit) { inf } }
             val wished = p.wish[staff][day]
             val locked = p.wishLocked(staff, day)
             val minBit = if (locked) (if (wished == c.shiftIdx) 1 else 0) else 0
             val maxBit = if (locked) minBit else 1
-            for (cnt in 0..day) for (mask in 0 until maskLimit) {
+            for (cnt in 0..minOf(day, hi)) for (mask in 0 until maskLimit) {
                 val base = dp[cnt][mask]
                 if (base >= inf) continue
                 for (bit in minBit..maxBit) {
@@ -292,6 +303,26 @@ internal object C1JointLnsPolish {
         var best = inf
         for (cnt in lo..hi) for (mask in 0 until maskLimit) best = minOf(best, dp[cnt][mask])
         return if (best >= inf) 0 else best
+    }
+
+    /**
+     * DP を使えない長窓用の保守的下界。各窓について、希望固定と月間上限だけから見て
+     * 物理的に必要回数へ届かない場合だけを数える。窓間の相互作用は無視するため過大評価しない。
+     */
+    private fun cheapSingleRuleLowerBound(p: Problem, staff: Int, c: C1, hi: Int): Int {
+        val d = c.day1
+        if (d <= 0 || d > p.T || c.day2 <= 0) return 0
+        val starts = p.T - d + 1
+        if (hi < c.day2) return starts
+        var unavoidable = 0
+        for (start in 0 until starts) {
+            var possible = 0
+            for (day in start until start + d) {
+                if (!p.wishLocked(staff, day) || p.wish[staff][day] == c.shiftIdx) possible++
+            }
+            if (possible < c.day2) unavoidable++
+        }
+        return unavoidable
     }
 
     private fun collectGoals(

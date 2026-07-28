@@ -486,7 +486,7 @@ object V6HotfixPasses {
         // [3.255.0/C1JointLnsPolish・PersonalBalanceJointLnsPolish, 受領・検証のうえ適用] ここまでの
         // 巡回研磨は各パスが候補を作った直後に正式目的関数で採否するため、C1改善や個人回数改善に伴う
         // coverage/range/c3系の副作用を別の手で相殺する前に候補を失うことがある。この2パスはdebt付き
-        // beamで複数手を束ね、最終採用のみ正式順序(hard→total→weighted)のkeep-bestで判定する（中間ノードの
+        // beamで複数手を束ね、最終採用のみ正式順序(hard→weighted→total)のkeep-bestで判定する（中間ノードの
         // debtは探索のみに影響し退化不能）。ホストJVM実行でgolden_state.json/sample_state_v6.jsonに対し
         // 既存パイプライン適用後の追加効果を実測: golden_state.jsonでは両方とも0（既存パイプラインが
         // 既に汲み尽くし済み＝安全なno-op）、sample_state_v6.jsonではC1JointLnsPolishがHARD5→4（既存
@@ -688,7 +688,7 @@ object V6HotfixPasses {
      *     （無変化/groupViol/pref破り/c3n は checker が確実に却下＝事前に落とす）。
      *  3. 候補日を不足シフトへ直接移動。旧シフトを抜いて covU 穴が空くなら `findCovUChain`（exclude=本人）の
      *     玉突き連鎖で埋め直す（手B と同型）。
-     *  4. 採否は必ず本物の `UnifiedViolationChecker` + `isBetter`（hard→total→weighted）+ `exactPinRegression`
+     *  4. 採否は必ず本物の `UnifiedViolationChecker` + `isBetter`（hard→weighted→total）+ `exactPinRegression`
      *     （3.256.0の厳密ピン保護）＝keep-best・退化不能。
      *
      * [位置づけ・正直な限界] 生成する手は既存の手B/beam/exact と重複する（keep-best で無害）。本オペレータの
@@ -714,7 +714,7 @@ object V6HotfixPasses {
         // [3.279.0/外部レビューC1-08] 旧: pass 開始時の index を採用後も走査し続け、解消済み窓の再処理と
         //   「採用で新たに生じた窓は次 pass まで不可視」の両方が起きていた（maxPasses=2 の有限 pass で
         //   改善を取りこぼす）。1手採用するたびに窓ループを抜け、最新盤面から Index を再構築する。
-        //   終了保証は isBetter の厳密改善（hard→total→weighted 辞書式で単調減少）＋採用上限の安全弁。
+        //   終了保証は isBetter の厳密改善（hard→weighted→total 辞書式で単調減少）＋採用上限の安全弁。
         val maxAdoptions = maxPasses * 32
         var capHit = false
         while (!shouldStop()) {
@@ -900,15 +900,15 @@ object V6HotfixPasses {
                             if (!feasible || same) continue
                             // [#5 差分前フィルタ] 同 sgrp かつ同 ssk の2者ブロック交換のみ前判定。
                             val canPre = p.sgrp[i] == p.sgrp[i2] && p.ssk[i] == p.ssk[i2]
-                            val preP = if (canPre) staffPacked(p, work, i) + staffPacked(p, work, i2) else 0L
+                            val preObjective = if (canPre) staffObjective(p, work, i) + staffObjective(p, work, i2) else null
                             // [厳密ピン保護] ブロック交換はwindow内の日ごとにi/i2の自身のシフト回数を変えうる
                             //   （2者間で異なるシフトが混在する日がある限り）。staffRange厳密ピン(lo==hi)を
                             //   崩す候補は不採用にする（keep-best/重みは不変・追加ガードのみ）。
                             val workBeforeBlock = work.copy2D()
                             for (t in 0 until w) { val tmp = work[i][j + t]; work[i][j + t] = work[i2][j + t]; work[i2][j + t] = tmp }
                             if (canPre) {
-                                val postP = staffPacked(p, work, i) + staffPacked(p, work, i2)
-                                if (postP >= preP) { for (t in 0 until w) { val tmp = work[i][j + t]; work[i][j + t] = work[i2][j + t]; work[i2][j + t] = tmp }; skipped++; continue }
+                                val postObjective = staffObjective(p, work, i) + staffObjective(p, work, i2)
+                                if (preObjective != null && !postObjective.isBetterThan(preObjective)) { for (t in 0 until w) { val tmp = work[i][j + t]; work[i][j + t] = work[i2][j + t]; work[i2][j + t] = tmp }; skipped++; continue }
                             }
                             val rep = UnifiedViolationChecker.check(state, work)
                             if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeBlock, work)) { bestRep = rep; applied++; improved = true }
@@ -995,17 +995,19 @@ object V6HotfixPasses {
                                 val sb = IntArray(w) { work[bi][j + it] }
                                 val sc = IntArray(w) { work[ci][j + it] }
                                 // [#5 差分前フィルタ] 同 sgrp かつ同 ssk の手のみ前判定(群/スキル群/被覆/pref不変
-                                //   →関与3名の packed が改善しなければ全体目的も改善しえない)。採用はフル評価が担う=安全。
+                                //   →関与3名の局所目的が改善しなければ全体目的も改善しえない)。採用はフル評価が担う=安全。
                                 val canPre = p.sgrp[ai] == p.sgrp[bi] && p.sgrp[bi] == p.sgrp[ci] &&
                                     p.ssk[ai] == p.ssk[bi] && p.ssk[bi] == p.ssk[ci]
-                                val preP = if (canPre) staffPacked(p, work, ai) + staffPacked(p, work, bi) + staffPacked(p, work, ci) else 0L
+                                val preObjective = if (canPre) {
+                                    staffObjective(p, work, ai) + staffObjective(p, work, bi) + staffObjective(p, work, ci)
+                                } else null
                                 // [厳密ピン保護] 3者回転もwindow内で各職員の自身のシフト回数を変えうるため、
                                 //   staffRange厳密ピン(lo==hi)を崩す候補は不採用にする（keep-best/重みは不変）。
                                 val workBeforeRotate = work.copy2D()
                                 for (t in 0 until w) { work[ai][j + t] = sb[t]; work[bi][j + t] = sc[t]; work[ci][j + t] = sa[t] }
                                 if (canPre) {
-                                    val postP = staffPacked(p, work, ai) + staffPacked(p, work, bi) + staffPacked(p, work, ci)
-                                    if (postP >= preP) { for (t in 0 until w) { work[ai][j + t] = sa[t]; work[bi][j + t] = sb[t]; work[ci][j + t] = sc[t] }; skipped++; continue }
+                                    val postObjective = staffObjective(p, work, ai) + staffObjective(p, work, bi) + staffObjective(p, work, ci)
+                                    if (preObjective != null && !postObjective.isBetterThan(preObjective)) { for (t in 0 until w) { work[ai][j + t] = sa[t]; work[bi][j + t] = sb[t]; work[ci][j + t] = sc[t] }; skipped++; continue }
                                 }
                                 val rep = UnifiedViolationChecker.check(state, work)
                                 if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRotate, work)) { bestRep = rep; applied++; improved = true }
@@ -1168,7 +1170,7 @@ object V6HotfixPasses {
      * 日 j2 で休」、相手 i' が「j1 で休・j2 で勤務(シフト y)」のとき、両者の j1/j2 を丸ごと入替える
      * （i: j1→休/j2→y、i': j1→x/j2→休）。各日の各シフト人数は保存される（j1 の x は i→i'、j2 の y は i'→i へ移るだけ）
      * ため covU/covO・群レンジ・pref は不変で、i の勤務が過剰曜日→過少曜日へ移動して weekly が下がる。fair（群内シフト
-     * 回数）や low/high/apt/c2 など per-staff 族も副次的に動く。**採否は実目的関数 isBetter のみ**（hard→total→weighted、
+     * 回数）や low/high/apt/c2 など per-staff 族も副次的に動く。**採否は実目的関数 isBetter のみ**（hard→weighted→total、
      * total は weekly/fair を含む）＝退化なし（keep-best）。weekly>0 の職員のみ起点＋first-improvement で空探索は即終了。
      * 変更セルは wish 固定なら不動（4セルとも movable ガード）。covO/c42/c2 など per-day 族は同日 CyclicSwap（isBetter）が
      * 既に最適に研磨済みのため本パスの対象外（2.49.0 の「専用パスは冗長」の結論を踏襲）。
@@ -1227,7 +1229,7 @@ object V6HotfixPasses {
                             if (y == rest || y !in 0 until p.K) continue
                             if (!p.canDo(ip, x) || !p.canDo(i, y)) continue
                             // 長方形交換を適用（被覆保存）→ フル評価 → 改善時のみ採用、不採用なら完全巻き戻し。
-                            // [監査で発見・3.270.0] isBetter は hard→total→weightedScore の辞書式のため、
+                            // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、
                             //   raw total が改善してもweightedScoreが悪化する組合せ(重い厳密ピン破りを軽い
                             //   weekly改善が数の上で上回る)がありうる。同型の全パスに既に適用済みの
                             //   exactPinRegression ガードをここにも追加（3.256.0の retrofit 漏れ）。
@@ -1292,7 +1294,7 @@ object V6HotfixPasses {
      * [C1研磨アルゴリズムの再設計/回数保存移設の追加] 手A(同日スワップ)/手B(直接移動+連鎖)はどちらも
      * 「i の X 回数を+1する」count-changing 手しか生成できない。golden_state の残差解剖(Python実測)では
      * c1=115 fires のうち relocation-only=48（休 fires の80%が個人別回数の下限=上限で固定された職員由来）
-     * は、X追加が low/high(90/45)>c1(4×窓数)で必ず isBetter に棄却され、**i自身のXを余剰位置→不足窓へ
+     * は、X追加が low/high(90/45)>c1(15×窓数)で必ず isBetter に棄却され、**i自身のXを余剰位置→不足窓へ
      * 移す回数保存の移設**だけが唯一の改善手と判明（行内2日swapの貪欲シムで c1 115→62, -46%）。
      * 現行手A/Bにこの移設プリミティブが無い欠落を埋めるため、手A(同日交換)の直後・手B(直接移動)の前に
      * 保存性の強い順で2手を追加する:
@@ -1302,7 +1304,7 @@ object V6HotfixPasses {
      *   手R2=自己2日swap（i の X@j1 ↔ b@j）: i の回数は保存（low/high/apt/c2/pref/groupViol不変）だが
      *        日別人数が変わるため、離脱側2箇所を p.covUCell（source of truth）で事前除外してから適用。
      * どちらも c3n(HARD) は p.makesForbiddenRun で事前枝刈り（見逃しても isBetter が最終拒否＝安全側）。
-     * 採否は既存と同じ isBetter(hard→total→weighted) の keep-best のみ＝退化不能・HF77非該当（重み不変）。
+     * 採否は既存と同じ isBetter(hard→weighted→total) の keep-best のみ＝退化不能・HF77非該当（重み不変）。
      * add-fixable（追加が唯一の解の局面）は既存手A/Bの担当のまま＝手クラスが互いに素で冗長を作らない。
      */
     fun applyC1WindowPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0x1C1L): CyclicSwapResult {
@@ -1633,7 +1635,7 @@ object V6HotfixPasses {
      * セルを起点にする（violations単一クラスマップだと、より重い違反が同居するセルで見落としうるため）。
      * 各アンカーセル(i,j)について、i の担当可能シフトへ付け替える(c3n新規発生はmakesForbiddenRunで事前枝刈り)。
      * 付け替えで元シフトの被覆が悪化するなら`findCovUChain`で玉突き連鎖を試す(C1Polish手Bと同一パターン)。
-     * 採否は既存のisBetter(hard→total→weighted)keep-best＝退化不能。完了条件はユニットテストのみ(grilling決定)。
+     * 採否は既存のisBetter(hard→weighted→total)keep-best＝退化不能。完了条件はユニットテストのみ(grilling決定)。
      */
     /**
      * [頭打ち調査・findCovUChainのrangeAvoid用] 候補(staff)がfillShiftを1つ得ると自身のstaffRange上限
@@ -1705,7 +1707,7 @@ object V6HotfixPasses {
                     var cnt = 0
                     for (s in 0 until p.S) if (work[s][j] == curK) cnt++
                     val needsChain = p.covUCell(curK, j, cnt - 1) > p.covUCell(curK, j, cnt)
-                    // [監査で発見・3.270.0] isBetter は hard→total→weightedScore の辞書式のため、raw
+                    // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、raw
                     //   total 改善だけでweightedScoreが悪化する組合せ(厳密ピン破り)がありうる。同型の
                     //   全パスに既に適用済みの exactPinRegression ガードをここにも追加（3.256.0 retrofit漏れ）。
                     val workBeforeMove = work.copy2D()
@@ -1771,8 +1773,9 @@ object V6HotfixPasses {
      *   当日1セルか隣接1日しか触っておらず、3連の先頭に構造的に届いていなかった。
      *
      * 候補数は (パターン長 × 担当可能シフト数) 倍に増えるため、フル checker を呼ぶ前に
-     * `C3nBitScan` の popcount で「その手で c3n の正味 fire が実際に減るか」を先に判定して枝刈りする
-     * （枝刈りが見逃しても最終採否は checker + isBetter + exactPinRegression が担保＝安全側）。
+     * `C3nRowScan` で「その手で c3n の正味 fire が実際に減るか」を先に判定して枝刈りする。
+     * 64日以内は popcount、長期日程は同じ意味のスカラー走査へ自動退避する。
+     * 最終採否は checker + isBetter + exactPinRegression が担保する。
      * 崩した先で被覆が悪化するなら `findCovUChain` の玉突き連鎖で埋め直すのは既存パスと同じ。
      */
     fun applyC3nPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0xC3EL): CyclicSwapResult {
@@ -1789,7 +1792,7 @@ object V6HotfixPasses {
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
         val combinable = ArrayList<CombinatorialRepair.Candidate>()
         val rejectCulprits = RejectCulpritStats()
-        var screened = 0          // ビット枝刈りで checker を呼ばずに落とした候補数
+        var screened = 0          // C3n枝刈りで checker を呼ばずに落とした候補数
         var evaluated = 0         // 実際に checker を呼んだ候補数
         var patternDays = 0       // 候補にしたセルの延べ数（当日1セルに留まらないことの実測）
         var pass = 0
@@ -1813,16 +1816,12 @@ object V6HotfixPasses {
                 if (i !in 0 until p.S || j !in 0 until p.T) continue
                 var done = false
                 // [当日も可変＋範囲拡張] 違反パターンがまたぐ全日を候補にする（j 自身を含む）。
-                val mask = C3nBitScan.buildRowMask(p, work[i])
-                val firesNow = C3nBitScan.fires(p, mask)
+                val c3nScan = C3nRowScan(p, work[i])
+                val firesNow = c3nScan.fires()
                 if (firesNow == 0) continue
-                val dayBits = if (C3nBitScan.usable(p)) C3nBitScan.coveringRunDays(p, mask, j) else C3nBitScan.rangeMask(j, j)
-                val days = ArrayList<Int>()
-                var rest = dayBits
-                while (rest != 0L) {
-                    days.add(java.lang.Long.numberOfTrailingZeros(rest))
-                    rest = rest and (rest - 1)
-                }
+                val candidateDays = c3nScan.coveringDays(j)
+                val days = ArrayList<Int>(candidateDays.size)
+                for (day in candidateDays) days.add(day)
                 if (days.isEmpty()) days.add(j)
                 days.sortBy { kotlin.math.abs(it - j) }   // 当日に近い日から（波及が小さい順）
                 patternDays += days.size
@@ -1834,11 +1833,9 @@ object V6HotfixPasses {
                     for (alt in p.allowedShiftsForStaff(i)) {
                         if (done || shouldStop()) break
                         if (alt == curK) continue
-                        // [ビット枝刈り] この1手で c3n の正味 fire が減らないなら checker を呼ばない。
+                        // [C3n枝刈り] この1手で c3n の正味 fire が減らないなら checker を呼ばない。
                         //   減らない手は hard が下がらず、この HARD 族専用パスとしては意味がない。
-                        if (C3nBitScan.usable(p) &&
-                            C3nBitScan.firesAfterSet(p, mask, j2, curK, alt) >= firesNow
-                        ) { screened++; continue }
+                        if (c3nScan.firesAfterSet(j2, alt) >= firesNow) { screened++; continue }
                         var cnt = 0
                         for (s in 0 until p.S) if (work[s][j2] == curK) cnt++
                         val needsChain = p.covUCell(curK, j2, cnt - 1) > p.covUCell(curK, j2, cnt)
@@ -1888,7 +1885,7 @@ object V6HotfixPasses {
         val c3nCombSummary = c3nCombStats.summary()
         val logs = listOf(MirrorLog(tag = "C3nPolish",
             message = "禁止連続(c3n)研磨: c3n ${before.breakdown["c3n"] ?: 0}->${bestRep.breakdown["c3n"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
-                " 候補日延べ$patternDays(パターン全域・当日含む) 正式評価$evaluated ビット枝刈り$screened" +
+                " 候補日延べ$patternDays(パターン全域・当日含む) 正式評価$evaluated C3n枝刈り$screened" +
                 (if (applied == 0 && (before.breakdown["c3n"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
@@ -1923,7 +1920,7 @@ object V6HotfixPasses {
      * 違反している(staff,shift)ペアを列挙。HIGH(超過)は当該シフトの保有日を他の担当可能シフトへ、
      * LOW(不足)は保有していない日のうち担当可能な1日をそのシフトへ、それぞれ付け替える。付け替えで
      * 空く/埋まる側の被覆(covUCell)が悪化する場合は`findCovUChain`で玉突き修復する（C1Polish手B/
-     * C3mnPolishと同一パターン）。採否はisBetter(hard→total→weighted)keep-best＝退化不能。
+     * C3mnPolishと同一パターン）。採否はisBetter(hard→weighted→total)keep-best＝退化不能。
      */
     fun applyRangePolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0x8A9EL): CyclicSwapResult {
         val p = Problem(state)
@@ -2506,7 +2503,7 @@ object V6HotfixPasses {
      *   同型の安全性。相手のcanDoは同一グループのため保証済み）。
      * 手③玉突きチェーン: 上記いずれでも解消しない残りは、RangePolishと同型のfindCovUChain（候補が
      *   自身の新規apt違反を招くなら後回しにするavoid述語つき）で任意の担当可能シフトへ移す。
-     * 採否はisBetter(hard→total→weighted)keep-best＝退化不能。全手とも希望固定(movable)・禁止連続
+     * 採否はisBetter(hard→weighted→total)keep-best＝退化不能。全手とも希望固定(movable)・禁止連続
      * (makesForbiddenRun)を事前ガード。
      */
     fun applyAptPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0xA97L): CyclicSwapResult {
@@ -2720,7 +2717,7 @@ object V6HotfixPasses {
      * 付け替えごとに動く。手①②③はいずれも候補選定のスナップショット近似（各手を試す時点で
      * counts/tgt を再計算）でよく、最終的な採否は常に isBetter(実目的関数)が担うため、tgt の近似が
      * ズレても安全性は損なわれない（見逃しても isBetter が拒否するだけ・過大選定しても isBetter が
-     * 拒否するだけ）。採否はisBetter(hard→total→weighted)keep-best＝退化不能。全手とも希望固定
+     * 拒否するだけ）。採否はisBetter(hard→weighted→total)keep-best＝退化不能。全手とも希望固定
      * (movable)・禁止連続(makesForbiddenRun)を事前ガード。
      */
     fun applyFairPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0xFA12L): CyclicSwapResult {
@@ -3060,7 +3057,7 @@ object V6HotfixPasses {
      * 消える（残り日が完成するよう複数日を同時に組み替える方向＝パターン完成は、複数日の依存関係が
      * 絡み正しさの保証が難しいため意図的にスコープ外＝既存の2-3者交換/回転パスに委ねる。見送っても
      * 既存機構が担当を続けるだけ＝安全側）。C3mnPolish(3.214.0)と同一の「1セル付け替え＋
-     * findCovUChain玉突き」パターンをそのまま適用する。採否はisBetter(hard→total→weighted)
+     * findCovUChain玉突き」パターンをそのまま適用する。採否はisBetter(hard→weighted→total)
      * keep-best＝退化不能。
      */
     fun applyC3PatternPolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }, seed: Long = 0xC3B4L): CyclicSwapResult {
@@ -3679,7 +3676,7 @@ object V6HotfixPasses {
      * [C1研磨・複数職員時空間ビーム版, 外部パッチ受領→2箇所修正のうえ適用] applyC1WindowPolish/
      * BeamC1PolishV2 と並存する第3のc1研磨。単一路の同日greedyでなく、各ステップで残っている
      * 不足(staff,day)ターゲットに最小単位の手（同日swap優先、だめならc1Pref付きchain）を足し、
-     * HARD悪化のみを絶対条件に生成した候補群を(hard,total,weightedScore)の真の目的関数順で
+     * HARD悪化のみを絶対条件に生成した候補群を(hard,weightedScore,total)の真の目的関数順で
      * 上位beamWidth本まで残して反復する（デフォルトmaxSteps=60）。
      *
      * **受領コードからの修正2点**（そのまま採用せずレビュー・実データ検証で発見）:
@@ -3687,8 +3684,8 @@ object V6HotfixPasses {
      * 近似指標**だった。golden_state.json実測でこれが致命的と判明: c1を91→63まで下げる候補を
      * 選ぶが、それと引き換えにlow/high/apt/weekly等の他族が軒並み悪化しtotal 291→349・
      * weightedScore 1939→3722（ほぼ倍）という**真の目的関数では大幅な退化**を招いていた
-     * （このコードベース全体の規約=hard→total→weightedScoreでなく、c1だけを見て他族への
-     * 転嫁を検出できない近似だったため）。ランキングを(hard,total,weightedScore)の真の目的
+     * （このコードベース全体の規約=hard→weightedScore→totalで、c1だけを見て他族への
+     * 転嫁を検出できない近似だったため）。ランキングを(hard,weightedScore,total)の真の目的
      * 関数へ修正した結果、golden_state.json/sample_state_v6.jsonの両方・全15シードで
      * 一貫してtotalが真に改善する（golden: 291→274-287, sample_v6: 236→227-229、HARDは
      * 両方とも不変）ことを確認。
@@ -3886,7 +3883,7 @@ object V6HotfixPasses {
      * もの。weekly を費用に入れる意味＝その日の「休スロット」を誰に割り当てるかで各職員の曜日別勤務数が変わる（被覆は不変）。
      * 「その曜日に働き過ぎの職員へ休を、少なすぎる職員へ勤務を」割り当てる候補を Hungarian が同日内で**同時最適**に生成し、
      * 曜日偏りを直す。同日内の最適再配置＝rectangle（3.197.0, クロス日の2職員×2日）とは別種の被覆保存手＝相補的。
-     * 採否は実目的関数 isBetter（hard→total→weighted, keep-best）＝退化なし。fair 等の他 soft は isBetter が担保する
+     * 採否は実目的関数 isBetter（hard→weighted→total, keep-best）＝退化なし。fair 等の他 soft は isBetter が担保する
      * （費用に無い族も採用判定で悪化しないことを保証）。純 Kotlin 後処理＝ネイティブ hot-path 非干渉（parity 影響なし）。
      */
     fun applyAlternatingSoftPolish(state: MagiState, schedule: Array<IntArray>, maxSweeps: Int = 4, shouldStop: () -> Boolean = { false }): DayAssignResult {
@@ -4241,25 +4238,33 @@ object V6HotfixPasses {
     // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
     private fun isBetter(a: ViolationReport, b: ViolationReport): Boolean = betterReport(a, b)
 
-    // ============================================================================
-    // [#5 差分前フィルタ] 職員 i の「研磨手で動きうる families」の重み付き違反量を checker と同一ロジックで
-    // 厳密計算する。c1(4) + c3(3) + c3m(2) + c3mn(12) + c3n(HARD=7000)。研磨手は被覆保存の置換なので、
-    // 関与職員が全員同一グループなら、群(c41/c42/groupViol)・被覆(covU/covO)・pref(希望固定セルは不動)は不変。
-    // よって「関与職員のこの値が改善しない同群の手」は全体目的(hard/total/weighted)も改善しえない。
-    // ⇒ そういう手では高コストの UnifiedViolationChecker.check をスキップできる(前フィルタ)。
-    // 安全性: 採用判定は従来どおりフル評価 isBetter が担う。前フィルタに誤りがあっても「改善手を取り
-    //         こぼす(=研磨が弱まるだけ)」方向にしか働かず、誤採用や研磨前からの悪化は起こらない。
-    // ============================================================================
-    // [#5 差分前フィルタ] 職員 i の packed メトリクス = (hard:c3n件数) を最上位、(total:変化しうる全family
-    // の件数) を中位、(weighted) を下位に詰めた単一 Long（isBetter の hard→total→weighted と同順）。
-    // 研磨手で動きうる per-staff family のうち主要分を集計: c1(4)/c2(1)/c3(3)/c3n(HARD7000)/c3m(2)/c3mn(12)/
-    // low(90)/high(45)。※apt/fair/weekly(各1) は本 packed に含めない＝それら**のみ**を改善する手はこの前フィルタで
-    // こぼす(研磨が弱まるだけ=keep-best 安全、誤採用や悪化は起きない)。関与職員が sgrp も ssk も同一なら、群(c41/c42)・スキル群(c41s/c42s)・被覆(covU/covO)・
-    // pref(希望固定セルは不動) は全て不変。よって関与職員のこの packed が改善しなければ全体目的も改善しえず、
-    // その手はフル評価をスキップしてよい(前フィルタ)。採用判定は従来どおりフル評価 isBetter が担う＝安全。
-    // 1職員あたり各レベルは小さく、関与2-3名の和でも桁跨ぎしない(hardレベル:1e15, totalレベル:1e9)。
-    private fun staffPacked(p: Problem, sched: Array<IntArray>, i: Int): Long {
-        var hard = 0L; var total = 0L; var wgt = 0L
+    /**
+     * C3 系ブロック研磨の低コストな局所目的。公式の [betterReport] と同じ
+     * HARD → weightedScore → total 順で比較する。
+     *
+     * apt/fair/weekly はここでは数えないため、この前フィルタは改善手を取りこぼし得るが、
+     * 最終採否を誤ることはない。重みは数値を複製せず [MirrorKeys] を単一ソースにする。
+     */
+    internal data class StaffObjective(
+        val hard: Long,
+        val weighted: Double,
+        val total: Long,
+    ) {
+        operator fun plus(other: StaffObjective): StaffObjective = StaffObjective(
+            hard + other.hard,
+            weighted + other.weighted,
+            total + other.total,
+        )
+
+        internal fun isBetterThan(other: StaffObjective): Boolean = when {
+            hard != other.hard -> hard < other.hard
+            weighted != other.weighted -> weighted < other.weighted
+            else -> total < other.total
+        }
+    }
+
+    private fun staffObjective(p: Problem, sched: Array<IntArray>, i: Int): StaffObjective {
+        var total = 0L; var weighted = 0.0
         val cnt = IntArray(p.K)                                   // 期間内シフト回数(c2/low/high 用)
         for (j in 0 until p.T) { val k = sched[i][j]; if (k in 0 until p.K) cnt[k]++ }
         for (c in p.cons1) {                                      // c1: d日窓で shiftIdx が day2 回未満
@@ -4268,24 +4273,26 @@ object V6HotfixPasses {
             while (j <= p.T - c.day1) {
                 var z = 0
                 for (l in 0 until c.day1) if (sched[i][j + l] == c.shiftIdx) z++
-                if (z < c.day2) { total++; wgt += 4 }
+                if (z < c.day2) { total++; weighted += MirrorKeys.weightOf("c1") }
                 j++
             }
         }
-        for (c in p.cons2) if (p.canDo(i, c.shiftIdx) && cnt[c.shiftIdx] < c.count) { total++; wgt += 1 } // c2
+        for (c in p.cons2) if (p.canDo(i, c.shiftIdx) && cnt[c.shiftIdx] < c.count) { total++; weighted += MirrorKeys.weightOf("c2") } // c2
         for (k in 0 until p.K) {                                  // low/high: 回数レンジ(不足/超過「量」を加算)
             val lo = p.rangeLo[i][k]; val hi = p.rangeHi[i][k]; val n = cnt[k]
-            if (lo != Int.MIN_VALUE && lo != 0 && p.canDo(i, k) && n < lo) { val d = (lo - n).toLong(); total += d; wgt += d * 90 }
-            if (hi != Int.MAX_VALUE && n > hi) { val d = (n - hi).toLong(); total += d; wgt += d * 45 }
+            if (lo != Int.MIN_VALUE && lo != 0 && p.canDo(i, k) && n < lo) { val d = (lo - n).toLong(); total += d; weighted += d * MirrorKeys.weightOf("low") }
+            if (hi != Int.MAX_VALUE && n > hi) { val d = (n - hi).toLong(); total += d; weighted += d * MirrorKeys.weightOf("high") }
         }
         val c3nC = c3FamCount(p, sched, i, p.cons3n, true)        // c3n は HARD
         val c3C = c3FamCount(p, sched, i, p.cons3, false)
         val c3mC = c3FamCount(p, sched, i, p.cons3m, false)
         val c3mnC = c3FamCount(p, sched, i, p.cons3mn, true)
-        hard += c3nC
         total += c3nC + c3C + c3mC + c3mnC
-        wgt += c3nC * 7000 + c3C * 3 + c3mC * 2 + c3mnC * 12
-        return hard * 1_000_000_000_000_000L + total * 1_000_000_000L + wgt
+        weighted += c3nC.toDouble() * MirrorKeys.weightOf("c3n") +
+            c3C.toDouble() * MirrorKeys.weightOf("c3") +
+            c3mC.toDouble() * MirrorKeys.weightOf("c3m") +
+            c3mnC.toDouble() * MirrorKeys.weightOf("c3mn")
+        return StaffObjective(c3nC, weighted, total)
     }
 
     private fun c3FamCount(p: Problem, sched: Array<IntArray>, i: Int, list: List<C3>, forbidden: Boolean): Long {
