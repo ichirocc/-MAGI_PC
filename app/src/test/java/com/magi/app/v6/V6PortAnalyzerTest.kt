@@ -285,4 +285,41 @@ class V6PortAnalyzerTest {
         assertEquals(ForbiddenCellEscape.FREE, day2.escape)
         assertTrue(run.escapable)
     }
+
+    /**
+     * [3.297.0 壁の緩和導線の前提] ForbiddenDiag の `seqLabel` が、cons3n 行から
+     * `Problem.resolveC3` と同じ意味論（**最初の空白まで**を本体とする）で作ったキーと一致すること。
+     *
+     * MagiViewModel.relaxForbiddenRule はこのキー一致だけを頼りに「壁になっている並び」を削除するため、
+     * ここがずれると「削除ボタンを押しても何も消えない」か「別のルールが消える」。UI 層はホストで
+     * コンパイルできないので、依存する不変条件を v6 層のテストとして固定する。
+     * 空白を**除去**する `SettingFixAction.DELETE_DUP_SEQ` のキーとは意味が違う点も同時に押さえる。
+     */
+    @Test
+    fun forbiddenRunSeqLabelMatchesRuleKeyDerivedFromCons3nRows() {
+        val rows = listOf(
+            C3Row(listOf("X", "X")),
+            C3Row(listOf("X", "Y", "")),          // 末尾空白（実データで普通に出る形）
+            C3Row(listOf("Y", "", "X")),          // 途中空白＝resolveC3 は ["Y"] として扱う
+        )
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1, 2, 0)),   // X X Y 休 → [X,X] と [X,Y] が1件ずつ
+            cons3n = rows,
+        )
+        fun ruleKey(row: C3Row): String {
+            val end = row.pattern.indexOfFirst { it.isBlank() }
+            val body = if (end >= 0) row.pattern.subList(0, end) else row.pattern
+            return body.joinToString("\u2192")
+        }
+        val keys = rows.map { ruleKey(it) }
+        assertEquals(listOf("X\u2192X", "X\u2192Y", "Y"), keys)
+
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        assertTrue("違反 run が検出されること", diag.totalRuns > 0)
+        for (run in diag.runs) {
+            assertTrue("seqLabel=${run.seqLabel} が cons3n 行のキーに含まれること", run.seqLabel in keys)
+        }
+        // 削除導線は同じ並びの重複行をまとめて消す＝キー一致で数えられること。
+        assertEquals(1, keys.count { it == "X\u2192X" })
+    }
 }

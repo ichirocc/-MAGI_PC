@@ -547,6 +547,18 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         logOp(if (on) "I" else "W", "設定変更: Kotlinパリティ照合 → ${if (on) "ON" else "OFF（純ネイティブ・誤結果の可能性）"}")
     }
 
+    /**
+     * [3.298.0 配線] ブロック巡回交換の c3n 事前フィルタ ON/OFF（既定OFF＝捨てない）。
+     * c3n は HARD なので増える候補は `isBetter` が必ず却下する＝**採用結果は ON/OFF で変わらない**
+     * （3.296.0 の A/B 実測で最終盤面・採用数の完全一致を確認済み）。ON は「詰んだ候補へフル checker を
+     * 呼ばない」ぶんの節約だけで、評価枠を soft 判定まで進める候補へ回せる。
+     */
+    fun setBlockSwapC3nFilter(on: Boolean) {
+        com.magi.app.v6.PolishGate.filterC3nIncrease = on
+        _ui.update { it.copy(blockSwapC3nFilter = on) }
+        logOp("I", "設定変更: 禁止連続の事前フィルタ → ${if (on) "ON" else "OFF"}")
+    }
+
     fun setBudget(sec: Int) { val v = sec.coerceIn(10, MAX_BUDGET_SEC); _ui.update { it.copy(budgetSec = v) }; logOp("I", "設定変更: 予算 → ${v}秒") }
     fun setSoftPolish(b: Boolean) { _ui.update { it.copy(softPolish = b) }; logOp("I", "設定変更: ソフト研磨 → ${if (b) "ON" else "OFF"}") }
     fun setV6Algorithm(a: V6Algorithm) { _ui.update { it.copy(v6Algorithm = a) }; logOp("I", "設定変更: 方式 → $a") }
@@ -1932,6 +1944,35 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * [ワンタップ修正] 設定の見直しカードの1ボタンで、該当する設定ミスをその場で直す。
      * 画面遷移・スクロール・行探し不要。applyStructure 経由なので Undo 可・自動再診断・自動保存される。
      */
+    /**
+     * [壁になっている禁止の並びを緩める] ForbiddenDiag が「崩せない」と判定した禁止連続(c3n)ルールを、
+     * その場で削除する。制約画面まで行って該当行を探す必要をなくすための導線。
+     *
+     * データを変えるのは**利用者の明示操作**（HF77 に抵触しない）。`applyStructure` 経由なので
+     * Undo 可・自動再診断・自動保存される。同じ並びが重複登録されている場合は全件まとめて消す
+     * （1件だけ残ると壁が解消しないため。cons3n の重複は既知＝設定ミス診断でも指摘される）。
+     *
+     * キーは `Problem.resolveC3` と同じ意味論（**最初の空白まで**を本体とする）で作る。
+     * `SettingFixAction.DELETE_DUP_SEQ` の空白除去とは意味が違うので流用しない。
+     */
+    fun relaxForbiddenRule(seqLabel: String) {
+        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は設定を変更できません（完了後にもう一度お試しください）") }; return }
+        val s = state ?: return
+        fun key(row: C3Row): String {
+            val end = row.pattern.indexOfFirst { it.isBlank() }
+            val body = if (end >= 0) row.pattern.subList(0, end) else row.pattern
+            return body.joinToString("→")
+        }
+        val remain = s.cons3n.filter { key(it) != seqLabel }
+        val removed = s.cons3n.size - remain.size
+        if (removed == 0) {
+            _ui.update { it.copy(message = "禁止の並び「$seqLabel」は見つかりませんでした") }
+            return
+        }
+        logOp("I", "禁止の並びを削除: $seqLabel（${removed}件）")
+        applyStructureWithMessage(s.copy(cons3n = remain), "禁止の並び「$seqLabel」を削除しました（${removed}件・元に戻せます）")
+    }
+
     fun applySettingFix(issue: SettingIssue) {
         val s = state ?: return
         val ns: MagiState? = when (issue.action) {

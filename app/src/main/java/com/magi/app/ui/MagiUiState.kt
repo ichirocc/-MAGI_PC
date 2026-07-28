@@ -46,6 +46,7 @@ data class UiState(
     val budgetSec: Int = 300,
     val nativeAccel: Boolean = true,           // [Stage4] C++ネイティブ加速（SAチャンク）のユーザートグル
     val nativeParity: Boolean = true,          // [照合トグル] Kotlinパリティ照合。OFF=純ネイティブ(検証/ベンチ用・誤結果の可能性)
+    val blockSwapC3nFilter: Boolean = false,    // [3.298.0] ブロック巡回交換で c3n が増える候補を候補生成段階で捨てるか。採用結果は不変・評価枠の節約のみ
     val softPolish: Boolean = true,   // [既定ON] 仕上げ最適化（品質研磨）。keep-best で悪化しない
     val v6Algorithm: V6Algorithm = V6Algorithm.AUTO,
     val staffNames: List<String> = emptyList(),

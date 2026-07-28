@@ -28,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
@@ -424,7 +425,7 @@ internal fun CoverageDiagnosisCard(ui: UiState) {
  * 「多段手が必要（再実行で解消し得る）」かを違反 run ごとに示す。読取専用・スコア不変。
  */
 @Composable
-internal fun ForbiddenRunDiagnosisCard(ui: UiState) {
+internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Unit = {}) {
     val diag = ui.forbiddenDiag ?: return
     if (!diag.hasRuns) return
     val cs = MaterialTheme.colorScheme
@@ -469,6 +470,37 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState) {
             if (diag.runs.size > 6) {
                 Text("ほか ${diag.runs.size - 6} 件（詳細はログ出力を参照）",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            }
+
+            // [壁の名指しと緩和] 「崩せない」判定の run を並び（ルール）ごとに集約し、そのルールを
+            //   その場で削除できるようにする。制約画面へ行って行を探す往復を省く導線。
+            //   崩す手が残っている並びは探索で解けうるので出さない（先にルールを消させない）。
+            val walls = diag.runs.filter { !it.escapable }
+                .groupBy { it.seqLabel }
+                .toList()
+                .sortedByDescending { it.second.size }
+            if (walls.isNotEmpty()) {
+                HorizontalDivider()
+                Text("崩せない原因の並び", style = MaterialTheme.typography.titleSmall)
+                Text("この並びを禁止しているかぎり、必須違反は残ります。ルールを外すとその場で再チェックします（元に戻せます）。",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                for ((seqLabel, rows) in walls) {
+                    val who = rows.map { it.staffName }.distinct()
+                    val whoTxt = who.take(3).joinToString("・") + if (who.size > 3) " ほか${who.size - 3}名" else ""
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(seqLabel, style = MaterialTheme.typography.titleSmall)
+                            Text("${rows.size}件（$whoTxt）", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { onRelaxRule(seqLabel) }, enabled = !ui.running) {
+                            Text("この並びの禁止をやめる")
+                        }
+                    }
+                }
             }
         }
     }

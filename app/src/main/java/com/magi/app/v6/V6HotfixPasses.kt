@@ -65,6 +65,23 @@ data class V6PostOptimizationResult(
     val logs: List<MirrorLog>,
 )
 
+/**
+ * [後処理研磨のユーザー設定ゲート] UI トグル → エンジン内部フラグの受け渡し。
+ * `NativeGate`（ネイティブ加速／Kotlin照合）と同じ形で、呼び出し鎖に引数を通さずに設定を届ける。
+ * セッション内のみ（state には保存しない＝勤務表データに影響しない実行時の調整）。
+ */
+object PolishGate {
+    /**
+     * ブロック巡回交換で、禁止連続(c3n)が正味増える候補を**候補生成の段階で**捨てるか。既定 false。
+     *
+     * c3n は HARD なので増える候補は最終的に `isBetter` が必ず却下する＝ON/OFF で**採用結果は変わらない**
+     * （3.296.0 の A/B 実測で最終盤面・採用数が完全一致することを確認済み）。ON にすると構造的に詰んだ
+     * 候補へフル checker を呼ばなくなり、評価枠を soft 判定まで進める候補へ回せる
+     * （実測: 正式評価 48→14〜38 件）。
+     */
+    @Volatile var filterC3nIncrease: Boolean = false
+}
+
 object V6HotfixPasses {
     /**
      * 長期ブロック交換の候補長。月次勤務表で「局所交換では越えにくい」谷を越えるための
@@ -315,10 +332,18 @@ object V6HotfixPasses {
             work = rC3.newSchedule.copy2D(); totalC3 += rC3.applied; roundApplied += rC3.applied
             if (round == 0) logs.addAll(rC3.logs)
 
-            onPhase("後処理 連続規則(c3系)3者回転研磨 [巡${round + 1}]")
-            val rC3r = applyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses = 2, shouldStop = clusterStop)
-            work = rC3r.newSchedule.copy2D(); totalC3r += rC3r.applied; roundApplied += rC3r.applied
-            if (round == 0) logs.addAll(rC3r.logs)
+            // [3.300.0 高コストの脱出手へ格下げ] 3者回転は O(候補^3) の全組合せをフル評価する重い手。
+            //   ablation（3データセットで完全に外して実行）の結果、**採用0かつ結果がバイト一致**＝
+            //   通常時の寄与はゼロと実測した（C1 用の同じ回転を 3.254.0 で撤去したのと同じ根拠）。
+            //   撤去はせず、**主手 applyC3SequencePolish が1手も採れなかった巡（＝停滞）**と
+            //   **最終巡**だけに限定する。別のデータ形状で主手が詰まる局面には従来どおり効く。
+            //   c3 違反が無ければ applyBlockRotationPolish 自身がアンカー0で即 return する＝追加コストなし。
+            if (rC3.applied == 0 || round == maxRounds - 1) {
+                onPhase("後処理 連続規則(c3系)3者回転研磨 [巡${round + 1}]")
+                val rC3r = applyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses = 2, shouldStop = clusterStop)
+                work = rC3r.newSchedule.copy2D(); totalC3r += rC3r.applied; roundApplied += rC3r.applied
+                if (round == 0) logs.addAll(rC3r.logs)
+            }
 
             // [C3mnPolish・玉突き連鎖の横展開] cons3n(HARD)で直接候補が全滅する局面向けに findCovUChain
             //   をc3mn(回避,SOFT)専用に反映（grilling 2026-07-19、金沢勇輝のDﾃ4連続実例）。
@@ -2925,87 +2950,9 @@ object V6HotfixPasses {
     }
 
     /**
-     * [BlockSwapPolish・15日ブロック丸ごと2人交換] ユーザー指示「15日間まるごと2人交換を実装する」
-     * （grillingで確定: 対象=同一担当グループのみ／位置=全オフセットのスライド窓／実行=後処理Polish
-     * パス／探索範囲=アンカーなし・同グループ内全ペア×全オフセットを無条件に試す）。
-     *
-     * 動機: 既存の交換系(CyclicSwap=同日1〜3人・鏡像長方形=2日)は局所的なため、「1日ずつ動かすと
-     * 途中経過が悪化して isBetter に拒否される」が「まとめて動かせば全体は改善する」ような大きな
-     * 交換を発見できない（金沢⇔アリフのような同一range設定のペアでは無意味だが、range/wish/apt等が
-     * 異なる同グループのペアでは、ブロックまるごとの入替がlow/high/pref/apt/weeklyを同時に動かし、
-     * 1日単位の局所探索が踏めない改善に到達し得る）。
-     *
-     * 安全性: 同一担当グループ(canDo完全一致)のペアに限定するため、交換後も groupViol/covU/covO/
-     * c41(s)/c42(s)/禁止連続の**内部**は構造的に不変（同じシフト列がそのまま相手に移るだけ）。
-     * ブロック境界(直前日・直後日との接続)でのみ新規の禁止連続が起こり得るが、それは isBetter の
-     * hard判定が担保する。ブロック内に希望固定(wish-lock)がある場合は事前にスキップ（他パスと同じ
-     * `movable`規約。無条件に希望を破壊する交換を試みない安全側フィルタ、コスト削減も兼ねる）。
-     * 採否はisBetter(hard→total→weighted)keep-best＝退化不能。
-     */
-    fun applyBlockSwapPolish(state: MagiState, schedule: Array<IntArray>, blockLen: Int = 15, maxPasses: Int = 3, shouldStop: () -> Boolean = { false }): CyclicSwapResult {
-        val p = Problem(state)
-        val work = normalizeSchedule(schedule, p)
-        val before = UnifiedViolationChecker.check(state, work)
-        var bestRep = before
-        var applied = 0
-        // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
-        //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
-        fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
-        fun name(i: Int) = state.staff.getOrNull(i)?.name ?: "#$i"
-
-        // 同一担当グループ(sgrp)ごとに職員をまとめ、グループ内の全ペアを列挙。
-        val byGroup = LinkedHashMap<Int, MutableList<Int>>()
-        for (i in 0 until p.S) byGroup.getOrPut(p.sgrp[i]) { ArrayList() }.add(i)
-        val pairs = ArrayList<Pair<Int, Int>>()
-        for (members in byGroup.values) {
-            for (a in members.indices) for (b in a + 1 until members.size) pairs.add(members[a] to members[b])
-        }
-        if (pairs.isEmpty() || blockLen <= 0 || blockLen > p.T) {
-            return CyclicSwapResult(work, before.total, before.total, 0,
-                listOf(MirrorLog(tag = "BlockSwapPolish", message = "対象ペア(同一グループ2名以上)なし=スキップ")))
-        }
-
-        val fixedNames = ArrayList<String>()
-        var pass = 0
-        while (pass < maxPasses) {
-            if (shouldStop()) break
-            var improved = false
-            for ((i, i2) in pairs) {
-                if (shouldStop()) break
-                for (start in 0..(p.T - blockLen)) {
-                    if (shouldStop()) break
-                    val end = start + blockLen - 1
-                    var locked = false
-                    var same = true
-                    for (j in start..end) {
-                        if (!movable(i, j) || !movable(i2, j)) { locked = true; break }
-                        if (work[i][j] != work[i2][j]) same = false
-                    }
-                    if (locked || same) continue
-                    for (j in start..end) { val t = work[i][j]; work[i][j] = work[i2][j]; work[i2][j] = t }
-                    val rep = UnifiedViolationChecker.check(state, work)
-                    if (isBetter(rep, bestRep)) {
-                        bestRep = rep; applied++; improved = true
-                        fixedNames.add("${name(i)}⇔${name(i2)} ${start + 1}〜${end + 1}日")
-                    } else {
-                        for (j in start..end) { val t = work[i][j]; work[i][j] = work[i2][j]; work[i2][j] = t }
-                    }
-                }
-            }
-            pass++
-            if (!improved) break
-        }
-        val logs = listOf(MirrorLog(tag = "BlockSwapPolish",
-            message = "${blockLen}日ブロック丸ごと交換研磨: total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
-                (if (applied == 0) " [頭打ち=改善手なし]" else "") +
-                (if (fixedNames.isNotEmpty()) " 対象: ${fixedNames.joinToString(", ")}" else "")))
-        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
-    }
-
-    /**
      * 指定した長さの勤務ブロックを、他職員と丸ごと交換／巡回交換する適応ポートフォリオ演算子。
      *
-     * 旧 [applyBlockSwapPolish] は「同一担当グループ × 15日 × 2者」に固定されていた。本演算子は
+     * 旧 applyBlockSwapPolish（3.300.0 で削除）は「同一担当グループ × 15日 × 2者」に固定されていた。本演算子は
      * 11/13/17/19/23/28日を独立した候補プールとして持ち、各長さから有望候補を必ず残す。
      * これにより、短い窓では途中退化して届かない個人回数・apt・週偏り・連続規則の同時改善を、
      * 期間ごとのまとまりとして探索できる。
@@ -3047,6 +2994,13 @@ object V6HotfixPasses {
         maxFocusStaff: Int = 16,
         maxCycle: Int = 5,
         maxCycleVisits: Int = 50_000,
+        /**
+         * 禁止連続(c3n)が正味増える候補を**候補生成の段階で**捨てるか。
+         * 既定は [PolishGate.filterC3nIncrease]（設定タブ→詳細設定のトグル・既定 false＝捨てない）。
+         * c3n は HARD なので増える候補は最終的に `isBetter` が必ず却下する＝true/false で**採用結果は
+         * 変わらない**。true にすると詰んだ候補へフル checker を呼ばなくなり評価枠を節約できる。
+         */
+        filterC3nIncrease: Boolean = PolishGate.filterC3nIncrease,
         shouldStop: () -> Boolean = { false },
     ): CyclicSwapResult {
         val p = Problem(state)
@@ -3130,6 +3084,75 @@ object V6HotfixPasses {
         }
 
         /**
+         * [ピン保存交換] 交換日 [swapDays] を「厳密ピン(lo==hi)のシフト回数が1つも動かない」部分集合へ絞る。
+         * 絞れた場合だけ true（[swapDays] を破壊的に更新）。
+         *
+         * 対象は**いま満たされている**厳密ピンだけ（`counts == lo == hi`）。すでに外れているピンは
+         * 動かして直せる余地があるため拘束しない（悪化は従来どおり `exactPinRegression` が弾く）。
+         *
+         * 各日 j について、参加者 t のピン付きシフト k の増減
+         * `d = [直前者が k] - [自分が k]`（∈ {-1,0,+1}）を並べた**符号ベクトル**を作る。
+         * 交換日集合の総和がゼロベクトルならピンは1つも動かない。ゼロベクトルの日は常に採り、
+         * 非ゼロの日は**符号が正反対の日と対にして**採る（打ち消し合う）。3日以上での相殺は拾わないが
+         * 安価で安全側（採れなかった日を落とすだけ＝退化しない）。
+         */
+        fun balancePinnedDays(cycle: IntArray, swapDays: ArrayList<Int>, counts: Array<IntArray>): Boolean {
+            val n = cycle.size
+            // いま満たされている厳密ピン (参加者位置, シフト) を集める。
+            var slots = 0
+            val slotStaff = IntArray(32)
+            val slotShift = IntArray(32)
+            for (t in 0 until n) {
+                val i = cycle[t]
+                for (k in 0 until p.K) {
+                    val lo = p.rangeLo[i][k]
+                    if (lo == Int.MIN_VALUE || lo != p.rangeHi[i][k] || counts[i][k] != lo) continue
+                    if (slots >= 31) return true   // 対象が多すぎる＝この安価な相殺では扱えない（従来どおり）
+                    slotStaff[slots] = t; slotShift[slots] = k; slots++
+                }
+            }
+            if (slots == 0) return true   // ピン無し＝制約なし（コストゼロで従来と同一）
+
+            fun signatureOf(j: Int): Long {
+                var sig = 0L
+                for (s in 0 until slots) {
+                    val t = slotStaff[s]
+                    val k = slotShift[s]
+                    val mine = if (work[cycle[t]][j] == k) 1 else 0
+                    val incoming = if (work[cycle[(t + 1) % n]][j] == k) 1 else 0
+                    val d = incoming - mine
+                    if (d > 0) sig = sig or (1L shl (2 * s))
+                    else if (d < 0) sig = sig or (2L shl (2 * s))
+                }
+                return sig
+            }
+            // 符号の反転（+1↔-1 のビットを入れ替える）。
+            fun negate(sig: Long): Long = ((sig and 0x5555_5555_5555_5555L) shl 1) or ((sig ushr 1) and 0x5555_5555_5555_5555L)
+
+            val bySig = LinkedHashMap<Long, ArrayList<Int>>()
+            for (j in swapDays) bySig.getOrPut(signatureOf(j)) { ArrayList() }.add(j)
+
+            val kept = ArrayList<Int>(swapDays.size)
+            bySig[0L]?.let { kept.addAll(it) }
+            val done = HashSet<Long>()
+            done.add(0L)
+            for ((sig, days) in bySig) {
+                if (sig in done) continue
+                done.add(sig)
+                val opposite = negate(sig)
+                done.add(opposite)
+                val other = bySig[opposite] ?: continue
+                val pairs = min(days.size, other.size)
+                for (t in 0 until pairs) { kept.add(days[t]); kept.add(other[t]) }
+            }
+            if (kept.size < 2) return false
+            kept.sort()
+            swapDays.clear()
+            swapDays.addAll(kept)
+            return true
+        }
+
+        /**
          * 巡回 [cycle] をブロック (start, length) に適用する正式な候補を作る。
          * 交換日は「全参加者が movable」「その日の受け渡しが全辺 canDo」「実際に値が動く」を満たす日だけ。
          */
@@ -3163,6 +3186,37 @@ object V6HotfixPasses {
                 if (!ok || !changes) continue
                 swapDays.add(j)
             }
+            if (swapDays.size < 2) return null
+            // [3.294.0 ピン保存交換] 交換日の集合を「厳密ピン(lo==hi)の回数が変わらない」ように選び直す。
+            //   3.293.0 の不採用内訳で、採用0の55〜80%が exactPinRegression のピン破りと判明した
+            //   （実データは10名中9名の「休」が厳密ピン＝長いブロックを丸ごと交換すると必ず回数が動く）。
+            if (!balancePinnedDays(cycle, swapDays, counts)) return null
+
+            // [3.295.0 境界c3nの事前フィルタ / 3.296.0 で既定OFF] 3.294.0 でピン破りを消した結果、
+            //   残る不採用は**全て**必須増＝c3n（禁止連続）になった（user 48/48・golden 39・real 34）。
+            //   この巡回交換では covU/covO は同日置換で不変・groupViol は canDo・pref は movable で
+            //   不変なので、**変化しうる HARD は c3n だけ**。c3n は職員行ローカルなので、参加者の行に
+            //   交換を当てた fire 数を数えれば**近似でなく厳密**に判定できる。
+            //
+            //   **既定は OFF**（ユーザー指示 3.296.0「巡回交換の c3n フィルタを外す」）。フィルタは
+            //   `firesAfter > firesBefore` の候補だけを落とす＝**減る・同数の候補は元から通している**ため、
+            //   外しても採用は増えない（c3n は HARD なので増える候補は `isBetter` が第1キーで必ず却下）。
+            //   ON にすると構造的に詰んだ候補へ checker を呼ばなくなり、評価枠を soft 判定まで進める
+            //   候補へ回せる（実測: 正式評価 48→14〜38 件・不採用が全て soft のトレードオフになる）。
+            if (filterC3nIncrease && p.cons3n.isNotEmpty()) {
+                var firesBefore = 0
+                var firesAfter = 0
+                for (t in 0 until n) {
+                    val self = cycle[t]
+                    val giver = cycle[(t + 1) % n]
+                    val row = work[self].copyOf()
+                    firesBefore += C1DeltaPrefilter.staffC3nFires(p, row)
+                    for (j in swapDays) row[j] = work[giver][j]
+                    firesAfter += C1DeltaPrefilter.staffC3nFires(p, row)
+                }
+                if (firesAfter > firesBefore) return null
+            }
+
             val differences = swapDays.size
             // 1日だけの交換は既存の同日交換/同日3者回転(CyclicSwap)と同一＝「期間をまとめて入れ替える」手にならないので除外。
             if (differences < 2) return null
@@ -3193,6 +3247,8 @@ object V6HotfixPasses {
         var generated = 0            // DFS が列挙した巡回の数（見積りキーだけで選別する安価な段）
         var builtCandidates = 0      // 実候補まで組み立てた数（プール上位のみ）
         val builtByCycleSize = sortedMapOf<Int, Int>()   // 巡回人数別の実候補数（多者交換が実際に出ているかの診断）
+        val rejectReasons = LinkedHashMap<String, Int>() // 不採用の理由別件数（採用0のとき何に負けたか）
+        val rejectCulprits = LinkedHashMap<String, Int>()// 悪化の主因になった族（重み付きで最も増えた族）
         var evaluated = 0
         var cycleHits = 0            // 3者以上の巡回として採用した手数（2者交換と区別してログに出す）
         val selectedLabels = ArrayList<String>()
@@ -3358,6 +3414,31 @@ object V6HotfixPasses {
                 if (!pinRegression && isBetter(report, bestRep) && (chosenRep == null || isBetter(report, chosenRep!!))) {
                     chosen = candidate
                     chosenRep = report
+                } else {
+                    // [不採用理由の分類] 採用0のとき「何に負けたか」がログから読めるようにする
+                    //   （RangePolish 3.222.0・C1Polish 3.236.0 の頭打ち理由と同じ趣旨）。
+                    //   分類は isBetter の判定順（HARD → weightedScore → total）と厳密に一致させる。
+                    val why = when {
+                        pinRegression -> "ピン破り"
+                        report.hard > bestRep.hard -> "必須増"
+                        report.hard < bestRep.hard -> "採用手に劣後"   // bestRep には勝つが同パスの別候補に負けた
+                        report.weightedScore > bestRep.weightedScore -> "重み悪化"
+                        report.weightedScore < bestRep.weightedScore -> "採用手に劣後"
+                        report.total < bestRep.total -> "採用手に劣後"
+                        report.total > bestRep.total -> "件数悪化"
+                        else -> "同値"
+                    }
+                    rejectReasons[why] = (rejectReasons[why] ?: 0) + 1
+                    if (why == "重み悪化" || why == "必須増") {
+                        // 重み付きで最も増えた族＝この手が壊した本体。
+                        var worstFam: String? = null
+                        var worstDelta = 0.0
+                        for (fam in MirrorKeys.all) {
+                            val d = ((report.breakdown[fam] ?: 0) - (bestRep.breakdown[fam] ?: 0)) * MirrorKeys.weightOf(fam)
+                            if (d > worstDelta) { worstDelta = d; worstFam = fam }
+                        }
+                        worstFam?.let { rejectCulprits[it] = (rejectCulprits[it] ?: 0) + 1 }
+                    }
                 }
             }
             val accepted = chosen ?: break
@@ -3378,6 +3459,10 @@ object V6HotfixPasses {
                 (if (builtByCycleSize.isEmpty()) "" else " 内訳 " + builtByCycleSize.entries.joinToString(" ") { "${it.key}者:${it.value}" }) +
                 ")/正式評価${evaluated}件" +
                 (if (applied == 0) " [頭打ち=改善手なし]" else "") +
+                (if (rejectReasons.isEmpty()) "" else " 不採用内訳: " +
+                    rejectReasons.entries.sortedByDescending { it.value }.joinToString(" ") { "${it.key}${it.value}" }) +
+                (if (rejectCulprits.isEmpty()) "" else " (悪化の主因 " +
+                    rejectCulprits.entries.sortedByDescending { it.value }.take(4).joinToString(" ") { "${it.key}:${it.value}" } + ")") +
                 (if (selectedLabels.isNotEmpty()) " 対象: ${selectedLabels.joinToString(", ")}" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }

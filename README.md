@@ -19,9 +19,10 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/screen_spec.md`](./docs/screen_spec.md) | 画面仕様（挙動・実寸・違反/希望の表示） |
 | [`docs/magi_design_system.md`](./docs/magi_design_system.md) | デザイン基盤（色/余白/タイポ/部品） |
 | [`docs/v6_engine_native_port.md`](./docs/v6_engine_native_port.md) | エンジン（v6）の移植 |
+| [`docs/algorithm_portfolio.md`](./docs/algorithm_portfolio.md) | 探索・研磨の**入口と責務の台帳**（どの手がどこで走るか・廃止済み・未実施の提案） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-07-27（3.292.0 ブロック交換を可変長の巡回交換＝3者・多者（最大5者）へ一般化。改善グラフ（cyclic exchange / VLSN）＋2段階生成で、正式評価の回数を据え置いたまま2〜5者の候補を探索。3.214.0〜3.291.0 の詳細は `CLAUDE.md` の各節に記録）／ **コード基準コミット**：main HEAD（この目次が古いと他が正しくても信頼が崩れるため、改修時は対象文書と本目次を必ず更新）。
+**最終更新**：2026-07-28（3.300.0 台帳の未実施2件を実施＝旧 applyBlockSwapPolish の定義削除と、C3 3者ブロック回転の「停滞時・最終巡のみ」への格下げ。後者は ablation で寄与ゼロを実測してから格下げ。3.214.0〜3.299.0 の詳細は `CLAUDE.md` の各節に記録）／ **コード基準コミット**：main HEAD（この目次が古いと他が正しくても信頼が崩れるため、改修時は対象文書と本目次を必ず更新）。
 
 ## Status
 

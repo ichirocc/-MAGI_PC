@@ -302,6 +302,15 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.nativeParity, onCheckedChange = { vm.setNativeParity(it) }, enabled = !ui.running && ui.nativeAccel)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("禁止連続の事前フィルタ")
+                Text("期間まるごとの入れ替えを試すとき、禁止の並びを新しく作る案を最初から候補にしません。" +
+                    "できあがる勤務表は同じで（そういう案は最後に必ず却下されるため）、無駄な検査を省くぶんだけ速くなります。",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = ui.blockSwapC3nFilter, onCheckedChange = { vm.setBlockSwapC3nFilter(it) }, enabled = !ui.running)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,
