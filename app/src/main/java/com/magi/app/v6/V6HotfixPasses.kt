@@ -3003,21 +3003,39 @@ object V6HotfixPasses {
     }
 
     /**
-     * 指定した長さの勤務ブロックを、他職員と丸ごと交換する適応ポートフォリオ演算子。
+     * 指定した長さの勤務ブロックを、他職員と丸ごと交換／巡回交換する適応ポートフォリオ演算子。
      *
-     * 旧 [applyBlockSwapPolish] は「同一担当グループ × 15日」に固定されていた。本演算子は
+     * 旧 [applyBlockSwapPolish] は「同一担当グループ × 15日 × 2者」に固定されていた。本演算子は
      * 11/13/17/19/23/28日を独立した候補プールとして持ち、各長さから有望候補を必ず残す。
      * これにより、短い窓では途中退化して届かない個人回数・apt・週偏り・連続規則の同時改善を、
      * 期間ごとのまとまりとして探索できる。
      *
+     * **可変長の巡回交換（2者交換〜N者巡回, [maxCycle]）**: 2者交換だけでは「A の X を B へ渡したいが、
+     * B の持ち札は A に不要」という局面で成立しない。3者以上の巡回（A←B←C←A）ならこの非対称な
+     * 譲り合いが閉じる。既存 [applyBlockRotationPolish] も3者回転を持つが**窓が2〜3日固定・
+     * 全日movable必須**のため、長期ブロックの巡回は本演算子だけが探索する。
+     *
+     * 候補生成は全列挙でなく **改善グラフ（cyclic exchange / VLSN）**:
+     *  1. ブロック (start, length) ごとに、有向辺 u→v の重み＝「u が v のブロックを受け取ったときの
+     *     u 個人の回数ペナルティ改善量」を [personalBalancePenalty] で見積もる。この重みは
+     *     **各参加者が「自分の札を出して直前者の札を受け取る」ぶんだけで決まる**ため辺ごとに分解でき、
+     *     巡回全体の見積り改善量は辺重みの単純和になる。
+     *  2. 最小番号アンカー＋深さ [maxCycle] の DFS で、見積り改善量が正になる巡回を集める。
+     *  3. 集めた巡回について**実際の**交換日集合（全参加者が movable かつ各辺の canDo を満たす日）を
+     *     取り直し、正式な候補を作る。辺ごとの見積りは3者以上では交換日をやや広く見積もる近似だが、
+     *     **順位付け専用**であり採否は必ず正式 checker が決めるため安全側。2者の場合は近似でなく厳密。
+     *
      * 安全性:
-     * - 同日・同人数のシフトを交換するため、全体の被覆量は保存する。
-     * - 異なる担当グループ間でも、ブロック内の全セルを相手が担当可能な場合だけ候補化する。
+     * - 同日の値を参加者間で巡回させるだけなので、日ごとのシフト多重集合＝全体の被覆量は保存する。
+     * - 異なる担当グループ間でも、その日その辺の受け手が担当可能な場合だけ候補化する。
      * - 実現可能な希望で固定されたセル・担当不可の日は**据え置き**（その日は交換しない）、残りの日だけを
      *   入れ替える。ブロック全体を棄却しないため、希望が多いデータでも長い期間の候補が成立する。
      * - 厳密回数ピンを破る候補は exactPinRegression で除外する。
      * - 最終採否は [UnifiedViolationChecker] と [betterReport] の正式順
      *   （HARD → weightedScore → total）だけで決めるため、探索順にかかわらず退化しない。
+     * - 正式評価（フル checker）の回数は [maxEvaluations] で据え置き。巡回を足しても**checker コストは
+     *   増えない**（増えるのは安価な候補生成だけ）。候補プールは (ブロック長 × 巡回人数) ごとに分け
+     *   ラウンドロビンで評価するため、長い28日案が11日案に、5者案が2者案に押し出されることもない。
      */
     fun applyAdaptiveBlockSwapPolish(
         state: MagiState,
@@ -3027,6 +3045,8 @@ object V6HotfixPasses {
         candidatesPerLength: Int = 8,
         maxEvaluations: Int = 48,
         maxFocusStaff: Int = 16,
+        maxCycle: Int = 5,
+        maxCycleVisits: Int = 50_000,
         shouldStop: () -> Boolean = { false },
     ): CyclicSwapResult {
         val p = Problem(state)
@@ -3037,31 +3057,43 @@ object V6HotfixPasses {
             .distinct()
             .sorted()
             .toList()
+        val cycleCap = maxCycle.coerceAtLeast(2)
         if (p.S < 2 || lengths.isEmpty() || maxPasses <= 0 || candidatesPerLength <= 0 || maxEvaluations <= 0 || maxFocusStaff <= 0) {
             return CyclicSwapResult(work, before.total, before.total, 0,
                 listOf(MirrorLog(tag = "AdaptiveBlockSwap", message = "対象長または職員ペアなし=スキップ")))
         }
 
+        /**
+         * 巡回交換の1候補。[cycle] は巡回順で、`cycle[t]` は `cycle[(t+1) % n]` のシフトを受け取る
+         * （n=2 なら通常の2者交換と同一）。[days] は据え置き分を除いた実際の交換日。
+         */
         data class Candidate(
-            val staffA: Int,
-            val staffB: Int,
+            val cycle: IntArray,
             val start: Int,
             val length: Int,
             val priority: Long,
             val differences: Int,
-            /** 実際に入れ替える日（希望固定・担当不可の日は据え置くため、ブロック内の部分集合になる）。 */
             val days: IntArray,
         )
 
         fun name(i: Int) = state.staff.getOrNull(i)?.name ?: "#$i"
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
-        fun swap(candidate: Candidate) {
-            // ブロック全体でなく candidate.days（据え置き分を除いた実交換日）だけを入れ替える。
-            //   各日は2人の値を交換するだけなので、日ごとのシフト多重集合＝被覆量は保存される。
+
+        /**
+         * 巡回を1つ回す。[forward] が真なら `cycle[t] <- cycle[t+1]`、偽なら逆回し。
+         * 逆回しは順回しの厳密な逆変換なので、評価のための「適用→検査→巻き戻し」に使える
+         * （2者交換は順逆が同一＝従来の swap と一致）。
+         */
+        fun rotate(candidate: Candidate, forward: Boolean) {
+            val cycle = candidate.cycle
+            val n = cycle.size
+            val vals = IntArray(n)
             for (j in candidate.days) {
-                val tmp = work[candidate.staffA][j]
-                work[candidate.staffA][j] = work[candidate.staffB][j]
-                work[candidate.staffB][j] = tmp
+                for (t in 0 until n) vals[t] = work[cycle[t]][j]
+                for (t in 0 until n) {
+                    val src = if (forward) (t + 1) % n else (t + n - 1) % n
+                    work[cycle[t]][j] = vals[src]
+                }
             }
         }
 
@@ -3097,116 +3129,216 @@ object V6HotfixPasses {
             return out
         }
 
+        /**
+         * 巡回 [cycle] をブロック (start, length) に適用する正式な候補を作る。
+         * 交換日は「全参加者が movable」「その日の受け渡しが全辺 canDo」「実際に値が動く」を満たす日だけ。
+         */
         fun candidateFor(
-            staffA: Int,
-            staffB: Int,
+            cycle: IntArray,
             start: Int,
             length: Int,
             counts: Array<IntArray>,
             pressure: LongArray,
         ): Candidate? {
-            val deltaA = IntArray(p.K)
+            val n = cycle.size
+            val vals = IntArray(n)
             val swapDays = ArrayList<Int>(length)
             for (j in start until start + length) {
-                // [3.291.0 候補生成の緩和] 旧: 希望固定が1つでもあればブロックごと棄却(return null)。
-                //   実データ（希望81件/10名31日）では11日以上の無ロック連続がほぼ存在せず、全探索空間で
-                //   候補が4件しか生成されない＝実質不活性だった（実測）。据え置き（その日は交換しない）へ
-                //   変更すると候補は100箇所超へ増える。交換するのは残りの日だけなので、日ごとの
-                //   シフト多重集合＝被覆量は依然として保存される（安全性は不変）。
-                if (!movable(staffA, j) || !movable(staffB, j)) continue
-                val a = work[staffA][j]
-                val b = work[staffB][j]
-                if (a == b) continue
-                // 異グループの相手でも、相互に担当可能な日だけ交換する（できない日は据え置き）。
-                if (a !in 0 until p.K || b !in 0 until p.K || !p.canDo(staffA, b) || !p.canDo(staffB, a)) continue
-                deltaA[a]--
-                deltaA[b]++
+                var ok = true
+                for (t in 0 until n) {
+                    val i = cycle[t]
+                    // [3.291.0 候補生成の緩和] 希望固定・担当不可の日はブロックごと棄却せず据え置く。
+                    if (!movable(i, j)) { ok = false; break }
+                    val v = work[i][j]
+                    if (v !in 0 until p.K) { ok = false; break }
+                    vals[t] = v
+                }
+                if (!ok) continue
+                var changes = false
+                for (t in 0 until n) {
+                    val incoming = vals[(t + 1) % n]
+                    if (incoming != vals[t]) changes = true
+                    if (!p.canDo(cycle[t], incoming)) { ok = false; break }
+                }
+                if (!ok || !changes) continue
                 swapDays.add(j)
             }
             val differences = swapDays.size
-            // 1日だけの交換は既存の同日交換パス(CyclicSwap)と同一＝「期間をまとめて入れ替える」手にならないので除外。
+            // 1日だけの交換は既存の同日交換/同日3者回転(CyclicSwap)と同一＝「期間をまとめて入れ替える」手にならないので除外。
             if (differences < 2) return null
 
             var beforeBalance = 0L
             var afterBalance = 0L
-            for (k in 0 until p.K) {
-                val aNow = counts[staffA][k]
-                val bNow = counts[staffB][k]
-                beforeBalance += personalBalancePenalty(staffA, k, aNow)
-                beforeBalance += personalBalancePenalty(staffB, k, bNow)
-                afterBalance += personalBalancePenalty(staffA, k, aNow + deltaA[k])
-                afterBalance += personalBalancePenalty(staffB, k, bNow - deltaA[k])
+            var pressureSum = 0L
+            val delta = IntArray(p.K)
+            for (t in 0 until n) {
+                val self = cycle[t]
+                val giver = cycle[(t + 1) % n]
+                java.util.Arrays.fill(delta, 0)
+                for (j in swapDays) { delta[work[self][j]]--; delta[work[giver][j]]++ }
+                for (k in 0 until p.K) {
+                    if (delta[k] == 0) continue
+                    beforeBalance += personalBalancePenalty(self, k, counts[self][k])
+                    afterBalance += personalBalancePenalty(self, k, counts[self][k] + delta[k])
+                }
+                pressureSum += pressure[self]
             }
             // 大きい推定改善を優先しつつ、違反に関与する職員と実際に変わるセル数をタイブレークに使う。
-            val priority = (beforeBalance - afterBalance) * 1_000_000L +
-                (pressure[staffA] + pressure[staffB]) * 16L + differences.toLong()
-            return Candidate(staffA, staffB, start, length, priority, differences, swapDays.toIntArray())
+            val priority = (beforeBalance - afterBalance) * 1_000_000L + pressureSum * 16L + differences.toLong()
+            return Candidate(cycle.copyOf(), start, length, priority, differences, swapDays.toIntArray())
         }
 
         var bestRep = before
         var applied = 0
-        var generated = 0
+        var generated = 0            // DFS が列挙した巡回の数（見積りキーだけで選別する安価な段）
+        var builtCandidates = 0      // 実候補まで組み立てた数（プール上位のみ）
+        val builtByCycleSize = sortedMapOf<Int, Int>()   // 巡回人数別の実候補数（多者交換が実際に出ているかの診断）
         var evaluated = 0
+        var cycleHits = 0            // 3者以上の巡回として採用した手数（2者交換と区別してログに出す）
         val selectedLabels = ArrayList<String>()
         var pass = 0
         while (pass < maxPasses && !shouldStop()) {
             val counts = countMatrix(p, work)
             val pressure = staffPressure(bestRep)
+            // 参加者の母集団は違反関与度の高い順に絞る（DFS の分岐を p.S でなく maxFocusStaff で抑える）。
             val focus = (0 until p.S)
                 .sortedWith(compareByDescending<Int> { pressure[it] }.thenBy { it })
                 .take(min(maxFocusStaff, p.S))
-            val pairSeen = HashSet<Long>()
-            val pairs = ArrayList<Pair<Int, Int>>()
-            for (focusStaff in focus) for (other in 0 until p.S) {
-                if (focusStaff == other) continue
-                val a = min(focusStaff, other)
-                val b = max(focusStaff, other)
-                val key = (a.toLong() shl 32) xor b.toLong()
-                if (pairSeen.add(key)) pairs.add(a to b)
-            }
-            if (pairs.isEmpty()) break
+                .sorted()
+            if (focus.size < 2) break
+            val nf = focus.size
 
-            // 各長さが候補を失わないよう、長さごとに上位だけを保持する。
-            val byLength = LinkedHashMap<Int, List<Candidate>>()
-            for (length in lengths) {
-                val worstFirst = Comparator<Candidate> { x, y ->
-                    when {
-                        x.priority != y.priority -> x.priority.compareTo(y.priority)
-                        x.differences != y.differences -> x.differences.compareTo(y.differences)
-                        x.start != y.start -> y.start.compareTo(x.start)
-                        x.staffA != y.staffA -> y.staffA.compareTo(x.staffA)
-                        else -> y.staffB.compareTo(x.staffB)
-                    }
+            // 候補は (ブロック長 × 巡回人数) ごとの固定サイズプールへ。どちらの軸でも押し出されない。
+            // **2段階生成**: ①DFS は巡回を「見積りキーだけ」で選別する（実候補を作らない＝O(1)/巡回で
+            //   数十万件を捌ける） ②各プールに残った上位だけ [candidateFor] で実候補にする。
+            //   見積りキー = 個人回数の改善見積り×1e6 ＋ 参加者の違反関与度×16（実 priority と同順序）。
+            //   **見積り0の巡回も捨てない**: ブロック交換の本命は c1/連続規則/曜日偏りの同時改善で、
+            //   個人回数が動かない（見積り0の）手が実際に採用されることがあるため（3.291.0 実測）。
+            //   段①のプール幅は段②より広く取る（[stageOneWidth]）。見積りキーの上位が実候補化で
+            //   落ちる（交換成立日が1日以下）ことは巡回人数が増えるほど起きやすく、幅が狭いと
+            //   その下にある成立候補まで一緒に失うため。実候補化は高々 バケット数×幅 回で安価。
+            val bucketW = (cycleCap - 1).coerceAtLeast(1)
+            val bucketCount = lengths.size * bucketW
+            val stageOneWidth = candidatesPerLength * 8
+            val poolKeys = LongArray(bucketCount * stageOneWidth)
+            val poolNodes = LongArray(bucketCount * stageOneWidth)
+            val poolStart = IntArray(bucketCount * stageOneWidth)
+            val poolSize = IntArray(bucketCount)
+            val poolMinKey = LongArray(bucketCount)
+            fun record(bucket: Int, key: Long, nodes: Long, start: Int) {
+                generated++
+                val base = bucket * stageOneWidth
+                val size = poolSize[bucket]
+                if (size < stageOneWidth) {
+                    poolKeys[base + size] = key; poolNodes[base + size] = nodes; poolStart[base + size] = start
+                    poolSize[bucket] = size + 1
+                    if (size == 0 || key < poolMinKey[bucket]) poolMinKey[bucket] = key
+                    return
                 }
-                val pool = PriorityQueue<Candidate>(worstFirst)
-                for ((staffA, staffB) in pairs) {
+                // 満杯後の却下は O(1)（最小キーを保持）。採用時のみ O(幅) で最小を取り直す。
+                if (key <= poolMinKey[bucket]) return
+                var worst = 0
+                for (t in 1 until stageOneWidth) if (poolKeys[base + t] < poolKeys[base + worst]) worst = t
+                poolKeys[base + worst] = key; poolNodes[base + worst] = nodes; poolStart[base + worst] = start
+                var mn = poolKeys[base]
+                for (t in 1 until stageOneWidth) if (poolKeys[base + t] < mn) mn = poolKeys[base + t]
+                poolMinKey[bucket] = mn
+            }
+
+            val edge = Array(nf) { LongArray(nf) }        // 改善グラフ: focus 添字 u→v の見積り改善量
+            val edgeOk = Array(nf) { BooleanArray(nf) }   // その辺で実際に動く日が1日でもあるか
+            val delta = IntArray(p.K)
+            val used = BooleanArray(nf)
+            // 巡回は focus 添字を8bitずつ詰めた Long で持ち回す（最大5者=40bit）。
+            val packable = nf <= 255
+
+            for ((li, length) in lengths.withIndex()) {
+                if (shouldStop() || !packable) break
+                for (start in 0..(p.T - length)) {
                     if (shouldStop()) break
-                    for (start in 0..(p.T - length)) {
-                        val candidate = candidateFor(staffA, staffB, start, length, counts, pressure) ?: continue
-                        generated++
-                        if (pool.size < candidatesPerLength) {
-                            pool.add(candidate)
-                        } else if (worstFirst.compare(candidate, pool.peek()) > 0) {
-                            pool.poll()
-                            pool.add(candidate)
+                    // 1) 辺重み（u が v のブロックを受け取ったときの u 個人の改善見積り）を作る。
+                    for (ui in 0 until nf) {
+                        val u = focus[ui]
+                        for (vi in 0 until nf) {
+                            edge[ui][vi] = 0L; edgeOk[ui][vi] = false
+                            if (ui == vi) continue
+                            val v = focus[vi]
+                            java.util.Arrays.fill(delta, 0)
+                            var any = false
+                            for (j in start until start + length) {
+                                if (!movable(u, j) || !movable(v, j)) continue
+                                val a = work[u][j]
+                                val b = work[v][j]
+                                if (a == b || a !in 0 until p.K || b !in 0 until p.K) continue
+                                if (!p.canDo(u, b)) continue
+                                delta[a]--; delta[b]++; any = true
+                            }
+                            if (!any) continue
+                            var gain = 0L
+                            for (k in 0 until p.K) {
+                                if (delta[k] == 0) continue
+                                gain += personalBalancePenalty(u, k, counts[u][k]) -
+                                    personalBalancePenalty(u, k, counts[u][k] + delta[k])
+                            }
+                            edge[ui][vi] = gain; edgeOk[ui][vi] = true
                         }
                     }
+
+                    // 2) 最小番号アンカーの DFS で巡回を列挙し、見積りキーで各プールへ入れる。
+                    var visits = 0
+                    fun dfs(anchor: Int, depth: Int, last: Int, sum: Long, pres: Long, nodes: Long) {
+                        if (depth >= 2 && edgeOk[last][anchor]) {
+                            val key = (sum + edge[last][anchor]) * 1_000_000L + pres * 16L
+                            record(li * bucketW + (depth - 2), key, nodes, start)
+                        }
+                        if (depth >= cycleCap) return
+                        for (ni in anchor + 1 until nf) {
+                            if (used[ni] || !edgeOk[last][ni]) continue
+                            if (++visits > maxCycleVisits) return
+                            used[ni] = true
+                            dfs(anchor, depth + 1, ni, sum + edge[last][ni], pres + pressure[focus[ni]],
+                                nodes or (ni.toLong() shl (8 * depth)))
+                            used[ni] = false
+                            if (visits > maxCycleVisits) return
+                        }
+                    }
+                    for (ai in 0 until nf) {
+                        if (visits > maxCycleVisits) break
+                        used[ai] = true
+                        dfs(ai, 1, ai, 0L, pressure[focus[ai]], ai.toLong())
+                        used[ai] = false
+                    }
                 }
-                byLength[length] = pool.toList().sortedWith(
+            }
+
+            // 3) 各プールの上位だけを実候補にし、(ブロック長 × 巡回人数) からラウンドロビンで取り出す。
+            val ordered = ArrayList<List<Candidate>>(bucketCount)
+            for (b in 0 until bucketCount) {
+                val size = poolSize[b]
+                if (size == 0) continue
+                val n = (b % bucketW) + 2
+                val length = lengths[b / bucketW]
+                val built = ArrayList<Candidate>(size)
+                for (t in 0 until size) {
+                    val packed = poolNodes[b * stageOneWidth + t]
+                    val cyc = IntArray(n) { focus[((packed ushr (8 * it)) and 0xFFL).toInt()] }
+                    candidateFor(cyc, poolStart[b * stageOneWidth + t], length, counts, pressure)?.let { built.add(it) }
+                }
+                if (built.isEmpty()) continue
+                builtCandidates += built.size
+                builtByCycleSize[n] = (builtByCycleSize[n] ?: 0) + built.size
+                ordered.add(built.sortedWith(
                     compareByDescending<Candidate> { it.priority }
                         .thenByDescending { it.differences }
                         .thenBy { it.start }
-                        .thenBy { it.staffA }
-                        .thenBy { it.staffB },
-                )
+                        .thenBy { it.cycle[0] },
+                ).take(candidatesPerLength))
             }
-
-            // 1位だけを全長から先に評価するラウンドロビン。候補数上限があっても、長い28日案が
-            // 11日案に押し出されず必ず試される。
+            if (ordered.isEmpty()) break
             val ranked = ArrayList<Candidate>()
             var rank = 0
-            while (lengths.any { rank < (byLength[it]?.size ?: 0) }) {
-                for (length in lengths) byLength[length]?.getOrNull(rank)?.let { ranked.add(it) }
+            while (ordered.any { rank < it.size }) {
+                for (pool in ordered) pool.getOrNull(rank)?.let { ranked.add(it) }
                 rank++
             }
             if (ranked.isEmpty()) break
@@ -3217,10 +3349,10 @@ object V6HotfixPasses {
             var checkedThisPass = 0
             for (candidate in ranked) {
                 if (shouldStop() || checkedThisPass >= maxEvaluations) break
-                swap(candidate)
+                rotate(candidate, forward = true)
                 val report = UnifiedViolationChecker.check(state, work)
                 val pinRegression = exactPinRegression(p, base, work)
-                swap(candidate)
+                rotate(candidate, forward = false)
                 checkedThisPass++
                 evaluated++
                 if (!pinRegression && isBetter(report, bestRep) && (chosenRep == null || isBetter(report, chosenRep!!))) {
@@ -3229,18 +3361,22 @@ object V6HotfixPasses {
                 }
             }
             val accepted = chosen ?: break
-            swap(accepted)
+            rotate(accepted, forward = true)
             bestRep = chosenRep ?: break
             applied++
-            selectedLabels.add("${accepted.length}日:${name(accepted.staffA)}⇔${name(accepted.staffB)} ${accepted.start + 1}〜${accepted.start + accepted.length}日(${accepted.differences}セル)")
+            if (accepted.cycle.size >= 3) cycleHits++
+            val who = accepted.cycle.joinToString("←") { name(it) } + "←" + name(accepted.cycle[0])
+            selectedLabels.add("${accepted.length}日${accepted.cycle.size}者:$who ${accepted.start + 1}〜${accepted.start + accepted.length}日(${accepted.differences}セル)")
             pass++
         }
 
         val lensLabel = lengths.joinToString("/")
         val logs = listOf(MirrorLog(tag = "AdaptiveBlockSwap",
-            message = "可変長ブロック丸ごと交換[${lensLabel}日]: total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard}" +
-                " score ${before.weightedScore.toLong()}->${bestRep.weightedScore.toLong()} 採用${applied}回" +
-                " 候補${generated}件/正式評価${evaluated}件" +
+            message = "可変長ブロック巡回交換[${lensLabel}日・最大${cycleCap}者]: total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard}" +
+                " score ${before.weightedScore.toLong()}->${bestRep.weightedScore.toLong()} 採用${applied}回(うち3者以上${cycleHits}回)" +
+                " 巡回${generated}件(実候補${builtCandidates}件" +
+                (if (builtByCycleSize.isEmpty()) "" else " 内訳 " + builtByCycleSize.entries.joinToString(" ") { "${it.key}者:${it.value}" }) +
+                ")/正式評価${evaluated}件" +
                 (if (applied == 0) " [頭打ち=改善手なし]" else "") +
                 (if (selectedLabels.isNotEmpty()) " 対象: ${selectedLabels.joinToString(", ")}" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)

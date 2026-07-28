@@ -110,6 +110,138 @@ class AdaptiveBlockSwapPolishTest {
         }
     }
 
+    /**
+     * [3.292.0 3者巡回] 3職員がそれぞれ「担当できる2シフト」しか持たず、**どの2者交換も担当不可で成立しない**が
+     * 3者巡回 A←C←B←A なら全員が目標シフトへ収まる盤面。
+     *
+     * A: X/Y 可（今 Y・X を11回欲しい） / B: Y/Z 可（今 Z・Y を11回欲しい） / C: X/Z 可（今 X・Z を11回欲しい）。
+     * 2者交換は A↔B が Z を A に、B↔C が X を B に、A↔C が Y を C に渡すため**3通りとも canDo で不成立**。
+     */
+    private fun threeWayCycleState(): MagiState {
+        val shifts = listOf(
+            Shift("休み", "休", "", ""),
+            Shift("X", "X", "1", "1"),
+            Shift("Y", "Y", "1", "1"),
+            Shift("Z", "Z", "1", "1"),
+        )
+        val groups = listOf(Group("G0", "G0"), Group("G1", "G1"), Group("G2", "G2"))
+        return MagiState(
+            startDate = "2026-02-01", endDate = "2026-02-11",
+            shifts = shifts, groups = groups,
+            staff = listOf(Staff("A", 0), Staff("B", 1), Staff("C", 2)),
+            use2Patterns = false,
+            groupShift = listOf(
+                listOf(0, 1, 1, 0),   // A: X/Y
+                listOf(0, 0, 1, 1),   // B: Y/Z
+                listOf(0, 1, 0, 1),   // C: X/Z
+            ),
+            groupShiftApt = List(3) { List(4) { "" } },
+            schedule = listOf(
+                List(11) { 2 },   // A: Y×11（欲しいのは X）
+                List(11) { 3 },   // B: Z×11（欲しいのは Y）
+                List(11) { 1 },   // C: X×11（欲しいのは Z）
+            ),
+            wishes = emptyMap(),
+            staffRange = mapOf(
+                "0,1" to Range("11", "11"),   // A の X を 11 に固定
+                "1,2" to Range("11", "11"),   // B の Y を 11 に固定
+                "2,3" to Range("11", "11"),   // C の Z を 11 に固定
+            ),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+    }
+
+    @Test
+    fun threeWayCycleSolvesWhatNoTwoWaySwapCan() {
+        val st = threeWayCycleState()
+        val sched = st.schedule.toIntArray2D()
+        assertEquals("初期の下限割れ合計(3人×11)", 33, UnifiedViolationChecker.check(st, sched).breakdown["low"] ?: 0)
+
+        // 2者交換までに制限すると、どの手も担当不可で成立しない。
+        val pairOnly = V6HotfixPasses.applyAdaptiveBlockSwapPolish(st, sched.copy2D(), maxCycle = 2)
+        assertEquals("2者交換だけでは到達不能", 0, pairOnly.applied)
+
+        // 3者巡回を許すと1手で全員が目標へ収まる。
+        val res = V6HotfixPasses.applyAdaptiveBlockSwapPolish(st, sched.copy2D())
+        val after = UnifiedViolationChecker.check(st, res.newSchedule)
+        assertTrue("3者巡回が採用されたこと", res.applied > 0)
+        assertEquals("下限割れが完全に解消", 0, after.breakdown["low"] ?: 0)
+        assertEquals("HARD は不変(=0)", 0, after.hard)
+        for (j in 0 until 11) {
+            val col = (0 until 3).map { res.newSchedule[it][j] }
+            assertEquals("日${j + 1}の被覆保存(X/Y/Z 各1人)", listOf(1, 2, 3), col.sorted())
+        }
+    }
+
+    /**
+     * [3.292.0 多者巡回] 4職員が一本の4者巡回でしか解けない盤面。
+     * A: P/Q 可（今 Q・P が目標） / B: Q/R（今 R・Q が目標） / C: R/S（今 S・R が目標） / D: S/P（今 P・S が目標）。
+     * 2者交換も3者巡回も canDo で全滅し、A←D←C←B←A の4者巡回だけが閉じる。
+     */
+    private fun fourWayCycleState(): MagiState {
+        val shifts = listOf(
+            Shift("休み", "休", "", ""),
+            Shift("P", "P", "1", "1"),
+            Shift("Q", "Q", "1", "1"),
+            Shift("R", "R", "1", "1"),
+            Shift("S", "S", "1", "1"),
+        )
+        val groups = listOf(Group("G0", "G0"), Group("G1", "G1"), Group("G2", "G2"), Group("G3", "G3"))
+        return MagiState(
+            startDate = "2026-02-01", endDate = "2026-02-11",
+            shifts = shifts, groups = groups,
+            staff = listOf(Staff("A", 0), Staff("B", 1), Staff("C", 2), Staff("D", 3)),
+            use2Patterns = false,
+            groupShift = listOf(
+                listOf(0, 1, 1, 0, 0),   // A: P/Q
+                listOf(0, 0, 1, 1, 0),   // B: Q/R
+                listOf(0, 0, 0, 1, 1),   // C: R/S
+                listOf(0, 1, 0, 0, 1),   // D: S/P
+            ),
+            groupShiftApt = List(4) { List(5) { "" } },
+            schedule = listOf(
+                List(11) { 2 },   // A: Q×11（欲しいのは P）
+                List(11) { 3 },   // B: R×11（欲しいのは Q）
+                List(11) { 4 },   // C: S×11（欲しいのは R）
+                List(11) { 1 },   // D: P×11（欲しいのは S）
+            ),
+            wishes = emptyMap(),
+            staffRange = mapOf(
+                "0,1" to Range("11", "11"),
+                "1,2" to Range("11", "11"),
+                "2,3" to Range("11", "11"),
+                "3,4" to Range("11", "11"),
+            ),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+    }
+
+    @Test
+    fun fourWayCycleSolvesWhatShorterCyclesCannot() {
+        val st = fourWayCycleState()
+        val sched = st.schedule.toIntArray2D()
+        assertEquals("初期の下限割れ合計(4人×11)", 44, UnifiedViolationChecker.check(st, sched).breakdown["low"] ?: 0)
+
+        val upToThree = V6HotfixPasses.applyAdaptiveBlockSwapPolish(st, sched.copy2D(), maxCycle = 3)
+        assertEquals("3者巡回まででは到達不能", 0, upToThree.applied)
+
+        val res = V6HotfixPasses.applyAdaptiveBlockSwapPolish(st, sched.copy2D())
+        val after = UnifiedViolationChecker.check(st, res.newSchedule)
+        assertTrue("4者巡回が採用されたこと", res.applied > 0)
+        assertEquals("下限割れが完全に解消", 0, after.breakdown["low"] ?: 0)
+        assertEquals("HARD は不変(=0)", 0, after.hard)
+        for (j in 0 until 11) {
+            val col = (0 until 4).map { res.newSchedule[it][j] }
+            assertEquals("日${j + 1}の被覆保存(P/Q/R/S 各1人)", listOf(1, 2, 3, 4), col.sorted())
+        }
+    }
+
     @Test
     fun adaptiveSwapIsNoOpOnAlreadyOptimalBoard() {
         val st = crossGroupState()
