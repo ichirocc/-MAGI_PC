@@ -311,6 +311,21 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.blockSwapC3nFilter, onCheckedChange = { vm.setBlockSwapC3nFilter(it) }, enabled = !ui.running)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("禁止連続の崩し範囲")
+                Text(
+                    if (ui.wideC3nBreak)
+                        "⚠ 禁止の並びを崩すとき、並び全体（前後2日以上）まで動かします。3つ以上つながる並びの先頭にも手が届きますが、" +
+                            "できあがる勤務表が良くなるとは限りません（データによっては悪くなります）。"
+                    else
+                        "禁止の並びを崩すとき、前後1日だけを動かします。",
+                    fontSize = 12.sp,
+                    color = if (ui.wideC3nBreak) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = ui.wideC3nBreak, onCheckedChange = { vm.setWideC3nBreak(it) }, enabled = !ui.running)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,

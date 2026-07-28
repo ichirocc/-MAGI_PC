@@ -559,6 +559,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         logOp("I", "設定変更: 禁止連続の事前フィルタ → ${if (on) "ON" else "OFF"}")
     }
 
+    /**
+     * [3.304.0] 禁止連続を崩しに行く日を j±1 から「違反パターンがまたぐ全日」へ広げる。
+     * 3連（`Dﾃ→休→A4`）の先頭に届くようになる一般化だが、実データ3件で利得が一貫しなかったため既定 OFF
+     * （詳細は `PolishGate.wideC3nBreakDays` の docstring）。検証用に切り替えられるようにしてある。
+     */
+    fun setWideC3nBreak(on: Boolean) {
+        com.magi.app.v6.PolishGate.wideC3nBreakDays = on
+        _ui.update { it.copy(wideC3nBreak = on) }
+        logOp("I", "設定変更: 禁止連続の崩し範囲 → ${if (on) "パターン全域" else "前後1日"}")
+    }
+
     fun setBudget(sec: Int) { val v = sec.coerceIn(10, MAX_BUDGET_SEC); _ui.update { it.copy(budgetSec = v) }; logOp("I", "設定変更: 予算 → ${v}秒") }
     fun setSoftPolish(b: Boolean) { _ui.update { it.copy(softPolish = b) }; logOp("I", "設定変更: ソフト研磨 → ${if (b) "ON" else "OFF"}") }
     fun setV6Algorithm(a: V6Algorithm) { _ui.update { it.copy(v6Algorithm = a) }; logOp("I", "設定変更: 方式 → $a") }
