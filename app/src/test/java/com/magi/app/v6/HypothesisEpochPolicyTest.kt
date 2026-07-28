@@ -99,4 +99,48 @@ class HypothesisEpochPolicyTest {
         assertNotEquals(a, b)
         assertNotEquals(b, c)
     }
+
+    // ---------------------------------------------------------------------------------------
+    // [3.308.0] 改善直後の長い量子を引き継ぐ条件（両経路が共有する契約）
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun improvingQuantumIsNotInheritedAcrossARoleChange() {
+        // 前の役割が改善しても、役割が変わったら新しい役割は基準量子から始める。
+        assertFalse(AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = true))
+        // 役割が続くなら改善はそのまま次の量子へ効く。
+        assertTrue(AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = false))
+        // 改善していなければどちらでも基準量子。
+        assertFalse(AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(false, roleChanged = false))
+        assertFalse(AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(false, roleChanged = true))
+    }
+
+    @Test
+    fun roleChangeCostsTheRsiPlusImprovingBonusInSeconds() {
+        // 契約が実際に秒へ効くことを quantumSeconds まで通して固定する。
+        val rsiPlus = AdaptiveHypothesisEpochPolicy.assignmentFor(
+            HypothesisEpochRole.HARD_DEBT_RSI_PLUS, escapeDepth = 0,
+        )
+        val kept = AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = false)
+        val changed = AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = true)
+        assertEquals(
+            AdaptiveHypothesisEpochPolicy.RSI_PLUS_IMPROVING_QUANTUM_SEC,
+            AdaptiveHypothesisEpochPolicy.quantumSeconds(rsiPlus, kept, 999),
+        )
+        assertEquals(
+            AdaptiveHypothesisEpochPolicy.RSI_PLUS_BASE_QUANTUM_SEC,
+            AdaptiveHypothesisEpochPolicy.quantumSeconds(rsiPlus, changed, 999),
+        )
+    }
+
+    @Test
+    fun intensityGrowthClampsNegativeBasisToZero() {
+        // 負の停滞深さは呼出側の想定外。基準強度へ丸め、例外にも負値にもしない。
+        for (role in HypothesisEpochRole.values()) {
+            assertEquals(
+                AdaptiveHypothesisEpochPolicy.intensityFor(role, 0),
+                AdaptiveHypothesisEpochPolicy.intensityFor(role, -5),
+            )
+        }
+    }
 }

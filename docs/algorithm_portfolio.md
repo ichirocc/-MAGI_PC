@@ -131,6 +131,34 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 |---|---|
 | `PolishGate.filterC3nIncrease`（ブロック巡回交換の c3n 事前フィルタ） | ON/OFF で最終盤面・採用数が完全に同一。詰んだ候補への無駄な checker 呼び出しを省くだけで品質は変わらない（3.296.0 / 3.298.0）。 |
 | `PolishGate.wideC3nBreakDays`（c3n 回避の崩し先をパターン全域へ拡張） | 一般化としては正しいが実データ3件で利得が一貫しない。golden=中立／real=weighted 改善だが covU 2件を c3n 2件へ付け替え・c1 +14／user=weighted 悪化。候補が増えると探索の経路が変わり、着地する局所解がデータ次第で良くも悪くもなる（3.303.0）。 |
+| `PolishGate.adaptiveEscapeControl`（`StagnationEscapeController` による残差ベースの役割選択） | 実データ3件×4回の A/B で有意な差を検出できなかった。範囲が完全に重なり、中央値の大小も一貫しない。設計としては既定経路より筋が通っている（盤面を見る／停滞の証拠を役割変更で消さない）ので撤去せず温存する（3.306.0）。 |
+
+### `StagnationEscapeController` の決定表（ON のときだけ効く）
+
+制御器が変えるのは**次の役割の選択だけ**。候補の採否、全体最良、終了判定はどれも変更しない。
+すべて従来どおり checker の `betterReport` が決める。
+
+| 観測 | 次の手 |
+|---|---|
+| W0 | 常に `BASELINE_REFINE`。安全な基準軌道を離れない。 |
+| 初期 epoch | W1/2/3/5/6/7 が Day ALNS / HARD RSI / HARD debt RSI+ / Large destroy / Personal RSI / Max-distance RSI+ を1本ずつ担当する。 |
+| HARD 残差 | `HARD_FAMILY_RSI` を優先する。 |
+| 時系列・日別残差（c1 / c3 / c4 / covO） | `DAY_BLOCK_ALNS` を優先する。 |
+| 個人回数・平準化残差（low / high / c2 / apt / fair / weekly） | `PERSONAL_RSI` を優先する。 |
+| 異なる peer がある | 次の段で `ELITE_RELINK`。W4 の初回停滞もここを優先する。 |
+| peer との距離が 2 セル以下 | `MAX_DISTANCE_RSI_PLUS` と `LARGE_DESTROY_ALNS` を交互に選び、同じ吸引域の再試行を避ける。 |
+
+停滞深さは**自己エリートが改善しなかった連続 epoch 数**であり、役割を替えてもリセットしない。
+改善したときだけ深さと強度を戻す。通常の停滞では
+`制約別の主手 → 再結合 → 多様化 → 深い破壊` の4段を決定的に巡回する。
+
+### 役割が変わった直後の量子（両経路が共有する契約）
+
+epoch 長（量子）は「直前の epoch が改善したか」で 5→8 秒 / 35→45 秒に伸びる。ただし
+**役割が変わった直後はこの延長を引き継がない**。新しい役割はまだ何も証明していないのに、
+前の役割が稼いだ改善で長い量子を受け取る根拠が無いため。判定は
+`AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum` の1か所にあり、既定経路と制御器経路の
+両方がそれを呼ぶ（3.308.0。それ以前は制御器経路だけがこの契約から外れていた）。
 
 ## 廃止・統合済み
 

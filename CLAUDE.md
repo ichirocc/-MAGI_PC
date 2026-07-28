@@ -5248,6 +5248,43 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## アップロード版の優秀な部分を部分融合（3.308.0, ユーザー指示「優秀な部分を部分融合する」）
+再アップロードされた3ファイルを HEAD と全差分し、**全面置換（制御器の無条件化＝3.306.0/3.307.0 で
+実測否決済み）から独立して価値のある部分だけ**を抽出して融合。`StagnationEscapePressure`/
+`StagnationEscapeController` の本体は 3.306.0 で取り込んだ版と**完全一致**（差分は既定経路の削除・
+識別子リネーム・コメント書き換えのみ）と確認したうえで、以下4点を採った。
+- **[実バグ修正・最重要] 役割変更直後の量子継承**: epoch 長は「直前が改善したか」で 5→8秒 /
+  35→45秒 に伸びるが、**役割が変わった直後は引き継いではいけない**（新しい役割はまだ何も証明して
+  いないのに、前の役割が稼いだ改善で長い量子を受け取る根拠が無い）。既定経路は再配属分岐で
+  `improvedPrevious=false` として元からこの契約を守っていたが、**3.306.0 で私が足した制御器経路だけが
+  `improvedThisEpoch` をそのまま引き継いでいた**（RSI+ 役なら 35秒のはずが 45秒になる）。
+  アップロード版の `improvedThisEpoch && !roleChanged` はこの不整合を正しく直している。
+  ただしインライン式のままだと再び片側だけずれるため、**契約に名前を付けて両経路から呼ぶ**形で融合:
+  `AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(improvedThisEpoch, roleChanged)`。
+  既定経路は代数的に恒等（`(x,true)=false`＝旧 `improvedPrevious=false`／`(x,false)=x`＝旧
+  `improvedPrevious=improvedThisEpoch`）＝**既定の挙動は完全に不変**、直るのは制御器 ON のときだけ。
+- **[防御] `intensityFor` の負値ガード**: `growthBasis.coerceAtLeast(0)`。現在の呼出元
+  （reassignments / plateauDepth とも 0 始まりの単調増加）では到達しないが、丸めておく。
+  併せて引数名を `reassignments` → `growthBasis` へ（既定経路は再配属回数・制御器経路は停滞深さを
+  渡す＝どちらでもない中立な名前が正しい。アップロード版の `escapeDepth` は既定経路側で誤読を招く）。
+- **[意図の明示] 初期配置**: `archive.register` 前の `assignmentFor(i, 0)` → `initialAssignmentFor(i)`
+  （値は同一・名前が「初期配置」だと分かる）。
+- **[文書] 制御器の決定表を台帳へ**: アップロード版 md が持っていて当方が持っていなかった資産。
+  「観測→次の手」の7行表（W0固定・初期分散・HARD残差→HARD_FAMILY・時系列残差→DAY_BLOCK・
+  個人回数残差→PERSONAL・peer有→ELITE_RELINK・距離2以下→MAX_DISTANCE と LARGE_DESTROY を交互）を
+  `docs/algorithm_portfolio.md` へ収録。**ただし前提は訂正**＝アップロード版は無条件稼働として本文に
+  書いているが実際は `PolishGate.adaptiveEscapeControl` 既定 OFF（台帳自身の規律「本文は実装済みの
+  事実だけ」に反する）。「実装済みだが既定 OFF」節の配下に置き、**3.306.0 で記載漏れだった
+  `adaptiveEscapeControl` の行自体も同時に追加**（台帳のギャップ修正）。量子継承の契約も明文化。
+- **採らなかったもの**: ①制御器の無条件化＝3.306.0 の A/B（実データ3件×4回）で有意差を検出できず
+  ユーザー選択で既定 OFF 温存と決定済み ②`shouldReassign`/`nextStagnantEpochs` の削除＝既定経路を
+  消すことと同義 ③`lastRole = assignment.role` への単純化＝HEAD の二経路構造では現行式が正しい。
+- **アップロード版の欠陥（3.306.0 から未修正のまま再送）**: `assignmentFor` 直後の**余分な `}`**（object が
+  そこで閉じる＝コンパイル不能）。今回も融合時に除いた。
+- 検証: ホストJVM **全343テスト green**（340 + 新規3＝役割変更で改善量子を継承しない／その契約が
+  `quantumSeconds` の 45秒→35秒として実際に効く／負の成長基準を 0 へ丸める）。既定経路の実データ結果は
+  PORTFOLIO の run 間ばらつき（既知 200〜300）の範囲内で、上記の代数的恒等により挙動は不変。
+
 ## 役割別worker秒のログ化＋秒予算再配分の否決（3.307.0, ユーザー指示「あなたが賢く考える」）
 ユーザーから 300秒×8ワーカー＝2,400 worker秒 を役割ごとに固定配分する設計（DayBlock 605s / Elite 575s /
 Large 320s / Max 295s / Personal 200s / Baseline 335s / HARD系 各35s ＋ワーカー別時間割＋運用ルール3件）

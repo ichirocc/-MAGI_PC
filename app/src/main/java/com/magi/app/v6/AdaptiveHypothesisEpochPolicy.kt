@@ -82,8 +82,22 @@ internal object AdaptiveHypothesisEpochPolicy {
         HypothesisEpochRole.MAX_DISTANCE_RSI_PLUS -> V6Algorithm.RSI_PLUS
     }
 
-    fun intensityFor(role: HypothesisEpochRole, reassignments: Int): Int {
-        val growth = (reassignments / 2).coerceAtMost(3)
+    /**
+     * [3.308.0] 次のエポックが「改善直後」の長い量子（8/45 秒）を受け取れるか。
+     *
+     * **役割が変わった直後は受け取れない**。新しい役割はまだ何も証明していないのに、
+     * 前の役割が稼いだ改善で 35→45 秒（RSI+）へ昇格するのは根拠が無い。既定経路は
+     * 再配属分岐で `improvedPrevious=false` として元からこの契約を守っていたが、
+     * 3.306.0 で足した制御器経路だけが `improvedThisEpoch` をそのまま引き継いでいた。
+     * 契約に名前を付けて両経路から呼ぶ（インライン式のままだと再び片側だけずれる）。
+     */
+    fun carriesImprovingQuantum(improvedThisEpoch: Boolean, roleChanged: Boolean): Boolean =
+        improvedThisEpoch && !roleChanged
+
+    fun intensityFor(role: HypothesisEpochRole, growthBasis: Int): Int {
+        // 2回失敗してから強度を上げる。最初の停滞は「別の考え方を試す」段階であって、
+        // いきなり最大近傍へ残予算を注ぐ段階ではない。負値は呼出側の想定外なので 0 へ丸める。
+        val growth = (growthBasis.coerceAtLeast(0) / 2).coerceAtMost(3)
         val base = when (role) {
             HypothesisEpochRole.BASELINE_REFINE -> 0
             HypothesisEpochRole.ELITE_RELINK -> 1

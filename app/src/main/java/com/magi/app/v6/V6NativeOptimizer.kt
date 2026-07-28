@@ -491,7 +491,8 @@ object V6NativeOptimizer {
             entry, globalReport, HypothesisEpochRole.BASELINE_REFINE, worker = 0, epoch = 0, bridge = false,
         )
         for (i in 0 until workers) {
-            val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, 0)
+            // [3.308.0] 初期配置であることを名前で示す（値は assignmentFor(i, 0) と同じ）。
+            val assignment = AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i)
             archive.register(
                 sharedTrajectories[i], initialReports[i], assignment.role, i, 0,
                 bridge = initialReports[i].hard == globalReport.hard + 1,
@@ -706,9 +707,13 @@ object V6NativeOptimizer {
                             nearestOtherDistance = nearest,
                             hasOtherHypothesis = workers > 1,
                         )
-                        if (next.role != controlledAssignment!!.role) reassignments++
+                        val roleChanged = next.role != controlledAssignment!!.role
+                        if (roleChanged) reassignments++
                         controlledAssignment = next
-                        improvedPrevious = improvedThisEpoch
+                        // [3.308.0] 役割が変わった直後は改善直後の長い量子を引き継がない
+                        //   （既定経路が元から守っていた契約。制御器経路だけ抜けていた）。
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged)
                     } else if (AdaptiveHypothesisEpochPolicy.shouldReassign(
                             index = i,
                             improvedThisEpoch = improvedThisEpoch,
@@ -718,9 +723,13 @@ object V6NativeOptimizer {
                     ) {
                         reassignments++
                         stagnantEpochs = 0
-                        improvedPrevious = false
+                        // [3.308.0] 再配属分岐＝役割が必ず変わる（escapeRoles は reassignments で
+                        //   index が進み、slot==4 は BASELINE→ELITE_RELINK）。契約は同じ関数で表す。
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged = true)
                     } else {
-                        improvedPrevious = improvedThisEpoch
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged = false)
                     }
                     // [3.307.0] quantum<=0 の break はここへ到達しない＝roleRuns と同じ母集団
                     //   （実際に走ったロールだけ）を秒でも数える。
