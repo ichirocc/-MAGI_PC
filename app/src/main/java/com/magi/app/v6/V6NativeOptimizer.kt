@@ -442,6 +442,9 @@ object V6NativeOptimizer {
         val epochs: Int,
         val reassignments: Int,
         val roleRuns: Map<HypothesisEpochRole, Int>,
+        /** [3.307.0/ログ強化] 役割ごとの実消費ミリ秒。量子(5/8/35/45秒)は要求値であって
+         *  消費値ではないため、予算配分を論じるにはこちらが要る。 */
+        val roleMillis: Map<HypothesisEpochRole, Long>,
         /** [3.306.0] ワーカーが epoch ループを抜けた時点の役割。エリート登録の分類に使う
          *  （再配属回数からの逆算では、残差ベース経路のとき実際の役割と一致しないため）。 */
         val lastRole: HypothesisEpochRole,
@@ -517,6 +520,11 @@ object V6NativeOptimizer {
                 var epoch = 0
                 var iterations = 0L
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
+                // [3.307.0/ログ強化] 役割ごとの**実消費ミリ秒**。roleRuns(エポック数)だけでは
+                //   「どの役割が予算のどれだけを実際に食ったか」が読めない（量子は役割ごとに
+                //   5/8/35/45 秒と桁が違い、かつロールは締切・HARD=0・内部早期終了で量子より
+                //   早く戻ることがある）。エポック境界の摂動・検査・距離計算も含めた実測。
+                val roleMillis = LinkedHashMap<HypothesisEpochRole, Long>()
                 // [3.281.0/停滞レビューB] ワーカー専属のHF63をエポック横断で共有。旧: runRsi 呼出ローカルのため
                 //   短いエポック(rounds=2)では「focus 2ラウンドで threshold 到達→即破棄→次エポックで白紙から
                 //   再学習」を全エポックで反復し、解けない族(実機: c3n)へ毎回突撃していた。ワーカー内は逐次
@@ -538,6 +546,7 @@ object V6NativeOptimizer {
                     try {
                     val assignment = controlledAssignment
                         ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
+                    val epochT0 = nowMs()
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
                     // [3.282.0/新領域ログ監査] エポック改善の基準線＝エポック開始時点の自己エリート。
                     //   旧: `better(result, startReport)` で startReport は**破壊摂動済みの入口盤面**（escape系
@@ -713,6 +722,9 @@ object V6NativeOptimizer {
                     } else {
                         improvedPrevious = improvedThisEpoch
                     }
+                    // [3.307.0] quantum<=0 の break はここへ到達しない＝roleRuns と同じ母集団
+                    //   （実際に走ったロールだけ）を秒でも数える。
+                    roleMillis.merge(assignment.role, nowMs() - epochT0, Long::plus)
                     epoch++
                     } catch (ce: kotlinx.coroutines.CancellationException) {
                         throw ce
@@ -733,6 +745,7 @@ object V6NativeOptimizer {
                     epochs = epoch,
                     reassignments = reassignments,
                     roleRuns = roleRuns,
+                    roleMillis = roleMillis,
                     hf63Avoided = workerHf63.infeasibleFamilies(),
                 )
             }
@@ -770,14 +783,26 @@ object V6NativeOptimizer {
             "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル"
         val roleNote = outcomes.indices.joinToString(" | ") { i ->
             val o = outcomes[i]
-            val used = o.roleRuns.entries.joinToString(",") { "${it.key.name}x${it.value}" }
+            val used = o.roleRuns.entries.joinToString(",") { e ->
+                val sec = (o.roleMillis[e.key] ?: 0L) / 1000.0
+                "${e.key.name}x${e.value}/${"%.0f".format(sec)}s"
+            }
             val avoided = if (o.hf63Avoided.isEmpty()) "" else "/HF63回避=${o.hf63Avoided.joinToString("+")}"
             "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided"
+        }
+        // [3.307.0/ログ強化] 全ワーカー横断の役割別 worker秒。予算配分を論じるときに見るのはここ
+        //   （量子は「1エポックの要求長」であって消費ではない＝両者を取り違えると偏りの診断を誤る）。
+        val roleTotals = LinkedHashMap<HypothesisEpochRole, Long>()
+        for (o in outcomes) for ((r, ms) in o.roleMillis) roleTotals.merge(r, ms, Long::plus)
+        val totalWorkerMs = roleTotals.values.sum().coerceAtLeast(1L)
+        val budgetNote = roleTotals.entries.sortedByDescending { it.value }.joinToString(" ") { e ->
+            "${e.key.name}=${e.value / 1000}s(${e.value * 100 / totalWorkerMs}%)"
         }
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
-                "相異なるelite=$distinctElites 距離=$distanceNote / $roleNote" +
+                "相異なるelite=$distinctElites 距離=$distanceNote / " +
+                "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
         )
