@@ -258,21 +258,26 @@ internal object C1JointLnsPolish {
 
     private fun singleRuleLowerBound(p: Problem, staff: Int, c: C1): Int {
         val d = c.day1
-        val lo0 = p.rangeLo[staff][c.shiftIdx]
-        val hi0 = p.rangeHi[staff][c.shiftIdx]
-        val lo = if (lo0 == Int.MIN_VALUE) 0 else lo0.coerceIn(0, p.T)
-        val hi = if (hi0 == Int.MAX_VALUE) p.T else hi0.coerceIn(0, p.T)
-        if (lo > hi) return 0
+        // [3.312.0] 旧実装は `rangeLo`/`rangeHi` を count の**硬い上下限**として DP に課していた。
+        //   しかし個人回数は **SOFT**（low=90 / high=45）で、c1(15) より重いだけであって禁止ではない。
+        //   結果この値は「rangeHi を一度も超えない範囲での c1 最小値」＝**真の下限より大きく**なり、
+        //   `best.c1 <= lowerBound` の早期終了と「構造下限到達」のログを誤って発火させていた。
+        //   反例: T=7・「4日窓で X>=1」・high(X)=0 なら、X なし＝c1=4(weighted 60) に対し
+        //   中央へ X を1つ置くと c1=0・high=1(weighted 45) で **betterReport は X を選ぶ**のに、
+        //   旧下限は 4 を返して探索を止めていた。
+        //   `wishLocked` は下限に残す：希望を破る代金は pref=9000 で、c1=15 を 600 件消して初めて
+        //   釣り合う＝c1 を下げる目的では実質的に硬い制約。
+        val hi = p.T
 
         // Exact suffix-mask DP is valuable for ordinary monthly windows, but its table is
         // O(min(T,hi) * 2^(d-1)). At d=20,T=31,hi=31 it allocates more than 100MB across dp/next and can
         // consume the whole LNS budget before a single candidate is explored. A local
         // impossibility scan is a weaker but still valid lower bound.
-        if (d > 20) return cheapSingleRuleLowerBound(p, staff, c, hi)
+        if (d > 20) return cheapSingleRuleLowerBound(p, staff, c)
         val suffixBits = (d - 1).coerceAtLeast(0)
         val maskLimit = if (suffixBits == 0) 1 else (1 shl suffixBits)
         val dpCells = (hi.toLong() + 1L) * maskLimit.toLong()
-        if (dpCells > MAX_EXACT_LOWER_BOUND_CELLS) return cheapSingleRuleLowerBound(p, staff, c, hi)
+        if (dpCells > MAX_EXACT_LOWER_BOUND_CELLS) return cheapSingleRuleLowerBound(p, staff, c)
         val maskKeep = maskLimit - 1
         val inf = 1_000_000
         var dp = Array(hi + 1) { IntArray(maskLimit) { inf } }
@@ -301,19 +306,21 @@ internal object C1JointLnsPolish {
             dp = next
         }
         var best = inf
-        for (cnt in lo..hi) for (mask in 0 until maskLimit) best = minOf(best, dp[cnt][mask])
+        for (cnt in 0..hi) for (mask in 0 until maskLimit) best = minOf(best, dp[cnt][mask])
         return if (best >= inf) 0 else best
     }
 
     /**
-     * DP を使えない長窓用の保守的下界。各窓について、希望固定と月間上限だけから見て
-     * 物理的に必要回数へ届かない場合だけを数える。窓間の相互作用は無視するため過大評価しない。
+     * DP を使えない長窓用の保守的下界。各窓について、**希望固定だけ**から見て物理的に必要回数へ
+     * 届かない場合を数える。窓間の相互作用は無視するため過大評価しない。
+     *
+     * [3.312.0] 個人上限(`rangeHi`)は見ない。SOFT を硬い上限として扱うと真の下限を上回り、
+     * 呼出側の早期終了を誤って発火させる（旧: `if (hi < c.day2) return starts` ＝全窓を不可避と宣言）。
      */
-    private fun cheapSingleRuleLowerBound(p: Problem, staff: Int, c: C1, hi: Int): Int {
+    private fun cheapSingleRuleLowerBound(p: Problem, staff: Int, c: C1): Int {
         val d = c.day1
         if (d <= 0 || d > p.T || c.day2 <= 0) return 0
         val starts = p.T - d + 1
-        if (hi < c.day2) return starts
         var unavoidable = 0
         for (start in 0 until starts) {
             var possible = 0
