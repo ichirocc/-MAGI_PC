@@ -610,7 +610,6 @@ object V6NativeOptimizer {
                     if (quantum <= 0) break
                     // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の前に
                     //   merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
-                    roleRuns.merge(assignment.role, 1, Int::plus)
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
                     val roleOptions = options.copy(
@@ -723,16 +722,27 @@ object V6NativeOptimizer {
                     ) {
                         reassignments++
                         stagnantEpochs = 0
-                        // [3.308.0] 再配属分岐＝役割が必ず変わる（escapeRoles は reassignments で
-                        //   index が進み、slot==4 は BASELINE→ELITE_RELINK）。契約は同じ関数で表す。
+                        // [3.308.1/敵対検証] 既定経路はこの分岐で常に基準量子へ戻していた（旧
+                        //   `improvedPrevious = false`）。roleChanged=true はその挙動を保つための
+                        //   引数であって「役割が必ず変わる」という主張ではない。実際 W4 は
+                        //   再配属2回目以降 ELITE_RELINK のまま変わらない
+                        //   （assignmentFor(4, r>=1) は常に ELITE_RELINK）。W1/2/3/5/6/7 は
+                        //   escapeRoles の index が1つ進むので必ず変わる。
                         improvedPrevious = AdaptiveHypothesisEpochPolicy
                             .carriesImprovingQuantum(improvedThisEpoch, roleChanged = true)
                     } else {
                         improvedPrevious = AdaptiveHypothesisEpochPolicy
                             .carriesImprovingQuantum(improvedThisEpoch, roleChanged = false)
                     }
-                    // [3.307.0] quantum<=0 の break はここへ到達しない＝roleRuns と同じ母集団
-                    //   （実際に走ったロールだけ）を秒でも数える。
+                    // [3.308.1/敵対検証] 回数と秒をここで同時に数える。旧実装は回数だけをエポック
+                    //   冒頭で加算していたため、例外で break したエポックが回数には入るのに秒には
+                    //   入らず、さらに epoch++ もされないので sum(roleRuns) > epochs になっていた
+                    //   （ログの角括弧の合計が epoch 数と合わない）。両方をここに置けば
+                    //   sum(roleRuns) == epochs == roleMillis の母集団が常に成り立つ。
+                    //   なお `quantum <= 0` と例外の break はここへ到達しないため、その回の
+                    //   摂動＋フル検査の時間は秒合計に入らない。実測でも 8ワーカー×300秒=2400 に対し
+                    //   計2396s と数秒少なく出る（各ワーカーの最後の1回ぶん）。
+                    roleRuns.merge(assignment.role, 1, Int::plus)
                     roleMillis.merge(assignment.role, nowMs() - epochT0, Long::plus)
                     epoch++
                     } catch (ce: kotlinx.coroutines.CancellationException) {

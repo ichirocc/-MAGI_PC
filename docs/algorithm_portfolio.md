@@ -1,6 +1,6 @@
 # アルゴリズム・ポートフォリオ
 
-> **最終更新**：2026-07-28（3.303.0 時点のコードに一致）。実行入口と責務を一か所に整理するための運用台帳。
+> **最終更新**：2026-07-28（3.308.1 時点のコードに一致）。実行入口と責務を一か所に整理するための運用台帳。
 > パラメータ・重み・制約の意味はこの文書では変更しない。候補の採否は常に
 > `MirrorCore.betterReport` の **HARD → weightedScore → total** に従う（3.287.0 で全サイト統一）。
 >
@@ -138,15 +138,26 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 制御器が変えるのは**次の役割の選択だけ**。候補の採否、全体最良、終了判定はどれも変更しない。
 すべて従来どおり checker の `betterReport` が決める。
 
+下の表は上から順に評価する。**この表は `StagnationEscapeController` の全分岐を尽くしている**
+（3.308.1 で実コードと1行ずつ突合し、欠けていた「改善したとき」「どの残差にも当たらないとき」の
+2行を追加した）。
+
 | 観測 | 次の手 |
 |---|---|
 | W0 | 常に `BASELINE_REFINE`。安全な基準軌道を離れない。 |
 | 初期 epoch | W1/2/3/5/6/7 が Day ALNS / HARD RSI / HARD debt RSI+ / Large destroy / Personal RSI / Max-distance RSI+ を1本ずつ担当する。 |
-| HARD 残差 | `HARD_FAMILY_RSI` を優先する。 |
-| 時系列・日別残差（c1 / c3 / c4 / covO） | `DAY_BLOCK_ALNS` を優先する。 |
-| 個人回数・平準化残差（low / high / c2 / apt / fair / weekly） | `PERSONAL_RSI` を優先する。 |
-| 異なる peer がある | 次の段で `ELITE_RELINK`。W4 の初回停滞もここを優先する。 |
-| peer との距離が 2 セル以下 | `MAX_DISTANCE_RSI_PLUS` と `LARGE_DESTROY_ALNS` を交互に選び、同じ吸引域の再試行を避ける。 |
+| **改善した（停滞深さ 0）かつ peer と衝突していない** | **役割を変えず、強度だけ基準へ戻す。**うまくいっている手を取り上げない。 |
+| peer との距離が 2 セル以下 | `MAX_DISTANCE_RSI_PLUS` と `LARGE_DESTROY_ALNS` を交互に選び、同じ吸引域の再試行を避ける。改善していても優先する（同じ盤面に落ちた2ワーカーは独立な情報を出していないため）。 |
+| W4 の初回停滞（かつ異なる peer がある） | `ELITE_RELINK`。 |
+| HARD 残差 | 主手は `HARD_FAMILY_RSI`。深い段では `HARD_DEBT_RSI_PLUS`。 |
+| 時系列・日別残差（c1 / c3 / c3m / c3mn / c3n / c41 / c42 / c41s / c42s / covO） | 主手は `DAY_BLOCK_ALNS`。 |
+| 個人回数・平準化残差（low / high / c2 / apt / fair / weekly） | 主手は `PERSONAL_RSI`。 |
+| **どの残差にも当たらない** | **主手も深い段も `LARGE_DESTROY_ALNS`。** |
+| 異なる peer がある | 再結合の段が `ELITE_RELINK` になる（いなければ `LARGE_DESTROY_ALNS`）。 |
+| 候補がすべて現在の役割と同じ | 役割を変えない（`firstDifferent` のフォールバック）。 |
+
+残差の判定は族ごとの `breakdown > 0`。HARD は `report.hard > 0`。同じ epoch で複数の残差が立つ
+ことは普通にあり、主手の優先順位は HARD → 時系列 → 個人回数の順。
 
 停滞深さは**自己エリートが改善しなかった連続 epoch 数**であり、役割を替えてもリセットしない。
 改善したときだけ深さと強度を戻す。通常の停滞では

@@ -143,4 +143,20 @@ class HypothesisEpochPolicyTest {
             )
         }
     }
+
+    @Test
+    fun defaultPathReassignmentDoesNotAlwaysChangeTheRole() {
+        // [3.308.1/敵対検証] 「再配属＝必ず役割が変わる」は偽。W4 は2回目以降 ELITE_RELINK のまま。
+        // roleChanged=true を渡しているのは旧挙動（常に基準量子へ戻す）の保存が目的であって、
+        // 役割変更の主張ではない。この事実を固定しておかないと同じ誤解を再び書く。
+        val w4 = (0..4).map { AdaptiveHypothesisEpochPolicy.assignmentFor(4, it).role }
+        assertEquals(HypothesisEpochRole.BASELINE_REFINE, w4[0])
+        for (r in 1..4) assertEquals(HypothesisEpochRole.ELITE_RELINK, w4[r])
+
+        // 脱出役6本を回すワーカーは index が1つ進むので毎回変わる。
+        for (slot in listOf(1, 2, 3, 5, 6, 7)) {
+            val seq = (0..6).map { AdaptiveHypothesisEpochPolicy.assignmentFor(slot, it).role }
+            for (r in 1..6) assertNotEquals(seq[r - 1], seq[r])
+        }
+    }
 }
