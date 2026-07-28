@@ -376,7 +376,9 @@ object V6PortAnalyzer {
      *  - CHAIN: 離脱元が covU 化するが findCovUChain（探索本体と同一関数・8 seed）で埋め直せることを実証。
      *  - ADJACENT: 代替は全て新たな禁止連続を作るが、隣接日調整（tryFixForbiddenRunViaAdjacentDay=
      *    探索本体と同一関数）で崩せることを実証。
-     *  - PINNED: 本人希望どおりのセル＝動かすと pref(9000)>c3n(7000) で悪化＝isBetter が正しく却下（設計どおり）。
+     *  - PINNED: 本人希望どおりのセルで、かつどの代替も**正味の HARD を減らせない**＝isBetter が正しく却下。
+     *    （3.311.0 で厳密化。旧実装は希望が一致した時点で無条件に固定扱いしており、1セルが複数の
+     *    禁止連続 fire に関与する局面で偽の壁を作っていた。）
      *  - BLOCKED: 全代替が「新たな禁止連続」か「covU 受け皿なし」＝この希望・担当のままでは崩せない。
      * 3.263.0 の教訓（「玉突きが必要」と楽観的に言うだけでは壁を誤解させる）に従い、CHAIN/ADJACENT は
      * 実際に探索本体の関数で成立を確認してからそう名乗る。読取専用・スコアリング不変。
@@ -446,19 +448,23 @@ object V6PortAnalyzer {
     ): ForbiddenRunCell {
         val label = dayLabel(state.startDate, j)
         val curSym = state.shifts.getOrNull(cur)?.kigou ?: cur.toString()
-        // 希望どおりのセル＝動かすと pref(9000) が増え c3n(7000) 減を上回る＝isBetter が却下（設計どおりの固定）。
-        //   希望が設定されていても現在それを破っているセル（cur != wish）は固定でない＝通常判定へ。
-        if (p.wishLocked(i, j) && p.wish[i][j] == cur) {
-            return ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.PINNED, "本人希望=$curSym")
-        }
+        // [3.311.0] 希望どおりのセルでも**即 PINNED にはしない**。
+        //   旧実装は `wishLocked && wish == cur` で HARD 差分を一切見ずに早期 return しており、
+        //   その根拠（「pref(9000) の増加が c3n(7000) の減少を上回る」）は**そのセルが c3n fire
+        //   1件にしか関与しない場合しか成り立たない**。例: 禁止「A→A」・行 A,A,A の中央セルは
+        //   2件の fire に関与し、B へ動かすと c3n 2→0 / pref 0→1 ＝ betterReport の第1キー hard が
+        //   2→1 と厳密に改善する（weighted も 14000→9000）。つまり isBetter は採用する＝固定ではない。
+        //   偽の PINNED は run 全体を「構造壁」と誤診し、3.281.0 の短い停滞タイムアウトを早期に
+        //   発火させうる。そこで pref の増加分を c3n の正味減と同じ土俵で勘定する。
+        val prefCost = if (p.wishLocked(i, j) && p.wish[i][j] == cur) 1 else 0
         // 行 fires の正味減判定（C1DeltaPrefilter.screenCell と同じ row-local 差分・staffC3nFires を共用）。
         val row = IntArray(p.T) { norm[i][it] }
         val firesBefore = C1DeltaPrefilter.staffC3nFires(p, row)
-        fun netC3nSafe(m: Int): Boolean {
+        fun c3nAfter(m: Int): Int {
             row[j] = m
             val after = C1DeltaPrefilter.staffC3nFires(p, row)
             row[j] = cur
-            return after < firesBefore
+            return after
         }
         // 離脱で (cur, j) に covU 穴が空くか。空くなら findCovUChain（探索本体と同一関数）で埋まるか実証する。
         val cnt = if (cur in 0 until p.K) cov[j][cur] else 0
@@ -468,13 +474,20 @@ object V6PortAnalyzer {
         }
         var c3nBlocked = 0
         var noReceiver = 0
+        var prefBlocked = 0   // c3n は減るが、希望を破る代金（pref +1）を払えない代替の数
         var chainOk: Int? = null      // CHAIN が成立した代替シフト
         var adjOk: Int? = null        // ADJACENT が成立した代替シフト
         var alts = 0
         for (m in p.allowedShiftsForStaff(i)) {
             if (m == cur) continue
             alts++
-            if (netC3nSafe(m)) {
+            val after = c3nAfter(m)
+            // 正味 HARD が減るか（希望を破る手は pref が 1 増える。hard は族横断の件数和なので同じ単位）。
+            val netOk = after + prefCost < firesBefore
+            // 「新たな禁止連続を作る（＝そもそも c3n が減らない）」かどうかは pref 代とは別問題。
+            //   両者を混ぜると、c3n は減るのに pref 代を払えないだけの代替まで隣接日調整へ流れてしまう。
+            val createsNewRun = after >= firesBefore
+            if (netOk) {
                 if (!departureHole) {
                     return ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.FREE,
                         "代替「${state.shifts.getOrNull(m)?.kigou ?: m}」へ変更可")
@@ -485,6 +498,9 @@ object V6PortAnalyzer {
                     tmp[i][j] = m
                     if (chainFills(tmp)) chainOk = m else noReceiver++
                 } else noReceiver++   // 既に CHAIN 成立済み＝以降の重い連鎖検証は省略（分類は不変）
+            } else if (!createsNewRun) {
+                // c3n 自体は減るが、希望を破る代金を払うと正味では減らない＝希望が本当に効いている。
+                prefBlocked++
             } else {
                 // この代替は新たな禁止連続を作る → 隣接日調整（探索本体と同一関数）で崩せるか実証。
                 if (adjOk == null && chainOk == null) {
@@ -505,6 +521,10 @@ object V6PortAnalyzer {
             adjOk != null -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.ADJACENT,
                 "「${state.shifts.getOrNull(adjOk)?.kigou ?: adjOk}」へ変更＋隣接日調整で成立")
             alts == 0 -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.BLOCKED, "代替シフトなし")
+            // [3.311.0] 希望どおりのセルで、かつどの代替も正味 HARD を減らせなかったときだけ
+            //   「希望固定」と名乗る（旧: 希望が一致した時点で無条件に固定扱い）。
+            prefBlocked > 0 -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.PINNED,
+                "本人希望=$curSym（動かしても正味の必須違反が減らない）")
             else -> ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.BLOCKED,
                 "代替${alts}件全滅: 新たな禁止連続${c3nBlocked}・covU受け皿なし${noReceiver}")
         }

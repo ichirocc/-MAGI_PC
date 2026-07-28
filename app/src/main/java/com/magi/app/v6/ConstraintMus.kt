@@ -57,7 +57,11 @@ object ConstraintMus {
     /** キャッシュ経由の `minDaysForFullCompliance`。検査2b-3と本エンジンで共用（同じ純関数）。 */
     fun cachedMinDays(t: Int, rules: List<Pair<Int, Int>>): Int? {
         if (rules.isEmpty()) return 0
-        val key = t.toString() + "|" + rules.map { it.first * 1000 + it.second }.sorted().joinToString(",")
+        // [3.311.0] 旧: `first * 1000 + second` は (1,1000) と (2,0) が同じ 2000 になり衝突する。
+        //   minCount>=1000 は不合理なデータだが入力可能で、これはプロセス全域キャッシュなので
+        //   誤ヒットは誤った診断そのものになる。区切り文字を入れて衝突を構造的に消す。
+        val key = t.toString() + "|" +
+            rules.map { "${it.first}:${it.second}" }.sorted().joinToString(",")
         val c = minDaysCache[key]
         if (c != null) return if (c == NULL_SENTINEL) null else c
         val v = SmartInitialScheduler.minDaysForFullCompliance(t, rules)

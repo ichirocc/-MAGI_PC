@@ -599,7 +599,10 @@ object V6HotfixPasses {
                 if (p.S > 0 && p.T > 0) {
                     val i = rng.nextInt(p.S)
                     val j = rng.nextInt(p.T)
-                    if (p.wish[i][j] < 0) {
+                    // [3.311.0] 3.270.0 の wishLocked 統一の取り残し。生の `wish < 0` だと
+                    //   **実現不能な希望**（担当できないシフトへの希望）のセルまで摂動対象から
+                    //   外れ、そこに座礁した groupViol セルが永久に動かせなくなる。
+                    if (!p.wishLocked(i, j)) {
                         val allowed = p.allowedShiftsForStaff(i)
                         if (allowed.isNotEmpty()) cand[i][j] = allowed[rng.nextInt(allowed.size)]
                     }
