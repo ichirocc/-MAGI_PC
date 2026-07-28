@@ -121,22 +121,29 @@ object V6LateOperators {
         // [HF411 Level Zero準拠] 平準化対象シフト: need定義済み かつ 担当可能2名以上(番号非依存=全シフト同等)
         fun isBalanceable(bk: Int): Boolean {
             if (bk !in 0 until kN) return false
-            var hasNeed = (state.shifts.getOrNull(bk)?.need1?.toIntOrNull() ?: 0) > 0
-            if (!hasNeed) {
-                for (j in 0 until tN) {
-                    val v = state.needDay1["$bk,$j"]
-                    if (!v.isNullOrBlank() && (v.toIntOrNull() ?: 0) > 0) { hasNeed = true; break }
-                }
+            // [3.309.0] 旧実装は生 state の need1 / needDay1 しか見ず、**P2 だけで需要が定義された
+            //   シフトを「需要なし」と判定**して Chain 系の候補から丸ごと外していた（3.173.0 で
+            //   CoverageDiagnosis に対して直したのと同型の取り残し）。判定は source of truth の
+            //   Problem.covUCell に委ねる＝誰も配置しない状態(got=0)で不足が出るならその日は需要がある。
+            var hasNeed = false
+            for (j in 0 until tN) {
+                if (p.covUCell(bk, j, 0) > 0) { hasNeed = true; break }
             }
             if (!hasNeed) return false
             var elig = 0
             for (i in 0 until sN) if (alw[i].contains(bk)) { if (++elig >= 2) return true }
             return false
         }
-        // 採否(Chain系): Web 同様 weightedScore 純改善のみ(evalByFamily/weightedScore 判定)。採用時は cur 更新。
+        // 採否(Chain系)。[3.309.0] 旧実装は weightedScore 純改善のみで **HARD を一切見ていなかった**
+        //   （すぐ上の gate() は 3.287.0 で hard 優先へ統一済みなのに、ここだけ 3.287.0/3.289.0 の
+        //   全サイト掃討から漏れていた）。実害は到達不能に近い＝同日3〜4者交換は最大4セルしか変えず、
+        //   soft から得られる weighted 改善は現実的に数百（low=90/high=45/c1=15）に対し、HARD の最小重みは
+        //   c3n=7000 なので HARD を増やす受理は成立しない。それでも契約は揃える（将来 HF77 で HARD 重みが
+        //   下がったときに静かに壊れる罠を残さない）。判定は betterReport と同じ hard → weightedScore。
         fun gateW(): Boolean {
             val nv = UnifiedViolationChecker.check(state, sched)
-            if (nv.weightedScore < cur.weightedScore) { cur = nv; return true }
+            val ok = nv.hard < cur.hard || (nv.hard == cur.hard && nv.weightedScore < cur.weightedScore)
+            if (ok) { cur = nv; return true }
             return false
         }
 

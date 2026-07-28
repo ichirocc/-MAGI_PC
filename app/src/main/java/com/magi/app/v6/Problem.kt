@@ -70,6 +70,15 @@ class Problem(val state: MagiState) {
     //   （従来: チェッカーのみ d>T skip、評価器の run-mode は罰し続ける乖離があった）。
     private val _c3OverT = mutableListOf<Pair<String, String>>()
     val c3OverT: List<Pair<String, String>> get() = _c3OverT
+
+    // [3.309.0] 存在しないシフト記号を含む連続パターン行。旧実装は resolveC3 で
+    //   `if (si < 0) return@mapNotNull null` と**無言で捨てて**おり、シフトを改名・削除すると
+    //   その行を参照する連続パターン（禁止=HARD を含む）が評価対象から消えるのに、画面にも
+    //   ログにも何も出なかった。すぐ下の L>期間 のケースは _c3OverT に記録して Sanity が案内する
+    //   のに、この分岐だけ同じ扱いになっていなかった非対称。fam と、行の記号列（未定義記号を
+    //   〈〉で囲んだもの）を記録する。読み取り専用＝評価・重みは一切変えない。
+    private val _c3UnknownShift = mutableListOf<Pair<String, String>>()
+    val c3UnknownShift: List<Pair<String, String>> get() = _c3UnknownShift
     val cons41: List<C41>
     val cons42: List<C42>
     // [スキルグループ新設] スキル群の C41/C42 相当（ssk = staff のスキル群index。既存 sgrp とは独立）。
@@ -193,7 +202,13 @@ class Problem(val state: MagiState) {
         val seq = IntArray(body.size)
         for (idx in body.indices) {
             val si = shiftIdxOf(body[idx])
-            if (si < 0) return@mapNotNull null
+            if (si < 0) {
+                // [3.309.0] 無言で捨てず記録する（Sanity が「この行は効いていない」と案内する）。
+                _c3UnknownShift.add(
+                    fam to body.joinToString("") { t -> if (shiftIdxOf(t) < 0) "〈$t〉" else t },
+                )
+                return@mapNotNull null
+            }
             seq[idx] = si
         }
         if (seq.size > T) {   // [監査#9] L>期間はどの族でも判定不能/無意味 → 除外して記録（Sanityが案内）

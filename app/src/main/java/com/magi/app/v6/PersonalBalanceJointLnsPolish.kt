@@ -266,8 +266,13 @@ internal object PersonalBalanceJointLnsPolish {
         val forced = IntArray(p.K)
         var fixed = 0
         for (j in 0 until p.T) {
+            // [3.309.0] 旧実装は生の `w >= 0` で数えており、**担当できないシフトへの希望**まで
+            //   「固定」として下限に織り込んでいた（この関数の docstring 自身が「担当可否も使う」と
+            //   書いているのに、この分岐だけ canDo を見ていなかった）。規約は Problem.wishLocked
+            //   ＝実現可能な希望だけが凍結される（3.264.0 / 3.270.0 / 3.278.0 と同じ retrofit）。
+            if (!p.wishLocked(staff, j)) continue
             val w = p.wish[staff][j]
-            if (w >= 0 && w in 0 until p.K) {
+            if (w in 0 until p.K) {
                 forced[w]++
                 fixed++
             }
@@ -328,7 +333,7 @@ internal object PersonalBalanceJointLnsPolish {
             val before = countPenalty(p, i, counts[i])
             val list = ArrayList<Goal>()
             for (j in 0 until p.T) {
-                if (p.wish[i][j] >= 0) continue
+                if (p.wishLocked(i, j)) continue
                 val old = schedule[i][j]
                 if (old !in 0 until p.K) continue
                 for (target in 0 until p.K) {
@@ -398,13 +403,13 @@ internal object PersonalBalanceJointLnsPolish {
         val j = goal.day
         val target = goal.target
         val old = base[i][j]
-        if (old == target || p.wish[i][j] >= 0 || !p.canDo(i, target)) return emptyList()
+        if (old == target || p.wishLocked(i, j) || !p.canDo(i, target)) return emptyList()
         val out = ArrayList<Candidate>()
 
         // 同日1対1交換。coverageを完全保存するため最優先。
         val donors = (0 until p.S).shuffled(rng)
         for (d in donors) {
-            if (d == i || base[d][j] != target || p.wish[d][j] >= 0 || !p.canDo(d, old)) continue
+            if (d == i || base[d][j] != target || p.wishLocked(d, j) || !p.canDo(d, old)) continue
             val w = base.copy2D()
             w[i][j] = target
             w[d][j] = old
@@ -449,7 +454,7 @@ internal object PersonalBalanceJointLnsPolish {
 
         // 本人の別日targetと自己交換。月間回数は不変だが、下限内移替やc1/c3/weeklyの副作用改善に使う。
         for (d2 in (0 until p.T).shuffled(rng)) {
-            if (d2 == j || base[i][d2] != target || p.wish[i][d2] >= 0 || !p.canDo(i, old)) continue
+            if (d2 == j || base[i][d2] != target || p.wishLocked(i, d2) || !p.canDo(i, old)) continue
             val w = base.copy2D()
             w[i][j] = target
             w[i][d2] = old
@@ -462,7 +467,7 @@ internal object PersonalBalanceJointLnsPolish {
         if (out.size < limit) {
             outer@ for (d in donors) for (d2 in (0 until p.T).shuffled(rng)) {
                 if (d == i && d2 == j) continue
-                if (base[d][d2] != target || p.wish[d][d2] >= 0 || !p.canDo(d, old)) continue
+                if (base[d][d2] != target || p.wishLocked(d, d2) || !p.canDo(d, old)) continue
                 val w = base.copy2D()
                 w[i][j] = target
                 w[d][d2] = old
