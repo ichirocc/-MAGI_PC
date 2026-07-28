@@ -129,11 +129,28 @@ class StagnationEscapeControllerTest {
         assertNotEquals(current.role, next.role)
     }
 
+    /**
+     * [3.308.2/敵対トレース] 旧テストは名前が「役割変更でリセットされない」と言いながら、実際には
+     * `nextPlateauDepth` の足し算しか見ておらず、役割変更に一度も触れていなかった（しかもその関数は
+     * 本番から呼ばれないデッドコードだった）。役割が変わっても深さが効き続けることは、**制御器の
+     * 出力の強度**として観測できる。そこを直接固定する。
+     */
     @Test
-    fun plateauDepthIsNotResetByRoleChange() {
-        assertEquals(1, AdaptiveHypothesisEpochPolicy.nextPlateauDepth(0, false))
-        assertEquals(3, AdaptiveHypothesisEpochPolicy.nextPlateauDepth(2, false))
-        assertEquals(0, AdaptiveHypothesisEpochPolicy.nextPlateauDepth(9, true))
+    fun accumulatedDepthStillRaisesIntensityAfterTheRoleChanges() {
+        val controller = StagnationEscapeController(workerIndex = 1)
+        val current = AdaptiveHypothesisEpochPolicy.initialAssignmentFor(1)
+        val deep = controller.nextAssignment(
+            current = current,
+            report = report(mapOf("c1" to 3)),
+            plateauDepth = 6,
+            nearestOtherDistance = 40,
+            hasOtherHypothesis = true,
+        )
+        // 役割は実際に変わっている（深さが役割継続の副産物ではないことの確認）。
+        assertNotEquals(current.role, deep.role)
+        // 深さ6は intensityFor の growth=3 を意味する。同じ役割を深さ0で組んだものより必ず強い。
+        val shallow = AdaptiveHypothesisEpochPolicy.assignmentFor(deep.role, escapeDepth = 0)
+        assertEquals(shallow.intensity + 3, deep.intensity)
     }
 
     /** 既定 OFF＝本番の経路は従来のまま、を明示的に固定する。 */

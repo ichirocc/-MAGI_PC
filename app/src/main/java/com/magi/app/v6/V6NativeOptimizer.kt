@@ -608,8 +608,6 @@ object V6NativeOptimizer {
                         assignment, improvedPrevious, remainingSec,
                     )
                     if (quantum <= 0) break
-                    // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の前に
-                    //   merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
                     val roleOptions = options.copy(
@@ -734,6 +732,8 @@ object V6NativeOptimizer {
                         improvedPrevious = AdaptiveHypothesisEpochPolicy
                             .carriesImprovingQuantum(improvedThisEpoch, roleChanged = false)
                     }
+                    // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の
+                    //   前に merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
                     // [3.308.1/敵対検証] 回数と秒をここで同時に数える。旧実装は回数だけをエポック
                     //   冒頭で加算していたため、例外で break したエポックが回数には入るのに秒には
                     //   入らず、さらに epoch++ もされないので sum(roleRuns) > epochs になっていた

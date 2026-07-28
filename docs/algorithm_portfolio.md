@@ -151,7 +151,7 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 | W4 の初回停滞（かつ異なる peer がある） | `ELITE_RELINK`。 |
 | HARD 残差 | 主手は `HARD_FAMILY_RSI`。深い段では `HARD_DEBT_RSI_PLUS`。 |
 | 時系列・日別残差（c1 / c3 / c3m / c3mn / c3n / c41 / c42 / c41s / c42s / covO） | 主手は `DAY_BLOCK_ALNS`。 |
-| 個人回数・平準化残差（low / high / c2 / apt / fair / weekly） | 主手は `PERSONAL_RSI`。 |
+| 個人回数・平準化残差（low / high / c2 / apt / fair / weekly） | 主手は `PERSONAL_RSI`。**ただし役割の内部 focus は apt → high → low → fair の順で、c2 と weekly は選べず `total` へ落ちる**（`adaptiveEpochStart`。3.308.2 の敵対トレースで判明した設計と実装の差。focus 連鎖を広げると探索経路が変わるため、A/B で示せるまで実装は変えない）。 |
 | **どの残差にも当たらない** | **主手も深い段も `LARGE_DESTROY_ALNS`。** |
 | 異なる peer がある | 再結合の段が `ELITE_RELINK` になる（いなければ `LARGE_DESTROY_ALNS`）。 |
 | 候補がすべて現在の役割と同じ | 役割を変えない（`firstDifferent` のフォールバック）。 |
@@ -160,8 +160,15 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 ことは普通にあり、主手の優先順位は HARD → 時系列 → 個人回数の順。
 
 停滞深さは**自己エリートが改善しなかった連続 epoch 数**であり、役割を替えてもリセットしない。
-改善したときだけ深さと強度を戻す。通常の停滞では
-`制約別の主手 → 再結合 → 多様化 → 深い破壊` の4段を決定的に巡回する。
+改善したときだけ深さと強度を戻す。通常の停滞では次の4段を決定的に巡回する
+（`(深さ-1) and 3` で選ぶ。各段の候補が現在の役割と同じなら次の候補へ送る）。
+
+1. **制約別の主手** — 上表の残差から選ぶ（HARD / 時系列 / 個人回数 / 該当なし）。
+2. **再結合** — `ELITE_RELINK`（異なる peer がいなければ `LARGE_DESTROY_ALNS`）。
+3. **多様化** — `MAX_DISTANCE_RSI_PLUS`。
+4. **深い破壊** — HARD が残っていれば `HARD_DEBT_RSI_PLUS`、それ以外は `LARGE_DESTROY_ALNS`。
+
+深さが上がるほど `intensityFor` の強度も上がる（2エポック失敗ごとに +1、上限 +3）。
 
 ### 役割が変わった直後の量子（両経路が共有する契約）
 

@@ -170,10 +170,6 @@ internal object AdaptiveHypothesisEpochPolicy {
             intensity = intensityFor(role, escapeDepth),
         )
 
-    /** [3.306.0/既定OFF経路] 連続の非改善エポック数。役割の再配属では減らさない。 */
-    fun nextPlateauDepth(previous: Int, improvedThisEpoch: Boolean): Int =
-        if (improvedThisEpoch) 0 else if (previous == Int.MAX_VALUE) previous else previous + 1
-
     fun roleLabel(assignment: HypothesisEpochAssignment): String =
         "${assignment.role.name}/x${assignment.intensity}"
 }

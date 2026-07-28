@@ -5248,6 +5248,38 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 適応ポートフォリオの敵対フルコードトレース（3.308.2, ユーザー指示「敵対フルコードトレースする」）
+`runAdaptivePortfolio` を設定 → epoch 頭 → 役割実行 → epoch 尾の順に行単位で追い、並行性・生存期間・
+例外経路・デッドコードを狙った。**うち3件は 3.306.0〜3.308.1 で私自身が作った欠陥**。
+- **[デッドコード撤去] `nextPlateauDepth` が本番から一度も呼ばれていなかった**: 3.306.0 で制御器経路用に
+  足したが、実配線（`V6NativeOptimizer:689`）は `nextStagnantEpochs` のまま。**3.278.0 で `safetyFloor` を
+  「計算されるだけで本番未読・テスト assert のみ」として撤去した先例があるのに、同型を再導入していた**。
+  2関数は `Int.MAX_VALUE` ガード以外まったく同一で、そのガードも到達不能（エポック数は予算/量子で上限）。
+  「役割変更でリセットしない」という性質は**関数ではなく呼び出し側**（制御器分岐が `stagnantEpochs = 0` を
+  持たないこと）にあるため、関数を分けても契約は表現できていなかった → 撤去。
+- **[テストが名前と違うものを検証していた] `plateauDepthIsNotResetByRoleChange`**: 名前に反し
+  `nextPlateauDepth` の足し算しか見ておらず、役割変更に一度も触れていなかった（しかも対象が上記の
+  デッドコード）。**実際の性質は制御器の出力の強度として観測できる**ので、そこを直接固定する
+  `accumulatedDepthStillRaisesIntensityAfterTheRoleChanges`（深さ6で役割が変わっても、同じ役割を深さ0で
+  組んだものより intensity がちょうど +3 になる）へ差し替えた。
+- **[孤児コメント] 3.308.1 で私が作った**: `roleRuns.merge` を移動した跡に 3.282.0 のコメント
+  （「集計はロールが実際に走ることが確定してから」）だけが残り、無関係な `val roleDeadline` の上に
+  ぶら下がっていた。移動先の集計サイトへ集約。3.282.0 の意図自体は移動後も満たされている（merge は
+  さらに後ろへ動いたため）。
+- **[設計と実装の差・報告のみ] `PERSONAL_RSI` は6族のうち4族しか狙えない**: 制御器の PERSONAL 圧力は
+  low/high/c2/apt/fair/weekly の6族で立つが、`adaptiveEpochStart` の PERSONAL_RSI 内部 focus 連鎖は
+  apt → high → low → fair → `"total"` で、**c2 と weekly は選べず総花的な `total` へ落ちる**。
+  focus 連鎖を広げると探索経路が変わる＝要 A/B だが、PORTFOLIO の run 間ばらつき（実測 200〜300）では
+  この規模の差を示せない → **コードは変えず、決定表を実装どおりに訂正**した。
+- **健全と確認（変更なし）**: `AdaptiveEliteArchive.register` は `@Synchronized`／`size`/`snapshot` は
+  await 後の単一スレッド呼び出し ／ `nowMs()` は `System.nanoTime()` ベース＝単調（`nowMs()-epochT0` は
+  壁時計の巻き戻りに影響されない）／`forceMaxDistanceKick`・`forceDiverseKick` はどちらも `wishLocked` と
+  `allowedShiftsForStaff` を守る＝groupViol/pref を新たに作らない ／ `escapeController` と
+  `controlledAssignment` は同一の判定から導出（`PolishGate` を2回読まない）／UI トグル3つとも
+  `enabled = !ui.running` ／ 制御器経路で `controlledAssignment = next` は集計より後だが、集計が使う
+  `assignment` は epoch 頭の `val` で別物＝役割の付け替え先を取り違えない。
+- 検証: ホストJVM **全344テスト green**（1件撤去・1件追加）。
+
 ## 3.307.0/3.308.0 の敵対検証＝自分の主張3件を反証して修正（3.308.1, ユーザー指示「敵対検証する」）
 直前2件（役割別worker秒のログ化・アップロード版の部分融合）の主張を1つずつ壊しに行き、**3件が実際に偽**と判明。
 - **[偽1・修正] 「roleRuns と同じ母集団を秒でも数える」**: `roleRuns.merge` はエポック**冒頭**（quantum 判定の直後）、
@@ -5393,7 +5425,8 @@ Large 320s / Max 295s / Personal 200s / Baseline 335s / HARD系 各35s ＋ワー
 - **採用形（(b)）**: 提示版で置き換えず、**旧 API を全部残したまま新経路を足す**。
   `AdaptiveHypothesisEpochPolicy` は既存（`assignmentFor(Int,Int)` / `shouldReassign` /
   `nextStagnantEpochs`）を無変更のまま、`assignmentFor(Role,Int)` / `initialAssignmentFor` /
-  `nextPlateauDepth` ＋ `StagnationEscapePressure` / `StagnationEscapeController` を追加。
+  `StagnationEscapePressure` / `StagnationEscapeController` を追加（同時に足した `nextPlateauDepth` は
+  本番から呼ばれないデッドコードだったため 3.308.2 で撤去）。
   `V6NativeOptimizer` の epoch ループは1箇所で分岐し、`PolishGate.adaptiveEscapeControl`（既定 false）が
   真のときだけ新経路。**既定 OFF なら現行と完全に同一経路**。
   提示版がそのままだと壊していた `HypothesisEpochPolicyTest` の4テストは無傷のまま green。
