@@ -1666,7 +1666,7 @@ object V6NativeOptimizer {
             focusTrail.add(focus)
             val focusedBefore = bestReport.breakdown[focus] ?: 0
             lastFocus = focus   // [レビュー#5] 次ラウンド頭の HF63 更新へ「このラウンドの投入先」を渡す
-            val hypothesis = rsiGenerateHypothesis(state, best, bestReport, focus, rng)
+            val hypothesis = rsiGenerateHypothesis(state, best, bestReport, focus, rng, shouldStop)
             val phase = if (round % 2 == 0) runAlns(state, hypothesis, options.copy(restarts = 1), per, shouldStop, onProgress) else runV5(state, hypothesis, options, per, shouldStop, onProgress)
             iters += phase.iterations
             var candSched = phase.schedule
@@ -2441,7 +2441,11 @@ object V6NativeOptimizer {
      *  従来のrepeat(8)相当以上(reps>=6の切り上げ計算)を維持し既存の攪乱強度を落とさない。 */
     internal fun destroyRepairStaffReps(s: Int, t: Int): Int = max(1, (6 * s + t - 1) / max(1, t))
 
-    internal fun rsiGenerateHypothesis(state: MagiState, base: Array<IntArray>, report: ViolationReport, focus: String, rng: Random): Array<IntArray> {
+    internal fun rsiGenerateHypothesis(
+        state: MagiState, base: Array<IntArray>, report: ViolationReport, focus: String, rng: Random,
+        // [3.313.0] free repair 群へ締切を通す。既定 `{ false }` ＝既存の直接呼出・テストは挙動不変。
+        shouldStop: () -> Boolean = { false },
+    ): Array<IntArray> {
         val out = base.copy2D()
         val p = cachedProblem(state)
         when (focus) {
@@ -2456,17 +2460,17 @@ object V6NativeOptimizer {
             //   （need>0のシフトを埋める設計）で自動的に再修復されるため実害は薄いが、covO/c42/c42s
             //   の過剰・違反ペア解消はrepairの対象外で影響が直接的。順序を「destroyRepairDay×6→
             //   専用free関数」へ統一し、hypothesisの最終状態に専用オペレータの改善が必ず残るようにする。
-            "covU" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovUChains(state, out, rng) }
+            "covU" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovUChains(state, out, rng, shouldStop) }
             // [3.209.0/covOと同型の穴=c41/c41sがfocusされてもdestroyRepairDayのc41DayMargは副次効果でしか
             //   効かない] markNeed系(needViolations)にしか載らずGLSキック/destroyRepairViolationsのヒントを
             //   一切持てない点がcovOと同じ。applyC41Freeで群レンジの超過/不足を直接動かす専用オペレータへ。
-            "c41" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = false) }
-            "c41s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = true) }
+            "c41" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = false, shouldStop = shouldStop) }
+            "c41s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = true, shouldStop = shouldStop) }
             // [3.233.0/c41,c41sと同型の穴] c42/c42sも「動かせるか」を判定する専用オペレータが無く
             // destroyRepairViolationsの汎用ランダム再割当頼みだった。applyC42Freeで違反ペアの
             // 片側を直接動かす専用オペレータへ。
-            "c42" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = false) }
-            "c42s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = true) }
+            "c42" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = false, shouldStop = shouldStop) }
+            "c42s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = true, shouldStop = shouldStop) }
             // [実機ログ起因=apt未focus] apt(適切回数)は maxViolatedFamily の order に無く探索中は一度も focus
             //   されなかった（post-processing の applyDayAssignmentPolish 頼み）。destroyRepairStaff の marginal
             //   cost(staffCountPenaltyAt)は既にaptを織込み済み(重み1)のため、low/high/c2と同じ経路へ合流するだけで
@@ -2496,7 +2500,7 @@ object V6NativeOptimizer {
             //   専用オペレータ applyCovOFree を新設し、covU chain(applyCovUChains)と対称に配線する。
             //   [3.241.0] destroyRepairDayを先に(順序バグ修正、上記covUコメント参照)＝covOは特にneed<=0
             //   シフト(休等)の過剰が主対象でrepair段階の恩恵が皆無のため、この順序修正の効果が最も直接的。
-            "covO" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovOFree(state, out, rng) }
+            "covO" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovOFree(state, out, rng, shouldStop) }
             // [実機ログ起因] groupViol/pref は hf67 の作用対象(hf66DataHardening=群外修正・希望反映)だが、
             //   c3n(禁止連続=HARD)は hf67 が一切作用しない(被覆/希望/下限のみ)＝c3n focus のラウンドが no-op 仮説で
             //   空転していた(実機3実行×計10ラウンドで c3n=1 不変→HF63 が c3n を誤 infeasible 判定)。c3n のセルは
@@ -2517,12 +2521,20 @@ object V6NativeOptimizer {
      * c3n枝刈り済み。最終採否は呼び出し側の keep-best（ラウンド better() or エピローグの checker 照合）が担保。
      * ユーザー実例（2026-08）: 8/11 モニカ B4→Cｵ（深さ1）／8/17 上條 Cｵ→Cｱ・山本 →Cｵ（深さ2）。
      */
-    private fun applyCovUChains(state: MagiState, sched: Array<IntArray>, rng: Random): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+private fun applyCovUChains(
+        state: MagiState, sched: Array<IntArray>, rng: Random,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         var applied = 0
         val cnt = IntArray(p.K)
         for (j in 0 until p.T) {
+            if (shouldStop()) return applied
             for (k in 0 until p.K) cnt[k] = 0
             for (i in 0 until p.S) { val kk = sched[i][j]; if (kk in 0 until p.K) cnt[kk]++ }
             for (k in 0 until p.K) {
@@ -2592,13 +2604,22 @@ object V6NativeOptimizer {
         return bestRep
     }
 
-    internal fun applyCovOFree(state: MagiState, sched: Array<IntArray>, rng: Random): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyCovOFree(
+        state: MagiState, sched: Array<IntArray>, rng: Random,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         var applied = 0
         for (j in 0 until p.T) {
+            if (shouldStop()) return applied
             for (k in 0 until p.K) {
                 while (true) {
+                    if (shouldStop()) return applied
                     val cov = IntArray(p.K)
                     for (i in 0 until p.S) { val kk = sched[i][j]; if (kk in 0 until p.K) cov[kk]++ }
                     if (p.covOCell(k, j, cov[k]) <= 0) break
@@ -2637,7 +2658,14 @@ object V6NativeOptimizer {
      * 移動元/移動先で covU/covO を悪化させない候補のみ動かす。sched を in-place 変更し適用手数を返す。
      * 最終採否は呼び出し側の keep-best が担保＝退化不能。
      */
-    internal fun applyC41Free(state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyC41Free(
+        state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         val rules = if (skill) p.cons41s else p.cons41
@@ -2656,7 +2684,9 @@ object V6NativeOptimizer {
         //   ここでは構造的に安全（希望非固定・禁止連続なし）な候補を直接移動・玉突き連鎖の両方で
         //   網羅的に集め、commitBestMoveが実チェッカーで全体評価して真に改善する最良の1件だけを選ぶ。
         for (c in rules) {
+            if (shouldStop()) return applied
             for (j in 0 until p.T) {
+                if (shouldStop()) return applied
                 // 超過(z>u): 群在籍者を他シフトへ移す。
                 while (groupCount(c, j) > c.u) {
                     val baseline = UnifiedViolationChecker.check(state, sched)
@@ -2716,7 +2746,14 @@ object V6NativeOptimizer {
      * sched を in-place 変更し適用手数を返す。最終採否は呼び出し側のkeep-best（ラウンドbetter()）が
      * 担保＝退化不能。
      */
-    internal fun applyC42Free(state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyC42Free(
+        state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         val rules = if (skill) p.cons42s else p.cons42
@@ -2741,7 +2778,9 @@ object V6NativeOptimizer {
             }
         }
         for (c in rules) {
+            if (shouldStop()) return applied
             for (j in 0 until p.T) {
+                if (shouldStop()) return applied
                 while (true) {
                     val left = (0 until p.S).filter { grp[it] == c.g1 && sched[it][j] == c.s1 }
                     val right = (0 until p.S).filter { grp[it] == c.g2 && sched[it][j] == c.s2 }

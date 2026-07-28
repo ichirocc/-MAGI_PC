@@ -454,7 +454,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 groups = lp.state.groupCount,
                                 use2 = lp.state.use2Patterns,
                                 initHard = lp.nativeHard,
-                                initSoft = lp.nativeSoft,
+                                // [3.313.0] 単位を checker 基準へ揃える。旧: Evaluator の**重み付き**soft を
+                                //   入れていたが、`makeUi`（中央のUI構築）が書く bestSoft は
+                                //   `report.soft`＝**生件数**なので、完了後の「改善 N%」が
+                                //   重み付き→生件数の引き算になり大幅に水増しされていた。
+                                initSoft = lp.report.soft.toLong(),
                                 iters = 0,
                                 itersPerSec = 0,
                                 elapsedMs = 0,

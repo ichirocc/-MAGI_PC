@@ -5248,6 +5248,34 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## free repair の締切確認と UI 指標の単位統一（3.313.0, 6本目のレビュー）
+6本目も対象は `552b553`＝3.305.0 で HEAD より7コミット古い。「継続」とされた項目のうち P0 skillIdx・
+C1構造下限・ForbiddenDiag・MUSキー衝突は 3.311.0/3.312.0 で修正済み。新規のうち実在を確認できた2件を修正。
+- **[実バグ] free repair 群に停止確認が1つも無かった**: `applyCovOFree` / `applyC41Free` / `applyC42Free` /
+  `applyCovUChains` は違反セル × 候補職員の二重ループの内側でフル checker（`commitBestMove`）と
+  `findCovUChain`(BFS) を呼ぶ高コストパスなのに、`shouldStop` を一切見ていなかった（**3.161.0 で
+  V6HotfixPasses の研磨パスへ入れた「内側ループでも締切を見る」の対象漏れ**。あちらは後処理研磨、
+  こちらは RSI 仮説生成器で、私が 3.204.0/3.209.0/3.233.0 で作った側）。4関数に
+  `shouldStop: () -> Boolean = { false }`（**既定つき＝既存の直接呼出・テストは挙動不変**）を足し、
+  ルール/日/セルの各ループ先頭で確認。`rsiGenerateHypothesis` 経由で `runRsi` の締切を配線。
+- **[表示バグ] 「改善 N%」が重み付きと生件数を引き算していた**: `initSoft` は
+  `ev.split(ev.fullEval(init)).second`＝**Evaluator の重み付き soft**なのに、`makeUi`（中央のUI構築）が
+  書く `bestSoft` は `report.soft = total - hard`＝**生件数**。`progressSummary` の
+  `改善 N% (initSoft→bestSoft)` は完了後にこの2つを引くため、実データなら 1900→170 で「91%」のように
+  **大幅に水増し**されていた。`initSoft` を `lp.report.soft` へ揃える（`LoadedProblem` は既に report を持つ）。
+  **残る不整合を正直に記録**: ライブSA経路（`ev.split(pr.bestScore)`）はまだ Evaluator 基準だが、
+  次の report push で `makeUi` が上書きするため一時的。完全統一には progress 側にも checker 呼出が要る。
+- **[報告のみ・確認済み] groupViol が checker と探索評価で非対称**: `MirrorKeys.hard` は
+  `[groupViol, c3n, covU, pref]` の4族だが、`Evaluator.fullEvalParts` の `hard1` は `c3n + pref + covU` の
+  3族で、docstring も明示的にそう書いている（意図的）。**露出は狭い**＝探索オペレータは
+  `allowedShiftsForStaff` で群外を作らず、入口の `hf67HardRepair` が既存の群外セルを担当可へ正規化し、
+  最終採用は checker ベースの `betterReport` が groupViol を数える。閉じるには Evaluator＋Delta＋C++ を
+  同時に変える目的関数の変更＝明示の承認と A/B が要るため据え置き。
+- **[未検証・報告のみ]** WorkManager の run identity（固定ファイル名＋REPLACE の競合）・休 index 0 の暗黙前提・
+  入力規模の上限・main 直 push の CI 差・Elite 統合の root 偏り・C1 window の重複排除キー・
+  ヘッダなし職員CSV は、いずれも実機/CI でしか動的確認できないか別途の設計判断が要るため今回は対象外。
+- 検証: ホストJVM **全349テスト green**。後処理研磨の決定的ベンチは3データセットとも 3.312.0 と完全一致。
+
 ## C1合同LNSの「構造下限」からSOFT個人回数を除外（3.312.0, 5本目のレビューの新規項目 N-01）
 5本目のレビュー対象は `552b553`＝3.305.0 で、私の HEAD より6コミット古い。「前回の M-01〜M-10 が全部
 残っている」は **HEAD に対しては成り立たない**（M-01/M-03残り/M-04/M-09 は 3.311.0、M-02 は 3.309.0 で修正済み）。
