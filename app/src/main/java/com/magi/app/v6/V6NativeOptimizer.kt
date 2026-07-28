@@ -442,6 +442,9 @@ object V6NativeOptimizer {
         val epochs: Int,
         val reassignments: Int,
         val roleRuns: Map<HypothesisEpochRole, Int>,
+        /** [3.306.0] ワーカーが epoch ループを抜けた時点の役割。エリート登録の分類に使う
+         *  （再配属回数からの逆算では、残差ベース経路のとき実際の役割と一致しないため）。 */
+        val lastRole: HypothesisEpochRole,
         /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
          *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
         val hf63Avoided: List<String> = emptyList(),
@@ -504,6 +507,13 @@ object V6NativeOptimizer {
                 var reassignments = 0
                 var stagnantEpochs = 0
                 var improvedPrevious = false
+                // [3.306.0/既定OFF] 残差ベースの4段脱出制御。null=従来経路（回数で機械的に巡回し、
+                //   再配属のたびに stagnantEpochs を 0 へ戻す）。非null=盤面の残差と peer 距離で
+                //   次の役割を選び、停滞の深さを役割変更でも保持する。既定 OFF の根拠は PolishGate 参照。
+                val escapeController =
+                    if (PolishGate.adaptiveEscapeControl) StagnationEscapeController(i) else null
+                var controlledAssignment =
+                    if (escapeController != null) AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i) else null
                 var epoch = 0
                 var iterations = 0L
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
@@ -526,7 +536,8 @@ object V6NativeOptimizer {
                     (hardZeroWinner.get() < 0 || hardZeroWinner.get() == i)
                 ) {
                     try {
-                    val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
+                    val assignment = controlledAssignment
+                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
                     // [3.282.0/新領域ログ監査] エポック改善の基準線＝エポック開始時点の自己エリート。
                     //   旧: `better(result, startReport)` で startReport は**破壊摂動済みの入口盤面**（escape系
@@ -676,7 +687,20 @@ object V6NativeOptimizer {
                         }
                         d
                     }
-                    if (AdaptiveHypothesisEpochPolicy.shouldReassign(
+                    if (escapeController != null) {
+                        // [3.306.0/既定OFF経路] stagnantEpochs をリセットしない＝停滞の深さが役割変更を
+                        //   跨いで残り、target → 再結合 → 多様化 → 深い破壊 の4段へ進める。
+                        val next = escapeController.nextAssignment(
+                            current = controlledAssignment!!,
+                            report = eliteReport,
+                            plateauDepth = stagnantEpochs,
+                            nearestOtherDistance = nearest,
+                            hasOtherHypothesis = workers > 1,
+                        )
+                        if (next.role != controlledAssignment!!.role) reassignments++
+                        controlledAssignment = next
+                        improvedPrevious = improvedThisEpoch
+                    } else if (AdaptiveHypothesisEpochPolicy.shouldReassign(
                             index = i,
                             improvedThisEpoch = improvedThisEpoch,
                             stagnantEpochs = stagnantEpochs,
@@ -703,6 +727,8 @@ object V6NativeOptimizer {
                     elite = elite,
                     report = eliteReport,
                     logs = eliteLogs,
+                    lastRole = (controlledAssignment
+                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)).role,
                     iterations = iterations,
                     epochs = epoch,
                     reassignments = reassignments,
@@ -717,7 +743,7 @@ object V6NativeOptimizer {
         for ((index, o) in outcomes.withIndex()) {
             archive.register(
                 o.elite, o.report,
-                AdaptiveHypothesisEpochPolicy.assignmentFor(index, o.reassignments).role,
+                o.lastRole,
                 index, o.epochs, bridge = o.report.hard == globalReport.hard + 1,
             )
             if (better(o.report, globalReport)) {

@@ -5248,6 +5248,56 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 適応ポートフォリオの停滞脱出を既定OFFのトグルで温存（3.306.0, ユーザー選択「b」）
+ユーザーから3ファイル（台帳・`V6NativeOptimizer.kt`・`AdaptiveHypothesisEpochPolicy.kt`）を受領し
+「高精度化できる確率が向上するか?」。実測したうえで**(a)見送る／(b)既定OFFのトグルで温存**を提示し、
+ユーザーが (b) を選択。
+- **提示版の内容**: 各ワーカーの次の役割を「再配属の回数」でなく **いま残っている違反の種類
+  （HARD／時系列／個人）と他仮説との距離**から選ぶ `StagnationEscapeController` を新設し、
+  停滞の深さ(`plateauDepth`)を役割変更でもリセットしない。既定経路は盤面を一切見ず
+  `escapeRoles[(offset + reassignments) % 6]` で機械的に巡回し、再配属のたびに停滞カウンタを 0 へ戻す。
+  **指摘としては正しい**——深さのリセットは 3.282.0 で `improvedThisEpoch` 恒真化を直したときに
+  私が残していた同型の穴で、現行は実質2エポックに1回しか役割が変わらない。
+- **PORTFOLIO A/B（ホストJVM・120s・workers=8・実データ3件×各4回）＝有意差を検出できず**:
+
+  | データ | build | weighted (min/中央/max) | c1 |
+  |---|---|---|---|
+  | golden | HEAD | 2159 / 2289 / 2366 | 85,94,96,98 |
+  | golden | NEW | 2187 / 2215 / 2333 | **93,95,99,101** |
+  | real | HEAD | 32591 / 32688 / 32775 | 69,72,78,78 |
+  | real | NEW | 32491 / 32609 / **32786** | 55,63,76,84 |
+  | user | HEAD | 32621 / **32707** / 32845 | 70,70,73,76 |
+  | user | NEW | 32527 / **32829** / 32845 | 59,70,70,73 |
+
+  3データセットとも範囲が**完全に重なり**、中央値の大小も一貫しない（golden=新が良い／real=新が良い／
+  user=新が悪い）。c1 は golden で**新のほうが悪い**。
+  **[重要な自己訂正] 2サンプル時点では「real は範囲が重ならない＝NEW 有利」と報告したが、4サンプルで
+  覆った**（NEW の max 32786 が HEAD の max 32775 を超える）。3.290.0 で自分が記録した「1回計測で A/B
+  判定してはならない」を、2回でやりかけた。
+- **測定系の限界**: PORTFOLIO は epoch が壁時計ベースで、**seed を固定しても run ごとに大きく振れる**
+  （実測の幅: golden HEAD 207・real NEW 295）。仮に真の効果が 100 程度あってもこの分散の中で有意に
+  示すには n=30 前後＝約6時間の反復が要る。現実的でない。
+- **採用形（(b)）**: 提示版で置き換えず、**旧 API を全部残したまま新経路を足す**。
+  `AdaptiveHypothesisEpochPolicy` は既存（`assignmentFor(Int,Int)` / `shouldReassign` /
+  `nextStagnantEpochs`）を無変更のまま、`assignmentFor(Role,Int)` / `initialAssignmentFor` /
+  `nextPlateauDepth` ＋ `StagnationEscapePressure` / `StagnationEscapeController` を追加。
+  `V6NativeOptimizer` の epoch ループは1箇所で分岐し、`PolishGate.adaptiveEscapeControl`（既定 false）が
+  真のときだけ新経路。**既定 OFF なら現行と完全に同一経路**。
+  提示版がそのままだと壊していた `HypothesisEpochPolicyTest` の4テストは無傷のまま green。
+- **提示版から直した2点**: ①`assignmentFor` の式本体直後に**余分な `}`** があり object がそこで閉じる
+  ＝**コンパイルエラー**（3.290.0 の `"[$lensLabel日]"` と同型の「1文字でビルドが落ちる」）
+  ②`archive.register` が役割を `reassignments` から逆算しており新経路では実際の役割と一致しない
+  → `AdaptiveWorkerOutcome.lastRole` を追加（提示版と同じ対処）。
+- **[自分で作って直したテストの誤り]** 新テストに「深さが増えると強度は単調非減少」と書いたが失敗した。
+  `intensityFor = base(role) + depth/2` で base は役割ごとに 0〜3 と違うため、役割が変わると強度は
+  下がりうる。単調性は同一役割内でしか成立しない。「同一役割内の単調性」と「深い停滞で複数役割を巡ること」の
+  2つに分けて固定し直した。
+- **UI 配線**: `UiState.adaptiveEscape` ／ `MagiViewModel.setAdaptiveEscape` ／ 設定タブ→詳細設定の
+  トグル（3.298.0/3.304.0 と同型）。ON のとき説明文が警告色になり「試した範囲では差が出ませんでした」と
+  正直に出す。
+- 検証: ホストJVM **全340テスト green**（新規7件＝W0固定・残差で役割が決まる・同一役割内の強度昇圧・
+  改善時の役割継続と昇圧解除・collapse時の必ず別役割・深さのリセット規則・既定OFFの明示）。
+
 ## staffPacked の重みドリフトと比較順序を修正（3.305.0, 外部提示コードを検証のうえ採用）
 ユーザーから3ファイル（`V6HotfixPasses.kt` / `C1JointLnsPolish.kt` / `C3nBitScan.kt`）を受領し
 「参考にできますか？」。receiving-code-review の規律どおり現行と diff を取り、1件ずつ実コードへ照合した。
