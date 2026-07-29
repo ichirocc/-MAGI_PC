@@ -5169,7 +5169,9 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
 **報告のみ(未修正=判断/測定待ち)**:
 - ~~`applyDayAssignmentPolish` の rangePen 重み 3/3・apt 1 は Evaluator の 90/45/1 と乖離~~ **→ 3.94.0 で 90/45/1 へ整合(下記)**。
 - `staffPacked`/`c3FamCount` が c3/c3m を run-deficit でなく窓#fire でモデル化(前フィルタ限定・keep-best 安全)。
-- 平準化研磨(`applyGroupShiftEqualizePolish`/`applyWeeklyEqualizePolish`)は分散指標で目的関数(fair/weekly=L1)と別物＝既知の冗長。
+- ~~平準化研磨(`applyGroupShiftEqualizePolish`/`applyWeeklyEqualizePolish`)は分散指標で目的関数(fair/weekly=L1)と別物＝既知の冗長~~
+  **→ 3.317.0 で撤去**（実データ3件で採用0回・分散指標も不動・ablation で最終盤面一致＝寄与ゼロを実測。
+  L1 ベースの後継が役割を代替）。
   ~~`weekly` の `restIdx=-1`(休記号改名時) で全シフトを勤務扱いする潜在バグ・`dow0` 再計算~~ **→ 3.103.0 で修正**
   (restIdx/dow0 とも Problem と同一ソースへ統一)。
 - **デッドコード**: ~~`V6RemainingScreens`(未描画・外部参照0)＋そこからのみ実呼出の `HeaderBar`/`RingGauge`/`BottomNav`/`FlagsView`/
@@ -5247,6 +5249,28 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   偏り職員を収集→UiState→`breakdownLocations` が「職員（曜日の偏り N）」「職員 「シフト」（偏り N）」で整形・タップで
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
+
+## 分散指標の平準化2パスを撤去＝目的関数と指標が一致していなかった（3.317.0）
+バックログに「平準化研磨は分散指標で目的関数(fair/weekly=L1)と別物＝既知の冗長」と 3.84.0 以来
+記録したまま**一度も測っていなかった**項目を消化した。
+- **測定**: 実データ3件（golden/real/user）で `runPostOptimization` のログを見ると、
+  `GroupEqualize`/`WeeklyEqualize` は**3件とも採用0回**で、しかも自分たちが最小化するはずの分散指標すら
+  1ミリも動いていない（`ばらつき 24.0->24.0` / `偏り 76.3->76.3`）。対照的に L1 ベースの
+  `WeeklyRebalance`(3.197.0) は user で採用1回・total 172→170 と実際に効いている。
+- **ablation**（2パスを完全に外して同一seedで実行）: user/golden は weighted が**完全一致**、real は
+  49231→49221 だが これは JointLNS の壁時計予算由来のばらつき帯（3.313.0=49221／3.314.0=49231）の中で、
+  撤去の効果ではない。**寄与ゼロが確定**。
+- **なぜ効かないか**: 目的関数の fair/weekly は 3.72.0 以降 **L1偏差**（round(平均)からの偏差和）で評価
+  されるのに、この2パスは**分散**を下げる手だけを採る。`mainNotWorse` ガードで主目的の悪化は防いでいた
+  ものの、改善方向が目的関数と一致していない＝「安全だが無益」の典型。役割は L1 ベースの後継が完全に
+  代替している（fair→`applyFairPolish` 3.235.0 ／ weekly→`applyWeeklyRebalancePolish` 3.197.0 ＋
+  `applyAlternatingSoftPolish` 3.198.0 が weekly の限界費用を Hungarian の費用に含む）。
+- **撤去**: 2関数＋専用ヘルパー3つ（`mainNotWorse`/`groupShiftVariance`/`dayOfWeekVariance`）＝約130行を
+  定義ごと削除（3.300.0 の旧 `applyBlockSwapPolish` と同じ扱い。3.300.0 の C3 3者回転は「別データで
+  効きうる」ため格下げに留めたが、こちらは**指標そのものが目的関数と別物**なので格下げでなく撤去が筋）。
+  `V6FinalBridgePortTest.equalizePolishesNeverWorsenMainObjective` は対象を後継2パスへ差し替えて維持。
+- 検証: ホストJVM **全356テスト green**（件数不変＝テストは差し替えのみ）。撤去後の決定的ベンチは
+  ablation と完全一致（real 49221／user 33167／golden 2469）。
 
 ## 休の下限合計チェックが必ず誤警告していた（3.316.0, 診断を実データに当てて発見）
 c1 残差（golden 104・real 58・user 54）に対して事前診断が何を言っているかを実データ3件で一覧したところ、

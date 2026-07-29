@@ -491,15 +491,9 @@ object V6HotfixPasses {
         work = rAlt.newSchedule.copy2D()
         logs.addAll(rAlt.logs)
 
-        onPhase("後処理 グループ内シフト回数の平準化")
-        val rGeq = applyGroupShiftEqualizePolish(state, work, maxPasses = 2, shouldStop = clusterStop)
-        work = rGeq.newSchedule.copy2D()
-        logs.addAll(rGeq.logs)
-
-        onPhase("後処理 7日周期(曜日)の平準化")
-        val rWeq = applyWeeklyEqualizePolish(state, work, maxPasses = 2, shouldStop = clusterStop)
-        work = rWeq.newSchedule.copy2D()
-        logs.addAll(rWeq.logs)
+        // [3.317.0] ここにあった分散指標ベースの平準化2パスは撤去した（実測で寄与ゼロ）。詳細は
+        //   applyAlternatingSoftPolish 群の下にある撤去メモを参照。fair/weekly の L1 研磨は
+        //   applyFairPolish / applyWeeklyRebalancePolish / applyAlternatingSoftPolish が担う。
 
         // [3.255.0/C1JointLnsPolish・PersonalBalanceJointLnsPolish, 受領・検証のうえ適用] ここまでの
         // 巡回研磨は各パスが候補を作った直後に正式目的関数で採否するため、C1改善や個人回数改善に伴う
@@ -1054,135 +1048,13 @@ object V6HotfixPasses {
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
 
-    // 主目的(hard→weighted→total)を悪化させないか。平準化は「悪化させない範囲」で二次最適化する。
-    private fun mainNotWorse(rep: ViolationReport, best: ViolationReport): Boolean =
-        rep.hard < best.hard ||
-            (rep.hard == best.hard && rep.weightedScore < best.weightedScore - 1e-9) ||
-            (rep.hard == best.hard && rep.weightedScore <= best.weightedScore + 1e-9 && rep.total <= best.total)
-
-    // グループ内シフト回数のばらつき（群ごと・担当ONシフトごとの分散の総和）。小さいほど平準。
-    private fun groupShiftVariance(p: Problem, state: MagiState, counts: Array<IntArray>): Double {
-        var v = 0.0
-        for (g in 0 until p.G) {
-            val gs = state.groupShift.getOrNull(g) ?: continue
-            val mem = (0 until p.S).filter { p.sgrp[it] == g }
-            if (mem.size < 2) continue
-            for (k in 0 until p.K) {
-                if (gs.getOrNull(k) != 1) continue
-                var sum = 0; for (i in mem) sum += counts[i][k]
-                val mean = sum.toDouble() / mem.size
-                for (i in mem) { val d = counts[i][k] - mean; v += d * d }
-            }
-        }
-        return v
-    }
-
-    // 7日周期(曜日)の偏り: 各職員の勤務(休以外)を曜日7バケットに割り、分散を総和。小さいほど曜日が均等。
-    private fun dayOfWeekVariance(p: Problem, state: MagiState, work: Array<IntArray>, restIdx: Int): Double {
-        // [一括修正] dow0 は Problem.dow0（目的関数 weekly と同一ソース）を使う（旧: ここで再パース＝重複計算）。
-        val dow0 = p.dow0
-        var v = 0.0
-        for (i in 0 until p.S) {
-            val wd = IntArray(7)
-            for (j in 0 until p.T) { val k = work[i][j]; if (k != restIdx && k in 0 until p.K) wd[(dow0 + j) % 7]++ }
-            val avg = wd.sum() / 7.0
-            for (x in wd) v += (x - avg) * (x - avg)
-        }
-        return v
-    }
-
-    /**
-     * [平準化・グループ内シフト回数] 同一グループ内で各シフトの担当回数を均す。同日に同一グループの2職員の
-     * シフトを入替え（被覆＝人数不変・HARD維持）、主目的(hard/total/weighted)を悪化させない範囲で
-     * グループ内分散を厳密に下げる移動だけ採用（lexicographic）。主目的は不変なので退化しない。
-     */
-    fun applyGroupShiftEqualizePolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 2, shouldStop: () -> Boolean = { false }): CyclicSwapResult {
-        val p = Problem(state)
-        val work = normalizeSchedule(schedule, p)
-        val before = UnifiedViolationChecker.check(state, work)
-        var bestRep = before
-        var bestMetric = groupShiftVariance(p, state, countMatrix(p, work))
-        var applied = 0
-        // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
-        //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
-        fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
-        var pass = 0
-        while (pass < maxPasses && bestMetric > 0.0) {
-            if (shouldStop()) break
-            var improved = false
-            for (j in 0 until p.T) {
-                if (shouldStop()) break
-                for (a in 0 until p.S) {
-                    // [監査(未レビュー領域再監査)] O(S^2)内側スキャンにも締切確認を追加。
-                    if (shouldStop()) break
-                    if (!movable(a, j)) continue
-                    for (b in a + 1 until p.S) {
-                        if (!movable(b, j) || p.sgrp[a] != p.sgrp[b]) continue
-                        val sa = work[a][j]; val sb = work[b][j]
-                        if (sa == sb || !p.canDo(a, sb) || !p.canDo(b, sa)) continue
-                        work[a][j] = sb; work[b][j] = sa
-                        val rep = UnifiedViolationChecker.check(state, work)
-                        val m = groupShiftVariance(p, state, countMatrix(p, work))
-                        if (mainNotWorse(rep, bestRep) && m < bestMetric - 1e-9) { bestRep = rep; bestMetric = m; applied++; improved = true }
-                        else { work[a][j] = sa; work[b][j] = sb }
-                    }
-                }
-            }
-            pass++
-            if (!improved) break
-        }
-        val logs = listOf(MirrorLog(tag = "GroupEqualize",
-            message = "グループ内シフト回数の平準化: ばらつき ${"%.1f".format(before.let { groupShiftVariance(p, state, countMatrix(p, normalizeSchedule(schedule, p))) })}->${"%.1f".format(bestMetric)} 採用${applied}回"))
-        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
-    }
-
-    /**
-     * [平準化・7日周期] 各職員の勤務が特定の曜日に偏らないよう均す。同日の2職員のシフトを入替え
-     * （被覆不変・HARD維持）、主目的を悪化させない範囲で曜日分散を厳密に下げる移動だけ採用。退化なし。
-     */
-    fun applyWeeklyEqualizePolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 2, shouldStop: () -> Boolean = { false }): CyclicSwapResult {
-        val p = Problem(state)
-        val work = normalizeSchedule(schedule, p)
-        val before = UnifiedViolationChecker.check(state, work)
-        // [一括修正] 休 index は Problem.restIdx（目的関数 weekly と同一解決・未発見時は 0 フォールバック）を使う。
-        //   旧: ローカル indexOfFirst は未発見で -1 ＝全シフトを勤務扱いし、目的関数と別の指標を最小化していた（latent）。
-        val restIdx = p.restIdx
-        var bestRep = before
-        var bestMetric = dayOfWeekVariance(p, state, work, restIdx)
-        val beforeMetric = bestMetric
-        var applied = 0
-        // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
-        //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
-        fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
-        var pass = 0
-        while (pass < maxPasses && bestMetric > 0.0) {
-            if (shouldStop()) break
-            var improved = false
-            for (j in 0 until p.T) {
-                if (shouldStop()) break
-                for (a in 0 until p.S) {
-                    // [監査(未レビュー領域再監査)] O(S^2)内側スキャンにも締切確認を追加。
-                    if (shouldStop()) break
-                    if (!movable(a, j)) continue
-                    for (b in a + 1 until p.S) {
-                        if (!movable(b, j)) continue
-                        val sa = work[a][j]; val sb = work[b][j]
-                        if (sa == sb || !p.canDo(a, sb) || !p.canDo(b, sa)) continue
-                        work[a][j] = sb; work[b][j] = sa
-                        val rep = UnifiedViolationChecker.check(state, work)
-                        val m = dayOfWeekVariance(p, state, work, restIdx)
-                        if (mainNotWorse(rep, bestRep) && m < bestMetric - 1e-9) { bestRep = rep; bestMetric = m; applied++; improved = true }
-                        else { work[a][j] = sa; work[b][j] = sb }
-                    }
-                }
-            }
-            pass++
-            if (!improved) break
-        }
-        val logs = listOf(MirrorLog(tag = "WeeklyEqualize",
-            message = "7日周期(曜日)の平準化: 偏り ${"%.1f".format(beforeMetric)}->${"%.1f".format(bestMetric)} 採用${applied}回"))
-        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
-    }
+    // [3.317.0] 分散指標ベースの平準化2パス（applyGroupShiftEqualizePolish / applyWeeklyEqualizePolish）は
+    //   ここにあったが撤去した。目的関数の fair/weekly は 3.72.0 以降 **L1偏差**で評価されるのに、この2パスは
+    //   **分散**を下げる手を採っており、指標が目的関数と一致していなかった（3.84.0 で「目的関数外の整え＝冗長」
+    //   と記録したまま未計測だった）。実データ3件で ablation を取り、採用0回・分散指標も1ミリも動かず・
+    //   最終盤面も変わらないことを確認して撤去。L1 ベースの後継が役割を完全に代替している:
+    //   fair → `applyFairPolish`(3.235.0) ／ weekly → `applyWeeklyRebalancePolish`(3.197.0 長方形交換)＋
+    //   `applyAlternatingSoftPolish`(3.198.0 が weekly の限界費用を Hungarian の費用に含む)。
 
     /**
      * [ソフト研磨・weekly（曜日平準化）＝長方形交換] weekly は「職員が特定の曜日にばかり勤務する」偏りで、
@@ -2733,9 +2605,9 @@ object V6HotfixPasses {
      * [FairPolish・グループ内公平化(fair, 重み1)専用の研磨パス] ユーザー指示「c42/c42s以外にも
      * 『動かせるか』専用オペレータの欠如が無いか棚卸しする」で発見（棚卸し結果はユーザー承認済み）。
      * fair は群×担当ONシフトごとにメンバー回数の round(平均)からのL1偏差和で、apt(3.223.0)と
-     * ほぼ同型の違反構造。しかし既存 applyGroupShiftEqualizePolish は同日2者スワップ＋分散指標での
-     * 山登りのみでチェーン救済が無く、交換相手が構造的に不在（希望固定/禁止連続/候補不足）だと
-     * 頭打ちする、covO/c41/c41s/c42/c42s/apt と同型の穴だった。AptPolish(3.223.0)と同一の3段構成
+     * ほぼ同型の違反構造。しかし当時の平準化パス（同日2者スワップ＋**分散**指標での山登り）はチェーン救済が
+     * 無く、交換相手が構造的に不在（希望固定/禁止連続/候補不足）だと頭打ちする、covO/c41/c41s/c42/c42s/apt と
+     * 同型の穴だった（その平準化パス自体は 3.317.0 で実測寄与ゼロを確認して撤去済み）。AptPolish(3.223.0)と同一の3段構成
      * （①自己振替 ②同一グループ内相互交換 ③玉突きチェーン）をfair向けに移植する。
      *
      * fair の目標(tgt)は「その時点のグループ合計の round(平均)」で apt の固定目標と異なり、1日の

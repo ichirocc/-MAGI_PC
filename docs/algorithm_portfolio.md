@@ -96,13 +96,11 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 
 | 順序 | 主手 | 補足 |
 |---:|---|---|
-| 12 | 曜日平準化（長方形交換） | 被覆保存の 2職員×2日 交換。 |
-| 13 | 交互最適化（日ブロック割当） | Hungarian を不動点まで巡回。 |
-| 14 | グループ内シフト回数の平準化 | 分散指標（目的関数外の「整え」）。 |
-| 15 | 7日周期（曜日）の平準化 | 同上。 |
-| 16 | C1 共同 LNS | 残予算を 8:6 で按分（`C1JointLnsPolish`）。 |
-| 17 | 個人回数/適切回数 共同 LNS | `PersonalBalanceJointLnsPolish`。 |
-| 18 | HF70 異常検知 | 最終検査。 |
+| 12 | 曜日平準化（長方形交換） | 被覆保存の 2職員×2日 交換。weekly の L1 偏差を直接下げる。 |
+| 13 | 交互最適化（日ブロック割当） | Hungarian を不動点まで巡回。費用に weekly の限界費用を含む。 |
+| 14 | C1 共同 LNS | 残予算を 8:6 で按分（`C1JointLnsPolish`）。 |
+| 15 | 個人回数/適切回数 共同 LNS | `PersonalBalanceJointLnsPolish`。 |
+| 16 | HF70 異常検知 | 最終検査。 |
 
 ### 横断機構
 
@@ -187,6 +185,7 @@ epoch 長（量子）は「直前の epoch が改善したか」で 5→8 秒 / 
 | `C1TemporalSwapPolish` | `C1TemporalFlowPolish` | 同日 swap でしか DP 解を実現できず、相手が居ない日は改善が丸ごと死んでいた。実現層を min-cost flow へ置換（3.254.0）。 |
 | `applyBlockSwapPolish`（同一グループ・固定15日） | `applyAdaptiveBlockSwapPolish` | 固定実装を定義ごと削除。長さ別候補・異グループ間・2〜5者の巡回・厳密ピン保護を備えた1実装へ集約した。15日が要るときは `blockLens` へ明示指定できる（3.300.0）。 |
 | C3 3者ブロック回転の**無条件実行** | 停滞時・最終巡だけの脱出手へ格下げ | ablation（3データセットで完全に外す）で**採用0かつ結果がバイト一致**＝通常時の寄与ゼロを実測。撤去はせず、主手が1手も採れなかった巡と最終巡に限定した（3.300.0）。 |
+| `applyGroupShiftEqualizePolish` / `applyWeeklyEqualizePolish`（分散指標の平準化） | `applyFairPolish`(3.235.0) ／ `applyWeeklyRebalancePolish`(3.197.0)＋`applyAlternatingSoftPolish`(3.198.0) | 目的関数の fair/weekly は 3.72.0 以降**L1偏差**なのに、この2パスは**分散**を下げる手を採っており指標が一致していなかった。実データ3件で**採用0回・分散指標も1ミリも動かず**、ablation でも最終盤面が一致＝寄与ゼロ。L1 ベースの後継が役割を完全に代替しているため定義ごと削除（3.317.0）。 |
 
 ## 実測で否決した提案（再提案しない）
 
