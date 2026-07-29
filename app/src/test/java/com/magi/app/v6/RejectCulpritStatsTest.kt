@@ -79,4 +79,17 @@ class RejectCulpritStatsTest {
     fun emptyStatsProduceNoText() {
         assertEquals("", RejectCulpritStats().summary())
     }
+
+    @Test
+    fun pinBrokenIsTheCountOfMovesTheObjectiveWouldHaveAccepted() {
+        // [3.323.0] pinBroken は「isBetter が採用を認めたのにピンのガードだけが却下した」件数。
+        //   緩和の判断根拠として UI へ出すので、スコア却下と混ざらないことを固定する。
+        val st = RejectCulpritStats()
+        val before = rep(hard = 0, total = 10, weighted = 100.0)
+        repeat(3) { st.record(before, before, pinBroken = true) }
+        st.record(rep(hard = 0, total = 11, weighted = 120.0, breakdown = mapOf("low" to 1)), before)
+        assertEquals(3, st.pinBroken)
+        assertEquals(1, st.weightUp)
+        assertEquals(4, st.rejected)
+    }
 }

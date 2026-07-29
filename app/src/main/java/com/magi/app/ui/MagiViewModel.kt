@@ -842,6 +842,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var lastC1Plateau: C1PlateauDiagnosis? = null
 
+    /**
+     * [3.323.0] 直近の最適化で、厳密ピン(lo==hi)だけが止めた手の数。
+     * `isBetter` が採用を認めた手をピンのガードだけが却下した件数＝
+     * 「回数固定を緩めれば通ったはずの手」の実測値。0 なら緩めても何も変わらない。
+     */
+    private var lastPinBlocked: Int = 0
+
     private fun hardFamilyJp(key: String): String = when (key) {
         "covU" -> "人員不足（必要人数）"
         "c3n" -> "禁止の並び（連勤など）"
@@ -1003,6 +1010,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.322.0] 窓の要件(c1)が直せなかった理由の構造化診断を保持（次の makeUi で UI へ）。
                 //   研磨が候補を却下した記録が唯一の根拠＝あとから再計算できないため ViewModel が持つ。
                 lastC1Plateau = res.post?.c1Plateau
+                lastPinBlocked = res.post?.pinBlocked ?: 0
                 lastC1Plateau?.logLines()?.take(4)?.forEach { logOp("W", it.removePrefix("[W] ")) }
                 lastTopHardFamily = if (res.report.hard > 0) topHardFamilyJp(res.report.breakdown) else null
                 logOp(if (res.report.hard == 0) "I" else "W", "最適化 完了 必須=${res.report.hard} 合計=${res.report.total} (${res.phase})")
@@ -2758,6 +2766,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             // [3.322.0] c1 頭打ちの構造化診断。再計算できない（研磨中の却下記録が唯一の根拠）ので
             //   ViewModel が保持し、いま c1 が残っているときだけ見せる（解消済みなら黙る）。
             c1Plateau = lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 },
+            pinBlocked = lastPinBlocked,
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )

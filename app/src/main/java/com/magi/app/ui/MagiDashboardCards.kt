@@ -519,6 +519,9 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Uni
 internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
     val diag = ui.c1Plateau ?: return
     if (!diag.hasEntries) return
+    // [3.323.0] 回数固定だけが止めた手の数。この手は目的関数が採用を認めていて、固定のガードだけが
+    //   却下している＝「固定を緩めれば通ったはずの手」の実測値。0 なら緩めても何も変わらない。
+    val pinBlocked = ui.pinBlocked
     val cs = MaterialTheme.colorScheme
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -559,7 +562,14 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
                 Text("ほか ${diag.entries.size - 6} 件（詳細はログ出力を参照）",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
-            if (diag.pinConstrained > 0) {
+            if (pinBlocked > 0) {
+                HorizontalDivider()
+                Text("回数の固定について", style = MaterialTheme.typography.titleSmall)
+                Text("今回の計算では、$pinBlocked 件の直し方が「回数を固定している」という理由だけで見送られました。" +
+                    "これらは他の条件では採用できる手でした。固定（下限＝上限）を1回ぶん緩めると通る可能性があります。",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
+            } else if (diag.pinConstrained > 0) {
                 TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
             }
         }
