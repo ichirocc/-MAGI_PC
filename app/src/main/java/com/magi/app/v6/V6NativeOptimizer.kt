@@ -2163,10 +2163,18 @@ object V6NativeOptimizer {
     }
 
     /** [soft-aware repair] 割当 i→shift k の per-staff soft(low/high/apt, checker と同一式)を count n で評価。 */
-    private fun staffCountPenaltyAt(p: Problem, i: Int, k: Int, n: Int): Long {
+    internal fun staffCountPenaltyAt(p: Problem, i: Int, k: Int, n: Int): Long {
         var pen = 0L
         val lo = p.rangeLo[i][k]; val hi = p.rangeHi[i][k]
-        if (lo != Int.MIN_VALUE && lo != 0 && n < lo) pen += (lo - n).toLong() * 90L
+        // [3.319.0] low は**担当できるシフトだけ**。`Evaluator.fullEvalParts` も `MirrorCore` の checker も
+        //   元から `p.canDo(i, k)` ガードを持つのに、destroy-repair の marginal cost であるこの関数だけ
+        //   欠けていた。担当外シフトに個人下限が設定されたデータ（UI で下限を入れたあと群の担当を外す等で
+        //   起こりうる）では、実際には存在しない違反を重み90 で数え、候補選択を無駄な方向へ引っ張る。
+        //   最終採否は checker が守るので誤った勤務表は出ないが、有効な候補を取りこぼす。
+        //   実データ3件（golden/real/user）では該当セル0＝潜在バグ。high は n>hi の形で担当外なら n=0 に
+        //   なり発火せず、かつ Evaluator 側もガードを持たない＝既に一致しているので触らない。
+        //   apt は `Problem` 構築時に bucket=canDo でガード済み。
+        if (lo != Int.MIN_VALUE && lo != 0 && n < lo && p.canDo(i, k)) pen += (lo - n).toLong() * 90L
         if (hi != Int.MAX_VALUE && n > hi) pen += (n - hi).toLong() * 45L
         val t = p.apt[i][k]
         if (t >= 0) pen += kotlin.math.abs(n - t).toLong()
