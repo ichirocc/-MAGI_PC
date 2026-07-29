@@ -530,27 +530,79 @@ internal fun worstWorsenedFamily(after: ViolationReport, before: ViolationReport
 }
 
 /**
- * [不採用の主因・パス共通の集計, 3.303.0] 研磨パスが候補を捨てたときの「何を壊したか」を族別に数える。
+ * [不採用の理由・パス共通の集計, 3.303.0 → 3.321.0 で分類化] 研磨パスが候補を捨てたときの理由を数える。
  *
  * 3.302.0 で C1Polish / RangePolish に入れた職員別の主因表示を、構造の異なる他パスへも同じ形で
  * 広げるための最小の受け皿（パス単位の集計＝AdaptiveBlockSwap と同じ粒度）。各パスの不採用地点で
  * [record] を呼び、ログ末尾に [summary] を足すだけで済む。読み取り専用・採否には一切影響しない。
+ *
+ * [3.321.0] **理由を分類する**。旧実装は `worstWorsenedFamily` の結果だけを数えていたため、
+ * 呼出側の受理条件 `isBetter(rep, best) && !exactPinRegression(...)` の**後半で落ちた候補**
+ * （＝厳密ピン破り。`isBetter` 自体は true なので悪化族が存在しない）が `rejected` だけ増やして
+ * 主因に何も残さず、「不採用N件(主因 …)」の N と内訳が合わなくなっていた。
+ * 分類は `betterReport` の判定順（hard → weightedScore → total）と厳密に一致させ、
+ * AdaptiveBlockSwap(3.293.0) が既に持っていた5分類をここへ集約する。
  */
 internal class RejectCulpritStats {
     private val counts = LinkedHashMap<String, Int>()
+
+    /** 却下の総数。以下の内訳の合計と必ず一致する。 */
     var rejected = 0
         private set
 
-    fun record(after: ViolationReport, before: ViolationReport) {
+    /** 厳密ピン(lo==hi)を目標から遠ざけるため却下。違反自体は改善しているので主因族を持たない。 */
+    var pinBroken = 0
+        private set
+
+    /** 必須違反(HARD)が増えるため却下。主因族つき。 */
+    var hardUp = 0
+        private set
+
+    /** HARD 同値で重み付きスコアが悪化するため却下。主因族つき。 */
+    var weightUp = 0
+        private set
+
+    /** HARD・重みとも同値で件数が増えるため却下。 */
+    var totalUp = 0
+        private set
+
+    /** どのキーも同値＝改善しないため却下。 */
+    var same = 0
+        private set
+
+    /**
+     * @param pinBroken 呼出側の `exactPinRegression` の結果。true なら理由は「ピン破り」で確定し、
+     *   スコア比較は行わない（違反自体は改善しているため主因族が存在しない）。
+     */
+    fun record(after: ViolationReport, before: ViolationReport, pinBroken: Boolean = false) {
         rejected++
-        worstWorsenedFamily(after, before)?.let { counts[it] = (counts[it] ?: 0) + 1 }
+        if (pinBroken) { this.pinBroken++; return }
+        when {
+            after.hard > before.hard -> {
+                hardUp++
+                worstWorsenedFamily(after, before)?.let { counts[it] = (counts[it] ?: 0) + 1 }
+            }
+            after.weightedScore > before.weightedScore -> {
+                weightUp++
+                worstWorsenedFamily(after, before)?.let { counts[it] = (counts[it] ?: 0) + 1 }
+            }
+            after.total > before.total -> totalUp++
+            else -> same++
+        }
     }
 
     fun summary(): String {
         if (rejected == 0) return ""
+        val parts = ArrayList<String>()
+        if (pinBroken > 0) parts.add("ピン破り:$pinBroken")
+        if (hardUp > 0) parts.add("必須増:$hardUp")
+        if (weightUp > 0) parts.add("重み悪化:$weightUp")
+        if (totalUp > 0) parts.add("件数悪化:$totalUp")
+        if (same > 0) parts.add("同値:$same")
         val culprits = counts.entries.sortedByDescending { it.value }.take(3)
             .joinToString(" ") { "${it.key}:${it.value}" }
-        return " 不採用${rejected}件" + (if (culprits.isEmpty()) "" else "(主因 $culprits)")
+        return " 不採用${rejected}件(${parts.joinToString(" ")})" +
+            (if (culprits.isEmpty()) "" else "(主因 $culprits)")
     }
 }
 

@@ -508,6 +508,122 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Uni
 
 
 /**
+ * [窓の要件が直せなかった理由 / 3.322.0] 直近の最適化で c1 研磨が候補を却下した記録を、
+ * 職員×シフトごとに理由つきで見せる。CoverageDiag（人員不足）・ForbiddenDiag（禁止連続）に続く3枚目。
+ *
+ * この2枚と違い**盤面から再計算できない**（根拠が「研磨が実際に候補を作って却下した」観測のため）。
+ * したがって「構造的に不能」とは言わない — 言えるのは「いまの設定で、**試した**手が却下された」までで、
+ * 試していない手の存在は否定しない。回数の幅を見直せば通る可能性が残る、という含みを文言で明示する。
+ *
+ * [3.325.0] 回数固定の横断集計（研磨パス全体の観測）は c1 固有の話ではないので
+ * [PinFixedImpactCard] へ分離した。このカードは c1 の理由だけを扱う。
+ */
+@Composable
+internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
+    val diag = ui.c1Plateau ?: return
+    val cs = MaterialTheme.colorScheme
+    // [3.325.0] c1 が残っているのに却下の観測が1件も無い場合。研磨が起点を取れなかった／後続パスが
+    //   別の窓を直して観測分だけ消えた、などで起こる。ここで理由を語ると観測していないことを語ることに
+    //   なるので、「原因未確定」と明示して次の一手だけ示す。
+    if (diag.causeUnknown) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("窓の要件が残っています（原因未確定）", style = MaterialTheme.typography.titleMedium)
+                Text("残り ${diag.remainingC1} 件。今回の研磨では、この残りについて直し方を試した記録が" +
+                    "残っていません。原因は特定できていません。もう一度つくると記録が取れる場合があります。",
+                    style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            }
+        }
+        return
+    }
+    if (!diag.hasEntries) return
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("窓の要件がなぜ直せなかったか", style = MaterialTheme.typography.titleMedium)
+            // [3.324.0/外部レビュー] 断定を外す。集計は職員×シフト単位で、同じ職員・同じシフトに複数の窓が
+            //   あるとどの窓で却下されたかは区別していない。前回つくったときの観測でしかない旨も明示する。
+            Text("残り ${diag.remainingC1} 件。前回つくったときに試した直し方の記録です" +
+                "（職員とシフトごとの集計。同じシフトに複数の期間の決まりがある場合はまとめて数えています）。",
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            for (e in diag.entries.take(6)) {
+                val pin = e.cause == com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED
+                val container = if (pin) cs.errorContainer else cs.secondaryContainer
+                val onContainer = if (pin) cs.onErrorContainer else cs.onSecondaryContainer
+                Surface(color = container, shape = MaterialTheme.shapes.medium) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(e.label, color = onContainer,
+                                style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            MagiTagChip(
+                                text = when (e.cause) {
+                                    com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED -> "回数固定で却下"
+                                    com.magi.app.v6.C1PlateauCause.SCORE_TRADEOFF -> "他とのトレードオフ"
+                                    com.magi.app.v6.C1PlateauCause.NO_CANDIDATE -> "候補なし"
+                                },
+                                color = if (pin) MagiAccent.red else MagiAccent.blue,
+                            )
+                        }
+                        // 根拠の内訳。「試した手が何件あって、何で落ちたか」を数で示す（推測でなく観測）。
+                        val parts = ArrayList<String>()
+                        if (e.rejectedByPin > 0) parts.add("回数固定で却下 ${e.rejectedByPin}件")
+                        if (e.rejectedByScore > 0) parts.add("総合評価で却下 ${e.rejectedByScore}件")
+                        if (e.noCandidate > 0) parts.add("候補なし ${e.noCandidate}件")
+                        Text(parts.joinToString(" ・ "), color = onContainer, style = MaterialTheme.typography.bodySmall)
+                        Text(e.recommendedAction { fam -> breakdownLabels[fam] ?: fam },
+                            color = onContainer, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            if (diag.entries.size > 6) {
+                Text("ほか ${diag.entries.size - 6} 件（詳細はログ出力を参照）",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            }
+            if (diag.pinConstrained > 0) {
+                TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
+            }
+        }
+    }
+}
+
+
+/**
+ * [回数固定の影響 / 3.325.0] 「回数を固定している（下限＝上限）ことだけが理由で却下された候補試行」の
+ * 横断集計。C1PlateauCard から分離した理由は2つ:
+ *  - この観測は c1 固有ではない（実データでは適切回数・公平化・連続パターンの研磨が大半を占める）。
+ *    c1 が 0 でも回数固定の影響はあり得るので、c1 の診断に従属させると出せなくなる。
+ *  - c1 の内訳（職員×シフト）と横断集計（全パスの試行回数）は粒度も母集団も違う。同じカードに混ぜると
+ *    どちらの数字なのか読めない。
+ *
+ * **数字の読み方**: 全手数でも改善予測でもない。9パスのみ計測・最大4巡を重複排除せず加算した
+ * 「計測済みの候補試行数」で、言えるのは「少なくとも N 回、回数固定だけが却下の理由だった」まで。
+ * 0 は「緩めても変わらない」の証明にはならない（未計測のパスがある）。
+ */
+@Composable
+internal fun PinFixedImpactCard(ui: UiState, onGoEdit: () -> Unit = {}) {
+    val attempts = ui.observedPinBlockedAttempts
+    if (attempts <= 0) return
+    val cs = MaterialTheme.colorScheme
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("回数の固定が計算に与えた影響", style = MaterialTheme.typography.titleMedium)
+            Text("回数を固定していることだけが理由で見送られた試行が、少なくとも $attempts 回ありました。" +
+                "これらは他の条件では採用できる手でした。",
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            // [3.324.0/外部レビュー] 幅は決め打ちしない（実測で ±1 が良い月と ±3 が良い月があり優劣が
+            //   逆転した）。件数の性質も正直に添える。
+            Text("※ 全部の手数ではなく、研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
+                "場合があります）。この数が 0 でも、緩めて変わらないとは限りません。",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            Text("試すときは、対象の職員とシフト、そして緩める幅（例: 下限だけ 1 下げる）を決めて、" +
+                "変更する前と後を見比べてください。",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
+        }
+    }
+}
+
+
+/**
  * [設定ミスの誘導修正] 制約・希望シフトの入力間違いを「どこが・なぜ・どう直すか」で具体的に提示する。
  * CoverageDiagnosisCard（人員不足の原因）と同じ作りで、配布前に設定を直せるようにするのが目的。
  */
