@@ -242,6 +242,29 @@ object V6SanityPort {
      * [p] は既定で state のキャッシュを使うが、[buildGuidance] のように呼び出し元が既に Problem を
      * 持っている場合はそれを渡す（同じ関数が別の Problem を見て診断と設定画面がズレるのを防ぐ）。
      */
+    /**
+     * 休(rest)の実質的な上限＝各職員が「他の担当シフトの個人下限」を満たしたうえで最大何日休めるか、の合計。
+     *
+     * 休は「1日に何人休んでよいか」という座席（必要人数）の概念を持たないため、必要人数の合計と比べても
+     * 意味がない。他シフトの下限が未設定なら minOther=0＝ほぼ T 日休める計算になり、誤検知を避ける側へ
+     * 保守的に丸まる。[3.235.0] で適切回数の検査へ導入したものを [3.316.0] で下限合計の検査とも共有する。
+     */
+    internal fun restCapacity(p: Problem): Int {
+        val k = p.restIdx
+        var cap = 0
+        for (i in 0 until p.S) {
+            if (!p.canDo(i, k)) continue
+            var minOther = 0
+            for (k2 in 0 until p.K) {
+                if (k2 == k || !p.canDo(i, k2)) continue
+                val lo2 = p.rangeLo[i][k2]
+                if (lo2 != Int.MIN_VALUE && lo2 > 0) minOther += lo2
+            }
+            cap += maxOf(0, p.T - minOther)
+        }
+        return cap
+    }
+
     fun aptBalances(state: MagiState, p: Problem = cachedProblem(state)): List<AptBalance> {
         val out = ArrayList<AptBalance>()
         for (k in 0 until p.K) {
@@ -255,18 +278,7 @@ object V6SanityPort {
             if (!anyApt) continue   // 目標が1つも設定されていないシフトは検算対象外
             val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
             if (k == p.restIdx) {
-                var restCapacity = 0
-                for (i in 0 until p.S) {
-                    if (!p.canDo(i, k)) continue
-                    var minOther = 0
-                    for (k2 in 0 until p.K) {
-                        if (k2 == k || !p.canDo(i, k2)) continue
-                        val lo2 = p.rangeLo[i][k2]
-                        if (lo2 != Int.MIN_VALUE && lo2 > 0) minOther += lo2
-                    }
-                    restCapacity += maxOf(0, p.T - minOther)
-                }
-                out.add(AptBalance(k, sym, aptSum, restCapacity, isRest = true))
+                out.add(AptBalance(k, sym, aptSum, restCapacity(p), isRest = true))
             } else {
                 var seatsHi = 0
                 var hasDemand = false
@@ -507,7 +519,9 @@ object V6SanityPort {
                 val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
                 seatsLo += maxOf(n1, 0); seatsHi += maxOf(hi, 0)
             }
-            if (!hasDemand) continue
+            // [3.316.0] 休は need に依存しない実質上限（restCapacity）で判定するので、必要人数が1日も
+            //   設定されていなくても検査する（3.301.1 で適切回数の検査に同じ変更を入れたのと同じ理由）。
+            if (!hasDemand && k != p.restIdx) continue
             val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
             var capable = 0; var loSum = 0; var capSum = 0; var allCapped = true
             for (i in 0 until p.S) {
@@ -517,11 +531,21 @@ object V6SanityPort {
                 if (lo != Int.MIN_VALUE && lo > 0) loSum += lo
                 if (hi != Int.MAX_VALUE) capSum += hi else allCapped = false
             }
-            // A) 下限の合計 > 必要数(上限)の合計 → 全員の下限を満たすと必要数を超える＝過剰配置/下限割れが不可避。
-            if (loSum > seatsHi) {
+            // A) 下限の合計 > それを受け止められる上限 → 全員の下限を満たすと過剰配置/下限割れが不可避。
+            // [3.316.0] 休だけ比較対象を restCapacity にする。旧実装は休も必要人数の合計(seatsHi)と
+            //   比べており、休に need1=0 が明示設定された実データ（real/user）では seatsHi=0 に対し
+            //   下限合計80 で**必ず誤警告**が出ていた（休に「1日に何人休んでよいか」の座席は無い）。
+            //   3.235.0 で適切回数(6-C)には同じ理由で restCapacity 比較を入れたが、この検査は取り残していた。
+            val loCapacity = if (k == p.restIdx) restCapacity(p) else seatsHi
+            if (loSum > loCapacity) {
                 out.add(SettingIssue(IssueKind.DEMAND, "「$sym」の回数下限の合計",
-                    "担当者の下限の合計が${loSum}回ですが、必要数の合計は${seatsHi}回しかありません。全員の下限は同時に満たせず、過剰配置か下限割れが必ず出ます",
-                    "「$sym」の個人下限を下げるか、必要人数を増やしてください"))
+                    if (k == p.restIdx)
+                        "担当者の下限の合計が${loSum}回ですが、他シフトの個人下限を差し引いた「$sym」の" +
+                            "最大可能日数の合計は${loCapacity}回しかありません。全員の下限は同時に満たせず、下限割れが必ず出ます"
+                    else
+                        "担当者の下限の合計が${loSum}回ですが、必要数の合計は${loCapacity}回しかありません。全員の下限は同時に満たせず、過剰配置か下限割れが必ず出ます",
+                    if (k == p.restIdx) "「$sym」の個人下限を下げるか、他シフトの個人下限を見直してください"
+                    else "「$sym」の個人下限を下げるか、必要人数を増やしてください"))
             }
             // B) 全担当者に上限があり、上限の合計 < 必要数 → 席を埋めきれず人員不足(covU)が不可避。
             if (capable > 0 && allCapped && capSum < seatsLo) {
