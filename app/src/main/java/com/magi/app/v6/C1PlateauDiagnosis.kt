@@ -9,7 +9,8 @@ package com.magi.app.v6
  * 「窓の外にある同じシフトを窓の中へ移す」（[V6HotfixPasses.applyC1WindowPolish] の手R1/R2/R3＝
  * 回数保存の再配置）でも解消しうるため、回数が動かせないことは即「直せない」を意味しない。
  * よってこの診断は **実際に研磨が候補を作って却下した記録**（観測）だけを根拠にする。
- * 「構造的に不能」とは言わない — 言えるのは「いまの設定のもとで、試した手はすべて却下された」まで。
+ * 「構造的に不能」とは言わない — 言えるのは「いまの設定のもとで、**試した**手が却下された」までで、
+ * 試していない手の存在を否定はしない。
  *
  * ## 証明つきの壁との住み分け
  * `C1RepairAnalysis.provenWalls`（coverage 入替でどう並べても焦点を解消できないことを厳密に
@@ -36,7 +37,11 @@ enum class C1PlateauEvidence {
     UNKNOWN,
 }
 
-/** 残った窓の要件1件（職員×シフト）についての内訳。 */
+/**
+ * 残った窓の要件についての内訳。**粒度は職員×シフト**で、同じ職員・同じシフトに複数の
+ * 期間の決まり（cons1 の規則・窓開始日）があってもまとめて1件に集計する
+ * （3.324.0/外部レビューで明示。別の窓で却下された理由が、残った別の窓の理由として並ぶことがある）。
+ */
 data class C1PlateauEntry(
     val staff: Int,
     val shift: Int,
@@ -66,8 +71,11 @@ data class C1PlateauEntry(
      */
     fun recommendedAction(labelOf: (String) -> String = { it }): String = when (cause) {
         C1PlateauCause.PIN_CONSTRAINED ->
-            "回数を固定（下限＝上限）しているため、回数が変わる直し方はすべて却下されています。" +
-                "この職員の回数固定を1回ぶん緩めるか、窓の要件を下げてください。"
+            // [3.324.0/外部レビュー] 「すべて」「1回ぶん」は断定しすぎ。観測できたのは
+            //   「試した手のうち多くが回数固定で却下された」ことまでで、全空間の主張はできない。
+            //   緩め幅の優劣は実測でデータによって逆転したので幅を決め打ちしない（HF77 と整合）。
+            "試した直し方の多くが、回数を固定している（下限＝上限）ために却下されています。" +
+                "この職員の回数の幅を見直すか、窓の要件を下げると通る可能性があります。"
         C1PlateauCause.SCORE_TRADEOFF -> {
             val fam = topScoreCulprits.firstOrNull()?.first
             val famTxt = if (fam == null) "他の条件" else "「${labelOf(fam)}」"
@@ -89,7 +97,7 @@ data class C1PlateauDiagnosis(
 ) {
     val hasEntries: Boolean get() = entries.isNotEmpty()
 
-    /** 回数固定が最大の壁になっている件数。設定画面へ誘導するかの判断に使う。 */
+    /** 回数固定による却下が最多だった件数。設定画面へ誘導するかの判断に使う。 */
     val pinConstrained: Int get() = entries.count { it.cause == C1PlateauCause.PIN_CONSTRAINED }
 
     /**
@@ -108,7 +116,7 @@ data class C1PlateauDiagnosis(
         out.add("[W] C1Plateau: 窓の要件(c1) ${remainingC1}件が残存 — 直せなかった理由の内訳")
         for (e in entries.take(8)) {
             val causeTxt = when (e.cause) {
-                C1PlateauCause.PIN_CONSTRAINED -> "回数固定が壁"
+                C1PlateauCause.PIN_CONSTRAINED -> "回数固定で却下"
                 C1PlateauCause.SCORE_TRADEOFF -> "他の条件とのトレードオフ"
                 C1PlateauCause.NO_CANDIDATE -> "候補なし"
             }

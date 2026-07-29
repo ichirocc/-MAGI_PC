@@ -843,11 +843,33 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var lastC1Plateau: C1PlateauDiagnosis? = null
 
     /**
-     * [3.323.0] 直近の最適化で、厳密ピン(lo==hi)だけが止めた手の数。
-     * `isBetter` が採用を認めた手をピンのガードだけが却下した件数＝
-     * 「回数固定を緩めれば通ったはずの手」の実測値。0 なら緩めても何も変わらない。
+     * [3.323.0] 直近の最適化で、厳密ピン(lo==hi)だけが止めた手の**計測できた**試行数。
+     * `isBetter` が採用を認めた手をピンのガードだけが却下した回数。ただし全件ではない
+     * （[com.magi.app.v6.V6PostOptimizationResult.pinBlocked] の注記参照）。
      */
     private var lastPinBlocked: Int = 0
+
+    /**
+     * [3.324.0/外部レビュー] 上の2つは「その盤面で研磨が却下した記録」であって盤面から再計算できない。
+     * よって**どの盤面に対する観測か**を指紋で持ち、盤面が変わったら自動的に黙る。
+     * 手編集・元に戻す・データ読込・CSV取込・初期解生成…と変更サイトごとにフックを足す方式は
+     * 必ずどこかを漏らすので、makeUi 側で毎回突き合わせる自己無効化にする。
+     */
+    private var lastDiagBoardKey: Long = 0L
+
+    /** 盤面の内容から決まる指紋。S×T が小さい（30×31）ので毎回の計算コストは無視できる。 */
+    private fun boardKey(schedule: Array<IntArray>): Long {
+        var h = 1125899906842597L
+        for (row in schedule) for (v in row) h = h * 31L + v
+        return h
+    }
+
+    /** 研磨診断を「この盤面のもの」として保存する。null/0 は診断なし。 */
+    private fun setPolishDiagnostics(plateau: C1PlateauDiagnosis?, pinBlocked: Int, forSchedule: Array<IntArray>) {
+        lastC1Plateau = plateau
+        lastPinBlocked = pinBlocked
+        lastDiagBoardKey = if (plateau == null && pinBlocked == 0) 0L else boardKey(forSchedule)
+    }
 
     private fun hardFamilyJp(key: String): String = when (key) {
         "covU" -> "人員不足（必要人数）"
@@ -982,6 +1004,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val worseThanInput = betterReport(baseReport, res.report)
                 if (worseThanInput) {
                     val kept = sched0.copy2D()
+                    // [3.324.0/外部レビュー] 採用しなかった盤面の診断は保存しない。旧実装は分岐に関わらず
+                    //   res.post を無条件に保存しており、「捨てた盤面で直せなかった理由」を「いま表示中の
+                    //   勤務表の理由」として見せうる（維持した勤務表は別の探索の産物）。
+                    setPolishDiagnostics(null, 0, kept)
                     currentSchedule = kept
                     autoSave()
                     resultSchedule = kept
@@ -995,6 +1021,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     logOp("I", "再実行: 今回 必須$newHard/合計$newTotal は前回 必須$baseHard/合計$baseTotal 以下に改善せず → 前回を維持")
                     lastResultHard = baseHard
                 } else {
+                    // [3.324.0/外部レビュー] pushReport(=makeUi の唯一の経路)より**前**に保存する。
+                    //   旧実装は pushReport のあとに代入していたため、その回の画面には診断が入らず
+                    //   次の再チェックでようやく（しかも古い盤面基準で）出るという順序の逆転だった。
+                    setPolishDiagnostics(res.post?.c1Plateau, res.post?.pinBlocked ?: 0, res.schedule)
                     currentSchedule = res.schedule.copy2D()
                     autoSave()
                     resultSchedule = res.schedule.copy2D()
@@ -1007,10 +1037,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     ) }
                     lastResultHard = newHard
                 }
-                // [3.322.0] 窓の要件(c1)が直せなかった理由の構造化診断を保持（次の makeUi で UI へ）。
-                //   研磨が候補を却下した記録が唯一の根拠＝あとから再計算できないため ViewModel が持つ。
-                lastC1Plateau = res.post?.c1Plateau
-                lastPinBlocked = res.post?.pinBlocked ?: 0
                 lastC1Plateau?.logLines()?.take(4)?.forEach { logOp("W", it.removePrefix("[W] ")) }
                 lastTopHardFamily = if (res.report.hard > 0) topHardFamilyJp(res.report.breakdown) else null
                 logOp(if (res.report.hard == 0) "I" else "W", "最適化 完了 必須=${res.report.hard} 合計=${res.report.total} (${res.phase})")
@@ -2667,6 +2693,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val coverageDiag = coverageD.await()
         val forbiddenDiag = forbiddenD.await()
         val v6Logs = listOf("[I] LoadDataBit: ${sanity.loadDataBitSummary}") + sanity.warns.map { "[W] SanityCheck: $it" } + sanity.notes.map { "[I] V6Port: $it" } + sanity.duplicateSeqConstraints.take(4).map { "[W] DuplicateSeq: $it" } + sanity.guidance.take(12).map { "[W] 設定ミス: ${it.where} — ${it.problem} → ${it.fix}" } + (coverageDiag?.logLines() ?: emptyList()) + (forbiddenDiag?.logLines() ?: emptyList())
+        // [3.324.0] 研磨診断は観測した盤面のものか（盤面が変わっていれば出さない）。
+        val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule)
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         Analysis(
             v6 = v6D.await(),
@@ -2765,8 +2793,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             forbiddenDiag = analysis.forbiddenDiag,
             // [3.322.0] c1 頭打ちの構造化診断。再計算できない（研磨中の却下記録が唯一の根拠）ので
             //   ViewModel が保持し、いま c1 が残っているときだけ見せる（解消済みなら黙る）。
-            c1Plateau = lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 },
-            pinBlocked = lastPinBlocked,
+            // [3.324.0/外部レビュー] 診断は観測した盤面のものだけ出す。盤面が変わっていれば黙る
+            //   （手編集・元に戻す・読込・初期解生成など、あらゆる変更で自動的に外れる）。
+            c1Plateau = if (diagFresh) lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 } else null,
+            pinBlocked = if (diagFresh) lastPinBlocked else 0,
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )

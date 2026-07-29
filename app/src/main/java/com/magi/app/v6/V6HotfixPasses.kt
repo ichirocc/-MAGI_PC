@@ -66,9 +66,17 @@ data class V6PostOptimizationResult(
     /** [3.322.0] 窓の要件(c1)が最後まで残った理由の構造化診断（残存なしなら null）。 */
     val c1Plateau: C1PlateauDiagnosis? = null,
     /**
-     * [3.323.0] 厳密ピン(lo==hi)だけが止めた手の総数（研磨パス横断）。
-     * これらは `isBetter` が採用を認めた手で、ピンのガードだけが却下している＝
-     * **回数固定を緩めれば通ったはずの手**の実測値。0 なら緩めても何も変わらない。
+     * [3.323.0] 厳密ピン(lo==hi)だけが却下した候補の**計測できた試行数**。
+     * これらは `isBetter` が採用を認めた手で、ピンのガードだけが止めている。
+     *
+     * **正確な読み方（3.324.0/外部レビューで是正）**:
+     *  - 「手の数」ではなく「試行の回数」。巡回研磨は最大4巡するので、同じ手が複数の巡で
+     *    数えられうる（重複排除していない）。
+     *  - **全パス横断ではない**。数えているのは C1/C1厳密窓/C3mn/C3n/個人回数/適切回数/公平化/
+     *    C3連/C3パターンの9パス。同じ後処理内の CyclicSwap・C1 index 駆動・広域ビーム・
+     *    ブロック交換・厳密日割当・交互最適化・曜日長方形・C3ブロック交換のピン却下は入っていない。
+     *  - よって「N 件の手が緩和で通る」ではなく「**少なくとも N 回、回数固定だけが却下の理由だった**」
+     *    が言えることの上限。0 でも「緩めても何も変わらない」の証明にはならない（未計測分がある）。
      */
     val pinBlocked: Int = 0,
 )
@@ -1365,9 +1373,14 @@ object V6HotfixPasses {
                             if (i2 == i || work[i2][j] != x || !movable(i2, j) || !p.canDo(i2, a)) continue
                             work[i][j] = x; work[i2][j] = a                 // 同日スワップ（被覆不変）
                             val rep = UnifiedViolationChecker.check(state, work)
-                            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeDay, work)) {
+                            val pinBadA = exactPinRegression(p, workBeforeDay, work)
+                            if (isBetter(rep, bestRep) && !pinBadA) {
                                 bestRep = rep; applied++; improved = true; done = true; break
                             }
+                            // [3.324.0/外部レビュー] 旧実装は手Aのピン却下を黙って巻き戻すだけで数えておらず、
+                            //   C1 の「ピン破り」件数が手B(玉突き)だけの部分集計になっていた。手Aは回数を実際に
+                            //   変える手（x+1/a-1）＝ピンの当たり判定があるので、ここも記録する。
+                            if (isBetter(rep, bestRep) && pinBadA) recordBlock(i, x, C1PlateauDiagnosis.REASON_PIN)
                             work[i][j] = a; work[i2][j] = x                 // 巻き戻し
                         }
                         if (done) { donorsCache = null; continue }

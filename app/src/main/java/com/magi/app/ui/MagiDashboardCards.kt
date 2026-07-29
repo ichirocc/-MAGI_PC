@@ -512,8 +512,8 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Uni
  * 職員×シフトごとに理由つきで見せる。CoverageDiag（人員不足）・ForbiddenDiag（禁止連続）に続く3枚目。
  *
  * この2枚と違い**盤面から再計算できない**（根拠が「研磨が実際に候補を作って却下した」観測のため）。
- * したがって「構造的に不能」とは言わない — 言えるのは「いまの設定で、試した手はすべて却下された」まで。
- * 回数固定を緩めれば通る可能性が残る、という含みを文言で明示する。
+ * したがって「構造的に不能」とは言わない — 言えるのは「いまの設定で、**試した**手が却下された」までで、
+ * 試していない手の存在は否定しない。回数の幅を見直せば通る可能性が残る、という含みを文言で明示する。
  */
 @Composable
 internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
@@ -526,8 +526,10 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("窓の要件がなぜ直せなかったか", style = MaterialTheme.typography.titleMedium)
-            val pinTxt = if (diag.pinConstrained > 0) "うち ${diag.pinConstrained} 件は回数の固定が壁になっています。" else ""
-            Text("残り ${diag.remainingC1} 件。$pinTxt 前回つくったときに試した直し方の記録です。",
+            // [3.324.0/外部レビュー] 断定を外す。集計は職員×シフト単位で、同じ職員・同じシフトに複数の窓が
+            //   あるとどの窓で却下されたかは区別していない。前回つくったときの観測でしかない旨も明示する。
+            Text("残り ${diag.remainingC1} 件。前回つくったときに試した直し方の記録です" +
+                "（職員とシフトごとの集計。同じシフトに複数の期間の決まりがある場合はまとめて数えています）。",
                 style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             for (e in diag.entries.take(6)) {
                 val pin = e.cause == com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED
@@ -540,7 +542,7 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
                                 style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                             MagiTagChip(
                                 text = when (e.cause) {
-                                    com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED -> "回数固定が壁"
+                                    com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED -> "回数固定で却下"
                                     com.magi.app.v6.C1PlateauCause.SCORE_TRADEOFF -> "他とのトレードオフ"
                                     com.magi.app.v6.C1PlateauCause.NO_CANDIDATE -> "候補なし"
                                 },
@@ -565,8 +567,12 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
             if (pinBlocked > 0) {
                 HorizontalDivider()
                 Text("回数の固定について", style = MaterialTheme.typography.titleSmall)
-                Text("今回の計算では、$pinBlocked 件の直し方が「回数を固定している」という理由だけで見送られました。" +
-                    "これらは他の条件では採用できる手でした。固定（下限＝上限）を1回ぶん緩めると通る可能性があります。",
+                // [3.324.0/外部レビュー] 「1回ぶん緩めると通る」は断定しすぎ。緩め幅の優劣は実測で
+                //   データによって逆転した（±1 が良い月と ±3 が良い月がある）ので、幅は決め打ちせず
+                //   「対象を決めて試して比べる」へ誘導する。件数も「試行回数・計測できた分」と明示する。
+                Text("今回の計算では、回数を固定していることだけが理由で見送られた試行が 少なくとも $pinBlocked 回ありました" +
+                    "（他の条件では採用できる手でした。研磨のうち計測できた範囲の回数で、同じ手を複数回数えている場合があります）。" +
+                    "対象の職員とシフト、緩める幅を決めて、変更前後を見比べてください。",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
             } else if (diag.pinConstrained > 0) {
