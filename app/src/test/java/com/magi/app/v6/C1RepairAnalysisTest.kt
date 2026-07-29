@@ -1,8 +1,10 @@
 package com.magi.app.v6
 
 import com.magi.app.model.C1Row
+import com.magi.app.model.C3Row
 import com.magi.app.model.Group
 import com.magi.app.model.MagiState
+import com.magi.app.model.Range
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
@@ -19,7 +21,14 @@ import org.junit.Test
  */
 class C1RepairAnalysisTest {
 
-    private fun st(days: Int, staff: Int, sched: List<List<Int>>, cons1: List<C1Row>): MagiState {
+    private fun st(
+        days: Int,
+        staff: Int,
+        sched: List<List<Int>>,
+        cons1: List<C1Row>,
+        staffRange: Map<String, Range> = emptyMap(),
+        cons3n: List<C3Row> = emptyList(),
+    ): MagiState {
         val end = "2026-01-" + days.toString().padStart(2, '0')
         val shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", ""), Shift("Y", "Y", "", ""))
         return MagiState(
@@ -27,12 +36,61 @@ class C1RepairAnalysisTest {
             shifts = shifts, groups = listOf(Group("G", "G")),
             staff = List(staff) { Staff("s$it", 0) }, use2Patterns = false,
             groupShift = listOf(listOf(1, 1, 1)), groupShiftApt = listOf(listOf("", "", "")),
-            schedule = sched, wishes = emptyMap(), staffRange = emptyMap(),
+            schedule = sched, wishes = emptyMap(), staffRange = staffRange,
             needDay1 = emptyMap(), needDay2 = emptyMap(),
             cons1 = cons1, cons2 = emptyList(), cons3 = emptyList(),
-            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons3n = cons3n, cons3m = emptyList(), cons3mn = emptyList(),
             cons41 = emptyList(), cons42 = emptyList(),
         )
+    }
+
+    // ---- [3.315.0] 探索の目的関数を実採否と揃える（厳密ピン・c3n） -----------------------------
+    //
+    // 共通盤面: 3日・2職員・ルール「X 2日窓≥1」（窓 [0,1] と [1,2]）。
+    //   i0 = Y,Y,Y → 2窓とも不足        a = X,X,Y → 充足
+    // X トークンは day0/day1 に1個ずつ。coverage 保存の並べ替えで到達できる配置は4通りで、
+    // joint c1 は baseline=2、最小=1。最小を取る配置は**必ず i0 が X を1個受け取る**
+    //   （i0 が X を取らない配置は i0 が2件のまま＝joint>=2）。手計算で全4通りを検算済み。
+
+    private fun pinFixture(staffRange: Map<String, Range> = emptyMap(), cons3n: List<C3Row> = emptyList()) =
+        st(3, 2, listOf(listOf(2, 2, 2), listOf(1, 1, 2)), listOf(C1Row("2", "X", "1")), staffRange, cons3n)
+
+    @Test
+    fun exactSolveFindsPatchWhenNoPinOrForbiddenRunBlocksIt() {
+        // 回帰: 制約が無ければ従来どおり joint 2→1 の手を見つける。
+        val s = pinFixture()
+        val p = Problem(s); val sched = s.schedule.toIntArray2D()
+        assertEquals(2, UnifiedViolationChecker.check(s, sched).breakdown["c1"])
+        val v = C1RepairAnalysis.analyze(p, sched).first { it.staff == 0 }
+        val r = C1RepairAnalysis.solveWindow(p, sched, v)
+        assertEquals("baseline は joint 2", 2, r.baselineJointC1)
+        assertEquals("coverage保存で joint 1 まで下げられる", 1, r.minJointC1)
+        assertNotNull("改善手が出る", r.patch)
+    }
+
+    @Test
+    fun exactSolveRejectsPatchThatBreaksAnExactPin() {
+        // i0 の X を 0回に固定（lo==hi==0・現状も0＝ピン充足中）。joint を下げる配置は必ず i0 が X を
+        // 受け取るので、ピンを守る限り改善手は存在しない。旧実装は joint c1 しか見ずこれを提案していた。
+        val s = pinFixture(staffRange = mapOf("0,1" to Range("0", "0")))
+        val p = Problem(s); val sched = s.schedule.toIntArray2D()
+        val v = C1RepairAnalysis.analyze(p, sched).first { it.staff == 0 }
+        val r = C1RepairAnalysis.solveWindow(p, sched, v)
+        assertNull("厳密ピンを崩す手は候補にしない", r.patch)
+        assertEquals("採用候補が無いので baseline のまま", r.baselineJointC1, r.minJointC1)
+    }
+
+    @Test
+    fun exactSolveRejectsPatchThatCreatesForbiddenRun() {
+        // 禁止「Y→X」。baseline は i0=Y,Y,Y / a=X,X,Y で fire 0。joint を下げる配置は i0 か a のどちらかに
+        // Y→X を作る（X を後ろの日へ移すため）ので、c3n を増やさない限り改善手は存在しない。
+        val s = pinFixture(cons3n = listOf(C3Row(listOf("Y", "X"))))
+        val p = Problem(s); val sched = s.schedule.toIntArray2D()
+        assertEquals("baseline に禁止連続は無い", 0, UnifiedViolationChecker.check(s, sched).breakdown["c3n"] ?: 0)
+        val v = C1RepairAnalysis.analyze(p, sched).first { it.staff == 0 }
+        val r = C1RepairAnalysis.solveWindow(p, sched, v)
+        assertNull("禁止連続を増やす手は候補にしない", r.patch)
+        assertEquals("採用候補が無いので baseline のまま", r.baselineJointC1, r.minJointC1)
     }
 
     @Test

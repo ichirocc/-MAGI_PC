@@ -10,8 +10,11 @@ name: Native Parity Check
 on:
   workflow_dispatch:
   push:
+    # main に加えて作業ブランチでも走らせる（g++ のみ・数十秒＝SDK ジョブより桁違いに軽い）。
+    # C++ を触った時点でパリティ崩れを検出できるようにする。
     branches:
       - main
+      - 'claude/**'
   pull_request:
     branches:
       - main

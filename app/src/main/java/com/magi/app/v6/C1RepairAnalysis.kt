@@ -215,6 +215,50 @@ object C1RepairAnalysis {
         }
         if (baseline == 0) return ExactResult(0, 0, null, true, 0)
 
+        // [3.315.0] 探索の目的関数を**実際の採否**と揃える。
+        // 旧実装は joint c1 だけを最小化しており、厳密ピン（staffRange lo==hi）も禁止連続(c3n)も見て
+        // いなかった。実データ計測では patch は出るのに採用は 0 で、却下の内訳は**全件**が
+        // 「ピン破り」か「c3n 増」だった（real cap=10: ピン6・c3n4／golden cap=10: ピン15／
+        // cap=6 real: c3n2）。つまり探索が、実採否が必ず却下する方向へ最適化していた。
+        // どちらも M 内の行だけで厳密に判定できる（ピン=行の回数／c3n=行ローカルの完全一致窓）ので、
+        // 葉（完全配置）で検査して**採用候補から外す**。これは候補生成の絞り込みであって
+        // 目的関数・重みの変更ではない（MirrorCore/Evaluator/C++ は無変更・HF77 非該当）。
+        //
+        // ピンの意味論は `exactPinRegression` と同一＝「目標から遠ざかる変更のみ禁止」。既に外れて
+        // いるデータ側の不整合はそのままでよく、現状維持と接近は妨げない。
+        val pins = ArrayList<IntArray>()   // [mi, k, target, baseDist]
+        for (mi in m.indices) {
+            val i = m[mi]
+            for (k in 0 until p.K) {
+                val lo = p.rangeLo[i][k]
+                val hi = p.rangeHi[i][k]
+                if (lo == Int.MIN_VALUE || hi == Int.MAX_VALUE || lo != hi) continue
+                var c = 0
+                for (j in 0 until p.T) if (s[i][j] == k) c++
+                pins.add(intArrayOf(mi, k, lo, kotlin.math.abs(c - lo)))
+            }
+        }
+        var baseC3n = 0
+        if (p.cons3n.isNotEmpty()) for (mi in m.indices) baseC3n += C1DeltaPrefilter.staffC3nFires(p, rows[mi])
+        /** 葉が実採否を通り得るか（ピンを遠ざけない・M 内の c3n 合計を増やさない）。 */
+        fun acceptableLeaf(): Boolean {
+            for (pn in pins) {
+                var c = 0
+                val mi = pn[0]
+                val k = pn[1]
+                for (j in 0 until p.T) if (rows[mi][j] == k) c++
+                if (kotlin.math.abs(c - pn[2]) > pn[3]) return false
+            }
+            if (p.cons3n.isNotEmpty()) {
+                var f = 0
+                for (mi in m.indices) {
+                    f += C1DeltaPrefilter.staffC3nFires(p, rows[mi])
+                    if (f > baseC3n) return false
+                }
+            }
+            return true
+        }
+
         // 各日 d の M 多重集合（並べ替え対象）と、その日の固定要素（希望ロック職員は自分の希望へ固定）。
         var nodes = 0
         var budgetHit = false
@@ -283,8 +327,14 @@ object C1RepairAnalysis {
         }
 
         assignDay(0) {
-            val jc = jointC1()
-            if (jc < best) { best = jc; bestRows = Array(m.size) { rows[it].clone() } }
+            // [3.315.0] best/patch の更新だけを acceptableLeaf でゲートする。**minFocusResidual は
+            //   従来どおり全葉で測る**＝A4 provenWalls（「coverage入替でどう並べても焦点は解消不能」）の
+            //   意味論は完全に不変。ここを制約下の最小に変えると壁判定が増える方向へ動き、3.76.0 の
+            //   「false wall を出さない」原則に触れるため意図的に分ける。
+            if (acceptableLeaf()) {
+                val jc = jointC1()
+                if (jc < best) { best = jc; bestRows = Array(m.size) { rows[it].clone() } }
+            }
             // 葉(=完全配置)ごとに焦点残を測り最小を追跡（rows はこの時点で全 days 割当済み）。
             val fr = focusResidualOf(rows)
             if (fr < minFocusResidual) minFocusResidual = fr

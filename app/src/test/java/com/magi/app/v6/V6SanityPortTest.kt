@@ -6,6 +6,7 @@ import com.magi.app.model.Range
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -233,6 +234,62 @@ class V6SanityPortTest {
         cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
     )
+
+    /**
+     * [3.316.0/休の下限合計チェック誤検知修正] 検査A（下限の合計 > それを受け止められる上限）は休も
+     * 必要人数の合計と比べており、休に need1=0 が明示設定された実データでは「下限合計80 vs 必要数0」で
+     * **必ず誤警告**が出ていた。休には「1日に何人休んでよいか」の座席が無いので、3.235.0 で適切回数へ
+     * 導入したのと同じ実質上限（Σ_i(T − 他シフトの個人下限)）と比べる。
+     * 2名・休(k=0)/X(k=1) の2シフト。restLo/otherLo でそれぞれの個人下限を与える。
+     */
+    private fun restLoState(days: Int, restLo: String, otherLo: String = "") = MagiState(
+        startDate = "2026-08-01", endDate = "2026-08-${days.toString().padStart(2, '0')}",
+        shifts = listOf(Shift("休", "休", "0", ""), Shift("X", "X", "0", "")),
+        groups = listOf(Group("G", "G")),
+        staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = List(2) { List(days) { 0 } },
+        wishes = emptyMap(),
+        staffRange = buildMap {
+            put("0,0", com.magi.app.model.Range(restLo, ""))
+            put("1,0", com.magi.app.model.Range(restLo, ""))
+            if (otherLo.isNotBlank()) {
+                put("0,1", com.magi.app.model.Range(otherLo, ""))
+                put("1,1", com.magi.app.model.Range(otherLo, ""))
+            }
+        },
+        needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    )
+
+    private fun hasLowerBoundIssue(rep: List<SettingIssue>, sym: String) =
+        rep.any { it.where.contains(sym) && it.where.contains("回数下限の合計") }
+
+    @Test fun restLowerBoundCheckUsesRestCapacityInsteadOfNeed() {
+        // T=10・休下限3(合計6)・X下限3。休の実質上限=2人×(10−3)=14 ≥ 6 → 誤検知しない。
+        // 同じ設定でも非休シフト X は必要数0に対し下限合計6＝従来どおり真の矛盾として検出する。
+        val rep = V6SanityPort.buildGuidance(restLoState(days = 10, restLo = "3", otherLo = "3"))
+        assertFalse("控えめな休の下限は誤検知しない(need=0との比較をやめた効果)", hasLowerBoundIssue(rep, "休"))
+        assertTrue("同一設定の非休シフト(X)は従来どおり検出する", hasLowerBoundIssue(rep, "X"))
+    }
+
+    @Test fun restLowerBoundCheckStillFlagsGenuinelyImpossibleLowerBound() {
+        // T=2・休下限5(合計10)。休の実質上限=2人×2日=4 < 10 → 物理的に不可能なので検出する。
+        val rep = V6SanityPort.buildGuidance(restLoState(days = 2, restLo = "5"))
+        assertTrue("期間日数を超える休の下限は検出すること", hasLowerBoundIssue(rep, "休"))
+    }
+
+    @Test fun restLowerBoundCheckAccountsForOtherShiftLowerBounds() {
+        // T=10・休下限8(合計16)。X下限5 があると休の実質上限=2人×(10−5)=10 < 16 → 検出。
+        // X下限が無ければ実質上限=2人×10=20 ≥ 16 → 検出しない（同じ休の下限でも他シフト次第で変わる）。
+        assertTrue("他シフト下限を差し引いた実質上限を下回れば検出",
+            hasLowerBoundIssue(V6SanityPort.buildGuidance(restLoState(10, restLo = "8", otherLo = "5")), "休"))
+        assertFalse("他シフト下限が無ければ収まるので検出しない",
+            hasLowerBoundIssue(V6SanityPort.buildGuidance(restLoState(10, restLo = "8")), "休"))
+    }
 
     @Test fun aptSumCheckUsesRestCapacityInsteadOfNeedForRestShift() {
         // T=10・apt目標3(合計6)。休の実質上限=2人×10日=20 ≥ 6 → 誤検知しない。

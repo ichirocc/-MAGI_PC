@@ -112,11 +112,12 @@ class V6FinalBridgePortTest {
     }
 
     @Test fun equalizePolishesNeverWorsenMainObjective() {
-        // 群が2名以上のサンプル（同一群A）。平準化は主目的(hard/total/weighted)を悪化させない。
+        // [3.317.0] 対象を分散指標ベースの旧2パス（撤去済み）から、その役割を引き継いだ L1 ベースの
+        //   後継へ差し替え。fair/weekly の平準化は主目的(hard→weighted→total)を悪化させない。
         val st = sampleState()
         for (op in listOf<(MagiState, Array<IntArray>) -> Array<IntArray>>(
-            { s, sc -> V6HotfixPasses.applyGroupShiftEqualizePolish(s, sc).newSchedule },
-            { s, sc -> V6HotfixPasses.applyWeeklyEqualizePolish(s, sc).newSchedule },
+            { s, sc -> V6HotfixPasses.applyFairPolish(s, sc).newSchedule },
+            { s, sc -> V6HotfixPasses.applyWeeklyRebalancePolish(s, sc).newSchedule },
         )) {
             val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
             val after = UnifiedViolationChecker.check(st, op(st, st.schedule.toIntArray2D()))
