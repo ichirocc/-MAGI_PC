@@ -63,6 +63,8 @@ data class V6PostOptimizationResult(
     val hf66: HF66Result,
     val hf70: HF70Result,
     val logs: List<MirrorLog>,
+    /** [3.322.0] 窓の要件(c1)が最後まで残った理由の構造化診断（残存なしなら null）。 */
+    val c1Plateau: C1PlateauDiagnosis? = null,
 )
 
 /**
@@ -282,6 +284,7 @@ object V6HotfixPasses {
         //   内部で構築する Problem(state) と同一）。C1DeltaPrefilter のクラスタ前段ゲートに使う。
         val pC1 = Problem(state)
         var round = 0
+        var c1Plateau: C1PlateauDiagnosis? = null
         var totalCyc = 0; var totalC1 = 0; var totalC3 = 0; var totalC3r = 0; var totalC3mn = 0; var totalC3n = 0; var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0
         while (round < maxRounds && !clusterStop()) {
             var roundApplied = 0
@@ -302,6 +305,9 @@ object V6HotfixPasses {
                 val rC1 = C1RepairOperators.selfRelocateAndSameDaySwap(state, work, maxPasses = 3, shouldStop = clusterStop, seed = roundSeed(seed, 0x1C1L, round))
                 work = rC1.newSchedule.copy2D(); totalC1 += rC1.applied; roundApplied += rC1.applied
                 if (round == 0) logs.addAll(rC1.logs)
+                // [構造化診断, 3.322.0] 巡ごとに上書きし最後の巡のものを残す（最終盤面に一番近い）。
+                //   末尾で最終盤面に対して再フィルタするので、後続パスが直した箇所は落ちる。
+                rC1.plateau?.let { c1Plateau = it }
 
                 // [C1IndexRepair / 3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖。C1RepairIndex/
                 //   C1DeltaPrefilter を実駆動する経路。厳密c1アンカー＝不足窓ゼロで no-op のため本ゲート内に配置。
@@ -562,10 +568,22 @@ object V6HotfixPasses {
                 // [3.278.0] 旧: 最終検査(フルcheck+HF70)が無区間で「区間合計 < 総」の不一致を生んでいた。
                 " 最終検査+HF70=${tEnd - tHf}ms"))
 
+        // [構造化診断, 3.322.0] C1研磨の時点で作った診断を最終盤面に合わせ直す
+        //   （そのあとの共同LNS等が直した箇所を「直せなかった」と見せない）。
+        val plateau = c1Plateau?.let { d ->
+            val pFin = cachedProblem(state)
+            d.refreshedAgainst(report.breakdown["c1"] ?: 0) { i, x ->
+                pFin.cons1.any { c ->
+                    c.shiftIdx == x && c.day1 > 0 &&
+                        (0..pFin.T - c.day1).any { j -> inDeficientC1Window(pFin, work, i, x, c.day1, c.day2, j) }
+                }
+            }
+        }?.takeIf { it.hasEntries }
+
         val allLogs = ArrayList<MirrorLog>()
         allLogs.addAll(logs)
         allLogs.addAll(report.logs)
-        return V6PostOptimizationResult(work, report.copy(logs = allLogs), r80, r67, r66, r70, logs)
+        return V6PostOptimizationResult(work, report.copy(logs = allLogs), r80, r67, r66, r70, logs, plateau)
     }
 
     fun applyHF80StrategicOscillation(
@@ -705,6 +723,11 @@ object V6HotfixPasses {
         val afterTotal: Int,
         val applied: Int,
         val logs: List<MirrorLog>,
+        /**
+         * [C1 頭打ちの構造化診断, 3.322.0] `applyC1WindowPolish` だけが設定する。
+         * 他パスは null のまま（既定値つき＝既存の構築サイトは非破壊）。
+         */
+        val plateau: C1PlateauDiagnosis? = null,
     )
 
     /**
@@ -1414,9 +1437,9 @@ object V6HotfixPasses {
                             // [不採用の主因, 3.302.0] ピン破り（厳密ピンを崩すため却下）は違反自体が
                             //   悪化していないので主因族を持たない＝別ラベルにして混同を避ける。
                             when {
-                                chain == null -> recordBlock(i, x, "候補なし")
-                                isBetter(rep, bestRep) -> recordBlock(i, x, "ピン破り")
-                                else -> recordBlock(i, x, "不採用", after = rep, before = bestRep)
+                                chain == null -> recordBlock(i, x, C1PlateauDiagnosis.REASON_NO_CANDIDATE)
+                                isBetter(rep, bestRep) -> recordBlock(i, x, C1PlateauDiagnosis.REASON_PIN)
+                                else -> recordBlock(i, x, C1PlateauDiagnosis.REASON_SCORE, after = rep, before = bestRep)
                             }
                         }
                     }
@@ -1449,7 +1472,7 @@ object V6HotfixPasses {
                 if (!stillDeficient0) continue
                 val hx = (0 until p.T).filter { work[i][it] == x && movable(i, it) }
                 val ho = (0 until p.T).filter { work[i][it] != x && movable(i, it) }
-                if (hx.isEmpty() || ho.isEmpty()) { recordBlock(i, x, "再配置候補なし"); continue }
+                if (hx.isEmpty() || ho.isEmpty()) { recordBlock(i, x, C1PlateauDiagnosis.REASON_NO_REPACK); continue }
                 val fires0 = c1RowFires(p, work, i)
                 var bestGain = 0; var bestJx = -1; var bestJo = -1
                 for (jx in hx) {
@@ -1481,10 +1504,10 @@ object V6HotfixPasses {
                         val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(x)?.kigou ?: x})"
                         combinable.add(CombinatorialRepair.Candidate(
                             listOf(intArrayOf(i, bestJx, a), intArrayOf(i, bestJo, x)), "手R3", hint))
-                        recordBlock(i, x, "不採用", after = rep, before = bestRep)
+                        recordBlock(i, x, C1PlateauDiagnosis.REASON_SCORE, after = rep, before = bestRep)
                     }
                 } else {
-                    recordBlock(i, x, "再配置候補なし")
+                    recordBlock(i, x, C1PlateauDiagnosis.REASON_NO_REPACK)
                 }
             }
         }
@@ -1516,13 +1539,27 @@ object V6HotfixPasses {
                     ?.let { if (it.isEmpty()) "" else " 主因 $it" } ?: ""
             "$lbl(${top.key}×${top.value}$culprits)"
         }.distinct()
+        // [構造化診断, 3.322.0] 上の「残存:」はログ文字列だが、同じ材料を構造化して UI まで運ぶ
+        //   （文字列を後から解析させない）。判定は最終盤面で不足が残っている (職員,シフト) だけ。
+        val plateau = C1PlateauDiagnosis.build(
+            remainingC1 = bestRep.breakdown["c1"] ?: 0,
+            blockStats = blockStats,
+            culpritStats = culpritStats,
+            staffName = { state.staff.getOrNull(it)?.name ?: "#$it" },
+            shiftKigou = { state.shifts.getOrNull(it)?.kigou ?: it.toString() },
+            stillDeficient = { i, x ->
+                p.cons1.any { c ->
+                    c.shiftIdx == x && c.day1 > 0 && (0..p.T - c.day1).any { j -> inDeficientC1Window(p, work, i, x, c.day1, c.day2, j) }
+                }
+            },
+        )
         val c1CombSummary = c1CombStats.summary()
         val logs = listOf(MirrorLog(tag = "C1Polish",
             message = "期間要件(c1)研磨: c1 ${before.breakdown["c1"] ?: 0}->${bestRep.breakdown["c1"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回(鏡像:$aRect 自己:$aSelf 再配置:$aRepack)" +
                 (if (applied == 0 && (before.breakdown["c1"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
                 (if (c1CombSummary.isNotEmpty()) " / $c1CombSummary" else "")))
-        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
+        return CyclicSwapResult(work, before.total, bestRep.total, applied, logs, plateau)
     }
 
     /**

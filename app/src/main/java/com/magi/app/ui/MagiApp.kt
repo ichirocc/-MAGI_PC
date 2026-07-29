@@ -367,6 +367,9 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     CoverageDiagnosisCard(ui)
                     // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断（CoverageDiag の c3n 版・c3n=0 なら非表示）。
                     ForbiddenRunDiagnosisCard(ui, onRelaxRule = { vm.relaxForbiddenRule(it) })
+                    // [3.322.0] 窓の要件(c1)が直せなかった理由（直近の最適化での却下記録。残存なしなら非表示）。
+                    // 誘導先は年間マスター③「回数（1人あたり）」＝個人の下限/上限がある場所（3.286.0 で一本化済み）。
+                    C1PlateauCard(ui, onGoEdit = { tab = 2; editScope = 2 })
                     SettingIssuesCard(ui, onFix = { vm.applySettingFix(it) }, onGoEdit = { tab = 2 })
                     // [スクショ指摘/撤去] 「ほかの作り方」カード（速くつくる/かんたんに/閉じても大丈夫）は
                     //   主導線（思考誘導カード＋下部バー）と重複し、実行中は全ボタン無効の死に領域だった

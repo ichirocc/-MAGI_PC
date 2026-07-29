@@ -25,6 +25,7 @@ import com.magi.app.v6.FixKind
 import com.magi.app.v6.V6PortReport
 import com.magi.app.v6.CoverageDiagnosis
 import com.magi.app.v6.ForbiddenRunDiagnosis
+import com.magi.app.v6.C1PlateauDiagnosis
 import com.magi.app.v6.V6Algorithm
 import com.magi.app.v6.V6FinalPort
 import com.magi.app.v6.V6NativeOptimizer
@@ -834,6 +835,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var lastResultHard: Long = -1L
     private var lastTopHardFamily: String? = null
 
+    /**
+     * [3.322.0] 直近の最適化で「窓の要件(c1)がなぜ直せなかったか」の構造化診断。
+     * 研磨が候補を作って却下した記録が唯一の根拠＝盤面から再計算できないため保持する
+     * （CoverageDiag/ForbiddenDiag が毎回作り直せるのとはここが違う）。
+     */
+    private var lastC1Plateau: C1PlateauDiagnosis? = null
+
     private fun hardFamilyJp(key: String): String = when (key) {
         "covU" -> "人員不足（必要人数）"
         "c3n" -> "禁止の並び（連勤など）"
@@ -992,6 +1000,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     ) }
                     lastResultHard = newHard
                 }
+                // [3.322.0] 窓の要件(c1)が直せなかった理由の構造化診断を保持（次の makeUi で UI へ）。
+                //   研磨が候補を却下した記録が唯一の根拠＝あとから再計算できないため ViewModel が持つ。
+                lastC1Plateau = res.post?.c1Plateau
+                lastC1Plateau?.logLines()?.take(4)?.forEach { logOp("W", it.removePrefix("[W] ")) }
                 lastTopHardFamily = if (res.report.hard > 0) topHardFamilyJp(res.report.breakdown) else null
                 logOp(if (res.report.hard == 0) "I" else "W", "最適化 完了 必須=${res.report.hard} 合計=${res.report.total} (${res.phase})")
                 // HF63 検出: 50秒改善のない制約族＝データ上満たせない可能性が高い（業務担当者へ提示）。
@@ -2743,6 +2755,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             coverageDiag = coverageDiag,
             // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断。c3n=0 なら null。
             forbiddenDiag = analysis.forbiddenDiag,
+            // [3.322.0] c1 頭打ちの構造化診断。再計算できない（研磨中の却下記録が唯一の根拠）ので
+            //   ViewModel が保持し、いま c1 が残っているときだけ見せる（解消済みなら黙る）。
+            c1Plateau = lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 },
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )

@@ -508,6 +508,66 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Uni
 
 
 /**
+ * [窓の要件が直せなかった理由 / 3.322.0] 直近の最適化で c1 研磨が候補を却下した記録を、
+ * 職員×シフトごとに理由つきで見せる。CoverageDiag（人員不足）・ForbiddenDiag（禁止連続）に続く3枚目。
+ *
+ * この2枚と違い**盤面から再計算できない**（根拠が「研磨が実際に候補を作って却下した」観測のため）。
+ * したがって「構造的に不能」とは言わない — 言えるのは「いまの設定で、試した手はすべて却下された」まで。
+ * 回数固定を緩めれば通る可能性が残る、という含みを文言で明示する。
+ */
+@Composable
+internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
+    val diag = ui.c1Plateau ?: return
+    if (!diag.hasEntries) return
+    val cs = MaterialTheme.colorScheme
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("窓の要件がなぜ直せなかったか", style = MaterialTheme.typography.titleMedium)
+            val pinTxt = if (diag.pinConstrained > 0) "うち ${diag.pinConstrained} 件は回数の固定が壁になっています。" else ""
+            Text("残り ${diag.remainingC1} 件。$pinTxt 前回つくったときに試した直し方の記録です。",
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            for (e in diag.entries.take(6)) {
+                val pin = e.cause == com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED
+                val container = if (pin) cs.errorContainer else cs.secondaryContainer
+                val onContainer = if (pin) cs.onErrorContainer else cs.onSecondaryContainer
+                Surface(color = container, shape = MaterialTheme.shapes.medium) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(e.label, color = onContainer,
+                                style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            MagiTagChip(
+                                text = when (e.cause) {
+                                    com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED -> "回数固定が壁"
+                                    com.magi.app.v6.C1PlateauCause.SCORE_TRADEOFF -> "他とのトレードオフ"
+                                    com.magi.app.v6.C1PlateauCause.NO_CANDIDATE -> "候補なし"
+                                },
+                                color = if (pin) MagiAccent.red else MagiAccent.blue,
+                            )
+                        }
+                        // 根拠の内訳。「試した手が何件あって、何で落ちたか」を数で示す（推測でなく観測）。
+                        val parts = ArrayList<String>()
+                        if (e.rejectedByPin > 0) parts.add("回数固定で却下 ${e.rejectedByPin}件")
+                        if (e.rejectedByScore > 0) parts.add("総合評価で却下 ${e.rejectedByScore}件")
+                        if (e.noCandidate > 0) parts.add("候補なし ${e.noCandidate}件")
+                        Text(parts.joinToString(" ・ "), color = onContainer, style = MaterialTheme.typography.bodySmall)
+                        Text(e.recommendedAction { fam -> breakdownLabels[fam] ?: fam },
+                            color = onContainer, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            if (diag.entries.size > 6) {
+                Text("ほか ${diag.entries.size - 6} 件（詳細はログ出力を参照）",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            }
+            if (diag.pinConstrained > 0) {
+                TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
+            }
+        }
+    }
+}
+
+
+/**
  * [設定ミスの誘導修正] 制約・希望シフトの入力間違いを「どこが・なぜ・どう直すか」で具体的に提示する。
  * CoverageDiagnosisCard（人員不足の原因）と同じ作りで、配布前に設定を直せるようにするのが目的。
  */
