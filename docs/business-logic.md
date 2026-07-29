@@ -2,7 +2,7 @@
 
 > **このファイルの役割**：制約の判定条件・スコア計算・エラーハンドリング方針の**唯一の正解**。最もハルシネーションが起きやすい業務ルールをここに集約する。「上限はいくつか」「違反時にどう振る舞うか」はここを見る。
 > **コード基準**：`v6/MirrorCore.kt`（`MirrorKeys.weights` ＝重みの単一の真実）／`v6/Evaluator.kt`。
-> **最終更新**：2026-07-26（3.287.0 keep-best比較順の統一を追記）
+> **最終更新**：2026-07-29（3.318.0 c42 のペア計数と HARD 4族の一致を追記）
 
 ---
 
@@ -35,15 +35,17 @@
 | `c3m` | 2 | SOFT | 推奨（Want）の連勤パターン未充足 | セル `i,j` |
 | `c2` | 1 | SOFT | 個人合計の目標差（C2） | 回数 `i,k` |
 | `c41` | 1 | SOFT | 群レンジ違反（1日 [l,u] 外） | 被覆/日 |
-| `c42` | 1 | SOFT | 群ペア同日併存 | セル/日 |
+| `c42` | 1 | SOFT | 群ペア同日併存（**異なる2人のペア数**。同一集合 `g1==g2 && s1==s2` は C(n,2)） | セル/日 |
 | `c41s` | 1 | SOFT | スキル群レンジ違反 | 被覆/日 |
-| `c42s` | 1 | SOFT | スキル群ペア同日併存 | セル/日 |
+| `c42s` | 1 | SOFT | スキル群ペア同日併存（c42 と同じ数え方） | セル/日 |
 | `apt` | 1 | SOFT | 適切回数からの L1 偏差 `|n-t|`（群単位の双方向目標） | 回数 `i,k`（aptLow/aptHigh） |
 | `fair` | 1 | SOFT | グループ内公平化：群×担当ONシフトで round(平均) からの L1 偏差和 | 職員×シフト（`distLocations["fair"]`） |
 | `weekly` | 1 | SOFT | 7日周期(曜日)シフト平準化：職員×曜日で round(勤務日/7) からの L1 偏差和 | 職員（`distLocations["weekly"]`） |
 | `covO` | 1.0 | SOFT | 過剰な配置（上限 hi 超過、`got-hi`） | 被覆 `k,j` |
 
-> **HARD = {groupViol, c3n, covU, pref}**、それ以外は SOFT。`covO` は 2026-07-13（HF77 明示指示）に 0.5→1.0 へ統一済み
+> **HARD = {groupViol, c3n, covU, pref}**、それ以外は SOFT。この4族はチェッカー（`MirrorKeys.hard`）と
+> 最適化器（`Evaluator.fullEvalParts` の hard1・`DeltaEvaluator`・`magi_native.cpp`）で一致する
+> （3.318.0 以前は評価器側だけ groupViol を欠いた3族で、同じ盤面に対して両者の hard が食い違っていた）。`covO` は 2026-07-13（HF77 明示指示）に 0.5→1.0 へ統一済み
 > （最適化器 Evaluator/Delta/C++ は元々 1.0、チェッカー `weightedScore` のみ 0.5 だった factor-2 乖離を最適化器基準に解消）。
 > `apt` は内訳チップ（`BreakdownCard`「人数の範囲」グループ、`countViolations` の vio-aptLow/vio-aptHigh）に表示、
 > `fair`/`weekly` も内訳チップ（「任意」グループ）に件数表示し、いずれもタップで違反箇所（fair=職員×シフト／

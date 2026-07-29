@@ -8,10 +8,28 @@ package com.magi.app.v6
 const val SCORE_HARD_UNIT = 1_000_000_000L
 
 /**
+ * [3.318.0] c42/c42s の「同じ日に同時発生している禁止ペア」の数。**チェッカー・評価器・Δ評価器・C++ の
+ * 共通ソース**（4面が同じ式を持つ必要があるため、Kotlin 側はこの1関数へ集約する）。
+ *
+ * left = 群 g1 で s1 に就いている職員、right = 群 g2 で s2 に就いている職員。両者が互いに素なら
+ * ペア数は素直に |left|×|right| でよい。**両者が同じ集合になるのは g1==g2 かつ s1==s2 のときだけ**で
+ * （s1!=s2 なら同じ職員が同日に両方へ就くことはなく、g1!=g2 なら sgrp が違うので両方には入らない）、
+ * そのとき素朴な積 n² は ①自分自身とのペア n 件 ②同じペアを (a,b) と (b,a) で2回、を余分に数える。
+ *
+ * 実データで確認した実害（HF77 ユーザー明示指示により修正）: `群9/休 × 群9/休` の行が**1人だけの群**に
+ * 付いており、その人が休むたび自己ペアを1件ずつ数えていた。real は c42=16 のうち **9件**、user は 13 の
+ * うち **8件** がこれ。異なる2人のペア数＝C(n,2) が正しい（順序重複は当該データでは 0 件だが、同一集合の
+ * 群に2人以上いれば同じ理由で二重計上になるため合わせて是正する）。
+ */
+internal fun c42PairCount(sameSet: Boolean, n1: Int, n2: Int): Long =
+    if (sameSet) n1.toLong() * (n1 - 1) / 2 else n1.toLong() * n2
+
+/**
  * Faithful port of the Web worker's `fullEval`.
  *
  * Lexicographic objective:  score = hard1 * SCORE_HARD_UNIT + soft
  *   hard1 = c3n (forbidden seq) + covU (per-cell OR/AND shortfall over P1/P2, #4b) + pref
+ *           + groupViol (担当できないシフトに就いているセル。3.318.0 でチェッカーの MirrorKeys.hard と揃えた)
  *   soft  = c1 (window) + c2 (per-staff total) + c41 (group/day range)
  *           + c42 (group pair conflict) + c41s/c42s (skill-group変種) + c3 (want seq) + c3m + c3mn
  *           + [統一a/b] low/high (range, amount×90/45) + covO (over-coverage, amount)
@@ -80,7 +98,7 @@ class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
                     if (p.sgrp[i] == c.g1 && a[i][j] == c.s1) n1++
                     if (p.sgrp[i] == c.g2 && a[i][j] == c.s2) n2++
                 }
-                soft += n1.toLong() * n2.toLong()
+                soft += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2)
             }
         }
 
@@ -99,7 +117,7 @@ class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
                     if (p.ssk[i] == c.g1 && a[i][j] == c.s1) n1++
                     if (p.ssk[i] == c.g2 && a[i][j] == c.s2) n2++
                 }
-                soft += n1.toLong() * n2.toLong()
+                soft += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2)
             }
         }
 
@@ -115,6 +133,12 @@ class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
         for (i in 0 until S) for (j in 0 until T) {
             val w = p.wish[i][j]
             if (w >= 0 && p.canDo(i, w) && a[i][j] != w) hard1 += 1
+            // [3.318.0] groupViol（担当できないシフトに就いているセル）も HARD へ。`MirrorKeys.hard` は
+            //   元から4族（groupViol/c3n/covU/pref）なのに評価器だけ3族で、同じ盤面に対してチェッカーと
+            //   評価器が違う hard を返していた（SA の受理と最終採否が別基準）。実データでは入口の
+            //   hf67HardRepair が群外セルを正規化するため通常 0 に落ちるが、契約の非対称は残っていた。
+            val k = a[i][j]
+            if (k in 0 until K && !p.canDo(i, k)) hard1 += 1
         }
 
         // [統一a/b] range (LimMin/LimMax) は SOFT。UnifiedViolationChecker と同じ amount×重み(low=90/high=45)・

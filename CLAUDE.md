@@ -5250,6 +5250,52 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## c42 の自己ペア／順序重複の除去と groupViol の HARD 統一（3.318.0, ユーザー明示指示）
+ユーザー指示「c42 自己ペア (HF77) と groupViol 非対称(目的関数変更)などを賢く考え対応する」。長く
+「指示待ち」として残していた2件を、どちらも**4面（チェッカー／Evaluator／DeltaEvaluator／C++）同時**に直した。
+
+### ① c42/c42s の同日ペア計数（HF77＝スコアが変わる）
+- **バグ**: `for (i in left) for (i2 in right)`（Kotlin）／`n1 * n2`（Evaluator・Delta・C++）は
+  left と right が同じ集合になるケースを考慮していなかった。**同じ集合になるのは `g1==g2 && s1==s2` の
+  ときだけ**（s1!=s2 なら同じ職員が同日に両方へ就くことはなく、g1!=g2 なら sgrp が違うので両方には入らない）。
+  そのとき素朴な積 n² は ①自分自身とのペア n 件 ②同じペアを (a,b) と (b,a) で2回、を余分に数える。
+- **実データの実害**（修正前に計測）: `群9/休 × 群9/休` の行が**1人だけの群**に付いており、その人が休むたび
+  自己ペアを1件ずつ数えていた。**real は c42=16 のうち 9件、user は 13 のうち 8件**が自己ペア（順序重複は
+  当該データでは 0 件＝該当群が1人でペアを作れないため。ただし2人以上いれば同じ理由で二重計上になる）。
+  golden は同一集合の行が発火しておらず 6件とも正味。
+- **修正**: 共通ソース `c42PairCount(sameSet, n1, n2) = if (sameSet) C(n,2) else n1*n2`（`Evaluator.kt`）を
+  新設し、Evaluator 2箇所・DeltaEvaluator 4箇所（preview の差分2・全量再構築2）・C++ 6箇所
+  （`fullEvalParts` 2・`contribDayGroups` の bit/scalar 各2）が同じ式を読む。チェッカーは mark を伴うので
+  ループ内で `i == i2` と `sameSet && i2 < i` を弾く同値の形。**違反セルのヒント**（C++ `collectViolationCells`
+  の `pairCells`）も `anyL && anyR`（1人でも真）→ 同一集合なら `nL >= 2` を要求する形へ揃えた。
+- **結果**: c42 は real 16→**7**、user 13→**5**、golden 6→6（不変）。
+
+### ② groupViol を評価器の HARD へ（目的関数の変更）
+- **不整合**: `MirrorKeys.hard` は元から4族（groupViol/c3n/covU/pref）なのに `Evaluator.fullEvalParts` の
+  hard1 は3族（c3n/pref/covU）で、**同じ盤面に対してチェッカーと評価器が違う hard を返していた**
+  ＝ SA/ALNS の受理と最終採否が別基準。docstring は「意図的」と書いていたが、`MirrorKeys.hard` との
+  矛盾は残ったまま（3.309.0 で `gateW` を直したときと同じ論理＝実害が到達不能でも契約違反は実在する）。
+- **修正**: Evaluator の pref ループへ groupViol を追加。DeltaEvaluator は `dGrpV`/`hGrpV`/`groupViolAll()` を
+  新設し `dHard` と `scoreFrom` へ合流（セル単位なので差分は1セルぶんで厳密）。C++ は `contribPrefCell` を
+  **`contribCellHard`（pref＋groupViol）へ改名**し `fullEvalParts` にも同じ加算を入れた（`deltaApply` は
+  before/after でこの関数を呼ぶので差分は自動的に正しい）。
+- **実害は元からゼロだったことを追認**: 後処理研磨の決定的ベンチで hard は 3データセットとも不変
+  （real 6／user 4／golden 0）。入口の `hf67HardRepair` が群外セルを正規化し、探索オペレータは
+  `allowedShiftsForStaff` から選ぶため群外を作らない、という既存の防御が実際に効いている。
+
+### 検証
+- **native parity**: `host_parity_bench` を2回（c42 修正後・groupViol 修正後）実ビルド・実行し、いずれも
+  **2,996,665手・mismatch=0**。harness は 3.199.0 以降 **非canDo セルを盤面に混ぜる**ので groupViol も
+  実際に照合されている（bit-op speedup ×2.04〜2.11 で速度退行なし）。
+- **ホストJVM 全363テスト green**（356 + 新規7）。新規は `C42PairCountTest`（1人=違反0／2人=1組／3人=3組／
+  異なる群は従来どおり／同じ群でもシフトが違えば従来どおり。**チェッカーと評価器の両方**で確認）と
+  `DeltaEvaluatorTest` 2件（担当外への移動を含むランダム2万手で Δ==フル／groupViol が hard に計上）。
+  既存の差分テストは移動先を `p.bucket[...]`＝常に担当可から選ぶため、この族の Δ を一度も通っていなかった。
+- **決定的ベンチ**: user は 33167→**33159**（消えた自己ペア8件ぶん）、golden は 2469 で不変、real は
+  49221→49223。**c42 の件数が正しくなったぶん weighted が下がるのは「勤務表が良くなった」のではなく
+  「数え方が正しくなった」だけ**で、real の +2 は目的関数が変わって別の局所解へ着地した経路依存
+  （JointLNS の壁時計ばらつき帯 49221〜49232 の中）。hard は3件とも不変。
+
 ## 分散指標の平準化2パスを撤去＝目的関数と指標が一致していなかった（3.317.0）
 バックログに「平準化研磨は分散指標で目的関数(fair/weekly=L1)と別物＝既知の冗長」と 3.84.0 以来
 記録したまま**一度も測っていなかった**項目を消化した。
@@ -5332,7 +5378,8 @@ c1 残差（golden 104・real 58・user 54）に対して事前診断が何を�
 
 ## レビュー積み残し5件の解消（3.314.0, ユーザー指示「修正する」）
 6本のレビューで「確認済みだが未着手」として残していた M-05〜M-08 / M-10 を解消。スコアが変わる2件
-（c42 自己ペア＝HF77・groupViol 非対称＝目的関数の変更）は明示指示待ちのまま**据え置き**。
+（c42 自己ペア＝HF77・groupViol 非対称＝目的関数の変更）は当時は明示指示待ちで据え置き
+**→ 3.318.0 でユーザー明示指示により両方とも4面同時に修正済み**。
 - **[M-05] C1「証明済み壁」が部分集合しか探していなかった**: `solveWindow` の余力職員が
   `p.sgrp[i] == p.sgrp[v.staff]` の**同群限定**で、別群を経由する3者循環を見落としたまま
   `exhaustive=true` を返していた。さらに `maxInvolvedStaff` の cap で候補を `break` したあとも

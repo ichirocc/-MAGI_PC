@@ -88,6 +88,59 @@ class DeltaEvaluatorTest {
         assertEquals(ev.fullEval(p.initialAssignment()), de.score())
     }
 
+    /**
+     * [3.318.0] groupViol（担当できないシフトに就いているセル）を評価器の HARD に含めた。
+     * 既存の差分テストは移動先を `p.bucket[p.sgrp[i]]`（＝常に担当可）から選ぶため、この族の Δ を
+     * 一度も通っていなかった。全シフトから選ぶ変種で Δ==フルを固定する。
+     */
+    @Test
+    fun deltaMatchesFullEval_movesIntoDisallowedShifts() {
+        val p = Problem(buildState())
+        val ev = Evaluator(p)
+        val de = DeltaEvaluator(p)
+        val rng = Random(24680)
+        var sawViolation = false
+        repeat(20_000) {
+            val i = rng.nextInt(p.S); val j = rng.nextInt(p.T)
+            val old = de.at(i, j)
+            val nw = rng.nextInt(p.K)                 // 担当可否を問わず選ぶ
+            de.apply(i, j, nw)
+            if (!p.canDo(i, nw)) sawViolation = true
+            assertEquals("preview/commit mismatch", ev.fullEval(de.snapshot()), de.score())
+            if (rng.nextBoolean()) {
+                de.apply(i, j, old)
+                assertEquals("revert mismatch", ev.fullEval(de.snapshot()), de.score())
+            }
+        }
+        org.junit.Assert.assertTrue("担当外への移動を実際に踏んでいること", sawViolation)
+    }
+
+    /** [3.318.0] groupViol が評価器の hard（soft ではなく）に計上されること。 */
+    @Test
+    fun groupViolCountsAsHardInEvaluator() {
+        val p = Problem(buildState())
+        val ev = Evaluator(p)
+        val base = p.initialAssignment()
+        val basePartsBefore = ev.fullEvalParts(base)
+        // s0 は G0（休/A/B 可）なので C(=index3) は担当外。1セルだけ C にすると hard が 1 増えるはず。
+        val i = 0
+        val j = (0 until p.T).first { base[0][it] != 3 }
+        org.junit.Assert.assertTrue("前提: s0 は C を担当できない", !p.canDo(i, 3))
+        val mutated = Array(p.S) { base[it].clone() }
+        mutated[i][j] = 3
+        val after = ev.fullEvalParts(mutated)
+        assertEquals("groupViol は hard に +1", basePartsBefore[0] + 1, after[0] - (prefDelta(p, base, mutated, i, j)))
+    }
+
+    /** 上のテストで pref の変化分を切り分けるための補助（希望セルを踏んだ場合の hard 差を打ち消す）。 */
+    private fun prefDelta(p: Problem, before: Array<IntArray>, after: Array<IntArray>, i: Int, j: Int): Long {
+        val w = p.wish[i][j]
+        if (w < 0 || !p.canDo(i, w)) return 0L
+        val b = if (before[i][j] != w) 1L else 0L
+        val a2 = if (after[i][j] != w) 1L else 0L
+        return a2 - b
+    }
+
     @Test
     fun deltaMatchesFullEval_singleMoves() {
         val p = Problem(buildState())

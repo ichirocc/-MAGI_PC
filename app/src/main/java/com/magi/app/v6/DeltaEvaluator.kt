@@ -29,6 +29,9 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     private var sc41s = 0L; private var sc42s = 0L   // [スキルグループ] c41s/c42s（ssk ベース、soft）
     private var sc3 = 0L; private var hc3n = 0L; private var sc3m = 0L; private var sc3mn = 0L
     private var hpref = 0L; private var hct = 0L
+    // [3.318.0] groupViol（担当できないシフトに就いているセル）。MirrorKeys.hard は元から4族なのに
+    //   評価器側だけ3族（c3n/pref/covU）で、同じ盤面に対しチェッカーと評価器の hard が食い違っていた。
+    private var hGrpV = 0L
     private var sApt = 0L                             // [統一apt] 適切回数(双方向目標)の running total（SOFT, 重み1）
     private var sFair = 0L                            // [統一fair] グループ内公平化の running total（SOFT, 重み1）
     private var sWeekly = 0L                          // [統一weekly] 曜日平準化の running total（SOFT, 重み1）
@@ -40,7 +43,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     private var dC1 = 0L; private var dC2 = 0L; private var dC41 = 0L; private var dC42 = 0L
     private var dC41s = 0L; private var dC42s = 0L
     private var dC3 = 0L; private var dC3n = 0L; private var dC3m = 0L; private var dC3mn = 0L
-    private var dPref = 0L; private var dCt = 0L; private var dApt = 0L; private var dFair = 0L; private var dWeekly = 0L; private var dCovO = 0L; private var nCovU = 0L
+    private var dPref = 0L; private var dGrpV = 0L; private var dCt = 0L; private var dApt = 0L; private var dFair = 0L; private var dWeekly = 0L; private var dCovO = 0L; private var nCovU = 0L
 
     init {
         a = p.initialAssignment()
@@ -79,7 +82,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     fun score(): Long = scoreFrom(covUTot)
 
     private fun scoreFrom(cu: Long): Long {
-        val h1 = hc3n + cu + hpref
+        val h1 = hc3n + cu + hpref + hGrpV
         // [統一a/b] range(hct, 重み付き) と covO(scovO) を SOFT に含める（旧: hct は h2=表示HARD）。
         // [統一c] c3/c3m/c3mn に checker 重み(3/2/15)を適用（sc3等は #fire/run-deficit の生カウント）。
         // [統一c1] c1 にも checker 重み(15)を適用（sc1 は #fire 生カウント、canDoガード済）。
@@ -95,7 +98,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         lI = i; lJ = j; lOld = old; lNw = nw
         if (nw == old) {
             dC1 = 0; dC2 = 0; dC41 = 0; dC42 = 0; dC41s = 0; dC42s = 0; dC3 = 0; dC3n = 0; dC3m = 0; dC3mn = 0
-            dPref = 0; dCt = 0; dApt = 0; dFair = 0; dWeekly = 0; dCovO = 0; nCovU = covUTot
+            dPref = 0; dGrpV = 0; dCt = 0; dApt = 0; dFair = 0; dWeekly = 0; dCovO = 0; nCovU = covUTot
             return score()
         }
 
@@ -158,6 +161,11 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         val wOk = w >= 0 && p.canDo(i, w)
         dPref = (if (wOk && nw != w) 1L else 0L) - (if (wOk && old != w) 1L else 0L)
 
+        // [3.318.0] groupViol（担当できないシフト）はセル単位なので差分もこの1セルだけ。
+        //   範囲外セントネル(-1)は canDo の対象外＝0 として扱う（Evaluator/checker と同じ範囲ガード）。
+        dGrpV = (if (nw in 0 until K && !p.canDo(i, nw)) 1L else 0L) -
+            (if (old in 0 until K && !p.canDo(i, old)) 1L else 0L)
+
         // c41 (group/day range) on day j — only constraints touching this staff's group & shifts
         val gi = p.sgrp[i]
         var d41 = 0L
@@ -183,7 +191,8 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             }
             val n1a = n1 + (if (c.g1 == gi && c.s1 == nw) 1 else 0) - (if (c.g1 == gi && c.s1 == old) 1 else 0)
             val n2a = n2 + (if (c.g2 == gi && c.s2 == nw) 1 else 0) - (if (c.g2 == gi && c.s2 == old) 1 else 0)
-            d42 += n1a.toLong() * n2a.toLong() - n1.toLong() * n2.toLong()
+            val same = c.g1 == c.g2 && c.s1 == c.s2
+            d42 += c42PairCount(same, n1a, n2a) - c42PairCount(same, n1, n2)
         }
         dC42 = d42
 
@@ -212,7 +221,8 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             }
             val n1a = n1 + (if (c.g1 == gis && c.s1 == nw) 1 else 0) - (if (c.g1 == gis && c.s1 == old) 1 else 0)
             val n2a = n2 + (if (c.g2 == gis && c.s2 == nw) 1 else 0) - (if (c.g2 == gis && c.s2 == old) 1 else 0)
-            d42s += n1a.toLong() * n2a.toLong() - n1.toLong() * n2.toLong()
+            val same = c.g1 == c.g2 && c.s1 == c.s2
+            d42s += c42PairCount(same, n1a, n2a) - c42PairCount(same, n1, n2)
         }
         dC42s = d42s
 
@@ -226,7 +236,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
                 (p.covOCell(nw, j, cn + 1) - p.covOCell(nw, j, cn)).toLong()
 
         // [統一b] dCt(range) は SOFT へ移動（hard から除外）。
-        val dHard = dC3n + (nCovU - covUTot) + dPref
+        val dHard = dC3n + (nCovU - covUTot) + dPref + dGrpV
         // [統一c] c3/c3m/c3mn の delta にも checker 重み(3/2/15)を適用（full soft と同一係数）。
         // [統一c1] c1 の delta にも ×15。[HF77明示数値指示(2026-07-20)] c1=4→5・c3mn=12→15。
         // [HF77明示数値指示(2026-07-21)] c1=5→15 に変更。
@@ -252,7 +262,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             if (wStep != 0) wdCnt[i][(p.dow0 + j) % 7] += wStep
             sc1 += dC1; sc2 += dC2; sc41 += dC41; sc42 += dC42; sc41s += dC41s; sc42s += dC42s
             sc3 += dC3; hc3n += dC3n; sc3m += dC3m; sc3mn += dC3mn
-            hpref += dPref; hct += dCt; sApt += dApt; sFair += dFair; sWeekly += dWeekly; scovO += dCovO
+            hpref += dPref; hGrpV += dGrpV; hct += dCt; sApt += dApt; sFair += dFair; sWeekly += dWeekly; scovO += dCovO
             covUTot = nCovU
         } finally {
             // invalidate the stash so a stray double-commit cannot corrupt aggregates
@@ -274,7 +284,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         sc1 = c1All(); sc2 = c2All(); sc41 = c41All(); sc42 = c42All(); sc41s = c41sAll(); sc42s = c42sAll()
         sc3 = c3All(p.cons3, false); hc3n = c3All(p.cons3n, true)
         sc3m = c3All(p.cons3m, false); sc3mn = c3All(p.cons3mn, true)
-        hpref = prefAll(); hct = ctAll(); sApt = aptAll(); sFair = fairAll(); sWeekly = weeklyAll(); scovO = covOAll()
+        hpref = prefAll(); hGrpV = groupViolAll(); hct = ctAll(); sApt = aptAll(); sFair = fairAll(); sWeekly = weeklyAll(); scovO = covOAll()
         covUTot = covUAll()
     }
 
@@ -381,7 +391,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
                 if (p.sgrp[i] == c.g1 && a[i][j] == c.s1) n1++
                 if (p.sgrp[i] == c.g2 && a[i][j] == c.s2) n2++
             }
-            tot += n1.toLong() * n2.toLong()
+            tot += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2)
         }
         return tot
     }
@@ -404,7 +414,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
                 if (p.ssk[i] == c.g1 && a[i][j] == c.s1) n1++
                 if (p.ssk[i] == c.g2 && a[i][j] == c.s2) n2++
             }
-            tot += n1.toLong() * n2.toLong()
+            tot += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2)
         }
         return tot
     }
@@ -439,6 +449,15 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         var h = 0L
         for (i in 0 until S) for (j in 0 until T) {
             val w = p.wish[i][j]; if (w >= 0 && p.canDo(i, w) && a[i][j] != w) h++
+        }
+        return h
+    }
+
+    /** [3.318.0] 担当できないシフトに就いているセル数（checker の "groupViol" と同一条件）。 */
+    private fun groupViolAll(): Long {
+        var h = 0L
+        for (i in 0 until S) for (j in 0 until T) {
+            val k = a[i][j]; if (k in 0 until K && !p.canDo(i, k)) h++
         }
         return h
     }
