@@ -266,7 +266,12 @@ object V6FinalPort {
         // [早期脱出方針] 実機ログで停滞検知が予算上限とほぼ同時(301s)に発火＝時間がほぼ節約できていなかった。
         //   停滞許容を短縮して「無改善なら早く返す」方針へ。globalBest は生スコア管理のため早期終了でも品質は不変
         //   （最後の改善時刻でタイマをリセット＝改善が続く限り止めない・フェーズ遷移でもリセットで猶予確保）。
-        val minRunMs = (budgetMs / 6).coerceIn(8_000L, 45_000L)   // 最初の猶予（早すぎる停止を防ぐ）
+        // [3.314.0] 下限 8 秒は「UI 経路は 10 秒下限」を前提にした値で、直接 API 呼出で 1〜7 秒を
+        //   指定すると minRunMs / postReserveMs が予算を上回り、searchDeadlineMs が hardDeadlineMs を
+        //   追い越して**要求したタイムアウトを超えて**いた。予算そのものでクランプして searchDeadline
+        //   <= hardDeadline を構造的に保証する（10 秒以上では minRunMs が支配するため結果は不変）。
+        val minRunMs = (budgetMs / 6).coerceIn(8_000L, 45_000L)
+            .coerceAtMost(budgetMs)   // 最初の猶予（早すぎる停止を防ぐ）
         // [5分強化] HARD>0（=未配布・配れない）は最優先で解消すべき失敗状態。予算の大半を使って多様化
         //   （多仮説＋HF80 戦略的振動）で HARD クリアを試みる。旧 budgetMs/6(=300s予算で50s) は早すぎ、
         //   実機ログで HARD=1 のまま 50s で早期終了し残り 250s を捨てていた。→ budgetMs*9/10(=270s)。
@@ -345,7 +350,7 @@ object V6FinalPort {
         // [後処理予約] 探索が予算を使い切ると後処理(平準化/fair等のkeep-best研磨)が時間切れ(実機8ms)になる。
         //   末尾に postReserveMs を予約し、探索は searchDeadlineMs で止め、後処理は hardDeadlineMs まで走らせる。
         //   stall早期終了時は探索が早く返るので後処理は自然に余裕を得る＝無改善の末尾だけを後処理へ回す。
-        val postReserveMs = (budgetMs / 12).coerceIn(8_000L, 25_000L)
+        val postReserveMs = (budgetMs / 12).coerceIn(8_000L, 25_000L).coerceAtMost(budgetMs / 2)
         val searchDeadlineMs = (hardDeadlineMs - postReserveMs).coerceAtLeast(startMs + minRunMs)
         // [3.230.0] 現フェーズ自身にも与える短い個別猶予（フェーズ開始直後の誤検知防止のみが目的。
         //   真の頭打ち検知は effStall/lastBestImproveMs が単独で担う）。stallMs(=予算9/10)のような

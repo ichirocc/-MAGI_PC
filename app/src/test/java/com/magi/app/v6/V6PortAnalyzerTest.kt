@@ -2,6 +2,7 @@ package com.magi.app.v6
 
 import com.magi.app.model.*
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -321,5 +322,29 @@ class V6PortAnalyzerTest {
         }
         // 削除導線は同じ並びの重複行をまとめて消す＝キー一致で数えられること。
         assertEquals(1, keys.count { it == "X\u2192X" })
+    }
+
+    /**
+     * [3.311.0] 1セルが**複数の**禁止連続 fire に関与する局面では、希望どおりのセルでも動かす価値がある。
+     * 禁止「X→X」・行 X,X,X の中央セルは 2件の fire に関与し、休へ動かすと c3n 2→0 / pref 0→1 ＝
+     * betterReport の第1キー hard が 2→1 と厳密に改善する（isBetter は採用する）。
+     * 旧実装は `wishLocked && wish == cur` で HARD 差分を見ずに即 PINNED を返し、run 全体を
+     * 「構造壁」と誤診していた。偽の壁は 3.281.0 の短い停滞タイムアウトを早期に発火させうる。
+     */
+    @Test
+    fun wishPinnedCellIsNotAWallWhenMovingItRemovesTwoForbiddenFires() {
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 1, 1)),              // X X X → [X,X] が2件
+            cons3n = listOf(C3Row(listOf("X", "X"))),
+            wishes = mapOf("0,1" to 1),                      // 中央セルだけ X を希望固定
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        val center = diag.runs.flatMap { it.cells }.filter { it.dayIndex == 1 }
+        assertTrue("中央セルが検出される", center.isNotEmpty())
+        assertTrue(
+            "希望固定でも正味の必須違反が減るなら壁ではない: ${center.map { it.escape }}",
+            center.none { it.escape == ForbiddenCellEscape.PINNED },
+        )
+        assertFalse("この盤面を構造壁と誤診しない", diag.allBlocked)
     }
 }

@@ -428,6 +428,16 @@ object V6SanityPort {
                 "連続パターン設定でパターンを${p.T}日以下に短縮するか、この行を削除してください"))
         }
 
+        // 2e) [3.309.0] 存在しないシフト記号を含む連続パターン — パース段階で無言除外されていた。
+        //   シフトの改名・削除でこうなる。禁止(c3n)なら HARD 制約が黙って無効化されるため必ず案内する。
+        for ((fam, seqStr) in p.c3UnknownShift) {
+            val famJp = c3FamilyJp(fam)
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "連続パターン「$seqStr」($famJp)",
+                "〈〉で囲んだ記号が今のシフト一覧にないため、この行は評価されていません" +
+                    "（シフトを改名・削除するとこうなります）",
+                "連続パターン設定でこの行の記号を今あるシフトに直すか、行を削除してください"))
+        }
+
         // 3) 需要 > 担当可能人数（その枠は誰をどう並べても必ず不足）
         for (j in 0 until p.T) for (k in 0 until p.K) {
             val need = p.need1[k][j]

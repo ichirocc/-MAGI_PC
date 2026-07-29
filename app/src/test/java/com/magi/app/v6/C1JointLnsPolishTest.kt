@@ -118,4 +118,39 @@ class C1JointLnsPolishTest {
         val out = C1JointLnsPolish.apply(st, sched)
         assertEquals(0, out.applied)
     }
+
+    /**
+     * [3.312.0] 「構造下限」は c1 の**真の**下限でなければならない。個人回数(low/high)は SOFT で、
+     * c1(15) より重いだけであって禁止ではない。旧実装は `rangeHi` を count の硬い上限として DP に
+     * 課しており、「rangeHi を超えない範囲での c1 最小値」を返していた＝真の下限より大きくなり、
+     * `best.c1 <= lowerBound` の早期終了と「構造下限到達」のログを誤って発火させていた。
+     *
+     * 反例: T=7・「4日窓で X を1回以上」・X の個人上限 0。X を1つも置かなければ 4窓すべて違反で
+     * c1=4（weighted 60）。中央に X を1つ置けば c1=0・high=1（weighted 45）＝betterReport は
+     * こちらを選ぶ。したがって c1 の下限は 0 であって 4 ではない。
+     */
+    @Test
+    fun structuralLowerBoundIgnoresSoftPersonalCaps() {
+        val shifts = listOf(Shift("Y", "Y", "", ""), Shift("X", "X", "", ""))
+        val st = MagiState(
+            startDate = "2026-01-01", endDate = "2026-01-07",
+            shifts = shifts, groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0)), use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = List(1) { List(2) { "" } },
+            schedule = listOf(List(7) { 0 }),
+            wishes = emptyMap(),
+            staffRange = mapOf("0,1" to Range("", "0")),   // X の個人上限 0（SOFT）
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = listOf(C1Row(day1 = "4", shiftKigou = "X", day2 = "1")),
+            cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertEquals(
+            "SOFT の個人上限は c1 の構造下限を押し上げてはいけない",
+            0, C1JointLnsPolish.structuralC1LowerBound(p),
+        )
+    }
 }

@@ -9,6 +9,7 @@ import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -114,5 +115,27 @@ class C1TemporalDpPolishTest {
         val sched = st.schedule.toIntArray2D()
         val out = C1TemporalFlowPolish.apply(st, sched)
         assertEquals(0, out.applied)
+    }
+
+    /**
+     * [3.310.0] 状態数の安全弁。DP は疎マップなので窓長ガードだけでは状態数を縛れない。
+     * 上限を超えたら解を返さず諦める（`null`）＝呼出側は提案なしとして扱い keep-best は不変。
+     * ここでは「上限1」を渡して打切り経路そのものを踏ませ、通常上限なら解が出ることと対比する。
+     */
+    @Test
+    fun exactDpBailsOutInsteadOfExplodingWhenStateCountExceedsTheCap() {
+        val t = 12
+        val row = IntArray(t) { if (it % 3 == 0) 1 else 0 }
+        val locked = BooleanArray(t)
+        val rules = listOf(C1TemporalDp.Rule(days = 5, minimum = 2))
+        val normal = C1TemporalDp.solve(
+            row = row, targetShift = 1, locked = locked, rules = rules, seed = 1L,
+        )
+        assertNotNull("通常の上限なら解が出る前提を固定する", normal)
+        val capped = C1TemporalDp.solve(
+            row = row, targetShift = 1, locked = locked, rules = rules, seed = 1L,
+            maxDpStates = 1,
+        )
+        assertNull("状態数が上限を超えたら例外でなく null で諦める", capped)
     }
 }

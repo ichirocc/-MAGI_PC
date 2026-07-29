@@ -457,6 +457,19 @@ private fun parseCsvRows(raw: String): List<List<String>> {
     return rows
 }
 
+/**
+ * [3.314.0] コンポーネント別CSV の本体行を返す。
+ *
+ * 旧実装は各 parse が `if (rows.size < 2) return null` で**1行だけのCSVを無条件に拒否**し、
+ * かつヘッダ判定を「先頭が既知の職員名か」という間接的な推測に頼っていた。`build()` が出す実ヘッダ
+ * （氏名 / 種別 …）で明示的に判定し、それ以外は全行を本体として扱う。1行データも取り込める。
+ */
+private fun csvBody(rows: List<List<String>>, headerFirstCell: String): List<List<String>> {
+    if (rows.isEmpty()) return emptyList()
+    val head = rows[0].getOrElse(0) { "" }.trim()
+    return if (head == headerFirstCell) rows.drop(1) else rows
+}
+
 // ============================================================================
 // コンポーネント別CSV入出力（オペレーターが取込種別を選択して使用）
 //   各CSVは1行目をヘッダとして読み飛ばす。氏名・群・シフトは「氏名/記号」で照合。
@@ -481,14 +494,15 @@ object StaffCsvIO {
     /** @return Pair(更新後state, 一致件数) または null（解析不能/一致0件）。 */
     fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
         val rows = parseCsvRows(text)
-        if (rows.size < 2) return null
+        if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val gByK = firstWinsMap(state.groups.size) { state.groups[it].kigou.trim() }
         val skByK = firstWinsMap(state.skillGroups.size) { state.skillGroups[it].kigou.trim() }
         val newStaff = state.staff.toMutableList()
         var matched = 0
-        // [一括修正/ヘッダ無CSV] 先頭行が既知の職員名なら実データとして取り込む（旧: 無条件 drop(1) で黙殺）。
-        val body = if (nameToI.containsKey(nameMatchKey(rows[0].getOrElse(0) { "" }.trim()))) rows else rows.drop(1)
+        // [3.314.0] ヘッダ判定を `build()` が出す実ヘッダ「氏名」の一致へ。旧:「先頭が既知の職員名か」
+        //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
+        val body = csvBody(rows, "氏名")
         for (r in body) {
             val name = r.getOrElse(0) { "" }.trim()
             if (name.isEmpty()) continue
@@ -513,7 +527,7 @@ object StaffCsvIO {
      */
     fun parseUpsert(text: String, state: MagiState, sched: Array<IntArray>): StaffUpsertResult? {
         val rows = parseCsvRows(text)
-        if (rows.size < 2) return null
+        if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val gByK = firstWinsMap(state.groups.size) { state.groups[it].kigou.trim() }
         val skByK = firstWinsMap(state.skillGroups.size) { state.skillGroups[it].kigou.trim() }
@@ -523,9 +537,11 @@ object StaffCsvIO {
         val seenNew = HashMap<String, Int>()
         var updated = 0
         var added = 0
-        // [一括修正/ヘッダ無CSV] 先頭行が既知の職員名なら実データとして取り込む。未知名は「新規追加」される仕様のため
-        //   ヘッダ文字列（氏名等）を誤って職員登録しないよう、既知名一致の場合のみ先頭行を本体に含める（保守的）。
-        val body = if (nameToI.containsKey(nameMatchKey(rows[0].getOrElse(0) { "" }.trim()))) rows else rows.drop(1)
+        // [3.314.0] 実ヘッダ「氏名」の一致で判定する。この経路は未知名を**新規追加**するため、旧実装は
+        //   「ヘッダ文字列を職員として登録しない」保守のために既知名一致のときだけ先頭行を本体へ入れて
+        //   おり、**先頭が新規職員のヘッダ無CSVはその1件を黙って捨てて**いた。厳密なヘッダ判定なら
+        //   その保守は不要で、取りこぼしも起きない。
+        val body = csvBody(rows, "氏名")
         for (r in body) {
             val rawName = r.getOrElse(0) { "" }.trim()
             if (rawName.isEmpty()) continue
@@ -579,13 +595,14 @@ object WishesCsvIO {
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
     fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
         val rows = parseCsvRows(text)
-        if (rows.size < 2) return null
+        if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val symToK = firstWinsMap(state.shifts.size) { state.shifts[it].kigou.trim() }
         val m = LinkedHashMap<String, Int>()
         var n = 0
-        // [一括修正/ヘッダ無CSV] 先頭行が既知の職員名なら実データとして取り込む（旧: 無条件 drop(1) で黙殺）。
-        val body = if (nameToI.containsKey(nameMatchKey(rows[0].getOrElse(0) { "" }.trim()))) rows else rows.drop(1)
+        // [3.314.0] ヘッダ判定を `build()` が出す実ヘッダ「氏名」の一致へ。旧:「先頭が既知の職員名か」
+        //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
+        val body = csvBody(rows, "氏名")
         for (r in body) {
             val name = r.getOrElse(0) { "" }.trim()
             val day = r.getOrElse(1) { "" }.trim().toIntOrNull()
@@ -629,7 +646,7 @@ object ConstraintsCsvIO {
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
     fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
         val rows = parseCsvRows(text)
-        if (rows.size < 2) return null
+        if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         fun c(r: List<String>, i: Int) = r.getOrElse(i) { "" }.trim()
         fun pat(r: List<String>): List<String> = (1..5).map { c(r, it) }.takeWhile { it.isNotEmpty() }.take(5)
@@ -640,10 +657,9 @@ object ConstraintsCsvIO {
         val cons42 = ArrayList<C42Row>(); val cons42s = ArrayList<C42Row>()
         val ranges = LinkedHashMap<String, Range>()
         var n = 0
-        // [一括修正/ヘッダ無CSV] 先頭行の種別が既知キーワードなら実データとして取り込む（旧: 無条件 drop(1) で黙殺）。
-        val kinds = setOf("連勤", "回数下限", "MUST連続", "禁止連続", "希望連続", "回避連続",
-            "群回数", "スキル群回数", "群組合せ禁止", "スキル群組合せ禁止", "個人レンジ")
-        val body = if (c(rows[0], 0) in kinds) rows else rows.drop(1)
+        // [3.314.0] ヘッダ判定を `build()` が出す実ヘッダ「種別」の一致へ（旧: 既知キーワード集合との
+        //   照合で、キーワードを増やすたびに取込側も直す必要があった）。
+        val body = csvBody(rows, "種別")
         for (r in body) {
             when (c(r, 0)) {
                 "連勤" -> { cons1.add(C1Row(c(r, 1), c(r, 2), c(r, 3))); n++ }

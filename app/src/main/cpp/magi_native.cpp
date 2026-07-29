@@ -2083,6 +2083,14 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
         if (p->sgrp[i] < 0 || p->sgrp[i] >= G) { delete p; return 0; }
     }
     p->ssk.assign(staff.begin() + S, staff.end());
+    // [3.311.0] ssk も同じ理由で検証する。sskMask は ssk の最大値からサイズを決めるため
+    // （buildGroupMasks の maxGs）、外部JSON由来の巨大な skillIdx がそのまま届くと巨大確保に
+    // なり得る。未所属の -1 は正規の値（3.70.0「(なし)」）なので許可し、正の値だけ上限を課す。
+    // 上限は「スキル群の実数」ではなく制約が参照しうる範囲＝職員数と同じ保守的な上限で十分
+    // （実運用の群数は職員数を超えない）。外れていればハンドル生成を拒否＝Kotlinへ安全退化。
+    for (int i = 0; i < S; i++) {
+        if (p->ssk[i] < -1 || p->ssk[i] > S) { delete p; return 0; }
+    }
     p->canDo.resize((size_t)S * K);
     for (int x = 0; x < S * K; x++) p->canDo[x] = canDo[x] != 0 ? 1 : 0;
     p->wish = std::move(wish);

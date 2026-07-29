@@ -454,7 +454,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 groups = lp.state.groupCount,
                                 use2 = lp.state.use2Patterns,
                                 initHard = lp.nativeHard,
-                                initSoft = lp.nativeSoft,
+                                // [3.313.0] 単位を checker 基準へ揃える。旧: Evaluator の**重み付き**soft を
+                                //   入れていたが、`makeUi`（中央のUI構築）が書く bestSoft は
+                                //   `report.soft`＝**生件数**なので、完了後の「改善 N%」が
+                                //   重み付き→生件数の引き算になり大幅に水増しされていた。
+                                initSoft = lp.report.soft.toLong(),
                                 iters = 0,
                                 itersPerSec = 0,
                                 elapsedMs = 0,
@@ -568,6 +572,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         com.magi.app.v6.PolishGate.wideC3nBreakDays = on
         _ui.update { it.copy(wideC3nBreak = on) }
         logOp("I", "設定変更: 禁止連続の崩し範囲 → ${if (on) "パターン全域" else "前後1日"}")
+    }
+
+    /**
+     * [3.306.0] 並列で走る複数案が行き詰まったとき、次に何を試すかを「残っている違反の種類」から選び、
+     * 行き詰まりの深さを手を替えても保持する。既定 OFF（実データ3件×各4回の A/B で有意差を検出できず、
+     * 詳細は `PolishGate.adaptiveEscapeControl` の docstring）。
+     */
+    fun setAdaptiveEscape(on: Boolean) {
+        com.magi.app.v6.PolishGate.adaptiveEscapeControl = on
+        _ui.update { it.copy(adaptiveEscape = on) }
+        logOp("I", "設定変更: 行き詰まりからの立て直し方 → ${if (on) "残りの違反に合わせて選ぶ" else "順ぐりに試す"}")
     }
 
     fun setBudget(sec: Int) { val v = sec.coerceIn(10, MAX_BUDGET_SEC); _ui.update { it.copy(budgetSec = v) }; logOp("I", "設定変更: 予算 → ${v}秒") }

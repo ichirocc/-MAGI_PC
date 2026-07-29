@@ -442,6 +442,12 @@ object V6NativeOptimizer {
         val epochs: Int,
         val reassignments: Int,
         val roleRuns: Map<HypothesisEpochRole, Int>,
+        /** [3.307.0/ログ強化] 役割ごとの実消費ミリ秒。量子(5/8/35/45秒)は要求値であって
+         *  消費値ではないため、予算配分を論じるにはこちらが要る。 */
+        val roleMillis: Map<HypothesisEpochRole, Long>,
+        /** [3.306.0] ワーカーが epoch ループを抜けた時点の役割。エリート登録の分類に使う
+         *  （再配属回数からの逆算では、残差ベース経路のとき実際の役割と一致しないため）。 */
+        val lastRole: HypothesisEpochRole,
         /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
          *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
         val hf63Avoided: List<String> = emptyList(),
@@ -485,7 +491,8 @@ object V6NativeOptimizer {
             entry, globalReport, HypothesisEpochRole.BASELINE_REFINE, worker = 0, epoch = 0, bridge = false,
         )
         for (i in 0 until workers) {
-            val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, 0)
+            // [3.308.0] 初期配置であることを名前で示す（値は assignmentFor(i, 0) と同じ）。
+            val assignment = AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i)
             archive.register(
                 sharedTrajectories[i], initialReports[i], assignment.role, i, 0,
                 bridge = initialReports[i].hard == globalReport.hard + 1,
@@ -504,9 +511,21 @@ object V6NativeOptimizer {
                 var reassignments = 0
                 var stagnantEpochs = 0
                 var improvedPrevious = false
+                // [3.306.0/既定OFF] 残差ベースの4段脱出制御。null=従来経路（回数で機械的に巡回し、
+                //   再配属のたびに stagnantEpochs を 0 へ戻す）。非null=盤面の残差と peer 距離で
+                //   次の役割を選び、停滞の深さを役割変更でも保持する。既定 OFF の根拠は PolishGate 参照。
+                val escapeController =
+                    if (PolishGate.adaptiveEscapeControl) StagnationEscapeController(i) else null
+                var controlledAssignment =
+                    if (escapeController != null) AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i) else null
                 var epoch = 0
                 var iterations = 0L
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
+                // [3.307.0/ログ強化] 役割ごとの**実消費ミリ秒**。roleRuns(エポック数)だけでは
+                //   「どの役割が予算のどれだけを実際に食ったか」が読めない（量子は役割ごとに
+                //   5/8/35/45 秒と桁が違い、かつロールは締切・HARD=0・内部早期終了で量子より
+                //   早く戻ることがある）。エポック境界の摂動・検査・距離計算も含めた実測。
+                val roleMillis = LinkedHashMap<HypothesisEpochRole, Long>()
                 // [3.281.0/停滞レビューB] ワーカー専属のHF63をエポック横断で共有。旧: runRsi 呼出ローカルのため
                 //   短いエポック(rounds=2)では「focus 2ラウンドで threshold 到達→即破棄→次エポックで白紙から
                 //   再学習」を全エポックで反復し、解けない族(実機: c3n)へ毎回突撃していた。ワーカー内は逐次
@@ -526,7 +545,9 @@ object V6NativeOptimizer {
                     (hardZeroWinner.get() < 0 || hardZeroWinner.get() == i)
                 ) {
                     try {
-                    val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
+                    val assignment = controlledAssignment
+                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
+                    val epochT0 = nowMs()
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
                     // [3.282.0/新領域ログ監査] エポック改善の基準線＝エポック開始時点の自己エリート。
                     //   旧: `better(result, startReport)` で startReport は**破壊摂動済みの入口盤面**（escape系
@@ -587,9 +608,6 @@ object V6NativeOptimizer {
                         assignment, improvedPrevious, remainingSec,
                     )
                     if (quantum <= 0) break
-                    // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の前に
-                    //   merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
-                    roleRuns.merge(assignment.role, 1, Int::plus)
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
                     val roleOptions = options.copy(
@@ -676,7 +694,24 @@ object V6NativeOptimizer {
                         }
                         d
                     }
-                    if (AdaptiveHypothesisEpochPolicy.shouldReassign(
+                    if (escapeController != null) {
+                        // [3.306.0/既定OFF経路] stagnantEpochs をリセットしない＝停滞の深さが役割変更を
+                        //   跨いで残り、target → 再結合 → 多様化 → 深い破壊 の4段へ進める。
+                        val next = escapeController.nextAssignment(
+                            current = controlledAssignment!!,
+                            report = eliteReport,
+                            plateauDepth = stagnantEpochs,
+                            nearestOtherDistance = nearest,
+                            hasOtherHypothesis = workers > 1,
+                        )
+                        val roleChanged = next.role != controlledAssignment!!.role
+                        if (roleChanged) reassignments++
+                        controlledAssignment = next
+                        // [3.308.0] 役割が変わった直後は改善直後の長い量子を引き継がない
+                        //   （既定経路が元から守っていた契約。制御器経路だけ抜けていた）。
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged)
+                    } else if (AdaptiveHypothesisEpochPolicy.shouldReassign(
                             index = i,
                             improvedThisEpoch = improvedThisEpoch,
                             stagnantEpochs = stagnantEpochs,
@@ -685,10 +720,30 @@ object V6NativeOptimizer {
                     ) {
                         reassignments++
                         stagnantEpochs = 0
-                        improvedPrevious = false
+                        // [3.308.1/敵対検証] 既定経路はこの分岐で常に基準量子へ戻していた（旧
+                        //   `improvedPrevious = false`）。roleChanged=true はその挙動を保つための
+                        //   引数であって「役割が必ず変わる」という主張ではない。実際 W4 は
+                        //   再配属2回目以降 ELITE_RELINK のまま変わらない
+                        //   （assignmentFor(4, r>=1) は常に ELITE_RELINK）。W1/2/3/5/6/7 は
+                        //   escapeRoles の index が1つ進むので必ず変わる。
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged = true)
                     } else {
-                        improvedPrevious = improvedThisEpoch
+                        improvedPrevious = AdaptiveHypothesisEpochPolicy
+                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged = false)
                     }
+                    // [3.282.0] 集計はロールが実際に走ることが確定してから（旧: quantum<=0 break の
+                    //   前に merge しており、締切間際に「実行していないロール」が1件多く summary に載っていた）。
+                    // [3.308.1/敵対検証] 回数と秒をここで同時に数える。旧実装は回数だけをエポック
+                    //   冒頭で加算していたため、例外で break したエポックが回数には入るのに秒には
+                    //   入らず、さらに epoch++ もされないので sum(roleRuns) > epochs になっていた
+                    //   （ログの角括弧の合計が epoch 数と合わない）。両方をここに置けば
+                    //   sum(roleRuns) == epochs == roleMillis の母集団が常に成り立つ。
+                    //   なお `quantum <= 0` と例外の break はここへ到達しないため、その回の
+                    //   摂動＋フル検査の時間は秒合計に入らない。実測でも 8ワーカー×300秒=2400 に対し
+                    //   計2396s と数秒少なく出る（各ワーカーの最後の1回ぶん）。
+                    roleRuns.merge(assignment.role, 1, Int::plus)
+                    roleMillis.merge(assignment.role, nowMs() - epochT0, Long::plus)
                     epoch++
                     } catch (ce: kotlinx.coroutines.CancellationException) {
                         throw ce
@@ -703,10 +758,13 @@ object V6NativeOptimizer {
                     elite = elite,
                     report = eliteReport,
                     logs = eliteLogs,
+                    lastRole = (controlledAssignment
+                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)).role,
                     iterations = iterations,
                     epochs = epoch,
                     reassignments = reassignments,
                     roleRuns = roleRuns,
+                    roleMillis = roleMillis,
                     hf63Avoided = workerHf63.infeasibleFamilies(),
                 )
             }
@@ -717,7 +775,7 @@ object V6NativeOptimizer {
         for ((index, o) in outcomes.withIndex()) {
             archive.register(
                 o.elite, o.report,
-                AdaptiveHypothesisEpochPolicy.assignmentFor(index, o.reassignments).role,
+                o.lastRole,
                 index, o.epochs, bridge = o.report.hard == globalReport.hard + 1,
             )
             if (better(o.report, globalReport)) {
@@ -744,14 +802,26 @@ object V6NativeOptimizer {
             "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル"
         val roleNote = outcomes.indices.joinToString(" | ") { i ->
             val o = outcomes[i]
-            val used = o.roleRuns.entries.joinToString(",") { "${it.key.name}x${it.value}" }
+            val used = o.roleRuns.entries.joinToString(",") { e ->
+                val sec = (o.roleMillis[e.key] ?: 0L) / 1000.0
+                "${e.key.name}x${e.value}/${"%.0f".format(sec)}s"
+            }
             val avoided = if (o.hf63Avoided.isEmpty()) "" else "/HF63回避=${o.hf63Avoided.joinToString("+")}"
             "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided"
+        }
+        // [3.307.0/ログ強化] 全ワーカー横断の役割別 worker秒。予算配分を論じるときに見るのはここ
+        //   （量子は「1エポックの要求長」であって消費ではない＝両者を取り違えると偏りの診断を誤る）。
+        val roleTotals = LinkedHashMap<HypothesisEpochRole, Long>()
+        for (o in outcomes) for ((r, ms) in o.roleMillis) roleTotals.merge(r, ms, Long::plus)
+        val totalWorkerMs = roleTotals.values.sum().coerceAtLeast(1L)
+        val budgetNote = roleTotals.entries.sortedByDescending { it.value }.joinToString(" ") { e ->
+            "${e.key.name}=${e.value / 1000}s(${e.value * 100 / totalWorkerMs}%)"
         }
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
-                "相異なるelite=$distinctElites 距離=$distanceNote / $roleNote" +
+                "相異なるelite=$distinctElites 距離=$distanceNote / " +
+                "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
         )
@@ -1596,7 +1666,7 @@ object V6NativeOptimizer {
             focusTrail.add(focus)
             val focusedBefore = bestReport.breakdown[focus] ?: 0
             lastFocus = focus   // [レビュー#5] 次ラウンド頭の HF63 更新へ「このラウンドの投入先」を渡す
-            val hypothesis = rsiGenerateHypothesis(state, best, bestReport, focus, rng)
+            val hypothesis = rsiGenerateHypothesis(state, best, bestReport, focus, rng, shouldStop)
             val phase = if (round % 2 == 0) runAlns(state, hypothesis, options.copy(restarts = 1), per, shouldStop, onProgress) else runV5(state, hypothesis, options, per, shouldStop, onProgress)
             iters += phase.iterations
             var candSched = phase.schedule
@@ -2371,7 +2441,11 @@ object V6NativeOptimizer {
      *  従来のrepeat(8)相当以上(reps>=6の切り上げ計算)を維持し既存の攪乱強度を落とさない。 */
     internal fun destroyRepairStaffReps(s: Int, t: Int): Int = max(1, (6 * s + t - 1) / max(1, t))
 
-    internal fun rsiGenerateHypothesis(state: MagiState, base: Array<IntArray>, report: ViolationReport, focus: String, rng: Random): Array<IntArray> {
+    internal fun rsiGenerateHypothesis(
+        state: MagiState, base: Array<IntArray>, report: ViolationReport, focus: String, rng: Random,
+        // [3.313.0] free repair 群へ締切を通す。既定 `{ false }` ＝既存の直接呼出・テストは挙動不変。
+        shouldStop: () -> Boolean = { false },
+    ): Array<IntArray> {
         val out = base.copy2D()
         val p = cachedProblem(state)
         when (focus) {
@@ -2386,17 +2460,17 @@ object V6NativeOptimizer {
             //   （need>0のシフトを埋める設計）で自動的に再修復されるため実害は薄いが、covO/c42/c42s
             //   の過剰・違反ペア解消はrepairの対象外で影響が直接的。順序を「destroyRepairDay×6→
             //   専用free関数」へ統一し、hypothesisの最終状態に専用オペレータの改善が必ず残るようにする。
-            "covU" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovUChains(state, out, rng) }
+            "covU" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovUChains(state, out, rng, shouldStop) }
             // [3.209.0/covOと同型の穴=c41/c41sがfocusされてもdestroyRepairDayのc41DayMargは副次効果でしか
             //   効かない] markNeed系(needViolations)にしか載らずGLSキック/destroyRepairViolationsのヒントを
             //   一切持てない点がcovOと同じ。applyC41Freeで群レンジの超過/不足を直接動かす専用オペレータへ。
-            "c41" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = false) }
-            "c41s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = true) }
+            "c41" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = false, shouldStop = shouldStop) }
+            "c41s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC41Free(state, out, rng, skill = true, shouldStop = shouldStop) }
             // [3.233.0/c41,c41sと同型の穴] c42/c42sも「動かせるか」を判定する専用オペレータが無く
             // destroyRepairViolationsの汎用ランダム再割当頼みだった。applyC42Freeで違反ペアの
             // 片側を直接動かす専用オペレータへ。
-            "c42" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = false) }
-            "c42s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = true) }
+            "c42" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = false, shouldStop = shouldStop) }
+            "c42s" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyC42Free(state, out, rng, skill = true, shouldStop = shouldStop) }
             // [実機ログ起因=apt未focus] apt(適切回数)は maxViolatedFamily の order に無く探索中は一度も focus
             //   されなかった（post-processing の applyDayAssignmentPolish 頼み）。destroyRepairStaff の marginal
             //   cost(staffCountPenaltyAt)は既にaptを織込み済み(重み1)のため、low/high/c2と同じ経路へ合流するだけで
@@ -2426,7 +2500,7 @@ object V6NativeOptimizer {
             //   専用オペレータ applyCovOFree を新設し、covU chain(applyCovUChains)と対称に配線する。
             //   [3.241.0] destroyRepairDayを先に(順序バグ修正、上記covUコメント参照)＝covOは特にneed<=0
             //   シフト(休等)の過剰が主対象でrepair段階の恩恵が皆無のため、この順序修正の効果が最も直接的。
-            "covO" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovOFree(state, out, rng) }
+            "covO" -> { repeat(6) { destroyRepairDay(state, out, rng) }; applyCovOFree(state, out, rng, shouldStop) }
             // [実機ログ起因] groupViol/pref は hf67 の作用対象(hf66DataHardening=群外修正・希望反映)だが、
             //   c3n(禁止連続=HARD)は hf67 が一切作用しない(被覆/希望/下限のみ)＝c3n focus のラウンドが no-op 仮説で
             //   空転していた(実機3実行×計10ラウンドで c3n=1 不変→HF63 が c3n を誤 infeasible 判定)。c3n のセルは
@@ -2447,12 +2521,20 @@ object V6NativeOptimizer {
      * c3n枝刈り済み。最終採否は呼び出し側の keep-best（ラウンド better() or エピローグの checker 照合）が担保。
      * ユーザー実例（2026-08）: 8/11 モニカ B4→Cｵ（深さ1）／8/17 上條 Cｵ→Cｱ・山本 →Cｵ（深さ2）。
      */
-    private fun applyCovUChains(state: MagiState, sched: Array<IntArray>, rng: Random): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+private fun applyCovUChains(
+        state: MagiState, sched: Array<IntArray>, rng: Random,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         var applied = 0
         val cnt = IntArray(p.K)
         for (j in 0 until p.T) {
+            if (shouldStop()) return applied
             for (k in 0 until p.K) cnt[k] = 0
             for (i in 0 until p.S) { val kk = sched[i][j]; if (kk in 0 until p.K) cnt[kk]++ }
             for (k in 0 until p.K) {
@@ -2522,13 +2604,22 @@ object V6NativeOptimizer {
         return bestRep
     }
 
-    internal fun applyCovOFree(state: MagiState, sched: Array<IntArray>, rng: Random): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyCovOFree(
+        state: MagiState, sched: Array<IntArray>, rng: Random,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         var applied = 0
         for (j in 0 until p.T) {
+            if (shouldStop()) return applied
             for (k in 0 until p.K) {
                 while (true) {
+                    if (shouldStop()) return applied
                     val cov = IntArray(p.K)
                     for (i in 0 until p.S) { val kk = sched[i][j]; if (kk in 0 until p.K) cov[kk]++ }
                     if (p.covOCell(k, j, cov[k]) <= 0) break
@@ -2567,7 +2658,14 @@ object V6NativeOptimizer {
      * 移動元/移動先で covU/covO を悪化させない候補のみ動かす。sched を in-place 変更し適用手数を返す。
      * 最終採否は呼び出し側の keep-best が担保＝退化不能。
      */
-    internal fun applyC41Free(state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyC41Free(
+        state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         val rules = if (skill) p.cons41s else p.cons41
@@ -2586,7 +2684,9 @@ object V6NativeOptimizer {
         //   ここでは構造的に安全（希望非固定・禁止連続なし）な候補を直接移動・玉突き連鎖の両方で
         //   網羅的に集め、commitBestMoveが実チェッカーで全体評価して真に改善する最良の1件だけを選ぶ。
         for (c in rules) {
+            if (shouldStop()) return applied
             for (j in 0 until p.T) {
+                if (shouldStop()) return applied
                 // 超過(z>u): 群在籍者を他シフトへ移す。
                 while (groupCount(c, j) > c.u) {
                     val baseline = UnifiedViolationChecker.check(state, sched)
@@ -2646,7 +2746,14 @@ object V6NativeOptimizer {
      * sched を in-place 変更し適用手数を返す。最終採否は呼び出し側のkeep-best（ラウンドbetter()）が
      * 担保＝退化不能。
      */
-    internal fun applyC42Free(state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean): Int {
+            // [3.313.0] 締切/キャンセル確認。これらは違反セル × 候補職員の二重ループの内側で
+        //   フル checker（commitBestMove）と findCovUChain(BFS) を呼ぶ高コストパスで、旧実装は
+        //   停止確認を一切持たなかった（3.161.0 で V6HotfixPasses の研磨パスへ入れた「内側ループ
+        //   でも締切を見る」の対象漏れ）。既定 `{ false }` なので既存の直接呼出＝挙動不変。
+internal fun applyC42Free(
+        state: MagiState, sched: Array<IntArray>, rng: Random, skill: Boolean,
+        shouldStop: () -> Boolean = { false },
+    ): Int {
         val p = cachedProblem(state)
         if (p.S == 0 || p.T == 0) return 0
         val rules = if (skill) p.cons42s else p.cons42
@@ -2671,7 +2778,9 @@ object V6NativeOptimizer {
             }
         }
         for (c in rules) {
+            if (shouldStop()) return applied
             for (j in 0 until p.T) {
+                if (shouldStop()) return applied
                 while (true) {
                     val left = (0 until p.S).filter { grp[it] == c.g1 && sched[it][j] == c.s1 }
                     val right = (0 until p.S).filter { grp[it] == c.g2 && sched[it][j] == c.s2 }

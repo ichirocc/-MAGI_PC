@@ -85,6 +85,24 @@ object PolishGate {
     var wideC3nBreakDays: Boolean = false
 
     /**
+     * [適応ポートフォリオの停滞脱出, 3.306.0] 各ワーカーの次の役割を「再配属の回数」でなく
+     * **いま残っている違反の種類と他仮説との距離**から選び、停滞の深さを役割変更でも保持する
+     * （`StagnationEscapeController`）。既定経路は盤面を見ずに6役割を機械的に巡回し、再配属のたびに
+     * 停滞カウンタを 0 へ戻す。
+     *
+     * **実データ3件×各4回の A/B で有意な差を検出できなかったため既定 OFF**。3データセットとも
+     * weighted の範囲が完全に重なり、中央値の大小も一貫しない（golden=新が良い／real=新が良い／
+     * user=新が悪い）。c1 も golden では新のほうが悪い。PORTFOLIO は epoch が壁時計ベースで
+     * seed を固定しても run ごとに大きく振れる（実測の幅: golden 207・real 295）ため、
+     * この分散の中で効果を示すには現実的でない反復数が要る。
+     *
+     * 設計としては既定経路より筋が通っている（盤面を見る／証拠を消さない）が、
+     * 「安全であること」と「有益であること」は別（2.55.0・3.94.0・3.303.0 と同じ結論）。
+     */
+    @Volatile
+    var adaptiveEscapeControl: Boolean = false
+
+    /**
      * ブロック巡回交換で、禁止連続(c3n)が正味増える候補を**候補生成の段階で**捨てるか。既定 false。
      *
      * c3n は HARD なので増える候補は最終的に `isBetter` が必ず却下する＝ON/OFF で**採用結果は変わらない**
@@ -581,7 +599,10 @@ object V6HotfixPasses {
                 if (p.S > 0 && p.T > 0) {
                     val i = rng.nextInt(p.S)
                     val j = rng.nextInt(p.T)
-                    if (p.wish[i][j] < 0) {
+                    // [3.311.0] 3.270.0 の wishLocked 統一の取り残し。生の `wish < 0` だと
+                    //   **実現不能な希望**（担当できないシフトへの希望）のセルまで摂動対象から
+                    //   外れ、そこに座礁した groupViol セルが永久に動かせなくなる。
+                    if (!p.wishLocked(i, j)) {
                         val allowed = p.allowedShiftsForStaff(i)
                         if (allowed.isNotEmpty()) cand[i][j] = allowed[rng.nextInt(allowed.size)]
                     }
@@ -635,14 +656,18 @@ object V6HotfixPasses {
             for (d in days) for (i in 0 until p.S) sb.append(work[i][d]).append(',')
             return sb.toString()
         }
-        // 焦点=(職員,シフト)ごとに1回だけ厳密探索（同一職員の多数窓は1スパンに束ねられる）。
-        val seenFocus = HashSet<Long>()
+        // 焦点ごとに1回だけ厳密探索する。
+        // [3.314.0] キーを (職員, シフト) → **(職員, シフト, スパン開始)** へ。旧実装は同一職員・同一
+        //   シフトなら最初の1窓しか探索せず、コメントの「多数窓は1スパンに束ねられる」はスパン幅
+        //   （maxWindowDays）に収まる窓にしか当てはまらない。**それより離れた別の C1 塊が同一対象と
+        //   みなされ、探索されないままスキップ**されていた。同一スパンの重複は下の deadSpans（スパン
+        //   内容ハッシュ）が引き続き弾き、走査全体は先頭の shouldStop() で予算内に収まる。
+        val seenFocus = HashSet<String>()
         for (v in C1RepairAnalysis.analyze(p, work)) {
             if (shouldStop()) break
-            val focus = v.staff.toLong() * 1000 + v.shift
-            if (!seenFocus.add(focus)) continue
             val span = minOf(cfg.maxWindowDays, p.T)
             val startD = v.start.coerceAtMost(p.T - span).coerceAtLeast(0)
+            if (!seenFocus.add("${v.staff}|${v.shift}|$startD")) continue
             val days = (startD until startD + span).toList()
             val key = spanKey(v.staff, v.shift, days)
             if (key in deadSpans) continue

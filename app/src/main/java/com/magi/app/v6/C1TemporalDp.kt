@@ -39,6 +39,19 @@ internal object C1TemporalDp {
 
     private const val FIRE_COST = 1_000_000L
     private const val CHANGE_COST = 1_000L
+    /**
+     * [3.310.0] 1日ぶんの DP が保持してよい状態数の上限。超えたら解を返さず諦める（`return null`）。
+     *
+     * DP は密配列でなく `HashMap` の疎表現なので「窓長20なら必ず 2^19 面を確保する」わけではない。
+     * ただし到達可能な状態数は「窓内の対象日の 2^n × 追加(<=maxRelocations) の組合せ × count × reloc」で
+     * 決まり、**窓長ガードだけでは縛れない**（出現回数の多いシフト × 長い窓で数百万に達しうる）。
+     * ここで状態数そのものに上限を置けば、メモリと時間の両方が同時に有界になる。
+     * `null` はこの関数の正規の出口（t>63 / 有効ルール無し / 既に違反0 など）で、呼出側の
+     * `C1TemporalFlowPolish` は提案が無いものとして扱うだけ＝keep-best は不変・退化しない。
+     * 3.305.0 で `C1JointLnsPolish` の密DPへ入れた `MAX_EXACT_LOWER_BOUND_CELLS` と同じ考え方。
+     */
+    private const val MAX_DP_STATES = 200_000
+
     private const val COUNT_BITS = 6
     private const val RELOC_BITS = 6
     private const val LOW_BITS = COUNT_BITS + RELOC_BITS
@@ -60,6 +73,7 @@ internal object C1TemporalDp {
         maxRelocations: Int = 4,
         seed: Long = 0L,
         maxExactWindow: Int = 20,
+        maxDpStates: Int = MAX_DP_STATES,
     ): Candidate? {
         val t = row.size
         if (t == 0 || t > 63 || locked.size != t || maxRelocations <= 0) return null
@@ -137,6 +151,9 @@ internal object C1TemporalDp {
                 }
             }
             if (next.isEmpty()) return null
+            // [3.310.0] 状態爆発の安全弁。密DPでない＝窓長だけでは状態数を縛れないため、
+            //   実際の到達状態数で打ち切る。諦めても後段は keep-best のまま（退化しない）。
+            if (next.size > maxDpStates) return null
             dp = next
         }
 

@@ -326,6 +326,21 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.wideC3nBreak, onCheckedChange = { vm.setWideC3nBreak(it) }, enabled = !ui.running)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("行き詰まりからの立て直し方")
+                Text(
+                    if (ui.adaptiveEscape)
+                        "⚠ 並列で走る複数案が行き詰まったとき、残っている違反の種類に合わせて次の手を選びます。" +
+                            "できあがる勤務表が良くなるとは限りません（試した範囲では差が出ませんでした）。"
+                    else
+                        "並列で走る複数案が行き詰まったとき、決まった順番で次の手を試します。",
+                    fontSize = 12.sp,
+                    color = if (ui.adaptiveEscape) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = ui.adaptiveEscape, onCheckedChange = { vm.setAdaptiveEscape(it) }, enabled = !ui.running)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,

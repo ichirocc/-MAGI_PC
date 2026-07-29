@@ -344,4 +344,37 @@ class V6SanityPortTest {
         assertTrue("他シフトに上限未設定が1つでもあれば誤検知しないこと",
             rep.none { it.where.contains("target") && it.where.contains("X") && it.where.contains("上限") })
     }
+
+    /**
+     * [3.309.0] 存在しないシフト記号を含む連続パターン行。旧実装は `Problem.resolveC3` が
+     * 無言で捨てており、シフトを改名・削除すると禁止連続(HARD)が黙って無効化されるのに
+     * 画面にもログにも何も出なかった（同じ関数の L>期間 のケースは記録して案内していた非対称）。
+     */
+    private fun unknownShiftState(pattern: List<String>) = MagiState(
+        startDate = "2026-06-01", endDate = "2026-06-06",
+        shifts = listOf(Shift("休", "休", "", ""), Shift("A", "A", "1", "")),
+        groups = listOf(Group("G", "G")),
+        staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = List(2) { listOf(1, 1, 0, 1, 1, 0) },
+        wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+        cons3n = listOf(com.magi.app.model.C3Row(pattern)),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    )
+
+    @Test fun warnsWhenForbiddenRunReferencesAMissingShiftSymbol() {
+        // 「Cｳ」は今のシフト一覧に無い＝この行は評価されない。無言で消さず必ず案内する。
+        val issues = V6SanityPort.buildGuidance(unknownShiftState(listOf("A", "Cｳ")))
+        assertTrue("未定義記号の行が案内される: $issues",
+            issues.any { it.problem.contains("今のシフト一覧にない") && it.where.contains("Cｳ") })
+    }
+
+    @Test fun doesNotWarnWhenAllShiftSymbolsResolve() {
+        val issues = V6SanityPort.buildGuidance(unknownShiftState(listOf("A", "休")))
+        assertTrue("既知記号だけなら未定義記号の案内は出さない",
+            issues.none { it.problem.contains("今のシフト一覧にない") })
+    }
 }
