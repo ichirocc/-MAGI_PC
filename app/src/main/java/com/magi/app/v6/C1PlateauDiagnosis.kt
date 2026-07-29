@@ -97,6 +97,13 @@ data class C1PlateauDiagnosis(
 ) {
     val hasEntries: Boolean get() = entries.isNotEmpty()
 
+    /**
+     * c1 は残っているのに却下の観測が1件も無い＝**原因未確定**。
+     * 研磨が起点を取れなかった／後続パスが別の窓を直して観測分だけ消えた、などで起こる。
+     * このとき「直せない理由」を語ってはいけない（何も観測していない）。
+     */
+    val causeUnknown: Boolean get() = remainingC1 > 0 && entries.isEmpty()
+
     /** 回数固定による却下が最多だった件数。設定画面へ誘導するかの判断に使う。 */
     val pinConstrained: Int get() = entries.count { it.cause == C1PlateauCause.PIN_CONSTRAINED }
 
@@ -111,6 +118,8 @@ data class C1PlateauDiagnosis(
         C1PlateauDiagnosis(remainingC1, entries.filter { stillDeficient(it.staff, it.shift) })
 
     fun logLines(): List<String> {
+        if (causeUnknown) return listOf(
+            "[W] C1Plateau: 窓の要件(c1) ${remainingC1}件が残存 — 却下の観測がなく原因未確定")
         if (!hasEntries) return emptyList()
         val out = ArrayList<String>()
         out.add("[W] C1Plateau: 窓の要件(c1) ${remainingC1}件が残存 — 直せなかった理由の内訳")

@@ -845,9 +845,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * [3.323.0] 直近の最適化で、厳密ピン(lo==hi)だけが止めた手の**計測できた**試行数。
      * `isBetter` が採用を認めた手をピンのガードだけが却下した回数。ただし全件ではない
-     * （[com.magi.app.v6.V6PostOptimizationResult.pinBlocked] の注記参照）。
+     * （[com.magi.app.v6.V6PostOptimizationResult.observedPinBlockedAttempts] の注記参照）。
      */
-    private var lastPinBlocked: Int = 0
+    private var lastObservedPinAttempts: Int = 0
 
     /**
      * [3.324.0/外部レビュー] 上の2つは「その盤面で研磨が却下した記録」であって盤面から再計算できない。
@@ -865,10 +865,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 研磨診断を「この盤面のもの」として保存する。null/0 は診断なし。 */
-    private fun setPolishDiagnostics(plateau: C1PlateauDiagnosis?, pinBlocked: Int, forSchedule: Array<IntArray>) {
+    private fun setPolishDiagnostics(plateau: C1PlateauDiagnosis?, observedPinBlockedAttempts: Int, forSchedule: Array<IntArray>) {
         lastC1Plateau = plateau
-        lastPinBlocked = pinBlocked
-        lastDiagBoardKey = if (plateau == null && pinBlocked == 0) 0L else boardKey(forSchedule)
+        lastObservedPinAttempts = observedPinBlockedAttempts
+        lastDiagBoardKey = if (plateau == null && observedPinBlockedAttempts == 0) 0L else boardKey(forSchedule)
     }
 
     private fun hardFamilyJp(key: String): String = when (key) {
@@ -1024,7 +1024,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     // [3.324.0/外部レビュー] pushReport(=makeUi の唯一の経路)より**前**に保存する。
                     //   旧実装は pushReport のあとに代入していたため、その回の画面には診断が入らず
                     //   次の再チェックでようやく（しかも古い盤面基準で）出るという順序の逆転だった。
-                    setPolishDiagnostics(res.post?.c1Plateau, res.post?.pinBlocked ?: 0, res.schedule)
+                    setPolishDiagnostics(res.post?.c1Plateau, res.post?.observedPinBlockedAttempts ?: 0, res.schedule)
                     currentSchedule = res.schedule.copy2D()
                     autoSave()
                     resultSchedule = res.schedule.copy2D()
@@ -2796,7 +2796,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             // [3.324.0/外部レビュー] 診断は観測した盤面のものだけ出す。盤面が変わっていれば黙る
             //   （手編集・元に戻す・読込・初期解生成など、あらゆる変更で自動的に外れる）。
             c1Plateau = if (diagFresh) lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 } else null,
-            pinBlocked = if (diagFresh) lastPinBlocked else 0,
+            observedPinBlockedAttempts = if (diagFresh) lastObservedPinAttempts else 0,
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )

@@ -514,15 +514,29 @@ internal fun ForbiddenRunDiagnosisCard(ui: UiState, onRelaxRule: (String) -> Uni
  * この2枚と違い**盤面から再計算できない**（根拠が「研磨が実際に候補を作って却下した」観測のため）。
  * したがって「構造的に不能」とは言わない — 言えるのは「いまの設定で、**試した**手が却下された」までで、
  * 試していない手の存在は否定しない。回数の幅を見直せば通る可能性が残る、という含みを文言で明示する。
+ *
+ * [3.325.0] 回数固定の横断集計（研磨パス全体の観測）は c1 固有の話ではないので
+ * [PinFixedImpactCard] へ分離した。このカードは c1 の理由だけを扱う。
  */
 @Composable
 internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
     val diag = ui.c1Plateau ?: return
-    if (!diag.hasEntries) return
-    // [3.323.0] 回数固定だけが止めた手の数。この手は目的関数が採用を認めていて、固定のガードだけが
-    //   却下している＝「固定を緩めれば通ったはずの手」の実測値。0 なら緩めても何も変わらない。
-    val pinBlocked = ui.pinBlocked
     val cs = MaterialTheme.colorScheme
+    // [3.325.0] c1 が残っているのに却下の観測が1件も無い場合。研磨が起点を取れなかった／後続パスが
+    //   別の窓を直して観測分だけ消えた、などで起こる。ここで理由を語ると観測していないことを語ることに
+    //   なるので、「原因未確定」と明示して次の一手だけ示す。
+    if (diag.causeUnknown) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("窓の要件が残っています（原因未確定）", style = MaterialTheme.typography.titleMedium)
+                Text("残り ${diag.remainingC1} 件。今回の研磨では、この残りについて直し方を試した記録が" +
+                    "残っていません。原因は特定できていません。もう一度つくると記録が取れる場合があります。",
+                    style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            }
+        }
+        return
+    }
+    if (!diag.hasEntries) return
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("窓の要件がなぜ直せなかったか", style = MaterialTheme.typography.titleMedium)
@@ -564,20 +578,46 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
                 Text("ほか ${diag.entries.size - 6} 件（詳細はログ出力を参照）",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
-            if (pinBlocked > 0) {
-                HorizontalDivider()
-                Text("回数の固定について", style = MaterialTheme.typography.titleSmall)
-                // [3.324.0/外部レビュー] 「1回ぶん緩めると通る」は断定しすぎ。緩め幅の優劣は実測で
-                //   データによって逆転した（±1 が良い月と ±3 が良い月がある）ので、幅は決め打ちせず
-                //   「対象を決めて試して比べる」へ誘導する。件数も「試行回数・計測できた分」と明示する。
-                Text("今回の計算では、回数を固定していることだけが理由で見送られた試行が 少なくとも $pinBlocked 回ありました" +
-                    "（他の条件では採用できる手でした。研磨のうち計測できた範囲の回数で、同じ手を複数回数えている場合があります）。" +
-                    "対象の職員とシフト、緩める幅を決めて、変更前後を見比べてください。",
-                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
-            } else if (diag.pinConstrained > 0) {
+            if (diag.pinConstrained > 0) {
                 TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
             }
+        }
+    }
+}
+
+
+/**
+ * [回数固定の影響 / 3.325.0] 「回数を固定している（下限＝上限）ことだけが理由で却下された候補試行」の
+ * 横断集計。C1PlateauCard から分離した理由は2つ:
+ *  - この観測は c1 固有ではない（実データでは適切回数・公平化・連続パターンの研磨が大半を占める）。
+ *    c1 が 0 でも回数固定の影響はあり得るので、c1 の診断に従属させると出せなくなる。
+ *  - c1 の内訳（職員×シフト）と横断集計（全パスの試行回数）は粒度も母集団も違う。同じカードに混ぜると
+ *    どちらの数字なのか読めない。
+ *
+ * **数字の読み方**: 全手数でも改善予測でもない。9パスのみ計測・最大4巡を重複排除せず加算した
+ * 「計測済みの候補試行数」で、言えるのは「少なくとも N 回、回数固定だけが却下の理由だった」まで。
+ * 0 は「緩めても変わらない」の証明にはならない（未計測のパスがある）。
+ */
+@Composable
+internal fun PinFixedImpactCard(ui: UiState, onGoEdit: () -> Unit = {}) {
+    val attempts = ui.observedPinBlockedAttempts
+    if (attempts <= 0) return
+    val cs = MaterialTheme.colorScheme
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("回数の固定が計算に与えた影響", style = MaterialTheme.typography.titleMedium)
+            Text("回数を固定していることだけが理由で見送られた試行が、少なくとも $attempts 回ありました。" +
+                "これらは他の条件では採用できる手でした。",
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+            // [3.324.0/外部レビュー] 幅は決め打ちしない（実測で ±1 が良い月と ±3 が良い月があり優劣が
+            //   逆転した）。件数の性質も正直に添える。
+            Text("※ 全部の手数ではなく、研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
+                "場合があります）。この数が 0 でも、緩めて変わらないとは限りません。",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            Text("試すときは、対象の職員とシフト、そして緩める幅（例: 下限だけ 1 下げる）を決めて、" +
+                "変更する前と後を見比べてください。",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
         }
     }
 }

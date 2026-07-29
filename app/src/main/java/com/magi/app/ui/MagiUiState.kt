@@ -94,7 +94,10 @@ data class UiState(
     val coverageDiag: CoverageDiagnosis? = null,  // 人員不足(covU)/人員過剰(covO)の原因診断（充足不可/充足可能の切り分け・過剰がなぜ動かせないか）
     val forbiddenDiag: ForbiddenRunDiagnosis? = null,  // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断（c3n=0 なら null）
     val c1Plateau: C1PlateauDiagnosis? = null,  // [3.322.0] 窓の要件(c1)がなぜ直せなかったかの構造化診断（直近の最適化の観測。残存なし/未実行なら null）
-    val pinBlocked: Int = 0,  // [3.323.0] 直近の最適化でピン(回数固定)だけが止めた手の数（0=緩めても変わらない）
+    // [3.325.0] 直近の最適化で「回数固定(lo==hi)だけが却下の理由だった」**計測済みの候補試行数**。
+    //   全手数でも改善予測でもない（9パスのみ計測・最大4巡を重複排除せず加算）。0 は「緩めても変わらない」
+    //   の証明にはならない（未計測のパスがある）。
+    val observedPinBlockedAttempts: Int = 0,
     val settingIssues: List<com.magi.app.v6.SettingIssue> = emptyList(), // 制約/希望の設定ミスと直し方の誘導
     val startDate: String = "",                   // 期間開始日（カレンダー表示の曜日整列に使用）
     val interruptedRun: Boolean = false,          // 前回の計算がプロセスkill等で中断された

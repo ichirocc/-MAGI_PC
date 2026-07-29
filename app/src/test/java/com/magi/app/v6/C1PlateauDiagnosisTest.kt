@@ -13,8 +13,9 @@ class C1PlateauDiagnosisTest {
         stats: Map<Pair<Int, Int>, Map<String, Int>>,
         culprits: Map<Pair<Int, Int>, Map<String, Int>> = emptyMap(),
         stillDeficient: (Int, Int) -> Boolean = { _, _ -> true },
+        remainingC1: Int = 9,
     ) = C1PlateauDiagnosis.build(
-        remainingC1 = 9,
+        remainingC1 = remainingC1,
         blockStats = stats,
         culpritStats = culprits,
         staffName = { "S$it" },
@@ -108,12 +109,31 @@ class C1PlateauDiagnosisTest {
 
     @Test
     fun alreadyResolvedTargetsAreNeverListed() {
+        // 対象が全部解消されたなら c1 も 0（残っていないので語ることが無い）。
         val d = build(
             mapOf((0 to 1) to mapOf(C1PlateauDiagnosis.REASON_PIN to 2)),
             stillDeficient = { _, _ -> false },
+            remainingC1 = 0,
         )
         assertTrue("解消済みは出さない", d.entries.isEmpty())
+        assertTrue("原因未確定でもない", !d.causeUnknown)
         assertTrue("ログも出さない", d.logLines().isEmpty())
+    }
+
+    @Test
+    fun remainingWithoutAnyObservationIsReportedAsCauseUnknown() {
+        // [3.325.0] c1 は残っているのに却下の観測が1件も無い＝原因未確定。
+        //   ここで「直せない理由」を語ると観測していないことを語ることになる。
+        val d = build(
+            mapOf((0 to 1) to mapOf(C1PlateauDiagnosis.REASON_PIN to 2)),
+            stillDeficient = { _, _ -> false },
+            remainingC1 = 7,
+        )
+        assertTrue("観測ゼロ＋残存＝原因未確定", d.causeUnknown)
+        assertTrue("内訳は持たない", d.entries.isEmpty())
+        val line = d.logLines().single()
+        assertTrue("残存件数を名乗る", line.contains("7件"))
+        assertTrue("原因未確定と明示する", line.contains("原因未確定"))
     }
 
     @Test
