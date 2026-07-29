@@ -158,10 +158,18 @@ object C1RepairAnalysis {
         val mSet = LinkedHashSet<Int>()
         mSet.add(v.staff)
         for (d in days) for (i in 0 until p.S) if (s[i][d] == v.shift && i != v.staff) mSet.add(i)
-        // 余力: 同群・x担当可の職員も少数加える（3者以上の連動を可能に）
+        // 余力: x を担当できる職員を加える（3者以上の連動を可能に）。
+        // [3.314.0] 旧実装は `p.sgrp[i] == p.sgrp[v.staff]` の**同群限定**で、別群を経由する3者循環を
+        //   見落としたまま exhaustive=true ＝「証明済み壁」を名乗っていた。coverage 保存の並べ替えが
+        //   要求するのは受け手の canDo だけで、DFS の place() は配置ごとに `p.canDo(i, sh)` を検査する
+        //   （259行）ため、群をまたいで M に加えても不正な解は生まれない。
+        // あわせて **cap で候補を切り捨てたら exhaustive を名乗らない**。旧実装は `break` で打ち切った
+        //   あとも「探索し尽くした」と主張しており、真部分集合しか見ていないのに壁を証明していた。
+        var truncated = false
         for (i in 0 until p.S) {
-            if (mSet.size >= cfg.maxInvolvedStaff) break
-            if (i !in mSet && p.canDo(i, v.shift) && p.sgrp[i] == p.sgrp[v.staff]) mSet.add(i)
+            if (i in mSet || !p.canDo(i, v.shift)) continue
+            if (mSet.size >= cfg.maxInvolvedStaff) { truncated = true; break }
+            mSet.add(i)
         }
         if (mSet.size > cfg.maxInvolvedStaff) return ExactResult(0, 0, null, false, 0)
         val m = mSet.toIntArray()
@@ -288,6 +296,6 @@ object C1RepairAnalysis {
             if (diff.isEmpty()) null else diff
         }
         // exhaustive のとき minFocusResidual は「coverage入替でどう並べても焦点はこれ以上減らせない」証明値。
-        return ExactResult(best, baseline, patch, !budgetHit, minFocusResidual)
+        return ExactResult(best, baseline, patch, !budgetHit && !truncated, minFocusResidual)
     }
 }

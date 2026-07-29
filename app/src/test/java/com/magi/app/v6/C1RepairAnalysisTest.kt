@@ -7,6 +7,8 @@ import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -130,5 +132,25 @@ class C1RepairAnalysisTest {
         val s = st(3, 2, listOf(listOf(1, 0, 1), listOf(0, 1, 0)), emptyList())
         val res = V6HotfixPasses.applyC1ExactWindowRepair(s, s.schedule.toIntArray2D())
         assertEquals(0, res.applied)
+    }
+
+    /**
+     * [3.314.0] 「証明済み壁」は探索空間を尽くしたときだけ名乗ってよい。旧実装は余力職員を
+     * **同群限定**で集め、しかも `maxInvolvedStaff` の cap で候補を切り捨てたあとも exhaustive=true を
+     * 返していた＝真部分集合しか見ていないのに壁を証明していた。cap=1（焦点職員のみ）で呼べば
+     * 候補は必ず切り捨てられるので、exhaustive を名乗ってはならない。
+     */
+    @Test
+    fun truncatedCandidateSetMustNotClaimAnExhaustiveProof() {
+        // 2職員×4日、ルール「X 2日窓>=1」。i1 は X を持つので候補になり得るが cap=1 で切り捨てられる。
+        val state = st(4, 2, listOf(listOf(2, 2, 2, 2), listOf(1, 1, 1, 1)), listOf(C1Row("2", "X", "1")))
+        val p = Problem(state)
+        val v = C1RepairAnalysis.analyze(p, state.schedule.toIntArray2D()).firstOrNull()
+        assertNotNull("不足窓が検出される前提", v)
+        val capped = C1RepairAnalysis.solveWindow(
+            p, state.schedule.toIntArray2D(), v!!,
+            C1RepairAnalysis.Config(maxInvolvedStaff = 1),
+        )
+        assertFalse("候補を cap で切り捨てたら証明を名乗らない", capped.exhaustive)
     }
 }

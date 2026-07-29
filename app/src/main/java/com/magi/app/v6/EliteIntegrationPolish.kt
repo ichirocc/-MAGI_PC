@@ -296,9 +296,14 @@ internal object EliteIntegrationPolish {
     private fun selectPairs(candidates: List<Candidate>, maxPairs: Int): List<Pair<Int, Int>> {
         if (maxPairs <= 0) return emptyList()
         val pairs = LinkedHashSet<Pair<Int, Int>>()
+        // [3.314.0] root ペアで予算を食い尽くさない。旧実装は (0,i) を全部入れてから `>= maxPairs` で
+        //   return しており、エリートが maxPairs 件以上あると**非root ペア（elite 間・高距離・別役割）へ
+        //   一度も到達しなかった**＝「EliteIntegration 改善なし」の説明になりうる。root に 2/3 を上限として
+        //   割り当て、残り 1/3 は下のランキング済み非root ペアへ必ず残す。
+        val rootQuota = maxOf(1, maxPairs * 2 / 3)
         for (i in 1 until candidates.size) {
             pairs.add(0 to i)
-            if (pairs.size >= maxPairs) return pairs.toList()
+            if (pairs.size >= rootQuota) break
         }
         val all = ArrayList<Triple<Int, Int, Int>>()
         for (i in 1 until candidates.size) for (j in i + 1 until candidates.size) {
@@ -316,9 +321,11 @@ internal object EliteIntegrationPolish {
     private fun selectFusionGroups(candidates: List<Candidate>, maxGroups: Int): List<IntArray> {
         if (candidates.size < 2 || maxGroups <= 0) return emptyList()
         val groups = ArrayList<IntArray>()
+        // [3.314.0] selectPairs と同じ理由で 2者組が枠を食い尽くさないようにする（旧: 3者融合へ到達しない）。
+        val pairQuota = maxOf(1, maxGroups * 2 / 3)
         for (i in 1 until candidates.size) {
             groups.add(intArrayOf(0, i))
-            if (groups.size >= maxGroups) return groups
+            if (groups.size >= pairQuota) break
         }
         val far = (1 until candidates.size).sortedByDescending {
             AdaptiveEliteArchive.scheduleDistance(candidates[0].schedule, candidates[it].schedule)

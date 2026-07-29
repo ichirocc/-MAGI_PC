@@ -656,14 +656,18 @@ object V6HotfixPasses {
             for (d in days) for (i in 0 until p.S) sb.append(work[i][d]).append(',')
             return sb.toString()
         }
-        // 焦点=(職員,シフト)ごとに1回だけ厳密探索（同一職員の多数窓は1スパンに束ねられる）。
-        val seenFocus = HashSet<Long>()
+        // 焦点ごとに1回だけ厳密探索する。
+        // [3.314.0] キーを (職員, シフト) → **(職員, シフト, スパン開始)** へ。旧実装は同一職員・同一
+        //   シフトなら最初の1窓しか探索せず、コメントの「多数窓は1スパンに束ねられる」はスパン幅
+        //   （maxWindowDays）に収まる窓にしか当てはまらない。**それより離れた別の C1 塊が同一対象と
+        //   みなされ、探索されないままスキップ**されていた。同一スパンの重複は下の deadSpans（スパン
+        //   内容ハッシュ）が引き続き弾き、走査全体は先頭の shouldStop() で予算内に収まる。
+        val seenFocus = HashSet<String>()
         for (v in C1RepairAnalysis.analyze(p, work)) {
             if (shouldStop()) break
-            val focus = v.staff.toLong() * 1000 + v.shift
-            if (!seenFocus.add(focus)) continue
             val span = minOf(cfg.maxWindowDays, p.T)
             val startD = v.start.coerceAtMost(p.T - span).coerceAtLeast(0)
+            if (!seenFocus.add("${v.staff}|${v.shift}|$startD")) continue
             val days = (startD until startD + span).toList()
             val key = spanKey(v.staff, v.shift, days)
             if (key in deadSpans) continue
