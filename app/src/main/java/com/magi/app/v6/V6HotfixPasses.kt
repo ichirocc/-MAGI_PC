@@ -645,6 +645,7 @@ object V6HotfixPasses {
         }
         // [A1] 証明済み「解消不能スパン」のmemo（キー=焦点職員,シフト,スパン内容ハッシュ）。
         val deadSpans = HashSet<String>()
+        val rejectCulprits = RejectCulpritStats()
         fun spanKey(staff: Int, shift: Int, days: List<Int>): String {
             val sb = StringBuilder().append(staff).append('|').append(shift).append('|')
             for (d in days) for (i in 0 until p.S) sb.append(work[i][d]).append(',')
@@ -675,9 +676,14 @@ object V6HotfixPasses {
             val workBefore = work.copy2D()
             for (op in res.patch) work[op[0]][op[1]] = op[2]
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) {
+            // [3.321.0] このパスだけ却下理由をまったく残しておらず、ログは applied==0 のとき
+            //   一律「頭打ち=改善手なし」としか言えなかった（patch が出て却下されても同じ文言）。
+            //   他の研磨パスと同じ RejectCulpritStats で分類する。
+            val pinBad = exactPinRegression(p, workBefore, work)
+            if (isBetter(rep, bestRep) && !pinBad) {
                 bestRep = rep; applied++
             } else {
+                rejectCulprits.record(rep, bestRep, pinBad)
                 for (mi in work.indices) work[mi] = workBefore[mi]
             }
         }
@@ -686,7 +692,10 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C1ExactRepair",
             message = "期間要件(c1)厳密窓修復: c1 $c1b->$c1a / total ${before.total}->${bestRep.total} " +
                 "HARD ${before.hard}->${bestRep.hard} 採用${applied}回 探索${solved}回 証明済み壁${provenWalls}件" +
-                (if (applied == 0 && c1b > 0) " [頭打ち=改善手なし]" else "")))
+                rejectCulprits.summary() +
+                // [3.321.0] 旧: applied==0 を一律「改善手なし」としていたが、patch が出て却下された場合と
+                //   patch がそもそも出ない場合を区別できなかった。前者は上の内訳が語るのでここは後者だけ。
+                (if (applied == 0 && c1b > 0 && rejectCulprits.rejected == 0) " [頭打ち=候補が出ない]" else "")))
         return CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
     }
 
@@ -1611,9 +1620,10 @@ object V6HotfixPasses {
                     work[i][j] = alt
                     if (!needsChain) {
                         val rep = UnifiedViolationChecker.check(state, work)
-                        if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) { bestRep = rep; applied++; improved = true; done = true }
+                        val pinBad = exactPinRegression(p, workBeforeMove, work)
+                        if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; improved = true; done = true }
                         else {
-                            rejectCulprits.record(rep, bestRep)
+                            rejectCulprits.record(rep, bestRep, pinBad)
                             val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(curK)?.kigou ?: curK})"
                             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, alt)), "C3mnAlt", hint))
                             work[i][j] = curK
@@ -1627,9 +1637,10 @@ object V6HotfixPasses {
                     val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
                     chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
                     val rep = UnifiedViolationChecker.check(state, work)
-                    if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) { bestRep = rep; applied++; improved = true; done = true }
+                    val pinBad = exactPinRegression(p, workBeforeMove, work)
+                    if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; improved = true; done = true }
                     else {
-                        rejectCulprits.record(rep, bestRep)
+                        rejectCulprits.record(rep, bestRep, pinBad)
                         for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
                         work[i][j] = curK
                         val hint = "${state.staff.getOrNull(i)?.name ?: "#$i"}(${state.shifts.getOrNull(curK)?.kigou ?: curK})"
@@ -1742,10 +1753,11 @@ object V6HotfixPasses {
                         if (!needsChain) {
                             evaluated++
                             val rep = UnifiedViolationChecker.check(state, work)
-                            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) {
+                            val pinBad = exactPinRegression(p, workBeforeMove, work)
+                            if (isBetter(rep, bestRep) && !pinBad) {
                                 bestRep = rep; applied++; improved = true; done = true
                             } else {
-                                rejectCulprits.record(rep, bestRep)
+                                rejectCulprits.record(rep, bestRep, pinBad)
                                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j2, alt)), "C3nAlt", hint))
                                 work[i][j2] = curK
                             }
@@ -1759,10 +1771,11 @@ object V6HotfixPasses {
                         chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
                         evaluated++
                         val rep = UnifiedViolationChecker.check(state, work)
-                        if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeMove, work)) {
+                        val pinBad = exactPinRegression(p, workBeforeMove, work)
+                        if (isBetter(rep, bestRep) && !pinBad) {
                             bestRep = rep; applied++; improved = true; done = true
                         } else {
-                            rejectCulprits.record(rep, bestRep)
+                            rejectCulprits.record(rep, bestRep, pinBad)
                             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
                             work[i][j2] = curK
                             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j2, alt)) + chain, "C3nAlt", hint))
@@ -2436,8 +2449,9 @@ object V6HotfixPasses {
             val workBefore = work.copy2D()
             work[i][j] = toK
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
-            rejectCulprits.record(rep, bestRep)
+            val pinBad = exactPinRegression(p, workBefore, work)
+            if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep, pinBad)
             work[i][j] = fromK
             return false
         }
@@ -2468,8 +2482,9 @@ object V6HotfixPasses {
                 val workBefore = work.copy2D()
                 work[i][j] = b; work[i2][j] = a
                 val rep = UnifiedViolationChecker.check(state, work)
-                if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
-                rejectCulprits.record(rep, bestRep)
+                val pinBad = exactPinRegression(p, workBefore, work)
+                if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep, pinBad)
                 work[i][j] = a; work[i2][j] = b
             }
             return false
@@ -2485,8 +2500,9 @@ object V6HotfixPasses {
             work[i][j] = toK
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
-                if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
-                rejectCulprits.record(rep, bestRep)
+                val pinBad = exactPinRegression(p, workBeforeRelocate, work)
+                if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep, pinBad)
                 work[i][j] = fromK
                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)), "AptChain", label(i, fromK)))
                 return false
@@ -2497,8 +2513,9 @@ object V6HotfixPasses {
             val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
-            rejectCulprits.record(rep, bestRep)
+            val pinBad = exactPinRegression(p, workBeforeRelocate, work)
+            if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep, pinBad)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][j] = fromK
             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)) + chain, "AptChain", label(i, fromK)))
@@ -2658,8 +2675,9 @@ object V6HotfixPasses {
             val workBefore = work.copy2D()
             work[i][j] = toK
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
-            rejectCulprits.record(rep, bestRep)
+            val pinBad = exactPinRegression(p, workBefore, work)
+            if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep, pinBad)
             work[i][j] = fromK
             return false
         }
@@ -2691,8 +2709,9 @@ object V6HotfixPasses {
                 val workBefore = work.copy2D()
                 work[i][j] = b; work[i2][j] = a
                 val rep = UnifiedViolationChecker.check(state, work)
-                if (isBetter(rep, bestRep) && !exactPinRegression(p, workBefore, work)) { bestRep = rep; applied++; return true }
-                rejectCulprits.record(rep, bestRep)
+                val pinBad = exactPinRegression(p, workBefore, work)
+                if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep, pinBad)
                 work[i][j] = a; work[i2][j] = b
             }
             return false
@@ -2708,8 +2727,9 @@ object V6HotfixPasses {
             work[i][j] = toK
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
-                if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
-                rejectCulprits.record(rep, bestRep)
+                val pinBad = exactPinRegression(p, workBeforeRelocate, work)
+                if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep, pinBad)
                 work[i][j] = fromK
                 combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)), "FairChain", label(i, fromK)))
                 return false
@@ -2720,8 +2740,9 @@ object V6HotfixPasses {
             val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true }
-            rejectCulprits.record(rep, bestRep)
+            val pinBad = exactPinRegression(p, workBeforeRelocate, work)
+            if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep, pinBad)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][j] = fromK
             combinable.add(CombinatorialRepair.Candidate(listOf(intArrayOf(i, j, toK)) + chain, "FairChain", label(i, fromK)))
@@ -2875,8 +2896,9 @@ object V6HotfixPasses {
             work[i][extDay] = toK
             if (!needsChain) {
                 val rep = UnifiedViolationChecker.check(state, work)
-                if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeExtend, work)) { bestRep = rep; applied++; return true }
-                rejectCulprits.record(rep, bestRep)
+                val pinBad = exactPinRegression(p, workBeforeExtend, work)
+                if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+                rejectCulprits.record(rep, bestRep, pinBad)
                 work[i][extDay] = fromK
                 return false
             }
@@ -2886,8 +2908,9 @@ object V6HotfixPasses {
             val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
             chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
             val rep = UnifiedViolationChecker.check(state, work)
-            if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforeExtend, work)) { bestRep = rep; applied++; return true }
-            rejectCulprits.record(rep, bestRep)
+            val pinBad = exactPinRegression(p, workBeforeExtend, work)
+            if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true }
+            rejectCulprits.record(rep, bestRep, pinBad)
             for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
             work[i][extDay] = fromK
             return false
@@ -3033,9 +3056,10 @@ object V6HotfixPasses {
                     val oldVals = IntArray(chain.size) { work[chain[it][0]][chain[it][1]] }
                     chain.forEach { mv -> work[mv[0]][mv[1]] = mv[2] }
                     val rep = UnifiedViolationChecker.check(state, work)
-                    if (isBetter(rep, bestRep) && !exactPinRegression(p, workBeforePattern, work)) { bestRep = rep; applied++; improved = true; done = true }
+                    val pinBad = exactPinRegression(p, workBeforePattern, work)
+                    if (isBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; improved = true; done = true }
                     else {
-                        rejectCulprits.record(rep, bestRep)
+                        rejectCulprits.record(rep, bestRep, pinBad)
                         for (idx in chain.indices) work[chain[idx][0]][chain[idx][1]] = oldVals[idx]
                         work[i][j] = curK
                     }
