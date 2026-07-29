@@ -5283,6 +5283,13 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   golden −34%・real −18%・user −0.8%）自体は表示不具合とは独立＝そのまま有効。
 - 検証: ホストJVM **全385テスト green**（件数不変＝文言変更後も既存アサーションを満たす）。実データ3件で
   最終盤面が 3.323.0 と一致（golden 2469/104・real 49213/59・user 33159/54）。
+- **(3.324.1, CI が捕まえた自分のミス) `diagFresh` を別の関数へ挿入していた**: `val mappedDiag = ...` を
+  アンカーに文字列置換したが、この行は `analyzeParallel` と `makeUi` の**2箇所にある**ため最初の一致
+  （= `analyzeParallel`）へ入り、`makeUi` からは見えず `Unresolved reference` でビルド失敗した。
+  UI 層はホストでコンパイルできないので**括弧均衡0では変数スコープの誤りを捕捉できない**（実際 0 だった）。
+  対策として、以後 UI 層を編集したら「導入した各シンボルの宣言行と使用行が同じ関数に属するか」を
+  行番号から逆引きして確認する（`enclosing_fun` 相当の静的チェック）。同名行が複数あるファイルでは
+  置換アンカーに関数境界を必ず含める。
 
 ## 専用証明探索は実データで1件も証明できないと実測→代わりに緩和の根拠を出す（3.323.0, 優先順③の再設計）
 ③「C-1専用証明探索」（`C1CandidateSearch` + `C1FocusProof`＝FEASIBLE / INFEASIBLE_PROVEN / UNKNOWN_BUDGET）は

@@ -2693,8 +2693,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val coverageDiag = coverageD.await()
         val forbiddenDiag = forbiddenD.await()
         val v6Logs = listOf("[I] LoadDataBit: ${sanity.loadDataBitSummary}") + sanity.warns.map { "[W] SanityCheck: $it" } + sanity.notes.map { "[I] V6Port: $it" } + sanity.duplicateSeqConstraints.take(4).map { "[W] DuplicateSeq: $it" } + sanity.guidance.take(12).map { "[W] 設定ミス: ${it.where} — ${it.problem} → ${it.fix}" } + (coverageDiag?.logLines() ?: emptyList()) + (forbiddenDiag?.logLines() ?: emptyList())
-        // [3.324.0] 研磨診断は観測した盤面のものか（盤面が変わっていれば出さない）。
-        val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule)
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         Analysis(
             v6 = v6D.await(),
@@ -2732,6 +2730,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val sanity = analysis.sanity
         val coverageDiag = analysis.coverageDiag
         val v6Logs = analysis.v6Logs
+        // [3.324.0] 研磨診断は観測した盤面のものか（盤面が変わっていれば出さない）。
+        val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule)
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         // rawDiagLogs は pushReport がメインスレッドで設定済み（背景スレッドからは書かない＝レース回避）。
         // 満足度(0-100): 初期からの違反削減率。HARD未解決の間は上限を抑える。
