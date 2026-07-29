@@ -79,6 +79,15 @@ class Problem(val state: MagiState) {
     //   〈〉で囲んだもの）を記録する。読み取り専用＝評価・重みは一切変えない。
     private val _c3UnknownShift = mutableListOf<Pair<String, String>>()
     val c3UnknownShift: List<Pair<String, String>> get() = _c3UnknownShift
+
+    // [3.320.0] 3.309.0 は連続パターン(cons3系)だけを直したが、**同じ無言除外が残り6族にあった**:
+    //   cons1(窓ルール)・cons2(個人合計)・cons41/cons42(群)・cons41s/cons42s(スキル群)は、記号が
+    //   解決できない行や数値が不正な行を `mapNotNull { ... else null }` でやはり黙って捨てる。
+    //   シフトや群を改名・削除すると、それを参照する窓ルール(重み15)や群ペア禁止が警告なく評価から
+    //   消える。(族ラベル, 行の表示) を記録し、Sanity が cons3 系と同じ形で案内する。読み取り専用。
+    private val _unresolvedRows = mutableListOf<Pair<String, String>>()
+    val unresolvedRows: List<Pair<String, String>> get() = _unresolvedRows
+
     val cons41: List<C41>
     val cons42: List<C42>
     // [スキルグループ新設] スキル群の C41/C42 相当（ssk = staff のスキル群index。既存 sgrp とは独立）。
@@ -86,6 +95,9 @@ class Problem(val state: MagiState) {
     val ssk = IntArray(S) { state.staff[it].skillIdx }
     val cons41s: List<C41>
     val cons42s: List<C42>
+
+    /** 記号が解決できたかを `〈〉` で示す表示（cons3 系の記録と同じ書式）。 */
+    private fun mark(kigou: String, resolved: Boolean): String = if (resolved) kigou else "〈$kigou〉"
 
     init {
         for ((key, v) in state.wishes) {
@@ -137,12 +149,14 @@ class Problem(val state: MagiState) {
             val d1 = it.day1.toIntOrNull() ?: 0
             val si = shiftIdxOf(it.shiftKigou)
             val d2 = it.day2.toIntOrNull() ?: 0
-            if (d1 > 0 && si >= 0 && d2 > 0) C1(d1, si, d2) else null
+            if (d1 > 0 && si >= 0 && d2 > 0) C1(d1, si, d2)
+            else { _unresolvedRows.add("窓の要件" to "${mark(it.shiftKigou, si >= 0)} を${it.day1}日で${it.day2}回以上"); null }
         }
         cons2 = state.cons2.mapNotNull {
             val si = shiftIdxOf(it.shiftKigou)
             val c = it.count.toIntOrNull() ?: 0
-            if (si >= 0 && c > 0) C2(si, c) else null
+            if (si >= 0 && c > 0) C2(si, c)
+            else { _unresolvedRows.add("個人の合計" to "${mark(it.shiftKigou, si >= 0)} を${it.count}回以上"); null }
         }
         cons3 = resolveC3(state.cons3, "c3")
         cons3n = resolveC3(state.cons3n, "c3n")
@@ -155,12 +169,23 @@ class Problem(val state: MagiState) {
             val hasHi = it.u.isNotBlank()
             val lo = if (hasLo) it.l.toIntOrNull() ?: 0 else 0
             val hi = if (hasHi) it.u.toIntOrNull() ?: Int.MAX_VALUE else Int.MAX_VALUE
-            if (gi >= 0 && si >= 0 && (hasLo || hasHi)) C41(gi, si, lo, hi) else null
+            if (gi >= 0 && si >= 0 && (hasLo || hasHi)) C41(gi, si, lo, hi)
+            else {
+                _unresolvedRows.add("群のレンジ" to
+                    "${mark(it.groupKigou, gi >= 0)} の ${mark(it.shiftKigou, si >= 0)}（${it.l}〜${it.u}）")
+                null
+            }
         }
         cons42 = state.cons42.mapNotNull {
             val g1 = groupIdxOf(it.g1Kigou); val g2 = groupIdxOf(it.g2Kigou)
             val s1 = shiftIdxOf(it.s1Kigou); val s2 = shiftIdxOf(it.s2Kigou)
-            if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) C42(g1, s1, g2, s2) else null
+            if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) C42(g1, s1, g2, s2)
+            else {
+                _unresolvedRows.add("群ペア禁止" to
+                    "${mark(it.g1Kigou, g1 >= 0)}/${mark(it.s1Kigou, s1 >= 0)} × " +
+                        "${mark(it.g2Kigou, g2 >= 0)}/${mark(it.s2Kigou, s2 >= 0)}")
+                null
+            }
         }
         cons41s = state.cons41s.mapNotNull {
             val gi = skillGroupIdxOf(it.groupKigou)
@@ -168,12 +193,23 @@ class Problem(val state: MagiState) {
             val hasLo = it.l.isNotBlank(); val hasHi = it.u.isNotBlank()
             val lo = if (hasLo) it.l.toIntOrNull() ?: 0 else 0
             val hi = if (hasHi) it.u.toIntOrNull() ?: Int.MAX_VALUE else Int.MAX_VALUE
-            if (gi >= 0 && si >= 0 && (hasLo || hasHi)) C41(gi, si, lo, hi) else null
+            if (gi >= 0 && si >= 0 && (hasLo || hasHi)) C41(gi, si, lo, hi)
+            else {
+                _unresolvedRows.add("スキル群のレンジ" to
+                    "${mark(it.groupKigou, gi >= 0)} の ${mark(it.shiftKigou, si >= 0)}（${it.l}〜${it.u}）")
+                null
+            }
         }
         cons42s = state.cons42s.mapNotNull {
             val g1 = skillGroupIdxOf(it.g1Kigou); val g2 = skillGroupIdxOf(it.g2Kigou)
             val s1 = shiftIdxOf(it.s1Kigou); val s2 = shiftIdxOf(it.s2Kigou)
-            if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) C42(g1, s1, g2, s2) else null
+            if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) C42(g1, s1, g2, s2)
+            else {
+                _unresolvedRows.add("スキル群ペア禁止" to
+                    "${mark(it.g1Kigou, g1 >= 0)}/${mark(it.s1Kigou, s1 >= 0)} × " +
+                        "${mark(it.g2Kigou, g2 >= 0)}/${mark(it.s2Kigou, s2 >= 0)}")
+                null
+            }
         }
     }
 

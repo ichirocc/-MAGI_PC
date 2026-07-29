@@ -4,9 +4,11 @@ import com.magi.app.model.C3Row
 import com.magi.app.model.C41Row
 import com.magi.app.model.Group
 import com.magi.app.model.MagiState
+import com.magi.app.model.Range
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -904,5 +906,52 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(setOf("covU", "c3n"), V6NativeOptimizer.lastInfeasibleFamilies)
         V6NativeOptimizer.clearInfeasible()
         assertEquals(emptySet<String>(), V6NativeOptimizer.lastInfeasibleFamilies)
+    }
+
+    // ---- [3.319.0] destroy-repair の marginal cost を目的関数と揃える -------------------------
+    //
+    // `staffCountPenaltyAt` は候補選択の marginal cost で、`Evaluator.fullEvalParts` と同じ族
+    // （low 90 / high 45 / apt 1）を見る。ところが low だけ `p.canDo` ガードが無く、担当外シフトに
+    // 個人下限が設定されたデータで「実際には存在しない違反」を重み90 で数えていた。
+
+    /** 2職員×2日・シフト {休, X, Y}。G0 は {休, X} のみ担当可＝Y は担当外。 */
+    private fun canDoState(staffRange: Map<String, Range>) = MagiState(
+        startDate = "2026-01-01", endDate = "2026-01-02",
+        shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", ""), Shift("Y", "Y", "", "")),
+        groups = listOf(Group("G0", "G0")),
+        staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1, 0)),
+        groupShiftApt = listOf(listOf("", "", "")),
+        schedule = listOf(listOf(0, 0), listOf(0, 0)),
+        wishes = emptyMap(), staffRange = staffRange, needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    )
+
+    @Test
+    fun marginalCostIgnoresLowerBoundOnDisallowedShift() {
+        // Y(k=2) は担当外。そこに下限2を置いても marginal cost は 0 でなければならない
+        // （Evaluator も checker も canDo ガードで数えない＝目的関数に存在しない違反）。
+        val p = Problem(canDoState(mapOf("0,2" to Range("2", ""))))
+        assertFalse("前提: s0 は Y を担当できない", p.canDo(0, 2))
+        assertEquals("担当外の下限は marginal cost に入らない",
+            0L, V6NativeOptimizer.staffCountPenaltyAt(p, 0, 2, 0))
+    }
+
+    @Test
+    fun marginalCostStillCountsLowerBoundOnAllowedShift() {
+        // X(k=1) は担当可。下限2に対し現在0なら 2×90=180。回帰の固定。
+        val p = Problem(canDoState(mapOf("0,1" to Range("2", ""))))
+        assertTrue("前提: s0 は X を担当できる", p.canDo(0, 1))
+        assertEquals("担当可の下限は従来どおり重み90で数える",
+            180L, V6NativeOptimizer.staffCountPenaltyAt(p, 0, 1, 0))
+    }
+
+    @Test
+    fun marginalCostUpperBoundIsUnchanged() {
+        // high は担当可否を問わず Evaluator と同じ扱い（両方ガード無しで一致）。X 上限1に対し3回で 2×45=90。
+        val p = Problem(canDoState(mapOf("0,1" to Range("", "1"))))
+        assertEquals("上限側は不変", 90L, V6NativeOptimizer.staffCountPenaltyAt(p, 0, 1, 3))
     }
 }

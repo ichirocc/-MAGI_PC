@@ -226,7 +226,12 @@ object UnifiedViolationChecker {
                     if (p.sgrp[i] == c.g1 && cellIs(i, j, c.s1)) left.add(i)
                     if (p.sgrp[i] == c.g2 && cellIs(i, j, c.s2)) right.add(i)
                 }
+                // [3.318.0] 自己ペア／同一集合の順序重複を数えない（`c42PairCount` と同じ意味論）。
+                //   left と right が同じ集合になるのは g1==g2 かつ s1==s2 のときだけ。
+                val sameSet = c.g1 == c.g2 && c.s1 == c.s2
                 for (i in left) for (i2 in right) {
+                    if (i == i2) continue
+                    if (sameSet && i2 < i) continue
                     inc("c42")
                     mark(i, j, "c42")
                     mark(i2, j, "c42")
@@ -249,7 +254,12 @@ object UnifiedViolationChecker {
                     if (p.ssk[i] == c.g1 && cellIs(i, j, c.s1)) left.add(i)
                     if (p.ssk[i] == c.g2 && cellIs(i, j, c.s2)) right.add(i)
                 }
-                for (i in left) for (i2 in right) { inc("c42s"); mark(i, j, "c42s"); mark(i2, j, "c42s") }
+                val sameSet = c.g1 == c.g2 && c.s1 == c.s2   // [3.318.0] c42 と同じ（自己ペア／順序重複を除く）
+                for (i in left) for (i2 in right) {
+                    if (i == i2) continue
+                    if (sameSet && i2 < i) continue
+                    inc("c42s"); mark(i, j, "c42s"); mark(i2, j, "c42s")
+                }
             }
         }
 

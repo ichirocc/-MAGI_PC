@@ -434,4 +434,76 @@ class V6SanityPortTest {
         assertTrue("既知記号だけなら未定義記号の案内は出さない",
             issues.none { it.problem.contains("今のシフト一覧にない") })
     }
+
+    // ---- [3.320.0] 記号が解決できない制約行 / 「休」不在 の可視化 ----------------------------
+    //
+    // 3.309.0 は連続パターン(cons3系)の無言除外だけを直したが、窓の要件・個人の合計・群/スキル群の
+    // レンジ・群/スキル群ペア禁止の6族にも同じ穴が残っていた。シフトや群を改名・削除すると、それを
+    // 参照する行が警告なく評価対象から消える（窓の要件は重み15）。
+
+    private fun unresolvedState(
+        cons1: List<com.magi.app.model.C1Row> = emptyList(),
+        cons41: List<com.magi.app.model.C41Row> = emptyList(),
+        cons42: List<com.magi.app.model.C42Row> = emptyList(),
+        restKigou: String = "休",
+    ) = MagiState(
+        startDate = "2026-08-01", endDate = "2026-08-03",
+        shifts = listOf(Shift(restKigou, restKigou, "0", ""), Shift("X", "X", "0", "")),
+        groups = listOf(Group("G", "G")),
+        staff = listOf(Staff("s0", 0)),
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = listOf(List(3) { 0 }),
+        wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = cons1, cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = cons41, cons42 = cons42,
+    )
+
+    @Test fun unknownShiftInWindowRuleIsReported() {
+        // 存在しない記号 NIGHT を参照する窓ルール。旧実装は Problem のパースで無言に捨てていた。
+        val st = unresolvedState(cons1 = listOf(com.magi.app.model.C1Row("3", "NIGHT", "1")))
+        assertTrue("前提: この行は評価対象から外れる", Problem(st).cons1.isEmpty())
+        val rep = V6SanityPort.buildGuidance(st)
+        assertTrue("窓の要件の未解決行が案内されること",
+            rep.any { it.where.contains("窓の要件") && it.where.contains("〈NIGHT〉") })
+    }
+
+    @Test fun unknownGroupInPairBanIsReported() {
+        // 存在しない群 GX を参照するペア禁止。
+        val st = unresolvedState(cons42 = listOf(com.magi.app.model.C42Row("G", "GX", "X", "X")))
+        assertTrue("前提: この行は評価対象から外れる", Problem(st).cons42.isEmpty())
+        val rep = V6SanityPort.buildGuidance(st)
+        assertTrue("群ペア禁止の未解決行が案内されること",
+            rep.any { it.where.contains("群ペア禁止") && it.where.contains("〈GX〉") })
+    }
+
+    @Test fun nonNumericRangeRowIsReported() {
+        // 群レンジの下限・上限がどちらも空＝評価できない行。記号は解決できているので〈〉は付かない。
+        val st = unresolvedState(cons41 = listOf(com.magi.app.model.C41Row("G", "X", "", "")))
+        assertTrue("前提: この行は評価対象から外れる", Problem(st).cons41.isEmpty())
+        val rep = V6SanityPort.buildGuidance(st)
+        assertTrue("群のレンジの未解決行が案内されること", rep.any { it.where.contains("群のレンジ") })
+    }
+
+    @Test fun resolvableRowsAreNotReported() {
+        // 回帰: すべて解決できる行なら未解決の案内は出さない。
+        val st = unresolvedState(
+            cons1 = listOf(com.magi.app.model.C1Row("3", "X", "1")),
+            cons41 = listOf(com.magi.app.model.C41Row("G", "X", "0", "1")),
+        )
+        val rep = V6SanityPort.buildGuidance(st)
+        assertFalse("解決できる行は案内しない",
+            rep.any { it.problem.contains("この行は評価されていません") })
+    }
+
+    @Test fun missingRestShiftIsReported() {
+        // 記号「休」のシフトが無いと restShiftIndex が先頭シフト(index 0)を休として扱う。
+        val st = unresolvedState(restKigou = "OFF")
+        assertEquals("前提: 先頭シフトが休として扱われる", 0, Problem(st).restIdx)
+        val rep = V6SanityPort.buildGuidance(st)
+        assertTrue("「休」不在が案内されること", rep.any { it.where.contains("「休」のシフトがありません") })
+        assertFalse("「休」があれば案内しない",
+            V6SanityPort.buildGuidance(unresolvedState()).any { it.where.contains("「休」のシフトがありません") })
+    }
 }

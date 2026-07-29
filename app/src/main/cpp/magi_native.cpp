@@ -26,6 +26,14 @@ struct C1r { int d1, si, d2; };
 struct C2r { int si, c; };
 struct C41r { int g, s, l, u; };
 struct C42r { int g1, s1, g2, s2; };
+
+// [3.318.0] c42/c42s の「同じ日に同時発生している禁止ペア」の数。Kotlin の `c42PairCount`
+//   (Evaluator.kt) と同一の式。left(群g1のs1) と right(群g2のs2) が同じ集合になるのは
+//   g1==g2 かつ s1==s2 のときだけで、そのとき素朴な積 n^2 は自己ペア n 件と順序重複を余分に
+//   数える。異なる2人のペア数 C(n,2) が正しい。4面(checker/Evaluator/Delta/C++)で必ず同期する。
+static inline long long c42PairCount(bool sameSet, long long n1, long long n2) {
+    return sameSet ? n1 * (n1 - 1) / 2 : n1 * n2;
+}
 struct C3r { std::vector<int> seq; bool singleRun; };
 
 struct MagiProblem {
@@ -171,7 +179,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
                 if (p.sgrp[i] == c.g1 && v == c.s1) n1++;
                 if (p.sgrp[i] == c.g2 && v == c.s2) n2++;
             }
-            soft += n1 * n2;
+            soft += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
         }
     }
 
@@ -191,7 +199,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
                 if (p.ssk[i] == c.g1 && v == c.s1) n1++;
                 if (p.ssk[i] == c.g2 && v == c.s2) n2++;
             }
-            soft += n1 * n2;
+            soft += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
         }
     }
 
@@ -201,12 +209,16 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
     soft += c3check(p, a, p.cons3m, false) * 2;
     soft += c3check(p, a, p.cons3mn, true) * 15;
 
-    // pref（実現可能な希望のみ）
+    // pref（実現可能な希望のみ）＋ [3.318.0] groupViol（担当できないシフトに就いているセル）。
+    //   MirrorKeys.hard は元から4族（groupViol/c3n/covU/pref）なのに評価器だけ3族で、同じ盤面に
+    //   対してチェッカーと評価器が違う hard を返していた。Kotlin Evaluator と同時に揃える。
     for (int i = 0; i < S; i++) {
         const int* row = a + (size_t)i * T;
         for (int j = 0; j < T; j++) {
             int w = p.wish[(size_t)i * T + j];
             if (w >= 0 && p.cd(i, w) && row[j] != w) hard1 += 1;
+            int k = row[j];
+            if (k >= 0 && k < K && !p.cd(i, k)) hard1 += 1;
         }
     }
 
@@ -429,10 +441,16 @@ struct SaChunk {
              + contribC3RowFam(i, p.cons3m, false, 2)
              + contribC3RowFam(i, p.cons3mn, true, 15);
     }
-    long long contribPrefCell(int i, int j) const {
+    // [3.318.0] このセルの HARD 寄与＝pref（実現可能な希望の未充足）＋ groupViol（担当できないシフト）。
+    //   どちらもセル単位なので deltaApply の before/after で呼べば差分は自動的に正しい。
+    //   旧名 contribPrefCell（pref だけ）から改名。
+    long long contribCellHard(int i, int j) const {
+        long long v = 0;
+        int cur = a[(size_t)i * T + j];
         int w = p.wish[(size_t)i * T + j];
-        if (w >= 0 && p.cd(i, w) && a[(size_t)i * T + j] != w) return (long long)M;
-        return 0;
+        if (w >= 0 && p.cd(i, w) && cur != w) v += (long long)M;
+        if (cur >= 0 && cur < K && !p.cd(i, cur)) v += (long long)M;
+        return v;
     }
     long long contribRangeApt(int i, int k) const {
         // [実データ対応] k=-1(未割当セル=normalizeSchedule の正規化結果)や範囲外は寄与0。
@@ -473,7 +491,7 @@ struct SaChunk {
             for (const auto& c : p.cons42) {
                 long long n1 = __builtin_popcountll(dm[c.s1] & grpMask[(size_t)c.g1]);
                 long long n2 = __builtin_popcountll(dm[c.s2] & grpMask[(size_t)c.g2]);
-                v += n1 * n2;
+                v += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
             }
             for (const auto& c : p.cons41s) {
                 int z = __builtin_popcountll(dm[c.s] & sskMask[(size_t)c.g]);
@@ -482,7 +500,7 @@ struct SaChunk {
             for (const auto& c : p.cons42s) {
                 long long n1 = __builtin_popcountll(dm[c.s1] & sskMask[(size_t)c.g1]);
                 long long n2 = __builtin_popcountll(dm[c.s2] & sskMask[(size_t)c.g2]);
-                v += n1 * n2;
+                v += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
             }
             return v;
         }
@@ -498,7 +516,7 @@ struct SaChunk {
                 if (p.sgrp[i] == c.g1 && x == c.s1) n1++;
                 if (p.sgrp[i] == c.g2 && x == c.s2) n2++;
             }
-            v += n1 * n2;
+            v += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
         }
         for (const auto& c : p.cons41s) {
             int z = 0;
@@ -512,7 +530,7 @@ struct SaChunk {
                 if (p.ssk[i] == c.g1 && x == c.s1) n1++;
                 if (p.ssk[i] == c.g2 && x == c.s2) n2++;
             }
-            v += n1 * n2;
+            v += c42PairCount(c.g1 == c.g2 && c.s1 == c.s2, n1, n2);
         }
         return v;
     }
@@ -539,7 +557,7 @@ struct SaChunk {
         const bool newIn = nw >= 0 && nw < K;
         int g = p.sgrp[i];
         long long before = contribC1Row(i) + contribC2Row(i) + contribC3Row(i)
-            + contribPrefCell(i, j)
+            + contribCellHard(i, j)
             + contribRangeApt(i, old) + contribRangeApt(i, nw)
             + contribFair(g, old) + contribFair(g, nw)
             + contribWeekly(i)
@@ -557,7 +575,7 @@ struct SaChunk {
         bool newWork = newIn && nw != p.restIdx;
         if (oldWork != newWork) wd[(size_t)i * 7 + (p.dow0 + j) % 7] += newWork ? 1 : -1;
         long long after = contribC1Row(i) + contribC2Row(i) + contribC3Row(i)
-            + contribPrefCell(i, j)
+            + contribCellHard(i, j)
             + contribRangeApt(i, old) + contribRangeApt(i, nw)
             + contribFair(g, old) + contribFair(g, nw)
             + contribWeekly(i)
@@ -848,14 +866,17 @@ void collectViolationCells(const MagiProblem& p, const int* a, std::vector<int>&
     // c42/c42s: 同日ペアの両セル
     auto pairCells = [&](const std::vector<C42r>& list, const std::vector<int>& grp) {
         for (const auto& c : list) {
+            // [3.318.0] 同一集合(g1==g2 && s1==s2)は「異なる2人が同時に就いている」ときだけ違反。
+            //   旧: anyL && anyR だと1人しか居なくても真になり、違反していないセルをヒントに出していた。
+            const bool sameSet = (c.g1 == c.g2 && c.s1 == c.s2);
             for (int j = 0; j < T; j++) {
-                bool anyL = false, anyR = false;
+                int nL = 0, nR = 0;
                 for (int i = 0; i < S; i++) {
                     int v = a[(size_t)i * T + j];
-                    if (grp[i] == c.g1 && v == c.s1) anyL = true;
-                    if (grp[i] == c.g2 && v == c.s2) anyR = true;
+                    if (grp[i] == c.g1 && v == c.s1) nL++;
+                    if (grp[i] == c.g2 && v == c.s2) nR++;
                 }
-                if (anyL && anyR) {
+                if (sameSet ? (nL >= 2) : (nL > 0 && nR > 0)) {
                     for (int i = 0; i < S; i++) {
                         int v = a[(size_t)i * T + j];
                         if ((grp[i] == c.g1 && v == c.s1) || (grp[i] == c.g2 && v == c.s2)) markCell(i, j);
