@@ -234,6 +234,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         pushUndo()
         OptimizationRepository.clear()
         OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] 旧途中状態を掃除（Workerが開始時に再保存）
+        // [3.327.0/外部レビュー High3] この実行の識別子を先に確定する。ファイル名は固定なので、これが無いと
+        //   置き換えられた旧実行が新実行の入力を消したり、別データの結果を書き残したりできてしまう。
+        //   ミリ秒だと同一ミリ秒での二重 enqueue が衝突しうるので、下位に乱数を混ぜて一意にする。
+        val runId = System.currentTimeMillis() * 1000L + (0..999).random()
+        OptimizationWorker.beginRun(getApplication(), runId)
         // [監査A7] enqueue前に入力を退避。Worker初回書込前にプロセスが死ぬと request=null かつ
         //   ファイル無しで復元不能だった穴を閉じる（同期・数ms・Workerが同内容で上書き）。
         runCatching { OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0)) }
@@ -247,6 +252,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             .setInputData(androidx.work.workDataOf(
                 OptimizationWorker.KEY_SECONDS to _ui.value.budgetSec,
                 OptimizationWorker.KEY_WORKERS to _ui.value.workers,
+                OptimizationWorker.KEY_RUN_ID to runId,
             ))
             .build()
         androidx.work.WorkManager.getInstance(getApplication())
@@ -861,10 +867,37 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var lastDiagBoardKey: Long = 0L
 
+    /** [3.327.0] 診断を取ったときの制約の指紋。制約が編集されたら診断は失効する。 */
+    private var lastDiagConstraintKey: Long = 0L
+
     /** 盤面の内容から決まる指紋。S×T が小さい（30×31）ので毎回の計算コストは無視できる。 */
     private fun boardKey(schedule: Array<IntArray>): Long {
         var h = 1125899906842597L
         for (row in schedule) for (v in row) h = h * 31L + v
+        return h
+    }
+
+    /**
+     * [3.327.0/外部レビュー High2] 診断の前提になる**制約**の指紋。
+     *
+     * 盤面だけを見ていると、「10〜10回の固定」を「9〜10回」に緩めても勤務表が同じなら古い根拠を
+     * 出し続ける。とくに 3.326.0 で足した `relaxStaffRangePin` は**盤面を変えず制約だけ変える**操作
+     * なので、盤面指紋だけの失効機構をそのまま素通りしていた（自分で作った導線が自分の失効を
+     * すり抜けていた）。診断が依拠する範囲（個人の回数・窓の要件）を指紋に含める。
+     */
+    private fun constraintKey(st: MagiState): Long {
+        var h = -3750763034362895579L
+        for ((k, r) in st.staffRange.entries.sortedBy { it.key }) {
+            for (c in k) h = h * 31L + c.code
+            for (c in r.lo) h = h * 31L + c.code
+            h = h * 31L + 1
+            for (c in r.hi) h = h * 31L + c.code
+        }
+        for (c1 in st.cons1) {
+            for (c in c1.day1) h = h * 31L + c.code
+            for (c in c1.shiftKigou) h = h * 31L + c.code
+            for (c in c1.day2) h = h * 31L + c.code
+        }
         return h
     }
 
@@ -878,7 +911,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         lastC1Plateau = plateau
         lastObservedPinAttempts = observedPinBlockedAttempts
         lastPinBlocks = pinBlocks
-        lastDiagBoardKey = if (plateau == null && observedPinBlockedAttempts == 0) 0L else boardKey(forSchedule)
+        val fresh = plateau != null || observedPinBlockedAttempts > 0
+        lastDiagBoardKey = if (fresh) boardKey(forSchedule) else 0L
+        lastDiagConstraintKey = if (fresh) state?.let { constraintKey(it) } ?: 0L else 0L
     }
 
     private fun hardFamilyJp(key: String): String = when (key) {
@@ -2761,7 +2796,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val coverageDiag = analysis.coverageDiag
         val v6Logs = analysis.v6Logs
         // [3.324.0] 研磨診断は観測した盤面のものか（盤面が変わっていれば出さない）。
-        val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule)
+        // [3.327.0] 盤面**と**制約の両方が観測時と一致するときだけ診断を出す。
+        val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule) &&
+            lastDiagConstraintKey == constraintKey(st)
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         // rawDiagLogs は pushReport がメインスレッドで設定済み（背景スレッドからは書かない＝レース回避）。
         // 満足度(0-100): 初期からの違反削減率。HARD未解決の間は上限を抑える。
@@ -2832,7 +2869,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val pr = cachedProblem(st)
                 lastPinBlocks?.byTarget()?.mapNotNull { (i, k, n) ->
                     val lo = pr.rangeLo.getOrNull(i)?.getOrNull(k) ?: return@mapNotNull null
-                    if (lo == Int.MIN_VALUE) return@mapNotNull null
+                    val hi = pr.rangeHi.getOrNull(i)?.getOrNull(k) ?: return@mapNotNull null
+                    // [3.327.0/外部レビュー High2] **いま固定されているものだけ**出す。緩めたあと
+                    //   (lo != hi) も「N回に固定」と表示し続けるのは事実に反する。
+                    if (lo == Int.MIN_VALUE || hi == Int.MAX_VALUE || lo != hi) return@mapNotNull null
                     PinTargetView(
                         staff = i, shift = k,
                         staffName = st.staff.getOrNull(i)?.name ?: "#$i",

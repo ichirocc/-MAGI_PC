@@ -27,7 +27,22 @@ class OptimizationWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(ctx, params) {
 
+    /**
+     * [3.327.0/外部レビュー High3] この実行が共有ファイル（入力・結果・途中最良）の所有者か。
+     * `runId` は inputData に載るので WorkManager が永続化する＝kill 後の再実行でも同一。
+     * - `mine == 0L`：runId を持たない旧経路 → 従来どおり所有者として扱う（非破壊）。
+     * - 置き換え（REPLACE）で新しい実行が `beginRun` を書くと、旧実行はここで false になり
+     *   **書き込みも削除も一切しなくなる**。停止（`clearFiles` で runId 消去）も同様。
+     */
+    private fun ownsFiles(): Boolean {
+        val mine = inputData.getLong(KEY_RUN_ID, 0L)
+        if (mine == 0L) return true
+        return activeRunId(ctx) == mine
+    }
+
     override suspend fun doWork(): Result {
+        // 置き換え済み／停止済みの実行はここで降りる（共有ファイルへ触らない）。
+        if (!ownsFiles()) return Result.success()
         // [C1] kill後にWorkManagerが再起動した場合、同一プロセス参照(request)は失われている。
         // [P2修正/レビュー指摘] 復元は「途中最良スナップショット」を優先（8秒毎に退避済み＝実質的な途中再開。
         //   無ければ元入力）。旧: 常に元入力から再スタートし、途中の改善を捨てていた。
@@ -84,19 +99,28 @@ class OptimizationWorker(
                     if (wallElapsed - lastSnapMs > 8_000L) {
                         lastSnapMs = wallElapsed
                         com.magi.app.v6.V6NativeOptimizer.liveBest?.let { live ->
-                            runCatching { snapshotFile(ctx).writeText(StateParser.serialize(req.first, live.toIntArray2D())) }
+                            // [3.327.0] 所有権を失っていたら書かない（8秒間引きの中なので追加I/Oは無視できる）。
+                            if (ownsFiles()) {
+                                runCatching { snapshotFile(ctx).writeText(StateParser.serialize(req.first, live.toIntArray2D())) }
+                            }
                         }
                     }
                 }
             }
-            OptimizationRepository.publishResult(
-                OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
-            )
-            notifyDone(res.report.hard, res.report.total)
-            // [C1] 完了結果を耐久保存。UI不在(プロセス再起動でWorkerだけ走った)でも次回起動で反映できる。
-            runCatching { resultFile(ctx).writeText(StateParser.serialize(req.first, res.schedule)) }
-            runCatching { inputFile(ctx).delete() }
-            runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+            // [3.327.0/外部レビュー High3] 置き換えられた実行の結果は**公開も保存もしない**。
+            //   旧実装はここに所有権の検査が無く、完了間際に REPLACE された実行が別データの結果を
+            //   resultFile へ書き、次回起動でそれが現在のデータとして復元されうる状態だった。
+            if (ownsFiles()) {
+                OptimizationRepository.publishResult(
+                    OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
+                )
+                notifyDone(res.report.hard, res.report.total)
+                // [C1] 完了結果を耐久保存。UI不在(プロセス再起動でWorkerだけ走った)でも次回起動で反映できる。
+                runCatching { resultFile(ctx).writeText(StateParser.serialize(req.first, res.schedule)) }
+                runCatching { inputFile(ctx).delete() }
+                runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+                runCatching { runIdFile(ctx).delete() }
+            }
             Result.success()
         } catch (e: CancellationException) {
             // [敵対的レビュー修正・#9] UI の stop() は cancelUniqueWork() の完了を待たず即座に
@@ -104,7 +128,9 @@ class OptimizationWorker(
             //   気づかずスナップショットを再生成しうる。自身のキャンセルを検知した時点で必ず
             //   もう一度片付けてから伝播する（次回起動時に明示停止済みの古い盤面を復旧候補として
             //   読んでしまう事故を防ぐ）。
-            runCatching { clearFiles(ctx) }
+            // [3.327.0/外部レビュー High3] **所有者のときだけ**片付ける。置き換えで打ち切られた旧実行が
+            //   ここを通ると、新実行が既に書いた入力ファイルまで消していた（復元不能の窓を作る）。
+            if (ownsFiles()) runCatching { clearFiles(ctx) }
             throw e
         } catch (e: Exception) {
             notify("最適化に失敗しました", e.message ?: "原因不明")
@@ -164,15 +190,31 @@ class OptimizationWorker(
         fun inputFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_input.json")
         fun resultFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_result.json")
         fun snapshotFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_best.json")   // [#4] 途中最良解
+        // [3.327.0/外部レビュー High3] いま所有権を持つ実行の ID。ファイル名は固定・
+        //   `ExistingWorkPolicy.REPLACE` で入れ替わるため、**どの実行が書いたファイルか**を区別する術が
+        //   無かった。区別できないと ①置き換えで打ち切られた旧実行が、新実行の入力ファイルを
+        //   `clearFiles` で消す ②旧実行が完了間際なら別データの結果を `resultFile` へ書き、次回起動で
+        //   それが現在のデータとして復元される、が起こりうる。
+        fun runIdFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_run.txt")
+
+        /** [3.327.0] enqueue の直前に呼び、この実行を所有者として記録する。 */
+        fun beginRun(ctx: Context, runId: Long) {
+            runCatching { runIdFile(ctx).writeText(runId.toString()) }
+        }
+
+        fun activeRunId(ctx: Context): Long =
+            runCatching { runIdFile(ctx).readText().trim().toLong() }.getOrDefault(0L)
 
         fun clearFiles(ctx: Context) {
             runCatching { inputFile(ctx).takeIf { it.exists() }?.delete() }
             runCatching { resultFile(ctx).takeIf { it.exists() }?.delete() }
             runCatching { snapshotFile(ctx).takeIf { it.exists() }?.delete() }
+            runCatching { runIdFile(ctx).takeIf { it.exists() }?.delete() }
         }
 
         const val KEY_SECONDS = "seconds"   // [P2] enqueue 時の予算秒数（WorkManager が永続化）
         const val KEY_WORKERS = "workers"   // [P2] enqueue 時の並列数
+        const val KEY_RUN_ID = "runId"      // [3.327.0] 実行の識別子（WorkManager が永続化＝kill後も同一）
 
         private fun loadPair(f: File): Pair<MagiState, Array<IntArray>>? {
             if (!f.exists()) return null

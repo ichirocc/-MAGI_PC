@@ -558,7 +558,7 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
                                 text = when (e.cause) {
                                     com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED -> "回数固定で却下"
                                     com.magi.app.v6.C1PlateauCause.SCORE_TRADEOFF -> "他とのトレードオフ"
-                                    com.magi.app.v6.C1PlateauCause.NO_CANDIDATE -> "候補なし"
+                                    com.magi.app.v6.C1PlateauCause.NO_CANDIDATE -> "この直し方では候補なし"
                                 },
                                 color = if (pin) MagiAccent.red else MagiAccent.blue,
                             )
@@ -591,12 +591,15 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
  * 横断集計。C1PlateauCard から分離した理由は2つ:
  *  - この観測は c1 固有ではない（実データでは適切回数・公平化・連続パターンの研磨が大半を占める）。
  *    c1 が 0 でも回数固定の影響はあり得るので、c1 の診断に従属させると出せなくなる。
- *  - c1 の内訳（職員×シフト）と横断集計（全パスの試行回数）は粒度も母集団も違う。同じカードに混ぜると
+ *  - c1 の内訳（職員×シフト）と横断集計（研磨の試行回数）は粒度も母集団も違う。同じカードに混ぜると
  *    どちらの数字なのか読めない。
  *
- * **数字の読み方**: 全手数でも改善予測でもない。9パスのみ計測・最大4巡を重複排除せず加算した
- * 「計測済みの候補試行数」で、言えるのは「少なくとも N 回、回数固定だけが却下の理由だった」まで。
- * 0 は「緩めても変わらない」の証明にはならない（未計測のパスがある）。
+ * **数字の読み方 [3.327.0 で範囲を訂正]**: 全手数でも改善予測でもない。計測しているのは後処理研磨のうち
+ * `V6HotfixPasses` の18パスだけで、`C1JointLns`/`PersonalBalanceJointLns`/`EliteIntegration`/
+ * `C1TemporalFlow`/`CombinatorialRepair` の10箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)は計測外。
+ * 最大4巡を重複排除せず加算した「計測済みの候補試行数」で、言えるのは
+ * 「少なくとも N 回、回数固定だけが却下の理由だった」まで。
+ * 0 は「緩めても変わらない」の証明にはならない（計測外の経路がある）。
  */
 @Composable
 internal fun PinFixedImpactCard(
@@ -615,7 +618,7 @@ internal fun PinFixedImpactCard(
                 style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             // [3.324.0/外部レビュー] 幅は決め打ちしない（実測で ±1 が良い月と ±3 が良い月があり優劣が
             //   逆転した）。件数の性質も正直に添える。
-            Text("※ 全部の手数ではなく、研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
+            Text("※ 全部の手数ではなく、後処理研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
                 "場合があります）。この数が 0 でも、緩めて変わらないとは限りません。",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             Text("試すときは、対象の職員とシフト、そして緩める幅を決めて、変更する前と後を見比べてください。",
