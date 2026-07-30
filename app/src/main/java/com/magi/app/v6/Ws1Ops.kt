@@ -146,7 +146,7 @@ object Ws1Ops {
      *  (every group needs >=1 doable shift); otherwise add -> save -> reload would be rejected. */
     fun addGroup(state: MagiState, name: String, kigou: String): MagiState {
         val k = state.shifts.size
-        val rest = state.shifts.indexOfFirst { it.kigou == "休" }.let { if (it >= 0) it else 0 }
+        val rest = restShiftIndex(state)
         val groups = state.groups + Group(name, kigou)
         val gs = state.groupShift + listOf(List(k) { idx -> if (idx == rest) 1 else 0 })
         val apt = if (state.groupShiftApt.isEmpty()) state.groupShiftApt
@@ -154,24 +154,29 @@ object Ws1Ops {
         return state.copy(groups = groups, groupShift = gs, groupShiftApt = apt)
     }
 
-    /** Add a staff (index S). The working schedule gains a row of 休/idx0. */
+    /** Add a staff (index S). The working schedule gains a row of 休.
+     *  [3.329.0/外部レビュー H-01] 旧コメントは「休/idx0」と両者を同一視していたが、**休は記号で解決する**
+     *  （`restShiftIndex`）。休が先頭でないデータでは、新しい職員の空き日が丸ごと勤務シフトになっていた。 */
     fun addStaff(state: MagiState, sched: Array<IntArray>, name: String, groupIdx: Int): Ws1Result {
         val t = if (sched.isNotEmpty()) sched[0].size else state.dayCount
         val gi = groupIdx.coerceIn(0, (state.groups.size - 1).coerceAtLeast(0))
         val staff = state.staff + Staff(name, gi)
-        val newSched = copyGrid(sched) + IntArray(t) { 0 }
+        val rest = restShiftIndex(state)
+        val newSched = copyGrid(sched) + IntArray(t) { rest }
         val ns = state.copy(staff = staff)
         return Ws1Result(withSchedule(ns, newSched), newSched)
     }
 
     // ---- period resize -------------------------------------------------------
 
-    /** Resize the period to [newT] days: schedule columns padded with 休/idx0 or truncated;
-     *  out-of-range needDay/wishes dropped; endDate recomputed from startDate. */
+    /** Resize the period to [newT] days: schedule columns padded with 休 or truncated;
+     *  out-of-range needDay/wishes dropped; endDate recomputed from startDate.
+     *  [3.329.0/外部レビュー H-01] 追加された日も休の**記号解決**で埋める（旧: index 0 直書き）。 */
     fun resizeDays(state: MagiState, sched: Array<IntArray>, newT: Int): Ws1Result {
         val t = newT.coerceIn(1, 31)
+        val rest = restShiftIndex(state)
         val newSched = Array(sched.size) { i ->
-            IntArray(t) { j -> if (j < sched[i].size) sched[i][j] else 0 }
+            IntArray(t) { j -> if (j < sched[i].size) sched[i][j] else rest }
         }
         fun dayOf(key: String) = key.split(",").getOrNull(1)?.toIntOrNull() ?: -1
         val need1 = state.needDay1.filterKeys { dayOf(it) in 0 until t }

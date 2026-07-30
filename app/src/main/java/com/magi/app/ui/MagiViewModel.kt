@@ -2743,9 +2743,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             logOp("W", "希望シフトCSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
-        val (ns, count) = res
-        logOp("I", "希望シフトCSV取込: ${count}件を反映（全置換）")
-        applyStructureWithMessage(ns, "希望シフトを取込: ${count}件を反映（既存の希望は置換）")
+        // [3.329.0/外部レビュー H-02] この取込は既存の希望を**全置換**する。中身のある行を1つでも
+        //   解釈できなかったら置換しない（旧: 誤記の行を黙って捨て、1行でも有効なら残りの希望を消していた）。
+        if (res.rejected > 0) {
+            _ui.update { it.copy(message = "希望シフトの取込を中止しました（読めない行が${res.rejected}件）。" +
+                "この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
+            logOp("W", "希望シフトCSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
+            return
+        }
+        logOp("I", "希望シフトCSV取込: ${res.accepted}件を反映（全置換）")
+        applyStructureWithMessage(res.state, "希望シフトを取込: ${res.accepted}件を反映（既存の希望は置換）")
     }
 
     /** [コンポーネント別取込] 各制約CSV（種別タグ付き）。制約一式＋個人レンジを置換。 */
@@ -2760,9 +2767,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             logOp("W", "各制約CSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
-        val (ns, count) = res
-        logOp("I", "各制約CSV取込: ${count}件を反映（制約一式を置換）")
-        applyStructureWithMessage(ns, "各制約を取込: ${count}件を反映（既存の制約・個人レンジは置換）")
+        // [3.329.0/外部レビュー H-02] 制約一式と個人レンジを**全置換**するので、希望と同じ扱いにする。
+        if (res.rejected > 0) {
+            _ui.update { it.copy(message = "各制約の取込を中止しました（読めない行が${res.rejected}件）。" +
+                "この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
+            logOp("W", "各制約CSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
+            return
+        }
+        logOp("I", "各制約CSV取込: ${res.accepted}件を反映（制約一式を置換）")
+        applyStructureWithMessage(res.state, "各制約を取込: ${res.accepted}件を反映（既存の制約・個人レンジは置換）")
     }
 
     fun clearMessage() { _ui.update { it.copy(message = null) } }
