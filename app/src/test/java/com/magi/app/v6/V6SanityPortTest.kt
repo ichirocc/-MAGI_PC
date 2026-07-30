@@ -446,18 +446,23 @@ class V6SanityPortTest {
         cons41: List<com.magi.app.model.C41Row> = emptyList(),
         cons42: List<com.magi.app.model.C42Row> = emptyList(),
         restKigou: String = "休",
+        staffRange: Map<String, Range> = emptyMap(),
+        needX: String = "0",
+        skillGroups: List<Group> = emptyList(),
+        skillIdx: Int = 0,
     ) = MagiState(
         startDate = "2026-08-01", endDate = "2026-08-03",
-        shifts = listOf(Shift(restKigou, restKigou, "0", ""), Shift("X", "X", "0", "")),
+        shifts = listOf(Shift(restKigou, restKigou, "0", ""), Shift("X", "X", needX, "")),
         groups = listOf(Group("G", "G")),
-        staff = listOf(Staff("s0", 0)),
+        staff = listOf(Staff("s0", 0, skillIdx)),
         use2Patterns = false,
         groupShift = listOf(listOf(1, 1)),
         groupShiftApt = listOf(listOf("", "")),
         schedule = listOf(List(3) { 0 }),
-        wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+        wishes = emptyMap(), staffRange = staffRange, needDay1 = emptyMap(), needDay2 = emptyMap(),
         cons1 = cons1, cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = cons41, cons42 = cons42,
+        skillGroups = skillGroups,
     )
 
     @Test fun unknownShiftInWindowRuleIsReported() {
@@ -505,5 +510,49 @@ class V6SanityPortTest {
         assertTrue("「休」不在が案内されること", rep.any { it.where.contains("「休」のシフトがありません") })
         assertFalse("「休」があれば案内しない",
             V6SanityPort.buildGuidance(unresolvedState()).any { it.where.contains("「休」のシフトがありません") })
+    }
+
+    // --- [3.327.0/外部レビュー High4/High5] fail-open で解釈される値と、範囲外のスキル群 ---
+    // 2f が拾えるのは Problem が行ごと捨てたものだけ。個人の回数・必要人数・群レンジの数値は
+    // 非数値でも行が生き残り「制限なし」「0人」として通るので、弱い条件で成功扱いになる。
+
+    @Test fun nonNumericStaffRangeIsReported() {
+        val st = unresolvedState(staffRange = mapOf("0,1" to Range("あ", "3")))
+        assertEquals("前提: 下限は未設定センチネルのまま＝制限なしとして通る",
+            Int.MIN_VALUE, Problem(st).rangeLo[0][1])
+        assertTrue("個人の回数の非数値が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("個人の回数") })
+    }
+
+    @Test fun nonNumericNeedIsReported() {
+        val st = unresolvedState(needX = "ー")
+        assertTrue("必要人数の非数値が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("必要人数「X」") })
+    }
+
+    @Test fun nonNumericGroupRangeIsReported() {
+        val st = unresolvedState(cons41 = listOf(com.magi.app.model.C41Row("G", "X", "1", "多")))
+        assertTrue("群のレンジの非数値が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("群のレンジ") && it.problem.contains("数値でない") })
+    }
+
+    @Test fun blankNumbersAreNotReportedAsNonNumeric() {
+        // 空欄＝未設定は正しい仕様なので、非数値としては案内しない（誤検知を作らない）。
+        val st = unresolvedState(staffRange = mapOf("0,1" to Range("", "")))
+        assertFalse("空欄は非数値として案内しない",
+            V6SanityPort.buildGuidance(st).any { it.problem.contains("数値でない") })
+    }
+
+    @Test fun outOfRangeSkillGroupIsReported() {
+        // skillIdx=3 だがスキル群は1つ＝この職員はスキル群の制約から静かに外れる。
+        val st = unresolvedState(skillGroups = listOf(Group("S", "S")), skillIdx = 3)
+        assertTrue("範囲外のスキル群が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("スキル群の割当") })
+        assertFalse("範囲内なら案内しない",
+            V6SanityPort.buildGuidance(unresolvedState(skillGroups = listOf(Group("S", "S")), skillIdx = 0))
+                .any { it.where.contains("スキル群の割当") })
+        assertFalse("未所属(-1)は案内しない",
+            V6SanityPort.buildGuidance(unresolvedState(skillGroups = listOf(Group("S", "S")), skillIdx = -1))
+                .any { it.where.contains("スキル群の割当") })
     }
 }

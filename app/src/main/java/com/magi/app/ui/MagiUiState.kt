@@ -95,8 +95,10 @@ data class UiState(
     val forbiddenDiag: ForbiddenRunDiagnosis? = null,  // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断（c3n=0 なら null）
     val c1Plateau: C1PlateauDiagnosis? = null,  // [3.322.0] 窓の要件(c1)がなぜ直せなかったかの構造化診断（直近の最適化の観測。残存なし/未実行なら null）
     // [3.325.0] 直近の最適化で「回数固定(lo==hi)だけが却下の理由だった」**計測済みの候補試行数**。
-    //   全手数でも改善予測でもない（9パスのみ計測・最大4巡を重複排除せず加算）。0 は「緩めても変わらない」
-    //   の証明にはならない（未計測のパスがある）。
+    //   全手数でも改善予測でもない。**[3.327.0 で範囲を訂正]** 計測しているのは後処理研磨のうち
+    //   `V6HotfixPasses` の18パスだけで、`C1JointLns`/`PersonalBalanceJointLns`/`EliteIntegration`/
+    //   `C1TemporalFlow`/`CombinatorialRepair` の10箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)は
+    //   計測外。最大4巡を重複排除せず加算する。0 は「緩めても変わらない」の証明にならない。
     val observedPinBlockedAttempts: Int = 0,
     // [3.326.0] 緩和の対象候補（どのピンが何回止めたか・多い順）。空＝観測なし。
     val pinTargets: List<PinTargetView> = emptyList(),

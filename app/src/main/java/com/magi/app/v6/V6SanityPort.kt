@@ -474,6 +474,61 @@ object V6SanityPort {
                 "シフト設定で休みのシフトの記号を「休」にしてください"))
         }
 
+        // 2h) [3.327.0/外部レビュー High4] **捨てられずに fail-open で解釈される**数値。
+        //   2f が拾うのは `Problem` がパースに失敗して行ごと捨てたものだけ。一方
+        //   `staffRange` の lo/hi・`cons41(s)` の l/u・シフトの必要人数は、非数値でも行は生き残り
+        //   **空欄と同じ扱い**になる（staffRange は `toIntOrNull()?.let{}` を素通り＝未設定センチネル
+        //   `Int.MIN_VALUE`/`MAX_VALUE` のまま、必要人数は `?: -1`＝要件なし）。
+        //   **空欄＝未設定は正しい仕様**なので対象にせず、
+        //   「空でないのに数値でない」ものだけを出す（弱い問題を解いて成功扱いになるのを防ぐ）。
+        fun badNum(v: String): Boolean = v.isNotBlank() && v.trim().toIntOrNull() == null
+        for ((key, r) in state.staffRange) {
+            if (!badNum(r.lo) && !badNum(r.hi)) continue
+            val idx = key.split(",")
+            val nm = idx.getOrNull(0)?.toIntOrNull()?.let { state.staff.getOrNull(it)?.name } ?: key
+            val sy = idx.getOrNull(1)?.toIntOrNull()?.let { state.shifts.getOrNull(it)?.kigou } ?: ""
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "個人の回数「$nm $sy」",
+                "下限「${r.lo}」上限「${r.hi}」に数値でない値があります。その側は**制限なし**として" +
+                    "扱われるため、意図より弱い条件で計算されます",
+                "個人の回数で数値を入れ直すか、制限しないなら空欄にしてください"))
+        }
+        for (sh in state.shifts) {
+            if (!badNum(sh.need1) && !badNum(sh.need2)) continue
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "必要人数「${sh.kigou}」",
+                "最低人数「${sh.need1}」上限人数「${sh.need2}」に数値でない値があります。その側は" +
+                    "**未設定（要件なし）**として扱われます",
+                "必要人数で数値を入れ直すか、設定しないなら空欄にしてください"))
+        }
+        fun checkRange(famJp: String, rows: List<com.magi.app.model.C41Row>) {
+            for (c in rows) {
+                if (!badNum(c.l) && !badNum(c.u)) continue
+                out.add(SettingIssue(IssueKind.CONSTRAINT, "$famJp「${c.groupKigou} ${c.shiftKigou}」",
+                    "下限「${c.l}」上限「${c.u}」に数値でない値があります。その側は**制限なし**として" +
+                        "扱われるため、意図より弱い条件で計算されます",
+                    "制約設定で数値を入れ直すか、制限しないなら空欄にしてください"))
+            }
+        }
+        checkRange("群のレンジ", state.cons41)
+        checkRange("スキル群のレンジ", state.cons41s)
+
+        // 2i) [3.327.0/外部レビュー High5] スキル群の割当が範囲外。
+        //   `Staff.skillIdx` の既定は 0 で、`Problem` は素通しする（native は 3.311.0 で巨大確保だけ
+        //   防いでいるが、意味論は検証していない）。範囲外だと `ssk[i]==groupIdx` が常に偽＝その職員が
+        //   スキル群の制約から**静かに外れる**。さらに旧いデータは未指定が 0 なので、あとからスキル群を
+        //   作ると全員が先頭の群に所属したことになる。自動で書き換えると意味が変わるので**知らせるだけ**にする。
+        if (state.skillGroups.isNotEmpty()) {
+            val bad = state.staff.withIndex().filter { (_, st2) ->
+                st2.skillIdx != -1 && st2.skillIdx !in state.skillGroups.indices
+            }
+            if (bad.isNotEmpty()) {
+                val names = bad.take(4).joinToString("・") { it.value.name.ifBlank { "#${it.index}" } }
+                out.add(SettingIssue(IssueKind.CONSTRAINT, "スキル群の割当",
+                    "${bad.size}名（$names${if (bad.size > 4) " ほか" else ""}）のスキル群が今の一覧の範囲外です。" +
+                        "この職員はスキル群の制約から外れて計算されます",
+                    "職員管理でスキル群を選び直すか、所属させないなら「(なし)」にしてください"))
+            }
+        }
+
         // 3) 需要 > 担当可能人数（その枠は誰をどう並べても必ず不足）
         for (j in 0 until p.T) for (k in 0 until p.K) {
             val need = p.need1[k][j]

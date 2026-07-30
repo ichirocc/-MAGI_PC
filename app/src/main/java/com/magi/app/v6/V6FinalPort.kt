@@ -627,7 +627,14 @@ object V6FinalPort {
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
         val logs = listOf(timingLog, budgetPlanLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
-        ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, post)
+        // [3.327.0/外部レビュー High1] `post` の診断（C1頭打ち・回数固定の却下記録）は **post.schedule を
+        //   観測した結果**。ところが finalSched はこのあと ExtraRefine で差し替わる（refSched）か、
+        //   最終番兵で入力へ戻る（normInput）ことがある。そのまま渡すと「いま表示している勤務表の理由」
+        //   として**別の盤面の観測**を見せてしまう（3.324.0 で ViewModel 側の keep-best 分岐は塞いだが、
+        //   エンジン内部のこの2経路が残っていた）。盤面が一致するときだけ診断を通す。
+        //   ログ（post.report.logs）は「その実行で何が起きたか」の記録なので落とさない。
+        val postForResult = post.takeIf { finalSched.contentDeepEquals(it.schedule) }
+        ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, postForResult)
     }
 
     fun checkResultWorse(before: ViolationReport?, after: ViolationReport): String? {
