@@ -371,7 +371,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     // 誘導先は年間マスター③「回数（1人あたり）」＝個人の下限/上限がある場所（3.286.0 で一本化済み）。
                     C1PlateauCard(ui, onGoEdit = { tab = 2; editScope = 2 })
                     // [3.325.0] 回数固定の横断集計は c1 固有でないので独立カードへ分離（c1=0 でも出る）。
-                    PinFixedImpactCard(ui, onGoEdit = { tab = 2; editScope = 2 })
+                    PinFixedImpactCard(ui, onGoEdit = { tab = 2; editScope = 2 },
+                        onRelax = { i, k, loD, hiD -> vm.relaxStaffRangePin(i, k, loD, hiD) })
                     SettingIssuesCard(ui, onFix = { vm.applySettingFix(it) }, onGoEdit = { tab = 2 })
                     // [スクショ指摘/撤去] 「ほかの作り方」カード（速くつくる/かんたんに/閉じても大丈夫）は
                     //   主導線（思考誘導カード＋下部バー）と重複し、実行中は全ボタン無効の死に領域だった

@@ -98,8 +98,27 @@ data class UiState(
     //   全手数でも改善予測でもない（9パスのみ計測・最大4巡を重複排除せず加算）。0 は「緩めても変わらない」
     //   の証明にはならない（未計測のパスがある）。
     val observedPinBlockedAttempts: Int = 0,
+    // [3.326.0] 緩和の対象候補（どのピンが何回止めたか・多い順）。空＝観測なし。
+    val pinTargets: List<PinTargetView> = emptyList(),
     val settingIssues: List<com.magi.app.v6.SettingIssue> = emptyList(), // 制約/希望の設定ミスと直し方の誘導
     val startDate: String = "",                   // 期間開始日（カレンダー表示の曜日整列に使用）
     val interruptedRun: Boolean = false,          // 前回の計算がプロセスkill等で中断された
     val interruptedInfo: String? = null,
+)
+
+/**
+ * [3.326.0] 回数固定(lo==hi)の緩和対象1件。
+ * `attempts` は「目的関数が採用を認めた手を、このピンのガードだけが止めた**計測できた回数**」。
+ * 手の数ではなく試行の回数で、研磨の巡（最大4）を重複排除せず数えている。
+ * **0 件でも緩和が無意味とは限らない** — 緩和は下限割れ(low, 重み90)の罰も外すため、
+ * 「ピン以外の理由で」却下されていた候補が通るようになる経路が別にある（実測で確認済み）。
+ */
+data class PinTargetView(
+    val staff: Int,
+    val shift: Int,
+    val staffName: String,
+    val shiftKigou: String,
+    /** 固定されている回数（lo==hi の値）。 */
+    val pinnedCount: Int,
+    val attempts: Int,
 )

@@ -622,6 +622,86 @@ internal class RejectCulpritStats {
  * 既に基準盤面がピンから外れている(データ側の既存不整合)場合は、そこから遠ざける変更のみを禁じ、
  * 現状維持やピンへ近づける変更は妨げない。
  */
+/**
+ * [3.326.0] 厳密ピンを目標から遠ざけた (職員, シフト) を全部返す。
+ *
+ * `exactPinRegression` は「1件でもあるか」の高速判定（見つけ次第 return）なので、**どのピンが止めたか**は
+ * 分からない。緩和の対象を利用者へ提示するにはそれが必要なので、判定が真だったときだけこちらを呼ぶ
+ * （ホットパスは `exactPinRegression` のまま＝早期 return が残る）。
+ *
+ * @return `[職員, シフト]` の並び。判定と同じ意味論（目標からの距離が増えたものだけ）。
+ */
+internal fun exactPinOffenders(p: Problem, before: Array<IntArray>, after: Array<IntArray>): List<IntArray> {
+    val out = ArrayList<IntArray>(2)
+    for (i in 0 until p.S) {
+        for (k in 0 until p.K) {
+            val lo = p.rangeLo[i][k]
+            val hi = p.rangeHi[i][k]
+            if (lo == Int.MIN_VALUE || hi == Int.MAX_VALUE || lo != hi) continue
+            var beforeCnt = 0
+            var afterCnt = 0
+            for (j in 0 until p.T) {
+                if (before[i][j] == k) beforeCnt++
+                if (after[i][j] == k) afterCnt++
+            }
+            if (kotlin.math.abs(afterCnt - lo) > kotlin.math.abs(beforeCnt - lo)) out.add(intArrayOf(i, k))
+        }
+    }
+    return out
+}
+
+/**
+ * [3.326.0] 「回数固定(lo==hi)だけが却下の理由だった候補試行」を**対象(職員,シフト)別に**数える。
+ *
+ * ここに入るのは `isBetter` が採用を認めた手だけ＝ピンのガードを外せば通ったはずの手。
+ * よって「どのピンを緩めれば何回ぶん通り得たか」の実測値になる（推測ではない）。
+ *
+ * UI（緩和対象の一覧）が読むので public。判定本体の `exactPinRegression`/`exactPinOffenders` は internal のまま。
+ *
+ * **数の性質**（画面へ出すときは必ず添える）: 手の数ではなく**試行の回数**。研磨は最大4巡するので
+ * 同じ手が複数の巡で数えられうる（重複排除していない）。
+ */
+class PinBlockAttribution {
+    private val counts = HashMap<Long, Int>()
+
+    /** 計測できた試行の総数。 */
+    var attempts = 0
+        private set
+
+    /**
+     * 判定と記録を同時に行う。**`isBetter` が真であることを確認した直後にだけ呼ぶ**
+     * （`isBetter(...) && !pinBlocks.blocksImproving(...)` の形なら短絡により保証される）。
+     * 記録対象を「目的関数が採用を認めた手」に限定するのが目的で、そうでない候補を混ぜると
+     * 「緩めれば通ったはず」の主張が崩れる。
+     */
+    fun blocksImproving(p: Problem, before: Array<IntArray>, after: Array<IntArray>): Boolean {
+        val bad = exactPinRegression(p, before, after)
+        if (bad) record(p, before, after)
+        return bad
+    }
+
+    /** ピン単独却下を1件記録する。`exactPinRegression` が真だったときだけ呼ぶ。 */
+    fun record(p: Problem, before: Array<IntArray>, after: Array<IntArray>) {
+        attempts++
+        for (o in exactPinOffenders(p, before, after)) {
+            val key = (o[0].toLong() shl 32) or o[1].toLong()
+            counts.merge(key, 1, Int::plus)
+        }
+    }
+
+    fun merge(other: PinBlockAttribution) {
+        attempts += other.attempts
+        for ((k, v) in other.counts) counts.merge(k, v, Int::plus)
+    }
+
+    /** (職員, シフト) → 却下試行数。件数の多い順。 */
+    fun byTarget(): List<Triple<Int, Int, Int>> =
+        counts.entries.sortedByDescending { it.value }
+            .map { Triple((it.key shr 32).toInt(), (it.key and 0xFFFFFFFFL).toInt(), it.value) }
+
+    val isEmpty: Boolean get() = attempts == 0
+}
+
 internal fun exactPinRegression(p: Problem, before: Array<IntArray>, after: Array<IntArray>): Boolean {
     for (i in 0 until p.S) {
         for (k in 0 until p.K) {

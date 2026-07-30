@@ -26,6 +26,7 @@ import com.magi.app.v6.V6PortReport
 import com.magi.app.v6.CoverageDiagnosis
 import com.magi.app.v6.ForbiddenRunDiagnosis
 import com.magi.app.v6.C1PlateauDiagnosis
+import com.magi.app.v6.PinBlockAttribution
 import com.magi.app.v6.V6Algorithm
 import com.magi.app.v6.V6FinalPort
 import com.magi.app.v6.V6NativeOptimizer
@@ -849,6 +850,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var lastObservedPinAttempts: Int = 0
 
+    /** [3.326.0] どのピン(職員,シフト)が何回止めたか。緩和対象の提示に使う。 */
+    private var lastPinBlocks: PinBlockAttribution? = null
+
     /**
      * [3.324.0/外部レビュー] 上の2つは「その盤面で研磨が却下した記録」であって盤面から再計算できない。
      * よって**どの盤面に対する観測か**を指紋で持ち、盤面が変わったら自動的に黙る。
@@ -865,9 +869,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 研磨診断を「この盤面のもの」として保存する。null/0 は診断なし。 */
-    private fun setPolishDiagnostics(plateau: C1PlateauDiagnosis?, observedPinBlockedAttempts: Int, forSchedule: Array<IntArray>) {
+    private fun setPolishDiagnostics(
+        plateau: C1PlateauDiagnosis?,
+        observedPinBlockedAttempts: Int,
+        forSchedule: Array<IntArray>,
+        pinBlocks: PinBlockAttribution? = null,
+    ) {
         lastC1Plateau = plateau
         lastObservedPinAttempts = observedPinBlockedAttempts
+        lastPinBlocks = pinBlocks
         lastDiagBoardKey = if (plateau == null && observedPinBlockedAttempts == 0) 0L else boardKey(forSchedule)
     }
 
@@ -1024,7 +1034,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     // [3.324.0/外部レビュー] pushReport(=makeUi の唯一の経路)より**前**に保存する。
                     //   旧実装は pushReport のあとに代入していたため、その回の画面には診断が入らず
                     //   次の再チェックでようやく（しかも古い盤面基準で）出るという順序の逆転だった。
-                    setPolishDiagnostics(res.post?.c1Plateau, res.post?.observedPinBlockedAttempts ?: 0, res.schedule)
+                    setPolishDiagnostics(res.post?.c1Plateau, res.post?.observedPinBlockedAttempts ?: 0, res.schedule, res.post?.pinBlocks)
                     currentSchedule = res.schedule.copy2D()
                     autoSave()
                     resultSchedule = res.schedule.copy2D()
@@ -1479,6 +1489,26 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (lo.isBlank() && hi.isBlank()) m.remove(key) else m[key] = Range(lo.trim(), hi.trim())
         logOp("I", "個人レンジ: ${opNm(i)} ${opSy(k)} → ${if (lo.isBlank() && hi.isBlank()) "削除" else "${lo.ifBlank { "?" }}〜${hi.ifBlank { "?" }}"}")
         applyStructure(st.copy(staffRange = m))
+    }
+
+    /**
+     * [3.326.0] 回数固定(lo==hi)の幅を1段だけ広げる。**利用者のタップでのみ動く**（HF77: 数値の変更は
+     * 業務判断）。幅の決め打ちを避けるため下限側・上限側を別々に選ばせ、押した内容は操作ログへ残す。
+     * `applyStructure` 経由なので「元に戻す」で戻せる。
+     *
+     * @param loDelta 下限へ足す量（負で緩める）。@param hiDelta 上限へ足す量（正で緩める）。
+     */
+    fun relaxStaffRangePin(i: Int, k: Int, loDelta: Int, hiDelta: Int) {
+        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は回数を変更できません。終わってから試してください。") }; return }
+        val st = state ?: return
+        val cur = st.staffRange["$i,$k"] ?: return
+        val lo = cur.lo.trim().toIntOrNull() ?: return
+        val hi = cur.hi.trim().toIntOrNull() ?: return
+        val newLo = (lo + loDelta).coerceAtLeast(0)
+        val newHi = (hi + hiDelta).coerceAtLeast(newLo)
+        if (newLo == lo && newHi == hi) return
+        logOp("I", "回数固定を緩和: ${opNm(i)} ${opSy(k)} $lo〜$hi → $newLo〜$newHi（もう一度つくると効果が分かります）")
+        setStaffRange(i, k, newLo.toString(), newHi.toString())
     }
 
     fun removeStaffRange(i: Int, k: Int) {
@@ -2797,6 +2827,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             //   （手編集・元に戻す・読込・初期解生成など、あらゆる変更で自動的に外れる）。
             c1Plateau = if (diagFresh) lastC1Plateau?.takeIf { (report.breakdown["c1"] ?: 0) > 0 } else null,
             observedPinBlockedAttempts = if (diagFresh) lastObservedPinAttempts else 0,
+            // [3.326.0] 緩和の対象候補。どのピンが何回止めたかを名前つきで渡す（多い順）。
+            pinTargets = if (!diagFresh) emptyList() else {
+                val pr = cachedProblem(st)
+                lastPinBlocks?.byTarget()?.mapNotNull { (i, k, n) ->
+                    val lo = pr.rangeLo.getOrNull(i)?.getOrNull(k) ?: return@mapNotNull null
+                    if (lo == Int.MIN_VALUE) return@mapNotNull null
+                    PinTargetView(
+                        staff = i, shift = k,
+                        staffName = st.staff.getOrNull(i)?.name ?: "#$i",
+                        shiftKigou = st.shifts.getOrNull(k)?.kigou ?: "$k",
+                        pinnedCount = lo, attempts = n,
+                    )
+                } ?: emptyList()
+            },
             settingIssues = sanity.guidance,
             startDate = st.startDate,
         )
