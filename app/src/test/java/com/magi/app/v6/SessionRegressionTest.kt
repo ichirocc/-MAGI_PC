@@ -264,4 +264,39 @@ class SessionRegressionTest {
         assertEquals(0, r2!!.accepted)
         assertEquals(1, r2.rejected)
     }
+
+    @Test fun removingSkillGroupLeavesMembersUnassignedNotInTheFirstGroup() {
+        // [3.330.0/外部レビュー M-01] 削除した群の所属者を 0 へ寄せると、①無関係な先頭の群の制約が
+        //   黙って掛かる ②最後の1群を消すと全員 0 になり、あとで群を足すと全員がそこに所属した扱い。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-02",
+            shifts = listOf(Shift("休", "休", "0", ""), Shift("A", "A", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0, 0), Staff("s1", 0, 1), Staff("s2", 0, 2), Staff("s3", 0, -1)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = List(4) { listOf(0, 0) },
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+            skillGroups = listOf(Group("S0", "S0"), Group("S1", "S1"), Group("S2", "S2")),
+        )
+        val after = Ws1Ops.removeSkillGroup(st, 1)
+        assertEquals("群が1つ減る", 2, after.skillGroups.size)
+        assertEquals("前の群は不変", 0, after.staff[0].skillIdx)
+        assertEquals("削除された群の所属者は未所属(-1)", -1, after.staff[1].skillIdx)
+        assertEquals("後ろの群は1つ詰まる", 1, after.staff[2].skillIdx)
+        assertEquals("元から未所属は不変", -1, after.staff[3].skillIdx)
+
+        // 最後の1群を消しても、あとで群を足したときに全員が所属した扱いにならないこと。
+        var s2 = st
+        for (g in st.skillGroups.indices.reversed()) s2 = Ws1Ops.removeSkillGroup(s2, g)
+        assertTrue("全員が未所属", s2.staff.all { it.skillIdx == -1 })
+        // 群の追加は `skillGroups` に1件足すだけ（MagiViewModel.addSkillGroup と同じ操作）。
+        val readded = s2.copy(skillGroups = s2.skillGroups + Group("S9", "S9"))
+        assertTrue("群を足しても誰も所属しない", readded.staff.all { it.skillIdx == -1 })
+
+        assertEquals("範囲外は何もしない", st, Ws1Ops.removeSkillGroup(st, 9))
+    }
 }

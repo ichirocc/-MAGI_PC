@@ -276,4 +276,28 @@ object Ws1Ops {
         }
         return state.copy(groups = groups, groupShift = gs, groupShiftApt = apt, staff = staff)
     }
+
+    /**
+     * [3.330.0/外部レビュー] スキル群 [g] を削除する。担当グループの [removeGroup] と対になる操作で、
+     * これまで ViewModel 側に手書きされていた（Android 依存＝テストできなかった）ので同じ置き場へ移す。
+     *
+     * **所属者は `-1`（未所属）へ**。3.328.0 まで `0`（先頭の群）へ寄せており、
+     *  - 無関係な先頭の群の制約が黙って掛かる
+     *  - 最後の1群を消すと全員 0 になり、あとで群を1つ足すと全員がそこに所属した扱いになる
+     * という2つの取り違えを起こしていた（3.70.0 が「(なし)=-1」を正規の値として用意済み）。
+     * 後ろの群は1つ詰める。残った `cons41s`/`cons42s` の参照外れは `Problem` 解決時に無視される。
+     */
+    fun removeSkillGroup(state: MagiState, g: Int): MagiState {
+        if (g !in state.skillGroups.indices) return state
+        val skillGroups = state.skillGroups.filterIndexed { idx, _ -> idx != g }
+        val staff = state.staff.map { s ->
+            val ni = when {
+                s.skillIdx == g -> -1          // 所属していた群が無くなった＝未所属
+                s.skillIdx > g -> s.skillIdx - 1
+                else -> s.skillIdx
+            }
+            if (ni == s.skillIdx) s else s.copy(skillIdx = ni)
+        }
+        return state.copy(skillGroups = skillGroups, staff = staff)
+    }
 }
