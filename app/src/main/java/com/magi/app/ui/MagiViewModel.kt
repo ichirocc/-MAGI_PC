@@ -944,13 +944,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         for (c in st.cons1) { txt(c.day1); txt(c.shiftKigou); txt(c.day2) }
         for (c in st.cons2) { txt(c.shiftKigou); txt(c.count) }
         for (fam in listOf(st.cons3, st.cons3n, st.cons3m, st.cons3mn)) {
-            mix(2); for (row in fam) for (t in row.seq) txt(t)
+            mix(2); for (row in fam) for (t in row.pattern) txt(t)
         }
         for (fam in listOf(st.cons41, st.cons41s)) {
             mix(3); for (c in fam) { txt(c.groupKigou); txt(c.shiftKigou); txt(c.l); txt(c.u) }
         }
         for (fam in listOf(st.cons42, st.cons42s)) {
-            mix(4); for (c in fam) { txt(c.g1); txt(c.g2); txt(c.s1); txt(c.s2) }
+            mix(4); for (c in fam) { txt(c.g1Kigou); txt(c.g2Kigou); txt(c.s1Kigou); txt(c.s2Kigou) }
         }
         return h
     }
