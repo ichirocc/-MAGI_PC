@@ -450,6 +450,8 @@ class V6SanityPortTest {
         needX: String = "0",
         skillGroups: List<Group> = emptyList(),
         skillIdx: Int = 0,
+        needDay1: Map<String, String> = emptyMap(),
+        apt: List<List<String>> = listOf(listOf("", "")),
     ) = MagiState(
         startDate = "2026-08-01", endDate = "2026-08-03",
         shifts = listOf(Shift(restKigou, restKigou, "0", ""), Shift("X", "X", needX, "")),
@@ -457,9 +459,9 @@ class V6SanityPortTest {
         staff = listOf(Staff("s0", 0, skillIdx)),
         use2Patterns = false,
         groupShift = listOf(listOf(1, 1)),
-        groupShiftApt = listOf(listOf("", "")),
+        groupShiftApt = apt,
         schedule = listOf(List(3) { 0 }),
-        wishes = emptyMap(), staffRange = staffRange, needDay1 = emptyMap(), needDay2 = emptyMap(),
+        wishes = emptyMap(), staffRange = staffRange, needDay1 = needDay1, needDay2 = emptyMap(),
         cons1 = cons1, cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = cons41, cons42 = cons42,
         skillGroups = skillGroups,
@@ -554,5 +556,26 @@ class V6SanityPortTest {
         assertFalse("未所属(-1)は案内しない",
             V6SanityPort.buildGuidance(unresolvedState(skillGroups = listOf(Group("S", "S")), skillIdx = -1))
                 .any { it.where.contains("スキル群の割当") })
+    }
+
+    @Test fun nonNumericDailyNeedIsReported() {
+        // 日別の例外が非数値だと、needAt はシフト既定値へ黙って読み替える（0 になるより性質が悪い）。
+        // 全角数字「２」は toIntOrNull が 2 として解釈するので非数値ではない＝ここでは使わない。
+        val st = unresolvedState(needDay1 = mapOf("1,0" to "2人"))
+        assertEquals("前提: 例外は効かず、シフト既定値(0)で計算される", 0, Problem(st).need1[1][0])
+        assertTrue("日別の必要人数の非数値が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("日別の最低人数") })
+    }
+
+    @Test fun nonNumericAptIsReported() {
+        val st = unresolvedState(apt = listOf(listOf("", "おおめ")))
+        assertTrue("適切回数の非数値が案内されること",
+            V6SanityPort.buildGuidance(st).any { it.where.contains("適切回数") && it.problem.contains("数値ではありません") })
+    }
+
+    @Test fun blankDailyNeedAndAptAreNotReported() {
+        val st = unresolvedState(needDay1 = mapOf("1,0" to ""), apt = listOf(listOf("", "")))
+        assertFalse("空欄は非数値として案内しない",
+            V6SanityPort.buildGuidance(st).any { it.problem.contains("数値ではありません") })
     }
 }
