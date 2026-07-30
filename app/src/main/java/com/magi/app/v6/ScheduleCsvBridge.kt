@@ -141,7 +141,11 @@ object RosterCsvImport {
         val title = cell(rows[0], 0)
         val reiwa = Regex("令和(\\d+)").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()
         val yr = reiwa?.let { 2018 + it } ?: LocalDate.now().year
-        val mo = rows[0].drop(1).mapNotNull { it.trim().toIntOrNull() }.firstOrNull { it in 1..12 } ?: 1
+        // [3.329.0/外部レビュー M-03] 月はまずタイトル文字列から読む。旧は `rows[0].drop(1)` の
+        //   セルだけを見ており、「令和8年 7月」が1セルに入った形式では**必ず1月**になっていた。
+        val mo = Regex("(\\d{1,2})\\s*月").find(title)?.groupValues?.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..12 }
+            ?: rows[0].drop(1).mapNotNull { it.trim().toIntOrNull() }.firstOrNull { it in 1..12 }
+            ?: 1
         val start = String.format("%04d-%02d-01", yr, mo)
         val end = runCatching { LocalDate.parse(start).plusDays((T - 1).toLong()).toString() }.getOrDefault(start)
 
@@ -206,10 +210,13 @@ object FlatRosterCsvImport {
         val nameCol = header.indexOfFirst { it.trim() == "氏名" }
         if (nameCol < 0) return null
         val dayCol0 = nameCol + 1
-        // 日数T: ヘッダの dayCol0 以降の連番(1,2,3…)の長さ。無ければ最大列数から推定。
+        // 日数T: ヘッダの dayCol0 以降の連番(1,2,3…)の長さ。
+        // [3.329.0/外部レビュー M-03] 連番ヘッダが無いときの「最大列数からの推定」を**やめる**。
+        //   合計・注記などの末尾列まで日付として取り込み、期間が伸びて中身が空の日ができていた。
+        //   期間はデータの根幹なので、推測せず取込を断る（利用者が日付行を足せば通る）。
         var T = 0
         while (dayCol0 + T < header.size && cell(header, dayCol0 + T).toIntOrNull() == T + 1) T++
-        if (T < 1) T = (rows.maxOf { it.size } - dayCol0).coerceAtLeast(1)
+        if (T < 1) return null
 
         // 曜日行（任意）: ヘッダ直後で氏名列が「曜日」。
         val youbiRow = rows.getOrNull(headerIdx + 1)?.takeIf { cell(it, nameCol) == "曜日" }
@@ -477,6 +484,22 @@ private fun csvBody(rows: List<List<String>>, headerFirstCell: String): List<Lis
 // ============================================================================
 
 /** スタッフ一覧: 「氏名,グループ,スキル」。氏名一致で所属群・スキルを更新（追加/削除はしない）。 */
+/**
+ * [3.329.0/外部レビュー H-02] コンポーネント別CSV取込の結果。
+ *
+ * これらの取込は**既存を全置換**する（希望なら `wishes` を丸ごと差し替える）。旧実装は
+ * 未知の氏名・記号・日付の行を `continue` で黙って捨て、1行でも有効なら置換を実行していた。
+ * つまり「80行のうち79行が誤記のCSV」を読ませると、**残り79件の希望が消える**。
+ * 中身が空でない行を1つでも解釈できなかったら、呼び出し側が置換を中止できるように件数を返す。
+ */
+class ComponentImport(
+    val state: MagiState,
+    val accepted: Int,
+    val rejected: Int,
+    /** 解釈できなかった最初の行（利用者へどこが悪いか示すため）。 */
+    val sample: String,
+)
+
 object StaffCsvIO {
     fun build(state: MagiState): String {
         val sb = StringBuilder()
@@ -560,8 +583,11 @@ object StaffCsvIO {
                     newStaff[dup] = cur.copy(groupIdx = gi ?: cur.groupIdx, skillIdx = si ?: cur.skillIdx)
                 } else {
                     seenNew[key] = newStaff.size
-                    newStaff.add(Staff(rawName, gi ?: 0, si ?: 0))
-                    extraRows.add(IntArray(t) { 0 })
+                    // [3.329.0/外部レビュー H-01/M-01] 新しい職員の空き日は**休の記号解決**で埋める
+                    //   （旧: index 0 直書きで、休が先頭でないデータでは全日が勤務になっていた）。
+                    //   未知のスキル群は 0（先頭の群）でなく **-1（未所属）**へ（3.70.0 の「(なし)」）。
+                    newStaff.add(Staff(rawName, gi ?: 0, si ?: -1))
+                    extraRows.add(IntArray(t) { restShiftIndex(state) })
                     added++
                 }
             }
@@ -593,7 +619,7 @@ object WishesCsvIO {
     }
 
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
-    fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
+    fun parse(text: String, state: MagiState): ComponentImport? {
         val rows = parseCsvRows(text)
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
@@ -603,18 +629,26 @@ object WishesCsvIO {
         // [3.314.0] ヘッダ判定を `build()` が出す実ヘッダ「氏名」の一致へ。旧:「先頭が既知の職員名か」
         //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
         val body = csvBody(rows, "氏名")
+        var bad = 0
+        var sample = ""
         for (r in body) {
             val name = r.getOrElse(0) { "" }.trim()
             val day = r.getOrElse(1) { "" }.trim().toIntOrNull()
             val sym = r.getOrElse(2) { "" }.trim()
-            val i = nameToI[nameMatchKey(name)] ?: continue
-            val k = symToK[sym] ?: continue
-            if (day == null || day < 1 || day > state.dayCount) continue
+            // 完全な空行は書式上のもの＝無視してよい。中身があるのに解釈できない行だけを数える。
+            if (name.isEmpty() && sym.isEmpty() && r.getOrElse(1) { "" }.isBlank()) continue
+            val i = nameToI[nameMatchKey(name)]
+            val k = symToK[sym]
+            if (i == null || k == null || day == null || day < 1 || day > state.dayCount) {
+                bad++
+                if (sample.isEmpty()) sample = r.joinToString(",").take(60)
+                continue
+            }
             m["$i,${day - 1}"] = k
             n++
         }
-        if (n == 0) return null
-        return state.copy(wishes = m) to n
+        if (n == 0 && bad == 0) return null
+        return ComponentImport(state.copy(wishes = m), n, bad, sample)
     }
 }
 
@@ -644,7 +678,7 @@ object ConstraintsCsvIO {
     }
 
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
-    fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
+    fun parse(text: String, state: MagiState): ComponentImport? {
         val rows = parseCsvRows(text)
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
@@ -660,14 +694,21 @@ object ConstraintsCsvIO {
         // [3.314.0] ヘッダ判定を `build()` が出す実ヘッダ「種別」の一致へ（旧: 既知キーワード集合との
         //   照合で、キーワードを増やすたびに取込側も直す必要があった）。
         val body = csvBody(rows, "種別")
+        var bad = 0
+        var sample = ""
+        fun reject(r: List<String>) {
+            bad++
+            if (sample.isEmpty()) sample = r.joinToString(",").take(60)
+        }
         for (r in body) {
+            if (r.all { it.isBlank() }) continue   // 書式上の空行は無視
             when (c(r, 0)) {
                 "連勤" -> { cons1.add(C1Row(c(r, 1), c(r, 2), c(r, 3))); n++ }
                 "回数下限" -> { cons2.add(C2Row(c(r, 1), c(r, 2))); n++ }
-                "MUST連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3.add(C3Row(p)); n++ } }
-                "禁止連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3n.add(C3Row(p)); n++ } }
-                "希望連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3m.add(C3Row(p)); n++ } }
-                "回避連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3mn.add(C3Row(p)); n++ } }
+                "MUST連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3.add(C3Row(p)); n++ } else reject(r) }
+                "禁止連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3n.add(C3Row(p)); n++ } else reject(r) }
+                "希望連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3m.add(C3Row(p)); n++ } else reject(r) }
+                "回避連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3mn.add(C3Row(p)); n++ } else reject(r) }
                 "群回数" -> { cons41.add(C41Row(c(r, 1), c(r, 2), c(r, 3), c(r, 4))); n++ }
                 "スキル群回数" -> { cons41s.add(C41Row(c(r, 1), c(r, 2), c(r, 3), c(r, 4))); n++ }
                 "群組合せ禁止" -> { cons42.add(C42Row(c(r, 1), c(r, 3), c(r, 2), c(r, 4))); n++ }
@@ -676,16 +717,19 @@ object ConstraintsCsvIO {
                     val i = nameToI[nameMatchKey(c(r, 1))]
                     val sym = c(r, 2)
                     val k = state.shifts.indexOfFirst { it.kigou.trim() == sym }
-                    if (i != null && k >= 0) { ranges["$i,$k"] = Range(c(r, 3), c(r, 4)); n++ }
+                    // [3.329.0/外部レビュー H-02] 氏名・記号が今のデータに無い行は黙って捨てない。
+                    //   捨てたまま置換すると、その職員の個人レンジが**消える**。
+                    if (i != null && k >= 0) { ranges["$i,$k"] = Range(c(r, 3), c(r, 4)); n++ } else reject(r)
                 }
-                else -> {}
+                // 未知の種別も黙って捨てない（種別の綴り違いで制約一式が消えるのを防ぐ）。
+                else -> reject(r)
             }
         }
-        if (n == 0) return null
-        return state.copy(
+        if (n == 0 && bad == 0) return null
+        return ComponentImport(state.copy(
             cons1 = cons1, cons2 = cons2, cons3 = cons3, cons3n = cons3n,
             cons3m = cons3m, cons3mn = cons3mn, cons41 = cons41, cons41s = cons41s,
             cons42 = cons42, cons42s = cons42s, staffRange = ranges,
-        ) to n
+        ), n, bad, sample)
     }
 }

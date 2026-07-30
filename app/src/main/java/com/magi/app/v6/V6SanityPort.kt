@@ -510,6 +510,38 @@ object V6SanityPort {
         }
         checkRange("群のレンジ", state.cons41)
         checkRange("スキル群のレンジ", state.cons41s)
+        // [3.328.0/外部レビュー] 日別の必要人数と適切回数も同じ穴。とくに needDay は
+        //   `needAt` が非数値のとき**シフト既定値へ黙って読み替える**ので、0 になるより性質が悪い
+        //   （その日だけ意図と違う人数で計算され、画面には何も出ない）。
+        for ((map, jp) in listOf(state.needDay1 to "最低人数", state.needDay2 to "上限人数")) {
+            val bad = map.entries.filter { badNum(it.value) }.sortedBy { it.key }
+            if (bad.isEmpty()) continue
+            val where = bad.take(3).joinToString("・") { e ->
+                val kj = e.key.split(",")
+                val sy = kj.getOrNull(0)?.toIntOrNull()?.let { state.shifts.getOrNull(it)?.kigou } ?: e.key
+                val d = kj.getOrNull(1)?.toIntOrNull()?.let { safeDayLabel(state.startDate, it) } ?: ""
+                "$sy $d「${e.value}」"
+            }
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "日別の$jp",
+                "${bad.size}件（$where${if (bad.size > 3) " ほか" else ""}）が数値ではありません。" +
+                    "その日は**シフトの既定値**で計算されます（例外を設定したつもりでも効きません）",
+                "日別の必要人数で数値を入れ直すか、例外にしないなら削除してください"))
+        }
+        run {
+            val bad = ArrayList<String>()
+            for ((g, row) in state.groupShiftApt.withIndex()) for ((k, v) in row.withIndex()) {
+                if (!badNum(v)) continue
+                val gk = state.groups.getOrNull(g)?.kigou ?: "#$g"
+                val sk = state.shifts.getOrNull(k)?.kigou ?: "#$k"
+                bad.add("$gk $sk「$v」")
+            }
+            if (bad.isNotEmpty()) {
+                out.add(SettingIssue(IssueKind.CONSTRAINT, "適切回数（1人あたりの目標）",
+                    "${bad.size}件（${bad.take(3).joinToString("・")}${if (bad.size > 3) " ほか" else ""}）が" +
+                        "数値ではありません。**目標なし**として扱われます",
+                    "回数設定で数値を入れ直すか、目標にしないなら空欄にしてください"))
+            }
+        }
 
         // 2i) [3.327.0/外部レビュー High5] スキル群の割当が範囲外。
         //   `Staff.skillIdx` の既定は 0 で、`Problem` は素通しする（native は 3.311.0 で巨大確保だけ

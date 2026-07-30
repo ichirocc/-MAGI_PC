@@ -83,6 +83,9 @@ class OptimizationWorker(
                     //   前提とするため、単調な壁時計(wallStart基準、MagiViewModel.runV6FullOptimizeの
                     //   startMsと同じ考え方)に統一する。
                     val wallElapsed = System.currentTimeMillis() - wallStart
+                    // [3.329.0/外部レビュー H-03] 置き換えられた旧実行の進捗を新実行のものとして
+                    //   見せない。所有権の確認はファイル1本の読取なので、8秒間引きの外でも十分安い。
+                    if (!ownsFiles()) return@handleOptimize
                     OptimizationRepository.publishProgress(
                         OptimizationRepository.BgProgress(phase, report.hard, report.soft, report.total, iters, wallElapsed),
                     )
@@ -137,7 +140,9 @@ class OptimizationWorker(
             runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました") }
             Result.failure()
         } finally {
-            OptimizationRepository.setRunning(false)
+            // [3.329.0/外部レビュー H-03] **所有者のときだけ**実行中を降ろす。置き換えで打ち切られた
+            //   旧実行がここを通ると、まだ動いている新実行の「実行中」を消してしまう。
+            if (ownsFiles()) OptimizationRepository.setRunning(false)
         }
     }
 

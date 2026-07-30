@@ -97,13 +97,14 @@ class SessionRegressionTest {
         // ヘッダ無し: 先頭行も実データ（連勤）→ 2件とも取り込まれる
         val headerless = ConstraintsCsvIO.parse("連勤,2,休,1\n回数下限,A,3", st)
         assertNotNull(headerless)
-        assertEquals(2, headerless!!.second)
-        assertEquals(1, headerless.first.cons1.size)
-        assertEquals(1, headerless.first.cons2.size)
+        assertEquals(2, headerless!!.accepted)
+        assertEquals("[3.329.0] 読めない行は無い", 0, headerless.rejected)
+        assertEquals(1, headerless.state.cons1.size)
+        assertEquals(1, headerless.state.cons2.size)
         // ヘッダ有り: 従来どおりヘッダは落ちる
         val withHeader = ConstraintsCsvIO.parse("種別,a,b,c,d,e\n連勤,2,休,1", st)
         assertNotNull(withHeader)
-        assertEquals(1, withHeader!!.second)
+        assertEquals(1, withHeader!!.accepted)
     }
 
     // ---- レビュー指摘P1: 休シフト削除でセルが勤務に化けない／休自体は削除禁止 ----
@@ -179,9 +180,123 @@ class SessionRegressionTest {
         val st = csvState()
         val headerless = WishesCsvIO.parse("花子,1,A\n花子,2,休", st)
         assertNotNull(headerless)
-        assertEquals(2, headerless!!.second)
+        assertEquals(2, headerless!!.accepted)
+        assertEquals("[3.329.0] 読めない行は無い", 0, headerless.rejected)
         val withHeader = WishesCsvIO.parse("氏名,日,希望シフト\n花子,1,A", st)
         assertNotNull(withHeader)
-        assertEquals(1, withHeader!!.second)
+        assertEquals(1, withHeader!!.accepted)
+    }
+
+    // --- [3.329.0/外部レビュー] 入力の意味論 ---
+
+    @Test fun addStaffAndResizeFillWithResolvedRestShift() {
+        // H-01: 休が index 0 でないデータ（先頭が勤務シフト）。新しい職員の行・伸ばした日は
+        //   index 0 ではなく**休**で埋まること。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-02",
+            shifts = listOf(Shift("A", "A", "0", ""), Shift("B", "B", "0", ""), Shift("休", "休", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1, 1)),
+            groupShiftApt = listOf(listOf("", "", "")),
+            schedule = listOf(listOf(0, 1)),
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val rest = restShiftIndex(st)
+        assertEquals("前提: 休は index 2", 2, rest)
+        val added = Ws1Ops.addStaff(st, st.schedule.toIntArray2D(), "s1", 0)
+        assertTrue("新しい職員の全日が休", added.schedule[1].all { it == rest })
+        val grown = Ws1Ops.resizeDays(st, st.schedule.toIntArray2D(), 4)
+        assertEquals("伸ばした日は休", rest, grown.schedule[0][2])
+        assertEquals("元の日は不変", 1, grown.schedule[0][1])
+    }
+
+    @Test fun componentImportReportsUnreadableRowsInsteadOfDroppingThem() {
+        // H-02: 希望CSVは既存を全置換する。読めない行を黙って捨てると、その分の希望が消える。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-03",
+            shifts = listOf(Shift("休", "休", "0", ""), Shift("A", "A", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("花子", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(List(3) { 0 }),
+            wishes = mapOf("0,0" to 1, "0,1" to 0), staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        // 1行は有効、2行は誤記（未知の氏名・未知の記号）。
+        val r = WishesCsvIO.parse("花子,1,A\n太郎,1,A\n花子,2,Z", st)
+        assertEquals("有効行", 1, r!!.accepted)
+        assertEquals("読めない行を数える", 2, r.rejected)
+        assertTrue("どこが悪いか示す", r.sample.isNotEmpty())
+        // 全部読める場合は従来どおり置換できる。
+        val ok = WishesCsvIO.parse("花子,1,A\n花子,2,休", st)
+        assertEquals(0, ok!!.rejected)
+        assertEquals(2, ok.accepted)
+    }
+
+    @Test fun constraintsImportRejectsUnknownKindInsteadOfWipingEverything() {
+        // H-02: 種別の綴り違いで制約一式が消えるのを防ぐ。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-03",
+            shifts = listOf(Shift("休", "休", "0", ""), Shift("A", "A", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("花子", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(List(3) { 0 }),
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val r = ConstraintsCsvIO.parse("連勤,2,休,1\n連勤日数,2,休,1", st)
+        assertEquals(1, r!!.accepted)
+        assertEquals("未知の種別を数える", 1, r.rejected)
+        // 氏名・記号が解決できない個人レンジも同じ扱い。
+        val r2 = ConstraintsCsvIO.parse("個人レンジ,太郎,A,1,2", st)
+        assertEquals(0, r2!!.accepted)
+        assertEquals(1, r2.rejected)
+    }
+
+    @Test fun removingSkillGroupLeavesMembersUnassignedNotInTheFirstGroup() {
+        // [3.330.0/外部レビュー M-01] 削除した群の所属者を 0 へ寄せると、①無関係な先頭の群の制約が
+        //   黙って掛かる ②最後の1群を消すと全員 0 になり、あとで群を足すと全員がそこに所属した扱い。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-02",
+            shifts = listOf(Shift("休", "休", "0", ""), Shift("A", "A", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0, 0), Staff("s1", 0, 1), Staff("s2", 0, 2), Staff("s3", 0, -1)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = List(4) { listOf(0, 0) },
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+            skillGroups = listOf(Group("S0", "S0"), Group("S1", "S1"), Group("S2", "S2")),
+        )
+        val after = Ws1Ops.removeSkillGroup(st, 1)
+        assertEquals("群が1つ減る", 2, after.skillGroups.size)
+        assertEquals("前の群は不変", 0, after.staff[0].skillIdx)
+        assertEquals("削除された群の所属者は未所属(-1)", -1, after.staff[1].skillIdx)
+        assertEquals("後ろの群は1つ詰まる", 1, after.staff[2].skillIdx)
+        assertEquals("元から未所属は不変", -1, after.staff[3].skillIdx)
+
+        // 最後の1群を消しても、あとで群を足したときに全員が所属した扱いにならないこと。
+        var s2 = st
+        for (g in st.skillGroups.indices.reversed()) s2 = Ws1Ops.removeSkillGroup(s2, g)
+        assertTrue("全員が未所属", s2.staff.all { it.skillIdx == -1 })
+        // 群の追加は `skillGroups` に1件足すだけ（MagiViewModel.addSkillGroup と同じ操作）。
+        val readded = s2.copy(skillGroups = s2.skillGroups + Group("S9", "S9"))
+        assertTrue("群を足しても誰も所属しない", readded.staff.all { it.skillIdx == -1 })
+
+        assertEquals("範囲外は何もしない", st, Ws1Ops.removeSkillGroup(st, 9))
     }
 }

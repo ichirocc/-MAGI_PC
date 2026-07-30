@@ -91,6 +91,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var fixJob: Job? = null   // [競合解消] 改善提案探索。連続タップ時に前探索をキャンセルし古い結果で上書きしない
     private var checkSeq = 0L
 
+    /**
+     * [3.328.0/外部レビュー・最重要] **長い最適化が動いているか**。
+     *
+     * `UiState.running` は「短い違反チェック」と「数十〜300秒の最適化」を1つの旗で兼ねていた。
+     * `refreshCheck()` は完了時に必ず `running = false` を立て、`checkJob?.cancel()` は checkJob しか
+     * 止めないので、**最適化の最中に設定を編集すると、その編集が起こす違反チェックの完了で
+     * 実行中フラグが落ち、以降 `!ui.running` を見ている全てのガード（セル編集=3.161.0・一括シート=
+     * 3.127.0・回数の緩和=3.326.0）が素通りになる**。旗を分けて、検査の完了では最適化の実行中表示を
+     * 解除しないようにする。
+     */
+    @Volatile private var optimizeActive = false
+
+    /** 前景の最適化（[optimizeActive]）と背景 Worker のどちらかが動いていれば真。 */
+    private fun optimizeInFlight(): Boolean =
+        optimizeActive || OptimizationRepository.running.value
+
     // ===== [v2.22] 自動保存・復元（端末内）と「元に戻す」 =====
     private val autosaveFile get() = getApplication<Application>().filesDir.resolve("magi_autosave.json")
     // [判断設計監査 #3] 「データを開く」直前の状態を1世代だけ退避（開く=取消不能な置換だった穴を塞ぐ）。
@@ -239,6 +255,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   ミリ秒だと同一ミリ秒での二重 enqueue が衝突しうるので、下位に乱数を混ぜて一意にする。
         val runId = System.currentTimeMillis() * 1000L + (0..999).random()
         OptimizationWorker.beginRun(getApplication(), runId)
+        // [3.328.0] この結果を後で当ててよいかを判断するための入力の指紋。
+        bgStateKey = stateKey(st0)
         // [監査A7] enqueue前に入力を退避。Worker初回書込前にプロセスが死ぬと request=null かつ
         //   ファイル無しで復元不能だった穴を閉じる（同期・数ms・Workerが同内容で上書き）。
         runCatching { OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0)) }
@@ -264,6 +282,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     private suspend fun applyBgResult(r: OptimizationRepository.BgResult) {
         val st0 = state ?: return
+        // [3.328.0/外部レビュー] 背景の結果は「開始時の入力」に対して計算されたもの。実行中に別のデータを
+        //   開く・取り込むなどで入力が変わっていたら、その結果は今の入力の答えではないので捨てる
+        //   （旧: 現在の state へ無条件に当てていた）。指紋が未記録(0)の経路＝プロセス再起動後の
+        //   ファイル復元は、結果ファイルが state ごと持つので自己整合＝従来どおり通す。
+        if (bgStateKey != 0L && bgStateKey != stateKey(st0)) {
+            bgStateKey = 0L
+            logOp("W", "バックグラウンド計算の結果を破棄しました（計算中に設定またはデータが変わったため）")
+            _ui.update { it.copy(running = false, message = "計算中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。") }
+            return
+        }
+        bgStateKey = 0L
         // [再実行 keep-best] 背景完了結果が前回採用解より悪化なら前回を維持（前景と同じ方針）。
         val prev = resultSchedule
         if (prev != null) {
@@ -347,7 +376,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 直前の編集・取込・計算開始前の状態へ戻す（最大30段）。現在状態は redo へ退避。 */
     fun undo() {
-        if (job?.isActive == true) return   // [監査A6] 実行/読込中のみ抑止（編集毎の再チェックのrunning表示ではundoを塞がない）
+        if (job?.isActive == true || optimizeInFlight()) return   // [3.328.0] 背景の最適化中も抑止（job は前景のみ）
         val snap = undoStack.removeLastOrNull() ?: return
         snapNow()?.let { redoStack.addLast(it) }   // [Web反映] 現在をやり直し用に退避
         state = snap.st
@@ -360,7 +389,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** [Web反映] 元に戻した操作をやり直す。手動修正のループ（修正→戻す→やり直し）を支える。 */
     fun redo() {
-        if (job?.isActive == true) return   // [監査A6] 同上
+        if (job?.isActive == true || optimizeInFlight()) return   // [3.328.0] 背景の最適化中も抑止（job は前景のみ）
         val snap = redoStack.removeLastOrNull() ?: return
         snapNow()?.let { undoStack.addLast(it) }
         state = snap.st
@@ -608,7 +637,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val res = V6FinalPort.handleCheck(st, sched)
                 if (seq != checkSeq) return@launch   // [review #6] a newer check started; drop stale result
                 pushReport(st, res.schedule, res.report) { it.copy(
-                    running = false,
+                    // [3.328.0] 最適化が動いていれば実行中のまま。旧: 無条件に false で、
+                    //   最適化中の設定編集→検査完了で全ガードが素通りになっていた。
+                    running = optimizeInFlight(),
                     message = "違反チェック完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
                 logOp("I", "違反チェック 必須=${res.report.hard} 合計=${res.report.total}")
@@ -616,10 +647,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.284.0/外部レビューHigh③] 停止時の running 固着を解消。新しいチェックによるキャンセル
                 //   （seq != checkSeq＝後続が直後に running=true を立て直す）では触らず、stop() による
                 //   キャンセルのときだけ実行中表示を戻す。
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "違反チェックを停止しました") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェックを停止しました") }
                 throw e
             } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "違反チェック失敗: ${e.message}") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェック失敗: ${e.message}") }
             }
         }
     }
@@ -720,6 +751,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         writeRunMarker("fg")   // [監査A8] 高速計算にも中断マーカー（kill時案内をv6本線と統一）
         _ui.update { it.copy(running = true, hasResult = false, message = "高速計算中…") }
         var lastUiMs = 0L
+        optimizeActive = true   // [3.328.0] 検査の完了でこの実行中が解除されないようにする
         job = viewModelScope.launch {
             try {
                 val res = withContext(Dispatchers.Default) {
@@ -781,6 +813,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     message = "最適化失敗: ${e.message}",
                 ) }
             } finally {
+                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
@@ -796,6 +829,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
         _ui.update { it.copy(running = true, hasResult = false, message = "軽量最適化中…") }
+        optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
             try {
                 val res = withContext(Dispatchers.Default) { LightMirrorOptimizer.optimize(st, sched, _ui.value.budgetSec.toDouble()) }
@@ -831,6 +865,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 logOp("W", "軽量最適化 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
                 _ui.update { it.copy(running = false, message = "軽量最適化失敗: ${e.message}") }
             } finally {
+                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
@@ -867,8 +902,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var lastDiagBoardKey: Long = 0L
 
-    /** [3.327.0] 診断を取ったときの制約の指紋。制約が編集されたら診断は失効する。 */
-    private var lastDiagConstraintKey: Long = 0L
+    /** [3.327.0→3.328.0] 診断を取ったときの入力の指紋。設定が編集されたら診断は失効する。 */
+    private var lastDiagStateKey: Long = 0L
+
+    /** [3.328.0] 背景の最適化を開始したときの入力の指紋。結果を当てる前に一致を確かめる。 */
+    private var bgStateKey: Long = 0L
 
     /** 盤面の内容から決まる指紋。S×T が小さい（30×31）ので毎回の計算コストは無視できる。 */
     private fun boardKey(schedule: Array<IntArray>): Long {
@@ -878,28 +916,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * [3.327.0/外部レビュー High2] 診断の前提になる**制約**の指紋。
-     *
-     * 盤面だけを見ていると、「10〜10回の固定」を「9〜10回」に緩めても勤務表が同じなら古い根拠を
-     * 出し続ける。とくに 3.326.0 で足した `relaxStaffRangePin` は**盤面を変えず制約だけ変える**操作
-     * なので、盤面指紋だけの失効機構をそのまま素通りしていた（自分で作った導線が自分の失効を
-     * すり抜けていた）。診断が依拠する範囲（個人の回数・窓の要件）を指紋に含める。
+     * [3.328.0/外部レビュー → 3.330.0 で v6 へ移動] 勤務表の意味を決める入力すべての指紋。
+     * 実体は [com.magi.app.v6.StateFingerprint]（Android 非依存＝ホストでテストできる）。
      */
-    private fun constraintKey(st: MagiState): Long {
-        var h = -3750763034362895579L
-        for ((k, r) in st.staffRange.entries.sortedBy { it.key }) {
-            for (c in k) h = h * 31L + c.code
-            for (c in r.lo) h = h * 31L + c.code
-            h = h * 31L + 1
-            for (c in r.hi) h = h * 31L + c.code
-        }
-        for (c1 in st.cons1) {
-            for (c in c1.day1) h = h * 31L + c.code
-            for (c in c1.shiftKigou) h = h * 31L + c.code
-            for (c in c1.day2) h = h * 31L + c.code
-        }
-        return h
-    }
+    private fun stateKey(st: MagiState): Long = com.magi.app.v6.StateFingerprint.of(st)
 
     /** 研磨診断を「この盤面のもの」として保存する。null/0 は診断なし。 */
     private fun setPolishDiagnostics(
@@ -913,7 +933,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         lastPinBlocks = pinBlocks
         val fresh = plateau != null || observedPinBlockedAttempts > 0
         lastDiagBoardKey = if (fresh) boardKey(forSchedule) else 0L
-        lastDiagConstraintKey = if (fresh) state?.let { constraintKey(it) } ?: 0L else 0L
+        lastDiagStateKey = if (fresh) state?.let { stateKey(it) } ?: 0L else 0L
     }
 
     private fun hardFamilyJp(key: String): String = when (key) {
@@ -957,6 +977,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var lastPhaseLogMs = -10_000L
         val phaseNameLastLogMs = HashMap<String, Long>()   // [3.283.0] 同名フェーズの再ログ抑制（60s窓・スパム対策）
         var lastHardLogMs = -10_000L
+        optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
             try {
                 // [再実行 keep-best] 実行開始時の入力解(sched0)の違反を評価し、完了時の採用判定の基準にする。
@@ -1119,6 +1140,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 logOp("W", "最適化 失敗: ${e.message}")
                 _ui.update { it.copy(running = false, message = "V6最適化失敗: ${e.message}") }
             } finally {
+                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
@@ -1140,6 +1162,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(running = true, hasResult = false, liveSchedule = emptyList(), message = "自動で整えています…") }
         logOp("I", "ソフト研磨 開始 (予算${_ui.value.budgetSec}s)")
         val startMs = System.currentTimeMillis()
+        optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
             try {
                 val baseReport = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(st0, sched0) }
@@ -1188,6 +1211,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 logOp("W", "ソフト研磨 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
                 _ui.update { it.copy(running = false, message = "自動整えに失敗: ${e.message}") }
             } finally {
+                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
@@ -2013,8 +2037,25 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Apply an edited state (constraints changed), then re-run the unified check on the current table. */
+    /**
+     * [3.328.0/外部レビュー・実行中編集] 意味論を変える編集が最適化の最中に入るのを止める。
+     *
+     * 個々の編集画面へ `!ui.running` を配るやり方は、これまで何度も取りこぼしてきた
+     * （3.161.0＝セル編集・3.127.0＝一括シート）。編集は最終的に必ず
+     * [applyStructure] / [applyStructureWithMessage] / [mutateConstraints] のどれかを通るので、
+     * **その3つの入口だけ**を塞ぐ。呼び出し元が先にログを出していることがあるので、
+     * 取り消したことも記録して読み手が混乱しないようにする。
+     */
+    private fun structuralEditBlocked(): Boolean {
+        if (!optimizeInFlight()) return false
+        logOp("W", "計算の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")
+        _ui.update { it.copy(message = "計算中は設定を変更できません。終わるか「やめる」を押してからにしてください。") }
+        return true
+    }
+
     private fun mutateConstraints(newState: MagiState?) {
         val ns = newState ?: return
+        if (structuralEditBlocked()) return
         pushUndo()
         state = ns
         // [3.222.0, 実機バグ修正「回避の並びなどが削除できない」] constraintsEdited が既に true だと
@@ -2043,6 +2084,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun applyStructure(ns: MagiState) {
+        if (structuralEditBlocked()) return
         pushUndo()
         state = ns
         // [再構成保証] editRev を必ず増やして distinct な UiState を emit（structureEdited 既true時の非emit＋
@@ -2054,6 +2096,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 構造変更(ns)を適用し、再チェック後に独自の完了メッセージを表示（コンポーネント別取込で使用）。 */
     private fun applyStructureWithMessage(ns: MagiState, doneMessage: String) {
+        if (structuralEditBlocked()) return
         pushUndo()
         state = ns
         autoSave()
@@ -2066,13 +2109,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val r = V6FinalPort.handleCheck(ns, sched)
                 if (seq != checkSeq) return@launch
-                pushReport(ns, r.schedule, r.report) { it.copy(running = false, message = "$doneMessage｜必須=${r.report.hard} 合計=${r.report.total}") }
+                pushReport(ns, r.schedule, r.report) { it.copy(running = optimizeInFlight(), message = "$doneMessage｜必須=${r.report.hard} 合計=${r.report.total}") }
             } catch (e: CancellationException) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェックを停止）") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェック失敗: ${e.message}）") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.message}）") }
             }
         }
     }
@@ -2217,6 +2260,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun applyStructure(r: Ws1Result) {
+        if (structuralEditBlocked()) return
         pushUndo()
         state = r.state
         // [review 4b] Ws1Result の schedule を防御コピーして取り込む。Undo は pushUndo() の
@@ -2242,13 +2286,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val rep = V6FinalPort.handleCheck(r.state, sched)
                 if (seq != checkSeq) return@launch
-                pushReport(r.state, rep.schedule, rep.report) { it.copy(running = false, message = "$doneMessage｜必須=${rep.report.hard} 合計=${rep.report.total}") }
+                pushReport(r.state, rep.schedule, rep.report) { it.copy(running = optimizeInFlight(), message = "$doneMessage｜必須=${rep.report.hard} 合計=${rep.report.total}") }
             } catch (e: CancellationException) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェックを停止）") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = false, message = "$doneMessage（チェック失敗: ${e.message}）") }
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.message}）") }
             }
         }
     }
@@ -2370,9 +2414,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun removeSkillGroup(g: Int) {
         val st = state ?: return
-        // 削除した群を参照する職員は 0 へ、後ろの群は1つ詰める。残った cons*s の参照外れは Problem 解決時に無視。
-        val newStaff = st.staff.map { s -> val k = s.skillIdx; s.copy(skillIdx = if (k == g) 0 else if (k > g) k - 1 else k) }
-        logOp("I", "スキル区分削除: [$g]"); applyStructure(st.copy(skillGroups = st.skillGroups.filterIndexed { i, _ -> i != g }, staff = newStaff))
+        // [3.330.0] 移行規則は Ws1Ops.removeSkillGroup（担当グループの removeGroup と対）。
+        //   ここに手書きしていた間はホストでテストできなかった。
+        logOp("I", "スキル区分削除: [$g]"); applyStructure(Ws1Ops.removeSkillGroup(st, g))
     }
     fun setStaffSkill(i: Int, skillIdx: Int) {
         val st = state ?: return
@@ -2662,9 +2706,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             logOp("W", "希望シフトCSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
-        val (ns, count) = res
-        logOp("I", "希望シフトCSV取込: ${count}件を反映（全置換）")
-        applyStructureWithMessage(ns, "希望シフトを取込: ${count}件を反映（既存の希望は置換）")
+        // [3.329.0/外部レビュー H-02] この取込は既存の希望を**全置換**する。中身のある行を1つでも
+        //   解釈できなかったら置換しない（旧: 誤記の行を黙って捨て、1行でも有効なら残りの希望を消していた）。
+        if (res.rejected > 0) {
+            _ui.update { it.copy(message = "希望シフトの取込を中止しました（読めない行が${res.rejected}件）。" +
+                "この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
+            logOp("W", "希望シフトCSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
+            return
+        }
+        logOp("I", "希望シフトCSV取込: ${res.accepted}件を反映（全置換）")
+        applyStructureWithMessage(res.state, "希望シフトを取込: ${res.accepted}件を反映（既存の希望は置換）")
     }
 
     /** [コンポーネント別取込] 各制約CSV（種別タグ付き）。制約一式＋個人レンジを置換。 */
@@ -2679,9 +2730,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             logOp("W", "各制約CSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
-        val (ns, count) = res
-        logOp("I", "各制約CSV取込: ${count}件を反映（制約一式を置換）")
-        applyStructureWithMessage(ns, "各制約を取込: ${count}件を反映（既存の制約・個人レンジは置換）")
+        // [3.329.0/外部レビュー H-02] 制約一式と個人レンジを**全置換**するので、希望と同じ扱いにする。
+        if (res.rejected > 0) {
+            _ui.update { it.copy(message = "各制約の取込を中止しました（読めない行が${res.rejected}件）。" +
+                "この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
+            logOp("W", "各制約CSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
+            return
+        }
+        logOp("I", "各制約CSV取込: ${res.accepted}件を反映（制約一式を置換）")
+        applyStructureWithMessage(res.state, "各制約を取込: ${res.accepted}件を反映（既存の制約・個人レンジは置換）")
     }
 
     fun clearMessage() { _ui.update { it.copy(message = null) } }
@@ -2798,7 +2855,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // [3.324.0] 研磨診断は観測した盤面のものか（盤面が変わっていれば出さない）。
         // [3.327.0] 盤面**と**制約の両方が観測時と一致するときだけ診断を出す。
         val diagFresh = lastDiagBoardKey != 0L && lastDiagBoardKey == boardKey(schedule) &&
-            lastDiagConstraintKey == constraintKey(st)
+            lastDiagStateKey == stateKey(st)
         val mappedDiag = report.logs.map { "[${it.level}] ${it.tag}: ${it.message}" }
         // rawDiagLogs は pushReport がメインスレッドで設定済み（背景スレッドからは書かない＝レース回避）。
         // 満足度(0-100): 初期からの違反削減率。HARD未解決の間は上限を抑える。

@@ -540,10 +540,10 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("窓の要件がなぜ直せなかったか", style = MaterialTheme.typography.titleMedium)
-            // [3.324.0/外部レビュー] 断定を外す。集計は職員×シフト単位で、同じ職員・同じシフトに複数の窓が
-            //   あるとどの窓で却下されたかは区別していない。前回つくったときの観測でしかない旨も明示する。
-            Text("残り ${diag.remainingC1} 件。前回つくったときに試した直し方の記録です" +
-                "（職員とシフトごとの集計。同じシフトに複数の期間の決まりがある場合はまとめて数えています）。",
+            // [3.324.0→3.328.0] 断定を外す。3.326.0 で内訳は**決まりごと**に分けたので、
+            //   「まとめて数えている」という 3.324.0 当時の注記はもう実態と合わない。
+            Text("※ 直近の計算で試した直し方の記録です。窓の要件は職員・シフト・決まりごとに分けています" +
+                "（同じ決まりの中に複数の期間がある場合はまとめて数えています）。",
                 style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             for (e in diag.entries.take(6)) {
                 val pin = e.cause == com.magi.app.v6.C1PlateauCause.PIN_CONSTRAINED
@@ -635,8 +635,13 @@ internal fun PinFixedImpactCard(
                             Text("${t.staffName} ${t.shiftKigou}：${t.pinnedCount}回に固定（${t.attempts}回の試行を止めました）",
                                 color = cs.onSecondaryContainer, style = MaterialTheme.typography.bodyMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TextButton(onClick = { onRelax(t.staff, t.shift, -1, 0) }, enabled = !ui.running) {
-                                    Text("下限を1下げる（${t.pinnedCount - 1}〜${t.pinnedCount}）")
+                                // [3.328.0/外部レビュー] 0回に固定されている行では「下限を1下げる」が
+                                //   0 でクランプされて無操作になる（押しても何も起きないボタンだった）。
+                                //   下げられるときだけ出す。
+                                if (t.pinnedCount > 0) {
+                                    TextButton(onClick = { onRelax(t.staff, t.shift, -1, 0) }, enabled = !ui.running) {
+                                        Text("下限を1下げる（${t.pinnedCount - 1}〜${t.pinnedCount}）")
+                                    }
                                 }
                                 TextButton(onClick = { onRelax(t.staff, t.shift, 0, 1) }, enabled = !ui.running) {
                                     Text("上限を1上げる（${t.pinnedCount}〜${t.pinnedCount + 1}）")
