@@ -599,7 +599,11 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
  * 0 は「緩めても変わらない」の証明にはならない（未計測のパスがある）。
  */
 @Composable
-internal fun PinFixedImpactCard(ui: UiState, onGoEdit: () -> Unit = {}) {
+internal fun PinFixedImpactCard(
+    ui: UiState,
+    onGoEdit: () -> Unit = {},
+    onRelax: (Int, Int, Int, Int) -> Unit = { _, _, _, _ -> },
+) {
     val attempts = ui.observedPinBlockedAttempts
     if (attempts <= 0) return
     val cs = MaterialTheme.colorScheme
@@ -614,9 +618,37 @@ internal fun PinFixedImpactCard(ui: UiState, onGoEdit: () -> Unit = {}) {
             Text("※ 全部の手数ではなく、研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
                 "場合があります）。この数が 0 でも、緩めて変わらないとは限りません。",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-            Text("試すときは、対象の職員とシフト、そして緩める幅（例: 下限だけ 1 下げる）を決めて、" +
-                "変更する前と後を見比べてください。",
+            Text("試すときは、対象の職員とシフト、そして緩める幅を決めて、変更する前と後を見比べてください。",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            // [3.326.0] どのピンが止めたかを対象別に出し、その場で1段だけ緩められるようにする。
+            //   幅は決め打ちせず下限側・上限側を別々に選ばせる（実測で ±1 と ±3 の優劣が逆転したため）。
+            //   押すと設定が変わるので「元に戻す」で戻せることを添える。
+            if (ui.pinTargets.isNotEmpty()) {
+                HorizontalDivider()
+                Text("止めていた回数固定", style = MaterialTheme.typography.titleSmall)
+                for (t in ui.pinTargets.take(5)) {
+                    Surface(color = cs.secondaryContainer, shape = MaterialTheme.shapes.medium) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${t.staffName} ${t.shiftKigou}：${t.pinnedCount}回に固定（${t.attempts}回の試行を止めました）",
+                                color = cs.onSecondaryContainer, style = MaterialTheme.typography.bodyMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = { onRelax(t.staff, t.shift, -1, 0) }, enabled = !ui.running) {
+                                    Text("下限を1下げる（${t.pinnedCount - 1}〜${t.pinnedCount}）")
+                                }
+                                TextButton(onClick = { onRelax(t.staff, t.shift, 0, 1) }, enabled = !ui.running) {
+                                    Text("上限を1上げる（${t.pinnedCount}〜${t.pinnedCount + 1}）")
+                                }
+                            }
+                        }
+                    }
+                }
+                if (ui.pinTargets.size > 5) {
+                    Text("ほか ${ui.pinTargets.size - 5} 件（詳細はログ出力を参照）",
+                        style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                }
+                Text("押すと設定が変わります。「元に戻す」で戻せます。効果はもう一度つくると分かります。",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            }
             TextButton(onClick = onGoEdit, enabled = !ui.running) { Text("個人の回数を見直す") }
         }
     }

@@ -38,15 +38,22 @@ enum class C1PlateauEvidence {
 }
 
 /**
- * 残った窓の要件についての内訳。**粒度は職員×シフト**で、同じ職員・同じシフトに複数の
- * 期間の決まり（cons1 の規則・窓開始日）があってもまとめて1件に集計する
- * （3.324.0/外部レビューで明示。別の窓で却下された理由が、残った別の窓の理由として並ぶことがある）。
+ * 残った窓の要件についての内訳。**粒度は職員×シフト×期間の決まり（cons1 の規則）**。
+ *
+ * [3.326.0] 規則index をキーに含めた。旧は職員×シフトだけで、同じシフトに複数の決まり
+ * （例「休 5日で1回以上」と「休 15日で4回以上」）があると別の決まりで却下された理由が混ざって並んだ。
+ * **同一規則の複数の窓は依然まとめて数える** — 1日は複数の不足窓に属しうるので代表窓を選べない
+ * （選べば恣意的になる）。この限界は [ruleLabel] を表示して読み手が区別できる形で残す。
  */
 data class C1PlateauEntry(
     val staff: Int,
     val shift: Int,
+    /** `Problem.cons1` の添字。同じシフトの別の決まりと区別するためのキー。 */
+    val ruleIndex: Int,
     val staffName: String,
     val shiftKigou: String,
+    /** 決まりの内容（例「5日で1回以上」）。どの決まりで詰まったかを画面で示すため。 */
+    val ruleLabel: String,
     val cause: C1PlateauCause,
     val evidence: C1PlateauEvidence,
     /** 厳密ピンを崩すため却下された候補の数。 */
@@ -61,7 +68,7 @@ data class C1PlateauEntry(
     /** 却下の総数（原因の判定に使った母数）。 */
     val observations: Int get() = rejectedByPin + rejectedByScore + noCandidate
 
-    val label: String get() = "$staffName $shiftKigou"
+    val label: String get() = "$staffName $shiftKigou（$ruleLabel）"
 
     /**
      * 利用者が次に取れる手。文言はここ1か所に置き、族名の日本語化だけ呼出側から受ける
@@ -114,8 +121,8 @@ data class C1PlateauDiagnosis(
      *
      * @param stillDeficient 最終盤面で当該窓がまだ不足しているか。
      */
-    fun refreshedAgainst(remainingC1: Int, stillDeficient: (Int, Int) -> Boolean): C1PlateauDiagnosis =
-        C1PlateauDiagnosis(remainingC1, entries.filter { stillDeficient(it.staff, it.shift) })
+    fun refreshedAgainst(remainingC1: Int, stillDeficient: (Int, Int, Int) -> Boolean): C1PlateauDiagnosis =
+        C1PlateauDiagnosis(remainingC1, entries.filter { stillDeficient(it.staff, it.shift, it.ruleIndex) })
 
     fun logLines(): List<String> {
         if (causeUnknown) return listOf(
@@ -156,16 +163,17 @@ data class C1PlateauDiagnosis(
          */
         fun build(
             remainingC1: Int,
-            blockStats: Map<Pair<Int, Int>, Map<String, Int>>,
-            culpritStats: Map<Pair<Int, Int>, Map<String, Int>>,
+            blockStats: Map<Triple<Int, Int, Int>, Map<String, Int>>,
+            culpritStats: Map<Triple<Int, Int, Int>, Map<String, Int>>,
             staffName: (Int) -> String,
             shiftKigou: (Int) -> String,
-            stillDeficient: (Int, Int) -> Boolean,
+            ruleLabel: (Int) -> String,
+            stillDeficient: (Int, Int, Int) -> Boolean,
         ): C1PlateauDiagnosis {
             val entries = ArrayList<C1PlateauEntry>()
             for ((key, reasons) in blockStats) {
-                val (i, x) = key
-                if (!stillDeficient(i, x)) continue
+                val (i, x, ri) = key
+                if (!stillDeficient(i, x, ri)) continue
                 val pin = reasons[REASON_PIN] ?: 0
                 val score = reasons[REASON_SCORE] ?: 0
                 val none = (reasons[REASON_NO_CANDIDATE] ?: 0) + (reasons[REASON_NO_REPACK] ?: 0)
@@ -184,8 +192,10 @@ data class C1PlateauDiagnosis(
                     C1PlateauEntry(
                         staff = i,
                         shift = x,
+                        ruleIndex = ri,
                         staffName = staffName(i),
                         shiftKigou = shiftKigou(x),
+                        ruleLabel = ruleLabel(ri),
                         cause = cause,
                         evidence = if (pin + score > 0) C1PlateauEvidence.OBSERVED else C1PlateauEvidence.UNKNOWN,
                         rejectedByPin = pin,
