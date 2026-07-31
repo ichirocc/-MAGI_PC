@@ -791,15 +791,22 @@ object V6NativeOptimizer {
             .take(3)
             .toList()
 
-        val distinctElites = compressedElites.map { o ->
-            o.schedule.joinToString("|") { it.joinToString(",") }
+        // [3.332.0/実機ログで判明] 旧表記は「圧縮elite=N 相異なるelite=M 距離=a..b」を1行に並べていたが、
+        //   **M と 距離 の母集団が違った**（M=アーカイブの圧縮エリート／距離=8ワーカーの最終解）。
+        //   読むと「10件すべて相異なるのに最小距離0」という矛盾に見える。しかも M は恒真値だった
+        //   （`register` が sameSchedule で重複を弾き `snapshot` も filterNot で除くので、
+        //   圧縮エリートは常に相異なる＝実機ログでも2実行とも 10/10）。
+        //   意味があるのは**ワーカー解が潰れているか**（同一解に収束＝並列の無駄）なので、そちらを出す。
+        val distinctWorkers = outcomes.map { o ->
+            o.elite.joinToString("|") { it.joinToString(",") }
         }.distinct().size
         val pairDistances = ArrayList<Int>()
         for (i in outcomes.indices) for (j in i + 1 until outcomes.size) {
             pairDistances.add(scheduleDistance(outcomes[i].elite, outcomes[j].elite))
         }
         val distanceNote = if (pairDistances.isEmpty()) "対象外" else
-            "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル"
+            "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル" +
+                (if (distinctWorkers < outcomes.size) "・同一解あり" else "")
         val roleNote = outcomes.indices.joinToString(" | ") { i ->
             val o = outcomes[i]
             val used = o.roleRuns.entries.joinToString(",") { e ->
@@ -820,7 +827,7 @@ object V6NativeOptimizer {
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
-                "相異なるelite=$distinctElites 距離=$distanceNote / " +
+                "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / " +
                 "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
