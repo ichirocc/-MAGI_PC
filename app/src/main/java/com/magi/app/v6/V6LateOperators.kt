@@ -77,9 +77,15 @@ object V6LateOperators {
             //   weighted 同値・total 改善の候補（例: c1×1 と c42×15 は weighted 15 で同値・total は14違う）を
             //   捨てていた。boost 側の soft<= ガードは「生カウントも悪化させない」追加条件として従来どおり残す。
             val base = betterReport(nv, cur)
+            // [3.336.0/敵対レビュー H3] boost に weightedScore 非増を要求する。`lim` は 200×high+120×low で
+            //   **目的関数の重み(high45 < low90)と大小が逆**なので、high−1/low+1 の入れ替えは lim を下げつつ
+            //   weighted を +45 悪化させられた。反例: c1 5→4・high 2→1・low 1→2 は
+            //   lim 520→440 ✓ / soft件数 8→7 ✓ / c1 減 ✓ を全部満たしつつ weighted 255→285。
+            //   これで boost は「hard・weighted・件数のどれも悪化させずに c1 だけ減らす」横移動に限定される。
             val boost = !base &&
                 c1(nv) < c1(cur) &&
                 nv.hard <= cur.hard &&
+                nv.weightedScore <= cur.weightedScore &&
                 lim(nv) <= lim(cur) &&
                 nv.soft <= cur.soft
             if (base || boost) {

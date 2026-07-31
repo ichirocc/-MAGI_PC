@@ -21,6 +21,7 @@ data class UiState(
     val use2: Boolean = false,
     val initHard: Long = 0,
     val initSoft: Long = 0,
+    /** 実行中の**表示**。可否の判定には使わない（[MagiViewModel.optimizeInFlight] が唯一の根拠）。 */
     val running: Boolean = false,
     val hasResult: Boolean = false,
     val bestHard: Long = 0,

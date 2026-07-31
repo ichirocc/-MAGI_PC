@@ -683,7 +683,16 @@ object ConstraintsCsvIO {
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         fun c(r: List<String>, i: Int) = r.getOrElse(i) { "" }.trim()
+        // [3.336.0/外部レビュー P2] 空セルで打ち切るので `MUST連続,A,,B` は ["A"] になり、**B が黙って
+        //   消えたまま accepted に数えられた**（3.333.0 で他の族に入れた「評価されない行を受理しない」
+        //   の取り残し）。穴が空いた行は書式の誤りとして呼び出し側で弾けるよう、別に判定する。
         fun pat(r: List<String>): List<String> = (1..5).map { c(r, it) }.takeWhile { it.isNotEmpty() }.take(5)
+        /** 途中に空セルがあり、その後ろにまだ中身がある＝並びが途切れている（書式の誤り）。 */
+        fun patHasGap(r: List<String>): Boolean {
+            val cells = (1..5).map { c(r, it) }
+            val last = cells.indexOfLast { it.isNotEmpty() }
+            return last >= 0 && cells.take(last).any { it.isEmpty() }
+        }
         val cons1 = ArrayList<C1Row>(); val cons2 = ArrayList<C2Row>()
         val cons3 = ArrayList<C3Row>(); val cons3n = ArrayList<C3Row>()
         val cons3m = ArrayList<C3Row>(); val cons3mn = ArrayList<C3Row>()
@@ -705,10 +714,10 @@ object ConstraintsCsvIO {
             when (c(r, 0)) {
                 "連勤" -> { cons1.add(C1Row(c(r, 1), c(r, 2), c(r, 3))); n++ }
                 "回数下限" -> { cons2.add(C2Row(c(r, 1), c(r, 2))); n++ }
-                "MUST連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3.add(C3Row(p)); n++ } else reject(r) }
-                "禁止連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3n.add(C3Row(p)); n++ } else reject(r) }
-                "希望連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3m.add(C3Row(p)); n++ } else reject(r) }
-                "回避連続" -> { val p = pat(r); if (p.isNotEmpty()) { cons3mn.add(C3Row(p)); n++ } else reject(r) }
+                "MUST連続" -> { val p = pat(r); if (p.isNotEmpty() && !patHasGap(r)) { cons3.add(C3Row(p)); n++ } else reject(r) }
+                "禁止連続" -> { val p = pat(r); if (p.isNotEmpty() && !patHasGap(r)) { cons3n.add(C3Row(p)); n++ } else reject(r) }
+                "希望連続" -> { val p = pat(r); if (p.isNotEmpty() && !patHasGap(r)) { cons3m.add(C3Row(p)); n++ } else reject(r) }
+                "回避連続" -> { val p = pat(r); if (p.isNotEmpty() && !patHasGap(r)) { cons3mn.add(C3Row(p)); n++ } else reject(r) }
                 "群回数" -> { cons41.add(C41Row(c(r, 1), c(r, 2), c(r, 3), c(r, 4))); n++ }
                 "スキル群回数" -> { cons41s.add(C41Row(c(r, 1), c(r, 2), c(r, 3), c(r, 4))); n++ }
                 "群組合せ禁止" -> { cons42.add(C42Row(c(r, 1), c(r, 3), c(r, 2), c(r, 4))); n++ }

@@ -42,6 +42,29 @@ class SaWishLockTest {
         needDay1 = emptyMap(), needDay2 = emptyMap(),
     )
 
+    @Test fun strongPerturbNeverMovesAFeasibleWish() {
+        // [3.336.0/敵対レビュー H1] `strongPerturbFlat`（ネイティブ経路の停滞脱出）は 3.334.0 の
+        //   ガードから漏れていた。
+        //
+        //   **間接テストでは検証できない**: ホスト JVM は `.so` を読めないので `NativeGate.usable` が
+        //   false になり、唯一の呼出元 `runWorkerNative` が走らない。実際、最初に書いた
+        //   「SaOptimizer.run を停滞させて呼ばせる」テストは**バグを戻しても通った**。直接呼ぶ。
+        val st = state()
+        val p = Problem(st)
+        val ev = Evaluator(p, c3RunMode = true)
+        val sa = SaOptimizer(p, ev)
+        val init = p.initialAssignment()
+        val flat = IntArray(p.S * p.T) { init[it / p.T][it % p.T] }
+        for (seed in 1L..40L) {   // 手数は毎回4〜11なので、固定セルへ当たるまで回数を稼ぐ
+            val cur = flat.copyOf()
+            sa.strongPerturbFlat(cur, java.util.Random(seed))
+            for (i in 0 until p.S) for (j in 0 until p.T) if (p.wishLocked(i, j)) {
+                assertEquals("seed=$seed 強い揺さぶりが職員$i 日$j の希望を動かした",
+                    p.wish[i][j], cur[i * p.T + j])
+            }
+        }
+    }
+
     @Test fun searchNeverMovesACellThatHoldsAFeasibleWish() {
         val st = state()
         val p = Problem(st)
