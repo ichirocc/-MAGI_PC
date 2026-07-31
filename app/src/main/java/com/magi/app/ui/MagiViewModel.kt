@@ -1114,7 +1114,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     val names = staleKeys.mapNotNull { k -> Hf63Infeasibility.KEY_TO_INDEX[k]?.let { Hf63Infeasibility.CNAMES[it] } }
                     logOp("W", "構造的に充足が難しい制約を検出: ${names.joinToString(", ")}（データの見直しを推奨）")
                 }
-                captureAlternatives()
+                captureAlternatives(res.alternatives)
             } catch (e: CancellationException) {
                 // [停止 keep-best] 中断時は実行中の(未採用の)途中盤面ではなく、直前に確定していた
                 //   入力解(sched0)をそのまま保持し、表示の違反数も実際の盤面に合わせる。これにより
@@ -1318,9 +1318,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var alternativeScheds: List<Array<IntArray>> = emptyList()
 
     /** 直近の並列最適化で得た「他の案」を取り込み、サマリをUIへ反映。 */
-    private suspend fun captureAlternatives() {
+    /** [3.335.0/外部レビュー P1] 「他の案」は可変 static でなく `handleOptimize` の返り値から受け取る
+     *  （実行が重なると static は新しい実行の値に置き換わり、別の実行の候補を掴み得た）。 */
+    private suspend fun captureAlternatives(source: List<Array<IntArray>>) {
         val st = state ?: return
-        val alts = V6NativeOptimizer.lastAlternatives.map { it.copy2D() }
+        val alts = source.map { it.copy2D() }
         alternativeScheds = alts
         // [Main負荷回避] 他案（最大3件）の違反チェックは同期CPU → Default で実行してから反映。
         val summaries = withContext(Dispatchers.Default) {

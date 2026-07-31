@@ -7,6 +7,7 @@ import com.magi.app.model.MagiState
 import com.magi.app.model.Range
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -906,6 +907,37 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(setOf("covU", "c3n"), V6NativeOptimizer.lastInfeasibleFamilies)
         V6NativeOptimizer.clearInfeasible()
         assertEquals(emptySet<String>(), V6NativeOptimizer.lastInfeasibleFamilies)
+    }
+
+    // ---- [3.335.0/外部レビュー P1] 実行ごとの成果物は返り値で受け取る ----
+    //
+    // 旧実装は `lastAlternatives` 等の可変 static を呼び出し側が返却後に読んでいた。実行が重なると
+    // （WorkManager の REPLACE で旧 Worker が協調キャンセルを待つ間など）入口の初期化が相手の値を消し、
+    // 「他の案」「残存分析」「ライブ表示」が混ざり得た。採用盤面は元から返り値で流れるので誤った
+    // 勤務表にはならないが、診断が別の実行のものになる。
+
+    @Test fun runSlotKeepsEachRunsOwnOutputs() {
+        val a = V6NativeOptimizer.RunSlot(1)
+        val b = V6NativeOptimizer.RunSlot(2)
+        a.addInfeasible(listOf("covU"))
+        b.addInfeasible(listOf("c3n"))
+        a.addInfeasible(listOf("pref", "covU"))
+        assertEquals("別の実行の学習が混ざらない", setOf("covU", "pref"), a.infeasible)
+        assertEquals(setOf("c3n"), b.infeasible)
+        a.addInfeasible(emptyList())   // 空は no-op
+        assertEquals(setOf("covU", "pref"), a.infeasible)
+    }
+
+    @Test fun optimizeResultCarriesItsOwnOutputs() = runBlocking {
+        // 実行の返り値がその実行の成果物を持つ（static を経由しない）ことを、最小の盤面で固定する。
+        val st = canDoState(emptyMap())
+        val r = V6NativeOptimizer.optimize(
+            st, st.schedule.toIntArray2D(),
+            V6OptimizerOptions(V6Algorithm.V5, totalBudgetSec = 1, workers = 1),
+        )
+        // 返り値の器が存在し、static とは独立に読めること（V5 単発では中身は空でよい）。
+        assertEquals(V6NativeOptimizer.lastInfeasibleFamilies, r.infeasibleFamilies)
+        assertEquals(st.staffCount, r.schedule.size)
     }
 
     // ---- [3.319.0] destroy-repair の marginal cost を目的関数と揃える -------------------------

@@ -5255,6 +5255,36 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 探索の成果物を実行ごとの持ち物にする＋後段オペレータの比較が total へ落ちていなかった（3.335.0, 外部レビュー P1 2件）
+ユーザー提示の6行表のうち **P0 3件は 3.333.0/3.334.0 で修正済み**（レビュー対象が古い）、
+**P1「StateFingerprint が C3 行境界をハッシュしない」も 3.333.0 で修正済み**。残る P1 2件を照合して修正した。
+- **[P1] `V6LateOperators` の `gate`/`gateW` が hard→weightedScore で止まっていた**: `betterReport` は
+  hard→weightedScore→**total** の3キーなのに、この2つは第2キーまでを手書きで複製しており第3キーへ落ちない。
+  weighted 同値・total 改善の候補（重み15 の c1 1件 ↔ 重み1 の c42 15件は weighted 同値で total が14違う）を
+  捨てていた。3.287.0 は第2キーだけ寄せて第3キーを書き忘れ、3.309.0 は `gateW` に hard を足したときに同じ
+  複製を作った＝**2回とも「委譲でなく複製」したのが原因**なので、両方 `betterReport` へ委譲した。
+  `gate` の c1 ブースト分岐（`soft<=` ガード付き）は従来どおり残す。
+  **正直な限界**: この2つは探索のラウンド境界（ChainSwap3/4 等）で走り、後処理研磨のベンチには現れない。
+  実データ3件の最終盤面は golden 2469/306/c1 104・user 33159/162/c1 54 が既知値と一致・real は既知帯
+  （49223）＝**この修正の効果は測れていない**。契約を揃えるための変更。
+- **[P1] 探索の成果物が実行をまたいで共有されていた**: `lastAlternatives`/`lastFusionElites`/
+  `lastInfeasibleFamilies`/`liveBest` は可変 static で、`optimize()` は入口で全部クリアする。呼び出し側は
+  **返却後にこの static を読む**ので、実行が重なると（WorkManager の `REPLACE` で旧 Worker が協調キャンセルを
+  待つ間・kill 後の再スケジュール）別の実行の値を掴み得た。**採用盤面は元から返り値で流れるので誤った勤務表には
+  ならない**＝混ざるのは「他の案」「残存分析」「ライブ表示」。3.327.0 で入れた `ownsFiles()` はファイル書き込み
+  だけを守っており、この static 群は素通しだった。
+  **対応**: 実行ごとに `RunSlot`（他の案・エリート・HF63学習）を作り、**コルーチンのコンテキスト**で呼び出し木の
+  隅々まで運ぶ（`runAlnsSingle`/`runRsi`/`runAdaptivePortfolio`/`runMultiWorker` はすべて suspend なので
+  引数を1つも増やさずに届く）。`optimize()` は結果を `V6OptimizerResult` に載せて返し、`V6FinalPort` と
+  `MagiViewModel`（`ActionResult.alternatives` 経由）は**返り値から読む**。static は「いちばん新しい実行の
+  ライブ表示」用に残し、置き換えられた古い実行は `ownsStatics()` が偽になって書かない。
+  副産物として **ExtraRefine の退避/復元（`restoreAlternatives`/`restoreFusionElites`）が不要になり撤去**
+  （「入口で消えるから退避する」という回避策そのものが、この設計の脆さの証拠だった）。
+  **正直な限界**: 実際の競合は Android 実機/エミュレータでしか再現できない。ここで確かめたのは
+  「スロットが実行ごとに独立していること」「返り値がその実行の値を運ぶこと」までで、**競合そのものは
+  測っていない**。
+- 検証: ホストJVM **全420テスト green**（418 + 新規2）。C++ は無変更＝native parity 影響なし。
+
 ## SA/LAHC の近傍が希望固定セルを触っていた＝手の35%が空振り（3.334.0, 3.333.0 の残り1件を計測して採用）
 3.333.0 で「非対称は実在するが、直すと探索の近傍が変わるので測ってから」と保留した項目。**測ったら
 一貫して支持されたので入れた**（3.310.1 は逆に一貫せず否決＝同じ手順で結論が分かれた対の実例）。
