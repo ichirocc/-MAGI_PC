@@ -726,10 +726,28 @@ object ConstraintsCsvIO {
             }
         }
         if (n == 0 && bad == 0) return null
-        return ComponentImport(state.copy(
+        val candidate = state.copy(
             cons1 = cons1, cons2 = cons2, cons3 = cons3, cons3n = cons3n,
             cons3m = cons3m, cons3mn = cons3mn, cons41 = cons41, cons41s = cons41s,
             cons42 = cons42, cons42s = cons42s, staffRange = ranges,
-        ), n, bad, sample)
+        )
+        // [3.333.0/外部レビュー Critical] 種別が既知なだけの行を**無条件に受理**していた。
+        //   例えば `連勤,,,` は C1Row("","","") として n に数えられ、`Problem` は
+        //   `d1>0 && si>=0 && d2>0` で捨てる＝**評価されない行で既存の有効な制約を全置換**できた
+        //   （実質「制約なし」で最適化される）。3.329.0 の中止条件は未知の氏名・記号しか見ておらず、
+        //   構造的に空/不正な行を通していた。
+        //
+        //   判定は `Problem` を単一ソースにする（各族の条件をここへ複製すると必ずドリフトする）。
+        //   この取込は制約族を**すべて置換**するので、候補 state の未解決行は必ずこのCSV由来。
+        //   連続パターン(cons3系)の未解決記号は別のリスト(`c3UnknownShift`)に入るので両方見る。
+        val unresolved = runCatching {
+            val pc = Problem(candidate)
+            pc.unresolvedRows + pc.c3UnknownShift
+        }.getOrDefault(emptyList())
+        if (unresolved.isNotEmpty()) {
+            bad += unresolved.size
+            if (sample.isEmpty()) sample = unresolved.first().let { "${it.first}「${it.second}」" }.take(60)
+        }
+        return ComponentImport(candidate, n, bad, sample)
     }
 }

@@ -24,6 +24,9 @@ import com.magi.app.model.MagiState
  * Android に依存しない純関数＝ホスト JVM でテストできる（ViewModel に置いていた間はできなかった）。
  */
 object StateFingerprint {
+    /** 行の区切り。可変長の行を素通しで連結すると、構造が違うのに同じ値になる。 */
+    private const val ROW = 0x5F3759DFL
+
     fun of(st: MagiState): Long {
         var h = -3750763034362895579L
         fun mix(v: Long) { h = h * 1099511628211L + v }
@@ -33,16 +36,19 @@ object StateFingerprint {
         for (g in st.groups) { txt(g.name); txt(g.kigou) }
         for (g in st.skillGroups) { txt(g.name); txt(g.kigou) }
         for (p in st.staff) { txt(p.name); mix(p.groupIdx.toLong()); mix(p.skillIdx.toLong()) }
-        for (row in st.groupShift) for (v in row) mix(v.toLong())
-        for (row in st.groupShiftApt) for (v in row) txt(v)
+        // [3.333.0/外部レビュー] 行の境界を混ぜる。旧は行を素通しで連結していたので
+        //   `[[1,1],[0]]` と `[[1],[1,0]]` が同じ値になり、担当可否の構造が違うのに指紋が一致した。
+        for (row in st.groupShift) { for (v in row) mix(v.toLong()); mix(ROW) }
+        for (row in st.groupShiftApt) { for (v in row) txt(v); mix(ROW) }
         for ((k, v) in st.wishes.entries.sortedBy { it.key }) { txt(k); mix(v.toLong()) }
         for ((k, r) in st.staffRange.entries.sortedBy { it.key }) { txt(k); txt(r.lo); txt(r.hi) }
         for ((k, v) in st.needDay1.entries.sortedBy { it.key }) { txt(k); txt(v) }
         for ((k, v) in st.needDay2.entries.sortedBy { it.key }) { txt(k); txt(v) }
         for (c in st.cons1) { txt(c.day1); txt(c.shiftKigou); txt(c.day2) }
         for (c in st.cons2) { txt(c.shiftKigou); txt(c.count) }
+        // 連続パターンは行の長さが可変。行の境界を入れないと `[["A","B"]]` と `[["A"],["B"]]` が衝突する。
         for (fam in listOf(st.cons3, st.cons3n, st.cons3m, st.cons3mn)) {
-            mix(2); for (row in fam) for (t in row.pattern) txt(t)
+            mix(2); for (row in fam) { for (t in row.pattern) txt(t); mix(ROW) }
         }
         for (fam in listOf(st.cons41, st.cons41s)) {
             mix(3); for (c in fam) { txt(c.groupKigou); txt(c.shiftKigou); txt(c.l); txt(c.u) }

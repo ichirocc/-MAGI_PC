@@ -100,6 +100,9 @@ internal object CombinatorialRepair {
             if (shouldStop()) { stats.truncated = true; break }
             var acceptedIdx: List<Int>? = null
             var acceptedRep: ViolationReport? = null
+            // [3.331.0] 組合せの試行は必ず `work` を元へ戻すので、この外側ループの間ずっと同じ盤面。
+            //   旧は組合せごとに copy2D() していた（同じ内容を最大200回作り直していた）。
+            val workBeforeCombo = if (p != null) work.copy2D() else emptyArray()
             val upperK = minOf(maxK, pool.size)
             searchK@ for (k in 2..upperK) {
                 val combo = IntArray(k) { it }
@@ -109,13 +112,18 @@ internal object CombinatorialRepair {
                     val ops = combo.flatMap { pool[it].ops }
                     if (!hasCellOverlap(ops)) {
                         val saved = IntArray(ops.size) { work[ops[it][0]][ops[it][1]] }
+                        for (op in ops) work[op[0]][op[1]] = op[2]
                         // [厳密ピン保護] 束ねた候補群も複数職員の回数を同時に変えうるため、staffRange
                         //   厳密ピン(lo==hi)を新たに崩す組合せは不採用にする（keep-best/重みは不変）。
-                        val workBefore = if (p != null) work.copy2D() else null
-                        for (op in ops) work[op[0]][op[1]] = op[2]
-                        val rep = UnifiedViolationChecker.check(state, work)
-                        val ok = isBetter(rep, bestRep) &&
-                            (p == null || workBefore == null || !exactPinRegression(p, workBefore, work))
+                        //
+                        // [3.331.0] **安いピン検査を先に**置く。旧はフル checker を必ず呼んでから
+                        //   `isBetter(...) && !exactPinRegression(...)` を評価しており、ピンを崩す組合せにも
+                        //   毎回フル評価を払っていた。`&&` は両方を要求するので**採否は完全に同一**で、
+                        //   ピン破りの組合せぶんだけ checker 呼び出しが減る（実データではプールの大半が
+                        //   ピン破り＝AptPolish 69/71・FairPolish 20/20）。
+                        val pinBad = p != null && exactPinRegression(p, workBeforeCombo, work)
+                        val rep = if (pinBad) null else UnifiedViolationChecker.check(state, work)
+                        val ok = rep != null && isBetter(rep, bestRep)
                         for ((idx, op) in ops.withIndex()) work[op[0]][op[1]] = saved[idx]
                         if (ok) {
                             acceptedIdx = combo.toList()

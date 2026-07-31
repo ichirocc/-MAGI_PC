@@ -119,6 +119,44 @@ data class C1PlateauDiagnosis(
     val pinConstrained: Int get() = entries.count { it.cause == C1PlateauCause.PIN_CONSTRAINED }
 
     /**
+     * [3.331.0/実機ログで判明] 後処理は C1研磨を**複数巡**回すので、巡ごとの観測を**合算**する。
+     *
+     * 旧実装は `c1Plateau = it` で最後の巡が前の巡を上書きしていた。2巡目は1巡目が直したあとの盤面を
+     * 見るので観測が少なく、実機ログでは **7箇所のうち3箇所しか説明が出ず**（5日窓4件は理由が一切
+     * 出ない）、件数も 24/16/22 → 6/8/12 と実際より小さく出ていた。この数は「計測できた候補試行数」と
+     * 名乗っているのだから、全巡の合計でなければ意味が合わない。
+     *
+     * 同じ (職員, シフト, 決まり) の件数を足し、主因の族も足し合わせて分類し直す。
+     * `remainingC1` は新しい方（最後に観測した時点の残数）を採る。
+     */
+    fun mergedWith(other: C1PlateauDiagnosis): C1PlateauDiagnosis {
+        if (entries.isEmpty()) return other
+        if (other.entries.isEmpty()) return C1PlateauDiagnosis(other.remainingC1, entries)
+        val byKey = LinkedHashMap<Triple<Int, Int, Int>, C1PlateauEntry>()
+        for (e in entries + other.entries) {
+            val key = Triple(e.staff, e.shift, e.ruleIndex)
+            val prev = byKey[key]
+            byKey[key] = if (prev == null) e else {
+                val pin = prev.rejectedByPin + e.rejectedByPin
+                val score = prev.rejectedByScore + e.rejectedByScore
+                val culprits = LinkedHashMap<String, Int>()
+                for ((fam, n) in prev.topScoreCulprits + e.topScoreCulprits) {
+                    culprits[fam] = (culprits[fam] ?: 0) + n
+                }
+                prev.copy(
+                    cause = causeOf(pin, score),
+                    evidence = if (pin + score > 0) C1PlateauEvidence.OBSERVED else C1PlateauEvidence.UNKNOWN,
+                    rejectedByPin = pin,
+                    rejectedByScore = score,
+                    noCandidate = prev.noCandidate + e.noCandidate,
+                    topScoreCulprits = culprits.entries.sortedByDescending { it.value }.map { it.key to it.value },
+                )
+            }
+        }
+        return C1PlateauDiagnosis(other.remainingC1, byKey.values.toList())
+    }
+
+    /**
      * 後続の研磨パスが解消した箇所を落として最終盤面に合わせ直す。
      * 診断は C1 研磨の時点で作られるが、その後に別のパスが同じ窓を直すことがあるため
      * （残っていない箇所を「直せなかった」と見せない）。
@@ -159,6 +197,20 @@ data class C1PlateauDiagnosis(
         const val REASON_NO_REPACK = "再配置候補なし"
 
         /**
+         * [分類規則] 「候補なし」は「入れ替え相手が見つかりません」という強い主張なので、
+         * 候補が1件でも作れて却下されているならこれを名乗らない（件数で多数決すると、実データで
+         * 「スコア却下8・候補なし10」→「相手が見つかりません」と案内してしまい、実際には相手が居て
+         * 禁止連続で落ちていた、という取り違えが起きる）。候補が作れているときだけ件数で比べる。
+         *
+         * [build] と [mergedWith] の両方から呼ぶ（片方だけ直して分類がずれるのを防ぐ）。
+         */
+        fun causeOf(pin: Int, score: Int): C1PlateauCause = when {
+            pin + score == 0 -> C1PlateauCause.NO_CANDIDATE
+            pin > score -> C1PlateauCause.PIN_CONSTRAINED
+            else -> C1PlateauCause.SCORE_TRADEOFF
+        }
+
+        /**
          * 研磨が記録した (職員,シフト)→理由別件数 から診断を組み立てる。
          *
          * @param blockStats 理由文字列→件数。上記 REASON_* のいずれか。
@@ -187,11 +239,7 @@ data class C1PlateauDiagnosis(
                 //   実データで「スコア却下8・候補なし10」→「相手が見つかりません」と案内してしまい、
                 //   実際には相手が居て禁止連続で落ちていた、という取り違えが起きる）。
                 //   候補が作れているときだけ、ピン破りとスコア却下を件数で比べる。
-                val cause = when {
-                    pin + score == 0 -> C1PlateauCause.NO_CANDIDATE
-                    pin > score -> C1PlateauCause.PIN_CONSTRAINED
-                    else -> C1PlateauCause.SCORE_TRADEOFF
-                }
+                val cause = causeOf(pin, score)
                 entries.add(
                     C1PlateauEntry(
                         staff = i,

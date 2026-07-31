@@ -72,9 +72,11 @@ object V6LateOperators {
         // 採否ゲート [HF537]: 採用なら cur 更新 + ログ。不採用なら false(呼び元で revert)。
         fun gate(tag: String, detail: String): Boolean {
             val nv = UnifiedViolationChecker.check(state, sched)
-            // [3.287.0 keep-best統一] 第2キーを soft(生カウント)→weightedScore へ（betterReport と同方針。
-            //   boost 側の soft<= ガードは「生カウントも悪化させない」追加条件として従来どおり残す）。
-            val base = nv.hard < cur.hard || (nv.hard == cur.hard && nv.weightedScore < cur.weightedScore)
+            // [3.287.0 keep-best統一→3.335.0 委譲] 判定は `betterReport`（hard→weightedScore→total）へ。
+            //   3.287.0 は第2キーだけ weightedScore へ寄せて**第3キー total へ落ちる分岐を書き忘れて**おり、
+            //   weighted 同値・total 改善の候補（例: c1×1 と c42×15 は weighted 15 で同値・total は14違う）を
+            //   捨てていた。boost 側の soft<= ガードは「生カウントも悪化させない」追加条件として従来どおり残す。
+            val base = betterReport(nv, cur)
             val boost = !base &&
                 c1(nv) < c1(cur) &&
                 nv.hard <= cur.hard &&
@@ -139,10 +141,11 @@ object V6LateOperators {
         //   全サイト掃討から漏れていた）。実害は到達不能に近い＝同日3〜4者交換は最大4セルしか変えず、
         //   soft から得られる weighted 改善は現実的に数百（low=90/high=45/c1=15）に対し、HARD の最小重みは
         //   c3n=7000 なので HARD を増やす受理は成立しない。それでも契約は揃える（将来 HF77 で HARD 重みが
-        //   下がったときに静かに壊れる罠を残さない）。判定は betterReport と同じ hard → weightedScore。
+        //   下がったときに静かに壊れる罠を残さない）。[3.335.0] 判定は `betterReport` へ委譲＝第3キー total
+        //   まで見る（3.309.0 は hard→weightedScore を手書きで複製しており total へ落ちなかった）。
         fun gateW(): Boolean {
             val nv = UnifiedViolationChecker.check(state, sched)
-            val ok = nv.hard < cur.hard || (nv.hard == cur.hard && nv.weightedScore < cur.weightedScore)
+            val ok = betterReport(nv, cur)   // [3.335.0] gate と同じく betterReport へ委譲（第3キー total まで見る）
             if (ok) { cur = nv; return true }
             return false
         }

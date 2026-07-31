@@ -58,6 +58,9 @@ object V6FinalPort {
         val busyDetail: BusyDetail,
         val logs: List<MirrorLog>,
         val post: V6PostOptimizationResult? = null,
+        /** [3.335.0/外部レビュー P1] この実行の「他の案」。旧実装は呼び出し側が可変 static を返却後に
+         *  読んでおり、実行が重なると別の実行の候補を掴み得た。 */
+        val alternatives: List<Array<IntArray>> = emptyList(),
     )
 
     fun buildBusyDetail(state: MagiState, algorithm: String, overrides: Map<String, String> = emptyMap()): BusyDetail {
@@ -217,7 +220,8 @@ object V6FinalPort {
         onProgress: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
     ): ActionResult = withContext(Dispatchers.Default) {
         require(state.dayCount > 0) { "対象期間が無効です。基本情報で終了日を開始日より後にしてください" }
-        // タイムアウト上限10分(600s)を厳守（業務指示）。呼び出し側に依らずここで頭打ちにする。
+        // [3.333.0/外部レビュー] 上限は [MAX_OPTIMIZE_SEC]（現在 300s＝5分）。呼び出し側に依らずここで
+        //   頭打ちにする。旧コメントは「10分(600s)」のままで実装と食い違っていた（HF77: コメント≠実装）。
         val seconds = secondsRaw.coerceIn(1, MAX_OPTIMIZE_SEC)
         val gate = confirmDespiteImpossibleWishes(state, allowImpossible)
         if (!gate.allowed) error(gate.message)
@@ -245,9 +249,9 @@ object V6FinalPort {
             is OptimizationPlan.Portfolio -> V6OptimizerOptions(V6Algorithm.PORTFOLIO, plan.seconds, workers, softPolish, restarts = 2, postPolish = false)
         }
         val optsR = opts.copy(rectSwap = V6LateOperators.optFlagBool(state, "rectSwap", true))   // [HF532移植] optFlags.rectSwap 既定ON
-        // [review: 600s budget] optimize() + runPostOptimization() を一つの予算で管理する。
+        // [review: 予算一本化] optimize() + runPostOptimization() を一つの予算で管理する。
         // 後処理は元々 deadline も progress も持たず、optimize が予算を使い切った後も走り続け、
-        // 合計が予算を大きく超過していた(実機44分/予算600s)。ここで全体に hardDeadline を張り、
+        // 合計が予算を大きく超過していた(実機44分。当時の上限は600s)。ここで全体に hardDeadline を張り、
         // coroutine キャンセル(計算を止める)と束ねて後処理へ伝播する。
         val startMs = System.currentTimeMillis()
         val budgetMs = seconds.toLong() * 1000L
@@ -426,9 +430,11 @@ object V6FinalPort {
         val integrationDeadline = minOf(hardDeadlineMs - postReserveMs / 2, System.currentTimeMillis() + integrationBudgetMs)
             .coerceAtLeast(System.currentTimeMillis())
         val integrationStop = { System.currentTimeMillis() >= integrationDeadline || !isActive }
-        val archivedElites = V6NativeOptimizer.lastFusionElites
+        // [3.335.0/外部レビュー P1] 可変 static でなく**この実行の返り値**から読む（実行が重なっても
+        //   別の実行の値を拾わない）。読む対象は従来どおり最後の段（RSIThenALNS なら ALNS 段）。
+        val archivedElites = chained.fusionElites
         val fusionElites = if (archivedElites.isNotEmpty()) archivedElites else {
-            V6NativeOptimizer.lastAlternatives.mapIndexed { index, sched ->
+            chained.alternatives.mapIndexed { index, sched ->
                 AdaptiveElite(
                     schedule = sched.copy2D(),
                     report = UnifiedViolationChecker.check(state, sched),
@@ -470,11 +476,8 @@ object V6FinalPort {
             if (extraMs >= 5_000 && isActive && !stagnationFired.get() && post.report.total > 0) {
                 val extraDeadline = tPost1 + extraMs
                 val extraStop = { System.currentTimeMillis() >= extraDeadline || !isActive }
-                // [他の案の保全] optimize() は入口で lastAlternatives を空にするため、本走行ポートフォリオが
-                //   保持した「他の案」を退避し、追加精製の後に復元する（ViewModel の captureAlternatives は
-                //   handleOptimize 復帰後に読むため、退避しないと他の案が消える）。
-                val savedAlts = V6NativeOptimizer.lastAlternatives
-                val savedFusionElites = V6NativeOptimizer.lastFusionElites
+                // [3.335.0] 「他の案」は `chained.alternatives`（この実行の返り値）で保持済みなので、
+                //   追加精製が static を上書きしても失われない＝旧来の退避/復元は不要になった。
                 // [敵対的レビュー3.212.0、仮説数上限撤廃後も維持] 微小予算(5〜25s)の追加精製は本走行と異なり
                 //   仮説数を workers まで増やすと悪化しうる（チェーン毎の固定費=入口hf67+フルcheck×2+
                 //   nativeハンドル生成 が小予算を侵食し、3.102.0が回収した予約枠が高worker設定で再び浪費
@@ -485,8 +488,6 @@ object V6FinalPort {
                         workers = optsR.workers.coerceAtMost(V6NativeOptimizer.MAX_HYPOTHESES)),
                     extraStop, progressWatch,
                 )
-                V6NativeOptimizer.restoreAlternatives(savedAlts)
-                V6NativeOptimizer.restoreFusionElites(savedFusionElites)
                 // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）。
                 val imp = betterReport(extra.report, post.report)
                 if (imp) {
@@ -602,7 +603,7 @@ object V6FinalPort {
         //   「どれを追う価値があるか」の判定はコード推論頼みだった。実行ごと1行のみ＝スパムなし。read-only。
         val residualLog = run {
             val bd = finalReport.breakdown
-            val infeasLearned = V6NativeOptimizer.lastInfeasibleFamilies
+            val infeasLearned = chained.infeasibleFamilies   // [3.335.0] この実行の返り値から
             val c3nWall = c3nWallResult.get() && bestNonCovUAllC3n.get()
             val walls = ArrayList<String>()
             val open = ArrayList<String>()
@@ -634,7 +635,8 @@ object V6FinalPort {
         //   エンジン内部のこの2経路が残っていた）。盤面が一致するときだけ診断を通す。
         //   ログ（post.report.logs）は「その実行で何が起きたか」の記録なので落とさない。
         val postForResult = post.takeIf { finalSched.contentDeepEquals(it.schedule) }
-        ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, postForResult)
+        ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, postForResult,
+            alternatives = chained.alternatives)
     }
 
     fun checkResultWorse(before: ViolationReport?, after: ViolationReport): String? {

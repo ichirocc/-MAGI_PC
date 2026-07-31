@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlin.coroutines.coroutineContext
 import kotlin.math.exp
@@ -68,7 +69,17 @@ data class V6OptimizerResult(
     val phaseLogs: List<MirrorLog>,
     val iterations: Long,
     val elapsedMs: Long,
-)
+    // [3.335.0/外部レビュー P1] 以下は**この実行の成果物**。旧実装は `lastAlternatives` 等の可変 static を
+    //   呼び出し側が返却後に読んでいたため、実行が重なると（WorkManager の REPLACE で旧 Worker が
+    //   協調キャンセルを待つ間など）別の実行の値を読み得た。採用盤面は元から返り値で流れるので
+    //   **誤った勤務表にはならない**が、「他の案」「残存分析」「ライブ表示」が混ざり得た。
+    val alternatives: List<Array<IntArray>> = emptyList(),
+    val infeasibleFamilies: Set<String> = emptySet(),
+) {
+    /** 同上。`AdaptiveElite` は internal なので本体プロパティとして持つ（`copy()` は引き継がない＝
+     *  作った側が明示的に載せる）。 */
+    internal var fusionElites: List<AdaptiveElite> = emptyList()
+}
 
 object V6NativeOptimizer {
     /** [GLS移植] 最良未更新がこの反復数を超えたら GLS penalty を強化（Web版 glsTrigger 既定200）。 */
@@ -180,7 +191,38 @@ object V6NativeOptimizer {
     internal fun greatDelugeLevel(initial: Double, best: Double, frac: Double): Double =
         best + (initial - best) * frac.coerceIn(0.0, 1.0)
 
-    /** 直近の並列探索で得た「他の案」（採用案以外の候補スケジュール、品質順・最大3件）。 */
+    // ───────── [3.335.0/外部レビュー P1] 実行ごとの成果物入れ ─────────
+    //   `lastAlternatives` などの可変 static は「直近の実行の値」しか持てず、実行が重なると
+    //   （WorkManager の REPLACE で旧 Worker が協調キャンセルを待つ間・kill 後の再スケジュール）
+    //   入口の初期化が相手の値を消し、書き込みも読み出しも混ざり得た。実行ごとに [RunSlot] を作り、
+    //   コルーチンのコンテキストで呼び出し木の隅々まで運ぶ（suspend 関数なので引数を増やさずに届く）。
+    //   static は「いちばん新しい実行のライブ表示」用として残す（新しい方が勝つのが正しい面）。
+    internal class RunSlot(val id: Long) {
+        @Volatile var alternatives: List<Array<IntArray>> = emptyList()
+        @Volatile var fusionElites: List<AdaptiveElite> = emptyList()
+        private val lock = Any()
+        @Volatile var infeasible: Set<String> = emptySet()
+            private set
+        fun addInfeasible(fams: Collection<String>) {
+            if (fams.isEmpty()) return
+            synchronized(lock) { infeasible = infeasible + fams }
+        }
+    }
+    private class RunSlotElement(val slot: RunSlot) :
+        kotlin.coroutines.AbstractCoroutineContextElement(RunSlotElement) {
+        companion object Key : kotlin.coroutines.CoroutineContext.Key<RunSlotElement>
+    }
+    private val runSeq = java.util.concurrent.atomic.AtomicLong(0)
+    /** いちばん新しい `optimize()` の実行 id。static への書き込みはこれと一致するときだけ行う。 */
+    @Volatile private var newestRunId = 0L
+    private suspend fun runSlot(): RunSlot? =
+        kotlin.coroutines.coroutineContext[RunSlotElement]?.slot
+    /** static（＝新しい実行が勝つライブ表示側）へ書いてよいか。スロット無し＝直接呼び出しは従来どおり許す。 */
+    private fun ownsStatics(slot: RunSlot?): Boolean = slot == null || slot.id == newestRunId
+
+    /** 直近の並列探索で得た「他の案」（採用案以外の候補スケジュール、品質順・最大3件）。
+     *  [3.335.0] **これは「いちばん新しい実行」の値**。呼び出し側は `V6OptimizerResult.alternatives`
+     *  （実行ごとの値）を読むこと。ここは表示・互換のために残している。 */
     @Volatile var lastAlternatives: List<Array<IntArray>> = emptyList()
         private set
 
@@ -193,6 +235,12 @@ object V6NativeOptimizer {
     internal fun recordInfeasible(fams: Collection<String>) {
         if (fams.isEmpty()) return
         synchronized(infeasLock) { lastInfeasibleFamilies = lastInfeasibleFamilies + fams }
+    }
+    /** [3.335.0] この実行のスロットへ記録し、いちばん新しい実行のときだけ static も更新する。 */
+    private suspend fun recordInfeasibleScoped(fams: Collection<String>) {
+        val slot = runSlot()
+        slot?.addInfeasible(fams)
+        if (ownsStatics(slot)) recordInfeasible(fams)
     }
     internal fun clearInfeasible() { synchronized(infeasLock) { lastInfeasibleFamilies = emptySet() } }
 
@@ -211,19 +259,10 @@ object V6NativeOptimizer {
         return out.toString()
     }
 
-    /** [他の案の保全] optimize() は入口で lastAlternatives を空にするため、追加精製(ExtraRefine)等で
-     *  optimize() を再呼出しする側が「本走行の他の案」を退避→復元できるようにする（V6FinalPort 専用）。 */
-    fun restoreAlternatives(saved: List<Array<IntArray>>) { lastAlternatives = saved }
-
     /** [3.268.0/elite archive fusion] 全epochから圧縮した品質・距離・橋渡しエリート
      *  （最適化後の再結合/Fusion専用、PORTFOLIO実行時のみ非空）。 */
     @Volatile internal var lastFusionElites: List<AdaptiveElite> = emptyList()
         private set
-
-    /** ExtraRefine の optimize() 再入で消える本走行アーカイブを復元する（restoreAlternatives と対）。 */
-    internal fun restoreFusionElites(saved: List<AdaptiveElite>) {
-        lastFusionElites = saved.map { it.copy(schedule = it.schedule.copy2D()) }
-    }
 
     /** [DefragLiveView移植] 実行中の最良盤面スナップショット（計算中ライブ表示用・読取専用）。
      *  進捗の節目で更新。
@@ -248,6 +287,12 @@ object V6NativeOptimizer {
         }
     }
 
+    /**
+     * [3.335.0/外部レビュー P1] この実行だけの成果物入れ（[RunSlot]）を作り、コルーチンのコンテキストで
+     * 呼び出し木の隅々まで運ぶ。結果は返り値に載せて返すので、**実行が重なっても呼び出し側は自分の
+     * 実行の値だけを読む**（旧実装は返却後に可変 static を読んでいた）。static は「いちばん新しい実行の
+     * ライブ表示」として残し、置き換えられた古い実行は書き込まない。
+     */
     suspend fun optimize(
         state: MagiState,
         initial: Array<IntArray> = state.schedule.toIntArray2D(),
@@ -255,12 +300,28 @@ object V6NativeOptimizer {
         shouldStop: () -> Boolean = { false },
         onProgressRaw: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
     ): V6OptimizerResult {
-        val started = nowMs()
+        val slot = RunSlot(runSeq.incrementAndGet())
+        newestRunId = slot.id
         lastAlternatives = emptyList()
         lastFusionElites = emptyList()
         clearInfeasible()   // [3.288.0/状態軸] この実行の HF63 学習をゼロから集約する
         liveBest = null
         liveBestReport.set(null)
+        val r = withContext(RunSlotElement(slot)) {
+            optimizeInSlot(state, initial, options, shouldStop, onProgressRaw)
+        }
+        return r.copy(alternatives = slot.alternatives, infeasibleFamilies = slot.infeasible)
+            .also { it.fusionElites = slot.fusionElites }
+    }
+
+    private suspend fun optimizeInSlot(
+        state: MagiState,
+        initial: Array<IntArray>,
+        options: V6OptimizerOptions,
+        shouldStop: () -> Boolean,
+        onProgressRaw: (String, ViolationReport?, Long, Long) -> Unit,
+    ): V6OptimizerResult {
+        val started = nowMs()
         // [敵対的レビュー: 進捗コールバックの直列化] runMultiWorker(仮説横断)・runAlnsChains(チェーン横断)は
         //   複数の Dispatchers.Default コルーチンから同じ onProgress を並行呼出しうる（best更新自体は
         //   各所でCAS/ロック済みだが、呼出元のコールバック本体＝UI/Worker側の非同期共有状態(スナップショット
@@ -783,23 +844,32 @@ object V6NativeOptimizer {
             }
         }
         val compressedElites = archive.snapshot(globalBest, globalReport)
-        lastFusionElites = compressedElites
-        lastAlternatives = compressedElites.asSequence()
+        val alts = compressedElites.asSequence()
             .filter { !it.bridge }
             .filter { !AdaptiveEliteArchive.sameSchedule(it.schedule, globalBest) }
             .map { it.schedule.copy2D() }
             .take(3)
             .toList()
+        // [3.335.0] まずこの実行のスロットへ。static は新しい実行が勝つライブ表示用なので所有時のみ。
+        runSlot()?.let { it.fusionElites = compressedElites; it.alternatives = alts }
+        if (ownsStatics(runSlot())) { lastFusionElites = compressedElites; lastAlternatives = alts }
 
-        val distinctElites = compressedElites.map { o ->
-            o.schedule.joinToString("|") { it.joinToString(",") }
+        // [3.332.0/実機ログで判明] 旧表記は「圧縮elite=N 相異なるelite=M 距離=a..b」を1行に並べていたが、
+        //   **M と 距離 の母集団が違った**（M=アーカイブの圧縮エリート／距離=8ワーカーの最終解）。
+        //   読むと「10件すべて相異なるのに最小距離0」という矛盾に見える。しかも M は恒真値だった
+        //   （`register` が sameSchedule で重複を弾き `snapshot` も filterNot で除くので、
+        //   圧縮エリートは常に相異なる＝実機ログでも2実行とも 10/10）。
+        //   意味があるのは**ワーカー解が潰れているか**（同一解に収束＝並列の無駄）なので、そちらを出す。
+        val distinctWorkers = outcomes.map { o ->
+            o.elite.joinToString("|") { it.joinToString(",") }
         }.distinct().size
         val pairDistances = ArrayList<Int>()
         for (i in outcomes.indices) for (j in i + 1 until outcomes.size) {
             pairDistances.add(scheduleDistance(outcomes[i].elite, outcomes[j].elite))
         }
         val distanceNote = if (pairDistances.isEmpty()) "対象外" else
-            "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル"
+            "${pairDistances.minOrNull()}..${pairDistances.maxOrNull()}セル" +
+                (if (distinctWorkers < outcomes.size) "・同一解あり" else "")
         val roleNote = outcomes.indices.joinToString(" | ") { i ->
             val o = outcomes[i]
             val used = o.roleRuns.entries.joinToString(",") { e ->
@@ -820,7 +890,7 @@ object V6NativeOptimizer {
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
-                "相異なるelite=$distinctElites 距離=$distanceNote / " +
+                "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / " +
                 "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
@@ -1022,13 +1092,15 @@ object V6NativeOptimizer {
         val best = if (results.isEmpty()) run(0, options.copy(workers = plan[0]), onProgress)
         else results.reduce { a, b -> if (better(b.report, a.report)) b else a }
         // 「他の案」: 採用案以外の仮説結果を品質順に保持（重複schedule除外、最大3件）
-        lastAlternatives = results.asSequence()
+        val alts = results.asSequence()
             .filter { it !== best }
             .sortedWith(compareBy({ it.report.hard }, { it.report.total }))
             .map { it.schedule }
             .distinctBy { sch -> sch.joinToString("|") { it.joinToString(",") } }
             .take(3)
             .toList()
+        runSlot()?.alternatives = alts                      // [3.335.0] この実行の「他の案」
+        if (ownsStatics(runSlot())) lastAlternatives = alts
         val totalIters = results.sumOf { it.iterations }
         val mode = if (winner.get() >= 0) "合格で早期キャンセル" else "時間内最良採用"
         val chainNote = if (plan.max() > 1) "・仮説内${plan.min()}〜${plan.max()}並列(SA/ALNS多チェーン)" else ""
@@ -1282,10 +1354,11 @@ object V6NativeOptimizer {
                 //   2層目番兵の fullEval（正しさ）は従来どおり改善チャンクごとに実施＝退化不能は不変。
                 var reportStale = false
                 var lastUiMs = 0L
+                val mySlot = runSlot()   // [3.335.0] 非 suspend なローカル関数からは取れないので先に捕まえる
                 fun syncReport() {
                     if (reportStale) {
                         globalReport = UnifiedViolationChecker.check(state, globalBest)
-                        publishLiveBest(globalReport, globalBest)
+                        if (ownsStatics(mySlot)) publishLiveBest(globalReport, globalBest)
                         reportStale = false
                     }
                 }
@@ -1552,7 +1625,8 @@ object V6NativeOptimizer {
                 iter++
                 itersTotal++
                 if (iter % 120L == 0L) {
-                    publishLiveBest(globalReport, globalBest)   // [DefragLiveView] 計算中ライブ盤面を公開
+                    // [3.335.0] 置き換えられた古い実行が新しい実行のライブ盤面を上書きしないようにする。
+                    if (ownsStatics(runSlot())) publishLiveBest(globalReport, globalBest)
                     onProgress("ALNS restart ${r + 1}/$restarts", globalReport, itersTotal, nowMs() - started)
                     yield()
                 }
@@ -1700,7 +1774,7 @@ object V6NativeOptimizer {
             if (stagnantRounds == 0 || round == rounds - 1) {
                 logs.add(MirrorLog(iter = iters, tag = "RunMAGI_RSI", message = "round=${round + 1}/$rounds focus=$focus best HARD=${bestReport.hard} total=${bestReport.total}" + if (stagnantRounds > 0) "（無改善${stagnantRounds}R）" else "（改善）"))
             }
-            publishLiveBest(bestReport, best)   // [DefragLiveView] 計算中ライブ盤面を公開
+            if (ownsStatics(runSlot())) publishLiveBest(bestReport, best)   // [DefragLiveView] 計算中ライブ盤面
             onProgress("RSI $focus", bestReport, iters, nowMs() - started)
             // [N4改] focus枯渇の早期終了。旧版は「2R無改善」だけで打ち切っていたが、これは達成可能族が
             //   残る場合でもランダム探索(destroy-repair)を早期に切り、乱数運の悪い2Rで本来伸びる盤面を捨てうる
@@ -1738,7 +1812,7 @@ object V6NativeOptimizer {
         }
         // [3.288.0/ログ強化=状態軸] このRSI実行でHF63が「構造的に充足困難」と学習した族を実行横断で集約
         //   （エピローグの残存分析行が読む。ワーカー並行呼出があるため synchronized 集約）。
-        recordInfeasible(hf63.infeasibleFamilies())
+        recordInfeasibleScoped(hf63.infeasibleFamilies())
         return V6OptimizerResult(best, bestReport.copy(logs = logs + bestReport.logs), V6Algorithm.RSI, logs, iters, nowMs() - started)
     }
 
