@@ -35,6 +35,11 @@
 評価の真実は `Evaluator` / `DeltaEvaluator` と `UnifiedViolationChecker` の共通重み。
 各探索器が独自の採否順を持たないよう、最終採否は `betterReport` に統一されている。
 
+**近傍の共通規約**：探索も研磨も**実現可能な希望が入ったセル（`Problem.wishLocked`）を触らない**。
+入口の `hf67HardRepair` と `Problem.initialAssignment` が実現可能な希望を先に盤面へ入れるので、
+触らなければ正しいまま残る。3.334.0 まで SA/LAHC の近傍だけがこの規約から外れており、
+**手の 35〜36% が採点でほぼ必ず却下される手**に費やされていた（pref は hard＝差分が 1e9 単位になる）。
+
 本最適化の終盤（`runPostOptimization` の**手前**）で `EliteIntegrationPolish` が走り、
 蓄積したエリート盤面を Path Relinking / Fusion で統合する。採否は checker ＋ `betterReport` ＋
 `exactPinRegression` の3段。

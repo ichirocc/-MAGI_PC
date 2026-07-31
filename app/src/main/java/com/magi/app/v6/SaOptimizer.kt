@@ -304,8 +304,18 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             val b = problem.bucket[problem.sgrp[i]]
             return if (b.isEmpty()) de.at(i, 0) else b[rng.nextInt(b.size)]
         }
+        // [3.334.0] 近傍は**実現可能な希望が入ったセルを触らない**。後処理研磨の全パスと C++ の修復
+        //   オペレータは元から `wishLocked` を見ているのに、探索の近傍だけが見ていなかった（非対称）。
+        //   採点は元から正しい（pref は hard＝希望を破ると差分が 1e9 単位で増え Metropolis はほぼ必ず却下）
+        //   ので誤った勤務表は出ないが、**手の 35〜36% がその却下される手に費やされていた**（実測）。
+        //   入口の hf67HardRepair が実現可能な希望を先に盤面へ入れるので、触らなければ正しいまま残る。
+        fun locked(i: Int, j: Int) = problem.wishLocked(i, j)
         fun opSingle() {
-            val i = rng.nextInt(S); val j = rng.nextInt(T)
+            val i = rng.nextInt(S)
+            var j = rng.nextInt(T)
+            var tries = 0
+            while (locked(i, j) && tries < 4) { j = rng.nextInt(T); tries++ }
+            if (locked(i, j)) return
             val b = problem.bucket[problem.sgrp[i]]
             if (b.isEmpty()) return
             applyCell(i, j, b[rng.nextInt(b.size)])
@@ -315,6 +325,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             if (T < 2) return
             val j1 = rng.nextInt(T); var j2 = rng.nextInt(T)
             if (j1 == j2) j2 = (j2 + 1) % T
+            if (locked(i, j1) || locked(i, j2)) return
             val o1 = de.at(i, j1); val o2 = de.at(i, j2)
             if (o1 == o2) return
             applyCell(i, j1, o2); applyCell(i, j2, o1)
@@ -330,16 +341,17 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             if (maxStart < 0) { opSingle(); return }
             val js = rng.nextInt(maxStart + 1)
             var l = 0
-            while (l < c.day1) { applyCell(i, js + l, c.shiftIdx); l++ }
+            while (l < c.day1) { if (!locked(i, js + l)) applyCell(i, js + l, c.shiftIdx); l++ }
         }
         fun opLns() {
             when (rng.nextInt(3)) {
                 0 -> { val i = rng.nextInt(S); val cnt = 2 + rng.nextInt(min(7, T)); var k = 0
-                    while (k < cnt) { applyCell(i, rng.nextInt(T), randShiftFor(i)); k++ } }
+                    while (k < cnt) { val j = rng.nextInt(T); if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
                 1 -> { val j = rng.nextInt(T); var i = 0
-                    while (i < S) { applyCell(i, j, randShiftFor(i)); i++ } }
+                    while (i < S) { if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); i++ } }
                 else -> { val cnt = 3 + rng.nextInt(8); var k = 0
-                    while (k < cnt) { val i = rng.nextInt(S); applyCell(i, rng.nextInt(T), randShiftFor(i)); k++ } }
+                    while (k < cnt) { val i = rng.nextInt(S); val j = rng.nextInt(T)
+                        if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
             }
         }
         val hasC1 = problem.cons1.isNotEmpty()

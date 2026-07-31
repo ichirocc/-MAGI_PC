@@ -588,6 +588,13 @@ struct SaChunk {
 // SA チャンク実行（SaOptimizer PhaseA の冷却ラダー1本ぶん、Kotlin と同じ4オペレータ＋Metropolis）。
 // out: [status, curScore, bestScore, iters, improvedInChunk, tailIters]
 // status: 0=OK / 1=cur整合性NG / 2=best整合性NG（いずれもKotlin側で破棄・退化）。
+// [3.334.0] 実現可能な希望が入ったセルか（Kotlin `Problem.wishLocked` と同義）。
+//   SA/LAHC の近傍と修復オペレータの両方から使うので、SA の手前で定義する。
+inline bool wishLockedN(const MagiProblem& p, int i, int j) {
+    int w = p.wish[(size_t)i * p.T + j];
+    return w >= 0 && p.cd(i, w);
+}
+
 void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn,
                 uint64_t seed, double t0, double tf, double alpha, int chain, long long out[6]) {
     const int S = p.S, T = p.T;
@@ -616,6 +623,8 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
     };
     auto opSingle = [&]() {
         int i = st.nextInt(S), j = st.nextInt(T);
+        for (int tries = 0; tries < 4 && wishLockedN(p, i, j); tries++) j = st.nextInt(T);
+        if (wishLockedN(p, i, j)) return;
         const auto& b = p.bucket[p.sgrp[i]];
         if (b.empty()) return;
         applyCell(i, j, b[st.nextInt((int)b.size())]);
@@ -625,6 +634,7 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
         int i = st.nextInt(S);
         int j1 = st.nextInt(T), j2 = st.nextInt(T);
         if (j1 == j2) j2 = (j2 + 1) % T;
+        if (wishLockedN(p, i, j1) || wishLockedN(p, i, j2)) return;
         int o1 = st.a[(size_t)i * T + j1], o2 = st.a[(size_t)i * T + j2];
         if (o1 == o2) return;
         applyCell(i, j1, o2);
@@ -639,16 +649,17 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
         int maxStart = T - c.d1;
         if (maxStart < 0) { opSingle(); return; }
         int js = st.nextInt(maxStart + 1);
-        for (int l = 0; l < c.d1; l++) applyCell(i, js + l, c.si);
+        for (int l = 0; l < c.d1; l++) if (!wishLockedN(p, i, js + l)) applyCell(i, js + l, c.si);
     };
     auto opLns = [&]() {
         switch (st.nextInt(3)) {
             case 0: { int i = st.nextInt(S); int cnt = 2 + st.nextInt(T < 7 ? T : 7);
-                for (int k = 0; k < cnt; k++) applyCell(i, st.nextInt(T), randShiftFor(i)); break; }
+                for (int k = 0; k < cnt; k++) { int j = st.nextInt(T); if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
             case 1: { int j = st.nextInt(T);
-                for (int i = 0; i < S; i++) applyCell(i, j, randShiftFor(i)); break; }
+                for (int i = 0; i < S; i++) if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); break; }
             default: { int cnt = 3 + st.nextInt(8);
-                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); applyCell(i, st.nextInt(T), randShiftFor(i)); } break; }
+                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); int j = st.nextInt(T);
+                    if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
         }
     };
     const bool hasC1 = !p.cons1.empty();
@@ -753,6 +764,8 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
     };
     auto opSingle = [&]() {
         int i = st.nextInt(S), j = st.nextInt(T);
+        for (int tries = 0; tries < 4 && wishLockedN(p, i, j); tries++) j = st.nextInt(T);
+        if (wishLockedN(p, i, j)) return;
         const auto& b = p.bucket[p.sgrp[i]];
         if (b.empty()) return;
         applyCell(i, j, b[st.nextInt((int)b.size())]);
@@ -762,6 +775,7 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
         int i = st.nextInt(S);
         int j1 = st.nextInt(T), j2 = st.nextInt(T);
         if (j1 == j2) j2 = (j2 + 1) % T;
+        if (wishLockedN(p, i, j1) || wishLockedN(p, i, j2)) return;
         int o1 = st.a[(size_t)i * T + j1], o2 = st.a[(size_t)i * T + j2];
         if (o1 == o2) return;
         applyCell(i, j1, o2);
@@ -776,16 +790,17 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
         int maxStart = T - c.d1;
         if (maxStart < 0) { opSingle(); return; }
         int js = st.nextInt(maxStart + 1);
-        for (int l = 0; l < c.d1; l++) applyCell(i, js + l, c.si);
+        for (int l = 0; l < c.d1; l++) if (!wishLockedN(p, i, js + l)) applyCell(i, js + l, c.si);
     };
     auto opLns = [&]() {
         switch (st.nextInt(3)) {
             case 0: { int i = st.nextInt(S); int cnt = 2 + st.nextInt(T < 7 ? T : 7);
-                for (int k = 0; k < cnt; k++) applyCell(i, st.nextInt(T), randShiftFor(i)); break; }
+                for (int k = 0; k < cnt; k++) { int j = st.nextInt(T); if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
             case 1: { int j = st.nextInt(T);
-                for (int i = 0; i < S; i++) applyCell(i, j, randShiftFor(i)); break; }
+                for (int i = 0; i < S; i++) if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); break; }
             default: { int cnt = 3 + st.nextInt(8);
-                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); applyCell(i, st.nextInt(T), randShiftFor(i)); } break; }
+                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); int j = st.nextInt(T);
+                    if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
         }
     };
     const bool hasC1 = !p.cons1.empty();
@@ -1005,10 +1020,6 @@ inline bool glsAcceptN(long long ns, long long curScore, double moveAug, double 
 // （乱数系列は別物＝経路一致は狙わない。採否は呼び出し側の受理と番兵が担保）。
 
 inline int rnInt(std::mt19937_64& rng, int bound) { return (int)(rng() % (uint64_t)bound); }
-inline bool wishLockedN(const MagiProblem& p, int i, int j) {
-    int w = p.wish[(size_t)i * p.T + j];
-    return w >= 0 && p.cd(i, w);
-}
 // staffCountPenaltyAt と同式（低90/高45/apt L1、n=回数）。
 inline long long staffCountPenaltyAtN(const MagiProblem& p, int i, int k, int n) {
     long long pen = 0;
