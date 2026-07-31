@@ -329,7 +329,9 @@ object V6HotfixPasses {
                 if (round == 0) logs.addAll(rC1.logs)
                 // [構造化診断, 3.322.0] 巡ごとに上書きし最後の巡のものを残す（最終盤面に一番近い）。
                 //   末尾で最終盤面に対して再フィルタするので、後続パスが直した箇所は落ちる。
-                rC1.plateau?.let { c1Plateau = it }
+                // [3.331.0] 巡ごとに上書きせず**合算**する。旧は最後の巡だけが残り、2巡目は
+                //   1巡目が直したあとの盤面を見るので観測が少なく、説明できる箇所が減っていた。
+                rC1.plateau?.let { fresh -> c1Plateau = c1Plateau?.mergedWith(fresh) ?: fresh }
                 rC1.pinBlocks?.let { pinBlocksAll.merge(it) }
 
                 // [C1IndexRepair / 3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖。C1RepairIndex/

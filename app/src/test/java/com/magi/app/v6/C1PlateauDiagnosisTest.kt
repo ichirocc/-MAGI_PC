@@ -147,4 +147,76 @@ class C1PlateauDiagnosisTest {
         assertEquals(1, d.entries.first().staff)
         assertTrue("ログ先頭は残存件数を名乗る", d.logLines().first().contains("窓の要件"))
     }
+
+    // --- [3.331.0/実機ログ] 巡ごとの観測を合算する ---
+
+    @Test fun mergedWithSumsObservationsAcrossRoundsInsteadOfOverwriting() {
+        // 実機ログの再現: 1巡目は7箇所を観測、2巡目は（1巡目が直したあとの盤面なので）3箇所だけ。
+        // 旧実装は 2巡目で上書きし、5日窓の説明が丸ごと消え、件数も実際より小さく出ていた。
+        val round1 = C1PlateauDiagnosis.build(
+            remainingC1 = 11,
+            blockStats = mapOf(
+                Triple(0, 1, 0) to mapOf(C1PlateauDiagnosis.REASON_SCORE to 8),   // 5日窓
+                Triple(0, 1, 1) to mapOf(C1PlateauDiagnosis.REASON_SCORE to 24),  // 14日窓
+            ),
+            culpritStats = mapOf(
+                Triple(0, 1, 0) to mapOf("low" to 8),
+                Triple(0, 1, 1) to mapOf("low" to 23, "high" to 1),
+            ),
+            staffName = { "古泉 健一" }, shiftKigou = { "休" },
+            ruleLabel = { if (it == 0) "5日で1回以上" else "14日で4回以上" },
+            stillDeficient = { _, _, _ -> true },
+        )
+        val round2 = C1PlateauDiagnosis.build(
+            remainingC1 = 8,
+            blockStats = mapOf(Triple(0, 1, 1) to mapOf(C1PlateauDiagnosis.REASON_SCORE to 6)),
+            culpritStats = mapOf(Triple(0, 1, 1) to mapOf("low" to 6)),
+            staffName = { "古泉 健一" }, shiftKigou = { "休" },
+            ruleLabel = { if (it == 0) "5日で1回以上" else "14日で4回以上" },
+            stillDeficient = { _, _, _ -> true },
+        )
+        val merged = round1.mergedWith(round2)
+        assertEquals("2巡目に出てこない5日窓も残る", 2, merged.entries.size)
+        assertEquals("残数は新しい方", 8, merged.remainingC1)
+        val wide = merged.entries.first { it.ruleIndex == 1 }
+        assertEquals("件数は全巡の合計", 30, wide.rejectedByScore)
+        assertEquals("主因の族も合算", 29, wide.topScoreCulprits.first { it.first == "low" }.second)
+        assertEquals("多い順", "low", wide.topScoreCulprits.first().first)
+        val narrow = merged.entries.first { it.ruleIndex == 0 }
+        assertEquals("1巡目だけの観測はそのまま", 8, narrow.rejectedByScore)
+    }
+
+    @Test fun mergedWithRecomputesCauseFromTheCombinedCounts() {
+        // 1巡目はピン破りが多く、2巡目はスコア却下が多い。合算後の分類は合計で決め直す。
+        fun one(pin: Int, score: Int, remaining: Int) = C1PlateauDiagnosis.build(
+            remainingC1 = remaining,
+            blockStats = mapOf(Triple(0, 1, 0) to mapOf(
+                C1PlateauDiagnosis.REASON_PIN to pin, C1PlateauDiagnosis.REASON_SCORE to score)),
+            culpritStats = emptyMap(),
+            staffName = { "s" }, shiftKigou = { "X" }, ruleLabel = { "r" },
+            stillDeficient = { _, _, _ -> true },
+        )
+        val a = one(pin = 5, score = 1, remaining = 3)
+        val b = one(pin = 0, score = 9, remaining = 2)
+        assertEquals(C1PlateauCause.PIN_CONSTRAINED, a.entries.single().cause)
+        val merged = a.mergedWith(b)
+        assertEquals("合計 pin=5 score=10 → スコア却下が多い",
+            C1PlateauCause.SCORE_TRADEOFF, merged.entries.single().cause)
+    }
+
+    @Test fun mergedWithHandlesEmptySides() {
+        val empty = C1PlateauDiagnosis(5, emptyList())
+        val one = C1PlateauDiagnosis.build(
+            remainingC1 = 3,
+            blockStats = mapOf(Triple(0, 1, 0) to mapOf(C1PlateauDiagnosis.REASON_SCORE to 2)),
+            culpritStats = emptyMap(),
+            staffName = { "s" }, shiftKigou = { "X" }, ruleLabel = { "r" },
+            stillDeficient = { _, _, _ -> true },
+        )
+        assertEquals("空 + 有 = 有", 1, empty.mergedWith(one).entries.size)
+        // 有 + 空 は観測を捨てず、残数だけ新しい方を採る（2巡目が何も観測しなくても説明を失わない）。
+        val kept = one.mergedWith(empty)
+        assertEquals(1, kept.entries.size)
+        assertEquals(5, kept.remainingC1)
+    }
 }
