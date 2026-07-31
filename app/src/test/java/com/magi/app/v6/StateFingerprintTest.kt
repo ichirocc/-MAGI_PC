@@ -109,6 +109,36 @@ class StateFingerprintTest {
         assertEquals("盤面だけの違いは指紋を変えない", StateFingerprint.of(b), StateFingerprint.of(moved))
     }
 
+    @Test fun rowShapeChangesTheFingerprint() {
+        // [3.333.0/外部レビュー Medium] 族ごとに1つ値を変えるテスト（上の29件）は**行の区切り**を
+        //   一度も試していなかった。可変長の行を素通しで連結すると、値の並びが同じで**構造だけ違う**
+        //   入力が同じ指紋になる。担当可否は「群×シフト」、連続パターンは「1本の並び」なので、
+        //   区切りが無いと別物が一致して古い診断・古い結果が新しい入力のものとして通る。
+        val b = base()
+        val shape = listOf(
+            "担当可否の行の切れ目" to Pair(
+                b.copy(groupShift = listOf(listOf(1, 1), listOf(0))),
+                b.copy(groupShift = listOf(listOf(1), listOf(1, 0))),
+            ),
+            "適切回数の行の切れ目" to Pair(
+                b.copy(groupShiftApt = listOf(listOf("1", "2"), listOf("3"))),
+                b.copy(groupShiftApt = listOf(listOf("1"), listOf("2", "3"))),
+            ),
+            "禁止の並びの切れ目" to Pair(
+                b.copy(cons3n = listOf(C3Row(listOf("A", "休")))),
+                b.copy(cons3n = listOf(C3Row(listOf("A")), C3Row(listOf("休")))),
+            ),
+            "必須の並びの切れ目" to Pair(
+                b.copy(cons3 = listOf(C3Row(listOf("A", "A", "休")))),
+                b.copy(cons3 = listOf(C3Row(listOf("A", "A")), C3Row(listOf("休")))),
+            ),
+        )
+        for ((label, pair) in shape) {
+            assertNotEquals("「$label」が違うのに指紋が一致する（構造の違いを見逃す）",
+                StateFingerprint.of(pair.first), StateFingerprint.of(pair.second))
+        }
+    }
+
     @Test fun sameStateGivesSameFingerprint() {
         assertEquals(StateFingerprint.of(base()), StateFingerprint.of(base()))
     }

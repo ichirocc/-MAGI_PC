@@ -107,6 +107,30 @@ class SessionRegressionTest {
         assertEquals(1, withHeader!!.accepted)
     }
 
+    @Test fun constraintsCsvRejectsStructurallyUnusableRows() {
+        // [3.333.0/外部レビュー Critical] 種別が既知なだけの行を無条件に受理していた。
+        //   `連勤,,,` は C1Row("","","") として件数に数えられるが `Problem` は捨てる＝
+        //   **評価されない行で既存の有効な制約を全置換**できた（実質「制約なし」で最適化される）。
+        val st = csvState()
+        val empty = ConstraintsCsvIO.parse("連勤,2,休,1\n連勤,,,", st)
+        assertNotNull(empty)
+        assertEquals("読める行は従来どおり数える", 2, empty!!.accepted)
+        assertEquals("評価されない行を数える", 1, empty.rejected)
+
+        // 群・スキル群も同じ（記号が今のデータに無い＝その行は一切効かない）。
+        val unknownGroup = ConstraintsCsvIO.parse("群回数,ZZ,A,0,1", st)
+        assertEquals(1, unknownGroup!!.rejected)
+
+        // 連続パターンの未解決記号は別リスト(c3UnknownShift)に入るので、そちらも見ていることの確認。
+        val unknownShift = ConstraintsCsvIO.parse("禁止連続,休,ZZ", st)
+        assertEquals(1, unknownShift!!.rejected)
+
+        // 正常な行しかなければ従来どおり 0。
+        val clean = ConstraintsCsvIO.parse("群回数,G,A,0,1\n禁止連続,休,A", st)
+        assertEquals(2, clean!!.accepted)
+        assertEquals(0, clean.rejected)
+    }
+
     // ---- レビュー指摘P1: 休シフト削除でセルが勤務に化けない／休自体は削除禁止 ----
 
     private fun threeShiftState() = MagiState(

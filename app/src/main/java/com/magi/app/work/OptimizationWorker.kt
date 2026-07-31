@@ -65,6 +65,12 @@ class OptimizationWorker(
             BubbleSupport.pushShortcut(ctx)
             BubbleSupport.postProgress(ctx, "最適化を開始しました")
         }
+        // [3.333.0/外部レビュー] 成功パスは所有権マーカー(runIdFile)を**自分で消してから** finally へ入る。
+        //   finally が `ownsFiles()` をファイルから読み直すと「所有者でない」と判定され、
+        //   `setRunning(false)` が飛ばされて **OptimizationRepository.running が永久に true** になっていた
+        //   （＝完了後も optimizeInFlight() が真のままで、編集・Undo/Redo が恒久的にブロックされる）。
+        //   自分で手放したことを覚えておき、finally はそれも所有者扱いにする。
+        var releasedByMe = false
         var lastSnapMs = 0L
         var lastBubbleMs = 0L
         val wallStart = System.currentTimeMillis()   // [実機報告「残り時間表示が5分から何度も巡回する」修正]
@@ -123,6 +129,7 @@ class OptimizationWorker(
                 runCatching { inputFile(ctx).delete() }
                 runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
                 runCatching { runIdFile(ctx).delete() }
+                releasedByMe = true
             }
             Result.success()
         } catch (e: CancellationException) {
@@ -142,7 +149,9 @@ class OptimizationWorker(
         } finally {
             // [3.329.0/外部レビュー H-03] **所有者のときだけ**実行中を降ろす。置き換えで打ち切られた
             //   旧実行がここを通ると、まだ動いている新実行の「実行中」を消してしまう。
-            if (ownsFiles()) OptimizationRepository.setRunning(false)
+            // [3.333.0] `releasedByMe` は「自分が正常完了してマーカーを消した」＝実行中を降ろすのが
+            //   正しい経路。ここを見ないと完了後に実行中が残り続けた（上のコメント参照）。
+            if (releasedByMe || ownsFiles()) OptimizationRepository.setRunning(false)
         }
     }
 

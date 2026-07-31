@@ -217,7 +217,8 @@ object V6FinalPort {
         onProgress: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
     ): ActionResult = withContext(Dispatchers.Default) {
         require(state.dayCount > 0) { "対象期間が無効です。基本情報で終了日を開始日より後にしてください" }
-        // タイムアウト上限10分(600s)を厳守（業務指示）。呼び出し側に依らずここで頭打ちにする。
+        // [3.333.0/外部レビュー] 上限は [MAX_OPTIMIZE_SEC]（現在 300s＝5分）。呼び出し側に依らずここで
+        //   頭打ちにする。旧コメントは「10分(600s)」のままで実装と食い違っていた（HF77: コメント≠実装）。
         val seconds = secondsRaw.coerceIn(1, MAX_OPTIMIZE_SEC)
         val gate = confirmDespiteImpossibleWishes(state, allowImpossible)
         if (!gate.allowed) error(gate.message)
@@ -245,9 +246,9 @@ object V6FinalPort {
             is OptimizationPlan.Portfolio -> V6OptimizerOptions(V6Algorithm.PORTFOLIO, plan.seconds, workers, softPolish, restarts = 2, postPolish = false)
         }
         val optsR = opts.copy(rectSwap = V6LateOperators.optFlagBool(state, "rectSwap", true))   // [HF532移植] optFlags.rectSwap 既定ON
-        // [review: 600s budget] optimize() + runPostOptimization() を一つの予算で管理する。
+        // [review: 予算一本化] optimize() + runPostOptimization() を一つの予算で管理する。
         // 後処理は元々 deadline も progress も持たず、optimize が予算を使い切った後も走り続け、
-        // 合計が予算を大きく超過していた(実機44分/予算600s)。ここで全体に hardDeadline を張り、
+        // 合計が予算を大きく超過していた(実機44分。当時の上限は600s)。ここで全体に hardDeadline を張り、
         // coroutine キャンセル(計算を止める)と束ねて後処理へ伝播する。
         val startMs = System.currentTimeMillis()
         val budgetMs = seconds.toLong() * 1000L
