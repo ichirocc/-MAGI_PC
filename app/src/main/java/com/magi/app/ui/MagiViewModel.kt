@@ -104,6 +104,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     @Volatile private var optimizeActive = false
 
     /** 前景の最適化（[optimizeActive]）と背景 Worker のどちらかが動いていれば真。 */
+    /**
+     * [3.328.0 → 3.336.0/外部レビュー P1] **編集・実行の可否はここだけを見る**。`ui.running` は
+     * 画面へ出すための写しで、初期化時の WorkManager 問い合わせが失敗すれば false のまま残る
+     * （＝背景で走っているのにガードが全部開く）。3.336.0 で早期 return するガード14箇所を
+     * こちらへ寄せ、`ui.running` は表示専用へ降格した。
+     */
     private fun optimizeInFlight(): Boolean =
         optimizeActive || OptimizationRepository.running.value
 
@@ -245,7 +251,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runInBackground() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (_ui.value.running) return
+        if (optimizeInFlight()) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         OptimizationRepository.clear()
@@ -519,7 +525,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [判断設計監査 #3] 「データを開く」直前に退避した1世代前の状態へ戻す。loadAsync 経由のため
      *  現在のデータが再び退避される＝もう一度押すと元へ戻る（スワップ）。 */
     fun restorePreviousData() {
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は操作できません") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は操作できません") }; return }
         viewModelScope.launch {
             val txt = withContext(Dispatchers.IO) {
                 runCatching { prevBackupFile.takeIf { it.exists() }?.readText() }.getOrNull()
@@ -668,7 +674,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   （走行中jobが stop() 不能のゾンビ化）と currentSchedule の同時書き換え（3.161.0 と同じ
         //   別名共有クラス）が起きていた（実機ログ 19:56:41 最適化開始→19:56:48 初期解生成完了 で実証）。
         //   runV6FullOptimize/start/runSoftPolish と同じガードに統一（3.161.0 のセル編集ガードと同方針）。
-        if (_ui.value.running) {
+        if (optimizeInFlight()) {
             _ui.update { it.copy(message = "計算の実行中は初期解を作れません（完了または「やめる」の後にどうぞ）") }
             return
         }
@@ -705,7 +711,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val st = state ?: return
         val sched = currentSchedule ?: return
         // [3.271.0] generateSmartInitial と同じ実行中ガード（API温存中だが同じ穴を残さない）。
-        if (_ui.value.running) {
+        if (optimizeInFlight()) {
             _ui.update { it.copy(message = "計算の実行中は下書きを作れません（完了または「やめる」の後にどうぞ）") }
             return
         }
@@ -739,7 +745,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun start() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (_ui.value.running) return
+        if (optimizeInFlight()) return
         if (!ensureValidForRun(st0, sched0)) return
         val runState = st0.withSchedule(sched0)
         val params = SaParams(
@@ -824,7 +830,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runLightOptimize() {
         val st = state ?: return
         val sched = currentSchedule ?: return
-        if (_ui.value.running) return
+        if (optimizeInFlight()) return
         if (!ensureValidForRun(st, sched)) return
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
@@ -955,7 +961,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runV6FullOptimize() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (_ui.value.running) return
+        if (optimizeInFlight()) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         val sig = "${_ui.value.budgetSec}|${_ui.value.workers}|${_ui.value.v6Algorithm}|${_ui.value.softPolish}"
@@ -1155,7 +1161,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runSoftPolish() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (_ui.value.running) return
+        if (optimizeInFlight()) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
@@ -1357,7 +1363,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   同一の配列参照＝ここで in-place 変更すると、完了時の baseReport(旧盤面基準)と食い違うか、
         //   良化採用時に編集が無言で上書き消失する。ジョブ完了まで編集を拒否する（他の直接変異API=
         //   setCells/cycleCell/applyFixSuggestion も同根のため同じガードを持つ）。
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         if (sched[i][j] == shift) return
@@ -1378,7 +1384,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [プロ一括編集] 複数セル(i,j)を1シフトへ一括設定。Undoは1回・再チェックも1回（keep-best互換）。 */
     fun setCells(cells: Collection<Pair<Int, Int>>, shift: Int) {
         val st = state ?: return
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         var changed = 0
         var first = true
@@ -1427,7 +1433,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cycleCell(i: Int, j: Int) {
         val st = state ?: return
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         val p = Problem(st)
@@ -1560,7 +1566,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * @param loDelta 下限へ足す量（負で緩める）。@param hiDelta 上限へ足す量（正で緩める）。
      */
     fun relaxStaffRangePin(i: Int, k: Int, loDelta: Int, hiDelta: Int) {
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は回数を変更できません。終わってから試してください。") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は回数を変更できません。終わってから試してください。") }; return }
         val st = state ?: return
         val cur = st.staffRange["$i,$k"] ?: return
         val lo = cur.lo.trim().toIntOrNull() ?: return
@@ -2150,7 +2156,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun relaxForbiddenRule(seqLabel: String) {
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は設定を変更できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は設定を変更できません（完了後にもう一度お試しください）") }; return }
         val s = state ?: return
         fun key(row: C3Row): String {
             val end = row.pattern.indexOfFirst { it.isBlank() }
@@ -2241,7 +2247,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。 */
     fun applyFixSuggestion(s: FixSuggestion) {
         val st = state ?: return
-        if (_ui.value.running) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (s.ops.isEmpty()) return
         for (op in s.ops) {

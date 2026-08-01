@@ -76,9 +76,7 @@ object FixSuggester {
             val rep = UnifiedViolationChecker.check(state, s)
             evals++
             for (idx in ops.indices) s[ops[idx].staff][ops[idx].day] = saved[idx]
-            val better = rep.hard < base.hard ||
-                (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
-                (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
+            val better = betterReport(rep, base)
             if (better) {
                 found.add(Quad(FixSuggestion(kind, ops, label, rep.hard - base.hard, rep.total - base.total, diffOf(rep)),
                     rep.hard - base.hard, rep.total - base.total, rep.weightedScore - base.weightedScore))
@@ -175,7 +173,7 @@ object FixSuggester {
                         // 現在の積み上げ盤面のスコアを基準に、x へ変えて更に改善する可動コマを1つ選ぶ（単調改善を保証）
                         val curRep = UnifiedViolationChecker.check(state, s); evals++
                         var bestJ = -1; var bestSaved = -1
-                        var bestHard = curRep.hard; var bestTotal = curRep.total; var bestW = curRep.weightedScore
+                        var bestRep: ViolationReport? = curRep
                         var improved = false
                         for (j in 0 until p.T) {
                             if (p.wish[i][j] >= 0) continue
@@ -184,10 +182,10 @@ object FixSuggester {
                             s[i][j] = x
                             val rep = UnifiedViolationChecker.check(state, s); evals++
                             s[i][j] = a
-                            val take = rep.hard < bestHard ||
-                                (rep.hard == bestHard && rep.weightedScore < bestW) ||
-                                (rep.hard == bestHard && rep.weightedScore == bestW && rep.total < bestTotal)
-                            if (take) { improved = true; bestHard = rep.hard; bestTotal = rep.total; bestW = rep.weightedScore; bestJ = j; bestSaved = a }
+                            // [3.336.0] 3キーを手書きで写さず `betterReport` を呼ぶ（写した瞬間、次に本体が
+                            //   変わったときここだけ取り残される＝教訓#28）。比較用に最良の report を持つ。
+                            val take = bestRep == null || betterReport(rep, bestRep!!)
+                            if (take) { improved = true; bestRep = rep; bestJ = j; bestSaved = a }
                         }
                         if (!improved || bestJ < 0) break
                         s[i][bestJ] = x; picked.add(FixCell(i, bestJ, x)); applied.add(bestJ to bestSaved); rounds++
@@ -199,9 +197,7 @@ object FixSuggester {
                         for (op in picked) s[op.staff][op.day] = op.toShift
                         val rep = UnifiedViolationChecker.check(state, s); evals++
                         for (idx in picked.indices) s[picked[idx].staff][picked[idx].day] = saved[idx]
-                        val better = rep.hard < base.hard ||
-                            (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
-                            (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
+                        val better = betterReport(rep, base)
                         if (better) found.add(Quad(FixSuggestion(FixKind.CHAIN, picked.toList(),
                             "（連鎖）${nm(i)} の「${sym(x)}」不足を${picked.size}コマ補充", rep.hard - base.hard, rep.total - base.total, diffOf(rep)),
                             rep.hard - base.hard, rep.total - base.total, rep.weightedScore - base.weightedScore))
@@ -232,19 +228,15 @@ object FixSuggester {
                 windows++
                 val sizes = IntArray(n) { cellOpts[it].size }
                 val idx = IntArray(n)
-                var haveBest = false; var bHard = 0; var bTotal = 0; var bW = 0.0
+                var bestComboRep: ViolationReport? = null   // [3.336.0] 3キー手書き→betterReport 委譲
                 var bestCombo: IntArray? = null
                 while (true) {
                     for (c in 0 until n) s[cells[c]][j] = cellOpts[c][idx[c]]
                     val rep = UnifiedViolationChecker.check(state, s); evals++
-                    val better = rep.hard < base.hard ||
-                        (rep.hard == base.hard && rep.weightedScore < base.weightedScore) ||
-                        (rep.hard == base.hard && rep.weightedScore == base.weightedScore && rep.total < base.total)
+                    val better = betterReport(rep, base)
                     if (better) {
-                        val take = !haveBest || rep.hard < bHard ||
-                            (rep.hard == bHard && rep.weightedScore < bW) ||
-                            (rep.hard == bHard && rep.weightedScore == bW && rep.total < bTotal)
-                        if (take) { haveBest = true; bHard = rep.hard; bTotal = rep.total; bW = rep.weightedScore; bestCombo = IntArray(n) { cellOpts[it][idx[it]] } }
+                        val take = bestComboRep == null || betterReport(rep, bestComboRep!!)
+                        if (take) { bestComboRep = rep; bestCombo = IntArray(n) { cellOpts[it][idx[it]] } }
                     }
                     var c = 0
                     while (c < n) { idx[c]++; if (idx[c] < sizes[c]) break; idx[c] = 0; c++ }
@@ -252,7 +244,7 @@ object FixSuggester {
                 }
                 for (c in 0 until n) s[cells[c]][j] = cur[c]   // 復元
                 val bc = bestCombo
-                if (haveBest && bc != null) {
+                if (bestComboRep != null && bc != null) {
                     val ops = ArrayList<FixCell>()
                     for (c in 0 until n) if (bc[c] != cur[c]) ops.add(FixCell(cells[c], j, bc[c]))
                     if (ops.size >= 2) {

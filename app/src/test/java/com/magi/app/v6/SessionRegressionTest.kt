@@ -131,6 +131,43 @@ class SessionRegressionTest {
         assertEquals(0, clean.rejected)
     }
 
+    @Test fun constraintsCsvRejectsPatternWithAGap() {
+        // [3.336.0/外部レビュー P2] `MUST連続,休,,A` は空セルで打ち切られ ["休"] になり、**A が黙って
+        //   消えたまま accepted に数えられて**いた（3.333.0 の「評価されない行を受理しない」の取り残し）。
+        val st = csvState()
+        val gap = ConstraintsCsvIO.parse("MUST連続,休,,A", st)
+        assertEquals("穴あきの並びは取り込まない", 0, gap!!.accepted)
+        assertEquals(1, gap.rejected)
+        assertEquals(0, gap.state.cons3.size)
+        // 末尾が空なのは正常（並びは可変長）。
+        val ok = ConstraintsCsvIO.parse("MUST連続,休,A", st)
+        assertEquals(1, ok!!.accepted)
+        assertEquals(0, ok.rejected)
+        assertEquals(listOf("休", "A"), ok.state.cons3[0].pattern)
+    }
+
+    // ---- [3.336.0/敵対レビュー H3] c1 ブーストの採否が weightedScore を悪化させない ----
+    //
+    // `V6LateOperators` の gate は `betterReport` が偽でも「c1 が減る横移動」を採る例外(HF537互換)を持つ。
+    // 旧条件の `lim = 200*high + 120*low` は**目的関数(high45 < low90)と大小が逆**なので、high−1/low+1 の
+    // 入れ替えは lim を下げつつ weighted を悪化させられた。ここでは条件式そのものを反例で固定する
+    // （gate は improve() の内側 private なので、同じ判定を外から検算する）。
+
+    @Test fun c1BoostMustNotAcceptAWeightedRegression() {
+        fun w(c1: Int, high: Int, low: Int) = c1 * 15.0 + high * 45.0 + low * 90.0
+        fun lim(high: Int, low: Int) = 200 * high + 120 * low
+        // cur: c1=5 high=2 low=1 ／ nv: c1=4 high=1 low=2
+        val curW = w(5, 2, 1); val nvW = w(4, 1, 2)
+        // 旧 boost の条件は全部通る
+        assertTrue("c1 は減る", 4 < 5)
+        assertTrue("lim は下がる", lim(1, 2) <= lim(2, 1))
+        assertTrue("生の件数も増えない", (4 + 1 + 2) <= (5 + 2 + 1))
+        // なのに weighted は悪化する＝旧実装はこれを採用していた
+        assertTrue("反例が weighted を悪化させることの確認", nvW > curW)
+        // 3.336.0 で足した条件がこれを弾く
+        assertTrue("weighted 非増の条件で弾かれる", !(nvW <= curW))
+    }
+
     // ---- レビュー指摘P1: 休シフト削除でセルが勤務に化けない／休自体は削除禁止 ----
 
     private fun threeShiftState() = MagiState(

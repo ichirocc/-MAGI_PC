@@ -82,6 +82,9 @@ object MirrorKeys {
         "groupViol" to 10000.0, "pref" to 9000.0, "covU" to 8000.0, "c3n" to 7000.0,
         "low" to 90.0, "high" to 45.0,
         // [HF77明示数値指示(2026-07-20)] 回避の並び(c3mn)=15・窓の要件(c1)=5 に変更（旧12/4）。
+        //   [3.253.0/HF77] 窓の要件(c1)は続けて 5→15 へ（上のコメントは 5 のままで実装とずれていた）。
+        // **ここを変えたら `Evaluator.fullEvalParts` のリテラルと C++ も同時に変える**。
+        //   Kotlin 側のずれは `ObjectiveParityTest`、C++ 側は native-parity CI が捕まえる。
         "c3mn" to 15.0, "c1" to 15.0, "c3" to 3.0, "c3m" to 2.0,
         "c2" to 1.0, "c41" to 1.0, "c42" to 1.0, "c41s" to 1.0, "c42s" to 1.0,
         "apt" to 1.0, "fair" to 1.0, "weekly" to 1.0,

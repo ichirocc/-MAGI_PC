@@ -120,12 +120,22 @@ class OptimizationWorker(
             //   旧実装はここに所有権の検査が無く、完了間際に REPLACE された実行が別データの結果を
             //   resultFile へ書き、次回起動でそれが現在のデータとして復元されうる状態だった。
             if (ownsFiles()) {
+                // [3.336.0/外部レビュー S3] 順序を「耐久保存 → 公開」へ。旧は公開が先で、その間に
+                //   プロセスが落ちるとメモリにしか無い結果が消えた。さらに `writeText` は非原子で、
+                //   書き込み途中で落ちると**壊れた JSON が resultFile に残る**。起動時の復元は
+                //   `resultTxt` が空でなければマーカーも入力も掃除してから読むので、壊れたファイルは
+                //   「結果も再開手段も両方失う」経路になっていた。一時ファイル経由で置き換える。
+                // [C1] 完了結果を耐久保存。UI不在(プロセス再起動でWorkerだけ走った)でも次回起動で反映できる。
+                runCatching {
+                    val json = StateParser.serialize(req.first, res.schedule)
+                    val tmp = File(resultFile(ctx).parentFile, "magi_bg_result.json.tmp")
+                    tmp.writeText(json)
+                    if (!tmp.renameTo(resultFile(ctx))) { resultFile(ctx).writeText(json); tmp.delete() }
+                }
                 OptimizationRepository.publishResult(
                     OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
                 )
                 notifyDone(res.report.hard, res.report.total)
-                // [C1] 完了結果を耐久保存。UI不在(プロセス再起動でWorkerだけ走った)でも次回起動で反映できる。
-                runCatching { resultFile(ctx).writeText(StateParser.serialize(req.first, res.schedule)) }
                 runCatching { inputFile(ctx).delete() }
                 runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
                 runCatching { runIdFile(ctx).delete() }
@@ -145,6 +155,10 @@ class OptimizationWorker(
         } catch (e: Exception) {
             notify("最適化に失敗しました", e.message ?: "原因不明")
             runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました") }
+            // [3.336.0/外部レビュー P0残] 失敗だけが所有権を閉じない出口だった。マーカーと入力が残るので、
+            //   次回起動が「中断されました・再開できます」と案内する（実際は失敗）。`Result.failure()` は
+            //   WorkManager が再実行しない＝入力を残す意味も無い。所有者なら片付けてから返す。
+            if (ownsFiles()) { runCatching { clearFiles(ctx) }; releasedByMe = true }
             Result.failure()
         } finally {
             // [3.329.0/外部レビュー H-03] **所有者のときだけ**実行中を降ろす。置き換えで打ち切られた

@@ -44,7 +44,17 @@ internal fun c42PairCount(sameSet: Boolean, n1: Int, n2: Int): Long =
  */
 class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
 
-    fun fullEval(a: Array<IntArray>): Long { val v = fullEvalParts(a); return v[0] * SCORE_HARD_UNIT + v[1] }
+    fun fullEval(a: Array<IntArray>): Long {
+        val v = fullEvalParts(a)
+        // [3.336.0/敵対レビュー H10] 辞書式パックは soft < SCORE_HARD_UNIT を前提にする（超えると
+        //   hard へ繰り上がり、SA/LAHC の HARD ゲートが静かに壊れる）。実運用（30名×31日）の実測は
+        //   soft ~2e3 で 1e9 に遠く及ばないが、**契約として一度も検査していなかった**。重みの変更
+        //   （HF77）や制約の大量複製で膨らんだときに、原因不明の挙動でなく明示的な失敗にする。
+        check(v[1] in 0 until SCORE_HARD_UNIT) {
+            "soft=${v[1]} が辞書式パックの桁(${SCORE_HARD_UNIT})を超えました。重みか制約数を見直してください"
+        }
+        return v[0] * SCORE_HARD_UNIT + v[1]
+    }
 
     /** [監査#7] hard/soft を分離して返す（soft の SCORE_HARD_UNIT 桁溢れ＝辞書式崩壊の診断用）。fullEval はこの合成で挙動不変。 */
     fun fullEvalParts(a: Array<IntArray>): LongArray {

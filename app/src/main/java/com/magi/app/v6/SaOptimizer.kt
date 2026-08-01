@@ -265,13 +265,25 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
         }
     }
 
-    /** strongPerturb の平坦配列版（従来: best から数手の単発移動で離す。スコア不要＝次チャンクが再計算）。 */
-    private fun strongPerturbFlat(cur: IntArray, rng: Random) {
+    /** strongPerturb の平坦配列版（従来: best から数手の単発移動で離す。スコア不要＝次チャンクが再計算）。
+     *
+     *  [3.336.0/敵対レビュー H1] **3.334.0 の取り残し**。Kotlin 側の `strongPerturb()` は `opSingle()` 経由で
+     *  希望固定を避けるのに、ネイティブ経路のこちらだけが見ていなかった。既定はネイティブ経路なので、
+     *  停滞のたびに Conductor がここを呼び、入口で盤面へ載せた実現可能な希望を上書きしていた。
+     *  最終解は fullEval 番兵と keep-best が守るが、「探索は実現可能な希望を動かさない」という契約は
+     *  破れていた（`opSingle` と同じく日を4回まで引き直し、それでも固定なら見送る）。 */
+    //  ホスト JVM は `.so` を読めずネイティブ経路（唯一の呼出元）が走らないため、**間接テストでは
+    //  この関数のガードを検証できない**（実際、バグを戻しても間接テストは通ってしまった）。直接呼ぶために internal。
+    internal fun strongPerturbFlat(cur: IntArray, rng: Random) {
         val s = problem.S; val t = problem.T
         repeat(4 + rng.nextInt(8)) {
             val i = rng.nextInt(s)
+            var j = rng.nextInt(t)
+            var tries = 0
+            while (problem.wishLocked(i, j) && tries < 4) { j = rng.nextInt(t); tries++ }
+            if (problem.wishLocked(i, j)) return@repeat
             val b = problem.bucket[problem.sgrp[i]]
-            if (b.isNotEmpty()) cur[i * t + rng.nextInt(t)] = b[rng.nextInt(b.size)]
+            if (b.isNotEmpty()) cur[i * t + j] = b[rng.nextInt(b.size)]
         }
     }
 
@@ -340,18 +352,27 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             val maxStart = T - c.day1
             if (maxStart < 0) { opSingle(); return }
             val js = rng.nextInt(maxStart + 1)
+            // [3.341.0] 固定セルを飛ばして「部分的に埋まった窓」を作らない。窓を埋めるのがこの手の
+            //   意図で、途中が抜けた窓はその意図を果たさないまま多数のセルを壊すだけだった。
+            var q = 0
+            while (q < c.day1) { if (locked(i, js + q)) return; q++ }
             var l = 0
-            while (l < c.day1) { if (!locked(i, js + l)) applyCell(i, js + l, c.shiftIdx); l++ }
+            while (l < c.day1) { applyCell(i, js + l, c.shiftIdx); l++ }
         }
         fun opLns() {
+            // [3.341.0] 破壊する集合を先に決め、固定セルが混ざっていたら手ごと見送る（部分適用しない）。
             when (rng.nextInt(3)) {
-                0 -> { val i = rng.nextInt(S); val cnt = 2 + rng.nextInt(min(7, T)); var k = 0
-                    while (k < cnt) { val j = rng.nextInt(T); if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
-                1 -> { val j = rng.nextInt(T); var i = 0
-                    while (i < S) { if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); i++ } }
-                else -> { val cnt = 3 + rng.nextInt(8); var k = 0
-                    while (k < cnt) { val i = rng.nextInt(S); val j = rng.nextInt(T)
-                        if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
+                0 -> { val i = rng.nextInt(S); val cnt = 2 + rng.nextInt(min(7, T))
+                    val js = IntArray(cnt) { rng.nextInt(T) }
+                    if (js.any { locked(i, it) }) return
+                    for (j in js) applyCell(i, j, randShiftFor(i)) }
+                1 -> { val j = rng.nextInt(T)
+                    for (i in 0 until S) if (locked(i, j)) return
+                    for (i in 0 until S) applyCell(i, j, randShiftFor(i)) }
+                else -> { val cnt = 3 + rng.nextInt(8)
+                    val cells = Array(cnt) { intArrayOf(rng.nextInt(S), rng.nextInt(T)) }
+                    if (cells.any { locked(it[0], it[1]) }) return
+                    for (c2 in cells) applyCell(c2[0], c2[1], randShiftFor(c2[0])) }
             }
         }
         val hasC1 = problem.cons1.isNotEmpty()
