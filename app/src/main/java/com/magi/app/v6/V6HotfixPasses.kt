@@ -3843,10 +3843,26 @@ object V6HotfixPasses {
      * 検証はホストJVM(Gradle同梱のkotlin-compiler-embeddable 2.0.21)でandroid非依存の
      * v6/modelパッケージを実コンパイルし、golden_state.json/sample_state_v6.jsonの実データで
      * 実測（このセッション内で実施）。
+     *
+     * **[3.340.0] 最良保持(elitism)と停滞打ち切り**。3.339.0 のパス別テレメトリでこのパスが後処理の
+     * 27〜42% を占めると判明したため、何にその時間を使っているかを実データ3件で計測した:
+     *  - 8回の呼出**すべてが maxSteps を完走**し、1回あたり約30,000回のフル checker（時間の82〜88%）。
+     *  - しかし**最後に最良が更新されてから 32〜60 ステップが空回り**（8回中4回は根を一度も超えない）。
+     *  - さらに `beam` は最良を保持せず**最終ビームの最小しか返さない**ため、探索途中で見つけた
+     *    より良い盤面を捨てていた（golden の1回目は s15 の候補が根に勝っていたのに最終ビームは
+     *    根より悪く、丸ごと破棄されていた）。
+     * → ①各ステップのビーム先頭を `bestEver` として保持し最終候補にする（最終ビームは観測列に
+     *   含まれるので**この手だけでは絶対に退化しない**）②最良が `patience` ステップ更新されなければ
+     *   打ち切る。実測の改善間隔の最大は 15 ステップなので既定 20 は観測済みの改善をすべて残す。
+     * 実データ3件で**最終盤面は現行とバイト一致**（golden 2469/306/c1 104・user 33159/162/c1 54・
+     * real 49223/170/c1 58）、本パスの所要は golden 7.0→3.2s・user 14.6→7.7s・real 8.1→6.9s。
+     * 浮いた時間はクラスタ締切(`clusterStop`)配下の後段（共同LNS等）へ回る。
+     * なお ablation（このパスを丸ごと外す）では user が 33159/162 → 33232/165 と悪化＝
+     * **このパスは実データで実際に効いている**ので、打ち切りはするが撤去はしない。
      */
     fun applyC1BeamPolish(
         state: MagiState, schedule: Array<IntArray>, beamWidth: Int = 16, maxSteps: Int = 60,
-        shouldStop: () -> Boolean = { false }, seed: Long = 0x1CBEAL,
+        shouldStop: () -> Boolean = { false }, seed: Long = 0x1CBEAL, patience: Int = 20,
     ): CyclicSwapResult {
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         val pinBlocks = PinBlockAttribution()
@@ -3904,6 +3920,9 @@ object V6HotfixPasses {
         }
 
         var beam = listOf(Beam(work0, before, 0))
+        // [3.340.0] 探索中に見つけた最良を保持する（最終ビームは観測列に含まれるので退化不能）。
+        var bestEver: Beam? = null
+        var stagnant = 0
         var step = 0
         while (step < maxSteps) {
             if (shouldStop()) break
@@ -3928,18 +3947,32 @@ object V6HotfixPasses {
                 .distinctBy { cand -> cand.work.joinToString("|") { row -> row.joinToString(",") } }
                 .sortedWith(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total }))
                 .take(beamWidth)
+            // sortedWith 済みなので先頭がこのステップの最小。最良を更新できなければ停滞を数える。
+            val top = beam.firstOrNull()
+            if (top != null) {
+                val be = bestEver
+                val improved = be == null || top.rep.hard < be.rep.hard ||
+                    (top.rep.hard == be.rep.hard && (top.rep.weightedScore < be.rep.weightedScore ||
+                        (top.rep.weightedScore == be.rep.weightedScore && top.rep.total < be.rep.total)))
+                if (improved) { bestEver = top; stagnant = 0 } else stagnant++
+            }
             step++
+            if (stagnant >= patience) break
         }
         // [keep-best安全網] ビーム探索は root 自身を無条件に温存しない（targets 非空の初回展開で
         //   root は子に置き換わり消える）ため、全展開が真の目的関数的には根より悪化する可能性が
         //   ある。既存の全パスが isBetter で keep-best するのに合わせ、root と厳密に比較し、
         //   勝てない場合は必ず未変更の root へフォールバックする（退化不能）。
-        val candidate = beam.minWithOrNull(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total })) ?: Beam(work0, before, 0)
+        val candidate = bestEver
+            ?: beam.minWithOrNull(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total }))
+            ?: Beam(work0, before, 0)
         // [厳密ピン保護] ビーム探索の手A/玉突きも i の自身のシフト回数を変えうるため、根(work0)と比較し
         //   staffRange厳密ピン(lo==hi)を崩す最終候補は不採用にする（keep-best/重みは不変・追加ガードのみ）。
         val best = if (isBetter(candidate.rep, before) && !pinBlocks.blocksImproving(p, work0, candidate.work)) candidate else Beam(work0, before, 0)
         val logs = listOf(MirrorLog(tag = "C1BeamPolish",
-            message = "期間要件(c1)研磨[ビーム K=$beamWidth steps=$step]: c1 ${before.breakdown["c1"] ?: 0}->${best.rep.breakdown["c1"] ?: 0} / total ${before.total}->${best.rep.total} HARD ${before.hard}->${best.rep.hard} 手数${best.applied}" +
+            message = "期間要件(c1)研磨[ビーム K=$beamWidth steps=$step" +
+                (if (stagnant >= patience) "/最良が${patience}手更新されず打ち切り" else "") + "]: " +
+                "c1 ${before.breakdown["c1"] ?: 0}->${best.rep.breakdown["c1"] ?: 0} / total ${before.total}->${best.rep.total} HARD ${before.hard}->${best.rep.hard} 手数${best.applied}" +
                 (if (best.applied == 0 && candidate !== best && candidate.applied > 0) " [探索結果が根に勝てず破棄]" else "")))
         return CyclicSwapResult(best.work, before.total, best.rep.total, best.applied, logs, pinBlocks = pinBlocks)
     }

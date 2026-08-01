@@ -71,6 +71,55 @@ class C1BeamPolishTest {
         assertEquals(0, result.applied)
     }
 
+    /**
+     * [3.340.0] **ステップを増やしても結果は決して悪くならない**（最良保持の直接検証）。
+     *
+     * 旧実装は最終ビームの最小しか返さず、ビームは各ステップで全メンバーを子に置き換えるため
+     * 探索が進むほど途中で見つけた良い盤面を捨てていた。実データ(golden_state, beamWidth=8, seed=7)
+     * では maxSteps=4 で weighted 2859 まで下がるのに、**6以降は根(2985)に戻り採用0**になる
+     * ＝長く回すほど成果を失う。最良保持を入れると全 maxSteps で 2834（旧の最良より良い）で一定。
+     */
+    @Test
+    fun moreStepsNeverProduceAWorseResult() {
+        val json = javaClass.getResourceAsStream("/golden_state.json")
+            ?.bufferedReader()?.use { it.readText() }
+            ?: error("golden_state.json not found on the test classpath")
+        val st = com.magi.app.model.StateParser.parse(json)
+        val sched = st.schedule.toIntArray2D()
+        val root = UnifiedViolationChecker.check(st, sched)
+        var prev: ViolationReport? = null
+        for (ms in listOf(2, 4, 6, 8, 12)) {
+            val r = V6HotfixPasses.applyC1BeamPolish(st, sched, beamWidth = 8, maxSteps = ms, seed = 7L)
+            val a = UnifiedViolationChecker.check(st, r.newSchedule)
+            val p = prev
+            if (p != null) {
+                assertTrue(
+                    "maxSteps=$ms がより少ないステップ数の結果より悪い（最良を保持していない）: " +
+                        "${p.hard}/${p.weightedScore}/${p.total} -> ${a.hard}/${a.weightedScore}/${a.total}",
+                    !betterReport(p, a),
+                )
+            }
+            prev = a
+        }
+        val last = prev!!
+        assertTrue("この盤面には実際に改善があるので根へ戻ってはいけない", betterReport(last, root))
+    }
+
+    /** [3.340.0] 停滞打ち切り(patience)を最小にしても keep-best は壊れず、1手で解ける改善は取り逃さない。 */
+    @Test
+    fun earlyStopKeepsTheImprovementAndNeverDegrades() {
+        val st = deficientState()
+        val sched = st.schedule.toIntArray2D()
+        val before = UnifiedViolationChecker.check(st, sched)
+        for (p in listOf(1, 2, 20, 60)) {
+            val r = V6HotfixPasses.applyC1BeamPolish(st, sched, patience = p)
+            val a = UnifiedViolationChecker.check(st, r.newSchedule)
+            assertEquals("patience=$p でもc1は解消する", 0, a.breakdown["c1"] ?: -1)
+            assertEquals("patience=$p でHARDは不変", before.hard, a.hard)
+            assertTrue("patience=$p で入力より悪化してはいけない", !betterReport(before, a))
+        }
+    }
+
     @Test
     fun c1BeamPolishNeverReturnsScheduleWorseThanInputAcrossManySeeds() {
         // [keep-best安全網の直接検証] 受領コードには無かった安全網が実際に機能し、任意のseedで
