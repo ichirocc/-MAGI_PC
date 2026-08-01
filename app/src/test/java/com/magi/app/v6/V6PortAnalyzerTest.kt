@@ -347,4 +347,45 @@ class V6PortAnalyzerTest {
         )
         assertFalse("この盤面を構造壁と誤診しない", diag.allBlocked)
     }
+
+    /**
+     * [3.343.0] **隣接日調整でも「正味の HARD が減るか」まで見る**。
+     *
+     * 3.311.0 で PINNED 判定へ `prefCost` を入れたとき、隣接日調整（ADJACENT）の分岐には入れ忘れて
+     * いた。隣接日調整はこの職員の複数日を動かすので、本セルだけでなく行全体の希望違反が増えうる。
+     *
+     * この盤面（担当可能=休/X/Y の1名・T=3・行 X,Y,X・day1 は Y を希望固定）:
+     *  - day0 はどの代替も新たな禁止連続を作り、隣接日 day1 は希望固定で動かせない＝BLOCKED。
+     *  - day1 を「休」にすると `休→X` が新たに発火するが、day2 を「休」へ変えれば並びは崩せる。
+     *    ところが day1 の希望を破るので **c3n 1→0 に対し pref 0→1＝正味の HARD は減らない**
+     *    （weighted では 9000−7000＝+2000 の悪化で、`betterReport` は決して採用しない）。
+     * 旧実装はこれを ADJACENT＝「崩せる」と誤って主張し、①利用者へ「探索が見つけていないだけ」と
+     * 誤った期待を与え ②3.281.0 の停滞打ち切り（全 run 塞がりなら短い閾値）を発火させなくしていた。
+     */
+    @Test
+    fun adjacentDayFixIsNotAnEscapeWhenItOnlyTradesForbiddenRunForABrokenWish() {
+        val st = forbiddenState(
+            schedule = listOf(listOf(1, 2, 1)),              // X Y X → [X,Y] が1件
+            cons3n = listOf(
+                C3Row(listOf("X", "Y")),                     // 本命の違反
+                C3Row(listOf("Y", "Y")),                     // day0 を Y にしても崩れない
+                C3Row(listOf("休", "X")),                    // day1 を休にすると新たに発火する
+                C3Row(listOf("休", "Y")),                    // day0 を休にしても崩れない
+            ),
+            wishes = mapOf("0,1" to 2),                      // day1 は Y を希望固定
+        )
+        val diag = V6PortAnalyzer.diagnoseForbiddenRuns(st)
+        assertEquals("違反 run は1件", 1, diag.totalRuns)
+        val cells = diag.runs.flatMap { it.cells }
+        assertTrue(
+            "希望を破る代金のほうが高い手を『崩せる』と主張してはいけない: ${cells.map { it.dayIndex to it.escape }}",
+            cells.none { it.escape == ForbiddenCellEscape.ADJACENT },
+        )
+        val pinned = cells.filter { it.dayIndex == 1 }
+        assertTrue(
+            "希望が効いていることを『希望固定』として説明する: ${pinned.map { it.escape }}",
+            pinned.all { it.escape == ForbiddenCellEscape.PINNED },
+        )
+        assertTrue("全セル塞がり＝停滞打ち切りが正しく発火できる", diag.allBlocked)
+    }
 }
