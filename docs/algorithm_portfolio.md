@@ -39,6 +39,9 @@
 入口の `hf67HardRepair` と `Problem.initialAssignment` が実現可能な希望を先に盤面へ入れるので、
 触らなければ正しいまま残る。3.334.0 まで SA/LAHC の近傍だけがこの規約から外れており、
 **手の 35〜36% が採点でほぼ必ず却下される手**に費やされていた（pref は hard＝差分が 1e9 単位になる）。
+複数セルを同時に変える手（`opBlockFill`／`opLns`）は、固定セルを飛ばして続けるのでなく
+**手ごと見送る**（3.341.0）。途中が抜けた窓は「窓を埋める」という手の意図を果たさないまま
+多数のセルを壊すだけだった。実データでは `opBlockFill` の 87〜100% が部分適用になっていた。
 
 本最適化の終盤（`runPostOptimization` の**手前**）で `EliteIntegrationPolish` が走り、
 蓄積したエリート盤面を Path Relinking / Fusion で統合する。採否は checker ＋ `betterReport` ＋

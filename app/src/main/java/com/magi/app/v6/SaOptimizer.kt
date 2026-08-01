@@ -352,18 +352,27 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             val maxStart = T - c.day1
             if (maxStart < 0) { opSingle(); return }
             val js = rng.nextInt(maxStart + 1)
+            // [3.341.0] 固定セルを飛ばして「部分的に埋まった窓」を作らない。窓を埋めるのがこの手の
+            //   意図で、途中が抜けた窓はその意図を果たさないまま多数のセルを壊すだけだった。
+            var q = 0
+            while (q < c.day1) { if (locked(i, js + q)) return; q++ }
             var l = 0
-            while (l < c.day1) { if (!locked(i, js + l)) applyCell(i, js + l, c.shiftIdx); l++ }
+            while (l < c.day1) { applyCell(i, js + l, c.shiftIdx); l++ }
         }
         fun opLns() {
+            // [3.341.0] 破壊する集合を先に決め、固定セルが混ざっていたら手ごと見送る（部分適用しない）。
             when (rng.nextInt(3)) {
-                0 -> { val i = rng.nextInt(S); val cnt = 2 + rng.nextInt(min(7, T)); var k = 0
-                    while (k < cnt) { val j = rng.nextInt(T); if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
-                1 -> { val j = rng.nextInt(T); var i = 0
-                    while (i < S) { if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); i++ } }
-                else -> { val cnt = 3 + rng.nextInt(8); var k = 0
-                    while (k < cnt) { val i = rng.nextInt(S); val j = rng.nextInt(T)
-                        if (!locked(i, j)) applyCell(i, j, randShiftFor(i)); k++ } }
+                0 -> { val i = rng.nextInt(S); val cnt = 2 + rng.nextInt(min(7, T))
+                    val js = IntArray(cnt) { rng.nextInt(T) }
+                    if (js.any { locked(i, it) }) return
+                    for (j in js) applyCell(i, j, randShiftFor(i)) }
+                1 -> { val j = rng.nextInt(T)
+                    for (i in 0 until S) if (locked(i, j)) return
+                    for (i in 0 until S) applyCell(i, j, randShiftFor(i)) }
+                else -> { val cnt = 3 + rng.nextInt(8)
+                    val cells = Array(cnt) { intArrayOf(rng.nextInt(S), rng.nextInt(T)) }
+                    if (cells.any { locked(it[0], it[1]) }) return
+                    for (c2 in cells) applyCell(c2[0], c2[1], randShiftFor(c2[0])) }
             }
         }
         val hasC1 = problem.cons1.isNotEmpty()

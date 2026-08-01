@@ -649,17 +649,26 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
         int maxStart = T - c.d1;
         if (maxStart < 0) { opSingle(); return; }
         int js = st.nextInt(maxStart + 1);
-        for (int l = 0; l < c.d1; l++) if (!wishLockedN(p, i, js + l)) applyCell(i, js + l, c.si);
+        // [3.341.0] 固定セルを飛ばして「部分的に埋まった窓」を作らない（Kotlin 側と同型）。
+        for (int l = 0; l < c.d1; l++) if (wishLockedN(p, i, js + l)) return;
+        for (int l = 0; l < c.d1; l++) applyCell(i, js + l, c.si);
     };
     auto opLns = [&]() {
+        // [3.341.0] 破壊する集合を先に決め、固定セルが混ざっていたら手ごと見送る（部分適用しない）。
         switch (st.nextInt(3)) {
             case 0: { int i = st.nextInt(S); int cnt = 2 + st.nextInt(T < 7 ? T : 7);
-                for (int k = 0; k < cnt; k++) { int j = st.nextInt(T); if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
+                std::vector<int> js(cnt);
+                for (int k = 0; k < cnt; k++) js[k] = st.nextInt(T);
+                for (int k = 0; k < cnt; k++) if (wishLockedN(p, i, js[k])) return;
+                for (int k = 0; k < cnt; k++) applyCell(i, js[k], randShiftFor(i)); break; }
             case 1: { int j = st.nextInt(T);
-                for (int i = 0; i < S; i++) if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); break; }
+                for (int i = 0; i < S; i++) if (wishLockedN(p, i, j)) return;
+                for (int i = 0; i < S; i++) applyCell(i, j, randShiftFor(i)); break; }
             default: { int cnt = 3 + st.nextInt(8);
-                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); int j = st.nextInt(T);
-                    if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
+                std::vector<int> ci(cnt), cj(cnt);
+                for (int k = 0; k < cnt; k++) { ci[k] = st.nextInt(S); cj[k] = st.nextInt(T); }
+                for (int k = 0; k < cnt; k++) if (wishLockedN(p, ci[k], cj[k])) return;
+                for (int k = 0; k < cnt; k++) applyCell(ci[k], cj[k], randShiftFor(ci[k])); break; }
         }
     };
     const bool hasC1 = !p.cons1.empty();
@@ -790,17 +799,26 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
         int maxStart = T - c.d1;
         if (maxStart < 0) { opSingle(); return; }
         int js = st.nextInt(maxStart + 1);
-        for (int l = 0; l < c.d1; l++) if (!wishLockedN(p, i, js + l)) applyCell(i, js + l, c.si);
+        // [3.341.0] 固定セルを飛ばして「部分的に埋まった窓」を作らない（Kotlin 側と同型）。
+        for (int l = 0; l < c.d1; l++) if (wishLockedN(p, i, js + l)) return;
+        for (int l = 0; l < c.d1; l++) applyCell(i, js + l, c.si);
     };
     auto opLns = [&]() {
+        // [3.341.0] 破壊する集合を先に決め、固定セルが混ざっていたら手ごと見送る（部分適用しない）。
         switch (st.nextInt(3)) {
             case 0: { int i = st.nextInt(S); int cnt = 2 + st.nextInt(T < 7 ? T : 7);
-                for (int k = 0; k < cnt; k++) { int j = st.nextInt(T); if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
+                std::vector<int> js(cnt);
+                for (int k = 0; k < cnt; k++) js[k] = st.nextInt(T);
+                for (int k = 0; k < cnt; k++) if (wishLockedN(p, i, js[k])) return;
+                for (int k = 0; k < cnt; k++) applyCell(i, js[k], randShiftFor(i)); break; }
             case 1: { int j = st.nextInt(T);
-                for (int i = 0; i < S; i++) if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); break; }
+                for (int i = 0; i < S; i++) if (wishLockedN(p, i, j)) return;
+                for (int i = 0; i < S; i++) applyCell(i, j, randShiftFor(i)); break; }
             default: { int cnt = 3 + st.nextInt(8);
-                for (int k = 0; k < cnt; k++) { int i = st.nextInt(S); int j = st.nextInt(T);
-                    if (!wishLockedN(p, i, j)) applyCell(i, j, randShiftFor(i)); } break; }
+                std::vector<int> ci(cnt), cj(cnt);
+                for (int k = 0; k < cnt; k++) { ci[k] = st.nextInt(S); cj[k] = st.nextInt(T); }
+                for (int k = 0; k < cnt; k++) if (wishLockedN(p, ci[k], cj[k])) return;
+                for (int k = 0; k < cnt; k++) applyCell(ci[k], cj[k], randShiftFor(ci[k])); break; }
         }
     };
     const bool hasC1 = !p.cons1.empty();
