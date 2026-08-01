@@ -17,7 +17,20 @@ import kotlin.math.max
  * 狭義減少する状態だけ。root は常に別枠で保持し、engine へ共有配列を渡す方式も使わない。
  *
  * 50% は「構造下限までの改善可能幅」に対する進捗目標であり、終了条件ではない。探索は C1=下限、
- * deadline、shouldStop、または全 restart の停滞まで継続する。
+ * deadline、shouldStop、[Config.patienceMs] の無改善、または全 restart の停滞まで継続する。
+ *
+ * **[3.342.0] 停滞打ち切り**。3.339.0 のパス別テレメトリでこのパスが後処理の 43〜53% を占めると
+ * 分かったので、何にその時間を使っているかを実データ3件で測った:
+ *  - 3件とも **`maxMillis` を使い切って終わる**（候補が 4.5〜7.3 万件も作れるので尽きない）。
+ *    兄弟の [PersonalBalanceJointLnsPolish] が数百ms〜1.3秒で終わるのは候補空間が狭くて尽きるため。
+ *  - **golden と user は best を一度も更新しないまま 7.4〜7.7 秒を使い切る**（＝全部が空回り）。
+ *    real だけが 2.9s / 4.4s / 6.8s の3回改善する。
+ *  - 候補の 43〜52% は debt 予算で捨てているが、その判定は**フル checker を呼んだ後**なので
+ *    捨てる候補にも全額払っている（安く先に判定する方法が無いため現状は許容する）。
+ * → 最良が [Config.patienceMs] 更新されなければ打ち切る。既定 4 秒は real の「最初の改善まで 2.9 秒」に
+ *   1.4 倍の余裕を持たせた値。実データ3件で **最終盤面は patience 3/4/5 秒とも現行と完全に一致**し、
+ *   後処理全体は golden 16.3→13.3s・user 19.0→15.3s（real は改善が続くので打ち切られず不変）。
+ *   keep-best は不変＝早く止めるだけで退化しない。
  */
 internal object C1JointLnsPolish {
     /**
@@ -37,6 +50,8 @@ internal object C1JointLnsPolish {
         val totalDebt: Int = 12,
         val c1Debt: Int = 4,
         val maxMillis: Long = 8_000L,
+        /** 最良がこの時間更新されなければ打ち切る（0以下＝無効）。既定の根拠はクラスの KDoc。 */
+        val patienceMs: Long = 4_000L,
     )
 
     private enum class GoalKind { C1, TEMPORAL, COVERAGE, RANGE_LOW }
@@ -105,7 +120,11 @@ internal object C1JointLnsPolish {
         val moveLimit = config.maxMovesPerGoal
         val budgetMillis = config.maxMillis.coerceAtMost(60_000L)
         val deadline = System.nanoTime() + budgetMillis * 1_000_000L
-        fun stopped(): Boolean = shouldStop() || System.nanoTime() >= deadline
+        // [3.342.0] 最良が patienceMs 更新されなければ打ち切る。keep-best は不変＝早く止めるだけ。
+        var lastImproveNs = System.nanoTime()
+        val patienceNs = if (config.patienceMs > 0L) config.patienceMs * 1_000_000L else Long.MAX_VALUE
+        fun stalled(): Boolean = patienceNs != Long.MAX_VALUE && System.nanoTime() - lastImproveNs >= patienceNs
+        fun stopped(): Boolean = shouldStop() || System.nanoTime() >= deadline || stalled()
 
         val lowerBound = structuralC1LowerBound(p)
         val improvable = (rootC1 - lowerBound).coerceAtLeast(0)
@@ -183,7 +202,10 @@ internal object C1JointLnsPolish {
                             children.add(child)
 
                             val finalCandidate = isFinalCandidate(p, child, root)
-                            if (finalCandidate && better(child.report, best.report)) best = child
+                            if (finalCandidate && better(child.report, best.report)) {
+                                best = child
+                                lastImproveNs = System.nanoTime()
+                            }
                         }
                     }
                 }
@@ -211,6 +233,7 @@ internal object C1JointLnsPolish {
             chosenC1 <= lowerBound -> "構造下限到達"
             shouldStop() -> "外部停止"
             System.nanoTime() >= deadline -> "期限"
+            stalled() -> "最良が${config.patienceMs}ms更新されず打ち切り"
             else -> "探索停滞"
         }
         val log = MirrorLog(

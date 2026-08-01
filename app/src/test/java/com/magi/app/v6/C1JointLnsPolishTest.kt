@@ -153,4 +153,49 @@ class C1JointLnsPolishTest {
             0, C1JointLnsPolish.structuralC1LowerBound(p),
         )
     }
+
+    /**
+     * [3.342.0] 停滞打ち切り（`patienceMs`）を入れても keep-best は壊れない。
+     *
+     * 打ち切りは「最良が更新されないまま時間が過ぎたら止める」だけなので、最悪でも root がそのまま
+     * 返る。**単調性（patience を伸ばすほど良くなる）は時間ベースで実行速度に依存するため固定しない**
+     * （3.340.0 のビームは回数ベースだったので単調性まで固定できたが、ここは別）。
+     */
+    @Test
+    fun patienceNeverProducesAResultWorseThanTheInput() {
+        val shifts = listOf(Shift("Y", "Y", "", ""), Shift("X", "X", "", ""))
+        val groups = listOf(Group("G", "G"))
+        val staff = listOf(Staff("target", 0), Staff("partner", 0))
+        val target = listOf(1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0)
+        val partner = target.map { if (it == 1) 0 else 1 }
+        val st = MagiState(
+            startDate = "2026-01-01", endDate = "2026-01-11",
+            shifts = shifts, groups = groups, staff = staff, use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = List(1) { List(2) { "" } },
+            schedule = listOf(target, partner),
+            wishes = emptyMap(),
+            staffRange = mapOf("0,1" to Range("4", "")),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = listOf(C1Row(day1 = "5", shiftKigou = "X", day2 = "2")),
+            cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val sched = st.schedule.toIntArray2D()
+        val before = UnifiedViolationChecker.check(st, sched)
+        for (patience in listOf(1L, 50L, 2_000L, 0L)) {
+            val out = C1JointLnsPolish.apply(
+                st, sched,
+                C1JointLnsPolish.Config(maxMillis = 2000L, maxRestarts = 2, maxDepth = 3, patienceMs = patience),
+            )
+            val after = UnifiedViolationChecker.check(st, out.newSchedule)
+            assertTrue(
+                "patience=$patience で入力より悪化した: " +
+                    "${before.hard}/${before.weightedScore}/${before.total} -> " +
+                    "${after.hard}/${after.weightedScore}/${after.total}",
+                !betterReport(before, after),
+            )
+        }
+    }
 }
