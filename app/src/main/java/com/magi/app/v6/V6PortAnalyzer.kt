@@ -442,6 +442,22 @@ object V6PortAnalyzer {
     }
 
     /** run 内の1セル (i,j,cur) の脱出可否を判定する（diagnoseForbiddenRuns 専用の下請け）。 */
+    /**
+     * [3.343.0] 多段手（隣接日調整）を当てた行が、**正味の HARD** で改善しているか。
+     * c3n も pref も HARD の件数和なので同じ単位で足して比べる。`tryFixForbiddenRunViaAdjacentDay` と
+     * その内部の `findCovUChain` は他職員の希望固定を守るため、行 [i] だけを見れば足りる。
+     */
+    private fun netHardImproves(
+        p: Problem, before: Array<IntArray>, after: Array<IntArray>, i: Int, c3nBefore: Int,
+    ): Boolean {
+        val c3nAfter = C1DeltaPrefilter.staffC3nFires(p, IntArray(p.T) { after[i][it] })
+        return c3nAfter + prefMissesOf(p, after, i) < c3nBefore + prefMissesOf(p, before, i)
+    }
+
+    /** 職員 [i] の行で「実現可能な希望どおりでない」日数（＝pref の HARD 件数）。 */
+    private fun prefMissesOf(p: Problem, board: Array<IntArray>, i: Int): Int =
+        (0 until p.T).count { d -> p.wishLocked(i, d) && p.wish[i][d] != board[i][d] }
+
     private fun diagnoseForbiddenCell(
         state: MagiState, p: Problem, norm: Array<IntArray>, cov: Array<IntArray>,
         i: Int, j: Int, cur: Int,
@@ -510,7 +526,23 @@ object V6PortAnalyzer {
                         // 隣接日の手＋本セルの変更を適用し、本セルの離脱穴が残るなら連鎖で埋まるかまで確認。
                         for (mv in extra) tmp[mv[0]][mv[1]] = mv[2]
                         tmp[i][j] = m
-                        if (!departureHole || chainFills(tmp)) adjOk = m else c3nBlocked++
+                        // [3.343.0] **多段手でも正味の HARD が減るかまで見る**。3.311.0 で PINNED 判定へ
+                        //   `prefCost` を入れたとき、この分岐（隣接日調整）には入れ忘れていた。隣接日調整は
+                        //   この職員の複数日を動かすので、本セルだけでなく**行全体の希望違反**が増えうる。
+                        //   実データで「本人希望のセルを休へ変えれば崩せる」と誤って ADJACENT を出しており
+                        //   （c3n −1 に対し pref +1 ＝ 正味 0・weighted は 9000−7000=+2000 悪化で採用され得ない）、
+                        //   利用者に「探索が見つけていないだけ」という誤った期待を与えていた。さらに
+                        //   3.281.0 の停滞打ち切り（全 run 塞がりなら短い閾値）が発火せず時間も余計に使う。
+                        if (netHardImproves(p, norm, tmp, i, firesBefore) &&
+                            (!departureHole || chainFills(tmp))
+                        ) {
+                            adjOk = m
+                        } else if (prefMissesOf(p, tmp, i) > prefMissesOf(p, norm, i)) {
+                            // 並びは崩せるが、希望を破る代金のほうが高い＝希望が本当に効いている。
+                            prefBlocked++
+                        } else {
+                            c3nBlocked++
+                        }
                     } else c3nBlocked++
                 } else c3nBlocked++
             }
