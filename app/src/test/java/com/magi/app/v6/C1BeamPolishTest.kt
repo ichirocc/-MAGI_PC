@@ -52,7 +52,8 @@ class C1BeamPolishTest {
         val before = UnifiedViolationChecker.check(st, sched)
         assertEquals("初期はcons1窓不足が1件", 1, before.breakdown["c1"] ?: 0)
         assertEquals("初期HARD=0", 0, before.hard)
-        assertEquals("初期total", 10, before.total)
+        // [3.345.0] weekly がシフト別になり初期 total の内訳が変わった（旧 10）。盤面自体は不変。
+        assertEquals("初期total", 19, before.total)
 
         val result = V6HotfixPasses.applyC1BeamPolish(st, sched)
         val after = UnifiedViolationChecker.check(st, result.newSchedule)

@@ -1216,20 +1216,22 @@ object V6HotfixPasses {
     //   `applyAlternatingSoftPolish`(3.198.0 が weekly の限界費用を Hungarian の費用に含む)。
 
     /**
-     * [ソフト研磨・weekly（曜日平準化）＝長方形交換] weekly は「職員が特定の曜日にばかり勤務する」偏りで、
-     * L1偏差（`weeklyDevOfBucket`＝各曜日の勤務数の round(平均) からの偏差和）で評価される。**同日2者スワップ
-     * （CyclicSwap / equalize 系）は勤務↔勤務では曜日別の勤務/休が変わらず weekly をほぼ動かせない**（勤務種類が
-     * 入れ替わるだけで、どちらの職員も「その曜日に勤務している」事実は不変）。これが「weekly の研磨ができていない」
-     * 実害の根本（実機ログで weekly=56＝SOFT 残差の最大級）。
+     * [ソフト研磨・weekly（7日周期のシフト平準化）＝長方形交換] weekly は「職員が特定の曜日にばかり同じシフトに
+     * 入る」偏りで、L1偏差（`weeklyDevOfBucket`＝そのシフトの曜日別回数の round(回数/7) からの偏差和）で評価される。
+     * **同日2者スワップ（CyclicSwap / equalize 系）は同じ日の中で入れ替えるだけなので、どの曜日に何が入るかを
+     * 動かせない**。これが「weekly の研磨ができていない」実害の根本（実機ログで weekly＝SOFT 残差の最大級）。
      *
-     * そこで **被覆保存の 2職員×2日 長方形交換** を導入する: 職員 i が「過剰曜日の日 j1 で勤務(シフト x)・過少曜日の
-     * 日 j2 で休」、相手 i' が「j1 で休・j2 で勤務(シフト y)」のとき、両者の j1/j2 を丸ごと入替える
-     * （i: j1→休/j2→y、i': j1→x/j2→休）。各日の各シフト人数は保存される（j1 の x は i→i'、j2 の y は i'→i へ移るだけ）
-     * ため covU/covO・群レンジ・pref は不変で、i の勤務が過剰曜日→過少曜日へ移動して weekly が下がる。fair（群内シフト
-     * 回数）や low/high/apt/c2 など per-staff 族も副次的に動く。**採否は実目的関数 isBetter のみ**（hard→weighted→total、
-     * total は weekly/fair を含む）＝退化なし（keep-best）。weekly>0 の職員のみ起点＋first-improvement で空探索は即終了。
-     * 変更セルは wish 固定なら不動（4セルとも movable ガード）。covO/c42/c2 など per-day 族は同日 CyclicSwap（isBetter）が
-     * 既に最適に研磨済みのため本パスの対象外（2.49.0 の「専用パスは冗長」の結論を踏襲）。
+     * そこで **被覆保存の 2職員×2日 長方形交換** を導入する: 職員 i がシフト x について「過剰曜日の日 j1 で x・
+     * 過少曜日の日 j2 で別のシフト y」、相手 i' が「j1 で別のシフト z・j2 で x」のとき、両者の j1/j2 を丸ごと
+     * 入替える（i: j1→z / j2→x、i': j1→x / j2→y）。各日の各シフト人数は保存される（j1 の x は i→i'、j2 の x は
+     * i'→i へ移るだけ）ため covU/covO・群レンジ・pref は不変で、i の x が過剰曜日→過少曜日へ移動して weekly が
+     * 下がる。fair（群内シフト回数）や low/high/apt/c2 など per-staff 族も副次的に動く。
+     * [3.345.0] 休を通常のシフト種として扱う定義に合わせ、x/y/z を勤務・休で区別しない（旧: x=勤務・y=z=休 の
+     * 特殊形のみ＝休だけを「空き」とみなしていた）。旧形は新形の部分集合なので探索範囲は広がるだけ。
+     * **採否は実目的関数 isBetter のみ**（hard→weighted→total、total は weekly/fair を含む）＝退化なし（keep-best）。
+     * dev>0 の (職員,シフト) のみ起点＋first-improvement で空探索は即終了。変更セルは wish 固定なら不動
+     * （4セルとも movable ガード）。covO/c42/c2 など per-day 族は同日 CyclicSwap（isBetter）が既に最適に研磨済みの
+     * ため本パスの対象外（2.49.0 の「専用パスは冗長」の結論を踏襲）。
      */
     fun applyWeeklyRebalancePolish(state: MagiState, schedule: Array<IntArray>, maxPasses: Int = 2, shouldStop: () -> Boolean = { false }): CyclicSwapResult {
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -1239,14 +1241,14 @@ object V6HotfixPasses {
         val before = UnifiedViolationChecker.check(state, work)
         var bestRep = before
         var applied = 0
-        val rest = p.restIdx
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
         //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
         fun movable(i: Int, j: Int) = !p.wishLocked(i, j)
         fun weekdayOf(j: Int) = (p.dow0 + j) % 7
-        fun wdBucket(i: Int): IntArray {
-            val wd = IntArray(7)
-            for (j in 0 until p.T) { val k = work[i][j]; if (k != rest && k in 0 until p.K) wd[weekdayOf(j)]++ }
+        // [3.345.0] 職員×シフト×曜日のカウント（休も1シフト）。
+        fun wdBucket(i: Int): Array<IntArray> {
+            val wd = Array(p.K) { IntArray(7) }
+            for (j in 0 until p.T) { val k = work[i][j]; if (k in 0 until p.K) wd[k][weekdayOf(j)]++ }
             return wd
         }
         var pass = 0
@@ -1255,47 +1257,51 @@ object V6HotfixPasses {
             var improved = false
             for (i in 0 until p.S) {
                 if (shouldStop()) break
-                val wd = wdBucket(i)
-                if (weeklyDevOfBucket(wd) == 0) continue
-                var sum = 0; for (w in wd) sum += w
-                val tgt = Math.round(sum.toDouble() / 7.0).toInt()
-                // 最も過剰な曜日（勤務が多すぎ）と最も過少な曜日（少なすぎ）を1つずつ狙う。
-                var wOver = -1; var wUnder = -1; var maxOver = 0; var maxUnder = 0
-                for (w in 0 until 7) {
-                    if (wd[w] - tgt > maxOver) { maxOver = wd[w] - tgt; wOver = w }
-                    if (tgt - wd[w] > maxUnder) { maxUnder = tgt - wd[w]; wUnder = w }
-                }
-                if (wOver < 0 || wUnder < 0) continue
-                // i が過剰曜日に勤務している日(movable, 非休) / 過少曜日に休んでいる日(movable)。
-                val overDays = (0 until p.T).filter { weekdayOf(it) == wOver && movable(i, it) && work[i][it] != rest && work[i][it] in 0 until p.K }
-                val underDays = (0 until p.T).filter { weekdayOf(it) == wUnder && movable(i, it) && work[i][it] == rest }
-                var done = false
-                for (j1 in overDays) {
-                    if (done || shouldStop()) break
-                    val x = work[i][j1]
-                    for (j2 in underDays) {
-                        // [レビュー#6 3.213.0] 内側ループにも締切確認（各候補がフル check を伴うため、
-                        //   キャンセル後のバーストを1候補以内に抑える。HF66=2.65.0/BlockRotation=3.84.0 と同方針）。
+                val wdAll = wdBucket(i)
+                for (x in 0 until p.K) {
+                    if (improved || shouldStop()) break
+                    val wd = wdAll[x]
+                    if (weeklyDevOfBucket(wd) == 0) continue
+                    var sum = 0; for (w in wd) sum += w
+                    val tgt = Math.round(sum.toDouble() / 7.0).toInt()
+                    // シフト x が最も過剰な曜日と最も過少な曜日を1つずつ狙う。
+                    var wOver = -1; var wUnder = -1; var maxOver = 0; var maxUnder = 0
+                    for (w in 0 until 7) {
+                        if (wd[w] - tgt > maxOver) { maxOver = wd[w] - tgt; wOver = w }
+                        if (tgt - wd[w] > maxUnder) { maxUnder = tgt - wd[w]; wUnder = w }
+                    }
+                    if (wOver < 0 || wUnder < 0) continue
+                    // i が過剰曜日に x に入っている日 / 過少曜日に x 以外に入っている日（どちらも movable）。
+                    val overDays = (0 until p.T).filter { weekdayOf(it) == wOver && movable(i, it) && work[i][it] == x }
+                    val underDays = (0 until p.T).filter { weekdayOf(it) == wUnder && movable(i, it) && work[i][it] != x && work[i][it] in 0 until p.K }
+                    var done = false
+                    for (j1 in overDays) {
                         if (done || shouldStop()) break
-                        for (ip in 0 until p.S) {
+                        for (j2 in underDays) {
+                            // [レビュー#6 3.213.0] 内側ループにも締切確認（各候補がフル check を伴うため、
+                            //   キャンセル後のバーストを1候補以内に抑える。HF66=2.65.0/BlockRotation=3.84.0 と同方針）。
                             if (done || shouldStop()) break
-                            if (ip == i) continue
-                            // 相手 i' は j1 で休・j2 で勤務(非休)、両日 movable。被覆保存には i'←x(j1), i←y(j2) が担当可であること。
-                            if (!movable(ip, j1) || !movable(ip, j2)) continue
-                            if (work[ip][j1] != rest) continue
-                            val y = work[ip][j2]
-                            if (y == rest || y !in 0 until p.K) continue
-                            if (!p.canDo(ip, x) || !p.canDo(i, y)) continue
-                            // 長方形交換を適用（被覆保存）→ フル評価 → 改善時のみ採用、不採用なら完全巻き戻し。
-                            // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、
-                            //   raw total が改善してもweightedScoreが悪化する組合せ(重い厳密ピン破りを軽い
-                            //   weekly改善が数の上で上回る)がありうる。同型の全パスに既に適用済みの
-                            //   exactPinRegression ガードをここにも追加（3.256.0の retrofit 漏れ）。
-                            val workBeforeRect = work.copy2D()
-                            work[i][j1] = rest; work[i][j2] = y; work[ip][j1] = x; work[ip][j2] = rest
-                            val rep = UnifiedViolationChecker.check(state, work)
-                            if (isBetter(rep, bestRep) && !pinBlocks.blocksImproving(p, workBeforeRect, work)) { bestRep = rep; applied++; improved = true; done = true; break }
-                            work[i][j1] = x; work[i][j2] = rest; work[ip][j1] = rest; work[ip][j2] = y
+                            val y = work[i][j2]
+                            for (ip in 0 until p.S) {
+                                if (done || shouldStop()) break
+                                if (ip == i) continue
+                                // 相手 i' は j1 で x 以外(z)・j2 で x、両日 movable。被覆保存には i←z(j1), i'←y(j2) が担当可であること。
+                                if (!movable(ip, j1) || !movable(ip, j2)) continue
+                                if (work[ip][j2] != x) continue
+                                val z = work[ip][j1]
+                                if (z == x || z !in 0 until p.K) continue
+                                if (!p.canDo(i, z) || !p.canDo(ip, y)) continue
+                                // 長方形交換を適用（被覆保存）→ フル評価 → 改善時のみ採用、不採用なら完全巻き戻し。
+                                // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、
+                                //   raw total が改善してもweightedScoreが悪化する組合せ(重い厳密ピン破りを軽い
+                                //   weekly改善が数の上で上回る)がありうる。同型の全パスに既に適用済みの
+                                //   exactPinRegression ガードをここにも追加（3.256.0の retrofit 漏れ）。
+                                val workBeforeRect = work.copy2D()
+                                work[i][j1] = z; work[i][j2] = x; work[ip][j1] = x; work[ip][j2] = y
+                                val rep = UnifiedViolationChecker.check(state, work)
+                                if (isBetter(rep, bestRep) && !pinBlocks.blocksImproving(p, workBeforeRect, work)) { bestRep = rep; applied++; improved = true; done = true; break }
+                                work[i][j1] = x; work[i][j2] = y; work[ip][j1] = z; work[ip][j2] = x
+                            }
                         }
                     }
                 }
@@ -4079,20 +4085,18 @@ object V6HotfixPasses {
         val before = UnifiedViolationChecker.check(state, work)
         var bestRep = before
         var applied = 0
-        val rest = p.restIdx
         fun aptTarget(i: Int, k: Int): Int? {
             val g = state.staff.getOrNull(i)?.groupIdx ?: return null
             return state.groupShiftApt.getOrNull(g)?.getOrNull(k)?.trim()?.toIntOrNull()
         }
-        // weekly の wd バケット（職員×曜日の勤務数）と目標 round(勤務日/7)。被覆保存の再配置ごとに更新。
-        fun wdOf(i: Int): IntArray {
-            val wd = IntArray(7)
-            for (j in 0 until p.T) { val k = work[i][j]; if (k != rest && k in 0 until p.K) wd[(p.dow0 + j) % 7]++ }
+        // [3.345.0] weekly の wd バケットは職員×**シフト**×曜日（休も1シフト＝特別扱いしない）。
+        //   目標は weeklyDevOfBucket が内部で round(そのシフトの回数/7) として持つ。被覆保存の再配置ごとに更新。
+        fun wdOf(i: Int): Array<IntArray> {
+            val wd = Array(p.K) { IntArray(7) }
+            for (j in 0 until p.T) { val k = work[i][j]; if (k in 0 until p.K) wd[k][(p.dow0 + j) % 7]++ }
             return wd
         }
-        fun tgtOf(wd: IntArray): Int { var s = 0; for (w in wd) s += w; return Math.round(s.toDouble() / 7.0).toInt() }
         var wd = Array(p.S) { wdOf(it) }
-        var wdTgt = IntArray(p.S) { tgtOf(wd[it]) }
         fun cnt(): Array<IntArray> = countMatrix(p, work)
         var counts = cnt()
         var sweep = 0
@@ -4122,13 +4126,18 @@ object V6HotfixPasses {
                             var cost = rangePen(x1) - rangePen(x0)
                             val t = aptTarget(i, k)
                             if (t != null) cost += (kotlin.math.abs(x1 - t) - kotlin.math.abs(x0 - t)).toLong()
-                            // weekly 限界費用: 当日を k(=勤務 or 休)にしたときの職員 i の曜日 wdj バケットの L1 偏差変化（重み1）。
-                            val curWork = if (work[i][j] != rest && work[i][j] in 0 until p.K) 1 else 0
-                            val newWork = if (k != rest) 1 else 0
-                            if (curWork != newWork) {
-                                val base = wd[i][wdj] - curWork              // 当日を除いた曜日カウント
-                                val tgt = wdTgt[i]
-                                cost += (kotlin.math.abs((base + newWork) - tgt) - kotlin.math.abs((base + curWork) - tgt)).toLong()
+                            // [3.345.0] weekly 限界費用: 当日を k にしたときの、職員 i の**シフト k の**曜日
+                            //   バケットの L1 偏差変化（重み1）。当日の元シフトを失う項は行(i)ごとの定数＝
+                            //   割当の argmin を変えないため省く（列ごとに効く項だけを費用に入れる）。
+                            run {
+                                val b = wd[i][k]
+                                val had = if (work[i][j] == k) 1 else 0
+                                b[wdj] -= had                                  // 当日を除いた状態
+                                val devBefore = weeklyDevOfBucket(b)
+                                b[wdj] += 1
+                                val devAfter = weeklyDevOfBucket(b)
+                                b[wdj] += had - 1                              // 復元
+                                cost += (devAfter - devBefore).toLong()
                             }
                             cost
                         }
@@ -4148,7 +4157,7 @@ object V6HotfixPasses {
                 //   staffRange厳密ピン(lo==hi)を新たに崩す日案は不採用にする（keep-best/重みは不変）。
                 if (isBetter(rep, bestRep) && !pinBlocks.blocksImproving(p, work, cand)) {
                     work = cand; bestRep = rep; counts = cnt()
-                    wd = Array(p.S) { wdOf(it) }; wdTgt = IntArray(p.S) { tgtOf(wd[it]) }
+                    wd = Array(p.S) { wdOf(it) }
                     applied++; changedInSweep = true
                 }
             }

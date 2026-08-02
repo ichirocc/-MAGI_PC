@@ -860,10 +860,12 @@ internal fun breakdownLocations(famKey: String, ui: UiState): List<Pair<String, 
             val p = it.key.split(","); val k = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
             if (k == null || j == null) null else ("${dayMD(ui.startDate, j)} 「${sym(k)}」" to null)
         }
-        // [場所表示] fair/weekly はセル単位でなく職員(weekly)・職員×シフト(fair)単位の偏り。distLocations から整形。
+        // [場所表示] fair/weekly はセル単位でなく職員×シフト単位の偏り。distLocations から整形。
+        // [3.345.0] weekly も職員×シフト（旧: 職員のみ）。休も1シフトとして出る。
         "weekly" -> (ui.distLocations["weekly"] ?: emptyList()).mapNotNull { e ->
-            val i = e.getOrNull(0) ?: return@mapNotNull null; val dev = e.getOrNull(1) ?: 0
-            "${nm(i)}（曜日の偏り ${dev}）" to i
+            val i = e.getOrNull(0) ?: return@mapNotNull null; val k = e.getOrNull(1) ?: return@mapNotNull null
+            val dev = e.getOrNull(2) ?: 0
+            "${nm(i)} 「${sym(k)}」（曜日の偏り ${dev}）" to i
         }
         "fair" -> (ui.distLocations["fair"] ?: emptyList()).mapNotNull { e ->
             val i = e.getOrNull(0) ?: return@mapNotNull null; val k = e.getOrNull(1) ?: return@mapNotNull null; val dev = e.getOrNull(2) ?: 0

@@ -305,10 +305,11 @@ internal fun tryFixForbiddenRunViaAdjacentDay(
         if (j2 !in 0 until p.T || p.wishLocked(i, j2)) continue
         val oldJ2 = sched[i][j2]
         if (oldJ2 !in 0 until p.K) continue
-        // 候補シフト: 休を優先（連続禁止を崩す最も安全な既定手）、続けて担当可能シフト一覧。
+        // 候補シフト: 担当可能シフトを順に試す。
+        // [3.345.0] 休は通常のシフト種の一つ＝先頭に置く優先をやめた（旧: 休を第一候補にしていた）。
+        //   実データ3件の後処理研磨で最終盤面がバイト一致＝この優先は実質不活性だった。
         val altOrder = ArrayList<Int>()
-        if (p.restIdx != oldJ2 && p.canDo(i, p.restIdx)) altOrder.add(p.restIdx)
-        for (s in p.allowedShiftsForStaff(i)) if (s != oldJ2 && s !in altOrder) altOrder.add(s)
+        for (s in p.allowedShiftsForStaff(i)) if (s != oldJ2) altOrder.add(s)
         for (alt in altOrder) {
             val cntBefore = (0 until p.S).count { sched[it][j2] == oldJ2 }
             sched[i][j2] = alt   // [一時変更] 下の判定後に必ず復元する

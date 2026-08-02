@@ -329,18 +329,23 @@ object UnifiedViolationChecker {
             }
         }
 
-        // [統一weekly] 7日周期(曜日)シフト平準化: 職員ごと、勤務日(非休)の曜日別カウントの round(平均) からの
-        // L1 偏差和。SOFT・重み1。最適化器(Evaluator/Delta)と同一指標。内訳チップ(UI)には出さず weightedScore/total に算入。
-        // [場所表示] 偏っている職員(i,dev)を収集（内訳パネル用・グリッドには出さない）。
+        // [統一weekly] 7日周期のシフト平準化: 職員ごと、**シフトごと**に、そのシフトが入る日の曜日別カウントの
+        // round(そのシフトの回数/7) からの L1 偏差和。SOFT・重み1。最適化器(Evaluator/Delta)と同一指標。
+        // [3.345.0] 休は通常のシフト種の一つとして扱う＝勤務/休の二値でなくシフト別に均す。旧定義（勤務日=非休の
+        //   曜日カウント）は「毎週おなじ曜日に働く偏り」しか見ておらず、「夜勤が毎週水曜」「休みが毎週月曜」を
+        //   区別できなかった。回数0のシフトは偏差0で無害（対象から外す必要はない）。
+        // [場所表示] 偏っている(職員,シフト,dev)を収集（内訳パネル用・グリッドには出さない）。
         val weeklyLocs = ArrayList<List<Int>>()
         for (i in 0 until p.S) {
-            val wd = IntArray(7)
-            for (j in 0 until p.T) { val k = s[i][j]; if (k != p.restIdx && k in 0 until p.K) wd[(p.dow0 + j) % 7]++ }
-            val d = weeklyDevOfBucket(wd)
-            if (d > 0) { inc("weekly", d); weeklyLocs.add(listOf(i, d)) }
+            val wd = Array(p.K) { IntArray(7) }
+            for (j in 0 until p.T) { val k = s[i][j]; if (k in 0 until p.K) wd[k][(p.dow0 + j) % 7]++ }
+            for (k in 0 until p.K) {
+                val d = weeklyDevOfBucket(wd[k])
+                if (d > 0) { inc("weekly", d); weeklyLocs.add(listOf(i, k, d)) }
+            }
         }
         val distLocations = mapOf(
-            "weekly" to weeklyLocs.sortedByDescending { it[1] },
+            "weekly" to weeklyLocs.sortedByDescending { it[2] },
             "fair" to fairLocs.sortedByDescending { it[2] },
         )
 

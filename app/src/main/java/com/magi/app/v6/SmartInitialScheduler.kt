@@ -143,8 +143,9 @@ object SmartInitialScheduler {
                     var covNow = 0
                     for (ii in 0 until p.S) if (schedule[ii][j] == k) covNow++
                     val demandBonus = if (needLo >= 0 && covNow < needLo) -100 else 0
-                    val restBonus = if (k == restK) -10 else 0
-                    val penalty = (if (over) 1000 else 0) + counts[i][k] + restBonus + demandBonus
+                    // [3.345.0] 休は通常のシフト種の一つ＝残り埋めで優先しない（旧: 休だけ -10 のボーナス）。
+                    //   実データ3件で hard/covO/covU/low/high/c1 が全て同一＝この優先は実質不活性だった。
+                    val penalty = (if (over) 1000 else 0) + counts[i][k] + demandBonus
                     if (penalty < bestPenalty) { bestPenalty = penalty; bestK = k }
                 }
                 schedule[i][j] = bestK

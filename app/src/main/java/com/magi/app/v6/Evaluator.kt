@@ -182,12 +182,13 @@ class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
             }
         }
 
-        // [統一weekly] 7日周期(曜日)シフト平準化 SOFT・重み1。職員ごと、勤務日(非休)の曜日別カウントの
-        // round(平均) からの L1偏差和（UnifiedViolationChecker の "weekly" と一致）。
+        // [統一weekly] 7日周期のシフト平準化 SOFT・重み1。職員ごと**シフトごと**に、そのシフトが入る日の
+        // 曜日別カウントの round(回数/7) からの L1偏差和（UnifiedViolationChecker の "weekly" と一致）。
+        // [3.345.0] 休も1シフトとして数える（旧: 勤務日=非休の二値）。
         for (i in 0 until S) {
-            val wd = IntArray(7)
-            for (j in 0 until T) { val k = a[i][j]; if (k != p.restIdx && k in 0 until K) wd[(p.dow0 + j) % 7]++ }
-            soft += weeklyDevOfBucket(wd).toLong()
+            val wd = Array(K) { IntArray(7) }
+            for (j in 0 until T) { val k = a[i][j]; if (k in 0 until K) wd[k][(p.dow0 + j) % 7]++ }
+            for (k in 0 until K) soft += weeklyDevOfBucket(wd[k]).toLong()
         }
 
         // [監査#4b] 被覆は per-cell OR/AND（VBA本家=Web HF574 と三面統一）。共有ヘルパで Δ/Checker と同式。

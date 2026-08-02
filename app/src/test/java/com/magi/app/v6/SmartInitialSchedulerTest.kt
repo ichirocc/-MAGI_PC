@@ -35,14 +35,16 @@ class SmartInitialSchedulerTest {
 
     @Test
     fun satisfiesC1FromBlankWhereGreedyMirrorSchedulerFails() {
-        val st = blankState(cons1 = listOf(C1Row(day1 = "5", shiftKigou = "X", day2 = "2")))
+        // [3.345.0] 対照の窓ルールを「5日窓 X>=2」→「3日窓 X>=2」へ。休を優先する restBonus を外した結果、
+        //   簡易作成は最少回数のシフトを選び続けて 休/X の交互になり、緩い 5日窓 X>=2 は偶然満たしてしまう。
+        //   3日窓 X>=2 は交互配置では満たせない（窓に X が1つしか入らない）ため対照として成立する。
+        val st = blankState(cons1 = listOf(C1Row(day1 = "3", shiftKigou = "X", day2 = "2")))
 
         val smart = SmartInitialScheduler.generate(st)
         assertEquals(0, smart.report.breakdown["c1"] ?: -1)
         assertEquals(0, smart.report.hard)
 
-        // 対照: 既存の簡易作成(C1非考慮)は同じ盤面でc1を解消できない
-        // （restBonusにより全セルが休へ倒れ、Xが1つも配置されないため）。
+        // 対照: 既存の簡易作成(C1非考慮)は同じ盤面でc1を解消できない。
         val naive = GreedyMirrorScheduler.generate(st)
         assertTrue("既存の簡易作成はC1を考慮しないため違反が残るはず", (naive.report.breakdown["c1"] ?: 0) > 0)
     }

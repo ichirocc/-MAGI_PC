@@ -5255,6 +5255,62 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 休を通常のシフト種として扱う＋weekly を7日周期のシフト平準化へ（3.345.0, ユーザー明示指示）
+ユーザー指示「全体で休は『OFF 特殊』ではなく、通常のシフト種の一つとして扱います」→ 対象の層を確認
+（AskUserQuestion）して**構築・探索の既定**を選択、続けて「weekly を7日周期のシフト平準化として、評価と研磨を
+合わせます」。weekly の定義変更は目的関数の変更＝HF77 該当だが、**明示指示**として実施した。
+
+### 休優先の既定2箇所を撤去（実測で中立と確認してから）
+- `GreedyMirrorScheduler`/`SmartInitialScheduler` の残り埋めスコアにあった **`restBonus = -10`**（休だけ優遇）と、
+  `V6SearchOperators.tryFixForbiddenRunViaAdjacentDay` の **`altOrder` 先頭に休**（代替候補で休を第一に試す）を撤去。
+- **撤去前に測って中立を確認した**: restBonus を外すと 3データセットとも hard/covO/covU/low/high/c1 が**完全に同一**で、
+  動いたのは休セル数（110→105 / 99→94）と total ±数のみ。altOrder は後処理研磨の**最終盤面が3件ともバイト一致**。
+  ＝どちらも実質不活性だった（3.290.0「候補4件の不活性パス」と同じ形の確認）。
+- **撤去しなかったもの（構造上の既定であって優先ではない）**: 新職員の行・伸ばした日・削除シフトのセルを休で埋める
+  （`Ws1Ops`）／`allowed` が空のときの `?: restK` フォールバック／destroy-repair が「非希望セルを休へ退避してから
+  埋め直す」構成（2.57.0/2.58.0 に nsp_bench 実測で選ばれた勝ち筋）。セルは必ず何かの値を持つ必要があり、
+  休以外に自然な既定が無い。
+
+### weekly の定義変更（評価4面＋研磨を同時に）
+**旧**: 職員ごと、**勤務日(非休)** の曜日別カウントの round(勤務日数/7) からの L1 偏差和（勤務/休の二値）。
+**新**: 職員ごと**シフトごと**に、そのシフトが入る日の曜日別カウントの round(そのシフトの回数/7) からの L1 偏差和。
+`weekly = Σ_i Σ_k Σ_d |wd[i][k][d] − round(count[i][k]/7)|`。休は k の一つとして自動的に含まれる。
+「夜勤が毎週水曜」と「休みが毎週月曜」を同じ式で捉える。重みは1のまま（HF77：重みの変更指示は無い）。
+- **同時に動かした面**: `MirrorCore`(checker)／`Evaluator.fullEvalParts`／`DeltaEvaluator`（`wdCnt` を [S][7]→[S][K][7]、
+  preview/commit/rebuild/weeklyAll）／`magi_native.cpp`（`fullEvalParts` と `SaChunk` の `wd` を S*K*7 へ、
+  `contribWeekly(i)`→`contribWeeklyK(i,k)` で **old/nw の2バケットだけ**を before/after に入れる＝
+  `contribRangeApt`/`contribFair` と同じ形なのでホットパスのコストは据え置き）。
+- **研磨・marginal も同時に**: `weeklyMarginalAt(wd:[K][7], bucket, oldK, newK)` へ署名変更（勤務/休の±1でなく
+  **シフト移動**を受ける）＋呼出3箇所（destroyRepairDay/Staff/Violations）／`applyAlternatingSoftPolish` の
+  Hungarian 費用（当日の元シフトを失う項は行ごとの定数＝argmin を変えないので省く）／
+  **`applyWeeklyRebalancePolish` の長方形交換を一般化**（旧: x=勤務・y=z=休 の特殊形＝休だけを「空き」とみなす。
+  新: i が x について過剰曜日 j1・過少曜日 j2、相手 i' が j1 で z・j2 で x のとき 4セルを入替。旧形は新形の部分集合）。
+- **検証**: ホストJVM **全433テスト green**。うち `WeeklyFairMarginalTest` は**ランダム状態80件×5変更で
+  marginal cost == checker の weightedScore 差分**を照合しており、新定義でもこれが通る＝marginal と checker が一致。
+  `DeltaEvaluatorTest` の Δ==フル も green。native parity **2,996,665手 mismatch=0**（bit-op ×2.04）。
+
+### 実データの数字（正直な記録）
+同じ入力盤面を新旧で評価: weekly は **golden 59→183 / real 52→226 / user 49→214**（3.1〜4.4倍）。
+そのうち**構造的な下限**（回数が7の倍数でない (職員,シフト) は偏差が0にならない）が **73 / 126 / 106**＝
+全体の 44〜60%。減らせる余地は 110 / 100 / 108。
+後処理研磨後（同一seed）: golden hard 0・c1 104→**96**・weekly 65→188 ／ real hard 6・c1 63→**61**・weekly 50→181 ／
+user hard 4・c1 54→54・weekly 49→208。**他族はほぼ中立**（golden は c1 −8 と引き換えに low +2、
+real は c1 −2、user は同値）。
+- **重み1のままだと weekly は「生の件数(total)では最大の項」だが「重み付き(weightedScore)では小さい」**
+  （golden: total 420 中 188＝45% だが weighted 2653 中 188＝7%。c1 は 96×15=1440）。実際、研磨後の weekly は
+  下限 73 に対し 188 とほとんど減っていない＝最適化器は weekly より重い族を優先しており、これは重み設定どおりの挙動。
+  **重みを上げるかは業務判断**（HF77＝明示の数値指示が要る）ため今回は 1 のまま据え置き、判断材料として数字を残す。
+
+### テスト修正（新定義に合わせて意味を直したもの）
+- `AptPolishTest`/`FairPolishTest` の「1パスで apt/fair=0 まで解消」は、T=7（各曜日が1回だけ＝weekly が最も強く効く）
+  の盤面で weekly と正面から競合するため成立しなくなった。**本来固定したかったのは「1パス内で自己振替が反復される」**
+  （旧実装は1単位で打ち切っていた）なので `applied` と単調減少で直接見る形へ。fair は追加パスで 0 に到達することも
+  固定、apt は目的関数の最適が apt=0 と一致しない（実測 apt=5）ため keep-best（悪化しない）を固定する形に是正。
+- `SmartInitialSchedulerTest` の対照は「restBonus で全セルが休へ倒れる」ことに依存していた。restBonus 撤去で
+  簡易作成は最少回数のシフトを選び続けて 休/X の交互になり、緩い「5日窓 X≥2」を偶然満たす。交互配置では満たせない
+  **「3日窓 X≥2」**へ変更して対照を成立させ直した（実測 greedy c1=5・smart c1=0）。
+- `C1BeamPolishTest` の初期 total 10→19（盤面は不変・weekly の内訳が変わっただけ）。
+
 ## 人員不足診断の「充足可能」と「どう組んでも解消できません」の矛盾を解消（3.344.0）
 3.343.0 の副次効果（診断が `allBlocked=true` になったので停滞打ち切りが発火するか）を確認したら、
 **自分の主張が過大だったと判明**し、その追跡で別の実害が出た。**表示・診断のみ＝スコアリング不変**。

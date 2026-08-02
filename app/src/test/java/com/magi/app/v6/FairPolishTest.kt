@@ -189,9 +189,15 @@ class FairPolishTest {
         val result = V6HotfixPasses.applyFairPolish(st, sched, maxPasses = 1)
         val after = UnifiedViolationChecker.check(st, result.newSchedule)
 
-        assertEquals("1パスで自己振替の反復によりfair=0まで解消されること", 0, after.breakdown["fair"] ?: -1)
+        // [3.345.0] weekly が「職員×シフト×曜日」になり同じ目的関数の中で自己振替と競合するため、
+        //   1パスで fair=0 まで到達するとは限らなくなった（この盤面は T=7＝曜日が各1回で weekly が最も強く効く）。
+        //   固定したいのは「1パス内で自己振替が反復される」ことなので、そこを直接見る。
+        assertTrue("1パス内で複数回の手が採用されている(旧実装は1回で打ち切っていた)", result.applied > 1)
+        assertTrue("fair は厳密に減る", (after.breakdown["fair"] ?: 99) < (before.breakdown["fair"] ?: 0))
         assertEquals("HARDは悪化しない", 0, after.hard)
-        assertTrue("複数回の手が採用されている(単発なら1)", result.applied > 1)
+        // 反復の継続で最終的には解消しきる（1パスの打ち切りが原因でないことの確認）。
+        val settled = UnifiedViolationChecker.check(st, V6HotfixPasses.applyFairPolish(st, result.newSchedule, maxPasses = 4).newSchedule)
+        assertEquals("パスを重ねれば fair=0 まで解消される", 0, settled.breakdown["fair"] ?: -1)
     }
 
     @Test
