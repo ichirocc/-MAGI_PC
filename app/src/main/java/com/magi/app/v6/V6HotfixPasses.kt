@@ -1492,7 +1492,12 @@ object V6HotfixPasses {
                             // [3.324.0/外部レビュー] 旧実装は手Aのピン却下を黙って巻き戻すだけで数えておらず、
                             //   C1 の「ピン破り」件数が手B(玉突き)だけの部分集計になっていた。手Aは回数を実際に
                             //   変える手（x+1/a-1）＝ピンの当たり判定があるので、ここも記録する。
+                            // [3.347.0/敵対検証] 手Aは**ピン却下だけ**を数えており、同じ手が採点で落ちた
+                            //   ときは何も残していなかった。手B(1590行)は両方残すので、同じ (職員,シフト,決まり)
+                            //   の集計でピン側だけが厚くなり、`causeOf` が「回数固定で却下」へ寄る。
+                            //   どちらも i2 ごと＝同じ粒度なので、対称に数える。
                             if (isBetter(rep, bestRep) && pinBadA) recordBlock(i, x, ri, C1PlateauDiagnosis.REASON_PIN)
+                            else recordBlock(i, x, ri, C1PlateauDiagnosis.REASON_SCORE, after = rep, before = bestRep)
                             work[i][j] = a; work[i2][j] = x                 // 巻き戻し
                         }
                         if (done) { donorsCache = null; continue }

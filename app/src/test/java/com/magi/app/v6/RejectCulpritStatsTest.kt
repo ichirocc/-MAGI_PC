@@ -86,10 +86,33 @@ class RejectCulpritStatsTest {
         //   緩和の判断根拠として UI へ出すので、スコア却下と混ざらないことを固定する。
         val st = RejectCulpritStats()
         val before = rep(hard = 0, total = 10, weighted = 100.0)
-        repeat(3) { st.record(before, before, pinBroken = true) }
+        // [3.347.0] 旧テストは after==before を渡していた＝目的関数が採用しない手をピン破りとして
+        //   固定しており、テスト名（「目的関数が採用したはずの手の数」）と中身が食い違っていた。
+        //   採用される側（厳密に改善する手）を渡す。
+        repeat(3) { st.record(rep(hard = 0, total = 8, weighted = 80.0), before, pinBroken = true) }
         st.record(rep(hard = 0, total = 11, weighted = 120.0, breakdown = mapOf("low" to 1)), before)
         assertEquals(3, st.pinBroken)
         assertEquals(1, st.weightUp)
         assertEquals(4, st.rejected)
+    }
+
+    @Test
+    fun pinBrokenIsNotClaimedForMovesTheObjectiveWouldRejectAnyway() {
+        // [3.347.0/敵対検証] ピンを崩し、かつ採点でも落ちる手は「ピン破り」ではない。
+        //   実データではこの取り違えが 98〜100%（golden fair 28/28・user fair 266/266 が非改善）で、
+        //   本当の主因族がログから消えていた。
+        val st = RejectCulpritStats()
+        val before = rep(hard = 0, total = 10, weighted = 100.0)
+        st.record(rep(hard = 1, total = 10, weighted = 100.0), before, pinBroken = true)              // 必須増
+        st.record(rep(hard = 0, total = 10, weighted = 130.0, breakdown = mapOf("high" to 1)), before, pinBroken = true)
+        st.record(rep(hard = 0, total = 12, weighted = 100.0), before, pinBroken = true)              // 件数増
+        st.record(before, before, pinBroken = true)                                                    // 同値
+        assertEquals("採点で落ちる手はピン破りに数えない", 0, st.pinBroken)
+        assertEquals(1, st.hardUp)
+        assertEquals(1, st.weightUp)
+        assertEquals(1, st.totalUp)
+        assertEquals(1, st.same)
+        assertEquals(4, st.rejected)
+        assertTrue("隠れていた主因族が出る: ${st.summary()}", st.summary().contains("high:1"))
     }
 }

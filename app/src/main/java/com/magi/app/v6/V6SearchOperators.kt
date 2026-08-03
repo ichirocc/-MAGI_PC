@@ -572,12 +572,20 @@ internal class RejectCulpritStats {
         private set
 
     /**
-     * @param pinBroken 呼出側の `exactPinRegression` の結果。true なら理由は「ピン破り」で確定し、
-     *   スコア比較は行わない（違反自体は改善しているため主因族が存在しない）。
+     * @param pinBroken 呼出側の `exactPinRegression` の結果。
+     *
+     * [3.347.0/敵対検証] **「ピン破り」を名乗れるのは、目的関数が採用を認めた手をピンだけが止めたとき**
+     * （そのときだけ「違反自体は改善しているので主因族を持たない」が成り立つ）。呼出12箇所は
+     * `isBetter(...) && !exactPinRegression(...)` の形で、隣の `pinBlocks.record` は
+     * `pinBad && isBetter(...)` と正しく絞っているのに、こちらは生の `pinBad` をそのまま受けていた。
+     * 結果、**採点でも落ちる手までピン破りに数え、本当の主因族を隠していた**。実データ計測:
+     * golden の c3mn 96件・fair 28件、user の c3mn 98件・fair 266件が**全件**「非改善なのにピン破り」で、
+     * 98〜100% が誤ラベル。3.326.0 が `PinBlockAttribution` 側で厳密化した意味論の取り残し（教訓#31）。
+     * ここで `betterReport` を通し、採点で落ちる手は従来どおり必須増／重み悪化／件数悪化へ分類する。
      */
     fun record(after: ViolationReport, before: ViolationReport, pinBroken: Boolean = false) {
         rejected++
-        if (pinBroken) { this.pinBroken++; return }
+        if (pinBroken && betterReport(after, before)) { this.pinBroken++; return }
         when {
             after.hard > before.hard -> {
                 hardUp++

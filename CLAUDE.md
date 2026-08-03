@@ -5259,6 +5259,43 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 「ピン破り」の誤ラベルで主因族が隠れていた（3.347.0, 新領域の敵対検証）
+`C1PlateauDiagnosis` / `C3nBitScan` / `StateFingerprint` / `RejectCulpritStats` / `AdaptiveBlockSwap` を
+ゼロベースで読み直した。**表示・診断のみ＝重み・採否・スコアは完全に不変**（実データで最終盤面が一致することを
+確認済み）。
+- **[実バグ] 採点でも落ちる手を「ピン破り」に数えていた**: `RejectCulpritStats.record` は呼出側の
+  `exactPinRegression` の結果を**生のまま**受けて最優先で pinBroken へ振り分けていた。だが「ピン破り」を
+  名乗れるのは**目的関数が採用を認めた手をピンだけが止めたとき**だけで、そのときだけ KDoc の
+  「違反自体は改善しているので主因族を持たない」が成立する。隣の行の `pinBlocks.record` は
+  `pinBad && isBetter(...)` と正しく絞っているのに、`rejectCulprits.record(rep, bestRep, pinBad)` だけが
+  素通し＝**3.326.0 が `PinBlockAttribution` 側で厳密化した意味論の取り残し**（教訓#31）。
+  **実データ計測（後処理研磨のみ）**: golden の c3mn 96件・fair 28件・apt 59件、user の c3mn 98件・
+  fair 266件・apt 7件が**98〜100% 非改善**＝ほぼ全部が誤ラベルで、本当の主因族がログから消えていた。
+  修正後は隠れていた壁が出る: golden c3mn「重み悪化125 主因 low:50 c1:42 high:33」／user fair
+  「重み悪化289 主因 low:160 c1:125」。**3.303.0 で言った「low/high/c1 が族を問わない共通の壁」を、
+  今度は正しい帰属で裏づけた**（当時は pin が全部かぶせていた）。
+- **[実バグ] 手A の採点却下が C1Plateau に記録されていなかった**: `applyC1WindowPolish` の手A（同日交換）は
+  ピン却下だけを記録し、同じ手が採点で落ちたときは何も残さない。手B は両方残すので、同じ
+  (職員, シフト, 決まり) の集計でピン側だけが厚くなり `causeOf` が「回数固定で却下」へ寄る。どちらも
+  i2 ごと＝同じ粒度なので対称に数える。
+- **[表示] 合算・再フィルタ後に並べ替えていなかった**: `C1PlateauDiagnosis.build` は観測数の多い順に
+  並べるのに、3.331.0 で入れた `mergedWith` と `refreshedAgainst` は並べ替えを引き継がず、
+  `logLines().take(8)` と画面の一覧が「上位8件」でなく1巡目の順のまま出ていた。両方で並べ直す。
+- **確認して問題なしだったもの**: `StateFingerprint` は `MagiState` の26フィールドを実際に数え、
+  読まない3つ（schedule/shiftColors/extras）以外の23を全部読み、**入れ子の data class
+  （Shift/Group/Staff/Range/C1Row/C2Row/C3Row/C41Row/C42Row）のフィールドも全部読む**ことをモデル定義と
+  機械照合した。`C3nBitScan` の `matchMask` は `ushr l` のシフト距離が d≤T≤64 で必ず 63 以内、
+  `valid`/`rangeMask` の 64bit 境界も検算して破綻なし。`C1PlateauDiagnosis` の「証明とは名乗らない」設計
+  （`provenWalls` との住み分け）も一貫している。
+- **未対応（報告のみ）**: ①`C3nRowScan` のスカラー退避（T>64）は `C3nBitScanTest` が days=21/10 しか使わず
+  **一度も通っていない**。業務前提は最大31日なので実運用では到達しないが、その分岐は「日数上限を上げたとき」の
+  ための保険なのにテストが無い ②`PersonalBalanceJointLnsPolish` には `patienceMs` が無い（3.342.0 で
+  C1JointLns にだけ入れた。当時「候補が尽きるので不要」と実測しているので現状は正しいが非対称）。
+- 検証: ホストJVM **全438テスト green**（437 + 新規1）。実データの最終盤面は golden(hard0/total420/
+  weighted2653/c1 96)・user(hard4/322/33347/54) が修正前後で**完全一致**、real は同一ビルドでも
+  48401〜48494 と揺れる（3.279.1 の既知の非決定性＝JointLNS の壁時計予算。同条件の2回目は両ビルドとも
+  48401/304/61 で一致）。
+
 ## 停滞ラッチが降りない＋ワーカーの片肺運転（3.346.0, 実機ログ 2026-08-03 から）
 実機ログ（PORTFOLIO 300s・workers=8・3.345.0 搭載機）を精読した。**まず 3.345.0 が実機で意図どおり動いて
 いることを確認**（パリティ行 soft=1016 を breakdown から手計算で再現＝weekly=154 を含めて一致・ネイティブ探索は

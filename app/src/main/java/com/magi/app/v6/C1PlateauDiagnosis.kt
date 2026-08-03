@@ -153,7 +153,10 @@ data class C1PlateauDiagnosis(
                 )
             }
         }
-        return C1PlateauDiagnosis(other.remainingC1, byKey.values.toList())
+        // [3.347.0/敵対検証] 合算後も観測数の多い順に並べ直す。`build` は並べていたが merge/refresh は
+        //   並べ替えておらず、巡ごとに合算した結果 `logLines().take(8)` と画面の一覧が「上位8件」でなく
+        //   1巡目の順のまま出ていた（3.331.0 で合算を入れたときの取り残し）。
+        return C1PlateauDiagnosis(other.remainingC1, byKey.values.sortedByDescending { it.observations })
     }
 
     /**
@@ -164,7 +167,11 @@ data class C1PlateauDiagnosis(
      * @param stillDeficient 最終盤面で当該窓がまだ不足しているか。
      */
     fun refreshedAgainst(remainingC1: Int, stillDeficient: (Int, Int, Int) -> Boolean): C1PlateauDiagnosis =
-        C1PlateauDiagnosis(remainingC1, entries.filter { stillDeficient(it.staff, it.shift, it.ruleIndex) })
+        C1PlateauDiagnosis(
+            remainingC1,
+            entries.filter { stillDeficient(it.staff, it.shift, it.ruleIndex) }
+                .sortedByDescending { it.observations },
+        )
 
     fun logLines(): List<String> {
         if (causeUnknown) return listOf(
