@@ -6,6 +6,8 @@ import com.magi.app.model.MagiState
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
 
@@ -125,5 +127,60 @@ class C3nBitScanTest {
         assertEquals("パターン全域(0,1,2)が候補日として返る", C3nBitScan.rangeMask(0, 2), covering)
         // 旧実装の視野(j±1 = 1,3)ではパターン先頭 day0 に届かないことを対比で固定。
         assertEquals("先頭 day0 が含まれる", 1L, covering and 1L)
+    }
+
+
+    // ---- [3.348.0] T>64 のスカラー退避 --------------------------------------------------------
+    // `C3nRowScan` は 64日以内をビット、65日以上を既存スカラーで読む。既存テストは days=21/10 しか
+    // 使っておらず**スカラー分岐を一度も通していなかった**（業務前提は最大31日なので実運用では
+    // 到達しないが、この分岐は「日数上限を上げたとき」のための保険であり、保険が動く証拠が無かった）。
+    //
+    // 65日目に「どのパターンの末尾にもならないシフト」(休)を置くと、日64を含む窓は
+    // start = 65-d の1本だけで、その窓は必ず不成立になる。よって 65日行のスカラー結果は
+    // 先頭64日を切り出した行のビット結果と厳密に一致しなければならない。
+
+    private fun prefix64(row: List<Int>): List<Int> = row.take(64)
+
+    @Test
+    fun scalarFallbackForLongHorizonMatchesTheBitPathOnTheSharedPrefix() {
+        var checkedCells = 0
+        for (seed in 1..6) {
+            val long = randomState(days = 65, seed = seed)
+            // 65日目を「どのパターンの末尾にもならない」休へ固定する（境界の窓を必ず不成立にする）。
+            val rows65 = long.schedule.map { r -> r.toMutableList().also { it[64] = rest } }
+            val st65 = state(65, rows65)
+            val st64 = state(64, rows65.map { prefix64(it) })
+            val p65 = Problem(st65)
+            val p64 = Problem(st64)
+            assertFalse("65日はビット経路を使えない", C3nBitScan.usable(p65))
+            assertTrue("64日はビット経路", C3nBitScan.usable(p64))
+
+            val row65 = rows65[0].toIntArray()
+            val row64 = prefix64(rows65[0]).toIntArray()
+            val scan65 = C3nRowScan(p65, row65)
+            val scan64 = C3nRowScan(p64, row64)
+            assertEquals("スカラーとビットで fire 数が一致 (seed=$seed)", scan64.fires(), scan65.fires())
+            assertEquals("スカラーはオラクルと一致", C1DeltaPrefilter.staffC3nFires(p65, row65), scan65.fires())
+
+            // 全セル×全シフトで、変更後の fire 数と「崩せる日」の集合まで一致させる。
+            // 日63以降は 65日側にだけ存在する窓が絡むので対象外（比較対象が同じでなくなる）。
+            for (day in 0 until 62) {
+                for (k in kigou.indices) {
+                    assertEquals(
+                        "変更後の fire 数が一致 (seed=$seed day=$day k=$k)",
+                        scan64.firesAfterSet(day, k), scan65.firesAfterSet(day, k),
+                    )
+                    assertEquals(
+                        "崩せる日の集合が一致 (seed=$seed day=$day k=$k)",
+                        scan64.coveringDaysAfterSet(day, k).toList(),
+                        scan65.coveringDaysAfterSet(day, k).toList(),
+                    )
+                    checkedCells++
+                }
+            }
+            assertEquals("スカラー経路は行を復元する", rows65[0], row65.toList())
+            assertEquals("ビット経路は行を復元する", prefix64(rows65[0]), row64.toList())
+        }
+        assertTrue("十分な数のセルを検査した: $checkedCells", checkedCells >= 1_800)
     }
 }
