@@ -509,6 +509,13 @@ object V6NativeOptimizer {
         /** [3.306.0] ワーカーが epoch ループを抜けた時点の役割。エリート登録の分類に使う
          *  （再配属回数からの逆算では、残差ベース経路のとき実際の役割と一致しないため）。 */
         val lastRole: HypothesisEpochRole,
+        /** [3.346.0/実機ログ] ワーカーが epoch ループを抜けた理由と、その時点の経過秒。
+         *  `shouldStop` は**単調でない**（改善が届けば偽に戻る）のに `while` 条件で使うため、
+         *  一瞬 true になった瞬間にポーリングしたワーカーだけが恒久的に離脱する。実機ログ
+         *  2026-08-03 では 8本中4本が 115〜116s で離脱し、残り159秒を4本で走っていた
+         *  （役割別worker秒を手で足さないと気づけなかった）。理由と時刻を明示して可視化する。 */
+        val exitReason: String,
+        val exitAtSec: Long,
         /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
          *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
         val hf63Avoided: List<String> = emptyList(),
@@ -581,6 +588,7 @@ object V6NativeOptimizer {
                     if (escapeController != null) AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i) else null
                 var epoch = 0
                 var iterations = 0L
+                var exitReason = ""   // [3.346.0] epoch ループの離脱理由（下で確定）
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
                 // [3.307.0/ログ強化] 役割ごとの**実消費ミリ秒**。roleRuns(エポック数)だけでは
                 //   「どの役割が予算のどれだけを実際に食ったか」が読めない（量子は役割ごとに
@@ -811,9 +819,19 @@ object V6NativeOptimizer {
                     } catch (e: Exception) {
                         // [3.278.0] epoch単位の隔離: このワーカーだけ停止し、蓄積済みエリートを成果として返す。
                         firstError.compareAndSet(null, e)
+                        exitReason = "例外"
                         break
                     }
                 }
+                // [3.346.0] while 条件のどれで抜けたかを確定（例外は上で確定済み）。
+                if (exitReason.isEmpty()) {
+                    exitReason = when {
+                        nowMs() >= deadline -> "締切"
+                        hardZeroWinner.get() >= 0 && hardZeroWinner.get() != i -> "勝者確定"
+                        else -> "停滞シグナル"
+                    }
+                }
+                val exitAtSec = (nowMs() - started) / 1000
 
                 AdaptiveWorkerOutcome(
                     elite = elite,
@@ -821,6 +839,8 @@ object V6NativeOptimizer {
                     logs = eliteLogs,
                     lastRole = (controlledAssignment
                         ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)).role,
+                    exitReason = exitReason,
+                    exitAtSec = exitAtSec,
                     iterations = iterations,
                     epochs = epoch,
                     reassignments = reassignments,
@@ -877,7 +897,7 @@ object V6NativeOptimizer {
                 "${e.key.name}x${e.value}/${"%.0f".format(sec)}s"
             }
             val avoided = if (o.hf63Avoided.isEmpty()) "" else "/HF63回避=${o.hf63Avoided.joinToString("+")}"
-            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided"
+            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided/離脱=${o.exitReason}@${o.exitAtSec}s"
         }
         // [3.307.0/ログ強化] 全ワーカー横断の役割別 worker秒。予算配分を論じるときに見るのはここ
         //   （量子は「1エポックの要求長」であって消費ではない＝両者を取り違えると偏りの診断を誤る）。
@@ -887,10 +907,20 @@ object V6NativeOptimizer {
         val budgetNote = roleTotals.entries.sortedByDescending { it.value }.joinToString(" ") { e ->
             "${e.key.name}=${e.value / 1000}s(${e.value * 100 / totalWorkerMs}%)"
         }
+        // [3.346.0/実機ログ] 締切前に離脱したワーカーを1行で明示する。`shouldStop` は単調でないため
+        //   一瞬の停滞シグナルでポーリングが当たったワーカーだけが恒久的に抜け、残りは走り続ける
+        //   （実機 2026-08-03: 8本中4本が 115〜116s で離脱＝残り159秒を半分の並列度で走っていた）。
+        //   旧ログは役割別worker秒を手で足さないと気づけなかった。
+        val earlyExits = outcomes.filter { it.exitReason != "締切" }
+        val exitNote = if (earlyExits.isEmpty()) "ワーカー離脱=全て締切まで実行" else
+            "ワーカー離脱=${earlyExits.size}/${outcomes.size}本が締切前(" +
+                earlyExits.groupBy { it.exitReason }.entries.joinToString(",") { e ->
+                    "${e.key}${e.value.size}本@${e.value.joinToString("/") { "${it.exitAtSec}s" }}"
+                } + ")"
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
-                "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / " +
+                "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / $exitNote / " +
                 "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",

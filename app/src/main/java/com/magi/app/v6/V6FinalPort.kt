@@ -337,6 +337,14 @@ object V6FinalPort {
                     val improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal)
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())
+                        // [3.346.0/実機ログ] 停滞ラッチを解除する。shouldStop は**単調でない**（改善が届けば
+                        //   条件は偽に戻り、探索はそのまま締切まで走る）のに、旧実装は一度立った
+                        //   stagnationFired を二度と降ろさなかった。実機ログ 2026-08-03 では 258s に発火 →
+                        //   261s に改善が届いて探索は続行 → 275s の探索予算を使い切ったのに
+                        //   「改善が無いため早期終了（290sで停止・停滞37s無改善）」と記録され、同じログの
+                        //   Watchdog 行（探索終了時の停滞13s）と矛盾していた。さらに ExtraRefine が
+                        //   古いラッチを根拠に skip され、予算の残り約9秒が使われないままだった。
+                        stagnationFired.set(false); stagnationDurationMs.set(-1)
                         // 非covU HARD(=解けるHARD)件数を best と同時に捕捉（stallHardMs 早期移行の判定に使う）。
                         val gv = report.breakdown["groupViol"] ?: 0
                         val pf = report.breakdown["pref"] ?: 0
