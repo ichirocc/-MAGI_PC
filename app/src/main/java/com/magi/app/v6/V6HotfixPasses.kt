@@ -4469,6 +4469,21 @@ object V6HotfixPasses {
         }
     }
 
+    /**
+     * ブロック交換・3者回転の**差分前フィルタ**。同 sgrp かつ同 ssk の参加者だけで使い、
+     * 「その職員たちの部分目的が改善しないなら、フル checker を呼ばずに捨てる」ための近似。
+     *
+     * **既知の近似2つ**（3.84.0 から「報告のみ」で残っていた項目）:
+     *  - c3/c3m を **窓の#fire** で数える。チェッカーは単一シフト連を `C3Run.rowDeficit`
+     *    （run-deficit）で評価するので、単一シフト連のルールではモデルが違う。
+     *  - apt/fair/weekly を集計しない（群平均・曜日バケットが要るため）。それらだけが改善する手はこぼす。
+     *
+     * [3.349.1/実測] どちらも **このデータでは一度も良い候補を落としていない**。捨てた候補すべてに
+     * フル checker を当てて「本来なら採用されたか」を数えたところ、**golden 235件・user 899件・
+     * real 896件の skip に対し採用相当は 0件**。捨てるのは checker も却下する候補ばかりで、
+     * 近似は inert。よってモデルを揃える改修はしない（測れる利得が無い＝3.290.0/3.310.1 と同じ判断）。
+     * 落としても keep-best は無関係なので**正しさには元から影響しない**（機会損失だけが論点だった）。
+     */
     private fun staffObjective(p: Problem, sched: Array<IntArray>, i: Int): StaffObjective {
         var total = 0L; var weighted = 0.0
         val cnt = IntArray(p.K)                                   // 期間内シフト回数(c2/low/high 用)

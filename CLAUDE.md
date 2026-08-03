@@ -5177,7 +5177,8 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
 
 **報告のみ(未修正=判断/測定待ち)**:
 - ~~`applyDayAssignmentPolish` の rangePen 重み 3/3・apt 1 は Evaluator の 90/45/1 と乖離~~ **→ 3.94.0 で 90/45/1 へ整合(下記)**。
-- `staffPacked`/`c3FamCount` が c3/c3m を run-deficit でなく窓#fire でモデル化(前フィルタ限定・keep-best 安全)。
+- ~~`staffPacked`/`c3FamCount` が c3/c3m を run-deficit でなく窓#fire でモデル化(前フィルタ限定・keep-best 安全)。~~
+  **→ 3.349.1 で実測して閉じた**（捨てた候補 golden 235/user 899/real 896 に対し「checker なら採用」は0件＝inert）。
 - ~~平準化研磨(`applyGroupShiftEqualizePolish`/`applyWeeklyEqualizePolish`)は分散指標で目的関数(fair/weekly=L1)と別物＝既知の冗長~~
   **→ 3.317.0 で撤去**（実データ3件で採用0回・分散指標も不動・ablation で最終盤面一致＝寄与ゼロを実測。
   L1 ベースの後継が役割を代替）。
@@ -5285,6 +5286,13 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   `applyC1WindowPolish` **だけ**で、C1 index 駆動/時系列フロー/広域ビーム/厳密窓修復は `plateau` を
   返さない。`NO_CANDIDATE` の文言が「この直し方では」と限定しているのはこのためだが、クラスの KDoc に
   出どころが無かった。明記した。
+**[3.349.1/実測で閉じた] 差分前フィルタ（`staffObjective`/`c3FamCount`）の近似は inert**。3.84.0 から
+「報告のみ」で残っていた2件（c3/c3m を窓#fire で数える＝チェッカーの run-deficit と別モデル／
+apt/fair/weekly を集計しない）について、**捨てた候補すべてにフル checker を当てて「本来なら採用
+されたか」を数えた**。結果は **golden 235件・user 899件・real 896件の skip に対し採用相当 0件**＝
+この近似は良い候補を一度も落としていない。モデルを揃える改修は測れる利得が無いので**しない**
+（3.290.0「不活性パスに投資しない」・3.310.1「測って支持されなければ入れない」と同じ判断）。
+事実を `staffObjective` の KDoc に残し、この項目を閉じる。
 **成立しない＝主なもの**: #4「`day2` のガードが無い」＝`Problem.cons1` 構築時の `d1>0 && d2>0` フィルタで
 到達不能（`day1>0` のガード自体が冗長な防御）／#11「`WeeklyFairMarginalTest` は撤去済みパスのテスト」＝
 実際は 3.267.0 の `weeklyMarginalAt`/`fairMarginalAt` を検証しており撤去された `applyWeeklyEqualizePolish`
