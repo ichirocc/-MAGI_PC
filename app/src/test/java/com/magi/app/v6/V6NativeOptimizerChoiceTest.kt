@@ -986,4 +986,52 @@ class V6NativeOptimizerChoiceTest {
         val p = Problem(canDoState(mapOf("0,1" to Range("", "1"))))
         assertEquals("上限側は不変", 90L, V6NativeOptimizer.staffCountPenaltyAt(p, 0, 1, 3))
     }
+
+    // ---- [3.346.1/方針B] 停滞シグナルの確認窓 ------------------------------------------------
+    // `shouldStop` は単調でない（締切・キャンセルは永久に真だが、停滞シグナルは他のワーカーが
+    // 改善を1件出せば偽に戻る）。旧実装は epoch ループの while 条件でこれを見ていたため、
+    // 一瞬 true の瞬間にポーリングしたワーカーだけが恒久離脱していた（実機で8本中4本）。
+
+    @Test
+    fun transientStopSignalIsNotConfirmed() = runBlocking {
+        // 1回目の問い合わせだけ真＝一瞬のシグナル。確認窓で偽へ戻るので「本物でない」と判定する。
+        var calls = 0
+        val transient = { calls++ == 0 }
+        assertTrue("前提: 初回は真", transient())
+        calls = 0
+        assertFalse("一瞬のシグナルは確認されない（走行を続ける）",
+            V6NativeOptimizer.confirmStop(transient, deadline = Long.MAX_VALUE, stopIsFinal = { false }))
+    }
+
+    @Test
+    fun persistentStopSignalIsConfirmed() = runBlocking {
+        // 常に真＝本物の停滞。確認窓ぶん待ってから真を返す（従来どおり離脱する）。
+        val t0 = System.currentTimeMillis()
+        assertTrue("続くシグナルは本物と判定する",
+            V6NativeOptimizer.confirmStop({ true }, deadline = Long.MAX_VALUE, stopIsFinal = { false }))
+        val waited = System.currentTimeMillis() - t0
+        assertTrue("確認窓のあいだ待ってから確定する（実測 ${waited}ms）",
+            waited >= V6NativeOptimizer.STOP_CONFIRM_MS / 2)
+    }
+
+    @Test
+    fun deadlinePassedIsConfirmedImmediately() = runBlocking {
+        // 締切超過は単調＝待たずに確定する（確認窓で早期終了の効きを削らない）。
+        // deadline は nowMs()（nanoTime 系の単調時計）と同じ物差しなので、
+        // 「必ず過ぎている値」として 0 を渡す（壁時計を混ぜると別の物差しになる）。
+        val t0 = System.currentTimeMillis()
+        assertTrue("締切超過は即確定",
+            V6NativeOptimizer.confirmStop({ true }, deadline = 0L, stopIsFinal = { false }))
+        assertTrue("待たない", System.currentTimeMillis() - t0 < 1_000L)
+    }
+
+    @Test
+    fun finalStopIsConfirmedWithoutWaiting() = runBlocking {
+        // 探索締切・キャンセルは単調＝確認窓を回さずに即確定する。旧実装（stopIsFinal 無し）は
+        // ここでも5秒待ち、探索が締切を超えて後処理予約を食っていた（実測 探索109.99s→114.998s）。
+        val t0 = System.currentTimeMillis()
+        assertTrue("単調な停止は即確定",
+            V6NativeOptimizer.confirmStop({ true }, deadline = Long.MAX_VALUE, stopIsFinal = { true }))
+        assertTrue("待たない", System.currentTimeMillis() - t0 < 1_000L)
+    }
 }

@@ -5,7 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlin.coroutines.coroutineContext
@@ -299,6 +301,10 @@ object V6NativeOptimizer {
         options: V6OptimizerOptions = V6OptimizerOptions(),
         shouldStop: () -> Boolean = { false },
         onProgressRaw: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
+        /** [3.346.1] `shouldStop` が真のとき、それが**単調な停止**（探索締切・キャンセル）かを返す。
+         *  停滞シグナルは単調でない（改善が届けば偽に戻る）ので、適応ポートフォリオはそれだけを
+         *  確認窓で再確認する。既定は「常に単調」＝確認せず即離脱＝従来どおり。 */
+        stopIsFinal: () -> Boolean = { true },
     ): V6OptimizerResult {
         val slot = RunSlot(runSeq.incrementAndGet())
         newestRunId = slot.id
@@ -308,7 +314,7 @@ object V6NativeOptimizer {
         liveBest = null
         liveBestReport.set(null)
         val r = withContext(RunSlotElement(slot)) {
-            optimizeInSlot(state, initial, options, shouldStop, onProgressRaw)
+            optimizeInSlot(state, initial, options, shouldStop, onProgressRaw, stopIsFinal)
         }
         return r.copy(alternatives = slot.alternatives, infeasibleFamilies = slot.infeasible)
             .also { it.fusionElites = slot.fusionElites }
@@ -320,6 +326,7 @@ object V6NativeOptimizer {
         options: V6OptimizerOptions,
         shouldStop: () -> Boolean,
         onProgressRaw: (String, ViolationReport?, Long, Long) -> Unit,
+        stopIsFinal: () -> Boolean,
     ): V6OptimizerResult {
         val started = nowMs()
         // [敵対的レビュー: 進捗コールバックの直列化] runMultiWorker(仮説横断)・runAlnsChains(チェーン横断)は
@@ -385,7 +392,7 @@ object V6NativeOptimizer {
             //   異なる方式を割当て keep-best で最良採用）では、入口を多様化しても収束後は同じ吸引域へ
             //   潰れたまま残時間を消費していた。5〜8秒（RSI++は35秒）epochで停滞/basin重複を検知し、
             //   エリートを保存しながら役割を再配属する非同期適応ポートフォリオへ置換。
-            V6Algorithm.PORTFOLIO -> runAdaptivePortfolio(state, schedule, w, options, full, shouldStop, onProgress)
+            V6Algorithm.PORTFOLIO -> runAdaptivePortfolio(state, schedule, w, options, full, shouldStop, stopIsFinal, onProgress)
             V6Algorithm.AUTO -> error("AUTO must be resolved")
         }
         logs = logs + result.phaseLogs
@@ -516,10 +523,57 @@ object V6NativeOptimizer {
          *  （役割別worker秒を手で足さないと気づけなかった）。理由と時刻を明示して可視化する。 */
         val exitReason: String,
         val exitAtSec: Long,
+        /** [3.346.1] 一瞬の停滞シグナルを確認窓で見送った回数（＝旧実装なら恒久離脱していた回数）。 */
+        val survivedStops: Int = 0,
         /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
          *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
         val hf63Avoided: List<String> = emptyList(),
     )
+
+    /** [3.346.1] 停滞シグナルの確認窓。この間 shouldStop が続けて真なら本物とみなす。 */
+    internal const val STOP_CONFIRM_MS = 5_000L
+    private const val STOP_CONFIRM_POLL_MS = 250L
+
+    /**
+     * [3.346.1/方針B] `shouldStop` が**本物の停止**かを確認窓のあいだ再確認する。
+     *
+     * `shouldStop` は単調でない: 締切・キャンセルは一度真なら永久に真だが、停滞シグナルは
+     * 「最終改善からの経過 > 閾値」なので**他のワーカーが改善を1件出した瞬間に偽へ戻る**。
+     * 旧実装はこれを epoch ループの `while` 条件で見ていたため、たまたまその瞬間にポーリングした
+     * ワーカーだけが恒久的に離脱していた（実機 2026-08-03: 8本中4本が115〜116秒で消え、
+     * 残り159秒を半分の並列度で走行。閾値37.5秒に対し改善間隔が37〜41秒＝ほぼ毎回きわどい）。
+     *
+     * ここでは短い窓のあいだ再確認し、途中で偽へ戻れば false（＝一瞬のシグナル・走行を続ける）、
+     * 窓のあいだ真のままなら true（＝本物・従来どおり離脱）を返す。窓を [STOP_CONFIRM_MS] に
+     * 取るのは、閾値をわずかに超えて発火する near-miss なら次の改善が数秒で届くため
+     * （実機の該当ケースは発火115秒→次の改善が約3秒後）。本物の停滞ならこの窓ぶんだけ
+     * 離脱が遅れるが、待機は suspend なので CPU は消費せず、8本が並行に待つので壁時計の
+     * 追加も窓1回ぶん。締切超過とキャンセルは単調なので即座に true を返す。
+     *
+     * `deadline` は [nowMs]（`System.nanoTime()` 系の単調時計）と同じ物差しで渡すこと。
+     * 壁時計（`System.currentTimeMillis()`）を混ぜると別の原点になり、締切超過を検出できない。
+     */
+    internal suspend fun confirmStop(
+        shouldStop: () -> Boolean,
+        deadline: Long,
+        stopIsFinal: () -> Boolean = { true },
+    ): Boolean {
+        if (stopIsFinal()) return true
+        val until = nowMs() + STOP_CONFIRM_MS
+        while (nowMs() < until) {
+            if (nowMs() >= deadline || stopIsFinal()) return true
+            if (!coroutineContext.isActive) return true
+            try {
+                delay(STOP_CONFIRM_POLL_MS)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // キャンセルは単調＝確定。旧実装（shouldStop 真で while を抜ける）と同じく
+                // ループを正常終了させ、蓄積済みエリートを成果として返す。
+                return true
+            }
+            if (!shouldStop()) return false
+        }
+        return true
+    }
 
     /**
      * [3.267.0/adaptive hypothesis epochs, 3.268.0/elite archive fusion]
@@ -539,6 +593,7 @@ object V6NativeOptimizer {
         options: V6OptimizerOptions,
         budgetSec: Int,
         shouldStop: () -> Boolean,
+        stopIsFinal: () -> Boolean,
         onProgress: (String, ViolationReport?, Long, Long) -> Unit,
     ): V6OptimizerResult = kotlinx.coroutines.supervisorScope {
         val started = nowMs()
@@ -589,6 +644,7 @@ object V6NativeOptimizer {
                 var epoch = 0
                 var iterations = 0L
                 var exitReason = ""   // [3.346.0] epoch ループの離脱理由（下で確定）
+                var survivedStops = 0 // [3.346.1] 一瞬の停滞シグナルを見送った回数
                 val roleRuns = LinkedHashMap<HypothesisEpochRole, Int>()
                 // [3.307.0/ログ強化] 役割ごとの**実消費ミリ秒**。roleRuns(エポック数)だけでは
                 //   「どの役割が予算のどれだけを実際に食ったか」が読めない（量子は役割ごとに
@@ -610,9 +666,20 @@ object V6NativeOptimizer {
                 //     **全ワーカーの keep-best 成果ごと optimize() が失敗**していた（runMultiWorker は仮説ごとの
                 //     隔離＋firstError＋全滅時のみフォールバックを採用済みの非対称）。epoch 本体を try で包み、
                 //     例外はこのワーカーの epoch ループだけを終了させて現エリートを成果として返す。
-                while (!shouldStop() && nowMs() < deadline &&
+                // [3.346.1/方針B] 停滞シグナルは単調でない（改善が届けば偽に戻る）ので、
+                //   `while` 条件には単調な締切・勝者確定だけを置き、シグナルは confirmStop で
+                //   確認窓ぶん再確認してから離脱する。一瞬のシグナルで片肺運転にならない。
+                while (nowMs() < deadline &&
                     (hardZeroWinner.get() < 0 || hardZeroWinner.get() == i)
                 ) {
+                    if (shouldStop()) {
+                        if (confirmStop(shouldStop, deadline, stopIsFinal)) {
+                            exitReason = if (stopIsFinal()) "探索締切" else "停滞シグナル"
+                            break
+                        }
+                        survivedStops++
+                        continue
+                    }
                     try {
                     val assignment = controlledAssignment
                         ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
@@ -823,13 +890,10 @@ object V6NativeOptimizer {
                         break
                     }
                 }
-                // [3.346.0] while 条件のどれで抜けたかを確定（例外は上で確定済み）。
+                // [3.346.0] while 条件のどれで抜けたかを確定
+                //   （例外と確認済み停滞シグナルは上で確定済み。ここは単調な2条件のみ）。
                 if (exitReason.isEmpty()) {
-                    exitReason = when {
-                        nowMs() >= deadline -> "締切"
-                        hardZeroWinner.get() >= 0 && hardZeroWinner.get() != i -> "勝者確定"
-                        else -> "停滞シグナル"
-                    }
+                    exitReason = if (nowMs() >= deadline) "締切" else "勝者確定"
                 }
                 val exitAtSec = (nowMs() - started) / 1000
 
@@ -841,6 +905,7 @@ object V6NativeOptimizer {
                         ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)).role,
                     exitReason = exitReason,
                     exitAtSec = exitAtSec,
+                    survivedStops = survivedStops,
                     iterations = iterations,
                     epochs = epoch,
                     reassignments = reassignments,
@@ -897,7 +962,8 @@ object V6NativeOptimizer {
                 "${e.key.name}x${e.value}/${"%.0f".format(sec)}s"
             }
             val avoided = if (o.hf63Avoided.isEmpty()) "" else "/HF63回避=${o.hf63Avoided.joinToString("+")}"
-            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided/離脱=${o.exitReason}@${o.exitAtSec}s"
+            val survived = if (o.survivedStops == 0) "" else "/停滞見送り${o.survivedStops}回"
+            "W${i}:epoch${o.epochs}/再配属${o.reassignments}[$used]$avoided/離脱=${o.exitReason}@${o.exitAtSec}s$survived"
         }
         // [3.307.0/ログ強化] 全ワーカー横断の役割別 worker秒。予算配分を論じるときに見るのはここ
         //   （量子は「1エポックの要求長」であって消費ではない＝両者を取り違えると偏りの診断を誤る）。
@@ -911,12 +977,16 @@ object V6NativeOptimizer {
         //   一瞬の停滞シグナルでポーリングが当たったワーカーだけが恒久的に抜け、残りは走り続ける
         //   （実機 2026-08-03: 8本中4本が 115〜116s で離脱＝残り159秒を半分の並列度で走っていた）。
         //   旧ログは役割別worker秒を手で足さないと気づけなかった。
+        //   [3.346.1] 一瞬のシグナルは confirmStop が見送るので、ここに出る停滞シグナルは
+        //   確認窓を通った本物。見送り回数も併記して「何回きわどい発火があったか」を残す。
         val earlyExits = outcomes.filter { it.exitReason != "締切" }
-        val exitNote = if (earlyExits.isEmpty()) "ワーカー離脱=全て締切まで実行" else
+        val survivedTotal = outcomes.sumOf { it.survivedStops }
+        val survivedNote = if (survivedTotal == 0) "" else " 停滞見送り計${survivedTotal}回"
+        val exitNote = (if (earlyExits.isEmpty()) "ワーカー離脱=全て締切まで実行" else
             "ワーカー離脱=${earlyExits.size}/${outcomes.size}本が締切前(" +
                 earlyExits.groupBy { it.exitReason }.entries.joinToString(",") { e ->
                     "${e.key}${e.value.size}本@${e.value.joinToString("/") { "${it.exitAtSec}s" }}"
-                } + ")"
+                } + ")") + survivedNote
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
             message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +

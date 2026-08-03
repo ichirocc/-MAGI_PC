@@ -413,17 +413,23 @@ object V6FinalPort {
                 else -> false
             }
         }
+        // [3.346.1/方針B] `shouldStop` が真のとき、それが**単調な停止**かを返す。探索締切とキャンセルは
+        //   一度真なら永久に真だが、停滞シグナルは他のワーカーが改善を1件出せば偽に戻る。適応
+        //   ポートフォリオは後者だけを確認窓で再確認する（一瞬のシグナルで片肺運転にしないため）。
+        //   締切側でこれを返さないと、探索締切のたびに全ワーカーが確認窓ぶん待って後処理予約を食う
+        //   （実測: 探索109.99s→114.998s・後処理8.48s→4.95s）。
+        val stopIsFinal = { System.currentTimeMillis() >= searchDeadlineMs || !isActive }
         // 後処理(runPostOptimization)用の別締切。stall では止めず予約枠 hardDeadlineMs まで使える。
         val postShouldStop = { System.currentTimeMillis() >= hardDeadlineMs || !isActive }
 
         val tFirst0 = System.currentTimeMillis()
-        val first = V6NativeOptimizer.optimize(state, schedule, optsR, shouldStop, progressWatch)
+        val first = V6NativeOptimizer.optimize(state, schedule, optsR, shouldStop, progressWatch, stopIsFinal)
         val tFirst1 = System.currentTimeMillis()
         // [review #5] RSIThenALNS は RSI(first)→ALNS(chained) を同一予算内で直列実行する。各段は
         //   postPolish=false（optsR で統一）なので段内 polish は走らない。最終 polish は段ではなく
         //   下流の runPostOptimization() に一度だけ集約しているため、ここでの二重 polish は意図的に無い。
         val chained = if (requestedAlgorithm == V6Algorithm.AUTO && plan is OptimizationPlan.RSIThenALNS && !shouldStop()) {
-            V6NativeOptimizer.optimize(state, first.schedule, optsR.copy(algorithm = V6Algorithm.ALNS, totalBudgetSec = plan.alnsSec), shouldStop, progressWatch)
+            V6NativeOptimizer.optimize(state, first.schedule, optsR.copy(algorithm = V6Algorithm.ALNS, totalBudgetSec = plan.alnsSec), shouldStop, progressWatch, stopIsFinal)
         } else first
         val tChain1 = System.currentTimeMillis()
 
