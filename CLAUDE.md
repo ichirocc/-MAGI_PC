@@ -5260,6 +5260,25 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 最終LNS 2本のピン却下を計測へ配線（3.350.0, 外部レビュー #1 の再指摘を実測して採用）
+外部レビュー（対象は1世代前の main `a879dea`）が「最終LNS の `pinBlocks` が `pinBlocksAll` へ
+マージされない」を再指摘。**指摘の前半は誤り**（両 LNS は `PinBlockAttribution` を構築しないので
+`pinBlocks` は常に null＝merge を足しても何も増えない。3.349.0 で確認済み）だが、**結論は正しかった**。
+- **実測で規模を確定**: 両 LNS の `exactPinRegression` 却下のうち「目的関数は採用を認めたのに
+  ピンだけが止めた」件数を数えると **golden 9+3・user 0+0・real 1,898+0**。real は
+  `V6HotfixPasses` 側の計測値（181）の**10倍以上が UI から抜けていた**＝inert ではない。
+- **実装**: 両 LNS に `PinBlockAttribution` を持たせ、`isFinalCandidate` と最終 `valid` ゲートの
+  `exactPinRegression` を `blocksImproving` へ置換（**同じ boolean を返しつつ記録する**ので挙動は不変）。
+  `CyclicSwapResult` へ載せ、`runPostOptimization` の欠けていた2箇所で merge。計測範囲は 18→**20パス**。
+- **効果（実データ・UI へ届く数）**: 総数 golden 38→**64** / real 181→**1,617**（user は 0→0＝
+  このデータでは両 LNS がピン却下を出さない）。上位対象も入れ替わり、**古泉 健一/休(24)・
+  モニカ/休(503) が新たに可視化**された（緩和候補の提示がその分だけ正確になる）。
+- **挙動不変の確認**: golden(hard0/total420/c1 96)・user(hard4/321/52) はバイト一致。real は
+  2回反復して両ビルドとも hard6/total304/c1 61 で一致（3.279.1 の既知のばらつきの内側）。
+- 残る計測外は `EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・`CombinatorialRepair`(2)・
+  `C1RepairAnalysis`(1) の8箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)。
+- 検証: ホストJVM **全445テスト green**。
+
 ## エリート統合の敵対検証＝実バグ0・観測性2件（3.349.2）
 `EliteIntegrationPolish`(379行) と `AdaptiveEliteArchive`(188行) をゼロベースで読み直した。
 **実バグは0**（3.271.0/3.278.0/3.314.0 で3回レビュー済みの領域だけあって、keep-best・pin ガード・

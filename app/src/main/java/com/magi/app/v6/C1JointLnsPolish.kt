@@ -105,6 +105,12 @@ internal object C1JointLnsPolish {
             )
         }
 
+        // [3.350.0/敵対検証] 「目的関数は採用を認めたのにピンだけが止めた」件数を対象別に記録する。
+        //   旧: このパスは exactPinRegression で却下するだけで一切数えておらず、UI の
+        //   observedPinBlockedAttempts / pinTargets から丸ごと抜けていた（実データ real_state で
+        //   **1,898件**＝V6HotfixPasses 側の計測値の30倍以上が見えていなかった）。
+        val pinBlocks = PinBlockAttribution()
+
         if (config.beamWidth <= 0 || config.maxDepth <= 0 || config.maxRestarts <= 0 ||
             config.maxGoals <= 0 || config.maxMovesPerGoal <= 0 || config.maxMillis <= 0L
         ) {
@@ -201,7 +207,7 @@ internal object C1JointLnsPolish {
                             }
                             children.add(child)
 
-                            val finalCandidate = isFinalCandidate(p, child, root)
+                            val finalCandidate = isFinalCandidate(p, child, root, pinBlocks)
                             if (finalCandidate && better(child.report, best.report)) {
                                 best = child
                                 lastImproveNs = System.nanoTime()
@@ -218,7 +224,7 @@ internal object C1JointLnsPolish {
         val finalReport = UnifiedViolationChecker.check(state, best.schedule)
         val finalC1 = finalReport.breakdown["c1"] ?: 0
         val valid = best !== root && finalC1 < rootC1 && better(finalReport, rootReport) &&
-            !exactPinRegression(p, rootSchedule, best.schedule)
+            !pinBlocks.blocksImproving(p, rootSchedule, best.schedule)
         val chosen = if (valid) best.schedule.copy2D() else rootSchedule.copy2D()
         val chosenReport = if (valid) finalReport else rootReport
         val chosenC1 = if (valid) finalC1 else rootC1
@@ -251,12 +257,24 @@ internal object C1JointLnsPolish {
         )
         return V6HotfixPasses.CyclicSwapResult(
             chosen, rootReport.total, chosenReport.total, if (valid) 1 else 0, listOf(log),
+            observedPinBlockedAttempts = pinBlocks.attempts, pinBlocks = pinBlocks,
         )
     }
 
-    private fun isFinalCandidate(p: Problem, node: Node, root: Node): Boolean =
+    /**
+     * [3.350.0] `pinBlocks` を渡すと「目的関数は採用を認めたのにピンだけが止めた」件数を記録する。
+     * 短絡評価により、`blocksImproving` を呼ぶ時点で c1 減少と `better` は確定済み＝
+     * `PinBlockAttribution` の契約（採用が認められた手だけを数える）を満たす。
+     */
+    private fun isFinalCandidate(
+        p: Problem,
+        node: Node,
+        root: Node,
+        pinBlocks: PinBlockAttribution? = null,
+    ): Boolean =
         node.c1 < root.c1 && better(node.report, root.report) &&
-            !exactPinRegression(p, root.schedule, node.schedule)
+            !(pinBlocks?.blocksImproving(p, root.schedule, node.schedule)
+                ?: exactPinRegression(p, root.schedule, node.schedule))
 
     private fun better(a: ViolationReport, b: ViolationReport): Boolean {
         return betterReport(a, b)  // [3.287.0 keep-best統一] hard→weighted→total（MirrorCore.betterReport）

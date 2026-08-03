@@ -94,6 +94,10 @@ internal object PersonalBalanceJointLnsPolish {
         var debtRejected = 0
         var duplicateRejected = 0
         var restartsDone = 0
+        // [3.350.0/敵対検証] 「目的関数は採用を認めたのにピンだけが止めた」件数を対象別に記録する。
+        //   旧: このパスも C1JointLns と同じく exactPinRegression で却下するだけで数えておらず、
+        //   UI の observedPinBlockedAttempts / pinTargets から抜けていた。
+        val pinBlocks = PinBlockAttribution()
 
         for (restart in 0 until config.maxRestarts) {
             if (stopped() || focus.all { best.personal[it] <= lower[it] }) break
@@ -141,7 +145,7 @@ internal object PersonalBalanceJointLnsPolish {
                                 changedCellCount(rootSchedule, candidate.schedule),
                             )
                             children.add(child)
-                            if (isFinalCandidate(p, child, root, focus)) {
+                            if (isFinalCandidate(p, child, root, focus, pinBlocks)) {
                                 if (best === root || betterFinal(child, best, focus, lower)) best = child
                             }
                         }
@@ -163,7 +167,7 @@ internal object PersonalBalanceJointLnsPolish {
         val valid = best !== root && better(checked, rootReport) &&
             focus.sumOf { checkedPersonal[it] } <= rootFocus &&
             focus.all { checkedPersonal[it] <= rootPersonal[it] } &&
-            !exactPinRegression(p, rootSchedule, best.schedule)
+            !pinBlocks.blocksImproving(p, rootSchedule, best.schedule)
 
         val chosen = if (valid) best.schedule.copy2D() else rootSchedule.copy2D()
         val chosenReport = if (valid) checked else rootReport
@@ -193,6 +197,7 @@ internal object PersonalBalanceJointLnsPolish {
         )
         return V6HotfixPasses.CyclicSwapResult(
             chosen, rootReport.total, chosenReport.total, if (valid) 1 else 0, listOf(log),
+            observedPinBlockedAttempts = pinBlocks.attempts, pinBlocks = pinBlocks,
         )
     }
 
@@ -483,11 +488,17 @@ internal object PersonalBalanceJointLnsPolish {
         .sortedWith(compareBy<CellOp> { it.staff }.thenBy { it.day }.thenBy { it.shift })
         .joinToString(";") { "${it.staff},${it.day},${it.shift}" }
 
+    /**
+     * [3.350.0] `pinBlocks` を渡すと「目的関数は採用を認めたのにピンだけが止めた」件数を記録する。
+     * ここへ到達した時点で `better` と focus の悪化なしは確定済み＝`PinBlockAttribution` の契約
+     * （採用が認められた手だけを数える）を満たす。
+     */
     private fun isFinalCandidate(
         p: Problem,
         node: Node,
         root: Node,
         focus: IntArray,
+        pinBlocks: PinBlockAttribution? = null,
     ): Boolean {
         if (!better(node.report, root.report)) return false
         // focusTotal は「悪化させない(<=)」まで緩和。狭義減少(<)のみを許すと、docstring が明記する
@@ -498,7 +509,9 @@ internal object PersonalBalanceJointLnsPolish {
         if (focus.any { node.personal[it] > root.personal[it] }) return false
         // [厳密ピン保護] focus外の職員(coverage連鎖の donor/receiver等)がstaffRange厳密ピンから
         // 遠ざかる副作用も拒否する（focusのみを見る上記チェックでは対象外のため追加）。
-        if (exactPinRegression(p, root.schedule, node.schedule)) return false
+        if (pinBlocks?.blocksImproving(p, root.schedule, node.schedule)
+                ?: exactPinRegression(p, root.schedule, node.schedule)
+        ) return false
         return true
     }
 

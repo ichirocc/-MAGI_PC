@@ -72,14 +72,13 @@ data class V6PostOptimizationResult(
      * **正確な読み方（3.324.0/外部レビューで是正）**:
      *  - 「手の数」ではなく「試行の回数」。巡回研磨は最大4巡するので、同じ手が複数の巡で
      *    数えられうる（重複排除していない）。
-     *  - **全パス横断ではない**。[3.349.0/敵対検証で訂正] 3.326.0 で計測を 9→**18パス**へ広げたのに
-     *    この行だけ「9パス」のまま残り、しかも「入っていない」と名指ししていた CyclicSwap・
-     *    C1 index 駆動・広域ビーム・ブロック交換・厳密日割当・交互最適化・曜日長方形・C3ブロック交換は
-     *    **全部入っている**（`PinBlockAttribution()` を持つ関数を grep で数えて 18 と確認）。
-     *    いま計測外なのは `V6HotfixPasses` の外にある `C1JointLnsPolish`(2)・
-     *    `PersonalBalanceJointLnsPolish`(2)・`EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・
-     *    `CombinatorialRepair`(2)・`C1RepairAnalysis`(1) の計12箇所の `exactPinRegression` 却下と、
-     *    ピン保護を持たない探索本体(SA/ALNS/LAHC)。
+     *  - **全パス横断ではない**。[3.349.0 で 9→18パスへ訂正 → 3.350.0 で最終LNS 2本を追加＝**20パス**]
+     *    `V6HotfixPasses` の18パスに加え、`C1JointLnsPolish` と `PersonalBalanceJointLnsPolish` を計測する。
+     *    後者2本は却下するだけで一切数えておらず、実データ real_state で **1,898件**（V6HotfixPasses 側の
+     *    計測値の30倍以上）が UI から丸ごと抜けていた。配線後の実測は総数 181→**1,617**で、
+     *    上位対象も入れ替わる（モニカ/休 が新たに可視化）。
+     *    残る計測外は `EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・`CombinatorialRepair`(2)・
+     *    `C1RepairAnalysis`(1) の計8箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)。
      *  - よって「N 件の手が緩和で通る」ではなく「**少なくとも N 回、回数固定だけが却下の理由だった**」
      *    が言えることの上限。0 でも「緩めても何も変わらない」の証明にはならない（未計測分がある）。
      */
@@ -627,6 +626,9 @@ object V6HotfixPasses {
         )
         passMs.merge("C1共同LNS", System.currentTimeMillis() - __t22) { a, b -> a + b }
         work = rC1Lns.newSchedule.copy2D()
+        // [3.350.0/敵対検証] 最終LNS 2パスのピン却下が pinBlocksAll へ合流していなかった
+        //   （旧: この2パスは PinBlockAttribution を作らず pinBlocks が常に null だった）。
+        rC1Lns.pinBlocks?.let { pinBlocksAll.merge(it) }
         logs.addAll(rC1Lns.logs)
 
         onPhase("後処理 個人回数/適切回数 共同LNS")
@@ -638,6 +640,7 @@ object V6HotfixPasses {
         )
         passMs.merge("個人回数共同LNS", System.currentTimeMillis() - __t23) { a, b -> a + b }
         work = rPersonalLns.newSchedule.copy2D()
+        rPersonalLns.pinBlocks?.let { pinBlocksAll.merge(it) }
         logs.addAll(rPersonalLns.logs)
 
         val tHf = System.currentTimeMillis()
