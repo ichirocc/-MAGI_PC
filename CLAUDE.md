@@ -5259,6 +5259,39 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 業務前提（30名・1か月）をコードで確認する＋提示レポート21件の検証（3.349.0）
+ユーザー確認「最大期間一ヶ月です」。前提は CLAUDE.md にしかなく、**コードはどこでも確認も強制もして
+いなかった**（`dayCount` は盤面の列数から導出するだけ）。AskUserQuestion で方針を確定（推奨⭐4＝
+事前診断に read-only の検査を足す／止めない）。
+- **検査2j 新設**（`V6SanityPort`）: 期間>31日・職員>30名で `SettingIssue` を出す。**実行は止めない**
+  （実行できるものを止めない）。64日を超える場合だけ「ビット演算の高速経路が使えず探索が遅くなります」を
+  併記する（`C3nBitScan.usable(T<=64)` と C++ `SaChunk.useBits` が境界）。read-only・スコアリング不変。
+  実データ3件（10名/31日）で**規模警告0件**＝誤検知なし（診断総数も 3/7/7 で従来と一致）。
+- 検証: ホストJVM **全443テスト green**（439 + 新規4＝31日30名は出さない／32日は出すが速度注記なし／
+  65日は速度注記つき／31名は別項目で出す）。
+
+### 提示レポート21件の検証（コード実測）
+**実在＝2件**（どちらも文書のドリフトで、コードの動作は正しい）:
+- **`observedPinBlockedAttempts` の KDoc が stale**（報告#1 の周辺）。3.326.0 で計測を 9→**18パス**へ
+  広げたのに `V6PostOptimizationResult` 側の KDoc だけ「9パス」のまま残り、しかも「入っていない」と
+  名指ししていた CyclicSwap・C1 index 駆動・広域ビーム・ブロック交換・厳密日割当・交互最適化・
+  曜日長方形・C3ブロック交換は**全部入っている**（`PinBlockAttribution()` を持つ関数を grep で数えて 18）。
+  実際に計測外なのは `V6HotfixPasses` の外にある12箇所（C1JointLns 2・PersonalBalanceJointLns 2・
+  EliteIntegration 4・C1TemporalFlow 1・CombinatorialRepair 2・C1RepairAnalysis 1）。**UiState 側の
+  KDoc（3.327.0）は最初から正しかった**ので、両者が食い違っていた。実数へ揃えた。
+  なお報告#1 の「2パスが `pinBlocks` を返すのに merge されていない」は**前半が誤り**＝両 LNS は
+  `PinBlockAttribution` を構築しないので `pinBlocks` は常に null。merge を足しても何も増えない。
+- **`C1PlateauDiagnosis` の観測元が KDoc に書かれていない**（報告#2）。却下を記録しているのは
+  `applyC1WindowPolish` **だけ**で、C1 index 駆動/時系列フロー/広域ビーム/厳密窓修復は `plateau` を
+  返さない。`NO_CANDIDATE` の文言が「この直し方では」と限定しているのはこのためだが、クラスの KDoc に
+  出どころが無かった。明記した。
+**成立しない＝主なもの**: #4「`day2` のガードが無い」＝`Problem.cons1` 構築時の `d1>0 && d2>0` フィルタで
+到達不能（`day1>0` のガード自体が冗長な防御）／#11「`WeeklyFairMarginalTest` は撤去済みパスのテスト」＝
+実際は 3.267.0 の `weeklyMarginalAt`/`fairMarginalAt` を検証しており撤去された `applyWeeklyEqualizePolish`
+とは無関係／#12「`V6LateOperators` は呼ばれていない」＝`V6NativeOptimizer` の2箇所＋`V6FinalPort` から
+呼ばれている（`runPostOptimization` だけを grep した結果）／#16「T>64 で性能が 1/15 に落ちる」＝
+前提が1か月なので到達しない（今回の検査2j がそれを画面にも出す）。
+
 ## 3.347.0 の報告のみ2件を消化（3.348.0）
 3.347.0 で「未対応（報告のみ）」に置いた2件を、どちらも**測ってから**決着させた。
 

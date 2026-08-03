@@ -578,4 +578,59 @@ class V6SanityPortTest {
         assertFalse("空欄は非数値として案内しない",
             V6SanityPort.buildGuidance(st).any { it.problem.contains("数値ではありません") })
     }
+
+
+    // ---- [3.349.0] 業務前提（職員30名・期間1か月=31日）の確認 ------------------------------------
+    // ユーザー確認「最大期間一ヶ月です」。前提はこれまで文書にしか無く、コードはどこでも確認して
+    // いなかった。止めずに知らせるだけ（実行できるものを止めない）。
+
+    private fun scaleState(days: Int, staffCount: Int) = MagiState(
+        startDate = "2026-08-01", endDate = "",
+        shifts = listOf(Shift("休", "休", "0", ""), Shift("X", "X", "1", "")),
+        groups = listOf(Group("G", "G")),
+        staff = List(staffCount) { Staff("s$it", 0) },
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = List(staffCount) { List(days) { 0 } },
+        wishes = emptyMap(), staffRange = emptyMap(),
+        needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    ).also { require(it.dayCount == days && it.staffCount == staffCount) }
+
+    private fun scaleIssues(days: Int, staffCount: Int): List<SettingIssue> {
+        val st = scaleState(days, staffCount)
+        return V6SanityPort.buildGuidance(st, Problem(st))
+            .filter { it.where.contains("対象期間") || it.where.contains("職員数") }
+    }
+
+    @Test
+    fun scaleWithinTheBusinessPremiseIsNotFlagged() {
+        // 31日・30名ちょうどは前提の内側＝出さない（境界で誤検知しない）。
+        assertTrue("31日30名で警告しない", scaleIssues(31, 30).isEmpty())
+    }
+
+    @Test
+    fun longerThanOneMonthIsFlaggedWithoutTheSlowPathNote() {
+        val issues = scaleIssues(32, 10)
+        assertEquals(1, issues.size)
+        assertTrue("期間の警告: ${issues[0].problem}", issues[0].problem.contains("32日"))
+        assertFalse("64日以内なら速度の注記は付けない", issues[0].problem.contains("遅くなります"))
+    }
+
+    @Test
+    fun beyondSixtyFourDaysAlsoWarnsAboutTheScalarFallback() {
+        // 64日を境に C3nBitScan / C++ SaChunk の bitmask 経路がスカラー退避へ落ちる。
+        val issues = scaleIssues(65, 10)
+        assertEquals(1, issues.size)
+        assertTrue("速度の注記が付く: ${issues[0].problem}", issues[0].problem.contains("遅くなります"))
+    }
+
+    @Test
+    fun moreStaffThanThePremiseIsFlaggedSeparately() {
+        val issues = scaleIssues(31, 31)
+        assertEquals(1, issues.size)
+        assertTrue("職員数の警告: ${issues[0].problem}", issues[0].problem.contains("31名"))
+    }
 }
