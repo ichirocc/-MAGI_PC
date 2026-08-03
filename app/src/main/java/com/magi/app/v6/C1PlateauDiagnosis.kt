@@ -16,6 +16,12 @@ package com.magi.app.v6
  * `C1RepairAnalysis.provenWalls`（coverage 入替でどう並べても焦点を解消できないことを厳密に
  * 証明する A4 診断）は別物で、こちらは一切変更しない。本診断はその手前の
  * 「探索は動いたが採用に至らなかった」層を説明する。
+ *
+ * ## 観測の出どころ（3.349.0/敵対検証で明記）
+ * 却下の記録を作っているのは **`V6HotfixPasses.applyC1WindowPolish` だけ**。同じ後処理の
+ * C1 index 駆動修復・時系列フロー・広域ビーム・厳密窓修復は c1 を直しにいくが `plateau` を返さない。
+ * よって内訳は「c1 を直そうとした全部の手」ではなく「**同日交換・自己再配置・玉突きで試した手**」の
+ * 範囲。[C1PlateauCause.NO_CANDIDATE] の文言が「この直し方では」と限定しているのはこのため。
  */
 enum class C1PlateauCause {
     /** 厳密ピン(lo==hi)を目標から遠ざけるため却下された手が最多。回数固定を緩めれば通る可能性がある。 */
@@ -153,7 +159,10 @@ data class C1PlateauDiagnosis(
                 )
             }
         }
-        return C1PlateauDiagnosis(other.remainingC1, byKey.values.toList())
+        // [3.347.0/敵対検証] 合算後も観測数の多い順に並べ直す。`build` は並べていたが merge/refresh は
+        //   並べ替えておらず、巡ごとに合算した結果 `logLines().take(8)` と画面の一覧が「上位8件」でなく
+        //   1巡目の順のまま出ていた（3.331.0 で合算を入れたときの取り残し）。
+        return C1PlateauDiagnosis(other.remainingC1, byKey.values.sortedByDescending { it.observations })
     }
 
     /**
@@ -164,7 +173,11 @@ data class C1PlateauDiagnosis(
      * @param stillDeficient 最終盤面で当該窓がまだ不足しているか。
      */
     fun refreshedAgainst(remainingC1: Int, stillDeficient: (Int, Int, Int) -> Boolean): C1PlateauDiagnosis =
-        C1PlateauDiagnosis(remainingC1, entries.filter { stillDeficient(it.staff, it.shift, it.ruleIndex) })
+        C1PlateauDiagnosis(
+            remainingC1,
+            entries.filter { stillDeficient(it.staff, it.shift, it.ruleIndex) }
+                .sortedByDescending { it.observations },
+        )
 
     fun logLines(): List<String> {
         if (causeUnknown) return listOf(

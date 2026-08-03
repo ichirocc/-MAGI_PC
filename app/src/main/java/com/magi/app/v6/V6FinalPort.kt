@@ -337,6 +337,14 @@ object V6FinalPort {
                     val improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal)
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())
+                        // [3.346.0/実機ログ] 停滞ラッチを解除する。shouldStop は**単調でない**（改善が届けば
+                        //   条件は偽に戻り、探索はそのまま締切まで走る）のに、旧実装は一度立った
+                        //   stagnationFired を二度と降ろさなかった。実機ログ 2026-08-03 では 258s に発火 →
+                        //   261s に改善が届いて探索は続行 → 275s の探索予算を使い切ったのに
+                        //   「改善が無いため早期終了（290sで停止・停滞37s無改善）」と記録され、同じログの
+                        //   Watchdog 行（探索終了時の停滞13s）と矛盾していた。さらに ExtraRefine が
+                        //   古いラッチを根拠に skip され、予算の残り約9秒が使われないままだった。
+                        stagnationFired.set(false); stagnationDurationMs.set(-1)
                         // 非covU HARD(=解けるHARD)件数を best と同時に捕捉（stallHardMs 早期移行の判定に使う）。
                         val gv = report.breakdown["groupViol"] ?: 0
                         val pf = report.breakdown["pref"] ?: 0
@@ -405,17 +413,23 @@ object V6FinalPort {
                 else -> false
             }
         }
+        // [3.346.1/方針B] `shouldStop` が真のとき、それが**単調な停止**かを返す。探索締切とキャンセルは
+        //   一度真なら永久に真だが、停滞シグナルは他のワーカーが改善を1件出せば偽に戻る。適応
+        //   ポートフォリオは後者だけを確認窓で再確認する（一瞬のシグナルで片肺運転にしないため）。
+        //   締切側でこれを返さないと、探索締切のたびに全ワーカーが確認窓ぶん待って後処理予約を食う
+        //   （実測: 探索109.99s→114.998s・後処理8.48s→4.95s）。
+        val stopIsFinal = { System.currentTimeMillis() >= searchDeadlineMs || !isActive }
         // 後処理(runPostOptimization)用の別締切。stall では止めず予約枠 hardDeadlineMs まで使える。
         val postShouldStop = { System.currentTimeMillis() >= hardDeadlineMs || !isActive }
 
         val tFirst0 = System.currentTimeMillis()
-        val first = V6NativeOptimizer.optimize(state, schedule, optsR, shouldStop, progressWatch)
+        val first = V6NativeOptimizer.optimize(state, schedule, optsR, shouldStop, progressWatch, stopIsFinal)
         val tFirst1 = System.currentTimeMillis()
         // [review #5] RSIThenALNS は RSI(first)→ALNS(chained) を同一予算内で直列実行する。各段は
         //   postPolish=false（optsR で統一）なので段内 polish は走らない。最終 polish は段ではなく
         //   下流の runPostOptimization() に一度だけ集約しているため、ここでの二重 polish は意図的に無い。
         val chained = if (requestedAlgorithm == V6Algorithm.AUTO && plan is OptimizationPlan.RSIThenALNS && !shouldStop()) {
-            V6NativeOptimizer.optimize(state, first.schedule, optsR.copy(algorithm = V6Algorithm.ALNS, totalBudgetSec = plan.alnsSec), shouldStop, progressWatch)
+            V6NativeOptimizer.optimize(state, first.schedule, optsR.copy(algorithm = V6Algorithm.ALNS, totalBudgetSec = plan.alnsSec), shouldStop, progressWatch, stopIsFinal)
         } else first
         val tChain1 = System.currentTimeMillis()
 

@@ -225,4 +225,45 @@ class EliteIntegrationPolishTest {
         )
         assertTrue(EliteIntegrationPolish.c1Cells(report).isEmpty())
     }
+
+
+    // ---- [3.349.2/敵対検証] 素材が使えないときの早期 return -------------------------------------
+    // 旧実装はここで**ログを1行も返さなかった**ので、実機ログから「統合が走ったが素材が無かった」のか
+    // 「そもそも呼ばれていない」のかが読めなかった。ただし PORTFOLIO 以外は毎回 elites が空なので、
+    // **エリートはあったのに1件も使えなかったとき**だけ出す（全ワーカーが同じ解へ潰れた信号）。
+
+    @Test
+    fun collapsedElitesAreReportedInsteadOfReturningSilently() {
+        val st = state()
+        val root = st.schedule.toIntArray2D()
+        // 素材はあるが全部 root と同一＝統合の余地なし。
+        val result = EliteIntegrationPolish.apply(
+            st, root,
+            elites = listOf(
+                elite(st, root.copy2D(), HypothesisEpochRole.PERSONAL_RSI, bridge = false),
+                elite(st, root.copy2D(), HypothesisEpochRole.HARD_DEBT_RSI_PLUS, bridge = false),
+            ),
+            shouldStop = { false },
+            deadlineMs = System.currentTimeMillis() + 3_000L,
+        )
+        assertEquals("使えた素材は0件", 0, result.elitesUsed)
+        assertEquals("ログを1行返す", 1, result.logs.size)
+        assertTrue("潰れたことが読める: ${result.logs[0].message}",
+            result.logs[0].message.contains("すべて現在の勤務表と同一"))
+        assertTrue("盤面は入口のまま", root.indices.all { result.schedule[it].contentEquals(root[it]) })
+    }
+
+    @Test
+    fun noElitesAtAllStaysSilent() {
+        // PORTFOLIO 以外の実行は毎回ここを通る。1行足すと全実行でノイズになるので出さない
+        // （3.288.0 のログスパム対策と同じ判断）。
+        val st = state()
+        val root = st.schedule.toIntArray2D()
+        val result = EliteIntegrationPolish.apply(
+            st, root, elites = emptyList(),
+            shouldStop = { false }, deadlineMs = System.currentTimeMillis() + 3_000L,
+        )
+        assertEquals(0, result.elitesUsed)
+        assertTrue("素材ゼロのときは無言", result.logs.isEmpty())
+    }
 }

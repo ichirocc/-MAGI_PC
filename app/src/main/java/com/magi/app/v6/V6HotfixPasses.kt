@@ -72,9 +72,14 @@ data class V6PostOptimizationResult(
      * **正確な読み方（3.324.0/外部レビューで是正）**:
      *  - 「手の数」ではなく「試行の回数」。巡回研磨は最大4巡するので、同じ手が複数の巡で
      *    数えられうる（重複排除していない）。
-     *  - **全パス横断ではない**。数えているのは C1/C1厳密窓/C3mn/C3n/個人回数/適切回数/公平化/
-     *    C3連/C3パターンの9パス。同じ後処理内の CyclicSwap・C1 index 駆動・広域ビーム・
-     *    ブロック交換・厳密日割当・交互最適化・曜日長方形・C3ブロック交換のピン却下は入っていない。
+     *  - **全パス横断ではない**。[3.349.0/敵対検証で訂正] 3.326.0 で計測を 9→**18パス**へ広げたのに
+     *    この行だけ「9パス」のまま残り、しかも「入っていない」と名指ししていた CyclicSwap・
+     *    C1 index 駆動・広域ビーム・ブロック交換・厳密日割当・交互最適化・曜日長方形・C3ブロック交換は
+     *    **全部入っている**（`PinBlockAttribution()` を持つ関数を grep で数えて 18 と確認）。
+     *    いま計測外なのは `V6HotfixPasses` の外にある `C1JointLnsPolish`(2)・
+     *    `PersonalBalanceJointLnsPolish`(2)・`EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・
+     *    `CombinatorialRepair`(2)・`C1RepairAnalysis`(1) の計12箇所の `exactPinRegression` 却下と、
+     *    ピン保護を持たない探索本体(SA/ALNS/LAHC)。
      *  - よって「N 件の手が緩和で通る」ではなく「**少なくとも N 回、回数固定だけが却下の理由だった**」
      *    が言えることの上限。0 でも「緩めても何も変わらない」の証明にはならない（未計測分がある）。
      */
@@ -1492,7 +1497,12 @@ object V6HotfixPasses {
                             // [3.324.0/外部レビュー] 旧実装は手Aのピン却下を黙って巻き戻すだけで数えておらず、
                             //   C1 の「ピン破り」件数が手B(玉突き)だけの部分集計になっていた。手Aは回数を実際に
                             //   変える手（x+1/a-1）＝ピンの当たり判定があるので、ここも記録する。
+                            // [3.347.0/敵対検証] 手Aは**ピン却下だけ**を数えており、同じ手が採点で落ちた
+                            //   ときは何も残していなかった。手B(1590行)は両方残すので、同じ (職員,シフト,決まり)
+                            //   の集計でピン側だけが厚くなり、`causeOf` が「回数固定で却下」へ寄る。
+                            //   どちらも i2 ごと＝同じ粒度なので、対称に数える。
                             if (isBetter(rep, bestRep) && pinBadA) recordBlock(i, x, ri, C1PlateauDiagnosis.REASON_PIN)
+                            else recordBlock(i, x, ri, C1PlateauDiagnosis.REASON_SCORE, after = rep, before = bestRep)
                             work[i][j] = a; work[i2][j] = x                 // 巻き戻し
                         }
                         if (done) { donorsCache = null; continue }
@@ -4459,6 +4469,21 @@ object V6HotfixPasses {
         }
     }
 
+    /**
+     * ブロック交換・3者回転の**差分前フィルタ**。同 sgrp かつ同 ssk の参加者だけで使い、
+     * 「その職員たちの部分目的が改善しないなら、フル checker を呼ばずに捨てる」ための近似。
+     *
+     * **既知の近似2つ**（3.84.0 から「報告のみ」で残っていた項目）:
+     *  - c3/c3m を **窓の#fire** で数える。チェッカーは単一シフト連を `C3Run.rowDeficit`
+     *    （run-deficit）で評価するので、単一シフト連のルールではモデルが違う。
+     *  - apt/fair/weekly を集計しない（群平均・曜日バケットが要るため）。それらだけが改善する手はこぼす。
+     *
+     * [3.349.1/実測] どちらも **このデータでは一度も良い候補を落としていない**。捨てた候補すべてに
+     * フル checker を当てて「本来なら採用されたか」を数えたところ、**golden 235件・user 899件・
+     * real 896件の skip に対し採用相当は 0件**。捨てるのは checker も却下する候補ばかりで、
+     * 近似は inert。よってモデルを揃える改修はしない（測れる利得が無い＝3.290.0/3.310.1 と同じ判断）。
+     * 落としても keep-best は無関係なので**正しさには元から影響しない**（機会損失だけが論点だった）。
+     */
     private fun staffObjective(p: Problem, sched: Array<IntArray>, i: Int): StaffObjective {
         var total = 0L; var weighted = 0.0
         val cnt = IntArray(p.K)                                   // 期間内シフト回数(c2/low/high 用)
