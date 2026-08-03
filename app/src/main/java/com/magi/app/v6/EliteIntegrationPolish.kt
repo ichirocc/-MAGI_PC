@@ -74,7 +74,18 @@ internal object EliteIntegrationPolish {
             candidates.add(Candidate(e.schedule.copy2D(), e.report, e.role, e.bridge))
         }
         if (candidates.size <= 1 || stopped(shouldStop, deadlineMs)) {
-            return Result(root, rootReport, emptyList(), candidates.size - 1, 0, 0, 0, 0)
+            // [3.349.2/敵対検証] 旧実装はここで**ログを1行も返さなかった**ので、実機ログから
+            //   「統合が走ったが素材が無かった」のか「そもそも呼ばれていない」のかが読めなかった。
+            //   ただし PORTFOLIO 以外は毎回 elites が空＝毎実行1行のノイズになるので、
+            //   **エリートはあったのに1件も使えなかったとき**だけ出す。これは
+            //   「全ワーカーが同じ解へ潰れた」という意味のある信号（3.332.0 の距離0と同じ）。
+            val note = if (elites.isEmpty()) emptyList() else listOf(
+                MirrorLog(tag = "EliteIntegration",
+                    message = "エリート統合: 素材${elites.size}件はすべて現在の勤務表と同一" +
+                        (if (stopped(shouldStop, deadlineMs)) "／または締切" else "") + "＝統合の余地なし"),
+            )
+            return Result(root, rootReport.copy(logs = note + rootReport.logs), note,
+                candidates.size - 1, 0, 0, 0, 0)
         }
 
         // Non-bridge endpoints are official return candidates in their own right. Re-check them
@@ -287,10 +298,16 @@ internal object EliteIntegrationPolish {
         return bestSchedule?.let { it to bestReport }
     }
 
-    private fun withinDebt(report: ViolationReport, root: ViolationReport, config: Config): Boolean {
-        if (report.hard < root.hard) return true
-        if (report.hard > root.hard + config.hardDebt) return false
-        return report.total <= root.total + config.totalDebt
+    /**
+     * ビーム中間ノードの許容幅。[baseline] は**呼出時点の現在最良**（`fuseGroup` の
+     * `currentBestReport`）であって入口盤面ではない。[3.349.2] 引数名が `root` だったため
+     * 「入口比の debt」と読めたが、実際は現在最良比＝窓はより狭い。名前を実態へ合わせた。
+     * 中間ノードの緩さは探索にしか効かず、採用は必ず [better] ＋ `exactPinRegression` が決める。
+     */
+    private fun withinDebt(report: ViolationReport, baseline: ViolationReport, config: Config): Boolean {
+        if (report.hard < baseline.hard) return true
+        if (report.hard > baseline.hard + config.hardDebt) return false
+        return report.total <= baseline.total + config.totalDebt
     }
 
     private fun selectPairs(candidates: List<Candidate>, maxPairs: Int): List<Pair<Int, Int>> {

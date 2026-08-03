@@ -5260,6 +5260,32 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## エリート統合の敵対検証＝実バグ0・観測性2件（3.349.2）
+`EliteIntegrationPolish`(379行) と `AdaptiveEliteArchive`(188行) をゼロベースで読み直した。
+**実バグは0**（3.271.0/3.278.0/3.314.0 で3回レビュー済みの領域だけあって、keep-best・pin ガード・
+debt・重複排除・スレッド安全性はいずれも健全）。**表示と可読性の2件だけ**直した＝スコアリング不変。
+- **[観測性] 素材が使えないときの早期 return が無言だった**: `candidates.size <= 1` で
+  `logs = emptyList()` を返すため、実機ログから「統合が走ったが素材が無かった」のか
+  「そもそも呼ばれていない」のかが読めなかった。ただし PORTFOLIO 以外は毎回 `elites` が空＝
+  1行足すと全実行でノイズになる（3.288.0 のログスパム対策と衝突）。**エリートはあったのに
+  1件も使えなかったとき**だけ出す形にした＝「全ワーカーが同じ解へ潰れた」という意味のある信号
+  （3.332.0 で距離0を可視化したのと同じ）。
+- **[可読性] `withinDebt` の引数名が実引数と食い違っていた**: 名前は `root` だが渡しているのは
+  `fuseGroup` の `currentBestReport`。「入口比の debt」と読めるが実際は**現在最良比＝窓はより狭い**。
+  `baseline` へ改名し KDoc で明記。中間ノードの緩さは探索にしか効かず、採用は必ず
+  `better` ＋ `exactPinRegression` が決める、という契約も同じ場所に書いた。
+- **確認して問題なしだったもの**: `register` の重複判定（ハッシュ＋厳密一致、bridge→非bridge の昇格）／
+  `snapshot` の quality/diversity/bridge 3母集団と `addUnique`／`compactRaw`（実機ログの archive は
+  25〜61 で **rawCapacity=64 に届かず実運用では発火しない**）／`selectPairs`・`selectFusionGroups` の
+  quota（3.314.0）／`fuseGroup` の `next.isEmpty()` → `continue`（3.278.0）／ビームが `bestSchedule` を
+  明示保持している点（3.340.0 で C1BeamPolish に見つけた「最良を捨てる」型ではない）／
+  `@Synchronized` と返却時の `copy2D()`。
+- **報告のみ**: `AdaptiveEliteArchive.compareReports` は `MirrorCore.betterReport` の**手書きの複製**
+  （キー順・Double の厳密比較まで現状は完全一致）。Comparator が要るので単純委譲はできないが、
+  教訓#28 の「複製した瞬間に取り残される」型。等式を試験で固定するのが本筋。
+- 検証: ホストJVM **全445テスト green**（443 + 新規2）。新テストは**旧挙動（無言）へ戻すと落ちる**
+  ことを確認済み（他8件は通る＝教訓#30）。
+
 ## 業務前提（30名・1か月）をコードで確認する＋提示レポート21件の検証（3.349.0）
 ユーザー確認「最大期間一ヶ月です」。前提は CLAUDE.md にしかなく、**コードはどこでも確認も強制もして
 いなかった**（`dayCount` は盤面の列数から導出するだけ）。AskUserQuestion で方針を確定（推奨⭐4＝
