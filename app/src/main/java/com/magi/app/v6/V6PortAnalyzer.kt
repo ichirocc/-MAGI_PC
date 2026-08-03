@@ -61,6 +61,16 @@ data class CoverageShortfall(
     val capacity: Int,
     val verdict: CoverageVerdict,
     val reason: String,
+    /**
+     * [3.344.0] **いまの希望・盤面のままでは埋められない**と実証した枠。
+     *
+     * `verdict` は「担当できる人数 >= 必要数」という静的判定なので、希望を1件でも変えれば直りうる枠は
+     * FIXABLE のまま残す（3.263.0 の意図的な区別）。だがそのせいで、サマリが「充足可能3枠」と言いながら
+     * 各枠の説明は「現在の希望のままではどう組んでも解消できません」という**矛盾したメッセージ**に
+     * なっていた。判定は reason と同じ根拠（空き番が居るか／`findCovUChain` で玉突きが実在するか）で、
+     * 文字列でなく値として持つ。
+     */
+    val blockedNow: Boolean = false,
 )
 
 /** 人員過剰(covO)が残る 1 つの (日, シフト) 枠の診断。読み取り専用・エンジン非変更。 */
@@ -90,13 +100,23 @@ data class CoverageDiagnosis(
     val hasShortage: Boolean get() = totalShortfall > 0
     /** 不足が全て「充足不可」＝このデータでは HARD=0 にできない（想定内の残存）。 */
     val allInfeasible: Boolean get() = hasShortage && fixableSlots == 0
+    /** [3.344.0] 「いまの希望のままでは埋められない」と実証した枠の数（`allInfeasible` とは別軸）。 */
+    val blockedNowSlots: Int get() = shortfalls.count { it.blockedNow }
+    /**
+     * [3.344.0] 不足枠が**全部**「充足不可 or いまの希望のままでは不能」＝この希望・担当のままでは
+     * どう探索しても covU は減らない。`allInfeasible`（データ上の不能）より広く、実データではこちらが真になる。
+     */
+    val allBlockedNow: Boolean get() = hasShortage &&
+        shortfalls.all { it.verdict == CoverageVerdict.INFEASIBLE || it.blockedNow }
     val hasSurplus: Boolean get() = totalSurplus > 0
 
     /** 診断ログ（エクスポートされる「MAGI ログ」に載る形式の文字列）。 */
     fun logLines(): List<String> {
         val out = ArrayList<String>()
         if (hasShortage) {
-            out.add("[W] CoverageDiag: 人員不足 合計${totalShortfall} — 充足不可${infeasibleSlots}枠 / 充足可能${fixableSlots}枠")
+            out.add("[W] CoverageDiag: 人員不足 合計${totalShortfall} — 充足不可${infeasibleSlots}枠 / 充足可能${fixableSlots}枠" +
+                (if (blockedNowSlots > 0) "（うち${blockedNowSlots}枠は いまの希望のままでは不能）" else "") +
+                (if (allBlockedNow) " ＝この希望・担当のままでは人員不足は減りません" else ""))
             for (s in shortfalls.take(8)) {
                 val v = if (s.verdict == CoverageVerdict.INFEASIBLE) "充足不可" else "充足可能"
                 out.add("[W] CoverageDiag: ${s.dayLabel} ${s.shiftSymbol} 必要${s.need}/現状${s.got}(不足${s.miss}) — ${v}: ${s.reason}")
@@ -238,6 +258,8 @@ object V6PortAnalyzer {
                 val verdict = if (capacity < need) CoverageVerdict.INFEASIBLE else CoverageVerdict.FIXABLE
                 if (verdict == CoverageVerdict.INFEASIBLE) infeasible++ else fixable++
                 val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
+                // [3.344.0] reason と同じ根拠で「いまの希望のままでは埋められない」かを値として持つ。
+                var blockedNow = false
                 val reason = if (verdict == CoverageVerdict.INFEASIBLE) {
                     "担当可能な職員が${capacity}人で必要数${need}に届きません（データ上、充足不可）"
                 } else {
@@ -277,6 +299,7 @@ object V6PortAnalyzer {
                     val chainVerified = cascade > 0 && (0 until 8).any { seed ->
                         findCovUChain(p, norm, k, j, java.util.Random(seed.toLong())) != null
                     }
+                    blockedNow = free == 0 && !(cascade > 0 && chainVerified)
                     val hint = when {
                         free > 0 -> "空き番${free}人を${sym}へ移せば充足（最適化が未到達＝勤務表でこのセルの『直し方を探す』で解消可）"
                         cascade > 0 && chainVerified -> "空き番が無く、過剰シフトからの多人数入替（玉突き=ブロック移動）が必要"
@@ -287,7 +310,8 @@ object V6PortAnalyzer {
                     "担当可能${capacity}人（うち在勤中${already}人）・今動かせる空き番${free}人（玉突き${cascade}・希望固定${pinned}・禁止連続${forbid}）。$hint"
                 }
                 list.add(
-                    CoverageShortfall(j, dayLabel(state.startDate, j), k, sym, need, got, miss, capacity, verdict, reason)
+                    CoverageShortfall(j, dayLabel(state.startDate, j), k, sym, need, got, miss, capacity,
+                        verdict, reason, blockedNow)
                 )
             }
         }

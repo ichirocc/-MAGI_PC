@@ -22,7 +22,8 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     // aggregates
     private val cntSS = Array(S) { IntArray(K) }      // per-staff per-shift count
     private val cntDay = Array(K) { IntArray(T) }     // per-shift per-day count
-    private val wdCnt = Array(S) { IntArray(7) }      // [統一weekly] per-staff 勤務日(非休)の曜日別カウント
+    // [統一weekly/3.345.0] per-staff × per-shift の曜日別カウント（休も1シフト＝特別扱いしない）。
+    private val wdCnt = Array(S) { Array(K) { IntArray(7) } }
 
     // running penalty pieces
     private var sc1 = 0L; private var sc2 = 0L; private var sc41 = 0L; private var sc42 = 0L
@@ -140,19 +141,27 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         if (p.canDo(i, old)) dFair += fairDevAt(gI, old, i, -1) - fairDevAt(gI, old, -1, 0)
         if (p.canDo(i, nw)) dFair += fairDevAt(gI, nw, i, +1) - fairDevAt(gI, nw, -1, 0)
 
-        // [統一weekly] 曜日平準化 — staff i の勤務/休が反転する時のみ曜日バケットが動く（同種→同種は不変）。
-        // [監査ハードニング] work 判定を Evaluator/rebuild/checker と同一の `k in 0 until K && k != restIdx` に統一。
-        //   old/nw は最適化領域で常に 0..K-1 のため現状は no-op だが、範囲外セントネルが入っても Δ が発散しない。
+        // [統一weekly/3.345.0] 曜日平準化 — シフト別なので old と nw の2バケットだけが動く（old==nw は不変）。
+        //   範囲外セントネル(-1等)はそのバケットを持たないので、範囲ガードで片側だけ動かす。
         dWeekly = 0L
         val wdIdx = (p.dow0 + j) % 7
-        fun isWork(k: Int) = k in 0 until p.K && k != p.restIdx
-        val wStep = (if (isWork(nw)) 1 else 0) - (if (isWork(old)) 1 else 0)
-        if (wStep != 0) {
-            val before = weeklyDevOfBucket(wdCnt[i]).toLong()
-            wdCnt[i][wdIdx] += wStep
-            val after = weeklyDevOfBucket(wdCnt[i]).toLong()
-            wdCnt[i][wdIdx] -= wStep
-            dWeekly = after - before
+        if (old != nw) {
+            var accW = 0L
+            if (old in 0 until p.K) {
+                val b = wdCnt[i][old]
+                val before = weeklyDevOfBucket(b).toLong()
+                b[wdIdx]--
+                accW += weeklyDevOfBucket(b).toLong() - before
+                b[wdIdx]++
+            }
+            if (nw in 0 until p.K) {
+                val b = wdCnt[i][nw]
+                val before = weeklyDevOfBucket(b).toLong()
+                b[wdIdx]++
+                accW += weeklyDevOfBucket(b).toLong() - before
+                b[wdIdx]--
+            }
+            dWeekly = accW
         }
 
         // pref (this cell only)
@@ -254,12 +263,13 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             a[i][j] = nw
             cntSS[i][old]--; cntSS[i][nw]++
             cntDay[old][j]--; cntDay[nw][j]++
-            // [統一weekly] 勤務/休 反転時のみ曜日バケットを更新（previewMove の dWeekly と同ステップ）。
-            // [12h見直し] work 判定を previewMove(isWork)/rebuild/Evaluator と同一の範囲ガード付きに統一。
-            //   3.92.0 のハードニングが preview 側のみで、範囲外セントネルの仮定下では preview と commit の
-            //   wdCnt 更新が乖離し Δ が発散し得た（現状の変異は全て 0..K-1 なので latent、対称性の回復）。
-            val wStep = (if (nw in 0 until K && nw != p.restIdx) 1 else 0) - (if (old in 0 until K && old != p.restIdx) 1 else 0)
-            if (wStep != 0) wdCnt[i][(p.dow0 + j) % 7] += wStep
+            // [統一weekly/3.345.0] シフト別バケットを更新（previewMove の dWeekly と同ステップ）。
+            //   範囲ガードは preview と対称（範囲外セントネルでも wdCnt が乖離しない）。
+            if (old != nw) {
+                val wIdx = (p.dow0 + j) % 7
+                if (old in 0 until K) wdCnt[i][old][wIdx]--
+                if (nw in 0 until K) wdCnt[i][nw][wIdx]++
+            }
             sc1 += dC1; sc2 += dC2; sc41 += dC41; sc42 += dC42; sc41s += dC41s; sc42s += dC42s
             sc3 += dC3; hc3n += dC3n; sc3m += dC3m; sc3mn += dC3mn
             hpref += dPref; hGrpV += dGrpV; hct += dCt; sApt += dApt; sFair += dFair; sWeekly += dWeekly; scovO += dCovO
@@ -275,10 +285,10 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     private fun rebuild() {
         for (i in 0 until S) java.util.Arrays.fill(cntSS[i], 0)
         for (k in 0 until K) java.util.Arrays.fill(cntDay[k], 0)
-        for (i in 0 until S) java.util.Arrays.fill(wdCnt[i], 0)
+        for (i in 0 until S) for (k in 0 until K) java.util.Arrays.fill(wdCnt[i][k], 0)
         for (i in 0 until S) for (j in 0 until T) {
             val k = a[i][j]; cntSS[i][k]++; cntDay[k][j]++
-            if (k != p.restIdx && k in 0 until K) wdCnt[i][(p.dow0 + j) % 7]++
+            if (k in 0 until K) wdCnt[i][k][(p.dow0 + j) % 7]++
         }
 
         sc1 = c1All(); sc2 = c2All(); sc41 = c41All(); sc42 = c42All(); sc41s = c41sAll(); sc42s = c42sAll()
@@ -498,10 +508,10 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
         return h
     }
 
-    /** [統一weekly] 全職員の曜日平準化偏差の総和。wdCnt を単一ソースとし checker/Evaluator と同一。 */
+    /** [統一weekly/3.345.0] 全職員×全シフトの曜日平準化偏差の総和。wdCnt を単一ソースとし checker/Evaluator と同一。 */
     private fun weeklyAll(): Long {
         var h = 0L
-        for (i in 0 until S) h += weeklyDevOfBucket(wdCnt[i]).toLong()
+        for (i in 0 until S) for (k in 0 until K) h += weeklyDevOfBucket(wdCnt[i][k]).toLong()
         return h
     }
 

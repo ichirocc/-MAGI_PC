@@ -106,6 +106,29 @@ class V6PortAnalyzerTest {
             sf.reason.contains("どう組んでも解消できません"))
     }
 
+    /**
+     * [3.344.0] 「充足可能N枠」というサマリと「いまの希望のままではどう組んでも解消できません」という
+     * 説明が**同じ枠に同時に出ていた**。`verdict` は「担当できる人数 >= 必要数」の静的判定なので
+     * FIXABLE のまま残すのが正しい（希望を1件変えれば直りうる）が、それだけを数えたサマリは
+     * 説明と矛盾する。実データ（real/user）でも `充足可能=3 不能=0` と出しながら3枠とも
+     * 「どう組んでも解消できません」だった。判定を文字列でなく値（`blockedNow`）として持たせる。
+     */
+    @Test
+    fun blockedNowSeparatesStaticCapacityFromWhatCanActuallyBeFilledNow() {
+        val blocked = V6PortAnalyzer.diagnoseCoverage(cascadeChainState(cWished = true))
+        val sfB = blocked.shortfalls.single { it.shiftIndex == 1 }
+        assertEquals("枠は足りているので verdict は FIXABLE のまま", CoverageVerdict.FIXABLE, sfB.verdict)
+        assertTrue("だが『いまの希望では埋められない』ことを値として持つ", sfB.blockedNow)
+        assertEquals("サマリと説明が一致する", 1, blocked.blockedNowSlots)
+        assertTrue("この盤面は探索を続けても covU が減らない", blocked.allBlockedNow)
+
+        val fixable = V6PortAnalyzer.diagnoseCoverage(cascadeChainState(cWished = false))
+        val sfF = fixable.shortfalls.single { it.shiftIndex == 1 }
+        assertTrue("玉突きが実在するなら『今は不能』とは言わない", !sfF.blockedNow)
+        assertEquals(0, fixable.blockedNowSlots)
+        assertTrue("再実行で解消し得る盤面を『減りません』と断定しない", !fixable.allBlockedNow)
+    }
+
     // [人員過剰(covO)の「なぜ減らないか」診断] 在勤2人のうち誰も希望固定・禁止連続に阻まれない盤面では
     // 「動かせる」人数が過剰人数と一致し、解消可能ヒントが出ることを固定する。
     @Test

@@ -2255,16 +2255,29 @@ object V6NativeOptimizer {
         return pen
     }
 
-    /** [3.267.0/weekly+fair統合、旧3.170.0「focus露出のみ・cost未対応」の解消] weekly(曜日平準化)の
-     *  marginal cost。wd は staff の曜日別非休日数(7要素、呼出元が維持)。delta=+1(休→勤務化)/-1(勤務→休化)
-     *  による weeklyDevOfBucket(checkerと同一式)の変化のみを計算し、wd 自体は変更しない(コミットは呼出元)。 */
-    internal fun weeklyMarginalAt(wd: IntArray, bucket: Int, delta: Int): Long {
-        if (delta == 0) return 0L
-        val before = weeklyDevOfBucket(wd)
-        wd[bucket] += delta
-        val after = weeklyDevOfBucket(wd)
-        wd[bucket] -= delta
-        return (after - before).toLong()
+    /** [3.267.0/weekly+fair統合、旧3.170.0「focus露出のみ・cost未対応」の解消] weekly(7日周期のシフト
+     *  平準化)の marginal cost。wd は staff のシフト別曜日カウント([K][7]、呼出元が維持)。
+     *  [3.345.0] 休を通常のシフト種として扱うため、勤務/休の二値でなく **oldK→newK のシフト移動** を受ける。
+     *  動くのは oldK と newK の2バケットだけ（oldK==newK は 0）。weeklyDevOfBucket(checkerと同一式)の
+     *  変化のみを計算し、wd 自体は変更しない(コミットは呼出元)。範囲外の値は該当側を寄与ゼロとして扱う。 */
+    internal fun weeklyMarginalAt(wd: Array<IntArray>, bucket: Int, oldK: Int, newK: Int): Long {
+        if (oldK == newK) return 0L
+        var acc = 0L
+        if (oldK in wd.indices) {
+            val b = wd[oldK]
+            val before = weeklyDevOfBucket(b)
+            b[bucket]--
+            acc += (weeklyDevOfBucket(b) - before).toLong()
+            b[bucket]++
+        }
+        if (newK in wd.indices) {
+            val b = wd[newK]
+            val before = weeklyDevOfBucket(b)
+            b[bucket]++
+            acc += (weeklyDevOfBucket(b) - before).toLong()
+            b[bucket]--
+        }
+        return acc
     }
 
     /** fair(グループ内公平化)の marginal cost。staff i の shift k 保有回数が delta 変化した際の、群
@@ -2331,7 +2344,9 @@ object V6NativeOptimizer {
         val grpTotal = Array(p.G) { IntArray(p.K) }
         for (i in 0 until p.S) for (k in 0 until p.K) grpTotal[p.sgrp[i]][k] += cnt[i][k]
         val wd = Array(p.S) { s ->
-            IntArray(7).also { a -> for (jj in 0 until p.T) if (schedule[s][jj] != rest) a[(p.dow0 + jj) % 7]++ }
+            Array(p.K) { IntArray(7) }.also { a ->
+                for (jj in 0 until p.T) { val k2 = schedule[s][jj]; if (k2 in 0 until p.K) a[k2][(p.dow0 + jj) % 7]++ }
+            }
         }
         val bucket = (p.dow0 + j) % 7
         // repair: 各勤務シフトの需要を soft(個人 low/high/apt/weekly/fair ＋ 群レンジ c41)最小の休スタッフで満たす。
@@ -2346,7 +2361,7 @@ object V6NativeOptimizer {
                     if (schedule[i][j] != rest || p.wishLocked(i, j) || !p.canDo(i, k)) continue
                     val delta = staffCountPenaltyAt(p, i, k, cnt[i][k] + 1) - staffCountPenaltyAt(p, i, k, cnt[i][k]) +
                         c41DayMarg(p.sgrp[i], k) +
-                        weeklyMarginalAt(wd[i], bucket, 1) +
+                        weeklyMarginalAt(wd[i], bucket, rest, k) +
                         fairMarginalAt(p, i, rest, -1, cnt, grpTotal) +
                         fairMarginalAt(p, i, k, 1, cnt, grpTotal)
                     if (delta < bestDelta) {
@@ -2360,7 +2375,7 @@ object V6NativeOptimizer {
                 schedule[bestI][j] = k; cnt[bestI][k]++; cnt[bestI][rest]--; covJ[k]++; miss--
                 if (hasC41) grpCnt[p.sgrp[bestI]][k]++
                 grpTotal[p.sgrp[bestI]][k]++; grpTotal[p.sgrp[bestI]][rest]--
-                wd[bestI][bucket]++
+                wd[bestI][rest][bucket]--; wd[bestI][k][bucket]++
             }
         }
     }
@@ -2389,8 +2404,8 @@ object V6NativeOptimizer {
         val cntI = counts[i]
         val grpTotal = Array(p.G) { IntArray(p.K) }
         for (s in 0 until p.S) for (k in 0 until p.K) grpTotal[p.sgrp[s]][k] += counts[s][k]
-        val wd = IntArray(7)
-        for (jj in 0 until p.T) if (schedule[i][jj] != rest) wd[(p.dow0 + jj) % 7]++
+        val wd = Array(p.K) { IntArray(7) }
+        for (jj in 0 until p.T) { val k2 = schedule[i][jj]; if (k2 in 0 until p.K) wd[k2][(p.dow0 + jj) % 7]++ }
         for (j in 0 until p.T) {
             if (p.wishLocked(i, j)) continue
             val old = schedule[i][j]
@@ -2398,7 +2413,7 @@ object V6NativeOptimizer {
                 schedule[i][j] = rest
                 cntI[old]--; cntI[rest]++
                 grpTotal[p.sgrp[i]][old]--; grpTotal[p.sgrp[i]][rest]++
-                wd[(p.dow0 + j) % 7]--
+                wd[old][(p.dow0 + j) % 7]--; wd[rest][(p.dow0 + j) % 7]++
             }
         }
         // [高速化] 旧: 日×シフトごとに被覆を全職員走査(O(T×K×S))。盤面のうち本関数中に変わるのは staff i の行
@@ -2415,7 +2430,7 @@ object V6NativeOptimizer {
                 if (need <= 0) continue
                 if (cov[j][k] >= need) continue
                 val delta = staffCountPenaltyAt(p, i, k, cntI[k] + 1) - staffCountPenaltyAt(p, i, k, cntI[k]) +
-                    weeklyMarginalAt(wd, bucket, 1) +
+                    weeklyMarginalAt(wd, bucket, rest, k) +
                     fairMarginalAt(p, i, rest, -1, counts, grpTotal) +
                     fairMarginalAt(p, i, k, 1, counts, grpTotal)
                 if (delta < bestDelta) {
@@ -2429,7 +2444,7 @@ object V6NativeOptimizer {
                 schedule[i][j] = bestK
                 cntI[bestK]++; cntI[rest]--
                 grpTotal[p.sgrp[i]][bestK]++; grpTotal[p.sgrp[i]][rest]--
-                wd[bucket]++
+                wd[rest][bucket]--; wd[bestK][bucket]++
                 cov[j][bestK]++; cov[j][rest]--
             }
         }
@@ -2439,7 +2454,6 @@ object V6NativeOptimizer {
         val p = cachedProblem(state)
         val keys = report.violations.keys.toList()
         if (keys.isEmpty()) { randomAllowedCell(state, schedule, rng); return }
-        val rest = restShiftIndex(state)
         repeat(min(8, keys.size)) {
             val key = keys[rng.nextInt(keys.size)]
             val i = key.substringBefore(',').toIntOrNull() ?: return@repeat
@@ -2453,8 +2467,8 @@ object V6NativeOptimizer {
             for (jj in 0 until p.T) { val k = schedule[i][jj]; if (k in 0 until p.K) cntI[k]++ }
             // [3.267.0/weekly+fair統合] この手専用にwd(staff iの曜日別非休日数)とgrpTotal(群合計, 全職員
             // スキャン)を構築。件数は最大8回(repeat)に限られ盤面規模も小さいため、毎回の再走査を許容する。
-            val wd = IntArray(7)
-            for (jj in 0 until p.T) if (schedule[i][jj] != rest) wd[(p.dow0 + jj) % 7]++
+            val wd = Array(p.K) { IntArray(7) }
+            for (jj in 0 until p.T) { val k2 = schedule[i][jj]; if (k2 in 0 until p.K) wd[k2][(p.dow0 + jj) % 7]++ }
             val counts = Array(p.S) { s ->
                 IntArray(p.K).also { a -> for (jj in 0 until p.T) { val k = schedule[s][jj]; if (k in 0 until p.K) a[k]++ } }
             }
@@ -2467,12 +2481,7 @@ object V6NativeOptimizer {
                 if (k == old) continue
                 val dOld = if (old in 0 until p.K) staffCountPenaltyAt(p, i, old, cntI[old] - 1) - staffCountPenaltyAt(p, i, old, cntI[old]) else 0L
                 val dK = staffCountPenaltyAt(p, i, k, cntI[k] + 1) - staffCountPenaltyAt(p, i, k, cntI[k])
-                val dWeekly = when {
-                    old !in 0 until p.K -> 0L
-                    old == rest && k != rest -> weeklyMarginalAt(wd, bucket, 1)
-                    old != rest && k == rest -> weeklyMarginalAt(wd, bucket, -1)
-                    else -> 0L
-                }
+                val dWeekly = weeklyMarginalAt(wd, bucket, old, k)
                 val dFair = (if (old in 0 until p.K) fairMarginalAt(p, i, old, -1, counts, grpTotal) else 0L) +
                     fairMarginalAt(p, i, k, 1, counts, grpTotal)
                 val delta = dOld + dK + dWeekly + dFair

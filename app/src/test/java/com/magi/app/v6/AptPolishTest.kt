@@ -190,9 +190,17 @@ class AptPolishTest {
         val result = V6HotfixPasses.applyAptPolish(st, sched, maxPasses = 1)
         val after = UnifiedViolationChecker.check(st, result.newSchedule)
 
-        assertEquals("1パスで超過3件すべてが自己振替により解消されること", 0, after.breakdown["apt"] ?: -1)
+        // [3.345.0] weekly が「職員×シフト×曜日」になり同じ目的関数の中で自己振替と競合するため、
+        //   1パスで apt=0 まで到達するとは限らなくなった（この盤面は T=7＝曜日が各1回で weekly が最も強く効く）。
+        //   このテストが本来固定したいのは「1パス内で自己振替が反復される」ことなので、そこを直接見る。
+        assertTrue("1パス内で複数回の手が採用されている(旧実装は1回で打ち切っていた)", result.applied >= 3)
+        assertTrue("apt は厳密に減る", (after.breakdown["apt"] ?: 99) < (before.breakdown["apt"] ?: 0))
         assertEquals("HARDは悪化しない", 0, after.hard)
-        assertTrue("複数回の手が採用されている(単発なら1)", result.applied >= 3)
+        // [3.345.0] apt=0 まで到達するとは限らない。この盤面は T=7＝各曜日が1回しか無く、apt(重み1)と
+        //   weekly(重み1)が同じ目的関数の中で正面から競合するため、目的関数の最適が apt=0 とは一致しない
+        //   （実測 apt=5 で落ち着く）。ここで固定できる真の不変条件は keep-best＝パスを重ねても悪化しないこと。
+        val settled = UnifiedViolationChecker.check(st, V6HotfixPasses.applyAptPolish(st, result.newSchedule, maxPasses = 4).newSchedule)
+        assertTrue("keep-best: パスを重ねても目的関数(total)は悪化しない", settled.total <= after.total)
     }
 
     @Test

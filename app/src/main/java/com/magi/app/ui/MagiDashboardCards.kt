@@ -355,8 +355,14 @@ internal fun CoverageDiagnosisCard(ui: UiState) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (diag.hasShortage) {
                 Text("人員不足の原因", style = MaterialTheme.typography.titleMedium)
+                // [3.344.0] 「充足可能N枠」と言いながら各枠の説明が「いまの希望のままでは解消できません」
+                //   という矛盾を解消する。枠の数（静的に足りているか）と、いま実際に埋められるかは別軸。
                 val headline = when {
                     diag.allInfeasible -> "不足 ${diag.totalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。"
+                    diag.allBlockedNow -> "不足 ${diag.totalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
+                        "希望を1件調整するか、担当を追加してください。"
+                    diag.blockedNowSlots > 0 -> "不足 ${diag.totalShortfall} 人 — うち ${diag.blockedNowSlots} 枠は" +
+                        "いまの希望のままでは埋められません（残りは再実行で解消し得ます）。"
                     diag.infeasibleSlots == 0 -> "不足 ${diag.totalShortfall} 人は枠が足りています。再実行や設定の見直しで解消し得ます。"
                     else -> "不足 ${diag.totalShortfall} 人 — 充足不可 ${diag.infeasibleSlots} 枠 / 充足可能 ${diag.fixableSlots} 枠。"
                 }
@@ -371,8 +377,16 @@ internal fun CoverageDiagnosisCard(ui: UiState) {
                                 Text("${s.dayLabel}  ${s.shiftSymbol}  必要${s.need}/現状${s.got}（不足${s.miss}）",
                                     color = onContainer, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                 MagiTagChip(
-                                    text = if (infeasible) "充足不可" else "充足可能",
-                                    color = if (infeasible) MagiAccent.red else MagiAccent.blue,
+                                    text = when {
+                                        infeasible -> "充足不可"
+                                        s.blockedNow -> "今は不能"
+                                        else -> "充足可能"
+                                    },
+                                    color = when {
+                                        infeasible -> MagiAccent.red
+                                        s.blockedNow -> MagiAccent.orange
+                                        else -> MagiAccent.blue
+                                    },
                                 )
                             }
                             Text(s.reason, color = onContainer, style = MaterialTheme.typography.bodySmall)
@@ -846,10 +860,12 @@ internal fun breakdownLocations(famKey: String, ui: UiState): List<Pair<String, 
             val p = it.key.split(","); val k = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
             if (k == null || j == null) null else ("${dayMD(ui.startDate, j)} 「${sym(k)}」" to null)
         }
-        // [場所表示] fair/weekly はセル単位でなく職員(weekly)・職員×シフト(fair)単位の偏り。distLocations から整形。
+        // [場所表示] fair/weekly はセル単位でなく職員×シフト単位の偏り。distLocations から整形。
+        // [3.345.0] weekly も職員×シフト（旧: 職員のみ）。休も1シフトとして出る。
         "weekly" -> (ui.distLocations["weekly"] ?: emptyList()).mapNotNull { e ->
-            val i = e.getOrNull(0) ?: return@mapNotNull null; val dev = e.getOrNull(1) ?: 0
-            "${nm(i)}（曜日の偏り ${dev}）" to i
+            val i = e.getOrNull(0) ?: return@mapNotNull null; val k = e.getOrNull(1) ?: return@mapNotNull null
+            val dev = e.getOrNull(2) ?: 0
+            "${nm(i)} 「${sym(k)}」（曜日の偏り ${dev}）" to i
         }
         "fair" -> (ui.distLocations["fair"] ?: emptyList()).mapNotNull { e ->
             val i = e.getOrNull(0) ?: return@mapNotNull null; val k = e.getOrNull(1) ?: return@mapNotNull null; val dev = e.getOrNull(2) ?: 0

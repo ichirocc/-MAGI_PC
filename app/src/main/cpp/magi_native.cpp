@@ -1,6 +1,7 @@
 #ifndef MAGI_HOST_TEST
 #include <jni.h>
 #endif
+#include <algorithm>   // std::fill（weekly のシフト別バケット初期化）
 #include <cstdint>
 #include <cstdlib>
 #include <cmath>
@@ -258,15 +259,19 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
         }
     }
 
-    // weekly（職員×曜日、round(勤務日/7) からの L1 偏差）
-    for (int i = 0; i < S; i++) {
-        int wd[7] = {0, 0, 0, 0, 0, 0, 0};
-        const int* row = a + (size_t)i * T;
-        for (int j = 0; j < T; j++) {
-            int k = row[j];
-            if (k != p.restIdx && k >= 0 && k < K) wd[(p.dow0 + j) % 7]++;
+    // weekly（職員×シフト×曜日、round(そのシフトの回数/7) からの L1 偏差）
+    // [3.345.0] 休を通常のシフト種として扱う＝勤務/休の二値でなくシフト別に均す（Kotlin と同式）。
+    {
+        std::vector<int> wdk((size_t)K * 7, 0);
+        for (int i = 0; i < S; i++) {
+            std::fill(wdk.begin(), wdk.end(), 0);
+            const int* row = a + (size_t)i * T;
+            for (int j = 0; j < T; j++) {
+                int k = row[j];
+                if (k >= 0 && k < K) wdk[(size_t)k * 7 + (p.dow0 + j) % 7]++;
+            }
+            for (int k = 0; k < K; k++) soft += weeklyDevOfBucket(&wdk[(size_t)k * 7]);
         }
-        soft += weeklyDevOfBucket(wd);
     }
 
     // 被覆（covU=HARD / covO=SOFT, per-cell OR/AND）
@@ -309,7 +314,7 @@ struct SaChunk {
     std::vector<int> a;    // S*T
     std::vector<int> ssn;  // S*K
     std::vector<int> dsn;  // T*K
-    std::vector<int> wd;   // S*7
+    std::vector<int> wd;   // S*K*7 [3.345.0] 職員×シフト×曜日（休も1シフト）
     // [ビット化] c1窓 / c41-c42 の O(1) 評価用マスク（S,T<=64 のとき有効）。効果は deltaApply の contrib* 経由。
     //   fullEvalParts はスカラーのまま＝自己整合(status)がビット化 delta をチャンク毎に照合する基準。
     bool useBits;
@@ -348,14 +353,14 @@ struct SaChunk {
         a.assign(cur, cur + (size_t)S * T);
         ssn.assign((size_t)S * K, 0);
         dsn.assign((size_t)T * K, 0);
-        wd.assign((size_t)S * 7, 0);
+        wd.assign((size_t)S * K * 7, 0);
         if (useBits) { rowMask.assign((size_t)S * K, 0ULL); dayShiftMask.assign((size_t)T * K, 0ULL); }
         for (int i = 0; i < S; i++) {
             for (int j = 0; j < T; j++) {
                 int k = a[(size_t)i * T + j];
                 if (k >= 0 && k < K) { ssn[(size_t)i * K + k]++; dsn[(size_t)j * K + k]++;
                     if (useBits) { rowMask[(size_t)i * K + k] |= (1ULL << j); dayShiftMask[(size_t)j * K + k] |= (1ULL << i); } }
-                if (k != p.restIdx && k >= 0 && k < K) wd[(size_t)i * 7 + (p.dow0 + j) % 7]++;
+                if (k >= 0 && k < K) wd[((size_t)i * K + k) * 7 + (p.dow0 + j) % 7]++;
             }
         }
         score = fullEvalCombined(p, a.data());
@@ -479,7 +484,12 @@ struct SaChunk {
         for (int x : mem) v += std::llabs((long long)ssn[(size_t)x * K + k] - tgt);
         return v;
     }
-    long long contribWeekly(int i) const { return weeklyDevOfBucket(&wd[(size_t)i * 7]); }
+    // [3.345.0] weekly は職員×シフト。deltaApply では old/nw の2バケットだけが動くので
+    //   contribRangeApt/contribFair と同じく (i,old)+(i,nw) の形で before/after を取る。
+    long long contribWeeklyK(int i, int k) const {
+        if (k < 0 || k >= K) return 0;
+        return weeklyDevOfBucket(&wd[((size_t)i * K + k) * 7]);
+    }
     long long contribDayGroups(int j) const {
         long long v = 0;
         if (useBits) {
@@ -560,7 +570,7 @@ struct SaChunk {
             + contribCellHard(i, j)
             + contribRangeApt(i, old) + contribRangeApt(i, nw)
             + contribFair(g, old) + contribFair(g, nw)
-            + contribWeekly(i)
+            + contribWeeklyK(i, old) + contribWeeklyK(i, nw)
             + contribDayGroups(j)
             + contribCov(old, j) + contribCov(nw, j);
         a[(size_t)i * T + j] = nw;
@@ -571,14 +581,17 @@ struct SaChunk {
             if (oldIn) { rowMask[(size_t)i * K + old] &= ~jb; dayShiftMask[(size_t)j * K + old] &= ~ib; }
             if (newIn) { rowMask[(size_t)i * K + nw] |= jb;  dayShiftMask[(size_t)j * K + nw] |= ib; }
         }
-        bool oldWork = oldIn && old != p.restIdx;
-        bool newWork = newIn && nw != p.restIdx;
-        if (oldWork != newWork) wd[(size_t)i * 7 + (p.dow0 + j) % 7] += newWork ? 1 : -1;
+        // [3.345.0] weekly はシフト別＝old と nw の2バケットが動く（範囲外は該当側を触らない）。
+        {
+            const size_t b = (size_t)(p.dow0 + j) % 7;
+            if (oldIn) wd[((size_t)i * K + old) * 7 + b]--;
+            if (newIn) wd[((size_t)i * K + nw) * 7 + b]++;
+        }
         long long after = contribC1Row(i) + contribC2Row(i) + contribC3Row(i)
             + contribCellHard(i, j)
             + contribRangeApt(i, old) + contribRangeApt(i, nw)
             + contribFair(g, old) + contribFair(g, nw)
-            + contribWeekly(i)
+            + contribWeeklyK(i, old) + contribWeeklyK(i, nw)
             + contribDayGroups(j)
             + contribCov(old, j) + contribCov(nw, j);
         score += after - before;
