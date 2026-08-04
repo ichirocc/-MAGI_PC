@@ -167,6 +167,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                 //   [照合トグル] OFF=純ネイティブ（照合せず C++結果を信頼）。C++自己整合(status)は上で常時検査済。
                 val bestSol = NativeEval.unflatten(best, s, t)
                 if (NativeGate.parityCheckEnabled) {
+                    TuningTelemetry.parityChecks++
                     val kotlinScore = evaluator.fullEval(bestSol)
                     if (kotlinScore != newBest) {
                         NativeGate.disable("Kotlin照合NG (native=$newBest kotlin=$kotlinScore)")
@@ -187,6 +188,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             // [Stage11] HARD 床到達（hardStallMs 無改善）で PhaseB=LAHC ソフト研磨へ恒久切替
             //   （Kotlin runWorker の phaseB=true と同じ一方向遷移。以後は予算末まで LAHC）。
             if (params.softPolish && (System.nanoTime() / 1_000_000L) - lastHardImprove > params.hardStallMs) {
+                TuningTelemetry.lahcEntered++
                 return runLahcNative(handle, best, bestScore, params, rng, start, flush)
             }
 
@@ -246,6 +248,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                     NativeBridge.nativeLahcRead(h, 0, bestFlat)
                     val sol = NativeEval.unflatten(bestFlat, s, t)
                     if (NativeGate.parityCheckEnabled) {
+                        TuningTelemetry.parityChecks++
                         val kotlinScore = evaluator.fullEval(sol)
                         if (kotlinScore != ret[2]) {
                             NativeGate.disable("LAHC Kotlin照合NG (native=${ret[2]} kotlin=$kotlinScore)")
@@ -439,6 +442,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                             if (timeUp()) { flush(best, copyOf(bestSol), 0); return }
                         }
                         if (params.softPolish && (System.nanoTime() / 1_000_000L) - lastHardImprove > params.hardStallMs) {
+                            TuningTelemetry.lahcEntered++
                             phaseB = true; break@cooling
                         }
                         ls++

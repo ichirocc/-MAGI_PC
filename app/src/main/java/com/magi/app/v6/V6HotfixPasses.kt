@@ -135,6 +135,52 @@ object PolishGate {
     @Volatile var filterC3nIncrease: Boolean = false
 }
 
+/**
+ * [3.356.0/ユーザー指示「オプションを減らせるようにログ強化する」] 設定タブ→詳細設定の調整トグルが
+ * **その実行で実際に何をしたか**を数える。旧: トグルは6つあるのに、ログを見ても「ONにした意味が
+ * あったか」が読めず、減らす判断ができなかった（`禁止連続の崩し範囲`・`立て直し方` に至っては
+ * 実行の痕跡が一切出ない）。数回まわして毎回「観測なし」なら、そのトグルは消してよい、と言える。
+ *
+ * 読み取り専用の計数のみ＝探索・採否・スコアには一切影響しない。`optimize()` 入口で reset する。
+ */
+object TuningTelemetry {
+    /** 禁止連続の事前フィルタが checker を呼ばずに落とした候補数。 */
+    @Volatile var c3nFilterSkipped: Int = 0
+    /** 禁止連続の崩し範囲が既定(前後1日)と違う候補日を返した回数（広がる／狭まるの両方）。 */
+    @Volatile var wideC3nDiffered: Int = 0
+    /** 同・呼ばれた回数（広がらなかった分も含む）。 */
+    @Volatile var wideC3nCalls: Int = 0
+    /** 立て直し方(適応制御)が役割を決めた回数。 */
+    @Volatile var escapeControlUsed: Int = 0
+    /** 仕上げ最適化により PhaseB(LAHC) へ切り替わった回数。 */
+    @Volatile var lahcEntered: Int = 0
+    /** Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。 */
+    @Volatile var parityChecks: Int = 0
+
+    fun reset() {
+        c3nFilterSkipped = 0; wideC3nDiffered = 0; wideC3nCalls = 0
+        escapeControlUsed = 0; lahcEntered = 0; parityChecks = 0
+    }
+
+    /** 各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。 */
+    fun summary(nativeOn: Boolean, parityOn: Boolean, softPolishOn: Boolean): String {
+        fun eff(on: Boolean, n: Int, unit: String): String =
+            if (!on) "OFF" else if (n > 0) "ON($n$unit)" else "ON(この実行では観測なし)"
+        val wide = when {
+            !PolishGate.wideC3nBreakDays -> "OFF"
+            wideC3nCalls == 0 -> "ON(この実行では出番なし)"
+            wideC3nDiffered == 0 -> "ON(${wideC3nCalls}回呼ばれたが既定(前後1日)と同じ範囲＝OFFと差なし)"
+            else -> "ON(${wideC3nCalls}回中${wideC3nDiffered}回は既定(前後1日)と違う範囲を探索)"
+        }
+        return "設定の効き: ネイティブ加速=" + (if (nativeOn) "ON" else "OFF") +
+            " / Kotlin照合=" + eff(parityOn, parityChecks, "回") +
+            " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped, "件の無駄な検査を省略・勤務表は不変") +
+            " / 禁止連続の崩し範囲=" + wide +
+            " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed, "回の役割決定") +
+            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered, "回LAHCへ切替")
+    }
+}
+
 object V6HotfixPasses {
     /**
      * 長期ブロック交換の候補長。月次勤務表で「局所交換では越えにくい」谷を越えるための
@@ -1911,6 +1957,11 @@ object V6HotfixPasses {
         var screened = 0          // C3n枝刈りで checker を呼ばずに落とした候補数
         var evaluated = 0         // 実際に checker を呼んだ候補数
         var patternDays = 0       // 候補にしたセルの延べ数（当日1セルに留まらないことの実測）
+        // [3.356.0/実機ログ起因] 「候補日延べ4 正式評価0 C3n枝刈り0」だけでは、なぜ1件も評価まで
+        //   進まなかったのかが読めなかった（実データではアリフの2セルとも本人希望で固定されていた）。
+        //   候補日から外れた理由を数える。
+        var blockedWish = 0       // 希望で固定されていて動かせなかった日
+        var blockedCell = 0       // 割当が範囲外（-1 等）で対象外だった日
         var pass = 0
         while (pass < maxPasses) {
             if (shouldStop()) break
@@ -1943,9 +1994,9 @@ object V6HotfixPasses {
                 patternDays += days.size
                 for (j2 in days) {
                     if (done || shouldStop()) break
-                    if (!movable(i, j2)) continue
+                    if (!movable(i, j2)) { blockedWish++; continue }
                     val curK = work[i][j2]
-                    if (curK !in 0 until p.K) continue
+                    if (curK !in 0 until p.K) { blockedCell++; continue }
                     for (alt in p.allowedShiftsForStaff(i)) {
                         if (done || shouldStop()) break
                         if (alt == curK) continue
@@ -2006,6 +2057,8 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C3nPolish",
             message = "禁止連続(c3n)研磨: c3n ${before.breakdown["c3n"] ?: 0}->${bestRep.breakdown["c3n"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 " 候補日延べ$patternDays(パターン全域・当日含む) 正式評価$evaluated C3n枝刈り$screened" +
+                (if (blockedWish > 0) " 希望固定で候補外${blockedWish}日" else "") +
+                (if (blockedCell > 0) " 割当が範囲外${blockedCell}日" else "") +
                 (if (applied == 0 && (before.breakdown["c3n"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
@@ -3587,7 +3640,7 @@ object V6HotfixPasses {
                     for (j in swapDays) row[j] = work[giver][j]
                     firesAfter += C1DeltaPrefilter.staffC3nFires(p, row)
                 }
-                if (firesAfter > firesBefore) return null
+                if (firesAfter > firesBefore) { TuningTelemetry.c3nFilterSkipped++; return null }
             }
 
             val differences = swapDays.size

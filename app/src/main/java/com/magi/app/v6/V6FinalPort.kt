@@ -611,6 +611,14 @@ object V6FinalPort {
                 },
             )
         }
+        // [3.356.0/ユーザー指示「オプションを減らせるようにログ強化する」] 詳細設定の調整トグル6つが
+        //   その実行で実際に何をしたかを1行で開示する。数回まわして毎回「観測なし」なら消してよい、と
+        //   利用者が判断できる材料にする（旧: 崩し範囲・立て直し方は実行の痕跡が一切出なかった）。
+        val tuningLog = MirrorLog(level = "I", tag = "設定の効き", message = TuningTelemetry.summary(
+            nativeOn = NativeGate.usable,
+            parityOn = NativeBridge.available && NativeGate.userEnabled && NativeGate.parityCheckEnabled,
+            softPolishOn = softPolish,
+        ))
         // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
         //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁・HF63が学習した充足困難族）
         //   ②まだ狙える（追えば減る見込み）に仕分ける。旧: 族別件数(UnifiedCheck/違反詳細)は出るが
@@ -664,7 +672,7 @@ object V6FinalPort {
         }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, budgetPlanLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         // [3.327.0/外部レビュー High1] `post` の診断（C1頭打ち・回数固定の却下記録）は **post.schedule を
         //   観測した結果**。ところが finalSched はこのあと ExtraRefine で差し替わる（refSched）か、
         //   最終番兵で入力へ戻る（normInput）ことがある。そのまま渡すと「いま表示している勤務表の理由」

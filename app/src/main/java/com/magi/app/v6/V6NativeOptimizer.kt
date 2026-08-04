@@ -306,6 +306,7 @@ object V6NativeOptimizer {
          *  確認窓で再確認する。既定は「常に単調」＝確認せず即離脱＝従来どおり。 */
         stopIsFinal: () -> Boolean = { true },
     ): V6OptimizerResult {
+        TuningTelemetry.reset()   // [3.356.0] 設定トグルの効き計測はこの実行ぶんだけ
         val slot = RunSlot(runSeq.incrementAndGet())
         newestRunId = slot.id
         lastAlternatives = emptyList()
@@ -833,6 +834,7 @@ object V6NativeOptimizer {
                     if (escapeController != null) {
                         // [3.306.0/既定OFF経路] stagnantEpochs をリセットしない＝停滞の深さが役割変更を
                         //   跨いで残り、target → 再結合 → 多様化 → 深い破壊 の4段へ進める。
+                        TuningTelemetry.escapeControlUsed++
                         val next = escapeController.nextAssignment(
                             current = controlledAssignment!!,
                             report = eliteReport,

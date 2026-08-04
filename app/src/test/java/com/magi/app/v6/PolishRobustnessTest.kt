@@ -103,4 +103,40 @@ class PolishRobustnessTest {
         val res = V6HotfixPasses.applyC1IndexChainRepair(s, sc)
         assertTrue("index駆動修復も完走する", res.afterTotal >= 0)
     }
+    /**
+     * [3.356.0] 設定トグルの「効き」ログ。ON なのに観測ゼロなら、そのトグルはこの実行では何もして
+     * いない＝消してよい判断材料になる、という点をそのまま固定する。
+     */
+    @Test
+    fun tuningSummaryDistinguishesOffFromOnWithNoObservedEffect() {
+        val wide = PolishGate.wideC3nBreakDays
+        val filter = PolishGate.filterC3nIncrease
+        val escape = PolishGate.adaptiveEscapeControl
+        try {
+            TuningTelemetry.reset()
+            PolishGate.wideC3nBreakDays = false
+            PolishGate.filterC3nIncrease = true
+            PolishGate.adaptiveEscapeControl = true
+            val off = TuningTelemetry.summary(nativeOn = false, parityOn = false, softPolishOn = false)
+            assertTrue(off, off.contains("禁止連続の崩し範囲=OFF"))
+            assertTrue(off, off.contains("禁止連続の事前フィルタ=ON(この実行では観測なし)"))
+            assertTrue(off, off.contains("立て直し方=ON(この実行では観測なし)"))
+
+            TuningTelemetry.c3nFilterSkipped = 12
+            TuningTelemetry.escapeControlUsed = 3
+            val on = TuningTelemetry.summary(nativeOn = true, parityOn = true, softPolishOn = true)
+            assertTrue(on, on.contains("ネイティブ加速=ON"))
+            assertTrue(on, on.contains("禁止連続の事前フィルタ=ON(12件"))
+            assertTrue(on, on.contains("立て直し方=ON(3回の役割決定)"))
+            // reset で実行ごとの計測に戻ること（前の実行の数字を持ち越さない）。
+            TuningTelemetry.reset()
+            assertTrue(TuningTelemetry.summary(true, true, true).contains("立て直し方=ON(この実行では観測なし)"))
+        } finally {
+            PolishGate.wideC3nBreakDays = wide
+            PolishGate.filterC3nIncrease = filter
+            PolishGate.adaptiveEscapeControl = escape
+            TuningTelemetry.reset()
+        }
+    }
+
 }
