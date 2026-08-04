@@ -1121,6 +1121,25 @@ object V6SanityPort {
             emit(byFam, DETAIL_CAP, report.breakdown)
         }
 
+        // 3.4) [3.355.0/ログ強化] DETAIL_CAP で切れる大きなセル族は「…他58件」で終わり、**誰に集中して
+        //   いるか**が読めなかった（実機ログ: c3 77件・場所66箇所のうち8箇所しか見えない）。checker が出した
+        //   場所（cellFamilies）をそのまま職員別に数え直すだけ＝規則の再実装をしないのでドリフトしない。
+        run {
+            val perFam = LinkedHashMap<String, HashMap<Int, Int>>()
+            for ((key, list) in report.cellFamilies) {
+                val i = key.substringBefore(',').toIntOrNull() ?: continue
+                if (i !in 0 until p.S) continue
+                for (cls in list) perFam.getOrPut(cls.removePrefix("vio-")) { HashMap() }.merge(i, 1) { a, b -> a + b }
+            }
+            for ((fam, byStaff) in perFam) {
+                if (fam == "c1") continue                          // c1 は下の「職員×窓ルール別」がより詳しい
+                if (byStaff.values.sum() <= DETAIL_CAP) continue   // 全件が上に出ているなら冗長
+                val txt = byStaff.entries.sortedByDescending { it.value }
+                    .joinToString(" / ") { "${nm(it.key)} ${it.value}箇所" }
+                out.add("[D] $fam 集約（職員別・場所数の全件）: $txt")
+            }
+        }
+
         // 3.5) [c1族の職員×窓ルール別件数] 「違反詳細 c1(N件)」はDETAIL_CAP=8で打ち切られ、特定職員が
         //   どの窓ルールで何件かは埋もれる（例: N件中8件しか見えず職員別内訳が分からない）。全件を
         //   職員×ルール別に再集計し、打ち切りなしの1行サマリとして追加する。読取専用（重み・データ不変）。
@@ -1149,6 +1168,33 @@ object V6SanityPort {
                 }
                 out.add("[D] c1内訳（職員×窓ルール別件数・全件）: $lines")
             }
+        }
+
+        // 3.6) [3.355.0/ログ強化] weekly は実機で最大の族（合計307中156）なのに内訳が一切無く、
+        //   「まだ狙える weekly 156件」としか読めなかった。**回数が7の倍数でないぶんは配置をどう変えても
+        //   消せない**（目標=round(回数/7) なので余りが必ず偏差として残る）。その構造床と、曜日の寄せ方で
+        //   減らせる残りを分けて示す。床は `weeklyFloorOfCount` の総和＝checker と同じ目標値から導出。
+        if ((report.breakdown["weekly"] ?: 0) > 0) {
+            val cntW = countMatrix(p, s)
+            var floor = 0
+            val worst = ArrayList<Triple<Int, Int, Int>>()   // (staff, shift, いま減らせる余地)
+            for (i in 0 until p.S) for (k in 0 until p.K) {
+                val c = cntW[i][k]
+                if (c <= 0) continue
+                floor += weeklyFloorOfCount(c)
+            }
+            for (loc in report.distLocations["weekly"].orEmpty()) {
+                val i = loc.getOrNull(0) ?: continue; val k = loc.getOrNull(1) ?: continue
+                val dev = loc.getOrNull(2) ?: continue
+                val room = dev - weeklyFloorOfCount(cntW.getOrNull(i)?.getOrNull(k) ?: 0)
+                if (room > 0) worst.add(Triple(i, k, room))
+            }
+            val total = report.breakdown["weekly"] ?: 0
+            val head = "[D] weekly内訳: 合計${total}件 = 構造床${minOf(floor, total)}件(回数が7の倍数でない＝配置では消せない)" +
+                " + 曜日の寄せ方で減らせる${(total - floor).coerceAtLeast(0)}件"
+            val topTxt = worst.sortedByDescending { it.third }.take(DETAIL_CAP)
+                .joinToString(" ; ") { (i, k, room) -> "${nm(i)} ${sym(k)} 余地${room}" }
+            out.add(if (topTxt.isEmpty()) head else "$head / 余地の大きい順: $topTxt")
         }
 
         if (out.isEmpty()) out.add("[D] 違反詳細: 制約違反はありません")

@@ -211,4 +211,28 @@ class MirrorEngineTest {
         val candBeyondNewGate = base + 3L * SCORE_HARD_UNIT
         assertFalse(acceptWorseScore(candBeyondNewGate, base, temp = 1.0e9, rng = java.util.Random(1)))
     }
+    /**
+     * [3.355.0] 回数を7曜日へどう配っても消せない weekly 偏差の下限。目標は round(回数/7) なので、
+     * 合計との差（余り）は必ず残る。実データ3件で checker の weekly と突き合わせて 73/126/106 を再現した式。
+     */
+    @Test
+    fun weeklyFloorIsTheRemainderAgainstSevenTimesTheRoundedTarget() {
+        assertEquals(0, weeklyFloorOfCount(0))
+        assertEquals(0, weeklyFloorOfCount(7))    // 目標1 × 7 = 7
+        assertEquals(0, weeklyFloorOfCount(14))
+        assertEquals(1, weeklyFloorOfCount(8))    // 目標1 → 7、余り1
+        assertEquals(3, weeklyFloorOfCount(31))   // 目標4 → 28、余り3
+        assertEquals(3, weeklyFloorOfCount(11))   // 目標2 → 14、差 -3
+        // 床は必ず達成可能: 回数 c を目標値に寄せた配置の実偏差が床と一致する。
+        for (c in 1..40) {
+            val tgt = Math.round(c / 7.0).toInt()
+            val wd = IntArray(7) { tgt }
+            var rest = c - 7 * tgt
+            var d = 0
+            while (rest > 0) { wd[d % 7]++; rest--; d++ }
+            while (rest < 0) { wd[d % 7]--; rest++; d++ }
+            assertEquals("c=$c", weeklyFloorOfCount(c), weeklyDevOfBucket(wd))
+        }
+    }
+
 }

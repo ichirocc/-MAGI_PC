@@ -637,6 +637,19 @@ object V6FinalPort {
             //   ＝目標1との差19）で、旧実装はこれを丸ごと「まだ狙える」に入れて誤解を招いていた。
             //   個人上限は SOFT なので apt 単独の下限とは言えないが、上限を破った分は high に移るだけなので
             //   **apt+high の和**には真の下限が立つ（structuralPersonalFloor の KDoc 参照）。
+            // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない（`weeklyFloorOfCount`）。
+            //   実機ログでは weekly 156件が丸ごと「まだ狙える」に入っていたが、実データ3件の実測では
+            //   40〜56%（golden 73/183・real 126/226・user 106/214）が床＝追っても減らない。
+            val weeklyNow = bd["weekly"] ?: 0
+            if (weeklyNow > 0) {
+                val wf = runCatching {
+                    val pw = cachedProblem(state); val cw = countMatrix(pw, finalSched)
+                    var f = 0
+                    for (i in 0 until pw.S) for (k in 0 until pw.K) f += weeklyFloorOfCount(cw[i][k])
+                    f
+                }.getOrDefault(0)
+                if (wf > 0) walls.add("weekly のうち${minOf(wf, weeklyNow)}件(回数が7の倍数でない＝配置では消せない)")
+            }
             val personalFloor = runCatching { V6SanityPort.structuralPersonalFloor(cachedProblem(state)) }.getOrDefault(0)
             val aptHighNow = (bd["apt"] ?: 0) + (bd["high"] ?: 0)
             if (personalFloor > 0 && aptHighNow > 0) {
