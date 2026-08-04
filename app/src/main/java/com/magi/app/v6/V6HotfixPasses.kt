@@ -4029,7 +4029,7 @@ object V6HotfixPasses {
         var counts = cnt()
         for (j in 0 until p.T) {
             if (shouldStop()) break
-            val free = (0 until p.S).filter { i -> p.wish[i][j] < 0 }
+            val free = (0 until p.S).filter { i -> !p.wishLocked(i, j) }
             if (free.size < 2) continue
             val slots = free.map { work[it][j] }                       // 当日の同一シフト多重集合（人数固定）
             val n = free.size
@@ -4119,7 +4119,7 @@ object V6HotfixPasses {
             var changedInSweep = false
             for (j in 0 until p.T) {
                 if (shouldStop()) break
-                val free = (0 until p.S).filter { i -> p.wish[i][j] < 0 }
+                val free = (0 until p.S).filter { i -> !p.wishLocked(i, j) }
                 if (free.size < 2) continue
                 val slots = free.map { work[it][j] }
                 val n = free.size
@@ -4279,7 +4279,7 @@ object V6HotfixPasses {
                 for (want in lows) for (give in highs) {
                     if (outOfTime()) break@scan
                     for (j in 0 until p.T) {
-                        if (work[i][j] != give || p.wish[i][j] >= 0) continue
+                        if (work[i][j] != give || p.wishLocked(i, j)) continue
                         val cand = work.copy2D()
                         cand[i][j] = want
                         val rep = UnifiedViolationChecker.check(state, cand)
@@ -4306,7 +4306,7 @@ object V6HotfixPasses {
                     val cand = work.copy2D()
                     val i = rng.nextInt(p.S)
                     val j = rng.nextInt(p.T)
-                    if (p.wish[i][j] < 0) {
+                    if (!p.wishLocked(i, j)) {
                         val allowed = p.allowedShiftsForStaff(i)
                         if (allowed.isNotEmpty()) {
                             val old = cand[i][j]
@@ -4359,8 +4359,8 @@ object V6HotfixPasses {
         val fromDays = ArrayList<Int>()
         val toDays = ArrayList<Int>()
         for (j in 0 until p.T) {
-            if (schedule[from][j] == shift && p.wish[from][j] < 0) fromDays.add(j)
-            if (schedule[to][j] != shift && p.wish[to][j] < 0 && p.canDo(to, shift) && p.canDo(from, schedule[to][j])) toDays.add(j)
+            if (schedule[from][j] == shift && !p.wishLocked(from, j)) fromDays.add(j)
+            if (schedule[to][j] != shift && !p.wishLocked(to, j) && p.canDo(to, shift) && p.canDo(from, schedule[to][j])) toDays.add(j)
         }
         for (jf in fromDays) for (jt in toDays) {
             val cand = schedule.copy2D()
@@ -4380,7 +4380,7 @@ object V6HotfixPasses {
         var rollback = 0
         loop@ for (i in 0 until p.S) for (i2 in i + 1 until p.S) for (j in 0 until p.T) {
             if (applied >= maxSwaps || shouldStop()) break@loop
-            if (p.wish[i][j] >= 0 || p.wish[i2][j] >= 0) continue
+            if (p.wishLocked(i, j) || p.wishLocked(i2, j)) continue
             val a = work[i][j]
             val b = work[i2][j]
             if (a == b || !p.canDo(i, b) || !p.canDo(i2, a)) continue
@@ -4411,7 +4411,7 @@ object V6HotfixPasses {
                 val cand = best.copy2D()
                 val i = rng.nextInt(p.S)
                 val j = rng.nextInt(p.T)
-                if (p.wish[i][j] < 0) {
+                if (!p.wishLocked(i, j)) {
                     val allowed = p.allowedShiftsForStaff(i)
                     if (allowed.isNotEmpty()) {
                         cand[i][j] = allowed[rng.nextInt(allowed.size)]
