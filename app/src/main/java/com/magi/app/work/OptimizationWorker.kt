@@ -154,7 +154,7 @@ class OptimizationWorker(
             throw e
         } catch (e: Exception) {
             notify("最適化に失敗しました", e.message ?: "原因不明")
-            runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました") }
+            runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました", autoExpand = true) }
             // [3.336.0/外部レビュー P0残] 失敗だけが所有権を閉じない出口だった。マーカーと入力が残るので、
             //   次回起動が「中断されました・再開できます」と案内する（実際は失敗）。`Result.failure()` は
             //   WorkManager が再実行しない＝入力を残す意味も無い。所有者なら片付けてから返す。

@@ -3,6 +3,7 @@ package com.magi.app.work
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+// isLaunchedFromBubble: Activity API 31+ (minSdk 36)
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +13,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,11 +22,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
- * バブルの展開ビュー（Android 17 会話バブル）。他アプリの上に浮かぶ小窓として、進行中の最適化の
- * 進捗と完了サマリを [OptimizationRepository] のフローから購読して表示する読取専用画面。
- *
- * バブルの要件を満たすため、AndroidManifest で allowEmbedded / resizeableActivity /
- * documentLaunchMode="always" を宣言する（[BubbleSupport] 参照）。表示専用・スコアリング不変。
+ * 会話バブル展開ビュー。
+ * OptimizationRepository の進捗／結果を購読する表示専用画面。
  */
 class BubbleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,15 +31,24 @@ class BubbleActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    BubbleContent()
+                    BubbleContent(
+                        fromBubble = isLaunchedFromBubble,
+                        onDismissBubble = {
+                            BubbleSupport.clear(this)
+                            finish()
+                        },
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-private fun BubbleContent() {
+@androidx.compose.runtime.Composable
+private fun BubbleContent(
+    fromBubble: Boolean,
+    onDismissBubble: () -> Unit,
+) {
     val running by OptimizationRepository.running.collectAsStateWithLifecycle()
     val progress by OptimizationRepository.progress.collectAsStateWithLifecycle()
     val result by OptimizationRepository.result.collectAsStateWithLifecycle()
@@ -51,21 +58,30 @@ private fun BubbleContent() {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("勤務表の最適化", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        if (fromBubble) {
+            Text("バブル表示中", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         val r = result
         val p = progress
         when {
             r != null && !running -> {
                 Text(
-                    if (r.report.hard == 0) "配布できます（必須違反0）" else "未解決 ${r.report.hard} 件",
+                    if (r.report.hard == 0) "配布できます（必須違反 0）"
+                    else "未解決 ${r.report.hard} 件",
                     fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text("合計違反 ${r.report.total}")
+                TextButton(onClick = onDismissBubble) { Text("閉じる") }
             }
             p != null -> {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text("計算中 ・ 経過 ${fmtElapsed(p.elapsedMs)}")
                 Text("違反 ${p.total}（必須 ${p.hard}）")
+            }
+            running -> {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("計算を開始しています…")
             }
             else -> Text("待機中…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
