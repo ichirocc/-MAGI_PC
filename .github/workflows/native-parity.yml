@@ -5,6 +5,9 @@ name: Native Parity Check
 # スカラーの fullEvalCombined（Kotlin オラクルの C++ ミラー）と一致することを合成問題×多シード×
 # 約150万手で照合し、mismatch があれば非ゼロ終了する。これを CI で自動実行し、Evaluator.kt を
 # 変えて magi_native.cpp を変え忘れる（意味的乖離＝実機で番兵発火→ネイティブ黙殺）回帰を捕捉する。
+# [3.357.0] さらに --expect= で **Kotlin と C++ の言語跨ぎ**パリティも照合する。旧来の照合は
+# C++ 内部（scalar vs bit-op）だけで、両方の C++ 経路を一貫して変えれば通ってしまい、
+# Kotlin との乖離は実機の番兵まで気づけなかった（速度が落ちるだけで結果は正しいので発覚しにくい）。
 # g++ のみで数十秒＝軽量なので SDK ジョブとは分離した専用ワークフローにする。
 
 on:
@@ -58,7 +61,13 @@ jobs:
         run: |
           set -o pipefail
           # 非ゼロ終了（mismatch>0）でこのステップ＝ジョブが失敗する。
-          ./build/magi_host build/golden.flat 2>&1 | tee build/ci-logs/native-parity-run.log
+          # --expect= は Kotlin 側の期待値（NativeParityFixtureTest が同じファイルを検証する）。
+          # C++ scalar-vs-bit だけでは「Kotlin と C++ を片側だけ直した」乖離を捕まえられないため、
+          # 両側を1つの数字に固定して片側変更を必ず落とす（実測: C++ に +113 の一貫した改変を入れると
+          # 旧チェックは 0 mismatch で通り、この --expect だけが MISMATCH で落ちる）。
+          ./build/magi_host build/golden.flat \
+            --expect=app/src/test/resources/golden_eval_expected.txt \
+            2>&1 | tee build/ci-logs/native-parity-run.log
 
       - name: Upload logs (on failure only)
         if: failure()

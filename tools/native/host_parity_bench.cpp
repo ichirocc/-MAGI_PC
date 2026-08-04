@@ -25,6 +25,7 @@
 #include <chrono>
 #include <random>
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <string>
 
@@ -230,14 +231,47 @@ static void runParityLoop(const MagiProblem& p, const std::vector<int>& board, c
     }
 }
 
+// [3.357.0/言語跨ぎパリティ] Kotlin の Evaluator.fullEval が出した値（app/src/test/resources/
+//   golden_eval_expected.txt・Kotlin 側は NativeParityFixtureTest が同じファイルを検証する）と
+//   C++ の fullEvalParts を突き合わせる。
+//
+//   これまでの CI は **C++ scalar vs C++ bit-op** しか照合しておらず、「Kotlin だけ／C++ だけを
+//   直した」意味的乖離（3.345.0 の weekly 定義変更がまさにその形）は**どちらの経路でも検出できなかった**。
+//   実機の番兵は捕まえるが、そのときネイティブは黙って無効化される＝速度が落ちるだけで気づけない。
+//   両側を1つの数字に固定することで、片側だけの変更が必ず CI で落ちる。
+static bool checkCrossLanguage(const MagiProblem& p, const std::vector<int>& board, const char* expectPath) {
+    std::ifstream f(expectPath);
+    if (!f) { printf("CROSS: cannot open %s\n", expectPath); return false; }
+    long long expHard = -1, expSoft = -1;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.rfind("hard=", 0) == 0) expHard = atoll(line.c_str() + 5);
+        else if (line.rfind("soft=", 0) == 0) expSoft = atoll(line.c_str() + 5);
+    }
+    if (expHard < 0 || expSoft < 0) { printf("CROSS: bad expectation file %s\n", expectPath); return false; }
+    long long out[2];
+    fullEvalParts(p, board.data(), out);
+    const bool ok = (out[0] == expHard && out[1] == expSoft);
+    printf("CROSS Kotlin-vs-C++ (%s): C++ hard=%lld soft=%lld / Kotlin hard=%lld soft=%lld -> %s\n",
+           expectPath, out[0], out[1], expHard, expSoft, ok ? "MATCH" : "MISMATCH");
+    return ok;
+}
+
 int main(int argc, char** argv) {
     long long totalMoves = 0, mismatches = 0;
 
+    // --expect=<path> は言語跨ぎパリティの期待値ファイル（flat 引数と同時に指定する）。
+    const char* expectPath = nullptr;
+    for (int ai = 1; ai < argc; ai++)
+        if (strncmp(argv[ai], "--expect=", 9) == 0) expectPath = argv[ai] + 9;
+
     // ---- 実データ問題（flat ファイル引数）: 素の盤面＋実運転ノイズ(-1/非canDo)入り盤面 ----
     for (int ai = 1; ai < argc; ai++) {
+        if (strncmp(argv[ai], "--", 2) == 0) continue;
         MagiProblem p;
         std::vector<int> board;
         if (!loadFlat(argv[ai], p, board)) return 2;
+        if (expectPath && !checkCrossLanguage(p, board, expectPath)) mismatches++;
         printf("REAL %s: S=%d T=%d K=%d G=%d rest=%d c1=%zu c2=%zu c41=%zu c42=%zu c3n=%zu\n",
                argv[ai], p.S, p.T, p.K, p.G, p.restIdx, p.cons1.size(), p.cons2.size(),
                p.cons41.size(), p.cons42.size(), p.cons3n.size());
