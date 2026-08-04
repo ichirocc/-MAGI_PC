@@ -2515,6 +2515,32 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun exportWishesCsv(): String? = state?.let { com.magi.app.v6.WishesCsvIO.build(it) }
     fun exportConstraintsCsv(): String? = state?.let { com.magi.app.v6.ConstraintsCsvIO.build(it) }
 
+    /**
+     * [3.360.0] 書き出したログが「どの版・どの端末で走ったか」を1行で残す。
+     *
+     * 旧ヘッダは出力時刻とデータ規模だけで、**受け取った側がビルドを特定できなかった**
+     * （本セッションでも、アップロードされたログがどの版のものか判定できず解析が止まった。
+     * 外部レポートが古い `.so` を現行ソースの不具合と誤読した件も同根）。
+     *
+     * CPU コア数を出すのは、[V6NativeOptimizer.clampWorkersToCores]（3.224.0）が
+     * 並列ワーカー設定を**黙ってコア数まで切り下げる**ため（設定8でも4本しか走らない実測あり）。
+     * 設定値だけを見ても実際の並列度が読めない。
+     */
+    private fun environmentLine(): String {
+        val ctx = getApplication<Application>()
+        val ver = runCatching {
+            val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+            "${pi.versionName} (${pi.longVersionCode})"
+        }.getOrDefault("不明")
+        val cores = Runtime.getRuntime().availableProcessors()
+        val nat = if (com.magi.app.v6.NativeBridge.available) {
+            "有効(ABI${com.magi.app.v6.NativeBridge.ABI_VERSION})"
+        } else "無効(.so未ロード)"
+        return "版: $ver ・ ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}" +
+            " ・ Android ${android.os.Build.VERSION.RELEASE}(SDK ${android.os.Build.VERSION.SDK_INT})" +
+            " ・ CPU ${cores}コア(いまの並列ワーカー設定=${_ui.value.workers}) ・ ネイティブ=$nat"
+    }
+
     /** Operator log as a plain-text file (mirrors the Web "ログ出力"). */
     fun exportLogs(): String? {
         val ops = _ui.value.opLog
@@ -2524,6 +2550,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val ts = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm:ss", java.util.Locale.JAPAN).format(java.util.Date())
         return buildString {
             append("MAGI ログ (Native)  出力: ").append(ts).append('\n')
+            append(environmentLine()).append('\n')
             append("状態: ${_ui.value.staff}名/${_ui.value.days}日 ・ 必須=${_ui.value.bestHard} 合計=${_ui.value.totalViolations}\n")
             append("\n==== 操作ログ（新しい順 ${ops.size}件）====\n")
             ops.forEach { append(it).append('\n') }
@@ -2537,6 +2564,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (_ui.value.opLog.isEmpty() && _ui.value.logs.isEmpty()) return null
         val o = org.json.JSONObject()
         o.put("exportedAt", System.currentTimeMillis())
+        o.put("environment", environmentLine())   // [3.360.0] 版・端末・コア数・ネイティブ可否（テキスト版と同一）
         o.put("staff", _ui.value.staff); o.put("days", _ui.value.days); o.put("shifts", _ui.value.shifts)
         o.put("hard", _ui.value.bestHard); o.put("soft", _ui.value.bestSoft); o.put("total", _ui.value.totalViolations)
         o.put("satisfaction", _ui.value.satisfaction)

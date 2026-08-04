@@ -604,6 +604,11 @@ object V6NativeOptimizer {
         val lock = Any()
         val firstError = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
         val hardZeroWinner = java.util.concurrent.atomic.AtomicInteger(-1)
+        // [3.360.0/ログ強化] 全体最良を更新した回数。1回ごとの onProgress 行は既にあるが（スロットル対象外＝
+        //   3.283.0）、**何回あったか**は要約に無く、実行の締めくくりで「序盤に1回きりで止まった」のか
+        //   「終盤まで刻み続けた」のかがログから読めなかった（Watchdog 行が出すのは最終改善の時刻だけ）。
+        //   改善が確定した分岐で数えるだけ＝ホットパスに追加コストなし。
+        val globalImproves = java.util.concurrent.atomic.AtomicInteger(0)
         val archive = AdaptiveEliteArchive()
 
         val sharedTrajectories = Array(workers) { i -> hypothesisStartFor(state, entry, i, baseSeed) }
@@ -734,6 +739,7 @@ object V6NativeOptimizer {
                         }
                     }
                     if (startImprovedGlobal) {
+                        globalImproves.incrementAndGet()
                         onProgress(
                             "適応portfolio W$i ${AdaptiveHypothesisEpochPolicy.roleLabel(assignment)} 入口改善",
                             startReport, iterations, nowMs() - started,
@@ -810,6 +816,7 @@ object V6NativeOptimizer {
                             }
                         }
                         if (improvedGlobal) {
+                            globalImproves.incrementAndGet()
                             onProgress(
                                 "適応portfolio グローバル最良更新 W$i epoch${epoch + 1}",
                                 result.report, iterations, nowMs() - started,
@@ -991,7 +998,10 @@ object V6NativeOptimizer {
                 } + ")") + survivedNote
         val summary = MirrorLog(
             tag = "AdaptivePortfolio",
-            message = "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
+            // [3.360.0] 合計iter と 最良更新回数 を併記。MultiWorker/AlnsChains/V5 は元から合計iterを出すのに
+            //   PORTFOLIO（予算211秒以上の既定経路＝実機の主経路）だけが出しておらず、規模の比較ができなかった。
+            message = "合計iter=${outcomes.sumOf { it.iterations }} 全体最良更新=${globalImproves.get()}回 / " +
+                "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
                 "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / $exitNote / " +
                 "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
