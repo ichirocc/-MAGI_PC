@@ -97,9 +97,10 @@ data class UiState(
     val c1Plateau: C1PlateauDiagnosis? = null,  // [3.322.0] 窓の要件(c1)がなぜ直せなかったかの構造化診断（直近の最適化の観測。残存なし/未実行なら null）
     // [3.325.0] 直近の最適化で「回数固定(lo==hi)だけが却下の理由だった」**計測済みの候補試行数**。
     //   全手数でも改善予測でもない。**[3.327.0 で範囲を訂正]** 計測しているのは後処理研磨のうち
-    //   `V6HotfixPasses` の18パスだけで、`C1JointLns`(2)/`PersonalBalanceJointLns`(2)/
-    //   `EliteIntegration`(4)/`C1TemporalFlow`(1)/`CombinatorialRepair`(2)/`C1RepairAnalysis`(1) の
-    //   計12箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)は計測外（3.349.0 で内訳を実数に更新）。
+    //   `V6HotfixPasses` の18パス＋最終LNS 2本（`C1JointLns`/`PersonalBalanceJointLns`）＝**20パス**
+    //   （3.350.0 で追加。それまで LNS 2本は却下するだけで数えておらず、real_state で 1,898件が
+    //   UI から抜けていた＝配線後は総数 181→1,617）。`EliteIntegration`(4)/`C1TemporalFlow`(1)/
+    //   `CombinatorialRepair`(2)/`C1RepairAnalysis`(1) の計8箇所と探索本体(SA/ALNS/LAHC)は計測外。
     //   最大4巡を重複排除せず加算する。0 は「緩めても変わらない」の証明にならない。
     val observedPinBlockedAttempts: Int = 0,
     // [3.326.0] 緩和の対象候補（どのピンが何回止めたか・多い順）。空＝観測なし。

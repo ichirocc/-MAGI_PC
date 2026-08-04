@@ -72,14 +72,13 @@ data class V6PostOptimizationResult(
      * **正確な読み方（3.324.0/外部レビューで是正）**:
      *  - 「手の数」ではなく「試行の回数」。巡回研磨は最大4巡するので、同じ手が複数の巡で
      *    数えられうる（重複排除していない）。
-     *  - **全パス横断ではない**。[3.349.0/敵対検証で訂正] 3.326.0 で計測を 9→**18パス**へ広げたのに
-     *    この行だけ「9パス」のまま残り、しかも「入っていない」と名指ししていた CyclicSwap・
-     *    C1 index 駆動・広域ビーム・ブロック交換・厳密日割当・交互最適化・曜日長方形・C3ブロック交換は
-     *    **全部入っている**（`PinBlockAttribution()` を持つ関数を grep で数えて 18 と確認）。
-     *    いま計測外なのは `V6HotfixPasses` の外にある `C1JointLnsPolish`(2)・
-     *    `PersonalBalanceJointLnsPolish`(2)・`EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・
-     *    `CombinatorialRepair`(2)・`C1RepairAnalysis`(1) の計12箇所の `exactPinRegression` 却下と、
-     *    ピン保護を持たない探索本体(SA/ALNS/LAHC)。
+     *  - **全パス横断ではない**。[3.349.0 で 9→18パスへ訂正 → 3.350.0 で最終LNS 2本を追加＝**20パス**]
+     *    `V6HotfixPasses` の18パスに加え、`C1JointLnsPolish` と `PersonalBalanceJointLnsPolish` を計測する。
+     *    後者2本は却下するだけで一切数えておらず、実データ real_state で **1,898件**（V6HotfixPasses 側の
+     *    計測値の30倍以上）が UI から丸ごと抜けていた。配線後の実測は総数 181→**1,617**で、
+     *    上位対象も入れ替わる（モニカ/休 が新たに可視化）。
+     *    残る計測外は `EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・`CombinatorialRepair`(2)・
+     *    `C1RepairAnalysis`(1) の計8箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)。
      *  - よって「N 件の手が緩和で通る」ではなく「**少なくとも N 回、回数固定だけが却下の理由だった**」
      *    が言えることの上限。0 でも「緩めても何も変わらない」の証明にはならない（未計測分がある）。
      */
@@ -627,6 +626,9 @@ object V6HotfixPasses {
         )
         passMs.merge("C1共同LNS", System.currentTimeMillis() - __t22) { a, b -> a + b }
         work = rC1Lns.newSchedule.copy2D()
+        // [3.350.0/敵対検証] 最終LNS 2パスのピン却下が pinBlocksAll へ合流していなかった
+        //   （旧: この2パスは PinBlockAttribution を作らず pinBlocks が常に null だった）。
+        rC1Lns.pinBlocks?.let { pinBlocksAll.merge(it) }
         logs.addAll(rC1Lns.logs)
 
         onPhase("後処理 個人回数/適切回数 共同LNS")
@@ -638,6 +640,7 @@ object V6HotfixPasses {
         )
         passMs.merge("個人回数共同LNS", System.currentTimeMillis() - __t23) { a, b -> a + b }
         work = rPersonalLns.newSchedule.copy2D()
+        rPersonalLns.pinBlocks?.let { pinBlocksAll.merge(it) }
         logs.addAll(rPersonalLns.logs)
 
         val tHf = System.currentTimeMillis()
@@ -4026,7 +4029,7 @@ object V6HotfixPasses {
         var counts = cnt()
         for (j in 0 until p.T) {
             if (shouldStop()) break
-            val free = (0 until p.S).filter { i -> p.wish[i][j] < 0 }
+            val free = (0 until p.S).filter { i -> !p.wishLocked(i, j) }
             if (free.size < 2) continue
             val slots = free.map { work[it][j] }                       // 当日の同一シフト多重集合（人数固定）
             val n = free.size
@@ -4116,7 +4119,7 @@ object V6HotfixPasses {
             var changedInSweep = false
             for (j in 0 until p.T) {
                 if (shouldStop()) break
-                val free = (0 until p.S).filter { i -> p.wish[i][j] < 0 }
+                val free = (0 until p.S).filter { i -> !p.wishLocked(i, j) }
                 if (free.size < 2) continue
                 val slots = free.map { work[it][j] }
                 val n = free.size
@@ -4276,7 +4279,7 @@ object V6HotfixPasses {
                 for (want in lows) for (give in highs) {
                     if (outOfTime()) break@scan
                     for (j in 0 until p.T) {
-                        if (work[i][j] != give || p.wish[i][j] >= 0) continue
+                        if (work[i][j] != give || p.wishLocked(i, j)) continue
                         val cand = work.copy2D()
                         cand[i][j] = want
                         val rep = UnifiedViolationChecker.check(state, cand)
@@ -4303,7 +4306,7 @@ object V6HotfixPasses {
                     val cand = work.copy2D()
                     val i = rng.nextInt(p.S)
                     val j = rng.nextInt(p.T)
-                    if (p.wish[i][j] < 0) {
+                    if (!p.wishLocked(i, j)) {
                         val allowed = p.allowedShiftsForStaff(i)
                         if (allowed.isNotEmpty()) {
                             val old = cand[i][j]
@@ -4356,8 +4359,8 @@ object V6HotfixPasses {
         val fromDays = ArrayList<Int>()
         val toDays = ArrayList<Int>()
         for (j in 0 until p.T) {
-            if (schedule[from][j] == shift && p.wish[from][j] < 0) fromDays.add(j)
-            if (schedule[to][j] != shift && p.wish[to][j] < 0 && p.canDo(to, shift) && p.canDo(from, schedule[to][j])) toDays.add(j)
+            if (schedule[from][j] == shift && !p.wishLocked(from, j)) fromDays.add(j)
+            if (schedule[to][j] != shift && !p.wishLocked(to, j) && p.canDo(to, shift) && p.canDo(from, schedule[to][j])) toDays.add(j)
         }
         for (jf in fromDays) for (jt in toDays) {
             val cand = schedule.copy2D()
@@ -4377,7 +4380,7 @@ object V6HotfixPasses {
         var rollback = 0
         loop@ for (i in 0 until p.S) for (i2 in i + 1 until p.S) for (j in 0 until p.T) {
             if (applied >= maxSwaps || shouldStop()) break@loop
-            if (p.wish[i][j] >= 0 || p.wish[i2][j] >= 0) continue
+            if (p.wishLocked(i, j) || p.wishLocked(i2, j)) continue
             val a = work[i][j]
             val b = work[i2][j]
             if (a == b || !p.canDo(i, b) || !p.canDo(i2, a)) continue
@@ -4408,7 +4411,7 @@ object V6HotfixPasses {
                 val cand = best.copy2D()
                 val i = rng.nextInt(p.S)
                 val j = rng.nextInt(p.T)
-                if (p.wish[i][j] < 0) {
+                if (!p.wishLocked(i, j)) {
                     val allowed = p.allowedShiftsForStaff(i)
                     if (allowed.isNotEmpty()) {
                         cand[i][j] = allowed[rng.nextInt(allowed.size)]

@@ -109,7 +109,7 @@ object FixSuggester {
                 if (!inFocus(i)) continue
                 val allowed = p.allowedShiftsForStaff(i)
                 for (j in 0 until p.T) {
-                    if (p.wish[i][j] >= 0) continue
+                    if (p.wishLocked(i, j)) continue
                     val a = s[i][j]
                     for (k in allowed) {
                         if (k == a || timeUp()) continue
@@ -124,7 +124,7 @@ object FixSuggester {
                 if (!pairFocus(i, i2)) continue
                 for (j in 0 until p.T) {
                     if (timeUp()) break
-                    if (p.wish[i][j] >= 0 || p.wish[i2][j] >= 0) continue
+                    if (p.wishLocked(i, j) || p.wishLocked(i2, j)) continue
                     val a = s[i][j]; val b = s[i2][j]
                     if (a == b || !p.canDo(i, b) || !p.canDo(i2, a)) continue
                     tryOps(FixKind.SWAP, listOf(FixCell(i, j, b), FixCell(i2, j, a)),
@@ -140,7 +140,7 @@ object FixSuggester {
                 val allowed = p.allowedShiftsForStaff(i)
                 // 目標シフト = そのstaffの下限割れシフト ∪ 休(0)。なければ単一マス候補を流用するため全許可。
                 val targets: List<Int> = (shortShift[i]?.toList() ?: emptyList()).let { if (it.isEmpty()) allowed.toList() else it + 0 }.distinct()
-                val cells = (0 until p.T).filter { p.wish[i][it] < 0 }
+                val cells = (0 until p.T).filter { !p.wishLocked(i, it) }
                 for (a in cells.indices) {
                     if (timeUp()) break
                     for (b in a + 1 until cells.size) {
@@ -176,7 +176,7 @@ object FixSuggester {
                         var bestRep: ViolationReport? = curRep
                         var improved = false
                         for (j in 0 until p.T) {
-                            if (p.wish[i][j] >= 0) continue
+                            if (p.wishLocked(i, j)) continue
                             val a = s[i][j]
                             if (a == x) continue
                             s[i][j] = x
@@ -211,7 +211,7 @@ object FixSuggester {
             var windows = 0
             for (j in wDays) {
                 if (timeUp() || windows >= 5) break
-                val movable = (0 until p.S).filter { p.wish[it][j] < 0 }
+                val movable = (0 until p.S).filter { !p.wishLocked(it, j) }
                 if (movable.size < 2) continue
                 // 違反関与(countHot)を優先、focus があれば先頭に。最大4名。
                 val ranked = movable.sortedByDescending { it in countHot }
@@ -265,11 +265,11 @@ object FixSuggester {
                 if (timeUp()) break
                 for (a in 0 until p.S) {
                     if (timeUp()) break
-                    if (p.wish[a][j] >= 0) continue
+                    if (p.wishLocked(a, j)) continue
                     for (b in 0 until p.S) {
-                        if (b == a || p.wish[b][j] >= 0) continue
+                        if (b == a || p.wishLocked(b, j)) continue
                         for (c in 0 until p.S) {
-                            if (c == a || c == b || p.wish[c][j] >= 0 || timeUp()) continue
+                            if (c == a || c == b || p.wishLocked(c, j) || timeUp()) continue
                             if (focus != null && a != focus && b != focus && c != focus) continue
                             // 重複列挙を避けるため a を最小に固定
                             if (a > b || a > c) continue
@@ -289,19 +289,19 @@ object FixSuggester {
             val anchors = ArrayList<Int>()
             anchors.addAll(hotCells)
             val anchorStaff = if (focus != null) listOf(focus) else countHot.toList()
-            for (i in anchorStaff) for (j in 0 until p.T) if (p.wish[i][j] < 0) anchors.add(i * 1000 + j)
+            for (i in anchorStaff) for (j in 0 until p.T) if (!p.wishLocked(i, j)) anchors.add(i * 1000 + j)
             val seenAnchor = HashSet<Int>()
             for (packed in anchors) {
                 if (!seenAnchor.add(packed) || timeUp()) continue
                 val i1 = packed / 1000; val j1 = packed % 1000
-                if (i1 !in 0 until p.S || j1 !in 0 until p.T || p.wish[i1][j1] >= 0) continue
+                if (i1 !in 0 until p.S || j1 !in 0 until p.T || p.wishLocked(i1, j1)) continue
                 val a = s[i1][j1]
                 for (i2 in 0 until p.S) {
                     if (timeUp()) break
                     if (focus != null && i1 != focus && i2 != focus) continue
                     for (j2 in 0 until p.T) {
                         if (j2 == j1 && i2 == i1) continue
-                        if (p.wish[i2][j2] >= 0 || timeUp()) continue
+                        if (p.wishLocked(i2, j2) || timeUp()) continue
                         val b = s[i2][j2]
                         if (a == b || !p.canDo(i1, b) || !p.canDo(i2, a)) continue
                         val label = if (i1 == i2)

@@ -5260,6 +5260,62 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 予算按分の敵対検証＝壁は再現せず、代わりに wishLocked の取り残し19箇所（3.351.0）
+
+外部の敵対検証が挙げた「クラスタの予算超過が共同LNSの温存分を食い潰す（🔴高）」ほか3件を、
+**推論でなく実測**（3データセット × 予算 28s/20s/14s/6s ＝12回）で確かめた。**主張は再現しない。**
+
+| 予算 | reserve | クラスタ枠 | クラスタ実消費 | **超過** | LNS到達時の残り |
+|---|---|---|---|---|---|
+| 28s | 13.6s | 13.6s | 6.9〜13.6s | **−6.8s〜+8ms** | 13.6〜20.5s |
+| 20s | 9.9s | 9.9s | 5.5〜10.0s | **−4.4s〜+14ms** | 9.9〜14.4s |
+| 14s | 6.9s | 6.9s | 6.9s | **+1〜5ms** | 6.9s |
+| 6s | 2.9s | 2.9s | 2.9s | **+3〜5ms** | 2.9s |
+
+- **超過は最大14ms**（reserve 2.9〜13.6s に対し 0.1%）。`clusterStop` は18パスすべてに配られ、各パスは
+  内側ループでも締切を見る（2.65.0/3.161.0）ので、超過はその粒度で頭打ちになる。
+  **「LNS が cap=0 で即死」は12回中一度も起きない**（`remainAtLns` は常に reserve 以上）。
+- **二重管理ではない**: reserve はクラスタの締切を削るために使い、LNS は `deadlineMs - tC1Lns` を読む。
+  この2つは同じ量の受け渡しで、実測でも `remainAtLns ≈ reserve`（クラスタが早く終われば reserve より多い）。
+- **HF70（「予算無制限」）は実測 0〜5ms**＝コメントの「安価」どおり。全体の終端超過も 6s 予算で 3〜10ms。
+- **HF80（「暴走で hf67Cap=0」）は 70〜702ms**、`shouldStop` で全体締切に縛られる。hf67Cap が既定 3000 を
+  割ったのは 6s 予算のときだけ（2958〜2964）＝**HF67 を飢えさせた事例はゼロ**。
+- **小予算で共同LNS が既定（8s/6s）に届かないのは設計どおり**（残予算の比例配分）。14s 予算なら
+  c1LnsCap 3.9s・personal 2.9s。「3s しか残っていないのに 14s 使う」ことはできない。
+
+### 独立に見つけた実在の取り残し＝`wishLocked` 統一の19箇所
+
+上記の検証中に、3.270.0（15箇所）・3.311.0（1箇所）で統一したはずの「実現不能な希望をロック扱いしない」規約が、
+**7つの関数で生の `p.wish[i][j] < 0` のまま残っている**のを見つけた（`applyDayAssignmentPolish`／
+`applyAlternatingSoftPolish`／`applyHF66IntraStaffRedistribution`×2／`trySwapShiftBetweenStaff`（HF67の要）／
+`localPairwiseStaffSwap`／`localBestImprovement`（HF80の要））。3.311.0 は HF80 **本体**の摂動だけを直し、
+そこから呼ばれるヘルパーを見ていなかった。さらに `V6SwapSuggester`（利用者向けの「直し方を探す」）にも
+**11箇所**が同じ形で残っていた＝担当できないシフトへの希望が付いたセルは、修復提案の対象から丸ごと外れる。
+19箇所すべてを `p.wishLocked` へ統一。
+- **実データでは潜在**（golden/real/user とも実現不能な希望 **0件**／希望セルは 84/81/81）。よって
+  `wishLocked ≡ wish>=0` で**結果はバイト一致**（golden 2653/420・user 33318/321、real は既知帯 48401/304）。
+  3.319.0 の canDo ガード（同じく実データ0件）と同じ性質＝将来のデータで効く契約の修正。
+- 検証: ホストJVM **全445テスト green**。
+
+## 最終LNS 2本のピン却下を計測へ配線（3.350.0, 外部レビュー #1 の再指摘を実測して採用）
+外部レビュー（対象は1世代前の main `a879dea`）が「最終LNS の `pinBlocks` が `pinBlocksAll` へ
+マージされない」を再指摘。**指摘の前半は誤り**（両 LNS は `PinBlockAttribution` を構築しないので
+`pinBlocks` は常に null＝merge を足しても何も増えない。3.349.0 で確認済み）だが、**結論は正しかった**。
+- **実測で規模を確定**: 両 LNS の `exactPinRegression` 却下のうち「目的関数は採用を認めたのに
+  ピンだけが止めた」件数を数えると **golden 9+3・user 0+0・real 1,898+0**。real は
+  `V6HotfixPasses` 側の計測値（181）の**10倍以上が UI から抜けていた**＝inert ではない。
+- **実装**: 両 LNS に `PinBlockAttribution` を持たせ、`isFinalCandidate` と最終 `valid` ゲートの
+  `exactPinRegression` を `blocksImproving` へ置換（**同じ boolean を返しつつ記録する**ので挙動は不変）。
+  `CyclicSwapResult` へ載せ、`runPostOptimization` の欠けていた2箇所で merge。計測範囲は 18→**20パス**。
+- **効果（実データ・UI へ届く数）**: 総数 golden 38→**64** / real 181→**1,617**（user は 0→0＝
+  このデータでは両 LNS がピン却下を出さない）。上位対象も入れ替わり、**古泉 健一/休(24)・
+  モニカ/休(503) が新たに可視化**された（緩和候補の提示がその分だけ正確になる）。
+- **挙動不変の確認**: golden(hard0/total420/c1 96)・user(hard4/321/52) はバイト一致。real は
+  2回反復して両ビルドとも hard6/total304/c1 61 で一致（3.279.1 の既知のばらつきの内側）。
+- 残る計測外は `EliteIntegrationPolish`(4)・`C1TemporalFlowPolish`(1)・`CombinatorialRepair`(2)・
+  `C1RepairAnalysis`(1) の8箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)。
+- 検証: ホストJVM **全445テスト green**。
+
 ## エリート統合の敵対検証＝実バグ0・観測性2件（3.349.2）
 `EliteIntegrationPolish`(379行) と `AdaptiveEliteArchive`(188行) をゼロベースで読み直した。
 **実バグは0**（3.271.0/3.278.0/3.314.0 で3回レビュー済みの領域だけあって、keep-best・pin ガード・
