@@ -443,6 +443,7 @@ object V6HotfixPasses {
             )
             passMs.merge("C1時系列フロー", System.currentTimeMillis() - __t7) { a, b -> a + b }
             work = rC1flow.newSchedule.copy2D(); totalC1 += rC1flow.applied; roundApplied += rC1flow.applied
+            rC1flow.pinBlocks?.let { pinBlocksAll.merge(it) }
             if (round == 0) logs.addAll(rC1flow.logs)
 
             // [C1BeamPolish, 外部パッチ受領→ランキング修正+keep-best安全網追加のうえ適用] BeamC1PolishV2

@@ -5263,6 +5263,32 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 残りのピン計測外3箇所を測って決着（3.359.0, ユーザー指示「残り作業を最適化する」）
+
+3.327.0 以降「計測外」として残していた `PinBlockAttribution`（UI の「回数の固定について」一覧）の
+未配線サイトを**測ってから**片付けた。3.350.0 で最終LNS 2本を配線したときと同じ手順。
+
+| 残っていたサイト | 実測 | 判断 |
+|---|---|---|
+| `EliteIntegrationPolish` ×4 | PORTFOLIO 45s 実走で **0〜1件** | 配線しない（実質ゼロ） |
+| `CombinatorialRepair` ×1 | 生のピン却下は 880〜3244件 | **配線しない**（下記） |
+| `C1TemporalFlowPolish` ×1 | golden 0 / real 6 / user 0 | **配線した** |
+
+- **EliteIntegration**: 最初の計測は `runPostOptimization` だけを回して 0 だったが、このパスは
+  `V6FinalPort` から**後処理の手前**で呼ばれるので**probe が経路を通っていなかった**＝0 は計測の不備。
+  PORTFOLIO を実走（elite=9・relink48・fusion8 が実際に動く条件）し直して 0〜1件と確認した。
+- **CombinatorialRepair**: 3.331.0 で**安いピン検査を checker より前**に置いた（実測 巡回研磨 13.6→12.7s）。
+  よってピン却下の候補は **checker を呼んでいない＝「目的関数なら採用したか」が原理的に分からない**。
+  3.347.0 で確立した意味論（ピン破り＝isBetter が採用を認めた手）で数えるには、まさに省いている
+  checker を払い直すことになる。**診断のために最適化を戻さない**＝配線しない、と根拠つきで確定。
+- **C1TemporalFlow**: `exactPinRegression` → `pinBlocks.blocksImproving` へ置換し `runPostOptimization` で
+  merge（同じ boolean を返すので**採否は完全に不変**）。実データの最終盤面は golden 2653/420・
+  user 33318/321・real 48401/304 と既知ベースラインに一致。
+- **計測総数のばらつきについて**: 同じ golden でも 50/64 と振れる。壁時計予算（クラスタ締切・JointLNS の
+  patience）下では各パスが評価しきる候補数が負荷で変わるため、この計数は本質的に負荷依存。
+  flow の寄与自体は 0/6/0 で再現する（分離計測で確認）。UiState の KDoc にも「計測できた試行回数の下限」
+  と書いてあるとおりで、絶対値でなく**対象の顔ぶれ**を見るための数字。
+
 ## 「どの日が塞いでいるか」をログへ＋パリティ不一致の次の一手（3.358.0, ユーザー指示「ログ強化する」）
 
 実機ログで**直しに行けなかった2点**を埋めた。表示・ログのみ・スコア不変。

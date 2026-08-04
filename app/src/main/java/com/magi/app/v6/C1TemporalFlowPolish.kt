@@ -44,6 +44,10 @@ internal object C1TemporalFlowPolish {
         var applied = 0
         var rowNoGain = 0                       // 行の c1 が減らず候補にならなかった数
         val rejects = RejectCulpritStats()      // 目的関数/ピンで落ちた候補の内訳
+        // [3.359.0] 「目的関数は採用を認めたのにピンだけが止めた」候補の**対象(職員,シフト)**を集める。
+        //   実データでの規模は小さい（real で6件・他は0）が、UI の「回数の固定について」一覧の
+        //   計測範囲を、このパスについても実装どおりにするための配線。
+        val pinBlocks = PinBlockAttribution()
         var dpCandidates = 0
         var flowFailures = 0
         val fixedLabels = ArrayList<String>()
@@ -167,7 +171,7 @@ internal object C1TemporalFlowPolish {
             val ok = better(rep, bestRep)
             // [厳密ピン保護] 他職員のジョイント再割当(FlexibleDayFlow)がstaffRange厳密ピンを崩す
             // 副作用は、total/weightedScoreが改善してもここで拒否する（keep-best不変・追加ガードのみ）。
-            val pinBad = ok && exactPinRegression(p, work, trialWork)
+            val pinBad = ok && pinBlocks.blocksImproving(p, work, trialWork)
             if (!ok || pinBad) { rejects.record(rep, bestRep, pinBad); return null }
             return Plan(trialWork, rep, i, x, candidate.relocations, changedDays.size)
         }
@@ -228,6 +232,9 @@ internal object C1TemporalFlowPolish {
                     (if (applied == 0 && (before.breakdown["c1"] ?: 0) > 0) " [頭打ち=ジョイント再割当解なし]" else ""),
             ),
         )
-        return V6HotfixPasses.CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
+        return V6HotfixPasses.CyclicSwapResult(
+            work, before.total, bestRep.total, applied, logs,
+            observedPinBlockedAttempts = pinBlocks.attempts, pinBlocks = pinBlocks,
+        )
     }
 }
