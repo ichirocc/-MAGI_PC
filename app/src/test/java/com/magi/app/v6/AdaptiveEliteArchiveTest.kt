@@ -19,6 +19,35 @@ class AdaptiveEliteArchiveTest {
 
     private fun board(vararg values: Int): Array<IntArray> = arrayOf(values)
 
+    /**
+     * [3.352.0] アーカイブの並べ替えは `MirrorCore.reportComparator`（keep-best と同じ辞書式）へ
+     * 委譲している。3キーを写した実装へ戻すと、順序を変えたときにここだけ取り残される
+     * （3.287.0 の統一後に4箇所で実際に起きた）。委譲が生きていることを直接固定する。
+     */
+    @Test
+    fun archiveOrderingIsTheKeepBestOrderAndFallsThroughToTotal() {
+        // hard が第1キー: hard が小さければ weighted/total がどれだけ悪くても勝つ。
+        assertTrue(AdaptiveEliteArchive.better(report(0, 999, 9999.0), report(1, 1, 1.0)))
+        // weightedScore が第2キー: hard 同値なら total が悪くても weighted が小さいほうが勝つ。
+        assertTrue(AdaptiveEliteArchive.better(report(1, 999, 10.0), report(1, 1, 11.0)))
+        // total は最後のタイブレーク。
+        assertTrue(AdaptiveEliteArchive.better(report(1, 5, 10.0), report(1, 6, 10.0)))
+        assertEquals(0, AdaptiveEliteArchive.compareReports(report(1, 5, 10.0), report(1, 5, 10.0)))
+
+        // 全ペアで keep-best 本体と一致すること（片方だけ順序を変えたら必ず落ちる）。
+        val samples = listOf(
+            report(0, 5, 10.0), report(0, 5, 11.0), report(0, 6, 10.0),
+            report(1, 1, 1.0), report(1, 5, 10.0), report(2, 0, 0.0),
+        )
+        for (a in samples) for (b in samples) {
+            assertEquals(
+                "compareReports が betterReport と食い違う: $a vs $b",
+                betterReport(a, b),
+                AdaptiveEliteArchive.compareReports(a, b) < 0,
+            )
+        }
+    }
+
     @Test
     fun exactDuplicateIsReplacedOnlyByBetterOfficialObjective() {
         val archive = AdaptiveEliteArchive()

@@ -3964,15 +3964,13 @@ object V6HotfixPasses {
             if (!anyExpanded) break
             beam = nextCandidates
                 .distinctBy { cand -> cand.work.joinToString("|") { row -> row.joinToString(",") } }
-                .sortedWith(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total }))
+                .sortedWith(compareBy(reportComparator) { it.rep })
                 .take(beamWidth)
             // sortedWith 済みなので先頭がこのステップの最小。最良を更新できなければ停滞を数える。
             val top = beam.firstOrNull()
             if (top != null) {
                 val be = bestEver
-                val improved = be == null || top.rep.hard < be.rep.hard ||
-                    (top.rep.hard == be.rep.hard && (top.rep.weightedScore < be.rep.weightedScore ||
-                        (top.rep.weightedScore == be.rep.weightedScore && top.rep.total < be.rep.total)))
+                val improved = be == null || betterReport(top.rep, be.rep)
                 if (improved) { bestEver = top; stagnant = 0 } else stagnant++
             }
             step++
@@ -3983,7 +3981,7 @@ object V6HotfixPasses {
         //   ある。既存の全パスが isBetter で keep-best するのに合わせ、root と厳密に比較し、
         //   勝てない場合は必ず未変更の root へフォールバックする（退化不能）。
         val candidate = bestEver
-            ?: beam.minWithOrNull(compareBy({ it.rep.hard }, { it.rep.weightedScore }, { it.rep.total }))
+            ?: beam.minWithOrNull(compareBy(reportComparator) { it.rep })
             ?: Beam(work0, before, 0)
         // [厳密ピン保護] ビーム探索の手A/玉突きも i の自身のシフト回数を変えうるため、根(work0)と比較し
         //   staffRange厳密ピン(lo==hi)を崩す最終候補は不採用にする（keep-best/重みは不変・追加ガードのみ）。

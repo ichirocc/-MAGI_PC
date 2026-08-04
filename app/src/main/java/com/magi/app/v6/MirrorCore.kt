@@ -51,11 +51,24 @@ data class ViolationReport(
  * チェッカーの重み階層（=業務優先度）と評価器の目的関数の両方に一致する。total は決定性のための
  * 第3タイブレークに降格。C++ 側は元から weighted のため変更不要（パリティ不変）。
  */
-fun betterReport(a: ViolationReport, b: ViolationReport): Boolean = when {
-    a.hard != b.hard -> a.hard < b.hard
-    a.weightedScore != b.weightedScore -> a.weightedScore < b.weightedScore
-    else -> a.total < b.total
+/**
+ * keep-best の辞書式順序そのもの（hard → weightedScore → total）。**この1つが唯一の定義**で、
+ * `betterReport` も並べ替えもここへ委譲する。
+ *
+ * 手で同じ3キーを書き写すと、順序を変えたときに写した側だけ取り残される（3.287.0 で第2キーを
+ * total→weightedScore へ統一したのに `V6LateOperators.gateW`(3.309.0)・C1広域ビーム(3.336.0/3.340.0)・
+ * `AdaptiveEliteArchive`・「他の案」の並べ替えが順に取り残された実績がある）。比較を足すときは
+ * 写さずにこれを使う。
+ */
+val reportComparator: Comparator<ViolationReport> = Comparator { a, b ->
+    when {
+        a.hard != b.hard -> a.hard.compareTo(b.hard)
+        a.weightedScore != b.weightedScore -> a.weightedScore.compareTo(b.weightedScore)
+        else -> a.total.compareTo(b.total)
+    }
 }
+
+fun betterReport(a: ViolationReport, b: ViolationReport): Boolean = reportComparator.compare(a, b) < 0
 
 data class ScheduleRunResult(
     val schedule: Array<IntArray>,

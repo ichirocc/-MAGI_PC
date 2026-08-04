@@ -1194,7 +1194,7 @@ object V6NativeOptimizer {
         // 「他の案」: 採用案以外の仮説結果を品質順に保持（重複schedule除外、最大3件）
         val alts = results.asSequence()
             .filter { it !== best }
-            .sortedWith(compareBy({ it.report.hard }, { it.report.total }))
+            .sortedWith(compareBy(reportComparator) { it.report })
             .map { it.schedule }
             .distinctBy { sch -> sch.joinToString("|") { it.joinToString(",") } }
             .take(3)
@@ -1213,7 +1213,7 @@ object V6NativeOptimizer {
         val extra = MirrorLog(tag = "MultiWorker", message = "仮説 ${w} 本 ($mode・役割分担:探索/精製＋受理SA/GreatDeluge多様化$chainNote$failNote) → 採用 HARD=${best.report.hard} total=${best.report.total} 合計iter=${totalIters} / 入口役割 $entryRoles")
         // [過程検証] 各仮説の個別結果・多様性（相異なる解の数）・保持した他の案数をログ化し、探索過程を後から検証できるようにする。
         //   各仮説の合計が揃っていれば収束、ばらけていれば多様な探索ができている、と判別できる。
-        val perHyp = results.sortedWith(compareBy({ it.report.hard }, { it.report.total }))
+        val perHyp = results.sortedWith(compareBy(reportComparator) { it.report })
             .joinToString("  ") { r -> "[必須${r.report.hard}/合計${r.report.total}${if (r === best) "★採用" else ""}]" }
         val distinctSols = results.map { r -> r.schedule.joinToString("|") { row -> row.joinToString(",") } }.distinct().size
         val pairDistances = ArrayList<Int>()
@@ -1372,7 +1372,7 @@ object V6NativeOptimizer {
         val best = results.reduce { a, b -> if (better(b.report, a.report)) b else a }
         val totalIters = results.sumOf { it.iterations }
         val chain0Iters = results.firstOrNull()?.iterations ?: 0L
-        val perChain = results.sortedWith(compareBy({ it.report.hard }, { it.report.total }))
+        val perChain = results.sortedWith(compareBy(reportComparator) { it.report })
             .joinToString("  ") { r -> "[必須${r.report.hard}/合計${r.report.total}${if (r === best) "★採用" else ""}]" }
         val distinctSols = results.map { r -> r.schedule.joinToString("|") { row -> row.joinToString(",") } }.distinct().size
         val failNote = if (results.size < chains) "・失敗${chains - results.size}本(例外/キャンセル)" else ""
