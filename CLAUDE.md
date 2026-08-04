@@ -5260,6 +5260,28 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## keep-best の順序を写す実装をなくす＝`reportComparator` 単一ソース（3.352.0）
+
+3.349.2 で「`AdaptiveEliteArchive.compareReports` は `betterReport` の手書きの複製＝教訓#28 の型」と
+報告だけして残していた項目。**同じ写しを探したら4箇所あり、うち1箇所は実際に古い順序のまま**だった。
+- **[実在の取り残し・利用者に見える] 「他の案」の並べ替えが 3.287.0 以前の順序**（`V6NativeOptimizer:1197`）。
+  採用案は `better`（hard→weightedScore→total）で選ぶのに、**画面に出す代替案の上位3件だけ hard→total で
+  並べていた**＝重い違反を軽い違反の件数と交換した案が上位に来うる。3.287.0 は比較器を全部揃えたが、
+  この「並べ替え」は比較器の形をしていなかったので棚卸しから漏れていた。
+- **[表示の不整合] 仮説別・チェーン別ログの並び**（同 1216/1375）も hard→total で、`★採用` が先頭に
+  来ないことがあった（採用は weighted 込みで選ぶため）。同じ順序へ。
+- **[自分が作った写し] C1広域ビーム**（3.340.0）は `compareBy(hard, weighted, total)` と、その3キーを
+  手で展開した `improved` 判定を持っていた。並べ替え・最小取り・改善判定の3箇所とも委譲へ。
+- **対応**: `MirrorCore.reportComparator`（`Comparator<ViolationReport>`）を**唯一の定義**にし、
+  `betterReport` もこれへ委譲。以後は「比較を足すときは写さずにこれを使う」。
+  `V6SwapSuggester` の `compareBy(dHard, dWeighted, dTotal)` は report でなく**差分**の並べ替えなので対象外。
+  共同LNS の Node コンパレータは3キーの後ろに c1/変更セル数の tie-break を足した**拡張**で、
+  前半3キーは既に正しい＝構造を崩さないため据え置き。
+- **検証**: ホストJVM **全446テスト green**（445 + 新規1）。新テストは
+  `compareReports` を 3.287.0 以前の順序へ戻すと**これだけが落ちる**ことを確認済み
+  （＝この順序を守るテストが他に無かったことの裏づけでもある＝だからドリフトした。教訓#30）。
+  実データ3件の後処理研磨は golden 2653/420・user 33318/321・real 48401/304 で 3.351.0 と一致。
+
 ## 予算按分の敵対検証＝壁は再現せず、代わりに wishLocked の取り残し19箇所（3.351.0）
 
 外部の敵対検証が挙げた「クラスタの予算超過が共同LNSの温存分を食い潰す（🔴高）」ほか3件を、
