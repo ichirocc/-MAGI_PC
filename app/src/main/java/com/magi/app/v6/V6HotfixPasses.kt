@@ -2120,8 +2120,20 @@ object V6HotfixPasses {
         val blockStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
         // [不採用の主因, 3.302.0] C1Polish と同じく、拒否された候補が重み付きで最も壊した族を併記する。
         val culpritStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
-        fun recordBlock(target: Pair<Int, Int>, reason: String, after: ViolationReport? = null, before: ViolationReport? = null) {
+        // [3.358.0/実機ログ起因] 「希望固定×16」「禁止連続×9」は**どの日か**が出ず、直しに行けなかった
+        //   （ForbiddenDiag は同じ理由で日付を名指ししている＝そちらだけ行動につながる形だった）。
+        //   日で決まる2理由だけ実日付を集める。件数は延べ・日は重複なし。
+        val blockDays = HashMap<Pair<Int, Int>, MutableMap<String, MutableSet<Int>>>()
+        // [3.358.0] 日番号を「M/D」へ。startDate が読めなければ「N日目」で妥協する（ログ専用）。
+        val start0 = runCatching { java.time.LocalDate.parse(state.startDate) }.getOrNull()
+        fun dayLabel(j: Int): String =
+            start0?.plusDays(j.toLong())?.let { "${it.monthValue}/${it.dayOfMonth}" } ?: "${j + 1}日目"
+        fun recordBlock(
+            target: Pair<Int, Int>, reason: String,
+            after: ViolationReport? = null, before: ViolationReport? = null, day: Int? = null,
+        ) {
             blockStats.getOrPut(target) { HashMap() }.merge(reason, 1, Int::plus)
+            if (day != null) blockDays.getOrPut(target) { HashMap() }.getOrPut(reason) { LinkedHashSet() }.add(day)
             if (after != null && before != null) {
                 worstWorsenedFamily(after, before)?.let { culpritStats.getOrPut(target) { HashMap() }.merge(it, 1, Int::plus) }
             }
@@ -2133,8 +2145,8 @@ object V6HotfixPasses {
         // [玉突き連鎖つき1セル付け替え] day j の staff i を fromK から toK へ動かす。fromK 側の被覆が
         //   悪化するなら findCovUChain で埋め直す。採用ならtrue（bestRep/appliedは呼び出し側で更新済み）。
         fun tryRelocate(target: Pair<Int, Int>, i: Int, j: Int, fromK: Int, toK: Int): Boolean {
-            if (!movable(i, j)) { recordBlock(target, "希望固定"); return false }
-            if (p.makesForbiddenRun(work, i, j, toK)) { recordBlock(target, "禁止連続"); return false }
+            if (!movable(i, j)) { recordBlock(target, "希望固定", day = j); return false }
+            if (p.makesForbiddenRun(work, i, j, toK)) { recordBlock(target, "禁止連続", day = j); return false }
             var cnt = 0
             for (s in 0 until p.S) if (work[s][j] == fromK) cnt++
             val needsChain = p.covUCell(fromK, j, cnt - 1) > p.covUCell(fromK, j, cnt)
@@ -2645,7 +2657,12 @@ object V6HotfixPasses {
                     culpritStats[i to k]?.entries?.sortedByDescending { it.value }?.take(2)
                         ?.joinToString(" ") { "${it.key}:${it.value}" }
                         ?.let { if (it.isEmpty()) "" else " 主因 $it" } ?: ""
-                "${label(i, k)}(${top.key}×${top.value}$culprits)"
+                // [3.358.0] 日で決まる理由（希望固定・禁止連続）は実日付を出す＝そのまま直しに行ける。
+                val days = blockDays[i to k]?.get(top.key)?.sorted().orEmpty()
+                val dayTxt = if (days.isEmpty()) "" else
+                    ": " + days.take(6).joinToString("・") { dayLabel(it) } +
+                        (if (days.size > 6) "ほか${days.size - 6}日" else "")
+                "${label(i, k)}(${top.key}×${top.value}$dayTxt$culprits)"
             }
         val rangeCombSummary = rangeCombStats.summary()
         val logs = listOf(MirrorLog(tag = "RangePolish",
