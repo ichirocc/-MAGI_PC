@@ -588,7 +588,7 @@ object V6FinalPort {
         val nativeLog = run {
             // [照合トグル] OFF=純ネイティブ（起動時パリティも含め Kotlin 照合を一切行わない）。native未ロード時は従来どおり。
             val parityOff = NativeBridge.available && NativeGate.userEnabled && !NativeGate.parityCheckEnabled
-            if (!parityOff && NativeBridge.available) TuningTelemetry.parityChecks++
+            if (!parityOff && NativeBridge.available) TuningTelemetry.parityChecks.incrementAndGet()
             val parity = if (parityOff) null else runCatching { NativeEval.parityCheck(baseProblem, finalSched) }.getOrNull()
             // フル評価パリティ不一致もゲートを閉じる（以後の実行で SA チャンクを使わない＝退化）。
             if (parity?.match == false) NativeGate.disable("フル評価パリティ不一致")

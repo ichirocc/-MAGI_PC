@@ -144,40 +144,59 @@ object PolishGate {
  * 読み取り専用の計数のみ＝探索・採否・スコアには一切影響しない。`optimize()` 入口で reset する。
  */
 object TuningTelemetry {
+    // [3.360.1/敵対検証] 旧実装は `@Volatile var Int` に `++`＝read-modify-write で、**8並列ワーカーから
+    //   加算されるため取りこぼしていた**（parityChecks は SA/LAHC/ALNS/研磨の4経路×全ワーカーから毎チャンク）。
+    //   ログは「1240回」と断定するので、下限を実数として出していたことになる。AtomicInteger へ。
+    //   加算は最も多い wideC3nCalls でも実行あたり1万回弱＝checker 1回より桁違いに安く、速度への影響はない。
+    //   ※「この実行では観測なし(==0)」の判定は旧実装でも健全だった（真の回数が1以上なら必ず1は書かれる）。
+    //     壊れていたのは大きさだけ。3.356.0 の「0ならトグルを消してよい」という判断根拠は無傷。
     /** 禁止連続の事前フィルタが checker を呼ばずに落とした候補数。 */
-    @Volatile var c3nFilterSkipped: Int = 0
+    val c3nFilterSkipped = java.util.concurrent.atomic.AtomicInteger(0)
     /** 禁止連続の崩し範囲が既定(前後1日)と違う候補日を返した回数（広がる／狭まるの両方）。 */
-    @Volatile var wideC3nDiffered: Int = 0
+    val wideC3nDiffered = java.util.concurrent.atomic.AtomicInteger(0)
     /** 同・呼ばれた回数（広がらなかった分も含む）。 */
-    @Volatile var wideC3nCalls: Int = 0
+    val wideC3nCalls = java.util.concurrent.atomic.AtomicInteger(0)
     /** 立て直し方(適応制御)が役割を決めた回数。 */
-    @Volatile var escapeControlUsed: Int = 0
+    val escapeControlUsed = java.util.concurrent.atomic.AtomicInteger(0)
     /** 仕上げ最適化により PhaseB(LAHC) へ切り替わった回数。 */
-    @Volatile var lahcEntered: Int = 0
+    val lahcEntered = java.util.concurrent.atomic.AtomicInteger(0)
     /** Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。 */
-    @Volatile var parityChecks: Int = 0
+    val parityChecks = java.util.concurrent.atomic.AtomicInteger(0)
 
+    /**
+     * 実行ごとに 0 へ戻す（`optimize()` 入口）。
+     *
+     * **既知の限界（意図的に残す）**: これは実行をまたぐ static なので、実行が重なると
+     * （WorkManager の REPLACE で旧 Worker が協調キャンセルを待つ間など）後発の reset が
+     * 先行実行の計数を消し、両者が同じ箱へ加算する。3.335.0 は同型の問題を `RunSlot`
+     * （コルーチンのコンテキストで実行ごとの箱を運ぶ）で解いたが、加算元の
+     * [breakableDaysFor] などは非 suspend の純関数でコンテキストを読めないため同じ手が使えない。
+     * 影響は**片方のログの診断値がずれる**だけで、勤務表・採否・スコアには一切触れない。
+     */
     fun reset() {
-        c3nFilterSkipped = 0; wideC3nDiffered = 0; wideC3nCalls = 0
-        escapeControlUsed = 0; lahcEntered = 0; parityChecks = 0
+        c3nFilterSkipped.set(0); wideC3nDiffered.set(0); wideC3nCalls.set(0)
+        escapeControlUsed.set(0); lahcEntered.set(0); parityChecks.set(0)
     }
 
     /** 各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。 */
     fun summary(nativeOn: Boolean, parityOn: Boolean, softPolishOn: Boolean): String {
         fun eff(on: Boolean, n: Int, unit: String): String =
             if (!on) "OFF" else if (n > 0) "ON($n$unit)" else "ON(この実行では観測なし)"
+        // 同一の値を2回読むと表示内で食い違う（別スレッドが加算しうる）ため、判定も表示も1回の読みで済ませる。
+        val calls = wideC3nCalls.get()
+        val differed = wideC3nDiffered.get()
         val wide = when {
             !PolishGate.wideC3nBreakDays -> "OFF"
-            wideC3nCalls == 0 -> "ON(この実行では出番なし)"
-            wideC3nDiffered == 0 -> "ON(${wideC3nCalls}回呼ばれたが既定(前後1日)と同じ範囲＝OFFと差なし)"
-            else -> "ON(${wideC3nCalls}回中${wideC3nDiffered}回は既定(前後1日)と違う範囲を探索)"
+            calls == 0 -> "ON(この実行では出番なし)"
+            differed == 0 -> "ON(${calls}回呼ばれたが既定(前後1日)と同じ範囲＝OFFと差なし)"
+            else -> "ON(${calls}回中${differed}回は既定(前後1日)と違う範囲を探索)"
         }
         return "設定の効き: ネイティブ加速=" + (if (nativeOn) "ON" else "OFF") +
-            " / Kotlin照合=" + eff(parityOn, parityChecks, "回") +
-            " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped, "件の無駄な検査を省略・勤務表は不変") +
+            " / Kotlin照合=" + eff(parityOn, parityChecks.get(), "回") +
+            " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped.get(), "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
-            " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed, "回の役割決定") +
-            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered, "回LAHCへ切替")
+            " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed.get(), "回の役割決定") +
+            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered.get(), "回LAHCへ切替")
     }
 }
 
@@ -3658,7 +3677,7 @@ object V6HotfixPasses {
                     for (j in swapDays) row[j] = work[giver][j]
                     firesAfter += C1DeltaPrefilter.staffC3nFires(p, row)
                 }
-                if (firesAfter > firesBefore) { TuningTelemetry.c3nFilterSkipped++; return null }
+                if (firesAfter > firesBefore) { TuningTelemetry.c3nFilterSkipped.incrementAndGet(); return null }
             }
 
             val differences = swapDays.size

@@ -266,7 +266,7 @@ internal fun acceptWorseScore(a: Long, b: Long, temp: Double, rng: Random): Bool
 internal fun breakableDaysFor(p: Problem, sched: Array<IntArray>, i: Int, j: Int, fillShift: Int): IntArray {
     // [既定 OFF・3.303.0] 一般化として正しいが実データ3件で利得が一貫しなかった（PolishGate の
     //   docstring に計測値）。既定は従来どおり j±1 のみで、ゲートを ON にしたときだけ広げる。
-    TuningTelemetry.wideC3nCalls++
+    TuningTelemetry.wideC3nCalls.incrementAndGet()
     if (!PolishGate.wideC3nBreakDays) return intArrayOf(j - 1, j + 1)
     if (!C3nBitScan.usable(p) || i !in sched.indices) return intArrayOf(j - 1, j + 1)
     val row = sched[i]
@@ -275,7 +275,7 @@ internal fun breakableDaysFor(p: Problem, sched: Array<IntArray>, i: Int, j: Int
     val days = C3nBitScan.coveringRunDaysAfterSet(p, mask, j, old, fillShift)
     // [3.356.0] 既定(j±1)と違う結果になった回数を数える。**広がる場合だけでなく狭まる場合もある**
     //   （covering run が無ければ空を返す＝既定より狭い）ので、「違うかどうか」で数える。
-    if (days == 0L) { TuningTelemetry.wideC3nDiffered++; return IntArray(0) }
+    if (days == 0L) { TuningTelemetry.wideC3nDiffered.incrementAndGet(); return IntArray(0) }
     // j に近い日から試す（当日から遠い日ほど他の制約への波及が読みにくいため、影響の小さい順）。
     val out = ArrayList<Int>(java.lang.Long.bitCount(days))
     var rest = days and (1L shl j).inv()
@@ -284,7 +284,7 @@ internal fun breakableDaysFor(p: Problem, sched: Array<IntArray>, i: Int, j: Int
         rest = rest and (rest - 1)
     }
     out.sortBy { kotlin.math.abs(it - j) }
-    if (out.size != 2 || !(out.contains(j - 1) && out.contains(j + 1))) TuningTelemetry.wideC3nDiffered++
+    if (out.size != 2 || !(out.contains(j - 1) && out.contains(j + 1))) TuningTelemetry.wideC3nDiffered.incrementAndGet()
     return out.toIntArray()
 }
 

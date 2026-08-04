@@ -2530,7 +2530,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val ctx = getApplication<Application>()
         val ver = runCatching {
             val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-            "${pi.versionName} (${pi.longVersionCode})"
+            // versionName はプラットフォーム型（String!）。マニフェスト由来で実運用では常に入るが、
+            // null をそのまま補間すると「版: null (526)」という無意味な行になるため落とす。
+            "${pi.versionName ?: "?"} (${pi.longVersionCode})"
         }.getOrDefault("不明")
         val cores = Runtime.getRuntime().availableProcessors()
         val nat = if (com.magi.app.v6.NativeBridge.available) {

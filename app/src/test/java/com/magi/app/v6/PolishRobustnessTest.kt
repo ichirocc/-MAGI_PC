@@ -107,6 +107,34 @@ class PolishRobustnessTest {
      * [3.356.0] 設定トグルの「効き」ログ。ON なのに観測ゼロなら、そのトグルはこの実行では何もして
      * いない＝消してよい判断材料になる、という点をそのまま固定する。
      */
+    /**
+     * [3.360.1/敵対検証] 設定の効きカウンタは**並列ワーカーから加算される**（parityChecks は
+     * SA/LAHC/ALNS/研磨の4経路×全ワーカーから毎チャンク）。旧実装の `@Volatile var Int` に `++` は
+     * read-modify-write なので取りこぼし、ログが実数と称して下限を出していた。
+     *
+     * 8スレッド×2万回の加算がちょうど16万になることを固定する。`@Volatile var Int` へ戻すと
+     * この1件だけが落ちる（実際に戻して確認済み）。他のテストは通る＝この不変条件を守るものが
+     * 他に無かったことの裏づけでもある。
+     */
+    @Test
+    fun tuningCountersDoNotLoseIncrementsUnderParallelWorkers() {
+        TuningTelemetry.reset()
+        val threads = 8
+        val perThread = 20_000
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val ts = (0 until threads).map {
+            Thread {
+                gate.await()
+                repeat(perThread) { TuningTelemetry.parityChecks.incrementAndGet() }
+            }.apply { start() }
+        }
+        gate.countDown()
+        ts.forEach { it.join() }
+        assertEquals(threads * perThread, TuningTelemetry.parityChecks.get())
+        TuningTelemetry.reset()
+        assertEquals(0, TuningTelemetry.parityChecks.get())
+    }
+
     @Test
     fun tuningSummaryDistinguishesOffFromOnWithNoObservedEffect() {
         val wide = PolishGate.wideC3nBreakDays
@@ -122,8 +150,8 @@ class PolishRobustnessTest {
             assertTrue(off, off.contains("禁止連続の事前フィルタ=ON(この実行では観測なし)"))
             assertTrue(off, off.contains("立て直し方=ON(この実行では観測なし)"))
 
-            TuningTelemetry.c3nFilterSkipped = 12
-            TuningTelemetry.escapeControlUsed = 3
+            TuningTelemetry.c3nFilterSkipped.set(12)
+            TuningTelemetry.escapeControlUsed.set(3)
             val on = TuningTelemetry.summary(nativeOn = true, parityOn = true, softPolishOn = true)
             assertTrue(on, on.contains("ネイティブ加速=ON"))
             assertTrue(on, on.contains("禁止連続の事前フィルタ=ON(12件"))

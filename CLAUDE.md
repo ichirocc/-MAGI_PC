@@ -5293,6 +5293,25 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - **停滞脱出の可視化**: `Watchdog`（最終改善・停滞量・実効閾値・発火有無・c3n壁の判定）／`EarlyStop` ／
   `戦略変更`（focus 遷移の圧縮列）／`AdaptivePortfolio`（役割・再配属・秒・離脱理由・停滞見送り）。
 
+### 敵対検証で見つけた自分のバグ（3.360.1）
+3.356.0 で入れた `TuningTelemetry` の6カウンタが **`@Volatile var Int` に `++`＝read-modify-write** で、
+**8並列ワーカーから加算されるため取りこぼしていた**（`parityChecks` は SA/LAHC/ALNS/研磨の4経路×全ワーカーから
+毎チャンク）。ログは「1240回」と実数のように出すので、下限を実数と称していたことになる。AtomicInteger へ。
+- **「0」は壊れていなかった**＝真の回数が1以上なら少なくとも1回は `1` が書かれるので、3.356.0 の
+  「観測なし(==0)ならトグルを消してよい」という判断根拠は無傷。壊れていたのは大きさだけ。ここは区別して記録する。
+- `summary()` で同じカウンタを2回読んでいた箇所（`wideC3nCalls`）も、判定と表示で値が食い違いうるため1回の読みへ。
+- **既知の限界（意図的に残す）**: 実行をまたぐ static なので、実行が重なると後発の `reset()` が先行実行の
+  計数を消す（3.335.0 が `RunSlot` で解いたのと同型）。ただし加算元の `breakableDaysFor` 等は非 suspend の
+  純関数でコルーチンのコンテキストを読めないため同じ手が使えない。影響は**片方のログの診断値がずれる**だけ。
+- あわせて `pi.versionName` の null（プラットフォーム型）で `版: null (526)` になりうる点を落とした。
+- **検証**: 8スレッド×2万回の加算がちょうど16万になることを固定。`@Volatile var Int` へ戻すと
+  **この1件だけが落ちる**ことを実行して確認（他452件は通る＝この不変条件を守るテストが他に無かった裏づけ）。
+- **所見なしと確認したもの**: `chainWins[w]++` は `synchronized(lock)` 内で安全／`globalImproves` は
+  フラグをロック内で立てロック外で1回加算＝二重計上なし／`environmentLine` の `NativeBridge.available`
+  （`by lazy` の `System.loadLibrary`）は呼出2箇所とも `withContext(Dispatchers.Default)` ＝メインスレッドを
+  塞がず、評価が早まるだけで結果は同一／`structuralPersonalFloor`・`weeklyFloorOfCount`・`blockDays` の
+  日付列挙は境界・桁溢れとも問題なし。
+
 ### 採らなかったもの＝採択回数(Accepted)
 JNI 越しにカウンタを渡す＝ABI 変更が要り、最内周に計数が入る。かつ受理率から引くレバー
 （温度・受理方式のチューニング）は 2.55.0/2.56.0 で **実測して中立or有害**と結論し「脱出ヒューリスティクスへの

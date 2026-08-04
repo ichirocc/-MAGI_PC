@@ -841,7 +841,7 @@ object V6NativeOptimizer {
                     if (escapeController != null) {
                         // [3.306.0/既定OFF経路] stagnantEpochs をリセットしない＝停滞の深さが役割変更を
                         //   跨いで残り、target → 再結合 → 多様化 → 深い破壊 の4段へ進める。
-                        TuningTelemetry.escapeControlUsed++
+                        TuningTelemetry.escapeControlUsed.incrementAndGet()
                         val next = escapeController.nextAssignment(
                             current = controlledAssignment!!,
                             report = eliteReport,
@@ -1491,7 +1491,7 @@ object V6NativeOptimizer {
                         NativeBridge.nativeAlnsRead(alns, 0, bestFlat)
                         val bestSol = NativeEval.unflatten(bestFlat, p.S, p.T)
                         if (NativeGate.parityCheckEnabled) {
-                            TuningTelemetry.parityChecks++
+                            TuningTelemetry.parityChecks.incrementAndGet()
                             val kScore = fullEvaluator.fullEval(bestSol)
                             if (kScore != ret[2]) { syncReport(); NativeGate.disable("ALNS Kotlin照合NG(native=${ret[2]} kotlin=$kScore)"); return false }
                         }
@@ -2299,7 +2299,7 @@ object V6NativeOptimizer {
                         NativeBridge.nativePolishRead(h, 0, buf)
                         val sol = NativeEval.unflatten(buf, p.S, p.T)
                         if (NativeGate.parityCheckEnabled) {
-                            TuningTelemetry.parityChecks++
+                            TuningTelemetry.parityChecks.incrementAndGet()
                             val k = fullEvaluator.fullEval(sol)
                             if (k != ret[2]) {
                                 NativeGate.disable("Polish Kotlin照合NG(native=${ret[2]} kotlin=$k)")
