@@ -632,6 +632,16 @@ object V6FinalPort {
                 }
                 if (structural != null) walls.add("$key ${n}件($structural)") else open.add("$key ${n}件")
             }
+            // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。実機ログでは
+            //   apt=30 のうち19件が桒澤美幸のB4（他シフトの上限合計11回では31日を埋めきれず B4 が最低20回
+            //   ＝目標1との差19）で、旧実装はこれを丸ごと「まだ狙える」に入れて誤解を招いていた。
+            //   個人上限は SOFT なので apt 単独の下限とは言えないが、上限を破った分は high に移るだけなので
+            //   **apt+high の和**には真の下限が立つ（structuralPersonalFloor の KDoc 参照）。
+            val personalFloor = runCatching { V6SanityPort.structuralPersonalFloor(cachedProblem(state)) }.getOrDefault(0)
+            val aptHighNow = (bd["apt"] ?: 0) + (bd["high"] ?: 0)
+            if (personalFloor > 0 && aptHighNow > 0) {
+                walls.add("apt+high のうち${minOf(personalFloor, aptHighNow)}件(個人の担当構成＝データ側)")
+            }
             val wallTxt = if (walls.isEmpty()) "なし" else walls.joinToString(" / ")
             val openTxt = if (open.isEmpty()) "なし＝これ以上は追っても減りません" else open.joinToString(" / ")
             listOf(MirrorLog(

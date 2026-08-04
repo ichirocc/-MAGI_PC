@@ -195,6 +195,48 @@ object V6SanityPort {
         forcedCovU(state, p).sumOf { it.amount }
 
     /**
+     * [3.354.0/6b・6c 共通] 職員 i の、シフト k 以外の担当可能シフトの個人上限の合計（上限未設定は期間日数
+     * で丸める）。`p.T - この値` が「他シフトの上限を守る限り k に必ず回ってくる日数」の下界になる。
+     * 合計が期間日数に達した時点で下界は 0 以下＝発火しないので早期に打ち切る。
+     */
+    internal fun otherShiftCapSum(p: Problem, i: Int, k: Int): Int {
+        var sum = 0
+        for (k2 in 0 until p.K) {
+            if (k2 == k || !p.canDo(i, k2)) continue
+            val hi = p.rangeHi[i][k2]
+            sum += if (hi == Int.MAX_VALUE) p.T else minOf(maxOf(hi, 0), p.T)
+            if (sum >= p.T) return sum
+        }
+        return sum
+    }
+
+    /**
+     * [3.354.0] 個人の担当構成から強制される **(apt + high) の合計下限**。
+     *
+     * 個人上限(rangeHi)は SOFT なので「必ず k に forcedMin 回入る」とは言えない（実機ログで確認: 6b が
+     * 「B4 は最低20回」と言う職員が、休の上限を1日超過して B4=19 に着地していた）。ただし上限を d 日ぶん
+     * 破れば count は forcedMin−d まで下がる代わりに high が d 増えるので、**両者の和** は
+     * `forcedMin − 目標` を下回れない。よってこの値は apt+high の真の下限になる。
+     *
+     * 同じ職員の複数シフトで下界が立つ場合は上限超過ぶん(d)が共有されうるため、**職員ごとに最大値だけ**を
+     * 取って合計する（保守的＝過大に見積もらない）。読み取り専用・スコア不変。
+     */
+    fun structuralPersonalFloor(p: Problem): Int {
+        var floor = 0
+        for (i in 0 until p.S) {
+            var best = 0
+            for (k in 0 until p.K) {
+                val t = p.apt[i][k]
+                if (t < 0 || !p.canDo(i, k)) continue
+                val d = (p.T - otherShiftCapSum(p, i, k)) - t
+                if (d > best) best = d
+            }
+            floor += best
+        }
+        return floor
+    }
+
+    /**
      * [設定ミスの誘導修正] 制約・希望の設定間違いを、人間が直せる粒度（誰の/何日の/どのシフト/どの制約、
      * そして具体的な直し方）で列挙する。検出済みの構造化データを平易な日本語の指示文に変換するだけで、
      * 重み・データは一切変更しない（読み取り専用＝安全）。表示順は「直すべき度合い」が高い順。
@@ -714,18 +756,13 @@ object V6SanityPort {
             for (k in 0 until p.K) {
                 val t = p.apt[i][k]
                 if (t < 0 || !p.canDo(i, k)) continue
-                var otherHiSum = 0
-                for (k2 in 0 until p.K) {
-                    if (k2 == k || !p.canDo(i, k2)) continue
-                    val hi = p.rangeHi[i][k2]
-                    otherHiSum += if (hi == Int.MAX_VALUE) p.T else minOf(maxOf(hi, 0), p.T)
-                    if (otherHiSum >= p.T) break   // 下界0以下が確定＝発火しない
-                }
+                val otherHiSum = otherShiftCapSum(p, i, k)
                 val forcedMin = p.T - otherHiSum
                 if (forcedMin > t) {
                     val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
                     out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」適切回数",
-                        "担当できるシフトの構成上、「$sym」は最低${forcedMin}回になります（他の担当シフトの上限合計${otherHiSum}回では${p.T}日を埋めきれません）。適切回数${t}回は達成できず、目標超過が必ず出ます",
+                        "担当できるシフトの構成上、他の担当シフトの個人上限（合計${otherHiSum}回）を守る限り「$sym」は最低${forcedMin}回になります（${p.T}日を埋めきれないぶんが必ず回ってくる）。" +
+                            "適切回数${t}回との差${forcedMin - t}回は、個人上限を破って別のシフトへ逃がさない限り消えません（上限超過は上限違反として同じだけ残ります）",
                         "「$sym」の適切回数を${forcedMin}回以上にするか空欄にする、または他シフトの担当・上限を見直してください"))
                 }
             }
@@ -743,13 +780,7 @@ object V6SanityPort {
             for (k in 0 until p.K) {
                 val hi = p.rangeHi[i][k]
                 if (hi == Int.MAX_VALUE || !p.canDo(i, k)) continue
-                var otherHiSum = 0
-                for (k2 in 0 until p.K) {
-                    if (k2 == k || !p.canDo(i, k2)) continue
-                    val hi2 = p.rangeHi[i][k2]
-                    otherHiSum += if (hi2 == Int.MAX_VALUE) p.T else minOf(maxOf(hi2, 0), p.T)
-                    if (otherHiSum >= p.T) break
-                }
+                val otherHiSum = otherShiftCapSum(p, i, k)
                 val forcedMin = p.T - otherHiSum
                 if (forcedMin > hi) {
                     val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
