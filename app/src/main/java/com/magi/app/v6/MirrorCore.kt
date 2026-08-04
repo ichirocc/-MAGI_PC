@@ -29,6 +29,13 @@ data class ViolationReport(
     // [Set化] セル("i,j")に重なった全違反クラスを重み降順で保持（violations は最重1クラス＝後方互換のまま）。
     //   タップ時の全列挙と E7 フィルタの整合（最重族がOFFでも表示中の族があれば枠を出す）に使う。表示のみ。
     val cellFamilies: Map<String, List<String>> = emptyMap(),
+    /**
+     * [3.353.0] 回数キー("i,k")に重なった全違反クラスを重み降順で保持（`countViolations` は最重1クラス＝
+     * 後方互換のまま）。`cellFamilies` の回数空間版。低い重みの族（apt・c2）が重い族（low 90/high 45）と
+     * 同じ (職員,シフト) に重なると `countViolations` から消え、診断に一切現れなかった
+     * （実機ログ: 内訳 c2=1 なのに詳細行が無く、apt=29 に対し表示は7箇所ぶんしか無い）。表示のみ。
+     */
+    val countFamilies: Map<String, List<String>> = emptyMap(),
     val breakdown: Map<String, Int>,
     val total: Int,
     val hard: Int,
@@ -147,6 +154,7 @@ object UnifiedViolationChecker {
         // [Set化] 重なった全クラスは cellFams("i,j"→クラス列)にも蓄積（重複なし・後で重み降順に整列）。
         //   violations は従来どおり最重1クラス＝既存読者は不変。
         val cellFams = linkedMapOf<String, MutableList<String>>()
+        val countFams = linkedMapOf<String, MutableList<String>>()
         fun mark(i: Int, j: Int, family: String) {
             val key = "$i,$j"
             val cls = vioClass[family] ?: family
@@ -181,6 +189,10 @@ object UnifiedViolationChecker {
         //   表示のみ・スコアリング(weightedScore/breakdown/inc)は不変。
         fun markCount(i: Int, k: Int, family: String) {
             val key = "$i,$k"
+            // [3.353.0] mark() と同じく、重なった全クラスを countFams へ蓄積（重複なし・後で重み降順に整列）。
+            val cls0 = vioClass[family] ?: family
+            val fams = countFams.getOrPut(key) { ArrayList(2) }
+            if (cls0 !in fams) fams.add(cls0)
             val prev = countViolations[key]
             if (prev != null) {
                 val prevW = MirrorKeys.weightOf(prev.removePrefix("vio-"))
@@ -409,11 +421,15 @@ object UnifiedViolationChecker {
         val cellFamilies = LinkedHashMap<String, List<String>>(cellFams.size)
         for ((ck, cv) in cellFams) cellFamilies[ck] =
             if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
+        val countFamilies = LinkedHashMap<String, List<String>>(countFams.size)
+        for ((ck, cv) in countFams) countFamilies[ck] =
+            if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
         return ViolationReport(
             violations = violations,
             needViolations = needViolations,
             countViolations = countViolations,
             cellFamilies = cellFamilies,
+            countFamilies = countFamilies,
             breakdown = breakdown,
             total = total,
             hard = hard,

@@ -1040,10 +1040,20 @@ object V6SanityPort {
         }
 
         // 2) 回数: 回数/下限/上限（countViolations は i,k キー）
+        //   [3.353.0] 旧実装は `countViolations`（1セル=最重1クラス）だけを見ていたため、軽い族が重い族と
+        //   同じ (職員,シフト) に重なると診断から**丸ごと消えて**いた（実機ログ: 内訳 c2=1 なのに詳細行が
+        //   無い／apt=29 に対し表示は7箇所ぶん＝残り3単位は low の裏に隠れていた）。3.111.0 が cellFamilies で
+        //   セル空間に対して解いたのと同じ形で、回数空間の全クラス（countFamilies）を列挙する。
+        //   ヘッダも 3.282.0 と同じく breakdown と突き合わせ、件数と場所数が違うときは両方出す。
         if (report.countViolations.isNotEmpty()) {
             val cnt = countMatrix(p, s)
             val byFam = LinkedHashMap<String, MutableList<String>>()
-            for ((key, cls) in report.countViolations) {
+            val pairs = if (report.countFamilies.isNotEmpty()) {
+                report.countFamilies.entries.flatMap { (k, list) -> list.map { k to it } }
+            } else {
+                report.countViolations.entries.map { it.key to it.value }
+            }
+            for ((key, cls) in pairs) {
                 val parts = key.split(','); val i = parts.getOrNull(0)?.toIntOrNull() ?: continue; val k = parts.getOrNull(1)?.toIntOrNull() ?: continue
                 if (i !in 0 until p.S || k !in 0 until p.K) continue
                 val lo = p.rangeLo[i][k].takeIf { it != Int.MIN_VALUE }
@@ -1054,7 +1064,19 @@ object V6SanityPort {
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }
                     .add("${nm(i)} ${sym(k)} 回数${cnt[i][k]}" + (apt?.let { " 目標$it" } ?: "") + (lo?.let { " 下限$it" } ?: "") + (hi?.let { " 上限$it" } ?: ""))
             }
-            emit(byFam, DETAIL_CAP)
+            // 族名が breakdown のキーと一致するもの(low/high/c2)だけ突き合わせる。aptLow/aptHigh は
+            //   breakdown に個別キーが無く実体は apt（重み1.0・3.243.0）＝両方へ同じ 29 を出すと二重に見える。
+            //   apt は下の専用行で「合計と場所数」を1度だけ示す。
+            emit(byFam, DETAIL_CAP, report.breakdown)
+            val aptFires = report.breakdown["apt"] ?: 0
+            if (aptFires > 0) {
+                val lo = byFam["aptLow"]?.size ?: 0
+                val hi = byFam["aptHigh"]?.size ?: 0
+                out.add(
+                    "[D] 違反詳細 apt(件数$aptFires・場所${lo + hi}箇所): 目標割れ${lo}箇所 + 目標超過${hi}箇所" +
+                        "（件数=各行の|回数−目標|の合計＝1箇所で複数件になる）",
+                )
+            }
         }
 
         // 3) セル違反: 誰の・何日・どのシフト（violations は i,j キー）

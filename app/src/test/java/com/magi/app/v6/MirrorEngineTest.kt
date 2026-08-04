@@ -115,6 +115,46 @@ class MirrorEngineTest {
         assertEquals(1, report.breakdown["c2"])
         assertEquals(2, report.breakdown["low"])   // lo(3) - got(1) = 2
         assertEquals("vio-low", report.countViolations["0,1"])   // 重い族(low=90)が軽い族(c2=1)を上書きしない/されない
+        // [3.353.0] countViolations は最重1クラスなので、この盤面では c2 が**どこにも現れない**。
+        //   実機ログでも「内訳 c2=1 なのに違反詳細に c2 行が無い」として観測された。countFamilies は
+        //   重なった全クラスを重み降順で保持する（先頭は countViolations と常に一致）。
+        assertEquals(listOf("vio-low", "vio-c2"), report.countFamilies["0,1"])
+        assertFalse(
+            "countViolations だけでは c2 が消える（countFamilies が必要な理由）",
+            report.countViolations.values.contains("vio-c2"),
+        )
+    }
+
+    /**
+     * [3.353.0] apt(重み1.0)が low(90)/high(45)と同じ (職員,シフト) に重なると countViolations から消える。
+     * 実データ3件でも golden 5件・real 8件・user 1件がこの形で隠れていた。
+     */
+    @Test
+    fun countFamiliesKeepsAptWhenItOverlapsWithHeavierRangeViolation() {
+        val shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", ""))
+        val groups = listOf(Group("G0", "G0"))
+        val staff = listOf(Staff("s0", 0))
+        // X を1回だけ勤務: 個人下限3(low)と 適切回数目標3(aptLow) が同じ (staff0, X) で同時に発火する。
+        val schedule = listOf(listOf(1, 0, 0, 0))
+        val st = MagiState(
+            startDate = "2025-01-01", endDate = "2025-01-04",
+            shifts = shifts, groups = groups, staff = staff,
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "3")),
+            schedule = schedule,
+            wishes = emptyMap(),
+            staffRange = mapOf("0,1" to Range("3", "")),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(),
+            cons3 = emptyList(), cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val report = UnifiedViolationChecker.check(st)
+        assertEquals(2, report.breakdown["low"])      // lo(3) - got(1)
+        assertEquals(2, report.breakdown["apt"])      // |1 - 3|
+        assertEquals("vio-low", report.countViolations["0,1"])
+        assertEquals(listOf("vio-low", "vio-aptLow"), report.countFamilies["0,1"])
     }
     // [レビュー#4 3.213.0] LightMirrorOptimizer の希望凍結規則がエンジン本体(wishLocked)と一致することを固定。
     //   旧 lockedMatrix は canDo 無視の全希望ロック＋事前適用なしで、初期盤面で未充足の実現可能希望が
