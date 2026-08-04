@@ -48,6 +48,12 @@ data class SaResult(
     val score: Long,
     val totalIters: Long,
     val elapsedMs: Long,
+    /**
+     * [3.356.0] 各SAチェーンが「全体の最良」を更新した回数。設定タブの**並列ワーカー**は
+     * V5(高速)経路ではそのままチェーン数になるが、旧ログはチェーン数も内訳も出さず、
+     * 増やした意味があったかを判断できなかった。1本しか勝っていなければ残りは無駄と読める。
+     */
+    val chainWins: IntArray = IntArray(0),
 )
 
 /**
@@ -70,6 +76,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
         var globalBest = evaluator.fullEval(init)
         var globalBestSol = copyOf(init)
         var totalIters = 0L
+        val chainWins = IntArray(params.workers.coerceAtLeast(1))
         val lock = Any()
 
         fun report() { onProgress(SaProgress(globalBest, totalIters, (System.nanoTime() / 1_000_000L) - start)) }
@@ -90,7 +97,9 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                 val flush: (Long, Array<IntArray>, Long) -> Unit = { localBest, localSol, iters ->
                     synchronized(lock) {
                         totalIters += iters
-                        if (localBest < globalBest) { globalBest = localBest; globalBestSol = localSol }
+                        if (localBest < globalBest) {
+                            globalBest = localBest; globalBestSol = localSol; chainWins[w]++
+                        }
                         report()
                     }
                 }
@@ -116,7 +125,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
 
         val finalScore = evaluator.fullEval(globalBestSol)
         synchronized(lock) { globalBest = finalScore; report() }
-        SaResult(globalBestSol, finalScore, totalIters, (System.nanoTime() / 1_000_000L) - start)
+        SaResult(globalBestSol, finalScore, totalIters, (System.nanoTime() / 1_000_000L) - start, chainWins)
     }
 
     /**

@@ -1301,6 +1301,11 @@ object V6NativeOptimizer {
         lastReport = report
         val logs = listOf(MirrorLog(tag = "RunMAGI_V5",
             message = "高速SA完了 HARD=${report.hard} total=${report.total} iter=${res.totalIters}" +
+                (if (res.chainWins.isNotEmpty()) {
+                    val wins = res.chainWins.count { it > 0 }
+                    " SAチェーン${res.chainWins.size}本(最良を更新した本数=$wins" +
+                        (if (wins <= 1 && res.chainWins.size > 1) "＝並列を増やした効果は出ていません" else "") + ")"
+                } else "") +
                 if (keptInput) "（SA結果が入力より悪化のため入力を維持=番兵）" else "")) + repaired.logs
         return V6OptimizerResult(outSched, report.copy(logs = logs + report.logs), V6Algorithm.V5, logs, res.totalIters, nowMs() - t0)
     }
@@ -1476,6 +1481,7 @@ object V6NativeOptimizer {
                         NativeBridge.nativeAlnsRead(alns, 0, bestFlat)
                         val bestSol = NativeEval.unflatten(bestFlat, p.S, p.T)
                         if (NativeGate.parityCheckEnabled) {
+                            TuningTelemetry.parityChecks++
                             val kScore = fullEvaluator.fullEval(bestSol)
                             if (kScore != ret[2]) { syncReport(); NativeGate.disable("ALNS Kotlin照合NG(native=${ret[2]} kotlin=$kScore)"); return false }
                         }
@@ -2283,6 +2289,7 @@ object V6NativeOptimizer {
                         NativeBridge.nativePolishRead(h, 0, buf)
                         val sol = NativeEval.unflatten(buf, p.S, p.T)
                         if (NativeGate.parityCheckEnabled) {
+                            TuningTelemetry.parityChecks++
                             val k = fullEvaluator.fullEval(sol)
                             if (k != ret[2]) {
                                 NativeGate.disable("Polish Kotlin照合NG(native=${ret[2]} kotlin=$k)")
