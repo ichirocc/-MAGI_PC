@@ -612,7 +612,10 @@ object V6FinalPort {
             message = "停滞検知: 改善が無いため早期終了（予算${seconds}s中 ${(tPost1 - startMs) / 1000}sで停止・" +
                 "停滞${stagnationDurationMs.get() / 1000}s無改善・解は最良を維持）" +
                 // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
-                (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else ""),
+                (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else "") +
+                // [3.362.0] covU 壁も同様に理由を出す。予算300秒の指定で92秒で返ると不具合に見えるため、
+                //   「なぜ切り上げたか」を必ず1行に残す。
+                (if (covUWallResult.get()) "（残る必須=人員不足はCoverageDiagが「いまの希望・担当のままでは減らせない」と判定済み。希望を1件調整するか担当を追加すると先へ進めます）" else ""),
         )) else emptyList()
         // [最終番兵/多重防御] 全段 keep-best のため通常は発火しないが、万一パイプラインが入力より
         // 悪い結果を返した場合は入力を採用し退化を防ぐ（checkResultWorse をここで配線）。

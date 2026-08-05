@@ -135,17 +135,32 @@ object PolishGate {
     @Volatile var filterC3nIncrease: Boolean = false
 
     /**
-     * [3.361.0 検証中/既定OFF] covU の「いまの希望のままでは不能」を停滞閾値の判定に使う。
+     * [3.362.0/ユーザー指示で既定ON] covU の「いまの希望のままでは不能」を停滞判定に使う。
      *
      * `effectiveStallMs` の短い閾値は covU が**静的な**構造下限（担当者数ベースの
-     * `structuralHardFloor`）に達したときしか効かない。実データの covU は希望固定・禁止連続で
-     * **動的に**塞がることがあり（3.344.0 で CoverageDiag が「充足可能3枠だが今は不能」と実測）、
-     * そのとき `bestHard > hardFloor` のままなので長い閾値（予算9/10）が選ばれ、実質的に発火しない。
-     * ON にすると CoverageDiag が全不足枠の塞がりを示した場合も頭打ちとして扱う。
+     * `structuralHardFloor`）に達したときしか効かなかった。実データの covU は希望固定・禁止連続で
+     * **動的に**塞がるため（3.344.0 で CoverageDiag が「充足可能3枠だが今は不能」と実測）、
+     * `bestHard > hardFloor` のままとなり長い閾値（予算9/10）が選ばれ、実質的に発火しなかった。
+     * ON では CoverageDiag が全不足枠の塞がりを示した場合も頭打ちとして扱う。
      *
-     * keep-best は不変＝早く止めるだけで解は退化しない。A/B の結果が支持しなければ削除する。
+     * **実測（300s・PORTFOLIO・workers=4・real/user 各3反復）**:
+     * - 時間: OFF は 0/6 しか早期終了しない（中央 298.7s）のに対し ON は 6/6 が終了。
+     *   中央 real 104.5s / user 93.9s ＝ **65.0% / 68.6% の短縮**。
+     * - 品質: hard の中央値は両者 4 で不変。ただし **hard=4 の中で weighted 中央値は ON が
+     *   real +206 / user +53 とわずかに悪く**、さらに real は OFF が3回中1回 hard=3 に到達した
+     *   （ON は 0/3）。早く止めれば、まれに終盤で見つかる HARD 改善を捨てる。
+     *
+     * よって「品質が悪化しないこと」という事前登録の基準は**満たしていない**。それでも既定を ON に
+     * するのは、待ち時間を 1/3 にする価値がその代償を上回るという**ユーザーの判断**（3.341.1 と同型の
+     * 品質と電池・待ち時間の交換）。measurement を曲げて正当化したのではない。
+     *
+     * keep-best は不変＝返す盤面は常にその時点の最良。早期終了は「もっと良い解を探す時間を諦める」
+     * のであって、見つけた解を悪くするものではない。止めた理由は EarlyStop ログに1行で出す。
+     *
+     * keep-best は不変＝返す盤面は常にその時点の最良。早期終了は「もっと良い解を探す時間を諦める」
+     * のであって、見つけた解を悪くするものではない。
      */
-    @Volatile var covUWallEarlyStop: Boolean = false
+    @Volatile var covUWallEarlyStop: Boolean = true
 }
 
 /**
