@@ -144,17 +144,30 @@ object V6FinalPort {
         c3nWallProven: Boolean, stallHardMs: Long, stallMs: Long,
         covUWallProven: Boolean = false,
     ): Long {
-        // 非covU 側が「もう解けない」と言えるか。0件＝解けるものは無い／c3n のみで壁が証明済み。
-        val nonCovUSettled = nonCovUHard == 0 || (nonCovUAllC3n && c3nWallProven)
-        // covU 側が「もう解けない」と言えるか。静的な構造下限に達した／CoverageDiag が全枠の塞がりを示した。
-        // [3.361.0] 後者が追加分。静的下限は担当者数ベースなので、希望固定・禁止連続で**動的に**塞がる
-        //   covU を捉えられない（3.344.0 で実測）。covUWallProven は既定 false ＝従来と厳密に同一
-        //   （テストがパラメータ空間を総当たりして固定している）。
-        // 旧実装は covU 側のこの条件を c3n 分岐の中に書いていた（同値だが所属が誤り）。covU の壁を
-        // 別に証明できるようになった以上、covU の条件は covU 側に置く。
-        val covUSettled = (bestHard - nonCovUHard) <= hardFloor || covUWallProven
-        return if (nonCovUSettled && covUSettled) stallHardMs else stallMs
+        return if (nonCovUSettled(nonCovUHard, nonCovUAllC3n, c3nWallProven) &&
+            covUSettled(bestHard, hardFloor, nonCovUHard, covUWallProven)
+        ) stallHardMs else stallMs
     }
+
+    /**
+     * 非covU 側（groupViol/pref/c3n）が「もう解けない」と言えるか。
+     * 0件＝解けるものが無い／残りが c3n のみで ForbiddenDiag が壁を証明済み。
+     */
+    internal fun nonCovUSettled(nonCovUHard: Int, nonCovUAllC3n: Boolean, c3nWallProven: Boolean): Boolean =
+        nonCovUHard == 0 || (nonCovUAllC3n && c3nWallProven)
+
+    /**
+     * covU 側が「もう解けない」と言えるか。静的な構造下限に達した／CoverageDiag が全枠の塞がりを示した。
+     *
+     * [3.361.0] 後者が追加分。静的下限は担当者数ベースなので、希望固定・禁止連続で**動的に**塞がる
+     * covU を捉えられない（3.344.0 で実測）。`covUWallProven=false` なら従来と厳密に同一
+     * （テストがパラメータ空間を総当たりして固定している）。
+     *
+     * 旧実装は covU 側のこの条件を c3n 分岐の中に書いていた（同値だが所属が誤り）。covU の壁を
+     * 別に証明できるようになった以上、covU の条件は covU 側に置く。
+     */
+    internal fun covUSettled(bestHard: Int, hardFloor: Int, nonCovUHard: Int, covUWallProven: Boolean): Boolean =
+        (bestHard - nonCovUHard) <= hardFloor || covUWallProven
 
     fun getAlgorithmLabel(seconds: Int): AlgorithmLabel = when {
         seconds <= 10 -> AlgorithmLabel("⚡", "高速", "短時間でサッと作成", "v5")
@@ -398,8 +411,13 @@ object V6FinalPort {
         //   僅かな世代ズレはあり得るが、本判定は「停滞閾値の選択」にのみ作用（採否/keep-bestとは無関係）で
         //   誤っても時間配分が変わるだけ＝品質は不変。並行呼出は同一結果を二重計算するだけで無害。
         val c3nWallProven = {
+            // [3.365.0] 版を**計算前に** CAS で確保する。旧実装は計算後に書いていたため、停滞ゲートが
+            //   開いた瞬間に全ワーカーが同時に未キャッシュ枝へ入り、各自がフル診断を回して結果を捨てていた。
+            //   競争に負けた側は直前世代の値を読むが、この判定は停滞閾値の選択にしか効かず（採否・keep-best
+            //   とは無関係）、次のポーリング（ms 後）で最新を読む＝元から世代遅れを許容している。
             val v = bestVersion.get()
-            if (c3nWallCheckedVersion.get() != v) {
+            val prevC3n = c3nWallCheckedVersion.get()
+            if (prevC3n != v && c3nWallCheckedVersion.compareAndSet(prevC3n, v)) {
                 val board = V6NativeOptimizer.liveBest
                 val proven = if (board == null) false else try {
                     val arr = Array(board.size) { r -> IntArray(board[r].size) { c -> board[r][c] } }
@@ -407,16 +425,16 @@ object V6FinalPort {
                     diag.hasRuns && diag.allBlocked
                 } catch (_: Exception) { false }
                 c3nWallResult.set(proven)
-                c3nWallCheckedVersion.set(v)
             }
             c3nWallResult.get()
         }
-        // [3.361.0/検証中] covU 壁の遅延証明。c3nWallProven と同型（best世代ごと1回・~20ms）。
+        // [3.362.0] covU 壁の遅延証明。c3nWallProven と同型（best世代ごと1回・~20ms）。
         //   CoverageDiag は読み取り専用で、判定は「停滞閾値の選択」にのみ作用する（採否/keep-best とは無関係）。
         val covUWallProven = {
             if (!PolishGate.covUWallEarlyStop) false else {
                 val v = bestVersion.get()
-                if (covUWallCheckedVersion.get() != v) {
+                val prev = covUWallCheckedVersion.get()
+                if (prev != v && covUWallCheckedVersion.compareAndSet(prev, v)) {
                     val board = V6NativeOptimizer.liveBest
                     val proven = if (board == null) false else try {
                         val arr = Array(board.size) { r -> IntArray(board[r].size) { c -> board[r][c] } }
@@ -424,7 +442,6 @@ object V6FinalPort {
                     } catch (_: Exception) { false }
                     if (proven) TuningTelemetry.covUWallHits.incrementAndGet()
                     covUWallResult.set(proven)
-                    covUWallCheckedVersion.set(v)
                 }
                 covUWallResult.get()
             }
@@ -588,20 +605,43 @@ object V6FinalPort {
             level = "I", tag = "TimeBudget",
             message = "予算配分: 総${seconds}s = 探索${(searchDeadlineMs - startMs) / 1000}s + 後処理予約${postReserveMs / 1000}s" +
                 " / 早期終了の条件: 最短実行${minRunMs / 1000}s経過かつ現フェーズ${phaseGraceMs / 1000}s経過かつ無改善が" +
-                "${stallMs / 1000}s(通常)〜${stallHardMs / 1000}s(頭打ち=HARD下限到達 or c3n構造壁)続いたとき" +
+                "${stallMs / 1000}s(通常)〜${stallHardMs / 1000}s(頭打ち=HARD下限到達 / c3n構造壁 / 人員不足が今の希望では不能)続いたとき" +
                 " / 構造的HARD下限=${hardFloor}",
         )
         val watchdogLog = run {
             val lastImp = lastBestImproveMs.get()
             val endStallS = (tChain1 - lastImp).coerceAtLeast(0L) / 1000
             val nonCovU = bestNonCovUHard.get()
-            val kind = when {
-                bestHard.get() <= hardFloor && nonCovU == 0 -> "plateau=短${stallHardMs / 1000}s"
-                c3nWallResult.get() && bestNonCovUAllC3n.get() -> "c3n壁=短${stallHardMs / 1000}s"
-                else -> "通常=長${stallMs / 1000}s"
+            // [3.365.0] 実効閾値の表示は **effectiveStallMs と同じ述語**から導く。旧実装は独立に
+            //   条件を書いており、covU 壁で短閾値になった実行でも「通常=長」と出て直下の EarlyStop と
+            //   矛盾した。さらに `wall` から covU 条件を外したことで、`c3nWallResult` が covU 床超えの
+            //   局面でも true になり得るようになり、実際は長閾値なのに「c3n壁=短」と誤表示していた。
+            val nonCovUOk = nonCovUSettled(nonCovU, bestNonCovUAllC3n.get(), c3nWallResult.get())
+            val covUOk = covUSettled(bestHard.get(), hardFloor, nonCovU, covUWallResult.get())
+            // どちらの側が何を根拠に「もう解けない」と言えたか（表示用）。
+            val covUReason = when {
+                (bestHard.get() - nonCovU) <= hardFloor -> "人員不足=構造下限"
+                covUWallResult.get() -> "人員不足=今の希望では不能"
+                else -> null
             }
-            val wallNote = if (c3nWallCheckedVersion.get() >= 0)
+            val nonCovUReason = when {
+                nonCovU == 0 -> "他の必須=なし"
+                bestNonCovUAllC3n.get() && c3nWallResult.get() -> "他の必須=c3n構造壁"
+                else -> null
+            }
+            val kind = if (nonCovUOk && covUOk)
+                "頭打ち=短${stallHardMs / 1000}s(${listOfNotNull(covUReason, nonCovUReason).joinToString("・")})"
+            else "通常=長${stallMs / 1000}s"
+            // 非発火時も診断の有無を出す（3.283.0 の目的＝発火しなかった理由をログだけで追う）。
+            val c3nNote = if (c3nWallCheckedVersion.get() >= 0)
                 "・c3n壁診断=${if (c3nWallResult.get()) "構造的な壁と判定" else "壁ではない（崩す手が実在）"}" else ""
+            val covUNote = when {
+                !PolishGate.covUWallEarlyStop -> "・人員不足の壁診断=OFF"
+                covUWallCheckedVersion.get() >= 0 ->
+                    "・人員不足の壁診断=${if (covUWallResult.get()) "今の希望では不能と判定" else "まだ動かせる枠あり"}"
+                else -> "・人員不足の壁診断=未実行(停滞が閾値未満)"
+            }
+            val wallNote = c3nNote + covUNote
             listOf(MirrorLog(
                 level = "I", tag = "Watchdog",
                 message = "停滞監視: 最終改善=経過${((lastImp - startMs) / 1000).coerceAtLeast(0)}s・" +
@@ -613,10 +653,16 @@ object V6FinalPort {
             message = "停滞検知: 改善が無いため早期終了（予算${seconds}s中 ${(tPost1 - startMs) / 1000}sで停止・" +
                 "停滞${stagnationDurationMs.get() / 1000}s無改善・解は最良を維持）" +
                 // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
-                (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else "") +
+                // [3.365.0] 注記は **最終値でその側が実際に壁を根拠にしたか** で判定する。
+                //   診断は停滞ゲートが開いたときしか再評価されないので、素の `xxxWallResult` を見ると
+                //   古い true が残って誤誘導する（例: covU が0になり groupViol だけ残った局面で
+                //   「希望を1件調整」と案内してしまう）。下の条件はその状況で自動的に偽になる。
+                (if (bestNonCovUHard.get() > 0 && bestNonCovUAllC3n.get() && c3nWallResult.get())
+                    "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else "") +
                 // [3.362.0] covU 壁も同様に理由を出す。予算300秒の指定で92秒で返ると不具合に見えるため、
                 //   「なぜ切り上げたか」を必ず1行に残す。
-                (if (covUWallResult.get()) "（残る必須=人員不足はCoverageDiagが「いまの希望・担当のままでは減らせない」と判定済み。希望を1件調整するか担当を追加すると先へ進めます）" else ""),
+                (if ((bestHard.get() - bestNonCovUHard.get()) > hardFloor && covUWallResult.get())
+                    "（残る必須=人員不足はCoverageDiagが「いまの希望・担当のままでは減らせない」と判定済み。希望を1件調整するか担当を追加すると先へ進めます）" else ""),
         )) else emptyList()
         // [最終番兵/多重防御] 全段 keep-best のため通常は発火しないが、万一パイプラインが入力より
         // 悪い結果を返した場合は入力を採用し退化を防ぐ（checkResultWorse をここで配線）。

@@ -2865,7 +2865,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // 人員不足(covU)または人員過剰(covO)が残る場合のみ原因診断（どの日/シフトが「充足不可」か
         // 「未到達」か／過剰がなぜ動かせないか）を算出しログに残す。
         val coverageD = async(Dispatchers.Default) {
-            V6PortAnalyzer.diagnoseCoverage(st, schedule, report).takeIf { it.hasShortage || it.hasSurplus }
+            V6PortAnalyzer.diagnoseCoverage(st, schedule).takeIf { it.hasShortage || it.hasSurplus }
         }
         // [3.280.0] 禁止連続(c3n)が残る場合のみ「なぜ崩せないか」診断（CoverageDiag の c3n 版）。
         val forbiddenD = async(Dispatchers.Default) {

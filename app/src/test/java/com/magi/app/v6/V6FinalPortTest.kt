@@ -151,4 +151,51 @@ class V6FinalPortTest {
         // 非covU が c3n のみで壁が証明済みなら、covU 壁と合わせて短い閾値へ。
         assertEquals(short, V6FinalPort.effectiveStallMs(4, 0, 1, true, true, short, long, true))
     }
+
+    /**
+     * [3.365.0] Watchdog の実効閾値表示は `effectiveStallMs` と**同じ述語**から導かねばならない。
+     *
+     * 旧実装はログ側で条件を独立に書いており、2つの誤表示を生んでいた:
+     *  - covU 壁で短閾値になった実行でも「通常=長」と出て、直下の EarlyStop と矛盾した。
+     *  - `wall` から covU 条件を外したあと `c3nWallResult` が covU 床超えでも true になり得るように
+     *    なり、実際は長閾値なのに「c3n壁=短」と誤表示した。
+     *
+     * 述語を1箇所に切り出したので、以後はここが「短い閾値 ⟺ 両側 settled」を保証する。
+     */
+    @Test
+    fun stallThresholdEqualsTheConjunctionOfBothSidePredicates() {
+        val short = 10L
+        val long = 90L
+        for (bestHard in 0..5) for (hardFloor in 0..3) for (nonCovU in 0..3)
+            for (allC3n in listOf(false, true)) for (c3nWall in listOf(false, true))
+                for (covUWall in listOf(false, true)) {
+                    val nonOk = V6FinalPort.nonCovUSettled(nonCovU, allC3n, c3nWall)
+                    val covOk = V6FinalPort.covUSettled(bestHard, hardFloor, nonCovU, covUWall)
+                    val expected = if (nonOk && covOk) short else long
+                    assertEquals(
+                        "bestHard=$bestHard floor=$hardFloor nonCovU=$nonCovU allC3n=$allC3n " +
+                            "c3nWall=$c3nWall covUWall=$covUWall",
+                        expected,
+                        V6FinalPort.effectiveStallMs(
+                            bestHard, hardFloor, nonCovU, allC3n, c3nWall, short, long, covUWall,
+                        ),
+                    )
+                }
+    }
+
+    /**
+     * [3.365.0] c3n 壁が証明されていても **covU が構造下限を超えていれば閾値は長いまま**。
+     * 旧ログはこの局面を「c3n壁=短」と表示していた（実際の閾値は長）。
+     */
+    @Test
+    fun aProvenC3nWallAloneDoesNotShortenTheThresholdWhileCovUIsStillAboveItsFloor() {
+        val short = 10L
+        val long = 90L
+        // covU=3（floor=0 超え）・非covU=1 が c3n で壁証明済み。
+        assertTrue(V6FinalPort.nonCovUSettled(1, true, true))
+        assertTrue(!V6FinalPort.covUSettled(4, 0, 1, false))
+        assertEquals(long, V6FinalPort.effectiveStallMs(4, 0, 1, true, true, short, long, false))
+        // covU 側も壁が証明されて初めて短くなる。
+        assertEquals(short, V6FinalPort.effectiveStallMs(4, 0, 1, true, true, short, long, true))
+    }
 }

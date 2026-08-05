@@ -156,9 +156,6 @@ object PolishGate {
      *
      * keep-best は不変＝返す盤面は常にその時点の最良。早期終了は「もっと良い解を探す時間を諦める」
      * のであって、見つけた解を悪くするものではない。止めた理由は EarlyStop ログに1行で出す。
-     *
-     * keep-best は不変＝返す盤面は常にその時点の最良。早期終了は「もっと良い解を探す時間を諦める」
-     * のであって、見つけた解を悪くするものではない。
      */
     @Volatile var covUWallEarlyStop: Boolean = true
 }

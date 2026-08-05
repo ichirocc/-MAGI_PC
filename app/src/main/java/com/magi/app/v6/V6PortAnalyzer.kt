@@ -224,7 +224,10 @@ object V6PortAnalyzer {
     fun diagnoseCoverage(
         state: MagiState,
         schedule: Array<IntArray> = state.schedule.toIntArray2D(),
-        report: ViolationReport = UnifiedViolationChecker.check(state, schedule),
+        // [3.365.0] 旧: `report: ViolationReport = UnifiedViolationChecker.check(state, schedule)` という
+        //   引数があったが**本体で一度も読まれていなかった**。既定値なので、省略した呼び出しは毎回
+        //   フル checker(19族×S×T) を計算しては捨てていた。実際に省略していたのは停滞判定の遅延診断
+        //   （全ワーカーが同時に入りうる経路）。使わない引数は消す。
     ): CoverageDiagnosis {
         val p = cachedProblem(state)
         val norm = normalizeSchedule(schedule, p)
