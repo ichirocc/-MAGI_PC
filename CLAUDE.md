@@ -5317,6 +5317,24 @@ JNI 越しにカウンタを渡す＝ABI 変更が要り、最内周に計数が
 （温度・受理方式のチューニング）は 2.55.0/2.56.0 で **実測して中立or有害**と結論し「脱出ヒューリスティクスへの
 投資は停止」と決めている。**既に死んでいると測ったレバーのために、いちばん熱いループへ計数を足さない。**
 
+## main のビルドを直す＝LocusIdCompat の import が誤っていた（3.360.2）
+
+3.360.1 を main へマージしたあと CI を確認して発覚。**マージより前から main が壊れていた**
+（`607966b feat: harden Android conversation bubbles for optimize progress`。V6 Engine Check と
+Android SDK の2ワークフローが赤＝**APK が一切ビルドできない**状態。Native Parity Check だけは
+g++ のみで走るので緑だった）。
+- 原因: `BubbleSupport.kt` の `import androidx.core.app.LocusIdCompat` が**誤った package**。
+  `compileDebugKotlin` が `Unresolved reference 'LocusIdCompat'` ×3 で落ちていた。
+- **記憶で直さず実アーティファクトで確認**: `androidx/core/core/1.13.1/core-1.13.1.aar` を取得して
+  `classes.jar` を展開し、`androidx/core/content/LocusIdCompat.class` が実体であること、
+  `ShortcutInfoCompat.Builder.setLocusId` / `NotificationCompat.Builder.setLocusId` の引数型も
+  いずれも `androidx.core.content.LocusIdCompat` であることを `javap` で確認した。
+- 同じ commit が入れた他の androidx シンボル（`setAutoExpandBubble`/`setSuppressNotification`/
+  `setLongLived`/`setBubbleMetadata`）も同じ jar に存在することを確認。`areBubblesAllowed` は
+  `NotificationManagerCompat` でなく**プラットフォームの `NotificationManager`**（API29+・minSdk36）で、
+  同ファイル内の同名ヘルパー越しに呼んでおり正しい。
+- import 1行の修正。エンジン・重み・スコアには一切触れない。
+
 ## 残りのピン計測外3箇所を測って決着（3.359.0, ユーザー指示「残り作業を最適化する」）
 
 3.327.0 以降「計測外」として残していた `PinBlockAttribution`（UI の「回数の固定について」一覧）の

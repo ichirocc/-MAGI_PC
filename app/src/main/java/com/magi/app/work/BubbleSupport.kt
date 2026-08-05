@@ -8,7 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.core.app.LocusIdCompat
+// [3.360.2] `LocusIdCompat` は androidx.core.app ではなく **androidx.core.content**。
+//   607966b はこの import で main の compileDebugKotlin を落としており、V6 Engine Check と
+//   Android SDK の2ワークフローが赤＝APK が一切ビルドできない状態だった。
+//   androidx.core 1.13.1 の実アーティファクトを取得して確認済み:
+//     androidx/core/content/LocusIdCompat.class が実体で、
+//     ShortcutInfoCompat.Builder.setLocusId / NotificationCompat.Builder.setLocusId の
+//     引数型もいずれも androidx.core.content.LocusIdCompat。
+import androidx.core.content.LocusIdCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
