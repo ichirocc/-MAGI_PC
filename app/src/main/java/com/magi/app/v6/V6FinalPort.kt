@@ -588,6 +588,7 @@ object V6FinalPort {
         val nativeLog = run {
             // [照合トグル] OFF=純ネイティブ（起動時パリティも含め Kotlin 照合を一切行わない）。native未ロード時は従来どおり。
             val parityOff = NativeBridge.available && NativeGate.userEnabled && !NativeGate.parityCheckEnabled
+            if (!parityOff && NativeBridge.available) TuningTelemetry.parityChecks.incrementAndGet()
             val parity = if (parityOff) null else runCatching { NativeEval.parityCheck(baseProblem, finalSched) }.getOrNull()
             // フル評価パリティ不一致もゲートを閉じる（以後の実行で SA チャンクを使わない＝退化）。
             if (parity?.match == false) NativeGate.disable("フル評価パリティ不一致")
@@ -607,10 +608,26 @@ object V6FinalPort {
                     parityOff -> "ネイティブ加速: Kotlin照合OFF＝純ネイティブ（検証/ベンチ用・誤結果の可能性）・ネイティブ探索=$searchState$gate"
                     parity == null -> "ネイティブ加速: 未ロード（Kotlin実行・機能差なし）"
                     parity.match -> "ネイティブ加速: C++評価器パリティ一致 (hard=${parity.kotlinHard} soft=${parity.kotlinSoft} / C++ ${parity.nativeUs}µs vs Kotlin ${parity.kotlinUs}µs=単発・JNI往復込みの参考値)・ネイティブ探索=$searchState$gate"
-                    else -> "ネイティブ加速: パリティ不一致のためネイティブ経路は使いません (C++ hard=${parity.nativeHard}/soft=${parity.nativeSoft} ≠ Kotlin hard=${parity.kotlinHard}/soft=${parity.kotlinSoft})$gate"
+                    // [3.358.0/外部レポート起因] 旧文言は両方の値を並べるだけで、読者は
+                    //   「ソースの乖離」と「.so が古い」を区別できなかった（実際そのレポートは
+                    //   soft の差 113 から weekly の定義差を推定していたが、当時の main は既に一致していた）。
+                    //   3.357.0 で言語跨ぎパリティが CI に入ったので、ソースが揃っていれば残る原因は
+                    //   ビルドの取り残し＝差分と次の一手まで書く。
+                    else -> "ネイティブ加速: パリティ不一致のためネイティブ経路は使いません " +
+                        "(C++ hard=${parity.nativeHard}/soft=${parity.nativeSoft} ≠ Kotlin hard=${parity.kotlinHard}/soft=${parity.kotlinSoft}" +
+                        "・差 hard=${parity.nativeHard - parity.kotlinHard} soft=${parity.nativeSoft - parity.kotlinSoft})" +
+                        "／CIは言語跨ぎパリティ(golden実データ)を検証済み＝ソースが揃っていれば .so が古い可能性が高い（再ビルドを試す）$gate"
                 },
             )
         }
+        // [3.356.0/ユーザー指示「オプションを減らせるようにログ強化する」] 詳細設定の調整トグル6つが
+        //   その実行で実際に何をしたかを1行で開示する。数回まわして毎回「観測なし」なら消してよい、と
+        //   利用者が判断できる材料にする（旧: 崩し範囲・立て直し方は実行の痕跡が一切出なかった）。
+        val tuningLog = MirrorLog(level = "I", tag = "設定の効き", message = TuningTelemetry.summary(
+            nativeOn = NativeGate.usable,
+            parityOn = NativeBridge.available && NativeGate.userEnabled && NativeGate.parityCheckEnabled,
+            softPolishOn = softPolish,
+        ))
         // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
         //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁・HF63が学習した充足困難族）
         //   ②まだ狙える（追えば減る見込み）に仕分ける。旧: 族別件数(UnifiedCheck/違反詳細)は出るが
@@ -632,6 +649,29 @@ object V6FinalPort {
                 }
                 if (structural != null) walls.add("$key ${n}件($structural)") else open.add("$key ${n}件")
             }
+            // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。実機ログでは
+            //   apt=30 のうち19件が桒澤美幸のB4（他シフトの上限合計11回では31日を埋めきれず B4 が最低20回
+            //   ＝目標1との差19）で、旧実装はこれを丸ごと「まだ狙える」に入れて誤解を招いていた。
+            //   個人上限は SOFT なので apt 単独の下限とは言えないが、上限を破った分は high に移るだけなので
+            //   **apt+high の和**には真の下限が立つ（structuralPersonalFloor の KDoc 参照）。
+            // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない（`weeklyFloorOfCount`）。
+            //   実機ログでは weekly 156件が丸ごと「まだ狙える」に入っていたが、実データ3件の実測では
+            //   40〜56%（golden 73/183・real 126/226・user 106/214）が床＝追っても減らない。
+            val weeklyNow = bd["weekly"] ?: 0
+            if (weeklyNow > 0) {
+                val wf = runCatching {
+                    val pw = cachedProblem(state); val cw = countMatrix(pw, finalSched)
+                    var f = 0
+                    for (i in 0 until pw.S) for (k in 0 until pw.K) f += weeklyFloorOfCount(cw[i][k])
+                    f
+                }.getOrDefault(0)
+                if (wf > 0) walls.add("weekly のうち${minOf(wf, weeklyNow)}件(回数が7の倍数でない＝配置では消せない)")
+            }
+            val personalFloor = runCatching { V6SanityPort.structuralPersonalFloor(cachedProblem(state)) }.getOrDefault(0)
+            val aptHighNow = (bd["apt"] ?: 0) + (bd["high"] ?: 0)
+            if (personalFloor > 0 && aptHighNow > 0) {
+                walls.add("apt+high のうち${minOf(personalFloor, aptHighNow)}件(個人の担当構成＝データ側)")
+            }
             val wallTxt = if (walls.isEmpty()) "なし" else walls.joinToString(" / ")
             val openTxt = if (open.isEmpty()) "なし＝これ以上は追っても減りません" else open.joinToString(" / ")
             listOf(MirrorLog(
@@ -641,7 +681,7 @@ object V6FinalPort {
         }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, budgetPlanLog, nativeLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         // [3.327.0/外部レビュー High1] `post` の診断（C1頭打ち・回数固定の却下記録）は **post.schedule を
         //   観測した結果**。ところが finalSched はこのあと ExtraRefine で差し替わる（refSched）か、
         //   最終番兵で入力へ戻る（normInput）ことがある。そのまま渡すと「いま表示している勤務表の理由」

@@ -135,6 +135,71 @@ object PolishGate {
     @Volatile var filterC3nIncrease: Boolean = false
 }
 
+/**
+ * [3.356.0/ユーザー指示「オプションを減らせるようにログ強化する」] 設定タブ→詳細設定の調整トグルが
+ * **その実行で実際に何をしたか**を数える。旧: トグルは6つあるのに、ログを見ても「ONにした意味が
+ * あったか」が読めず、減らす判断ができなかった（`禁止連続の崩し範囲`・`立て直し方` に至っては
+ * 実行の痕跡が一切出ない）。数回まわして毎回「観測なし」なら、そのトグルは消してよい、と言える。
+ *
+ * 読み取り専用の計数のみ＝探索・採否・スコアには一切影響しない。`optimize()` 入口で reset する。
+ */
+object TuningTelemetry {
+    // [3.360.1/敵対検証] 旧実装は `@Volatile var Int` に `++`＝read-modify-write で、**8並列ワーカーから
+    //   加算されるため取りこぼしていた**（parityChecks は SA/LAHC/ALNS/研磨の4経路×全ワーカーから毎チャンク）。
+    //   ログは「1240回」と断定するので、下限を実数として出していたことになる。AtomicInteger へ。
+    //   加算は最も多い wideC3nCalls でも実行あたり1万回弱＝checker 1回より桁違いに安く、速度への影響はない。
+    //   ※「この実行では観測なし(==0)」の判定は旧実装でも健全だった（真の回数が1以上なら必ず1は書かれる）。
+    //     壊れていたのは大きさだけ。3.356.0 の「0ならトグルを消してよい」という判断根拠は無傷。
+    /** 禁止連続の事前フィルタが checker を呼ばずに落とした候補数。 */
+    val c3nFilterSkipped = java.util.concurrent.atomic.AtomicInteger(0)
+    /** 禁止連続の崩し範囲が既定(前後1日)と違う候補日を返した回数（広がる／狭まるの両方）。 */
+    val wideC3nDiffered = java.util.concurrent.atomic.AtomicInteger(0)
+    /** 同・呼ばれた回数（広がらなかった分も含む）。 */
+    val wideC3nCalls = java.util.concurrent.atomic.AtomicInteger(0)
+    /** 立て直し方(適応制御)が役割を決めた回数。 */
+    val escapeControlUsed = java.util.concurrent.atomic.AtomicInteger(0)
+    /** 仕上げ最適化により PhaseB(LAHC) へ切り替わった回数。 */
+    val lahcEntered = java.util.concurrent.atomic.AtomicInteger(0)
+    /** Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。 */
+    val parityChecks = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * 実行ごとに 0 へ戻す（`optimize()` 入口）。
+     *
+     * **既知の限界（意図的に残す）**: これは実行をまたぐ static なので、実行が重なると
+     * （WorkManager の REPLACE で旧 Worker が協調キャンセルを待つ間など）後発の reset が
+     * 先行実行の計数を消し、両者が同じ箱へ加算する。3.335.0 は同型の問題を `RunSlot`
+     * （コルーチンのコンテキストで実行ごとの箱を運ぶ）で解いたが、加算元の
+     * [breakableDaysFor] などは非 suspend の純関数でコンテキストを読めないため同じ手が使えない。
+     * 影響は**片方のログの診断値がずれる**だけで、勤務表・採否・スコアには一切触れない。
+     */
+    fun reset() {
+        c3nFilterSkipped.set(0); wideC3nDiffered.set(0); wideC3nCalls.set(0)
+        escapeControlUsed.set(0); lahcEntered.set(0); parityChecks.set(0)
+    }
+
+    /** 各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。 */
+    fun summary(nativeOn: Boolean, parityOn: Boolean, softPolishOn: Boolean): String {
+        fun eff(on: Boolean, n: Int, unit: String): String =
+            if (!on) "OFF" else if (n > 0) "ON($n$unit)" else "ON(この実行では観測なし)"
+        // 同一の値を2回読むと表示内で食い違う（別スレッドが加算しうる）ため、判定も表示も1回の読みで済ませる。
+        val calls = wideC3nCalls.get()
+        val differed = wideC3nDiffered.get()
+        val wide = when {
+            !PolishGate.wideC3nBreakDays -> "OFF"
+            calls == 0 -> "ON(この実行では出番なし)"
+            differed == 0 -> "ON(${calls}回呼ばれたが既定(前後1日)と同じ範囲＝OFFと差なし)"
+            else -> "ON(${calls}回中${differed}回は既定(前後1日)と違う範囲を探索)"
+        }
+        return "設定の効き: ネイティブ加速=" + (if (nativeOn) "ON" else "OFF") +
+            " / Kotlin照合=" + eff(parityOn, parityChecks.get(), "回") +
+            " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped.get(), "件の無駄な検査を省略・勤務表は不変") +
+            " / 禁止連続の崩し範囲=" + wide +
+            " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed.get(), "回の役割決定") +
+            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered.get(), "回LAHCへ切替")
+    }
+}
+
 object V6HotfixPasses {
     /**
      * 長期ブロック交換の候補長。月次勤務表で「局所交換では越えにくい」谷を越えるための
@@ -397,6 +462,7 @@ object V6HotfixPasses {
             )
             passMs.merge("C1時系列フロー", System.currentTimeMillis() - __t7) { a, b -> a + b }
             work = rC1flow.newSchedule.copy2D(); totalC1 += rC1flow.applied; roundApplied += rC1flow.applied
+            rC1flow.pinBlocks?.let { pinBlocksAll.merge(it) }
             if (round == 0) logs.addAll(rC1flow.logs)
 
             // [C1BeamPolish, 外部パッチ受領→ランキング修正+keep-best安全網追加のうえ適用] BeamC1PolishV2
@@ -1911,6 +1977,11 @@ object V6HotfixPasses {
         var screened = 0          // C3n枝刈りで checker を呼ばずに落とした候補数
         var evaluated = 0         // 実際に checker を呼んだ候補数
         var patternDays = 0       // 候補にしたセルの延べ数（当日1セルに留まらないことの実測）
+        // [3.356.0/実機ログ起因] 「候補日延べ4 正式評価0 C3n枝刈り0」だけでは、なぜ1件も評価まで
+        //   進まなかったのかが読めなかった（実データではアリフの2セルとも本人希望で固定されていた）。
+        //   候補日から外れた理由を数える。
+        var blockedWish = 0       // 希望で固定されていて動かせなかった日
+        var blockedCell = 0       // 割当が範囲外（-1 等）で対象外だった日
         var pass = 0
         while (pass < maxPasses) {
             if (shouldStop()) break
@@ -1943,9 +2014,9 @@ object V6HotfixPasses {
                 patternDays += days.size
                 for (j2 in days) {
                     if (done || shouldStop()) break
-                    if (!movable(i, j2)) continue
+                    if (!movable(i, j2)) { blockedWish++; continue }
                     val curK = work[i][j2]
-                    if (curK !in 0 until p.K) continue
+                    if (curK !in 0 until p.K) { blockedCell++; continue }
                     for (alt in p.allowedShiftsForStaff(i)) {
                         if (done || shouldStop()) break
                         if (alt == curK) continue
@@ -2006,6 +2077,8 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C3nPolish",
             message = "禁止連続(c3n)研磨: c3n ${before.breakdown["c3n"] ?: 0}->${bestRep.breakdown["c3n"] ?: 0} / total ${before.total}->${bestRep.total} HARD ${before.hard}->${bestRep.hard} 採用${applied}回" +
                 " 候補日延べ$patternDays(パターン全域・当日含む) 正式評価$evaluated C3n枝刈り$screened" +
+                (if (blockedWish > 0) " 希望固定で候補外${blockedWish}日" else "") +
+                (if (blockedCell > 0) " 割当が範囲外${blockedCell}日" else "") +
                 (if (applied == 0 && (before.breakdown["c3n"] ?: 0) > 0) " [頭打ち=改善手なし]" else "") +
                 rejectCulprits.summary() +
                 (if (stuckNames.isNotEmpty()) " 残存: ${stuckNames.joinToString(", ")}" else "") +
@@ -2067,8 +2140,20 @@ object V6HotfixPasses {
         val blockStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
         // [不採用の主因, 3.302.0] C1Polish と同じく、拒否された候補が重み付きで最も壊した族を併記する。
         val culpritStats = HashMap<Pair<Int, Int>, MutableMap<String, Int>>()
-        fun recordBlock(target: Pair<Int, Int>, reason: String, after: ViolationReport? = null, before: ViolationReport? = null) {
+        // [3.358.0/実機ログ起因] 「希望固定×16」「禁止連続×9」は**どの日か**が出ず、直しに行けなかった
+        //   （ForbiddenDiag は同じ理由で日付を名指ししている＝そちらだけ行動につながる形だった）。
+        //   日で決まる2理由だけ実日付を集める。件数は延べ・日は重複なし。
+        val blockDays = HashMap<Pair<Int, Int>, MutableMap<String, MutableSet<Int>>>()
+        // [3.358.0] 日番号を「M/D」へ。startDate が読めなければ「N日目」で妥協する（ログ専用）。
+        val start0 = runCatching { java.time.LocalDate.parse(state.startDate) }.getOrNull()
+        fun dayLabel(j: Int): String =
+            start0?.plusDays(j.toLong())?.let { "${it.monthValue}/${it.dayOfMonth}" } ?: "${j + 1}日目"
+        fun recordBlock(
+            target: Pair<Int, Int>, reason: String,
+            after: ViolationReport? = null, before: ViolationReport? = null, day: Int? = null,
+        ) {
             blockStats.getOrPut(target) { HashMap() }.merge(reason, 1, Int::plus)
+            if (day != null) blockDays.getOrPut(target) { HashMap() }.getOrPut(reason) { LinkedHashSet() }.add(day)
             if (after != null && before != null) {
                 worstWorsenedFamily(after, before)?.let { culpritStats.getOrPut(target) { HashMap() }.merge(it, 1, Int::plus) }
             }
@@ -2080,8 +2165,8 @@ object V6HotfixPasses {
         // [玉突き連鎖つき1セル付け替え] day j の staff i を fromK から toK へ動かす。fromK 側の被覆が
         //   悪化するなら findCovUChain で埋め直す。採用ならtrue（bestRep/appliedは呼び出し側で更新済み）。
         fun tryRelocate(target: Pair<Int, Int>, i: Int, j: Int, fromK: Int, toK: Int): Boolean {
-            if (!movable(i, j)) { recordBlock(target, "希望固定"); return false }
-            if (p.makesForbiddenRun(work, i, j, toK)) { recordBlock(target, "禁止連続"); return false }
+            if (!movable(i, j)) { recordBlock(target, "希望固定", day = j); return false }
+            if (p.makesForbiddenRun(work, i, j, toK)) { recordBlock(target, "禁止連続", day = j); return false }
             var cnt = 0
             for (s in 0 until p.S) if (work[s][j] == fromK) cnt++
             val needsChain = p.covUCell(fromK, j, cnt - 1) > p.covUCell(fromK, j, cnt)
@@ -2592,7 +2677,12 @@ object V6HotfixPasses {
                     culpritStats[i to k]?.entries?.sortedByDescending { it.value }?.take(2)
                         ?.joinToString(" ") { "${it.key}:${it.value}" }
                         ?.let { if (it.isEmpty()) "" else " 主因 $it" } ?: ""
-                "${label(i, k)}(${top.key}×${top.value}$culprits)"
+                // [3.358.0] 日で決まる理由（希望固定・禁止連続）は実日付を出す＝そのまま直しに行ける。
+                val days = blockDays[i to k]?.get(top.key)?.sorted().orEmpty()
+                val dayTxt = if (days.isEmpty()) "" else
+                    ": " + days.take(6).joinToString("・") { dayLabel(it) } +
+                        (if (days.size > 6) "ほか${days.size - 6}日" else "")
+                "${label(i, k)}(${top.key}×${top.value}$dayTxt$culprits)"
             }
         val rangeCombSummary = rangeCombStats.summary()
         val logs = listOf(MirrorLog(tag = "RangePolish",
@@ -3587,7 +3677,7 @@ object V6HotfixPasses {
                     for (j in swapDays) row[j] = work[giver][j]
                     firesAfter += C1DeltaPrefilter.staffC3nFires(p, row)
                 }
-                if (firesAfter > firesBefore) return null
+                if (firesAfter > firesBefore) { TuningTelemetry.c3nFilterSkipped.incrementAndGet(); return null }
             }
 
             val differences = swapDays.size

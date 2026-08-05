@@ -633,4 +633,54 @@ class V6SanityPortTest {
         assertEquals(1, issues.size)
         assertTrue("職員数の警告: ${issues[0].problem}", issues[0].problem.contains("31名"))
     }
+    /**
+     * [3.354.0] 個人の担当構成から立つ (apt + high) の下限。実機ログの桒澤美幸と同じ形
+     * （担当={休,B4,有}・休は上限10・有は上限1・31日 → B4 は他シフトの上限を守る限り最低20回。
+     * 目標1との差19は、個人上限を破って逃がしても high へ移るだけで消えない）。
+     */
+    @Test
+    fun structuralPersonalFloorMatchesTheForcedRepertoireMinimum() {
+        val shifts = listOf(Shift("休", "休", "", ""), Shift("B4", "B4", "", ""), Shift("有", "有", "", ""))
+        val groups = listOf(Group("G0", "G0"))
+        val staff = listOf(Staff("s0", 0))
+        val st = MagiState(
+            startDate = "2025-01-01", endDate = "2025-01-31",
+            shifts = shifts, groups = groups, staff = staff,
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1, 1)),
+            groupShiftApt = listOf(listOf("", "1", "")),   // B4 の目標だけ 1
+            schedule = List(1) { List(31) { 0 } },
+            wishes = emptyMap(),
+            staffRange = mapOf("0,0" to Range("10", "10"), "0,2" to Range("1", "1")),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(),
+            cons3 = emptyList(), cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertEquals(11, V6SanityPort.otherShiftCapSum(p, 0, 1))   // 休10 + 有1
+        assertEquals(19, V6SanityPort.structuralPersonalFloor(p))  // (31-11) - 目標1
+    }
+
+    /** 他シフトに上限未設定が1つでもあれば下界は立たない（6b/6c と同じ保守的判定）。 */
+    @Test
+    fun structuralPersonalFloorIsZeroWhenAnotherShiftIsUncapped() {
+        val shifts = listOf(Shift("休", "休", "", ""), Shift("B4", "B4", "", ""), Shift("有", "有", "", ""))
+        val st = MagiState(
+            startDate = "2025-01-01", endDate = "2025-01-31",
+            shifts = shifts, groups = listOf(Group("G0", "G0")), staff = listOf(Staff("s0", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1, 1)),
+            groupShiftApt = listOf(listOf("", "1", "")),
+            schedule = List(1) { List(31) { 0 } },
+            wishes = emptyMap(),
+            staffRange = mapOf("0,0" to Range("10", "10")),   // 有 は上限未設定
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(),
+            cons3 = emptyList(), cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        assertEquals(0, V6SanityPort.structuralPersonalFloor(Problem(st)))
+    }
+
 }

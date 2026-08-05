@@ -195,6 +195,48 @@ object V6SanityPort {
         forcedCovU(state, p).sumOf { it.amount }
 
     /**
+     * [3.354.0/6b・6c 共通] 職員 i の、シフト k 以外の担当可能シフトの個人上限の合計（上限未設定は期間日数
+     * で丸める）。`p.T - この値` が「他シフトの上限を守る限り k に必ず回ってくる日数」の下界になる。
+     * 合計が期間日数に達した時点で下界は 0 以下＝発火しないので早期に打ち切る。
+     */
+    internal fun otherShiftCapSum(p: Problem, i: Int, k: Int): Int {
+        var sum = 0
+        for (k2 in 0 until p.K) {
+            if (k2 == k || !p.canDo(i, k2)) continue
+            val hi = p.rangeHi[i][k2]
+            sum += if (hi == Int.MAX_VALUE) p.T else minOf(maxOf(hi, 0), p.T)
+            if (sum >= p.T) return sum
+        }
+        return sum
+    }
+
+    /**
+     * [3.354.0] 個人の担当構成から強制される **(apt + high) の合計下限**。
+     *
+     * 個人上限(rangeHi)は SOFT なので「必ず k に forcedMin 回入る」とは言えない（実機ログで確認: 6b が
+     * 「B4 は最低20回」と言う職員が、休の上限を1日超過して B4=19 に着地していた）。ただし上限を d 日ぶん
+     * 破れば count は forcedMin−d まで下がる代わりに high が d 増えるので、**両者の和** は
+     * `forcedMin − 目標` を下回れない。よってこの値は apt+high の真の下限になる。
+     *
+     * 同じ職員の複数シフトで下界が立つ場合は上限超過ぶん(d)が共有されうるため、**職員ごとに最大値だけ**を
+     * 取って合計する（保守的＝過大に見積もらない）。読み取り専用・スコア不変。
+     */
+    fun structuralPersonalFloor(p: Problem): Int {
+        var floor = 0
+        for (i in 0 until p.S) {
+            var best = 0
+            for (k in 0 until p.K) {
+                val t = p.apt[i][k]
+                if (t < 0 || !p.canDo(i, k)) continue
+                val d = (p.T - otherShiftCapSum(p, i, k)) - t
+                if (d > best) best = d
+            }
+            floor += best
+        }
+        return floor
+    }
+
+    /**
      * [設定ミスの誘導修正] 制約・希望の設定間違いを、人間が直せる粒度（誰の/何日の/どのシフト/どの制約、
      * そして具体的な直し方）で列挙する。検出済みの構造化データを平易な日本語の指示文に変換するだけで、
      * 重み・データは一切変更しない（読み取り専用＝安全）。表示順は「直すべき度合い」が高い順。
@@ -714,18 +756,13 @@ object V6SanityPort {
             for (k in 0 until p.K) {
                 val t = p.apt[i][k]
                 if (t < 0 || !p.canDo(i, k)) continue
-                var otherHiSum = 0
-                for (k2 in 0 until p.K) {
-                    if (k2 == k || !p.canDo(i, k2)) continue
-                    val hi = p.rangeHi[i][k2]
-                    otherHiSum += if (hi == Int.MAX_VALUE) p.T else minOf(maxOf(hi, 0), p.T)
-                    if (otherHiSum >= p.T) break   // 下界0以下が確定＝発火しない
-                }
+                val otherHiSum = otherShiftCapSum(p, i, k)
                 val forcedMin = p.T - otherHiSum
                 if (forcedMin > t) {
                     val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
                     out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」適切回数",
-                        "担当できるシフトの構成上、「$sym」は最低${forcedMin}回になります（他の担当シフトの上限合計${otherHiSum}回では${p.T}日を埋めきれません）。適切回数${t}回は達成できず、目標超過が必ず出ます",
+                        "担当できるシフトの構成上、他の担当シフトの個人上限（合計${otherHiSum}回）を守る限り「$sym」は最低${forcedMin}回になります（${p.T}日を埋めきれないぶんが必ず回ってくる）。" +
+                            "適切回数${t}回との差${forcedMin - t}回は、個人上限を破って別のシフトへ逃がさない限り消えません（上限超過は上限違反として同じだけ残ります）",
                         "「$sym」の適切回数を${forcedMin}回以上にするか空欄にする、または他シフトの担当・上限を見直してください"))
                 }
             }
@@ -743,13 +780,7 @@ object V6SanityPort {
             for (k in 0 until p.K) {
                 val hi = p.rangeHi[i][k]
                 if (hi == Int.MAX_VALUE || !p.canDo(i, k)) continue
-                var otherHiSum = 0
-                for (k2 in 0 until p.K) {
-                    if (k2 == k || !p.canDo(i, k2)) continue
-                    val hi2 = p.rangeHi[i][k2]
-                    otherHiSum += if (hi2 == Int.MAX_VALUE) p.T else minOf(maxOf(hi2, 0), p.T)
-                    if (otherHiSum >= p.T) break
-                }
+                val otherHiSum = otherShiftCapSum(p, i, k)
                 val forcedMin = p.T - otherHiSum
                 if (forcedMin > hi) {
                     val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
@@ -1040,10 +1071,20 @@ object V6SanityPort {
         }
 
         // 2) 回数: 回数/下限/上限（countViolations は i,k キー）
+        //   [3.353.0] 旧実装は `countViolations`（1セル=最重1クラス）だけを見ていたため、軽い族が重い族と
+        //   同じ (職員,シフト) に重なると診断から**丸ごと消えて**いた（実機ログ: 内訳 c2=1 なのに詳細行が
+        //   無い／apt=29 に対し表示は7箇所ぶん＝残り3単位は low の裏に隠れていた）。3.111.0 が cellFamilies で
+        //   セル空間に対して解いたのと同じ形で、回数空間の全クラス（countFamilies）を列挙する。
+        //   ヘッダも 3.282.0 と同じく breakdown と突き合わせ、件数と場所数が違うときは両方出す。
         if (report.countViolations.isNotEmpty()) {
             val cnt = countMatrix(p, s)
             val byFam = LinkedHashMap<String, MutableList<String>>()
-            for ((key, cls) in report.countViolations) {
+            val pairs = if (report.countFamilies.isNotEmpty()) {
+                report.countFamilies.entries.flatMap { (k, list) -> list.map { k to it } }
+            } else {
+                report.countViolations.entries.map { it.key to it.value }
+            }
+            for ((key, cls) in pairs) {
                 val parts = key.split(','); val i = parts.getOrNull(0)?.toIntOrNull() ?: continue; val k = parts.getOrNull(1)?.toIntOrNull() ?: continue
                 if (i !in 0 until p.S || k !in 0 until p.K) continue
                 val lo = p.rangeLo[i][k].takeIf { it != Int.MIN_VALUE }
@@ -1054,7 +1095,19 @@ object V6SanityPort {
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }
                     .add("${nm(i)} ${sym(k)} 回数${cnt[i][k]}" + (apt?.let { " 目標$it" } ?: "") + (lo?.let { " 下限$it" } ?: "") + (hi?.let { " 上限$it" } ?: ""))
             }
-            emit(byFam, DETAIL_CAP)
+            // 族名が breakdown のキーと一致するもの(low/high/c2)だけ突き合わせる。aptLow/aptHigh は
+            //   breakdown に個別キーが無く実体は apt（重み1.0・3.243.0）＝両方へ同じ 29 を出すと二重に見える。
+            //   apt は下の専用行で「合計と場所数」を1度だけ示す。
+            emit(byFam, DETAIL_CAP, report.breakdown)
+            val aptFires = report.breakdown["apt"] ?: 0
+            if (aptFires > 0) {
+                val lo = byFam["aptLow"]?.size ?: 0
+                val hi = byFam["aptHigh"]?.size ?: 0
+                out.add(
+                    "[D] 違反詳細 apt(件数$aptFires・場所${lo + hi}箇所): 目標割れ${lo}箇所 + 目標超過${hi}箇所" +
+                        "（件数=各行の|回数−目標|の合計＝1箇所で複数件になる）",
+                )
+            }
         }
 
         // 3) セル違反: 誰の・何日・どのシフト（violations は i,j キー）
@@ -1066,6 +1119,25 @@ object V6SanityPort {
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }.add("${nm(i)} ${day(j)}=${sym(s[i][j])}")
             }
             emit(byFam, DETAIL_CAP, report.breakdown)
+        }
+
+        // 3.4) [3.355.0/ログ強化] DETAIL_CAP で切れる大きなセル族は「…他58件」で終わり、**誰に集中して
+        //   いるか**が読めなかった（実機ログ: c3 77件・場所66箇所のうち8箇所しか見えない）。checker が出した
+        //   場所（cellFamilies）をそのまま職員別に数え直すだけ＝規則の再実装をしないのでドリフトしない。
+        run {
+            val perFam = LinkedHashMap<String, HashMap<Int, Int>>()
+            for ((key, list) in report.cellFamilies) {
+                val i = key.substringBefore(',').toIntOrNull() ?: continue
+                if (i !in 0 until p.S) continue
+                for (cls in list) perFam.getOrPut(cls.removePrefix("vio-")) { HashMap() }.merge(i, 1) { a, b -> a + b }
+            }
+            for ((fam, byStaff) in perFam) {
+                if (fam == "c1") continue                          // c1 は下の「職員×窓ルール別」がより詳しい
+                if (byStaff.values.sum() <= DETAIL_CAP) continue   // 全件が上に出ているなら冗長
+                val txt = byStaff.entries.sortedByDescending { it.value }
+                    .joinToString(" / ") { "${nm(it.key)} ${it.value}箇所" }
+                out.add("[D] $fam 集約（職員別・場所数の全件）: $txt")
+            }
         }
 
         // 3.5) [c1族の職員×窓ルール別件数] 「違反詳細 c1(N件)」はDETAIL_CAP=8で打ち切られ、特定職員が
@@ -1096,6 +1168,33 @@ object V6SanityPort {
                 }
                 out.add("[D] c1内訳（職員×窓ルール別件数・全件）: $lines")
             }
+        }
+
+        // 3.6) [3.355.0/ログ強化] weekly は実機で最大の族（合計307中156）なのに内訳が一切無く、
+        //   「まだ狙える weekly 156件」としか読めなかった。**回数が7の倍数でないぶんは配置をどう変えても
+        //   消せない**（目標=round(回数/7) なので余りが必ず偏差として残る）。その構造床と、曜日の寄せ方で
+        //   減らせる残りを分けて示す。床は `weeklyFloorOfCount` の総和＝checker と同じ目標値から導出。
+        if ((report.breakdown["weekly"] ?: 0) > 0) {
+            val cntW = countMatrix(p, s)
+            var floor = 0
+            val worst = ArrayList<Triple<Int, Int, Int>>()   // (staff, shift, いま減らせる余地)
+            for (i in 0 until p.S) for (k in 0 until p.K) {
+                val c = cntW[i][k]
+                if (c <= 0) continue
+                floor += weeklyFloorOfCount(c)
+            }
+            for (loc in report.distLocations["weekly"].orEmpty()) {
+                val i = loc.getOrNull(0) ?: continue; val k = loc.getOrNull(1) ?: continue
+                val dev = loc.getOrNull(2) ?: continue
+                val room = dev - weeklyFloorOfCount(cntW.getOrNull(i)?.getOrNull(k) ?: 0)
+                if (room > 0) worst.add(Triple(i, k, room))
+            }
+            val total = report.breakdown["weekly"] ?: 0
+            val head = "[D] weekly内訳: 合計${total}件 = 構造床${minOf(floor, total)}件(回数が7の倍数でない＝配置では消せない)" +
+                " + 曜日の寄せ方で減らせる${(total - floor).coerceAtLeast(0)}件"
+            val topTxt = worst.sortedByDescending { it.third }.take(DETAIL_CAP)
+                .joinToString(" ; ") { (i, k, room) -> "${nm(i)} ${sym(k)} 余地${room}" }
+            out.add(if (topTxt.isEmpty()) head else "$head / 余地の大きい順: $topTxt")
         }
 
         if (out.isEmpty()) out.add("[D] 違反詳細: 制約違反はありません")

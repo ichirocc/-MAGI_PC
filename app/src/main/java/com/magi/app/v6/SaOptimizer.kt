@@ -48,6 +48,12 @@ data class SaResult(
     val score: Long,
     val totalIters: Long,
     val elapsedMs: Long,
+    /**
+     * [3.356.0] 各SAチェーンが「全体の最良」を更新した回数。設定タブの**並列ワーカー**は
+     * V5(高速)経路ではそのままチェーン数になるが、旧ログはチェーン数も内訳も出さず、
+     * 増やした意味があったかを判断できなかった。1本しか勝っていなければ残りは無駄と読める。
+     */
+    val chainWins: IntArray = IntArray(0),
 )
 
 /**
@@ -70,6 +76,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
         var globalBest = evaluator.fullEval(init)
         var globalBestSol = copyOf(init)
         var totalIters = 0L
+        val chainWins = IntArray(params.workers.coerceAtLeast(1))
         val lock = Any()
 
         fun report() { onProgress(SaProgress(globalBest, totalIters, (System.nanoTime() / 1_000_000L) - start)) }
@@ -90,7 +97,9 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                 val flush: (Long, Array<IntArray>, Long) -> Unit = { localBest, localSol, iters ->
                     synchronized(lock) {
                         totalIters += iters
-                        if (localBest < globalBest) { globalBest = localBest; globalBestSol = localSol }
+                        if (localBest < globalBest) {
+                            globalBest = localBest; globalBestSol = localSol; chainWins[w]++
+                        }
                         report()
                     }
                 }
@@ -116,7 +125,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
 
         val finalScore = evaluator.fullEval(globalBestSol)
         synchronized(lock) { globalBest = finalScore; report() }
-        SaResult(globalBestSol, finalScore, totalIters, (System.nanoTime() / 1_000_000L) - start)
+        SaResult(globalBestSol, finalScore, totalIters, (System.nanoTime() / 1_000_000L) - start, chainWins)
     }
 
     /**
@@ -167,6 +176,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                 //   [照合トグル] OFF=純ネイティブ（照合せず C++結果を信頼）。C++自己整合(status)は上で常時検査済。
                 val bestSol = NativeEval.unflatten(best, s, t)
                 if (NativeGate.parityCheckEnabled) {
+                    TuningTelemetry.parityChecks.incrementAndGet()
                     val kotlinScore = evaluator.fullEval(bestSol)
                     if (kotlinScore != newBest) {
                         NativeGate.disable("Kotlin照合NG (native=$newBest kotlin=$kotlinScore)")
@@ -187,6 +197,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
             // [Stage11] HARD 床到達（hardStallMs 無改善）で PhaseB=LAHC ソフト研磨へ恒久切替
             //   （Kotlin runWorker の phaseB=true と同じ一方向遷移。以後は予算末まで LAHC）。
             if (params.softPolish && (System.nanoTime() / 1_000_000L) - lastHardImprove > params.hardStallMs) {
+                TuningTelemetry.lahcEntered.incrementAndGet()
                 return runLahcNative(handle, best, bestScore, params, rng, start, flush)
             }
 
@@ -246,6 +257,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                     NativeBridge.nativeLahcRead(h, 0, bestFlat)
                     val sol = NativeEval.unflatten(bestFlat, s, t)
                     if (NativeGate.parityCheckEnabled) {
+                        TuningTelemetry.parityChecks.incrementAndGet()
                         val kotlinScore = evaluator.fullEval(sol)
                         if (kotlinScore != ret[2]) {
                             NativeGate.disable("LAHC Kotlin照合NG (native=${ret[2]} kotlin=$kotlinScore)")
@@ -439,6 +451,7 @@ class SaOptimizer(private val problem: Problem, private val evaluator: Evaluator
                             if (timeUp()) { flush(best, copyOf(bestSol), 0); return }
                         }
                         if (params.softPolish && (System.nanoTime() / 1_000_000L) - lastHardImprove > params.hardStallMs) {
+                            TuningTelemetry.lahcEntered.incrementAndGet()
                             phaseB = true; break@cooling
                         }
                         ls++

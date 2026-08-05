@@ -42,6 +42,12 @@ internal object C1TemporalFlowPolish {
         val before = UnifiedViolationChecker.check(state, work)
         var bestRep = before
         var applied = 0
+        var rowNoGain = 0                       // 行の c1 が減らず候補にならなかった数
+        val rejects = RejectCulpritStats()      // 目的関数/ピンで落ちた候補の内訳
+        // [3.359.0] 「目的関数は採用を認めたのにピンだけが止めた」候補の**対象(職員,シフト)**を集める。
+        //   実データでの規模は小さい（real で6件・他は0）が、UI の「回数の固定について」一覧の
+        //   計測範囲を、このパスについても実装どおりにするための配線。
+        val pinBlocks = PinBlockAttribution()
         var dpCandidates = 0
         var flowFailures = 0
         val fixedLabels = ArrayList<String>()
@@ -157,12 +163,16 @@ internal object C1TemporalFlowPolish {
                 trialWork = next
             }
             val newRowFires = rowC1Fires(trialWork, i)
-            if (newRowFires >= rowC1Fires(work, i)) return null
+            if (newRowFires >= rowC1Fires(work, i)) { rowNoGain++; return null }
             val rep = UnifiedViolationChecker.check(state, trialWork)
-            if (!better(rep, bestRep)) return null
+            // [3.356.0/実機ログ起因] 旧ログは「DP候補12 flow失敗0 採用0回」までで、12件が
+            //   ①行のc1が減らない ②目的関数に負けた ③厳密ピンを崩す のどれで落ちたかが読めなかった。
+            //   判定の順序は変えず（better → ピン）、落ちた理由だけを数える。
+            val ok = better(rep, bestRep)
             // [厳密ピン保護] 他職員のジョイント再割当(FlexibleDayFlow)がstaffRange厳密ピンを崩す
             // 副作用は、total/weightedScoreが改善してもここで拒否する（keep-best不変・追加ガードのみ）。
-            if (exactPinRegression(p, work, trialWork)) return null
+            val pinBad = ok && pinBlocks.blocksImproving(p, work, trialWork)
+            if (!ok || pinBad) { rejects.record(rep, bestRep, pinBad); return null }
             return Plan(trialWork, rep, i, x, candidate.relocations, changedDays.size)
         }
 
@@ -216,10 +226,15 @@ internal object C1TemporalFlowPolish {
                     "${bestRep.breakdown["c1"] ?: 0} / total ${before.total}->${bestRep.total} " +
                     "HARD ${before.hard}->${bestRep.hard} 採用${applied}回 DP候補$dpCandidates " +
                     "flow失敗$flowFailures" +
+                    (if (rowNoGain > 0) " 行c1が減らず${rowNoGain}件" else "") +
+                    rejects.summary() +
                     (if (fixedLabels.isNotEmpty()) " 対象: ${fixedLabels.joinToString(", ")}" else "") +
                     (if (applied == 0 && (before.breakdown["c1"] ?: 0) > 0) " [頭打ち=ジョイント再割当解なし]" else ""),
             ),
         )
-        return V6HotfixPasses.CyclicSwapResult(work, before.total, bestRep.total, applied, logs)
+        return V6HotfixPasses.CyclicSwapResult(
+            work, before.total, bestRep.total, applied, logs,
+            observedPinBlockedAttempts = pinBlocks.attempts, pinBlocks = pinBlocks,
+        )
     }
 }
