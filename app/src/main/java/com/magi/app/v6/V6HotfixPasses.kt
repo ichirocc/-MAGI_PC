@@ -190,6 +190,8 @@ object TuningTelemetry {
     val lahcEntered = java.util.concurrent.atomic.AtomicInteger(0)
     /** Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。 */
     val parityChecks = java.util.concurrent.atomic.AtomicInteger(0)
+    /** covU 壁（いまの希望のままでは人員不足を減らせない）と判定した回数。 */
+    val covUWallHits = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
      * 実行ごとに 0 へ戻す（`optimize()` 入口）。
@@ -203,7 +205,7 @@ object TuningTelemetry {
      */
     fun reset() {
         c3nFilterSkipped.set(0); wideC3nDiffered.set(0); wideC3nCalls.set(0)
-        escapeControlUsed.set(0); lahcEntered.set(0); parityChecks.set(0)
+        escapeControlUsed.set(0); lahcEntered.set(0); parityChecks.set(0); covUWallHits.set(0)
     }
 
     /** 各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。 */
@@ -224,7 +226,9 @@ object TuningTelemetry {
             " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped.get(), "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
             " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed.get(), "回の役割決定") +
-            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered.get(), "回LAHCへ切替")
+            " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered.get(), "回LAHCへ切替") +
+            " / 人員不足が詰んだときの切り上げ=" +
+            eff(PolishGate.covUWallEarlyStop, covUWallHits.get(), "回 壁と判定")
     }
 }
 

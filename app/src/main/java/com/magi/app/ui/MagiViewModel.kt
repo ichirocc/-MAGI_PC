@@ -168,6 +168,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private fun opDays(days: List<Int>): String = if (days.size <= 10) days.joinToString(",") { "${it + 1}日" } else "${days.size}日分"
 
     init {
+        // [3.363.0] 調整トグルの実体はプロセス全域の `NativeGate`/`PolishGate`。UiState はその写しなので、
+        //   ViewModel が作り直されると **UiState だけ既定へ戻り engine 側は前の選択を保持**する＝
+        //   画面が嘘をつく。写す向きは gate → UiState（gate が実際に効いている設定）。
+        //   通常の起動（新規プロセス）では gate も既定なので値は変わらない。
+        _ui.update {
+            it.copy(
+                nativeAccel = com.magi.app.v6.NativeGate.userEnabled,
+                nativeParity = com.magi.app.v6.NativeGate.parityCheckEnabled,
+                blockSwapC3nFilter = com.magi.app.v6.PolishGate.filterC3nIncrease,
+                wideC3nBreak = com.magi.app.v6.PolishGate.wideC3nBreakDays,
+                adaptiveEscape = com.magi.app.v6.PolishGate.adaptiveEscapeControl,
+                covUWallEarlyStop = com.magi.app.v6.PolishGate.covUWallEarlyStop,
+            )
+        }
         // 起動時: 前回の自動保存があれば復元（無ければ何もしない）
         viewModelScope.launch {
             // [並行I/O] 独立した3つのファイル読み込み（自動保存・中断マーカー・完了結果）は互いに依存しない
@@ -615,6 +629,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         com.magi.app.v6.PolishGate.wideC3nBreakDays = on
         _ui.update { it.copy(wideC3nBreak = on) }
         logOp("I", "設定変更: 禁止連続の崩し範囲 → ${if (on) "パターン全域" else "前後1日"}")
+    }
+
+    /**
+     * [3.363.0 配線] 人員不足が「いまの希望・担当のままでは減らせない」と CoverageDiag が判定した時点で
+     * 探索を切り上げるか（既定ON）。実測（300s・PORTFOLIO・real/user 各3反復）は
+     * **時間 65.0% / 68.6% 短縮**、hard 中央値は不変。ただし hard=4 の中で weighted 中央値が
+     * わずかに悪く（real +206 / user +53）、real は OFF が3回中1回 hard=3 に到達した（ON は 0/3）。
+     * ＝**まれに、最後まで回せば見つかったはずの必須違反1件を取り逃す**。
+     * 時間より品質の最後の一滴を取りたい場合に OFF にする。keep-best は不変（3.362.0 の docstring 参照）。
+     */
+    fun setCovUWallEarlyStop(on: Boolean) {
+        com.magi.app.v6.PolishGate.covUWallEarlyStop = on
+        _ui.update { it.copy(covUWallEarlyStop = on) }
+        logOp("I", "設定変更: 人員不足が詰んだときの切り上げ → ${if (on) "切り上げる" else "時間を使い切る"}")
     }
 
     /**

@@ -422,6 +422,7 @@ object V6FinalPort {
                         val arr = Array(board.size) { r -> IntArray(board[r].size) { c -> board[r][c] } }
                         V6PortAnalyzer.diagnoseCoverage(state, arr).allBlockedNow
                     } catch (_: Exception) { false }
+                    if (proven) TuningTelemetry.covUWallHits.incrementAndGet()
                     covUWallResult.set(proven)
                     covUWallCheckedVersion.set(v)
                 }

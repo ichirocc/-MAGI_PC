@@ -50,6 +50,7 @@ data class UiState(
     val nativeParity: Boolean = true,          // [照合トグル] Kotlinパリティ照合。OFF=純ネイティブ(検証/ベンチ用・誤結果の可能性)
     val blockSwapC3nFilter: Boolean = false,    // [3.298.0] ブロック巡回交換で c3n が増える候補を候補生成段階で捨てるか。採用結果は不変・評価枠の節約のみ
     val wideC3nBreak: Boolean = false,          // [3.304.0] 禁止連続を崩す日を j±1 から違反パターン全域へ広げるか。既定OFF（実データで利得が一貫しない）
+    val covUWallEarlyStop: Boolean = true,      // [3.363.0] 人員不足が「いまの希望のままでは減らせない」と分かった時点で切り上げるか。既定ON（300s実測で65〜69%短縮・代償は3.362.0参照）
     val adaptiveEscape: Boolean = false,        // [3.306.0] 並列仮説の次の役割を残差から選び停滞の深さを保持するか。既定OFF（A/Bで有意差を検出できず）
     val softPolish: Boolean = true,   // [既定ON] 仕上げ最適化（品質研磨）。keep-best で悪化しない
     val v6Algorithm: V6Algorithm = V6Algorithm.AUTO,

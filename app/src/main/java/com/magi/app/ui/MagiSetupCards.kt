@@ -341,6 +341,22 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.adaptiveEscape, onCheckedChange = { vm.setAdaptiveEscape(it) }, enabled = !ui.running)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("人員不足が詰んだときの切り上げ")
+                // どちらの状態も危険ではないので警告色は使わず、実測値で違いを説明する。
+                Text(
+                    if (ui.covUWallEarlyStop)
+                        "人員不足が「いまの希望・担当のままでは減らせない」と分かった時点で切り上げます。" +
+                            "試した範囲では5分の設定が約1分40秒で終わりました。まれに、最後まで回せば見つかったはずの" +
+                            "必須違反1件を取り逃します。"
+                    else
+                        "決めた時間を最後まで使い切ります。",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = ui.covUWallEarlyStop, onCheckedChange = { vm.setCovUWallEarlyStop(it) }, enabled = !ui.running)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,
