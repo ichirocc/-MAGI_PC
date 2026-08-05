@@ -133,6 +133,19 @@ object PolishGate {
      * （実測: 正式評価 48→14〜38 件）。
      */
     @Volatile var filterC3nIncrease: Boolean = false
+
+    /**
+     * [3.361.0 検証中/既定OFF] covU の「いまの希望のままでは不能」を停滞閾値の判定に使う。
+     *
+     * `effectiveStallMs` の短い閾値は covU が**静的な**構造下限（担当者数ベースの
+     * `structuralHardFloor`）に達したときしか効かない。実データの covU は希望固定・禁止連続で
+     * **動的に**塞がることがあり（3.344.0 で CoverageDiag が「充足可能3枠だが今は不能」と実測）、
+     * そのとき `bestHard > hardFloor` のままなので長い閾値（予算9/10）が選ばれ、実質的に発火しない。
+     * ON にすると CoverageDiag が全不足枠の塞がりを示した場合も頭打ちとして扱う。
+     *
+     * keep-best は不変＝早く止めるだけで解は退化しない。A/B の結果が支持しなければ削除する。
+     */
+    @Volatile var covUWallEarlyStop: Boolean = false
 }
 
 /**

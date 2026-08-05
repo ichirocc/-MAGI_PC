@@ -109,4 +109,46 @@ class V6FinalPortTest {
         //   bestHard(3) > hardFloor(0)+nonCovU(1) ＝ covU 部分が床超過。
         assertEquals(stallLong, V6FinalPort.effectiveStallMs(3, 0, 1, true, true, stallHard, stallLong))
     }
+
+    /**
+     * [3.361.0] `effectiveStallMs` を書き換えた（covU 側と非covU 側を別々に判定する形へ）ので、
+     * **新しい引数を既定(false)にすると旧式と厳密に一致する**ことをパラメータ空間の総当たりで固定する。
+     *
+     * 旧式:
+     *   basePlateau   = bestHard <= hardFloor && nonCovU == 0
+     *   c3nWallPlateau= nonCovU > 0 && allC3n && bestHard <= hardFloor + nonCovU && proven
+     *   結果          = basePlateau || c3nWallPlateau
+     */
+    @Test
+    fun effectiveStallMsIsUnchangedWhenTheCovUWallIsNotProven() {
+        val short = 10L
+        val long = 90L
+        for (bestHard in 0..4) for (hardFloor in 0..3) for (nonCovU in 0..3)
+            for (allC3n in listOf(false, true)) for (proven in listOf(false, true)) {
+                val base = bestHard <= hardFloor && nonCovU == 0
+                val c3n = nonCovU > 0 && allC3n && bestHard <= hardFloor + nonCovU && proven
+                val expected = if (base || c3n) short else long
+                val actual = V6FinalPort.effectiveStallMs(
+                    bestHard, hardFloor, nonCovU, allC3n, proven, short, long,
+                )
+                assertEquals(
+                    "bestHard=$bestHard floor=$hardFloor nonCovU=$nonCovU allC3n=$allC3n proven=$proven",
+                    expected, actual,
+                )
+            }
+    }
+
+    /** covU 壁が証明されたときだけ、静的下限を超えていても短い閾値へ移る（非covU が片付いている場合）。 */
+    @Test
+    fun provenCovUWallShortensTheThresholdOnlyWhenTheNonCovUSideIsSettled() {
+        val short = 10L
+        val long = 90L
+        // covU だけが残り、静的下限(0)を超えている＝旧式では常に長い閾値だった局面。
+        assertEquals(long, V6FinalPort.effectiveStallMs(3, 0, 0, false, false, short, long, false))
+        assertEquals(short, V6FinalPort.effectiveStallMs(3, 0, 0, false, false, short, long, true))
+        // 非covU HARD が残り、それが c3n の壁として証明されていなければ、covU 壁が証明されても長いまま。
+        assertEquals(long, V6FinalPort.effectiveStallMs(3, 0, 1, false, false, short, long, true))
+        // 非covU が c3n のみで壁が証明済みなら、covU 壁と合わせて短い閾値へ。
+        assertEquals(short, V6FinalPort.effectiveStallMs(4, 0, 1, true, true, short, long, true))
+    }
 }

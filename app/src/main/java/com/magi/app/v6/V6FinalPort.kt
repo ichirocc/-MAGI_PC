@@ -142,11 +142,18 @@ object V6FinalPort {
     internal fun effectiveStallMs(
         bestHard: Int, hardFloor: Int, nonCovUHard: Int, nonCovUAllC3n: Boolean,
         c3nWallProven: Boolean, stallHardMs: Long, stallMs: Long,
+        covUWallProven: Boolean = false,
     ): Long {
-        val basePlateau = bestHard <= hardFloor && nonCovUHard == 0
-        val c3nWallPlateau = nonCovUHard > 0 && nonCovUAllC3n &&
-            bestHard <= hardFloor + nonCovUHard && c3nWallProven
-        return if (basePlateau || c3nWallPlateau) stallHardMs else stallMs
+        // 非covU 側が「もう解けない」と言えるか。0件＝解けるものは無い／c3n のみで壁が証明済み。
+        val nonCovUSettled = nonCovUHard == 0 || (nonCovUAllC3n && c3nWallProven)
+        // covU 側が「もう解けない」と言えるか。静的な構造下限に達した／CoverageDiag が全枠の塞がりを示した。
+        // [3.361.0] 後者が追加分。静的下限は担当者数ベースなので、希望固定・禁止連続で**動的に**塞がる
+        //   covU を捉えられない（3.344.0 で実測）。covUWallProven は既定 false ＝従来と厳密に同一
+        //   （テストがパラメータ空間を総当たりして固定している）。
+        // 旧実装は covU 側のこの条件を c3n 分岐の中に書いていた（同値だが所属が誤り）。covU の壁を
+        // 別に証明できるようになった以上、covU の条件は covU 側に置く。
+        val covUSettled = (bestHard - nonCovUHard) <= hardFloor || covUWallProven
+        return if (nonCovUSettled && covUSettled) stallHardMs else stallMs
     }
 
     fun getAlgorithmLabel(seconds: Int): AlgorithmLabel = when {
@@ -334,6 +341,8 @@ object V6FinalPort {
         val bestNonCovUAllC3n = java.util.concurrent.atomic.AtomicBoolean(false)
         val bestVersion = java.util.concurrent.atomic.AtomicInteger(0)
         val c3nWallCheckedVersion = java.util.concurrent.atomic.AtomicInteger(-1)
+        val covUWallResult = java.util.concurrent.atomic.AtomicBoolean(false)
+        val covUWallCheckedVersion = java.util.concurrent.atomic.AtomicInteger(-1)
         val c3nWallResult = java.util.concurrent.atomic.AtomicBoolean(false)
         var bTotal = Int.MAX_VALUE; var bWeighted = Double.MAX_VALUE; var lastPhase = ""
         val progressLock = Any()   // [競合解消] 並列ワーカーから呼ばれる best 追跡の read-modify-write を直列化
@@ -402,6 +411,23 @@ object V6FinalPort {
             }
             c3nWallResult.get()
         }
+        // [3.361.0/検証中] covU 壁の遅延証明。c3nWallProven と同型（best世代ごと1回・~20ms）。
+        //   CoverageDiag は読み取り専用で、判定は「停滞閾値の選択」にのみ作用する（採否/keep-best とは無関係）。
+        val covUWallProven = {
+            if (!PolishGate.covUWallEarlyStop) false else {
+                val v = bestVersion.get()
+                if (covUWallCheckedVersion.get() != v) {
+                    val board = V6NativeOptimizer.liveBest
+                    val proven = if (board == null) false else try {
+                        val arr = Array(board.size) { r -> IntArray(board[r].size) { c -> board[r][c] } }
+                        V6PortAnalyzer.diagnoseCoverage(state, arr).allBlockedNow
+                    } catch (_: Exception) { false }
+                    covUWallResult.set(proven)
+                    covUWallCheckedVersion.set(v)
+                }
+                covUWallResult.get()
+            }
+        }
         val shouldStop = {
             val now = System.currentTimeMillis()
             // [賢い早期脱出] bestHard が「解消不能な下限(hardFloor=構造的covU)」以下＝解けるHARDは出し切った状態。
@@ -413,11 +439,18 @@ object V6FinalPort {
             //   plateau（解けないHARD）として stallHardMs へ移行（実機ログの「c3n=1のまま150s無改善でも
             //   270s閾値のため発火不能」を解消）。診断は停滞が stallHardMs を超えてから遅延実行（~20ms/世代1回）。
             val nonCovU = bestNonCovUHard.get()
+            // [3.361.0] 旧実装はここに covU 側の条件 `bestHard <= hardFloor + nonCovU` を混ぜており、
+            //   covU が静的下限を超えている間は `c3nWallProven()` を**一度も呼ばなかった**。
+            //   covU の壁を別に証明できるようになった以上、この遅延ゲートは非covU 側の条件だけで判定する
+            //   （covU 側は covUSettled が見る）。covUWallEarlyStop=false のときは effectiveStallMs の
+            //   covUSettled が同じ条件を課すので、**判定結果は従来と厳密に同一**。
             val wall = nonCovU > 0 && bestNonCovUAllC3n.get() &&
-                bestHard.get() <= hardFloor + nonCovU &&
                 now - lastBestImproveMs.get() > stallHardMs && c3nWallProven()
+            val covUWall = bestHard.get() > hardFloor + nonCovU &&
+                now - lastBestImproveMs.get() > stallHardMs && covUWallProven()
             val effStall = effectiveStallMs(
                 bestHard.get(), hardFloor, nonCovU, bestNonCovUAllC3n.get(), wall, stallHardMs, stallMs,
+                covUWall,
             )
             when {
                 now >= searchDeadlineMs || !isActive -> true
