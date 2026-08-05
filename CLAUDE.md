@@ -5317,6 +5317,42 @@ JNI 越しにカウンタを渡す＝ABI 変更が要り、最内周に計数が
 （温度・受理方式のチューニング）は 2.55.0/2.56.0 で **実測して中立or有害**と結論し「脱出ヒューリスティクスへの
 投資は停止」と決めている。**既に死んでいると測ったレバーのために、いちばん熱いループへ計数を足さない。**
 
+## 共有ネイティブハンドルの並列安全性を実行で示す（3.364.0, 外部指摘「並列SAが1本のハンドルを同時に叩いてSIGSEGVでは?」）
+
+指摘は**この repo に実在する API**（`nativeCreateProblem`/`nativeSaChunk`）についてのもので、かつ
+`SaOptimizer.run` が**ハンドルを1本だけ作り最大8ワーカーで共有する**のは事実。コードのコメントは
+「read-only なのでスレッド安全」と主張しているが、**コメントと実装の食い違いはこのリポジトリで
+何度も起きている**（HF77）ので、読んで確認するのでなく**実行で示す**ことにした。
+
+### 静的に確認したこと（C++ 実体）
+- `runSaChunk(**const** MagiProblem&, ...)`＝問題データは const 参照。
+- `MagiProblem` に `mutable` メンバ **0**／`const_cast` **0**／関数内 `static` **0**／`thread_local` **0**／
+  ファイルスコープの可変グローバル **0**。遅延構築されるメンバも無い（全部コンストラクタで確定）。
+- `SaChunk` の可変状態（`a`/`ssn`/`dsn`/`wd`/各マスク/`score`/`rng`）は**全てインスタンスごと**で、
+  `p` は `const MagiProblem&` 保持。`runSaChunk` 本体に `p.xxx = ` の書き込みは **0 件**。
+- JNI 側は `cur`/`best` を**呼び出しローカルの `std::vector` へコピー**してから渡す＝配列も共有しない。
+
+### 実行で示したこと（`tools/native/host_parity_bench.cpp` に追加）
+`runSharedHandleConcurrency`: **同一 `MagiProblem` を8スレッドから同時に `runSaChunk`** し、
+同じ seed の逐次実行と**ビット単位で一致**することを確認する。`--shared-only` で競合検査だけを
+走らせられる（パリティループ数十万手は ThreadSanitizer 下で桁違いに遅く、そのままでは到達しない）。
+
+- 実データ(real_state)で **`SHARED-HANDLE x8 threads: identical to serial`**。
+- **ThreadSanitizer ビルドで警告 0**（`g++ -fsanitize=thread ... --shared-only`）。
+- 通常ビルドの全体も回帰なし（PARITY 3,596,099手 mismatch=0・bit-op ×2.09）。
+
+**結論: 指摘された機構（共有ハンドルの書き込み競合）はこのコードには無い。** 共有は読み取り専用で、
+ハンドルの破棄も 3.289.0 で「全ワーカーを cancel+join してから destroy」に修正済み（use-after-free も無い）。
+ただし**確認したのは x86 ホストでの競合検査**であり、arm64 実機での動作を証明したわけではない。
+
+### 併せて否定した2つの前提
+- **「C++/Kotlin パリティ不一致（soft 933≠1046）」**: 現行ソースは golden 実データで
+  **Kotlin soft=3109 == C++ soft=3109**。3.357.0 で `golden_eval_expected.txt` を両側から固定し CI で検証中。
+  提示された数値はどのログとも一致しない（3.357.0 で調べたとおり、古い `.so` を見た可能性が高い）。
+- **「release で `REBUILD_ENGINE=false` のため上流 SA が選ばれる」**: `REBUILD_ENGINE`・`autoNative`・
+  `OptimizeToggleStore`・`TransitionMode`・`ANNEAL` はいずれも**作業ツリーにも全 git 履歴にも 0 件**。
+  そのような分岐は存在しない。
+
 ## 切り上げトグルの UI 配線＋調整トグル全体の起動時同期（3.363.0, ユーザー指示「UI 配線する」）
 
 3.362.0 で covU 壁の早期終了を既定 ON にしたが、**利用者が OFF に戻す手段が無かった**（`PolishGate` の

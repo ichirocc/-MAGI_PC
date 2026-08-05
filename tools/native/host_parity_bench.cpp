@@ -26,6 +26,7 @@
 #include <random>
 #include <algorithm>
 #include <cstring>
+#include <thread>
 #include <fstream>
 #include <string>
 
@@ -257,6 +258,46 @@ static bool checkCrossLanguage(const MagiProblem& p, const std::vector<int>& boa
     return ok;
 }
 
+// [3.364.0] **共有ネイティブハンドルの安全性を、読んで確認するのでなく実行で示す。**
+//
+// `SaOptimizer.run` は `nativeCreateProblem` のハンドルを1本だけ作り、最大8本の並列ワーカーが
+// 同時に `nativeSaChunk` を呼ぶ。コメントは「read-only なのでスレッド安全」と主張しているが、
+// コメントと実装が食い違うのはこのリポジトリで何度も起きている（HF77）。実際に N スレッドから
+// 同一 MagiProblem を叩き、**逐次実行とビット単位で同じ結果**になることを確かめる。
+// ThreadSanitizer 付きでビルドすれば、書き込み競合はここで検出される。
+static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<int>& board,
+                                       int threads, long long& mismatches) {
+    struct Res { std::vector<int> cur, best; long long out[6]; };
+    auto oneChunk = [&](uint64_t seed, Res& r) {
+        r.cur = board; r.best = board;
+        long long bestScore = fullEvalCombined(p, r.best.data());
+        // ラダーは軽くてよい。ここで確かめたいのは「同じ p を並列に読んで壊れないか」であって
+        // 探索の深さではない（深さはパリティループ 360万手が担当）。ThreadSanitizer は10〜20倍遅く、
+        // 重いラダーだと競合検査そのものが時間内に回らない。
+        runSaChunk(p, r.cur.data(), r.best.data(), bestScore, seed, 1.0, 0.5, 0.5, 1, r.out);
+    };
+    // 逐次で基準を取る
+    std::vector<Res> serial((size_t)threads);
+    for (int t = 0; t < threads; t++) oneChunk((uint64_t)(t + 1) * 9176ULL, serial[(size_t)t]);
+    // 同じ seed を並列で。p は共有＝ここで競合があれば結果がずれるか TSAN が鳴る。
+    std::vector<Res> par((size_t)threads);
+    std::vector<std::thread> ts;
+    for (int t = 0; t < threads; t++)
+        ts.emplace_back([&, t] { oneChunk((uint64_t)(t + 1) * 9176ULL, par[(size_t)t]); });
+    for (auto& th : ts) th.join();
+    bool ok = true;
+    for (int t = 0; t < threads; t++) {
+        if (serial[(size_t)t].cur != par[(size_t)t].cur ||
+            serial[(size_t)t].best != par[(size_t)t].best) { ok = false; break; }
+        for (int x = 0; x < 6; x++)
+            if (serial[(size_t)t].out[x] != par[(size_t)t].out[x]) { ok = false; break; }
+        if (!ok) break;
+    }
+    printf("SHARED-HANDLE x%d threads: %s\n", threads, ok ? "identical to serial" : "MISMATCH");
+    if (!ok) mismatches++;
+    return ok;
+}
+
 int main(int argc, char** argv) {
     long long totalMoves = 0, mismatches = 0;
 
@@ -264,9 +305,14 @@ int main(int argc, char** argv) {
     const char* expectPath = nullptr;
     for (int ai = 1; ai < argc; ai++)
         if (strncmp(argv[ai], "--expect=", 9) == 0) expectPath = argv[ai] + 9;
+    // --shared-only は共有ハンドルの競合検査だけを走らせる（ThreadSanitizer 用）。
+    // パリティループ(数十万手)は TSAN 下では桁違いに遅く、そのままでは競合検査に到達しない。
+    bool sharedOnly = false;
+    for (int ai = 1; ai < argc; ai++)
+        if (strcmp(argv[ai], "--shared-only") == 0) sharedOnly = true;
 
     // ---- 実データ問題（flat ファイル引数）: 素の盤面＋実運転ノイズ(-1/非canDo)入り盤面 ----
-    for (int ai = 1; ai < argc; ai++) {
+    for (int ai = 1; ai < argc && !sharedOnly; ai++) {
         if (strncmp(argv[ai], "--", 2) == 0) continue;
         MagiProblem p;
         std::vector<int> board;
@@ -282,6 +328,19 @@ int main(int argc, char** argv) {
             injectRealisticNoise(p, noisy, nz);
             runParityLoop(p, noisy, "real(noisy -1/nonCanDo)", seed, seed % 2 == 0, 40000, totalMoves, mismatches);
         }
+    }
+
+    // 共有ハンドル並列テスト（実データがあればそれで、無ければ合成で下の方でも回す）
+    for (int ai = 1; ai < argc; ai++) {
+        if (strncmp(argv[ai], "--", 2) == 0) continue;
+        MagiProblem p;
+        std::vector<int> board;
+        if (!loadFlat(argv[ai], p, board)) return 2;
+        runSharedHandleConcurrency(p, board, 8, mismatches);
+    }
+    if (sharedOnly) {
+        printf("SHARED-ONLY: %lld mismatches\n", mismatches);
+        return mismatches == 0 ? 0 : 1;
     }
 
     // ---- 合成フィクスチャ ----
