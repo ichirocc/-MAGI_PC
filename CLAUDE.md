@@ -5317,6 +5317,40 @@ JNI 越しにカウンタを渡す＝ABI 変更が要り、最内周に計数が
 （温度・受理方式のチューニング）は 2.55.0/2.56.0 で **実測して中立or有害**と結論し「脱出ヒューリスティクスへの
 投資は停止」と決めている。**既に死んでいると測ったレバーのために、いちばん熱いループへ計数を足さない。**
 
+## 提出された静的解析レポートの照合＝実コードに当たったのは1件（3.360.3）
+
+`SearchSessionFull` / `tryTransition(ANNEAL)` / `tryMetropolis` / `TemperatureParams` / `ProblemGuards` /
+`G1.propose` など**15個のシンボルを全部 grep したが、作業ツリーにも全 git 履歴（`-S` 全ref検索）にも
+1つも存在しない**（3.178.0「マスク最適化#1〜#4」・3.319.0 `BlockPatternMatch` と同じ形＝別コードベースの
+レポート）。よって提示コードは適用しない。**そのうえで指摘の中身を1件ずつ実コードへ当てた**。
+
+- **#3「`nextInt(0)` でクラッシュ」＝当たり**。期間には `require(state.dayCount > 0)` があるのに
+  **職員数には無く非対称**だった。3経路（`handleOptimize`/`handleSimple`/`handleSmartInitial`）へ
+  `require(state.staff.isNotEmpty())` を追加。
+  **ガードを外して実測して確かめた**（死にコードでないことの確認）: `handleOptimize` は実際に
+  `IllegalArgumentException("bound must be positive")`＝`SaOptimizer` の `rng.nextInt(S)` を投げていた。
+  `handleSimple`/`handleSmartInitial` は生成器側が「期間/職員/シフトが不足しています」を返しており
+  致命的ではなかったが、3経路で文言を揃える。
+  **到達経路は限定的**: 編集画面からは作れない（`Ws1Ops.removeStaff` が最後の1名を消さない）。かつ
+  `dayCount` は日付でなく `schedule[0].size` 由来なので、staff も schedule も空なら既存の期間ガードが
+  先に止める。**職員が空で schedule に行だけ残る不整合な取込**でのみ到達する。
+- **当たらなかった8件（根拠つき）**:
+  - #1/#2「HARD 増加を current に取り込む」= 事実だが**設計どおり**（SA/Metropolis）。辞書式パックで
+    hard 差分は 1e9 単位になり `exp(-Δ/(200·temp))` が実質0、最終採用は `betterReport` の keep-best。
+    current を hard 非悪化に縛るのは**探索の変更＝A/B が要る**（2.55.0/2.56.0/3.310.1 の規律）。
+  - #4「`budgetMs=0` で無限ループ」= `timeUp()` は `elapsed >= budgetMs` なので 0 なら**即 true**＝
+    ループに一度も入らない。`maxIters` という概念はこのコードベースに無い。
+  - #5「schedule 形状 ≠ S×T で範囲外」= `normalizeSchedule` が不足を休で埋め範囲外を -1 センチネルへ写す
+    （3.199.0 で C++ 側の -1 未対応を修正済み・3.278.0 で -1 の添字使用を全掃討済み）。
+  - #6「`alpha >= 1` で冷却停止」= 冷却ループは `while (t >= tf && !timeUp())` で**時間で必ず有界**。
+    `alpha` は内部定数(0.975)でユーザーからは設定できない。
+  - #7「希望固定×c3n の構造壁」= 3.280.0 `ForbiddenDiag` が run 単位で証明し、3.311.0 で pref の代金も
+    勘定するよう修正済み。3.283.1 に実機での発火例を記録済み。
+  - #8「soft 表示と重み付き softSum の不一致」= 3.313.0 で「改善N%」の混在を是正し、3.337.0 で
+    Checker↔Evaluator のパリティを CI で固定済み。
+  - #9「ALNS 後処理の固定上限」= 3.271.0 の `clusterStop`（クラスタ専用締切）と各パスの内側締切確認で有界。
+- テスト1件追加。**ガードを外すとこの1件だけが落ちる**ことを実行して確認（教訓#30）。
+
 ## main のビルドを直す＝LocusIdCompat の import が誤っていた（3.360.2）
 
 3.360.1 を main へマージしたあと CI を確認して発覚。**マージより前から main が壊れていた**

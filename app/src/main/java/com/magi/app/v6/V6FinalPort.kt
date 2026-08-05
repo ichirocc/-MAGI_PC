@@ -162,6 +162,11 @@ object V6FinalPort {
 
     suspend fun handleSimple(state: MagiState, allowImpossible: Boolean = false): ActionResult = withContext(Dispatchers.Default) {
         require(state.dayCount > 0) { "対象期間が無効です。終了日を開始日より後の日付にしてください" }
+        // [3.360.3] 期間には T>0 のガードがあるのに職員数には無く、非対称だった。S=0 は編集画面からは
+        //   作れない（Ws1Ops.removeStaff が最後の1名を消さない）が、**JSON/CSV 取込で外部から入りうる**。
+        //   その場合 SaOptimizer の rng.nextInt(S) が IllegalArgumentException を投げ、ViewModel の
+        //   catch が「最適化失敗: bound must be positive」という原因の読めない文言を出していた。
+        require(state.staff.isNotEmpty()) { "職員が1人も登録されていません。職員管理で追加してください" }
         val gate = confirmDespiteImpossibleWishes(state, allowImpossible)
         if (!gate.allowed) error(gate.message)
         val busy = buildBusyDetail(state, "シフト作成中", mapOf(
@@ -182,6 +187,11 @@ object V6FinalPort {
      */
     suspend fun handleSmartInitial(state: MagiState, allowImpossible: Boolean = false): ActionResult = withContext(Dispatchers.Default) {
         require(state.dayCount > 0) { "対象期間が無効です。終了日を開始日より後の日付にしてください" }
+        // [3.360.3] 期間には T>0 のガードがあるのに職員数には無く、非対称だった。S=0 は編集画面からは
+        //   作れない（Ws1Ops.removeStaff が最後の1名を消さない）が、**JSON/CSV 取込で外部から入りうる**。
+        //   その場合 SaOptimizer の rng.nextInt(S) が IllegalArgumentException を投げ、ViewModel の
+        //   catch が「最適化失敗: bound must be positive」という原因の読めない文言を出していた。
+        require(state.staff.isNotEmpty()) { "職員が1人も登録されていません。職員管理で追加してください" }
         val gate = confirmDespiteImpossibleWishes(state, allowImpossible)
         if (!gate.allowed) error(gate.message)
         val busy = buildBusyDetail(state, "初期解を作成中", mapOf(
@@ -220,6 +230,11 @@ object V6FinalPort {
         onProgress: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
     ): ActionResult = withContext(Dispatchers.Default) {
         require(state.dayCount > 0) { "対象期間が無効です。基本情報で終了日を開始日より後にしてください" }
+        // [3.360.3] 期間には T>0 のガードがあるのに職員数には無く、非対称だった。S=0 は編集画面からは
+        //   作れない（Ws1Ops.removeStaff が最後の1名を消さない）が、**JSON/CSV 取込で外部から入りうる**。
+        //   その場合 SaOptimizer の rng.nextInt(S) が IllegalArgumentException を投げ、ViewModel の
+        //   catch が「最適化失敗: bound must be positive」という原因の読めない文言を出していた。
+        require(state.staff.isNotEmpty()) { "職員が1人も登録されていません。職員管理で追加してください" }
         // [3.333.0/外部レビュー] 上限は [MAX_OPTIMIZE_SEC]（現在 300s＝5分）。呼び出し側に依らずここで
         //   頭打ちにする。旧コメントは「10分(600s)」のままで実装と食い違っていた（HF77: コメント≠実装）。
         val seconds = secondsRaw.coerceIn(1, MAX_OPTIMIZE_SEC)

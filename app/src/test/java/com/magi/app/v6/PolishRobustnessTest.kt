@@ -116,6 +116,35 @@ class PolishRobustnessTest {
      * この1件だけが落ちる（実際に戻して確認済み）。他のテストは通る＝この不変条件を守るものが
      * 他に無かったことの裏づけでもある。
      */
+    /**
+     * [3.360.3] 職員ゼロの入力で、原因の読めない例外でなく**何を直せばよいか言う**メッセージで止まる。
+     *
+     * 期間には `dayCount > 0` のガードがあるのに職員数には無く非対称だった。S=0 は編集画面からは
+     * 作れない（`Ws1Ops.removeStaff` が最後の1名を消さない）が、JSON/CSV 取込で外部から入りうる。
+     * **ガードを外して実測**: `handleOptimize` は `bound must be positive`（= `rng.nextInt(0)`）を投げていた。
+     * `handleSimple`/`handleSmartInitial` は生成器側が「期間/職員/シフトが不足しています」を返しており
+     * 致命的ではなかったが、3経路で同じ文言に揃える。
+     */
+    @Test
+    fun emptyStaffIsRejectedWithAnActionableMessage() = kotlinx.coroutines.runBlocking {
+        // 職員ゼロだが schedule に行が残っている＝取込で起こりうる不整合な入力。
+        // （staff も schedule も空なら dayCount==0 で既存の期間ガードが先に止めるので、
+        //  この形でないと職員ガードには到達しない。）
+        val s = emptyBucketState().let { it.copy(staff = emptyList(), schedule = listOf(listOf(0, 1, 0))) }
+        for (call in listOf<suspend () -> Unit>(
+            { V6FinalPort.handleOptimize(s, emptyArray(), 1) },
+            { V6FinalPort.handleSimple(s) },
+            { V6FinalPort.handleSmartInitial(s) },
+        )) {
+            val e = runCatching { call() }.exceptionOrNull()
+            assertNotNull("職員ゼロは受け付けない", e)
+            assertTrue(
+                "原因と直し方が読めるメッセージであること: ${e?.message}",
+                e?.message?.contains("職員が1人も登録されていません") == true,
+            )
+        }
+    }
+
     @Test
     fun tuningCountersDoNotLoseIncrementsUnderParallelWorkers() {
         TuningTelemetry.reset()
