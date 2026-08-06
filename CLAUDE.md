@@ -5263,6 +5263,50 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## covU-blocked のウォッチドッグ配線を実測して却下（3.361.0, ユーザー指示「修正する」＝#1 の A/B）
+残作業 #1「`CoverageDiagnosis.allBlockedNow` をウォッチドッグへ配線し、covU が構造床超でも blocked-now を
+実証したら plateau として stallHardMs（早期終了）へ移す」。3.344.0 が「要A/B・品質と電池の交換・今回は診断の
+矛盾解消までに留める」と保留した項目を、ユーザーの「修正する」で再開。**別セッションで一度 principled-safe として
+原理採用しかけた4編集を、この規律違反に気づいて revert し、実測のうえ却下した。**
+
+### なぜ原理採用できないか（前提の訂正）
+早期終了は focus 変更（3.74.0系）と違い **keep-best で退化不能ではない**。keep-best が保証するのは「返す解は
+**見た**解の最良」であって、早期終了は探索そのものを止める＝**まだ見ていない改善を諦める**ため keep-best では
+回収できない。前セッションの「principled-safe＝keep-best が担保」判断はこの区別を見落としていた。よって
+3.310.1/3.341.1 の規律どおり「探索動学に効く変更は実測してから採否・原理採用しない」に該当する。
+
+### 実測（ホストJVM・handleOptimize 改善タイムライン）
+kotlin-compiler-embeddable で v6/model をコンパイルし handleOptimize を実走（3.251.0/3.263.0 の手法）。
+- **golden_state は hard=0・covU=0 に到達**（`structuralHardFloor=0`・allBlockedNow=false）＝**covUBlocked 項は
+  構造的に常に偽＝完全な no-op**。この変更を golden では**一切検証できない**。CLAUDE.md 3.263.0 の
+  「golden 構造的covU=2」は現行 golden_state.json では stale（今は hard=0 到達）。
+- covU-blocked を実際に持つ唯一のデータ（real_state/user_state）は前セッションのアップロード＝**揮発コンテナで消失**。
+  よって covUBlocked の直接 ON/OFF は**利用可能データで不可能**。
+- **sample_state_v6（stuck HARD=1・非covU＝pref由来・covU=0）のタイムラインが決定的な傍証**:
+  改善が 17159ms(weighted 8158) で止まり **22秒停滞**を挟んで 39234ms(8156)→…→53696ms(8113) と再開。
+  この stuck HARD は c3n でないため**既存ウォッチドッグが正しく stallMs（長）を選び、この遅延バースト
+  改善(8158→8113≈45pt/0.5%)を捕らえている**。もし stallHardMs(=budget/8=15s) の早期終了が効いていれば
+  32159ms で止まり weighted 8158 のまま＝この改善を切り捨てていた。
+- **soft 族の研磨動学は stuck HARD が covU か c3n か pref かに依らない**（3.183.0/3.184.0＝HARD が stuck でも
+  focus は SOFT へ pivot し続ける）。よって sample_v6 が示す「遅延バースト soft 改善の実在」は covU-blocked
+  ケースにも適用でき、covUBlocked が stallMs→stallHardMs へ切り替えると**同種の改善を切り捨てる**と結論できる。
+
+### 却下の根拠（4点）
+1. 早期終了は keep-best-safe でない（上記）＝原理採用は規律違反。
+2. 新規価値は**電池/時間の節約のみ**。「stuck HARD の予算を soft へ振り向ける」品質価値は 3.183.0/3.184.0 で
+   既に実現済み＝品質の upside は無く、電池ゲインに対する**未実測の品質リスク**だけが残る。
+3. 3.341.1 は逆方向（早期終了の撤去）を実測し中央 −3.5%/平均 −4.1%（p≈0.075）＝**早期終了は僅かに品質を
+   落とす**方向。covUBlocked は早期終了を**より攻撃的**にする＝品質を落とす向き。
+4. 直接 A/B が不可能（動機データ消失・golden は no-op・wall-clock ウォッチドッグ×PORTFOLIO ばらつきで
+   ホスト JVM の綺麗な測定が困難）＝3.344.0 が保留した理由そのもの。
+- **反証されたコードは残さない**（3.307.0）＝V6FinalPort.kt の4編集（effectiveStallMs 署名＋covUBlockedPlateau・
+  covUBlockedCheckedVersion/Result atomics・covUBlockedProven lambda・shouldStop の covUBlocked 計算）を全て revert。
+  **診断の矛盾解消（3.343.0/3.344.0 の「充足可能 vs どう組んでも解消できません」＋allBlockedNow）は既に済み**＝
+  #1 の残りは本却下で確定。**再提案しない**（明示の real/user データつき A/B 指示があった場合のみ）。
+- 検証手段の穴として記録: covU-blocked の実データが repo に無い（golden は hard=0 到達）ため、この class の
+  ウォッチドッグ変更は**現状のサンドボックスでは直接 A/B できない**。将来 real/user 相当の「構造的 covU が
+  床超で blocked-now」な state を test resource 化すれば測定可能になる（backlog）。
+
 ## ログのヘッダに版と実行環境を書く＋PORTFOLIO の合計iterと最良更新回数（3.360.0, ユーザー提示のログ強化仕様）
 
 仕様案4項目をコードへ突合し、**実際に欠けていたところだけ**を足した。表示・ログのみ・スコア不変。
@@ -5934,9 +5978,12 @@ mass が3〜4倍になったぶん探索の受理予算を食い、user では c
   `allBlockedNow`（`allInfeasible` とは別軸）。ログとカードの見出しを
   「不足3人 — 充足不可0枠 / 充足可能3枠（うち3枠は いまの希望のままでは不能）＝この希望・担当のままでは
   人員不足は減りません」へ。枠のチップも「充足不可 / **今は不能** / 充足可能」の3値に。
-- **[未着手・要A/B]** `allBlockedNow` をウォッチドッグへ配線すれば「covU も壁」と判定して早期終了できる
+- ~~**[未着手・要A/B]** `allBlockedNow` をウォッチドッグへ配線すれば「covU も壁」と判定して早期終了できる
   （real/user は最終改善が 58s/16s なのに 120秒を使い切っている）。ただし 3.341.1 と同じ「品質と電池の
-  交換」の領域なので、判定基準を先に固定した A/B が要る。今回は診断の矛盾解消までに留める。
+  交換」の領域なので、判定基準を先に固定した A/B が要る。今回は診断の矛盾解消までに留める。~~
+  **→ 3.361.0 で実測のうえ却下**（早期終了は keep-best-safe でない・sample_v6 が遅延バースト soft 改善の実在を
+  示す・動機データ消失で直接 A/B 不可・golden は hard=0 到達で no-op。詳細は「covU-blocked のウォッチドッグ
+  配線を実測して却下」節）。**再提案しない**（real/user 相当の実データつき明示指示があった場合のみ）。
 - 検証: ホストJVM **全432テスト green**（431 + 新規1）。UI 層はホストでコンパイル不可＝静的確認のみ。
 
 ## 禁止連続診断が「崩せる」と誤主張していた＝隣接日調整にも pref の代金を勘定（3.343.0）
