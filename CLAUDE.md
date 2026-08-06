@@ -5150,9 +5150,14 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
    **→ 3.357.0 で言語跨ぎパリティも追加**（旧: 照合は C++ scalar vs C++ bit-op ＝同じ言語どうしで、
    両方の C++ 経路を一貫して変えれば通ってしまった。`golden_eval_expected.txt` を Kotlin テストと
    `--expect=` の両側から固定し、片側だけの変更が必ず落ちるようにした）
-   **→ 3.199.0 でフィクスチャ拡充完了**（`tools/native/state_to_flat.py`＝実 state JSON→flat 変換を新設し、
+   **→ 3.199.0 でフィクスチャ拡充**（`tools/native/state_to_flat.py`＝実 state JSON→flat 変換を新設し、
    CI が golden_state.json の実データ問題でも照合＋合成 builder に休シフト range/apt/c1/c2・実現不可能希望・
    -1/非canDo混入盤面を追加。この拡充が実バグ=SaChunk の -1 未対応を実際に捕捉した）。
+   **→ 3.362.0 で2つ目の実データ形状 sample_v6 を追加**（golden は入力盤面 hard=0＝C++ の HARD族パスを
+   実データで一度も exercise しないため、sample_state_v6 の hard=15 盤面を第2 fixture に。`--expect` を
+   flat と出現順で対応づけ1回のベンチで両形状を言語跨ぎ照合。詳細は「パリティネットへ2つ目の…」節）。
+   ~~**残課題**: 合成問題は S<=64/T<=64・乱数生成で、実データ形状の網羅ではない（fixture 拡充は将来課題）~~
+   **残: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い（3.361.0 参照）。**
 7. ~~**[ネイティブ・堅牢性] 群index無検証のOOB（潜在）**（3.168.0系精読で判明）。探索オペレータ約13箇所が
    `p.bucket[p.sgrp[i]]`／`grpCnt[sgrp[i]*K+k]` を sgrp範囲未検証で使用しており、不正な groupIdx が渡ると
    C++側はUB（bucket=範囲外読み・grpCnt=範囲外**書込=ヒープ破壊**）でSIGSEGVし得た（Kotlin側は例外→
@@ -5262,6 +5267,28 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   偏り職員を収集→UiState→`breakdownLocations` が「職員（曜日の偏り N）」「職員 「シフト」（偏り N）」で整形・タップで
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
+
+## パリティネットへ2つ目の実データ形状 sample_v6 を追加（3.362.0, backlog#6「実データ形状の網羅」）
+残バックログ #3。言語跨ぎパリティ CI（3.357.0）は実データ fixture が golden_state **1つだけ**で、
+その入力盤面は **hard=0**（3.361.0 の実測で判明）＝**C++ の HARD 族パス（groupViol/c3n/pref/covU）を
+実データで一度も exercise しない**という穴があった。**test/CI のみ・エンジン/重み/スコア不変。**
+- **fixture**: `sample_state_v6.json`（app/assets の実サンプル）を test/resources へ複製。**入力盤面 hard=15**
+  （c1=2/c2=1/c42=7/c3n=11＝多族の HARD/SOFT が発火する別形状）。期待値 `sample_v6_eval_expected.txt`
+  （hard=15/soft=825）は Kotlin `Evaluator.fullEval(入力盤面)` で算出（golden の hard=0/soft=3109 も同手法で再現し
+  既存 fixture と一致＝ハーネス健全を確認）。
+- **ベンチ1回で複数照合**: `host_parity_bench.cpp` の `--expect` を **flat 引数と出現順で対応づく**よう拡張
+  （旧: 単一で全 flat が共有）。`magi_host golden.flat sample_v6.flat --expect=g.exp --expect=s.exp` で
+  合成ベンチ（3.6M手）を1回のまま両形状を言語跨ぎ照合＝CI 時間は据え置き。
+- **配線**: `NativeParityFixtureTest` を helper 化し golden/sample_v6 の2 @Test へ（Kotlin 側を両方固定）。
+  `native-parity.yml` に sample_v6 の flatten＋run の第2 --expect を追加。
+- **検証（提示物を信用せず独立に再現）**: ホスト実行で **CROSS golden C++ hard0/soft3109==Kotlin・
+  sample_v6 C++ hard15/soft825==Kotlin・合計 4,195,533手 mismatch=0**（sample_v6 の parity ループが約60万手を
+  追加）。**捕捉できることを実測**: sample_v6 期待値を soft 826 にずらすと sample_v6 だけ MISMATCH で exit 1
+  （golden は MATCH のまま）＝第2 --expect が実際に対応づけ・照合されている。Kotlin テストも host-JVM で
+  実実行し 2 tests green。
+- **残る穴**: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い（3.361.0 で記録した
+  covU-watchdog A/B の前提）。sample_v6 は hard=15 だが covU は解ける形＝covU-blocked ではない。将来その形状を
+  test resource 化すれば backlog#6 と covU-A/B の両方が前進する。
 
 ## covU-blocked のウォッチドッグ配線を実測して却下（3.361.0, ユーザー指示「修正する」＝#1 の A/B）
 残作業 #1「`CoverageDiagnosis.allBlockedNow` をウォッチドッグへ配線し、covU が構造床超でも blocked-now を

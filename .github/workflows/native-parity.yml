@@ -46,15 +46,20 @@ jobs:
             tools/native/host_parity_bench.cpp -o build/magi_host \
             2>&1 | tee build/ci-logs/native-parity-build.log
 
-      # [実データ形状フィクスチャ] golden_state.json（実10職員/31日データ）を flat 問題へ変換し、
-      # 合成フィクスチャに加えて実データ形状（休シフトの range/apt/c1・c42・任意長c3n・use2 等）でも
-      # Δ==フルを照合する（backlog#6 残課題「実データ形状の網羅」への対応）。
-      - name: Generate real-data fixture (golden_state.json → flat)
+      # [実データ形状フィクスチャ] 実 state JSON を flat 問題へ変換し、合成フィクスチャに加えて
+      # 実データ形状（休シフトの range/apt/c1・c42・任意長c3n・use2 等）でも Δ==フルを照合する
+      # （backlog#6 残課題「実データ形状の網羅」への対応）。
+      # [3.361.0] golden(hard=0) は C++ の HARD 族パスを実データで一度も exercise しないため、
+      #   sample_state_v6(入力盤面 hard=15＝groupViol/c3n/pref/covU 発火) を2つ目の形状として追加。
+      - name: Generate real-data fixtures (state JSON → flat)
         shell: bash
         run: |
           python3 tools/native/state_to_flat.py \
             app/src/test/resources/golden_state.json build/golden.flat \
             2>&1 | tee build/ci-logs/native-parity-fixture.log
+          python3 tools/native/state_to_flat.py \
+            app/src/test/resources/sample_state_v6.json build/sample_v6.flat \
+            2>&1 | tee -a build/ci-logs/native-parity-fixture.log
 
       - name: Run parity check (fails on any mismatch)
         shell: bash
@@ -65,8 +70,11 @@ jobs:
           # C++ scalar-vs-bit だけでは「Kotlin と C++ を片側だけ直した」乖離を捕まえられないため、
           # 両側を1つの数字に固定して片側変更を必ず落とす（実測: C++ に +113 の一貫した改変を入れると
           # 旧チェックは 0 mismatch で通り、この --expect だけが MISMATCH で落ちる）。
-          ./build/magi_host build/golden.flat \
+          # [3.361.0] flat と --expect は**出現順**で対応づく（golden⇔golden_expected,
+          #   sample_v6⇔sample_v6_expected）。合成ベンチは1回のまま両形状を言語跨ぎ照合する。
+          ./build/magi_host build/golden.flat build/sample_v6.flat \
             --expect=app/src/test/resources/golden_eval_expected.txt \
+            --expect=app/src/test/resources/sample_v6_eval_expected.txt \
             2>&1 | tee build/ci-logs/native-parity-run.log
 
       - name: Upload logs (on failure only)

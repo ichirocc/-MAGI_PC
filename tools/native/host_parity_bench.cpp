@@ -260,17 +260,23 @@ static bool checkCrossLanguage(const MagiProblem& p, const std::vector<int>& boa
 int main(int argc, char** argv) {
     long long totalMoves = 0, mismatches = 0;
 
-    // --expect=<path> は言語跨ぎパリティの期待値ファイル（flat 引数と同時に指定する）。
-    const char* expectPath = nullptr;
+    // --expect=<path> は言語跨ぎパリティの期待値ファイル。複数指定でき、flat 引数と
+    //   **出現順**で対応づける（k 番目の flat ⇔ k 番目の --expect）。CI は順序を制御するので
+    //   `magi_host a.flat b.flat --expect=a.exp --expect=b.exp` で1回のベンチ実行のまま
+    //   複数の実データ形状を同時に言語跨ぎ照合できる（旧: --expect は単一で全 flat が共有していた）。
+    std::vector<const char*> expects;
     for (int ai = 1; ai < argc; ai++)
-        if (strncmp(argv[ai], "--expect=", 9) == 0) expectPath = argv[ai] + 9;
+        if (strncmp(argv[ai], "--expect=", 9) == 0) expects.push_back(argv[ai] + 9);
 
     // ---- 実データ問題（flat ファイル引数）: 素の盤面＋実運転ノイズ(-1/非canDo)入り盤面 ----
+    int flatIdx = 0;
     for (int ai = 1; ai < argc; ai++) {
         if (strncmp(argv[ai], "--", 2) == 0) continue;
         MagiProblem p;
         std::vector<int> board;
         if (!loadFlat(argv[ai], p, board)) return 2;
+        const char* expectPath = (flatIdx < (int)expects.size()) ? expects[flatIdx] : nullptr;
+        flatIdx++;
         if (expectPath && !checkCrossLanguage(p, board, expectPath)) mismatches++;
         printf("REAL %s: S=%d T=%d K=%d G=%d rest=%d c1=%zu c2=%zu c41=%zu c42=%zu c3n=%zu\n",
                argv[ai], p.S, p.T, p.K, p.G, p.restIdx, p.cons1.size(), p.cons2.size(),
