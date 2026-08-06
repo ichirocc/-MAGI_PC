@@ -1271,7 +1271,8 @@ FIXABLE(充足可能)理由を「担当可能N人・M人移せば充足」止ま
   下げられないと**静的に確定**するので、HF63 の動的検知(約3ラウンド無改善を要す)を待たず **round 0 から focus 除外**し、RSI の
   残ラウンドを解ける族(他HARD/SOFT)へ回す(旧: covU=床でも HF63 が flag するまで ~3 ラウンド無駄打ち)。`covU>=床` は恒真ゆえ
   `covU<=床`＝「これ以上不可」を正しく判定。**床=0(構造的不足なし＝HARD=0 到達可能な一般ケース)は no-op＝挙動不変**。focus 選択
-  のみでスコアリング不変(keep-best=better() が結果担保)＝退化なし。covU が下限であることは定理(測定不要)。golden(構造的covU=2)で発火。
+  のみでスコアリング不変(keep-best=better() が結果担保)＝退化なし。covU が下限であることは定理(測定不要)。~~golden(構造的covU=2)で発火。~~
+  **※[3.362.0 訂正] 現行 golden_state.json は `structuralHardFloor=0`（実測）＝この床は golden では発火しない（no-op）。当時の golden か記述が stale。機構自体は floor>0 のデータで正しく動作する。**
   ※bench は RSI focus/portfolio を模擬しないため 3.74.0 同様「実測でなく原理」で採否(no-op安全・低リスク・可逆)。
 - (3.95.1, 12h見直し=敵対的レビューで判明した3.95.0の相互作用バグを修正): ①**[実バグ] N4早期脱出の常時武装化**: 3.95.0 の
   静的covU床が `avoid` を合流させたため、N4 早期脱出(`stagnantRounds>=2 && avoid.isNotEmpty()`)が構造的covU>0 のデータ
@@ -5268,6 +5269,25 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 直近コード（3.352-3.360）の焦点レビュー＝clean 確認＋stale fact 1件訂正（3.363.0）
+バックログ #2/#4/#5 はすべて grilling か製品判断が必要で terse な指示では進められないため、直近追加コードを
+sibling-bug（3.347.0/3.311.0/3.335.0 の「取り残し」型）狙いで焦点レビューした。**実バグ0＝直近コードは
+良く保守されていることを確認**（3.356.1/3.360.1/3.347.0 で既にレビュー済みの領域が多い）。
+- **keep-best 比較の集約（3.352.0 reportComparator）は完全**: 残る手書き比較を全数照合したが取り残し0。
+  `V6LateOperators.gate:88` は c1-boost 例外の追加条件（本採用は line 79 betterReport）／`V6SwapSuggester` は
+  採用=betterReport(:79)・ランキング=`compareBy(dHard,dWeighted,dTotal)`(:318) で正順（Quad のコンストラクタ
+  フィールド宣言順とソート順を混同しないこと）／`checkResultWorse`(V6FinalPort:717) は「厳密に悪化」時のみ
+  非null＝tie で revert しない・順序 hard→weighted→total で正しく、message 生成のため hand-written が正当／
+  `RejectCulpritStats`(3891) は却下理由の分類（isBetter 順に整合済み）＝いずれも意図どおり別物。
+- **診断の算術も正しい**: `weeklyFloorOfCount`(MirrorCore) は r=min(余り,7−余り)＝真の最小偏差を返し曜日上限を
+  無視＝真の下限以下（過大評価しない・診断用途に安全）／`structuralPersonalFloor`(3.354.0) は
+  forcedMin=T−他シフト上限和・d=forcedMin−目標・per-staff max（保守的）で 6b の美幸B4=19 と一致。
+- **environmentLine** は versionName null（`?: "?"`）・NativeBridge.available ガードとも健全。telemetry 並行性は
+  3.360.1 で AtomicInteger 化済み。
+- **[stale fact 訂正]** 3.95.0 の「golden(構造的covU=2)で発火」を実測で反証・訂正: 現行 golden_state.json は
+  `V6SanityPort.structuralHardFloor=0`（入力盤面 hard=0/covU=0）＝covU 床の avoid 機構は golden では no-op。
+  3.361.0 note の誤帰属（この記述を「3.263.0」とした）も「3.95.0」へ訂正。docs のみ・エンジン不変。
+
 ## パリティネットへ2つ目の実データ形状 sample_v6 を追加（3.362.0, backlog#6「実データ形状の網羅」）
 残バックログ #3。言語跨ぎパリティ CI（3.357.0）は実データ fixture が golden_state **1つだけ**で、
 その入力盤面は **hard=0**（3.361.0 の実測で判明）＝**C++ の HARD 族パス（groupViol/c3n/pref/covU）を
@@ -5305,8 +5325,9 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 ### 実測（ホストJVM・handleOptimize 改善タイムライン）
 kotlin-compiler-embeddable で v6/model をコンパイルし handleOptimize を実走（3.251.0/3.263.0 の手法）。
 - **golden_state は hard=0・covU=0 に到達**（`structuralHardFloor=0`・allBlockedNow=false）＝**covUBlocked 項は
-  構造的に常に偽＝完全な no-op**。この変更を golden では**一切検証できない**。CLAUDE.md 3.263.0 の
-  「golden 構造的covU=2」は現行 golden_state.json では stale（今は hard=0 到達）。
+  構造的に常に偽＝完全な no-op**。この変更を golden では**一切検証できない**。CLAUDE.md 3.95.0 の
+  「golden(構造的covU=2)で発火」は現行 golden_state.json では stale（3.362.0 で `V6SanityPort.structuralHardFloor`
+  を実測して 0 を確認＝covU 床の avoid 機構は golden では発火しない）。
 - covU-blocked を実際に持つ唯一のデータ（real_state/user_state）は前セッションのアップロード＝**揮発コンテナで消失**。
   よって covUBlocked の直接 ON/OFF は**利用可能データで不可能**。
 - **sample_state_v6（stuck HARD=1・非covU＝pref由来・covU=0）のタイムラインが決定的な傍証**:
