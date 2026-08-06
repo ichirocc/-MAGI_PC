@@ -342,6 +342,33 @@ int main(int argc, char** argv) {
         printf("SHARED-ONLY: %lld mismatches\n", mismatches);
         return mismatches == 0 ? 0 : 1;
     }
+    // [3.366.0] Kotlin DeltaEvaluator との**同一データ**での比較用。実データ flat を渡したときだけ走る。
+    for (int ai = 1; ai < argc; ai++) {
+        if (strncmp(argv[ai], "--bench-real", 12) != 0) continue;
+        for (int aj = 1; aj < argc; aj++) {
+            if (strncmp(argv[aj], "--", 2) == 0) continue;
+            MagiProblem bp;
+            std::vector<int> bboard;
+            if (!loadFlat(argv[aj], bp, bboard)) return 2;
+            for (int forceScalar = 1; forceScalar >= 0; forceScalar--) {
+                SaChunk st(bp, bboard.data(), 777);
+                st.useBits = st.useBits && !forceScalar;
+                std::mt19937_64 rng(12345);
+                const long long N = 20000000;
+                auto t0 = std::chrono::high_resolution_clock::now();
+                for (long long m = 0; m < N; m++) {
+                    int i = (int)(rng() % (uint64_t)bp.S), j = (int)(rng() % (uint64_t)bp.T);
+                    const auto& b = bp.bucket[(size_t)bp.sgrp[i]];
+                    st.deltaApply(i, j, b[rng() % b.size()]);
+                }
+                auto t1 = std::chrono::high_resolution_clock::now();
+                double ns = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+                printf("BENCH-REAL %s %s: %.2f M moves/s\n", argv[aj],
+                       forceScalar ? "scalar" : "bit-op", (double)N / (ns / 1e9) / 1e6);
+            }
+        }
+        break;
+    }
 
     // ---- 合成フィクスチャ ----
     struct Dim { int S, T, K, G; bool use2; const char* name; };
