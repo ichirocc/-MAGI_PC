@@ -51,16 +51,29 @@ class V6SanityPortTest {
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
     )
 
-    @Test fun classifiesStructuralWindowWallButNotDial() {
-        val cons = listOf(com.magi.app.model.C1Row("3", "A", "2"))   // A を3日窓で2回以上
-        // 壁: A 供給=6(1/日×6) < 需要下界=2人×2回×floor(6/3=2)=8 → 構造的不能。
-        val wall = V6SanityPort.buildGuidance(windowState("1", cons))
-        assertTrue("A の窓が壁として案内される",
-            wall.any { it.where.contains("A") && it.problem.contains("構造的に残ります") })
-        // ダイヤル: A 供給=12(2/日×6) ≥ 需要8 → 案内しない。
-        val dial = V6SanityPort.buildGuidance(windowState("2", cons))
-        assertTrue("供給充足なら窓の壁案内は出さない",
-            dial.none { it.where.contains("窓ルール") && it.problem.contains("構造的に残ります") })
+    @Test fun nonRestWindowShortfallIsCovOTensionNotAStructuralWall() {
+        // [3.364.0] 非休 A: 1日上限1・窓3日で2回以上 → 上限合計6 < 需要下界8。だが物理供給(2人×6日=12)>=8 で
+        //   壁ではない(need2/need1 は covO の SOFT 上限＝超えられる)。旧実装は「構造的に残ります」と誤断定していた。
+        val cons = listOf(com.magi.app.model.C1Row("3", "A", "2"))
+        val a = V6SanityPort.buildGuidance(windowState("1", cons))
+            .filter { it.where.contains("窓ルール") && it.where.contains("A") }
+        assertTrue("非休の窓不足は案内される", a.isNotEmpty())
+        assertTrue("非休を『構造的に残ります／最適化では消せません』とは言わない",
+            a.none { it.problem.contains("構造的に残ります") || it.problem.contains("最適化では消せません") })
+        assertTrue("過剰配置(covO)のトレードオフとして案内する", a.any { it.problem.contains("過剰配置") })
+        // 上限が窓ルールに足りていれば(need1=2 → 上限合計12>=8)何も出さない。
+        val ok = V6SanityPort.buildGuidance(windowState("2", cons))
+        assertTrue("上限充足なら窓案内は出さない",
+            ok.none { it.where.contains("窓ルール") && it.where.contains("A") })
+    }
+
+    @Test fun restWindowShortfallIsStillAStructuralWall() {
+        // [3.364.0] 休は「作業に回さないセル数」が実在の物理上限。A の必要人数2で全12セルが work に埋まる →
+        //   休の供給=2*6-12=0 < 需要(2人×3回×floor(6/3=2)=12) ＝真の構造的不能として維持する。
+        val cons = listOf(com.magi.app.model.C1Row("3", "休", "3"))
+        val issues = V6SanityPort.buildGuidance(windowState("2", cons))
+        assertTrue("休の窓は物理上限を超えるため構造的な壁として案内される",
+            issues.any { it.where.contains("窓ルール") && it.where.contains("休") && it.problem.contains("構造的に残ります") })
     }
 
     /** [3.228.0/個人内壁検知] 1職員×31日、cons1(day1日窓でXが≥day2回)、Xの個人上限をhiで指定。 */

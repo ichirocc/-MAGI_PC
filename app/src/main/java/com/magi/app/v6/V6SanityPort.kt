@@ -384,42 +384,51 @@ object V6SanityPort {
             }
         }
 
-        // 2b-2) [壁/ダイヤル分類] c1 窓制約の「構造的不能(壁)」検知。供給<需要下界なら、どう組んでもこの窓違反(c1)は
-        //   残る＝作成者が最適化で追っても無駄（staffingを変えるかルールを緩めるしかない）。供給≥需要(=ダイヤル:
-        //   優先度で減らせる)は正常なので出さない。conservative 設計で false wall を出さない:
-        //   ・需要 = 各 canDo 職員 × day2 × floor(T/day1)（disjoint窓の下界）＝真の下界（sliding はより厳しいので過小評価）。
-        //   ・供給 = 休窓:S*T−Σ最小work需要(=休へ回せる上限) / 作業シフト窓:Σ上限被覆(=最大スロット数)＝供給を高めに見積もる。
-        //   両者とも「壁を過剰断定しない」向きに丸めているため、発火＝真に構造的不能。read-only・スコアリング不変。
+        // 2b-2) [壁/covO-tension 分類] c1 窓制約の充足可否。需要 = 各 canDo 職員 × day2 × floor(T/day1)（disjoint窓の下界）。
+        //   [3.364.0 訂正・実データ計測起因] 非休シフトの供給に per-day 上限(need2/need1)の総和を使うのは誤り。
+        //   need2/need1 は covO の SOFT 目標(1日あたりの過剰配置しきい値=重み1)であって物理上限ではなく、最適化は covO を
+        //   払って上限を超えて配置できる。かつ day2<=day1 ガードより「物理供給(担当nCanDo人×T日) >= 需要」が**常に成立**する
+        //   ので、非休の c1 窓は原理的に構造的不能にはならない（旧実装は golden の Dﾃ を「構造的に残る」と誤断定していたが、
+        //   実データの手作り表は Dﾃ を上限超えの35回配置しており供給31は実上限でないことを実測で確認）。
+        //   → 休のみ「S*T−Σ最小work需要」が実在の物理上限＝供給<需要なら真の壁。非休は上限が窓ルールに届かない場合のみ、
+        //     c1 充足に過剰配置(covO)が要る旨を「解消不能ではないトレードオフ」として正直に案内する。read-only・スコア不変。
         run {
             var workMinDemand = 0
             for (k in 0 until p.K) for (j in 0 until p.T) workMinDemand += p.need1[k][j].coerceAtLeast(0)
             for (c in p.cons1) {
                 val si = c.shiftIdx
-                // 退化ケース(窓>期間 / 回数>窓)は 2b が別途案内。ここは通常窓の構造的不能のみ。
+                // 退化ケース(窓>期間 / 回数>窓)は 2b が別途案内。ここは通常窓のみ。
                 if (c.day1 <= 0 || c.day2 <= 0 || c.day1 > p.T || c.day2 > c.day1) continue
                 val disjoint = p.T / c.day1
                 if (disjoint <= 0) continue
                 val nCanDo = (0 until p.S).count { p.canDo(it, si) }
                 if (nCanDo == 0) continue   // 担当者ゼロは別の案内対象
                 val demand = nCanDo * c.day2 * disjoint
-                val isRest = si == p.restIdx
-                val supply = if (isRest) {
-                    p.S * p.T - workMinDemand
+                val sym = state.shifts.getOrNull(si)?.kigou ?: si.toString()
+                if (si == p.restIdx) {
+                    // 休は「作業に回さないセル数(S*T−最小work需要)」が実在の物理上限＝供給<需要なら真の構造的不能。
+                    val supply = p.S * p.T - workMinDemand
+                    if (supply < demand) {
+                        out.add(SettingIssue(IssueKind.CONSTRAINT, "窓ルール「$sym を${c.day1}日で${c.day2}回以上」",
+                            "「$sym」の供給${supply}に対し必要${demand}(=担当${nCanDo}人×${c.day2}回×${disjoint}窓)で${demand - supply} 不足。" +
+                                "どう組んでもこの窓違反(c1)は構造的に残ります（最適化では消せません）。",
+                            "作業シフトの最低人数を下げて「$sym」に回せる余地を増やすか、窓ルールの回数を下げる／日数を延ばす(制約設定)。"))
+                    }
                 } else {
-                    var s = 0
+                    // 非休は物理供給(担当nCanDo人×T日)>=需要が常に成立＝壁ではない。per-day 上限(need2/need1)の総和が
+                    //   窓ルールに届かない場合のみ、c1 充足に過剰配置(covO)が要る旨をトレードオフとして案内。
+                    var capSum = 0
                     for (j in 0 until p.T) {
                         val h = if (p.use2 && p.need2[si][j] >= 0) p.need2[si][j] else p.need1[si][j]
-                        s += h.coerceAtLeast(0)
+                        capSum += h.coerceAtLeast(0)
                     }
-                    s
-                }
-                if (supply < demand) {
-                    val sym = state.shifts.getOrNull(si)?.kigou ?: si.toString()
-                    val short = demand - supply
-                    out.add(SettingIssue(IssueKind.CONSTRAINT, "窓ルール「$sym を${c.day1}日で${c.day2}回以上」",
-                        "「$sym」の供給${supply}に対し必要${demand}(=担当${nCanDo}人×${c.day2}回×${disjoint}窓)で$short 不足。" +
-                            "どう組んでもこの窓違反(c1)は構造的に残ります（最適化では消せません）。",
-                        "「$sym」の担当者を増やすか、窓ルールの回数を下げる／日数を延ばす(制約設定)。"))
+                    if (capSum < demand) {
+                        val short = demand - capSum
+                        out.add(SettingIssue(IssueKind.CONSTRAINT, "窓ルール「$sym を${c.day1}日で${c.day2}回以上」",
+                            "「$sym」の1日あたり上限の合計(${capSum})が窓ルールの必要回数(${demand})に${short}回ぶん届かず、" +
+                                "c1 を満たすには一部の日で上限を超える配置(過剰配置)が要ります。構造的に不能ではなく、最適化は過剰配置を少し払って解消できます。",
+                            "「$sym」の1日あたり上限を上げるか、${short}回ぶんの過剰配置を許容してください。"))
+                    }
                 }
             }
         }
