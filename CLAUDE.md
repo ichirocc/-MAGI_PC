@@ -5270,6 +5270,20 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 後処理研磨の「Range 先頭化」を3データセット A/B で否決（敵対検証ケース6の続き・実データ受領）
+ユーザーが敵対検証ケース6「soft 研磨パスの順序は正しいか」を提示。実 `runPostOptimization` と突合し順序は正確・
+安全（keep-best で退化不能）・実測隣接（3.254.0 temporalFlow<wideBeam・3.300.0 BlockSwap は Range 後 Apt/Fair 前）を
+尊重と確認。唯一 open だった「最重ソフト Range(low90/high45)が4番目＝重み降順なら先頭へ」という untested 仮説を
+**host-JVM A/B で実測**（固定seed・Range を巡回クラスタ先頭へ移す variant をコンパイルして比較）。
+- **当初2データセット**: golden=Range先頭 **weighted 2653→2530（−4.6%）**改善 / sample_v6=中立（low 2→1 と c1 6→11 の
+  構成入替で相殺）。「fixture 限定の利得＋2データセットのみ」で保留を推奨したところ、**ユーザーが第3の実データ
+  （2026-08 実運用 state）を受領**＝私の「real/user 揮発済み」を直接解決。
+- **real3 で決着**: baseline と Range先頭が**完全一致**（33347/33318・run1≠run2 は JointLNS 壁時計非決定性で両ビルド同一）
+  ＝**実運用データに効果ゼロ**。3/3 で weighted は never worse だが改善は golden のみ＝測定済みパイプラインを
+  fixture 限定利得で書き換えない＝**不採用**（`docs/algorithm_portfolio.md` の「実測で否決した提案」に記録・再提案しない）。
+- 副産物: real3 で 3.364.0 の c1 壁修正が**実データで正しく動作**確認（休の rest-wall のみ発火・非休 false wall なし）。
+  希望は impossible=0/feasible-unmet=0（pref クリーン）、input hard=4 は全て covU（post-opt 単体では不変＝search フェーズの担当）。
+
 ## c1「壁」判定の need2 依存を実データ計測で false wall と確定・正直化（3.364.0, backlog#4 解消）
 残バックログ #4「`V6SanityPort` の c1『壁』判定(検査2b-2)が非休シフトの供給に need2（covO の SOFT 目標=1日あたり
 過剰配置しきい値）を実質ハード上限として使い、covO を犠牲に c1 を解消できる局面を過大に『構造的不能』と報告しうる」。
