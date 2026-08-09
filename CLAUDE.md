@@ -5348,6 +5348,22 @@ sibling-bug（3.347.0/3.311.0/3.335.0 の「取り残し」型）狙いで焦点
   covU-watchdog A/B の前提）。sample_v6 は hard=15 だが covU は解ける形＝covU-blocked ではない。将来その形状を
   test resource 化すれば backlog#6 と covU-A/B の両方が前進する。
 
+## covU-blocked 早期終了を実データ多seed A/B で確認却下（3.361.0 の再オープン条件を満たし、却下を補強）
+3.361.0 は「動機データ消失で直接 A/B 不可」と記録していた。ユーザーが **covU-blocked/floor=0 の実データ real3
+（2026-08 実運用 state）を受領**＝再オープン条件（実データ+A/B）を満たした。**real3 の構造**: `structuralHardFloor=0`
+（供給床でない）かつ `allBlockedNow=true`（covU=4 は FIXABLE だが今の希望・盤面では局所手で解けない）＝3.344.0 の
+`allBlockedNow` 診断が実データで正しく発火する形状。**多seed A/B（6 run × 45s・handleOptimize は nanoTime シード・
+壁時計計測）**:
+- 最終改善時刻の分布 = 6.4s / 7.9s / 9.9s / 10.1s / **25.8s / 26.6s**。**6 run 中2 run が ~26s まで改善継続**。
+  とくに **run2 は hard=4→3 に突破**（他5 run が届かない covU をもう1つ解消）し、その突破が **25.8s の遅い時刻**。
+- **単一 run（前回・plateau 10.2s）だけ見ると「早期終了は安全」に誤誘導されたが、多seed で覆った**（★★★★ 推奨どおり）。
+  ＝**遅延改善（含む hard=3 への構造突破）は実データで実在** → 15s 早期終了なら run2 の hard=3 を取り逃す。
+- **計測上の注記**: `gain@Ts` 絶対値は最終エピローグ（onProgress 報告後に improving）で嵩上げされる混入があり信頼しない。
+  信頼できる信号は「最終改善時刻」（onProgress live-best が最後に下がった壁時刻＝探索 plateau 時点）と run2 の最終 hard=3。
+- **結論**: A/B の結果が **3.361.0 の原却下を確認**（早期終了は keep-best-unsafe＝遅延改善を切る、が実データで実証）。
+  3.361.0 は**再オープンしない**。証拠が「データ無し・原理のみ」→「実データ多seed で確認済み」へ格上げ。
+  ※real3 を repo の covU-blocked fixture 化する価値はあるが**実職員名を含む（public repo）**ため匿名化＋承認まで保留。
+
 ## covU-blocked のウォッチドッグ配線を実測して却下（3.361.0, ユーザー指示「修正する」＝#1 の A/B）
 残作業 #1「`CoverageDiagnosis.allBlockedNow` をウォッチドッグへ配線し、covU が構造床超でも blocked-now を
 実証したら plateau として stallHardMs（早期終了）へ移す」。3.344.0 が「要A/B・品質と電池の交換・今回は診断の
