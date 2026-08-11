@@ -42,7 +42,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/ci-logs
-          g++ -O3 -std=c++17 -DMAGI_HOST_TEST -I app/src/main/cpp \
+          g++ -O3 -std=c++17 -DMAGI_HOST_TEST -pthread -I app/src/main/cpp \
             tools/native/host_parity_bench.cpp -o build/magi_host \
             2>&1 | tee build/ci-logs/native-parity-build.log
 

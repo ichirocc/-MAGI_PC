@@ -5270,6 +5270,24 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 共有ネイティブハンドルの並列安全性を実行テストで示す（3.365.0, 別ブランチ x8ygvy から選択的に取り込み）
+ユーザー指示「すべてのブランチを main にマージする」→ 調査で fork 2本（x8ygvy・ir1xng）は**競合する並行開発ライン**
+（版番号衝突・ir1xng は 3.176.0 の4週間前・401commits分岐）と判明し盲目マージは main 破壊と判断。ユーザー選択で
+**x8ygvy を精査し価値ある変更だけ選択的に取り込む**方針に。7コミットを1件ずつ評価:
+- **却下**: `ecab235`（covU 壁の早期終了を既定ON）・`c4d6302`（Watchdog 修正だが covUWallProven 等の早期終了機構と
+  分離不能）・covU 早期終了配線（cfcca0d/cc0faa2）＝**このセッションで real3 多seed A/B により有害と実証・却下した決定**
+  そのもの。取り込むと検証済みの却下を覆すため不採用。
+- **採用（1件・検証済み）**: `923bf07` の**共有ネイティブハンドル並列安全テスト**を `host_parity_bench.cpp` へ移植。
+  `SaOptimizer.run` は native handle を1本だけ作り最大8ワーカーが同時に `nativeSaChunk` を呼ぶ。**このセッションで
+  「Problem は const& read-only・共有可変状態ゼロ＝スレッド安全」と読んで結論した内容を、実行で証明する**もの
+  （N スレッドが同一 MagiProblem で `runSaChunk` を並列実行し**逐次と bit 一致**を確認・`--shared-only` は
+  ThreadSanitizer 用）。flat ループに無条件で入れたので**既存の native-parity CI で自動実行**（mismatch で exit 1）。
+  CI の g++ へ `-pthread` を追加（`std::thread` リンク）。**見送り**: `dc104cc`(--bench-real=フル parity 後にしか走らない
+  awkward 設計・低価値)・`b8b4ae9`(kotlin_cpp_split.md=x8ygvy 版番号スタンプ＋dc104cc 参照＋既存 native docs と重複)。
+- **検証（提示物を信用せず独立に再現）**: `g++ -O3 -pthread` で実ビルド、`--shared-only` で **8スレッド identical to
+  serial・0 mismatches**、フル run で **PARITY 4,195,533手・0 mismatches**（移植が既存パリティを壊していないことを確認）。
+  test/tools のみ・engine/重み/スコア不変。
+
 ## 後処理研磨の「Range 先頭化」を3データセット A/B で否決（敵対検証ケース6の続き・実データ受領）
 ユーザーが敵対検証ケース6「soft 研磨パスの順序は正しいか」を提示。実 `runPostOptimization` と突合し順序は正確・
 安全（keep-best で退化不能）・実測隣接（3.254.0 temporalFlow<wideBeam・3.300.0 BlockSwap は Range 後 Apt/Fair 前）を
