@@ -1794,7 +1794,7 @@ object V6HotfixPasses {
     }
 
     /**
-     * [C3mnPolish・玉突き連鎖の横展開] cons3mn(回避パターン, SOFT重み12)専用の研磨パス。
+     * [C3mnPolish・玉突き連鎖の横展開] cons3mn(回避パターン, SOFT重み15)専用の研磨パス。
      * grilling(2026-07-19)で確定: 対象はc3mnのみ(c3nはHARDで既存のRSI focus優先/keep-bestが担当済み・
      * 同一パスに混ぜると役割が重複し測定しづらくなる)。既存の`findCovUChain`(玉突き連鎖BFS、深さ5まで)を
      * そのまま再利用し、C1Polish(3.158.0)の「手B/E11」ブロックと同型の構成にする。

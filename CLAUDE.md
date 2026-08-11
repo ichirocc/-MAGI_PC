@@ -5270,6 +5270,25 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 重み値コメントのドリフト＋c1 表示昇格の判断点（3.367.0, 3.366.0 の sibling-bug 掃討を重み定数へ拡張）
+3.366.0（keep-best 順序コメント）と同じ HF77＝コメント≠実装の掃討を**重み定数**へ広げた。重みは
+c1 4→5→15（3.249.0/3.253.0）・c3mn 12→15（3.249.0）・covO 0.5→1.0（3.148.0）と変わっており、3.305.0 で
+`staffPacked` のハードコード重みは直したが、**現行記述コメントに旧値が残っていた**:
+- **`MagiScheduleViews:733` heavySoftFamilies KDoc**「c3mn=12／軽い族（重み≤4: c1/…）」／**`V6WebCompat:556`**
+  重大度階層「c3mn(12)>c1(4)」／**`V6WebCompat` severityFromVioKey** の HIGH コメント「(90/45/12)」・WARN
+  コメント「中 soft(1〜4)」／**`V6HotfixPasses:1797`** C3mnPolish「SOFT重み12」。全て現行値へ訂正（3ファイル・
+  **コメントのみ**・`when` の `-> "HIGH"/"WARN"` 分類コードは不変＝diff で確認）。歴史記述（`DeltaEvaluator:91/250`
+  「c1=4→5・c3mn=12→15」・`ObjectiveParityTest:26`）と件数記述（`c1=4(weighted 60)`＝4件×15）は温存。
+- **[実在の設計上の緊張を発見・分類は変えず据え置き＋判断点として明示]** `heavySoftFamilies={low,high,c3mn}`
+  と `severityFromVioKey`（c1=WARN）はどちらも c1 が**重み4だった 3.99.0 当時**の分類。c1 は今 15（=c3mn）だが、
+  ①`severityFromVioKey` は下流（`V6RemainingScreens`）が **HIGH と WARN を同一表示に畳む**（`->"要調整"`/softHex）
+  ため c1 の分類は**視覚的に不活性**（凡例スウォッチ不変）②グリッド `heavySoftFamilies` は c1 が**最多件数の
+  ソフト族**（real3 で c1≈58-73）のため、飽和回避（3.99.0 の「格子が警告に飽和し必須が埋没」対策）を優先して
+  角マーク据え置きが妥当。**両面とも c1 を非 heavy で一貫**しており視覚は変わらないので分類は変えず、コメントに
+  「c1=15 だが最多件数で飽和回避＝表示の強さ＝重み＋件数」を正直に記した。**判断点（ユーザー選択）**: severity-match
+  を優先して c1 を c3mn 同様に破線へ昇格したい場合は `heavySoftFamilies` に "c1" を足す一行変更で可能（ただし
+  グリッド飽和のリスク＝business 判断）。今回は既定＝非 heavy を維持。表示・スコアリング完全不変。
+
 ## 外部レポート L1-L10 の周辺検証＝keep-best 順序コメントのドリフト12件を訂正（3.366.0, ユーザー「周辺も検証する」）
 ユーザーが別 fork のレポート（L1-L10・`g2.covU.chain2`/`MoveNormalizer`/`tryTransition`/`STAGE rsi-enter`/
 `normal_clear`/`6089acef` 等の用語）を提示。**用語は全語0件でこの main に無い別 fork**（前ターンの 3.371.0 判定の
