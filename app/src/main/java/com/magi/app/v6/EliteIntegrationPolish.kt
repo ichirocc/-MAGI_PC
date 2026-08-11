@@ -10,7 +10,7 @@ import com.magi.app.model.MagiState
  *  2. disagreement-region beam fusion using only values present in the elites.
  *
  * Bridge schedules are never returned directly. Every adopted schedule is re-evaluated by the
- * official checker, must improve HARD -> total -> weightedScore, and must not regress exact pins.
+ * official checker, must improve HARD -> weightedScore -> total, and must not regress exact pins.
  */
 internal object EliteIntegrationPolish {
     data class Config(

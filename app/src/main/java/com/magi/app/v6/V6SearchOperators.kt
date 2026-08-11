@@ -626,7 +626,7 @@ internal class RejectCulpritStats {
  * 動機（桒澤美幸の実例、実機ログ+実データ検証）: 休(rest)が10-10固定の彼女が、C1JointLnsPolish/
  * C1TemporalFlowPolish/PersonalBalanceJointLnsPolish 等の複数職員横断ジョイント研磨により、他職員の
  * c1/covU改善の副作用として10→13へ動かされる（total/weightedScoreは全体として改善するため既存の
- * isBetter/better(hard→total→weighted辞書式)keep-bestだけでは防げない）。通常のlo<hi範囲は既存の
+ * isBetter/better(hard→weighted→total辞書式)keep-bestだけでは防げない）。通常のlo<hi範囲は既存の
  * 重み(90/45)付きソフト評価のままで良いが、"厳密ピン"は「担当外(canDo)ガード」や「希望固定」と同種の
  * 個人単位の確定事項として扱い、これらのジョイント研磨パスの最終採否にAND条件として追加する。
  *

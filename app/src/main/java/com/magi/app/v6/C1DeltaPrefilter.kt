@@ -10,7 +10,7 @@ package com.magi.app.v6
  *  - hasActionableC1(index): 盤面に不足窓が1つも無い＝すべての c1修復手は c1中立。c1オペレータは c1違反
  *    セルにアンカーするため候補ゼロ＝no-op。よってクラスタ全体を1回のチェックで安全にスキップできる。
  *  - screenCell(...): **単一セル候補**の速い判定。適用すると HARD（groupViol/pref/c3n）が必ず増える、または
- *    盤面が変わらない候補は checker が辞書式(hard→total→weighted)で必ず却下するため HARD_REJECT を返す。
+ *    盤面が変わらない候補は checker が辞書式(hard→weighted→total)で必ず却下するため HARD_REJECT を返す。
  *    それ以外は NEUTRAL（判定を checker に委ねる）。**単一セル専用**＝相手の隣接日に触れる bundle には使わない
  *    （その場合 makesForbiddenRun の per-cell 判定が陳腐化するため）。
  *  - c1Delta(...): (staff,day)→newShift の**その職員のc1 fire 正味増減**（gain−loss を厳密勘定）。

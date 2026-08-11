@@ -30,7 +30,7 @@ data class FixSuggestion(
 
 /**
  * 違反を減らす「1手」を列挙する。最適化エンジンと同じ評価（canDo 可否・希望ロック保護・
- * UnifiedViolationChecker による被覆込み (hard,total,weighted) 辞書式改善）。CHANGE / CHANGE_MULTI /
+ * UnifiedViolationChecker による被覆込み (hard,weighted,total) 辞書式改善）。CHANGE / CHANGE_MULTI /
  * SWAP / SWAP_XDAY / SWAP_MULTI / CHAIN / WINDOW を統合し、効果順・同型重複排除で返す。読取専用。
  * 高コストな手（複数マス・別日・3人）は違反箇所にターゲットし、締切（deadlineMs）で打ち切る賢い探索。
  */

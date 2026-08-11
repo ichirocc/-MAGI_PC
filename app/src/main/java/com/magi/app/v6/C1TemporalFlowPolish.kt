@@ -16,7 +16,7 @@ import com.magi.app.model.MagiState
  *
  * 日ごとの独立最適化のため月全体での厳密最適解ではないが、既存の同日swap限定より確実に広い（同日swapは
  * この解の特殊ケース＝実現可能な集合の真部分集合）。最終採否は必ず`UnifiedViolationChecker`と
- * hard→total→weightedScoreのkeep-bestで行う（退化不能）。
+ * hard→weightedScore→totalのkeep-bestで行う（退化不能）。
  */
 internal object C1TemporalFlowPolish {
     private data class Plan(

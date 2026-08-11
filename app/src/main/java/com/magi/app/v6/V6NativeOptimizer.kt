@@ -342,7 +342,7 @@ object V6NativeOptimizer {
         val chosen = chooseAlgorithm(options.algorithm, options.totalBudgetSec)
         val p = cachedProblem(state)
         var schedule = hf66DataHardening(state, normalizeSchedule(initial, p), "pre")
-        // [N1b] 入口修復(hf67)は better(hard→total→weighted) 改善時のみ採用。既に良好な入力
+        // [N1b] 入口修復(hf67)は better(hard→weighted→total) 改善時のみ採用。既に良好な入力
         //   （前回結果の再最適化など）を破壊し、探索を劣化seedに係留する事故を防ぐ
         //   （運用ログ実例: 入力214 → 修復後HARD4/250 → 275秒が回復に浪費）。hf66(群内正規化)は無条件維持。
         val entryReport = UnifiedViolationChecker.check(state, schedule)
@@ -1150,7 +1150,7 @@ object V6NativeOptimizer {
         val base = actualSeed(options.seed)
         val completed = java.util.concurrent.atomic.AtomicInteger(0)
         val winner = java.util.concurrent.atomic.AtomicInteger(-1)
-        // [レビュー#2 3.213.0] 全ワーカー横断の最良(hard→total→weighted)を追跡し、どのワーカーの改善も
+        // [レビュー#2 3.213.0] 全ワーカー横断の最良(hard→weighted→total)を追跡し、どのワーカーの改善も
         //   外側へ転送する。旧: i==0 のみ転送＝W1..W4 だけが改善を続ける局面で外側ウォッチドッグ
         //   (V6FinalPort の停滞時計)が改善を観測できず、HARD平坦時の短い猶予(stallHardMs)で全ワーカーを
         //   早期停止し得た。非改善レポートまで転送すると phase 文字列が W0 と交互に振れて外側の
@@ -1303,7 +1303,7 @@ object V6NativeOptimizer {
         //   keep-best のため、Phase1 の劣化(実測: 入力HARD=1/195 → Seed HARD=2/229)が全チェーンへ伝播し、
         //   最後にディスパッチャ番兵が入力へ復帰＝予算全体が無駄になっていた(実機で 275s×2回)。入力を品質床に
         //   することで以降の全フェーズが「入力以上」から積み上がる。SA が入力より良い解を見つけた場合は素通し
-        //   ＝多様化は維持。スコアリング不変(選択のみ・better()=hard→total→weighted)。
+        //   ＝多様化は維持。スコアリング不変(選択のみ・better()=hard→weighted→total)。
         val baseSched = normalizeSchedule(initial, p)
         val baseReport = UnifiedViolationChecker.check(state, baseSched)
         val keptInput = better(baseReport, report)
@@ -1325,7 +1325,7 @@ object V6NativeOptimizer {
      *  （単一チェーン本体）を直接呼ぶ＝再帰は構造的に不可能（[敵対的レビュー3.212.0] 旧実装は runAlns 経由の
      *  ガード再帰で、無限再帰防止が options.copy(workers=1) 1引数とコメントのみに依存していた）。
      *  restarts・GLS・destroy-repair 等の内部ロジックは一切変更しない。最終選択は全チェーン共通の
-     *  better()（hard→total→weighted辞書式）でゲートするため退化不能。
+     *  better()（hard→weighted→total辞書式）でゲートするため退化不能。
      *  [敵対的レビュー3.212.0で追加した3つの堅牢化]
      *  ①部分結果許容: 1チェーンの非Cancellation例外で兄弟チェーンの有効な結果を道連れにしない（チェーン毎に
      *    捕捉・全滅時のみ最初の例外を再送出=旧単一チェーンと同じ失敗面）。
@@ -1431,7 +1431,7 @@ object V6NativeOptimizer {
         var globalReport = UnifiedViolationChecker.check(state, globalBest)
         // [退化防止] hot-loop は生スコア(DeltaEvaluator)で最良を追うが、生スコアと weightedScore は
         // 目的が異なる（range は生スコアで hard、weightedScore で soft）。最終結果が入力(best)より
-        // hard→total→weighted の辞書順で悪化しないよう、開始時の盤面を baseline として保持し最後に番兵比較する。
+        // hard→weighted→total の辞書順で悪化しないよう、開始時の盤面を baseline として保持し最後に番兵比較する。
         val baseBest = globalBest.copy2D()
         val baseReport = globalReport
         var itersTotal = 0L
@@ -1962,7 +1962,7 @@ object V6NativeOptimizer {
             val lr = V6LateOperators.improve(state, bestSched, best.report, Random(actualSeed(options.seed) xor 0x528L), started + budgetSec * 1000L, rectEnabled = options.rectSwap)
             val fired = lr.chain3 + lr.chain4 + lr.rect + lr.blkN > 0
             // [監査#1] Chain3/4の受理(gateW)はweighted単層でHARD増を相殺受理し得るため、採用は
-            //   runRsiと同じ better(hard→total→weighted) でゲートする（素通しでHARD悪化を最終出力しない）。
+            //   runRsiと同じ better(hard→weighted→total) でゲートする（素通しでHARD悪化を最終出力しない）。
             // ※ run{} 末尾のため if を式位置にしない（else-if 連鎖は式扱いとなり全分岐必須。ネストifの文形式で書く）。
             if (fired) {
                 if (better(lr.report, best.report)) {
@@ -2789,7 +2789,7 @@ private fun applyCovUChains(
      *
      * 候補（セル代入の束＝直接移動、または移動＋玉突き連鎖の複合手）を1つずつ実際に一時適用し、
      * UnifiedViolationChecker で全体評価、baseline(この手を試す直前の盤面)に対して真に改善する
-     * (better()=hard→total→weighted辞書式で厳密改善)候補の中から最良の1件だけを選んでコミットする。
+     * (better()=hard→weighted→total辞書式で厳密改善)候補の中から最良の1件だけを選んでコミットする。
      * 改善する候補が1つも無ければ何もしない(null)＝そのセルは諦める（安全側・退化不能）。
      * 実装コストは度外視（ユーザー指示）＝候補ごとにフルcheckを行うため計算量は増えるが、
      * これらはRSI 1ラウンドにつき1回しか呼ばれない仮説生成器のため許容範囲。

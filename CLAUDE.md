@@ -5270,6 +5270,31 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 外部レポート L1-L10 の周辺検証＝keep-best 順序コメントのドリフト12件を訂正（3.366.0, ユーザー「周辺も検証する」）
+ユーザーが別 fork のレポート（L1-L10・`g2.covU.chain2`/`MoveNormalizer`/`tryTransition`/`STAGE rsi-enter`/
+`normal_clear`/`6089acef` 等の用語）を提示。**用語は全語0件でこの main に無い別 fork**（前ターンの 3.371.0 判定の
+続き）だが、指摘の中身をこの 3.365.0 のコードに写して1件ずつ突合し、**L5/L9 の実在アナログを両方とも精読で否定**した:
+- **L9（「正規化を通さない raw Move」）は不在**: `findCovUChain` は `List<IntArray>?`（`[staff,day,newK]` 三つ組）を
+  返し、**採否は必ず keep-best**——`commitBestMove`（per-candidate `better()`）・手B の `isBetter+pinBlocks`・
+  または RSI 仮説生成としてラウンド境界の `better()`。`MoveNormalizer` 相当の型付き Move 契約は存在しない（正規化
+  でなく keep-best ゲートで弾く）。findCovUChain 自体が covU 減少・c3n 回避を保証。全13呼出元を確認。
+- **L5（「hard同点で soft 悪化 elite が載る／better の順序」）は実装レベルで完全ガード**: `publishLiveBest` は
+  `compareAndSet` を `!better()` でガード（劣る report は載らない）。全 elite/global 採択サイトが `better()`
+  ＝`betterReport`＝`reportComparator`＝**hard→weightedScore→total**（3098行 `better = betterReport` で確認）。
+  「合計 up with hard 同点」は 3.287.0 の weighted 優先どおりの正しい取引（3.283.1 に total−18/weighted+238 の実例）。
+- **実在した唯一の項目＝コメントの stale ドリフト**: 実装は全て正しいのに、**keep-best 順序を旧 `hard→total→weight`
+  で書いた現行記述コメントが12箇所**（`V6NativeOptimizer`×6・`CombinatorialRepair`×2・`EliteIntegrationPolish`・
+  `C1TemporalFlowPolish`・`C1DeltaPrefilter`・`V6SearchOperators`・`V6SwapSuggester`・`AdaptiveEliteArchive` KDoc・
+  `V6FinalBridgePortTest`×2）。3.287.0 が第2キーを total→weightedScore へ統一した際、`MirrorCore.reportComparator`
+  の KDoc 自身が「写した側だけ取り残される」と警告していた実績（gateW/広域ビーム/AdaptiveEliteArchive/「他の案」）の
+  **さらなる残り**。L5 を監査する読み手をこの12コメントが「total 優先」と誤誘導するため訂正（HF77＝コメント≠実装、
+  3.363.0/3.352.0 と同じ sibling-bug 掃討）。全て `hard→weighted→total` へ。**歴史記述（`旧:`/`修正前`＝
+  V6FinalBridgePortTest:15・C1BeamPolishTest:18）と正しい移行説明（MirrorCore:66「total→weightedScore へ統一した」）は
+  温存**。9ファイル・17行・**コメントのみ**（コード行の混入0を diff で確認）＝コンパイル/テスト/スコアリング完全不変。
+- L1/L2/L3/L7 は既診断の入力/仕様矛盾（3.280.0 ForbiddenDiag・3.343.0 pref代金・3.344.0 allBlockedNow・
+  3.361.0 covU-blocked A/B・backlog#4）、L4/L6/L8 は仕様どおりの挙動（3.353.0 countFamilies 全族表示・250ms 間引き・
+  export 形式）。**新規に直すべき論理バグはこの 3.365.0 に無し**、というのが周辺検証の結論。
+
 ## 共有ネイティブハンドルの並列安全性を実行テストで示す（3.365.0, 別ブランチ x8ygvy から選択的に取り込み）
 ユーザー指示「すべてのブランチを main にマージする」→ 調査で fork 2本（x8ygvy・ir1xng）は**競合する並行開発ライン**
 （版番号衝突・ir1xng は 3.176.0 の4週間前・401commits分岐）と判明し盲目マージは main 破壊と判断。ユーザー選択で

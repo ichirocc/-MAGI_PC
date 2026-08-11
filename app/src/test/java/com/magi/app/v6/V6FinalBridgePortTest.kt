@@ -47,7 +47,7 @@ class V6FinalBridgePortTest {
         val alt = listOf(listOf(1, 0), listOf(0, 1)).toIntArray2D()
         val bestRep = UnifiedViolationChecker.check(st, best)
         val (_, rep) = V6NativeOptimizer.elitePathRelink(st, best, listOf(alt)) { false }
-        // 退化しない: 結果は best 以上（hard→total→weighted の辞書順で悪化しない）。
+        // 退化しない: 結果は best 以上（hard→weighted→total の辞書順で悪化しない）。
         val notWorse = notWorseThan(rep, bestRep)
         assertTrue(notWorse)
         // 精鋭解が無ければ best 不変。
@@ -74,7 +74,7 @@ class V6FinalBridgePortTest {
         val before = UnifiedViolationChecker.check(st, st.schedule.toIntArray2D())
         val r = V6HotfixPasses.applyDayAssignmentPolish(st, st.schedule.toIntArray2D())
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
-        // 退化しない: hard→total→weighted の辞書順で悪化しない。
+        // 退化しない: hard→weighted→total の辞書順で悪化しない。
         val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
         assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))   // 割当は常に妥当（人数=列固定）

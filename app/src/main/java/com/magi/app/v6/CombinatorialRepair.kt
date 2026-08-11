@@ -7,7 +7,7 @@ import com.magi.app.model.MagiState
  * 束ねてまとめて適用し、全体としてなら採用できないか再挑戦する汎用ヘルパ。
  *
  * ユーザー実データの研磨ログ「不採用×78」「不採用×19」は、chain探索自体は候補を構築できた
- * (findCovUChain/手M/手F等が成立)がisBetterの最終総合判定(hard→total→weightedScore)に負けた
+ * (findCovUChain/手M/手F等が成立)がisBetterの最終総合判定(hard→weightedScore→total)に負けた
  * 個別候補の件数。多くは「その1手だけでは他族とのトレードオフで損」だが、複数の個別に損な手を
  * 同時に適用すると全体では改善する組合せが存在しうる（例: Aさんの休振替とBさんのDﾃ振替は単独
  * ではどちらもweekly悪化で負けるが、組合わせるとweekly族の増減が打ち消し合い総合改善する）。
@@ -17,7 +17,7 @@ import com.magi.app.model.MagiState
  * 候補プール上限=なし(shouldStop()のみで打ち切り、時間予算のみで制御)。完了条件=5族各々に
  * 「単独では不採用だが結合で採用」の最小盤面テストを固定。
  *
- * 安全性: 組合せの採否は必ずUnifiedViolationChecker+isBetter(hard→total→weightedScore辞書式、
+ * 安全性: 組合せの採否は必ずUnifiedViolationChecker+isBetter(hard→weightedScore→total辞書式、
  * 呼び出し側からinjectされる)でゲート。近似は一切せず本物の目的関数で評価するため退化不能
  * （悪化する組合せは採用されない。最悪ケースは「見つからず終わる」だけ＝既存の単独手の結果より
  * 悪化することはない）。

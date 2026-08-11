@@ -23,7 +23,7 @@ internal data class AdaptiveElite(
  *
  * Exact duplicates are replaced only by an officially better report. Compression deliberately
  * keeps three different populations instead of simply taking the scalar top-N:
- *  - quality: best HARD -> total -> weightedScore schedules,
+ *  - quality: best HARD -> weightedScore -> total schedules,
  *  - diversity: schedules far from the selected set while staying within best HARD + 1,
  *  - bridge: temporary best HARD + 1 schedules used only as relinking/fusion material.
  */
