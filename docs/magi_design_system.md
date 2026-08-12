@@ -288,7 +288,7 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 ![ダイアログ](screens/05_dialog.png)
 
 ### 5.4 分析 🟡
-上部に **一般/プロ** 切替(`proMode`)。`OverviewDashboard`(ようす) / `CheckSummaryView`(チェック概要) / `BreakdownCard`(**違反内訳=全18種/100%**・fair含む) / `BottleneckCard` / `FixSuggestionCard`(1手提案)。`重大のみ`フィルタ✅。プロ時のみ `V6DashboardCard`＋`WeightTableCard`。プロ表示は冗長な説明文を非表示（構造的不足ヒント・状態・実データは常時）。
+上部に **一般/プロ** 切替(`proMode`)。`OverviewDashboard`(ようす) / `CheckSummaryView`(チェック概要) / `BreakdownCard`(**違反内訳=全19種/100%**・fair/weekly含む) / `BottleneckCard` / `FixSuggestionCard`(1手提案)。`重大のみ`フィルタ✅。プロ時のみ `V6DashboardCard`＋`WeightTableCard`。プロ表示は冗長な説明文を非表示（構造的不足ヒント・状態・実データは常時）。
 
 ### 5.5 設定 ✅
 外観(`AppearanceCard`：自動/明/暗/UD ＋片手 ＋かんたん/プロ・`MagiSegmentedControl`化✅) /

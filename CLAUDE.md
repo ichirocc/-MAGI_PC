@@ -5270,6 +5270,21 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 族数「18種」の docs 取り残しを19種へ横断修正（3.368.0, 3.202.0 の兄弟 docs への波及完了）
+「次」の掃討を族数へ広げた。`MirrorKeys.all` は**19族**（weekly が19番目・3.72.0 で目的関数へ統合）だが、
+3.202.0 が `business-logic.md` を「18種→19種(HARD4/SOFT15)」に直した際、**兄弟 docs が取り残されていた**
+（CLAUDE.md 更新ルールが警戒する「同じ事実を写した側だけ stale 化」の実例）:
+- **現行値へ訂正（docs）**: `data-models.md`「breakdown(18種)」→19種／`overview.md`「内訳(18種)」→19種／
+  `requirements.md`「18種の違反」→19種／`magi_design_system.md`「全18種/100%・fair含む」→「全19種/100%・fair/weekly含む」／
+  `screen_spec.md`（6箇所の「18種」＋version-marker「18/18」＋§08b 見出し＋:199 族列挙）。**:199 の任意群列挙に
+  weekly を追加**（旧列挙は fair 止まりで weekly が抜けていた）・「17/18→18/18」を「17/19→19/19」へ。
+- **コード1コメント**: `MagiScheduleViews:354` E7 バケツ「18族を6バケツに」→**「場所を持つ17族（全19族から fair/weekly を
+  除く=357行）」**（`vioBuckets` の union は実測17族＝need2+pref1+seq4+count4+group5+window1。357行が既に fair/weekly
+  除外を明記していたのに 354 の数だけ取り残されていた）。
+- 温存: `business-logic.md:17`「19種(HARD4/SOFT15)」は 3.202.0 で既に正しい。ポリッシュ**パス**数の「18パス」
+  （MagiDashboardCards/MagiUiState/V6HotfixPasses）は族数と無関係＝不変（18 V6HotfixPasses パス＋LNS2本=20）。
+- 6ファイル・**docs＋コメントのみ・ロジック/スコア不変**（diff で code 変更が1コメント行のみと確認）。read-only。
+
 ## 重み値コメントのドリフト＋c1 表示昇格の判断点（3.367.0, 3.366.0 の sibling-bug 掃討を重み定数へ拡張）
 3.366.0（keep-best 順序コメント）と同じ HF77＝コメント≠実装の掃討を**重み定数**へ広げた。重みは
 c1 4→5→15（3.249.0/3.253.0）・c3mn 12→15（3.249.0）・covO 0.5→1.0（3.148.0）と変わっており、3.305.0 で

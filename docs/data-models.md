@@ -75,7 +75,7 @@
 - **読込/履歴**：`loaded`, `canUndo`, `canRedo`
 - **規模**：`staff`, `days`, `shifts`, `groups`, `use2`
 - **最適化状態**：`running`, `hasResult`, `bestHard`(Long), `bestSoft`(Long), `initHard/initSoft`, `weightedScore`(Double), `totalViolations`, `iters`, `itersPerSec`, `elapsedMs`, `workers`, `budgetSec`(=300), `softPolish`(=true), `v6Algorithm`
-- **違反の内訳と場所**：`breakdown: Map<String,Int>`（18種の件数）、`violationCells["i,j"]→"vio-xxx"`（セル系）、`countViolations["i,k"]`（回数系）、`needViolations["k,j"]`（被覆系）
+- **違反の内訳と場所**：`breakdown: Map<String,Int>`（19種の件数）、`violationCells["i,j"]→"vio-xxx"`（セル系）、`countViolations["i,k"]`（回数系）、`needViolations["k,j"]`（被覆系）
 - **表示素材**：`schedule`, `resultSchedule`(ws6確定), `liveSchedule`(計算中の最良盤面), `wishes`, `staffNames`, `staffGroupSymbols`, `shiftSymbols`, `shiftColorHex`, `shiftTextHex`, `violationColorHex`（空＝テーマerror、`shiftColors["__vio__"]`）
 - **誘導/診断**：`satisfaction`(%), `copilotHint`, `impossibleWishCount`, `coverageDiag`(covU原因診断), `settingIssues`, `fixSuggestions`, `alternatives`, `polishExhausted`
 - **中断**：`interruptedRun`, `interruptedInfo`
