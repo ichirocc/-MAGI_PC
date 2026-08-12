@@ -23,7 +23,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-12（3.366.0 3.365.0（共有ネイティブハンドル並列安全テスト）に `/code-review`（8視点並列サブエージェント）を
+**最終更新**：2026-08-12（3.367.0 3.366.0で「設計トレードオフのため未対応」としていた4項目を実測してから対応。
+TSANビルドの実コスト（~7秒+~0.05秒）を測ったうえで、通常ビルド検査を削らず**専用TSAN CIジョブを新設**して
+`runSharedHandleConcurrency`のコメントが主張する検出力を実際にCIへ担保。あわせてflatフィクスチャごとの
+重複実行を1回に統合・`--shared-only`+`--expect`同時指定時の無警告スキップを明示的な注記へ・exit code契約を
+ファイル冒頭にコメント化（過剰な分割はせず現状の1/2二層を維持）・簡素化4件を適用。CI相当のフル実行で
+両フィクスチャMATCH・4,195,533手・0 mismatchesを再確認。test/tools/CIのみ・engine/重み/スコア不変。
+3.366.0 3.365.0（共有ネイティブハンドル並列安全テスト）に `/code-review`（8視点並列サブエージェント）を
 実施し、正しさに関わる指摘2件（スレッド生成中の例外で`std::terminate()`しうる／`out[0]`(自己整合番兵)を独立検証せず
 serial/parallelが同一に自己整合失敗した場合を見逃しうる）と規約違反2件（version bump漏れ・README最終更新の陳腐化）を
 検証のうえ修正。CI相当のフル実行（golden.flat＋sample_v6.flat）で両方MATCH・4,195,533手・0 mismatchesを再確認。

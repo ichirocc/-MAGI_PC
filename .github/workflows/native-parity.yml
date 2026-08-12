@@ -9,6 +9,14 @@ name: Native Parity Check
 # C++ 内部（scalar vs bit-op）だけで、両方の C++ 経路を一貫して変えれば通ってしまい、
 # Kotlin との乖離は実機の番兵まで気づけなかった（速度が落ちるだけで結果は正しいので発覚しにくい）。
 # g++ のみで数十秒＝軽量なので SDK ジョブとは分離した専用ワークフローにする。
+# [3.366.0] shared-handle-tsan ジョブ: runSharedHandleConcurrency（SaOptimizer.run が native
+# ハンドル1本を最大8並列ワーカーで叩く実運用と同じ形を再現する検査）のコメントは「TSAN でビルド
+# すれば書き込み競合を検出する」と主張していたが、CI はどこも -fsanitize=thread でビルドして
+# おらず、この主張を実際に検証する経路が「開発者が手元で --shared-only を思い出して走らせる」
+# 一回限りの手作業しか無かった（読んで確認できる契約と実際にCIが守る契約が食い違う＝このリポジトリで
+# 何度も踏んだ HF77 と同じ構図）。実測コスト（TSANビルド~7秒＋実行~0.05秒）が無視できる小ささ
+# だったため、常時実行の native-parity ジョブへ混ぜずに独立の軽量ジョブとして追加し、コメントの
+# 主張を実際にCIが継続的に担保するようにした。
 
 on:
   workflow_dispatch:
@@ -83,6 +91,52 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-parity-logs
+          path: build/ci-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # [3.366.0] TSAN ビルドで runSharedHandleConcurrency の --shared-only を回すだけの軽量ジョブ。
+  # native-parity ジョブとは独立（TSAN ビルドは通常ビルドと別コンパイラフラグのため同一ステップに
+  # 混ぜない）。1つの flat フィクスチャで十分（この検査は「MagiProblem が読み取り専用で共有安全か」
+  # という盤面データに依らない構造的性質を見るもの＝複数フィクスチャを回しても検出力は増えない）。
+  shared-handle-tsan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build harness with ThreadSanitizer
+        shell: bash
+        run: |
+          mkdir -p build/ci-logs
+          g++ -O1 -g -std=c++17 -fsanitize=thread -DMAGI_HOST_TEST -I app/src/main/cpp \
+            tools/native/host_parity_bench.cpp -o build/magi_host_tsan \
+            2>&1 | tee build/ci-logs/shared-handle-tsan-build.log
+
+      - name: Generate fixture (state JSON → flat)
+        shell: bash
+        run: |
+          python3 tools/native/state_to_flat.py \
+            app/src/test/resources/golden_state.json build/golden.flat \
+            2>&1 | tee build/ci-logs/shared-handle-tsan-fixture.log
+
+      - name: Run shared-handle concurrency check under TSAN
+        shell: bash
+        run: |
+          set -o pipefail
+          # TSAN が競合を検出すると非ゼロ終了する。--shared-only は --expect を使わない
+          # （このジョブの目的は言語跨ぎパリティでなくスレッド安全性の検証のため）。
+          ./build/magi_host_tsan --shared-only build/golden.flat \
+            2>&1 | tee build/ci-logs/shared-handle-tsan-run.log
+
+      - name: Upload logs (on failure only)
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-handle-tsan-logs
           path: build/ci-logs
           if-no-files-found: ignore
           retention-days: 7
