@@ -5270,6 +5270,30 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## host_parity_bench.cpp のハーデニング＝/code-review 8視点サブエージェントの指摘を検証・修正（3.366.0）
+3.365.0（共有ネイティブハンドル並列安全テスト）に対し `/code-review`（8視点並列サブエージェント）を実施。
+正しさに関わる指摘2件・規約違反2件を検証のうえ修正。他の指摘（`--shared-only`の常時実行範囲・`--expect`と
+flatの対応検証以外の部分・exit code重複・簡素化系）は設計トレードオフのため未対応（対応方針待ち）。
+- **[正しさ①] `runSharedHandleConcurrency`のスレッド生成中に例外で`std::terminate()`しうる**: 全スレッドを
+  `emplace_back`し終えてから一括joinする構造のため、途中（スレッド上限・メモリ逼迫下でのpthread_create失敗等）で
+  例外が飛ぶと既に起動済みのjoinable`std::thread`がスタック巻き戻りで破棄され`std::terminate()`でプロセスが落ちる
+  （設計された正常終了コード`mismatches==0?0:1`に到達しない）。`ts.reserve(threads)`でベクタ再確保由来の例外を
+  排除し、生成ループをtry/catchで囲み既に起動済みのスレッドをjoinしてから再送出する形へ修正。
+- **[正しさ②] `out[0]`(status=自己整合番兵)を独立検証していなかった**: serial/parallelの結果を要素ごと比較する
+  だけで、`status!=0`（`deltaApply`の自己整合失敗＝呼出元がcur/bestを破棄する契約）が両方に**同一に**発生した
+  場合、比較上は「一致」となり「identical to serial」と誤って報告しうる＝この検査が本来守るべき対象（自己整合性
+  そのもの）を見逃す。`out[0]`を先に確認し、非0なら`SELF-CONSISTENCY FAIL`として明示的に区別する。
+- **[規約違反①] `--expect`とflatファイルの件数不一致を検証していなかった**: 出現順で1:1対応する契約なのに
+  件数チェックが無く、将来flatフィクスチャを追加して対応する`--expect`を書き忘れると、その分だけ言語跨ぎ照合が
+  **無警告でスキップ**される（3.362.0の穴と同型）。メイン処理前に件数を数えて不一致ならfail-loud（`--shared-only`
+  時は対象外）。
+- **[規約違反②] versionCode/versionName・README最終更新の更新漏れ**: 3.365.0直後の`--shared-only`修正コミット
+  （0флатファイルで無言成功する不具合の修正）がコードを変えたのにversion bumpせず、CLAUDE.mdの「変更ごとに
+  versionCode++」規約に違反していた。README「最終更新」も5日陳腐化。両方是正。
+- 検証: `g++ -O3 -pthread`で実ビルド・`--shared-only`（8スレッド identical to serial）・
+  `-fsanitize=thread`ビルドでも競合警告なし・CI相当のフル実行（golden.flat＋sample_v6.flat、両方MATCH・
+  **4,195,533手・0 mismatches**、3.365.0の主張数値と一致）を確認。test/toolsのみ・engine/重み/スコア不変。
+
 ## 共有ネイティブハンドルの並列安全性を実行テストで示す（3.365.0, 別ブランチ x8ygvy から選択的に取り込み）
 ユーザー指示「すべてのブランチを main にマージする」→ 調査で fork 2本（x8ygvy・ir1xng）は**競合する並行開発ライン**
 （版番号衝突・ir1xng は 3.176.0 の4週間前・401commits分岐）と判明し盲目マージは main 破壊と判断。ユーザー選択で

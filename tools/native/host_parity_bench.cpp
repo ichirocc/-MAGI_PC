@@ -282,11 +282,28 @@ static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<i
     // 同じ seed を並列で。p は共有＝ここで競合があれば結果がずれるか TSAN が鳴る。
     std::vector<Res> par((size_t)threads);
     std::vector<std::thread> ts;
-    for (int t = 0; t < threads; t++)
-        ts.emplace_back([&, t] { oneChunk((uint64_t)(t + 1) * 9176ULL, par[(size_t)t]); });
+    ts.reserve((size_t)threads);
+    // スレッド生成を全部終えてから join する構造のため、途中で emplace_back が例外を投げると
+    // 既に起動済みの std::thread が joinable のまま巻き戻りで破棄され std::terminate() する。
+    // 生成側で捕捉し、既に起動済みの分は join してから再送出する（クラッシュでなく例外で終わる）。
+    try {
+        for (int t = 0; t < threads; t++)
+            ts.emplace_back([&, t] { oneChunk((uint64_t)(t + 1) * 9176ULL, par[(size_t)t]); });
+    } catch (...) {
+        for (auto& th : ts) if (th.joinable()) th.join();
+        throw;
+    }
     for (auto& th : ts) th.join();
     bool ok = true;
     for (int t = 0; t < threads; t++) {
+        // out[0]=status（deltaApply の自己整合番兵）。serial/parallel の値が偶然一致していても
+        // status!=0 なら cur/best は書き込まれておらず（呼出元は破棄する契約）「一致」と呼ぶべき
+        // 結果ではない＝この検査本来の対象（自己整合性そのもの）を見逃さないよう別掲で判定する。
+        if (serial[(size_t)t].out[0] != 0 || par[(size_t)t].out[0] != 0) {
+            printf("SHARED-HANDLE x%d threads: SELF-CONSISTENCY FAIL (status serial=%lld par=%lld, thread %d)\n",
+                   threads, serial[(size_t)t].out[0], par[(size_t)t].out[0], t);
+            ok = false; break;
+        }
         if (serial[(size_t)t].cur != par[(size_t)t].cur ||
             serial[(size_t)t].best != par[(size_t)t].best) { ok = false; break; }
         for (int x = 0; x < 6; x++)
@@ -313,6 +330,25 @@ int main(int argc, char** argv) {
     std::vector<const char*> expects;
     for (int ai = 1; ai < argc; ai++)
         if (strncmp(argv[ai], "--expect=", 9) == 0) expects.push_back(argv[ai] + 9);
+
+    // --expect は flat 引数と出現順で1:1対応する契約。件数がずれると、対応の無い flat 側は
+    // 言語跨ぎ照合が無警告でスキップされる（例: 将来フィクスチャを追加して対応する --expect を
+    // 書き忘れると、新フィクスチャだけ照合されないまま「MATCH」扱いの隣でCIが通り続ける）。
+    // 件数不一致を事前に数えて fail-loud にする（--shared-only 時は --expect 自体を使わないため対象外）。
+    if (!expects.empty()) {
+        int flatCount = 0;
+        for (int ai = 1; ai < argc; ai++)
+            if (strncmp(argv[ai], "--", 2) != 0) flatCount++;
+        bool sharedOnlyPrescan = false;
+        for (int ai = 1; ai < argc; ai++)
+            if (strcmp(argv[ai], "--shared-only") == 0) sharedOnlyPrescan = true;
+        if (!sharedOnlyPrescan && (int)expects.size() != flatCount) {
+            printf("--expect= count (%zu) does not match flat-file argument count (%d) — "
+                   "each flat file needs exactly one --expect= in the same order, or none.\n",
+                   expects.size(), flatCount);
+            return 2;
+        }
+    }
 
     // ---- 実データ問題（flat ファイル引数）: 素の盤面＋実運転ノイズ(-1/非canDo)入り盤面 ----
     int flatIdx = 0;
