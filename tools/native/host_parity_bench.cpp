@@ -340,6 +340,14 @@ int main(int argc, char** argv) {
     }
 
     if (sharedOnly) {
+        // flatIdx==0 means the concurrency check never ran (no flat file argument was
+        // given) — without that, mismatches stays at its initial 0 and we'd silently
+        // report a clean pass despite exercising zero threads and zero code. Fail loudly
+        // instead, since this flag's whole purpose is a ThreadSanitizer-verified check.
+        if (flatIdx == 0) {
+            printf("SHARED-ONLY: no flat file argument given — nothing was checked\n");
+            return 2;
+        }
         printf("SHARED-ONLY: %lld mismatches\n", mismatches);
         return mismatches == 0 ? 0 : 1;
     }
