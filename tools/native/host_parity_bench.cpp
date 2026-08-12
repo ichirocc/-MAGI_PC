@@ -408,6 +408,17 @@ int main(int argc, char** argv) {
         // given) — without that, mismatches stays at its initial 0 and we'd silently
         // report a clean pass despite exercising zero threads and zero code. Fail loudly
         // instead, since this flag's whole purpose is a ThreadSanitizer-verified check.
+        //
+        // This guard is deliberately scoped to --shared-only rather than hoisted to a
+        // generic "did any short-circuiting flag actually do something" check at the top
+        // of main(): today there is exactly one such flag, and the non-shared-only path
+        // is never vacuous (it always falls through to the synthetic-fixture loop below),
+        // so a general mechanism would have no second caller to justify it (see this file's
+        // own history: --shared-only's own guard was itself missing for a while — 64a8083 —
+        // which is the concrete precedent for *why* this comment exists). If a second
+        // early-exit flag is ever added, copy this pattern (own zero-work guard, own
+        // message) rather than reaching for shared machinery until there are ≥2 real
+        // instances of the same shape to factor out.
         if (flatIdx == 0) {
             printf("SHARED-ONLY: no flat file argument given — nothing was checked\n");
             return 2;
