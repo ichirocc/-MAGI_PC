@@ -36,6 +36,14 @@ data class ViolationReport(
      * （実機ログ: 内訳 c2=1 なのに詳細行が無く、apt=29 に対し表示は7箇所ぶんしか無い）。表示のみ。
      */
     val countFamilies: Map<String, List<String>> = emptyMap(),
+    /**
+     * [/code-review, 3.111.0/3.353.0と同根の第3キー空間] 被覆キー("k,j")に重なった全違反クラスを
+     * 重み降順で保持（`needViolations` は最重1クラス＝後方互換のまま）。`cellFamilies`/`countFamilies`の
+     * 被覆空間版。covU(重み8000)と同じ(シフト,日)に c41/c41s(重み1)が重なると、covUが表示を独占し
+     * `needViolations` からc41/c41sが消えていた（`breakdownLocations`の「群のレンジ」タップ→場所一覧が
+     * 内訳件数より少なく見える）。表示のみ。
+     */
+    val needFamilies: Map<String, List<String>> = emptyMap(),
     val breakdown: Map<String, Int>,
     val total: Int,
     val hard: Int,
@@ -155,6 +163,7 @@ object UnifiedViolationChecker {
         //   violations は従来どおり最重1クラス＝既存読者は不変。
         val cellFams = linkedMapOf<String, MutableList<String>>()
         val countFams = linkedMapOf<String, MutableList<String>>()
+        val needFams = linkedMapOf<String, MutableList<String>>()
         fun mark(i: Int, j: Int, family: String) {
             val key = "$i,$j"
             val cls = vioClass[family] ?: family
@@ -171,6 +180,10 @@ object UnifiedViolationChecker {
         // [判読性] mark() と同じ重み優先。旧: 後勝ちで軽い族(旧 covO=0.5 等)が重い族(c41 等)のマークを上書きし得た。
         fun markNeed(k: Int, j: Int, family: String) {
             val key = "$k,$j"
+            // [/code-review] mark()/markCount() と同じく、重なった全クラスを needFams へ蓄積（重複なし・後で重み降順に整列）。
+            val cls0 = vioClass[family] ?: family
+            val fams = needFams.getOrPut(key) { ArrayList(2) }
+            if (cls0 !in fams) fams.add(cls0)
             val prev = needViolations[key]
             if (prev != null) {
                 val prevW = MirrorKeys.weightOf(prev.removePrefix("vio-"))
@@ -424,12 +437,16 @@ object UnifiedViolationChecker {
         val countFamilies = LinkedHashMap<String, List<String>>(countFams.size)
         for ((ck, cv) in countFams) countFamilies[ck] =
             if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
+        val needFamilies = LinkedHashMap<String, List<String>>(needFams.size)
+        for ((ck, cv) in needFams) needFamilies[ck] =
+            if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
         return ViolationReport(
             violations = violations,
             needViolations = needViolations,
             countViolations = countViolations,
             cellFamilies = cellFamilies,
             countFamilies = countFamilies,
+            needFamilies = needFamilies,
             breakdown = breakdown,
             total = total,
             hard = hard,

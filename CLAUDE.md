@@ -5270,6 +5270,36 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## needFamilies 新設＝covU/c41系の重なりで場所一覧が件数より少なく見える穴を解消＋CI download の無防備さを是正（3.370.0, ユーザー指示「同様な問題などあるか?」）
+外部レポート（フルコード/48時間ログの2件とも全て別コードベース＝この main には無関係と確定済み）の**カテゴリ名**
+（MirrorCore型整合／部分Δ covU/c3n／CI安定化）だけをこのコードベースに写して監査。**実在する2件**を発見・修正した。
+- **[実バグ] `breakdownLocations`（内訳→場所タップ）が3キー空間とも単一クラスの生マップを直接フィルタ**:
+  3.111.0（`cellFamilies`）・3.353.0（`countFamilies`）で「重い違反(low90/high45/covU8000等)が同じセルの
+  軽い違反(apt/c2/c41/c41s等)を隠す」問題はチェッカー層では解決済みだったが、**この機能の消費者
+  (`MagiDashboardCards.breakdownLocations`)がどちらの union も一度も使っていなかった**（`countFamilies`は
+  `UiState`にすら届いていなかった＝V6SanityPortの診断ログ専用のまま）。実害＝「群のレンジ 3件」の内訳
+  チップをタップしても、covUと同じセルで重なった1件が場所一覧から消えて2件しか出ない、という**件数と
+  一覧が食い違う表示バグ**。加えて `needViolations`（covU/covO/c41/c41s の被覆キー空間）には
+  `cellFamilies`/`countFamilies`の兄弟（全クラス保持マップ）が**checker層にすら存在しなかった**——
+  3.111.0/3.353.0が直した2つのキー空間とは別の**第3のキー空間**で同型の穴が未対応のまま残っていた。
+  修正: `MirrorCore.markNeed`を`markCount`と同型に拡張し`needFams`蓄積を追加、`ViolationReport.needFamilies`
+  を新設（checker層）。`UiState`に`countFamilies`/`needFamilies`(+`resultCountFamilies`/`resultNeedFamilies`)を
+  追加し`makeUi`から配線（表示層）。`breakdownLocations`の4分岐（count系/apt/被覆系/セル系）全てを
+  `*Families`優先＋単一クラスへのフォールバック（`ui未充填時の保険`）へ書き換え。表示のみ・スコアリング不変。
+- **[実在の gap] CI の Gradle ダウンロードが3ワークフローとも無防備**: `android-sdk.yml`/`release-build.yml`/
+  `v6-engine-check.yml`が同一の`wget -q -O /tmp/gradle.zip ...`をリトライなし・キャッシュなしで毎回実行
+  （~100MB超を毎回無条件に再取得、一時的なネットワーク不調でジョブごと失敗しうる）。`actions/cache@v4`
+  （バージョン文字列固定キー、ヒット時はダウンロード自体をスキップ）＋`wget --tries=3 --waitretry=5`の
+  多重防御を3ファイルに同一パターンで追加。**編集事故を1件その場で発見・是正**: `release-build.yml`の
+  初回編集で`name:`行を含めずold_stringを組んだ結果、直前の`- name: Install Gradle 9.3.1`行が孤立し
+  run/usesを持たない不正なstepとして残った（YAML構文自体はエラーにならないため`grep`目視で発見）。
+  `python3 -c "import yaml; yaml.safe_load(...)"`で3ファイルとも構文有効・step構造も再度目視確認して是正済み。
+- 検証: v6層（MirrorCore.kt）はホストJVM実行で**452テストgreen**（新規1件
+  `needFamiliesKeepsC41WhenItOverlapsWithCovU`＝covUとc41が同一(shift,日)セルで同時発火する最小盤面で
+  `needViolations`単体ではc41が消え`needFamilies`には両方保持されることを固定）。UI層3ファイルは
+  ホストコンパイル不可＝括弧均衡・シンボル重複無し・呼び出し側シグネチャ一致を静的確認。
+  CIワークフロー3件はYAML構文検証＋目視でstep構造を確認。最終判定は次回push時のCI実行。
+
 ## /code-review 全コード＝need2単独定義セル見落としの第3世代を発見・修正（3.369.0, ユーザー指示「すべてのフルコードを/code-review する」）
 `/code-review` skill（サブエージェント fan-out 不可のためインライン単一パス、CLAUDE.md 履歴と照合して既解決事項は除外）を
 約35,000行の Kotlin/C++ 全体へ実施。findings 4件を全て実コードで裏取りしたうえで修正した。**エンジン評価器本体

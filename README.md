@@ -23,7 +23,16 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-13（3.369.0 ユーザー指示「すべてのフルコードを/code-review する」＝約35,000行の
+**最終更新**：2026-08-13（3.370.0 ユーザー指示「同様な問題などあるか?」＝外部レポート（別コードベース確定済み）の
+カテゴリ名だけを写して監査し実在2件を発見・修正。**`breakdownLocations`（内訳→場所タップ）が3キー空間
+（セル/回数/被覆）とも単一クラスの生マップを直接フィルタ**しており、重い違反(covU8000/low90等)と同じセルの
+軽い違反(c41/apt/c2等)が場所一覧から消える表示バグ＝3.111.0/3.353.0の`cellFamilies`/`countFamilies`は
+checker層で解決済みだったのに消費者(`breakdownLocations`)へ一度も配線されておらず、`needViolations`
+（covU/covO/c41系の被覆キー空間）には兄弟union自体が存在しなかった（第3のキー空間で同型の穴が未対応）。
+`MirrorCore`に`needFamilies`新設・`UiState`/`makeUi`へ配線・`breakdownLocations`4分岐を`*Families`優先へ
+書き換え。ホストJVM実行で452テストgreen（新規1件）。あわせて**CIのGradleダウンロードが3ワークフローとも
+リトライ・キャッシュなし**という実在の gap を発見し`actions/cache`+`wget --tries=3`の多重防御を追加
+（編集中に`name:`行の孤立という自己ミスをYAML構文検証で発見・是正）。3.369.0 ユーザー指示「すべてのフルコードを/code-review する」＝約35,000行の
 Kotlin/C++全体をインライン単一パス精査。**need2単独定義セル見落としの第3世代を発見・修正**＝`covUCell`/
 `covOCell`（3.173.0/3.309.0で確立済みのsource of truth）を経由せず生の`need1`だけを見る箇所が
 `SmartInitialScheduler.kt`(demand-fill/残り埋め)・`GreedyMirrorScheduler.kt`(同型)・

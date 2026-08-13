@@ -49,13 +49,24 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0" "ndk;26.1.10909125" "cmake;3.22.1"
 
+      # [/code-review] キャッシュ+リトライ（android-sdk.ymlと同一パターン。旧: 無防備な単一wget）。
+      - name: Cache Gradle distribution
+        id: gradle-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/gradle-dist
+          key: gradle-dist-9.3.1
+
       - name: Install Gradle 9.3.1
+        if: steps.gradle-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          wget -q -O /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          wget -q --tries=3 --waitretry=5 -O /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
           mkdir -p "$HOME/gradle-dist"
           unzip -q /tmp/gradle.zip -d "$HOME/gradle-dist"
-          echo "$HOME/gradle-dist/gradle-9.3.1/bin" >> "$GITHUB_PATH"
+
+      - name: Add Gradle to PATH
+        run: echo "$HOME/gradle-dist/gradle-9.3.1/bin" >> "$GITHUB_PATH"
 
       - name: Build release APK
         env:

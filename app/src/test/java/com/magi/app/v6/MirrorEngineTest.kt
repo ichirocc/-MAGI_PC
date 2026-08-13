@@ -156,6 +156,42 @@ class MirrorEngineTest {
         assertEquals("vio-low", report.countViolations["0,1"])
         assertEquals(listOf("vio-low", "vio-aptLow"), report.countFamilies["0,1"])
     }
+
+    /**
+     * [/code-review, 3.111.0/3.353.0と同根の第3キー空間] covU(重み8000)がc41(重み1)と同じ(シフト,日)に
+     * 重なると needViolations から c41 が消える（breakdownLocations の「群のレンジ」タップ→場所一覧が
+     * 内訳件数より少なく見える）。needFamilies は重なった全クラスを重み降順で保持する。
+     */
+    @Test
+    fun needFamiliesKeepsC41WhenItOverlapsWithCovU() {
+        val shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "3", ""))
+        val groups = listOf(Group("G0", "G0"))
+        val staff = listOf(Staff("s0", 0))
+        // day0: s0のみXへ配置＝need1(3)に対しcovU(不足2)、かつG0のXレンジ[2,5]に対してもc41(不足)が同時発火。
+        val schedule = listOf(listOf(1, 0, 0, 0))
+        val st = MagiState(
+            startDate = "2025-01-01", endDate = "2025-01-04",
+            shifts = shifts, groups = groups, staff = staff,
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = schedule,
+            wishes = emptyMap(), staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(),
+            cons3 = emptyList(), cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = listOf(C41Row("G0", "X", "2", "5")), cons42 = emptyList(),
+        )
+        val report = UnifiedViolationChecker.check(st)
+        assertTrue("前提: covUが発火していること", (report.breakdown["covU"] ?: 0) > 0)
+        assertTrue("前提: c41が発火していること", (report.breakdown["c41"] ?: 0) > 0)
+        assertEquals("vio-covU", report.needViolations["1,0"])
+        assertFalse(
+            "needViolations だけでは c41 が消える（needFamilies が必要な理由）",
+            report.needViolations.values.contains("vio-c41"),
+        )
+        assertEquals(listOf("vio-covU", "vio-c41"), report.needFamilies["1,0"])
+    }
     // [レビュー#4 3.213.0] LightMirrorOptimizer の希望凍結規則がエンジン本体(wishLocked)と一致することを固定。
     //   旧 lockedMatrix は canDo 無視の全希望ロック＋事前適用なしで、初期盤面で未充足の実現可能希望が
     //   最適化後も永久に未充足のまま残っていた。

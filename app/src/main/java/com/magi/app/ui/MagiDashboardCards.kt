@@ -846,18 +846,28 @@ internal fun breakdownLocations(famKey: String, ui: UiState): List<Pair<String, 
     fun nm(i: Int) = ui.staffNames.getOrNull(i) ?: "#$i"
     fun sym(k: Int) = ui.shiftSymbols.getOrNull(k) ?: "$k"
     val want = "vio-$famKey"
+    // [/code-review, 3.111.0/3.353.0と同根の第3キー空間] 重い族(covU8000/low90/high45等)と同じセルに
+    //   軽い族(apt/c2/c41/c41s等)が重なると、単一クラスの countViolations/needViolations からは消える
+    //   （内訳の件数は breakdown で正しいのに、タップ→場所一覧だけ件数より少なく見える）。*Families
+    //   （全クラス保持）を先に見て、無ければ単一クラス版へフォールバック（読込直後等ui未充填時の保険）。
+    fun countHits(target: String): List<String> =
+        if (ui.countFamilies.isNotEmpty()) ui.countFamilies.entries.filter { target in it.value }.map { it.key }
+        else ui.countViolations.entries.filter { it.value == target }.map { it.key }
+    fun needHits(target: String): List<String> =
+        if (ui.needFamilies.isNotEmpty()) ui.needFamilies.entries.filter { target in it.value }.map { it.key }
+        else ui.needViolations.entries.filter { it.value == target }.map { it.key }
     return when (famKey) {
-        "low", "high", "c2" -> ui.countViolations.entries.filter { it.value == want }.mapNotNull {
-            val p = it.key.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val k = p.getOrNull(1)?.toIntOrNull()
+        "low", "high", "c2" -> countHits(want).mapNotNull {
+            val p = it.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val k = p.getOrNull(1)?.toIntOrNull()
             if (i == null || k == null) null else ("${nm(i)} 「${sym(k)}」" to i)
         }
         // 適切回数(apt) は不足=vio-aptLow / 超過=vio-aptHigh の2クラスで countViolations(i,k) に入る。
-        "apt" -> ui.countViolations.entries.filter { it.value == "vio-aptLow" || it.value == "vio-aptHigh" }.mapNotNull {
-            val p = it.key.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val k = p.getOrNull(1)?.toIntOrNull()
+        "apt" -> (countHits("vio-aptLow") + countHits("vio-aptHigh")).distinct().mapNotNull {
+            val p = it.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val k = p.getOrNull(1)?.toIntOrNull()
             if (i == null || k == null) null else ("${nm(i)} 「${sym(k)}」" to i)
         }
-        "covU", "covO", "c41", "c41s" -> ui.needViolations.entries.filter { it.value == want }.mapNotNull {
-            val p = it.key.split(","); val k = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
+        "covU", "covO", "c41", "c41s" -> needHits(want).mapNotNull {
+            val p = it.split(","); val k = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
             if (k == null || j == null) null else ("${dayMD(ui.startDate, j)} 「${sym(k)}」" to null)
         }
         // [場所表示] fair/weekly はセル単位でなく職員×シフト単位の偏り。distLocations から整形。
@@ -871,11 +881,16 @@ internal fun breakdownLocations(famKey: String, ui: UiState): List<Pair<String, 
             val i = e.getOrNull(0) ?: return@mapNotNull null; val k = e.getOrNull(1) ?: return@mapNotNull null; val dev = e.getOrNull(2) ?: 0
             "${nm(i)} 「${sym(k)}」（偏り ${dev}）" to i
         }
-        else -> ui.violationCells.entries.filter { it.value == want }.mapNotNull {
-            val p = it.key.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
-            if (i == null || j == null) null else {
-                val cell = ui.schedule.getOrNull(i)?.getOrNull(j) ?: -1
-                ("${nm(i)} ${dayMD(ui.startDate, j)}=${if (cell >= 0) sym(cell) else "—"}" to i)
+        else -> {
+            val hits = if (ui.violationCellFamilies.isNotEmpty())
+                ui.violationCellFamilies.entries.filter { want in it.value }.map { it.key }
+            else ui.violationCells.entries.filter { it.value == want }.map { it.key }
+            hits.mapNotNull {
+                val p = it.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
+                if (i == null || j == null) null else {
+                    val cell = ui.schedule.getOrNull(i)?.getOrNull(j) ?: -1
+                    ("${nm(i)} ${dayMD(ui.startDate, j)}=${if (cell >= 0) sym(cell) else "—"}" to i)
+                }
             }
         }
     }
