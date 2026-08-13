@@ -76,7 +76,12 @@ internal object C1TemporalDp {
         maxDpStates: Int = MAX_DP_STATES,
     ): Candidate? {
         val t = row.size
-        if (t == 0 || t > 63 || locked.size != t || maxRelocations <= 0) return null
+        // [3.213.0のSCORE_HARD_UNIT検証と同型] RELOC_BITS(6bit)を超えるmaxRelocationsはkey()のビット
+        //   詰め込みでcountフィールドへ溢れ、異なる(relocations,count)状態がDP重複排除で誤って同一視され
+        //   状態が黙って潰れうる（現在の全4呼出元は4/6で範囲内=到達不能だが、silent corruption を
+        //   明示的な no-op（null返却=このパスがない場合の安全側フォールバック）に変える）。
+        if (t == 0 || t > 63 || locked.size != t || maxRelocations <= 0 ||
+            maxRelocations > (1 shl RELOC_BITS) - 1) return null
         val validRules = rules.filter { it.days in 1..t && it.minimum > 0 }
         if (validRules.isEmpty()) return null
         val maxWindow = validRules.maxOf { it.days }

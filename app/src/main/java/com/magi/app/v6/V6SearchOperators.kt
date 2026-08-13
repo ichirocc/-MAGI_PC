@@ -12,14 +12,15 @@ import kotlin.math.max
 // 集合構築は 2 パス（個数を数えてから N 番目を選ぶ）で ArrayList/filter を排し GC 圧を下げる。
 // ALNS の直接評価アームから eval+cur へ copy2D なしで適用される。
 
+// [need2単独定義セル見落とし修正] 過剰スキャン/移動先の不足推定をともに p.covOCell/covUCell
+//   (need1・need2のOR、source of truth)へ統一。旧実装はneed1のみで、need1未設定・need2のみで
+//   定義されたシフトの過剰/不足を見落としていた（3.173.0のCoverageDiagnosis修正と同根）。
 internal fun findCovOFix(p: Problem, eval: DeltaEvaluator, rng: Random): IntArray? {
     if (p.T == 0 || p.K == 0) return null
     val j = rng.nextInt(p.T)
     var overK = -1; var maxOver = 0
     for (k in 0 until p.K) {
-        val lo = p.need1[k][j]; if (lo < 0) continue
-        val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else lo
-        val over = eval.countOnDay(k, j) - hi
+        val over = p.covOCell(k, j, eval.countOnDay(k, j))
         if (over > maxOver) { maxOver = over; overK = k }
     }
     if (overK < 0) return null
@@ -31,8 +32,7 @@ internal fun findCovOFix(p: Problem, eval: DeltaEvaluator, rng: Random): IntArra
     var bestNw = -1; var bestDef = Int.MIN_VALUE
     for (k in 0 until p.K) {
         if (k == overK || !p.canDo(i, k)) continue
-        val lo = p.need1[k][j]
-        val def = if (lo >= 0) lo - eval.countOnDay(k, j) else 0
+        val def = p.covUCell(k, j, eval.countOnDay(k, j))
         if (def > bestDef) { bestDef = def; bestNw = k }
     }
     return if (bestNw >= 0) intArrayOf(i, j, bestNw) else null

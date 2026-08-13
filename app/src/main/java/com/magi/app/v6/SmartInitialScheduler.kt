@@ -73,15 +73,18 @@ object SmartInitialScheduler {
             }
         }
 
-        // ③ 日別必要人数(need1)。不足の大きいシフトから、超過/回数の少ない職員を優先して埋める
-        //   （GreedyMirrorSchedulerの充足フィルと同一ロジック）。
+        // ③ 日別必要人数(need1/need2=covUCellのOR)。不足の大きいシフトから、超過/回数の少ない職員を
+        //   優先して埋める（GreedyMirrorSchedulerの充足フィルと同一ロジック）。
+        //   [need2単独定義セル見落とし修正] need1のみを見ると、need1未設定・need2のみで需要が定義された
+        //   シフトがdemandOrderへ一切追加されず初期解が積極的に埋めない（3.173.0のCoverageDiagnosis修正と
+        //   同根、covUCellをsource of truthとして統一）。
         var counts = countMatrix(p, schedule)
         var cov = coverage(p, schedule)
         for (j in 0 until p.T) {
             val demandOrder = ArrayList<Pair<Int, Int>>()
             for (k in 0 until p.K) {
-                val lo = p.need1[k][j]
-                if (lo >= 0 && lo > cov[j][k]) demandOrder.add((lo - cov[j][k]) to k)
+                val deficit = p.covUCell(k, j, cov[j][k])
+                if (deficit > 0) demandOrder.add(deficit to k)
             }
             demandOrder.sortWith { a, b ->
                 val d = b.first.compareTo(a.first)
@@ -89,9 +92,7 @@ object SmartInitialScheduler {
             }
             for (pair in demandOrder) {
                 val k = pair.second
-                val lo = p.need1[k][j]
-                if (lo < 0) continue
-                while (cov[j][k] < lo) {
+                while (p.covUCell(k, j, cov[j][k]) > 0) {
                     var bestI = -1
                     var bestPenalty = Int.MAX_VALUE
                     for (i in 0 until p.S) {
@@ -139,10 +140,10 @@ object SmartInitialScheduler {
                 for (k in allowed) {
                     val hi = p.rangeHi[i][k]
                     val over = hi != Int.MAX_VALUE && counts[i][k] >= hi
-                    val needLo = p.need1[k][j]
                     var covNow = 0
                     for (ii in 0 until p.S) if (schedule[ii][j] == k) covNow++
-                    val demandBonus = if (needLo >= 0 && covNow < needLo) -100 else 0
+                    // [need2単独定義セル見落とし修正] 上のstep③と同根。need1のみでなくcovUCell(OR)で判定。
+                    val demandBonus = if (p.covUCell(k, j, covNow) > 0) -100 else 0
                     // [3.345.0] 休は通常のシフト種の一つ＝残り埋めで優先しない（旧: 休だけ -10 のボーナス）。
                     //   実データ3件で hard/covO/covU/low/high/c1 が全て同一＝この優先は実質不活性だった。
                     val penalty = (if (over) 1000 else 0) + counts[i][k] + demandBonus

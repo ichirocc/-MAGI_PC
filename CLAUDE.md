@@ -5270,6 +5270,33 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## /code-review 全コード＝need2単独定義セル見落としの第3世代を発見・修正（3.369.0, ユーザー指示「すべてのフルコードを/code-review する」）
+`/code-review` skill（サブエージェント fan-out 不可のためインライン単一パス、CLAUDE.md 履歴と照合して既解決事項は除外）を
+約35,000行の Kotlin/C++ 全体へ実施。findings 4件を全て実コードで裏取りしたうえで修正した。**エンジン評価器本体
+（Checker/Evaluator/DeltaEvaluator/native parity）は既存の大量の敵対的レビュー履歴で堅牢化済みで新規欠陥は0**。
+- **[実バグ・最重要] need1のみ判定の第3世代**: `covUCell`/`covOCell`（Problem.kt、need1・need2のORで需要/上限を
+  判定する source of truth）を経由せず生の `p.need1[k][j]` だけを見る箇所が、3.173.0（CoverageDiagnosis）・
+  3.309.0（V6LateOperators.isBalanceable）で修正した族とは**別に4箇所**残っていた:
+  - `SmartInitialScheduler.kt` step③（日別必要人数の demand-fill）＋step⑤（残り埋めの demandBonus tie-break）
+  - `GreedyMirrorScheduler.kt` の同一ロジック（両ファイルで完全に同型のコード＝同時修正）
+  - `V6SearchOperators.kt` の `findCovOFix`（過剰スキャン＋移動先の不足推定の両方）
+  いずれも need1未設定・need2のみで需要/上限が定義されたシフトを**完全に見落とす**（demand-fillは対象0件のまま
+  スキップ、findCovOFixは過剰配置を検出できずnullを返す）。初期解生成（`generateSmartInitial`/`generateSimple`）が
+  covU(HARD, 重み8000)違反を残したまま返り得る。修正は全箇所 `p.covUCell`/`p.covOCell` へ置換（need1/need2の
+  分岐ロジックをsource of truthへ委譲・重複コード削減も兼ねる）。
+- **[latent, 防御的ガード追加] `C1TemporalDp.kt` の RELOC_BITS(6bit)未検証**: `key(mask,count,relocations)` の
+  ビット詰め込みは `maxRelocations`>63 だと count フィールドへ溢れ、異なる状態が誤って同一視され得る
+  （silent corruption）。現在の全4呼出元は4/6で範囲内＝到達不能だが、3.213.0の`SCORE_HARD_UNIT`検証と同型の
+  精神で、既存の early-return-null 契約（この関数は無効入力に対し例外でなく null を返す設計）に1条件追加。
+- **検証**: ホストJVM実行（3.251.0系の手法）で main+test 61ファイルをコンパイル・**451テスト green**
+  （実質失敗0＝1件は3.266.0記録済みの非JUnitクラスの誤検出）。新規3テスト
+  （`SmartInitialSchedulerTest.fillsNeed2OnlyDemandDuringInitialConstruction`・
+  `V6SearchOperatorsTest`×2＝`findCovOFixDetectsNeed2OnlyOverCoverage`/`ReturnsNullWhenNoOverCoverage`）を追加。
+  **教訓#30の実践**: SmartInitialSchedulerの修正をscratchコピーでのみ一時revertし、新規テストが単独で
+  `expected:<0> but was:<2>`（HARD=2）で落ち他7件は無傷であることを確認してから復元（repo本体は無変更のまま）。
+- 探索/後処理研磨（`runPostOptimization`）は無関係＝最終採否は常にchecker+isBetterのkeep-bestが担保するため
+  影響なし。影響は**初期解生成の質のみ**（GreedyMirrorScheduler/SmartInitialSchedulerが返す盤面）。
+
 ## 族数「18種」の docs 取り残しを19種へ横断修正（3.368.0, 3.202.0 の兄弟 docs への波及完了）
 「次」の掃討を族数へ広げた。`MirrorKeys.all` は**19族**（weekly が19番目・3.72.0 で目的関数へ統合）だが、
 3.202.0 が `business-logic.md` を「18種→19種(HARD4/SOFT15)」に直した際、**兄弟 docs が取り残されていた**

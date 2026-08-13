@@ -187,4 +187,36 @@ class SmartInitialSchedulerTest {
     }
 
     private fun ScheduleRunResult.newScheduleXAt(staff: Int, day: Int): Int = schedule[staff][day]
+
+    /**
+     * [/code-review, need2単独定義セル見落とし修正] need1未設定・need2のみで需要が定義されたシフトは、
+     * 旧実装ではstep③(日別必要人数)のdemandOrderへ一切追加されず、step⑤(残り埋め)のdemandBonusも
+     * 発火しないため、初期解生成が積極的に埋めず covU(HARD) 違反が残ったまま返っていた
+     * （3.173.0のCoverageDiagnosis修正・3.309.0のV6LateOperators.isBalanceable修正と同根）。
+     */
+    @Test
+    fun fillsNeed2OnlyDemandDuringInitialConstruction() {
+        val st = MagiState(
+            startDate = "2026-01-01", endDate = "2026-01-01",
+            shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", "2")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+            use2Patterns = true,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(List(1) { -1 }, List(1) { -1 }),
+            wishes = emptyMap(), staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val smart = SmartInitialScheduler.generate(st)
+        assertEquals("need2単独定義の需要も充足しHARD=0で返ること", 0, smart.report.hard)
+        assertEquals(2, smart.schedule.count { it[0] == 1 })
+
+        // GreedyMirrorScheduler（簡易作成）も同一パターンの修正対象。
+        val naive = GreedyMirrorScheduler.generate(st)
+        assertEquals("簡易作成も同様にneed2単独定義の需要を充足すること", 0, naive.report.hard)
+    }
 }
