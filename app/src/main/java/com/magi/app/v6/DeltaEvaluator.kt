@@ -73,6 +73,31 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
     /** Running per-day count of shift k on day j (O(1) lookup; backs findCovOFix). */
     fun countOnDay(k: Int, j: Int): Int = cntDay[k][j]
 
+    /**
+     * [3.371.0/soft全族の完全差分] running per-family の生カウント（`MirrorKeys.all` の各キーと
+     * 一対一・checker の `report.breakdown[key]` と同一単位）を検証専用に公開する。
+     *
+     * `score()`(soft集約) は各フィールドへ重みを乗じて合算するため、**総和が一致しても族ごとの誤差が
+     * 相殺されて隠れる余地がある**（例: c1(重み15)とc3mn(重み15)が同じ重みを持つため、片方+1・もう片方-1
+     * の誤りは総和では検出できない。c2/c41/c42/c41s/c42s/apt/fair/weekly/covO も全て重み1で同じ穴を持つ）。
+     * このマップは checker の `breakdown` と**1キーずつ**突き合わせる per-family パリティ検証のために
+     * 存在する（`DeltaEvaluatorTest` 参照）。low/high だけは [rangeWeighted] を参照（下記）。
+     */
+    internal fun familyRaw(): Map<String, Long> = linkedMapOf(
+        "c1" to sc1, "c2" to sc2, "c41" to sc41, "c42" to sc42, "c41s" to sc41s, "c42s" to sc42s,
+        "c3" to sc3, "c3n" to hc3n, "c3m" to sc3m, "c3mn" to sc3mn,
+        "pref" to hpref, "groupViol" to hGrpV, "apt" to sApt, "fair" to sFair, "weekly" to sWeekly,
+        "covO" to scovO, "covU" to covUTot,
+    )
+
+    /**
+     * [3.371.0/soft全族の完全差分] `hct` は low(重み90)/high(重み45) を**その場で重み適用済み**の1つの
+     * running total へ合算している（`rangeViol` 参照）。checker の `breakdown["low"]`/`breakdown["high"]`
+     * は生カウント(UNweighted)なので、単体では直接比較できない。検証は
+     * `breakdown["low"]*90 + breakdown["high"]*45 == rangeWeighted()` の形で行う。
+     */
+    internal fun rangeWeighted(): Long = hct
+
     /** Fused previewMove + commit for a single cell. Returns the new total score. */
     fun apply(i: Int, j: Int, nw: Int): Long {
         previewMove(i, j, nw)

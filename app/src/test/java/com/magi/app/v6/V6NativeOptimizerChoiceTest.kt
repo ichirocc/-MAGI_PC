@@ -790,6 +790,48 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(5, V6NativeOptimizer.hypothesisCount(5))
     }
 
+    // [3.371.0/並列SA本格再有効化] hypothesisSpawnPlan: workers<=cores（大半の端末）では
+    // hypothesisChainPlan の旧来どおりの結果と完全一致すること（無変更を固定）。
+    @Test fun spawnPlanMatchesLegacyBehaviorWhenWorkersFitsWithinCores() {
+        val (hSpawn8, plan8) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 8, w = 8, cores = 8)
+        assertEquals(8, hSpawn8)
+        assertEquals(V6NativeOptimizer.hypothesisChainPlan(8, 8, cores = 8).toList(), plan8.toList())
+        assertTrue("workers<=coresでは常に1本ずつ(旧来と同一)", plan8.all { it == 1 })
+
+        val (hSpawn4, plan4) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 4, w = 4, cores = 8)
+        assertEquals(4, hSpawn4)
+        assertEquals(V6NativeOptimizer.hypothesisChainPlan(4, 4, cores = 8).toList(), plan4.toList())
+        assertTrue(plan4.all { it == 1 })
+    }
+
+    // workers>cores（端末のコア数を超える設定）のときだけ、spawn数をコア数まで絞り、
+    // その分を仮説内チェーン数へ配分する（並列SAの本格再有効化）。
+    @Test fun spawnPlanRedistributesSurplusAsChainDepthWhenWorkersExceedsCores() {
+        val (hSpawn, plan) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 16, w = 16, cores = 4)
+        assertEquals(4, hSpawn)                 // 希釈を避けコア数まで縮小（1 hypothesis/core）
+        assertEquals(4, plan.size)
+        assertEquals(16, plan.sum())            // workers予算の合計は不変（コルーチンをコア数超に増やさない）
+        assertTrue("各仮説が複数チェーンを持つはず(本格再有効化)", plan.all { it > 1 })
+        assertEquals(listOf(4, 4, 4, 4), plan.toList())
+    }
+
+    // workers=2（オーバーサブスクライブ時のhypothesisCount floor）は cores に関わらず
+    // 多様性の下限2を割らない＝深さへの転用を行わない（コーナーケースの安全確認）。
+    @Test fun spawnPlanNeverDropsBelowTheDiversityFloorOfTwo() {
+        val (hSpawn, plan) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 1, w = 2, cores = 1)
+        assertEquals(2, hSpawn)
+        assertEquals(2, plan.size)
+        assertTrue(plan.all { it >= 1 })
+    }
+
+    // 縮退入力でも例外にならず安全であること。
+    @Test fun spawnPlanIsSafeForDegenerateInputs() {
+        val (hSpawn, plan) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 0, w = 0, cores = 0)
+        assertTrue(hSpawn >= 2)
+        assertTrue(plan.isNotEmpty())
+        assertTrue(plan.all { it >= 1 })
+    }
+
     // [3.231.0/ドッグフーディングで発見・修正] rsiHf63EffortIters: 実機ログ(rounds=5)で
     // covU/apt/c1がE9冷却で交互切替を続け全ラウンドtotal不変だった事例。旧1800固定は5000到達に
     // 3回のfocusを要し、round1,3,5(=最終)でようやく成立し振り向け先が残らなかった。

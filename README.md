@@ -23,7 +23,24 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-13（3.370.0 ユーザー指示「同様な問題などあるか?」＝外部レポート（別コードベース確定済み）の
+**最終更新**：2026-08-14（3.371.0 ユーザー指示「並列SAの本格再有効化する」「soft全族の完全差分する」の2件。
+①**並列SAの本格再有効化**＝`hypothesisChainPlan`は`hypotheses==workers`（3.224.0以降の常態）だと
+`distributable=max(h,min(workers,cores))`が構造的に常に`h`へ収束し、`runMultiWorker`（ALNS/RSI/RSI_PLUS
+明示選択の経路）の仮説内チェーン本数が実機コア数に関わらず常に1本に潰れることを数式で特定。新設
+`hypothesisSpawnPlan(workers,w,cores)`が`workers>cores`のときだけ仮説本数を`max(2,min(w,cores))`へ
+畳んで余剰をチェーン深さへ再配分（`workers`上限は`clampWorkersToCores`の先例どおり厳守）。**さらに実機ログ
+2本（Pixel 10 Pro XL・8コア・workers=8）で PORTFOLIO（既定211秒以上の主経路）は`roleOptions.workers=1`が
+無条件固定と確認**＝希釈リスクの無いworkers==coresでもSAチェーン1本のまま。430行の`runAdaptivePortfolio`を
+under-testedなまま作り替えるリスクを避け、`PolishGate.portfolioRoleParallelSa`（既定OFF・未測定のため
+実機検証用トグル、設定タブ「詳細設定」に配線）で明示オプトイン化。②**soft全族の完全差分**＝
+`DeltaEvaluator`の既存検証はaggregate（`sc1+sc2+...`合算値）のみで、2族が同じ重み（c1=15=c3mn等）だと
+片方の誤りをもう片方が相殺しうる盲点を発見。`familyRaw()`/`rangeWeighted()`を新設し、`MirrorKeys.all`の
+19族すべてを個別にcheckerの`report.breakdown`と突合するテストを追加。**教訓#30を実践**＝scratch限定で
+`sc1`/`sc3mn`を意図的に取り違えるバグを注入し、新テストだけが単独で落ちる(`family=c1 expected:<2> but
+was:<0>`)ことを確認してから実コミットへ反映（scratch側は検証後に削除・repo本体は無傷）。ホストJVM実行で
+main+test 47+61ファイルを再コンパイルし**457テストgreen**（新規4件、既知の false positive
+`EliteIntegrationRandomSafetyTest`1件を除く）。エンジン重み・探索・keep-best採否ロジックは完全に不変
+（並列度の配線とテストの追加のみ）。3.370.0 ユーザー指示「同様な問題などあるか?」＝外部レポート（別コードベース確定済み）の
 カテゴリ名だけを写して監査し実在2件を発見・修正。**`breakdownLocations`（内訳→場所タップ）が3キー空間
 （セル/回数/被覆）とも単一クラスの生マップを直接フィルタ**しており、重い違反(covU8000/low90等)と同じセルの
 軽い違反(c41/apt/c2等)が場所一覧から消える表示バグ＝3.111.0/3.353.0の`cellFamilies`/`countFamilies`は

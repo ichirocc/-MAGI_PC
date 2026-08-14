@@ -133,6 +133,38 @@ object PolishGate {
      * （実測: 正式評価 48→14〜38 件）。
      */
     @Volatile var filterC3nIncrease: Boolean = false
+
+    /**
+     * [並列SA本格再有効化, 3.371.0] 適応ポートフォリオ(PORTFOLIO)の各ロールが内部で呼ぶ V5(SA)を、
+     * 常時1本固定(`roleOptions.workers=1`)から、コア数に収まる範囲で複数本の並列SAチェーンへ広げるか。
+     * 既定 false。
+     *
+     * **背景**: `runAdaptivePortfolio` は `workers` 本のロールコルーチンを並列起動し（通常
+     * workers==端末コア数、希釈なし）、各ロールが内部で呼ぶ `runV5`/`runAlns`/`runRsi`/`runRsiPlus` には
+     * 一律 `roleOptions.workers=1` を渡していた（3.211.0/3.212.0 で作った「並列SAチェーン」の仕組みは
+     * `runMultiWorker`（3.371.0で `hypothesisSpawnPlan` により復元）を経由する ALNS/RSI/RSI++ の**明示
+     * 選択時**にしか届かず、既定(AUTO)で長時間予算が解決する PORTFOLIO では常に単一チェーンのまま
+     * だった。実機ログ(Pixel 10 Pro XL, workers=8=コア数8, 300秒PORTFOLIO)で
+     * `RunMAGI_V5: ... SAチェーン1本` を確認済み）。`runAlns` は `options.workers>1` で
+     * `runAlnsChains`（複数ALNSチェーンを`async`で並列実行）へ分岐するため、この設定は
+     * ロールの割当アルゴリズムがALNSの場合にも同様に効く。
+     *
+     * workers==コア数のとき、単純に各ロールへ複数チェーンを与えると **8ロール×2チェーン=16スレッドの
+     * ような組織的な倍率オーバーサブスクライブ**になり、`clampWorkersToCores`/`hypothesisChainPlan` の
+     * コア数クランプが避けている希釈リスクと同種の問題を生む。ON にすると、ロールが実際に V5(SA)へ
+     * 入るときだけ [portfolioRoleChains] 本（既定2・コア数以内にクランプ）の並列チェーンを与える
+     * （全ロールが常時V5フェーズにいるわけではないため — RSI は V5/ALNS交互・RSI++はSeed段階のみ — 恒常的な
+     * 倍率オーバーサブスクライブにはならないが、瞬間的なピーク並列度は増える）。
+     *
+     * **測定は未実施**（PORTFOLIOは~430行の複雑な適応制御を持ち、このサンドボックスでは実機相当の
+     * A/B測定ができない）。2.55.0/2.56.0/3.306.0 と同じ規律により、既定は安全側(false=旧来どおり)に
+     * 倒し、ユーザーが実機で試して効果を確認できるようトグルとして提供する。
+     */
+    @Volatile var portfolioRoleParallelSa: Boolean = false
+
+    /** [3.371.0] `portfolioRoleParallelSa` ON 時、PORTFOLIO の各ロールが V5(SA) 呼出に使う並列チェーン数。
+     *  コア数以内にクランプ（希釈を避ける）。既定2。 */
+    @Volatile var portfolioRoleChains: Int = 2
 }
 
 /**

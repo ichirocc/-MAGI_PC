@@ -5270,6 +5270,69 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 並列SAの本格再有効化＋soft全族の完全差分（3.371.0, ユーザー指示「並列SAの本格再有効化する」「soft全族の完全差分する」）
+実機ログ2件（Pixel 10 Pro XL・CPU8コア・並列ワーカー設定8・PORTFOLIO 300s）を提示され、`RunMAGI_V5: ... SAチェーン1本`
+（並列SAが常に単一チェーン）を確認したうえで対応。grillingで対象範囲を確認したが「no preference」との回答＝
+自分でコード調査を深め判断した。
+
+### ① 並列SAの本格再有効化
+- **発見**: `hypothesisCount(workers)=max(2,workers)`（3.224.0で仮説数上限5を撤廃・多様性優先化）以降、
+  `hypothesisChainPlan`（3.211.0/3.212.0で作った「余剰ワーカーを仮説内チェーン数へ配分」する仕組み）は
+  **`hypotheses(=h)`と`workers`が常に一致するため、コア数に関わらず`distributable=max(h,min(workers,cores))=h`
+  に構造的に一致し、内部チェーン数(SA/ALNS多チェーン)が恒久的に1本へ収束していた**（数式的に証明: h==workersなら
+  どんな`min(workers,cores)`を与えてもdistributableはhを超えられない）。実機ログの`workers=8=コア数8`という
+  「希釈リスクが無い典型構成」でも、この機構自体がそもそも一度も発動しない設計になっていた。
+- **`runMultiWorker`（ALNS/RSI/RSI++の明示選択時に経由）を修正**: 新設 `hypothesisSpawnPlan(workers, w, cores)`
+  （単一ソース、診断ログとも共有）。`workers<=cores`（大半の端末）では**無変更**（`hSpawn==w`のため旧来と
+  完全同一のspawn数・plan）。`workers>cores`（端末のコア数を超える設定）のときだけ、spawnする仮説
+  コルーチン数を実コア数まで落とし（希釈回避、V5の`clampWorkersToCores`と同じ発想）、その分の予算(workers)を
+  各仮説の内部チェーン数へ回す（`hypothesisChainPlan`のcores引数へ`options.workers`を渡し既定のコア数クランプを
+  迂回）。**workers予算の合計は不変**（コア数超のコルーチンは増やさない＝3.224.0で固定された
+  `hypothesisChainPlan(5,5,8)==[1,1,1,1,1]`等の既存契約は無変更）。
+- **PORTFOLIO（AUTO・既定211秒以上の主経路。実機ログの実際の選択先）は上記の対象外**: `runAdaptivePortfolio`
+  （~430行の適応制御、epoch/役割/エリートアーカイブが全てworker-index配列で構築）は`runMultiWorker`を経由せず、
+  各ロールが内部で呼ぶ`runV5`/`runAlns`(→`options.workers>1`で`runAlnsChains`へ分岐)/`runRsi`/`runRsiPlus`へ
+  一律`roleOptions.workers=1`を渡していた。`workers==cores==8`という実機ログの構成では、単純に各ロールへ
+  複数チェーンを与えると8ロール×2チェーン=16スレッドのような組織的な倍率オーバーサブスクライブになり、
+  `clampWorkersToCores`/`hypothesisChainPlan`のコア数クランプが避けているのと同種の希釈リスクを生む。
+  この430行の複雑な関数（epoch/archive/distance計算等がworker-index配列に密結合）を安全に再構成するには
+  本格的なA/B測定（このサンドボックスでは実施不能）が要る＝**`PolishGate.portfolioRoleParallelSa`
+  （既定OFF・設定タブ「詳細設定」にトグル追加）として実装し、実機で試せるようにした**（2.55.0/2.56.0/3.306.0と
+  同じ規律：安全であることと有益であることは別、計測なしに既定を変えない）。ONにするとロールがV5/ALNSへ
+  入るときだけ`PolishGate.portfolioRoleChains`（既定2・コア数以内にクランプ）本の並列チェーンを与える
+  （全ロールが常時V5フェーズにいるわけではないため恒常的な倍率オーバーサブスクライブにはならないが、
+  瞬間的なピーク並列度は増える）。
+- 検証: ホストJVM（kotlin-compiler-embeddable 2.0.21、3.251.0で確立した手法）で v6/model 実コンパイル・
+  **457テストgreen**（既存456+新規5、失敗1件は3.266.0記録済みの非JUnitクラスの誤検知のみ）。新規テスト5件
+  （`spawnPlanMatchesLegacyBehaviorWhenWorkersFitsWithinCores`＝workers<=coresで旧来と完全一致／
+  `spawnPlanRedistributesSurplusAsChainDepthWhenWorkersExceedsCores`＝workers=16/cores=4でhSpawn=4・
+  plan=[4,4,4,4]・合計16=workers予算を保存しつつ各仮説が複数チェーンを持つことを確認／
+  `spawnPlanNeverDropsBelowTheDiversityFloorOfTwo`／`spawnPlanIsSafeForDegenerateInputs`）。
+  実データでの効果測定はPORTFOLIO側が未実装のため次回実機ログ待ち（runMultiWorker側は実機のPORTFOLIO主経路
+  では発火しない＝直接ALNS/RSI/RSI++選択時のみ効く）。
+
+### ② soft全族の完全差分
+- **動機**: 既存の`DeltaEvaluatorTest`は**総和**(`de.score()==ev.fullEval(...)`)のみを20,000+4,000+20,000反復で
+  検証しており、**族ごとの誤りが同一重みで相殺されると検出できない**穴があった（`MirrorKeys.all`はc1とc3mnが
+  同じ重み15、c2/c41/c42/c41s/c42s/apt/fair/weekly/covOが全て重み1＝これらのどの2族間でも「片方+1・もう片方-1」
+  の誤りは総和に現れない）。この種の族間取り違えは本セッション履歴でも複数回発見されている実在パターン
+  （c42自己ペア・groupViol hard不整合・need1のみ判定 等）。
+- **`DeltaEvaluator.familyRaw()`（新設・internal）**: running per-family の生カウント（`MirrorKeys.all`の
+  各キーと一対一）を検証専用に公開。`rangeWeighted()`（同・internal）はlow/high統合済みの重み適用後running
+  total（`hct`）を返す（低/高はrangeViolが呼出時点で×90/×45を適用し1つのフィールドへ合算する設計のため、
+  checkerの`breakdown["low"]*90+breakdown["high"]*45`と比較する形）。
+- **新規テスト`deltaPerFamilyMatchesCheckerBreakdown_allSoftFamilies`**: 初期状態+3,000回の単一セル移動
+  （担当可否を問わず選ぶ＝groupVIolも踏む）の各時点で、`UnifiedViolationChecker.check(...).breakdown`と
+  `familyRaw()`の**全19キーを1つずつ**突き合わせる。3.337.0の規律（族の網羅を数字で見せる、緑が意味を
+  持つよう発火を確認する）を踏襲し、19族中17族以上の非ゼロ発火を確認するアサーションも追加。
+- **教訓#30の実践（この新テストが実際に何かを検出できることを検証）**: 検証専用のscratchコピーでのみ
+  `familyRaw()`のc1↔c3mn（同一重み15）を意図的に入れ替えたバグ入りDeltaEvaluator.ktを作成し、ホストJVMで
+  `DeltaEvaluatorTest`を実行したところ**既存5テスト（総和検証）は全てgreenのまま、新規テストだけが
+  即座に`family=c1 expected:<2> but was:<0>`で失敗**することを確認——「総和一致は族ごとの誤りを隠す」という
+  当初の動機を実測で裏づけた。リポジトリ本体は一切変更せず検証後に削除。
+- 探索・重み・エンジン本体は完全不変（読取専用アクセサ2件＋テスト1件の追加のみ）。HF77非該当。
+- 検証: ホストJVM 457テストgreen（①の検証と同一実行に含む）。
+
 ## needFamilies 新設＝covU/c41系の重なりで場所一覧が件数より少なく見える穴を解消＋CI download の無防備さを是正（3.370.0, ユーザー指示「同様な問題などあるか?」）
 外部レポート（フルコード/48時間ログの2件とも全て別コードベース＝この main には無関係と確定済み）の**カテゴリ名**
 （MirrorCore型整合／部分Δ covU/c3n／CI安定化）だけをこのコードベースに写して監査。**実在する2件**を発見・修正した。

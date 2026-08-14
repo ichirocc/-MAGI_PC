@@ -356,15 +356,19 @@ object V6NativeOptimizer {
         //   していた。ユーザー指示により固定上限を撤廃し、仮説数(w)をワーカー設定にそのまま連動させる
         //   （多様性>深さ。V5だけは仮説の概念を使わずworkersをそのままSAチェーン数とする＝対象外）。
         val w = hypothesisCount(options.workers)
-        // [余剰ワーカー活用] w=workers(>=2時)のため通常は仮説内並列度は1本(hypothesisChainPlanのh floorが
-        //   distributableと一致)。workers=1の縮退時(w=2>workers)や端末コア数<workersの高負荷設定では
-        //   1本を下回らない範囲でオーバーサブスクライブし得る＝表示はエンジンが実際に使うプランから導出。
-        val planNote = hypothesisChainPlan(options.workers, w).let { pl ->
+        // [3.371.0/並列SA本格再有効化] 表示はエンジンが実際に使う hypothesisSpawnPlan（runMultiWorker と
+        //   同一関数）から導出。PORTFOLIO は runMultiWorker を経由せず各ロールが roleOptions.workers=1
+        //   固定（仮説内チェーンは対象外＝別途の設計課題として据え置き）のため、この plan は適用されない旨を明示。
+        val (spawnHyp, plan) = hypothesisSpawnPlan(options.workers, w)
+        val planNote = plan.let { pl ->
             val mn = pl.min(); val mx = pl.max()
             if (mn == mx) "仮説内${mn}並列" else "仮説内${mn}〜${mx}並列"
         }
-        val workersNote = if (chosen == V6Algorithm.V5) "workers=${options.workers}（SAチェーン）"
-            else "workers=${options.workers}（実効仮説${w}・$planNote）"
+        val workersNote = when (chosen) {
+            V6Algorithm.V5 -> "workers=${options.workers}（SAチェーン）"
+            V6Algorithm.PORTFOLIO -> "workers=${options.workers}（適応ポートフォリオ仮説${w}・仮説内チェーンは対象外）"
+            else -> "workers=${options.workers}（実効仮説${spawnHyp}${if (spawnHyp < w) "＝設定${w}をコア数まで縮小" else ""}・$planNote）"
+        }
         var logs = listOf(
             MirrorLog(tag = "V6Dispatcher", message = "algorithm=$chosen budget=${options.totalBudgetSec}s $workersNote"),
             MirrorLog(tag = "HF67", message = if (hf67Adopted)
@@ -501,6 +505,40 @@ object V6NativeOptimizer {
         val basePer = distributable / h
         val remainder = distributable % h
         return IntArray(h) { i -> basePer + if (i < remainder) 1 else 0 }
+    }
+
+    /** [3.371.0/並列SA本格再有効化] `runMultiWorker` が実際に spawn する仮説コルーチン数と、各仮説の
+     *  内部チェーン本数プランを、診断ログ側とも共有する単一ソース（3.212.0/3.225.0と同じ「表示は実挙動
+     *  から導出」原則）。
+     *
+     *  背景: `w=hypothesisCount(workers)` は workers>=2 のとき常に `w==workers` になる（3.224.0 の
+     *  多様性優先化）。これを [hypothesisChainPlan] の hypotheses へそのまま渡すと
+     *  `distributable=max(w, min(workers,cores))=w` に構造的に一致し、内部チェーン本数（並列SA/ALNS）が
+     *  **コア数に関わらず恒久的に1本**に収束していた（3.211.0/3.212.0で作った「余剰ワーカーを内部並列へ
+     *  配分」する仕組みが 3.224.0 以降、実質死んでいた）。
+     *
+     *  workers<=cores（大半の端末・既定の並列ワーカー設定）ではこの関数は無変更の挙動を返す
+     *  （hSpawn==w のため下記 if に入らず、旧来と完全に同一の spawn 数・plan）。
+     *  workers>cores（端末のコア数を超える設定）のときだけ、spawn する仮説コルーチン数を実コア数まで
+     *  落とし（cores<w の希釈を避ける、V5用 [clampWorkersToCores] と同じ発想）、その分の予算(workers)を
+     *  各仮説の内部チェーン数へ回す（[hypothesisChainPlan] の cores 引数へ options.workers を渡し、
+     *  既定のコア数クランプを迂回して「予算workers・仮説hSpawn本」を素直に配る）。
+     *  workers 予算の合計は不変（コア数を超えてコルーチンを増やさない＝オーバーサブスクライブの新規発生
+     *  なし。3.224.0 で固定された `hypothesisChainPlan(5,5,8)==[1,1,1,1,1]` 等の既存契約は無変更）。
+     *  返り値: (spawn する仮説コルーチン数, 各仮説のチェーン本数プラン=長さそのhSpawn)。 */
+    internal fun hypothesisSpawnPlan(
+        workers: Int,
+        w: Int,
+        cores: Int = Runtime.getRuntime().availableProcessors(),
+    ): Pair<Int, IntArray> {
+        val hSpawn = max(2, min(w, cores))
+        // [テスト容易性] else 分岐も明示的に cores を渡す（渡さないと hypothesisChainPlan の既定引数＝
+        //   実デバイスのコア数へ暗黙フォールバックし、この関数のテストが実行環境依存になる）。
+        //   hSpawn==w のときは hypothesisChainPlan 自体が h==hypotheses に一致し distributable も
+        //   常に h と一致するため（本関数のKDoc参照）、cores を明示的に渡しても渡さなくても結果は同一。
+        val plan = if (hSpawn < w) hypothesisChainPlan(workers, hSpawn, cores = workers)
+            else hypothesisChainPlan(workers, w, cores = cores)
+        return hSpawn to plan
     }
 
     private data class AdaptiveWorkerOutcome(
@@ -753,8 +791,14 @@ object V6NativeOptimizer {
                     if (quantum <= 0) break
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
+                    // [並列SA本格再有効化, 3.371.0/既定OFF] 通常はロール1本=内部チェーン1本（希釈回避、
+                    //   workers==コア数のときの安全な既定）。トグルONのときだけコア数以内で複数チェーンへ
+                    //   広げる（詳細は PolishGate.portfolioRoleParallelSa の docstring）。
+                    val roleWorkers = if (PolishGate.portfolioRoleParallelSa)
+                        PolishGate.portfolioRoleChains.coerceIn(1, Runtime.getRuntime().availableProcessors())
+                    else 1
                     val roleOptions = options.copy(
-                        workers = 1,
+                        workers = roleWorkers,
                         seed = roleSeed,
                         explore = when (assignment.role) {
                             HypothesisEpochRole.HARD_DEBT_RSI_PLUS,
@@ -1135,18 +1179,9 @@ object V6NativeOptimizer {
         onProgress: (String, ViolationReport?, Long, Long) -> Unit,
         run: suspend (Int, V6OptimizerOptions, (String, ViolationReport?, Long, Long) -> Unit) -> V6OptimizerResult,
     ): V6OptimizerResult = kotlinx.coroutines.supervisorScope {
-        // [仮説数上限撤廃・ユーザー指示] w=hypothesisCount(workers) は workers>=2 のとき workers に等しく
-        //   なるため、以下の hypothesisChainPlan による「仮説内並列度への配分」は通常 plan.max()==1 に
-        //   収束する（仮説そのものが増えるため内部並列で吸収する必要が無い）。workers=1(w=2でオーバー
-        //   サブスクライブ)やコア数<workersの高負荷設定でのみ非自明な配分になる。旧実装（仮説数固定5・
-        //   超過ワーカーは内部並列=RSI/RSI++のrunV5 SAチェーン数・runAlnsChainsへ配分）は「仮説ごとに
-        //   一律 workers=1 を強制し5を超える設定が完全に無駄」だった実機ログ由来のバグ修正だったが、
-        //   ユーザー指示によりさらに「多様性(仮説数)優先」へ設計変更。
-        // [敵対的レビュー3.212.0] 均等床(perW)のみの配分は 6〜9 で余りを黙って廃棄しつつ「使われる」と
-        //   表示する虚偽（HF77）＋コア数超の希釈リスクがあった → hypothesisChainPlan（余り配分＋コア数
-        //   クランプ）で仮説ごとの本数を決める。plan.max()>1 の仮説だけが多チェーン化する。
-        val plan = hypothesisChainPlan(options.workers, w)
-        if (w <= 1) return@supervisorScope run(0, options.copy(workers = plan[0]), onProgress)
+        // [3.371.0/並列SA本格再有効化] spawn数×チェーン内訳は hypothesisSpawnPlan（単一ソース）から。
+        val (hSpawn, plan) = hypothesisSpawnPlan(options.workers, w)
+        if (hSpawn <= 1) return@supervisorScope run(0, options.copy(workers = plan[0]), onProgress)
         val base = actualSeed(options.seed)
         val completed = java.util.concurrent.atomic.AtomicInteger(0)
         val winner = java.util.concurrent.atomic.AtomicInteger(-1)
@@ -1170,8 +1205,8 @@ object V6NativeOptimizer {
         //   なくLAZYな未開始Deferredなので、早いwinnerのcancel()がまだstart前のジョブにも正しく効く
         //   （旧実装はjobs配列がnullのままcancel()を呼んでも無効化されず、後から作られる新規ジョブが
         //   キャンセルを免れて走ってしまっていた）。
-        val jobs = arrayOfNulls<kotlinx.coroutines.Deferred<V6OptimizerResult?>>(w)
-        for (i in 0 until w) {
+        val jobs = arrayOfNulls<kotlinx.coroutines.Deferred<V6OptimizerResult?>>(hSpawn)
+        for (i in 0 until hSpawn) {
             jobs[i] = async(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.LAZY) {
                 // 開始時点で既に勝者が確定していれば(まれな競合)何もせず抜ける。
                 if (winner.get() >= 0 && winner.get() != i) return@async null
@@ -1179,10 +1214,10 @@ object V6NativeOptimizer {
                     // [HF290 役割分担＋論文活用] 各仮説に探索/精製プロファイル＋受理基準(SA/GD)を割当て多様化（W0=ベースライン）。
                     run(i, options.copy(workers = plan[i], seed = base + (i + 1) * 0x9E3779B1L, explore = roleExploreFor(i), accept = roleAcceptFor(i), opSelect = roleOpSelectFor(i))) { phase, report, iters, elapsed ->
                         val improved = report != null && improvesShared(report)
-                        if (i == 0 || improved) onProgress("仮説${(w - completed.get()).coerceAtLeast(1)}本探索中 / $phase", report, iters, elapsed)
+                        if (i == 0 || improved) onProgress("仮説${(hSpawn - completed.get()).coerceAtLeast(1)}本探索中 / $phase", report, iters, elapsed)
                         // 絶対評価: 合格ライン(HARD=0)に最初に到達した仮説が、残りを即キャンセル
                         if (report != null && report.hard == 0 && winner.compareAndSet(-1, i)) {
-                            for (j in 0 until w) if (j != i) jobs[j]?.cancel()
+                            for (j in 0 until hSpawn) if (j != i) jobs[j]?.cancel()
                         }
                     }
                 } catch (ce: kotlinx.coroutines.CancellationException) {
@@ -1215,14 +1250,15 @@ object V6NativeOptimizer {
         if (ownsStatics(runSlot())) lastAlternatives = alts
         val totalIters = results.sumOf { it.iterations }
         val mode = if (winner.get() >= 0) "合格で早期キャンセル" else "時間内最良採用"
-        val chainNote = if (plan.max() > 1) "・仮説内${plan.min()}〜${plan.max()}並列(SA/ALNS多チェーン)" else ""
-        val failNote = if (results.size < w) "・失敗${w - results.size}本(例外/キャンセル${firstError.get()?.let { "・${it.message}" } ?: ""})" else ""
+        val chainNote = if (plan.max() > 1) "・仮説内${plan.min()}〜${plan.max()}並列(SA/ALNS多チェーン、設定${options.workers}がコア数を超えるため仮説数を絞り並列SAへ配分)" else ""
+        val failNote = if (results.size < hSpawn) "・失敗${hSpawn - results.size}本(例外/キャンセル${firstError.get()?.let { "・${it.message}" } ?: ""})" else ""
         // [3.266.0/hypothesis basin diversity] 各仮説の入口が実際にどう多様化されたかをログに残す。
-        val entryRoles = (0 until w).joinToString(" ") { i ->
+        val entryRoles = (0 until hSpawn).joinToString(" ") { i ->
             val sp = HypothesisDiversityPolicy.startPlanFor(i)
             "W$i=${sp.mode.name.removeSuffix("_REPAIR")}${if (sp.intensity > 0) "x${sp.intensity}" else ""}"
         }
-        val extra = MirrorLog(tag = "MultiWorker", message = "仮説 ${w} 本 ($mode・役割分担:探索/精製＋受理SA/GreatDeluge多様化$chainNote$failNote) → 採用 HARD=${best.report.hard} total=${best.report.total} 合計iter=${totalIters} / 入口役割 $entryRoles")
+        val hypNote = if (hSpawn < w) "${hSpawn}本(設定仮説数${w}をコア数まで縮小)" else "${hSpawn}本"
+        val extra = MirrorLog(tag = "MultiWorker", message = "仮説 $hypNote ($mode・役割分担:探索/精製＋受理SA/GreatDeluge多様化$chainNote$failNote) → 採用 HARD=${best.report.hard} total=${best.report.total} 合計iter=${totalIters} / 入口役割 $entryRoles")
         // [過程検証] 各仮説の個別結果・多様性（相異なる解の数）・保持した他の案数をログ化し、探索過程を後から検証できるようにする。
         //   各仮説の合計が揃っていれば収束、ばらけていれば多様な探索ができている、と判別できる。
         val perHyp = results.sortedWith(compareBy(reportComparator) { it.report })

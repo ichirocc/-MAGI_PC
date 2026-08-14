@@ -341,6 +341,21 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.adaptiveEscape, onCheckedChange = { vm.setAdaptiveEscape(it) }, enabled = !ui.running)
         }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text("PORTFOLIOロール内並列SA")
+                Text(
+                    if (ui.portfolioRoleParallelSa)
+                        "⚠ 「おまかせ」で長めの制限時間を選んだときの既定方式（PORTFOLIO）で、各案の内部計算に" +
+                            "コア数以内で複数本の並列計算を使います。できあがる勤務表が良くなるとは限りません（未検証）。"
+                    else
+                        "「おまかせ」で長めの制限時間を選んだときの既定方式（PORTFOLIO）は、各案の内部計算を1本で行います。",
+                    fontSize = 12.sp,
+                    color = if (ui.portfolioRoleParallelSa) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = ui.portfolioRoleParallelSa, onCheckedChange = { vm.setPortfolioRoleParallelSa(it) }, enabled = !ui.running)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,
