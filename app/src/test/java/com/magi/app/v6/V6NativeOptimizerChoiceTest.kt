@@ -825,9 +825,30 @@ class V6NativeOptimizerChoiceTest {
     }
 
     // 縮退入力でも例外にならず安全であること。
+    /**
+     * [3.372.0/レビュー修正] `runMultiWorker` は `for (i in 0 until hSpawn) { ... plan[i] ... }` と
+     * `plan[0]` を index するので、**`hSpawn == plan.size`** が破れると AIOOBE で落ちる。
+     * 旧実装は `hSpawn = max(2, min(w, cores))` と「plan は w で組む」の組合せで、w<2 のとき
+     * hSpawn(2) > plan.size(1) となりこの不変条件を破っていた（旧テストは `plan.isNotEmpty()` しか
+     * 見ておらず、まさにその入力を踏みながら緑のままだった）。
+     * 本番の3呼出は w=hypothesisCount(workers)>=2 のため到達しないが、本関数は internal ＝潜在バグ。
+     */
+    @Test fun spawnPlanAlwaysMatchesItsPlanLength() {
+        // w<2（旧実装が壊れていた領域）を含め、退化入力から通常帯まで不変条件を総当たりで固定する。
+        for (w in 0..8) for (cores in 0..8) for (workers in 0..8) {
+            val (hSpawn, plan) = V6NativeOptimizer.hypothesisSpawnPlan(workers = workers, w = w, cores = cores)
+            assertEquals("hSpawn==plan.size (w=$w cores=$cores workers=$workers)", hSpawn, plan.size)
+            assertTrue("hSpawn>=1 (w=$w cores=$cores workers=$workers)", hSpawn >= 1)
+            // 要求された仮説数を超えて spawn しない（超えると plan と対応が取れなくなる）。
+            assertTrue("hSpawn<=max(1,w) (w=$w cores=$cores workers=$workers)", hSpawn <= maxOf(1, w))
+            assertTrue("chains>=1 (w=$w cores=$cores workers=$workers)", plan.all { it >= 1 })
+        }
+    }
+
     @Test fun spawnPlanIsSafeForDegenerateInputs() {
         val (hSpawn, plan) = V6NativeOptimizer.hypothesisSpawnPlan(workers = 0, w = 0, cores = 0)
-        assertTrue(hSpawn >= 2)
+        assertEquals(hSpawn, plan.size)
+        assertTrue(hSpawn >= 1)
         assertTrue(plan.isNotEmpty())
         assertTrue(plan.all { it >= 1 })
     }

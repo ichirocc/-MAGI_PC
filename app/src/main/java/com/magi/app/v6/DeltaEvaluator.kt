@@ -98,6 +98,28 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
      */
     internal fun rangeWeighted(): Long = hct
 
+    /**
+     * [3.372.0/レビュー修正] low/high を**別々の生 amount** で返す（検証専用・O(S×K) のフル再計算）。
+     * `rangeWeighted()` だけだと `90a+45b` が単射でない（low=1,high=0 と low=0,high=2 がどちらも90）ため、
+     * 「low を1件見落として high を2件過剰に数える」型の取り違えを検出できない＝soft全族の完全差分という
+     * 主張が low/high についてだけ成立していなかった。
+     *
+     * ホットパスの [rangeViol] は重み適用済みの1本(`hct`)で持つ設計（性能上の意図的な選択）なので、
+     * ここは同じ述語を書き下したフル再計算にしてある。両者のドリフトは、テストが
+     * `rangeRaw().first*90 + rangeRaw().second*45 == rangeWeighted()` を毎手つき合わせることで検出する
+     * （左辺=フル再計算・右辺=差分維持なので、この等式は同時に増分整合性の検査にもなる）。
+     */
+    internal fun rangeRaw(): Pair<Long, Long> {
+        var lowAmt = 0L; var highAmt = 0L
+        for (i in 0 until S) for (k in 0 until K) {
+            val n = cntSS[i][k]
+            val lo = p.rangeLo[i][k]; val hi = p.rangeHi[i][k]
+            if (lo != Int.MIN_VALUE && lo != 0 && n < lo && p.canDo(i, k)) lowAmt += (lo - n).toLong()
+            if (hi != Int.MAX_VALUE && n > hi) highAmt += (n - hi).toLong()
+        }
+        return lowAmt to highAmt
+    }
+
     /** Fused previewMove + commit for a single cell. Returns the new total score. */
     fun apply(i: Int, j: Int, nw: Int): Long {
         previewMove(i, j, nw)

@@ -5270,6 +5270,44 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## 3.371.0 の /code-review 指摘4件を検証して修正（3.372.0）
+`/code-review` が出した4件を1件ずつ実コードへ照合し、**4件とも実在**を確認して修正した。うち3件は
+3.371.0 で私自身が作った欠陥。**表示・テスト・潜在バグの修正のみ＝重み・採否・探索は完全に不変**。
+- **[潜在バグ] `hypothesisSpawnPlan` が `hSpawn == plan.size` を破っていた**: `runMultiWorker` は
+  `for (i in 0 until hSpawn) { ... plan[i] ... }` と index するのに、旧実装は `hSpawn = max(2, min(w, cores))`
+  としつつ plan を `w` で組んでいた。`w < 2` では hSpawn(2) > plan.size(1) ＝ `plan[1]` で AIOOBE。
+  本番の3呼出は全て `w = hypothesisCount(workers) = max(2, workers) >= 2` のため**到達しない**が、
+  本関数は `internal`＝テスト/将来の呼出から届く。①hSpawn が w を超えないようにし（多様性の下限2は
+  `min(w, ...)` の内側＝w>=2 のときだけ意味を持つ）②plan を必ず hSpawn で組む
+  （`hypothesisChainPlan` は `IntArray(max(1,hypotheses))` を返すので不変条件が**構造的に**成立）。
+  **旧テスト `spawnPlanIsSafeForDegenerateInputs` はまさにこの入力(w=0)を踏みながら
+  `plan.isNotEmpty()` しか見ておらず緑のままだった**＝アサーションが弱かったことの実例。
+  w=0..8 × cores=0..8 × workers=0..8 の総当たりで不変条件を固定する
+  `spawnPlanAlwaysMatchesItsPlanLength` を新設。
+- **[表示バグ・自分の取り残し] 「実効仮説」が2箇所で旧 `hypothesisCount` のまま**: 3.371.0 は
+  `hypothesisSpawnPlan` の中で「表示は実挙動から導出」の原則を立てながら、その消費者2つ
+  （`V6FinalPort` の TIME 行・`MagiSetupCards` の設定注記）を更新していなかった。workers=16／8コアだと
+  **同じ実行の V6Dispatcher 行が「実効仮説8」、TIME 行が「実効仮説16」**と食い違う。
+  runMultiWorker 経路(ALNS/RSI/RSI_PLUS)だけ spawn 数へ、PORTFOLIO は畳まれないので w のまま、
+  V5 は仮説の概念を使わないので「SAチェーンN本」と分けて表示する。
+- **[表示バグ] PORTFOLIO 診断が `仮説内チェーンは対象外` を無条件に印字**: `portfolioRoleParallelSa` を
+  ON にしても実挙動がログに出ず、**実機ログでのA/Bというトグル本来の目的を潰していた**（3.153.0 の
+  NativeBridge 行と同型）。実配線と表示が同じ値を読むよう `portfolioRoleChainCount()` を単一ソースとして
+  新設し、`runAdaptivePortfolio` の `roleWorkers` もこれへ委譲（複製すれば必ずドリフトする）。
+- **[検証の穴] 3.371.0 の per-family テストが low/high だけ完全差分になっていなかった**: `90a+45b` は
+  単射でない（low=1,high=0 と low=0,high=2 がどちらも90）ため「low を1件見落として high を2件過剰に
+  数える」型の取り違えを通す。かつ**片方だけ非ゼロでも両方を「発火」に数えており**、下の網羅チェックが
+  実際より甘くなっていた。`DeltaEvaluator.rangeRaw()`（検証専用・O(S×K) のフル再計算）を新設して
+  low/high を個別に breakdown と突合し、あわせて `rangeRaw()` の重み付き和 == 差分維持の `hct` を
+  毎手つき合わせる（フル再計算 vs 差分維持＝増分整合性の検査にもなり、両者のドリフトもここで落ちる）。
+- **[自分で踏んで直したミス]** `hypothesisSpawnPlan` に新関数を足す編集で **余分な `}` を作り object を
+  早期に閉じてしまい**、`portfolioRoleChainCount`/`roleExploreFor`/`runSlot` 等が軒並み unresolved に
+  なった（3.290.0/3.306.0 と同型＝この編集様式で3回目）。old_string に閉じ括弧を含めなかったのが原因。
+- 検証: ホストJVM **458テスト green**（既知の false positive `EliteIntegrationRandomSafetyTest` 1件を除く）。
+  **教訓#30 実践**＝`hypothesisSpawnPlan` の修正を scratch コピーでのみ revert し、新テストと強化した
+  退化入力テストの**2件だけ**が `hSpawn==plan.size (w=0 cores=0 workers=0) expected:<2> but was:<1>` で
+  落ちることを確認してから採用（repo 本体は無傷・検証後に scratch を削除）。
+
 ## 並列SAの本格再有効化＋soft全族の完全差分（3.371.0, ユーザー指示「並列SAの本格再有効化する」「soft全族の完全差分する」）
 実機ログ2件（Pixel 10 Pro XL・CPU8コア・並列ワーカー設定8・PORTFOLIO 300s）を提示され、`RunMAGI_V5: ... SAチェーン1本`
 （並列SAが常に単一チェーン）を確認したうえで対応。grillingで対象範囲を確認したが「no preference」との回答＝

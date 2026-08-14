@@ -357,8 +357,10 @@ object V6NativeOptimizer {
         //   （多様性>深さ。V5だけは仮説の概念を使わずworkersをそのままSAチェーン数とする＝対象外）。
         val w = hypothesisCount(options.workers)
         // [3.371.0/並列SA本格再有効化] 表示はエンジンが実際に使う hypothesisSpawnPlan（runMultiWorker と
-        //   同一関数）から導出。PORTFOLIO は runMultiWorker を経由せず各ロールが roleOptions.workers=1
-        //   固定（仮説内チェーンは対象外＝別途の設計課題として据え置き）のため、この plan は適用されない旨を明示。
+        //   同一関数）から導出。PORTFOLIO は runMultiWorker を経由せず各ロールが portfolioRoleChainCount()
+        //   本のチェーンで走るため、この plan でなくそちらを表示する（3.372.0/レビュー修正: 旧実装は
+        //   「仮説内チェーンは対象外」を無条件に印字し、portfolioRoleParallelSa を ON にしても実挙動が
+        //   ログに出ず、実機ログでのA/Bというトグル本来の目的を潰していた）。
         val (spawnHyp, plan) = hypothesisSpawnPlan(options.workers, w)
         val planNote = plan.let { pl ->
             val mn = pl.min(); val mx = pl.max()
@@ -366,7 +368,11 @@ object V6NativeOptimizer {
         }
         val workersNote = when (chosen) {
             V6Algorithm.V5 -> "workers=${options.workers}（SAチェーン）"
-            V6Algorithm.PORTFOLIO -> "workers=${options.workers}（適応ポートフォリオ仮説${w}・仮説内チェーンは対象外）"
+            V6Algorithm.PORTFOLIO -> {
+                val roleChains = portfolioRoleChainCount()
+                "workers=${options.workers}（適応ポートフォリオ仮説${w}・ロール内チェーン${roleChains}本" +
+                    "${if (roleChains > 1) "＝ロール内並列SA ON" else ""}）"
+            }
             else -> "workers=${options.workers}（実効仮説${spawnHyp}${if (spawnHyp < w) "＝設定${w}をコア数まで縮小" else ""}・$planNote）"
         }
         var logs = listOf(
@@ -531,15 +537,34 @@ object V6NativeOptimizer {
         w: Int,
         cores: Int = Runtime.getRuntime().availableProcessors(),
     ): Pair<Int, IntArray> {
-        val hSpawn = max(2, min(w, cores))
+        // [3.372.0/レビュー修正] 旧実装は `max(2, min(w, cores))` で、w<2 のとき hSpawn(=2) が w(=1) を
+        //   上回り、plan を w で組んでいたため `plan.size(1) < hSpawn(2)` ＝ runMultiWorker が index する
+        //   不変条件 `hSpawn == plan.size` を破っていた（plan[1] で AIOOBE）。本番の3呼出は全て
+        //   w=hypothesisCount(workers)=max(2,workers)>=2 のため到達しないが、本関数は internal で
+        //   テスト/将来の呼出から届く＝潜在バグ。①hSpawn が w を超えないようにし ②plan を必ず hSpawn で
+        //   組む（hypothesisChainPlan は IntArray(max(1,hypotheses)) を返す＝不変条件が構造的に成立）。
+        //   多様性の下限2は「w>=2 のときだけ意味を持つ」ので min(w, ...) の内側に置く。
+        val hSpawn = max(1, min(w, max(2, cores)))
         // [テスト容易性] else 分岐も明示的に cores を渡す（渡さないと hypothesisChainPlan の既定引数＝
         //   実デバイスのコア数へ暗黙フォールバックし、この関数のテストが実行環境依存になる）。
         //   hSpawn==w のときは hypothesisChainPlan 自体が h==hypotheses に一致し distributable も
         //   常に h と一致するため（本関数のKDoc参照）、cores を明示的に渡しても渡さなくても結果は同一。
         val plan = if (hSpawn < w) hypothesisChainPlan(workers, hSpawn, cores = workers)
-            else hypothesisChainPlan(workers, w, cores = cores)
+            else hypothesisChainPlan(workers, hSpawn, cores = cores)
         return hSpawn to plan
     }
+
+    /**
+     * [3.372.0/レビュー修正] PORTFOLIO の各ロールが内部の V5(SA)/ALNS へ渡すチェーン本数。
+     * `runAdaptivePortfolio` の実配線と診断ログの表示が同じ値を読むための単一ソース
+     * （旧: 診断ログが `仮説内チェーンは対象外` を無条件に印字し、トグルONでも実挙動を隠していた＝
+     *   実機ログでのA/Bというトグル本来の目的を潰していた。3.153.0 の NativeBridge 行と同型）。
+     */
+    internal fun portfolioRoleChainCount(
+        cores: Int = Runtime.getRuntime().availableProcessors(),
+    ): Int = if (PolishGate.portfolioRoleParallelSa)
+        PolishGate.portfolioRoleChains.coerceIn(1, max(1, cores))
+    else 1
 
     private data class AdaptiveWorkerOutcome(
         val elite: Array<IntArray>,
@@ -794,9 +819,8 @@ object V6NativeOptimizer {
                     // [並列SA本格再有効化, 3.371.0/既定OFF] 通常はロール1本=内部チェーン1本（希釈回避、
                     //   workers==コア数のときの安全な既定）。トグルONのときだけコア数以内で複数チェーンへ
                     //   広げる（詳細は PolishGate.portfolioRoleParallelSa の docstring）。
-                    val roleWorkers = if (PolishGate.portfolioRoleParallelSa)
-                        PolishGate.portfolioRoleChains.coerceIn(1, Runtime.getRuntime().availableProcessors())
-                    else 1
+                    //   [3.372.0] 実配線と診断ログ表示が同じ値を読むよう portfolioRoleChainCount へ集約。
+                    val roleWorkers = portfolioRoleChainCount()
                     val roleOptions = options.copy(
                         workers = roleWorkers,
                         seed = roleSeed,

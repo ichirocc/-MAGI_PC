@@ -218,11 +218,21 @@ class DeltaEvaluatorTest {
                 assertEquals("$label: family=$fam", want, raw)
                 if (raw != 0L) everNonZero.add(fam)
             }
-            val wantRange = (report.breakdown["low"] ?: 0).toLong() * 90L + (report.breakdown["high"] ?: 0).toLong() * 45L
-            assertEquals("$label: low/high weighted (rangeWeighted)", wantRange, de.rangeWeighted())
-            if ((report.breakdown["low"] ?: 0) != 0 || (report.breakdown["high"] ?: 0) != 0) {
-                everNonZero.add("low"); everNonZero.add("high")
-            }
+            // [3.372.0/レビュー修正] low/high は `90a+45b` に畳むと単射でない（low=1,high=0 と
+            //   low=0,high=2 がどちらも90）ため、旧実装は「lowを1件見落としてhighを2件過剰に数える」型の
+            //   取り違えを通してしまい、この族だけ完全差分になっていなかった。生 amount で個別に突合する。
+            val wantLow = (report.breakdown["low"] ?: 0).toLong()
+            val wantHigh = (report.breakdown["high"] ?: 0).toLong()
+            val (gotLow, gotHigh) = de.rangeRaw()
+            assertEquals("$label: family=low", wantLow, gotLow)
+            assertEquals("$label: family=high", wantHigh, gotHigh)
+            // フル再計算(rangeRaw)と差分維持(hct)の増分整合性。両者のドリフトはここで落ちる。
+            assertEquals("$label: low/high weighted (rangeRaw vs 差分維持のhct)",
+                gotLow * 90L + gotHigh * 45L, de.rangeWeighted())
+            // [同] 旧実装は片方だけ非ゼロでも両方を「発火」に数えており、下の網羅チェックが実際より
+            //   甘くなっていた。各族が自分で非ゼロになったときだけ数える。
+            if (wantLow != 0L) everNonZero.add("low")
+            if (wantHigh != 0L) everNonZero.add("high")
         }
 
         assertAgainstChecker("initial")

@@ -274,7 +274,18 @@ object V6FinalPort {
         // [仮説数上限撤廃・ユーザー指示] 診断ログ表示専用。実際の dispatch は V6NativeOptimizer.optimize()
         //   内の同名関数呼出が担うため、ここも同じ V6NativeOptimizer.hypothesisCount から導出し独立再計算による
         //   表示/実挙動の乖離を防ぐ（3.212.0 と同じ設計原則）。
-        val effHypotheses = V6NativeOptimizer.hypothesisCount(workers)
+        // [3.372.0/レビュー修正] 旧: hypothesisCount(workers) をそのまま「実効仮説」として印字していたが、
+        //   runMultiWorker 経路(ALNS/RSI/RSI_PLUS)は workers>コア数のとき hypothesisSpawnPlan が spawn数を
+        //   コア数まで畳む（3.371.0）。同じ実行の V6Dispatcher 行は正しい spawn 数を出すため、TIME 行だけが
+        //   食い違って見えていた（例: workers=16/8コア → V6Dispatcher「実効仮説8」vs TIME「実効仮説16」）。
+        //   PORTFOLIO は runMultiWorker を経由せず w 本のロールを spawn するため畳まれない。
+        //   V5 は仮説の概念を使わず workers をそのまま SA チェーン数にするため、その旨を表示側で分ける。
+        val plannedHypotheses = V6NativeOptimizer.hypothesisCount(workers)
+        val effHypotheses = when (opts.algorithm) {
+            V6Algorithm.ALNS, V6Algorithm.RSI, V6Algorithm.RSI_PLUS ->
+                V6NativeOptimizer.hypothesisSpawnPlan(workers, plannedHypotheses).first
+            else -> plannedHypotheses
+        }
 
         // ----- 停滞早期脱出ウォッチドッグ -----
         // 進捗ストリームから「最良解(hard→total→重み付きの辞書順)」の更新時刻を追跡し、一定時間
@@ -539,7 +550,9 @@ object V6FinalPort {
             tag = "TIME",
             message = "総${(tExtra1 - startMs) / 1000.0}s (予算${seconds}s${if (overBudget) " 超過" else ""}): " +
                 "探索${(tFirst1 - tFirst0) / 1000.0}s + 連鎖${(tChain1 - tFirst1) / 1000.0}s + 統合${(tIntegration1 - tChain1) / 1000.0}s + 後処理${(tPost1 - tIntegration1) / 1000.0}s + 追加精製${(tExtra1 - tPost1) / 1000.0}s " +
-                "/ workers設定${workers} 実効仮説${effHypotheses}",
+                "/ workers設定${workers} " +
+                (if (opts.algorithm == V6Algorithm.V5) "SAチェーン${workers}本"
+                 else "実効仮説${effHypotheses}${if (effHypotheses < plannedHypotheses) "（設定${plannedHypotheses}をコア数まで縮小）" else ""}"),
         )
         val integrationLog = integrated.logs
         // [3.283.0/ログ強化] ウォッチドッグの内部状態を非発火時も1行で可視化。旧: 発火時の EarlyStop 行のみで、
