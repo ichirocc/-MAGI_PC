@@ -777,6 +777,33 @@ object V6SanityPort {
             }
         }
 
+        // 6d) [3.373.0/実機ログ起因・希望で固定された回数 > apt目標] 希望どおりに置かれるセルは動かせない
+        //    （希望を破る代金 pref=9000 は apt=1 の利得では絶対に釣り合わない＝`wishLocked` は探索・研磨の
+        //    全パスが尊重する）。よってシフト k について「担当可能な希望が W 件」あれば count(k) >= W が
+        //    どの解でも成立し、W が apt目標 t を超えるなら超過(aptHigh)は W−t 回ぶん必ず残る。
+        //    [発見の経緯] 実機ログ(2026-08-15)で 大島愛 が 休17回・目標10 のまま動かず、apt が停滞していた。
+        //    同型構造を合成して測ったところ、休の希望を 0件→17件 と増やすと AptPolish の到達点が
+        //    休10(apt 0・採用5手) → 休17(apt 14・採用0手) へ単調に悪化し、**17件で実機の観測と完全に一致**した
+        //    ＝最適化の不具合ではなく希望ロックが正しく効いている。しかし当時どの診断もその理由を述べず
+        //    （6b は担当レパートリー由来の下限のみ・検査9 は個人上限との矛盾のみを見る）、利用者には
+        //    「直せない apt 違反」が理由不明のまま残っていた。読み取り専用・データは変更しない。
+        for (i in 0 until p.S) {
+            val name = state.staff.getOrNull(i)?.name ?: "#$i"
+            for (k in 0 until p.K) {
+                val t = p.apt[i][k]
+                if (t < 0 || !p.canDo(i, k)) continue
+                var wished = 0
+                for (j in 0 until p.T) if (p.wishLocked(i, j) && p.wish[i][j] == k) wished++
+                if (wished > t) {
+                    val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
+                    out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」適切回数と希望",
+                        "「$sym」の希望が${wished}件あり、適切回数の目標${t}回を超えています。希望どおりに配置する限り" +
+                            "「$sym」は必ず${wished}回以上になるため、差${wished - t}回ぶんの超過は最適化では消せません",
+                        "「$sym」の適切回数を${wished}回以上にするか、${name}さんの「$sym」の希望を${wished - t}件減らしてください"))
+                }
+            }
+        }
+
         // 6c) [事前診断/幻のhigh超過+代用要員提示・grilling確定=美幸・上條・大島の実例を踏まえ実装]
         //    6bと同じ「担当レパートリーから強制される最低回数」ロジックを staffRange 上限(hi、個人上限)
         //    にも適用。担当できるシフトの構成上、あるシフトの回数が個人上限を必ず上回ってしまう（他の

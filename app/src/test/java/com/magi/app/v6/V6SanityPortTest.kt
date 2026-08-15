@@ -696,4 +696,39 @@ class V6SanityPortTest {
         assertEquals(0, V6SanityPort.structuralPersonalFloor(Problem(st)))
     }
 
+    // ---- 6d) 希望で固定された回数 > apt目標（3.373.0/実機ログ起因: 大島愛 休17・目標10）----
+
+    private fun wishVsAptState(wishCount: Int, aptTarget: String): MagiState {
+        val T = 12
+        val row = (0 until T).map { if (it % 2 == 0) 0 else 1 }   // 休6 / P6
+        val wishes = (0 until T).filter { it % 2 == 0 }.take(wishCount).associate { "0,$it" to 0 }
+        return MagiState(
+            startDate = "2026-09-01", endDate = "2026-09-12",
+            shifts = listOf(Shift("休", "休", "", ""), Shift("P", "P", "", "")),
+            groups = listOf(Group("G0", "G0")), staff = listOf(Staff("大島", 0)),
+            use2Patterns = false, groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf(aptTarget, "")),
+            schedule = listOf(row), wishes = wishes, staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+    }
+
+    @Test fun wishLockedCountAboveAptTargetIsReported() {
+        // 休の希望5件 vs 適切回数の目標2回 → 希望を守る限り必ず3回ぶん超過する。
+        val issues = V6SanityPort.buildGuidance(wishVsAptState(5, "2"), Problem(wishVsAptState(5, "2")))
+        val hit = issues.filter { it.where.contains("適切回数と希望") }
+        assertEquals("1件だけ出ること", 1, hit.size)
+        assertTrue("希望件数を示すこと", hit[0].problem.contains("希望が5件"))
+        assertTrue("超過ぶんを示すこと", hit[0].problem.contains("差3回"))
+    }
+
+    @Test fun wishLockedCountWithinAptTargetIsNotReported() {
+        // 希望2件 vs 目標5回 → 希望は目標の内側なので誤検知しない。
+        val issues = V6SanityPort.buildGuidance(wishVsAptState(2, "5"), Problem(wishVsAptState(2, "5")))
+        assertTrue("誤検知しないこと", issues.none { it.where.contains("適切回数と希望") })
+    }
+
 }
