@@ -694,14 +694,19 @@ object V6NativeOptimizer {
             }
         }
 
-        // [3.375.0/実機ログ起因] HARD=0 の盤面から再実行するとき、`hardZeroWinner`（先に実行可能へ
-        //   到達した者が勝ち＝他を止める）のレースは**意味を持たない**（全員が最初から HARD=0）。
-        //   旧実装は入口が HARD=0 でも最初の進捗報告で即座に勝者が立ち、残る全ワーカーが
-        //   1エポックも走らずに離脱していた（実機ログ 2026-08-15: `W6:epoch0/…/離脱=勝者確定@0s`・
-        //   8本中7本が @0s 離脱・`全体最良更新=0回`）。**利用者が「並列8」と設定しても実質1並列**になり、
-        //   HARD=0 到達後に残るのは全部 SOFT の仕事なので、止める理由がそもそも無い。
-        //   入口が HARD>0 のときだけレースを武装する（従来どおり＝挙動不変）。
-        val hardRaceArmed = globalReport.hard > 0
+        // [3.376.0/ユーザー指示「ワーカー、並列が本当に動くようにする」] `hardZeroWinner` は
+        //   「先に HARD=0 へ到達した者が勝ち＝残りを即キャンセル」する省電力機構だった（docstring 参照）。
+        //   だが **HARD=0 に到達した時点で残る仕事は全部 SOFT** で、勝者1本だけがそれを担うと
+        //   利用者が指定した並列度の 1/8 しか使われない。実機は初期解 HARD=64 から**1秒で HARD=0**へ
+        //   到達しており（実機ログ 13:53:53→13:53:54）、そこから 195 秒を実質1並列で走っていた。
+        //   3.375.0 は「入口が既に HARD=0」の場合だけを塞いだが、HARD>0 入口でも同じ潰れが
+        //   数秒遅れて起きる（同じ機構）。**キル自体を撤廃**し、全ワーカーを締切まで走らせる。
+        //   `hardZeroWinner` は「誰が最初に到達したか」の記録としてのみ残す（ログの情報価値を維持）。
+        //   安全性: 採否は全段 keep-best（better()）なので探索を増やしても品質は退化しない。
+        //   代償は電池/発熱だが、総時間は予算と停滞ウォッチドッグが従来どおり govern する。
+        //   [測れなかったこと] 手元の fixture では PORTFOLIO が HARD=0 へ到達しない
+        //   （golden の greedy 初期解 hard=15 → 30秒で hard=1 止まり）ため、この機構の品質への効果は
+        //   A/B できていない。確かなのは構造的な帰結（キルされなくなる）だけ。
         val jobs = Array<kotlinx.coroutines.Deferred<AdaptiveWorkerOutcome>>(workers) { i ->
             async(Dispatchers.Default) {
                 var trajectory = synchronized(lock) { sharedTrajectories[i].copy2D() }
@@ -746,9 +751,7 @@ object V6NativeOptimizer {
                 // [3.346.1/方針B] 停滞シグナルは単調でない（改善が届けば偽に戻る）ので、
                 //   `while` 条件には単調な締切・勝者確定だけを置き、シグナルは confirmStop で
                 //   確認窓ぶん再確認してから離脱する。一瞬のシグナルで片肺運転にならない。
-                while (nowMs() < deadline &&
-                    (hardZeroWinner.get() < 0 || hardZeroWinner.get() == i)
-                ) {
+                while (nowMs() < deadline) {
                     if (shouldStop()) {
                         if (confirmStop(shouldStop, deadline, stopIsFinal)) {
                             exitReason = if (stopIsFinal()) "探索締切" else "停滞シグナル"
@@ -843,12 +846,11 @@ object V6NativeOptimizer {
                         tabu = assignment.role != HypothesisEpochRole.BASELINE_REFINE,
                     )
                     val stopRole = {
-                        shouldStop() || nowMs() >= roleDeadline ||
-                            (hardZeroWinner.get() >= 0 && hardZeroWinner.get() != i)
+                        shouldStop() || nowMs() >= roleDeadline
                     }
                     val result = try {
                         val progress: (String, ViolationReport?, Long, Long) -> Unit = { phase, rep, it, elapsed ->
-                            if (hardRaceArmed && rep?.hard == 0) hardZeroWinner.compareAndSet(-1, i)
+                            if (rep?.hard == 0) hardZeroWinner.compareAndSet(-1, i)   // 記録のみ（キルしない）
                             if (i == 0 || rep?.hard == 0) {
                                 onProgress(
                                     "適応portfolio W$i epoch${epoch + 1} ${AdaptiveHypothesisEpochPolicy.roleLabel(assignment)} / $phase",
@@ -869,7 +871,7 @@ object V6NativeOptimizer {
                     }
 
                     if (result != null) {
-                        if (hardRaceArmed && result.report.hard == 0) hardZeroWinner.compareAndSet(-1, i)
+                        if (result.report.hard == 0) hardZeroWinner.compareAndSet(-1, i)   // 記録のみ
                         iterations += result.iterations
                         archive.register(
                             result.schedule, result.report, assignment.role, i, epoch,
@@ -978,7 +980,7 @@ object V6NativeOptimizer {
                 // [3.346.0] while 条件のどれで抜けたかを確定
                 //   （例外と確認済み停滞シグナルは上で確定済み。ここは単調な2条件のみ）。
                 if (exitReason.isEmpty()) {
-                    exitReason = if (nowMs() >= deadline) "締切" else "勝者確定"
+                    exitReason = "締切"   // [3.376.0] 勝者キル撤廃により、単調な離脱条件は締切のみ
                 }
                 val exitAtSec = (nowMs() - started) / 1000
 
@@ -1200,8 +1202,9 @@ object V6NativeOptimizer {
     /**
      * Run up to [w] independent hypotheses concurrently (distinct seeds) and keep the best —
      * the native W0..Wn multi-worker pool with the spec's hybrid termination (§2.2/§4.2):
-     *  - 絶対評価: the first hypothesis to reach the pass line (HARD=0) cancels the others
-     *    immediately (saves battery/heat); the winner finishes its own budget (soft polish).
+     *  - 絶対評価: the first hypothesis to reach the pass line (HARD=0) is recorded as the winner.
+     *    [3.376.0] It no longer cancels the others: once HARD=0 is reached the remaining work is all
+     *    SOFT, and keeping a single worker wastes the parallelism the user asked for.
      *  - 相対評価: if none passes by the deadline, the lowest-penalty hypothesis is adopted.
      * Worker 0's progress is forwarded, prefixed with the number of hypotheses still running.
      */
@@ -1248,9 +1251,10 @@ object V6NativeOptimizer {
                         val improved = report != null && improvesShared(report)
                         if (i == 0 || improved) onProgress("仮説${(hSpawn - completed.get()).coerceAtLeast(1)}本探索中 / $phase", report, iters, elapsed)
                         // 絶対評価: 合格ライン(HARD=0)に最初に到達した仮説が、残りを即キャンセル
-                        if (report != null && report.hard == 0 && winner.compareAndSet(-1, i)) {
-                            for (j in 0 until hSpawn) if (j != i) jobs[j]?.cancel()
-                        }
+                        // [3.376.0] 「HARD=0 到達で残りを即キャンセル」を撤廃（runAdaptivePortfolio と同じ理由:
+                        //   到達後に残る仕事は全部 SOFT で、1本に絞ると指定した並列度が無駄になる）。
+                        //   winner は「誰が最初に合格したか」の記録として残す（下のログ表記に使う）。
+                        if (report != null && report.hard == 0) winner.compareAndSet(-1, i)
                     }
                 } catch (ce: kotlinx.coroutines.CancellationException) {
                     throw ce
@@ -1281,7 +1285,7 @@ object V6NativeOptimizer {
         runSlot()?.alternatives = alts                      // [3.335.0] この実行の「他の案」
         if (ownsStatics(runSlot())) lastAlternatives = alts
         val totalIters = results.sumOf { it.iterations }
-        val mode = if (winner.get() >= 0) "合格で早期キャンセル" else "時間内最良採用"
+        val mode = if (winner.get() >= 0) "合格あり(全本継続)" else "時間内最良採用"
         val chainNote = if (plan.max() > 1) "・仮説内${plan.min()}〜${plan.max()}並列(SA/ALNS多チェーン、設定${options.workers}がコア数を超えるため仮説数を絞り並列SAへ配分)" else ""
         val failNote = if (results.size < hSpawn) "・失敗${hSpawn - results.size}本(例外/キャンセル${firstError.get()?.let { "・${it.message}" } ?: ""})" else ""
         // [3.266.0/hypothesis basin diversity] 各仮説の入口が実際にどう多様化されたかをログに残す。
