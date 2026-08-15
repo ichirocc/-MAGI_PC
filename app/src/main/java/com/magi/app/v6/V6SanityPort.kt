@@ -992,10 +992,25 @@ object V6SanityPort {
                 }
                 if (covUreal > 0) notes.add("現状${cur}(需要${demand})→不足${covUreal}(covU)")
                 if (covOreal > 0) notes.add("現状${cur}(需要${demand})→過剰${covOreal}(covO)")
-                // 構造要因(過剰): 各人が下限/適切回数まで埋める圧力(=確実に埋まる量)の合計が需要超過。
+                // 構造要因(過剰): 各人が下限/適切回数まで埋める圧力(=確実に埋まる量)の合計が、
+                //   **covO を払わずに置ける上限**を超過。
+                // [3.372.0/実機ログ起因] 比較先を need1 合計(demand)から seatsHi へ是正した。旧実装は
+                //   demand と比べていたため、2世代需要(use2)が有効で need2>need1 のデータでは
+                //   「置いても罰の無い枠」を無視して圧力を過大報告していた（実機 2026-08-15 の B4:
+                //   需要2 に対し「供給圧力7(適切回数)>需要2」と出るが、need2 の枠内なら7人置いても
+                //   covO は増えない＝構造的な矛盾は無い）。設定ミス検査6-C は同じ状況で正しく沈黙して
+                //   おり、**同じ問い「目標は席に収まるか」に2つの診断が違う容量定義で違う答えを出して
+                //   いた**。6-C と同じ seatsHi に揃える（緩い側が正しかった）。
+                var seatsHi = 0
+                for (j in 0 until p.T) {
+                    val n1 = p.need1[k][j]
+                    if (n1 < 0) continue
+                    val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
+                    seatsHi += maxOf(hi, 0)
+                }
                 val pull = maxOf(loSum, aptSum)
                 val pullSrc = if (aptSum >= loSum) "適切回数" else "下限"
-                if (demand > 0 && pull > demand) notes.add("供給圧力${pull}(${pullSrc})>需要${demand}")
+                if (seatsHi > 0 && pull > seatsHi) notes.add("供給圧力${pull}(${pullSrc})>置ける上限${seatsHi}")
                 // 構造要因(不足): 全担当者に上限があり、その合計が需要未満のときのみ（未設定者は無制限なので除外）。
                 if (demand > 0 && doable > 0 && hiCnt == doable && hiSum < demand) notes.add("全${doable}名の上限計${hiSum}<需要${demand}→構造的に不足")
                 fun cs(sum: Int, c: Int) = if (c == doable) "$sum" else "$sum(${c}/${doable}名)"

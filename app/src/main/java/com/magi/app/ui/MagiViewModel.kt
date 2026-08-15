@@ -996,6 +996,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var lastHardLogMs = -10_000L
         optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
+            // [3.372.0/実機ログ起因] 終端ログ（完了/停止/失敗）を必ず1行残す保証。実機ログ(2026-08-15)で
+            //   「最適化 開始」だけあって終端行が無い実行が2件あり、死因を判別できなかった。全経路が
+            //   logOp を持つはずなのに欠けうるのは、停止分岐の logOp が pushReport（診断を回す＝例外を
+            //   投げうる）の**後ろ**にあるため。そこが落ちると finally は何も残さず実行が消える。
+            //   3.271.0 の「サイレント死の防止」と同じ狙いを、原因に依存しない形で閉じる。
+            var terminalLogged = false
             try {
                 // [再実行 keep-best] 実行開始時の入力解(sched0)の違反を評価し、完了時の採用判定の基準にする。
                 //   sched0 はデータ編集直後なら新データの初期解なので、編集をまたいでも公平な基準になる。
@@ -1123,6 +1129,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 lastC1Plateau?.logLines()?.take(4)?.forEach { logOp("W", it.removePrefix("[W] ")) }
                 lastTopHardFamily = if (res.report.hard > 0) topHardFamilyJp(res.report.breakdown) else null
                 logOp(if (res.report.hard == 0) "I" else "W", "最適化 完了 必須=${res.report.hard} 合計=${res.report.total} (${res.phase})")
+                terminalLogged = true
                 // HF63 検出: 50秒改善のない制約族＝データ上満たせない可能性が高い（業務担当者へ提示）。
                 // [実機ログ起因] 探索中の一時盤面でしか違反が無かった族（最終盤面で0）は「充足できている」ので
                 //   警告から除外する（旧: 破棄された探索トラックの covO/LimMax まで列挙され誤解を招いた）。
@@ -1149,16 +1156,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
                 ) }
                 logOp("I", "停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                terminalLogged = true
                 throw e
             } catch (e: Exception) {
                 // [3.271.0, 実機ログ起因] 失敗を操作ログにも残す。旧: message のみのため、書き出した
                 //   ログに「最適化 開始」だけあって完了も停止も無い実行が現れても死因（例外で静かに
                 //   落ちたのか）を判別できなかった（実機ログ 19:56:41 の消えた実行の解析を阻んだ実例）。
                 logOp("W", "最適化 失敗: ${e.message}")
+                terminalLogged = true
                 _ui.update { it.copy(running = false, message = "V6最適化失敗: ${e.message}") }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
+                if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（診断の実行中に例外が出た可能性）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1181,6 +1191,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val startMs = System.currentTimeMillis()
         optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
+            var terminalLogged = false   // [3.372.0] 終端ログの保証（runV6FullOptimize と同じ理由）
             try {
                 val baseReport = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(st0, sched0) }
                 val polished = withContext(Dispatchers.Default) {
@@ -1209,6 +1220,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         "ソフト研磨 完了: これ以上の削減は見つかりませんでした（合計=${finalReport.total} 必須=${finalReport.hard}）。残りは構造的要因の可能性。",
                 ) }
                 logOp("I", "ソフト研磨 完了 必須=${finalReport.hard} 合計=${finalReport.total}（${if (gain > 0) "-$gain" else "増減なし"}）")
+                terminalLogged = true
             } catch (e: CancellationException) {
                 // [停止 keep-best] 中断時は直前の確定盤面を保持し表示も整合させる。
                 val kept = sched0.copy2D()
@@ -1223,13 +1235,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     hasResult = true,
                     message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
                 ) }
+                // [3.372.0] 旧: この分岐だけ logOp が1つも無く、停止すると終端行がゼロになっていた
+                //   （最適化側の「停止: …を保持」に対する対象漏れ）。
+                logOp("I", "ソフト研磨 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                terminalLogged = true
                 throw e
             } catch (e: Exception) {
                 logOp("W", "ソフト研磨 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
+                terminalLogged = true
                 _ui.update { it.copy(running = false, message = "自動整えに失敗: ${e.message}") }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
+                if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（診断の実行中に例外が出た可能性）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
