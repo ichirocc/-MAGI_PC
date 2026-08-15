@@ -483,6 +483,16 @@ object V6FinalPort {
             V6NativeOptimizer.optimize(state, first.schedule, optsR.copy(algorithm = V6Algorithm.ALNS, totalBudgetSec = plan.alnsSec), shouldStop, progressWatch, stopIsFinal)
         } else first
         val tChain1 = System.currentTimeMillis()
+        // [3.377.0/実機ログ起因] 停滞ウォッチドッグの遠隔測定は**探索フェーズの話**なのに、ログは
+        //   `lastBestImproveMs` を出力時（後処理・追加精製のあと）に読んでいた。ExtraRefine(3.102.0)の
+        //   改善も `progressWatch` を通るので lastBestImproveMs は tChain1 より後へ進み、
+        //   `tChain1 - lastImp` が負→0 に丸められて「最終改善=経過287s・探索終了時の停滞0s」（探索は274sで終了）
+        //   という**時間軸の混ざった自己矛盾**になっていた（読み手は「探索は一度も停滞していない」と誤読する）。
+        //   探索終了時点でスナップショットし、ウォッチドッグの数字は全てこの時刻基準で揃える。
+        val lastImpAtSearchEnd = lastBestImproveMs.get()
+        val lastPhaseAtSearchEnd = lastPhaseChangeMs.get()
+        val itersAtSearchEnd = observedIters.get()
+        val lastImpItersAtSearchEnd = lastBestImproveIters.get()
 
         // [3.268.0/エリート統合] 旧「エリート再結合(Path Relinking)」を置換。8役の最終1解だけでなく、
         //   非同期適応ポートフォリオが全epochから保存した品質/距離/橋渡しエリート(lastFusionElites)を
@@ -596,7 +606,7 @@ object V6FinalPort {
                 " / 構造的HARD下限=${hardFloor}",
         )
         val watchdogLog = run {
-            val lastImp = lastBestImproveMs.get()
+            val lastImp = lastImpAtSearchEnd
             val endStallS = (tChain1 - lastImp).coerceAtLeast(0L) / 1000
             val nonCovU = bestNonCovUHard.get()
             val kind = when {
@@ -613,16 +623,20 @@ object V6FinalPort {
             //   ウォッチドッグがほぼ無効化された（修正前は7本が死んでおり W1 のフェーズしか出ず猶予を満たしていた）。
             //   挙動そのもの（予算を使い切る）は利用者の指定どおりで、3.341.1 の実測でも早期終了を減らす方向は
             //   品質にわずかに有利だったため**ここでは頻度を変えない**。まず理由が読めるようにする。
+            // [3.377.0] 判定時刻も**探索終了時**へ揃える（旧: 出力時の now＝後処理ぶんが混ざり、
+            //   3条件のどれも「探索中の状況」を表していなかった）。
             val blockNote = if (!stagnationFired.get()) {
-                val nowMs = System.currentTimeMillis()
                 val reasons = ArrayList<String>()
-                if (nowMs - startMs <= minRunMs) reasons.add("最短実行${minRunMs / 1000}s未達")
-                if (nowMs - lastPhaseChangeMs.get() <= phaseGraceMs)
+                if (tChain1 - startMs <= minRunMs) reasons.add("最短実行${minRunMs / 1000}s未達")
+                if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs)
                     reasons.add("現フェーズ猶予${phaseGraceMs / 1000}s未達(並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい)")
                 val effStallForLog = if (kind.startsWith("通常")) stallMs else stallHardMs
-                if (nowMs - lastImp <= effStallForLog) reasons.add("停滞が閾値未満")
+                if (tChain1 - lastImp <= effStallForLog) reasons.add("停滞が閾値未満")
                 if (reasons.isEmpty()) "" else "・未発火の理由=${reasons.joinToString("＋")}"
             } else ""
+            // 探索の後（後処理・追加精製）で改善したなら別項目として出す。探索フェーズの停滞と混ぜない。
+            val afterNote = if (lastBestImproveMs.get() > tChain1)
+                "・探索後も改善あり(経過${((lastBestImproveMs.get() - startMs) / 1000)}s＝後処理/追加精製)" else ""
             val wallNote = if (c3nWallCheckedVersion.get() >= 0)
                 "・c3n壁診断=${if (c3nWallResult.get()) "構造的な壁と判定" else "壁ではない（崩す手が実在）"}" else ""
             listOf(MirrorLog(
@@ -630,9 +644,9 @@ object V6FinalPort {
                 message = "停滞監視: 最終改善=経過${((lastImp - startMs) / 1000).coerceAtLeast(0)}s・" +
                     "探索終了時の停滞${endStallS}s・実効閾値($kind)・発火=${if (stagnationFired.get()) "あり" else "なし"}" +
                     // [3.375.0] 時刻に加えて反復数も出す（「回していない」のか「回しても改善しない」のかの区別）。
-                    "・反復(進捗報告ぶん・目安)=最終改善時${fmtIter(lastBestImproveIters.get())}→" +
-                    "終了時${fmtIter(observedIters.get())}（無改善のまま約${fmtIter(observedIters.get() - lastBestImproveIters.get())}転・" +
-                    "総量はAdaptivePortfolioの合計iter参照）$blockNote$wallNote",
+                    "・反復(進捗報告ぶん・目安)=最終改善時${fmtIter(lastImpItersAtSearchEnd)}→" +
+                    "探索終了時${fmtIter(itersAtSearchEnd)}（無改善のまま約${fmtIter(itersAtSearchEnd - lastImpItersAtSearchEnd)}転・" +
+                    "総量はAdaptivePortfolioの合計iter参照）$blockNote$afterNote$wallNote",
             ))
         }
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
@@ -735,19 +749,46 @@ object V6FinalPort {
             // apt+high の床は**2族の和**に対して立つ（片方だけには割り振れない）ので、床が立つときは
             //   open 側もまとめて "apt+high" の1項目として残りを出す。
             val personalWall = if (personalFloor > 0 && aptHighNow > 0) minOf(personalFloor, aptHighNow) else 0
+            // [3.377.0/実機ログ起因] covU の構造判定が `hardFloor`（有資格者数ベースの静的下限）だけを
+            //   見ており、実データでいちばん多い「担当者は足りるが**いまの希望・禁止連続では埋められない**」枠を
+            //   丸ごと「まだ狙える」へ入れていた。同じログの `CoverageDiag` が
+            //   「充足可能2枠（うち2枠は いまの希望のままでは不能）＝この希望・担当のままでは人員不足は
+            //   減りません」と出し、設定ミス診断(検査9=ConstraintMus)が同じ2日を「証明つき」で名指ししているのに、
+            //   **この1行だけが「covU 2件＝まだ狙える」と食い違っていた**（3.375.0 で直した weekly の
+            //   二重計上と同型の、床を open から差し引かない/そもそも床を持たない誤り）。
+            //   判定は `CoverageDiagnosis`（3.344.0 の `blockedNow`＝空き番なし・玉突き連鎖も `findCovUChain` で
+            //   不成立を実証）を**単一ソース**として読む（ここで再実装すると必ずドリフトする）。
+            //   read-only＝探索・採否・早期終了には一切配線しない（3.361.0 で「早期終了は keep-best-safe でない」と
+            //   実測して却下した判断はそのまま維持する）。
+            val covUNow = bd["covU"] ?: 0
+            val covUFloor = if (hardFloor > 0 && covUNow in 1..hardFloor) covUNow else 0
+            val covUBlocked = if (covUNow <= 0) 0 else runCatching {
+                covUBlockedAmount(V6PortAnalyzer.diagnoseCoverage(state, finalSched, finalReport))
+            }.getOrDefault(0)
+            val covUWall = covUStructuralWall(covUNow, hardFloor, covUBlocked)
             for (key in MirrorKeys.all) {
                 val n0 = bd[key] ?: 0
                 if (n0 <= 0) continue
                 if (personalWall > 0 && (key == "apt" || key == "high")) continue   // 下でまとめて出す
                 val structural = when {
-                    key == "covU" && hardFloor > 0 && n0 <= hardFloor -> "構造的下限"
                     key == "c3n" && c3nWall -> "証明済みの壁"
                     key in infeasLearned -> "探索が充足困難と学習"
                     else -> null
                 }
                 if (structural != null) { walls.add("$key ${n0}件($structural)"); continue }
-                val n = if (key == "weekly") n0 - weeklyWall else n0
+                val n = when (key) {
+                    "weekly" -> n0 - weeklyWall
+                    "covU" -> n0 - covUWall
+                    else -> n0
+                }
                 if (n > 0) open.add("$key ${n}件")
+            }
+            if (covUWall > 0) {
+                // 床が全部を覆うときだけ従来どおり「構造的下限」（供給不足）と名乗る。それ以外は
+                //   「担当者は居るが いまの希望では動かせない」＝データ側で希望を1件調整すれば動きうる、を明示。
+                val why = if (covUFloor >= covUNow) "構造的下限"
+                    else "いまの希望・担当のままでは埋められないと実証済み"
+                walls.add("covU ${covUWall}件($why)")
             }
             // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。実機ログでは
             //   apt=30 のうち19件が桒澤美幸のB4（他シフトの上限合計11回では31日を埋めきれず B4 が最低20回
@@ -781,6 +822,28 @@ object V6FinalPort {
         val postForResult = post.takeIf { finalSched.contentDeepEquals(it.schedule) }
         ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, postForResult,
             alternatives = chained.alternatives)
+    }
+
+    /**
+     * [3.377.0] 「もう直せない covU」の量。`CoverageDiagnosis` を単一ソースとして読む
+     * （INFEASIBLE=データ上充足不可／`blockedNow`=空き番なし・玉突き連鎖も `findCovUChain` で不成立を実証）。
+     * 単位は `breakdown["covU"]` と同じ**不足人数の合計**（枠数ではない）。
+     */
+    internal fun covUBlockedAmount(diag: CoverageDiagnosis): Int =
+        diag.shortfalls.filter { it.verdict == CoverageVerdict.INFEASIBLE || it.blockedNow }.sumOf { it.miss }
+
+    /**
+     * [3.377.0] 残存 covU のうち「もう直せない」ぶん。
+     *
+     * 旧実装は `hardFloor`（有資格者数ベースの静的下限）しか見ておらず、実データでいちばん多い
+     * 「担当者は足りるが**いまの希望・禁止連続では埋められない**」枠を丸ごと「まだ狙える」へ入れていた。
+     * 供給不足（floor）と いま埋められない（blocked）の**どちらか大きいほう**を壁として扱う
+     * （blocked は verdict=INFEASIBLE も含むので通常は floor を包含する。両方0なら壁なし＝従来どおり全部 open）。
+     */
+    internal fun covUStructuralWall(covUNow: Int, hardFloor: Int, blockedMiss: Int): Int {
+        if (covUNow <= 0) return 0
+        val floorPart = if (hardFloor > 0 && covUNow <= hardFloor) covUNow else 0
+        return minOf(covUNow, maxOf(floorPart, blockedMiss.coerceAtLeast(0)))
     }
 
     /** [3.375.0] 反復数を読める形に（例: 54476513 → 5,447万）。停滞ログで桁を一目で掴むため。 */

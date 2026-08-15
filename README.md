@@ -23,7 +23,15 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-14（3.371.0 ユーザー指示「並列SAの本格再有効化する」「soft全族の完全差分する」の2件。
+**最終更新**：2026-08-15（3.377.0 実機ログ起因の診断バグ2件。①**`残存分析` が「もう直せない covU」を
+「まだ狙える」に入れていた**＝covU の構造判定が `hardFloor`（有資格者数ベースの静的下限）しか見ておらず、
+同じ実行の `CoverageDiag`（「いまの希望のままでは不能」）と設定ミス診断（同じ2日を「証明つき」で名指し）と
+食い違っていた。3.344.0 の `CoverageDiagnosis.blockedNow` を単一ソースとして読む形へ（**3.361.0 の実測＝
+早期終了への配線は却下、はそのまま維持**＝表示だけ）。②**`Watchdog` 行が2つの時間軸を混ぜていた**＝
+「最終改善=経過287s・**探索終了時**の停滞0s」なのに探索は274sで終了。ExtraRefine の改善が
+`lastBestImproveMs` を進めるため負→0 に丸められていた。探索終了時点のスナップショットへ統一し、
+探索後の改善は別項目で出す。ホストJVM **470テスト green**（新規1・教訓#30 の scratch-revert 確認済み）。
+読み取り専用・表示のみ＝重み・採否・探索・停止条件は完全に不変。3.371.0 ユーザー指示「並列SAの本格再有効化する」「soft全族の完全差分する」の2件。
 ①**並列SAの本格再有効化**＝`hypothesisChainPlan`は`hypotheses==workers`（3.224.0以降の常態）だと
 `distributable=max(h,min(workers,cores))`が構造的に常に`h`へ収束し、`runMultiWorker`（ALNS/RSI/RSI_PLUS
 明示選択の経路）の仮説内チェーン本数が実機コア数に関わらず常に1本に潰れることを数式で特定。新設

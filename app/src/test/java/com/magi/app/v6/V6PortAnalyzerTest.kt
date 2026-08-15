@@ -411,4 +411,36 @@ class V6PortAnalyzerTest {
         )
         assertTrue("全セル塞がり＝停滞打ち切りが正しく発火できる", diag.allBlocked)
     }
+
+    /**
+     * [3.377.0/実機ログ起因] 実機ログの同じ実行の中で、`CoverageDiag` が
+     * 「充足可能2枠（うち2枠は いまの希望のままでは不能）＝この希望・担当のままでは人員不足は減りません」
+     * と出し、設定ミス診断(検査9)が同じ2日を「証明つき」で名指ししているのに、`残存分析` だけが
+     * `covU 2件` を **「まだ狙える」** に入れていた。原因は covU の構造判定が `hardFloor`
+     * （有資格者数ベースの静的下限）しか見ておらず、そのログは `構造的HARD下限=0` だったこと。
+     *
+     * この盤面（`cascadeChainState(cWished = true)`）はまさに **担当者は足りる(FIXABLE)が
+     * 希望固定で玉突きが完成しない** ＝ hardFloor では捉えられない形。
+     */
+    @Test
+    fun residualAnalysisTreatsWishBlockedCovUAsAWallEvenWhenSupplyFloorIsZero() {
+        val blocked = V6PortAnalyzer.diagnoseCoverage(cascadeChainState(cWished = true))
+        val miss = V6FinalPort.covUBlockedAmount(blocked)
+        assertEquals("いまの希望では埋められない不足人数を拾う", 1, miss)
+        // hardFloor=0（担当者は足りるので供給下限は立たない）でも壁として数える。
+        assertEquals("旧実装が『まだ狙える』に入れていた分が壁になる",
+            1, V6FinalPort.covUStructuralWall(covUNow = 1, hardFloor = 0, blockedMiss = miss))
+
+        // 玉突きが実在する盤面は従来どおり「まだ狙える」のまま＝壁と誤断定しない。
+        val fixable = V6PortAnalyzer.diagnoseCoverage(cascadeChainState(cWished = false))
+        val missF = V6FinalPort.covUBlockedAmount(fixable)
+        assertEquals("解ける枠は壁に数えない", 0, missF)
+        assertEquals(0, V6FinalPort.covUStructuralWall(covUNow = 1, hardFloor = 0, blockedMiss = missF))
+
+        // 供給下限（従来の判定）は引き続き有効で、壁は covU 件数を超えない。
+        assertEquals("構造的下限だけでも壁になる（従来の挙動）",
+            2, V6FinalPort.covUStructuralWall(covUNow = 2, hardFloor = 2, blockedMiss = 0))
+        assertEquals("壁は残存件数を超えない", 3, V6FinalPort.covUStructuralWall(3, 0, 99))
+        assertEquals("covU が無ければ壁も無い", 0, V6FinalPort.covUStructuralWall(0, 5, 5))
+    }
 }
