@@ -338,8 +338,15 @@ object V6FinalPort {
         //   「最終改善の瞬間」と「停滞発火の瞬間」に記録する。
         //   ※各ワーカー/フェーズは**自分のカウンタ**を報告する（役割が変わると 0 から数え直す）ので、
         //     単純な最大値だと最大の1本で頭打ちになり増分が見えない（実測で「無改善のまま0回転」と
-        //     出て誤りに気づいた）。フェーズ文字列ごとの増分を足し合わせて総量にする。
-        //     同じフェーズ文字列を2本が同時に報告するとその分は粗くなるが、桁の把握には十分。
+        //     出て誤りに気づいた）。フェーズ文字列ごとの増分を足し合わせる。
+        //   [3.375.1/精度を実測して確認] これは**進捗報告に現れたぶんだけ**の下限であり、真の総量ではない。
+        //     golden_state を30秒予算で3回計測した実測: 終了時の値 1,734/2,615/2,898万回に対し
+        //     AdaptivePortfolio の `合計iter`（各役割の返り値を厳密に合算した真の総量）は
+        //     2,950/4,620/5,972万回＝**捕捉率 49〜59%**。各役割が返す最終反復数まで報告が届かないため。
+        //     さらに停滞窓内のレートは全体レート比 0.5〜2.1倍にぶれる（並列ワーカーの報告が改善の後に
+        //     まとめて届き、その多くは改善と**並行して**行われた仕事のため）。
+        //     よってログでは「進捗報告ぶん・目安」と明示し、総量は AdaptivePortfolio 行を参照させる。
+        //     用途は「そもそも回していない」と「大量に回しても改善しない」の**桁の区別**に限る。
         val itersByPhase = HashMap<String, Long>()
         val observedIters = java.util.concurrent.atomic.AtomicLong(0)
         val lastBestImproveIters = java.util.concurrent.atomic.AtomicLong(0)
@@ -387,7 +394,7 @@ object V6FinalPort {
                         //   「改善が無いため早期終了（290sで停止・停滞37s無改善）」と記録され、同じログの
                         //   Watchdog 行（探索終了時の停滞13s）と矛盾していた。さらに ExtraRefine が
                         //   古いラッチを根拠に skip され、予算の残り約9秒が使われないままだった。
-                        stagnationFired.set(false); stagnationDurationMs.set(-1)
+                        stagnationFired.set(false); stagnationDurationMs.set(-1); stagnationIters.set(-1)
                         // 非covU HARD(=解けるHARD)件数を best と同時に捕捉（stallHardMs 早期移行の判定に使う）。
                         val gv = report.breakdown["groupViol"] ?: 0
                         val pf = report.breakdown["pref"] ?: 0
@@ -604,8 +611,9 @@ object V6FinalPort {
                 message = "停滞監視: 最終改善=経過${((lastImp - startMs) / 1000).coerceAtLeast(0)}s・" +
                     "探索終了時の停滞${endStallS}s・実効閾値($kind)・発火=${if (stagnationFired.get()) "あり" else "なし"}" +
                     // [3.375.0] 時刻に加えて反復数も出す（「回していない」のか「回しても改善しない」のかの区別）。
-                    "・反復=最終改善時${fmtIter(lastBestImproveIters.get())}→探索終了時${fmtIter(observedIters.get())}" +
-                    "（無改善のまま${fmtIter(observedIters.get() - lastBestImproveIters.get())}回転）$wallNote",
+                    "・反復(進捗報告ぶん・目安)=最終改善時${fmtIter(lastBestImproveIters.get())}→" +
+                    "終了時${fmtIter(observedIters.get())}（無改善のまま約${fmtIter(observedIters.get() - lastBestImproveIters.get())}転・" +
+                    "総量はAdaptivePortfolioの合計iter参照）$wallNote",
             ))
         }
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
@@ -614,7 +622,7 @@ object V6FinalPort {
                 "停滞${stagnationDurationMs.get() / 1000}s無改善" +
                 // [3.375.0] 何回転ぶん空回りしたか（時間だけでは実施量が読めない）。
                 (if (stagnationIters.get() >= 0)
-                    "・発火までに無改善のまま${fmtIter(stagnationIters.get() - lastBestImproveIters.get())}回転" else "") +
+                    "・発火までに無改善のまま約${fmtIter(stagnationIters.get() - lastBestImproveIters.get())}転(進捗報告ぶん・目安)" else "") +
                 "・解は最良を維持）" +
                 // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                 (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else ""),
