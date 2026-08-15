@@ -604,6 +604,25 @@ object V6FinalPort {
                 c3nWallResult.get() && bestNonCovUAllC3n.get() -> "c3n壁=短${stallHardMs / 1000}s"
                 else -> "通常=長${stallMs / 1000}s"
             }
+            // [3.375.2/実測で判明] 発火しなかったとき**どの条件が塞いだか**を出す。実測(golden・150s予算)で
+            //   「停滞47s > 閾値18s なのに発火=なし」が起き、ログからは理由が読めなかった。原因は
+            //   `phaseGraceMs`(予算/40)のリセット判定が **"/ " 以降＝内側のフェーズ名**（"V5 SA"/"ALNS restart 1/1"/
+            //   "RSI apt"…）を見ており、これは**8本のワーカーで共有される**ため、並列が本当に動くと base が
+            //   絶え間なく入れ替わり `now - lastPhaseChangeMs` が猶予を超えなくなること。
+            //   ＝3.375.0 で hardRaceArmed を直して 8本が走るようにした副作用で、PORTFOLIO では
+            //   ウォッチドッグがほぼ無効化された（修正前は7本が死んでおり W1 のフェーズしか出ず猶予を満たしていた）。
+            //   挙動そのもの（予算を使い切る）は利用者の指定どおりで、3.341.1 の実測でも早期終了を減らす方向は
+            //   品質にわずかに有利だったため**ここでは頻度を変えない**。まず理由が読めるようにする。
+            val blockNote = if (!stagnationFired.get()) {
+                val nowMs = System.currentTimeMillis()
+                val reasons = ArrayList<String>()
+                if (nowMs - startMs <= minRunMs) reasons.add("最短実行${minRunMs / 1000}s未達")
+                if (nowMs - lastPhaseChangeMs.get() <= phaseGraceMs)
+                    reasons.add("現フェーズ猶予${phaseGraceMs / 1000}s未達(並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい)")
+                val effStallForLog = if (kind.startsWith("通常")) stallMs else stallHardMs
+                if (nowMs - lastImp <= effStallForLog) reasons.add("停滞が閾値未満")
+                if (reasons.isEmpty()) "" else "・未発火の理由=${reasons.joinToString("＋")}"
+            } else ""
             val wallNote = if (c3nWallCheckedVersion.get() >= 0)
                 "・c3n壁診断=${if (c3nWallResult.get()) "構造的な壁と判定" else "壁ではない（崩す手が実在）"}" else ""
             listOf(MirrorLog(
@@ -613,7 +632,7 @@ object V6FinalPort {
                     // [3.375.0] 時刻に加えて反復数も出す（「回していない」のか「回しても改善しない」のかの区別）。
                     "・反復(進捗報告ぶん・目安)=最終改善時${fmtIter(lastBestImproveIters.get())}→" +
                     "終了時${fmtIter(observedIters.get())}（無改善のまま約${fmtIter(observedIters.get() - lastBestImproveIters.get())}転・" +
-                    "総量はAdaptivePortfolioの合計iter参照）$wallNote",
+                    "総量はAdaptivePortfolioの合計iter参照）$blockNote$wallNote",
             ))
         }
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
