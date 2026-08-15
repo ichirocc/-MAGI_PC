@@ -155,7 +155,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var rawDiagLogs: List<String> = emptyList()
     private val opLogFmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.JAPAN)
 
-    /** 操作ログに1件追記し、UIへ反映（新しい順、最大300件）。 */
+    /**
+     * 操作ログに1件追記し、UIへ反映（新しい順、リングの上限は下の `while` のとおり **1000件**）。
+     * [3.378.0/HF77=コメント≠実装] 旧 KDoc は「最大300件」と書いていたが実装は 1000。
+     * 「自分の行がリングから押し出されたのか」を判断する材料なので実装値へ訂正する。
+     */
     private fun logOp(level: String, message: String) {
         opLog.addFirst(OpLogEntry(System.currentTimeMillis(), level, message))
         while (opLog.size > 1000) opLog.removeLast()
@@ -1053,21 +1057,31 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     //   表示に既に使っている壁時計(runWall0基準)へスロットル判定・保持値とも統一する。
                     val wallElapsed = System.currentTimeMillis() - runWall0
                     val base = phase.substringAfter("/ ").trim().ifEmpty { phase }
-                    if (base != livePhase && wallElapsed - lastPhaseLogMs >= 2_500) {
+                    // [3.283.0] 最良更新・改善は情報価値が高いので同名60秒窓の対象外。
+                    // [3.378.0/実機ログ起因] **一律2.5秒ゲートの対象からも外す**。旧実装は「窓の対象外」と
+                    //   言いながら `lastPhaseLogMs`（全フェーズ行で共有）で先に弾いており、実機ログでは
+                    //   `全体最良更新=17回` に対し操作ログに残ったのは**7行だけ**＝改善の10回が消えていた。
+                    //   これは「探索が序盤で止まったのか終盤まで刻んだのか」を読むための唯一の軌跡で、
+                    //   3.283.0 が守ろうとした「重要イベントを押し出さない」意図そのもの。300秒で17行＝スパムにならない。
+                    val important = base.contains("最良更新") || base.contains("改善")
+                    if (base != livePhase && (important || wallElapsed - lastPhaseLogMs >= 2_500)) {
                         // [3.283.0/スパムログ対策] 適応ポートフォリオは V5 SA→RSI→ALNS を数秒周期で循環し、
                         //   遷移ごとにログすると操作ログが探索フェーズ行で埋まる（実機ログ: 68件中約60件が
                         //   フェーズ行＝読込/完了/改善などの重要イベントがリングから押し出される）。
                         //   同名フェーズ（数字を # に正規化: "ALNS restart 1/2" と "2/2" は同一視）は60秒に
                         //   1回まで。最良更新・改善を含む行は情報価値が高いため窓の対象外（従来どおり）。
                         val nameKey = base.replace(Regex("[0-9]+"), "#")
-                        val important = base.contains("最良更新") || base.contains("改善")
                         // [3.283.1/実機ログで発覚した自己回帰の修正] 旧: 未出フェーズの番兵に Long.MIN_VALUE を
                         //   使い `wallElapsed - Long.MIN_VALUE` が**負へオーバーフロー**＝初出判定が恒偽で
                         //   通常フェーズ行が1件も出なくなっていた（意図は同名60秒窓＝20行台、実機は0行）。
                         //   null 判定へ是正（初出は常にログ・以後は60秒窓）。
                         val lastForName = phaseNameLastLogMs[nameKey]
                         if (important || lastForName == null || wallElapsed - lastForName >= 60_000) {
-                            logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒）")
+                            // [3.378.0] 最良更新の行に**その時点の値**を載せる。旧: 「いつ改善したか」は
+                            //   出るのに「いくつになったか」が無く、改善の軌跡（例 366→…→294）がログから
+                            //   一切追えなかった（スコアの数字は最初の必須改善行と最後の完了行の2点のみ）。
+                            val score = if (important && rep != null) "・必須${rep.hard} 合計${rep.total}" else ""
+                            logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒$score）")
                             phaseNameLastLogMs[nameKey] = wallElapsed
                             lastPhaseLogMs = wallElapsed
                         }

@@ -548,7 +548,22 @@ object V6FinalPort {
             //   全予算走行なら残り≒予約枠で従来どおり。N4 早期脱出等 stagnationFired 以外の早期復帰では
             //   残りが数分になり得るが、その節約(電池/熱)を ExtraRefine が食い潰さないよう予約枠でキャップする。
             val extraMs = minOf(hardDeadlineMs - tPost1, postReserveMs)
-            if (extraMs >= 5_000 && isActive && !stagnationFired.get() && post.report.total > 0) {
+            // [3.378.0] 予算が残っているのに走らせなかったときは理由を残す（旧: 無言で skip＝
+            //   「残り25sあるのに何もしていない」がログから読めなかった）。予算不足は TIME 行から自明なので出さない。
+            //   判定は1回だけ評価して分岐と説明で共有する（`isActive` を2度読むと食い違い得るため）。
+            val stopRequested = !isActive
+            val stagnated = stagnationFired.get()
+            val canExtra = !stopRequested && !stagnated && post.report.total > 0
+            if (extraMs >= 5_000 && !canExtra) {
+                val why = when {
+                    stopRequested -> "停止要求"
+                    stagnated -> "停滞検知で早期終了済み（無改善なら早く返す方針）"
+                    else -> "違反が残っていない"
+                }
+                extraLog = listOf(MirrorLog(level = "I", tag = "ExtraRefine",
+                    message = "予算残${extraMs / 1000}sだが追加精製は実行せず: $why"))
+            }
+            if (extraMs >= 5_000 && canExtra) {
                 val extraDeadline = tPost1 + extraMs
                 val extraStop = { System.currentTimeMillis() >= extraDeadline || !isActive }
                 // [3.335.0] 「他の案」は `chained.alternatives`（この実行の返り値）で保持済みなので、
@@ -565,6 +580,14 @@ object V6FinalPort {
                 )
                 // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）。
                 val imp = betterReport(extra.report, post.report)
+                if (!imp) {
+                    // [3.378.0/実機ログ起因] 旧: 改善したときだけログしていたため、**12秒（予算の4%）を
+                    //   使った追加精製が1行も残らない**実行があった（実機ログ: TIME 行に 追加精製12.007s と
+                    //   出るのに ExtraRefine 行が無く、効果0なのか実行されなかったのか区別できない）。
+                    extraLog = listOf(MirrorLog(level = "I", tag = "ExtraRefine",
+                        message = "予算残${extraMs / 1000}sで追加精製: 改善なし" +
+                            "（HARD ${post.report.hard} / total ${post.report.total} のまま後処理の結果を採用）"))
+                }
                 if (imp) {
                     refSched = extra.schedule; refReport = extra.report
                     extraLog = listOf(
@@ -810,9 +833,57 @@ object V6FinalPort {
                 message = "もう直せない: $wallTxt ／ まだ狙える: $openTxt",
             ))
         }
+        // [3.378.0/実機ログ起因・デバッグ用] **段をまたいだスコアの収支を1行で追えるようにする**。
+        //   旧: 各段が自分の before→after を別々の行で出すだけで、しかも母集団が繋がっていなかった
+        //   （実機ログ: AdaptivePortfolio「採用 total=307」→ EliteIntegration「307->307」→
+        //   SoftPolishVerify「**299**->299」→ C1JointLNS「**295**->295」→ PersonalJointLNS「295->294」。
+        //   307→299 と 299→295 がどの段で起きたのか1行も無く、時間だけの POST 行と突き合わせても追えない）。
+        //   ここで各段の**採用値**を同じ物差しで並べる。keep-best は hard→weightedScore→total の順なので
+        //   **重みも出す**＝「total は同じなのに採用された」（EliteIntegration 採用=1 で total 307→307）が
+        //   矛盾でなく weighted の改善だと読めるようにする。read-only・全ての値は既に各段が持つ report から。
+        val ledgerLog = run {
+            data class Stage(val name: String, val r: ViolationReport)
+            val stages = listOf(
+                Stage("入力", inputReport),
+                Stage("探索", chained.report),
+                Stage("統合", integrated.report),
+                Stage("後処理", post.report),
+                Stage("追加精製", refReport),
+                Stage("採用", finalReport),
+            )
+            val sb = StringBuilder("スコア収支（各段の採用値・必須/合計/重み）: ")
+            var prev: ViolationReport? = null
+            val idle = ArrayList<String>()
+            for ((idx, st) in stages.withIndex()) {
+                if (idx > 0) sb.append(" → ")
+                val w = st.r.weightedScore
+                sb.append("${st.name} ${st.r.hard}/${st.r.total}/w${w.toLong()}")
+                val p = prev
+                if (p != null) {
+                    val dt = st.r.total - p.total
+                    val dw = w - p.weightedScore
+                    if (dt == 0 && kotlin.math.abs(dw) < 0.5) {
+                        sb.append("(±0)"); idle.add(st.name)
+                    } else {
+                        sb.append("(合計${if (dt > 0) "+$dt" else "$dt"}")
+                        if (kotlin.math.abs(dw) >= 0.5) sb.append("・重み${if (dw > 0) "+" else ""}${dw.toLong()}")
+                        sb.append(")")
+                    }
+                }
+                prev = st.r
+            }
+            // 「時間を使ったのに1点も動かなかった段」を名指しする（どこを削れるかの判断材料）。
+            val ms = mapOf(
+                "統合" to (tIntegration1 - tChain1), "後処理" to (tPost1 - tIntegration1),
+                "追加精製" to (tExtra1 - tPost1),
+            )
+            val wasted = idle.mapNotNull { n -> ms[n]?.takeIf { it >= 1_000 }?.let { "$n${it / 1000}s" } }
+            if (wasted.isNotEmpty()) sb.append(" ／ 変化なしに費やした段: ${wasted.joinToString("・")}")
+            listOf(MirrorLog(level = "I", tag = "スコア収支", message = sb.toString()))
+        }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + ledgerLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         // [3.327.0/外部レビュー High1] `post` の診断（C1頭打ち・回数固定の却下記録）は **post.schedule を
         //   観測した結果**。ところが finalSched はこのあと ExtraRefine で差し替わる（refSched）か、
         //   最終番兵で入力へ戻る（normInput）ことがある。そのまま渡すと「いま表示している勤務表の理由」
