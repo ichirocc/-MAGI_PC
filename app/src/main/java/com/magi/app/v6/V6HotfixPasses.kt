@@ -4005,6 +4005,10 @@ object V6HotfixPasses {
         state: MagiState, schedule: Array<IntArray>, beamWidth: Int = 16, maxSteps: Int = 60,
         shouldStop: () -> Boolean = { false }, seed: Long = 0x1CBEAL, patience: Int = 20,
     ): CyclicSwapResult {
+        // [3.375.0/ユーザー指示「停滞脱出のログにイテ回数と時間を出す」] 停滞打ち切りの所要時間。
+        //   旧: 「steps=22/最良が20手更新されず打ち切り」と手数だけで、その空振りが一瞬なのか
+        //   秒単位なのかが読めず、patience の妥当性を実機ログから判断できなかった。
+        val beamT0 = System.currentTimeMillis()
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         val pinBlocks = PinBlockAttribution()
         val p = Problem(state)
@@ -4109,7 +4113,7 @@ object V6HotfixPasses {
         //   staffRange厳密ピン(lo==hi)を崩す最終候補は不採用にする（keep-best/重みは不変・追加ガードのみ）。
         val best = if (isBetter(candidate.rep, before) && !pinBlocks.blocksImproving(p, work0, candidate.work)) candidate else Beam(work0, before, 0)
         val logs = listOf(MirrorLog(tag = "C1BeamPolish",
-            message = "期間要件(c1)研磨[ビーム K=$beamWidth steps=$step" +
+            message = "期間要件(c1)研磨[ビーム K=$beamWidth steps=$step/${System.currentTimeMillis() - beamT0}ms" +
                 (if (stagnant >= patience) "/最良が${patience}手更新されず打ち切り" else "") + "]: " +
                 "c1 ${before.breakdown["c1"] ?: 0}->${best.rep.breakdown["c1"] ?: 0} / total ${before.total}->${best.rep.total} HARD ${before.hard}->${best.rep.hard} 手数${best.applied}" +
                 (if (best.applied == 0 && candidate !== best && candidate.applied > 0) " [探索結果が根に勝てず破棄]" else "")))

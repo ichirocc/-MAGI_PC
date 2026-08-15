@@ -694,6 +694,14 @@ object V6NativeOptimizer {
             }
         }
 
+        // [3.375.0/実機ログ起因] HARD=0 の盤面から再実行するとき、`hardZeroWinner`（先に実行可能へ
+        //   到達した者が勝ち＝他を止める）のレースは**意味を持たない**（全員が最初から HARD=0）。
+        //   旧実装は入口が HARD=0 でも最初の進捗報告で即座に勝者が立ち、残る全ワーカーが
+        //   1エポックも走らずに離脱していた（実機ログ 2026-08-15: `W6:epoch0/…/離脱=勝者確定@0s`・
+        //   8本中7本が @0s 離脱・`全体最良更新=0回`）。**利用者が「並列8」と設定しても実質1並列**になり、
+        //   HARD=0 到達後に残るのは全部 SOFT の仕事なので、止める理由がそもそも無い。
+        //   入口が HARD>0 のときだけレースを武装する（従来どおり＝挙動不変）。
+        val hardRaceArmed = globalReport.hard > 0
         val jobs = Array<kotlinx.coroutines.Deferred<AdaptiveWorkerOutcome>>(workers) { i ->
             async(Dispatchers.Default) {
                 var trajectory = synchronized(lock) { sharedTrajectories[i].copy2D() }
@@ -840,7 +848,7 @@ object V6NativeOptimizer {
                     }
                     val result = try {
                         val progress: (String, ViolationReport?, Long, Long) -> Unit = { phase, rep, it, elapsed ->
-                            if (rep?.hard == 0) hardZeroWinner.compareAndSet(-1, i)
+                            if (hardRaceArmed && rep?.hard == 0) hardZeroWinner.compareAndSet(-1, i)
                             if (i == 0 || rep?.hard == 0) {
                                 onProgress(
                                     "適応portfolio W$i epoch${epoch + 1} ${AdaptiveHypothesisEpochPolicy.roleLabel(assignment)} / $phase",
@@ -861,7 +869,7 @@ object V6NativeOptimizer {
                     }
 
                     if (result != null) {
-                        if (result.report.hard == 0) hardZeroWinner.compareAndSet(-1, i)
+                        if (hardRaceArmed && result.report.hard == 0) hardZeroWinner.compareAndSet(-1, i)
                         iterations += result.iterations
                         archive.register(
                             result.schedule, result.report, assignment.role, i, epoch,

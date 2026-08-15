@@ -332,6 +332,18 @@ object V6FinalPort {
         // [停滞時間のログ出力] 発火の瞬間に「何ms無改善だったか」を記録する（ログ側で再計算すると
         //   後処理(runPostOptimization)の所要時間が混入し、実際に判定へ使った値とズレるため）。
         val stagnationDurationMs = java.util.concurrent.atomic.AtomicLong(-1)
+        // [3.375.0/ユーザー指示「停滞脱出のログにイテ回数と時間を出す」] 時刻だけでは
+        //   「そもそも回していないから改善が無い」のか「大量に回しても改善が無い」のかが区別できず、
+        //   停滞閾値が妥当かを実機ログから判断できなかった。進捗ストリームで観測した反復数を
+        //   「最終改善の瞬間」と「停滞発火の瞬間」に記録する。
+        //   ※各ワーカー/フェーズは**自分のカウンタ**を報告する（役割が変わると 0 から数え直す）ので、
+        //     単純な最大値だと最大の1本で頭打ちになり増分が見えない（実測で「無改善のまま0回転」と
+        //     出て誤りに気づいた）。フェーズ文字列ごとの増分を足し合わせて総量にする。
+        //     同じフェーズ文字列を2本が同時に報告するとその分は粗くなるが、桁の把握には十分。
+        val itersByPhase = HashMap<String, Long>()
+        val observedIters = java.util.concurrent.atomic.AtomicLong(0)
+        val lastBestImproveIters = java.util.concurrent.atomic.AtomicLong(0)
+        val stagnationIters = java.util.concurrent.atomic.AtomicLong(-1)
         val bestHard = java.util.concurrent.atomic.AtomicInteger(Int.MAX_VALUE)   // 並列ワーカーから読むため atomic
         // [hardFloor 精度] best の「非covU HARD」(groupViol/pref/c3n=解けるHARD)件数。hardFloor は構造的covU
         //   のみの下限なので、`bestHard<=hardFloor` だけだと、担当不可の過配置(groupViol)が covU を構造下限より
@@ -350,6 +362,10 @@ object V6FinalPort {
         val progressLock = Any()   // [競合解消] 並列ワーカーから呼ばれる best 追跡の read-modify-write を直列化
         val progressWatch: (String, ViolationReport?, Long, Long) -> Unit = { phase, report, iters, elapsed ->
             synchronized(progressLock) {
+                // [3.375.0] フェーズごとの増分を足して総反復数にする（同期ブロック内＝競合なし）。
+                val prevIt = itersByPhase[phase] ?: 0L
+                observedIters.addAndGet(if (iters >= prevIt) iters - prevIt else iters)
+                itersByPhase[phase] = iters
                 val base = phase.substringAfter("/ ").trim().ifEmpty { phase }   // 「仮説N本探索中 / 」接頭辞を除去
                 if (base != lastPhase) { lastPhase = base; lastPhaseChangeMs.set(System.currentTimeMillis()) }
                 if (report != null) {
@@ -363,6 +379,7 @@ object V6FinalPort {
                     val improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal)
                     if (improved) {
                         bestHard.set(h); bTotal = t; bWeighted = wgt; lastBestImproveMs.set(System.currentTimeMillis())
+                        lastBestImproveIters.set(observedIters.get())   // [3.375.0] 最終改善時点の反復数
                         // [3.346.0/実機ログ] 停滞ラッチを解除する。shouldStop は**単調でない**（改善が届けば
                         //   条件は偽に戻り、探索はそのまま締切まで走る）のに、旧実装は一度立った
                         //   stagnationFired を二度と降ろさなかった。実機ログ 2026-08-03 では 258s に発火 →
@@ -434,6 +451,7 @@ object V6FinalPort {
                 now >= searchDeadlineMs || !isActive -> true
                 watchdogStagnationFired(now, startMs, minRunMs, lastPhaseChangeMs.get(), phaseGraceMs, lastBestImproveMs.get(), effStall) -> {
                     stagnationDurationMs.set(now - lastBestImproveMs.get())
+                    stagnationIters.set(observedIters.get())   // [3.375.0] 停滞発火の瞬間の反復数
                     stagnationFired.set(true); true
                 }
                 else -> false
@@ -584,13 +602,20 @@ object V6FinalPort {
             listOf(MirrorLog(
                 level = "I", tag = "Watchdog",
                 message = "停滞監視: 最終改善=経過${((lastImp - startMs) / 1000).coerceAtLeast(0)}s・" +
-                    "探索終了時の停滞${endStallS}s・実効閾値($kind)・発火=${if (stagnationFired.get()) "あり" else "なし"}$wallNote",
+                    "探索終了時の停滞${endStallS}s・実効閾値($kind)・発火=${if (stagnationFired.get()) "あり" else "なし"}" +
+                    // [3.375.0] 時刻に加えて反復数も出す（「回していない」のか「回しても改善しない」のかの区別）。
+                    "・反復=最終改善時${fmtIter(lastBestImproveIters.get())}→探索終了時${fmtIter(observedIters.get())}" +
+                    "（無改善のまま${fmtIter(observedIters.get() - lastBestImproveIters.get())}回転）$wallNote",
             ))
         }
         val stagnationLog = if (stagnationFired.get()) listOf(MirrorLog(
             level = "I", tag = "EarlyStop",
             message = "停滞検知: 改善が無いため早期終了（予算${seconds}s中 ${(tPost1 - startMs) / 1000}sで停止・" +
-                "停滞${stagnationDurationMs.get() / 1000}s無改善・解は最良を維持）" +
+                "停滞${stagnationDurationMs.get() / 1000}s無改善" +
+                // [3.375.0] 何回転ぶん空回りしたか（時間だけでは実施量が読めない）。
+                (if (stagnationIters.get() >= 0)
+                    "・発火までに無改善のまま${fmtIter(stagnationIters.get() - lastBestImproveIters.get())}回転" else "") +
+                "・解は最良を維持）" +
                 // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                 (if (c3nWallResult.get() && bestNonCovUAllC3n.get()) "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）" else ""),
         )) else emptyList()
@@ -666,16 +691,36 @@ object V6FinalPort {
             val c3nWall = c3nWallResult.get() && bestNonCovUAllC3n.get()
             val walls = ArrayList<String>()
             val open = ArrayList<String>()
+            // [3.375.0/実機ログ起因] 構造床は**族ループより先に**計算する。旧実装は床を後から walls へ
+            //   足すだけで **open 側から差し引いていなかった**ため、同じ1行が
+            //   「もう直せない: weekly のうち57件 ／ まだ狙える: … weekly 159件」と出て
+            //   57+159=216 > 全体159 という自己矛盾になっていた（`weekly内訳` 行は正しく
+            //   159 = 床57 + 減らせる102 と出しており、この行だけが食い違っていた）。
+            val weeklyNow = bd["weekly"] ?: 0
+            val weeklyWall = if (weeklyNow <= 0) 0 else minOf(weeklyNow, runCatching {
+                val pw = cachedProblem(state); val cw = countMatrix(pw, finalSched)
+                var f = 0
+                for (i in 0 until pw.S) for (k in 0 until pw.K) f += weeklyFloorOfCount(cw[i][k])
+                f
+            }.getOrDefault(0))
+            val personalFloor = runCatching { V6SanityPort.structuralPersonalFloor(cachedProblem(state)) }.getOrDefault(0)
+            val aptHighNow = (bd["apt"] ?: 0) + (bd["high"] ?: 0)
+            // apt+high の床は**2族の和**に対して立つ（片方だけには割り振れない）ので、床が立つときは
+            //   open 側もまとめて "apt+high" の1項目として残りを出す。
+            val personalWall = if (personalFloor > 0 && aptHighNow > 0) minOf(personalFloor, aptHighNow) else 0
             for (key in MirrorKeys.all) {
-                val n = bd[key] ?: 0
-                if (n <= 0) continue
+                val n0 = bd[key] ?: 0
+                if (n0 <= 0) continue
+                if (personalWall > 0 && (key == "apt" || key == "high")) continue   // 下でまとめて出す
                 val structural = when {
-                    key == "covU" && hardFloor > 0 && n <= hardFloor -> "構造的下限"
+                    key == "covU" && hardFloor > 0 && n0 <= hardFloor -> "構造的下限"
                     key == "c3n" && c3nWall -> "証明済みの壁"
                     key in infeasLearned -> "探索が充足困難と学習"
                     else -> null
                 }
-                if (structural != null) walls.add("$key ${n}件($structural)") else open.add("$key ${n}件")
+                if (structural != null) { walls.add("$key ${n0}件($structural)"); continue }
+                val n = if (key == "weekly") n0 - weeklyWall else n0
+                if (n > 0) open.add("$key ${n}件")
             }
             // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。実機ログでは
             //   apt=30 のうち19件が桒澤美幸のB4（他シフトの上限合計11回では31日を埋めきれず B4 が最低20回
@@ -683,22 +728,12 @@ object V6FinalPort {
             //   個人上限は SOFT なので apt 単独の下限とは言えないが、上限を破った分は high に移るだけなので
             //   **apt+high の和**には真の下限が立つ（structuralPersonalFloor の KDoc 参照）。
             // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない（`weeklyFloorOfCount`）。
-            //   実機ログでは weekly 156件が丸ごと「まだ狙える」に入っていたが、実データ3件の実測では
-            //   40〜56%（golden 73/183・real 126/226・user 106/214）が床＝追っても減らない。
-            val weeklyNow = bd["weekly"] ?: 0
-            if (weeklyNow > 0) {
-                val wf = runCatching {
-                    val pw = cachedProblem(state); val cw = countMatrix(pw, finalSched)
-                    var f = 0
-                    for (i in 0 until pw.S) for (k in 0 until pw.K) f += weeklyFloorOfCount(cw[i][k])
-                    f
-                }.getOrDefault(0)
-                if (wf > 0) walls.add("weekly のうち${minOf(wf, weeklyNow)}件(回数が7の倍数でない＝配置では消せない)")
-            }
-            val personalFloor = runCatching { V6SanityPort.structuralPersonalFloor(cachedProblem(state)) }.getOrDefault(0)
-            val aptHighNow = (bd["apt"] ?: 0) + (bd["high"] ?: 0)
-            if (personalFloor > 0 && aptHighNow > 0) {
-                walls.add("apt+high のうち${minOf(personalFloor, aptHighNow)}件(個人の担当構成＝データ側)")
+            //   実データ3件の実測では 40〜56%（golden 73/183・real 126/226・user 106/214）が床＝追っても減らない。
+            if (weeklyWall > 0) walls.add("weekly のうち${weeklyWall}件(回数が7の倍数でない＝配置では消せない)")
+            if (personalWall > 0) {
+                walls.add("apt+high のうち${personalWall}件(個人の担当構成＝データ側)")
+                val rest = aptHighNow - personalWall
+                if (rest > 0) open.add("apt+high ${rest}件")
             }
             val wallTxt = if (walls.isEmpty()) "なし" else walls.joinToString(" / ")
             val openTxt = if (open.isEmpty()) "なし＝これ以上は追っても減りません" else open.joinToString(" / ")
@@ -719,6 +754,14 @@ object V6FinalPort {
         val postForResult = post.takeIf { finalSched.contentDeepEquals(it.schedule) }
         ActionResult(finalSched, finalReport.copy(logs = logs), "optimize:${label.tech}", busy, logs, postForResult,
             alternatives = chained.alternatives)
+    }
+
+    /** [3.375.0] 反復数を読める形に（例: 54476513 → 5,447万）。停滞ログで桁を一目で掴むため。 */
+    internal fun fmtIter(n: Long): String = when {
+        n < 0 -> "?"
+        n < 10_000 -> "${n}回"
+        n < 100_000_000 -> "%,d万回".format(n / 10_000)
+        else -> "%,d億回".format(n / 100_000_000)
     }
 
     fun checkResultWorse(before: ViolationReport?, after: ViolationReport): String? {

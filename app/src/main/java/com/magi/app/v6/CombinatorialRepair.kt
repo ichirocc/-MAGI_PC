@@ -38,6 +38,10 @@ internal object CombinatorialRepair {
         // [停滞検知, ユーザー指示「早期脱出しないのか?」への対応] 連続maxStagnantTries回不採用のまま
         //   進むと成立見込み薄と判断し早期break（truncated=時間切れ、こちらは無駄打ち回避で区別）。
         var stagnantExit = false
+        /** [3.375.0/ユーザー指示「停滞脱出のログにイテ回数と時間を出す」] 結合探索に費やしたミリ秒。
+         *  旧: 「200通り試行→無駄打ち回避で早期終了」と回数だけで、その空振りが一瞬なのか秒単位なのかが
+         *  読めず、打ち切り閾値(maxStagnantTries)が妥当かを実機ログから判断できなかった。 */
+        var elapsedMs = 0L
         val mechanismCounts = LinkedHashMap<String, Int>()
         val acceptedLabels = ArrayList<String>()
 
@@ -55,7 +59,7 @@ internal object CombinatorialRepair {
                 stagnantExit -> "→無駄打ち回避で早期終了"
                 else -> ""
             }
-            parts.add("結合探索: ${combosTried}通り試行$exitReason")
+            parts.add("結合探索: ${combosTried}通り試行${if (elapsedMs > 0) "/${elapsedMs}ms" else ""}$exitReason")
             if (combosAccepted > 0) {
                 val labelPart = if (acceptedLabels.isNotEmpty()) "(${acceptedLabels.joinToString(", ")})" else ""
                 parts.add("結合成立×$combosAccepted$labelPart")
@@ -93,6 +97,7 @@ internal object CombinatorialRepair {
         p: Problem? = null,
     ): ViolationReport {
         rejected.forEach(stats::onFeed)
+        val t0 = System.currentTimeMillis()   // [3.375.0] 結合探索に費やした時間（summary で出す）
         var bestRep = bestRepIn
         val pool = rejected.toMutableList()
         var misses = 0
@@ -146,6 +151,7 @@ internal object CombinatorialRepair {
             if (lbl.isNotBlank()) stats.acceptedLabels.add(lbl)
             for (idx in acceptedIdx.sortedDescending()) pool.removeAt(idx)
         }
+        stats.elapsedMs += System.currentTimeMillis() - t0
         return bestRep
     }
 
