@@ -40,6 +40,17 @@ class OptimizationWorker(
         return activeRunId(ctx) == mine
     }
 
+    /**
+     * [3.385.0] 耐久保証（kill 耐性）の書き込みが落ちたことを、書き出せる操作ログへ届ける。
+     * Worker はこのアプリの診断リング（`MagiViewModel.logOp`）へ直接触れないので Repository を経由する。
+     * 記録自体が失敗しても本処理は止めない。
+     */
+    private fun note(what: String, e: Throwable) {
+        runCatching {
+            OptimizationRepository.publishNote("バックグラウンド計算: $what: ${e.javaClass.simpleName}: ${e.message}")
+        }
+    }
+
     override suspend fun doWork(): Result {
         // 置き換え済み／停止済みの実行はここで降りる（共有ファイルへ触らない）。
         if (!ownsFiles()) return Result.success()
@@ -49,7 +60,10 @@ class OptimizationWorker(
         val req = OptimizationRepository.request ?: loadInputFromFile(ctx) ?: return Result.failure()
         ensureChannel()
         // [C1] 入力をファイルへ退避（現在は参照渡し）。kill後の再起動でここから復元できる。
+        // [3.385.0/外部レビュー High3] 失敗は無言にしない。ここが落ちると **kill 耐性そのものが消える**
+        //   （プロセスが終了したら実行は跡形もなく失われる）のに、旧実装は runCatching で握り潰していた。
         runCatching { inputFile(ctx).writeText(StateParser.serialize(req.first, req.second)) }
+            .onFailure { note("入力の退避に失敗（この実行は途中でプロセスが終了すると復元できません）", it) }
         OptimizationRepository.setRunning(true)
         // [P2修正/レビュー指摘] 予算秒数・並列数は WorkManager の inputData から復元する。
         //   旧: インメモリの OptimizationRepository のみで、プロセス再起動後は既定の 60秒/4並列 に
@@ -111,6 +125,7 @@ class OptimizationWorker(
                             // [3.327.0] 所有権を失っていたら書かない（8秒間引きの中なので追加I/Oは無視できる）。
                             if (ownsFiles()) {
                                 runCatching { snapshotFile(ctx).writeText(StateParser.serialize(req.first, live.toIntArray2D())) }
+                                    .onFailure { note("途中経過の退避に失敗（kill されると途中の改善が失われます）", it) }
                             }
                         }
                     }
@@ -130,8 +145,14 @@ class OptimizationWorker(
                     val json = StateParser.serialize(req.first, res.schedule)
                     val tmp = File(resultFile(ctx).parentFile, "magi_bg_result.json.tmp")
                     tmp.writeText(json)
+                    // [3.385.0/外部レビュー High1] 所有権の再確認を**置き換え直前**へ置く。
+                    //   TOCTOU の窓自体は消えない（完全に閉じるには run 別のファイル名が要る＝3.336.0 で
+                    //   復元経路ごと作り替えになるため見送り済み）。ここで縮むのは
+                    //   「直列化(数百KBのJSON)＋一時ファイル書き込み」のぶん＝ms 級 → μs 級。
+                    //   捨てるのは一時ファイルだけで、本物の resultFile には触らない。
+                    if (!ownsFiles()) { tmp.delete(); return@runCatching }
                     if (!tmp.renameTo(resultFile(ctx))) { resultFile(ctx).writeText(json); tmp.delete() }
-                }
+                }.onFailure { note("完了結果の保存に失敗（プロセスが終了すると結果が失われます）", it) }
                 OptimizationRepository.publishResult(
                     OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
                 )

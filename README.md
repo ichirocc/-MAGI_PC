@@ -23,7 +23,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-16（3.384.0 **R-09 解消**＝既定 OFF のトグル4つ（`filterC3nIncrease`/`wideC3nBreakDays`/
+**最終更新**：2026-08-16（3.385.0 外部レビュー（`OptimizationWorker` 10項目）を1件ずつ実コードへ当て、
+**指摘された理由とは別の実バグ**を1件見つけて修正。`publishLiveBest` は report にしか CAS が掛かっておらず、
+**盤面の代入が CAS の外**だったため、劣るスレッドが後から上書きして「評価は最良・盤面は劣る」食い違いが起きた
+（kill 復旧スナップショットが進捗を捨てる）。旧実装は新テストで **3/3 失敗（最良=1 に対し 987/1107/494）**＝
+理論上の窓でなく実際に大きく外していた。評価と盤面を1つの不変オブジェクトにして1回の CAS で publish する形へ。
+あわせて耐久保証の書き込み3箇所の無言の失敗を書き出しログへ流す経路（`OptimizationRepository.notes`）を新設。
+TOCTOU は**縮めたが閉じたとは言わない**（ms 級→μs 級・完全に閉じるには run 別ファイル名が要る）。
+ホストJVM **480テスト green**。3.384.0 **R-09 解消**＝既定 OFF のトグル4つ（`filterC3nIncrease`/`wideC3nBreakDays`/
 `adaptiveEscapeControl`/`portfolioRoleParallelSa`）が「消すのも怖いし試すのも面倒」で腐る問題に、
 `docs/algorithm_portfolio.md` へ**見直しの条件**（期限でなく「何をもって残す／再測定する／削除するか」）を明文化。
 未測定の `portfolioRoleParallelSa` を表へ追加し、規律8として「既定 OFF を増やすなら同時に条件を書く／

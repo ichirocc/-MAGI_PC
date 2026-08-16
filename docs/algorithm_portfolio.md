@@ -155,8 +155,16 @@ seed → 仮説 → refine → 研磨の一連を回すため、秒あたりの�
 | `adaptiveEscapeControl` | **n を増やして測るか、測れないと認めて削除するか。** PORTFOLIO の run 間ばらつき（実測幅 golden 207・real 295）に対し真の効果が 100 程度なら n≈30 が要る＝約6時間。**この反復を誰かが実際に回すまでは判定しない。** 回した結果が中立なら削除する（設計の筋の良さは残す理由にならない＝2.55.0 で戦略的振動を revert したのと同じ）。 |
 | `portfolioRoleParallelSa` | **実機で1回測るか、削除するか。** 唯一の「一度も測っていない」トグル。実機ログの `RunMAGI_V5: … SAチェーンN本` と `AdaptivePortfolio` の `合計iter`／`全体最良更新` を ON/OFF で比べれば判定できる（3.360.0 でこのログを足したのはこのため）。**次に実機ログを受け取る機会があれば必ず ON/OFF を1回ずつ取る。** 測れないまま次の大きな改修を迎えるなら削除する。 |
 
-いずれのトグルも `TuningTelemetry`（3.356.0）が「その実行で実際に何をしたか」を1行で出す。
-**ON なのに「この実行では観測なし」が毎回続くトグルは、測るまでもなく消してよい。**
+**どこを見れば「ONにした意味があったか」が分かるか**（判定に使う行が分かれているので明記する）:
+
+- `filterC3nIncrease` / `wideC3nBreakDays` / `adaptiveEscapeControl` → **`設定の効き` 行**
+  （`TuningTelemetry.summary()`・3.356.0）。ON なのに「この実行では観測なし」「既定と同じ範囲＝OFFと差なし」が
+  **毎回続くトグルは、測るまでもなく消してよい**。
+- `portfolioRoleParallelSa` → **`V6Dispatcher` 行**（`ロール内チェーンN本＝ロール内並列SA ON`）。
+  これは回数を数える性質のものではなく「ロールへ何本のチェーンを与えたか」という構成なので、
+  `TuningTelemetry` でなく実配線と同じ `portfolioRoleChainCount()` から表示している（3.372.0。
+  複製すると必ずドリフトするため単一ソースに寄せてある）。効果そのものは
+  `RunMAGI_V5: … SAチェーンN本` と `AdaptivePortfolio` の `合計iter`／`全体最良更新` で比べる。
 
 ### `StagnationEscapeController` の決定表（ON のときだけ効く）
 

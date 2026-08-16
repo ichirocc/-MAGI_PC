@@ -262,6 +262,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             OptimizationRepository.result.collect { r -> if (r != null) applyBgResult(r) }
         }
+        // [3.385.0/外部レビュー High3] Worker が握り潰していた耐久保証（kill 耐性）の失敗を操作ログへ。
+        //   旧: 入力・途中最良・完了結果の書き込みが全て runCatching で無言＝失敗しても書き出したログに
+        //   1行も残らず、「5分回した実行が消えた」理由を後から追えなかった。
+        viewModelScope.launch {
+            OptimizationRepository.notes.collect { logOp("W", it) }
+        }
     }
 
     /** バックグラウンド（WorkManager / Expedited）で最適化を開始。完了時に通知＋画面反映。 */

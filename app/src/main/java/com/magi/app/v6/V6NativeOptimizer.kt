@@ -272,22 +272,43 @@ object V6NativeOptimizer {
      *  最良でも有効な解」としていたが、実際には各仮説/チェーンが**自分のローカル最良**を無条件に書くため、
      *  劣った仮説が後から書き込むと途中結果(kill復旧用)の品質が非単調に退行し得た）。[liveBestReport]で
      *  CAS管理する真のグローバル最良のときだけ更新する（[publishLiveBest]経由。better()と同一基準）。 */
-    @Volatile var liveBest: List<List<Int>>? = null
-        private set
-    private val liveBestReport = java.util.concurrent.atomic.AtomicReference<ViolationReport?>(null)
+    val liveBest: List<List<Int>>? get() = liveBestRef.get()?.board
+
+    /**
+     * [3.385.0] 評価と盤面を**1つの不変オブジェクト**にして1回の CAS で publish する。
+     *
+     * 旧実装は「report を CAS → 成功したら liveBest へ代入」の2段だった。CAS は report を単調にするが、
+     * **盤面の代入は CAS の外**なので次の順で割り込める:
+     *   A: CAS(null → 必須3) 成功 → 盤面コピー(O(職員×日))の途中でプリエンプト
+     *   B: CAS(必須3 → 必須1) 成功 → 盤面B を書く
+     *   A: 再開して**盤面A（劣る方）で上書き**
+     * 結果 `liveBestReport` は必須1 なのに `liveBest` は必須3 の盤面＝**両者が食い違い、
+     * 途中最良が退行する**（docstring が「退行を防ぐ」と謳っていた不変条件そのものが破れる）。
+     * 8並列ワーカーが同時に publish し、間に O(310) のコピーが挟まるので稀ではない。
+     *
+     * 実害は誤った勤務表ではない（採用は必ず checker の keep-best が決める）。破れるのは
+     * ①kill 復旧用スナップショット(`magi_bg_best.json`)が最良より劣る盤面になり進捗を捨てる
+     * ②ライブ表示の数字と盤面が食い違う、の2点。
+     */
+    private class LiveBestSnapshot(val report: ViolationReport, val board: List<List<Int>>)
+
+    private val liveBestRef = java.util.concurrent.atomic.AtomicReference<LiveBestSnapshot?>(null)
 
     /** [敵対的レビュー修正] liveBest を真にグローバルな最良のときだけ更新する。呼出元のローカル
      *  best/report が既存の liveBest より劣る/同値なら何もしない＝退行を防ぐ。 */
     internal fun publishLiveBest(report: ViolationReport, schedule: Array<IntArray>) {
+        // 盤面コピーは「勝ち目がある」と分かってから1回だけ。負ける呼出（多数）はコピーを払わない。
+        var snap: LiveBestSnapshot? = null
         while (true) {
-            val cur = liveBestReport.get()
-            if (cur != null && !better(report, cur)) return
-            if (liveBestReport.compareAndSet(cur, report)) {
-                liveBest = schedule.map { it.toList() }
-                return
-            }
+            val cur = liveBestRef.get()
+            if (cur != null && !better(report, cur.report)) return
+            if (snap == null) snap = LiveBestSnapshot(report, schedule.map { it.toList() })
+            if (liveBestRef.compareAndSet(cur, snap)) return
         }
     }
+
+    /** テスト専用（`optimize()` を回さずに publish の不変条件だけを検査するため）。 */
+    internal fun resetLiveBestForTest() { liveBestRef.set(null) }
 
     /**
      * [3.335.0/外部レビュー P1] この実行だけの成果物入れ（[RunSlot]）を作り、コルーチンのコンテキストで
@@ -312,8 +333,7 @@ object V6NativeOptimizer {
         lastAlternatives = emptyList()
         lastFusionElites = emptyList()
         clearInfeasible()   // [3.288.0/状態軸] この実行の HF63 学習をゼロから集約する
-        liveBest = null
-        liveBestReport.set(null)
+        liveBestRef.set(null)
         val r = withContext(RunSlotElement(slot)) {
             optimizeInSlot(state, initial, options, shouldStop, onProgressRaw, stopIsFinal)
         }
