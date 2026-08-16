@@ -2495,7 +2495,7 @@ object V6NativeOptimizer {
         return (after - before).toLong()
     }
 
-    private fun destroyRepairDayAt(state: MagiState, schedule: Array<IntArray>, j: Int, rng: Random) {
+    internal fun destroyRepairDayAt(state: MagiState, schedule: Array<IntArray>, j: Int, rng: Random) {
         val p = cachedProblem(state)
         if (p.T == 0) return
         // [soft-aware destroy-repair / 実測検証 tools/nsp_bench.py] 従来はランダム順で穴を埋めるだけ(soft無視)で、
@@ -2543,9 +2543,14 @@ object V6NativeOptimizer {
         // repair: 各勤務シフトの需要を soft(個人 low/high/apt/weekly/fair ＋ 群レンジ c41)最小の休スタッフで満たす。
         for (k in 0 until p.K) {
             if (k == rest) continue   // [監査#2] 休以外の全シフトを対象（旧: k in 1..K-1 の「0=休」前提）
-            val need = p.need1[k][j]
-            if (need <= 0) continue
-            var miss = need - covJ[k]
+            // [3.379.0/need1直参照の第4世代] 旧: `p.need1[k][j] <= 0 → continue` で
+            //   **need2 単独定義の需要を丸ごと素通り**していた（need1 未設定は -1）。3.173.0
+            //   (CoverageDiagnosis)・3.309.0(isBalanceable)・3.369.0(初期解生成2つ+findCovOFix)で
+            //   同じ穴を潰したのに、**RSI/ALNS 修復の中核であるこの2関数が取り残されていた**＝
+            //   そのデータでは covU(HARD, 重み8000) を修復オペレータが原理的に埋められない。
+            //   source of truth の `covUCell`（片方定義=その値）へ委譲する。
+            var miss = p.covUCell(k, j, covJ[k])
+            if (miss <= 0) continue
             while (miss > 0) {
                 var bestI = -1; var bestDelta = Long.MAX_VALUE; var tied = 0
                 for (i in 0 until p.S) {
@@ -2577,7 +2582,7 @@ object V6NativeOptimizer {
         destroyRepairStaffAt(state, schedule, rng.nextInt(p.S), rng)
     }
 
-    private fun destroyRepairStaffAt(state: MagiState, schedule: Array<IntArray>, i: Int, rng: Random) {
+    internal fun destroyRepairStaffAt(state: MagiState, schedule: Array<IntArray>, i: Int, rng: Random) {
         val p = cachedProblem(state)
         val allowed = p.allowedShiftsForStaff(i)
         if (allowed.isEmpty()) return
@@ -2617,9 +2622,9 @@ object V6NativeOptimizer {
             var bestK = -1; var bestDelta = Long.MAX_VALUE; var tied = 0
             for (k in 0 until p.K) {
                 if (k == rest || !p.canDo(i, k)) continue
-                val need = p.need1[k][j]
-                if (need <= 0) continue
-                if (cov[j][k] >= need) continue
+                // [3.379.0/同上] need2 単独定義の穴を塞ぐ。`covUCell<=0` は「需要なし」と
+                //   「既に足りている」の両方を同時に表すので、旧2条件をこれ1つで置き換えられる。
+                if (p.covUCell(k, j, cov[j][k]) <= 0) continue
                 val delta = staffCountPenaltyAt(p, i, k, cntI[k] + 1) - staffCountPenaltyAt(p, i, k, cntI[k]) +
                     weeklyMarginalAt(wd, bucket, rest, k) +
                     fairMarginalAt(p, i, rest, -1, counts, grpTotal) +

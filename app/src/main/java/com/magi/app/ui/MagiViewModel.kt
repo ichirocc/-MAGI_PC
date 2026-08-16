@@ -153,6 +153,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private val opLog = ArrayDeque<OpLogEntry>()
     // 診断ログの「非圧縮・全文」を保持（画面表示は compressDiagLogs で圧縮、出力はこちらの全文を使う）。
     private var rawDiagLogs: List<String> = emptyList()
+    /**
+     * [3.379.0/実機ログ起因] **最後に実行したエンジンの診断ログ**（ラベル・時刻つき）。
+     *
+     * `rawDiagLogs` は `pushReport` のたびに丸ごと差し替わる。ところが `refreshCheck` も pushReport を通るので、
+     * **最適化のあとにセルや希望を1つ触るだけで TIME/TimeBudget/スコア収支/Watchdog/残存分析/AdaptivePortfolio/
+     * POST が全部消える**（実機ログ 3.378.0: 14:04 に最適化 → 14:16-14:17 に希望を編集 → 20:50 に書き出し、で
+     * 診断67件が違反チェックの分だけ＝最適化の診断がゼロ）。「作る → 見る → 直す」という実際の使い方では
+     * ほぼ必ずこうなるので、書き出したログで最適化を追えないという致命的な穴だった。
+     * エンジン実行のときだけここへ退避し、書き出しでは現在の診断と**別セクション**で併記する。
+     */
+    private var lastRunDiagLogs: List<String> = emptyList()
+    private var lastRunDiagLabel: String = ""
+    private var lastRunDiagAtMs: Long = 0L
     private val opLogFmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.JAPAN)
 
     /**
@@ -703,7 +716,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 autoSave()
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
-                pushReport(state ?: st, res.schedule, res.report) { it.copy(
+                pushReport(state ?: st, res.schedule, res.report, runLabel = "初期解生成") { it.copy(
                     running = false,
                     hasResult = true,
                     iters = 0,
@@ -740,7 +753,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 autoSave()
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
-                pushReport(state ?: st, res.schedule, res.report) { it.copy(
+                pushReport(state ?: st, res.schedule, res.report, runLabel = "簡易作成") { it.copy(
                     running = false,
                     hasResult = true,
                     iters = 0,
@@ -801,7 +814,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = res.schedule.copy2D()
                 state = runState.withSchedule(res.schedule)
                 val ips = if (res.elapsedMs > 0) res.totalIters * 1000 / res.elapsedMs else 0
-                pushReport(state ?: runState, res.schedule, report) { it.copy(
+                pushReport(state ?: runState, res.schedule, report, runLabel = "高速計算") { it.copy(
                     running = false,
                     hasResult = true,
                     iters = res.totalIters,
@@ -859,7 +872,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
                 val ips = if (res.elapsedMs > 0) res.iterations * 1000 / res.elapsedMs else 0
-                pushReport(state ?: st, res.schedule, res.report) { it.copy(
+                pushReport(state ?: st, res.schedule, res.report, runLabel = "軽量最適化") { it.copy(
                     running = false,
                     hasResult = true,
                     iters = res.iterations,
@@ -1080,7 +1093,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                             // [3.378.0] 最良更新の行に**その時点の値**を載せる。旧: 「いつ改善したか」は
                             //   出るのに「いくつになったか」が無く、改善の軌跡（例 366→…→294）がログから
                             //   一切追えなかった（スコアの数字は最初の必須改善行と最後の完了行の2点のみ）。
-                            val score = if (important && rep != null) "・必須${rep.hard} 合計${rep.total}" else ""
+                            // [3.379.0/実機ログ起因] **重みも出す**。3.378.0 で必須/合計だけを載せたが、
+                            //   実機ログの軌跡が 540→522→482→430→**467**→452 と途中で合計が増えて見え、
+                            //   「最良更新なのに悪化している」という読めない行になった。keep-best は
+                            //   hard→weightedScore→total（3.287.0）なので合計の増加は weighted の改善と
+                            //   引き換えの正しい取引だが、重みが無いとそれが確かめられない（スコア収支と同じ理由）。
+                            val score = if (important && rep != null)
+                                "・必須${rep.hard} 合計${rep.total} 重み${rep.weightedScore.toLong()}" else ""
                             logOp("I", "探索フェーズ: $base（経過${wallElapsed / 1000}秒$score）")
                             phaseNameLastLogMs[nameKey] = wallElapsed
                             lastPhaseLogMs = wallElapsed
@@ -1132,7 +1151,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     autoSave()
                     resultSchedule = res.schedule.copy2D()
                     state = st0.withSchedule(res.schedule)
-                    pushReport(state ?: st0, res.schedule, res.report) { it.copy(
+                    pushReport(state ?: st0, res.schedule, res.report, runLabel = "最適化") { it.copy(
                         running = false,
                         hasResult = true,
                         itersPerSec = if (it.elapsedMs > 0) it.iters * 1000 / it.elapsedMs else 0,
@@ -1225,7 +1244,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = finalSched
                 state = st0.withSchedule(finalSched)
                 val gain = baseReport.total - finalReport.total
-                pushReport(state ?: st0, finalSched, finalReport) { it.copy(
+                pushReport(state ?: st0, finalSched, finalReport, runLabel = "仕上げ最適化") { it.copy(
                     running = false,
                     hasResult = true,
                     message = if (gain > 0)
@@ -2601,6 +2620,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             ops.forEach { append(it).append('\n') }
             append("\n==== 診断ログ（全文 ${logs.size}件）====\n")
             logs.forEach { append(it).append('\n') }
+            // [3.379.0] 最適化のあとに1回でも編集/再チェックすると診断が丸ごと入れ替わるため、
+            //   直近のエンジン実行ぶんを別セクションで必ず残す（同一なら重複させない）。
+            val run = lastRunDiagLogs
+            if (run.isNotEmpty() && run !== logs && run != logs) {
+                val at = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.JAPAN)
+                    .format(java.util.Date(lastRunDiagAtMs))
+                append("\n==== 直近の$lastRunDiagLabel の診断ログ（$at 時点・全文 ${run.size}件）====\n")
+                append("※上の診断ログはその後の編集/再チェックで作り直された最新版です。こちらは実行時のもの。\n")
+                run.forEach { append(it).append('\n') }
+            }
         }
     }
 
@@ -2618,6 +2647,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         o.put("satisfactionMeaning", "0-100の進捗スコア（必須・合計違反の減少度）。希望充足率ではありません")
         o.put("opLog", org.json.JSONArray().apply { _ui.value.opLog.forEach { put(it) } })
         o.put("diagLog", org.json.JSONArray().apply { rawDiagLogs.ifEmpty { _ui.value.logs }.forEach { put(it) } })
+        // [3.379.0] テキスト版と同じ理由＝最適化後の編集で diagLog は作り直されるため実行時のぶんも残す。
+        if (lastRunDiagLogs.isNotEmpty()) {
+            o.put("lastRunLabel", lastRunDiagLabel)
+            o.put("lastRunAt", lastRunDiagAtMs)
+            o.put("lastRunDiagLog", org.json.JSONArray().apply { lastRunDiagLogs.forEach { put(it) } })
+        }
         o.put("breakdown", org.json.JSONObject().apply { _ui.value.breakdown.forEach { (k, v) -> put(k, v) } })
         return o.toString(2)
     }
@@ -2918,12 +2953,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         schedule: Array<IntArray>,
         report: ViolationReport,
         nonCancellable: Boolean = false,
+        /** [3.379.0] エンジン実行の結果を押すときだけ非 null（"最適化" 等）。診断を退避する印。 */
+        runLabel: String? = null,
         transform: (UiState) -> UiState = { it },
     ) {
         val analysis =
             if (nonCancellable) withContext(NonCancellable) { analyzeParallel(st, schedule, report) }
             else analyzeParallel(st, schedule, report)
         rawDiagLogs = analysis.rawDiagLogs
+        if (runLabel != null) {
+            lastRunDiagLogs = analysis.rawDiagLogs
+            lastRunDiagLabel = runLabel
+            lastRunDiagAtMs = System.currentTimeMillis()
+        }
         _ui.update { base -> makeUi(st, schedule, report, analysis, transform(base)) }
     }
 

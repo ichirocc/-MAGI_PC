@@ -641,8 +641,8 @@ object V6PortAnalyzer {
         var out = 0
         for (j in 0 until p.T) {
             for (k in 0 until p.K) {
-                val need = p.need1[k][j]
-                if (need > 0) out += need
+                // [3.379.0] need2 単独定義の需要も数える（`covUCell(k,j,0)` = 誰も置かないときの不足＝実効需要）。
+                out += p.covUCell(k, j, 0)
             }
         }
         return out
@@ -654,9 +654,10 @@ object V6PortAnalyzer {
             var shortfall = 0
             val parts = ArrayList<String>()
             for (k in 0 until p.K) {
-                val need = p.need1[k][j]
-                if (need < 0) continue
-                val miss = (need - cov[j][k]).coerceAtLeast(0)
+                // [3.379.0] 同上。need1 だけ見ると need2 単独定義シフトの不足が日別リスクに出なかった。
+                val miss = p.covUCell(k, j, cov[j][k])
+                val need = p.covUCell(k, j, 0)
+                if (need <= 0) continue
                 shortfall += miss
                 if (miss > 0) {
                     val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()

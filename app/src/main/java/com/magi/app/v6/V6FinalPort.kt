@@ -560,8 +560,12 @@ object V6FinalPort {
                     stagnated -> "停滞検知で早期終了済み（無改善なら早く返す方針）"
                     else -> "違反が残っていない"
                 }
+                // [3.379.0/レビュー] `extraMs` は予約枠(postReserveMs)でクランプ済みなので、これを「予算残」と
+                //   呼ぶと**未使用の予算を過小に報告する**（300s 予算で 150s に停滞終了すると実際は約145s 余るのに
+                //   「予算残25s」と出る）。まさにその無駄を見せるための行なので、実測の残りを主に出す。
+                val leftMs = (hardDeadlineMs - tPost1).coerceAtLeast(0L)
                 extraLog = listOf(MirrorLog(level = "I", tag = "ExtraRefine",
-                    message = "予算残${extraMs / 1000}sだが追加精製は実行せず: $why"))
+                    message = "予算残${leftMs / 1000}s（追加精製に使える上限は予約枠の${extraMs / 1000}s）だが実行せず: $why"))
             }
             if (extraMs >= 5_000 && canExtra) {
                 val extraDeadline = tPost1 + extraMs
@@ -873,7 +877,10 @@ object V6FinalPort {
                 prev = st.r
             }
             // 「時間を使ったのに1点も動かなかった段」を名指しする（どこを削れるかの判断材料）。
+            // [3.379.0/レビュー] **探索も対象に入れる**。旧: 統合/後処理/追加精製しか写像しておらず、
+            //   いちばん時間を食う探索（実測 golden 20s 中 12.0s）が `(±0)` でも名前が出なかった。
             val ms = mapOf(
+                "探索" to (tChain1 - tFirst0),
                 "統合" to (tIntegration1 - tChain1), "後処理" to (tPost1 - tIntegration1),
                 "追加精製" to (tExtra1 - tPost1),
             )

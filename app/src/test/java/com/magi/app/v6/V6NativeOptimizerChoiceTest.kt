@@ -1097,4 +1097,47 @@ class V6NativeOptimizerChoiceTest {
             V6NativeOptimizer.confirmStop({ true }, deadline = Long.MAX_VALUE, stopIsFinal = { true }))
         assertTrue("待たない", System.currentTimeMillis() - t0 < 1_000L)
     }
+
+    /**
+     * [3.379.0/need1直参照の第4世代] `need2` **だけ**で需要が定義されたシフト（`need1` は未設定＝-1）を、
+     * RSI/ALNS 修復の中核 `destroyRepairDayAt` / `destroyRepairStaffAt` が丸ごと素通りしていた
+     * （旧: `p.need1[k][j] <= 0 → continue`）。そのデータでは covU(HARD, 重み8000) を修復オペレータが
+     * 原理的に埋められない。3.173.0 / 3.309.0 / 3.369.0 で同じ穴を潰した先の、4世代目の取り残し。
+     *
+     * fixture は need2 単独定義（`Shift(need1="", need2="1")`）＋use2 有効。旧実装なら休のまま、
+     * 修正後は covUCell 経由で需要を認識して埋める。
+     */
+    private fun need2OnlyState(): MagiState = MagiState(
+        startDate = "2026-09-01", endDate = "2026-09-01",
+        shifts = listOf(Shift("休", "休", "", ""), Shift("X", "X", "", "1")),
+        groups = listOf(Group("G", "G")),
+        staff = listOf(Staff("A", 0)),
+        use2Patterns = true,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = listOf(listOf(0)),           // A=休 ＝ X が need2=1 に対し0人＝covU 1
+        wishes = emptyMap(), staffRange = emptyMap(),
+        needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    )
+
+    @Test
+    fun dayRepairFillsDemandDefinedOnlyByNeed2() {
+        val st = need2OnlyState()
+        assertEquals("前提: need2 単独でも covU が立つ", 1, cachedProblem(st).covUCell(1, 0, 0))
+        val sched = arrayOf(intArrayOf(0))
+        V6NativeOptimizer.destroyRepairDayAt(st, sched, 0, Random(1))
+        assertEquals("need2 単独定義の需要を埋める", 1, sched[0][0])
+        assertEquals("covU が解消する", 0, UnifiedViolationChecker.check(st, sched).breakdown["covU"] ?: 0)
+    }
+
+    @Test
+    fun staffRepairFillsDemandDefinedOnlyByNeed2() {
+        val st = need2OnlyState()
+        val sched = arrayOf(intArrayOf(0))
+        V6NativeOptimizer.destroyRepairStaffAt(st, sched, 0, Random(1))
+        assertEquals("need2 単独定義の需要を埋める", 1, sched[0][0])
+        assertEquals("covU が解消する", 0, UnifiedViolationChecker.check(st, sched).breakdown["covU"] ?: 0)
+    }
 }
