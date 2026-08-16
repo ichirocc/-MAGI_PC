@@ -23,7 +23,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-16（3.383.0 ユーザー指示「検証できないと見送った項目をログ強化」＝このセッションで
+**最終更新**：2026-08-16（3.384.0 **R-09 解消**＝既定 OFF のトグル4つ（`filterC3nIncrease`/`wideC3nBreakDays`/
+`adaptiveEscapeControl`/`portfolioRoleParallelSa`）が「消すのも怖いし試すのも面倒」で腐る問題に、
+`docs/algorithm_portfolio.md` へ**見直しの条件**（期限でなく「何をもって残す／再測定する／削除するか」）を明文化。
+未測定の `portfolioRoleParallelSa` を表へ追加し、規律8として「既定 OFF を増やすなら同時に条件を書く／
+条件を書けない機構は温存する資格が無い」を追加。docs のみ・コード不変。3.383.0 ユーザー指示
+「検証できないと見送った項目をログ強化」＝このセッションで
 **私が推論に頼るしかなかった**箇所をログ側から潰した。①**`stop()` の前景経路にログが1つも無かった**
 （背景だけ出す非対称）＝3.381.0 で「異常終了4件は停止を押した実行」と結論できたのは状況証拠からの推論で、
 押した事実はログに1行も無かった → 対象（計算/改善探索/違反チェック）つきで記録 ②`optimizeInFlight()` の
