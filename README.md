@@ -23,7 +23,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-16（3.380.0 添付ログ（3.378.0搭載機）を数字の整合で総当たりし、**同じ report の中で
+**最終更新**：2026-08-16（3.381.0 添付ログの時系列追跡で**停止処理が丸ごと飛んでいた**ことを特定・修正。
+3.372.0 のフォールバックが実機で**11実行中4件**発火しており、共通点は「直後にユーザーが編集を始めている」＝
+停止を押した実行だった。停止ハンドラが `withContext(NonCancellable + Default)` を checker にだけ掛けており、
+**そこを抜けて既にキャンセル済みの外側へ再開する時点で新しい CancellationException が投げられ**、続く
+`pushReport` と終端 `logOp` が飛んでいた（CancellationException なのでアプリは落ちず静かに消える）。実害は
+①停止の終端ログが残らない ②**keep-best の結果が UI に届かず画面が探索中の数字のまま**（実機ログで裏取り＝
+停止直後の再チェックが必須69 なのに停止直前の表示は必須3）。ハンドラ全体を NonCancellable で包み、
+`pushReport` を `runCatching` で囲んで UI メッセージと終端ログだけは必ず残す形へ。3.380.0 添付ログ（3.378.0搭載機）を数字の整合で総当たりし、**同じ report の中で
 矛盾している行**を1件発見・修正＝`UnifiedCheck covO=23` / `CoverageDiag 合計23 — 14枠` に対し
 **`違反詳細 covO(14件)`**（場所数を件数として出力）。被覆セクションの `emit` だけ 3.282.0 の `fires` を
 渡しておらず、他族が `件数F・場所N箇所` と書き分けているのに covO/covU だけ取り残されていた。covU は 3件/3枠 で

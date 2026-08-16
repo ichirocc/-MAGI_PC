@@ -1176,20 +1176,39 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [停止 keep-best] 中断時は実行中の(未採用の)途中盤面ではなく、直前に確定していた
                 //   入力解(sched0)をそのまま保持し、表示の違反数も実際の盤面に合わせる。これにより
                 //   「必須=0だったのに停止したら必須が増えて見える」不整合を防ぐ（完了時のkeep-bestと同じ思想）。
-                val kept = sched0.copy2D()
-                val keptReport = withContext(NonCancellable + Dispatchers.Default) {
-                    UnifiedViolationChecker.check(st0, kept)
+                // [3.381.0/実機ログで原因特定] **ハンドラ全体**を NonCancellable で包む。旧実装は
+                //   `withContext(NonCancellable + Default)` を checker にだけ掛けており、**その直後に
+                //   外側の（既にキャンセル済みの）コンテキストへ再開する時点で CancellationException が
+                //   新たに投げられ**、続く `pushReport` と `logOp("停止: …")` が丸ごと飛んでいた。
+                //   実害は2つ: ①停止の終端ログが残らない（実機ログ 3.378.0 で 11実行中4件が
+                //   `最適化 終了: …いずれも記録されませんでした` になった＝3.372.0 のフォールバックが
+                //   拾った正体） ②`_ui` に keep-best の結果が届かず、**画面は探索中の途中盤面の数字のまま**
+                //   （データは kept に戻っているのに表示だけ食い違う＝このコメントが防ぐと謳っている
+                //   まさにその不整合）。実機ログで裏取り: 11:48:38開始→11:48:57停止のあと、次の
+                //   違反チェックが 必須=69 なのに停止直前の表示は 必須=3 だった。
+                withContext(NonCancellable) {
+                    val kept = sched0.copy2D()
+                    val keptReport = withContext(Dispatchers.Default) {
+                        UnifiedViolationChecker.check(st0, kept)
+                    }
+                    currentSchedule = kept
+                    resultSchedule = kept
+                    state = st0.withSchedule(kept)
+                    // 診断(analyzeParallel)が落ちても終端ログだけは必ず残す（原因に依存しない保証）。
+                    runCatching {
+                        pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
+                            running = false,
+                            hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
+                        ) }
+                    }.onFailure { t ->
+                        _ui.update { it.copy(running = false, hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。") }
+                        logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}")
+                    }
+                    logOp("I", "停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                    terminalLogged = true
                 }
-                currentSchedule = kept
-                resultSchedule = kept
-                state = st0.withSchedule(kept)
-                pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
-                    running = false,
-                    hasResult = true,
-                    message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                ) }
-                logOp("I", "停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
-                terminalLogged = true
                 throw e
             } catch (e: Exception) {
                 // [3.271.0, 実機ログ起因] 失敗を操作ログにも残す。旧: message のみのため、書き出した
@@ -1201,7 +1220,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
-                if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（診断の実行中に例外が出た可能性）")
+                if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。Error(OOM等)や停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1256,22 +1275,31 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 terminalLogged = true
             } catch (e: CancellationException) {
                 // [停止 keep-best] 中断時は直前の確定盤面を保持し表示も整合させる。
-                val kept = sched0.copy2D()
-                val keptReport = withContext(NonCancellable + Dispatchers.Default) {
-                    UnifiedViolationChecker.check(st0, kept)
+                // [3.381.0] 最適化側と同型の修正＝ハンドラ全体を NonCancellable で包む（理由は同関数のコメント参照）。
+                withContext(NonCancellable) {
+                    val kept = sched0.copy2D()
+                    val keptReport = withContext(Dispatchers.Default) {
+                        UnifiedViolationChecker.check(st0, kept)
+                    }
+                    currentSchedule = kept
+                    resultSchedule = kept
+                    state = st0.withSchedule(kept)
+                    runCatching {
+                        pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
+                            running = false,
+                            hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
+                        ) }
+                    }.onFailure { t ->
+                        _ui.update { it.copy(running = false, hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。") }
+                        logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}")
+                    }
+                    // [3.372.0] 旧: この分岐だけ logOp が1つも無く、停止すると終端行がゼロになっていた
+                    //   （最適化側の「停止: …を保持」に対する対象漏れ）。
+                    logOp("I", "ソフト研磨 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                    terminalLogged = true
                 }
-                currentSchedule = kept
-                resultSchedule = kept
-                state = st0.withSchedule(kept)
-                pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
-                    running = false,
-                    hasResult = true,
-                    message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                ) }
-                // [3.372.0] 旧: この分岐だけ logOp が1つも無く、停止すると終端行がゼロになっていた
-                //   （最適化側の「停止: …を保持」に対する対象漏れ）。
-                logOp("I", "ソフト研磨 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
-                terminalLogged = true
                 throw e
             } catch (e: Exception) {
                 logOp("W", "ソフト研磨 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
@@ -1280,7 +1308,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
-                if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（診断の実行中に例外が出た可能性）")
+                if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。Error(OOM等)や停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
