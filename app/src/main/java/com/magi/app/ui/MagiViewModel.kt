@@ -787,6 +787,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var lastUiMs = 0L
         optimizeActive = true   // [3.328.0] 検査の完了でこの実行中が解除されないようにする
         job = viewModelScope.launch {
+            var terminalLogged = false   // [3.382.0] 終端ログの保証（runV6FullOptimize と同じ理由）
             try {
                 val res = withContext(Dispatchers.Default) {
                     // [Main負荷回避] Problem/Evaluator の構築（同期CPU）も Default で行う（他経路と統一）。
@@ -822,33 +823,50 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     elapsedMs = res.elapsedMs,
                     message = "高速計算完了: 必須=${report.hard} 合計=${report.total} (${res.totalIters}反復, ${res.elapsedMs}ms)",
                 ) }
+                logOp("I", "高速計算 完了 必須=${report.hard} 合計=${report.total}")
+                terminalLogged = true
             } catch (e: CancellationException) {
                 // [停止 keep-best] 中断時は途中(未採用)盤面ではなく直前に確定していた入力解を保持し表示も整合させる。
-                val kept = sched0.copy2D()
-                val keptReport = withContext(NonCancellable + Dispatchers.Default) {
-                    UnifiedViolationChecker.check(runState, kept)
+                // [3.382.0] 3.381.0 と同型の穴がここにも残っていた＝NonCancellable を checker にだけ掛けると、
+                //   その直後に既にキャンセル済みの外側へ再開する時点で新しい CancellationException が投げられ、
+                //   pushReport と終端ログが飛ぶ。ハンドラ全体を包む。
+                withContext(NonCancellable) {
+                    val kept = sched0.copy2D()
+                    val keptReport = withContext(Dispatchers.Default) {
+                        UnifiedViolationChecker.check(runState, kept)
+                    }
+                    currentSchedule = kept
+                    resultSchedule = kept
+                    state = runState.withSchedule(kept)
+                    runCatching {
+                        pushReport(state ?: runState, kept, keptReport, nonCancellable = true) { it.copy(
+                            running = false,
+                            hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
+                        ) }
+                    }.onFailure { t -> logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}") }
+                    logOp("I", "高速計算 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                    terminalLogged = true
                 }
-                currentSchedule = kept
-                resultSchedule = kept
-                state = runState.withSchedule(kept)
-                pushReport(state ?: runState, kept, keptReport, nonCancellable = true) { it.copy(
-                    running = false,
-                    hasResult = true,
-                    message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                ) }
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // [review D] 失敗時は進捗中に書き込んだメトリクス（反復数・速度・経過）を消す。
                 //   「事故前データ」を失敗メッセージの脇に残さない。hasResult は開始時に false 済み。
-                logOp("W", "高速計算 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す（サイレント死の防止）
+                // [3.382.0] `Exception` → `Throwable`（Error も終端ログを残す。理由は runV6FullOptimize のコメント）。
+                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
+                logOp("W", "高速計算 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す（サイレント死の防止）
+                terminalLogged = true
                 _ui.update { it.copy(
                     running = false, hasResult = false,
                     iters = 0, itersPerSec = 0, elapsedMs = 0,
-                    message = "最適化失敗: ${e.message}",
+                    message = "最適化失敗: $kind: ${e.message}",
                 ) }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
+                // [3.382.0/ユーザー指示「完了・停止・失敗のいずれも記録されるログ強化」] 終端ログの保証を
+                //   長い実行の全経路へ広げる（旧: runV6FullOptimize と runSoftPolish だけ）。
+                if (!terminalLogged) logOp("W", "高速計算 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -865,6 +883,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(running = true, hasResult = false, message = "軽量最適化中…") }
         optimizeActive = true   // [3.328.0]
         job = viewModelScope.launch {
+            var terminalLogged = false   // [3.382.0] 終端ログの保証
             try {
                 val res = withContext(Dispatchers.Default) { LightMirrorOptimizer.optimize(st, sched, _ui.value.budgetSec.toDouble()) }
                 currentSchedule = res.schedule.copy2D()
@@ -880,27 +899,39 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     elapsedMs = res.elapsedMs,
                     message = "軽量最適化完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
+                logOp("I", "軽量最適化 完了 必須=${res.report.hard} 合計=${res.report.total}")
+                terminalLogged = true
             } catch (e: CancellationException) {
                 // [停止 keep-best] 中断時は途中(未採用)盤面ではなく直前に確定していた入力解を保持し表示も整合させる。
-                val kept = sched.copy2D()
-                val keptReport = withContext(NonCancellable + Dispatchers.Default) {
-                    UnifiedViolationChecker.check(st, kept)
+                // [3.382.0] 3.381.0 と同型＝ハンドラ全体を NonCancellable で包む（理由は runV6FullOptimize のコメント）。
+                withContext(NonCancellable) {
+                    val kept = sched.copy2D()
+                    val keptReport = withContext(Dispatchers.Default) {
+                        UnifiedViolationChecker.check(st, kept)
+                    }
+                    currentSchedule = kept
+                    resultSchedule = kept
+                    state = st.withSchedule(kept)
+                    runCatching {
+                        pushReport(state ?: st, kept, keptReport, nonCancellable = true) { it.copy(
+                            running = false,
+                            hasResult = true,
+                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
+                        ) }
+                    }.onFailure { t -> logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}") }
+                    logOp("I", "軽量最適化 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
+                    terminalLogged = true
                 }
-                currentSchedule = kept
-                resultSchedule = kept
-                state = st.withSchedule(kept)
-                pushReport(state ?: st, kept, keptReport, nonCancellable = true) { it.copy(
-                    running = false,
-                    hasResult = true,
-                    message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                ) }
                 throw e
-            } catch (e: Exception) {
-                logOp("W", "軽量最適化 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
-                _ui.update { it.copy(running = false, message = "軽量最適化失敗: ${e.message}") }
+            } catch (e: Throwable) {
+                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
+                logOp("W", "軽量最適化 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す
+                terminalLogged = true
+                _ui.update { it.copy(running = false, message = "軽量最適化失敗: $kind: ${e.message}") }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
+                if (!terminalLogged) logOp("W", "軽量最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1210,17 +1241,27 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     terminalLogged = true
                 }
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // [3.271.0, 実機ログ起因] 失敗を操作ログにも残す。旧: message のみのため、書き出した
                 //   ログに「最適化 開始」だけあって完了も停止も無い実行が現れても死因（例外で静かに
                 //   落ちたのか）を判別できなかった（実機ログ 19:56:41 の消えた実行の解析を阻んだ実例）。
-                logOp("W", "最適化 失敗: ${e.message}")
+                // [3.382.0] `Exception` → `Throwable`。旧は **`Error`（OutOfMemoryError/StackOverflowError 等）を
+                //   1つも拾わず**、8ワーカー×300秒という重い経路でメモリ不足が起きると終端ログすら残らずに
+                //   消えていた（3.381.0 で CancellationException 経路を塞いだあと、残っていた最後の穴）。
+                //   **Error を再送出しない**のは意図的なトレードオフ: `viewModelScope.launch` の未捕捉例外は
+                //   既定ハンドラでプロセスを落とすため、**その死因を説明する操作ログ（メモリ上のリング）ごと
+                //   失われる**。ここで捕まえれば `OutOfMemoryError` と名指しした行が残り、書き出せる。
+                //   状態の一貫性は保たれる（ViewModel の盤面は handleOptimize が値を返した**後**にしか
+                //   書き換えず、この時点では未変更＝入力盤面のまま）。代償は「プロセス状態が不明なまま
+                //   継続しうる」ことで、これは業務判断として受け入れる（利用者は続行/再起動を選べる）。
+                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
+                logOp("W", "最適化 失敗: $kind: ${e.message}")
                 terminalLogged = true
-                _ui.update { it.copy(running = false, message = "V6最適化失敗: ${e.message}") }
+                _ui.update { it.copy(running = false, message = "V6最適化失敗: $kind: ${e.message}") }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
-                if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。Error(OOM等)や停止処理自体の失敗が疑われます）")
+                if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1301,14 +1342,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     terminalLogged = true
                 }
                 throw e
-            } catch (e: Exception) {
-                logOp("W", "ソフト研磨 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
+            } catch (e: Throwable) {
+                // [3.382.0] 最適化側と同型＝`Error` も拾って終端ログを残す（理由は runV6FullOptimize のコメント）。
+                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
+                logOp("W", "ソフト研磨 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す
                 terminalLogged = true
-                _ui.update { it.copy(running = false, message = "自動整えに失敗: ${e.message}") }
+                _ui.update { it.copy(running = false, message = "自動整えに失敗: $kind: ${e.message}") }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()   // [監査A8]
-                if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。Error(OOM等)や停止処理自体の失敗が疑われます）")
+                if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }

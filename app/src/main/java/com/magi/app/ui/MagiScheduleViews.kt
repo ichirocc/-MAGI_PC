@@ -350,32 +350,10 @@ internal fun ShiftPickerSheet(
 //   結果スナップショット(resultSchedule/result専用違反マップ)のモデルは温存（最適化完了時に充填・将来のCSV等）。
 
 
-// ===== [E7] 違反 種別フィルタ（勤務表タブ全面共有・コース6分類） =====
-// 主軸=制約種別。場所を持つ17族(全19族から fair/weekly を除く＝本ブロック末尾の注記参照)を作成者の語彙で6バケツに束ね、勤務表タブの全面(グリッドセル/日ヘッダ/Tally職員・日/
-// カレンダー)を1つの共有フィルタで絞る。複数トグル・初期全ON（見たくないノイズを引き算）。件数付きチップで
-// 「まずどの種類を潰すか」の種別トリアージを兼ねる。表示のみ・スコアリング不変（どの違反が存在するかは不変、
-// 表示するかだけを制御）。公平/曜日(fair/weekly)は場所マップが無いのでバケツ対象外＝常に非表示対象にならない。
-internal data class VioBucket(val key: String, val label: String, val families: Set<String>)
-internal val vioBuckets: List<VioBucket> = listOf(
-    VioBucket("need", "人員", setOf("covU", "covO")),
-    VioBucket("pref", "希望", setOf("pref")),
-    VioBucket("seq", "連勤", setOf("c3", "c3n", "c3m", "c3mn")),
-    VioBucket("count", "回数", setOf("low", "high", "apt", "c2")),
-    VioBucket("group", "群ルール", setOf("groupViol", "c41", "c42", "c41s", "c42s")),
-    VioBucket("window", "窓", setOf("c1")),
-)
-/** vio-class（"vio-covU"/"vio-aptLow" 等）→ 族キー。aptLow/aptHigh は apt に畳む。 */
-internal fun familyOfVioClass(cls: String): String =
-    when (val f = cls.removePrefix("vio-")) { "aptLow", "aptHigh" -> "apt"; else -> f }
-/** 族キー → バケツキー（対象外＝null）。 */
-internal fun bucketOfFamily(fam: String): String? = vioBuckets.firstOrNull { fam in it.families }?.key
-/** この違反クラスが現在のフィルタ(enabled=表示中バケツ集合)で表示されるか。バケツ対象外の族は常に表示。 */
-internal fun vioVisible(cls: String?, enabled: Set<String>): Boolean {
-    if (cls == null) return false
-    val b = bucketOfFamily(familyOfVioClass(cls)) ?: return true
-    return b in enabled
-}
-internal val allVioBucketKeys: Set<String> = vioBuckets.map { it.key }.toSet()
+// ===== [E7] 違反 種別フィルタ =====
+// [3.382.0] 分類表（VioBucket/vioBuckets/vioBucketlessFamilies/familyOfVioClass/bucketOfFamily/
+//   vioVisible/allVioBucketKeys）は Compose 非依存なので `VioBuckets.kt` へ切り出した
+//   （族の追加漏れを `VioBucketsTest` で機械的に固定するため）。ロジックは不変。
 
 /** [Set化] セル("i,j")の全違反クラス（重み降順）。families 未充填の経路では最重1クラスへフォールバック。 */
 internal fun cellVioClasses(ui: UiState, key: String): List<String> =

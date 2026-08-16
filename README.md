@@ -23,7 +23,15 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-16（3.381.0 添付ログの時系列追跡で**停止処理が丸ごと飛んでいた**ことを特定・修正。
+**最終更新**：2026-08-16（3.382.0 ①3.381.0 と**同型の穴が `start()`/`runLightOptimize()` にも残っていた**
+（停止ハンドラの NonCancellable が checker だけ）＝4経路すべてでハンドラ全体を包む形へ統一 ②終端ログの
+保証（`terminalLogged`+`finally`）を長い実行4経路へ広げ、完了ログが無かった高速計算/軽量最適化にも追加
+③`catch (Exception)` → `Throwable`＝`OutOfMemoryError` 等を1つも拾えていなかった穴を塞ぐ（**再送出しないのは
+意図的**＝落とすとその死因を説明する操作ログごと失われるため。トレードオフはコードに明記）
+④**R-08 解消**＝族を追加して分類表に入れ忘れると E7 フィルタで静かに「常に表示」へ落ちる問題を、Compose
+非依存の分類表を `ui/VioBuckets.kt` へ切り出したうえで `VioBucketsTest` が両方向で固定（切り出しにより
+**教訓#30 の scratch-revert 確認が可能になった**＝以前「検証できないので見送り」とした項目）。
+ホストJVM **475テスト green**。3.381.0 添付ログの時系列追跡で**停止処理が丸ごと飛んでいた**ことを特定・修正。
 3.372.0 のフォールバックが実機で**11実行中4件**発火しており、共通点は「直後にユーザーが編集を始めている」＝
 停止を押した実行だった。停止ハンドラが `withContext(NonCancellable + Default)` を checker にだけ掛けており、
 **そこを抜けて既にキャンセル済みの外側へ再開する時点で新しい CancellationException が投げられ**、続く
