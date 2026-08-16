@@ -268,7 +268,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runInBackground() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (optimizeInFlight()) return
+        if (runBlockedByInFlight("バックグラウンド計算の開始")) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         OptimizationRepository.clear()
@@ -773,7 +773,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun start() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (optimizeInFlight()) return
+        if (runBlockedByInFlight("高速計算の開始")) return
         if (!ensureValidForRun(st0, sched0)) return
         val runState = st0.withSchedule(sched0)
         val params = SaParams(
@@ -876,7 +876,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runLightOptimize() {
         val st = state ?: return
         val sched = currentSchedule ?: return
-        if (optimizeInFlight()) return
+        if (runBlockedByInFlight("軽量最適化の開始")) return
         if (!ensureValidForRun(st, sched)) return
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
@@ -1020,7 +1020,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runV6FullOptimize() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (optimizeInFlight()) return
+        if (runBlockedByInFlight("勤務表の作成")) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         val sig = "${_ui.value.budgetSec}|${_ui.value.workers}|${_ui.value.v6Algorithm}|${_ui.value.softPolish}"
@@ -1275,7 +1275,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun runSoftPolish() {
         val st0 = state ?: return
         val sched0 = currentSchedule ?: return
-        if (optimizeInFlight()) return
+        if (runBlockedByInFlight("仕上げ最適化の開始")) return
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
@@ -1374,6 +1374,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             //   最適化ジョブ(job)自身は CancellationException 側で keep-best と running=false を行うため、
             //   ここでの即時リセットは冪等（後からジョブ側の確定メッセージが上書きする）。
             _ui.update { it.copy(running = false, fixSearching = false, message = "停止しました") }
+            // [3.383.0/ユーザー指示「検証できないと見送った項目をログ強化」] **前景の停止だけログが無かった**
+            //   （背景は「バックグラウンド最適化を停止」を出していた＝非対称）。3.381.0 で「4件の異常終了は
+            //   停止を押した実行」と結論できたのは、直後にユーザーが編集を始めている、という**状況証拠から
+            //   推論した**からで、ログには押した事実が1行も無かった。以後は直接読める。
+            //   何を止めたかも区別する（最適化なのか、違反チェック/改善探索だけなのかで意味が全く違う）。
+            val what = buildList {
+                if (optimizeActive) add("計算")
+                if (_ui.value.fixSearching) add("改善探索")
+                if (isEmpty()) add("違反チェック")
+            }.joinToString("・")
+            logOp("I", "停止を押しました（対象: $what）")
         }
         clearRunMarker()
     }
@@ -2187,6 +2198,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * **その3つの入口だけ**を塞ぐ。呼び出し元が先にログを出していることがあるので、
      * 取り消したことも記録して読み手が混乱しないようにする。
      */
+    /**
+     * [3.383.0/ユーザー指示「検証できないと見送った項目をログ強化」] 実行中に別の実行を頼まれて
+     * **黙って無視した**ことを記録する。旧: 5つの入口が `if (optimizeInFlight()) return` で無言に落ちており、
+     * 書き出したログには**そのボタンを押した痕跡が一切残らなかった**（利用者から見れば「押したのに何も
+     * 起きない」、解析する側から見れば「実行が重なったのか単に押していないのか区別できない」）。
+     * 兄弟の `structuralEditBlocked`（3.328.0）は同じ状況を既にログしており、こちらが対象漏れだった。
+     */
+    private fun runBlockedByInFlight(what: String): Boolean {
+        if (!optimizeInFlight()) return false
+        logOp("W", "$what を取り消しました（別の計算が実行中）")
+        _ui.update { it.copy(message = "計算中です。終わるか「やめる」を押してからにしてください。") }
+        return true
+    }
+
     private fun structuralEditBlocked(): Boolean {
         if (!optimizeInFlight()) return false
         logOp("W", "計算の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")

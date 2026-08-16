@@ -23,7 +23,16 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-16（3.382.0 ①3.381.0 と**同型の穴が `start()`/`runLightOptimize()` にも残っていた**
+**最終更新**：2026-08-16（3.383.0 ユーザー指示「検証できないと見送った項目をログ強化」＝このセッションで
+**私が推論に頼るしかなかった**箇所をログ側から潰した。①**`stop()` の前景経路にログが1つも無かった**
+（背景だけ出す非対称）＝3.381.0 で「異常終了4件は停止を押した実行」と結論できたのは状況証拠からの推論で、
+押した事実はログに1行も無かった → 対象（計算/改善探索/違反チェック）つきで記録 ②`optimizeInFlight()` の
+**5入口が無言で early return**＝実行が重なったのか押していないのかを後から区別できなかった
+（`structuralEditBlocked` は既にログしており対象漏れ）→ `runBlockedByInFlight` で記録
+③Watchdog の未発火理由に**実測値を併記**＝3.375.2 が「要 A/B と業務判断」として保留した phaseGrace の
+妥当性が「猶予2s未達」だけでは判断できなかった → `実測0s/2s` の a/b 形式へ。
+ログでは埋められないもの（実際のレース・portfolioRoleParallelSa の効果測定・covU-blocked fixture）も明記。
+ホストJVM **475テスト green**。3.382.0 ①3.381.0 と**同型の穴が `start()`/`runLightOptimize()` にも残っていた**
 （停止ハンドラの NonCancellable が checker だけ）＝4経路すべてでハンドラ全体を包む形へ統一 ②終端ログの
 保証（`terminalLogged`+`finally`）を長い実行4経路へ広げ、完了ログが無かった高速計算/軽量最適化にも追加
 ③`catch (Exception)` → `Throwable`＝`OutOfMemoryError` 等を1つも拾えていなかった穴を塞ぐ（**再送出しないのは

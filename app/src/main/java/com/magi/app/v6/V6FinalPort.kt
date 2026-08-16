@@ -652,13 +652,20 @@ object V6FinalPort {
             //   品質にわずかに有利だったため**ここでは頻度を変えない**。まず理由が読めるようにする。
             // [3.377.0] 判定時刻も**探索終了時**へ揃える（旧: 出力時の now＝後処理ぶんが混ざり、
             //   3条件のどれも「探索中の状況」を表していなかった）。
+            // [3.383.0/ユーザー指示「検証できないと見送った項目をログ強化」] **実測値を併記**する。
+            //   3.375.2 は「phaseGrace を並列非依存にするかは要 A/B と業務判断」として頻度の変更を保留したが、
+            //   ログは「猶予2s未達」としか言わず、**惜しかったのか桁で足りないのかが読めなかった**＝
+            //   その判断に必要な材料が出ていなかった。実測(a/b の形)を出せば実機ログだけで判断できる。
             val blockNote = if (!stagnationFired.get()) {
                 val reasons = ArrayList<String>()
-                if (tChain1 - startMs <= minRunMs) reasons.add("最短実行${minRunMs / 1000}s未達")
+                if (tChain1 - startMs <= minRunMs)
+                    reasons.add("最短実行未達(実測${(tChain1 - startMs) / 1000}s/${minRunMs / 1000}s)")
                 if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs)
-                    reasons.add("現フェーズ猶予${phaseGraceMs / 1000}s未達(並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい)")
+                    reasons.add("現フェーズ猶予未達(実測${(tChain1 - lastPhaseAtSearchEnd) / 1000}s/${phaseGraceMs / 1000}s" +
+                        "＝並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい)")
                 val effStallForLog = if (kind.startsWith("通常")) stallMs else stallHardMs
-                if (tChain1 - lastImp <= effStallForLog) reasons.add("停滞が閾値未満")
+                if (tChain1 - lastImp <= effStallForLog)
+                    reasons.add("停滞が閾値未満(実測${(tChain1 - lastImp) / 1000}s/${effStallForLog / 1000}s)")
                 if (reasons.isEmpty()) "" else "・未発火の理由=${reasons.joinToString("＋")}"
             } else ""
             // 探索の後（後処理・追加精製）で改善したなら別項目として出す。探索フェーズの停滞と混ぜない。
