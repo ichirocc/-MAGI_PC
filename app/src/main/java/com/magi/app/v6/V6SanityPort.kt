@@ -1095,7 +1095,13 @@ object V6SanityPort {
                 val needStr = if (p.use2 && n2 >= 0 && n2 != n1) "$n1~$n2" else "$n1"
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }.add("${day(j)} ${sym(k)} 必要$needStr/現状${cov[j][k]}")
             }
-            emit(byFam, DETAIL_CAP)
+            // [3.380.0/実機ログ起因] **この呼出だけ `fires` を渡していなかった**＝3.282.0 が
+            //   「件数(breakdown)と場所(セル数)は別物」と明示するために入れた仕組みの取り残し。
+            //   covO は1枠が最大4人ぶん超過しうるので両者が大きく食い違い、実機ログでは
+            //   `UnifiedCheck covO=23` / `CoverageDiag 合計23 — 14枠` に対して
+            //   **`違反詳細 covO(14件)`** と、**場所数を件数のように**出していた（他の族は
+            //   `件数23・場所14箇所` と正しく書き分けている）。同じ report の中で数字が食い違う。
+            emit(byFam, DETAIL_CAP, report.breakdown)
         }
 
         // 1b) [診断強化②③＋スパム削減] c41/c41s = 日次・群(スキル)×シフトの人数が[下限,上限]に収まるか。

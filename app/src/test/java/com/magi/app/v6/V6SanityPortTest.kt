@@ -731,4 +731,35 @@ class V6SanityPortTest {
         assertTrue("誤検知しないこと", issues.none { it.where.contains("適切回数と希望") })
     }
 
+    /**
+     * [3.380.0/実機ログ起因] `違反詳細 covO(...)` のヘッダが**場所数を件数として**出していた。
+     * 実機ログ（3.378.0搭載機）: `UnifiedCheck covO=23` / `CoverageDiag 人員過剰 合計23 — 14枠` に対し
+     * `違反詳細 covO(14件)`。他の族は 3.282.0 で `件数F・場所N箇所` と書き分けているのに、
+     * 被覆セクションの emit だけ `fires` を渡していなかった（covO は1枠が複数人ぶん超過しうるので
+     * 両者が大きく食い違う）。同じ report の中で数字が矛盾して見える。
+     */
+    @Test
+    fun coverageDetailHeaderSeparatesFireCountFromLocationCount() {
+        // 1日・休の必要人数0に対し3人とも休＝covO は 1枠で 3件。
+        val st = MagiState(
+            startDate = "2026-09-01", endDate = "2026-09-01",
+            shifts = listOf(Shift("休", "休", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("A", 0), Staff("B", 0), Staff("C", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1)),
+            groupShiftApt = listOf(listOf("")),
+            schedule = listOf(listOf(0), listOf(0), listOf(0)),
+            wishes = emptyMap(), staffRange = emptyMap(),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val sched = arrayOf(intArrayOf(0), intArrayOf(0), intArrayOf(0))
+        val rep = UnifiedViolationChecker.check(st, sched)
+        assertEquals("前提: 1枠に3件ぶんの過剰が立つ", 3, rep.breakdown["covO"])
+        val line = V6SanityPort.buildViolationDebug(st, sched, rep).single { it.contains("違反詳細 covO") }
+        assertTrue("件数と場所を書き分ける（旧: 場所数を件数として『covO(1件)』）: $line",
+            line.contains("件数3・場所1箇所"))
+    }
 }
