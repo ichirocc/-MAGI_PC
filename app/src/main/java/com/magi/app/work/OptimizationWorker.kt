@@ -41,24 +41,47 @@ class OptimizationWorker(
      * Worker はこのアプリの診断リング（`MagiViewModel.logOp`）へ直接触れないので Repository を経由する。
      * 記録自体が失敗しても本処理は止めない。
      */
-    private fun note(what: String, e: Throwable) {
-        runCatching {
-            OptimizationRepository.publishNote("バックグラウンド計算: $what: ${e.javaClass.simpleName}: ${e.message}")
-        }
+    private fun note(what: String, e: Throwable) = note("$what: ${e.javaClass.simpleName}: ${e.message}")
+
+    /** [3.387.0] 例外を伴わない出来事も同じ経路で残す（終端ログ・所有権の喪失・手順の並び）。 */
+    private fun note(msg: String) {
+        runCatching { OptimizationRepository.publishNote("バックグラウンド計算: $msg") }
     }
 
     override suspend fun doWork(): Result {
+        // [3.387.0] `doWork` の**並び**（耐久保存→公開→片付け）と所有権の喪失は、単体テストでは
+        //   捕まらない（Robolectric か実機が要る）。せめて**実行のたびに1行**残して、書き出したログから
+        //   後追いできるようにする。3.382.0 で前景4経路へ入れた終端ログの保証の、背景 Worker 版。
+        val t0 = System.currentTimeMillis()
+        val steps = mutableListOf<String>()
+        var terminalLogged = false
+        fun step(name: String) { steps += "$name@${(System.currentTimeMillis() - t0) / 1000}秒" }
+        fun terminal(msg: String) {
+            if (terminalLogged) return
+            terminalLogged = true
+            note(if (steps.isEmpty()) msg else "$msg ／ 手順: ${steps.joinToString("→")}")
+        }
+
         // 置き換え済み／停止済みの実行はここで降りる（共有ファイルへ触らない）。
-        if (!ownsFiles()) return Result.success()
+        // [3.387.0] ここは **所有権の競合が実際に起きた瞬間**（REPLACE で新しい実行に入れ替わった／
+        //   停止でマーカーが消えた）。旧実装は無言だったので、実機で本当に起きているのかが分からなかった。
+        if (!ownsFiles()) {
+            note("開始前に所有権を失っていたため何もしませんでした（置き換えまたは停止）")
+            return Result.success()
+        }
         // [C1] kill後にWorkManagerが再起動した場合、同一プロセス参照(request)は失われている。
         // [P2修正/レビュー指摘] 復元は「途中最良スナップショット」を優先（8秒毎に退避済み＝実質的な途中再開。
         //   無ければ元入力）。旧: 常に元入力から再スタートし、途中の改善を捨てていた。
-        val req = OptimizationRepository.request ?: loadInputFromFile(ctx) ?: return Result.failure()
+        val req = OptimizationRepository.request ?: loadInputFromFile(ctx) ?: run {
+            terminal("入力を復元できず開始できませんでした（メモリにも退避ファイルにも無い）")
+            return Result.failure()
+        }
         ensureChannel()
         // [C1] 入力をファイルへ退避（現在は参照渡し）。kill後の再起動でここから復元できる。
         // [3.385.0/外部レビュー High3] 失敗は無言にしない。ここが落ちると **kill 耐性そのものが消える**
         //   （プロセスが終了したら実行は跡形もなく失われる）のに、旧実装は runCatching で握り潰していた。
         runCatching { inputFile(ctx).writeText(StateParser.serialize(req.first, req.second)) }
+            .onSuccess { step("入力退避") }
             .onFailure { note("入力の退避に失敗（この実行は途中でプロセスが終了すると復元できません）", it) }
         OptimizationRepository.setRunning(true)
         // [P2修正/レビュー指摘] 予算秒数・並列数は WorkManager の inputData から復元する。
@@ -81,6 +104,7 @@ class OptimizationWorker(
         //   （＝完了後も optimizeInFlight() が真のままで、編集・Undo/Redo が恒久的にブロックされる）。
         //   自分で手放したことを覚えておき、finally はそれも所有者扱いにする。
         var releasedByMe = false
+        var droppedProgress = 0   // [3.387.0] 所有権を失って捨てた進捗の回数（＝競合が起きた証拠）
         var lastSnapMs = 0L
         var lastBubbleMs = 0L
         val wallStart = System.currentTimeMillis()   // [実機報告「残り時間表示が5分から何度も巡回する」修正]
@@ -101,7 +125,7 @@ class OptimizationWorker(
                     val wallElapsed = System.currentTimeMillis() - wallStart
                     // [3.329.0/外部レビュー H-03] 置き換えられた旧実行の進捗を新実行のものとして
                     //   見せない。所有権の確認はファイル1本の読取なので、8秒間引きの外でも十分安い。
-                    if (!ownsFiles()) return@handleOptimize
+                    if (!ownsFiles()) { droppedProgress++; return@handleOptimize }
                     OptimizationRepository.publishProgress(
                         OptimizationRepository.BgProgress(phase, report.hard, report.soft, report.total, iters, wallElapsed),
                     )
@@ -146,15 +170,25 @@ class OptimizationWorker(
                         resultFile(ctx),
                         StateParser.serialize(req.first, res.schedule),
                     ) { ownsFiles() }
+                }.onSuccess { committed ->
+                    // [3.387.0] committed=false は **残っている TOCTOU の窓が実際に発火した瞬間**
+                    //   （直列化のあいだに置き換えられた）。理論上の窓が実機で起きるのかを、ここでしか測れない。
+                    if (committed) step("耐久保存") else note("結果の保存直前に所有権を失いました（置き換え＝TOCTOUの窓が発火）")
                 }.onFailure { note("完了結果の保存に失敗（プロセスが終了すると結果が失われます）", it) }
                 OptimizationRepository.publishResult(
                     OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
                 )
                 notifyDone(res.report.hard, res.report.total)
+                step("公開")
                 runCatching { inputFile(ctx).delete() }
                 runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
                 runCatching { runIdFile(ctx).delete() }
+                step("片付け")
                 releasedByMe = true
+                terminal("完了（必須${res.report.hard} 合計${res.report.total}）" +
+                    if (droppedProgress > 0) "・進捗${droppedProgress}回は所有権喪失で破棄" else "")
+            } else {
+                terminal("完了したが所有権を失っていたため保存も公開もしませんでした（置き換え）")
             }
             Result.success()
         } catch (e: CancellationException) {
@@ -165,7 +199,9 @@ class OptimizationWorker(
             //   読んでしまう事故を防ぐ）。
             // [3.327.0/外部レビュー High3] **所有者のときだけ**片付ける。置き換えで打ち切られた旧実行が
             //   ここを通ると、新実行が既に書いた入力ファイルまで消していた（復元不能の窓を作る）。
-            if (ownsFiles()) runCatching { clearFiles(ctx) }
+            val owned = ownsFiles()
+            if (owned) runCatching { clearFiles(ctx) }
+            terminal(if (owned) "停止（片付け済み）" else "停止（所有権が無いため片付けなし）")
             throw e
         } catch (e: Exception) {
             notify("最適化に失敗しました", e.message ?: "原因不明")
@@ -173,7 +209,9 @@ class OptimizationWorker(
             // [3.336.0/外部レビュー P0残] 失敗だけが所有権を閉じない出口だった。マーカーと入力が残るので、
             //   次回起動が「中断されました・再開できます」と案内する（実際は失敗）。`Result.failure()` は
             //   WorkManager が再実行しない＝入力を残す意味も無い。所有者なら片付けてから返す。
-            if (ownsFiles()) { runCatching { clearFiles(ctx) }; releasedByMe = true }
+            val owned = ownsFiles()
+            if (owned) { runCatching { clearFiles(ctx) }; releasedByMe = true }
+            terminal("失敗: ${e.javaClass.simpleName}: ${e.message}" + if (owned) "（片付け済み）" else "（所有権なし）")
             Result.failure()
         } finally {
             // [3.329.0/外部レビュー H-03] **所有者のときだけ**実行中を降ろす。置き換えで打ち切られた
@@ -181,6 +219,9 @@ class OptimizationWorker(
             // [3.333.0] `releasedByMe` は「自分が正常完了してマーカーを消した」＝実行中を降ろすのが
             //   正しい経路。ここを見ないと完了後に実行中が残り続けた（上のコメント参照）。
             if (releasedByMe || ownsFiles()) OptimizationRepository.setRunning(false)
+            // [3.387.0] 3.382.0 と同じ保証＝どの経路を通っても終端行が1つは残る。
+            //   ここへ落ちたら「想定外の経路」（Error など catch(Exception) が拾わないもの）を疑う。
+            terminal("終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
         }
     }
 

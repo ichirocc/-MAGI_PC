@@ -304,8 +304,17 @@ object V6NativeOptimizer {
             if (cur != null && !better(report, cur.report)) return
             if (snap == null) snap = LiveBestSnapshot(report, schedule.map { it.toList() })
             if (liveBestRef.compareAndSet(cur, snap)) return
+            // [3.387.0] ここへ来る＝**別スレッドが同時に publish していた**。3.385.0 で直した競合が
+            //   実機で本当に起きるのかは単体テストでは分からない（合成の競合しか作れない）ので、
+            //   ここだけが唯一の実測点。0 が続くなら「理論上の窓」、非ゼロなら「実際に起きている」。
+            liveBestContention.incrementAndGet()
         }
     }
+
+    /** [3.387.0] `publishLiveBest` の CAS が競合で再試行した回数（この実行ぶん・診断表示のみ）。 */
+    private val liveBestContention = java.util.concurrent.atomic.AtomicInteger(0)
+
+    internal fun liveBestContentionCount(): Int = liveBestContention.get()
 
     /** テスト専用（`optimize()` を回さずに publish の不変条件だけを検査するため）。 */
     internal fun resetLiveBestForTest() { liveBestRef.set(null) }
@@ -334,6 +343,7 @@ object V6NativeOptimizer {
         lastFusionElites = emptyList()
         clearInfeasible()   // [3.288.0/状態軸] この実行の HF63 学習をゼロから集約する
         liveBestRef.set(null)
+        liveBestContention.set(0)
         val r = withContext(RunSlotElement(slot)) {
             optimizeInSlot(state, initial, options, shouldStop, onProgressRaw, stopIsFinal)
         }

@@ -852,6 +852,20 @@ object V6FinalPort {
         //   ここで各段の**採用値**を同じ物差しで並べる。keep-best は hard→weightedScore→total の順なので
         //   **重みも出す**＝「total は同じなのに採用された」（EliteIntegration 採用=1 で total 307→307）が
         //   矛盾でなく weighted の改善だと読めるようにする。read-only・全ての値は既に各段が持つ report から。
+        // [3.387.0] 「並行アクセスの実際のレースは実機でしか確かめられない」と記録してきた項目の実測点。
+        //   `publishLiveBest` の CAS が再試行した回数＝**別スレッドと同時に publish が起きた回数**。
+        //   3.385.0 で直した競合が実機で本当に踏まれるのかを、ここでだけ数えられる。
+        //   0 のときは出さない（毎回出すとログが太るだけで、意味があるのは非ゼロのときだけ）。
+        val contentionLog = V6NativeOptimizer.liveBestContentionCount().let { n ->
+            if (n <= 0) emptyList()
+            else listOf(
+                MirrorLog(
+                    tag = "LiveBestContention",
+                    message = "途中最良の同時publish: ${n}回（複数ワーカーが同時に最良を更新＝3.385.0 で直した競合が" +
+                        "実機で実際に踏まれている。0 なら理論上の窓に留まっている）",
+                ),
+            )
+        }
         val ledgerLog = run {
             data class Stage(val name: String, val r: ViolationReport)
             val stages = listOf(
@@ -897,7 +911,7 @@ object V6FinalPort {
         }
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
-        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + ledgerLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
+        val logs = listOf(timingLog, budgetPlanLog, nativeLog, tuningLog) + sentinelLog + integrationLog + extraLog + watchdogLog + contentionLog + ledgerLog + residualLog + stagnationLog + gate.logs + first.phaseLogs + (if (chained !== first) chained.phaseLogs else emptyList()) + post.report.logs
         // [3.327.0/外部レビュー High1] `post` の診断（C1頭打ち・回数固定の却下記録）は **post.schedule を
         //   観測した結果**。ところが finalSched はこのあと ExtraRefine で差し替わる（refSched）か、
         //   最終番兵で入力へ戻る（normInput）ことがある。そのまま渡すと「いま表示している勤務表の理由」
