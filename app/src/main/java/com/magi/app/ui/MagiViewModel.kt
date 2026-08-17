@@ -1839,14 +1839,26 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         return Triple(lo, hi, apt)
     }
 
-    /** [直せる導線] 集計セル(日別)の必要数レンジ lo..hi（need1/need2）。lo<0(対象外)は null。 */
+    /** [直せる導線] 集計セル(日別)の必要数レンジ lo..hi（need1/need2 の OR）。どちらも未定義なら null。
+     *
+     *  [3.391.0/need1直参照の第5世代] 旧実装は `lo = need1; if (lo < 0) return null` で、
+     *  **need2 だけで需要が定義されたセルを「対象外」として null を返していた**（need1 未設定は -1）。
+     *  エンジンは `Problem.covUCell`（source of truth）の OR 意味論でそこに covU(HARD) を課すのに、
+     *  UI 側だけが「要件なし」と表示していた＝赤いセルをタップしても何も出ない／必要人数カレンダーが
+     *  「未設定」と出る／実働チェックの月間需要が 0 になる。3.173.0・3.309.0・3.369.0・3.379.0 と同根。
+     *
+     *  しきい値は `covUCell`/`covOCell` の選択と厳密に一致させる:
+     *  両方定義なら lo=min・hi=max（小さい方で不足が立ち、大きい方を超えて初めて過剰が立つ）、
+     *  片方だけなら双方その値。**通常データ（need1 <= need2）では旧実装と同じ値**になる。 */
     fun needCellLimits(k: Int, j: Int): Pair<Int, Int>? {
         val st = state ?: return null
         val p = cachedProblem(st)
         if (k !in 0 until p.K || j !in 0 until p.T) return null
-        val lo = p.need1[k][j]
-        if (lo < 0) return null
-        val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else lo
+        val n1 = p.need1[k][j]
+        val n2 = if (p.use2) p.need2[k][j] else -1
+        if (n1 < 0 && n2 < 0) return null
+        val lo = if (n1 >= 0 && n2 >= 0) minOf(n1, n2) else maxOf(n1, n2)
+        val hi = maxOf(n1, n2)
         return lo to hi
     }
 

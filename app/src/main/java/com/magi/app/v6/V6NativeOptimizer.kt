@@ -2957,7 +2957,11 @@ internal fun applyCovOFree(
                     val staffOnK = (0 until p.S).filter { sched[it][j] == k }
                     val candidates = ArrayList<List<IntArray>>()
                     for (i in staffOnK) {
-                        if (p.wish[i][j] == k) continue   // 本人希望＝動かすとpref未充足化、対象外
+                        // [3.391.0] 生の `wish==k` は**実現不能な希望**（担当できないシフトへの希望）まで
+                        //   固定扱いにしていた。pref は実現可能な希望しか数えない（MirrorCore）ので、
+                        //   その場合ここを動かしても pref は増えず、逆に担当外セル＝groupViol(10000) が消える
+                        //   ＝**必須違反が厳密に減る手を丸ごと捨てていた**。規約の wishLocked へ統一（3.351.0 と同型）。
+                        if (p.wishLocked(i, j) && p.wish[i][j] == k) continue   // 実現可能な本人希望＝動かすとpref未充足化
                         for (m in p.allowedShiftsForStaff(i).filter { it != k }) {
                             if (p.makesForbiddenRun(sched, i, j, m)) {
                                 val fix = tryFixForbiddenRunViaAdjacentDay(p, sched, i, j, m, rng) ?: continue
@@ -3023,7 +3027,8 @@ internal fun applyC41Free(
                     val onShift = (0 until p.S).filter { grp[it] == c.groupIdx && sched[it][j] == c.shiftIdx }
                     val candidates = ArrayList<List<IntArray>>()
                     for (i in onShift) {
-                        if (p.wish[i][j] == c.shiftIdx) continue   // 本人希望＝動かすとpref未充足化、対象外
+                        // [3.391.0] 実現不能な希望は固定しない（wishLocked へ統一）。上の applyCovOFree と同型。
+                        if (p.wishLocked(i, j) && p.wish[i][j] == c.shiftIdx) continue   // 実現可能な本人希望＝対象外
                         for (m in p.allowedShiftsForStaff(i).filter { it != c.shiftIdx }) {
                             if (p.makesForbiddenRun(sched, i, j, m)) continue
                             candidates.add(listOf(intArrayOf(i, j, m)))
@@ -3046,7 +3051,8 @@ internal fun applyC41Free(
                     val candidates = ArrayList<List<IntArray>>()
                     for (i in offShift) {
                         val old = sched[i][j]
-                        if (old !in 0 until p.K || p.wish[i][j] == old) continue   // 現シフトが本人希望＝対象外
+                        // [3.391.0] 実現不能な希望は固定しない（wishLocked へ統一）。
+                        if (old !in 0 until p.K || (p.wishLocked(i, j) && p.wish[i][j] == old)) continue   // 現シフトが実現可能な本人希望＝対象外
                         if (p.makesForbiddenRun(sched, i, j, c.shiftIdx)) continue
                         candidates.add(listOf(intArrayOf(i, j, c.shiftIdx)))
                         sched[i][j] = c.shiftIdx
@@ -3095,7 +3101,8 @@ internal fun applyC42Free(
         //   玉突き連鎖の両方の候補を集め、commitBestMoveが実チェッカーで全体評価する。
         fun gatherSide(candidates: List<Int>, j: Int, fromShift: Int, out: ArrayList<List<IntArray>>) {
             for (i in candidates) {
-                if (p.wish[i][j] == fromShift) continue   // 本人希望＝動かすとpref未充足化、対象外
+                // [3.391.0] 実現不能な希望は固定しない（wishLocked へ統一）。
+                if (p.wishLocked(i, j) && p.wish[i][j] == fromShift) continue   // 実現可能な本人希望＝対象外
                 for (m in p.allowedShiftsForStaff(i).filter { it != fromShift }) {
                     if (p.makesForbiddenRun(sched, i, j, m)) continue
                     out.add(listOf(intArrayOf(i, j, m)))

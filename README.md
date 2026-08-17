@@ -24,7 +24,16 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-17（3.389.0 **SUDO モデル**（S システム関連図／U ユースケース図／D ドメインモデル図／
+**最終更新**：2026-08-17（3.391.0 ユーザー指示「不具合を全て修正する」＝兄弟バグのパターンを全数 grep し
+**実在した9件**を修正。中心は `wishLocked` 規約（**実現不能な希望＝担当できないシフトへの希望は凍結しない**）の
+取り残しで 3.264.0 以来の7世代目。`pref` は実現可能な希望しか数えないので、この族のセルを動かしても pref は
+1点も増えず、逆に担当外＝groupViol(HARD 10000) が消える＝**必須違反が厳密に減る手を捨てていた**（探索
+オペレータ4／診断3／旧世代の生成器1）。9件目は need1 直参照の第5世代（`needCellLimits` が need2 単独定義セルを
+「対象外」と返す）。**実データで効果を確認**＝`sample_state_v6.json`（実現不能希望9件）で生成器の
+groupViol 9→0・hard 114→107、`pref` は旧も新も 0（＝置いても得しない HARD だけ払っていた）、診断の担当可能
+3人→4人。golden（実現不能希望0件）は完全に不変。ホストJVM **493テスト green**、修正を revert したビルドで
+**新規4件だけが落ちる**ことを実行して確認。3.390.0 `data-models.md` §4 の UiState 一覧を全82フィールドへ刷新。
+3.389.0 **SUDO モデル**（S システム関連図／U ユースケース図／D ドメインモデル図／
 O オブジェクト図）を `docs/sudo_model.md` として新設。4図とも実装から起こし、**D の不変条件と O の値は実測**
 （`golden_state.json` を読み、`UnifiedViolationChecker.check` をホストJVMで実走して `hard=0 total=437
 weightedScore=3109.0` まで確認）。作成中に **docs と実装の食い違いを5件**発見して同文書へ列挙 ―

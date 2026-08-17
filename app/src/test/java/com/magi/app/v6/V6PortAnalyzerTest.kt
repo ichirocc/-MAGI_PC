@@ -443,4 +443,73 @@ class V6PortAnalyzerTest {
         assertEquals("壁は残存件数を超えない", 3, V6FinalPort.covUStructuralWall(3, 0, 99))
         assertEquals("covU が無ければ壁も無い", 0, V6FinalPort.covUStructuralWall(0, 5, 5))
     }
+    // [3.391.0 実バグ回帰] 実現不能な希望（担当できないシフトへの希望）を「別シフトへ固定」として
+    // capacity から外していたため、verdict が FIXABLE→INFEASIBLE へ倒れ「データ上、充足不可」という
+    // 誤った断定を出していた。s1 は A を担当できるが、担当できない B への希望を持つ＝
+    // wishLocked=false なのでこの枠へ回せる。旧実装なら capacity=1 < need=2 で INFEASIBLE。
+    @Test
+    fun infeasibleWishDoesNotShrinkCoverageCapacity() {
+        val st = MagiState(
+            startDate = "2025-12-01",
+            endDate = "2025-12-01",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "2", "2"), Shift("遅番", "B", "", "")),
+            groups = listOf(Group("G", "G"), Group("H", "H")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+            use2Patterns = true,
+            // 群G は 休/A のみ担当可（B は担当不可）。
+            groupShift = listOf(listOf(1, 1, 0), listOf(1, 1, 1)),
+            groupShiftApt = listOf(listOf("", "", ""), listOf("", "", "")),
+            schedule = listOf(listOf(1), listOf(0)),
+            wishes = mapOf("1,0" to 2),   // s1 は担当できない B を希望＝実現不能
+            staffRange = emptyMap(),
+            needDay1 = emptyMap(),
+            needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertFalse("前提: s1 の B 希望は実現不能", p.wishLocked(1, 0))
+        val diag = V6PortAnalyzer.diagnoseCoverage(st)
+        val sf = diag.shortfalls.single()
+        assertEquals("A の不足1件", 1, sf.miss)
+        assertEquals("実現不能な希望は capacity を減らさない", CoverageVerdict.FIXABLE, sf.verdict)
+        assertFalse("「充足不可」と断定しない", sf.reason.contains("充足不可"))
+    }
+
+    // [3.391.0 実バグ回帰] covO 側も同型。**希望が過剰シフトそのものを指し、かつ実現不能**でないと
+    // 旧コードの `wish == k` を踏まないので、s0 を「A を担当できないのに A に在勤し、A を希望している」
+    // 形にする（＝groupViol も立っている）。旧実装はこれを「希望固定＝動かせない」と案内していたが、
+    // 実現不能な希望は凍結しない＝動かせるし、動かせば groupViol も同時に消える。
+    @Test
+    fun infeasibleWishIsNotReportedAsPinnedInSurplus() {
+        val st = MagiState(
+            startDate = "2025-12-01",
+            endDate = "2025-12-01",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "0", "0")),
+            groups = listOf(Group("G", "G"), Group("H", "H")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 1)),
+            use2Patterns = true,
+            // 群G(s0) は 休 のみ担当可＝A は担当不可。群H(s1) は両方可。
+            groupShift = listOf(listOf(1, 0), listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", ""), listOf("", "")),
+            schedule = listOf(listOf(1), listOf(0)),   // s0 が担当外の A に在勤＝need 0 に対し過剰1
+            wishes = mapOf("0,0" to 1),                 // s0 は担当できない A を希望＝実現不能
+            staffRange = emptyMap(),
+            needDay1 = emptyMap(),
+            needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertFalse("前提: s0 の A 希望は実現不能", p.wishLocked(0, 0))
+        assertEquals("前提: 担当外セルなので groupViol が立っている",
+            1, UnifiedViolationChecker.check(st, st.schedule.toIntArray2D()).breakdown["groupViol"])
+
+        val sp = V6PortAnalyzer.diagnoseCoverage(st).surpluses.single()
+        assertEquals("A の過剰1件", 1, sp.excess)
+        // reason は 0 件でも「希望固定0人」というラベルを必ず含むので、件数で見る。
+        assertTrue("実現不能な希望を「希望固定」に数えない: " + sp.reason, sp.reason.contains("希望固定0人"))
+        assertTrue("動かせる候補として数える: " + sp.reason, sp.reason.contains("動かせる1人"))
+    }
+
 }

@@ -251,8 +251,11 @@ object V6PortAnalyzer {
                 var capacity = 0
                 for (i in 0 until p.S) {
                     if (!p.canDo(i, k)) continue
-                    val w = p.wish[i][j]
-                    if (w in 0 until p.K && w != k) continue   // 別シフトへ希望固定 → この枠には回せない
+                    // [3.391.0] 生の `w != k` は**実現不能な希望**（担当できないシフトへの希望）まで
+                    //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
+                    //   （wishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
+                    //   verdict を FIXABLE→INFEASIBLE へ倒し「データ上、充足不可」という**誤った断定**を生む。
+                    if (p.wishLocked(i, j) && p.wish[i][j] != k) continue   // 実現可能な希望が別シフト → この枠には回せない
                     capacity++
                 }
                 val verdict = if (capacity < need) CoverageVerdict.INFEASIBLE else CoverageVerdict.FIXABLE
@@ -272,8 +275,8 @@ object V6PortAnalyzer {
                     for (i in 0 until p.S) {
                         if (!p.canDo(i, k)) continue
                         val m = norm[i][j]
-                        val w = p.wish[i][j]
-                        if (w in 0 until p.K && w != k) continue               // 別シフトへ希望固定=capacity 対象外
+                        // [3.391.0] 上の capacity と同じ事前フィルタ＝同じ条件に揃える（wishLocked）。
+                        if (p.wishLocked(i, j) && p.wish[i][j] != k) continue   // 実現可能な希望が別シフト=capacity 対象外
                         if (m == k) { already++; continue }                    // 既にこのシフト=移す対象でない
                         // [監査(未レビュー領域再監査) 実バグ修正] p.wishLocked(i,j) は「希望が設定されている」の
                         //   意味だが、上の事前フィルタ(127-128行目)で w!=k の候補は既に除外済み＝ここに残る
@@ -361,7 +364,9 @@ object V6PortAnalyzer {
                 var pinned = 0; var forbid = 0; var cascade = 0; var free = 0
                 for (i in 0 until p.S) {
                     if (norm[i][j] != k) continue   // このシフトの在勤者だけが移動候補
-                    if (p.wish[i][j] == k) { pinned++; continue }   // 本人希望＝動かすと希望未充足(pref)化
+                    // [3.391.0] 実現不能な希望は凍結しない＝「希望固定で動かせない」と案内するのは誤り
+                    //   （むしろ動かすと担当外セル=groupViol も同時に消える）。wishLocked へ統一。
+                    if (p.wishLocked(i, j) && p.wish[i][j] == k) { pinned++; continue }   // 実現可能な本人希望＝動かすとpref化
                     val alts = p.allowedShiftsForStaff(i).filter { it != k }
                     if (alts.isEmpty()) { forbid++; continue }      // 担当可能な代替シフトが無い
                     var hasRoom = false; var blockedByC3n = true

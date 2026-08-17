@@ -7,6 +7,7 @@ import com.magi.app.model.Range
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -219,4 +220,39 @@ class SmartInitialSchedulerTest {
         val naive = GreedyMirrorScheduler.generate(st)
         assertEquals("簡易作成も同様にneed2単独定義の需要を充足すること", 0, naive.report.hard)
     }
+    // [3.391.0 実バグ回帰] 旧 GreedyMirrorScheduler は担当できないシフトへの希望まで**盤面へ置いて**
+    // いた。pref は実現可能な希望しか数えない（MirrorCore）ので置いても pref は1点も得しない一方、
+    // 担当外セル＝groupViol(HARD 10000) が確実に立つ＝純損。SmartInitialScheduler は同じ処理で
+    // canDo を見ており（3.257.0）、旧世代の生成器だけが取り残されていた。両方で groupViol=0 を固定する。
+    @Test
+    fun neitherGeneratorPlacesAnInfeasibleWish() {
+        val st = MagiState(
+            startDate = "2025-12-01",
+            endDate = "2025-12-03",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "1", "1"), Shift("遅番", "B", "", "")),
+            groups = listOf(Group("G", "G"), Group("H", "H")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 1)),
+            use2Patterns = true,
+            // 群G(s0) は 休/A のみ担当可＝B は担当不可。
+            groupShift = listOf(listOf(1, 1, 0), listOf(1, 1, 1)),
+            groupShiftApt = listOf(listOf("", "", ""), listOf("", "", "")),
+            schedule = listOf(listOf(-1, -1, -1), listOf(-1, -1, -1)),
+            wishes = mapOf("0,0" to 2),   // s0 が担当できない B を希望＝実現不能
+            staffRange = emptyMap(),
+            needDay1 = emptyMap(),
+            needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertFalse("前提: s0 の B 希望は実現不能", p.wishLocked(0, 0))
+
+        val greedy = GreedyMirrorScheduler.generate(st)
+        assertEquals("旧世代の生成器も担当外セルを作らない",
+            0, UnifiedViolationChecker.check(st, greedy.schedule).breakdown["groupViol"])
+        val smart = SmartInitialScheduler.generate(st)
+        assertEquals("新しい生成器も同じ",
+            0, UnifiedViolationChecker.check(st, smart.schedule).breakdown["groupViol"])
+    }
+
 }

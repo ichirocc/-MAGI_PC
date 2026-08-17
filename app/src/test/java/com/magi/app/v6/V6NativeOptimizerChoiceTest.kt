@@ -282,6 +282,42 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(0, after.hard)
     }
 
+    // [3.391.0 実バグ回帰] 旧実装は生の `wish == k` で固定判定しており、**実現不能な希望**
+    // （担当できないシフトへの希望）まで「動かせない」と扱っていた。pref は実現可能な希望しか
+    // 数えない（MirrorCore）ので、その場合ここを動かしても pref は増えず、逆に担当外セル＝
+    // groupViol(HARD 10000) が消える＝**必須違反が厳密に減る手を丸ごと捨てていた**。
+    // b は A を担当できないのに A に在勤し（groupViol）、A を希望している（実現不能）。
+    @Test fun applyCovOFreeMovesStaffWhoseWishIsInfeasible() {
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-01",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "1", "")),
+            groups = listOf(Group("G0", "G0"), Group("G1", "G1")),
+            staff = listOf(Staff("a", 0), Staff("b", 1)),
+            use2Patterns = false,
+            // 群G1(b) は 休 のみ担当可＝A は担当不可。
+            groupShift = listOf(listOf(1, 1), listOf(1, 0)),
+            groupShiftApt = listOf(listOf("", ""), listOf("", "")),
+            schedule = listOf(listOf(1), listOf(1)),   // 両者ともA（必要1に対し現状2＝過剰1）
+            wishes = mapOf("1,0" to 1),                 // b は担当できない A を希望＝実現不能
+            staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(),
+            cons3n = emptyList(), cons3m = emptyList(), cons3mn = emptyList(),
+            cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val p = Problem(st)
+        assertFalse("前提: b の A 希望は実現不能", p.wishLocked(1, 0))
+        val sched = st.schedule.toIntArray2D()
+        val before = UnifiedViolationChecker.check(st, sched)
+        assertEquals(1, before.breakdown["covO"])
+        assertEquals("前提: 担当外セルなので groupViol が立っている", 1, before.breakdown["groupViol"])
+
+        val applied = V6NativeOptimizer.applyCovOFree(st, sched, Random(1))
+        assertEquals("旧実装は実現不能な希望を固定扱いして何もしなかった", 1, applied)
+        val after = UnifiedViolationChecker.check(st, sched)
+        assertEquals("過剰が解消", 0, after.breakdown["covO"] ?: 0)
+        assertEquals("同時に担当外セルも消える", 0, after.hard)
+    }
+
     @Test fun applyCovOFreeLeavesWishPinnedSurplusUntouched() {
         // 両者ともAを希望固定（希望どおり配置済み）だと、動かすと希望未充足(pref)に化けるため何もしない。
         val st = covOState(listOf(listOf(1), listOf(1)), wishes = mapOf("0,0" to 1, "1,0" to 1))
