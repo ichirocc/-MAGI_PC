@@ -317,7 +317,22 @@ object V6NativeOptimizer {
     internal fun liveBestContentionCount(): Int = liveBestContention.get()
 
     /** テスト専用（`optimize()` を回さずに publish の不変条件だけを検査するため）。 */
-    internal fun resetLiveBestForTest() { liveBestRef.set(null) }
+    internal fun resetLiveBestForTest() { liveBestRef.set(null); liveBestContention.set(0) }
+
+    /**
+     * [3.388.0/外部レビュー] **利用者の1回の「つくる」ぶん**の計測をゼロから始める。
+     *
+     * 旧実装は [optimize] の入口で `TuningTelemetry.reset()` と競合カウンタを落としていたが、
+     * `handleOptimize` は AUTO の 31〜210秒帯で **optimize() を最大3回**呼ぶ（RSI → ALNS →
+     * ExtraRefine）。よって後続の呼出が先行ぶんを上書きし、診断に出るのは**最後の pass だけ**だった
+     * ＝主計算(8ワーカー)の計測が捨てられ、`設定の効き` も競合数も 0 に見える。
+     * 「0 なら理論上の窓に留まっている」と読ませる行がまさに false negative になる
+     * （3.102.1 の `lastAlternatives` と同じ罠）。入口で1回だけ落とす形へ移す。
+     */
+    fun beginTelemetry() {
+        TuningTelemetry.reset()
+        liveBestContention.set(0)
+    }
 
     /**
      * [3.335.0/外部レビュー P1] この実行だけの成果物入れ（[RunSlot]）を作り、コルーチンのコンテキストで
@@ -336,14 +351,12 @@ object V6NativeOptimizer {
          *  確認窓で再確認する。既定は「常に単調」＝確認せず即離脱＝従来どおり。 */
         stopIsFinal: () -> Boolean = { true },
     ): V6OptimizerResult {
-        TuningTelemetry.reset()   // [3.356.0] 設定トグルの効き計測はこの実行ぶんだけ
         val slot = RunSlot(runSeq.incrementAndGet())
         newestRunId = slot.id
         lastAlternatives = emptyList()
         lastFusionElites = emptyList()
         clearInfeasible()   // [3.288.0/状態軸] この実行の HF63 学習をゼロから集約する
         liveBestRef.set(null)
-        liveBestContention.set(0)
         val r = withContext(RunSlotElement(slot)) {
             optimizeInSlot(state, initial, options, shouldStop, onProgressRaw, stopIsFinal)
         }

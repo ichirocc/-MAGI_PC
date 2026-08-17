@@ -266,7 +266,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   旧: 入力・途中最良・完了結果の書き込みが全て runCatching で無言＝失敗しても書き出したログに
         //   1行も残らず、「5分回した実行が消えた」理由を後から追えなかった。
         viewModelScope.launch {
-            OptimizationRepository.notes.collect { logOp("W", it) }
+            OptimizationRepository.notes.collect { (level, msg) -> logOp(level, msg) }
         }
     }
 

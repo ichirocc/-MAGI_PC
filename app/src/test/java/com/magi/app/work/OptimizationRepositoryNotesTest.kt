@@ -18,18 +18,19 @@ class OptimizationRepositoryNotesTest {
 
     @Test
     fun notesEmittedBeforeAnyoneSubscribesAreStillDelivered() = runBlocking {
-        OptimizationRepository.publishNote("A")
-        OptimizationRepository.publishNote("B")
+        OptimizationRepository.publishNote("I", "A")
+        OptimizationRepository.publishNote("I", "B")
         // ここで初めて購読する（＝ViewModel が後から起動した状況）。
         val got = OptimizationRepository.notes.take(2).toList()
-        assertEquals(listOf("A", "B"), got)
+        assertEquals(listOf("I" to "A", "I" to "B"), got)
     }
 
     @Test
     fun publishNoteNeverBlocksOrThrowsEvenWithoutSubscribers() {
         // 記録のために本処理を止めない＝購読者ゼロでも溢れても素通りする（tryEmit）。
-        repeat(200) { OptimizationRepository.publishNote("note $it") }
+        repeat(200) { OptimizationRepository.publishNote("W", "note $it") }
         val got = runBlocking { OptimizationRepository.notes.take(1).toList() }
-        assertTrue("溢れても直近の記録は残る", got.single().startsWith("note "))
+        assertTrue("溢れても直近の記録は残る", got.single().second.startsWith("note "))
+        assertEquals("レベルが失われていない", "W", got.single().first)
     }
 }

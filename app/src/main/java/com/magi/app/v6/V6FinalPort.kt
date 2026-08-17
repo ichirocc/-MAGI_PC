@@ -229,6 +229,10 @@ object V6FinalPort {
         allowImpossible: Boolean = false,
         onProgress: (String, ViolationReport?, Long, Long) -> Unit = { _, _, _, _ -> },
     ): ActionResult = withContext(Dispatchers.Default) {
+        // [3.388.0/外部レビュー] 計測は**この1回の「つくる」ぶん**。旧実装は optimize() の入口で
+        //   落としていたため、AUTO の 31〜210秒帯（RSI → ALNS → ExtraRefine で optimize() を最大3回）では
+        //   後続が先行ぶんを上書きし、診断に出るのは最後の pass だけだった。
+        V6NativeOptimizer.beginTelemetry()
         require(state.dayCount > 0) { "対象期間が無効です。基本情報で終了日を開始日より後にしてください" }
         // [3.360.3] 期間には T>0 のガードがあるのに職員数には無く、非対称だった。S=0 は編集画面からは
         //   作れない（Ws1Ops.removeStaff が最後の1名を消さない）が、**JSON/CSV 取込で外部から入りうる**。
@@ -844,6 +848,24 @@ object V6FinalPort {
                 message = "もう直せない: $wallTxt ／ まだ狙える: $openTxt",
             ))
         }
+        // [3.387.0/3.388.0] 並行アクセスの実レースは実機でしか確かめられない、と記録してきた項目の
+        //   唯一の実測点。`publishLiveBest` の CAS が再試行した回数＝別スレッドと同時に publish が
+        //   起きた回数。0 のときは出さない（毎回出すとログが太るだけで、意味があるのは非ゼロのとき）。
+        val contentionLog = V6NativeOptimizer.liveBestContentionCount().let { n ->
+            if (n <= 0) emptyList()
+            else listOf(
+                MirrorLog(
+                    level = "W",
+                    tag = "LiveBestContention",
+                    // [3.388.0/外部レビュー] 主張を観測の範囲へ戻す。この数は **CAS の再試行回数**＝
+                    //   「複数ワーカーが同時に途中最良を publish した回数」であって、3.385.0 が直した
+                    //   特定の交錯（CAS に勝った側が盤面コピーの途中で止まる）そのものを数えてはいない。
+                    //   非ゼロは必要条件であって十分条件ではない、と書く（3.324.0/3.263.0 の規律）。
+                    message = "途中最良の同時publish: ${n}回（複数ワーカーが同時に最良を更新した回数。" +
+                        "3.385.0 で直した競合が成立しうる条件が実機で揃っている＝0 なら揃っていない）",
+                ),
+            )
+        }
         // [3.378.0/実機ログ起因・デバッグ用] **段をまたいだスコアの収支を1行で追えるようにする**。
         //   旧: 各段が自分の before→after を別々の行で出すだけで、しかも母集団が繋がっていなかった
         //   （実機ログ: AdaptivePortfolio「採用 total=307」→ EliteIntegration「307->307」→
@@ -852,20 +874,6 @@ object V6FinalPort {
         //   ここで各段の**採用値**を同じ物差しで並べる。keep-best は hard→weightedScore→total の順なので
         //   **重みも出す**＝「total は同じなのに採用された」（EliteIntegration 採用=1 で total 307→307）が
         //   矛盾でなく weighted の改善だと読めるようにする。read-only・全ての値は既に各段が持つ report から。
-        // [3.387.0] 「並行アクセスの実際のレースは実機でしか確かめられない」と記録してきた項目の実測点。
-        //   `publishLiveBest` の CAS が再試行した回数＝**別スレッドと同時に publish が起きた回数**。
-        //   3.385.0 で直した競合が実機で本当に踏まれるのかを、ここでだけ数えられる。
-        //   0 のときは出さない（毎回出すとログが太るだけで、意味があるのは非ゼロのときだけ）。
-        val contentionLog = V6NativeOptimizer.liveBestContentionCount().let { n ->
-            if (n <= 0) emptyList()
-            else listOf(
-                MirrorLog(
-                    tag = "LiveBestContention",
-                    message = "途中最良の同時publish: ${n}回（複数ワーカーが同時に最良を更新＝3.385.0 で直した競合が" +
-                        "実機で実際に踏まれている。0 なら理論上の窓に留まっている）",
-                ),
-            )
-        }
         val ledgerLog = run {
             data class Stage(val name: String, val r: ViolationReport)
             val stages = listOf(

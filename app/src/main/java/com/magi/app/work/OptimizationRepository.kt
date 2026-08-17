@@ -62,15 +62,22 @@ object OptimizationRepository {
      *
      * `replay` を持たせるのは、Worker がプロセス再起動直後（ViewModel が購読する前）に走り得るため。
      */
-    private val _notes = MutableSharedFlow<String>(
+    private val _notes = MutableSharedFlow<Pair<String, String>>(
         replay = 8,
         extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    val notes: SharedFlow<String> = _notes.asSharedFlow()
+    val notes: SharedFlow<Pair<String, String>> = _notes.asSharedFlow()
 
-    /** 失敗の記録は本処理を止めてはいけないので、ブロックしない `tryEmit` を使う。 */
-    fun publishNote(msg: String) { _notes.tryEmit(msg) }
+    /**
+     * 失敗の記録は本処理を止めてはいけないので、ブロックしない `tryEmit` を使う。
+     *
+     * [3.388.0/外部レビュー] `level` を持たせる。3.387.0 で Worker のライフサイクル全体を流すように
+     * したのに消費側が `logOp("W", it)` 固定のままで、**正常に完了した背景実行まで警告として記録**して
+     * いた。このリポジトリの診断は「まず [W] を拾う」読み方が定着している（SanityCheck・CoverageDiag・
+     * 設定ミス・NativeBridge がすべて W）ので、正常系を混ぜるとその読み方が壊れる。
+     */
+    fun publishNote(level: String, msg: String) { _notes.tryEmit(level to msg) }
 
     fun setRunning(v: Boolean) { _running.value = v }
     fun publishProgress(p: BgProgress) { _progress.value = p }

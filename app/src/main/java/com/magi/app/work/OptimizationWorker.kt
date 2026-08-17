@@ -41,11 +41,16 @@ class OptimizationWorker(
      * Worker はこのアプリの診断リング（`MagiViewModel.logOp`）へ直接触れないので Repository を経由する。
      * 記録自体が失敗しても本処理は止めない。
      */
-    private fun note(what: String, e: Throwable) = note("$what: ${e.javaClass.simpleName}: ${e.message}")
+    private fun note(what: String, e: Throwable) = note("$what: ${e.javaClass.simpleName}: ${e.message}", "W")
 
-    /** [3.387.0] 例外を伴わない出来事も同じ経路で残す（終端ログ・所有権の喪失・手順の並び）。 */
-    private fun note(msg: String) {
-        runCatching { OptimizationRepository.publishNote("バックグラウンド計算: $msg") }
+    /**
+     * [3.387.0] 例外を伴わない出来事も同じ経路で残す（終端ログ・所有権の喪失・手順の並び）。
+     * [3.388.0/外部レビュー] レベルを分ける。旧実装は消費側が `logOp("W", it)` 固定で、**正常に完了した
+     * 背景実行まで警告として記録**していた。このリポジトリの診断は「まず [W] を拾う」読み方が定着して
+     * いる（SanityCheck・CoverageDiag・設定ミス・NativeBridge がすべて W）ので、正常系を混ぜると壊れる。
+     */
+    private fun note(msg: String, level: String = "I") {
+        runCatching { OptimizationRepository.publishNote(level, "バックグラウンド計算: $msg") }
     }
 
     override suspend fun doWork(): Result {
@@ -55,11 +60,17 @@ class OptimizationWorker(
         val t0 = System.currentTimeMillis()
         val steps = mutableListOf<String>()
         var terminalLogged = false
+        // [3.388.0/外部レビュー] 所有権の喪失は**単調**（beginRun を書くのは新しい実行だけ・clear は
+        //   マーカーを消すだけ）なので、`droppedProgress > 0` の実行は必ず所有権を失っている＝
+        //   旧実装のように「成功かつ所有」分岐だけで出すと**構造的に一度も表示されない**。
+        //   進捗を捨てたのに理由が読めないのが困るので、どの出口でも付ける。
+        var droppedProgress = 0
         fun step(name: String) { steps += "$name@${(System.currentTimeMillis() - t0) / 1000}秒" }
-        fun terminal(msg: String) {
+        fun terminal(msg: String, level: String = "I") {
             if (terminalLogged) return
             terminalLogged = true
-            note(if (steps.isEmpty()) msg else "$msg ／ 手順: ${steps.joinToString("→")}")
+            val dropped = if (droppedProgress > 0) "・進捗${droppedProgress}回は所有権喪失で破棄" else ""
+            note(msg + dropped + if (steps.isEmpty()) "" else " ／ 手順: ${steps.joinToString("→")}", level)
         }
 
         // 置き換え済み／停止済みの実行はここで降りる（共有ファイルへ触らない）。
@@ -104,7 +115,6 @@ class OptimizationWorker(
         //   （＝完了後も optimizeInFlight() が真のままで、編集・Undo/Redo が恒久的にブロックされる）。
         //   自分で手放したことを覚えておき、finally はそれも所有者扱いにする。
         var releasedByMe = false
-        var droppedProgress = 0   // [3.387.0] 所有権を失って捨てた進捗の回数（＝競合が起きた証拠）
         var lastSnapMs = 0L
         var lastBubbleMs = 0L
         val wallStart = System.currentTimeMillis()   // [実機報告「残り時間表示が5分から何度も巡回する」修正]
@@ -165,28 +175,40 @@ class OptimizationWorker(
                 //   TOCTOU の窓自体は消えない（完全に閉じるには run 別のファイル名が要る＝3.336.0 で
                 //   復元経路ごと作り替えになるため見送り済み）。縮むのは「直列化(数百KBのJSON)＋一時ファイル
                 //   書き込み」のぶん＝ms 級 → μs 級。ガードが偽なら一時ファイルだけ捨てて resultFile は不変。
-                runCatching {
+                val saved = runCatching {
                     files(ctx).writeAtomically(
                         resultFile(ctx),
                         StateParser.serialize(req.first, res.schedule),
                     ) { ownsFiles() }
-                }.onSuccess { committed ->
-                    // [3.387.0] committed=false は **残っている TOCTOU の窓が実際に発火した瞬間**
-                    //   （直列化のあいだに置き換えられた）。理論上の窓が実機で起きるのかを、ここでしか測れない。
-                    if (committed) step("耐久保存") else note("結果の保存直前に所有権を失いました（置き換え＝TOCTOUの窓が発火）")
                 }.onFailure { note("完了結果の保存に失敗（プロセスが終了すると結果が失われます）", it) }
-                OptimizationRepository.publishResult(
-                    OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
-                )
-                notifyDone(res.report.hard, res.report.total)
-                step("公開")
-                runCatching { inputFile(ctx).delete() }
-                runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
-                runCatching { runIdFile(ctx).delete() }
-                step("片付け")
-                releasedByMe = true
-                terminal("完了（必須${res.report.hard} 合計${res.report.total}）" +
-                    if (droppedProgress > 0) "・進捗${droppedProgress}回は所有権喪失で破棄" else "")
+                    .getOrDefault(false)
+
+                // [3.388.0/実バグ] `commitGuard` が偽＝**直列化のあいだに置き換えられた**（残る TOCTOU の窓が
+                //   発火した）とき、旧実装は保存だけ諦めて**そのまま公開と片付けへ流れていた**。実害3つ:
+                //   ①古い結果を `publishResult` で UI へ流す（入力が同じなら `applyBgResult` の指紋照合も通る）
+                //   ②`runIdFile` を消す＝`owns(mine)` は `mine==0L || activeRunId()==mine` なので、
+                //     以後 `activeRunId()` が 0 になり **新しい所有者は二度と所有者になれない**（保存も公開も不能）
+                //   ③`inputFile`/`snapshotFile` も消えて新しい実行の kill 復旧手段まで失われ、
+                //     `releasedByMe=true` で `setRunning(false)`＝新実行の計算中に編集ガードが開く。
+                //   3.327.0 が防ごうとした被害そのもの。**所有権を失っていたら以降いっさい触らない**。
+                if (!saved && !ownsFiles()) {
+                    terminal("結果の保存直前に所有権を失いました（置き換え＝TOCTOUの窓が発火）。" +
+                        "公開も片付けもしていません", "W")
+                } else {
+                    if (saved) step("耐久保存")
+                    OptimizationRepository.publishResult(
+                        OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
+                    )
+                    notifyDone(res.report.hard, res.report.total)
+                    step("公開")
+                    runCatching { inputFile(ctx).delete() }
+                    runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+                    runCatching { runIdFile(ctx).delete() }
+                    step("片付け")
+                    releasedByMe = true
+                    terminal("完了（必須${res.report.hard} 合計${res.report.total}）" +
+                        if (saved) "" else "・結果を保存できず（プロセス終了で失われます）")
+                }
             } else {
                 terminal("完了したが所有権を失っていたため保存も公開もしませんでした（置き換え）")
             }
@@ -204,14 +226,18 @@ class OptimizationWorker(
             terminal(if (owned) "停止（片付け済み）" else "停止（所有権が無いため片付けなし）")
             throw e
         } catch (e: Exception) {
-            notify("最適化に失敗しました", e.message ?: "原因不明")
-            runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました", autoExpand = true) }
+            // [3.388.0/外部レビュー] 終端ログを**通知より先に**出す。旧実装は notify() が先で、その
+            //   NotificationCompat.Builder(...).build() は runCatching で包まれていない＝ここが投げると
+            //   catch を抜けて finally のフォールバックへ落ち、**本当の原因(e)がどこにも残らないまま**
+            //   「想定外の経路」と誤って記録されていた。片付けは runCatching 済みで投げないので先に済ませる。
             // [3.336.0/外部レビュー P0残] 失敗だけが所有権を閉じない出口だった。マーカーと入力が残るので、
             //   次回起動が「中断されました・再開できます」と案内する（実際は失敗）。`Result.failure()` は
             //   WorkManager が再実行しない＝入力を残す意味も無い。所有者なら片付けてから返す。
             val owned = ownsFiles()
             if (owned) { runCatching { clearFiles(ctx) }; releasedByMe = true }
-            terminal("失敗: ${e.javaClass.simpleName}: ${e.message}" + if (owned) "（片付け済み）" else "（所有権なし）")
+            terminal("失敗: ${e.javaClass.simpleName}: ${e.message}" + if (owned) "（片付け済み）" else "（所有権なし）", "W")
+            notify("最適化に失敗しました", e.message ?: "原因不明")
+            runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました", autoExpand = true) }
             Result.failure()
         } finally {
             // [3.329.0/外部レビュー H-03] **所有者のときだけ**実行中を降ろす。置き換えで打ち切られた
@@ -221,7 +247,7 @@ class OptimizationWorker(
             if (releasedByMe || ownsFiles()) OptimizationRepository.setRunning(false)
             // [3.387.0] 3.382.0 と同じ保証＝どの経路を通っても終端行が1つは残る。
             //   ここへ落ちたら「想定外の経路」（Error など catch(Exception) が拾わないもの）を疑う。
-            terminal("終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
+            terminal("終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。Error(OOM等)や停止処理自体の失敗が疑われます）", "W")
         }
     }
 
