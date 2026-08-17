@@ -5309,6 +5309,59 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 論理的問題の横断監査＝旗の固着・無言の編集・矛盾するデッド述語（3.392.0, ユーザー指示「すべての論理的問題点などを修正する」）
+
+不変条件が機械で確かめられるものは**全部確かめてから**、実在した問題だけを直した。
+**確かめて健全だったもの**も同じ重みで記録する（次に同じ場所を疑わないため）。
+
+### 直した3件
+
+**① 旗を立てて確実に戻さない経路が7つ残っていた（アプリが読取専用に固着しうる）**
+`running` を立てる5経路（`loadAsync`/`importCsv`/`generateSimple`/`generateSmartInitial`/`refreshCheck`ほか
+チェック3経路）が `catch (e: Exception)` でしか旗を戻しておらず、**`Error`（OOM 等）だと `running=true` が
+永久に残る**。3.328.0 で `running` を**14個の編集ガードの根拠**にしたので、固着するとセル編集・一括シート・
+Undo/Redo・設定変更が全部閉じたまま＝**アプリが読取専用になる**。3.382.0 が長い4経路
+（`start`/`runLightOptimize`/`runSoftPolish`/`runV6FullOptimize`）で `Throwable` へ広げた際の対象漏れ。
+`CancellationException` は `Exception` の子孫なので**捕捉範囲に増えるのは Error だけ＝停止の扱いは完全に不変**。
+
+**② `findFixSuggestions` には catch が1つも無かった**
+`fixSearching = true` を立てて `viewModelScope.launch` するだけで、探索が落ちると
+**「直し方を探す」が探索中のまま二度と戻らない**。`fixSeq` を新設して世代管理する
+（`cancel()` は非同期なので、後続の探索が旗を立てた**後**に古いジョブの後始末が走ると新しい探索の旗を消す
+＝`refreshCheck` が `checkSeq` を持つのと同じ理由）。`applyAlternative` も catch が無く、
+盤面は launch の**前**に差し替わるので、再チェックが落ちると「盤面は変わったのに違反数は前の案のまま」になる
+＝理由を必ず残す形へ。
+
+**③ 年間マスター編集13個＋設定ミス修正が操作ログに1行も残らなかった**
+対になるスキル群編集（追加/編集/削除/割当）・制約編集・希望編集・回数編集は**全て記録する**のに、
+`ws1AddShift`/`ws1EditShift`/`ws1RemoveShift`/`ws1AddGroup`/`ws1EditGroup`/`ws1RemoveGroup`/
+`ws1AddStaff`/`ws1EditStaff`/`ws1RemoveStaff`/`ws1SetGroupShift`(担当可否)/`ws1SetGroupApt`/`ws1SetUse2`/
+`ws1ResizeDays` と `applySettingFix` が無言だった。**いちばん影響の大きい構造変更が痕跡を残さない**うえ、
+3.328.0 は*ブロックされた*編集を記録するので「拒否は残るが成功は残らない」という逆転になっていた。
+とくに `ws1RemoveGroup` は所属者を先頭グループへ黙って移す＝**担当できるシフトが変わる**ので人数を必ず出す。
+残る無言は色設定8個のみ（表示専用・勤務表に影響しない）。
+
+**④ `Ws1Ops.canRemoveGroup` を削除**（呼出0かつ実挙動と矛盾）
+「所属者がいたら削除不可」と返すが、`removeGroup` は所属者を先頭グループへ移して削除するし、
+UI が使う `MagiViewModel.ws1CanRemoveGroup` も2グループ以上あれば可とする。名前が「削除できるか」なので
+将来これを信じた呼出側は逆の答えを受け取る＝このリポジトリが繰り返し踏んだ
+「写した側だけ取り残される」型の地雷だった。
+
+### 確かめて健全だったもの（実測・変更なし）
+| 不変条件 | 結果 |
+|---|---|
+| JSON 往復（parse→serialize→parse） | 26フィールド＋評価値まで**差分0**（実データ2件） |
+| 削除・期間変更の index 付け替え | **68操作で新規の参照外れ0**（盤面/希望/個人回数/日別必要人数/群/スキル群/Problem 構築・評価まで） |
+| 改善提案（FixSuggester） | **118提案すべて**が適用で `betterReport` 改善・Δ表示も一致・担当外0・希望破り0・重複署名0 |
+| CSV 往復（勤務表/職員/希望/制約） | 意味論は完全一致。cons3族の差は**末尾空白の正規化のみ**で、解決後の seq も評価値も同一＝バグではない |
+| fair の `m<2` ガード | checker/Evaluator/Delta/C++ の**4面すべてに存在** |
+
+### 検証
+- ホストJVM **493テスト green**（既知の false positive 1件を除く）。
+- UI 層はホストでコンパイル不可＝括弧均衡（`{`/`}` +55/+55・`(`/`)` +62/+62 で対称）と、
+  導入した `fixSeq` の宣言（クラス直下）と使用（`findFixSuggestions` のみ）をスコープ逆引きで確認。
+- v6 層（`Ws1Ops`）は実コンパイル＋全テスト実行。
+
 ## 実現不能な希望を「固定」と誤扱いする穴を9箇所修正（3.391.0, ユーザー指示「不具合を全て修正する」）
 
 このコードベースが繰り返し踏んできた兄弟バグのパターンを全数 grep し、**実在した9件だけ**を直した。

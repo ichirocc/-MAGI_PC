@@ -90,6 +90,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private var checkJob: Job? = null
     private var fixJob: Job? = null   // [競合解消] 改善提案探索。連続タップ時に前探索をキャンセルし古い結果で上書きしない
     private var checkSeq = 0L
+    /** [3.392.0] 直し方の探索も seq で世代管理する（cancel() が非同期なため。詳細は findFixSuggestions）。 */
+    private var fixSeq = 0L
 
     /**
      * [3.328.0/外部レビュー・最重要] **長い最適化が動いているか**。
@@ -539,7 +541,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         _ui.update { it.copy(running = false, message = "読込失敗: ${it.message}") }
                     },
                 )
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _ui.update { it.copy(running = false, message = "読込失敗: ${e.message}") }
             }
         }
@@ -689,8 +691,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 //   キャンセルのときだけ実行中表示を戻す。
                 if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェックを停止しました") }
                 throw e
-            } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェック失敗: ${e.message}") }
+            } catch (e: Throwable) {
+                // [3.392.0] Error(OOM等)まで拾う。旧: Exception だけで、Error だと running=true が固着し
+                //   3.328.0 で running を根拠にした14個の編集ガードが全て閉じたまま＝アプリが読取専用になった。
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェック失敗: ${e.javaClass.simpleName}") }
             }
         }
     }
@@ -731,7 +735,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     message = "初期解生成完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
                 logOp("I", "初期解生成 完了 必須=${res.report.hard} 合計=${res.report.total}")
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 // [3.271.0] 失敗を操作ログにも残す（旧: message のみ＝書き出したログから消えた実行が
                 //   追跡不能だった。実機ログ解析で「開始したのに完了も停止も無い実行」の死因特定を阻んだ）。
                 logOp("W", "初期解生成 失敗: ${e.message}")
@@ -768,8 +772,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     message = "簡易作成完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
                 logOp("I", "簡易作成 完了 必須=${res.report.hard} 合計=${res.report.total}")
-            } catch (e: Exception) {
-                logOp("W", "簡易作成 失敗: ${e.message}")   // [3.271.0] 操作ログにも残す
+            } catch (e: Throwable) {
+                logOp("W", "簡易作成 失敗: ${e.javaClass.simpleName}: ${e.message}")   // [3.271.0] 操作ログにも残す
                 _ui.update { it.copy(running = false, message = "簡易作成失敗: ${e.message}") }
             }
         }
@@ -1500,9 +1504,18 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st.withSchedule(sch)
         autoSave()
         viewModelScope.launch {
-            val rep = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(state ?: st, sch) }
-            pushReport(state ?: st, sch, rep) { it.copy(hasResult = true, message = "他の案 ${i + 1} を適用") }
-            logOp("I", "他の案 ${i + 1} を適用 必須=${rep.hard} 合計=${rep.total}")
+            // [3.392.0] 盤面は launch の前に既に差し替わっている。ここが例外で落ちると報告だけ届かず
+            //   「盤面は変わったのに違反数は前の案のまま」になるので、必ず理由を残す。
+            try {
+                val rep = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(state ?: st, sch) }
+                pushReport(state ?: st, sch, rep) { it.copy(hasResult = true, message = "他の案 ${i + 1} を適用") }
+                logOp("I", "他の案 ${i + 1} を適用 必須=${rep.hard} 合計=${rep.total}")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logOp("W", "他の案 ${i + 1} の適用後の再チェックに失敗: ${e.javaClass.simpleName}（盤面は適用済み・違反数は古い可能性）")
+                _ui.update { it.copy(message = "他の案 ${i + 1} を適用（違反数の再計算に失敗）") }
+            }
         }
     }
 
@@ -2298,8 +2311,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
                 if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
-            } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.message}）") }
+            } catch (e: Throwable) {
+                // [3.392.0] refreshCheck と同型。Error でも running を戻す（固着でアプリが読取専用になるため）。
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
             }
         }
     }
@@ -2398,7 +2412,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             }
             SettingFixAction.NONE -> null
         }
-        if (ns != null) applyStructure(ns)
+        if (ns != null) {
+            logOp("I", "設定ミスの修正を適用: ${issue.action} @ ${issue.where}")
+            applyStructure(ns)
+        }
     }
 
     /**
@@ -2410,13 +2427,27 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val sched = currentSchedule ?: return
         val focusName = focusStaff?.let { st.staff.getOrNull(it)?.name } ?: ""
         val snap = sched.copy2D()
+        // [3.392.0] 旧実装は catch が1つも無く、探索が例外で終わると `fixSearching=true` が**永久に残った**
+        //   （「直し方を探す」が探索中のまま戻らない）。3.382.0 が長い4経路で潰した「旗を立てて確実に戻さない」
+        //   型の残り。`seq` を持つのは refreshCheck と同じ理由＝`cancel()` は非同期なので、後続の探索が
+        //   `fixSearching=true` を立てた**後**に古いジョブの後始末が走ると、新しい探索の旗を消してしまう。
+        val seq = ++fixSeq
         fixJob?.cancel()   // 連続タップ時の前探索を破棄（古い結果で UI を上書きしない）
         _ui.update { it.copy(fixSearching = true, fixFocusName = focusName) }
         fixJob = viewModelScope.launch {
-            val list = withContext(Dispatchers.Default) {
-                FixSuggester.suggest(st, snap, focusStaff = focusStaff, focusShift = focusShift, maxResults = 8)
+            try {
+                val list = withContext(Dispatchers.Default) {
+                    FixSuggester.suggest(st, snap, focusStaff = focusStaff, focusShift = focusShift, maxResults = 8)
+                }
+                if (seq != fixSeq) return@launch   // 後続の探索が始まっている＝古い結果で上書きしない
+                _ui.update { it.copy(fixSuggestions = list, fixSearching = false, fixFocusName = focusName) }
+            } catch (e: CancellationException) {
+                if (seq == fixSeq) _ui.update { it.copy(fixSearching = false) }
+                throw e
+            } catch (e: Throwable) {
+                logOp("W", "直し方の探索に失敗: ${e.javaClass.simpleName}: ${e.message}")
+                if (seq == fixSeq) _ui.update { it.copy(fixSearching = false, message = "直し方を探せませんでした") }
             }
-            _ui.update { it.copy(fixSuggestions = list, fixSearching = false, fixFocusName = focusName) }
         }
     }
 
@@ -2475,14 +2506,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
                 if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
-            } catch (e: Exception) {
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.message}）") }
+            } catch (e: Throwable) {
+                // [3.392.0] refreshCheck と同型。Error でも running を戻す（固着でアプリが読取専用になるため）。
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
             }
         }
     }
 
     fun ws1EditShift(k: Int, name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
+        logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
         applyStructure(Ws1Ops.editShift(st, k, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
     }
 
@@ -2491,27 +2524,32 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun setShiftNeed(k: Int, need1: String, need2: String) {
         val st = state ?: return
         val sh = st.shifts.getOrNull(k) ?: return
+        logOp("I", "必要人数編集: ${opSy(k)} → 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
         applyStructure(Ws1Ops.editShift(st, k, sh.name, sh.kigou, need1.trim(), need2.trim()))
     }
 
     fun ws1EditGroup(g: Int, name: String, kigou: String) {
         val st = state ?: return
+        logOp("I", "グループ編集: [$g] → ${name.trim()}(${kigou.trim()})")
         applyStructure(Ws1Ops.editGroup(st, g, name.trim(), kigou.trim()))
     }
 
     fun ws1EditStaff(i: Int, name: String, groupIdx: Int) {
         val st = state ?: return
+        logOp("I", "職員編集: ${opNm(i)} → ${name.trim()} / グループ[$groupIdx]")
         applyStructure(Ws1Ops.editStaff(st, i, name.trim(), groupIdx))
     }
 
     fun ws1SetGroupShift(g: Int, k: Int, allowed: Boolean) {
         val st = state ?: return
+        logOp("I", "担当可否: グループ[$g] × ${opSy(k)} → ${if (allowed) "担当できる" else "担当しない"}")
         applyStructure(Ws1Ops.setGroupShift(st, g, k, allowed))
     }
 
     /** グループ別シフトの適切回数（1人あたり期間内目標。空欄＝目標なし）を設定。 */
     fun ws1SetGroupApt(g: Int, k: Int, value: String) {
         val st = state ?: return
+        logOp("I", "適切回数: グループ[$g] × ${opSy(k)} → ${value.trim().ifBlank { "未設定" }}")
         applyStructure(Ws1Ops.setGroupApt(st, g, k, value))
     }
 
@@ -2528,30 +2566,35 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun ws1SetUse2(on: Boolean) {
         val st = state ?: return
+        logOp("I", "設定変更: 上限人数(2パターン目) → ${if (on) "使う" else "使わない"}")
         applyStructure(Ws1Ops.setUse2(st, on))
     }
 
     fun ws1AddShift(name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
         if (kigou.isBlank()) return
+        logOp("I", "シフト追加: ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
         applyStructure(Ws1Ops.addShift(st, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
     }
 
     fun ws1AddGroup(name: String, kigou: String) {
         val st = state ?: return
         if (kigou.isBlank()) return
+        logOp("I", "グループ追加: ${name.trim()}(${kigou.trim()})")
         applyStructure(Ws1Ops.addGroup(st, name.trim(), kigou.trim()))
     }
 
     fun ws1AddStaff(name: String, groupIdx: Int) {
         val st = state ?: return
         val sched = currentSchedule ?: return
+        logOp("I", "職員追加: ${name.trim()} / グループ[$groupIdx]")
         applyStructure(Ws1Ops.addStaff(st, sched, name.trim(), groupIdx))
     }
 
     fun ws1ResizeDays(newT: Int) {
         val st = state ?: return
         val sched = currentSchedule ?: return
+        logOp("I", "期間変更: ${st.dayCount}日 → ${newT}日")
         applyStructure(Ws1Ops.resizeDays(st, sched, newT))
     }
 
@@ -2655,18 +2698,23 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             _ui.update { it.copy(message = "「休」シフトは削除できません（全ての休日が別のシフトに変わってしまうため）") }
             return
         }
+        logOp("I", "シフト削除: ${opSy(k)}（このシフトのマスは休へ・希望も削除）")
         applyStructure(Ws1Ops.removeShift(st, sched, k))
     }
 
     fun ws1RemoveStaff(i: Int) {
         val st = state ?: return
         val sched = currentSchedule ?: return
+        logOp("I", "職員削除: ${opNm(i)}（勤務行・希望・個人の回数も削除）")
         applyStructure(Ws1Ops.removeStaff(st, sched, i))
     }
 
     fun ws1RemoveGroup(g: Int) {
         val st = state ?: return
         if (g !in st.groups.indices || st.groups.size <= 1) return
+        // 所属者は先頭グループへ移る＝担当できるシフトが黙って変わるので、人数を必ず記録する。
+        val moved = st.staff.count { it.groupIdx == g }
+        logOp("I", "グループ削除: [$g]" + if (moved > 0) "（所属${moved}名は先頭グループへ移動＝担当できるシフトが変わります）" else "")
         applyStructure(Ws1Ops.removeGroup(st, g))
     }
 
@@ -2876,7 +2924,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     logOp("W", "CSV取込 一部のみ反映: ${res.matched}/${total}名一致（${total - res.matched}名は氏名不一致）")
                 }
                 logOp("I", "CSV取込 完了 ${res.matched}名一致 必須=${res.report.hard} 合計=${res.report.total}")
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _ui.update { it.copy(running = false, message = "CSV取込失敗: ${e.message}") }
             }
         }

@@ -206,8 +206,11 @@ object Ws1Ops {
         return out
     }
 
-    fun canRemoveGroup(state: MagiState, g: Int): Boolean =
-        state.groups.size > 1 && state.staff.none { it.groupIdx == g }
+    // [3.392.0] `canRemoveGroup` を削除した。**呼出0のうえ [removeGroup] の実挙動と矛盾**していた
+    //   （「所属者がいたら削除不可」と返すが、removeGroup は所属者を先頭グループへ移して削除する）。
+    //   実際の可否判定は UI が使う `MagiViewModel.ws1CanRemoveGroup`（2グループ以上あれば可）。
+    //   名前が「削除できるか」なので、将来この関数を信じた呼出側は逆の答えを受け取る＝
+    //   このリポジトリが繰り返し踏んだ「写した側だけ取り残される」型の地雷だった。
 
     /** Remove shift [k]: drop the shift; schedule cells ==k -> 休（削除後のindexへ追従）, >k decremented;
      *  wish values ==k dropped, >k decremented; groupShift/apt lose column k; needDay (axis k) and
