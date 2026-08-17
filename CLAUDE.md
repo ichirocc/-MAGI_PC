@@ -5270,6 +5270,48 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   当該職員へフォーカス。**内訳パネルのみに表示（グリッド不変＝飽和回避）・スコアリング不変**。配線=MirrorCore→
   ViolationReport→UiState→makeUi→breakdownLocations（表示専用フィールド追加、既存構築は全て named 引数＋デフォルトで非破壊）。
 
+## Worker の「コメントだけの再発防止」をテストへ＝RunFiles 抽出（3.386.0, ユーザー指示「修正する」）
+
+「外部レビュー痕跡がコードに残っており再発防止が徹底されているか?」への回答を実測したら**否**だった。
+コメントは直した記録であって再発防止ではない。**16件中2件しか自動で守られていなかった**:
+
+| 防いでいるもの | 件数 | 内訳 |
+|---|---|---|
+| テストが落ちる | **2** | `wasDecoded`(MojibakeRepairTest) / `reportComparator` 委譲(AdaptiveEliteArchiveTest) |
+| コンパイラ/CI が落ちる | 1 | LocusIdCompat（import 誤りは compileDebugKotlin で必ず落ちる） |
+| **コメントだけ** | **13** | A9・A1・UDテーマ・**Worker 11件すべて** |
+
+**最も密に監査された塊（Worker）が自動保護ゼロ**。原因は `ctx.filesDir.resolve` を直接呼ぶため JVM 単体
+テストから1行も届かないこと。3.336.0 で「`ownsFiles` はテストしても同語反復」と判断したのは**関数単体
+としては今も正しい**が、守るべきは `releasedByMe || ownsFiles()` の順序・原子置換・失敗パスの後始末と
+いった **doWork() の並び**で、そこが丸ごと無保護だった。
+- **`RunFiles(dir: File)` を新設**（`work/RunFiles.kt`）: 所有権判定・後片付け・原子置換を `Context` から
+  切り離す。**ロジックは動かしただけで1文字も変えていない**。`OptimizationWorker` の companion は
+  12箇所から呼ばれるので外形を保ったまま委譲（`files(ctx) = RunFiles(ctx.filesDir)`）。3.330.0 で
+  `removeSkillGroup` を `Ws1Ops` へ移したのと同じ手＝**テストできる場所へ動かして初めて再発防止になる**。
+- **`writeAtomically(target, text, commitGuard)`**: 3.385.0 で入れた「置き換え直前の所有権再確認」を
+  引数として外に出した。ガードが偽なら一時ファイルだけ捨て target には触れない。
+- **`RunFilesTest` 9件**: 旧経路(runId=0)の互換 / REPLACE で旧実行が所有権を失う / 壊れたマーカーは 0 へ
+  倒す / **clear 後にディレクトリが空**（個別の存在確認でなく網羅で固定＝「1つ足して消し忘れる」を防ぐ）/
+  原子置換の完全性と一時ファイル残骸なし / 既存内容の完全置換 / **ガードが偽なら target 不変** /
+  ガードは一時ファイル書き込みの**後**にちょうど1回。
+- **教訓#30 を実践**: scratch で ①`clear()` から snapshot を落とす ②`writeAtomically` をガード前の素の
+  `writeText` へ戻す、の2つを注入すると **9件中3件が落ちる**ことを実行して確認（repo は無傷・検証後に削除）。
+- **[正直な限界] `doWork()` の並びは依然として無保護**（耐久保存→公開の順序・失敗パスが所有権を閉じること・
+  進捗公開前の所有権確認）。Worker のライフサイクル側にあり Robolectric か instrumented test が要る。
+  所有確認〜置き換えの TOCTOU（3.385.0 で ms→μs へ縮めたが閉じていない）も同様に単体テストでは捕まらない。
+- **併せて実測した3原則**（ユーザー質問「採否は常に checker+keep-best / score不変・退化不能 /
+  exhaustive時のみ証明 は全ファイルで徹底か」）: **3つとも成立**。①採否＝checker を呼ばない候補は
+  `AdaptiveEliteArchive`(report を保管するだけ)・`V6SearchOperators`(コメントと診断のみ)・
+  `C1RepairAnalysis`/`FlexibleDayFlow`(候補生成器＝呼出側が check→isBetter→exactPinRegression の3段)・
+  `Ws1Ops`(データ編集)で、いずれも採否地点ではない ②重み定義は MirrorKeys/Evaluator/DeltaEvaluator/
+  magi_native.cpp の4面だけ（grep が拾った `Hf63Infeasibility` は族インデックス表、`MagiDashboardCards` は
+  日本語ラベル表＝誤検知）③`if (r.exhaustive && r.focusResidual > 0)` で壁を出す。
+  **ただし `minFocusResidual` は `acceptableLeaf` の制約を掛けない全葉で測り続けるのが正**（制約下最小に
+  変えると壁と判定される窓が増え「false wall を出さない」原則=3.76.0 に触れる）＝「意味論不変」ではなく
+  **意図的に母集団を分けている**。ここを混同して統一すると false wall を作り込む。
+- 検証: ホストJVM **489テスト green**（480＋新規9）。
+
 ## 途中最良の publish が「評価」と「盤面」で食い違う競合を修正（3.385.0, 外部レビューの検証から）
 
 ユーザー提示のレビュー（`OptimizationWorker` 10項目）を1件ずつ実コードへ当てた。最後の問い

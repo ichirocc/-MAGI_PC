@@ -1,0 +1,83 @@
+package com.magi.app.work
+
+import java.io.File
+
+/**
+ * [3.386.0] バックグラウンド最適化が使う**共有ファイルの所有権と原子的な書き込み**を、`Context` から
+ * 切り離してテストできる場所へ移したもの。ロジックは `OptimizationWorker` から動かしただけで変えていない。
+ *
+ * **なぜ切り出すか**: このアプリで最も監査が濃いのは `OptimizationWorker`（3.327.0 High3・3.329.0 H-03・
+ * 3.333.0・3.336.0 S3/P0残・3.385.0 の計11件）だが、`ctx.filesDir.resolve` を直接呼ぶため
+ * **JVM 単体テストからは1行も触れず、再発防止がコメントだけ**という状態だった。守るべき性質のうち
+ * 「所有権の判定」「後片付けの網羅」「原子置換」は `Context` でなく**ディレクトリ1つ**あれば表現できる。
+ * 3.330.0 で `removeSkillGroup` を `Ws1Ops` へ移したのと同じ手＝**テストできる場所へ動かして初めて
+ * 再発防止になる**。
+ *
+ * **ここでは守れないもの（正直に）**: `doWork()` の**並び**（耐久保存→公開の順序・失敗パスが所有権を
+ * 閉じること・進捗公開の前に所有権を確認すること）は Worker のライフサイクルそのものなので、
+ * Robolectric か instrumented test が要る。所有確認と置き換えの間の TOCTOU（3.385.0 で ms→μs へ
+ * 縮めたが閉じてはいない）も同様に単体テストでは捕まらない。
+ */
+internal class RunFiles(private val dir: File) {
+
+    /** kill 後の再起動でここから復元する入力。 */
+    val input: File get() = File(dir, "magi_bg_input.json")
+
+    /** 完了結果。UI 不在で完走しても次回起動で反映できるように残す。 */
+    val result: File get() = File(dir, "magi_bg_result.json")
+
+    /** 途中最良のスナップショット（8秒ごと退避＝実質の途中再開）。 */
+    val snapshot: File get() = File(dir, "magi_bg_best.json")
+
+    /**
+     * いま所有権を持つ実行の ID。ファイル名は固定・`ExistingWorkPolicy.REPLACE` で入れ替わるため、
+     * **どの実行が書いたファイルか**を区別する術がこれしかない（3.327.0）。
+     */
+    val runId: File get() = File(dir, "magi_bg_run.txt")
+
+    /** enqueue の直前に呼び、この実行を所有者として記録する。 */
+    fun beginRun(id: Long) {
+        runCatching { runId.writeText(id.toString()) }
+    }
+
+    /** 記録が無い・壊れているときは 0（＝誰も所有していない）。 */
+    fun activeRunId(): Long =
+        runCatching { runId.readText().trim().toLong() }.getOrDefault(0L)
+
+    /**
+     * この実行が共有ファイルの所有者か。
+     * - `mine == 0L`：runId を持たない旧経路 → 従来どおり所有者として扱う（非破壊）。
+     * - 置き換え（REPLACE）で新しい実行が [beginRun] を書くと旧実行はここで false になり、
+     *   **書き込みも削除も一切しなくなる**。停止（[clear] で runId 消去）も同様。
+     */
+    fun owns(mine: Long): Boolean = mine == 0L || activeRunId() == mine
+
+    /**
+     * 4ファイルすべてを消す。**1つでも足すのを忘れると次回起動が古い状態を掴む**ので、
+     * `RunFilesTest` が「clear 後に dir が空」で網羅を固定している。
+     */
+    fun clear() {
+        for (f in listOf(input, result, snapshot, runId)) {
+            runCatching { f.takeIf { it.exists() }?.delete() }
+        }
+    }
+
+    /**
+     * 一時ファイル経由の原子置換（3.336.0 S3）。素の `writeText` は非原子で、書き込み途中に落ちると
+     * **壊れた JSON が残る**。起動時の復元は「結果が空でなければマーカーも入力も掃除してから読む」ため、
+     * 壊れたファイルは「結果も再開手段も両方失う」経路になっていた。
+     *
+     * @param commitGuard 置き換えの**直前**に呼ぶ（3.385.0）。false なら一時ファイルだけ捨て、
+     *   `target` には一切触れない。所有権の再確認をここへ置くと、直列化と一時ファイル書き込みのぶん
+     *   （ms 級）が TOCTOU の窓から外れる。**窓が消えるわけではない。**
+     * @return `target` に `text` が入ったなら true。
+     */
+    fun writeAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean {
+        val tmp = File(target.parentFile, "${target.name}.tmp")
+        tmp.writeText(text)
+        if (!commitGuard()) { tmp.delete(); return false }
+        // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
+        if (!tmp.renameTo(target)) { target.writeText(text); tmp.delete() }
+        return true
+    }
+}

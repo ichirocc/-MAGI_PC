@@ -34,11 +34,7 @@ class OptimizationWorker(
      * - 置き換え（REPLACE）で新しい実行が `beginRun` を書くと、旧実行はここで false になり
      *   **書き込みも削除も一切しなくなる**。停止（`clearFiles` で runId 消去）も同様。
      */
-    private fun ownsFiles(): Boolean {
-        val mine = inputData.getLong(KEY_RUN_ID, 0L)
-        if (mine == 0L) return true
-        return activeRunId(ctx) == mine
-    }
+    private fun ownsFiles(): Boolean = files(ctx).owns(inputData.getLong(KEY_RUN_ID, 0L))
 
     /**
      * [3.385.0] 耐久保証（kill 耐性）の書き込みが落ちたことを、書き出せる操作ログへ届ける。
@@ -141,17 +137,15 @@ class OptimizationWorker(
                 //   `resultTxt` が空でなければマーカーも入力も掃除してから読むので、壊れたファイルは
                 //   「結果も再開手段も両方失う」経路になっていた。一時ファイル経由で置き換える。
                 // [C1] 完了結果を耐久保存。UI不在(プロセス再起動でWorkerだけ走った)でも次回起動で反映できる。
+                // [3.385.0/外部レビュー High1] `commitGuard` に所有権の再確認を渡す＝置き換えの**直前**に見る。
+                //   TOCTOU の窓自体は消えない（完全に閉じるには run 別のファイル名が要る＝3.336.0 で
+                //   復元経路ごと作り替えになるため見送り済み）。縮むのは「直列化(数百KBのJSON)＋一時ファイル
+                //   書き込み」のぶん＝ms 級 → μs 級。ガードが偽なら一時ファイルだけ捨てて resultFile は不変。
                 runCatching {
-                    val json = StateParser.serialize(req.first, res.schedule)
-                    val tmp = File(resultFile(ctx).parentFile, "magi_bg_result.json.tmp")
-                    tmp.writeText(json)
-                    // [3.385.0/外部レビュー High1] 所有権の再確認を**置き換え直前**へ置く。
-                    //   TOCTOU の窓自体は消えない（完全に閉じるには run 別のファイル名が要る＝3.336.0 で
-                    //   復元経路ごと作り替えになるため見送り済み）。ここで縮むのは
-                    //   「直列化(数百KBのJSON)＋一時ファイル書き込み」のぶん＝ms 級 → μs 級。
-                    //   捨てるのは一時ファイルだけで、本物の resultFile には触らない。
-                    if (!ownsFiles()) { tmp.delete(); return@runCatching }
-                    if (!tmp.renameTo(resultFile(ctx))) { resultFile(ctx).writeText(json); tmp.delete() }
+                    files(ctx).writeAtomically(
+                        resultFile(ctx),
+                        StateParser.serialize(req.first, res.schedule),
+                    ) { ownsFiles() }
                 }.onFailure { note("完了結果の保存に失敗（プロセスが終了すると結果が失われます）", it) }
                 OptimizationRepository.publishResult(
                     OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
@@ -235,31 +229,27 @@ class OptimizationWorker(
         private const val NID_PROGRESS = 4101
         private const val NID_DONE = 4102
 
+        // [3.386.0] 所有権・後片付け・原子置換の実体は `RunFiles`（Context 非依存＝ホストでテスト可能）。
+        //   ここは Context ベースの外形を保つだけの薄い委譲（呼出元が12箇所あるため非破壊）。
+        internal fun files(ctx: Context): RunFiles = RunFiles(ctx.filesDir)
+
         // [C1] kill耐性: 入力・完了結果・途中最良解のファイル退避先（filesDir、UIと共有）
-        fun inputFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_input.json")
-        fun resultFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_result.json")
-        fun snapshotFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_best.json")   // [#4] 途中最良解
+        fun inputFile(ctx: Context): File = files(ctx).input
+        fun resultFile(ctx: Context): File = files(ctx).result
+        fun snapshotFile(ctx: Context): File = files(ctx).snapshot
         // [3.327.0/外部レビュー High3] いま所有権を持つ実行の ID。ファイル名は固定・
         //   `ExistingWorkPolicy.REPLACE` で入れ替わるため、**どの実行が書いたファイルか**を区別する術が
         //   無かった。区別できないと ①置き換えで打ち切られた旧実行が、新実行の入力ファイルを
         //   `clearFiles` で消す ②旧実行が完了間際なら別データの結果を `resultFile` へ書き、次回起動で
         //   それが現在のデータとして復元される、が起こりうる。
-        fun runIdFile(ctx: Context): File = ctx.filesDir.resolve("magi_bg_run.txt")
+        fun runIdFile(ctx: Context): File = files(ctx).runId
 
         /** [3.327.0] enqueue の直前に呼び、この実行を所有者として記録する。 */
-        fun beginRun(ctx: Context, runId: Long) {
-            runCatching { runIdFile(ctx).writeText(runId.toString()) }
-        }
+        fun beginRun(ctx: Context, runId: Long) = files(ctx).beginRun(runId)
 
-        fun activeRunId(ctx: Context): Long =
-            runCatching { runIdFile(ctx).readText().trim().toLong() }.getOrDefault(0L)
+        fun activeRunId(ctx: Context): Long = files(ctx).activeRunId()
 
-        fun clearFiles(ctx: Context) {
-            runCatching { inputFile(ctx).takeIf { it.exists() }?.delete() }
-            runCatching { resultFile(ctx).takeIf { it.exists() }?.delete() }
-            runCatching { snapshotFile(ctx).takeIf { it.exists() }?.delete() }
-            runCatching { runIdFile(ctx).takeIf { it.exists() }?.delete() }
-        }
+        fun clearFiles(ctx: Context) = files(ctx).clear()
 
         const val KEY_SECONDS = "seconds"   // [P2] enqueue 時の予算秒数（WorkManager が永続化）
         const val KEY_WORKERS = "workers"   // [P2] enqueue 時の並列数
