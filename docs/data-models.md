@@ -1,8 +1,11 @@
 # data-models.md — データモデル（項目名と型の正解）
 
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
-> **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`（main commit `6769806` 時点）。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が無変換で往復する。
-> **最終更新**：2026-06-30
+> **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
+> **最終更新**：2026-08-17（3.389.0 — SUDO モデル作成時の実装照合で §3 の2件を訂正。§1・§2 のフィールド表は
+> 実装と一致を再確認済み。**§4 の UiState 一覧はまだドリフトしている**＝`cellFamilies`/`countFamilies`/
+> `needFamilies`（3.111.0/3.353.0/3.370.0 で追加した「1セルに重なった全違反クラス」マップ）と
+> `resultSchedule` 系の result 専用マップが未記載。全体像は [`sudo_model.md`](./sudo_model.md) 参照）
 
 ---
 
@@ -44,7 +47,7 @@
 |---|---|---|
 | `Shift` | `name: String`, `kigou: String`, `need1: String`, `need2: String` | need1/need2 = P1/P2 の既定必要数（`""`/null＝要件なし） |
 | `Group` | `name: String`, `kigou: String` | kigou＝制約で使う記号 |
-| `Staff` | `name: String`, `groupIdx: Int`, `skillIdx: Int = 0` | groupIdx→ユニット群（担当可否/covU）、skillIdx→スキル群（C41s/C42s 専用） |
+| `Staff` | `name: String`, `groupIdx: Int`, `skillIdx: Int = 0` | groupIdx→ユニット群（担当可否/covU）、skillIdx→スキル群（C41s/C42s 専用）。**`skillIdx = -1` は「未所属」の正規の値**（UI の「(なし)」・3.70.0）。`ssk[i] == groupIdx(>=0)` が常に偽になるので cons41s/cons42s から安全に外れる。群削除時の再割当も `-1` へ寄せる（3.328.0） |
 | `Range` | `lo: String`, `hi: String` | 個人×シフトの下限/上限（LimMin/LimMax） |
 | `C1Row` | `day1: String`, `shiftKigou: String`, `day2: String` | 「day1 日窓で shiftKigou を day2 回」 |
 | `C2Row` | `shiftKigou: String`, `count: String` | 個人の shiftKigou 合計の目標 |
@@ -64,7 +67,14 @@
 | 回数系（職員×シフト） | `"i,k"` | `staffRange`, `countViolations` |
 | 被覆系（シフト×日） | `"k,j"` | `needDay1/2`, `needViolations` |
 
-`schedule[i][j] < 0` ＝ 公休（未割当）。希望が反映済みか＝ `wishes["i,j"] == schedule[i][j]`。
+**`schedule[i][j]` は必ず有効なシフト index**（0..K-1）。希望が反映済みか＝ `wishes["i,j"] == schedule[i][j]`。
+
+> **[3.389.0 訂正]** 旧記述「`schedule[i][j] < 0` ＝ 公休（未割当）」は**誤り**だった。
+> 「休」は `kigou == "休"` で解決される**通常のシフト index**（`Problem.restIdx` = `shifts.indexOfFirst { it.kigou == "休" } ?: 0`）
+> であって負値ではない。負値は `MirrorCore.normalizeSchedule` が**範囲外セルへ付けるセンチネル `-1`**で、
+> 意味は「公休」ではなく**「不正な値」**（行が短い場合は `0` で埋める）。`Problem.initialAssignment` も
+> `k < 0` を `0` へクランプする。「休は特殊な OFF ではなく通常のシフト種の一つ」は 3.345.0 で全面的に
+> 徹底された前提で、weekly もシフト別に均すので休を特別扱いしない。
 
 ---
 

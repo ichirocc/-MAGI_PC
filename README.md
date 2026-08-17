@@ -20,10 +20,18 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/magi_design_system.md`](./docs/magi_design_system.md) | デザイン基盤（色/余白/タイポ/部品） |
 | [`docs/v6_engine_native_port.md`](./docs/v6_engine_native_port.md) | エンジン（v6）の移植 |
 | [`docs/algorithm_portfolio.md`](./docs/algorithm_portfolio.md) | 探索・研磨の**入口と責務の台帳**（どの手がどこで走るか・横断機構・既定OFF・廃止済み・未実施の提案） |
+| [`docs/sudo_model.md`](./docs/sudo_model.md) | **SUDO モデル**（S 関連図／U ユースケース／D ドメイン／O オブジェクト。実装から起こした全体像。D の不変条件と O の実測値つき） |
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-17（3.388.0 `/code-review` 11件を実コードで裏取りし**9件が実在**と確認して修正。1件目は直前に main へ入れた **Critical で私のバグ** ― 3.385.0 の `commitGuard` が「保存はスキップするが公開・片付けはスキップしない」形だったため、置き換えられた実行が古い結果を公開したうえ `runIdFile` を消し、`owns()` の定義上**新しい実行が二度と所有者になれない**（保存も公開も永久に不能・kill 復旧手段も消失）状態を作っていた＝3.327.0 が防ごうとした被害そのもの。あわせて**指摘より広い欠陥**を1件発見 ― 計測リセットが`optimize()` 入口にあり AUTO 帯で最大3回呼ばれるため最後の pass しか報告せず、`TuningTelemetry` も3.356.0 以来同じ状態だった。ホストJVM **489テスト green**。3.387.0 ユーザー指示「残っている、埋められない穴などログ強化する」＝
+**最終更新**：2026-08-17（3.389.0 **SUDO モデル**（S システム関連図／U ユースケース図／D ドメインモデル図／
+O オブジェクト図）を `docs/sudo_model.md` として新設。4図とも実装から起こし、**D の不変条件と O の値は実測**
+（`golden_state.json` を読み、`UnifiedViolationChecker.check` をホストJVMで実走して `hard=0 total=437
+weightedScore=3109.0` まで確認）。作成中に **docs と実装の食い違いを5件**発見して同文書へ列挙 ―
+とくに `data-models.md` の「`schedule[i][j] < 0` ＝公休」は誤り（休は `kigou=="休"` で解決される通常の
+シフト index で、負値は `normalizeSchedule` が範囲外セルへ付ける**センチネル -1**＝「不正な値」）。
+**行番号は書かない方針**（作成中に自分が `OptimizationWorker.kt` を編集した結果、収集時の行番号が最大 +26
+ずれた＝行番号は最も早く腐る）。3.388.0 `/code-review` 11件を実コードで裏取りし**9件が実在**と確認して修正。1件目は直前に main へ入れた **Critical で私のバグ** ― 3.385.0 の `commitGuard` が「保存はスキップするが公開・片付けはスキップしない」形だったため、置き換えられた実行が古い結果を公開したうえ `runIdFile` を消し、`owns()` の定義上**新しい実行が二度と所有者になれない**（保存も公開も永久に不能・kill 復旧手段も消失）状態を作っていた＝3.327.0 が防ごうとした被害そのもの。あわせて**指摘より広い欠陥**を1件発見 ― 計測リセットが`optimize()` 入口にあり AUTO 帯で最大3回呼ばれるため最後の pass しか報告せず、`TuningTelemetry` も3.356.0 以来同じ状態だった。ホストJVM **489テスト green**。3.387.0 ユーザー指示「残っている、埋められない穴などログ強化する」＝
 テストで捕まえられないと記録してきた項目を、**起きたことが必ずログに残る**形にした。①**背景 Worker の
 ライフサイクルが書き出したログにほぼ何も残らなかった**（3.382.0 の終端ログ保証が Worker だけ対象外で、
 成功も停止も所有権の喪失も無言）→ 全6出口に終端ログ＋手順と経過秒（`doWork()` の並びが単体テストで

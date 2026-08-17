@@ -5309,6 +5309,54 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## SUDO モデルを実装から起こす（3.389.0, ユーザー提示「SUDOモデリング」）
+
+ユーザーがログラス松岡さん（@little_hand_s）の **SUDO モデリング**（S=システム関連図／U=ユースケース図／
+D=ドメインモデル図／O=オブジェクト図）を提示。**実装から**4図を起こし `docs/sudo_model.md` として新設した。
+**docs のみ＋コメント1件＝エンジン・重み・スコアは完全に不変**（`MirrorCore` の変更は stale コメントの訂正のみ）。
+
+### 作った理由と、この文書の位置づけ
+既存 docs は層ごと（design/architecture/business-logic/data-models/screen_spec…）に縦割りで、
+**「誰が・何のために・どの型が・実際にどんな値で」を1枚で見る面が無かった**。SUDO はその4面をちょうど埋める。
+`algorithm_portfolio.md` と同じ規律（**書くのは実装済みの事実だけ**・構想は隔離）を明記して従う。
+
+### 実測した数字（推定値は1つも書かない）
+O 図の素材は `golden_state.json`。`UnifiedViolationChecker.check(state, state.schedule)` をホストJVMで実走し
+**hard=0 / total=437 / weightedScore=3109.0**（breakdown: weekly 183・c1 115・c3 36・c3m 36・apt 28・
+c3mn 11・low 8・c42 6・c2 4・covO 4・fair 4・high 2、violations 116件・needViolations 4件・countViolations 15件）
+まで確認。`weightedScore=3109` は `golden_eval_expected.txt` の `soft=3109` と一致＝**言語跨ぎパリティの固定値**（3.357.0）。
+`needViolations` のキーは `"2,8" "2,9" "2,21" "2,27"`＝Dﾃ が 12/9・12/10・12/22・12/28 に2人配置。
+
+### 収集の検証で見つけた自分の誤り（Workflow の集計を信じなかった結果）
+4本の収集 + 2本の敵対検証で組んだが、**集計側の返り値は `wrong: 0 / missing: 0`** だった。ツール自身の
+guidance どおり `journal.jsonl` を読むと**検証は5件の誤りを検出していた**。集計を鵜呑みにしていたら全部残っていた:
+1. **D の不変条件「数値項目は全て String」が誤り**。String なのは**利用者が入力する設定値**だけで、理由は
+   「未設定」と「0」を区別するため（`""` と `"0"` は別）。`Staff.groupIdx/skillIdx`・`schedule`・`groupShift`・
+   `wishes` の値は `Int`、`use2Patterns` は `Boolean`。**この誤りのまま描くと `groupIdx: String` の図になる。**
+2. **S の `OptimizationWorker.kt` の行番号が stale**（+11〜+26）。収集後に自分がそのファイルを編集したため。
+   → **この文書は行番号を持たない方針**にした（内容は正しいのに数字だけ腐るのが最も質が悪い）。
+3. **U のボタン文言が違う**。実際は「CSV取込」「CSV出力」「データを保存」「職員」「希望」「制約」。
+4. **O の cons3n は7行でなく8行**（Dﾃ×5・Cｵ×2・Cｱ×1＝「夜勤・準夜勤の翌日に勤務を置かない」という
+   単一の業務ルールを8行へ展開したもの）。JSON を直接数えて確認。
+5. **`sample_state_v6.json` は mojibake fixture ではない**＝native-parity CI の2つ目の実データ形状（入力盤面 hard=15・
+   3.362.0）。素材から外した判断自体は正しかったが、**理由が誤っていた**ので文書に正しい理由を書いた。
+
+### 副産物＝docs と実装の食い違いを5件発見し、うち4件をその場で修正
+| 見つけたもの | 対応 |
+|---|---|
+| `data-models.md`「`schedule[i][j] < 0` ＝公休（未割当）」が**誤り** | **訂正**。休は `kigou=="休"` で解決される通常のシフト index（`restIdx`）。負値は `normalizeSchedule` が範囲外セルへ付ける**センチネル -1**＝「不正な値」。3.345.0「休は通常のシフト種の一つ」と整合 |
+| `data-models.md` が `Staff.skillIdx = -1`（未所属）を書いていない | **追記**（UI の「(なし)」・3.70.0／群削除時の再割当も -1・3.328.0） |
+| `data-models.md` のヘッダが stale（`6769806` 時点・2026-06-30） | **更新**。§1・§2 のフィールド表は実装と一致を再確認、**§4 の UiState 一覧はまだドリフト**（`cellFamilies`/`countFamilies`/`needFamilies`/result 専用マップが未記載）と正直に明記 |
+| `MirrorKeys.weights` のコメント「窓の要件(c1)=5」 | **訂正**（実装は 15。3.249.0 で 4→5、3.253.0 で 5→15。HF77 の履歴を1行に畳んだ） |
+| `business-logic.md` の重み・族数 | **一致を確認**（19族・c1=15・c3mn=15・covO=1.0・c42 の C(n,2)・keep-best の hard→weightedScore→total）＝ここは信用してよい |
+
+### 検証
+- **mermaid 4図を実際にパースして確認**（`mermaid@11` + `jsdom` で `mermaid.parse`）。**4/4 OK**。
+  あわせて**この検証器が本当に落ちることも確認**（不正なエッジを注入すると exit 1・教訓#30）。
+- ホストJVM **489テスト green**（既知の false positive 1件を除く）。`MirrorCore` はコメントのみの変更だが、
+  v6 を触ったので main/test とも再コンパイルして実行した。
+- O の値は上記のとおりホストJVM実走。S/U の記述は実ファイル・実ボタン文言まで戻って確認した。
+
 ## 埋められない穴をログで観測可能にする（3.387.0, ユーザー指示「残っている、埋められない穴などログ強化する」）
 
 これまで「テストでは捕まらない」と記録してきた項目を、**起きたことが必ずログに残る**形にした。
