@@ -55,8 +55,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * [3.386.0] `private` → `internal`。会話バブルの展開先（`BubbleActivity`）が素の `MaterialTheme` を
+ * 使っており、D8（3.121.0＝外観は UD 高コントラスト固定）から**バブルだけ外れて** M3 既定の
+ * mauve/pink が出ていた。同じテーマを共有するため可視性を上げる（呼出は本アプリ内の2箇所のみ）。
+ */
 @Composable
-private fun MagiTheme(mode: Int = 0, content: @Composable () -> Unit) {
+internal fun MagiTheme(mode: Int = 0, content: @Composable () -> Unit) {
     // mode: 0=システム / 1=ライト / 2=ダーク / 3=高コントラスト(ユニバーサルデザイン)
     val dark = when (mode) { 1 -> false; 2 -> true; else -> isSystemInDarkTheme() }
     // [MAGI "Ward" 配色 — melta-ui 流トークン設計 / 詳細は docs/DESIGN.md]

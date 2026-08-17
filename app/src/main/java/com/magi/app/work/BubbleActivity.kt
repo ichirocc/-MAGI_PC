@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import com.magi.app.MagiTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +30,9 @@ class BubbleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            // [3.386.0] 素の MaterialTheme だと M3 既定色が出て、D8（3.121.0＝UD 高コントラスト固定）から
+            //   このバブル画面だけ外れる。MainActivity と同じ MagiTheme(3) を共有する。
+            MagiTheme(3) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     BubbleContent(
                         fromBubble = isLaunchedFromBubble,

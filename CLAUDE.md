@@ -5311,6 +5311,31 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   変えると壁と判定される窓が増え「false wall を出さない」原則=3.76.0 に触れる）＝「意味論不変」ではなく
   **意図的に母集団を分けている**。ここを混同して統一すると false wall を作り込む。
 - 検証: ホストJVM **489テスト green**（480＋新規9）。
+- **[併せて] U6＝バブル画面だけ D8 から外れていた**（提示された不具合表のうち唯一実在した項目）:
+  `BubbleActivity` が素の `MaterialTheme` を使い、M3 既定の mauve/pink が出て D8（3.121.0＝外観は UD
+  高コントラスト固定）から外れていた。`MainActivity` の `MagiTheme` を `private`→`internal` にして共有。
+  呼出は本アプリ内の2箇所のみ。表示のみ・スコア不変。
+- **提示された不具合表の検証結果（U1〜U10・N1〜N4 の14件中、実在は1件）**:
+  - **U1「`cheapSingleRuleLowerBound` の関数本体崩壊・`unavoidable` 未定義」＝Critical と報告されたが不成立**。
+    361行に完全な形で存在し、報告書が「推奨修正」として書いた疑似コードと**実装が既に同じ構造**。
+    かつ 489テストが通る＝コンパイルできている（未定義ならビルドが落ちる）。
+  - U2 skillIdx 境界＝`skillGroups[...]` を skillIdx で引く箇所がコード上に存在せずクラッシュしない
+    （実際は「その職員が cons41s/42s から静かに外れる」で 3.328.0 の検査2i が警告済み）。
+  - U3 dayCount ジャグ配列＝`normalizeSchedule` が不足を休で埋め範囲外を -1 へ写す（3.199.0/3.278.0）。
+  - U5 skillGroups の書き出し漏れ＝スキル群の編集4関数は全て `applyStructure`→`structureEdited=true` を
+    立てるので `exportJson()` は `serialize`（skillGroups を書く）へ分岐する。`exportWithEdits` に到達
+    するのは制約だけを編集した場合で、そのとき skillGroups は変わっていない。
+  - U7 `request` の RMW 競合＝書き込み3箇所は**すべて ViewModel 側**で Worker は読むだけ＝同時書き込みなし。
+  - U8 `changedCellCount` のサイズ差＝呼出は1箇所で両方とも同じ Problem の S×T＝構造的に同寸。
+    危険なのは報告書が挙げた「other が大きい」側でなく**小さい側（AIOOBE）**だが、こちらも到達不能。
+  - U10 `ExactResult(0,0,null,false,0)`＝`minJointC1` は `V6HotfixPasses` から一度も読まれておらず、
+    `provenWalls` は `exhaustive=false` で除外する。読みやすさの指摘としては妥当だが欠陥ではない。
+  - N1 下界が rangeLo を無視＝制約を無視した下界は**より緩い下界として健全**（早期終了が効きにくいだけ）。
+  - N3 bridgePool＝`bridge || hard==ref.hard+1` で doc より広いが、非 bridge の hard+1 は正規に登録された
+    エリートなので diversity から返るのは正しい。命名/doc の不正確さ（Low）。
+  - N4「`V6HotfixPasses` の存在保証がない」＝同一モジュールでコンパイル時に解決される。
+  - 行数は前回同様ズレている（`StateParser` 465→実 256・`OptimizationWorker` 403→実 280 等）。
+
 
 ## 途中最良の publish が「評価」と「盤面」で食い違う競合を修正（3.385.0, 外部レビューの検証から）
 
