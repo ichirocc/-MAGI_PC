@@ -2,10 +2,10 @@
 
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
 > **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
-> **最終更新**：2026-08-17（3.389.0 — SUDO モデル作成時の実装照合で §3 の2件を訂正。§1・§2 のフィールド表は
-> 実装と一致を再確認済み。**§4 の UiState 一覧はまだドリフトしている**＝`cellFamilies`/`countFamilies`/
-> `needFamilies`（3.111.0/3.353.0/3.370.0 で追加した「1セルに重なった全違反クラス」マップ）と
-> `resultSchedule` 系の result 専用マップが未記載。全体像は [`sudo_model.md`](./sudo_model.md) 参照）
+> **最終更新**：2026-08-17（3.390.0 — **§4 の UiState 一覧を全82フィールドへ刷新**。旧記述は30フィールドが
+> 未記載で、`*Families` 3種・result 専用マップ7種・調整トグル4種・診断5種などが丸ごと落ちていた。
+> 3.389.0 で §3 の2件を訂正（`schedule[i][j] < 0` ＝公休は誤り／`skillIdx = -1` は正規の値）。
+> §1・§2 のフィールド表は実装と一致を再確認済み。全体像は [`sudo_model.md`](./sudo_model.md) 参照）
 
 ---
 
@@ -80,16 +80,70 @@
 
 ## 4. UiState（画面表示用の派生状態）
 
-`data class UiState`（`ui/MagiUiState.kt`）。MagiState から ViewModel が生成する**表示専用**の状態。主なフィールド：
+`data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
+状態。**全82フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
 
-- **読込/履歴**：`loaded`, `canUndo`, `canRedo`
-- **規模**：`staff`, `days`, `shifts`, `groups`, `use2`
-- **最適化状態**：`running`, `hasResult`, `bestHard`(Long), `bestSoft`(Long), `initHard/initSoft`, `weightedScore`(Double), `totalViolations`, `iters`, `itersPerSec`, `elapsedMs`, `workers`, `budgetSec`(=300), `softPolish`(=true), `v6Algorithm`
-- **違反の内訳と場所**：`breakdown: Map<String,Int>`（19種の件数）、`violationCells["i,j"]→"vio-xxx"`（セル系）、`countViolations["i,k"]`（回数系）、`needViolations["k,j"]`（被覆系）
-- **表示素材**：`schedule`, `resultSchedule`(ws6確定), `liveSchedule`(計算中の最良盤面), `wishes`, `staffNames`, `staffGroupSymbols`, `shiftSymbols`, `shiftColorHex`, `shiftTextHex`, `violationColorHex`（空＝テーマerror、`shiftColors["__vio__"]`）
-- **誘導/診断**：`satisfaction`(%), `copilotHint`, `impossibleWishCount`, `coverageDiag`(covU原因診断), `settingIssues`, `fixSuggestions`, `alternatives`, `polishExhausted`
-- **中断**：`interruptedRun`, `interruptedInfo`
-- **その他**：`v6: V6PortReport?`, `message`, `opLog`, `logs`, `startDate`
+**読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
+
+**規模**（5）：`staff`, `days`, `shifts`, `groups`, `use2`
+
+**最適化の状態**（11）：`running`, `hasResult`, `initHard`/`initSoft`(Long), `bestHard`/`bestSoft`(Long),
+`totalViolations`, `weightedScore`(Double), `iters`, `itersPerSec`, `elapsedMs`
+
+**計算の設定**（10）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
+`softPolish`(=true), `nativeAccel`(=true), `nativeParity`(=true) と、**既定 OFF の調整トグル**
+`blockSwapC3nFilter` / `wideC3nBreak` / `adaptiveEscape` / `portfolioRoleParallelSa`
+（意味と見直しの条件は [`algorithm_portfolio.md`](./algorithm_portfolio.md)）
+
+**違反の内訳と場所**（8）— **3つのキー空間**を混ぜないこと（§3 参照）：
+
+| フィールド | 型 | 意味 |
+|---|---|---|
+| `breakdown` | `Map<String,Int>` | 19族の件数（キー = `MirrorKeys.all`） |
+| `violationCells` | `"i,j"→"vio-xxx"` | セル系。**最重1クラスのみ** |
+| `countViolations` | `"i,k"→"vio-xxx"` | 回数系。**最重1クラスのみ** |
+| `needViolations` | `"k,j"→"vio-xxx"` | 被覆系。**最重1クラスのみ** |
+| `violationCellFamilies` | `"i,j"→List` | セルの**全**違反クラス（重み降順）。3.111.0 |
+| `countFamilies` | `"i,k"→List` | 回数キーの全クラス。3.353.0 |
+| `needFamilies` | `"k,j"→List` | 被覆キーの全クラス。3.370.0 |
+| `distLocations` | `"weekly"→[[i,dev]]` / `"fair"→[[i,k,dev]]` | セル位置を持たない2族の偏り箇所（内訳パネル専用） |
+
+> `*Families` の3つは「重い違反（low 90 / covU 8000 等）が同じキーの軽い違反を隠す」問題への対処。
+> 先頭要素は対応する単一クラスマップと常に一致する。内訳→場所タップと E7 フィルタはこちらを読む。
+
+**表示素材**（12）：`schedule`, `liveSchedule`(計算中の最良盤面), `wishes`(`"i,j"→shiftIdx`),
+`staffNames`, `staffGroupSymbols`, `shiftSymbols`, `shiftColorHex`, `shiftTextHex`,
+`violationColorHex`（必須違反・空＝テーマ error / `shiftColors["__vio__"]` 由来）,
+`violationSoftColorHex`（要調整・`__vioSoft__` 由来）, `violationFamilyColorHex`（族別の個別色・`__vioFam_<fam>__` 由来）,
+`reviewMemos`（見直し候補メモ・セッション内のみ）
+
+**結果スナップショット**（8・**現在 UI 参照ゼロ**）：`resultSchedule`, `hasResultSnapshot`,
+`resultViolationCells`, `resultNeedViolations`, `resultCountViolations`,
+`resultViolationCellFamilies`, `resultCountFamilies`, `resultNeedFamilies`
+（読取モード撤去＝D7/3.120.0 で参照が消えた。`makeUi` の充填だけ継続してモデルとして温存している。
+`null` = 未計算 → 現行マップへフォールバックする規約）
+
+**編集/再構成**（4）：`constraintsEdited`, `structureEdited`, `editRev`, `prevBackupAvailable`
+
+> `editRev` は構造編集ごとに単調増加する。`structureEdited` は Boolean なので既に true だと `copy` が同値になり
+> StateFlow が emit せず、`currentSchedule == null` のときは `refreshCheck` も早期 return するため、
+> 編集画面が再構成されず「+/- で数字が変わらない」実機バグを生んでいた（3.185.0/3.189.0）。
+> `editRev` があると必ず distinct な UiState になる。
+
+**誘導/診断**（14）：`satisfaction`(%), `copilotHint`, `polishExhausted`, `impossibleWishCount`,
+`settingIssues`, `fixSuggestions`, `fixSearching`, `fixFocusName`, `alternatives`,
+`coverageDiag`(covU/covO の原因診断), `forbiddenDiag`(禁止連続の壁・3.280.0),
+`c1Plateau`(窓の要件が直せなかった理由・3.322.0), `observedPinBlockedAttempts` と `pinTargets`
+（回数固定が却下した候補の**計測できた下限**と対象・3.326.0）
+
+**中断**（2）：`interruptedRun`, `interruptedInfo`
+
+**その他**（5）：`v6`(`V6PortReport?`), `message`, `opLog`(操作ログ), `logs`(診断ログ), `startDate`
+
+> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+11+10+8+12+8+4+14+2+5 = **82** で
+> `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
+> **フィールドが増減したのにここを直し忘れた**ことが件数のずれとして出る（実際、本文を書いた直後の照合で
+> 4グループとも数字が間違っていた）。件数を落とすと照合は無意味になるので、更新のたびに数字も直すこと。
 
 ---
 

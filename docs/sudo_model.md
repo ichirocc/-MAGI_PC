@@ -475,7 +475,9 @@ flowchart TB
    群削除時の再割当も `-1` へ寄せる（3.328.0）。
 3. **`docs/data-models.md` のヘッダが stale**（「最終更新 2026-06-30 / main commit `6769806` 時点」）。
    §1・§2 の MagiState フィールド表そのものは実装と完全一致だが、§3 のキー規約の注記と §4 の UiState 一覧が
-   ドリフトしている（`cellFamilies`/`countFamilies`/`needFamilies`/`resultSchedule` 系が未記載）。
+   ドリフトしていた。**→ 3.390.0 で §4 を全82フィールドへ刷新**（旧記述は30フィールドが未記載＝`*Families` 3種・
+   result 専用マップ7種・調整トグル4種・診断5種などが丸ごと落ちていた）。以後は各グループの**件数**を
+   `MagiUiState.kt` の `val` 宣言数と機械照合できる形にしてある。
 4. **`docs/business-logic.md` は重み・族数とも実装と一致**（19族・c1=15・c3mn=15・covO=1.0・c42 の C(n,2)・
    keep-best の hard→weightedScore→total）。ここは信用してよい。
 5. **コード内コメントの stale が1件**：`MirrorKeys.weights` に「窓の要件(c1)=5」というコメントが残っており、
