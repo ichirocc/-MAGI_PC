@@ -51,7 +51,7 @@ class SaWishLockTest {
         //   「SaOptimizer.run を停滞させて呼ばせる」テストは**バグを戻しても通った**。直接呼ぶ。
         val st = state()
         val p = Problem(st)
-        val ev = Evaluator(p, c3RunMode = true)
+        val ev = Evaluator(p)
         val sa = SaOptimizer(p, ev)
         val init = p.initialAssignment()
         val flat = IntArray(p.S * p.T) { init[it / p.T][it % p.T] }
@@ -68,7 +68,7 @@ class SaWishLockTest {
     @Test fun searchNeverMovesACellThatHoldsAFeasibleWish() {
         val st = state()
         val p = Problem(st)
-        val ev = Evaluator(p, c3RunMode = true)
+        val ev = Evaluator(p)
 
         // 前提: 入口の盤面では実現可能な希望がすべて反映されている。
         val init = p.initialAssignment()

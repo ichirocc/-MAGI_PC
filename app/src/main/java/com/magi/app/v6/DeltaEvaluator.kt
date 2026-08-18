@@ -14,7 +14,7 @@ package com.magi.app.v6
  * The delta logic was validated against fullEval with a 20,000-move randomized
  * differential test (zero mismatches on both preview and committed score).
  */
-class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
+class DeltaEvaluator(private val p: Problem) {
 
     private val S = p.S; private val T = p.T; private val K = p.K
     private val a: Array<IntArray>
@@ -389,7 +389,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             // [HF507] single-shift run: deficit is per-staff whole-row, not windowed.
             // A move at (i,j) only affects staff i's row, so recompute row i's run deficit
             // (before/after via the caller's swap captures the delta correctly).
-            if (!fbd && c3RunMode && C3Run.isSingleShiftSeq(seq)) {
+            if (!fbd && C3Run.isSingleShiftSeq(seq)) {
                 sub += C3Run.rowDeficit(a, i, seq[0], D)
                 continue
             }
@@ -482,7 +482,7 @@ class DeltaEvaluator(private val p: Problem, private val c3RunMode: Boolean = tr
             val seq = c.seq; val D = seq.size
             if (D == 0) continue
             // [HF507] non-forbidden single-shift run -> run deficit (per staff whole-row)
-            if (!fbd && c3RunMode && C3Run.isSingleShiftSeq(seq)) {
+            if (!fbd && C3Run.isSingleShiftSeq(seq)) {
                 for (i in 0 until S) sub += C3Run.rowDeficit(a, i, seq[0], D)
                 continue
             }

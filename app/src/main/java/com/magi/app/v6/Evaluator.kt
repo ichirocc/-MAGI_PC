@@ -42,7 +42,7 @@ internal fun c42PairCount(sameSet: Boolean, n1: Int, n2: Int): Long =
  * Phase 1 recomputes the whole objective per candidate (no BIT-DELTA). It is exact;
  * native speed absorbs the cost. Δ-evaluation is a later optimization.
  */
-class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
+class Evaluator(private val p: Problem) {
 
     fun fullEval(a: Array<IntArray>): Long {
         val v = fullEvalParts(a)
@@ -219,7 +219,7 @@ class Evaluator(private val p: Problem, private val c3RunMode: Boolean = true) {
             if (D == 0) continue
             val first = seq[0]
             // [HF507] non-forbidden single-shift run -> run deficit (per staff whole-row)
-            if (!forbidden && c3RunMode && C3Run.isSingleShiftSeq(seq)) {
+            if (!forbidden && C3Run.isSingleShiftSeq(seq)) {
                 for (i in 0 until S) sub += C3Run.rowDeficit(a, i, first, D)
                 continue
             }

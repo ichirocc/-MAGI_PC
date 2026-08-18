@@ -5130,8 +5130,8 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
 
 ## バックログ / 未対応
 1. ~~TallyCard の読取/編集モード完全整合（result専用検査結果の plumbing）~~ **→ 3.96.0 で完了**（ユーザー向け機能の TallyCard 項参照）。
-2. 未レビュー領域の精読: `V6LateOperators`/`V6SearchOperators`/`V6HotfixPasses` 各パス内部, `V6WebCompat`,
-   CSV/UI 層。**(3.84.0, 並列監査で一巡・下記参照)**。
+2. 未レビュー領域の精読: `V6LateOperators`/`V6SearchOperators`/`V6HotfixPasses` 各パス内部, CSV/UI 層。
+   **(3.84.0, 並列監査で一巡・下記参照)**。※`V6WebCompat` は 3.393.0 に撤去済み（Web 版は存在しない）。
 3. ~~C++/NDK 移植は**不要**の結論（純Kotlin＋被覆対応Δ評価で十分高速）~~ **→ 撤回（3.136〜／第2期・第3期でネイティブ加速＝
    C++フル評価器＋SA/LAHC/ALNS/Polishチャンク＋JNI＋実行時パリティを実装。監査指摘は下記6/7）**。エンジンは ALNS/Destroy-Repair/
    ChainSwap3-4/C1BlockN/PathRelink/LNS/Reheat/Oscillation/適応的オペレータ重み/希望ロック枝刈り を実装済み。
@@ -5198,7 +5198,7 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
   `OverviewDashboard`/`OperatorLogView`~~ **→ 3.86.0 で撤去済**(外部参照0を再確認。live な `CheckSummaryView`/`ColorSettingsView` と
   それらが使う `SectionSegment` のみ残置)。**→ 3.87.0 で `V6WebCompat` のスコアベクタ死蔵クラスタも撤去**
   (`classifyHardBreakdown`/`HardBreakdown`/`scoreVecStable`/`betterVec`/`firstDiffTier`/`ScoreVector`=呼出0)。
-  `buildWorkbook`/`buildWs2-7` は `V6WebCompatTest` がカバー中のため残置。
+  `buildWorkbook`/`buildWs2-7` は当時 `V6WebCompatTest` がカバー中のため残置していたが、**3.393.0 で `V6WebCompat` ごと撤去**（ユーザー確認「Web版は存在しないので web互換性は不要」）。
 - ~~`ScheduleCsvBridge` 各コンポーネント取込の `drop(1)` ヘッダ無検証(ヘッダ無CSVで先頭行黙殺=軽微)~~ **→ 3.103.0 で修正**
   (4サイトとも先頭行が実データ=既知の職員名/制約キーワードなら取り込む。upsert は新規追加の誤登録を防ぐため既知名のみ=保守的)。
 
@@ -5308,6 +5308,62 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   べきで、それは別の判断。記録に留める。
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
+
+## Web互換の撤去・最適化中のちらつき・死んだ配管の始末（3.393.0, ユーザー指示3点）
+
+ユーザーの3点「Web版は存在しないので web互換性は不要」「最適化中の表示のちらつきを配慮する」
+「死んでいる流す配管を必要確率があれば配線する」に対応。**エンジンの探索・重み・採否は完全に不変**
+（削除したのはどこからも呼ばれない経路、変えたのは UI へ押す頻度と表示だけ）。
+
+### ① ちらつきは「毎秒35回の全面再合成」だった（測ってから直した）
+`runV6FullOptimize` の進捗コールバックが `_ui.update` を呼ぶ頻度を実測した:
+**golden_state・30秒・並列4 で 1059回＝35.3回/秒**、間隔の中央値 4ms、**96%が50ms未満**。
+UiState を丸ごと差し替えるので、`ui` を読む Compose の木が毎秒35回作り直される＝これがちらつきの正体。
+- **`UI_PROGRESS_PUSH_MS = 200`** で UI へ押す回数だけ間引く（実測 1059 → **53回**）。
+  **エンジンの報告頻度は1つも変えていない**＝停滞ウォッチドッグ・HF63・操作ログのマイルストーン判定は
+  従来どおり全コールバックで動く。フェーズが変わった瞬間と必須違反が減った瞬間は窓を待たずに押すので
+  応答は落ちない。間引いた回の検査結果は `lastLiveReport` で持ち回る（report は毎回付くとは限らず、
+  押す回だけ見ると breakdown が飛ぶため）。最終値は完了時の `_ui.update` と `pushReport` が必ず上書きする。
+- `runSoftPolish` は進捗コールバックを持たないので対象外（確認済み）。
+
+### ② Web互換の撤去
+`V6WebCompat`（631行・Web版の非DOMヘルパー移植）のうち本アプリが実際に使うのは **4関数だけ**だった。
+`ShiftAppearance` へ切り出し、残りは削除した:
+Worksheet/Workbook 一式（buildWs1〜7・buildWorkbook・buildScheduleSheetCells・colLetter）／Web側の
+undo-redo リデューサ（本アプリは ViewModel の undoStack/redoStack を使う）／Web側の診断ビルダ5種
+（本アプリは V6SanityPort/V6PortAnalyzer が担う）／Web版V5のヘルパー（popcnt32・validStartMask・
+makeXorShift・hammingDistanceV5・zobristHashV5・V5Flags）／呼出ゼロの雑多ユーティリティ11種。
+- **`LightMirrorOptimizer`（95行）も同じ理由で撤去**。ヘッダの docstring 自身が
+  「Kotlin port of magi_python_mirror.py」＝Python/Web ミラーの移植と書いており、UI 導線は 3.112.0 で
+  撤去済み・本番呼出ゼロだった。役割は `softPolishOnly`（「自動で整えています」）が担っている。
+- `invalidAssignmentCount` は**テストのオラクルが唯一の用途**だったので `V6FinalBridgePortTest` へ移した
+  （挙動は同一）。`V6WebCompatTest` は Web専用の検証ごと撤去し、生き残る4関数の検証を
+  `ShiftAppearanceTest`（4件）へ引き継いだ。
+
+### ③ 死んだ配管＝「使えるものは配線、意味の無いものは撤去」を1つずつ判断
+| 対象 | 判断 |
+|---|---|
+| `itersPerSec` | **配線**。毎回計算していたのに表示先が無かった。進捗行へ「毎秒NK」＝「回数は増えるが遅い（ネイティブ加速が効いていない等）」を画面だけで見分けられる |
+| `initHard` | **配線**。必須違反が残っている間は「改善◯%」の枝に入らず、旧表示は `⚠3` だけで進み具合が皆無だった。「最初は69」を併記 |
+| `totalViolations` | **配線**。同じ理由で、必須が残る間に減っていく数字が1つも無かった。`合計N` を併記（必須0のときは重複するので出さない） |
+| UiState の結果スナップショット8種（`resultSchedule`/`hasResultSnapshot`/result専用マップ6種） | **撤去**。D7（3.120.0＝読取モードはユーザー判断で不要）から一度も読み手が現れなかった。ViewModel 側の `resultSchedule` は「開く前のデータに戻す」等が使う生きた状態なので残す |
+| `commitEditingToResult`/`copyResultToEditing` | **撤去**（同じ D7 の族・呼出ゼロ） |
+| `start()`（高速計算）・`runLightOptimize()`（軽量最適化）・`generateSimple()`（簡易作成） | **撤去**。UI 導線は 3.112.0/3.126.0 でユーザー判断により撤去済みで、機能は「勤務表をつくる」＋「初期解を作る」＋計算方式の選択が覆う |
+| `V6FinalPort.handleSimple` | **撤去**（`generateSimple` の撤去で本番呼出ゼロ）。`GreedyMirrorScheduler` は `SmartInitialSchedulerTest` が**旧生成器との対照**に使う（3.391.0 の回帰テストも載っている）ので残す |
+| `Evaluator`/`DeltaEvaluator` の `c3RunMode` | **撤去**。既定 true で `false` は一度も渡されない。**単に未使用なのではなく危険**で、false は 2.31.0 で統一した「単一シフト連は run-deficit」を窓マッチへ戻す＝チェッカーと目的関数を黙って乖離させるスイッチだった |
+| `LoadedProblem.nativeHard`/`nativeSoft` | **撤去**。`initHard` を checker の `report.hard` へ寄せた（3.313.0 が initSoft に施したのと同じ単位合わせ。3.318.0 で groupViol が Evaluator の hard にも入り両者は一致するので、別々の計算から取る理由がもう無い） |
+| CI の `platforms;android-35`・`build-tools;35.0.0` | **撤去**。compileSdk/minSdk とも 36 で AGP が一度も選ばない |
+
+### 検証
+- ホストJVM **全471テスト green**（既知の false positive 1件を除く）。テスト数は HEAD と同数
+  （−3 V6WebCompatTest・−1 LightMirrorOptimizer・+4 ShiftAppearanceTest）。
+- **教訓#30 の実践**: `severityFromVioKey` の low を scratch コピーでのみ HIGH から外すと
+  **`severityFollowsTheWeightHierarchy` だけが落ちる**ことを実行して確認（repo は無傷）。
+- **実データで結果が変わらないことを確認**: 後処理研磨は golden **2653/420/c1 96**・
+  user **33318/321** と既知ベースライン（3.352.0）に一致。`initHard` の checker↔Evaluator 一致も
+  3データセット（0/0・15/15・4/4）で確認。
+- UI 層はホストでコンパイル不可＝括弧均衡（6ファイルとも開閉同数）と、導入した全シンボルの
+  宣言・使用が `runV6FullOptimize` に属することをスコープ逆引きで確認。最終判定は CI。
 
 ## 論理的問題の横断監査＝旗の固着・無言の編集・矛盾するデッド述語（3.392.0, ユーザー指示「すべての論理的問題点などを修正する」）
 

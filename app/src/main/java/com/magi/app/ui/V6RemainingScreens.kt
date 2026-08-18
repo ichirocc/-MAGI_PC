@@ -27,7 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.magi.app.v6.MirrorKeys
-import com.magi.app.v6.V6WebCompat
+import com.magi.app.v6.ShiftAppearance
 
 // [3.86.0 デッドコード撤去] 未描画の合成画面 `V6RemainingScreens` と、そこからのみ実呼出だった
 //   HeaderBar / RingGauge / OverviewDashboard / FlagsView / OperatorLogView / BottomNav を撤去
@@ -66,7 +66,7 @@ fun ColorSettingsView(ui: UiState, vm: MagiViewModel) {
         keys.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { key ->
-                    val sev = V6WebCompat.severityFromVioKey(key)
+                    val sev = ShiftAppearance.severityFromVioKey(key)
                     // [色覚/日本語化] 色に依らない文字バックアップ。英語enum(CRITICAL/…)ではなく日本語の重大度語で示す。
                     val sevJp = when (sev) { "CRITICAL" -> "必須"; "HIGH", "WARN" -> "要調整"; else -> "情報" }
                     val count = ui.breakdown[key] ?: 0
@@ -131,7 +131,7 @@ fun ColorSettingsView(ui: UiState, vm: MagiViewModel) {
             else -> ColorPickerDialog(
                 kigou = breakdownLabels[pf] ?: pf,
                 currentHex = ui.violationFamilyColorHex[pf] ?: "",
-                defaultHex = when (V6WebCompat.severityFromVioKey(pf)) {
+                defaultHex = when (ShiftAppearance.severityFromVioKey(pf)) {
                     "CRITICAL" -> hardHex
                     "HIGH", "WARN" -> softHex
                     else -> "#8A979B"   // INFO(灰)

@@ -387,8 +387,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                         focusRange = vm.violationRange(i, j)?.let { Triple(i, it.first, it.second) }
                     }
                     // [D7] 読取(結果)モードはユーザー判断で撤去（「下書き（直す）モードだけで大丈夫」）。
-                    //   勤務表は常に直接編集の1本＝タップで即編集シート。最適化完了時は schedule==resultSchedule
-                    //   のため結果はそのまま見えている。誤編集は「元に戻す」が担保。
+                    //   勤務表は常に直接編集の1本＝タップで即編集シート。最適化が終わればその結果が
+                    //   そのまま編集中の盤面になるので結果は見えている。誤編集は「元に戻す」が担保。
                     var wishBulkOpen by rememberSaveable { mutableStateOf(false) }
                     // [E7] 違反 種別フィルタ（勤務表タブ全面共有）。初期=全ON。bitmask(Int)で rememberSaveable 保存
                     //   （回転/プロセス復元で保持）。表示のみ・スコアリング不変。ビット i = vioBuckets[i] のON/OFF。

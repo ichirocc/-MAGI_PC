@@ -120,15 +120,23 @@ import kotlin.math.roundToInt
 
 /** 実行中の進捗サマリ文字列: 改善率(初期soft→現best) ・ 残り時間 ・ 探索数。読取専用。 */
 internal fun progressSummary(ui: UiState): String {
-    val parts = ArrayList<String>(3)
+    val parts = ArrayList<String>(4)
     parts += when {
-        ui.bestHard > 0L -> "未解決 ⚠${ui.bestHard}"
+        // [3.393.0] 必須違反が残っている間は「改善◯%」の枝に入らないため、旧実装は進み具合を
+        //   まったく示していなかった（⚠3 とだけ出る）。開始時の必須件数(initHard)を併記して
+        //   「69件から3件まで来ている」ことを見せる。initHard は満足度の計算で既に使っており、
+        //   ここが最後の未配線だった。
+        ui.bestHard > 0L ->
+            if (ui.initHard > ui.bestHard) "未解決 ⚠${ui.bestHard}（最初は${ui.initHard}）" else "未解決 ⚠${ui.bestHard}"
         ui.initSoft > 0L -> {
             val pct = ((ui.initSoft - ui.bestSoft) * 100L / ui.initSoft).coerceAtLeast(0L)
             "改善 ${pct}% (${ui.initSoft}→${ui.bestSoft})"
         }
         else -> "改善 –"
     }
+    // 必須が残っている間は「改善◯%」が出ないので、ソフトを含む今の合計を出す（減っていく数字が1つは要る）。
+    //   必須=0 のときは上の枝が (初期→現在) を出しているので重複させない。
+    if (ui.bestHard > 0L && ui.totalViolations > 0) parts += "合計${ui.totalViolations}"
     val secLeft = ((ui.budgetSec * 1000L - ui.elapsedMs).coerceAtLeast(0L) / 1000L)
     parts += "残り %d:%02d".format(secLeft / 60, secLeft % 60)
     val it = ui.iters
@@ -137,7 +145,9 @@ internal fun progressSummary(ui: UiState): String {
         it >= 1_000L -> "${it / 1_000L}K回"
         else -> "${it}回"
     }
-    parts += iterStr
+    // [3.393.0] 毎秒の反復数。エンジンは毎回の進捗で計算していたのに表示先が無かった。
+    //   「回数は増えているが遅い（ネイティブ加速が効いていない等）」を画面だけで見分けられるようにする。
+    parts += if (ui.itersPerSec >= 1_000L) "$iterStr（毎秒${ui.itersPerSec / 1_000L}K）" else iterStr
     return parts.joinToString("  ・  ")
 }
 
@@ -347,7 +357,9 @@ internal fun ShiftPickerSheet(
 //   （ScheduleGrid）と同じ盤面の二重表示＝タブの密度/冗長の主因だった（旧コメントが自認済み）。呼出0を確認済み。
 
 // [D7撤去] ScheduleModeCard（結果=読取/下書き=編集の切替）はユーザー判断で撤去。勤務表は常に直接編集の1本。
-//   結果スナップショット(resultSchedule/result専用違反マップ)のモデルは温存（最適化完了時に充填・将来のCSV等）。
+//   [3.393.0] UiState 側の結果スナップショット（resultSchedule / result 専用違反マップ6種 / hasResultSnapshot）は
+//   D7 から一度も読み手が現れなかったので撤去した。ViewModel の resultSchedule（最後に生成した結果の控え）は
+//   「開く前のデータに戻す」等が使う生きた状態なので残っている。
 
 
 // ===== [E7] 違反 種別フィルタ =====

@@ -58,7 +58,8 @@
 - **単一ハブ MVVM**：状態と副作用を `MagiViewModel` に集約し、UI を純表示に保つ。
 - **前景サービスでの最適化**：長時間処理を WorkManager 前景で実行し、画面を閉じても継続・中断復帰。
 - **差分評価（Δ）**：`DeltaEvaluator` で手ごとの差分採点を行い高速化。
-- **Web 一致層**：`V6WebCompat`/`V6SanityPort`/`V6FinalPort`/`V6PortAnalyzer` で Web 版と挙動を一致させ、3実装間の乖離を防ぐ。
+- **ファサード層**：`V6SanityPort`/`V6FinalPort`/`V6PortAnalyzer` が事前診断・UI 向け入口・分析を担う。
+  （旧「Web 一致層」の `V6WebCompat` は 3.393.0 に撤去＝Web 版は存在しない。生き残った表示色/重大度は `ShiftAppearance`。）
 - **重みの単一の真実**：`MirrorKeys.weights` を UI も最適化器も参照し、ドリフトを防止。
 - **1本指・最小UI**：ドラッグ非依存、主操作は下部固定、二重符号化（色＋形）。詳細は [`screen_spec.md`](./screen_spec.md) / [`magi_design_system.md`](./magi_design_system.md)。
 

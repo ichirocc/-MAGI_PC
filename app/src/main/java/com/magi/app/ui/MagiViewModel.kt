@@ -6,11 +6,7 @@ import android.app.Application
 import androidx.lifecycle.viewModelScope
 import com.magi.app.v6.Evaluator
 import com.magi.app.v6.betterReport
-import com.magi.app.v6.LightMirrorOptimizer
-import com.magi.app.v6.MirrorKeys
 import com.magi.app.v6.Problem
-import com.magi.app.v6.SaOptimizer
-import com.magi.app.v6.SaParams
 import com.magi.app.v6.ScheduleCsvBridge
 import com.magi.app.v6.UnifiedViolationChecker
 import com.magi.app.v6.ViolationReport
@@ -20,8 +16,6 @@ import com.magi.app.v6.SettingIssue
 import com.magi.app.v6.SettingFixAction
 import com.magi.app.v6.FixSuggester
 import com.magi.app.v6.FixSuggestion
-import com.magi.app.v6.FixCell
-import com.magi.app.v6.FixKind
 import com.magi.app.v6.V6PortReport
 import com.magi.app.v6.CoverageDiagnosis
 import com.magi.app.v6.ForbiddenRunDiagnosis
@@ -56,7 +50,7 @@ import com.magi.app.model.C42Row
 import com.magi.app.model.MagiState
 import com.magi.app.model.MojibakeRepair
 import com.magi.app.model.StateParser
-import com.magi.app.v6.V6WebCompat
+import com.magi.app.v6.ShiftAppearance
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,6 +70,19 @@ import kotlinx.coroutines.withContext
  * UI 設定の上限とエンジンの頭打ちが乖離しないようにする。
  */
 const val MAX_BUDGET_SEC = com.magi.app.v6.MAX_OPTIMIZE_SEC
+
+/**
+ * 最適化中に UiState を差し替える最短間隔（ミリ秒）。
+ *
+ * [3.393.0/実機報告「最適化中の表示がちらつく」] エンジンの進捗コールバックは実測 **35回/秒**
+ * （golden_state・30秒・並列4で 1059回／間隔の中央値 4ms／**96%が50ms未満**）届く。旧実装はその
+ * たびに `_ui.update` で UiState を丸ごと差し替えており、UiState を読む Compose の木が毎秒35回
+ * 再合成されていた＝進捗行・カード・途中経過が小刻みに描き直される「ちらつき」の正体。
+ * **エンジンの報告頻度は一切変えない**（停滞ウォッチドッグ・HF63・操作ログのマイルストーン判定は
+ * 従来どおり全コールバックで動く）。UI へ押す回数だけこの窓へ間引く＝実測 1059回 → **53回**。
+ * フェーズが変わった瞬間と必須違反が減った瞬間は窓を待たずに押すので、体感の応答は落ちない。
+ */
+private const val UI_PROGRESS_PUSH_MS = 200L
 
 class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -472,11 +479,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     val st = StateParser.parse(json)
                     validate(st)?.let { return@withContext Result.failure<LoadedProblem>(IllegalArgumentException(it)) }
                     val p = Problem(st)
-                    val ev = Evaluator(p)
                     val init = p.initialAssignment()
-                    val baseEval = ev.split(ev.fullEval(init))
                     val report = UnifiedViolationChecker.check(st, init)
-                    Result.success(LoadedProblem(st, init, baseEval.first, baseEval.second, report))
+                    Result.success(LoadedProblem(st, init, report))
                 }
                 loaded.fold(
                     onSuccess = { lp ->
@@ -521,7 +526,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 shifts = lp.state.shiftCount,
                                 groups = lp.state.groupCount,
                                 use2 = lp.state.use2Patterns,
-                                initHard = lp.nativeHard,
+                                // [3.393.0] 3.313.0 が initSoft に施したのと同じ単位合わせ。旧: Evaluator の
+                                //   hard を入れていたが、比較相手の bestHard は checker の report.hard。
+                                //   3.318.0 で groupViol が Evaluator の hard にも入り両者は一致するように
+                                //   なったが、**別々の計算から取る理由はもう無い**ので checker へ寄せる
+                                //   （進捗行の「最初は N」がこの値を使う）。
+                                initHard = lp.report.hard.toLong(),
                                 // [3.313.0] 単位を checker 基準へ揃える。旧: Evaluator の**重み付き**soft を
                                 //   入れていたが、`makeUi`（中央のUI構築）が書く bestSoft は
                                 //   `report.soft`＝**生件数**なので、完了後の「改善 N%」が
@@ -744,209 +754,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // [3.126.0] UI導線（下書きをつくる）はユーザー判断で撤去。API として温存。
-    fun generateSimple() {
-        val st = state ?: return
-        val sched = currentSchedule ?: return
-        // [3.271.0] generateSmartInitial と同じ実行中ガード（API温存中だが同じ穴を残さない）。
-        if (optimizeInFlight()) {
-            _ui.update { it.copy(message = "計算の実行中は下書きを作れません（完了または「やめる」の後にどうぞ）") }
-            return
-        }
-        if (!ensureValidForRun(st, sched)) return
-        pushUndo()
-        _ui.update { it.copy(running = true, hasResult = false, message = "簡易作成中…") }
-        job = viewModelScope.launch {
-            try {
-                val res = V6FinalPort.handleSimple(st.withSchedule(sched), allowImpossible = true)
-                currentSchedule = res.schedule.copy2D()
-                autoSave()
-                resultSchedule = res.schedule.copy2D()
-                state = st.withSchedule(res.schedule)
-                pushReport(state ?: st, res.schedule, res.report, runLabel = "簡易作成") { it.copy(
-                    running = false,
-                    hasResult = true,
-                    iters = 0,
-                    itersPerSec = 0,
-                    elapsedMs = 0,
-                    message = "簡易作成完了: 必須=${res.report.hard} 合計=${res.report.total}",
-                ) }
-                logOp("I", "簡易作成 完了 必須=${res.report.hard} 合計=${res.report.total}")
-            } catch (e: Throwable) {
-                logOp("W", "簡易作成 失敗: ${e.javaClass.simpleName}: ${e.message}")   // [3.271.0] 操作ログにも残す
-                _ui.update { it.copy(running = false, message = "簡易作成失敗: ${e.message}") }
-            }
-        }
-    }
-
-    // [3.112.0] UI導線（ホーム「ほかの作り方」の速くつくる）はユーザー指示で撤去済み。API として温存。
-    fun start() {
-        val st0 = state ?: return
-        val sched0 = currentSchedule ?: return
-        if (runBlockedByInFlight("高速計算の開始")) return
-        if (!ensureValidForRun(st0, sched0)) return
-        val runState = st0.withSchedule(sched0)
-        val params = SaParams(
-            workers = _ui.value.workers,
-            budgetMs = _ui.value.budgetSec * 1000L,
-            softPolish = _ui.value.softPolish,
-        )
-        pushUndo()
-        writeRunMarker("fg")   // [監査A8] 高速計算にも中断マーカー（kill時案内をv6本線と統一）
-        _ui.update { it.copy(running = true, hasResult = false, message = "高速計算中…") }
-        var lastUiMs = 0L
-        optimizeActive = true   // [3.328.0] 検査の完了でこの実行中が解除されないようにする
-        job = viewModelScope.launch {
-            var terminalLogged = false   // [3.382.0] 終端ログの保証（runV6FullOptimize と同じ理由）
-            try {
-                val res = withContext(Dispatchers.Default) {
-                    // [Main負荷回避] Problem/Evaluator の構築（同期CPU）も Default で行う（他経路と統一）。
-                    val p = Problem(runState)
-                    val ev = Evaluator(p)
-                    SaOptimizer(p, ev).run(params) { pr ->
-                        val now = System.currentTimeMillis()
-                        if (now - lastUiMs >= 200) {
-                            lastUiMs = now
-                            val (h, s) = ev.split(pr.bestScore)
-                            val ips = if (pr.elapsedMs > 0) pr.totalIters * 1000 / pr.elapsedMs else 0
-                            _ui.update { it.copy(
-                                bestHard = h,
-                                bestSoft = s,
-                                iters = pr.totalIters,
-                                itersPerSec = ips,
-                                elapsedMs = pr.elapsedMs,
-                            ) }
-                        }
-                    }
-                }
-                val report = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(runState, res.schedule) }
-                currentSchedule = res.schedule.copy2D()
-                autoSave()
-                resultSchedule = res.schedule.copy2D()
-                state = runState.withSchedule(res.schedule)
-                val ips = if (res.elapsedMs > 0) res.totalIters * 1000 / res.elapsedMs else 0
-                pushReport(state ?: runState, res.schedule, report, runLabel = "高速計算") { it.copy(
-                    running = false,
-                    hasResult = true,
-                    iters = res.totalIters,
-                    itersPerSec = ips,
-                    elapsedMs = res.elapsedMs,
-                    message = "高速計算完了: 必須=${report.hard} 合計=${report.total} (${res.totalIters}反復, ${res.elapsedMs}ms)",
-                ) }
-                logOp("I", "高速計算 完了 必須=${report.hard} 合計=${report.total}")
-                terminalLogged = true
-            } catch (e: CancellationException) {
-                // [停止 keep-best] 中断時は途中(未採用)盤面ではなく直前に確定していた入力解を保持し表示も整合させる。
-                // [3.382.0] 3.381.0 と同型の穴がここにも残っていた＝NonCancellable を checker にだけ掛けると、
-                //   その直後に既にキャンセル済みの外側へ再開する時点で新しい CancellationException が投げられ、
-                //   pushReport と終端ログが飛ぶ。ハンドラ全体を包む。
-                withContext(NonCancellable) {
-                    val kept = sched0.copy2D()
-                    val keptReport = withContext(Dispatchers.Default) {
-                        UnifiedViolationChecker.check(runState, kept)
-                    }
-                    currentSchedule = kept
-                    resultSchedule = kept
-                    state = runState.withSchedule(kept)
-                    runCatching {
-                        pushReport(state ?: runState, kept, keptReport, nonCancellable = true) { it.copy(
-                            running = false,
-                            hasResult = true,
-                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                        ) }
-                    }.onFailure { t -> logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}") }
-                    logOp("I", "高速計算 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
-                    terminalLogged = true
-                }
-                throw e
-            } catch (e: Throwable) {
-                // [review D] 失敗時は進捗中に書き込んだメトリクス（反復数・速度・経過）を消す。
-                //   「事故前データ」を失敗メッセージの脇に残さない。hasResult は開始時に false 済み。
-                // [3.382.0] `Exception` → `Throwable`（Error も終端ログを残す。理由は runV6FullOptimize のコメント）。
-                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
-                logOp("W", "高速計算 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す（サイレント死の防止）
-                terminalLogged = true
-                _ui.update { it.copy(
-                    running = false, hasResult = false,
-                    iters = 0, itersPerSec = 0, elapsedMs = 0,
-                    message = "最適化失敗: $kind: ${e.message}",
-                ) }
-            } finally {
-                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
-                clearRunMarker()   // [監査A8]
-                // [3.382.0/ユーザー指示「完了・停止・失敗のいずれも記録されるログ強化」] 終端ログの保証を
-                //   長い実行の全経路へ広げる（旧: runV6FullOptimize と runSoftPolish だけ）。
-                if (!terminalLogged) logOp("W", "高速計算 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
-                if (_ui.value.running) _ui.update { it.copy(running = false) }
-            }
-        }
-    }
-
-    // [3.112.0] UI導線（ホーム「ほかの作り方」のかんたんに）はユーザー指示で撤去済み。API として温存。
-    fun runLightOptimize() {
-        val st = state ?: return
-        val sched = currentSchedule ?: return
-        if (runBlockedByInFlight("軽量最適化の開始")) return
-        if (!ensureValidForRun(st, sched)) return
-        pushUndo()
-        writeRunMarker("fg")   // [監査A8]
-        _ui.update { it.copy(running = true, hasResult = false, message = "軽量最適化中…") }
-        optimizeActive = true   // [3.328.0]
-        job = viewModelScope.launch {
-            var terminalLogged = false   // [3.382.0] 終端ログの保証
-            try {
-                val res = withContext(Dispatchers.Default) { LightMirrorOptimizer.optimize(st, sched, _ui.value.budgetSec.toDouble()) }
-                currentSchedule = res.schedule.copy2D()
-                autoSave()
-                resultSchedule = res.schedule.copy2D()
-                state = st.withSchedule(res.schedule)
-                val ips = if (res.elapsedMs > 0) res.iterations * 1000 / res.elapsedMs else 0
-                pushReport(state ?: st, res.schedule, res.report, runLabel = "軽量最適化") { it.copy(
-                    running = false,
-                    hasResult = true,
-                    iters = res.iterations,
-                    itersPerSec = ips,
-                    elapsedMs = res.elapsedMs,
-                    message = "軽量最適化完了: 必須=${res.report.hard} 合計=${res.report.total}",
-                ) }
-                logOp("I", "軽量最適化 完了 必須=${res.report.hard} 合計=${res.report.total}")
-                terminalLogged = true
-            } catch (e: CancellationException) {
-                // [停止 keep-best] 中断時は途中(未採用)盤面ではなく直前に確定していた入力解を保持し表示も整合させる。
-                // [3.382.0] 3.381.0 と同型＝ハンドラ全体を NonCancellable で包む（理由は runV6FullOptimize のコメント）。
-                withContext(NonCancellable) {
-                    val kept = sched.copy2D()
-                    val keptReport = withContext(Dispatchers.Default) {
-                        UnifiedViolationChecker.check(st, kept)
-                    }
-                    currentSchedule = kept
-                    resultSchedule = kept
-                    state = st.withSchedule(kept)
-                    runCatching {
-                        pushReport(state ?: st, kept, keptReport, nonCancellable = true) { it.copy(
-                            running = false,
-                            hasResult = true,
-                            message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
-                        ) }
-                    }.onFailure { t -> logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}") }
-                    logOp("I", "軽量最適化 停止: 直前の勤務表 必須=${keptReport.hard}/合計=${keptReport.total} を保持")
-                    terminalLogged = true
-                }
-                throw e
-            } catch (e: Throwable) {
-                val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
-                logOp("W", "軽量最適化 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す
-                terminalLogged = true
-                _ui.update { it.copy(running = false, message = "軽量最適化失敗: $kind: ${e.message}") }
-            } finally {
-                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
-                clearRunMarker()   // [監査A8]
-                if (!terminalLogged) logOp("W", "軽量最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路）")
-                if (_ui.value.running) _ui.update { it.copy(running = false) }
-            }
-        }
-    }
-
     // 操作コパイロット用: 直前の実行設定と結果（ガチャ操作検知に使用）
     private var lastSettingsSig: String? = null
     private var lastResultHard: Long = -1L
@@ -1048,6 +855,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // 最適化中ログ強化用のスロットル状態（操作ログへマイルストーンだけを残しスパムを防ぐ）。
         var liveHard = Long.MAX_VALUE
         var livePhase = ""
+        // [3.393.0/ちらつき対策] UI へ押した最後の時刻・フェーズと、間引きで捨てた回を埋める最新の検査結果。
+        var lastUiPushMs = Long.MIN_VALUE / 4
+        var lastUiPhase = ""
+        var lastLiveReport: ViolationReport? = null
         val runWall0 = System.currentTimeMillis()   // [N6] 経過表示は壁時計基準（onProgressのelapsedは仮説ローカルで巻き戻る）
         var lastPhaseLogMs = -10_000L
         val phaseNameLastLogMs = HashMap<String, Long>()   // [3.283.0] 同名フェーズの再ログ抑制（60s窓・スパム対策）
@@ -1083,24 +894,39 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     //   [監査(6)] callback の elapsed はフェーズ境界で巻き戻るローカル時計＝長いフェーズ後に族が永久に
                     //   フラグ不能になるため、最適化開始からの単調な壁時計(startMs基準)を使う。
                     if (rep != null) hf63.updateFromBreakdown(rep.breakdown, ((System.currentTimeMillis() - startMs) / 10L).toInt())
-                    _ui.update { it.copy(
-                        bestHard = rep?.hard?.toLong() ?: it.bestHard,
-                        bestSoft = rep?.soft?.toLong() ?: it.bestSoft,
-                        totalViolations = rep?.total ?: it.totalViolations,
-                        // 実行中も breakdown をライブ更新（export時に hard と breakdown が食い違う不整合を防ぐ）
-                        breakdown = if (rep != null) emptyBreakdown + rep.breakdown else it.breakdown,
-                        iters = iters,
-                        itersPerSec = if (elapsed > 0) iters * 1000 / elapsed else 0,
-                        // [実機報告「残り時間表示が5分から何度も巡回する」修正] onProgressのelapsedは
-                        //   フェーズ境界で巻き戻るローカル時計（727/751行のコメントと同じ既知の性質）。
-                        //   progressSummary の「残り」表示はこれを budgetSec から引くため、V5→ALNS→RSI
-                        //   ラウンド等の頻繁なフェーズ遷移のたびに残り時間が予算近くまで跳ね戻って見えていた。
-                        //   HF63(753行)と同じ単調な壁時計(startMs基準)に統一する。
-                        elapsedMs = System.currentTimeMillis() - startMs,
-                        // [DefragLiveView] 計算中の最良盤面をライブ表示用に反映（節目で更新される）。
-                        liveSchedule = V6NativeOptimizer.liveBest ?: it.liveSchedule,
-                        message = "V6 $phase 実行中…",
-                    ) }
+                    // [3.393.0] 壁時計とフェーズ名を前倒しで出す（UI 押し出しの間引き判定と操作ログの
+                    //   スロットル判定が同じ値を見るように。旧はログ側だけがここより後で計算していた）。
+                    val wallElapsed = System.currentTimeMillis() - runWall0
+                    val base = phase.substringAfter("/ ").trim().ifEmpty { phase }
+                    // 間引きで捨てた回のぶんを埋めるため、最後に届いた非nullの検査結果を持ち回す
+                    //   （report は毎回付くとは限らず、押す回だけ見ると breakdown が飛ぶ）。
+                    if (rep != null) lastLiveReport = rep
+                    val uiDue = base != lastUiPhase ||                                   // フェーズ遷移は即時
+                        (rep != null && rep.hard.toLong() < liveHard) ||                 // 必須違反が減った瞬間も即時
+                        wallElapsed - lastUiPushMs >= UI_PROGRESS_PUSH_MS
+                    if (uiDue) {
+                        lastUiPushMs = wallElapsed
+                        lastUiPhase = base
+                        val shown = lastLiveReport
+                        _ui.update { it.copy(
+                            bestHard = shown?.hard?.toLong() ?: it.bestHard,
+                            bestSoft = shown?.soft?.toLong() ?: it.bestSoft,
+                            totalViolations = shown?.total ?: it.totalViolations,
+                            // 実行中も breakdown をライブ更新（export時に hard と breakdown が食い違う不整合を防ぐ）
+                            breakdown = if (shown != null) emptyBreakdown + shown.breakdown else it.breakdown,
+                            iters = iters,
+                            itersPerSec = if (elapsed > 0) iters * 1000 / elapsed else 0,
+                            // [実機報告「残り時間表示が5分から何度も巡回する」修正] onProgressのelapsedは
+                            //   フェーズ境界で巻き戻るローカル時計（727/751行のコメントと同じ既知の性質）。
+                            //   progressSummary の「残り」表示はこれを budgetSec から引くため、V5→ALNS→RSI
+                            //   ラウンド等の頻繁なフェーズ遷移のたびに残り時間が予算近くまで跳ね戻って見えていた。
+                            //   HF63(753行)と同じ単調な壁時計(startMs基準)に統一する。
+                            elapsedMs = System.currentTimeMillis() - startMs,
+                            // [DefragLiveView] 計算中の最良盤面をライブ表示用に反映（節目で更新される）。
+                            liveSchedule = V6NativeOptimizer.liveBest ?: it.liveSchedule,
+                            message = "V6 $phase 実行中…",
+                        ) }
+                    }
                     // ---- 最適化中ログ強化（スロットル付き）----
                     // フェーズ遷移と「必須違反が減った瞬間」だけを操作ログへ。頻度上限を設けてスパムを防ぐ。
                     // [ログ欠落バグ修正] スロットル判定に onProgress の仮説ローカル elapsed をそのまま使うと、
@@ -1109,8 +935,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     //   持続時間がその残存値+閾値に届かない場合、遷移ログが1件も出ないまま丸ごと欠落していた
                     //   （実機ログでRSI++のALNS Refineフェーズ(約90秒)が操作ログから完全に消えていたのはこれが原因）。
                     //   表示に既に使っている壁時計(runWall0基準)へスロットル判定・保持値とも統一する。
-                    val wallElapsed = System.currentTimeMillis() - runWall0
-                    val base = phase.substringAfter("/ ").trim().ifEmpty { phase }
                     // [3.283.0] 最良更新・改善は情報価値が高いので同名60秒窓の対象外。
                     // [3.378.0/実機ログ起因] **一律2.5秒ゲートの対象からも外す**。旧実装は「窓の対象外」と
                     //   言いながら `lastPhaseLogMs`（全フェーズ行で共有）で先に弾いており、実機ログでは
@@ -1619,44 +1443,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         refreshCheck()
     }
 
-    // [D7] 読取(結果)モードUIは撤去済み（勤務表=常に直接編集）。以下2関数は結果スナップショット操作の
-    //   API として温存（UI 参照ゼロ・テスト非依存。結果モデル自体は最適化完了時に充填され続ける）。
-    /** [B1] 編集中(ws7) を結果(ws6) として確定する。表示・違反は不変なのでスナップショットのみ更新。 */
-    fun commitEditingToResult() {
-        val cur = currentSchedule ?: return
-        resultSchedule = cur.copy2D()
-        _ui.update { it.copy(
-            resultSchedule = cur.map { it.toList() },
-            hasResultSnapshot = true,
-            // [backlog#1] 結果=編集中の確定なので、結果専用マップも現行(編集中)の検査結果をそのまま引き継ぐ。
-            //   直前編集の refreshCheck が進行中でも、完了時の makeUi が schedule==resultSchedule で再充填（自己修復）。
-            resultViolationCells = it.violationCells,
-            resultNeedViolations = it.needViolations,
-            resultCountViolations = it.countViolations,
-            resultViolationCellFamilies = it.violationCellFamilies,
-            message = "編集中の内容を「結果」として確定しました",
-        ) }
-        logOp("I", "編集中→結果に確定")
-    }
-
-    /** [B1] 結果(ws6) を編集中(ws7) に複製（編集中は破棄、元に戻すで取消可）。 */
-    fun copyResultToEditing() {
-        val st = state ?: return
-        val res = resultSchedule ?: return
-        pushUndo()
-        val sched = res.copy2D()
-        currentSchedule = sched
-        state = st.withSchedule(sched)
-        autoSave()
-        _ui.update { it.copy(
-            hasResult = true,
-            schedule = sched.map { it.toList() },
-            message = "「結果」を編集中に複製しました（元に戻すで取消可）",
-        ) }
-        refreshCheck()
-        logOp("I", "結果→編集中に複製")
-    }
-
     // [D7撤去] hintReadOnly（読取モードの案内）は読取モード撤去に伴い削除（UI 参照ゼロ）。
 
     // ---- constraint editing (ws3-5) -------------------------------------------
@@ -1977,7 +1763,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val st = state ?: return emptyList()
         return st.shifts.mapIndexed { i, sh ->
             val ov = st.shiftColors[sh.kigou]
-            ShiftColorView(sh.kigou, sh.name, V6WebCompat.resolveShiftColor(sh.kigou, sh.name, ov, i), !ov.isNullOrBlank())
+            ShiftColorView(sh.kigou, sh.name, ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, ov, i), !ov.isNullOrBlank())
         }
     }
 
@@ -3148,7 +2934,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val ratio = (1.0 - report.total.toDouble() / initTotal).coerceIn(0.0, 1.0)
         val sat = if (report.hard > 0) (ratio * 55).toInt() else (40 + (ratio * 60).toInt()).coerceIn(0, 100)
         // [backlog#1] この検査対象が結果(ws6)そのものか（＝report が結果専用マップの最新値か）。
-        val resultFresh = resultSchedule != null && schedule.contentDeepEquals(resultSchedule)
         return base.copy(
             staff = st.staffCount,
             days = st.dayCount,
@@ -3167,22 +2952,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             countFamilies = report.countFamilies,
             needFamilies = report.needFamilies,
             distLocations = report.distLocations,
-            // [backlog#1] 検査対象が結果(ws6)そのものなら、この report が結果専用マップの最新値。
-            //   最適化完了/他案適用/結果→編集複製後の refreshCheck 等、resultSchedule 更新サイトは全て
-            //   makeUi(schedule==resultSchedule, 対応report) を通るためここで一元的に充填できる。
-            //   編集で schedule が結果から離れた場合は既存値を保持（resultSchedule 不変＝マップも有効なまま）。
-            resultViolationCells = when { resultSchedule == null -> null; resultFresh -> report.violations; else -> base.resultViolationCells },
-            resultNeedViolations = when { resultSchedule == null -> null; resultFresh -> report.needViolations; else -> base.resultNeedViolations },
-            resultCountViolations = when { resultSchedule == null -> null; resultFresh -> report.countViolations; else -> base.resultCountViolations },
-            resultViolationCellFamilies = when { resultSchedule == null -> null; resultFresh -> report.cellFamilies; else -> base.resultViolationCellFamilies },
-            resultCountFamilies = when { resultSchedule == null -> null; resultFresh -> report.countFamilies; else -> base.resultCountFamilies },
-            resultNeedFamilies = when { resultSchedule == null -> null; resultFresh -> report.needFamilies; else -> base.resultNeedFamilies },
             logs = v6Logs + compressDiagLogs(mappedDiag),
             staffNames = st.staff.map { it.name },
             staffGroupSymbols = groupSymbols.map { toHankakuKigou(it) },
             shiftSymbols = st.shifts.map { toHankakuKigou(it.kigou) },
-            shiftColorHex = st.shifts.mapIndexed { i, sh -> V6WebCompat.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i) },
-            shiftTextHex = st.shifts.mapIndexed { i, sh -> V6WebCompat.pickTextColor(V6WebCompat.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i)) },
+            shiftColorHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i) },
+            shiftTextHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.pickTextColor(ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i)) },
             violationColorHex = st.shiftColors["__vio__"] ?: "",
             violationSoftColorHex = st.shiftColors["__vioSoft__"] ?: "",
             violationFamilyColorHex = st.shiftColors.entries
@@ -3190,8 +2965,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 .associate { it.key.removePrefix("__vioFam_").removeSuffix("__") to it.value },
             schedule = schedule.map { it.toList() },
             wishes = st.wishes,
-            resultSchedule = resultSchedule?.map { it.toList() } ?: emptyList(),   // [B1] 確定結果(ws6)
-            hasResultSnapshot = resultSchedule != null,                            // [B1]
             v6 = v6,
             satisfaction = sat,
             // 研磨の限界: 必須は解決済みだが微調整が残る → 手修正の検討を促す
@@ -3235,8 +3008,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private data class LoadedProblem(
         val state: MagiState,
         val schedule: Array<IntArray>,
-        val nativeHard: Long,
-        val nativeSoft: Long,
         val report: ViolationReport,
     )
 }

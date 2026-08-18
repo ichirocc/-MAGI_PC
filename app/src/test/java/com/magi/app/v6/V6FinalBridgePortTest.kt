@@ -77,7 +77,7 @@ class V6FinalBridgePortTest {
         // 退化しない: hard→weighted→total の辞書順で悪化しない。
         val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
-        assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))   // 割当は常に妥当（人数=列固定）
+        assertEquals(0, invalidAssignmentCount(st, r.newSchedule))   // 割当は常に妥当（人数=列固定）
     }
 
     @Test fun cyclicSwapPolishNeverWorsens() {
@@ -87,7 +87,7 @@ class V6FinalBridgePortTest {
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
         val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
-        assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))   // 被覆保存＝割当は常に妥当
+        assertEquals(0, invalidAssignmentCount(st, r.newSchedule))   // 被覆保存＝割当は常に妥当
     }
 
     @Test fun c1WindowPolishNeverWorsens() {
@@ -98,7 +98,7 @@ class V6FinalBridgePortTest {
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
         val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
-        assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))
+        assertEquals(0, invalidAssignmentCount(st, r.newSchedule))
     }
 
     @Test fun c3SequencePolishNeverWorsens() {
@@ -108,7 +108,7 @@ class V6FinalBridgePortTest {
         val after = UnifiedViolationChecker.check(st, r.newSchedule)
         val notWorse = notWorseThan(after, before)
         assertTrue(notWorse)
-        assertEquals(0, V6WebCompat.invalidAssignmentCount(st, r.newSchedule))
+        assertEquals(0, invalidAssignmentCount(st, r.newSchedule))
     }
 
     @Test fun equalizePolishesNeverWorsenMainObjective() {
@@ -145,7 +145,7 @@ class V6FinalBridgePortTest {
     @Test fun postHotfixChainReturnsReport() {
         val st = sampleState()
         val post = V6HotfixPasses.runPostOptimization(st, st.schedule.toIntArray2D(), "test")
-        assertEquals(0, V6WebCompat.invalidAssignmentCount(st, post.schedule))
+        assertEquals(0, invalidAssignmentCount(st, post.schedule))
         assertTrue(post.logs.isNotEmpty())
         assertEquals(post.report.total, UnifiedViolationChecker.check(st, post.schedule).total)
     }
@@ -173,4 +173,20 @@ class V6FinalBridgePortTest {
         cons41 = emptyList(),
         cons42 = emptyList(),
     )
+}
+
+/**
+ * 盤面のうち「担当できないシフト／範囲外のシフト番号」が入っているセル数。
+ * [3.393.0] 旧 `V6WebCompat.invalidAssignmentCount`。本番の呼出は無く、この検証オラクルが唯一の用途
+ * だったので Web 互換オブジェクトの撤去に合わせてテスト側へ移した（挙動は同一）。
+ */
+internal fun invalidAssignmentCount(state: MagiState, schedule: Array<IntArray> = state.schedule.toIntArray2D()): Int {
+    val p = Problem(state)
+    val s = normalizeSchedule(schedule, p)
+    var n = 0
+    for (i in 0 until p.S) for (j in 0 until p.T) {
+        val k = s[i][j]
+        if (k !in 0 until p.K || !p.canDo(i, k)) n++
+    }
+    return n
 }

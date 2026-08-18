@@ -16,11 +16,12 @@
 |---|---|---|
 | 本最適化 | 初期解から広域探索して最良解を作る | `V6FinalPort.handleOptimize` → `V6NativeOptimizer.optimize` |
 | 後処理 | 既存の良解を退化させずに制約別の残差を磨く | `V6HotfixPasses.runPostOptimization` |
-| 初期解生成 | 希望・C1 を優先した下書きをゼロから組む | `V6FinalPort.handleSmartInitial` → `SmartInitialScheduler`（簡易版は `handleSimple` → `GreedyMirrorScheduler`） |
+| 初期解生成 | 希望・C1 を優先した下書きをゼロから組む | `V6FinalPort.handleSmartInitial` → `SmartInitialScheduler` |
 | 手動提案 | 利用者が確認して適用する一手を列挙する | `FixSuggester.suggest` |
 
 `V6FinalPort.handleCheck` は評価のみで探索を起動しない＝入口ではない。
-`LightMirrorOptimizer` は UI から参照ゼロ（`MirrorEngineTest` のみ使用）で、本番の入口ではない。
+[3.393.0] `LightMirrorOptimizer`（Python/Web ミラーの移植）と簡易版の入口 `handleSimple` は本番呼出ゼロのため撤去した。
+`GreedyMirrorScheduler` は残っているが、用途は `SmartInitialSchedulerTest` が**旧生成器との対照**に使うテスト専用。
 
 ## 本最適化（広域探索）
 

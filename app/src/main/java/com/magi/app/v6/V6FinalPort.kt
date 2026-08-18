@@ -9,7 +9,7 @@ import kotlinx.coroutines.isActive
  * Final bridge for Web App-level handlers.
  *
  * V6 Web kept many behaviors inside React App methods instead of standalone
- * worker functions: handleSimple, handleCheck, handleOptimize, busy-detail
+ * worker functions: handleSmartInitial, handleCheck, handleOptimize, busy-detail
  * construction, impossible-wish gate, algorithm labels, and post-optimization
  * HF80/HF67/HF66/HF70 chaining.  This object ports those App-level semantics as
  * pure Kotlin so ViewModel/Compose can call the same workflow without WebView.
@@ -158,26 +158,6 @@ object V6FinalPort {
         //   異なる基盤・役割から非同期に探索し、停滞/重複を検知して再配属する。
         seconds <= 300 -> AlgorithmLabel("🌈", "究極(5分)", "ALNS/RSI/RSI++ 異種並列探索(適応epoch)", "PORTFOLIO")
         else -> AlgorithmLabel("🌈", "究極", "最大限の品質 (${seconds / 60}分)", "PORTFOLIO拡張")
-    }
-
-    suspend fun handleSimple(state: MagiState, allowImpossible: Boolean = false): ActionResult = withContext(Dispatchers.Default) {
-        require(state.dayCount > 0) { "対象期間が無効です。終了日を開始日より後の日付にしてください" }
-        // [3.360.3] 期間には T>0 のガードがあるのに職員数には無く、非対称だった。S=0 は編集画面からは
-        //   作れない（Ws1Ops.removeStaff が最後の1名を消さない）が、**JSON/CSV 取込で外部から入りうる**。
-        //   その場合 SaOptimizer の rng.nextInt(S) が IllegalArgumentException を投げ、ViewModel の
-        //   catch が「最適化失敗: bound must be positive」という原因の読めない文言を出していた。
-        require(state.staff.isNotEmpty()) { "職員が1人も登録されていません。職員管理で追加してください" }
-        val gate = confirmDespiteImpossibleWishes(state, allowImpossible)
-        if (!gate.allowed) error(gate.message)
-        val busy = buildBusyDetail(state, "シフト作成中", mapOf(
-            "subtitle" to "初期勤務表を作成中",
-            "phaseDesc" to "希望シフトと必要人数を考慮して、担当できるシフトを割り当てています",
-            "expectedSec" to "< 1 秒",
-            "estimatedIter" to "~800 回",
-        ))
-        val res = GreedyMirrorScheduler.generate(state)
-        val logs = gate.logs + res.report.logs + MirrorLog(tag = "MAGI_GenerateInitial", message = "簡易作成 完了 HARD=${res.report.hard} total=${res.report.total}")
-        ActionResult(res.schedule, res.report.copy(logs = logs), "simple", busy, logs)
     }
 
     /**

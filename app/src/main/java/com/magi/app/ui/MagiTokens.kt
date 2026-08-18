@@ -44,7 +44,7 @@ fun magiWarnColors(): Pair<Color, Color> {
     else Color(0xFFFBEAD0) to Color(0xFF6B4E00)                      // 明: 淡いアンバー＋濃い文字
 }
 
-// シフト記号→色の既定フォールバックは V6WebCompat.resolveShiftColor が唯一の真実源。
+// シフト記号→色の既定フォールバックは ShiftAppearance.resolveShiftColor が唯一の真実源。
 // （以前ここに同等の shiftAccentFallback があったが未配線・二重管理のため削除）
 
 /**

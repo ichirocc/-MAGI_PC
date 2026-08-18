@@ -32,7 +32,7 @@ jobs:
         run: yes | sdkmanager --licenses >/dev/null || true
 
       - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       # [/code-review] 旧: wgetがリトライなし・キャッシュなしで毎回~200MBを再取得＝一時的なネットワーク
       #   不調でジョブごと失敗しうる無防備な単一ダウンロードだった。バージョン文字列固定のキーでキャッシュし

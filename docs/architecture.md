@@ -59,8 +59,9 @@ StateParser（JSON I/O） / ScheduleCsvBridge（CSV I/O）── map ─▶ Magi
 | `Evaluator` / `DeltaEvaluator` | Engine-Scoring | 違反スコアの計算 / 差分評価（高速化） |
 | `MirrorCore`（`MirrorKeys`） | Constraint-Defs | **18 違反種と重み**＝`weightedScore` の唯一の真実 |
 | `V6SearchOperators` / `V6LateOperators` / `V6SwapSuggester` | Engine-Operators | 近傍・交換・修復などの探索手 |
-| `GreedyMirrorScheduler` / `LightMirrorOptimizer` | Engine-Seed | 初期解の生成 |
-| `V6WebCompat` / `V6SanityPort` / `V6FinalPort` / `V6PortAnalyzer` | Engine-Parity | Web 版（`magi_v6_web.html`）と挙動を一致させる移植・検証層 |
+| `SmartInitialScheduler` / `GreedyMirrorScheduler` | Engine-Seed | 初期解の生成（後者はテスト専用の旧生成器） |
+| `V6SanityPort` / `V6FinalPort` / `V6PortAnalyzer` | Engine-Facade | 事前診断・UI 向けファサード・分析層 |
+| `ShiftAppearance` | UI-Support | シフト記号→表示色 と 違反キー→重大度 の唯一の解決元（3.393.0 に `V6WebCompat` から切り出し） |
 | `ScheduleCsvBridge` | IO-CSV | 勤務表 / 希望 CSV ↔ `MagiState`（文字コード自動判定） |
 
 ### 背景実行（work）
@@ -98,7 +99,7 @@ ViewModel ハブ
 エンジン（v6）
 - `OptimizationWorker` **runs** `V6NativeOptimizer` ／ **uses** `StateParser`
 - `V6NativeOptimizer` **depends-on** `Problem`
-- `V6NativeOptimizer` **uses** `SaOptimizer`, `V6SearchOperators`/`V6LateOperators`/`V6SwapSuggester`, `GreedyMirrorScheduler`/`LightMirrorOptimizer`, `V6WebCompat`/`V6SanityPort`/`V6FinalPort`/`V6PortAnalyzer`
+- `V6NativeOptimizer` **uses** `SaOptimizer`, `V6SearchOperators`/`V6LateOperators`/`V6SwapSuggester`, `SmartInitialScheduler`/`GreedyMirrorScheduler`, `V6SanityPort`/`V6FinalPort`/`V6PortAnalyzer`
 - `V6NativeOptimizer` **scores-with** `Evaluator` / `DeltaEvaluator`
 - `DeltaEvaluator` **builds-on** `Evaluator`
 - `Evaluator` **depends-on** `Problem`

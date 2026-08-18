@@ -71,15 +71,6 @@ data class UiState(
     val violationFamilyColorHex: Map<String, String> = emptyMap(),
     val schedule: List<List<Int>> = emptyList(),
     val wishes: Map<String, Int> = emptyMap(),   // ws3 希望 "i,j"->shiftIdx（表示融合用）
-    val resultSchedule: List<List<Int>> = emptyList(),   // [B1→D7] 確定結果(ws6)スナップショット。読取モード撤去に伴い UI 参照ゼロ（モデルのみ温存）。
-    val hasResultSnapshot: Boolean = false,               // [B1→D7] 結果スナップショットの有無（UI 参照ゼロ・温存）。
-    // [backlog#1→D7] 結果(ws6)専用の違反マップ。読取モード撤去に伴い UI 参照ゼロ（makeUi の充填のみ継続・温存）。
-    val resultViolationCells: Map<String, String>? = null,
-    val resultNeedViolations: Map<String, String>? = null,
-    val resultCountViolations: Map<String, String>? = null,
-    val resultViolationCellFamilies: Map<String, List<String>>? = null,
-    val resultCountFamilies: Map<String, List<String>>? = null,
-    val resultNeedFamilies: Map<String, List<String>>? = null,
     val liveSchedule: List<List<Int>> = emptyList(),      // [DefragLiveView] 計算中の最良盤面（実行中のみ）
     val v6: V6PortReport? = null,
     val constraintsEdited: Boolean = false,

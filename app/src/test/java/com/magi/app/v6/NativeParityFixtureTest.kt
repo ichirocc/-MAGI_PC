@@ -61,7 +61,7 @@ class NativeParityFixtureTest {
         val st = StateParser.parse(json!!)!!
         val p = Problem(st)
         val sched = Array(st.schedule.size) { i -> st.schedule[i].toIntArray() }
-        val ev = Evaluator(p, c3RunMode = true)
+        val ev = Evaluator(p)
         val (hard, soft) = ev.split(ev.fullEval(sched))
 
         assertEquals(

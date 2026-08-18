@@ -30,18 +30,20 @@ Main (`app/src/main/java/com/magi/app/v6/`):
 - `Problem.kt`, `Evaluator.kt`, `DeltaEvaluator.kt`, `C3Run.kt` — resolved problem
   view + full / delta scoring.
 - `MirrorCore.kt` — `UnifiedViolationChecker`, weighted score, shared helpers.
-- `GreedyMirrorScheduler.kt`, `LightMirrorOptimizer.kt`, `SaOptimizer.kt` —
+- `SmartInitialScheduler.kt`, `GreedyMirrorScheduler.kt`, `SaOptimizer.kt` —
   schedule construction and the high-speed simulated-annealing optimizer.
+  （`GreedyMirrorScheduler` は 3.393.0 以降テスト専用の旧生成器。`LightMirrorOptimizer.kt` は同版で撤去。）
 - `V6NativeOptimizer.kt` — full multi-algorithm dispatcher (V5 / ALNS / RSI /
   RSI+) wiring the SA engine, late operators, and hotfix passes.
 - `V6HotfixPasses.kt`, `V6LateOperators.kt` — post-optimization passes.
 - `V6SanityPort.kt`, `V6PortAnalyzer.kt` — diagnostics.
 - `Ws1Ops.kt`, `ScheduleCsvBridge.kt` — settings ops and CSV round-trip.
-- `V6WebCompat.kt`, `V6FinalPort.kt` — stable façade for UI / tests
-  (`handleCheck` / `handleSimple` / `handleOptimize`).
+- `V6FinalPort.kt` — stable façade for UI / tests
+  (`handleCheck` / `handleSmartInitial` / `handleOptimize`)。
+- `ShiftAppearance.kt` — シフト記号→表示色・違反キー→重大度（3.393.0 に `V6WebCompat.kt` から切り出し、残りは撤去）。
 
 Tests (`app/src/test/java/com/magi/app/v6/`): `DeltaEvaluatorTest`,
-`MirrorEngineTest`, `V6WebCompatTest`, `V6SanityPortTest`, `V6PortAnalyzerTest`,
+`MirrorEngineTest`, `ShiftAppearanceTest`, `V6SanityPortTest`, `V6PortAnalyzerTest`,
 `V6LateOperatorsTest`, `V6NativeOptimizerChoiceTest`, `V6FinalBridgePortTest`.
 
 ## UI wiring
@@ -58,7 +60,8 @@ Each action launches a cancellable `job`; **計算を止める** calls `job?.can
     停滞時はさらに早期終了する。旧仕様の「30 秒固定」「600 秒」は撤去済み。
   - **方式は選択式**: `AUTO / V5 / ALNS / RSI / RSI_PLUS`。AUTO は予算からプランを自動選択。
   - `handleOptimize` 自身が `withContext(Dispatchers.Default)` で実行。
-- **簡易作成** → `V6FinalPort.handleSimple(state)`（greedy 初期スケジュール、ViewModel 経由）。
+- **初期解生成** → `V6FinalPort.handleSmartInitial(state)`（希望・C1 優先の下書き、ViewModel 経由）。
+  （旧「簡易作成」`handleSimple` は UI 導線が 3.126.0 で撤去され、本体も 3.393.0 で撤去。）
 - **違反チェック** → `V6FinalPort.handleCheck(state, schedule)`（評価のみ、`checkJob` で実行）。
 
 実行中の挙動（旧仕様より複雑）:
@@ -121,6 +124,10 @@ Each action launches a cancellable `job`; **計算を止める** calls `job?.can
 | `_csvEsc` / CSV export | Native CSV ヘルパー・共有/書き出し |
 | `parseScheduleCsv` | `ScheduleCsvBridge.parse` |
 | `resolveConstraints` | `Problem`（resolved view） |
+> **[3.393.0]** 下表は Web 版からの移植先を記録した**当時の対応表**。`V6WebCompat` に置いた Web 専用の
+> 助っ人（Worksheet/Workbook 一式・Web 側の診断ビルダ・Web 版 V5 のヘルパー・安定スコア等）は、Web 版が
+> 存在しないことをユーザーに確認したうえで撤去した。現存するのは表示色/重大度の4関数＝`ShiftAppearance` のみ。
+
 | `buildImpossibleWishSummary` / `detectImpossibleWishes` | `V6WebCompat` / `V6SanityPort` |
 | `buildShiftCountDiagnosticStructured` / `buildSanityCheck` | `V6WebCompat` / `V6SanityPort` ＋ `V6PortAnalyzer` |
 | `runSimpleSchedule` | `GreedyMirrorScheduler`（`handleSimple`） |
@@ -143,8 +150,9 @@ DOM 操作 / Web Worker Blob URL / Tailwind ランタイム / `window.storage` /
 React `App` コンポーネント内に閉じていた V6 ロジックの最終移植分。
 
 ## 新規 Native ファイル
-- `V6FinalPort.kt`: `buildBusyDetail` / `confirmDespiteImpossibleWishes` / `handleSimple` /
+- `V6FinalPort.kt`: `buildBusyDetail` / `confirmDespiteImpossibleWishes` / `handleSmartInitial` /
   `handleCheck` / `handleOptimize` / `getAlgorithmLabel` / `optimizationPlan` / `checkResultWorse`
+  （`handleSimple` は 3.393.0 で撤去）
 - `V6HotfixPasses.kt`: HF80(戦略的振動) / HF67(職員間スワップ) / HF66(職員内再配分) /
   HF70(異常検出)、後処理連鎖 `HF80 → HF67 → HF66 → HF70`
 

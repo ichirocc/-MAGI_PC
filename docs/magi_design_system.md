@@ -65,7 +65,7 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 
 ### 1.3 シフト色マッピング（既定パレット）
 
-**重要**: 実データの色（`state.shiftColors[kigou]` → `V6WebCompat.resolveShiftColor`）が**最優先**。
+**重要**: 実データの色（`state.shiftColors[kigou]` → `ShiftAppearance.resolveShiftColor`）が**最優先**。
 データに色が無い場合のみ、以下の既定テイストにフォールバックする（`shiftAccentFallback(kigou,name)`）。
 
 | シフト | 既定色 |
@@ -78,7 +78,7 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 | 希望 | pink `#EC4899` |
 | NG/違反 | red `#EF4444` |
 
-各ピル/タイルのテキスト色は `V6WebCompat.pickTextColor(bg)`（既存）で黒/白を自動選択。
+各ピル/タイルのテキスト色は `ShiftAppearance.pickTextColor(bg)`（既存）で黒/白を自動選択。
 
 ---
 
@@ -380,7 +380,7 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 - **高コントラスト(UD)**：アクセシビリティ優先のため**変更しない**（純白地・高コントラスト維持）。
 - 形（カード20dp・タイル24dp・ピル）と書体（見出し大・本文静か）は既存が既にプランナー調のため踏襲。
 - **意味色は不変**（緑=OK / 赤=注意 / 青=主操作）。違反の非色手がかり（実線/破線＋ドット）も維持。
-- 実装は `MainActivity.MagiTheme` の `lightColorScheme`/`darkColorScheme` のみ。シフトセル色（`MagiAccent`/`V6WebCompat.resolveShiftColor`）は判別性維持のため据え置き。
+- 実装は `MainActivity.MagiTheme` の `lightColorScheme`/`darkColorScheme` のみ。シフトセル色（`MagiAccent`/`ShiftAppearance.resolveShiftColor`）は判別性維持のため据え置き。
 
 ---
 

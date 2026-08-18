@@ -24,7 +24,18 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-17（3.392.0 ユーザー指示「すべての論理的問題点などを修正する」＝機械で確かめられる
+**最終更新**：2026-08-18（3.393.0 ユーザー指示3点。①**Web版は存在しないので web互換性は不要**＝
+`V6WebCompat`(631行)のうち本アプリが実際に使う4関数だけを `ShiftAppearance` へ切り出し、Worksheet/Workbook
+一式・Web側の undo-redo リデューサ・Web側の診断ビルダ5種・Web版V5のヘルパー・呼出ゼロの雑多ユーティリティ11種を
+削除。`LightMirrorOptimizer`(95行) も docstring 自身が「Kotlin port of magi_python_mirror.py」＝同じ族なので撤去。
+②**最適化中の表示のちらつき**＝進捗コールバックが `_ui.update` を呼ぶ頻度を実測すると **35.3回/秒**
+（間隔の中央値4ms・96%が50ms未満）で、UiState を読む Compose の木が毎秒35回作り直されていた。**エンジンの報告
+頻度は変えず**UI へ押す回数だけ200ms窓へ間引く（1059→**53回**）。フェーズ遷移と必須違反の減少は窓を待たず即時。
+③**死んだ配管は使えるものを配線・意味の無いものを撤去**＝`itersPerSec`/`initHard`/`totalViolations` を進捗行へ
+**配線**（必須が残る間は「改善◯%」が出ず `⚠3` だけで進み具合が皆無だった）／結果スナップショット8種・
+`start`/`runLightOptimize`/`generateSimple`/`handleSimple`・`c3RunMode`（**false はチェッカーと目的関数を黙って
+乖離させるスイッチ**＝未使用なだけでなく危険）・CI の android-35 を**撤去**。ホストJVM **471テスト green**、
+実データの後処理研磨は golden 2653/420・user 33318/321 と既知ベースラインに一致。／3.392.0 ユーザー指示「すべての論理的問題点などを修正する」＝機械で確かめられる
 不変条件を全部確かめてから、実在した4件を修正。①**旗の固着**＝`running` を立てる7経路が `catch (Exception)`
 でしか戻さず、**Error だと `running=true` が永久に残る**（3.328.0 でこれを14個の編集ガードの根拠にしたので
 **アプリが読取専用になる**）。3.382.0 が長い4経路で `Throwable` へ広げた対象漏れ。②`findFixSuggestions` は
@@ -34,7 +45,7 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 ④`Ws1Ops.canRemoveGroup` は呼出0かつ実挙動と矛盾する述語＝削除。**確かめて健全だったもの**も記録＝
 JSON往復（差分0）／削除・期間変更の index 付け替え（**68操作で参照外れ0**）／改善提案（**118提案すべて**が
 適用で改善・Δ表示一致）／CSV往復（cons3の差は末尾空白の正規化のみで意味論は同一）／fair の m<2 ガード（4面全部）。
-ホストJVM **493テスト green**。3.391.0 ユーザー指示「不具合を全て修正する」＝兄弟バグのパターンを全数 grep し
+ホストJVM **471テスト green**（3.392.0 時点で「493」と書いたのは数え違い＝実測は 471）。3.391.0 ユーザー指示「不具合を全て修正する」＝兄弟バグのパターンを全数 grep し
 **実在した9件**を修正。中心は `wishLocked` 規約（**実現不能な希望＝担当できないシフトへの希望は凍結しない**）の
 取り残しで 3.264.0 以来の7世代目。`pref` は実現可能な希望しか数えないので、この族のセルを動かしても pref は
 1点も増えず、逆に担当外＝groupViol(HARD 10000) が消える＝**必須違反が厳密に減る手を捨てていた**（探索

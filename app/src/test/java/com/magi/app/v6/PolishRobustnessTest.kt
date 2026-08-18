@@ -122,7 +122,7 @@ class PolishRobustnessTest {
      * 期間には `dayCount > 0` のガードがあるのに職員数には無く非対称だった。S=0 は編集画面からは
      * 作れない（`Ws1Ops.removeStaff` が最後の1名を消さない）が、JSON/CSV 取込で外部から入りうる。
      * **ガードを外して実測**: `handleOptimize` は `bound must be positive`（= `rng.nextInt(0)`）を投げていた。
-     * `handleSimple`/`handleSmartInitial` は生成器側が「期間/職員/シフトが不足しています」を返しており
+     * `handleSmartInitial` は生成器側が「期間/職員/シフトが不足しています」を返しており
      * 致命的ではなかったが、3経路で同じ文言に揃える。
      */
     @Test
@@ -133,7 +133,6 @@ class PolishRobustnessTest {
         val s = emptyBucketState().let { it.copy(staff = emptyList(), schedule = listOf(listOf(0, 1, 0))) }
         for (call in listOf<suspend () -> Unit>(
             { V6FinalPort.handleOptimize(s, emptyArray(), 1) },
-            { V6FinalPort.handleSimple(s) },
             { V6FinalPort.handleSmartInitial(s) },
         )) {
             val e = runCatching { call() }.exceptionOrNull()

@@ -41,7 +41,7 @@ class ObjectiveParityTest {
 
     private fun assertParity(label: String, st: MagiState, sched: Array<IntArray>) {
         val p = Problem(st)
-        val ev = Evaluator(p, c3RunMode = true)
+        val ev = Evaluator(p)
         val rep = UnifiedViolationChecker.check(st, sched)
         val parts = ev.fullEvalParts(sched)
         assertEquals("$label: HARD 件数が Checker と Evaluator で違う", rep.hard.toLong(), parts[0])
