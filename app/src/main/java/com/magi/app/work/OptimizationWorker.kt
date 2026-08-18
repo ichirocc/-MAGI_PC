@@ -117,6 +117,8 @@ class OptimizationWorker(
         var releasedByMe = false
         var lastSnapMs = 0L
         var lastBubbleMs = 0L
+        var lastPublishMs = Long.MIN_VALUE / 4   // [3.394.0] 進捗 publish の窓
+        var lostOwnership = false                // [3.394.0] 所有権を失ったら以後この実行は何も出さない
         val wallStart = System.currentTimeMillis()   // [実機報告「残り時間表示が5分から何度も巡回する」修正]
         return try {
             val res = V6FinalPort.handleOptimize(
@@ -133,12 +135,24 @@ class OptimizationWorker(
                     //   前提とするため、単調な壁時計(wallStart基準、MagiViewModel.runV6FullOptimizeの
                     //   startMsと同じ考え方)に統一する。
                     val wallElapsed = System.currentTimeMillis() - wallStart
-                    // [3.329.0/外部レビュー H-03] 置き換えられた旧実行の進捗を新実行のものとして
-                    //   見せない。所有権の確認はファイル1本の読取なので、8秒間引きの外でも十分安い。
-                    if (!ownsFiles()) { droppedProgress++; return@handleOptimize }
-                    OptimizationRepository.publishProgress(
-                        OptimizationRepository.BgProgress(phase, report.hard, report.soft, report.total, iters, wallElapsed),
-                    )
+                    // [3.329.0/外部レビュー H-03] 置き換えられた旧実行は何も出さない。所有権の喪失は
+                    //   **単調**（3.385.0＝`beginRun` を書くのは新しい実行だけ・`clear` はマーカーを消すだけ）
+                    //   なので、一度失ったら以後この実行は進捗もバブルも出さずに抜ける。
+                    if (lostOwnership) { droppedProgress++; return@handleOptimize }
+                    // [3.394.0/外部レビュー] 前景と同じ窓で間引く。旧: 進捗コールバックごとに publish して
+                    //   おり、ViewModel の collector が UiState を丸ごと差し替える＝前景で消したちらつきが
+                    //   背景実行では残っていた（実測 PORTFOLIO 並列8 で 1,174.7回/秒）。
+                    //   窓を **ownsFiles() より前** に置くので、旧コメントが「十分安い」と見積もっていた
+                    //   所有権確認のファイル読取も同じ回数だけ減る（publish する回は従来どおり必ず確認する）。
+                    //   検知は最大 200ms 遅れるが、その間に走るのはバブル1回と、自前で所有権を見る
+                    //   スナップショット書き込みだけ。
+                    if (wallElapsed - lastPublishMs >= OptimizationRepository.PROGRESS_PUSH_MS) {
+                        lastPublishMs = wallElapsed
+                        if (!ownsFiles()) { lostOwnership = true; droppedProgress++; return@handleOptimize }
+                        OptimizationRepository.publishProgress(
+                            OptimizationRepository.BgProgress(phase, report.hard, report.soft, report.total, iters, wallElapsed),
+                        )
+                    }
                     // [Android 17 バブル] 進捗を会話バブルへ反映（連続更新は onlyAlertOnce で静音・~1.5秒間引き）。
                     if (wallElapsed - lastBubbleMs > 1_500L) {
                         lastBubbleMs = wallElapsed

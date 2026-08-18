@@ -81,7 +81,7 @@ Claude Code 環境に Android SDK があれば直接 `./gradlew assembleRelease`
   `check(state, schedule) -> ViolationReport{violations, needViolations, countViolations, breakdown, hard, total, weightedScore}`。
   `Problem`（`cachedProblem(state)`）, `canDo(i,k)`, `allowedShiftsForStaff(i)`, `countMatrix`, `coverage`,
   `normalizeSchedule`。`MirrorKeys`（hard/soft/all のキー分割）と weightedScore の重み定義もここ。
-- `Evaluator.kt` / `DeltaEvaluator.kt` — **最適化器の目的関数**（SA の受理判定）。`Evaluator(p, c3RunMode=true)`。
+- `Evaluator.kt` / `DeltaEvaluator.kt` — **最適化器の目的関数**（SA の受理判定）。`Evaluator(p)`（3.393.0 で `c3RunMode` は撤去＝単一シフト連は常に run-deficit）。
   Delta は差分評価。`SaOptimizer` が Delta×Full の整合チェック（安全網）を行うため**両者は常に一致させる**。
 - `C3Run.kt` — `isSingleShiftSeq(seq)`, `rowDeficit(a,i,k,L)`（単一シフト連の不足評価）。
 - `V6FinalPort.kt` — `handleOptimize`（最適化オーケストレーション）, `handleCheck`（UnifiedViolationChecker）。
@@ -5308,6 +5308,43 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   べきで、それは別の判断。記録に留める。
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
+
+## ちらつき対策が既定経路で効いていなかった＝測り直して修正（3.394.0, /code-review 6件）
+
+`/code-review` の指摘6件を1件ずつ実測・実コードで確かめ、**全件実在**を確認して直した。最大のものは
+**3.393.0 で私が入れた対策そのものが、既定の長時間経路ではほぼ無効だった**という自分の欠陥。
+
+- **[最重要・自分の欠陥] フェーズ遷移の抜け道が窓を99.9%迂回していた**: 3.393.0 は「フェーズが変わったら
+  200ms 窓を飛ばす」抜け道を持たせたが、フェーズ名は**ワーカーごと**に流れる。既定の長時間経路
+  （AUTO 211秒以上＝PORTFOLIO・並列8）で測り直すと **コールバック 1,174.7回/秒**、押し出しは
+  **785.0回/秒**（35,559回のうち **35,518回=99.9% が抜け道**）＝窓は事実上効いていなかった。
+  抜け道を「必須違反が減った瞬間」だけに絞る（単調減少なので回数が入力の必須件数で上限される）＝
+  実測 **4.3回/秒**。フェーズ名の更新は最大 200ms 遅れるだけ。
+  **3.393.0 に書いた「35.3回/秒・1059→53回」は測り方が不十分だった**＝30秒予算・並列4 は AUTO が V5 を
+  選ぶ帯で、実機報告の場面（長時間＝PORTFOLIO）を代表していなかった。数字は上記へ訂正する。
+- **[背景実行に同じ churn が残っていた]** `OptimizationWorker` は進捗コールバックごとに
+  `publishProgress` しており、ViewModel の collector が UiState を丸ごと差し替える＝前景で消した
+  ちらつきが背景実行では残っていた。**発行側**に同じ窓を掛ける（`OptimizationRepository.PROGRESS_PUSH_MS`
+  を前景・背景の単一ソースに）。窓を `ownsFiles()` **より前**に置いたので、旧コメントが「十分安い」と
+  見積もっていた所有権確認のファイル読取も同じ回数だけ減る（1,175回/秒 → 5回/秒）。
+  あわせて**所有権の喪失を latch** した（3.385.0 の「喪失は単調」）＝旧実装は所有権を失うと
+  `return@handleOptimize` で全部止めていたので、窓を入れたことでバブルだけ出続けるのを防ぐ。
+- **[進捗の基準が別データを指していた]** `initHard`/`initSoft` は `loadAsync` でしか書かれず、CSV 取込・
+  編集・再実行のあとも**最後に JSON を読んだときの値**を指していた。3.393.0 で足した「最初は N」だけの
+  問題ではなく、**旧来の「改善◯%」も同じ基準で出ていた**。keep-best の判定に使う `baseReport`
+  （＝この実行の入力盤面）を同じ基準にする。満足度 `satisfaction` も `initHard+initSoft` 由来なので一緒に直る。
+- **[docs] `data-models.md` の UiState 一覧が壊れていた**: 3.393.0 で撤去した結果スナップショット8種を
+  まだ載せており、自分で置いた**件数チェックサムが合わない**状態だった（82 → **74**）。撤去して
+  件数と式を直し、**機械照合**（実装の `val` 74 個すべてが本文に出現・グループ件数の合計が 74）で確認。
+- **[docs] 移植対応表を割っていた**: 3.393.0 の注記を**表の途中**に入れたため、以降11行が表として
+  描画されず生のパイプ文字になっていた。表の直前へ移動。
+- **[docs] `CLAUDE.md` の stale なシグネチャ**: `Evaluator(p, c3RunMode=true)` が撤去後も残っていた
+  （README と `docs/` は直したのにここだけ漏れ）。**[軽微]** `MagiViewModel` の未使用 `Evaluator` import。
+
+検証: ホストJVM **全471テスト green**（既知の false positive 1件を除く）。ちらつきの数字は
+`golden_state`・45秒・並列8 で PORTFOLIO/ALNS を実走して取得（同じ盤面で現行ロジックと新ロジックの
+押し出し回数を同時に数えた）。UI/Worker 層はホストでコンパイル不可＝括弧均衡とシンボルのスコープ逆引き
+まで（最終判定は CI）。
 
 ## Web互換の撤去・最適化中のちらつき・死んだ配管の始末（3.393.0, ユーザー指示3点）
 

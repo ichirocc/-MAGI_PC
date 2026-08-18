@@ -4,7 +4,6 @@ import com.magi.app.toHankakuKigou
 import androidx.lifecycle.AndroidViewModel
 import android.app.Application
 import androidx.lifecycle.viewModelScope
-import com.magi.app.v6.Evaluator
 import com.magi.app.v6.betterReport
 import com.magi.app.v6.Problem
 import com.magi.app.v6.ScheduleCsvBridge
@@ -71,18 +70,6 @@ import kotlinx.coroutines.withContext
  */
 const val MAX_BUDGET_SEC = com.magi.app.v6.MAX_OPTIMIZE_SEC
 
-/**
- * 最適化中に UiState を差し替える最短間隔（ミリ秒）。
- *
- * [3.393.0/実機報告「最適化中の表示がちらつく」] エンジンの進捗コールバックは実測 **35回/秒**
- * （golden_state・30秒・並列4で 1059回／間隔の中央値 4ms／**96%が50ms未満**）届く。旧実装はその
- * たびに `_ui.update` で UiState を丸ごと差し替えており、UiState を読む Compose の木が毎秒35回
- * 再合成されていた＝進捗行・カード・途中経過が小刻みに描き直される「ちらつき」の正体。
- * **エンジンの報告頻度は一切変えない**（停滞ウォッチドッグ・HF63・操作ログのマイルストーン判定は
- * 従来どおり全コールバックで動く）。UI へ押す回数だけこの窓へ間引く＝実測 1059回 → **53回**。
- * フェーズが変わった瞬間と必須違反が減った瞬間は窓を待たずに押すので、体感の応答は落ちない。
- */
-private const val UI_PROGRESS_PUSH_MS = 200L
 
 class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -855,9 +842,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // 最適化中ログ強化用のスロットル状態（操作ログへマイルストーンだけを残しスパムを防ぐ）。
         var liveHard = Long.MAX_VALUE
         var livePhase = ""
-        // [3.393.0/ちらつき対策] UI へ押した最後の時刻・フェーズと、間引きで捨てた回を埋める最新の検査結果。
+        // [3.393.0/ちらつき対策] UI へ押した最後の時刻と、間引きで捨てた回を埋める最新の検査結果。
         var lastUiPushMs = Long.MIN_VALUE / 4
-        var lastUiPhase = ""
         var lastLiveReport: ViolationReport? = null
         val runWall0 = System.currentTimeMillis()   // [N6] 経過表示は壁時計基準（onProgressのelapsedは仮説ローカルで巻き戻る）
         var lastPhaseLogMs = -10_000L
@@ -878,6 +864,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [一括修正] 「必須違反 残りN件 に改善」の基準を入力盤面の必須数でシード。旧: Long.MAX_VALUE 始まりの
                 //   ため、探索シードが入力より悪い局面(例: 入力1→シード2)でも最初の報告を「改善」と表示していた。
                 liveHard = baseReport.hard.toLong()
+                // [3.394.0/外部レビュー] 進捗行の基準（「改善◯% (初期→現在)」「最初は N」）を**この実行の
+                //   入力盤面**にする。旧: initHard/initSoft は `loadAsync` でしか書かれず、CSV 取込・編集・
+                //   再実行のあとも最後に JSON を読んだときの値を指していた＝別のデータや別の実行の基準で
+                //   進み具合を出していた。keep-best の判定に使う baseReport がまさにこの実行の入力なので、
+                //   同じものを基準にする（満足度 satisfaction も initHard+initSoft から出るので一緒に直る）。
+                _ui.update { it.copy(initHard = baseReport.hard.toLong(), initSoft = baseReport.soft.toLong()) }
                 val res = V6FinalPort.handleOptimize(
                     state = st0,
                     schedule = sched0.copy2D(),
@@ -901,12 +893,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     // 間引きで捨てた回のぶんを埋めるため、最後に届いた非nullの検査結果を持ち回す
                     //   （report は毎回付くとは限らず、押す回だけ見ると breakdown が飛ぶ）。
                     if (rep != null) lastLiveReport = rep
-                    val uiDue = base != lastUiPhase ||                                   // フェーズ遷移は即時
-                        (rep != null && rep.hard.toLong() < liveHard) ||                 // 必須違反が減った瞬間も即時
-                        wallElapsed - lastUiPushMs >= UI_PROGRESS_PUSH_MS
+                    // [3.394.0/外部レビューで判明・3.393.0 の欠陥] 旧実装は「フェーズが変わったら窓を飛ばす」
+                    //   抜け道を持っていたが、フェーズ名は**ワーカーごと**に流れる。既定の長時間経路
+                    //   （AUTO 211秒以上＝PORTFOLIO・並列8）では実測 **35,559回の押し出しのうち 35,518回
+                    //   （99.9%）がこの抜け道**で、窓は事実上無効だった（1,174.7回/秒 → 785.0回/秒）。
+                    //   抜け道は「必須違反が減った瞬間」だけに絞る＝これは単調減少なので回数が
+                    //   入力の必須件数で上限される。実測 4.3回/秒。フェーズ名の更新は最大 200ms 遅れるだけ。
+                    val uiDue = (rep != null && rep.hard.toLong() < liveHard) ||
+                        wallElapsed - lastUiPushMs >= OptimizationRepository.PROGRESS_PUSH_MS
                     if (uiDue) {
                         lastUiPushMs = wallElapsed
-                        lastUiPhase = base
                         val shown = lastLiveReport
                         _ui.update { it.copy(
                             bestHard = shown?.hard?.toLong() ?: it.bestHard,

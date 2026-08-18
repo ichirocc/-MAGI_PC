@@ -2,8 +2,10 @@
 
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
 > **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
-> **最終更新**：2026-08-17（3.390.0 — **§4 の UiState 一覧を全82フィールドへ刷新**。旧記述は30フィールドが
-> 未記載で、`*Families` 3種・result 専用マップ7種・調整トグル4種・診断5種などが丸ごと落ちていた。
+> **最終更新**：2026-08-18（3.394.0 — 3.393.0 で UiState から撤去した**結果スナップショット8種**
+> （`resultSchedule` / `hasResultSnapshot` / result 専用マップ6種）を §4 から削除し、件数を 82 → **74** へ。
+> 3.390.0 で **§4 の UiState 一覧を全フィールドへ刷新**。旧記述は30フィールドが未記載で、
+> `*Families` 3種・result 専用マップ・調整トグル4種・診断5種などが丸ごと落ちていた。
 > 3.389.0 で §3 の2件を訂正（`schedule[i][j] < 0` ＝公休は誤り／`skillIdx = -1` は正規の値）。
 > §1・§2 のフィールド表は実装と一致を再確認済み。全体像は [`sudo_model.md`](./sudo_model.md) 参照）
 
@@ -81,7 +83,7 @@
 ## 4. UiState（画面表示用の派生状態）
 
 `data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
-状態。**全82フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
+状態。**全74フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
 
 **読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
 
@@ -117,12 +119,6 @@
 `violationSoftColorHex`（要調整・`__vioSoft__` 由来）, `violationFamilyColorHex`（族別の個別色・`__vioFam_<fam>__` 由来）,
 `reviewMemos`（見直し候補メモ・セッション内のみ）
 
-**結果スナップショット**（8・**現在 UI 参照ゼロ**）：`resultSchedule`, `hasResultSnapshot`,
-`resultViolationCells`, `resultNeedViolations`, `resultCountViolations`,
-`resultViolationCellFamilies`, `resultCountFamilies`, `resultNeedFamilies`
-（読取モード撤去＝D7/3.120.0 で参照が消えた。`makeUi` の充填だけ継続してモデルとして温存している。
-`null` = 未計算 → 現行マップへフォールバックする規約）
-
 **編集/再構成**（4）：`constraintsEdited`, `structureEdited`, `editRev`, `prevBackupAvailable`
 
 > `editRev` は構造編集ごとに単調増加する。`structureEdited` は Boolean なので既に true だと `copy` が同値になり
@@ -140,7 +136,7 @@
 
 **その他**（5）：`v6`(`V6PortReport?`), `message`, `opLog`(操作ログ), `logs`(診断ログ), `startDate`
 
-> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+11+10+8+12+8+4+14+2+5 = **82** で
+> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+11+10+8+12+4+14+2+5 = **74** で
 > `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
 > **フィールドが増減したのにここを直し忘れた**ことが件数のずれとして出る（実際、本文を書いた直後の照合で
 > 4グループとも数字が間違っていた）。件数を落とすと照合は無意味になるので、更新のたびに数字も直すこと。

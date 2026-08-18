@@ -118,16 +118,16 @@ Each action launches a cancellable `job`; **計算を止める** calls `job?.can
 
 ## コア対応サマリ
 
+> **[3.393.0]** 下表は Web 版からの移植先を記録した**当時の対応表**。`V6WebCompat` に置いた Web 専用の
+> 助っ人（Worksheet/Workbook 一式・Web 側の診断ビルダ・Web 版 V5 のヘルパー・安定スコア等）は、Web 版が
+> 存在しないことをユーザーに確認したうえで撤去した。現存するのは表示色/重大度の4関数＝`ShiftAppearance` のみ。
+
 | Web シンボル / 機能 | Native 実装 / 状態 |
 |---|---|
 | `makeInitialState` | `StateParser` ＋ 同梱サンプル JSON |
 | `_csvEsc` / CSV export | Native CSV ヘルパー・共有/書き出し |
 | `parseScheduleCsv` | `ScheduleCsvBridge.parse` |
 | `resolveConstraints` | `Problem`（resolved view） |
-> **[3.393.0]** 下表は Web 版からの移植先を記録した**当時の対応表**。`V6WebCompat` に置いた Web 専用の
-> 助っ人（Worksheet/Workbook 一式・Web 側の診断ビルダ・Web 版 V5 のヘルパー・安定スコア等）は、Web 版が
-> 存在しないことをユーザーに確認したうえで撤去した。現存するのは表示色/重大度の4関数＝`ShiftAppearance` のみ。
-
 | `buildImpossibleWishSummary` / `detectImpossibleWishes` | `V6WebCompat` / `V6SanityPort` |
 | `buildShiftCountDiagnosticStructured` / `buildSanityCheck` | `V6WebCompat` / `V6SanityPort` ＋ `V6PortAnalyzer` |
 | `runSimpleSchedule` | `GreedyMirrorScheduler`（`handleSimple`） |

@@ -21,6 +21,20 @@ import kotlinx.coroutines.flow.asStateFlow
  * snapshotFile / resultFile), so the run completes and the result is reflected on relaunch.
  */
 object OptimizationRepository {
+    /**
+     * 進捗を UI へ押し出す最短間隔（ミリ秒）。前景（`MagiViewModel.runV6FullOptimize`）と
+     * 背景（`OptimizationWorker`）の**両方**がこの窓を使う。
+     *
+     * [3.394.0/3.393.0 の測り直し] エンジンの進捗コールバックは実測で
+     * **PORTFOLIO・並列8 なら 1,174.7回/秒**（golden_state・45秒）。この値をそのまま UiState の
+     * 差し替えに流すと `ui` を読む Compose の木がその頻度で作り直される＝実機報告の「ちらつき」。
+     * 窓で間引くと **4.3回/秒**（同条件の実測）。
+     *
+     * **3.393.0 で 35.3回/秒・1059→53回と書いたのは測り方が不十分だった**：30秒予算・並列4 は
+     * AUTO が V5 を選ぶ帯で、既定の長時間経路（211秒以上＝PORTFOLIO）を代表していなかった。
+     */
+    const val PROGRESS_PUSH_MS = 200L
+
     data class BgProgress(
         val phase: String,
         val hard: Int,
