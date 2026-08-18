@@ -126,6 +126,13 @@ object MirrorKeys {
     //   出さない＝weights map 自体には追加しない）。markCount/cellFamilies の重み優先比較では実体である apt の
     //   重み(1.0)をそのまま使う（旧: weights にキーが無く 0.0 扱い＝常に最下位に劣後していた。ユーザー指示により
     //   「aptLow/aptHighは重み1.0扱いにする」＝c2/c41/c42/c41s/c42s/fair/weekly と同格の重み1.0で競わせる）。
+    /**
+     * [3.395.0/高速化] `all` の族名 → 添字。`check()` の `inc` はここで引いた添字で `IntArray` を
+     * 加算する（旧: `breakdown[key] = (breakdown[key] ?: 0) + amount` ＝ハッシュ探索2回＋Int のボクシング。
+     * 実測でこの1関数が `check()` の自己時間の 7.4% を占めていた）。
+     */
+    val index: Map<String, Int> = all.withIndex().associate { (i, k) -> k to i }
+
     fun weightOf(family: String): Double = when (family) {
         "aptLow", "aptHigh" -> weights["apt"] ?: 0.0
         else -> weights[family] ?: 0.0
@@ -133,6 +140,16 @@ object MirrorKeys {
 }
 
 object UnifiedViolationChecker {
+    /**
+     * [3.395.0/高速化] mark 系の重み優先比較のための事前表。
+     *
+     * 旧: `MirrorKeys.weightOf(prev.removePrefix("vio-"))` ＝**マークが重なるたびに String を1個作る**
+     * うえ、`weightOf` は String の `when`（ハッシュ分岐＋equals）。実測で `mark` が `check()` の
+     * 自己時間の 14.1%、`weightOf` が 2.7% を占めていた。クラス名から直接引けば割り当てゼロで済む。
+     * 値は `weightOf` から作るので**重みの定義は `MirrorKeys` の1箇所のまま**（ドリフトしない）。
+     */
+    private val classWeight: Map<String, Double> by lazy { vioClass.entries.associate { it.value to MirrorKeys.weightOf(it.key) } }
+
     private val vioClass = mapOf(
         "c1" to "vio-c1", "c2" to "vio-c2", "c3" to "vio-c3", "c3n" to "vio-c3n",
         "c3m" to "vio-c3m", "c3mn" to "vio-c3mn", "c41" to "vio-c41", "c42" to "vio-c42",
@@ -147,13 +164,12 @@ object UnifiedViolationChecker {
         val t0 = System.nanoTime()
         val p = cachedProblem(state)
         val s = normalizeSchedule(schedule, p)
-        val breakdown = linkedMapOf<String, Int>()
-        for (key0 in MirrorKeys.all) breakdown[key0] = 0
-        val violations = linkedMapOf<String, String>()
-        val needViolations = linkedMapOf<String, String>()
-        val countViolations = linkedMapOf<String, String>()
+        // [3.395.0/高速化] 集計は添字加算の IntArray で行い、最後に `MirrorKeys.all` の順で Map へ起こす
+        //   （返り値の中身と順序は従来と完全に同じ）。`inc` に渡すキーは全て `MirrorKeys.all` にある
+        //   ことを確認済み（c3系は `checkC3Family` が受け取った族名をそのまま返す）。
+        val bd = IntArray(MirrorKeys.all.size)
 
-        fun inc(key: String, amount: Int = 1) { breakdown[key] = (breakdown[key] ?: 0) + amount }
+        fun inc(key: String, amount: Int = 1) { bd[MirrorKeys.index.getValue(key)] += amount }
         // [判読性/レビュー指摘] 同一セルに複数族が重なる場合、従来は「後にマークした族」が無条件上書きで、
         //   評価順の最後(c3系)が pref/groupViol(必須)のマークを潰し、実線枠が角マーク(軽ソフト)へ降格し得た
         //   （重大度の逆転）。MirrorKeys.weights を表示優先度として使い、常に最重の族のマークを保持する。
@@ -164,32 +180,24 @@ object UnifiedViolationChecker {
         val cellFams = linkedMapOf<String, MutableList<String>>()
         val countFams = linkedMapOf<String, MutableList<String>>()
         val needFams = linkedMapOf<String, MutableList<String>>()
+        // [3.395.0/高速化] 「最重1クラス」を毎回ここで決めるのをやめ、末尾で `cellFams` の**整列済み先頭**
+        //   から起こす。両者は定義上いつも同じ値になる：整列は重み降順の**安定ソート**なので先頭＝最初に
+        //   マークされた最大重みのクラス、旧ロジックの「厳密に重いものだけが置き換える」も同じものを残す
+        //   （このファイルの `cellFamilies` の注記が元から「先頭は violations[key] と常に一致」と書いている）。
+        //   挿入順も同じ（どちらも最初のマークで生える LinkedHashMap）。これで1マークあたり
+        //   ハッシュ探索1回＋重み比較2回が消える（実測で `mark` が `check()` 自己時間の 20% だった）。
         fun mark(i: Int, j: Int, family: String) {
-            val key = "$i,$j"
             val cls = vioClass[family] ?: family
-            val fams = cellFams.getOrPut(key) { ArrayList(2) }
+            val fams = cellFams.getOrPut("$i,$j") { ArrayList(2) }
             if (cls !in fams) fams.add(cls)
-            val prev = violations[key]
-            if (prev != null) {
-                val prevW = MirrorKeys.weightOf(prev.removePrefix("vio-"))
-                val newW = MirrorKeys.weightOf(family)
-                if (prevW >= newW) return
-            }
-            violations[key] = cls
         }
         // [判読性] mark() と同じ重み優先。旧: 後勝ちで軽い族(旧 covO=0.5 等)が重い族(c41 等)のマークを上書きし得た。
+        // [/code-review] 重なった全クラスを needFams へ蓄積（重複なし・後で重み降順に整列）。
+        // [3.395.0] mark() と同じ理由で「最重1クラス」は末尾で先頭から起こす。
         fun markNeed(k: Int, j: Int, family: String) {
-            val key = "$k,$j"
-            // [/code-review] mark()/markCount() と同じく、重なった全クラスを needFams へ蓄積（重複なし・後で重み降順に整列）。
             val cls0 = vioClass[family] ?: family
-            val fams = needFams.getOrPut(key) { ArrayList(2) }
+            val fams = needFams.getOrPut("$k,$j") { ArrayList(2) }
             if (cls0 !in fams) fams.add(cls0)
-            val prev = needViolations[key]
-            if (prev != null) {
-                val prevW = MirrorKeys.weightOf(prev.removePrefix("vio-"))
-                if (prevW >= MirrorKeys.weightOf(family)) return
-            }
-            needViolations[key] = vioClass[family] ?: family
         }
         // [防御的統一/敵対的監査で確認] mark()/markNeed() と同じ重み優先へ統一。旧: 無条件上書き
         //   (last-write-wins)は、現在の呼出順(c2→low→high→apt)と apt呼出側の手動 containsKey ガードが
@@ -200,18 +208,12 @@ object UnifiedViolationChecker {
         //   解決する（旧: weights にキーが無く 0.0 扱い＝c2/low/high 等の全実族に対し常に劣後していた）。
         //   同重み同士は先勝ち(mark順)＝c2(先に呼ばれる)が apt(後に呼ばれる)より引き続き優先される。
         //   表示のみ・スコアリング(weightedScore/breakdown/inc)は不変。
+        // [3.353.0] 重なった全クラスを countFams へ蓄積（重複なし・後で重み降順に整列）。
+        // [3.395.0] mark() と同じ理由で「最重1クラス」は末尾で先頭から起こす。
         fun markCount(i: Int, k: Int, family: String) {
-            val key = "$i,$k"
-            // [3.353.0] mark() と同じく、重なった全クラスを countFams へ蓄積（重複なし・後で重み降順に整列）。
             val cls0 = vioClass[family] ?: family
-            val fams = countFams.getOrPut(key) { ArrayList(2) }
+            val fams = countFams.getOrPut("$i,$k") { ArrayList(2) }
             if (cls0 !in fams) fams.add(cls0)
-            val prev = countViolations[key]
-            if (prev != null) {
-                val prevW = MirrorKeys.weightOf(prev.removePrefix("vio-"))
-                if (prevW >= MirrorKeys.weightOf(family)) return
-            }
-            countViolations[key] = vioClass[family] ?: family
         }
         fun cellIs(i: Int, j: Int, k: Int): Boolean = i in 0 until p.S && j in 0 until p.T && s[i][j] == k
 
@@ -223,9 +225,19 @@ object UnifiedViolationChecker {
                 //   窓幅ぶんの塗り広げを止め、違反窓ランの先頭1セルにアンカーする。スライド窓が重複して
                 //   持続不足で行全体を破線で埋めていた（1論理違反≒窓幅×重複数セル）のを 1不足領域=1マーカーへ。
                 var prevViol = false
+                // [3.395.0/高速化] 旧: 窓の開始位置ごとに day1 個を数え直す O(T×day1)。窓は1日ずつ滑るので
+                //   「出た日を引き、入った日を足す」だけで同じ数になる＝O(T)。`j` は `0..T-day1`・`l < day1`
+                //   なので `j+l <= T-1`＝常に範囲内で、`cellIs` の境界検査も外せる（`s` は S×T に正規化済み）。
+                //   数える値が同じなので結果は1ビットも変わらない。
+                if (c.day1 > p.T) continue
+                val row = s[i]
+                var z = 0
+                for (l in 0 until c.day1) if (row[l] == c.shiftIdx) z++
                 while (j <= p.T - c.day1) {
-                    var z = 0
-                    for (l in 0 until c.day1) if (cellIs(i, j + l, c.shiftIdx)) z++
+                    if (j > 0) {
+                        if (row[j - 1] == c.shiftIdx) z--
+                        if (row[j + c.day1 - 1] == c.shiftIdx) z++
+                    }
                     val viol = z < c.day2
                     if (viol) {
                         inc("c1")
@@ -259,18 +271,26 @@ object UnifiedViolationChecker {
             }
         }
 
+        // [3.395.0/高速化] 旧: (規則×日) ごとに ArrayList を2個作っていた。違反が出るのは稀なので
+        //   大半は「片側が空」で捨てられる＝割り当てが丸ごと無駄だった（実測で L267/268/273 が
+        //   `check()` の 16.3%）。使い回しの IntArray ＋ 件数で同じ走査をする（結果は同じ）。
+        val pairL = IntArray(p.S)
+        val pairR = IntArray(p.S)
         for (c in p.cons42) {
             for (j in 0 until p.T) {
-                val left = ArrayList<Int>()
-                val right = ArrayList<Int>()
+                var nL = 0
+                var nR = 0
                 for (i in 0 until p.S) {
-                    if (p.sgrp[i] == c.g1 && cellIs(i, j, c.s1)) left.add(i)
-                    if (p.sgrp[i] == c.g2 && cellIs(i, j, c.s2)) right.add(i)
+                    if (p.sgrp[i] == c.g1 && cellIs(i, j, c.s1)) pairL[nL++] = i
+                    if (p.sgrp[i] == c.g2 && cellIs(i, j, c.s2)) pairR[nR++] = i
                 }
+                if (nL == 0 || nR == 0) continue
                 // [3.318.0] 自己ペア／同一集合の順序重複を数えない（`c42PairCount` と同じ意味論）。
                 //   left と right が同じ集合になるのは g1==g2 かつ s1==s2 のときだけ。
                 val sameSet = c.g1 == c.g2 && c.s1 == c.s2
-                for (i in left) for (i2 in right) {
+                for (a in 0 until nL) for (b in 0 until nR) {
+                    val i = pairL[a]
+                    val i2 = pairR[b]
                     if (i == i2) continue
                     if (sameSet && i2 < i) continue
                     inc("c42")
@@ -290,13 +310,17 @@ object UnifiedViolationChecker {
         }
         for (c in p.cons42s) {
             for (j in 0 until p.T) {
-                val left = ArrayList<Int>(); val right = ArrayList<Int>()
+                var nL = 0
+                var nR = 0
                 for (i in 0 until p.S) {
-                    if (p.ssk[i] == c.g1 && cellIs(i, j, c.s1)) left.add(i)
-                    if (p.ssk[i] == c.g2 && cellIs(i, j, c.s2)) right.add(i)
+                    if (p.ssk[i] == c.g1 && cellIs(i, j, c.s1)) pairL[nL++] = i
+                    if (p.ssk[i] == c.g2 && cellIs(i, j, c.s2)) pairR[nR++] = i
                 }
+                if (nL == 0 || nR == 0) continue
                 val sameSet = c.g1 == c.g2 && c.s1 == c.s2   // [3.318.0] c42 と同じ（自己ペア／順序重複を除く）
-                for (i in left) for (i2 in right) {
+                for (a in 0 until nL) for (b in 0 until nR) {
+                    val i = pairL[a]
+                    val i2 = pairR[b]
                     if (i == i2) continue
                     if (sameSet && i2 < i) continue
                     inc("c42s"); mark(i, j, "c42s"); mark(i2, j, "c42s")
@@ -409,6 +433,10 @@ object UnifiedViolationChecker {
             }
         }
 
+        // [3.395.0] 集計 IntArray を `MirrorKeys.all` の順で Map へ起こす（内容も順序も旧実装と同じ）。
+        val breakdown = linkedMapOf<String, Int>()
+        for ((bi, bk) in MirrorKeys.all.withIndex()) breakdown[bk] = bd[bi]
+
         var total = 0
         for (v in breakdown.values) total += v
         var hard = 0
@@ -432,14 +460,26 @@ object UnifiedViolationChecker {
         val level = if (total == 0) "I" else "W"
         // [Set化] クラス列を重み降順に整列（安定ソート＝同重みはマーク順維持 → 先頭は violations[key] と常に一致）。
         val cellFamilies = LinkedHashMap<String, List<String>>(cellFams.size)
-        for ((ck, cv) in cellFams) cellFamilies[ck] =
-            if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
+        val violations = LinkedHashMap<String, String>(cellFams.size)
+        for ((ck, cv) in cellFams) {
+            val sorted = if (cv.size <= 1) cv else cv.sortedByDescending { classWeight[it] ?: 0.0 }
+            cellFamilies[ck] = sorted
+            violations[ck] = sorted[0]   // [3.395.0] 最重1クラス＝整列済み先頭（旧 mark() と同値）
+        }
         val countFamilies = LinkedHashMap<String, List<String>>(countFams.size)
-        for ((ck, cv) in countFams) countFamilies[ck] =
-            if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
+        val countViolations = LinkedHashMap<String, String>(countFams.size)
+        for ((ck, cv) in countFams) {
+            val sorted = if (cv.size <= 1) cv else cv.sortedByDescending { classWeight[it] ?: 0.0 }
+            countFamilies[ck] = sorted
+            countViolations[ck] = sorted[0]
+        }
         val needFamilies = LinkedHashMap<String, List<String>>(needFams.size)
-        for ((ck, cv) in needFams) needFamilies[ck] =
-            if (cv.size <= 1) cv else cv.sortedByDescending { MirrorKeys.weightOf(it.removePrefix("vio-")) }
+        val needViolations = LinkedHashMap<String, String>(needFams.size)
+        for ((ck, cv) in needFams) {
+            val sorted = if (cv.size <= 1) cv else cv.sortedByDescending { classWeight[it] ?: 0.0 }
+            needFamilies[ck] = sorted
+            needViolations[ck] = sorted[0]
+        }
         return ViolationReport(
             violations = violations,
             needViolations = needViolations,
