@@ -73,7 +73,7 @@ fun ShiftColorCard(ui: UiState, vm: MagiViewModel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("シフトの表示色", style = MaterialTheme.typography.titleMedium)
             Text(
-                "勤務表に表示される各シフトの色。タップして変更できます（既定はシフト種別ごとの色）。",
+                "勤務表に表示される各シフトの色（既定はシフト種別ごとの色）。",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

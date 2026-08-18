@@ -801,16 +801,20 @@ internal fun WeightTableCard() {
     val soft = sorted.filter { it.value < 1000.0 }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("重み表（最適化器と一致）", fontWeight = FontWeight.Bold)
-            Text("スコアの内部重み。大きいほど優先して直されます。", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("絶対に守る（HARD）", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            // [3.396.0] 旧: 「重み表（最適化器と一致）」＋「スコアの内部重み。大きいほど…」＝
+            //   初見の人は「重み？ 最適化器？」と聞き返す。見出しと**並び順そのもの**（上から重い順）が
+            //   読み方を教える形にし、説明の一文は落とした。英字コード(HARD/SOFT)も作り手語彙なので外す
+            //   （日本語が既に同じことを言っている＝operator_ux「英字符号を画面に出さない」）。
+            Text("直す優先順位", fontWeight = FontWeight.Bold)
+            Text("上にあるものから先に直します。", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("絶対に守る", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             hard.forEach { (k, w) ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(breakdownLabels[k] ?: k, modifier = Modifier.weight(1f))
                     Text("×${fmt(w)}", fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.error)
                 }
             }
-            Text("できれば守る（SOFT）", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+            Text("できれば守る", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             soft.forEach { (k, w) ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(breakdownLabels[k] ?: k, modifier = Modifier.weight(1f))

@@ -249,7 +249,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 if (p != null && _ui.value.running) {
                     _ui.update { it.copy(
                         bestHard = p.hard.toLong(), bestSoft = p.soft.toLong(),
-                        totalViolations = p.total, iters = p.iters, elapsedMs = p.elapsedMs,
+                        totalViolations = p.total, elapsedMs = p.elapsedMs,
                         message = "バックグラウンド ${p.phase}",
                     ) }
                 }
@@ -524,8 +524,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 //   `report.soft`＝**生件数**なので、完了後の「改善 N%」が
                                 //   重み付き→生件数の引き算になり大幅に水増しされていた。
                                 initSoft = lp.report.soft.toLong(),
-                                iters = 0,
-                                itersPerSec = 0,
                                 elapsedMs = 0,
                                 // [3.289.0] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
                                 prevBackupAvailable = prevSaved || it.prevBackupAvailable,
@@ -726,8 +724,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 pushReport(state ?: st, res.schedule, res.report, runLabel = "初期解生成") { it.copy(
                     running = false,
                     hasResult = true,
-                    iters = 0,
-                    itersPerSec = 0,
                     elapsedMs = 0,
                     message = "初期解生成完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
@@ -878,7 +874,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     softPolish = _ui.value.softPolish,
                     requestedAlgorithm = _ui.value.v6Algorithm,
                     allowImpossible = true,
-                ) { phase, report, iters, elapsed ->
+                ) { phase, report, _, _ ->
                     val rep = report
                     // [3.93.1と同クラスの補正 / 実機ログ起因] 旧: 累積iter(数千万)を渡すと閾値5000が「約20msの無改善」
                     //   相当になり、違反>0の族がほぼ全て即 infeasible 判定＝9族ノイズ警告になっていた。経過時間ベース
@@ -910,8 +906,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                             totalViolations = shown?.total ?: it.totalViolations,
                             // 実行中も breakdown をライブ更新（export時に hard と breakdown が食い違う不整合を防ぐ）
                             breakdown = if (shown != null) emptyBreakdown + shown.breakdown else it.breakdown,
-                            iters = iters,
-                            itersPerSec = if (elapsed > 0) iters * 1000 / elapsed else 0,
                             // [実機報告「残り時間表示が5分から何度も巡回する」修正] onProgressのelapsedは
                             //   フェーズ境界で巻き戻るローカル時計（727/751行のコメントと同じ既知の性質）。
                             //   progressSummary の「残り」表示はこれを budgetSec から引くため、V5→ALNS→RSI
@@ -998,7 +992,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     pushReport(state ?: st0, kept, baseReport) { it.copy(
                         running = false,
                         hasResult = true,
-                        itersPerSec = if (it.elapsedMs > 0) it.iters * 1000 / it.elapsedMs else 0,
                         message = "今回(必須$newHard/合計$newTotal)は前回(必須$baseHard/合計$baseTotal)より改善しませんでした。前回の結果を維持します。",
                     ) }
                     logOp("I", "再実行: 今回 必須$newHard/合計$newTotal は前回 必須$baseHard/合計$baseTotal 以下に改善せず → 前回を維持")
@@ -1015,7 +1008,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     pushReport(state ?: st0, res.schedule, res.report, runLabel = "最適化") { it.copy(
                         running = false,
                         hasResult = true,
-                        itersPerSec = if (it.elapsedMs > 0) it.iters * 1000 / it.elapsedMs else 0,
                         message = "最適化（${res.phase}）完了: 必須=${res.report.hard} 合計=${res.report.total} (${System.currentTimeMillis() - startMs}ms)",
                     ) }
                     lastResultHard = newHard

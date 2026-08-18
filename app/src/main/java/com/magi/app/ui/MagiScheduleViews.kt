@@ -127,27 +127,27 @@ internal fun progressSummary(ui: UiState): String {
         //   「69件から3件まで来ている」ことを見せる。initHard は満足度の計算で既に使っており、
         //   ここが最後の未配線だった。
         ui.bestHard > 0L ->
-            if (ui.initHard > ui.bestHard) "未解決 ⚠${ui.bestHard}（最初は${ui.initHard}）" else "未解決 ⚠${ui.bestHard}"
+            if (ui.initHard > ui.bestHard) "必ず守る条件 残り${ui.bestHard}件（開始${ui.initHard}件）" else "必ず守る条件 残り${ui.bestHard}件"
+        // [3.396.0] 旧「改善 91% (1900→170)」は、初見の人が「1900 と 170 は何の数？」と聞き返す形だった。
+        //   上の必須ありの枝と**同じ並び**（何が・いくつ・開始はいくつ）に揃えて、レイアウトの反復自体が
+        //   読み方を教えるようにする。
         ui.initSoft > 0L -> {
             val pct = ((ui.initSoft - ui.bestSoft) * 100L / ui.initSoft).coerceAtLeast(0L)
-            "改善 ${pct}% (${ui.initSoft}→${ui.bestSoft})"
+            "気になる点 ${ui.bestSoft}件（開始${ui.initSoft}件・${pct}%減）"
         }
-        else -> "改善 –"
+        else -> "気になる点 –"
     }
     // 必須が残っている間は「改善◯%」が出ないので、ソフトを含む今の合計を出す（減っていく数字が1つは要る）。
     //   必須=0 のときは上の枝が (初期→現在) を出しているので重複させない。
-    if (ui.bestHard > 0L && ui.totalViolations > 0) parts += "合計${ui.totalViolations}"
+    if (ui.bestHard > 0L && ui.totalViolations > 0) parts += "気になる点 全${ui.totalViolations}件"
     val secLeft = ((ui.budgetSec * 1000L - ui.elapsedMs).coerceAtLeast(0L) / 1000L)
     parts += "残り %d:%02d".format(secLeft / 60, secLeft % 60)
-    val it = ui.iters
-    val iterStr = when {
-        it >= 1_000_000L -> "%.1fM回".format(it / 1_000_000.0)
-        it >= 1_000L -> "${it / 1_000L}K回"
-        else -> "${it}回"
-    }
-    // [3.393.0] 毎秒の反復数。エンジンは毎回の進捗で計算していたのに表示先が無かった。
-    //   「回数は増えているが遅い（ネイティブ加速が効いていない等）」を画面だけで見分けられるようにする。
-    parts += if (ui.itersPerSec >= 1_000L) "$iterStr（毎秒${ui.itersPerSec / 1_000L}K）" else iterStr
+    // [3.396.0] 反復数（「1.2M回」「毎秒40K」）は**作り手の指標**なので操作画面から外した。
+    //   初見の人は必ず「これ何の回数？」と聞く＝その時点でこの表示は失敗している。知りたいのは
+    //   「あとどれくらい」と「良くなっているか」の2つで、それは上の2項目が既に答えている。
+    //   反復数を見たいとき（ネイティブ加速が効いているか等）は診断ログの `TIME` 行と
+    //   `AdaptivePortfolio 合計iter`（3.360.0）に出ている。3.393.0 で「死んだ配管を配線する」として
+    //   毎秒表示を足したのは、この観点では逆向きだったので戻す。
     return parts.joinToString("  ・  ")
 }
 
@@ -1148,8 +1148,10 @@ internal fun TallyCard(ui: UiState, vm: MagiViewModel, onFix: (Int?, Int?) -> Un
                     }
                 }
             } else {
-                // [P7/実務者向け短文化] 「日別」タブ名＋表で自明。日別は横スクロール（他の日）の含意も添える。
-                Text("ⓘ タップで内訳と直し方 ・ 👆 左右スワイプで他の日",
+                // [3.396.0] 「左右スワイプで他の日」は剥がした。列は 84dp + 48dp×31日 = 1572dp あり、
+                //   どの対象端末（幅390dp以上=D4）でも**右端が必ず見切れる**＝横に続くことは形が語っている。
+                //   残した「タップで内訳」は形がまだ語れていないぶん（下の注記参照）。
+                Text("ⓘ タップで内訳と直し方",
                     style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                 TallyLegend(shortBg, overBg)
                 Spacer(Modifier.height(8.dp))

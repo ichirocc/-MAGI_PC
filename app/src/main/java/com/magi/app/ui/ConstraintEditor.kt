@@ -62,10 +62,6 @@ fun ConstraintsCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "行をタップすると変更できます。追加・変更・削除はすぐに調べ直し、保存にも反映されます。",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
-            )
             families.forEachIndexed { fi, fam ->
                 if (fi > 0) Spacer(Modifier.height(6.dp))
                 Spacer(Modifier.height(8.dp))
@@ -90,7 +86,15 @@ fun ConstraintsCard(
     editTarget?.let { (k, i) -> ConstraintDialog(k, vm, editIndex = i, onClose = { editTarget = null }) }
 }
 
-/** 制約1行: 本文タップ=変更、右端=削除。タップ可能に見えるよう最小高44dpを確保。 */
+/**
+ * 制約1行: 本文タップ=変更、右端に「編集」「削除」。
+ *
+ * [3.396.0] 旧実装は本文が 12sp の素のテキストで、KDoc も「タップ可能に見えるよう最小高44dpを確保」と
+ * 書いていた——だが **44dp は触れる大きさであって見た目の手がかりではない**。だからカードの上に
+ * 「行をタップすると変更できます」という貼り紙が要り、それでも実機で「登録した制約の変更ができない」と
+ * 報告された（3.130.0）。職員一覧（`StaffManageCard`）は同じ「行を編集する」操作を**編集ボタン**で
+ * 表しているので、同じ操作は同じ形にする。貼り紙は剥がした。
+ */
 @Composable
 private fun ConstraintRow(row: String, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -98,9 +102,11 @@ private fun ConstraintRow(row: String, onEdit: () -> Unit, onDelete: () -> Unit)
             .weight(1f)
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onEdit)
-            .heightIn(min = 44.dp)
+            .heightIn(min = 48.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .padding(horizontal = 4.dp))
+        EditRowButton(onClick = onEdit)
+        Spacer(Modifier.width(6.dp))
         DeleteRowButton(onClick = onDelete)
     }
 }
@@ -114,7 +120,7 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
     val families = vm.skillConstraintFamilies()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("上の「スキルグループ」に対する専用ルールです。スキル群のレンジ（1日の人数）と、スキル群ペア禁止（同じ日に不可）を設定します。行をタップすると変更できます。",
+            Text("上の「スキルグループ」に対する専用ルールです。スキル群のレンジ（1日の人数）と、スキル群ペア禁止（同じ日に不可）を設定します。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
             if (vm.skillGroupKigouList().isEmpty()) {
                 Spacer(Modifier.height(8.dp))

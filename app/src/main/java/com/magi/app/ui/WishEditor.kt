@@ -113,7 +113,6 @@ fun WishCard(ui: UiState, vm: MagiViewModel, initialStaff: Int? = null, onInitia
             if (daysSel.isNotEmpty()) {
                 WishApplyPanel(ui, vm, i, daysSel, shifts, allowed, onCancel = { daysSel = emptySet() }, onDone = { daysSel = emptySet() })
             } else {
-                Text("日をタップして希望シフトを設定します", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
             }
             // [全職員横断の一覧] カレンダーは1職員ずつしか見えない弱点を補う確認・削除専用ビュー（既定非表示）。
             if (showAllStaff && rows.isNotEmpty()) {

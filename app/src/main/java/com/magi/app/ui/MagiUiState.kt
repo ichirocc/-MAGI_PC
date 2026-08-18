@@ -45,8 +45,6 @@ data class UiState(
     val fixSearching: Boolean = false,                                       // 改善手を探索中
     val fixFocusName: String = "",                                           // 絞り込み対象スタッフ名（空=全体）
     val logs: List<String> = emptyList(),
-    val iters: Long = 0,
-    val itersPerSec: Long = 0,
     val elapsedMs: Long = 0,
     val workers: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 8),
     val budgetSec: Int = 300,

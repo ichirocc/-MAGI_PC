@@ -44,8 +44,6 @@ fun StaffManageCard(ui: UiState, vm: MagiViewModel) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("職員一覧（${v.staff.size}名）", style = MaterialTheme.typography.titleMedium)
-            Text("行タップで改名・所属変更。スキル▼で資格を割当。入職=追加 / 退職=削除。",
-                style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
             v.staff.forEachIndexed { i, st ->
                 val gk = v.groups.getOrNull(st.groupIdx)?.kigou?.let { toHankakuKigou(it) } ?: "?"
                 Row(

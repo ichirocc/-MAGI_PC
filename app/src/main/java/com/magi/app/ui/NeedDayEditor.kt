@@ -165,7 +165,6 @@ fun NeedCalendarCard(ui: UiState, vm: MagiViewModel, initialShift: Int? = null, 
                 NeedApplyPanel(ui, vm, k, daysSel, shift.need1, shift.need2,
                     onCancel = { daysSel = emptySet() }, onDone = { daysSel = emptySet() })
             } else {
-                Text("日をタップして必要人数を設定します", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
             }
         }
     }
