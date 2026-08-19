@@ -762,4 +762,44 @@ class V6SanityPortTest {
         assertTrue("件数と場所を書き分ける（旧: 場所数を件数として『covO(1件)』）: $line",
             line.contains("件数3・場所1箇所"))
     }
+    /** 群のレンジ l/u を差し替えた最小 state（2職員・1グループ・A シフト・3日）。 */
+    private fun groupRangeState(l: String, u: String) = MagiState(
+        startDate = "2026-06-01", endDate = "2026-06-03",
+        shifts = listOf(Shift("休", "休", "", ""), Shift("A", "A", "", "")),
+        groups = listOf(Group("G", "G")),
+        staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+        use2Patterns = false,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = List(2) { listOf(1, 1, 1) },
+        wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(),
+        cons41 = listOf(com.magi.app.model.C41Row("G", "A", l, u)), cons42 = emptyList(),
+    )
+
+    /**
+     * [3.399.0] 群のレンジで下限>上限は「期間の全日が必ず違反」になる。まずその前提を engine で確かめ
+     * （主張の裏取り）、そのうえで診断がワンタップ修正つきで出ることを固定する。
+     */
+    @Test fun groupRangeLoAboveHiAlwaysViolatesAndIsReported() {
+        val bad = groupRangeState("3", "1")
+        // 前提: どの人数(0..2)でも `z<3 || z>1` が真＝3日すべてで c41 が立つ。
+        val rep = UnifiedViolationChecker.check(bad, bad.schedule.map { it.toIntArray() }.toTypedArray())
+        assertEquals("全日が違反になる", 3, rep.breakdown["c41"])
+
+        val issues = V6SanityPort.buildGuidance(bad).filter { it.problem.contains("下限3 > 上限1") }
+        assertEquals(1, issues.size)
+        val fix = issues[0]
+        assertEquals(SettingFixAction.CLAMP_GROUP_RANGE_LO, fix.action)
+        assertEquals("c41", fix.groupRangeFamily)
+        assertEquals("1", fix.newLo)
+        assertNotNull(fix.groupRangeRow)
+    }
+
+    @Test fun groupRangeLoBelowHiIsNotReported() {
+        val ok = groupRangeState("1", "3")
+        assertTrue(V6SanityPort.buildGuidance(ok).none { it.problem.contains("矛盾") })
+    }
+
 }

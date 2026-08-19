@@ -32,7 +32,7 @@ enum class IssueKind { WISH, CONSTRAINT, DEMAND, RANGE }
  * [ワンタップ修正] カード上で画面遷移・スクロールなしに直せる安全な単一操作の種類。
  * NONE = 自動修正不可（編集画面へ誘導）。それ以外はカードのボタン1つで適用→自動再診断。
  */
-enum class SettingFixAction { NONE, REMOVE_WISH, DELETE_DUP_SEQ, ZERO_RANGE_LO, CLAMP_RANGE_LO, CAP_DEMAND }
+enum class SettingFixAction { NONE, REMOVE_WISH, DELETE_DUP_SEQ, ZERO_RANGE_LO, CLAMP_RANGE_LO, CAP_DEMAND, CLAMP_GROUP_RANGE_LO }
 
 data class SettingIssue(
     val kind: IssueKind,
@@ -49,6 +49,10 @@ data class SettingIssue(
     val newLo: String? = null,             // ZERO/CLAMP_RANGE_LO: 新しい下限
     val demandShiftIdx: Int? = null,       // CAP_DEMAND: シフトidx
     val demandCap: Int? = null,            // CAP_DEMAND: 担当可能人数（上限）
+    // CLAMP_GROUP_RANGE_LO: 群/スキル群のレンジ行。行は List なので index で指すと、診断からタップまでの間に
+    //   並びが変わると別の行を壊す。DELETE_DUP_SEQ と同じく**内容一致**で指す（data class の equals）。
+    val groupRangeFamily: String? = null,  // "c41" / "c41s"
+    val groupRangeRow: com.magi.app.model.C41Row? = null,
 )
 
 data class ShiftCountDiagnostic(
@@ -568,17 +572,34 @@ object V6SanityPort {
                     "**未設定（要件なし）**として扱われます",
                 "必要人数で数値を入れ直すか、設定しないなら空欄にしてください"))
         }
-        fun checkRange(famJp: String, rows: List<com.magi.app.model.C41Row>) {
+        fun checkRange(famJp: String, fam: String, rows: List<com.magi.app.model.C41Row>) {
             for (c in rows) {
-                if (!badNum(c.l) && !badNum(c.u)) continue
-                out.add(SettingIssue(IssueKind.CONSTRAINT, "$famJp「${c.groupKigou} ${c.shiftKigou}」",
-                    "下限「${c.l}」上限「${c.u}」に数値でない値があります。その側は**制限なし**として" +
-                        "扱われるため、意図より弱い条件で計算されます",
-                    "制約設定で数値を入れ直すか、制限しないなら空欄にしてください"))
+                if (badNum(c.l) || badNum(c.u)) {
+                    out.add(SettingIssue(IssueKind.CONSTRAINT, "$famJp「${c.groupKigou} ${c.shiftKigou}」",
+                        "下限「${c.l}」上限「${c.u}」に数値でない値があります。その側は**制限なし**として" +
+                            "扱われるため、意図より弱い条件で計算されます",
+                        "制約設定で数値を入れ直すか、制限しないなら空欄にしてください"))
+                    continue
+                }
+                // [3.399.0] 下限>上限。engine は `z < l || z > u` で判定するため、l>u だと**どの人数でも
+                //   必ずどちらかが真**＝その群×シフトは**期間の全日が違反**になり、しかも何をしても消えない。
+                //   個人の回数(staffRange)は同じ矛盾を既に検出してワンタップ修正まで出しているのに、
+                //   群/スキル群のレンジだけ取り残されていた（3.327.0 の 2h は「数値でない」しか見ていない）。
+                val lo = c.l.trim().toIntOrNull()
+                val hi = c.u.trim().toIntOrNull()
+                if (lo != null && hi != null && lo > hi) {
+                    out.add(SettingIssue(IssueKind.CONSTRAINT, "$famJp「${c.groupKigou} ${c.shiftKigou}」",
+                        "下限$lo > 上限$hi で矛盾しています。この組み合わせは期間の全日が違反になり、" +
+                            "勤務表をどう組んでも消えません",
+                        "制約設定で下限≤上限に直してください",
+                        action = SettingFixAction.CLAMP_GROUP_RANGE_LO,
+                        actionLabel = "下限を${hi}に下げる",
+                        newLo = hi.toString(), groupRangeFamily = fam, groupRangeRow = c))
+                }
             }
         }
-        checkRange("群のレンジ", state.cons41)
-        checkRange("スキル群のレンジ", state.cons41s)
+        checkRange("群のレンジ", "c41", state.cons41)
+        checkRange("スキル群のレンジ", "c41s", state.cons41s)
         // [3.328.0/外部レビュー] 日別の必要人数と適切回数も同じ穴。とくに needDay は
         //   `needAt` が非数値のとき**シフト既定値へ黙って読み替える**ので、0 になるより性質が悪い
         //   （その日だけ意図と違う人数で計算され、画面には何も出ない）。

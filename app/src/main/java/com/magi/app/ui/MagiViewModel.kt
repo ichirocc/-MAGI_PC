@@ -2171,6 +2171,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val cur = s.staffRange[key] ?: Range("", "")
                 s.copy(staffRange = s.staffRange + (key to Range(issue.newLo ?: cur.lo, cur.hi)))
             }
+            SettingFixAction.CLAMP_GROUP_RANGE_LO -> {
+                // 行は List なので index でなく**内容一致**で指す（DELETE_DUP_SEQ と同じ理由＝診断から
+                //   タップまでに並びが変わっても別の行を壊さない）。同じ内容が複数あるときは先頭1件だけ直す。
+                val row = issue.groupRangeRow ?: return
+                val lo = issue.newLo ?: return
+                fun clampOne(rows: List<C41Row>): List<C41Row> {
+                    val i = rows.indexOf(row)
+                    if (i < 0) return rows
+                    return rows.toMutableList().also { it[i] = row.copy(l = lo) }
+                }
+                when (issue.groupRangeFamily) {
+                    "c41" -> s.copy(cons41 = clampOne(s.cons41))
+                    "c41s" -> s.copy(cons41s = clampOne(s.cons41s))
+                    else -> return
+                }
+            }
             SettingFixAction.CAP_DEMAND -> {
                 val k = issue.demandShiftIdx ?: return
                 val cap = issue.demandCap ?: return
@@ -2793,7 +2809,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         applyStructureWithMessage(res.state, "各制約を取込: ${res.accepted}件を反映（既存の制約・個人レンジは置換）")
     }
 
-    fun clearMessage() { _ui.update { it.copy(message = null) } }
+    /**
+     * 直近メッセージを消す。`shown` を渡すと**それがまだ表示中のときだけ**消す（compare-and-clear）。
+     * Snackbar を出し終えたあとに素で消すと、その間に届いた新しいメッセージまで消してしまうため。
+     */
+    fun clearMessage(shown: String? = null) {
+        _ui.update { if (shown == null || it.message == shown) it.copy(message = null) else it }
+    }
 
     /**
      * 診断ログのスパム抑制。RSI/ALNS の各ラウンド・各リスタート・EarlyChain などで同種の行が大量に

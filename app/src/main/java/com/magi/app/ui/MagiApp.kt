@@ -37,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -92,6 +93,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -139,7 +143,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     }
     // [Web反映/Wake Lock] 最適化(前景)中は画面を消灯させない＝計算の中断・ライブ表示の停止を防ぐ。
     val rootView = androidx.compose.ui.platform.LocalView.current
-    androidx.compose.runtime.LaunchedEffect(ui.running) { rootView.keepScreenOn = ui.running }
+    LaunchedEffect(ui.running) { rootView.keepScreenOn = ui.running }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -319,6 +323,20 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     }
     val openJson: () -> Unit = { openJsonLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
 
+    // [3.399.0] 操作の結果は Snackbar で出す。旧: `ui.message` を**スクロール内容の最下端**に置いた
+    //   MessageBar 1枚だけで、①押した場所から遠く（長いカード列の下＝画面外のことが多い）
+    //   ②`clearMessage()` は定義があるだけで呼び出しゼロ＝**一度出たら次の操作まで消えない**ので、
+    //   下まで行くと無関係な古い結果が残っていた。Snackbar は押した場所の近く（下部バーの上）へ出て
+    //   数秒で消える＝**イベントはSnackbar・状態は上部バッジと進捗行**、という役割分担になる。
+    //   消えたあとも操作ログ（詳細設定＞ログ）に残るので読み返せる。
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(ui.message) {
+        val m = ui.message ?: return@LaunchedEffect
+        snackbarHostState.currentSnackbarData?.dismiss()
+        snackbarHostState.showSnackbar(m, duration = SnackbarDuration.Short)
+        vm.clearMessage(m)   // 同じ文言が再び来ても状態が変わる＝次のタップでもう一度出る
+    }
+
     Scaffold(
         // [現在地] トップバー副題を現在タブ名に同期（従来は固定"勤務表"で「今どこ」が不明だった）。下部ナビの選択と一致。
         topBar = { MagiTopBar(ui, when (tab) { 0 -> "ホーム"; 1 -> "勤務表"; 2 -> "編集"; 3 -> "分析"; else -> "設定" }) },
@@ -328,6 +346,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 MagiBottomNav(tab) { tab = it }
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(
@@ -606,7 +625,6 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     )
                 }
             }
-            ui.message?.let { MessageBar(it) }
             Spacer(Modifier.height(12.dp)) // 下部コマンドバー分の余白
         }
         val cell = editingCell
@@ -879,10 +897,3 @@ internal fun EmptyStateCard(onOpen: () -> Unit, onSample: () -> Unit, onNew: () 
 }
 
 
-@Composable
-internal fun MessageBar(text: String) {
-    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.fillMaxWidth().padding(14.dp))
-    }
-}
