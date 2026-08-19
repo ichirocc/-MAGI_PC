@@ -342,6 +342,17 @@ object V6SanityPort {
         return out
     }
 
+    /**
+     * 下限>上限 なら (下限, 上限) を返す。**入力ダイアログの阻止と、この事後診断が同じ判定を使う**ための単一ソース。
+     * 片方だけ緩いと「画面は通すのに、あとから直せと言われる」入力が生まれる（3.403.0）。
+     * 両方が数値のときだけ矛盾と見なす＝空欄（未設定）や数値でない値は 2h/2f の別の検査が扱う。
+     */
+    fun rangeOrderConflict(lo: String?, hi: String?): Pair<Int, Int>? {
+        val l = lo?.trim()?.toIntOrNull() ?: return null
+        val h = hi?.trim()?.toIntOrNull() ?: return null
+        return if (l > h) l to h else null
+    }
+
     fun buildGuidance(state: MagiState, p: Problem = Problem(state)): List<SettingIssue> {
         val out = ArrayList<SettingIssue>()
 
@@ -585,9 +596,7 @@ object V6SanityPort {
                 //   必ずどちらかが真**＝その群×シフトは**期間の全日が違反**になり、しかも何をしても消えない。
                 //   個人の回数(staffRange)は同じ矛盾を既に検出してワンタップ修正まで出しているのに、
                 //   群/スキル群のレンジだけ取り残されていた（3.327.0 の 2h は「数値でない」しか見ていない）。
-                val lo = c.l.trim().toIntOrNull()
-                val hi = c.u.trim().toIntOrNull()
-                if (lo != null && hi != null && lo > hi) {
+                rangeOrderConflict(c.l, c.u)?.let { (lo, hi) ->
                     out.add(SettingIssue(IssueKind.CONSTRAINT, "$famJp「${c.groupKigou} ${c.shiftKigou}」",
                         "下限$lo > 上限$hi で矛盾しています。この組み合わせは期間の全日が違反になり、" +
                             "勤務表をどう組んでも消えません",
@@ -673,16 +682,15 @@ object V6SanityPort {
             val i = parts.getOrNull(0)?.toIntOrNull()
             val k = parts.getOrNull(1)?.toIntOrNull()
             val lo = r.lo.trim().toIntOrNull()
-            val hi = r.hi.trim().toIntOrNull()
             val name = i?.let { state.staff.getOrNull(it)?.name } ?: "#$i"
             val sym = k?.let { state.shifts.getOrNull(it)?.kigou } ?: "$k"
             if (i == null || k == null || i !in 0 until p.S || k !in 0 until p.K) {
                 out.add(SettingIssue(IssueKind.RANGE, "回数設定 $key", "対象職員/シフトが範囲外です", "設定で正しい職員・シフトに付け直してください"))
                 continue
             }
-            if (lo != null && hi != null && lo > hi) {
-                out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」回数", "下限$lo > 上限$hi で矛盾しています", "設定で下限≤上限に直してください",
-                    action = SettingFixAction.CLAMP_RANGE_LO, actionLabel = "下限を${hi}に下げる", rangeKey = key, newLo = hi.toString()))
+            rangeOrderConflict(r.lo, r.hi)?.let { (cLo, cHi) ->
+                out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」回数", "下限$cLo > 上限$cHi で矛盾しています", "設定で下限≤上限に直してください",
+                    action = SettingFixAction.CLAMP_RANGE_LO, actionLabel = "下限を${cHi}に下げる", rangeKey = key, newLo = cHi.toString()))
             }
             if (lo != null && lo > 0 && !p.canDo(i, k)) {
                 out.add(SettingIssue(IssueKind.RANGE, "$name の「$sym」回数", "担当できないシフトに下限${lo}が設定されています", "下限を0にするか、${name}さんの担当に「$sym」を追加してください",

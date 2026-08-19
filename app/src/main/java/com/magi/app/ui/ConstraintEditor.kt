@@ -22,6 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.magi.app.v6.V6SanityPort
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -193,14 +194,18 @@ private fun ConstraintDialog(family: String, vm: MagiViewModel, editIndex: Int? 
             var sk by remember { mutableStateOf(init?.getOrNull(1) ?: shifts.firstOrNull() ?: "") }
             var l by remember { mutableStateOf(init?.getOrNull(2) ?: "") }
             var u by remember { mutableStateOf(init?.getOrNull(3) ?: "") }
+            // [3.403.0] 下限>上限は engine の `z < l || z > u` で**どの人数でも必ず違反**＝期間の全日が違反になる。
+            //   事後診断(V6SanityPort 検査2f)は出していたが、画面は素通しで確定できた＝入力時に止める。
+            val bad = V6SanityPort.rangeOrderConflict(l, u) != null
             Shell("群のレンジ（1日の人数）$mode", okLabel, onClose, { commit(listOf(gk, sk, l, u)) { vm.addCons41(gk, sk, l, u) } },
-                gk.isNotBlank() && sk.isNotBlank()) {
+                gk.isNotBlank() && sk.isNotBlank() && !bad) {
                 Picker("グループ", groups, gk) { gk = it }
                 Picker("シフト", shifts, sk) { sk = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumField("下限(空=0)", l, Modifier.weight(1f)) { l = it }
-                    NumField("上限(空=無制限)", u, Modifier.weight(1f)) { u = it }
+                    NumField("下限(空=0)", l, Modifier.weight(1f), isError = bad) { l = it }
+                    NumField("上限(空=無制限)", u, Modifier.weight(1f), isError = bad) { u = it }
                 }
+                if (bad) Text(RANGE_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
             }
         }
         "cons42" -> {
@@ -221,14 +226,16 @@ private fun ConstraintDialog(family: String, vm: MagiViewModel, editIndex: Int? 
             var sk by remember { mutableStateOf(init?.getOrNull(1) ?: shifts.firstOrNull() ?: "") }
             var l by remember { mutableStateOf(init?.getOrNull(2) ?: "") }
             var u by remember { mutableStateOf(init?.getOrNull(3) ?: "") }
+            val bad = V6SanityPort.rangeOrderConflict(l, u) != null   // [3.403.0] cons41 と同じ（群かスキル群かの違いだけ）
             Shell("スキル群のレンジ（1日の人数）$mode", okLabel, onClose, { commit(listOf(gk, sk, l, u)) { vm.addCons41s(gk, sk, l, u) } },
-                gk.isNotBlank() && sk.isNotBlank()) {
+                gk.isNotBlank() && sk.isNotBlank() && !bad) {
                 Picker("スキル", skills, gk) { gk = it }
                 Picker("シフト", shifts, sk) { sk = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NumField("下限(空=0)", l, Modifier.weight(1f)) { l = it }
-                    NumField("上限(空=無制限)", u, Modifier.weight(1f)) { u = it }
+                    NumField("下限(空=0)", l, Modifier.weight(1f), isError = bad) { l = it }
+                    NumField("上限(空=無制限)", u, Modifier.weight(1f), isError = bad) { u = it }
                 }
+                if (bad) Text(RANGE_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
             }
         }
         "cons42s" -> {
@@ -294,12 +301,14 @@ private fun Shell(
 }
 
 @Composable
-private fun NumField(label: String, value: String, modifier: Modifier = Modifier.width(150.dp), onChange: (String) -> Unit) {
+private fun NumField(label: String, value: String, modifier: Modifier = Modifier.width(150.dp), isError: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.filter { c -> c.isDigit() }) },
         label = { Text(label, fontSize = 12.sp) },
         singleLine = true,
+        // [3.403.0] 入力エラーは枠の色そのもので示す（OutlinedTextField の組み込み）。説明文で補わない。
+        isError = isError,
         // [レイアウト整合] 既定は width(150)。Row 内2連で並べる箇所は weight(1f) を渡してダイアログ幅からの溢れ(欠け)を防ぐ。
         modifier = modifier,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

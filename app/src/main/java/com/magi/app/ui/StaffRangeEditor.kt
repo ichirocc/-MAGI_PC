@@ -2,6 +2,7 @@ package com.magi.app.ui
 
 import com.magi.app.toHankakuKigou
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
@@ -27,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.InputChipDefaults
+import com.magi.app.v6.V6SanityPort
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -155,7 +157,10 @@ internal fun StaffRangeDialog(
     var hi by remember { mutableStateOf(init.hi) }
     var openS by remember { mutableStateOf(false) }
     var openK by remember { mutableStateOf(false) }
-    val ok = i in staff.indices && k in shifts.indices && (lo.isNotBlank() || hi.isNotBlank())
+    // [3.403.0] 下限>上限。事後診断(V6SanityPort 検査4)は「下限をNに下げる」ワンタップまで出していたが、
+    //   画面はそのまま確定でき、直した直後にまた同じ入力ができた＝入力時に止める（A6 の担当外シフト除外と同じ二重防御）。
+    val bad = V6SanityPort.rangeOrderConflict(lo, hi) != null
+    val ok = i in staff.indices && k in shifts.indices && (lo.isNotBlank() || hi.isNotBlank()) && !bad
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
@@ -190,8 +195,11 @@ internal fun StaffRangeDialog(
                         }
                     }
                 }
-                NumberStepper("下限", lo, { lo = it }, min = 0, blankLabel = "なし")
-                NumberStepper("上限", hi, { hi = it }, min = 0, blankLabel = "なし")
+                Column(if (bad) Modifier.border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.medium) else Modifier) {
+                    NumberStepper("下限", lo, { lo = it }, min = 0, blankLabel = "なし")
+                    NumberStepper("上限", hi, { hi = it }, min = 0, blankLabel = "なし")
+                }
+                if (bad) Text(RANGE_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
             }
         },
     )
@@ -268,7 +276,8 @@ internal fun GroupRangeDialog(
     var openG by remember { mutableStateOf(false) }
     var openK by remember { mutableStateOf(false) }
     val allowed = allowedFor(g)
-    val ok = g in groups.indices && k in allowed && (lo.isNotBlank() || hi.isNotBlank())
+    val bad = V6SanityPort.rangeOrderConflict(lo, hi) != null   // [3.403.0] 個人別と同じ（全員へ一括適用するぶん影響は大きい）
+    val ok = g in groups.indices && k in allowed && (lo.isNotBlank() || hi.isNotBlank()) && !bad
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
@@ -300,8 +309,11 @@ internal fun GroupRangeDialog(
                         }
                     }
                 }
-                NumberStepper("下限", lo, { lo = it }, min = 0, blankLabel = "なし")
-                NumberStepper("上限", hi, { hi = it }, min = 0, blankLabel = "なし")
+                Column(if (bad) Modifier.border(1.dp, MaterialTheme.colorScheme.error, MaterialTheme.shapes.medium) else Modifier) {
+                    NumberStepper("下限", lo, { lo = it }, min = 0, blankLabel = "なし")
+                    NumberStepper("上限", hi, { hi = it }, min = 0, blankLabel = "なし")
+                }
+                if (bad) Text(RANGE_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                 Text("全員の個人上下限に設定し、下限=上限なら適切回数も同時に設定します（既存の個人設定は上書き）。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },

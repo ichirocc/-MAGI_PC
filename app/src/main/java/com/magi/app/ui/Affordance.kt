@@ -97,3 +97,10 @@ fun DialogDangerButton(text: String, onClick: () -> Unit, enabled: Boolean = tru
         Text(text)
     }
 }
+
+/**
+ * 下限>上限 のときに出す一言。**同じ間違いは同じ言葉で示す**ため4つのダイアログ
+ * （群のレンジ・スキル群のレンジ・個人別の回数・グループ単位の回数）で共有する。
+ * 判定そのものは `V6SanityPort.rangeOrderConflict`（事後診断と同一ソース）。
+ */
+const val RANGE_ORDER_HINT = "下限は上限以下にしてください"

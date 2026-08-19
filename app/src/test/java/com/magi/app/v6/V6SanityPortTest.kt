@@ -8,6 +8,7 @@ import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -802,4 +803,32 @@ class V6SanityPortTest {
         assertTrue(V6SanityPort.buildGuidance(ok).none { it.problem.contains("矛盾") })
     }
 
+
+    /**
+     * [3.403.0] 入力ダイアログの阻止と事後診断が**同じ判定**を使うための述語。
+     * ここが緩むと「画面は通すのに、あとから直せと言われる」入力が生まれ、逆に厳しすぎると
+     * 正当な設定（空欄＝未設定、片側だけ設定、下限==上限の厳密ピン）を保存できなくなる。
+     */
+    @Test fun rangeOrderConflictFlagsOnlyRealConflicts() {
+        // 矛盾＝両方が数値で 下限>上限。返すのは実際に使う値（メッセージと判定がずれないため）。
+        assertEquals(3 to 1, V6SanityPort.rangeOrderConflict("3", "1"))
+        assertEquals(1 to 0, V6SanityPort.rangeOrderConflict(" 1 ", " 0 "))   // 前後の空白は無視する
+        // 矛盾でないもの: 下限<上限 / 下限==上限(厳密ピン=正当な設定) / 片側だけ / 空欄 / null
+        assertNull(V6SanityPort.rangeOrderConflict("1", "3"))
+        assertNull(V6SanityPort.rangeOrderConflict("2", "2"))
+        assertNull(V6SanityPort.rangeOrderConflict("", "1"))
+        assertNull(V6SanityPort.rangeOrderConflict("3", ""))
+        assertNull(V6SanityPort.rangeOrderConflict(null, null))
+        // 数値でない値は 2h の別の検査が扱う＝ここでは矛盾と言わない（二重に叱らない）。
+        assertNull(V6SanityPort.rangeOrderConflict("あ", "1"))
+    }
+
+    /** 事後診断が上のこの述語と厳密に一致すること（片方だけ直して食い違うのを防ぐ）。 */
+    @Test fun diagnosisAgreesWithThePredicateItShares() {
+        for ((lo, hi) in listOf("3" to "1", "1" to "3", "2" to "2", "" to "1", "0" to "0")) {
+            val st = groupRangeState(lo, hi)
+            val reported = V6SanityPort.buildGuidance(st).any { it.problem.contains("矛盾") }
+            assertEquals("lo=$lo hi=$hi", V6SanityPort.rangeOrderConflict(lo, hi) != null, reported)
+        }
+    }
 }
