@@ -1123,12 +1123,12 @@ internal fun ConfirmListCard(
 /**
  * [★3+4] 日別/人別 注意リスト＋「要確認のみ」トグル（web「画面修正版」day/staff カード＋alertOnly の融合移植）。
  *  - 人別＝countViolations(職員×シフト)＋violationCells(職員×日)を職員ごとに件数集計。行タップで修復フロー。
- *  - 日別＝needViolations(シフト×日)を日ごとに件数集計。各行に不足/過剰のシフトを併記。
+ *  - 日別＝needViolations(シフト×日)を日ごとに件数集計。各行に不足/過剰のシフトを併記。行タップで勤務表の該当日へ。
  *  - 「要確認のみ」ON(既定)で違反0の行を隠す＝そのまま triage。既存 BottleneckCard(top5テキスト)の上位互換だが
  *    additive-safe で併存。表示のみ・スコアリング不変（読取専用）。
  */
 @Composable
-internal fun AttentionCardsSection(ui: UiState, onFocusStaff: (Int) -> Unit) {
+internal fun AttentionCardsSection(ui: UiState, onFocusStaff: (Int) -> Unit, onShowDay: (Int) -> Unit = {}) {
     if (ui.schedule.isEmpty()) return
     fun nm(i: Int) = ui.staffNames.getOrNull(i) ?: "#$i"
     fun sym(k: Int) = ui.shiftSymbols.getOrNull(k) ?: "$k"
@@ -1177,7 +1177,9 @@ internal fun AttentionCardsSection(ui: UiState, onFocusStaff: (Int) -> Unit) {
                     Text(if (alertOnly) "日別の要確認はありません。" else "日がありません。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)   // [監査修正] 成功テキストは AA を満たす tertiary(緑ロール)。MagiAccent.green は text で 3.3:1
                 } else rows.forEach { j ->
                     val ac = dayAlerts[j] ?: 0
-                    AttentionRow(title = dayMD(ui.startDate, j), sub = dayShifts[j]?.joinToString("・") ?: "", alerts = ac, warnBg = warnBg, warnFg = warnFg, onClick = null)
+                    // [3.402.0] 日別行だけ押せなかった（人別は押せるのに）。行き先は要確認一覧と同じ勤務表の該当日。
+                    AttentionRow(title = dayMD(ui.startDate, j), sub = dayShifts[j]?.joinToString("・") ?: "", alerts = ac, warnBg = warnBg, warnFg = warnFg,
+                        onClick = if (ac > 0) ({ onShowDay(j) }) else null, hint = "勤務表→")
                 }
             } else {
                 val rows = (0 until staffCount).filter { !alertOnly || (staffAlerts[it] ?: 0) > 0 }
@@ -1194,7 +1196,7 @@ internal fun AttentionCardsSection(ui: UiState, onFocusStaff: (Int) -> Unit) {
 
 /** [★3+4] 日別/人別 注意リストの1行。alerts>0 で警告バッジ、onClick!=null でタップ修復可。 */
 @Composable
-private fun AttentionRow(title: String, sub: String, alerts: Int, warnBg: Color, warnFg: Color, onClick: (() -> Unit)?) {
+private fun AttentionRow(title: String, sub: String, alerts: Int, warnBg: Color, warnFg: Color, onClick: (() -> Unit)?, hint: String = "直し方→") {
     val cs = MaterialTheme.colorScheme
     var m = Modifier.fillMaxWidth().heightIn(min = 52.dp)
     if (onClick != null) m = m.clickable { onClick() }
@@ -1209,7 +1211,7 @@ private fun AttentionRow(title: String, sub: String, alerts: Int, warnBg: Color,
                     Text("確認$alerts", color = warnFg, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
                 }
             }
-            if (onClick != null) Text("直し方→", style = MaterialTheme.typography.labelMedium,
+            if (onClick != null) Text(hint, style = MaterialTheme.typography.labelMedium,
                 color = ensureReadable(cs.surfaceVariant, MagiAccent.blue))
         }
     }

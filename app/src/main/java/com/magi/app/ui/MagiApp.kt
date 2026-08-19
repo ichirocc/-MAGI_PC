@@ -601,7 +601,12 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                         onFixNeed = { k -> deepLinkNeedShift = k; editScope = 0; tab = 2 })
                     // [★3+4] 日別/人別 注意リスト＋「要確認のみ」トグル（web「画面修正版」day/staff＋alertOnly 融合）。
                     //   人別行タップで修復フローへ。BottleneckCard(top5テキスト) の上位互換のため下の BottleneckCard は撤去。
-                    AttentionCardsSection(ui, onFocusStaff = { vm.findFixSuggestions(it) })
+                    AttentionCardsSection(
+                        ui,
+                        onFocusStaff = { vm.findFixSuggestions(it) },
+                        // [3.402.0] 日別行の行き先は要確認一覧と同じ＝勤務表の該当日へ（同じ意味の操作は同じ行き先）。
+                        onShowDay = { j -> focusCell = -1 to j; tab = 1 },
+                    )
                     // [冗長性/用語][コメント訂正] 開発用の V6 1ヶ月俯瞰(HARD Core/Guard・Apt/Equalize/covU 等の
                     //   生指標)は「詳細設定(上級者)」ではなく分析タブのプロ表示にのみ一本化済み（冗長性J1、
                     //   MagiSetupCards.kt 参照。旧コメントは移設先が実態と食い違っていたため訂正）。
@@ -822,7 +827,10 @@ internal fun BottomCommandBar(ui: UiState, vm: MagiViewModel) {
                 Spacer(Modifier.width(10.dp))
             }
             when {
-                ui.running -> Button(
+                // [3.402.0] 「直し方を探す」の最中も「やめる」を出す。`stop()` は元から
+                //   `running || fixSearching` を見て両方を戻す（3.284.0）のに、**このボタンのゲートだけ
+                //   `ui.running` に限定**されており、探索中は止める手段が画面上に一つも無かった。
+                ui.running || ui.fixSearching -> Button(
                     onClick = { vm.stop() },
                     modifier = Modifier.weight(1f).heightIn(min = 60.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = cs.errorContainer, contentColor = cs.onErrorContainer),
