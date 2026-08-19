@@ -5309,6 +5309,55 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 旗の名前が「最適化」だったせいで、同じ性質の3ジョブが旗を立て忘れていた（3.404.0）
+
+`ui.running` の二重用途を全サイト棚卸しするワークフロー（7エージェント・書込44件／読取134件を全数分類）の
+結果を**1件ずつ実コードで裏取り**し、実在した4件を修正した。**表示・ガードのみ＝重み・採否・エンジンは不変。**
+
+- **[最重要] 3つのジョブが編集ロックを持っていなかった**: `optimizeActive = true` は
+  `runV6FullOptimize` と `runSoftPolish` の**2箇所だけ**（grep で確認）。だが `running = true` を立てて
+  **完了時に `currentSchedule` と `state` を丸ごと差し替える**ジョブは他に3つある——`generateSmartInitial`・
+  `loadAsync`・`importCsv`。この3つでは `ui.running=true`（画面は全ロック）なのに
+  `optimizeInFlight()=false`（ガードは全開）という**逆転**が起き、`setCell` の
+  `if (optimizeInFlight()) return` を素通りして盤面へ書き込まれ、完了時の
+  `currentSchedule = res.schedule.copy2D()` が**それを無言で上書きする**（メッセージも出ない）。
+  3.161.0 が最適化について塞いだ穴の、残り3ジョブぶんの取り残し。
+  なお engine の入力は汚れない（`withSchedule` が `row.toList()` でコピーする）＝被害は
+  「利用者の編集が黙って消える」ことに限定される（`pushUndo` は両方が呼ぶので「元に戻す」で復旧可）。
+- **原因は名前**: `optimizeActive` は「最適化」としか読めず、読み込みや取込がこれに当たると気づけない。
+  `boardJobLabel: String?`（＝走っているジョブの名前・null なら無し）へ改名し、KDoc に不変条件を書いた。
+  下ろすのは `beginBoardJob`/`endBoardJob` の**通し番号**で「**自分が立てた旗のときだけ**」
+  （`checkSeq`/`fixSeq`・3.333.0 の `releasedByMe` と同じ手）＝`loadAsync` が先行ジョブを `job?.cancel()` して
+  自分の旗を立てたあと、遅れて走る先行ジョブの `finally` がロックを早く解いてしまう事故を防ぐ。
+  `optimizeInFlight()` の名前は据え置き（読み手23箇所を触らない）。
+- **[4つ目の編集入口だけガードが無かった]** 3.328.0 は「編集は必ず4入口を通るのでその4つだけを塞ぐ」と
+  したのに、`applyStructureWithMessage(r: Ws1Result, ...)` にだけ `structuralEditBlocked()` が無かった。
+  通るのは `ws1ResetGroupApt`(apt全リセット)と `importStaffCsv`(職員一覧CSV取込)で、**後者は
+  `currentSchedule` ごと差し替える**ため最適化中に到達すると 3.161.0 のクラスに触れる。
+- **[ゾンビ化] `importCsv` に入口ガードが無かった**: `job = viewModelScope.launch` が走行中の最適化の
+  参照を**キャンセルせずに上書き**する＝その最適化は `stop()` で止められない（3.271.0 が
+  `generateSmartInitial` で直したのと同型の取り残し）。`runBlockedByInFlight("CSV取込")` を追加。
+- **[停止を「失敗」と呼んでいた]** `loadAsync`/`generateSmartInitial`/`importCsv` の3経路だけ
+  `CancellationException` を分離しておらず（兄弟の `refreshCheck`・`applyStructureWithMessage` は分離済み＝
+  非対称）、停止や `job` 上書きのたびに「読込失敗」「初期解生成失敗」という**誤った文言**が出ていた。
+- **[途中経過が生き残る] `liveSchedule` を完了時に消していなかった**: 開始時に空へ戻すのに完了時は放置。
+  消費側は `if (!ui.running || ui.liveSchedule.isEmpty()) return` なので、**あとで編集して違反チェックが
+  走る（`ui.running` が再び真になる）と、前の実行の古い途中経過が現在のものとして出る**。両最適化の
+  `finally` で消す。UiState の宣言コメント「計算中の最良盤面（実行中のみ）」が実態と一致する。
+- **[文言] 「計算中は…」の一律表示をやめた**: `busyWhat()` が旗の名前（勤務表づくり／仕上げ最適化／
+  初期解生成／読み込み／CSV取込／バックグラウンド計算）を返し、8つのメッセージとログが**何の実行中か**を言う。
+  `stop()` の「対象:」も一律「計算」からジョブ名へ。
+- **検証**: ホストJVM **497テスト green**（v6 層は無変更）。UI 層はホストでコンパイル不可＝括弧均衡が
+  HEAD と同一・`optimizeActive` の残存参照ゼロ・`boardToken` と `busyWhat()` の**スコープ逆引き**
+  （`boardToken` は5関数それぞれの内部で宣言・使用）・`design_lint`（P5 0件）を静的確認。
+  **トークン方式の正しさは順序を手で辿って確認**: 最適化(token=1) → `loadAsync` が `job?.cancel()`（非同期）
+  → `beginBoardJob`(token=2) → 遅れて最適化の `finally` が `endBoardJob(1)`＝**1≠2 で下ろさない** →
+  `loadAsync` の `finally` が `endBoardJob(2)` で下ろす。`applyBgResult` と復元経路は
+  `applyStructure*` を通らず直接書くので新しいガードの影響を受けないことも確認済み。
+- **[未対応・記録]** バックグラウンド継続の復元（init）で `loadAsync` の成功時 `running=false` が
+  「バックグラウンド計算を継続中…」の表示を消す（`optimizeInFlight()` は true のままなのでガードは
+  効いており、崩れるのは表示だけ）。本版より前からある挙動＝今回のスコープ外。
+
 ## 下限>上限を、あとから叱るのでなく入力時に止める（3.403.0, 監査 D-1）
 
 `V6SanityPort` は群のレンジ（3.399.0）も個人の回数（既存）も「下限N > 上限M で矛盾しています」と診断し、

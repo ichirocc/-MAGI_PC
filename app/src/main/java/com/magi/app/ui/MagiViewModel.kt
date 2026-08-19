@@ -97,17 +97,47 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * 3.127.0・回数の緩和=3.326.0）が素通りになる**。旗を分けて、検査の完了では最適化の実行中表示を
      * 解除しないようにする。
      */
-    @Volatile private var optimizeActive = false
+    /**
+     * [3.404.0] いま**「完了時に勤務表と設定を丸ごと差し替える前景ジョブ」**が走っているか＝その名前
+     * （走っていなければ null）。旧名 `optimizeActive` は「最適化」としか読めず、**同じ性質を持つ
+     * 読み込み・CSV取込・初期解生成の3つが旗を立て忘れていた**（この名前そのものが取り残しの原因）。
+     * その3つは `running = true`（画面は全部ロック）にしながら `optimizeInFlight()` は false のままで、
+     * ガード側だけが全開という**逆転**が起きていた——たとえば初期解生成の最中にセルを編集すると
+     * `setCell` のガードを素通りして盤面へ書き込まれ、完了時の `currentSchedule = res.schedule.copy2D()`
+     * が**それを無言で上書きする**（3.161.0 が最適化について塞いだ穴の、他の3ジョブぶんの取り残し）。
+     * 名前で「最適化に限らない」と分かるようにし、画面のメッセージもこの名前で言い分ける。
+     */
+    @Volatile private var boardJobLabel: String? = null
 
-    /** 前景の最適化（[optimizeActive]）と背景 Worker のどちらかが動いていれば真。 */
+    /**
+     * 旗の持ち主を識別する通し番号。`finally` で**自分が立てた旗のときだけ**下ろす
+     * （`checkSeq`/`fixSeq` と同じ手＝後から始まったジョブの旗を、先に終わった側が下ろして
+     * ロックを早く解いてしまう事故を防ぐ。3.333.0 の `releasedByMe` と同趣旨）。
+     */
+    private var boardJobToken = 0
+
+    private fun beginBoardJob(label: String): Int {
+        boardJobLabel = label
+        return ++boardJobToken
+    }
+
+    private fun endBoardJob(token: Int) {
+        if (token == boardJobToken) boardJobLabel = null
+    }
+
+    /** 画面のメッセージで「何の実行中か」を言うための名前。背景 Worker には名前が無いので既定を返す。 */
+    private fun busyWhat(): String = boardJobLabel ?: "バックグラウンド計算"
+
     /**
      * [3.328.0 → 3.336.0/外部レビュー P1] **編集・実行の可否はここだけを見る**。`ui.running` は
      * 画面へ出すための写しで、初期化時の WorkManager 問い合わせが失敗すれば false のまま残る
      * （＝背景で走っているのにガードが全部開く）。3.336.0 で早期 return するガード14箇所を
      * こちらへ寄せ、`ui.running` は表示専用へ降格した。
+     * [3.404.0] 対象は最適化に限らない（[boardJobLabel] 参照）＝関数名は据え置くが意味は
+     * 「盤面を丸ごと差し替えるジョブが走っている」。
      */
     private fun optimizeInFlight(): Boolean =
-        optimizeActive || OptimizationRepository.running.value
+        boardJobLabel != null || OptimizationRepository.running.value
 
     // ===== [v2.22] 自動保存・復元（端末内）と「元に戻す」 =====
     private val autosaveFile get() = getApplication<Application>().filesDir.resolve("magi_autosave.json")
@@ -461,6 +491,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val repaired = MojibakeRepair.wasDecoded(rawJson, json)
         job?.cancel()
         _ui.update { it.copy(running = true, message = "読込中…") }
+        // [3.404.0] 読み込みも「完了時に state と勤務表を丸ごと差し替える」ジョブ＝その間の編集を止める。
+        val boardToken = beginBoardJob("読み込み")
         job = viewModelScope.launch {
             try {
                 if (repaired) logOp("W", "文字化け（二重エンコード）を自動修復して読み込みました。元のファイル自体は修復されません（「データを保存」で保存し直すと次回からこの警告は出ません）")
@@ -542,8 +574,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         _ui.update { it.copy(running = false, message = "読み込めませんでした（${err.javaClass.simpleName}）。ファイルの中身を確認してください", messageIsError = true) }
                     },
                 )
+            } catch (e: CancellationException) {
+                _ui.update { it.copy(running = false, message = "読み込みを中止しました") }   // [3.404.0] 停止は失敗ではない
+                throw e
             } catch (e: Throwable) {
                 _ui.update { it.copy(running = false, message = "読み込めませんでした（${e.javaClass.simpleName}）。ファイルの中身を確認してください", messageIsError = true) }
+            } finally {
+                endBoardJob(boardToken)
             }
         }
     }
@@ -551,7 +588,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [判断設計監査 #3] 「データを開く」直前に退避した1世代前の状態へ戻す。loadAsync 経由のため
      *  現在のデータが再び退避される＝もう一度押すと元へ戻る（スワップ）。 */
     fun restorePreviousData() {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は操作できません") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は操作できません") }; return }
         viewModelScope.launch {
             val txt = withContext(Dispatchers.IO) {
                 runCatching { prevBackupFile.takeIf { it.exists() }?.readText() }.getOrNull()
@@ -723,6 +760,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (!ensureValidForRun(st, sched)) return
         pushUndo()
         _ui.update { it.copy(running = true, hasResult = false, message = "初期解生成中…") }
+        // [3.404.0] 完了時に currentSchedule/state を丸ごと差し替えるので、その間の編集を止める旗を立てる。
+        //   旧: `running=true`（画面は全ロック）なのに `optimizeInFlight()` は false のままで、
+        //   `setCell` のガードだけ素通り＝編集が完了時に無言で消えていた。
+        val boardToken = beginBoardJob("初期解生成")
         job = viewModelScope.launch {
             try {
                 val res = V6FinalPort.handleSmartInitial(st.withSchedule(sched), allowImpossible = true)
@@ -737,11 +778,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     message = "初期解生成完了: 必須=${res.report.hard} 合計=${res.report.total}",
                 ) }
                 logOp("I", "初期解生成 完了 必須=${res.report.hard} 合計=${res.report.total}")
+            } catch (e: CancellationException) {
+                // [3.404.0] 停止・ジョブ上書きを「失敗」と呼ばない（兄弟の refreshCheck 等は分離済みで
+                //   ここだけ取り残されていた＝停止するたび「初期解生成失敗」という誤った文言が出ていた）。
+                logOp("I", "初期解生成 停止")
+                _ui.update { it.copy(running = false, message = "初期解生成を停止しました") }
+                throw e
             } catch (e: Throwable) {
                 // [3.271.0] 失敗を操作ログにも残す（旧: message のみ＝書き出したログから消えた実行が
                 //   追跡不能だった。実機ログ解析で「開始したのに完了も停止も無い実行」の死因特定を阻んだ）。
-                logOp("W", "初期解生成 失敗: ${e.message}")
-                _ui.update { it.copy(running = false, message = "初期解生成失敗: ${e.message}") }
+                logOp("W", "初期解生成 失敗: ${e.javaClass.simpleName}: ${e.message}")
+                _ui.update { it.copy(running = false, message = "初期解を作れませんでした（${e.javaClass.simpleName}）", messageIsError = true) }
+            } finally {
+                endBoardJob(boardToken)
             }
         }
     }
@@ -854,7 +903,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var lastPhaseLogMs = -10_000L
         val phaseNameLastLogMs = HashMap<String, Long>()   // [3.283.0] 同名フェーズの再ログ抑制（60s窓・スパム対策）
         var lastHardLogMs = -10_000L
-        optimizeActive = true   // [3.328.0]
+        val boardToken = beginBoardJob("勤務表づくり")   // [3.328.0/3.404.0]
         job = viewModelScope.launch {
             // [3.372.0/実機ログ起因] 終端ログ（完了/停止/失敗）を必ず1行残す保証。実機ログ(2026-08-15)で
             //   「最適化 開始」だけあって終端行が無い実行が2件あり、死因を判別できなかった。全経路が
@@ -1096,7 +1145,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 //   （3.147.0/3.191.0 の「英字符号・内部名を画面に出さない」方針の取り残し）。
                 _ui.update { it.copy(running = false, message = "勤務表をつくれませんでした（$kind）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）", messageIsError = true) }
             } finally {
-                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
+                endBoardJob(boardToken)   // [3.328.0/3.404.0] 盤面を差し替えるジョブの終了（正常・停止・失敗すべて）
+                // [3.404.0] 途中経過の盤面を捨てる。旧: 完了時に消さないので、あとで編集して違反チェックが
+                //   走ると（`ui.running` が再び真になり）**前の実行の古い途中経過が現在のものとして出た**。
+                if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
                 if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
@@ -1119,7 +1171,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(running = true, hasResult = false, liveSchedule = emptyList(), message = "自動で整えています…") }
         logOp("I", "ソフト研磨 開始 (予算${_ui.value.budgetSec}s)")
         val startMs = System.currentTimeMillis()
-        optimizeActive = true   // [3.328.0]
+        val boardToken = beginBoardJob("仕上げ最適化")   // [3.328.0/3.404.0]
         job = viewModelScope.launch {
             var terminalLogged = false   // [3.372.0] 終端ログの保証（runV6FullOptimize と同じ理由）
             try {
@@ -1186,7 +1238,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 terminalLogged = true
                 _ui.update { it.copy(running = false, message = "自動整えに失敗: $kind: ${e.message}") }
             } finally {
-                optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
+                endBoardJob(boardToken)   // [3.328.0/3.404.0]
+                if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }   // [3.404.0]
                 clearRunMarker()   // [監査A8]
                 if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
@@ -1217,7 +1270,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             //   推論した**からで、ログには押した事実が1行も無かった。以後は直接読める。
             //   何を止めたかも区別する（最適化なのか、違反チェック/改善探索だけなのかで意味が全く違う）。
             val what = buildList {
-                if (optimizeActive) add("計算")
+                boardJobLabel?.let { add(it) }   // [3.404.0] 何のジョブかを名前で言う（旧: 一律「計算」）
                 if (_ui.value.fixSearching) add("改善探索")
                 if (isEmpty()) add("違反チェック")
             }.joinToString("・")
@@ -1353,7 +1406,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   同一の配列参照＝ここで in-place 変更すると、完了時の baseReport(旧盤面基準)と食い違うか、
         //   良化採用時に編集が無言で上書き消失する。ジョブ完了まで編集を拒否する（他の直接変異API=
         //   setCells/cycleCell/applyFixSuggestion も同根のため同じガードを持つ）。
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         if (sched[i][j] == shift) return
@@ -1374,7 +1427,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [プロ一括編集] 複数セル(i,j)を1シフトへ一括設定。Undoは1回・再チェックも1回（keep-best互換）。 */
     fun setCells(cells: Collection<Pair<Int, Int>>, shift: Int) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         var changed = 0
         var first = true
@@ -1434,7 +1487,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cycleCell(i: Int, j: Int) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         val p = Problem(st)
@@ -1529,7 +1582,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * @param loDelta 下限へ足す量（負で緩める）。@param hiDelta 上限へ足す量（正で緩める）。
      */
     fun relaxStaffRangePin(i: Int, k: Int, loDelta: Int, hiDelta: Int) {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は回数を変更できません。終わってから試してください。") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は回数を変更できません。終わってから試してください。") }; return }
         val st = state ?: return
         val cur = st.staffRange["$i,$k"] ?: return
         val lo = cur.lo.trim().toIntOrNull() ?: return
@@ -2038,15 +2091,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun runBlockedByInFlight(what: String): Boolean {
         if (!optimizeInFlight()) return false
-        logOp("W", "$what を取り消しました（別の計算が実行中）")
-        _ui.update { it.copy(message = "計算中です。終わるか「やめる」を押してからにしてください。") }
+        logOp("W", "$what を取り消しました（${busyWhat()}が実行中）")
+        _ui.update { it.copy(message = "${busyWhat()}の実行中です。終わるか「やめる」を押してからにしてください。") }
         return true
     }
 
     private fun structuralEditBlocked(): Boolean {
         if (!optimizeInFlight()) return false
-        logOp("W", "計算の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")
-        _ui.update { it.copy(message = "計算中は設定を変更できません。終わるか「やめる」を押してからにしてください。") }
+        logOp("W", "${busyWhat()}の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")
+        _ui.update { it.copy(message = "${busyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してからにしてください。") }
         return true
     }
 
@@ -2146,7 +2199,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun relaxForbiddenRule(seqLabel: String) {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は設定を変更できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は設定を変更できません（完了後にもう一度お試しください）") }; return }
         val s = state ?: return
         fun key(row: C3Row): String {
             val end = row.pattern.indexOfFirst { it.isBlank() }
@@ -2270,7 +2323,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。 */
     fun applyFixSuggestion(s: FixSuggestion) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "計算中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
         val sched = currentSchedule ?: return
         if (s.ops.isEmpty()) return
         for (op in s.ops) {
@@ -2305,6 +2358,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Ws1Result(状態+勤務表)を適用し、再チェック後に独自メッセージを表示（スタッフ新規追加など行数変化を伴う取込）。 */
     private fun applyStructureWithMessage(r: Ws1Result, doneMessage: String) {
+        // [3.404.0] 3.328.0 は「編集は必ずこの4入口を通るのでその4つだけを塞ぐ」としたが、**ここだけ
+        //   ガードが無かった**。通るのは apt全リセットと職員一覧CSV取込で、後者は `currentSchedule` ごと
+        //   差し替えるため、最適化中に到達すると 3.161.0 の「別名共有で編集が消える」クラスに触れる。
+        if (structuralEditBlocked()) return
         pushUndo()
         state = r.state
         val sched = r.schedule.copy2D()
@@ -2703,10 +2760,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun importCsv(rawText: String) {
+        // [3.404.0] 旧: 入口ガードが無く、`job = viewModelScope.launch` が走行中の最適化の参照を
+        //   **キャンセルせずに上書き**していた＝その最適化は「やめる」で止められないゾンビになる
+        //   （3.271.0 が generateSmartInitial で直したのと同型の取り残し）。
+        if (runBlockedByInFlight("CSV取込")) return
         val st = state ?: return
         val sched = currentSchedule ?: return
         val text = MojibakeRepair.repair(rawText)
         _ui.update { it.copy(running = true, message = "CSV取込中…") }
+        val boardToken = beginBoardJob("CSV取込")
         job = viewModelScope.launch {
             try {
                 // [3.282.0] JSON 側(loadAsync)と同じ是正: BOM 除去だけの健全な CSV で誤警告しない。
@@ -2740,8 +2802,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     logOp("W", "CSV取込 一部のみ反映: ${res.matched}/${total}名一致（${total - res.matched}名は氏名不一致）")
                 }
                 logOp("I", "CSV取込 完了 ${res.matched}名一致 必須=${res.report.hard} 合計=${res.report.total}")
+            } catch (e: CancellationException) {
+                _ui.update { it.copy(running = false, message = "CSV取込を中止しました") }   // [3.404.0]
+                throw e
             } catch (e: Throwable) {
-                _ui.update { it.copy(running = false, message = "CSV取込失敗: ${e.message}") }
+                _ui.update { it.copy(running = false, message = "CSVを取り込めませんでした（${e.javaClass.simpleName}）", messageIsError = true) }
+            } finally {
+                endBoardJob(boardToken)
             }
         }
     }
