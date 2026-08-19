@@ -79,6 +79,10 @@ data class UiState(
     //   生んでいた。applyStructure が毎回これを増やして必ず distinct な UiState を emit＝確実に再構成させる。
     val editRev: Int = 0,
     val message: String? = null,
+    // [3.400.0] 直近メッセージが「失敗・拒否」か。Snackbar の色（errorContainer）と表示時間（長め）を分ける。
+    //   **`notify(text, "W")` が唯一の true の書き手**で、`clearMessage` が false へ戻す。素の
+    //   `copy(message = …)` は触らない＝既定 false のまま＝旧来どおりの見た目になる（退行しない）。
+    val messageIsError: Boolean = false,
     // [判断設計監査 #3] 「データを開く」直前の1世代退避が存在するか（設定タブの復元導線の表示条件）。
     val prevBackupAvailable: Boolean = false,
     // 操作コパイロット: 満足度(0-100) / 研磨の限界 / ガチャ操作の助言

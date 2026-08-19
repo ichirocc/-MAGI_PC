@@ -93,6 +93,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -165,14 +166,18 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val text = withContext(Dispatchers.IO) {
+                // [3.400.0] 旧: `.getOrNull()` で失敗を握り潰し `if (text != null)` に else が無かった＝
+                //   読めなくても画面もログも無反応で、押せていないのか読めなかったのか区別できなかった。
+                val r = withContext(Dispatchers.IO) {
                     runCatching {
                         ctx.contentResolver.openInputStream(uri)?.use {
                             it.readBytes().toString(Charsets.UTF_8)
                         }
-                    }.getOrNull()
+                    }
                 }
+                val text = r.getOrNull()
                 if (text != null) vm.load(text)
+                else vm.notifyOpenFailure(r, "ファイル")
             }
         }
     }
@@ -182,15 +187,16 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     ) { uri ->
         if (uri != null) {
             scope.launch {
-                val text = withContext(Dispatchers.IO) {
+                val r = withContext(Dispatchers.IO) {
                     runCatching {
                         ctx.contentResolver.openInputStream(uri)?.use { decodeCsvBytes(it.readBytes()) }
-                    }.getOrNull()
+                    }
                 }
+                val text = r.getOrNull()
                 if (text != null) {
                     // 取込種別はオペレーターが選択する（自動判定しない）。
                     pendingCsvImport = text
-                }
+                } else vm.notifyOpenFailure(r, "CSV")
             }
         }
     }
@@ -202,12 +208,17 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
             scope.launch {
                 val json = withContext(Dispatchers.Default) { vm.exportJson() }
                 if (json != null) {
-                    withContext(Dispatchers.IO) {
+                    // [3.400.0] 旧: runCatching の戻り値を捨てていた＝成功も失敗も画面に何も出ない。
+                    //   CreateDocument は callback の前に SAF がファイルを実体化するので、書き込みが落ちると
+                    //   **0バイトのファイルだけが残る**＝保存できたと信じて元データを捨てうる。
+                    val r = withContext(Dispatchers.IO) {
                         runCatching {
                             ctx.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                                ?: throw java.io.FileNotFoundException("書き込み先を開けません")
                         }
                     }
-                }
+                    vm.notifySave(r, "データ")
+                } else vm.notify("保存するデータがありません", "W")
             }
         }
     }
@@ -219,17 +230,18 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
             scope.launch {
                 val csv = withContext(Dispatchers.Default) { vm.exportCsv() }
                 if (csv != null) {
-                    withContext(Dispatchers.IO) {
+                    val r = withContext(Dispatchers.IO) {
                         runCatching {
                             ctx.contentResolver.openOutputStream(uri)?.use {
                                 // UTF-8 BOM を付与。日本の Excel は BOM 無し UTF-8 を CP932 と誤読し文字化けするため、
                                 // BOM(EF BB BF) を先頭に書いて Unicode(UTF-8) と認識させる。取込側は removePrefix で BOM 除去済。
                                 it.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
                                 it.write(csv.toByteArray(Charsets.UTF_8))
-                            }
+                            } ?: throw java.io.FileNotFoundException("書き込み先を開けません")
                         }
                     }
-                }
+                    vm.notifySave(r, "勤務表CSV")
+                } else vm.notify("書き出す勤務表がありません", "W")
             }
         }
     }
@@ -249,15 +261,16 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     }
                 }
                 if (csv != null) {
-                    withContext(Dispatchers.IO) {
+                    val r = withContext(Dispatchers.IO) {
                         runCatching {
                             ctx.contentResolver.openOutputStream(uri)?.use {
                                 it.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
                                 it.write(csv.toByteArray(Charsets.UTF_8))
-                            }
+                            } ?: throw java.io.FileNotFoundException("書き込み先を開けません")
                         }
                     }
-                }
+                    vm.notifySave(r, when (kind) { "staff" -> "職員CSV"; "wishes" -> "希望CSV"; else -> "制約CSV" })
+                } else vm.notify("書き出す内容がありません", "W")
             }
         }
     }
@@ -269,12 +282,14 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
             scope.launch {
                 val text = withContext(Dispatchers.Default) { vm.exportLogs() }
                 if (text != null) {
-                    withContext(Dispatchers.IO) {
+                    val r = withContext(Dispatchers.IO) {
                         runCatching {
                             ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                                ?: throw java.io.FileNotFoundException("書き込み先を開けません")
                         }
                     }
-                }
+                    vm.notifySave(r, "ログ")
+                } else vm.notify("書き出すログがありません", "W")
             }
         }
     }
@@ -286,12 +301,14 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
             scope.launch {
                 val text = withContext(Dispatchers.Default) { vm.exportLogsJson() }
                 if (text != null) {
-                    withContext(Dispatchers.IO) {
+                    val r = withContext(Dispatchers.IO) {
                         runCatching {
                             ctx.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                                ?: throw java.io.FileNotFoundException("書き込み先を開けません")
                         }
                     }
-                }
+                    vm.notifySave(r, "ログ(JSON)")
+                } else vm.notify("書き出すログがありません", "W")
             }
         }
     }
@@ -312,13 +329,14 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     var focusRange by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
     val loadSample: () -> Unit = {
         scope.launch {
-            val text = withContext(Dispatchers.IO) {
+            val r = withContext(Dispatchers.IO) {
                 runCatching {
                     val asset = runCatching { ctx.assets.open("sample_state_v6.json") }.getOrElse { ctx.assets.open("sample_state.json") }
                     asset.use { it.readBytes().toString(Charsets.UTF_8) }
-                }.getOrNull()
+                }
             }
-            if (text != null) vm.load(text)
+            val text = r.getOrNull()
+            if (text != null) vm.load(text) else vm.notifyOpenFailure(r, "見本データ")
         }
     }
     val openJson: () -> Unit = { openJsonLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
@@ -333,7 +351,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     LaunchedEffect(ui.message) {
         val m = ui.message ?: return@LaunchedEffect
         snackbarHostState.currentSnackbarData?.dismiss()
-        snackbarHostState.showSnackbar(m, duration = SnackbarDuration.Short)
+        // [3.400.0] 失敗・拒否は長め（4秒だと120字級の失敗文を読み切る前に消える）。
+        snackbarHostState.showSnackbar(m, duration = if (ui.messageIsError) SnackbarDuration.Long else SnackbarDuration.Short)
         vm.clearMessage(m)   // 同じ文言が再び来ても状態が変わる＝次のタップでもう一度出る
     }
 
@@ -346,7 +365,17 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 MagiBottomNav(tab) { tab = it }
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // [3.400.0] 成功と失敗を同じ見た目で出さない（失敗はエラー色）。色は既に SettingIssuesCard 等が
+        //   使っている errorContainer と同じ＝アプリの中で「これは失敗」を表す色が1つに揃う。
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = if (ui.messageIsError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = if (ui.messageIsError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.inverseOnSurface,
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(

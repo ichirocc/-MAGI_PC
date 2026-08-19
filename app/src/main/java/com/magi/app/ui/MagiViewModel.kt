@@ -247,10 +247,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             OptimizationRepository.progress.collect { p ->
                 if (p != null && _ui.value.running) {
+                    // [3.400.0] 旧: `message = "バックグラウンド ${p.phase}"`。前景側(917行)と同じ理由で外す＝
+                    //   3.399.0 で message が Snackbar になったため、背景実行中もフェーズが変わるたびに
+                    //   Snackbar が出続けてしまう。実行中であることは上部バッジと進捗行が示す（状態）。
                     _ui.update { it.copy(
                         bestHard = p.hard.toLong(), bestSoft = p.soft.toLong(),
                         totalViolations = p.total, elapsedMs = p.elapsedMs,
-                        message = "バックグラウンド ${p.phase}",
                     ) }
                 }
             }
@@ -532,12 +534,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         logOp("I", "読込 ${lp.state.staffCount}名/${lp.state.dayCount}日/${lp.state.shiftCount}シフト")
                     },
-                    onFailure = {
-                        _ui.update { it.copy(running = false, message = "読込失敗: ${it.message}") }
+                    onFailure = { err ->
+                        // [3.400.0] 旧: `onFailure = { _ui.update { it.copy(..., message = "読込失敗: ${it.message}") } }`
+                        //   内側の `it` は **UiState** を指すので、出ていたのは直前の文言＝「読込失敗: 読込中…」。
+                        //   すぐ下の catch は `e.message` で正しく、ここだけ取り違えていた。引数に名前を付けて塞ぐ。
+                        logOp("W", "読込失敗: ${err.javaClass.simpleName}: ${err.message}")
+                        _ui.update { it.copy(running = false, message = "読み込めませんでした（${err.javaClass.simpleName}）。ファイルの中身を確認してください", messageIsError = true) }
                     },
                 )
             } catch (e: Throwable) {
-                _ui.update { it.copy(running = false, message = "読込失敗: ${e.message}") }
+                _ui.update { it.copy(running = false, message = "読み込めませんでした（${e.javaClass.simpleName}）。ファイルの中身を確認してください", messageIsError = true) }
             }
         }
     }
@@ -689,7 +695,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: Throwable) {
                 // [3.392.0] Error(OOM等)まで拾う。旧: Exception だけで、Error だと running=true が固着し
                 //   3.328.0 で running を根拠にした14個の編集ガードが全て閉じたまま＝アプリが読取専用になった。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェック失敗: ${e.javaClass.simpleName}") }
+                // [3.400.0] 3.382.0 は長い実行4経路へ終端ログを入れたが、毎回のセル編集で走る refreshCheck は
+                //   対象外だった＝画面の文言が消えると死因が何も残らない。痕跡を必ず残す。
+                logOp("W", "違反チェック 失敗: ${e.javaClass.simpleName}: ${e.message}")
+                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェックに失敗しました（${e.javaClass.simpleName}）", messageIsError = true) }
             }
         }
     }
@@ -828,7 +837,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             "前回と同じ設定での再実行です。最大の未解決は『${lastTopHardFamily ?: "未解決の制約"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
         else null
         lastSettingsSig = sig
-        _ui.update { it.copy(running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "計算エンジン実行中…") }
+        _ui.update { it.copy(running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "勤務表をつくり始めました") }
         logOp("I", "最適化 開始 (予算${_ui.value.budgetSec}s, 並列${_ui.value.workers}, 方式${_ui.value.v6Algorithm})")
         writeRunMarker("fg")
         OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] fg実行ではbg途中状態は無関係＝掃除
@@ -914,7 +923,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                             elapsedMs = System.currentTimeMillis() - startMs,
                             // [DefragLiveView] 計算中の最良盤面をライブ表示用に反映（節目で更新される）。
                             liveSchedule = V6NativeOptimizer.liveBest ?: it.liveSchedule,
-                            message = "V6 $phase 実行中…",
+                            // [3.400.0] 旧: `message = "V6 $phase 実行中…"`。3.399.0 で message が Snackbar に
+                            //   なったため、フェーズが変わるたびに（実行中ずっと）Snackbar が出続ける副作用に
+                            //   なっていた。これは**イベントでなく状態**で、実行中であることは上部バッジと
+                            //   進捗行が既に示している＝3.399.0 自身が定めた役割分担に従って流さない。
+                            //   フェーズの遷移は操作ログ（下のスロットル付き logOp）に残るので追える。
                         ) }
                     }
                     // ---- 最適化中ログ強化（スロットル付き）----
@@ -1079,7 +1092,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
                 logOp("W", "最適化 失敗: $kind: ${e.message}")
                 terminalLogged = true
-                _ui.update { it.copy(running = false, message = "V6最適化失敗: $kind: ${e.message}") }
+                // [3.400.0] 画面には失敗の種類と次の一手だけ。内部名「V6」と生の例外文は直上の logOp へ
+                //   （3.147.0/3.191.0 の「英字符号・内部名を画面に出さない」方針の取り残し）。
+                _ui.update { it.copy(running = false, message = "勤務表をつくれませんでした（$kind）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）", messageIsError = true) }
             } finally {
                 optimizeActive = false   // [3.328.0] 長い最適化の終了（正常・停止・失敗すべて）
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
@@ -2810,11 +2825,50 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * 画面へ1行の返事を出す（Snackbar）。ファイルの読み書きのように **ViewModel の外で完結する操作**が
+     * 結果を返すための入口。`level` は操作ログの水準（既定 I。失敗は W）。
+     * [3.400.0] 旧: ファイル入出力7経路は成功も失敗も画面にもログにも何も出さず、
+     *   「保存」を押しても画面が1ミリも変わらなかった（0バイトのファイルだけ残る事故も起こりうる）。
+     */
+    fun notify(text: String, level: String = "I") {
+        logOp(level, text)
+        _ui.update { it.copy(message = text, messageIsError = level == "W") }
+    }
+
+    /**
+     * ファイル書き込みの結果を1行で返す。**成功も必ず返す**のが肝で、旧実装は成功時も無反応だったため
+     * 「保存できたのか」を画面で確かめる手段が無かった。
+     */
+    fun notifySave(result: Result<*>, what: String) {
+        result.fold(
+            onSuccess = { notify("${what}を保存しました") },
+            onFailure = { e -> notify("${what}を保存できませんでした（${ioReason(e)}）", "W") },
+        )
+    }
+
+    /** ファイル読み込みの失敗を1行で返す（成功時は呼ばない＝読み込めた事実は中身の表示が示す）。 */
+    fun notifyOpenFailure(result: Result<*>, what: String) {
+        notify("${what}を開けませんでした（${ioReason(result.exceptionOrNull())}）", "W")
+    }
+
+    /**
+     * 例外を利用者の言葉へ。**生の例外文を画面へ出さない**（3.147.0/3.191.0 の方針）が、
+     * 詳しい原因は notify が logOp へ流すので書き出したログには残る。
+     */
+    private fun ioReason(e: Throwable?): String = when {
+        e == null -> "内容が空でした"
+        e is SecurityException -> "アクセスが許可されていません"
+        e is java.io.FileNotFoundException -> "ファイルが見つからないか、書き込みが許可されていません"
+        e.message?.contains("space", ignoreCase = true) == true -> "保存先の空き容量が足りません"
+        else -> e.javaClass.simpleName
+    }
+
+    /**
      * 直近メッセージを消す。`shown` を渡すと**それがまだ表示中のときだけ**消す（compare-and-clear）。
      * Snackbar を出し終えたあとに素で消すと、その間に届いた新しいメッセージまで消してしまうため。
      */
     fun clearMessage(shown: String? = null) {
-        _ui.update { if (shown == null || it.message == shown) it.copy(message = null) else it }
+        _ui.update { if (shown == null || it.message == shown) it.copy(message = null, messageIsError = false) else it }
     }
 
     /**

@@ -84,7 +84,7 @@
 ## 4. UiState（画面表示用の派生状態）
 
 `data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
-状態。**全72フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
+状態。**全73フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
 
 **読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
 
@@ -135,7 +135,7 @@
 
 **中断**（2）：`interruptedRun`, `interruptedInfo`
 
-**その他**（5）：`v6`(`V6PortReport?`), `message`, `opLog`(操作ログ), `logs`(診断ログ), `startDate`
+**その他**（6）：`v6`(`V6PortReport?`), `message`, `messageIsError`(Snackbar を失敗色にするか), `opLog`(操作ログ), `logs`(診断ログ), `startDate`
 
 > **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+9+10+8+12+4+14+2+5 = **72** で
 > `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
