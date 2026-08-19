@@ -1092,9 +1092,8 @@ internal fun TallyCard(ui: UiState, vm: MagiViewModel, onFix: (Int?, Int?) -> Un
                 Spacer(Modifier.height(8.dp))
             }
             if (mode == 0) {
-                // [P7/実務者向け短文化] 「職員別」タブ名＋表そのもので内容は自明。残すのは操作の含意だけ。
-                Text("ⓘ タップで内訳と直し方",
-                    style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                // [3.397.0 形が語る] 「ⓘ タップで内訳と直し方」の貼り紙は剥がした。押せるセル（違反セル）は
+                //   右端の「›」が形で示す＝このアプリが行で使ってきた「›＝押せる」と同じ語彙。
                 // [一括修正] 職員別の赤/橙は low/high(上下限)だけでなく aptLow/aptHigh(適切回数=目標)も同色マーク
                 //   のため、凡例に「目標」を含める（旧「上限超過」だけでは 美幸B4=目標超過 の橙が読めなかった）。
                 TallyLegend(shortBg, overBg)
@@ -1150,9 +1149,7 @@ internal fun TallyCard(ui: UiState, vm: MagiViewModel, onFix: (Int?, Int?) -> Un
             } else {
                 // [3.396.0] 「左右スワイプで他の日」は剥がした。列は 84dp + 48dp×31日 = 1572dp あり、
                 //   どの対象端末（幅390dp以上=D4）でも**右端が必ず見切れる**＝横に続くことは形が語っている。
-                //   残した「タップで内訳」は形がまだ語れていないぶん（下の注記参照）。
-                Text("ⓘ タップで内訳と直し方",
-                    style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                // [3.397.0] 「タップで内訳」も剥がした（押せるセルは右端の「›」が形で示す）。
                 TallyLegend(shortBg, overBg)
                 Spacer(Modifier.height(8.dp))
                 val labW = 84.dp; val cw = 48.dp; val rh = 48.dp // [a11y] 日別集計セル 34x34 -> 48x48
@@ -1291,7 +1288,22 @@ private fun TallyBox(
                 .then(if (cd != null) Modifier.semantics { contentDescription = cd } else Modifier)
                 .then(if (start) Modifier.padding(horizontal = 6.dp) else Modifier),
             contentAlignment = if (start) Alignment.CenterStart else Alignment.Center,
-        ) { content() }
+        ) {
+            if (onClick == null) {
+                content()
+            } else {
+                // [3.397.0 形が語る] 押せるセルだけに「›」を出す。呼出側でなく TallyBox に置くのは、
+                //   「onClick を渡した＝押せる」と見た目が構造的に一致し、書き忘れが起こらないため。
+                //   数字は「›」のぶんだけ左へ寄せて重ならないようにする（セル幅48dp）。
+                Box(Modifier.fillMaxSize().padding(end = 10.dp), contentAlignment = Alignment.Center) { content() }
+                Text(
+                    "›",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
+                )
+            }
+        }
     }
 }
 

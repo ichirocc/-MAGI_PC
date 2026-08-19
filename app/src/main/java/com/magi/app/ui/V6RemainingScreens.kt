@@ -1,16 +1,13 @@
 package com.magi.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,11 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.magi.app.v6.MirrorKeys
@@ -48,6 +42,7 @@ fun SectionSegment(title: String, subtitle: String? = null, content: @Composable
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ColorSettingsView(ui: UiState, vm: MagiViewModel) {
     // [色変更/スクショ指摘] 旧版は read-only の凡例で、チップを押しても何も起きず「色を変更出来ない」と誤解を
@@ -58,52 +53,38 @@ fun ColorSettingsView(ui: UiState, vm: MagiViewModel) {
     //   未設定の族は重大度色（必須=__vio__/要調整=__vioSoft__）で表示＝従来互換。族色はグリッドの枠・角マーク・
     //   カレンダー・編集シートの理由テキストへ即反映（resolvedVioColor が族→重大度の順で解決）。
     var pickFam by remember { mutableStateOf<String?>(null) }   // 族キー(c1/c3n/…)
-    SectionSegment("違反種別の色", "チップをタップで、その種別の色を個別に変更できます（未設定は重大度の色）") {
+    // [3.397.0 形が語る] 旧版は「背景を丸ごと色で塗った白文字の四角」＝これは凡例(badge)の形であって
+    //   操作できる形ではなかった。だから「チップをタップで…変更できます」という貼り紙が要り、それでも
+    //   実機で「個別に設定できない」と報告された。**同じ操作は同じ形**にする＝シフトの表示色と同一の
+    //   ColorChip（枠＋色見本＋ラベル）へ揃え、貼り紙を剥がす。副次的にユーザー指定色の上へ白文字を
+    //   載せる必要が無くなり、コントラスト担保(ensureReadable)の綱渡りも消える。
+    SectionSegment("違反種別の色") {
         val cs = MaterialTheme.colorScheme
-        val hardBg = ui.violationColorHex.takeIf { it.isNotBlank() }?.let { hexToColor(it) } ?: Color(0xFFBA1A1A)
-        val softBg = ui.violationSoftColorHex.takeIf { it.isNotBlank() }?.let { hexToColor(it) } ?: MagiAccent.orange
-        val keys = MirrorKeys.all
-        keys.chunked(4).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                row.forEach { key ->
-                    val sev = ShiftAppearance.severityFromVioKey(key)
-                    // [色覚/日本語化] 色に依らない文字バックアップ。英語enum(CRITICAL/…)ではなく日本語の重大度語で示す。
-                    val sevJp = when (sev) { "CRITICAL" -> "必須"; "HIGH", "WARN" -> "要調整"; else -> "情報" }
-                    val count = ui.breakdown[key] ?: 0
-                    val famHex = ui.violationFamilyColorHex[key]?.takeIf { it.isNotBlank() }
-                    val bg = famHex?.let { hexToColor(it) } ?: when (sev) {
-                        "CRITICAL" -> hardBg
-                        "HIGH", "WARN" -> softBg
-                        else -> cs.surfaceVariant   // INFO（族色を設定すればそれが優先）
-                    }
-                    // [コントラスト] ユーザー色でも読めるよう WCAG で文字色を保証（白が不足なら黒へ）。
-                    val fg = if (famHex != null || sev != "INFO") ensureReadable(bg, Color(0xFFFFFFFF)) else cs.onSurfaceVariant
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .background(bg, RoundedCornerShape(8.dp))
-                            .then(if (!ui.running) Modifier.clickable { pickFam = key } else Modifier)
-                            .padding(6.dp),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("${breakdownLabels[key] ?: key}\n$sevJp" + (if (count > 0) " ·$count" else ""), fontSize = 12.sp, textAlign = TextAlign.Center, color = fg) }
+        // 基準色の実効値（未設定なら既定＝必須は UD 赤 / 要調整はアンバー。ピッカーの defaultHex と同値）。
+        val baseHard = ui.violationColorHex.ifBlank { "#BA1A1A" }
+        val baseSoft = ui.violationSoftColorHex.ifBlank { "#E08A1E" }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MirrorKeys.all.forEach { key ->
+                val sev = ShiftAppearance.severityFromVioKey(key)
+                // [色覚/日本語化] 色に依らない文字バックアップ。英語enum(CRITICAL/…)ではなく日本語の重大度語で示す。
+                val sevJp = when (sev) { "CRITICAL" -> "必須"; "HIGH", "WARN" -> "要調整"; else -> "情報" }
+                val famHex = ui.violationFamilyColorHex[key]?.takeIf { it.isNotBlank() }
+                val hex = famHex ?: when (sev) {
+                    "CRITICAL" -> baseHard
+                    "HIGH", "WARN" -> baseSoft
+                    else -> "#8A979B"   // 情報（族色を設定すればそれが優先）
                 }
+                val count = ui.breakdown[key] ?: 0
+                val label = "${breakdownLabels[key] ?: key}（$sevJp）" + (if (count > 0) " $count件" else "")
+                ColorChip(hex = hex, label = label, custom = famHex != null, enabled = !ui.running) { pickFam = key }
             }
-            Spacer(Modifier.height(6.dp))
         }
-        Text("基準色（未設定の種別に効く色）は下の2チップから変更できます。",
-            fontSize = 12.sp, color = cs.onSurfaceVariant)
-        Spacer(Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-            Box(Modifier.weight(1f).background(hardBg, RoundedCornerShape(8.dp))
-                .then(if (!ui.running) Modifier.clickable { pickFam = "__hard__" } else Modifier).padding(6.dp),
-                contentAlignment = Alignment.Center) {
-                Text("必須の基準色", fontSize = 12.sp, textAlign = TextAlign.Center, color = ensureReadable(hardBg, Color(0xFFFFFFFF)))
-            }
-            Box(Modifier.weight(1f).background(softBg, RoundedCornerShape(8.dp))
-                .then(if (!ui.running) Modifier.clickable { pickFam = "__soft__" } else Modifier).padding(6.dp),
-                contentAlignment = Alignment.Center) {
-                Text("要調整の基準色", fontSize = 12.sp, textAlign = TextAlign.Center, color = ensureReadable(softBg, Color(0xFFFFFFFF)))
-            }
+        Spacer(Modifier.height(12.dp))
+        Text("未設定の種別に効く基準色", fontSize = 12.sp, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ColorChip(hex = baseHard, label = "必須", custom = ui.violationColorHex.isNotBlank(), enabled = !ui.running) { pickFam = "__hard__" }
+            ColorChip(hex = baseSoft, label = "要調整", custom = ui.violationSoftColorHex.isNotBlank(), enabled = !ui.running) { pickFam = "__soft__" }
         }
     }
     pickFam?.let { pf ->

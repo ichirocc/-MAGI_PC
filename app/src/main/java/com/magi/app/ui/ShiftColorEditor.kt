@@ -86,22 +86,9 @@ fun ShiftColorCard(ui: UiState, vm: MagiViewModel) {
             } else {
                 // [校正] 縦長の一覧をやめ、スウォッチ＋記号のコンパクトなチップを折り返しグリッドに。
                 //   カスタム色は枠色（primary）で「指定」を表現（テキスト列を削減＝冗長解消）。
-                val cs = MaterialTheme.colorScheme
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     shifts.forEach { sc ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                                .border(if (sc.custom) 2.dp else 1.dp, if (sc.custom) cs.primary else cs.outline, MaterialTheme.shapes.medium)
-                                .clickable(enabled = !ui.running) { target = sc.kigou }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                        ) {
-                            Swatch(sc.hex, 24.dp)
-                            Text(sc.kigou, style = MaterialTheme.typography.bodyMedium)
-                        }
+                        ColorChip(hex = sc.hex, label = sc.kigou, custom = sc.custom, enabled = !ui.running) { target = sc.kigou }
                     }
                 }
             }
@@ -118,6 +105,36 @@ fun ShiftColorCard(ui: UiState, vm: MagiViewModel) {
             onReset = { vm.resetShiftColor(kg); target = null },
             onClose = { target = null },
         )
+    }
+}
+
+/**
+ * 色を変える操作の共通の形。**枠＋色見本＋ラベル**で「押すと色が変わる」を形そのものが示す
+ * （説明文で補わない）。同じ操作は同じ形にする＝シフトの表示色と違反種別の色が同一の見た目になり、
+ * 片方だけ形が変わって取り残される事故も起きない。
+ * custom=true（利用者が明示指定した色）は枠を太く primary にして「指定済み」を示す。
+ */
+@Composable
+internal fun ColorChip(
+    hex: String,
+    label: String,
+    custom: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .border(if (custom) 2.dp else 1.dp, if (custom) cs.primary else cs.outline, MaterialTheme.shapes.medium)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Swatch(hex, 24.dp)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
