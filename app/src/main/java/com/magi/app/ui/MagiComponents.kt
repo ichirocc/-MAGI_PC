@@ -143,24 +143,3 @@ fun MagiTagChip(
         }
     }
 }
-
-/** §4.2 セクション見出し（タイトル＋任意のサブ＋右トレーリング）。 */
-@Composable
-fun MagiSectionHeader(
-    title: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    Row(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        trailing?.invoke()
-    }
-}

@@ -6,33 +6,28 @@ package com.magi.app.v6
  *
  * 目的（業務担当者の核心要望）: 「データ問題があっても最適化できるアルゴリズム」。
  * 各制約族の改善を追跡し、INFEAS_STALL_ITERS 反復のあいだ改善が無い族を
- * 「構造的に充足不能（infeasible-likely）」と推定して penalty 上限(maxLam)を縮小
- * （HARD は /8、SOFT は /4）。これにより、満たせない制約に最適化リソースを浪費せず、
- * 達成可能な制約へ集中できる。改善を検出したらフラグは解除（self-correction）。
+ * 「構造的に充足不能（infeasible-likely）」と推定して学習する。改善を検出したら解除（self-correction）。
  *
- * 制約 index（VBA gLam(0..13) と一致）:
- *  0=C1 1=C2 2=C3 3=C3n 4=C3m 5=C3mn 6=C41 7=C42 8=CovU 9=CovO 10=Pref 11=LimMin 12=LimMax 13=Apt
- * HARD 族（V5仕様）: 3=C3n, 8=CovU, 10=Pref（V5_HARD_KEYS と一致）。
+ * **この学習を何に使うか**（3.409.0 で実態へ訂正・3.409.10 で範囲を確定）:
+ *  - `infeasibleBreakdownKeys()` が `runRsi` の `dynamicAvoid` になり、充足困難と学習した族を
+ *    RSI の focus 候補から外す（3.184.0 で HARD のみに限定・3.281.0 でワーカー専属インスタンスを
+ *    エポック横断で共有・3.213.0 で focus 投入量ベースの停滞加算へ）。
+ *  - `infeasibleFamilies()` が `recordInfeasibleScoped` 経由で残存分析（3.288.0）へ供給する。
+ *  - **目的関数の重みには一切触れない**。重みの変更は HF77 該当で、明示の数値指示と
+ *    Evaluator/Delta/C++/checker の4面同時変更が要る。
  *
- * 配線状況（HF77: 実態に合わせて 3.409.0 で訂正。旧コメントは「診断/ログ供給のみ」と書いていたが
- * 実際は探索の focus 選択を動かしている＝読み手が inert と誤解する）:
- *  - **配線済み**: `infeasibleBreakdownKeys()` が `runRsi` の `dynamicAvoid` になり、充足困難と学習した
- *    族を RSI の focus 候補から外す（3.184.0 で HARD のみに限定・3.281.0 でワーカー専属インスタンスを
- *    エポック横断で共有・3.213.0 で focus 投入量ベースの停滞加算へ）。`recordInfeasibleScoped` 経由で
- *    残存分析（3.288.0）にも供給する。
- *  - **未配線（意図的）**: 目的関数の重みそのものには一切触れない。重みの変更は HF77 該当で、
- *    明示の数値指示と Evaluator/Delta/C++/checker の4面同時変更が要る。
+ * [3.409.10] **λ上限(penalty cap)の一式を撤去した**。移植元の VBA は制約ごとの Lagrange 乗数
+ * `gLam(0..13)` を持ち、その上限を infeasible 族について縮小する設計だったが、**この Kotlin エンジンに
+ * `gLam` は存在しない**（固定重み `MirrorKeys.weights` ＋ GLS penalty で動く）。よって `maxLam` は
+ * 存在しない変数の上限を返し、`weightFactor` は「探索スコアへ掛ける係数」を名乗るが、3.213.0 以降の
+ * スコアは `hard*1e9 + soft` の**辞書式パック Long** で、その一部の族だけに 0.125 を掛ける意味が無い。
+ * ＝「まだ配線していない」ではなく**書かれたままでは配線できない**（3.393.0 で撤去した `c3RunMode` と
+ * 同じ、配線すると静かに壊れる種類のスイッチ）。学習の半分だけを残す。
  */
 class Hf63Infeasibility {
     companion object {
         const val INFEAS_STALL_ITERS = 5000        // 不可能性判定の iter 閾値
-        const val INFEAS_HARD_CAP_DIV = 8          // HARD infeas で LAM_MAX/8
-        const val INFEAS_SOFT_CAP_DIV = 4          // SOFT infeas で LAM_MAX/4
-        const val LAM_HARD_MAX_INT = 50000         // HARD λ 上限 = 50 x SCALE
-        const val LAM_SOFT_MAX_INT = 10000         // SOFT λ 上限 = 10 x SCALE
         const val N_CONSTRAINTS = 14
-        const val SENTINEL = 2147483647            // この iter で追跡しない印（Long.MaxValue 相当）
-        val HARD_INDICES = setOf(3, 8, 10)         // c3n, covU, pref
         val CNAMES = listOf(
             "C1", "C2", "C3", "C3n", "C3m", "C3mn", "C41", "C42",
             "CovU", "CovO", "Pref", "LimMin", "LimMax", "Apt",
@@ -79,15 +74,6 @@ class Hf63Infeasibility {
         }
     }
 
-    /** 全14制約を1回で更新（SENTINEL の族はスキップ）。 */
-    fun updateBatch(curvArr: IntArray, gIter: Int) {
-        val n = minOf(N_CONSTRAINTS, curvArr.size)
-        for (c in 0 until n) {
-            if (curvArr[c] == SENTINEL) continue
-            update(c, curvArr[c], gIter)
-        }
-    }
-
     /** UnifiedViolationChecker の breakdown から更新（族→indexへマップ）。
      *  注: 全族の停滞を無差別に加算する旧セマンティクス。focus の概念が無い呼出元
      *  （ViewModel の実行後警告など）用に温存。RSI の focus 選択には
@@ -121,25 +107,7 @@ class Hf63Infeasibility {
         }
     }
 
-    /** 制約 c の動的 penalty 上限（infeasible-likely なら縮小、整数除算）。 */
-    fun maxLam(c: Int): Int {
-        val isHard = c in HARD_INDICES
-        val baseMax = if (isHard) LAM_HARD_MAX_INT else LAM_SOFT_MAX_INT
-        if (c !in 0 until N_CONSTRAINTS || !gInfeasibleLikely[c]) return baseMax
-        val div = if (isHard) INFEAS_HARD_CAP_DIV else INFEAS_SOFT_CAP_DIV
-        return baseMax / div
-    }
-
-    fun maxLamBatch(): IntArray = IntArray(N_CONSTRAINTS) { maxLam(it) }
-
-    /** 探索スコアへ掛ける重み係数（1.0=平常 / infeasible は HARD 0.125・SOFT 0.25）。配線時に使用。 */
-    fun weightFactor(c: Int): Double {
-        if (c !in 0 until N_CONSTRAINTS || !gInfeasibleLikely[c]) return 1.0
-        return if (c in HARD_INDICES) 1.0 / INFEAS_HARD_CAP_DIV else 1.0 / INFEAS_SOFT_CAP_DIV
-    }
-
     fun isInfeasibleLikely(c: Int): Boolean = c in 0 until N_CONSTRAINTS && gInfeasibleLikely[c]
-    fun infeasibleCount(): Int = gInfeasibleLikely.count { it }
 
     /** 構造的に充足不能と推定された制約族名（診断/ログ用）。 */
     fun infeasibleFamilies(): List<String> =

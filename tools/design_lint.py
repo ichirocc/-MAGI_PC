@@ -17,6 +17,7 @@ Compose/Kotlin をコンパイルせずに grep 相当で検出（サンドボ�
                             して扱うため `${'$'}count件` は `count件` という未定義シンボルになる＝必ずビルドが落ちる）
     P6 message severity  : message を書くのに messageIsError を書かない copy(…)
     P7 二重エンコード      : UTF-8 を Latin-1 として読んだ内容を保存した文字化け（追跡中の全テキスト）
+    P8 DS の ✅ 誤表示     : magi_design_system.md が「実装済(✅)」と書いた共通コンポーネントの実在確認
 """
 import os
 import re
@@ -228,12 +229,60 @@ P2_BASELINE = 0
 P4_BASELINE = 0
 
 
+# [3.409.10] P8: `docs/magi_design_system.md` の「✅＝実装済」が実在するかを機械で確かめる。
+#   この ✅ は読み手が「共通コンポーネントが用意されている」と信じる根拠になる（実際 3.409.8 では
+#   ✅ を理由に未使用コンポーネントを残す判断をした）。ところが実測すると 4.4 QuickActionTile と
+#   4.12 MagiCalendarMonthView/DayShiftCell/ShiftEventPill は**コードに存在しない**＝
+#   状態列そのものが信用できなかった。✅ 節の kotlin ブロックに書かれた `fun 名前(` を抜き出し、
+#   実装に同名の関数があるかを突き合わせる（🟡/⬜ は「未実装/一部」の宣言なので対象外）。
+DS_DOC = os.path.join(ROOT, "docs/magi_design_system.md")
+RE_DS_HEAD = re.compile(r"^### (\d+\.\d+) (.*)$")
+RE_DS_FUN = re.compile(r"\bfun ([A-Za-z]\w*)\s*\(")
+
+
+def find_p8():
+    """✅ と書かれた節の kotlin ブロックの関数が実装に存在するか。"""
+    out = []
+    if not os.path.exists(DS_DOC):
+        return out
+    with open(DS_DOC, encoding="utf-8") as fh:
+        lines = fh.read().split("\n")
+    src = []
+    for base, _dirs, files in os.walk(os.path.join(ROOT, "app/src/main/java")):
+        for fn in files:
+            if fn.endswith(".kt"):
+                with open(os.path.join(base, fn), encoding="utf-8") as f:
+                    src.append(f.read())
+    code = "\n".join(src)
+    sec, mark, in_block, n0 = None, False, False, 0
+    for n, line in enumerate(lines, 1):
+        m = RE_DS_HEAD.match(line)
+        if m:
+            # 状態は見出しで**最初に現れた**グリフ（後ろの補足に別のグリフが出ることがある。
+            #   例「⬜（… ✅ を訂正）」＝状態は ⬜。素朴に `"✅" in 見出し` にすると訂正文で誤検出する）。
+            first = min(
+                (m.group(2).index(g), g) for g in ("✅", "🟡", "⬜") if g in m.group(2)
+            )[1] if any(g in m.group(2) for g in ("✅", "🟡", "⬜")) else ""
+            sec, mark, in_block, n0 = m.group(1), (first == "✅"), False, n
+            continue
+        if line.startswith("```"):
+            in_block = not in_block
+            continue
+        if in_block and mark:
+            for fm in RE_DS_FUN.finditer(line):
+                name = fm.group(1)
+                if f"fun {name}(" not in code:
+                    out.append(f"docs/magi_design_system.md:{n0} §{sec} ✅ だが実装に無い: {name}")
+    return out
+
+
 def main():
     strict = "--strict" in sys.argv
     findings = scan()
     findings["P5"] = scan_templates()
     findings["P6"] = find_p6()
     findings["P7"] = find_p7()
+    findings["P8"] = find_p8()
     labels = {
         "P1": "純黒本文/背景 (Color.Black / 0xFF000000)",
         "P2": "生 hex 直書き (Color(0x……)) ※MagiTokens.kt 除く=baseline監視",
@@ -242,18 +291,20 @@ def main():
         "P5": "テンプレート食い込み (変数の直後に日本語＝必ずコンパイルエラー)",
         "P6": "message を書くのに messageIsError を書かない copy(…)（copy は現在値を引き継ぐ＝失敗色が残る）",
         "P7": "二重エンコードの文字化け（UTF-8 を Latin-1 として読んだ内容を保存した状態）",
+        "P8": "magi_design_system.md の ✅（実装済）と実装の食い違い",
     }
     total = sum(len(v) for v in findings.values())
     print("=== MAGI design lint (docs/DESIGN.md P1-P4) ===")
-    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7"):
+    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"):
         hits = findings[key]
         print(f"\n[{key}] {labels[key]}: {len(hits)} 件")
         for h in hits[:40]:
             print(f"    {h}")
         if len(hits) > 40:
             print(f"    …ほか {len(hits) - 40} 件")
-    hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"]) + len(findings["P6"]) + len(findings["P7"])
-    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
+    hard = (len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"])
+            + len(findings["P6"]) + len(findings["P7"]) + len(findings["P8"]))
+    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ+P8DS表示 severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
 
     # [3.409.5] P2/P4 は「baseline 監視」と名乗りながら**baseline を記録していなかった**＝20件増えても
     #   exit 0 で静かに通る。`docs/DESIGN.md` §4 はこれを「禁止事項（machine-checkable）」と呼んでいるのに
@@ -281,6 +332,8 @@ def main():
     if findings["P6"]:
         blockers.append("P6: message を書くなら messageIsError も必ず書いてください（copy は既定値でなく現在値を引き継ぎます）。")
     # P7 は「UTF-8 として妥当なので誰も気づかない」型＝出荷物に入り込む。ここで止める。
+    if findings["P8"]:
+        blockers.append("P8: magi_design_system.md の ✅（実装済）が実装と食い違っています。実装するか、状態を 🟡/⬜ へ直してください。")
     if findings["P7"]:
         blockers.append("P7: 二重エンコードの文字化けです。`text.encode('latin-1').decode('utf-8')` で復号できます（可逆であることを確認してから保存）。")
     if blockers:

@@ -5318,6 +5318,50 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 残した3つを片付ける＝λ上限は「配線できない」と確定／DS の ✅ を機械検査へ（3.409.10）
+
+3.409.8 で「理由つきで残す」とした3つを、**残した理由そのものを検証してから**片付けた。
+結果、3つとも残す理由が成り立たなかった。
+
+### `Hf63Infeasibility` の λ上限（`maxLam`/`maxLamBatch`/`weightFactor`）＝**書かれたままでは配線できない**
+残した根拠は KDoc の「未配線（意図的）」だったが、それは**目的関数の重みに触れない**という別の宣言で、
+λ上限を残す理由にはなっていなかった。調べると:
+- 本番からの呼び出しは `maxLam` 0 / `maxLamBatch` 0 / `weightFactor` 0 / `updateBatch` 0
+  （`isInfeasibleLikely` の19件も**全てテストから**）。live なのは `updateFromBreakdown(Focused)` →
+  `infeasibleFamilies`/`infeasibleBreakdownKeys` の学習側だけ。
+- **決定的な事実**: λ上限が縛るはずの Lagrange 乗数 `gLam` は**このコードベースに存在しない**
+  （grep で KDoc の VBA 参照1件のみ。Kotlin は固定重み `MirrorKeys.weights` ＋ GLS penalty で動く）。
+  さらに `weightFactor` の「探索スコアへ掛ける係数」は、3.213.0 以降のスコアが `hard*1e9 + soft` の
+  **辞書式パック Long** なので、その一部の族だけに 0.125 を掛ける意味が無い。
+  ＝「まだ配線していない」ではなく**配線すると静かに壊れる**（3.393.0 で撤去した `c3RunMode` と同種）。
+- よって λ上限一式（3関数＋`LAM_*`/`INFEAS_*_CAP_DIV`/`HARD_INDICES`/`SENTINEL` と `updateBatch`・
+  `infeasibleCount`）を撤去し、クラス KDoc は**実際にやっていること**から書き直した。
+  テストは λ上限の突合（A=6250/B=50000/C=2500/D=50000）だけ落とし、**学習の判定そのものは全部残す**
+  （`SENTINEL` を使っていた1件は、live な `update` で「一度も投入していない族は flag しない」を表す形へ）。
+
+### `MagiSectionHeader` ＝ 採用されなかった部品なので撤去
+実際の見出しは `CollapsibleSection(title=…)` と、カード内で直接書く `typography.titleMedium`（**51箇所**）。
+約660コミットのあいだ一度も採用されなかった。51箇所を寄せるのは視覚上の利得が無い割に回帰リスクが
+大きい別の判断なので、**部品のほうを撤去**した。
+
+### いちばん重い発見＝**残す根拠にした ✅ が信用できなかった**
+3.409.8 で `MagiSectionHeader` を残した理由は「`magi_design_system.md` §4.2 に ✅ で載っているから」。
+その状態列を全数照合したら、**§4.4 `QuickActionTile` と §4.12 `MagiCalendarMonthView`/`ShiftEventPill` は
+コードに存在しない**のに ✅ だった（月カレンダーは 3.193.0 でユーザー判断により撤去済み・勤務表の実体は
+`MagiFlatGrid`/`FlatCell`）。**誤った ✅ は、次に読む人がそこを確かめ直す機会を奪う**（実際その罠に私が
+かかった）。3件を実態へ訂正したうえで、**`design_lint` に P8 を新設**＝✅ 節の kotlin ブロックに書かれた
+`fun 名前(` が実装に在るかを機械で突き合わせ、無ければ exit 1。
+- **検査自身の欠陥を1つ出荷前に是正**: 初版は見出しに ✅ の文字が含まれるかで状態を判定していたため、
+  「⬜（… ✅ を訂正）」という訂正文まで ✅ と読んでいた。**最初に現れた状態グリフ**を状態とみなす形へ。
+- 教訓#30: ✅ 節へ実在しない `fun MagiNotARealThing` を注入すると P8 が1件で exit 1、本体は exit 0。
+  そもそも**この検査は導入直後に実在の誤り4件を検出**しており（うち2件は私の撤去より前から在った）、
+  発火することは注入以前に実データで確認できている。
+
+- 検証: ホストJVM **508テスト green**（509 − 撤去した `weightFactorReflectsDeprioritization` 1件。
+  他は1件も落ちない＝撤去した API は live 側の検証に使われていなかった）。`design_lint` exit=0。
+  UI 層はホストでコンパイル不可＝括弧均衡（`MagiComponents.kt` は `{}` `()` とも対称に減少）と
+  残存参照0を静的確認。
+
 ## 提示レビュー P0-P3 の照合＝広域ビームのピン合流漏れと停止伝播の回帰（3.409.9）
 
 提示された P0-P3 を1件ずつ実コードへ当てた。**P0 が名指しした対象はこのリポジトリに存在しない**が、

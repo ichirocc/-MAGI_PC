@@ -20,7 +20,7 @@ Apple直コピーではなく **Jetpack Compose / Material 3 に自然に落と�
 | Phase | 内容 | 状況 |
 |---|---|---|
 | A | テーマ整備（色・角丸・タイポ・スペーシング） | ✅ 色/角丸/タイポ（`MainActivity.MagiTheme`） + ✅ `MagiTokens`（spacing/意味色） |
-| B | 共通コンポーネント（カード/タイル/チップ/セグメント/ゲージ/ダイアログ） | 🟡 `QuickActionTile`/`MagiSegmentedControl`/`MagiScoreGauge`/`MagiTagChip`/`MagiSectionHeader`✅ 他⬜ |
+| B | 共通コンポーネント（カード/タイル/チップ/セグメント/ゲージ/ダイアログ） | 🟡 `MagiSegmentedControl`/`MagiScoreGauge`/`MagiTagChip`/`BigStat`/`Affordance.kt`✅ 他⬜（3.409.10 で実測して訂正） |
 | C | 画面反映（ホーム/勤務表/分析/編集/設定） | 🟡 ホーム✅ 勤務表(カレンダー/非色手がかり)✅ 分析(ゲージ)🟡 編集(月次/年次マスター7折りたたみ節)✅ 設定(冗長除去・見出し統一)✅ |
 | D | 画面最適化（横/折りたたみ等） | 対象外（ユーザー指示により非対応） |
 
@@ -142,11 +142,12 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 - onClick 非null時は `Card(onClick=…)`。タップ領域は最小 48dp を侵さない。
 - 既存 `Card(...){ Column(padding(16), spacedBy(12)) }` パターンの置換。
 
-### 4.2 MagiSectionHeader ✅
-```kotlin
-@Composable fun MagiSectionHeader(title: String, subtitle: String? = null, trailing: @Composable (() -> Unit)? = null)
-```
-- title=`titleLarge`、subtitle=`bodySmall`+`onSurfaceVariant`。trailing は右寄せアクション。
+### 4.2 セクション見出し ⬜（`MagiSectionHeader` は 3.409.10 で撤去）
+- 実装はあったが**呼出0のまま採用されなかった**（約660コミット）。実際の見出しは
+  `CollapsibleSection(title=…)`（編集タブの折りたたみ節）と、カード内で直接書く
+  `typography.titleMedium`（51箇所）で成り立っている。使われない部品を「用意されている」と
+  示し続けると、3.409.8 のように**この ✅ を根拠に撤去を見送る**判断を招くため、部品ごと撤去した。
+- 51箇所を共通部品へ寄せるのは、視覚上の利得が無い割に回帰リスクのある大きな改修＝別途の判断。
 
 ### 4.3 MagiStatCard / BigStat 🟡（`BigStat` 実装済 → 名称統一）
 ```kotlin
@@ -155,7 +156,7 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 - value=`displaySmall`(34 Bold)、label=`labelMedium`+`onSurfaceVariant`。
 - accent 指定時は value をその色に。複数並置は `Row{ Modifier.weight(1f) }`。
 
-### 4.4 MagiQuickActionTile ✅（`QuickActionTile` 実装済 → 移設）
+### 4.4 MagiQuickActionTile ⬜（`QuickActionTile` は**存在しない**。3.409.10 で ✅ を訂正）
 ```kotlin
 @Composable fun MagiQuickActionTile(
     icon: ImageVector, title: String, container: Color, onClick: () -> Unit,
@@ -218,7 +219,10 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 ```
 - 丸いカラーチップ（36dp）横並び、選択中はリング。既存 AlertDialog 色ピッカーの置換。
 
-### 4.12 MagiCalendarMonthView / DayShiftCell / ShiftEventPill ✅（最重要・勤務表）
+### 4.12 MagiCalendarMonthView / DayShiftCell / ShiftEventPill ⬜（3.409.10 で ✅ を訂正）
+> 実装はこの形になっていない。勤務表は `MagiFlatGrid`/`FlatCell`（横スクロールの格子）で、
+> 月カレンダー（`StaffCalendarCard`/`CalendarCell`）は **3.193.0 でユーザー判断により撤去**済み。
+> 以下は当時の設計案として残す。
 ```kotlin
 @Composable fun MagiCalendarMonthView(year: Int, month: Int, days: List<DayCell>, onDayClick: (Int) -> Unit)
 data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: Boolean, val shortageNote: String?)

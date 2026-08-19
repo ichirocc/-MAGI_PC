@@ -6,8 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * HF63 の忠実移植検証。Web `HF63.runSelfTest()` の判定値（A=6250 / B=50000 / C=2500 / D=50000）を
- * そのまま再現して固定する。
+ * HF63 の忠実移植検証。移植元 Web `HF63.runSelfTest()` の A〜D シナリオを再現する。
+ *
+ * [3.409.10] 旧版は各シナリオで λ上限（A=6250 / B=50000 / C=2500 / D=50000）も突き合わせていたが、
+ * λ上限一式は**このエンジンに存在しない `gLam` の上限**だったため撤去した（クラス KDoc 参照）。
+ * 残すのは実際に配線されている側＝「停滞で infeasible と学習し、改善で解除する」判定そのもの。
  */
 class Hf63InfeasibilityTest {
 
@@ -17,7 +20,6 @@ class Hf63InfeasibilityTest {
         hf.update(8, 24, 0)        // CovU(HARD) 初回: best=24
         hf.update(8, 24, 5000)     // 5000 iter 改善なし → infeasible 判定
         assertTrue(hf.isInfeasibleLikely(8))
-        assertEquals(6250, hf.maxLam(8))   // 50000 / 8
     }
 
     @Test
@@ -27,7 +29,6 @@ class Hf63InfeasibilityTest {
         hf.update(8, 24, 5000)             // deprioritize
         hf.update(8, 10, 12000)            // 改善検出 → フラグ解除
         assertFalse(hf.isInfeasibleLikely(8))
-        assertEquals(50000, hf.maxLam(8))  // 平常復帰
     }
 
     @Test
@@ -36,7 +37,6 @@ class Hf63InfeasibilityTest {
         hf.update(12, 18, 0)               // LimMax(SOFT) best=18
         hf.update(12, 18, 5000)            // stall → infeasible
         assertTrue(hf.isInfeasibleLikely(12))
-        assertEquals(2500, hf.maxLam(12))  // 10000 / 4
     }
 
     @Test
@@ -46,19 +46,16 @@ class Hf63InfeasibilityTest {
             hf.update(3, 100 - i / 100, i)  // C3n が改善し続ける
         }
         assertFalse(hf.isInfeasibleLikely(3))
-        assertEquals(50000, hf.maxLam(3))   // HARD 平常維持
     }
 
     @Test
-    fun sentinelSkipsUntrackedAndBreakdownMapsFamilies() {
+    fun untrackedFamilyIsNeverFlaggedAndBreakdownMapsFamilies() {
         val hf = Hf63Infeasibility()
-        // covU=8 を停滞させ、c3n=3 は SENTINEL でスキップ
-        val arr = IntArray(Hf63Infeasibility.N_CONSTRAINTS) { Hf63Infeasibility.SENTINEL }
-        arr[8] = 5
-        hf.updateBatch(arr, 0)
-        hf.updateBatch(arr, 5000)
+        // covU=8 だけを停滞させ、c3n=3 には一度も値を与えない（＝追跡しない）
+        hf.update(8, 5, 0)
+        hf.update(8, 5, 5000)
         assertTrue(hf.isInfeasibleLikely(8))
-        assertFalse(hf.isInfeasibleLikely(3))   // SENTINEL のため未追跡
+        assertFalse(hf.isInfeasibleLikely(3))   // 一度も投入していない族は「不能」と推定しない
 
         // breakdown 経由でも covU が追える
         val hf2 = Hf63Infeasibility()
@@ -80,13 +77,6 @@ class Hf63InfeasibilityTest {
         assertFalse("c1" in avoid)   // 改善中の族は回避しない
     }
 
-    @Test
-    fun weightFactorReflectsDeprioritization() {
-        val hf = Hf63Infeasibility()
-        assertEquals(1.0, hf.weightFactor(8), 1e-9)   // 平常
-        hf.update(8, 3, 0); hf.update(8, 3, 5000)
-        assertEquals(0.125, hf.weightFactor(8), 1e-9) // HARD infeasible → 1/8
-    }
     // ---- [レビュー#5 3.213.0] focus 投入量ベースの更新（updateFromBreakdownFocused）----
 
     @Test
