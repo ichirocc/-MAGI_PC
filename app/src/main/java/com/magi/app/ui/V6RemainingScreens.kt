@@ -75,7 +75,10 @@ fun ColorSettingsView(ui: UiState, vm: MagiViewModel) {
                     else -> "#8A979B"   // 情報（族色を設定すればそれが優先）
                 }
                 val count = ui.breakdown[key] ?: 0
-                val label = "${breakdownLabels[key] ?: key}（$sevJp）" + (if (count > 0) " $count件" else "")
+                // [注] 文字列テンプレートで変数の直後に日本語を続けるときは必ず波括弧で囲む。
+                //   Kotlin は日本語を識別子文字として扱うため、囲まないと変数名に食われて未定義シンボルになる
+                //   （3.290.0 で同じ形のコンパイル失敗を踏んでいる）。
+                val label = "${breakdownLabels[key] ?: key}（$sevJp）" + (if (count > 0) " ${count}件" else "")
                 ColorChip(hex = hex, label = label, custom = famHex != null, enabled = !ui.running) { pickFam = key }
             }
         }

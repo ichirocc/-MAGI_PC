@@ -681,12 +681,18 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 onDismissRequest = { wishConfirm = 0 },
                 title = { Text("担当外の希望を含めますか？") },
                 text = { Text("担当できないグループの希望が ${wishConfirm} 件あります。含めて反映すると担当不可の配置になります（違反として検出されます）。") },
+                // [3.398.0] 旧版は「含めて反映」「担当内のみ反映」の2つで、**どちらを押しても勤務表が変わる**のに
+                //   取消のボタンが1つも無かった（外側タップ/戻るでしか抜けられない）。しかも取消の位置
+                //   (dismissButton) に反映が置かれ、押し間違いがそのまま変更になる。すぐ上のCSVダイアログは
+                //   既に「選択肢は confirm 側の列にまとめ、dismiss はキャンセル」の形をとっており、ここだけ
+                //   取り残されていた＝同じ形へ揃える。
                 confirmButton = {
-                    DialogConfirmButton("含めて反映", onClick = { vm.applyWishes(true); wishConfirm = 0 })
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DialogConfirmButton("含めて反映", onClick = { vm.applyWishes(true); wishConfirm = 0 })
+                        DialogDismissButton(onClick = { vm.applyWishes(false); wishConfirm = 0 }, text = "担当内のみ反映")
+                    }
                 },
-                dismissButton = {
-                    DialogDismissButton(onClick = { vm.applyWishes(false); wishConfirm = 0 }, text = "担当内のみ反映")
-                },
+                dismissButton = { DialogDismissButton(onClick = { wishConfirm = 0 }) },
             )
         }
     }
