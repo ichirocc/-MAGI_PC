@@ -1176,4 +1176,22 @@ class V6NativeOptimizerChoiceTest {
         assertEquals("need2 単独定義の需要を埋める", 1, sched[0][0])
         assertEquals("covU が解消する", 0, UnifiedViolationChecker.check(st, sched).breakdown["covU"] ?: 0)
     }
+    // [3.409.4] 実機ログ6本で比を計算して裏取りした値を固定する（パッチのコメントを鵜呑みにしない）。
+    //   健全: 3.402.0 のログ 2,189 worker秒 / 275.007s = 7.96（8ワーカーがほぼ完全に並行）。
+    //   片肺: 3.370.0 のログ 74 worker秒 / 79.593s = 0.93。同ログの離脱行は
+    //         `ワーカー離脱=8/8本が締切前(勝者確定7本@0s…)` ＝ 3.376.0 で撤廃した
+    //         「HARD=0 到達時に残りを即キャンセル」そのもの。この指標なら一目で検出できた。
+    @Test
+    fun observedOuterParallelismSeparatesHealthyFromSingleLaneRuns() {
+        assertEquals(7.96, V6NativeOptimizer.observedOuterParallelism(2_189_000L, 275_007L), 0.01)
+        assertEquals(0.93, V6NativeOptimizer.observedOuterParallelism(74_000L, 79_593L), 0.01)
+    }
+
+    // 0 除算と空サンプルで例外を投げない（診断値なので、壊れるより 0 を返すほうが安全）。
+    @Test
+    fun observedOuterParallelismIsSafeForEmptyOrZeroDurationSamples() {
+        assertEquals(0.0, V6NativeOptimizer.observedOuterParallelism(0L, 100L), 0.0)
+        assertEquals(0.0, V6NativeOptimizer.observedOuterParallelism(100L, 0L), 0.0)
+    }
+
 }

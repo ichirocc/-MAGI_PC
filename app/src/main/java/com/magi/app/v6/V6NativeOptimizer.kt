@@ -609,6 +609,22 @@ object V6NativeOptimizer {
         PolishGate.portfolioRoleChains.coerceIn(1, max(1, cores))
     else 1
 
+    /**
+     * [3.409.4] PORTFOLIO の**外側ワーカー**が壁時計上でどれだけ並行していたかの観測値
+     * （役割別worker秒の合計 ÷ ポートフォリオ本体の経過）。**CPU 使用率でも、仮説内チェーンを
+     * 含む使用コア数でもない。**
+     *
+     * 目的は「8仮説の設定なのに実質1本」で走る片肺化を、入力・端末を跨いだログで一目で見ること。
+     * 実機ログで実際に判別できることを確認済み: 3.402.0 の 2,189s/275.007s = **7.96**（健全）に対し、
+     * 3.370.0 の 74s/79.593s = **0.93**＝同じログの離脱行が
+     * `ワーカー離脱=8/8本が締切前(勝者確定7本@0s…)` で、**3.376.0 で撤廃した「HARD=0 到達時に
+     * 残りを即キャンセルする」機構**そのものだった。つまりこの指標は当時なら即座に検出できた。
+     * そのバグは既に直っているので、前向きの用途は**回帰検出**である。
+     */
+    internal fun observedOuterParallelism(totalWorkerMs: Long, wallElapsedMs: Long): Double =
+        if (totalWorkerMs <= 0L || wallElapsedMs <= 0L) 0.0
+        else totalWorkerMs.toDouble() / wallElapsedMs.toDouble()
+
     private data class AdaptiveWorkerOutcome(
         val elite: Array<IntArray>,
         val report: ViolationReport,
@@ -1100,6 +1116,8 @@ object V6NativeOptimizer {
         val roleTotals = LinkedHashMap<HypothesisEpochRole, Long>()
         for (o in outcomes) for ((r, ms) in o.roleMillis) roleTotals.merge(r, ms, Long::plus)
         val totalWorkerMs = roleTotals.values.sum().coerceAtLeast(1L)
+        // [3.409.4] 外側ワーカーの実効並列度。片肺化（設定8なのに実質1本）を数字1つで検出する。
+        val outerParallelism = observedOuterParallelism(totalWorkerMs, nowMs() - started)
         val budgetNote = roleTotals.entries.sortedByDescending { it.value }.joinToString(" ") { e ->
             "${e.key.name}=${e.value / 1000}s(${e.value * 100 / totalWorkerMs}%)"
         }
@@ -1124,7 +1142,7 @@ object V6NativeOptimizer {
             message = "合計iter=${outcomes.sumOf { it.iterations }} 全体最良更新=${globalImproves.get()}回 / " +
                 "非同期適応仮説 archive=${archive.size()} 圧縮elite=${compressedElites.size} " +
                 "ワーカー解=${outcomes.size}本(相異なる${distinctWorkers}本) 距離=$distanceNote / $exitNote / " +
-                "役割別worker秒(計${totalWorkerMs / 1000}s): $budgetNote / $roleNote" +
+                "役割別worker秒(計${totalWorkerMs / 1000}s・実効外側並列=${"%.2f".format(outerParallelism)}): $budgetNote / $roleNote" +
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
         )
