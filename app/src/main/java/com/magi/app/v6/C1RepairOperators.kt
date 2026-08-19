@@ -23,8 +23,6 @@ internal object C1RepairOperators {
 
     // ---- 共有の読取専用前段（Index / Prefilter） ----
 
-    fun buildIndex(p: Problem, schedule: Array<IntArray>): C1RepairIndex.Index = C1RepairIndex.build(p, schedule)
-
     /** 盤面に c1修復の余地（不足窓）があるか。無ければ全 c1オペレータは no-op（安全にスキップ可）。 */
     fun hasActionableC1(p: Problem, schedule: Array<IntArray>): Boolean =
         C1DeltaPrefilter.hasActionableC1(C1RepairIndex.build(p, schedule))

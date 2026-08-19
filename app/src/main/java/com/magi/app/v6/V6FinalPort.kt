@@ -977,11 +977,4 @@ object V6FinalPort {
             else -> null
         }
     }
-
-    fun buildBusyLogLine(detail: BusyDetail): String = buildString {
-        append(detail.algorithm)
-        if (detail.subtitle.isNotBlank()) append(" — ").append(detail.subtitle)
-        append(" / ").append(detail.problemSize)
-        append(" / ").append(detail.constraintCount)
-    }
 }

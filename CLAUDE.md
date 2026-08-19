@@ -5318,6 +5318,37 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 呼出0の関数6つを撤去＝「4つの編集入口」は最初から3つだった（3.409.8）
+
+呼出0の関数を機械で数えた（`::name` の関数参照も数えて誤検知を除く）。**9件のうち6件を撤去**。
+いちばん重いのは数でなく、そのうち1つが**存在しない前提を3世代にわたって支えていた**こと。
+
+- **`MagiViewModel.cycleCell` は初回インポート（2026-06-17）以来ただの一度も呼ばれていない**
+  （`git log -S` で確認）。にもかかわらず CLAUDE.md は4箇所で「編集は必ず `setCell`/`setCells`/
+  `cycleCell`/`applyFixSuggestion` の4入口を通る」と書き、**3.161.0・3.328.0・3.405.0 の3回が
+  この関数にガードを足していた**。実際の編集入口は**3つ**。
+  **死んだ関数を守ってもガードの網羅は証明されない**ので、この誤りは監査の結論そのものを弱めていた。
+  タップ＝シートを開く（3.120.0/D7）が現行の決定なので、循環トグルの構想は既に上書きされている。
+  過去の記録は当時の作業内容として正しいのでそのまま残し、live なコード内コメント（`setCell` の
+  KDoc）だけ3つへ訂正した。
+- **`V6NativeOptimizer.swapWithinStaff`**（private）は、同じ操作が op==3 の分岐へインライン展開された
+  ときの取り残し。呼び出し側には `// swapWithinStaff` という**存在しない関数を指すコメント**が残って
+  いたので「同一職員の2日入替」へ書き換えた。
+- **`C1RepairOperators.buildIndex`** は1行の委譲で呼出0（兄弟の `hasActionableC1` は `C1RepairIndex.build`
+  を直接呼ぶ）。3.275.0 が謳う「共有前段」の実体は `hasActionableC1` のほうで、この関数は名前だけだった。
+- **`V6FinalPort.buildBusyLogLine`**（`BusyDetail` 自体は live・整形器だけが呼出0）／
+  **`MagiViewModel.setThisMonth`**（3.127.0 で導線が「今月にする」→「来月にする」へ変わった残り。
+  live なのは `setNextMonth`）／**`staffRangeOverrides` + `StaffRangeView`**（型を作るのがその関数だけの
+  自己完結クラスタ＝3.286.0 で撤去した旧「回数設定画面」の孤児 VM クラスタと同じ形）。
+- **残した3つと理由**（次の走査で再検討しなくて済むように記録）:
+  `Hf63Infeasibility.maxLamBatch`/`infeasibleCount` は KDoc が「**未配線（意図的）**＝目的関数の重みには
+  一切触れない」と宣言している面のアクセサ（`weightFactor` も同じ面）。`MagiSectionHeader` は
+  `docs/magi_design_system.md` §4.2 に ✅ で載る共通コンポーネントで、使われていないこと自体は
+  デザインシステムとして異常ではない。
+- 検証: ホストJVM **508テスト green**（テスト数不変＝どれもテストから参照されていなかったことの裏づけ）。
+  `design_lint` exit=0。UI 層はホストでコンパイル不可＝括弧均衡（4ファイルとも `{}` が同数ずつ減る）と
+  残存参照0を静的確認。
+
 ## 族→日本語名の表を、テストできる場所へ（3.409.7）
 
 族を1つ足して `breakdownLabels` へ書き忘れると、**内部キー（"c41s" 等）がそのまま利用者の画面に出る**。

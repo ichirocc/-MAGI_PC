@@ -1485,7 +1485,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // [監査(未レビュー領域再監査) 実バグ修正] running中は currentSchedule が最適化ジョブの sched0 と
         //   同一の配列参照＝ここで in-place 変更すると、完了時の baseReport(旧盤面基準)と食い違うか、
         //   良化採用時に編集が無言で上書き消失する。ジョブ完了まで編集を拒否する（他の直接変異API=
-        //   setCells/cycleCell/applyFixSuggestion も同根のため同じガードを持つ）。
+        //   setCells/applyFixSuggestion も同根のため同じガードを持つ）。
         if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
@@ -1567,32 +1567,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         return out
     }
 
-    fun cycleCell(i: Int, j: Int) {
-        val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
-        val sched = currentSchedule ?: return
-        if (i !in sched.indices || j !in sched[i].indices) return
-        val p = Problem(st)
-        val allowed = p.allowedShiftsForStaff(i)
-        if (allowed.isEmpty()) return
-        val old = sched[i][j]
-        val idx = allowed.indexOf(old)
-        val next = allowed[(idx + 1).floorMod(allowed.size)]
-        pushUndo()
-        sched[i][j] = next
-        currentSchedule = sched
-        state = st.withSchedule(sched)
-        autoSave()
-        _ui.update { it.copy(
-            messageIsError = false,
-            hasResult = true,
-            schedule = sched.map { it.toList() },
-            message = "${st.staff.getOrNull(i)?.name ?: i} / ${j + 1}日 を ${st.shifts.getOrNull(next)?.kigou ?: next} に変更",
-        ) }
-        logOp("I", "編集: ${opNm(i)} ${j + 1}日 → ${opSy(next)}")
-        refreshCheck()
-    }
-
     // [D7撤去] hintReadOnly（読取モードの案内）は読取モード撤去に伴い削除（UI 参照ゼロ）。
 
     // ---- constraint editing (ws3-5) -------------------------------------------
@@ -1635,18 +1609,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---- ws5: 個人別の回数（LimMin/LimMax） staffRange["i,k"]=Range(lo,hi) を編集 ----
-    data class StaffRangeView(val i: Int, val k: Int, val staffName: String, val kigou: String, val lo: String, val hi: String)
-
-    fun staffRangeOverrides(): List<StaffRangeView> {
-        val st = state ?: return emptyList()
-        return st.staffRange.mapNotNull { (key, r) ->
-            val parts = key.split(",")
-            if (parts.size != 2) return@mapNotNull null
-            val i = parts[0].toIntOrNull() ?: return@mapNotNull null
-            val k = parts[1].toIntOrNull() ?: return@mapNotNull null
-            StaffRangeView(i, k, st.staff.getOrNull(i)?.name ?: i.toString(), st.shifts.getOrNull(k)?.kigou ?: k.toString(), r.lo, r.hi)
-        }.sortedWith(compareBy({ it.i }, { it.k }))
-    }
 
     fun setStaffRange(i: Int, k: Int, lo: String, hi: String) {
         val st = state ?: return
@@ -2585,11 +2547,6 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         setMonth(m.year, m.monthValue)
     }
 
-    /** 端末の今月へ設定。 */
-    fun setThisMonth() {
-        val now = java.time.LocalDate.now()
-        setMonth(now.year, now.monthValue)
-    }
     /** [実機指摘] 月末に「来月」の勤務表を作る業務のため、ワンタップは来月が適切。 */
     fun setNextMonth() {
         val next = java.time.LocalDate.now().plusMonths(1)

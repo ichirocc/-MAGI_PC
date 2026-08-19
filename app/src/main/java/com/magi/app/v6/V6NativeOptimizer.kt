@@ -1717,7 +1717,7 @@ object V6NativeOptimizer {
                     var c0i = -1; var c0j = -1; var c0old = -1
                     var c1i = -1; var c1j = -1; var c1old = -1
                     when {
-                        op == 3 && p.S > 0 && p.T >= 2 -> {   // swapWithinStaff
+                        op == 3 && p.S > 0 && p.T >= 2 -> {   // 同一職員の2日入替
                             val i = rng.nextInt(p.S)
                             var ja = rng.nextInt(p.T); var jb = rng.nextInt(p.T)
                             if (ja == jb) jb = (jb + 1) % p.T
@@ -2761,19 +2761,6 @@ object V6NativeOptimizer {
         if (p.wishLocked(i, j)) return
         val allowed = p.allowedShiftsForStaff(i)
         if (allowed.isNotEmpty()) schedule[i][j] = allowed[rng.nextInt(allowed.size)]
-    }
-
-    private fun swapWithinStaff(state: MagiState, schedule: Array<IntArray>, rng: Random) {
-        val p = cachedProblem(state)
-        if (p.S == 0 || p.T < 2) return
-        val i = rng.nextInt(p.S)
-        var a = rng.nextInt(p.T)
-        var b = rng.nextInt(p.T)
-        if (a == b) b = (b + 1) % p.T
-        if (p.wishLocked(i, a) || p.wishLocked(i, b)) return
-        val tmp = schedule[i][a]
-        schedule[i][a] = schedule[i][b]
-        schedule[i][b] = tmp
     }
 
     private fun perturb(state: MagiState, base: Array<IntArray>, rng: Random, strength: Double): Array<IntArray> {
