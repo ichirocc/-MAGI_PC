@@ -116,13 +116,28 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var boardJobToken = 0
 
-    private fun beginBoardJob(label: String): Int {
+    /**
+     * [3.408.0] エンジン実行の通し番号。操作ログ（履歴）と診断ログ（直近1回）を突き合わせるための唯一の鍵。
+     * `activeRunSerial` は「いま実行中の番号」（0＝実行外）で、`logOp` がこれを各行へ刻む。
+     */
+    private var runSerial = 0
+
+    @Volatile private var activeRunSerial = 0
+
+    private fun beginBoardJob(label: String, engineRun: Boolean = false): Int {
         boardJobLabel = label
+        if (engineRun) {
+            runSerial++
+            activeRunSerial = runSerial
+        }
         return ++boardJobToken
     }
 
     private fun endBoardJob(token: Int) {
-        if (token == boardJobToken) boardJobLabel = null
+        if (token == boardJobToken) {
+            boardJobLabel = null
+            activeRunSerial = 0
+        }
     }
 
     /** 画面のメッセージで「何の実行中か」を言うための名前。背景 Worker には名前が無いので既定を返す。 */
@@ -175,7 +190,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ===== 操作ログ（監査）: 追記式・新しい順・時刻/レベル付き =====
-    data class OpLogEntry(val timeMs: Long, val level: String, val message: String)
+    /**
+     * [3.408.0] `run` = そのとき走っていたエンジン実行の通し番号（0＝実行外）。
+     *
+     * 操作ログは**複数回の実行にまたがる履歴**なのに、診断ログは**直近1回ぶん**しか無い。書き出しでは
+     * この2つが同じファイルに連結されるため、実行#1 の「グローバル最良更新」と実行#2 の「全体最良更新=0回」が
+     * **同一実行の自己矛盾**として読めてしまう（実機ログ 2026-08-19 16:09/16:14 の2回実行で実際に起きた。
+     * `globalImproves` 自体は正しい＝ホストJVMで「メッセージ3回＝サマリ3回」を実測して確認済み）。
+     * 番号を持たせて「どの行がどの実行のものか」を機械的に分けられるようにする。
+     */
+    data class OpLogEntry(val timeMs: Long, val level: String, val message: String, val run: Int = 0)
     private val opLog = ArrayDeque<OpLogEntry>()
     // 診断ログの「非圧縮・全文」を保持（画面表示は compressDiagLogs で圧縮、出力はこちらの全文を使う）。
     private var rawDiagLogs: List<String> = emptyList()
@@ -189,6 +213,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * ほぼ必ずこうなるので、書き出したログで最適化を追えないという致命的な穴だった。
      * エンジン実行のときだけここへ退避し、書き出しでは現在の診断と**別セクション**で併記する。
      */
+    /** [3.408.0] `rawDiagLogs` を作った実行の通し番号（0＝実行外の違反チェック等）。書き出しの帰属に使う。 */
+    private var lastDiagSerial = 0
+
+    /** [3.408.0] `lastRunDiagLogs` を作ったエンジン実行の通し番号。 */
+    private var lastRunDiagSerial = 0
+
     private var lastRunDiagLogs: List<String> = emptyList()
     private var lastRunDiagLabel: String = ""
     private var lastRunDiagAtMs: Long = 0L
@@ -200,9 +230,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * 「自分の行がリングから押し出されたのか」を判断する材料なので実装値へ訂正する。
      */
     private fun logOp(level: String, message: String) {
-        opLog.addFirst(OpLogEntry(System.currentTimeMillis(), level, message))
+        opLog.addFirst(OpLogEntry(System.currentTimeMillis(), level, message, activeRunSerial))
         while (opLog.size > 1000) opLog.removeLast()
-        _ui.update { it.copy(opLog = opLog.map { "${opLogFmt.format(java.util.Date(it.timeMs))} [${it.level}] ${it.message}" }) }
+        _ui.update { it.copy(opLog = opLog.map { formatOpLine(it) }) }
+    }
+
+    /** [3.408.0] 実行中の行だけ `#N` を付ける（実行外＝0 は従来どおり無印）。 */
+    private fun formatOpLine(e: OpLogEntry): String {
+        val run = if (e.run > 0) "#${e.run} " else ""
+        return "${opLogFmt.format(java.util.Date(e.timeMs))} [${e.level}] $run${e.message}"
     }
 
     // 操作再現用デコード（現stateを参照。staff/shift一覧は操作中に不変）。
@@ -780,7 +816,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // [3.404.0] 完了時に currentSchedule/state を丸ごと差し替えるので、その間の編集を止める旗を立てる。
         //   旧: `running=true`（画面は全ロック）なのに `optimizeInFlight()` は false のままで、
         //   `setCell` のガードだけ素通り＝編集が完了時に無言で消えていた。
-        val boardToken = beginBoardJob("初期解生成")
+        val boardToken = beginBoardJob("初期解生成", engineRun = true)
         job = viewModelScope.launch {
             try {
                 val res = V6FinalPort.handleSmartInitial(st.withSchedule(sched), allowImpossible = true)
@@ -920,7 +956,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         var lastPhaseLogMs = -10_000L
         val phaseNameLastLogMs = HashMap<String, Long>()   // [3.283.0] 同名フェーズの再ログ抑制（60s窓・スパム対策）
         var lastHardLogMs = -10_000L
-        val boardToken = beginBoardJob("勤務表づくり")   // [3.328.0/3.404.0]
+        val boardToken = beginBoardJob("勤務表づくり", engineRun = true)   // [3.328.0/3.404.0]
         job = viewModelScope.launch {
             // [3.372.0/実機ログ起因] 終端ログ（完了/停止/失敗）を必ず1行残す保証。実機ログ(2026-08-15)で
             //   「最適化 開始」だけあって終端行が無い実行が2件あり、死因を判別できなかった。全経路が
@@ -1188,7 +1224,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, liveSchedule = emptyList(), message = "自動で整えています…") }
         logOp("I", "ソフト研磨 開始 (予算${_ui.value.budgetSec}s)")
         val startMs = System.currentTimeMillis()
-        val boardToken = beginBoardJob("仕上げ最適化")   // [3.328.0/3.404.0]
+        val boardToken = beginBoardJob("仕上げ最適化", engineRun = true)   // [3.328.0/3.404.0]
         job = viewModelScope.launch {
             var terminalLogged = false   // [3.372.0] 終端ログの保証（runV6FullOptimize と同じ理由）
             try {
@@ -2672,8 +2708,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Operator log as a plain-text file (mirrors the Web "ログ出力"). */
+    /** [3.408.0] 実行の帰属表示。0＝実行外（違反チェック等）。 */
+    private fun runTag(serial: Int): String = if (serial > 0) "実行#$serial" else "実行外"
+
     fun exportLogs(): String? {
         val ops = _ui.value.opLog
+        val runsInLog = opLog.map { it.run }.filter { it > 0 }.distinct().sorted()
+        val runSpan = if (runsInLog.isEmpty()) "" else "・実行#${runsInLog.first()}〜#${runsInLog.last()}"
         // 出力は全文（非圧縮）。画面表示は圧縮版だが、監査用にはロスレスの rawDiagLogs を使う。
         val logs = rawDiagLogs.ifEmpty { _ui.value.logs }
         if (ops.isEmpty() && logs.isEmpty()) return null
@@ -2682,9 +2723,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             append("MAGI ログ (Native)  出力: ").append(ts).append('\n')
             append(environmentLine()).append('\n')
             append("状態: ${_ui.value.staff}名/${_ui.value.days}日 ・ 必須=${_ui.value.bestHard} 合計=${_ui.value.totalViolations}\n")
-            append("\n==== 操作ログ（新しい順 ${ops.size}件）====\n")
+            append("\n==== 操作ログ（新しい順 ${ops.size}件$runSpan）====\n")
             ops.forEach { append(it).append('\n') }
-            append("\n==== 診断ログ（全文 ${logs.size}件）====\n")
+            append("\n==== 診断ログ（${runTag(lastDiagSerial)}の全文 ${logs.size}件）====\n")
+            // [3.408.0] 操作ログは履歴・診断ログは直近1回ぶん。実行が2回以上あるとき、両者を続けて読むと
+            //   前の実行の「グローバル最良更新」と直近の「全体最良更新=0回」が同一実行の矛盾に見える。
+            //   どの行がどの実行かは行頭の #N で分かる、と明示する。
+            if (runsInLog.size > 1) {
+                append("※操作ログは複数回の実行を含みます（行頭 #N）。この診断ログは ${runTag(lastDiagSerial)} のものだけです。\n")
+            }
             logs.forEach { append(it).append('\n') }
             // [3.379.0] 最適化のあとに1回でも編集/再チェックすると診断が丸ごと入れ替わるため、
             //   直近のエンジン実行ぶんを別セクションで必ず残す（同一なら重複させない）。
@@ -2692,7 +2739,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             if (run.isNotEmpty() && run !== logs && run != logs) {
                 val at = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.JAPAN)
                     .format(java.util.Date(lastRunDiagAtMs))
-                append("\n==== 直近の$lastRunDiagLabel の診断ログ（$at 時点・全文 ${run.size}件）====\n")
+                append("\n==== 直近の$lastRunDiagLabel の診断ログ（${runTag(lastRunDiagSerial)}・$at 時点・全文 ${run.size}件）====\n")
                 append("※上の診断ログはその後の編集/再チェックで作り直された最新版です。こちらは実行時のもの。\n")
                 run.forEach { append(it).append('\n') }
             }
@@ -2713,9 +2760,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         o.put("satisfactionMeaning", "0-100の進捗スコア（必須・合計違反の減少度）。希望充足率ではありません")
         o.put("opLog", org.json.JSONArray().apply { _ui.value.opLog.forEach { put(it) } })
         o.put("diagLog", org.json.JSONArray().apply { rawDiagLogs.ifEmpty { _ui.value.logs }.forEach { put(it) } })
+        // [3.408.0] 帰属の鍵。opLog の行頭 #N と対応する。これが無いと、複数回実行したあとの書き出しで
+        //   前の実行の「グローバル最良更新」と直近の「全体最良更新=0回」が同一実行の矛盾に見える。
+        o.put("diagRun", lastDiagSerial)
+        o.put("runsInOpLog", org.json.JSONArray().apply { opLog.map { it.run }.filter { it > 0 }.distinct().sorted().forEach { put(it) } })
         // [3.379.0] テキスト版と同じ理由＝最適化後の編集で diagLog は作り直されるため実行時のぶんも残す。
         if (lastRunDiagLogs.isNotEmpty()) {
             o.put("lastRunLabel", lastRunDiagLabel)
+            o.put("lastRunSerial", lastRunDiagSerial)
             o.put("lastRunAt", lastRunDiagAtMs)
             o.put("lastRunDiagLog", org.json.JSONArray().apply { lastRunDiagLogs.forEach { put(it) } })
         }
@@ -3082,10 +3134,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             if (nonCancellable) withContext(NonCancellable) { analyzeParallel(st, schedule, report) }
             else analyzeParallel(st, schedule, report)
         rawDiagLogs = analysis.rawDiagLogs
+        lastDiagSerial = activeRunSerial
         if (runLabel != null) {
             lastRunDiagLogs = analysis.rawDiagLogs
             lastRunDiagLabel = runLabel
             lastRunDiagAtMs = System.currentTimeMillis()
+            lastRunDiagSerial = activeRunSerial
         }
         _ui.update { base -> makeUi(st, schedule, report, analysis, transform(base)) }
     }

@@ -65,6 +65,50 @@ class V6FinalPortTest {
         )
     }
 
+    // [3.408.0/実機ログ 2026-08-19] 並列ワーカーが1本のフェーズ文字列を共有するため
+    //   `lastPhaseChangeMs` が絶えず更新され、フェーズ猶予が**恒久的な拒否権**になっていた
+    //   （実機: 停滞274s・閾値37s・発火なし・未発火の理由「現フェーズ猶予未達(実測0s/7s)」）。
+    //   猶予は遅延であって検知を止める根拠は無い＝閾値の2倍で必ず発火する。
+    @Test fun phaseGraceDelaysButCanNeverVetoForever() {
+        val now = 300_000L
+        val shortStall = 37_500L
+        // フェーズは常に「たった今」始まった状態（並列ワーカーの共有フェーズ名を再現）。
+        val alwaysFreshPhase = now - 1_000L
+
+        // 閾値は超えたが2倍には達していない＝猶予が効いて**まだ**発火しない。
+        assertFalse(
+            "閾値超〜2倍未満のあいだは、フェーズ猶予が発火を遅らせる",
+            V6FinalPort.watchdogStagnationFired(
+                now = now, startMs = 0L, minRunMs = minRunMs,
+                lastPhaseChangeMs = alwaysFreshPhase, phaseGraceMs = phaseGraceMs,
+                lastBestImproveMs = now - shortStall - 1_000L, effStall = shortStall,
+            ),
+        )
+
+        // 2倍を超えたら、フェーズがいくら更新され続けていても発火する。
+        assertTrue(
+            "フェーズ猶予は拒否権ではない＝閾値の2倍で必ず発火する",
+            V6FinalPort.watchdogStagnationFired(
+                now = now, startMs = 0L, minRunMs = minRunMs,
+                lastPhaseChangeMs = alwaysFreshPhase, phaseGraceMs = phaseGraceMs,
+                lastBestImproveMs = now - shortStall * V6FinalPort.STALL_OVERRIDE_FACTOR - 1_000L,
+                effStall = shortStall,
+            ),
+        )
+    }
+
+    // 実機ログそのものの再現: 停滞274s・実効閾値37s・フェーズは常に直近更新。
+    @Test fun realDeviceLogCaseNowFires() {
+        val now = 275_000L
+        assertTrue(
+            V6FinalPort.watchdogStagnationFired(
+                now = now, startMs = 0L, minRunMs = minRunMs,
+                lastPhaseChangeMs = now, phaseGraceMs = 7_000L,   // 実測0s/7s
+                lastBestImproveMs = now - 274_000L, effStall = 37_000L,
+            ),
+        )
+    }
+
     @Test fun doesNotFireWhileImprovementsAreRecent() {
         // 最終改善が effStall 以内なら（フェーズも十分経過していても）発火しない＝品質不変の担保。
         assertFalse(

@@ -121,15 +121,34 @@ object V6FinalPort {
      *  と比較しており、20〜90秒間隔で頻発するフェーズ遷移のたびにタイマがリセットされ続け、270秒という
      *  長い閾値には実質的に一度も到達し得なかった（改善が本当に無くても検知できない）。
      *  本関数は two-condition AND: ①現フェーズ自身が phaseGraceMs 以上経過（起動直後の誤検知防止のみ）
-     *  ②最終改善から effStall 以上経過（フェーズ遷移でリセットしない＝真の頭打ち）。 */
+     *  ②最終改善から effStall 以上経過（フェーズ遷移でリセットしない＝真の頭打ち）。
+     *
+     *  [3.408.0/実機ログで確定・ユーザー指示「フェーズ名を停滞判定に使うべきではない」]
+     *  ①のフェーズ猶予が**並列ワーカーによって恒久的な拒否権になっていた**。適応ポートフォリオの
+     *  8ワーカーは1本のフェーズ文字列を共有するため `lastPhaseChangeMs` が絶えず更新され、①が
+     *  ほぼ真にならない。実機ログ(2026-08-19)は
+     *  「停滞274s・実効閾値37s・発火=なし・未発火の理由=現フェーズ猶予未達(実測0s/7s)」＝
+     *  **275秒まるごと無改善なのに一度も発火しない**という形でこれを記録している。
+     *  フェーズ猶予は「始まったばかりのフェーズを即殺しない」ための**遅延**であって、
+     *  頭打ちの検知そのものを止めてよい根拠は無い。よって①を**遅延に降格**し、
+     *  無改善が閾値の [STALL_OVERRIDE_FACTOR] 倍に達したらフェーズ猶予に関わらず発火する。
+     *
+     *  代償は測ってある: 3.341.1 の実測で早期終了を**外す**と weighted 中央 −3.5%（p≈0.075＝有意でない）
+     *  ＝発火を早めるとごく僅かに品質を落とし、時間と電池を大きく節約する。倍率2は
+     *  「本当に詰まっている run は閾値の2倍まで待つ」保守側の設定。 */
+    internal const val STALL_OVERRIDE_FACTOR = 2
+
     internal fun watchdogStagnationFired(
         now: Long, startMs: Long, minRunMs: Long,
         lastPhaseChangeMs: Long, phaseGraceMs: Long,
         lastBestImproveMs: Long, effStall: Long,
-    ): Boolean =
-        now - startMs > minRunMs &&
-            now - lastPhaseChangeMs > phaseGraceMs &&
-            now - lastBestImproveMs > effStall
+    ): Boolean {
+        if (now - startMs <= minRunMs) return false
+        val stalled = now - lastBestImproveMs
+        if (stalled <= effStall) return false
+        // フェーズ猶予は遅延であって拒否権ではない（並列ワーカーのフェーズ更新で永久に塞がれない）。
+        return now - lastPhaseChangeMs > phaseGraceMs || stalled > effStall * STALL_OVERRIDE_FACTOR
+    }
 
     /** [3.281.0/停滞レビューA] ウォッチドッグの実効停滞閾値の選択を純関数として抽出（ユニットテスト用）。
      *  従来: 「bestHard<=hardFloor(構造的covU床) かつ 非covU HARD=0」のときだけ短い stallHardMs＝
@@ -644,10 +663,14 @@ object V6FinalPort {
                 val reasons = ArrayList<String>()
                 if (tChain1 - startMs <= minRunMs)
                     reasons.add("最短実行未達(実測${(tChain1 - startMs) / 1000}s/${minRunMs / 1000}s)")
-                if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs)
-                    reasons.add("現フェーズ猶予未達(実測${(tChain1 - lastPhaseAtSearchEnd) / 1000}s/${phaseGraceMs / 1000}s" +
-                        "＝並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい)")
                 val effStallForLog = if (kind.startsWith("通常")) stallMs else stallHardMs
+                // [3.408.0] フェーズ猶予は**遅延**に降格した（閾値の STALL_OVERRIDE_FACTOR 倍で上書き発火）
+                //   ので、理由として挙げるのは「まだ上書き倍率にも達していない」ときだけ。
+                if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs &&
+                    tChain1 - lastImp <= effStallForLog * STALL_OVERRIDE_FACTOR)
+                    reasons.add("現フェーズ猶予未達(実測${(tChain1 - lastPhaseAtSearchEnd) / 1000}s/${phaseGraceMs / 1000}s" +
+                        "＝並列ワーカーがフェーズ名を共有し頻繁に更新されるため満たしにくい。停滞が" +
+                        "${effStallForLog * STALL_OVERRIDE_FACTOR / 1000}s に達すれば猶予に関わらず発火する)")
                 if (tChain1 - lastImp <= effStallForLog)
                     reasons.add("停滞が閾値未満(実測${(tChain1 - lastImp) / 1000}s/${effStallForLog / 1000}s)")
                 if (reasons.isEmpty()) "" else "・未発火の理由=${reasons.joinToString("＋")}"
