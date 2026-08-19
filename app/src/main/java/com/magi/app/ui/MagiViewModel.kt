@@ -1406,7 +1406,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   同一の配列参照＝ここで in-place 変更すると、完了時の baseReport(旧盤面基準)と食い違うか、
         //   良化採用時に編集が無言で上書き消失する。ジョブ完了まで編集を拒否する（他の直接変異API=
         //   setCells/cycleCell/applyFixSuggestion も同根のため同じガードを持つ）。
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         if (sched[i][j] == shift) return
@@ -1427,7 +1427,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [プロ一括編集] 複数セル(i,j)を1シフトへ一括設定。Undoは1回・再チェックも1回（keep-best互換）。 */
     fun setCells(cells: Collection<Pair<Int, Int>>, shift: Int) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         var changed = 0
         var first = true
@@ -1487,7 +1487,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cycleCell(i: Int, j: Int) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         if (i !in sched.indices || j !in sched[i].indices) return
         val p = Problem(st)
@@ -2096,6 +2096,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /**
+     * [3.405.0] 盤面セルを編集できない状態なら、理由を出して true を返す。**画面がシートを開く前に
+     * 同じ判定を使う**ためのもの（`setCell` 等が使う文言と1文字も違わないよう同じ定数を読む）。
+     * 旧: セルはいつでもタップでき、シートは「タップで割当を即変更。」と言い切ってから拒否していた＝
+     * **形が約束したことを守れていなかった**。開かなければ約束は嘘にならない。
+     */
+    fun editBlockedNow(): Boolean {
+        if (!optimizeInFlight()) return false
+        _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }
+        return true
+    }
+
+    private fun busyEditMessage(): String = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）"
+
     private fun structuralEditBlocked(): Boolean {
         if (!optimizeInFlight()) return false
         logOp("W", "${busyWhat()}の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")
@@ -2323,7 +2337,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。 */
     fun applyFixSuggestion(s: FixSuggestion) {
         val st = state ?: return
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は編集できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         if (s.ops.isEmpty()) return
         for (op in s.ops) {

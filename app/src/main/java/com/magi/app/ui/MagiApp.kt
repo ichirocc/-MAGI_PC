@@ -429,10 +429,15 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 }
                 1 -> {
                     val openEditor: (Int, Int) -> Unit = { i, j ->
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        editingCell = i to j
-                        // [窓ハイライト③] c1/c3/c3m はどの範囲の違反かをグリッド上でも示す（シート表示中のみ）。
-                        focusRange = vm.violationRange(i, j)?.let { Triple(i, it.first, it.second) }
+                        // [3.405.0] 変えられない状態ならシートを開かない。旧: いつでも開き、シートが
+                        //   「タップで割当を即変更。」と言い切ってから拒否していた＝形が約束したことを
+                        //   守れていなかった。判定と文言は VM 側の1箇所（setCell 等と同じ）に置く。
+                        if (!vm.editBlockedNow()) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            editingCell = i to j
+                            // [窓ハイライト③] c1/c3/c3m はどの範囲の違反かをグリッド上でも示す（シート表示中のみ）。
+                            focusRange = vm.violationRange(i, j)?.let { Triple(i, it.first, it.second) }
+                        }
                     }
                     // [D7] 読取(結果)モードはユーザー判断で撤去（「下書き（直す）モードだけで大丈夫」）。
                     //   勤務表は常に直接編集の1本＝タップで即編集シート。最適化が終わればその結果が
