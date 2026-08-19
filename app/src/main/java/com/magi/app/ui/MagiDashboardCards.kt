@@ -633,7 +633,7 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
  *    どちらの数字なのか読めない。
  *
  * **数字の読み方 [3.327.0 で範囲を訂正]**: 全手数でも改善予測でもない。計測しているのは後処理研磨のうち
- * `V6HotfixPasses` の18パスだけで、`C1JointLns`/`PersonalBalanceJointLns`/`EliteIntegration`/
+ * `V6HotfixPasses` の19パス＋最終LNS 2本だけで、`EliteIntegration`/
  * `C1TemporalFlow`/`CombinatorialRepair` の10箇所と、ピン保護を持たない探索本体(SA/ALNS/LAHC)は計測外。
  * 最大4巡を重複排除せず加算した「計測済みの候補試行数」で、言えるのは
  * 「少なくとも N 回、回数固定だけが却下の理由だった」まで。

@@ -72,8 +72,11 @@ data class V6PostOptimizationResult(
      * **正確な読み方（3.324.0/外部レビューで是正）**:
      *  - 「手の数」ではなく「試行の回数」。巡回研磨は最大4巡するので、同じ手が複数の巡で
      *    数えられうる（重複排除していない）。
-     *  - **全パス横断ではない**。[3.349.0 で 9→18パスへ訂正 → 3.350.0 で最終LNS 2本を追加＝**20パス**]
-     *    `V6HotfixPasses` の18パスに加え、`C1JointLnsPolish` と `PersonalBalanceJointLnsPolish` を計測する。
+     *  - **全パス横断ではない**。[3.349.0 で 9→18パスへ訂正 → 3.350.0 で最終LNS 2本を追加 →
+     *    **3.409.9 で広域ビームの合流漏れを修正＝21パス**]
+     *    `V6HotfixPasses` の19パスに加え、`C1JointLnsPolish` と `PersonalBalanceJointLnsPolish` を計測する。
+     *    （広域ビームは `PinBlockAttribution` を作って返すのに `runPostOptimization` 側の merge だけが
+     *    無く、**この1つだけが終端集計から抜けていた**。他20サイトは元から merge 済み。）
      *    後者2本は却下するだけで一切数えておらず、実データ real_state で **1,898件**（V6HotfixPasses 側の
      *    計測値の30倍以上）が UI から丸ごと抜けていた。配線後の実測は総数 181→**1,617**で、
      *    上位対象も入れ替わる（モニカ/休 が新たに可視化）。
@@ -506,6 +509,9 @@ object V6HotfixPasses {
             val rC1wide = C1RepairOperators.wideBeam(state, work, shouldStop = clusterStop, seed = roundSeed(seed, 0xC1BEAL, round))
             passMs.merge("C1広域ビーム", System.currentTimeMillis() - __t8) { a, b -> a + b }
             work = rC1wide.newSchedule.copy2D(); totalC1 += rC1wide.applied; roundApplied += rC1wide.applied
+            // [3.409.9] 広域ビームは `PinBlockAttribution` を作って返すのに、ここだけ合流を書き忘れていた
+            //   （他20サイトは全て merge 済み＝**この1つだけ**が終端の「回数の固定について」から抜けていた）。
+            rC1wide.pinBlocks?.let { pinBlocksAll.merge(it) }
             if (round == 0) logs.addAll(rC1wide.logs)
 
             // [A2/A3 厳密窓修復] 上記の局所/ビーム系が届かない「別日で連動して初めて解ける多職員手」を、
