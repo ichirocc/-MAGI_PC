@@ -78,7 +78,7 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 W1Field("日数(1-31)", daysText, Modifier.width(130.dp)) { daysText = it }
-                EditRowButton(onClick = { daysText.toIntOrNull()?.let { vm.ws1ResizeDays(it) } }, text = "変更")
+                EditRowButton(onClick = { daysText.toIntOrNull()?.let { vm.ws1ResizeDays(it) } }, enabled = !ui.running, text = "変更")
             }
 
             // --- use2 ---
@@ -99,10 +99,10 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                     verticalAlignment = Alignment.CenterVertically) {
                     Text("${toHankakuKigou(s.kigou)}  ${s.name}  (最低 ${s.need1.ifBlank { "-" }}人 / 上限 ${s.need2.ifBlank { "-" }}人)",
                         fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    EditRowButton(onClick = { dialog = Ws1Dialog.EditShift(k, s.name, s.kigou, s.need1, s.need2) })
+                    EditRowButton(onClick = { dialog = Ws1Dialog.EditShift(k, s.name, s.kigou, s.need1, s.need2) }, enabled = !ui.running)
                     if (v.shifts.size > 1) {
                         Spacer(Modifier.width(6.dp))
-                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("shift", k, "シフト ${toHankakuKigou(s.kigou)}") })
+                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("shift", k, "シフト ${toHankakuKigou(s.kigou)}") }, enabled = !ui.running)
                     }
                 }
             }
@@ -111,8 +111,8 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
             if (v.shifts.size <= 1) {
                 Text("最後の1シフトは削除できません（勤務表のセルが指す先が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
-            AddRowButton("シフト追加", onClick = { dialog = Ws1Dialog.AddShift })
-            AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddShift })   // [⛏12]
+            AddRowButton("シフト追加", onClick = { dialog = Ws1Dialog.AddShift }, enabled = !ui.running)
+            AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddShift }, enabled = !ui.running)   // [⛏12]
             Divider()
 
             // --- groups ---
@@ -130,18 +130,18 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { dialog = Ws1Dialog.EditGroup(g, gr.name, gr.kigou) },
                     verticalAlignment = Alignment.CenterVertically) {
                     Text("${toHankakuKigou(gr.kigou)}  ${gr.name}", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    EditRowButton(onClick = { dialog = Ws1Dialog.EditGroup(g, gr.name, gr.kigou) })
+                    EditRowButton(onClick = { dialog = Ws1Dialog.EditGroup(g, gr.name, gr.kigou) }, enabled = !ui.running)
                     if (vm.ws1CanRemoveGroup(g)) {
                         val members = vm.ws1GroupMemberCount(g)
                         Spacer(Modifier.width(6.dp))
                         DeleteRowButton(onClick = {
                             val label = "グループ ${toHankakuKigou(gr.kigou)}" + if (members > 0) "（所属${members}名→先頭グループへ移動）" else ""
                             dialog = Ws1Dialog.ConfirmDelete("group", g, label)
-                        })
+                        }, enabled = !ui.running)
                     }
                 }
             }
-            AddRowButton("グループ追加", onClick = { dialog = Ws1Dialog.AddGroup })
+            AddRowButton("グループ追加", onClick = { dialog = Ws1Dialog.AddGroup }, enabled = !ui.running)
             Divider()
 
             // --- staff ---
@@ -154,10 +154,10 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { dialog = Ws1Dialog.EditStaff(i, st.name, st.groupIdx) },
                     verticalAlignment = Alignment.CenterVertically) {
                     Text("${st.name}  [グループ $gk]", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    EditRowButton(onClick = { dialog = Ws1Dialog.EditStaff(i, st.name, st.groupIdx) })
+                    EditRowButton(onClick = { dialog = Ws1Dialog.EditStaff(i, st.name, st.groupIdx) }, enabled = !ui.running)
                     if (v.staff.size > 1) {
                         Spacer(Modifier.width(6.dp))
-                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("staff", i, st.name) })
+                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("staff", i, st.name) }, enabled = !ui.running)
                     }
                 }
             }
@@ -165,8 +165,8 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
             if (v.staff.size <= 1) {
                 Text("最後の1名は削除できません（勤務表の行が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
-            AddRowButton("職員追加", onClick = { dialog = Ws1Dialog.AddStaff })
-            AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddStaff })   // [⛏12]
+            AddRowButton("職員追加", onClick = { dialog = Ws1Dialog.AddStaff }, enabled = !ui.running)
+            AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddStaff }, enabled = !ui.running)   // [⛏12]
             Divider()
 
             // --- groupShift bucket ---

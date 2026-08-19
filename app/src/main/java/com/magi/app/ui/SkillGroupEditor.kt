@@ -56,12 +56,12 @@ fun SkillGroupCard(ui: UiState, vm: MagiViewModel) {
             skills.forEachIndexed { g, sg ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("${sg.kigou}  ${sg.name}", fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    EditRowButton(onClick = { dialog = SkillDlg.Edit(g, sg.name, sg.kigou) })
+                    EditRowButton(onClick = { dialog = SkillDlg.Edit(g, sg.name, sg.kigou) }, enabled = !ui.running)
                     Spacer(Modifier.width(6.dp))
-                    DeleteRowButton(onClick = { confirmDelete = g })
+                    DeleteRowButton(onClick = { confirmDelete = g }, enabled = !ui.running)
                 }
             }
-            AddRowButton("スキルグループ追加", onClick = { dialog = SkillDlg.Add })
+            AddRowButton("スキルグループ追加", onClick = { dialog = SkillDlg.Add }, enabled = !ui.running)
 
             if (skills.isNotEmpty()) {
                 Divider()

@@ -276,6 +276,56 @@ def find_p8():
     return out
 
 
+RE_BEGIN_JOB = re.compile(r"\bval (\w+) = beginBoardJob\(")
+RE_MEMBER_FUN = re.compile(r"^ {0,8}(private |internal |public )?(suspend )?fun ")
+
+
+def find_p9():
+    """盤面を差し替えるジョブの取得（beginBoardJob）が finally の解放（endBoardJob）と対になっているか。
+
+    これを外すと **アプリが恒久的に読み取り専用へ固着する**（`optimizeInFlight()` が真のままになり、
+    セル編集・一括シート・Undo/Redo・設定変更のガード14箇所が全部閉じたまま戻らない）。
+    3.333.0／3.382.0／3.404.0 は同じ「旗を立てて確実に戻さない」型を3回踏んでおり、しかも
+    **3回とも呼び出し側の書き忘れ**だった＝ヘルパーの単体テストでは捕まらない（3.338.0 の
+    「不変条件を強制しているのは採否であってガードではない」と同じ構図）。よって機械検査で止める。
+    """
+    hits = []
+    for path in kotlin_files():
+        # [3.409.12] 例外は**読めない種類だけ**を握る。旧案は `io.open` を使いながら io を import して
+        #   おらず、それを広い `except Exception` が飲み込んで**常に0件**になっていた（3.406.0 の P6 で
+        #   同じ失敗を記録したのに再発させた＝広い except は自分のバグを隠す）。
+        try:
+            lines = open(path, encoding="utf-8").read().split("\n")
+        except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+            continue
+        for i, line in enumerate(lines):
+            m = RE_BEGIN_JOB.search(line)
+            if not m:
+                continue
+            var, end_at, depth = m.group(1), None, 0
+            # [3.409.12] 探索は**囲っている関数の中だけ**。全サイトが同じ `boardToken` という名前を
+            #   使うので、単純な前方探索だと「この関数の解放を消しても、次の関数の解放が拾われて
+            #   対になって見える」＝欠陥を注入しても発火しなかった（教訓#30 の実践で判明）。
+            #   波括弧の深さが begin 行より下がった時点＝関数を抜けた、で打ち切る。
+            for j in range(i, len(lines)):
+                if j > i and f"endBoardJob({var})" in lines[j]:
+                    end_at = j
+                    break
+                code = _strip_strings_and_comments(lines[j])
+                depth += code.count("{") - code.count("}")
+                if j > i and depth < 0:
+                    break
+                if j > i and RE_MEMBER_FUN.match(lines[j]):
+                    break
+            rel = os.path.relpath(path, ROOT)
+            if end_at is None:
+                hits.append(f"{rel}:{i + 1}  endBoardJob({var}) が見つかりません（旗が戻らず読み取り専用に固着します）")
+                continue
+            if not any(re.search(r"\bfinally\b", lines[j]) for j in range(i, end_at)):
+                hits.append(f"{rel}:{end_at + 1}  endBoardJob({var}) が finally の外です（例外・停止で旗が戻りません）")
+    return hits
+
+
 def main():
     strict = "--strict" in sys.argv
     findings = scan()
@@ -283,6 +333,7 @@ def main():
     findings["P6"] = find_p6()
     findings["P7"] = find_p7()
     findings["P8"] = find_p8()
+    findings["P9"] = find_p9()
     labels = {
         "P1": "純黒本文/背景 (Color.Black / 0xFF000000)",
         "P2": "生 hex 直書き (Color(0x……)) ※MagiTokens.kt 除く=baseline監視",
@@ -292,10 +343,11 @@ def main():
         "P6": "message を書くのに messageIsError を書かない copy(…)（copy は現在値を引き継ぐ＝失敗色が残る）",
         "P7": "二重エンコードの文字化け（UTF-8 を Latin-1 として読んだ内容を保存した状態）",
         "P8": "magi_design_system.md の ✅（実装済）と実装の食い違い",
+        "P9": "beginBoardJob と finally の endBoardJob が対になっていない（読み取り専用に固着）",
     }
     total = sum(len(v) for v in findings.values())
     print("=== MAGI design lint (docs/DESIGN.md P1-P4) ===")
-    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8"):
+    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"):
         hits = findings[key]
         print(f"\n[{key}] {labels[key]}: {len(hits)} 件")
         for h in hits[:40]:
@@ -303,8 +355,9 @@ def main():
         if len(hits) > 40:
             print(f"    …ほか {len(hits) - 40} 件")
     hard = (len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"])
-            + len(findings["P6"]) + len(findings["P7"]) + len(findings["P8"]))
-    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ+P8DS表示 severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
+            + len(findings["P6"]) + len(findings["P7"]) + len(findings["P8"])
+            + len(findings["P9"]))
+    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ+P8DS表示+P9ジョブ解放 severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
 
     # [3.409.5] P2/P4 は「baseline 監視」と名乗りながら**baseline を記録していなかった**＝20件増えても
     #   exit 0 で静かに通る。`docs/DESIGN.md` §4 はこれを「禁止事項（machine-checkable）」と呼んでいるのに
@@ -334,6 +387,9 @@ def main():
     # P7 は「UTF-8 として妥当なので誰も気づかない」型＝出荷物に入り込む。ここで止める。
     if findings["P8"]:
         blockers.append("P8: magi_design_system.md の ✅（実装済）が実装と食い違っています。実装するか、状態を 🟡/⬜ へ直してください。")
+    # P9 は落ちても例外が出ない＝実機で「何をしても編集できない」として初めて気づく。ここで止める。
+    if findings["P9"]:
+        blockers.append("P9: beginBoardJob には finally の endBoardJob を必ず対にしてください（旗が戻らないとアプリが読み取り専用に固着します）。")
     if findings["P7"]:
         blockers.append("P7: 二重エンコードの文字化けです。`text.encode('latin-1').decode('utf-8')` で復号できます（可逆であることを確認してから保存）。")
     if blockers:

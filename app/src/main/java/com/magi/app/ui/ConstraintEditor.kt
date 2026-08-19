@@ -71,12 +71,12 @@ fun ConstraintsCard(
                     Text("(なし)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     fam.rows.forEachIndexed { idx, row ->
-                        ConstraintRow(row,
+                        ConstraintRow(row, enabled = !ui.running,
                             onEdit = { editTarget = fam.key to idx },
                             onDelete = { vm.removeConstraint(fam.key, idx) })
                     }
                 }
-                AddRowButton("追加", onClick = { addFamily = fam.key })
+                AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)
                 Divider()
             }
         }
@@ -97,18 +97,18 @@ fun ConstraintsCard(
  * 表しているので、同じ操作は同じ形にする。貼り紙は剥がした。
  */
 @Composable
-private fun ConstraintRow(row: String, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(row, fontSize = 12.sp, modifier = Modifier
             .weight(1f)
             .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onEdit)
+            .clickable(enabled = enabled, onClick = onEdit)
             .heightIn(min = 48.dp)
             .wrapContentHeight(Alignment.CenterVertically)
             .padding(horizontal = 4.dp))
-        EditRowButton(onClick = onEdit)
+        EditRowButton(onClick = onEdit, enabled = enabled)
         Spacer(Modifier.width(6.dp))
-        DeleteRowButton(onClick = onDelete)
+        DeleteRowButton(onClick = onDelete, enabled = enabled)
     }
 }
 
@@ -136,12 +136,12 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
                         Text("(なし)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         fam.rows.forEachIndexed { idx, row ->
-                            ConstraintRow(row,
+                            ConstraintRow(row, enabled = !ui.running,
                                 onEdit = { editTarget = fam.key to idx },
                                 onDelete = { vm.removeConstraint(fam.key, idx) })
                         }
                     }
-                    AddRowButton("追加", onClick = { addFamily = fam.key })
+                    AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)
                     Divider()
                 }
             }

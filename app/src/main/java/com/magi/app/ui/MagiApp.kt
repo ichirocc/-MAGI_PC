@@ -784,9 +784,12 @@ internal fun MagiTopBar(ui: UiState, sectionTitle: String = "勤務表") {
                 val label: String; val fg: Color; val bg: Color
                 when {
                     ui.running -> {
-                        // [進捗の見える化] バッジに改善の手応えを添える: hard残あり→⚠数、hard=0→soft改善(init→best)。
+                        // [進捗の見える化] バッジに改善の手応えを添える: hard残あり→必須違反数、hard=0→soft改善(init→best)。
+                        // [3.409.12] 旧は裸の「⚠5」で**その5が何の数かを画面のどこも言っていなかった**
+                        //   （非実行中の枝は 3.396.0 で「必須違反 N」へ揃えたのに、この枝だけ取り残し）。
+                        //   バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉にする。
                         val prog = when {
-                            ui.bestHard > 0L -> " ⚠${ui.bestHard}"
+                            ui.bestHard > 0L -> " 必須${ui.bestHard}"
                             ui.initSoft > 0L && ui.bestSoft in 0 until ui.initSoft -> " ${ui.initSoft}→${ui.bestSoft}"
                             else -> ""
                         }
