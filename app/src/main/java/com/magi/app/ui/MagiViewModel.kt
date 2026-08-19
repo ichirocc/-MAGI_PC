@@ -274,7 +274,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             if (resultUsable) {
                 clearRunMarker()
                 OptimizationWorker.clearFiles(getApplication<Application>())
-                if (state == null) loadAsync(resultTxt, markResult = true)   // initialAssignment が state.schedule を返すため結果が復元される
+                if (state == null) loadAsync(resultTxt, markResult = true, fromRestore = true)   // initialAssignment が state.schedule を返すため結果が復元される
                 logOp("I", "前回のバックグラウンド最適化の結果を反映しました")
             } else {
                 // [#4/C1] 中断時、途中最良解のスナップショットがあれば「途中結果から再開」する。
@@ -292,7 +292,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 if (bgActive) {
                     _ui.update { it.copy(messageIsError = false, running = true, message = "バックグラウンド計算を継続中…（完了時に自動反映）") }
-                    if (state == null && !txt.isNullOrBlank()) loadAsync(txt)
+                    if (state == null && !txt.isNullOrBlank()) loadAsync(txt, fromRestore = true)
                     logOp("I", "バックグラウンド最適化の継続を検知（進捗を購読）")
                 } else {
                 if (marker != null) {
@@ -311,7 +311,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 if (state == null) {
                     // 途中最良解を優先して復元（無ければ自動保存の入力）。
                     val resumeTxt = snapTxt?.takeIf { it.isNotBlank() } ?: txt
-                    if (!resumeTxt.isNullOrBlank()) loadAsync(resumeTxt)
+                    if (!resumeTxt.isNullOrBlank()) loadAsync(resumeTxt, fromRestore = true)
                     if (!snapTxt.isNullOrBlank()) OptimizationWorker.clearFiles(getApplication<Application>())   // 消費後は掃除
                 }
                 }
@@ -418,6 +418,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 state = st0.withSchedule(kept)
                 autoSave()
                 pushReport(state ?: st0, kept, prevReport) { it.copy(
+                    messageIsError = false,
                     running = false, hasResult = true,
                     message = "今回(必須$newHard/合計$newTotal)は前回(必須${prevReport.hard}/合計${prevReport.total})より改善せず。前回の結果を維持しました。",
                 ) }
@@ -435,6 +436,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st0.withSchedule(sched)
         autoSave()
         pushReport(state ?: st0, sched, r.report) { it.copy(
+            messageIsError = false,
             running = false, hasResult = true,
             message = "バックグラウンド最適化 完了: 必須=${r.report.hard} 合計=${r.report.total}",
         ) }
@@ -536,7 +538,18 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         load(seed)
     }
 
-    fun loadAsync(rawJson: String, markResult: Boolean = false) {
+    /**
+     * [3.409.0] 入口ガードを追加。3.404.0 は「完了時に `currentSchedule` と `state` を丸ごと差し替える」
+     * ジョブを3つ（読み込み・CSV取込・初期解生成）名指ししたが、**ここだけガードが無かった**。
+     * `job?.cancel()` は前景ジョブしか止めず（背景の最適化は `OptimizationRepository` 側で走り続ける）、
+     * さらに走行中の最適化の `NonCancellable` な keep-best ハンドラと競合する。頼れるのは
+     * `ui.running` ではない——3.404.0 自身がそれを表示専用へ降格させたため。
+     *
+     * [fromRestore] は**起動時の復元だけ**が渡す。背景実行の最中にアプリが起動して state を復元するのは
+     * 正常な経路なので、ここを塞ぐと退行になる（結果は完了時に `applyBgResult` が別途適用する）。
+     */
+    fun loadAsync(rawJson: String, markResult: Boolean = false, fromRestore: Boolean = false) {
+        if (!fromRestore && runBlockedByInFlight("読み込み")) return
         val json = MojibakeRepair.repair(rawJson)
         // [3.282.0/新領域ログ監査] 旧: 参照比較(`!==`)のため BOM 除去だけの健全なファイルでも毎回
         //   「文字化けを自動修復」と誤警告していた。実際に二重エンコードを復号したときだけ警告し、
@@ -590,6 +603,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         autoSave()
                         pushReport(lp.state, lp.schedule, lp.report) {
                             it.copy(
+                                messageIsError = false,
                                 loaded = true,
                                 running = false,
                                 hasResult = markResult,
@@ -770,6 +784,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val res = V6FinalPort.handleCheck(st, sched)
                 if (seq != checkSeq) return@launch   // [review #6] a newer check started; drop stale result
                 pushReport(st, res.schedule, res.report) { it.copy(
+                    messageIsError = false,
                     // [3.328.0] 最適化が動いていれば実行中のまま。旧: 無条件に false で、
                     //   最適化中の設定編集→検査完了で全ガードが素通りになっていた。
                     running = optimizeInFlight(),
@@ -825,6 +840,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
                 pushReport(state ?: st, res.schedule, res.report, runLabel = "初期解生成") { it.copy(
+                    messageIsError = false,
                     running = false,
                     hasResult = true,
                     elapsedMs = 0,
@@ -1105,6 +1121,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     resultSchedule = kept
                     state = st0.withSchedule(kept)
                     pushReport(state ?: st0, kept, baseReport) { it.copy(
+                        messageIsError = false,
                         running = false,
                         hasResult = true,
                         message = "今回(必須$newHard/合計$newTotal)は前回(必須$baseHard/合計$baseTotal)より改善しませんでした。前回の結果を維持します。",
@@ -1121,6 +1138,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     resultSchedule = res.schedule.copy2D()
                     state = st0.withSchedule(res.schedule)
                     pushReport(state ?: st0, res.schedule, res.report, runLabel = "最適化") { it.copy(
+                        messageIsError = false,
                         running = false,
                         hasResult = true,
                         message = "最適化（${res.phase}）完了: 必須=${res.report.hard} 合計=${res.report.total} (${System.currentTimeMillis() - startMs}ms)",
@@ -1165,12 +1183,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     // 診断(analyzeParallel)が落ちても終端ログだけは必ず残す（原因に依存しない保証）。
                     runCatching {
                         pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
+                            messageIsError = false,
                             running = false,
                             hasResult = true,
                             message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
                         ) }
                     }.onFailure { t ->
                         _ui.update { it.copy(running = false, hasResult = true,
+                            messageIsError = false,
                             message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。") }
                         logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}")
                     }
@@ -1198,12 +1218,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 //   （3.147.0/3.191.0 の「英字符号・内部名を画面に出さない」方針の取り残し）。
                 _ui.update { it.copy(running = false, message = "勤務表をつくれませんでした（$kind）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）", messageIsError = true) }
             } finally {
-                endBoardJob(boardToken)   // [3.328.0/3.404.0] 盤面を差し替えるジョブの終了（正常・停止・失敗すべて）
                 // [3.404.0] 途中経過の盤面を捨てる。旧: 完了時に消さないので、あとで編集して違反チェックが
                 //   走ると（`ui.running` が再び真になり）**前の実行の古い途中経過が現在のものとして出た**。
                 if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }
                 clearRunMarker()  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
                 if (!terminalLogged) logOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
+                // [3.409.0] endBoardJob は**終端ログより後**。旧: 先頭にあったため `activeRunSerial` が
+                //   先に 0 へ戻り、この行だけ「実行外」と刻まれていた＝実行IDを最も必要とする診断
+                //   （原因不明の終了）が、どの実行のものか分からない形で残っていた。
+                endBoardJob(boardToken)   // [3.328.0/3.404.0] 盤面を差し替えるジョブの終了（正常・停止・失敗すべて）
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1247,6 +1270,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 state = st0.withSchedule(finalSched)
                 val gain = baseReport.total - finalReport.total
                 pushReport(state ?: st0, finalSched, finalReport, runLabel = "仕上げ最適化") { it.copy(
+                    messageIsError = false,
                     running = false,
                     hasResult = true,
                     message = if (gain > 0)
@@ -1269,12 +1293,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     state = st0.withSchedule(kept)
                     runCatching {
                         pushReport(state ?: st0, kept, keptReport, nonCancellable = true) { it.copy(
+                            messageIsError = false,
                             running = false,
                             hasResult = true,
                             message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。",
                         ) }
                     }.onFailure { t ->
                         _ui.update { it.copy(running = false, hasResult = true,
+                            messageIsError = false,
                             message = "停止しました。直前の勤務表（必須=${keptReport.hard} 合計=${keptReport.total}）を保持しています。") }
                         logOp("W", "停止時の診断に失敗: ${t.javaClass.simpleName}: ${t.message}")
                     }
@@ -1291,10 +1317,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 terminalLogged = true
                 _ui.update { it.copy(messageIsError = true, running = false, message = "自動整えに失敗: $kind: ${e.message}") }
             } finally {
-                endBoardJob(boardToken)   // [3.328.0/3.404.0]
                 if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }   // [3.404.0]
                 clearRunMarker()   // [監査A8]
                 if (!terminalLogged) logOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）")
+                endBoardJob(boardToken)   // [3.328.0/3.404.0] 終端ログより後（実行IDを刻むため・3.409.0）
                 if (_ui.value.running) _ui.update { it.copy(running = false) }
             }
         }
@@ -1401,6 +1427,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val note = if (oos > 0) "（担当外 ${oos}件含む）" else ""
         logOp(if (oos > 0) "W" else "I", "希望を勤務表へ反映 ${applied}件$note")
         _ui.update { it.copy(
+            messageIsError = false,
             hasResult = true,
             schedule = sched.map { it.toList() },
             message = "希望を反映: ${applied}件$note",
@@ -1469,6 +1496,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st.withSchedule(sched)
         autoSave()
         _ui.update { it.copy(
+            messageIsError = false,
             hasResult = true,
             schedule = sched.map { it.toList() },
             message = "${st.staff.getOrNull(i)?.name ?: i} / ${j + 1}日 を ${st.shifts.getOrNull(shift)?.kigou ?: shift} に変更",
@@ -1496,6 +1524,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st.withSchedule(sched)
         autoSave()
         _ui.update { it.copy(
+            messageIsError = false,
             hasResult = true,
             schedule = sched.map { it.toList() },
             message = "${changed}マスを ${st.shifts.getOrNull(shift)?.kigou ?: shift} に一括変更",
@@ -1555,6 +1584,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st.withSchedule(sched)
         autoSave()
         _ui.update { it.copy(
+            messageIsError = false,
             hasResult = true,
             schedule = sched.map { it.toList() },
             message = "${st.staff.getOrNull(i)?.name ?: i} / ${j + 1}日 を ${st.shifts.getOrNull(next)?.kigou ?: next} に変更",
@@ -2402,6 +2432,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = st.withSchedule(sched)
         autoSave()
         _ui.update { it.copy(
+            messageIsError = false,
             hasResult = true,
             schedule = sched.map { it.toList() },
             fixSuggestions = emptyList(),   // 適用後は候補をクリア（盤面が変わるため再探索を促す）
@@ -2860,6 +2891,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // 取込失敗の明示: 氏名が1件も一致しなければ適用せず、オペレーターに原因を表示する。
                 if (res.matched == 0) {
                     _ui.update { it.copy(
+                        messageIsError = true,
                         running = false,
                         message = "CSV取込失敗: 一致する職員名がありませんでした（0名）。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。",
                     ) }
@@ -2877,6 +2909,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 else
                     "CSV取込完了: ${res.matched}名を更新｜必須=${res.report.hard} 合計=${res.report.total}"
                 pushReport(state ?: st, res.schedule, res.report) { it.copy(
+                    messageIsError = false,
                     running = false,
                     hasResult = true,
                     message = msg,

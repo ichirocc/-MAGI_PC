@@ -21,8 +21,8 @@ android {
         applicationId = "com.magi.app"
         minSdk = 36
         targetSdk = 36
-        versionCode = 580
-        versionName = "3.408.0-run-id-and-watchdog"
+        versionCode = 581
+        versionName = "3.409.0-lint-p6-multiline"
         // [ネイティブ加速] minSdk 36（Android 16+）の実機は arm64 のみ対象で十分。
         //   .so が無い環境でも NativeBridge が false を返し Kotlin パスで全機能が動く。
         ndk { abiFilters += listOf("arm64-v8a") }

@@ -71,20 +71,74 @@ def kotlin_files():
 #   「message を書くなら severity も必ず書く」を機械で強制する。コンパイルは通ってしまうので lint が要る。
 RE_COPY_MESSAGE = re.compile(r"\bcopy\(")
 
+# [3.409.0] 旧実装は「1**物理行**に copy( と message = が揃う」ことを要求しており、複数行に折り返した
+#   `copy(\n  message = ...,\n)` を**丸ごと見落としていた**（実測 19 箇所を素通しして 0 件と報告）。
+#   検査が守るはずの規則を検査自身が守れていない状態＝この repo が繰り返し踏んだ「防具が発火しない」型。
+#   ブロック単位（copy( から括弧が閉じるまで）で見るよう作り直す。
+#   括弧の深さを数える前に**文字列リテラルとコメントを消す**のが肝: message の値には
+#   `"(${System.currentTimeMillis() - startMs}ms)"` のように**閉じない ASCII 括弧**が入りうるし、
+#   `// [3.400.0] 旧: `message = "…"`` のようにコメント内の message= を拾うと誤検出になる（実際に踏んだ）。
+def _strip_strings_and_comments(line):
+    """行から文字列リテラルと行コメントを落とす（括弧の深さと識別子の検出を正しくするため）。"""
+    out = []
+    i = 0
+    n = len(line)
+    while i < n:
+        c = line[i]
+        if c == '"':
+            i += 1
+            while i < n:
+                if line[i] == "\\":
+                    i += 2
+                    continue
+                if line[i] == '"':
+                    i += 1
+                    break
+                i += 1
+            out.append(" ")
+            continue
+        if c == "/" and i + 1 < n and line[i + 1] == "/":
+            break
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+MAX_COPY_BLOCK_LINES = 80   # 走らせすぎないための保険（実データの最長は 27 行）
+
+
 def find_p6():
     hits = []
     for path in kotlin_files():
         # 読めない .kt はここでは起こり得ない（起きたら検査が黙って0件になるので握り潰さない）。
         with open(path, encoding="utf-8") as fh:
             src = fh.read()
-        for n, line in enumerate(src.split("\n"), 1):
-            st = line.strip()
-            if st.startswith("//") or st.startswith("*"):
+        lines = src.split("\n")
+        i = 0
+        while i < len(lines):
+            st = lines[i].strip()
+            if st.startswith("//") or st.startswith("*") or st.startswith("/*"):
+                i += 1
                 continue
-            if not RE_COPY_MESSAGE.search(line):
+            code = _strip_strings_and_comments(lines[i])
+            if not RE_COPY_MESSAGE.search(code):
+                i += 1
                 continue
-            if re.search(r"\bmessage\s*=", line) and "messageIsError" not in line:
-                hits.append("%s:%d" % (path.replace(ROOT + "/", ""), n))
+            # copy( から括弧が閉じるまでをブロックとして集める。
+            depth = 0
+            block = []
+            j = i
+            while j < len(lines) and j - i < MAX_COPY_BLOCK_LINES:
+                c = _strip_strings_and_comments(lines[j])
+                block.append(c)
+                depth += c.count("(") - c.count(")")
+                if depth <= 0:
+                    break
+                j += 1
+            text = "\n".join(block)
+            if re.search(r"\bmessage\s*=", text) and "messageIsError" not in text:
+                hits.append("%s:%d" % (path.replace(ROOT + "/", ""), i + 1))
+            i = j + 1
     return hits
 
 
