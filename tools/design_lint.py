@@ -217,6 +217,13 @@ def scan():
     return findings
 
 
+# [3.409.5] P2/P4 の現状件数。**既存分は許し、増えたら落とす**ラチェットの基準。
+#   2026-08-19 実測（3.409.4 時点）: P2=1（MagiScheduleViews.kt:1506）・P4=12（16dp×2・8dp×10）。
+#   意図して増やすときは、この定数と一緒に「なぜ任意値が要るか」を DESIGN.md へ書く。
+P2_BASELINE = 1
+P4_BASELINE = 12
+
+
 def main():
     strict = "--strict" in sys.argv
     findings = scan()
@@ -243,6 +250,23 @@ def main():
             print(f"    …ほか {len(hits) - 40} 件")
     hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"]) + len(findings["P6"]) + len(findings["P7"])
     print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
+
+    # [3.409.5] P2/P4 は「baseline 監視」と名乗りながら**baseline を記録していなかった**＝20件増えても
+    #   exit 0 で静かに通る。`docs/DESIGN.md` §4 はこれを「禁止事項（machine-checkable）」と呼んでいるのに
+    #   強制されていない状態だった（今回のセッションで P6 に見つけたのと同じ「検査が守れていない」型）。
+    #   既存分は許し、**増えたときだけ落とす**ラチェットにする。減ったら baseline を下げるよう促す
+    #   （下げ忘れると次の増加を見逃す＝ラチェットが緩む）。
+    for key, base in (("P2", P2_BASELINE), ("P4", P4_BASELINE)):
+        n = len(findings[key])
+        if n > base:
+            print(f"{key}: baseline {base} 件 → {n} 件に増えています。"
+                  f"{'色は MagiTokens.kt / MagiTheme の colorScheme ' if key == 'P2' else '角丸は MagiTheme の Shapes(small/medium/large) '}"
+                  f"を使ってください（どうしても必要なら根拠を添えて {key}_BASELINE を更新）。")
+            return 1
+        if n < base:
+            print(f"{key}: baseline {base} 件 → {n} 件に減りました。tools/design_lint.py の "
+                  f"{key}_BASELINE を {n} へ下げてください（下げ忘れると次の増加を見逃します）。")
+            return 1
     # P5 は「様式の逸脱」でなく**確実なコンパイルエラー**なので、--strict でなくても失敗させる。
     if findings["P5"]:
         print("P5: 変数の直後に日本語が続いています。必ず波括弧で囲んでください（例: 「N件」なら {count} を波括弧で）。")
