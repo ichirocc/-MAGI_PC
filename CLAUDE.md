@@ -5318,6 +5318,29 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 死んだ配管の撤去と、生きている配管の配線（3.409.1, ユーザー指示「配管と配線する」「スタブなどを実装する」）
+
+`tools/` を全数点検した。**スタブ・TODO()・未実装は0件**（`TODO()`/`FIXME` の grep はいずれも過去の
+経緯コメントで、実装の穴ではない）。代わりに**動かない配管**が見つかった。
+
+- **[配線] 10ツール中8つが別リポジトリの絶対パス `/home/user/MAGI-ShiftOptimizer/...` を直書き**していた。
+  この repo は `magi7ichiro-fork` なので**実行すると必ず落ちる**。docs は
+  「再生成 `python3 tools/mock_render_operator.py`」と案内しており、**守れない約束**になっていた
+  （3.405.0 の原則はドキュメントにも当てはまる）。生きている5ツール
+  （mock_render 4種・make_launcher_icon）を `__file__` からリポジトリルートを導く形へ配線し、
+  `_REPO` が実際にこの repo を指し出力先ディレクトリが実在することを確認した。
+- **[撤去] Web版前提の3ツールを削除**（`compare_web_native.py`・`native_verify_pdf.py`・
+  `make_updated_report.py`）。**3.393.0 が「Web版は存在しない」として `V6WebCompat` を撤去した際の
+  ツール側の取り残し**。判定の根拠＝①リポジトリに `.html` が1件も無い ②3つとも参照0
+  ③2026-06-17 から2か月間未変更 ④`make_updated_report.py` は死んだブランチ
+  `claude/code-review-0gu5p3 @ 57c0421` に固定され `openpyxl`（未インストール）を要求する。
+- **[docs] 前提を明記**: 残る4つの再生成コマンドに `要 pip install pillow` を添えた
+  （PIL はこのサンドボックスに無く、コマンドだけ書くと再び守れない約束になる）。
+- **[HF77] `Hf63Infeasibility` の配線状況コメントが実態と逆だった**: 「独立モジュール・診断/ログ供給の
+  用途」と書いてあるが、実際は `infeasibleBreakdownKeys()` が `runRsi` の `dynamicAvoid` になり
+  **RSI の focus 選択を動かしている**（3.184.0/3.213.0/3.281.0）。読み手が inert と誤解する。
+  「配線済み（focus 選択）／未配線（目的関数の重み・意図的）」に書き分けた。
+
 ## 検査自身が守れていなかった＝P6 の複数行見落としと、そこに隠れていた3件（3.409.0, /code-review）
 
 `/code-review` の4件を1件ずつ実コードに当て、**4件とも実在**を確認して直した。中心は

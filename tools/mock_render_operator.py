@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os as _os
+_REPO = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 # 思考誘導・指1本・スマホ特化 の完成予想モック（operator_ux.md 用）。トークン忠実・実装ではない。
 from PIL import Image, ImageDraw, ImageFont
 JP = "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"
@@ -90,6 +92,6 @@ def guided_fix():
     nav(d,H,1); return im
 
 screens=[("op_01_home_make",home_make()),("op_02_home_fix",home_fix()),("op_03_guided_fix",guided_fix())]
-import os; D="/home/user/MAGI-ShiftOptimizer/docs/screens"; os.makedirs(D,exist_ok=True)
+import os; D=_os.path.join(_REPO, "docs/screens"); os.makedirs(D,exist_ok=True)
 for n,im in screens: im.save(f"{D}/{n}.png")
 print("WROTE", *[n for n,_ in screens])

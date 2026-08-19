@@ -252,7 +252,7 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 
 
 > 下図は **トークン正確モック**（`MainActivity.kt`/`MagiApp.kt` の実トークンで描画）であり、
-> 実機スクリーンショットではない。`tools/mock_render_dogfood.py` で再生成できる
+> 実機スクリーンショットではない。`tools/mock_render_dogfood.py`（要 `pip install pillow`）で再生成できる
 > （出力先 `docs/screens/`）。運用フロー **初期解 → 手動修正 → 最適化** をたどって検証した版。
 
 | 画面 | 図 |
@@ -365,7 +365,7 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
     - 根拠: Wertheimer (1923) ゲシュタルト原理。
     - 担保: 関連項目はカードで近接配置、同種は同形・同色（違反内訳の重大度別チップ等）。
 
-> 検証: 上記 1–10 を「全画面ドッグフーディング」のチェックリストとして用いる（`tools/mock_render_current.py` でトークン忠実モックを生成して点検）。
+> 検証: 上記 1–10 を「全画面ドッグフーディング」のチェックリストとして用いる（`tools/mock_render_current.py`（要 `pip install pillow`）でトークン忠実モックを生成して点検）。
 
 ---
 

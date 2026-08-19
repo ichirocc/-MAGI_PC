@@ -142,7 +142,7 @@
 
 ## 8. 完成予想（思考誘導ホーム／直すお手伝い）
 
-> トークン忠実モック（実装ではない）。再生成 `python3 tools/mock_render_operator.py`。
+> トークン忠実モック（実装ではない）。再生成 `python3 tools/mock_render_operator.py`（要 `pip install pillow`）。
 
 | 画面 | 図 |
 |---|---|

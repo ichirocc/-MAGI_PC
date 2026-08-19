@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os as _os
+_REPO = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 # プロ編集モード（上級者）完成予想モック。power_user_ux.md 用。トークン忠実・実装ではない。
 from PIL import Image, ImageDraw, ImageFont
 JP="/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"; S=2.75
@@ -98,6 +100,6 @@ def diagnostics():
     cmd2(d,H,"元に戻す","▶ 再最適化"); nav(d,H,3); return im
 
 screens=[("power_01_grid_editor",grid_editor()),("power_02_diagnostics",diagnostics())]
-import os; D="/home/user/MAGI-ShiftOptimizer/docs/screens"; os.makedirs(D,exist_ok=True)
+import os; D=_os.path.join(_REPO, "docs/screens"); os.makedirs(D,exist_ok=True)
 for n,im in screens: im.save(f"{D}/{n}.png")
 print("WROTE",*[n for n,_ in screens])

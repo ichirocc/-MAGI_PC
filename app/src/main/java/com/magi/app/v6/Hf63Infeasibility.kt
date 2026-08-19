@@ -14,9 +14,14 @@ package com.magi.app.v6
  *  0=C1 1=C2 2=C3 3=C3n 4=C3m 5=C3mn 6=C41 7=C42 8=CovU 9=CovO 10=Pref 11=LimMin 12=LimMax 13=Apt
  * HARD 族（V5仕様）: 3=C3n, 8=CovU, 10=Pref（V5_HARD_KEYS と一致）。
  *
- * 注: Web 同様、これは独立モジュール（探索の重み系へは未配線）。ネイティブ engine は
- * 動的重みを持つため、将来 SA のスコアリングへ配線して 5分内の品質改善に使える（要計測）。
- * 現状は「構造的に不能な制約族の検出」を診断/ログへ供給する用途で安全に利用できる。
+ * 配線状況（HF77: 実態に合わせて 3.409.0 で訂正。旧コメントは「診断/ログ供給のみ」と書いていたが
+ * 実際は探索の focus 選択を動かしている＝読み手が inert と誤解する）:
+ *  - **配線済み**: `infeasibleBreakdownKeys()` が `runRsi` の `dynamicAvoid` になり、充足困難と学習した
+ *    族を RSI の focus 候補から外す（3.184.0 で HARD のみに限定・3.281.0 でワーカー専属インスタンスを
+ *    エポック横断で共有・3.213.0 で focus 投入量ベースの停滞加算へ）。`recordInfeasibleScoped` 経由で
+ *    残存分析（3.288.0）にも供給する。
+ *  - **未配線（意図的）**: 目的関数の重みそのものには一切触れない。重みの変更は HF77 該当で、
+ *    明示の数値指示と Evaluator/Delta/C++/checker の4面同時変更が要る。
  */
 class Hf63Infeasibility {
     companion object {

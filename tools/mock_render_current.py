@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os as _os
+_REPO = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 # 現状(本ブランチ実装後)の主要画面のトークン忠実モック。ドッグフーディング用。実装文言・レイアウトに一致させる。
 from PIL import Image, ImageDraw, ImageFont
 import os, math
@@ -352,7 +354,7 @@ def c41s_dialog(d,x,y,w):
     rr(d,x+dp(30)+int((w-dp(52))/2),y,int((w-dp(52))/2),dp(40),10,C["surface"],outline=C["outline"],ow=2); tx(d,x+dp(42)+int((w-dp(52))/2),y+dp(11),"2",14,C["onSurface"]); y+=dp(52)
     dlg_actions(d,x,y,w,"追加")
 
-D="/home/user/MAGI-ShiftOptimizer/tools"
+D=_os.path.join(_REPO, "tools")
 out=[]
 for n,im in [("df_cur_ws1_apt",ws1_apt()),("df_cur_schedule",schedule_view()),("df_cur_analysis",analysis_view()),("df_cur_settings",settings_view()),
              ("df_cur_edit_year",edit_year()),("df_cur_skill_dialog",dialog("スキルグループ追加",skill_dialog,dp(290))),("df_cur_c41s_dialog",dialog("スキル別の回数を追加",c41s_dialog,dp(330)))]:

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
+import os as _os
+_REPO = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 # MAGI ランチャーアイコン（アダプティブ）の前景PNG＋モノクロPNGを各密度で生成し、プレビューも出力。
 # デザイン: 白いカレンダー(青ヘッダ＋綴じタブ) + 3色のシフト行 + 緑の「完成」チェックバッジ。
 # 背景は vector グラデ(別XML)。前景は安全領域(中央72dp)内に配置。座標は108dp系を4倍した432px。
 from PIL import Image, ImageDraw
 import os
 
-RES = "/home/user/MAGI-ShiftOptimizer/app/src/main/res"
+RES = _os.path.join(_REPO, "app/src/main/res")
 SZ = 432  # xxxhdpi (108dp * 4)
 K = SZ / 108.0  # dp -> px
 
@@ -96,10 +98,10 @@ mask = Image.new("L", (SZ, SZ), 0); md = ImageDraw.Draw(mask)
 md.rounded_rectangle([0,0,SZ-1,SZ-1], radius=int(SZ*0.235), fill=255)  # squircle近似
 prev.putalpha(mask)
 prev2 = Image.new("RGBA",(SZ,SZ),(245,245,247,255)); prev2.alpha_composite(prev)
-prev2.convert("RGB").save("/home/user/MAGI-ShiftOptimizer/tools/icon_preview.png")
+prev2.convert("RGB").save(_os.path.join(_REPO, "tools/icon_preview.png"))
 # 円マスク版も
 maskc = Image.new("L",(SZ,SZ),0); ImageDraw.Draw(maskc).ellipse([0,0,SZ-1,SZ-1],fill=255)
 pc = Image.alpha_composite(bg, fg); pc.putalpha(maskc)
 pc2 = Image.new("RGBA",(SZ,SZ),(245,245,247,255)); pc2.alpha_composite(pc)
-pc2.convert("RGB").save("/home/user/MAGI-ShiftOptimizer/tools/icon_preview_round.png")
+pc2.convert("RGB").save(_os.path.join(_REPO, "tools/icon_preview_round.png"))
 print("WROTE foreground+monochrome for", *DENS.keys(), "+ previews")

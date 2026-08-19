@@ -3,7 +3,7 @@
 本書は MAGI（純Kotlin / Jetpack Compose / Material3）の**全画面・主要ポップアップ・メッセージ**を、
 実トークン（`MainActivity.kt` の色・角丸・タイポ）で描いたモック画像とともに定義する。
 
-- 図はトークン正確モック（実機スクショではない）。再生成: `python3 tools/mock_render_dogfood.py`（出力 `docs/screens/`、PDFは `tools/magi_dogfood.pdf`）。
+- 図はトークン正確モック（実機スクショではない）。再生成: `python3 tools/mock_render_dogfood.py`（要 `pip install pillow`。出力 `docs/screens/`、PDFは `tools/magi_dogfood.pdf`）。
 - 設計トークン・コンポーネントAPIの正典は [`magi_design_system.md`](magi_design_system.md)。本書は「画面ごとの目的・オブジェクト・メッセージ・指1本操作」を定義する。
 - 運用フロー: **初期解の生成 → 手動修正 → 最適化**（人事課マネージャー／リーダーの運用）。
 - 共通: 上部 `TopBar`（MAGIバッジ＋状態チップ 配布可/要確認/実行中）、下部 `コマンドバー`（元に戻す＋主要アクション）＋`ナビ`（ホーム/勤務表/編集/分析/設定）。タップ標的は最小48dp。

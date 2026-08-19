@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os as _os
+_REPO = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 # Dogfooding mock of the MAGI operator loop: 初期解 → 手動修正 → 最適化.
 # Token-accurate (colors/radii/type from MainActivity.kt + MagiApp.kt). Not an
 # emulator screenshot — a faithful mock to eyeball one-finger ergonomics and the
@@ -541,7 +543,7 @@ screens = [
     ("11_settings", settings()), ("05_dialog", dialog()), ("12_interrupted", interrupted()),
 ]
 import os
-DOCS = "/home/user/MAGI-ShiftOptimizer/docs/screens"
+DOCS = _os.path.join(_REPO, "docs/screens")
 os.makedirs(DOCS, exist_ok=True)
 paths = []
 for name, im in screens:
@@ -552,7 +554,7 @@ for name, im in screens:
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas as rcanvas
 from reportlab.lib.utils import ImageReader
-pdf_path = "/home/user/MAGI-ShiftOptimizer/tools/magi_dogfood.pdf"
+pdf_path = _os.path.join(_REPO, "tools/magi_dogfood.pdf")
 pw, ph = A4
 c = rcanvas.Canvas(pdf_path, pagesize=A4)
 labels = ["00 未読込（EmptyState）",

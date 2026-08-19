@@ -94,7 +94,7 @@
 
 ## 6. 完成予想（プロ編集モード）
 
-> トークン忠実モック（実装ではない）。再生成 `python3 tools/mock_render_power.py`。
+> トークン忠実モック（実装ではない）。再生成 `python3 tools/mock_render_power.py`（要 `pip install pillow`）。
 
 | 画面 | 図 |
 |---|---|
