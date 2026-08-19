@@ -5227,6 +5227,15 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 次の自然な続きは c2/c41/c42 等の残り soft 族の重み統一（同じ原則で）か、未レビュー領域の精読。
 
 ## スキル / 作業の進め方
+- 画面（`ui/` の Composable）を実装・改修したら **design-review**（`.claude/skills/design-review/SKILL.md`）で
+  規約からの逸脱をレビューする。**`/code-review`（正しさのバグ）とは対象も根拠も違う**＝こちらは
+  `docs/DESIGN.md` / `operator_ux.md` / `screen_spec.md` / `ux_test_checklist.md` / CLAUDE.md の D決定 と
+  `tools/design_lint.py` を根拠に、形・文言・トークン・アクセシビリティ・冗長を見る。severity は
+  MUST/SHOULD/IMO/nits/Q で、**根拠を示せないものは MUST/SHOULD にしない**。D決定(D3〜D8/E5)と HF77 に
+  触れる指摘は severity を付けず `Q` へ落とす。エンジン・重み・採否は対象外。
+  出典は dachi023 氏の gist（Figma+Notion+Storybook 前提）で、この repo にはその3点が無いため
+  **根拠の層をリポジトリ内文書と design_lint へ置き換えて移植**した（design-context は Figma/Notion 取得が
+  本体で、無いと grilling の劣化版になるため移植しない）。
 - 非自明な変更・新機能・仕様判断に着手する前は **grilling**（`.claude/skills/grilling/SKILL.md`）で要件を壁打ちする。作る前に**一問ずつ**容赦なく質問し、各問に**推奨案＋一行根拠**を添え、コードで分かることは**調べてから**聞く。認識が一致したら3〜5行に要約してから着手。「grill」「詰める」「壁打ち」の合図でも発動。MAGI 固有の必須観点（対象実装 / 変更の種類とHF77 / Level Zero不変条件 / 制約系の特定 / 完了条件）はスキル本文を参照。
 
 - (3.145.0, シンプルデザイン融合①=シフト集計の凡例): 実機スクショのシンプルな集計画面を融合する第1歩。
