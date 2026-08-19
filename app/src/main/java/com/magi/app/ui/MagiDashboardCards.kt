@@ -853,15 +853,8 @@ internal fun WeightTableCard() {
 // [3.286.0 冗長性C] RiskChip は dayRisks チップ列の撤去で呼出0となったため削除。
 
 
-/** 内訳の家族キー → 日本語ラベル（BreakdownCard と FixSuggestionCard で共用）。 */
-internal val breakdownLabels: Map<String, String> = mapOf(
-    "groupViol" to "担当外シフト", "pref" to "希望違反", "covU" to "人員不足", "c3n" to "禁止の並び",
-    "low" to "下限割れ", "high" to "上限超過", "apt" to "適切回数のズレ", "fair" to "公平化のズレ", "weekly" to "曜日の偏り",
-    "c1" to "窓の要件", "c2" to "個人の合計", "c3" to "必須の並び", "c3m" to "推奨の並び",
-    "c3mn" to "回避の並び", "c41" to "群のレンジ", "c42" to "群ペア",
-    // [④用語統一] covO は covU「人員不足」/集計凡例「人員過剰」と対にする（旧「過剰な配置」は同じ違反の別名で紛らわしい）。
-    "c41s" to "スキル群のレンジ", "c42s" to "スキル群ペア", "covO" to "人員過剰",
-)
+// [3.409.7] 内訳の家族キー → 日本語ラベル（breakdownLabels）は BreakdownLabels.kt へ移した。
+//   Compose に依存しない表なので、切り出して「MirrorKeys.all と過不足なく一致する」をテストで固定する。
 
 /**
  * [分析→場所] 内訳の家族キー(low/covO/c42 等)から、その違反の「場所」と関係スタッフindexを返す。
