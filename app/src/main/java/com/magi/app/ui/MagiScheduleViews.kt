@@ -127,7 +127,7 @@ internal fun progressSummary(ui: UiState): String {
         //   「69件から3件まで来ている」ことを見せる。initHard は満足度の計算で既に使っており、
         //   ここが最後の未配線だった。
         ui.bestHard > 0L ->
-            if (ui.initHard > ui.bestHard) "必ず守る条件 残り${ui.bestHard}件（開始${ui.initHard}件）" else "必ず守る条件 残り${ui.bestHard}件"
+            if (ui.initHard > ui.bestHard) "必須違反 残り${ui.bestHard}件（開始${ui.initHard}件）" else "必須違反 残り${ui.bestHard}件"
         // [3.396.0] 旧「改善 91% (1900→170)」は、初見の人が「1900 と 170 は何の数？」と聞き返す形だった。
         //   上の必須ありの枝と**同じ並び**（何が・いくつ・開始はいくつ）に揃えて、レイアウトの反復自体が
         //   読み方を教えるようにする。

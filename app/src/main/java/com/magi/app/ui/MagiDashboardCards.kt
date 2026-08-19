@@ -237,7 +237,7 @@ internal fun OperatorNextActionCard(
         }
         !ui.hasResult -> OpNextPlan(cs.primaryContainer, cs.onPrimaryContainer,
             "② ボタンひとつで、勤務表を作ります。",
-            "勤務表をつくる", onMake, true, "初期解を作る（希望・C1を優先した下書き）", onSmartInitial)
+            "勤務表をつくる", onMake, true, "下書きをつくる（希望と窓の要件を先に埋める）", onSmartInitial)
         ui.bestHard == 0L -> OpNextPlan(cs.tertiaryContainer, cs.onTertiaryContainer,
             "③ できました！ そのまま配れます。",
             "印刷・書き出し", onExport, true, "中身を見る", onSchedule)
@@ -309,7 +309,7 @@ internal fun OperatorNextActionCard(
             // 常に再生成できるようにする（元に戻すで取消可能・破壊的でない）。
             if (!ui.running && ui.hasResult) {
                 TextButton(onClick = onSmartInitial, modifier = Modifier.fillMaxWidth()) {
-                    Text("初期解を作り直す（希望・C1優先の下書きに戻す）")
+                    Text("下書きを作り直す（希望と窓の要件を先に埋め直す）")
                 }
             }
         }
@@ -567,7 +567,7 @@ internal fun C1PlateauCard(ui: UiState, onGoEdit: () -> Unit = {}) {
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("窓の要件が残っています（原因未確定）", style = MaterialTheme.typography.titleMedium)
-                Text("残り ${diag.remainingC1} 件。今回の研磨では、この残りについて直し方を試した記録が" +
+                Text("残り ${diag.remainingC1} 件。今回の整えでは、この残りについて直し方を試した記録が" +
                     "残っていません。原因は特定できていません。もう一度つくると記録が取れる場合があります。",
                     style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             }
@@ -656,7 +656,7 @@ internal fun PinFixedImpactCard(
                 style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
             // [3.324.0/外部レビュー] 幅は決め打ちしない（実測で ±1 が良い月と ±3 が良い月があり優劣が
             //   逆転した）。件数の性質も正直に添える。
-            Text("※ 全部の手数ではなく、後処理研磨のうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
+            Text("※ 全部の手数ではなく、仕上げの整えのうち計測できた範囲の試行回数です（同じ手を複数回数えている" +
                 "場合があります）。この数が 0 でも、緩めて変わらないとは限りません。",
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             Text("試すときは、対象の職員とシフト、そして緩める幅を決めて、変更する前と後を見比べてください。",

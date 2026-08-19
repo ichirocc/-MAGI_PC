@@ -822,16 +822,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   別名共有クラス）が起きていた（実機ログ 19:56:41 最適化開始→19:56:48 初期解生成完了 で実証）。
         //   runV6FullOptimize/start/runSoftPolish と同じガードに統一（3.161.0 のセル編集ガードと同方針）。
         if (optimizeInFlight()) {
-            _ui.update { it.copy(messageIsError = false, message = "計算の実行中は初期解を作れません（完了または「やめる」の後にどうぞ）") }
+            _ui.update { it.copy(messageIsError = false, message = "計算の実行中は下書きをつくれません（完了または「やめる」の後にどうぞ）") }
             return
         }
         if (!ensureValidForRun(st, sched)) return
         pushUndo()
-        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, message = "初期解生成中…") }
+        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, message = "下書きをつくっています…") }
         // [3.404.0] 完了時に currentSchedule/state を丸ごと差し替えるので、その間の編集を止める旗を立てる。
         //   旧: `running=true`（画面は全ロック）なのに `optimizeInFlight()` は false のままで、
         //   `setCell` のガードだけ素通り＝編集が完了時に無言で消えていた。
-        val boardToken = beginBoardJob("初期解生成", engineRun = true)
+        val boardToken = beginBoardJob("下書きづくり", engineRun = true)
         job = viewModelScope.launch {
             try {
                 val res = V6FinalPort.handleSmartInitial(st.withSchedule(sched), allowImpossible = true)
@@ -839,25 +839,25 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 autoSave()
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
-                pushReport(state ?: st, res.schedule, res.report, runLabel = "初期解生成") { it.copy(
+                pushReport(state ?: st, res.schedule, res.report, runLabel = "下書きづくり") { it.copy(
                     messageIsError = false,
                     running = false,
                     hasResult = true,
                     elapsedMs = 0,
-                    message = "初期解生成完了: 必須=${res.report.hard} 合計=${res.report.total}",
+                    message = "下書きをつくりました: 必須違反=${res.report.hard} 合計=${res.report.total}",
                 ) }
                 logOp("I", "初期解生成 完了 必須=${res.report.hard} 合計=${res.report.total}")
             } catch (e: CancellationException) {
                 // [3.404.0] 停止・ジョブ上書きを「失敗」と呼ばない（兄弟の refreshCheck 等は分離済みで
                 //   ここだけ取り残されていた＝停止するたび「初期解生成失敗」という誤った文言が出ていた）。
                 logOp("I", "初期解生成 停止")
-                _ui.update { it.copy(messageIsError = false, running = false, message = "初期解生成を停止しました") }
+                _ui.update { it.copy(messageIsError = false, running = false, message = "下書きづくりを停止しました") }
                 throw e
             } catch (e: Throwable) {
                 // [3.271.0] 失敗を操作ログにも残す（旧: message のみ＝書き出したログから消えた実行が
                 //   追跡不能だった。実機ログ解析で「開始したのに完了も停止も無い実行」の死因特定を阻んだ）。
                 logOp("W", "初期解生成 失敗: ${e.javaClass.simpleName}: ${e.message}")
-                _ui.update { it.copy(running = false, message = "初期解を作れませんでした（${e.javaClass.simpleName}）", messageIsError = true) }
+                _ui.update { it.copy(running = false, message = "下書きをつくれませんでした（${e.javaClass.simpleName}）", messageIsError = true) }
             } finally {
                 endBoardJob(boardToken)
             }
@@ -952,7 +952,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         pushUndo()
         val sig = "${_ui.value.budgetSec}|${_ui.value.workers}|${_ui.value.v6Algorithm}|${_ui.value.softPolish}"
         val hint = if (sig == lastSettingsSig && lastResultHard > 0L)
-            "前回と同じ設定での再実行です。最大の未解決は『${lastTopHardFamily ?: "未解決の制約"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
+            "前回と同じ設定での再実行です。いちばん多い必須違反は『${lastTopHardFamily ?: "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
         else null
         lastSettingsSig = sig
         _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "勤務表をつくり始めました") }
