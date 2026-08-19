@@ -1413,6 +1413,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             if (sched[i][dayIndex] == shiftIndex) continue   // すでにそのシフト
             // [監査A5] 実現可能な希望のみ固定扱い（#11①整合: 不可能希望のセルはエンジン同様に可動）。
             if (p.wishLocked(i, dayIndex) && p.wish[i][dayIndex] != shiftIndex) continue
+            // [3.401.0] ここまでは「担当できる・希望で固定されていない」だけの判定で、押しても必須違反が
+            //   減らない候補が混ざっていた。CoverageDiagnosis(3.156.0) が「空き番」と数えるのと同じ2条件を
+            //   足して、**実際に動かせる人だけ**を出す。
+            //   ① 移すと禁止連続(c3n)になる人は出さない。
+            if (p.makesForbiddenRun(sched, i, dayIndex, shiftIndex)) continue
+            //   ② 抜けると元のシフトに穴が空く人は「動かせる人」ではない（玉突きが要る＝この画面の手には余る）。
+            val from = sched[i][dayIndex]
+            if (from in 0 until p.K) {
+                val cnt = (0 until p.S).count { it in sched.indices && dayIndex in sched[it].indices && sched[it][dayIndex] == from }
+                if (p.covUCell(from, dayIndex, cnt - 1) > p.covUCell(from, dayIndex, cnt)) continue
+            }
             val g = st.staff.getOrNull(i)?.groupIdx ?: -1
             out.add(FixCandidate(i, st.staff.getOrNull(i)?.name ?: "#$i", st.groups.getOrNull(g)?.kigou ?: "", sched[i][dayIndex] == rest))
         }

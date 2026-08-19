@@ -112,9 +112,17 @@ import androidx.compose.ui.input.pointer.pointerInput
 internal fun GuidedFixDialog(ui: UiState, vm: MagiViewModel, onDismiss: () -> Unit, onRerun: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val shortfalls = ui.coverageDiag?.shortfalls ?: emptyList()
-    val target = shortfalls.firstOrNull { it.verdict == CoverageVerdict.FIXABLE && it.miss > 0 }
+    // [3.401.0] 旧: target を `verdict == FIXABLE && miss > 0` だけで選び、無条件に「この日に動かせる人が
+    //   います」と断言していた。しかし `verdict` は「担当できる人数 >= 必要数」という**静的判定**で、
+    //   いまの希望・盤面では埋められない枠(blockedNow)も FIXABLE のまま残る（3.344.0 の意図的な区別）。
+    //   その結果、**同じホーム画面の CoverageDiagnosisCard が「いまの希望のままでは埋められません」と
+    //   言っている枠に対して、この画面だけが「動かせる人がいます」と正反対の約束をしていた**。
+    //   押しても必須違反は減らず、何度押しても同じ日が出続ける。→ blockedNow は target にしない。
+    val target = shortfalls.firstOrNull { it.verdict == CoverageVerdict.FIXABLE && it.miss > 0 && !it.blockedNow }
+    val blocked = shortfalls.filter { it.miss > 0 && it.blockedNow && it.verdict != CoverageVerdict.INFEASIBLE }
     val infeasible = shortfalls.filter { it.verdict == CoverageVerdict.INFEASIBLE }
-    val allDone = target == null && infeasible.isEmpty()
+    // blocked を数えないと「直し終わりました！」と言ってしまう（旧より悪い嘘になる）。
+    val allDone = target == null && blocked.isEmpty() && infeasible.isEmpty()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -134,7 +142,9 @@ internal fun GuidedFixDialog(ui: UiState, vm: MagiViewModel, onDismiss: () -> Un
                             vm.shortageFixCandidates(target.dayIndex, target.shiftIndex)
                         }
                         if (cands.isEmpty()) {
-                            Text("いま動かせる人がいません。別の日を見直すか、データを確認してください。", color = cs.error)
+                            // [3.401.0] 汎用の文言でなく、この枠についての診断そのものを出す
+                            //   （なぜ動かせないかは CoverageDiagnosis が既に調べて書いている）。
+                            Text(target.reason, color = cs.error, style = MaterialTheme.typography.bodyMedium)
                         } else {
                             cands.take(8).forEach { c ->
                                 Button(
@@ -157,6 +167,17 @@ internal fun GuidedFixDialog(ui: UiState, vm: MagiViewModel, onDismiss: () -> Un
                                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                         }
                         Text("人を増やすか、担当できるシフトや希望を見直すと直せます。", fontSize = 12.sp, color = cs.onSurfaceVariant)
+                    }
+                    blocked.isNotEmpty() -> {
+                        // [3.401.0] 「動かせる人がいる」枠が無くなったが、埋まっていない枠は残っている状態。
+                        //   ここで「直し終わりました」と言うのが旧実装の嘘だった。診断が調べた理由をそのまま出す。
+                        Text("いまの希望・担当のままでは埋められない日が残っています。", fontWeight = FontWeight.Bold)
+                        blocked.take(4).forEach {
+                            Text("・${it.dayLabel}「${it.shiftSymbol}」：${it.reason}",
+                                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                        Text("もう一度つくっても、この日は同じ結果になります。希望を1件調整するか、担当できるシフトを増やしてください（編集タブ＞月次条件）。",
+                            fontSize = 12.sp, color = cs.onSurfaceVariant)
                     }
                     else -> {
                         Text("人手が足りない日はなくなりました。仕上げにもう一度つくると全体が整います。")
