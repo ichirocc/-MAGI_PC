@@ -1,0 +1,44 @@
+name: Design Lint
+
+# tools/design_lint.py の「コンパイルは通るのに壊れている」検査を CI で走らせる。
+#
+# P5(テンプレート食い込み)・P6(message severity)・P7(二重エンコードの文字化け) は --strict なしでも
+# 非ゼロ終了する＝この3つはジョブを落とす。P1-P4 は baseline 監視（報告のみ）。
+#
+# なぜ CI が要るか: この3つは**サンドボックスでも実機でも静かに通る**。
+#   P5 は UI 層がホストでコンパイルできないため CI 1周まで気づけない（3.290.0/3.397.0 で実際にビルドを落とした）。
+#   P6 はコンパイルが通り、実機で「成功なのに失敗色」として初めて分かる（3.400.0 で作り込んだ）。
+#   P7 は UTF-8 として妥当なので既存のどの検査も素通りし、**同梱アセットが文字化けしたまま出荷**されていた
+#   （3.407.0 で発見・修復。アプリが自分の見本データを読むたび「文字化けを自動修復しました」と警告していた）。
+#
+# python3 のみ＝数秒。SDK/NDK ジョブとは分離する。
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  design-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run design lint (P5/P6/P7 fail the job)
+        shell: bash
+        run: python3 tools/design_lint.py

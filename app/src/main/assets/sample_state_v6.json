@@ -3,147 +3,147 @@
   "endDate": "2025-12-31",
   "shifts": [
     {
-      "name": "ä¼ã¿",
-      "kigou": "ä¼",
+      "name": "休み",
+      "kigou": "休",
       "need1": "",
       "need2": ""
     },
     {
-      "name": "Pï½¼å¤§å¶",
-      "kigou": "Pï½¼",
+      "name": "Pｼ大嶋",
+      "kigou": "Pｼ",
       "need1": "",
       "need2": ""
     },
     {
-      "name": "å¤å¤",
-      "kigou": "Dï¾",
+      "name": "夜勤",
+      "kigou": "Dﾃ",
       "need1": 1,
       "need2": 1
     },
     {
-      "name": "æ©çªA4",
+      "name": "早番A4",
       "kigou": "A4",
       "need1": 1,
       "need2": 1
     },
     {
-      "name": "æ©çªAï½±",
-      "kigou": "Aï½±",
+      "name": "早番Aｱ",
+      "kigou": "Aｱ",
       "need1": 1,
       "need2": 1
     },
     {
-      "name": "Pï¾å²¡ç°",
-      "kigou": "Pï¾",
+      "name": "Pﾅ岡田",
+      "kigou": "Pﾅ",
       "need1": "",
       "need2": ""
     },
     {
-      "name": "éçª",
-      "kigou": "Cï½µ",
+      "name": "遅番",
+      "kigou": "Cｵ",
       "need1": 1,
       "need2": 1
     },
     {
-      "name": "Cï½±",
-      "kigou": "Cï½±",
+      "name": "Cｱ",
+      "kigou": "Cｱ",
       "need1": 1,
       "need2": 1
     },
     {
-      "name": "æ¥å¤",
+      "name": "日勤",
       "kigou": "B4",
       "need1": "",
       "need2": ""
     },
     {
-      "name": "æçµ¦",
-      "kigou": "æ",
+      "name": "有給",
+      "kigou": "有",
       "need1": "",
       "need2": ""
     }
   ],
   "groups": [
     {
-      "name": "ããã©ã³",
+      "name": "ベテラン",
       "kigou": "V"
     },
     {
-      "name": "æ¡ããã©ã³",
-      "kigou": "æ¡"
+      "name": "桐ベテラン",
+      "kigou": "桐"
     },
     {
-      "name": "æ®é",
+      "name": "普通",
       "kigou": "S"
     },
     {
-      "name": "ç ä¿®",
+      "name": "研修",
       "kigou": "SN"
     },
     {
-      "name": "æ°äºº",
+      "name": "新人",
       "kigou": "NE"
     },
     {
-      "name": "å¤§å³¶",
-      "kigou": "Pï½¼"
+      "name": "大島",
+      "kigou": "Pｼ"
     },
     {
-      "name": "å²¡ç°",
-      "kigou": "Pï¾"
+      "name": "岡田",
+      "kigou": "Pﾅ"
     },
     {
-      "name": "æ¡æ¾¤",
+      "name": "桒澤",
       "kigou": "B"
     },
     {
-      "name": "åæ±",
-      "kigou": "å"
+      "name": "吉江",
+      "kigou": "吉"
     },
     {
-      "name": "å¤æ³",
-      "kigou": "å¤"
+      "name": "古泉",
+      "kigou": "古"
     }
   ],
   "staff": [
     {
-      "name": "å¤æ³ å¥ä¸",
+      "name": "古泉 健一",
       "groupIdx": 9
     },
     {
-      "name": "å±±æ¬æå¹¸",
+      "name": "山本昌幸",
       "groupIdx": 0
     },
     {
-      "name": "ç¦æ¾¤ä¿é½",
+      "name": "福澤俊陽",
       "groupIdx": 0
     },
     {
-      "name": "æ¡æ¾¤ç¾å¹¸",
+      "name": "桒澤美幸",
       "groupIdx": 7
     },
     {
-      "name": "ä½è¤ç´ç¾",
+      "name": "佐藤直美",
       "groupIdx": 0
     },
     {
-      "name": "åæ±éè²´",
+      "name": "吉江雄貴",
       "groupIdx": 8
     },
     {
-      "name": "éæ²¢åè¼",
+      "name": "金沢勇輝",
       "groupIdx": 1
     },
     {
-      "name": "å¤§å³¶æ",
+      "name": "大島愛",
       "groupIdx": 5
     },
     {
-      "name": "ã¢ãã«",
+      "name": "モニカ",
       "groupIdx": 3
     },
     {
-      "name": "ã¢ãªã",
+      "name": "アリフ",
       "groupIdx": 2
     }
   ],
@@ -395,35 +395,35 @@
   "cons1": [
     {
       "day1": 5,
-      "shiftKigou": "ä¼",
+      "shiftKigou": "休",
       "day2": 1
     },
     {
       "day1": 14,
-      "shiftKigou": "ä¼",
+      "shiftKigou": "休",
       "day2": 4
     }
   ],
   "cons2": [
     {
-      "shiftKigou": "æ",
+      "shiftKigou": "有",
       "count": 1
     }
   ],
   "cons3": [
     {
       "pattern": [
-        "Dï¾",
-        "Dï¾",
-        "Dï¾",
+        "Dﾃ",
+        "Dﾃ",
+        "Dﾃ",
         "",
         ""
       ]
     },
     {
       "pattern": [
-        "ä¼",
-        "ä¼",
+        "休",
+        "休",
         "",
         "",
         ""
@@ -433,7 +433,7 @@
   "cons3n": [
     {
       "pattern": [
-        "Dï¾",
+        "Dﾃ",
         "B4",
         "",
         "",
@@ -442,7 +442,7 @@
     },
     {
       "pattern": [
-        "Dï¾",
+        "Dﾃ",
         "A4",
         "",
         "",
@@ -451,8 +451,8 @@
     },
     {
       "pattern": [
-        "Dï¾",
-        "Aï½±",
+        "Dﾃ",
+        "Aｱ",
         "",
         "",
         ""
@@ -460,8 +460,8 @@
     },
     {
       "pattern": [
-        "Dï¾",
-        "Cï½µ",
+        "Dﾃ",
+        "Cｵ",
         "",
         "",
         ""
@@ -469,7 +469,7 @@
     },
     {
       "pattern": [
-        "Dï¾",
+        "Dﾃ",
         "A4",
         "",
         "",
@@ -478,8 +478,8 @@
     },
     {
       "pattern": [
-        "Dï¾",
-        "æ",
+        "Dﾃ",
+        "有",
         "",
         "",
         ""
@@ -487,8 +487,8 @@
     },
     {
       "pattern": [
-        "Dï¾",
-        "Cï½±",
+        "Dﾃ",
+        "Cｱ",
         "",
         "",
         ""
@@ -496,7 +496,7 @@
     },
     {
       "pattern": [
-        "Cï½µ",
+        "Cｵ",
         "A4",
         "",
         "",
@@ -505,8 +505,8 @@
     },
     {
       "pattern": [
-        "Cï½µ",
-        "Aï½±",
+        "Cｵ",
+        "Aｱ",
         "",
         "",
         ""
@@ -514,7 +514,7 @@
     },
     {
       "pattern": [
-        "Cï½±",
+        "Cｱ",
         "A4",
         "",
         "",
@@ -523,8 +523,8 @@
     },
     {
       "pattern": [
-        "Cï½±",
-        "Aï½±",
+        "Cｱ",
+        "Aｱ",
         "",
         "",
         ""
@@ -534,8 +534,8 @@
   "cons3m": [
     {
       "pattern": [
-        "Cï½µ",
-        "Dï¾",
+        "Cｵ",
+        "Dﾃ",
         "",
         "",
         ""
@@ -545,8 +545,8 @@
   "cons3mn": [
     {
       "pattern": [
-        "Cï½µ",
-        "Aï½±",
+        "Cｵ",
+        "Aｱ",
         "",
         "",
         ""
@@ -558,44 +558,44 @@
     {
       "g1Kigou": "SN",
       "g2Kigou": "NE",
-      "s1Kigou": "Cï½µ",
-      "s2Kigou": "Cï½µ"
+      "s1Kigou": "Cｵ",
+      "s2Kigou": "Cｵ"
     },
     {
-      "g1Kigou": "å",
-      "g2Kigou": "å¤",
+      "g1Kigou": "吉",
+      "g2Kigou": "古",
       "s1Kigou": "A4",
       "s2Kigou": "A4"
     },
     {
-      "g1Kigou": "å",
-      "g2Kigou": "å¤",
-      "s1Kigou": "ä¼",
-      "s2Kigou": "ä¼"
+      "g1Kigou": "吉",
+      "g2Kigou": "古",
+      "s1Kigou": "休",
+      "s2Kigou": "休"
     },
     {
       "g1Kigou": "SN",
       "g2Kigou": "S",
-      "s1Kigou": "Cï½µ",
-      "s2Kigou": "Cï½µ"
+      "s1Kigou": "Cｵ",
+      "s2Kigou": "Cｵ"
     },
     {
       "g1Kigou": "NE",
       "g2Kigou": "S",
-      "s1Kigou": "Cï½µ",
-      "s2Kigou": "Cï½µ"
+      "s1Kigou": "Cｵ",
+      "s2Kigou": "Cｵ"
     },
     {
-      "g1Kigou": "å",
-      "g2Kigou": "å¤",
-      "s1Kigou": "Dï¾",
-      "s2Kigou": "ä¼"
+      "g1Kigou": "吉",
+      "g2Kigou": "古",
+      "s1Kigou": "Dﾃ",
+      "s2Kigou": "休"
     },
     {
-      "g1Kigou": "å",
-      "g2Kigou": "å¤",
-      "s1Kigou": "ä¼",
-      "s2Kigou": "Dï¾"
+      "g1Kigou": "吉",
+      "g2Kigou": "古",
+      "s1Kigou": "休",
+      "s2Kigou": "Dﾃ"
     }
   ],
   "wishes": {
@@ -1238,7 +1238,7 @@
   "countViolations": {},
   "lastResult": {
     "score": null,
-    "note": "V6 xlsm ããã­ã¼ãæ¸ã¿ ï¼ååæé©åçµæï¼"
+    "note": "V6 xlsm からロード済み （前回最適化結果）"
   },
   "lastPhase": "imported"
 }

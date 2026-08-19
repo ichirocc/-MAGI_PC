@@ -15,9 +15,12 @@ Compose/Kotlin をコンパイルせずに grep 相当で検出（サンドボ�
     P4 任意角丸          : ui/*.kt の RoundedCornerShape(<dp>) 直書き（pill=999/CircleShape は除外）
     P5 テンプレート食い込み: 文字列テンプレートで変数の直後に日本語が続く（Kotlin は日本語を識別子文字と
                             して扱うため `${'$'}count件` は `count件` という未定義シンボルになる＝必ずビルドが落ちる）
+    P6 message severity  : message を書くのに messageIsError を書かない copy(…)
+    P7 二重エンコード      : UTF-8 を Latin-1 として読んだ内容を保存した文字化け（追跡中の全テキスト）
 """
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 
@@ -86,6 +89,40 @@ def find_p6():
 
 
 
+# [P7] 二重エンコードの文字化け（UTF-8 を Latin-1/CP1252 として読んだ結果を再び UTF-8 で保存した状態）。
+#   同梱の見本データ `assets/sample_state_v6.json` が実際にこの状態で出荷されており、アプリは自分の
+#   asset を読むたび「文字化けを自動修復しました」と警告していた（3.407.0 で修復）。UTF-8 として妥当な
+#   ため既存の検査は素通りする＝専用の検出が要る。判定は「U+00C0-U+00FF の直後に U+0080-U+00BF が続く」
+#   ＝日本語(U+3000+)には当たらず、正規のラテン文字にもまず現れない並び。
+_MOJIBAKE_LEAD = set(range(0x00C0, 0x0100))
+_MOJIBAKE_TAIL = set(range(0x0080, 0x00C0))
+# 文字化けの例をわざと本文に持つファイル（修復ロジック本体とそのテスト）は対象外。
+MOJIBAKE_EXEMPT = (
+    "app/src/main/java/com/magi/app/model/MojibakeRepair.kt",
+    "app/src/test/java/com/magi/app/model/MojibakeRepairTest.kt",
+)
+
+
+def tracked_text_files():
+    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout.split()
+    return [f for f in out if not f.startswith(MOJIBAKE_EXEMPT)]
+
+
+def find_p7():
+    hits = []
+    for rel in tracked_text_files():
+        try:
+            src = open(os.path.join(ROOT, rel), encoding="utf-8").read()
+        except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+            continue
+        for n, line in enumerate(src.split("\n"), 1):
+            for i in range(len(line) - 1):
+                if ord(line[i]) in _MOJIBAKE_LEAD and ord(line[i + 1]) in _MOJIBAKE_TAIL:
+                    hits.append("%s:%d" % (rel, n))
+                    break
+    return hits
+
+
 def scan_templates():
     hits = []
     for path in kotlin_files():
@@ -131,6 +168,7 @@ def main():
     findings = scan()
     findings["P5"] = scan_templates()
     findings["P6"] = find_p6()
+    findings["P7"] = find_p7()
     labels = {
         "P1": "純黒本文/背景 (Color.Black / 0xFF000000)",
         "P2": "生 hex 直書き (Color(0x……)) ※MagiTokens.kt 除く=baseline監視",
@@ -138,17 +176,18 @@ def main():
         "P4": "任意角丸 (RoundedCornerShape(<dp>)) ※999=pill 除外",
         "P5": "テンプレート食い込み (変数の直後に日本語＝必ずコンパイルエラー)",
         "P6": "message を書くのに messageIsError を書かない copy(…)（copy は現在値を引き継ぐ＝失敗色が残る）",
+        "P7": "二重エンコードの文字化け（UTF-8 を Latin-1 として読んだ内容を保存した状態）",
     }
     total = sum(len(v) for v in findings.values())
     print("=== MAGI design lint (docs/DESIGN.md P1-P4) ===")
-    for key in ("P1", "P2", "P3", "P4", "P5", "P6"):
+    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7"):
         hits = findings[key]
         print(f"\n[{key}] {labels[key]}: {len(hits)} 件")
         for h in hits[:40]:
             print(f"    {h}")
         if len(hits) > 40:
             print(f"    …ほか {len(hits) - 40} 件")
-    hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"]) + len(findings["P6"])
+    hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"]) + len(findings["P6"]) + len(findings["P7"])
     print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
     # P5 は「様式の逸脱」でなく**確実なコンパイルエラー**なので、--strict でなくても失敗させる。
     if findings["P5"]:
@@ -157,6 +196,10 @@ def main():
     # P6 はコンパイルが通ってしまう＝実機で「成功なのに失敗色」として初めて気づく。ここで止める。
     if findings["P6"]:
         print("P6: message を書くなら messageIsError も必ず書いてください（copy は既定値でなく現在値を引き継ぎます）。")
+        return 1
+    # P7 は「UTF-8 として妥当なので誰も気づかない」型＝出荷物に入り込む。ここで止める。
+    if findings["P7"]:
+        print("P7: 二重エンコードの文字化けです。`text.encode('latin-1').decode('utf-8')` で復号できます（可逆であることを確認してから保存）。")
         return 1
     if strict and hard > 0:
         print("--strict: P1/P3 の hard 違反があるため exit 1")
