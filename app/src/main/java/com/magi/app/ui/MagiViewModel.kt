@@ -1705,7 +1705,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (cleared == 0) return
         val stNew = Ws1Ops.setGroupApt(st0.copy(staffRange = m), g, k, "")
         val gname = st0.groups.getOrNull(g)?.name ?: "#$g"
-        logOp("I", "グループ既定解除: $gname ${opSy(k)} → ${cleared}名のws5削除（個人別値は保持）")
+        // [3.409.11] チップ内の小さな✕1回で**N名ぶん**の個人設定が消えるのに、画面には
+        //   チップが1つ消えるだけで、何人ぶん消えたかが出ていなかった（logOp は詳細設定のログ止まり）。
+        //   3.399.0/3.400.0 の「イベントは Snackbar へ」に合わせ、実際の効果を件数つきで返す。
+        notify("$gname「${opSy(k)}」のグループ上下限を解除しました（${cleared}名ぶん・「元に戻す」で戻せます）")
         applyStructure(stNew)
     }
 

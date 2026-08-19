@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * [入口4分割/職員管理] 入退職・改名・所属グループ・資格スキルを職員単位で随時変更する1枚。
@@ -76,6 +77,10 @@ fun StaffManageCard(ui: UiState, vm: MagiViewModel) {
                         DeleteRowButton(onClick = { confirmDelete = i }, enabled = !ui.running)
                     }
                 }
+            }
+            // [3.409.11] 残り1名のとき削除ボタンが理由なく消える（年間マスター側と同じ対象漏れ）。
+            if (v.staff.size <= 1) {
+                Text("最後の1名は削除できません（勤務表の行が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
             AddRowButton("入職（職員追加）", onClick = { addOpen = true }, enabled = ui.loaded && !ui.running)
         }

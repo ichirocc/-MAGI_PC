@@ -106,6 +106,11 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                     }
                 }
             }
+            // [3.409.11] 残り1シフトのとき削除ボタンが**理由の説明なく消える**（3.400.0 でグループには
+            //   理由を付けたが、シフトと職員は対象漏れだった）。同じ形で理由を出す。
+            if (v.shifts.size <= 1) {
+                Text("最後の1シフトは削除できません（勤務表のセルが指す先が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            }
             AddRowButton("シフト追加", onClick = { dialog = Ws1Dialog.AddShift })
             AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddShift })   // [⛏12]
             Divider()
@@ -155,6 +160,10 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                         DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("staff", i, st.name) })
                     }
                 }
+            }
+            // [3.409.11] 同上（残り1職員のときも無言で消えていた）。
+            if (v.staff.size <= 1) {
+                Text("最後の1名は削除できません（勤務表の行が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
             AddRowButton("職員追加", onClick = { dialog = Ws1Dialog.AddStaff })
             AddRowButton("一括追加", onClick = { dialog = Ws1Dialog.BulkAddStaff })   // [⛏12]
