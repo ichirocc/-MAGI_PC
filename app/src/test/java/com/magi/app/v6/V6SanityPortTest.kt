@@ -831,4 +831,41 @@ class V6SanityPortTest {
             assertEquals("lo=$lo hi=$hi", V6SanityPort.rangeOrderConflict(lo, hi) != null, reported)
         }
     }
+
+    /**
+     * [3.406.0] 上限の合計 < 必要数のとき、**covU が不可避とは言えない**（個人上限は SOFT で超過できる）。
+     * 言えるのは和の下界 covU + high ≥ 差 だけ。実機ログ(2026-08-19)では Cｵ が 需要30 vs 上限計24 で
+     * 本検査が発火したのに結果は covU=0・high=6 ＝旧文言「人員不足になります」は反証されていた。
+     * まず前提（どう置いても和が差を下回らない／片方だけには寄らない）を engine で確かめてから文言を固定する。
+     */
+    @Test fun capSumBelowDemandBoundsTheSumNotCoverageAlone() {
+        val st = MagiState(
+            startDate = "2025-12-01", endDate = "2025-12-01",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "2", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(listOf(0), listOf(0)),
+            wishes = emptyMap(),
+            // 2名とも A は上限0＝上限計0 < 必要数2。全員に上限があるので検査Bが発火する。
+            staffRange = mapOf("0,1" to Range("", "0"), "1,1" to Range("", "0")),
+            needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        // 前提①: 誰も A に入れない＝covU 2 / high 0。前提②: 2名とも入れる＝covU 0 / high 2。
+        //   どちらでも covU + high = 2（＝必要数2 − 上限計0）で、**covU 単独では不可避でない**。
+        val none = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(0), intArrayOf(0)))
+        val both = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(1), intArrayOf(1)))
+        assertEquals(2, (none.breakdown["covU"] ?: 0) + (none.breakdown["high"] ?: 0))
+        assertEquals(2, (both.breakdown["covU"] ?: 0) + (both.breakdown["high"] ?: 0))
+        assertEquals("上限を破れば covU は 0 にできる", 0, both.breakdown["covU"])
+
+        val issue = V6SanityPort.buildGuidance(st).single { it.where.contains("「A」の必要人数") }
+        assertTrue(issue.problem.contains("2回ぶんは埋まりません"))
+        assertTrue("covU 単独を不可避と断定しない", !issue.problem.contains("席を埋めきれず人員不足になります"))
+        assertTrue("和の下界として両方を名指しする", issue.problem.contains("人員不足と上限超過"))
+    }
 }

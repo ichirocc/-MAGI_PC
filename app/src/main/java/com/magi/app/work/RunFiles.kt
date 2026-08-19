@@ -36,9 +36,14 @@ internal class RunFiles(private val dir: File) {
     val runId: File get() = File(dir, "magi_bg_run.txt")
 
     /** enqueue の直前に呼び、この実行を所有者として記録する。 */
-    fun beginRun(id: Long) {
-        runCatching { runId.writeText(id.toString()) }
-    }
+    /**
+     * この実行の所有権マーカーを立てる。**書けたかどうかを返す**（3.406.0/B-01）。
+     * 旧: 失敗を握り潰していたため、書けなくても Work が投入され、Worker 側は
+     * `activeRunId()==0 ≠ 自分のid` で所有権なしと判定して**何もせず即 return**——
+     * 画面だけ「開始しました」のまま実行中が永久に残る、という無言の失敗になっていた。
+     */
+    fun beginRun(id: Long): Boolean =
+        runCatching { runId.writeText(id.toString()); runId.readText().trim() == id.toString() }.getOrDefault(false)
 
     /** 記録が無い・壊れているときは 0（＝誰も所有していない）。 */
     fun activeRunId(): Long =

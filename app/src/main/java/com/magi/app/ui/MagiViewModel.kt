@@ -226,7 +226,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             // [判断設計監査 #3] 前回「データを開く」時の退避があれば復元導線（設定タブ）を有効化。
             val hasPrev = withContext(Dispatchers.IO) { runCatching { prevBackupFile.exists() }.getOrDefault(false) }
             if (hasPrev) _ui.update { it.copy(prevBackupAvailable = true) }
-            if (!resultTxt.isNullOrBlank()) {
+            // [3.406.0/B-02] **読めることを確かめてから**共有ファイルを消す。旧: 解析前に clearFiles して
+            //   いたため、完了結果が壊れていると復元に使えたはずの入力・途中最良・マーカーまで同時に失い、
+            //   利用者は何も取り戻せなかった。解析できなければ結果だけ捨てて、下の中断/途中結果の経路へ落とす。
+            val resultUsable = !resultTxt.isNullOrBlank() &&
+                withContext(Dispatchers.Default) { runCatching { StateParser.parse(resultTxt) }.isSuccess }
+            if (!resultTxt.isNullOrBlank() && !resultUsable) {
+                logOp("W", "前回のバックグラウンド最適化の完了結果が壊れていて読めませんでした（入力と途中結果は残してあります）")
+                runCatching { OptimizationWorker.resultFile(getApplication()).delete() }
+            }
+            if (resultUsable) {
                 clearRunMarker()
                 OptimizationWorker.clearFiles(getApplication<Application>())
                 if (state == null) loadAsync(resultTxt, markResult = true)   // initialAssignment が state.schedule を返すため結果が復元される
@@ -246,7 +255,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     }.getOrDefault(false)
                 }
                 if (bgActive) {
-                    _ui.update { it.copy(running = true, message = "バックグラウンド計算を継続中…（完了時に自動反映）") }
+                    _ui.update { it.copy(messageIsError = false, running = true, message = "バックグラウンド計算を継続中…（完了時に自動反映）") }
                     if (state == null && !txt.isNullOrBlank()) loadAsync(txt)
                     logOp("I", "バックグラウンド最適化の継続を検知（進捗を購読）")
                 } else {
@@ -311,12 +320,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   置き換えられた旧実行が新実行の入力を消したり、別データの結果を書き残したりできてしまう。
         //   ミリ秒だと同一ミリ秒での二重 enqueue が衝突しうるので、下位に乱数を混ぜて一意にする。
         val runId = System.currentTimeMillis() * 1000L + (0..999).random()
-        OptimizationWorker.beginRun(getApplication(), runId)
+        // [3.406.0/B-01] マーカーと入力を**両方保存できたときだけ**投入する。旧: どちらも握り潰しで、
+        //   書けなくても Work を投入していた。マーカーが無いと Worker は所有権なしと判定して何もせず、
+        //   画面だけ「開始しました」＝実行中が永久に残る無言の失敗になる（容量不足・I/O 失敗で再現）。
+        val markerOk = OptimizationWorker.beginRun(getApplication(), runId)
+        val inputOk = runCatching {
+            OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0))
+        }.isSuccess
+        if (!markerOk || !inputOk) {
+            runCatching { OptimizationWorker.clearFiles(getApplication<Application>()) }
+            notify("バックグラウンド計算を開始できませんでした（端末の空き容量をご確認ください）", "W")
+            return
+        }
         // [3.328.0] この結果を後で当ててよいかを判断するための入力の指紋。
         bgStateKey = stateKey(st0)
-        // [監査A7] enqueue前に入力を退避。Worker初回書込前にプロセスが死ぬと request=null かつ
-        //   ファイル無しで復元不能だった穴を閉じる（同期・数ms・Workerが同内容で上書き）。
-        runCatching { OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0)) }
         OptimizationRepository.request = st0 to sched0.copy2D()
         OptimizationRepository.seconds = _ui.value.budgetSec
         OptimizationRepository.workers = _ui.value.workers
@@ -332,7 +349,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             .build()
         androidx.work.WorkManager.getInstance(getApplication())
             .enqueueUniqueWork(OptimizationWorker.UNIQUE, androidx.work.ExistingWorkPolicy.REPLACE, work)
-        _ui.update { it.copy(running = true, hasResult = false, interruptedRun = false, interruptedInfo = null, message = "バックグラウンドで最適化を開始しました（完了時に通知）") }
+        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, interruptedRun = false, interruptedInfo = null, message = "バックグラウンドで最適化を開始しました（完了時に通知）") }
         writeRunMarker("bg")
         logOp("I", "バックグラウンド最適化 開始 (予算${_ui.value.budgetSec}s, 並列${_ui.value.workers})")
     }
@@ -346,7 +363,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (bgStateKey != 0L && bgStateKey != stateKey(st0)) {
             bgStateKey = 0L
             logOp("W", "バックグラウンド計算の結果を破棄しました（計算中に設定またはデータが変わったため）")
-            _ui.update { it.copy(running = false, message = "計算中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。") }
+            _ui.update { it.copy(messageIsError = false, running = false, message = "計算中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。") }
             return
         }
         bgStateKey = 0L
@@ -438,7 +455,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         snapNow()?.let { redoStack.addLast(it) }   // [Web反映] 現在をやり直し用に退避
         state = snap.st
         currentSchedule = Array(snap.sched.size) { snap.sched[it].clone() }
-        _ui.update { it.copy(structureEdited = true, canUndo = undoStack.isNotEmpty(), canRedo = true, message = "1つ前に戻しました") }
+        _ui.update { it.copy(messageIsError = false, structureEdited = true, canUndo = undoStack.isNotEmpty(), canRedo = true, message = "1つ前に戻しました") }
         logOp("I", "元に戻す")
         refreshCheck()
         autoSave()
@@ -451,7 +468,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         snapNow()?.let { undoStack.addLast(it) }
         state = snap.st
         currentSchedule = Array(snap.sched.size) { snap.sched[it].clone() }
-        _ui.update { it.copy(structureEdited = true, canUndo = true, canRedo = redoStack.isNotEmpty(), message = "やり直しました") }
+        _ui.update { it.copy(messageIsError = false, structureEdited = true, canUndo = true, canRedo = redoStack.isNotEmpty(), message = "やり直しました") }
         logOp("I", "やり直し")
         refreshCheck()
         autoSave()
@@ -490,7 +507,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   元ファイル自体は直らない（再取込のたび修復が走る）ことも案内する。
         val repaired = MojibakeRepair.wasDecoded(rawJson, json)
         job?.cancel()
-        _ui.update { it.copy(running = true, message = "読込中…") }
+        _ui.update { it.copy(messageIsError = false, running = true, message = "読込中…") }
         // [3.404.0] 読み込みも「完了時に state と勤務表を丸ごと差し替える」ジョブ＝その間の編集を止める。
         val boardToken = beginBoardJob("読み込み")
         job = viewModelScope.launch {
@@ -567,7 +584,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         logOp("I", "読込 ${lp.state.staffCount}名/${lp.state.dayCount}日/${lp.state.shiftCount}シフト")
                     },
                     onFailure = { err ->
-                        // [3.400.0] 旧: `onFailure = { _ui.update { it.copy(..., message = "読込失敗: ${it.message}") } }`
+                        // [3.400.0] 旧: `onFailure = { _ui.update { it.copy(message = "読込失敗: ${it.message}") } }`
                         //   内側の `it` は **UiState** を指すので、出ていたのは直前の文言＝「読込失敗: 読込中…」。
                         //   すぐ下の catch は `e.message` で正しく、ここだけ取り違えていた。引数に名前を付けて塞ぐ。
                         logOp("W", "読込失敗: ${err.javaClass.simpleName}: ${err.message}")
@@ -575,7 +592,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     },
                 )
             } catch (e: CancellationException) {
-                _ui.update { it.copy(running = false, message = "読み込みを中止しました") }   // [3.404.0] 停止は失敗ではない
+                _ui.update { it.copy(messageIsError = false, running = false, message = "読み込みを中止しました") }   // [3.404.0] 停止は失敗ではない
                 throw e
             } catch (e: Throwable) {
                 _ui.update { it.copy(running = false, message = "読み込めませんでした（${e.javaClass.simpleName}）。ファイルの中身を確認してください", messageIsError = true) }
@@ -588,13 +605,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** [判断設計監査 #3] 「データを開く」直前に退避した1世代前の状態へ戻す。loadAsync 経由のため
      *  現在のデータが再び退避される＝もう一度押すと元へ戻る（スワップ）。 */
     fun restorePreviousData() {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は操作できません") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(messageIsError = true, message = "${busyWhat()}の実行中は操作できません") }; return }
         viewModelScope.launch {
             val txt = withContext(Dispatchers.IO) {
                 runCatching { prevBackupFile.takeIf { it.exists() }?.readText() }.getOrNull()
             }
             if (txt.isNullOrBlank()) {
-                _ui.update { it.copy(message = "開く前のデータの退避がありません") }
+                _ui.update { it.copy(messageIsError = false, message = "開く前のデータの退避がありません") }
                 return@launch
             }
             logOp("I", "開く前のデータに戻します（もう一度押すと入れ替わります）")
@@ -636,7 +653,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun ensureValidForRun(st: MagiState, sched: Array<IntArray>): Boolean {
         val err = validate(st.withSchedule(sched)) ?: return true
-        _ui.update { it.copy(running = false, message = "実行できません: $err。編集内容を確認してください") }
+        _ui.update { it.copy(messageIsError = true, running = false, message = "実行できません: $err。編集内容を確認してください") }
         return false
     }
 
@@ -711,7 +728,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val sched = currentSchedule?.copy2D() ?: return
         val seq = ++checkSeq
         checkJob?.cancel()
-        _ui.update { it.copy(running = true, message = "違反チェック中…") }
+        _ui.update { it.copy(messageIsError = false, running = true, message = "違反チェック中…") }
         checkJob = viewModelScope.launch {
             try {
                 val res = V6FinalPort.handleCheck(st, sched)
@@ -727,7 +744,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.284.0/外部レビューHigh③] 停止時の running 固着を解消。新しいチェックによるキャンセル
                 //   （seq != checkSeq＝後続が直後に running=true を立て直す）では触らず、stop() による
                 //   キャンセルのときだけ実行中表示を戻す。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "違反チェックを停止しました") }
+                if (seq == checkSeq) _ui.update { it.copy(messageIsError = false, running = optimizeInFlight(), message = "違反チェックを停止しました") }
                 throw e
             } catch (e: Throwable) {
                 // [3.392.0] Error(OOM等)まで拾う。旧: Exception だけで、Error だと running=true が固着し
@@ -754,12 +771,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   別名共有クラス）が起きていた（実機ログ 19:56:41 最適化開始→19:56:48 初期解生成完了 で実証）。
         //   runV6FullOptimize/start/runSoftPolish と同じガードに統一（3.161.0 のセル編集ガードと同方針）。
         if (optimizeInFlight()) {
-            _ui.update { it.copy(message = "計算の実行中は初期解を作れません（完了または「やめる」の後にどうぞ）") }
+            _ui.update { it.copy(messageIsError = false, message = "計算の実行中は初期解を作れません（完了または「やめる」の後にどうぞ）") }
             return
         }
         if (!ensureValidForRun(st, sched)) return
         pushUndo()
-        _ui.update { it.copy(running = true, hasResult = false, message = "初期解生成中…") }
+        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, message = "初期解生成中…") }
         // [3.404.0] 完了時に currentSchedule/state を丸ごと差し替えるので、その間の編集を止める旗を立てる。
         //   旧: `running=true`（画面は全ロック）なのに `optimizeInFlight()` は false のままで、
         //   `setCell` のガードだけ素通り＝編集が完了時に無言で消えていた。
@@ -782,7 +799,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // [3.404.0] 停止・ジョブ上書きを「失敗」と呼ばない（兄弟の refreshCheck 等は分離済みで
                 //   ここだけ取り残されていた＝停止するたび「初期解生成失敗」という誤った文言が出ていた）。
                 logOp("I", "初期解生成 停止")
-                _ui.update { it.copy(running = false, message = "初期解生成を停止しました") }
+                _ui.update { it.copy(messageIsError = false, running = false, message = "初期解生成を停止しました") }
                 throw e
             } catch (e: Throwable) {
                 // [3.271.0] 失敗を操作ログにも残す（旧: message のみ＝書き出したログから消えた実行が
@@ -886,7 +903,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             "前回と同じ設定での再実行です。最大の未解決は『${lastTopHardFamily ?: "未解決の制約"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
         else null
         lastSettingsSig = sig
-        _ui.update { it.copy(running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "勤務表をつくり始めました") }
+        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "勤務表をつくり始めました") }
         logOp("I", "最適化 開始 (予算${_ui.value.budgetSec}s, 並列${_ui.value.workers}, 方式${_ui.value.v6Algorithm})")
         writeRunMarker("fg")
         OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] fg実行ではbg途中状態は無関係＝掃除
@@ -1168,7 +1185,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         writeRunMarker("fg")   // [監査A8]
-        _ui.update { it.copy(running = true, hasResult = false, liveSchedule = emptyList(), message = "自動で整えています…") }
+        _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, liveSchedule = emptyList(), message = "自動で整えています…") }
         logOp("I", "ソフト研磨 開始 (予算${_ui.value.budgetSec}s)")
         val startMs = System.currentTimeMillis()
         val boardToken = beginBoardJob("仕上げ最適化")   // [3.328.0/3.404.0]
@@ -1236,7 +1253,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
                 logOp("W", "ソフト研磨 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す
                 terminalLogged = true
-                _ui.update { it.copy(running = false, message = "自動整えに失敗: $kind: ${e.message}") }
+                _ui.update { it.copy(messageIsError = true, running = false, message = "自動整えに失敗: $kind: ${e.message}") }
             } finally {
                 endBoardJob(boardToken)   // [3.328.0/3.404.0]
                 if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }   // [3.404.0]
@@ -1256,14 +1273,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (bgWasRunning) {
             OptimizationRepository.clear()
             runCatching { OptimizationWorker.clearFiles(getApplication<Application>()) }
-            _ui.update { it.copy(running = false, message = "停止しました（バックグラウンド計算を中断）") }
+            _ui.update { it.copy(messageIsError = false, running = false, message = "停止しました（バックグラウンド計算を中断）") }
             logOp("I", "バックグラウンド最適化を停止")
         } else if (_ui.value.running || _ui.value.fixSearching) {
             // [3.284.0/外部レビューHigh③] 前景の違反チェック(checkJob)/改善探索(fixJob)を停止した場合、
             //   それらのコルーチンは running/fixSearching を戻す機会がなく実行中表示が固着していた。
             //   最適化ジョブ(job)自身は CancellationException 側で keep-best と running=false を行うため、
             //   ここでの即時リセットは冪等（後からジョブ側の確定メッセージが上書きする）。
-            _ui.update { it.copy(running = false, fixSearching = false, message = "停止しました") }
+            _ui.update { it.copy(messageIsError = false, running = false, fixSearching = false, message = "停止しました") }
             // [3.383.0/ユーザー指示「検証できないと見送った項目をログ強化」] **前景の停止だけログが無かった**
             //   （背景は「バックグラウンド最適化を停止」を出していた＝非対称）。3.381.0 で「4件の異常終了は
             //   停止を押した実行」と結論できたのは、直後にユーザーが編集を始めている、という**状況証拠から
@@ -1388,13 +1405,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             //   「盤面は変わったのに違反数は前の案のまま」になるので、必ず理由を残す。
             try {
                 val rep = withContext(Dispatchers.Default) { UnifiedViolationChecker.check(state ?: st, sch) }
-                pushReport(state ?: st, sch, rep) { it.copy(hasResult = true, message = "他の案 ${i + 1} を適用") }
+                pushReport(state ?: st, sch, rep) { it.copy(messageIsError = false, hasResult = true, message = "他の案 ${i + 1} を適用") }
                 logOp("I", "他の案 ${i + 1} を適用 必須=${rep.hard} 合計=${rep.total}")
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
                 logOp("W", "他の案 ${i + 1} の適用後の再チェックに失敗: ${e.javaClass.simpleName}（盤面は適用済み・違反数は古い可能性）")
-                _ui.update { it.copy(message = "他の案 ${i + 1} を適用（違反数の再計算に失敗）") }
+                _ui.update { it.copy(messageIsError = true, message = "他の案 ${i + 1} を適用（違反数の再計算に失敗）") }
             }
         }
     }
@@ -1582,7 +1599,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * @param loDelta 下限へ足す量（負で緩める）。@param hiDelta 上限へ足す量（正で緩める）。
      */
     fun relaxStaffRangePin(i: Int, k: Int, loDelta: Int, hiDelta: Int) {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は回数を変更できません。終わってから試してください。") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(messageIsError = true, message = "${busyWhat()}の実行中は回数を変更できません。終わってから試してください。") }; return }
         val st = state ?: return
         val cur = st.staffRange["$i,$k"] ?: return
         val lo = cur.lo.trim().toIntOrNull() ?: return
@@ -1879,7 +1896,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     // ---- [見直し候補] 月次の修正から「基本ルールの見直し候補」を積む軽量メモ（セッション内のみ・state 非保存） ----
     fun addReviewMemo(text: String) {
         if (text.isBlank()) return
-        _ui.update { it.copy(reviewMemos = it.reviewMemos + text.trim(), message = "見直し候補に追加しました") }
+        _ui.update { it.copy(messageIsError = false, reviewMemos = it.reviewMemos + text.trim(), message = "見直し候補に追加しました") }
     }
     fun removeReviewMemo(index: Int) {
         _ui.update { val l = it.reviewMemos; if (index !in l.indices) it else it.copy(reviewMemos = l.filterIndexed { j, _ -> j != index }) }
@@ -2092,7 +2109,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private fun runBlockedByInFlight(what: String): Boolean {
         if (!optimizeInFlight()) return false
         logOp("W", "$what を取り消しました（${busyWhat()}が実行中）")
-        _ui.update { it.copy(message = "${busyWhat()}の実行中です。終わるか「やめる」を押してからにしてください。") }
+        _ui.update { it.copy(messageIsError = true, message = "${busyWhat()}の実行中です。終わるか「やめる」を押してからにしてください。") }
         return true
     }
 
@@ -2113,7 +2130,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     private fun structuralEditBlocked(): Boolean {
         if (!optimizeInFlight()) return false
         logOp("W", "${busyWhat()}の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）")
-        _ui.update { it.copy(message = "${busyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してからにしてください。") }
+        _ui.update { it.copy(messageIsError = true, message = "${busyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してからにしてください。") }
         return true
     }
 
@@ -2165,22 +2182,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         state = ns
         autoSave()
         val sched = currentSchedule?.copy2D()
-        if (sched == null) { _ui.update { it.copy(structureEdited = true, message = doneMessage) }; return }
+        if (sched == null) { _ui.update { it.copy(messageIsError = false, structureEdited = true, message = doneMessage) }; return }
         val seq = ++checkSeq
         checkJob?.cancel()
-        _ui.update { it.copy(running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
+        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
         checkJob = viewModelScope.launch {
             try {
                 val r = V6FinalPort.handleCheck(ns, sched)
                 if (seq != checkSeq) return@launch
-                pushReport(ns, r.schedule, r.report) { it.copy(running = optimizeInFlight(), message = "$doneMessage｜必須=${r.report.hard} 合計=${r.report.total}") }
+                pushReport(ns, r.schedule, r.report) { it.copy(messageIsError = false, running = optimizeInFlight(), message = "$doneMessage｜必須=${r.report.hard} 合計=${r.report.total}") }
             } catch (e: CancellationException) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
+                if (seq == checkSeq) _ui.update { it.copy(messageIsError = false, running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Throwable) {
                 // [3.392.0] refreshCheck と同型。Error でも running を戻す（固着でアプリが読取専用になるため）。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
+                if (seq == checkSeq) _ui.update { it.copy(messageIsError = true, running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
             }
         }
     }
@@ -2213,7 +2230,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun relaxForbiddenRule(seqLabel: String) {
-        if (optimizeInFlight()) { _ui.update { it.copy(message = "${busyWhat()}の実行中は設定を変更できません（完了後にもう一度お試しください）") }; return }
+        if (optimizeInFlight()) { _ui.update { it.copy(messageIsError = true, message = "${busyWhat()}の実行中は設定を変更できません（完了後にもう一度お試しください）") }; return }
         val s = state ?: return
         fun key(row: C3Row): String {
             val end = row.pattern.indexOfFirst { it.isBlank() }
@@ -2223,7 +2240,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val remain = s.cons3n.filter { key(it) != seqLabel }
         val removed = s.cons3n.size - remain.size
         if (removed == 0) {
-            _ui.update { it.copy(message = "禁止の並び「$seqLabel」は見つかりませんでした") }
+            _ui.update { it.copy(messageIsError = true, message = "禁止の並び「$seqLabel」は見つかりませんでした") }
             return
         }
         logOp("I", "禁止の並びを削除: $seqLabel（${removed}件）")
@@ -2329,7 +2346,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: Throwable) {
                 logOp("W", "直し方の探索に失敗: ${e.javaClass.simpleName}: ${e.message}")
-                if (seq == fixSeq) _ui.update { it.copy(fixSearching = false, message = "直し方を探せませんでした") }
+                if (seq == fixSeq) _ui.update { it.copy(messageIsError = false, fixSearching = false, message = "直し方を探せませんでした") }
             }
         }
     }
@@ -2383,19 +2400,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         autoSave()
         val seq = ++checkSeq
         checkJob?.cancel()
-        _ui.update { it.copy(running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
+        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
         checkJob = viewModelScope.launch {
             try {
                 val rep = V6FinalPort.handleCheck(r.state, sched)
                 if (seq != checkSeq) return@launch
-                pushReport(r.state, rep.schedule, rep.report) { it.copy(running = optimizeInFlight(), message = "$doneMessage｜必須=${rep.report.hard} 合計=${rep.report.total}") }
+                pushReport(r.state, rep.schedule, rep.report) { it.copy(messageIsError = false, running = optimizeInFlight(), message = "$doneMessage｜必須=${rep.report.hard} 合計=${rep.report.total}") }
             } catch (e: CancellationException) {
                 // [3.284.0/外部レビューHigh③] stop() によるキャンセル時の running 固着を解消（refreshCheck と同型）。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
+                if (seq == checkSeq) _ui.update { it.copy(messageIsError = false, running = optimizeInFlight(), message = "$doneMessage（チェックを停止）") }
                 throw e
             } catch (e: Throwable) {
                 // [3.392.0] refreshCheck と同型。Error でも running を戻す（固着でアプリが読取専用になるため）。
-                if (seq == checkSeq) _ui.update { it.copy(running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
+                if (seq == checkSeq) _ui.update { it.copy(messageIsError = true, running = optimizeInFlight(), message = "$doneMessage（チェック失敗: ${e.javaClass.simpleName}）") }
             }
         }
     }
@@ -2582,7 +2599,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val sched = currentSchedule ?: return
         // [P1修正/レビュー指摘] 休シフトの削除は Ws1Ops 側で no-op（全休日が勤務に化けるため禁止）。理由を提示する。
         if (k == com.magi.app.v6.restShiftIndex(st)) {
-            _ui.update { it.copy(message = "「休」シフトは削除できません（全ての休日が別のシフトに変わってしまうため）") }
+            _ui.update { it.copy(messageIsError = true, message = "「休」シフトは削除できません（全ての休日が別のシフトに変わってしまうため）") }
             return
         }
         logOp("I", "シフト削除: ${opSy(k)}（このシフトのマスは休へ・希望も削除）")
@@ -2719,7 +2736,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 // 凡例(記号一覧)が無いとシフトが「休」1種のみになり全セルが公休化する。
                 // 取り込まず原因をオペレーターに表示する（Excel保存で凡例が消えるケース）。
                 if (st.shiftCount <= 1) {
-                    _ui.update { it.copy(message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで開いて保存すると消える場合があります）。元のファイルをそのまま取り込んでください。") }
+                    _ui.update { it.copy(messageIsError = true, message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで開いて保存すると消える場合があります）。元のファイルをそのまま取り込んでください。") }
                     logOp("W", "勤務表CSV取込 中止: 凡例なし（シフト${st.shiftCount}種のみ→全公休化を防止）")
                     return
                 }
@@ -2737,12 +2754,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 load(StateParser.serialize(st, st.schedule.toIntArray2D()))
                 return
             }
-            _ui.update { it.copy(message = "CSV取込失敗: ユニット列形式と判定しましたが解析できませんでした。ヘッダ行（ユニット, No, 役職, 氏名, 1, 2, …）と氏名列をご確認ください。") }
+            _ui.update { it.copy(messageIsError = true, message = "CSV取込失敗: ユニット列形式と判定しましたが解析できませんでした。ヘッダ行（ユニット, No, 役職, 氏名, 1, 2, …）と氏名列をご確認ください。") }
             logOp("W", "勤務表CSV(ユニット列形式)取込 失敗: 解析不能")
             return
         }
         if (state == null) {
-            _ui.update { it.copy(message = "このCSVを読み込めませんでした。先に『データを開く』で基本データを読み込むか、勤務表テンプレCSVをご利用ください。") }
+            _ui.update { it.copy(messageIsError = true, message = "このCSVを読み込めませんでした。先に『データを開く』で基本データを読み込むか、勤務表テンプレCSVをご利用ください。") }
             return
         }
         // [3.282.0] 修復済みテキストをそのまま渡す（旧: rawText を渡し importCsv 内で二重に repair＝
@@ -2759,11 +2776,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val text = MojibakeRepair.repair(rawText)
         val st = runCatching { com.magi.app.v6.RosterCsvImport.parse(text, asWishes) }.getOrNull()
         if (st == null) {
-            _ui.update { it.copy(message = "このCSVを読み込めませんでした。形式をご確認ください。") }
+            _ui.update { it.copy(messageIsError = true, message = "このCSVを読み込めませんでした。形式をご確認ください。") }
             return
         }
         if (st.shiftCount <= 1) {
-            _ui.update { it.copy(message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで保存すると消える場合があります）。") }
+            _ui.update { it.copy(messageIsError = true, message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで保存すると消える場合があります）。") }
             logOp("W", "${if (asWishes) "希望シフト" else "勤務表"}CSV取込 中止: 凡例なし（シフト${st.shiftCount}種のみ）")
             return
         }
@@ -2781,7 +2798,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val st = state ?: return
         val sched = currentSchedule ?: return
         val text = MojibakeRepair.repair(rawText)
-        _ui.update { it.copy(running = true, message = "CSV取込中…") }
+        _ui.update { it.copy(messageIsError = false, running = true, message = "CSV取込中…") }
         val boardToken = beginBoardJob("CSV取込")
         job = viewModelScope.launch {
             try {
@@ -2817,7 +2834,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 logOp("I", "CSV取込 完了 ${res.matched}名一致 必須=${res.report.hard} 合計=${res.report.total}")
             } catch (e: CancellationException) {
-                _ui.update { it.copy(running = false, message = "CSV取込を中止しました") }   // [3.404.0]
+                _ui.update { it.copy(messageIsError = false, running = false, message = "CSV取込を中止しました") }   // [3.404.0]
                 throw e
             } catch (e: Throwable) {
                 _ui.update { it.copy(running = false, message = "CSVを取り込めませんでした（${e.javaClass.simpleName}）", messageIsError = true) }
@@ -2849,14 +2866,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** [コンポーネント別取込] スタッフ一覧CSV（氏名,グループ,スキル）。既存は所属群/スキルを更新、未知の氏名は新規追加（勤務表に休の行を追加）。 */
     fun importStaffCsv(rawText: String) {
-        val st = state ?: run { _ui.update { it.copy(message = "先にデータを開いてください（職員一覧は既存データに追加/更新します）") }; return }
-        val sched = currentSchedule ?: run { _ui.update { it.copy(message = "先にデータを開いてください（職員一覧は既存データに追加/更新します）") }; return }
+        val st = state ?: run { _ui.update { it.copy(messageIsError = false, message = "先にデータを開いてください（職員一覧は既存データに追加/更新します）") }; return }
+        val sched = currentSchedule ?: run { _ui.update { it.copy(messageIsError = false, message = "先にデータを開いてください（職員一覧は既存データに追加/更新します）") }; return }
         val text = MojibakeRepair.repair(rawText)
         val res = runCatching { com.magi.app.v6.StaffCsvIO.parseUpsert(text, st, sched) }.getOrNull()
         if (res == null) {
             val hint = componentImportMismatchHint(text)
             val tail = if (hint.isEmpty()) "形式『氏名,グループ,スキル』（1行=1名）をご確認ください。" else hint
-            _ui.update { it.copy(message = "職員一覧の取込失敗（追加0・更新0）。$tail") }
+            _ui.update { it.copy(messageIsError = true, message = "職員一覧の取込失敗（追加0・更新0）。$tail") }
             logOp("W", "職員一覧CSV取込 失敗: 0件")
             return
         }
@@ -2871,20 +2888,20 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** [コンポーネント別取込] 希望シフトCSV（氏名,日,希望シフト）。氏名一致で希望を全置換。 */
     fun importWishesCsv(rawText: String) {
-        val st = state ?: run { _ui.update { it.copy(message = "先にデータを開いてください（希望シフトは既存データに重ねます）") }; return }
+        val st = state ?: run { _ui.update { it.copy(messageIsError = false, message = "先にデータを開いてください（希望シフトは既存データに重ねます）") }; return }
         val text = MojibakeRepair.repair(rawText)
         val res = runCatching { com.magi.app.v6.WishesCsvIO.parse(text, st) }.getOrNull()
         if (res == null) {
             val hint = componentImportMismatchHint(text)
             val tail = if (hint.isEmpty()) "形式は『氏名,日,希望シフト』（例: 古泉 健一,5,休）です。氏名・シフト記号が一致しているかご確認ください。" else hint
-            _ui.update { it.copy(message = "希望シフトの取込失敗（取り込める行が0件）。$tail") }
+            _ui.update { it.copy(messageIsError = true, message = "希望シフトの取込失敗（取り込める行が0件）。$tail") }
             logOp("W", "希望シフトCSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
         // [3.329.0/外部レビュー H-02] この取込は既存の希望を**全置換**する。中身のある行を1つでも
         //   解釈できなかったら置換しない（旧: 誤記の行を黙って捨て、1行でも有効なら残りの希望を消していた）。
         if (res.rejected > 0) {
-            _ui.update { it.copy(message = "希望シフトの取込を中止しました（読めない行が${res.rejected}件）。" +
+            _ui.update { it.copy(messageIsError = false, message = "希望シフトの取込を中止しました（読めない行が${res.rejected}件）。" +
                 "この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
             logOp("W", "希望シフトCSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
             return
@@ -2895,19 +2912,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** [コンポーネント別取込] 各制約CSV（種別タグ付き）。制約一式＋個人レンジを置換。 */
     fun importConstraintsCsv(rawText: String) {
-        val st = state ?: run { _ui.update { it.copy(message = "先にデータを開いてください（各制約は既存データに重ねます）") }; return }
+        val st = state ?: run { _ui.update { it.copy(messageIsError = false, message = "先にデータを開いてください（各制約は既存データに重ねます）") }; return }
         val text = MojibakeRepair.repair(rawText)
         val res = runCatching { com.magi.app.v6.ConstraintsCsvIO.parse(text, st) }.getOrNull()
         if (res == null) {
             val hint = componentImportMismatchHint(text)
             val tail = if (hint.isEmpty()) "1列目の種別（連勤/禁止連続/群組合せ禁止/個人レンジ 等）をご確認ください。例: 連勤,5,休,14 ／ 個人レンジ,古泉 健一,A4,6,8" else hint
-            _ui.update { it.copy(message = "各制約の取込失敗（取り込める行が0件）。$tail") }
+            _ui.update { it.copy(messageIsError = true, message = "各制約の取込失敗（取り込める行が0件）。$tail") }
             logOp("W", "各制約CSV取込 失敗: 0件${if (hint.isEmpty()) "" else "（別形式CSVの取り違えの可能性）"}")
             return
         }
         // [3.329.0/外部レビュー H-02] 制約一式と個人レンジを**全置換**するので、希望と同じ扱いにする。
         if (res.rejected > 0) {
-            _ui.update { it.copy(message = "各制約の取込を中止しました（読めない行が${res.rejected}件）。" +
+            _ui.update { it.copy(messageIsError = false, message = "各制約の取込を中止しました（読めない行が${res.rejected}件）。" +
                 "この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: ${res.sample}") }
             logOp("W", "各制約CSV取込 中止: 読めない行${res.rejected}件（取込可${res.accepted}件）例: ${res.sample}")
             return

@@ -82,6 +82,12 @@ data class CoverageSurplus(
     val need: Int,
     val got: Int,
     val excess: Int,
+    /**
+     * [3.406.0] 構造的には動かせるのに、**1人動かす手がどれも目的関数に負ける**とき、いちばん重く
+     * 悪化した族（`MirrorKeys` の生キー・負けなかった/試していないなら null）。画面は
+     * `breakdownLabels` で日本語にして出す（ログは C1Plateau と同じく生キーのまま）。
+     */
+    val blockedFamily: String? = null,
     /** この枠の在勤者中、他シフトへ動かせる／動かせない内訳と理由。 */
     val reason: String,
 )
@@ -127,7 +133,8 @@ data class CoverageDiagnosis(
         if (hasSurplus) {
             out.add("[W] CoverageDiag: 人員過剰 合計${totalSurplus} — ${surpluses.size}枠（なぜ減らないか）")
             for (s in surpluses.take(8)) {
-                out.add("[W] CoverageDiag: ${s.dayLabel} ${s.shiftSymbol} 必要${s.need}/現状${s.got}(過剰${s.excess}) — ${s.reason}")
+                val fam = s.blockedFamily?.let { "（主因 $it）" } ?: ""
+                out.add("[W] CoverageDiag: ${s.dayLabel} ${s.shiftSymbol} 必要${s.need}/現状${s.got}(過剰${s.excess}) — ${s.reason}$fam")
             }
             if (surpluses.size > 8) out.add("[W] CoverageDiag: ほか${surpluses.size - 8}枠（過剰）")
         }
@@ -353,6 +360,10 @@ object V6PortAnalyzer {
         //   「動かせるのに動いていない」ことの説明にはならない点に注意（読取専用・スコア不変）。
         val surplusList = ArrayList<CoverageSurplus>()
         var totalSurplus = 0
+        // [3.406.0] 「動かせる」を目的関数で実際に試すための作業盤面と予算。checker は約72µs(3.395.0)なので
+        //   実データ規模（過剰11枠×候補数人）なら数msに収まるが、上限を切って UI の再チェックを重くしない。
+        val probe = norm.copy2D()
+        var probeBudget = 240
         for (j in 0 until p.T) {
             for (k in 0 until p.K) {
                 val got = cov[j][k]
@@ -362,6 +373,16 @@ object V6PortAnalyzer {
                 totalSurplus += excess
                 val sym = state.shifts.getOrNull(k)?.kigou ?: k.toString()
                 var pinned = 0; var forbid = 0; var cascade = 0; var free = 0
+                // [3.406.0] 構造的に動かせる(free)ことと、最適化が採ることは別。covO は最も軽い族(重み1.0)で、
+                //   移動先で他の族が1点でも悪化すると betterReport に負ける——**すぐ上のコメント自身が
+                //   「動かせるのに動いていない」ことの説明にはならないと書いているのに、下の hint は
+                //   「最適化が未到達＝『直し方を探す』で解消可」と断言していた**（3.401.0 の GuidedFix、
+                //   3.344.0 の covU 側と同じ「診断が守れない約束をする」型）。実機ログ(2026-08-19)では
+                //   covO 焦点の修復が275秒走ってなお 8件が残り、断言が実測に裏切られている。
+                //   そこで**同じ目的関数で実際に1手試してから**言う。
+                var freeImproving = 0
+                var probedAny = false
+                val famHits = HashMap<String, Int>()   // 「主因」＝試した手のうち最も多く最重悪化を出した族
                 for (i in 0 until p.S) {
                     if (norm[i][j] != k) continue   // このシフトの在勤者だけが移動候補
                     // [3.391.0] 実現不能な希望は凍結しない＝「希望固定で動かせない」と案内するのは誤り
@@ -377,19 +398,39 @@ object V6PortAnalyzer {
                         if (p.covOCell(m, j, cov[j][m] + 1) <= p.covOCell(m, j, cov[j][m])) { hasRoom = true; break }
                     }
                     when {
-                        hasRoom -> free++
+                        hasRoom -> {
+                            free++
+                            // 実際に1人動かして目的関数が改善するかを、最適化と同じ betterReport で確かめる。
+                            for (m in alts) {
+                                if (probeBudget <= 0) break
+                                if (c3nAt(i, j, m)) continue
+                                if (p.covOCell(m, j, cov[j][m] + 1) > p.covOCell(m, j, cov[j][m])) continue
+                                probeBudget--
+                                probedAny = true
+                                probe[i][j] = m
+                                val after = UnifiedViolationChecker.check(state, probe)
+                                probe[i][j] = k
+                                if (betterReport(after, report)) { freeImproving++; break }
+                                worstWorsenedFamily(after, report)?.let { famHits[it] = (famHits[it] ?: 0) + 1 }
+                            }
+                        }
                         !blockedByC3n -> cascade++   // 代替はあるが、どこも受け皿がない＝玉突きが必要
                         else -> forbid++              // 代替は全て禁止連続で塞がる
                     }
                 }
                 val hint = when {
-                    free > 0 -> "在勤${free}人を他シフトへ移せば解消可能（最適化が未到達＝勤務表でこのセルの『直し方を探す』で解消可）"
+                    // 実際に試して改善した＝『直し方を探す』も同じ手を見つける。ここでだけ断言してよい。
+                    freeImproving > 0 -> "在勤${freeImproving}人は他シフトへ移すだけで全体が良くなります（勤務表でこのセルの『直し方を探す』で解消できます）"
+                    free > 0 && probedAny -> "移せる先はありますが、1人動かす手はどれも他の条件を悪化させるため最適化は採用しません" +
+                        "（この過剰を減らすには、その条件を緩めるか、過剰を受け入れる必要があります）"
+                    free > 0 -> "移せる先はありますが、目的関数での確認は打ち切りました（枠が多いため）"
                     cascade > 0 -> "移動先はどこも定員一杯で、過剰シフトからの多人数入替（玉突き）が必要"
                     else -> "在籍者は希望固定/禁止連続で動かせず、希望を1件調整するか担当を減らすと解消に近づく"
                 }
                 surplusList.add(
                     CoverageSurplus(j, dayLabel(state.startDate, j), k, sym, need, got, excess,
-                        "在勤者中 動かせる${free}人・玉突き必要${cascade}人・希望固定${pinned}人・禁止連続${forbid}人。$hint")
+                        blockedFamily = if (freeImproving == 0 && probedAny) famHits.maxByOrNull { it.value }?.key else null,
+                        reason = "在勤者中 動かせる${free}人・玉突き必要${cascade}人・希望固定${pinned}人・禁止連続${forbid}人。$hint")
                 )
             }
         }

@@ -3,6 +3,7 @@ package com.magi.app.v6
 import com.magi.app.model.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -158,7 +159,50 @@ class V6PortAnalyzerTest {
         assertEquals(2, sp.got)
         assertEquals(1, sp.excess)
         assertTrue(sp.reason.contains("動かせる2人"))
-        assertTrue(sp.reason.contains("解消可能"))
+        // [3.406.0] **旧テストは over-promise を固定していた**。この盤面は2名が同一グループなので、
+        //   1名を休へ移すと covO 1→0 の代わりに fair が 0→2 になり、目的関数は厳密に悪化する
+        //   （実測: before total=3/w=3.0 → after total=4/w=4.0・betterReport=false）。
+        //   つまり最適化は正しく拒否するのに、旧診断は「解消可能（最適化が未到達）」と断言していた。
+        //   まず前提（この手は本当に改善しない）を engine で確かめてから、文言を固定する。
+        val moved = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(0), intArrayOf(1)))
+        val base = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(1), intArrayOf(1)))
+        assertTrue("1人動かす手は目的関数を改善しない", !betterReport(moved, base))
+        assertTrue(sp.reason.contains("最適化は採用しません"))
+        assertTrue(!sp.reason.contains("解消できます"))
+        assertEquals("fair", sp.blockedFamily)
+    }
+
+    /**
+     * [3.406.0] 断言してよいのは**実際に目的関数が良くなるときだけ**。上と同じ形でも、2名を
+     * 別グループにすると fair は m<2 で対象外になり、covO 1→0 が純粋な改善になる
+     * （実測: before total=3 → after total=2・betterReport=true）。このときだけ
+     * 「『直し方を探す』で解消できます」と言い、主因は付けない。
+     */
+    @Test
+    fun diagnoseCoveragePromisesAFixOnlyWhenTheObjectiveActuallyImproves() {
+        val st = MagiState(
+            startDate = "2025-12-01",
+            endDate = "2025-12-01",
+            shifts = listOf(Shift("休み", "休", "", ""), Shift("早番", "A", "1", "")),
+            groups = listOf(Group("G0", "G0"), Group("G1", "G1")),
+            staff = listOf(Staff("s0", 0), Staff("s1", 1)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1), listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", ""), listOf("", "")),
+            schedule = listOf(listOf(1), listOf(1)),
+            wishes = emptyMap(),
+            staffRange = emptyMap(),
+            needDay1 = emptyMap(),
+            needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val moved = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(0), intArrayOf(1)))
+        val base = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(1), intArrayOf(1)))
+        assertTrue("1人動かす手は目的関数を改善する", betterReport(moved, base))
+        val sp = V6PortAnalyzer.diagnoseCoverage(st).surpluses.single()
+        assertTrue(sp.reason.contains("解消できます"))
+        assertNull(sp.blockedFamily)
     }
 
     // 両者とも希望固定（希望どおりに配置済み＝pref違反ゼロ）だと、動かすと希望未充足に化けるため

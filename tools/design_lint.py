@@ -62,6 +62,29 @@ def kotlin_files():
             out += [os.path.join(dirpath, n) for n in names if n.endswith(".kt")]
     return sorted(out)
 
+# [P6] UiState.message を書くのに messageIsError を書かない copy(...)。
+#   data class の copy は**既定値でなく現在値を引き継ぐ**ため、直前がエラーだと通常メッセージまで
+#   失敗色・長時間表示のまま出る（3.400.0 で実際に作り込み、3.406.0 で全数修正した）。
+#   「message を書くなら severity も必ず書く」を機械で強制する。コンパイルは通ってしまうので lint が要る。
+RE_COPY_MESSAGE = re.compile(r"\bcopy\(")
+
+def find_p6():
+    hits = []
+    for path in kotlin_files():
+        # 読めない .kt はここでは起こり得ない（起きたら検査が黙って0件になるので握り潰さない）。
+        with open(path, encoding="utf-8") as fh:
+            src = fh.read()
+        for n, line in enumerate(src.split("\n"), 1):
+            st = line.strip()
+            if st.startswith("//") or st.startswith("*"):
+                continue
+            if not RE_COPY_MESSAGE.search(line):
+                continue
+            if re.search(r"\bmessage\s*=", line) and "messageIsError" not in line:
+                hits.append("%s:%d" % (path.replace(ROOT + "/", ""), n))
+    return hits
+
+
 
 def scan_templates():
     hits = []
@@ -107,27 +130,33 @@ def main():
     strict = "--strict" in sys.argv
     findings = scan()
     findings["P5"] = scan_templates()
+    findings["P6"] = find_p6()
     labels = {
         "P1": "純黒本文/背景 (Color.Black / 0xFF000000)",
         "P2": "生 hex 直書き (Color(0x……)) ※MagiTokens.kt 除く=baseline監視",
         "P3": "重い影 (.shadow / shadowElevation)",
         "P4": "任意角丸 (RoundedCornerShape(<dp>)) ※999=pill 除外",
         "P5": "テンプレート食い込み (変数の直後に日本語＝必ずコンパイルエラー)",
+        "P6": "message を書くのに messageIsError を書かない copy(…)（copy は現在値を引き継ぐ＝失敗色が残る）",
     }
     total = sum(len(v) for v in findings.values())
     print("=== MAGI design lint (docs/DESIGN.md P1-P4) ===")
-    for key in ("P1", "P2", "P3", "P4", "P5"):
+    for key in ("P1", "P2", "P3", "P4", "P5", "P6"):
         hits = findings[key]
         print(f"\n[{key}] {labels[key]}: {len(hits)} 件")
         for h in hits[:40]:
             print(f"    {h}")
         if len(hits) > 40:
             print(f"    …ほか {len(hits) - 40} 件")
-    hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"])
-    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
+    hard = len(findings["P1"]) + len(findings["P3"]) + len(findings["P5"]) + len(findings["P6"])
+    print(f"\n合計 {total} 件（P1純黒+P3影+P5テンプレート+P6メッセージ severity=hard {hard} 件 / P2生hex・P4角丸=baseline監視）。")
     # P5 は「様式の逸脱」でなく**確実なコンパイルエラー**なので、--strict でなくても失敗させる。
     if findings["P5"]:
         print("P5: 変数の直後に日本語が続いています。必ず波括弧で囲んでください（例: 「N件」なら {count} を波括弧で）。")
+        return 1
+    # P6 はコンパイルが通ってしまう＝実機で「成功なのに失敗色」として初めて気づく。ここで止める。
+    if findings["P6"]:
+        print("P6: message を書くなら messageIsError も必ず書いてください（copy は既定値でなく現在値を引き継ぎます）。")
         return 1
     if strict and hard > 0:
         print("--strict: P1/P3 の hard 違反があるため exit 1")

@@ -239,7 +239,12 @@ class OptimizationWorker(
             if (owned) runCatching { clearFiles(ctx) }
             terminal(if (owned) "停止（片付け済み）" else "停止（所有権が無いため片付けなし）")
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // [3.406.0/B-03] `Exception` では `Error`(OOM 等)を拾えず、失敗通知も後片付けも走らないまま
+            //   finally のフォールバックへ落ちていた（実行中の解除と終端ログは 3.387.0 で確保済みだが、
+            //   マーカーと入力が残るので次回起動が「中断＝再開できます」と**失敗を中断として案内**する）。
+            //   前景4経路を 3.400.0 で `Throwable` へ広げたのと同じ判断＝プロセス状態が不明なまま継続する
+            //   代償を受け入れて、死因を残し後片付けを確定させる方を採る。
             // [3.388.0/外部レビュー] 終端ログを**通知より先に**出す。旧実装は notify() が先で、その
             //   NotificationCompat.Builder(...).build() は runCatching で包まれていない＝ここが投げると
             //   catch を抜けて finally のフォールバックへ落ち、**本当の原因(e)がどこにも残らないまま**
@@ -326,7 +331,7 @@ class OptimizationWorker(
         fun runIdFile(ctx: Context): File = files(ctx).runId
 
         /** [3.327.0] enqueue の直前に呼び、この実行を所有者として記録する。 */
-        fun beginRun(ctx: Context, runId: Long) = files(ctx).beginRun(runId)
+        fun beginRun(ctx: Context, runId: Long): Boolean = files(ctx).beginRun(runId)
 
         fun activeRunId(ctx: Context): Long = files(ctx).activeRunId()
 

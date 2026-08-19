@@ -59,8 +59,23 @@ class RunFilesTest {
 
     @Test
     fun beginRunRoundTripsThroughTheMarkerFile() {
-        files().beginRun(1_234_567_890_123L)
+        assertTrue("書けたら true を返す", files().beginRun(1_234_567_890_123L))
         assertEquals(1_234_567_890_123L, files().activeRunId())
+    }
+
+    /**
+     * [3.406.0/B-01] マーカーを書けなかったら **false** を返す。旧: 握り潰して Unit を返していたため、
+     * 呼出側は書けたつもりで Work を投入し、Worker は所有権なしと判定して何もせず、画面だけ
+     * 「開始しました」のまま実行中が残る無言の失敗になっていた。書けない状況（親がファイル＝
+     * ディレクトリを作れない）を作って、例外でなく false で返ることを固定する。
+     */
+    @Test
+    fun beginRunReportsFailureInsteadOfSwallowingIt() {
+        val blocked = tmp.newFile("blocked")
+        blocked.writeText("これはファイル。この下にディレクトリは作れない")
+        val files = RunFiles(File(blocked, "dir"))
+        assertFalse("書けないなら false", files.beginRun(99L))
+        assertEquals("所有者なし＝0", 0L, files.activeRunId())
     }
 
     // --- 後片付けの網羅（3.336.0 P0残 / 敵対的レビュー #9） -------------------------------------

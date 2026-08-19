@@ -440,7 +440,10 @@ internal fun CoverageDiagnosisCard(ui: UiState) {
                         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("${s.dayLabel}  ${s.shiftSymbol}  必要${s.need}/現状${s.got}（過剰${s.excess}）",
                                 color = cs.onSecondaryContainer, style = MaterialTheme.typography.titleSmall)
-                            Text(s.reason, color = cs.onSecondaryContainer, style = MaterialTheme.typography.bodySmall)
+                            // [3.406.0] 主因は画面では日本語で出す（ログは生キー＝C1Plateau と同じ規約）。
+                            val famJp = s.blockedFamily?.let { breakdownLabels[it] ?: it }
+                            Text(s.reason + (famJp?.let { "（主因: $it）" } ?: ""),
+                                color = cs.onSecondaryContainer, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
