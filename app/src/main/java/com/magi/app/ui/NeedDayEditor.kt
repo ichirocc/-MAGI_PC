@@ -76,7 +76,7 @@ internal fun MonthHeaderStatic(startDate: String) {
 internal fun SelectorField(label: String, value: String, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Column(
-        Modifier.fillMaxWidth().border(1.dp, cs.outline, RoundedCornerShape(8.dp))
+        Modifier.fillMaxWidth().border(1.dp, cs.outline, MaterialTheme.shapes.extraSmall)
             .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
@@ -143,7 +143,7 @@ fun NeedCalendarCard(ui: UiState, vm: MagiViewModel, initialShift: Int? = null, 
             Text("必要人数設定", style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box {
-                    Surface(color = cs.surfaceVariant, shape = RoundedCornerShape(8.dp), modifier = Modifier.clickable { shiftMenu = true }) {
+                    Surface(color = cs.surfaceVariant, shape = MaterialTheme.shapes.extraSmall, modifier = Modifier.clickable { shiftMenu = true }) {
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(shift.kigou, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text("▼", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
@@ -195,7 +195,7 @@ private fun NeedApplyPanel(ui: UiState, vm: MagiViewModel, k: Int, days: Set<Int
             CountPill("${days.size}日選択中")
             Text(datesLabel, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 2, modifier = Modifier.weight(1f))
         }
-        Column(Modifier.border(1.dp, if (invalid) cs.error else Color.Transparent, RoundedCornerShape(8.dp))) {
+        Column(Modifier.border(1.dp, if (invalid) cs.error else Color.Transparent, MaterialTheme.shapes.medium)) {
             NumberStepper("最低人数", p1, { p1 = it }, min = 0, blankLabel = "既定")
             NumberStepper("上限人数", p2, { p2 = it }, min = 0, blankLabel = "既定")
         }
@@ -270,8 +270,8 @@ private fun NeedMonthGrid(
                         }
                         Box(
                             Modifier.weight(1f).height(54.dp)
-                                .background(if (sel) cs.primaryContainer else cs.surface, RoundedCornerShape(8.dp))
-                                .border(if (sel) 2.dp else 1.dp, if (sel) cs.primary else cs.outlineVariant, RoundedCornerShape(8.dp))
+                                .background(if (sel) cs.primaryContainer else cs.surface, MaterialTheme.shapes.extraSmall)
+                                .border(if (sel) 2.dp else 1.dp, if (sel) cs.primary else cs.outlineVariant, MaterialTheme.shapes.extraSmall)
                                 .clickable { onToggle(j + 1) }
                                 .semantics {
                                     contentDescription = "${j + 1}日を" + (if (sel) "選択解除" else "選択") +

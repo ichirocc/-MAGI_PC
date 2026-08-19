@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -184,11 +183,11 @@ internal fun ColorPickerDialog(
                                 Modifier
                                     .weight(1f)
                                     .aspectRatio(1f)
-                                    .background(hexToColor(hex), RoundedCornerShape(8.dp))
+                                    .background(hexToColor(hex), MaterialTheme.shapes.extraSmall)
                                     .border(
                                         if (selected) 3.dp else 1.dp,
                                         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                        RoundedCornerShape(8.dp),
+                                        MaterialTheme.shapes.extraSmall,
                                     )
                                     .clickable { onPick(hex) }
                                     // [a11y] 色のみの選択肢に読み上げ名を付与。

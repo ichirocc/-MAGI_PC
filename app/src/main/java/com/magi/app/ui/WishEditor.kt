@@ -263,8 +263,8 @@ private fun WishMonthGrid(
                         val k = marked[d]
                         Box(
                             Modifier.weight(1f).height(56.dp)
-                                .background(if (sel) cs.primaryContainer else cs.surface, RoundedCornerShape(8.dp))
-                                .border(if (sel) 2.dp else 1.dp, if (sel) cs.primary else cs.outlineVariant, RoundedCornerShape(8.dp))
+                                .background(if (sel) cs.primaryContainer else cs.surface, MaterialTheme.shapes.extraSmall)
+                                .border(if (sel) 2.dp else 1.dp, if (sel) cs.primary else cs.outlineVariant, MaterialTheme.shapes.extraSmall)
                                 .clickable { onToggle(d) }
                                 .semantics {
                                     contentDescription = "${d}日を" + (if (sel) "選択解除" else "選択") +

@@ -219,9 +219,13 @@ def scan():
 
 # [3.409.5] P2/P4 の現状件数。**既存分は許し、増えたら落とす**ラチェットの基準。
 #   2026-08-19 実測（3.409.4 時点）: P2=1（MagiScheduleViews.kt:1506）・P4=12（16dp×2・8dp×10）。
+#   [3.409.6] その 13 件を全て tier へ寄せて **0 件**にした（P4: 8dp→shapes.extraSmall(10dp)/
+#   16dp→shapes.large(18dp)、最低>上限のエラー枠だけ 3.403.0 の先例に合わせ shapes.medium。
+#   P2: ensureReadable の第2引数を Color(0xFFFFFFFF)→Color.White＝兄弟の呼出と同じ書き方へ）。
+#   **0 が基準になったので、以後この2つは「1 件でも増えたら落ちる」**＝任意値は例外でなく禁止に戻る。
 #   意図して増やすときは、この定数と一緒に「なぜ任意値が要るか」を DESIGN.md へ書く。
-P2_BASELINE = 1
-P4_BASELINE = 12
+P2_BASELINE = 0
+P4_BASELINE = 0
 
 
 def main():
@@ -256,28 +260,32 @@ def main():
     #   強制されていない状態だった（今回のセッションで P6 に見つけたのと同じ「検査が守れていない」型）。
     #   既存分は許し、**増えたときだけ落とす**ラチェットにする。減ったら baseline を下げるよう促す
     #   （下げ忘れると次の増加を見逃す＝ラチェットが緩む）。
+    # [3.409.6] 途中で return せず**全部集めてから**落とす。1つ直して再実行して次が出る、を繰り返させない
+    #   （旧: 最初に当たった検査だけ報告して return 1＝P2 と P4 が同時に増えても P4 が見えなかった）。
+    blockers = []
     for key, base in (("P2", P2_BASELINE), ("P4", P4_BASELINE)):
         n = len(findings[key])
         if n > base:
-            print(f"{key}: baseline {base} 件 → {n} 件に増えています。"
-                  f"{'色は MagiTokens.kt / MagiTheme の colorScheme ' if key == 'P2' else '角丸は MagiTheme の Shapes(small/medium/large) '}"
-                  f"を使ってください（どうしても必要なら根拠を添えて {key}_BASELINE を更新）。")
-            return 1
-        if n < base:
-            print(f"{key}: baseline {base} 件 → {n} 件に減りました。tools/design_lint.py の "
-                  f"{key}_BASELINE を {n} へ下げてください（下げ忘れると次の増加を見逃します）。")
-            return 1
+            blockers.append(
+                f"{key}: baseline {base} 件 → {n} 件に増えています。"
+                f"{'色は MagiTokens.kt / MagiTheme の colorScheme ' if key == 'P2' else '角丸は MagiTheme の Shapes(small/medium/large) '}"
+                f"を使ってください（どうしても必要なら根拠を添えて {key}_BASELINE を更新）。")
+        elif n < base:
+            blockers.append(
+                f"{key}: baseline {base} 件 → {n} 件に減りました。tools/design_lint.py の "
+                f"{key}_BASELINE を {n} へ下げてください（下げ忘れると次の増加を見逃します）。")
     # P5 は「様式の逸脱」でなく**確実なコンパイルエラー**なので、--strict でなくても失敗させる。
     if findings["P5"]:
-        print("P5: 変数の直後に日本語が続いています。必ず波括弧で囲んでください（例: 「N件」なら {count} を波括弧で）。")
-        return 1
+        blockers.append("P5: 変数の直後に日本語が続いています。必ず波括弧で囲んでください（例: 「N件」なら {count} を波括弧で）。")
     # P6 はコンパイルが通ってしまう＝実機で「成功なのに失敗色」として初めて気づく。ここで止める。
     if findings["P6"]:
-        print("P6: message を書くなら messageIsError も必ず書いてください（copy は既定値でなく現在値を引き継ぎます）。")
-        return 1
+        blockers.append("P6: message を書くなら messageIsError も必ず書いてください（copy は既定値でなく現在値を引き継ぎます）。")
     # P7 は「UTF-8 として妥当なので誰も気づかない」型＝出荷物に入り込む。ここで止める。
     if findings["P7"]:
-        print("P7: 二重エンコードの文字化けです。`text.encode('latin-1').decode('utf-8')` で復号できます（可逆であることを確認してから保存）。")
+        blockers.append("P7: 二重エンコードの文字化けです。`text.encode('latin-1').decode('utf-8')` で復号できます（可逆であることを確認してから保存）。")
+    if blockers:
+        for line in blockers:
+            print(line)
         return 1
     if strict and hard > 0:
         print("--strict: P1/P3 の hard 違反があるため exit 1")

@@ -5318,6 +5318,32 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## ラチェットを 0 まで下げる＝任意の角丸と生 hex を tier へ（3.409.6）
+
+3.409.5 で P2/P4 をラチェット化したが、**ラチェットは baseline を下げて初めて意味を持つ**。据え置いた
+13 件をそのまま tier へ寄せ、baseline を **0/0** にした。以後この2つは「既存分は許す」ではなく
+**1件でも増えたら落ちる**＝DESIGN.md の「任意値禁止」が例外なしで機械強制される。
+
+- **寄せ先は私の好みでなく `MagiTheme` の tier 表が決めている**（`extraSmall 10 / small 12 / medium 14 /
+  large 18 / extraLarge 24`、用途は「chip/入力=10・カード=14・タイル/シート=18」）。
+  **8dp → `extraSmall`**（日セル 54/56dp・色見本・集計セル・ドロップダウン枠＝どれも chip/入力）、
+  **16dp → `large`**（シフト選択シートの 56dp タイル）。例外は「最低>上限」のエラー枠1件だけで、
+  3.403.0 が同じ枠に使った `medium` に合わせた（**同じ UI 要素は同じトークン**）。
+- **視覚は +2dp 変わる**（8→10・16→18）。3.90.0 が「非同値だから backlog」と残したのはこの差で、
+  不変ではないと正直に書く。判断の根拠は DESIGN.md 3.4 の「任意 dp を新規に使わない」＋ tier 表そのもの。
+- **P2 の残り1件は書き方の不統一だった**: `ensureReadable(MagiAccent.pink, Color(0xFFFFFFFF))` の隣で
+  `MagiDashboardCards.kt:267` が**同じ呼び出しを `Color.White` で書いている**。名前付き定数へ揃えた
+  ＝ lint 対策でなく兄弟サイトとの一致（`ensureReadable` 自身も内部で `Color.White` を使う）。
+- **[検査自身の欠陥も1件] 落ちる検査を1つ報告して止まっていた**: ラチェットのループは最初に当たった
+  時点で `return 1` していたため、P2 と P4 が同時に増えても P4 が見えない。実際この作業中に踏んだ
+  （P2 を直すまで P4 の注入が報告されなかった）。全部集めてから落とす形へ（P5/P6/P7 も同じ扱い）。
+- **教訓#30 の実践**: scratch へ「生 hex 1件」と「9dp の角丸1件」を同時に注入すると **P2/P4 の2行が
+  揃って報告され exit 1**、repo 本体は exit 0 を確認（`ShiftColorEditor.kt` は用途が消えた
+  `RoundedCornerShape` の import も削除）。
+- 検証: ホストJVM **504テスト green**。UI 層はホストでコンパイル不可＝括弧均衡（`{}` は4ファイルとも
+  増減0・`()` は削除した `RoundedCornerShape(...)` の数とちょうど一致して対称）と `MaterialTheme` の
+  import 有無を静的確認。最終判定は CI。
+
 ## 「baseline 監視」が監視になっていなかった＝P2/P4 のラチェット化（3.409.5）
 
 繰り返してきた欠陥クラス（need1 直読み・生 `wish` 比較・`betterReport` の複製）を再掃討したところ

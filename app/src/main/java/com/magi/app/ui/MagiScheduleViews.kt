@@ -321,8 +321,8 @@ internal fun ShiftPickerSheet(
                             Modifier
                                 .weight(1f)
                                 .heightIn(min = 56.dp)
-                                .background(bg, RoundedCornerShape(16.dp))
-                                .then(if (ng) Modifier.border(2.dp, cs.error, RoundedCornerShape(16.dp)) else Modifier)
+                                .background(bg, MaterialTheme.shapes.large)
+                                .then(if (ng) Modifier.border(2.dp, cs.error, MaterialTheme.shapes.large) else Modifier)
                                 .clickable {
                                     if (mode == 0) onPick(k) else { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.setWish(i, j, k); onDismiss() }
                                 }
@@ -1281,7 +1281,7 @@ private fun TallyBox(
 ) {
     Box(Modifier.width(w).height(h).padding(1.dp)) {
         Box(
-            Modifier.fillMaxSize().background(bg, RoundedCornerShape(8.dp))
+            Modifier.fillMaxSize().background(bg, MaterialTheme.shapes.extraSmall)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 // [a11y/B1] 違反セルは数字だけでは読み上げが「9」等になり文脈が失われる。渡された時のみ
                 //   「氏名 シフト N回 不足」のような説明を公開（タップ先の詳細と同義）。非違反セルは cd=null で無音のまま。
@@ -1503,7 +1503,7 @@ private fun FlatCell(
                         .padding(horizontal = 2.dp),
                 ) {
                     Text(wishSym, fontSize = symSize * 0.70f, fontWeight = FontWeight.Bold,
-                        color = ensureReadable(MagiAccent.pink, Color(0xFFFFFFFF)), maxLines = 1)
+                        color = ensureReadable(MagiAccent.pink, Color.White), maxLines = 1)
                 }
             } else if (wk != 0) {
                 Box(
