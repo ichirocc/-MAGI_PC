@@ -400,10 +400,9 @@ object V6NativeOptimizer {
         //   （多様性>深さ。V5だけは仮説の概念を使わずworkersをそのままSAチェーン数とする＝対象外）。
         val w = hypothesisCount(options.workers)
         // [3.371.0/並列SA本格再有効化] 表示はエンジンが実際に使う hypothesisSpawnPlan（runMultiWorker と
-        //   同一関数）から導出。PORTFOLIO は runMultiWorker を経由せず各ロールが portfolioRoleChainCount()
-        //   本のチェーンで走るため、この plan でなくそちらを表示する（3.372.0/レビュー修正: 旧実装は
-        //   「仮説内チェーンは対象外」を無条件に印字し、portfolioRoleParallelSa を ON にしても実挙動が
-        //   ログに出ず、実機ログでのA/Bというトグル本来の目的を潰していた）。
+        //   同一関数）から導出。PORTFOLIO は runMultiWorker を経由せず各ロールが単一チェーンで走る
+        //   （ロール内並列SA=portfolioRoleParallelSa は 3.409.21 の単体 A/B で中立＝削除。
+        //   ON は反復数中央値がむしろ低かった＝チェーン分割が希釈になっていた）。
         val (spawnHyp, plan) = hypothesisSpawnPlan(options.workers, w)
         val planNote = plan.let { pl ->
             val mn = pl.min(); val mx = pl.max()
@@ -411,11 +410,7 @@ object V6NativeOptimizer {
         }
         val workersNote = when (chosen) {
             V6Algorithm.V5 -> "workers=${options.workers}（SAチェーン）"
-            V6Algorithm.PORTFOLIO -> {
-                val roleChains = portfolioRoleChainCount()
-                "workers=${options.workers}（適応ポートフォリオ仮説${w}・ロール内チェーン${roleChains}本" +
-                    "${if (roleChains > 1) "＝ロール内並列SA ON" else ""}）"
-            }
+            V6Algorithm.PORTFOLIO -> "workers=${options.workers}（適応ポートフォリオ仮説${w}・各ロール単一チェーン）"
             else -> "workers=${options.workers}（実効仮説${spawnHyp}${if (spawnHyp < w) "＝設定${w}をコア数まで縮小" else ""}・$planNote）"
         }
         var logs = listOf(
@@ -596,18 +591,6 @@ object V6NativeOptimizer {
             else hypothesisChainPlan(workers, hSpawn, cores = cores)
         return hSpawn to plan
     }
-
-    /**
-     * [3.372.0/レビュー修正] PORTFOLIO の各ロールが内部の V5(SA)/ALNS へ渡すチェーン本数。
-     * `runAdaptivePortfolio` の実配線と診断ログの表示が同じ値を読むための単一ソース
-     * （旧: 診断ログが `仮説内チェーンは対象外` を無条件に印字し、トグルONでも実挙動を隠していた＝
-     *   実機ログでのA/Bというトグル本来の目的を潰していた。3.153.0 の NativeBridge 行と同型）。
-     */
-    internal fun portfolioRoleChainCount(
-        cores: Int = Runtime.getRuntime().availableProcessors(),
-    ): Int = if (PolishGate.portfolioRoleParallelSa)
-        PolishGate.portfolioRoleChains.coerceIn(1, max(1, cores))
-    else 1
 
     /**
      * [3.409.4] PORTFOLIO の**外側ワーカー**が壁時計上でどれだけ並行していたかの観測値
@@ -808,13 +791,6 @@ object V6NativeOptimizer {
                 var reassignments = 0
                 var stagnantEpochs = 0
                 var improvedPrevious = false
-                // [3.306.0/既定OFF] 残差ベースの4段脱出制御。null=従来経路（回数で機械的に巡回し、
-                //   再配属のたびに stagnantEpochs を 0 へ戻す）。非null=盤面の残差と peer 距離で
-                //   次の役割を選び、停滞の深さを役割変更でも保持する。既定 OFF の根拠は PolishGate 参照。
-                val escapeController =
-                    if (PolishGate.adaptiveEscapeControl) StagnationEscapeController(i) else null
-                var controlledAssignment =
-                    if (escapeController != null) AdaptiveHypothesisEpochPolicy.initialAssignmentFor(i) else null
                 var epoch = 0
                 var iterations = 0L
                 var exitReason = ""   // [3.346.0] epoch ループの離脱理由（下で確定）
@@ -858,8 +834,7 @@ object V6NativeOptimizer {
                         continue
                     }
                     try {
-                    val assignment = controlledAssignment
-                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
+                    val assignment = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)
                     val epochT0 = nowMs()
                     val roleSeed = AdaptiveHypothesisEpochPolicy.epochSeed(baseSeed, i, epoch, reassignments)
                     // [3.282.0/新領域ログ監査] エポック改善の基準線＝エポック開始時点の自己エリート。
@@ -924,13 +899,12 @@ object V6NativeOptimizer {
                     if (quantum <= 0) break
                     val roleDeadline = minOf(deadline, nowMs() + quantum * 1000L)
                     val roleIndex = i + reassignments * 8
-                    // [並列SA本格再有効化, 3.371.0/既定OFF] 通常はロール1本=内部チェーン1本（希釈回避、
-                    //   workers==コア数のときの安全な既定）。トグルONのときだけコア数以内で複数チェーンへ
-                    //   広げる（詳細は PolishGate.portfolioRoleParallelSa の docstring）。
-                    //   [3.372.0] 実配線と診断ログ表示が同じ値を読むよう portfolioRoleChainCount へ集約。
-                    val roleWorkers = portfolioRoleChainCount()
+                    // ロール1本=内部チェーン1本（希釈回避。workers==コア数が通常なので、ロール内で
+                    //   さらに分割すると倍率オーバーサブスクライブになる。複数チェーン化
+                    //   =portfolioRoleParallelSa は 3.409.21 の単体 A/B で中立＝削除。ON は反復数中央値が
+                    //   2/3データセットで低く、チェーン分割が希釈になっていたことまで実測で確認した）。
                     val roleOptions = options.copy(
-                        workers = roleWorkers,
+                        workers = 1,
                         seed = roleSeed,
                         explore = when (assignment.role) {
                             HypothesisEpochRole.HARD_DEBT_RSI_PLUS,
@@ -1021,25 +995,7 @@ object V6NativeOptimizer {
                         }
                         d
                     }
-                    if (escapeController != null) {
-                        // [3.306.0/既定OFF経路] stagnantEpochs をリセットしない＝停滞の深さが役割変更を
-                        //   跨いで残り、target → 再結合 → 多様化 → 深い破壊 の4段へ進める。
-                        TuningTelemetry.escapeControlUsed.incrementAndGet()
-                        val next = escapeController.nextAssignment(
-                            current = controlledAssignment!!,
-                            report = eliteReport,
-                            plateauDepth = stagnantEpochs,
-                            nearestOtherDistance = nearest,
-                            hasOtherHypothesis = workers > 1,
-                        )
-                        val roleChanged = next.role != controlledAssignment!!.role
-                        if (roleChanged) reassignments++
-                        controlledAssignment = next
-                        // [3.308.0] 役割が変わった直後は改善直後の長い量子を引き継がない
-                        //   （既定経路が元から守っていた契約。制御器経路だけ抜けていた）。
-                        improvedPrevious = AdaptiveHypothesisEpochPolicy
-                            .carriesImprovingQuantum(improvedThisEpoch, roleChanged)
-                    } else if (AdaptiveHypothesisEpochPolicy.shouldReassign(
+                    if (AdaptiveHypothesisEpochPolicy.shouldReassign(
                             index = i,
                             improvedThisEpoch = improvedThisEpoch,
                             stagnantEpochs = stagnantEpochs,
@@ -1093,8 +1049,7 @@ object V6NativeOptimizer {
                     elite = elite,
                     report = eliteReport,
                     logs = eliteLogs,
-                    lastRole = (controlledAssignment
-                        ?: AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments)).role,
+                    lastRole = AdaptiveHypothesisEpochPolicy.assignmentFor(i, reassignments).role,
                     exitReason = exitReason,
                     exitAtSec = exitAtSec,
                     survivedStops = survivedStops,

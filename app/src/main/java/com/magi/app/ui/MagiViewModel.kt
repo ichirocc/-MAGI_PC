@@ -770,27 +770,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         logOp("I", "設定変更: 禁止連続の崩し範囲 → ${if (on) "パターン全域" else "前後1日"}")
     }
 
-    /**
-     * [3.306.0] 並列で走る複数案が行き詰まったとき、次に何を試すかを「残っている違反の種類」から選び、
-     * 行き詰まりの深さを手を替えても保持する。既定 OFF（実データ3件×各4回の A/B で有意差を検出できず、
-     * 詳細は `PolishGate.adaptiveEscapeControl` の docstring）。
-     */
-    fun setAdaptiveEscape(on: Boolean) {
-        com.magi.app.v6.PolishGate.adaptiveEscapeControl = on
-        _ui.update { it.copy(adaptiveEscape = on) }
-        logOp("I", "設定変更: 行き詰まりからの立て直し方 → ${if (on) "残りの違反に合わせて選ぶ" else "順ぐりに試す"}")
-    }
-
-    /**
-     * [3.371.0/並列SA本格再有効化] AUTOで長時間予算が既定選択する PORTFOLIO の各ロールが内部で使う
-     * SA/ALNSチェーン数を、常時1本固定からコア数以内の複数本へ広げる（既定OFF、
-     * `PolishGate.portfolioRoleParallelSa` の docstring参照。未測定のため実機検証用）。
-     */
-    fun setPortfolioRoleParallelSa(on: Boolean) {
-        com.magi.app.v6.PolishGate.portfolioRoleParallelSa = on
-        _ui.update { it.copy(portfolioRoleParallelSa = on) }
-        logOp("I", "設定変更: PORTFOLIOロール内並列SA → ${if (on) "ON" else "OFF"}")
-    }
+    // [3.409.21] setAdaptiveEscape / setPortfolioRoleParallelSa は削除（単体 A/B 中立＝機構ごと撤去。
+    //   PolishGate 冒頭の記録参照）。
 
     fun setBudget(sec: Int) { val v = sec.coerceIn(10, MAX_BUDGET_SEC); _ui.update { it.copy(budgetSec = v) }; logOp("I", "設定変更: 予算 → ${v}秒") }
     fun setSoftPolish(b: Boolean) { _ui.update { it.copy(softPolish = b) }; logOp("I", "設定変更: ソフト研磨 → ${if (b) "ON" else "OFF"}") }

@@ -84,7 +84,7 @@
 ## 4. UiState（画面表示用の派生状態）
 
 `data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
-状態。**全73フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
+状態。**全71フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
 
 **読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
 
@@ -93,10 +93,11 @@
 **最適化の状態**（9）：`running`, `hasResult`, `initHard`/`initSoft`(Long), `bestHard`/`bestSoft`(Long),
 `totalViolations`, `weightedScore`(Double), `elapsedMs`
 
-**計算の設定**（10）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
+**計算の設定**（8）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
 `softPolish`(=true), `nativeAccel`(=true), `nativeParity`(=true) と、**既定 OFF の調整トグル**
-`blockSwapC3nFilter` / `wideC3nBreak` / `adaptiveEscape` / `portfolioRoleParallelSa`
-（意味と見直しの条件は [`algorithm_portfolio.md`](./algorithm_portfolio.md)）
+`blockSwapC3nFilter` / `wideC3nBreak`
+（意味と見直しの条件は [`algorithm_portfolio.md`](./algorithm_portfolio.md)。
+`adaptiveEscape` / `portfolioRoleParallelSa` は 3.409.21 で削除＝単体 A/B 中立）
 
 **違反の内訳と場所**（8）— **3つのキー空間**を混ぜないこと（§3 参照）：
 
@@ -137,7 +138,7 @@
 
 **その他**（6）：`v6`(`V6PortReport?`), `message`, `messageIsError`(Snackbar を失敗色にするか), `opLog`(操作ログ), `logs`(診断ログ), `startDate`
 
-> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+9+10+8+12+4+14+2+6 = **73** で
+> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+9+8+8+12+4+14+2+6 = **71** で
 > `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
 > **フィールドが増減したのにここを直し忘れた**ことが件数のずれとして出る（実際、本文を書いた直後の照合で
 > 4グループとも数字が間違っていた）。件数を落とすと照合は無意味になるので、更新のたびに数字も直すこと。

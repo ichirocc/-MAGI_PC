@@ -5320,6 +5320,41 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 既定OFFトグル2つを単体 A/B で測って削除（3.409.21, ユーザー選択「両方削除」）
+
+3.384.0 の「見直しの条件」表が事前に約束した手順を実行した。対象は残っていた未判定トグル2つ:
+`portfolioRoleParallelSa`（PORTFOLIO ロール内並列SA・3.371.0）と `adaptiveEscapeControl`
+（停滞脱出の適応制御・3.306.0）。**測ってから、事前に固定した基準で、機構ごと削除**（規律7）。
+
+- **測定の設計**（ホストJVM）: 1プロセス=1実行（static のクリーン化）・`requestedAlgorithm=PORTFOLIO`
+  強制・**workers=4**＝ホストは4コアなので実機（8ワーカー/8コア）と同じ worker:コア=1 の比率を再現
+  （parallelSa ON のときだけ 2倍の過剰予約になる、という実機と同じレジーム）。3データセット×各5ペア
+  =トグルごと15ペア・ペア内で ON/OFF の実行順を交互化・**判定基準は測定前に固定**（weighted 12/15 で採否、
+  符号検定 p≈0.035）。sample_v6 は実現不能希望9件で ImpossibleWishGate に弾かれるため
+  `allowImpossible=true` が要る（最初の10 run が無言で全滅して発覚）。計60 run・約100分を
+  `setsid nohup` で分離実行。
+- **結果**: parallelSa = **ON7/OFF8＝中立**。しかも **ON は反復数中央値が 2/3 データセットで低い**
+  （blocked 45M vs 57M・sample 53M vs 60M）＝チェーン分割は希釈にしかならない——このトグルの動機だった
+  「ロール内1本=遊休」仮説そのものの反証。escape = **ON5/OFF10＝中立〜OFF寄り**（3.306.0 の n=24 と
+  合わせ**2度目の中立**）。hard 中央値はどちらも全データセットで不変。正直な限界＝ホスト4コア/JIT vs
+  実機8コア/ART（比率は合わせたが絶対条件は違う）。
+- **削除の範囲**: `PolishGate` の3フィールド／`TuningTelemetry.escapeControlUsed`＋summary の立て直し方
+  段／`portfolioRoleChainCount()`（roleWorkers は 1 固定へ）／epoch ループの制御器分岐
+  （`controlledAssignment` 消滅で `assignment`・`lastRole` が単純化）／`StagnationEscapePressure`・
+  `StagnationEscapeController`・役割指定の `assignmentFor(role, escapeDepth)` overload／UI の
+  Switch 2行・`setAdaptiveEscape`・`setPortfolioRoleParallelSa`・UiState 2フィールド（73→71、
+  `data-models.md` の件数照合も更新）／`StagnationEscapeControllerTest.kt` 丸ごと・
+  `PolishRobustnessTest` の escape 参照・`HypothesisEpochPolicyTest` の overload 依存1件は
+  既定経路 `assignmentFor(3,0)`（=HARD_DEBT_RSI_PLUS を role assert つき）へ書き換え。
+  **温存**: `carriesImprovingQuantum`（既定経路の量子契約）・`initialAssignmentFor`（既定経路の
+  初期配置＝V6NativeOptimizer:779 が使用）・`intensityFor`/`shouldReassign`/`nextStagnantEpochs`。
+- **docs**: `algorithm_portfolio.md` は2トグルを「廃止・統合済み」へ移し（A/B の数値・希釈の反証・
+  比率合わせの設計まで記録）、「見直しの条件」表・「どこを見れば」から削除、
+  `StagnationEscapeController` の決定表セクション（~40行）を削除、「役割が変わった直後の量子」は
+  既定経路の生きた契約なので適応ポートフォリオ章へ移動して文言を単数経路へ是正。
+- 検証: ホストJVM 全テスト green（escape テスト撤去ぶん減）・design_lint 0。探索の既定経路は
+  1ビットも変えていない（roleWorkers は既定 OFF 時も常に 1 だった＝削除後も 1 固定で同一）。
+
 ## C41/C42/C41s/C42s の説明を別々の制約として書き分け（3.409.20, ユーザー指示）
 
 ユーザー指示「C41,C42,C41s,C42sは別々の制約です。別々の説明も明確に分かるように記載する」。

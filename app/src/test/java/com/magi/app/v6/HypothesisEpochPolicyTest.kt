@@ -118,9 +118,10 @@ class HypothesisEpochPolicyTest {
     @Test
     fun roleChangeCostsTheRsiPlusImprovingBonusInSeconds() {
         // 契約が実際に秒へ効くことを quantumSeconds まで通して固定する。
-        val rsiPlus = AdaptiveHypothesisEpochPolicy.assignmentFor(
-            HypothesisEpochRole.HARD_DEBT_RSI_PLUS, escapeDepth = 0,
-        )
+        // slot3/r=0 は HARD_DEBT_RSI_PLUS（3.409.21: 役割指定の overload は制御器経路ごと削除したため
+        // 既定経路の assignmentFor で組む。役割が変われば下の assertEquals が落ちる）。
+        val rsiPlus = AdaptiveHypothesisEpochPolicy.assignmentFor(3, 0)
+        assertEquals(HypothesisEpochRole.HARD_DEBT_RSI_PLUS, rsiPlus.role)
         val kept = AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = false)
         val changed = AdaptiveHypothesisEpochPolicy.carriesImprovingQuantum(true, roleChanged = true)
         assertEquals(

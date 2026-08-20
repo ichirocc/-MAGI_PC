@@ -109,23 +109,13 @@ object PolishGate {
     @Volatile
     var wideC3nBreakDays: Boolean = false
 
-    /**
-     * [適応ポートフォリオの停滞脱出, 3.306.0] 各ワーカーの次の役割を「再配属の回数」でなく
-     * **いま残っている違反の種類と他仮説との距離**から選び、停滞の深さを役割変更でも保持する
-     * （`StagnationEscapeController`）。既定経路は盤面を見ずに6役割を機械的に巡回し、再配属のたびに
-     * 停滞カウンタを 0 へ戻す。
-     *
-     * **実データ3件×各4回の A/B で有意な差を検出できなかったため既定 OFF**。3データセットとも
-     * weighted の範囲が完全に重なり、中央値の大小も一貫しない（golden=新が良い／real=新が良い／
-     * user=新が悪い）。c1 も golden では新のほうが悪い。PORTFOLIO は epoch が壁時計ベースで
-     * seed を固定しても run ごとに大きく振れる（実測の幅: golden 207・real 295）ため、
-     * この分散の中で効果を示すには現実的でない反復数が要る。
-     *
-     * 設計としては既定経路より筋が通っている（盤面を見る／証拠を消さない）が、
-     * 「安全であること」と「有益であること」は別（2.55.0・3.94.0・3.303.0 と同じ結論）。
-     */
-    @Volatile
-    var adaptiveEscapeControl: Boolean = false
+    // [3.409.21/ユーザー選択「両方削除」] adaptiveEscapeControl（停滞脱出の適応制御・3.306.0）と
+    //   portfolioRoleParallelSa/portfolioRoleChains（ロール内並列SA・3.371.0）は削除した。
+    //   単体 A/B（1プロセス=1実行・各15ペア・基準は測定前に固定「12/15 で採否」）の結果:
+    //   parallelSa = ON7/OFF8（中立。しかも ON は反復数中央値が2/3データセットで**低い**＝
+    //   チェーン分割が希釈になっていた: blocked 45M vs 57M・sample 53M vs 60M）、
+    //   escape = ON5/OFF10（中立〜OFF寄り。3.306.0 の n=24 と合わせ2度目の中立）。
+    //   hard 中央値はどちらも全データセットで不変。docs/algorithm_portfolio.md「廃止・統合済み」参照。
 
     /**
      * ブロック巡回交換で、禁止連続(c3n)が正味増える候補を**候補生成の段階で**捨てるか。既定 false。
@@ -136,38 +126,6 @@ object PolishGate {
      * （実測: 正式評価 48→14〜38 件）。
      */
     @Volatile var filterC3nIncrease: Boolean = false
-
-    /**
-     * [並列SA本格再有効化, 3.371.0] 適応ポートフォリオ(PORTFOLIO)の各ロールが内部で呼ぶ V5(SA)を、
-     * 常時1本固定(`roleOptions.workers=1`)から、コア数に収まる範囲で複数本の並列SAチェーンへ広げるか。
-     * 既定 false。
-     *
-     * **背景**: `runAdaptivePortfolio` は `workers` 本のロールコルーチンを並列起動し（通常
-     * workers==端末コア数、希釈なし）、各ロールが内部で呼ぶ `runV5`/`runAlns`/`runRsi`/`runRsiPlus` には
-     * 一律 `roleOptions.workers=1` を渡していた（3.211.0/3.212.0 で作った「並列SAチェーン」の仕組みは
-     * `runMultiWorker`（3.371.0で `hypothesisSpawnPlan` により復元）を経由する ALNS/RSI/RSI++ の**明示
-     * 選択時**にしか届かず、既定(AUTO)で長時間予算が解決する PORTFOLIO では常に単一チェーンのまま
-     * だった。実機ログ(Pixel 10 Pro XL, workers=8=コア数8, 300秒PORTFOLIO)で
-     * `RunMAGI_V5: ... SAチェーン1本` を確認済み）。`runAlns` は `options.workers>1` で
-     * `runAlnsChains`（複数ALNSチェーンを`async`で並列実行）へ分岐するため、この設定は
-     * ロールの割当アルゴリズムがALNSの場合にも同様に効く。
-     *
-     * workers==コア数のとき、単純に各ロールへ複数チェーンを与えると **8ロール×2チェーン=16スレッドの
-     * ような組織的な倍率オーバーサブスクライブ**になり、`clampWorkersToCores`/`hypothesisChainPlan` の
-     * コア数クランプが避けている希釈リスクと同種の問題を生む。ON にすると、ロールが実際に V5(SA)へ
-     * 入るときだけ [portfolioRoleChains] 本（既定2・コア数以内にクランプ）の並列チェーンを与える
-     * （全ロールが常時V5フェーズにいるわけではないため — RSI は V5/ALNS交互・RSI++はSeed段階のみ — 恒常的な
-     * 倍率オーバーサブスクライブにはならないが、瞬間的なピーク並列度は増える）。
-     *
-     * **測定は未実施**（PORTFOLIOは~430行の複雑な適応制御を持ち、このサンドボックスでは実機相当の
-     * A/B測定ができない）。2.55.0/2.56.0/3.306.0 と同じ規律により、既定は安全側(false=旧来どおり)に
-     * 倒し、ユーザーが実機で試して効果を確認できるようトグルとして提供する。
-     */
-    @Volatile var portfolioRoleParallelSa: Boolean = false
-
-    /** [3.371.0] `portfolioRoleParallelSa` ON 時、PORTFOLIO の各ロールが V5(SA) 呼出に使う並列チェーン数。
-     *  コア数以内にクランプ（希釈を避ける）。既定2。 */
-    @Volatile var portfolioRoleChains: Int = 2
 }
 
 /**
@@ -175,6 +133,8 @@ object PolishGate {
  * **その実行で実際に何をしたか**を数える。旧: トグルは6つあるのに、ログを見ても「ONにした意味が
  * あったか」が読めず、減らす判断ができなかった（`禁止連続の崩し範囲`・`立て直し方` に至っては
  * 実行の痕跡が一切出ない）。数回まわして毎回「観測なし」なら、そのトグルは消してよい、と言える。
+ * [3.409.21] この計測が実際に判断を支えた＝立て直し方(adaptiveEscapeControl)とロール内並列SA
+ * (portfolioRoleParallelSa)は単体 A/B の中立を根拠に削除（PolishGate 冒頭の記録参照）。
  *
  * 読み取り専用の計数のみ＝探索・採否・スコアには一切影響しない。`optimize()` 入口で reset する。
  */
@@ -191,8 +151,6 @@ object TuningTelemetry {
     val wideC3nDiffered = java.util.concurrent.atomic.AtomicInteger(0)
     /** 同・呼ばれた回数（広がらなかった分も含む）。 */
     val wideC3nCalls = java.util.concurrent.atomic.AtomicInteger(0)
-    /** 立て直し方(適応制御)が役割を決めた回数。 */
-    val escapeControlUsed = java.util.concurrent.atomic.AtomicInteger(0)
     /** 仕上げ最適化により PhaseB(LAHC) へ切り替わった回数。 */
     val lahcEntered = java.util.concurrent.atomic.AtomicInteger(0)
     /** Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。 */
@@ -210,7 +168,7 @@ object TuningTelemetry {
      */
     fun reset() {
         c3nFilterSkipped.set(0); wideC3nDiffered.set(0); wideC3nCalls.set(0)
-        escapeControlUsed.set(0); lahcEntered.set(0); parityChecks.set(0)
+        lahcEntered.set(0); parityChecks.set(0)
     }
 
     /** 各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。 */
@@ -232,7 +190,6 @@ object TuningTelemetry {
             " / Kotlin照合=" + eff(parityOn, parityChecks.get(), "回") +
             " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped.get(), "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
-            " / 立て直し方=" + eff(PolishGate.adaptiveEscapeControl, escapeControlUsed.get(), "回の役割決定") +
             " / 仕上げ最適化=" + eff(softPolishOn, lahcEntered.get(), "回LAHCへ切替")
     }
 }

@@ -332,36 +332,8 @@ private fun OptimizationTuningSection(ui: UiState, vm: MagiViewModel) {
             }
             Switch(checked = ui.wideC3nBreak, onCheckedChange = { vm.setWideC3nBreak(it) }, enabled = !ui.running)
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("行き詰まりからの立て直し方")
-                Text(
-                    if (ui.adaptiveEscape)
-                        "⚠ 並列で走る複数案が行き詰まったとき、残っている違反の種類に合わせて次の手を選びます。" +
-                            "できあがる勤務表が良くなるとは限りません（試した範囲では差が出ませんでした）。"
-                    else
-                        "並列で走る複数案が行き詰まったとき、決まった順番で次の手を試します。",
-                    fontSize = 12.sp,
-                    color = if (ui.adaptiveEscape) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = ui.adaptiveEscape, onCheckedChange = { vm.setAdaptiveEscape(it) }, enabled = !ui.running)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text("PORTFOLIOロール内並列SA")
-                Text(
-                    if (ui.portfolioRoleParallelSa)
-                        "⚠ 「おまかせ」で長めの制限時間を選んだときの既定方式（PORTFOLIO）で、各案の内部計算に" +
-                            "コア数以内で複数本の並列計算を使います。できあがる勤務表が良くなるとは限りません（未検証）。"
-                    else
-                        "「おまかせ」で長めの制限時間を選んだときの既定方式（PORTFOLIO）は、各案の内部計算を1本で行います。",
-                    fontSize = 12.sp,
-                    color = if (ui.portfolioRoleParallelSa) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = ui.portfolioRoleParallelSa, onCheckedChange = { vm.setPortfolioRoleParallelSa(it) }, enabled = !ui.running)
-        }
+        // [3.409.21] 「行き詰まりからの立て直し方」「PORTFOLIOロール内並列SA」の2トグルは、単体 A/B
+        //   （各15ペア・基準は測定前に固定）で中立と確定したため機構ごと削除した（PolishGate 冒頭の記録参照）。
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = ui.softPolish,
