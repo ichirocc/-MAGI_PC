@@ -72,7 +72,7 @@ fun SkillGroupCard(ui: UiState, vm: MagiViewModel) {
                         Text(st.name, fontSize = 12.sp, modifier = Modifier.weight(1f))
                         var open by remember { mutableStateOf(false) }
                         Box {
-                            OutlinedButton(onClick = { open = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                            OutlinedButton(onClick = { open = true }, enabled = !ui.running, modifier = Modifier.heightIn(min = 48.dp)) {
                                 Text(skills.getOrNull(st.skillIdx)?.kigou ?: "(なし)")
                                 // [校正] ドロップダウンと分かるよう下向き矢印アフォーダンスを付与。
                                 Icon(

@@ -5318,6 +5318,54 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## /code-review 7件を全て修正＝作ったばかりの P9 に本物の穴が3つあった（3.409.13）
+
+3.409.12 への `/code-review`（7件・全て注入または実コードで verify 済みの指摘）を受け、全件修正した。
+**最も重いのは、前日に「注入試験で2つの欠陥を潰した」と書いた P9 自身に、まだ3つの穴があったこと**＝
+注入試験は「試したケースが通る」ことしか証明しない。レビューは私が試さなかったケースを試した。
+
+### P9 の3つの穴（レビュー#2/#3/#4）→ ブロック所属ベースへ作り直し
+- **#2 トークンを捨てた裸の呼び出しが完全に不可視**: `beginBoardJob("x")` と `val` 無しで呼ぶと
+  **解放が構造的に不可能**（＝最悪の書き間違い）なのに、正規表現が `val x = beginBoardJob(` しか
+  見ていなかった。裸の呼び出し自体を検出対象に追加（定義行は除外）。
+- **#3 判定が生テキストの語検索だった**: `// finally we do the work` というコメントで「finally の外」
+  判定を騙せる／無関係な `try{..} finally{log()}` が先に在れば解放がその外でも通る／
+  **コメントアウトされた `// endBoardJob(t)` が解放として通る**。
+- **#4 偽陽性**: 正当な1行 `try { .. } finally { endBoardJob(t) }` を「finally の外」と誤検出
+  （範囲検索 `range(i, end_at)` が end 行自身を含まないため）＝CI を不当に落とす。
+- **作り直し**: `_strip_kotlin_file`（行コメント・文字列に加え **複数行 /* */＝KDoc も**落とす）＋
+  char スキャンで `{` を積むとき直前の識別子が `finally` かを記録し、endBoardJob 出現時に
+  **スタック上に finally ブロックが在るか**で判定する（語の有無でなくブロック所属）。
+  注入試験は8ケース＝欠陥4（裸呼び出し・コメント finally・無関係 try/finally・コメントアウト解放）が
+  **全て発火**し、正当4（1行 try-finally・標準形・KDoc言及・finally 内の if ネスト）が**全て素通り**。
+  実リポジトリは 5/5 サイト通過＝0件のまま。
+
+### UI の同型漏れ（レビュー#1/#6）
+- **#1 行本文タップが対象漏れ**: 3.409.12 は Ws1Editor の Edit/Delete **ボタン**を無効化したのに、
+  **同じ行の本文タップ（48dp の行全体が clickable）**が編集ダイアログを開いたままだった＝
+  「入力し終えてから拒否」がボタンの隣で再発する。シフト/グループ/職員の3行とも
+  `clickable(enabled = !ui.running)` へ（ConstraintEditor と StaffManageCard は既に正しかった形に揃える）。
+- **#6 スキル▼と担当可否チップ**: SkillGroupEditor のスキル割当ドロップダウン（StaffManageCard 側は
+  既に enabled 付き＝非対称だった）と、Ws1Card の担当可否 FilterChip（`ws1SetGroupShift` は
+  `applyStructure` 経由＝実行中は必ず拒否される）に `enabled = !ui.running`。
+
+### 写しの stale-false 経路を源で塞ぐ（レビュー#7）
+`enabled = !ui.running` は**表示の写し**を読む。3.336.0 が記録したとおり、init 時の WorkManager
+問い合わせが失敗すると背景で走っているのに写しが false のまま＝その経路ではボタンが生きて
+「入力し終えてから拒否」が再発する。**Worker は開始時に必ず `OptimizationRepository.setRunning(true)` を
+流す**ので、その StateFlow を写しへ反映する collector を追加（問い合わせの成否に依存しない）。
+下げる側は **true を見たあとの遷移だけ**＝購読開始時の初期値 false が、init 復元の
+「バックグラウンド計算を継続中…」の running=true を踏み消さないため。下げるときも前景ジョブ
+（boardJobLabel）や違反チェック（checkJob）が生きていれば触らない。
+
+### docs（レビュー#5）
+`DESIGN.md` §4 が「P1–P8」のままで P9 を載せていなかった＝**3.409.5 が直したのと同じ doc/lint ドリフトを
+その翌日に自分で作っていた**。P9 の項と §5 の「P1–P9」を追記。
+
+- 検証: `design_lint` exit=0（P9 注入8ケース＝欠陥4発火・正当4素通り）・ホストJVM **508テスト green**。
+  UI 層はホストでコンパイル不可＝括弧均衡（3ファイルとも対称）・`ui`/`checkJob`/`boardJobLabel` の
+  スコープを静的確認。
+
 ## この環境で実行できないと言っていたものを、実行できる形に置き換える（3.409.12）
 
 「実機/Robolectric が無いから確かめられない」と記録していた項目を、**その言い分が本当かを1件ずつ検証**した。

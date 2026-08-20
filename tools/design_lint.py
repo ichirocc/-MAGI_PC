@@ -276,53 +276,133 @@ def find_p8():
     return out
 
 
-RE_BEGIN_JOB = re.compile(r"\bval (\w+) = beginBoardJob\(")
-RE_MEMBER_FUN = re.compile(r"^ {0,8}(private |internal |public )?(suspend )?fun ")
+RE_BEGIN_CAPTURE = re.compile(r"\bval\s+(\w+)\s*=\s*beginBoardJob\s*\(")
+RE_BEGIN_ANY = re.compile(r"\bbeginBoardJob\s*\(")
+RE_BEGIN_DEF = re.compile(r"\bfun\s+beginBoardJob\b")
+
+
+def _strip_kotlin_file(lines):
+    """行コメント・文字列に加え、**複数行の /* */（KDoc 含む）**も落とした行リストを返す。
+
+    [3.409.13/レビュー#3] 旧 P9 は行単位の _strip_strings_and_comments だけを（しかも endBoardJob の
+    照合には**使わずに**）呼んでおり、①コメント中の「finally」が本物の finally として数えられる
+    ②コメントアウトされた `// endBoardJob(...)` が解放として通る、の両方が注入試験で実証された。
+    KDoc（`/** … */`）は行単位ストリッパでは落ちないので、ファイル単位でブロックコメントを追跡する。
+    """
+    out = []
+    in_block = False
+    for line in lines:
+        res, i, n = [], 0, len(line)
+        while i < n:
+            if in_block:
+                j = line.find("*/", i)
+                if j < 0:
+                    i = n
+                else:
+                    in_block = False
+                    i = j + 2
+                continue
+            c = line[i]
+            if c == '"':
+                i += 1
+                while i < n:
+                    if line[i] == "\\":
+                        i += 2
+                        continue
+                    if line[i] == '"':
+                        i += 1
+                        break
+                    i += 1
+                res.append(" ")
+                continue
+            if c == "/" and i + 1 < n and line[i + 1] == "/":
+                break
+            if c == "/" and i + 1 < n and line[i + 1] == "*":
+                in_block = True
+                i += 2
+                continue
+            res.append(c)
+            i += 1
+        out.append("".join(res))
+    return out
+
+
+def _p9_scan_site(lines, i, col, var):
+    """begin サイト1つを追跡し、(結果, 行番号) を返す。
+
+    結果: "ok"=finally 内で解放 / "outside"=解放は在るが finally の外 / "missing"=解放が無い。
+
+    [3.409.13/レビュー#3,#4] 判定は**ブロック所属**で行う: `{` を積むとき直前の識別子が
+    `finally` かを記録し、endBoardJob 出現時にスタック上へ finally ブロックが在るかを見る。
+    旧実装の「begin〜end の行範囲に finally という語が在るか」は、①コメントの finally で偽陰性
+    ②1行 `try { .. } finally { endBoardJob(t) }`（end 行自身の finally が range(i, end_at) に
+    入らない）で偽陽性、の両方を注入試験で実証した欠陥だった。
+    深さが begin 行の水準を下回ったら関数ブロックを抜けた＝探索終了（全サイトが同名 boardToken を
+    使うため、前方無制限だと隣の関数の解放を拾って対に見える＝3.409.12 の注入で実証済み）。
+    """
+    re_end = re.compile(r"\bendBoardJob\s*\(\s*" + re.escape(var) + r"\s*\)")
+    stack = []      # True = finally 直後に開いたブロック
+    word = ""
+    for j in range(i, min(i + 800, len(lines))):
+        text = lines[j]
+        starts = {mm.start() for mm in re_end.finditer(text)}
+        k = col if j == i else 0
+        while k < len(text):
+            if k in starts:
+                return ("ok" if any(stack) else "outside"), j
+            c = text[k]
+            if c.isalnum() or c == "_":
+                word += c
+            elif c.isspace():
+                pass    # `finally {` の空白は語を跨がない
+            else:
+                if c == "{":
+                    stack.append(word == "finally")
+                elif c == "}":
+                    if stack:
+                        stack.pop()
+                    else:
+                        return "missing", j   # begin の水準より外へ出た＝関数を抜けた
+                word = ""
+            k += 1
+        word = ""   # 行末は語を切る
+    return "missing", i
 
 
 def find_p9():
     """盤面を差し替えるジョブの取得（beginBoardJob）が finally の解放（endBoardJob）と対になっているか。
 
     これを外すと **アプリが恒久的に読み取り専用へ固着する**（`optimizeInFlight()` が真のままになり、
-    セル編集・一括シート・Undo/Redo・設定変更のガード14箇所が全部閉じたまま戻らない）。
+    セル編集・一括シート・Undo/Redo・設定変更のガードが全部閉じたまま戻らない）。
     3.333.0／3.382.0／3.404.0 は同じ「旗を立てて確実に戻さない」型を3回踏んでおり、しかも
-    **3回とも呼び出し側の書き忘れ**だった＝ヘルパーの単体テストでは捕まらない（3.338.0 の
-    「不変条件を強制しているのは採否であってガードではない」と同じ構図）。よって機械検査で止める。
+    **3回とも呼び出し側の書き忘れ**だった＝ヘルパーの単体テストでは捕まらない。よって機械検査で止める。
+
+    検出するのは3通り: ①戻り値のトークンを捨てた裸の呼び出し（解放が構造的に不可能）
+    ②endBoardJob がどこにも無い ③endBoardJob は在るが finally ブロックの中でない。
     """
     hits = []
     for path in kotlin_files():
-        # [3.409.12] 例外は**読めない種類だけ**を握る。旧案は `io.open` を使いながら io を import して
-        #   おらず、それを広い `except Exception` が飲み込んで**常に0件**になっていた（3.406.0 の P6 で
-        #   同じ失敗を記録したのに再発させた＝広い except は自分のバグを隠す）。
         try:
-            lines = open(path, encoding="utf-8").read().split("\n")
+            raw = open(path, encoding="utf-8").read().split("\n")
         except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
             continue
+        if not any("beginBoardJob" in l for l in raw):
+            continue
+        lines = _strip_kotlin_file(raw)
+        rel = os.path.relpath(path, ROOT)
         for i, line in enumerate(lines):
-            m = RE_BEGIN_JOB.search(line)
+            m = RE_BEGIN_CAPTURE.search(line)
             if not m:
+                # [レビュー#2] `beginBoardJob("x")` と裸で呼ぶとトークンが失われ**解放が構造的に不可能**
+                #   ＝最悪の書き間違いなのに旧 P9 は完全に素通しだった（注入で実証）。定義行は除外。
+                if RE_BEGIN_ANY.search(line) and not RE_BEGIN_DEF.search(line):
+                    hits.append(f"{rel}:{i + 1}  beginBoardJob の戻り値（トークン）を捨てています（endBoardJob で解放できず読み取り専用に固着します）")
                 continue
-            var, end_at, depth = m.group(1), None, 0
-            # [3.409.12] 探索は**囲っている関数の中だけ**。全サイトが同じ `boardToken` という名前を
-            #   使うので、単純な前方探索だと「この関数の解放を消しても、次の関数の解放が拾われて
-            #   対になって見える」＝欠陥を注入しても発火しなかった（教訓#30 の実践で判明）。
-            #   波括弧の深さが begin 行より下がった時点＝関数を抜けた、で打ち切る。
-            for j in range(i, len(lines)):
-                if j > i and f"endBoardJob({var})" in lines[j]:
-                    end_at = j
-                    break
-                code = _strip_strings_and_comments(lines[j])
-                depth += code.count("{") - code.count("}")
-                if j > i and depth < 0:
-                    break
-                if j > i and RE_MEMBER_FUN.match(lines[j]):
-                    break
-            rel = os.path.relpath(path, ROOT)
-            if end_at is None:
-                hits.append(f"{rel}:{i + 1}  endBoardJob({var}) が見つかりません（旗が戻らず読み取り専用に固着します）")
-                continue
-            if not any(re.search(r"\bfinally\b", lines[j]) for j in range(i, end_at)):
-                hits.append(f"{rel}:{end_at + 1}  endBoardJob({var}) が finally の外です（例外・停止で旗が戻りません）")
+            state, at = _p9_scan_site(lines, i, m.end(), m.group(1))
+            if state == "missing":
+                hits.append(f"{rel}:{i + 1}  endBoardJob({m.group(1)}) が見つかりません（旗が戻らず読み取り専用に固着します）")
+            elif state == "outside":
+                hits.append(f"{rel}:{at + 1}  endBoardJob({m.group(1)}) が finally の外です（例外・停止で旗が戻りません）")
     return hits
 
 

@@ -341,6 +341,29 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             OptimizationRepository.notes.collect { (level, msg) -> logOp(level, msg) }
         }
+        // [3.409.13/レビュー#7] `ui.running`（表示の写し）が背景実行で stale-false になる経路を**源で**塞ぐ。
+        //   3.336.0 は「init 時の WorkManager 問い合わせが失敗すると背景で走っているのに写しが false のまま」
+        //   としてガード14箇所を optimizeInFlight() へ寄せたが、3.409.12 で足した `enabled = !ui.running` は
+        //   写しを読む＝その stale 経路ではボタンが生きたまま「入力し終えてから拒否」が再発する。
+        //   Worker は開始時に必ず OptimizationRepository.setRunning(true) を流すので、その StateFlow を
+        //   写しへ反映すればプロセスが生きている限り写しは正になる（問い合わせの成否に依存しない）。
+        //   下げる側は **true を見たあとの遷移だけ**＝購読開始時の初期値 false が、init 復元の
+        //   「バックグラウンド計算を継続中…」（WorkManager 問い合わせ由来の running=true）を踏み消さないため。
+        //   下げるときも前景ジョブ（boardJobLabel）や違反チェック（checkJob）が生きていれば触らない。
+        viewModelScope.launch {
+            var sawBgRunning = false
+            OptimizationRepository.running.collect { bg ->
+                if (bg) {
+                    sawBgRunning = true
+                    _ui.update { it.copy(running = true) }
+                } else if (sawBgRunning) {
+                    sawBgRunning = false
+                    if (boardJobLabel == null && checkJob?.isActive != true) {
+                        _ui.update { it.copy(running = false) }
+                    }
+                }
+            }
+        }
     }
 
     /** バックグラウンド（WorkManager / Expedited）で最適化を開始。完了時に通知＋画面反映。 */
