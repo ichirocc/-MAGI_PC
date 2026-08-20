@@ -636,6 +636,24 @@ object V6NativeOptimizer {
     internal fun isEarlyWorkerExit(exitReason: String): Boolean =
         exitReason != "締切" && exitReason != "探索締切"
 
+    /**
+     * [3.409.17/実機ログ 3.409.14] エポック超過（ロールが roleDeadline を5秒超えて走った記録）の
+     * 集約行。空なら null（＝通常の実行ではログを増やさない）。実機で予算300sの実行が474〜959sまで
+     * 超過したのに、どの役割が塞いだかを後から特定できなかった穴を埋める（証拠は W4 epoch3 の
+     * グローバル最良更新が経過474sに出たこと＝ロールが stopRole を数百秒無視した）。
+     * 検出側（nowMs() - roleDeadline > 5s）は epoch ループ内のインライン算術で、遅いロールを
+     * 注入しないと踏めないため単体テストは整形のみ＝検出は次回の実機ログで確認する。
+     */
+    internal fun epochOverrunLog(notes: List<String>): MirrorLog? {
+        if (notes.isEmpty()) return null
+        return MirrorLog(
+            level = "W", tag = "エポック超過",
+            message = "ロールが停止確認(stopRole)を大きく超過: " + notes.take(8).joinToString(",") +
+                (if (notes.size > 8) " ほか${notes.size - 8}件" else "") +
+                "（量子q秒のロールが実N秒走った＝内部で締切を見ない経路がある。役割名から特定する）",
+        )
+    }
+
     private data class AdaptiveWorkerOutcome(
         val elite: Array<IntArray>,
         val report: ViolationReport,
@@ -662,6 +680,10 @@ object V6NativeOptimizer {
         /** [3.283.0/ログ強化] ワーカー専属HF63がエポック横断で学習した回避族（勝者以外のfocus学習は
          *  従来この要約でしか外へ出ない＝W1/W2が何を諦めたかがログ解析不能だった穴を埋める）。 */
         val hf63Avoided: List<String> = emptyList(),
+        /** [3.409.17/実機ログ 3.409.14] ロール呼出が roleDeadline を5秒超えて走った記録
+         *  （"W$i:ROLE(q=量子s→実N s)"）。実機で予算300sの実行が474〜959sまで超過したのに、
+         *  どの役割が塞いだかを後から特定する手段が無かった穴を埋める。 */
+        val epochOverruns: List<String> = emptyList(),
     )
 
     /** [3.346.1] 停滞シグナルの確認窓。この間 shouldStop が続けて真なら本物とみなす。 */
@@ -803,6 +825,11 @@ object V6NativeOptimizer {
                 //   5/8/35/45 秒と桁が違い、かつロールは締切・HARD=0・内部早期終了で量子より
                 //   早く戻ることがある）。エポック境界の摂動・検査・距離計算も含めた実測。
                 val roleMillis = LinkedHashMap<HypothesisEpochRole, Long>()
+                // [3.409.17/実機ログ 3.409.14] ロール呼出が roleDeadline（自分の量子と探索締切の min）を
+                //   5秒超えて走った事実。実機で予算300sの実行が474〜959sまで超過し（W4 epoch3 の
+                //   グローバル最良更新が経過474sに出た＝ロールが stopRole を数百秒無視した証拠）、
+                //   どの役割が塞いだかは診断ログが次の実行で消えていて特定できなかった。
+                val epochOverrunNotes = ArrayList<String>()
                 // [3.281.0/停滞レビューB] ワーカー専属のHF63をエポック横断で共有。旧: runRsi 呼出ローカルのため
                 //   短いエポック(rounds=2)では「focus 2ラウンドで threshold 到達→即破棄→次エポックで白紙から
                 //   再学習」を全エポックで反復し、解けない族(実機: c3n)へ毎回突撃していた。ワーカー内は逐次
@@ -918,6 +945,7 @@ object V6NativeOptimizer {
                     val stopRole = {
                         shouldStop() || nowMs() >= roleDeadline
                     }
+                    val roleT0 = nowMs()
                     val result = try {
                         val progress: (String, ViolationReport?, Long, Long) -> Unit = { phase, rep, it, elapsed ->
                             if (rep?.hard == 0) hardZeroWinner.compareAndSet(-1, i)   // 記録のみ（キルしない）
@@ -938,6 +966,13 @@ object V6NativeOptimizer {
                     } catch (e: Exception) {
                         firstError.compareAndSet(null, e)
                         null
+                    }
+
+                    // [3.409.17] roleDeadline を5秒超えたロールを役割名つきで記録（診断は実行を
+                    //   またいで消えるため、集約して operation ログへ写せる形で外へ出す）。
+                    if (nowMs() - roleDeadline > 5_000L) {
+                        epochOverrunNotes.add(
+                            "W$i:${assignment.role.name}(q=${quantum}s→実${(nowMs() - roleT0) / 1000}s)")
                     }
 
                     if (result != null) {
@@ -1069,6 +1104,7 @@ object V6NativeOptimizer {
                     roleRuns = roleRuns,
                     roleMillis = roleMillis,
                     hf63Avoided = workerHf63.infeasibleFamilies(),
+                    epochOverruns = epochOverrunNotes,
                 )
             }
         }
@@ -1158,7 +1194,10 @@ object V6NativeOptimizer {
                 (firstError.get()?.let { " / 一部例外=${it.message}" } ?: "") +
                 " / 採用 HARD=${globalReport.hard} total=${globalReport.total}",
         )
-        val logs = globalLogs + summary
+        // [3.409.17] エポック超過（役割名つき）は専用の [W] 行で出す。ViewModel が予算超過の実行で
+        //   この行を操作ログへ写す＝診断ログが次の実行で消えても証拠が生き残る。
+        val overrunLog = listOfNotNull(epochOverrunLog(outcomes.flatMap { it.epochOverruns }))
+        val logs = globalLogs + overrunLog + summary
         V6OptimizerResult(
             globalBest,
             globalReport.copy(logs = logs + globalReport.logs),

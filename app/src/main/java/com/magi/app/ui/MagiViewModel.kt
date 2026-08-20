@@ -1171,6 +1171,15 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 lastC1Plateau?.logLines()?.take(4)?.forEach { logOp("W", it.removePrefix("[W] ")) }
                 lastTopHardFamily = if (res.report.hard > 0) topHardFamilyJp(res.report.breakdown) else null
                 logOp(if (res.report.hard == 0) "I" else "W", "最適化 完了 必須=${res.report.hard} 合計=${res.report.total} (${res.phase})")
+                // [3.409.17/実機ログ 3.409.14] 予算超過の実行は内訳が診断ログ（次の実行で消える）にしか
+                //   残らず特定不能だった（13実行中5回が474〜959sまで超過したのに、残った診断は最後の
+                //   1回ぶんだけ）。超過時は TIME/エポック超過/後処理パス別 を操作ログへ写して生き残らせる。
+                if (res.logs.any { it.tag == "TIME" && it.level == "W" }) {
+                    res.logs.firstOrNull { it.tag == "TIME" }?.let { logOp("W", "予算超過: ${it.message}") }
+                    res.logs.firstOrNull { it.tag == "エポック超過" }?.let { logOp("W", it.message) }
+                    res.logs.lastOrNull { it.tag == "POST" && it.message.startsWith("後処理パス別") }
+                        ?.let { logOp("W", "予算超過の内訳(後処理): ${it.message}") }
+                }
                 terminalLogged = true
                 // HF63 検出: 50秒改善のない制約族＝データ上満たせない可能性が高い（業務担当者へ提示）。
                 // [実機ログ起因] 探索中の一時盤面でしか違反が無かった族（最終盤面で0）は「充足できている」ので

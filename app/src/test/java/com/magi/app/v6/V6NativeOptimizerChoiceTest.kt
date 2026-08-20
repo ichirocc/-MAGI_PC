@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Random
@@ -1203,6 +1204,19 @@ class V6NativeOptimizerChoiceTest {
         assertFalse("stopシグナル経由の探索締切も正常終了", V6NativeOptimizer.isEarlyWorkerExit("探索締切"))
         assertTrue("確認窓を通った停滞シグナルは早期離脱", V6NativeOptimizer.isEarlyWorkerExit("停滞シグナル"))
         assertTrue("例外は早期離脱", V6NativeOptimizer.isEarlyWorkerExit("例外"))
+    }
+
+    // [3.409.17] エポック超過の集約行: 空なら null（通常の実行でログを増やさない）・非空なら
+    //   [W] で役割名を保持・9件以上は「ほかN件」に畳む。検出側（roleDeadline+5s 超過）は
+    //   遅いロールを注入しないと踏めないため対象外＝整形だけを固定する（KDoc に明記済み）。
+    @Test
+    fun epochOverrunLogKeepsRoleNamesAndStaysSilentWhenEmpty() {
+        assertNull(V6NativeOptimizer.epochOverrunLog(emptyList()))
+        val one = V6NativeOptimizer.epochOverrunLog(listOf("W4:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)"))!!
+        assertEquals("W", one.level)
+        assertTrue(one.message, one.message.contains("W4:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)"))
+        val many = V6NativeOptimizer.epochOverrunLog((1..10).map { "W$it:ROLE(q=5s→実60s)" })!!
+        assertTrue(many.message, many.message.contains("ほか2件"))
     }
 
 }
