@@ -625,6 +625,17 @@ object V6NativeOptimizer {
         if (totalWorkerMs <= 0L || wallElapsedMs <= 0L) 0.0
         else totalWorkerMs.toDouble() / wallElapsedMs.toDouble()
 
+    /**
+     * [3.409.16] ワーカーの離脱理由が「締切前の早期離脱」か。
+     * 「締切」=自分の while ループの deadline 到達／「探索締切」=同じ締切（またはキャンセル）が
+     * stopIsFinal() の stop シグナル経由で届いた正常終了＝どちらも早期離脱ではない。
+     * 旧判定（!= "締切" のみ）は、全ワーカーが予算を使い切った正常な実行を
+     * 「ワーカー離脱=8/8本が締切前(探索締切8本@275s)」と自己矛盾で報告していた（3.409.14 実機ログで発覚）。
+     * 早期離脱として数えるのは「停滞シグナル」（confirmStop の確認窓を通った本物の停滞）と「例外」。
+     */
+    internal fun isEarlyWorkerExit(exitReason: String): Boolean =
+        exitReason != "締切" && exitReason != "探索締切"
+
     private data class AdaptiveWorkerOutcome(
         val elite: Array<IntArray>,
         val report: ViolationReport,
@@ -1127,7 +1138,8 @@ object V6NativeOptimizer {
         //   旧ログは役割別worker秒を手で足さないと気づけなかった。
         //   [3.346.1] 一瞬のシグナルは confirmStop が見送るので、ここに出る停滞シグナルは
         //   確認窓を通った本物。見送り回数も併記して「何回きわどい発火があったか」を残す。
-        val earlyExits = outcomes.filter { it.exitReason != "締切" }
+        //   [3.409.16] 早期離脱の判定は isEarlyWorkerExit（KDoc参照＝「探索締切」は正常終了）。
+        val earlyExits = outcomes.filter { isEarlyWorkerExit(it.exitReason) }
         val survivedTotal = outcomes.sumOf { it.survivedStops }
         val survivedNote = if (survivedTotal == 0) "" else " 停滞見送り計${survivedTotal}回"
         val exitNote = (if (earlyExits.isEmpty()) "ワーカー離脱=全て締切まで実行" else

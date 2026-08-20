@@ -1194,4 +1194,15 @@ class V6NativeOptimizerChoiceTest {
         assertEquals(0.0, V6NativeOptimizer.observedOuterParallelism(100L, 0L), 0.0)
     }
 
+    // [3.409.16/実機ログ 3.409.14] 「探索締切」は締切が stop シグナル経由で届いた正常終了。
+    //   旧判定（!= "締切" のみ）は全ワーカーが予算を使い切った正常な実行を
+    //   「8/8本が締切前(探索締切8本@275s)」と自己矛盾で報告していた。
+    @Test
+    fun searchDeadlineExitIsNotCountedAsAnEarlyWorkerExit() {
+        assertFalse("while締切は早期離脱でない", V6NativeOptimizer.isEarlyWorkerExit("締切"))
+        assertFalse("stopシグナル経由の探索締切も正常終了", V6NativeOptimizer.isEarlyWorkerExit("探索締切"))
+        assertTrue("確認窓を通った停滞シグナルは早期離脱", V6NativeOptimizer.isEarlyWorkerExit("停滞シグナル"))
+        assertTrue("例外は早期離脱", V6NativeOptimizer.isEarlyWorkerExit("例外"))
+    }
+
 }

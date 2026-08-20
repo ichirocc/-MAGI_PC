@@ -24,7 +24,10 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-19（3.409.5〜3.409.7 デザイン lint のラチェットを実際に効かせる。3.409.5 で
+**最終更新**：2026-08-20（3.409.16 実機ログ(3.409.14搭載機)の検分＝表示の自己矛盾3件を修正——
+「探索締切」の正常終了を「締切前離脱」と数える集計／「設定の効き:」の二重ラベル／C1広域ビームの
+採用ログに weighted が無く正しい取引が退行に見える。実機では adaptiveEscapeControl の初観測(91回)・
+portfolioRoleParallelSa の配線実動作ほかを確認。以下は前回まで: 3.409.5〜3.409.7 デザイン lint のラチェットを実際に効かせる。3.409.5 で
 P2「生 hex」/P4「任意角丸」が**baseline を記録しておらず、増えても exit 0 で静かに通っていた**のを
 ラチェット化（`docs/DESIGN.md` §4 が「禁止事項（machine-checkable）」と呼ぶのに強制されていなかった）。
 3.409.6 で据え置いていた13件を `MagiTheme` の tier へ寄せて **baseline を 0/0**＝以後は1件でも増えたら

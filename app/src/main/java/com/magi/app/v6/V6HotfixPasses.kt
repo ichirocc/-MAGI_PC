@@ -226,7 +226,9 @@ object TuningTelemetry {
             differed == 0 -> "ON(${calls}回呼ばれたが既定(前後1日)と同じ範囲＝OFFと差なし)"
             else -> "ON(${calls}回中${differed}回は既定(前後1日)と違う範囲を探索)"
         }
-        return "設定の効き: ネイティブ加速=" + (if (nativeOn) "ON" else "OFF") +
+        // タグ（MirrorLog tag="設定の効き"）が同じ語を出すため、ここに前置きを付けると
+        // 実機ログで「設定の効き: 設定の効き: …」と二重になる（3.409.16 で実機ログにより発覚）。本文だけを返す。
+        return "ネイティブ加速=" + (if (nativeOn) "ON" else "OFF") +
             " / Kotlin照合=" + eff(parityOn, parityChecks.get(), "回") +
             " / 禁止連続の事前フィルタ=" + eff(PolishGate.filterC3nIncrease, c3nFilterSkipped.get(), "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
@@ -4121,7 +4123,10 @@ object V6HotfixPasses {
         val logs = listOf(MirrorLog(tag = "C1BeamPolish",
             message = "期間要件(c1)研磨[ビーム K=$beamWidth steps=$step/${System.currentTimeMillis() - beamT0}ms" +
                 (if (stagnant >= patience) "/最良が${patience}手更新されず打ち切り" else "") + "]: " +
-                "c1 ${before.breakdown["c1"] ?: 0}->${best.rep.breakdown["c1"] ?: 0} / total ${before.total}->${best.rep.total} HARD ${before.hard}->${best.rep.hard} 手数${best.applied}" +
+                // weighted を併記する: keep-best は hard→weightedScore→total（3.287.0）なので、
+                // c1/total が増える採用も weighted の改善なら正しい取引。実機ログ（3.409.14）で
+                // 「c1 107->112 / total 425->431」だけが出て退行に見えた＝数字の根拠を同じ行に出す。
+                "c1 ${before.breakdown["c1"] ?: 0}->${best.rep.breakdown["c1"] ?: 0} / total ${before.total}->${best.rep.total} score ${before.weightedScore.toLong()}->${best.rep.weightedScore.toLong()} HARD ${before.hard}->${best.rep.hard} 手数${best.applied}" +
                 (if (best.applied == 0 && candidate !== best && candidate.applied > 0) " [探索結果が根に勝てず破棄]" else "")))
         return CyclicSwapResult(best.work, before.total, best.rep.total, best.applied, logs, pinBlocks = pinBlocks)
     }
