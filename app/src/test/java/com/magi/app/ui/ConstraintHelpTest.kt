@@ -35,4 +35,15 @@ class ConstraintHelpTest {
         assertTrue("必須条件" in constraintHelp.getValue("cons3n"))
         assertEquals(1, constraintHelp.values.count { "必須条件＝" in it })
     }
+
+    // [3.409.18] ペア禁止の「向き」の説明（違うシフトの組は鏡の2行が必要・同じシフトは1行でよい）。
+    //   実機でまさにこの点を聞き返された＝画面で答えられるべき内容なので、落とすと失敗する形で固定。
+    @Test
+    fun pairBanHelpExplainsDirectionality() {
+        for (k in listOf("cons42", "cons42s")) {
+            val v = constraintHelp.getValue(k)
+            assertTrue("$k が向き（逆向きにもう1行）を説明していません", "逆向き" in v)
+            assertTrue("$k が同一シフト1行の規則を説明していません", "1行で両方向" in v)
+        }
+    }
 }

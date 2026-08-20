@@ -1604,7 +1604,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     // ---- constraint editing (ws3-5) -------------------------------------------
 
     /** A constraint family with its rows rendered for display (key used for add/remove). */
-    data class ConstraintFamilyView(val key: String, val title: String, val rows: List<String>)
+    data class ConstraintFamilyView(
+        val key: String, val title: String, val rows: List<String>,
+        /** [3.409.18] 行ごとの読み下し文（任意・rows と同順）。「吉・Dﾃ ✕ 古・休」のような記号の
+         *  羅列から意味文を復元できない（実機で2回聞き返された）ペア禁止系だけが使う。 */
+        val subs: List<String> = emptyList(),
+    )
 
     fun shiftKigouList(): List<String> = state?.shifts?.map { it.kigou } ?: emptyList()
 
@@ -1995,8 +2000,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             ConstraintFamilyView("cons3mn", "回避の並び", st.cons3mn.map { seq(it.pattern) }),
             ConstraintFamilyView("cons41", "群のレンジ（1日の人数の下限〜上限）",
                 st.cons41.map { "${it.groupKigou}・${it.shiftKigou}   ${boundLabel(it.l, it.u)}" }),
-            ConstraintFamilyView("cons42", "群ペア禁止（同じ日に不可）",
-                st.cons42.map { "${it.g1Kigou}・${it.s1Kigou}  ✕  ${it.g2Kigou}・${it.s2Kigou}" }),
+            // [3.409.18] 「禁止/不可」はラベルとして実態（最軽量のソフト条件＝他の条件と衝突すると
+            //   真っ先に譲られる）と逆の約束をするため「できるだけ守る」を見出しへ明示（3.405.0 の言葉版）。
+            //   subs=読み下し文: 記号の羅列（吉・Dﾃ ✕ 古・休）から意味文を復元できず実機で聞き返された。
+            ConstraintFamilyView("cons42", "群ペア禁止（同じ日に不可・できるだけ守る）",
+                st.cons42.map { "${it.g1Kigou}・${it.s1Kigou}  ✕  ${it.g2Kigou}・${it.s2Kigou}" },
+                subs = st.cons42.map { "同じ日に、${it.g1Kigou}の${it.s1Kigou} と ${it.g2Kigou}の${it.s2Kigou} が両方いると違反" }),
         )
     }
 
@@ -2006,8 +2015,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         return listOf(
             ConstraintFamilyView("cons41s", "スキル群のレンジ（1日の人数の下限〜上限）",
                 st.cons41s.map { "${it.groupKigou}・${it.shiftKigou}   ${boundLabel(it.l, it.u)}" }),
-            ConstraintFamilyView("cons42s", "スキル群ペア禁止（同じ日に不可）",
-                st.cons42s.map { "${it.g1Kigou}・${it.s1Kigou}  ✕  ${it.g2Kigou}・${it.s2Kigou}" }),
+            ConstraintFamilyView("cons42s", "スキル群ペア禁止（同じ日に不可・できるだけ守る）",
+                st.cons42s.map { "${it.g1Kigou}・${it.s1Kigou}  ✕  ${it.g2Kigou}・${it.s2Kigou}" },
+                subs = st.cons42s.map { "同じ日に、${it.g1Kigou}の${it.s1Kigou} と ${it.g2Kigou}の${it.s2Kigou} が両方いると違反" }),
         )
     }
 

@@ -74,7 +74,8 @@ fun ConstraintsCard(
                     fam.rows.forEachIndexed { idx, row ->
                         ConstraintRow(row, enabled = !ui.running,
                             onEdit = { editTarget = fam.key to idx },
-                            onDelete = { vm.removeConstraint(fam.key, idx) })
+                            onDelete = { vm.removeConstraint(fam.key, idx) },
+                            sub = fam.subs.getOrNull(idx))
                     }
                 }
                 AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)
@@ -134,15 +135,21 @@ private fun ConstraintHelpExpander(families: List<MagiViewModel.ConstraintFamily
  * 表しているので、同じ操作は同じ形にする。貼り紙は剥がした。
  */
 @Composable
-private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, sub: String? = null) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(row, fontSize = 12.sp, modifier = Modifier
+        // [3.409.18] sub=読み下し文（ペア禁止系のみ）。「吉・Dﾃ ✕ 古・休」という記号の羅列から
+        //   「同じ日に両方いると違反」という意味文を利用者が復元できず、実機で聞き返された。
+        //   本文と同じタップ標的の中に淡色で添える（行の操作性は不変）。
+        Column(Modifier
             .weight(1f)
             .clip(MaterialTheme.shapes.small)
             .clickable(enabled = enabled, onClick = onEdit)
             .heightIn(min = 48.dp)
             .wrapContentHeight(Alignment.CenterVertically)
-            .padding(horizontal = 4.dp))
+            .padding(horizontal = 4.dp)) {
+            Text(row, fontSize = 12.sp)
+            if (sub != null) Text(sub, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         EditRowButton(onClick = onEdit, enabled = enabled)
         Spacer(Modifier.width(6.dp))
         DeleteRowButton(onClick = onDelete, enabled = enabled)
@@ -158,7 +165,7 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
     val families = vm.skillConstraintFamilies()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("上の「スキルグループ」に対する専用ルールです。スキル群のレンジ（1日の人数）と、スキル群ペア禁止（同じ日に不可）を設定します。",
+            Text("上の「スキルグループ」に対する専用ルールです。スキル群のレンジ（1日の人数）と、スキル群ペア禁止（同じ日に不可・できるだけ守る）を設定します。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
             if (vm.skillGroupKigouList().isEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -176,7 +183,8 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
                         fam.rows.forEachIndexed { idx, row ->
                             ConstraintRow(row, enabled = !ui.running,
                                 onEdit = { editTarget = fam.key to idx },
-                                onDelete = { vm.removeConstraint(fam.key, idx) })
+                                onDelete = { vm.removeConstraint(fam.key, idx) },
+                                sub = fam.subs.getOrNull(idx))
                         }
                     }
                     AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)

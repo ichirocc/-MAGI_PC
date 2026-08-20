@@ -50,8 +50,22 @@ fun SkillGroupCard(ui: UiState, vm: MagiViewModel) {
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("担当シフトには影響しない別の分類。スキル別の回数/禁止ペアだけが参照します（1人1スキル）。",
+            // [3.409.18] 開発者語「参照します」をやめ、状態依存の1行を足す（3.301.0 の検算と同じ型）。
+            //   スキルは勤務グループとは別の独立した分類（ユーザー確認済み）＝分類を置いておくこと
+            //   自体は正しい。ただし「いま効いているか」は画面が言わないと分からない（実機で
+            //   「グループ分けは正しいか?」と聞き返された＝ルール0本で何にも効いていない状態が不可視だった）。
+            Text("担当シフトには影響しない、勤務グループとは別の分類です（1人1スキル）。スキル群のルール（レンジ／ペア禁止）だけがこの分類を使います。",
                 fontSize = 12.sp, color = cs.onSurfaceVariant)
+            if (skills.isNotEmpty()) {
+                val skillRules = vm.skillConstraintFamilies().sumOf { it.rows.size }
+                if (skillRules == 0) {
+                    Text("いまはスキル群のルールが1件も無いため、この分類は勤務表に影響しません（分類を置いておくこと自体は問題ありません）。ルールはこの下の専用ルール欄で作れます。",
+                        fontSize = 12.sp, color = cs.onSurfaceVariant)
+                } else {
+                    Text("スキル群のルール ${skillRules}件がこの分類を使っています。",
+                        fontSize = 12.sp, color = cs.onSurfaceVariant)
+                }
+            }
 
             skills.forEachIndexed { g, sg ->
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
