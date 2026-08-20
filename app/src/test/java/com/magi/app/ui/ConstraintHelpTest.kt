@@ -46,4 +46,23 @@ class ConstraintHelpTest {
             assertTrue("$k が同一シフト1行の規則を説明していません", "1行で両方向" in v)
         }
     }
+
+    // [3.409.20/ユーザー指示「C41,C42,C41s,C42sは別々の制約です。別々の説明も明確に分かるように」]
+    //   4族はエンジンでも別々（cons41/42=勤務グループ所属 sgrp・cons41s/42s=スキル割当 ssk）。
+    //   説明が近い写しに戻ると区別が読めなくなるため、①どの分類で数えるか ②兄弟制約を名指しして
+    //   「別の制約」と言うこと、を落とすと失敗する形で固定する。
+    @Test
+    fun groupAndSkillFamiliesAreExplicitlyDistinguished() {
+        for (k in listOf("cons41", "cons42")) {
+            val v = constraintHelp.getValue(k)
+            assertTrue("$k が勤務グループ所属で数えることを言っていません", "勤務グループの所属だけを見" in v)
+            assertTrue("$k が兄弟のスキル群制約と別物だと言っていません", "別の制約" in v && "スキル群" in v)
+        }
+        for (k in listOf("cons41s", "cons42s")) {
+            val v = constraintHelp.getValue(k)
+            assertTrue("$k がスキル割当で数えることを言っていません", "スキル割当だけを見" in v)
+            assertTrue("$k が兄弟の群制約と別物だと言っていません", "別の制約" in v)
+            assertTrue("$k が担当とは独立の分類だと言っていません", "独立" in v)
+        }
+    }
 }
