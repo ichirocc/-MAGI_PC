@@ -148,7 +148,10 @@ private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onD
             .wrapContentHeight(Alignment.CenterVertically)
             .padding(horizontal = 4.dp)) {
             Text(row, fontSize = 12.sp)
-            if (sub != null) Text(sub, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // [3.409.19/design-review] 11sp はこのアプリ唯一の最小値で、MagiTheme labelSmall の
+            //   「11sp→13→14sp へ継続底上げ」（判読性の決定）に逆行していた。周辺説明文の最小=12sp へ
+            //   合わせ、階層は色（onSurfaceVariant）だけで示す。
+            if (sub != null) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         EditRowButton(onClick = onEdit, enabled = enabled)
         Spacer(Modifier.width(6.dp))
