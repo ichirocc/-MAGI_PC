@@ -63,6 +63,7 @@ fun ConstraintsCard(
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.titleMedium)
+            ConstraintHelpExpander(families)
             families.forEachIndexed { fi, fam ->
                 if (fi > 0) Spacer(Modifier.height(6.dp))
                 Spacer(Modifier.height(8.dp))
@@ -85,6 +86,42 @@ fun ConstraintsCard(
     val fam = addFamily
     if (fam != null) ConstraintDialog(fam, vm, onClose = { addFamily = null })
     editTarget?.let { (k, i) -> ConstraintDialog(k, vm, editIndex = i, onClose = { editTarget = null }) }
+}
+
+/**
+ * [3.409.14] 既定で閉じた「ⓘ 詳しい説明」。本文は [constraintHelp]（Compose 非依存＝ホストの
+ * ConstraintHelpTest が族との過不足を固定）から、見出しは表示中の families から取る＝カードの
+ * 一覧と同じソースなので、族の改名・追加でここだけ古くなることがない。
+ * 常時表示にしないのは 3.129.0/3.396.0 の方針（説明文は読まれない・貼り紙で形を補わない）と、
+ * ユーザー指示「詳しい説明をアプリにも」を両立させるため＝読みたい人がタップしたときだけ全文を出す。
+ */
+@Composable
+private fun ConstraintHelpExpander(families: List<MagiViewModel.ConstraintFamilyView>) {
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clip(MaterialTheme.shapes.small)
+                .clickable { open = !open },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(if (open) "ⓘ 詳しい説明を閉じる" else "ⓘ 詳しい説明（それぞれの条件の意味）",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+        }
+        if (open) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                families.forEach { fam ->
+                    constraintHelp[fam.key]?.let { body ->
+                        Column {
+                            Text(fam.title, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(body, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Text(CONSTRAINT_HELP_FOOTER, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
 }
 
 /**
@@ -128,6 +165,7 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
                 Text("先に上で「スキルグループ」を追加すると設定できます。",
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
+                ConstraintHelpExpander(families)
                 families.forEachIndexed { fi, fam ->
                     if (fi > 0) Spacer(Modifier.height(6.dp))
                     Spacer(Modifier.height(8.dp))
