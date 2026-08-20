@@ -60,6 +60,9 @@ jobs:
           python3 tools/native/state_to_flat.py \
             app/src/test/resources/sample_state_v6.json build/sample_v6.flat \
             2>&1 | tee -a build/ci-logs/native-parity-fixture.log
+          python3 tools/native/state_to_flat.py \
+            app/src/test/resources/blocked_covu_state.json build/blocked_covu.flat \
+            2>&1 | tee -a build/ci-logs/native-parity-fixture.log
 
       - name: Run parity check (fails on any mismatch)
         shell: bash
@@ -72,9 +75,10 @@ jobs:
           # 旧チェックは 0 mismatch で通り、この --expect だけが MISMATCH で落ちる）。
           # [3.361.0] flat と --expect は**出現順**で対応づく（golden⇔golden_expected,
           #   sample_v6⇔sample_v6_expected）。合成ベンチは1回のまま両形状を言語跨ぎ照合する。
-          ./build/magi_host build/golden.flat build/sample_v6.flat \
+          ./build/magi_host build/golden.flat build/sample_v6.flat build/blocked_covu.flat \
             --expect=app/src/test/resources/golden_eval_expected.txt \
             --expect=app/src/test/resources/sample_v6_eval_expected.txt \
+            --expect=app/src/test/resources/blocked_covu_eval_expected.txt \
             2>&1 | tee build/ci-logs/native-parity-run.log
 
       - name: Upload logs (on failure only)

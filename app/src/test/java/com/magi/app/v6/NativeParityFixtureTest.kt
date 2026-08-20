@@ -41,6 +41,15 @@ class NativeParityFixtureTest {
         assertFixtureMatchesEvaluator("/sample_state_v6.json", "/sample_v6_eval_expected.txt")
     }
 
+    /** [3.409.15/backlog#6 解消] covU が構造床(0)を超えて blocked-now な第3の実データ形状
+     *  （2026-08 実運用 state の匿名化版＝職員名のみ 職員A..J へ・診断ログは除去・評価は
+     *  匿名化前と bit 一致を実測済み）。golden(hard=0)/sample_v6(covU は解ける形) のどちらにも
+     *  無かった「いまの希望・盤面では埋められない covU」を言語跨ぎで固定する。 */
+    @Test
+    fun blockedCovUEvaluatorValueMatchesTheSharedCrossLanguageFixture() {
+        assertFixtureMatchesEvaluator("/blocked_covu_state.json", "/blocked_covu_eval_expected.txt")
+    }
+
     private fun assertFixtureMatchesEvaluator(stateResource: String, expectResource: String) {
         val json = javaClass.getResourceAsStream(stateResource)?.bufferedReader()?.readText()
         assertNotNull("$stateResource がテストリソースにありません", json)

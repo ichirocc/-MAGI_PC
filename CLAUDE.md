@@ -5159,7 +5159,9 @@ Phase3=ALNS Refine（コード上 `runRsiPlus` の `alnsSec=budgetSec*0.30=90s`,
    実データで一度も exercise しないため、sample_state_v6 の hard=15 盤面を第2 fixture に。`--expect` を
    flat と出現順で対応づけ1回のベンチで両形状を言語跨ぎ照合。詳細は「パリティネットへ2つ目の…」節）。
    ~~**残課題**: 合成問題は S<=64/T<=64・乱数生成で、実データ形状の網羅ではない（fixture 拡充は将来課題）~~
-   **残: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い（3.361.0 参照）。**
+   ~~残: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い~~
+   **→ 3.409.15 で解消**（2026-08 実運用 state の**匿名化版** `blocked_covu_state.json`＝covU=4 が床0を超えて
+   blocked-now、を第3フィクスチャとして追加。言語跨ぎ照合＋形状の回帰テストつき）。
 7. ~~**[ネイティブ・堅牢性] 群index無検証のOOB（潜在）**（3.168.0系精読で判明）。探索オペレータ約13箇所が
    `p.bucket[p.sgrp[i]]`／`grpCnt[sgrp[i]*K+k]` を sgrp範囲未検証で使用しており、不正な groupIdx が渡ると
    C++側はUB（bucket=範囲外読み・grpCnt=範囲外**書込=ヒープ破壊**）でSIGSEGVし得た（Kotlin側は例外→
@@ -5317,6 +5319,26 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
   べきで、それは別の判断。記録に留める。
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
+
+## covU-blocked の実データを匿名化して第3フィクスチャへ＝backlog#6 の残りを解消（3.409.15）
+
+「次」の掃討。3.361.0/3.377.0 が繰り返し記録したギャップ＝**「covU が構造床を超えて blocked-now」な
+実データ形状が repo に1つも無く**（golden=入力 hard=0／sample_v6=covU は解ける形）、3.377.0 が直した
+残存分析の「もう直せない covU」分岐は実機ログと合成盤面でしか検証できなかった。
+
+- **塞いでいた理由（実名を含む）を匿名化で消した**: real3（2026-08 実運用 state）は golden に無い実名
+  1名を含み、そのままの追加は新しい個人データの露出になる。**職員名だけを 職員A..J へ置換し、実名を
+  含む診断ログ配列（logs）を除去**した版を `blocked_covu_state.json` として追加。名前は engine の
+  評価に一切入らないので、**匿名化前後で eval hard=4 soft=1681・checker covU=4・床0・
+  blockedNowSlots=4 が bit 一致**することをホスト実行で確認してから採った（形は完全に保存される）。
+- **言語跨ぎ照合の3本目**: `blocked_covu_eval_expected.txt`（hard=4/soft=1681）を
+  `NativeParityFixtureTest` と native-parity CI の `--expect` の両側へ。ローカルで CI と同じ形の
+  実行を先に通し **3フィクスチャとも MATCH・4,794,967手 mismatch=0**（第3フィクスチャが約60万手を追加）。
+- **形状そのものの回帰テスト `BlockedCovUFixtureTest`**: ①床0なのに covU=4（供給床では説明できない
+  不足）②`diagnoseCoverage` が全4枠を blocked-now と判定（`allBlockedNow=true`）③恒久的な充足不可
+  （infeasibleSlots）とは別物＝0、を固定。**`fixtureIsAnonymized`**（全職員名が 職員A..J 規約に従う）も
+  固定＝誰かが匿名化前の版へ差し替えたら CI が落ちる防具。
+- 検証: ホストJVM **513テスト green**（510 + 新規3＝言語跨ぎ1・形状2）。C++ は無変更＝ローカルの parity 実行と CI が担保。
 
 ## 制約10族の「詳しい説明」をアプリへ＝既定で閉じた ⓘ 展開（3.409.14, ユーザー指示「詳しく説明をアプリにも追加」）
 
@@ -7465,7 +7487,7 @@ sibling-bug（3.347.0/3.311.0/3.335.0 の「取り残し」型）狙いで焦点
   追加）。**捕捉できることを実測**: sample_v6 期待値を soft 826 にずらすと sample_v6 だけ MISMATCH で exit 1
   （golden は MATCH のまま）＝第2 --expect が実際に対応づけ・照合されている。Kotlin テストも host-JVM で
   実実行し 2 tests green。
-- **残る穴**: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い（3.361.0 で記録した
+- ~~残る穴: real/user 相当の「構造的 covU が床超で blocked-now」な形状は依然 repo に無い~~（3.409.15 で解消。3.361.0 で記録した
   covU-watchdog A/B の前提）。sample_v6 は hard=15 だが covU は解ける形＝covU-blocked ではない。将来その形状を
   test resource 化すれば backlog#6 と covU-A/B の両方が前進する。
 
@@ -7483,7 +7505,8 @@ sibling-bug（3.347.0/3.311.0/3.335.0 の「取り残し」型）狙いで焦点
   信頼できる信号は「最終改善時刻」（onProgress live-best が最後に下がった壁時刻＝探索 plateau 時点）と run2 の最終 hard=3。
 - **結論**: A/B の結果が **3.361.0 の原却下を確認**（早期終了は keep-best-unsafe＝遅延改善を切る、が実データで実証）。
   3.361.0 は**再オープンしない**。証拠が「データ無し・原理のみ」→「実データ多seed で確認済み」へ格上げ。
-  ※real3 を repo の covU-blocked fixture 化する価値はあるが**実職員名を含む（public repo）**ため匿名化＋承認まで保留。
+  ※real3 の fixture 化は実職員名を含むため保留していた **→ 3.409.15 で職員名のみ匿名化（職員A..J）して解消**
+  （匿名化前後で評価が bit 一致することを実測してから追加＝形は完全に保存される）。
 
 ## covU-blocked のウォッチドッグ配線を実測して却下（3.361.0, ユーザー指示「修正する」＝#1 の A/B）
 残作業 #1「`CoverageDiagnosis.allBlockedNow` をウォッチドッグへ配線し、covU が構造床超でも blocked-now を
