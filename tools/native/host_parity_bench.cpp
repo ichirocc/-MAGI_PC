@@ -298,6 +298,297 @@ static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<i
     return ok;
 }
 
+// [3.409.22] ネイティブ修復器が **need2 単独定義の被覆需要** を扱えるかの直接検証。
+//   旧実装は `need1<=0 → continue`（destroyRepairDayAtN）/ `need1<0 → continue`（findCovOFixN）で
+//   need1 未設定のセルを丸ごと素通りしており、**評価器は covU/covO を計上するのに修復器はその枠を
+//   狙う候補を作れない**という乖離になっていた（Kotlin 側は 3.379.0/3.369.0 で covUCell/covOCell へ
+//   委譲済みで、この C++ ミラーだけ取り残されていた）。パリティ番兵はスコアの一致しか見ないため
+//   この乖離を検出できない＝ここで直接叩く。
+static int runNeed2OnlyRepairTest() {
+    int failures = 0;
+    // S=4, T=3, K=2（0=休, 1=A）, G=1。全員 A を担当可能。
+    MagiProblem p;
+    p.S = 4; p.T = 3; p.K = 2; p.G = 1; p.restIdx = 0; p.dow0 = 0; p.use2 = true;
+    p.sgrp.assign(p.S, 0); p.ssk.assign(p.S, -1);
+    p.canDo.assign((size_t)p.S * p.K, 1);
+    p.wish.assign((size_t)p.S * p.T, -1);
+    p.need1.assign((size_t)p.K * p.T, -1);      // ← need1 は全セル未設定
+    p.need2.assign((size_t)p.K * p.T, -1);
+    p.need2[(size_t)1 * p.T + 0] = 2;           // ← day0 の A だけ need2=2（P2 単独定義）
+    p.rangeLo.assign((size_t)p.S * p.K, INT32_MIN);
+    p.rangeHi.assign((size_t)p.S * p.K, INT32_MAX);
+    p.apt.assign((size_t)p.S * p.K, -1);
+    p.bucket.assign((size_t)p.G, {0, 1});
+    finalizeProblem(p);
+
+    // 前提の裏取り: 公式ヘルパは「誰も居ない day0 の A は 2 不足」と判定する。
+    if (p.covUCell(1, 0, 0) != 2) { printf("REPAIR-TEST FAIL: covUCell 前提が崩れています\n"); failures++; }
+
+    // (1) destroyRepairDayAtN: 全員休の盤面で day0 を修復 → A が need2 ぶん埋まること。
+    std::vector<int> a((size_t)p.S * p.T, 0);   // 全セル休
+    std::mt19937_64 rng(20260821);
+    destroyRepairDayAtN(p, a.data(), 0, rng);
+    int got = 0;
+    for (int i = 0; i < p.S; i++) if (a[(size_t)i * p.T + 0] == 1) got++;
+    if (got < 2) {
+        printf("REPAIR-TEST FAIL: destroyRepairDayAtN が need2 単独定義の不足を埋めない (got=%d, 期待>=2)\n", got);
+        failures++;
+    }
+
+    // (2) findCovOFixN: need2=2 の枠に3人＝公式 covOCell は過剰1。修復器がその日を見つけること。
+    //     day を引くのは乱数なので、T=3 の全日について「過剰のある day0 を引いたら必ず検出する」を確認する。
+    std::vector<int> b((size_t)p.S * p.T, 0);
+    for (int i = 0; i < 3; i++) b[(size_t)i * p.T + 0] = 1;   // day0 の A に3人
+    if (p.covOCell(1, 0, 3) != 1) { printf("REPAIR-TEST FAIL: covOCell 前提が崩れています\n"); failures++; }
+    bool found = false;
+    for (int trial = 0; trial < 200 && !found; trial++) {
+        SaChunk st(p, b.data(), 4242 + trial);
+        std::mt19937_64 r2(9000 + trial);
+        Fix f = findCovOFixN(p, st, r2);
+        if (f.ok() && f.j == 0 && b[(size_t)f.i * p.T + 0] == 1) found = true;
+    }
+    if (!found) {
+        printf("REPAIR-TEST FAIL: findCovOFixN が need2 単独定義の過剰を検出しない\n");
+        failures++;
+    }
+    printf("REPAIR need2-only: %s (day-repair got=%d/2, covO-fix %s)\n",
+           failures == 0 ? "OK" : "FAILED", got, found ? "found" : "missed");
+    return failures;
+}
+
+// [3.409.22] 修復器の候補順位に使う marginal cost が「全量再計算の差分」と厳密に一致するか。
+//   weeklyMarginalN / fairMarginalN はどちらも**作業配列を一時的に書き換えて戻す**実装なので、
+//   復元漏れや添字ずれがあると静かに誤った順位を返す（採否は checker が守るので勤務表は壊れないが、
+//   候補選択が歪む＝パリティ番兵では捕まらない領域）。ここでは同じ盤面変更を実際に適用して
+//   全量から測り直し、marginal がその差分と一致することを確認する。
+static int runMarginalCostTest() {
+    int failures = 0;
+    MagiProblem p;
+    p.S = 6; p.T = 14; p.K = 3; p.G = 2; p.restIdx = 0; p.dow0 = 3; p.use2 = false;
+    p.sgrp.assign(p.S, 0);
+    for (int i = 3; i < p.S; i++) p.sgrp[i] = 1;
+    p.ssk.assign(p.S, -1);
+    p.canDo.assign((size_t)p.S * p.K, 1);
+    p.wish.assign((size_t)p.S * p.T, -1);
+    p.need1.assign((size_t)p.K * p.T, -1);
+    p.need2.assign((size_t)p.K * p.T, -1);
+    p.rangeLo.assign((size_t)p.S * p.K, INT32_MIN);
+    p.rangeHi.assign((size_t)p.S * p.K, INT32_MAX);
+    p.apt.assign((size_t)p.S * p.K, -1);
+    p.bucket.assign((size_t)p.G, {0, 1, 2});
+    finalizeProblem(p);
+
+    std::mt19937_64 rng(777);
+    std::vector<int> a((size_t)p.S * p.T);
+    for (auto& v : a) v = (int)(rng() % (uint64_t)p.K);
+
+    auto weeklyOf = [&](const std::vector<int>& bd, int i) {
+        std::vector<int> wd((size_t)p.K * 7, 0);
+        for (int jj = 0; jj < p.T; jj++) {
+            int k = bd[(size_t)i * p.T + jj];
+            if (k >= 0 && k < p.K) wd[(size_t)k * 7 + (size_t)((p.dow0 + jj) % 7)]++;
+        }
+        long long d = 0;
+        for (int k = 0; k < p.K; k++) d += weeklyDevOfBucket(&wd[(size_t)k * 7]);
+        return d;
+    };
+    auto fairOf = [&](const std::vector<int>& bd) {
+        std::vector<int> counts((size_t)p.S * p.K, 0);
+        for (int i = 0; i < p.S; i++)
+            for (int jj = 0; jj < p.T; jj++) {
+                int k = bd[(size_t)i * p.T + jj];
+                if (k >= 0 && k < p.K) counts[(size_t)i * p.K + k]++;
+            }
+        long long d = 0;
+        for (int g = 0; g < p.G; g++) {
+            const auto& mem = p.members[g];
+            if ((int)mem.size() < 2) continue;
+            for (int k = 0; k < p.K; k++) {
+                if (!p.bucketHas[(size_t)g * p.K + k]) continue;
+                int sum = 0;
+                for (int x : mem) sum += counts[(size_t)x * p.K + k];
+                long long tgt = jround((double)sum / (double)mem.size());
+                for (int x : mem) d += std::llabs((long long)counts[(size_t)x * p.K + k] - tgt);
+            }
+        }
+        return d;
+    };
+
+    int checked = 0, nonZeroWeekly = 0, nonZeroFair = 0;
+    for (int trial = 0; trial < 400; trial++) {
+        int i = (int)(rng() % (uint64_t)p.S);
+        int j = (int)(rng() % (uint64_t)p.T);
+        int oldK = a[(size_t)i * p.T + j];
+        int newK = (int)(rng() % (uint64_t)p.K);
+        if (newK == oldK) continue;
+        checked++;
+
+        std::vector<int> wd((size_t)p.K * 7, 0);
+        for (int jj = 0; jj < p.T; jj++) {
+            int k = a[(size_t)i * p.T + jj];
+            if (k >= 0 && k < p.K) wd[(size_t)k * 7 + (size_t)((p.dow0 + jj) % 7)]++;
+        }
+        std::vector<int> wdCopy = wd;
+        std::vector<int> counts((size_t)p.S * p.K, 0);
+        for (int s2 = 0; s2 < p.S; s2++)
+            for (int jj = 0; jj < p.T; jj++) {
+                int k = a[(size_t)s2 * p.T + jj];
+                if (k >= 0 && k < p.K) counts[(size_t)s2 * p.K + k]++;
+            }
+        std::vector<int> countsCopy = counts;
+        std::vector<int> grpTotal((size_t)p.G * p.K, 0);
+        for (int s2 = 0; s2 < p.S; s2++)
+            for (int k = 0; k < p.K; k++)
+                grpTotal[(size_t)p.sgrp[s2] * p.K + k] += counts[(size_t)s2 * p.K + k];
+
+        const int bucket = (p.dow0 + j) % 7;
+        long long mWeekly = weeklyMarginalN(wd.data(), p.K, bucket, oldK, newK);
+        long long mFair = fairMarginalN(p, i, oldK, -1, counts, grpTotal)
+                        + fairMarginalN(p, i, newK, 1, counts, grpTotal);
+
+        if (wd != wdCopy) { printf("MARGINAL-TEST FAIL: weeklyMarginalN が作業配列を戻していない\n"); failures++; break; }
+        if (counts != countsCopy) { printf("MARGINAL-TEST FAIL: fairMarginalN が counts を戻していない\n"); failures++; break; }
+
+        long long wBefore = weeklyOf(a, i), fBefore = fairOf(a);
+        a[(size_t)i * p.T + j] = newK;
+        long long wAfter = weeklyOf(a, i), fAfter = fairOf(a);
+        a[(size_t)i * p.T + j] = oldK;
+
+        if (mWeekly != wAfter - wBefore) {
+            printf("MARGINAL-TEST FAIL: weekly %lld != 全量差分 %lld\n", mWeekly, wAfter - wBefore);
+            failures++; break;
+        }
+        if (mFair != fAfter - fBefore) {
+            printf("MARGINAL-TEST FAIL: fair %lld != 全量差分 %lld\n", mFair, fAfter - fBefore);
+            failures++; break;
+        }
+        if (mWeekly != 0) nonZeroWeekly++;
+        if (mFair != 0) nonZeroFair++;
+    }
+    // 全部ゼロなら「一致」に意味が無い（何も測っていない緑）。実際に効いていることまで見る。
+    if (failures == 0 && (nonZeroWeekly == 0 || nonZeroFair == 0)) {
+        printf("MARGINAL-TEST FAIL: 非ゼロの marginal が観測されず検証が空振り (weekly=%d fair=%d)\n",
+               nonZeroWeekly, nonZeroFair);
+        failures++;
+    }
+
+    // destroyRepairViolationsN が希望固定セルを触らず、担当可シフトだけを書くこと。
+    //   canDo は「群 bucket に含まれるか」から導かれる（NativeEval の flatten がそう詰める）ので、
+    //   bucket と canDo は必ず揃えて作る。片方だけ弄ると実在しない問題になり、テストが
+    //   自分の作った不整合を捕まえてしまう（初版で実際に踏んだ）。
+    p.wish[(size_t)0 * p.T + 0] = 1;              // 職員0/day0 を希望固定
+    p.bucket[1] = {0, 1};                          // 群1（職員3-5）はシフト2を担当しない
+    for (int i = 0; i < p.S; i++)
+        for (int k = 0; k < p.K; k++)
+            p.canDo[(size_t)i * p.K + k] = (p.sgrp[i] == 1 && k == 2) ? 0 : 1;
+    finalizeProblem(p);
+    // 初期盤面も担当可だけで作る（repair は最大8セルしか触らないので、触っていないセルの
+    //   違反を数えると「repair のせい」に見えてしまう）。
+    std::vector<int> vb = a;
+    for (int i = 0; i < p.S; i++)
+        for (int j = 0; j < p.T; j++)
+            if (!p.cd(i, vb[(size_t)i * p.T + j])) vb[(size_t)i * p.T + j] = 0;
+    std::vector<int> cells;
+    for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j += 3) cells.push_back(i * p.T + j);
+    int touched = 0;
+    for (int trial = 0; trial < 50; trial++) {
+        std::vector<int> bd = vb;
+        std::mt19937_64 r3(31337 + trial);
+        destroyRepairViolationsN(p, bd.data(), cells, r3);
+        if (bd[0] != vb[0]) { printf("MARGINAL-TEST FAIL: 希望固定セルが変更された\n"); failures++; break; }
+        bool bad = false;
+        for (int i = 0; i < p.S && !bad; i++)
+            for (int j = 0; j < p.T; j++) {
+                if (bd[(size_t)i * p.T + j] != vb[(size_t)i * p.T + j]) touched++;
+                if (!p.cd(i, bd[(size_t)i * p.T + j])) { bad = true; break; }
+            }
+        if (bad) { printf("MARGINAL-TEST FAIL: 担当外シフトが割り当てられた\n"); failures++; break; }
+    }
+    // 1セルも動かないなら上の2つは何も検証していない（空振りの緑）。
+    if (failures == 0 && touched == 0) {
+        printf("MARGINAL-TEST FAIL: destroyRepairViolationsN が1セルも動かさず検証が空振り\n");
+        failures++;
+    }
+
+    // **operator が実際に weekly/fair を費用へ入れているか**を外から観測する。
+    //   個人回数の上下限も apt も設定しないので staffCountPenaltyAtN は常に 0＝候補は
+    //   weekly+fair だけで決まる。ここを外すと全候補が同点になり reservoir 抽選＝
+    //   最小でない候補も選ばれる（＝ヘルパを持っていても呼んでいなければ落ちる）。
+    int decided = 0;
+    {
+        MagiProblem q;
+        q.S = 2; q.T = 14; q.K = 3; q.G = 1; q.restIdx = 0; q.dow0 = 0; q.use2 = false;
+        q.sgrp.assign(q.S, 0); q.ssk.assign(q.S, -1);
+        q.canDo.assign((size_t)q.S * q.K, 1);
+        q.wish.assign((size_t)q.S * q.T, -1);
+        q.need1.assign((size_t)q.K * q.T, -1);
+        q.need2.assign((size_t)q.K * q.T, -1);
+        q.rangeLo.assign((size_t)q.S * q.K, INT32_MIN);
+        q.rangeHi.assign((size_t)q.S * q.K, INT32_MAX);
+        q.apt.assign((size_t)q.S * q.K, -1);
+        q.bucket.assign((size_t)q.G, {0, 1, 2});
+        finalizeProblem(q);
+
+        auto costOf = [&](const std::vector<int>& bd) {
+            std::vector<int> wd((size_t)q.K * 7, 0);
+            for (int jj = 0; jj < q.T; jj++) {
+                int k = bd[(size_t)0 * q.T + jj];
+                if (k >= 0 && k < q.K) wd[(size_t)k * 7 + (size_t)((q.dow0 + jj) % 7)]++;
+            }
+            long long d = 0;
+            for (int k = 0; k < q.K; k++) d += weeklyDevOfBucket(&wd[(size_t)k * 7]);
+            std::vector<int> counts((size_t)q.S * q.K, 0);
+            for (int i = 0; i < q.S; i++)
+                for (int jj = 0; jj < q.T; jj++) {
+                    int k = bd[(size_t)i * q.T + jj];
+                    if (k >= 0 && k < q.K) counts[(size_t)i * q.K + k]++;
+                }
+            for (int k = 0; k < q.K; k++) {
+                int sum = counts[k] + counts[(size_t)q.K + k];
+                long long tgt = jround((double)sum / 2.0);
+                d += std::llabs((long long)counts[k] - tgt) + std::llabs((long long)counts[(size_t)q.K + k] - tgt);
+            }
+            return d;
+        };
+
+        std::mt19937_64 gen(4242);
+        for (int trial = 0; trial < 4000 && decided < 30 && failures == 0; trial++) {
+            std::vector<int> bd((size_t)q.S * q.T);
+            for (auto& v : bd) v = (int)(gen() % (uint64_t)q.K);
+            int j0 = (int)(gen() % (uint64_t)q.T);
+            int old = bd[j0];
+            // 候補（old 以外）の全量費用を測り、**厳密に唯一の最小**があるときだけ判定に使う。
+            long long best = INT64_MAX; int bestK = -1; int ties = 0;
+            for (int k = 0; k < q.K; k++) {
+                if (k == old) continue;
+                std::vector<int> t = bd; t[j0] = k;
+                long long c = costOf(t);
+                if (c < best) { best = c; bestK = k; ties = 1; }
+                else if (c == best) ties++;
+            }
+            if (ties != 1) continue;
+            std::vector<int> t0 = bd; t0[j0] = old;
+            if (costOf(t0) <= best) continue;   // 動かさない方が良い局面は対象外
+            decided++;
+            std::vector<int> out = bd;
+            std::mt19937_64 r4(555 + trial);
+            destroyRepairViolationsN(q, out.data(), std::vector<int>{j0}, r4);
+            if (out[j0] != bestK) {
+                printf("MARGINAL-TEST FAIL: 候補選択が weekly+fair の最小と一致しない "
+                       "(選んだ=%d 期待=%d j=%d)\n", out[j0], bestK, j0);
+                failures++;
+            }
+        }
+        if (failures == 0 && decided < 30) {
+            printf("MARGINAL-TEST FAIL: 判定に使える局面が %d 件しか作れず検証が空振り\n", decided);
+            failures++;
+        }
+    }
+    printf("MARGINAL cost parity: %s (checked=%d weekly非ゼロ=%d fair非ゼロ=%d 再割当セル=%d 候補選択=%d局面)\n",
+           failures == 0 ? "OK" : "FAILED", checked, nonZeroWeekly, nonZeroFair, touched, decided);
+    return failures;
+}
+
 int main(int argc, char** argv) {
     long long totalMoves = 0, mismatches = 0;
     // --shared-only は共有ハンドルの競合検査だけを走らせる（ThreadSanitizer 用）。
@@ -390,5 +681,6 @@ int main(int argc, char** argv) {
     double bits   = benchOne(false);
     printf("BENCH deltaApply (10x31 K6): scalar %.2f M moves/s, bit-op %.2f M moves/s, speedup x%.2f\n",
            scalar / 1e6, bits / 1e6, bits / scalar);
-    return mismatches == 0 ? 0 : 1;
+    int repairFail = runNeed2OnlyRepairTest() + runMarginalCostTest();
+    return (mismatches == 0 && repairFail == 0) ? 0 : 1;
 }

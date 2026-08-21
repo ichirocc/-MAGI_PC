@@ -5320,6 +5320,74 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## ネイティブ修復器が Kotlin から5世代ぶん取り残されていた（3.409.22, 外部レビューを全件検証して修正）
+
+受領したレビュー5項目を1件ずつ実コードへ当て、**全件が実在**すると確認して直した。根は1つ＝
+**Kotlin 側で直した修復オペレータの規則が `magi_native.cpp` のミラーへ反映されていなかった**。
+5世代ぶんが溜まっていた: 3.266.0(reservoir tie)・3.267.0(weekly/fair marginal)・3.319.0(canDo ガード)・
+3.369.0(findCovOFix→covOCell)・3.379.0(destroyRepairDay/Staff→covUCell)。
+**ネイティブは既定 ON なので、直したはずの規則が既定経路では効いていなかった。**
+
+### なぜ番兵も CI も気づけなかったか（構造の話）
+2層番兵も native-parity CI も**スコアの一致**しか見ない。修復オペレータは**候補生成**であって
+評価器ではないので、両者の網から構造的に外れる。実機ログは `Kotlin照合=ON(4047回)` が全部通っており、
+**照合が通っていることは候補生成が一致している証拠にならない**。
+実害は「誤った勤務表」ではなく（採否は checker の keep-best が守る）**候補の取りこぼしと無駄打ち**。
+
+### 直した5点（C++）
+| 箇所 | 旧 | 新 |
+|---|---|---|
+| `destroyRepairDayAtN` | `need1<=0 → continue` / `miss = need1 - got` | `miss = p.covUCell(k,j,got)` |
+| `destroyRepairStaffAtN` | `need1<=0 → continue` ＋ `got>=need1 → continue` | `p.covUCell(k,j,got) <= 0 → continue` |
+| `findCovOFixN` | 過剰 `dsn - hi`(need1/need2 を自前で組む) / 代替先 `need1 - dsn` | `p.covOCell` / `p.covUCell` |
+| `staffCountPenaltyAtN` | low を担当可否に関わらず数える | `&& p.cd(i,k)`（評価器 `contribRangeApt` は元から持っていた） |
+| `destroyRepair*N` 3種 | 費用は個人回数(+Day のみ c41)だけ・同点は先頭固定 | `weeklyMarginalN`/`fairMarginalN` を加算・`reservoirTieN` で同点抽選 |
+
+`weeklyMarginalN`/`fairMarginalN`/`reservoirTieN` を新設（Kotlin の同名関数と同式）。
+**3兄弟の3番目 `destroyRepairViolationsN` は最初の修正で取り残しており、並列監査が拾った**
+（同一ファイル内で2つだけ直っている非対称になっていた）。ここは Kotlin と同じく wd/counts/grpTotal を
+repeat ごとに再構築する（件数が最大8回に限られるため）。
+
+### 事前診断も同じ穴を持っていた（V6SanityPort・9箇所）
+検査3「必要N人だが担当できるのはM人」が `need1` 直読みで、**need2 単独定義のセルを丸ごと見落として
+いた**（利用者には「設定上は問題なし」と見え、実行すると covU が必ず残る）。しかも**同じファイルの
+`forcedCovU` は元から `covUCell` を使っており、ファイル内で判定基準が二重化**していた。
+`needDefined` / `effectiveDemand`(=`covUCell(k,j,0)`) / `effectiveCap`(=`covOCell` が 0 を返す最大 got) を
+file-private で新設し、検査3・`impossibleDemandDays`（検査3の双子。**片方だけ直しかけて
+`assert count==1` が落ちたことで存在に気づいた**）・検査6 の seatsLo/seatsHi/hasDemand・需給行の
+demand と seatsHi・違反詳細の needStr・`aptBalances`・c1壁の workMinDemand と capSum の9箇所を委譲へ。
+**レビューの「警告しない可能性がある」は過大**で、実際は検査7 `forcedCovU` が別途警告していた
+（欠けていたのは per-day の**行動につながる** DEMAND 項目＝ワンタップ修正 `CAP_DEMAND` を運ぶほう）。
+
+### 検証
+- **native parity 4,794,967手 mismatch=0 / 3フィクスチャとも言語跨ぎ MATCH**（評価器は無傷）・
+  bit-op ×2.13＝速度退行なし。修復器の新テストも `REPAIR need2-only: OK` /
+  `MARGINAL cost parity: OK (checked=264 weekly非ゼロ=205 fair非ゼロ=206 再割当セル=320 候補選択=30局面)`。
+- **ホストJVM 511テスト green**（新規2件＝need2 単独定義の需要が検査3に出る／収まっていれば出さない）。
+- **harness に修復器の直接テストを2本追加**（パリティが評価器しか見ない以上、ここは自分で叩くしかない）:
+  ①`need2` 単独定義の不足を `destroyRepairDayAtN` が埋め、過剰を `findCovOFixN` が見つける
+  ②`weeklyMarginalN`/`fairMarginalN` が**全量再計算の差分と厳密に一致**し、作業配列を必ず復元する
+  （両関数とも一時的に書き換えて戻す実装＝復元漏れは静かに順位を歪める）。
+  **非ゼロの marginal が観測されなければ失敗にする**＝「何も測っていない緑」を防ぐ。
+  あわせて `destroyRepairViolationsN` が希望固定セルを触らず担当可シフトだけを書くことも固定。
+- **[自分のテストの誤りを実行で捕まえた]** 初版は `p.canDo` だけを弄って「担当外シフト」を作ったが、
+  canDo は**群 bucket から導かれる**（flatten がそう詰める）ので、片方だけ弄ると実在しない問題になる。
+  かつ repair は最大8セルしか触らないのに全セルを検査していたため、**初期盤面の担当外セルを
+  「repair のせい」と報告**していた。bucket と canDo を揃えて作り、初期盤面も担当可だけで組み直した
+  （harness を先に走らせていなければ、この誤りを本物のバグとして記録するところだった）。
+- **教訓#30（両側で実行して確認）**: Kotlin は revert すると新テスト1件だけが落ちる。C++ は
+  scratch へ2箇所（`covUCell` 委譲と `destroyRepairViolationsN` の weekly/fair）を戻して実行し、
+  **`PARITY: 2,996,665手 0 mismatches` はそのまま通り、新テスト2本だけが落ちて exit 1**
+  （`destroyRepairDayAtN が need2 単独定義の不足を埋めない (got=0)` ／
+  `候補選択が weekly+fair の最小と一致しない (選んだ=1 期待=2)`）。
+  **パリティが満点のまま落ちる**ことが、この乖離が番兵の外にあることの直接の証拠になっている。
+
+### 実データでは潜在（正直な記録）
+3フィクスチャ（golden / sample_v6 / blocked_covu）とも **need2 単独定義セルは0件**なので、
+need 系の穴はこのデータでは発火しない。**いま効いているのは canDo ガードと weekly/fair/tie の側**。
+need 系は「UI から1回の編集で作れる形」（`BaseNeedSheet` は最低人数の空欄を無ガードで保存できる）
+に対する保険で、将来のデータで顕在化する。
+
 ## 既定OFFトグル2つを単体 A/B で測って削除（3.409.21, ユーザー選択「両方削除」）
 
 3.384.0 の「見直しの条件」表が事前に約束した手順を実行した。対象は残っていた未判定トグル2つ:

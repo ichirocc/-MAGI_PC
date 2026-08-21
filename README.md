@@ -24,7 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-20（3.409.21 既定OFFトグル2つを単体 A/B で測って削除——
+**最終更新**：2026-08-21（3.409.22 ネイティブ修復器が Kotlin から5世代ぶん取り残されていた——
+`magi_native.cpp` の destroy-repair / findCovOFix が 3.266.0(同点抽選)・3.267.0(weekly/fair 費用)・
+3.319.0(canDo ガード)・3.369.0/3.379.0(`covUCell`/`covOCell` への委譲) を1つも反映しておらず、
+**ネイティブ既定 ON なので直したはずの規則が既定経路では効いていなかった**。2層番兵も
+native-parity CI も**スコアの一致**しか見ないため、候補生成の乖離は構造的に網から外れる
+（harness に修復器の直接テストを2本追加してこの穴を塞いだ）。事前診断(V6SanityPort)の9箇所も
+同じ `need1` 直読みを実効値へ委譲。3.409.21 既定OFFトグル2つを単体 A/B で測って削除——
 `portfolioRoleParallelSa`（ロール内並列SA）は 15ペアで ON7/OFF8＝中立、しかも ON は反復数中央値が
 2/3データセットで**低い**＝チェーン分割が希釈になっていた（動機だった「1本=遊休」仮説の反証）。
 `adaptiveEscapeControl`（停滞脱出の適応制御）は ON5/OFF10＝3.306.0 に続く2度目の中立。

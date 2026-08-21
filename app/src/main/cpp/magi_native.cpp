@@ -1052,10 +1052,66 @@ inline bool glsAcceptN(long long ns, long long curScore, double moveAug, double 
 
 inline int rnInt(std::mt19937_64& rng, int bound) { return (int)(rng() % (uint64_t)bound); }
 // staffCountPenaltyAt と同式（低90/高45/apt L1、n=回数）。
+// [3.409.22] Kotlin `weeklyMarginalAt`/`fairMarginalAt`(3.267.0) と
+//   `HypothesisDiversityPolicy.takeReservoirTie`(3.266.0) の C++ ミラー。
+//   Kotlin の destroy-repair はこの3つを候補順位へ織り込むのに、C++ ミラーは
+//   個人回数(low/high/apt)＋群レンジ(c41)だけで weekly/fair を一切見ておらず、
+//   タイブレークも先頭固定だった＝**同じ operator がネイティブ加速の ON/OFF で別物**になっていた。
+//   2層番兵はスコアの一致しか見ないためこの乖離を検出できない（候補生成は番兵の対象外）。
+inline long long weeklyMarginalN(int* wdI, int K, int bucket, int oldK, int newK) {
+    if (oldK == newK) return 0;
+    long long acc = 0;
+    if (oldK >= 0 && oldK < K) {
+        int* b = &wdI[(size_t)oldK * 7];
+        long long before = weeklyDevOfBucket(b);
+        b[bucket]--; acc += weeklyDevOfBucket(b) - before; b[bucket]++;
+    }
+    if (newK >= 0 && newK < K) {
+        int* b = &wdI[(size_t)newK * 7];
+        long long before = weeklyDevOfBucket(b);
+        b[bucket]++; acc += weeklyDevOfBucket(b) - before; b[bucket]--;
+    }
+    return acc;
+}
+
+// counts(S*K) は一時的に書き換えて必ず戻す（Kotlin fairMarginalAt と同じ手）。
+inline long long fairMarginalN(const MagiProblem& p, int i, int k, int delta,
+                               std::vector<int>& counts, const std::vector<int>& grpTotal) {
+    const int K = p.K;
+    if (delta == 0 || k < 0 || k >= K) return 0;
+    int g = p.sgrp[i];
+    if (g < 0 || g >= p.G) return 0;
+    if (!p.bucketHas[(size_t)g * K + k]) return 0;
+    const auto& mem = p.members[g];
+    const int m = (int)mem.size();
+    if (m < 2) return 0;
+    auto dev = [&](int sum) -> long long {
+        long long tgt = jround((double)sum / m);
+        long long d = 0;
+        for (int x : mem) d += std::llabs((long long)counts[(size_t)x * K + k] - tgt);
+        return d;
+    };
+    long long before = dev(grpTotal[(size_t)g * K + k]);
+    counts[(size_t)i * K + k] += delta;
+    long long after = dev(grpTotal[(size_t)g * K + k] + delta);
+    counts[(size_t)i * K + k] -= delta;
+    return after - before;
+}
+
+inline bool reservoirTieN(int tieCount, std::mt19937_64& rng) {
+    return tieCount > 0 && rnInt(rng, tieCount) == 0;
+}
+
+// [3.409.22] Kotlin `staffCountPenaltyAt`(V6NativeOptimizer.kt) のミラー。
+//   low は**担当できるシフトだけ**（3.319.0）。同ファイルの評価器 `SaChunk::contribRangeApt` は
+//   元から `p.cd(i,k)` ガードを持つのに、修復の marginal cost であるこの関数だけ欠けていた
+//   ＝3.319.0 以前の Kotlin と同じ構図。担当外シフトに個人下限が設定されたデータで、
+//   実在しない違反を重み90 で数えて候補選択を歪める（最終採否は checker が守るので誤った
+//   勤務表にはならないが、有効な候補を取りこぼす）。
 inline long long staffCountPenaltyAtN(const MagiProblem& p, int i, int k, int n) {
     long long pen = 0;
     int lo = p.rangeLo[(size_t)i * p.K + k], hi = p.rangeHi[(size_t)i * p.K + k];
-    if (lo != INT32_MIN && lo != 0 && n < lo) pen += (long long)(lo - n) * 90;
+    if (lo != INT32_MIN && lo != 0 && n < lo && p.cd(i, k)) pen += (long long)(lo - n) * 90;
     if (hi != INT32_MAX && n > hi) pen += (long long)(n - hi) * 45;
     int t = p.apt[(size_t)i * p.K + k];
     if (t >= 0) pen += std::llabs((long long)n - t);
@@ -1070,8 +1126,10 @@ void randomAllowedCellN(const MagiProblem& p, int* a, std::mt19937_64& rng) {
     if (!allowed.empty()) a[(size_t)i * p.T + j] = allowed[rnInt(rng, (int)allowed.size())];
 }
 
-// destroyRepairDayAt: 非希望セルを休へ destroy → need1 の不足を marginal soft（個人low/high/apt＋群c41）最小の休職員で repair。
-void destroyRepairDayAtN(const MagiProblem& p, int* a, int j, std::mt19937_64&) {
+// destroyRepairDayAt: 非希望セルを休へ destroy → 被覆不足(covUCell)を marginal soft
+//   （個人 low/high/apt ＋ 群レンジ c41 ＋ weekly ＋ fair）最小の休職員で repair。
+//   [3.409.22] 費用の族と covUCell 委譲・タイブレークを Kotlin destroyRepairDayAt と一致させた。
+void destroyRepairDayAtN(const MagiProblem& p, int* a, int j, std::mt19937_64& rng) {
     const int S = p.S, T = p.T, K = p.K, rest = p.restIdx;
     if (T == 0 || rest < 0 || rest >= K) return;
     std::vector<int> cnt((size_t)S * K, 0);
@@ -1104,31 +1162,52 @@ void destroyRepairDayAtN(const MagiProblem& p, int* a, int j, std::mt19937_64&) 
         }
         return d;
     };
+    // [3.409.22/Kotlin 3.267.0 のミラー] 群合計(fair の月間 total)と職員別の曜日バケット(weekly)を
+    //   destroy 後の盤面基準で一度だけ構築（c41 の grpCnt と同じ順序）。day j は固定なので bucket は共通。
+    std::vector<int> grpTotal((size_t)p.G * K, 0);
+    for (int i = 0; i < S; i++) for (int k = 0; k < K; k++) grpTotal[(size_t)p.sgrp[i] * K + k] += cnt[(size_t)i * K + k];
+    std::vector<int> wd((size_t)S * K * 7, 0);
+    for (int i = 0; i < S; i++) for (int jj = 0; jj < T; jj++) {
+        int k2 = a[(size_t)i * T + jj];
+        if (k2 >= 0 && k2 < K) wd[((size_t)i * K + k2) * 7 + (size_t)((p.dow0 + jj) % 7)]++;
+    }
+    const int bucket = (p.dow0 + j) % 7;
     for (int k = 0; k < K; k++) {
         if (k == rest) continue;
-        int need = p.need1[(size_t)k * T + j];
-        if (need <= 0) continue;
-        int miss = need - covJ[k];
+        // [3.409.22] 旧: `need1<=0 → continue` で **need2 単独定義の需要を丸ごと素通り**していた
+        //   （need1 未設定は -1）。Kotlin 側は 3.379.0 で covUCell へ委譲済みで、この C++ ミラーだけ
+        //   取り残されていた。source of truth（片方定義=その値・両方定義=不足の小さい方）へ委譲する。
+        //   covUCell は max(0, lo-got) を返すので旧 `continue` は miss==0 に吸収される。
+        int miss = p.covUCell(k, j, covJ[k]);
         while (miss > 0) {
-            int bestI = -1;
+            int bestI = -1, tied = 0;
             long long bestDelta = INT64_MAX;
             for (int i = 0; i < S; i++) {
                 if (a[(size_t)i * T + j] != rest || wishLockedN(p, i, j) || !p.cd(i, k)) continue;
                 long long delta = staffCountPenaltyAtN(p, i, k, cnt[(size_t)i * K + k] + 1)
-                    - staffCountPenaltyAtN(p, i, k, cnt[(size_t)i * K + k]) + c41DayMarg(p.sgrp[i], k);
-                if (delta < bestDelta) { bestDelta = delta; bestI = i; }
+                    - staffCountPenaltyAtN(p, i, k, cnt[(size_t)i * K + k]) + c41DayMarg(p.sgrp[i], k)
+                    + weeklyMarginalN(&wd[((size_t)i * K) * 7], K, bucket, rest, k)
+                    + fairMarginalN(p, i, rest, -1, cnt, grpTotal)
+                    + fairMarginalN(p, i, k, 1, cnt, grpTotal);
+                if (delta < bestDelta) { bestDelta = delta; bestI = i; tied = 1; }
+                else if (delta == bestDelta) { tied++; if (reservoirTieN(tied, rng)) bestI = i; }
             }
             if (bestI < 0) break;
             a[(size_t)bestI * T + j] = k;
             cnt[(size_t)bestI * K + k]++; cnt[(size_t)bestI * K + rest]--;
             covJ[k]++; miss--;
             if (hasC41) grpCnt[(size_t)p.sgrp[bestI] * K + k]++;
+            grpTotal[(size_t)p.sgrp[bestI] * K + k]++; grpTotal[(size_t)p.sgrp[bestI] * K + rest]--;
+            wd[((size_t)bestI * K + rest) * 7 + (size_t)bucket]--;
+            wd[((size_t)bestI * K + k) * 7 + (size_t)bucket]++;
         }
     }
 }
 
-// destroyRepairStaffAt: 職員 i の非希望セルを休へ → 各日の被覆穴を marginal soft 最小のシフトで repair（covO を作らない）。
-void destroyRepairStaffAtN(const MagiProblem& p, int* a, int i, std::mt19937_64&) {
+// destroyRepairStaffAt: 職員 i の非希望セルを休へ → 各日の被覆穴(covUCell)を marginal soft
+//   （個人 low/high/apt ＋ weekly ＋ fair）最小のシフトで repair（covO を作らない）。
+//   [3.409.22] Kotlin destroyRepairStaffAt と費用の族・covUCell 委譲・タイブレークを一致させた。
+void destroyRepairStaffAtN(const MagiProblem& p, int* a, int i, std::mt19937_64& rng) {
     const int S = p.S, T = p.T, K = p.K, rest = p.restIdx;
     const auto& allowed = p.bucket[p.sgrp[i]];
     if (allowed.empty() || rest < 0 || rest >= K || !p.cd(i, rest)) return;
@@ -1144,29 +1223,54 @@ void destroyRepairStaffAtN(const MagiProblem& p, int* a, int i, std::mt19937_64&
         int k2 = a[(size_t)x * T + j];
         if (k2 >= 0 && k2 < K) cov[(size_t)j * K + k2]++;
     }
+    // [3.409.22/Kotlin 3.267.0 のミラー] fair は群メンバー全員の月間 total が要るので counts(S*K) を持つ
+    //   （職員 i の行は cntI と同じ値を二重に持たず、下の更新で両方を同時に動かす）。weekly は職員 i のぶんだけ。
+    std::vector<int> counts((size_t)S * K, 0);
+    for (int x = 0; x < S; x++) for (int jj = 0; jj < T; jj++) {
+        int k2 = a[(size_t)x * T + jj];
+        if (k2 >= 0 && k2 < K) counts[(size_t)x * K + k2]++;
+    }
+    std::vector<int> grpTotal((size_t)p.G * K, 0);
+    for (int x = 0; x < S; x++) for (int k = 0; k < K; k++) grpTotal[(size_t)p.sgrp[x] * K + k] += counts[(size_t)x * K + k];
+    std::vector<int> wd((size_t)K * 7, 0);
+    for (int jj = 0; jj < T; jj++) {
+        int k2 = a[(size_t)i * T + jj];
+        if (k2 >= 0 && k2 < K) wd[(size_t)k2 * 7 + (size_t)((p.dow0 + jj) % 7)]++;
+    }
     for (int j = 0; j < T; j++) {
         if (wishLockedN(p, i, j) || a[(size_t)i * T + j] != rest) continue;
-        int bestK = -1;
+        const int bucket = (p.dow0 + j) % 7;
+        int bestK = -1, tied = 0;
         long long bestDelta = INT64_MAX;
         for (int k = 0; k < K; k++) {
             if (k == rest || !p.cd(i, k)) continue;
-            int need = p.need1[(size_t)k * T + j];
-            if (need <= 0) continue;
-            if (cov[(size_t)j * K + k] >= need) continue;
-            long long delta = staffCountPenaltyAtN(p, i, k, cntI[k] + 1) - staffCountPenaltyAtN(p, i, k, cntI[k]);
-            if (delta < bestDelta) { bestDelta = delta; bestK = k; }
+            // [3.409.22] 同上（Kotlin destroyRepairStaffAt は 3.379.0 で covUCell へ委譲済み）。
+            //   旧2条件（need<=0 / 充足済み）は「残る不足が無い」の1条件に畳まれる。
+            if (p.covUCell(k, j, cov[(size_t)j * K + k]) <= 0) continue;
+            long long delta = staffCountPenaltyAtN(p, i, k, cntI[k] + 1) - staffCountPenaltyAtN(p, i, k, cntI[k])
+                + weeklyMarginalN(wd.data(), K, bucket, rest, k)
+                + fairMarginalN(p, i, rest, -1, counts, grpTotal)
+                + fairMarginalN(p, i, k, 1, counts, grpTotal);
+            if (delta < bestDelta) { bestDelta = delta; bestK = k; tied = 1; }
+            else if (delta == bestDelta) { tied++; if (reservoirTieN(tied, rng)) bestK = k; }
         }
         if (bestK >= 0) {
             a[(size_t)i * T + j] = bestK;
             cntI[bestK]++; cntI[rest]--;
             cov[(size_t)j * K + bestK]++; cov[(size_t)j * K + rest]--;
+            counts[(size_t)i * K + bestK]++; counts[(size_t)i * K + rest]--;
+            grpTotal[(size_t)p.sgrp[i] * K + bestK]++; grpTotal[(size_t)p.sgrp[i] * K + rest]--;
+            wd[(size_t)rest * 7 + (size_t)bucket]--; wd[(size_t)bestK * 7 + (size_t)bucket]++;
         }
     }
 }
 
 // destroyRepairViolations: 違反セル(hint)から最大8セルを marginal soft 最小の担当可シフトへ再割当。
+// [3.409.22] 費用は 個人回数(low/high/apt) + weekly + fair、同点は reservoir 抽選＝Kotlin と同式。
+//   兄弟2関数（Day/Staff）と違い、ここは wd/counts/grpTotal を **repeat ごとに再構築**する
+//   （Kotlin も同じ＝件数が最大8回に限られるため毎回の再走査を許容している）。
 void destroyRepairViolationsN(const MagiProblem& p, int* a, const std::vector<int>& cells, std::mt19937_64& rng) {
-    const int T = p.T, K = p.K;
+    const int S = p.S, T = p.T, K = p.K;
     if (cells.empty()) { randomAllowedCellN(p, a, rng); return; }
     int reps = (int)cells.size() < 8 ? (int)cells.size() : 8;
     for (int r = 0; r < reps; r++) {
@@ -1177,15 +1281,39 @@ void destroyRepairViolationsN(const MagiProblem& p, int* a, const std::vector<in
         if (allowed.empty()) continue;
         std::vector<int> cntI(K, 0);
         for (int jj = 0; jj < T; jj++) { int k = a[(size_t)i * T + jj]; if (k >= 0 && k < K) cntI[k]++; }
+        std::vector<int> wd((size_t)K * 7, 0);
+        for (int jj = 0; jj < T; jj++) {
+            int k2 = a[(size_t)i * T + jj];
+            if (k2 >= 0 && k2 < K) wd[(size_t)k2 * 7 + (size_t)((p.dow0 + jj) % 7)]++;
+        }
+        std::vector<int> counts((size_t)S * K, 0);
+        for (int s2 = 0; s2 < S; s2++)
+            for (int jj = 0; jj < T; jj++) {
+                int k2 = a[(size_t)s2 * T + jj];
+                if (k2 >= 0 && k2 < K) counts[(size_t)s2 * K + k2]++;
+            }
+        std::vector<int> grpTotal((size_t)p.G * K, 0);
+        for (int s2 = 0; s2 < S; s2++) {
+            int g = p.sgrp[s2];
+            if (g < 0 || g >= p.G) continue;
+            for (int k2 = 0; k2 < K; k2++) grpTotal[(size_t)g * K + k2] += counts[(size_t)s2 * K + k2];
+        }
+        const int bucket = (p.dow0 + j) % 7;
         int old = a[(size_t)i * T + j];
         int bestK = old;
         long long bestDelta = INT64_MAX;
+        int tied = 0;
         for (int k : allowed) {
             if (k == old) continue;
             long long dOld = (old >= 0 && old < K)
                 ? staffCountPenaltyAtN(p, i, old, cntI[old] - 1) - staffCountPenaltyAtN(p, i, old, cntI[old]) : 0;
             long long dK = staffCountPenaltyAtN(p, i, k, cntI[k] + 1) - staffCountPenaltyAtN(p, i, k, cntI[k]);
-            if (dOld + dK < bestDelta) { bestDelta = dOld + dK; bestK = k; }
+            long long delta = dOld + dK
+                + weeklyMarginalN(wd.data(), K, bucket, old, k)
+                + ((old >= 0 && old < K) ? fairMarginalN(p, i, old, -1, counts, grpTotal) : 0)
+                + fairMarginalN(p, i, k, 1, counts, grpTotal);
+            if (delta < bestDelta) { bestDelta = delta; bestK = k; tied = 1; }
+            else if (delta == bestDelta) { tied++; if (reservoirTieN(tied, rng)) bestK = k; }
         }
         if (bestK != old) a[(size_t)i * T + j] = bestK;
     }
@@ -1201,10 +1329,9 @@ Fix findCovOFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng) 
     int j = rnInt(rng, T);
     int overK = -1, maxOver = 0;
     for (int k = 0; k < K; k++) {
-        int lo = p.need1[(size_t)k * T + j];
-        if (lo < 0) continue;
-        int hi = (p.use2 && p.need2[(size_t)k * T + j] >= 0) ? p.need2[(size_t)k * T + j] : lo;
-        int over = st.dsn[(size_t)j * K + k] - hi;
+        // [3.409.22] 旧: need1 未設定(-1)なら continue＝need2 単独で上限が定義されたセルの過剰を
+        //   一度も検出できなかった。Kotlin findCovOFix は 3.369.0 で covOCell へ委譲済み。
+        int over = p.covOCell(k, j, st.dsn[(size_t)j * K + k]);
         if (over > maxOver) { maxOver = over; overK = k; }
     }
     if (overK < 0) return {};
@@ -1216,8 +1343,8 @@ Fix findCovOFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng) 
     int bestNw = -1, bestDef = INT32_MIN;
     for (int k = 0; k < K; k++) {
         if (k == overK || !p.cd(sel, k)) continue;
-        int lo = p.need1[(size_t)k * T + j];
-        int def = lo >= 0 ? lo - st.dsn[(size_t)j * K + k] : 0;
+        // [3.409.22] 移動先の不足推定も同様に covUCell へ（Kotlin findCovOFix と同式）。
+        int def = p.covUCell(k, j, st.dsn[(size_t)j * K + k]);
         if (def > bestDef) { bestDef = def; bestNw = k; }
     }
     return bestNw >= 0 ? Fix{sel, j, bestNw} : Fix{};

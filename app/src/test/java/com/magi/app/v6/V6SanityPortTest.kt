@@ -37,6 +37,43 @@ class V6SanityPortTest {
         assertTrue(rep.warns.any { it.contains("担当不可") })
     }
 
+    /**
+     * [3.409.22] need1 未設定・need2 のみで需要が定義されたシフト（use2 有効）。
+     * 公式の `covUCell` は片方定義ならその値を使うので covU を計上するが、診断は need1 だけを見ていたため
+     * **何も警告しなかった**＝「設定上は問題なし」と見せて実行後に必須違反が残る、という食い違いになっていた。
+     */
+    private fun need2OnlyState(need2A: String, staffCount: Int) = MagiState(
+        startDate = "2026-06-01", endDate = "2026-06-06",
+        shifts = listOf(Shift("休", "休", "", ""), Shift("A", "A", "", need2A)),
+        groups = listOf(Group("G", "G")),
+        staff = List(staffCount) { Staff("s$it", 0) },
+        use2Patterns = true,
+        groupShift = listOf(listOf(1, 1)),
+        groupShiftApt = listOf(listOf("", "")),
+        schedule = List(staffCount) { listOf(1, 1, 0, 1, 1, 0) },
+        wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+        cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+        cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+    )
+
+    @Test fun need2OnlyDemandBeyondCapableStaffIsReported() {
+        // 担当できるのは2人だけなのに need2 だけで「3人必要」と設定＝どう並べても covU が1残る。
+        val st = need2OnlyState(need2A = "3", staffCount = 2)
+        // 前提: 公式評価はこの設定を「需要3」と解釈する（診断が沈黙してよい理由が無いことの裏取り）。
+        val p = Problem(st)
+        assertEquals(3, p.covUCell(1, 0, 0))
+        val issues = V6SanityPort.buildGuidance(st).filter { it.kind == IssueKind.DEMAND }
+        assertTrue("need2 単独定義でも『担当できるのは2人だけ』を案内する: $issues",
+            issues.any { it.problem.contains("必要3人") && it.problem.contains("2人だけ") })
+    }
+
+    @Test fun need2OnlyDemandWithinCapableStaffIsNotReported() {
+        // 担当が足りていれば誤検知しない（実データ3件で診断件数が変わらないことの回帰）。
+        val st = need2OnlyState(need2A = "2", staffCount = 4)
+        assertTrue("充足できる need2 単独定義は案内しない",
+            V6SanityPort.buildGuidance(st).none { it.kind == IssueKind.DEMAND })
+    }
+
     /** ベース: 2職員×6日、A は 1日1スロット。cons1 A(窓3日で2回以上) を切替えて壁/ダイヤルを検証。 */
     private fun windowState(need1A: String, cons1: List<com.magi.app.model.C1Row>) = MagiState(
         startDate = "2026-06-01", endDate = "2026-06-06",

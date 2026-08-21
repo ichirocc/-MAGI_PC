@@ -329,11 +329,9 @@ object V6SanityPort {
                 var seatsHi = 0
                 var hasDemand = false
                 for (j in 0 until p.T) {
-                    val n1 = p.need1[k][j]
-                    if (n1 < 0) continue
+                    if (!needDefined(p, k, j)) continue   // [3.409.22] need2 単独定義も席として数える
                     hasDemand = true
-                    val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
-                    seatsHi += maxOf(hi, 0)
+                    seatsHi += maxOf(effectiveCap(p, k, j), 0)
                 }
                 if (!hasDemand) continue   // 必要人数が1日も設定されていない＝比較対象がない
                 out.add(AptBalance(k, sym, aptSum, seatsHi, isRest = false))
@@ -409,7 +407,10 @@ object V6SanityPort {
         //     c1 充足に過剰配置(covO)が要る旨を「解消不能ではないトレードオフ」として正直に案内する。read-only・スコア不変。
         run {
             var workMinDemand = 0
-            for (k in 0 until p.K) for (j in 0 until p.T) workMinDemand += p.need1[k][j].coerceAtLeast(0)
+            // [3.409.22] 旧: need1 直読み＝need2 単独定義の需要を 0 と数え、休の供給を過大評価していた
+            //   （＝真の壁を見逃す側。false wall は作らないので実害は軽いが値が不正確だった）。
+            //   effectiveDemand はセルごとの真の最小＝過大にはならない（3.76.0「false wall を出さない」と両立）。
+            for (k in 0 until p.K) for (j in 0 until p.T) workMinDemand += effectiveDemand(p, k, j)
             for (c in p.cons1) {
                 val si = c.shiftIdx
                 // 退化ケース(窓>期間 / 回数>窓)は 2b が別途案内。ここは通常窓のみ。
@@ -433,10 +434,7 @@ object V6SanityPort {
                     // 非休は物理供給(担当nCanDo人×T日)>=需要が常に成立＝壁ではない。per-day 上限(need2/need1)の総和が
                     //   窓ルールに届かない場合のみ、c1 充足に過剰配置(covO)が要る旨をトレードオフとして案内。
                     var capSum = 0
-                    for (j in 0 until p.T) {
-                        val h = if (p.use2 && p.need2[si][j] >= 0) p.need2[si][j] else p.need1[si][j]
-                        capSum += h.coerceAtLeast(0)
-                    }
+                    for (j in 0 until p.T) capSum += effectiveCap(p, si, j).coerceAtLeast(0)   // [3.409.22] 実効上限へ委譲
                     if (capSum < demand) {
                         val short = demand - capSum
                         out.add(SettingIssue(IssueKind.CONSTRAINT, "窓ルール「$sym を${c.day1}日で${c.day2}回以上」",
@@ -662,7 +660,9 @@ object V6SanityPort {
 
         // 3) 需要 > 担当可能人数（その枠は誰をどう並べても必ず不足）
         for (j in 0 until p.T) for (k in 0 until p.K) {
-            val need = p.need1[k][j]
+            // [3.409.22] 旧: `need1` 直読み＝need2 単独定義の需要を見落とし、担当可能人数が足りなくても
+            //   「設定上は問題なし」と見せていた（実行すると covU が必ず残る）。実効需要へ委譲する。
+            val need = effectiveDemand(p, k, j)
             if (need <= 0) continue
             var capable = 0
             for (i in 0 until p.S) if (p.canDo(i, k)) capable++
@@ -722,11 +722,12 @@ object V6SanityPort {
         for (k in 0 until p.K) {
             var seatsLo = 0; var seatsHi = 0; var hasDemand = false
             for (j in 0 until p.T) {
-                val n1 = p.need1[k][j]
-                if (n1 < 0) continue   // need 未設定の日は対象外
+                // [3.409.22] 旧: `need1<0 → continue` で need2 単独定義の日を丸ごと落としていた
+                //   （hasDemand も立たず、そのシフトの検査自体が走らなかった）。実効値へ委譲する。
+                if (!needDefined(p, k, j)) continue   // need 未設定の日は対象外
                 hasDemand = true
-                val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
-                seatsLo += maxOf(n1, 0); seatsHi += maxOf(hi, 0)
+                seatsLo += maxOf(effectiveDemand(p, k, j), 0)
+                seatsHi += maxOf(effectiveCap(p, k, j), 0)
             }
             // [3.316.0] 休は need に依存しない実質上限（restCapacity）で判定するので、必要人数が1日も
             //   設定されていなくても検査する（3.301.1 で適切回数の検査に同じ変更を入れたのと同じ理由）。
@@ -1029,7 +1030,8 @@ object V6SanityPort {
             val cnt = countMatrix(p, s)
             for (k in 0 until p.K) {
                 var demand = 0
-                for (j in 0 until p.T) { val n = p.need1[k][j]; if (n > 0) demand += n }
+                // [3.409.22] 同上（need2 単独定義の需要を落とすと需給行が過小に出る）。
+                for (j in 0 until p.T) demand += effectiveDemand(p, k, j)
                 var doable = 0; var loSum = 0; var hiSum = 0; var aptSum = 0
                 var loCnt = 0; var hiCnt = 0; var aptCnt = 0; var cur = 0
                 for (i in 0 until p.S) {
@@ -1068,10 +1070,8 @@ object V6SanityPort {
                 //   いた**。6-C と同じ seatsHi に揃える（緩い側が正しかった）。
                 var seatsHi = 0
                 for (j in 0 until p.T) {
-                    val n1 = p.need1[k][j]
-                    if (n1 < 0) continue
-                    val hi = if (p.use2 && p.need2[k][j] >= 0) p.need2[k][j] else n1
-                    seatsHi += maxOf(hi, 0)
+                    if (!needDefined(p, k, j)) continue   // [3.409.22] need2 単独定義も席として数える
+                    seatsHi += maxOf(effectiveCap(p, k, j), 0)
                 }
                 val pull = maxOf(loSum, aptSum)
                 val pullSrc = if (aptSum >= loSum) "適切回数" else "下限"
@@ -1129,8 +1129,10 @@ object V6SanityPort {
                 if (cls == "vio-c41" || cls == "vio-c41s") continue
                 val parts = key.split(','); val k = parts.getOrNull(0)?.toIntOrNull() ?: continue; val j = parts.getOrNull(1)?.toIntOrNull() ?: continue
                 if (k !in 0 until p.K || j !in 0 until p.T) continue
-                val n1 = p.need1[k][j]; val n2 = if (p.use2) p.need2[k][j] else n1
-                val needStr = if (p.use2 && n2 >= 0 && n2 != n1) "$n1~$n2" else "$n1"
+                // [3.409.22] 旧: 生の need1/need2 を出すため need2 単独定義セルで「必要-1~2」と
+                //   表示していた（c41/c41s を上で除外した理由と同型の誤表示）。実効値で出す。
+                val lo = effectiveDemand(p, k, j); val hi = effectiveCap(p, k, j)
+                val needStr = if (hi > lo) "$lo~$hi" else "$lo"
                 byFam.getOrPut(cls.removePrefix("vio-")) { ArrayList() }.add("${day(j)} ${sym(k)} 必要$needStr/現状${cov[j][k]}")
             }
             // [3.380.0/実機ログ起因] **この呼出だけ `fires` を渡していなかった**＝3.282.0 が
@@ -1375,7 +1377,7 @@ object V6SanityPort {
     private fun impossibleDemandDays(state: MagiState, p: Problem): List<String> {
         val out = ArrayList<String>()
         for (j in 0 until p.T) for (k in 0 until p.K) {
-            val need = p.need1[k][j]
+            val need = effectiveDemand(p, k, j)   // [3.409.22] 検査3 と同じ穴（need2 単独定義の見落とし）
             if (need <= 0) continue
             var capable = 0
             for (i in 0 until p.S) {
@@ -1408,6 +1410,35 @@ object V6SanityPort {
             if (!seen.add(key)) out.add("$name:$key")
         }
     }
+}
+
+/**
+ * [3.409.22] この (シフト,日) に**被覆の要件が定義されているか**。need1/need2 のどちらか片方でも
+ * 設定されていれば真（P2 単独定義セルも `covUCell`/`covOCell` は正しく評価する＝3.173.0 の規約）。
+ * 値そのものは下の2関数が source of truth へ委譲するので、ここは「定義の有無」だけを見る。
+ */
+private fun needDefined(p: Problem, k: Int, j: Int): Boolean =
+    p.need1[k][j] >= 0 || (p.use2 && p.need2[k][j] >= 0)
+
+/**
+ * [3.409.22] 実効需要＝**誰も配置しないときの不足量**。`covUCell(k,j,0)` は両方定義なら
+ * min(need1,need2)・片方定義ならその値・未定義なら 0 を返すので、これがそのまま「この枠が最低
+ * 何人を求めるか」になる（3.391.0 の `isBalanceable` と同じ手）。旧実装は `need1` を直読みして
+ * `<=0 なら対象外` としており、**need2 単独定義の需要を丸ごと見落としていた**＝評価器は covU を
+ * 計上するのに診断だけ沈黙し、利用者には「設定上は問題なし」と見えていた。
+ */
+private fun effectiveDemand(p: Problem, k: Int, j: Int): Int = p.covUCell(k, j, 0)
+
+/**
+ * [3.409.22] 実効上限＝**covO が出はじめない最大の配置人数**。`covOCell` は got がこの値を超えた
+ * ときだけ正になる（両方定義なら max・片方定義ならその値）。need1/need2 の分岐をここで再実装せず
+ * source of truth へ委譲する。要件が未定義なら -1（席の概念が無い）。
+ */
+private fun effectiveCap(p: Problem, k: Int, j: Int): Int {
+    if (!needDefined(p, k, j)) return -1
+    var h = 0
+    while (h < p.S && p.covOCell(k, j, h + 1) == 0) h++
+    return h
 }
 
 private fun safeDayLabel(startDate: String, offset: Int): String = try {
