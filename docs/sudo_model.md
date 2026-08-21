@@ -428,7 +428,7 @@ flowchart TB
   W017["<b>wishes['0,17']</b> = 8<br/>古泉×12/18 に B4 を希望<br/>schedule[0][17]=8 ＝充足済み"]
   SC3["<b>schedule[3]</b>（桒澤美幸の1か月・31要素）<br/>[9,8,8,8,8,0,8,8,8,8,0,0,0,0,8,8,0,8,8,8,8,8,0,8,8,8,8,8,0,0,0]<br/>= 休10回 / B4 20回 / 有1回"]
 
-  RP["<b>report : ViolationReport</b>（実測）<br/><b>hard=0 total=437 weightedScore=3109.0</b><br/>c1:115 weekly:183 c3:36 c3m:36 apt:28<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:4 high:2<br/>violations=116件 needViolations=4件 countViolations=15件"]
+  RP["<b>report : ViolationReport</b>（実測）<br/><b>hard=0 total=437 weightedScore=4999.0</b><br/>c1:115 weekly:183 c3:36 c3m:36 apt:28<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:4 high:2<br/>violations=116件 needViolations=4件 countViolations=15件"]
 
   ST --- SH0 & SH2 & SH9
   ST --- G7
@@ -446,7 +446,8 @@ flowchart TB
 **この1件から読み取れること**
 
 - **`hard=0` は「配布できる」を意味する**。golden は既に配布可の盤面で、残っているのは全部 SOFT。
-  `weightedScore=3109` は `golden_eval_expected.txt` の `soft=3109` と一致する（`hard=0` なので
+  `weightedScore=4999` は `golden_eval_expected.txt` の `soft=4999` と一致する（3.409.24 で c1/c3mn の重みを
+  15→30 にしたので 3109 から上がっている＝族の件数は1つも変わっていない）（`hard=0` なので
   `weightedScore == soft の重み付き和`）。これが **Kotlin↔C++ の言語跨ぎパリティの固定値**（3.357.0）。
 - **担当可否が apt を無効化する具体例**：`groupShiftApt[7]` は Dﾃ に目標10 を持つが、`groupShift[7][2]=0`＝
   群Bは Dﾃ を担当できない。`Problem.apt` 構築時に `bucket=canDo` ガードが効くので、この目標は**実効しない**

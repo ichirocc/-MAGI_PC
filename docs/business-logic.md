@@ -56,7 +56,7 @@
 
 ## 3. 制約族の意味（cons*）
 
-- **C1（窓）**：`C1Row(day1, shiftKigou, day2)` ＝「day1 日の窓で shiftKigou を day2 回」。SOFT(15)。
+- **C1（窓）**：`C1Row(day1, shiftKigou, day2)` ＝「day1 日の窓で shiftKigou を day2 回」。SOFT(30)。
 - **C2（個人合計）**：`C2Row(shiftKigou, count)` ＝個人の合計目標。SOFT(1)。
 - **C3 族（連勤の列パターン）**：`C3Row(pattern: List<String>)`。
   - `cons3` ＝ **MUST**（必須・SOFT 3）／`cons3n` ＝ **FORBIDDEN**（禁止・**HARD 7000**）／`cons3m` ＝ **Want**（推奨・SOFT 2）／`cons3mn` ＝ **Hate**（回避・SOFT 15）。
