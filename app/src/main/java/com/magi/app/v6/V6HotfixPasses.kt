@@ -4070,7 +4070,12 @@ object V6HotfixPasses {
                 //   root に勝てない候補はそもそも最終ゲートを通らないので、ピン判定は root 改善時だけ行う。
                 val blocked = improved && isBetter(top.rep, before) &&
                     pinBlocks.blocksImproving(p, work0, top.work)
-                if (improved && !blocked) { bestEver = top; stagnant = 0 } else stagnant++
+                if (improved && !blocked) bestEver = top
+                // [3.409.27] 停滞カウンタは**旧実装と厳密に同じ**（目的関数で最良を更新したら 0）。
+                //   ピンで弾いた回を停滞に数えると patience が早く発火し、その先にあったかもしれない
+                //   ピン安全な改善を取り逃す＝「探索を短くする」別の退化を持ち込む。ここで直したいのは
+                //   **保持するもの**であって**探索の長さ**ではないので、探索長は1ステップも変えない。
+                if (improved) stagnant = 0 else stagnant++
             }
             step++
             if (stagnant >= patience) break
