@@ -24,7 +24,10 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-21（3.409.24 回避の並び(c3mn)と窓の要件(c1)の重みを 15→30（HF77 明示指示）——
+**最終更新**：2026-08-21（3.409.25 トグル A/B の第2ラウンドを 240s で測り切った——立て直し方は
+24ペア通算 ON7/OFF17（p≈0.032）で **OFF が有意に良い**＝削除は実測に支持されていた／ロール内並列SA は
+6ペア ON3/OFF3 で事前バーに届かず削除確定（ただし第1ラウンドの「反復希釈」は 240s では再現せず、根拠を
+中立の方へ置き直した）／崩し範囲は 9ペア ON5/OFF4 で既定OFF据え置き。3.409.24 回避の並び(c3mn)と窓の要件(c1)の重みを 15→30（HF77 明示指示）——
 `MirrorKeys`/`Evaluator`/`DeltaEvaluator`/`magi_native.cpp` の4面と言語跨ぎ期待値3ファイルを同時更新
 （golden soft 3109→4999・sample_v6 825→930・blocked_covu 1681→2731・hard は不変）。
 併せて重み変更が露呈させた C1広域ビームの実バグを修正——`bestEver` にピン検査が無く、あとから来た
