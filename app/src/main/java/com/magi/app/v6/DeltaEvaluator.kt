@@ -51,9 +51,26 @@ class DeltaEvaluator(private val p: Problem) {
         rebuild()
     }
 
-    /** Reset to a fresh assignment and recompute all aggregates / totals. */
+    /** Reset to a fresh assignment and recompute all aggregates / totals.
+     *
+     *  [3.410.0/D-01] 旧: 行長・値域を検証せず `System.arraycopy` していたため、S×T に満たない盤面で
+     *  `IndexOutOfBoundsException`、範囲外シフト値で `rebuild()` の `cntSS/cntDay` 添字が飛んだ。
+     *  正規経路（`Problem.initialAssignment` / `allowedShiftsForStaff` 由来）では起きないが、この関数は
+     *  internal＝直接呼出で到達しうる。**丸めず落とす**: `rebuild()` は `cntSS[i][k]++` を無検証で行うので
+     *  センチネル -1 を入れても結局そこで飛ぶし、`restIdx` へ黙って丸めるのは「静かに意味を変える」
+     *  fail-open そのもの。この不変条件（盤面は必ず S×T かつ全セルが [0,K)）は `initialAssignment` が
+     *  入口で保証しており、破れているなら呼出側のバグ＝その場で名指しするのが正しい。 */
     fun reset(init: Array<IntArray>) {
-        for (i in 0 until S) System.arraycopy(init[i], 0, a[i], 0, T)
+        require(init.size >= S) { "reset: rows ${init.size} < S=$S" }
+        for (i in 0 until S) {
+            val row = init[i]
+            require(row.size >= T) { "reset: row $i has ${row.size} cells < T=$T" }
+            for (j in 0 until T) {
+                val k = row[j]
+                require(k in 0 until K) { "reset: cell($i,$j)=$k out of [0,$K)" }
+                a[i][j] = k
+            }
+        }
         rebuild()
     }
 
@@ -142,6 +159,11 @@ class DeltaEvaluator(private val p: Problem) {
 
     /** Preview the score after moving (i,j) -> nw, stashing deltas for commit(). No mutation of totals. */
     private fun previewMove(i: Int, j: Int, nw: Int): Long {
+        // [3.410.0/D-02] 旧: `nw` を無検証で `cntDay[nw][j]` 等の添字に使っており、範囲外で即座に
+        //   ArrayIndexOutOfBounds になった。正規の探索オペレータは `allowedShiftsForStaff` から選ぶので
+        //   到達しないが、`revert()` は過去の `a[i][j]` を戻すため、盤面の不変条件（reset の require）と
+        //   対で保っておく必要がある。ここも丸めずに落とす（理由は reset の KDoc と同じ）。
+        require(nw in 0 until K) { "previewMove: nw=$nw out of [0,$K)" }
         val old = a[i][j]
         lI = i; lJ = j; lOld = old; lNw = nw
         if (nw == old) {

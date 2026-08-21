@@ -29,6 +29,9 @@ data class SaParams(
     val budgetMs: Long = 8_000,
     val softPolish: Boolean = false,
     val hardStallMs: Long = 2_500,
+    /** LAHC(PhaseB) の履歴長。**1 以上**（`bIt % lahcLen` でゼロ除算になるため）。
+     *  [3.410.0/E-15] 旧: 下限検証が無く、直接API で 0 を渡すと softPolish=true の PhaseB 突入時に
+     *  `hist[(bIt % 0)]` が ArithmeticException で落ちた。UI 経路は既定200 で到達しない。 */
     val lahcLen: Int = 200,
     /** 外部からの協調停止（停滞早期脱出・ユーザー停止）。true で各ワーカーは現在の best を返して終了。 */
     val shouldStop: () -> Boolean = { false },
@@ -39,7 +42,14 @@ data class SaParams(
     /** [多様化] 乱数シード。0=従来通り System.nanoTime()。多仮説では各仮説に異なる seed を渡して
      *  探索を多様化・再現可能にする（各ワーカーは内部で seed xor (w*定数) に分散）。 */
     val seed: Long = 0L,
-)
+) {
+    init {
+        // [3.410.0/E-15] 直接APIからの不正値は**構築時に落とす**（PhaseB 突入まで潜伏させない）。
+        //   fail-open で `max(1, lahcLen)` へ丸めると、意味の違う探索が静かに走ってしまう。
+        require(lahcLen >= 1) { "lahcLen must be >= 1 (got $lahcLen)" }
+        require(chain >= 1) { "chain must be >= 1 (got $chain)" }
+    }
+}
 
 data class SaProgress(val bestScore: Long, val totalIters: Long, val elapsedMs: Long)
 

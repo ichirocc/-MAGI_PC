@@ -669,6 +669,23 @@ object V6SanityPort {
             }
         }
 
+        // 2k) [3.410.0/P-06] グループの割当が範囲外。2i（スキル群）と対になる検査で、**こちらだけ
+        //   取り残されていた**。`skillIdx` は -1 が正規の「未所属」で範囲外でも安全側に外れるだけだが、
+        //   `groupIdx` は `bucket[sgrp[i]]` / `grpCnt[sgrp[i]*K+k]` の添字なので**範囲外だと落ちる**。
+        //   そのため `Problem` 側は先頭群へ寄せて動かし続ける（クラッシュさせない）が、寄せた事実は
+        //   黙っていると「別の群のルールが静かに掛かる」ので、ここで必ず知らせる。
+        if (p.outOfRangeGroupStaff.isNotEmpty()) {
+            val bad = p.outOfRangeGroupStaff
+            val names = bad.take(4).joinToString("・") { i ->
+                state.staff.getOrNull(i)?.name?.ifBlank { "#$i" } ?: "#$i"
+            }
+            val head = state.groups.firstOrNull()?.kigou?.ifBlank { "先頭のグループ" } ?: "先頭のグループ"
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "グループの割当",
+                "${bad.size}名（$names${if (bad.size > 4) " ほか" else ""}）のグループが今の一覧の範囲外です。" +
+                    "計算では「$head」に所属しているものとして扱っています＝担当できるシフトが意図と違います",
+                "職員管理でグループを選び直してください"))
+        }
+
         // 3) 需要 > 担当可能人数（その枠は誰をどう並べても必ず不足）
         for (j in 0 until p.T) for (k in 0 until p.K) {
             // [3.409.22] 旧: `need1` 直読み＝need2 単独定義の需要を見落とし、担当可能人数が足りなくても
@@ -1452,7 +1469,11 @@ private fun effectiveCap(p: Problem, k: Int, j: Int): Int {
     return h
 }
 
+/** [3.410.0/F-02] 旧: `offset` を検証せず `plusDays(offset)` していたため、壊れたキー（例 day=-1）が
+ *  **前月末日のラベル**として表示され、実在する別の日を指しているように見えた。負の offset は
+ *  日付に写さず、そのまま「N日」形式で出す（例外でなく異常値なので、落とさず正直に出す）。 */
 private fun safeDayLabel(startDate: String, offset: Int): String = try {
+    require(offset >= 0)
     val d = java.time.LocalDate.parse(startDate).plusDays(offset.toLong())
     val wd = "月火水木金土日"[d.dayOfWeek.value - 1]
     "${d.monthValue}/${d.dayOfMonth}($wd)"

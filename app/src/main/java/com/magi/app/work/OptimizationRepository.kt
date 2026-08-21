@@ -48,6 +48,15 @@ object OptimizationRepository {
         val schedule: Array<IntArray>,
         val report: ViolationReport,
         val phase: String,
+        /**
+         * [3.410.0/U-01] これを計算した実行の ID（0=識別子を持たない旧経路／プロセス再起動後の復元）。
+         * 旧: `BgResult` は run の識別子を持たず、ViewModel は入力の指紋(`bgStateKey`)だけで受容を
+         * 決めていた。指紋は**入力が同じなら別の実行でも一致する**ので、置き換えられた古い実行が
+         * 完了間際に publish した結果を「いま走らせている実行の答え」として受け取れた。
+         * ファイル側の所有権（`RunFiles.owns`）はファイルを守るだけで、この**メモリ経由の公開**は
+         * 素通りする＝ここに識別子を載せて塞ぐ。
+         */
+        val runId: Long = 0L,
     )
 
     /** Input handed to the next worker run. */

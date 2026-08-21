@@ -374,16 +374,26 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (!ensureValidForRun(st0, sched0)) return
         pushUndo()
         OptimizationRepository.clear()
-        OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] 旧途中状態を掃除（Workerが開始時に再保存）
         // [3.327.0/外部レビュー High3] この実行の識別子を先に確定する。ファイル名は固定なので、これが無いと
         //   置き換えられた旧実行が新実行の入力を消したり、別データの結果を書き残したりできてしまう。
         //   ミリ秒だと同一ミリ秒での二重 enqueue が衝突しうるので、下位に乱数を混ぜて一意にする。
         val runId = System.currentTimeMillis() * 1000L + (0..999).random()
+        // [3.410.0/U-02] **順序を入れ替えた**。旧: `clearFiles()` → runId 生成 → `beginRun()` で、
+        //   掃除と所有権の確立のあいだ `activeRunId()` が 0 に落ちる窓があった。そこで `beginRun` が
+        //   失敗すると（容量不足など）、**旧実行の復元手段を消しただけで新しい実行も始まらない**。
+        //   先に所有権を立てれば、まだ走っている旧実行はその時点で `owns()` が偽になって書き込みを止め、
+        //   掃除は「自分が所有者になったあと」に行える＝どちらの実行の復元手段も宙に浮かない。
         // [3.406.0/B-01] マーカーと入力を**両方保存できたときだけ**投入する。旧: どちらも握り潰しで、
         //   書けなくても Work を投入していた。マーカーが無いと Worker は所有権なしと判定して何もせず、
         //   画面だけ「開始しました」＝実行中が永久に残る無言の失敗になる（容量不足・I/O 失敗で再現）。
         val markerOk = OptimizationWorker.beginRun(getApplication(), runId)
-        val inputOk = runCatching {
+        // 所有権を確立してから旧途中状態を掃除する（Worker が開始時に再保存する）。
+        //   [3.410.0/B-06] 消し残りは黙って捨てず記録する（残ると次回起動が古い状態を掴む）。
+        if (markerOk) {
+            val stuck = OptimizationWorker.clearFiles(getApplication<Application>(), keepRunId = true)
+            if (stuck.isNotEmpty()) logOp("W", "旧途中状態の削除に失敗: ${stuck.joinToString("・")}")
+        }
+        val inputOk = markerOk && runCatching {
             OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0))
         }.isSuccess
         if (!markerOk || !inputOk) {
@@ -393,6 +403,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         }
         // [3.328.0] この結果を後で当ててよいかを判断するための入力の指紋。
         bgStateKey = stateKey(st0)
+        bgRunId = runId
         OptimizationRepository.request = st0 to sched0.copy2D()
         OptimizationRepository.seconds = _ui.value.budgetSec
         OptimizationRepository.workers = _ui.value.workers
@@ -419,13 +430,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         //   開く・取り込むなどで入力が変わっていたら、その結果は今の入力の答えではないので捨てる
         //   （旧: 現在の state へ無条件に当てていた）。指紋が未記録(0)の経路＝プロセス再起動後の
         //   ファイル復元は、結果ファイルが state ごと持つので自己整合＝従来どおり通す。
+        // [3.410.0/U-01] 実行の識別子で先に弾く。入力の指紋は**入力が同じなら別の実行でも一致する**ので、
+        //   置き換えられた古い実行が完了間際に publish した結果を通してしまう。r.runId==0 は識別子を
+        //   持たない経路（プロセス再起動後のファイル復元）＝従来どおり通す。
+        if (bgRunId != 0L && r.runId != 0L && r.runId != bgRunId) {
+            logOp("W", "バックグラウンド計算の結果を破棄しました（置き換えられた古い実行の結果）")
+            return
+        }
         if (bgStateKey != 0L && bgStateKey != stateKey(st0)) {
             bgStateKey = 0L
+            bgRunId = 0L
             logOp("W", "バックグラウンド計算の結果を破棄しました（計算中に設定またはデータが変わったため）")
             _ui.update { it.copy(messageIsError = false, running = false, message = "計算中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。") }
             return
         }
         bgStateKey = 0L
+        bgRunId = 0L
         // [再実行 keep-best] 背景完了結果が前回採用解より悪化なら前回を維持（前景と同じ方針）。
         val prev = resultSchedule
         if (prev != null) {
@@ -903,6 +923,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     /** [3.328.0] 背景の最適化を開始したときの入力の指紋。結果を当てる前に一致を確かめる。 */
     private var bgStateKey: Long = 0L
+
+    /** [3.410.0/U-01] いま待っている背景実行の ID。0=待っていない／プロセス再起動後の復元経路。 */
+    private var bgRunId: Long = 0L
 
     /** 盤面の内容から決まる指紋。S×T が小さい（30×31）ので毎回の計算コストは無視できる。 */
     private fun boardKey(schedule: Array<IntArray>): Long {
@@ -2887,18 +2910,26 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = res.schedule.copy2D()
                 state = st.withSchedule(res.schedule)
                 val total = st.staff.size
+                // [3.410.0/I-01] シフト一覧に無い記号は取り込めない。旧: 黙って読み飛ばしていたため、
+                //   誤字や凡例漏れが「休のまま」「元のまま」として静かに混入した。件数と記号を必ず出す。
+                val unk = if (res.unknownCells > 0)
+                    "｜読めない記号 ${res.unknownCells}セル(${res.unknownSymbols.joinToString("・")})は取り込めませんでした"
+                else ""
                 val msg = if (res.matched in 1 until total)
-                    "CSV取込完了: ${res.matched}/${total}名を更新（${total - res.matched}名は氏名不一致でスキップ）｜必須=${res.report.hard} 合計=${res.report.total}"
+                    "CSV取込完了: ${res.matched}/${total}名を更新（${total - res.matched}名は氏名不一致でスキップ）｜必須=${res.report.hard} 合計=${res.report.total}$unk"
                 else
-                    "CSV取込完了: ${res.matched}名を更新｜必須=${res.report.hard} 合計=${res.report.total}"
+                    "CSV取込完了: ${res.matched}名を更新｜必須=${res.report.hard} 合計=${res.report.total}$unk"
                 pushReport(state ?: st, res.schedule, res.report) { it.copy(
-                    messageIsError = false,
+                    messageIsError = res.unknownCells > 0,
                     running = false,
                     hasResult = true,
                     message = msg,
                 ) }
                 if (res.matched in 1 until total) {
                     logOp("W", "CSV取込 一部のみ反映: ${res.matched}/${total}名一致（${total - res.matched}名は氏名不一致）")
+                }
+                if (res.unknownCells > 0) {
+                    logOp("W", "CSV取込 読めない記号 ${res.unknownCells}セル: ${res.unknownSymbols.joinToString("・")}（シフト一覧に無い記号）")
                 }
                 logOp("I", "CSV取込 完了 ${res.matched}名一致 必須=${res.report.hard} 合計=${res.report.total}")
             } catch (e: CancellationException) {

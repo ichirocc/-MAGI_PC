@@ -530,6 +530,21 @@ object V6NativeOptimizer {
     internal fun clampWorkersToCores(workers: Int, cores: Int = Runtime.getRuntime().availableProcessors()): Int =
         max(1, workers).coerceAtMost(max(1, cores))
 
+    /** [3.410.0/E-02] 適応ポートフォリオの実spawn数。**PORTFOLIO だけがコア数クランプを持っていなかった**。
+     *  V5 は [clampWorkersToCores]、runMultiWorker 経路は [hypothesisSpawnPlan] が実コア数まで落とすのに、
+     *  `runAdaptivePortfolio` は `w = hypothesisCount(workers) = max(2, workers)` をそのまま
+     *  `Array(workers){ async(...) }` へ渡していた。設定タブの並列ワーカーは **16 まで上げられる**ので、
+     *  8コア機で16ワーカー＝各エポックが壁時計の量子内で半分しか進まない希釈が**設定画面から作れた**。
+     *  （Dispatchers.Default のスレッド数はコア数で頭打ちなのでスレッド爆発は起きない。害は希釈のみ。）
+     *
+     *  ただし 3.224.0 の「workers まで仮説を増やす」という明示決定と、3.224.0/3.371.0 の「コア数を超えて
+     *  希釈しない」という決定はここで衝突する。PORTFOLIO のロールは常に workers=1（3.409.21 で
+     *  ロール内並列SAを削除済）＝**余剰の行き先が無い**ので、runMultiWorker のような「チェーン深さへ
+     *  回す」再配分ができない。よって希釈側を採る。**既定設定では no-op**（既定 workers=コア数）で、
+     *  効くのは利用者が手でコア数超へ上げたときだけ。多様性の下限2（3.224.0）は割らない。 */
+    internal fun portfolioWorkerCount(w: Int, cores: Int = Runtime.getRuntime().availableProcessors()): Int =
+        max(1, minOf(max(1, w), max(2, cores)))
+
     /** [敵対的レビュー3.212.0/単一ソース] 仮説ごとのチェーン本数プラン。レビューで確定した2欠陥を修正:
      *  ①旧 perW=床のみ配分は workers 6〜9（既定上限8＝動機の実機ログ当該ケース）で余り1〜4本を黙って
      *    廃棄しながらUI/docsが「無駄にならない」と虚偽主張（HF77: コメント≠実装）→ 余りを先頭仮説から
@@ -738,7 +753,7 @@ object V6NativeOptimizer {
         val started = nowMs()
         val deadline = started + budgetSec.coerceAtLeast(1) * 1000L
         val baseSeed = actualSeed(options.seed)
-        val workers = max(1, w)
+        val workers = portfolioWorkerCount(w)
         val lock = Any()
         val firstError = java.util.concurrent.atomic.AtomicReference<Throwable?>(null)
         val hardZeroWinner = java.util.concurrent.atomic.AtomicInteger(-1)
@@ -1497,11 +1512,15 @@ object V6NativeOptimizer {
         val jobs = arrayOfNulls<kotlinx.coroutines.Deferred<V6OptimizerResult?>>(chains)
         for (c in 0 until chains) {
             jobs[c] = async(Dispatchers.Default, start = kotlinx.coroutines.CoroutineStart.LAZY) {
-                if (passed.get() >= 0 && passed.get() != c) return@async null
                 try {
                     runAlnsSingle(state, initial.copy2D(), options.copy(workers = 1, seed = base + (c + 1) * 0x2545F4914F6CDD1DL), budgetSec, shouldStop) { phase, report, iters, elapsed ->
+                        // [3.410.0/E-03] 旧: HARD=0 へ最初に到達したチェーンが兄弟を即キャンセルしていた。
+                        //   3.376.0 が `runAdaptivePortfolio`/`runMultiWorker` の同じ機構を撤廃したとき、
+                        //   **この3つ目だけが取り残されていた**。HARD=0 到達時点で残る仕事は全部 SOFT なので、
+                        //   勝者1本に絞ると指定した並列度の 1/N しか使われない。採否は全段 keep-best なので
+                        //   走らせ続けても品質は退化しない。`passed` は「誰が最初に到達したか」の記録として
+                        //   のみ残す（その報告を一度だけ外側へ転送する＝runMultiWorker の絶対評価に必要）。
                         val won = report != null && report.hard == 0 && passed.compareAndSet(-1, c)
-                        if (won) { for (j in 0 until chains) if (j != c) jobs[j]?.cancel() }
                         // 先頭チェーンは常時、非先頭は合格時＋チェーン横断改善時に転送
                         //（合格の可視化がrunMultiWorkerの絶対評価に、改善の可視化が外側停滞時計に必要）。
                         val improved = report != null && improvesShared(report)

@@ -48,9 +48,14 @@ object ConstraintMus {
      * [性能] `minDaysForFullCompliance`（15日窓で数百msかかりうる重いDP）のプロセス全域キャッシュ。
      * key=(T, ルール部分集合) は入力の純関数＝安全にキャッシュ可能。buildGuidance はセル編集ごとに
      * 走る（makeUi の analyzeParallel 経由）ため、初回だけDPを払い2回目以降はほぼ0msにする。
-     * ルール構成は滅多に変わらず部分集合の種類も高々 2^(シフト毎ルール数) で極小＝メモリ上限不要。
+     * ルール構成は滅多に変わらず部分集合の種類も高々 2^(シフト毎ルール数) で極小。
      * 値の null（計算不能）は MIN_VALUE 番兵で保持。
+     *
+     * [3.410.0/M-01] ただし「極小だから上限不要」は**期間日数 T やルールを編集し続ける限り単調に増える**
+     * ことを見落としている（キーは (T, ルール部分集合)）。純粋な memo なので**捨てても正しさは不変**＝
+     * 上限を超えたら丸ごと捨てる（再計算のコストだけ払う）。実運用の到達点はこの上限のはるか手前。
      */
+    private const val MAX_CACHE_ENTRIES = 4096
     private val minDaysCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private const val NULL_SENTINEL = Int.MIN_VALUE
 
@@ -65,6 +70,7 @@ object ConstraintMus {
         val c = minDaysCache[key]
         if (c != null) return if (c == NULL_SENTINEL) null else c
         val v = SmartInitialScheduler.minDaysForFullCompliance(t, rules)
+        if (minDaysCache.size >= MAX_CACHE_ENTRIES) minDaysCache.clear()
         minDaysCache[key] = v ?: NULL_SENTINEL
         return v
     }

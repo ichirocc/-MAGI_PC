@@ -20,7 +20,20 @@ class Problem(val state: MagiState) {
     val G = state.groupCount
     val use2 = state.use2Patterns
 
-    val sgrp = IntArray(S) { state.staff[it].groupIdx }
+    /** [3.410.0/P-06] `groupIdx` が群の範囲外だった職員 index（表示は `V6SanityPort` の検査2k）。
+     *  旧: `sgrp = IntArray(S) { state.staff[it].groupIdx }` は無検証で、外部 JSON 由来の範囲外値が
+     *  そのまま `bucket[sgrp[i]]` / `grpCnt[sgrp[i]*K+k]` の添字になり **Kotlin 側で AIOOBE** になった。
+     *  3.327.0 は同じクラスの `skillIdx` に検査2i を入れたが `groupIdx` は取り残しだった。
+     *  C++ 側は 3.171.0 が `nativeCreateProblem` で拒否するが、拒否＝ハンドル0＝**Kotlin へ退化**なので
+     *  救いにならない（結局 Kotlin で落ちる）。先頭群へ寄せる（`Ws1Ops.removeGroup` が所属者を先頭群へ
+     *  移すのと同じ規約）＋**必ず知らせる**（黙って寄せると別の群のルールが静かに掛かる）。 */
+    private val _outOfRangeGroupStaff = mutableListOf<Int>()
+    val outOfRangeGroupStaff: List<Int> get() = _outOfRangeGroupStaff
+
+    val sgrp = IntArray(S) { i ->
+        val g = state.staff[i].groupIdx
+        if (g in 0 until G) g else { _outOfRangeGroupStaff.add(i); 0 }
+    }
 
     /** 休シフトの index（記号"休"解決、無ければ0）。曜日平準化(weekly)で「勤務日か休か」を判定。 */
     val restIdx: Int = restShiftIndex(state)
@@ -41,7 +54,9 @@ class Problem(val state: MagiState) {
 
     /** Staff indices that may take a given shift (used by block-fill moves). */
     val staffForShift: Array<IntArray> = Array(K) { k ->
-        (0 until S).filter { i -> bucket[state.staff[i].groupIdx].contains(k) }.toIntArray()
+        // [3.410.0/P-06] 旧: `state.staff[i].groupIdx` の**直読み**で、`sgrp` のクランプを迂回していた
+        //   （範囲外 groupIdx でここだけ AIOOBE）。群の解決は必ず `sgrp` を通す＝単一ソース。
+        (0 until S).filter { i -> bucket[sgrp[i]].contains(k) }.toIntArray()
     }
 
     /** wish[i][j] = desired shift index, or -1. */
@@ -326,7 +341,12 @@ class Problem(val state: MagiState) {
             var k = state.schedule.getOrNull(i)?.getOrNull(j) ?: 0
             val w = wish[i][j]
             if (w >= 0 && b.contains(w)) k = w
-            if (k < 0 || k >= K) k = 0
+            // [3.410.0/P-01] 旧: 範囲外セルをハードコードの 0 へ寄せていた。0 が休とは限らない
+            //   （休が先頭でないデータでは**勤務シフトへ化ける**）。`restShiftIndex` へ揃える＝
+            //   3.106.0 が `Ws1Ops.removeShift` で直したのと同じ取り違え。なお `MirrorCore.normalizeSchedule`
+            //   は同じセルを -1（センチネル）にするが、ここは**探索へ渡す初期盤面**なので合法値が要る
+            //   （-1 を入れると `DeltaEvaluator.rebuild` の `cntSS[i][k]++` が飛ぶ）＝非対称は意図的。
+            if (k < 0 || k >= K) k = restIdx
             k
         }
     }

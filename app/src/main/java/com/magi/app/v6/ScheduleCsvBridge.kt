@@ -359,6 +359,8 @@ object ScheduleCsvBridge {
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val kigouToK = firstWinsMap(state.shifts.size) { state.shifts[it].kigou.trim() }
         var matched = 0
+        // [3.410.0/I-01] 未知記号を数える（旧: 黙って読み飛ばしていた）。
+        val unknown = LinkedHashMap<String, Int>()
         var rr = 1
         while (rr < rows.size) {
             val r = rows[rr]
@@ -373,8 +375,10 @@ object ScheduleCsvBridge {
                     val last = minOf(p.T, r.size - 1)
                     var j = 0
                     while (j < last) {
-                        val k = kigouToK[r[j + 1].trim()]
+                        val sym = r[j + 1].trim()
+                        val k = kigouToK[sym]
                         if (k != null) schedule[staffIndex][j] = k
+                        else if (sym.isNotEmpty()) unknown[sym] = (unknown[sym] ?: 0) + 1
                         j++
                     }
                 }
@@ -382,11 +386,17 @@ object ScheduleCsvBridge {
             rr++
         }
         val report = UnifiedViolationChecker.check(state, schedule)
-        val log = MirrorLog(tag = "CSVImport", message = "CSV取込: staff一致 ${matched}行")
+        val unknownTotal = unknown.values.sum()
+        val unknownTop = unknown.entries.sortedByDescending { it.value }.take(5).map { "${it.key}(${it.value})" }
+        val log = MirrorLog(tag = "CSVImport", message = "CSV取込: staff一致 ${matched}行" +
+            if (unknownTotal > 0) " / 読めない記号 ${unknownTotal}セル: ${unknownTop.joinToString("・")}" else "")
         val logs = ArrayList<MirrorLog>()
         logs.add(log)
         logs.addAll(report.logs)
-        return ScheduleRunResult(schedule, report.copy(logs = logs), matched = matched)
+        return ScheduleRunResult(
+            schedule, report.copy(logs = logs), matched = matched,
+            unknownCells = unknownTotal, unknownSymbols = unknownTop,
+        )
     }
 }
 

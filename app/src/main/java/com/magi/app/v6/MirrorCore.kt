@@ -90,6 +90,14 @@ data class ScheduleRunResult(
     val report: ViolationReport,
     /** CSV取込で氏名が一致したスタッフ行数。最適化系の結果では未使用(-1)。 */
     val matched: Int = -1,
+    /**
+     * [3.410.0/I-01] CSV取込で**シフト一覧に無い記号**だったセルの数と、その記号（多い順・上位）。
+     * 旧: 未知記号は黙って読み飛ばし（既存セル維持）、勤務表CSVの生成経路では初期値の「休」のまま
+     * 残っていた＝誤字や凡例漏れが**休として静かに混入**した。3.329.0 が希望・制約CSVで潰した
+     * 「読めない行を捨てたまま取り込む」族の、勤務表CSV側の残り。呼出側が件数を必ず出す。
+     */
+    val unknownCells: Int = 0,
+    val unknownSymbols: List<String> = emptyList(),
 )
 
 data class LightOptimizeResult(

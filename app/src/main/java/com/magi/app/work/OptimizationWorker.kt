@@ -91,7 +91,13 @@ class OptimizationWorker(
         // [C1] 入力をファイルへ退避（現在は参照渡し）。kill後の再起動でここから復元できる。
         // [3.385.0/外部レビュー High3] 失敗は無言にしない。ここが落ちると **kill 耐性そのものが消える**
         //   （プロセスが終了したら実行は跡形もなく失われる）のに、旧実装は runCatching で握り潰していた。
-        runCatching { inputFile(ctx).writeText(StateParser.serialize(req.first, req.second)) }
+        // [3.410.0/B-03] 旧: 素の `writeText`＝**非原子**。`resultFile` だけが `writeAtomically` で、
+        //   入力と途中経過は書き込み途中に kill されると壊れた JSON が残った。起動時の復元はそれを
+        //   「中断されました・再開できます」として掴んでから読み、パースに失敗する＝**案内した再開が
+        //   できない**。3.336.0 が結果に対して直したのと同じ扱いへ揃える。
+        runCatching {
+            files(ctx).writeAtomically(inputFile(ctx), StateParser.serialize(req.first, req.second))
+        }
             .onSuccess { step("入力退避") }
             .onFailure { note("入力の退避に失敗（この実行は途中でプロセスが終了すると復元できません）", it) }
         OptimizationRepository.setRunning(true)
@@ -168,7 +174,14 @@ class OptimizationWorker(
                         com.magi.app.v6.V6NativeOptimizer.liveBest?.let { live ->
                             // [3.327.0] 所有権を失っていたら書かない（8秒間引きの中なので追加I/Oは無視できる）。
                             if (ownsFiles()) {
-                                runCatching { snapshotFile(ctx).writeText(StateParser.serialize(req.first, live.toIntArray2D())) }
+                                // [3.410.0/B-03] 非原子な writeText をやめる。8秒ごとに数百KBを書くので
+                                //   「書き込み中に kill」に当たる確率がいちばん高いのがここ。
+                                runCatching {
+                                    files(ctx).writeAtomically(
+                                        snapshotFile(ctx),
+                                        StateParser.serialize(req.first, live.toIntArray2D()),
+                                    ) { ownsFiles() }
+                                }
                                     .onFailure { note("途中経過の退避に失敗（kill されると途中の改善が失われます）", it) }
                             }
                         }
@@ -211,14 +224,23 @@ class OptimizationWorker(
                 } else {
                     if (saved) step("耐久保存")
                     OptimizationRepository.publishResult(
-                        OptimizationRepository.BgResult(res.schedule, res.report, res.phase),
+                        OptimizationRepository.BgResult(res.schedule, res.report, res.phase, inputData.getLong(KEY_RUN_ID, 0L)),
                     )
                     notifyDone(res.report.hard, res.report.total)
                     step("公開")
-                    runCatching { inputFile(ctx).delete() }
-                    runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+                    // [3.410.0/B-01] 保存が**例外で失敗**したとき（所有権は持っている）、旧実装は結果を
+                    //   公開したうえで入力・途中経過まで消していた。結果はメモリにしか無いので、直後に
+                    //   プロセスが終了すると**結果も再開手段も両方失う**。保存できなかったときは復元元を
+                    //   残す（次回起動が「中断されました」として拾える）。runId は所有権の解放そのものなので
+                    //   どちらでも消す＝残すと次の実行が所有者になれない。
+                    if (saved) {
+                        runCatching { inputFile(ctx).delete() }
+                        runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+                        step("片付け")
+                    } else {
+                        note("結果を保存できなかったため、入力と途中経過は残します（次回起動で再開できます）", "W")
+                    }
                     runCatching { runIdFile(ctx).delete() }
-                    step("片付け")
                     releasedByMe = true
                     terminal("完了（必須${res.report.hard} 合計${res.report.total}）" +
                         if (saved) "" else "・結果を保存できず（プロセス終了で失われます）")
@@ -335,7 +357,7 @@ class OptimizationWorker(
 
         fun activeRunId(ctx: Context): Long = files(ctx).activeRunId()
 
-        fun clearFiles(ctx: Context) = files(ctx).clear()
+        fun clearFiles(ctx: Context, keepRunId: Boolean = false) = files(ctx).clear(keepRunId)
 
         const val KEY_SECONDS = "seconds"   // [P2] enqueue 時の予算秒数（WorkManager が永続化）
         const val KEY_WORKERS = "workers"   // [P2] enqueue 時の並列数

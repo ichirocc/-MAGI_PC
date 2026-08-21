@@ -60,11 +60,22 @@ internal class RunFiles(private val dir: File) {
     /**
      * 4ファイルすべてを消す。**1つでも足すのを忘れると次回起動が古い状態を掴む**ので、
      * `RunFilesTest` が「clear 後に dir が空」で網羅を固定している。
+     *
+     * [3.410.0/B-06] **消し残った名前を返す**。旧: `delete()` の戻り値も例外も捨てており、消えなかった
+     * ファイルがあっても呼出側に届かなかった＝**残ったファイルを次回起動が「中断されました・再開できます」
+     * として掴む**。所有権マーカー(`runId`)が消え残ると、なお悪く新しい実行が所有者になれない。
+     * 返り値が空でないときは呼出側が記録する（消せないこと自体はここでは直せない）。
+     *
+     * @param keepRunId 所有権マーカーを残す。[3.410.0/U-02] 「所有権を立ててから旧途中状態を掃除する」
+     *   順序では、ここで runId まで消すと**自分で立てたばかりの所有権を自分で捨てる**ことになる。
      */
-    fun clear() {
-        for (f in listOf(input, result, snapshot, runId)) {
-            runCatching { f.takeIf { it.exists() }?.delete() }
+    fun clear(keepRunId: Boolean = false): List<String> {
+        val stuck = ArrayList<String>()
+        for (f in listOf(input, result, snapshot) + (if (keepRunId) emptyList() else listOf(runId))) {
+            val ok = runCatching { if (f.exists()) f.delete() else true }.getOrDefault(false)
+            if (!ok) stuck.add(f.name)
         }
+        return stuck
     }
 
     /**
@@ -78,11 +89,25 @@ internal class RunFiles(private val dir: File) {
      * @return `target` に `text` が入ったなら true。
      */
     fun writeAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean {
-        val tmp = File(target.parentFile, "${target.name}.tmp")
-        tmp.writeText(text)
-        if (!commitGuard()) { tmp.delete(); return false }
-        // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
-        if (!tmp.renameTo(target)) { target.writeText(text); tmp.delete() }
-        return true
+        // [3.410.0/B-05] 旧: 一時ファイル名が「対象名 + .tmp」の**固定名**で、置き換え(REPLACE)の
+        //   前後に2つの writer が重なると同じ一時ファイルを奪い合った（片方の書き込み途中に他方が
+        //   rename/delete する＝**壊れた内容が target に入る**）。所有権チェックは rename の直前しか
+        //   見ないのでこの競合は素通りする。呼出ごとに一意な名前にすれば構造的に交差しない
+        //   （WorkManager の Worker は同一プロセスで走るのでプロセス内カウンタで足りる）。
+        val tmp = File(target.parentFile, target.name + ".t" + tmpSeq.incrementAndGet() + ".tmp")
+        try {
+            tmp.writeText(text)
+            if (!commitGuard()) return false
+            // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
+            if (!tmp.renameTo(target)) target.writeText(text)
+            return true
+        } finally {
+            // 成功時の rename 後は既に消えている。失敗・ガード偽・例外のいずれでも残骸を残さない。
+            runCatching { if (tmp.exists()) tmp.delete() }
+        }
+    }
+
+    private companion object {
+        val tmpSeq = java.util.concurrent.atomic.AtomicLong(0)
     }
 }

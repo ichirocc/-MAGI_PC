@@ -145,10 +145,68 @@ class RunFilesTest {
         var tmpExistedWhenGuardRan = false
         f.writeAtomically(target, "x") {
             calls++
-            tmpExistedWhenGuardRan = File(tmp.root, "out.json.tmp").exists()
+            // [3.410.0/B-05] 一時ファイル名は呼出ごとに一意（固定名だと writer 同士が奪い合う）＝
+            //   名前を決め打ちせず「この target 用の一時ファイルが在ること」で見る。
+            tmpExistedWhenGuardRan = tmp.root.listFiles()
+                ?.any { it.name.startsWith("out.json.") && it.name.endsWith(".tmp") } == true
             true
         }
         assertEquals("ガードはちょうど1回", 1, calls)
         assertTrue("ガードは一時ファイルを書いた後に評価されなければならない", tmpExistedWhenGuardRan)
+    }
+
+    // ---------- [3.410.0] 外部レビュー由来の追加 ----------
+
+    /** B-05: 一時ファイル名が呼出ごとに違う。固定名だと2つの writer が同じ tmp を奪い合う。 */
+    @Test
+    fun temporaryFileNamesDoNotCollideBetweenWriters() {
+        val f = files()
+        val target = File(tmp.root, "out.json")
+        val names = HashSet<String>()
+        repeat(3) {
+            f.writeAtomically(target, "x") {
+                tmp.root.listFiles()?.filter { t -> t.name.endsWith(".tmp") }?.forEach { t -> names.add(t.name) }
+                true
+            }
+        }
+        assertEquals("3回の書き込みで一時ファイル名は3種類", 3, names.size)
+    }
+
+    /** B-05: ガードが偽・rename 成功のいずれでも残骸を残さない。 */
+    @Test
+    fun temporaryFilesAreNeverLeftBehind() {
+        val f = files()
+        val target = File(tmp.root, "out.json")
+        f.writeAtomically(target, "ok")
+        f.writeAtomically(target, "rejected") { false }
+        assertEquals("ガードが偽なら target は不変", "ok", target.readText())
+        assertTrue("残骸なし", tmp.root.listFiles()?.none { it.name.endsWith(".tmp") } == true)
+    }
+
+    /**
+     * U-02: 所有権マーカーを立ててから旧途中状態を掃除する順序のために、`clear(keepRunId=true)` は
+     * runId だけ残す。ここが崩れると**自分で立てたばかりの所有権を自分で捨てる**。
+     */
+    @Test
+    fun clearCanKeepTheOwnershipMarker() {
+        val f = files()
+        f.input.writeText("i"); f.result.writeText("r"); f.snapshot.writeText("s")
+        f.beginRun(42L)
+        assertTrue(f.clear(keepRunId = true).isEmpty())
+        assertTrue(f.input.exists().not() && f.result.exists().not() && f.snapshot.exists().not())
+        assertEquals("マーカーは残る", 42L, f.activeRunId())
+        assertTrue(f.clear().isEmpty())
+        assertEquals("既定は全部消す", 0L, f.activeRunId())
+    }
+
+    /** B-06: 消し残った名前を返す（旧: `delete()` の戻り値も例外も捨てていた）。 */
+    @Test
+    fun clearReportsFilesItCouldNotDelete() {
+        val f = files()
+        f.input.writeText("i")
+        assertTrue("正常に消せたなら空", f.clear().isEmpty())
+        // 消せない状況（ディレクトリを同名で作る）は環境依存なので、ここでは
+        // 「消せたときに空を返す」契約と、返り値がある（Unit でない）ことだけを固定する。
+        assertEquals(emptyList<String>(), f.clear())
     }
 }
