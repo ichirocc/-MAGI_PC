@@ -113,7 +113,7 @@ object MirrorKeys {
         //   3.253.0 で c1 5→15。**現在値はどちらも 15**（3.389.0 まで「c1=5」と書いた旧コメントが残っていた）。
         // **ここを変えたら `Evaluator.fullEvalParts` のリテラルと C++ も同時に変える**。
         //   Kotlin 側のずれは `ObjectiveParityTest`、C++ 側は native-parity CI が捕まえる。
-        "c3mn" to 15.0, "c1" to 15.0, "c3" to 3.0, "c3m" to 2.0,
+        "c3mn" to 30.0, "c1" to 30.0, "c3" to 3.0, "c3m" to 2.0,
         "c2" to 1.0, "c41" to 1.0, "c42" to 1.0, "c41s" to 1.0, "c42s" to 1.0,
         "apt" to 1.0, "fair" to 1.0, "weekly" to 1.0,
         // [目的関数統一] covO は最適化器(Evaluator/Delta/C++)が amount×1.0 で加算しており、

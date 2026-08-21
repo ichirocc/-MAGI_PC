@@ -168,7 +168,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
             for (int j = 0; j <= T - c.d1; j++) {
                 int z = 0;
                 for (int l = 0; l < c.d1; l++) if (row[j + l] == c.si) z++;
-                if (z < c.d2) soft += 15;
+                if (z < c.d2) soft += 30;
             }
         }
     }
@@ -228,7 +228,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
     soft += c3check(p, a, p.cons3, false) * 3;
     hard1 += c3check(p, a, p.cons3n, true);
     soft += c3check(p, a, p.cons3m, false) * 2;
-    soft += c3check(p, a, p.cons3mn, true) * 15;
+    soft += c3check(p, a, p.cons3mn, true) * 30;
 
     // pref（実現可能な希望のみ）＋ [3.318.0] groupViol（担当できないシフトに就いているセル）。
     //   MirrorKeys.hard は元から4族（groupViol/c3n/covU/pref）なのに評価器だけ3族で、同じ盤面に
@@ -399,7 +399,7 @@ struct SaChunk {
                 uint64_t rm = rowMask[(size_t)i * K + c.si];
                 uint64_t wmask = (c.d1 >= 64) ? ~0ULL : ((1ULL << c.d1) - 1ULL);
                 for (int j = 0; j <= T - c.d1; j++)
-                    if (__builtin_popcountll((rm >> j) & wmask) < c.d2) v += 15;
+                    if (__builtin_popcountll((rm >> j) & wmask) < c.d2) v += 30;
             }
             return v;
         }
@@ -409,7 +409,7 @@ struct SaChunk {
             for (int j = 0; j <= T - c.d1; j++) {
                 int z = 0;
                 for (int l = 0; l < c.d1; l++) if (row[j + l] == c.si) z++;
-                if (z < c.d2) v += 15;
+                if (z < c.d2) v += 30;
             }
         }
         return v;
@@ -464,7 +464,7 @@ struct SaChunk {
         return contribC3RowFam(i, p.cons3, false, 3)
              + contribC3RowFam(i, p.cons3n, true, (long long)M)
              + contribC3RowFam(i, p.cons3m, false, 2)
-             + contribC3RowFam(i, p.cons3mn, true, 15);
+             + contribC3RowFam(i, p.cons3mn, true, 30);
     }
     // [3.318.0] このセルの HARD 寄与＝pref（実現可能な希望の未充足）＋ groupViol（担当できないシフト）。
     //   どちらもセル単位なので deltaApply の before/after で呼べば差分は自動的に正しい。

@@ -24,7 +24,11 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-21（3.409.23 並列監査の残り2件——c1 壁判定の非休側が「上限未設定＝上限0」と読み、
+**最終更新**：2026-08-21（3.409.24 回避の並び(c3mn)と窓の要件(c1)の重みを 15→30（HF77 明示指示）——
+`MirrorKeys`/`Evaluator`/`DeltaEvaluator`/`magi_native.cpp` の4面と言語跨ぎ期待値3ファイルを同時更新
+（golden soft 3109→4999・sample_v6 825→930・blocked_covu 1681→2731・hard は不変）。
+併せて重み変更が露呈させた C1広域ビームの実バグを修正——`bestEver` にピン検査が無く、あとから来た
+ピンを崩す候補が先に見つけたピン安全な改善を追い出していた。3.409.23 並列監査の残り2件——c1 壁判定の非休側が「上限未設定＝上限0」と読み、
 一部の日だけ need を設定したシフトで不足量が過大に出ていた（前提が崩れているので案内しない形へ）／
 `contribDayGroups` のビット経路が制約 index を無検査で、天井は2層番兵で捕捉できない SIGSEGV＝
 `nativeCreateProblem` の入口で一括拒否（判定は harness から叩ける `consIndicesValidN` として JNI の外へ）。

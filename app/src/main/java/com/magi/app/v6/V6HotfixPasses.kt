@@ -4062,7 +4062,15 @@ object V6HotfixPasses {
             if (top != null) {
                 val be = bestEver
                 val improved = be == null || betterReport(top.rep, be.rep)
-                if (improved) { bestEver = top; stagnant = 0 } else stagnant++
+                // [3.409.24] **厳密ピンを崩す盤面は最良として保持しない**。保持しても最終ゲートで
+                //   root へ落ちるだけでなく、**それより前に見つけたピン安全な改善を追い出してしまう**
+                //   ＝3.340.0 が入れた「ステップを増やすほど良くなる」保証が壊れる。実際 c1/c3mn の重みを
+                //   30 へ上げた直後に `moreStepsNeverProduceAWorseResult` が落ちて発覚した
+                //   （maxSteps=8 は 4520/421 を返すのに 12 は root 4999/437 へ落ちていた）。
+                //   root に勝てない候補はそもそも最終ゲートを通らないので、ピン判定は root 改善時だけ行う。
+                val blocked = improved && isBetter(top.rep, before) &&
+                    pinBlocks.blocksImproving(p, work0, top.work)
+                if (improved && !blocked) { bestEver = top; stagnant = 0 } else stagnant++
             }
             step++
             if (stagnant >= patience) break

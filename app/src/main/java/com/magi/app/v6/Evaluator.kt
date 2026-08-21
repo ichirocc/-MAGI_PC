@@ -75,7 +75,7 @@ class Evaluator(private val p: Problem) {
                     var z = 0
                     var l = 0
                     while (l < d1) { if (a[i][j + l] == si) z++; l++ }
-                    if (z < d2) soft += 15L
+                    if (z < d2) soft += 30L
                     j++
                 }
             }
@@ -137,7 +137,7 @@ class Evaluator(private val p: Problem) {
         soft += c3check(a, p.cons3, false) * 3L
         hard1 += c3check(a, p.cons3n, true)    // forbidden -> display HARD (count)
         soft += c3check(a, p.cons3m, false) * 2L
-        soft += c3check(a, p.cons3mn, true) * 15L
+        soft += c3check(a, p.cons3mn, true) * 30L
 
         // pref: wished cell not honored -> display HARD（[監査#11②] 実現可能な希望のみ計上。不可能希望は計数から対称除外）
         for (i in 0 until S) for (j in 0 until T) {
