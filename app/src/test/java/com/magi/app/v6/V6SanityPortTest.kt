@@ -105,6 +105,24 @@ class V6SanityPortTest {
             ok.none { it.where.contains("窓ルール") && it.where.contains("A") })
     }
 
+    @Test fun nonRestWindowIsSilentWhenTheDailyCapIsNotDefinedEveryDay() {
+        // [3.409.23/監査SANITY-5] 「1日あたり上限の合計」は、上限が**全日に定義されている**ときしか意味を持たない。
+        //   未設定の日は covO が構造的に発火しない（covOCell が恒常0）＝そこに「過剰配置が要る」という罰は存在しない。
+        //   旧実装は未設定(-1)を 0 に潰して合算していたため、一部の日だけ設定したシフトで不足量が過大に出た。
+        val cons = listOf(com.magi.app.model.C1Row("3", "A", "2"))
+        // (a) 6日中 day0 だけ上限1、残り5日は未設定。旧実装は capSum=1 →「7回ぶんの過剰配置が要ります」。
+        val partial = windowState("", cons).copy(needDay1 = mapOf("1,0" to "1"))
+        val p = Problem(partial)
+        assertEquals("前提: day0 だけ上限が存在する", 1, p.need1[1][0])
+        assertEquals("前提: day1 は未設定＝無制限", -1, p.need1[1][1])
+        assertTrue("上限が全日そろっていないシフトには過剰配置の助言を出さない",
+            V6SanityPort.buildGuidance(partial).none { it.where.contains("窓ルール") && it.where.contains("A") })
+        // (b) 全日未設定なら当然出さない。
+        assertTrue("上限が1日も無ければ出さない",
+            V6SanityPort.buildGuidance(windowState("", cons))
+                .none { it.where.contains("窓ルール") && it.where.contains("A") })
+    }
+
     @Test fun restWindowShortfallIsStillAStructuralWall() {
         // [3.364.0] 休は「作業に回さないセル数」が実在の物理上限。A の必要人数2で全12セルが work に埋まる →
         //   休の供給=2*6-12=0 < 需要(2人×3回×floor(6/3=2)=12) ＝真の構造的不能として維持する。

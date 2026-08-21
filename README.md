@@ -24,7 +24,11 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-21（3.409.22 ネイティブ修復器が Kotlin から5世代ぶん取り残されていた——
+**最終更新**：2026-08-21（3.409.23 並列監査の残り2件——c1 壁判定の非休側が「上限未設定＝上限0」と読み、
+一部の日だけ need を設定したシフトで不足量が過大に出ていた（前提が崩れているので案内しない形へ）／
+`contribDayGroups` のビット経路が制約 index を無検査で、天井は2層番兵で捕捉できない SIGSEGV＝
+`nativeCreateProblem` の入口で一括拒否（判定は harness から叩ける `consIndicesValidN` として JNI の外へ）。
+3.409.22 ネイティブ修復器が Kotlin から5世代ぶん取り残されていた——
 `magi_native.cpp` の destroy-repair / findCovOFix が 3.266.0(同点抽選)・3.267.0(weekly/fair 費用)・
 3.319.0(canDo ガード)・3.369.0/3.379.0(`covUCell`/`covOCell` への委譲) を1つも反映しておらず、
 **ネイティブ既定 ON なので直したはずの規則が既定経路では効いていなかった**。2層番兵も

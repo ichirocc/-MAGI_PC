@@ -82,6 +82,26 @@ struct MagiProblem {
     }
 };
 
+// [3.409.23/監査G3] 群/日レンジ・ペア禁止の index 健全性。**ここで拒否しないと SaChunk のビット経路が
+//   `grpMask[(size_t)c.g]`（負値→巨大 size_t）と `dayShiftMask[j*K + c.s]`（c.s>=K は隣日の行・j=T-1 で
+//   末尾越え）を無検査で引く**。兄弟の `contribC3RowFam` は seq を [0,K) 検査してスカラーへ退避するのに、
+//   c41/c42/c41s/c42s のビット経路だけ非対称だった。帰結はスコアのドリフト（番兵が status=1 で捕まえて
+//   Kotlin 退化＝正しいが遅い）か SIGSEGV（番兵では捕捉不能・3.171.0 の監査#7 と同クラス）。
+//   **群の上限は課さない**: buildGroupMasks が cons の参照群 id からもベクタ長を決めるので非負なら安全。
+//   上限を課すと「職員数より多いスキル群」を持つ正当なデータを誤って拒否する。
+//   JNI の外に置くのは、ホストの harness から直接叩けるようにするため（nativeCreateProblem は
+//   MAGI_HOST_TEST では丸ごと除外されるので、中に書くとテストできない）。
+static bool consIndicesValidN(const MagiProblem& p) {
+    const int K = p.K;
+    for (const auto* fam : {&p.cons41, &p.cons41s})
+        for (const auto& c : *fam)
+            if (c.g < 0 || c.s < 0 || c.s >= K) return false;
+    for (const auto* fam : {&p.cons42, &p.cons42s})
+        for (const auto& c : *fam)
+            if (c.g1 < 0 || c.g2 < 0 || c.s1 < 0 || c.s1 >= K || c.s2 < 0 || c.s2 >= K) return false;
+    return true;
+}
+
 // MirrorCore.weeklyDevOfBucket と同式。
 inline long long weeklyDevOfBucket(const int wd[7]) {
     int sum = 0;
@@ -1106,8 +1126,12 @@ inline bool reservoirTieN(int tieCount, std::mt19937_64& rng) {
 //   low は**担当できるシフトだけ**（3.319.0）。同ファイルの評価器 `SaChunk::contribRangeApt` は
 //   元から `p.cd(i,k)` ガードを持つのに、修復の marginal cost であるこの関数だけ欠けていた
 //   ＝3.319.0 以前の Kotlin と同じ構図。担当外シフトに個人下限が設定されたデータで、
-//   実在しない違反を重み90 で数えて候補選択を歪める（最終採否は checker が守るので誤った
-//   勤務表にはならないが、有効な候補を取りこぼす）。
+//   実在しない違反を重み90 で数える。
+//   [3.409.23/敵対検証で訂正] ただし**現行の呼出3箇所ではこの項は選択を1つも変えない**（不活性）:
+//   Day/Staff は候補ループの入口で `!p.cd(i,k) continue` 済み、Violations は `for (k : allowed)`＝
+//   allowed が canDo そのもので、唯一 canDo 外を取り得る `dOld` は k に依存しない定数オフセットなので
+//   argmin を動かせない（「動かさない」を表す 0 baseline との比較も存在しない）。よって価値は
+//   **Kotlin ミラーとしての一貫性**＝将来 baseline 比較や k 依存項が入ったときに静かに壊れる罠を残さないこと。
 inline long long staffCountPenaltyAtN(const MagiProblem& p, int i, int k, int n) {
     long long pen = 0;
     int lo = p.rangeLo[(size_t)i * p.K + k], hi = p.rangeHi[(size_t)i * p.K + k];
@@ -2323,6 +2347,10 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
     int n42s = takeCount(4);
     for (int r = 0; r < n42s; r++) { C42r c{next(), next(), next(), next()}; p->cons42s.push_back(c); }
     if (!parseOk) { delete p; return 0; }
+    // [3.409.23/監査G3] 群 index が負・シフト index が範囲外の制約行はハンドル生成ごと拒否する
+    //   （0=native 不可→Kotlin へ安全退化＝sgrp/ssk 検証と同じ確立済みの契約）。判定は
+    //   `consIndicesValidN`（JNI の外＝ホスト harness から直接叩ける場所）に置いてある。
+    if (!consIndicesValidN(*p)) { delete p; return 0; }
 
     // c3 レイアウト: 4族順(c3, c3n, c3m, c3mn) に [count, (len, seq...)*count]
     size_t ci = 0;

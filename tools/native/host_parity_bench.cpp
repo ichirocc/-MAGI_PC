@@ -589,6 +589,59 @@ static int runMarginalCostTest() {
     return failures;
 }
 
+// [3.409.23/監査G3] 制約 index の入口検証。ここで拒否しないと SaChunk のビット経路が
+//   grpMask[(size_t)c.g]（負値→巨大 size_t）と dayShiftMask[j*K + c.s]（c.s>=K は隣日・末尾越え）を
+//   無検査で引く。天井は SIGSEGV で**2層番兵では捕捉できない**種類なので、入口で閉じたことを直接確かめる。
+static int runConsIndexGuardTest() {
+    int failures = 0;
+    auto base = []() {
+        MagiProblem p;
+        p.S = 3; p.T = 5; p.K = 2; p.G = 2; p.restIdx = 0; p.dow0 = 0; p.use2 = false;
+        p.sgrp.assign(p.S, 0); p.ssk.assign(p.S, 0);
+        p.canDo.assign((size_t)p.S * p.K, 1);
+        p.wish.assign((size_t)p.S * p.T, -1);
+        p.need1.assign((size_t)p.K * p.T, -1);
+        p.need2.assign((size_t)p.K * p.T, -1);
+        p.rangeLo.assign((size_t)p.S * p.K, INT32_MIN);
+        p.rangeHi.assign((size_t)p.S * p.K, INT32_MAX);
+        p.apt.assign((size_t)p.S * p.K, -1);
+        p.bucket.assign((size_t)p.G, {0, 1});
+        finalizeProblem(p);
+        return p;
+    };
+    struct Case { const char* name; bool expectValid; };
+    // 正当: 群 id が職員数・G を超えていても buildGroupMasks が長さを合わせるので受け入れる
+    //   （上限を課すと「職員数より多いスキル群」を持つ正当なデータを誤って拒否する）。
+    {
+        MagiProblem p = base();
+        p.cons41.push_back({1, 1, 0, 2});
+        p.cons41s.push_back({7, 0, 0, 3});
+        p.cons42.push_back({0, 0, 1, 1});
+        p.cons42s.push_back({9, 1, 3, 0});
+        if (!consIndicesValidN(p)) { printf("CONS-GUARD FAIL: 正当な制約を拒否した\n"); failures++; }
+    }
+    // 不正: 負の群 id / 範囲外シフト id を4族それぞれで拒否する。
+    const char* names[] = {"cons41.g<0", "cons41.s>=K", "cons41s.s<0",
+                           "cons42.g2<0", "cons42.s1>=K", "cons42s.s2>=K"};
+    for (int c = 0; c < 6; c++) {
+        MagiProblem p = base();
+        switch (c) {
+            case 0: p.cons41.push_back({-1, 0, 0, 1}); break;
+            case 1: p.cons41.push_back({0, p.K, 0, 1}); break;
+            case 2: p.cons41s.push_back({0, -1, 0, 1}); break;
+            case 3: p.cons42.push_back({0, 0, -1, 1}); break;
+            case 4: p.cons42.push_back({0, p.K, 0, 1}); break;
+            case 5: p.cons42s.push_back({0, 0, 0, p.K}); break;
+        }
+        if (consIndicesValidN(p)) {
+            printf("CONS-GUARD FAIL: %s を受け入れた\n", names[c]);
+            failures++;
+        }
+    }
+    printf("CONS index guard: %s\n", failures == 0 ? "OK" : "FAILED");
+    return failures;
+}
+
 int main(int argc, char** argv) {
     long long totalMoves = 0, mismatches = 0;
     // --shared-only は共有ハンドルの競合検査だけを走らせる（ThreadSanitizer 用）。
@@ -681,6 +734,6 @@ int main(int argc, char** argv) {
     double bits   = benchOne(false);
     printf("BENCH deltaApply (10x31 K6): scalar %.2f M moves/s, bit-op %.2f M moves/s, speedup x%.2f\n",
            scalar / 1e6, bits / 1e6, bits / scalar);
-    int repairFail = runNeed2OnlyRepairTest() + runMarginalCostTest();
+    int repairFail = runNeed2OnlyRepairTest() + runMarginalCostTest() + runConsIndexGuardTest();
     return (mismatches == 0 && repairFail == 0) ? 0 : 1;
 }

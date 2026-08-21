@@ -433,9 +433,20 @@ object V6SanityPort {
                 } else {
                     // 非休は物理供給(担当nCanDo人×T日)>=需要が常に成立＝壁ではない。per-day 上限(need2/need1)の総和が
                     //   窓ルールに届かない場合のみ、c1 充足に過剰配置(covO)が要る旨をトレードオフとして案内。
+                    // [3.409.23/監査SANITY-5] 上限が**1日でも未設定**なら、その日は covO が構造的に発火しない
+                    //   ＝「1日あたり上限」という前提そのものが成立しない。旧実装は未設定(-1)を
+                    //   `coerceAtLeast(0)` で 0 に潰して合算していたため、一部の日だけ need を設定した
+                    //   シフトで不足量が過大に出た（実測: 6日中 day0 のみ need1=1 → 「7回ぶんの過剰配置が
+                    //   要ります」。実際に上限があるのは1日だけ）。しかも助言が指す罰(covO)がそのシフトには
+                    //   存在しないので、従っても何も変わらない。前提が崩れている以上、案内しないのが正しい。
                     var capSum = 0
-                    for (j in 0 until p.T) capSum += effectiveCap(p, si, j).coerceAtLeast(0)   // [3.409.22] 実効上限へ委譲
-                    if (capSum < demand) {
+                    var capKnown = true
+                    for (j in 0 until p.T) {
+                        val cap = effectiveCap(p, si, j)
+                        if (cap < 0) { capKnown = false; break }   // 未設定＝無制限
+                        capSum += cap
+                    }
+                    if (capKnown && capSum < demand) {
                         val short = demand - capSum
                         out.add(SettingIssue(IssueKind.CONSTRAINT, "窓ルール「$sym を${c.day1}日で${c.day2}回以上」",
                             "「$sym」の1日あたり上限の合計(${capSum})が窓ルールの必要回数(${demand})に${short}回ぶん届かず、" +
