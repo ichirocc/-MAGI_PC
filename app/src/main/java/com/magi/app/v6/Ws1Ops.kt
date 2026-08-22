@@ -175,7 +175,7 @@ object Ws1Ops {
     }
 
     /**
-     * 空きマスを埋めるシフト index。
+     * 空きマスを埋めるシフト index（[3.418.0] 新職員の行・伸ばした日・消したシフトのマス）。
      *
      * [3.418.0] 旧: 埋める側は一律 `restShiftIndex` で、**その職員がそのシフトを担当できるかを見て
      * いなかった**。担当可否から休を外した群（UI の担当可否チップで実際にできる操作）に職員を足す／
@@ -187,11 +187,14 @@ object Ws1Ops {
      * 全群が休を担当できるため**挙動は変わらない**）。できなければ、その群が担当できる先頭のシフト。
      * どちらも無い（担当可能シフトが1つも無い群）なら休へ倒す＝ここで throw すると、その不整合を
      * 直しに来た編集操作そのものがクラッシュする。この state は検査2k/2l が別途指摘する。
+     *
+     * [3.419.0] 判断そのものは [fillShiftIndex] が唯一の持ち場（`Problem.initialAssignment` と規則を
+     * 共有する）。ここは `groupShift` の 1/0 行を担当可能 index の配列へ直すだけの入口。
      */
     private fun fillShift(groupShiftRow: List<Int>?, rest: Int): Int {
         if (groupShiftRow == null) return rest
-        if (groupShiftRow.getOrNull(rest) == 1) return rest
-        return groupShiftRow.indexOfFirst { it == 1 }.takeIf { it >= 0 } ?: rest
+        val allowed = groupShiftRow.indices.filter { groupShiftRow[it] == 1 }.toIntArray()
+        return fillShiftIndex(allowed, rest)
     }
 
     /** Add a staff (index S). The working schedule gains a row of the group's fill shift.

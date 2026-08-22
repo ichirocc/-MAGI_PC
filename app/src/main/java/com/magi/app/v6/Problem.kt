@@ -350,15 +350,22 @@ class Problem(val state: MagiState) {
     fun initialAssignment(): Array<IntArray> = Array(S) { i ->
         val b = bucket[sgrp[i]]
         IntArray(T) { j ->
-            var k = state.schedule.getOrNull(i)?.getOrNull(j) ?: 0
+            // [3.419.0] 旧: 欠損セル（行が短い・行が無い）を `?: 0` でハードコードの index 0 にしていた。
+            //   0 は合法値なので下の範囲チェックを素通りし、**勤務シフトへ黙って化ける**。3.410.0 が
+            //   範囲外セルについて直したのと同じ取り違えが、その1行上に残っていた。-1 へ倒して
+            //   下の穴埋めに合流させる。
+            var k = state.schedule.getOrNull(i)?.getOrNull(j) ?: -1
             val w = wish[i][j]
             if (w >= 0 && b.contains(w)) k = w
             // [3.410.0/P-01] 旧: 範囲外セルをハードコードの 0 へ寄せていた。0 が休とは限らない
-            //   （休が先頭でないデータでは**勤務シフトへ化ける**）。`restShiftIndex` へ揃える＝
-            //   3.106.0 が `Ws1Ops.removeShift` で直したのと同じ取り違え。なお `MirrorCore.normalizeSchedule`
-            //   は同じセルを -1（センチネル）にするが、ここは**探索へ渡す初期盤面**なので合法値が要る
-            //   （-1 を入れると `DeltaEvaluator.rebuild` の `cntSS[i][k]++` が飛ぶ）＝非対称は意図的。
-            if (k < 0 || k >= K) k = restIdx
+            //   （休が先頭でないデータでは**勤務シフトへ化ける**）。
+            // [3.419.0] さらに、寄せ先の `restIdx` を**この職員が担当できるか見ていなかった**＝
+            //   休を担当できない群では、範囲外という入力の不備だけを理由に groupViol(HARD) を作っていた。
+            //   共通規則 `fillShiftIndex` へ委譲する（Ws1Ops の3経路と同じ判断）。
+            //   なお `MirrorCore.normalizeSchedule` は同じセルを -1（センチネル）にするが、ここは
+            //   **探索へ渡す初期盤面**なので合法値が要る（-1 を入れると `DeltaEvaluator.rebuild` の
+            //   `cntSS[i][k]++` が飛ぶ）＝非対称は意図的。
+            if (k < 0 || k >= K) k = fillShiftIndex(b, restIdx)
             k
         }
     }

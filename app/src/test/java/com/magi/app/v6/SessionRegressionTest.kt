@@ -314,7 +314,7 @@ class SessionRegressionTest {
     }
 
     @Test fun filledCellsAreAlwaysAShiftTheStaffMayActuallyWork() {
-        // [3.416.0] 空きマスを埋めるとき、**その職員が担当できないシフトを置かない**。
+        // [3.418.0] 空きマスを埋めるとき、**その職員が担当できないシフトを置かない**。
         //   旧実装は担当可否を見ずに一律「休」で埋めていたため、担当可否から休を外した群
         //   （UI の担当可否チップで実際にできる操作）に職員を足す／期間を伸ばすと、
         //   その全日が groupViol(HARD 重み10000) になった。埋めた瞬間に必須違反が並ぶ。
@@ -354,6 +354,15 @@ class SessionRegressionTest {
             removed.schedule[0].all { pRem.canDo(0, it) })
         assertEquals("担当外シフトを置いていない（groupViol=0）",
             0, UnifiedViolationChecker.check(removed.state, removed.schedule).breakdown["groupViol"] ?: 0)
+
+        // [3.419.0] 4つ目の経路＝探索へ渡す初期盤面。範囲外の値と欠損セル（行が短い）を穴埋めするとき、
+        //   入力の不備だけを理由に担当外シフトを置いて groupViol を作らない。
+        val broken = st.copy(schedule = listOf(listOf(999, 1)))          // day0 が範囲外
+        assertTrue("範囲外セルの穴埋めが担当可能なシフト",
+            Problem(broken).initialAssignment()[0].all { Problem(broken).canDo(0, it) })
+        val short = st.copy(schedule = listOf(listOf(1)))                // day1 が欠損（行が短い）
+        assertTrue("欠損セルの穴埋めが担当可能なシフト",
+            Problem(short).initialAssignment()[0].all { Problem(short).canDo(0, it) })
     }
 
     @Test fun componentImportReportsUnreadableRowsInsteadOfDroppingThem() {

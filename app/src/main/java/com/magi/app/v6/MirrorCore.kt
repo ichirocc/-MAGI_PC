@@ -695,6 +695,22 @@ fun coverage(p: Problem, schedule: Array<IntArray>): Array<IntArray> {
 
 fun restShiftIndex(state: MagiState): Int = state.shifts.indexOfFirst { it.kigou == "休" }.takeIf { it >= 0 } ?: 0
 
+/**
+ * 空きマス（新職員の行・伸ばした日・消したシフトのマス・範囲外や欠損の値）を埋めるシフト index。
+ *
+ * [3.419.0] 埋める側は「休」を既定にしてきたが、**その職員がそのシフトを担当できるかを見ていなかった**。
+ * 担当可否から休を外した群（UI の担当可否チップで実際にできる操作）では、埋めたマスが丸ごと
+ * groupViol（HARD・重み10000）になる＝入力が不正なだけなのに、こちらが**存在しない違反を作っていた**。
+ *
+ * 規則はこの1箇所だけに置く（3.418.0 で `Ws1Ops` の3経路を直したとき同じ判断を写しかけた＝写すと必ず
+ * 取り残される）。休を担当できるならそのまま休（需要が無く「まだ決めていない」を表すのに最も無難で、
+ * 実データ3件は全群が休を担当できるため**挙動は変わらない**）。できなければ担当できる先頭のシフト。
+ * 担当できるシフトが1つも無ければ休へ倒す＝**ここで例外を投げると、その不整合を直しに来た編集操作
+ * そのものがクラッシュする**（検査2k/2l が別途その状態を指摘する）。
+ */
+fun fillShiftIndex(allowed: IntArray, rest: Int): Int =
+    if (allowed.contains(rest)) rest else allowed.firstOrNull() ?: rest
+
 fun formatDay(startDate: String, offset: Int): String {
     return try {
         val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
