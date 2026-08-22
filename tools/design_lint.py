@@ -406,6 +406,48 @@ def find_p9():
     return hits
 
 
+# [3.415.0] P10: シフト記号を文字列リテラルと比べる箇所（ラチェット）。
+#   勤務シフトの意味は**外部データ**（担当可否・必要人数・個人レンジ・希望・制約）だけが決める。
+#   記号の字面で分岐すると ①その記号を使わない職場では黙って効かない ②同じ字を含む別の勤務に
+#   誤って効く、のどちらかが必ず起きる。実際 3.106.0 は `Ws1Ops.removeShift` の記号取り違えを、
+#   監査A5 は「raw "休" 比較が『公』職場で全滅していた」を直しており、**この型は2回発生している**。
+#   3.415.0 で表示色のカテゴリ推測（休/夜/早/遅/日）と「希」の割当除外3件を撤去し、残りは下の
+#   baseline 2 件だけ:
+#     - `MirrorCore.restShiftIndex`（記号「休」の解決。Ws1Ops の初期化・診断・初期解が使う業務概念）
+#     - `V6SanityPort` 検査2g（その解決が失敗して先頭シフトを休とみなしていることの警告）
+#   ＝**片方は概念の解決、もう片方はその失敗の告知**で対になっている。増やすときはここも更新する。
+#   このルールが見ないもの（既知の残債・記号依存だが比較の形をしていない）:
+#     - `ScheduleCsvBridge` の `const val REST = "休"`（凡例に無ければ休シフトを補完する）
+#     - `restShiftIndex` 経由で `restIdx` を読む側（Problem/Ws1Ops/V6SanityPort/探索オペレータ）
+P10_BASELINE = 2
+RE_P10_FWD = re.compile(
+    r'(?:kigou|shiftSymbols\w*)[^"\n]{0,40}?(?:==|!=|\.contains\(|\.startsWith\(|\.endsWith\()\s*"([^"]+)"')
+RE_P10_REV = re.compile(r'"([^"]+)"\s*(?:==|!=)[^"\n]{0,40}?(?:kigou|shiftSymbols\w*)\b')
+
+
+def find_p10():
+    """シフト記号（kigou / shiftSymbols）を空でない文字列リテラルと比較している箇所。"""
+    hits = []
+    for path in kotlin_files():
+        rel = os.path.relpath(path, ROOT)
+        # テストは記号つきの fixture を作るのが仕事なので対象外（本番の分岐だけを見る）。
+        if "/src/test/" in path.replace(os.sep, "/"):
+            continue
+        try:
+            raw = open(path, encoding="utf-8").read().split("\n")
+        except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+            continue
+        for i, line in enumerate(raw, 1):
+            if "kigou" not in line and "shiftSymbols" not in line:
+                continue
+            if not _strip_strings_and_comments(line).strip():
+                continue  # コメント行
+            m = RE_P10_FWD.search(line) or RE_P10_REV.search(line)
+            if m:
+                hits.append(f"{rel}:{i}  シフト記号を \"{m.group(1)}\" と比較しています")
+    return hits
+
+
 def main():
     strict = "--strict" in sys.argv
     findings = scan()
@@ -414,6 +456,7 @@ def main():
     findings["P7"] = find_p7()
     findings["P8"] = find_p8()
     findings["P9"] = find_p9()
+    findings["P10"] = find_p10()
     labels = {
         "P1": "純黒本文/背景 (Color.Black / 0xFF000000)",
         "P2": "生 hex 直書き (Color(0x……)) ※MagiTokens.kt 除く=baseline監視",
@@ -424,10 +467,11 @@ def main():
         "P7": "二重エンコードの文字化け（UTF-8 を Latin-1 として読んだ内容を保存した状態）",
         "P8": "magi_design_system.md の ✅（実装済）と実装の食い違い",
         "P9": "beginBoardJob と finally の endBoardJob が対になっていない（読み取り専用に固着）",
+        "P10": "シフト記号を文字列リテラルと比較（記号の字面で分岐＝別の記号の職場では黙って効かない）※baseline監視",
     }
     total = sum(len(v) for v in findings.values())
     print("=== MAGI design lint (docs/DESIGN.md P1-P4) ===")
-    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"):
+    for key in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"):
         hits = findings[key]
         print(f"\n[{key}] {labels[key]}: {len(hits)} 件")
         for h in hits[:40]:
@@ -447,13 +491,17 @@ def main():
     # [3.409.6] 途中で return せず**全部集めてから**落とす。1つ直して再実行して次が出る、を繰り返させない
     #   （旧: 最初に当たった検査だけ報告して return 1＝P2 と P4 が同時に増えても P4 が見えなかった）。
     blockers = []
-    for key, base in (("P2", P2_BASELINE), ("P4", P4_BASELINE)):
+    fixes = {
+        "P2": "色は MagiTokens.kt / MagiTheme の colorScheme ",
+        "P4": "角丸は MagiTheme の Shapes(small/medium/large) ",
+        "P10": "勤務シフトの意味は外部データ（担当可否・必要人数・個人レンジ・希望・制約）から決めて ",
+    }
+    for key, base in (("P2", P2_BASELINE), ("P4", P4_BASELINE), ("P10", P10_BASELINE)):
         n = len(findings[key])
         if n > base:
             blockers.append(
-                f"{key}: baseline {base} 件 → {n} 件に増えています。"
-                f"{'色は MagiTokens.kt / MagiTheme の colorScheme ' if key == 'P2' else '角丸は MagiTheme の Shapes(small/medium/large) '}"
-                f"を使ってください（どうしても必要なら根拠を添えて {key}_BASELINE を更新）。")
+                f"{key}: baseline {base} 件 → {n} 件に増えています。{fixes[key]}"
+                f"ください（どうしても必要なら根拠を添えて {key}_BASELINE を更新）。")
         elif n < base:
             blockers.append(
                 f"{key}: baseline {base} 件 → {n} 件に減りました。tools/design_lint.py の "

@@ -60,7 +60,7 @@ private val COLOR_PALETTE = listOf(
 
 /**
  * colors 移植: シフトの表示色設定。
- * shiftColors[kigou] の上書きを編集。既定はカテゴリ別の色（resolveShiftColor）。
+ * shiftColors[kigou] の上書きを編集。既定は一覧上の位置で決まる色（resolveShiftColor）。
  * 表示専用のため採点・エンジンに影響しない。勤務表グリッドに反映される。
  */
 @OptIn(ExperimentalLayoutApi::class)

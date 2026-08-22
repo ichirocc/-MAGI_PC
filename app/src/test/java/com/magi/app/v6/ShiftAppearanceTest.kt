@@ -11,12 +11,6 @@ import org.junit.Test
  */
 class ShiftAppearanceTest {
 
-    @Test fun shiftCategoryIsInferredFromSymbolAndName() {
-        assertEquals("rest", ShiftAppearance.shiftCatDefault("休"))
-        assertEquals("night", ShiftAppearance.shiftCatDefault("Dﾃ", "夜勤"))
-        assertEquals("unknown", ShiftAppearance.shiftCatDefault(""))
-    }
-
     @Test fun severityFollowsTheWeightHierarchy() {
         // HARD 4族は CRITICAL、重いソフト(low90/high45/c3mn15)は HIGH、整え(fair/weekly)は INFO。
         for (k in listOf("groupViol", "covU", "pref", "c3n")) assertEquals(k, "CRITICAL", ShiftAppearance.severityFromVioKey(k))
@@ -29,11 +23,17 @@ class ShiftAppearanceTest {
         assertEquals("INFO", ShiftAppearance.severityFromVioKey("no-such-family"))
     }
 
-    @Test fun colorResolutionPrefersExplicitThenRestThenPaletteByIndex() {
-        assertEquals("#123456", ShiftAppearance.resolveShiftColor("Dﾃ", index = 3, explicit = "#123456"))
-        assertEquals("#A7B4C2", ShiftAppearance.resolveShiftColor("休", index = 3))   // 休は index より優先
-        // 隣接する index は異なる色（同カテゴリの色潰れを防ぐのが目的）。
-        assertNotEquals(ShiftAppearance.resolveShiftColor("A", index = 0), ShiftAppearance.resolveShiftColor("B", index = 1))
+    /**
+     * [3.415.0] 色は「利用者の明示色 → 一覧上の位置」だけで決まり、記号・名称からは何も推測しない。
+     * 記号を引数に取らない形にしたので、この不変条件は**シグネチャで構造的に保証**される
+     * （文字列を渡す余地が無い＝将来また字面で分岐する実装へ戻れない）。
+     */
+    @Test fun colorResolutionUsesOnlyExplicitColorOrPosition() {
+        assertEquals("#123456", ShiftAppearance.resolveShiftColor(explicit = "#123456", index = 3))
+        // 隣接する index は異なる色（同じ色に潰れないことがパレットの目的）。
+        assertNotEquals(ShiftAppearance.resolveShiftColor(index = 0), ShiftAppearance.resolveShiftColor(index = 1))
+        // 位置が不明なときはどのシフトでも同じ中立色＝記号による優劣を持たない。
+        assertEquals(ShiftAppearance.NEUTRAL_SHIFT_COLOR, ShiftAppearance.resolveShiftColor())
     }
 
     @Test fun textColorIsTheHigherContrastOfTheTwoInkColors() {
@@ -42,7 +42,7 @@ class ShiftAppearanceTest {
         assertEquals("#14110d", ShiftAppearance.pickTextColor("こわれた値"))  // 解釈できなければ黒へ倒す
         // パレットは中間色ぞろいなので、どの色にも「黒か生成りのどちらか」が返る（未定義の色を返さない）。
         for (i in 0 until 16) {
-            val ink = ShiftAppearance.pickTextColor(ShiftAppearance.resolveShiftColor("A", index = i))
+            val ink = ShiftAppearance.pickTextColor(ShiftAppearance.resolveShiftColor(index = i))
             assertTrue(ink, ink == "#14110d" || ink == "#fbf4e8")
         }
     }

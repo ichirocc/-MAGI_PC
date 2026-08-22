@@ -1,6 +1,5 @@
 package com.magi.app.v6
 
-import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -31,20 +30,8 @@ object ShiftAppearance {
         return if (contrast(lum, dark) >= contrast(lum, light)) "#14110d" else "#fbf4e8"
     }
 
-    /** 記号・名称からシフトのカテゴリ（rest/night/early/late/day/work/unknown）を推定する。 */
-    fun shiftCatDefault(symbol: String, name: String = ""): String {
-        val s = (symbol + " " + name).lowercase(Locale.JAPAN)
-        if (symbol.isBlank()) return "unknown"
-        if (s.contains("休") || s.contains("off") || s.contains("明")) return "rest"
-        if (s.contains("夜") || s.contains("night") || s.contains("深")) return "night"
-        if (s.contains("早") || s.contains("early")) return "early"
-        if (s.contains("遅") || s.contains("late")) return "late"
-        if (s.contains("日") || s.contains("day") || s.contains("勤")) return "day"
-        return "work"
-    }
-
-    // [判別性パレット] 似たカテゴリのシフトが同色に潰れないよう、休(rest)以外はシフトの並び順(index)で
-    //   色相を十分に離した既定色を割り当てる。隣接シフトのコントラストを保つため暖色/寒色を交互配置。
+    // [判別性パレット] シフトが同色に潰れないよう、並び順(index)で色相を十分に離した既定色を
+    //   割り当てる。隣接シフトのコントラストを保つため暖色/寒色を交互配置。
     private val SHIFT_WORK_PALETTE = listOf(
         "#E59B96", // coral
         "#74BEB0", // teal
@@ -64,22 +51,23 @@ object ShiftAppearance {
         "#C8A0C0", // mauve
     )
 
-    fun resolveShiftColor(symbol: String, name: String = "", explicit: String? = null, index: Int = -1): String {
+    /**
+     * 表示色は「利用者が設定した色」→「一覧上の位置」の順で決める。
+     *
+     * [3.415.0] 旧実装は記号・名称に「休/off/明」「夜/night/深」「早」「遅」「日/勤」が含まれるかで
+     * カテゴリを推測し、rest だけは index パレットより優先してスレート固定にしていた。これは外部データに
+     * 無い意味を記号の字面から作り出す推測で、①「公」「OFF」のように別の記号を使う職場では黙って効かない
+     * ②「休日」のように複数のカテゴリ語を含む名称では先に書いた条件が勝つだけ、という当てにならない規則
+     * だった。利用者が色を決めたいシフトは `shiftColors` の明示色（第1優先）で指定できる。
+     */
+    fun resolveShiftColor(explicit: String? = null, index: Int = -1): String {
         if (!explicit.isNullOrBlank()) return explicit
-        // 休(rest)は常に落ち着いたスレート（休みであることを一目で）。
-        if (shiftCatDefault(symbol, name) == "rest") return "#A7B4C2"
-        // それ以外はシフトの並び順で判別性の高い色を割り当て（同カテゴリの色潰れを防ぐ）。
         if (index >= 0) return SHIFT_WORK_PALETTE[index % SHIFT_WORK_PALETTE.size]
-        // index 未指定（後方互換）: 旧カテゴリ別の既定色。
-        return when (shiftCatDefault(symbol, name)) {
-            "night" -> "#B79CE0"  // 夜: ダスティ・ラベンダー
-            "early" -> "#74BEB0"  // 早: やわらかいティール
-            "late" -> "#E0B968"   // 遅: 穏やかなアンバー
-            "day" -> "#8CBE89"    // 日: やさしいセージ
-            "work" -> "#84C4DC"   // 勤: やわらかいスカイ
-            else -> "#C2B4A0"     // 他: 温かいトープ
-        }
+        return NEUTRAL_SHIFT_COLOR
     }
+
+    /** 位置が不明なときの色。どのシフトでも同じ＝記号による優劣を持たない。 */
+    const val NEUTRAL_SHIFT_COLOR = "#84C4DC"
 
     fun severityFromVioKey(key: String): String = when (key.removePrefix("vio-")) {
         "groupViol", "covU", "pref", "c3n" -> "CRITICAL"                                   // HARD

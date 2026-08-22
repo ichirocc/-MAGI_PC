@@ -1357,9 +1357,10 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
             else { val k = ui.schedule.getOrNull(i)?.getOrNull(d) ?: -1; if (wk == k) 1 else 2 }
         } }
     }
-    // [判読性] 休セルは淡色＋細字で視覚的に後退させ、勤務セルの模様（誰がいつ働くか）を浮かび上がらせる。
-    //   記号「休」から解決（改名データでは -1=後退なし＝従来表示）。色データ・スコアリング不変。
-    val restIdx = remember(ui.shiftSymbols) { ui.shiftSymbols.indexOfFirst { it.trim() == "休" } }
+    // [3.415.0] 旧: 記号が「休」のセルだけ淡色＋細字で後退させていた（3.99.0）。記号の字面から
+    //   「これは休み」と決める推測で、「公」「OFF」等の職場では黙って効かず、逆に勤務シフトの名前に
+    //   「休」が入る職場では勤務セルが沈む。淡色化は集中モード（下の quiet）だけが行う。特定のシフトを
+    //   目立たせたい場合は設定タブの表示色で明示指定できる。
     // [グループ色帯/Web試作の移植] 名前列の左端4dpにグループ色の帯。行の視線追跡と所属の一目把握を助ける。
     //   色は群の出現順に黄金角で自動割当（設定不要・群1つなら実質無地）。
     val groupOrder = remember(ui.staffGroupSymbols) { ui.staffGroupSymbols.distinct() }
@@ -1429,7 +1430,6 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                         }
                         for (i in 0 until staffCount) {
                             val k = ui.schedule.getOrNull(i)?.getOrNull(d) ?: -1
-                            val isRest = k >= 0 && k == restIdx
                             val rawBg = if (k < 0) cs.surfaceVariant else (shiftColorsC.getOrNull(k) ?: cs.surfaceVariant)
                             val sym = ui.shiftSymbols.getOrNull(k) ?: ""
                             val vk = vioKind[i][d]; val wkk = wishKind[i][d]
@@ -1437,10 +1437,9 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                                 (focusRange != null && focusRange.first == i && d >= focusRange.second && d <= focusRange.third)
                             // [集中モード] 違反・未反映希望・注目セル以外を淡色に沈める（非表示にはしない＝被覆の文脈は残す）。
                             val quiet = focusMode && vk == 0 && wkk != 2 && !cellFocused
-                            // [判読性] 休は淡色化して後退（勤務セルが浮かぶ）。文字は onSurfaceVariant で可読性を担保。
-                            val bg = if (isRest || quiet) rawBg.copy(alpha = 0.30f) else rawBg
+                            val bg = if (quiet) rawBg.copy(alpha = 0.30f) else rawBg
                             // [コントラスト] 淡い背景に沈まないよう記号色をWCAGで保証（色データは不変）。
-                            val fg = if (isRest || quiet) cs.onSurfaceVariant else ensureReadable(rawBg, shiftTextC.getOrNull(k) ?: cs.onSurface)
+                            val fg = if (quiet) cs.onSurfaceVariant else ensureReadable(rawBg, shiftTextC.getOrNull(k) ?: cs.onSurface)
                             // [希望バッジ] 未反映（割付≠希望）のときは希望シフトの記号をバッジでセルに重ねる
                             //   （旧: 桃ドットのみで「何を希望していたか」が編集シートを開かないと分からなかった）。
                             val wishSym = if (wkk == 2) ui.wishes["$i,$d"]?.let { ui.shiftSymbols.getOrNull(it) } ?: "" else ""
@@ -1449,7 +1448,7 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                                 (if (wkk == 2) "・希望未反映（希望=${wishSym.ifBlank { "?" }}）" else if (wkk != 0) "・希望" else "") + "、タップで変更"
                             // [違反色/族別] このセルの表示中クラスの族色（未設定は重大度色）。枠・角マークに適用。
                             val cellVioC = vioCls[i][d]?.let { resolvedVioColor(ui, it, vioColor, vioSoftColor) }
-                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = isRest || quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym) { onCellClick(i, d) }
+                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym) { onCellClick(i, d) }
                         }
                     }
                 }

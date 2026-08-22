@@ -2324,11 +2324,18 @@ object V6HotfixPasses {
                             if (i == hi && newK == k) continue
                             if (i == receiver && newK != k) continue
                             if (newK != oldK) {
+                                // [3.415.0] 旧: 記号が「希」のシフトを割当先から外していた（3.278.0）。撤去の根拠3点。
+                                //   ①**主張が実装されていない**: コメントは「最適化が自由生成しない」と書いていたが、
+                                //     このガードは研磨3箇所にしかなく、探索本体（SA/ALNS の randomAllowedCell・
+                                //     destroyRepair・findTargetedFix 等）は `allowedShiftsForStaff` から選ぶので素通り
+                                //     ＝方針として機能していなかった（HF77: コメント≠実装）。
+                                //   ②**実測で中立**: 「希」を含む唯一の実データ blocked_covu_state（希望10件＝盤面10セル）で
+                                //     ガードは 1686 回発火するが、外すと後処理研磨の結果は hard=4/total=311/weighted=34149 と
+                                //     **バイト一致**。弾いていた候補は目的関数側でも全て負けていた。フル30秒でも希望外の
+                                //     「希」生成は 0 件（この職場では休が lo==hi の厳密ピンで9/10名固定＋勤務側に需要があり、
+                                //     「希望外の希」はデータ側の制約が既に禁じている＝中立な仕組みが機能している）。
+                                //   ③**別の職場では黙って効かない**: 記号が「希望」「W」等なら同じ意図でも一切適用されない。
                                 if (!movable(i, j) || !p.canDo(i, newK)) continue
-                                // [3.278.0/監査修正] 兄弟実装(tryFlexibleDayFlow/C1TemporalFlowPolish)と同じ
-                                //   「『希』は希望セルとしてのみ存在させ、最適化が自由生成しない」ガード。手Mだけ
-                                //   欠けており、既存の「希」トークンを希望していない別職員へ再割当できていた。
-                                if (state.shifts.getOrNull(newK)?.kigou == "希") continue
                                 work[i][j] = newK
                                 val badRun = p.makesForbiddenRun(work, i, j, newK)
                                 work[i][j] = oldK
@@ -2464,9 +2471,8 @@ object V6HotfixPasses {
                             if (i == victim && newK == forbiddenK) continue
                             val changed = newK != oldK
                             if (changed) {
+                                // [3.415.0] 記号「希」を割当先から外すガードを撤去（根拠は手M側の同種箇所に記載）。
                                 if (!movable(i, j) || !p.canDo(i, newK)) continue
-                                // 「希」は希望セルとしてのみ存在させ、最適化が自由生成しない。
-                                if (state.shifts.getOrNull(newK)?.kigou == "希") continue
                                 work[i][j] = newK
                                 val badRun = p.makesForbiddenRun(work, i, j, newK)
                                 work[i][j] = oldK

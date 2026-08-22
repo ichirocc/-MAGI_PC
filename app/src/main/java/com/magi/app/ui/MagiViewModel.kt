@@ -1947,7 +1947,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         val st = state ?: return emptyList()
         return st.shifts.mapIndexed { i, sh ->
             val ov = st.shiftColors[sh.kigou]
-            ShiftColorView(sh.kigou, sh.name, ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, ov, i), !ov.isNullOrBlank())
+            ShiftColorView(sh.kigou, sh.name, ShiftAppearance.resolveShiftColor(ov, i), !ov.isNullOrBlank())
         }
     }
 
@@ -3312,8 +3312,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             staffNames = st.staff.map { it.name },
             staffGroupSymbols = groupSymbols.map { toHankakuKigou(it) },
             shiftSymbols = st.shifts.map { toHankakuKigou(it.kigou) },
-            shiftColorHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i) },
-            shiftTextHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.pickTextColor(ShiftAppearance.resolveShiftColor(sh.kigou, sh.name, st.shiftColors[sh.kigou], i)) },
+            shiftColorHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.resolveShiftColor(st.shiftColors[sh.kigou], i) },
+            shiftTextHex = st.shifts.mapIndexed { i, sh -> ShiftAppearance.pickTextColor(ShiftAppearance.resolveShiftColor(st.shiftColors[sh.kigou], i)) },
             violationColorHex = st.shiftColors["__vio__"] ?: "",
             violationSoftColorHex = st.shiftColors["__vioSoft__"] ?: "",
             violationFamilyColorHex = st.shiftColors.entries
