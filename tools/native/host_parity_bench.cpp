@@ -16,6 +16,23 @@
 //   さらに flat ファイル引数で実 state（golden_state.json 等）の問題をそのまま照合できる。
 // Bench: times raw deltaApply throughput (apply+revert) so bit-op changes can be
 //   measured A/B via SaChunk.useBits.
+//
+// Exit code contract: 0 = all checks passed. 1 = the check(s) actually ran and found a
+//   real mismatch (Δ!=full, cross-language divergence, or shared-handle divergence) —
+//   this is the "the code is wrong" signal a CI/script consumer should act on.
+//   2 = the run could not meaningfully execute at all (bad/missing flat file, missing
+//   required arguments, --expect count not matching flat-file count) — a setup/usage
+//   problem, not a finding about the code under test. The printed message (not a further
+//   split of exit codes) disambiguates within the "2" bucket; nothing in this repo greps
+//   for a specific sub-code today, so a single "could not run" code is intentional.
+//
+// Shared-handle concurrency check (runSharedHandleConcurrency, below) is two-tier by
+//   design: a plain (`-O3`, no sanitizer) build runs it once per invocation as a cheap
+//   smoke check that can still catch an outright shared-mutable-state bug if it happens
+//   to produce an observably different value serial-vs-parallel. The *race detector*
+//   proper is `-fsanitize=thread` — wired as a dedicated, fast (~10s total) CI job
+//   (native-parity.yml) that runs `--shared-only`, so the TSAN protection these comments
+//   describe is continuously enforced, not just a manual step a developer has to remember.
 #ifndef MAGI_HOST_TEST
 #define MAGI_HOST_TEST
 #endif
@@ -265,15 +282,20 @@ static bool checkCrossLanguage(const MagiProblem& p, const std::vector<int>& boa
 // コメントと実装が食い違うのはこのリポジトリで何度も起きている（HF77）。実際に N スレッドから
 // 同一 MagiProblem を叩き、**逐次実行とビット単位で同じ結果**になることを確かめる。
 // ThreadSanitizer 付きでビルドすれば、書き込み競合はここで検出される。
+// 呼出は1箇所・常に kSharedHandleThreads 本（SaOptimizer.Params.workers の実運用上限と同じ）。
+// パラメータ化を保つのは「TSAN専用ジョブが必要なら別本数で呼べる」将来の柔軟性のためで、
+// 現状は名前付き定数を1箇所で参照する（呼出側で生の 8 を読む手間を無くすだけ）。
+static constexpr int kSharedHandleThreads = 8;
+
 static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<int>& board,
                                        int threads, long long& mismatches) {
     struct Res { std::vector<int> cur, best; long long out[6]; };
-    auto oneChunk = [&](uint64_t seed, Res& r) {
+    auto oneChunk = [&p, &board](uint64_t seed, Res& r) {
         r.cur = board; r.best = board;
         long long bestScore = fullEvalCombined(p, r.best.data());
         // ラダーは軽くてよい。ここで確かめたいのは「同じ p を並列に読んで壊れないか」であって
-        // 探索の深さではない（深さはパリティループが担当）。ThreadSanitizer は10〜20倍遅く、
-        // 重いラダーだと競合検査そのものが時間内に回らない。
+        // 探索の深さではない（深さはパリティループが担当）。ThreadSanitizer は重いラダーだと
+        // 遅くなるが、この軽さなら計測上 TSAN ビルドでも通常ビルドと同程度（~50ms）で終わる。
         runSaChunk(p, r.cur.data(), r.best.data(), bestScore, seed, 1.0, 0.5, 0.5, 1, r.out);
     };
     // 逐次で基準を取る
@@ -282,16 +304,32 @@ static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<i
     // 同じ seed を並列で。p は共有＝ここで競合があれば結果がずれるか TSAN が鳴る。
     std::vector<Res> par((size_t)threads);
     std::vector<std::thread> ts;
-    for (int t = 0; t < threads; t++)
-        ts.emplace_back([&, t] { oneChunk((uint64_t)(t + 1) * 9176ULL, par[(size_t)t]); });
+    ts.reserve((size_t)threads);
+    // スレッド生成を全部終えてから join する構造のため、途中で emplace_back が例外を投げると
+    // 既に起動済みの std::thread が joinable のまま巻き戻りで破棄され std::terminate() する。
+    // 生成側で捕捉し、既に起動済みの分は join してから再送出する（クラッシュでなく例外で終わる）。
+    try {
+        for (int t = 0; t < threads; t++)
+            ts.emplace_back([&par, &oneChunk, t] { oneChunk((uint64_t)(t + 1) * 9176ULL, par[(size_t)t]); });
+    } catch (...) {
+        for (auto& th : ts) if (th.joinable()) th.join();
+        throw;
+    }
     for (auto& th : ts) th.join();
+    // out[0]=status（deltaApply の自己整合番兵）。serial/parallel が偶然同じ status!=0 に
+    // なっても、cur/best は書き込まれていない（呼出元は破棄する契約）ため「一致」とは呼べない
+    // ＝この検査本来の対象（自己整合性そのもの）を見逃さないよう status を明示的に含めて比較する。
     bool ok = true;
-    for (int t = 0; t < threads; t++) {
-        if (serial[(size_t)t].cur != par[(size_t)t].cur ||
-            serial[(size_t)t].best != par[(size_t)t].best) { ok = false; break; }
-        for (int x = 0; x < 6; x++)
-            if (serial[(size_t)t].out[x] != par[(size_t)t].out[x]) { ok = false; break; }
-        if (!ok) break;
+    for (int t = 0; t < threads && ok; t++) {
+        const Res& s = serial[(size_t)t];
+        const Res& q = par[(size_t)t];
+        if (s.out[0] != 0 || q.out[0] != 0) {
+            printf("SHARED-HANDLE x%d threads: SELF-CONSISTENCY FAIL (status serial=%lld par=%lld, thread %d)\n",
+                   threads, s.out[0], q.out[0], t);
+            ok = false;
+            break;
+        }
+        ok = s.cur == q.cur && s.best == q.best && std::equal(std::begin(s.out), std::end(s.out), std::begin(q.out));
     }
     printf("SHARED-HANDLE x%d threads: %s\n", threads, ok ? "identical to serial" : "MISMATCH");
     if (!ok) mismatches++;
@@ -658,6 +696,29 @@ int main(int argc, char** argv) {
     for (int ai = 1; ai < argc; ai++)
         if (strncmp(argv[ai], "--expect=", 9) == 0) expects.push_back(argv[ai] + 9);
 
+    // --expect は flat 引数と出現順で1:1対応する契約。件数がずれると、対応の無い flat 側は
+    // 言語跨ぎ照合が無警告でスキップされる（例: 将来フィクスチャを追加して対応する --expect を
+    // 書き忘れると、新フィクスチャだけ照合されないまま「MATCH」扱いの隣でCIが通り続ける）。
+    // 件数不一致を事前に数えて fail-loud にする。
+    if (!expects.empty()) {
+        if (sharedOnly) {
+            // --shared-only は --expect（言語跨ぎ照合）を一切見ない別モードのため、
+            // 両方渡しても黙って --expect 側を無視していた。無言スキップは罠になるので明示する。
+            printf("note: --shared-only ignores --expect= (%zu given) — only the concurrency "
+                   "check runs in this mode.\n", expects.size());
+        } else {
+            int flatCount = 0;
+            for (int ai = 1; ai < argc; ai++)
+                if (strncmp(argv[ai], "--", 2) != 0) flatCount++;
+            if ((int)expects.size() != flatCount) {
+                printf("--expect= count (%zu) does not match flat-file argument count (%d) — "
+                       "each flat file needs exactly one --expect= in the same order, or none.\n",
+                       expects.size(), flatCount);
+                return 2;
+            }
+        }
+    }
+
     // ---- 実データ問題（flat ファイル引数）: 素の盤面＋実運転ノイズ(-1/非canDo)入り盤面 ----
     int flatIdx = 0;
     for (int ai = 1; ai < argc; ai++) {
@@ -665,11 +726,14 @@ int main(int argc, char** argv) {
         MagiProblem p;
         std::vector<int> board;
         if (!loadFlat(argv[ai], p, board)) return 2;
-        // [923bf07 由来] 共有ハンドル並列テスト（実データで）。--shared-only なら以降のパリティは省く。
-        runSharedHandleConcurrency(p, board, 8, mismatches);
-        if (sharedOnly) { flatIdx++; continue; }
+        // [923bf07 由来] 共有ハンドル並列テスト（実データで）。p の形状に依らない構造的性質
+        // （MagiProblem が読み取り専用で共有安全か）の検査なので、複数 flat 引数があっても
+        // 最初の1件だけで十分＝2件目以降は同じことを別データで繰り返すだけの無駄になる。
         const char* expectPath = (flatIdx < (int)expects.size()) ? expects[flatIdx] : nullptr;
+        const bool isFirstFlat = (flatIdx == 0);
         flatIdx++;
+        if (isFirstFlat) runSharedHandleConcurrency(p, board, kSharedHandleThreads, mismatches);
+        if (sharedOnly) continue;
         if (expectPath && !checkCrossLanguage(p, board, expectPath)) mismatches++;
         printf("REAL %s: S=%d T=%d K=%d G=%d rest=%d c1=%zu c2=%zu c41=%zu c42=%zu c3n=%zu\n",
                argv[ai], p.S, p.T, p.K, p.G, p.restIdx, p.cons1.size(), p.cons2.size(),
@@ -684,6 +748,25 @@ int main(int argc, char** argv) {
     }
 
     if (sharedOnly) {
+        // flatIdx==0 means the concurrency check never ran (no flat file argument was
+        // given) — without that, mismatches stays at its initial 0 and we'd silently
+        // report a clean pass despite exercising zero threads and zero code. Fail loudly
+        // instead, since this flag's whole purpose is a ThreadSanitizer-verified check.
+        //
+        // This guard is deliberately scoped to --shared-only rather than hoisted to a
+        // generic "did any short-circuiting flag actually do something" check at the top
+        // of main(): today there is exactly one such flag, and the non-shared-only path
+        // is never vacuous (it always falls through to the synthetic-fixture loop below),
+        // so a general mechanism would have no second caller to justify it (see this file's
+        // own history: --shared-only's own guard was itself missing for a while — 64a8083 —
+        // which is the concrete precedent for *why* this comment exists). If a second
+        // early-exit flag is ever added, copy this pattern (own zero-work guard, own
+        // message) rather than reaching for shared machinery until there are ≥2 real
+        // instances of the same shape to factor out.
+        if (flatIdx == 0) {
+            printf("SHARED-ONLY: no flat file argument given — nothing was checked\n");
+            return 2;
+        }
         printf("SHARED-ONLY: %lld mismatches\n", mismatches);
         return mismatches == 0 ? 0 : 1;
     }

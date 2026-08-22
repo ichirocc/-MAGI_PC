@@ -24,7 +24,19 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-22（3.420.0＝`design_lint.py` P10（3.417.0で新設）が baseline超過(3件)を検出。
+**最終更新**：2026-08-22（3.421.0＝別ブランチ発の PR#110（`tools/native/host_parity_bench.cpp` の
+テスト/CI強化）を受領。ブランチ間で版番号3.366.0/3.367.0が main の別内容と衝突していたため cherry-pick
+はせず、fork点との差分が無いことを確認したうえで内容を手動再適用。①スレッド生成の例外安全化
+（生成中の例外で `std::terminate()` しないよう join してから再送出）②`out[0]`(自己整合番兵)を独立検証
+してから比較（serial/parallel が同じ status!=0 に偶然一致しても「一致」と呼ばない）③`--expect` と
+flat引数の件数不一致を事前検証してfail-loud化 ④`--shared-only` が flat引数無しで無言成功していた
+バグの修正（0件ガード）⑤スレッド数の名前付き定数化・ラムダキャプチャの絞り込み・比較ループの単一化。
+専用CIジョブ `shared-handle-tsan`（TSANビルドで `--shared-only` を実行、~5秒）を新設し、
+`runSharedHandleConcurrency` のコメントが元々主張していた「TSANでビルドすれば検出される」を実際に
+CIが継続的に担保する形へ格上げ。検証: 実ビルド+実行で全5シナリオ（通常フルラン・`--shared-only`単体・
+`--shared-only`+flat無し・`--shared-only`+`--expect`同時・`--expect`件数不一致）を確認、TSANビルドで
+競合なし、通常フルランは golden/sample_v6/blocked_covu の3フィクスチャとも MATCH・4,794,967手・
+0 mismatches で不変。test/tools/CIのみ・engine/重み/スコア不変。3.420.0＝`design_lint.py` P10（3.417.0で新設）が baseline超過(3件)を検出。
 3件目は `Ws1Ops.removeShift` 自身の `newRest` 計算が `restShiftIndex` へ委譲せず記号比較を再実装して
 いたもの（3.416.0由来）。`restShiftIndex(state.copy(shifts=shifts))` へ委譲し baseline 2 に復帰。
 3.419.0＝同じ穴が**探索の入口**（`Problem.initialAssignment`）にもあり、さらにその
