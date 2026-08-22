@@ -168,6 +168,16 @@ object V6FinalPort {
         return if (basePlateau || c3nWallPlateau) stallHardMs else stallMs
     }
 
+    /** [3.422.0/Part B] 「通常」分岐（HARD がまだ構造床に届いていない＝解ける可能性がある局面）の
+     *  停滞閾値 `stallMs` の算出を純関数として抽出（`effectiveStallMs`/`watchdogStagnationFired` と
+     *  同じ理由でユニットテスト可能にする）。`fraction` は既定で `PolishGate.normalStallFraction`
+     *  を読む（Kotlin のデフォルト引数は呼び出し時評価＝`filterC3nIncrease`/`wideC3nBreakDays` と
+     *  同じ配線パターン）。既定 fraction=0.9 は旧来の固定 `searchWindowMs*9/10` と厳密に同一。 */
+    internal fun normalStallMs(
+        searchWindowMs: Long,
+        fraction: Double = PolishGate.normalStallFraction,
+    ): Long = (searchWindowMs * fraction).toLong().coerceAtLeast(20_000L)
+
     fun getAlgorithmLabel(seconds: Int): AlgorithmLabel = when {
         seconds <= 10 -> AlgorithmLabel("⚡", "高速", "短時間でサッと作成", "v5")
         seconds <= 30 -> AlgorithmLabel("★", "標準", "速さと品質のバランス", "v5")
@@ -305,13 +315,31 @@ object V6FinalPort {
         //   <= hardDeadline を構造的に保証する（10 秒以上では minRunMs が支配するため結果は不変）。
         val minRunMs = (budgetMs / 6).coerceIn(8_000L, 45_000L)
             .coerceAtMost(budgetMs)   // 最初の猶予（早すぎる停止を防ぐ）
+        // [後処理予約] 探索が予算を使い切ると後処理(平準化/fair等のkeep-best研磨)が時間切れ(実機8ms)になる。
+        //   末尾に postReserveMs を予約し、探索は searchDeadlineMs で止め、後処理は hardDeadlineMs まで走らせる。
+        //   stall早期終了時は探索が早く返るので後処理は自然に余裕を得る＝無改善の末尾だけを後処理へ回す。
+        //   [3.422.0/ユーザー報告「停滞の早期終了が実質効いていない」＝E-14(3.410.0)の続き] stallMs 等を
+        //   ここより前に計算していたため、判定は budgetMs（探索+後処理を含む全体予算）の割合で決まっていた。
+        //   ところが探索そのものは searchDeadlineMs（=budgetMs から postReserveMs を引いた分）で止まる。
+        //   postReserveMs は 8〜25s の下限クランプを持つため、中程度の予算（実測: 60秒予算）では
+        //   postReserveMs が searchWindow を budgetMs より大きく削り、stallMs(=budgetMs*9/10) が
+        //   searchWindow(=searchDeadlineMs-startMs) そのものを超えてしまい、判定の「達したかどうか」が
+        //   探索終了まで一度も真にならなかった（60秒予算の実測で stallMs=54s > searchWindow=52s を確認）。
+        //   探索が実際に動く区間(searchWindowMs)を基準に計算し直し、この区間を超えないことを構造的に保証する。
+        val postReserveMs = (budgetMs / 12).coerceIn(8_000L, 25_000L).coerceAtMost(budgetMs / 2)
+        val searchDeadlineMs = (hardDeadlineMs - postReserveMs).coerceAtLeast(startMs + minRunMs)
+        val searchWindowMs = searchDeadlineMs - startMs
         // [5分強化] HARD>0（=未配布・配れない）は最優先で解消すべき失敗状態。予算の大半を使って多様化
         //   （多仮説＋HF80 戦略的振動）で HARD クリアを試みる。旧 budgetMs/6(=300s予算で50s) は早すぎ、
-        //   実機ログで HARD=1 のまま 50s で早期終了し残り 250s を捨てていた。→ budgetMs*9/10(=270s)。
+        //   実機ログで HARD=1 のまま 50s で早期終了し残り 250s を捨てていた。→ searchWindowMs*9/10(旧: budgetMs)。
         //   改善が続く限り lastBestImproveMs がリセットされるので、生産的な探索は自然に締切まで走る。
-        val stallMs = (budgetMs * 9 / 10).coerceAtLeast(20_000L)
+        // [3.422.0/ユーザー報告「停滞の早期終了が実質効いていない」・Part B] 固定 9/10 を
+        //   `PolishGate.normalStallFraction`（既定 0.9＝旧値と同一）へ外出し。理由と設計判断は
+        //   PolishGate 側の KDoc 参照。既定では stallMs の値は1ミリ秒も変わらない。算出は
+        //   `normalStallMs`（純関数・同一 object 内）に委譲＝ユニットテスト可能。
+        val stallMs = normalStallMs(searchWindowMs)
         // [5分圧縮] HARD=0到達後（=配布可・残りは研磨のみ）は頭打ちをより早く検知して終了（plateauなので品質は不変）。
-        val stallHardMs = (budgetMs / 8).coerceAtLeast(15_000L)   // 5分予算→37.5s
+        val stallHardMs = (searchWindowMs / 8).coerceAtLeast(15_000L)   // 5分予算→ほぼ37.5s（旧: budgetMs基準）
         // [賢い早期脱出] 証明可能に解消不能な「データ起因HARD」の下限（report.hard と同単位）。
         //   ＝有資格者を全員そのシフトに就けても埋まらない席（構造的covU）。どう探索しても消えない HARD なので、
         //   HARD がこの下限まで到達したら「HARD=0 到達」と同じく頭打ち(plateau)とみなし短い stallHardMs へ移行して
@@ -412,15 +440,11 @@ object V6FinalPort {
             }
             onProgress(phase, report, iters, elapsed)   // ユーザーコールバックはロック外で呼ぶ
         }
-        // [後処理予約] 探索が予算を使い切ると後処理(平準化/fair等のkeep-best研磨)が時間切れ(実機8ms)になる。
-        //   末尾に postReserveMs を予約し、探索は searchDeadlineMs で止め、後処理は hardDeadlineMs まで走らせる。
-        //   stall早期終了時は探索が早く返るので後処理は自然に余裕を得る＝無改善の末尾だけを後処理へ回す。
-        val postReserveMs = (budgetMs / 12).coerceIn(8_000L, 25_000L).coerceAtMost(budgetMs / 2)
-        val searchDeadlineMs = (hardDeadlineMs - postReserveMs).coerceAtLeast(startMs + minRunMs)
         // [3.230.0] 現フェーズ自身にも与える短い個別猶予（フェーズ開始直後の誤検知防止のみが目的。
-        //   真の頭打ち検知は effStall/lastBestImproveMs が単独で担う）。stallMs(=予算9/10)のような
+        //   真の頭打ち検知は effStall/lastBestImproveMs が単独で担う）。stallMs(=探索区間の9/10)のような
         //   長さは不要で、「フェーズがまだ何も試していない」瞬間を除外できれば十分。
-        val phaseGraceMs = (budgetMs / 40).coerceIn(2_000L, 15_000L)
+        //   [3.422.0] postReserveMs/searchDeadlineMs/searchWindowMs は上（stallMs 等の直前）で計算済み。
+        val phaseGraceMs = (searchWindowMs / 40).coerceIn(2_000L, 15_000L)
         // [3.281.0/A] c3n構造壁の遅延証明。best 世代ごとに一度だけ ForbiddenDiag を実行しキャッシュする。
         //   呼出条件（c3nのみ残存＋停滞がstallHardMs超）は呼び出し側でゲート済み＝停滞局面でしか走らない。
         //   liveBest は publishLiveBest(CAS, better()単調) のグローバル最良スナップショット。best報告との

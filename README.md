@@ -24,7 +24,15 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-22（3.421.0＝別ブランチ発の PR#110（`tools/native/host_parity_bench.cpp` の
+**最終更新**：2026-08-22（3.422.0＝ユーザー報告「停滞の早期終了が実質効いていない」への対応。
+Part A（正しさの修正・A/B不要）＝停滞監視の閾値(`stallMs`等)が生の予算(budgetMs)基準のままだったため、
+後処理予約枠の下限クランプが効く中程度の予算帯（実測60秒）で閾値が実際の探索区間を超え、**基準閾値自体が
+到達不能**になっていた（3.410.0のE-14＝上書き倍率の到達不能、よりも重い症状）。算出順序を実際の探索区間
+(`searchWindowMs`)基準へ統一し、実測（54s>52s→46s<52s）で到達可能になったことを確認。Part B（A/B用インフラ・
+既定値は不変）＝`stallMs`算出を純関数`normalStallMs`へ抽出し`PolishGate.normalStallFraction`（既定0.9＝
+旧値と同一）を新設。**A/B自体は本コミット時点で未確定**（18run測定中・採否基準は事前固定・結果は
+次バージョンで確定）。検証: ホストJVM 全537テストgreen（+4新規）・design_lint 0/2件・C++無変更。
+3.421.0＝別ブランチ発の PR#110（`tools/native/host_parity_bench.cpp` の
 テスト/CI強化）を受領。ブランチ間で版番号3.366.0/3.367.0が main の別内容と衝突していたため cherry-pick
 はせず、fork点との差分が無いことを確認したうえで内容を手動再適用。①スレッド生成の例外安全化
 （生成中の例外で `std::terminate()` しないよう join してから再送出）②`out[0]`(自己整合番兵)を独立検証

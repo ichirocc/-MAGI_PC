@@ -153,4 +153,39 @@ class V6FinalPortTest {
         //   bestHard(3) > hardFloor(0)+nonCovU(1) ＝ covU 部分が床超過。
         assertEquals(stallLong, V6FinalPort.effectiveStallMs(3, 0, 1, true, true, stallHard, stallLong))
     }
+
+    // ==== [3.422.0/ユーザー報告「停滞の早期終了が実質効いていない」・Part B]
+    //   normalStallMs＝「通常」分岐の停滞閾値算出（PolishGate.normalStallFraction で外部化）====
+
+    @Test fun normalStallMsDefaultsToNinetyPercentOfSearchWindow() {
+        // 既定 fraction=0.9 は旧来の固定 `searchWindowMs*9/10` と厳密に同一（非破壊の確認）。
+        assertEquals(90_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.9))
+        assertEquals(270_000L, V6FinalPort.normalStallMs(300_000L, fraction = 0.9))
+    }
+
+    @Test fun normalStallMsHonorsTwentySecondFloor() {
+        // searchWindowMs が小さいと 9割でも20秒未満になりうる＝下限20秒でクランプ（旧来どおり）。
+        assertEquals(20_000L, V6FinalPort.normalStallMs(10_000L, fraction = 0.9))
+        assertEquals(20_000L, V6FinalPort.normalStallMs(1_000L, fraction = 0.9))
+    }
+
+    @Test fun normalStallMsScalesWithFraction() {
+        // fraction を下げるほど閾値は比例して下がる（floor に当たらない範囲で）。
+        assertEquals(50_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.5))
+        assertEquals(30_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.3))
+    }
+
+    @Test fun normalStallMsReadsPolishGateByDefault() {
+        // 引数を省略すると PolishGate.normalStallFraction を読む（filterC3nIncrease と同じ
+        //   「デフォルト引数は呼び出し時評価」の配線パターン）。テスト後は必ず既定値へ復元する。
+        val saved = PolishGate.normalStallFraction
+        try {
+            PolishGate.normalStallFraction = 0.5
+            assertEquals(50_000L, V6FinalPort.normalStallMs(100_000L))
+            PolishGate.normalStallFraction = 0.9
+            assertEquals(90_000L, V6FinalPort.normalStallMs(100_000L))
+        } finally {
+            PolishGate.normalStallFraction = saved
+        }
+    }
 }
