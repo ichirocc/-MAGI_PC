@@ -154,25 +154,36 @@ class V6FinalPortTest {
         assertEquals(stallLong, V6FinalPort.effectiveStallMs(3, 0, 1, true, true, stallHard, stallLong))
     }
 
-    // ==== [3.422.0/ユーザー報告「停滞の早期終了が実質効いていない」・Part B]
-    //   normalStallMs＝「通常」分岐の停滞閾値算出（PolishGate.normalStallFraction で外部化）====
+    // ==== [3.422.0/ユーザー報告「停滞の早期終了が実質効いていない」・Part B / 3.424.0で基準是正]
+    //   normalStallMs＝「通常」分岐の停滞閾値算出（PolishGate.normalStallFraction で外部化）。
+    //   意味論=予算×割合、予算基準の値が探索区間内で発火し得ない帯だけ探索区間×割合へフォールバック ====
 
-    @Test fun normalStallMsDefaultsToNinetyPercentOfSearchWindow() {
-        // 既定 fraction=0.9 は旧来の固定 `searchWindowMs*9/10` と厳密に同一（非破壊の確認）。
-        assertEquals(90_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.9))
-        assertEquals(270_000L, V6FinalPort.normalStallMs(300_000L, fraction = 0.9))
+    @Test fun normalStallMsPreservesLegacyBudgetBasisWhenReachable() {
+        // [3.424.0/code-review是正の核心] 予算基準の値が探索区間内なら旧来の budgetMs*9/10 と
+        //   ビット単位で同一（3.422.0 初版はここを 247,500 へ無計測で厳格化していた＝退行）。
+        assertEquals(270_000L, V6FinalPort.normalStallMs(300_000L, 275_000L, fraction = 0.9))
+        assertEquals(216_000L, V6FinalPort.normalStallMs(240_000L, 220_000L, fraction = 0.9))
+        assertEquals(90_000L, V6FinalPort.normalStallMs(100_000L, 91_666L, fraction = 0.9))
+    }
+
+    @Test fun normalStallMsFallsBackToWindowFractionWhenBudgetBasisCannotFire() {
+        // 60秒予算の実測帯（Part A の動機）: 予算×0.9=54s >= 探索区間52s＝発火不能 → 区間×0.9=46.8s。
+        assertEquals(46_800L, V6FinalPort.normalStallMs(60_000L, 52_000L, fraction = 0.9))
+        // 境界: raw == window は「stalled > effStall が探索終了まで真になれない」＝発火不能側に分類。
+        assertEquals(64_800L, V6FinalPort.normalStallMs(80_000L, 72_000L, fraction = 0.9))
     }
 
     @Test fun normalStallMsHonorsTwentySecondFloor() {
-        // searchWindowMs が小さいと 9割でも20秒未満になりうる＝下限20秒でクランプ（旧来どおり）。
-        assertEquals(20_000L, V6FinalPort.normalStallMs(10_000L, fraction = 0.9))
-        assertEquals(20_000L, V6FinalPort.normalStallMs(1_000L, fraction = 0.9))
+        // 小さな予算では両経路とも下限20秒でクランプ（旧来どおり）。
+        assertEquals(20_000L, V6FinalPort.normalStallMs(10_000L, 8_000L, fraction = 0.9))
+        assertEquals(20_000L, V6FinalPort.normalStallMs(20_000L, 12_000L, fraction = 0.5))
     }
 
     @Test fun normalStallMsScalesWithFraction() {
-        // fraction を下げるほど閾値は比例して下がる（floor に当たらない範囲で）。
-        assertEquals(50_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.5))
-        assertEquals(30_000L, V6FinalPort.normalStallMs(100_000L, fraction = 0.3))
+        // fraction を下げるほど閾値は比例して下がり、大予算帯（見直しの条件の再測定対象＝
+        //   blocked_covu 型の実機ログは 300s PORTFOLIO）でもノブが実際に効く。
+        assertEquals(150_000L, V6FinalPort.normalStallMs(300_000L, 275_000L, fraction = 0.5))
+        assertEquals(30_000L, V6FinalPort.normalStallMs(100_000L, 92_000L, fraction = 0.3))
     }
 
     @Test fun normalStallMsReadsPolishGateByDefault() {
@@ -181,11 +192,24 @@ class V6FinalPortTest {
         val saved = PolishGate.normalStallFraction
         try {
             PolishGate.normalStallFraction = 0.5
-            assertEquals(50_000L, V6FinalPort.normalStallMs(100_000L))
+            assertEquals(150_000L, V6FinalPort.normalStallMs(300_000L, 275_000L))
             PolishGate.normalStallFraction = 0.9
-            assertEquals(90_000L, V6FinalPort.normalStallMs(100_000L))
+            assertEquals(270_000L, V6FinalPort.normalStallMs(300_000L, 275_000L))
         } finally {
             PolishGate.normalStallFraction = saved
         }
+    }
+
+    @Test fun normalStallMsRejectsFractionsThatWouldDisableTheWatchdog() {
+        // [3.424.0/code-review指摘] fraction>=1.0 は「閾値>=探索区間」＝Part A が直した到達不能バグの
+        //   再現、NaN は toLong()=0→20秒床への暗黙の崩落＝最凶の早期終了。どちらも丸めず落とす。
+        for (bad in listOf(1.0, 1.5, 0.0, -0.5, Double.NaN, Double.POSITIVE_INFINITY)) {
+            try {
+                V6FinalPort.normalStallMs(300_000L, 275_000L, fraction = bad)
+                org.junit.Assert.fail("fraction=$bad は拒否されるべき")
+            } catch (_: IllegalArgumentException) { /* expected */ }
+        }
+        // 0.999 は有効（フォールバック側でも閾値 < 探索区間が保たれる）。
+        assertEquals(274_725L, V6FinalPort.normalStallMs(300_000L, 275_000L, fraction = 0.999))
     }
 }
