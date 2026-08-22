@@ -271,7 +271,8 @@ object Ws1Ops {
         //   （「休」があればそれ、無ければ先頭）。k が休以外なら旧 newRest（削除後の休index追従＝3.106.0 の
         //   本体であるハードコード0バグの修正）と厳密に一致し、k が休自身でも範囲内の正しい既定へ落ちる
         //   （旧式 `rest>k ? rest-1 : rest` は k==rest のとき削除済みindexを指し、末尾削除では範囲外だった）。
-        val newRest = shifts.indexOfFirst { it.kigou == "休" }.takeIf { it >= 0 } ?: 0
+        //   [P10] 記号比較は `restShiftIndex` の唯一の持ち場に委譲（削除後の一覧を渡すだけ）。
+        val newRest = restShiftIndex(state.copy(shifts = shifts))
         val gs = state.groupShift.map { row -> row.filterIndexed { i, _ -> i != k } }
         val apt = if (state.groupShiftApt.isEmpty()) state.groupShiftApt
         else state.groupShiftApt.map { row -> row.filterIndexed { i, _ -> i != k } }

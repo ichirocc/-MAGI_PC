@@ -24,7 +24,10 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-22（3.419.0＝同じ穴が**探索の入口**（`Problem.initialAssignment`）にもあり、さらにその
+**最終更新**：2026-08-22（3.420.0＝`design_lint.py` P10（3.417.0で新設）が baseline超過(3件)を検出。
+3件目は `Ws1Ops.removeShift` 自身の `newRest` 計算が `restShiftIndex` へ委譲せず記号比較を再実装して
+いたもの（3.416.0由来）。`restShiftIndex(state.copy(shifts=shifts))` へ委譲し baseline 2 に復帰。
+3.419.0＝同じ穴が**探索の入口**（`Problem.initialAssignment`）にもあり、さらにその
 1行上で欠損セルがハードコードの index 0＝勤務シフトへ黙って化けていた。埋める規則を `fillShiftIndex` の
 1箇所に集約し `Ws1Ops` と共有。初期解生成2種は掃討の結果**健全**と確認。3.418.0＝**空きマスを「担当できない
 シフト」で埋めていた件**。`Ws1Ops` の
