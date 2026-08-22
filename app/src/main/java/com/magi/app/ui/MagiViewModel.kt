@@ -578,7 +578,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         autoSave()
     }
 
-    fun load(json: String) = loadAsync(json)
+    fun load(json: String, note: String = "") = loadAsync(json, note = note)
 
     /**
      * [⛏6] ゼロから作る起点。最小の有効データ(1シフト/1グループ/1スタッフ/31日)を
@@ -614,7 +614,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * [fromRestore] は**起動時の復元だけ**が渡す。背景実行の最中にアプリが起動して state を復元するのは
      * 正常な経路なので、ここを塞ぐと退行になる（結果は完了時に `applyBgResult` が別途適用する）。
      */
-    fun loadAsync(rawJson: String, markResult: Boolean = false, fromRestore: Boolean = false) {
+    /**
+     * @param note [3.414.0/I-02] 読込完了メッセージの末尾へ足す一言。CSV取込のように**期間を推定して
+     *   いる**経路が、その事実を利用者へ届けるための唯一の口（旧: 呼出側が `_ui.update` で出しても
+     *   この関数の「読込完了: …」が必ず上書きしていた）。既定は空＝JSON 読込などは従来どおり。
+     */
+    fun loadAsync(rawJson: String, markResult: Boolean = false, fromRestore: Boolean = false, note: String = "") {
         if (!fromRestore && runBlockedByInFlight("読み込み")) return
         val json = MojibakeRepair.repair(rawJson)
         // [3.282.0/新領域ログ監査] 旧: 参照比較(`!==`)のため BOM 除去だけの健全なファイルでも毎回
@@ -694,7 +699,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                                 elapsedMs = 0,
                                 // [3.289.0] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
                                 prevBackupAvailable = prevSaved || it.prevBackupAvailable,
-                                message = "読込完了: ${lp.state.staffCount}名 / ${lp.state.dayCount}日 / ${lp.state.shiftCount}シフト",
+                                message = "読込完了: ${lp.state.staffCount}名 / ${lp.state.dayCount}日 / ${lp.state.shiftCount}シフト$note",
                             )
                         }
                         logOp("I", "読込 ${lp.state.staffCount}名/${lp.state.dayCount}日/${lp.state.shiftCount}シフト")
@@ -2857,6 +2862,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      * 新規データセットとして丸ごと取り込む（[RosterCsvImport]）。それ以外は、既存データへ勤務表だけを
      * 重ねる従来の取込([importCsv])に回す（既存データが無ければ案内のみ）。
      */
+    /**
+     * [3.414.0/I-02] CSV取込は**期間を推定して黙って確定していた**（`RosterCsvImport` はタイトルに
+     * 年月が無ければ当年1月、`FlatRosterCsvImport` は曜日行から当年で最初に一致する月・曜日行が
+     * 無ければ当年1月）。期間は勤務表の根幹で、間違っていれば曜日の平準化も日付表示もずれるのに、
+     * 画面には「N名 / M日」しか出ず**推定したことすら伝わらなかった**。何日からとして取り込んだかを
+     * 必ず出す。挙動は不変＝知らせるだけで、違っていれば設定タブで直せる。
+     */
+    private fun periodNote(startDate: String) =
+        "｜期間は「$startDate」から として取り込みました（CSVに年月が無い場合は推定です。設定タブで直せます）"
+
     fun importCsvSmart(rawText: String) {
         val text = MojibakeRepair.repair(rawText)
         if (com.magi.app.v6.RosterCsvImport.detect(text)) {
@@ -2869,8 +2884,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     logOp("W", "勤務表CSV取込 中止: 凡例なし（シフト${st.shiftCount}種のみ→全公休化を防止）")
                     return
                 }
-                logOp("I", "勤務表CSVを新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット")
-                load(StateParser.serialize(st, st.schedule.toIntArray2D()))
+                // [3.414.0/I-02] 期間はCSVから読めないことがあり、**推定して黙って確定していた**
+                //   （RosterCsvImport はタイトルに年月が無ければ当年1月、FlatRosterCsvImport は
+                //   曜日行から当年で最初に一致する月／曜日行が無ければ当年1月）。期間は勤務表の根幹で、
+                //   間違っていれば曜日の平準化も日付表示もずれる。**何日から取り込んだかを必ず出す**
+                //   （挙動は不変＝知らせるだけ。違っていれば設定タブで直せる）。
+                logOp("I", "勤務表CSVを新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット / 期間${st.startDate}〜${st.endDate}")
+                load(StateParser.serialize(st, st.schedule.toIntArray2D()), periodNote(st.startDate))
                 return
             }
             // テンプレらしいが解析不能 → 既存取込にフォールバック（または案内）。
@@ -2879,8 +2899,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (com.magi.app.v6.FlatRosterCsvImport.detect(text)) {
             val st = runCatching { com.magi.app.v6.FlatRosterCsvImport.parse(text) }.getOrNull()
             if (st != null) {
-                logOp("I", "勤務表CSV(ユニット列形式)を新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット")
-                load(StateParser.serialize(st, st.schedule.toIntArray2D()))
+                // [3.414.0/I-02] この形式は**必ず**期間を推定する（曜日行から当年で最初に一致する月・
+                //   曜日行が無ければ当年1月）。何日から取り込んだかを必ず出す（挙動は不変）。
+                logOp("I", "勤務表CSV(ユニット列形式)を新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット / 期間${st.startDate}〜${st.endDate}（推定）")
+                load(StateParser.serialize(st, st.schedule.toIntArray2D()), periodNote(st.startDate))
                 return
             }
             _ui.update { it.copy(messageIsError = true, message = "CSV取込失敗: ユニット列形式と判定しましたが解析できませんでした。ヘッダ行（ユニット, No, 役職, 氏名, 1, 2, …）と氏名列をご確認ください。") }
@@ -2914,9 +2936,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val kind = if (asWishes) "希望シフト" else "勤務表"
-        logOp("I", "${kind}として新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット" +
+        // [3.414.0/I-02] 期間はタイトルの年月から読むが、無ければ当年1月へ黙って落ちていた。
+        //   何日から取り込んだかを必ず出す（挙動は不変＝知らせるだけ）。
+        logOp("I", "${kind}として新規取込: ${st.staffCount}名 / ${st.dayCount}日 / ${st.shiftCount}シフト / ${st.groupCount}ユニット / 期間${st.startDate}〜${st.endDate}" +
             if (asWishes) "（希望${st.wishes.size}件）" else "")
-        load(StateParser.serialize(st, st.schedule.toIntArray2D()))
+        load(StateParser.serialize(st, st.schedule.toIntArray2D()), periodNote(st.startDate))
     }
 
     fun importCsv(rawText: String) {
