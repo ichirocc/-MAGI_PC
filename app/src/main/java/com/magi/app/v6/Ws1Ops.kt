@@ -239,13 +239,13 @@ object Ws1Ops {
      *  （削除すると次のシフトが index0 となり全休日が無言で勤務へ変わるため禁止＝P1修正/レビュー指摘）. */
     fun removeShift(state: MagiState, sched: Array<IntArray>, k: Int): Ws1Result {
         if (k !in state.shifts.indices || state.shifts.size <= 1) return Ws1Result(state, sched)
-        // [P1修正] 休シフト自体の削除は禁止（no-op）。呼出側(ViewModel)がメッセージを出す。
-        val rest = restShiftIndex(state)
-        if (k == rest) return Ws1Result(state, sched)
-        // [P1修正] 削除シフトのセルは「休」へ。旧実装はハードコードの 0 で、休が index0 でないデータや
-        //   休より前のシフトを消した場合に勤務シフトへ化けていた。削除後の休indexへ正しく追従させる。
-        val newRest = if (rest > k) rest - 1 else rest
         val shifts = state.shifts.filterIndexed { i, _ -> i != k }
+        // [3.416.0/方針「休は通常のシフト定義」] 旧: 休シフト自体の削除を no-op で禁止（3.106.0）していたが
+        //   撤廃＝休も他シフトと同じ編集規則。削除セルの行き先は**削除後の一覧**で解決した既定シフト
+        //   （「休」があればそれ、無ければ先頭）。k が休以外なら旧 newRest（削除後の休index追従＝3.106.0 の
+        //   本体であるハードコード0バグの修正）と厳密に一致し、k が休自身でも範囲内の正しい既定へ落ちる
+        //   （旧式 `rest>k ? rest-1 : rest` は k==rest のとき削除済みindexを指し、末尾削除では範囲外だった）。
+        val newRest = shifts.indexOfFirst { it.kigou == "休" }.takeIf { it >= 0 } ?: 0
         val gs = state.groupShift.map { row -> row.filterIndexed { i, _ -> i != k } }
         val apt = if (state.groupShiftApt.isEmpty()) state.groupShiftApt
         else state.groupShiftApt.map { row -> row.filterIndexed { i, _ -> i != k } }

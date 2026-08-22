@@ -168,7 +168,7 @@ class SessionRegressionTest {
         assertTrue("weighted 非増の条件で弾かれる", !(nvW <= curW))
     }
 
-    // ---- レビュー指摘P1: 休シフト削除でセルが勤務に化けない／休自体は削除禁止 ----
+    // ---- レビュー指摘P1(3.106.0)＋方針転換(3.416.0): 休シフトも通常の編集規則 ----
 
     private fun threeShiftState() = MagiState(
         startDate = "2026-06-01", endDate = "2026-06-03",
@@ -185,16 +185,54 @@ class SessionRegressionTest {
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
     )
 
-    @Test fun removeShiftMapsDeletedCellsToRestAndBlocksRestDeletion() {
+    @Test fun removeShiftMapsDeletedCellsToRest() {
         val st = threeShiftState()
         val sched = arrayOf(intArrayOf(0, 1, 2))
-        // A(idx0) を削除: A のセルは休(削除後 idx0)へ、休(1)→0、B(2)→1 に追従
+        // A(idx0) を削除: A のセルは休(削除後 idx0)へ、休(1)→0、B(2)→1 に追従（3.106.0 の本体＝
+        // ハードコード0で勤務シフトへ化けるバグの回帰）
         val r = Ws1Ops.removeShift(st, sched, 0)
         assertEquals("休", r.state.shifts[0].kigou)
         assertEquals(listOf(0, 0, 1), r.schedule[0].toList())
-        // 休(idx1) 自体の削除は no-op（全休日が勤務へ化けるため禁止）
-        val blocked = Ws1Ops.removeShift(st, sched, 1)
-        assertEquals(3, blocked.state.shifts.size)
+    }
+
+    /** [3.416.0/方針「休は通常のシフト定義」] 休シフト自体も他シフトと同じ規則で削除できる。
+     *  削除セルは**削除後の一覧**の既定シフト（「休」があればそれ、無ければ先頭）へ。
+     *  旧実装（3.106.0）はここを no-op で禁止していた＝この2件は方針転換の回帰ガード。 */
+    @Test fun removeShiftAllowsDeletingTheRestShiftItself() {
+        val st = threeShiftState()   // shifts = [A, 休, B]
+        val sched = arrayOf(intArrayOf(0, 1, 2))
+        val r = Ws1Ops.removeShift(st, sched, 1)   // 休(idx1) を削除
+        assertEquals(2, r.state.shifts.size)
+        assertEquals(listOf("A", "B"), r.state.shifts.map { it.kigou })
+        // 削除後の一覧に「休」が無い＝既定は先頭(A=0)。休セル(1)→0、B(2)→1 へ追従。範囲外や-1は出ない。
+        assertEquals(listOf(0, 0, 1), r.schedule[0].toList())
+        assertTrue(r.schedule[0].all { it in 0 until 2 })
+    }
+
+    /** 休が末尾indexのとき削除しても範囲外セルを作らない（旧式 `rest>k ? rest-1 : rest` は
+     *  k==rest の末尾削除で削除済みindexを指し、正規化で -1 センチネル＝必須違反化していた形）。 */
+    @Test fun removeShiftDeletingTrailingRestStaysInBounds() {
+        val st = threeShiftState().copy(
+            shifts = listOf(Shift("A", "A", "1", ""), Shift("B", "B", "1", ""), Shift("休", "休", "", "")),
+            schedule = listOf(listOf(0, 1, 2)),
+        )
+        val sched = arrayOf(intArrayOf(0, 1, 2))
+        val r = Ws1Ops.removeShift(st, sched, 2)   // 末尾の休を削除
+        assertEquals(listOf("A", "B"), r.state.shifts.map { it.kigou })
+        assertEquals(listOf(0, 1, 0), r.schedule[0].toList())   // 休セルは先頭(A)へ
+        assertTrue(r.schedule[0].all { it in 0 until 2 })
+    }
+
+    /** [3.416.0] 休シフトの改名も通常経路＝制約参照（記号の文字列）が renameShiftInConstraints で追従し、
+     *  「休」記号が消えた場合の既定シフト解決は先頭へ倒れる（検査2g が案内する既定挙動）。 */
+    @Test fun editShiftRenamingRestFollowsConstraintsLikeAnyShift() {
+        val st = threeShiftState().copy(
+            cons1 = listOf(com.magi.app.model.C1Row("5", "休", "2")),
+        )
+        val r = Ws1Ops.editShift(st, 1, "公休", "公", "", "")
+        assertEquals("公", r.shifts[1].kigou)
+        assertEquals("公", r.cons1[0].shiftKigou)          // 窓ルールが改名へ追従＝同じシフトを指し続ける
+        assertEquals(0, restShiftIndex(r))                  // 「休」記号は消えた＝既定解決は先頭へ
     }
 
     // ---- 判読性/レビュー指摘: 同一セルの複数違反で「重い族」のマークが軽い族に上書きされない ----

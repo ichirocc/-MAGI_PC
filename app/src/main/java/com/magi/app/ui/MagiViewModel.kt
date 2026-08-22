@@ -2526,18 +2526,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun ws1EditShift(k: Int, name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
         if (symbolTaken(st.shifts.map { it.kigou }, kigou, "シフト", exceptIndex = k)) return
-        // [R-04] 「休」記号のシフトを他の記号へ改名すると、restShiftIndex（休index解決の単一ソース）が
-        //  記号一致で見つからなくなり `?: 0`（3.103.0の意図的フォールバック）で先頭シフトへ黙って倒れる。
-        //  削除は removeShift が既に禁止しているのに、改名だけ入口チェックが抜けていた（外部レビュー R-04）。
-        //  「休」でない扱いへ本当に変えたいケースがこのデータモデルに存在しない（休の判定は記号一致のみ）ため、
-        //  削除と同じ姿勢で入口ブロックする。「休」が無いデータ自体は検査2g が別途案内する。
-        val kt = kigou.trim()
-        if (st.shifts.getOrNull(k)?.kigou == "休" && kt != "休") {
-            notify("「休」シフトの記号は変更できません（休の判定は記号一致のため、変更すると休の扱いが失われます）", "W")
-            return
-        }
-        logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kt}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
-        applyStructure(Ws1Ops.editShift(st, k, name.trim(), kt, need1.trim(), need2.trim()))
+        // [3.416.0] 3.415.0 の R-04 ガード（休シフトの改名禁止）はユーザー方針「休は通常のシフト定義」により
+        //   撤回。改名は他シフトと同じ経路＝renameShiftInConstraints が制約参照を追従させ、「休」記号が
+        //   無くなった場合の帰結（既定シフト解決が先頭へ倒れる）は検査2g が案内する。
+        logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
+        applyStructure(Ws1Ops.editShift(st, k, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
     }
 
     /** [必要人数カレンダー] シフト既定のneed1/need2だけをその場で編集する（name/kigouは不変）。
@@ -2725,12 +2718,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun ws1RemoveShift(k: Int) {
         val st = state ?: return
         val sched = currentSchedule ?: return
-        // [P1修正/レビュー指摘] 休シフトの削除は Ws1Ops 側で no-op（全休日が勤務に化けるため禁止）。理由を提示する。
-        if (k == com.magi.app.v6.restShiftIndex(st)) {
-            _ui.update { it.copy(messageIsError = true, message = "「休」シフトは削除できません（全ての休日が別のシフトに変わってしまうため）") }
-            return
-        }
-        logOp("I", "シフト削除: ${opSy(k)}（このシフトのマスは休へ・希望も削除）")
+        // [3.416.0/方針「休は通常のシフト定義」] 旧: 休シフトの削除を入口で拒否（3.106.0）。撤廃＝
+        //   休も他シフトと同じ編集規則。削除セルは残りの一覧の「休」（無ければ先頭シフト）へ。
+        logOp("I", "シフト削除: ${opSy(k)}（このシフトのマスは休（無ければ先頭シフト）へ・希望も削除）")
         applyStructure(Ws1Ops.removeShift(st, sched, k))
     }
 

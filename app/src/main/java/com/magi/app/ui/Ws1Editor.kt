@@ -120,8 +120,8 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
             LoadoutHeader("SQUAD", "班／グループ (${v.groups.size})")
             Text("編集で改名。削除すると所属者は先頭グループへ移動。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // [不具合報告「グループが削除出来ない」対応] 残り1グループの場合、削除ボタンが理由の説明なく
-            //   消えるだけだった（担当可否の分類が無くなるため意図的に不可＝休シフトの削除不可と同型の
-            //   ガードだが、そちらには理由メッセージがある一方こちらは無言で消えるだけだった）。理由を明示。
+            //   消えるだけだった（担当可否の分類が無くなるため意図的に不可）。理由を明示。
+            //   ※旧記述が引き合いに出していた「休シフトの削除不可」は 3.416.0 の方針（休は通常のシフト定義）で撤廃済み。
             if (v.groups.size <= 1) {
                 Text("最後の1グループは削除できません（担当可否の分類が無くなるため）。", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
             }
