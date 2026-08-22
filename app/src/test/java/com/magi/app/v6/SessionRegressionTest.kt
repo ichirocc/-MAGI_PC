@@ -313,6 +313,49 @@ class SessionRegressionTest {
         assertEquals("元の日は不変", 1, grown.schedule[0][1])
     }
 
+    @Test fun filledCellsAreAlwaysAShiftTheStaffMayActuallyWork() {
+        // [3.416.0] 空きマスを埋めるとき、**その職員が担当できないシフトを置かない**。
+        //   旧実装は担当可否を見ずに一律「休」で埋めていたため、担当可否から休を外した群
+        //   （UI の担当可否チップで実際にできる操作）に職員を足す／期間を伸ばすと、
+        //   その全日が groupViol(HARD 重み10000) になった。埋めた瞬間に必須違反が並ぶ。
+        val st = MagiState(
+            startDate = "2026-08-01", endDate = "2026-08-02",
+            shifts = listOf(Shift("A", "A", "0", ""), Shift("B", "B", "0", ""), Shift("休", "休", "0", "")),
+            groups = listOf(Group("G", "G")),
+            staff = listOf(Staff("s0", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1, 0)),   // この群は休を担当できない
+            groupShiftApt = listOf(listOf("", "", "")),
+            schedule = listOf(listOf(0, 1)),
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        assertEquals("前提: 休は index 2 で、この群は担当できない", 2, restShiftIndex(st))
+        assertTrue("前提: 群0 は休を担当できない", !Problem(st).canDo(0, 2))
+
+        val added = Ws1Ops.addStaff(st, st.schedule.toIntArray2D(), "s1", 0)
+        val pAdd = Problem(added.state)
+        assertTrue("追加した職員の全日が担当可能なシフト",
+            added.schedule[1].all { pAdd.canDo(1, it) })
+        assertEquals("担当外シフトを置いていない（groupViol=0）",
+            0, UnifiedViolationChecker.check(added.state, added.schedule).breakdown["groupViol"] ?: 0)
+
+        val grown = Ws1Ops.resizeDays(st, st.schedule.toIntArray2D(), 4)
+        val pGrow = Problem(grown.state)
+        assertTrue("伸ばした日も担当可能なシフト",
+            grown.schedule[0].all { pGrow.canDo(0, it) })
+        assertEquals("元の日は不変", 1, grown.schedule[0][1])
+
+        // 3つ目の埋め込み経路: シフト削除で空いたマス（s0 は day0 に A が入っている）。
+        val removed = Ws1Ops.removeShift(st, st.schedule.toIntArray2D(), 0)
+        val pRem = Problem(removed.state)
+        assertTrue("消したシフトのマスも担当可能なシフト",
+            removed.schedule[0].all { pRem.canDo(0, it) })
+        assertEquals("担当外シフトを置いていない（groupViol=0）",
+            0, UnifiedViolationChecker.check(removed.state, removed.schedule).breakdown["groupViol"] ?: 0)
+    }
+
     @Test fun componentImportReportsUnreadableRowsInsteadOfDroppingThem() {
         // H-02: 希望CSVは既存を全置換する。読めない行を黙って捨てると、その分の希望が消える。
         val st = MagiState(

@@ -174,15 +174,35 @@ object Ws1Ops {
         return state.copy(groups = groups, groupShift = gs, groupShiftApt = apt)
     }
 
-    /** Add a staff (index S). The working schedule gains a row of 休.
+    /**
+     * 空きマスを埋めるシフト index。
+     *
+     * [3.418.0] 旧: 埋める側は一律 `restShiftIndex` で、**その職員がそのシフトを担当できるかを見て
+     * いなかった**。担当可否から休を外した群（UI の担当可否チップで実際にできる操作）に職員を足す／
+     * 期間を伸ばす／シフトを消すと、**埋めたマス全部が groupViol(HARD 重み10000)** になった
+     * （31日なら1クリックで必須違反31件）。最適化を回せば `hf67HardRepair` が正規化するが、
+     * その前に画面が真っ赤になる＝利用者には理由が分からない。
+     *
+     * 休を担当できるならそのまま休（需要が無く「まだ決めていない」を表すのに最も無難で、実データ3件は
+     * 全群が休を担当できるため**挙動は変わらない**）。できなければ、その群が担当できる先頭のシフト。
+     * どちらも無い（担当可能シフトが1つも無い群）なら休へ倒す＝ここで throw すると、その不整合を
+     * 直しに来た編集操作そのものがクラッシュする。この state は検査2k/2l が別途指摘する。
+     */
+    private fun fillShift(groupShiftRow: List<Int>?, rest: Int): Int {
+        if (groupShiftRow == null) return rest
+        if (groupShiftRow.getOrNull(rest) == 1) return rest
+        return groupShiftRow.indexOfFirst { it == 1 }.takeIf { it >= 0 } ?: rest
+    }
+
+    /** Add a staff (index S). The working schedule gains a row of the group's fill shift.
      *  [3.329.0/外部レビュー H-01] 旧コメントは「休/idx0」と両者を同一視していたが、**休は記号で解決する**
      *  （`restShiftIndex`）。休が先頭でないデータでは、新しい職員の空き日が丸ごと勤務シフトになっていた。 */
     fun addStaff(state: MagiState, sched: Array<IntArray>, name: String, groupIdx: Int): Ws1Result {
         val t = if (sched.isNotEmpty()) sched[0].size else state.dayCount
         val gi = groupIdx.coerceIn(0, (state.groups.size - 1).coerceAtLeast(0))
         val staff = state.staff + Staff(name, gi)
-        val rest = restShiftIndex(state)
-        val newSched = copyGrid(sched) + IntArray(t) { rest }
+        val fill = fillShift(state.groupShift.getOrNull(gi), restShiftIndex(state))
+        val newSched = copyGrid(sched) + IntArray(t) { fill }
         val ns = state.copy(staff = staff)
         return Ws1Result(withSchedule(ns, newSched), newSched)
     }
@@ -196,7 +216,9 @@ object Ws1Ops {
         val t = newT.coerceIn(1, 31)
         val rest = restShiftIndex(state)
         val newSched = Array(sched.size) { i ->
-            IntArray(t) { j -> if (j < sched[i].size) sched[i][j] else rest }
+            // [3.418.0] 伸ばした日も**その職員の群が担当できる**シフトで埋める（旧: 一律 休）。
+            val fill = fillShift(state.groupShift.getOrNull(state.staff.getOrNull(i)?.groupIdx ?: -1), rest)
+            IntArray(t) { j -> if (j < sched[i].size) sched[i][j] else fill }
         }
         fun dayOf(key: String) = key.split(",").getOrNull(1)?.toIntOrNull() ?: -1
         val need1 = state.needDay1.filterKeys { dayOf(it) in 0 until t }
@@ -232,11 +254,12 @@ object Ws1Ops {
     //   名前が「削除できるか」なので、将来この関数を信じた呼出側は逆の答えを受け取る＝
     //   このリポジトリが繰り返し踏んだ「写した側だけ取り残される」型の地雷だった。
 
-    /** Remove shift [k]: drop the shift; schedule cells ==k -> 休（削除後のindexへ追従）, >k decremented;
+    /** Remove shift [k]: drop the shift; schedule cells ==k -> the post-deletion default shift
+     *  (削除後一覧の「休」があればそれ、無ければ担当可能な先頭シフトへ＝[fillShift]), >k decremented;
      *  wish values ==k dropped, >k decremented; groupShift/apt lose column k; needDay (axis k) and
      *  staffRange (axis k) re-indexed. Constraints referencing the removed kigou simply stop
-     *  resolving (kept verbatim). No-op if only one shift remains, or if [k] is the 休 shift itself
-     *  （削除すると次のシフトが index0 となり全休日が無言で勤務へ変わるため禁止＝P1修正/レビュー指摘）. */
+     *  resolving (kept verbatim). No-op only if it's the last remaining shift（[3.416.0/方針「休は通常の
+     *  シフト定義」] 旧: 休シフト自体の削除も禁止していたが撤廃済み）. */
     fun removeShift(state: MagiState, sched: Array<IntArray>, k: Int): Ws1Result {
         if (k !in state.shifts.indices || state.shifts.size <= 1) return Ws1Result(state, sched)
         val shifts = state.shifts.filterIndexed { i, _ -> i != k }
@@ -250,7 +273,10 @@ object Ws1Ops {
         val apt = if (state.groupShiftApt.isEmpty()) state.groupShiftApt
         else state.groupShiftApt.map { row -> row.filterIndexed { i, _ -> i != k } }
         val newSched = Array(sched.size) { r ->
-            IntArray(sched[r].size) { j -> val v = sched[r][j]; if (v == k) newRest else if (v > k) v - 1 else v }
+            // [3.418.0] 消したシフトのマスも**その職員の群が担当できる**シフトへ（旧: 一律 休）。
+            //   担当可否は列を消したあとの `gs` で見る（index がずれているため）。
+            val fill = fillShift(gs.getOrNull(state.staff.getOrNull(r)?.groupIdx ?: -1), newRest)
+            IntArray(sched[r].size) { j -> val v = sched[r][j]; if (v == k) fill else if (v > k) v - 1 else v }
         }
         val wishes = LinkedHashMap<String, Int>()
         for ((key, v) in state.wishes) { if (v == k) continue; wishes[key] = if (v > k) v - 1 else v }
