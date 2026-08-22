@@ -2526,8 +2526,18 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun ws1EditShift(k: Int, name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
         if (symbolTaken(st.shifts.map { it.kigou }, kigou, "シフト", exceptIndex = k)) return
-        logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
-        applyStructure(Ws1Ops.editShift(st, k, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
+        // [R-04] 「休」記号のシフトを他の記号へ改名すると、restShiftIndex（休index解決の単一ソース）が
+        //  記号一致で見つからなくなり `?: 0`（3.103.0の意図的フォールバック）で先頭シフトへ黙って倒れる。
+        //  削除は removeShift が既に禁止しているのに、改名だけ入口チェックが抜けていた（外部レビュー R-04）。
+        //  「休」でない扱いへ本当に変えたいケースがこのデータモデルに存在しない（休の判定は記号一致のみ）ため、
+        //  削除と同じ姿勢で入口ブロックする。「休」が無いデータ自体は検査2g が別途案内する。
+        val kt = kigou.trim()
+        if (st.shifts.getOrNull(k)?.kigou == "休" && kt != "休") {
+            notify("「休」シフトの記号は変更できません（休の判定は記号一致のため、変更すると休の扱いが失われます）", "W")
+            return
+        }
+        logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kt}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
+        applyStructure(Ws1Ops.editShift(st, k, name.trim(), kt, need1.trim(), need2.trim()))
     }
 
     /** [必要人数カレンダー] シフト既定のneed1/need2だけをその場で編集する（name/kigouは不変）。
