@@ -46,7 +46,12 @@ object RosterCsvImport {
      *   ※元表の明示「休」セルは希望休として wishes に入り、空セル（通常の休み）と区別される。
      */
     fun parse(text: String, asWishes: Boolean = false): MagiState? {
-        val rows = parseCsvRows(text)
+        val parsed = parseCsvFull(text)
+        // [3.413.0/I-08] 引用符が閉じていないCSVは、開いた引用符以降が1セルへ吸い込まれ**残りの行が
+        //   丸ごと消える**。この経路は勤務表そのものを丸ごと差し替えるので、黙って一部だけ取り込むと
+        //   「なぜこの人の勤務が消えたのか」が説明できない。書式の誤りとして取込を断る。
+        if (parsed.unclosedQuote) return null
+        val rows = parsed.rows
         if (rows.isEmpty()) return null
         fun cell(r: List<String>, idx: Int): String = r.getOrElse(idx) { "" }.trim()
         fun normName(s: String): String = s.replace('　', ' ').trim().replace(Regex("\\s+"), " ")
@@ -198,7 +203,12 @@ object FlatRosterCsvImport {
     }
 
     fun parse(text: String, asWishes: Boolean = false): MagiState? {
-        val rows = parseCsvRows(text)
+        val parsed = parseCsvFull(text)
+        // [3.413.0/I-08] 引用符が閉じていないCSVは、開いた引用符以降が1セルへ吸い込まれ**残りの行が
+        //   丸ごと消える**。この経路は勤務表そのものを丸ごと差し替えるので、黙って一部だけ取り込むと
+        //   「なぜこの人の勤務が消えたのか」が説明できない。書式の誤りとして取込を断る。
+        if (parsed.unclosedQuote) return null
+        val rows = parsed.rows
         if (rows.isEmpty()) return null
         fun cell(r: List<String>, i: Int): String = r.getOrElse(i) { "" }.trim()
         fun normName(s: String): String = s.replace('　', ' ').trim().replace(Regex("\\s+"), " ")
@@ -351,7 +361,10 @@ object ScheduleCsvBridge {
     }
 
     fun parse(text: String, state: MagiState, base: Array<IntArray>): ScheduleRunResult {
-        val rows = parseCsvRows(text)
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える。ここは非nullを返す経路なので
+        //   断れない代わりに旗を立て、呼出側が「一致が少ない」と「消えた」を区別できるようにする。
+        val parsedAll = parseCsvFull(text)
+        val rows = parsedAll.rows
         val p = Problem(state)
         val schedule = normalizeSchedule(base, p)
         // [P1修正/レビュー指摘] 重複した氏名/記号は「最初の1件」に解決する（Problem.shiftIdxOf=indexOfFirst と同じ）。
@@ -396,6 +409,7 @@ object ScheduleCsvBridge {
         return ScheduleRunResult(
             schedule, report.copy(logs = logs), matched = matched,
             unknownCells = unknownTotal, unknownSymbols = unknownTop,
+            unclosedQuote = parsedAll.unclosedQuote,
         )
     }
 }
@@ -437,7 +451,18 @@ internal fun firstWinsMap(n: Int, key: (Int) -> String): Map<String, Int> {
     return m
 }
 
-private fun parseCsvRows(raw: String): List<List<String>> {
+/**
+ * [3.413.0/I-08] CSV の解析結果。旧実装は行だけを返し、**引用符が閉じないまま入力が終わっても
+ * 何も検出しなかった**（`inQuote` が true のまま抜ける）。この場合、開いた引用符以降の全文が
+ * 1セルへ吸い込まれ**残りの行が丸ごと消える**のに、呼出側からは「短いCSV」と区別が付かない。
+ * 走査器を2つ作ると必ずドリフトするので、既存のループから両方を返す形にして
+ * [parseCsvRows] はその行だけを取り出す薄い委譲にする（既存の呼出は無変更）。
+ */
+private class CsvParse(val rows: List<List<String>>, val unclosedQuote: Boolean)
+
+private fun parseCsvRows(raw: String): List<List<String>> = parseCsvFull(raw).rows
+
+private fun parseCsvFull(raw: String): CsvParse {
     // UTF-8 BOM(U+FEFF) 除去: 付いていると先頭セルが "\uFEFFユニット" 等になり、trim()でも消えず
     //   ヘッダ判定(== "ユニット" 等)が失敗して取り込めなくなる。Excel/UTF-8出力由来で頻出。
     val text = if (raw.isNotEmpty() && raw[0] == '\uFEFF') raw.substring(1) else raw
@@ -471,7 +496,7 @@ private fun parseCsvRows(raw: String): List<List<String>> {
         row.add(cell.toString())
         rows.add(ArrayList(row))
     }
-    return rows
+    return CsvParse(rows, inQuote)
 }
 
 /**
@@ -526,7 +551,11 @@ object StaffCsvIO {
 
     /** @return Pair(更新後state, 一致件数) または null（解析不能/一致0件）。 */
     fun parse(text: String, state: MagiState): Pair<MagiState, Int>? {
-        val rows = parseCsvRows(text)
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝**全置換の取込では
+        //   「消えた」ことが取込結果からは分からない**。書式の誤りとして断る。
+        val parsed0 = parseCsvFull(text)
+        if (parsed0.unclosedQuote) return null
+        val rows = parsed0.rows
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val gByK = firstWinsMap(state.groups.size) { state.groups[it].kigou.trim() }
@@ -550,16 +579,30 @@ object StaffCsvIO {
     }
 
     /** スタッフ一覧 upsert の結果（新規追加分の勤務表行も反映済み）。 */
-    class StaffUpsertResult(val state: MagiState, val schedule: Array<IntArray>, val updated: Int, val added: Int)
+    /**
+     * @param unknownGroups 空でないのに既存のグループ記号と一致しなかったセル（記号→件数）。
+     *   新規職員は先頭グループへ、既存職員は現状維持へ**黙って**落ちるため、呼出側が必ず知らせる。
+     * @param unknownSkills 同じくスキル群。未所属(-1)へ落ちる。
+     */
+    class StaffUpsertResult(
+        val state: MagiState, val schedule: Array<IntArray>, val updated: Int, val added: Int,
+        val unknownGroups: Map<String, Int> = emptyMap(), val unknownSkills: Map<String, Int> = emptyMap(),
+    )
 
     /**
      * [氏名,グループ,スキル] を upsert で取込: 既存氏名は所属群/スキルを更新、未知の氏名は
      * 新規スタッフとして追加し勤務表に休(0)の行を1行足す。氏名は空白無視で照合。
-     * 群/スキルは記号(kigou)照合、未知なら新規は群0/スキル0・既存は現状維持。
+     * 群/スキルは記号(kigou)照合、未知なら新規は先頭群/未所属(-1)・既存は現状維持。
+     * [3.413.0/I-07] 未知の記号は [StaffUpsertResult.unknownGroups]/[StaffUpsertResult.unknownSkills] に
+     * 記録する（空欄＝指定なしと、誤記＝解決できなかった、を呼出側が区別できるようにするため）。
      * @return StaffUpsertResult、または null（解析不能/更新0かつ追加0）。
      */
     fun parseUpsert(text: String, state: MagiState, sched: Array<IntArray>): StaffUpsertResult? {
-        val rows = parseCsvRows(text)
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝**全置換の取込では
+        //   「消えた」ことが取込結果からは分からない**。書式の誤りとして断る。
+        val parsed0 = parseCsvFull(text)
+        if (parsed0.unclosedQuote) return null
+        val rows = parsed0.rows
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val gByK = firstWinsMap(state.groups.size) { state.groups[it].kigou.trim() }
@@ -570,6 +613,12 @@ object StaffCsvIO {
         val seenNew = HashMap<String, Int>()
         var updated = 0
         var added = 0
+        // [3.413.0/I-07] 空でないのに解決できなかった群/スキル記号を数える。旧実装は `gi ?: 0`（新規＝
+        //   先頭グループ）・`gi ?: cur.groupIdx`（既存＝現状維持）で、**空欄と誤記が見分けられない**まま
+        //   黙って落ちていた。所属グループは担当できるシフトを決めるので、誤記が通ると「なぜこの人が
+        //   この勤務に入るのか」が説明できない盤面になる。3.410.0 の勤務表CSV未知記号と同じ形で知らせる。
+        val unknownG = LinkedHashMap<String, Int>()
+        val unknownS = LinkedHashMap<String, Int>()
         // [3.314.0] 実ヘッダ「氏名」の一致で判定する。この経路は未知名を**新規追加**するため、旧実装は
         //   「ヘッダ文字列を職員として登録しない」保守のために既知名一致のときだけ先頭行を本体へ入れて
         //   おり、**先頭が新規職員のヘッダ無CSVはその1件を黙って捨てて**いた。厳密なヘッダ判定なら
@@ -579,8 +628,12 @@ object StaffCsvIO {
             val rawName = r.getOrElse(0) { "" }.trim()
             if (rawName.isEmpty()) continue
             val key = nameMatchKey(rawName)
-            val gi = gByK[r.getOrElse(1) { "" }.trim()]
-            val si = skByK[r.getOrElse(2) { "" }.trim()]
+            val gRaw = r.getOrElse(1) { "" }.trim()
+            val sRaw = r.getOrElse(2) { "" }.trim()
+            val gi = gByK[gRaw]
+            val si = skByK[sRaw]
+            if (gi == null && gRaw.isNotEmpty()) unknownG[gRaw] = (unknownG[gRaw] ?: 0) + 1
+            if (si == null && sRaw.isNotEmpty()) unknownS[sRaw] = (unknownS[sRaw] ?: 0) + 1
             val existing = nameToI[key]
             if (existing != null) {
                 val cur = newStaff[existing]
@@ -607,7 +660,7 @@ object StaffCsvIO {
             if (i < sched.size) sched[i].copyOf() else extraRows[i - sched.size]
         }
         val ns = state.copy(staff = newStaff, schedule = newSched.map { it.toList() })
-        return StaffUpsertResult(ns, newSched, updated, added)
+        return StaffUpsertResult(ns, newSched, updated, added, unknownG, unknownS)
     }
 }
 
@@ -630,7 +683,11 @@ object WishesCsvIO {
 
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
     fun parse(text: String, state: MagiState): ComponentImport? {
-        val rows = parseCsvRows(text)
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝**全置換の取込では
+        //   「消えた」ことが取込結果からは分からない**。書式の誤りとして断る。
+        val parsed0 = parseCsvFull(text)
+        if (parsed0.unclosedQuote) return null
+        val rows = parsed0.rows
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         val symToK = firstWinsMap(state.shifts.size) { state.shifts[it].kigou.trim() }
@@ -689,7 +746,11 @@ object ConstraintsCsvIO {
 
     /** @return Pair(更新後state, 取込件数) または null（解析不能/0件）。 */
     fun parse(text: String, state: MagiState): ComponentImport? {
-        val rows = parseCsvRows(text)
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝**全置換の取込では
+        //   「消えた」ことが取込結果からは分からない**。書式の誤りとして断る。
+        val parsed0 = parseCsvFull(text)
+        if (parsed0.unclosedQuote) return null
+        val rows = parsed0.rows
         if (rows.isEmpty()) return null
         val nameToI = firstWinsMap(state.staff.size) { nameMatchKey(state.staff[it].name) }
         fun c(r: List<String>, i: Int) = r.getOrElse(i) { "" }.trim()

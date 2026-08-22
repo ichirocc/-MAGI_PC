@@ -5,6 +5,9 @@ import com.magi.app.model.MagiState
 import com.magi.app.model.Shift
 import com.magi.app.model.Staff
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -156,5 +159,67 @@ class ReviewFixes3410Test {
         assertThrows(IllegalArgumentException::class.java) { de.reset(arrayOf(intArrayOf(0, 99))) }      // 値が範囲外
         assertThrows(IllegalArgumentException::class.java) { de.apply(0, 0, 99) }                         // nw が範囲外
         de.reset(arrayOf(intArrayOf(0, 1)))   // 正常な盤面は通る
+    }
+
+    // ===== I-07: 職員一覧CSV の未知グループ/スキル記号を記録する =====
+    // 旧: `gi ?: 0`（新規＝先頭グループ）・`gi ?: cur.groupIdx`（既存＝現状維持）で、空欄と誤記が
+    //   見分けられないまま黙って落ちていた。所属グループは担当できるシフトを決める＝説明のつかない盤面になる。
+    @Test fun unknownGroupAndSkillSymbolsInStaffCsvAreRecorded() {
+        val st = com.magi.app.model.MagiState(
+            startDate = "2026-06-01", endDate = "2026-06-02",
+            shifts = listOf(com.magi.app.model.Shift("休", "休", "", ""), com.magi.app.model.Shift("A", "A", "", "")),
+            groups = listOf(com.magi.app.model.Group("G1", "G1")),
+            skillGroups = listOf(com.magi.app.model.Group("S1", "S1")),
+            staff = listOf(com.magi.app.model.Staff("既存", 0, 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(listOf(0, 0)),
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val sched = arrayOf(intArrayOf(0, 0))
+        val csv = "氏名,グループ,スキル\n新人,ZZ,QQ\n既存,ZZ,S1\n別人,G1,\n"
+        val r = com.magi.app.v6.StaffCsvIO.parseUpsert(csv, st, sched)
+        assertNotNull("取込自体は成功する", r)
+        assertEquals("未知グループ ZZ は2件（新規1＋既存1）", 2, r!!.unknownGroups["ZZ"])
+        assertEquals("未知スキル QQ は1件", 1, r.unknownSkills["QQ"])
+        assertNull("既知の G1 は未知に数えない", r.unknownGroups["G1"])
+        assertNull("空欄は未知に数えない（指定なしと誤記を区別する）", r.unknownSkills[""])
+        // 挙動そのものは不変: 新規は先頭グループ、既存は元のまま。
+        assertEquals("新規は先頭グループ", 0, r.state.staff.first { it.name == "新人" }.groupIdx)
+        assertEquals("既存の所属は維持", 0, r.state.staff.first { it.name == "既存" }.groupIdx)
+    }
+
+    // ===== I-08: 引用符が閉じないCSVを検出する =====
+    // 旧: `inQuote` が true のまま入力が終わっても検出せず、開いた引用符以降の全文が1セルへ
+    //   吸い込まれ残りの行が丸ごと消えるのに、呼出側からは「短いCSV／氏名不一致」と区別が付かなかった。
+    @Test fun unclosedQuoteInScheduleCsvIsFlaggedInsteadOfSilentlyTruncated() {
+        val st = com.magi.app.model.MagiState(
+            startDate = "2026-06-01", endDate = "2026-06-02",
+            shifts = listOf(com.magi.app.model.Shift("休", "休", "", ""), com.magi.app.model.Shift("A", "A", "", "")),
+            groups = listOf(com.magi.app.model.Group("G1", "G1")),
+            staff = listOf(com.magi.app.model.Staff("職員A", 0), com.magi.app.model.Staff("職員B", 0)),
+            use2Patterns = false,
+            groupShift = listOf(listOf(1, 1)),
+            groupShiftApt = listOf(listOf("", "")),
+            schedule = listOf(listOf(0, 0), listOf(0, 0)),
+            wishes = emptyMap(), staffRange = emptyMap(), needDay1 = emptyMap(), needDay2 = emptyMap(),
+            cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
+            cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
+        )
+        val base = arrayOf(intArrayOf(0, 0), intArrayOf(0, 0))
+        val good = "スタッフ \\ 日付,1,2\n職員A,A,休\n職員B,休,A\n"
+        val ok = com.magi.app.v6.ScheduleCsvBridge.parse(good, st, base)
+        assertEquals("正常なCSVは2名とも一致", 2, ok.matched)
+        assertFalse("正常なCSVで旗は立たない", ok.unclosedQuote)
+        assertEquals("職員Aの1日目はA", 1, ok.schedule[0][0])
+
+        // 職員A の行で引用符を開いたまま閉じない → 以降（職員B の行を含む）が1セルへ吸い込まれる。
+        val bad = "スタッフ \\ 日付,1,2\n職員A,\"A,休\n職員B,休,A\n"
+        val ng = com.magi.app.v6.ScheduleCsvBridge.parse(bad, st, base)
+        assertTrue("引用符が閉じないことを検出する", ng.unclosedQuote)
+        assertTrue("実際に行が失われている（一致が減る）", ng.matched < 2)
     }
 }

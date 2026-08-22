@@ -98,6 +98,12 @@ data class ScheduleRunResult(
      */
     val unknownCells: Int = 0,
     val unknownSymbols: List<String> = emptyList(),
+    /**
+     * [3.413.0/I-08] 引用符が閉じないまま入力が終わった＝開いた引用符以降が1セルへ吸い込まれ
+     * **残りの行が丸ごと消えた**。呼出側からは「一致した氏名が少ないCSV」と区別が付かず
+     * 部分的な成功に見えるため、旗として持ち上げて必ず知らせる。
+     */
+    val unclosedQuote: Boolean = false,
 )
 
 data class LightOptimizeResult(

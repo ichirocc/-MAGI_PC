@@ -2952,15 +2952,19 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val total = st.staff.size
                 // [3.410.0/I-01] シフト一覧に無い記号は取り込めない。旧: 黙って読み飛ばしていたため、
                 //   誤字や凡例漏れが「休のまま」「元のまま」として静かに混入した。件数と記号を必ず出す。
+                // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝「氏名不一致でスキップ」と
+                //   区別が付かず部分的な成功に見える。必ず名指しする。
+                val quoteWarn = if (res.unclosedQuote)
+                    "｜⚠ 引用符（\"）が閉じていません。ここから後ろの行は読めていません" else ""
                 val unk = if (res.unknownCells > 0)
                     "｜読めない記号 ${res.unknownCells}セル(${res.unknownSymbols.joinToString("・")})は取り込めませんでした"
                 else ""
                 val msg = if (res.matched in 1 until total)
-                    "CSV取込完了: ${res.matched}/${total}名を更新（${total - res.matched}名は氏名不一致でスキップ）｜必須=${res.report.hard} 合計=${res.report.total}$unk"
+                    "CSV取込完了: ${res.matched}/${total}名を更新（${total - res.matched}名は氏名不一致でスキップ）｜必須=${res.report.hard} 合計=${res.report.total}$unk$quoteWarn"
                 else
-                    "CSV取込完了: ${res.matched}名を更新｜必須=${res.report.hard} 合計=${res.report.total}$unk"
+                    "CSV取込完了: ${res.matched}名を更新｜必須=${res.report.hard} 合計=${res.report.total}$unk$quoteWarn"
                 pushReport(state ?: st, res.schedule, res.report) { it.copy(
-                    messageIsError = res.unknownCells > 0,
+                    messageIsError = res.unknownCells > 0 || res.unclosedQuote,
                     running = false,
                     hasResult = true,
                     message = msg,
@@ -3020,8 +3024,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             if (res.added > 0) add("${res.added}名を新規追加")
             if (res.updated > 0) add("${res.updated}名を更新")
         }
-        val msg = "職員一覧を取込: " + parts.joinToString("・")
-        logOp("I", "職員一覧CSV取込: 追加${res.added} 更新${res.updated}")
+        // [3.413.0/I-07] 空でないのに解決できなかった群/スキル記号を必ず知らせる。旧: 新規は先頭
+        //   グループ、既存は現状維持へ黙って落ち、**空欄と誤記が見分けられなかった**。所属グループは
+        //   担当できるシフトを決めるので、誤記が通ると説明のつかない盤面になる。
+        val badG = res.unknownGroups
+        val badS = res.unknownSkills
+        val warn = buildList {
+            if (badG.isNotEmpty()) add("グループ記号 ${badG.entries.take(3).joinToString("・") { "「${it.key}」${it.value}件" }}${if (badG.size > 3) "ほか" else ""}")
+            if (badS.isNotEmpty()) add("スキル記号 ${badS.entries.take(3).joinToString("・") { "「${it.key}」${it.value}件" }}${if (badS.size > 3) "ほか" else ""}")
+        }
+        val tailWarn = if (warn.isEmpty()) "" else
+            "。⚠ 見つからない${warn.joinToString("／")}（新規は先頭グループ・既存は元のまま。記号をご確認ください）"
+        val msg = "職員一覧を取込: " + parts.joinToString("・") + tailWarn
+        logOp(if (warn.isEmpty()) "I" else "W",
+            "職員一覧CSV取込: 追加${res.added} 更新${res.updated}" +
+                (if (badG.isNotEmpty()) " 未知グループ${badG.values.sum()}件" else "") +
+                (if (badS.isNotEmpty()) " 未知スキル${badS.values.sum()}件" else ""))
         applyStructureWithMessage(com.magi.app.v6.Ws1Result(res.state, res.schedule), msg)
     }
 
