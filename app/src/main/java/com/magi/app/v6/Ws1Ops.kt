@@ -133,6 +133,26 @@ object Ws1Ops {
     // ---- append (low-risk dimension change, no re-indexing) ------------------
 
     /** Add a shift (index K). Existing schedule/wishes indices stay valid; groupShift/apt gain a column. */
+    /**
+     * [3.410.0/W-01・W-02] 記号がすでに他の行で使われているか。**追加と改名の入口で使う**。
+     *
+     * 制約（cons1/2/3系/41/42）はシフト・群を**記号の文字列**で参照するので、既存の記号へ改名すると
+     * `renameShiftInConstraints` が旧記号の行を新記号へ一括置換し、**別の行のルールと合流する**。
+     * しかもこの合流は改名し直しても戻らない（戻すと相手側のルールまで巻き添えで改名される）＝
+     * 取り返しがつかない。検査8（3.106.0）は事後に「重複しています」と警告するが、そのときには
+     * もう合流が済んでいる。3.403.0 で「下限>上限」を入力時に止めたのと同じ理由で、ここで止める。
+     *
+     * 比較は `trim()` 込み（P-11: `Problem.shiftIdxOf` は完全一致・CSV 照合の `firstWinsMap` は trim と
+     * 揺れているので、**そもそも紛らわしい組を作らせない**方向へ倒す）。
+     *
+     * @param exceptIndex 改名では自分自身を除く（自分と同じ記号のままの確定を拒否しない）。
+     */
+    fun symbolCollides(existing: List<String>, kigou: String, exceptIndex: Int = -1): Boolean {
+        val k = kigou.trim()
+        if (k.isEmpty()) return false
+        return existing.withIndex().any { (i, x) -> i != exceptIndex && x.trim() == k }
+    }
+
     fun addShift(state: MagiState, name: String, kigou: String, need1: String, need2: String): MagiState {
         val shifts = state.shifts + Shift(name, kigou, need1, need2)
         val gs = state.groupShift.map { it + 0 }                 // new shift not allowed by default

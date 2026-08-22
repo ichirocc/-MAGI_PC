@@ -493,14 +493,36 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** 1.2秒デバウンスで状態をアプリ専用領域に保存。失敗は黙殺（次回操作で再試行）。 */
+    /**
+     * [3.410.0/U-03・B-03] 自動保存を**原子書き込み**にし、失敗を**一度だけ**知らせる。
+     *
+     * 旧: 素の `writeText` を `runCatching` で握り潰していた。実害2つ——
+     * ①書き込み中にプロセスが落ちると**壊れた JSON が自動保存に残る**（起動時にそれを読む＝
+     *   編集が丸ごと失われるうえ理由も分からない。3.336.0 が bg 結果に対して直したのと同じ形）
+     * ②容量不足などで保存できていないのに画面もログも無反応＝利用者は保存されたと信じて編集を続ける。
+     * 1.2秒ごとに走るので毎回は出さず、**成功→失敗へ変わった瞬間**だけ出す。
+     */
     private fun autoSave() {
         if (!hydrated) return
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             kotlinx.coroutines.delay(1200)
             val json = exportJson() ?: return@launch
-            withContext(Dispatchers.IO) { runCatching { autosaveFile.writeText(json) } }
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { com.magi.app.work.writeFileAtomically(autosaveFile, json) }.getOrDefault(false)
+            }
+            reportAutoSave(ok)
         }
+    }
+
+    /** 直前の自動保存が成功したか。失敗を連続で通知しないための状態。 */
+    private var autoSaveOk = true
+
+    private fun reportAutoSave(ok: Boolean) {
+        if (ok == autoSaveOk) return
+        autoSaveOk = ok
+        if (ok) logOp("I", "自動保存が復旧しました")
+        else notify("自動保存に失敗しています（端末の空き容量をご確認ください）。「データを保存」で書き出してください", "W")
     }
 
     /**
@@ -512,7 +534,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (!hydrated) return
         saveJob?.cancel()
         val json = exportJson() ?: return
-        runCatching { autosaveFile.writeText(json) }
+        // [3.410.0/U-03] 即時保存も同じ扱い（原子書き込み＋失敗の通知）。
+        reportAutoSave(runCatching { com.magi.app.work.writeFileAtomically(autosaveFile, json) }.getOrDefault(false))
     }
 
     private fun pushUndo() {
@@ -2497,6 +2520,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun ws1EditShift(k: Int, name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
+        if (symbolTaken(st.shifts.map { it.kigou }, kigou, "シフト", exceptIndex = k)) return
         logOp("I", "シフト編集: ${opSy(k)} → ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
         applyStructure(Ws1Ops.editShift(st, k, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
     }
@@ -2512,6 +2536,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
     fun ws1EditGroup(g: Int, name: String, kigou: String) {
         val st = state ?: return
+        if (symbolTaken(st.groups.map { it.kigou }, kigou, "グループ", exceptIndex = g)) return
         logOp("I", "グループ編集: [$g] → ${name.trim()}(${kigou.trim()})")
         applyStructure(Ws1Ops.editGroup(st, g, name.trim(), kigou.trim()))
     }
@@ -2552,9 +2577,21 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         applyStructure(Ws1Ops.setUse2(st, on))
     }
 
+    /**
+     * [3.410.0/W-01・W-02] 記号の重複を**入力時に**断る。既存の記号へ改名すると制約行が一括置換されて
+     * 別の行と合流し、改名し直しても戻らない（検査8 が事後に警告するが、そのときには手遅れ）。
+     */
+    private fun symbolTaken(existing: List<String>, kigou: String, what: String, exceptIndex: Int = -1): Boolean {
+        if (!com.magi.app.v6.Ws1Ops.symbolCollides(existing, kigou, exceptIndex)) return false
+        val k = kigou.trim()
+        notify("記号「$k」はすでに別の${what}で使われています（制約の参照が混ざるため、別の記号にしてください）", "W")
+        return true
+    }
+
     fun ws1AddShift(name: String, kigou: String, need1: String, need2: String) {
         val st = state ?: return
         if (kigou.isBlank()) return
+        if (symbolTaken(st.shifts.map { it.kigou }, kigou, "シフト")) return
         logOp("I", "シフト追加: ${name.trim()}(${kigou.trim()}) 最低${need1.trim().ifBlank { "-" }}/上限${need2.trim().ifBlank { "-" }}")
         applyStructure(Ws1Ops.addShift(st, name.trim(), kigou.trim(), need1.trim(), need2.trim()))
     }
@@ -2562,6 +2599,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun ws1AddGroup(name: String, kigou: String) {
         val st = state ?: return
         if (kigou.isBlank()) return
+        if (symbolTaken(st.groups.map { it.kigou }, kigou, "グループ")) return
         logOp("I", "グループ追加: ${name.trim()}(${kigou.trim()})")
         applyStructure(Ws1Ops.addGroup(st, name.trim(), kigou.trim()))
     }
@@ -2606,10 +2644,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun skillGroups(): List<Group> = state?.skillGroups ?: emptyList()
     fun addSkillGroup(name: String, kigou: String) {
         val st = state ?: return; if (kigou.isBlank()) return
+        if (symbolTaken(st.skillGroups.map { it.kigou }, kigou, "スキル区分")) return
         logOp("I", "スキル区分追加: ${name.trim()}(${kigou.trim()})"); applyStructure(st.copy(skillGroups = st.skillGroups + Group(name.trim(), kigou.trim())))
     }
     fun editSkillGroup(g: Int, name: String, kigou: String) {
         val st = state ?: return
+        if (symbolTaken(st.skillGroups.map { it.kigou }, kigou, "スキル区分", exceptIndex = g)) return
         val old = st.skillGroups.getOrNull(g)?.kigou ?: ""
         val renamed = st.copy(skillGroups = st.skillGroups.mapIndexed { i, x -> if (i == g) Group(name.trim(), kigou.trim()) else x })
         logOp("I", "スキル区分編集: [$g] → ${name.trim()}(${kigou.trim()})")

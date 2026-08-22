@@ -113,6 +113,30 @@ import androidx.compose.ui.input.pointer.pointerInput
  * 文字化けせず取り込める（UTF-8 として bytes を読むと壊れていた）。
  */
 
+/**
+ * [3.410.0/UI-01] SAF で選ばれたファイルを**上限つき**で読む。
+ *
+ * 旧: `openInputStream(uri).use { it.readBytes() }` は上限が無く、大きなファイルを選ばれると
+ * その場でヒープを食い尽くしてプロセスが落ちた（利用者から見れば「開いたら落ちた」で理由が出ない）。
+ * このアプリが扱うのは職員30名×31日ぶんの JSON/CSV で、実データは数十KB。32MiB は桁で余裕がある。
+ * 超えたら**読み切らずに**中断して理由を返す（読み切ってから判定すると OOM を防げない）。
+ */
+private const val MAX_IMPORT_BYTES = 32L * 1024 * 1024
+
+private fun java.io.InputStream.readAtMost(limit: Long = MAX_IMPORT_BYTES): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(64 * 1024)
+    var total = 0L
+    while (true) {
+        val n = read(buf)
+        if (n < 0) break
+        total += n
+        if (total > limit) throw java.io.IOException("ファイルが大きすぎます（${limit / 1024 / 1024}MB まで）")
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
+}
+
 internal fun decodeCsvBytes(bytes: ByteArray): String {
     val utf8 = runCatching {
         val dec = Charsets.UTF_8.newDecoder()
@@ -171,7 +195,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 val r = withContext(Dispatchers.IO) {
                     runCatching {
                         ctx.contentResolver.openInputStream(uri)?.use {
-                            it.readBytes().toString(Charsets.UTF_8)
+                            it.readAtMost().toString(Charsets.UTF_8)
                         }
                     }
                 }
@@ -189,7 +213,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
             scope.launch {
                 val r = withContext(Dispatchers.IO) {
                     runCatching {
-                        ctx.contentResolver.openInputStream(uri)?.use { decodeCsvBytes(it.readBytes()) }
+                        ctx.contentResolver.openInputStream(uri)?.use { decodeCsvBytes(it.readAtMost()) }
                     }
                 }
                 val text = r.getOrNull()

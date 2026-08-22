@@ -110,7 +110,43 @@ class ReviewFixes3410Test {
         assertTrue(V6SanityPort.buildGuidance(clean, Problem(clean)).none { it.where == "グループの割当" })
     }
 
+    // ---------- W-03: 担当できるシフトが0の群 ----------
+
+    /** 全部 OFF にすると休しか置けなくなる（`allowedShiftsForStaff` が空→`?: restIdx`）。 */
+    @Test
+    fun groupWithNoAllowedShiftIsReported() {
+        val base = stWithRestNotFirst(0)
+        val blank = base.copy(groupShift = listOf(listOf(0, 0)))
+        assertTrue("担当できるシフトの診断が出ること",
+            V6SanityPort.buildGuidance(blank, Problem(blank)).any { it.where == "担当できるシフト" })
+        // 所属者がいない群は無害＝出さない。
+        val noMember = blank.copy(staff = emptyList(), schedule = emptyList())
+        assertTrue(V6SanityPort.buildGuidance(noMember, Problem(noMember)).none { it.where == "担当できるシフト" })
+        // 正常データでは出さない。
+        assertTrue(V6SanityPort.buildGuidance(base, Problem(base)).none { it.where == "担当できるシフト" })
+    }
+
     // ---------- D-01 / D-02: DeltaEvaluator の不正入力は丸めず落とす ----------
+
+    // ---------- W-01 / W-02: 記号の重複を入力時に断る ----------
+
+    /**
+     * 既存の記号へ改名すると `renameShiftInConstraints` が制約行を一括置換して**別の行と合流**し、
+     * 改名し直しても戻らない（戻すと相手側まで巻き添え）。検査8 は事後警告なので手遅れ。
+     */
+    @Test
+    fun symbolCollisionIsDetectedForAddAndRename() {
+        val syms = listOf("休", "X", "Y")
+        // 追加: 既存と同じ記号は衝突
+        assertTrue(Ws1Ops.symbolCollides(syms, "X"))
+        assertTrue("空白違いも同じ記号として扱う（P-11 の揺れを作らせない）", Ws1Ops.symbolCollides(syms, " X "))
+        assertTrue(Ws1Ops.symbolCollides(syms, "Z").not())
+        // 改名: 自分自身は除く（同じ記号のままの確定を拒否しない）
+        assertTrue("自分自身は衝突にしない", Ws1Ops.symbolCollides(syms, "X", exceptIndex = 1).not())
+        assertTrue("他の行との衝突は検出する", Ws1Ops.symbolCollides(syms, "Y", exceptIndex = 1))
+        // 空記号は衝突判定の対象外（別途 isBlank で弾いている）
+        assertTrue(Ws1Ops.symbolCollides(syms, "").not())
+    }
 
     @Test
     fun deltaEvaluatorRejectsMalformedBoards() {

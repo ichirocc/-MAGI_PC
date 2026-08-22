@@ -88,26 +88,32 @@ internal class RunFiles(private val dir: File) {
      *   （ms 級）が TOCTOU の窓から外れる。**窓が消えるわけではない。**
      * @return `target` に `text` が入ったなら true。
      */
-    fun writeAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean {
-        // [3.410.0/B-05] 旧: 一時ファイル名が「対象名 + .tmp」の**固定名**で、置き換え(REPLACE)の
-        //   前後に2つの writer が重なると同じ一時ファイルを奪い合った（片方の書き込み途中に他方が
-        //   rename/delete する＝**壊れた内容が target に入る**）。所有権チェックは rename の直前しか
-        //   見ないのでこの競合は素通りする。呼出ごとに一意な名前にすれば構造的に交差しない
-        //   （WorkManager の Worker は同一プロセスで走るのでプロセス内カウンタで足りる）。
-        val tmp = File(target.parentFile, target.name + ".t" + tmpSeq.incrementAndGet() + ".tmp")
-        try {
-            tmp.writeText(text)
-            if (!commitGuard()) return false
-            // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
-            if (!tmp.renameTo(target)) target.writeText(text)
-            return true
-        } finally {
-            // 成功時の rename 後は既に消えている。失敗・ガード偽・例外のいずれでも残骸を残さない。
-            runCatching { if (tmp.exists()) tmp.delete() }
-        }
-    }
+    fun writeAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean =
+        writeFileAtomically(target, text, commitGuard)
+}
 
-    private companion object {
-        val tmpSeq = java.util.concurrent.atomic.AtomicLong(0)
+/**
+ * 一時ファイル経由の原子置換。[RunFiles.writeAtomically] の実体で、**run ファイル以外**（自動保存など）
+ * からも使えるようにファイルレベルへ出してある（同じ処理を写すと必ず片方が取り残される）。
+ *
+ * [3.410.0/B-05] 旧: 一時ファイル名が「対象名 + .tmp」の**固定名**で、置き換え(REPLACE)の前後に2つの
+ * writer が重なると同じ一時ファイルを奪い合った（片方の書き込み途中に他方が rename/delete する＝
+ * **壊れた内容が target に入る**）。所有権チェックは rename の直前しか見ないのでこの競合は素通りする。
+ * 呼出ごとに一意な名前にすれば構造的に交差しない（WorkManager の Worker は同一プロセスで走るので
+ * プロセス内カウンタで足りる）。
+ */
+internal fun writeFileAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean {
+    val tmp = File(target.parentFile, target.name + ".t" + atomicWriteSeq.incrementAndGet() + ".tmp")
+    try {
+        tmp.writeText(text)
+        if (!commitGuard()) return false
+        // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
+        if (!tmp.renameTo(target)) target.writeText(text)
+        return true
+    } finally {
+        // 成功時の rename 後は既に消えている。失敗・ガード偽・例外のいずれでも残骸を残さない。
+        runCatching { if (tmp.exists()) tmp.delete() }
     }
 }
+
+private val atomicWriteSeq = java.util.concurrent.atomic.AtomicLong(0)

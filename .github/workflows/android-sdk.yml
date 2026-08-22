@@ -49,6 +49,10 @@ jobs:
         shell: bash
         run: |
           wget -q --tries=3 --waitretry=5 -O /tmp/gradle.zip https://services.gradle.org/distributions/gradle-9.3.1-bin.zip
+          # [3.410.0/CI-03] 取得物を検証する。旧: チェックサムも署名も見ずに展開して PATH へ通していた＝
+          #   配布元やネットワーク経路が入れ替わったものをそのまま実行していた。公式の
+          #   gradle-9.3.1-bin.zip.sha256 の値を固定する（Gradle を上げるときはここも同時に更新する）。
+          echo "b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06  /tmp/gradle.zip" | sha256sum -c -
           mkdir -p "$HOME/gradle-dist"
           unzip -q /tmp/gradle.zip -d "$HOME/gradle-dist"
 

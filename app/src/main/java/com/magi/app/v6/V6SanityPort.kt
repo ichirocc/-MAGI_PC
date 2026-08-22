@@ -686,6 +686,22 @@ object V6SanityPort {
                 "職員管理でグループを選び直してください"))
         }
 
+        // 2l) [3.410.0/W-03] 担当できるシフトが1つも無いグループ。`Ws1Ops.setGroupShift` は全部 OFF に
+        //   できるが（検証も拒否もしない）、そうするとその群の職員は `allowedShiftsForStaff` が空＝
+        //   `?: restIdx` のフォールバックで**休しか置けなくなる**。必要人数のある日は軒並み covU になるのに、
+        //   画面はチェックが外れていることしか示さない。所属者がいるときだけ知らせる（空の群は無害）。
+        for (g in state.groups.indices) {
+            val row = state.groupShift.getOrNull(g) ?: emptyList()
+            if (row.any { it == 1 }) continue
+            val members = state.staff.count { it.groupIdx == g }
+            if (members == 0) continue
+            val gname = state.groups[g].kigou.ifBlank { "#$g" }
+            out.add(SettingIssue(IssueKind.CONSTRAINT, "担当できるシフト",
+                "グループ「$gname」（${members}名）は担当できるシフトが1つもありません。この職員は休しか置けず、" +
+                    "必要人数のある日はすべて人員不足になります",
+                "年間マスターの「担当できるシフト（群×シフト）」で担当するシフトを選んでください"))
+        }
+
         // 3) 需要 > 担当可能人数（その枠は誰をどう並べても必ず不足）
         for (j in 0 until p.T) for (k in 0 until p.K) {
             // [3.409.22] 旧: `need1` 直読み＝need2 単独定義の需要を見落とし、担当可能人数が足りなくても
