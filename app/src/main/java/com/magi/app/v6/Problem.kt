@@ -95,6 +95,14 @@ class Problem(val state: MagiState) {
     private val _c3UnknownShift = mutableListOf<Pair<String, String>>()
     val c3UnknownShift: List<Pair<String, String>> get() = _c3UnknownShift
 
+    // [3.412.0/P-04] 期間より長い窓の要件(cons1)。`MirrorCore.checkC1Family` は `c.day1 > p.T` を
+    //   `continue` で**無言で飛ばす**ため、31日の月に「休を35日で4回以上」と入れると評価もされず
+    //   画面にも何も出ない。連続パターンは同じ状況を `_c3OverT` に記録して検査2d が案内するのに、
+    //   窓の要件だけ取り残されていた（3.320.0 が6族へ広げた `_unresolvedRows` は「行が解決できない」
+    //   ケースで、こちらは「行は解決できるが窓が期間を超える」＝別の穴）。読み取り専用＝評価不変。
+    private val _c1OverT = mutableListOf<String>()
+    val c1OverT: List<String> get() = _c1OverT
+
     // [3.320.0] 3.309.0 は連続パターン(cons3系)だけを直したが、**同じ無言除外が残り6族にあった**:
     //   cons1(窓ルール)・cons2(個人合計)・cons41/cons42(群)・cons41s/cons42s(スキル群)は、記号が
     //   解決できない行や数値が不正な行を `mapNotNull { ... else null }` でやはり黙って捨てる。
@@ -164,8 +172,12 @@ class Problem(val state: MagiState) {
             val d1 = it.day1.toIntOrNull() ?: 0
             val si = shiftIdxOf(it.shiftKigou)
             val d2 = it.day2.toIntOrNull() ?: 0
-            if (d1 > 0 && si >= 0 && d2 > 0) C1(d1, si, d2)
-            else { _unresolvedRows.add("窓の要件" to "${mark(it.shiftKigou, si >= 0)} を${it.day1}日で${it.day2}回以上"); null }
+            if (d1 > 0 && si >= 0 && d2 > 0) {
+                // [3.412.0/P-04] 行としては解決できるが窓が期間を超える＝チェッカーが無言で飛ばす。
+                //   行は残す（評価の挙動は完全に不変）が、記録して Sanity が理由を案内する。
+                if (d1 > T) _c1OverT.add("${it.shiftKigou} を${d1}日で${d2}回以上")
+                C1(d1, si, d2)
+            } else { _unresolvedRows.add("窓の要件" to "${mark(it.shiftKigou, si >= 0)} を${it.day1}日で${it.day2}回以上"); null }
         }
         cons2 = state.cons2.mapNotNull {
             val si = shiftIdxOf(it.shiftKigou)

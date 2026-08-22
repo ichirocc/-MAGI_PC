@@ -89,6 +89,21 @@ class V6SanityPortTest {
         cons3m = emptyList(), cons3mn = emptyList(), cons41 = emptyList(), cons42 = emptyList(),
     )
 
+    @Test fun windowLongerThanThePeriodIsReportedAsNeverEvaluated() {
+        // [3.412.0/P-04] `MirrorCore.checkC1Family` は `c.day1 > p.T` を無言で `continue` する。
+        //   期間6日に「Aを10日で2回以上」と入れると評価もされず画面にも何も出なかった。
+        //   連続パターン(検査2d)は同じ状況を案内するのに、窓の要件だけ取り残されていた。
+        val over = V6SanityPort.buildGuidance(windowState("1", listOf(com.magi.app.model.C1Row("10", "A", "2"))))
+            .filter { it.where.contains("窓の要件") }
+        assertTrue("期間を超える窓は理由が案内される", over.isNotEmpty())
+        assertTrue("評価されない旨を言う", over.any { it.problem.contains("評価されません") })
+
+        // 期間内の窓は従来どおり何も出さない（誤検知しない）。
+        val within = V6SanityPort.buildGuidance(windowState("1", listOf(com.magi.app.model.C1Row("3", "A", "2"))))
+            .filter { it.where.contains("窓の要件") }
+        assertTrue("期間内の窓では出さない", within.isEmpty())
+    }
+
     @Test fun nonRestWindowShortfallIsCovOTensionNotAStructuralWall() {
         // [3.364.0] 非休 A: 1日上限1・窓3日で2回以上 → 上限合計6 < 需要下界8。だが物理供給(2人×6日=12)>=8 で
         //   壁ではない(need2/need1 は covO の SOFT 上限＝超えられる)。旧実装は「構造的に残ります」と誤断定していた。

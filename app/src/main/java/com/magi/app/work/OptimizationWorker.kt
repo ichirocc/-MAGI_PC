@@ -115,6 +115,15 @@ class OptimizationWorker(
             BubbleSupport.pushShortcut(ctx)
             BubbleSupport.postProgress(ctx, "最適化を開始しました")
         }
+        // [3.412.0/B-10] `areBubblesAllowed` は定義があるだけで**戻り値がどこにも使われていなかった**
+        //   （＝端末側でバブルが禁止されていても、利用者にも作り手にも何も伝わらない）。バブルは
+        //   計算中の進捗を見せる唯一の常時表示なので、出ない理由が分かるようにログへ1行残す。
+        //   出さないのはバブルが**許可されているとき**＝正常時にノイズを増やさない。
+        runCatching {
+            if (!BubbleSupport.areBubblesAllowed(ctx)) {
+                note("会話バブルは端末の設定で許可されていません（進捗は通知バーに出ます）", "W")
+            }
+        }
         // [3.333.0/外部レビュー] 成功パスは所有権マーカー(runIdFile)を**自分で消してから** finally へ入る。
         //   finally が `ownsFiles()` をファイルから読み直すと「所有者でない」と判定され、
         //   `setRunning(false)` が飛ばされて **OptimizationRepository.running が永久に true** になっていた
@@ -259,6 +268,11 @@ class OptimizationWorker(
             //   ここを通ると、新実行が既に書いた入力ファイルまで消していた（復元不能の窓を作る）。
             val owned = ownsFiles()
             if (owned) runCatching { clearFiles(ctx) }
+            // [3.412.0/B-08] 停止経路だけがバブルを片付けていなかった。完了・失敗は postDone で
+            //   進行中(ongoing)を解いて自動消去できる形にするのに、停止すると「計算中…」の
+            //   バブルが**画面に残り続ける**（`setOngoing(true)` はユーザーが払えない）。
+            //   所有者のときだけ消す（置き換えられた旧実行が新実行のバブルを消さないため）。
+            if (owned) runCatching { BubbleSupport.clear(ctx) }
             terminal(if (owned) "停止（片付け済み）" else "停止（所有権が無いため片付けなし）")
             throw e
         } catch (e: Throwable) {
