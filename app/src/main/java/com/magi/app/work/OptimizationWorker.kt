@@ -72,6 +72,26 @@ class OptimizationWorker(
             val dropped = if (droppedProgress > 0) "・進捗${droppedProgress}回は所有権喪失で破棄" else ""
             note(msg + dropped + if (steps.isEmpty()) "" else " ／ 手順: ${steps.joinToString("→")}", level)
         }
+        /**
+         * [3.428.0/#14] 片付けの**消し残りを必ず残す**。`RunFiles.clear` は 3.410.0/B-06 で消せなかった
+         * 名前を返すようにしたのに、Worker 側の2つの出口（停止・失敗）は `runCatching { }` で戻り値ごと
+         * 捨てていた。消し残ると次回起動が入力・途中最良・マーカーを掴んで
+         * **停止や失敗を「中断されました・再開できます」と誤案内**するのに、痕跡が残らない。
+         */
+        fun reportClear(where: String) {
+            val stuck = runCatching { clearFiles(ctx) }.getOrElse {
+                note("$where の片付けに失敗しました: ${it.javaClass.simpleName}", "W"); return
+            }
+            if (stuck.isNotEmpty()) {
+                note("$where の片付けで削除できないファイルが残りました: ${stuck.joinToString("・")}" +
+                    "（次回起動が古い状態を「中断」として掴む可能性があります）", "W")
+            }
+        }
+        /** 完了パスの個別削除も同じ理由で戻り値を捨てない（[reportClear] と対）。 */
+        fun reportDelete(f: File, what: String) {
+            val ok = runCatching { !f.exists() || f.delete() }.getOrDefault(false)
+            if (!ok) note("$what を削除できませんでした（次回起動が古い状態を「中断」として掴む可能性があります）", "W")
+        }
 
         // 置き換え済み／停止済みの実行はここで降りる（共有ファイルへ触らない）。
         // [3.387.0] ここは **所有権の競合が実際に起きた瞬間**（REPLACE で新しい実行に入れ替わった／
@@ -108,7 +128,11 @@ class OptimizationWorker(
         val budgetSec = inputData.getInt(KEY_SECONDS, 0).takeIf { it > 0 } ?: OptimizationRepository.seconds
         val bgWorkers = inputData.getInt(KEY_WORKERS, 0).takeIf { it > 0 } ?: OptimizationRepository.workers
         // [#4] 前景サービス化: 5分のCPUジョブをOSに止めさせない（FGS不可な環境では通常実行へフォールバック）。
+        // [3.428.0/#43] 前景化の失敗を**残す**。旧: 握り潰していたため、前景サービスになれないまま
+        //   走り（OS はバックグラウンドのプロセスを優先的に殺す）、次回起動が「中断されました」と
+        //   だけ案内する＝**なぜ途中で消えたか**が読めなかった。失敗しても本体は続ける（従来どおり）。
         runCatching { setForeground(getForegroundInfo()) }
+            .onFailure { note("前景サービスにできませんでした（${it.javaClass.simpleName}）＝端末の都合で計算が途中終了する可能性があります", "W") }
         // [Android 17 バブル] 会話バブルの前提（会話チャンネル＋長寿命ショートカット）を用意し、開始バブルを提示。
         runCatching {
             BubbleSupport.ensureChannel(ctx)
@@ -243,13 +267,13 @@ class OptimizationWorker(
                     //   残す（次回起動が「中断されました」として拾える）。runId は所有権の解放そのものなので
                     //   どちらでも消す＝残すと次の実行が所有者になれない。
                     if (saved) {
-                        runCatching { inputFile(ctx).delete() }
-                        runCatching { snapshotFile(ctx).delete() }   // [#4] 完了でスナップショット破棄
+                        reportDelete(inputFile(ctx), "入力ファイル")
+                        reportDelete(snapshotFile(ctx), "途中最良のスナップショット")   // [#4] 完了でスナップショット破棄
                         step("片付け")
                     } else {
                         note("結果を保存できなかったため、入力と途中経過は残します（次回起動で再開できます）", "W")
                     }
-                    runCatching { runIdFile(ctx).delete() }
+                    reportDelete(runIdFile(ctx), "所有権マーカー")
                     releasedByMe = true
                     terminal("完了（必須${res.report.hard} 合計${res.report.total}）" +
                         if (saved) "" else "・結果を保存できず（プロセス終了で失われます）")
@@ -267,7 +291,7 @@ class OptimizationWorker(
             // [3.327.0/外部レビュー High3] **所有者のときだけ**片付ける。置き換えで打ち切られた旧実行が
             //   ここを通ると、新実行が既に書いた入力ファイルまで消していた（復元不能の窓を作る）。
             val owned = ownsFiles()
-            if (owned) runCatching { clearFiles(ctx) }
+            if (owned) reportClear("停止")
             // [3.412.0/B-08] 停止経路だけがバブルを片付けていなかった。完了・失敗は postDone で
             //   進行中(ongoing)を解いて自動消去できる形にするのに、停止すると「計算中…」の
             //   バブルが**画面に残り続ける**（`setOngoing(true)` はユーザーが払えない）。
@@ -289,7 +313,7 @@ class OptimizationWorker(
             //   次回起動が「中断されました・再開できます」と案内する（実際は失敗）。`Result.failure()` は
             //   WorkManager が再実行しない＝入力を残す意味も無い。所有者なら片付けてから返す。
             val owned = ownsFiles()
-            if (owned) { runCatching { clearFiles(ctx) }; releasedByMe = true }
+            if (owned) { reportClear("失敗"); releasedByMe = true }
             terminal("失敗: ${e.javaClass.simpleName}: ${e.message}" + if (owned) "（片付け済み）" else "（所有権なし）", "W")
             notify("最適化に失敗しました", e.message ?: "原因不明")
             runCatching { BubbleSupport.postDone(ctx, "最適化に失敗しました", autoExpand = true) }

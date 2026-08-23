@@ -209,4 +209,35 @@ class RunFilesTest {
         // 「消せたときに空を返す」契約と、返り値がある（Unit でない）ことだけを固定する。
         assertEquals(emptyList<String>(), f.clear())
     }
+
+    // --- 原子置換を諦めたことの通知（3.428.0/#7） -----------------------------------------------
+
+    /**
+     * 通常経路（rename が成立する）では `onNonAtomic` を呼ばない。ここが誤って発火すると、
+     * 「原子置換が使えていない」という**嘘の警告**を毎回の自動保存で出すことになる。
+     */
+    @Test
+    fun normalAtomicWriteDoesNotReportFallback() {
+        var reported = 0
+        val target = File(tmp.root, "ok.json")
+        assertTrue(files().writeAtomically(target, "v1") { true })
+        assertTrue(writeFileAtomically(target, "v2", onNonAtomic = { reported++ }, commitGuard = { true }))
+        assertEquals("v2", target.readText())
+        assertEquals("rename が成立した書き込みでは通知しない", 0, reported)
+    }
+
+    /**
+     * rename が成立しないとき（ここでは置き換え先がディレクトリ）に **onNonAtomic が実際に呼ばれる**。
+     * 旧: 黙って `target.writeText` へ落ちており、原子性を諦めたことがどこにも残らなかった。
+     * この経路で書いている最中にプロセスが落ちると壊れたファイルが残る＝原子置換を入れた動機そのもの。
+     */
+    @Test
+    fun givingUpAtomicReplaceIsReported() {
+        var reported = 0
+        val target = File(tmp.root, "dir-in-the-way")
+        assertTrue(target.mkdirs())
+        runCatching { writeFileAtomically(target, "v1", onNonAtomic = { reported++ }, commitGuard = { true }) }
+        assertEquals("原子置換を諦めたことを必ず通知する", 1, reported)
+        assertTrue("一時ファイルの残骸を残さない", tmp.root.listFiles()!!.none { it.name.contains(".tmp") })
+    }
 }

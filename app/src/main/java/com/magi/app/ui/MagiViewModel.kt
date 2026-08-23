@@ -184,9 +184,33 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
     private fun clearRunMarker() { runCatching { if (runMarkerFile.exists()) runMarkerFile.delete() } }
+    /**
+     * [3.428.0/#14] 背景実行の共有ファイルを消し、**消し残った名前を必ず記録する**。
+     *
+     * 3.410.0/B-06 で `RunFiles.clear` が消し残りを返すようにしたのに、その返り値を読んでいたのは
+     * 「背景計算の開始直前」の1箇所だけで、**残り9箇所は捨てていた**（自分で書いた契約の取り残し）。
+     * 消し残ると次回起動が入力・途中最良・マーカーを掴んで「中断されました・再開できます」と
+     * **失敗や停止を中断として誤案内**するのに、痕跡がどこにも残らない。消せないこと自体はここでは
+     * 直せないので、せめて後から読めるようにする。
+     *
+     * @param where どの経路の掃除か（ログを読むときに原因を切り分けるため）。
+     */
+    private fun clearBgFiles(where: String, keepRunId: Boolean = false) {
+        val stuck = runCatching {
+            OptimizationWorker.clearFiles(getApplication<Application>(), keepRunId)
+        }.getOrElse { e ->
+            logOp("W", "$where: 途中状態ファイルの削除に失敗しました（${e.javaClass.simpleName}）")
+            return
+        }
+        if (stuck.isNotEmpty()) {
+            logOp("W", "$where: 途中状態ファイルを削除できませんでした: ${stuck.joinToString("・")}" +
+                "（次回起動が古い状態を「中断」として掴む可能性があります）")
+        }
+    }
+
     fun dismissInterrupted() {
         _ui.update { it.copy(interruptedRun = false, interruptedInfo = null) }
-        OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] 破棄で途中状態ファイルを削除
+        clearBgFiles("中断の破棄")   // [C1] 破棄で途中状態ファイルを削除
     }
 
     // ===== 操作ログ（監査）: 追記式・新しい順・時刻/レベル付き =====
@@ -273,7 +297,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (resultUsable) {
                 clearRunMarker()
-                OptimizationWorker.clearFiles(getApplication<Application>())
+                clearBgFiles("前回の完了結果を反映")
                 if (state == null) loadAsync(resultTxt, markResult = true, fromRestore = true)   // initialAssignment が state.schedule を返すため結果が復元される
                 logOp("I", "前回のバックグラウンド最適化の結果を反映しました")
             } else {
@@ -312,7 +336,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     // 途中最良解を優先して復元（無ければ自動保存の入力）。
                     val resumeTxt = snapTxt?.takeIf { it.isNotBlank() } ?: txt
                     if (!resumeTxt.isNullOrBlank()) loadAsync(resumeTxt, fromRestore = true)
-                    if (!snapTxt.isNullOrBlank()) OptimizationWorker.clearFiles(getApplication<Application>())   // 消費後は掃除
+                    if (!snapTxt.isNullOrBlank()) clearBgFiles("途中結果の復元後")   // 消費後は掃除
                 }
                 }
             }
@@ -390,14 +414,13 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         // 所有権を確立してから旧途中状態を掃除する（Worker が開始時に再保存する）。
         //   [3.410.0/B-06] 消し残りは黙って捨てず記録する（残ると次回起動が古い状態を掴む）。
         if (markerOk) {
-            val stuck = OptimizationWorker.clearFiles(getApplication<Application>(), keepRunId = true)
-            if (stuck.isNotEmpty()) logOp("W", "旧途中状態の削除に失敗: ${stuck.joinToString("・")}")
+            clearBgFiles("背景計算の開始（旧途中状態の掃除）", keepRunId = true)
         }
         val inputOk = markerOk && runCatching {
             OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0))
         }.isSuccess
         if (!markerOk || !inputOk) {
-            runCatching { OptimizationWorker.clearFiles(getApplication<Application>()) }
+            clearBgFiles("背景計算の開始に失敗")
             notify("バックグラウンド計算を開始できませんでした（端末の空き容量をご確認ください）", "W")
             return
         }
@@ -467,7 +490,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 ) }
                 logOp("I", "バックグラウンド: 今回 必須$newHard/合計$newTotal は前回 以下に改善せず → 前回を維持")
                 clearRunMarker()
-                OptimizationWorker.clearFiles(getApplication<Application>())
+                clearBgFiles("背景結果: 前回を維持")
                 OptimizationRepository.request = null
                 OptimizationRepository.publishResult(null)
                 return
@@ -486,7 +509,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         logOp("I", "バックグラウンド最適化 完了 必須=${r.report.hard} 合計=${r.report.total}")
         lastResultHard = r.report.hard.toLong()
         clearRunMarker()
-        OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] 完了で途中状態ファイルを削除
+        clearBgFiles("背景最適化 完了")   // [C1] 完了で途中状態ファイルを削除
         // 消費したらクリア（再生成時の二重適用を防ぐ）
         OptimizationRepository.request = null
         OptimizationRepository.publishResult(null)
@@ -509,14 +532,41 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
             kotlinx.coroutines.delay(1200)
             val json = exportJson() ?: return@launch
             val ok = withContext(Dispatchers.IO) {
-                runCatching { com.magi.app.work.writeFileAtomically(autosaveFile, json) }.getOrDefault(false)
+                runCatching {
+                    com.magi.app.work.writeFileAtomically(autosaveFile, json, onNonAtomic = { nonAtomicSaveSeen = true })
+                }.getOrDefault(false)
             }
+            reportNonAtomicSave()   // [3.428.0/#7] 記録は **main へ戻ってから**（下の KDoc 参照）
             reportAutoSave(ok)
         }
     }
 
     /** 直前の自動保存が成功したか。失敗を連続で通知しないための状態。 */
     private var autoSaveOk = true
+
+    /**
+     * [3.428.0/#7] 原子置換を諦めた（rename 不能）ことを書き込み側から受け取る旗。
+     * **`Dispatchers.IO` から立つ**ので `@Volatile`。ここでは旗を立てるだけにして、記録は
+     * [reportNonAtomicSave] が main へ戻ってから行う——`logOp` は `opLog`(ArrayDeque) を変更し
+     * `_ui.update` を呼ぶので、背景スレッドから呼ぶと 3.176.0 で決めた
+     * 「共有可変と `_ui` への書き込みはメインスレッドの単一ライタに限る」を破る。
+     */
+    @Volatile private var nonAtomicSaveSeen = false
+
+    /** 一度だけ記録したか（1.2秒ごとに走るので毎回は出さない）。main からのみ触る。 */
+    private var nonAtomicSaveLogged = false
+
+    /**
+     * rename が使えず**原子性を諦めて直接書いた**ことを記録する。書き込みは成功しうるので失敗としては
+     * 扱わないが、この経路で書いている最中にプロセスが落ちると**壊れた自動保存が残る**（原子置換を
+     * 入れた動機そのもの）。旧: 黙ってフォールバックしており、後から読める痕跡が無かった。
+     */
+    private fun reportNonAtomicSave() {
+        if (nonAtomicSaveLogged || !nonAtomicSaveSeen) return
+        nonAtomicSaveLogged = true
+        logOp("W", "自動保存で原子置換（一時ファイルの差し替え）が使えず直接書き込みました" +
+            "（書き込み中にアプリが強制終了すると自動保存が壊れる可能性があります）")
+    }
 
     private fun reportAutoSave(ok: Boolean) {
         if (ok == autoSaveOk) return
@@ -535,7 +585,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         saveJob?.cancel()
         val json = exportJson() ?: return
         // [3.410.0/U-03] 即時保存も同じ扱い（原子書き込み＋失敗の通知）。
-        reportAutoSave(runCatching { com.magi.app.work.writeFileAtomically(autosaveFile, json) }.getOrDefault(false))
+        // saveNow は同期（main）なので旗を立てたその場で記録して構わない。
+        val ok = runCatching {
+            com.magi.app.work.writeFileAtomically(autosaveFile, json, onNonAtomic = { nonAtomicSaveSeen = true })
+        }.getOrDefault(false)
+        reportNonAtomicSave()
+        reportAutoSave(ok)
     }
 
     private fun pushUndo() {
@@ -1013,7 +1068,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, copilotHint = hint, alternatives = emptyList(), liveSchedule = emptyList(), interruptedRun = false, interruptedInfo = null, message = "勤務表をつくり始めました") }
         logOp("I", "最適化 開始 (予算${_ui.value.budgetSec}s, 並列${_ui.value.workers}, 方式${_ui.value.v6Algorithm})")
         writeRunMarker("fg")
-        OptimizationWorker.clearFiles(getApplication<Application>())   // [C1] fg実行ではbg途中状態は無関係＝掃除
+        clearBgFiles("前景実行の開始")   // [C1] fg実行ではbg途中状態は無関係＝掃除
         val startMs = System.currentTimeMillis()
         // HF63: 探索の改善ストリームを追跡し、構造的に充足困難な制約族を検出（重み系は非改変＝安全）。
         val hf63 = Hf63Infeasibility()
@@ -1398,7 +1453,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { androidx.work.WorkManager.getInstance(getApplication()).cancelUniqueWork(OptimizationWorker.UNIQUE) }
         if (bgWasRunning) {
             OptimizationRepository.clear()
-            runCatching { OptimizationWorker.clearFiles(getApplication<Application>()) }
+            clearBgFiles("停止（背景計算の中断）")
             _ui.update { it.copy(messageIsError = false, running = false, message = "停止しました（バックグラウンド計算を中断）") }
             logOp("I", "バックグラウンド最適化を停止")
         } else if (_ui.value.running || _ui.value.fixSearching) {

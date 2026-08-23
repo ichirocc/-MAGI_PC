@@ -2145,12 +2145,18 @@ object V6NativeOptimizer {
         )
     }
 
-    private fun hf66DataHardening(state: MagiState, schedule: Array<IntArray>, tag: String): Array<IntArray> {
+    /** [3.428.0/#30] 埋めシフト規則の委譲を直接固定するため internal（本番の可視性要件は private のまま）。 */
+    internal fun hf66DataHardening(state: MagiState, schedule: Array<IntArray>, tag: String): Array<IntArray> {
         val p = cachedProblem(state)
         val out = normalizeSchedule(schedule, p)
         for (i in 0 until p.S) {
             val allowed = p.allowedShiftsForStaff(i)
-            val fallback = allowed.firstOrNull() ?: 0
+            // [3.428.0/#30] 「担当外セルを何で埋めるか」の規則は `fillShiftIndex` の1箇所に置く
+            //   （3.419.0 で構造編集の3経路を統一したときの取り残し＝ここだけ独自の `?: 0` だった）。
+            //   旧実装との違いは2つ: ①休が担当可なら休を選ぶ（旧は index 最小＝休が先頭でないデータでは
+            //   勤務シフトへ倒れる）②担当可能が空なら 0 でなく休へ倒す。実データ3件は restIdx=0 かつ
+            //   全群が休を担当できるので**挙動は完全に不変**（測って確認済み）。
+            val fallback = fillShiftIndex(allowed, p.restIdx)
             for (j in 0 until p.T) {
                 val k = out[i][j]
                 if (k !in 0 until p.K || !p.canDo(i, k)) out[i][j] = fallback

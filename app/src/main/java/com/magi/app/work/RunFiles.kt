@@ -86,10 +86,21 @@ internal class RunFiles(private val dir: File) {
      * @param commitGuard 置き換えの**直前**に呼ぶ（3.385.0）。false なら一時ファイルだけ捨て、
      *   `target` には一切触れない。所有権の再確認をここへ置くと、直列化と一時ファイル書き込みのぶん
      *   （ms 級）が TOCTOU の窓から外れる。**窓が消えるわけではない。**
+     * @param onNonAtomic rename が使えず**原子性を諦めて直接書いた**ときに呼ぶ（3.428.0/#7）。
+     *   旧: 黙ってフォールバックしていたため、壊れたファイルが残る可能性のある書き方をしたことが
+     *   どこにも残らなかった。原子性は諦めても、諦めたことは残す。
+     *   **`commitGuard` より前に置くこと**：本番の呼出2箇所（途中最良・完了結果）は末尾ラムダ記法で
+     *   `{ ownsFiles() }` を `commitGuard` へ渡している。末尾ラムダは**最後の引数**に束縛されるので、
+     *   これを末尾にすると 3.385.0 の所有権再確認が黙って既定の `{ true }` に落ちる
+     *   （実際にこの順序で書いて `RunFilesTest` の4件が落ち、出荷前に捕まえた）。
      * @return `target` に `text` が入ったなら true。
      */
-    fun writeAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean =
-        writeFileAtomically(target, text, commitGuard)
+    fun writeAtomically(
+        target: File,
+        text: String,
+        onNonAtomic: () -> Unit = {},
+        commitGuard: () -> Boolean = { true },
+    ): Boolean = writeFileAtomically(target, text, onNonAtomic, commitGuard)
 }
 
 /**
@@ -102,13 +113,20 @@ internal class RunFiles(private val dir: File) {
  * 呼出ごとに一意な名前にすれば構造的に交差しない（WorkManager の Worker は同一プロセスで走るので
  * プロセス内カウンタで足りる）。
  */
-internal fun writeFileAtomically(target: File, text: String, commitGuard: () -> Boolean = { true }): Boolean {
+internal fun writeFileAtomically(
+    target: File,
+    text: String,
+    onNonAtomic: () -> Unit = {},
+    commitGuard: () -> Boolean = { true },
+): Boolean {
     val tmp = File(target.parentFile, target.name + ".t" + atomicWriteSeq.incrementAndGet() + ".tmp")
     try {
         tmp.writeText(text)
         if (!commitGuard()) return false
         // rename が使えない環境（別ファイルシステム跨ぎ等）では原子性を諦めて直接書く＝最善努力。
-        if (!tmp.renameTo(target)) target.writeText(text)
+        // [3.428.0/#7] 諦めたことは呼出側へ知らせる。この経路で書いている間に落ちると壊れたファイルが
+        //   残り、起動時の復元が「結果も再開手段も両方失う」形になりうる（原子置換を入れた動機そのもの）。
+        if (!tmp.renameTo(target)) { onNonAtomic(); target.writeText(text) }
         return true
     } finally {
         // 成功時の rename 後は既に消えている。失敗・ガード偽・例外のいずれでも残骸を残さない。

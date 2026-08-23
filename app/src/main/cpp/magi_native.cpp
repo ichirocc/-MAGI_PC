@@ -315,10 +315,20 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
     out[1] = soft;
 }
 
+// [3.428.0/#93+#99] 辞書式パック score = hard * SCORE_HARD_UNIT + soft の HARD 桁単位。
+//   Kotlin の `Evaluator.SCORE_HARD_UNIT` と**必ず同じ値**でなければならない（片方だけ変えると、
+//   hard と soft の分解・SA の HARD ゲート・LAHC・GLS の比較が静かに壊れる）。旧: この値と
+//   受理ゲートの `2 * SCORE_HARD_UNIT` が **12箇所以上に直書き**されていて、Kotlin 側だけ定数参照
+//   （3.213.1 で 4 箇所を揃えたときに C++ は数値のまま残った）＝将来の変更で片側が取り残される。
+static const long long SCORE_HARD_UNIT = 1000000000LL;
+// 受理の早期ゲート。hard が1つでも動くと差分は必ず SCORE_HARD_UNIT 桁になるので、
+// これを超える悪化はどの温度でも実質受理されない（Kotlin の acceptWorseScore/glsAccept と同式）。
+static const long long ACCEPT_REJECT_DELTA = 2 * SCORE_HARD_UNIT;
+
 inline long long fullEvalCombined(const MagiProblem& p, const int* a) {
     long long v[2];
     fullEvalParts(p, a, v);
-    return v[0] * 1000000000LL + v[1];
+    return v[0] * SCORE_HARD_UNIT + v[1];
 }
 
 // ============ [Stage3] SA チャンク: 差分評価つき冷却ラダーを C++ 内で完走 ============
@@ -329,8 +339,8 @@ inline long long fullEvalCombined(const MagiProblem& p, const int* a) {
 struct SaChunk {
     const MagiProblem& p;
     const int S, T, K;
-    // [レビュー#1 3.213.0] 辞書式パックの HARD 桁単位。Kotlin の SCORE_HARD_UNIT (Evaluator.kt) と要同期。
-    const long long M = 1000000000LL;
+    // [レビュー#1 3.213.0] 辞書式パックの HARD 桁単位。[3.428.0] 直書きをやめ単一の定数から引く。
+    const long long M = SCORE_HARD_UNIT;
     std::vector<int> a;    // S*T
     std::vector<int> ssn;  // S*K
     std::vector<int> dsn;  // T*K
@@ -774,7 +784,7 @@ struct LahcState {
         : p(prob), st(prob, board, seed),
           bestSol(board, board + (size_t)prob.S * prob.T) {
         bestScore = st.score;
-        bestHard = bestScore / 1000000000LL;
+        bestHard = bestScore / SCORE_HARD_UNIT;
         hist.assign((size_t)(lahcLen < 1 ? 1 : lahcLen), st.score);   // Kotlin: LongArray(lahcLen){curVal}
     }
 };
@@ -868,7 +878,7 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
         bn = 0;
         pickOperator();
         long long cand = st.score;
-        long long candHard = cand / 1000000000LL;
+        long long candHard = cand / SCORE_HARD_UNIT;
         long long v = s.hist[(size_t)(s.bIt % L)];
         if (candHard <= s.bestHard && (cand <= v || cand <= curVal)) {
             curVal = cand;
@@ -1056,9 +1066,9 @@ inline bool glsAcceptN(long long ns, long long curScore, double moveAug, double 
                        int mode, double temp, double gdLevel, double u01) {
     // [3.213.0見落とし修正] M(=SCORE_HARD_UNIT)を1e6→1e9へ拡大した際にこの閾値だけ旧スケール
     //   (2*1e6)のまま残っていた。Kotlin側(V6SearchOperators.glsAccept)と同期し2*1e9へ。
-    if (ns > curScore + 2000000000LL) return false;
+    if (ns > curScore + ACCEPT_REJECT_DELTA) return false;
     if (mode == 1) {
-        return ((double)ns + curAug + moveAug) <= gdLevel && (ns / 1000000000LL) <= (curScore / 1000000000LL);
+        return ((double)ns + curAug + moveAug) <= gdLevel && (ns / SCORE_HARD_UNIT) <= (curScore / SCORE_HARD_UNIT);
     }
     double delta = (double)(ns - curScore) + moveAug;
     if (delta <= 0.0) return true;
@@ -1750,8 +1760,8 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
     for (int it = 0; it < iters; it++) {
         int op = s.opSelectMode == 1 ? thompsonSelectN(s.opW, 7, s.itersRestart, rng)
                                      : rouletteSelectN(s.opW, 7, rng);
-        long long globalHard = s.bestScore / 1000000000LL;
-        long long curHard = curScore / 1000000000LL;
+        long long globalHard = s.bestScore / SCORE_HARD_UNIT;
+        long long curHard = curScore / SCORE_HARD_UNIT;
         double softFocusProb = globalHard == 0 ? 0.30 : 0.15;
         if (curHard <= globalHard && st.nextDouble() < softFocusProb) op = 5;
         double temp = s.acceptMode == 2 ? s.lamTemp
@@ -1958,7 +1968,7 @@ struct PolishState {
 // Δ<=0 受理、それ以外 exp(-Δ/(200*0.15)) = exp(-Δ/30)。
 inline bool polishAcceptN(long long ns, long long cur, double u01) {
     // [3.213.0見落とし修正] Kotlin側(acceptWorseScore)と同じく2*SCORE_HARD_UNIT(=2e9)へ同期。
-    if (ns > cur + 2000000000LL) return false;
+    if (ns > cur + ACCEPT_REJECT_DELTA) return false;
     long long d = ns - cur;
     if (d <= 0) return true;
     return u01 < std::exp(-(double)d / 30.0);
@@ -1976,8 +1986,8 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
     // hint(vioCells) は PolishState 生成時＋best 改善時に更新済み（Kotlin の bestReport 相当＝同源・同鮮度）。
 
     for (int it = 0; it < iters; it++) {
-        long long curHard = curScore / 1000000000LL;
-        long long bestHard = s.bestScore / 1000000000LL;
+        long long curHard = curScore / SCORE_HARD_UNIT;
+        long long bestHard = s.bestScore / SCORE_HARD_UNIT;
         int op = rnInt(rng, 11);
         if (op <= 8) {
             // ── 単一/2セルの直接評価オペ（3..8 は targetedFix の6スロット＝Kotlin と同比率）──
@@ -2024,7 +2034,7 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
             }
             if (moved) {
                 long long ns = st.score;
-                if (ns / 1000000000LL <= bestHard && (ns < curScore || polishAcceptN(ns, curScore, st.nextDouble()))) {
+                if (ns / SCORE_HARD_UNIT <= bestHard && (ns < curScore || polishAcceptN(ns, curScore, st.nextDouble()))) {
                     curScore = ns;
                     if (ns < s.bestScore) {
                         std::memcpy(s.bestSol.data(), st.a.data(), sizeof(int) * (size_t)S * T);
@@ -2050,7 +2060,7 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
             }
             for (int d = 0; d < nDiffs; d++) { int f = s.diffFlat[d]; st.deltaApply(f / T, f % T, s.scratch[(size_t)f]); }
             long long ns = st.score;
-            if (ns / 1000000000LL <= bestHard && (ns < curScore || polishAcceptN(ns, curScore, st.nextDouble()))) {
+            if (ns / SCORE_HARD_UNIT <= bestHard && (ns < curScore || polishAcceptN(ns, curScore, st.nextDouble()))) {
                 curScore = ns;
                 if (ns < s.bestScore) {
                     std::memcpy(s.bestSol.data(), st.a.data(), sizeof(int) * (size_t)S * T);
