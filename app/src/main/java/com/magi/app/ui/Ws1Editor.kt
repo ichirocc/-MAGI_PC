@@ -172,7 +172,12 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                     EditRowButton(onClick = { dialog = Ws1Dialog.EditStaff(i, st.name, st.groupIdx) }, enabled = !ui.running)
                     if (v.staff.size > 1) {
                         Spacer(Modifier.width(6.dp))
-                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("staff", i, st.name) }, enabled = !ui.running)
+                        DeleteRowButton(onClick = {
+                            // [design-review] 職員管理ドア（StaffManageCard）の同じ削除操作（vm.ws1RemoveStaff）は
+                            //   「この職員の勤務・希望も消えます」と最も重要な結果を警告しているのに、こちらの
+                            //   ドアからは同じ操作なのにその警告が無かった（同じ操作は同じ形に＝3.397.0）。
+                            dialog = Ws1Dialog.ConfirmDelete("staff", i, st.name, "この職員の勤務・希望も消えます。")
+                        }, enabled = !ui.running)
                     }
                 }
             }
