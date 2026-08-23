@@ -105,10 +105,12 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                         DeleteRowButton(onClick = {
                             // [3.429.0/R-03] 削除する前に、参照している制約の件数を見せる（削除自体は
                             //   従来どおり進められる＝止めるのではなく、確認ダイアログを情報つきにする）。
+                            // [design-review] 参照件数は独立の文（note）として渡す。旧実装はラベルの
+                            //   括弧内に詰め込んでおり、スキルグループ側（別文として表示）と表現が
+                            //   食い違っていた（同じ操作は同じ形にする＝3.397.0）。
                             val refs = vm.ws1ShiftRefCount(k)
-                            val label = "シフト ${toHankakuKigou(s.kigou)}" +
-                                if (refs > 0) "（このシフトを参照する制約が${refs}件あります。削除すると評価対象から外れます）" else ""
-                            dialog = Ws1Dialog.ConfirmDelete("shift", k, label)
+                            val note = if (refs > 0) "このシフトを参照する制約が${refs}件あります。削除すると評価対象から外れます。" else ""
+                            dialog = Ws1Dialog.ConfirmDelete("shift", k, "シフト ${toHankakuKigou(s.kigou)}", note)
                         }, enabled = !ui.running)
                     }
                 }
@@ -143,13 +145,13 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                         Spacer(Modifier.width(6.dp))
                         DeleteRowButton(onClick = {
                             // [3.429.0/R-03] 所属者移動に加え、参照している制約の件数も見せる。
+                            // [design-review] 参照件数は独立の文（note）として渡す。旧実装は所属者移動の
+                            //   短い注記と参照件数の完全な文を同じ括弧に詰め込んでおり、文が積み重なって
+                            //   読みにくかった（括弧の中に文を入れない）。
                             val refs = vm.ws1GroupRefCount(g)
-                            val parts = buildList {
-                                if (members > 0) add("所属${members}名→先頭グループへ移動")
-                                if (refs > 0) add("このグループを参照する制約が${refs}件あります。削除すると評価対象から外れます")
-                            }
-                            val label = "グループ ${toHankakuKigou(gr.kigou)}" + if (parts.isNotEmpty()) "（${parts.joinToString("。")}）" else ""
-                            dialog = Ws1Dialog.ConfirmDelete("group", g, label)
+                            val note = if (refs > 0) "このグループを参照する制約が${refs}件あります。削除すると評価対象から外れます。" else ""
+                            val label = "グループ ${toHankakuKigou(gr.kigou)}" + if (members > 0) "（所属${members}名→先頭グループへ移動）" else ""
+                            dialog = Ws1Dialog.ConfirmDelete("group", g, label, note)
                         }, enabled = !ui.running)
                     }
                 }
@@ -243,7 +245,9 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
             },
             dismissButton = { DialogDismissButton(onClick = { dialog = null }) },
             title = { Text("削除の確認") },
-            text = { Text("${d.label} を削除します。割当やインデックスが再構成されます。よろしいですか？") },
+            // [design-review] 「インデックス」は開発者向けの内部語（operator_ux.md §1「専門用語を使わない」）。
+            //   ふつうの言葉に置き換え、参照件数(note)は独立の文として挟む。
+            text = { Text("${d.label} を削除します。${d.note}残りの設定は自動で調整されます。よろしいですか？") },
         )
         null -> Unit
     }
@@ -258,7 +262,7 @@ private sealed interface Ws1Dialog {
     object AddStaff : Ws1Dialog
     object BulkAddShift : Ws1Dialog
     object BulkAddStaff : Ws1Dialog
-    data class ConfirmDelete(val kind: String, val index: Int, val label: String) : Ws1Dialog
+    data class ConfirmDelete(val kind: String, val index: Int, val label: String, val note: String = "") : Ws1Dialog
 }
 
 @Composable
