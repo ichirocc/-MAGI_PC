@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -52,12 +53,16 @@ internal fun hexToColor(hex: String): Color {
 //   パレットに無く「現在の色が画面の中にない・他の色も選択できない」だった。20色=5×4の完全グリッドにし、
 //   既定色(#BA1A1A 必須 / #E08A1E 要調整)と MagiAccent 系(赤/橙/緑/青/紫/桃/灰)を含める。
 // [ユーザー指示] 25色=5×5へ拡張。5行目に濃色・アクセントを5つ追加（濃灰・茶・深緑・インディゴ・辛子色）。
+// [ユーザー指示 再改訂] 「淡い中間色25色＋濃色太字テキスト」。全25色を淡いパステル調（中明度）へ差し替え。
+//   pickFg()の明度しきい値140に対し全色177〜219＝濃色文字(#14110d)が選ばれることを算出で確認済み
+//   （淡い背景に対して選択チェック印が確実に濃色で乗る）。行構成(暖色/緑/青/紫系/追加色)は既定の
+//   グリッド位置を維持し、色相だけ全面的に淡色化。
 private val COLOR_PALETTE = listOf(
-    "#ba1a1a", "#d23b34", "#c0563f", "#e08a1e", "#d7a13b",
-    "#6fa56b", "#2e9e62", "#4fa89c", "#556b2f", "#8a979b",
-    "#5fb3d4", "#3b6fd4", "#3f6fc0", "#34558b", "#8195a8",
-    "#8a5cd1", "#7a4fd0", "#a96bff", "#d24d89", "#6e6354",
-    "#4a4a4a", "#8b5a2b", "#2f6f4e", "#4a5fc1", "#b8860b",
+    "#f2a8a8", "#f2b8a0", "#f3c49a", "#f4d295", "#f0dc9c",
+    "#b9dba0", "#a6d9ab", "#9fd9c8", "#a9cf9a", "#c3cfc2",
+    "#a3d7e0", "#a9c9ec", "#aebde0", "#9fb3d6", "#bcc8d6",
+    "#c9aee0", "#ccb3e8", "#dcb8ef", "#eeb4cf", "#cdb59f",
+    "#c9c9c9", "#d8b79c", "#a8c9b0", "#b3b8e6", "#e3cf9a",
 )
 
 /**
@@ -196,7 +201,14 @@ internal fun ColorPickerDialog(
                                     .semantics { contentDescription = "色 $hex" + (if (selected) "・選択中" else "") },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (selected) Text("✓", color = hexToColor(pickFg(hex)), textAlign = TextAlign.Center)
+                                if (selected) {
+                                    Text(
+                                        "✓",
+                                        color = hexToColor(pickFg(hex)),
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
                             }
                         }
                         repeat(perRow - rowColors.size) { Spacer(Modifier.weight(1f).aspectRatio(1f)) }
