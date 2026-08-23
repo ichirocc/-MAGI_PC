@@ -593,9 +593,10 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                             // ④ 人数と組み合わせ ★統合: グループ(C41/C42) ＋ スキルグループ(C41s/C42s)
                             CollapsibleSection("④ 人数と組み合わせ", "yr_headcount") {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SectionNote("その日その勤務に入る人数の下限／上限（群のレンジ）と、同じ日に一緒に入れない組み合わせ（群ペア禁止）を設定します。グループ単位とスキルグループ単位の両方を扱えます。")
+                                    // [3.427.0] 旧 SectionNote（群のレンジ／群ペア禁止の列挙）は撤去:
+                                    //   直下のカード見出し・族見出しの完全な重複だった（3.129.0 の方針）。
                                     key(ui.editRev) {
-                                        ConstraintsCard(ui, vm, title = "グループ単位（群のレンジ・群ペア禁止）",
+                                        ConstraintsCard(ui, vm, title = "グループ単位",
                                             keys = setOf("cons41", "cons42"))
                                     }
                                     key(ui.editRev) { SkillConstraintsCard(ui, vm) }
@@ -603,7 +604,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                             }
                             CollapsibleSection("⑤ 並び・くり返し", "yr_cons") {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SectionNote("勤務の並び方のルールです。『○日間に△回以上』の窓の要件、個人の合計（回数）、『必須／禁止／推奨／回避の並び』のパターンを設定します。")
+                                    // [3.427.0] 旧 SectionNote（窓の要件／個人の合計／並び4種の列挙）は撤去:
+                                    //   ④と同じく直下のカード・族見出しの完全な重複だった。
                                     key(ui.editRev) {
                                         ConstraintsCard(ui, vm, title = "",
                                             keys = setOf("cons1", "cons2", "cons3", "cons3n", "cons3m", "cons3mn"))

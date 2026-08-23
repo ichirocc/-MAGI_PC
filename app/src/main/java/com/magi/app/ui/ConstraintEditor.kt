@@ -74,8 +74,7 @@ fun ConstraintsCard(
                     fam.rows.forEachIndexed { idx, row ->
                         ConstraintRow(row, enabled = !ui.running,
                             onEdit = { editTarget = fam.key to idx },
-                            onDelete = { vm.removeConstraint(fam.key, idx) },
-                            sub = fam.subs.getOrNull(idx))
+                            onDelete = { vm.removeConstraint(fam.key, idx) })
                     }
                 }
                 AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)
@@ -135,11 +134,11 @@ private fun ConstraintHelpExpander(families: List<MagiViewModel.ConstraintFamily
  * 表しているので、同じ操作は同じ形にする。貼り紙は剥がした。
  */
 @Composable
-private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, sub: String? = null) {
+private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        // [3.409.18] sub=読み下し文（ペア禁止系のみ）。「吉・Dﾃ ✕ 古・休」という記号の羅列から
-        //   「同じ日に両方いると違反」という意味文を利用者が復元できず、実機で聞き返された。
-        //   本文と同じタップ標的の中に淡色で添える（行の操作性は不変）。
+        // [3.427.0] 旧 sub（3.409.18 の読み下し文）は撤去。ペア禁止系の行タイトル自体を
+        //   「吉の休 ✕ 古の休」（の形）にしたため、行下の文はタイトルと見出し（同じ日に不可）の
+        //   完全な重複だった。全体の意味は ⓘ詳しい説明（constraintHelp）が持つ。
         Column(Modifier
             .weight(1f)
             .clip(MaterialTheme.shapes.small)
@@ -148,10 +147,6 @@ private fun ConstraintRow(row: String, enabled: Boolean, onEdit: () -> Unit, onD
             .wrapContentHeight(Alignment.CenterVertically)
             .padding(horizontal = 4.dp)) {
             Text(row, fontSize = 12.sp)
-            // [3.409.19/design-review] 11sp はこのアプリ唯一の最小値で、MagiTheme labelSmall の
-            //   「11sp→13→14sp へ継続底上げ」（判読性の決定）に逆行していた。周辺説明文の最小=12sp へ
-            //   合わせ、階層は色（onSurfaceVariant）だけで示す。
-            if (sub != null) Text(sub, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         EditRowButton(onClick = onEdit, enabled = enabled)
         Spacer(Modifier.width(6.dp))
@@ -168,7 +163,9 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
     val families = vm.skillConstraintFamilies()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("上の「スキルグループ」に対する専用ルールです。スキル群のレンジ（1日の人数）と、スキル群ペア禁止（同じ日に不可・できるだけ守る）を設定します。",
+            // [3.427.0] 旧文は続けて「スキル群のレンジ（…）と、スキル群ペア禁止（…）を設定します」と
+            //   列挙していたが、直下の族見出し2行と完全な重複＝カードの識別に要る1文だけ残す。
+            Text("上の「スキルグループ」に対する専用ルールです。",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
             if (vm.skillGroupKigouList().isEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -186,8 +183,7 @@ fun SkillConstraintsCard(ui: UiState, vm: MagiViewModel) {
                         fam.rows.forEachIndexed { idx, row ->
                             ConstraintRow(row, enabled = !ui.running,
                                 onEdit = { editTarget = fam.key to idx },
-                                onDelete = { vm.removeConstraint(fam.key, idx) },
-                                sub = fam.subs.getOrNull(idx))
+                                onDelete = { vm.removeConstraint(fam.key, idx) })
                         }
                     }
                     AddRowButton("追加", onClick = { addFamily = fam.key }, enabled = !ui.running)
