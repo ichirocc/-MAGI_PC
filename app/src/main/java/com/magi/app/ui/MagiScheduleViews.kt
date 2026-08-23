@@ -567,20 +567,13 @@ internal fun ScheduleGrid(
                     }
                 }
             }
-            // [E7 誰が・いつ] 表示中(フィルタ通過)のセル違反を「名前 d日」で列挙（最大8件）。種別を絞ると場所が一目で分かる。
-            //   種別チップは勤務表タブ上部の共有フィルタ(ViolationFilterBar)へ集約したのでここには出さない。
-            run {
-                val shownLocs = ui.violationCells.entries.filter { visibleCellVio(ui, it.key, vioEnabled) != null }.mapNotNull { e ->
-                    val p = e.key.split(","); val i = p.getOrNull(0)?.toIntOrNull(); val j = p.getOrNull(1)?.toIntOrNull()
-                    if (i == null || j == null) null else "${ui.staffNames.getOrNull(i) ?: "#$i"} ${j + 1}日"
-                }
-                if (shownLocs.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    val more = if (shownLocs.size > 8) " 他${shownLocs.size - 8}件" else ""
-                    Text("違反セル：${shownLocs.take(8).joinToString("、")}$more",
-                        style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
-                }
-            }
+            // [3.431.0 冗長性見直し] 旧「E7 誰が・いつ」= 表示中の違反セルを「名前 d日」で最大8件+「他N件」と
+            //   テキスト列挙していたブロックを撤去。①タップ不可（グリッドの当該セルへ飛べない）②直下の「違反ナビ」
+            //   （＜前の違反/次の違反＞）が同じ「違反のある場所を辿る」役割をタップ操作で既に提供 ③この列挙は
+            //   ui.violationCells（セル系のみ）しか数えず、上の ViolationFilterBar の「要確認N件」（セル+日+回数の
+            //   3マップ合計）と母数が食い違う部分集合＝件数の異なる2つの「N件」が並ぶ混乱の元だった。他75件のような
+            //   長大な棒読みは読めない・押せないで「人間に見やすい」の逆＝MismatchExtractCard撤去(3.194.0)と同型の
+            //   貼り紙を撤去し、グリッド自体の違反枠と違反ナビに一本化。表示のみ・スコアリング不変。
             // [②] 凡例は上部「検索・凡例」折りたたみへ集約したためグリッド内からは撤去（重複回避）。
             // [週ページング＋横スクロール併用] 前週/次週 は hScroll を1週ぶんジャンプ（列は隠さない＝自由スクロールと併用）。
             if (weeks.size > 1) {
