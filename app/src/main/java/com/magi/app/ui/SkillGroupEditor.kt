@@ -117,10 +117,13 @@ fun SkillGroupCard(ui: UiState, vm: MagiViewModel) {
 
     confirmDelete?.let { g ->
         val name = skills.getOrNull(g)?.let { "${it.kigou} ${it.name}" } ?: "このスキルグループ"
+        // [3.429.0/R-03] cons41s/cons42s の参照件数も見せる（削除自体は従来どおり進められる）。
+        val refs = vm.ws1SkillGroupRefCount(g)
+        val refNote = if (refs > 0) " このスキルグループを参照する制約が${refs}件あります。削除すると評価対象から外れます。" else ""
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text("スキルグループを削除しますか？") },
-            text = { Text("「$name」を削除します。所属していた職員のスキル割当は自動で付け替わります。元に戻すで取り消せます。") },
+            text = { Text("「$name」を削除します。所属していた職員のスキル割当は自動で付け替わります。元に戻すで取り消せます。$refNote") },
             confirmButton = { DialogDangerButton("削除する", onClick = { vm.removeSkillGroup(g); confirmDelete = null }) },
             dismissButton = { DialogDismissButton(onClick = { confirmDelete = null }) },
         )

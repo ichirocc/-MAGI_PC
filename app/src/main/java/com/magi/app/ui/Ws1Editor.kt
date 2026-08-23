@@ -102,7 +102,14 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                     EditRowButton(onClick = { dialog = Ws1Dialog.EditShift(k, s.name, s.kigou, s.need1, s.need2) }, enabled = !ui.running)
                     if (v.shifts.size > 1) {
                         Spacer(Modifier.width(6.dp))
-                        DeleteRowButton(onClick = { dialog = Ws1Dialog.ConfirmDelete("shift", k, "シフト ${toHankakuKigou(s.kigou)}") }, enabled = !ui.running)
+                        DeleteRowButton(onClick = {
+                            // [3.429.0/R-03] 削除する前に、参照している制約の件数を見せる（削除自体は
+                            //   従来どおり進められる＝止めるのではなく、確認ダイアログを情報つきにする）。
+                            val refs = vm.ws1ShiftRefCount(k)
+                            val label = "シフト ${toHankakuKigou(s.kigou)}" +
+                                if (refs > 0) "（このシフトを参照する制約が${refs}件あります。削除すると評価対象から外れます）" else ""
+                            dialog = Ws1Dialog.ConfirmDelete("shift", k, label)
+                        }, enabled = !ui.running)
                     }
                 }
             }
@@ -135,7 +142,13 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                         val members = vm.ws1GroupMemberCount(g)
                         Spacer(Modifier.width(6.dp))
                         DeleteRowButton(onClick = {
-                            val label = "グループ ${toHankakuKigou(gr.kigou)}" + if (members > 0) "（所属${members}名→先頭グループへ移動）" else ""
+                            // [3.429.0/R-03] 所属者移動に加え、参照している制約の件数も見せる。
+                            val refs = vm.ws1GroupRefCount(g)
+                            val parts = buildList {
+                                if (members > 0) add("所属${members}名→先頭グループへ移動")
+                                if (refs > 0) add("このグループを参照する制約が${refs}件あります。削除すると評価対象から外れます")
+                            }
+                            val label = "グループ ${toHankakuKigou(gr.kigou)}" + if (parts.isNotEmpty()) "（${parts.joinToString("。")}）" else ""
                             dialog = Ws1Dialog.ConfirmDelete("group", g, label)
                         }, enabled = !ui.running)
                     }

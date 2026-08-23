@@ -153,6 +153,40 @@ object Ws1Ops {
         return existing.withIndex().any { (i, x) -> i != exceptIndex && x.trim() == k }
     }
 
+    /**
+     * [3.429.0/R-03] シフト削除の確認ダイアログへ渡す影響件数。`Problem.shiftIdxOf` と同じ厳密一致(==)で
+     * 数える（trim なし＝評価時の解決と完全に同じ基準）。読取専用・カウントのみ＝評価/削除の挙動には触れない。
+     * 削除後にどう振る舞うか（`_unresolvedRows` で無言除外を可視化＝3.320.0）は不変。ここは**削除する前に**
+     * 何件へ影響するかを見せるだけ。
+     */
+    fun shiftRefCount(state: MagiState, kigou: String): Int {
+        var n = 0
+        n += state.cons1.count { it.shiftKigou == kigou }
+        n += state.cons2.count { it.shiftKigou == kigou }
+        n += (state.cons3 + state.cons3n + state.cons3m + state.cons3mn).count { row -> row.pattern.any { it == kigou } }
+        n += state.cons41.count { it.shiftKigou == kigou }
+        n += state.cons42.count { it.s1Kigou == kigou || it.s2Kigou == kigou }
+        n += state.cons41s.count { it.shiftKigou == kigou }
+        n += state.cons42s.count { it.s1Kigou == kigou || it.s2Kigou == kigou }
+        return n
+    }
+
+    /** 同上・グループ削除版（cons41/cons42 の groupKigou/g1Kigou/g2Kigou のみ＝スキル群は別分類のため対象外）。 */
+    fun groupRefCount(state: MagiState, kigou: String): Int {
+        var n = 0
+        n += state.cons41.count { it.groupKigou == kigou }
+        n += state.cons42.count { it.g1Kigou == kigou || it.g2Kigou == kigou }
+        return n
+    }
+
+    /** 同上・スキル群削除版（cons41s/cons42s の groupKigou/g1Kigou/g2Kigou）。 */
+    fun skillGroupRefCount(state: MagiState, kigou: String): Int {
+        var n = 0
+        n += state.cons41s.count { it.groupKigou == kigou }
+        n += state.cons42s.count { it.g1Kigou == kigou || it.g2Kigou == kigou }
+        return n
+    }
+
     fun addShift(state: MagiState, name: String, kigou: String, need1: String, need2: String): MagiState {
         val shifts = state.shifts + Shift(name, kigou, need1, need2)
         val gs = state.groupShift.map { it + 0 }                 // new shift not allowed by default
