@@ -9,10 +9,12 @@ plugins {
 android {
     namespace = "com.magi.app"
     // [Android 17 会話バブル] compileSdk は 36 のまま。当初 37 へ上げたが CI（Release Build）で
-    //   sdkmanager が "Failed to find package 'platforms;android-37'" となり、API 37（Android 17）の
-    //   platform SDK が未提供と確認（run 29385635188）。Bubbles API は Android 11/API30+ で minSdk 36 なら
-    //   常時利用可のため、バブル機能は 36 で完全に動作する。API 37 の SDK 公開後に 36→37 と CI の
-    //   sdkmanager 行へ platforms;android-37・build-tools;37.0.0 を追加すれば「Android 17 でコンパイル」へ移行できる。
+    //   sdkmanager が "Failed to find package 'platforms;android-37'" となり当時は未提供だった（run 29385635188）。
+    //   [3.426.0 更新] 3.409.12 で SDK リポジトリを直接確認: 素の 'platforms;android-37' は存在せず
+    //   'platforms;android-37.0'（stable・revision 2）と 'build-tools;37.0.0' が公開済み＝「未公開」は解消。
+    //   残る移行ゲートは (a) compileSdk=37 が AGP 9.1.1 でマイナー付き 37.0 へ解決するかの CI 確認
+    //   (b) targetSdk まで上げるかは Android 17 の挙動変更を受け入れる製品判断。Bubbles API は
+    //   Android 11/API30+ で minSdk 36 なら常時利用可のため、バブル機能は 36 で完全に動作する＝機能上の利得ゼロ。
     compileSdk = 36
     // [ネイティブ加速] NDK を明示固定（CI と開発環境で同一ビルドを保証。AGP の既定NDKに追従させない）。
     ndkVersion = "26.1.10909125"
@@ -21,8 +23,8 @@ android {
         applicationId = "com.magi.app"
         minSdk = 36
         targetSdk = 36
-        versionCode = 626
-        versionName = "3.425.0-branch-cleanup-integration"
+        versionCode = 627
+        versionName = "3.426.0-version-label-collision-note"
         // [ネイティブ加速] minSdk 36（Android 16+）の実機は arm64 のみ対象で十分。
         //   .so が無い環境でも NativeBridge が false を返し Kotlin パスで全機能が動く。
         ndk { abiFilters += listOf("arm64-v8a") }
