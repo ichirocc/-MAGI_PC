@@ -2355,7 +2355,7 @@ object V6HotfixPasses {
                             if (i == hi && newK == k) continue
                             if (i == receiver && newK != k) continue
                             if (newK != oldK) {
-                                // [3.415.0] 旧: 記号が「希」のシフトを割当先から外していた（3.278.0）。撤去の根拠3点。
+                                // [3.417.0] 旧: 記号が「希」のシフトを割当先から外していた（3.278.0）。撤去の根拠3点。
                                 //   ①**主張が実装されていない**: コメントは「最適化が自由生成しない」と書いていたが、
                                 //     このガードは研磨3箇所にしかなく、探索本体（SA/ALNS の randomAllowedCell・
                                 //     destroyRepair・findTargetedFix 等）は `allowedShiftsForStaff` から選ぶので素通り
@@ -2502,7 +2502,7 @@ object V6HotfixPasses {
                             if (i == victim && newK == forbiddenK) continue
                             val changed = newK != oldK
                             if (changed) {
-                                // [3.415.0] 記号「希」を割当先から外すガードを撤去（根拠は手M側の同種箇所に記載）。
+                                // [3.417.0] 記号「希」を割当先から外すガードを撤去（根拠は手M側の同種箇所に記載）。
                                 if (!movable(i, j) || !p.canDo(i, newK)) continue
                                 work[i][j] = newK
                                 val badRun = p.makesForbiddenRun(work, i, j, newK)

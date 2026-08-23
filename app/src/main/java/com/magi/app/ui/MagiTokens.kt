@@ -45,7 +45,7 @@ fun magiWarnColors(): Pair<Color, Color> {
 }
 
 // シフトの表示色の既定フォールバックは ShiftAppearance.resolveShiftColor が唯一の真実源
-// （[3.415.0] 記号からは何も推測しない＝明示色→一覧上の位置、の順で決まる）。
+// （[3.417.0] 記号からは何も推測しない＝明示色→一覧上の位置、の順で決まる）。
 // （以前ここに同等の shiftAccentFallback があったが未配線・二重管理のため削除）
 
 /**

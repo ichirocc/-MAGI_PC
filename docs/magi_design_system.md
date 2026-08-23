@@ -21,74 +21,70 @@ Apple直コピーではなく **Jetpack Compose / Material 3 に自然に落と�
 |---|---|---|
 | A | テーマ整備（色・角丸・タイポ・スペーシング） | ✅ 色/角丸/タイポ（`MainActivity.MagiTheme`） + ✅ `MagiTokens`（spacing/意味色） |
 | B | 共通コンポーネント（カード/タイル/チップ/セグメント/ゲージ/ダイアログ） | 🟡 `MagiSegmentedControl`/`MagiScoreGauge`/`MagiTagChip`/`BigStat`/`Affordance.kt`✅ 他⬜（3.409.10 で実測して訂正） |
-| C | 画面反映（ホーム/勤務表/分析/編集/設定） | 🟡 ホーム✅ 勤務表(カレンダー/非色手がかり)✅ 分析(ゲージ)🟡 編集(月次/年次マスター7折りたたみ節)✅ 設定(冗長除去・見出し統一)✅ |
+| C | 画面反映（ホーム/勤務表/分析/編集/設定） | 🟡 ホーム✅ 勤務表(非色手がかり3段階)✅ 分析(ゲージ)🟡 編集(3ドア＋年間マスター5節)✅ 設定(冗長除去・見出し統一)✅（**§5 に現物を記載**・3.425.0 で実測して訂正。旧記述の「カレンダー」表示は存在しない） |
 | D | 画面最適化（横/折りたたみ等） | 対象外（ユーザー指示により非対応） |
 
 ---
 
 ## 1. カラートークン
 
-### 1.1 Material3 colorScheme（実装済 / `MainActivity.kt`）
+### 1.1 Material3 colorScheme（実装済 / **値の一次ソース＝`MainActivity.MagiTheme`**）
 
-ライト（既定）:
+> **値をここに転記しない**。過去に転記した表は 3.89.0（deep teal への刷新）で全ロールが変わったあとも
+> 旧 Tailwind 系の HEX を載せ続け、**実装と一致しない状態で「実装済」と称していた**。値はコードを見る。
+> ここに置くのは**コードから読み取れない規則**だけ。
 
-| ロール | HEX | 用途 |
-|---|---|---|
-| `background` | `#F5F5F7` | 明るく静かなベース |
-| `surface` | `#FFFFFF` | カード面 |
-| `surfaceVariant` | `#F0F1F4` | 副次面（SurfaceSubtle） |
-| `outline` | `#D9DCE3` | 淡い境界 |
-| `onSurface` | `#111318` | 主要テキスト（TextPrimary） |
-| `onSurfaceVariant` | `#6B7280` | 補助テキスト（TextSecondary） |
-| `primary` | `#3B82F6` | CTA / 実行中（青） |
-| `tertiary` | `#22C55E` | 成功 / 配布可（緑） |
-| `error` | `#EF4444` | 重大違反（赤） |
+- **外観は UD（高コントラスト・白地）固定**（D8 / 3.121.0）。`MagiTheme(mode)` は 0=システム / 1=明 /
+  2=暗 / 3=UD を今も持つが、`MainActivity` は **3 を直指定**し、設定タブのテーマ選択は撤去済み。
+  明/暗の定義は復活可能な形で温存している。
+- ロールの意味: `primary`=CTA・実行中 / `tertiary`=成功・配布可 / `error`=重大違反 /
+  `surfaceVariant`=副次面 / `outline`=境界 / `onSurfaceVariant`=補助テキスト。
+- **純黒本文を使わない・重い影を使わない**（`design_lint` P1/P3 が機械検査）。階層は境界と surface トーンで作る。
 
-ダーク: `background #111318` / `surface #1B1D22` / `primary #60A5FA` / `tertiary #4ADE80` /
-`error #F87171`。UD（高コントラスト, `mode=3`）は白地 + `#000` 境界の独立スキーム。
+### 1.2 MagiTokens 意味色・アクセント（実装済 / `MagiTokens.kt`・`object MagiAccent`）
 
-### 1.2 MagiTokens 意味色・アクセント（未実装 / 追加対象）
+colorScheme に無い「意味色／シフト色」を一元化する。**値の一次ソースは `MagiAccent`**（同上の理由で転記しない）。
 
-colorScheme に無い「意味色／シフト色」を一元化する。`@Immutable object MagiAccent`。
-
-| トークン | HEX | 意味 |
-|---|---|---|
-| `blue` | `#3B82F6` | 実行中 / 早番 |
-| `green` | `#22C55E` | 成功 / 日勤 |
-| `orange` | `#F59E0B` | 警告 / 夜勤 |
-| `purple` | `#A855F7` | 遅番 / 個人属性 |
-| `pink` | `#EC4899` | 希望 / 個人属性 |
-| `red` | `#EF4444` | 重大違反 / NG制約 |
-| `gray` | `#9CA3AF` | 休み / 無効 |
+| トークン | 意味 |
+|---|---|
+| `blue` | 実行中 / 早番 |
+| `green` | 成功 / 日勤 |
+| `orange` | 警告 / 夜勤 |
+| `purple` | 遅番 / 個人属性 |
+| `pink` | 希望 / 個人属性 |
+| `red` | 重大違反 / NG制約 |
+| `gray` | 休み / 無効 |
 
 意味付け: 最適化成功=green / 実行中=blue / 警告=orange / 重大違反=red / 希望・個人属性=pink|purple。
+**上の「早番/日勤/…」は色の由来を説明する語であって、シフトの判定には使わない**（次項）。
 
-### 1.3 シフト色マッピング（既定パレット）
+### 1.3 シフト色の解決規則
 
-**重要**: 実データの色（`state.shiftColors[kigou]` → `ShiftAppearance.resolveShiftColor`）が**最優先**。
-データに色が無い場合のみ、以下の既定テイストにフォールバックする（`shiftAccentFallback(kigou,name)`）。
+`ShiftAppearance.resolveShiftColor(explicit, index)` が唯一の解決点。順に:
 
-| シフト | 既定色 |
-|---|---|
-| 早番 | blue `#3B82F6` |
-| 日勤 | green `#22C55E` |
-| 遅番 | purple `#A855F7` |
-| 夜勤 | orange `#F59E0B` |
-| 休み | gray `#9CA3AF` |
-| 希望 | pink `#EC4899` |
-| NG/違反 | red `#EF4444` |
+1. **利用者の明示色** `state.shiftColors[kigou]` があればそれ（第1優先）。
+2. 無ければ**一覧上の位置**（`index % SHIFT_WORK_PALETTE.size`）。
+3. 位置も不明なら中立色 `NEUTRAL_SHIFT_COLOR`（どのシフトでも同じ＝記号による優劣を持たない）。
 
-各ピル/タイルのテキスト色は `ShiftAppearance.pickTextColor(bg)`（既存）で黒/白を自動選択。
+> **記号・名称からカテゴリを推測しない**（3.417.0 で撤去）。旧実装は「休/夜/早/遅/日」を含むかで色を決める
+> `shiftAccentFallback(kigou, name)` 相当を持っていたが、①「公」「OFF」の職場では効かない
+> ②「休日」のように複数のカテゴリ語を含む名称は先に書いた条件が勝つだけ、で当てにならない。
+> いまは `resolveShiftColor` の**シグネチャに文字列を渡す余地が無い**＝構造的に再発しない。
+> 同じ型の分岐は `design_lint` **P10** がラチェットで見張る（§4 の禁止事項）。
+
+各ピル/タイルのテキスト色は `ShiftAppearance.pickTextColor(bg)` で黒/白を自動選択。
 
 ---
 
 ## 2. Shape / Spacing / Elevation
 
-### 2.1 Shapes（実装済 / `MainActivity.kt`）
-`extraSmall 12 / small 16 / medium 20 / large 24 / extraLarge 28`（dp, RoundedCorner）。
-- カード = `medium`(20) / タイル = `large`(24) / ピル・チップ = `CircleShape`(999相当)。
+### 2.1 Shapes（実装済 / `MainActivity.MagiTheme`）
+`extraSmall 10 / small 12 / medium 14 / large 18 / extraLarge 24`（dp, RoundedCorner）。
+- chip・入力 = `extraSmall`(10) / カード = `medium`(14) / タイル・シート = `large`(18) /
+  ピル・チップ（完全な丸） = `CircleShape`(999相当)。
+- **任意の dp を新規に使わない**（`design_lint` P4 がラチェット監視・3.409.6 で baseline 0 まで下げ済み）。
 
-### 2.2 Spacing（未実装 / `object MagiSpacing`）
+### 2.2 Spacing（実装済 / `MagiTokens.kt`・`object MagiSpacing`）
 4dp グリッド。
 
 | 名称 | dp | 用途 |
@@ -98,6 +94,8 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 | `md` | 12 | カード内行間 |
 | `lg` | 16 | カード内余白（標準） |
 | `xl` | 20 | カード内余白（広） |
+| `section` | 20 | セクション（カード）間 |
+| `screenH` | 16 | 画面左右パディング |
 | `section` | 20 | セクション（カード）間 |
 | `screenH` | 16 | 画面左右パディング |
 
@@ -117,11 +115,14 @@ colorScheme に無い「意味色／シフト色」を一元化する。`@Immuta
 | `headlineSmall` | 24 Bold | 画面タイトル |
 | `titleLarge` | 20 SemiBold | セクションタイトル |
 | `titleMedium` | 17 SemiBold | カード見出し |
-| `titleSmall` | 15 SemiBold | 行タイトル |
-| `bodyLarge/Medium/Small` | 16/15/13 | 本文・補助 |
-| `labelLarge/Medium` | 15/13 | ボタン・ラベル |
+| `titleSmall` | 16 SemiBold | 行タイトル |
+| `bodyLarge/Medium/Small` | 17/16/14 | 本文・補助 |
+| `labelLarge/Medium` | 16/14 | ボタン・ラベル |
+| `labelSmall` | 14 Medium | チップ・凡例・補足の**下限**（11sp→13→14 と継続して底上げ） |
 
 ルール: 画面タイトル大・本文静か・**数値最大**。`sp` はシステム文字サイズに追従。
+本文・ラベル層は実機の「文字が小さい」指摘を受けて +1sp 底上げ済み（最小 tier=14sp）。見出し層
+（title/headline/display）は密な表の折返しを避けるため据え置き＝**この2層は同じ数字にならない**。
 大数値は `displaySmall`（34）を基準にし、特に強調する箇所のみ `fontSize=44.sp` をローカル指定。
 
 ---
@@ -254,6 +255,11 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 
 ---
 
+## 5. 画面反映（**いま画面にある構成**）
+
+> §4 が「作りたい共通部品の目録（⬜=未実装を含む）」なのに対し、**§5 は現物だけ**を書く。
+> 撤去した部品の名前は `>` 引用で「存在しない」と明示して残す（旧記述をそのまま消すと、
+> 古い版を読んだ人が「あるはずのものが無い」と探し直すため）。
 
 > 下図は **トークン正確モック**（`MainActivity.kt`/`MagiApp.kt` の実トークンで描画）であり、
 > 実機スクリーンショットではない。`tools/mock_render_dogfood.py`（要 `pip install pillow`）で再生成できる
@@ -268,8 +274,12 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 | ⑤ 確認ダイアログ | ![ダイアログ](screens/05_dialog.png) |
 
 ### 5.1 ホーム ✅
-`StatusHero`✅ → `CopilotCard`(満足度ゲージ)✅ → `CoverageDiagnosisCard`✅ →
-`SummaryCard`(`BigStat`×3)✅ → `ActionCard`✅ → `AlternativesCard`✅ → `QuickActionGrid`✅。
+`InterruptedBanner` → `OperatorNextActionCard`(思考誘導＝主導線・`GuidedFixDialog` へ) →
+`LiveScheduleCard`(実行中の途中経過) → `CopilotCard`(満足度ゲージ) → `CoverageDiagnosisCard` →
+`ForbiddenRunDiagnosisCard` → `C1PlateauCard` → `PinFixedImpactCard` → `SettingIssuesCard` →
+`AlternativesCard`。
+> 旧記述の `StatusHero` / `SummaryCard` / `ActionCard` / `QuickActionGrid` は**いずれも存在しない**
+> （3.112.0 の冗長性削減で撤去。MagiApp.kt の該当箇所に撤去理由がコメントで残っている）。
 
 ![ホーム](screens/01_home.png)
 
@@ -277,28 +287,39 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 までをひと目で提示し、下部コマンドバーの「最適化する」へ親指誘導。
 
 ### 5.2 勤務表 ✅
-`ScheduleGrid` の表示切替を **`MagiSegmentedControl`(7日/カレンダー/1ヶ月)** に統一✅。
-月表示は **`MagiCalendarMonthView` + `DayShiftCell` + `ShiftEventPill`**（曜日列・シフト色ピル・不足赤枠）✅。
-セル編集は `ShiftPickerSheet`(親指ゾーンの大タイル)✅。シフト色は §1.3。
-違反は赤リング+赤ドットに加え、**非色手がかり(HARD実線/SOFT破線)+凡例 `ViolationLegend`** ✅。
+`WishApplyCard` → `ViolationFilterBar`(種別フィルタ＋集中モード) → `SearchLegendBar`(検索・凡例) →
+`ScheduleGrid`(`MagiFlatGrid`) → `TallyCard`(職員別/日別を `MagiSegmentedControl` で切替)。
+セル編集は `ShiftPickerSheet`(親指ゾーンの大タイル)。シフト色は §1.3。
+違反は**3段階の非色手がかり**（必須=実線 / 重いソフト=破線 / 軽いソフト=右上の角マーク・3.99.0）＋
+凡例 `ViolationLegend`。セル幅は「1週間(7日)が名前列と同時に収まる」よう動的計算（3.100.0）。
+> 旧記述の**表示切替セグメント(7日/カレンダー/1ヶ月)と `MagiCalendarMonthView`/`DayShiftCell`/
+> `ShiftEventPill` は存在しない**（§4.12 と同じ訂正。月全体の俯瞰=E5 はユーザーの明示 go まで保留）。
 
 ![勤務表7日](screens/02_schedule7.png)
 ![シフト選択](screens/03_picker.png)
 ![カレンダー](screens/04_calendar.png)
 
 ### 5.3 編集 🟡
-3サブタブ **今月の調整／シフト希望／基本マスター**（`MagiSegmentedControl`→`editScope`）。基本マスターは**5節に集約**（①シフト・グループ・スタッフ ②スキルグループ ③回数[目標/個人/グループ] ④人数と組み合わせ[C41/C42/C41s/C42s] ⑤並び・くり返し[cons系]）。各節先頭に `SectionNote`。フォーム/ダイアログは `DialogHeader`＋共有3ボタンで統一（§4.14）。`WishApplyCard`✅。一覧の `MagiListRow` 化は段階移行。
+3サブタブ **月次条件（毎月）／職員管理（随時）／年間マスター（制度変更時）**（`MagiSegmentedControl`→`editScope`。
+3.114.0 で「いつ触るか」で再編。旧: 今月の調整／シフト希望／基本マスター）。年間マスターは**5節に集約**（①シフト・グループ・スタッフ ②スキルグループ ③回数[目標/個人/グループ] ④人数と組み合わせ[C41/C42/C41s/C42s] ⑤並び・くり返し[cons系]）。各節先頭に `SectionNote`。フォーム/ダイアログは `DialogHeader`＋共有3ボタンで統一（§4.14）。`WishApplyCard`✅。一覧の `MagiListRow` 化は段階移行。
 
 ![ダイアログ](screens/05_dialog.png)
 
 ### 5.4 分析 🟡
-上部に **一般/プロ** 切替(`proMode`)。`OverviewDashboard`(ようす) / `CheckSummaryView`(チェック概要) / `BreakdownCard`(**違反内訳=全19種/100%**・fair/weekly含む) / `BottleneckCard` / `FixSuggestionCard`(1手提案)。`重大のみ`フィルタ✅。プロ時のみ `V6DashboardCard`＋`WeightTableCard`。プロ表示は冗長な説明文を非表示（構造的不足ヒント・状態・実データは常時）。
+上部に **一般/プロ** 切替(`proMode`)。`ConfirmListCard`(要確認一覧＝箇所単位・重大度リスト) /
+`AttentionCardsSection`(日別・人別の注意リスト＋「要確認のみ」トグル) / `BreakdownCard`(**違反内訳=全19種/100%**・
+fair/weekly含む) / `FixSuggestionCard`(1手提案)。プロ時のみ `V6DashboardCard`。
+> 旧記述の `OverviewDashboard` / `CheckSummaryView` / `BottleneckCard` は**いずれも撤去済み**
+> （3.83.0・3.286.0・3.103.1。`AttentionCardsSection` と `ConfirmListCard` が上位互換）。
+> `WeightTableCard`（直す優先順位）は 3.127.0 で**設定タブへ移動**した。
 
 ### 5.5 設定 ✅
-外観(`AppearanceCard`：自動/明/暗/UD ＋片手 ＋かんたん/プロ・`MagiSegmentedControl`化✅) /
+外観(`AppearanceCard`：片手モード ＋ かんたん/プロ。**テーマ選択は D8/3.121.0 で撤去し UD 固定**) /
+シフトの表示色(`ShiftColorCard`) / 違反種別の色(`ColorSettingsView`) / 直す優先順位(`WeightTableCard`) /
 **最適化設定**(`SettingsCard`：並列・時間予算・計算方式・仕上げ最適化・版表示) /
 データ(`DataActionsCard`：JSON/CSV入出力・コンポーネント別出力) /
-詳細設定(折りたたみ・既定=閉：1ヶ月俯瞰・ログ・違反色トークン)。
+詳細設定(`AdvancedSettingsSection`・折りたたみ・既定=閉：並列ワーカー/ネイティブ加速/Kotlin照合/
+仕上げ最適化などの調整とログの確認・出力)。
 **設定の重複を排除（v3.8）**：計算方式/ログの二重表示を解消（旧 FlagsView・トップの OperatorLogView を撤去）、カード見出しを `titleMedium` に統一。
 
 ---

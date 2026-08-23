@@ -24,7 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-22（3.424.0＝/code-reviewが3.422.0に検出した3件を全件修正。①3.422.0の
+**最終更新**：2026-08-23（3.425.0＝未マージブランチ `12ysbf`（旧PR#111 head）の後始末を選別統合。
+版番号取り違え10箇所（記号中立化=3.417.0 の作業コメントが `[3.415.0]`=改名ガードの番号のまま）を実番号へ、
+CLAUDE.md の節順・3.416.0 の stale 行（休セル淡色化「維持」→実際は3.417.0が撤去済み）を是正、
+`magi_design_system.md` の広範な実装乖離（色表HEX・Shapes全値・§5の存在しない部品9/19等）を実測値へ、
+design_lint P8 を地の文の「`名前`✅」へ拡張。ブランチは 3.421.0 を名乗り main と衝突するため
+3.421.0 の前例どおり盲目マージせず renumber（→3.425.0）して統合。docs/コメントのみ・挙動不変。
+3.424.0＝/code-reviewが3.422.0に検出した3件を全件修正。①3.422.0の
 searchWindowMs基準へのrebaseは「帯の外はビット単位で同一」という主張に反し、到達可能だった帯まで
 無計測で厳格化していた（300s予算: stallMs 270s→247.5s＝−8.3%等）→ stallHardMs/phaseGraceMsは
 budgetMs基準へ完全復元、stallMsは「予算×割合を基本・発火し得ない帯（≦80s）だけ探索区間×割合へ

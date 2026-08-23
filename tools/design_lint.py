@@ -238,6 +238,12 @@ P4_BASELINE = 0
 DS_DOC = os.path.join(ROOT, "docs/magi_design_system.md")
 RE_DS_HEAD = re.compile(r"^### (\d+\.\d+) (.*)$")
 RE_DS_FUN = re.compile(r"\bfun ([A-Za-z]\w*)\s*\(")
+# [3.425.0] 地の文で「`名前`✅」＝存在の断言。§5(画面反映)がこの形で撤去済みの部品を
+#   ✅ のまま並べ続けていた（StatusHero/SummaryCard/ActionCard/QuickActionGrid/
+#   MagiCalendarMonthView/DayShiftCell/ShiftEventPill＝**7件が存在しないのに ✅**）。
+#   閉じバッククォートの直後に ✅ が来る形だけを見るので、`Affordance.kt`✅（ファイル）や
+#   「⬜（… ✅ を訂正）」のような訂正文には当たらない＝誤検出しない。
+RE_DS_INLINE_OK = re.compile(r"`([A-Z][A-Za-z0-9]*)`\s*✅")
 
 
 def find_p8():
@@ -273,6 +279,11 @@ def find_p8():
                 name = fm.group(1)
                 if f"fun {name}(" not in code:
                     out.append(f"docs/magi_design_system.md:{n0} §{sec} ✅ だが実装に無い: {name}")
+        if not in_block:
+            for im in RE_DS_INLINE_OK.finditer(line):
+                name = im.group(1)
+                if f"fun {name}(" not in code:
+                    out.append(f"docs/magi_design_system.md:{n}  `{name}`✅ と書いているが実装に無い")
     return out
 
 
@@ -406,12 +417,12 @@ def find_p9():
     return hits
 
 
-# [3.415.0] P10: シフト記号を文字列リテラルと比べる箇所（ラチェット）。
+# [3.417.0] P10: シフト記号を文字列リテラルと比べる箇所（ラチェット）。
 #   勤務シフトの意味は**外部データ**（担当可否・必要人数・個人レンジ・希望・制約）だけが決める。
 #   記号の字面で分岐すると ①その記号を使わない職場では黙って効かない ②同じ字を含む別の勤務に
 #   誤って効く、のどちらかが必ず起きる。実際 3.106.0 は `Ws1Ops.removeShift` の記号取り違えを、
 #   監査A5 は「raw "休" 比較が『公』職場で全滅していた」を直しており、**この型は2回発生している**。
-#   3.415.0 で表示色のカテゴリ推測（休/夜/早/遅/日）と「希」の割当除外3件を撤去し、残りは下の
+#   3.417.0 で表示色のカテゴリ推測（休/夜/早/遅/日）と「希」の割当除外3件を撤去し、残りは下の
 #   baseline 2 件だけ:
 #     - `MirrorCore.restShiftIndex`（記号「休」の解決。Ws1Ops の初期化・診断・初期解が使う業務概念）
 #     - `V6SanityPort` 検査2g（その解決が失敗して先頭シフトを休とみなしていることの警告）
