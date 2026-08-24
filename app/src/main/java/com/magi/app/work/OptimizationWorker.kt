@@ -291,7 +291,19 @@ class OptimizationWorker(
             // [3.327.0/外部レビュー High3] **所有者のときだけ**片付ける。置き換えで打ち切られた旧実行が
             //   ここを通ると、新実行が既に書いた入力ファイルまで消していた（復元不能の窓を作る）。
             val owned = ownsFiles()
-            if (owned) reportClear("停止")
+            // [3.438.0/外部レビュー C1] `reportClear("停止")` は runId マーカーも消す(keepRunId 既定 false)。
+            //   `owned==true` のとき（＝ユーザーが押した「やめる」の通常経路）ここでマーカーが消えると、
+            //   直後に走る finally の `ownsFiles()` は同じファイルを読み直して**必ず false** を返す
+            //   （`activeRunId()` は読めないマーカーを 0L として扱い、`mine!=0L` の新経路では
+            //   `owns(mine)` が false になる）。`releasedByMe` をここで立てないと、finally の
+            //   `if (releasedByMe || ownsFiles())` が両方 false で `setRunning(false)` を一度も呼ばず、
+            //   **`OptimizationRepository.running` が停止後も恒久的に true のまま残る**。
+            //   `MagiViewModel.stop()` は自分の `ui.running`（表示の写し）を false に戻すだけで
+            //   `OptimizationRepository.running` には触れないため、画面は「実行中でない」ように見えながら
+            //   `optimizeInFlight()`（編集・実行の可否を判定する唯一の関数、3.336.0）は true のまま固着し、
+            //   以後の編集・Undo/Redo・新規実行が理由の見えないまま拒否され続ける（プロセス再起動まで）。
+            //   `catch (Throwable)` 側は元から `releasedByMe = true` を立てており、ここだけ非対称だった。
+            if (owned) { reportClear("停止"); releasedByMe = true }
             // [3.412.0/B-08] 停止経路だけがバブルを片付けていなかった。完了・失敗は postDone で
             //   進行中(ongoing)を解いて自動消去できる形にするのに、停止すると「計算中…」の
             //   バブルが**画面に残り続ける**（`setOngoing(true)` はユーザーが払えない）。

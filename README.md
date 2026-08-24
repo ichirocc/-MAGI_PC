@@ -24,7 +24,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-24（3.437.0＝MagiViewModel.ktのコメント4件がコード内の別位置を絶対行番号で
+**最終更新**：2026-08-24（3.438.0＝ユーザー貼付の外部レビュー文書を`receiving-code-review`規律で
+1件ずつ検証。最重要（C1）＝背景最適化を停止(cancel)すると`OptimizationWorker`の`CancellationException`
+処理が`releasedByMe`を立てないまま所有権マーカーを削除し、`finally`の`setRunning(false)`条件が
+両方falseで一度も呼ばれず`OptimizationRepository.running`が恒久固着＝画面は実行中でなく見えるのに
+編集・Undo/Redo・新規実行が理由なく拒否され続ける実バグを発見・修正。H2＝`applyWishes`/
+`applyAlternative`に`setCell`等と同じ実行中ガードが無かったのを追加。M2＝c1/c3mn重みの実装(30)に対し
+コメント7箇所が旧値15のまま＝ドリフト是正。H3(fillShiftIndex)は既に一本化済みと確認、H5/M8/M9は
+既知の記録済みギャップ/意図的設計/製品判断として据え置き。3.437.0＝MagiViewModel.ktのコメント4件がコード内の別位置を絶対行番号で
 参照しており、うち3件は既に指し先がずれていた（3.368.1/3.409.9と同型のドリフト。1件は3.435.0で自分が
 書いたばかりの再発）のをタグ/関数名ベースの参照へ統一。「mainにマージする」を受けブランチを全数調査した
 結果、未取り込みの有用な内容は無し（既評価・選択的移植済み or 実測で否決済み）と確認して監査へ復帰。

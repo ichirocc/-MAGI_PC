@@ -65,7 +65,9 @@ class Evaluator(private val p: Problem) {
         // c1: every window of length day1 must contain >= day2 of shiftIdx
         // [統一] (1)担当不可スタッフは対象外(canDoガード=チェッカーと一致、解消不能な幻の違反を除去)、
         //   (2)#fire 計上(soft += 1*重み15)。旧: 全スタッフ・soft += d1(フラット)。
-        // [HF77明示数値指示(2026-07-20)] 窓の要件(c1)の重みを4→5→15に変更。
+        // [外部レビューM2/コメントドリフト是正] 窓の要件(c1)の重みは
+        //   4→5(2026-07-20)→15(2026-07-21)→30(3.409.24)とHF77明示数値指示で変遷。ここは実装(30L)は
+        //   常に正しく、この行のコメント自体が旧値のまま取り残されていた（実害なし・記述のみ訂正）。
         for (c in p.cons1) {
             val d1 = c.day1; val si = c.shiftIdx; val d2 = c.day2
             for (i in 0 until S) {
@@ -131,9 +133,10 @@ class Evaluator(private val p: Problem) {
             }
         }
 
-        // c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=3/c3m=2/c3mn=15)を soft に適用。
+        // c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=3/c3m=2/c3mn=30)を soft に適用。
         // c3n は forbidden=HARD として hard1(count, ×1e6) のまま。窓マッチは #fire 計上(後述の sub += 1)。
-        // [HF77明示数値指示(2026-07-20)] 回避の並び(c3mn)の重みを12→15に変更。
+        // [外部レビューM2/コメントドリフト是正] 回避の並び(c3mn)の重みは
+        //   12→15(2026-07-20)→30(3.409.24)とHF77明示数値指示で変遷。実装(30L)は常に正しい。
         soft += c3check(a, p.cons3, false) * 3L
         hard1 += c3check(a, p.cons3n, true)    // forbidden -> display HARD (count)
         soft += c3check(a, p.cons3m, false) * 2L

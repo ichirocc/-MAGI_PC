@@ -1535,6 +1535,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun applyWishes(includeOutOfScope: Boolean) {
         val st = state ?: return
+        // [外部レビューH2] setCell/setCells/applyFixSuggestion と同じ理由(1617行のコメント参照)で、
+        //   ここも currentSchedule を直接書き換える＝running中は最適化ジョブの sched0 と同一参照のため
+        //   良化採用時に上書き消失しうる。3.328.0/3.161.0 の「編集は必ず4入口を通る」の対象漏れだった。
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sched = currentSchedule ?: return
         val p = Problem(st)
         pushUndo()
@@ -1589,6 +1593,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     /** 「他の案」を勤務表へ適用（Undo・操作ログ付き）。 */
     fun applyAlternative(i: Int) {
         val st = state ?: return
+        // [外部レビューH2] applyWishes と同根＝currentSchedule/state を running 中に直接差し替えると
+        //   最適化ジョブの完了時上書きと衝突しうる。
+        if (optimizeInFlight()) { _ui.update { it.copy(message = busyEditMessage(), messageIsError = true) }; return }
         val sch = alternativeScheds.getOrNull(i)?.copy2D() ?: return
         pushUndo()
         currentSchedule = sch

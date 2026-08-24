@@ -5330,6 +5330,61 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 外部提示の「レビュー文書」を検証＝停止後に running が永久固着する実バグを発見・修正（3.438.0）
+
+ユーザーが「この詳細なレビュー文書を拝読しました…」で始まる、C1〜M9の番号付き所見7件＋P0-P3再優先度表を
+含む長文を貼付。この文書が言及する「前回の私のレビュー」「レビュー文書」は本セッションの会話履歴には
+一切存在せず、**`receiving-code-review` 規律どおり出典を信用せず1件ずつ実コードで裏取り**した。
+
+- **[C1・最重要・実バグ確定] 停止(cancel)後に `OptimizationRepository.running` が恒久的に true のまま
+  固着する**: `OptimizationWorker.doWork()` の `catch (e: CancellationException)` は
+  `owned=ownsFiles()` が真のとき `reportClear("停止")`（＝`clearFiles(ctx)`＝`RunFiles.clear(keepRunId=false)`
+  ＝**runId マーカーごと削除**）を呼ぶが、`releasedByMe` を一度も立てていなかった（`catch (Throwable)` 側は
+  `if (owned) { reportClear("失敗"); releasedByMe = true }` と対称に立てるのに、この分岐だけ非対称）。
+  `finally` の `if (releasedByMe || ownsFiles()) OptimizationRepository.setRunning(false)` は、
+  ①`releasedByMe=false` ②`ownsFiles()` はマーカーを読み直すため既に削除済みで
+  （`RunFiles.activeRunId()` は読めないマーカーを 0L として扱い、`owns(mine)` は `mine!=0L`(通常の新経路)の
+  とき `0L==mine` で false）**両方 false**＝`setRunning(false)` が一度も呼ばれない。
+  `OptimizationRepository.running` を false に戻す箇所はこの1行しかコードベースに存在せず、
+  `MagiViewModel.stop()` は自分の `_ui.running`（表示の写し）を直接 false へ書き換えるだけで
+  `OptimizationRepository.clear()`（progress/result のみ初期化・running には無関係）を呼ぶのみ＝
+  `OptimizationRepository.running` そのものには一切触れない。3.336.0 が
+  「編集・実行の可否は `optimizeInFlight()`（=`OptimizationRepository.running.value` を直読み）だけを見る」と
+  明示的に統一した設計のため、**画面は「実行中でない」ように見えながら、編集・Undo/Redo・新規実行の
+  ガードが理由の見えないまま恒久的に拒否され続ける**（プロセス再起動まで解消しない）。
+  修正: `catch (CancellationException)` の `if (owned)` に `releasedByMe = true` を追加し
+  `catch (Throwable)` と対称化。
+- **[H2・実バグ確定] `applyWishes`/`applyAlternative` に実行中ガードが無かった**: `setCell`/`setCells`/
+  `applyFixSuggestion` は関数冒頭で `if (optimizeInFlight()) { ...; return }`
+  （3.161.0/3.328.0「編集は必ず4入口を通る」の統一済みガード）を持つのに、同じく `currentSchedule`/`state`
+  を直接書き換えるこの2関数は最初からその「4入口」に数えられておらず素通しだった。最適化ジョブ実行中に
+  希望反映・他案適用を行うと、完了時の上書きと衝突し編集が無言で消失しうる（`setCell` 冒頭コメントが
+  警告する事象と同型）。同じガード文を両関数の冒頭へ追加。
+- **[H3・再現せず] CSV新規行の `fillShiftIndex` 未使用**: grep で確認したところ
+  `Problem.initialAssignment`／`Ws1Ops.fillShift`／`V6NativeOptimizer` の担当外セル埋めは
+  3.419.0/3.428.0#30 で `MirrorCore.fillShiftIndex` へ既に一本化済み。生の index 0 決め打ちは残っていない。
+- **[H5] test層のギャップ**: 3.386.0 で「Worker のライフサイクル並びは Robolectric か instrumented test が
+  要る＝単体テストでは捕まらない」と既に記録済み。今回新たな対応は無し。
+- **[M2・実在＝コメントのみのドリフト] c1/c3mn 重みの記述が旧値「15」のまま**: `MirrorKeys.weights`
+  （単一ソース）・`Evaluator.fullEvalParts`（`soft += 30L` / `* 30L`）は 3.409.24（HF77明示指示,
+  c1/c3mn を 15→30）以降ずっと正しいのに、`Evaluator.kt`(2箇所)・`DeltaEvaluator.kt`(3箇所)・
+  `SmartInitialScheduler.kt`(1箇所)・`V6LateOperators.kt`(1箇所、c1×1とc42×15が同値という具体例ごと)の
+  計7箇所のコメントが「15」のまま取り残されていた（実装は無傷・**実害ゼロ**、読み手が誤った重みを
+  信じるだけ）。3.213.1/3.352.0/3.368.1/3.409.9 と同型のコメントドリフト是正として全7箇所を実装値へ
+  更新（`V6LateOperators.kt` の具体例は c1=30 で再計算し「weighted 30で同値・total は29違う」へ訂正）。
+- **[M8・据え置き] `saveNow()` のメインスレッド同期 I/O**: 事実として存在する（`autoSave`同様
+  `writeFileAtomically` を呼出スレッドで同期実行、コメント自身が「main なので旗を立てたその場で記録して
+  構わない」と明示＝意図的な設計）。ジャンクの具体的な実害報告は無く、非同期化は自動保存の原子性・
+  タイミング保証（3.410.0/U-03の設計）に触れるため、証拠なしに探索的変更はしない（2.55.0/3.310.1の規律）。
+- **[M9・据え置き] `AndroidManifest.xml` の `allowBackup="true"`**: 事実。本アプリは
+  `app/build.gradle.kts` 自身が明記する「Personal-test release APK（debug鍵署名・ストア配布前提外）」で、
+  ADBバックアップ許可は現状の用途と矛盾しない。変更はセキュリティ方針の製品判断＝明示指示なしに
+  自律的に変えない。
+- 検証: `design_lint.py` 0/2件（P1-P9=0、P10 baseline=2 のまま不変）。ブレース/丸括弧均衡を6ファイル全てで
+  静的確認（`DeltaEvaluator.kt` の丸括弧差分 -3 は編集前から存在するコメント内 `)` の非対称＝変更で
+  増減していないことを stash 比較で確認済み）。v6層(Evaluator/DeltaEvaluator/SmartInitialScheduler/
+  V6LateOperators)はコメントのみの変更。UI/Worker層はホストでコンパイル不可のため最終判定は CI。
+
 ## MagiViewModel のコメントに残っていた絶対行番号参照4件を是正（3.437.0, 自律監査の続き）
 3.436.0 の続き。「mainにマージする」を受けブランチを全数調査（結論: 未取り込みの内容は無し。
 `claude/smart-optimal-merge-onahtl` は 0 ahead・`rsmp2p`/`x8ygvy`/`ir1xng` の origin ブランチが

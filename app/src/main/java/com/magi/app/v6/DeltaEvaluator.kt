@@ -95,7 +95,7 @@ class DeltaEvaluator(private val p: Problem) {
      * 一対一・checker の `report.breakdown[key]` と同一単位）を検証専用に公開する。
      *
      * `score()`(soft集約) は各フィールドへ重みを乗じて合算するため、**総和が一致しても族ごとの誤差が
-     * 相殺されて隠れる余地がある**（例: c1(重み15)とc3mn(重み15)が同じ重みを持つため、片方+1・もう片方-1
+     * 相殺されて隠れる余地がある**（例: c1(重み30)とc3mn(重み30)が同じ重みを持つため、片方+1・もう片方-1
      * の誤りは総和では検出できない。c2/c41/c42/c41s/c42s/apt/fair/weekly/covO も全て重み1で同じ穴を持つ）。
      * このマップは checker の `breakdown` と**1キーずつ**突き合わせる per-family パリティ検証のために
      * 存在する（`DeltaEvaluatorTest` 参照）。low/high だけは [rangeWeighted] を参照（下記）。
@@ -149,10 +149,11 @@ class DeltaEvaluator(private val p: Problem) {
     private fun scoreFrom(cu: Long): Long {
         val h1 = hc3n + cu + hpref + hGrpV
         // [統一a/b] range(hct, 重み付き) と covO(scovO) を SOFT に含める（旧: hct は h2=表示HARD）。
-        // [統一c] c3/c3m/c3mn に checker 重み(3/2/15)を適用（sc3等は #fire/run-deficit の生カウント）。
-        // [統一c1] c1 にも checker 重み(15)を適用（sc1 は #fire 生カウント、canDoガード済）。
+        // [統一c] c3/c3m/c3mn に checker 重み(3/2/30)を適用（sc3等は #fire/run-deficit の生カウント）。
+        // [統一c1] c1 にも checker 重み(30)を適用（sc1 は #fire 生カウント、canDoガード済）。
         // [統一apt/fair/weekly] sApt(適切回数) sFair(群内公平化) sWeekly(曜日平準化) を SOFT に含める（共に重み1）。
-        // [HF77明示数値指示(2026-07-20)] c1=4→5・c3mn=12→15 に変更。[HF77明示数値指示(2026-07-21)] c1=5→15 に変更。
+        // [HF77明示数値指示] c1: 4→5(2026-07-20)→15(2026-07-21)→30(3.409.24)。c3mn: 12→15(2026-07-20)→30(3.409.24)。
+        //   [外部レビューM2] 上3行のコメントは長らく旧値(15)のまま残っていた＝実装(下の * 30)は常に正しい。
         val soft = sc1 * 30 + sc2 + sc41 + sc42 + sc41s + sc42s + sc3 * 3 + sc3m * 2 + sc3mn * 30 + hct + sApt + sFair + sWeekly + scovO
         return h1 * SCORE_HARD_UNIT + soft
     }

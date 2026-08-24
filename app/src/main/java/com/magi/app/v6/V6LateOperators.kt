@@ -74,7 +74,8 @@ object V6LateOperators {
             val nv = UnifiedViolationChecker.check(state, sched)
             // [3.287.0 keep-best統一→3.335.0 委譲] 判定は `betterReport`（hard→weightedScore→total）へ。
             //   3.287.0 は第2キーだけ weightedScore へ寄せて**第3キー total へ落ちる分岐を書き忘れて**おり、
-            //   weighted 同値・total 改善の候補（例: c1×1 と c42×15 は weighted 15 で同値・total は14違う）を
+            //   weighted 同値・total 改善の候補（例: c1×1 と c42×30 は weighted 30 で同値・total は29違う。
+            //   [外部レビューM2] c1 重みは 3.409.24 で 15→30 に変更済みのため数値を実装へ合わせて訂正）を
             //   捨てていた。boost 側の soft<= ガードは「生カウントも悪化させない」追加条件として従来どおり残す。
             val base = betterReport(nv, cur)
             // [3.336.0/敵対レビュー H3] boost に weightedScore 非増を要求する。`lim` は 200×high+120×low で
