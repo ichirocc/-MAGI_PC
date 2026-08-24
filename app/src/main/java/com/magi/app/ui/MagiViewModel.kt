@@ -346,7 +346,8 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             OptimizationRepository.progress.collect { p ->
                 if (p != null && _ui.value.running) {
-                    // [3.400.0] 旧: `message = "バックグラウンド ${p.phase}"`。前景側(917行)と同じ理由で外す＝
+                    // [3.400.0] 旧: `message = "バックグラウンド ${p.phase}"`。前景側（runV6FullOptimize の
+                    //   進捗コールバック、同型の [3.400.0] コメント参照）と同じ理由で外す＝
                     //   3.399.0 で message が Snackbar になったため、背景実行中もフェーズが変わるたびに
                     //   Snackbar が出続けてしまう。実行中であることは上部バッジと進捗行が示す（状態）。
                     _ui.update { it.copy(
@@ -1144,10 +1145,11 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                             // 実行中も breakdown をライブ更新（export時に hard と breakdown が食い違う不整合を防ぐ）
                             breakdown = if (shown != null) emptyBreakdown + shown.breakdown else it.breakdown,
                             // [実機報告「残り時間表示が5分から何度も巡回する」修正] onProgressのelapsedは
-                            //   フェーズ境界で巻き戻るローカル時計（727/751行のコメントと同じ既知の性質）。
+                            //   フェーズ境界で巻き戻るローカル時計（本関数冒頭の runWall0＝[N6] コメントと同じ既知の性質）。
                             //   progressSummary の「残り」表示はこれを budgetSec から引くため、V5→ALNS→RSI
                             //   ラウンド等の頻繁なフェーズ遷移のたびに残り時間が予算近くまで跳ね戻って見えていた。
-                            //   HF63(753行)と同じ単調な壁時計(startMs基準)に統一する。
+                            //   HF63の改善ストリーム追跡（本関数内 hf63.updateFromBreakdown 呼出）と同じ単調な
+                            //   壁時計(startMs基準)に統一する。
                             elapsedMs = System.currentTimeMillis() - startMs,
                             // [DefragLiveView] 計算中の最良盤面をライブ表示用に反映（節目で更新される）。
                             liveSchedule = V6NativeOptimizer.liveBest ?: it.liveSchedule,
@@ -1393,7 +1395,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = finalSched
                 state = st0.withSchedule(finalSched)
                 val gain = baseReport.total - finalReport.total
-                // [design-review] 開始メッセージ(1366行)は「自動で整えています…」なのに、完了だけ内部語
+                // [design-review] この関数冒頭の開始メッセージは「自動で整えています…」なのに、完了だけ内部語
                 //   「ソフト研磨」に戻っていた（同じ操作の中で語彙が食い違う＝3.397.0と同型）。
                 //   operator_ux.md §2「最適化する/RunMAGI → 勤務表をつくる/いい感じに整える」に合わせる。
                 pushReport(state ?: st0, finalSched, finalReport, runLabel = "仕上げ最適化") { it.copy(
