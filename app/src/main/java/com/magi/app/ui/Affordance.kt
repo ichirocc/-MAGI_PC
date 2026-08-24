@@ -104,3 +104,12 @@ fun DialogDangerButton(text: String, onClick: () -> Unit, enabled: Boolean = tru
  * 判定そのものは `V6SanityPort.rangeOrderConflict`（事後診断と同一ソース）。
  */
 const val RANGE_ORDER_HINT = "下限は上限以下にしてください"
+
+/**
+ * [design-review] 上と同じ判定(`V6SanityPort.rangeOrderConflict`)を、必要人数(Shift.need1/need2)の
+ * 3つの編集面（Ws1Editor のシフト追加/編集・NeedDayEditor の基本値/日別例外）へ広げたときの専用文言。
+ * これらは全て「最低人数」「上限人数」という field label で統一されており、RANGE_ORDER_HINT の
+ * 「下限」「上限」という語彙とは一致しない（そのまま使うと自分自身の項目名と矛盾する）ため、
+ * 同じ判定・同じ見せ方（枠を赤くする＋直下に赤字）のまま文言だけ項目名に合わせて分けた。
+ */
+const val NEED_ORDER_HINT = "最低人数は上限人数以下にしてください"

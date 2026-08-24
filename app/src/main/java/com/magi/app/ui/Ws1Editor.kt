@@ -1,6 +1,7 @@
 package com.magi.app.ui
 
 import com.magi.app.toHankakuKigou
+import com.magi.app.v6.V6SanityPort
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.heightIn
@@ -279,13 +280,17 @@ private fun ShiftDialog(
     var kigou by remember { mutableStateOf(kigou0) }
     var need1 by remember { mutableStateOf(need10) }
     var need2 by remember { mutableStateOf(need20) }
-    W1Shell(title, onClose, { onOk(name, kigou, need1, need2) }, kigou.isNotBlank()) {
+    // [design-review] 下限>上限は他の3面（群/スキル群のレンジ・個人回数、3.403.0）と同じく必ず違反を
+    //   生む設定ミスだが、必要人数(need1/need2)のこの面だけ入力時のガードが無かった（対象漏れ）。
+    val bad = V6SanityPort.rangeOrderConflict(need1, need2) != null
+    W1Shell(title, onClose, { onOk(name, kigou, need1, need2) }, kigou.isNotBlank() && !bad) {
         W1Text("記号 (kigou)", kigou) { kigou = it }
         W1Text("名称", name) { name = it }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            W1Field("最低人数", need1, Modifier.weight(1f)) { need1 = it }
-            W1Field("上限人数(2パターン時)", need2, Modifier.weight(1f)) { need2 = it }
+            W1Field("最低人数", need1, Modifier.weight(1f), isError = bad) { need1 = it }
+            W1Field("上限人数(2パターン時)", need2, Modifier.weight(1f), isError = bad) { need2 = it }
         }
+        if (bad) Text(NEED_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -395,11 +400,11 @@ private fun W1Text(label: String, value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun W1Field(label: String, value: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+private fun W1Field(label: String, value: String, modifier: Modifier = Modifier, isError: Boolean = false, onChange: (String) -> Unit) {
     OutlinedTextField(
         value = value,
         onValueChange = { onChange(it.filter { c -> c.isDigit() }) },
-        label = { Text(label, fontSize = 14.sp) }, singleLine = true, modifier = modifier,
+        label = { Text(label, fontSize = 14.sp) }, singleLine = true, modifier = modifier, isError = isError,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     )
 }

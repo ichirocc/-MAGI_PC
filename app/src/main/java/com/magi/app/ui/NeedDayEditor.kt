@@ -1,5 +1,6 @@
 package com.magi.app.ui
 
+import com.magi.app.v6.V6SanityPort
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -187,8 +188,9 @@ private fun NeedApplyPanel(ui: UiState, vm: MagiViewModel, k: Int, days: Set<Int
     // 選択日が多い場合は「6/3、6/8、6/17、ほか2日」と省略。
     val datesLabel = if (sorted.size <= 4) sorted.joinToString("、") { dayChipLabel(ui.startDate, it) }
     else sorted.take(3).joinToString("、") { dayChipLabel(ui.startDate, it) } + "、ほか${sorted.size - 3}日"
-    val n1 = p1.toIntOrNull(); val n2 = p2.toIntOrNull()
-    val invalid = n1 != null && n2 != null && n1 > n2
+    // [design-review] 判定の手書き複製（n1>n2）は写した瞬間ドリフトする（3.352.0）。
+    //   群/スキル群のレンジ・個人回数と同じ V6SanityPort.rangeOrderConflict を単一ソースにする。
+    val invalid = V6SanityPort.rangeOrderConflict(p1, p2) != null
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -199,7 +201,7 @@ private fun NeedApplyPanel(ui: UiState, vm: MagiViewModel, k: Int, days: Set<Int
             NumberStepper("最低人数", p1, { p1 = it }, min = 0, blankLabel = "既定")
             NumberStepper("上限人数", p2, { p2 = it }, min = 0, blankLabel = "既定")
         }
-        if (invalid) Text("最低は最高以下にしてください", style = MaterialTheme.typography.labelMedium, color = cs.error)
+        if (invalid) Text(NEED_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = cs.error)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCancel, enabled = !ui.running, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("キャンセル") }
             Button(
@@ -220,12 +222,18 @@ private fun BaseNeedSheet(kigou: String, need1: String, need2: String, running: 
     val sheetState = rememberModalBottomSheetState()
     var p1 by remember { mutableStateOf(need1) }
     var p2 by remember { mutableStateOf(need2) }
+    // [design-review] このシートは NeedApplyPanel(日別例外)と同じ need1/need2 を編集するのに
+    //   下限>上限のガードが無く、確定するとどの日も必ず違反になる設定を保存できていた（3.403.0 対象漏れ）。
+    val bad = V6SanityPort.rangeOrderConflict(p1, p2) != null
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("基本の必要人数（${kigou}の既定値）", style = MaterialTheme.typography.titleMedium)
-            NumberStepper("最低人数", p1, { p1 = it }, min = 0, blankLabel = "未設定")
-            NumberStepper("上限人数", p2, { p2 = it }, min = 0, blankLabel = "未設定")
-            Button(onClick = { onApply(p1, p2); onDismiss() }, enabled = !running, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("保存") }
+            Column(Modifier.border(1.dp, if (bad) MaterialTheme.colorScheme.error else Color.Transparent, MaterialTheme.shapes.medium)) {
+                NumberStepper("最低人数", p1, { p1 = it }, min = 0, blankLabel = "未設定")
+                NumberStepper("上限人数", p2, { p2 = it }, min = 0, blankLabel = "未設定")
+            }
+            if (bad) Text(NEED_ORDER_HINT, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+            Button(onClick = { onApply(p1, p2); onDismiss() }, enabled = !running && !bad, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("保存") }
         }
     }
 }

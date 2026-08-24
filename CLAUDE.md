@@ -5330,6 +5330,36 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 必要人数(need1/need2)だけ下限>上限の入力時ガードが無かった（3.436.0, 自律監査の続き）
+3.435.0 の続き。`dismissButton` の action-in-dismiss-slot（3.398.0 の観点）を全数再走査したが新規発見なし
+（既知の例外＝`ColorPickerDialog`「既定に戻す」のみ）。次に 3.403.0（下限>上限の入力時ガード）の対象漏れを
+探したところ、**必要人数(`Shift.need1`/`need2`)だけが3.403.0の対象4面から漏れていた**と判明。
+- **[実バグ] `Ws1Editor.kt` の `ShiftDialog`（年間マスター→シフト追加/編集）に下限>上限ガードが皆無**:
+  確定ボタンの有効条件は `kigou.isNotBlank()` のみ。ここで確定した need1/need2 は**期間の全日で必ず
+  違反になる**（3.403.0 が cons41/staffRange で直したのと同じ engine の性質、`covUCell` の
+  `z<l||z>u` 判定）。事後診断（検査2h）も非数値しか見ておらず lo>hi は素通り。
+- **[実バグ] `NeedDayEditor.kt` の `BaseNeedSheet`（必要人数カレンダー→基本設定）も同型で皆無**:
+  こちらは need1/need2 の**もう1つの編集面**（3.114.0 と同じ「同じデータを別ドアから触る」設計・
+  両方の存在自体は妥当）。「保存」ボタンが `!running` だけで確定でき、同じ穴を持っていた。
+- **[表示の不整合] `NeedApplyPanel`（同ファイル、日別例外編集）は唯一ガードを持っていたが**:
+  ①判定が `V6SanityPort.rangeOrderConflict` を使わず `n1>n2` を手書きで複製（3.352.0の型＝写した
+  瞬間ドリフトしうる。今回は結果は同じだったが単一ソースでない） ②ヒント文言
+  `"最低は最高以下にしてください"` が独自のハードコードで、直上のフィールドラベル「最低人数」
+  「**上限**人数」とすら一致しない（「最高」という語がどこにも無い）。
+- **修正**: `Affordance.kt` に **`NEED_ORDER_HINT`**（"最低人数は上限人数以下にしてください"）を新設。
+  既存の `RANGE_ORDER_HINT`（"下限は上限以下に"）は cons41/staffRange 系4面のフィールドラベル
+  （「下限」「上限」）に合わせた文言のままにし、変更しない（3.403.0 の4面は無変更）。need1/need2 系
+  3面（`Ws1Editor.ShiftDialog`／`NeedDayEditor.BaseNeedSheet`／`NeedDayEditor.NeedApplyPanel`）は
+  共通して「最低人数」「上限人数」ラベルを使うため、この3面専用の文言として揃えた
+  （**同じ間違いは同じ言葉で示す**が、家族が違えばラベルに合わせて言葉も変える）。
+  3面とも `V6SanityPort.rangeOrderConflict(lo, hi) != null` を唯一の判定源にし、赤枠＋赤字ヒント＋
+  確定ボタン無効化のパターンを statically 揃えた（`Ws1Editor.kt` の `W1Field` に `isError` パラメータを
+  新設＝`ConstraintEditor.kt` の `NumField(isError=...)` と同型）。
+- 表示・入力ガードのみ＝重み・採否・エンジンは完全に不変。
+- 検証: `design_lint` exit=0（P10 baseline=2 のまま不変）。UI層はホストでコンパイル不可＝ブレース/丸括弧/
+  角括弧均衡（3ファイルとも対称）・`W1Field` の唯一の呼出変更なしサイト（1箇所）が新パラメータの既定値で
+  引き続き解決すること・`V6SanityPort`/`NEED_ORDER_HINT` の import 追加を静的確認。最終判定は CI。
+
 ## 完了メッセージが内部識別子を出し、開始と語彙が食い違っていた（3.435.0, 自律監査の続き）
 3.434.0 の続き。`AlertDialog` 群の棚卸しでは新規発見が無かったため、対象を`messageIsError`/例外文言の
 規約（design-review skill「操作の返事」節：3.399.0/3.400.0）へ広げ、`runV6FullOptimize`/`runSoftPolish`
