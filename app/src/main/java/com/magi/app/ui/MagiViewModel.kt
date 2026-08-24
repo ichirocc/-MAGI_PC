@@ -1247,11 +1247,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                     autoSave()
                     resultSchedule = res.schedule.copy2D()
                     state = st0.withSchedule(res.schedule)
+                    // [design-review] 旧「最適化（${res.phase}）完了: …」は res.phase="optimize:PORTFOLIO" 等の
+                    //   生の内部識別子（label.tech）をそのまま画面へ出していた（operator_ux.md §2「英字符号を
+                    //   画面に一切出さない」・3.400.0 が背景進捗の同型漏れを既に除去した先例の取りこぼし）。
+                    //   併せて開始メッセージ「勤務表をつくり始めました」と語彙を揃える（同じ操作は同じ形＝3.397.0）。
+                    //   詳細な方式は診断ログ(直下logOp)と設定タブ(3.192.0)で確認可能。
                     pushReport(state ?: st0, res.schedule, res.report, runLabel = "最適化") { it.copy(
                         messageIsError = false,
                         running = false,
                         hasResult = true,
-                        message = "最適化（${res.phase}）完了: 必須=${res.report.hard} 合計=${res.report.total} (${System.currentTimeMillis() - startMs}ms)",
+                        message = "勤務表ができました: 必須=${res.report.hard} 合計=${res.report.total} (${System.currentTimeMillis() - startMs}ms)",
                     ) }
                     lastResultHard = newHard
                 }
@@ -1388,14 +1393,17 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 resultSchedule = finalSched
                 state = st0.withSchedule(finalSched)
                 val gain = baseReport.total - finalReport.total
+                // [design-review] 開始メッセージ(1366行)は「自動で整えています…」なのに、完了だけ内部語
+                //   「ソフト研磨」に戻っていた（同じ操作の中で語彙が食い違う＝3.397.0と同型）。
+                //   operator_ux.md §2「最適化する/RunMAGI → 勤務表をつくる/いい感じに整える」に合わせる。
                 pushReport(state ?: st0, finalSched, finalReport, runLabel = "仕上げ最適化") { it.copy(
                     messageIsError = false,
                     running = false,
                     hasResult = true,
                     message = if (gain > 0)
-                        "ソフト研磨 完了: 合計 ${baseReport.total} → ${finalReport.total}（-$gain）必須=${finalReport.hard} (${System.currentTimeMillis() - startMs}ms)"
+                        "整えました: 合計 ${baseReport.total} → ${finalReport.total}（-$gain）必須=${finalReport.hard} (${System.currentTimeMillis() - startMs}ms)"
                     else
-                        "ソフト研磨 完了: これ以上の削減は見つかりませんでした（合計=${finalReport.total} 必須=${finalReport.hard}）。残りは構造的要因の可能性。",
+                        "これ以上は整いませんでした（合計=${finalReport.total} 必須=${finalReport.hard}）。残りは構造的要因の可能性。",
                 ) }
                 logOp("I", "ソフト研磨 完了 必須=${finalReport.hard} 合計=${finalReport.total}（${if (gain > 0) "-$gain" else "増減なし"}）")
                 terminalLogged = true
@@ -1434,7 +1442,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 val kind = if (e is Error) "重大なエラー(${e.javaClass.simpleName})" else e.javaClass.simpleName
                 logOp("W", "ソフト研磨 失敗: $kind: ${e.message}")   // [3.271.0] 操作ログにも残す
                 terminalLogged = true
-                _ui.update { it.copy(messageIsError = true, running = false, message = "自動整えに失敗: $kind: ${e.message}") }
+                // [design-review] 生の例外文(e.message)を画面へ出していた（他の失敗ハンドラは全て
+                //   $kind だけで、詳細は直上のlogOpへ＝3.400.0「画面には失敗の種類と次の一手だけ」の
+                //   対象漏れ。operator_ux.md §6「生の例外文… を出していないか」）。
+                _ui.update { it.copy(messageIsError = true, running = false, message = "整えられませんでした（$kind）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）") }
             } finally {
                 if (_ui.value.liveSchedule.isNotEmpty()) _ui.update { it.copy(liveSchedule = emptyList()) }   // [3.404.0]
                 clearRunMarker()   // [監査A8]
