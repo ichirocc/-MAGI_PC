@@ -24,6 +24,11 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.452.0＝色ピッカーの隣接ペア差異を15%→25%へ強化。旧・全探索(5!)方式では狭い
+色相帯の制約下で17.6%が上限だったため、色相帯を広げヒルクライム局所探索（隣接距離最小値を悪化させない
+移動のみ受理）で再設計。全25色の隣接ペア距離が25%以上（最悪27.5%）を達成、彩度上限0.60（ネオン調回避）と
+`#E08A1E`固定は既存の制約を維持。表示のみ・エンジン/採点は不変。）
+
 **最終更新**：2026-08-25（3.451.0＝3.450.0（largeHeap）に対しユーザーが「根本的に修正する」と追加指示。
 後処理HF80戦略的振動の内側探索`localBestImprovement`が候補ごとに`UnifiedViolationChecker.check()`
 （重いViolationReportを毎回アロケート）を呼んでいたのを`Evaluator.fullEval()`（packed Long、アロケートなし）
