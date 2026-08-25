@@ -70,6 +70,15 @@ import kotlinx.coroutines.withContext
  */
 const val MAX_BUDGET_SEC = com.magi.app.v6.MAX_OPTIMIZE_SEC
 
+/**
+ * [saveNow メインスレッドI/O] onStop/onPause は「プロセスがこの直後に破棄されうる」区間なので、
+ * saveNow() の同期書込は**意図的**（Dispatchers.IO へ逃がすと、ディスパッチされたコルーチンが走る前に
+ * プロセスが死にうる＝saveNow が存在する動機そのものを壊す。onSaveInstanceState も同じ理由で同期）。
+ * データは業務上限（最大30名×31日, CLAUDE.md参照）で小さく通常は数msで終わる想定＝この閾値超過だけを
+ * 異常として記録する（起きていないことは静かなまま・起きたら操作ログに残る）。
+ */
+private const val SAVE_NOW_SLOW_MS = 100L
+
 
 class MagiViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -584,6 +593,7 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
     fun saveNow() {
         if (!hydrated) return
         saveJob?.cancel()
+        val t0 = System.nanoTime()
         val json = exportJson() ?: return
         // [3.410.0/U-03] 即時保存も同じ扱い（原子書き込み＋失敗の通知）。
         // saveNow は同期（main）なので旗を立てたその場で記録して構わない。
@@ -592,6 +602,10 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         }.getOrDefault(false)
         reportNonAtomicSave()
         reportAutoSave(ok)
+        // [賢い修正・saveNowメインスレッドI/O] 意図的な同期I/O（上記 SAVE_NOW_SLOW_MS の KDoc参照）を
+        // 前提のまま残すが、想定外に長く main を塞いだ回だけ観測できるようにする（表示・エンジンは不変）。
+        val ms = (System.nanoTime() - t0) / 1_000_000
+        if (ms >= SAVE_NOW_SLOW_MS) logOp("W", "即時保存に${ms}ms（想定より遅い。端末のストレージ負荷をご確認ください）")
     }
 
     private fun pushUndo() {

@@ -5330,6 +5330,45 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## M8/M9を明示指示で解消＝allowBackupの無効化とsaveNow()の観測性強化（3.440.0, ユーザー指示「賢く深く考え修正する」）
+3.438.0のレビュー検証で「製品判断・据え置き」とした2件（M8=`saveNow()`のメインスレッド同期I/O、M9=
+`AndroidManifest.xml`の`allowBackup="true"`）を、ユーザーの明示指示を受け実際に調査・修正した。
+**「メインスレッドで同期I/O」を機械的に非同期化する短絡的な直しはしない**——`saveNow()`の呼出元
+（`MagiApp.kt`の`ON_STOP`/`ON_PAUSE`ライフサイクル観測）を精読し、正しい修正が何かを判断した。
+
+- **[調査結果・saveNow()は非同期化しない] 同期実行はバグでなく必須の設計**: `saveNow()`は
+  `LifecycleEventObserver`が`ON_STOP`/`ON_PAUSE`で呼ぶ唯一の呼出元（`MagiApp.kt:163`）＝**プロセスが
+  直後に破棄されうる区間**。ここで`Dispatchers.IO`へディスパッチして即returnすると、ディスパッチされた
+  コルーチンが実際に走る**前**にOSがプロセスを終了させうる＝`saveNow()`が存在する動機（autoSaveの
+  1200msデバウンス中の破棄に備える保険）そのものを壊す。`onSaveInstanceState`が同じ理由で同期的な
+  設計なのと同型（これはAndroidプラットフォームの制約であり、通常の「main threadでI/Oするな」原則の
+  例外に当たる）。`writeFileAtomically`（`RunFiles.kt`）を読んで書込コストも確認: fsyncは行わず
+  `writeText`＋`renameTo`（同一ファイルシステム内なら実質メタデータ更新のみ）のみ。ペイロードは業務上限
+  （**最大30名×31日**, CLAUDE.md記載の前提）で頭打ち＝数KB〜数十KB級、通常は数ms未満で完了する想定。
+  → **移動でなく観測性を追加**するのが正しい修正: `SAVE_NOW_SLOW_MS`(=100ms)を新設し、実測がこれを
+  超えた回だけ操作ログへ`W`レベルで残す（`即時保存にNms（想定より遅い。端末のストレージ負荷をご確認
+  ください）`）。閾値未満（通常運用）は一切ログを増やさない＝3.383.0/3.387.0と同じ「起きたことは
+  必ず残る・起きていないことは静かなまま」の型。同期実行の意図もKDocへ明記し、将来「main threadだから」
+  という表面的な理由での安易な非同期化を防ぐ。
+- **[修正・allowBackup] `AndroidManifest.xml`の`android:allowBackup`を`true`→`false`**:
+  `filesDir`配下（`magi_autosave.json`／`RunFiles`の入力・完了結果・途中最良解スナップショット）は
+  職員氏名・勤務割当を含む実データ（golden_state.json等に実名を含む運用実績がCLAUDE.md履歴に多数あり）。
+  `allowBackup="true"`（Android既定値と同一だが明示指定されていた）のままだと、**adb backup**
+  （USBデバッグ有効時やroot経由でアプリ外部データを丸ごと抜き取れる既知の攻撃経路）と**Auto Backup**
+  （Android 6.0+既定で対象端末所有者のGoogleドライブへ自動退避）の両方でアプリの管理外へデータが
+  複製されうる。アプリ自身が既に「データを保存」（JSON往復）とCSV入出力という明示的なバックアップ・
+  移行手段を持つため、OS標準バックアップに機能上依存していない＝`false`化に利用者側の機能損失は無い。
+  1行の変更のみ（`android:fullBackupContent`/`dataExtractionRules`は元々未定義で`false`化により
+  丸ごと不要に）。**[実装時に発見・是正した事故]** 初回編集でコメントを`<application>`タグの属性列の
+  **途中**に挿入し、XML仕様上不正な構文（要素の開始タグ内にコメントは書けない）を作り込んだ。
+  `python3 -c "xml.dom.minidom.parse(...)"`で実際にパースして検出し、コメントを開始タグの**手前**
+  （このファイルの他の注釈と同じ配置パターン）へ移動して是正した。
+- 検証: `python3 tools/design_lint.py` exit=0（全項目0件、P10 baseline=2 不変）。
+  `python3 -c "xml.dom.minidom.parse(...)"`でAndroidManifest.xmlが妥当なXMLとしてパースできることと
+  `allowBackup`属性値を機械照合。UI層（MagiViewModel.kt）はホストでコンパイル不可＝ブレース/丸括弧/
+  角括弧均衡（1096/1096・2374/2374・421/421、変更前と同一）を静的確認。最終判定は CI
+  （v6-engine-check の testDebugUnitTest／Release Build／Design Lint／Android SDK）。
+
 ## 勤務表タブのレイアウトをモックアップへ合わせる＝週ラベルの年月併記＋違反凡例のカジュアル化（3.439.0, ユーザー提示の目標デザイン画像から）
 ユーザーが勤務表タブのモックアップ画像を提示し「レイアウトを熟読して、人間に理解できるようにアプリに反映する」。
 grilling で確認: ①画像は現状の screenshot でなく**目標デザイン**（このレイアウトへ実装してほしい）

@@ -5,12 +5,18 @@
     <!-- バックグラウンド最適化を前景サービスとして実行（5分のCPUジョブをOSに止められない） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- [賢い修正・allowBackup] filesDir(magi_autosave.json/RunFiles入出力等)は職員氏名・勤務割当を
+         含む実データ（golden_state.json 等に実名が入る運用実績あり）。allowBackup="true"(旧値。既定値と
+         同一だが明示)のままだと adb backup（USBデバッグ/rootでの抜き取り経路）と Auto Backup
+         （ユーザーのGoogleドライブへの自動退避）の両方でアプリ外へ複製されうる。アプリ自身が
+         「データを保存」JSON/CSV入出力という明示的なバックアップ・移行手段を既に持つため、
+         OS標準バックアップに頼る機能上の必要が無い＝false化に利用者側の機能損失は無い。 -->
     <application
         android:theme="@style/Theme.Magi"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true">
         <activity
