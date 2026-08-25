@@ -1285,8 +1285,11 @@ private fun TallyBox(
     content: @Composable () -> Unit,
 ) {
     Box(Modifier.width(w).height(h).padding(1.dp)) {
+        // [シフト集計/バッジ視認性] 押せる＝違反セルだけ丸みを強め(extraLarge=24dp、既存トークン)て
+        //   「バッジ」として浮かせる。非違反セルは他の集計セルと同じ extraSmall のまま＝任意値は増やさない。
+        val shape = if (onClick != null) MaterialTheme.shapes.extraLarge else MaterialTheme.shapes.extraSmall
         Box(
-            Modifier.fillMaxSize().background(bg, MaterialTheme.shapes.extraSmall)
+            Modifier.fillMaxSize().background(bg, shape)
                 .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 // [a11y/B1] 違反セルは数字だけでは読み上げが「9」等になり文脈が失われる。渡された時のみ
                 //   「氏名 シフト N回 不足」のような説明を公開（タップ先の詳細と同義）。非違反セルは cd=null で無音のまま。
