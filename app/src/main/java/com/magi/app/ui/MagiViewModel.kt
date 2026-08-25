@@ -37,6 +37,7 @@ import com.magi.app.v6.restShiftIndex
 import com.magi.app.v6.wishLocked
 import com.magi.app.work.OptimizationRepository
 import com.magi.app.work.OptimizationWorker
+import com.magi.app.work.writeFileAtomically
 import com.magi.app.model.Range
 import com.magi.app.model.C1Row
 import com.magi.app.model.Group
@@ -426,9 +427,16 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         if (markerOk) {
             clearBgFiles("背景計算の開始（旧途中状態の掃除）", keepRunId = true)
         }
+        // [外部レビュー P1-01] 旧: 素の `writeText`＝非原子。書き込み途中でプロセスが kill されると
+        //   `magi_bg_input.json` が壊れた JSON のまま残り、旧ファイルは開始前に既に消してあるため
+        //   復元の当てが無い（Worker 自身は doWork() 冒頭で同じファイルを原子的に書き直す＝
+        //   OptimizationWorker.kt:118-119 の「入力退避」だが、それが走る**前**に落ちれば意味が無い）。
+        //   ここも同じ原子書き込みへ揃える。
         val inputOk = markerOk && runCatching {
-            OptimizationWorker.inputFile(getApplication()).writeText(StateParser.serialize(st0, sched0))
-        }.isSuccess
+            OptimizationWorker.files(getApplication()).writeAtomically(
+                OptimizationWorker.inputFile(getApplication()), StateParser.serialize(st0, sched0),
+            )
+        }.getOrDefault(false)
         if (!markerOk || !inputOk) {
             clearBgFiles("背景計算の開始に失敗")
             notify("バックグラウンド計算を開始できませんでした（端末の空き容量をご確認ください）", "W")
@@ -450,8 +458,22 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                 OptimizationWorker.KEY_RUN_ID to runId,
             ))
             .build()
-        androidx.work.WorkManager.getInstance(getApplication())
-            .enqueueUniqueWork(OptimizationWorker.UNIQUE, androidx.work.ExistingWorkPolicy.REPLACE, work)
+        // [外部レビュー P1-02] 旧: enqueue が例外を投げると、直前に立てたマーカー・入力ファイル・
+        //   所有権が残ったまま関数を抜けていた（次回起動が「中断されました」と誤案内しうる）。
+        //   保存の成否と同じ扱いへ揃える＝失敗したら所有権を確認したうえで片付け、開始失敗を通知する。
+        //   enqueue が成功したときだけ「開始しました」を表示する。
+        val enqueued = runCatching {
+            androidx.work.WorkManager.getInstance(getApplication())
+                .enqueueUniqueWork(OptimizationWorker.UNIQUE, androidx.work.ExistingWorkPolicy.REPLACE, work)
+        }.isSuccess
+        if (!enqueued) {
+            OptimizationRepository.request = null
+            bgStateKey = 0L
+            bgRunId = 0L
+            clearBgFiles("バックグラウンド計算の投入に失敗")
+            notify("バックグラウンド計算を開始できませんでした（端末の状態をご確認ください）", "W")
+            return
+        }
         _ui.update { it.copy(messageIsError = false, running = true, hasResult = false, interruptedRun = false, interruptedInfo = null, message = "バックグラウンドで最適化を開始しました（完了時に通知）") }
         writeRunMarker("bg")
         logOp("I", "バックグラウンド最適化 開始 (予算${_ui.value.budgetSec}s, 並列${_ui.value.workers})")
@@ -721,18 +743,12 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
                         //   プロセス終了で退避が消えるのに復元可能表示だけ残る、の2つが起こり得た。
                         //   状態を切り替える前に **同期で・一時ファイル経由の原子的置換** で書き、
                         //   書込に成功したときだけ復元可能フラグを立てる。
+                        // [外部レビュー P2-01] 旧: この置換をここだけ手書きしており、固定名の一時ファイル
+                        //   （`RunFiles.writeAtomically` は呼出ごとに一意な名前＝3.410.0/B-05 が直した
+                        //   競合を、ここだけ再現していた）。共通ヘルパーへ統一する。
                         val prevJson = if (state != null) exportJson() else null
                         val prevSaved = if (prevJson == null) false else withContext(Dispatchers.IO) {
-                            runCatching {
-                                val tmp = java.io.File(prevBackupFile.parentFile, prevBackupFile.name + ".tmp")
-                                tmp.writeText(prevJson)
-                                if (!tmp.renameTo(prevBackupFile)) {
-                                    // rename 不可の環境向けフォールバック（同一FS内なので通常は成立する）。
-                                    prevBackupFile.writeText(prevJson)
-                                    tmp.delete()
-                                }
-                                true
-                            }.getOrDefault(false)
+                            runCatching { writeFileAtomically(prevBackupFile, prevJson) }.getOrDefault(false)
                         }
                         originalJson = json
                         state = lp.state.withSchedule(lp.schedule)

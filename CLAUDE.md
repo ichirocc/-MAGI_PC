@@ -5330,6 +5330,64 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 背景実行の開始トランザクション3件を原子化＋normalStallFraction再測定を完了（3.447.0）
+ユーザーから対象コミット `328b059`（=直近main）への外部レビューを受領。receiving-code-review の規律どおり
+全5件を実コードで検証し、**5件とも実在**と確認。あわせて `docs/algorithm_portfolio.md`「見直しの条件」が
+指示する `normalStallFraction` の再測定（blocked_covu 型に絞る）を実施した。
+
+### 外部レビューの検証・修正（P1×2・P2×3）
+- **[P1-01・実在=修正] 背景計算の入力保存が非原子的**: `MagiViewModel.runInBackground()` が
+  `OptimizationWorker.inputFile(...).writeText(...)` で `magi_bg_input.json` を直接書いていた
+  （リポジトリ内の他の3箇所＝入力の自己修復・途中最良スナップショット・完了結果は既に
+  `RunFiles.writeAtomically` で原子化済み＝ここだけ取り残されていた）。書き込み中の kill で壊れた
+  JSON が残り、旧ファイルは開始前に消去済みのため復元の当てが無い。`Worker.doWork()` 冒頭が同じ
+  ファイルを原子的に書き直す自己修復（3.410.0/B-03）を持つが、それが走る**前**に落ちれば無意味。
+  `OptimizationWorker.files(getApplication()).writeAtomically(...)` へ統一（`files(ctx)` は
+  `internal fun`＝同一モジュールから直接呼べる）。
+- **[P1-02・実在=修正] `enqueueUniqueWork()` が無防備**: 直前に確立した所有権マーカー・入力ファイルの
+  存在を前提に、例外を捕捉せず呼んでいた。WorkManager初期化不備・内部DB/ストレージ障害等で投げると、
+  マーカーと入力が残ったまま関数を抜け、次回起動が「中断されました」と誤案内しうる（保存失敗は既に
+  通知付きで処理しているのに、投入失敗だけ非対称だった）。`runCatching` で包み、失敗時は
+  `OptimizationRepository.request`/`bgStateKey`/`bgRunId` を戻したうえで `clearBgFiles` により所有権と
+  ファイルを片付け、開始失敗を通知する。enqueue が成功したときだけ「開始しました」を表示する。
+- **[P2-01・実在=修正] 「開く前のデータ」退避が独自の非原子実装だった**: `loadAsync()` 内の
+  prevBackup 退避が、共通ヘルパー `RunFiles.writeAtomically`（呼出ごとに一意な一時ファイル名＝
+  3.410.0/B-05 が直した競合を回避）とは別に、**固定名の一時ファイル**（`magi_prev_before_open.json.tmp`）
+  を使う手書きの原子置換を持っていた。「同じロジックを2回書くと必ず片方が取り残される」という
+  このリポジトリの繰り返しの教訓どおりの重複。`writeFileAtomically(prevBackupFile, prevJson)`
+  （`com.magi.app.work` のファイルスコープ関数、`internal`＝同一モジュールから import 可）へ委譲。
+- **[P2-02・実在=修正] JSON配列の不正要素を黙ってスキップしていた**: `StateParser.mapObjects`/
+  `mapArrays`（`staff`/`schedule`/全 cons* 系など17呼出）が、要素がオブジェクト/配列でなければ
+  `optJSONObject(i)?.let{}`/`optJSONArray(i)?.let{}` で無言除外していた。`staff` に `null` が
+  1件混じると、その職員だけが静かに消えた短いリストへ化ける（`validate()` の
+  `schedule.size != staffCount` チェックは、両方が同じ数だけ縮むと素通りする）。読み飛ばしを
+  `IllegalArgumentException("$name[$i] が…ではありません")` へ変更（17呼出全てへ `name` 引数を追加）。
+  3箇所の呼出元（`MagiViewModel`×2・`OptimizationWorker`×1）は全て `runCatching`/try-catch で
+  包まれていることを確認済み＝throw化しても未捕捉クラッシュにはならない。
+  `StateParserTest.kt` を新設（正常系1件＋`staff`/`schedule` への不正要素混入2件、旧実装なら
+  静かに縮んだリストとして通っていたことを確認したうえで反映）。
+- **[P2-03・確認のみ、対応せず] release variant が debug 鍵署名・縮小無効**: 事実。ただし
+  `app/build.gradle.kts` 自身のコメントが「Personal-test release APK…ストア配布前に変更」と明記する
+  意図的な製品判断（3.410.0 の M8/M9 と同型＝実装済みの設計選択であり不具合ではない）。ストア配布を
+  始める段階で改めて判断する。
+- **成立しなかった主張は無し**（今回の5件は全て実コードで再現・確認できた）。
+
+### normalStallFraction 再測定（見直しの条件に基づく follow-up）
+`docs/algorithm_portfolio.md` の見直しの条件は「blocked_covu 型に絞って再測定」を指示していた
+（第1ラウンド n=3 は「3/3一貫して有利」だが決定力不足）。`blocked_covu_state.json` 単体に絞って
+同一条件（60秒・RSI・workers=1）で**12ペア追加測定**した結果、**0.9=weighted平均33724.9・
+0.5=33743.3（差0.06%）・6勝6敗の完全な五分**（HARDは24run全て4で不変）。第1ラウンドと合わせ
+計15ペア中9勝6敗（符号検定 p≈0.61＝有意でない）。**結論: 第1ラウンドの3/3一貫はn=3のサンプル
+ノイズだった**（同一形状でサンプル数を4倍にすると効果が完全に消えた）。既定0.9のまま据え置き、
+「見直しの条件」表を「このまま残す・再測定不要」へ更新（`filterC3nIncrease` と同じ確定ステータス）。
+`wideC3nBreakDays` も同じタイミングで確認したが、3.409.24 時点の生データを再照合しただけで
+新しい実データが無いため対応不要（据え置き継続）。
+
+- 検証: ホストJVM **553テスト green**（既存550 + `StateParserTest` 新規3）。design_lint
+  P1-P9=0・P10 baseline 2 のまま不変。UI/Worker 層はホストでコンパイル不可＝括弧均衡
+  （`MagiViewModel.kt` `{}` 1096→1097・`()` 2379→2381、増分は追加した1つの `if` ブロックと
+  対応）を静的確認。
+
 ## 続く2表(13+15項目)の検証＝dWeekly自己復元窓にも同型の穴を発見・修正、残りは反証つきで対応不要（3.446.0）
 ユーザーが2表（1つ目は3.445.0の8項目を①修正提案②実装方針③工数④リスク⑤検証方法へ展開したもの、2つ目は
 新規L-01〜L-15の15項目の論理的問題点一覧）を追加で提示。指示動詞は無いが、直前と同じ

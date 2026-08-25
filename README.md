@@ -24,6 +24,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.447.0＝対象コミット328b059への外部レビュー5件を全件実コードで検証し全件実在と
+確認。背景計算の入力保存・「開く前のデータ」退避の非原子書込み2箇所を`RunFiles.writeAtomically`へ統一、
+`enqueueUniqueWork()`の未捕捉例外に所有権ロールバック付きの防御を追加、`StateParser`のJSON配列不正要素の
+無言スキップを明示例外へ変更（17呼出）。release署名は既存の意図的製品判断と確認し対応せず。あわせて
+`docs/algorithm_portfolio.md`の見直しの条件に基づき`normalStallFraction`をblocked_covu型に絞って12ペア
+追加測定＝第1ラウンドの3/3一貫はn=3のサンプルノイズと判明、効果は再現せず既定0.9のまま確定。ホストJVM
+553テストgreen。）
+
 **最終更新**：2026-08-25（3.446.0＝3.445.0の続きで提示された2表（13+15項目）をreceiving-code-review規律で
 全件再検証。`DeltaEvaluator.previewMove`のdWeekly自己復元ブロックにも3.445.0と同型の例外安全性ギャップを
 自力発見・修正（try/finally追加）。残り全項目は実コード確認・不変条件の証明・既存テストチェーン

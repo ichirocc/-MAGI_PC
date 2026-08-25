@@ -13,25 +13,25 @@ object StateParser {
     fun parse(json: String): MagiState {
         val o = JSONObject(json)
 
-        val shifts = o.optJSONArray("shifts").mapObjects {
+        val shifts = o.optJSONArray("shifts").mapObjects("shifts") {
             Shift(it.optString("name"), it.optString("kigou"), asStr(it.opt("need1")), asStr(it.opt("need2")))
         }
-        val groups = o.optJSONArray("groups").mapObjects {
+        val groups = o.optJSONArray("groups").mapObjects("groups") {
             Group(it.optString("name"), it.optString("kigou"))
         }
-        val staff = o.optJSONArray("staff").mapObjects {
+        val staff = o.optJSONArray("staff").mapObjects("staff") {
             Staff(it.optString("name"), it.optInt("groupIdx", 0), it.optInt("skillIdx", 0))
         }
-        val skillGroups = o.optJSONArray("skillGroups").mapObjects {
+        val skillGroups = o.optJSONArray("skillGroups").mapObjects("skillGroups") {
             Group(it.optString("name"), it.optString("kigou"))
         }
-        val groupShift = o.optJSONArray("groupShift").mapArrays { row ->
+        val groupShift = o.optJSONArray("groupShift").mapArrays("groupShift") { row ->
             (0 until row.length()).map { row.optInt(it, 0) }
         }
-        val groupShiftApt = o.optJSONArray("groupShiftApt").mapArrays { row ->
+        val groupShiftApt = o.optJSONArray("groupShiftApt").mapArrays("groupShiftApt") { row ->
             (0 until row.length()).map { asStr(row.opt(it)) }
         }
-        val schedule = o.optJSONArray("schedule").mapArrays { row ->
+        val schedule = o.optJSONArray("schedule").mapArrays("schedule") { row ->
             // [監査A9] 不正/null セルは 0(先頭シフト) でなく -1(未割当) に倒す（勝手な勤務化を防ぐ）。
             (0 until row.length()).map { row.optInt(it, -1) }
         }
@@ -51,26 +51,26 @@ object StateParser {
         val needDay2 = strMap(o.optJSONObject("needDay2"))
         val shiftColors = strMap(o.optJSONObject("shiftColors"))
 
-        val cons1 = o.optJSONArray("cons1").mapObjects {
+        val cons1 = o.optJSONArray("cons1").mapObjects("cons1") {
             C1Row(asStr(it.opt("day1")), it.optString("shiftKigou"), asStr(it.opt("day2")))
         }
-        val cons2 = o.optJSONArray("cons2").mapObjects {
+        val cons2 = o.optJSONArray("cons2").mapObjects("cons2") {
             C2Row(it.optString("shiftKigou"), asStr(it.opt("count")))
         }
-        val cons3 = o.optJSONArray("cons3").mapObjects { C3Row(strList(it.optJSONArray("pattern"))) }
-        val cons3n = o.optJSONArray("cons3n").mapObjects { C3Row(strList(it.optJSONArray("pattern"))) }
-        val cons3m = o.optJSONArray("cons3m").mapObjects { C3Row(strList(it.optJSONArray("pattern"))) }
-        val cons3mn = o.optJSONArray("cons3mn").mapObjects { C3Row(strList(it.optJSONArray("pattern"))) }
-        val cons41 = o.optJSONArray("cons41").mapObjects {
+        val cons3 = o.optJSONArray("cons3").mapObjects("cons3") { C3Row(strList(it.optJSONArray("pattern"))) }
+        val cons3n = o.optJSONArray("cons3n").mapObjects("cons3n") { C3Row(strList(it.optJSONArray("pattern"))) }
+        val cons3m = o.optJSONArray("cons3m").mapObjects("cons3m") { C3Row(strList(it.optJSONArray("pattern"))) }
+        val cons3mn = o.optJSONArray("cons3mn").mapObjects("cons3mn") { C3Row(strList(it.optJSONArray("pattern"))) }
+        val cons41 = o.optJSONArray("cons41").mapObjects("cons41") {
             C41Row(it.optString("groupKigou"), it.optString("shiftKigou"), asStr(it.opt("l")), asStr(it.opt("u")))
         }
-        val cons42 = o.optJSONArray("cons42").mapObjects {
+        val cons42 = o.optJSONArray("cons42").mapObjects("cons42") {
             C42Row(it.optString("g1Kigou"), it.optString("g2Kigou"), it.optString("s1Kigou"), it.optString("s2Kigou"))
         }
-        val cons41s = o.optJSONArray("cons41s").mapObjects {
+        val cons41s = o.optJSONArray("cons41s").mapObjects("cons41s") {
             C41Row(it.optString("groupKigou"), it.optString("shiftKigou"), asStr(it.opt("l")), asStr(it.opt("u")))
         }
-        val cons42s = o.optJSONArray("cons42s").mapObjects {
+        val cons42s = o.optJSONArray("cons42s").mapObjects("cons42s") {
             C42Row(it.optString("g1Kigou"), it.optString("g2Kigou"), it.optString("s1Kigou"), it.optString("s2Kigou"))
         }
 
@@ -240,17 +240,30 @@ object StateParser {
         return m
     }
 
-    private inline fun <T> JSONArray?.mapObjects(f: (JSONObject) -> T): List<T> {
+    // [外部レビュー P2-02] 旧: 要素がオブジェクト/配列でなければ黙って読み飛ばしていた（null・数値・文字列の
+    //   混入で staff/schedule 等が本来より短いリストへ静かに変わる）。インポート・復元データは職員名や
+    //   勤務割当を含むため、読み飛ばしより「配列N番目が不正」という明示的な失敗のほうが安全。
+    //   throw は3呼出元（MagiViewModel×2・OptimizationWorker×1）すべてが runCatching/try-catch で
+    //   包んでいる（確認済み）ので、ここで投げても未捕捉クラッシュにはならない。
+    private inline fun <T> JSONArray?.mapObjects(name: String, f: (JSONObject) -> T): List<T> {
         if (this == null) return emptyList()
         val out = ArrayList<T>(length())
-        for (i in 0 until length()) optJSONObject(i)?.let { out.add(f(it)) }
+        for (i in 0 until length()) {
+            val o = optJSONObject(i)
+                ?: throw IllegalArgumentException("$name[$i] がオブジェクトではありません（データが壊れています）")
+            out.add(f(o))
+        }
         return out
     }
 
-    private inline fun <T> JSONArray?.mapArrays(f: (JSONArray) -> T): List<T> {
+    private inline fun <T> JSONArray?.mapArrays(name: String, f: (JSONArray) -> T): List<T> {
         if (this == null) return emptyList()
         val out = ArrayList<T>(length())
-        for (i in 0 until length()) optJSONArray(i)?.let { out.add(f(it)) }
+        for (i in 0 until length()) {
+            val a = optJSONArray(i)
+                ?: throw IllegalArgumentException("$name[$i] が配列ではありません（データが壊れています）")
+            out.add(f(a))
+        }
         return out
     }
 }
