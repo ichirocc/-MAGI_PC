@@ -24,6 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.448.0＝ユーザー提示のスクショ2枚から色ピッカーを再設計。「休」の色ピッカーで
+隣接スウォッチの淡色差が小さい指摘（各15%以上の差異を要求）と、「人員不足」の色ピッカーで警告色
+（`MagiAccent.orange=#E08A1E`）が実選択できない指摘（同一の`ColorPickerDialog`を共有）に対応。
+farthest-point-selection＋隣接順序全探索で25色パレットを再設計し、`#E08A1E`を実スウォッチとして含め、
+水平隣接ペアの最小距離を17.6%（要求15%以上）まで確保。表示のみ・スコアリング/エンジンは完全に不変。
+design_lint exit=0（P2/P4ともbaseline不変）。）
+
 **最終更新**：2026-08-25（3.447.0＝対象コミット328b059への外部レビュー5件を全件実コードで検証し全件実在と
 確認。背景計算の入力保存・「開く前のデータ」退避の非原子書込み2箇所を`RunFiles.writeAtomically`へ統一、
 `enqueueUniqueWork()`の未捕捉例外に所有権ロールバック付きの防御を追加、`StateParser`のJSON配列不正要素の
