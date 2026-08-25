@@ -11,12 +11,20 @@
          （ユーザーのGoogleドライブへの自動退避）の両方でアプリ外へ複製されうる。アプリ自身が
          「データを保存」JSON/CSV入出力という明示的なバックアップ・移行手段を既に持つため、
          OS標準バックアップに頼る機能上の必要が無い＝false化に利用者側の機能損失は無い。 -->
+    <!-- [3.450.0, largeHeap] 実機ログ(2026-12データ)で6回連続の300秒PORTFOLIO実行後、後処理HF80
+         （UnifiedViolationChecker.check()を1回のパスで1000回超呼ぶタイトループ。各呼出が
+         Map/Listフィールド7つを持つ重いViolationReportを新規アロケート）でOutOfMemoryErrorが発生。
+         target/growth limitが268435456B=256MiB=既定ヒープ上限と一致＝largeHeap未設定のまま動いていた。
+         MagiViewModel.kt の catch(Throwable) が捕捉しログに残す設計のためアプリはクラッシュせず失敗を
+         報告していたが（過去バージョンでOOM/StackOverflowを握り潰さない目的の意図的な広いcatch）、
+         根本のヒープ上限そのものを緩和する。設定のみの変更＝エンジン/重み/探索ロジックは不変。 -->
     <application
         android:theme="@style/Theme.Magi"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
+        android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"
         android:supportsRtl="true">
         <activity

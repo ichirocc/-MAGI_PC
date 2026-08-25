@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.450.0＝3.449.0で見つけた12月データログのOutOfMemoryErrorを調査。原因は
+後処理HF80戦略的振動（`UnifiedViolationChecker.check()`を1回のパスで1,000回超呼ぶタイトループ）が
+既定（largeHeap未設定）ヒープ上限256MiBを、6回連続の300秒PORTFOLIO実行の蓄積の末に使い切ったもの。
+`catch(Throwable)`で捕捉済みでアプリはクラッシュせず失敗をログ報告していたが、根本のヒープ上限を
+`android:largeHeap="true"`追加で緩和。設定変更のみ＝エンジン・重み・探索ロジックは不変。）
+
 **最終更新**：2026-08-25（3.449.0＝ユーザーが実機ログ2本＋その基データのstate.jsonを直接アップロード。
 `wideC3nBreakDays`（禁止連続の崩し範囲トグル）を`docs/algorithm_portfolio.md`が要求していた
 「4件目以降の実データ」で初めて再測定。職員名＋グループ名を匿名化のうえ`sept2026_state.json`として

@@ -5330,6 +5330,32 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## largeHeap 追加＝後処理HF80のタイトループOOMを既定ヒープ緩和で対処（3.450.0, ユーザー提示の実機ログ12月データから調査）
+「AB評価」で提示された state.json（3.449.0の4件目データセット）とは別に、同じアップロード群に含まれていた
+**もう1本の実機ログ**（12月データセット・別セッションの吉江雄貴を含むロースター・`版: 3.446.0-weekly-bucket-
+exception-safety (647)`）を精読し、6回連続実行のうち **run#6 が `OutOfMemoryError` で失敗**していたのを発見。
+- **発生箇所の特定**: `後処理 HF80 戦略的振動（経過152秒）`のフェーズに入った直後にクラッシュ。
+  `applyHF80StrategicOscillation`（`V6HotfixPasses.kt`）は `localBestImprovement` ヘルパーを介し、
+  3サイクル×最大490試行/サイクルで**1回の呼出につき `UnifiedViolationChecker.check()` を1,000回超**呼ぶ
+  タイトループ構造。`check()` の返り値 `ViolationReport` は Map/List フィールドを7つ持つ重い data class
+  （`violations`/`needViolations`/`countViolations`/`cellFamilies`/`countFamilies`/`needFamilies`/
+  `breakdown`/`distLocations`）で、10職員/31日盤面では毎回100〜300要素級のマップを新規アロケートする。
+- **なぜこの回だけ落ちたか**: クラッシュログの `target footprint 268435456` / `growth limit 268435456` は
+  ちょうど **256MiB＝Androidの既定（largeHeap未設定時）ヒープ上限**と一致。`AndroidManifest.xml` を確認した
+  ところ `android:largeHeap` は設定されておらず、5回連続の300秒PORTFOLIO実行を経たプロセスで、この既定上限に
+  対しHF80のタイトループ割当がGC後もheap空きを使い切ったという構図に整合する（run#1〜#5は同等かそれ以上の
+  負荷で完走済み＝プロセス寿命に伴う蓄積が最後のひと押しになった可能性が高い）。
+- **クラッシュではなく正常にハンドルされていた**: `MagiViewModel.kt:1357` の `catch (e: Throwable)` が
+  `OutOfMemoryError` を捕捉し `最適化 失敗: 重大なエラー(OutOfMemoryError): ...` としてログへ記録していた
+  （この広い catch は過去バージョンで「OOM/StackOverflowを握り潰さずログへ残す」目的の意図的な拡張＝
+  `Exception`→`Throwable`）。アプリはハングも黙落もせず、失敗を利用者へ説明可能な形で報告済み。
+- **対応**: `AndroidManifest.xml` の `<application>` へ `android:largeHeap="true"` を追加。
+  **設定変更のみ＝エンジン・重み・探索ロジックには一切触れない**低リスクな対処。HF80のタイトループ自体
+  （1,000回超の `check()` 呼出）を軽くする改修は、探索/割当の挙動を変える類の変更にあたり計測が要るため
+  今回は見送り、記録に留める（将来 real/user 相当の実データで再現できた場合に着手する候補）。
+- 検証: manifest 変更のみ＝Kotlin/C++ は無変更（native parity・後処理研磨の決定的ベンチは影響を受けない）。
+  最終判定は CI（Android SDK・v6-engine-check の testDebugUnitTest／Release Build）。
+
 ## wideC3nBreakDays を4件目の実データで再測定＝符号不一致で既定OFF据え置きを確定（3.449.0, ユーザー提示の実機ログ3本＋state.json直接アップロード）
 ユーザーが実機ログ2本（同一データセット, 2026-09/10職員/31日）を`AB評価`と共に提示。ログ単体では
 `filterC3nIncrease`/`wideC3nBreakDays` の効果を判定できない（同一設定内でも run ごとに HARD/weighted が
