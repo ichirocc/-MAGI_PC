@@ -175,6 +175,9 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     var editingCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var oneHand by rememberSaveable { mutableStateOf(false) }
     var proMode by rememberSaveable { mutableStateOf(false) }   // [プロ編集] 表示モード（false=かんたん / true=プロ）
+    // [通常セルの枠線] 違反の無いセルにも「分離」用の1dp輪郭を付けていた(3.397.0)が、常時表示は格子が
+    //   線で埋まって見づらいという声を受け選択式に。既定は非表示＝違反枠（実線/破線/角マーク）だけが目立つ。
+    var plainCellBorder by rememberSaveable { mutableStateOf(false) }
     var editScope by rememberSaveable { mutableStateOf(0) }   // [入口4分割] 編集タブ: 0=月次条件 / 1=職員管理 / 2=年間マスター
     // [下流→上流ディープリンク] 要確認一覧「設定で直す」→ 該当職員/シフトを事前選択して開く（-1=無し・消費で戻す）。
     var deepLinkWishStaff by rememberSaveable { mutableStateOf(-1) }
@@ -493,7 +496,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     ScheduleGrid(ui, onCellClick = openEditor, proMode = proMode, vioEnabled = vioEnabled, nameQuery = searchQuery,
                         onBulkSet = { cells, k -> vm.setCells(cells, k) },
                         focusCell = focusCell, onFocusShown = { focusCell = null }, focusRange = focusRange, focusMode = focusMode,
-                        canDo = { i, k -> vm.allowedShiftsFor(i).contains(k) })
+                        canDo = { i, k -> vm.allowedShiftsFor(i).contains(k) }, plainCellBorder = plainCellBorder)
                     // [3.193.0 シンプル化] 「職員別カレンダー」（StaffCalendarCard）を撤去。既存コメントが
                     //   自認していたとおり全職員グリッドと同じ盤面の二重表示＝密度/冗長の主因だった。撤去。
                     TallyCard(ui, vm, onFix = { staff, shift -> tab = 3; vm.findFixSuggestions(staff, shift) }, vioEnabled = vioEnabled)
@@ -658,7 +661,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     // [3.122.0→3.132系] ColorSettingsView（違反種別の色=族別の色設定）は設定タブのシフトの表示色直後に配置。
                 }
                 else -> {
-                    AppearanceCard(oneHand, { oneHand = it }, proMode) { proMode = it }
+                    AppearanceCard(oneHand, { oneHand = it }, proMode, { proMode = it },
+                        plainCellBorder = plainCellBorder, onPlainCellBorder = { plainCellBorder = it })
                     ShiftColorCard(ui, vm)
                     // [IA重複解消 3.132系] 違反の色は ColorSettingsView（基準色2種＋族別）へ一本化し、
                     //   シフトの表示色の直後＝色設定の定位置に配置（旧: 詳細設定の折りたたみ内で見つけにくい＋

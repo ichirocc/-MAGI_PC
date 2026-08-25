@@ -629,6 +629,7 @@ internal fun DataActionsCard(
 internal fun AppearanceCard(
     oneHand: Boolean = false, onOneHand: (Boolean) -> Unit = {},
     proMode: Boolean = false, onProMode: (Boolean) -> Unit = {},
+    plainCellBorder: Boolean = false, onPlainCellBorder: (Boolean) -> Unit = {},
 ) {
     // [D8/UD固定] 配色セレクタ（自動/明/暗/UD）はユーザー判断で撤去。テーマは UD（高コントラスト）固定。
     Card(Modifier.fillMaxWidth()) {
@@ -640,6 +641,13 @@ internal fun AppearanceCard(
                 Switch(checked = oneHand, onCheckedChange = onOneHand)
                 Spacer(Modifier.width(8.dp))
                 Text("片手モード", fontSize = 14.sp, modifier = Modifier.weight(1f))
+            }
+            // [通常セルの枠線] 違反の無いセルに常時1dp輪郭を付けるか（既定=付けない）。付けると同色が
+            //   並ぶセル同士の境目が分かりやすくなる一方、格子全体が線で埋まり違反枠が目立ちにくくなる。
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Switch(checked = plainCellBorder, onCheckedChange = onPlainCellBorder)
+                Spacer(Modifier.width(8.dp))
+                Text("勤務表の通常セルに枠線を表示", fontSize = 14.sp, modifier = Modifier.weight(1f))
             }
             // [プロ編集] 表示モード。プロ＝数値診断（生指標）を前面に。今後さらに高密度編集を拡張予定。
             Text("表示モード", style = MaterialTheme.typography.titleSmall)

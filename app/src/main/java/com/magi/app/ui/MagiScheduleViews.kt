@@ -504,6 +504,7 @@ internal fun ScheduleGrid(
     focusRange: Triple<Int, Int, Int>? = null,   // [窓ハイライト③] (職員i, 開始日, 終了日)
     focusMode: Boolean = false,                  // [集中モード] 違反・未反映希望以外のセルを淡色化
     canDo: (Int, Int) -> Boolean = { _, _ -> true },   // [矛盾なく選択] 一括割当の担当可否（(職員i, シフトk)）
+    plainCellBorder: Boolean = false,   // [外観] 違反の無いセルにも1dp輪郭を付けるか（既定=付けない）
 ) {
     val cs = MaterialTheme.colorScheme
     // [一括編集] 円柱は1セル編集。まとめて変更するダイアログの開閉。
@@ -598,7 +599,7 @@ internal fun ScheduleGrid(
                 if (navFlash != null) { kotlinx.coroutines.delay(2_500); navFlash = null }
             }
             Spacer(Modifier.height(12.dp))
-            MagiFlatGrid(ui, onCellClick, vioEnabled, hScroll, nameQuery, cellW = gridCellW, focusCell = focusCell ?: navFlash, focusRange = focusRange, focusMode = focusMode, canDo = canDo)   // [円柱やめる] フィッシュアイ→平面グリッドに置換（旧円柱コードは削除済み）
+            MagiFlatGrid(ui, onCellClick, vioEnabled, hScroll, nameQuery, cellW = gridCellW, focusCell = focusCell ?: navFlash, focusRange = focusRange, focusMode = focusMode, canDo = canDo, plainCellBorder = plainCellBorder)   // [円柱やめる] フィッシュアイ→平面グリッドに置換（旧円柱コードは削除済み）
             // [週ページング＋横スクロール併用] 前週/次週 は hScroll を1週ぶんジャンプ（列は隠さない＝自由スクロールと併用）。
             if (weeks.size > 1) {
                 Spacer(Modifier.height(10.dp))
@@ -1323,7 +1324,7 @@ private fun TallyBox(
 // フィッシュアイ(円柱)をやめ、均一セルのスプレッドシート型に。名前列固定・横スクロールで日移動。
 // 歪みなし＝全職員×全日で記号/違反が明瞭（周辺日の潰れを構造的に解消）。Composeネイティブでタップ/スクロール。
 @Composable
-internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabled: Set<String> = allVioBucketKeys, hScroll: ScrollState = rememberScrollState(), nameQuery: String = "", cellW: androidx.compose.ui.unit.Dp = 48.dp, focusCell: Pair<Int, Int>? = null, focusRange: Triple<Int, Int, Int>? = null, focusMode: Boolean = false, canDo: (Int, Int) -> Boolean = { _, _ -> true }) {
+internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabled: Set<String> = allVioBucketKeys, hScroll: ScrollState = rememberScrollState(), nameQuery: String = "", cellW: androidx.compose.ui.unit.Dp = 48.dp, focusCell: Pair<Int, Int>? = null, focusRange: Triple<Int, Int, Int>? = null, focusMode: Boolean = false, canDo: (Int, Int) -> Boolean = { _, _ -> true }, plainCellBorder: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val days = ui.days.coerceAtLeast(1)
     val staffCount = ui.schedule.size
@@ -1495,7 +1496,7 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                                 (if (wkk == 2) "・希望未反映（希望=${wishSym.ifBlank { "?" }}）" else if (wkk != 0) "・希望" else "") + "、タップで変更"
                             // [違反色/族別] このセルの表示中クラスの族色（未設定は重大度色）。枠・角マークに適用。
                             val cellVioC = vioCls[i][d]?.let { resolvedVioColor(ui, it, vioColor, vioSoftColor) }
-                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym) { tapped = i to d; onCellClick(i, d) }
+                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym, plainBorder = plainCellBorder) { tapped = i to d; onCellClick(i, d) }
                         }
                     }
                 }
@@ -1508,21 +1509,24 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
 private fun FlatCell(
     w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp, symbol: String,
     bg: Color, fg: Color, vk: Int, wk: Int, vioColor: Color, vioSoftColor: Color, cd: String, dim: Boolean = false,
-    symSize: androidx.compose.ui.unit.TextUnit = 15.sp, focused: Boolean = false, wishSym: String = "", onClick: () -> Unit,
+    symSize: androidx.compose.ui.unit.TextUnit = 15.sp, focused: Boolean = false, wishSym: String = "",
+    plainBorder: Boolean = false, onClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Box(Modifier.width(w).height(h).padding(1.5.dp)) {
         Box(
             Modifier.fillMaxSize()
                 .background(bg, RoundedCornerShape(6.dp))
-                // [分離] 無違反セルにも微細な輪郭を付け、似た明度の隣接セルと切り分ける（違反時は違反枠が優先）。
+                // [分離/選択式] 無違反セルの1dp輪郭は既定=非表示（外観設定でON可）。ONにすると似た明度の
+                //   隣接セル同士を切り分けやすくなるが、格子全体が線で埋まり違反枠が目立ちにくくなるため。
                 // [判読性] 枠は 1=実線(必須)/2=破線(重い調整)のみ。3=軽い調整は右上の角マークに落とし飽和を防ぐ。
                 .then(when {
                     focused -> Modifier.border(3.dp, cs.primary, RoundedCornerShape(6.dp))   // [ジャンプ] 注目セル
                     // [枠のハロー] 違反色と同系色のセル背景でも枠が埋没しないよう surface の縁取りを敷く。
                     vk == 1 -> Modifier.violationBorder(true, vioColor, 6.dp, halo = cs.surface)
                     vk == 2 -> Modifier.violationBorder(false, vioSoftColor, 6.dp, halo = cs.surface)
-                    else -> Modifier.border(1.dp, cs.outlineVariant, RoundedCornerShape(6.dp))
+                    plainBorder -> Modifier.border(1.dp, cs.outlineVariant, RoundedCornerShape(6.dp))
+                    else -> Modifier
                 })
                 .clickable(onClick = onClick)
                 // [a11y] 主操作セルを読み上げ対応（従来 contentDescription 無し）。氏名/日/シフト/違反/希望を1文で。
