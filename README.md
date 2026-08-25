@@ -24,6 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.445.0＝ユーザー提示の外部レビュー8件（🔴高3/🟡中3/🟢低2）をreceiving-code-review規律
+どおり全件実コードで検証。実在の欠陥は1件のみ（`DeltaEvaluator.previewMove`の一時盤面書換え窓にtry/finally
+なし）で修正・ホストJVM550テストgreen。残り7件は「既に対応済み(重み同期documentation/文書)」「意図的トレード
+オフとして検討済み(commitロールバック/ProblemCacheキャッシュ)」「過大な主張(SCORE_HARD_UNITオーバーフロー＝
+実際は fail-loud 設計・試算も1e9の約400分の1)」「既に grilling で却下済み(ファイル分割2件)」「低深刻度で妥当
+(fairDevAtのO(m))」のいずれかで対応不要と判断・根拠を明記。HF77非該当。）
+
 **最終更新**：2026-08-25（3.444.0＝ユーザー提示の勤務表グリッド再設計案をAskUserQuestionで既存の意図的判断
 （違反枠3段階・希望バッジの記号表示・TallyCardの配置）と突合し3点は現状維持を確認、唯一の実施項目
 「週送り/違反ジャンプを画面下部（サムゾーン）へ移動」を`ScheduleGrid`内で実装（新規state無し・純粋な並べ替え）。

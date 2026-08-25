@@ -177,11 +177,20 @@ class DeltaEvaluator(private val p: Problem) {
         val bC1 = c1Local(i, j); val bC3 = c3Local(i, j, p.cons3, false)
         val bC3n = c3Local(i, j, p.cons3n, true); val bC3m = c3Local(i, j, p.cons3m, false)
         val bC3mn = c3Local(i, j, p.cons3mn, true)
+        // [外部レビュー検証/例外安全性] a[i][j] を一時的に nw へ書き換えて after 側を測るこの窓は、
+        //   c1Local/c3Local が現行の不変条件下では例外を投げない（境界は min/max で常にクランプ済み）
+        //   ため実害は未確認だが、将来の変更で throw する経路が増えても「復元されないまま盤面が
+        //   壊れる」という最悪の失敗モード（クラッシュではなく以降の全差分計算が静かに狂う）を
+        //   構造的に防ぐため try/finally で復元を保証する。プリミティブ var のみ＝ボクシング無し。
         a[i][j] = nw
-        val aC1 = c1Local(i, j); val aC3 = c3Local(i, j, p.cons3, false)
-        val aC3n = c3Local(i, j, p.cons3n, true); val aC3m = c3Local(i, j, p.cons3m, false)
-        val aC3mn = c3Local(i, j, p.cons3mn, true)
-        a[i][j] = old
+        var aC1 = 0L; var aC3 = 0L; var aC3n = 0L; var aC3m = 0L; var aC3mn = 0L
+        try {
+            aC1 = c1Local(i, j); aC3 = c3Local(i, j, p.cons3, false)
+            aC3n = c3Local(i, j, p.cons3n, true); aC3m = c3Local(i, j, p.cons3m, false)
+            aC3mn = c3Local(i, j, p.cons3mn, true)
+        } finally {
+            a[i][j] = old
+        }
         dC1 = (aC1 - bC1); dC3 = (aC3 - bC3); dC3n = (aC3n - bC3n); dC3m = (aC3m - bC3m); dC3mn = (aC3mn - bC3mn)
 
         // c2 (per-staff total) for shifts old / nw
