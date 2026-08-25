@@ -5330,6 +5330,43 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## wideC3nBreakDays を4件目の実データで再測定＝符号不一致で既定OFF据え置きを確定（3.449.0, ユーザー提示の実機ログ3本＋state.json直接アップロード）
+ユーザーが実機ログ2本（同一データセット, 2026-09/10職員/31日）を`AB評価`と共に提示。ログ単体では
+`filterC3nIncrease`/`wideC3nBreakDays` の効果を判定できない（同一設定内でも run ごとに HARD/weighted が
+揺れる＝PORTFOLIO の既知の run間ばらつき, n=1 は判定不能）ため、①暫定所見をdocsへ記録する提案をした。
+ユーザーが「はい」と回答した直後、**その基データの state.json を直接アップロード**——これは
+`docs/algorithm_portfolio.md` の見直しの条件が要求していた「4件目以降の実データ」そのもの。
+- **匿名化**: 3.409.15 の規約（職員名→職員A..J）を、**グループ名/記号にも拡張**して適用
+  （`groups[].name`/`.kigou` が実姓=大島/岡田/桒澤/吉江/古泉を含んでいたため）。`cons42[].g1Kigou`/
+  `.g2Kigou` の参照も同時にグループA..Jへ付け替え。匿名化前後で `UnifiedViolationChecker.check` の
+  hard/total/weighted/**全19族breakdown**がbit一致することをホストJVM実行で確認してから
+  `app/src/test/resources/sept2026_state.json`（新設）として commit。`WideC3nFixtureTest.kt`
+  （新設・`fixtureShapeAndBaselineEval`＝hard=0 total=435 weighted=3140.0 の固定値検証、
+  `fixtureIsAnonymized`＝全職員名"職員"始まり・全グループ名"グループ"始まり/記号"G\d+"を機械検証）。
+- **測定**: ホストJVM上に新設した A/B ドライバ（`PolishGate.wideC3nBreakDays` を ON/OFF 切替＋
+  `V6FinalPort.handleOptimize` を `V6Algorithm.PORTFOLIO`・予算240秒・workers=4 で起動）で
+  **6ペア(12run)** を実行。結果: **ON 2勝・OFF 3勝・引分1**（weighted平均 ON=3095.5 / OFF=3079.8、
+  差0.5%）。**HARDは12run全て0で不変**（この帯では c1/c3n の trade-off が weighted のみに現れる）。
+- **結論**: 事前に定めた採否基準（「5件以上のデータで ON が一貫して勝つなら既定ON」）に対し、
+  この4件目データも符号が一貫しない（2勝3敗1分）＝**「5件全て一貫してON」は数学的にもう成立しない**
+  （あと1件が完全にON一貫でもこの4件目の不一致だけで条件が崩れる）。`docs/algorithm_portfolio.md`
+  の該当行（実装済みだが既定OFF・見直しの条件の両テーブル）を「既定OFFで確定的に据え置き。再測定不要・
+  再提案しない」へ更新。**削除はしない**（3.307.0 の規律7＝候補生成の一般化自体は正しく、反証されたのは
+  「既定ONにする根拠」であって機構自体ではない。genuinely 新しいデータ形状で顕著な差が出た場合のみ
+  その形状に絞って再検討する）。
+- **副次的な裏づけ**: 同一データの実機ログ2セッション（file1/file2）で、**同一設定・同一データの
+  連続実行（run#2 vs run#3）だけで HARD が 0→1 に振れる**実例を確認済み＝単発の実機ログ比較が
+  信頼できない理由がここでも裏づけられた（今回の12run A/Bを単発ログ比較ではなく多ペア測定にした根拠）。
+- **併せて確認した第3のログ（12月データ, 別セッション）**: `filterC3nIncrease=ON, wideC3nBreakDays=OFF`
+  設定下の6実行中run#6が**OutOfMemoryError**でクラッシュ（`後処理 HF80 戦略的振動（経過152秒）`の
+  最中、`Failed to allocate a 24 byte allocation with 1662560 free bytes...target footprint
+  268435456`）。この12月データセットは9月データとは別物（10職員/31日だが吉江雄貴を含む別ロースター、
+  セッション内で cons2[0]削除・cons1[1]変更という制約編集を経た状態）。**このOOMは今回のA/B測定とは
+  独立した別バグとして扱う**（次のセクションで調査）。
+- 検証: ホストJVM **555テスト green**（`hosttest.sh` 全実行、新規2件=`WideC3nFixtureTest`）。
+  UI/Worker層は無変更（本版はdocs＋test resourceのみ）。ブレース/丸括弧均衡は変更ファイルなし
+  （新規Kotlinテストファイルのみ追加）。`python3 tools/design_lint.py` exit=0。
+
 ## 色ピッカーの識別性と警告色の実選択可能性を確保（3.448.0, ユーザー提示のスクショ2枚から）
 ユーザーが2画面のスクショを提示: ①編集タブ「「休」の色」ピッカー＝隣接スウォッチの淡色差が小さく
 見分けにくい＝**「各15%以上ぐらい差異を作る」** ②ホーム「「人員不足」の色」ピッカー（同じ

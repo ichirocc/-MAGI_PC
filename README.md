@@ -24,6 +24,16 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.449.0＝ユーザーが実機ログ2本＋その基データのstate.jsonを直接アップロード。
+`wideC3nBreakDays`（禁止連続の崩し範囲トグル）を`docs/algorithm_portfolio.md`が要求していた
+「4件目以降の実データ」で初めて再測定。職員名＋グループ名を匿名化のうえ`sept2026_state.json`として
+新規fixture化（匿名化前後のbit一致をホストJVM実行で確認）し、6ペア(12run)のPORTFOLIO A/Bを実施。
+結果はON2勝/OFF3勝/引分1（weighted差0.5%・HARDは12run全て0で不変）＝符号不一致のため
+「既定OFFで確定的に据え置き・再測定不要」を確定。副次的に、同一データの実機ログでも同一設定の
+連続実行だけでHARDが振れる実例を確認し単発ログ比較が信頼できないことを裏づけ。併せて別セッションの
+12月データログでOutOfMemoryError（HF80戦略的振動フェーズ中）を確認し、今回のA/Bとは独立した別バグとして
+記録。ホストJVM555テストgreen。エンジン・重み・探索は不変（測定・fixture追加のみ）。）
+
 **最終更新**：2026-08-25（3.448.0＝ユーザー提示のスクショ2枚から色ピッカーを再設計。「休」の色ピッカーで
 隣接スウォッチの淡色差が小さい指摘（各15%以上の差異を要求）と、「人員不足」の色ピッカーで警告色
 （`MagiAccent.orange=#E08A1E`）が実選択できない指摘（同一の`ColorPickerDialog`を共有）に対応。
