@@ -225,7 +225,9 @@ object Ws1Ops {
      * [3.419.0] 判断そのものは [fillShiftIndex] が唯一の持ち場（`Problem.initialAssignment` と規則を
      * 共有する）。ここは `groupShift` の 1/0 行を担当可能 index の配列へ直すだけの入口。
      */
-    private fun fillShift(groupShiftRow: List<Int>?, rest: Int): Int {
+    /** [3.442.0/H3] CSV取込(`ScheduleCsvBridge.parseUpsert`)も同じ判断を読むため internal 化した。
+     *  写すと必ず片方が取り残される（3.418.0/3.419.0 でこの規則を1箇所へ寄せたのと同じ理由）。 */
+    internal fun fillShift(groupShiftRow: List<Int>?, rest: Int): Int {
         if (groupShiftRow == null) return rest
         val allowed = groupShiftRow.indices.filter { groupShiftRow[it] == 1 }.toIntArray()
         return fillShiftIndex(allowed, rest)

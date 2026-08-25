@@ -656,12 +656,19 @@ static int runConsIndexGuardTest() {
         p.cons41s.push_back({7, 0, 0, 3});
         p.cons42.push_back({0, 0, 1, 1});
         p.cons42s.push_back({9, 1, 3, 0});
+        // [3.442.0/M4] cons1/cons2 も正当な値なら通す（Kotlin の Problem 構築と同じ意味論）。
+        p.cons1.push_back({3, 1, 2});
+        p.cons2.push_back({0, 4});
         if (!consIndicesValidN(p)) { printf("CONS-GUARD FAIL: 正当な制約を拒否した\n"); failures++; }
     }
     // 不正: 負の群 id / 範囲外シフト id を4族それぞれで拒否する。
+    // [3.442.0/M4] cons1.si は rowMask/staffForShift/applyCell(=ssn への書込) の index、
+    //   cons2.si は ssn の index。d1<=0 は bit 経路 `1ULL << d1` のシフト量が負＝UB。
     const char* names[] = {"cons41.g<0", "cons41.s>=K", "cons41s.s<0",
-                           "cons42.g2<0", "cons42.s1>=K", "cons42s.s2>=K"};
-    for (int c = 0; c < 6; c++) {
+                           "cons42.g2<0", "cons42.s1>=K", "cons42s.s2>=K",
+                           "cons1.si<0", "cons1.si>=K", "cons1.d1<=0", "cons1.d2<=0",
+                           "cons2.si>=K", "cons2.c<=0"};
+    for (int c = 0; c < 12; c++) {
         MagiProblem p = base();
         switch (c) {
             case 0: p.cons41.push_back({-1, 0, 0, 1}); break;
@@ -670,6 +677,12 @@ static int runConsIndexGuardTest() {
             case 3: p.cons42.push_back({0, 0, -1, 1}); break;
             case 4: p.cons42.push_back({0, p.K, 0, 1}); break;
             case 5: p.cons42s.push_back({0, 0, 0, p.K}); break;
+            case 6: p.cons1.push_back({3, -1, 1}); break;
+            case 7: p.cons1.push_back({3, p.K, 1}); break;
+            case 8: p.cons1.push_back({0, 1, 1}); break;
+            case 9: p.cons1.push_back({3, 1, 0}); break;
+            case 10: p.cons2.push_back({p.K, 1}); break;
+            case 11: p.cons2.push_back({0, 0}); break;
         }
         if (consIndicesValidN(p)) {
             printf("CONS-GUARD FAIL: %s を受け入れた\n", names[c]);

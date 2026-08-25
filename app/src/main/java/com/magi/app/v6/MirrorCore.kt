@@ -123,8 +123,9 @@ object MirrorKeys {
     val weights: Map<String, Double> = linkedMapOf(
         "groupViol" to 10000.0, "pref" to 9000.0, "covU" to 8000.0, "c3n" to 7000.0,
         "low" to 90.0, "high" to 45.0,
-        // [HF77明示数値指示] 回避の並び(c3mn)=15・窓の要件(c1)=15。経緯: 3.249.0 で c3mn 12→15・c1 4→5、
-        //   3.253.0 で c1 5→15。**現在値はどちらも 15**（3.389.0 まで「c1=5」と書いた旧コメントが残っていた）。
+        // [HF77明示数値指示] 回避の並び(c3mn)=30・窓の要件(c1)=30。経緯: 3.249.0 で c3mn 12→15・c1 4→5、
+        //   3.253.0 で c1 5→15、3.409.24 で両方 15→30。**現在値はどちらも 30**（この行が stale だと監査が
+        //   誤誘導される。実際 3.389.0 まで「c1=5」、3.428.0 まで「15」と書いた旧コメントが残っていた）。
         // **ここを変えたら `Evaluator.fullEvalParts` のリテラルと C++ も同時に変える**。
         //   Kotlin 側のずれは `ObjectiveParityTest`、C++ 側は native-parity CI が捕まえる。
         "c3mn" to 30.0, "c1" to 30.0, "c3" to 3.0, "c3m" to 2.0,

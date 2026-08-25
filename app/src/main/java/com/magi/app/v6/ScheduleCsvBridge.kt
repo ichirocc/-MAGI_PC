@@ -591,7 +591,9 @@ object StaffCsvIO {
 
     /**
      * [氏名,グループ,スキル] を upsert で取込: 既存氏名は所属群/スキルを更新、未知の氏名は
-     * 新規スタッフとして追加し勤務表に休(0)の行を1行足す。氏名は空白無視で照合。
+     * 新規スタッフとして追加し勤務表に1行足す。空き日を何で埋めるかは `Ws1Ops.fillShift`
+     * （その群が休を担当できるなら休、できなければ担当できる先頭のシフト）が決める
+     * ＝3.442.0/H3。旧 KDoc の「休(0)」は 3.329.0 の記号解決化より前の記述だった。氏名は空白無視で照合。
      * 群/スキルは記号(kigou)照合、未知なら新規は先頭群/未所属(-1)・既存は現状維持。
      * [3.413.0/I-07] 未知の記号は [StaffUpsertResult.unknownGroups]/[StaffUpsertResult.unknownSkills] に
      * 記録する（空欄＝指定なしと、誤記＝解決できなかった、を呼出側が区別できるようにするため）。
@@ -649,8 +651,15 @@ object StaffCsvIO {
                     // [3.329.0/外部レビュー H-01/M-01] 新しい職員の空き日は**休の記号解決**で埋める
                     //   （旧: index 0 直書きで、休が先頭でないデータでは全日が勤務になっていた）。
                     //   未知のスキル群は 0（先頭の群）でなく **-1（未所属）**へ（3.70.0 の「(なし)」）。
-                    newStaff.add(Staff(rawName, gi ?: 0, si ?: -1))
-                    extraRows.add(IntArray(t) { restShiftIndex(state) })
+                    // [3.442.0/H3] さらに**その群が休を担当できるか**まで見る。休を担当可否から外した群
+                    //   （UI の担当可否チップで実際にできる操作）へ CSV で職員を足すと、旧実装は全日を
+                    //   休で埋めて**行まるごと groupViol(HARD 10000)**になっていた（31日なら1回の取込で
+                    //   必須違反31件）。3.418.0 が `Ws1Ops` の3経路で直したのと同じ穴の、CSV 側の取り残し。
+                    //   未知の群は `gi ?: 0`＝先頭グループへ落ちるので、そこが休を持たない場合も同様に効く。
+                    val gIdx = gi ?: 0
+                    val fill = Ws1Ops.fillShift(state.groupShift.getOrNull(gIdx), restShiftIndex(state))
+                    newStaff.add(Staff(rawName, gIdx, si ?: -1))
+                    extraRows.add(IntArray(t) { fill })
                     added++
                 }
             }

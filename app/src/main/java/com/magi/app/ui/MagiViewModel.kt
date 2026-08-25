@@ -1480,6 +1480,14 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { androidx.work.WorkManager.getInstance(getApplication()).cancelUniqueWork(OptimizationWorker.UNIQUE) }
         if (bgWasRunning) {
             OptimizationRepository.clear()
+            // [3.442.0/C1 の押した側] `clear()` は progress/result だけを落とし **running は落とさない**。
+            //   Worker 側の解除（`releasedByMe`）は 3.441.0 時点で入っているが、`cancelUniqueWork()` は
+            //   非同期で Worker が気づくまで時間がかかる＝その間 `OptimizationRepository.running` は true の
+            //   ままなので `optimizeInFlight()`（編集ガード14箇所の根拠・3.328.0）が閉じ続ける。
+            //   押した側でも降ろして窓を閉じる。Worker 側の解除と冪等（両方 false にするだけ）。
+            //   置き換えで打ち切られた旧実行はここを通らない（`stop()` はユーザー操作のみ）＝
+            //   新しい実行の running を落とす経路にはならない。
+            OptimizationRepository.setRunning(false)
             clearBgFiles("停止（背景計算の中断）")
             _ui.update { it.copy(messageIsError = false, running = false, message = "停止しました（バックグラウンド計算を中断）") }
             logOp("I", "バックグラウンド最適化を停止")

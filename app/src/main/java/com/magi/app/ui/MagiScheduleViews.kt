@@ -723,13 +723,13 @@ internal fun ShiftColorLegend(symbols: List<String>, colorHex: List<String>, tex
 internal fun isHardCellViolation(v: String?): Boolean =
     v != null && MirrorKeys.hard.any { v.contains(it) }
 
-/** [判読性] 破線枠にする「重いソフト族」（low=90 / high=45 / c1=15 / c3mn=15）か。
+/** [判読性] 破線枠にする「重いソフト族」（low=90 / high=45 / c1=30 / c3mn=30）か。
  *  残りは右上の角マークに落として「格子全体が警告に埋まって必須違反が埋没する」のを防ぐ。
  *  [3.409.11] c1 を破線側へ昇格した。3.367.0 は「c1 は最多件数のソフト族だから飽和する」として
  *  角マークに据え置いたが、その判断は **fire 数**（golden 96）で見ており、この表示が実際に扱うのは
  *  **セル数**（同 22）＝単位が違った。実測（セル総数 310）: golden 破線 20→42・real3 11→28・
  *  sample_v6 0→5。3.99.0 が飽和と判定した 194 セルには遠く、重み階層と表示強度を一致させる
- *  当初の規則（c1=15=c3mn）が回復する。 */
+ *  当初の規則（c1=30=c3mn）が回復する。 */
 internal val heavySoftFamilies = setOf("low", "high", "c1", "c3mn")
 internal fun isHeavySoftCellViolation(v: String?): Boolean =
     v != null && familyOfVioClass(v) in heavySoftFamilies

@@ -106,7 +106,7 @@ class Problem(val state: MagiState) {
     // [3.320.0] 3.309.0 は連続パターン(cons3系)だけを直したが、**同じ無言除外が残り6族にあった**:
     //   cons1(窓ルール)・cons2(個人合計)・cons41/cons42(群)・cons41s/cons42s(スキル群)は、記号が
     //   解決できない行や数値が不正な行を `mapNotNull { ... else null }` でやはり黙って捨てる。
-    //   シフトや群を改名・削除すると、それを参照する窓ルール(重み15)や群ペア禁止が警告なく評価から
+    //   シフトや群を改名・削除すると、それを参照する窓ルール(重み30)や群ペア禁止が警告なく評価から
     //   消える。(族ラベル, 行の表示) を記録し、Sanity が cons3 系と同じ形で案内する。読み取り専用。
     private val _unresolvedRows = mutableListOf<Pair<String, String>>()
     val unresolvedRows: List<Pair<String, String>> get() = _unresolvedRows

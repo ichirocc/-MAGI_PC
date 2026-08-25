@@ -24,7 +24,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-25（3.441.0＝ユーザー提示の勤務表タブ画像を熟読し、土日・祝日の列色分けと祝日データの
+**最終更新**：2026-08-25（3.442.0＝並行セッションの3.438.0が同じドッグフーディングレポートから
+C1(Worker)/H2/M2の一部を解消したのを受け、残る3件を実装。①CSV取込の追加行が「その群が休を担当できるか」を
+見ずに休で埋めていた＝担当外の群では行まるごとgroupViol(HARD 10000)になる穴（main側は「再現しない」と
+判断したが、修正を戻すと落ちる回帰テストで反証）②JNI入口の制約index検証にcons1/cons2が抜けていた
+（cons1.siは`ssn`への書込index＝範囲外はヒープ破壊・cons1.d1<=0は`1ULL<<d1`のUB。ガード検査を6→12ケースへ）
+③`stop()`の押した側でも`OptimizationRepository.running`を降ろす＋重み15→30のコメント残り18箇所。
+検証＝ホストJVM 550テスト green・native parity 4,794,967手 mismatch=0・実データ3件は既知値と完全一致。
+前版は 3.441.0＝ユーザー提示の勤務表タブ画像を熟読し、土日・祝日の列色分けと祝日データの
 外部ファイル化を実装。祝日は`tools/generate_japan_holidays.py`が祝日法（国民の祝日に関する法律）の規則
 （固定日・ハッピーマンデー・春分秋分の近似式・国民の休日・振替休日）を一般ロジックとして計算し
 `app/src/main/assets/japan_holidays.json`（2026〜2036年・196件）へ出力。2026年9月22日が「敬老の日」と

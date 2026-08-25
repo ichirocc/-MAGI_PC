@@ -93,6 +93,24 @@ struct MagiProblem {
 //   MAGI_HOST_TEST では丸ごと除外されるので、中に書くとテストできない）。
 static bool consIndicesValidN(const MagiProblem& p) {
     const int K = p.K;
+    // [3.442.0/M4] cons1/cons2 も同じ入口で拒否する。3.409.23 は c41/c42 系だけを見ており
+    //   **同じクラスの穴が cons1/cons2 に非対称に残っていた**:
+    //   - `cons1.si` は `rowMask[i*K + c.si]`（SaChunk の bit 経路）・`staffForShift[c.si]`・
+    //     `applyCell(i, j, c.si)` ＝ `ssn[i*K + c.si]` への**書込**の index に使われる
+    //     ＝範囲外なら 3.171.0 の監査#7（sgrp）と同じヒープ破壊で、SIGSEGV は2層番兵で捕捉できない。
+    //   - `cons2.si` は `findC2FixN` の `ssn[i*K + c.si]` と `cd(i, c.si)` の index。
+    //   - `cons1.d1 <= 0` は bit 経路の `(1ULL << c.d1)` が**シフト量負＝UB**（d1>=64 側は 3.172.0 が
+    //     別分岐で処理済み）。scalar 経路も `j <= T - d1` が T を超え、内側ループが回らないまま
+    //     違反だけを数え続ける＝誤った評価になる。
+    //   条件は Kotlin の `Problem` 構築（`d1>0 && si>=0 && d2>0` / `si>=0 && c>0`）と同じ意味論に揃える
+    //   ＝正規経路では到達しないが、入口で一括拒否すればホットパスに分岐を足さずに閉じられる
+    //   （3.409.23 と同じ理由・同じ契約＝0 返却で「native 不可 → Kotlin へ安全退化」）。
+    //   cons3 系は seq を **比較にしか使わない**（`c3check` の `row[j]==first`・`rowDeficit`）ので対象外。
+    //   bit 経路の `contribC3RowFam` は 3.174.0 が seq を範囲検査して scalar へ退避する。
+    for (const auto& c : p.cons1)
+        if (c.si < 0 || c.si >= K || c.d1 <= 0 || c.d2 <= 0) return false;
+    for (const auto& c : p.cons2)
+        if (c.si < 0 || c.si >= K || c.c <= 0) return false;
     for (const auto* fam : {&p.cons41, &p.cons41s})
         for (const auto& c : *fam)
             if (c.g < 0 || c.s < 0 || c.s >= K) return false;
@@ -160,7 +178,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
     const int S = p.S, T = p.T, K = p.K;
     long long hard1 = 0, soft = 0;
 
-    // c1（canDo ガード＋#fire×重み15、HF77明示数値指示2026-07-20で4→5・2026-07-21で5→15）
+    // c1（canDo ガード＋#fire×重み30、HF77明示数値指示で 4→5(3.249.0)→15(3.253.0)→30(3.409.24)）
     for (const auto& c : p.cons1) {
         for (int i = 0; i < S; i++) {
             if (!p.cd(i, c.si)) continue;
@@ -224,7 +242,7 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
         }
     }
 
-    // c3 族（重み: c3=3 / c3n=HARD / c3m=2 / c3mn=15、HF77明示数値指示2026-07-20で12→15）
+    // c3 族（重み: c3=3 / c3n=HARD / c3m=2 / c3mn=30、HF77明示数値指示で 12→15(3.249.0)→30(3.409.24)）
     soft += c3check(p, a, p.cons3, false) * 3;
     hard1 += c3check(p, a, p.cons3n, true);
     soft += c3check(p, a, p.cons3m, false) * 2;
@@ -400,7 +418,7 @@ struct SaChunk {
     inline double nextDouble() { return (double)(rng() >> 11) * 0x1.0p-53; }
 
     // ---- 影響スライスの寄与（combined: HARD族は ×1e6）----
-    // c1 重み15・c3mn重み15（HF77明示数値指示2026-07-20で旧4/12から5/15へ・2026-07-21でc1を5→15へ変更）。
+    // c1 重み30・c3mn重み30（HF77明示数値指示で c1 4→5→15→30・c3mn 12→15→30。版数は 3.249.0/3.253.0/3.409.24）。
     long long contribC1Row(int i) const {
         long long v = 0;
         if (useBits) {
