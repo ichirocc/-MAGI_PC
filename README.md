@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.456.0＝既定OFFの3トグル(`filterC3nIncrease`/`normalStallFraction`/
+`wideC3nBreakDays`)をサンドボックス上で再測定。filterC3nIncrease/normalStallFractionは文書の
+「再測定不要」を完全再現。wideC3nBreakDaysは予算90秒(過去3ラウンドの240秒とは別条件)で24ペア測定し
+決着21ペア中ON13勝(62%)とやや優勢だが、既定は変更せず`docs/algorithm_portfolio.md`へ記録のみ。
+コード変更なし・docs+versionのみ。）
+
 **最終更新**：2026-08-25（3.455.0＝ユーザー提示の11シフト配色案(A4/Aｱ/B4/B1/Pｼ/Cｵ/Cｱ/Dテ/休/有/F1)を、
 記号一致するテスト用サンプルデータ4件(`golden_state.json`/`sample_state_v6.json`/`blocked_covu_state.json`/
 `sept2026_state.json`)の`shiftColors`へ適用。表記ゆれ(Dﾃ=Dテ)は同一視、対応不明な記号(希≠F1)は適用せず。
