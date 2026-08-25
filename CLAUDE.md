@@ -5330,6 +5330,40 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## HF80戦略的振動のOOM根本修正＝localBestImprovementをEvaluatorベースの候補生成へ（3.451.0, ユーザー指示「根本的に修正する」）
+3.450.0（largeHeap）で対症療法を出荷した直後、ユーザーから直接の追加指示「クラッシュログの target footprint/
+growth limit が両方とも268435456バイト（256MiB）を根本的に修正する」＝ヒープ上限を上げるだけでなく、
+その上限を使い切っていた**アロケート量そのものを減らせ**という明示要求。3.450.0 のCLAUDE.mdエントリ自身が
+「HF80のタイトループ自体（1,000回超のcheck()呼出）を軽くする改修は…探索/割当の挙動を変える類の変更にあたり
+計測が要るため今回は見送り」と書いていた項目を、ユーザーが直接指示したことで着手した。
+
+- **根本原因の再確認**: `applyHF80StrategicOscillation` が呼ぶ `localBestImprovement`（250〜490 tries/サイクル×
+  3サイクル）の内側ループが、候補を1つ試すたびに `UnifiedViolationChecker.check()`（Map/Listフィールド7つを
+  持つ重い `ViolationReport` を毎回新規アロケート）を呼んでいた＝1パスあたり最大1,470回超のアロケート。
+- **選ばなかった案**: `MirrorCore.check()` 自体（19族の違反を判定する唯一の source of truth・約400行）を
+  「軽量モード」対応に改修する案は、Map蓄積とスカラー集計が全族にわたって密結合しており改修リスクが高いため不採用。
+- **採用した案（`V6NativeOptimizer.runV5` に既存の二層構成を踏襲）**: `localBestImprovement` の内側探索を
+  `UnifiedViolationChecker.check()` から **`Evaluator(p).fullEval()`**（`Evaluator.kt`＝Mapを一切作らない
+  packed Long スコア＝`hard×SCORE_HARD_UNIT+soft`）へ置換。呼出元 `applyHF80StrategicOscillation` の**外側ゲート
+  （1サイクルにつき1回のみ・`UnifiedViolationChecker.check()`+`isBetter`=betterReport で採否）は無変更**のため、
+  最終的にHF80Resultへ採用される盤面の品質は理論上も退化しない（3.290.0系「候補生成は近似でよい・最終採否は
+  必ずchecker+isBetter」という本コードベース全体の確立済み契約と同型。native SA探索が内側で `Evaluator` を
+  使い最終結果だけ checker で再検証する `V6NativeOptimizer.runV5` と同一パターン）。`Evaluator.hard`/`soft` と
+  Checker の `hard`/`weightedScore` の数値一致は `ObjectiveParityTest`(3.337.0) が既に保証済み。唯一の理論上の
+  差異は「同一hard件数のときの内訳tie-break」（旧: weightedScore=hard族の重み付き寄与を含む差で決着 / 新:
+  packed比較はhard件数で確定同点ならsoftのみで決める）だが、これは内側探索の経路のみに影響し外側ゲートの
+  正しさには無関係。アロケートは1パスあたり最大4回（`before`1回＋cycle毎の外側`rep`1回×3）まで減少。
+- **A/B実測（教訓#30: revert を scratch へ作り旧実装と突合。3データセット全件）**: `runPostOptimization` の
+  決定的ベンチ（固定seed=12345）を旧(checker毎回)実装／新(Evaluator)実装の両方で実行し、hard/total/
+  weightedScore/c1 が**3データセットすべてでバイト一致**することを確認: golden_state
+  `hard=0 total=420 weighted=4258.0 c1=96`／sample_state_v6 `hard=9 total=336 weighted=73828.0 c1=4`／
+  blocked_covu_state `hard=4 total=311 weighted=34149.0 c1=52`（いずれも既存の記録済みベースラインと一致）。
+  理論上の tie-break 差はこの3データセットの探索経路には一切影響しなかった。
+- 検証: ホストJVM **全555テスト green**（`applyHF80StrategicOscillation`/`localBestImprovement` を直接検証する
+  専用テストは元々存在しないため、上記の3データセットA/Bを実測の裏付けとする）。`design_lint` exit=0（P10
+  baseline=2 のまま不変）。3.450.0の largeHeap は据え置き（アロケート量を減らしても瞬間ピークがゼロになる
+  保証はないため、二重の安全網として維持）。
+
 ## largeHeap 追加＝後処理HF80のタイトループOOMを既定ヒープ緩和で対処（3.450.0, ユーザー提示の実機ログ12月データから調査）
 「AB評価」で提示された state.json（3.449.0の4件目データセット）とは別に、同じアップロード群に含まれていた
 **もう1本の実機ログ**（12月データセット・別セッションの吉江雄貴を含むロースター・`版: 3.446.0-weekly-bucket-

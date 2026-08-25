@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.451.0＝3.450.0（largeHeap）に対しユーザーが「根本的に修正する」と追加指示。
+後処理HF80戦略的振動の内側探索`localBestImprovement`が候補ごとに`UnifiedViolationChecker.check()`
+（重いViolationReportを毎回アロケート）を呼んでいたのを`Evaluator.fullEval()`（packed Long、アロケートなし）
+へ置換。呼出元の外側採否ゲート（check()+isBetter）は無変更のため最終品質は理論上も退化せず、3データセット
+のA/B実測でも新旧実装が決定的ベンチでバイト一致することを確認。largeHeapは二重の安全網として維持。）
+
 **最終更新**：2026-08-25（3.450.0＝3.449.0で見つけた12月データログのOutOfMemoryErrorを調査。原因は
 後処理HF80戦略的振動（`UnifiedViolationChecker.check()`を1回のパスで1,000回超呼ぶタイトループ）が
 既定（largeHeap未設定）ヒープ上限256MiBを、6回連続の300秒PORTFOLIO実行の蓄積の末に使い切ったもの。

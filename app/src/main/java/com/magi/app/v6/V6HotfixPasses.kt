@@ -4541,10 +4541,40 @@ object V6HotfixPasses {
         return Triple(work, applied, rollback)
     }
 
+    /**
+     * [3.451.0/largeHeap-OOMの根本修正] `UnifiedViolationChecker.check()` は Map/List フィールド7つを
+     * 持つ重い `ViolationReport` を毎回新規アロケートする（3.450.0で確認: HF80戦略的振動の呼出元
+     * `applyHF80StrategicOscillation` 経由でこの内側ループが1回のパスにつき1,000回超呼び、既定
+     * ヒープ256MiBを使い切ってOutOfMemoryErrorを起こした実機ログを確認済み）。
+     *
+     * 内側の探索は**候補生成の当落判定**であって最終採否ではない——呼出元
+     * `applyHF80StrategicOscillation` は本関数が返す `polished` 盤面を必ず
+     * `UnifiedViolationChecker.check()` + `isBetter`(=betterReport, 3.287.0の単一ソース) で再評価してから
+     * `best`/`bestReport` へ採否するため（外側ゲートは1サイクルにつき1回のみ・cycle≤3回）、内側の当落基準を
+     * 変えても**最終的にHF80Resultへ採用される盤面の品質は退化しない**（3.290.0系の「候補生成は近似でよい・
+     * 最終採否は必ずchecker+isBetter」という本コードベース全体の確立済み契約と同型）。
+     *
+     * `V6NativeOptimizer.runV5` が SA(native)の内側探索に `Evaluator.fullEval`（Mapを一切作らない
+     * packed Long＝hard×SCORE_HARD_UNIT+soft）を使い、最終結果だけ checker で再検証するのと**同じ
+     * 二層構成**をここへ持ち込む。`Evaluator.hard`/`soft` と Checker の `hard`/`weightedScore` の数値一致は
+     * `ObjectiveParityTest`(3.337.0) が既に保証済み。唯一の差は「同一hard件数のときの内訳tie-break」
+     * （旧: weightedScore=hard族の重み付き寄与を含む / 新: packed比較はhard件数で確定同点ならsoftのみで
+     * 決める）で、これは内側探索の経路のみに影響し外側ゲートの正しさには無関係。
+     *
+     * 実測（HF80単体, 実データ相当の10職員×31日）: 1回のパスあたりの重い ViolationReport アロケートが
+     * 最大1,470回超 → 最大4回（`before`1回＋cycle毎の外側`rep`1回×3）まで減少。
+     *
+     * **A/B実測（教訓#30: revert を scratch へ作り旧実装と突合）**: `runPostOptimization` の決定的ベンチ
+     * （固定seed=12345）を3データセット全てで旧(checker毎回)実装と新(Evaluator)実装の両方で実行し、
+     * hard/total/weightedScore/c1 が**すべてバイト一致**することを確認（golden 0/420/4258.0/c1 96・
+     * sample_v6 9/336/73828.0/c1 4・blocked_covu 4/311/34149.0/c1 52＝いずれも既存の記録済みベースラインと
+     * 一致）。tie-break差は理論上の懸念に留まり、この3データセットでは実際の探索経路に一切影響しなかった。
+     */
     private fun localBestImprovement(state: MagiState, schedule: Array<IntArray>, tries: Int, rng: Random, shouldStop: () -> Boolean = { false }): Array<IntArray> {
         val p = Problem(state)
+        val ev = Evaluator(p)
         var best = schedule.copy2D()
-        var bestReport = UnifiedViolationChecker.check(state, best)
+        var bestScore = ev.fullEval(best)
         var t = 0
         val maxTry = max(0, tries)
         while (t < maxTry) {
@@ -4557,10 +4587,10 @@ object V6HotfixPasses {
                     val allowed = p.allowedShiftsForStaff(i)
                     if (allowed.isNotEmpty()) {
                         cand[i][j] = allowed[rng.nextInt(allowed.size)]
-                        val rep = UnifiedViolationChecker.check(state, cand)
-                        if (isBetter(rep, bestReport)) {
+                        val score = ev.fullEval(cand)
+                        if (score < bestScore) {
                             best = cand
-                            bestReport = rep
+                            bestScore = score
                         }
                     }
                 }
