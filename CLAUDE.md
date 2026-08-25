@@ -5330,6 +5330,38 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## テスト用サンプルデータの既定シフト表示色を設定（3.455.0, ユーザー提示の11シフト配色案）
+ユーザーが「勤務シフトのデフォルト案」として11シフト記号（A4/Aｱ/B4/B1/Pｼ/Cｵ/Cｱ/Dテ/休/有/F1）を背景色16進値＋
+推奨文字色＋配色名で提示。既存の `ShiftAppearance.resolveShiftColor`（3.417.0）は記号の字面でカテゴリ推測を
+**しない**設計（担当可否のグループ分けと同じく職場ごとに記号語彙が違うため）で、記号→色の対応は
+`MagiState.shiftColors[kigou]` という**利用者側のデータ**としてのみ持てる。AskUserQuestion で確認し、
+ユーザーは「自分のデータへ適用」を選択。実際の state.json 未提供のまま、ユーザーが続けて
+「あなたが保存するデータも差し替える」と指示＝**この repo が保守する test fixture（JSON）側の `shiftColors`**
+にも同じ配色を適用する意図と判断した。
+- **対象**: `app/src/test/resources/{golden_state.json, sample_state_v6.json, blocked_covu_state.json,
+  sept2026_state.json}`。各ファイルの `shifts[].kigou` と提示表の記号を突合し、**確実に一致するものだけ**
+  適用（半角/全角の表記ゆれは同一シフトとみなす: `Dﾃ`(半角ﾃ)=ユーザー提示の`Dテ`(全角テ)。一方
+  `blocked_covu_state.json` の `希` とユーザー提示の `F1` は対応が推測の域を出ないため**あえて適用しない**
+  ＝未知の対応をでっち上げない）。golden/sample_v6 は `Pﾅ` が未提示のため対象外のまま。4ファイルとも
+  休/Pｼ/Dﾃ/A4/Aｱ/Cｵ/Cｱ/B4/有 の9記号（B1がある2ファイルはB1も含め10記号）を提示どおりの背景16進値で設定。
+  提示表の「推奨文字色」列は**保存しない**——`shiftColors` は背景色1値のみを持つ設計で、文字色は
+  `MagiViewModel.kt:3432` が `ShiftAppearance.pickTextColor(bg)`（WCAG輝度ベース）で自動算出するため、
+  手動値を保存すると自動算出と食い違いうる二重管理を持ち込む。
+- **安全性の確認**: `shiftColors` は `StateFingerprint.of`（3.330.0）が明示的に除外するフィールド
+  （KDoc「エンジンに影響しない」）＝native-parity CI の期待値・診断の鮮度判定・背景結果の照合には無関係。
+  4ファイルとも `state_to_flat.py`（native parity 用の平坦化）で `shiftColors` を一切参照しないことを確認。
+  test ソース全体を grep しても `shiftColors` を assert するテストは0件。エンジン評価4ファイル
+  （Problem/Evaluator/MirrorCore/DeltaEvaluator）も未参照。**採否・重み・スコアリングは完全に不変**、
+  表示専用データの追記のみ。
+- **フォーマット保存**: golden_state.json/sept2026_state.json は既存の pretty-print(2-space) 形式のまま
+  該当キーを差し替え、sample_state_v6.json は元々このキーが無かったため末尾へ新規追加、
+  blocked_covu_state.json は既存の1行コンパクト形式（key-value間スペースあり）を保ったまま該当キーだけ
+  差し替え——`json.dumps` での丸ごと再ダンプは blocked_covu_state.json を9.5KB→17.6KBへ肥大化させる
+  （コンパクト→pretty変換の副作用）と判明したため採用せず、対象行のみの文字列置換で行った。
+- 検証: `python3 tools/design_lint.py` exit=0（P1-P9=0、P10 baseline=2 のまま不変）。4ファイルとも
+  Python `json.load` で妥当なJSONと確認。`state_to_flat.py` で `blocked_covu_state.json` を再変換し
+  盤面次元・c1/c2/c41/c42件数が変更前と一致することを確認（S=10 T=31 K=11 c1=3 c2=0 c41=0 c42=9）。
+
 ## 色ピッカーをユーザー手指定の25色へ再び全面差替え（3.454.0, ユーザー提示の別の25色表）
 3.453.0 の直後、ユーザーが**別の**5×5=25色の完全な指定表（16進値＋色名。警告赤/ソフトブルー/ミント
 グリーン等、前回とは全く異なる色）を再び文章指示なしで提示。**表示のみ・勤務表の採点/エンジンには

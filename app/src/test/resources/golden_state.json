@@ -1363,7 +1363,17 @@
     "low": "#6db3c9",
     "high": "#4a90a8"
   },
-  "shiftColors": {},
+  "shiftColors": {
+    "休": "#E5E5E5",
+    "Pｼ": "#4FA8D1",
+    "Dﾃ": "#B39DDB",
+    "A4": "#88D49E",
+    "Aｱ": "#C8E6C9",
+    "Cｵ": "#F4A261",
+    "Cｱ": "#FFE0B2",
+    "B4": "#7EC8E3",
+    "有": "#FFF59D"
+  },
   "stagTimeoutMin": 20,
   "equCfg": {
     "dow": 1,

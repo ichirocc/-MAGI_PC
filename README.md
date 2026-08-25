@@ -24,6 +24,11 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.455.0＝ユーザー提示の11シフト配色案(A4/Aｱ/B4/B1/Pｼ/Cｵ/Cｱ/Dテ/休/有/F1)を、
+記号一致するテスト用サンプルデータ4件(`golden_state.json`/`sample_state_v6.json`/`blocked_covu_state.json`/
+`sept2026_state.json`)の`shiftColors`へ適用。表記ゆれ(Dﾃ=Dテ)は同一視、対応不明な記号(希≠F1)は適用せず。
+`shiftColors`はStateFingerprintが明示的に除外する表示専用フィールド＝native-parity/診断/採点は完全に不変。）
+
 **最終更新**：2026-08-25（3.454.0＝色ピッカーをユーザー手指定の別の25色表へ再び全面差替え。3.453.0と
 同型の3制約衝突（アンカー未含有・隣接距離8.3%(要件25%未達)・彩度0.00〜1.00(既存上限0.60超)）を検証。
 アンカー枠1色のみ差替え・残り24色は指定値のまま全域ヒルクライム局所探索で再配置し隣接距離39.7%を達成、
