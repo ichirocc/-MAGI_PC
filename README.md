@@ -24,7 +24,14 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
-**最終更新**：2026-08-24（3.438.0＝ユーザー貼付の外部レビュー文書を`receiving-code-review`規律で
+**最終更新**：2026-08-25（3.439.0＝ユーザー提示の勤務表タブ目標デザイン画像へレイアウトを合わせる。
+grillingで①目標デザイン（現状screenshotでない）②違反凡例はモックアップのカジュアルな言い回し
+（絶対NG／できれば直す）に合わせる＝3.133.0用語統一を本箇所限定で明示上書き、を確認。差分は週ラベルへの
+年月併記（`ScheduleGrid`の週ページング、表示中週の初日基準で計算）と、`ViolationLegend`＋キャプション＋
+セルcontent descriptionの計3箇所の凡例文言変更（実線/破線/角マークの3段階構造自体は3.99.0のまま不変）の
+2点に限定。他タブの「必須違反」「要調整」表記(breakdownLabels等)はスコープ外＝3.133.0のまま。表示・
+文言のみ・スコアリング不変。design_lint exit=0（P10 baseline=2不変）。
+2026-08-24（3.438.0＝ユーザー貼付の外部レビュー文書を`receiving-code-review`規律で
 1件ずつ検証。最重要（C1）＝背景最適化を停止(cancel)すると`OptimizationWorker`の`CancellationException`
 処理が`releasedByMe`を立てないまま所有権マーカーを削除し、`finally`の`setRunning(false)`条件が
 両方falseで一度も呼ばれず`OptimizationRepository.running`が恒久固着＝画面は実行中でなく見えるのに

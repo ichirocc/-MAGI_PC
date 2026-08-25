@@ -583,7 +583,13 @@ internal fun ScheduleGrid(
                         onClick = { val t = weeks[(curWeek - 1).coerceAtLeast(0)].first(); scrollScope.launch { hScroll.animateScrollTo(t * cellWpx) } },
                         enabled = curWeek > 0, modifier = Modifier.heightIn(min = 48.dp)) { Text("← 前週") }
                     val wk = weeks.getOrNull(curWeek)
-                    val label = if (wk != null && wk.isNotEmpty()) "第${curWeek + 1}/${weeks.size}週（${wk.first() + 1}〜${wk.last() + 1}日）" else "第${curWeek + 1}週"
+                    // [レイアウト刷新] モックアップに合わせ「年月」を先頭に付す。月をまたぐ勤務表でも表示中の週の
+                    //   実際の年月（=週初日基準）を出す＝常に startDate の月を出すと月またぎで誤表示するため。
+                    val ymPrefix = if (wk != null && wk.isNotEmpty()) runCatching {
+                        val d0 = LocalDate.parse(ui.startDate).plusDays(wk.first().toLong())
+                        "${d0.year}年${d0.monthValue}月 "
+                    }.getOrDefault("") else ""
+                    val label = if (wk != null && wk.isNotEmpty()) "${ymPrefix}第${curWeek + 1}/${weeks.size}週（${wk.first() + 1}〜${wk.last() + 1}日）" else "第${curWeek + 1}週"
                     Text(label, style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant,
                         modifier = Modifier.weight(1f), textAlign = TextAlign.Center, maxLines = 1)
                     OutlinedButton(
@@ -655,11 +661,13 @@ internal fun ViolationLegend(vioColor: Color, vioSoftColor: Color = MagiAccent.o
             Box(Modifier.size(width = 22.dp, height = 16.dp).border(3.dp, vioColor, RoundedCornerShape(4.dp)))
             // [B4] 色名は固定しない（ユーザーが違反色を変更でき、凡例とグリッドが食い違うため）。
             //   実線/破線の形状＋左の色見本が真の手がかり（色覚配慮＝形状符号化）。
-            Text("実線＝必須違反", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            // [レイアウト刷新] モックアップのカジュアルな言い回しへ変更（ユーザー明示選択・3.133.0の「必須違反/
+            //   要調整」統一を本箇所に限り上書き）。3段階の強度区分(実線/破線/角マーク)自体は3.99.0のまま不変。
+            Text("実線＝絶対NG", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(width = 22.dp, height = 16.dp).violationBorder(false, vioSoftColor, 4.dp))
-            Text("破線＝要調整（重）", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            Text("破線＝できれば直す（重）", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.size(width = 22.dp, height = 16.dp).border(1.dp, cs.outlineVariant, RoundedCornerShape(4.dp)).drawBehind {
@@ -667,7 +675,7 @@ internal fun ViolationLegend(vioColor: Color, vioSoftColor: Color = MagiAccent.o
                 val p = Path().apply { moveTo(size.width - t, 0f); lineTo(size.width, 0f); lineTo(size.width, t); close() }
                 drawPath(p, vioSoftColor)
             })
-            Text("右上の角＝要調整（軽）", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+            Text("右上の角＝できれば直す（軽）", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
         }
     }
 }
@@ -1375,7 +1383,8 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
     Column {
         // [P7/実務者向け短文化] スクロール・週送り・土日色・休の淡色は操作/見た目から自明のため説明しない。
         //   常時可視で必要なのは違反枠の読み方だけ（詳細凡例は「検索・凡例」内）。
-        Text("タップで修正。違反枠: 実線=必須 ・ 破線=重 ・ 右上角=軽。希望: 桃バッジ=未反映 ・ 緑リング=反映済み",
+        // [レイアウト刷新] モックアップのカジュアルな言い回しへ変更（652行のViolationLegendと同一語彙に統一）。
+        Text("タップで修正。違反枠: 実線=絶対NG ・ 破線=できれば直す(重) ・ 右上角=できれば直す(軽)。希望: 桃バッジ=未反映 ・ 緑リング=反映済み",
             style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         Row {
@@ -1437,7 +1446,7 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                             //   （旧: 桃ドットのみで「何を希望していたか」が編集シートを開かないと分からなかった）。
                             val wishSym = if (wkk == 2) ui.wishes["$i,$d"]?.let { ui.shiftSymbols.getOrNull(it) } ?: "" else ""
                             val cd = "${ui.staffNames.getOrNull(i) ?: "#$i"} ${d + 1}日 ${sym.ifBlank { "なし" }}" +
-                                (if (vk == 1) "・必須違反" else if (vk >= 2) "・要調整" else "") +
+                                (if (vk == 1) "・絶対NG" else if (vk >= 2) "・できれば直す" else "") +
                                 (if (wkk == 2) "・希望未反映（希望=${wishSym.ifBlank { "?" }}）" else if (wkk != 0) "・希望" else "") + "、タップで変更"
                             // [違反色/族別] このセルの表示中クラスの族色（未設定は重大度色）。枠・角マークに適用。
                             val cellVioC = vioCls[i][d]?.let { resolvedVioColor(ui, it, vioColor, vioSoftColor) }
