@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -106,6 +107,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1327,6 +1329,15 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
     val shiftTextC = remember(ui.shiftTextHex) { ui.shiftTextHex.map { hexToColor(it) } }
     val sdow = startDowMonFirst(ui.startDate)
     val weekdayJa = listOf("月", "火", "水", "木", "金", "土", "日")
+    // [レイアウト刷新/祝日色] 祝日法に基づく外部データ(JapanHolidays.kt/tools/generate_japan_holidays.py)を
+    //   日付ごとに1回だけ引く（内部キャッシュ済みなのでI/Oは初回のみ）。開始日が解析できなければ全日null（安全側）。
+    val holidayCtx = LocalContext.current
+    val holidayName = remember(ui.startDate, days) {
+        Array(days) { d ->
+            runCatching { LocalDate.parse(ui.startDate).plusDays(d.toLong()) }.getOrNull()
+                ?.let { JapanHolidays.nameOf(holidayCtx, it) }
+        }
+    }
     val todayIdx = remember(ui.startDate, days) {
         runCatching {
             val off = (LocalDate.now().toEpochDay() - LocalDate.parse(ui.startDate).toEpochDay()).toInt()
@@ -1381,7 +1392,8 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
     // [7日間表示] cellW は ScheduleGrid が「1週間が収まる幅」を動的計算して注入（既定48dp=単独利用時）。
     val nameW = 80.dp; val cellH = 48.dp; val headH = 72.dp
     Column {
-        // [P7/実務者向け短文化] スクロール・週送り・土日色・休の淡色は操作/見た目から自明のため説明しない。
+        // [P7/実務者向け短文化] スクロール・週送り・土日/祝日色・休の淡色は操作/見た目から自明のため説明しない
+        //   （日本のカレンダーの慣行＝赤=日曜/祝日・青=土曜 をシフト作成者は既に知っている前提）。
         //   常時可視で必要なのは違反枠の読み方だけ（詳細凡例は「検索・凡例」内）。
         // [レイアウト刷新] モックアップのカジュアルな言い回しへ変更（652行のViolationLegendと同一語彙に統一）。
         Text("タップで修正。違反枠: 実線=絶対NG ・ 破線=できれば直す(重) ・ 右上角=できれば直す(軽)。希望: 桃バッジ=未反映 ・ 緑リング=反映済み",
@@ -1410,15 +1422,30 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
             Row(Modifier.horizontalScroll(hScroll)) {
                 for (d in 0 until days) {
                     val dow = (sdow + d) % 7
+                    // [レイアウト刷新/祝日色] 祝日法に基づく祝日（外部データ, JapanHolidays.kt）は日本の
+                    //   慣行どおり日曜と同じ扱い（色も意味も同一）＝曜日を問わず適用（平日祝日も対象）。
+                    val isHolidayCol = holidayName[d] != null
                     // [UD監査] 今日マーカーの緑(3.4:1)は白地で不足→ tertiary(濃緑ロール)へ。
-                    val dcol = when { d == todayIdx -> cs.tertiary; dow == 5 -> MagiAccent.blue; dow == 6 -> MagiAccent.red; else -> cs.onSurfaceVariant }
+                    // [3.125.0と同型] 淡い塗り(α0.14)上の生アクセント文字はコントラスト不足になりうるため、
+                    //   実効背景（cs.surfaceへ合成後）に対して ensureReadable で保証する。
+                    val headerTintColor = when { isHolidayCol || dow == 6 -> MagiAccent.red; dow == 5 -> MagiAccent.blue; else -> null }
+                    val headerBg = headerTintColor?.copy(alpha = 0.14f)?.compositeOver(cs.surface)
+                    val dcol = when {
+                        d == todayIdx -> cs.tertiary
+                        headerTintColor != null -> ensureReadable(headerBg ?: cs.surface, headerTintColor)
+                        else -> cs.onSurfaceVariant
+                    }
                     val hc = when { dayVioH[d] > 0 -> vioColor; dayVioS[d] > 0 -> vioSoftColor; else -> null }
                     // [⑥日別ジャンプ] 要確認一覧の日別項目(人員/群レンジ)から来たとき、日ヘッダを primary 枠で注目表示
                     //   （focusCell.first=-1 は「日のみ注目」＝どの行セルにも一致しない番兵）。約2.5秒で自動解除。
                     val dayFocused = focusCell != null && focusCell.first < 0 && focusCell.second == d
                     Column {
                         Column(Modifier.width(cellW).height(headH)
-                            .then(if (dayFocused) Modifier.border(3.dp, cs.primary, RoundedCornerShape(6.dp)) else Modifier),
+                            // [祝日色] 今日マーカーの日はテキスト色のみで示す（背景タグは重ねない＝混同回避）。
+                            .then(if (d != todayIdx && headerBg != null) Modifier.background(headerBg, RoundedCornerShape(6.dp)) else Modifier)
+                            .then(if (dayFocused) Modifier.border(3.dp, cs.primary, RoundedCornerShape(6.dp)) else Modifier)
+                            // [a11y/祝日色] 祝日名はスクリーンリーダーへ（表示は色のみ＝セル幅の都合で文字は出さない）。
+                            .then(if (holidayName[d] != null) Modifier.semantics { contentDescription = "${d + 1}日 ${weekdayJa[dow]}曜日 ${holidayName[d]}" } else Modifier),
                             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Text("${d + 1}", style = MaterialTheme.typography.labelMedium, color = dcol, fontWeight = if (d == todayIdx) FontWeight.Bold else FontWeight.Normal, maxLines = 1)
                             // [a11y] 荷重情報の「▼N」は別行の赤字バッジに分離（曜日と混ざって潰れないように）。
