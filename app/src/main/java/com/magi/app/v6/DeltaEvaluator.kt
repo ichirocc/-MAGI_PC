@@ -222,6 +222,11 @@ class DeltaEvaluator(private val p: Problem) {
 
         // [統一weekly/3.345.0] 曜日平準化 — シフト別なので old と nw の2バケットだけが動く（old==nw は不変）。
         //   範囲外セントネル(-1等)はそのバケットを持たないので、範囲ガードで片側だけ動かす。
+        // [3.445.0続/L-04経由で発見] ここも c1Local/c3Local の a[i][j] 窓と同型の一時書換え→測定→復元
+        //   パターン（b[wdIdx]-- ... b[wdIdx]++）で、復元前に例外が飛ぶと wdCnt が恒久的にずれる。
+        //   weeklyDevOfBucket は現行不変条件下で例外を投げない純関数（配列を添字なしで走査するのみ・
+        //   0除算は 7.0 固定なので発生しない）ため実害は未確認だが、previewMove 冒頭の a[i][j] と
+        //   同じ理由で try/finally を掛け、将来の変更でも構造的に安全にする。
         dWeekly = 0L
         val wdIdx = (p.dow0 + j) % 7
         if (old != nw) {
@@ -230,15 +235,21 @@ class DeltaEvaluator(private val p: Problem) {
                 val b = wdCnt[i][old]
                 val before = weeklyDevOfBucket(b).toLong()
                 b[wdIdx]--
-                accW += weeklyDevOfBucket(b).toLong() - before
-                b[wdIdx]++
+                try {
+                    accW += weeklyDevOfBucket(b).toLong() - before
+                } finally {
+                    b[wdIdx]++
+                }
             }
             if (nw in 0 until p.K) {
                 val b = wdCnt[i][nw]
                 val before = weeklyDevOfBucket(b).toLong()
                 b[wdIdx]++
-                accW += weeklyDevOfBucket(b).toLong() - before
-                b[wdIdx]--
+                try {
+                    accW += weeklyDevOfBucket(b).toLong() - before
+                } finally {
+                    b[wdIdx]--
+                }
             }
             dWeekly = accW
         }

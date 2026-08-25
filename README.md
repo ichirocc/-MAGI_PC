@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.446.0＝3.445.0の続きで提示された2表（13+15項目）をreceiving-code-review規律で
+全件再検証。`DeltaEvaluator.previewMove`のdWeekly自己復元ブロックにも3.445.0と同型の例外安全性ギャップを
+自力発見・修正（try/finally追加）。残り全項目は実コード確認・不変条件の証明・既存テストチェーン
+（ObjectiveParityTest/DeltaEvaluatorTest/NativeParityFixtureTest+native-parity CI）の存在確認により
+根拠つきで対応不要と結論。ホストJVM550テストgreen。HF77非該当。）
+
 **最終更新**：2026-08-25（3.445.0＝ユーザー提示の外部レビュー8件（🔴高3/🟡中3/🟢低2）をreceiving-code-review規律
 どおり全件実コードで検証。実在の欠陥は1件のみ（`DeltaEvaluator.previewMove`の一時盤面書換え窓にtry/finally
 なし）で修正・ホストJVM550テストgreen。残り7件は「既に対応済み(重み同期documentation/文書)」「意図的トレード
