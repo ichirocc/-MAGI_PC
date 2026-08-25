@@ -577,6 +577,28 @@ internal fun ScheduleGrid(
             //   長大な棒読みは読めない・押せないで「人間に見やすい」の逆＝MismatchExtractCard撤去(3.194.0)と同型の
             //   貼り紙を撤去し、グリッド自体の違反枠と違反ナビに一本化。表示のみ・スコアリング不変。
             // [②] 凡例は上部「検索・凡例」折りたたみへ集約したためグリッド内からは撤去（重複回避）。
+            // [3.444.0 サムゾーン] 週送り/違反ジャンプのボタン列はグリッドの「下」（画面下部寄り）へ移動し、
+            //   片手操作で押しやすくする（AskUserQuestion でユーザーが明示選択）。状態(vioDays/navFlash)は
+            //   MagiFlatGrid の focusCell が参照するため、グリッドより前に据え置く＝新規stateは増やさず
+            //   同一Column内での並べ替えのみ（Scaffold側へのstate引き上げより低リスク）。
+            // [違反ナビ] 表示中（フィルタ通過）の違反がある日を ＜前/次＞ で巡回（Web試作「不足日へ」の一般化）。
+            //   ジャンプ先の日ヘッダは focusCell=(-1,j) の番兵で約2.5秒ハイライト（⑥日別ジャンプと同機構）。
+            val vioDays = remember(ui.violationCells, ui.violationCellFamilies, ui.needViolations, vioEnabled) {
+                val days = sortedSetOf<Int>()
+                ui.violationCells.keys.forEach { key ->
+                    if (visibleCellVio(ui, key, vioEnabled) != null) key.substringAfter(",").toIntOrNull()?.let { days.add(it) }
+                }
+                for ((k, cls) in ui.needViolations) {
+                    if (vioVisible(cls, vioEnabled)) k.substringAfter(",").toIntOrNull()?.let { days.add(it) }
+                }
+                days.toList()
+            }
+            var navFlash by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+            LaunchedEffect(navFlash) {
+                if (navFlash != null) { kotlinx.coroutines.delay(2_500); navFlash = null }
+            }
+            Spacer(Modifier.height(12.dp))
+            MagiFlatGrid(ui, onCellClick, vioEnabled, hScroll, nameQuery, cellW = gridCellW, focusCell = focusCell ?: navFlash, focusRange = focusRange, focusMode = focusMode, canDo = canDo)   // [円柱やめる] フィッシュアイ→平面グリッドに置換（旧円柱コードは削除済み）
             // [週ページング＋横スクロール併用] 前週/次週 は hScroll を1週ぶんジャンプ（列は隠さない＝自由スクロールと併用）。
             if (weeks.size > 1) {
                 Spacer(Modifier.height(10.dp))
@@ -599,22 +621,6 @@ internal fun ScheduleGrid(
                         enabled = curWeek < weeks.size - 1, modifier = Modifier.heightIn(min = 48.dp)) { Text("次週 →") }
                 }
             }
-            // [違反ナビ] 表示中（フィルタ通過）の違反がある日を ＜前/次＞ で巡回（Web試作「不足日へ」の一般化）。
-            //   ジャンプ先の日ヘッダは focusCell=(-1,j) の番兵で約2.5秒ハイライト（⑥日別ジャンプと同機構）。
-            val vioDays = remember(ui.violationCells, ui.violationCellFamilies, ui.needViolations, vioEnabled) {
-                val days = sortedSetOf<Int>()
-                ui.violationCells.keys.forEach { key ->
-                    if (visibleCellVio(ui, key, vioEnabled) != null) key.substringAfter(",").toIntOrNull()?.let { days.add(it) }
-                }
-                for ((k, cls) in ui.needViolations) {
-                    if (vioVisible(cls, vioEnabled)) k.substringAfter(",").toIntOrNull()?.let { days.add(it) }
-                }
-                days.toList()
-            }
-            var navFlash by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-            LaunchedEffect(navFlash) {
-                if (navFlash != null) { kotlinx.coroutines.delay(2_500); navFlash = null }
-            }
             if (vioDays.isNotEmpty()) {
                 var navIdx by remember(vioDays) { mutableIntStateOf(-1) }
                 fun jumpTo(n: Int) {
@@ -634,8 +640,6 @@ internal fun ScheduleGrid(
                         modifier = Modifier.heightIn(min = 48.dp)) { Text("次の違反 ＞") }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            MagiFlatGrid(ui, onCellClick, vioEnabled, hScroll, nameQuery, cellW = gridCellW, focusCell = focusCell ?: navFlash, focusRange = focusRange, focusMode = focusMode, canDo = canDo)   // [円柱やめる] フィッシュアイ→平面グリッドに置換（旧円柱コードは削除済み）
             if (showBulk) AssignBulkSheet(ui, onBulkSet, onDismiss = { showBulk = false }, canDo = canDo)
         }
         }
@@ -1387,6 +1391,11 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
     val dayVioH = remember(vioKind) { IntArray(days) { d -> (0 until staffCount).count { vioKind[it][d] == 1 } } }
     val dayVioS = remember(vioKind) { IntArray(days) { d -> (0 until staffCount).count { vioKind[it][d] >= 2 } } }
     val dayShort = remember(ui.v6, days) { IntArray(days) { d -> ui.v6?.dayRisks?.getOrNull(d)?.shortage ?: 0 } }
+    // [3.444.0 行列クロスハイライト] セルをタップすると対象の「職員名」と「日付」を約2.5秒強調＝
+    //   広いグリッドでどの行/列を触ったか見失いにくくする（読み間違い防止。ユーザー提示の改善案③）。
+    //   セル自体の枠（違反表示）は変更しない＝タップした瞬間に違反枠が隠れて読めなくなるのを避ける。
+    var tapped by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    LaunchedEffect(tapped) { if (tapped != null) { kotlinx.coroutines.delay(2_500); tapped = null } }
 
     // [a11y] 生の Box.clickable セルは M3 の 48dp タッチ補完が効かないため、主操作セルの高さは 48dp を維持。
     //   幅は「7日間表示」の明示要件でセル幅を 36〜48dp に可変化（36×48dp = タッチ面は縦方向で確保・片手一本指仕様）。
@@ -1408,7 +1417,11 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                     Text("職員", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
                 }
                 for (i in 0 until staffCount) {
-                    Row(Modifier.width(nameW).height(cellH).padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // [行クロスハイライト] このセル行が最近タップされた対象なら淡い primary 背景で強調。
+                    val rowTapped = tapped?.first == i
+                    Row(Modifier.width(nameW).height(cellH)
+                        .then(if (rowTapped) Modifier.background(cs.primary.copy(alpha = 0.12f)) else Modifier)
+                        .padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         // [グループ色帯] 左端4dp=所属グループ色（出現順に黄金角で自動割当）。行追跡の視線ガイド兼用。
                         val gi = groupOrder.indexOf(ui.staffGroupSymbols.getOrNull(i) ?: "").coerceAtLeast(0)
                         Box(Modifier.width(4.dp).height(cellH - 12.dp)
@@ -1439,9 +1452,11 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                         else -> cs.onSurfaceVariant
                     }
                     val hc = when { dayVioH[d] > 0 -> vioColor; dayVioS[d] > 0 -> vioSoftColor; else -> null }
-                    // [⑥日別ジャンプ] 要確認一覧の日別項目(人員/群レンジ)から来たとき、日ヘッダを primary 枠で注目表示
+                    // [⑥日別ジャンプ／列クロスハイライト] 要確認一覧の日別項目(人員/群レンジ)から来たとき、または
+                    //   このセル列を最近タップしたとき、日ヘッダを primary 枠で注目表示
                     //   （focusCell.first=-1 は「日のみ注目」＝どの行セルにも一致しない番兵）。約2.5秒で自動解除。
-                    val dayFocused = focusCell != null && focusCell.first < 0 && focusCell.second == d
+                    val dayFocused = (focusCell != null && focusCell.first < 0 && focusCell.second == d) ||
+                        (tapped?.second == d)
                     Column {
                         Column(Modifier.width(cellW).height(headH)
                             // [祝日色] 今日マーカーの日はテキスト色のみで示す（背景タグは重ねない＝混同回避）。
@@ -1480,7 +1495,7 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
                                 (if (wkk == 2) "・希望未反映（希望=${wishSym.ifBlank { "?" }}）" else if (wkk != 0) "・希望" else "") + "、タップで変更"
                             // [違反色/族別] このセルの表示中クラスの族色（未設定は重大度色）。枠・角マークに適用。
                             val cellVioC = vioCls[i][d]?.let { resolvedVioColor(ui, it, vioColor, vioSoftColor) }
-                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym) { onCellClick(i, d) }
+                            FlatCell(cellW, cellH, sym, bg, fg, vk, wkk, cellVioC ?: vioColor, cellVioC ?: vioSoftColor, cd, dim = quiet, symSize = symFontSize, focused = cellFocused, wishSym = wishSym) { tapped = i to d; onCellClick(i, d) }
                         }
                     }
                 }

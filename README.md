@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-25（3.444.0＝ユーザー提示の勤務表グリッド再設計案をAskUserQuestionで既存の意図的判断
+（違反枠3段階・希望バッジの記号表示・TallyCardの配置）と突合し3点は現状維持を確認、唯一の実施項目
+「週送り/違反ジャンプを画面下部（サムゾーン）へ移動」を`ScheduleGrid`内で実装（新規state無し・純粋な並べ替え）。
+併せてセルタップ時の行列クロスハイライト（職員名の行/日付の列を約2.5秒強調）を追加し読み間違いを防止。
+design_lint exit=0（P2/P4/P10 baseline不変）。）
+
 **最終更新**：2026-08-25（3.443.0＝ユーザー提示の「シフト集計」修正版モックアップと現行`TallyCard`を突合。
 ヘッダー列・不足/超過バッジ色・0セル空白表示・凡例は既に一致を確認。バッジセル（押せる集計セル＝
 `onClick != null`）の角丸を extraSmall(10dp)→extraLarge(24dp、既存トークン)へ拡大しピル形に近づけ視認性を
