@@ -684,6 +684,16 @@ internal fun ViolationLegend(vioColor: Color, vioSoftColor: Color = MagiAccent.o
             })
             Text("右上の角＝できれば直す（軽）", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
         }
+        // [凡例の抜け] 希望シフトの桃バッジ/緑リングは勤務表グリッドの常時キャプションにしかなく、この
+        //   折りたたみ凡例には無かった＝重複解消でキャプションを短縮する前提として、ここへ移す。
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(width = 22.dp, height = 16.dp).background(MagiAccent.pink, RoundedCornerShape(4.dp)))
+            Text("桃バッジ＝希望が未反映", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.size(width = 22.dp, height = 16.dp).border(2.dp, cs.tertiary, RoundedCornerShape(50)))
+            Text("緑リング＝希望が反映済み", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+        }
     }
 }
 
@@ -1407,9 +1417,9 @@ internal fun MagiFlatGrid(ui: UiState, onCellClick: (Int, Int) -> Unit, vioEnabl
     Column {
         // [P7/実務者向け短文化] スクロール・週送り・土日/祝日色・休の淡色は操作/見た目から自明のため説明しない
         //   （日本のカレンダーの慣行＝赤=日曜/祝日・青=土曜 をシフト作成者は既に知っている前提）。
-        //   常時可視で必要なのは違反枠の読み方だけ（詳細凡例は「検索・凡例」内）。
-        // [レイアウト刷新] モックアップのカジュアルな言い回しへ変更（652行のViolationLegendと同一語彙に統一）。
-        Text("タップで修正。違反枠: 実線=絶対NG ・ 破線=できれば直す(重) ・ 右上角=できれば直す(軽)。希望: 桃バッジ=未反映 ・ 緑リング=反映済み",
+        // [冗長解消] 違反枠・希望バッジの全文は「検索・凡例」の ViolationLegend に一本化（重複表示だった）。
+        //   ここは常時表示なので「タップで直せる」ことだけ示し、詳細は凡例を指す。
+        Text("タップで修正。凡例（枠・バッジの見方）は「検索・凡例」へ。",
             style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         Row {

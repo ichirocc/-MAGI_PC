@@ -178,6 +178,9 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     // [通常セルの枠線] 違反の無いセルにも「分離」用の1dp輪郭を付けていた(3.397.0)が、常時表示は格子が
     //   線で埋まって見づらいという声を受け選択式に。既定は非表示＝違反枠（実線/破線/角マーク）だけが目立つ。
     var plainCellBorder by rememberSaveable { mutableStateOf(false) }
+    // [外観/実機指摘「この画面にシフト種別の枠を表示するかのオプション」] シフトの表示色チップの1dp枠。
+    //   plainCellBorder(グリッドの通常セル)とは別の対象＝既定は表示のまま(=true)。
+    var shiftChipBorder by rememberSaveable { mutableStateOf(true) }
     var editScope by rememberSaveable { mutableStateOf(0) }   // [入口4分割] 編集タブ: 0=月次条件 / 1=職員管理 / 2=年間マスター
     // [下流→上流ディープリンク] 要確認一覧「設定で直す」→ 該当職員/シフトを事前選択して開く（-1=無し・消費で戻す）。
     var deepLinkWishStaff by rememberSaveable { mutableStateOf(-1) }
@@ -663,7 +666,7 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                 else -> {
                     AppearanceCard(oneHand, { oneHand = it }, proMode, { proMode = it },
                         plainCellBorder = plainCellBorder, onPlainCellBorder = { plainCellBorder = it })
-                    ShiftColorCard(ui, vm)
+                    ShiftColorCard(ui, vm, plainBorder = shiftChipBorder, onPlainBorder = { shiftChipBorder = it })
                     // [IA重複解消 3.132系] 違反の色は ColorSettingsView（基準色2種＋族別）へ一本化し、
                     //   シフトの表示色の直後＝色設定の定位置に配置（旧: 詳細設定の折りたたみ内で見つけにくい＋
                     //   ShiftColorCard 内に必須色だけの部分入口が重複していた）。
