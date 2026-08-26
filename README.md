@@ -24,6 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-26（3.463.0＝ユーザー指示「AB評価」を受け`wideC3nBreakDays`（禁止連続の崩し範囲
+トグル）の既定ON化を最終判断。240秒帯（正式ペア計測2ラウンド・3.409.24/3.449.0の計15ペア）はON7・OFF7・
+引分1で完全な五分。AUTOがPORTFOLIOを選ぶのは予算211秒以上＝240秒帯こそ実利用の主経路で、3.456.0の
+90秒帯ON優勢(21ペア中13勝)はAUTO経由では到達しない非代表条件かつその帯唯一の実データ(sept2026)自体も
+OFF寄り。既定OFFで確定・再提案しないと決定し`docs/algorithm_portfolio.md`を更新。コード変更なし・
+docs+versionのみ。）
+
 **最終更新**：2026-08-26（3.459.0＝分析タブ3枚（要確認一覧/日別・人別/違反の内訳）を`ViolationHubCard`へ
 統合し、勤務表タブと共有する違反フィルタ(E7の6バケツ)を「一覧／日別・人別／内訳」の3ビューへ一様に効かせる。
 `applyVioFilter`(新設・Compose非依存)＋`ViolationBucketChips`(チップ行の共有化)。旧3カードの中身は
