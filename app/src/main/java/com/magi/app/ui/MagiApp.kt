@@ -357,6 +357,18 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
     var focusCell by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     // [窓ハイライト③] 編集シートを開いている間、c1/c3/c3m の違反窓・連の範囲を薄枠で示す(閉じたら消す)。
     var focusRange by remember { mutableStateOf<Triple<Int, Int, Int>?>(null) }
+    // [E7/3.459.0] 違反 種別フィルタ。旧: 勤務表タブ(1)のブロック内だけの局所状態だったが、分析タブの
+    //   統合カード(ViolationHubCard)とも同じフィルタを共有するため共通スコープへ引き上げた。初期=全ON。
+    //   bitmask(Int)で rememberSaveable 保存（回転/プロセス復元で保持）。表示のみ・スコアリング不変。
+    //   ビット i = vioBuckets[i] のON/OFF。
+    var vioMask by rememberSaveable { mutableIntStateOf((1 shl vioBuckets.size) - 1) }
+    val vioEnabled = remember(vioMask) {
+        vioBuckets.filterIndexed { i, _ -> (vioMask shr i) and 1 == 1 }.map { it.key }.toSet()
+    }
+    val onToggleVioBucket: (String) -> Unit = { key ->
+        val i = vioBuckets.indexOfFirst { it.key == key }
+        if (i >= 0) vioMask = vioMask xor (1 shl i)
+    }
     val loadSample: () -> Unit = {
         scope.launch {
             val r = withContext(Dispatchers.IO) {
@@ -473,12 +485,6 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     //   勤務表は常に直接編集の1本＝タップで即編集シート。最適化が終わればその結果が
                     //   そのまま編集中の盤面になるので結果は見えている。誤編集は「元に戻す」が担保。
                     var wishBulkOpen by rememberSaveable { mutableStateOf(false) }
-                    // [E7] 違反 種別フィルタ（勤務表タブ全面共有）。初期=全ON。bitmask(Int)で rememberSaveable 保存
-                    //   （回転/プロセス復元で保持）。表示のみ・スコアリング不変。ビット i = vioBuckets[i] のON/OFF。
-                    var vioMask by rememberSaveable { mutableIntStateOf((1 shl vioBuckets.size) - 1) }
-                    val vioEnabled = remember(vioMask) {
-                        vioBuckets.filterIndexed { i, _ -> (vioMask shr i) and 1 == 1 }.map { it.key }.toSet()
-                    }
                     // [集中モード] 違反・未反映希望以外のセルを淡色化するトグル（既定OFF・回転/復元で保持）。
                     var focusMode by rememberSaveable { mutableStateOf(false) }
                     // [画面修正版 ②] 検索・凡例（折りたたみ）。検索=職員名で該当グリッド行を強調（回転/復元で保持）。
@@ -490,10 +496,8 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     // [E7] 種別フィルタ行（違反があるときだけ表示）。グリッド/カレンダー/集計を1つのフィルタで絞る。
                     // [画面修正版 ③] 要確認件数＝違反ロケーション数（セル+日+回数の各マップの実箇所数）。
                     val vioLocCount = ui.violationCells.size + ui.needViolations.size + ui.countViolations.size
-                    ViolationFilterBar(vioBucketLocCounts(ui), vioEnabled, onToggle = { key ->
-                        val i = vioBuckets.indexOfFirst { it.key == key }
-                        if (i >= 0) vioMask = vioMask xor (1 shl i)
-                    }, locCount = vioLocCount, focusMode = focusMode, onFocusMode = { focusMode = it })
+                    ViolationFilterBar(vioBucketLocCounts(ui), vioEnabled, onToggle = onToggleVioBucket,
+                        locCount = vioLocCount, focusMode = focusMode, onFocusMode = { focusMode = it })
                     // [画面修正版 ②] 検索・凡例の統合折りたたみ（E7フィルタは上の独立バーのまま＝可視）。
                     SearchLegendBar(ui, searchQuery, onQuery = { searchQuery = it })
                     ScheduleGrid(ui, onCellClick = openEditor, proMode = proMode, vioEnabled = vioEnabled, nameQuery = searchQuery,
@@ -627,22 +631,23 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     MagiSegmentedControl(options = listOf("一般", "プロ"), selected = if (proMode) 1 else 0, onSelect = { proMode = it == 1 })
                     // [スクショ指摘/撤去] 概要ヒーロー（対象人数/対象期間）は読込ステータス行と重複の固定値で
                     //   トリアージに寄与しないため撤去（ユーザー赤囲い指示）。件数は要確認一覧の見出しが担う。
-                    // [★1/E1] 要確認一覧＝散在していた診断を「箇所単位・重大度」で1ハブに統合（web「画面修正版」confirm 移植）。
-                    //   タブ先頭のヒーローとして配置。staff 紐付き項目タップで修復フロー(findFixSuggestions)へ。表示のみ・スコア不変。
-                    ConfirmListCard(ui, onFocusStaff = { vm.findFixSuggestions(it) }, onGoEdit = { tab = 2 }, proMode = proMode,
+                    // [3.459.0/分析タブ統合] 旧・要確認一覧(ConfirmListCard)/日別・人別(AttentionCardsSection)/
+                    //   違反の内訳(BreakdownCard)の3枚は同じ3系統のデータ(violationCells/needViolations/
+                    //   countViolations)を別々の切り口で見せていただけで、常に3枚まとめて縦積みになり
+                    //   「冗長」とユーザーから繰り返し指摘されていた。1枚の ViolationHubCard へ統合し、
+                    //   E7の族フィルタ(vioEnabled、勤務表タブと共有)を「一覧／日別・人別／内訳」の3ビューへ
+                    //   一様に効かせる（旧: フィルタは勤務表タブのグリッド/集計にしか効かず「有効活用」の
+                    //   要望に応えていなかった）。staff 紐付き項目タップで修復フロー(findFixSuggestions)へ。
+                    //   表示のみ・スコア/エンジンは完全に不変。
+                    ViolationHubCard(
+                        ui, vioEnabled, onToggleBucket = onToggleVioBucket,
+                        onFocusStaff = { vm.findFixSuggestions(it) }, onGoEdit = { tab = 2 }, proMode = proMode,
                         onShowCell = { i, j -> focusCell = i to j; tab = 1 },
                         // [⑥日別ジャンプ] 人員/群レンジ(日×シフト)の項目→勤務表タブの該当日列へ（i=-1=日のみ注目）。
                         onShowDay = { j -> focusCell = -1 to j; tab = 1 },
                         // [下流→上流ディープリンク] pref→希望シフト登録(職員)、covU/covO→必要人数カレンダー(シフト)。編集タブ/月次条件へ。
                         onFixWish = { s -> deepLinkWishStaff = s; editScope = 0; tab = 2 },
-                        onFixNeed = { k -> deepLinkNeedShift = k; editScope = 0; tab = 2 })
-                    // [★3+4] 日別/人別 注意リスト＋「要確認のみ」トグル（web「画面修正版」day/staff＋alertOnly 融合）。
-                    //   人別行タップで修復フローへ。BottleneckCard(top5テキスト) の上位互換のため下の BottleneckCard は撤去。
-                    AttentionCardsSection(
-                        ui,
-                        onFocusStaff = { vm.findFixSuggestions(it) },
-                        // [3.402.0] 日別行の行き先は要確認一覧と同じ＝勤務表の該当日へ（同じ意味の操作は同じ行き先）。
-                        onShowDay = { j -> focusCell = -1 to j; tab = 1 },
+                        onFixNeed = { k -> deepLinkNeedShift = k; editScope = 0; tab = 2 },
                     )
                     // [冗長性/用語][コメント訂正] 開発用の V6 1ヶ月俯瞰(HARD Core/Guard・Apt/Equalize/covU 等の
                     //   生指標)は「詳細設定(上級者)」ではなく分析タブのプロ表示にのみ一本化済み（冗長性J1、
@@ -652,14 +657,13 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                     // [実機指摘] 重み表（WeightTableCard）は分析タブから設定タブの最適化設定直後へ移動。
                     // [IA重複解消] BossCard は FixSuggestionCard と同じ提案＋適用を二重描画していたため撤去（下の FixSuggestionCard に一本化）。
                     // [見直し/IA重複解消] OverviewDashboard(気になる点=総違反リング / 注意の日リング)を撤去。融合カードが上位代替:
-                    //   気になる点(総数)→ヒーロー規模＋要確認一覧ヘッダ件数、注意の日→AttentionCardsSection の日別リスト。
+                    //   気になる点(総数)→ヒーロー規模＋要確認一覧ヘッダ件数、注意の日→ViolationHubCard の日別・人別ビュー。
                     //   「違反総数」の三重表示を D2(HARD三重リング撤去)と同方針で解消。composable 定義は残置=無害。
                     // [3.286.0 冗長性D] CheckSummaryView（チェック概要=必須違反数の1行）を撤去。必須違反数は
-                    //   ホームの OperatorNextActionCard と要確認一覧（ConfirmListCard）見出しで既に2重に提示済みで
-                    //   3重目だった（3.83.0 の維持判断は ConfirmListCard ヒーロー化前。違反ゼロ時の達成表示も
-                    //   ConfirmListCard が持つため喪失情報なし）。
-                    BreakdownCard(ui, onFocusStaff = { vm.findFixSuggestions(it) }, proMode = proMode)
-                    // [★3+4] BottleneckCard(top5テキスト) は AttentionCardsSection(上・全件＋トグル＋タップ修復) が上位互換のため撤去。
+                    //   ホームの OperatorNextActionCard と要確認一覧見出しで既に2重に提示済みで3重目だった
+                    //   （3.83.0 の維持判断は ConfirmListCard ヒーロー化前。違反ゼロ時の達成表示も
+                    //   ViolationHubCard が持つため喪失情報なし）。
+                    // [★3+4] BottleneckCard(top5テキスト) は日別・人別ビュー(上・全件＋トグル＋タップ修復) が上位互換のため撤去。
                     FixSuggestionCard(ui, onSearch = { vm.findFixSuggestions(null) }, onApply = { vm.applyFixSuggestion(it) }, proMode = proMode)
                     // [3.122.0→3.132系] ColorSettingsView（違反種別の色=族別の色設定）は設定タブのシフトの表示色直後に配置。
                 }

@@ -5330,6 +5330,48 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 分析タブ3カードの統合＋違反フィルタの有効活用（3.459.0, ユーザー指示「1，2をあなたが賢く深く考え判断して修正する」）
+2件の全面委任: **①分析タブの3枚**（要確認一覧`ConfirmListCard`／日別・人別`AttentionCardsSection`／違反の内訳
+`BreakdownCard`）が常に縦積みで表示され「冗長」と繰り返し指摘され、`本格的に統合する`を選択済み。
+**②`ViolationFilterBar`（E7の6バケツ族フィルタ）を「有効活用してほしい」**＝当時は勤務表タブのグリッド/集計
+にしか効かず、分析タブには一切届いていなかった。設計に先立ち read-only の事実調査サブエージェントで両画面の
+現物（file:line 付き）を確認してから着手。**表示のみ・スコアリング/エンジンは完全に不変。**
+- **`ViolationHubCard`（新設, `MagiDashboardCards.kt`）**: 旧3カードを「①1つの見出し ②勤務表タブと共有する
+  族フィルタ(6バケツ) ③一覧／日別・人別／内訳を切り替えるセグメント」の1枚へ統合。旧3カードの中身は
+  ロジックを1文字も変えずそれぞれ private な `ConfirmListBody`/`AttentionBody`/`BreakdownBody` へ移動
+  （Card・見出し・重複していたトグル行だけを `ViolationHubCard` 側へ集約）。各ビュー固有の絞り込み
+  （一覧の方向チップ・日別人別の「要確認のみ」・内訳の「重大のみ」）は族フィルタと別軸のため残す
+  （3.397.0「同じ操作でも軸が違えば別の形で良い」）。
+- **`applyVioFilter`（新設, `ViolationHubFilter.kt`）**: `vioEnabled`（E7バケツ）を
+  `violationCells`/`needViolations`/`countViolations`（＋各`*Families`/`breakdown`）へ一様に適用する
+  Compose非依存の純関数。**多重family（1セルに複数クラスが重なる）はどれか1つでも表示中バケツに属せば
+  残す**（`visibleCellVio` と同じ規約）。`breakdown`はバケツ対象外の族(fair/weekly)を無条件に残し、
+  `distLocations`（fair/weekly の場所）は意図的に一切触らない。単体テスト`ViolationHubFilterTest`
+  （5件: 全ON早期return・多重family生存・need/count同型・バケツ対象外の温存・distLocations不変）で固定
+  （`VioBucketsTest`/`BreakdownLabelsTest`と同じくCompose非依存＝ホストJVMテスト対象）。
+- **`ViolationBucketChips`（新設, `MagiScheduleViews.kt`）**: `ViolationFilterBar`のチップ行の中身
+  （見出し＋「すべて表示」＋バケツチップ＋任意の「集中」トグル）を切り出し、`ViolationFilterBar`（勤務表
+  タブの単独カード）と`ViolationHubCard`（分析タブの統合カード内、Card無しで直接埋め込み）の両方が
+  同じ実装を共有する。**「集中」トグルは`showFocusToggle: Boolean = true`で選択式に**（既定=表示、
+  勤務表タブは従来どおり）——グリッドのセル淡色化専用の効果なので、分析タブの統合カードから呼ぶときは
+  `false`で隠す（3.405.0「形が守れない約束をしない」＝意味を持たないトグルを出さない）。
+- **`MagiApp.kt`**: `vioMask`/`vioEnabled`（旧: 勤務表タブ(tab==1)のブロック内ローカル）を
+  `tab`/`focusCell`/`focusRange`と同じ共通スコープへ引き上げ、両タブから同じフィルタ状態を参照する
+  （回転/プロセス復元は既存の`rememberSaveable`のまま保持）。分析タブ(tab==3)の3カード呼出し
+  （`ConfirmListCard`/`AttentionCardsSection`/`BreakdownCard`）を`ViolationHubCard`1つへ置換し、
+  既存のコールバック配線（セル/日ジャンプ・pref/covU→設定への下流→上流ディープリンク）を全て引き継ぐ。
+  `FixSuggestionCard`とプロ表示限定の`V6DashboardCard(ui.v6)`は従来どおり別カードのまま残す。
+- **達成表示は未フィルタの総数で判定**: `ViolationHubCard`の「確認事項はありません」は
+  `confirmItems(ui)`（**フィルタ前の`ui`**）が0件のときのみ表示——フィルタで全バケツを隠しただけの状態を
+  「すべて満たしている」と偽らない（3.405.0の原則の別適用）。バケツチップの件数表示も
+  `vioBucketLocCounts(ui)`（未フィルタ）を使い、トグルで隠れている件数が見える。
+- 検証: `ViolationHubFilterTest`（5件）はロジックのみでホストJVM実行可能（実行はCI待ち）。UI層
+  （`MagiApp.kt`/`MagiScheduleViews.kt`/`MagiDashboardCards.kt`）はホストでコンパイル不可＝ブレース/
+  丸括弧/角括弧均衡（4ファイルとも開閉同数）・削除した3関数(`ConfirmListCard`/`AttentionCardsSection`/
+  `BreakdownCard`)の呼出0（コメント内の歴史記述のみ残存）・新規シンボル(`vioMask`/`onToggleVioBucket`/
+  `ViolationBucketChips`/`applyVioFilter`/`ViolationHubCard`)の宣言と全使用箇所が同一スコープに属することを
+  静的確認。最終判定は CI。
+
 ## シフト種別チップの枠線を選択式に＋希望バッジ凡例の統合＋グリッドキャプションの重複解消（3.458.0, ユーザー指示3件）
 実機スクショ3枚を受けた対応。**表示のみ・スコアリング/エンジンは完全に不変**。
 - **[① シフト種別の枠]** 設定タブ「シフトの表示色」の`ColorChip`（休/Pｼ/Dﾃ等の記号チップ）が持つ通常時1dp枠を

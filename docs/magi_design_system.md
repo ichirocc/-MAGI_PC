@@ -306,11 +306,14 @@ data class DayCell(val day: Int, val pills: List<ShiftPill>, val hasViolation: B
 ![ダイアログ](screens/05_dialog.png)
 
 ### 5.4 分析 🟡
-上部に **一般/プロ** 切替(`proMode`)。`ConfirmListCard`(要確認一覧＝箇所単位・重大度リスト) /
-`AttentionCardsSection`(日別・人別の注意リスト＋「要確認のみ」トグル) / `BreakdownCard`(**違反内訳=全19種/100%**・
-fair/weekly含む) / `FixSuggestionCard`(1手提案)。プロ時のみ `V6DashboardCard`。
+上部に **一般/プロ** 切替(`proMode`)。**`ViolationHubCard`**（3.459.0＝旧`ConfirmListCard`/`AttentionCardsSection`/
+`BreakdownCard`の3枚を統合。①見出し＋設定見直し件数 ②勤務表タブと共有するE7族フィルタ(6バケツ) ③一覧／
+日別・人別／内訳の3ビューを切り替えるセグメント。各ビューの中身は`ConfirmListBody`(箇所単位・重大度リスト)/
+`AttentionBody`(日別・人別＋「要確認のみ」トグル)/`BreakdownBody`(**違反内訳=全19種/100%**・fair/weekly含む・
+「重大のみ」トグル)へロジック不変で分割）/ `FixSuggestionCard`(1手提案)。プロ時のみ `V6DashboardCard`。
 > 旧記述の `OverviewDashboard` / `CheckSummaryView` / `BottleneckCard` は**いずれも撤去済み**
-> （3.83.0・3.286.0・3.103.1。`AttentionCardsSection` と `ConfirmListCard` が上位互換）。
+> （3.83.0・3.286.0・3.103.1。`AttentionCardsSection` と `ConfirmListCard` が上位互換だったが、
+> その2枚と`BreakdownCard`も3.459.0で`ViolationHubCard`へ統合済み）。
 > `WeightTableCard`（直す優先順位）は 3.127.0 で**設定タブへ移動**した。
 
 ### 5.5 設定 ✅

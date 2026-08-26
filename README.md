@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-26（3.459.0＝分析タブ3枚（要確認一覧/日別・人別/違反の内訳）を`ViolationHubCard`へ
+統合し、勤務表タブと共有する違反フィルタ(E7の6バケツ)を「一覧／日別・人別／内訳」の3ビューへ一様に効かせる。
+`applyVioFilter`(新設・Compose非依存)＋`ViolationBucketChips`(チップ行の共有化)。旧3カードの中身は
+`ConfirmListBody`/`AttentionBody`/`BreakdownBody`へロジック不変で移動。ユーザーの「本格的に統合する」
+「(フィルタを)有効活用してほしい」への全面委任対応。表示のみ・スコアリング/エンジンは完全に不変。）
+
 **最終更新**：2026-08-25（3.458.0＝実機スクショ3件対応。①設定タブ「シフトの表示色」チップの通常枠を
 選択式に（既定=表示、`plainBorder`パラメータ・他呼出元は非破壊）②折りたたみ凡例(`ViolationLegend`)に
 希望バッジ（桃バッジ=未反映/緑リング=反映済み）の説明を追加③勤務表グリッド常時キャプションを

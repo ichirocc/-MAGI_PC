@@ -412,51 +412,65 @@ internal fun mondayWeeks(startDate: String, days: Int): List<List<Int>> {
     return weeks
 }
 
-/** [E7] 6バケツの件数付きフィルタチップ行（勤務表タブ共有）。件数は breakdown から族合計。0件は淡色。 */
+/** [3.459.0/分析タブ統合] E7チップ行の中身（見出し＋チップ＋任意の集中トグル）。Card は呼出側が持つ＝
+ *  勤務表タブの単独バー(`ViolationFilterBar`)と分析タブの統合カードが同じ行を共有できる。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ViolationFilterBar(bucketCounts: Map<String, Int>, enabled: Set<String>, onToggle: (String) -> Unit, locCount: Int = -1,
-    focusMode: Boolean = false, onFocusMode: (Boolean) -> Unit = {}) {
+internal fun ViolationBucketChips(bucketCounts: Map<String, Int>, enabled: Set<String>, onToggle: (String) -> Unit, locCount: Int = -1,
+    focusMode: Boolean = false, onFocusMode: (Boolean) -> Unit = {}, showFocusToggle: Boolean = true) {
     val cs = MaterialTheme.colorScheme
     // [監査修正] チップ件数は「違反ロケーション数(箇所)」＝見出し「要確認 N件」と同単位。旧: breakdown の量(low/high は
     //   不足量計・c1 は #fire)を混在合算しており、単位不一致で「回数20 vs 要確認1件」の誤トリアージを招いていた。
     val counts = bucketCounts
-    val anyViol = counts.values.any { it > 0 }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        // [画面修正版 ③] 「要確認 N件」= 違反ロケーション数（族fire数でなく作成者が見るべきセル数）。
+        Text(if (locCount >= 0) "違反フィルタ（種別）・要確認 ${locCount}件" else "違反フィルタ（種別）",
+            style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+        if (enabled != allVioBucketKeys) {
+            TextButton(onClick = { vioBuckets.forEach { if (it.key !in enabled) onToggle(it.key) } }) {
+                Text("すべて表示", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        // [集中モード/Web試作③] 違反・未反映希望のセルだけを浮かせ、他を淡色に沈めるトグル（表示のみ）。
+        // [3.459.0] 分析タブの統合カードから呼ぶときは showFocusToggle=false で隠す（グリッド専用の効果で
+        //   意味を持たないため）。
+        if (showFocusToggle) FilterChip(selected = focusMode, onClick = { onFocusMode(!focusMode) },
+            label = { Text("集中", style = MaterialTheme.typography.titleSmall) })
+    }
+    Spacer(Modifier.height(4.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        vioBuckets.forEach { b ->
+            val n = counts[b.key] ?: 0
+            val on = b.key in enabled
+            FilterChip(
+                selected = on,
+                onClick = { onToggle(b.key) },
+                label = {
+                    Text("${b.label} $n",
+                        style = MaterialTheme.typography.titleSmall,
+                        // 0件は淡色（存在しない種別＝トリアージ上ノイズ）。トグル自体は可能。
+                        color = if (n == 0) cs.onSurfaceVariant.copy(alpha = 0.5f) else Color.Unspecified)
+                },
+            )
+        }
+    }
+    // [P7/実務者向け短文化] コーチング文（多い種類から潰す…）は削除。チップの件数が優先順を語る。
+    // [冗長性見直し] 操作説明はチップのトグル自体が示すため削除。
+}
+
+/** [E7] 6バケツの件数付きフィルタチップ行（勤務表タブ単独カード）。件数は breakdown から族合計。0件は淡色。
+ *  中身は `ViolationBucketChips` へ委譲＝分析タブの統合カードと同じロジックを共有する。 */
+@Composable
+internal fun ViolationFilterBar(bucketCounts: Map<String, Int>, enabled: Set<String>, onToggle: (String) -> Unit, locCount: Int = -1,
+    focusMode: Boolean = false, onFocusMode: (Boolean) -> Unit = {},
+    // [3.459.0/分析タブ統合] 「集中」はグリッドのセル淡色化専用（勤務表タブのみ意味を持つ）。分析タブの
+    //   統合カードから共有フィルタとして呼ぶときは、意味の無いトグルを出さないよう false で隠す。
+    showFocusToggle: Boolean = true) {
+    val anyViol = bucketCounts.values.any { it > 0 }
     if (!anyViol) return   // 違反ゼロなら出さない（ノイズ削減）
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // [画面修正版 ③] 「要確認 N件」= 違反ロケーション数（族fire数でなく作成者が見るべきセル数）。
-                Text(if (locCount >= 0) "違反フィルタ（種別）・要確認 ${locCount}件" else "違反フィルタ（種別）",
-                    style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
-                if (enabled != allVioBucketKeys) {
-                    TextButton(onClick = { vioBuckets.forEach { if (it.key !in enabled) onToggle(it.key) } }) {
-                        Text("すべて表示", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-                // [集中モード/Web試作③] 違反・未反映希望のセルだけを浮かせ、他を淡色に沈めるトグル（表示のみ）。
-                FilterChip(selected = focusMode, onClick = { onFocusMode(!focusMode) },
-                    label = { Text("集中", style = MaterialTheme.typography.titleSmall) })
-            }
-            Spacer(Modifier.height(4.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                vioBuckets.forEach { b ->
-                    val n = counts[b.key] ?: 0
-                    val on = b.key in enabled
-                    FilterChip(
-                        selected = on,
-                        onClick = { onToggle(b.key) },
-                        label = {
-                            Text("${b.label} $n",
-                                style = MaterialTheme.typography.titleSmall,
-                                // 0件は淡色（存在しない種別＝トリアージ上ノイズ）。トグル自体は可能。
-                                color = if (n == 0) cs.onSurfaceVariant.copy(alpha = 0.5f) else Color.Unspecified)
-                        },
-                    )
-                }
-            }
-            // [P7/実務者向け短文化] コーチング文（多い種類から潰す…）は削除。チップの件数が優先順を語る。
-            // [冗長性見直し] 操作説明はチップのトグル自体が示すため削除。
+            ViolationBucketChips(bucketCounts, enabled, onToggle, locCount, focusMode, onFocusMode, showFocusToggle)
         }
     }
 }
