@@ -23,7 +23,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -115,9 +114,6 @@ private val COLOR_PALETTE = listOf(
 fun ShiftColorCard(
     ui: UiState,
     vm: MagiViewModel,
-    // [外観/実機指摘] シフト種別チップの枠線を表示するか（既定=表示）。
-    plainBorder: Boolean = true,
-    onPlainBorder: (Boolean) -> Unit = {},
 ) {
     var target by remember { mutableStateOf<String?>(null) }
     val shifts = vm.shiftColorList()
@@ -138,20 +134,15 @@ fun ShiftColorCard(
             } else {
                 // [校正] 縦長の一覧をやめ、スウォッチ＋記号のコンパクトなチップを折り返しグリッドに。
                 //   カスタム色は枠色（primary）で「指定」を表現（テキスト列を削減＝冗長解消）。
+                // [冗長性解消 3.461.0] チップの1dp枠を切替える専用トグル(旧「シフト種別の枠を表示」)は撤去。
+                //   すぐ上の外観カードにある「勤務表の通常セルに枠線を表示」と隣接して並び、対象が違う
+                //   （こちらは設定画面内のチップの見た目だけ・実際の勤務表には無関係）のに文言が酷似し
+                //   「同じことを2回設定させられる」冗長に見えた（実機報告）。この枠は情報量を持つ既定表示
+                //   （custom=trueの太枠との対比で「未指定」を示す）なので、常時表示へ戻し設定自体を無くす。
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     shifts.forEach { sc ->
-                        ColorChip(hex = sc.hex, label = sc.kigou, custom = sc.custom, enabled = !ui.running, plainBorder = plainBorder) { target = sc.kigou }
+                        ColorChip(hex = sc.hex, label = sc.kigou, custom = sc.custom, enabled = !ui.running) { target = sc.kigou }
                     }
-                }
-                // [外観/実機指摘「この画面にシフト種別の枠を表示するかのオプションを追加」] チップの通常時1dp枠。
-                //   指定色(custom)のチップは常にprimary枠のまま＝ここで消えるのは無指定チップの装飾枠のみ。
-                // [実機指摘 3.459.1] 旧文言「シフト種別の枠を表示」が「勤務表グリッド自体の枠線」と誤読され
-                //   （実際は plainCellBorder=外観カードの別トグルが担当）「トグルしても勤務表に反映しない」と
-                //   報告された。この一覧のチップにしか効かないことが分かる文言へ変更（対象範囲を明示）。
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = plainBorder, onCheckedChange = onPlainBorder)
-                    Spacer(Modifier.width(8.dp))
-                    Text("この一覧のチップに枠を表示（勤務表の枠線は外観の設定）", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 }
             }
             // [IA重複解消 3.132系] 旧「違反の色（必須違反）」節（__vio__ のみの入口）は撤去。違反の色は
@@ -182,9 +173,6 @@ internal fun ColorChip(
     label: String,
     custom: Boolean,
     enabled: Boolean = true,
-    // [外観] チップの通常時1dp枠を表示するか（既定=表示。custom=true の2dp primary枠は常に表示＝
-    //   「指定済み」という意味のある信号のため、このパラメータでは消さない）。
-    plainBorder: Boolean = true,
     onClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -195,7 +183,7 @@ internal fun ColorChip(
             .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.medium)
             .border(
-                width = if (custom) 2.dp else if (plainBorder) 1.dp else 0.dp,
+                width = if (custom) 2.dp else 1.dp,
                 color = if (custom) cs.primary else cs.outline,
                 shape = MaterialTheme.shapes.medium,
             )
