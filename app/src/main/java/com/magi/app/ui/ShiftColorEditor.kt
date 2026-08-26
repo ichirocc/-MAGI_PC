@@ -88,12 +88,21 @@ internal fun hexToColor(hex: String): Color {
 //   意図的な選択とみなす扱いを据え置く）。pickFg()の明度しきい値140に対し各色78〜229と幅が
 //   あるため、選択チェック印の濃淡は従来どおり色ごとに自動で切り替わる（算出済み・17色が
 //   濃色文字・8色が淡色文字）。
+// [ユーザー指示 7回目改訂] 「6×6の36色にしてください」。既定25色(row0col0=#E08A1Eアンカー)は
+//   位置・値とも完全に保持し、末尾へ11色を追加して36色化（perRowも5→6）。追加色は既存25色の
+//   色相・明度分布の空白（真紅・鮮緑・濃紺・インディゴ・焦茶・寒色系グレー・ミントティール・
+//   深紫・珊瑚赤・セージ・暖色ゴールド）を埋める方向で選定し、既存色との完全一致は無し。
+//   perRow変更で既存25色の行/列の見た目上の並びは組み替わるが、格納順自体は不変のため
+//   shiftColors[kigou]の明示指定（hex文字列を直接保存）には一切影響しない。
 private val COLOR_PALETTE = listOf(
     "#e08a1e", "#e5e5e5", "#52b788", "#f77f00", "#ffb3c6",
     "#83a6ed", "#ff8c42", "#3a86ff", "#e76f51", "#457b9d",
     "#9d4edd", "#a7c957", "#ff006e", "#ffcc00", "#b5838d",
     "#8338ec", "#f7ee7f", "#48cae4", "#f4978e", "#606c38",
     "#f4a261", "#a2d2ff", "#e09f3e", "#2a9d8f", "#a82246",
+    "#d62828", "#2b9348", "#023047", "#6a4c93", "#6f4518",
+    "#adb5bd", "#06d6a0", "#7209b7", "#ef476f", "#588157",
+    "#ffd166",
 )
 
 /**
@@ -136,10 +145,13 @@ fun ShiftColorCard(
                 }
                 // [外観/実機指摘「この画面にシフト種別の枠を表示するかのオプションを追加」] チップの通常時1dp枠。
                 //   指定色(custom)のチップは常にprimary枠のまま＝ここで消えるのは無指定チップの装飾枠のみ。
+                // [実機指摘 3.459.1] 旧文言「シフト種別の枠を表示」が「勤務表グリッド自体の枠線」と誤読され
+                //   （実際は plainCellBorder=外観カードの別トグルが担当）「トグルしても勤務表に反映しない」と
+                //   報告された。この一覧のチップにしか効かないことが分かる文言へ変更（対象範囲を明示）。
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = plainBorder, onCheckedChange = onPlainBorder)
                     Spacer(Modifier.width(8.dp))
-                    Text("シフト種別の枠を表示", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text("この一覧のチップに枠を表示（勤務表の枠線は外観の設定）", fontSize = 14.sp, modifier = Modifier.weight(1f))
                 }
             }
             // [IA重複解消 3.132系] 旧「違反の色（必須違反）」節（__vio__ のみの入口）は撤去。違反の色は
@@ -230,7 +242,7 @@ internal fun ColorPickerDialog(
                         style = MaterialTheme.typography.bodyMedium)
                 }
                 Text("色を選ぶ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val perRow = 5
+                val perRow = 6
                 COLOR_PALETTE.chunked(perRow).forEach { rowColors ->
                     // [不具合修正×2] 固定40dp×6は幅超過で6個目が切れ、weight等分は端数行(2個)が巨大化していた。
                     //   幅いっぱいを等分(weight)＋正方形(aspectRatio)＋端数行は空 Spacer で埋めて全行同サイズに。
