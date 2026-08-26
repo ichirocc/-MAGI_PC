@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-26（3.464.0＝外部レビュー(対象3.462.0)を検証し2件を修正。①`ViolationHubCard`の
+達成表示が`fair`/`weekly`のみの違反（場所を持たない集計指標のため`confirmItems`の母数に現れない）を
+「達成」と誤表示していた穴を、フィルタ前の`ui.breakdown`を併用する判定へ修正②内訳タブの展開パネルが
+族フィルタOFFで隠れた族に対しても開いたまま残る穴を`LaunchedEffect(ui.breakdown)`で自動解消。
+両方とも実コードを確認してから対応（`receiving-code-review`規律）。表示・UI状態のみ・エンジン不変。）
+
 **最終更新**：2026-08-26（3.463.0＝ユーザー指示「AB評価」を受け`wideC3nBreakDays`（禁止連続の崩し範囲
 トグル）の既定ON化を最終判断。240秒帯（正式ペア計測2ラウンド・3.409.24/3.449.0の計15ペア）はON7・OFF7・
 引分1で完全な五分。AUTOがPORTFOLIOを選ぶのは予算211秒以上＝240秒帯こそ実利用の主経路で、3.456.0の

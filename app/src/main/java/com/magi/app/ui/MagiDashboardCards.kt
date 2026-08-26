@@ -38,6 +38,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -1087,7 +1088,11 @@ internal fun ViolationHubCard(
     val cs = MaterialTheme.colorScheme
     val issueCount = ui.settingIssues.size
     val totalItems = remember(ui.violationCells, ui.violationCellFamilies, ui.needViolations, ui.countViolations, ui.schedule, ui.staffNames, ui.shiftSymbols, ui.startDate) { confirmItems(ui) }.size
-    if (totalItems == 0 && issueCount == 0) {
+    // [外部レビューP1-01, 3.464.0] fair/weekly は場所を持たない集計値のため violationCells/needViolations/
+    //   countViolations（＝confirmItemsの母数）に一切現れない（distLocations経由・内訳ビュー専用）。
+    //   totalItems だけで判定すると fair/weekly のみが残る盤面を「達成」と誤表示しうる。breakdown 全体も見る。
+    val hasBreakdownViolations = ui.breakdown.values.any { it > 0 }
+    if (totalItems == 0 && issueCount == 0 && !hasBreakdownViolations) {
         // 達成表示（結果があり違反ゼロのときのみ）。データ未読込・実行中は何も出さない。
         if (ui.schedule.isNotEmpty() && !ui.running) {
             Card(Modifier.fillMaxWidth()) {
@@ -1264,6 +1269,15 @@ private fun BreakdownBody(ui: UiState, onFocusStaff: (Int) -> Unit, proMode: Boo
     val labels = breakdownLabels
     var criticalOnly by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
+    // [外部レビューP2-01, 3.464.0] 展開中に族フィルタ(vioEnabled)をOFFにすると、applyVioFilter が
+    //   breakdown からそのキーごと除く（vioEnabled が変われば ui=filteredUi の参照が変わる＝再実行）。
+    //   `expanded` は各族のトグルとは独立の rememberSaveable のため、開いたままだと「場所情報がありません」
+    //   という展開枠だけが残る。ui.breakdown が変わるたびに、開いている族が0件（＝フィルタで隠れた/解消済み）
+    //   なら自動で閉じる。手動で0件チップを開く操作自体は妨げない（この効果は ui.breakdown の参照が
+    //   変わったときだけ走り、タップ操作それ自体では再実行されない）。
+    LaunchedEffect(ui.breakdown) {
+        if (expanded != null && (ui.breakdown[expanded] ?: 0) == 0) expanded = null
+    }
     val onTapChip: (String) -> Unit = { k -> expanded = if (expanded == k) null else k }
     val cs = MaterialTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {

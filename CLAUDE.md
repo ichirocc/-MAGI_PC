@@ -5330,6 +5330,36 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## 統合カード(ViolationHubCard)の達成表示・展開状態を修正＝外部レビューP1-01/P2-01（3.464.0）
+外部レビュー（対象 `8b29535`＝自分自身の 3.462.0）を受領。**鵜呑みにせず両方とも実コードを直接確認**
+（`receiving-code-review` 規律）してから対応した。**表示・UI状態のみ＝勤務表・重み・エンジンは完全に不変**。
+- **[P1-01, 実在＝修正] fair/weeklyのみの違反を「達成」と誤表示していた**: `ViolationHubCard`
+  （3.459.0 の統合カード）の達成メッセージ判定 `if (totalItems == 0 && issueCount == 0)` の
+  `totalItems = confirmItems(ui).size` は `violationCells`/`needViolations`/`countViolations` という
+  **場所付きセル空間3つだけ**から作られる（`confirmItems` の実装を確認）。しかし `fair`（グループ内公平化）
+  ・`weekly`（曜日周期の平準化）は場所を持たない集計指標で `distLocations` 経由（`breakdownLocations()`
+  ＝内訳タブ専用）でしか表現されず、この3マップには**構造的に一度も現れない**。結果、場所付き違反が0件でも
+  `ui.breakdown["fair"]`/`["weekly"]` が正の値を持つ盤面では「確認事項はありません（すべての条件を
+  満たしています）。」と表示されていた。`hasBreakdownViolations = ui.breakdown.values.any { it > 0 }` を
+  判定へ足す（**フィルタ前の `ui.breakdown`** を使う＝3.459.0 のカード自身が既に持つ設計原則「達成表示は
+  フィルタと無関係に未フィルタの全件で判定する」＝3.405.0「形が守れない約束をしない」と整合）。
+- **[P2-01, 実在＝修正] フィルタで隠した族の展開パネルが開いたまま残っていた**: `BreakdownBody`
+  （内訳タブ）の `expanded: String?` は族チップのタップで開閉するローカル状態だが、族フィルタ
+  （`vioEnabled`）をOFFにすると `applyVioFilter` が `filteredUi.breakdown` からそのキーを丸ごと除く
+  （`ViolationHubFilter.kt:26`）一方、`expanded` は独立の `rememberSaveable` のため**リセットされない**。
+  結果、展開中の族を隠すと「場所情報がありません。」という空の展開枠だけが残った。
+  `LaunchedEffect(ui.breakdown) { if (expanded != null && (ui.breakdown[expanded] ?: 0) == 0) expanded = null }`
+  を追加。**`ui.breakdown`（＝`filteredUi.breakdown` の参照）が変わったときだけ発火**するため、
+  利用者がチップを手動でタップして0件の族を開く操作そのものは妨げない（タップは `expanded` だけを
+  変え `ui`/`vioEnabled` は変わらないため `filteredUi` の参照は安定＝このエフェクトは再発火しない）。
+- **[解消済みと確認]** レビューが挙げた前回分の2項目（背景入力JSONの原子保存・WorkManager投入例外）は
+  実際に `MagiViewModel.kt` で対応済みと確認できた（既に前回コミットで解消・再確認のみ）。
+  **[対応せず]** P3（Compose UIテスト・Android SDK不在での実行）はこのサンドボックスの制約として
+  既知（`docs/lessons.md` 等に記録済みの限界と同種）＝実施できない旨は正直に維持する。
+- 検証: `python3 tools/design_lint.py` exit=0（P1-P9=0・P10 baseline=2 のまま不変、変更前と同一出力）。
+  UI層はホストでコンパイル不可＝ブレース/丸括弧均衡（HEAD比で両者とも自己整合＝各リビジョン単体で
+  開閉が一致）・`LaunchedEffect` importの重複なしを静的確認。最終判定は CI。
+
 ## wideC3nBreakDays を既定OFFで最終確定＝ユーザー指示「AB評価」への回答（3.463.0）
 ユーザーの「AB評価」という短い依頼に対し AskUserQuestion で対象を確認したところ
 「禁止連続の崩し範囲(wideC3nBreakDays)の既定ON化」を選択。3.303.0〜3.456.0 で4ラウンドにわたり
