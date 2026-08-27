@@ -44,4 +44,29 @@ public sealed class JavaRandom
     /// exactly.
     /// </summary>
     public long NextLong() => ((long)Next(32) << 32) + Next(32);
+
+    /// <summary>
+    /// [フェーズ5a追加] Bit-exact port of <c>java.util.Random.nextInt(int bound)</c> — used
+    /// pervasively by <c>SaOptimizer</c>'s SA neighbourhood operators. The rejection-loop
+    /// termination condition (<c>bits - val + (bound-1) &lt; 0</c>) relies on 32-bit signed
+    /// <c>int</c> overflow wraparound, exactly as it does in the JDK; this project does not enable
+    /// <c>CheckForOverflowUnderflow</c>, so C#'s default unchecked <c>int</c> arithmetic wraps the
+    /// same way and this is a faithful translation, not an approximation.
+    /// </summary>
+    public int NextInt(int bound)
+    {
+        if (bound <= 0) throw new ArgumentException("bound must be positive");
+        if ((bound & -bound) == bound) // bound is a power of 2
+            return (int)((bound * (long)Next(31)) >> 31);
+        int bits, val;
+        do
+        {
+            bits = Next(31);
+            val = bits % bound;
+        } while (bits - val + (bound - 1) < 0);
+        return val;
+    }
+
+    /// <summary>[フェーズ5a追加] Bit-exact port of <c>java.util.Random.nextDouble()</c>.</summary>
+    public double NextDouble() => (((long)Next(26) << 27) + Next(27)) / (double)(1L << 53);
 }
