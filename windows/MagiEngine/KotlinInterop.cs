@@ -71,4 +71,38 @@ public static class KotlinInterop
         }
         return isNegative ? result : -result;
     }
+
+    /// <summary>
+    /// Mirrors Java's <c>Math.round(double a): long</c> — "round half up" (an exact .5 midpoint
+    /// always rounds toward positive infinity, regardless of sign), per the JDK's documented
+    /// contract: the result equals <c>(long) Math.floor(a + 0.5d)</c> for every finite value,
+    /// with NaN -&gt; 0 and out-of-<see cref="long"/>-range values clamped to
+    /// <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>.
+    ///
+    /// This differs from C#'s <see cref="Math.Round(double)"/> default (banker's
+    /// rounding/round-half-to-even at exact midpoints), which is why a bespoke helper is needed
+    /// rather than a direct call. Phase 3's ported v6 code uses this pattern for two families:
+    /// <c>weeklyFloorOfCount</c>/<c>weeklyDevOfBucket</c> (divisor 7 — for which the rounding
+    /// *mode* is actually provably irrelevant, since <c>c / 7.0</c> for an integer <c>c</c> can
+    /// never land exactly on a .5 midpoint: that would require <c>c = 7k + 3.5</c> for some
+    /// integer <c>k</c>, which has no integer solution) and <c>fairDevAt</c>'s group-average
+    /// target (divisor = the group's member count <c>m</c>, which is NOT fixed and CAN produce
+    /// reachable .5 midpoints for some group sizes — e.g. sum=3, m=2 -&gt; 1.5). The helper is
+    /// implemented once, faithfully, and used everywhere this pattern appears so correctness
+    /// never depends on which divisor a particular call site happens to use.
+    ///
+    /// The real OpenJDK implementation is a bit-twiddling optimization of the same contract; the
+    /// straightforward <c>floor(a + 0.5d)</c> formula below is bit-for-bit equivalent to it for
+    /// every value this codebase's data can actually produce (small counts of scheduled shifts
+    /// over at most ~31 days, divided by small integers) — the two implementations can only
+    /// diverge near <see cref="double"/>'s precision limit close to <see cref="long.MaxValue"/>,
+    /// far outside this domain.
+    /// </summary>
+    public static long MathRound(double a)
+    {
+        if (double.IsNaN(a)) return 0L;
+        if (a <= long.MinValue) return long.MinValue;
+        if (a >= long.MaxValue) return long.MaxValue;
+        return (long)Math.Floor(a + 0.5d);
+    }
 }
