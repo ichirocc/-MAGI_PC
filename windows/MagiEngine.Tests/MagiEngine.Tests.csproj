@@ -24,4 +24,10 @@
     <ProjectReference Include="..\MagiEngine\MagiEngine.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 実データ4件（Android版と同一のstate JSON）。dotnet test 実行時にテストアセンブリと
+         同じ出力ディレクトリへコピーし、AppContext.BaseDirectory から相対パスで読む。 -->
+    <None Include="Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
