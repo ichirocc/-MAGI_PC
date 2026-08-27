@@ -324,7 +324,8 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2]) {
         }
         for (int k = 0; k < K; k++) {
             covU += p.covUCell(k, j, dsn[k]);
-            soft += p.covOCell(k, j, dsn[k]);
+            // [HF77明示指示 2026-08-27] covO 重み 1→5。MirrorKeys.weights["covO"]・Evaluator.kt と同時に変更。
+            soft += p.covOCell(k, j, dsn[k]) * 5;
         }
     }
     hard1 += covU;
@@ -595,7 +596,8 @@ struct SaChunk {
     long long contribCov(int k, int j) const {
         if (k < 0 || k >= K) return 0;
         int got = dsn[(size_t)j * K + k];
-        return (long long)p.covUCell(k, j, got) * M + p.covOCell(k, j, got);
+        // [HF77明示指示 2026-08-27] covO 重み 1→5（fullEval と同時に変更）。
+        return (long long)p.covUCell(k, j, got) * M + (long long)p.covOCell(k, j, got) * 5;
     }
 
     // セル(i,j)を nw へ差分適用（影響スライスの before/after 再計算で score を維持）。

@@ -2,7 +2,7 @@
 
 > **このファイルの役割**：制約の判定条件・スコア計算・エラーハンドリング方針の**唯一の正解**。最もハルシネーションが起きやすい業務ルールをここに集約する。「上限はいくつか」「違反時にどう振る舞うか」はここを見る。
 > **コード基準**：`v6/MirrorCore.kt`（`MirrorKeys.weights` ＝重みの単一の真実）／`v6/Evaluator.kt`。
-> **最終更新**：2026-08-02（3.345.0 weekly をシフト別へ＝休を通常のシフト種として扱う）
+> **最終更新**：2026-08-27（covO 重み 1.0→5.0、HF77明示指示）
 
 ---
 
@@ -41,12 +41,17 @@
 | `apt` | 1 | SOFT | 適切回数からの L1 偏差 `|n-t|`（群単位の双方向目標） | 回数 `i,k`（aptLow/aptHigh） |
 | `fair` | 1 | SOFT | グループ内公平化：群×担当ONシフトで round(平均) からの L1 偏差和 | 職員×シフト（`distLocations["fair"]`） |
 | `weekly` | 1 | SOFT | 7日周期のシフト平準化：職員×シフト×曜日で round(そのシフトの回数/7) からの L1 偏差和 | 職員×シフト（`distLocations["weekly"]`） |
-| `covO` | 1.0 | SOFT | 過剰な配置（上限 hi 超過、`got-hi`） | 被覆 `k,j` |
+| `covO` | 5.0 | SOFT | 過剰な配置（必要数 need1/need2 超過、`got-need`。0.5→1.0→5.0、2026-08-27 HF77明示指示） | 被覆 `k,j` |
 
 > **HARD = {groupViol, c3n, covU, pref}**、それ以外は SOFT。この4族はチェッカー（`MirrorKeys.hard`）と
 > 最適化器（`Evaluator.fullEvalParts` の hard1・`DeltaEvaluator`・`magi_native.cpp`）で一致する
 > （3.318.0 以前は評価器側だけ groupViol を欠いた3族で、同じ盤面に対して両者の hard が食い違っていた）。`covO` は 2026-07-13（HF77 明示指示）に 0.5→1.0 へ統一済み
 > （最適化器 Evaluator/Delta/C++ は元々 1.0、チェッカー `weightedScore` のみ 0.5 だった factor-2 乖離を最適化器基準に解消）。
+> 2026-08-27（HF77 明示指示）に 1.0→5.0 へ再変更。人員過剰(covO)が個人上限(high, 重み45)に阻まれて
+> 研磨されない実機ログを受け、apt/fair/weekly/c2/c41/c42/c41s/c42s（重み1）より確実に優先して削られる
+> 水準へ引き上げた。high/low/c1/c3mn（45/90/30/30）には遠く及ばない＝個人の労働条件や構造ルールより
+> 日々の過剰人員削減を優先しない、という位置づけは維持（4面同時変更＝`MirrorKeys.weights`・
+> `Evaluator.fullEvalParts`・`DeltaEvaluator`・`magi_native.cpp`＋言語跨ぎ期待値3ファイル）。
 > `apt` は内訳チップ（`BreakdownCard`「人数の範囲」グループ、`countViolations` の vio-aptLow/vio-aptHigh）に表示、
 > `fair`/`weekly` も内訳チップ（「任意」グループ）に件数表示し、いずれもタップで違反箇所（fair=職員×シフト／
 > weekly=職員×シフト）へフォーカスできる（`distLocations`、3.149.0／weekly の粒度は 3.345.0 でシフト別へ）。

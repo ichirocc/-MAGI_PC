@@ -17,7 +17,9 @@ import org.junit.Test
  * fixture は職員名のみ 職員A..J へ、group の name/kigou も実姓（大島/岡田/桒澤/吉江/古泉）が
  * 混入していたため G0..G9 へ匿名化（cons42 の g1Kigou/g2Kigou も同時に付け替え）。匿名化前後で
  * checker の hard/total/weighted/全19族 breakdown が bit 一致することをホスト実行で確認済み
- * （hard=0 total=435 weighted=3140.0）。
+ * （hard=0 total=435 weighted=3140.0＝covO重み1.0 時点の値）。
+ * [2026-08-27] covO 1.0→5.0（HF77明示指示）。covO 23件ぶん weighted +92（=23*(5-1)）＝3140.0→3232.0。
+ *   hard/total は covO が SOFT のみのため不変。
  */
 class WideC3nFixtureTest {
     private fun load() = StateParser.parse(
@@ -35,7 +37,7 @@ class WideC3nFixtureTest {
         val rep = UnifiedViolationChecker.check(st, sched)
         assertEquals(0, rep.hard)
         assertEquals(435, rep.total)
-        assertEquals(3140.0, rep.weightedScore, 1e-9)
+        assertEquals(3232.0, rep.weightedScore, 1e-9)
     }
 
     @Test

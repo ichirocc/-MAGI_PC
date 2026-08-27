@@ -32,9 +32,9 @@ internal fun c42PairCount(sameSet: Boolean, n1: Int, n2: Int): Long =
  *           + groupViol (担当できないシフトに就いているセル。3.318.0 でチェッカーの MirrorKeys.hard と揃えた)
  *   soft  = c1 (window) + c2 (per-staff total) + c41 (group/day range)
  *           + c42 (group pair conflict) + c41s/c42s (skill-group変種) + c3 (want seq) + c3m + c3mn
- *           + [統一a/b] low/high (range, amount×90/45) + covO (over-coverage, amount)
- *   ※ range と covO は UnifiedViolationChecker と同分類(SOFT)・同重み。Web betterVec の lim 層は
- *     soft 内の高重み(90/45)として表現（hard1 は ×SCORE_HARD_UNIT で常に優先）。
+ *           + [統一a/b] low/high (range, amount×90/45) + covO (over-coverage, amount×5, 2026-08-27 HF77明示指示)
+ *   ※ range と covO は UnifiedViolationChecker と同分類(SOFT)。重みは MirrorKeys.weights が単一の真実
+ *     （hard1 は ×SCORE_HARD_UNIT で常に優先）。
  *
  * The solution `a[i][j]` is the assigned shift index (exactly one shift per cell),
  * the equivalent of the Web's one-hot `x[i][j][k] === 1`.
@@ -202,7 +202,8 @@ class Evaluator(private val p: Problem) {
                 var dsn = 0
                 for (i in 0 until S) if (a[i][j] == k) dsn++
                 covU += p.covUCell(k, j, dsn)
-                soft += p.covOCell(k, j, dsn).toLong()
+                // [HF77明示指示 2026-08-27] covO 重み 1→5。MirrorKeys.weights["covO"] と同時に変更。
+                soft += p.covOCell(k, j, dsn).toLong() * 5L
             }
         }
         hard1 += covU

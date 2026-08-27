@@ -131,10 +131,13 @@ object MirrorKeys {
         "c3mn" to 30.0, "c1" to 30.0, "c3" to 3.0, "c3m" to 2.0,
         "c2" to 1.0, "c41" to 1.0, "c42" to 1.0, "c41s" to 1.0, "c42s" to 1.0,
         "apt" to 1.0, "fair" to 1.0, "weekly" to 1.0,
-        // [目的関数統一] covO は最適化器(Evaluator/Delta/C++)が amount×1.0 で加算しており、
-        //   チェッカー weightedScore も 1.0 に統一（旧: 0.5 で最適化器と factor-2 乖離＝族寄与不一致）。
-        //   ユーザー指示(2026-07-13)により「最適化器を正」として 1.0 で確定（HF77 明示数値指示）。
-        "covO" to 1.0,
+        // [目的関数統一] covO は最適化器(Evaluator/Delta/C++)が amount×重みで加算しており、
+        //   チェッカー weightedScore も同じ重みに統一する（乖離させない）。
+        //   経緯: 0.5→1.0(2026-07-13, HF77明示指示,「最適化器を正」として統一)→5.0(2026-08-27,
+        //   HF77明示指示。人員過剰が individually-capped high(45)に阻まれ研磨されない実機ログを受け、
+        //   apt/fair/weekly/c2/c41/c42等(重み1)より確実に優先して削られる水準へ引き上げ。high/low/c1/c3mnには
+        //   遠く及ばない＝個人上限・構造ルールより過剰削減を優先しない、という位置づけは維持）。
+        "covO" to 5.0,
     )
 
     // [表示優先度/HF77明示指示 2026-07-20] aptLow/aptHigh は apt の表示専用サブクラス（重み表(WeightTableCard)には

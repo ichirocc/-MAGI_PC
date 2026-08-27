@@ -5330,6 +5330,47 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## covO（人員過剰）重み 1.0→5.0（3.465.0, ユーザー明示数値指示＝HF77一時保留のうえ確定）
+実機ログ（3.459.0 搭載機・PORTFOLIO 300s）で Dﾃ/Aｱ/Cｵ に▲2〜3の過剰が残るスクショ＋ログを提示され
+「なぜ超過を研磨出来ないのか？」。`CoverageDiag` の該当行をそのまま引用して回答: 動かせる在勤者はいるが、
+動かすと個人上限超過(`high`, 重み45)が立つため`betterReport`が正しく拒否している（covO=1 は high の
+1/45）。あわせて `設定ミス` 診断が Dﾃ の適切回数(apt)合計60 vs 実需要30 という**そもそも満たせない設定**を
+指摘していることも提示し、重みでなくデータ側の是正（apt目標を下げる／必要数を上げる／過剰を受容する）を
+優先候補として提案した。
+- **「一時的にHF77を保留して断定してほしい」との明示指示**を受け、covO の適正値を検討: **1→5** を推奨
+  （apt/fair/weekly/c2/c41/c42/c41s/c42s＝重み1の「理想バランス」層より確実に優先して削れる水準へ上げつつ、
+  c1/c3mn(30)・high/low(45/90)には遠く及ばない＝個人の労働条件や構造ルールより日々の過剰人員削減を
+  優先しない、という位置づけを維持）。**5に上げても今回のログの22件は直らない**（high=45に対しcovO=5は
+  依然軽い）ことを明記し、high超えの5→45級への引き上げは「今日の過剰が個人の月間上限に優先する」ことを
+  意味し労務管理上不健全と判断して明示的に非推奨とした。
+- **ユーザーが「covO: 1 → 5 に上げる」と最終確定** → 実装。単一ソース `MirrorKeys.weights["covO"]`(MirrorCore.kt)・
+  `Evaluator.fullEvalParts`（`soft += covOCell(...) * 5L`）・`DeltaEvaluator.scoreFrom`（`scovO * 5`）・
+  `magi_native.cpp`（フル評価器の `soft += covOCell(...) * 5` と、SA/ALNS/LAHC/研磨の全探索が通るホット
+  パス `SaChunk::contribCov` の両方＝後者を見落とすと探索は旧重みのまま最終採否だけ新重みという二重管理に
+  なるため必須）の4面を同時変更。候補生成ヒューリスティック2箇所（`V6HotfixPasses`/`C1TemporalFlowPolish`の
+  `FlexibleDayFlow.dayPenalty`、docstring自身が「MirrorKeysの重み階層と整合させた限界費用」と明記＝
+  最終採否には無関係だが放置すると自己文書と矛盾する）も同時に揃えた。
+- **言語跨ぎ期待値3ファイル**（`golden/sample_v6/blocked_covu_eval_expected.txt`）を、Kotlin
+  （`Evaluator.fullEval`をホストJVM実行）とC++（`host_parity_bench`を`g++ -O3 -DMAGI_HOST_TEST`で再ビルド）
+  の**両方を直してから**再計算・更新（golden soft 4999→5015／sample_v6 930→950／blocked_covu 2731→2739、
+  hardは3件とも不変＝covOはSOFT専用のため）。**Kotlin/C++の新値が完全一致**することを`host_parity_bench`の
+  `CROSS`出力で確認してから確定（3.357.0の規律どおり）。`WideC3nFixtureTest`(sept2026データ)の
+  `weightedScore`も3140.0→3232.0(covO23件×Δ4)へ同時更新。
+- **[実データ検証で発見した副作用]** `V6PortAnalyzerTest.diagnoseCoverageMarksFreelyRelievableSurplus`
+  （3.406.0が「1人動かしてもfairが悪化するため目的関数は改善しない」ことをengineで確かめてから固定した
+  反例）が、covO=5では**fairの犠牲より大きい**ため`betterReport`が逆転し「改善する」に反転してテストが
+  落ちた——covOを重くするほど「動かさない方が良い」という反例はfair(重み1)では作れなくなる、という
+  今回の変更が意図した効果そのもの。fair依存の反例をやめ、shift0(休)に個人上限0(`staffRange`)を課し
+  `high`(重み45)で必ず上回るよう差替え（covOが今後さらに動いても崩れにくい・`blockedFamily`も
+  "fair"→"high"へ）。ホストJVM**全563テストgreen**（新規0件・修正1件）・native parity
+  4,794,967手mismatch=0・3フィクスチャとも言語跨ぎMATCH。
+- **[未対応・要フォローアップ]** 同じ流れでユーザーから「apt/fair/weeklyなども重みの適切なパラメータを
+  教えてほしい」と質問あり。この3族は**決定記録D3**（HF77とは別の、より具体的・2度再確認済みの標準決定＝
+  「業務レビュー済で現状維持・再提案しない」、直近は3.345.0(2026-08-02)でweeklyのmass増加という実測
+  トレードオフを提示したうえでもなお現状維持と再確認）の対象。回答は次のターンで、D3を明示提示し
+  「この決定を上書きする」という利用者の明示同意を別途取ってから数値を出す方針（今回のcovO＝汎用HF77の
+  一時保留とは別に、D3自体の上書き同意が要る）。
+
 ## 統合カード(ViolationHubCard)の達成表示・展開状態を修正＝外部レビューP1-01/P2-01（3.464.0）
 外部レビュー（対象 `8b29535`＝自分自身の 3.462.0）を受領。**鵜呑みにせず両方とも実コードを直接確認**
 （`receiving-code-review` 規律）してから対応した。**表示・UI状態のみ＝勤務表・重み・エンジンは完全に不変**。

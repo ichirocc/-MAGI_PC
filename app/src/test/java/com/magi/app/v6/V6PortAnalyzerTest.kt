@@ -145,7 +145,14 @@ class V6PortAnalyzerTest {
             groupShiftApt = listOf(listOf("", "")),
             schedule = listOf(listOf(1), listOf(1)),   // 両者ともA（必要1に対し現状2＝過剰1、休へ動かす余地あり）
             wishes = emptyMap(),
-            staffRange = emptyMap(),
+            // [2026-08-27, covO 1→5 で fair 版の反例が崩れたため差替] 旧: staffRange 空で「休へ動かすと
+            //   fair(重み1)が悪化し covO(旧重み1)の改善を上回る」という trade-off だったが、covO=5 では
+            //   その差し引きが逆転し moved が改善してしまう（fair の swing は covO の重みに関わらず一定な
+            //   ので、covO 側を重くするほど「動かさない方が良い」側の反例が壊れやすい）。
+            //   high(45) は covO(5)よりずっと重く設計されている（このセッションの覚書どおり covO は
+            //   high/low を上書きしない位置づけ）ため、休（shift0）側に個人上限0を課して「動かすと
+            //   high が立つ」形にすれば、covO の重みが今後さらに動いても崩れにくい。
+            staffRange = mapOf("0,0" to Range("0", "0"), "1,0" to Range("0", "0")),
             needDay1 = emptyMap(),
             needDay2 = emptyMap(),
             cons1 = emptyList(), cons2 = emptyList(), cons3 = emptyList(), cons3n = emptyList(),
@@ -159,17 +166,15 @@ class V6PortAnalyzerTest {
         assertEquals(2, sp.got)
         assertEquals(1, sp.excess)
         assertTrue(sp.reason.contains("動かせる2人"))
-        // [3.406.0] **旧テストは over-promise を固定していた**。この盤面は2名が同一グループなので、
-        //   1名を休へ移すと covO 1→0 の代わりに fair が 0→2 になり、目的関数は厳密に悪化する
-        //   （実測: before total=3/w=3.0 → after total=4/w=4.0・betterReport=false）。
-        //   つまり最適化は正しく拒否するのに、旧診断は「解消可能（最適化が未到達）」と断言していた。
-        //   まず前提（この手は本当に改善しない）を engine で確かめてから、文言を固定する。
+        // [3.406.0] **旧テストは over-promise を固定していた**。まず前提（この手は本当に改善しない）を
+        //   engine で確かめてから、文言を固定する。休（shift0）の個人上限0により、動かすと
+        //   high(重み45) が立ち、covO(重み5)の改善では割に合わない＝betterReport は必ず拒否する。
         val moved = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(0), intArrayOf(1)))
         val base = UnifiedViolationChecker.check(st, arrayOf(intArrayOf(1), intArrayOf(1)))
         assertTrue("1人動かす手は目的関数を改善しない", !betterReport(moved, base))
         assertTrue(sp.reason.contains("最適化は採用しません"))
         assertTrue(!sp.reason.contains("解消できます"))
-        assertEquals("fair", sp.blockedFamily)
+        assertEquals("high", sp.blockedFamily)
     }
 
     /**

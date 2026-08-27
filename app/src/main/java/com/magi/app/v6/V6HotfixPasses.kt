@@ -2470,7 +2470,8 @@ object V6HotfixPasses {
             }
 
             fun dayPenalty(k: Int, j: Int, q: Int): Long =
-                p.covUCell(k, j, q).toLong() * 8000L + p.covOCell(k, j, q).toLong()
+                // [HF77明示指示 2026-08-27] covO 重み 1→5。MirrorKeys の重み階層と整合させた限界費用のため同時に変更。
+                p.covUCell(k, j, q).toLong() * 8000L + p.covOCell(k, j, q).toLong() * 5L
 
             data class FlowPlan(
                 val day: Int,

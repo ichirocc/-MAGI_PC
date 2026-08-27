@@ -116,7 +116,8 @@ internal object C1TemporalFlowPolish {
                 return out
             }
             fun dayPenalty(k: Int, q: Int): Long =
-                p.covUCell(k, j, q).toLong() * 8000L + p.covOCell(k, j, q).toLong()
+                // [HF77明示指示 2026-08-27] covO 重み 1→5（V6HotfixPasses の同種箇所と同時に変更）。
+                p.covUCell(k, j, q).toLong() * 8000L + p.covOCell(k, j, q).toLong() * 5L
 
             val staffCost = Array(p.S) { LongArray(p.K) { FlexibleDayFlow.INF } }
             for (i in 0 until p.S) {
