@@ -83,7 +83,7 @@
   - **基本マスター**(2) = 注意帯（「制度・人員が変わったときだけ編集」）＋**5つの折りたたみ節**(`CollapsibleSection`)。各節は先頭に平易な一文(`SectionNote`)を持ち、`rememberSaveable` で開閉状態を保持して縦長を畳む。
     - **① シフト・グループ・スタッフ**(`Ws1Card`：種類の追加・編集・削除。既定で展開)
     - **② スキルグループ**(`SkillGroupCard`：似た技能のまとめ)
-    - **③ 回数（1人あたり）**★統合 = `AptCard`（目標＝やわらかい・groupShiftApt）＋`StaffRangeCard`（個人の下限/上限）＋`GroupRangeCard`（グループ一括の下限/上限＝ws5共有・既存個人値はスキップ保持）
+    - **③ 回数（1人あたり）**★統合 = `CountsCard`（1枚のカードに統合、区切りは`Divider`）内の3節：`AptSection`（目標＝やわらかい・groupShiftApt）／`StaffRangeSection`（個人の下限/上限）／`GroupRangeSection`（グループ一括の下限/上限＝ws5共有・既存個人値はスキップ保持）。[design-review 冗長性=③統合] 旧実装は3枚の別カードが縦に並び、各カードが同じ「やわらかい/かたい/グループ一括」の説明を少しずつ言い換えていた（④⑤で先に行った重複説明削除の対象漏れ）。1枚のカードへ統合し、共通の説明は先頭で1回だけ言う形に整理した。
     - **④ 人数と組み合わせ**★統合 = `ConstraintsCard`（グループ単位：C41 1日の人数・C42 禁止ペア）＋`SkillConstraintsCard`（スキル単位：C41s/C42s）
     - **⑤ 並び・くり返し** = `ConstraintsCard`（cons1/2/3/3n/3m/3mn：並び・窓）
 - **ラベル混同防止**: サブタブ「シフト希望」(ws3＝勤務の希望) と ⑤ 内の cons3系(ws4＝並びパターン) を区別するため、cons3m を**「並び希望」**、cons3mn を**「並び回避」**と表記（cons3=「必須の並び」/cons3n=「禁止の並び」）。

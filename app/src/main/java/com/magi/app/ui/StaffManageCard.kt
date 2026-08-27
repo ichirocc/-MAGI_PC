@@ -32,7 +32,8 @@ import androidx.compose.ui.unit.sp
 /**
  * [入口4分割/職員管理] 入退職・改名・所属グループ・資格スキルを職員単位で随時変更する1枚。
  * 年間マスター(Ws1Card)のスタッフ節と同じ ViewModel API（ws1EditStaff/ws1AddStaff/ws1RemoveStaff/
- * setStaffSkill）を使う職員中心の別ビュー（併存＝安全）。個人の回数上下限は下の StaffRangeCard が担当。
+ * setStaffSkill）を使う職員中心の別ビュー（併存＝安全）。個人の回数上下限は年間マスター③「回数（1人あたり）」
+ * の CountsCard（StaffRangeSection）が担当。
  */
 @Composable
 fun StaffManageCard(ui: UiState, vm: MagiViewModel) {

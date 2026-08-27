@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -44,22 +45,49 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * ws5 移植: 個人別の回数（上下限 = LimMin/LimMax）。
- * staffRange["i,k"] = Range(lo, hi) を編集する。空＝制限なし。
- * モデル(staffRange)・エンジン(ct)は既存のため不変、UI のみ追加。
+ * [design-review 冗長性=③統合] 旧実装は `AptCard`/`StaffRangeCard`/`GroupRangeCard` が別々の `Card` で
+ * 縦に3枚並んでいた（見出し「③ 回数（1人あたり）★統合」自体は3.286.0 で機能を統合済みだったが、見た目は
+ * まだ3つの箱＋各箱がほぼ同じ「やわらかい目標／かたい下限上限／グループ一括」を少しずつ言い換えて
+ * 説明していた＝3.129.0/3.396.0/3.427.0 が④⑤で行った「重複説明の削除」の対象が③だけ残っていた）。
+ * 3つを1枚のカードへ統合し、共通の説明はここで1回だけ言う。各節（[AptSection]/[StaffRangeSection]/
+ * [GroupRangeSection]）はここでしか言っていない具体だけを残す。ロジック・ViewModel API は完全に不変
+ * （3つの呼び出し元がここへ1本化されただけ）。
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun StaffRangeCard(ui: UiState, vm: MagiViewModel) {
-    var dialog by remember { mutableStateOf<StaffRangeEdit?>(null) }
-    val rows = vm.staffCountRules()
+fun CountsCard(ui: UiState, vm: MagiViewModel) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                "各職員が各シフトを「1か月に何回」担当するか。上下限（個人別の制約）と適切回数（群の目標）の実効値を1か所で確認できます。",
+                "1人がその勤務へ1か月に何回入るかを調整します。『目標』は近づけたい回数（やわらかい）、" +
+                    "『下限/上限』は必ず守る回数（かたい）。",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            AptSection(ui, vm)
+            Divider(Modifier.padding(vertical = 8.dp))
+            StaffRangeSection(ui, vm)
+            Divider(Modifier.padding(vertical = 8.dp))
+            GroupRangeSection(ui, vm)
+        }
+    }
+}
+
+/**
+ * ws5 移植: 個人別の回数（上下限 = LimMin/LimMax）。
+ * staffRange["i,k"] = Range(lo, hi) を編集する。空＝制限なし。
+ * モデル(staffRange)・エンジン(ct)は既存のため不変、UI のみ追加。
+ * [design-review 冗長性] 旧見出し文（「各職員が各シフトを…実効値を1か所で確認できます」）は、
+ * この節が③統合カード内で apt/GroupRange と並んで表示されるようになった時点で自明になった
+ * （見出し・並びそのものが「上下限と目標を並べて見る節」だと語る＝3.396.0）。短い太字見出しへ差し替え、
+ * チップの表記（「目標A→B」の丸め・色の意味）という**ここでしか説明されない**情報だけ残す。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun StaffRangeSection(ui: UiState, vm: MagiViewModel) {
+    var dialog by remember { mutableStateOf<StaffRangeEdit?>(null) }
+    val rows = vm.staffCountRules()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("下限・上限（かたい）", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(
                 "「目標」=適切回数（A→Bは個人上下限で丸め）・「今」=現在の回数。色=不足/超過。",
                 style = MaterialTheme.typography.labelMedium,
@@ -126,7 +154,6 @@ fun StaffRangeCard(ui: UiState, vm: MagiViewModel) {
                 }
             }
             AddRowButton("上下限を追加", onClick = { dialog = StaffRangeEdit(0, 0, "", "") }, enabled = ui.loaded && !ui.running)
-        }
     }
     dialog?.let { d ->
         StaffRangeDialog(
@@ -213,12 +240,12 @@ internal fun StaffRangeDialog(
 //   内部は既存 staffRange への展開（vm.setGroupRange）＝新制約・スコア評価器の変更なし。 ----
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GroupRangeCard(ui: UiState, vm: MagiViewModel) {
+internal fun GroupRangeSection(ui: UiState, vm: MagiViewModel) {
     var dialog by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("グループ一括設定", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(
-                "選んだグループ全員に同じ回数の上下限を設定します（個人設定済みは保持）。",
+                "選んだグループ全員に同じ上下限を一度に設定します（個人設定済みは保持）。",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -250,7 +277,6 @@ fun GroupRangeCard(ui: UiState, vm: MagiViewModel) {
                 }
             }
             AddRowButton("グループに上下限を適用", onClick = { dialog = true }, enabled = ui.loaded && !ui.running)
-        }
     }
     if (dialog) {
         GroupRangeDialog(

@@ -215,7 +215,7 @@ fun Ws1Card(ui: UiState, vm: MagiViewModel) {
                 }
             }
 
-            // [③回数へ移動] 適切回数(apt)gridは「回数（1人あたり）」節の AptCard へ分離した。
+            // [③回数へ移動] 適切回数(apt)gridは「回数（1人あたり）」節の CountsCard（AptSection）へ分離した。
 
         }
     }
@@ -409,16 +409,23 @@ private fun W1Field(label: String, value: String, modifier: Modifier = Modifier,
     )
 }
 
-/** 適切回数のステッパー（記号 −[値]＋）。空欄＝目標なし。0も設定可（空欄→0→1…、0で−→空欄）。 */
+/**
+ * 適切回数のステッパー（記号 −[値]＋）。空欄＝目標なし。0も設定可（空欄→0→1…、0で−→空欄）。
+ * [design-review 冗長性] 旧実装はここが自前の `Card` を持ち「目標（1人あたり・やわらかい）」の下に
+ * 「1か月で何回くらい…最適化が近づけようとします（必ず守るわけではない）」という段落を置いていた。
+ * これは1つ上の `CountsCard`（③統合カード）の共通説明「『目標』は近づけたい回数（やわらかい）」の
+ * 言い換えに過ぎず、③の中で同じ「やわらかい／かたい」の説明が3回（共通説明＋本節＋StaffRangeSection）
+ * 積み重なっていた（3.129.0/3.396.0 の「同じ情報を二重に出さない」原則）。ここでしか言っていない具体
+ * （空欄＝目標なし・担当ONの勤務にだけ設定可）だけを残す。
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AptCard(ui: UiState, vm: MagiViewModel) {
+internal fun AptSection(ui: UiState, vm: MagiViewModel) {
     val v = vm.ws1() ?: return
     var confirmResetApt by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("目標（1人あたり・やわらかい）", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text("「この勤務に1か月で何回くらい入ってほしい」という目安です。最適化が各人をその回数に近づけようとします（必ず守るわけではありません。空欄＝目標なし）。担当ONの勤務にだけ設定できます。",
+    Column {
+            Text("目標（やわらかい）", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text("空欄＝目標なし。担当ONの勤務にだけ設定できます。",
                 fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             // [目標の検算をその場で] 目標の合計がそれを受け止められる上限を超えていると、何をしても
@@ -474,7 +481,6 @@ fun AptCard(ui: UiState, vm: MagiViewModel) {
                 }
             }
         }
-    }
 
     if (confirmResetApt) {
         AlertDialog(

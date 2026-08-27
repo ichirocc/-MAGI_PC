@@ -583,19 +583,16 @@ fun MagiApp(vm: MagiViewModel = viewModel()) {
                                     key(ui.editRev) { SkillGroupCard(ui, vm) }
                                 }
                             }
-                            // ③ 回数（1人あたり）★統合: 目標(apt) ＋ 個人の下限上限(ws5) ＋ グループ一括
+                            // ③ 回数（1人あたり）★統合: 目標(apt) ＋ 個人の下限上限(ws5) ＋ グループ一括。
+                            //   [design-review 冗長性] 旧SectionNoteは CountsCard 冒頭の説明文と全文重複していた
+                            //   （3枚の別カードだった名残）。CountsCard へ統合したいま、説明はカード内の1回だけ。
                             CollapsibleSection("③ 回数（1人あたり）", "yr_count") {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SectionNote("1人がその勤務へ1か月に何回入るかを調整します。『目標』は近づけたい回数（やわらかい）、『下限/上限』は必ず守る回数（かたい）。グループまとめての一括設定もできます。")
-                                    // [実機バグ修正/③回数] +/-を押しても画面上の数字が更新されない（タブを離れて
-                                    //   戻ると反映される＝データは正しく保存されるが同一画面での再描画だけが
-                                    //   遅れる）。CollapsibleSection の content ラムダが ui/vm を捕捉するため
-                                    //   スキップ判定が絡み再構成が伝播しないケースがある。key(ui.editRev) で
-                                    //   editRev 変化ごとにこの3カードのみ確実に作り直す（タブ往復と同じ効果）。
-                                    key(ui.editRev) { AptCard(ui, vm) }
-                                    key(ui.editRev) { StaffRangeCard(ui, vm) }
-                                    key(ui.editRev) { GroupRangeCard(ui, vm) }
-                                }
+                                // [実機バグ修正/③回数] +/-を押しても画面上の数字が更新されない（タブを離れて
+                                //   戻ると反映される＝データは正しく保存されるが同一画面での再描画だけが
+                                //   遅れる）。CollapsibleSection の content ラムダが ui/vm を捕捉するため
+                                //   スキップ判定が絡み再構成が伝播しないケースがある。key(ui.editRev) で
+                                //   editRev 変化ごとに確実に作り直す（タブ往復と同じ効果）。
+                                key(ui.editRev) { CountsCard(ui, vm) }
                             }
                             // ④ 人数と組み合わせ ★統合: グループ(C41/C42) ＋ スキルグループ(C41s/C42s)
                             CollapsibleSection("④ 人数と組み合わせ", "yr_headcount") {
