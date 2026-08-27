@@ -24,6 +24,13 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-27（3.467.0＝ユーザー指示「ドッグフーディング検証する」を受け、直前の3.466.0（③統合）を
+自分でトレース検証。①`CountsCard`外側の余白4dpを内側3節と揃え8dpへ ②より重要な発見: 3.185.0/3.189.0が
+確立した「`key(ui.editRev)`配下は editRev の増分だけが再構成を伝える」契約を、兄弟関数`applyStructure`は
+守るのに`applyStructureWithMessage`の両オーバーロードだけが editRev を一度も増やしていなかった。呼出元4箇所
+（`ws1ResetGroupApt`＝今回統合したAptSectionの「目標を全リセット」ボタン含む）へ横展開して是正。表示・状態
+管理のみ・重み/採否/エンジンは完全に不変。design_lint exit=0。）
+
 **最終更新**：2026-08-27（3.466.0＝編集タブ「③ 回数（1人あたり）」を実装から読み直し、ユーザー指示
 「冗長性を賢くシンプルデザインに深く考え直す」に対応。`AptCard`/`StaffRangeCard`/`GroupRangeCard`の
 別々の3枚のカードを、共通説明を1回だけ言う新設`CountsCard`1枚（`Divider`区切りの3節）へ統合。

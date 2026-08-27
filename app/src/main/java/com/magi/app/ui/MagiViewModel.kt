@@ -2390,17 +2390,23 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         autoSave()
     }
 
-    /** 構造変更(ns)を適用し、再チェック後に独自の完了メッセージを表示（コンポーネント別取込で使用）。 */
+    /**
+     * 構造変更(ns)を適用し、再チェック後に独自の完了メッセージを表示（コンポーネント別取込・apt全リセット等で使用）。
+     * [ドッグフーディング/3.466.0] 兄弟の `applyStructure(ns: MagiState)` は editRev を必ず増やす（3.189.0の
+     * 「+/-で数字が変わらない」修正＝`key(ui.editRev)` で包まれた CollapsibleSection 配下は editRev の増分だけが
+     * 再構成を確実に伝える）が、この関数だけ取り残されていた。呼出元 `ws1ResetGroupApt`（`AptSection`＝
+     * `CountsCard`＝`key(ui.editRev)` 配下）が対象＝同じ穴を踏む。
+     */
     private fun applyStructureWithMessage(ns: MagiState, doneMessage: String) {
         if (structuralEditBlocked()) return
         pushUndo()
         state = ns
         autoSave()
         val sched = currentSchedule?.copy2D()
-        if (sched == null) { _ui.update { it.copy(messageIsError = false, structureEdited = true, message = doneMessage) }; return }
+        if (sched == null) { _ui.update { it.copy(messageIsError = false, structureEdited = true, editRev = it.editRev + 1, message = doneMessage) }; return }
         val seq = ++checkSeq
         checkJob?.cancel()
-        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
+        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, editRev = it.editRev + 1, message = "$doneMessage（違反チェック中…）") }
         checkJob = viewModelScope.launch {
             try {
                 val r = V6FinalPort.handleCheck(ns, sched)
@@ -2616,7 +2622,9 @@ class MagiViewModel(app: Application) : AndroidViewModel(app) {
         autoSave()
         val seq = ++checkSeq
         checkJob?.cancel()
-        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, message = "$doneMessage（違反チェック中…）") }
+        // [ドッグフーディング/3.466.0] 兄弟の `applyStructure(r: Ws1Result)` と同じく editRev を増やす（理由は
+        //   上の (ns: MagiState) 版のコメント参照）。
+        _ui.update { it.copy(messageIsError = false, running = true, structureEdited = true, editRev = it.editRev + 1, message = "$doneMessage（違反チェック中…）") }
         checkJob = viewModelScope.launch {
             try {
                 val rep = V6FinalPort.handleCheck(r.state, sched)

@@ -5330,6 +5330,28 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: ホストJVM **489テスト green**。UI/Worker 層はホストでコンパイル不可＝括弧均衡と
   `publishNote` 全呼出のシグネチャ一致を静的確認。最終判定は CI。
 
+## ドッグフーディング＝③統合の直後に editRev 取り残しを発見・是正（3.467.0, ユーザー指示「ドッグフーディング検証する」）
+ユーザー指示「ドッグフーディング検証する」を受け、直前の3.466.0（③ CountsCard統合）を自分でトレース検証した。
+**表示・状態管理のみ＝重み・採否・エンジンは完全に不変**。
+- **[① 是正済み] `CountsCard` 内側の余白不整合**: 新設した外側 `Column` が `Arrangement.spacedBy(4.dp)`、
+  内側3節（`AptSection`/`StaffRangeSection`/`GroupRangeSection`）はいずれも `spacedBy(8.dp)`。UI全体の
+  実測（`grep`頻度: 8.dp=72件・6.dp=21件・4.dp=23件）で 8.dp が圧倒的多数派＝`MagiSpacing.sm` と一致する
+  既定の節間隔。外側だけ4dpのままだと導入文と最初の節見出しの間だけ詰まって見える＝**8.dp へ統一**。
+- **[② 実装済み・より重要] `applyStructureWithMessage` に editRev 取り残しを発見**: 3.185.0/3.189.0 が
+  確立した「`key(ui.editRev)` で包んだ `CollapsibleSection` 配下は editRev の増分だけが再構成を確実に
+  伝える」という契約を、兄弟関数 `applyStructure(ns: MagiState)`/`applyStructure(r: Ws1Result)` は
+  厳守している（`editRev = it.editRev + 1` を明記）のに、**`applyStructureWithMessage` の両オーバーロード
+  （`(ns: MagiState, doneMessage)` と `(r: Ws1Result, doneMessage)`）だけが editRev を一度も増やして
+  いなかった**。呼出元は4箇所: `ws1ResetGroupApt`（**まさに今回統合した `AptSection`＝`CountsCard`＝
+  `key(ui.editRev)` 配下の「目標を全リセット」ボタン**）／`relaxForbiddenRule`（禁止の並び削除, Home）／
+  希望シフトCSV取込／各制約CSV取込。特に前者は自分が直したばかりのコンポーネントの中で踏む形になるところ
+  だった。両オーバーロードの構造変更確定時点の `_ui.update` へ `editRev = it.editRev + 1` を追加
+  （後続の非同期チェック完了/停止/失敗の `_ui.update` は追従メッセージのみのため対象外＝兄弟関数と同じ
+  1回だけの契約）。**探索・重み・採否は無関係、UI再構成の確実性のみの修正**。
+- 検証: `python3 tools/design_lint.py` exit=0（P6=0件・P10 baseline=2のまま不変）。ブレース/丸括弧均衡
+  （MagiViewModel.kt 1097/1097・2386/2386、StaffRangeEditor.kt 140/140・232/232）を静的確認。UI層は
+  ホストでコンパイル不可のため最終判定は CI。
+
 ## 編集タブ「③ 回数（1人あたり）」の3枚カードを1枚へ統合（3.466.0, ユーザー指示「冗長性を賢くシンプルデザインに深く考え直す」）
 
 ユーザーが編集タブ全5節（①シフト・グループ・職員／②スキルグループ／③回数（1人あたり）／④人数と組み合わせ／

@@ -56,7 +56,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun CountsCard(ui: UiState, vm: MagiViewModel) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 "1人がその勤務へ1か月に何回入るかを調整します。『目標』は近づけたい回数（やわらかい）、" +
                     "『下限/上限』は必ず守る回数（かたい）。",
