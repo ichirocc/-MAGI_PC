@@ -69,4 +69,8 @@ public sealed class JavaRandom
 
     /// <summary>[フェーズ5a追加] Bit-exact port of <c>java.util.Random.nextDouble()</c>.</summary>
     public double NextDouble() => (((long)Next(26) << 27) + Next(27)) / (double)(1L << 53);
+
+    /// <summary>[フェーズ5b追加] Bit-exact port of <c>java.util.Random.nextBoolean()</c>
+    /// (<c>V6SearchOperators.findC3WantFix</c> uses it to pick between cons3/cons3m).</summary>
+    public bool NextBoolean() => Next(1) != 0;
 }
