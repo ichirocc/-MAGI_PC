@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MagiEngine.Model;
+using MagiEngine.Tests.Fixtures;
 
 namespace MagiEngine.Tests.Model;
 
@@ -11,14 +12,6 @@ namespace MagiEngine.Tests.Model;
 /// </summary>
 public class StateJsonSerializerFixtureTest
 {
-    public static readonly TheoryData<string> FixtureFiles = new()
-    {
-        "golden_state.json",
-        "sample_state_v6.json",
-        "blocked_covu_state.json",
-        "sept2026_state.json",
-    };
-
     // Test-local mirror of StateJsonSerializer's private DerivedKeysToDrop: ExportWithSchedule
     // and ExportWithEdits both intentionally strip these from the original JSON before
     // re-emitting (stale caches must not survive a schedule/edit re-export), so state1's
@@ -28,14 +21,13 @@ public class StateJsonSerializerFixtureTest
     private static readonly string[] DerivedKeys =
         { "violations", "needViolations", "countViolations", "lastResult", "lastPhase" };
 
-    private static string ReadFixture(string name) =>
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", name));
+    private static string ReadFixture(string name) => FixtureLoader.ReadRaw(name);
 
     private static int[][] ToJagged(IReadOnlyList<IReadOnlyList<int>> grid) =>
         grid.Select(row => row.ToArray()).ToArray();
 
     [Theory]
-    [MemberData(nameof(FixtureFiles))]
+    [MemberData(nameof(FixtureLoader.AllFiles), MemberType = typeof(FixtureLoader))]
     public void ParseSerializeParse_RoundTrips(string fixtureFile)
     {
         var raw = ReadFixture(fixtureFile);
@@ -48,7 +40,7 @@ public class StateJsonSerializerFixtureTest
     }
 
     [Theory]
-    [MemberData(nameof(FixtureFiles))]
+    [MemberData(nameof(FixtureLoader.AllFiles), MemberType = typeof(FixtureLoader))]
     public void ParseExportWithScheduleParse_RoundTrips(string fixtureFile)
     {
         var raw = ReadFixture(fixtureFile);
@@ -68,7 +60,7 @@ public class StateJsonSerializerFixtureTest
     }
 
     [Theory]
-    [MemberData(nameof(FixtureFiles))]
+    [MemberData(nameof(FixtureLoader.AllFiles), MemberType = typeof(FixtureLoader))]
     public void ParseExportWithEditsParse_RoundTrips(string fixtureFile)
     {
         var raw = ReadFixture(fixtureFile);
