@@ -59,4 +59,27 @@ public static class V6SanityPort
         }
         return result.OrderBy(w => w.StaffIndex).ThenBy(w => w.DayIndex).ToList();
     }
+
+    /// <summary>
+    /// **Phase 5c stub.** Faithful port target is Kotlin's <c>structuralHardFloor(state, p) =
+    /// forcedCovU(state, p).sumOf {{ it.amount }}</c> — a static lower bound on unavoidable covU
+    /// (people-shortage) violations, derived from qualified-staff headcounts alone (independent of
+    /// any particular schedule). <c>forcedCovU</c> itself lives deeper in the still-unported,
+    /// phase-7-scoped remainder of <c>V6SanityPort.kt</c> (1,507 lines total; see this class's own
+    /// doc comment), so implementing this faithfully now would require pulling in more of that file
+    /// than phase 5c's scope calls for.
+    ///
+    /// Every phase-5c call site in the Kotlin source (<c>runRsi</c>'s <c>avoid</c>-set computation)
+    /// wraps this call in a <c>try {{ ... }} catch (_: Exception) {{ 0 }}</c> — i.e. the ported
+    /// callers already tolerate this returning 0 (or throwing) as a degenerate case. This stub
+    /// throws <see cref="NotImplementedException"/> so that <c>V6NativeOptimizer.RunRsi</c>'s
+    /// equivalent try/catch-defaulting-to-0 wrapper produces byte-identical behavior to what it
+    /// will once phase 7 implements this properly — no changes to <c>RunRsi</c> will be needed at
+    /// that point, only this method's body.
+    /// </summary>
+    public static int StructuralHardFloor(MagiState state, Problem p) =>
+        throw new NotImplementedException(
+            "V6SanityPort.StructuralHardFloor is phase-7 scope (forcedCovU's full diagnostic " +
+            "chain); callers must catch and default to 0, matching the Kotlin source's own " +
+            "try/catch wrapper at every phase-5c call site.");
 }

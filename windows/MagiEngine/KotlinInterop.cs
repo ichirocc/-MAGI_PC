@@ -105,4 +105,19 @@ public static class KotlinInterop
         if (a >= long.MaxValue) return long.MaxValue;
         return (long)Math.Floor(a + 0.5d);
     }
+
+    /// <summary>
+    /// Mirrors Kotlin/Java's <c>Math.floorMod(x, y)</c>: the result always has the same sign as
+    /// <paramref name="y"/> (floor division), unlike C#'s <c>%</c> operator (truncated division,
+    /// same as Kotlin's own <c>%</c>/Java's <c>%</c> — result takes the sign of the dividend).
+    /// The two agree whenever <paramref name="x"/> is non-negative, but this codebase's phase-5
+    /// hypothesis-index arithmetic (<see cref="V6.HypothesisDiversityPolicy.StartPlanFor"/>) uses
+    /// the Kotlin source's actual call, so the floor variant is ported faithfully rather than
+    /// assumed equivalent to <c>%</c>.
+    /// </summary>
+    public static int FloorMod(int x, int y)
+    {
+        int r = x % y;
+        return (r != 0 && (r < 0) != (y < 0)) ? r + y : r;
+    }
 }
