@@ -24,6 +24,15 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-27（3.465.0＝covO（人員過剰）の重みを1.0→5.0へ引き上げ（ユーザー明示数値指示・HF77）。
+実機ログで「動かせる在勤者がいるのにcovOがhigh(重み45)に阻まれ研磨されない」逆転現象を確認し、apt/fair/
+weekly等(重み1)より確実に優先しつつhigh/low/c1/c3mn(45/90/30/30)には遠く及ばない水準へ変更。単一ソース
+(`MirrorKeys.weights`)・`Evaluator.fullEvalParts`・`DeltaEvaluator.scoreFrom`・`magi_native.cpp`（フル
+評価器＋SA/ALNS/LAHCの全探索が通るホットパス`contribCov`）の4面を同時変更し、言語跨ぎ期待値3ファイルを
+Kotlin/C++両方で再計算・一致確認してから更新。apt/fair/weeklyは決定記録D3の対象として別途ゼロから再検討
+したが、covOと異なる位置づけの逆転は見つからず変更なしと結論。ホストJVM全563テストgreen・native parity
+479万手mismatch=0。）
+
 **最終更新**：2026-08-26（3.464.0＝外部レビュー(対象3.462.0)を検証し2件を修正。①`ViolationHubCard`の
 達成表示が`fair`/`weekly`のみの違反（場所を持たない集計指標のため`confirmItems`の母数に現れない）を
 「達成」と誤表示していた穴を、フィルタ前の`ui.breakdown`を併用する判定へ修正②内訳タブの展開パネルが
