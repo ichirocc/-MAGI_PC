@@ -24,6 +24,12 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
 | [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
 
+**最終更新**：2026-08-27（3.467.1＝CI失敗の是正。3.466.0で新設した`CountsCard`の見出し2箇所が
+`.sp`（fontSize）を使うのに`StaffRangeEditor.kt`が`androidx.compose.ui.unit.sp`を import していな
+かった＝`Unresolved reference 'sp'`でコンパイル失敗。`mcp__github__get_job_logs`でCIログを取得して
+特定し、import 1行を追加して解消。静的確認（ブレース均衡・design_lint）では検出できない種類の誤り
+だったため、実際のCIログ取得が正しい検証手段だったと記録。）
+
 **最終更新**：2026-08-27（3.467.0＝ユーザー指示「ドッグフーディング検証する」を受け、直前の3.466.0（③統合）を
 自分でトレース検証。①`CountsCard`外側の余白4dpを内側3節と揃え8dpへ ②より重要な発見: 3.185.0/3.189.0が
 確立した「`key(ui.editRev)`配下は editRev の増分だけが再構成を伝える」契約を、兄弟関数`applyStructure`は

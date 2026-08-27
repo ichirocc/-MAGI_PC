@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * [design-review 冗長性=③統合] 旧実装は `AptCard`/`StaffRangeCard`/`GroupRangeCard` が別々の `Card` で

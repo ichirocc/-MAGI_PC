@@ -5351,6 +5351,19 @@ Kotlin側で full==delta を検証。Golden parity は soft total 非アサー�
 - 検証: `python3 tools/design_lint.py` exit=0（P6=0件・P10 baseline=2のまま不変）。ブレース/丸括弧均衡
   （MagiViewModel.kt 1097/1097・2386/2386、StaffRangeEditor.kt 140/140・232/232）を静的確認。UI層は
   ホストでコンパイル不可のため最終判定は CI。
+- **(3.467.1, CI失敗の是正)**: ここまでの静的確認（ブレース均衡・design_lint）は**コンパイルエラーを
+  1つ見逃した**。CI（`v6-engine-check`）で実際に3.466.0・3.467.0の両コミットが失敗しており、
+  `mcp__github__get_job_logs` でログを取得したところ原因は3.466.0自体（`StaffRangeEditor.kt`）に
+  あった: `CountsCard` 統合時に新設した見出し `Text(..., fontSize = 14.sp, ...)`（`StaffRangeSection`/
+  `GroupRangeSection` の2箇所）が `.sp`（`androidx.compose.ui.unit.sp`）を使うのに、この
+  ファイルは元々 `.dp` しか import していなかった＝`Unresolved reference 'sp'`（90:46・246:44）で
+  `compileDebugKotlin` が落ちていた。ブレース均衡・design_lintのどちらも import 漏れは検出できない
+  （検出できる種類の誤りではない）＝**CI ログを実際に取得して確認するのが正しい検証手段だった**
+  （CLAUDE.md 冒頭の「CI ログ本体は取得不可」は `results-receiver` 経由の生ログの話で、
+  `mcp__github__get_job_logs` は取得できると判明・今後の教訓として記録）。`import
+  androidx.compose.ui.unit.sp` を1行追加して解消。UI全ファイルを横断 grep し、他に `.sp` 使用＋
+  import 欠落の組み合わせが無いことも確認済み（この1箇所のみ）。
+  検証: design_lint exit=0（不変）・ブレース均衡不変（140/140・232/232、import 1行追加のみ）。
 
 ## 編集タブ「③ 回数（1人あたり）」の3枚カードを1枚へ統合（3.466.0, ユーザー指示「冗長性を賢くシンプルデザインに深く考え直す」）
 
