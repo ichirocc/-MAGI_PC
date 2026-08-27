@@ -1,0 +1,40 @@
+name: Windows Port - WinUI3 App Build
+
+# MagiApp.WinUI（Windows App SDK / WinUI 3）は Windows 専用のビルドツールチェーンを要する。
+# ubuntu ランナーでは Windows App SDK の MSBuild ターゲットが解決できないため、
+# 必ず windows-latest ランナーで実行する（フェーズ0の設計方針どおり）。
+#
+# 実機での起動確認まではCIでは行わない（GUIが無いランナー上でウィンドウは開けないため）。
+# ここで確認するのは「ビルドが通る」ことまで。実際の起動確認はWindows 11実機で手動で行う。
+
+on:
+  push:
+    branches: [main, windows-port]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-app-build.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-app-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore (MagiApp.WinUI)
+        run: dotnet restore MagiApp.WinUI/MagiApp.WinUI.csproj
+
+      - name: Build (MagiApp.WinUI, x64)
+        run: dotnet build MagiApp.WinUI/MagiApp.WinUI.csproj --no-restore --configuration Release --runtime win-x64 --self-contained false

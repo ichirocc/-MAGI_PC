@@ -1,0 +1,9 @@
+# .NET / WinUI3 ビルド成果物（windows/ 配下専用。ルートの .gitignore は Android/Gradle 用）
+bin/
+obj/
+*.user
+*.suo
+.vs/
+AppPackages/
+BundleArtifacts/
+Generated Files/

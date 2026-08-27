@@ -1,0 +1,47 @@
+name: Windows Port - Engine Check
+
+# MagiEngine（プラットフォーム非依存の .NET クラスライブラリ）と MagiEngine.Tests は
+# Linux ランナーでビルド・テストできる。MagiApp.WinUI（Windows App SDK）はここでは対象外
+# （windows-app-build.yml で windows-latest ランナーが担当）。
+# 対象は windows/ 配下のみ（Android版の Kotlin/Gradle CI とは独立）。
+
+on:
+  push:
+    branches: [main, windows-port]
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-engine-check.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/windows-engine-check.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore (MagiEngine)
+        run: dotnet restore MagiEngine/MagiEngine.csproj
+
+      - name: Build (MagiEngine)
+        run: dotnet build MagiEngine/MagiEngine.csproj --no-restore --configuration Release
+
+      - name: Restore (MagiEngine.Tests)
+        run: dotnet restore MagiEngine.Tests/MagiEngine.Tests.csproj
+
+      - name: Test (MagiEngine.Tests)
+        run: dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+
+      - name: Build (MagiEngine.GoldenGen)
+        run: dotnet build MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj --configuration Release
