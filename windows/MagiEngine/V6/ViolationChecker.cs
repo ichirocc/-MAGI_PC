@@ -560,3 +560,29 @@ public static class UnifiedViolationChecker
         return outVal;
     }
 }
+
+/// <summary>
+/// Faithful port of Kotlin's <c>ScheduleRunResult</c> data class (also declared in
+/// <c>MirrorCore.kt</c>). Shared return type of the schedule generators
+/// (<see cref="SmartInitialScheduler"/>, <see cref="GreedyMirrorScheduler"/>, phase 4) and later
+/// (phase 7) of <c>ScheduleCsvBridge</c>'s CSV import path — hence the 4 CSV-only fields below
+/// are ported now (with their Kotlin default values) even though nothing populates them until
+/// phase 7, so this record's shape does not need to change again when that phase wires them up.
+/// </summary>
+public sealed record ScheduleRunResult(
+    int[][] Schedule,
+    ViolationReport Report,
+    /// <summary>CSV取込で氏名が一致したスタッフ行数。最適化系の結果では未使用(-1)。</summary>
+    int Matched = -1,
+    /// <summary>CSV取込でシフト一覧に無い記号だったセルの数。</summary>
+    int UnknownCells = 0,
+    /// <summary>その未知記号（多い順・上位）。</summary>
+    IReadOnlyList<string>? UnknownSymbols = null,
+    /// <summary>引用符が閉じないまま入力が終わった（開いた引用符以降が1セルへ吸い込まれ、残りの行が丸ごと消えた）。</summary>
+    bool UnclosedQuote = false)
+{
+    public IReadOnlyList<string> UnknownSymbols { get; init; } = UnknownSymbols ?? Array.Empty<string>();
+}
+
+// LightOptimizeResult (also declared in MirrorCore.kt) is deferred to phase 5 (SA optimizer
+// results) — not needed by anything in phase 4's scope.
