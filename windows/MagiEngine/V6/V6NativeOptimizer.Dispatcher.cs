@@ -12,13 +12,20 @@ namespace MagiEngine.V6;
 /// wrapping ALNS/RSI/RSI++ / <see cref="RunAdaptivePortfolio"/>), then runs the ChainFill and HF80
 /// epilogues and the inner "N1c" sentinel.
 ///
-/// [TuningTelemetry省略, Kotlin原本] Kotlin の <c>optimize()</c> は入口で
-/// <c>beginTelemetry()</c>（= <c>TuningTelemetry.reset()</c> ＋ liveBest 競合カウンタのリセット）を
-/// 呼ぶ。<c>TuningTelemetry</c> 自体は sub-phase 5a/5b で「探索・採否・スコアには一切影響しない
-/// 読み取り専用の診断カウンタ」として移植範囲から意図的に除外済み（<c>V6SearchOperators.cs</c> の
-/// <c>BreakableDaysFor</c> の doc comment 参照）。それに合わせ、ここでは liveBest 競合カウンタの
-/// リセットだけを <see cref="Optimize"/> の入口で行い（<see cref="ResetLiveBestForTest"/> と同じ
-/// 操作を直接インライン化）、<c>TuningTelemetry.Reset()</c> 相当の呼び出しは行わない。
+/// [TuningTelemetry, Kotlin原本の正確な呼び出し位置・ピース5で訂正] 旧いこの doc comment は
+/// 「Kotlin の <c>optimize()</c> が入口で <c>beginTelemetry()</c> を呼ぶ」と書いていたが、これは
+/// **現在の Kotlin 原本(3.388.0以降)に対して誤り**（フェーズ5a/5b 当時の理解を後日訂正）。
+/// 実際には <c>beginTelemetry()</c> は <c>optimize()</c> からは一度も呼ばれておらず、
+/// <c>V6FinalPort.handleOptimize</c>（フェーズ7・未移植）の入口から**一度だけ**呼ばれる
+/// （3.388.0「利用者の1回の「つくる」ぶんの計測をゼロから始める」——`handleOptimize` は AUTO の
+/// 31〜210秒帯で <c>optimize()</c> を最大3回呼ぶため、`optimize()` 側で毎回リセットすると
+/// 最後の pass 以外の計測が失われる、という回帰の修正）。この C# 移植でも同じ構造を踏襲し、
+/// <see cref="Optimize"/> のこの入口には <c>TuningTelemetry.Reset()</c> を**意図的に追加していない**
+/// （追加すると 3.388.0 が直した回帰を再導入する）。liveBest 競合カウンタのリセットも
+/// <c>beginTelemetry()</c> ではなく <see cref="Optimize"/> 自身の入口が担当する（下記
+/// <c>_liveBestRef.Value = null;</c>、Kotlin原本と同じ役割分担）。<c>TuningTelemetry.BeginTelemetry()</c>
+/// 相当の公開静的メソッドは <c>V6NativeOptimizer.RunSlot.cs</c> の <see cref="BeginTelemetry"/> として
+/// 独立に存在し、フェーズ18で <c>HandleOptimize</c> を移植する際にその入口から一度だけ呼ぶ。
 /// </summary>
 public static partial class V6NativeOptimizer
 {

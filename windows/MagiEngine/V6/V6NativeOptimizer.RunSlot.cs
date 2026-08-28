@@ -215,6 +215,36 @@ public static partial class V6NativeOptimizer
     }
 
     /// <summary>
+    /// [Kotlin 3.388.0/外部レビュー] **利用者の1回の「つくる」ぶん**の計測をゼロから始める。
+    ///
+    /// 旧実装は <see cref="Optimize"/> の入口で <see cref="TuningTelemetry.Reset"/> と競合カウンタを
+    /// 落としていたが、<c>HandleOptimize</c>（フェーズ7・未移植）は AUTO の 31〜210秒帯で
+    /// **<see cref="Optimize"/> を最大3回**呼ぶ（RSI → ALNS → ExtraRefine）。よって後続の呼出が
+    /// 先行ぶんを上書きし、診断に出るのは**最後の pass だけ**だった＝主計算(8ワーカー)の計測が
+    /// 捨てられ、`設定の効き` も競合数も 0 に見える。「0 なら理論上の窓に留まっている」と読ませる行が
+    /// まさに false negative になる（Kotlin 3.102.1 の <c>lastAlternatives</c> と同じ罠）。
+    /// 呼び出し元（<c>HandleOptimize</c> の入口）で1回だけ落とす形へ移した。
+    ///
+    /// [Kotlin原本との対応, 重要] <c>liveBestRef</c>（この実行の途中経過スナップショット）は<b>ここでは
+    /// 触らない</b>——それは <see cref="Optimize"/> 自身の入口（<c>_liveBestRef.Value = null;</c>）が
+    /// 既に担当している。Kotlin の <c>beginTelemetry()</c> も <c>liveBestRef.set(null)</c> は呼ばず
+    /// <c>TuningTelemetry.reset()</c> と <c>liveBestContention.set(0)</c> の2つだけを行う——
+    /// <see cref="ResetLiveBestForTest"/>（同じ競合カウンタをゼロ化するがテスト専用で
+    /// <c>liveBestRef</c> も一緒に消す）とは意図的に別の関数として保つ。
+    ///
+    /// [C#移植上の判断] <c>V6NativeOptimizer.Dispatcher.cs</c> の <c>Optimize()</c> エントリには
+    /// 意図的に <c>TuningTelemetry.Reset()</c> を追加していない——それを追加すると 3.388.0 が
+    /// 直したまさにその回帰（複数回呼ばれる <c>Optimize()</c> のたびに計測が上書きされる）を
+    /// 再導入することになる。この <see cref="BeginTelemetry"/> は <c>HandleOptimize</c>（フェーズ18で
+    /// ポートする予定）の入口から一度だけ呼ばれるべき、独立した公開静的メソッドとして存在する。
+    /// </summary>
+    public static void BeginTelemetry()
+    {
+        TuningTelemetry.Reset();
+        Interlocked.Exchange(ref _liveBestContention, 0L);
+    }
+
+    /// <summary>
     /// Minimal CAS-capable reference cell — C# has no built-in <c>AtomicReference&lt;T&gt;</c>
     /// (unlike Java/Kotlin's <c>java.util.concurrent.atomic.AtomicReference</c>, used pervasively
     /// throughout the Kotlin source); <see cref="Interlocked.CompareExchange{T}(ref T, T, T)"/>

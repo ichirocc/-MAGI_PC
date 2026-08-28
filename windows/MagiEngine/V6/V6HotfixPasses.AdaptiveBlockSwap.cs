@@ -284,9 +284,6 @@ public static partial class V6HotfixPasses
             //   落とす＝減る・同数の候補は元から通しているため、外しても採用は増えない（c3n は HARD なので
             //   増える候補は isBetter が第1キーで必ず却下）。ON にすると構造的に詰んだ候補へ checker を
             //   呼ばなくなり、評価枠を soft 判定まで進める候補へ回せる。
-            //   [TuningTelemetry.c3nFilterSkipped 相当のカウンタは移植対象外＝診断専用の read-only 計測で
-            //   探索・採否・スコアには一切影響しない（V6NativeOptimizer.Dispatcher.cs の lahcEntered 省略と
-            //   同じ既定路線）。]
             if (filterC3n && p.Cons3n.Count > 0)
             {
                 var firesBefore = 0;
@@ -300,7 +297,7 @@ public static partial class V6HotfixPasses
                     foreach (var j in swapDays) row[j] = work[giver][j];
                     firesAfter += C1DeltaPrefilter.StaffC3nFires(p, row);
                 }
-                if (firesAfter > firesBefore) return null;
+                if (firesAfter > firesBefore) { TuningTelemetry.IncrementC3nFilterSkipped(); return null; }
             }
 
             var differences = swapDays.Count;

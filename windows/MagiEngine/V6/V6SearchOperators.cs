@@ -447,21 +447,25 @@ internal static class V6SearchOperators
     /// 全部を候補にする。T&gt;64 は <see cref="C3nBitScan"/> が使えないので従来どおり j±1 のみ
     /// （安全側＝候補が減るだけ）。
     ///
-    /// [3.303.0/TuningTelemetry省略] Kotlin原本は <c>TuningTelemetry.wideC3nCalls</c>/
-    /// <c>wideC3nDiffered</c> という診断専用カウンタをここで加算するが（探索・採否・スコアには一切
-    /// 影響しない読み取り専用の計数）、本フェーズでは <c>TuningTelemetry</c> オブジェクト自体を移植
-    /// 範囲から除外している（sub-phase 5a の <c>lahcEntered</c> と同じ判断）。関数の分岐・戻り値
-    /// ロジックは完全にそのまま。
+    /// [Kotlin 3.356.0/ピース5で配線] <see cref="TuningTelemetry.IncrementWideC3nCalls"/>/
+    /// <see cref="TuningTelemetry.IncrementWideC3nDiffered"/> という診断専用カウンタ（探索・採否・
+    /// スコアには一切影響しない読み取り専用の計数）をここで加算する。関数の分岐・戻り値ロジックは
+    /// 完全にそのまま（<c>TuningTelemetry</c>自体はピース5で移植・配線済み）。
     /// </summary>
     internal static int[] BreakableDaysFor(Problem p, int[][] sched, int i, int j, int fillShift)
     {
+        // [Kotlin原本, 既定OFF・3.303.0] 一般化として正しいが実データ3件で利得が一貫しなかった
+        //   （PolishGate の docstring に計測値）。既定は従来どおり j±1 のみで、ゲートを ON にしたときだけ広げる。
+        TuningTelemetry.IncrementWideC3nCalls();
         if (!PolishGate.WideC3nBreakDays) return new[] { j - 1, j + 1 };
         if (!C3nBitScan.Usable(p) || i < 0 || i >= sched.Length) return new[] { j - 1, j + 1 };
         var row = sched[i];
         var mask = C3nBitScan.BuildRowMask(p, row);
         int old = (j >= 0 && j < p.T && j < row.Length) ? row[j] : -1;
         long days = C3nBitScan.CoveringRunDaysAfterSet(p, mask, j, old, fillShift);
-        if (days == 0L) return Array.Empty<int>();
+        // [Kotlin 3.356.0] 既定(j±1)と違う結果になった回数を数える。**広がる場合だけでなく狭まる場合もある**
+        //   （covering run が無ければ空を返す＝既定より狭い）ので、「違うかどうか」で数える。
+        if (days == 0L) { TuningTelemetry.IncrementWideC3nDiffered(); return Array.Empty<int>(); }
         // j に近い日から試す（当日から遠い日ほど他の制約への波及が読みにくいため、影響の小さい順）。
         var outList = new List<int>(System.Numerics.BitOperations.PopCount((ulong)days));
         long rest = days & ~(1L << j);
@@ -470,7 +474,9 @@ internal static class V6SearchOperators
             outList.Add(System.Numerics.BitOperations.TrailingZeroCount((ulong)rest));
             rest &= rest - 1;
         }
-        return outList.OrderBy(d => Math.Abs(d - j)).ToArray();
+        var result = outList.OrderBy(d => Math.Abs(d - j)).ToArray();
+        if (result.Length != 2 || !(result.Contains(j - 1) && result.Contains(j + 1))) TuningTelemetry.IncrementWideC3nDiffered();
+        return result;
     }
 
     /// <summary>

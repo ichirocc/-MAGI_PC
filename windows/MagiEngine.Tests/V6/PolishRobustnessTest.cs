@@ -1,3 +1,4 @@
+using System.Threading;
 using MagiEngine.Model;
 using MagiEngine.V6;
 // System.Range (built-in C# 8+ slice type, brought into scope by the SDK's implicit
@@ -9,18 +10,23 @@ namespace MagiEngine.Tests.V6;
 /// <summary>
 /// [3.278.0/監査で実証された2クラッシュの回帰テスト, フェーズ6ピース30]
 /// <c>PolishRobustnessTest.kt</c>のうち <see cref="V6HotfixPasses.RunPostOptimization"/> および
-/// その依存 <see cref="C1RepairIndex"/>/<see cref="C1DeltaPrefilter"/> を直接運動させる2件のみを移植。
+/// その依存 <see cref="C1RepairIndex"/>/<see cref="C1DeltaPrefilter"/> を直接運動させる2件を移植。
 ///
-/// 移植しなかった残り5件の理由:
+/// [フェーズ7ピース5, 訂正・追加移植] <c>tuningCountersDoNotLoseIncrementsUnderParallelWorkers</c>/
+/// <c>tuningSummaryDistinguishesOffFromOnWithNoObservedEffect</c> は、フェーズ6当時「<c>TuningTelemetry</c>
+/// は <c>RunPostOptimization</c>本体から一切参照されない」ため対象外としていたが、この判断は
+/// <b>「<c>TuningTelemetry</c>自体がまだ移植されていない」</b>という一時的な理由に過ぎなかった
+/// （<c>RunPostOptimization</c>と機能的に結合しているかどうかとは無関係）。ピース5で
+/// <see cref="TuningTelemetry"/> を移植したので、Kotlin原本と同じくこのファイルへ2件とも追加した
+/// （物理的な co-location は Kotlin 原本の構成をそのまま踏襲＝機能結合ではなく利便上の同居）。
+///
+/// 移植しなかった残り3件の理由:
 ///  - <c>minCostAssignmentReturnsNullForAllInfRowInsteadOfCrashing</c> →
 ///    <c>MinCostAssignmentTest.SolveReturnsNullWhenARowIsEntirelyInfeasible</c>等で既に移植済み。
 ///  - <c>dayAssignmentPolishSkipsInfeasibleDaysInsteadOfCrashing</c> →
 ///    <c>V6HotfixPassesDayAssignTest.SkipsInfeasibleDaysInsteadOfCrashing</c>で既に移植済み。
 ///  - <c>emptyStaffIsRejectedWithAnActionableMessage</c> → <c>V6FinalPort.handleOptimize</c> に依存し、
-///    それは未移植（フェーズ7「V6FinalPort統括」のスコープ）。
-///  - <c>tuningCountersDoNotLoseIncrementsUnderParallelWorkers</c>/
-///    <c>tuningSummaryDistinguishesOffFromOnWithNoObservedEffect</c> → <c>TuningTelemetry</c> は
-///    <c>RunPostOptimization</c>本体から一切参照されない（Kotlin原本のgrepで確認済み）ため対象外。
+///    それは未移植（フェーズ7「V6FinalPort統括」のスコープ、ピース18）。
 ///
 ///  1. MinCostAssignment: 全INF行（担当可否ゼロの群の職員・-1センチネル等）で j1=-1 のまま p[-1] を読み
 ///     AIOOBE でプロセスごと落ちていた（handleOptimize フル経路=12秒予算で再現済み。ポテンシャル v[j] は
@@ -99,5 +105,67 @@ public class PolishRobustnessTest
         Assert.True(C1DeltaPrefilter.HasActionableC1(index), "不足窓は正しく検出される（クラッシュせず）");
         var res = V6HotfixPasses.ApplyC1IndexChainRepair(s, sc);
         Assert.True(res.AfterTotal >= 0, "index駆動修復も完走する");
+    }
+
+    /// <summary>
+    /// [Kotlin 3.360.1/敵対検証の回帰テスト] 8並列スレッド×20,000回の加算がちょうど16万になることを
+    /// 固定する（<see cref="Interlocked"/> による原子加算でなければ、この並行負荷は確実に取りこぼす）。
+    /// </summary>
+    [Fact]
+    public void TuningCountersDoNotLoseIncrementsUnderParallelWorkers()
+    {
+        TuningTelemetry.Reset();
+        const int threads = 8;
+        const int perThread = 20_000;
+        using var gate = new CountdownEvent(1);
+        var ts = Enumerable.Range(0, threads).Select(_ => new Thread(() =>
+        {
+            gate.Wait();
+            for (var k = 0; k < perThread; k++) TuningTelemetry.IncrementParityChecks();
+        })).ToList();
+        foreach (var t in ts) t.Start();
+        gate.Signal();
+        foreach (var t in ts) t.Join();
+        Assert.Equal(threads * perThread, TuningTelemetry.ParityChecksCount());
+        TuningTelemetry.Reset();
+        Assert.Equal(0, TuningTelemetry.ParityChecksCount());
+    }
+
+    /// <summary>
+    /// [Kotlin 3.356.0の回帰テスト] トグル OFF は "OFF"、ON だが未発火は「この実行では観測なし」、
+    /// 実際に加算されると件数を明示する。<c>Reset()</c> で前の実行の数字を持ち越さないことも固定する。
+    /// </summary>
+    [Fact]
+    public void TuningSummaryDistinguishesOffFromOnWithNoObservedEffect()
+    {
+        var wide = PolishGate.WideC3nBreakDays;
+        var filter = PolishGate.FilterC3nIncrease;
+        try
+        {
+            TuningTelemetry.Reset();
+            PolishGate.WideC3nBreakDays = false;
+            PolishGate.FilterC3nIncrease = true;
+            var off = TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: false);
+            Assert.Contains("禁止連続の崩し範囲=OFF", off);
+            Assert.Contains("禁止連続の事前フィルタ=ON(この実行では観測なし)", off);
+
+            // Kotlin原本の `TuningTelemetry.c3nFilterSkipped.set(12)` に相当（このC#移植では直接の
+            // Set は公開していないため、同じ終値になるまで公開の増分メソッドを繰り返す）。
+            for (var i = 0; i < 12; i++) TuningTelemetry.IncrementC3nFilterSkipped();
+            var on = TuningTelemetry.Summary(nativeOn: true, parityOn: true, softPolishOn: true);
+            Assert.Contains("ネイティブ加速=ON", on);
+            Assert.Contains("禁止連続の事前フィルタ=ON(12件", on);
+            // reset で実行ごとの計測に戻ること（前の実行の数字を持ち越さない）。
+            TuningTelemetry.Reset();
+            Assert.Contains(
+                "禁止連続の事前フィルタ=ON(この実行では観測なし)",
+                TuningTelemetry.Summary(true, true, true));
+        }
+        finally
+        {
+            PolishGate.WideC3nBreakDays = wide;
+            PolishGate.FilterC3nIncrease = filter;
+            TuningTelemetry.Reset();
+        }
     }
 }
