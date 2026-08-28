@@ -534,13 +534,38 @@ public static partial class V6NativeOptimizer
                 // [3.346.1/方針B, Kotlin原本] 停滞シグナルは単調でない（改善が届けば偽に戻る）ので、
                 //   while 条件には単調な締切・勝者確定だけを置き、シグナルは ConfirmStop で確認窓ぶん
                 //   再確認してから離脱する。一瞬のシグナルで片肺運転にならない。
+                // [C#移植上の発見・監査で指摘] 旧実装は cancellationToken を while 条件にもゲートにも
+                //   一切含めておらず、shouldStop() だけを見ていた。ALNS専任ロール(DayBlockAlns/
+                //   LargeDestroyAlns)は RunAlnsSingle の TimeUp() がトークンを見て静かに戻るだけで
+                //   throw しないため、cancellationToken だけを外側で cancel した場合にこのエポック
+                //   ループが shouldStop() 偽のまま新しいエポックを開始し続けうる（Kotlin原本の
+                //   ensureActive() は全ロール一様にコルーチン境界で効くため生じない、移植固有の非対称）。
+                //   ConfirmStop は既にトークンを最優先で見て即 true を返す実装なので、ここでゲートへ
+                //   合流させるだけで足りる（ConfirmStop 自体の変更は不要）。
+                //
+                //   [実測での訂正] 当初は「Task.WhenAll 後段の ThrowIfCancellationRequested に届くまで
+                //   壁時計締切ぶん無制限に空エポックを回りうる」と見積もっていたが、これは実測で反証した。
+                //   TimeUp() 自体は修正前から token を見て即座に検査ループを終える（すぐ戻るだけで
+                //   投げない）ため各エポックはほぼ無時間で終わり、かつ AdaptiveHypothesisEpochPolicy の
+                //   再配属は無改善エポック1回で即座に発火（攻撃的）＋EscapeRoles は周期3
+                //   （Alns→Rsi→RsiPlus の繰り返し）で Alns系ロールの直後には必ず Rsi系（token 観測時に
+                //   実際に throw する）ロールが来る。この2つの組合せにより、修正前でも token 非throw の
+                //   ロールに留まれるのは最大1エポックだけで、実際の空回りは無時間級のエポックが高々
+                //   1〜2回に自己限定される（w:2 の狙い撃ちテストを2種類作り、修正の有無で挙動が
+                //   区別できない＝どちらも数百msで完了することを確認した。ゆえに black-box なタイミング
+                //   試験でこの修正の有無を判別する回帰試験は作れない＝作らない）。
+                //   それでも本修正は残す価値がある: ①Kotlin原本の ensureActive() が持つ「全ロール一様に
+                //   token を尊重する」という意味論に厳密に一致させる ②この自己限定は
+                //   AdaptiveHypothesisEpochPolicy の再配属の攻撃性に暗黙に依存しており、そのチューニングが
+                //   将来変わった場合の防御になる ③exitReason に "キャンセル" という正しいラベルを持たせる。
                 while (NowMs() < deadline)
                 {
-                    if (shouldStop())
+                    if (shouldStop() || cancellationToken.IsCancellationRequested)
                     {
                         if (await ConfirmStop(shouldStop, deadline, stopIsFinal, cancellationToken).ConfigureAwait(false))
                         {
-                            exitReason = stopIsFinal() ? "探索締切" : "停滞シグナル";
+                            exitReason = cancellationToken.IsCancellationRequested ? "キャンセル"
+                                : stopIsFinal() ? "探索締切" : "停滞シグナル";
                             break;
                         }
                         survivedStops++;
