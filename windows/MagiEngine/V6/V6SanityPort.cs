@@ -25,9 +25,10 @@ namespace MagiEngine.V6;
 ///
 /// <c>ConstraintMus</c> (piece 13, <c>ConstraintMus.cs</c>) and the full <c>buildGuidance</c>
 /// settings-mistake advisor plus <c>c3FamilyJp</c>/duplicate-sequence detection
-/// (piece 14/15, <c>V6SanityPort.Guidance.cs</c>) are now ported. The remainder of
-/// <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics, and the
-/// <c>build()</c> capstone) belongs to phase-7 piece 16 and is not in any file yet.
+/// (piece 14/15, <c>V6SanityPort.Guidance.cs</c>) are ported. <c>V6SanityPort.Build.cs</c>
+/// (piece 16, the final piece of this split) ports the remainder: load-data-bit summaries,
+/// shift-count diagnostics, and the <c>build()</c> capstone that assembles every piece above into
+/// a single <c>V6SanityReport</c>. <c>V6SanityPort.kt</c> is now fully ported.
 /// </summary>
 public sealed record ImpossibleWish(
     int StaffIndex,

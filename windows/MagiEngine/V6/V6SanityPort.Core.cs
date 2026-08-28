@@ -32,10 +32,11 @@ public sealed record AptBalance(int ShiftIdx, string Kigou, int AptSum, int Capa
 /// staff member's OTHER capped shifts leave for one under-target shift),
 /// <c>AptBalance</c>/<c>aptBalances</c> (the apt-target-vs-capacity comparison that also backs
 /// setting-mistake check 6-C, ported here as a pure function — <c>buildGuidance</c> itself, which
-/// turns an overloaded balance into a <c>SettingIssue</c>, now lives in
+/// turns an overloaded balance into a <c>SettingIssue</c>, lives in
 /// <c>V6SanityPort.Guidance.cs</c>, phase-7 piece 14/15), and three
 /// small schedule-independent helpers: <c>restCapacity</c>, <c>rangeOrderConflict</c>, and
-/// <c>safeDayLabel</c>.
+/// <c>safeDayLabel</c> (the last of which is also used by the <c>build()</c> capstone's
+/// schedule-dependent helpers in <c>V6SanityPort.Build.cs</c>, phase-7 piece 16).
 ///
 /// Three genuine Kotlin/.NET divergences were confirmed EMPIRICALLY (real Kotlin execution, and
 /// for the third one also a real C# console-app execution) before writing this file, not assumed:
