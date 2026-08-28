@@ -14,11 +14,11 @@ namespace MagiEngine.Tests.V6;
 /// 各テストは「厳密探索が単一same-day swapの合成では到達できない多日多職員連動手を見つける」
 /// または「coverage入替でも解消不能を証明する」ことを、手計算で答えを設計した最小盤面で固定する。
 ///
-/// [移植メモ] Kotlin原本の11テストのうち2件（<c>passAppliesExactRepairAndIsKeepBestSafe</c> /
-/// <c>passIsNoOpWhenNoCons1</c>）は <c>V6HotfixPasses.applyC1ExactWindowRepair</c> に依存するが、
-/// この関数はフェーズ6でまだ移植されていない（<c>V6HotfixPasses.cs</c> 自体が未作成）。同じ
-/// フェーズ内で後ほど移植される予定のため、その時点でこの2テストを追加する（今は意図的に
-/// 省略＝コンパイルできない呼び出しを持ち込まない）。
+/// [移植メモ・フェーズ6ピース27で解消] Kotlin原本の11テストのうち2件
+/// （<see cref="PassAppliesExactRepairAndIsKeepBestSafe"/> / <see cref="PassIsNoOpWhenNoCons1"/>）は
+/// <c>V6HotfixPasses.ApplyC1ExactWindowRepair</c> に依存し、その移植前は意図的に省略していた
+/// （コンパイルできない呼び出しを持ち込まないため）。同関数の移植（フェーズ6ピース27）に伴い
+/// この2テストを追加し、Kotlin原本の11テストが揃った。
 /// </summary>
 public class C1RepairAnalysisTest
 {
@@ -213,6 +213,39 @@ public class C1RepairAnalysisTest
         var walls = C1RepairAnalysis.ProvenWalls(p, sched);
         Assert.Contains(walls, x => x.Staff == 0 && x.Start == 1); // 2窓目以降の真の壁を検出（旧実装は見逃し）
         Assert.DoesNotContain(walls, x => x.Staff == 0 && x.Start == 0); // 解消可能な窓[0,1]は壁と誤検出しない
+    }
+
+    [Fact]
+    public void PassAppliesExactRepairAndIsKeepBestSafe()
+    {
+        // [フェーズ6, ピース27] ApplyC1ExactWindowRepair の移植完了に伴い、ヘッダーで予告していた
+        //   保留を解消（元Kotlinテスト passAppliesExactRepairAndIsKeepBestSafe）。
+        var s = St(
+            4, 2,
+            new List<IReadOnlyList<int>> { new List<int> { 1, 1, 2, 2 }, new List<int> { 2, 2, 1, 1 } },
+            new List<C1Row> { new("2", "X", "1") });
+        var sched = s.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(s, sched);
+        var res = V6HotfixPasses.ApplyC1ExactWindowRepair(s, sched);
+        var after = UnifiedViolationChecker.Check(s, res.NewSchedule);
+        Assert.True(after.Breakdown.GetValueOrDefault("c1", 0) < before.Breakdown.GetValueOrDefault("c1", 0), "c1 が改善");
+        Assert.True(after.Hard <= before.Hard, "HARD 非悪化");
+        Assert.True(after.Total <= before.Total, "total 非悪化");
+        // 入力配列は不変（呼出側が別名共有しても安全）
+        var echo = s.Schedule.ToIntArray2D();
+        for (var i = 0; i < sched.Length; i++) Assert.Equal(echo[i], sched[i]);
+    }
+
+    [Fact]
+    public void PassIsNoOpWhenNoCons1()
+    {
+        // [フェーズ6, ピース27移植元] passIsNoOpWhenNoCons1
+        var s = St(
+            3, 2,
+            new List<IReadOnlyList<int>> { new List<int> { 1, 0, 1 }, new List<int> { 0, 1, 0 } },
+            new List<C1Row>());
+        var res = V6HotfixPasses.ApplyC1ExactWindowRepair(s, s.Schedule.ToIntArray2D());
+        Assert.Equal(0, res.Applied);
     }
 
     /// <summary>
