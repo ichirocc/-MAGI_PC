@@ -13,13 +13,20 @@ namespace MagiEngine.V6;
 /// ViewModel/Compose could call the same workflow without WebView; this C# port preserves that.
 ///
 /// [phase 4 minimal slice] Only the entry points that do not depend on the search/polish engine
-/// are ported here: <see cref="BuildBusyDetail"/>, <see cref="ConfirmDespiteImpossibleWishes"/>,
-/// <see cref="HandleSmartInitial"/>, <see cref="HandleCheck"/>. Deliberately NOT ported yet —
-/// all depend on <c>V6NativeOptimizer</c> (phase 5) and/or <c>V6HotfixPasses.runPostOptimization</c>
-/// (phase 6), so they stay out of scope until those phases exist: <c>AlgorithmLabel</c>,
-/// <c>OptimizationPlan</c>, <c>optimizationPlan</c>, <c>getAlgorithmLabel</c>,
-/// <c>watchdogStagnationFired</c>, <c>effectiveStallMs</c>, <c>normalStallMs</c>,
-/// <c>MAX_OPTIMIZE_SEC</c>, and <c>handleOptimize</c> itself.
+/// were ported first: <see cref="BuildBusyDetail"/>, <see cref="ConfirmDespiteImpossibleWishes"/>,
+/// <see cref="HandleSmartInitial"/>, <see cref="HandleCheck"/> (this file).
+///
+/// [phase 7 piece 6, <c>V6FinalPort.AlgorithmPlan.cs</c>] <c>MAX_OPTIMIZE_SEC</c>/<c>AlgorithmLabel</c>/
+/// <c>OptimizationPlan</c>/<c>optimizationPlan</c>/<c>getAlgorithmLabel</c> are now ported (this
+/// class is <c>partial</c> to accommodate that file, and future pieces of this phase).
+///
+/// Deliberately still NOT ported: <c>watchdogStagnationFired</c>/<c>effectiveStallMs</c>/
+/// <c>normalStallMs</c> (piece 7 — depend on nothing not yet ported, but are scoped as their own
+/// piece since <c>V6FinalPortTest.kt</c> has 17 dedicated Kotlin tests for them with zero existing
+/// C# coverage) and <c>handleOptimize</c> itself (piece 18 — the ~740-line core orchestration,
+/// which depends on <c>V6NativeOptimizer</c> (phase 5, done) and
+/// <c>V6HotfixPasses.runPostOptimization</c> (phase 6, done) plus several still-unported helper
+/// pieces of this same file/phase).
 ///
 /// [async 移植上の判断] Kotlin's <c>suspend fun ... = withContext(Dispatchers.Default) { ... }</c>
 /// here is purely "run this CPU-bound work off the caller's (typically UI) thread" — it is not
@@ -30,7 +37,7 @@ namespace MagiEngine.V6;
 /// *concurrent*, cancellable, multi-worker coroutines in <c>V6NativeOptimizer</c> to TPL), which
 /// is a different concern from this "just move synchronous work off-thread" pattern.
 /// </summary>
-public static class V6FinalPort
+public static partial class V6FinalPort
 {
     /// <summary>
     /// Faithful port of Kotlin's <c>BusyDetail</c> data class. <c>Base</c> and <c>StartedAt</c>
