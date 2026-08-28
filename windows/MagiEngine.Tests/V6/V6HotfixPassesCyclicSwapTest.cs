@@ -9,8 +9,8 @@ namespace MagiEngine.Tests.V6;
 
 /// <summary>
 /// [フェーズ6, 循環交換系] <see cref="V6HotfixPasses.ApplyCyclicSwapPolish"/>／
-/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/>／<see cref="V6HotfixPasses.ApplyBlockRotationPolish"/>
-/// の検証。
+/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/>／<see cref="V6HotfixPasses.ApplyBlockRotationPolish"/>／
+/// <see cref="V6HotfixPasses.ApplyWeeklyRebalancePolish"/> の検証。
 ///
 /// [Kotlin原本] <c>V6FinalBridgePortTest.kt</c>の <c>cyclicSwapPolishNeverWorsens</c>
 /// （<c>sampleState()</c> 固定盤面での退化しないことの確認）を <see cref="NeverWorsensTheGivenSchedule"/>
@@ -25,6 +25,14 @@ namespace MagiEngine.Tests.V6;
 /// <c>blockRotationPolishFindsAnchorEvenWhenC1MarkIsShadowedByHeavierViolationAtSameCell</c>
 /// （3者回転＋anchor-shadowing退行の回帰）を <see cref="BlockRotationPolishFindsAnchorEvenWhenC1MarkIsShadowedByHeavierViolationAtSameCell"/>
 /// として移植する（Kotlin原本は別ファイルのテストだが、対象関数がこのファミリーに属するためここへ集約）。
+///
+/// <see cref="V6HotfixPasses.ApplyWeeklyRebalancePolish"/> は専用の <c>WeeklyRebalancePolishTest.kt</c>
+/// から、対象関数を直接使う2件（<c>weeklyRebalanceReducesWeeklyDeviationAndPreservesCoverage</c>→
+/// <see cref="WeeklyRebalanceReducesWeeklyDeviationAndPreservesCoverage"/>／
+/// <c>weeklyRebalanceIsNoOpWhenBalanced</c>→<see cref="WeeklyRebalanceIsNoOpWhenBalanced"/>）を移植する。
+/// 同ファイルの残り2件（<c>alternatingOptimizationReducesWeeklyViaPerDayReassignment</c>／
+/// <c>alternatingOptimizationIsNoOpWhenAlreadyOptimal</c>）は <c>applyAlternatingSoftPolish</c>
+/// （まだ未移植の別関数＝日割当系ファミリー）を対象とするため、その関数を移植する際に別途ポートする。
 /// </summary>
 public class V6HotfixPassesCyclicSwapTest
 {
@@ -227,5 +235,64 @@ public class V6HotfixPassesCyclicSwapTest
         Assert.Equal(0, r.Applied);
         Assert.Equal(sched[0][0], r.NewSchedule[0][0]);
         Assert.Equal(sched[1][0], r.NewSchedule[1][0]);
+    }
+
+    // 2職員・14日・シフト W(need1=1)/休。各日ちょうど1人が W に入る（被覆= covU/covO 0）。
+    // A は weekday {6,0,1} に勤務が偏り(各2回)・weekday {3,4,5} は0回 → weekly-L1=6。
+    // B はその補集合で対称に weekly-L1=6（合計12）。長方形交換で過剰曜日→過少曜日へ勤務を移せる。
+    private static MagiState WeeklyState() => MinimalState.Build(
+        startDate: "2026-08-01", endDate: "2026-08-14",
+        shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+        groups: new List<Group> { new("G0", "G0") },
+        staffList: new List<Staff> { new("A", 0), new("B", 0) },
+        schedule: new List<IReadOnlyList<int>>
+        {
+            new List<int> { 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0 }, // A: {0,1,2,3,7,8,9}
+            new List<int> { 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1 }, // B: 残り
+        });
+
+    [Fact]
+    public void WeeklyRebalanceReducesWeeklyDeviationAndPreservesCoverage()
+    {
+        var st = WeeklyState();
+        var sched = st.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(st, sched);
+
+        // 前提: 被覆は満たされ(covU/covO=0)、weekly のみが違反として残っている。
+        Assert.Equal(0, before.Breakdown.GetValueOrDefault("covU", 0));
+        Assert.Equal(0, before.Breakdown.GetValueOrDefault("covO", 0));
+        Assert.Equal(0, before.Hard);
+        Assert.True(before.Breakdown.GetValueOrDefault("weekly", 0) > 0, "初期 weekly>0（曜日の偏りがある）");
+
+        var res = V6HotfixPasses.ApplyWeeklyRebalancePolish(st, sched);
+        var after = UnifiedViolationChecker.Check(st, res.NewSchedule);
+
+        Assert.True(res.Applied > 0, "長方形交換を1手以上採用したこと");
+        Assert.True(after.Breakdown.GetValueOrDefault("weekly", 0) < before.Breakdown.GetValueOrDefault("weekly", 0), "weekly が減少したこと");
+        // keep-best: total は非悪化、HARD は不変(=0)、被覆は保存。
+        Assert.True(after.Total <= before.Total, "total が非悪化(keep-best)");
+        Assert.Equal(0, after.Hard); // HARD 不変(=0)
+        Assert.Equal(0, after.Breakdown.GetValueOrDefault("covU", 0)); // 被覆保存: covU=0 のまま
+        Assert.Equal(0, after.Breakdown.GetValueOrDefault("covO", 0)); // 被覆保存: covO=0 のまま
+    }
+
+    [Fact]
+    public void WeeklyRebalanceIsNoOpWhenBalanced()
+    {
+        // 既に weekly=0（各職員が全曜日を均等に勤務）なら 1手も採用しない（空探索は即終了）。
+        // 7日・1職員が毎日 W（各曜日ちょうど1回＝weekly=0）。need を満たすため2人目は毎日休。
+        var st = MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-07",
+            shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+            groups: new List<Group> { new("G0", "G0") },
+            staffList: new List<Staff> { new("A", 0), new("B", 0) },
+            schedule: new List<IReadOnlyList<int>>
+            {
+                new List<int> { 1, 1, 1, 1, 1, 1, 1 },
+                new List<int> { 0, 0, 0, 0, 0, 0, 0 },
+            });
+        var sched = st.Schedule.ToIntArray2D();
+        var res = V6HotfixPasses.ApplyWeeklyRebalancePolish(st, sched);
+        Assert.Equal(0, res.Applied); // 均等配置では採用0（no-op）
     }
 }
