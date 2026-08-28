@@ -20,6 +20,15 @@ public static partial class V6HotfixPasses
     // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
     private static bool IsBetter(ViolationReport a, ViolationReport b) => UnifiedViolationChecker.BetterReport(a, b);
 
+    /// <summary>個人上限(<c>Problem.RangeHi</c>)の未設定センチネル(<see cref="int.MaxValue"/>)を
+    /// 「実質無制限」を表す大きな有限値へ丸める。日別の highs/lows 走査や Hungarian のコスト行列で
+    /// <see cref="int.MaxValue"/> をそのまま算術に使うとオーバーフローするため。</summary>
+    private static int EffectiveHi(Problem p, int i, int k)
+    {
+        var hi = p.RangeHi[i][k];
+        return hi == int.MaxValue ? int.MaxValue / 4 : hi;
+    }
+
     /// <summary>
     /// C3 系ブロック研磨の低コストな局所目的。公式の <see cref="UnifiedViolationChecker.BetterReport"/> と同じ
     /// HARD → weightedScore → total 順で比較する。
