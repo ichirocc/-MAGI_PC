@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 
 namespace MagiEngine.V6;
@@ -18,9 +19,10 @@ namespace MagiEngine.V6;
 /// internal static class へ集約する」パターン）に従い、<c>internal</c>
 /// （同一アセンブリ内の全クラスから可視・アセンブリ外へは非公開）としてここへ集約する。
 ///
-/// <c>csvBody</c> はフェーズ7ピース11の3クラスのみが使う（ピース10側の3クラス
+/// <c>CsvBody</c>（<see cref="CsvBody"/>）はフェーズ7ピース11の3クラス（<c>StaffCsvIO</c>/
+/// <c>WishesCsvIO</c>/<c>ConstraintsCsvIO</c>）のみが使う（ピース10側の3クラス
 /// <c>RosterCsvImport</c>/<c>FlatRosterCsvImport</c>/<c>ScheduleCsvBridge</c> からは移植元
-/// Kotlin コードで一度も呼ばれないことを確認済み）ため、ピース11でこのファイルへ追記する。
+/// Kotlin コードで一度も呼ばれないことを確認済み）ため、ピース11でこのファイルへ追記した。
 /// </summary>
 internal static class CsvUtil
 {
@@ -136,5 +138,21 @@ internal static class CsvUtil
             rows.Add(new List<string>(row));
         }
         return new CsvParse(rows, inQuote);
+    }
+
+    /// <summary>
+    /// [フェーズ7ピース11] コンポーネント別CSV（<see cref="StaffCsvIO"/>/<see cref="WishesCsvIO"/>/
+    /// <see cref="ConstraintsCsvIO"/>）の本体行を返す。
+    ///
+    /// 旧実装は各 parse が「1行だけのCSVを無条件に拒否」し、かつヘッダ判定を「先頭が既知の値か」という
+    /// 間接的な推測に頼っていた。<c>Build</c> が出す実ヘッダ（氏名 / 種別 …）で明示的に判定し、
+    /// それ以外は全行を本体として扱う。1行データも取り込める。
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<string>> CsvBody(
+        IReadOnlyList<IReadOnlyList<string>> rows, string headerFirstCell)
+    {
+        if (rows.Count == 0) return Array.Empty<IReadOnlyList<string>>();
+        var head = (rows[0].Count > 0 ? rows[0][0] : "").Trim();
+        return head == headerFirstCell ? rows.Skip(1).ToList() : rows;
     }
 }

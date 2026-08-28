@@ -211,4 +211,13 @@ public static class KotlinInterop
         int r = x % y;
         return (r != 0 && (r < 0) != (y < 0)) ? r + y : r;
     }
+
+    /// <summary>
+    /// [フェーズ7ピース11] Mirrors Kotlin's <c>String.take(n)</c>: the first <paramref name="n"/>
+    /// characters, or the whole string if it is shorter than <paramref name="n"/> — unlike
+    /// <see cref="string.Substring(int, int)"/>, this never throws when <paramref name="n"/>
+    /// exceeds the string's length (every call site in this port passes a fixed positive literal,
+    /// so Kotlin's own <c>require(n &gt;= 0)</c> guard is not reproduced).
+    /// </summary>
+    public static string Take(this string s, int n) => s.Substring(0, Math.Min(n, s.Length));
 }
