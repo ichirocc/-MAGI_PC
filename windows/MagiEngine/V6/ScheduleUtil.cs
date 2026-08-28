@@ -1,3 +1,4 @@
+using System.Globalization;
 using MagiEngine.Model;
 
 namespace MagiEngine.V6;
@@ -7,9 +8,8 @@ namespace MagiEngine.V6;
 /// and <see cref="FillShiftIndex"/> were ported ahead of the rest (phase 2), because
 /// <see cref="Problem"/> itself depends on them directly; phase 3 (parity triangle) added the
 /// remainder here rather than in a new file, per that earlier decision to consolidate.
-///
-/// Deliberately NOT ported here: <c>formatDay</c> (Japanese weekday display formatting — UI-facing,
-/// unrelated to evaluation correctness; deferred to phase 7 alongside CSV/diagnostics).
+/// [フェーズ7ピース1] <see cref="FormatDay"/> (Japanese weekday display formatting for CSV headers,
+/// UI-facing, unrelated to evaluation correctness) added here.
 /// </summary>
 public static class ScheduleUtil
 {
@@ -194,5 +194,102 @@ public static class ScheduleUtil
         var rows = new List<IReadOnlyList<int>>(schedule.Length);
         foreach (var row in schedule) rows.Add(row.ToList());
         return state with { Schedule = rows };
+    }
+
+    /// <summary>
+    /// [フェーズ7ピース1] Faithful port of <c>MirrorCore.kt</c>'s <c>formatDay</c> — the day header
+    /// used by CSV export (<c>ScheduleCsvBridge.kt:333</c>): <paramref name="startDate"/> + offset
+    /// days, formatted as <c>"M/d(曜)"</c>, falling back to <c>"(offset+1)日"</c> on any failure.
+    ///
+    /// Kotlin's implementation parses via <c>SimpleDateFormat("yyyy-MM-dd")</c> +
+    /// <c>java.util.Calendar</c> (NOT the strict <c>java.time.LocalDate.parse</c> used by the
+    /// already-ported sibling <see cref="Problem.Dow0"/> for this SAME <c>state.StartDate</c>
+    /// field — a genuine, deliberate divergence in the Kotlin source between these two functions,
+    /// preserved rather than "fixed" per HF77). This is meaningfully more lenient than a strict
+    /// exact-format parse, confirmed empirically against a real Kotlin runtime across ~24 malformed/
+    /// edge-case inputs (see phase-7 verification notes) in three independent dimensions:
+    ///
+    ///  1. Numeric field widths are NOT fixed — "2026-6-1" (unpadded month/day) parses the same as
+    ///     "2026-06-01". (The literal '-' separators are NOT lenient, though: "2026/06/01" fails to
+    ///     parse in real Kotlin and hits the fallback branch — confirmed empirically.)
+    ///  2. <c>DateFormat.parse(String)</c> only requires SOME progress from position 0, not a full
+    ///     match — trailing content after the day field is silently ignored ("2026-06-01T00:00:00",
+    ///     "2026-06-01T12:34:56.789Z", "2026-06-01x" all parse to June 1, 2026, ignoring everything
+    ///     after the day field — confirmed empirically, including the fractional-seconds+'Z' form).
+    ///  3. Out-of-range numeric field values roll over via Calendar's field-carry arithmetic rather
+    ///     than failing to parse — e.g. month=13 carries into January of the next year, day=0
+    ///     carries into the last day of the previous month (confirmed for all four directions:
+    ///     month overflow/underflow, day overflow/underflow).
+    ///
+    /// Rather than hand-reimplementing Calendar's own field-normalization algorithm, dimension 3
+    /// is reproduced by leaning on .NET's own correct <see cref="DateOnly.AddMonths"/>/
+    /// <see cref="DateOnly.AddDays"/> carry arithmetic: constructing <c>new DateOnly(year, 1, 1)
+    /// .AddMonths(month - 1).AddDays(day - 1)</c> is exactly equivalent to <c>new
+    /// DateOnly(year, month, day)</c> for valid in-range values, and naturally degrades to the same
+    /// carry semantics as Calendar for out-of-range ones (verified to reproduce all four rollover
+    /// cases exactly).
+    ///
+    /// [Accepted, documented gaps — deliberately NOT replicated, both confirmed empirically and
+    /// both firmly outside anything this app's own date picker could ever produce]
+    ///  (a) Years before Java's Gregorian-calendar cutover (1582-10-15): <c>GregorianCalendar</c>
+    ///      switches to JULIAN calendar day-of-week arithmetic for these ("26-06-01" -&gt; year 26
+    ///      AD -&gt; real Kotlin shows Saturday), whereas <see cref="DateOnly"/> is always proleptic
+    ///      GREGORIAN regardless of how far back the date goes (this port shows Monday for the same
+    ///      input) — the two calendar systems' leap-year rules diverge over the centuries.
+    ///  (b) Year 0000 (or, through <see cref="TryParseLenientYmd"/>'s unsigned-digit-run reader,
+    ///      any input literally spelling a zero year field): Java's <c>Calendar.YEAR</c> field is
+    ///      always non-negative, with a separate BC/AD <c>ERA</c> field — year 0 input becomes
+    ///      "1 BC" and a real date IS produced. <see cref="DateOnly"/>'s valid range is 1-9999
+    ///      (no BC/proleptic-negative-year support), so this throws and falls to the fallback
+    ///      branch instead of a rolled date.
+    /// </summary>
+    public static string FormatDay(string startDate, int offset)
+    {
+        try
+        {
+            if (!TryParseLenientYmd(startDate, out var y, out var m, out var d))
+                return $"{offset + 1}日";
+
+            var date = new DateOnly(y, 1, 1).AddMonths(m - 1).AddDays(d - 1).AddDays(offset);
+            char weekday = "日月火水木金土"[(int)date.DayOfWeek]; // Sunday=0..Saturday=6 in both languages
+            return $"{date.Month}/{date.Day}({weekday})";
+        }
+        catch (Exception)
+        {
+            return $"{offset + 1}日";
+        }
+    }
+
+    /// <summary>
+    /// The lenient y/m/d tokenizer backing <see cref="FormatDay"/> (see its KDoc for the exact
+    /// leniency dimensions replicated). Skips leading whitespace before each numeric field (matches
+    /// an empirically-observed Java <c>NumberFormat</c>-derived leniency of <c>SimpleDateFormat</c>
+    /// itself, not a general string-trim), reads a run of ASCII digits of any width for each of
+    /// year/month/day, requires a literal '-' between each, and does NOT require consuming the rest
+    /// of the string after the day field.
+    /// </summary>
+    private static bool TryParseLenientYmd(string s, out int year, out int month, out int day)
+    {
+        year = month = day = 0;
+        int idx = 0;
+        int n = s.Length;
+
+        bool TryReadDigits(out int value)
+        {
+            while (idx < n && char.IsWhiteSpace(s[idx])) idx++;
+            int start = idx;
+            while (idx < n && s[idx] >= '0' && s[idx] <= '9') idx++;
+            if (idx == start) { value = 0; return false; }
+            value = int.Parse(s.AsSpan(start, idx - start), CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        if (!TryReadDigits(out year)) return false;
+        if (idx >= n || s[idx] != '-') return false;
+        idx++;
+        if (!TryReadDigits(out month)) return false;
+        if (idx >= n || s[idx] != '-') return false;
+        idx++;
+        return TryReadDigits(out day);
     }
 }

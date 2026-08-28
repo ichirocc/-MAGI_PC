@@ -81,11 +81,16 @@ public sealed record V6OptimizerResult(
     public IReadOnlySet<string> InfeasibleFamilies { get; init; } = InfeasibleFamilies ?? new HashSet<string>();
 
     /// <summary>
-    /// [Kotlin原本] 同上。<c>AdaptiveElite</c> は internal なので本体プロパティとして持つ
-    /// （<c>copy()</c> は引き継がない＝作った側が明示的に載せる）— phase 5d/5e scope。C# の record
-    /// の <c>with</c> 式は既定で全プロパティをコピーするため、Kotlin の「copy() は引き継がない」という
-    /// 意図的な非対称は phase 5d で <c>AdaptiveElite</c> の実体を導入する際に、このプロパティを
-    /// record の外側（mutable な通常プロパティのまま、<c>init</c> を付けない）に保つことで再現する。
+    /// [Kotlin原本] <c>internal var fusionElites: List&lt;AdaptiveElite&gt; = emptyList()</c> — 同上
+    /// (<see cref="Alternatives"/>/<see cref="InfeasibleFamilies"/>)。<c>AdaptiveElite</c> は internal
+    /// なので本体プロパティとして持つ（data class の <c>copy()</c> は引き継がない＝作った側が明示的に
+    /// 載せる）。C# の record の <c>with</c> 式は既定で全プロパティをコピーするため、Kotlin の
+    /// 「copy() は引き継がない」という意図的な非対称は、このプロパティを record の外側（mutable な
+    /// 通常プロパティのまま、<c>init</c> を付けない）に保つことで再現する。
+    /// [フェーズ7ピース1] <c>AdaptiveElite</c> の実体は既にフェーズ5で導入済みのため、暫定の
+    /// <c>object?</c> プレースホルダから本来の型へ確定した。Kotlin 側は non-nullable
+    /// （既定 <c>emptyList()</c>）＝<c>IReadOnlyList&lt;AdaptiveElite&gt;?</c> ではなく
+    /// <c>IReadOnlyList&lt;AdaptiveElite&gt;</c>。
     /// </summary>
-    public object? FusionElites { get; set; }
+    public IReadOnlyList<AdaptiveElite> FusionElites { get; set; } = Array.Empty<AdaptiveElite>();
 }

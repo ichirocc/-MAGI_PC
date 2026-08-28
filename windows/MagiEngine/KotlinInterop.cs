@@ -73,6 +73,97 @@ public static class KotlinInterop
     }
 
     /// <summary>
+    /// Mirrors Kotlin's <c>String.toDoubleOrNull()</c>. Used by <c>V6PortAnalyzer.kt</c>'s
+    /// <c>aptPenalty</c>/<c>equalizationPenalty</c> (both call sites already <c>.trim()</c> first,
+    /// exactly where the Kotlin source does — this method does not trim on its own, matching
+    /// <see cref="ToIntOrNull"/>'s convention).
+    ///
+    /// [フェーズ7ピース1] The phase-7 master plan (from an automated "Understand" workflow) claimed
+    /// this needed the same full-width-Unicode-digit-aware, hand-rolled character accumulator as
+    /// <see cref="ToIntOrNull"/>. That claim was checked empirically against a real Kotlin runtime
+    /// (<c>kotlin-compiler-embeddable</c>) before being trusted, and is **false**:
+    /// <c>"３".toDoubleOrNull()</c> (full-width 3) returns <c>null</c> in real Kotlin — unlike
+    /// <c>toIntOrNull</c>, <c>toDoubleOrNull</c> does not support full-width digits. It instead
+    /// delegates essentially to Java's <c>Double.parseDouble</c> grammar, which — after extensive
+    /// empirical cross-checking against .NET's own <see cref="double.TryParse(string, NumberStyles, IFormatProvider, out double)"/>
+    /// with <see cref="NumberStyles.Float"/> + <see cref="CultureInfo.InvariantCulture"/> — turned
+    /// out to match it almost exactly, with three confirmed divergences handled explicitly below:
+    ///
+    ///  1. Kotlin accepts a single trailing Java float/double literal type-suffix character
+    ///     (<c>d</c>/<c>D</c>/<c>f</c>/<c>F</c>) appended to a genuine numeral (e.g. <c>"1.5d"</c>,
+    ///     <c>"1e400d"</c> — the latter legitimately overflows to <c>Infinity</c>, and must still
+    ///     succeed). .NET's TryParse rejects any trailing letter outright, so this is handled via
+    ///     an explicit strip-and-retry fallback.
+    ///  2. Kotlin accepts the <c>NaN</c>/<c>Infinity</c> keyword productions (with optional sign)
+    ///     **case-sensitively, exact spelling only** — <c>"nan"</c>/<c>"NAN"</c>/<c>"infinity"</c>/
+    ///     <c>"INFINITY"</c>/<c>"-infinity"</c> etc. all return <c>null</c>. .NET's TryParse
+    ///     recognizes these symbols **case-insensitively**, so a naive direct delegation would
+    ///     wrongly accept those spellings; <see cref="LooksLikeNaNOrInfinityKeyword"/> rejects any
+    ///     non-exact-case spelling before/instead of trusting TryParse's built-in recognition.
+    ///  3. The type suffix is valid ONLY on a genuine <c>FloatingPointLiteral</c>, never on the
+    ///     keyword productions themselves — <c>"NaNd"</c>/<c>"Infinityd"</c>/<c>"+Infinityd"</c>/
+    ///     <c>"-Infinityd"</c> all return <c>null</c> in real Kotlin (confirmed empirically; the
+    ///     JLS/Kotlin grammar treats these as separate productions). The suffix-stripping fallback
+    ///     below re-applies the same keyword rejection to the stripped remainder — so e.g.
+    ///     <c>"NaNd"</c> strips to <c>"NaN"</c>, which is caught by the keyword check and rejected,
+    ///     rather than being handed to a exact-case fast path that would wrongly accept it.
+    ///
+    /// A fourth divergence (Java/Kotlin's hex-float literal grammar, e.g. <c>"0x1.8p3" -&gt; 12.0</c>)
+    /// is a deliberate, accepted gap: it is NOT replicated here. Both real call sites in this
+    /// codebase parse simple decimal apt-count overrides that will never contain hex floats, and
+    /// .NET has no built-in support for the C99 hex-float grammar to delegate to.
+    /// </summary>
+    public static double? ToDoubleOrNull(string? s)
+    {
+        if (s is null) return null;
+        var t = s.Trim();
+        if (t.Length == 0) return null;
+
+        var direct = ParseCore(t);
+        if (direct.HasValue) return direct;
+
+        char last = t[t.Length - 1];
+        if (last is not ('d' or 'D' or 'f' or 'F')) return null;
+        var stripped = t.Substring(0, t.Length - 1);
+        if (stripped.Length == 0) return null;
+
+        // The d/D/f/F suffix applies only to a genuine numeral literal, never to the NaN/Infinity
+        // keyword productions (see divergence #3 above) — reject before parsing the remainder.
+        if (LooksLikeNaNOrInfinityKeyword(stripped)) return null;
+        return double.TryParse(stripped, NumberStyles.Float, CultureInfo.InvariantCulture, out var v2)
+            ? v2
+            : null;
+    }
+
+    /// <summary>Parses one un-suffixed literal per Kotlin's toDoubleOrNull grammar (see divergences #2/#3 on <see cref="ToDoubleOrNull"/>).</summary>
+    private static double? ParseCore(string t)
+    {
+        // Exact-case NaN/Infinity keyword productions — the only spellings toDoubleOrNull accepts.
+        switch (t)
+        {
+            case "NaN": case "+NaN": case "-NaN": return double.NaN;
+            case "Infinity": case "+Infinity": return double.PositiveInfinity;
+            case "-Infinity": return double.NegativeInfinity;
+        }
+        // Any other spelling of the keyword (wrong case) must be rejected before calling
+        // TryParse, which would otherwise recognize it case-insensitively and let it through.
+        if (LooksLikeNaNOrInfinityKeyword(t)) return null;
+        return double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
+    }
+
+    /// <summary>
+    /// True if <paramref name="t"/> (optionally signed) case-insensitively spells "NaN" or
+    /// "Infinity" — i.e. it is SOME spelling of the keyword productions, exact-case or not. Used
+    /// to reject non-exact-case spellings that .NET's TryParse would otherwise silently accept.
+    /// </summary>
+    private static bool LooksLikeNaNOrInfinityKeyword(string t)
+    {
+        var core = t.Length > 0 && (t[0] == '+' || t[0] == '-') ? t.Substring(1) : t;
+        return core.Equals("NaN", StringComparison.OrdinalIgnoreCase)
+            || core.Equals("Infinity", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Mirrors Java's <c>Math.round(double a): long</c> — "round half up" (an exact .5 midpoint
     /// always rounds toward positive infinity, regardless of sign), per the JDK's documented
     /// contract: the result equals <c>(long) Math.floor(a + 0.5d)</c> for every finite value,
