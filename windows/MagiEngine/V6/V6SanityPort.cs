@@ -16,11 +16,17 @@ namespace MagiEngine.V6;
 ///   used to be this file's <c>NotImplementedException</c> stub), <c>OtherShiftCapSum</c>/
 ///   <c>StructuralPersonalFloor</c>, <c>AptBalance</c>/<c>AptBalances</c>,
 ///   <c>RestCapacity</c>/<c>RangeOrderConflict</c>/<c>SafeDayLabel</c>.
+/// - <c>V6SanityPort.ViolationDebug.cs</c> (phase 7 piece 12): <c>BuildViolationDebug</c>, the
+///   schedule-dependent per-run diagnostic log (supply/demand summary, upper/lower-bound check,
+///   coverage/count/cell violation detail, the c1-per-rule and weekly breakdowns). Depends only
+///   on this file's <c>ForcedCovU</c>/<c>SafeDayLabel</c> plus <see cref="Problem"/>/
+///   <c>ScheduleUtil</c>/<c>ViolationReport</c> — no dependency on <c>buildGuidance</c> or
+///   <c>c3FamilyJp</c> (that helper is exclusive to <c>buildGuidance</c>, piece 14's scope).
 ///
 /// The remainder of <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics,
-/// duplicate-sequence detection, the full <c>buildGuidance</c> settings-mistake advisor, the
-/// <c>buildViolationDebug</c> report, the <c>build()</c> capstone) belongs to later phase-7
-/// pieces and is not in either file yet.
+/// duplicate-sequence detection, <c>c3FamilyJp</c>, the full <c>buildGuidance</c>
+/// settings-mistake advisor, <c>ConstraintMus</c>-backed guidance, the <c>build()</c> capstone)
+/// belongs to later phase-7 pieces (13–16) and is not in any file yet.
 /// </summary>
 public sealed record ImpossibleWish(
     int StaffIndex,
