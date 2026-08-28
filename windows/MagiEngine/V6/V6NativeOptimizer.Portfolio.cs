@@ -425,4 +425,435 @@ public static partial class V6NativeOptimizer
                 throw new ArgumentOutOfRangeException(nameof(assignment), assignment.Role, "unknown HypothesisEpochRole");
         }
     }
+
+    /// <summary>
+    /// Faithful port of Kotlin's private <c>runAdaptivePortfolio</c> — the highest-risk piece of this
+    /// migration (per the plan's explicit ordering note), the async W0..W7 island-model coordinator
+    /// underlying the PORTFOLIO algorithm. Each of <see cref="PortfolioWorkerCount"/> workers runs an
+    /// independent sequence of epochs, each epoch picking a role (via
+    /// <see cref="AdaptiveHypothesisEpochPolicy.AssignmentFor"/>), building a starting board (via
+    /// <see cref="AdaptiveEpochStart"/>), then searching from it for that epoch's quantum using
+    /// whichever of <see cref="RunAlns"/>/<see cref="RunRsi"/>/<see cref="RunRsiPlus"/> the role's
+    /// algorithm dictates. Improvements flow both into the worker's own elite trajectory and (via a
+    /// shared lock) into the cross-worker <c>globalBest</c>; every intermediate board is also
+    /// registered into <see cref="AdaptiveEliteArchive"/> for later path-relinking/fusion.
+    ///
+    /// [C#移植上の判断・coroutines→TPL] Kotlin 原本は <c>supervisorScope</c> ＋
+    /// <c>async(Dispatchers.Default)</c>（各ワーカー = 1 コルーチン）＋
+    /// <c>jobs.map { it.await() }</c>（例外を無条件伝播＝<c>RunMultiWorker</c> の
+    /// per-task try/catch とは異なる設計 — 各ワーカー自身が2段の try/catch で
+    /// <c>OperationCanceledException</c> 以外を全て捕捉・<see cref="AdaptiveWorkerOutcome"/> へ変換
+    /// して正常終了するため、この <c>await</c> がスローされるのは真にキャンセルされた場合のみ）。
+    /// C# 側は <c>Task.Run(async () =&gt; { ... })</c>（<c>Dispatchers.Default</c> と同じ役割）＋
+    /// <c>Task.WhenAll(jobs)</c>（<c>SaOptimizer.Run</c>/<c>RunMultiWorker</c>で確立済みの単一ループ
+    /// eager 起動パターン、<see cref="RunMultiWorker"/> の doc comment 参照）＋直後の
+    /// <c>cancellationToken.ThrowIfCancellationRequested()</c>（<c>ensureActive()</c> の等価物、
+    /// <see cref="RunMultiWorker"/> で確立済み）で翻訳する。<c>AtomicInteger</c>/<c>AtomicReference</c>
+    /// は <see cref="Interlocked"/> 経由のプレーンフィールドへ（<c>SaOptimizer.Run</c>/
+    /// <c>RunMultiWorker</c> で確立済み）、複数フィールドをまとめて更新する
+    /// <c>synchronized(lock)</c> ブロック（<c>globalBest</c>/<c>globalReport</c>/<c>globalLogs</c>/
+    /// <c>sharedTrajectories</c> の一貫性を保つ5箇所）は <c>lock (lockObj) { ... }</c>
+    /// （<c>SaOptimizer.Run</c>/<see cref="AdaptiveEliteArchive"/> で確立済み）へ。
+    /// </summary>
+    internal static async Task<V6OptimizerResult> RunAdaptivePortfolio(
+        MagiState state,
+        int[][] entry,
+        int w,
+        V6OptimizerOptions options,
+        int budgetSec,
+        Func<bool> shouldStop,
+        Func<bool> stopIsFinal,
+        Action<string, ViolationReport?, long, long> onProgress,
+        CancellationToken cancellationToken = default)
+    {
+        var started = NowMs();
+        var deadline = started + Math.Max(budgetSec, 1) * 1000L;
+        var baseSeed = ActualSeed(options.Seed);
+        var workers = PortfolioWorkerCount(w);
+        var lockObj = new object();
+        Exception? firstError = null;
+        var hardZeroWinner = -1;
+        var globalImproves = 0;
+        var archive = new AdaptiveEliteArchive();
+
+        var sharedTrajectories = new int[workers][][];
+        for (var i = 0; i < workers; i++) sharedTrajectories[i] = HypothesisStartFor(state, entry, i, baseSeed);
+        var initialReports = new ViolationReport[workers];
+        for (var i = 0; i < workers; i++) initialReports[i] = UnifiedViolationChecker.Check(state, sharedTrajectories[i]);
+
+        var globalBest = entry.Copy2D();
+        var globalReport = UnifiedViolationChecker.Check(state, globalBest);
+        IReadOnlyList<MirrorLog> globalLogs = Array.Empty<MirrorLog>();
+        archive.Register(entry, globalReport, HypothesisEpochRole.BaselineRefine, worker: 0, epoch: 0, bridge: false);
+        for (var i = 0; i < workers; i++)
+        {
+            // [3.308.0, Kotlin原本] 初期配置であることを名前で示す（値は AssignmentFor(i, 0) と同じ）。
+            var assignment0 = AdaptiveHypothesisEpochPolicy.InitialAssignmentFor(i);
+            archive.Register(sharedTrajectories[i], initialReports[i], assignment0.Role, i, 0,
+                bridge: initialReports[i].Hard == globalReport.Hard + 1);
+            if (Better(initialReports[i], globalReport))
+            {
+                globalBest = sharedTrajectories[i].Copy2D();
+                globalReport = initialReports[i];
+            }
+        }
+
+        // [3.376.0, Kotlin原本] hardZeroWinner は「先に HARD=0 へ到達した者が勝ち＝残りを即キャンセル」
+        //   していた省電力機構の名残。HARD=0 到達後に残る仕事は全部 SOFT なので、勝者1本だけが担うと
+        //   利用者が指定した並列度が使われない＝キル自体を撤廃し、記録専用フィールドとしてのみ残す。
+        var jobs = new Task<AdaptiveWorkerOutcome>[workers];
+        for (var wi = 0; wi < workers; wi++)
+        {
+            var i = wi; // capture-by-value for the loop variable, matching Kotlin's `Array(workers) { i -> ... }`.
+            jobs[i] = Task.Run(async () =>
+            {
+                int[][] trajectory;
+                lock (lockObj) { trajectory = sharedTrajectories[i].Copy2D(); }
+                var elite = trajectory.Copy2D();
+                var eliteReport = initialReports[i];
+                IReadOnlyList<MirrorLog> eliteLogs = Array.Empty<MirrorLog>();
+                var reassignments = 0;
+                var stagnantEpochs = 0;
+                var improvedPrevious = false;
+                var epoch = 0;
+                var iterations = 0L;
+                var exitReason = "";   // [3.346.0, Kotlin原本] epoch ループの離脱理由（下で確定）
+                var survivedStops = 0; // [3.346.1, Kotlin原本] 一瞬の停滞シグナルを見送った回数
+                // [C#移植上の判断・LinkedHashMap] Kotlin の LinkedHashMap（挿入順保持）を素の
+                //   Dictionary へ。ここは accumulate-only（削除なし）＝.NET の Dictionary は実装上
+                //   挿入順を保つ（保証はされないが本ポート全体でこの前提を踏襲）。影響は roleNote の
+                //   ログ表示順のみ（roleTotals の集計側は明示的に値降順ソートするため無関係）。
+                var roleRuns = new Dictionary<HypothesisEpochRole, int>();
+                var roleMillis = new Dictionary<HypothesisEpochRole, long>();
+                // [3.409.17, Kotlin原本] ロール呼出が roleDeadline を5秒超えて走った事実を役割名つきで記録。
+                var epochOverrunNotes = new List<string>();
+                // [3.281.0, Kotlin原本] ワーカー専属のHF63をエポック横断で共有（ワーカー内は逐次実行＝
+                //   並行アクセスなし。ワーカー間では共有しない＝役割多様性を汚染しないため）。
+                var workerHf63 = new Hf63Infeasibility();
+
+                // [3.346.1/方針B, Kotlin原本] 停滞シグナルは単調でない（改善が届けば偽に戻る）ので、
+                //   while 条件には単調な締切・勝者確定だけを置き、シグナルは ConfirmStop で確認窓ぶん
+                //   再確認してから離脱する。一瞬のシグナルで片肺運転にならない。
+                while (NowMs() < deadline)
+                {
+                    if (shouldStop())
+                    {
+                        if (await ConfirmStop(shouldStop, deadline, stopIsFinal, cancellationToken).ConfigureAwait(false))
+                        {
+                            exitReason = stopIsFinal() ? "探索締切" : "停滞シグナル";
+                            break;
+                        }
+                        survivedStops++;
+                        continue;
+                    }
+                    try
+                    {
+                        var assignment = AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments);
+                        var epochT0 = NowMs();
+                        var roleSeed = AdaptiveHypothesisEpochPolicy.EpochSeed(baseSeed, i, epoch, reassignments);
+                        // [3.282.0, Kotlin原本] エポック改善の基準線＝エポック開始時点の自己エリート。
+                        var preEpochEliteReport = eliteReport;
+                        int[][] snapGlobalBest;
+                        ViolationReport snapGlobalReport;
+                        int[][][] snapPeers;
+                        lock (lockObj)
+                        {
+                            snapGlobalBest = globalBest.Copy2D();
+                            snapGlobalReport = globalReport;
+                            snapPeers = new int[workers][][];
+                            for (var x = 0; x < workers; x++) snapPeers[x] = sharedTrajectories[x].Copy2D();
+                        }
+                        var start = AdaptiveEpochStart(
+                            state: state,
+                            globalBest: snapGlobalBest,
+                            localTrajectory: trajectory,
+                            peers: snapPeers,
+                            assignment: assignment,
+                            seed: roleSeed,
+                            shouldStop: shouldStop);
+                        var startReport = UnifiedViolationChecker.Check(state, start);
+                        archive.Register(start, startReport, assignment.Role, i, epoch,
+                            bridge: startReport.Hard == snapGlobalReport.Hard + 1);
+                        trajectory = start;
+                        if (Better(startReport, eliteReport))
+                        {
+                            elite = start.Copy2D();
+                            eliteReport = startReport;
+                            // [3.278.0, Kotlin原本] 旧: eliteLogs 未更新＝この入口盤面が最終勝者になると、
+                            //   採用盤面を生成していない古いロール実行のフェーズログが表示されていた。
+                            eliteLogs = new[] { new MirrorLog(tag: "AdaptivePortfolio",
+                                message: $"W{i} epoch{epoch + 1} 入口盤面({AdaptiveHypothesisEpochPolicy.RoleLabel(assignment)})をエリート採用 HARD={startReport.Hard} total={startReport.Total}") };
+                        }
+                        var startImprovedGlobal = false;
+                        lock (lockObj)
+                        {
+                            sharedTrajectories[i] = start.Copy2D();
+                            if (Better(startReport, globalReport))
+                            {
+                                globalBest = start.Copy2D();
+                                globalReport = startReport;
+                                globalLogs = eliteLogs;   // [3.278.0] 同上: グローバル側の stale ログも同期
+                                startImprovedGlobal = true;
+                            }
+                        }
+                        if (startImprovedGlobal)
+                        {
+                            Interlocked.Increment(ref globalImproves);
+                            onProgress($"適応portfolio W{i} {AdaptiveHypothesisEpochPolicy.RoleLabel(assignment)} 入口改善",
+                                startReport, iterations, NowMs() - started);
+                        }
+
+                        var remainingSec = (int)Math.Max((deadline - NowMs() + 999L) / 1000L, 0L);
+                        var quantum = AdaptiveHypothesisEpochPolicy.QuantumSeconds(assignment, improvedPrevious, remainingSec);
+                        if (quantum <= 0) break;
+                        var roleDeadline = Math.Min(deadline, NowMs() + quantum * 1000L);
+                        var roleIndex = i + reassignments * 8;
+                        // [3.409.21, Kotlin原本] ロール1本=内部チェーン1本（希釈回避。複数チェーン化
+                        //   =portfolioRoleParallelSa は単体 A/B で中立＝削除済み）。
+                        var roleOptions = options with
+                        {
+                            Workers = 1,
+                            Seed = roleSeed,
+                            Explore = assignment.Role is HypothesisEpochRole.HardDebtRsiPlus
+                                or HypothesisEpochRole.LargeDestroyAlns or HypothesisEpochRole.MaxDistanceRsiPlus
+                                ? Math.Max(2.0, RoleExploreFor(roleIndex))
+                                : RoleExploreFor(roleIndex),
+                            Accept = RoleAcceptFor(roleIndex),
+                            OpSelect = RoleOpSelectFor(roleIndex),
+                            Tabu = assignment.Role != HypothesisEpochRole.BaselineRefine,
+                        };
+                        bool StopRole() => shouldStop() || NowMs() >= roleDeadline;
+                        var roleT0 = NowMs();
+                        V6OptimizerResult? result;
+                        try
+                        {
+                            void Progress(string phase, ViolationReport? rep, long iters, long elapsed)
+                            {
+                                if (rep?.Hard == 0) Interlocked.CompareExchange(ref hardZeroWinner, i, -1); // 記録のみ（キルしない）
+                                if (i == 0 || rep?.Hard == 0)
+                                {
+                                    onProgress($"適応portfolio W{i} epoch{epoch + 1} {AdaptiveHypothesisEpochPolicy.RoleLabel(assignment)} / {phase}",
+                                        rep, iters, elapsed);
+                                }
+                            }
+                            result = assignment.Algorithm switch
+                            {
+                                V6Algorithm.Alns => await RunAlns(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, cancellationToken).ConfigureAwait(false),
+                                V6Algorithm.Rsi => await RunRsi(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
+                                _ => await RunRsiPlus(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
+                            };
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception e)
+                        {
+                            Interlocked.CompareExchange(ref firstError, e, null);
+                            result = null;
+                        }
+
+                        // [3.409.17, Kotlin原本] roleDeadline を5秒超えたロールを役割名つきで記録。
+                        if (NowMs() - roleDeadline > 5_000L)
+                        {
+                            epochOverrunNotes.Add($"W{i}:{AdaptiveHypothesisEpochPolicy.RoleName(assignment.Role)}(q={quantum}s→実{(NowMs() - roleT0) / 1000}s)");
+                        }
+
+                        if (result != null)
+                        {
+                            if (result.Report.Hard == 0) Interlocked.CompareExchange(ref hardZeroWinner, i, -1); // 記録のみ
+                            iterations += result.Iterations;
+                            archive.Register(result.Schedule, result.Report, assignment.Role, i, epoch,
+                                bridge: result.Report.Hard == snapGlobalReport.Hard + 1);
+                            trajectory = result.Schedule.Copy2D();
+                            if (Better(result.Report, eliteReport))
+                            {
+                                elite = result.Schedule.Copy2D();
+                                eliteReport = result.Report;
+                                eliteLogs = result.PhaseLogs;
+                            }
+                            var improvedGlobal = false;
+                            lock (lockObj)
+                            {
+                                sharedTrajectories[i] = result.Schedule.Copy2D();
+                                if (Better(result.Report, globalReport))
+                                {
+                                    globalBest = result.Schedule.Copy2D();
+                                    globalReport = result.Report;
+                                    globalLogs = result.PhaseLogs;
+                                    improvedGlobal = true;
+                                }
+                            }
+                            if (improvedGlobal)
+                            {
+                                Interlocked.Increment(ref globalImproves);
+                                onProgress($"適応portfolio グローバル最良更新 W{i} epoch{epoch + 1}",
+                                    result.Report, iterations, NowMs() - started);
+                            }
+                        }
+
+                        // [3.282.0, Kotlin原本] エポック改善＝自己エリートの前進（入口盤面の採用・ロール
+                        //   結果の採用いずれも eliteReport 更新経由でここに反映される）。
+                        var improvedThisEpoch = Better(eliteReport, preEpochEliteReport);
+                        stagnantEpochs = AdaptiveHypothesisEpochPolicy.NextStagnantEpochs(stagnantEpochs, improvedThisEpoch);
+                        int nearest;
+                        lock (lockObj)
+                        {
+                            var d = int.MaxValue;
+                            for (var x = 0; x < workers; x++)
+                                if (x != i)
+                                    d = Math.Min(d, ScheduleDistance(trajectory, sharedTrajectories[x]));
+                            nearest = d;
+                        }
+                        if (AdaptiveHypothesisEpochPolicy.ShouldReassign(
+                                index: i, improvedThisEpoch: improvedThisEpoch,
+                                stagnantEpochs: stagnantEpochs, nearestOtherDistance: nearest))
+                        {
+                            reassignments++;
+                            stagnantEpochs = 0;
+                            // [3.308.1/敵対検証, Kotlin原本] この分岐は常に基準量子へ戻す（旧
+                            //   improvedPrevious = false）。roleChanged=true はその挙動を保つための
+                            //   引数であって「役割が必ず変わる」という主張ではない。
+                            improvedPrevious = AdaptiveHypothesisEpochPolicy.CarriesImprovingQuantum(improvedThisEpoch, roleChanged: true);
+                        }
+                        else
+                        {
+                            improvedPrevious = AdaptiveHypothesisEpochPolicy.CarriesImprovingQuantum(improvedThisEpoch, roleChanged: false);
+                        }
+                        // [3.282.0/3.308.1, Kotlin原本] 集計はロールが実際に走ることが確定してから。
+                        //   回数と秒をここで同時に数える（quantum<=0 break と例外の break はここへ
+                        //   到達しないため、その回の摂動＋フル検査の時間は秒合計に入らない）。
+                        roleRuns[assignment.Role] = roleRuns.GetValueOrDefault(assignment.Role) + 1;
+                        roleMillis[assignment.Role] = roleMillis.GetValueOrDefault(assignment.Role) + (NowMs() - epochT0);
+                        epoch++;
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception e)
+                    {
+                        // [3.278.0, Kotlin原本] epoch単位の隔離: このワーカーだけ停止し、蓄積済み
+                        //   エリートを成果として返す。
+                        Interlocked.CompareExchange(ref firstError, e, null);
+                        exitReason = "例外";
+                        break;
+                    }
+                }
+                // [3.346.0, Kotlin原本] while 条件のどれで抜けたかを確定
+                //   （例外と確認済み停滞シグナルは上で確定済み。ここは単調な2条件のみ）。
+                if (exitReason.Length == 0)
+                {
+                    exitReason = "締切";   // [3.376.0] 勝者キル撤廃により、単調な離脱条件は締切のみ
+                }
+                var exitAtSec = (NowMs() - started) / 1000;
+
+                return new AdaptiveWorkerOutcome(
+                    Elite: elite,
+                    Report: eliteReport,
+                    Logs: eliteLogs,
+                    Iterations: iterations,
+                    Epochs: epoch,
+                    Reassignments: reassignments,
+                    RoleRuns: roleRuns,
+                    RoleMillis: roleMillis,
+                    LastRole: AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments).Role,
+                    ExitReason: exitReason,
+                    ExitAtSec: exitAtSec,
+                    SurvivedStops: survivedStops,
+                    Hf63Avoided: workerHf63.InfeasibleFamilies(),
+                    EpochOverruns: epochOverrunNotes);
+            });
+        }
+
+        var outcomes = await Task.WhenAll(jobs).ConfigureAwait(false);
+        // 兄弟キャンセル(自己)とユーザー停止(外部)を区別: 外部停止ならここで伝播させる
+        // （Kotlin原本の ensureActive() と同じ役割、RunMultiWorker で確立済みのパターン）。
+        cancellationToken.ThrowIfCancellationRequested();
+
+        for (var index = 0; index < outcomes.Length; index++)
+        {
+            var o = outcomes[index];
+            archive.Register(o.Elite, o.Report, o.LastRole, index, o.Epochs, bridge: o.Report.Hard == globalReport.Hard + 1);
+            if (Better(o.Report, globalReport))
+            {
+                globalBest = o.Elite.Copy2D();
+                globalReport = o.Report;
+                globalLogs = o.Logs;
+            }
+        }
+        var compressedElites = archive.Snapshot(globalBest, globalReport);
+        var alts = compressedElites
+            .Where(e => !e.Bridge)
+            .Where(e => !AdaptiveEliteArchive.SameSchedule(e.Schedule, globalBest))
+            .Select(e => e.Schedule.Copy2D())
+            .Take(3)
+            .ToList();
+        // [3.335.0, Kotlin原本] まずこの実行のスロットへ。static は新しい実行が勝つライブ表示用なので所有時のみ。
+        var slot = GetRunSlot();
+        if (slot != null) { slot.FusionElites = compressedElites; slot.Alternatives = alts; }
+        if (OwnsStatics(slot)) { _lastFusionElites = compressedElites; _lastAlternatives = alts; }
+
+        // [3.332.0/実機ログで判明, Kotlin原本] 「圧縮elite=N 相異なるelite=M 距離=a..b」は M と 距離 の
+        //   母集団が違うため矛盾に見えた。意味があるのは**ワーカー解が潰れているか**（同一解に収束＝
+        //   並列の無駄）なので、そちらを出す。
+        var distinctWorkers = outcomes
+            .Select(o => string.Join("|", o.Elite.Select(row => string.Join(",", row))))
+            .Distinct().Count();
+        var pairDistances = new List<int>();
+        for (var a = 0; a < outcomes.Length; a++)
+            for (var b = a + 1; b < outcomes.Length; b++)
+                pairDistances.Add(ScheduleDistance(outcomes[a].Elite, outcomes[b].Elite));
+        var distanceNote = pairDistances.Count == 0
+            ? "対象外"
+            : $"{pairDistances.Min()}..{pairDistances.Max()}セル" + (distinctWorkers < outcomes.Length ? "・同一解あり" : "");
+        var roleNote = string.Join(" | ", Enumerable.Range(0, outcomes.Length).Select(i =>
+        {
+            var o = outcomes[i];
+            var used = string.Join(",", o.RoleRuns.Select(e =>
+            {
+                var sec = o.RoleMillis.GetValueOrDefault(e.Key, 0L) / 1000.0;
+                return $"{AdaptiveHypothesisEpochPolicy.RoleName(e.Key)}x{e.Value}/{sec:F0}s";
+            }));
+            var avoided = o.Hf63Avoided.Count == 0 ? "" : $"/HF63回避={string.Join("+", o.Hf63Avoided)}";
+            var survived = o.SurvivedStops == 0 ? "" : $"/停滞見送り{o.SurvivedStops}回";
+            return $"W{i}:epoch{o.Epochs}/再配属{o.Reassignments}[{used}]{avoided}/離脱={o.ExitReason}@{o.ExitAtSec}s{survived}";
+        }));
+        // [3.307.0/ログ強化, Kotlin原本] 全ワーカー横断の役割別 worker秒。予算配分を論じるときに見るのはここ。
+        var roleTotals = new Dictionary<HypothesisEpochRole, long>();
+        foreach (var o in outcomes)
+            foreach (var (r, ms) in o.RoleMillis)
+                roleTotals[r] = roleTotals.GetValueOrDefault(r) + ms;
+        var totalWorkerMs = Math.Max(roleTotals.Values.Sum(), 1L);
+        // [3.409.4, Kotlin原本] 外側ワーカーの実効並列度。片肺化を数字1つで検出する。
+        var outerParallelism = ObservedOuterParallelism(totalWorkerMs, NowMs() - started);
+        var budgetNote = string.Join(" ", roleTotals.OrderByDescending(e => e.Value).Select(e =>
+            $"{AdaptiveHypothesisEpochPolicy.RoleName(e.Key)}={e.Value / 1000}s({e.Value * 100 / totalWorkerMs}%)"));
+        // [3.346.0/3.346.1/3.409.16, Kotlin原本] 締切前に離脱したワーカーを1行で明示する。
+        var earlyExits = outcomes.Where(o => IsEarlyWorkerExit(o.ExitReason)).ToList();
+        var survivedTotal = outcomes.Sum(o => o.SurvivedStops);
+        var survivedNote = survivedTotal == 0 ? "" : $" 停滞見送り計{survivedTotal}回";
+        var exitNote = (earlyExits.Count == 0
+            ? "ワーカー離脱=全て締切まで実行"
+            : $"ワーカー離脱={earlyExits.Count}/{outcomes.Length}本が締切前(" +
+                string.Join(",", earlyExits.GroupBy(o => o.ExitReason).Select(g =>
+                    $"{g.Key}{g.Count()}本@{string.Join("/", g.Select(o => $"{o.ExitAtSec}s"))}")) + ")")
+            + survivedNote;
+        var summary = new MirrorLog(
+            tag: "AdaptivePortfolio",
+            // [3.360.0, Kotlin原本] 合計iter と 最良更新回数 を併記。
+            message: $"合計iter={outcomes.Sum(o => o.Iterations)} 全体最良更新={Volatile.Read(ref globalImproves)}回 / " +
+                $"非同期適応仮説 archive={archive.Size()} 圧縮elite={compressedElites.Count} " +
+                $"ワーカー解={outcomes.Length}本(相異なる{distinctWorkers}本) 距離={distanceNote} / {exitNote} / " +
+                $"役割別worker秒(計{totalWorkerMs / 1000}s・実効外側並列={outerParallelism:F2}): {budgetNote} / {roleNote}" +
+                (firstError != null ? $" / 一部例外={firstError.Message}" : "") +
+                $" / 採用 HARD={globalReport.Hard} total={globalReport.Total}");
+        // [3.409.17, Kotlin原本] エポック超過（役割名つき）は専用の [W] 行で出す。
+        var overrunLog = EpochOverrunLog(outcomes.SelectMany(o => o.EpochOverruns).ToList());
+        var logs = globalLogs
+            .Concat(overrunLog != null ? new[] { overrunLog } : Array.Empty<MirrorLog>())
+            .Append(summary)
+            .ToList();
+        return new V6OptimizerResult(
+            globalBest,
+            globalReport with { Logs = logs.Concat(globalReport.Logs).ToList() },
+            V6Algorithm.Portfolio,
+            logs,
+            outcomes.Sum(o => o.Iterations),
+            NowMs() - started);
+    }
 }
