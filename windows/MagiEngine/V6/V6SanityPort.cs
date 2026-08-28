@@ -21,12 +21,13 @@ namespace MagiEngine.V6;
 ///   coverage/count/cell violation detail, the c1-per-rule and weekly breakdowns). Depends only
 ///   on this file's <c>ForcedCovU</c>/<c>SafeDayLabel</c> plus <see cref="Problem"/>/
 ///   <c>ScheduleUtil</c>/<c>ViolationReport</c> — no dependency on <c>buildGuidance</c> or
-///   <c>c3FamilyJp</c> (that helper is exclusive to <c>buildGuidance</c>, piece 14's scope).
+///   <c>c3FamilyJp</c> (now ported in <c>V6SanityPort.Guidance.cs</c>, piece 14/15).
 ///
-/// The remainder of <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics,
-/// duplicate-sequence detection, <c>c3FamilyJp</c>, the full <c>buildGuidance</c>
-/// settings-mistake advisor, <c>ConstraintMus</c>-backed guidance, the <c>build()</c> capstone)
-/// belongs to later phase-7 pieces (13–16) and is not in any file yet.
+/// <c>ConstraintMus</c> (piece 13, <c>ConstraintMus.cs</c>) and the full <c>buildGuidance</c>
+/// settings-mistake advisor plus <c>c3FamilyJp</c>/duplicate-sequence detection
+/// (piece 14/15, <c>V6SanityPort.Guidance.cs</c>) are now ported. The remainder of
+/// <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics, and the
+/// <c>build()</c> capstone) belongs to phase-7 piece 16 and is not in any file yet.
 /// </summary>
 public sealed record ImpossibleWish(
     int StaffIndex,

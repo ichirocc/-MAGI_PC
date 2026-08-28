@@ -10,10 +10,10 @@ namespace MagiEngine.Tests.V6;
 /// [フェーズ7ピース2] Direct tests for the schedule-independent structural-diagnostic slice
 /// ported in <c>V6SanityPort.Core.cs</c>. Ported from the subset of the source project's
 /// <c>V6SanityPortTest.kt</c> (~60 tests total) that exercises these functions BY NAME with no
-/// dependency on not-yet-ported types (<c>SettingIssue</c>/<c>buildGuidance</c>/
-/// <c>buildViolationDebug</c>/<c>V6SanityReport</c>, all later phase-7 pieces). Two of the ported
-/// <c>AptBalances</c> tests drop their trailing Kotlin-side <c>buildGuidance</c> cross-check
-/// assertion (deferred to piece 14) — noted inline. <c>NeedDefined</c>/<c>EffectiveDemand</c>/
+/// dependency on not-yet-ported types (<c>buildViolationDebug</c>/<c>V6SanityReport</c>, later
+/// phase-7 pieces). <c>SettingIssue</c>/<c>buildGuidance</c> (piece 14/15) have since landed in
+/// <c>V6SanityPort.Guidance.cs</c>, so the two <c>AptBalances</c> tests now carry their full
+/// Kotlin-side <c>buildGuidance</c> cross-check assertion in place. <c>NeedDefined</c>/<c>EffectiveDemand</c>/
 /// <c>EffectiveCap</c> have zero direct Kotlin-side test coverage either (only exercised
 /// transitively through <c>AptBalances</c> here, and later through <c>buildViolationDebug</c>/
 /// <c>buildGuidance</c>) — no speculative direct coverage is invented for them.
@@ -124,9 +124,8 @@ public class V6SanityPortTest
         Assert.True(x.Overloaded); // 超過していること
         Assert.Equal(2, x.Shortfall); // 何回ぶん届かないか
         Assert.False(x.IsRest); // 非休シフトは isRest=false
-        // [DEFER TO PIECE 14 — buildGuidance not yet ported] the Kotlin original also asserts
-        // that V6SanityPort.buildGuidance(st) reports a matching SettingIssue whose text embeds
-        // these same 12/10 figures.
+        var issue = V6SanityPort.BuildGuidance(st).Single(i => i.Where.Contains("X") && i.Where.Contains("適切回数の合計"));
+        Assert.True(issue.Problem.Contains("12") && issue.Problem.Contains("10"));
     }
 
     [Fact]
@@ -137,7 +136,7 @@ public class V6SanityPortTest
         Assert.Equal(10, x.AptSum);
         Assert.Equal(10, x.Capacity);
         Assert.False(x.Overloaded); // ちょうど収まるなら超過ではない
-        // [DEFER TO PIECE 14] the Kotlin original also asserts buildGuidance emits no matching issue.
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), i => i.Where.Contains("X") && i.Where.Contains("適切回数の合計"));
     }
 
     [Fact]
