@@ -74,6 +74,15 @@ public static partial class V6NativeOptimizer
     /// </summary>
     private static long _newestRunId = 0L;
 
+    /// <summary>Monotonic run-id generator (Kotlin: <c>private val runSeq = AtomicLong(0)</c>).</summary>
+    private static long _runSeq = 0L;
+
+    /// <summary>Allocates the next run id (Kotlin: <c>runSeq.incrementAndGet()</c>).</summary>
+    private static long NextRunId() => Interlocked.Increment(ref _runSeq);
+
+    /// <summary>Records <paramref name="id"/> as the newest run (Kotlin: <c>newestRunId = slot.id</c>, phase 5e's <c>Optimize</c>).</summary>
+    private static void SetNewestRunId(long id) => Interlocked.Exchange(ref _newestRunId, id);
+
     private static RunSlot? GetRunSlot() => CurrentRunSlot.Value;
 
     /// <summary>static（＝新しい実行が勝つライブ表示側）へ書いてよいか。スロット無し＝直接呼び出しは従来どおり許す。</summary>
