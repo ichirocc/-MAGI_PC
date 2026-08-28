@@ -6,21 +6,19 @@ namespace MagiEngine.Tests.V6;
 
 /// <summary>
 /// フェーズ7 ピース3（<c>V6PortAnalyzer.Coverage.cs</c>＝<c>DiagnoseCoverage</c>）の移植テスト。
+/// <see cref="ResidualAnalysisTreatsWishBlockedCovUAsAWallEvenWhenSupplyFloorIsZero"/> のみ
+/// フェーズ7 ピース17（<c>V6FinalPort.Tail.cs</c>）の <c>CovUBlockedAmount</c>/<c>CovUStructuralWall</c>
+/// にも依存する（本ファイルの他の全テストは piece 3 のみで完結）。
 ///
 /// <c>V6PortAnalyzerTest.kt</c>（Kotlin 側、全16件）のうち、この移植で対象なのは
 /// <c>DiagnoseCoverage</c> を直接呼び、戻り値の型（<see cref="CoverageVerdict"/>/
 /// <see cref="CoverageShortfall"/>/<see cref="CoverageSurplus"/>/<see cref="CoverageDiagnosis"/>）
-/// にしか依存しない9件だけ。以下は明示的にスコープ外（依存先が未移植のため）:
+/// にしか依存しない10件だけ。以下は明示的にスコープ外（依存先が未移植のため）:
 ///  - <c>v6OverviewComputesAptAndRisk</c>（piece 9, <c>V6PortAnalyzer.Analyze</c>）
 ///  - <c>diagnoseForbiddenRuns*</c> の8件（piece 4, <c>ForbiddenCellEscape</c>/<c>ForbiddenRunDiagnosis</c>）
 ///  - <c>forbiddenRunSeqLabelMatchesRuleKeyDerivedFromCons3nRows</c>（piece 4）
 ///  - <c>wishPinnedCellIsNotAWallWhenMovingItRemovesTwoForbiddenFires</c>（piece 4）
 ///  - <c>adjacentDayFixIsNotAnEscapeWhenItOnlyTradesForbiddenRunForABrokenWish</c>（piece 4）
-///  - <c>residualAnalysisTreatsWishBlockedCovUAsAWallEvenWhenSupplyFloorIsZero</c>
-///    （piece 17, <c>V6FinalPort.CovUBlockedAmount</c>/<c>CovUStructuralWall</c> 未移植。
-///    ただし <c>V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: true))</c> 自体は
-///    piece 3 のみで再現できるため、その部分の前提だけ本ファイルの
-///    <see cref="BlockedNowSeparatesStaticCapacityFromWhatCanActuallyBeFilledNow"/> で固定済み）
 ///
 /// <c>DayLabel</c> 自体は Kotlin 側に直接のユニットテストが無いが、<see cref="V6SanityPort.SafeDayLabel"/>
 /// との唯一の相違点（負のオフセットを拒否するガードが無い）が load-bearing な差なので、
@@ -147,6 +145,36 @@ public class V6PortAnalyzerCoverageTest
         Assert.False(sfF.BlockedNow, "玉突きが実在するなら『今は不能』とは言わない");
         Assert.Equal(0, fixable.BlockedNowSlots);
         Assert.False(fixable.AllBlockedNow, "再実行で解消し得る盤面を『減りません』と断定しない");
+    }
+
+    /// <summary>
+    /// [3.377.0, フェーズ7 ピース17] 残存分析（<see cref="V6FinalPort.CovUBlockedAmount"/>/
+    /// <see cref="V6FinalPort.CovUStructuralWall"/>）は旧実装だと <c>hardFloor</c>（供給下限）
+    /// しか見ておらず、「担当者は足りるがいまの希望では埋められない」枠を丸ごと「まだ狙える」に
+    /// 入れていた。<see cref="CascadeChainState"/>(cWished: true) は <c>BlockedNow=true</c> な
+    /// 唯一の枠を作る（上の <see cref="BlockedNowSeparatesStaticCapacityFromWhatCanActuallyBeFilledNow"/>
+    /// で確認済み）ので、その diag を <c>CovUBlockedAmount</c>/<c>CovUStructuralWall</c> へ渡し、
+    /// <c>hardFloor=0</c> でも壁として数えることを固定する。
+    /// </summary>
+    [Fact]
+    public void ResidualAnalysisTreatsWishBlockedCovUAsAWallEvenWhenSupplyFloorIsZero()
+    {
+        var blocked = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: true));
+        var miss = V6FinalPort.CovUBlockedAmount(blocked);
+        Assert.Equal(1, miss); // いまの希望では埋められない不足人数を拾う
+        // hardFloor=0（担当者は足りるので供給下限は立たない）でも壁として数える。
+        Assert.Equal(1, V6FinalPort.CovUStructuralWall(covUNow: 1, hardFloor: 0, blockedMiss: miss));
+
+        // 玉突きが実在する盤面は従来どおり「まだ狙える」のまま＝壁と誤断定しない。
+        var fixable = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: false));
+        var missF = V6FinalPort.CovUBlockedAmount(fixable);
+        Assert.Equal(0, missF); // 解ける枠は壁に数えない
+        Assert.Equal(0, V6FinalPort.CovUStructuralWall(covUNow: 1, hardFloor: 0, blockedMiss: missF));
+
+        // 供給下限（従来の判定）は引き続き有効で、壁は covU 件数を超えない。
+        Assert.Equal(2, V6FinalPort.CovUStructuralWall(covUNow: 2, hardFloor: 2, blockedMiss: 0)); // 構造的下限だけでも壁になる（従来の挙動）
+        Assert.Equal(3, V6FinalPort.CovUStructuralWall(3, 0, 99)); // 壁は残存件数を超えない
+        Assert.Equal(0, V6FinalPort.CovUStructuralWall(0, 5, 5)); // covU が無ければ壁も無い
     }
 
     // [人員過剰(covO)の「なぜ減らないか」診断] 在勤2人のうち誰も希望固定・禁止連続に阻まれない盤面では

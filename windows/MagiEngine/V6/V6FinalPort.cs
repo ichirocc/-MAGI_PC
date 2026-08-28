@@ -20,13 +20,14 @@ namespace MagiEngine.V6;
 /// <c>OptimizationPlan</c>/<c>optimizationPlan</c>/<c>getAlgorithmLabel</c> are now ported (this
 /// class is <c>partial</c> to accommodate that file, and future pieces of this phase).
 ///
-/// Deliberately still NOT ported: <c>watchdogStagnationFired</c>/<c>effectiveStallMs</c>/
-/// <c>normalStallMs</c> (piece 7 — depend on nothing not yet ported, but are scoped as their own
-/// piece since <c>V6FinalPortTest.kt</c> has 17 dedicated Kotlin tests for them with zero existing
-/// C# coverage) and <c>handleOptimize</c> itself (piece 18 — the ~740-line core orchestration,
-/// which depends on <c>V6NativeOptimizer</c> (phase 5, done) and
-/// <c>V6HotfixPasses.runPostOptimization</c> (phase 6, done) plus several still-unported helper
-/// pieces of this same file/phase).
+/// <c>watchdogStagnationFired</c>/<c>effectiveStallMs</c>/<c>normalStallMs</c> are now ported in
+/// <c>V6FinalPort.Watchdog.cs</c>. <c>covUBlockedAmount</c>/<c>covUStructuralWall</c>/<c>fmtIter</c>/
+/// <c>checkResultWorse</c> are now ported in <c>V6FinalPort.Tail.cs</c> (piece 17).
+///
+/// Deliberately still NOT ported: <c>handleOptimize</c> itself (piece 18/19 — the ~740-line core
+/// orchestration, which depends on <c>V6NativeOptimizer</c> (phase 5, done) and
+/// <c>V6HotfixPasses.runPostOptimization</c> (phase 6, done); every other member of
+/// <c>V6FinalPort.kt</c> it needs is now ported).
 ///
 /// [async 移植上の判断] Kotlin's <c>suspend fun ... = withContext(Dispatchers.Default) { ... }</c>
 /// here is purely "run this CPU-bound work off the caller's (typically UI) thread" — it is not
