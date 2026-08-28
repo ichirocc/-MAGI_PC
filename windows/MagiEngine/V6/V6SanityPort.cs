@@ -4,12 +4,23 @@ namespace MagiEngine.V6;
 
 /// <summary>
 /// Deeper native port of V6 Web diagnostics (<c>V6SanityPort.kt</c>, 1,507 lines in the source
-/// project). This file is a **phase 4 minimal slice**: only <see cref="ImpossibleWish"/> and
-/// <see cref="V6SanityPort.DetectImpossibleWishes"/>, the single piece
-/// <c>V6FinalPort.HandleSmartInitial</c>'s wish gate genuinely depends on. The remainder of
-/// <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics, duplicate-sequence
-/// detection, the full <c>buildGuidance</c> settings-mistake advisor, etc.) is phase 7 scope
-/// ("V6FinalPort統括・CSV・診断" in the migration plan) and is deliberately not ported here.
+/// project), split across multiple partial-class files (matching the ~18-file
+/// <c>V6HotfixPasses.*.cs</c> house style established for other large multi-file Kotlin
+/// sources):
+///
+/// - This file (phase 4 minimal slice): <see cref="ImpossibleWish"/> and
+///   <see cref="V6SanityPort.DetectImpossibleWishes"/>, the single piece
+///   <c>V6FinalPort.HandleSmartInitial</c>'s wish gate genuinely depended on before phase 7.
+/// - <c>V6SanityPort.Core.cs</c> (phase 7 piece 2): the schedule-independent structural
+///   diagnostics — <c>ForcedCovU</c>/<c>StructuralHardFloor</c> (the real implementation of what
+///   used to be this file's <c>NotImplementedException</c> stub), <c>OtherShiftCapSum</c>/
+///   <c>StructuralPersonalFloor</c>, <c>AptBalance</c>/<c>AptBalances</c>,
+///   <c>RestCapacity</c>/<c>RangeOrderConflict</c>/<c>SafeDayLabel</c>.
+///
+/// The remainder of <c>V6SanityPort.kt</c> (load-data-bit summaries, shift-count diagnostics,
+/// duplicate-sequence detection, the full <c>buildGuidance</c> settings-mistake advisor, the
+/// <c>buildViolationDebug</c> report, the <c>build()</c> capstone) belongs to later phase-7
+/// pieces and is not in either file yet.
 /// </summary>
 public sealed record ImpossibleWish(
     int StaffIndex,
@@ -19,7 +30,7 @@ public sealed record ImpossibleWish(
     string ShiftSymbol,
     string Reason);
 
-public static class V6SanityPort
+public static partial class V6SanityPort
 {
     /// <summary>
     /// Faithful port of Kotlin's <c>detectImpossibleWishes</c>: flags every entry in
@@ -59,27 +70,4 @@ public static class V6SanityPort
         }
         return result.OrderBy(w => w.StaffIndex).ThenBy(w => w.DayIndex).ToList();
     }
-
-    /// <summary>
-    /// **Phase 5c stub.** Faithful port target is Kotlin's <c>structuralHardFloor(state, p) =
-    /// forcedCovU(state, p).sumOf {{ it.amount }}</c> — a static lower bound on unavoidable covU
-    /// (people-shortage) violations, derived from qualified-staff headcounts alone (independent of
-    /// any particular schedule). <c>forcedCovU</c> itself lives deeper in the still-unported,
-    /// phase-7-scoped remainder of <c>V6SanityPort.kt</c> (1,507 lines total; see this class's own
-    /// doc comment), so implementing this faithfully now would require pulling in more of that file
-    /// than phase 5c's scope calls for.
-    ///
-    /// Every phase-5c call site in the Kotlin source (<c>runRsi</c>'s <c>avoid</c>-set computation)
-    /// wraps this call in a <c>try {{ ... }} catch (_: Exception) {{ 0 }}</c> — i.e. the ported
-    /// callers already tolerate this returning 0 (or throwing) as a degenerate case. This stub
-    /// throws <see cref="NotImplementedException"/> so that <c>V6NativeOptimizer.RunRsi</c>'s
-    /// equivalent try/catch-defaulting-to-0 wrapper produces byte-identical behavior to what it
-    /// will once phase 7 implements this properly — no changes to <c>RunRsi</c> will be needed at
-    /// that point, only this method's body.
-    /// </summary>
-    public static int StructuralHardFloor(MagiState state, Problem p) =>
-        throw new NotImplementedException(
-            "V6SanityPort.StructuralHardFloor is phase-7 scope (forcedCovU's full diagnostic " +
-            "chain); callers must catch and default to 0, matching the Kotlin source's own " +
-            "try/catch wrapper at every phase-5c call site.");
 }
