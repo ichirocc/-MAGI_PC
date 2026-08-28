@@ -9,7 +9,8 @@ namespace MagiEngine.Tests.V6;
 
 /// <summary>
 /// [フェーズ6, 循環交換系] <see cref="V6HotfixPasses.ApplyCyclicSwapPolish"/>／
-/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/> の検証。
+/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/>／<see cref="V6HotfixPasses.ApplyBlockRotationPolish"/>
+/// の検証。
 ///
 /// [Kotlin原本] <c>V6FinalBridgePortTest.kt</c>の <c>cyclicSwapPolishNeverWorsens</c>
 /// （<c>sampleState()</c> 固定盤面での退化しないことの確認）を <see cref="NeverWorsensTheGivenSchedule"/>
@@ -19,6 +20,11 @@ namespace MagiEngine.Tests.V6;
 /// <see cref="ResolvesSymmetricLowDeficiencyViaSameDaySwap"/>／
 /// <see cref="C3SequencePolishResolvesForbiddenPatternViaTwoDayBlockSwap"/> を新設（採否の実効性
 /// そのものはKotlin側テストが直接検証していなかったため、手計算で設計した最小盤面で追加検証する）。
+///
+/// <see cref="V6HotfixPasses.ApplyBlockRotationPolish"/> は <c>C1RelocationPolishTest.kt</c>の
+/// <c>blockRotationPolishFindsAnchorEvenWhenC1MarkIsShadowedByHeavierViolationAtSameCell</c>
+/// （3者回転＋anchor-shadowing退行の回帰）を <see cref="BlockRotationPolishFindsAnchorEvenWhenC1MarkIsShadowedByHeavierViolationAtSameCell"/>
+/// として移植する（Kotlin原本は別ファイルのテストだが、対象関数がこのファミリーに属するためここへ集約）。
 /// </summary>
 public class V6HotfixPassesCyclicSwapTest
 {
@@ -173,5 +179,53 @@ public class V6HotfixPassesCyclicSwapTest
         Assert.Equal(0, r.Applied);
         Assert.Equal(raw[0][0], r.NewSchedule[0][0]);
         Assert.Equal(raw[1][0], r.NewSchedule[1][0]);
+    }
+
+    // [同根の実バグ修正/applyBlockRotationPolish] C1Rotate/C3Rotate が共有するこの関数も同じ
+    //   シャドーイングを受ける。3者回転が必要なため職員2名(mirrorStateと同一のai=[X,X,Y,Y]とドナー
+    //   bi=[X,X,X,X])に無関係な第3の職員ci=[X,X,X,X]を加え、ciにはYの下限(staffRange)を設定する。
+    private static MagiState ShadowedC1RotationState() => MinimalState.Build(
+        startDate: "2026-01-01", endDate: "2026-01-04",
+        shifts: new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") },
+        groups: new List<Group> { new("G0", "G0") },
+        staffList: new List<Staff> { new("ai", 0), new("bi", 0), new("ci", 0) },
+        schedule: new List<IReadOnlyList<int>>
+        {
+            new List<int> { 1, 1, 0, 0 }, // ai: X,X,Y,Y
+            new List<int> { 1, 1, 1, 1 }, // bi: X,X,X,X
+            new List<int> { 1, 1, 1, 1 }, // ci: X,X,X,X
+        },
+        staffRange: new Dictionary<string, Range> { ["2,0"] = new("2", "") }, // ci: Y(index0)の下限2
+        cons1: new List<C1Row> { new("2", "X", "1") },
+        cons3n: new List<C3Row> { new(new List<string> { "Y", "Y" }) });
+
+    [Fact]
+    public void BlockRotationPolishFindsAnchorEvenWhenC1MarkIsShadowedByHeavierViolationAtSameCell()
+    {
+        var st = ShadowedC1RotationState();
+        var sched = st.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(st, sched);
+        Assert.Equal(1, before.Hard); // 初期 HARD=1（c3n 1件）
+        Assert.Equal(1, before.Breakdown.GetValueOrDefault("c1", 0)); // 初期 c1=1
+        Assert.NotEqual("vio-c1", before.Violations.GetValueOrDefault("0,2")); // 職員aiのday2セルはvio-c1を含まない（c3nに上書き済み）
+        Assert.Contains("vio-c1", before.CellFamilies.GetValueOrDefault("0,2", Array.Empty<string>())); // しかしcellFamiliesにはvio-c1も残っている
+
+        var res = V6HotfixPasses.ApplyBlockRotationPolish(st, sched, new HashSet<string> { "vio-c1" }, "C1Rotate", maxPasses: 1);
+        var after = UnifiedViolationChecker.Check(st, res.NewSchedule);
+
+        Assert.True(res.Applied > 0, "cellFamilies切替えによりaiがanchorに入り、3者回転が試行・採用されること");
+        Assert.True(after.Total < before.Total, "総合スコアが改善したこと");
+        Assert.True(after.Hard <= before.Hard, "HARDが悪化しないこと(keep-best)");
+    }
+
+    [Fact]
+    public void BlockRotationPolishShouldStopHaltsBeforeAnyRotationIsAttempted()
+    {
+        var st = ShadowedC1RotationState();
+        var sched = st.Schedule.ToIntArray2D();
+        var r = V6HotfixPasses.ApplyBlockRotationPolish(st, sched, new HashSet<string> { "vio-c1" }, "C1Rotate", shouldStop: () => true);
+        Assert.Equal(0, r.Applied);
+        Assert.Equal(sched[0][0], r.NewSchedule[0][0]);
+        Assert.Equal(sched[1][0], r.NewSchedule[1][0]);
     }
 }

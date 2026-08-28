@@ -7,9 +7,9 @@ namespace MagiEngine.V6;
 /// <c>applyCyclicSwapPolish</c>／<c>applyC3SequencePolish</c>／<c>applyBlockRotationPolish</c>／
 /// <c>applyWeeklyRebalancePolish</c>（いずれも <see cref="V6HotfixPasses.CyclicSwapResult"/> を
 /// 返す「同日/複数日の割当を交換する」系の研磨パス群）を収める partial ファイル。
-/// このピースには <see cref="V6HotfixPasses.ApplyCyclicSwapPolish"/> と
-/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/> の2本を収める（<c>ApplyBlockRotationPolish</c>／
-/// <c>ApplyWeeklyRebalancePolish</c> はまだ未移植）。
+/// このピースには <see cref="V6HotfixPasses.ApplyCyclicSwapPolish"/>／
+/// <see cref="V6HotfixPasses.ApplyC3SequencePolish"/>／<see cref="V6HotfixPasses.ApplyBlockRotationPolish"/>
+/// の3本を収める（<c>ApplyWeeklyRebalancePolish</c> はまだ未移植）。
 /// </summary>
 public static partial class V6HotfixPasses
 {
@@ -229,6 +229,153 @@ public static partial class V6HotfixPasses
         {
             new MirrorLog(tag: "C3Polish",
                 message: $"連続規則c3系研磨(2者ブロック): c3 {before.Breakdown.GetValueOrDefault("c3", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3", 0)}" +
+                    $" / c3m {before.Breakdown.GetValueOrDefault("c3m", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3m", 0)}" +
+                    $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
+                    $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手)"),
+        };
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+    }
+
+    /// <summary>
+    /// [Kotlin原本のKDoc2つを保存 — 2つ目が現行の一般化版の説明]
+    ///
+    /// [ソフト研磨・c3系強化] c3/c3m/c3mn(連続規則)で違反しているセルを起点に、3職員×連日(2-3日)の
+    /// ブロック「回転」を試す。2者ブロック入替や同日k=3巡回では到達できない3者×窓の組替えを、各日の
+    /// (日,シフト)人数を保ったまま（=被覆/HARD不変）行い、実目的(UnifiedViolationChecker)で改善時のみ
+    /// 採用（keep-best＝退化なし）。重み・パラメータは不変。違反セル指向なので低コスト。
+    /// 2回の2者交換に分解すると中間で悪化するため山登りでは越えられない局面を、回転1手で跨ぐのが狙い。
+    ///
+    /// [ソフト研磨・3者回転] 指定クラス(anchorClasses)で違反しているセルを起点に、3職員×連日(2-3日)の
+    /// ブロック「回転」を試す。2者ブロック入替/同日k=3巡回では到達できない3者×窓の組替えを、各日の
+    /// (日,シフト)人数を保ったまま（=被覆/HARD不変）行い、実目的(UnifiedViolationChecker)で改善時のみ
+    /// 採用（keep-best＝退化なし）。c1・c3系どちらの違反起点にも使える汎用版。重み・パラメータ不変。
+    /// 2回の2者交換に分解すると中間で悪化するため山登りでは越えられない局面を、回転1手で跨ぐのが狙い。
+    /// </summary>
+    public static CyclicSwapResult ApplyBlockRotationPolish(
+        MagiState state, int[][] schedule, IReadOnlySet<string> anchorClasses, string tag,
+        int maxPasses = 2, Func<bool>? shouldStop = null)
+    {
+        var stop = shouldStop ?? (() => false);
+        // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
+        var pinBlocks = new PinBlockAttribution();
+        var p = new Problem(state);
+        var work = ScheduleUtil.NormalizeSchedule(schedule, p);
+        var before = UnifiedViolationChecker.Check(state, work);
+        var bestRep = before;
+        var applied = 0;
+        var skipped = 0; // [#5] 前フィルタでフル評価を省いた手数(有効性ログ用)
+        // [監査で発見・3.270.0] p.wish[i][j]<0 は「希望が一切ない」判定で、実現不能な希望
+        //   (canDo(i,wish)==false)まで動かせないと誤判定していた（3.183.0 LightMirrorOptimizer と
+        //   同型のバグ）。実現不能な希望はpref計上上も定数=動かして良い＝canDoガード込みの
+        //   wishLocked が正しい判定。安全側（isBetter/checkerが最終ゲート）で候補が広がるのみ。
+        bool Movable(int i, int j) => !p.WishLocked(i, j);
+        void Rotate(int a, int b, int c, int jj, int ww, int[] targetA, int[] targetB, int[] targetC)
+        {
+            for (var t = 0; t < ww; t++)
+            {
+                work[a][jj + t] = targetA[t];
+                work[b][jj + t] = targetB[t];
+                work[c][jj + t] = targetC[t];
+            }
+        }
+        var windows = new[] { 2, 3 };
+        var pass = 0;
+        while (pass < maxPasses)
+        {
+            if (stop()) break;
+            // 指定クラスで違反している職員(=回転の起点)を収集。無ければ即終了（コスト0）。
+            // [実バグ修正/applyC1WindowPolishと同根] rep0.violations（1セル=最重1クラスのみ）だと、
+            //   anchorClassesのマーク位置に更に重い他族が同居する場合そのセルの分類が上書きされ検出漏れ
+            //   になる。cellFamilies（1セルの全クラス保持）に切替え、上書きされても検出できるようにする。
+            //   起点が広がるだけの後方互換な修正（C1Rotate/C3Rotate 両呼出に共通して適用される）。
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var anchorStaff = new HashSet<int>();
+            foreach (var (key, fams) in rep0.CellFamilies)
+            {
+                if (!fams.Any(f => anchorClasses.Contains(f))) continue;
+                var staffIdx = KotlinInterop.ToIntOrNull(key.Split(',')[0]);
+                if (staffIdx is int idx) anchorStaff.Add(idx);
+            }
+            if (anchorStaff.Count == 0) break;
+            var improved = false;
+            foreach (var w in windows)
+            {
+                if (p.T < w) continue;
+                for (var j = 0; j <= p.T - w; j++)
+                {
+                    if (stop()) break;
+                    // この窓で全日movableな職員のみ回転対象（同一3名を各日で回す＝日内人数不変）。
+                    var cand = Enumerable.Range(0, p.S)
+                        .Where(i => Enumerable.Range(0, w).All(t => Movable(i, j + t)))
+                        .ToList();
+                    if (cand.Count < 3) continue;
+                    foreach (var ai in cand)
+                    {
+                        // [予算ガード] 締切後は O(cand^3) の全候補フル評価を走り切らせない(HF66=2.65.0と同方針)。
+                        if (stop()) break;
+                        if (!anchorStaff.Contains(ai)) continue;
+                        foreach (var bi in cand)
+                        {
+                            // [予算ガード] 内側スキャンでも締切確認しバーストを O(cand) 以内に抑える。
+                            if (stop()) break;
+                            if (bi == ai) continue;
+                            foreach (var ci in cand)
+                            {
+                                if (ci == ai || ci == bi) continue;
+                                // 回転 ai<-bi, bi<-ci, ci<-ai が各日で担当可能か。
+                                var feasible = true;
+                                for (var t = 0; t < w; t++)
+                                {
+                                    if (!p.CanDo(ai, work[bi][j + t]) || !p.CanDo(bi, work[ci][j + t]) || !p.CanDo(ci, work[ai][j + t]))
+                                    { feasible = false; break; }
+                                }
+                                if (!feasible) continue;
+                                var sa = Enumerable.Range(0, w).Select(t => work[ai][j + t]).ToArray();
+                                var sb = Enumerable.Range(0, w).Select(t => work[bi][j + t]).ToArray();
+                                var sc = Enumerable.Range(0, w).Select(t => work[ci][j + t]).ToArray();
+                                // [#5 差分前フィルタ] 同 sgrp かつ同 ssk の手のみ前判定(群/スキル群/被覆/pref不変
+                                //   →関与3名の局所目的が改善しなければ全体目的も改善しえない)。採用はフル評価が担う=安全。
+                                var canPre = p.Sgrp[ai] == p.Sgrp[bi] && p.Sgrp[bi] == p.Sgrp[ci] &&
+                                    p.Ssk[ai] == p.Ssk[bi] && p.Ssk[bi] == p.Ssk[ci];
+                                StaffObjective? preObjective = canPre
+                                    ? ComputeStaffObjective(p, work, ai) + ComputeStaffObjective(p, work, bi) + ComputeStaffObjective(p, work, ci)
+                                    : null;
+                                // [厳密ピン保護] 3者回転もwindow内で各職員の自身のシフト回数を変えうるため、
+                                //   staffRange厳密ピン(lo==hi)を崩す候補は不採用にする（keep-best/重みは不変）。
+                                var workBeforeRotate = work.Copy2D();
+                                Rotate(ai, bi, ci, j, w, sb, sc, sa);
+                                if (canPre)
+                                {
+                                    var postObjective = ComputeStaffObjective(p, work, ai) + ComputeStaffObjective(p, work, bi) + ComputeStaffObjective(p, work, ci);
+                                    if (preObjective != null && !postObjective.IsBetterThan(preObjective))
+                                    {
+                                        Rotate(ai, bi, ci, j, w, sa, sb, sc);
+                                        skipped++;
+                                        continue;
+                                    }
+                                }
+                                var rep = UnifiedViolationChecker.Check(state, work);
+                                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRotate, work))
+                                {
+                                    bestRep = rep; applied++; improved = true;
+                                }
+                                else
+                                {
+                                    Rotate(ai, bi, ci, j, w, sa, sb, sc); // 巻き戻し
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            pass++;
+            if (!improved) break;
+        }
+        var logs = new[]
+        {
+            new MirrorLog(tag: tag,
+                message: $"{tag} 3者回転研磨: c1 {before.Breakdown.GetValueOrDefault("c1", 0)}->{bestRep.Breakdown.GetValueOrDefault("c1", 0)}" +
+                    $" / c3 {before.Breakdown.GetValueOrDefault("c3", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3", 0)}" +
                     $" / c3m {before.Breakdown.GetValueOrDefault("c3m", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3m", 0)}" +
                     $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
                     $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手)"),
