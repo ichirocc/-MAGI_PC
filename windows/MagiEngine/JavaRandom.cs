@@ -74,3 +74,29 @@ public sealed class JavaRandom
     /// (<c>V6SearchOperators.findC3WantFix</c> uses it to pick between cons3/cons3m).</summary>
     public bool NextBoolean() => Next(1) != 0;
 }
+
+/// <summary>
+/// [フェーズ6/C1JointLnsPolish 追加] Kotlin's <c>Iterable&lt;T&gt;.shuffled(random: java.util.Random)</c>
+/// — confirmed (via disassembling the vendored <c>kotlin-stdlib-2.0.21.jar</c>'s
+/// <c>CollectionsKt__CollectionsJVMKt.shuffled</c>) to be the JVM-platform-specific overload that
+/// calls <c>toMutableList()</c> then delegates directly to
+/// <c>java.util.Collections.shuffle(List, Random)</c> — i.e. the JDK's documented in-place
+/// Fisher-Yates: <c>for (i = size; i &gt; 1; i--) swap(list, i-1, rnd.nextInt(i))</c> (the
+/// <c>RandomAccess</c>-list branch, which applies here since a freshly-copied <see cref="List{T}"/>
+/// is random-access). <see cref="JavaRandom.NextInt"/> is already a bit-exact port of
+/// <c>java.util.Random.nextInt(int)</c>, so replicating that same loop here reproduces the exact
+/// same permutation for the same seed and input order.
+/// </summary>
+public static class JavaRandomExtensions
+{
+    public static List<T> Shuffled<T>(this IEnumerable<T> source, JavaRandom rng)
+    {
+        var list = new List<T>(source);
+        for (int i = list.Count; i > 1; i--)
+        {
+            int j = rng.NextInt(i);
+            (list[i - 1], list[j]) = (list[j], list[i - 1]);
+        }
+        return list;
+    }
+}
