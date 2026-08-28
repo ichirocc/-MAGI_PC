@@ -30,12 +30,11 @@ public static partial class V6NativeOptimizer
     //   AsyncLocal で呼び出し木の隅々まで運ぶ。static は「いちばん新しい実行のライブ表示」用として
     //   残す（新しい方が勝つのが正しい面）。
     //
-    //   [5c範囲の縮小] Kotlin の RunSlot は alternatives/fusionElites/infeasible の3フィールドを
-    //   持つが、fusionElites（AdaptiveElite 型、phase 5d/5e scope）は phase 5c のどの関数（
-    //   RunMultiWorker/RunV5/RunAlnsChains/RunAlns/RunAlnsSingle/RunRsi/RunRsiPlus）からも一切
-    //   読み書きされない（Kotlin 原本で読み書きするのは optimize()・runAdaptivePortfolio・
-    //   EliteIntegrationPolish のみ、いずれも phase 5d/5e scope）。よってここでは意図的に省略し、
-    //   AdaptiveElite の実体を導入する phase 5d でこのクラスへ追加する。
+    //   [5d/AdaptiveEliteArchive導入後に追加] Kotlin の RunSlot は alternatives/fusionElites/
+    //   infeasible の3フィールドを持つ。fusionElites（AdaptiveElite 型、runAdaptivePortfolio専用の
+    //   全epoch横断エリート統合結果）は AdaptiveEliteArchive.cs でこの型を導入した後の今、ここへ追加する
+    //   （phase 5c 時点では対応する読み書き元＝optimize()/runAdaptivePortfolio/EliteIntegrationPolish が
+    //   まだ移植されていなかったため意図的に省略していた）。
     public sealed class RunSlot
     {
         public long Id { get; }
@@ -43,6 +42,11 @@ public static partial class V6NativeOptimizer
 
         private volatile IReadOnlyList<int[][]> _alternatives = Array.Empty<int[][]>();
         public IReadOnlyList<int[][]> Alternatives { get => _alternatives; set => _alternatives = value; }
+
+        // [3.268.0/elite archive fusion, Kotlin原本] 全epochから圧縮した品質・距離・橋渡しエリート
+        //   （最適化後の再結合/Fusion専用、PORTFOLIO実行時のみ非空）。
+        private volatile IReadOnlyList<AdaptiveElite> _fusionElites = Array.Empty<AdaptiveElite>();
+        public IReadOnlyList<AdaptiveElite> FusionElites { get => _fusionElites; set => _fusionElites = value; }
 
         private readonly object _lock = new();
         private volatile IReadOnlySet<string> _infeasible = new HashSet<string>();
@@ -84,6 +88,14 @@ public static partial class V6NativeOptimizer
     /// </summary>
     private static volatile IReadOnlyList<int[][]> _lastAlternatives = Array.Empty<int[][]>();
     public static IReadOnlyList<int[][]> LastAlternatives => _lastAlternatives;
+
+    /// <summary>
+    /// [3.268.0/elite archive fusion, Kotlin原本] 全epochから圧縮した品質・距離・橋渡しエリート
+    /// （最適化後の再結合/Fusion専用、PORTFOLIO実行時のみ非空）。<see cref="_lastAlternatives"/>と同じ
+    /// 「いちばん新しい実行」の値＝ライブ表示用の legacy static mirror。
+    /// </summary>
+    private static volatile IReadOnlyList<AdaptiveElite> _lastFusionElites = Array.Empty<AdaptiveElite>();
+    public static IReadOnlyList<AdaptiveElite> LastFusionElites => _lastFusionElites;
 
     // [3.288.0/ログ強化=状態軸, Kotlin原本] この Optimize() 実行中に HF63 が「構造的に充足困難」と
     //   学習した族の集合（全 RunRsi 呼出＝直接RSI/RSI++/適応ポートフォリオの各ワーカーからの union）。

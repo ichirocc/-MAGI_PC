@@ -7,9 +7,9 @@ namespace MagiEngine.V6;
 /// size its parallelism, pick a role profile for hypothesis <c>i</c>, or format a diagnostic log line.
 /// No mutable state; every member here is a pure function (or a thin delegate to one).
 ///
-/// [5c範囲の縮小] <c>PortfolioWorkerCount</c>（phase 5d の <c>runAdaptivePortfolio</c> の唯一の
-/// 呼出元）と <c>HypothesisStartFor</c>/<c>ForceDiverseKick</c>（<c>optimizeInSlot</c> の呼出site
-/// lambda からのみ呼ばれる、phase 5d/5e scope）は、この partial class の他ファイルへ後ほど追加する。
+/// [5d残作業] <c>HypothesisStartFor</c>/<c>ForceDiverseKick</c>（<c>optimizeInSlot</c> の呼出site
+/// lambda からのみ呼ばれる、phase 5e scope）は、この partial class の他ファイルへ後ほど追加する
+/// （<c>PortfolioWorkerCount</c> は本ファイルへ追加済み）。
 /// </summary>
 public static partial class V6NativeOptimizer
 {
@@ -173,6 +173,15 @@ public static partial class V6NativeOptimizer
             : HypothesisChainPlan(workers, hSpawn, cores: c);
         return (hSpawn, plan);
     }
+
+    /// <summary>
+    /// [PORTFOLIO専用ワーカー数] <c>RunAdaptivePortfolio</c>（phase 5d、単一の呼出元）が spawn する
+    /// 外側ワーカー本数。下限1、上限は無し（cores未満でも設定値をそのまま使う——<see cref="HypothesisChainPlan"/>
+    /// のような内部並列度への転用は行わない、PORTFOLIO の役割固定8スロット構造とは独立の素朴なクランプ）。
+    /// 下限には cores も 2 の大きい方を要求する（1コア機でも最低2ワーカーの多様性を保証）。
+    /// </summary>
+    internal static int PortfolioWorkerCount(int w, int? cores = null) =>
+        Math.Max(1, Math.Min(Math.Max(1, w), Math.Max(2, cores ?? Environment.ProcessorCount)));
 
     /// <summary>
     /// [3.409.4] PORTFOLIO の**外側ワーカー**が壁時計上でどれだけ並行していたかの観測値（役割別
