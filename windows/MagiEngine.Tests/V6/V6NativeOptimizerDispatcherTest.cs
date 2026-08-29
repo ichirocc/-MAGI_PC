@@ -9,7 +9,8 @@ namespace MagiEngine.Tests.V6;
 /// <summary>
 /// Phase 5e (final piece of phase 5): <see cref="V6NativeOptimizer.Optimize"/>/
 /// <see cref="V6NativeOptimizer.OptimizeInSlot"/> — the top-level dispatcher that
-/// <c>V6FinalPort.HandleOptimize</c> (phase 7, not yet ported) will call. Exercises:
+/// <see cref="V6FinalPort.HandleOptimize"/> (phase 7 piece 18, ported and exercised end-to-end in
+/// <see cref="V6FinalPortHandleOptimizeTest"/>) calls up to three times per run. Exercises:
 /// algorithm dispatch across all five explicit <see cref="V6Algorithm"/> values plus AUTO's
 /// budget-based resolution (already-ported <see cref="V6NativeOptimizer.ChooseAlgorithm"/>);
 /// the HF67 entry-repair adopt/reject decision; the PostPolish epilogue toggle; and the

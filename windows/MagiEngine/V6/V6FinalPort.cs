@@ -24,10 +24,12 @@ namespace MagiEngine.V6;
 /// <c>V6FinalPort.Watchdog.cs</c>. <c>covUBlockedAmount</c>/<c>covUStructuralWall</c>/<c>fmtIter</c>/
 /// <c>checkResultWorse</c> are now ported in <c>V6FinalPort.Tail.cs</c> (piece 17).
 ///
-/// Deliberately still NOT ported: <c>handleOptimize</c> itself (piece 18/19 — the ~740-line core
-/// orchestration, which depends on <c>V6NativeOptimizer</c> (phase 5, done) and
-/// <c>V6HotfixPasses.runPostOptimization</c> (phase 6, done); every other member of
-/// <c>V6FinalPort.kt</c> it needs is now ported).
+/// [phase 7 piece 18, <c>V6FinalPort.HandleOptimize.cs</c>] <c>handleOptimize</c> itself — the
+/// ~740-line core orchestration — is now ported. This was the last member of <c>V6FinalPort.kt</c>;
+/// <c>MagiEngine</c> is now functionally complete end-to-end with zero WinUI3 code, matching the
+/// migration plan's stated completion point for phase 7's engine-side scope (CSV I/O,
+/// <c>ScheduleCsvBridge.kt</c>, remains separately tracked within this phase — see that file's own
+/// doc comment for status).
 ///
 /// [async 移植上の判断] Kotlin's <c>suspend fun ... = withContext(Dispatchers.Default) { ... }</c>
 /// here is purely "run this CPU-bound work off the caller's (typically UI) thread" — it is not
@@ -69,11 +71,13 @@ public static partial class V6FinalPort
     /// <summary>
     /// Faithful port of Kotlin's <c>ActionResult</c> data class.
     ///
-    /// <see cref="Post"/> stays untyped (<c>object?</c>) for now: Kotlin's field type is
-    /// <c>V6PostOptimizationResult?</c>, a type owned by <c>V6HotfixPasses.kt</c> (phase 6) that
-    /// does not exist yet in this port. No phase-4 call site ever constructs a non-null value for
-    /// it, so this is honestly "not yet modeled" rather than a guessed-at stub shape; phase 6
-    /// will widen this field's type to the real port of <c>V6PostOptimizationResult</c>.
+    /// [フェーズ7ピース18] <see cref="Post"/> は当初（phase 4）<c>object?</c> のプレースホルダ
+    /// だったが、<c>V6PostOptimizationResult</c>（phase 6 の実体）が既にポート済みのため、
+    /// Kotlin原本と同じ型 <c>V6PostOptimizationResult?</c> へ確定した。型は
+    /// <see cref="V6HotfixPasses"/> のネストされたレコード（Kotlin原本はトップレベルの
+    /// <c>data class</c> だが、姉妹の <c>HF80Result</c>/<c>HF67Result</c>/<c>HF66Result</c>/
+    /// <c>HF70Result</c> と同じ「所有クラスへのネスト」方針にC#移植では統一済み）なので、
+    /// このファイル（<c>V6HotfixPasses</c> の外）から参照するには完全修飾が要る。
     /// </summary>
     public sealed record ActionResult(
         int[][] Schedule,
@@ -81,7 +85,7 @@ public static partial class V6FinalPort
         string Phase,
         BusyDetail BusyDetail,
         IReadOnlyList<MirrorLog> Logs,
-        object? Post = null,
+        V6HotfixPasses.V6PostOptimizationResult? Post = null,
         IReadOnlyList<int[][]>? Alternatives = null)
     {
         public IReadOnlyList<int[][]> Alternatives { get; init; } = Alternatives ?? Array.Empty<int[][]>();

@@ -188,6 +188,25 @@ public static class ScheduleUtil
         return result;
     }
 
+    /// <summary>
+    /// [フェーズ7ピース18] Kotlin の <c>Array&lt;IntArray&gt;.contentDeepEquals(other)</c>
+    /// （<c>V6FinalPort.handleOptimize</c> の <c>postForResult</c> ガードでのみ使用）に対応する、
+    /// このC#移植では他に既存の同等ヘルパーが無かったため新設した拡張メソッド。行数不一致・各行の
+    /// 内容不一致のどちらでも false（Kotlin の contentDeepEquals と同じ意味論。参照が同一なら
+    /// 早期 true を返す点も含め、値の逐次比較として振る舞いは同一）。
+    /// </summary>
+    public static bool ContentDeepEquals(this int[][] a, int[][] b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (ReferenceEquals(a[i], b[i])) continue;
+            if (!a[i].AsSpan().SequenceEqual(b[i])) return false;
+        }
+        return true;
+    }
+
     /// <summary>Returns a copy of <paramref name="state"/> with its schedule replaced.</summary>
     public static MagiState WithSchedule(this MagiState state, int[][] schedule)
     {
