@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      [フェーズ9] MagiViewModel.kt / MagiUiState.kt の移植先。プラットフォーム非依存の
+      net8.0 クラスライブラリ（Windows App SDK 依存なし）とすることで、このLinuxサンドボックス上で
+      dotnet build / dotnet test により検証できる（MagiApp.WinUI と同じ理由で分離した——
+      あちらは net8.0-windows10.0.19041.0 で Windows 専用ビルドのため、View層(XAML+code-behind)
+      だけをそちらへ残し、ViewModel/UiState はここへ切り出す）。
+      CommunityToolkit.Mvvm はこのプロジェクトが直接依存する（[ObservableProperty] 等の
+      source generator が Windows 非依存であることは事前にプローブして確認済み）。
+    -->
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>MagiApp.ViewModels</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MagiEngine\MagiEngine.csproj" />
+  </ItemGroup>
+
+</Project>

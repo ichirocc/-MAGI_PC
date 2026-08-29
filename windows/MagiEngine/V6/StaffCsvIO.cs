@@ -37,22 +37,6 @@ public static class StaffCsvIO
     /// <summary>Kotlin の <c>r.getOrElse(idx) { "" }.trim()</c> と同じ「範囲外は空文字」読み取り。</summary>
     private static string Cell(IReadOnlyList<string> r, int idx) => (idx >= 0 && idx < r.Count ? r[idx] : "").Trim();
 
-    /// <summary>
-    /// [Ws1Ops.kt 230〜234行 移植元] <c>Ws1Ops.fillShift</c> の逐語移植（この3行のためだけに
-    /// <c>Ws1Ops.kt</c> 全体を移植しない＝フェーズ9のスコープのまま）。
-    ///
-    /// 空き日を何で埋めるか＝ <paramref name="rest"/> をその群が担当できるならそれ、できなければ
-    /// 担当できる先頭のシフト（どちらも無ければ <paramref name="rest"/> のまま。ここで例外を投げると
-    /// この不整合を直しに来た編集操作自体が落ちるため、あえて投げない）。
-    /// </summary>
-    private static int FillShift(IReadOnlyList<int>? groupShiftRow, int rest)
-    {
-        if (groupShiftRow is null) return rest;
-        var allowed = new List<int>();
-        for (var k = 0; k < groupShiftRow.Count; k++) if (groupShiftRow[k] == 1) allowed.Add(k);
-        return ScheduleUtil.FillShiftIndex(allowed.ToArray(), rest);
-    }
-
     public static string Build(MagiState state)
     {
         var sb = new System.Text.StringBuilder();
@@ -167,14 +151,17 @@ public static class StaffCsvIO
                 // [3.329.0/外部レビュー H-01/M-01] 新しい職員の空き日は**休の記号解決**で埋める
                 //   （旧: index 0 直書きで、休が先頭でないデータでは全日が勤務になっていた）。
                 //   未知のスキル群は 0（先頭の群）でなく **-1（未所属）**へ（3.70.0の「(なし)」）。
-                // [3.442.0/H3] さらに**その群が休を担当できるか**まで見る。休を担当可否から外した群
-                //   （UIの担当可否チップで実際にできる操作）へCSVで職員を足すと、旧実装は全日を休で
-                //   埋めて**行まるごとgroupViol(HARD 10000)**になっていた（31日なら1回の取込で必須違反31件）。
-                //   3.418.0がWs1Opsの3経路で直したのと同じ穴の、CSV側の取り残し。未知の群は先頭グループへ
+                // [3.442.0/H3、フェーズ9で解消] さらに**その群が休を担当できるか**まで見る。休を
+                //   担当可否から外した群（UIの担当可否チップで実際にできる操作）へCSVで職員を足すと、
+                //   旧実装は全日を休で埋めて**行まるごとgroupViol(HARD 10000)**になっていた（31日なら
+                //   1回の取込で必須違反31件）。3.418.0がWs1Opsの3経路で直したのと同じ穴の、CSV側の
+                //   取り残しだった。フェーズ9で Ws1Ops.cs（Ws1Ops.kt の全体移植）が完成したため、
+                //   ここだけが持っていた私的な複製（旧 <c>FillShift</c>）は削除し共有ヘルパーへ委譲する
+                //   （写せば必ずどちらかが取り残される＝Ws1Ops.kt 自身の教訓）。未知の群は先頭グループへ
                 //   落ちるので、そこが休を持たない場合も同様に効く。
                 var gIdx = hasGi ? gi : 0;
                 var groupShiftRow = gIdx >= 0 && gIdx < state.GroupShift.Count ? state.GroupShift[gIdx] : null;
-                var fill = FillShift(groupShiftRow, ScheduleUtil.RestShiftIndex(state));
+                var fill = Ws1Ops.FillShift(groupShiftRow, ScheduleUtil.RestShiftIndex(state));
                 newStaff.Add(new Staff(rawName, gIdx, hasSi ? si : -1));
                 extraRows.Add(Enumerable.Repeat(fill, t).ToArray());
                 added++;
