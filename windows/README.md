@@ -41,16 +41,18 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 12フェーズに分割して段階的に進める（詳細は移植計画を参照。フェーズ完了ごとに区切りを置く）：
 
-0. ソリューション雛形・CI・WinUI3足場（**このフェーズ**）
-1. `MagiState` データモデル + JSON往復（Android/Web版とのファイル互換を維持する方針）
-2. `Problem`（解決済みビュー）
-3. **パリティ三角形**（`ViolationChecker`/`Evaluator`/`DeltaEvaluator`）＝最重要フェーズ
-4. 初期解生成＋薄い入口
-5. 探索統括（SA→ALNS/RSI/RSI++→Portfolio）＝coroutines→TPL変換の最大リスク
-6. 後処理研磨パス（`V6HotfixPasses.kt` 4,682行、C#では族ごとに複数ファイルへ分割）
-7. `V6FinalPort` 統括・CSV・診断（この時点で MagiEngine は機能的に完結）
-8. WinUI3縦断スライス（フェーズ4完了後に前倒し着手可）
-9. UIシェル本体＋ViewModel
+0. ✅ ソリューション雛形・CI・WinUI3足場
+1. ✅ `MagiState` データモデル + JSON往復（Android/Web版とのファイル互換を維持する方針）
+2. ✅ `Problem`（解決済みビュー）
+3. ✅ **パリティ三角形**（`ViolationChecker`/`Evaluator`/`DeltaEvaluator`）＝最重要フェーズ
+4. ✅ 初期解生成＋薄い入口
+5. ✅ 探索統括（SA→ALNS/RSI/RSI++→Portfolio）＝coroutines→TPL変換の最大リスク
+6. ✅ 後処理研磨パス（`V6HotfixPasses.kt` 4,682行、C#では族ごとに複数ファイルへ分割）
+7. ✅ `V6FinalPort` 統括・CSV・診断（この時点で MagiEngine は機能的に完結）
+8. 🚧 WinUI3縦断スライス（**進行中**・フェーズ9と並行）
+9. 🚧 UIシェル本体＋ViewModel（**進行中**・フェーズ8と並行。画面マップは
+   [`docs/screen_port_map.md`](docs/screen_port_map.md) を参照＝下調べ資料であり、
+   実移植時は必ず元のKotlinソースを直接確認すること）
 10. 背景実行
 11. パッケージング/配布
 
