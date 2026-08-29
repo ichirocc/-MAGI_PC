@@ -39,6 +39,54 @@ public class ShiftAppearanceTest
         Assert.Equal(ShiftAppearance.NeutralShiftColor, ShiftAppearance.ResolveShiftColor());
     }
 
+    /// <summary>
+    /// [フェーズ9] <c>ensureReadable</c>（<c>MagiTokens.kt</c>）の逐語移植の検証。
+    /// 数値は WCAG 相対輝度式で独立に検算済み（bg=白 vs 黒: contrast=21.0 / bg=白 vs #F0F0F0:
+    /// contrast≈1.14 / bg=黒 vs #101010: contrast≈1.10、いずれも4.5未満）。
+    /// </summary>
+    [Fact]
+    public void PreferredColorIsKeptWhenItAlreadyMeetsTheRatio()
+    {
+        // 白地に黒＝コントラスト比21.0、既定しきい値4.5を大きく超える＝そのまま採用。
+        Assert.Equal("#000000", ShiftAppearance.EnsureReadable("#FFFFFF", "#000000"));
+    }
+
+    [Fact]
+    public void FallsBackToPureBlackWhenPreferredIsTooCloseToAWhiteBackground()
+    {
+        // 白地に薄灰(#F0F0F0)＝コントラスト比≈1.14と既定しきい値4.5未満＝黒/白のうち高い方(黒)へ。
+        Assert.Equal("#000000", ShiftAppearance.EnsureReadable("#FFFFFF", "#F0F0F0"));
+    }
+
+    [Fact]
+    public void FallsBackToPureWhiteWhenPreferredIsTooCloseToABlackBackground()
+    {
+        // 黒地に濃灰(#101010)＝コントラスト比≈1.10と既定しきい値4.5未満＝黒/白のうち高い方(白)へ。
+        Assert.Equal("#FFFFFF", ShiftAppearance.EnsureReadable("#000000", "#101010"));
+    }
+
+    [Fact]
+    public void ALowMinRatioLetsTheOriginallyRejectedPreferredColorThrough()
+    {
+        // 同じ薄灰(#F0F0F0)でも minRatio=1.0 なら 1.14 >= 1.0 で通る＝指定色をそのまま尊重する。
+        Assert.Equal("#F0F0F0", ShiftAppearance.EnsureReadable("#FFFFFF", "#F0F0F0", minRatio: 1.0));
+    }
+
+    [Fact]
+    public void UnparseableBackgroundReturnsThePreferredColorUnchanged()
+    {
+        // 背景が解釈できなければコントラストを判定できない＝指定色をそのまま返す
+        // （Kotlin原本はColor型を受けるためこの経路は無いが、文字列を受けるC#移植側の保険）。
+        Assert.Equal("#123456", ShiftAppearance.EnsureReadable("こわれた値", "#123456"));
+    }
+
+    [Fact]
+    public void UnparseablePreferredColorFallsBackJustLikeInsufficientContrast()
+    {
+        // 指定色が解釈できない＝コントラスト要件を満たせないのと同様に扱い、黒/白の高い方へ。
+        Assert.Equal("#000000", ShiftAppearance.EnsureReadable("#FFFFFF", "こわれた値"));
+    }
+
     [Fact]
     public void TextColorIsTheHigherContrastOfTheTwoInkColors()
     {

@@ -10,6 +10,35 @@ namespace MagiEngine.V6;
 /// </summary>
 public static class ShiftAppearance
 {
+    /// <summary>
+    /// [フェーズ9] <c>MagiTokens.kt</c> の <c>ensureReadable(bg, preferred, minRatio)</c> の逐語移植。
+    ///
+    /// 前景色 <paramref name="preferredHex"/> が背景 <paramref name="bgHex"/> に対し
+    /// <paramref name="minRatio"/>（既定 4.5＝通常テキストのWCAG基準）以上のコントラストを持てば
+    /// そのまま採用。不足する場合のみ、純白(#FFFFFF)/純黒(#000000)のうちコントラストが高い方へ
+    /// フォールバックする（<see cref="PickTextColor"/> が使う生成り/濃色の2色とは別物＝混同しない）。
+    /// 描画時のみの補正で、保存済みの色データを書き換える意図の関数ではない（HF77 セーフ）。
+    /// </summary>
+    public static string EnsureReadable(string bgHex, string preferredHex, double minRatio = 4.5)
+    {
+        var bg = ParseHex(bgHex);
+        // bg が解釈できなければコントラストを判定できないため、指定色をそのまま返す
+        // （Kotlin原本は Color 型を受けるためこの経路は無いが、C#移植は文字列を受けるため必要な保険）。
+        if (bg is null) return preferredHex;
+        double bgLum = RelLum(bg.Value.r, bg.Value.g, bg.Value.b);
+
+        var preferred = ParseHex(preferredHex);
+        if (preferred is not null)
+        {
+            double prefLum = RelLum(preferred.Value.r, preferred.Value.g, preferred.Value.b);
+            if (Contrast(bgLum, prefLum) >= minRatio) return preferredHex;
+        }
+
+        double whiteLum = RelLum(0xFF, 0xFF, 0xFF);
+        double blackLum = RelLum(0x00, 0x00, 0x00);
+        return Contrast(bgLum, whiteLum) >= Contrast(bgLum, blackLum) ? "#FFFFFF" : "#000000";
+    }
+
     /// <summary>背景色 <paramref name="bgHex"/> の上に載せる文字色を、コントラストが大きい方（黒 or 生成り）で選ぶ。</summary>
     public static string PickTextColor(string bgHex)
     {
