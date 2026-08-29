@@ -35,8 +35,15 @@ namespace MagiApp.ViewModels;
 /// <c>Ui.X = ...; Ui.Y = ...;</c> という <see cref="Ui"/> インスタンスへの直接複数プロパティ代入に
 /// 置き換える（新しいインスタンスへの差し替えではなく、既存インスタンスの変更＝各プロパティが
 /// 個別に <c>PropertyChanged</c> を上げる）。
+///
+/// [partial class 分割方針] <c>V6SanityPort</c>/<c>V6HotfixPasses</c>/<c>V6NativeOptimizer</c> 等、
+/// このC#移植で複数ピースにまたがる巨大クラスはすべて <c>partial class</c> ＋
+/// <c>ClassName.Topic.cs</c>（例: <c>V6SanityPort.Guidance.cs</c>）という確立済みの規約で分割している
+/// （Kotlin原本が単一ファイルなのは積み上げの結果であり意図的設計ではないと判断——計画書「フェーズ6」
+/// 参照）。<c>MagiViewModel</c> も同じ規約に従う。このファイル（<c>MagiViewModel.cs</c>）はピース5
+/// （状態管理サブシステム）、<c>MagiViewModel.Diagnostics.cs</c> はピース6（診断/レポート集約パイプライン）。
 /// </summary>
-public sealed class MagiViewModel
+public sealed partial class MagiViewModel
 {
     /// <summary>
     /// 勤務表最適化のタイムアウト上限（秒）。唯一の真実源はエンジン層の

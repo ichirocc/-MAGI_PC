@@ -26,7 +26,10 @@ namespace MagiApp.ViewModels;
 public sealed partial class UiState : ObservableObject
 {
     // Kotlin: internal val emptyBreakdown = MirrorKeys.all.associateWith { 0 }
-    private static IReadOnlyDictionary<string, int> EmptyBreakdown() =>
+    // [テスト可視性/再利用のためinternal化] MagiViewModel.MakeUi（フェーズ9 ピース6）が
+    // Kotlin原本の `emptyBreakdown + report.breakdown`（マップ合成で全19キーを保証する）と
+    // 同じ土台を必要とするため、複製せずここへ委譲する（複製は必ずドリフトする＝確立済みの規約）。
+    internal static IReadOnlyDictionary<string, int> EmptyBreakdown() =>
         MirrorKeys.All.ToDictionary(k => k, _ => 0);
 
     [ObservableProperty] private bool loaded;
