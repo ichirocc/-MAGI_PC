@@ -37,4 +37,8 @@ jobs:
         run: dotnet restore MagiApp.WinUI/MagiApp.WinUI.csproj
 
       - name: Build (MagiApp.WinUI, x64)
-        run: dotnet build MagiApp.WinUI/MagiApp.WinUI.csproj --no-restore --configuration Release --runtime win-x64 --self-contained false
+        # -p:Platform=x64 が必須: --runtime win-x64 だけでは MSBuild の Platform は
+        # プロジェクトの <Platforms>x86;x64;ARM64</Platforms> から既定値が出ず AnyCPU のままになり、
+        # MSIX パッケージング(EnableMsixTooling=true)が
+        # "Packaged .NET applications with an app host exe cannot be ProcessorArchitecture neutral" で失敗する。
+        run: dotnet build MagiApp.WinUI/MagiApp.WinUI.csproj --no-restore --configuration Release --runtime win-x64 --self-contained false -p:Platform=x64

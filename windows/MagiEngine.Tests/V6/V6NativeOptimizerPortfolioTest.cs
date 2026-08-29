@@ -299,7 +299,13 @@ public class V6NativeOptimizerPortfolioTest
         sw.Stop();
 
         Assert.False(result);
-        Assert.True(sw.ElapsedMilliseconds < 3_000, $"A blip must resolve within a couple of poll intervals, not the full window (took {sw.ElapsedMilliseconds}ms).");
+        // [CI フレーク対応] 通常は250ms間隔のポーリング2回(≈500ms)で解決するが、共有CIランナー
+        // (windows-latest)のスレッド/Task.Delayスケジューリング遅延で4462msを観測（実機ログ）。
+        // ここで検証すべき本質的な不変条件は「本物の行き詰まり(StopConfirmMs=5秒待ち切って true を
+        // 返す経路)と区別できる」ことであって「何ms未満か」という具体的な数字ではないため、しきい値を
+        // 意味のある境界＝確認窓そのもの(StopConfirmMs)未満へ緩める（3秒という恣意的な値をやめる）。
+        Assert.True(sw.ElapsedMilliseconds < V6NativeOptimizer.StopConfirmMs,
+            $"A blip must resolve before the full confirmation window elapses, not ride it out like a genuine stall (took {sw.ElapsedMilliseconds}ms, window={V6NativeOptimizer.StopConfirmMs}ms).");
     }
 
     [Fact]
@@ -327,7 +333,9 @@ public class V6NativeOptimizerPortfolioTest
         sw.Stop();
 
         Assert.True(result);
-        Assert.True(sw.ElapsedMilliseconds < 2_000, $"Cancellation must be treated as a genuine (monotonic) stop without riding out the full window (took {sw.ElapsedMilliseconds}ms).");
+        // [CI フレーク対応] 上のブリップテストと同じ理由でしきい値を確認窓(StopConfirmMs)基準へ緩める。
+        Assert.True(sw.ElapsedMilliseconds < V6NativeOptimizer.StopConfirmMs,
+            $"Cancellation must be treated as a genuine (monotonic) stop without riding out the full confirmation window (took {sw.ElapsedMilliseconds}ms, window={V6NativeOptimizer.StopConfirmMs}ms).");
     }
 
     // ================================ AdaptiveEpochStart ================================

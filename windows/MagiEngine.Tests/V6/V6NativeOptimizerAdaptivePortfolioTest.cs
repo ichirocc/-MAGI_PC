@@ -147,17 +147,21 @@ public class V6NativeOptimizerAdaptivePortfolioTest
         // min(deadline, now+quantum*1000) で常に外側の deadline にクランプされるため、budgetSec を
         // 小さく保てば各役割(RunAlns/RunRsi/RunRsiPlus)の内部フロア（RunRsiPlusのみ最大35秒）に
         // 律速されず、実コストは budgetSec 近辺に収まる。
+        // [CI フレーク対応] budgetSec=2 は共有CIランナー(windows-latest)のスレッドプール起動/JITウォーム
+        // アップの遅延次第で Iterations=0 のまま締切に達しうることを実機で観測（result.Iterations > 0 が
+        // 間欠的に失敗）。budgetSec=5 へ緩めて実反復が起きる余地を広げる（教訓#30の規律どおり実コストを
+        // 払う判断の延長で、アサーション自体を弱めるのではなく実行時間側に余裕を持たせる）。
         var state = MinimalState.Build();
         var p = new Problem(state);
         var initial = p.InitialAssignment();
 
         var sw = Stopwatch.StartNew();
         var result = await V6NativeOptimizer.RunAdaptivePortfolio(
-            state, initial, w: 2, new V6OptimizerOptions(Workers: 2, Seed: 7L), budgetSec: 2,
+            state, initial, w: 2, new V6OptimizerOptions(Workers: 2, Seed: 7L), budgetSec: 5,
             shouldStop: () => false, stopIsFinal: () => false, onProgress: NoOpProgress);
         sw.Stop();
 
-        Assert.True(sw.ElapsedMilliseconds < 20_000,
+        Assert.True(sw.ElapsedMilliseconds < 30_000,
             $"Sanity ceiling only — roleDeadline is clamped by the outer deadline (took {sw.ElapsedMilliseconds}ms).");
         AssertNeverWorsensInput(state, p, initial, result.Report);
         AssertValidShape(p, result.Schedule);
