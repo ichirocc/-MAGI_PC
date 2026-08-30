@@ -66,22 +66,32 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "installer version = $v"
 
+      - name: Setup MSBuild
+        # dotnet CLI では publish できない（run 33284484499 で実測）: WindowsAppSDK の
+        # MrtCore.PriGen.targets が要求する Microsoft.Build.Packaging.Pri.Tasks は
+        # VS の MSBuild 配下にしかなく、dotnet SDK ディレクトリを探して MSB4062 で失敗する。
+        # MSIX ジョブと同じく VS の msbuild を使う。
+        uses: microsoft/setup-msbuild@v2
+
       - name: Publish (unpackaged, self-contained win-x64)
         # WindowsPackageType=None … MSIX を使わない「unpackaged」実行形態に切り替える
         #   （csproj は MSIX が既定。CLI のグローバルプロパティ上書きで、csproj を書き換えずに両形態を共存させる）。
         # WindowsAppSDKSelfContained=true … WinAppSDK ランタイムを出力へ同梱（配布先で Runtime インストール不要）。
-        # --self-contained true … .NET ランタイムも同梱。
-        # -p:Platform=x64 は windows-app-build.yml と同じ理由で必須（AnyCPU では apphost が作れない）。
+        # SelfContained=true … .NET ランタイムも同梱。
+        # Platform=x64 は windows-app-build.yml と同じ理由で必須（AnyCPU では apphost が作れない）。
+        # PublishDir は working-directory(windows/) 絶対パス＝installer\MagiApp.iss の ..\publish\win-x64 と一致。
+        shell: pwsh
         run: >
-          dotnet publish MagiApp.WinUI/MagiApp.WinUI.csproj
-          --configuration Release
-          --runtime win-x64
-          --self-contained true
-          -p:Platform=x64
-          -p:WindowsPackageType=None
-          -p:WindowsAppSDKSelfContained=true
-          -p:EnableMsixTooling=false
-          --output publish/win-x64
+          msbuild MagiApp.WinUI/MagiApp.WinUI.csproj
+          /restore /t:Publish
+          /p:Configuration=Release
+          /p:Platform=x64
+          /p:RuntimeIdentifier=win-x64
+          /p:SelfContained=true
+          /p:WindowsPackageType=None
+          /p:WindowsAppSDKSelfContained=true
+          /p:EnableMsixTooling=false
+          /p:PublishDir=$PWD\publish\win-x64\
 
       - name: Build setup.exe (Inno Setup)
         shell: pwsh
