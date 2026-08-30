@@ -7,6 +7,8 @@ name: Windows Installer
 #      ランナー同梱の Inno Setup (ISCC.exe) で per-user インストーラに包む。
 #      .NET / WindowsAppSDK ランタイム同梱＝配布先 PC に前提インストール不要。
 #      署名なしでも実行可（初回に SmartScreen の「詳細情報→実行」が出るのは仕様）。
+#      Secrets に WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD があれば
+#      signtool で Authenticode 二重署名（中身の .exe → setup.exe、タイムスタンプ付き）。
 #
 #   ② msix-package … MSIX サイドロードパッケージ（WinUI3 の正式なパッケージ形態）
 #      Secrets に MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD があれば署名付き .msix
@@ -93,6 +95,17 @@ jobs:
           /p:EnableMsixTooling=false
           /p:PublishDir=$PWD\publish\win-x64\
 
+      - name: Sign app binary (optional, Authenticode)
+        # 二重署名構成の①: インストーラへ入れる前に「中身の MagiApp.WinUI.exe」を署名する
+        # （setup.exe だけ署名しても展開後の本体が未署名だと SmartScreen/AV の評価が下がるため）。
+        # Secrets: WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD が無ければ何もせず成功
+        # （署名なし配布＝従来どおり）。詳細は installer/sign-files.ps1 と installer/README.md。
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./installer/sign-files.ps1 -Paths @("$PWD\publish\win-x64\MagiApp.WinUI.exe")
+
       - name: Build setup.exe (Inno Setup)
         shell: pwsh
         run: |
@@ -103,6 +116,14 @@ jobs:
                   /O"installer-out" `
                   installer\MagiApp.iss
           Get-ChildItem installer-out
+
+      - name: Sign setup.exe (optional, Authenticode)
+        # 二重署名構成の②: 生成されたセットアップファイル自体を署名（タイムスタンプ付き）。
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./installer/sign-files.ps1 -Paths @("$PWD\installer-out")
 
       - name: Upload artifact (setup.exe)
         uses: actions/upload-artifact@v4
