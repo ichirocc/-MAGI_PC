@@ -1,0 +1,161 @@
+name: Windows Installer
+
+# Windows 11 向けの「インストールできる成果物」を2形態で生成し Artifacts へ保存する。
+#
+#   ① installer-exe … Inno Setup 製の setup.exe（推奨・証明書不要）
+#      WinUI3 を unpackaged（WindowsPackageType=None）＋ self-contained で publish し、
+#      ランナー同梱の Inno Setup (ISCC.exe) で per-user インストーラに包む。
+#      .NET / WindowsAppSDK ランタイム同梱＝配布先 PC に前提インストール不要。
+#      署名なしでも実行可（初回に SmartScreen の「詳細情報→実行」が出るのは仕様）。
+#
+#   ② msix-package … MSIX サイドロードパッケージ（WinUI3 の正式なパッケージ形態）
+#      Secrets に MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD があれば署名付き .msix
+#      （ダブルクリックでインストール可。証明書を配布先で1回信頼させる必要あり）。
+#      Secrets が無ければ未署名 .msix（開発者モード＋PowerShell の
+#      Add-AppxPackage でのみインストール可）を成果物にする。
+#      注意: Package.appxmanifest の Publisher (CN=MAGI) と証明書 Subject は一致必須。
+#      自己署名証明書の作成例（Windows 上の PowerShell・管理者不要）:
+#        $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=MAGI" `
+#          -KeyUsage DigitalSignature -FriendlyName "MAGI sideload" `
+#          -CertStoreLocation "Cert:\CurrentUser\My" `
+#          -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+#        Export-PfxCertificate -Cert $cert -FilePath magi.pfx `
+#          -Password (ConvertTo-SecureString -String "<パスワード>" -Force -AsPlainText)
+#        [Convert]::ToBase64String([IO.File]::ReadAllBytes("magi.pfx")) | Set-Clipboard
+#      → クリップボードの文字列を Secrets: MSIX_PFX_BASE64 へ、パスワードを MSIX_PFX_PASSWORD へ。
+#
+# トリガは手動（workflow_dispatch）とリリースタグ（win-v*）のみ。
+# 通常 push のビルド検証は windows-app-build.yml が担当（毎 push でインストーラまで
+# 作ると windows ランナーの課金分数を浪費するため分離）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "インストーラのバージョン表記（空欄なら Package.appxmanifest の Version を使用）"
+        required: false
+        default: ""
+  push:
+    tags: ["win-v*"]
+
+jobs:
+  installer-exe:
+    name: setup.exe (Inno Setup)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($v)) {
+            [xml]$m = Get-Content MagiApp.WinUI/Package.appxmanifest
+            # appxmanifest は 4 桁 (1.0.0.0)。インストーラ表記は 3 桁へ丸める。
+            $v = ($m.Package.Identity.Version -replace '\.\d+$', '')
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "installer version = $v"
+
+      - name: Publish (unpackaged, self-contained win-x64)
+        # WindowsPackageType=None … MSIX を使わない「unpackaged」実行形態に切り替える
+        #   （csproj は MSIX が既定。CLI のグローバルプロパティ上書きで、csproj を書き換えずに両形態を共存させる）。
+        # WindowsAppSDKSelfContained=true … WinAppSDK ランタイムを出力へ同梱（配布先で Runtime インストール不要）。
+        # --self-contained true … .NET ランタイムも同梱。
+        # -p:Platform=x64 は windows-app-build.yml と同じ理由で必須（AnyCPU では apphost が作れない）。
+        run: >
+          dotnet publish MagiApp.WinUI/MagiApp.WinUI.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:Platform=x64
+          -p:WindowsPackageType=None
+          -p:WindowsAppSDKSelfContained=true
+          -p:EnableMsixTooling=false
+          --output publish/win-x64
+
+      - name: Build setup.exe (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found (Inno Setup 6 はランナー同梱のはず)" }
+          & $iscc /DAppVersion=${{ steps.ver.outputs.version }} `
+                  /DPublishDir=..\publish\win-x64 `
+                  /O"installer-out" `
+                  installer\MagiApp.iss
+          Get-ChildItem installer-out
+
+      - name: Upload artifact (setup.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: magi-windows-setup-exe
+          path: windows/installer-out/*.exe
+          retention-days: 14
+          if-no-files-found: error
+
+  msix-package:
+    name: MSIX package
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Setup MSBuild
+        # MSIX パッケージ生成 (GenerateAppxPackageOnBuild) は dotnet CLI では駆動できず
+        # Visual Studio の msbuild が必要（makeappx/signtool は Windows SDK 同梱）。
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Package (MSIX, sideload)
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.MSIX_PFX_BASE64 }}
+          PFX_PASS: ${{ secrets.MSIX_PFX_PASSWORD }}
+        run: |
+          $props = @(
+            "/restore", "/p:Configuration=Release", "/p:Platform=x64",
+            "/p:GenerateAppxPackageOnBuild=true",
+            "/p:AppxPackageDir=$PWD\msix-out\",
+            "/p:UapAppxPackageBuildMode=SideloadOnly",
+            "/p:AppxBundle=Never"
+          )
+          if (-not [string]::IsNullOrWhiteSpace($env:PFX_B64)) {
+            Write-Host "署名あり（Secrets の PFX を使用）"
+            [IO.File]::WriteAllBytes("$PWD\signing.pfx", [Convert]::FromBase64String($env:PFX_B64))
+            $props += @(
+              "/p:AppxPackageSigningEnabled=true",
+              "/p:PackageCertificateKeyFile=$PWD\signing.pfx",
+              "/p:PackageCertificatePassword=$env:PFX_PASS"
+            )
+          } else {
+            Write-Host "署名なし（Secrets: MSIX_PFX_BASE64 未設定）→ 未署名 .msix を生成"
+            $props += "/p:AppxPackageSigningEnabled=false"
+          }
+          msbuild MagiApp.WinUI/MagiApp.WinUI.csproj @props
+          if (Test-Path "$PWD\signing.pfx") { Remove-Item "$PWD\signing.pfx" -Force }
+          Get-ChildItem msix-out -Recurse | Select-Object FullName
+
+      - name: Upload artifact (msix)
+        uses: actions/upload-artifact@v4
+        with:
+          name: magi-windows-msix
+          path: |
+            windows/msix-out/**/*.msix
+            windows/msix-out/**/*.cer
+          retention-days: 14
+          if-no-files-found: error
