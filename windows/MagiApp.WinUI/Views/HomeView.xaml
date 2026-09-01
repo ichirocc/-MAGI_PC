@@ -8,6 +8,7 @@
       MagiDashboardCards.kt）の本格移植ではなく、現在の状態（読込済みか・満足度・直近メッセージ・
       必須/合計違反）を読取専用で示す最小版。「勤務表をつくる」導線は既存の RunV6FullOptimize
       （フェーズ9ピース9で移植済み・テスト済み）へ直接委譲する。
+      「バックグラウンドで計算」は Phase 10 で実装した RunInBackground（HomeView.xaml.cs 参照）。
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
@@ -15,6 +16,7 @@
             <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="14" />
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
             <Button x:Name="MakeButton" Content="勤務表をつくる" Click="OnMakeClick" HorizontalAlignment="Stretch" />
+            <Button x:Name="BackgroundButton" Content="バックグラウンドで計算" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
             <Button x:Name="StopButton" Content="やめる" Click="OnStopClick" HorizontalAlignment="Stretch" />
         </StackPanel>
     </ScrollViewer>

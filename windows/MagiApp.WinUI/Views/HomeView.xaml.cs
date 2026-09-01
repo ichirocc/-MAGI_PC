@@ -28,10 +28,13 @@ public sealed partial class HomeView : UserControl
             ? $"満足度 {ui.Satisfaction} ・ 必須違反 {ui.BestHard} ・ 合計 {ui.BestSoft}"
             : "";
         MakeButton.IsEnabled = ui.Loaded && !ui.Running;
+        BackgroundButton.IsEnabled = ui.Loaded && !ui.Running;
         StopButton.IsEnabled = ui.Running;
     }
 
     private void OnMakeClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.RunV6FullOptimize();
+
+    private void OnBackgroundClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.RunInBackground();
 
     private void OnStopClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.Stop();
 }
