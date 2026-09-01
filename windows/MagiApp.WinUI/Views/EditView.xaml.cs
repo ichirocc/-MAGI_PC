@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using MagiApp.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -32,13 +33,24 @@ public sealed partial class EditView : UserControl
     /// <summary>開いているドア。0=月次条件 / 1=職員管理 / 2=年間マスター。</summary>
     private int _door;
 
-    /// <summary>職員/グループの ComboBox の中身。差分があるときだけ作り直して選択を保つ。</summary>
+    /// <summary>職員/グループ/シフトの ComboBox の中身。差分があるときだけ作り直して選択を保つ。</summary>
     private IReadOnlyList<string> _staffItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _groupItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _wishStaffItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _wishShiftItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
 
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
     private int _syncedStaffIndex = -1;
+
+    /// <summary>年間マスターのグループ選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
+    private int _syncedMasterGroupIndex = -1;
+
+    /// <summary>希望シフト/日別必要人数の表示上限（件）。超えた分は件数だけ添える
+    /// （AnalysisView.MaxIssueRows と同じ理由——最大30名×31日で930件になりうる）。</summary>
+    private const int MaxOverrideRows = 60;
 
     public EditView(MagiViewModel vm)
     {
@@ -61,8 +73,10 @@ public sealed partial class EditView : UserControl
             var editable = ui.Loaded && !ui.Running;
             RenderDoor();
             RenderMonthly(ui, editable);
+            RenderWish(ui, editable);
+            RenderNeedDay(ui, editable);
             RenderStaff(ui, editable);
-            RenderMaster(ui);
+            RenderMaster(ui, editable);
         }
         finally
         {
@@ -119,6 +133,124 @@ public sealed partial class EditView : UserControl
         _vm.SetNextMonth();
         // 期間が変わると職員の並びは変わらないが、入力欄は取り込み直す（下記 OnAdd/Edit と同じ理由）。
         _syncedStaffIndex = -1;
+    }
+
+    // ===== 希望シフト（月次条件） =====
+
+    /// <summary>選択肢を差分更新（新規作成しない）。中身が変わらなければ選択位置を保つ。</summary>
+    private static void SyncItems(ComboBox combo, IReadOnlyList<string> items, ref IReadOnlyList<string> cache)
+    {
+        if (cache.SequenceEqual(items)) return;
+        cache = items;
+        var keep = combo.SelectedIndex;
+        combo.ItemsSource = items.ToList();
+        combo.SelectedIndex = keep >= 0 && keep < items.Count ? keep : (items.Count > 0 ? 0 : -1);
+    }
+
+    private void RenderWish(UiState ui, bool editable)
+    {
+        SyncItems(WishStaffCombo, ui.StaffNames, ref _wishStaffItems);
+        SyncItems(WishShiftCombo, ui.ShiftSymbols, ref _wishShiftItems);
+        SetWishButton.IsEnabled = editable;
+
+        WishListHost.Children.Clear();
+        var rows = _vm.WishOverrides();
+        foreach (var v in rows.Take(MaxOverrideRows))
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{v.StaffName} {v.Day}日 → {v.Kigou}", FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var i = v.I; var j = v.J;
+            remove.Click += (_, _) => _vm.RemoveWish(i, j);
+            row.Children.Add(remove);
+            WishListHost.Children.Add(row);
+        }
+        if (rows.Count > MaxOverrideRows)
+        {
+            WishListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+        }
+    }
+
+    private void OnSetWishClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var i = WishStaffCombo.SelectedIndex;
+        var k = WishShiftCombo.SelectedIndex;
+        if (i < 0) { WishHintText.Text = "対象の職員を選んでください。"; return; }
+        if (k < 0) { WishHintText.Text = "シフトを選んでください。"; return; }
+        if (!int.TryParse(WishDayBox.Text.Trim(), out var day1) || day1 < 1 || day1 > _vm.Ui.Days)
+        {
+            WishHintText.Text = $"日は 1〜{_vm.Ui.Days} で入れてください。";
+            return;
+        }
+        _vm.SetWish(i, day1 - 1, k);
+        WishHintText.Text = "";
+    }
+
+    // ===== 日別の必要人数（例外, 月次条件） =====
+
+    private void RenderNeedDay(UiState ui, bool editable)
+    {
+        SyncItems(NeedDayShiftCombo, ui.ShiftSymbols, ref _needDayShiftItems);
+        SetNeedDayButton.IsEnabled = editable;
+
+        NeedDayListHost.Children.Clear();
+        var rows = _vm.NeedDayOverrides();
+        foreach (var v in rows.Take(MaxOverrideRows))
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{v.Kigou} {v.J + 1}日 → 最低{DashIfBlank(v.P1)}/上限{DashIfBlank(v.P2)}",
+                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var k = v.K; var j = v.J;
+            remove.Click += (_, _) => _vm.RemoveNeedDay(k, j);
+            row.Children.Add(remove);
+            NeedDayListHost.Children.Add(row);
+        }
+        if (rows.Count > MaxOverrideRows)
+        {
+            NeedDayListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+        }
+    }
+
+    private static string DashIfBlank(string s) => string.IsNullOrWhiteSpace(s) ? "-" : s;
+
+    private void OnSetNeedDayClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var k = NeedDayShiftCombo.SelectedIndex;
+        if (k < 0) { NeedDayHintText.Text = "シフトを選んでください。"; return; }
+        if (!int.TryParse(NeedDayDayBox.Text.Trim(), out var day1) || day1 < 1 || day1 > _vm.Ui.Days)
+        {
+            NeedDayHintText.Text = $"日は 1〜{_vm.Ui.Days} で入れてください。";
+            return;
+        }
+        _vm.SetNeedDay(k, day1 - 1, NeedDayP1Box.Text.Trim(), NeedDayP2Box.Text.Trim());
+        NeedDayHintText.Text = "";
+    }
+
+    // ===== 確認ダイアログ（削除の共通入口） =====
+
+    /// <summary>削除前の確認。Kotlin原本は削除前に確認ダイアログ（影響件数つき）を出す——
+    /// この移植ではこれまで押す前の警告文＋Undoで代用していたが、ここで本来の確認ダイアログへ揃える。</summary>
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = "削除",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     // ===== 職員管理 =====
@@ -237,20 +369,22 @@ public sealed partial class EditView : UserControl
         _syncedStaffIndex = -1;
     }
 
-    private void OnRemoveStaffClick(object sender, RoutedEventArgs e)
+    private async void OnRemoveStaffClick(object sender, RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
         var i = StaffCombo.SelectedIndex;
         if (i < 0) { StaffHintText.Text = "対象の職員を選んでください。"; return; }
-        // TODO: Kotlin原本は削除前に確認ダイアログ（影響件数つき）を出す。ContentDialog への移植は後続の段階。
-        //   いまは押す前の警告文（StaffHintText）と ViewModel 側の Undo（「元に戻す」）で担保する。
+        var name = i < _vm.Ui.StaffNames.Count ? _vm.Ui.StaffNames[i] : "";
+        var ok = await ConfirmAsync("職員を削除しますか？",
+            $"「{name}」を削除します。勤務・希望・個人の回数も削除されます（「元に戻す」で戻せます）。");
+        if (!ok) return;
         _vm.Ws1RemoveStaff(i);
         _syncedStaffIndex = -1;
     }
 
     // ===== 年間マスター =====
 
-    private void RenderMaster(UiState ui)
+    private void RenderMaster(UiState ui, bool editable)
     {
         ShiftListText.Text = ui.ShiftSymbols.Count > 0
             ? string.Join(" ・ ", ui.ShiftSymbols)
@@ -258,6 +392,16 @@ public sealed partial class EditView : UserControl
 
         var groups = _vm.GroupLabels();
         GroupListText.Text = groups.Count > 0 ? string.Join(" ・ ", groups) : "（未設定）";
+
+        SyncItems(MasterGroupCombo, groups, ref _masterGroupItems);
+        SyncMasterGroupFields();
+        var hasGroup = MasterGroupCombo.SelectedIndex >= 0;
+        AddMasterGroupButton.IsEnabled = editable;
+        EditMasterGroupButton.IsEnabled = editable && hasGroup;
+        RemoveMasterGroupButton.IsEnabled = editable && hasGroup && _vm.Ws1CanRemoveGroup(MasterGroupCombo.SelectedIndex);
+        MasterGroupHintText.Text = editable
+            ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。"
+            : (ui.Loaded ? "計算の実行中はグループを変更できません。終わってからにしてください。" : "");
 
         // ルールの件数は族ごとに出す（GetSetupCounts().Constraints はスキル群の2族を含まない合計のため、
         // 表示は ConstraintFamilies/SkillConstraintFamilies の実 Rows 数を正とする）。
@@ -280,6 +424,74 @@ public sealed partial class EditView : UserControl
             FontSize = 13,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
+    }
+
+    /// <summary>選択中のグループの名前・記号を入力欄へ取り込む（選択が変わったときだけ、職員管理と同じ理由）。</summary>
+    private void SyncMasterGroupFields()
+    {
+        var g = MasterGroupCombo.SelectedIndex;
+        if (g < 0 || g == _syncedMasterGroupIndex) return;
+        _syncedMasterGroupIndex = g;
+        var groups = _vm.Ws1()?.Groups;
+        if (groups is not null && g < groups.Count)
+        {
+            MasterGroupNameBox.Text = groups[g].Name;
+            MasterGroupKigouBox.Text = groups[g].Kigou;
+        }
+    }
+
+    private void OnMasterGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _syncingFromModel = true;
+        try
+        {
+            SyncMasterGroupFields();
+        }
+        finally
+        {
+            _syncingFromModel = false;
+        }
+    }
+
+    private void OnAddMasterGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var name = MasterGroupNameBox.Text.Trim();
+        var kigou = MasterGroupKigouBox.Text.Trim();
+        if (name.Length == 0 || kigou.Length == 0) { MasterGroupHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.Ws1AddGroup(name, kigou);
+        _syncedMasterGroupIndex = -1;
+    }
+
+    private void OnEditMasterGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var g = MasterGroupCombo.SelectedIndex;
+        var name = MasterGroupNameBox.Text.Trim();
+        var kigou = MasterGroupKigouBox.Text.Trim();
+        if (g < 0) { MasterGroupHintText.Text = "対象のグループを選んでください。"; return; }
+        if (name.Length == 0 || kigou.Length == 0) { MasterGroupHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.Ws1EditGroup(g, name, kigou);
+        _syncedMasterGroupIndex = -1;
+    }
+
+    private async void OnRemoveMasterGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var g = MasterGroupCombo.SelectedIndex;
+        if (g < 0) { MasterGroupHintText.Text = "対象のグループを選んでください。"; return; }
+        if (!_vm.Ws1CanRemoveGroup(g)) { MasterGroupHintText.Text = "グループは最低1つ必要なため削除できません。"; return; }
+        var members = _vm.Ws1GroupMemberCount(g);
+        var refs = _vm.Ws1GroupRefCount(g) + _vm.Ws1SkillGroupRefCount(g);
+        var name = g < _masterGroupItems.Count ? _masterGroupItems[g] : "";
+        var msg = $"「{name}」を削除します。" +
+            (members > 0 ? $" 所属{members}名は先頭グループへ移動し、担当できるシフトが変わります。" : "") +
+            (refs > 0 ? $" このグループを参照する制約が{refs}件あります。" : "");
+        var ok = await ConfirmAsync("グループを削除しますか？", msg);
+        if (!ok) return;
+        _vm.Ws1RemoveGroup(g);
+        _syncedMasterGroupIndex = -1;
     }
 
     // ===== ドア切替 =====

@@ -10,9 +10,12 @@
 
       この第1段は Kotlin原本のカード群（WishCard/NeedCalendarCard/Ws1Card/ConstraintsCard 等）の
       本格移植ではなく、各ドアの骨格＋既存の公開 ViewModel メソッドへ確実に配線できる操作のみ:
-        月次条件   … 対象期間の表示・「来月にする」(SetNextMonth)・希望/日別例外の件数(GetSetupCounts)
+        月次条件   … 対象期間の表示・「来月にする」(SetNextMonth)・希望/日別必要人数の一覧・追加/削除
+                     (WishOverrides/SetWish/RemoveWish・NeedDayOverrides/SetNeedDay/RemoveNeedDay)
         職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
-        年間マスター … シフト・グループ・登録済み制約の読取専用一覧（編集は後続の段階）
+        年間マスター … シフト一覧（読取専用）＋グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)
+                     ＋登録済み制約の読取専用一覧（シフトの追加/改名/削除・制約編集は後続の段階）
+      削除系（職員/グループ）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む。
       ドアの切替は ComboBox（SettingsView.xaml の計算方式セレクタと同じ書き方）で行い、各ドアの
       StackPanel の Visibility をコードビハインドで切り替える。
 
@@ -42,6 +45,27 @@
                 <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick"
                         HorizontalAlignment="Left" />
                 <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+
+                <TextBlock Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <StackPanel x:Name="WishListHost" Spacing="2" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="WishStaffCombo" Width="140" PlaceholderText="職員" />
+                    <TextBox x:Name="WishDayBox" Width="56" PlaceholderText="日" />
+                    <ComboBox x:Name="WishShiftCombo" Width="100" PlaceholderText="シフト" />
+                    <Button x:Name="SetWishButton" Content="設定" Click="OnSetWishClick" />
+                </StackPanel>
+                <TextBlock x:Name="WishHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="日別の必要人数（例外）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <StackPanel x:Name="NeedDayListHost" Spacing="2" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="NeedDayShiftCombo" Width="100" PlaceholderText="シフト" />
+                    <TextBox x:Name="NeedDayDayBox" Width="56" PlaceholderText="日" />
+                    <TextBox x:Name="NeedDayP1Box" Width="56" PlaceholderText="最低" />
+                    <TextBox x:Name="NeedDayP2Box" Width="56" PlaceholderText="上限" />
+                    <Button x:Name="SetNeedDayButton" Content="設定" Click="OnSetNeedDayClick" />
+                </StackPanel>
+                <TextBlock x:Name="NeedDayHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
             </StackPanel>
 
             <!-- ===== 職員管理（随時） ===== -->
@@ -81,10 +105,24 @@
                 <TextBlock Text="グループ" FontWeight="SemiBold" />
                 <TextBlock x:Name="GroupListText" TextWrapping="Wrap" FontSize="13" />
 
-                <TextBlock Text="登録済みのルール" FontWeight="SemiBold" />
+                <TextBlock Text="グループの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <ComboBox x:Name="MasterGroupCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnMasterGroupSelectionChanged" />
+                <TextBlock Text="名前" />
+                <TextBox x:Name="MasterGroupNameBox" HorizontalAlignment="Stretch" />
+                <TextBlock Text="記号" />
+                <TextBox x:Name="MasterGroupKigouBox" HorizontalAlignment="Stretch" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddMasterGroupButton" Content="追加" Click="OnAddMasterGroupClick" />
+                    <Button x:Name="EditMasterGroupButton" Content="改名" Click="OnEditMasterGroupClick" />
+                    <Button x:Name="RemoveMasterGroupButton" Content="削除" Click="OnRemoveMasterGroupClick" />
+                </StackPanel>
+                <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="登録済みのルール" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />
 
-                <TextBlock Text="シフト・グループ・ルールの追加や変更は今後の段階で対応します。"
+                <TextBlock Text="シフト・ルールの追加や変更は今後の段階で対応します。"
                            TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
             </StackPanel>
         </StackPanel>
