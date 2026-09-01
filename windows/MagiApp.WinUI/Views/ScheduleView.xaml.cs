@@ -1,9 +1,12 @@
 using System.ComponentModel;
+using System.Linq;
 using MagiApp.ViewModels;
+using MagiEngine.V6;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 
 namespace MagiApp.WinUI.Views;
 
@@ -16,8 +19,12 @@ namespace MagiApp.WinUI.Views;
 /// <see cref="MagiViewModel.AllowedShiftsFor"/>（そのスタッフが担当可能なシフト一覧）から選ばせ、
 /// <see cref="MagiViewModel.SetCell"/> で確定する。<c>SetCell</c> 自身が実行中(<c>OptimizeInFlight</c>)を
 /// ガードして無言で拒否するため、ここでも <see cref="UiState.Running"/> の間はボタンを無効化して
-/// 「押せるのに何も起きない」を避ける（二重の防御——ViewModel 側が最終防御）。違反ハイライト・
-/// 希望バッジ等の装飾（Kotlin原本 MagiScheduleViews.kt）は本格移植までの間、未対応のまま。
+/// 「押せるのに何も起きない」を避ける（二重の防御——ViewModel 側が最終防御）。
+///
+/// [違反ハイライト/希望バッジ] Kotlin原本 MagiScheduleViews.kt の色分け/バッジの本格移植ではなく、
+/// <see cref="UiState.ViolationCells"/>/<see cref="UiState.Wishes"/> だけで表せる最小版。
+/// セル枠の色=<see cref="MirrorKeys.Hard"/>（必須違反=濃い赤）/それ以外（要調整=橙）。
+/// 右下の丸=希望シフトの有無（反映済み=緑・未反映=桃、Kotlin原本の「反映済みリング/未反映バッジ」相当）。
 ///
 /// [元に戻す/やり直す] <see cref="MagiViewModel.Undo"/>/<see cref="MagiViewModel.Redo"/> へ配線。
 /// <see cref="UiState.CanUndo"/>/<see cref="UiState.CanRedo"/> でボタンの有効/無効を反映する
@@ -101,12 +108,32 @@ public sealed partial class ScheduleView : UserControl
                 IsEnabled = !ui.Running,
             };
             button.Click += (sender, _) => ShowCellEditor((FrameworkElement)sender, i, j);
-            var border = new Border
+
+            var cell = new Grid();
+            cell.Children.Add(button);
+            if (ui.Wishes.TryGetValue($"{i},{j}", out var wishK))
             {
-                Child = button,
-                BorderBrush = new SolidColorBrush(Colors.LightGray),
-                BorderThickness = new Thickness(0, 0, 1, 1),
-            };
+                var reflected = wishK == k;
+                cell.Children.Add(new Ellipse
+                {
+                    Width = 8,
+                    Height = 8,
+                    Fill = new SolidColorBrush(reflected ? Colors.SeaGreen : Colors.HotPink),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 2, 2),
+                });
+            }
+
+            Brush borderBrush = new SolidColorBrush(Colors.LightGray);
+            var thickness = new Thickness(0, 0, 1, 1);
+            if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
+            {
+                var family = vioClass.StartsWith("vio-") ? vioClass["vio-".Length..] : vioClass;
+                borderBrush = new SolidColorBrush(MirrorKeys.Hard.Contains(family) ? Colors.Crimson : Colors.DarkOrange);
+                thickness = new Thickness(2);
+            }
+            var border = new Border { Child = cell, BorderBrush = borderBrush, BorderThickness = thickness };
             Grid.SetRow(border, row);
             Grid.SetColumn(border, col);
             ScheduleGridHost.Children.Add(border);
