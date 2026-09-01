@@ -1,0 +1,92 @@
+<UserControl
+    x:Class="MagiApp.WinUI.Views.EditView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      [フェーズ9] 「編集」タブの最初の実装。Kotlin原本（MagiApp.kt の editScope＝入口3分割）と同じく、
+      入力場所を「いつ触るか」で分ける——月次条件(毎月)／職員管理(随時)／年間マスター(制度変更時のみ)。
+      4か所目の勤務表グリッドは「勤務表」タブが担当する。
+
+      この第1段は Kotlin原本のカード群（WishCard/NeedCalendarCard/Ws1Card/ConstraintsCard 等）の
+      本格移植ではなく、各ドアの骨格＋既存の公開 ViewModel メソッドへ確実に配線できる操作のみ:
+        月次条件   … 対象期間の表示・「来月にする」(SetNextMonth)・希望/日別例外の件数(GetSetupCounts)
+        職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
+        年間マスター … シフト・グループ・登録済み制約の読取専用一覧（編集は後続の段階）
+      ドアの切替は ComboBox（SettingsView.xaml の計算方式セレクタと同じ書き方）で行い、各ドアの
+      StackPanel の Visibility をコードビハインドで切り替える。
+
+      レンダリングは全てコードビハインド（ScheduleView と同じ方針・x:Bind/{Binding} は使わない）。
+      Render() でコントロールの値をプログラム的に設定するため、SettingsView と同じ _syncingFromModel
+      フラグでイベントの逆流を止める。
+    -->
+    <ScrollViewer Padding="16">
+        <StackPanel Spacing="20" MaxWidth="560" HorizontalAlignment="Left">
+            <TextBlock Text="編集" FontSize="20" FontWeight="SemiBold" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="どこを直しますか" />
+                <ComboBox x:Name="DoorCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnDoorChanged">
+                    <ComboBoxItem Content="月次条件（毎月）" />
+                    <ComboBoxItem Content="職員管理（随時）" />
+                    <ComboBoxItem Content="年間マスター（制度変更時のみ）" />
+                </ComboBox>
+                <TextBlock x:Name="DoorHintText" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- ===== 月次条件（毎月） ===== -->
+            <StackPanel x:Name="MonthlyPanel" Spacing="8">
+                <TextBlock Text="月次条件" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="PeriodText" TextWrapping="Wrap" />
+                <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick"
+                        HorizontalAlignment="Left" />
+                <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+            </StackPanel>
+
+            <!-- ===== 職員管理（随時） ===== -->
+            <StackPanel x:Name="StaffPanel" Spacing="8">
+                <TextBlock Text="職員管理" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="StaffSummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+                <StackPanel x:Name="StaffListHost" Spacing="2" />
+
+                <TextBlock Text="対象の職員（改名・所属変更・削除）" />
+                <ComboBox x:Name="StaffCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnStaffSelectionChanged" />
+
+                <TextBlock Text="名前" />
+                <TextBox x:Name="StaffNameBox" HorizontalAlignment="Stretch" />
+
+                <TextBlock Text="所属グループ" />
+                <ComboBox x:Name="GroupCombo" HorizontalAlignment="Stretch" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddStaffButton" Content="追加" Click="OnAddStaffClick" />
+                    <Button x:Name="EditStaffButton" Content="改名・所属変更" Click="OnEditStaffClick" />
+                    <Button x:Name="RemoveStaffButton" Content="削除" Click="OnRemoveStaffClick" />
+                </StackPanel>
+
+                <TextBlock x:Name="StaffHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+            </StackPanel>
+
+            <!-- ===== 年間マスター（制度変更時のみ） ===== -->
+            <StackPanel x:Name="MasterPanel" Spacing="8">
+                <TextBlock Text="年間マスター" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="土台の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
+                           TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+
+                <TextBlock Text="シフト" FontWeight="SemiBold" />
+                <TextBlock x:Name="ShiftListText" TextWrapping="Wrap" FontSize="13" />
+
+                <TextBlock Text="グループ" FontWeight="SemiBold" />
+                <TextBlock x:Name="GroupListText" TextWrapping="Wrap" FontSize="13" />
+
+                <TextBlock Text="登録済みのルール" FontWeight="SemiBold" />
+                <StackPanel x:Name="ConstraintListHost" Spacing="2" />
+
+                <TextBlock Text="シフト・グループ・ルールの追加や変更は今後の段階で対応します。"
+                           TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
