@@ -1,3 +1,4 @@
+using MagiApp.ViewModels.Services;
 using MagiApp.ViewModels.Work;
 using MagiEngine;
 using MagiEngine.Model;
@@ -45,6 +46,24 @@ namespace MagiApp.ViewModels;
 /// </summary>
 public sealed partial class MagiViewModel
 {
+    /// <summary>
+    /// [Services/UseCases/DI層] 最適化エンジン呼出しの境界（<see cref="MagiViewModel.Optimize.cs"/>
+    /// が使用）。既定は <see cref="EngineOptimizationService"/>（実エンジンをそのまま呼ぶ）——
+    /// <see cref="MagiViewModel()"/> の既存呼出元（本体コード・63件のテスト）は一切変更を要らない。
+    /// WinUI3シェル側のDIコンテナ、またはテストがフェイク実装を注入したい場合は
+    /// <see cref="MagiViewModel(IOptimizationService)"/> を使う。
+    /// </summary>
+    private readonly IOptimizationService _optimizationService;
+
+    /// <summary>既定コンストラクタ。実エンジン（<see cref="EngineOptimizationService"/>）を使う。</summary>
+    public MagiViewModel() : this(new EngineOptimizationService()) { }
+
+    /// <summary>[Services/UseCases/DI層] 最適化エンジンの呼出し方を差し替え可能にするコンストラクタ。</summary>
+    public MagiViewModel(IOptimizationService optimizationService)
+    {
+        _optimizationService = optimizationService;
+    }
+
     /// <summary>
     /// 勤務表最適化のタイムアウト上限（秒）。唯一の真実源はエンジン層の
     /// <see cref="V6FinalPort.MaxOptimizeSec"/>。UI 側はそれを参照し、UI 設定の上限とエンジンの
