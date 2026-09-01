@@ -7,8 +7,10 @@ namespace MagiApp.ViewModels;
 
 /// <summary>
 /// [フェーズ9, Services/UseCases/DI層] <c>MagiViewModel.kt</c> の <c>runV6FullOptimize()</c>
-/// （1103-1404行）の移植——最適化の実行制御そのもの（Kotlin原本コメントの
-/// 「最適化の実行制御(<c>runV6FullOptimize</c>/<c>runSoftPolish</c>/<c>stop</c>)」のうち前者）。
+/// （1103-1404行）と <c>runSoftPolish()</c>（1411-1504行）の移植——最適化の実行制御そのもの
+/// （Kotlin原本コメントの「最適化の実行制御(<c>runV6FullOptimize</c>/<c>runSoftPolish</c>/
+/// <c>stop</c>)」のうち前2つ。<c>stop()</c>（1506行）は <c>checkJob</c>/<c>fixJob</c> 相当の一部
+/// （<c>findFixSuggestions</c>）が未移植のため別ピースで扱う）。
 ///
 /// [Services/UseCases/DI層への変更点] Kotlin原本は <c>V6FinalPort.handleOptimize</c> を直接呼ぶが、
 /// この移植ではユーザーが明示的に選択した Services/UseCases/DI 層に従い
@@ -296,6 +298,117 @@ public sealed partial class MagiViewModel
             // clearRunMarker() は Phase 10（背景実行）未移植——このピースでは対応するファイルI/O自体が無い。
             if (!terminalLogged)
                 LogOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
+            EndBoardJob(boardToken);
+            if (Ui.Running) Ui.Running = false;
+        }
+    }
+
+    /// <summary>[テスト可視性のための追加] 直近の <see cref="RunSoftPolish"/> 呼出しが背後で走らせる Task。</summary>
+    internal Task? LastRunSoftPolishTask { get; private set; }
+
+    /// <summary>
+    /// [ソフト研磨のみ] 現在の勤務表をHARDガード付きで局所研磨し、SOFT違反だけを削る。Kotlin原本
+    /// <c>runSoftPolish()</c>（1411-1504行）の移植。「もう一度つくる」と違い破壊/多様化を行わないため
+    /// 必須が一時的に増えることはなく、keep-best により入力より悪い結果は採用しない（HARD=0 を壊さない）。
+    /// </summary>
+    public void RunSoftPolish()
+    {
+        var st0 = _state;
+        var sched0 = _currentSchedule;
+        if (st0 is null || sched0 is null) return;
+        if (RunBlockedByInFlight("仕上げ最適化の開始")) return;
+        if (!EnsureValidForRun(st0, sched0)) return;
+        PushUndo();
+        Ui.MessageIsError = false;
+        Ui.Running = true;
+        Ui.HasResult = false;
+        Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
+        Ui.Message = "自動で整えています…";
+        LogOp("I", $"ソフト研磨 開始 (予算{Ui.BudgetSec}s)");
+        var startMs = NowMs();
+        var boardToken = BeginBoardJob("仕上げ最適化", engineRun: true);
+        var cts = new CancellationTokenSource();
+        _job = cts;
+        LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, cts.Token);
+    }
+
+    private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, CancellationToken ct)
+    {
+        // [3.372.0相当の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
+        var terminalLogged = false;
+        try
+        {
+            var baseReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, sched0), ct);
+            var polished = await _optimizationService.SoftPolishAsync(st0, sched0.Copy2D(), Ui.BudgetSec, ct);
+            var polishedReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, polished), ct);
+            // softPolishOnly は退化防止済みだが、VM側でも入力以上のみ採用（保険）。keep-best は
+            // hard→weightedScore→total を単一実装する ReportComparer（runV6FullOptimize と同一）。
+            var worse = UnifiedViolationChecker.ReportComparer.Compare(baseReport, polishedReport) < 0;
+            var finalSched = worse ? sched0.Copy2D() : polished.Copy2D();
+            var finalReport = worse ? baseReport : polishedReport;
+            _currentSchedule = finalSched;
+            AutoSave();
+            _resultSchedule = finalSched;
+            _state = st0.WithSchedule(finalSched);
+            var gain = baseReport.Total - finalReport.Total;
+            await PushReportAsync(_state ?? st0, finalSched, finalReport, runLabel: "仕上げ最適化", transform: ui =>
+            {
+                ui.MessageIsError = false;
+                ui.Running = false;
+                ui.HasResult = true;
+                ui.Message = gain > 0
+                    ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"
+                    : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは構造的要因の可能性。";
+            }, ct: ct);
+            LogOp("I", $"ソフト研磨 完了 必須={finalReport.Hard} 合計={finalReport.Total}（{(gain > 0 ? $"-{gain}" : "増減なし")}）");
+            terminalLogged = true;
+        }
+        catch (OperationCanceledException)
+        {
+            // [停止 keep-best] 中断時は直前の確定盤面を保持し表示も整合させる（runV6FullOptimize と同型）。
+            var kept = sched0.Copy2D();
+            var keptReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, kept), CancellationToken.None);
+            _currentSchedule = kept;
+            _resultSchedule = kept;
+            _state = st0.WithSchedule(kept);
+            try
+            {
+                await PushReportAsync(_state ?? st0, kept, keptReport, nonCancellable: true, transform: ui =>
+                {
+                    ui.MessageIsError = false;
+                    ui.Running = false;
+                    ui.HasResult = true;
+                    ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
+                });
+            }
+            catch (Exception t)
+            {
+                Ui.Running = false;
+                Ui.HasResult = true;
+                Ui.MessageIsError = false;
+                Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
+                LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");
+            }
+            LogOp("I", $"ソフト研磨 停止: 直前の勤務表 必須={keptReport.Hard}/合計={keptReport.Total} を保持");
+            terminalLogged = true;
+            throw;
+        }
+        catch (Exception e)
+        {
+            // [3.271.0/3.382.0相当の由来をそのまま記録] C#に Kotlin の Throwable/Error 相当の区別は
+            //   無いため、確立済みの規約に倣い単一の Exception 捕捉とする（RunV6FullOptimizeCoreAsync 参照）。
+            LogOp("W", $"ソフト研磨 失敗: {e.GetType().Name}: {e.Message}");
+            terminalLogged = true;
+            Ui.MessageIsError = true;
+            Ui.Running = false;
+            Ui.Message = $"整えられませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
+        }
+        finally
+        {
+            if (Ui.LiveSchedule.Count > 0) Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
+            // clearRunMarker() は Phase 10（背景実行）未移植——このピースでは対応するファイルI/O自体が無い。
+            if (!terminalLogged)
+                LogOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
             EndBoardJob(boardToken);
             if (Ui.Running) Ui.Running = false;
         }

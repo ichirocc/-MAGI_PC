@@ -40,8 +40,16 @@ public class MagiViewModelOptimizeTest
             return Task.FromResult(Result!(state, schedule));
         }
 
-        public Task<int[][]> SoftPolishAsync(MagiState state, int[][] schedule, int seconds, CancellationToken cancellationToken) =>
-            Task.FromResult(schedule);
+        public int SoftPolishCallCount { get; private set; }
+        public Func<MagiState, int[][], int[][]>? PolishedSchedule { get; set; }
+        public Exception? ThrowInsteadOnSoftPolish { get; set; }
+
+        public Task<int[][]> SoftPolishAsync(MagiState state, int[][] schedule, int seconds, CancellationToken cancellationToken)
+        {
+            SoftPolishCallCount++;
+            if (ThrowInsteadOnSoftPolish is not null) throw ThrowInsteadOnSoftPolish;
+            return Task.FromResult(PolishedSchedule?.Invoke(state, schedule) ?? schedule);
+        }
     }
 
     private static readonly IReadOnlyDictionary<string, string> EmptyS = new Dictionary<string, string>();
@@ -181,5 +189,69 @@ public class MagiViewModelOptimizeTest
         vm.RunV6FullOptimize();
 
         Assert.Contains("読み込み", vm.Ui.Message);
+    }
+
+    // ===== RunSoftPolish（MagiViewModel.Optimize.cs, Kotlin原本 runSoftPolish 1411-1504行）=====
+
+    [Fact]
+    public async Task SoftPolish_NoGain_ReportsNoFurtherImprovement()
+    {
+        // MinimalState.Build() は制約皆無＝どの盤面も違反0。gain=0 の「これ以上は整いませんでした」分岐を検証。
+        var fake = new FakeOptimizationService();
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunSoftPolish();
+        Assert.NotNull(vm.LastRunSoftPolishTask);
+        await vm.LastRunSoftPolishTask!;
+
+        Assert.Equal(1, fake.SoftPolishCallCount);
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.HasResult);
+        Assert.False(vm.Ui.MessageIsError);
+        Assert.Contains("これ以上は整いませんでした", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("ソフト研磨 完了"));
+    }
+
+    [Fact]
+    public async Task SoftPolish_Cancelled_KeepsInputAndReportsStopped()
+    {
+        var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new OperationCanceledException() };
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunSoftPolish();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunSoftPolishTask!);
+
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.HasResult);
+        Assert.Contains("停止しました", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("ソフト研磨 停止: 直前の勤務表"));
+    }
+
+    [Fact]
+    public async Task SoftPolish_Failure_ReportsErrorAndDoesNotCrash()
+    {
+        var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new InvalidOperationException("boom") };
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunSoftPolish();
+        await vm.LastRunSoftPolishTask!;
+
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("整えられませんでした", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("ソフト研磨 失敗"));
+    }
+
+    [Fact]
+    public void SoftPolish_BlockedWhileAnotherJobInFlight_DoesNotCallService()
+    {
+        var fake = new FakeOptimizationService();
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.BeginBoardJob("勤務表づくり");
+
+        vm.RunSoftPolish();
+
+        Assert.Equal(0, fake.SoftPolishCallCount);
+        Assert.True(vm.Ui.MessageIsError);
     }
 }
