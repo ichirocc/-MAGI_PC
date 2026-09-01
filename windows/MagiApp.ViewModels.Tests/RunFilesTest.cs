@@ -328,7 +328,7 @@ public class RunFilesTest : IDisposable
         var vm = new MagiViewModel { DataDir = FreshTempDir() };
         File.WriteAllText(MarkerPath(vm), "{\"startedAt\":1,\"mode\":\"fg\",\"budgetSec\":300}");
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.True(vm.Ui.InterruptedRun);
@@ -352,7 +352,7 @@ public class RunFilesTest : IDisposable
         File.WriteAllText(MarkerPath(vm), "{\"mode\":\"bg\"}");
         File.WriteAllText(files.Snapshot, "{}");
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.True(vm.Ui.InterruptedRun);
@@ -365,7 +365,7 @@ public class RunFilesTest : IDisposable
         var vm = new MagiViewModel { DataDir = FreshTempDir(), _state = MinimalState.Build() };
         File.WriteAllText(MarkerPath(vm), "{\"mode\":\"bg\"}");
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.Contains("バックグラウンド", vm.Ui.InterruptedInfo);
@@ -377,7 +377,7 @@ public class RunFilesTest : IDisposable
         var vm = new MagiViewModel { DataDir = FreshTempDir(), _state = MinimalState.Build() };
         File.WriteAllText(MarkerPath(vm), "これはJSONではない");
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.True(vm.Ui.InterruptedRun);
@@ -390,7 +390,7 @@ public class RunFilesTest : IDisposable
         var dir = FreshTempDir();
         var vm = new MagiViewModel { DataDir = dir };
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.False(vm.Ui.InterruptedRun);
@@ -406,7 +406,7 @@ public class RunFilesTest : IDisposable
         var json = StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule());
         File.WriteAllText(Path.Combine(vm.DataDir, "magi_autosave.json"), json);
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
         await vm.LastLoadTask!;
 
@@ -425,7 +425,7 @@ public class RunFilesTest : IDisposable
         File.WriteAllText(files.Result,
             StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule()));
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
         await vm.LastLoadTask!;
 
@@ -449,7 +449,7 @@ public class RunFilesTest : IDisposable
         File.WriteAllText(files.Input, "{}");
         File.WriteAllText(files.Result, "壊れている");
 
-        vm.RestoreOnStartup();
+        _ = vm.RestoreOnStartup();
         await vm.LastRestoreOnStartupTask!;
 
         Assert.False(File.Exists(files.Result));   // 読めない結果だけ捨てる

@@ -129,12 +129,21 @@ public sealed partial class MagiViewModel
     /// <see cref="UiState.InterruptedInfo"/>）を立て、途中最良か自動保存から復元する。
     /// 最後に <c>_hydrated</c> を立てて自動保存を解禁する（復元前に空のドラフトで上書きしないため）。
     ///
-    /// シェル（<c>MagiApp.WinUI</c>）が起動時に一度だけ呼ぶ。Kotlin原本の <c>init{}</c> と同じく
-    /// fire-and-forget（完了を待たない）。
+    /// シェル（<c>MagiApp.WinUI</c>）が起動時に一度だけ呼ぶ。Kotlin原本の <c>init{}</c> と同じく、
+    /// ここで実際に読み込む <see cref="LoadAsync"/> 呼出し自体は fire-and-forget（完了を待たない——
+    /// <see cref="UiState.Loaded"/>/<see cref="UiState.Running"/> の変化で画面が追従する）。
+    ///
+    /// [Task を返す理由] 「復元すべきものが実際にあったか」を呼出元が知る手段が
+    /// <see cref="UiState.Running"/>/<see cref="UiState.Loaded"/>（この Task 完了時点でどちらかが
+    /// true なら復元中または復元済み）しか無いため、この**外側**のオーケストレーション自体は
+    /// 呼出元が待てるようにする（シェル側が「復元できなければ暫定フィクスチャを出す」といった
+    /// フォールバック分岐を組めるように——実際に <c>MainWindow</c> がこの用途で使う）。
     /// </summary>
-    public void RestoreOnStartup()
+    public Task RestoreOnStartup()
     {
-        LastRestoreOnStartupTask = RestoreOnStartupCoreAsync();
+        var task = RestoreOnStartupCoreAsync();
+        LastRestoreOnStartupTask = task;
+        return task;
     }
 
     private static string? ReadTextOrNull(string path)

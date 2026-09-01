@@ -6,9 +6,16 @@ using Microsoft.UI.Xaml.Controls;
 namespace MagiApp.WinUI;
 
 /// <summary>
-/// [フェーズ9] アプリのルートウィンドウ。5タブ（ホーム/勤務表/編集/分析/設定）のナビゲーション殻を
-/// 持ち、起動時にフェーズ8由来の同梱フィクスチャを読み込む（フェーズ9で「データを開く」導線に
-/// 置き換わるまでの暫定入口——クラスKDocはXAML側参照）。
+/// [フェーズ9→Phase 10] アプリのルートウィンドウ。5タブ（ホーム/勤務表/編集/分析/設定）の
+/// ナビゲーション殻を持つ。
+///
+/// [起動時の初期化] <see cref="MagiViewModel.RestoreOnStartup"/>（前回の自動保存・中断マーカー・
+/// バックグラウンド完了結果からの復元、Phase 10 で実装済み）をまず待ち、それでも何も復元されなければ
+/// （<c>Ui.Running</c>/<c>Ui.Loaded</c> がどちらも false のまま＝真にデータの無い初回起動）フェーズ8由来の
+/// 同梱フィクスチャへフォールバックする（フェーズ9で「データを開く」導線に置き換わるまでの暫定入口
+/// ——<see cref="LoadFixtureAsync"/> 参照）。両者を無条件に両方走らせると、復元が読み込む前に
+/// フィクスチャが先に <c>state</c> を埋めてしまい実データを握り潰しうる（<c>RestoreOnStartup</c> 自身の
+/// 復元判定は「<c>state</c> がまだ null か」を見るため）——このガードがその競合を防ぐ。
 /// </summary>
 public sealed partial class MainWindow : Window
 {
@@ -22,7 +29,17 @@ public sealed partial class MainWindow : Window
         Title = "MAGI ShiftOptimizer";
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First();
         ShowTab("home");
-        _ = LoadFixtureAsync();
+        _ = InitializeAsync();
+    }
+
+    private async Task InitializeAsync()
+    {
+        await _vm.RestoreOnStartup();
+        // Ui.Running=true は「復元すべきものが見つかり LoadAsync が進行中」（LoadAsync 自身が
+        // 読込開始時に同期的に立てる）、Ui.Loaded=true は「既に読み込み完了済み」。どちらも false なら
+        // 復元対象が本当に無かった（自動保存も途中結果も無い、真の初回起動）と判断してよい。
+        if (_vm.Ui.Running || _vm.Ui.Loaded) return;
+        await LoadFixtureAsync();
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
