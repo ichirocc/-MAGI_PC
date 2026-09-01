@@ -1,5 +1,6 @@
 using MagiApp.ViewModels;
 using MagiApp.WinUI.Views;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -16,11 +17,21 @@ namespace MagiApp.WinUI;
 /// ——<see cref="LoadFixtureAsync"/> 参照）。両者を無条件に両方走らせると、復元が読み込む前に
 /// フィクスチャが先に <c>state</c> を埋めてしまい実データを握り潰しうる（<c>RestoreOnStartup</c> 自身の
 /// 復元判定は「<c>state</c> がまだ null か」を見るため）——このガードがその競合を防ぐ。
+///
+/// [プロセス生存戦略の決定（Phase 10 の残課題への回答）] Kotlin原本は WorkManager の前景サービスにより
+/// アプリがバックグラウンドへ回っても最適化を続行できるが、Windows デスクトップに直接対応する機構
+/// （タスクトレイ常駐等）は無い。フルのトレイアイコン実装（Win32相互運用または追加パッケージ・
+/// このサンドボックスでは実機検証不可）を新規に持ち込むリスクを避け、**ウィンドウを閉じたら
+/// プロセスも終了する**（標準的なデスクトップアプリの既定動作のまま）と明示的に決定する。
+/// その代わり、閉じようとした時点でバックグラウンド計算が動いている場合は**無言で捨てない**——
+/// <see cref="OnAppWindowClosing"/> が確認ダイアログを挟み、実行中と知らずに計算を失う事故を防ぐ
+/// （「生かし続ける」の代わりに「知らずに失わせない」で決着）。
 /// </summary>
 public sealed partial class MainWindow : Window
 {
     private readonly MagiViewModel _vm;
     private readonly Dictionary<string, UIElement> _tabCache = new();
+    private bool _closeConfirmed;
 
     public MainWindow(MagiViewModel vm)
     {
@@ -28,8 +39,32 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Title = "MAGI ShiftOptimizer";
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First();
+        AppWindow.Closing += OnAppWindowClosing;
         ShowTab("home");
         _ = InitializeAsync();
+    }
+
+    /// <summary>
+    /// 実行中（前景/背景いずれか）に閉じようとしたら確認する（クラスKDoc「プロセス生存戦略の決定」参照）。
+    /// 確認後に自分自身が呼ぶ <see cref="Window.Close"/> で無限ループしないよう <see cref="_closeConfirmed"/> で防ぐ。
+    /// </summary>
+    private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
+    {
+        if (_closeConfirmed || !_vm.Ui.Running) return;
+        args.Cancel = true;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = "計算が実行中です",
+            Content = "閉じると、実行中の計算（バックグラウンドを含む）が中断されます。終了しますか？",
+            PrimaryButtonText = "終了する",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        _closeConfirmed = true;
+        _vm.Stop();
+        Close();
     }
 
     private async Task InitializeAsync()
