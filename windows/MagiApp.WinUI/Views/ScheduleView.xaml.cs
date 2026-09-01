@@ -10,7 +10,14 @@ namespace MagiApp.WinUI.Views;
 /// <summary>
 /// [フェーズ8→9] 「勤務表」タブの内容。フェーズ8の縦断スライスで <c>MainWindow</c> に直接書いていた
 /// グリッド描画コードを、フェーズ9のマルチタブ化に伴いこの <see cref="UserControl"/> へ切り出した
-/// （挙動は変えていない——読取専用のコードビハインド駆動レンダリングのまま）。
+/// （コードビハインド駆動レンダリングのまま）。
+///
+/// [セル編集] データセルを <see cref="Button"/> にし、タップで <see cref="MenuFlyout"/> を開いて
+/// <see cref="MagiViewModel.AllowedShiftsFor"/>（そのスタッフが担当可能なシフト一覧）から選ばせ、
+/// <see cref="MagiViewModel.SetCell"/> で確定する。<c>SetCell</c> 自身が実行中(<c>OptimizeInFlight</c>)を
+/// ガードして無言で拒否するため、ここでも <see cref="UiState.Running"/> の間はボタンを無効化して
+/// 「押せるのに何も起きない」を避ける（二重の防御——ViewModel 側が最終防御）。違反ハイライト・
+/// 希望バッジ等の装飾（Kotlin原本 MagiScheduleViews.kt）は本格移植までの間、未対応のまま。
 /// </summary>
 public sealed partial class ScheduleView : UserControl
 {
@@ -71,6 +78,31 @@ public sealed partial class ScheduleView : UserControl
             ScheduleGridHost.Children.Add(border);
         }
 
+        void AddDataCell(int row, int col, int i, int j, int k)
+        {
+            var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+            var button = new Button
+            {
+                Content = new TextBlock { Text = sym, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center },
+                Padding = new Thickness(6, 4, 6, 4),
+                MinWidth = 32,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(0),
+                IsEnabled = !ui.Running,
+            };
+            button.Click += (sender, _) => ShowCellEditor((FrameworkElement)sender, i, j);
+            var border = new Border
+            {
+                Child = button,
+                BorderBrush = new SolidColorBrush(Colors.LightGray),
+                BorderThickness = new Thickness(0, 0, 1, 1),
+            };
+            Grid.SetRow(border, row);
+            Grid.SetColumn(border, col);
+            ScheduleGridHost.Children.Add(border);
+        }
+
         AddCell(0, 0, "", header: true);
         for (var j = 0; j < dayCount; j++) AddCell(0, j + 1, $"{j + 1}", header: true);
 
@@ -81,10 +113,29 @@ public sealed partial class ScheduleView : UserControl
             var row = ui.Schedule[i];
             for (var j = 0; j < row.Count; j++)
             {
-                var k = row[j];
-                var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-                AddCell(i + 1, j + 1, sym, header: false);
+                AddDataCell(i + 1, j + 1, i, j, row[j]);
             }
         }
+    }
+
+    /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
+    private void ShowCellEditor(FrameworkElement anchor, int i, int j)
+    {
+        if (_vm.Ui.Running) return; // ボタン無効化と二重の防御（Render 直後の取りこぼし対策）。
+        var ui = _vm.Ui;
+        var allowed = _vm.AllowedShiftsFor(i);
+        var flyout = new MenuFlyout();
+        foreach (var k in allowed)
+        {
+            var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+            var item = new MenuFlyoutItem { Text = sym };
+            item.Click += (_, _) => _vm.SetCell(i, j, k);
+            flyout.Items.Add(item);
+        }
+        if (flyout.Items.Count == 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "担当可能なシフトがありません", IsEnabled = false });
+        }
+        flyout.ShowAt(anchor);
     }
 }
