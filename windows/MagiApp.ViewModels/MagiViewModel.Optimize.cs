@@ -423,28 +423,24 @@ public sealed partial class MagiViewModel
     /// 実行中の処理を止める。Kotlin原本 <c>stop()</c>（1506-1544行）の移植——前景ジョブ
     /// （<c>job</c>/<c>checkJob</c>/<c>fixJob</c> 相当）の停止部分のみ。Kotlin原本の
     /// <c>clearRunMarker</c>（末尾・無条件）は Phase 10 で移植済みでここでも呼ぶ。
-    /// <c>WorkManager.cancelUniqueWork</c> と、その分岐の中でだけ呼ばれる
-    /// <c>clearBgFiles("停止（背景計算の中断）")</c> は、Windows 向けのバックグラウンド実行機構自体を
-    /// 実装するまで対応するものが無いため意図的に省略する（<c>OptimizationRepository.Running</c> が
-    /// true＝背景実行中の場合は、それを停止する実装が無いことを警告ログへ残すに留める。前景の
-    /// <c>_job</c>/<c>_checkCts</c>/<c>_fixCts</c> はすべて即座に確実にキャンセルできる）。
+    ///
+    /// [Phase 10 本体で更新] 当初このメソッドは「Windows向けの背景実行機構が無い」ことを理由に
+    /// <c>OptimizationRepository.Running</c> のときは警告ログのみに留めていたが、
+    /// <c>MagiViewModel.Background.cs</c> で実際にバックグラウンド <c>Task</c>（<see cref="_bgCts"/>）
+    /// を実装したため、ここも実際に Cancel する。Kotlin原本の <c>WorkManager.cancelUniqueWork</c> とは
+    /// 機構が異なるが「背景計算を止める」という意図は忠実に果たす——止まった後の後片付け
+    /// （<c>clearBgFiles</c>／<c>OptimizationRepository.SetRunning(false)</c>）は
+    /// <c>RunInBackgroundCoreAsync</c> 自身の <c>catch (OperationCanceledException)</c>/<c>finally</c>
+    /// が担う（Kotlin原本で Worker 自身が同じ経路を担うのと同じ構造）。
     /// </summary>
     public void Stop()
     {
         _job?.Cancel();
         _checkCts?.Cancel();
         _fixCts?.Cancel();
+        _bgCts?.Cancel();
 
-        if (OptimizationRepository.Running)
-        {
-            // [背景実行機構が未実装] Kotlin原本はここで WorkManager.cancelUniqueWork(...) を呼び、背景実行
-            //   そのものを止める。対応する Windows 側の背景実行機構がまだ無いため、それができないことを
-            //   利用者へ明示する（黙って「停止しました」と嘘をつかない）。同じ理由でこの分岐でだけ呼ばれる
-            //   clearBgFiles("停止（背景計算の中断）") も省略する——止められていないものの途中状態を
-            //   消すと、後から届く結果と食い違う。
-            LogOp("W", "バックグラウンド計算の停止は未対応です。前景の処理のみ停止しました。");
-        }
-        else if (Ui.Running || Ui.FixSearching)
+        if (Ui.Running || Ui.FixSearching)
         {
             // [3.284.0相当] 前景の違反チェック(_checkCts)/改善探索(_fixCts)は自身の catch(OperationCanceledException)
             //   で running/fixSearching を戻す機会があるが、ここでの即時リセットは冪等
@@ -459,6 +455,10 @@ public sealed partial class MagiViewModel
             // HF77＝逐語移植の対象としてそのまま保存する（勝手に「直さない」）。
             var what = new List<string>();
             if (_boardJobLabel is not null) what.Add(_boardJobLabel);
+            // [Phase 10 本体で追加] 背景実行には _boardJobLabel が無い（クラスKDoc
+            //   「MagiViewModel.Background.cs」の WireBackgroundSubscriptions 節参照）ため、
+            //   これが無いと背景最適化の停止が誤って既定の「違反チェック」に分類されていた。
+            if (OptimizationRepository.Running) what.Add("バックグラウンド最適化");
             if (Ui.FixSearching) what.Add("改善探索");
             if (what.Count == 0) what.Add("違反チェック");
             LogOp("I", $"停止を押しました（対象: {string.Join("・", what)}）");
