@@ -61,6 +61,7 @@ public sealed partial class AnalysisView : UserControl
         {
             SummarySection.Visibility = Visibility.Collapsed;
             BreakdownSection.Visibility = Visibility.Collapsed;
+            FixSection.Visibility = Visibility.Collapsed;
             IssuesSection.Visibility = Visibility.Collapsed;
             PinSection.Visibility = Visibility.Collapsed;
             LogSection.Visibility = Visibility.Collapsed;
@@ -69,10 +70,42 @@ public sealed partial class AnalysisView : UserControl
 
         RenderSummary(ui);
         RenderBreakdown(ui);
+        RenderFix(ui);
         RenderIssues(ui);
         RenderPinTargets(ui);
         RenderLogs(ui);
     }
+
+    private void OnFixSearchClick(object sender, RoutedEventArgs e) => _vm.FindFixSuggestions();
+
+    /// <summary>
+    /// 「直し方を探す」。<see cref="UiState.FixSuggestions"/> は空リストが既定値（未検索/0件を区別しない
+    /// ——Kotlin原本も同じ）ため、ボタン/検索中インジケータは常に出し、一覧だけを件数で切り替える。
+    /// </summary>
+    private void RenderFix(UiState ui)
+    {
+        FixSection.Visibility = Visibility.Visible;
+        FixSearchButton.IsEnabled = !ui.FixSearching;
+        FixSearchingText.Visibility = ui.FixSearching ? Visibility.Visible : Visibility.Collapsed;
+
+        FixList.Children.Clear();
+        foreach (var s in ui.FixSuggestions)
+        {
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(BodyText(s.Label, semiBold: true));
+            row.Children.Add(BodyText($"必須 {DeltaText(s.DeltaHard)} ・ 合計 {DeltaText(s.DeltaTotal)}", dim: true));
+            var apply = new Button { Content = "適用", HorizontalAlignment = HorizontalAlignment.Left };
+            apply.Click += (_, _) => _vm.ApplyFixSuggestion(s);
+            row.Children.Add(apply);
+            FixList.Children.Add(row);
+        }
+        if (ui.FixSuggestions.Count == 0 && !ui.FixSearching)
+        {
+            FixList.Children.Add(BodyText("「直し方を探す」を押すと候補が出ます（見つからないこともあります）。", dim: true));
+        }
+    }
+
+    private static string DeltaText(int delta) => delta <= 0 ? delta.ToString() : $"+{delta}";
 
     /// <summary>① サマリー。読込済みなら常に出す（0件でも「0件」に意味がある）。</summary>
     private void RenderSummary(UiState ui)

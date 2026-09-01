@@ -15,6 +15,9 @@
       中身を作り直して Visibility を切り替える（データが無い節は箱ごと隠す＝空の箱を見せない）。
       ScheduleView と同じくコードビハインド駆動——内訳の行数も設定ミスの件数も可変で、XAML の
       静的テンプレートでは表現しづらいため。
+
+      [直し方を探す] MagiViewModel.FindFixSuggestions/ApplyFixSuggestion（フェーズ9で移植・テスト済み）
+      への導線を追加（Kotlin原本 FixSuggestionCard 相当・AnalysisView.xaml.cs 参照）。
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="20" MaxWidth="640" HorizontalAlignment="Left">
@@ -35,6 +38,14 @@
             <StackPanel x:Name="BreakdownSection" Spacing="6">
                 <TextBlock Text="違反の内訳" FontSize="16" FontWeight="SemiBold" />
                 <StackPanel x:Name="BreakdownList" Spacing="2" />
+            </StackPanel>
+
+            <!-- 直し方を探す -->
+            <StackPanel x:Name="FixSection" Spacing="6">
+                <TextBlock Text="直し方を探す" FontSize="16" FontWeight="SemiBold" />
+                <Button x:Name="FixSearchButton" Content="直し方を探す" Click="OnFixSearchClick" HorizontalAlignment="Left" />
+                <TextBlock x:Name="FixSearchingText" FontSize="13" Opacity="0.8" Text="探索中…" />
+                <StackPanel x:Name="FixList" Spacing="10" />
             </StackPanel>
 
             <!-- ③ 設定の見直し候補 -->
