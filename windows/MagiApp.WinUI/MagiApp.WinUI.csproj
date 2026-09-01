@@ -7,6 +7,11 @@
       WinAppSDK ランタイムが Windows 専用のため）。実機/Windows CI ランナー専用。
       フェーズ0時点では「Hello World」の最小ウィンドウのみ（実起動確認はフェーズ0の
       検証項目として Windows 11 実機で行う）。
+
+      [フェーズ8, 縦断スライス] MagiApp.ViewModels（フェーズ9で先行実装済みの ViewModel 層）への
+      参照と DI コンテナを追加し、「フィクスチャ読込→違反検査→読取専用グリッド表示」の最小経路を通す。
+      このプロジェクト自体は引き続き Windows 専用でこのサンドボックスではビルドできないため、
+      実際のコンパイル確認は windows-app-build.yml（Windows CI ランナー）が担う。
     -->
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -30,11 +35,25 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.5.240311000" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.3233" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- [フェーズ8] MagiViewModel/EngineOptimizationService の登録に使う最小限のDIコンテナ。 -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- MagiEngine はプラットフォーム非依存（フェーズ0時点ではまだ空だが将来 v6/model がここに入る） -->
+    <!-- MagiEngine はプラットフォーム非依存（v6/model 一式が入っている。WinUI からエンジンの型
+         （V6Algorithm 等）を直接参照する場面があるため、MagiApp.ViewModels 経由の間接参照とは
+         別に維持する）。 -->
     <ProjectReference Include="..\MagiEngine\MagiEngine.csproj" />
+    <!-- [フェーズ8] ViewModel層（フェーズ9で先行実装済み、MagiEngineのみに依存しWinUI非依存）。 -->
+    <ProjectReference Include="..\MagiApp.ViewModels\MagiApp.ViewModels.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- [フェーズ8] 縦断スライス用の同梱フィクスチャ（MagiEngine.Tests/Fixtures/sample_state_v6.json
+         と同一内容。非パッケージ実行(dotnet run)でも動くよう Content としてビルド出力へコピーする）。 -->
+    <Content Include="Assets\sample_state_v6.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

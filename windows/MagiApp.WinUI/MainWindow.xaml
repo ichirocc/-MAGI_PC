@@ -4,16 +4,29 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      フェーズ0のHello Worldウィンドウ。フェーズ8以降、ここが
-      「フィクスチャ読込→初期解生成→検査→読取専用グリッド表示」の縦断スライス、
-      最終的にフェーズ9でMagiAppの5タブ本体（ホーム/勤務表/編集/分析/設定）へ置き換わる。
+      [フェーズ8, 縦断スライス] 「フィクスチャ読込→違反検査→読取専用グリッド表示」の最小経路。
+      勤務表グリッド本体（ScheduleGridHost）は S×T の可変サイズかつセルごとに違反色分けが要るため
+      XAML の静的テンプレートでは表現しづらく、コードビハインドで Grid を組み立てる
+      （MainWindow.xaml.cs の RenderSchedule 参照）。フェーズ9で ItemsRepeater ベースの
+      本実装（MagiScheduleViews.kt 相当）へ置き換わるまでの暫定表示。
     -->
-    <Grid>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-            <TextBlock Text="MAGI ShiftOptimizer" FontSize="28" FontWeight="SemiBold"
-                       HorizontalAlignment="Center" />
-            <TextBlock Text="Windows 11 ネイティブ版（フェーズ0: 足場）"
-                       FontSize="14" Opacity="0.7" HorizontalAlignment="Center" />
+    <Grid Padding="16" RowSpacing="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
+            <TextBlock Text="MAGI ShiftOptimizer" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock Text="Windows 11 ネイティブ版（フェーズ8: 縦断スライス）"
+                       FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
         </StackPanel>
+
+        <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="14" TextWrapping="Wrap" />
+
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="ScheduleGridHost" />
+        </ScrollViewer>
     </Grid>
 </Window>

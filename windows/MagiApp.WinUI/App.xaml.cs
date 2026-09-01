@@ -1,24 +1,40 @@
+using MagiApp.ViewModels;
+using MagiApp.ViewModels.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 
 namespace MagiApp.WinUI;
 
 /// <summary>
-/// フェーズ0の Hello World アプリケーションエントリポイント。
-/// フェーズ9で DI コンテナ・ViewModel 配線・背景実行の起動などをここへ足す
-/// （現状は MainWindow を1つ開くだけ）。
+/// [フェーズ8, 縦断スライス] フェーズ0の Hello World から一歩進め、DI コンテナで
+/// <see cref="MagiViewModel"/> を組み立てて <see cref="MainWindow"/> へ渡す。
+///
+/// [DI コンテナの選定] Kotlin原本はAndroid ViewModel（フレームワーク自身がインスタンス管理）を使うため
+/// 対応物が無い。この移植は <c>Microsoft.Extensions.DependencyInjection</c> を最小限（コンストラクタ
+/// 注入のみ・ライフタイムはアプリ全体で単一インスタンス）で導入する——フェーズ9のUseCases/Services層
+/// 拡張時にここへ登録を足していく想定。<see cref="MagiViewModel"/> は<c>単一の可変 <see cref="MagiViewModel.Ui"/>
+/// を保持し続ける設計（クラスKDoc参照）のため Singleton が自然に対応する。
 /// </summary>
 public partial class App : Application
 {
     private Window? _window;
 
+    /// <summary>[テスト/将来のUseCases層からの参照用] アプリ全体で共有する DI コンテナ。</summary>
+    public IServiceProvider Services { get; }
+
     public App()
     {
         InitializeComponent();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IOptimizationService, EngineOptimizationService>();
+        services.AddSingleton<MagiViewModel>();
+        Services = services.BuildServiceProvider();
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
+        _window = new MainWindow(Services.GetRequiredService<MagiViewModel>());
         _window.Activate();
     }
 }
