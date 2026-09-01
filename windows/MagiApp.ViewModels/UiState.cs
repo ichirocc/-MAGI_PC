@@ -186,11 +186,6 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>期間開始日（カレンダー表示の曜日整列に使用）。</summary>
     [ObservableProperty] private string startDate = "";
-
-    /// <summary>前回の計算がプロセスkill等で中断された。</summary>
-    [ObservableProperty] private bool interruptedRun;
-
-    [ObservableProperty] private string? interruptedInfo;
 }
 
 /// <summary>

@@ -781,4 +781,96 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         Assert.Null(vm.ExportJson());
     }
+
+    // ===================================================================
+    // RestoreOnStartup（<c>MagiViewModel.Restore.cs</c>）
+    //
+    // [2026-09-01] クラッシュ復旧機構（実行中マーカー・RunFiles ベースの背景スナップショット・
+    // 起動時の「中断されました」検知）はユーザー明示判断で全撤去した（詳細は
+    // MagiViewModel.Restore.cs のクラスKDoc参照）。ここでは撤去後も残る2つの通常運用UXだけを
+    // 検証する: ①自動保存からの起動時復元 ②開く前データの退避有無フラグ(PrevBackupAvailable)。
+    // ===================================================================
+
+    [Fact]
+    public async Task RestoreOnStartupRestoresTheAutosaveWhenNoStateIsLoadedYet()
+    {
+        var vm = NewVm();
+        var json = StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule());
+        File.WriteAllText(Path.Combine(vm.DataDir, "magi_autosave.json"), json);
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+        await vm.LastLoadTask!;
+
+        Assert.True(vm.Ui.Loaded);
+        Assert.Equal(2, vm.Ui.Staff);
+    }
+
+    [Fact]
+    public async Task RestoreOnStartupSetsPrevBackupAvailableWhenARetiredBackupExists()
+    {
+        var vm = NewVm();
+        File.WriteAllText(Path.Combine(vm.DataDir, "magi_prev_before_open.json"), "{}");
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+
+        Assert.True(vm.Ui.PrevBackupAvailable);
+    }
+
+    [Fact]
+    public async Task RestoreOnStartupDoesNothingAndHydratesWhenNothingIsPresent()
+    {
+        var vm = NewVm();
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+
+        Assert.False(vm.Ui.Loaded);
+        Assert.False(vm.Ui.PrevBackupAvailable);
+        Assert.True(vm._hydrated); // 復元が終わったので自動保存を解禁してよい
+    }
+
+    [Fact]
+    public async Task RestoreOnStartupDoesNotOverwriteStateAlreadyPresent()
+    {
+        var vm = NewVm();
+        vm._state = MinimalState.Build();
+        var json = StateJsonSerializer.Serialize(MinimalState.Build(startDate: "2025-12-08", endDate: "2025-12-14"), MinimalState.BuildSchedule());
+        File.WriteAllText(Path.Combine(vm.DataDir, "magi_autosave.json"), json);
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+
+        Assert.Null(vm.LastLoadTask); // 既に state があるので自動保存からの復元は起きない
+        Assert.True(vm._hydrated);
+    }
+
+    [Fact]
+    public async Task RestoreOnStartupRemovesStrayTempFilesLeftByAnInterruptedAtomicWrite()
+    {
+        var vm = NewVm();
+        var strayA = Path.Combine(vm.DataDir, "magi_autosave.json.t1.tmp");
+        var strayB = Path.Combine(vm.DataDir, "magi_prev_before_open.json.t2.tmp");
+        File.WriteAllText(strayA, "半端に書きかけの中身");
+        File.WriteAllText(strayB, "同上");
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+
+        Assert.False(File.Exists(strayA));
+        Assert.False(File.Exists(strayB));
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("迷子の一時ファイルを2件片付けました"));
+    }
+
+    [Fact]
+    public async Task RestoreOnStartupIsSilentWhenNoStrayTempFileExists()
+    {
+        var vm = NewVm();
+
+        _ = vm.RestoreOnStartup();
+        await vm.LastRestoreOnStartupTask!;
+
+        Assert.DoesNotContain(vm.Ui.OpLog, l => l.Contains("迷子の一時ファイル"));
+    }
 }

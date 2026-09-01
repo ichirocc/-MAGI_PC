@@ -46,8 +46,6 @@ public class UiStateTest
         Assert.Null(s.Message);
         Assert.False(s.MessageIsError);
         Assert.Null(s.CopilotHint);
-        Assert.Null(s.InterruptedInfo);
-        Assert.False(s.InterruptedRun);
 
         Assert.Null(s.V6);
         Assert.Null(s.CoverageDiag);

@@ -11,12 +11,13 @@ namespace MagiApp.ViewModels.Tests;
 /// （<c>MagiViewModel.Background.cs</c>、Kotlin原本 <c>runInBackground()</c>/<c>applyBgResult()</c>/
 /// <c>OptimizationWorker.doWork()</c> の移植）の検証。
 ///
-/// <see cref="MagiViewModelOptimizeTest"/> と同じ2つの規約に従う: ①<see cref="FakeOptimizationService"/>
-/// を注入し実エンジンの探索を待たない ②<see cref="MagiViewModel.DataDir"/> を <see cref="FreshTempDir"/>
-/// で隔離する（<c>RunInBackground</c> は開始時に同期的にファイルI/Oを行うため、<c>RunV6FullOptimize</c>
-/// 以上にこれが必須）。加えて <c>[Collection("OptimizationRepositoryState")]</c>
+/// <see cref="MagiViewModelOptimizeTest"/> と同じ規約に従う: <see cref="FakeOptimizationService"/>
+/// を注入し実エンジンの探索を待たない。<c>[Collection("OptimizationRepositoryState")]</c>
 /// （<see cref="Work.OptimizationRepository"/> はプロセス全体で共有される static——
 /// <c>TestSupport/SerialCollections.cs</c> 参照）。
+/// [2026-09-01] <c>RunInBackground</c> は当初開始時に同期的なファイルI/Oを行っていたため
+/// <see cref="MagiViewModel.DataDir"/> の隔離が必須だったが、kill耐性の全撤去によりディスクI/Oは
+/// 無くなった。<c>FreshTempDir</c> は自動保存（<c>AutoSave</c>）が触れる先を隔離する目的で維持する。
 /// </summary>
 [Collection("OptimizationRepositoryState")]
 public class MagiViewModelBackgroundTest : IDisposable
@@ -138,12 +139,11 @@ public class MagiViewModelBackgroundTest : IDisposable
     }
 
     [Fact]
-    public async Task ImprovedResult_IsAdoptedAndFilesCleanedUp()
+    public async Task ImprovedResult_IsAdopted()
     {
-        var dir = FreshTempDir();
         var fake = new FakeOptimizationService { Result = (_, _) => ActionResult(hard: 0, total: 0) };
         var st = MinimalState.Build();
-        var vm = new MagiViewModel(fake) { DataDir = dir, _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunInBackground();
         Assert.NotNull(vm.LastRunInBackgroundTask);
@@ -160,12 +160,6 @@ public class MagiViewModelBackgroundTest : IDisposable
         Assert.Contains("バックグラウンド最適化 完了", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("バックグラウンド最適化 完了"));
         Assert.False(OptimizationRepository.Running);
-
-        var files = new RunFiles(dir);
-        Assert.False(File.Exists(files.Input));
-        Assert.False(File.Exists(files.Snapshot));
-        Assert.False(File.Exists(files.Result));
-        Assert.False(File.Exists(files.RunId));
     }
 
     [Fact]
@@ -215,7 +209,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         // メッセージへ確定する。「対象」ラベリング自体の検証は
         // Stop_WhileBackgroundRunningFlagSet_LogsBackgroundAsTarget で行う。
         Assert.Contains("バックグラウンド計算を停止しました", vm.Ui.Message);
-        Assert.Contains(vm.Ui.OpLog, l => l.Contains("停止（片付け済み）"));
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("バックグラウンド計算: 停止"));
     }
 
     [Fact]

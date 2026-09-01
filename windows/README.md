@@ -72,13 +72,26 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 10. ✅ 背景実行（**完了**。Android の WorkManager に直接対応する Windows デスクトップの機構は
     無いため、`OptimizationRepository` が元々プロセス内 pub/sub として設計されていた点を活かし、
     同一プロセス内の `Task` として実装した——設計判断の詳細は
-    `MagiApp.ViewModels/MagiViewModel.Background.cs` のクラスKDoc参照。kill耐性は `RunFiles`/
-    `RunMarker` による途中最良スナップショット・起動時復元。ウィンドウを閉じてもプロセスを
+    `MagiApp.ViewModels/MagiViewModel.Background.cs` のクラスKDoc参照。ウィンドウを閉じてもプロセスを
     生かし続けるか（トレイ常駐等）は「生かし続けない・その代わり実行中は閉じる前に確認する」で
     決着（`MainWindow.OnAppWindowClosing` 参照。トレイアイコンはWin32相互運用か追加パッケージが
     要り、このサンドボックスでは実機検証できないリスクを避けた）。**2026-09-01、ユーザーが
     「Windows11版はトレイ常駐不要・ウィンドウを閉じてもプロセスを生かし続ける必要は無い」と
     明示的に再確認**＝上記の決着どおりで確定（再提案しない）。
+    **kill耐性は撤去済み（2026-09-01, ユーザー明示判断「クラッシュからの復旧はそこまで重視しない」）**:
+    当初は `RunFiles`（背景実行専用の共有ファイル4種＝入力・完了結果・8秒ごとの途中最良スナップショット・
+    所有権マーカー）と実行中マーカー（`magi_run_marker.json`）で、プロセスがkillされても次回起動時に
+    「前回の計算は中断されました」バナーから再開できる仕組みを実装していたが、全撤去した
+    （`Work/RunFiles.cs`・`MagiViewModel.RunMarker.cs`・`UiState.InterruptedRun`/`InterruptedInfo`・
+    `DismissInterrupted()` を削除、`MagiViewModel.RunMarker.cs`→`MagiViewModel.Restore.cs` へ縮小
+    改名）。背景実行(`RunInBackground`)はディスクI/Oを一切行わない純粋なインメモリ処理になり、前景実行
+    (`RunV6FullOptimize`)と同型になった。**残したもの**（クラッシュ復旧とは別の、通常運用のUX）:
+    自動保存(`magi_autosave.json`)からの起動時復元（編集のたびに継続保存され、次回起動時に前回の続きを
+    開く。クラッシュの有無に関係なく毎回使う）と、「データを開く」直前の退避(`PrevBackupAvailable`)。
+    詳細・撤去理由は `MagiViewModel.Background.cs`/`MagiViewModel.Restore.cs` のクラスKDoc参照。
+    自動保存等が使う原子置換（一時ファイル→rename）は書込のごく短いウィンドウ中にkillされると
+    `*.tmp` を迷子で残し得るため、起動のたびに `DataDir` 直下の迷子 `*.tmp` を無条件で片付ける
+    （`CleanupStrayTempFiles`。ディスク容量を脅かす量にはならないが放置しない、というだけの軽微な保険）。
 11. 🚧 パッケージング/配布（**部分的に先行**。`windows-installer.yml` が Inno Setup で
     per-user の `setup.exe` を、msbuild で MSIX をそれぞれ生成し Artifacts へ保存する所まで
     実装済み。Authenticode 署名も Secrets 設定時のみ有効化される形で入っている。

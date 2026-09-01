@@ -8,10 +8,12 @@ using Range = MagiEngine.Model.Range;
 namespace MagiApp.ViewModels.Tests;
 
 /// <summary>
-/// [フェーズ9 ピース8 追補] <c>MagiViewModel.kt</c> の <c>dismissInterrupted()</c>（行230-233）と
+/// [フェーズ9 ピース8 追補] <c>MagiViewModel.kt</c> の
 /// <c>applySettingFix(issue: SettingIssue)</c>（行1946-2015）の検証
 /// （<c>MagiViewModel.Editing.cs</c> のクラスKDoc参照）。Kotlin原本には専用テストが無い
 /// （<c>MagiViewModelEditingTest</c> と同じ経緯）。
+/// [2026-09-01] <c>dismissInterrupted()</c>（中断バナーの破棄）はクラッシュ復旧機構全撤去に伴い
+/// 削除済み——このファイルにあった対応テストも削除した。
 ///
 /// <see cref="MagiViewModel.ApplySettingFix"/> は <c>OptimizeInFlight</c> ガード付きの
 /// <see cref="MagiViewModel.ApplyStructure(MagiState)"/> を経由するため、
@@ -24,23 +26,6 @@ public class MagiViewModelSettingFixTest
     {
         OptimizationRepository.SetRunning(false);
         OptimizationRepository.Clear();
-    }
-
-    // ===================================================================
-    // DismissInterrupted
-    // ===================================================================
-
-    [Fact]
-    public void DismissInterruptedResetsBothUiFlags()
-    {
-        var vm = new MagiViewModel { _state = MinimalState.Build() };
-        vm.Ui.InterruptedRun = true;
-        vm.Ui.InterruptedInfo = "何か中断情報";
-
-        vm.DismissInterrupted();
-
-        Assert.False(vm.Ui.InterruptedRun);
-        Assert.Null(vm.Ui.InterruptedInfo);
     }
 
     // ===================================================================

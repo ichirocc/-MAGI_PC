@@ -24,12 +24,10 @@ namespace MagiApp.ViewModels;
 /// （<c>MagiViewModel.Persistence.cs</c> で宣言済み、partial class のため本ファイルからも直接参照可）を
 /// 再利用する——複製すると <c>stop()</c>（未移植・別ピース）が正しいトークンを掴めなくなる。
 ///
-/// [Phase 10 で移植済み] Kotlin原本の <c>writeRunMarker("fg")</c>/<c>clearBgFiles(...)</c>/
-/// <c>clearRunMarker()</c>（<c>work/RunFiles.kt</c> 相当、プロセスkill耐性のためのファイルI/O）は
-/// <see cref="Work.RunFiles"/> ＋ <c>MagiViewModel.RunMarker.cs</c> として移植済みで、このファイルの
-/// 該当箇所（<see cref="RunV6FullOptimize"/>/<see cref="RunSoftPolish"/> の開始時、両コアの
-/// <c>finally</c>、<see cref="Stop"/> の末尾）は実際に呼んでいる。Windows 側のバックグラウンド実行機構
-/// そのもの（<c>runInBackground</c>/<c>OptimizationWorker.kt</c> 相当）は依然として未実装。
+/// [2026-09-01] Kotlin原本の <c>writeRunMarker("fg")</c>/<c>clearBgFiles(...)</c>/<c>clearRunMarker()</c>
+/// （プロセスkill耐性のためのファイルI/O）は Phase 10 で一時移植したが、ユーザー明示判断
+/// 「クラッシュからの復旧はそこまで重視しない」により全撤去した（経緯は
+/// <c>windows/README.md</c> フェーズ10節・<c>MagiViewModel.Background.cs</c> クラスKDoc参照）。
 ///
 /// [_ui.update{it.copy(...)} の置き換え方針] クラスKDoc（<c>MagiViewModel.cs</c>）参照——
 /// <c>Ui.X = ...;</c> の直接代入へ置き換える。
@@ -87,12 +85,8 @@ public sealed partial class MagiViewModel
         Ui.CopilotHint = hint;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
-        Ui.InterruptedRun = false;
-        Ui.InterruptedInfo = null;
         Ui.Message = "勤務表をつくり始めました";
         LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
-        WriteRunMarker("fg");
-        ClearBgFiles("前景実行の開始");   // [C1] fg実行ではbg途中状態は無関係＝掃除
         var startMs = NowMs();
         var hf63 = new Hf63Infeasibility();
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
@@ -299,7 +293,6 @@ public sealed partial class MagiViewModel
         finally
         {
             if (Ui.LiveSchedule.Count > 0) Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
-            ClearRunMarker();  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
             if (!terminalLogged)
                 LogOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
             EndBoardJob(boardToken);
@@ -323,7 +316,6 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("仕上げ最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         PushUndo();
-        WriteRunMarker("fg");   // [監査A8]
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
@@ -411,7 +403,6 @@ public sealed partial class MagiViewModel
         finally
         {
             if (Ui.LiveSchedule.Count > 0) Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
-            ClearRunMarker();   // [監査A8]
             if (!terminalLogged)
                 LogOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
             EndBoardJob(boardToken);
@@ -421,15 +412,14 @@ public sealed partial class MagiViewModel
 
     /// <summary>
     /// 実行中の処理を止める。Kotlin原本 <c>stop()</c>（1506-1544行）の移植——前景ジョブ
-    /// （<c>job</c>/<c>checkJob</c>/<c>fixJob</c> 相当）の停止部分のみ。Kotlin原本の
-    /// <c>clearRunMarker</c>（末尾・無条件）は Phase 10 で移植済みでここでも呼ぶ。
+    /// （<c>job</c>/<c>checkJob</c>/<c>fixJob</c> 相当）の停止部分のみ。
     ///
     /// [Phase 10 本体で更新] 当初このメソッドは「Windows向けの背景実行機構が無い」ことを理由に
     /// <c>OptimizationRepository.Running</c> のときは警告ログのみに留めていたが、
     /// <c>MagiViewModel.Background.cs</c> で実際にバックグラウンド <c>Task</c>（<see cref="_bgCts"/>）
     /// を実装したため、ここも実際に Cancel する。Kotlin原本の <c>WorkManager.cancelUniqueWork</c> とは
     /// 機構が異なるが「背景計算を止める」という意図は忠実に果たす——止まった後の後片付け
-    /// （<c>clearBgFiles</c>／<c>OptimizationRepository.SetRunning(false)</c>）は
+    /// （<c>OptimizationRepository.SetRunning(false)</c>）は
     /// <c>RunInBackgroundCoreAsync</c> 自身の <c>catch (OperationCanceledException)</c>/<c>finally</c>
     /// が担う（Kotlin原本で Worker 自身が同じ経路を担うのと同じ構造）。
     /// </summary>
@@ -463,6 +453,5 @@ public sealed partial class MagiViewModel
             if (what.Count == 0) what.Add("違反チェック");
             LogOp("I", $"停止を押しました（対象: {string.Join("・", what)}）");
         }
-        ClearRunMarker();
     }
 }

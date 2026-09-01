@@ -24,14 +24,14 @@ namespace MagiApp.ViewModels;
 /// [背景実行の切り分け] Kotlin原本の <c>OptimizationRepository</c>（<c>work/OptimizationRepository.kt</c>）
 /// はAndroid/WorkManagerに一切依存しない純粋な状態ブリッジであることが判明したため、
 /// <see cref="Work.OptimizationRepository"/> として今回**先行して完全移植**した（詳細は同クラスの
-/// KDoc参照）。一方、それを使って実際にOSのバックグラウンド機構を駆動する
-/// <c>OptimizationWorker.kt</c> 相当のうち、**ファイルI/Oによる kill 耐性**は Phase 10 で
-/// <see cref="Work.RunFiles"/> ＋ <c>MagiViewModel.RunMarker.cs</c> として移植した
-/// （<c>work/RunFiles.kt</c> はディレクトリ1つしか要らない＝Android非依存だったため）。
-/// **WorkManager 相当のタスク投入**（<c>runInBackground</c>）は Windows デスクトップに対応する
-/// OS機構が無いため未実装のまま——設計判断が要る（無いものを作らない＝HF77）。このピースでは
-/// <c>optimizeInFlight()</c> が <see cref="Work.OptimizationRepository.Running"/> を参照できるように
-/// なったことで、以降のピースが編集ガードを正しく移植できる土台が整った。
+/// KDoc参照）。それを使って実際に背景で最適化を駆動する本体（Kotlin原本の
+/// <c>OptimizationWorker.kt</c>/<c>runInBackground</c> 相当）は Phase 10（<c>MagiViewModel.Background.cs</c>）
+/// で同一プロセス内の <c>Task</c> として実装済み——**ファイルI/Oによる kill 耐性は当初実装したが、
+/// 2026-09-01 のユーザー明示判断「クラッシュからの復旧はそこまで重視しない」により全撤去**した
+/// （経緯・現状は <c>windows/README.md</c> フェーズ10節・<c>MagiViewModel.Background.cs</c> クラスKDoc
+/// 参照）。このピースでは <c>optimizeInFlight()</c> が
+/// <see cref="Work.OptimizationRepository.Running"/> を参照できるようになったことで、以降のピースが
+/// 編集ガードを正しく移植できる土台が整った。
 ///
 /// [_ui.update{it.copy(...)} の置き換え方針] <see cref="UiState"/> は不変 data class ではなく
 /// <c>ObservableObject</c> 派生の可変クラスとして移植済み（<c>UiState.cs</c> のクラスKDoc参照）。
