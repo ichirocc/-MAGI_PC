@@ -29,15 +29,22 @@ public class MagiViewModelOptimizeTest
         public Func<MagiState, int[][], V6FinalPort.ActionResult>? Result { get; set; }
         public Exception? ThrowInstead { get; set; }
 
-        public Task<V6FinalPort.ActionResult> OptimizeAsync(
+        /// <summary>true にすると、呼出元がキャンセルするまで完了しない（Stop()検証用）。</summary>
+        public bool HangUntilCancelled { get; set; }
+
+        public async Task<V6FinalPort.ActionResult> OptimizeAsync(
             MagiState state, int[][] schedule, int secondsRaw, int? workers, bool softPolish,
             V6Algorithm requestedAlgorithm, bool allowImpossible,
             Action<string, ViolationReport?, long, long>? onProgress, CancellationToken cancellationToken)
         {
             OptimizeCallCount++;
             onProgress?.Invoke("テスト探索中", null, 0, 0);
+            if (HangUntilCancelled)
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
             if (ThrowInstead is not null) throw ThrowInstead;
-            return Task.FromResult(Result!(state, schedule));
+            return Result!(state, schedule);
         }
 
         public int SoftPolishCallCount { get; private set; }
@@ -253,5 +260,50 @@ public class MagiViewModelOptimizeTest
 
         Assert.Equal(0, fake.SoftPolishCallCount);
         Assert.True(vm.Ui.MessageIsError);
+    }
+
+    // ===== Stop（MagiViewModel.Optimize.cs, Kotlin原本 stop() 1506-1544行）=====
+
+    [Fact]
+    public void Stop_WithNothingRunning_IsANoOp()
+    {
+        var fake = new FakeOptimizationService();
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.Stop(); // 例外を投げないこと。
+
+        Assert.False(vm.Ui.Running);
+    }
+
+    [Fact]
+    public async Task Stop_CancelsInFlightOptimizeRun()
+    {
+        var fake = new FakeOptimizationService { HangUntilCancelled = true };
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimize();
+        Assert.NotNull(vm.LastRunOptimizeTask);
+        Assert.True(vm.Ui.Running);
+
+        vm.Stop();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
+
+        Assert.False(vm.Ui.Running);
+        Assert.Contains("停止しました", vm.Ui.Message);
+    }
+
+    [Fact]
+    public void Stop_WhileRunningFlagSet_ResetsRunningAndLogsWhichJob()
+    {
+        var fake = new FakeOptimizationService();
+        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.BeginBoardJob("勤務表づくり");
+        vm.Ui.Running = true;
+
+        vm.Stop();
+
+        Assert.False(vm.Ui.Running);
+        Assert.Equal("停止しました", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("停止を押しました") && l.Contains("勤務表づくり"));
     }
 }

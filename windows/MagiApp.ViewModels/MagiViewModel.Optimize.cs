@@ -413,4 +413,47 @@ public sealed partial class MagiViewModel
             if (Ui.Running) Ui.Running = false;
         }
     }
+
+    /// <summary>
+    /// 実行中の処理を止める。Kotlin原本 <c>stop()</c>（1506-1544行）の移植——前景ジョブ
+    /// （<c>job</c>/<c>checkJob</c>/<c>fixJob</c> 相当）の停止部分のみ。Kotlin原本の
+    /// <c>WorkManager.cancelUniqueWork</c>/<c>clearBgFiles</c>/<c>clearRunMarker</c> は Phase 10
+    /// （背景実行）で Windows 向けのバックグラウンド実行機構自体を実装するまで対応するものが無いため、
+    /// このピースでは意図的に省略する（<c>OptimizationRepository.Running</c> が true＝背景実行中の場合は
+    /// それを停止する実装が無いことを警告ログへ残すに留める。前景の <c>_job</c>/<c>_checkCts</c>/
+    /// <c>_fixCts</c> はすべて即座に確実にキャンセルできる）。
+    /// </summary>
+    public void Stop()
+    {
+        _job?.Cancel();
+        _checkCts?.Cancel();
+        _fixCts?.Cancel();
+
+        if (OptimizationRepository.Running)
+        {
+            // [Phase 10未移植] Kotlin原本はここで WorkManager.cancelUniqueWork(...) を呼び、背景実行
+            //   そのものを止める。対応する Windows 側の背景実行機構がまだ無いため、それができないことを
+            //   利用者へ明示する（黙って「停止しました」と嘘をつかない）。
+            LogOp("W", "バックグラウンド計算の停止は未対応です（Phase 10で実装予定）。前景の処理のみ停止しました。");
+        }
+        else if (Ui.Running || Ui.FixSearching)
+        {
+            // [3.284.0相当] 前景の違反チェック(_checkCts)/改善探索(_fixCts)は自身の catch(OperationCanceledException)
+            //   で running/fixSearching を戻す機会があるが、ここでの即時リセットは冪等
+            //   （後からジョブ側の確定メッセージが上書きする）。
+            Ui.MessageIsError = false;
+            Ui.Running = false;
+            Ui.FixSearching = false;
+            Ui.Message = "停止しました";
+            // [Kotlin原本の挙動をそのまま保存] "改善探索" 分岐は fixSearching を直前で false に
+            // リセットした**後**の値を読むため、Kotlin原本(1526-1541行)でも実質常に到達しない
+            // （`_ui.update{fixSearching=false}` の直後に `_ui.value.fixSearching` を読んでいる）。
+            // HF77＝逐語移植の対象としてそのまま保存する（勝手に「直さない」）。
+            var what = new List<string>();
+            if (_boardJobLabel is not null) what.Add(_boardJobLabel);
+            if (Ui.FixSearching) what.Add("改善探索");
+            if (what.Count == 0) what.Add("違反チェック");
+            LogOp("I", $"停止を押しました（対象: {string.Join("・", what)}）");
+        }
+    }
 }
