@@ -41,6 +41,7 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _constraintRowItems = System.Array.Empty<string>();
 
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
@@ -51,6 +52,13 @@ public sealed partial class EditView : UserControl
 
     /// <summary>年間マスターのシフト選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
     private int _syncedMasterShiftIndex = -1;
+
+    /// <summary>制約の種類(<see cref="ConstraintFamilyCombo"/>)選択も同じ理由。種類が変わったときは
+    /// 行選択・入力欄を必ずリセットする（前の種類の行indexを新しい種類へ誤って持ち越さないため）。</summary>
+    private string? _syncedConstraintFamilyKey;
+
+    /// <summary>制約の行選択(<see cref="ConstraintRowCombo"/>)も同じ理由で「選択が変わったときだけ取り込む」。</summary>
+    private int _syncedConstraintRowIndex = -1;
 
     /// <summary>希望シフト/日別必要人数の表示上限（件）。超えた分は件数だけ添える
     /// （AnalysisView.MaxIssueRows と同じ理由——最大30名×31日で930件になりうる）。</summary>
@@ -449,6 +457,201 @@ public sealed partial class EditView : UserControl
             FontSize = 13,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
+
+        SyncConstraintFields();
+        var hasConstraintFamily = ConstraintFamilyCombo.SelectedIndex >= 0;
+        var hasConstraintRow = ConstraintRowCombo.SelectedIndex >= 0;
+        AddConstraintButton.IsEnabled = editable && hasConstraintFamily;
+        UpdateConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
+        RemoveConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
+        if (!editable)
+            ConstraintHintText.Text = ui.Loaded ? "計算の実行中はルールを変更できません。終わってからにしてください。" : "";
+    }
+
+    /// <summary>
+    /// [制約(ルール)10族の追加/変更/削除] 種類ごとの入力欄構成。<c>FieldLabels</c> の並びは
+    /// <see cref="MagiViewModel.ConstraintRowValues"/>/<see cref="MagiViewModel.UpdateConstraint"/> の
+    /// 値順と一致させる（cons3系は最大5・可変長=空欄で打ち切り、それ以外は固定長）。
+    /// <c>Add*</c> 系メソッドへの引数の並びだけ cons42/cons42s で異なる
+    /// （<see cref="TryAddConstraint"/> 参照・<c>MagiViewModel.Editing.cs</c> の
+    /// <see cref="MagiViewModel.ConstraintRowValues"/> のKDocに理由あり）。
+    /// </summary>
+    private sealed record ConstraintFamilyMeta(string Key, string[] FieldLabels);
+
+    private static readonly ConstraintFamilyMeta[] ConstraintFamilyMetas =
+    {
+        new("cons1", new[] { "窓の日数", "シフト記号", "最低回数" }),
+        new("cons2", new[] { "シフト記号", "合計回数" }),
+        new("cons3", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
+        new("cons3n", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
+        new("cons3m", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
+        new("cons3mn", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
+        new("cons41", new[] { "群記号", "シフト記号", "下限", "上限" }),
+        new("cons42", new[] { "群1記号", "シフト1記号", "群2記号", "シフト2記号" }),
+        new("cons41s", new[] { "スキル群記号", "シフト記号", "下限", "上限" }),
+        new("cons42s", new[] { "スキル群1記号", "シフト1記号", "スキル群2記号", "シフト2記号" }),
+    };
+
+    private string? ConstraintFamilyKey() => (ConstraintFamilyCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+
+    private IReadOnlyList<string> RowLabelsFor(string key)
+    {
+        var f = _vm.ConstraintFamilies().Concat(_vm.SkillConstraintFamilies()).FirstOrDefault(x => x.Key == key);
+        if (f is null) return System.Array.Empty<string>();
+        return f.Rows.Select((r, i) => $"{i + 1}: {r}").ToList();
+    }
+
+    /// <summary>種類の選択・行一覧・入力欄の表示/ラベルを同期する。種類が変わったときだけ行選択と
+    /// 入力欄を強制的に空へ戻す（<see cref="_syncedConstraintFamilyKey"/> 参照）。</summary>
+    private void SyncConstraintFields()
+    {
+        var key = ConstraintFamilyKey();
+        var meta = key is null ? null : ConstraintFamilyMetas.FirstOrDefault(m => m.Key == key);
+        var familyChanged = key != _syncedConstraintFamilyKey;
+        _syncedConstraintFamilyKey = key;
+
+        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
+        var labels = new[] { ConstraintField1Label, ConstraintField2Label, ConstraintField3Label, ConstraintField4Label, ConstraintField5Label };
+        for (var i = 0; i < boxes.Length; i++)
+        {
+            var show = meta is not null && i < meta.FieldLabels.Length;
+            boxes[i].Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            labels[i].Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (show) labels[i].Text = meta!.FieldLabels[i];
+            if (familyChanged) boxes[i].Text = "";
+        }
+
+        var rows = key is null ? System.Array.Empty<string>() : RowLabelsFor(key);
+        if (familyChanged)
+        {
+            // [SyncItemsのキャッシュ差分検知に頼らない理由] 種類切替の直前直後で行ラベルがたまたま
+            //   一致すると(通常起きないが)差分無しと誤判定され、前の種類の行一覧が残ってしまう。
+            //   種類が変わったときは常に明示的に作り直す。
+            _syncedConstraintRowIndex = -1;
+            _constraintRowItems = rows;
+            ConstraintRowCombo.ItemsSource = rows.ToList();
+            ConstraintRowCombo.SelectedIndex = -1;
+        }
+        else
+        {
+            SyncItems(ConstraintRowCombo, rows, ref _constraintRowItems);
+        }
+    }
+
+    private void OnConstraintFamilyChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _syncingFromModel = true;
+        try
+        {
+            SyncConstraintFields();
+            ConstraintHintText.Text = "";
+        }
+        finally
+        {
+            _syncingFromModel = false;
+        }
+    }
+
+    private void OnConstraintRowSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var idx = ConstraintRowCombo.SelectedIndex;
+        if (idx < 0 || idx == _syncedConstraintRowIndex) return;
+        _syncedConstraintRowIndex = idx;
+        var key = ConstraintFamilyKey();
+        var values = key is null ? null : _vm.ConstraintRowValues(key, idx);
+        if (values is null) return;
+        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
+        for (var i = 0; i < boxes.Length; i++) boxes[i].Text = i < values.Count ? values[i] : "";
+    }
+
+    private IReadOnlyList<string> CollectConstraintFieldValues(ConstraintFamilyMeta meta)
+    {
+        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
+        return boxes.Take(meta.FieldLabels.Length).Select(b => b.Text.Trim()).ToList();
+    }
+
+    /// <summary>[追加専用のフィールド並び替え] <c>AddCons42</c>/<c>AddCons42s</c> の引数順(g1,g2,s1,s2)は、
+    /// 編集の値順(<see cref="MagiViewModel.ConstraintRowValues"/>=g1,s1,g2,s2、群と対応シフトを並べて
+    /// 見せるUI都合)と異なるため、ここでだけ明示的に並べ替える。それ以外の族は両者が一致するため
+    /// 並べ替え不要（<see cref="ConstraintFamilyMetas"/> クラスKDoc参照）。</summary>
+    private bool TryAddConstraint(string key, IReadOnlyList<string> v, out string error)
+    {
+        error = "";
+        string G(int i) => i < v.Count ? v[i] : "";
+        switch (key)
+        {
+            case "cons1":
+                if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0) { error = "すべての項目を入れてください。"; return false; }
+                _vm.AddCons1(G(0), G(1), G(2));
+                return true;
+            case "cons2":
+                if (G(0).Length == 0 || G(1).Length == 0) { error = "すべての項目を入れてください。"; return false; }
+                _vm.AddCons2(G(0), G(1));
+                return true;
+            case "cons3": case "cons3n": case "cons3m": case "cons3mn":
+                if (v.All(x => x.Length == 0)) { error = "少なくとも1日目を入れてください。"; return false; }
+                _vm.AddCons3(key, v);
+                return true;
+            case "cons41":
+                if (G(0).Length == 0 || G(1).Length == 0) { error = "群記号とシフト記号を入れてください。"; return false; }
+                _vm.AddCons41(G(0), G(1), G(2), G(3));
+                return true;
+            case "cons41s":
+                if (G(0).Length == 0 || G(1).Length == 0) { error = "スキル群記号とシフト記号を入れてください。"; return false; }
+                _vm.AddCons41s(G(0), G(1), G(2), G(3));
+                return true;
+            case "cons42":
+                if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0 || G(3).Length == 0) { error = "すべての項目を入れてください。"; return false; }
+                _vm.AddCons42(G(0), G(2), G(1), G(3)); // 入力欄=[群1,シフト1,群2,シフト2] -> AddCons42(g1,g2,s1,s2)
+                return true;
+            case "cons42s":
+                if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0 || G(3).Length == 0) { error = "すべての項目を入れてください。"; return false; }
+                _vm.AddCons42s(G(0), G(2), G(1), G(3));
+                return true;
+            default:
+                error = "種類を選んでください。";
+                return false;
+        }
+    }
+
+    private void OnAddConstraintClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var key = ConstraintFamilyKey();
+        var meta = key is null ? null : ConstraintFamilyMetas.FirstOrDefault(m => m.Key == key);
+        if (key is null || meta is null) { ConstraintHintText.Text = "種類を選んでください。"; return; }
+        if (!TryAddConstraint(key, CollectConstraintFieldValues(meta), out var error)) { ConstraintHintText.Text = error; return; }
+        ConstraintHintText.Text = "";
+        _syncedConstraintRowIndex = -1;
+    }
+
+    private void OnUpdateConstraintClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var key = ConstraintFamilyKey();
+        var meta = key is null ? null : ConstraintFamilyMetas.FirstOrDefault(m => m.Key == key);
+        var idx = ConstraintRowCombo.SelectedIndex;
+        if (key is null || meta is null) { ConstraintHintText.Text = "種類を選んでください。"; return; }
+        if (idx < 0) { ConstraintHintText.Text = "変更する行を選んでください。"; return; }
+        var values = CollectConstraintFieldValues(meta);
+        if (values.All(x => x.Length == 0)) { ConstraintHintText.Text = "内容を入れてください。"; return; }
+        _vm.UpdateConstraint(key, idx, values);
+        ConstraintHintText.Text = "";
+        _syncedConstraintRowIndex = -1;
+    }
+
+    private void OnRemoveConstraintClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var key = ConstraintFamilyKey();
+        var idx = ConstraintRowCombo.SelectedIndex;
+        if (key is null) { ConstraintHintText.Text = "種類を選んでください。"; return; }
+        if (idx < 0) { ConstraintHintText.Text = "削除する行を選んでください。"; return; }
+        _vm.RemoveConstraint(key, idx);
+        ConstraintHintText.Text = "";
+        _syncedConstraintRowIndex = -1;
     }
 
     /// <summary>選択中のグループの名前・記号を入力欄へ取り込む（選択が変わったときだけ、職員管理と同じ理由）。</summary>

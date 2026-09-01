@@ -15,7 +15,8 @@
         職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
         年間マスター … シフトの追加/改名/削除(Ws1AddShift/Ws1EditShift/Ws1RemoveShift)＋
                      グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)＋
-                     登録済み制約の読取専用一覧（制約そのものの追加/編集は後続の段階）
+                     制約(ルール)10族の追加/変更/削除(AddCons*/UpdateConstraint/RemoveConstraint、
+                     フィールド構成は EditView.xaml.cs の ConstraintFamilyMetas 参照)
       削除系（職員/グループ）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む
       （シフト削除は該当マスがKotlin原本と同じく「休」/先頭シフトへ吸収されるだけで大量破壊的では
       ないため、職員/グループと同じ確認ダイアログは課さず参照件数(Ws1ShiftRefCount)をヒント文で示す）。
@@ -144,8 +145,42 @@
                 <TextBlock Text="登録済みのルール" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />
 
-                <TextBlock Text="ルール（制約）の追加や変更は今後の段階で対応します。"
-                           TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock Text="ルールの追加・変更・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="種類" />
+                <ComboBox x:Name="ConstraintFamilyCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnConstraintFamilyChanged">
+                    <ComboBoxItem Content="窓の要件（cons1）" Tag="cons1" />
+                    <ComboBoxItem Content="個人の合計（cons2）" Tag="cons2" />
+                    <ComboBoxItem Content="必須の並び（cons3）" Tag="cons3" />
+                    <ComboBoxItem Content="禁止の並び（cons3n）" Tag="cons3n" />
+                    <ComboBoxItem Content="推奨の並び（cons3m）" Tag="cons3m" />
+                    <ComboBoxItem Content="回避の並び（cons3mn）" Tag="cons3mn" />
+                    <ComboBoxItem Content="群のレンジ（cons41）" Tag="cons41" />
+                    <ComboBoxItem Content="群ペア禁止（cons42）" Tag="cons42" />
+                    <ComboBoxItem Content="スキル群のレンジ（cons41s）" Tag="cons41s" />
+                    <ComboBoxItem Content="スキル群ペア禁止（cons42s）" Tag="cons42s" />
+                </ComboBox>
+                <TextBlock Text="変更・削除する行（新規追加なら未選択のまま）" />
+                <ComboBox x:Name="ConstraintRowCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnConstraintRowSelectionChanged" />
+
+                <TextBlock x:Name="ConstraintField1Label" Text="項目1" />
+                <TextBox x:Name="ConstraintField1Box" HorizontalAlignment="Stretch" />
+                <TextBlock x:Name="ConstraintField2Label" Text="項目2" />
+                <TextBox x:Name="ConstraintField2Box" HorizontalAlignment="Stretch" />
+                <TextBlock x:Name="ConstraintField3Label" Text="項目3" />
+                <TextBox x:Name="ConstraintField3Box" HorizontalAlignment="Stretch" />
+                <TextBlock x:Name="ConstraintField4Label" Text="項目4" />
+                <TextBox x:Name="ConstraintField4Box" HorizontalAlignment="Stretch" />
+                <TextBlock x:Name="ConstraintField5Label" Text="項目5" />
+                <TextBox x:Name="ConstraintField5Box" HorizontalAlignment="Stretch" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddConstraintButton" Content="追加" Click="OnAddConstraintClick" />
+                    <Button x:Name="UpdateConstraintButton" Content="変更" Click="OnUpdateConstraintClick" />
+                    <Button x:Name="RemoveConstraintButton" Content="削除" Click="OnRemoveConstraintClick" />
+                </StackPanel>
+                <TextBlock x:Name="ConstraintHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
