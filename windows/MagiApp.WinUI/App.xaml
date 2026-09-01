@@ -8,10 +8,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!--
-                  フェーズ9でここへ MagiTheme 相当（深緑青パレット・4モード・Typography/Shapes・
-                  MagiTokens の spacing/WCAGコントラストヘルパー）を ResourceDictionary /
-                  ThemeResources.xaml として追加する（現状は既定のFluentテーマのみ）。
+                  [デザイントークン] Kotlin原本 MagiTheme（D8決定=UDモードのみ出荷）のブランド色を
+                  Styles/MagiTheme.xaml へ移植（詳細・スコープはそのファイルのコメント参照）。
+                  MergedDictionaries は同キーなら**後の方が勝つ**ため、既定の XamlControlsResources の
+                  後に置く（SystemAccentColor 等を上書きするため）。
                 -->
+                <ResourceDictionary Source="Styles/MagiTheme.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
