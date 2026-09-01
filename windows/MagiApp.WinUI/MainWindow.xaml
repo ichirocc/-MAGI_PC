@@ -4,29 +4,23 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      [フェーズ8, 縦断スライス] 「フィクスチャ読込→違反検査→読取専用グリッド表示」の最小経路。
-      勤務表グリッド本体（ScheduleGridHost）は S×T の可変サイズかつセルごとに違反色分けが要るため
-      XAML の静的テンプレートでは表現しづらく、コードビハインドで Grid を組み立てる
-      （MainWindow.xaml.cs の RenderSchedule 参照）。フェーズ9で ItemsRepeater ベースの
-      本実装（MagiScheduleViews.kt 相当）へ置き換わるまでの暫定表示。
+      [フェーズ9] Android版の5タブ（ホーム/勤務表/編集/分析/設定）に対応するナビゲーション殻。
+      NavigationView(PaneDisplayMode=Top) の選択に応じて HostContent（ContentControl）の内容を
+      差し替える方式（Frame+Page方式ではなく、5タブとも同一の MagiViewModel インスタンスを
+      共有するため、コンストラクタ注入で足りる——MainWindow.xaml.cs 参照）。
+      各タブの内容は初回選択時に構築してキャッシュする（未選択タブの ObservableObject 購読と
+      無駄な再描画を避ける）。
     -->
-    <Grid Padding="16" RowSpacing="8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
-            <TextBlock Text="MAGI ShiftOptimizer" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <TextBlock Text="Windows 11 ネイティブ版（フェーズ8: 縦断スライス）"
-                       FontSize="12" Opacity="0.7" VerticalAlignment="Center" />
-        </StackPanel>
-
-        <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="14" TextWrapping="Wrap" />
-
-        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <Grid x:Name="ScheduleGridHost" />
-        </ScrollViewer>
-    </Grid>
+    <NavigationView x:Name="Nav" PaneDisplayMode="Top"
+                     IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
+                     SelectionChanged="OnNavSelectionChanged">
+        <NavigationView.MenuItems>
+            <NavigationViewItem Content="ホーム" Tag="home" />
+            <NavigationViewItem Content="勤務表" Tag="schedule" />
+            <NavigationViewItem Content="編集" Tag="edit" />
+            <NavigationViewItem Content="分析" Tag="analysis" />
+            <NavigationViewItem Content="設定" Tag="settings" />
+        </NavigationView.MenuItems>
+        <ContentControl x:Name="HostContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+    </NavigationView>
 </Window>

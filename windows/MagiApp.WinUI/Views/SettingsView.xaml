@@ -1,0 +1,59 @@
+<UserControl
+    x:Class="MagiApp.WinUI.Views.SettingsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      [フェーズ9] 「設定」タブの最初の実装。Kotlin原本 SettingsCard（最適化設定）に相当する部分のみ——
+      並列数・計算時間・計算方式・仕上げ最適化・ネイティブ加速表示・パリティ照合表示・禁止連続の
+      事前フィルタ/崩し範囲。いずれも既存の MagiViewModel セッター（SetWorkers 等、フェーズ9ピース5で
+      移植済み・テスト済み）へ直接委譲するだけの薄い配線。色設定・データ入出力・外観（片手モード等）は
+      今後の段階で追加する。
+    -->
+    <ScrollViewer Padding="16">
+        <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
+            <TextBlock Text="最適化設定" FontSize="20" FontWeight="SemiBold" />
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="WorkersLabel" Text="並列数" />
+                <Slider x:Name="WorkersSlider" Minimum="1" Maximum="16" StepFrequency="1"
+                        ValueChanged="OnWorkersChanged" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock x:Name="BudgetLabel" Text="計算の制限時間" />
+                <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
+                        TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
+                        ValueChanged="OnBudgetChanged" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="計算方式" />
+                <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnAlgorithmChanged">
+                    <ComboBoxItem Content="おまかせ（予算から自動選択）" Tag="Auto" />
+                    <ComboBoxItem Content="高速（並列SA・短時間向け）" Tag="V5" />
+                    <ComboBoxItem Content="ALNS（破壊・修復マルチリスタート）" Tag="Alns" />
+                    <ComboBoxItem Content="RSI（最大違反族に集中）" Tag="Rsi" />
+                    <ComboBoxItem Content="RSI++（シード→仮説→精製→研磨）" Tag="RsiPlus" />
+                    <ComboBoxItem Content="Portfolio（異種適応アンサンブル）" Tag="Portfolio" />
+                </ComboBox>
+            </StackPanel>
+
+            <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ最適化" OnContent="ON" OffContent="OFF"
+                          Toggled="OnSoftPolishToggled" />
+
+            <!-- ネイティブ加速/パリティ照合はKotlin原本と異なりこの移植では常に対象外
+                 （magi_native.cpp相当のC++加速層が無く、計算は最初からマネージドC#のみ）。
+                 設定データの往復互換のためトグル自体は保持し、表示専用として無効化する。 -->
+            <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
+                          OnContent="ON" OffContent="OFF" IsEnabled="False" />
+
+            <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ"
+                          OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
+
+            <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
+                          OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
