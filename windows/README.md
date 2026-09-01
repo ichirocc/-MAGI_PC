@@ -55,14 +55,28 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
    [`docs/screen_port_map.md`](docs/screen_port_map.md) を参照＝下調べ資料であり、
    実移植時は必ず元のKotlinソースを直接確認すること）
    - ViewModel層＝**移植完了**。Kotlin原本 `MagiViewModel.kt` の拡張関数86件・コアメンバ関数とも
-     すべて対応物あり（唯一の例外は `runInBackground`＝フェーズ10の背景実行機構に依存）。
-   - UI層＝5タブのナビゲーション殻あり。ホーム/勤務表/設定は実装済み、編集/分析は準備中。
-10. 背景実行（未着手。Android は WorkManager 前提だが Windows デスクトップにプロセス外の
-    ジョブスケジューラ相当は無く、「何をもって背景実行とするか」の設計判断が先に要る）
+     すべて対応物あり（`runInBackground`/`applyBgResult` も含め完了。詳細はフェーズ10）。
+   - UI層＝5タブすべてに実体あり。勤務表タブはセル編集(タップ→担当可能シフト選択)・
+     元に戻す/やり直す・違反ハイライト/希望バッジまで実装。編集タブは月次条件(希望/日別必要人数の
+     一覧・追加・削除)・職員管理(追加/改名/削除、削除確認ダイアログ付き)・年間マスター
+     (グループの追加/改名/削除、シフト追加/改名/制約編集は未実装)。分析タブは診断一覧＋
+     「直し方を探す」。設定タブは最適化設定＋データ入出力(JSON開く/保存・CSV取込/書出)。
+     デザイントークン（ブランド色）も `Styles/MagiTheme.xaml` へ移植済み（余白/角丸/
+     タイポグラフィスケールの全面移植は未着手）。
+10. ✅ 背景実行（**完了**。Android の WorkManager に直接対応する Windows デスクトップの機構は
+    無いため、`OptimizationRepository` が元々プロセス内 pub/sub として設計されていた点を活かし、
+    同一プロセス内の `Task` として実装した——設計判断の詳細は
+    `MagiApp.ViewModels/MagiViewModel.Background.cs` のクラスKDoc参照。kill耐性は `RunFiles`/
+    `RunMarker` による途中最良スナップショット・起動時復元。ウィンドウを閉じてもプロセスを
+    生かし続けるか（トレイ常駐等）は「生かし続けない・その代わり実行中は閉じる前に確認する」で
+    決着（`MainWindow.OnAppWindowClosing` 参照。トレイアイコンはWin32相互運用か追加パッケージが
+    要り、このサンドボックスでは実機検証できないリスクを避けた）。
 11. 🚧 パッケージング/配布（**部分的に先行**。`windows-installer.yml` が Inno Setup で
     per-user の `setup.exe` を、msbuild で MSIX をそれぞれ生成し Artifacts へ保存する所まで
     実装済み。Authenticode 署名も Secrets 設定時のみ有効化される形で入っている。
-    残るのは正式アイコン/ブランディングと実機での新規インストール確認）
+    アイコン/ブランディングは `MagiApp.WinUI/Assets/`（Kotlin原本のlauncher iconの意匠を
+    現行ブランド配色へ揃えて再構成）に用意済み。**残るのは実機での新規インストール確認のみ**
+    （このサンドボックスでは Windows 実機/実インストールの検証ができないため未実施）。
 
 ## 変更規律（HF77 を移植作業自体にも適用）
 

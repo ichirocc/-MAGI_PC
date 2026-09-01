@@ -18,6 +18,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>MagiApp.WinUI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- [フェーズ11] インストーラ(installer/MagiApp.iss)が配布する非パッケージ(unpackaged)ビルドの
+         exe自体のアイコン。パッケージ版はPackage.appxmanifestのAssets/*.pngが担うため対象外だが、
+         非パッケージ版はexeに埋め込まれたWin32アイコンが無いと既定の白紙アイコンになる。 -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
