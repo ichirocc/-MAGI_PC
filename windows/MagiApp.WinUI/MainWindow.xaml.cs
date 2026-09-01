@@ -39,9 +39,9 @@ public sealed partial class MainWindow : Window
             {
                 "home" => new HomeView(_vm),
                 "schedule" => new ScheduleView(_vm),
+                "edit" => new EditView(_vm),
+                "analysis" => new AnalysisView(_vm),
                 "settings" => new SettingsView(_vm),
-                "edit" => PlaceholderTab("編集"),
-                "analysis" => PlaceholderTab("分析"),
                 _ => PlaceholderTab(tag),
             };
             _tabCache[tag] = content;
@@ -49,7 +49,10 @@ public sealed partial class MainWindow : Window
         HostContent.Content = content;
     }
 
-    /// <summary>[フェーズ9] 編集/分析タブは未実装。実装済みタブとの区別が付くよう明示する。</summary>
+    /// <summary>
+    /// [フェーズ9] 未知のタグに対する防御（5タグはすべて実装済みのため通常は到達しない）。
+    /// switch 式の網羅性を静的に証明できない以上、黙って空を出すよりは理由を画面に出す。
+    /// </summary>
     private static UIElement PlaceholderTab(string label) => new TextBlock
     {
         Text = $"{label}タブは準備中です。",
