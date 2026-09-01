@@ -49,12 +49,20 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 5. ✅ 探索統括（SA→ALNS/RSI/RSI++→Portfolio）＝coroutines→TPL変換の最大リスク
 6. ✅ 後処理研磨パス（`V6HotfixPasses.kt` 4,682行、C#では族ごとに複数ファイルへ分割）
 7. ✅ `V6FinalPort` 統括・CSV・診断（この時点で MagiEngine は機能的に完結）
-8. 🚧 WinUI3縦断スライス（**進行中**・フェーズ9と並行）
-9. 🚧 UIシェル本体＋ViewModel（**進行中**・フェーズ8と並行。画面マップは
+8. ✅ WinUI3縦断スライス（フィクスチャ読込→検査→読取専用グリッド表示。DIコンテナで
+   `MagiViewModel` を組み立て `MainWindow` へ注入する経路まで Windows CI でビルド実証済み）
+9. 🚧 UIシェル本体＋ViewModel（**進行中**。画面マップは
    [`docs/screen_port_map.md`](docs/screen_port_map.md) を参照＝下調べ資料であり、
    実移植時は必ず元のKotlinソースを直接確認すること）
-10. 背景実行
-11. パッケージング/配布
+   - ViewModel層＝**移植完了**。Kotlin原本 `MagiViewModel.kt` の拡張関数86件・コアメンバ関数とも
+     すべて対応物あり（唯一の例外は `runInBackground`＝フェーズ10の背景実行機構に依存）。
+   - UI層＝5タブのナビゲーション殻あり。ホーム/勤務表/設定は実装済み、編集/分析は準備中。
+10. 背景実行（未着手。Android は WorkManager 前提だが Windows デスクトップにプロセス外の
+    ジョブスケジューラ相当は無く、「何をもって背景実行とするか」の設計判断が先に要る）
+11. 🚧 パッケージング/配布（**部分的に先行**。`windows-installer.yml` が Inno Setup で
+    per-user の `setup.exe` を、msbuild で MSIX をそれぞれ生成し Artifacts へ保存する所まで
+    実装済み。Authenticode 署名も Secrets 設定時のみ有効化される形で入っている。
+    残るのは正式アイコン/ブランディングと実機での新規インストール確認）
 
 ## 変更規律（HF77 を移植作業自体にも適用）
 
