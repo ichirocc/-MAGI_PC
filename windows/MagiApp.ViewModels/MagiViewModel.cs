@@ -25,8 +25,11 @@ namespace MagiApp.ViewModels;
 /// はAndroid/WorkManagerに一切依存しない純粋な状態ブリッジであることが判明したため、
 /// <see cref="Work.OptimizationRepository"/> として今回**先行して完全移植**した（詳細は同クラスの
 /// KDoc参照）。一方、それを使って実際にOSのバックグラウンド機構を駆動する
-/// <c>OptimizationWorker.kt</c> 相当（ファイルI/Oによる kill 耐性・WorkManager 相当のタスク投入）は、
-/// 計画どおり Phase 10（背景実行）で Windows 向けに再実装する。このピースでは
+/// <c>OptimizationWorker.kt</c> 相当のうち、**ファイルI/Oによる kill 耐性**は Phase 10 で
+/// <see cref="Work.RunFiles"/> ＋ <c>MagiViewModel.RunMarker.cs</c> として移植した
+/// （<c>work/RunFiles.kt</c> はディレクトリ1つしか要らない＝Android非依存だったため）。
+/// **WorkManager 相当のタスク投入**（<c>runInBackground</c>）は Windows デスクトップに対応する
+/// OS機構が無いため未実装のまま——設計判断が要る（無いものを作らない＝HF77）。このピースでは
 /// <c>optimizeInFlight()</c> が <see cref="Work.OptimizationRepository.Running"/> を参照できるように
 /// なったことで、以降のピースが編集ガードを正しく移植できる土台が整った。
 ///

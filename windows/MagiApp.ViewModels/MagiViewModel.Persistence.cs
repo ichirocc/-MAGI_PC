@@ -38,10 +38,10 @@ public sealed partial class MagiViewModel
 {
     /// <summary>
     /// [テスト可視性のためinternal化] Kotlin原本は <c>private var hydrated = false</c> で、
-    /// <c>init{}</c>（このC#移植では Phase 10 スコープ・未移植）の起動時復元が完了した時点で
-    /// true へ立てる唯一の書き手。このピースだけでは true へ遷移する経路が無いため、
-    /// <see cref="AutoSave"/>/<see cref="SaveNow"/> の no-op ガードをテストから直接運動できるよう
-    /// internal 昇格する。
+    /// <c>init{}</c> の起動時復元が完了した時点で true へ立てる唯一の書き手。このC#移植では
+    /// Phase 10 で <see cref="RestoreOnStartup"/>（<c>MagiViewModel.RunMarker.cs</c>）が
+    /// その唯一の書き手になった。<see cref="AutoSave"/>/<see cref="SaveNow"/> の no-op ガードを
+    /// テストから直接運動できるよう internal のままにしておく。
     /// </summary>
     internal bool _hydrated;
 

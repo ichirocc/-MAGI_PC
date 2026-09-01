@@ -1004,16 +1004,16 @@ public sealed partial class MagiViewModel
 
     /// <summary>
     /// [中断バナーの破棄] Kotlin原本 <c>dismissInterrupted()</c>（行230-233）の移植。UI状態の2フラグを
-    /// リセットするだけ。Kotlin原本は続けて <c>clearBgFiles("中断の破棄")</c>（<c>work/RunFiles.kt</c>
-    /// 相当・プロセスkill耐性のための途中状態ファイル削除）を呼ぶが、その背景実行サブシステムは
-    /// Phase 10（未移植）のためここでは意図的に省略する（<c>MagiViewModel.Optimize.cs</c> クラスKDocの
-    /// 「Phase 10 未移植の由来」と同じ方針）。
+    /// リセットし、続けて <c>clearBgFiles("中断の破棄")</c>（<c>work/RunFiles.kt</c> 相当・プロセスkill
+    /// 耐性のための途中状態ファイル削除）を呼ぶ。Phase 10 で <see cref="Work.RunFiles"/> ＋
+    /// <c>MagiViewModel.RunMarker.cs</c> を移植したため、この2行目も本来の意味で機能する
+    /// （破棄したのに途中状態ファイルが残ると、次回起動が同じ「中断されました」を再び掴む）。
     /// </summary>
     public void DismissInterrupted()
     {
         Ui.InterruptedRun = false;
         Ui.InterruptedInfo = null;
-        // [Phase 10 未移植] clearBgFiles("中断の破棄") はここでは意図的に省略（上記KDoc参照）。
+        ClearBgFiles("中断の破棄");   // [C1] 破棄で途中状態ファイルを削除
     }
 
     /// <summary>

@@ -24,10 +24,12 @@ namespace MagiApp.ViewModels;
 /// （<c>MagiViewModel.Persistence.cs</c> で宣言済み、partial class のため本ファイルからも直接参照可）を
 /// 再利用する——複製すると <c>stop()</c>（未移植・別ピース）が正しいトークンを掴めなくなる。
 ///
-/// [Phase 10 未移植の由来] Kotlin原本の <c>writeRunMarker("fg")</c>/<c>clearBgFiles(...)</c>
-/// （<c>work/RunFiles.kt</c> 相当、プロセスkill耐性のためのファイルI/O）は計画どおり Phase 10
-/// （背景実行）で Windows 向けに再実装する。このピースでは意図的に省略する
-/// （<c>MagiViewModel.cs</c> クラスKDocの「背景実行の切り分け」と同じ方針）。
+/// [Phase 10 で移植済み] Kotlin原本の <c>writeRunMarker("fg")</c>/<c>clearBgFiles(...)</c>/
+/// <c>clearRunMarker()</c>（<c>work/RunFiles.kt</c> 相当、プロセスkill耐性のためのファイルI/O）は
+/// <see cref="Work.RunFiles"/> ＋ <c>MagiViewModel.RunMarker.cs</c> として移植済みで、このファイルの
+/// 該当箇所（<see cref="RunV6FullOptimize"/>/<see cref="RunSoftPolish"/> の開始時、両コアの
+/// <c>finally</c>、<see cref="Stop"/> の末尾）は実際に呼んでいる。Windows 側のバックグラウンド実行機構
+/// そのもの（<c>runInBackground</c>/<c>OptimizationWorker.kt</c> 相当）は依然として未実装。
 ///
 /// [_ui.update{it.copy(...)} の置き換え方針] クラスKDoc（<c>MagiViewModel.cs</c>）参照——
 /// <c>Ui.X = ...;</c> の直接代入へ置き換える。
@@ -89,6 +91,8 @@ public sealed partial class MagiViewModel
         Ui.InterruptedInfo = null;
         Ui.Message = "勤務表をつくり始めました";
         LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
+        WriteRunMarker("fg");
+        ClearBgFiles("前景実行の開始");   // [C1] fg実行ではbg途中状態は無関係＝掃除
         var startMs = NowMs();
         var hf63 = new Hf63Infeasibility();
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
@@ -295,7 +299,7 @@ public sealed partial class MagiViewModel
         finally
         {
             if (Ui.LiveSchedule.Count > 0) Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
-            // clearRunMarker() は Phase 10（背景実行）未移植——このピースでは対応するファイルI/O自体が無い。
+            ClearRunMarker();  // 正常終了・停止・失敗いずれでもマーカーを消す（中断のみ残す）
             if (!terminalLogged)
                 LogOp("W", "最適化 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
             EndBoardJob(boardToken);
@@ -319,6 +323,7 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("仕上げ最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         PushUndo();
+        WriteRunMarker("fg");   // [監査A8]
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
@@ -406,7 +411,7 @@ public sealed partial class MagiViewModel
         finally
         {
             if (Ui.LiveSchedule.Count > 0) Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
-            // clearRunMarker() は Phase 10（背景実行）未移植——このピースでは対応するファイルI/O自体が無い。
+            ClearRunMarker();   // [監査A8]
             if (!terminalLogged)
                 LogOp("W", "ソフト研磨 終了: 完了・停止・失敗のいずれも記録されませんでした（想定外の経路。停止処理自体の失敗が疑われます）");
             EndBoardJob(boardToken);
@@ -417,11 +422,12 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// 実行中の処理を止める。Kotlin原本 <c>stop()</c>（1506-1544行）の移植——前景ジョブ
     /// （<c>job</c>/<c>checkJob</c>/<c>fixJob</c> 相当）の停止部分のみ。Kotlin原本の
-    /// <c>WorkManager.cancelUniqueWork</c>/<c>clearBgFiles</c>/<c>clearRunMarker</c> は Phase 10
-    /// （背景実行）で Windows 向けのバックグラウンド実行機構自体を実装するまで対応するものが無いため、
-    /// このピースでは意図的に省略する（<c>OptimizationRepository.Running</c> が true＝背景実行中の場合は
-    /// それを停止する実装が無いことを警告ログへ残すに留める。前景の <c>_job</c>/<c>_checkCts</c>/
-    /// <c>_fixCts</c> はすべて即座に確実にキャンセルできる）。
+    /// <c>clearRunMarker</c>（末尾・無条件）は Phase 10 で移植済みでここでも呼ぶ。
+    /// <c>WorkManager.cancelUniqueWork</c> と、その分岐の中でだけ呼ばれる
+    /// <c>clearBgFiles("停止（背景計算の中断）")</c> は、Windows 向けのバックグラウンド実行機構自体を
+    /// 実装するまで対応するものが無いため意図的に省略する（<c>OptimizationRepository.Running</c> が
+    /// true＝背景実行中の場合は、それを停止する実装が無いことを警告ログへ残すに留める。前景の
+    /// <c>_job</c>/<c>_checkCts</c>/<c>_fixCts</c> はすべて即座に確実にキャンセルできる）。
     /// </summary>
     public void Stop()
     {
@@ -431,10 +437,12 @@ public sealed partial class MagiViewModel
 
         if (OptimizationRepository.Running)
         {
-            // [Phase 10未移植] Kotlin原本はここで WorkManager.cancelUniqueWork(...) を呼び、背景実行
+            // [背景実行機構が未実装] Kotlin原本はここで WorkManager.cancelUniqueWork(...) を呼び、背景実行
             //   そのものを止める。対応する Windows 側の背景実行機構がまだ無いため、それができないことを
-            //   利用者へ明示する（黙って「停止しました」と嘘をつかない）。
-            LogOp("W", "バックグラウンド計算の停止は未対応です（Phase 10で実装予定）。前景の処理のみ停止しました。");
+            //   利用者へ明示する（黙って「停止しました」と嘘をつかない）。同じ理由でこの分岐でだけ呼ばれる
+            //   clearBgFiles("停止（背景計算の中断）") も省略する——止められていないものの途中状態を
+            //   消すと、後から届く結果と食い違う。
+            LogOp("W", "バックグラウンド計算の停止は未対応です。前景の処理のみ停止しました。");
         }
         else if (Ui.Running || Ui.FixSearching)
         {
@@ -455,5 +463,6 @@ public sealed partial class MagiViewModel
             if (what.Count == 0) what.Add("違反チェック");
             LogOp("I", $"停止を押しました（対象: {string.Join("・", what)}）");
         }
+        ClearRunMarker();
     }
 }

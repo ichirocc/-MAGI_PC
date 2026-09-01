@@ -13,14 +13,38 @@ namespace MagiApp.ViewModels.Tests;
 /// <see cref="FakeOptimizationService"/> を <see cref="MagiViewModel(IOptimizationService)"/> 経由で
 /// 注入し、実エンジン（数百ms〜数百秒の探索）を待たずに、呼出しの間接化・keep-best判定
 /// （入力が結果より良ければ入力を維持）・停止時の直前盤面保持・失敗時のメッセージだけを検証する。
+///
+/// [Phase 10 以降] <see cref="MagiViewModel.RunV6FullOptimize"/>/<see cref="MagiViewModel.RunSoftPolish"/>/
+/// <see cref="MagiViewModel.Stop"/> は実行中マーカーの読み書き（<c>MagiViewModel.RunMarker.cs</c>）を
+/// 伴うため、各テストは <see cref="FreshTempDir"/> で隔離した一時ディレクトリを
+/// <see cref="MagiViewModel.DataDir"/> へ注入する（既定の <c>LocalApplicationData</c> は触らない＝
+/// <see cref="MagiViewModelPersistenceTest"/> と同じ規約）。
 /// </summary>
 [Collection("OptimizationRepositoryState")]
-public class MagiViewModelOptimizeTest
+public class MagiViewModelOptimizeTest : IDisposable
 {
+    private readonly List<string> _dirs = new();
+
     public MagiViewModelOptimizeTest()
     {
         OptimizationRepository.SetRunning(false);
         OptimizationRepository.Clear();
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _dirs)
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private string FreshTempDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "magi-vm-optimize-test-" + Guid.NewGuid());
+        Directory.CreateDirectory(dir);
+        _dirs.Add(dir);
+        return dir;
     }
 
     private sealed class FakeOptimizationService : IOptimizationService
@@ -69,7 +93,7 @@ public class MagiViewModelOptimizeTest
     public void NoStateLoaded_DoesNotCallServiceAndStaysIdle()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake);
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir() };
 
         vm.RunV6FullOptimize();
 
@@ -82,7 +106,7 @@ public class MagiViewModelOptimizeTest
     public void BlockedWhileAnotherBoardJobInFlight_DoesNotCallServiceAndNotifies()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("読み込み"); // 別ジョブが進行中を模擬（EndBoardJobを呼ばず占有したまま）
 
         vm.RunV6FullOptimize();
@@ -105,7 +129,7 @@ public class MagiViewModelOptimizeTest
                 Logs: Array.Empty<MirrorLog>()),
         };
         var st = MinimalState.Build();
-        var vm = new MagiViewModel(fake) { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunV6FullOptimize();
         Assert.NotNull(vm.LastRunOptimizeTask);
@@ -134,7 +158,7 @@ public class MagiViewModelOptimizeTest
         };
         var st = MinimalState.Build();
         var inputSchedule = MinimalState.BuildSchedule();
-        var vm = new MagiViewModel(fake) { _state = st, _currentSchedule = inputSchedule };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = inputSchedule };
 
         vm.RunV6FullOptimize();
         await vm.LastRunOptimizeTask!;
@@ -153,7 +177,7 @@ public class MagiViewModelOptimizeTest
     {
         var fake = new FakeOptimizationService { ThrowInstead = new OperationCanceledException() };
         var st = MinimalState.Build();
-        var vm = new MagiViewModel(fake) { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunV6FullOptimize();
         Assert.NotNull(vm.LastRunOptimizeTask);
@@ -175,7 +199,7 @@ public class MagiViewModelOptimizeTest
     {
         var fake = new FakeOptimizationService { ThrowInstead = new InvalidOperationException("boom") };
         var st = MinimalState.Build();
-        var vm = new MagiViewModel(fake) { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunV6FullOptimize();
         await vm.LastRunOptimizeTask!;
@@ -190,7 +214,7 @@ public class MagiViewModelOptimizeTest
     public void RunBlockedByInFlightMessage_NamesTheRunningJob()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("読み込み");
 
         vm.RunV6FullOptimize();
@@ -205,7 +229,7 @@ public class MagiViewModelOptimizeTest
     {
         // MinimalState.Build() は制約皆無＝どの盤面も違反0。gain=0 の「これ以上は整いませんでした」分岐を検証。
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunSoftPolish();
         Assert.NotNull(vm.LastRunSoftPolishTask);
@@ -223,7 +247,7 @@ public class MagiViewModelOptimizeTest
     public async Task SoftPolish_Cancelled_KeepsInputAndReportsStopped()
     {
         var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new OperationCanceledException() };
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunSoftPolish();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunSoftPolishTask!);
@@ -238,7 +262,7 @@ public class MagiViewModelOptimizeTest
     public async Task SoftPolish_Failure_ReportsErrorAndDoesNotCrash()
     {
         var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new InvalidOperationException("boom") };
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunSoftPolish();
         await vm.LastRunSoftPolishTask!;
@@ -253,7 +277,7 @@ public class MagiViewModelOptimizeTest
     public void SoftPolish_BlockedWhileAnotherJobInFlight_DoesNotCallService()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("勤務表づくり");
 
         vm.RunSoftPolish();
@@ -268,7 +292,7 @@ public class MagiViewModelOptimizeTest
     public void Stop_WithNothingRunning_IsANoOp()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.Stop(); // 例外を投げないこと。
 
@@ -279,7 +303,7 @@ public class MagiViewModelOptimizeTest
     public async Task Stop_CancelsInFlightOptimizeRun()
     {
         var fake = new FakeOptimizationService { HangUntilCancelled = true };
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.RunV6FullOptimize();
         Assert.NotNull(vm.LastRunOptimizeTask);
@@ -296,7 +320,7 @@ public class MagiViewModelOptimizeTest
     public void Stop_WhileRunningFlagSet_ResetsRunningAndLogsWhichJob()
     {
         var fake = new FakeOptimizationService();
-        var vm = new MagiViewModel(fake) { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("勤務表づくり");
         vm.Ui.Running = true;
 
