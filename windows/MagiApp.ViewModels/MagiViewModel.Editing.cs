@@ -18,10 +18,11 @@ namespace MagiApp.ViewModels;
 /// (applyAlternative)・なおすのを手伝って(shortageFixCandidates)・日別必要人数(needDay)・
 /// 個人別回数(staffRange)・グループ単位の回数(groupRange)・希望シフト(wishes)・シフト表示色
 /// (colors)・見直し候補メモ(reviewMemo)・制約CRUD(cons1〜cons42s)・年間マスター閲覧(ws1)・
-/// 目標の検算(aptBalances)・壁になっている禁止の並びを緩める(relaxForbiddenRule)。
+/// 目標の検算(aptBalances)・壁になっている禁止の並びを緩める(relaxForbiddenRule)・
+/// 中断バナーの破棄(dismissInterrupted)・設定ミスのワンタップ修正(applySettingFix)。
 ///
 /// 含まれない範囲（後続ピースで移植）: <c>Ws1Result</c> を介する ws1 の追加/改名/削除系
-/// （<c>ws1EditShift</c>/<c>ws1AddStaff</c> 等）・設定ミスのワンタップ修正(<c>applySettingFix</c>)・
+/// （<c>ws1EditShift</c>/<c>ws1AddStaff</c> 等）・
 /// 改善提案(<c>findFixSuggestions</c>/<c>applyFixSuggestion</c>)・CSV入出力・
 /// 最適化の実行制御(<c>runV6FullOptimize</c>/<c>runSoftPolish</c>/<c>stop</c>)・
 /// バックグラウンド実行(<c>runInBackground</c>/<c>applyBgResult</c>)・初期解生成
@@ -999,6 +1000,135 @@ public sealed partial class MagiViewModel
         }
         LogOp("I", $"制約変更: {family}[{index}] → {string.Join(" ", v.Where(x => x.Length > 0))}");
         MutateConstraints(next);
+    }
+
+    /// <summary>
+    /// [中断バナーの破棄] Kotlin原本 <c>dismissInterrupted()</c>（行230-233）の移植。UI状態の2フラグを
+    /// リセットするだけ。Kotlin原本は続けて <c>clearBgFiles("中断の破棄")</c>（<c>work/RunFiles.kt</c>
+    /// 相当・プロセスkill耐性のための途中状態ファイル削除）を呼ぶが、その背景実行サブシステムは
+    /// Phase 10（未移植）のためここでは意図的に省略する（<c>MagiViewModel.Optimize.cs</c> クラスKDocの
+    /// 「Phase 10 未移植の由来」と同じ方針）。
+    /// </summary>
+    public void DismissInterrupted()
+    {
+        Ui.InterruptedRun = false;
+        Ui.InterruptedInfo = null;
+        // [Phase 10 未移植] clearBgFiles("中断の破棄") はここでは意図的に省略（上記KDoc参照）。
+    }
+
+    /// <summary>
+    /// [設定ミスのワンタップ修正] Kotlin原本 <c>applySettingFix(issue: SettingIssue)</c>
+    /// （行1946-2015）の移植。<see cref="SettingIssue.Action"/> ごとに新しい <see cref="MagiState"/> を
+    /// 組み立て、組み立てられた場合のみ操作ログ＋<see cref="ApplyStructure(MagiState)"/>（Undo・自動保存・
+    /// 再チェック付き）を呼ぶ。各分岐のガード（Kotlinの <c>?: return</c>）は
+    /// <see cref="ComputeSettingFixState"/> 内の早期 <c>return null</c> として保持する
+    /// （どちらも「何もしない」という同一の観測可能な結果になる——Kotlin原本の <c>return</c> は
+    /// <c>applySettingFix</c> 全体を抜けるが、その後に残るのは <c>if (ns != null)</c> だけなので
+    /// null を返して素通りさせるのと結果は同じ）。
+    /// </summary>
+    public void ApplySettingFix(SettingIssue issue)
+    {
+        var s = _state;
+        if (s is null) return;
+        var ns = ComputeSettingFixState(s, issue);
+        if (ns is not null)
+        {
+            LogOp("I", $"設定ミスの修正を適用: {issue.Action} @ {issue.Where}");
+            ApplyStructure(ns);
+        }
+    }
+
+    private static MagiState? ComputeSettingFixState(MagiState s, SettingIssue issue)
+    {
+        switch (issue.Action)
+        {
+            case SettingFixAction.RemoveWish:
+            {
+                var key = issue.WishKey;
+                if (key is null) return null;
+                if (!s.Wishes.ContainsKey(key)) return null;
+                return s with { Wishes = Without(s.Wishes, key) };
+            }
+            case SettingFixAction.DeleteDupSeq:
+            {
+                var fam = issue.SeqFamily;
+                var key = issue.SeqKey;
+                if (fam is null || key is null) return null;
+                static List<C3Row> DelOne(IReadOnlyList<C3Row> rows, string key)
+                {
+                    var done = false;
+                    var res = new List<C3Row>(rows.Count);
+                    foreach (var row in rows)
+                    {
+                        var joined = string.Join("→", row.Pattern.Where(x => x.Trim().Length > 0));
+                        if (!done && joined == key) { done = true; continue; }
+                        res.Add(row);
+                    }
+                    return res;
+                }
+                return fam switch
+                {
+                    "c3" => s with { Cons3 = DelOne(s.Cons3, key) },
+                    "c3n" => s with { Cons3n = DelOne(s.Cons3n, key) },
+                    "c3m" => s with { Cons3m = DelOne(s.Cons3m, key) },
+                    "c3mn" => s with { Cons3mn = DelOne(s.Cons3mn, key) },
+                    _ => null,
+                };
+            }
+            case SettingFixAction.ZeroRangeLo:
+            case SettingFixAction.ClampRangeLo:
+            {
+                var key = issue.RangeKey;
+                if (key is null) return null;
+                var cur = s.StaffRange.TryGetValue(key, out var r) ? r : new MagiEngine.Model.Range("", "");
+                var m = new Dictionary<string, MagiEngine.Model.Range>(s.StaffRange)
+                {
+                    [key] = new MagiEngine.Model.Range(issue.NewLo ?? cur.Lo, cur.Hi),
+                };
+                return s with { StaffRange = m };
+            }
+            case SettingFixAction.ClampGroupRangeLo:
+            {
+                // 行は List なので index でなく**内容一致**で指す（DeleteDupSeq と同じ理由＝診断から
+                //   タップまでに並びが変わっても別の行を壊さない）。同じ内容が複数あるときは先頭1件だけ直す。
+                var row = issue.GroupRangeRow;
+                var lo = issue.NewLo;
+                if (row is null || lo is null) return null;
+                static List<C41Row> ClampOne(IReadOnlyList<C41Row> rows, C41Row row, string lo)
+                {
+                    var list = rows.ToList();
+                    var i = list.IndexOf(row);
+                    if (i < 0) return list;
+                    list[i] = row with { L = lo };
+                    return list;
+                }
+                return issue.GroupRangeFamily switch
+                {
+                    "c41" => s with { Cons41 = ClampOne(s.Cons41, row, lo) },
+                    "c41s" => s with { Cons41s = ClampOne(s.Cons41s, row, lo) },
+                    _ => null,
+                };
+            }
+            case SettingFixAction.CapDemand:
+            {
+                var k = issue.DemandShiftIdx;
+                var cap = issue.DemandCap;
+                if (k is null || cap is null) return null;
+                if (k.Value < 0 || k.Value >= s.Shifts.Count) return null;
+                var sh = s.Shifts[k.Value];
+                var n1Ok = int.TryParse(sh.Need1.Trim(), out var n1);
+                var n2Ok = int.TryParse(sh.Need2.Trim(), out var n2);
+                var newN1 = n1Ok && n1 > cap.Value ? cap.Value.ToString() : sh.Need1;
+                var newN2 = n2Ok && n2 > cap.Value ? cap.Value.ToString() : sh.Need2;
+                if (newN1 == sh.Need1 && newN2 == sh.Need2) return null;
+                var list = s.Shifts.ToList();
+                list[k.Value] = sh with { Need1 = newN1, Need2 = newN2 };
+                return s with { Shifts = list };
+            }
+            case SettingFixAction.None:
+            default:
+                return null;
+        }
     }
 
     // ===== 実行中ガード（構造編集向け）・構造編集の土台 =====
