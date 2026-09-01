@@ -13,9 +13,12 @@
         月次条件   … 対象期間の表示・「来月にする」(SetNextMonth)・希望/日別必要人数の一覧・追加/削除
                      (WishOverrides/SetWish/RemoveWish・NeedDayOverrides/SetNeedDay/RemoveNeedDay)
         職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
-        年間マスター … シフト一覧（読取専用）＋グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)
-                     ＋登録済み制約の読取専用一覧（シフトの追加/改名/削除・制約編集は後続の段階）
-      削除系（職員/グループ）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む。
+        年間マスター … シフトの追加/改名/削除(Ws1AddShift/Ws1EditShift/Ws1RemoveShift)＋
+                     グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)＋
+                     登録済み制約の読取専用一覧（制約そのものの追加/編集は後続の段階）
+      削除系（職員/グループ）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む
+      （シフト削除は該当マスがKotlin原本と同じく「休」/先頭シフトへ吸収されるだけで大量破壊的では
+      ないため、職員/グループと同じ確認ダイアログは課さず参照件数(Ws1ShiftRefCount)をヒント文で示す）。
       ドアの切替は ComboBox（SettingsView.xaml の計算方式セレクタと同じ書き方）で行い、各ドアの
       StackPanel の Visibility をコードビハインドで切り替える。
 
@@ -102,7 +105,26 @@
                 <TextBlock Text="シフト" FontWeight="SemiBold" />
                 <TextBlock x:Name="ShiftListText" TextWrapping="Wrap" FontSize="13" />
 
-                <TextBlock Text="グループ" FontWeight="SemiBold" />
+                <TextBlock Text="シフトの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <ComboBox x:Name="MasterShiftCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnMasterShiftSelectionChanged" />
+                <TextBlock Text="名前" />
+                <TextBox x:Name="MasterShiftNameBox" HorizontalAlignment="Stretch" />
+                <TextBlock Text="記号" />
+                <TextBox x:Name="MasterShiftKigouBox" HorizontalAlignment="Stretch" />
+                <TextBlock Text="最低人数 / 上限人数（1日あたり・空欄可）" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBox x:Name="MasterShiftNeed1Box" Width="80" PlaceholderText="最低" />
+                    <TextBox x:Name="MasterShiftNeed2Box" Width="80" PlaceholderText="上限" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddMasterShiftButton" Content="追加" Click="OnAddMasterShiftClick" />
+                    <Button x:Name="EditMasterShiftButton" Content="改名・変更" Click="OnEditMasterShiftClick" />
+                    <Button x:Name="RemoveMasterShiftButton" Content="削除" Click="OnRemoveMasterShiftClick" />
+                </StackPanel>
+                <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="グループ" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock x:Name="GroupListText" TextWrapping="Wrap" FontSize="13" />
 
                 <TextBlock Text="グループの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
@@ -122,7 +144,7 @@
                 <TextBlock Text="登録済みのルール" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />
 
-                <TextBlock Text="シフト・ルールの追加や変更は今後の段階で対応します。"
+                <TextBlock Text="ルール（制約）の追加や変更は今後の段階で対応します。"
                            TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
             </StackPanel>
         </StackPanel>

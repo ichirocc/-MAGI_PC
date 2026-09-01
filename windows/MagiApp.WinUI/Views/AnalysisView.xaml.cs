@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
+using MagiEngine.V6;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -157,6 +158,18 @@ public sealed partial class AnalysisView : UserControl
             row.Children.Add(BodyText(issue.Where, semiBold: true));
             row.Children.Add(BodyText(issue.Problem));
             row.Children.Add(BodyText($"→ {issue.Fix}", dim: true));
+            // [設定ミスのワンタップ修正] Action==None のものは提案文だけ（自動修正の当てが無い）。
+            if (issue.Action != SettingFixAction.None)
+            {
+                var apply = new Button
+                {
+                    Content = issue.ActionLabel.Length > 0 ? issue.ActionLabel : "この修正を適用",
+                    FontSize = 12,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                };
+                apply.Click += (_, _) => _vm.ApplySettingFix(issue);
+                row.Children.Add(apply);
+            }
             IssuesList.Children.Add(row);
         }
         if (issues.Count > MaxIssueRows)

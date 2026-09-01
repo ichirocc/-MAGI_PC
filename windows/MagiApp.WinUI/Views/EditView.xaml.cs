@@ -40,6 +40,7 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _wishShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
 
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
@@ -47,6 +48,9 @@ public sealed partial class EditView : UserControl
 
     /// <summary>年間マスターのグループ選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
     private int _syncedMasterGroupIndex = -1;
+
+    /// <summary>年間マスターのシフト選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
+    private int _syncedMasterShiftIndex = -1;
 
     /// <summary>希望シフト/日別必要人数の表示上限（件）。超えた分は件数だけ添える
     /// （AnalysisView.MaxIssueRows と同じ理由——最大30名×31日で930件になりうる）。</summary>
@@ -390,6 +394,27 @@ public sealed partial class EditView : UserControl
             ? string.Join(" ・ ", ui.ShiftSymbols)
             : "（未設定）";
 
+        var shifts = _vm.Ws1()?.Shifts;
+        var shiftItems = shifts?.Select(s => s.Kigou.Length > 0 && s.Kigou != s.Name ? $"{s.Name}·{s.Kigou}" : s.Name).ToList()
+            ?? new List<string>();
+        SyncItems(MasterShiftCombo, shiftItems, ref _masterShiftItems);
+        SyncMasterShiftFields();
+        var hasShift = MasterShiftCombo.SelectedIndex >= 0;
+        AddMasterShiftButton.IsEnabled = editable;
+        EditMasterShiftButton.IsEnabled = editable && hasShift;
+        RemoveMasterShiftButton.IsEnabled = editable && hasShift;
+        if (editable && hasShift)
+        {
+            var refs = _vm.Ws1ShiftRefCount(MasterShiftCombo.SelectedIndex);
+            MasterShiftHintText.Text = refs > 0
+                ? $"削除すると、該当マスは「休」（無ければ先頭シフト）へ置き換わります。このシフトを参照する制約が{refs}件あります。"
+                : "削除すると、該当マスは「休」（無ければ先頭シフト）へ置き換わります。";
+        }
+        else
+        {
+            MasterShiftHintText.Text = editable ? "" : (ui.Loaded ? "計算の実行中はシフトを変更できません。終わってからにしてください。" : "");
+        }
+
         var groups = _vm.GroupLabels();
         GroupListText.Text = groups.Count > 0 ? string.Join(" ・ ", groups) : "（未設定）";
 
@@ -492,6 +517,69 @@ public sealed partial class EditView : UserControl
         if (!ok) return;
         _vm.Ws1RemoveGroup(g);
         _syncedMasterGroupIndex = -1;
+    }
+
+    /// <summary>選択中のシフトの名前・記号・最低/上限人数を入力欄へ取り込む（選択が変わったときだけ）。</summary>
+    private void SyncMasterShiftFields()
+    {
+        var k = MasterShiftCombo.SelectedIndex;
+        if (k < 0 || k == _syncedMasterShiftIndex) return;
+        _syncedMasterShiftIndex = k;
+        var shifts = _vm.Ws1()?.Shifts;
+        if (shifts is not null && k < shifts.Count)
+        {
+            MasterShiftNameBox.Text = shifts[k].Name;
+            MasterShiftKigouBox.Text = shifts[k].Kigou;
+            MasterShiftNeed1Box.Text = shifts[k].Need1;
+            MasterShiftNeed2Box.Text = shifts[k].Need2;
+        }
+    }
+
+    private void OnMasterShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _syncingFromModel = true;
+        try
+        {
+            SyncMasterShiftFields();
+        }
+        finally
+        {
+            _syncingFromModel = false;
+        }
+    }
+
+    private void OnAddMasterShiftClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var name = MasterShiftNameBox.Text.Trim();
+        var kigou = MasterShiftKigouBox.Text.Trim();
+        if (name.Length == 0 || kigou.Length == 0) { MasterShiftHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.Ws1AddShift(name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim());
+        _syncedMasterShiftIndex = -1;
+    }
+
+    private void OnEditMasterShiftClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var k = MasterShiftCombo.SelectedIndex;
+        var name = MasterShiftNameBox.Text.Trim();
+        var kigou = MasterShiftKigouBox.Text.Trim();
+        if (k < 0) { MasterShiftHintText.Text = "対象のシフトを選んでください。"; return; }
+        if (name.Length == 0 || kigou.Length == 0) { MasterShiftHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.Ws1EditShift(k, name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim());
+        _syncedMasterShiftIndex = -1;
+    }
+
+    private void OnRemoveMasterShiftClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var k = MasterShiftCombo.SelectedIndex;
+        if (k < 0) { MasterShiftHintText.Text = "対象のシフトを選んでください。"; return; }
+        // [Kotlin原本の挙動をそのまま保存] 削除は「休」（無ければ先頭シフト）への吸収で大量破壊的では
+        //   ないため、職員/グループのような確認ダイアログは課さない（クラスKDoc参照）。
+        _vm.Ws1RemoveShift(k);
+        _syncedMasterShiftIndex = -1;
     }
 
     // ===== ドア切替 =====
