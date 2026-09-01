@@ -1,0 +1,66 @@
+<UserControl
+    x:Class="MagiApp.WinUI.Views.AnalysisView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      [フェーズ9] 「分析」タブの最初の実装。読取専用の診断ビューで、UiState に既にある値
+      （サマリー・違反の内訳・設定の見直し候補・回数の固定で止まった手・診断ログ）だけを並べる。
+      修復導線（改善提案の適用・設定ミスのワンタップ修正・場所へのジャンプ）は今後の段階で追加する。
+
+      Kotlin原本の分析タブ（AnalysisTriage.kt / MagiDashboardCards.kt の診断カード群）の本格移植では
+      なく、その中で「読むだけで価値があり、かつ UiState だけで描ける」部分の最小版。
+
+      節ごと（サマリー/内訳/…）に x:Name 付きの StackPanel を置き、コードビハインドの Render() が
+      中身を作り直して Visibility を切り替える（データが無い節は箱ごと隠す＝空の箱を見せない）。
+      ScheduleView と同じくコードビハインド駆動——内訳の行数も設定ミスの件数も可変で、XAML の
+      静的テンプレートでは表現しづらいため。
+    -->
+    <ScrollViewer Padding="16">
+        <StackPanel Spacing="20" MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock Text="分析" FontSize="20" FontWeight="SemiBold" />
+
+            <!-- 未読込のときだけ出す案内（下の各節はすべて非表示になる）。 -->
+            <TextBlock x:Name="EmptyText" FontSize="13" TextWrapping="Wrap" Opacity="0.7"
+                       Text="データを読み込むと、ここに診断が出ます。" />
+
+            <!-- ① サマリー -->
+            <StackPanel x:Name="SummarySection" Spacing="6">
+                <TextBlock Text="サマリー" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="SummaryText" FontSize="13" TextWrapping="Wrap" />
+                <TextBlock x:Name="HintText" FontSize="13" TextWrapping="Wrap" Opacity="0.8" />
+            </StackPanel>
+
+            <!-- ② 違反の内訳 -->
+            <StackPanel x:Name="BreakdownSection" Spacing="6">
+                <TextBlock Text="違反の内訳" FontSize="16" FontWeight="SemiBold" />
+                <StackPanel x:Name="BreakdownList" Spacing="2" />
+            </StackPanel>
+
+            <!-- ③ 設定の見直し候補 -->
+            <StackPanel x:Name="IssuesSection" Spacing="6">
+                <TextBlock Text="設定の見直し候補" FontSize="16" FontWeight="SemiBold" />
+                <StackPanel x:Name="IssuesList" Spacing="10" />
+            </StackPanel>
+
+            <!-- ④ 回数の固定で止まった手 -->
+            <StackPanel x:Name="PinSection" Spacing="6">
+                <TextBlock Text="回数の固定で止まった手" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="PinSummaryText" FontSize="13" TextWrapping="Wrap" />
+                <StackPanel x:Name="PinList" Spacing="2" />
+            </StackPanel>
+
+            <!-- ⑤ 診断ログ -->
+            <StackPanel x:Name="LogSection" Spacing="6">
+                <TextBlock Text="診断ログ" FontSize="16" FontWeight="SemiBold" />
+                <Border BorderBrush="LightGray" BorderThickness="1" Padding="8">
+                    <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto">
+                        <TextBlock x:Name="LogText" FontSize="12" FontFamily="Consolas"
+                                   IsTextSelectionEnabled="True" />
+                    </ScrollViewer>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
