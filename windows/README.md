@@ -63,6 +63,12 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      「直し方を探す」。設定タブは最適化設定＋データ入出力(JSON開く/保存・CSV取込/書出)。
      デザイントークン（ブランド色）も `Styles/MagiTheme.xaml` へ移植済み（余白/角丸/
      タイポグラフィスケールの全面移植は未着手）。
+   - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
+     `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
+     OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの
+     プレースホルダーファイルも、ピッカー選択時にシェルが自動的に実体化する。アンパッケージ
+     Win32アプリなので `CachedFileManager.CompleteUpdatesAsync` 等のブローカー越し更新通知も不要）。
+     追加実装は無し（既定保存先の変更・自動保存のOneDrive化・Graph API直接連携は明示的に不要と確認済み）。
 10. ✅ 背景実行（**完了**。Android の WorkManager に直接対応する Windows デスクトップの機構は
     無いため、`OptimizationRepository` が元々プロセス内 pub/sub として設計されていた点を活かし、
     同一プロセス内の `Task` として実装した——設計判断の詳細は
@@ -70,7 +76,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
     `RunMarker` による途中最良スナップショット・起動時復元。ウィンドウを閉じてもプロセスを
     生かし続けるか（トレイ常駐等）は「生かし続けない・その代わり実行中は閉じる前に確認する」で
     決着（`MainWindow.OnAppWindowClosing` 参照。トレイアイコンはWin32相互運用か追加パッケージが
-    要り、このサンドボックスでは実機検証できないリスクを避けた）。
+    要り、このサンドボックスでは実機検証できないリスクを避けた）。**2026-09-01、ユーザーが
+    「Windows11版はトレイ常駐不要・ウィンドウを閉じてもプロセスを生かし続ける必要は無い」と
+    明示的に再確認**＝上記の決着どおりで確定（再提案しない）。
 11. 🚧 パッケージング/配布（**部分的に先行**。`windows-installer.yml` が Inno Setup で
     per-user の `setup.exe` を、msbuild で MSIX をそれぞれ生成し Artifacts へ保存する所まで
     実装済み。Authenticode 署名も Secrets 設定時のみ有効化される形で入っている。
