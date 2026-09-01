@@ -6,4 +6,16 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- MAGI001 (int[][] の浅いコピー検出, ../MagiEngine.Analyzers) は既定では参照しない。
+       実測（2026-09-01）: 実ビルドで警告40件・サンプル6件すべて誤検出（Copy2D()由来の一時変数への
+       再代入／メソッド戻り値プロパティへの代入を、単純な構文一致で「浅いコピーの疑い」と誤判定）。
+       このコードベースは既に Copy2D() を一貫して使っており、この単純アナライザは信号よりノイズが
+       支配的と判断し、既定ビルドには組み込まない。手動で走らせて棚卸ししたい場合だけ
+       `dotnet build -p:UseMagiArrayCopyAnalyzer=true` を付ける。 -->
+  <ItemGroup Condition="'$(UseMagiArrayCopyAnalyzer)' == 'true'">
+    <ProjectReference Include="..\MagiEngine.Analyzers\MagiEngine.Analyzers.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

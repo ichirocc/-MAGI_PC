@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Roslyn analyzers must target netstandard2.0 for maximum host-compiler compatibility
+         (VS/msbuild/dotnet build all load analyzers into a netstandard2.0-compatible host). -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+    <!-- This project's own output must not itself become an "analyzer dependency" reference
+         when other projects add a plain ProjectReference to it by mistake; consumers use the
+         explicit OutputItemType="Analyzer" ProjectReference pattern (see MagiEngine.csproj). -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+    <!-- RS1033: メタアナライザーが説明文の文末記号にASCIIの .!? だけを期待するため、日本語の
+         「。」を使う本プロジェクトの説明文（このリポジトリ全体の言語規約）では常に誤検出する。 -->
+    <NoWarn>$(NoWarn);RS1033</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.11.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>
