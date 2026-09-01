@@ -7,8 +7,9 @@
       [フェーズ9] 「設定」タブの最初の実装。Kotlin原本 SettingsCard（最適化設定）に相当する部分のみ——
       並列数・計算時間・計算方式・仕上げ最適化・ネイティブ加速表示・パリティ照合表示・禁止連続の
       事前フィルタ/崩し範囲。いずれも既存の MagiViewModel セッター（SetWorkers 等、フェーズ9ピース5で
-      移植済み・テスト済み）へ直接委譲するだけの薄い配線。色設定・データ入出力・外観（片手モード等）は
-      今後の段階で追加する。
+      移植済み・テスト済み）へ直接委譲するだけの薄い配線。色設定・外観（片手モード等）は
+      今後の段階で追加する。データ入出力（本ファイル下部）は Kotlin原本の
+      ファイル選択コード（<c>ui/MagiApp.kt</c>）相当をこの移植では SettingsView.xaml.cs に置く。
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
@@ -54,6 +55,15 @@
 
             <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
+
+            <TextBlock Text="データ" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
+            <TextBlock x:Name="DataStatusText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+            <StackPanel Spacing="8">
+                <Button x:Name="OpenDataButton" Content="データを開く（JSON）" Click="OnOpenDataClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="SaveDataButton" Content="データを保存（JSON）" Click="OnSaveDataClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ImportCsvButton" Content="勤務表CSVを取り込む" Click="OnImportCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ExportCsvButton" Content="勤務表CSVを書き出す" Click="OnExportCsvClick" HorizontalAlignment="Stretch" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

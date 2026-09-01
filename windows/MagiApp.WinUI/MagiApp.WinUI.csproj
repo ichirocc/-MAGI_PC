@@ -37,6 +37,10 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
     <!-- [フェーズ8] MagiViewModel/EngineOptimizationService の登録に使う最小限のDIコンテナ。 -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <!-- [CSV取込の文字コード自動判定] .NET は既定でレガシーコードページ（Shift-JIS/CP932=MS932）を
+         含まない。Kotlin原本 decodeCsvBytes（MagiApp.kt:140-149、UTF-8厳密デコード失敗時に
+         "MS932" へフォールバック）を移植する CsvEncoding.cs（本プロジェクト）が使う。 -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -58,7 +58,7 @@ public sealed partial class MainWindow : Window
                 "schedule" => new ScheduleView(_vm),
                 "edit" => new EditView(_vm),
                 "analysis" => new AnalysisView(_vm),
-                "settings" => new SettingsView(_vm),
+                "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };
             _tabCache[tag] = content;
