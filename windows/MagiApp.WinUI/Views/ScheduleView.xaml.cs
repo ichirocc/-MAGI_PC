@@ -18,6 +18,10 @@ namespace MagiApp.WinUI.Views;
 /// ガードして無言で拒否するため、ここでも <see cref="UiState.Running"/> の間はボタンを無効化して
 /// 「押せるのに何も起きない」を避ける（二重の防御——ViewModel 側が最終防御）。違反ハイライト・
 /// 希望バッジ等の装飾（Kotlin原本 MagiScheduleViews.kt）は本格移植までの間、未対応のまま。
+///
+/// [元に戻す/やり直す] <see cref="MagiViewModel.Undo"/>/<see cref="MagiViewModel.Redo"/> へ配線。
+/// <see cref="UiState.CanUndo"/>/<see cref="UiState.CanRedo"/> でボタンの有効/無効を反映する
+/// （<c>Undo</c>/<c>Redo</c> 自身も実行中は無言で no-op なので、ここでも二重の防御）。
 /// </summary>
 public sealed partial class ScheduleView : UserControl
 {
@@ -34,12 +38,17 @@ public sealed partial class ScheduleView : UserControl
 
     private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
 
+    private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
+    private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
+
     private void Render()
     {
         var ui = _vm.Ui;
         StatusText.Text = ui.Loaded
             ? $"{ui.Message}（必須={ui.BestHard} 合計={ui.BestSoft}・{ui.Staff}名×{ui.Days}日×{ui.Shifts}シフト）"
             : ui.Message ?? "読込中…";
+        UndoButton.IsEnabled = ui.CanUndo && !ui.Running;
+        RedoButton.IsEnabled = ui.CanRedo && !ui.Running;
         RenderSchedule(ui);
     }
 
