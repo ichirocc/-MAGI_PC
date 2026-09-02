@@ -200,16 +200,25 @@ public class MagiViewModelBackgroundTest : IDisposable
 
         Assert.False(vm.Ui.Running);
         Assert.False(OptimizationRepository.Running);
-        // [発見した実装上の注記] Task.Delay(Timeout.Infinite, ct) を Cancel() すると、その継続
-        // （RunInBackgroundCoreAsync の catch(OperationCanceledException)〜finally）は .NET の
-        // CancellationTokenSource.Cancel() の仕様どおり Stop() を呼んだスレッド上で**同期的に**
-        // 走り切る（実エンジンは深い探索ループの中で ct を定期確認するため、この同期的な巻き戻りは
-        // 起きない＝このテストの HangUntilCancelled という単純化に起因する）。そのため Stop() 自身の
-        // 「停止を押しました（対象: ...）」ログに辿り着く前に Ui.Message が背景タスク側のより具体的な
-        // メッセージへ確定する。「対象」ラベリング自体の検証は
-        // Stop_WhileBackgroundRunningFlagSet_LogsBackgroundAsTarget で行う。
-        Assert.Contains("バックグラウンド計算を停止しました", vm.Ui.Message);
-        Assert.Contains(vm.Ui.OpLog, l => l.Contains("バックグラウンド計算: 停止"));
+        // [訂正: 旧コメントの前提は誤りだった] このテストは元々「Task.Delay(Timeout.Infinite, ct)を
+        // Cancel()すると、その継続はStop()を呼んだスレッド上で同期的に走り切る」という前提で、
+        // Stop()自身の一般文言("停止しました")より背景タスク側のより具体的な文言
+        // ("バックグラウンド計算を停止しました")が必ず勝つと決め打ちしていた。実際には、await の
+        // 継続はそのawaitが捕捉した SynchronizationContext 経由でスケジュールされる——実アプリの
+        // UIスレッド用コンテキスト(DispatcherQueueSynchronizationContext)は継続を単一スレッドへ
+        // 直列化するが、xUnitのAsyncTestSyncContextはスレッドプールへ非同期にポストするだけで
+        // 直列化しない。そのため**この2つの書き手（Stop()の呼出元スレッドと背景タスクの継続）は
+        // テスト実行時には実際に並行し得る**——間欠的な失敗（LinkedList走査中変更の例外／
+        // メッセージが一般文言のまま、の両方）として実際に再現した。恒久対処として
+        // LogOp をロックで保護した（MagiViewModel.cs 参照、走査中変更のクラッシュは解消済み）。
+        // 一方「一般文言 vs 具体文言のどちらが最終値として残るか」は依然として2スレッド間の
+        // 素の代入レース（Ui.Message はロック保護していない）で、実アプリでは単一UIスレッドの
+        // 直列化により起きない前提のため、テスト側で人工的な同期を追加してまで固定しない。
+        // 両文言に共通する部分文字列で検証し、どちらの順で書かれても意味のある主張
+        // （「停止した」ことがメッセージ／ログの両方に残っている）だけを固定する。
+        // 「対象」ラベリング自体の検証は Stop_WhileBackgroundRunningFlagSet_LogsBackgroundAsTarget で行う。
+        Assert.Contains("停止しました", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("停止"));
     }
 
     [Fact]

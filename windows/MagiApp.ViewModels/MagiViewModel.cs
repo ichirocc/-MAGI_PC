@@ -218,15 +218,33 @@ public sealed partial class MagiViewModel
     private readonly LinkedList<OpLogEntry> _opLog = new();
 
     /// <summary>
+    /// [Phase 10由来のハードニング] <c>LinkedList&lt;T&gt;</c> はスレッドセーフではない。Kotlin原本には
+    /// この懸念が無い（Android は基本的に単一UIスレッドから呼ばれる想定）が、この移植は
+    /// <c>RunInBackground</c> により実際のバックグラウンド <c>Task</c> から <see cref="LogOp"/> を
+    /// 呼ぶ経路が生まれた。テストハーネス（xUnit の <c>AsyncTestSyncContext</c>）は実アプリの
+    /// UIスレッド用 <c>SynchronizationContext</c>（<c>DispatcherQueueSynchronizationContext</c>、
+    /// 継続を単一UIスレッドへ直列化する）と違い継続をスレッドプールへ非同期にポストするため、
+    /// <c>Stop()</c>（呼出元スレッド）と背景タスクの継続（別スレッド）が実際に並行実行され、
+    /// 未保護の <c>_opLog</c> 走査中変更（<c>InvalidOperationException</c>）を実際に再現した。
+    /// 実アプリでは起きない可能性が高いが、防御として安価なので固定する。
+    /// </summary>
+    private readonly object _opLogLock = new();
+
+    /// <summary>
     /// 操作ログに1件追記し、UIへ反映（新しい順、リングの上限1000件）。
     /// [3.378.0/HF77=コメント≠実装の由来] Kotlin原本の旧KDocは「最大300件」と書いていたが実装は
     /// 1000だった、という教訓をそのまま実装値へ反映する。
     /// </summary>
     private void LogOp(string level, string message)
     {
-        _opLog.AddFirst(new OpLogEntry(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), level, message, _activeRunSerial));
-        while (_opLog.Count > 1000) _opLog.RemoveLast();
-        Ui.OpLog = _opLog.Select(FormatOpLine).ToList();
+        List<string> formatted;
+        lock (_opLogLock)
+        {
+            _opLog.AddFirst(new OpLogEntry(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), level, message, _activeRunSerial));
+            while (_opLog.Count > 1000) _opLog.RemoveLast();
+            formatted = _opLog.Select(FormatOpLine).ToList();
+        }
+        Ui.OpLog = formatted;
     }
 
     /// <summary>[3.408.0の由来] 実行中の行だけ「#N」を付ける（実行外＝0 は従来どおり無印）。</summary>

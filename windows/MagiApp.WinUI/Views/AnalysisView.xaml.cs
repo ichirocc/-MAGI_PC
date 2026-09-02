@@ -41,11 +41,20 @@ public sealed partial class AnalysisView : UserControl
         ["c41s"] = "スキル群のレンジ", ["c42s"] = "スキル群ペア", ["covO"] = "人員過剰",
     };
 
+    /// <summary>違反の場所の表示上限（件）。930件(30名×31日)まで起こり得るため
+    /// <see cref="MaxIssueRows"/> と同じ理由で打ち切る。</summary>
+    private const int MaxLocationRows = 40;
+
     private readonly MagiViewModel _vm;
 
-    public AnalysisView(MagiViewModel vm)
+    /// <summary>[違反箇所へのジャンプ] <c>MainWindow.JumpToCell</c> — 勤務表タブへ切替＋
+    /// 該当セルへスクロール＋一時ハイライト（<c>ScheduleView.FocusCell</c> 参照）。</summary>
+    private readonly Action<int, int> _jumpToCell;
+
+    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell)
     {
         _vm = vm;
+        _jumpToCell = jumpToCell;
         InitializeComponent();
         _vm.Ui.PropertyChanged += OnUiChanged;
         Unloaded += (_, _) => _vm.Ui.PropertyChanged -= OnUiChanged;
@@ -62,6 +71,7 @@ public sealed partial class AnalysisView : UserControl
         {
             SummarySection.Visibility = Visibility.Collapsed;
             BreakdownSection.Visibility = Visibility.Collapsed;
+            LocationsSection.Visibility = Visibility.Collapsed;
             FixSection.Visibility = Visibility.Collapsed;
             IssuesSection.Visibility = Visibility.Collapsed;
             PinSection.Visibility = Visibility.Collapsed;
@@ -71,6 +81,7 @@ public sealed partial class AnalysisView : UserControl
 
         RenderSummary(ui);
         RenderBreakdown(ui);
+        RenderLocations(ui);
         RenderFix(ui);
         RenderIssues(ui);
         RenderPinTargets(ui);
@@ -142,6 +153,50 @@ public sealed partial class AnalysisView : UserControl
         {
             BreakdownList.Children.Add(BodyText($"{LabelOf(kv.Key)} {kv.Value}件"));
         }
+    }
+
+    /// <summary>
+    /// [違反箇所へのジャンプ] <see cref="UiState.ViolationCells"/>（"i,j"→"vio-族"、セル単位の
+    /// 違反のみ載る＝クラスKDoc参照）を1行1セルで列挙し、タップで <see cref="_jumpToCell"/> を呼ぶ。
+    /// 職員×日の自然な読み順（i, j 昇順）で安定させる。930件(30名×31日)まで起こり得るため
+    /// <see cref="MaxLocationRows"/> で打ち切る。
+    /// </summary>
+    private void RenderLocations(UiState ui)
+    {
+        LocationsList.Children.Clear();
+        var locations = ui.ViolationCells
+            .Select(kv => ParseLocation(kv.Key, kv.Value))
+            .Where(l => l is not null)
+            .Select(l => l!.Value)
+            .OrderBy(l => l.I).ThenBy(l => l.J)
+            .ToList();
+        LocationsSection.Visibility = locations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (locations.Count == 0) return;
+
+        foreach (var loc in locations.Take(MaxLocationRows))
+        {
+            var name = loc.I < ui.StaffNames.Count ? ui.StaffNames[loc.I] : $"#{loc.I}";
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(BodyText($"{name}　{loc.J + 1}日　{LabelOf(loc.Family)}"));
+            var jump = new Button { Content = "勤務表へ", FontSize = 12 };
+            var i = loc.I; var j = loc.J;
+            jump.Click += (_, _) => _jumpToCell(i, j);
+            row.Children.Add(jump);
+            LocationsList.Children.Add(row);
+        }
+        if (locations.Count > MaxLocationRows)
+        {
+            LocationsList.Children.Add(BodyText($"ほか {locations.Count - MaxLocationRows}件", dim: true));
+        }
+    }
+
+    private static (int I, int J, string Family)? ParseLocation(string key, string vioClass)
+    {
+        var parts = key.Split(',');
+        if (parts.Length != 2) return null;
+        if (!int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) return null;
+        var family = vioClass.StartsWith("vio-", StringComparison.Ordinal) ? vioClass["vio-".Length..] : vioClass;
+        return (i, j, family);
     }
 
     /// <summary>③ 設定の見直し候補。1件＝どこが / 何が問題か / どう直すか の3行。</summary>

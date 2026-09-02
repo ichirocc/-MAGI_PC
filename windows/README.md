@@ -61,11 +61,14 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      一覧・追加・削除)・職員管理(追加/改名/削除、削除確認ダイアログ付き)・年間マスター
      (グループ/シフトの追加/改名/削除に加え、制約(ルール)10族=cons1/cons2/cons3系4/cons41(s)/
      cons42(s)の追加/変更/削除まで実装。種類ごとに入力欄の構成が異なる=`EditView.xaml.cs` の
-     `ConstraintFamilyMetas` 参照)。分析タブは診断一覧＋「直し方を探す」。設定タブは
+     `ConstraintFamilyMetas` 参照)。分析タブは診断一覧＋「直し方を探す」＋**違反の場所**
+     （セル単位の違反=`UiState.ViolationCells`に載る族のみ。タップで勤務表タブへ切替＋該当セルへ
+     スクロール＋約2.5秒ハイライト=`MainWindow.JumpToCell`/`ScheduleView.FocusCell`）。設定タブは
      最適化設定＋データ入出力(JSON開く/保存・CSV取込/書出)。デザイントークン（ブランド色）も
      `Styles/MagiTheme.xaml` へ移植済み（余白/角丸/タイポグラフィスケールの全面移植は未着手）。
-     未対応（意図的にスコープ外）：違反箇所から勤務表タブへのジャンプ導線・
-     `MagiScheduleViews.kt`（TallyCard/週送り/ItemsRepeater等）の本格移植。
+     未対応（意図的にスコープ外）：`MagiScheduleViews.kt`（TallyCard/週送り/ItemsRepeater等）の
+     本格移植・covU/covO/c41系(日単位)やlow/high/apt/c2(職員単位)の違反箇所ジャンプ
+     （単一セルを指さないため対象外、上記「違反の場所」参照）。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

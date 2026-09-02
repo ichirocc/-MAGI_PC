@@ -1,3 +1,4 @@
+using System.Linq;
 using MagiApp.ViewModels;
 using MagiApp.WinUI.Views;
 using Microsoft.UI.Windowing;
@@ -94,13 +95,28 @@ public sealed partial class MainWindow : Window
                 "home" => new HomeView(_vm),
                 "schedule" => new ScheduleView(_vm),
                 "edit" => new EditView(_vm),
-                "analysis" => new AnalysisView(_vm),
+                "analysis" => new AnalysisView(_vm, JumpToCell),
                 "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };
             _tabCache[tag] = content;
         }
         HostContent.Content = content;
+    }
+
+    /// <summary>
+    /// [違反箇所へのジャンプ] <c>AnalysisView</c>「違反の場所」から呼ばれる。勤務表タブへ切替え
+    /// （<c>NavigationView</c> の選択表示も同期させる）てから、対象セルへスクロール＋一時ハイライト
+    /// する（<see cref="ScheduleView.FocusCell"/>）。<see cref="ShowTab"/> が呼ばれた後は
+    /// <c>_tabCache["schedule"]</c> に <see cref="ScheduleView"/> が必ず存在する（初回訪問でも
+    /// このタイミングで構築される）。
+    /// </summary>
+    private void JumpToCell(int i, int j)
+    {
+        ShowTab("schedule");
+        var scheduleItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(it => (string?)it.Tag == "schedule");
+        if (scheduleItem is not null) Nav.SelectedItem = scheduleItem;
+        if (_tabCache["schedule"] is ScheduleView sv) sv.FocusCell(i, j);
     }
 
     /// <summary>

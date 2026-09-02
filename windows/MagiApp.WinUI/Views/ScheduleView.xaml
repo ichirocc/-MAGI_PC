@@ -9,7 +9,8 @@
       RenderSchedule 参照）。Kotlin原本 MagiScheduleViews.kt（1594行、ScheduleGrid/StaffCalendarCard/
       TallyCard 等）の本格移植は今後の段階（ItemsRepeaterベース・違反フィルタ・週送り等）で行う。
       セルタップで担当可能シフトの一覧から選んで編集できる（ScheduleView.xaml.cs の
-      ShowCellEditor/MagiViewModel.SetCell 参照）。違反ハイライト等の装飾は未移植。
+      ShowCellEditor/MagiViewModel.SetCell 参照）。違反ハイライト（枠色）・希望バッジ・
+      分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
       「元に戻す/やり直す」は MagiViewModel.Undo/Redo（Kotlin原本と同じ最大30段のスタック）へ配線。
     -->
     <Grid Padding="16" RowSpacing="8">

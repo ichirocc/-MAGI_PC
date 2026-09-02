@@ -29,10 +29,24 @@ namespace MagiApp.WinUI.Views;
 /// [元に戻す/やり直す] <see cref="MagiViewModel.Undo"/>/<see cref="MagiViewModel.Redo"/> へ配線。
 /// <see cref="UiState.CanUndo"/>/<see cref="UiState.CanRedo"/> でボタンの有効/無効を反映する
 /// （<c>Undo</c>/<c>Redo</c> 自身も実行中は無言で no-op なので、ここでも二重の防御）。
+///
+/// [違反箇所へのジャンプ] <see cref="FocusCell"/>（<c>MainWindow.JumpToCell</c> 経由で
+/// <c>AnalysisView</c>「違反の場所」から呼ばれる）。指定セルへ <c>StartBringIntoView</c> で
+/// スクロールし、約2.5秒だけ強調色の太枠を付けてから自動的に消す（Kotlin原本 <c>focusCell</c> の
+/// 最小移植）。
 /// </summary>
 public sealed partial class ScheduleView : UserControl
 {
     private readonly MagiViewModel _vm;
+
+    /// <summary>[違反箇所へのジャンプ] 分析タブから飛んできた注目セル。<see cref="FocusCell"/> 参照。</summary>
+    private (int I, int J)? _focusCell;
+
+    /// <summary>直近の <see cref="RenderSchedule"/> が作った注目セルの要素（無ければ null）。
+    /// <see cref="FocusCell"/> が <c>StartBringIntoView</c> を呼ぶために使う。</summary>
+    private Border? _focusCellElement;
+
+    private DispatcherTimer? _focusTimer;
 
     public ScheduleView(MagiViewModel vm)
     {
@@ -44,6 +58,31 @@ public sealed partial class ScheduleView : UserControl
     }
 
     private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+
+    /// <summary>
+    /// [違反箇所へのジャンプ] 分析タブの「違反の場所」からの遷移先。Kotlin原本の
+    /// <c>focusCell</c>（約2.5秒だけ枠でハイライトして自動的に消える）の最小移植——
+    /// この移植では枠色を一時的に強調色へ差し替え、タイマー満了で再描画して元に戻す
+    /// （<see cref="Render"/> が毎回グリッドを作り直す設計のため、アニメーションではなく
+    /// 「ハイライトを付けて描く／付けずに描き直す」の2状態で表現する）。
+    /// </summary>
+    public void FocusCell(int i, int j)
+    {
+        _focusCell = (i, j);
+        Render();
+        _focusCellElement?.StartBringIntoView();
+
+        _focusTimer?.Stop();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _focusCell = null;
+            Render();
+        };
+        _focusTimer = timer;
+        timer.Start();
+    }
 
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
     private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
@@ -64,6 +103,7 @@ public sealed partial class ScheduleView : UserControl
         ScheduleGridHost.Children.Clear();
         ScheduleGridHost.RowDefinitions.Clear();
         ScheduleGridHost.ColumnDefinitions.Clear();
+        _focusCellElement = null;
         if (!ui.Loaded || ui.Schedule.Count == 0) return;
 
         var staffCount = ui.Schedule.Count;
@@ -133,7 +173,15 @@ public sealed partial class ScheduleView : UserControl
                 borderBrush = new SolidColorBrush(MirrorKeys.Hard.Contains(family) ? Colors.Crimson : Colors.DarkOrange);
                 thickness = new Thickness(2);
             }
+            // [違反箇所へのジャンプ] 注目セルは一時的に強調色の太枠へ差し替える（FocusCell 参照）。
+            var isFocused = _focusCell is { } fc && fc.I == i && fc.J == j;
+            if (isFocused)
+            {
+                borderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                thickness = new Thickness(3);
+            }
             var border = new Border { Child = cell, BorderBrush = borderBrush, BorderThickness = thickness };
+            if (isFocused) _focusCellElement = border;
             Grid.SetRow(border, row);
             Grid.SetColumn(border, col);
             ScheduleGridHost.Children.Add(border);

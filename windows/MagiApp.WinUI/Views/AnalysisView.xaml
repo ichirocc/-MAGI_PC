@@ -6,9 +6,10 @@
     <!--
       [フェーズ9] 「分析」タブの最初の実装。読取専用の診断ビューで、UiState に既にある値
       （サマリー・違反の内訳・設定の見直し候補・回数の固定で止まった手・診断ログ）だけを並べる。
-      修復導線のうち改善提案の適用・設定ミスのワンタップ修正は追加済み（下記参照）。
-      場所（該当セル）へのジャンプ（勤務表タブへ切替＋スクロール）はタブ間の連携状態が要るため
-      今後の段階で追加する。
+      修復導線のうち改善提案の適用・設定ミスのワンタップ修正・場所（該当セル）へのジャンプ
+      （勤務表タブへ切替＋スクロール＋一時ハイライト）は追加済み（下記・AnalysisView.xaml.cs参照）。
+      ジャンプ対象はセル単位の違反（UiState.ViolationCells に載る族=groupViol/pref/c3n/c1/c3/c3m/c3mn）
+      のみ——covU/covO/c41系（日単位）やlow/high/apt/c2（職員単位）は特定の1セルを指さないため対象外。
 
       Kotlin原本の分析タブ（AnalysisTriage.kt / MagiDashboardCards.kt の診断カード群）の本格移植では
       なく、その中で「読むだけで価値があり、かつ UiState だけで描ける」部分の最小版。
@@ -40,6 +41,12 @@
             <StackPanel x:Name="BreakdownSection" Spacing="6">
                 <TextBlock Text="違反の内訳" FontSize="16" FontWeight="SemiBold" />
                 <StackPanel x:Name="BreakdownList" Spacing="2" />
+            </StackPanel>
+
+            <!-- 違反の場所（タップで勤務表タブへジャンプ） -->
+            <StackPanel x:Name="LocationsSection" Spacing="6">
+                <TextBlock Text="違反の場所" FontSize="16" FontWeight="SemiBold" />
+                <StackPanel x:Name="LocationsList" Spacing="4" />
             </StackPanel>
 
             <!-- 直し方を探す -->
