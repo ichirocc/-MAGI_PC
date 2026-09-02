@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
 using MagiApp.WinUI.Views;
@@ -36,6 +37,15 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, UIElement> _tabCache = new();
     private bool _closeConfirmed;
 
+    /// <summary>[通知バー] 直近 <see cref="GlobalMessageBar"/> に表示した <c>Ui.Message</c> の値
+    /// （<see cref="OnMessageBarClosed"/> が <see cref="MagiViewModel.ClearMessage"/> へ compare-and-clear
+    /// 用に渡す——別の新しい通知が表示中に上書きしていたら消さないため）。</summary>
+    private string? _shownMessage;
+
+    /// <summary>[通知バー] 自動消滅タイマー（Kotlin原本の Snackbar の自動消滅に対応。<c>DispatcherTimer</c>
+    /// を使う既存規約は <c>ScheduleView.FocusCell</c> と同じ）。</summary>
+    private DispatcherTimer? _messageTimer;
+
     public MainWindow(MagiViewModel vm)
     {
         _vm = vm;
@@ -43,8 +53,64 @@ public sealed partial class MainWindow : Window
         Title = "MAGI ShiftOptimizer";
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First();
         AppWindow.Closing += OnAppWindowClosing;
+        _vm.Ui.PropertyChanged += OnUiChangedForMessageBar;
         ShowTab("home");
+        UpdateMessageBar();
         _ = InitializeAsync();
+    }
+
+    /// <summary>
+    /// [通知バー] Kotlin原本の Snackbar 相当。<c>Ui.Message</c> が変わるたびに開閉する
+    /// （タブは <c>ShowTab</c> がタブ内容だけを差し替えるので、この購読はウィンドウ生存期間中ずっと有効
+    /// ——<see cref="MainWindow"/> 自体がアプリの生存期間と一致するため明示的な解除は行わない）。
+    /// </summary>
+    private void OnUiChangedForMessageBar(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
+    }
+
+    /// <summary>
+    /// [通知バー] <c>Ui.Message</c> を <see cref="GlobalMessageBar"/> へ反映する。null なら閉じるだけ
+    /// （<see cref="MagiViewModel.ClearMessage"/> は呼ばない——既に空なので比較対象が無い）。
+    /// 同一メッセージが既に開いている間の再描画（他プロパティの変更に連動した <c>Render</c> 等）では
+    /// タイマーを再起動しない（表示時間が伸び続けるのを防ぐ）。
+    /// </summary>
+    private void UpdateMessageBar()
+    {
+        var msg = _vm.Ui.Message;
+        if (msg is null)
+        {
+            _messageTimer?.Stop();
+            GlobalMessageBar.IsOpen = false;
+            return;
+        }
+        if (msg == _shownMessage && GlobalMessageBar.IsOpen) return;
+
+        _shownMessage = msg;
+        GlobalMessageBar.Message = msg;
+        GlobalMessageBar.Severity = _vm.Ui.MessageIsError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
+        GlobalMessageBar.IsOpen = true;
+
+        _messageTimer?.Stop();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_vm.Ui.MessageIsError ? 6 : 4) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            GlobalMessageBar.IsOpen = false;
+        };
+        _messageTimer = timer;
+        timer.Start();
+    }
+
+    /// <summary>
+    /// [通知バー] 自動消滅／×ボタンいずれで閉じても呼ばれる。<see cref="MagiViewModel.ClearMessage"/>
+    /// へ compare-and-clear させる——表示していた間に別の新しい通知が <c>Ui.Message</c> を上書きして
+    /// いたら（<c>_shownMessage</c> と一致しない）、その新しい通知を誤って消さない。
+    /// </summary>
+    private void OnMessageBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
+    {
+        _messageTimer?.Stop();
+        _vm.ClearMessage(_shownMessage);
     }
 
     /// <summary>

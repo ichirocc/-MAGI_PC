@@ -62,14 +62,34 @@
             <StackPanel x:Name="MonthlyPanel" Spacing="8">
                 <TextBlock Text="月次条件" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="PeriodText" TextWrapping="Wrap" />
-                <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick"
-                        HorizontalAlignment="Left" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="PrevMonthButton" Content="前の月" Click="OnPrevMonthClick" />
+                    <Button x:Name="NextStepMonthButton" Content="次の月" Click="OnNextStepMonthClick" />
+                    <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick" />
+                </StackPanel>
                 <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
 
                 <TextBlock Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
+
+                <TextBlock Text="職員を選んでカレンダーから複数日をまとめて選択できます" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                <ComboBox x:Name="WishStaffCombo" HorizontalAlignment="Stretch" PlaceholderText="職員"
+                          SelectionChanged="OnWishStaffSelectionChanged" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Grid x:Name="WishCalendarHost" />
+                </ScrollViewer>
+                <StackPanel x:Name="WishApplyPanel" Spacing="4" Visibility="Collapsed">
+                    <TextBlock x:Name="WishApplySummaryText" FontSize="12" Opacity="0.8" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox x:Name="WishApplyShiftCombo" Width="100" PlaceholderText="シフト"
+                                  SelectionChanged="OnWishApplyShiftSelectionChanged" />
+                        <Button x:Name="ApplyWishesForDaysButton" Content="適用" Click="OnApplyWishesForDaysClick" />
+                        <Button x:Name="ClearWishesForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearWishesForDaysClick" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Text="登録済みの希望（1件ずつ確認・削除）" FontSize="12" Opacity="0.8" Margin="0,8,0,0" />
                 <StackPanel x:Name="WishListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <ComboBox x:Name="WishStaffCombo" Width="140" PlaceholderText="職員" />
                     <TextBox x:Name="WishDayBox" Width="56" PlaceholderText="日" />
                     <ComboBox x:Name="WishShiftCombo" Width="100" PlaceholderText="シフト" />
                     <Button x:Name="SetWishButton" Content="設定" Click="OnSetWishClick" />
@@ -144,6 +164,15 @@
                     <TextBox x:Name="ReviewMemoBox" Width="240" PlaceholderText="メモを直接追加" />
                     <Button x:Name="AddReviewMemoButton" Content="追加" Click="OnAddReviewMemoClick" />
                 </StackPanel>
+
+                <TextBlock Text="期間（日数）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="暦通りの月以外（例：15日間の一部期間）を使うときはここで直接変えます。通常は「月次条件」の月移動で足ります。"
+                           TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBox x:Name="MasterDaysBox" Width="80" PlaceholderText="日数(1-31)" />
+                    <Button x:Name="EditMasterDaysButton" Content="変更" Click="OnEditMasterDaysClick" />
+                </StackPanel>
+                <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
 
                 <TextBlock Text="シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock x:Name="ShiftListText" TextWrapping="Wrap" FontSize="13" />
@@ -222,6 +251,13 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="GroupShiftMatrixHost" />
                 </ScrollViewer>
+                <Border x:Name="AptOverloadPanel" Visibility="Collapsed" Background="#FFFDEDED"
+                        BorderBrush="#FFB00020" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,4,0,0">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="この目標は達成できません" FontWeight="SemiBold" FontSize="13" Foreground="#FFB00020" />
+                        <StackPanel x:Name="AptOverloadList" Spacing="2" />
+                    </StackPanel>
+                </Border>
                 <Button x:Name="ResetAptButton" Content="適切回数を全リセット" Click="OnResetAptClick"
                         HorizontalAlignment="Left" Margin="0,4,0,0" />
 
@@ -247,16 +283,30 @@
                 <ComboBox x:Name="ConstraintRowCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnConstraintRowSelectionChanged" />
 
+                <!-- [シフト記号欄=ComboBox] cons1/cons2/cons41(s)/cons42(s) のシフト記号欄は、既存シフトから
+                     選べる編集可能ComboBox（IsEditable=既存データ整合用の自由入力も残す）。それ以外の欄
+                     （群記号・回数・cons3系の並び等）は従来どおりTextBox。同じ枠位置に両方を重ねて置き、
+                     選んだ制約の種類に応じてどちらかだけを表示する（EditView.xaml.cs SyncConstraintFields参照）。 -->
                 <TextBlock x:Name="ConstraintField1Label" Text="項目1" />
                 <TextBox x:Name="ConstraintField1Box" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="ConstraintField1ShiftCombo" HorizontalAlignment="Stretch" IsEditable="True"
+                          PlaceholderText="シフト" Visibility="Collapsed" />
                 <TextBlock x:Name="ConstraintField2Label" Text="項目2" />
                 <TextBox x:Name="ConstraintField2Box" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="ConstraintField2ShiftCombo" HorizontalAlignment="Stretch" IsEditable="True"
+                          PlaceholderText="シフト" Visibility="Collapsed" />
                 <TextBlock x:Name="ConstraintField3Label" Text="項目3" />
                 <TextBox x:Name="ConstraintField3Box" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="ConstraintField3ShiftCombo" HorizontalAlignment="Stretch" IsEditable="True"
+                          PlaceholderText="シフト" Visibility="Collapsed" />
                 <TextBlock x:Name="ConstraintField4Label" Text="項目4" />
                 <TextBox x:Name="ConstraintField4Box" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="ConstraintField4ShiftCombo" HorizontalAlignment="Stretch" IsEditable="True"
+                          PlaceholderText="シフト" Visibility="Collapsed" />
                 <TextBlock x:Name="ConstraintField5Label" Text="項目5" />
                 <TextBox x:Name="ConstraintField5Box" HorizontalAlignment="Stretch" />
+                <ComboBox x:Name="ConstraintField5ShiftCombo" HorizontalAlignment="Stretch" IsEditable="True"
+                          PlaceholderText="シフト" Visibility="Collapsed" />
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="AddConstraintButton" Content="追加" Click="OnAddConstraintClick" />

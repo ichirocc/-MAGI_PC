@@ -1,10 +1,13 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using MagiApp.ViewModels;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace MagiApp.WinUI.Views;
 
@@ -38,6 +41,7 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _groupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _wishStaffItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _wishShiftItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _wishApplyShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
@@ -47,6 +51,10 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _staffRangeShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _groupRangeGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _groupRangeShiftItems = System.Array.Empty<string>();
+
+    /// <summary>制約編集(<see cref="ConstraintFamilyMetas"/>)のシフト記号欄5枠が共有する
+    /// <c>_vm.ShiftKigouList()</c> のキャッシュ（5枠とも同じ中身のため1つで足りる。<see cref="SyncConstraintShiftCombos"/>）。</summary>
+    private IReadOnlyList<string> _constraintShiftItems = System.Array.Empty<string>();
 
     /// <summary>群×シフトの担当可否・適切回数マトリクス（Ws1SetGroupShift/Ws1SetGroupApt）が
     /// 直近に組み立てた行/列の記号。群数・シフト数・記号が変わったときだけ<see cref="BuildGroupShiftMatrix"/>
@@ -59,6 +67,12 @@ public sealed partial class EditView : UserControl
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
     private int _syncedStaffIndex = -1;
+
+    /// <summary>希望シフトの月間カレンダー（<see cref="RenderWishCalendar"/>）でタップ選択中の日
+    /// （1始まり）。<see cref="WishStaffCombo"/> の選択が変わったら（別人の選択を持ち越さないよう）
+    /// リセットする——直近に同期した職員 index は <see cref="_wishCalendarStaffIndex"/> に持つ。</summary>
+    private readonly HashSet<int> _wishSelectedDays = new();
+    private int _wishCalendarStaffIndex = -1;
 
     /// <summary>年間マスターのグループ選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
     private int _syncedMasterGroupIndex = -1;
@@ -135,6 +149,8 @@ public sealed partial class EditView : UserControl
         PeriodText.Text = ui.Loaded
             ? $"対象期間: {FormatPeriod(ui.StartDate, ui.Days)}"
             : "対象期間: （データ読込中）";
+        PrevMonthButton.IsEnabled = editable;
+        NextStepMonthButton.IsEnabled = editable;
         NextMonthButton.IsEnabled = editable;
 
         // 件数は GetSetupCounts（入力ガイド用の集計・1回の呼出しで揃う）から取る。
@@ -165,6 +181,25 @@ public sealed partial class EditView : UserControl
         _syncedStaffIndex = -1;
     }
 
+    /// <summary>
+    /// [2026-09-02, 配線] ShiftMonth（フェーズ9で移植・テスト済み）はこれまで呼び出し口が無かった。
+    /// 「来月にする」(SetNextMonth) は常に翌月へ一足飛びだが、Kotlin原本の MonthPickerCard は
+    /// それに加えて「前の月」「次の月」の1か月ずつの移動も併設する。同じ理由で職員入力欄を取り込み直す。
+    /// </summary>
+    private void OnPrevMonthClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.ShiftMonth(-1);
+        _syncedStaffIndex = -1;
+    }
+
+    private void OnNextStepMonthClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.ShiftMonth(1);
+        _syncedStaffIndex = -1;
+    }
+
     // ===== 希望シフト（月次条件） =====
 
     /// <summary>選択肢を差分更新（新規作成しない）。中身が変わらなければ選択位置を保つ。</summary>
@@ -182,6 +217,8 @@ public sealed partial class EditView : UserControl
         SyncItems(WishStaffCombo, ui.StaffNames, ref _wishStaffItems);
         SyncItems(WishShiftCombo, ui.ShiftSymbols, ref _wishShiftItems);
         SetWishButton.IsEnabled = editable;
+
+        RenderWishCalendar(ui, editable);
 
         WishListHost.Children.Clear();
         var rows = _vm.WishOverrides();
@@ -204,6 +241,186 @@ public sealed partial class EditView : UserControl
         {
             WishListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
         }
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] SetWishesForDays/ClearWishesForDays（フェーズ9で移植・テスト済み）はこれまで
+    /// 呼び出し口が無かった——既存の希望登録は<see cref="OnSetWishClick"/>の1日ずつ(SetWish)のみで、
+    /// Kotlin原本の WishMonthGrid＋WishApplyPanel（複数日をまとめて選び、まとめて反映/クリア）に
+    /// 相当する導線が無かった。<see cref="WishStaffCombo"/> で選択中の職員の月間カレンダー
+    /// （日曜始まり）を毎回まるごと作り直し（<see cref="ScheduleView"/> のグリッドと同じ方針。
+    /// フォーカスを保つ入力欄が無いセルのみのため差分更新は不要）、タップで
+    /// <see cref="_wishSelectedDays"/>（1始まりの日）へ出し入れする。1件以上選ぶと下の適用パネル
+    /// （シフト選択＋「適用（N日）」/「選択した日を未設定に戻す」）を表示する。職員選択が変わったら
+    /// （<see cref="_wishCalendarStaffIndex"/> で検知）選択日をリセットする（別人の選択を持ち越さない）。
+    /// </summary>
+    private void RenderWishCalendar(UiState ui, bool editable)
+    {
+        var staffIdx = WishStaffCombo.SelectedIndex;
+        if (staffIdx != _wishCalendarStaffIndex)
+        {
+            _wishCalendarStaffIndex = staffIdx;
+            _wishSelectedDays.Clear();
+        }
+
+        SyncItems(WishApplyShiftCombo, ui.ShiftSymbols, ref _wishApplyShiftItems);
+
+        WishCalendarHost.Children.Clear();
+        WishCalendarHost.RowDefinitions.Clear();
+        WishCalendarHost.ColumnDefinitions.Clear();
+        if (!ui.Loaded || ui.Days <= 0)
+        {
+            WishApplyPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var dow0 = 0;
+        if (DateOnly.TryParseExact(
+                ui.StartDate, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var start))
+        {
+            dow0 = (int)start.DayOfWeek; // .NET の DayOfWeek は日曜=0
+        }
+
+        var days = ui.Days;
+        var rowCount = (dow0 + days + 6) / 7;
+        for (var c = 0; c < 7; c++) WishCalendarHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (var r = 0; r <= rowCount; r++) WishCalendarHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        string[] weekdayLabels = { "日", "月", "火", "水", "木", "金", "土" };
+        for (var c = 0; c < 7; c++)
+        {
+            var color = c == 0 ? Colors.Red : (c == 6 ? Colors.RoyalBlue : Colors.Black);
+            var head = new TextBlock
+            {
+                Text = weekdayLabels[c], FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(color), HorizontalAlignment = HorizontalAlignment.Center,
+                Padding = new Thickness(2),
+            };
+            Grid.SetRow(head, 0);
+            Grid.SetColumn(head, c);
+            WishCalendarHost.Children.Add(head);
+        }
+
+        // このスタッフが既に持っている希望: 日(1始まり) -> シフト記号（未反映/反映の別はここでは問わない）。
+        var marked = new Dictionary<int, string>();
+        if (staffIdx >= 0)
+        {
+            foreach (var v in _vm.WishOverrides())
+                if (v.I == staffIdx) marked[v.Day] = v.Kigou;
+        }
+
+        for (var d = 1; d <= days; d++)
+        {
+            var col = (dow0 + d - 1) % 7;
+            var row = 1 + (dow0 + d - 1) / 7;
+            var selected = _wishSelectedDays.Contains(d);
+
+            var content = new StackPanel { Spacing = 0, HorizontalAlignment = HorizontalAlignment.Center };
+            content.Children.Add(new TextBlock { Text = d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+            if (marked.TryGetValue(d, out var kigou))
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = kigou, FontSize = 10, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center,
+                });
+            }
+
+            var cellButton = new Button
+            {
+                Content = content,
+                Padding = new Thickness(4),
+                MinWidth = 36,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Background = new SolidColorBrush(selected ? Colors.DodgerBlue : Colors.Transparent),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Colors.LightGray),
+                IsEnabled = editable && staffIdx >= 0,
+            };
+            var day = d;
+            cellButton.Click += (_, _) =>
+            {
+                if (_syncingFromModel) return;
+                if (!_wishSelectedDays.Add(day)) _wishSelectedDays.Remove(day);
+                _syncingFromModel = true;
+                try
+                {
+                    RenderWishCalendar(_vm.Ui, editable);
+                }
+                finally
+                {
+                    _syncingFromModel = false;
+                }
+            };
+            Grid.SetRow(cellButton, row);
+            Grid.SetColumn(cellButton, col);
+            WishCalendarHost.Children.Add(cellButton);
+        }
+
+        var hasSelection = staffIdx >= 0 && _wishSelectedDays.Count > 0;
+        WishApplyPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        if (hasSelection)
+        {
+            WishApplySummaryText.Text = $"選択中: {_wishSelectedDays.Count}日";
+            ApplyWishesForDaysButton.Content = $"適用（{_wishSelectedDays.Count}日）";
+            ApplyWishesForDaysButton.IsEnabled = editable && WishApplyShiftCombo.SelectedIndex >= 0;
+            ClearWishesForDaysButton.IsEnabled = editable;
+        }
+    }
+
+    /// <summary>職員選択が変わったらカレンダーを作り直す（選択日リセット・「今持っている希望」チップの
+    /// 更新）。<see cref="Render"/> は <c>_vm.Ui</c> の PropertyChanged でしか走らないため、ComboBoxの
+    /// 選択変更そのものはここで拾う必要がある（<see cref="OnStaffSelectionChanged"/> と同じ理由）。</summary>
+    private void OnWishStaffSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _syncingFromModel = true;
+        try
+        {
+            var ui = _vm.Ui;
+            RenderWishCalendar(ui, ui.Loaded && !ui.Running);
+        }
+        finally
+        {
+            _syncingFromModel = false;
+        }
+    }
+
+    /// <summary>適用先シフトの選択だけなら盤面全体を作り直す必要はなく、ボタンの活性判定だけ更新する。</summary>
+    private void OnWishApplyShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        if (_wishSelectedDays.Count == 0 || WishStaffCombo.SelectedIndex < 0) return;
+        var ui = _vm.Ui;
+        ApplyWishesForDaysButton.IsEnabled = ui.Loaded && !ui.Running && WishApplyShiftCombo.SelectedIndex >= 0;
+    }
+
+    private void OnApplyWishesForDaysClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var i = WishStaffCombo.SelectedIndex;
+        var k = WishApplyShiftCombo.SelectedIndex;
+        if (i < 0) { WishHintText.Text = "対象の職員を選んでください。"; return; }
+        if (k < 0) { WishHintText.Text = "シフトを選んでください。"; return; }
+        if (_wishSelectedDays.Count == 0) { WishHintText.Text = "日を選んでください。"; return; }
+        var days = _wishSelectedDays.Select(d => d - 1).ToList();
+        _vm.SetWishesForDays(i, days, k);
+        _wishSelectedDays.Clear();
+        WishHintText.Text = "";
+    }
+
+    private void OnClearWishesForDaysClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var i = WishStaffCombo.SelectedIndex;
+        if (i < 0) { WishHintText.Text = "対象の職員を選んでください。"; return; }
+        if (_wishSelectedDays.Count == 0) { WishHintText.Text = "日を選んでください。"; return; }
+        var days = _wishSelectedDays.Select(d => d - 1).ToList();
+        _vm.ClearWishesForDays(i, days);
+        _wishSelectedDays.Clear();
+        WishHintText.Text = "";
     }
 
     private void OnSetWishClick(object sender, RoutedEventArgs e)
@@ -623,6 +840,20 @@ public sealed partial class EditView : UserControl
     {
         RenderReviewMemos(ui);
 
+        // [2026-09-02, 配線] Ws1ResizeDays（フェーズ9で移植・テスト済み）はこれまで呼び出し口が無かった。
+        // 期間の日数は「対象月を選ぶ」(SetMonth/ShiftMonth/SetNextMonth＝常に暦通りの月)でしか変えられず、
+        // 15日等の任意の日数（暦月と一致しない期間）を直接指定する手段が無かった。Kotlin原本(Ws1Card)の
+        // PERIOD節と同じく日数入力＋「変更」ボタンを ARSENAL(シフト)節の前に置く。入力中は上書きしない
+        // （群×シフトの適切回数欄と同じ理由・SyncMasterShiftFields系のフォーカスガードと同型）。
+        if (MasterDaysBox.FocusState == FocusState.Unfocused)
+        {
+            MasterDaysBox.Text = ui.Loaded && ui.Days > 0 ? ui.Days.ToString() : "";
+        }
+        EditMasterDaysButton.IsEnabled = editable;
+        MasterDaysHintText.Text = editable
+            ? ""
+            : (ui.Loaded ? "計算の実行中は期間を変更できません。終わってからにしてください。" : "");
+
         ShiftListText.Text = ui.ShiftSymbols.Count > 0
             ? string.Join(" ・ ", ui.ShiftSymbols)
             : "（未設定）";
@@ -710,21 +941,28 @@ public sealed partial class EditView : UserControl
     /// <c>Add*</c> 系メソッドへの引数の並びだけ cons42/cons42s で異なる
     /// （<see cref="TryAddConstraint"/> 参照・<c>MagiViewModel.Editing.cs</c> の
     /// <see cref="MagiViewModel.ConstraintRowValues"/> のKDocに理由あり）。
+    /// <paramref name="ShiftFieldIndexes"/>=この族で「シフト記号」を入れる欄の index（0始まり）。
+    /// 該当欄は<see cref="SyncConstraintFields"/>が既存シフトから選べる編集可能ComboBoxへ切り替える
+    /// （Kotlin原本 ConstraintEditor.kt の Picker("シフト", shifts, sk) 相当・
+    /// <see cref="MagiViewModel.ShiftKigouList"/> 配線）。未指定の欄は従来どおりTextBoxのまま。
     /// </summary>
-    private sealed record ConstraintFamilyMeta(string Key, string[] FieldLabels);
+    private sealed record ConstraintFamilyMeta(string Key, string[] FieldLabels, int[]? ShiftFieldIndexes = null)
+    {
+        public bool IsShiftField(int i) => ShiftFieldIndexes is not null && System.Array.IndexOf(ShiftFieldIndexes, i) >= 0;
+    }
 
     private static readonly ConstraintFamilyMeta[] ConstraintFamilyMetas =
     {
-        new("cons1", new[] { "窓の日数", "シフト記号", "最低回数" }),
-        new("cons2", new[] { "シフト記号", "合計回数" }),
+        new("cons1", new[] { "窓の日数", "シフト記号", "最低回数" }, new[] { 1 }),
+        new("cons2", new[] { "シフト記号", "合計回数" }, new[] { 0 }),
         new("cons3", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3n", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3m", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3mn", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
-        new("cons41", new[] { "群記号", "シフト記号", "下限", "上限" }),
-        new("cons42", new[] { "群1記号", "シフト1記号", "群2記号", "シフト2記号" }),
-        new("cons41s", new[] { "スキル群記号", "シフト記号", "下限", "上限" }),
-        new("cons42s", new[] { "スキル群1記号", "シフト1記号", "スキル群2記号", "シフト2記号" }),
+        new("cons41", new[] { "群記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
+        new("cons42", new[] { "群1記号", "シフト1記号", "群2記号", "シフト2記号" }, new[] { 1, 3 }),
+        new("cons41s", new[] { "スキル群記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
+        new("cons42s", new[] { "スキル群1記号", "シフト1記号", "スキル群2記号", "シフト2記号" }, new[] { 1, 3 }),
     };
 
     private string? ConstraintFamilyKey() => (ConstraintFamilyCombo.SelectedItem as ComboBoxItem)?.Tag as string;
@@ -736,8 +974,30 @@ public sealed partial class EditView : UserControl
         return f.Rows.Select((r, i) => $"{i + 1}: {r}").ToList();
     }
 
+    private TextBox[] ConstraintFieldBoxes() =>
+        new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
+
+    private ComboBox[] ConstraintFieldShiftCombos() => new[]
+    {
+        ConstraintField1ShiftCombo, ConstraintField2ShiftCombo, ConstraintField3ShiftCombo,
+        ConstraintField4ShiftCombo, ConstraintField5ShiftCombo,
+    };
+
+    /// <summary>シフト記号欄5枠(<see cref="ConstraintFieldShiftCombos"/>)は中身が全て同じ
+    /// <c>_vm.ShiftKigouList()</c> のため、<see cref="SyncItems"/>(単一キャッシュ=単一コンボ前提)は使わず
+    /// ここで一括同期する（表示中でない枠も含めて更新——種類切替の直後でも即座に正しい選択肢を持つ）。</summary>
+    private void SyncConstraintShiftCombos()
+    {
+        var items = _vm.ShiftKigouList();
+        if (_constraintShiftItems.SequenceEqual(items)) return;
+        _constraintShiftItems = items;
+        var list = items.ToList();
+        foreach (var combo in ConstraintFieldShiftCombos()) combo.ItemsSource = list;
+    }
+
     /// <summary>種類の選択・行一覧・入力欄の表示/ラベルを同期する。種類が変わったときだけ行選択と
-    /// 入力欄を強制的に空へ戻す（<see cref="_syncedConstraintFamilyKey"/> 参照）。</summary>
+    /// 入力欄を強制的に空へ戻す（<see cref="_syncedConstraintFamilyKey"/> 参照）。シフト記号欄
+    /// （<see cref="ConstraintFamilyMeta.IsShiftField"/>）はTextBoxでなくComboBoxを表示する。</summary>
     private void SyncConstraintFields()
     {
         var key = ConstraintFamilyKey();
@@ -745,15 +1005,24 @@ public sealed partial class EditView : UserControl
         var familyChanged = key != _syncedConstraintFamilyKey;
         _syncedConstraintFamilyKey = key;
 
-        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
+        SyncConstraintShiftCombos();
+
+        var boxes = ConstraintFieldBoxes();
+        var combos = ConstraintFieldShiftCombos();
         var labels = new[] { ConstraintField1Label, ConstraintField2Label, ConstraintField3Label, ConstraintField4Label, ConstraintField5Label };
         for (var i = 0; i < boxes.Length; i++)
         {
             var show = meta is not null && i < meta.FieldLabels.Length;
-            boxes[i].Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            var isShift = show && meta!.IsShiftField(i);
+            boxes[i].Visibility = show && !isShift ? Visibility.Visible : Visibility.Collapsed;
+            combos[i].Visibility = isShift ? Visibility.Visible : Visibility.Collapsed;
             labels[i].Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (show) labels[i].Text = meta!.FieldLabels[i];
-            if (familyChanged) boxes[i].Text = "";
+            if (familyChanged)
+            {
+                boxes[i].Text = "";
+                combos[i].Text = "";
+            }
         }
 
         var rows = key is null ? System.Array.Empty<string>() : RowLabelsFor(key);
@@ -795,16 +1064,28 @@ public sealed partial class EditView : UserControl
         if (idx < 0 || idx == _syncedConstraintRowIndex) return;
         _syncedConstraintRowIndex = idx;
         var key = ConstraintFamilyKey();
+        var meta = key is null ? null : ConstraintFamilyMetas.FirstOrDefault(m => m.Key == key);
         var values = key is null ? null : _vm.ConstraintRowValues(key, idx);
-        if (values is null) return;
-        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
-        for (var i = 0; i < boxes.Length; i++) boxes[i].Text = i < values.Count ? values[i] : "";
+        if (values is null || meta is null) return;
+        var boxes = ConstraintFieldBoxes();
+        var combos = ConstraintFieldShiftCombos();
+        for (var i = 0; i < boxes.Length; i++)
+        {
+            var v = i < values.Count ? values[i] : "";
+            if (meta.IsShiftField(i)) combos[i].Text = v; else boxes[i].Text = v;
+        }
     }
 
+    /// <summary>シフト記号欄(<see cref="ConstraintFamilyMeta.IsShiftField"/>)はComboBox.Text から、
+    /// それ以外はTextBox.Text から集める（<see cref="SyncConstraintFields"/>で表示している側が実データ）。</summary>
     private IReadOnlyList<string> CollectConstraintFieldValues(ConstraintFamilyMeta meta)
     {
-        var boxes = new[] { ConstraintField1Box, ConstraintField2Box, ConstraintField3Box, ConstraintField4Box, ConstraintField5Box };
-        return boxes.Take(meta.FieldLabels.Length).Select(b => b.Text.Trim()).ToList();
+        var boxes = ConstraintFieldBoxes();
+        var combos = ConstraintFieldShiftCombos();
+        var result = new List<string>();
+        for (var i = 0; i < meta.FieldLabels.Length; i++)
+            result.Add((meta.IsShiftField(i) ? combos[i].Text : boxes[i].Text).Trim());
+        return result;
     }
 
     /// <summary>[追加専用のフィールド並び替え] <c>AddCons42</c>/<c>AddCons42s</c> の引数順(g1,g2,s1,s2)は、
@@ -1020,6 +1301,17 @@ public sealed partial class EditView : UserControl
         _syncedMasterShiftIndex = -1;
     }
 
+    private void OnEditMasterDaysClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        if (!int.TryParse(MasterDaysBox.Text.Trim(), out var n) || n < 1 || n > 31)
+        {
+            MasterDaysHintText.Text = "日数は 1〜31 で入れてください。";
+            return;
+        }
+        _vm.Ws1ResizeDays(n);
+    }
+
     // ===== スキル区分（年間マスター・新C41s/C42s 専用） =====
 
     /// <summary>
@@ -1137,6 +1429,7 @@ public sealed partial class EditView : UserControl
             _matrixCells.Clear();
             _matrixGroupKigou = System.Array.Empty<string>();
             _matrixShiftKigou = System.Array.Empty<string>();
+            RenderAptOverload();
             return;
         }
 
@@ -1163,6 +1456,28 @@ public sealed partial class EditView : UserControl
                     cell.Apt.Text = k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
                 }
             }
+        }
+
+        RenderAptOverload();
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] AptBalances（フェーズ7で移植・テスト済み、Kotlin原本 Ws1Editor.kt の
+    /// 「この目標は達成できません」インライン警告）はこれまで呼び出し口が無かった——同じ診断は
+    /// 分析タブの設定ミス一覧(SettingIssues)にも出るが、タブを跨がず**適切回数を入力しているその場**で
+    /// 即座に見えるのが Kotlin 原本の狙い。マトリクス直下に、超過しているシフトだけ列挙する。
+    /// </summary>
+    private void RenderAptOverload()
+    {
+        var overloaded = _vm.AptBalances().Where(b => b.Overloaded).ToList();
+        AptOverloadPanel.Visibility = overloaded.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        AptOverloadList.Children.Clear();
+        foreach (var b in overloaded)
+        {
+            var reason = b.IsRest
+                ? $"「{b.Kigou}」目標の合計 {b.AptSum}回 に対し、他シフトの上限を差し引いた最大可能日数の合計は {b.Capacity}回。{b.Shortfall}回ぶんは必ず届きません。"
+                : $"「{b.Kigou}」目標の合計 {b.AptSum}回 に対し、必要人数の合計は {b.Capacity}回。{b.Shortfall}回ぶんは必ず届きません。";
+            AptOverloadList.Children.Add(new TextBlock { Text = reason, FontSize = 12, TextWrapping = TextWrapping.Wrap });
         }
     }
 

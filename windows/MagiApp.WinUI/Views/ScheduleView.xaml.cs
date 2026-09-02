@@ -35,6 +35,10 @@ namespace MagiApp.WinUI.Views;
 /// <c>AnalysisView</c>「違反の場所」から呼ばれる）。指定セルへ <c>StartBringIntoView</c> で
 /// スクロールし、約2.5秒だけ強調色の太枠を付けてから自動的に消す（Kotlin原本 <c>focusCell</c> の
 /// 最小移植）。
+///
+/// [まとめて割当] <see cref="OnBulkAssignClick"/>。Kotlin原本 <c>AssignBulkSheet</c>（ドラッグ選択ではなく
+/// フィルタ選択で複数セルへ一括代入）の最小移植——対象範囲(期間全体/この曜日)・対象（全職員/職員を選ぶ）・
+/// シフトを選ばせ、canDo で担当外を自動除外したセル集合を <see cref="MagiViewModel.SetCells"/> へ渡す。
 /// </summary>
 public sealed partial class ScheduleView : UserControl
 {
@@ -88,6 +92,169 @@ public sealed partial class ScheduleView : UserControl
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
     private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
 
+    /// <summary>ListView（複数選択）の表示用ラッパー。氏名の重複があっても index で確実に職員を特定するため
+    /// 文字列そのものではなくこれを ItemsSource に流す（<see cref="ListView.SelectedItems"/> から拾い戻す）。</summary>
+    private sealed record StaffPickItem(int Index, string Name)
+    {
+        public override string ToString() => Name;
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] SetCells（プロ一括編集・フェーズ9で移植・テスト済み）はこれまで呼び出し口が無かった。
+    /// Kotlin原本の AssignBulkSheet（ドラッグではなくフィルタ選択で複数セルへ一括代入＝片手一本指の制約に沿う）を
+    /// 最小移植: ①対象範囲(期間全体/この曜日) ②対象（誰に・全職員/職員を選ぶ） ③シフト（単一選択）を選ばせ、
+    /// canDo（<see cref="MagiViewModel.AllowedShiftsFor"/>）で担当外の職員を自動除外したうえでセル数を
+    /// プレビューし、「確定」で <see cref="MagiViewModel.SetCells"/> を1回だけ呼ぶ（SetCells 自身が
+    /// Undo1回・再チェック1回でまとめる）。
+    /// </summary>
+    private async void OnBulkAssignClick(object sender, RoutedEventArgs e)
+    {
+        // [監査(ShowCellEditor/ShowShortageFixFlyoutと同じ理由)] EditBlockedNow が実行中を理由つきで拒否する。
+        if (_vm.EditBlockedNow()) return;
+        var ui = _vm.Ui;
+        if (!ui.Loaded || ui.Schedule.Count == 0 || ui.StaffNames.Count == 0 || ui.ShiftSymbols.Count == 0) return;
+
+        var dow0 = 0;
+        if (System.DateOnly.TryParseExact(
+                ui.StartDate, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var start))
+        {
+            dow0 = (int)start.DayOfWeek; // .NET の DayOfWeek は日曜=0（EditView.RenderWishCalendar と同じ規約）
+        }
+
+        var scopeCombo = new ComboBox
+        {
+            ItemsSource = new[] { "期間全体", "この曜日" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        string[] weekdayLabels = { "日", "月", "火", "水", "木", "金", "土" };
+        var weekdayChecks = weekdayLabels.Select(l => new CheckBox { Content = l, Padding = new Thickness(4, 0, 4, 0) }).ToList();
+        var weekdayPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 2, Visibility = Visibility.Collapsed,
+        };
+        foreach (var cb in weekdayChecks) weekdayPanel.Children.Add(cb);
+
+        var targetCombo = new ComboBox
+        {
+            ItemsSource = new[] { "全職員", "職員を選ぶ" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        var staffItems = ui.StaffNames.Select((n, i) => new StaffPickItem(i, n)).ToList();
+        var staffList = new ListView
+        {
+            ItemsSource = staffItems,
+            SelectionMode = ListViewSelectionMode.Multiple,
+            MaxHeight = 160,
+            Visibility = Visibility.Collapsed,
+        };
+
+        var shiftCombo = new ComboBox
+        {
+            ItemsSource = ui.ShiftSymbols.ToList(), HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+
+        var previewText = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.85 };
+
+        var panel = new StackPanel { Spacing = 8, Width = 340 };
+        panel.Children.Add(new TextBlock { Text = "対象範囲", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(scopeCombo);
+        panel.Children.Add(weekdayPanel);
+        panel.Children.Add(new TextBlock { Text = "対象（誰に）", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(targetCombo);
+        panel.Children.Add(staffList);
+        panel.Children.Add(new TextBlock { Text = "シフト", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(shiftCombo);
+        panel.Children.Add(previewText);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "まとめて割当",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
+            PrimaryButtonText = "確定",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+            IsPrimaryButtonEnabled = false,
+        };
+
+        // 対象日（1始まりではなく0始まりのj）。対象範囲=この曜日 のときはチェック済み曜日に限定。
+        List<int> TargetDays()
+        {
+            if (scopeCombo.SelectedIndex != 1) return Enumerable.Range(0, ui.Days).ToList();
+            var selectedWd = weekdayChecks
+                .Select((cb, idx) => (cb, idx))
+                .Where(t => t.cb.IsChecked == true)
+                .Select(t => t.idx)
+                .ToHashSet();
+            return Enumerable.Range(0, ui.Days).Where(j => selectedWd.Contains((dow0 + j) % 7)).ToList();
+        }
+
+        // 対象職員（canDo未適用の生選択）。
+        List<int> TargetStaff() => targetCombo.SelectedIndex == 1
+            ? staffList.SelectedItems.Cast<StaffPickItem>().Select(x => x.Index).ToList()
+            : Enumerable.Range(0, ui.StaffNames.Count).ToList();
+
+        void UpdatePreview()
+        {
+            weekdayPanel.Visibility = scopeCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+            staffList.Visibility = targetCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+
+            var k = shiftCombo.SelectedIndex;
+            if (k < 0) { previewText.Text = "シフトを選んでください。"; dialog.IsPrimaryButtonEnabled = false; return; }
+
+            var targetStaff = TargetStaff();
+            if (targetCombo.SelectedIndex == 1 && targetStaff.Count == 0)
+            {
+                previewText.Text = "職員を選んでください。";
+                dialog.IsPrimaryButtonEnabled = false;
+                return;
+            }
+            // [canDo自動除外＝Kotlin原本 AssignBulkSheet と同型] 担当できない職員は対象から外す。
+            var eligible = targetStaff.Where(i => _vm.AllowedShiftsFor(i).Contains(k)).ToList();
+            var skipped = targetStaff.Count - eligible.Count;
+
+            if (scopeCombo.SelectedIndex == 1 && weekdayChecks.All(cb => cb.IsChecked != true))
+            {
+                previewText.Text = "曜日を選んでください。";
+                dialog.IsPrimaryButtonEnabled = false;
+                return;
+            }
+            var days = TargetDays();
+            var cellCount = eligible.Count * days.Count;
+            var skipNote = skipped > 0 ? $"（担当外のため{skipped}名を自動除外）" : "";
+            previewText.Text = cellCount > 0
+                ? $"{eligible.Count}名 × {days.Count}日 = {cellCount}マスへ一括設定します{skipNote}。既存の割当は上書きされます。"
+                : $"対象がありません{skipNote}。";
+            dialog.IsPrimaryButtonEnabled = cellCount > 0;
+        }
+
+        scopeCombo.SelectionChanged += (_, _) => UpdatePreview();
+        targetCombo.SelectionChanged += (_, _) => UpdatePreview();
+        staffList.SelectionChanged += (_, _) => UpdatePreview();
+        shiftCombo.SelectionChanged += (_, _) => UpdatePreview();
+        foreach (var cb in weekdayChecks) cb.Click += (_, _) => UpdatePreview();
+        UpdatePreview();
+
+        dialog.PrimaryButtonClick += (_, _) =>
+        {
+            var k = shiftCombo.SelectedIndex;
+            if (k < 0) return;
+            var eligible = TargetStaff().Where(i => _vm.AllowedShiftsFor(i).Contains(k)).ToList();
+            var days = TargetDays();
+            if (eligible.Count == 0 || days.Count == 0) return;
+            var cells = new List<(int I, int J)>(eligible.Count * days.Count);
+            foreach (var i in eligible)
+                foreach (var j in days)
+                    cells.Add((i, j));
+            // ここでも running を再確認（ダイアログ表示中に別経路で最適化が始まる可能性はほぼ無いが、
+            // SetCell/ApplyWishes と同じ「編集は必ずガードを通す」原則に合わせ SetCells 自身のガードに委ねる）。
+            _vm.SetCells(cells, k);
+        };
+
+        await dialog.ShowAsync();
+    }
+
     private void Render()
     {
         var ui = _vm.Ui;
@@ -96,6 +263,9 @@ public sealed partial class ScheduleView : UserControl
             : ui.Message ?? "読込中…";
         UndoButton.IsEnabled = ui.CanUndo && !ui.Running;
         RedoButton.IsEnabled = ui.CanRedo && !ui.Running;
+        // [まとめて割当] SetCell と同じ二重防御——EditBlockedNow が最終防御、ここは押せるのに拒否されるだけの
+        // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
+        BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         RenderSchedule(ui);
         RenderStaffTally(ui);
         RenderDayTally(ui);
@@ -332,6 +502,9 @@ public sealed partial class ScheduleView : UserControl
     /// （「動かせる人がいない」＝この画面の手には余る＝別の対処が要ることの表明）。</summary>
     private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)
     {
+        // [2026-09-02, 配線] EditBlockedNow。ShowCellEditor と同じ理由＝ SetCell を呼ぶ入口はここも同じで、
+        // 旧実装はガード自体が無く実行中でも候補が出て SetCell が黙って弾かれるだけだった。
+        if (_vm.EditBlockedNow()) return;
         var candidates = _vm.ShortageFixCandidates(day, shift);
         var flyout = new MenuFlyout();
         foreach (var c in candidates)
@@ -384,7 +557,11 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
     private void ShowCellEditor(FrameworkElement anchor, int i, int j)
     {
-        if (_vm.Ui.Running) return; // ボタン無効化と二重の防御（Render 直後の取りこぼし対策）。
+        // [2026-09-02, 配線] EditBlockedNow（Kotlin 3.405.0 相当）。旧: Ui.Running の素通し判定のみで、
+        // ボタン無効化の取りこぼし（Render 直後のタップ等）は理由も出さず無反応に見えていた。
+        // SetCell 自身が使うのと同じ文言を Ui.Message へセットするので、StatusText（Render 側）に
+        // 「なぜ何も起きなかったか」が出る。
+        if (_vm.EditBlockedNow()) return;
         var ui = _vm.Ui;
         var allowed = _vm.AllowedShiftsFor(i);
         var flyout = new MenuFlyout();

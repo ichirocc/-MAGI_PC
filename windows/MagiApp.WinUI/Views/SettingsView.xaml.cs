@@ -89,6 +89,10 @@ public sealed partial class SettingsView : UserControl
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;
             ExportCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+            // [2026-09-02, 配線] CheckProblems（Kotlin原本 refreshCheck の直接呼び出し口。
+            // 通常はデータ編集の各経路が末尾で自動的にRefreshCheck()するため未配線でも実害は薄いが、
+            // Kotlin原本にはCSV取込後の再確認等のため編集を伴わない明示ボタンがある）。
+            CheckProblemsButton.IsEnabled = ui.Loaded && !ui.Running;
             // [2026-09-02, 配線] RestorePreviousData（フェーズ9で移植・テスト済み）はこれまで
             // 呼び出し口が無かった。Ui.PrevBackupAvailable（「データを開く」直前の1世代退避が
             // 存在するか）が false の間はボタンごと隠す＝押しても何も起きないボタンを見せない。
@@ -347,6 +351,11 @@ public sealed partial class SettingsView : UserControl
         }
     }
 
+    /// <summary>[2026-09-02, 配線] RefreshCheck（クラスKDoc参照。Kotlin原本 <c>DataActionsCard</c>の
+    /// 「問題がないか調べる」ボタン相当）。編集を伴わずに違反チェックだけをやり直したい場合
+    /// （CSV取込後の確認等）の直接呼び出し口。ファイルI/Oを伴わないのでピッカーは不要。</summary>
+    private void OnCheckProblemsClick(object sender, RoutedEventArgs e) => _vm.RefreshCheck();
+
     /// <summary>[2026-09-02, 配線] RestorePreviousData（クラスKDoc参照）。ファイルI/Oを伴わない
     /// （ディスク上の退避ファイルを読むだけ）のでピッカーは不要、ボタン1つで完結する。</summary>
     private void OnRestorePreviousDataClick(object sender, RoutedEventArgs e) => _vm.RestorePreviousData();
@@ -394,10 +403,16 @@ public sealed partial class SettingsView : UserControl
     }
 
     /// <summary>種類別CSV書出の共通ハンドラ（<see cref="OnExportCsvClick"/> と同型）。
-    /// <paramref name="content"/> が null（未読込等）なら静かに何もしない。</summary>
+    /// [2026-09-02, 配線] <paramref name="content"/> が null（未読込等）の場合、Kotlin原本
+    /// （<c>ui/MagiApp.kt</c> の各 save*Launcher コールバック）は <c>vm.notify("...がありません", "W")</c>
+    /// で明示的にユーザーへ通知する（従来の「静かに何もしない」は Kotlin から外れた挙動だった）。</summary>
     private async Task ExportCsvVariantAsync(string? content, string friendlyName, string extension, string suggestedName)
     {
-        if (content is null) return;
+        if (content is null)
+        {
+            _vm.Notify($"書き出す{friendlyName}がありません", "W");
+            return;
+        }
         try
         {
             var file = await PickSaveFileAsync(friendlyName, extension, suggestedName);
