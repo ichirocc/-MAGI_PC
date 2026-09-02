@@ -138,6 +138,19 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      （`SetStaffRange`）は1人ずつしか設定できないのに対し、こちらはグループ全員へ一括で下限/上限を
      書く（既に個人別で設定済みの職員はスキップ・保持）＋下限=上限のときは同じシフトの適切回数(apt)
      も同時に設定する——Kotlin原本コメントの言う「Excelのws1 C→ws5展開を1操作で再現」。
+   - **見直し候補メモ＋人員不足の代用候補フライアウトを配線、未配線APIの全数点検を完了（2026-09-02）**:
+     `AddReviewMemo`/`RemoveReviewMemo`（セッション内のみ・state非保存の軽量メモ）を年間マスター先頭に
+     一覧＋手動追加欄で追加、加えて勤務表タブのセル編集フライアウトに「この違反を見直し候補にする」
+     項目（違反セルのみ表示）を新設——追加口が無ければ一覧だけあっても意味が無いため両方必要だった。
+     `ShortageFixCandidates`（担当可能・希望固定でない・禁止連続にならない・抜けても穴が空かない
+     「動かせる人」だけを返す候補探索）も未配線だったため、シフト集計(日別)の人員不足(covU)セルを
+     ボタン化しタップで候補フライアウト→選択でワンタップ割当を配線（`AddTallyCell`に`onClick`を追加）。
+     `GroupKigouList`/`SkillGroupKigouList`（既存記号の一覧）は年間マスターのグループ/スキル区分
+     追加ヒント文に「使用中の記号」として追加——記号衝突を`SymbolTaken`の事後エラーでなく事前に防ぐ。
+     残り2件（`AllowedShiftsForGroup`＝群×シフトのcanDoマトリクスと数学的に同じ結果を返す・
+     `GroupMemberCount`＝既に配線済みの`Ws1GroupMemberCount`と実装が完全に同一）は精査の結果、
+     既存UIと重複するため新規UIを追加しないと判断した（コード自体は削除せず温存）。これで
+     この移植のViewModel公開APIは全数、意味のあるUI導線を持つか、その理由が明記された状態になった。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

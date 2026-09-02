@@ -273,32 +273,79 @@ public sealed partial class ScheduleView : UserControl
                 foreach (var row in ui.Schedule) if (j < row.Count && row[j] == k) count++;
                 ui.NeedViolations.TryGetValue($"{k},{j}", out var vioClass);
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
-                AddTallyCell(DayTallyGridHost, k + 1, j + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
+                // [2026-09-02, 配線] ShortageFixCandidates（フェーズ9で移植・テスト済み）はこれまで
+                // 呼び出し口が無かった。人員不足(covU)のセルだけボタン化し、タップで「動かせる人」の
+                // 候補（担当可能・希望固定でない・禁止連続にならない・抜けても穴が空かない）をフライアウトで
+                // 出し、選ぶと即 SetCell で割り当てる。
+                Action<FrameworkElement>? onClick = vioClass == "vio-covU"
+                    ? anchor => ShowShortageFixFlyout(anchor, j, k)
+                    : null;
+                AddTallyCell(DayTallyGridHost, k + 1, j + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness, onClick: onClick);
             }
         }
     }
 
-    /// <summary>集計グリッド共通のセル描画（<see cref="RenderStaffTally"/>/<see cref="RenderDayTally"/> 共用）。</summary>
-    private static void AddTallyCell(Grid host, int row, int col, string text, bool header, Brush? borderBrush = null, Thickness? thickness = null)
+    /// <summary>集計グリッド共通のセル描画（<see cref="RenderStaffTally"/>/<see cref="RenderDayTally"/> 共用）。
+    /// <paramref name="onClick"/> を渡すと素のセルの代わりにボタン化し、タップ元(<see cref="FrameworkElement"/>)を
+    /// フライアウトのアンカーとして渡す（<see cref="ShowShortageFixFlyout"/> 参照）。</summary>
+    private static void AddTallyCell(Grid host, int row, int col, string text, bool header, Brush? borderBrush = null, Thickness? thickness = null, Action<FrameworkElement>? onClick = null)
     {
         var block = new TextBlock
         {
             Text = text,
             FontSize = 12,
             FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
-            Padding = new Thickness(6, 4, 6, 4),
-            MinWidth = header && col == 0 ? 96 : 32,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
+        FrameworkElement content = block;
+        if (onClick is not null)
+        {
+            var button = new Button
+            {
+                Content = block,
+                Padding = new Thickness(6, 4, 6, 4),
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(0),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                MinWidth = 32,
+            };
+            button.Click += (sender, _) => onClick((FrameworkElement)sender);
+            content = button;
+        }
+        else
+        {
+            block.Padding = new Thickness(6, 4, 6, 4);
+            block.MinWidth = header && col == 0 ? 96 : 32;
+        }
         var border = new Border
         {
-            Child = block,
+            Child = content,
             BorderBrush = borderBrush ?? new SolidColorBrush(Colors.LightGray),
             BorderThickness = thickness ?? new Thickness(0, 0, 1, 1),
         };
         Grid.SetRow(border, row);
         Grid.SetColumn(border, col);
         host.Children.Add(border);
+    }
+
+    /// <summary>人員不足セルのタップ→動かせる候補一覧→ワンタップ割当。候補0件なら理由を出す
+    /// （「動かせる人がいない」＝この画面の手には余る＝別の対処が要ることの表明）。</summary>
+    private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)
+    {
+        var candidates = _vm.ShortageFixCandidates(day, shift);
+        var flyout = new MenuFlyout();
+        foreach (var c in candidates)
+        {
+            var item = new MenuFlyoutItem { Text = c.FromRest ? $"{c.Name}（休み中）" : c.Name };
+            var i = c.StaffIndex;
+            item.Click += (_, _) => _vm.SetCell(i, day, shift);
+            flyout.Items.Add(item);
+        }
+        if (flyout.Items.Count == 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "動かせる候補がいません（担当可能・希望が固定でない・玉突きなしの人がいない）", IsEnabled = false });
+        }
+        flyout.ShowAt(anchor);
     }
 
     /// <summary>違反クラス文字列("vio-xxx"等)から集計セルの枠色/太さを決める。null=違反なし=既定枠。</summary>
@@ -352,6 +399,20 @@ public sealed partial class ScheduleView : UserControl
         {
             flyout.Items.Add(new MenuFlyoutItem { Text = "担当可能なシフトがありません", IsEnabled = false });
         }
+
+        // [2026-09-02, 配線] AddReviewMemo（クラスKDoc参照）。違反セルのときだけ「見直し候補にする」を
+        // 出す（違反の無いセルを見直し候補にする意味が無いため）。
+        if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+            var family = vioClass.StartsWith("vio-", StringComparison.Ordinal) ? vioClass["vio-".Length..] : vioClass;
+            var label = AnalysisView.BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
+            var memoItem = new MenuFlyoutItem { Text = "この違反を見直し候補にする" };
+            memoItem.Click += (_, _) => _vm.AddReviewMemo($"{name} {j + 1}日: {label}");
+            flyout.Items.Add(memoItem);
+        }
+
         flyout.ShowAt(anchor);
     }
 }

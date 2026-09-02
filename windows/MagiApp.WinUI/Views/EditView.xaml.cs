@@ -492,6 +492,42 @@ public sealed partial class EditView : UserControl
         GroupRangeHintText.Text = "";
     }
 
+    /// <summary>
+    /// [2026-09-02, 配線] AddReviewMemo/RemoveReviewMemo（フェーズ9で移植・テスト済み、セッション内のみ・
+    /// state非保存の軽量メモ）はこれまで呼び出し口が無かった。追加口は2つ:
+    /// ①ここの手動追加欄 ②勤務表タブのセル編集フライアウト（違反セルのみ「見直し候補にする」項目、
+    /// <see cref="ScheduleView.ShowCellEditor"/> 参照）。年間マスターに置くのは Kotlin原本と同じ理由
+    /// （「見直し候補」＝土台の設定を見直すべき箇所という位置づけ）。
+    /// </summary>
+    private void RenderReviewMemos(UiState ui)
+    {
+        ReviewMemoListHost.Children.Clear();
+        var memos = ui.ReviewMemos;
+        for (var idx = 0; idx < memos.Count; idx++)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = memos[idx], FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center, MaxWidth = 380,
+            });
+            var remove = new Button { Content = "削除", FontSize = 12 };
+            var i = idx;
+            remove.Click += (_, _) => _vm.RemoveReviewMemo(i);
+            row.Children.Add(remove);
+            ReviewMemoListHost.Children.Add(row);
+        }
+    }
+
+    private void OnAddReviewMemoClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var text = ReviewMemoBox.Text.Trim();
+        if (text.Length == 0) return;
+        _vm.AddReviewMemo(text);
+        ReviewMemoBox.Text = "";
+    }
+
     /// <summary>選択中の職員の名前・所属を入力欄へ取り込む（選択が変わったときだけ）。</summary>
     private void SyncStaffFields()
     {
@@ -585,6 +621,8 @@ public sealed partial class EditView : UserControl
 
     private void RenderMaster(UiState ui, bool editable)
     {
+        RenderReviewMemos(ui);
+
         ShiftListText.Text = ui.ShiftSymbols.Count > 0
             ? string.Join(" ・ ", ui.ShiftSymbols)
             : "（未設定）";
@@ -623,8 +661,12 @@ public sealed partial class EditView : UserControl
         AddMasterGroupButton.IsEnabled = editable;
         EditMasterGroupButton.IsEnabled = editable && hasGroup;
         RemoveMasterGroupButton.IsEnabled = editable && hasGroup && _vm.Ws1CanRemoveGroup(MasterGroupCombo.SelectedIndex);
+        // [2026-09-02, 配線] GroupKigouList（フェーズ9で移植・テスト済み）はこれまで呼び出し口が
+        // 無かった。追加/改名で記号が衝突すると SymbolTaken が事後にエラーで断るため、既存の記号を
+        // 先に見せて衝突を未然に避けられるようにする。
         MasterGroupHintText.Text = editable
-            ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。"
+            ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。" +
+              $" 使用中の記号: {string.Join("・", _vm.GroupKigouList())}"
             : (ui.Loaded ? "計算の実行中はグループを変更できません。終わってからにしてください。" : "");
 
         RenderGroupRange(editable);
@@ -998,8 +1040,10 @@ public sealed partial class EditView : UserControl
         AddMasterSkillGroupButton.IsEnabled = editable;
         EditMasterSkillGroupButton.IsEnabled = editable && hasSkillGroup;
         RemoveMasterSkillGroupButton.IsEnabled = editable && hasSkillGroup;
+        // [2026-09-02, 配線] SkillGroupKigouList（フェーズ9で移植・テスト済み）も同じ理由で追加。
         MasterSkillGroupHintText.Text = editable
-            ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。"
+            ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。" +
+              (_vm.SkillGroupKigouList().Count > 0 ? $" 使用中の記号: {string.Join("・", _vm.SkillGroupKigouList())}" : "")
             : (ui.Loaded ? "計算の実行中はスキル区分を変更できません。終わってからにしてください。" : "");
     }
 

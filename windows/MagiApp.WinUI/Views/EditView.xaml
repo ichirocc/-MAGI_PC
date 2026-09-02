@@ -22,6 +22,9 @@
                      群×シフトの担当可否・適切回数マトリクス(Ws1SetGroupShift/Ws1SetGroupApt/
                      Ws1ResetGroupApt、EditView.xaml.cs の BuildGroupShiftMatrix 参照)＋
                      上限人数(2パターン目)の使用可否(Ws1SetUse2)＋
+                     グループ単位の回数の一括設定/解除(SetGroupRange/ClearGroupRange、2026-09-02追加。
+                     GroupRangeSummaryから一覧表示)＋見直し候補メモ(AddReviewMemo/RemoveReviewMemo、
+                     2026-09-02追加。追加口はここの手動欄と勤務表タブのセル編集フライアウトの2つ)＋
                      制約(ルール)10族の追加/変更/削除(AddCons*/UpdateConstraint/RemoveConstraint、
                      フィールド構成は EditView.xaml.cs の ConstraintFamilyMetas 参照)
       [2026-09-02, 配線] 上記のうちスキル区分CRUD・群×シフトマトリクス・Use2トグルは、対応する
@@ -133,7 +136,16 @@
                 <TextBlock Text="土台の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
                            TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
 
-                <TextBlock Text="シフト" FontWeight="SemiBold" />
+                <TextBlock Text="見直し候補メモ" FontWeight="SemiBold" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="勤務表タブでセルの違反枠をタップ→「見直し候補にする」で積めます（このセッション内のみ・保存されません）。" />
+                <StackPanel x:Name="ReviewMemoListHost" Spacing="2" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBox x:Name="ReviewMemoBox" Width="240" PlaceholderText="メモを直接追加" />
+                    <Button x:Name="AddReviewMemoButton" Content="追加" Click="OnAddReviewMemoClick" />
+                </StackPanel>
+
+                <TextBlock Text="シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock x:Name="ShiftListText" TextWrapping="Wrap" FontSize="13" />
 
                 <TextBlock Text="シフトの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
