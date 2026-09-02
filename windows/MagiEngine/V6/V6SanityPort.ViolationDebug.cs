@@ -62,7 +62,14 @@ public static partial class V6SanityPort
         //   パターン全セルをmark・重い族に同一セルを奪われた軽い族は位置ごと消える等）。実機ログで
         //   「違反詳細 c1(11件)」vs「UnifiedCheck c1=12」の食い違いとして混乱を生んでいたため、
         //   fires(breakdown)を併記し両者が異なるときは「件数F・場所N箇所」と明示する。表示のみ・スコア不変。
-        void Emit(Dictionary<string, List<string>> byFam, int cap, IReadOnlyDictionary<string, int>? fires = null)
+        //
+        // [2026-09-02/監査是正] Kotlin原本(V6SanityPort.kt:1178等)はこの byFam を LinkedHashMap で持ち、
+        //   走査順=「[D] 違反詳細 …」各行が並ぶ順を挿入順のまま保証する。素の Dictionary は削除の無い
+        //   使い方では現行 .NET 実装が挿入順を保つが、それは公開契約ではなく将来の BCL 変更で静かに
+        //   崩れうる（ViolationChecker.cs の cellFams/countFams/needFams と同根の問題・同じ是正）。
+        //   ここは Kotlin/C# 間のログ差分比較（CLAUDE.md のパリティ検証運用）を安定させるためだけの
+        //   変更であり、集計値・重み・スコアリングには一切影響しない。
+        void Emit(InsertionOrderDictionary<string, List<string>> byFam, int cap, IReadOnlyDictionary<string, int>? fires = null)
         {
             foreach (var (fam, items) in byFam)
             {
@@ -176,7 +183,7 @@ public static partial class V6SanityPort
         if (report.NeedViolations.Count > 0)
         {
             var cov = ScheduleUtil.Coverage(p, s);
-            var byFam = new Dictionary<string, List<string>>();
+            var byFam = new InsertionOrderDictionary<string, List<string>>();
             foreach (var (key, cls) in report.NeedViolations)
             {
                 // [診断強化②③] c41/c41s は被覆ではなく「群(スキル)×シフトの人数制約」。専用集約(1b)へ回す。
@@ -231,7 +238,7 @@ public static partial class V6SanityPort
         if (report.CountViolations.Count > 0)
         {
             var cnt = ScheduleUtil.CountMatrix(p, s);
-            var byFam = new Dictionary<string, List<string>>();
+            var byFam = new InsertionOrderDictionary<string, List<string>>();
             var pairs = report.CountFamilies.Count > 0
                 ? report.CountFamilies.SelectMany(kv => kv.Value.Select(cls => (Key: kv.Key, Cls: cls))).ToList()
                 : report.CountViolations.Select(kv => (Key: kv.Key, Cls: kv.Value)).ToList();
@@ -273,7 +280,7 @@ public static partial class V6SanityPort
         // 3) セル違反: 誰の・何日・どのシフト（violations は i,j キー）
         if (report.Violations.Count > 0)
         {
-            var byFam = new Dictionary<string, List<string>>();
+            var byFam = new InsertionOrderDictionary<string, List<string>>();
             foreach (var (key, cls) in report.Violations)
             {
                 var parts = key.Split(',');
@@ -293,7 +300,10 @@ public static partial class V6SanityPort
         //   いるかが読めなかった。checker が出した場所（cellFamilies）を職員別に数え直すだけ＝規則の
         //   再実装をしないのでドリフトしない。
         {
-            var perFam = new Dictionary<string, Dictionary<int, int>>();
+            // [2026-09-02/監査是正] 外側(fam)のみ挿入順を保証すればよい。内側(byStaff)は下で
+            //   OrderByDescending(kv.Value) により値で並び替えるため素の Dictionary のままで足りる
+            //   （Kotlin原本 V6SanityPort.kt:1278 も外側だけ LinkedHashMap・内側は HashMap<Int,Int>）。
+            var perFam = new InsertionOrderDictionary<string, Dictionary<int, int>>();
             foreach (var (key, list) in report.CellFamilies)
             {
                 var iStr = key.Split(',')[0];
@@ -323,7 +333,10 @@ public static partial class V6SanityPort
         //   常に UnifiedCheck の c1 と一致する。
         if (report.Breakdown.TryGetValue("c1", out var c1v) && c1v > 0)
         {
-            var perStaffRule = new Dictionary<int, Dictionary<string, int>>();
+            // [2026-09-02/監査是正] Kotlin原本(V6SanityPort.kt:1301)は外側(職員)・内側(ルール別件数)
+            //   の両方を LinkedHashMap で持つ（内側は下で kv.Value をそのまま join し値で並べ替えない
+            //   ため、perFam の byStaff と違い内側も順序保証が要る）。両方とも InsertionOrderDictionary へ。
+            var perStaffRule = new InsertionOrderDictionary<int, InsertionOrderDictionary<string, int>>();
             foreach (var c in p.Cons1)
             {
                 var ruleLabel = $"{Sym(c.ShiftIdx)}({c.Day1}日窓≥{c.Day2})";
@@ -338,7 +351,7 @@ public static partial class V6SanityPort
                         if (z < c.Day2)
                         {
                             if (!perStaffRule.TryGetValue(i, out var rules))
-                                perStaffRule[i] = rules = new Dictionary<string, int>();
+                                perStaffRule[i] = rules = new InsertionOrderDictionary<string, int>();
                             rules[ruleLabel] = rules.GetValueOrDefault(ruleLabel, 0) + 1;
                         }
                         j++;

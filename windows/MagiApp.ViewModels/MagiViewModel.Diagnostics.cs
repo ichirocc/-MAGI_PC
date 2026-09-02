@@ -158,52 +158,75 @@ public sealed partial class MagiViewModel
     internal static async Task<Analysis> AnalyzeParallelAsync(
         MagiState st, int[][] schedule, ViolationReport report, CancellationToken ct = default)
     {
-        var v6Task = Task.Run(() => V6PortAnalyzer.Analyze(st, schedule, report), ct);
-        var sanityTask = Task.Run(() => V6SanityPort.Build(st, schedule), ct);
+        // [3.409.26/構造化並行性の欠落を修正] Kotlin原本の coroutineScope { async {...} } は「兄弟いずれかの
+        // 失敗・呼び出し元キャンセルが確実に兄弟へ伝播する」構造化並行性を持つ（クラスKDoc L2311参照）。
+        // 直前までの実装は5本の Task.Run を素の ct だけで独立に起動しており、どれか1本が例外を投げても
+        // 他の4本には何も伝わらず、かつ全部を Task.WhenAll でまとめて待ってもいなかった——先に await した
+        // タスクが投げると、まだ await していない残りタスクは背景で走り続け、後で「それも」例外を投げると
+        // 誰にも観測されない UnobservedTaskException として静かに握り潰されていた（SaOptimizer.RunAsync の
+        // linkedCts と同じ理由・同じ直し方）。ここで ct を linked source で束ね、5本すべてへ渡す。
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var v6Task = Task.Run(() => V6PortAnalyzer.Analyze(st, schedule, report), cts.Token);
+        var sanityTask = Task.Run(() => V6SanityPort.Build(st, schedule), cts.Token);
         // 人員不足(covU)または人員過剰(covO)が残る場合のみ原因診断（どの日/シフトが「充足不可」か
         // 「未到達」か／過剰がなぜ動かせないか）を算出しログに残す。
         var coverageTask = Task.Run(() =>
         {
             var d = V6PortAnalyzer.DiagnoseCoverage(st, schedule, report);
             return d.HasShortage || d.HasSurplus ? d : null;
-        }, ct);
+        }, cts.Token);
         // [3.280.0] 禁止連続(c3n)が残る場合のみ「なぜ崩せないか」診断（CoverageDiag の c3n 版）。
         var forbiddenTask = Task.Run(() =>
         {
             if (report.Breakdown.GetValueOrDefault("c3n", 0) <= 0) return null;
             var d = V6PortAnalyzer.DiagnoseForbiddenRuns(st, schedule);
             return d.HasRuns ? d : null;
-        }, ct);
+        }, cts.Token);
         // [デバッグ] 制約違反を家族ごとに「場所＋実値(必要/現状, 回数/下限上限, 誰/何日/シフト)」で出力。
-        var vioDebugTask = Task.Run(() => V6SanityPort.BuildViolationDebug(st, schedule, report), ct);
+        var vioDebugTask = Task.Run(() => V6SanityPort.BuildViolationDebug(st, schedule, report), cts.Token);
 
-        // v6Logs は sanity/coverageDiag/forbiddenDiag に依存 → 依存先だけ先に await（依存グラフを尊重）。
-        // 内部の待ち合わせは Ui に一切触れないため ConfigureAwait(false) で構わない
-        // （PushReportAsync 側の外側の await は意図的に既定のまま＝クラスKDoc/PushReportAsync参照）。
-        var sanity = await sanityTask.ConfigureAwait(false);
-        var coverageDiag = await coverageTask.ConfigureAwait(false);
-        var forbiddenDiag = await forbiddenTask.ConfigureAwait(false);
+        try
+        {
+            // v6Logs は sanity/coverageDiag/forbiddenDiag に依存 → 依存先だけ先に await（依存グラフを尊重）。
+            // 内部の待ち合わせは Ui に一切触れないため ConfigureAwait(false) で構わない
+            // （PushReportAsync 側の外側の await は意図的に既定のまま＝クラスKDoc/PushReportAsync参照）。
+            var sanity = await sanityTask.ConfigureAwait(false);
+            var coverageDiag = await coverageTask.ConfigureAwait(false);
+            var forbiddenDiag = await forbiddenTask.ConfigureAwait(false);
 
-        var v6Logs = new List<string> { $"[I] LoadDataBit: {sanity.LoadDataBitSummary}" };
-        v6Logs.AddRange(sanity.Warns.Select(w => $"[W] SanityCheck: {w}"));
-        v6Logs.AddRange(sanity.Notes.Select(n => $"[I] V6Port: {n}"));
-        v6Logs.AddRange(sanity.DuplicateSeqConstraints.Take(4).Select(d => $"[W] DuplicateSeq: {d}"));
-        v6Logs.AddRange(sanity.Guidance.Take(12).Select(g => $"[W] 設定ミス: {g.Where} — {g.Problem} → {g.Fix}"));
-        if (coverageDiag is not null) v6Logs.AddRange(coverageDiag.LogLines());
-        if (forbiddenDiag is not null) v6Logs.AddRange(forbiddenDiag.LogLines());
+            var v6Logs = new List<string> { $"[I] LoadDataBit: {sanity.LoadDataBitSummary}" };
+            v6Logs.AddRange(sanity.Warns.Select(w => $"[W] SanityCheck: {w}"));
+            v6Logs.AddRange(sanity.Notes.Select(n => $"[I] V6Port: {n}"));
+            v6Logs.AddRange(sanity.DuplicateSeqConstraints.Take(4).Select(d => $"[W] DuplicateSeq: {d}"));
+            v6Logs.AddRange(sanity.Guidance.Take(12).Select(g => $"[W] 設定ミス: {g.Where} — {g.Problem} → {g.Fix}"));
+            if (coverageDiag is not null) v6Logs.AddRange(coverageDiag.LogLines());
+            if (forbiddenDiag is not null) v6Logs.AddRange(forbiddenDiag.LogLines());
 
-        var mappedDiag = report.Logs.Select(l => $"[{l.Level}] {l.Tag}: {l.Message}").ToList();
-        var vioDebug = await vioDebugTask.ConfigureAwait(false);
-        var v6 = await v6Task.ConfigureAwait(false);
+            var mappedDiag = report.Logs.Select(l => $"[{l.Level}] {l.Tag}: {l.Message}").ToList();
+            var vioDebug = await vioDebugTask.ConfigureAwait(false);
+            var v6 = await v6Task.ConfigureAwait(false);
 
-        return new Analysis(
-            V6: v6,
-            Sanity: sanity,
-            CoverageDiag: coverageDiag,
-            ForbiddenDiag: forbiddenDiag,
-            V6Logs: v6Logs,
-            // 出力用の全文（非圧縮）。表示は圧縮版（CompressDiagLogs）を使う。
-            RawDiagLogs: v6Logs.Concat(mappedDiag).Concat(vioDebug).ToList());
+            return new Analysis(
+                V6: v6,
+                Sanity: sanity,
+                CoverageDiag: coverageDiag,
+                ForbiddenDiag: forbiddenDiag,
+                V6Logs: v6Logs,
+                // 出力用の全文（非圧縮）。表示は圧縮版（CompressDiagLogs）を使う。
+                RawDiagLogs: v6Logs.Concat(mappedDiag).Concat(vioDebug).ToList());
+        }
+        catch (Exception)
+        {
+            // 兄弟パスへ即キャンセルを伝播（構造化並行性のfail-fast）。まだ開始していない Task.Run は
+            // ここで止まる。既に開始済みの4診断関数はCancellationTokenを見ないため走り切るが（上の
+            // パラメータKDoc参照）、その戻り値/例外も Task.WhenAll で必ず observe してから、最初の
+            // 例外を `throw;` で再送出する——WhenAll 自体が投げる例外は無視する（主因は最初の例外）。
+            cts.Cancel();
+            try { await Task.WhenAll(v6Task, sanityTask, coverageTask, forbiddenTask, vioDebugTask).ConfigureAwait(false); }
+            catch { /* 観測のみが目的。ここでの例外は握りつぶし、元の例外を主因として伝える */ }
+            throw;
+        }
     }
 
     /// <summary>

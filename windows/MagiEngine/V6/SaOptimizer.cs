@@ -134,6 +134,17 @@ public sealed class SaOptimizer
         void Report() => onProgress?.Invoke(new SaProgress(globalBest, totalIters, sw.ElapsedMilliseconds));
         Report();
 
+        // [フェーズ5a追補] Kotlin原本の coroutineScope は「一人が投げたら全員即キャンセルして join」という
+        // 構造化並行性を持つ（jobs.awaitAll() 手前で一子が例外→スコープが残り全員へキャンセルを伝播し、
+        // 全員の後始末を待ってから re-throw）。上のクラス doc comment (フェーズ5a) が統合した2つの signal
+        // は「TimeUp() が非throwで真になる経路」の話であり、それとは別に「ワーカーが本当に未処理例外を
+        // 投げた場合」の扱いが抜けていた（Task.WhenAll は素直に待つだけで、他ワーカーは自分の TimeUp() に
+        // 到達するまで気づかず走り続ける）。ここで cancellationToken を linked source で束ね、あるワーカーが
+        // 例外を投げたら即 Cancel() して他ワーカーの次回 TimeUp() 判定を早めに真にする（RunWorker は
+        // キャンセルで例外を投げず、いつもの予算切れと同じ経路で現在の best を flush して自然終了する＝
+        // 挙動は「早く終わる予算切れ」と区別が付かない、安全）。本当に投げた1タスクだけが Faulted のまま
+        // Task.WhenAll から素通しされる。
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var tasks = new Task[workerCount];
         for (int w = 0; w < workerCount; w++)
         {
@@ -156,7 +167,16 @@ public sealed class SaOptimizer
                         Report();
                     }
                 }
-                RunWorker(init, p, new JavaRandom(seed), sw, Flush, cancellationToken);
+                try
+                {
+                    RunWorker(init, p, new JavaRandom(seed), sw, Flush, linkedCts.Token);
+                }
+                catch (Exception)
+                {
+                    // 本物の未処理例外＝他ワーカーを道連れにせず、次回 TimeUp() で速やかに切り上げさせる。
+                    linkedCts.Cancel();
+                    throw;
+                }
             });
         }
         await Task.WhenAll(tasks).ConfigureAwait(false);

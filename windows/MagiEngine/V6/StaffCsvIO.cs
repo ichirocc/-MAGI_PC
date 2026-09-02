@@ -116,8 +116,13 @@ public static class StaffCsvIO
         //   既存＝現状維持」で、**空欄と誤記が見分けられない**まま黙って落ちていた。所属グループは担当できる
         //   シフトを決めるので、誤記が通ると「なぜこの人がこの勤務に入るのか」が説明できない盤面になる。
         //   3.410.0 の勤務表CSV未知記号と同じ形で知らせる。
-        var unknownG = new Dictionary<string, int>();
-        var unknownS = new Dictionary<string, int>();
+        // [監査再検証で判明した再発] 呼出側(MagiViewModel.Csv.cs)は件数ソートなしで先頭N件を
+        //   そのまま見せる（Kotlin原本 <c>badG.entries.take(3)</c> と同じ「最初に出会った異なる
+        //   記号から順にN件」）。素の Dictionary は列挙順を契約保証しない（現CoreCLR実装が
+        //   挿入順を保つのは実装詳細）ため、LinkedHashMap 相当の順序保証を明示的に持つ
+        //   CsvUtil.OrderedCounter を使う（ScheduleCsvBridge.Parse の未知記号集計と同型の穴）。
+        var unknownG = new CsvUtil.OrderedCounter();
+        var unknownS = new CsvUtil.OrderedCounter();
         // [3.314.0] 実ヘッダ「氏名」の一致で判定する。この経路は未知名を**新規追加**するため、旧実装は
         //   「ヘッダ文字列を職員として登録しない」保守のために既知名一致のときだけ先頭行を本体へ入れて
         //   おり、**先頭が新規職員のヘッダ無CSVはその1件を黙って捨てて**いた。厳密なヘッダ判定なら
@@ -132,8 +137,8 @@ public static class StaffCsvIO
             var sRaw = Cell(r, 2);
             var hasGi = gByK.TryGetValue(gRaw, out var gi);
             var hasSi = skByK.TryGetValue(sRaw, out var si);
-            if (!hasGi && gRaw.Length != 0) unknownG[gRaw] = (unknownG.TryGetValue(gRaw, out var gc) ? gc : 0) + 1;
-            if (!hasSi && sRaw.Length != 0) unknownS[sRaw] = (unknownS.TryGetValue(sRaw, out var sc) ? sc : 0) + 1;
+            if (!hasGi && gRaw.Length != 0) unknownG.Increment(gRaw);
+            if (!hasSi && sRaw.Length != 0) unknownS.Increment(sRaw);
             if (nameToI.TryGetValue(key, out var existing))
             {
                 var cur = newStaff[existing];

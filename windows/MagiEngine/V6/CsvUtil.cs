@@ -155,4 +155,45 @@ internal static class CsvUtil
         var head = (rows[0].Count > 0 ? rows[0][0] : "").Trim();
         return head == headerFirstCell ? rows.Skip(1).ToList() : rows;
     }
+
+    /// <summary>
+    /// [監査再検証で判明した再発/3.410.0・3.413.0系の再修正] 「最初に出現した順」を保ったまま件数を
+    /// 数える集計器。Kotlin原本（<c>ScheduleCsvBridge.kt</c> 376/622-623行）は未知記号の集計に
+    /// <c>LinkedHashMap</c>&lt;String, Int&gt; を使う。<c>LinkedHashMap</c> は挿入順で列挙するため、
+    /// ①件数で降順ソートした際の同数タイブレークは「ファイル中で最初に見つかった記号」順になり
+    /// （<c>sortedByDescending</c> は安定ソート）、②単純に先頭N件を取る呼出（<c>entries.take(N)</c>）は
+    /// そのまま「最初に出会った異なる記号から順にN件」を返す。C#の <c>Dictionary&lt;TKey,TValue&gt;</c>
+    /// はBCLとして列挙順を契約保証しない（現在のCoreCLR実装はキー削除が無ければ挿入順を保つが、これは
+    /// 実装詳細であり将来のランタイム変更やリハッシュで壊れ得る——<see cref="FirstWinsMap"/>とは違い
+    /// ここは「同点の見せ方」というUI/ログ表示に直結するため、契約に依らず明示的に順序を保証する）。
+    /// 実装は List(挿入順)+Dictionary(O(1)検索) の組で、<c>FlatRosterCsvImport</c> の
+    /// symList/symSeen と同じ手法。<see cref="IReadOnlyDictionary{TKey,TValue}"/> を実装するため、
+    /// 既存の <c>Dictionary&lt;string,int&gt;</c> を受け渡していた箇所（戻り値の型・呼出側の
+    /// Count/Take/Values.Sum()/インデクサ）へそのまま差し込める。
+    /// </summary>
+    internal sealed class OrderedCounter : IReadOnlyDictionary<string, int>
+    {
+        private readonly List<string> _order = new();
+        private readonly Dictionary<string, int> _counts = new();
+
+        internal void Increment(string key)
+        {
+            if (_counts.TryGetValue(key, out var cur)) _counts[key] = cur + 1;
+            else { _counts[key] = 1; _order.Add(key); }
+        }
+
+        public int Count => _order.Count;
+        public int this[string key] => _counts[key];
+        public IEnumerable<string> Keys => _order;
+        public IEnumerable<int> Values => _order.Select(k => _counts[k]);
+        public bool ContainsKey(string key) => _counts.ContainsKey(key);
+        public bool TryGetValue(string key, out int value) => _counts.TryGetValue(key, out value);
+
+        public IEnumerator<KeyValuePair<string, int>> GetEnumerator()
+        {
+            foreach (var k in _order) yield return new KeyValuePair<string, int>(k, _counts[k]);
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 }

@@ -119,13 +119,14 @@ public static class UnifiedViolationChecker
         // [判読性/レビュー指摘 移植元] 重なった全クラスを蓄積し、末尾で重み降順に整列する
         // （安定ソート＝同重みはマーク順維持 → 先頭は「最重1クラス」と常に一致）。
         //
-        // これらは Dictionary（挿入順保持は .NET の公開契約ではないが、削除を一切しない使い方の下では
-        // 現行実装が確実に保つ挙動）で持つ。MirrorKeys.Weights の合計順（Double のビット結果を左右する）
-        // とは異なり、ここでの列挙順は表示の一覧順にしか影響せず、正しさ（hard/soft/breakdown/
-        // weightedScore）には影響しない。
-        var cellFams = new Dictionary<string, List<string>>();
-        var countFams = new Dictionary<string, List<string>>();
-        var needFams = new Dictionary<string, List<string>>();
+        // [2026-09-02/監査是正 移植元] ここでの列挙順は表示の一覧順だけでなく、下流の貪欲修復パス
+        // （Range/Apt/C3Run/C3n/C3mn）が候補を処理する順序＝keep-best が収束する具体的な局所最適にも
+        // 効く（正しさそのもの＝hard/soft/breakdown/weightedScore には影響しない）。素の Dictionary は
+        // 削除を一切しない使い方の下では現行 .NET 実装が挿入順を保つが、それは公開契約ではなく将来の
+        // BCL 変更で静かに崩れうるため、契約として挿入順を保証する InsertionOrderDictionary で持つ。
+        var cellFams = new InsertionOrderDictionary<string, List<string>>();
+        var countFams = new InsertionOrderDictionary<string, List<string>>();
+        var needFams = new InsertionOrderDictionary<string, List<string>>();
 
         void Mark(int i, int j, string family)
         {
@@ -468,12 +469,14 @@ public static class UnifiedViolationChecker
     /// [Set化 移植元] 重なった全クラスを重み降順に整列した族マップと、その先頭（最重1クラス）だけの
     /// 単一クラスマップを同時に作る。両方が同じ元データから同時に生成されるため、
     /// 「先頭は単一クラスマップの値と常に一致する」不変条件が構造的に保たれる。
+    /// [2026-09-02/監査是正 移植元] 戻り値の2マップも <see cref="InsertionOrderDictionary{TKey,TValue}"/>
+    /// で持つ（<c>fams</c> の挿入順＝下流修復パスの処理順をここでも保つ理由は呼出元コメント参照）。
     /// </summary>
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildFamilyMaps(
-        Dictionary<string, List<string>> fams, out IReadOnlyDictionary<string, string> singleFamily)
+        IReadOnlyDictionary<string, List<string>> fams, out IReadOnlyDictionary<string, string> singleFamily)
     {
-        var families = new Dictionary<string, IReadOnlyList<string>>(fams.Count);
-        var single = new Dictionary<string, string>(fams.Count);
+        var families = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
+        var single = new InsertionOrderDictionary<string, string>();
         foreach (var (ck, cv) in fams)
         {
             var sorted = cv.Count <= 1 ? cv : cv.OrderByDescending(x => ClassWeight.TryGetValue(x, out var w) ? w : 0.0).ToList();

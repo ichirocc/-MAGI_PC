@@ -63,7 +63,11 @@ public static class ScheduleCsvBridge
         var kigouToK = CsvUtil.FirstWinsMap(state.Shifts.Count, i => state.Shifts[i].Kigou.Trim());
         var matched = 0;
         // [3.410.0/I-01] 未知記号を数える（旧: 黙って読み飛ばしていた）。
-        var unknown = new Dictionary<string, int>();
+        // [監査再検証で判明した再発] 下の OrderByDescending は安定ソートだが、素の Dictionary は
+        //   列挙順を契約保証しない（現CoreCLR実装が挿入順を保つのは実装詳細）ため、件数が同点の
+        //   未知記号の並び順（=どれを先に見せるか）が「ファイル中の初出順」というKotlin原本
+        //   （LinkedHashMap）の契約を満たせなくなる。CsvUtil.OrderedCounter で明示的に保証する。
+        var unknown = new CsvUtil.OrderedCounter();
         var rr = 1;
         while (rr < rows.Count)
         {
@@ -83,7 +87,7 @@ public static class ScheduleCsvBridge
                     {
                         var sym = r[j + 1].Trim();
                         if (kigouToK.TryGetValue(sym, out var k)) schedule[staffIndex][j] = k;
-                        else if (sym.Length != 0) unknown[sym] = (unknown.TryGetValue(sym, out var cur) ? cur : 0) + 1;
+                        else if (sym.Length != 0) unknown.Increment(sym);
                         j++;
                     }
                 }
