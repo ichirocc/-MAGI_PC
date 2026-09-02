@@ -151,6 +151,35 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      `GroupMemberCount`＝既に配線済みの`Ws1GroupMemberCount`と実装が完全に同一）は精査の結果、
      既存UIと重複するため新規UIを追加しないと判断した（コード自体は削除せず温存）。これで
      この移植のViewModel公開APIは全数、意味のあるUI導線を持つか、その理由が明記された状態になった。
+   - **[訂正] 上記「全数点検を完了」は誤りだった＋未配線API9件を追加配線（2026-09-02）**:
+     公開メソッド名を再抽出してWinUI呼び出し箇所と再度突き合わせたところ、`SetWishesForDays`/
+     `ClearWishesForDays`（希望シフトのカレンダー複数選択）・`ShiftMonth`（前月/次月ボタン）・
+     `Ws1ResizeDays`（期間日数の直接変更）・`RefreshCheck`（「問題がないか調べる」単独ボタン）・
+     `EditBlockedNow`（セル編集ガードの無言Running判定を置換）・`ClearMessage`（シェル共通の
+     `InfoBar`通知バーを新設）・`Notify`（CSV/ログ書出しで対象が無い時の警告）・`ShiftKigouList`
+     （制約編集のシフト記号欄を自由入力→選択式コンボボックスへ）・`AptBalances`（適切回数マトリクス
+     直下への入力その場警告）・`SetCells`（「まとめて割当」ダイアログ、Kotlin原本の
+     `AssignBulkSheet`と同じフィルタ式選択＝ドラッグ不可制約に整合）が未配線のまま残っていた。
+     いずれもKotlin原本のUIと突き合わせ、実在するギャップのみ対応（`SetMonth`/`SetShiftNeed`は
+     内部ヘルパーまたは既存導線で充足、`SetNativeAccel`/`SetNativeParity`はこの移植にネイティブ層が
+     存在しないため意図的に無効のまま維持、`EnvironmentLine`は`ExportLogs`経由で既に使用済み、と
+     判断した理由を明記）。あわせて`MagiTheme.xaml`の余白/角丸/タイポグラフィスケール（Kotlin原本の
+     `MagiTokens.kt`/`MainActivity.kt`のスケールを1:1移植）も追加——**トークン定義のみで、各Viewの
+     ハードコード値(Thickness/CornerRadius/FontSizeが計60箇所超)からの置換は未着手のまま残っている**
+     （次の全数点検で拾うべき既知の残課題として明記）。実装の教訓: 「全数点検を完了」と明言した
+     直後でも、コードは変わり続けるため定期的な再走査が要る＝一度の宣言を恒久の事実として扱わない。
+   - **並行処理・決定性バグの監査（2026-08-28実施分）を再検証＋横断スイープ（2026-09-02）**:
+     過去の監査で見つかった3件（`V6NativeOptimizer.Portfolio.cs`のCancellationToken未観測は監査当日中に
+     既に修正済みと確認・対応不要／`SaOptimizer.Run`の`Task.WhenAll`が兄弟ワーカーの障害時に
+     フェイルファストしない／`ViolationChecker.cs`の`CountViolations`等6種のマップがKotlin原本の
+     `LinkedHashMap`と異なりC#の`Dictionary`で列挙順が契約上保証されない）を最新コードで再検証し、
+     後の2件が依然として存在することを確認して修正（前者は`CancellationTokenSource`の連結で兄弟を
+     フェイルファスト化、後者は新設の`InsertionOrderDictionary<TKey,TValue>`で挿入順を保証）。
+     同種のバグを他領域へも横断的に探索し、`MagiViewModel.Diagnostics.cs`の`AnalyzeParallelAsync`
+     （5つの診断`Task.Run`が未観測例外を起こしうる）と、CSV取込・違反詳細ログの「未知の記号/職員別
+     集計」が同型の列挙順問題を抱えていたことを新規発見・修正。いずれもkeep-best判定が最終採否を
+     担うため無効な解には至らない（`IsBetter`ゲート）＝並行処理のフェイルファスト化と列挙順の
+     決定性のみの改善で、スコアリング・重みロジックは不変。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの
