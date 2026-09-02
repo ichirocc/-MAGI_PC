@@ -45,6 +45,8 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _masterSkillGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _staffSkillItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _staffRangeShiftItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _groupRangeGroupItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _groupRangeShiftItems = System.Array.Empty<string>();
 
     /// <summary>群×シフトの担当可否・適切回数マトリクス（Ws1SetGroupShift/Ws1SetGroupApt）が
     /// 直近に組み立てた行/列の記号。群数・シフト数・記号が変わったときだけ<see cref="BuildGroupShiftMatrix"/>
@@ -439,6 +441,57 @@ public sealed partial class EditView : UserControl
         StaffRangeHintText.Text = "";
     }
 
+    /// <summary>
+    /// [2026-09-02, 配線] GroupRangeSummary/SetGroupRange/ClearGroupRange（フェーズ9で移植・
+    /// テスト済み）はこれまで呼び出し口が無かった。個人別(<see cref="RenderStaffRange"/>)は
+    /// 1人ずつしか設定できないのに対し、こちらはグループ全員へ一括で下限/上限を書く
+    /// （既に個人別で設定済みの職員はスキップ・保持）＋下限=上限のときは同じシフトの適切回数(apt)も
+    /// 同時に設定する——Kotlin原本コメントの言う「Excelのws1 C→ws5展開を1操作で再現」。
+    /// </summary>
+    private void RenderGroupRange(bool editable)
+    {
+        SyncItems(GroupRangeGroupCombo, _vm.GroupLabels(), ref _groupRangeGroupItems);
+        SyncItems(GroupRangeShiftCombo, _vm.Ui.ShiftSymbols, ref _groupRangeShiftItems);
+        SetGroupRangeButton.IsEnabled = editable && GroupRangeGroupCombo.SelectedIndex >= 0;
+
+        GroupRangeListHost.Children.Clear();
+        var rows = _vm.GroupRangeSummary();
+        foreach (var v in rows.Take(MaxOverrideRows))
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{v.GroupName} {v.Kigou}: 下限{DashIfBlank(v.Lo)}〜上限{DashIfBlank(v.Hi)}（{v.Shared}/{v.Members}名が共有）",
+                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var clear = new Button { Content = "解除", FontSize = 12, IsEnabled = editable };
+            var g = v.G; var k = v.K; var lo = v.Lo; var hi = v.Hi;
+            clear.Click += (_, _) => _vm.ClearGroupRange(g, k, lo, hi);
+            row.Children.Add(clear);
+            GroupRangeListHost.Children.Add(row);
+        }
+        if (rows.Count > MaxOverrideRows)
+        {
+            GroupRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+        }
+    }
+
+    private void OnSetGroupRangeClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var g = GroupRangeGroupCombo.SelectedIndex;
+        var k = GroupRangeShiftCombo.SelectedIndex;
+        if (g < 0) { GroupRangeHintText.Text = "対象のグループを選んでください。"; return; }
+        if (k < 0) { GroupRangeHintText.Text = "シフトを選んでください。"; return; }
+        if (GroupRangeLoBox.Text.Trim().Length == 0 && GroupRangeHiBox.Text.Trim().Length == 0)
+        {
+            GroupRangeHintText.Text = "下限・上限のどちらかは入れてください。";
+            return;
+        }
+        _vm.SetGroupRange(g, k, GroupRangeLoBox.Text.Trim(), GroupRangeHiBox.Text.Trim());
+        GroupRangeHintText.Text = "";
+    }
+
     /// <summary>選択中の職員の名前・所属を入力欄へ取り込む（選択が変わったときだけ）。</summary>
     private void SyncStaffFields()
     {
@@ -573,6 +626,8 @@ public sealed partial class EditView : UserControl
         MasterGroupHintText.Text = editable
             ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。"
             : (ui.Loaded ? "計算の実行中はグループを変更できません。終わってからにしてください。" : "");
+
+        RenderGroupRange(editable);
 
         // ルールの件数は族ごとに出す（GetSetupCounts().Constraints はスキル群の2族を含まない合計のため、
         // 表示は ConstraintFamilies/SkillConstraintFamilies の実 Rows 数を正とする）。

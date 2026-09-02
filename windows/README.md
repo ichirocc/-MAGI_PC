@@ -133,6 +133,11 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      設定する手段がアプリのどこにも無かった（`RelaxStaffRangePin`の±1調整は既存値の微調整のみで
      新規設定はできない）。職員管理の「対象の職員」選択を共有し、`StaffCountRules`（個人別レンジと
      適切回数(apt)の実効目標を統合したビュー）から一覧表示＋シフト選択＋下限/上限入力で設定できる。
+   - **グループ単位の回数（一括設定）を年間マスターへ配線（2026-09-02）**: `GroupRangeSummary`/
+     `SetGroupRange`/`ClearGroupRange`（フェーズ9で移植・テスト済み）も未配線だった。個人別
+     （`SetStaffRange`）は1人ずつしか設定できないのに対し、こちらはグループ全員へ一括で下限/上限を
+     書く（既に個人別で設定済みの職員はスキップ・保持）＋下限=上限のときは同じシフトの適切回数(apt)
+     も同時に設定する——Kotlin原本コメントの言う「Excelのws1 C→ws5展開を1操作で再現」。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

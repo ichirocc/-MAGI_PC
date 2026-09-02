@@ -172,6 +172,19 @@
                 </StackPanel>
                 <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
 
+                <TextBlock Text="グループ単位の回数（一括設定）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限ならそのシフトの適切回数(apt)も同時に設定されます。" />
+                <StackPanel x:Name="GroupRangeListHost" Spacing="2" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="GroupRangeGroupCombo" Width="120" PlaceholderText="グループ" />
+                    <ComboBox x:Name="GroupRangeShiftCombo" Width="100" PlaceholderText="シフト" />
+                    <TextBox x:Name="GroupRangeLoBox" Width="56" PlaceholderText="下限" />
+                    <TextBox x:Name="GroupRangeHiBox" Width="56" PlaceholderText="上限" />
+                    <Button x:Name="SetGroupRangeButton" Content="一括設定" Click="OnSetGroupRangeClick" />
+                </StackPanel>
+                <TextBlock x:Name="GroupRangeHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
                 <TextBlock Text="スキル区分" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock x:Name="SkillGroupListText" TextWrapping="Wrap" FontSize="13" />
 
