@@ -176,6 +176,23 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      理由コメントを追加**——数値を無理にトークンへ寄せてグリッドの見た目を変えることより、
      デザインシステムに素直に繋がる箇所だけ繋ぐことを優先した。FontSize（31箇所）は`Style`
      オブジェクト全体の割当が絡み判断がより難しいため今回は対象外のまま（次の残課題）。
+   - **MagiThemeのTypography(FontSize)トークンを各Viewへ適用（2026-09-02）**: 上記の残課題を消化。
+     全View（EditView/ScheduleView/SettingsView/HomeView/AnalysisView/MainWindow.xaml.cs、計39箇所）の
+     `FontSize`をMagiTheme.xamlのタイポスケール（`MagiBodySmallTextStyle`等11種、最小14pt〜）と
+     突き合わせた結果、**実際の値は10/11/12/13/14の5種類しかなく、厳密一致するのはMainWindow.xaml.cs
+     の未使用タブ向けプレースホルダ1箇所（`FontSize=14`・FontWeight未指定→`MagiBodySmallTextStyle`
+     =14/Normal と完全一致）だけ**だった。この1箇所のみ`Style = (Style)Application.Current
+     .Resources["MagiBodySmallTextStyle"]`へ置換し（実質未到達コードのため影響ゼロ）、残り38箇所は
+     2種類の理由で意図的に据え置いた（各ファイルの最初の該当箇所に理由コメントを追加）:
+     - **型として不可能**（Button/TextBoxのFontSizeが約15箇所）: トークンは`TargetType="TextBlock"`の
+       `Style`のため、`Button.Style`/`TextBox.Style`へ代入すると型不一致で実行時例外になる。
+     - **値が一致しない**（TextBlockのFontSize=10/11/12/13が約23箇所）: このアプリの一覧行・
+       密グリッド・ダイアログ本文はスケール最小値(14)より小さい値を使っており、Thickness/
+       CornerRadiusパスと同じ理由（無理に14へ引き上げると一覧行が全画面で目に見えて大きくなる）で
+       据え置いた。**タイポグラフィスケールは元々「読み物用の大きい文字」向けで、この移植の密な
+       業務UIとは前提が異なる**ことが今回の調査で判明した（Thickness/CornerRadiusより一致率が低い）。
+     これで「デザイントークン全面移植」の残課題（Thickness/CornerRadius/FontSize）はすべて着手・
+     判断済み。据え置いた箇所は全てその場に理由コメントがあり、無言のハードコードは残っていない。
    - **並行処理・決定性バグの監査（2026-08-28実施分）を再検証＋横断スイープ（2026-09-02）**:
      過去の監査で見つかった3件（`V6NativeOptimizer.Portfolio.cs`のCancellationToken未観測は監査当日中に
      既に修正済みと確認・対応不要／`SaOptimizer.Run`の`Task.WhenAll`が兄弟ワーカーの障害時に

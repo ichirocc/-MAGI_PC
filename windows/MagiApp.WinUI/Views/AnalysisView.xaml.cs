@@ -318,6 +318,11 @@ public sealed partial class AnalysisView : UserControl
         BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
 
     /// <summary>本文1行。節の中身はすべてこの形（13px・折り返しあり）で作る。</summary>
+    /// <remarks>
+    /// [トークン非適用] FontSize=13はMagiThemeタイポスケール(14始まり)より小さい一覧行用の
+    /// 調整値で厳密一致しない。このファイルのButton.FontSize(12、行186/227/264/293)も、
+    /// Style(TargetType=TextBlock)を型的に受け付けられないためトークン化の対象外。
+    /// </remarks>
     private static TextBlock BodyText(string text, bool semiBold = false, bool dim = false) => new()
     {
         Text = text,

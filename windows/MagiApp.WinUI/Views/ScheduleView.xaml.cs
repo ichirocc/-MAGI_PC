@@ -155,6 +155,8 @@ public sealed partial class ScheduleView : UserControl
             ItemsSource = ui.ShiftSymbols.ToList(), HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
+        // [トークン非適用, ファイル共通] このファイルのFontSize=12はMagiThemeタイポスケール(14始まり)
+        // より小さい密グリッド/ダイアログ用の調整値で、どのStyleとも厳密一致しない（据え置き）。
         var previewText = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.85 };
 
         var panel = new StackPanel { Spacing = 8, Width = 340 };

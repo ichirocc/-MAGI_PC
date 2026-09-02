@@ -224,6 +224,10 @@ public sealed partial class EditView : UserControl
         var rows = _vm.WishOverrides();
         ApplyWishesButton.IsEnabled = editable && rows.Count > 0;
         ClearAllWishesButton.IsEnabled = editable && rows.Count > 0;
+        // [トークン非適用, ファイル共通] このファイルのFontSize値(10/11/12/13)はMagiThemeタイポ
+        // スケール(14始まり=BodySmall)より小さい一覧行/密グリッド用の意図的な調整値で、どれとも
+        // 厳密一致しない。Button.FontSizeはStyle(TargetType=TextBlock)を型的に受け付けられない
+        // （Button.Styleの対象型が違う）ため、そもそもトークン化の対象外。
         foreach (var v in rows.Take(MaxOverrideRows))
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };

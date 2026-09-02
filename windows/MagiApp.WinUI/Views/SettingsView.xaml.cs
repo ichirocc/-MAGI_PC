@@ -192,6 +192,8 @@ public sealed partial class SettingsView : UserControl
             BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        // [トークン非適用] FontSize=13はMagiThemeタイポスケール(14始まり)より小さい設定行用の
+        // 調整値で、どのStyleとも厳密一致しない（据え置き）。
         var labelBlock = new TextBlock
         {
             Text = label,

@@ -60,6 +60,9 @@ public sealed partial class HomeView : UserControl
         }
         AlternativesPanel.Visibility = Visibility.Visible;
         AlternativesListHost.Children.Clear();
+        // [トークン非適用, ファイル共通] FontSize=13(TextBlock)/12(Button)はMagiThemeタイポ
+        // スケール(14始まり)より小さい一覧行用の調整値で厳密一致せず、Button.FontSizeはStyle
+        // (TargetType=TextBlock)を型的に受け付けられないため、いずれもトークン化の対象外。
         for (var i = 0; i < ui.Alternatives.Count; i++)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };

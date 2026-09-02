@@ -204,7 +204,7 @@ public sealed partial class MainWindow : Window
     {
         Text = $"{label}タブは準備中です。",
         Margin = new Thickness(16),
-        FontSize = 14,
+        Style = (Style)Application.Current.Resources["MagiBodySmallTextStyle"],
         Opacity = 0.7,
     };
 
