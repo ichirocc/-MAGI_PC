@@ -139,12 +139,18 @@ public sealed partial class ScheduleView : UserControl
         void AddDataCell(int row, int col, int i, int j, int k)
         {
             var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+            // [2026-09-02, 配線] ui.ShiftColorHex/ShiftTextHex は常に解決済みの色を持つ（既定パレット
+            // または SettingsView の色設定で保存したもの）。従来はここで一切読んでおらず、色設定を
+            // 変更しても勤務表グリッドの見た目が変わらない「論理的な箱」だった。
+            var bg = k >= 0 && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.Transparent) : Colors.Transparent;
+            var fg = k >= 0 && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
             var button = new Button
             {
-                Content = new TextBlock { Text = sym, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center },
+                Content = new TextBlock { Text = sym, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(fg) },
                 Padding = new Thickness(6, 4, 6, 4),
                 MinWidth = 32,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
+                Background = new SolidColorBrush(bg),
                 BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(0),
                 IsEnabled = !ui.Running,
@@ -171,8 +177,7 @@ public sealed partial class ScheduleView : UserControl
             var thickness = new Thickness(0, 0, 1, 1);
             if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
             {
-                var family = vioClass.StartsWith("vio-") ? vioClass["vio-".Length..] : vioClass;
-                borderBrush = new SolidColorBrush(MirrorKeys.Hard.Contains(family) ? Colors.Crimson : Colors.DarkOrange);
+                borderBrush = ResolveVioBrush(ui, vioClass);
                 thickness = new Thickness(2);
             }
             // [違反箇所へのジャンプ] 注目セルは一時的に強調色の太枠へ差し替える（FocusCell 参照）。
@@ -233,7 +238,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 var count = ui.Schedule[i].Count(v => v == k);
                 ui.CountViolations.TryGetValue($"{i},{k}", out var vioClass);
-                var brush = VioBorderBrush(vioClass, out var thickness);
+                var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
             }
         }
@@ -266,7 +271,7 @@ public sealed partial class ScheduleView : UserControl
                 var count = 0;
                 foreach (var row in ui.Schedule) if (j < row.Count && row[j] == k) count++;
                 ui.NeedViolations.TryGetValue($"{k},{j}", out var vioClass);
-                var brush = VioBorderBrush(vioClass, out var thickness);
+                var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 AddTallyCell(DayTallyGridHost, k + 1, j + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
             }
         }
@@ -296,13 +301,37 @@ public sealed partial class ScheduleView : UserControl
     }
 
     /// <summary>違反クラス文字列("vio-xxx"等)から集計セルの枠色/太さを決める。null=違反なし=既定枠。</summary>
-    private static Brush? VioBorderBrush(string? vioClass, out Thickness? thickness)
+    private static Brush? VioBorderBrush(UiState ui, string? vioClass, out Thickness? thickness)
     {
         if (vioClass is null) { thickness = null; return null; }
-        var family = vioClass.StartsWith("vio-", StringComparison.Ordinal) ? vioClass["vio-".Length..] : vioClass;
         thickness = new Thickness(2);
-        return new SolidColorBrush(MirrorKeys.Hard.Contains(family) ? Colors.Crimson : Colors.DarkOrange);
+        return ResolveVioBrush(ui, vioClass);
     }
+
+    /// <summary>
+    /// [2026-09-02, 配線] 違反クラス("vio-xxx")→表示色。Kotlin原本 <c>resolvedVioColor(ui,cls,hard,soft)</c>
+    /// の逐語移植（族別 <see cref="UiState.ViolationFamilyColorHex"/> が最優先、無ければ重大度の基準色
+    /// <see cref="UiState.ViolationColorHex"/>/<see cref="UiState.ViolationSoftColorHex"/>、それも
+    /// 未設定なら既定色）。<see cref="ScheduleView"/>（メイングリッド）と TallyCard の両方が共有する
+    /// 唯一の解決元——従来はここが無く、SettingsView 側で色を変更しても勤務表の見た目が変わらない
+    /// 「配線されていない ViewModel API」だった。
+    /// </summary>
+    private static Brush ResolveVioBrush(UiState ui, string vioClassRaw)
+    {
+        var stripped = vioClassRaw.StartsWith("vio-", StringComparison.Ordinal) ? vioClassRaw["vio-".Length..] : vioClassRaw;
+        var family = stripped is "aptLow" or "aptHigh" ? "apt" : stripped;
+        var hard = MirrorKeys.Hard.Contains(family);
+        var fallback = hard ? DefaultHardVioColor : DefaultSoftVioColor;
+        if (ui.ViolationFamilyColorHex.TryGetValue(family, out var famHex) && !string.IsNullOrWhiteSpace(famHex))
+            return new SolidColorBrush(ParseHexColor(famHex, fallback));
+        var baseHex = hard ? ui.ViolationColorHex : ui.ViolationSoftColorHex;
+        return new SolidColorBrush(ParseHexColor(baseHex, fallback));
+    }
+
+    private static readonly Color DefaultHardVioColor = ColorHex.Parse(ColorHex.DefaultHardVioHex, Colors.Crimson);
+    private static readonly Color DefaultSoftVioColor = ColorHex.Parse(ColorHex.DefaultSoftVioHex, Colors.DarkOrange);
+
+    private static Color ParseHexColor(string? hex, Color fallback) => ColorHex.Parse(hex, fallback);
 
     /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
     private void ShowCellEditor(FrameworkElement anchor, int i, int j)

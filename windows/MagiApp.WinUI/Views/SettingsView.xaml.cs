@@ -5,11 +5,14 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Media;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.UI;
 using WinRT.Interop;
 
 namespace MagiApp.WinUI.Views;
@@ -78,11 +81,145 @@ public sealed partial class SettingsView : UserControl
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;
             ExportCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+
+            RenderShiftColors(ui);
+            RenderViolationColors(ui);
         }
         finally
         {
             _syncingFromModel = false;
         }
+    }
+
+    // ===== 表示色（クラスKDoc参照。RenderのXAML静的化が難しい可変長リスト2種） =====
+
+    /// <summary>シフト記号の表示色。行=シフト1件、既定パレット色との差＝<c>Custom</c> が「既定に戻す」の有効/無効。</summary>
+    private void RenderShiftColors(UiState ui)
+    {
+        ShiftColorList.Children.Clear();
+        if (!ui.Loaded) return;
+        foreach (var sc in _vm.ShiftColorList())
+        {
+            var kigou = sc.Kigou;
+            ShiftColorList.Children.Add(BuildColorRow(
+                $"{sc.Name}（{sc.Kigou}）", sc.Hex, sc.Custom,
+                hex => _vm.SetShiftColor(kigou, hex),
+                () => _vm.ResetShiftColor(kigou)));
+        }
+    }
+
+    /// <summary>違反の基準色（必須/要調整の2行）＋族別の個別色（19族、未設定は基準色へフォールバック）。</summary>
+    private void RenderViolationColors(UiState ui)
+    {
+        ViolationBaseColorList.Children.Clear();
+        ViolationFamilyColorList.Children.Clear();
+        if (!ui.Loaded) return;
+
+        var hardResolved = string.IsNullOrWhiteSpace(ui.ViolationColorHex) ? ColorHex.DefaultHardVioHex : ui.ViolationColorHex;
+        var softResolved = string.IsNullOrWhiteSpace(ui.ViolationSoftColorHex) ? ColorHex.DefaultSoftVioHex : ui.ViolationSoftColorHex;
+
+        ViolationBaseColorList.Children.Add(BuildColorRow(
+            "必須違反の枠色", hardResolved, !string.IsNullOrWhiteSpace(ui.ViolationColorHex),
+            hex => _vm.SetViolationColor(hex), () => _vm.ResetViolationColor()));
+        ViolationBaseColorList.Children.Add(BuildColorRow(
+            "要調整（ソフト違反）の枠色", softResolved, !string.IsNullOrWhiteSpace(ui.ViolationSoftColorHex),
+            hex => _vm.SetViolationSoftColor(hex), () => _vm.ResetViolationSoftColor()));
+
+        // [MirrorKeys.All=19族。ScheduleView.ResolveVioBrush と同じ優先順位（族別→基準色→既定色）で
+        //  解決した色をそのままスウォッチに出す＝設定画面とグリッドの見え方が食い違わない。]
+        foreach (var family in MirrorKeys.All)
+        {
+            var hard = MirrorKeys.Hard.Contains(family);
+            var baseResolved = hard ? hardResolved : softResolved;
+            ui.ViolationFamilyColorHex.TryGetValue(family, out var famHex);
+            var custom = !string.IsNullOrWhiteSpace(famHex);
+            var resolved = custom ? famHex! : baseResolved;
+            var label = AnalysisView.BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
+            ViolationFamilyColorList.Children.Add(BuildColorRow(
+                label, resolved, custom,
+                hex => _vm.SetViolationFamilyColor(family, hex),
+                () => _vm.ResetViolationFamilyColor(family)));
+        }
+    }
+
+    /// <summary>色設定1行＝スウォッチ＋ラベル＋「変更」（フライアウトの簡易カラーピッカー）＋「既定に戻す」。</summary>
+    private FrameworkElement BuildColorRow(string label, string resolvedHex, bool custom, Action<string> onSet, Action onReset)
+    {
+        var swatch = new Border
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new CornerRadius(4),
+            Background = new SolidColorBrush(ColorHex.Parse(resolvedHex, Colors.Gray)),
+            BorderBrush = new SolidColorBrush(Colors.Gray),
+            BorderThickness = new Thickness(1),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var labelBlock = new TextBlock
+        {
+            Text = label,
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            MinWidth = 180,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var changeButton = new Button { Content = "変更", Padding = new Thickness(8, 2, 8, 2) };
+        changeButton.Flyout = BuildColorPickerFlyout(resolvedHex, onSet);
+        var resetButton = new Button { Content = "既定に戻す", Padding = new Thickness(8, 2, 8, 2), IsEnabled = custom };
+        resetButton.Click += (_, _) => onReset();
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        row.Children.Add(swatch);
+        row.Children.Add(labelBlock);
+        row.Children.Add(changeButton);
+        row.Children.Add(resetButton);
+        return row;
+    }
+
+    /// <summary>
+    /// 「変更」ボタンのフライアウト＝<see cref="MagiAccent.All"/>（既存7色パレット、色設定の唯一の
+    /// 一次ソース）のスウォッチをタップで即適用、または16進テキストで任意色を指定して「適用」。
+    /// Kotlin原本 <c>ColorPickerDialog</c>（プリセットパレット＋現在色表示）の簡易移植——
+    /// WinUI3 の <see cref="Microsoft.UI.Xaml.Controls.ColorPicker"/>（HSVホイール等の高機能版）は
+    /// このC#移植の最初の段階では過剰と判断し、既存の7色パレット＋16進入力に留める。
+    /// </summary>
+    private Flyout BuildColorPickerFlyout(string currentHex, Action<string> onSet)
+    {
+        var flyout = new Flyout();
+        var panel = new StackPanel { Spacing = 8, Padding = new Thickness(4) };
+
+        var swatchGrid = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        foreach (var hex in MagiAccent.All)
+        {
+            var swatchButton = new Button
+            {
+                Width = 28,
+                Height = 28,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray)),
+            };
+            swatchButton.Click += (_, _) => { onSet(hex); flyout.Hide(); };
+            swatchGrid.Children.Add(swatchButton);
+        }
+        panel.Children.Add(swatchGrid);
+
+        var hexBox = new TextBox { Text = currentHex, PlaceholderText = "#rrggbb" };
+        var applyButton = new Button { Content = "適用", HorizontalAlignment = HorizontalAlignment.Stretch };
+        applyButton.Click += (_, _) =>
+        {
+            var text = hexBox.Text?.Trim() ?? "";
+            if (text.Length == 0) return;
+            onSet(text.StartsWith("#", StringComparison.Ordinal) ? text : $"#{text}");
+            flyout.Hide();
+        };
+        var hexRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        hexRow.Children.Add(hexBox);
+        hexRow.Children.Add(applyButton);
+        panel.Children.Add(hexRow);
+
+        flyout.Content = panel;
+        return flyout;
     }
 
     // ===== データ入出力（クラスKDoc参照） =====
@@ -103,40 +240,82 @@ public sealed partial class SettingsView : UserControl
         return await picker.PickSaveFileAsync();
     }
 
+    /// <summary>
+    /// [2026-09-02, エラーハンドリングの欠落を解消] 旧実装は<c>FileOpenPicker</c>/<c>FileIO</c>の失敗
+    /// （権限拒否・ディスク容量不足・ファイルロック等）を素通りさせていた。<c>async void</c>イベント
+    /// ハンドラでの未処理例外はWinUI3ではアプリごとクラッシュしうるため、<see cref="MagiViewModel.NotifyOpenFailure"/>
+    /// （用意済みだが呼び出し口が無かった）で受け止める。読込成功時は <see cref="MagiViewModel.LoadAsync"/>
+    /// 自身が完了メッセージを出すため、ここで重ねて通知しない（クラスKDoc「成功時は呼ばない」参照）。
+    /// </summary>
     private async void OnOpenDataClick(object sender, RoutedEventArgs e)
     {
-        var file = await PickOpenFileAsync(".json");
-        if (file is null) return;
-        var bytes = await FileIO.ReadBufferAsync(file);
-        var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
-        _vm.LoadAsync(text);
+        try
+        {
+            var file = await PickOpenFileAsync(".json");
+            if (file is null) return;
+            var bytes = await FileIO.ReadBufferAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            _vm.LoadAsync(text);
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifyOpenFailure(MagiViewModel.IoOutcome.Fail(ex), "データ");
+        }
     }
 
+    /// <summary>[2026-09-02] 保存は成功時も必ず通知する（<see cref="MagiViewModel.NotifySave"/> クラスKDoc参照
+    /// ——ExportJson自体はI/Oを行わないため、成功の事実を伝えるのはここの責務）。</summary>
     private async void OnSaveDataClick(object sender, RoutedEventArgs e)
     {
         var json = _vm.ExportJson();
         if (json is null) return;
-        var file = await PickSaveFileAsync("MAGI データ (JSON)", ".json", "magi_state");
-        if (file is null) return;
-        await FileIO.WriteTextAsync(file, json);
+        try
+        {
+            var file = await PickSaveFileAsync("MAGI データ (JSON)", ".json", "magi_state");
+            if (file is null) return;
+            await FileIO.WriteTextAsync(file, json);
+            _vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "データ");
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), "データ");
+        }
     }
 
+    /// <summary>[2026-09-02] OnOpenDataClick と同じ理由。<see cref="MagiViewModel.ImportCsvSmart"/> 自身が
+    /// 取込結果（成功/失敗いずれも）を通知するため、ここではファイルI/O自体の失敗だけを受け持つ。</summary>
     private async void OnImportCsvClick(object sender, RoutedEventArgs e)
     {
-        var file = await PickOpenFileAsync(".csv");
-        if (file is null) return;
-        var bytes = await FileIO.ReadBufferAsync(file);
-        var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
-        _vm.ImportCsvSmart(text);
+        try
+        {
+            var file = await PickOpenFileAsync(".csv");
+            if (file is null) return;
+            var bytes = await FileIO.ReadBufferAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            _vm.ImportCsvSmart(text);
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifyOpenFailure(MagiViewModel.IoOutcome.Fail(ex), "勤務表CSV");
+        }
     }
 
+    /// <summary>[2026-09-02] OnSaveDataClick と同じ理由。</summary>
     private async void OnExportCsvClick(object sender, RoutedEventArgs e)
     {
         var csv = _vm.ExportCsv();
         if (csv is null) return;
-        var file = await PickSaveFileAsync("勤務表CSV", ".csv", "magi_schedule");
-        if (file is null) return;
-        await FileIO.WriteTextAsync(file, csv);
+        try
+        {
+            var file = await PickSaveFileAsync("勤務表CSV", ".csv", "magi_schedule");
+            if (file is null) return;
+            await FileIO.WriteTextAsync(file, csv);
+            _vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "勤務表CSV");
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), "勤務表CSV");
+        }
     }
 
     private static string FormatBudget(int sec)

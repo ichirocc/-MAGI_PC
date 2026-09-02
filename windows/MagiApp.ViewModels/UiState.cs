@@ -12,8 +12,9 @@ namespace MagiApp.ViewModels;
 /// <c>INotifyPropertyChanged</c> を実装し、プロパティ単位で変更通知する）に合わせ、この移植では
 /// <see cref="ObservableObject"/> ＋ <c>[ObservableProperty]</c>（CommunityToolkit.Mvvm の
 /// source generator）による**可変**の観測可能プロパティ群として表現する。<c>MagiViewModel</c>
-/// （このC#移植では未着手）は Kotlin の <c>copy()</c> 呼び出し1つ1つを、対応するプロパティへの
-/// 直接代入に置き換えて実装する（1画面分の値だけを直接更新でき、XAMLバインディングは変更のあった
+/// （フェーズ9で移植完了。<c>MagiApp.ViewModels/MagiViewModel*.cs</c> 参照）は Kotlin の
+/// <c>copy()</c> 呼び出し1つ1つを、対応するプロパティへの直接代入に置き換えて実装している
+/// （1画面分の値だけを直接更新でき、XAMLバインディングは変更のあった
 /// プロパティだけを再評価する＝Composeの全体再構成より効率が良い）。
 ///
 /// <c>editRev: Int</c> は意図的に移植していない——Kotlin原本のコメントが明記するとおり、これは

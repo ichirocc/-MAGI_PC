@@ -30,8 +30,11 @@ public sealed partial class AnalysisView : UserControl
     /// 引けなかったキーは生の英字キーがそのまま画面に出る＝<c>docs/operator_ux.md</c> の
     /// 「英字符号を画面に出さない」に正面から反するため、族を増やしたらここへ必ず足す
     /// （例外も警告も出ないので、書き忘れは実機で誰かが気づくまで分からない）。
+    ///
+    /// [2026-09-02] <c>internal</c> 化＝<see cref="SettingsView"/> の族別色設定UI（族キー→ラベル表示）が
+    /// 同じ対応表を必要とするため、複製せずここへ委譲する（複製は必ずドリフトする＝確立済みの規約）。
     /// </summary>
-    private static readonly Dictionary<string, string> BreakdownLabels = new()
+    internal static readonly Dictionary<string, string> BreakdownLabels = new()
     {
         ["groupViol"] = "担当外シフト", ["pref"] = "希望違反", ["covU"] = "人員不足", ["c3n"] = "禁止の並び",
         ["low"] = "下限割れ", ["high"] = "上限超過", ["apt"] = "適切回数のズレ", ["fair"] = "公平化のズレ",

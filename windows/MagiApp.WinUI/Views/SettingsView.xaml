@@ -4,11 +4,16 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!--
-      [フェーズ9] 「設定」タブの最初の実装。Kotlin原本 SettingsCard（最適化設定）に相当する部分のみ——
+      [フェーズ9] 「設定」タブ。Kotlin原本 SettingsCard（最適化設定）に相当する部分——
       並列数・計算時間・計算方式・仕上げ最適化・ネイティブ加速表示・パリティ照合表示・禁止連続の
       事前フィルタ/崩し範囲。いずれも既存の MagiViewModel セッター（SetWorkers 等、フェーズ9ピース5で
-      移植済み・テスト済み）へ直接委譲するだけの薄い配線。色設定・外観（片手モード等）は
-      今後の段階で追加する。データ入出力（本ファイル下部）は Kotlin原本の
+      移植済み・テスト済み）へ直接委譲するだけの薄い配線。
+      表示色（シフトの記号色・違反枠の基準色/族別色、Kotlin原本 ColorSettingsView 相当）は
+      SettingsView.xaml.cs の RenderShiftColors/RenderViolationColors がコードビハインドで動的に
+      組み立てる（シフト数・族数が可変のため静的XAMLでは表現しづらい）。設定した色は
+      ScheduleView.xaml.cs の ResolveVioBrush/AddDataCell が共有元の ColorHex 経由で実際の
+      勤務表グリッド表示へ反映する。外観（片手モード等）は対応する MagiViewModel API が無く
+      今後の段階のまま。データ入出力（本ファイル下部）は Kotlin原本の
       ファイル選択コード（<c>ui/MagiApp.kt</c>）相当をこの移植では SettingsView.xaml.cs に置く。
     -->
     <ScrollViewer Padding="16">
@@ -55,6 +60,25 @@
 
             <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
+
+            <TextBlock Text="表示色" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
+            <TextBlock TextWrapping="Wrap" FontSize="13" Opacity="0.8"
+                       Text="シフトの記号色・違反枠の色を変更できます。「既定に戻す」で手動設定を消して既定色へ戻ります。" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="シフトの表示色" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel x:Name="ShiftColorList" Spacing="4" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="違反の基準色" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel x:Name="ViolationBaseColorList" Spacing="4" />
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="違反種別ごとの色（族別・未設定は基準色を使用）" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel x:Name="ViolationFamilyColorList" Spacing="4" />
+            </StackPanel>
 
             <TextBlock Text="データ" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <TextBlock x:Name="DataStatusText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />

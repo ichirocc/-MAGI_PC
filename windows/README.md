@@ -71,6 +71,19 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      未対応（意図的にスコープ外）：`MagiScheduleViews.kt`の残り（週ページング・横スクロール併用・
      ItemsRepeaterベース化・違反種別フィルタ・検索/凡例折りたたみ等）・covU/covO/c41系(日単位)や
      low/high/apt/c2(職員単位)の違反箇所ジャンプ（単一セルを指さないため対象外、上記「違反の場所」参照）。
+   - **色設定UI＋データ入出力のエラーハンドリング（2026-09-02）**: 設定タブに「表示色」節を追加
+     （`SettingsView.RenderShiftColors`/`RenderViolationColors`）。シフト記号の表示色（`ShiftColorList()`/
+     `SetShiftColor`/`ResetShiftColor`）・違反の基準色2種（必須/要調整、`SetViolationColor`/
+     `SetViolationSoftColor`）・族別の個別色（19族、`SetViolationFamilyColor`）を、簡易カラーピッカー
+     （既存7色パレット`MagiAccent.All`のスウォッチ＋16進テキスト入力の2択、フライアウト）で編集できる。
+     **これらのViewModel APIは元々実装済みだったが、勤務表グリッド（`ScheduleView`）側が一切参照して
+     おらず、設定を変えても見た目が変わらない「配線されていない箱」だった**——同じタイミングで
+     `ScheduleView.ResolveVioBrush`（新設、`ColorHex`経由でシフト背景色/違反枠色を実際に解決）を配線し、
+     セル背景（シフト色）・違反枠（族別→基準色→既定色の優先順位、Kotlin原本`resolvedVioColor`と同じ順）
+     の両方に反映されるようにした（メイングリッド・シフト集計の両方が共有）。データ入出力の4ハンドラ
+     （`OnOpenDataClick`等）は`FileOpenPicker`/`FileIO`の例外を素通りさせ`async void`ハンドラの
+     未処理例外でアプリごとクラッシュしうる欠陥があったため、try/catchで`NotifySave`/`NotifyOpenFailure`
+     （既存API・呼び出し口が無かった）へ受け止めるよう修正。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

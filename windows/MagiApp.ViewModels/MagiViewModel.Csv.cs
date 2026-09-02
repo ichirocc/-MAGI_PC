@@ -554,8 +554,9 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// [Result&lt;*&gt; の代替] Kotlin原本の <c>kotlin.Result&lt;*&gt;</c>（ペイロード型は
     /// <see cref="NotifySave"/>/<see cref="NotifyOpenFailure"/> のどちらでも使われないため消去済み）に
-    /// 相当する最小の成功/失敗値。WinUI3側の実ファイル保存・読込コード（ピッカー経由、未着手）が
-    /// この型を組み立てて渡す想定。
+    /// 相当する最小の成功/失敗値。WinUI3側の実ファイル保存・読込コード（<c>SettingsView.xaml.cs</c>、
+    /// <c>FileOpenPicker</c>/<c>FileSavePicker</c> 経由・2026-09-02にエラーハンドリングを実装済み）が
+    /// この型を組み立てて渡す。
     /// </summary>
     public readonly struct IoOutcome
     {
