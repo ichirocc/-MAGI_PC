@@ -140,6 +140,9 @@ public sealed partial class MagiViewModel
         var lastPublishMs = long.MinValue / 4;
         try
         {
+            // [2026-09-02, 外部レビュー#43] 前景実行(MagiViewModel.Optimize.cs)と同じ理由でPostToUi経由
+            //   にする——このOnProgressもエンジンの並列ワーカーがTask.Run内部から直接呼ぶため
+            //   UIスレッドとは限らない（クラスKDoc「MagiViewModel.cs」のPostToUi参照）。
             void OnProgress(string phase, ViolationReport? report, long _, long __)
             {
                 var wallElapsed = NowMs() - wallStart;
@@ -147,10 +150,13 @@ public sealed partial class MagiViewModel
                 if (wallElapsed - lastPublishMs >= OptimizationRepository.ProgressPushMs)
                 {
                     lastPublishMs = wallElapsed;
-                    Ui.BestHard = report.Hard;
-                    Ui.BestSoft = report.Soft;
-                    Ui.TotalViolations = report.Total;
-                    Ui.ElapsedMs = wallElapsed;
+                    PostToUi(() =>
+                    {
+                        Ui.BestHard = report.Hard;
+                        Ui.BestSoft = report.Soft;
+                        Ui.TotalViolations = report.Total;
+                        Ui.ElapsedMs = wallElapsed;
+                    });
                 }
             }
 

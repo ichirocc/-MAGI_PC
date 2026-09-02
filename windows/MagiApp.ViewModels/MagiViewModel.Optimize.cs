@@ -125,7 +125,12 @@ public sealed partial class MagiViewModel
             Ui.InitHard = baseReport.Hard;
             Ui.InitSoft = baseReport.Soft;
 
-            void OnProgress(string phase, ViolationReport? rep, long _, long __)
+            // [2026-09-02, 外部レビュー#43] エンジンの並列ワーカーがTask.Run内部から直接呼ぶため、
+            //   UIスレッドとは限らない。Ui.*への書き込み・LogOp呼出しをまとめてPostToUiへ渡す
+            //   （クラスKDoc「MagiViewModel.cs」のPostToUi参照。ローカル変数(liveHard等)の読み書き自体は
+            //   このコールバックの外からは触られないため単一スレッドの逐次実行のまま=競合なし、
+            //   UIへの反映だけを投げ返す）。
+            void OnProgress(string phase, ViolationReport? rep, long _, long __) => PostToUi(() =>
             {
                 if (rep is not null) hf63.UpdateFromBreakdown(rep.Breakdown, (int)((NowMs() - startMs) / 10L));
                 var wallElapsed = NowMs() - runWall0;
@@ -175,7 +180,7 @@ public sealed partial class MagiViewModel
                     }
                     liveHard = rep.Hard;
                 }
-            }
+            });
 
             var res = await _optimizationService.OptimizeAsync(
                 st0, sched0.Copy2D(), Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm,

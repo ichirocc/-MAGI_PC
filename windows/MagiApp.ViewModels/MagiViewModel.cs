@@ -58,6 +58,36 @@ public sealed partial class MagiViewModel
     /// </summary>
     private readonly IOptimizationService _optimizationService;
 
+    /// <summary>
+    /// [2026-09-02, 外部レビュー#43の由来] 最適化の進捗コールバック(<c>onProgress</c>)はエンジン側の
+    /// 並列ワーカーが<c>Task.Run</c>内部から直接呼ぶ（<see cref="MagiViewModel.Optimize.cs"/>/
+    /// <see cref="MagiViewModel.Background.cs"/>の<c>OnProgress</c>local function）——つまりUIスレッド
+    /// ではないスレッドから<see cref="Ui"/>のプロパティ(<c>Ui.BestHard</c>等、WinUI3の
+    /// <c>PropertyChanged</c>経由でViewの<c>Render()</c>を同期的に駆動する)を直接書き換えていた。
+    /// WinUI3のUI要素は生成スレッド以外からの操作で<c>RPC_E_WRONG_THREAD</c>例外を投げるため、
+    /// これは実行中に高確率で再現するクラッシュだった。<see cref="MagiViewModel"/>自体は
+    /// <c>MagiApp.WinUI</c>を参照しない（<c>MagiEngine</c>と同じくプラットフォーム非依存に保つ設計）ため
+    /// <c>DispatcherQueue</c>を直接使えないが、BCLの<see cref="System.Threading.SynchronizationContext"/>
+    /// なら依存を増やさず使える——WinUI3はUIスレッドに<c>DispatcherQueueSynchronizationContext</c>を
+    /// 自動的にインストールするため、コンストラクタ実行時点（＝UIスレッドでシェルがDI解決した時点）の
+    /// <see cref="SynchronizationContext.Current"/>を捕まえておけば、後から任意のスレッドで
+    /// <see cref="PostToUi"/>経由でUIスレッドへ投げ返せる。xUnitテスト等、UIスレッドが存在しない文脈では
+    /// <c>Current</c>がnullのままなので<see cref="PostToUi"/>は同期実行にフォールバックする
+    /// （既存の同期テストの前提を一切変えない）。
+    /// </summary>
+    private readonly System.Threading.SynchronizationContext? _uiContext = System.Threading.SynchronizationContext.Current;
+
+    /// <summary>
+    /// UIスレッド以外（エンジンの並列ワーカー内）から呼ばれうるコールバックの中で、<see cref="Ui"/>への
+    /// 書き込み（や、それを内部で行う<c>LogOp</c>呼出し）をUIスレッドへ投げ返す。<see cref="_uiContext"/>が
+    /// 無い（UIスレッドが存在しない/未確立の）文脈では同期実行にフォールバックする。
+    /// </summary>
+    private void PostToUi(Action action)
+    {
+        if (_uiContext is null) { action(); return; }
+        _uiContext.Post(_ => action(), null);
+    }
+
     /// <summary>既定コンストラクタ。実エンジン（<see cref="EngineOptimizationService"/>）を使う。</summary>
     public MagiViewModel() : this(new EngineOptimizationService()) { }
 
