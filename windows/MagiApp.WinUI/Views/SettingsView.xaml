@@ -89,6 +89,28 @@
                 <Button x:Name="ExportCsvButton" Content="勤務表CSVを書き出す" Click="OnExportCsvClick" HorizontalAlignment="Stretch" />
                 <Button x:Name="RestorePreviousDataButton" Content="「データを開く」前の状態に戻す"
                         Click="OnRestorePreviousDataClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="NewBlankDataButton" Content="新規作成（空のデータから始める）"
+                        Click="OnNewBlankDataClick" HorizontalAlignment="Stretch" />
+            </StackPanel>
+
+            <TextBlock Text="データ（種類別のCSV）" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                       Text="職員一覧・希望シフト・各制約だけを別々に取込/書出できます（取込は今のデータに重ねます。氏名一致で更新）。" />
+            <StackPanel Spacing="8">
+                <Button x:Name="ImportStaffCsvButton" Content="職員一覧CSVを取り込む" Click="OnImportStaffCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ExportStaffCsvButton" Content="職員一覧CSVを書き出す" Click="OnExportStaffCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ImportWishesCsvButton" Content="希望シフトCSVを取り込む" Click="OnImportWishesCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ExportWishesCsvButton" Content="希望シフトCSVを書き出す" Click="OnExportWishesCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ImportConstraintsCsvButton" Content="各制約CSVを取り込む" Click="OnImportConstraintsCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ExportConstraintsCsvButton" Content="各制約CSVを書き出す" Click="OnExportConstraintsCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ImportRosterButton" Content="名簿CSVを新規データとして取り込む"
+                        Click="OnImportRosterClick" HorizontalAlignment="Stretch" />
+            </StackPanel>
+
+            <TextBlock Text="ログ" FontSize="16" FontWeight="SemiBold" Margin="0,8,0,0" />
+            <StackPanel Spacing="8">
+                <Button x:Name="ExportLogsButton" Content="操作ログを書き出す（テキスト）" Click="OnExportLogsClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="ExportLogsJsonButton" Content="操作ログを書き出す（JSON）" Click="OnExportLogsJsonClick" HorizontalAlignment="Stretch" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

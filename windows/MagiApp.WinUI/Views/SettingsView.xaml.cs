@@ -38,6 +38,14 @@ namespace MagiApp.WinUI.Views;
 /// [アンパッケージ実行でのピッカー] <see cref="FileOpenPicker"/>/<see cref="FileSavePicker"/> は
 /// デスクトップアプリでは所有ウィンドウのハンドルが要る（<see cref="InitializeWithWindow"/>）ため、
 /// <see cref="MainWindow"/> 自身を <paramref name="window"/> として受け取る。
+///
+/// [2026-09-02, 配線] 種類別CSV（職員/希望/各制約、<see cref="MagiViewModel.ImportStaffCsv"/> 等）・
+/// 名簿CSV新規取込（<see cref="MagiViewModel.ImportRosterAs"/>、勤務表/希望のどちらとして取り込むか
+/// ダイアログで選ばせる——<c>ImportCsvSmart</c> には無い選択肢）・操作ログ書き出し
+/// （<see cref="MagiViewModel.ExportLogs"/>/<see cref="MagiViewModel.ExportLogsJson"/>）・新規作成
+/// （<see cref="MagiViewModel.InitBlankState"/>）を追加。いずれもフェーズ9で移植・テスト済みだったが
+/// この画面から一度も呼べなかった（<c>ImportCsvVariantAsync</c>/<c>ExportCsvVariantAsync</c> が
+/// 共通のファイルI/Oエラーハンドリングを提供する）。
 /// </summary>
 public sealed partial class SettingsView : UserControl
 {
@@ -86,6 +94,22 @@ public sealed partial class SettingsView : UserControl
             // 存在するか）が false の間はボタンごと隠す＝押しても何も起きないボタンを見せない。
             RestorePreviousDataButton.Visibility = ui.PrevBackupAvailable ? Visibility.Visible : Visibility.Collapsed;
             RestorePreviousDataButton.IsEnabled = !ui.Running;
+            NewBlankDataButton.IsEnabled = !ui.Running;
+
+            // [2026-09-02, 配線] 種類別CSV(職員/希望/各制約)・名簿CSV新規取込・ログ書き出しは
+            // いずれもフェーズ9で移植・テスト済みだったが、この画面から一度も呼べなかった。
+            // 取込系はImportCsvButtonと同じ理由でLoaded不問(!Running)＝Import*Csv自身が
+            // 「先にデータを開いてください」等の自己完結したメッセージを返す。書出系はSaveDataButtonと
+            // 同じ理由でLoaded必須（未読込時はnullを返すだけで押しても意味が無いため）。
+            ImportStaffCsvButton.IsEnabled = !ui.Running;
+            ImportWishesCsvButton.IsEnabled = !ui.Running;
+            ImportConstraintsCsvButton.IsEnabled = !ui.Running;
+            ImportRosterButton.IsEnabled = !ui.Running;
+            ExportStaffCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+            ExportWishesCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+            ExportConstraintsCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+            ExportLogsButton.IsEnabled = ui.Loaded && !ui.Running;
+            ExportLogsJsonButton.IsEnabled = ui.Loaded && !ui.Running;
 
             RenderShiftColors(ui);
             RenderViolationColors(ui);
@@ -326,6 +350,120 @@ public sealed partial class SettingsView : UserControl
     /// <summary>[2026-09-02, 配線] RestorePreviousData（クラスKDoc参照）。ファイルI/Oを伴わない
     /// （ディスク上の退避ファイルを読むだけ）のでピッカーは不要、ボタン1つで完結する。</summary>
     private void OnRestorePreviousDataClick(object sender, RoutedEventArgs e) => _vm.RestorePreviousData();
+
+    /// <summary>[2026-09-02, 配線] InitBlankState（クラスKDoc参照）は「データを開く」以外に
+    /// データ作成の起点が無かったギャップを埋める。呼ぶと現在のデータは Load() 経路の退避
+    /// （<see cref="MagiViewModel.RestorePreviousData"/>）で復元可能なので、確認は軽めに留める。</summary>
+    private async void OnNewBlankDataClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "新規作成しますか？",
+            Content = new TextBlock
+            {
+                Text = "今のデータを離れ、最小構成（シフト1・グループ1・職員1・31日）から作り直します。" +
+                       "今の内容は退避されるため、「「データを開く」前の状態に戻す」で戻せます。",
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = "新規作成",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        _vm.InitBlankState();
+    }
+
+    /// <summary>種類別CSV取込の共通ハンドラ（<see cref="OnImportCsvClick"/> と同型）。
+    /// 取込結果そのもののメッセージ（成功件数・失敗理由）は各 Import*Csv 自身が
+    /// <c>Ui.Message</c>/<c>LogOp</c> で報告するため、ここではファイルI/O自体の失敗だけを受け持つ。</summary>
+    private async Task ImportCsvVariantAsync(Action<string> importer, string what)
+    {
+        try
+        {
+            var file = await PickOpenFileAsync(".csv");
+            if (file is null) return;
+            var bytes = await FileIO.ReadBufferAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            importer(text);
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifyOpenFailure(MagiViewModel.IoOutcome.Fail(ex), what);
+        }
+    }
+
+    /// <summary>種類別CSV書出の共通ハンドラ（<see cref="OnExportCsvClick"/> と同型）。
+    /// <paramref name="content"/> が null（未読込等）なら静かに何もしない。</summary>
+    private async Task ExportCsvVariantAsync(string? content, string friendlyName, string extension, string suggestedName)
+    {
+        if (content is null) return;
+        try
+        {
+            var file = await PickSaveFileAsync(friendlyName, extension, suggestedName);
+            if (file is null) return;
+            await FileIO.WriteTextAsync(file, content);
+            _vm.NotifySave(MagiViewModel.IoOutcome.Ok(), friendlyName);
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), friendlyName);
+        }
+    }
+
+    private async void OnImportStaffCsvClick(object sender, RoutedEventArgs e) => await ImportCsvVariantAsync(_vm.ImportStaffCsv, "職員一覧CSV");
+    private async void OnImportWishesCsvClick(object sender, RoutedEventArgs e) => await ImportCsvVariantAsync(_vm.ImportWishesCsv, "希望シフトCSV");
+    private async void OnImportConstraintsCsvClick(object sender, RoutedEventArgs e) => await ImportCsvVariantAsync(_vm.ImportConstraintsCsv, "各制約CSV");
+
+    private async void OnExportStaffCsvClick(object sender, RoutedEventArgs e) =>
+        await ExportCsvVariantAsync(_vm.ExportStaffCsv(), "職員一覧CSV", ".csv", "magi_staff");
+    private async void OnExportWishesCsvClick(object sender, RoutedEventArgs e) =>
+        await ExportCsvVariantAsync(_vm.ExportWishesCsv(), "希望シフトCSV", ".csv", "magi_wishes");
+    private async void OnExportConstraintsCsvClick(object sender, RoutedEventArgs e) =>
+        await ExportCsvVariantAsync(_vm.ExportConstraintsCsv(), "各制約CSV", ".csv", "magi_constraints");
+    private async void OnExportLogsClick(object sender, RoutedEventArgs e) =>
+        await ExportCsvVariantAsync(_vm.ExportLogs(), "操作ログ", ".txt", "magi_logs");
+    private async void OnExportLogsJsonClick(object sender, RoutedEventArgs e) =>
+        await ExportCsvVariantAsync(_vm.ExportLogsJson(), "操作ログ(JSON)", ".json", "magi_logs");
+
+    /// <summary>
+    /// [2026-09-02, 配線] ImportRosterAs（クラスKDoc参照）。<see cref="MagiViewModel.ImportCsvSmart"/>
+    /// （<see cref="OnImportCsvClick"/>）が既に名簿形式CSVを自動検出して「勤務表」として新規取込む
+    /// のに対し、こちらは「希望として取込む」を明示的に選べる版——ImportCsvSmartには無い選択肢。
+    /// この取込はデータ全体を新規に置き換えるため、種類別CSV(職員/希望/各制約=既存へ重ねる)とは別枠。
+    /// </summary>
+    private async void OnImportRosterClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var file = await PickOpenFileAsync(".csv");
+            if (file is null) return;
+            var bytes = await FileIO.ReadBufferAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "名簿CSVをどう取り込みますか？",
+                Content = new TextBlock
+                {
+                    Text = "表の中身を「勤務表（初期割当）」として取り込むか、「希望シフト」として取り込むかを選んでください。" +
+                           "この取込は今のデータを新規データへ置き換えます（「「データを開く」前の状態に戻す」で戻せます）。",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                PrimaryButtonText = "勤務表として取込",
+                SecondaryButtonText = "希望として取込",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary) _vm.ImportRosterAs(text, asWishes: false);
+            else if (result == ContentDialogResult.Secondary) _vm.ImportRosterAs(text, asWishes: true);
+        }
+        catch (Exception ex)
+        {
+            _vm.NotifyOpenFailure(MagiViewModel.IoOutcome.Fail(ex), "名簿CSV");
+        }
+    }
 
     private static string FormatBudget(int sec)
     {

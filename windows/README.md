@@ -110,6 +110,17 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      `MainWindow.OnAppWindowClosing`の実行中でない通常終了経路で必ず呼ぶ。`RestorePreviousData`
      （「データを開く」直前の状態へ戻す）も設定タブへボタンを追加（`Ui.PrevBackupAvailable`が
      falseの間はボタンごと隠す）。
+   - **CIビルド失敗の修正＋種類別CSV/ログ書出/新規作成の配線（2026-09-02）**: 直前2コミット
+     （色設定UI・群×シフトマトリクス）がいずれもWindows CIでビルド失敗していた
+     （`ScheduleView.xaml.cs`が素の`Color`型=`Windows.UI.Color`を使うのに`using Windows.UI;`が
+     無くCS0246。このサンドボックスはWindows専用プロジェクトをビルドできずCIでしか検出できない
+     既知の制約で、2回連続で見落とした）。`using`を1行追加して解消・CI緑化を確認。続けて同じ
+     全数点検の最後のまとまり: 種類別CSV（`ImportStaffCsv`/`ExportStaffCsv`・`ImportWishesCsv`/
+     `ExportWishesCsv`・`ImportConstraintsCsv`/`ExportConstraintsCsv`、氏名一致で既存データへ
+     追加/更新）・名簿CSVの新規取込（`ImportRosterAs`、「勤務表として/希望として」をダイアログで
+     選べる——`ImportCsvSmart`には無い選択肢）・操作ログ書出（`ExportLogs`/`ExportLogsJson`）・
+     新規作成（`InitBlankState`、最小構成から作り直す。`Load()`経路のため現在のデータは
+     `RestorePreviousData`で復元可能）を設定タブへ配線。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの
