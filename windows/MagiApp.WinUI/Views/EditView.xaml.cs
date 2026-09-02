@@ -62,7 +62,12 @@ public sealed partial class EditView : UserControl
     /// 適切回数テキストボックスからフォーカスが飛ぶため）。</summary>
     private IReadOnlyList<string> _matrixGroupKigou = System.Array.Empty<string>();
     private IReadOnlyList<string> _matrixShiftKigou = System.Array.Empty<string>();
-    private readonly Dictionary<(int G, int K), (CheckBox Check, TextBox Apt)> _matrixCells = new();
+    /// <summary>[マトリックス再設計] 担当可否セル＝セル全面がタップ標的の <see cref="Button"/>（✓/—）。
+    /// 適切回数は別マトリクス（<see cref="_aptCells"/>）へ分離した。</summary>
+    private readonly Dictionary<(int G, int K), Button> _matrixCells = new();
+    private readonly Dictionary<(int G, int K), TextBox> _aptCells = new();
+    /// <summary>行ヘッダ（群名）/列ヘッダ（シフト名）のボタン。一括操作の有効/無効を実行中に同期する。</summary>
+    private readonly List<Button> _matrixHeaderButtons = new();
 
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
@@ -1432,7 +1437,11 @@ public sealed partial class EditView : UserControl
         if (ws1 is null)
         {
             GroupShiftMatrixHost.Children.Clear();
+            GroupShiftNameColumn.Children.Clear();
+            GroupAptMatrixHost.Children.Clear();
             _matrixCells.Clear();
+            _aptCells.Clear();
+            _matrixHeaderButtons.Clear();
             _matrixGroupKigou = System.Array.Empty<string>();
             _matrixShiftKigou = System.Array.Empty<string>();
             RenderAptOverload();
@@ -1448,18 +1457,33 @@ public sealed partial class EditView : UserControl
             _matrixShiftKigou = shiftKigou;
         }
 
+        var onBg = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
+        var onFg = (Brush)Application.Current.Resources["MagiOnPrimaryBrush"];
+        var offBg = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"];
+        var offFg = (Brush)Application.Current.Resources["MagiOnBackgroundBrush"];
+        foreach (var hb in _matrixHeaderButtons) hb.IsEnabled = editable;
         for (var g = 0; g < ws1.Groups.Count; g++)
         {
             for (var k = 0; k < ws1.Shifts.Count; k++)
             {
-                if (!_matrixCells.TryGetValue((g, k), out var cell)) continue;
                 var allowed = k < ws1.GroupShift[g].Count && ws1.GroupShift[g][k] != 0;
-                cell.Check.IsChecked = allowed;
-                cell.Check.IsEnabled = editable;
-                cell.Apt.IsEnabled = editable && allowed;
-                if (cell.Apt.FocusState == FocusState.Unfocused)
+                if (_matrixCells.TryGetValue((g, k), out var cell))
                 {
-                    cell.Apt.Text = k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
+                    // ON=濃い主色地＋白✓ / OFF=薄い地＋「—」（色だけに依存しない手がかり）。
+                    cell.Background = allowed ? onBg : offBg;
+                    cell.Foreground = allowed ? onFg : offFg;
+                    cell.Content = allowed ? "✓" : "—";
+                    cell.IsEnabled = editable;
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(cell,
+                        $"{ws1.Groups[g].Name} × {ws1.Shifts[k].Kigou}: {(allowed ? "担当できる" : "担当しない")}");
+                }
+                if (_aptCells.TryGetValue((g, k), out var apt))
+                {
+                    apt.IsEnabled = editable && allowed;
+                    if (apt.FocusState == FocusState.Unfocused)
+                    {
+                        apt.Text = k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
+                    }
                 }
             }
         }
@@ -1487,55 +1511,166 @@ public sealed partial class EditView : UserControl
         }
     }
 
+    /// <summary>
+    /// [マトリックス再設計（ユーザー提示案）] 行=群・列=シフトの2次元マトリクス。
+    ///  - 左列（群名）は <c>GroupShiftNameColumn</c> に置いて横スクロールの外＝固定。右側（シフト名ヘッダ＋
+    ///    セル）だけ <c>GroupShiftMatrixHost</c> で横スクロール。両側とも行高を <see cref="MatrixRowH"/> に
+    ///    固定してヘッダ/セルの横ずれを防ぐ。
+    ///  - セルは<b>全面がタップ標的</b>の Button（44×44、ON=主色地＋✓ / OFF=薄い地＋—）。チェックボックスと
+    ///    数字欄を同じセルに重ねていた旧レイアウトは、適切回数を別マトリクス（<c>GroupAptMatrixHost</c>）へ分離。
+    ///  - 行ヘッダ（群名）タップ＝その群の全シフトを一括（1つでもOFFがあれば全ON、全ONなら全OFF＝休は残る）。
+    ///    列ヘッダ（シフト名）タップ＝そのシフトを全群へ一括（同じ規則。休の列はOFFにできない＝VMが案内）。
+    /// </summary>
+    private const double MatrixRowH = 44;
+    private const double MatrixCellW = 44;
+
     private void BuildGroupShiftMatrix(MagiViewModel.Ws1View ws1)
     {
         GroupShiftMatrixHost.Children.Clear();
         GroupShiftMatrixHost.RowDefinitions.Clear();
         GroupShiftMatrixHost.ColumnDefinitions.Clear();
+        GroupShiftNameColumn.Children.Clear();
+        GroupShiftNameColumn.RowDefinitions.Clear();
+        GroupAptMatrixHost.Children.Clear();
+        GroupAptMatrixHost.RowDefinitions.Clear();
+        GroupAptMatrixHost.ColumnDefinitions.Clear();
         _matrixCells.Clear();
+        _aptCells.Clear();
+        _matrixHeaderButtons.Clear();
 
         var groupCount = ws1.Groups.Count;
         var shiftCount = ws1.Shifts.Count;
-        for (var r = 0; r <= groupCount; r++) GroupShiftMatrixHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var c = 0; c <= shiftCount; c++) GroupShiftMatrixHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        void AddHeader(int row, int col, string text)
+        var xs = (double)Application.Current.Resources["MagiSpacingXS"];
+        for (var r = 0; r <= groupCount; r++)
         {
-            var block = new TextBlock
+            GroupShiftMatrixHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(MatrixRowH) });
+            GroupShiftNameColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(MatrixRowH) });
+            GroupAptMatrixHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        }
+        for (var c = 0; c < shiftCount; c++) GroupShiftMatrixHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (var c = 0; c <= shiftCount; c++) GroupAptMatrixHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        Button HeaderButton(string text, string automationName)
+        {
+            var b = new Button
             {
-                Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]), HorizontalAlignment = HorizontalAlignment.Center,
+                Content = text,
+                FontSize = 12,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                MinHeight = MatrixRowH,
+                MinWidth = MatrixCellW,
+                // [Token] 密マトリクス用の意図的な値（ScheduleView のセルと同じ理由で据え置き）。
+                Padding = new Thickness(xs, 0, xs, 0),
+                CornerRadius = new CornerRadius(0),
+                HorizontalContentAlignment = HorizontalAlignment.Center,
             };
-            Grid.SetRow(block, row);
-            Grid.SetColumn(block, col);
-            GroupShiftMatrixHost.Children.Add(block);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, automationName);
+            _matrixHeaderButtons.Add(b);
+            return b;
         }
 
-        AddHeader(0, 0, "");
-        for (var k = 0; k < shiftCount; k++) AddHeader(0, k + 1, ws1.Shifts[k].Kigou);
-        for (var g = 0; g < groupCount; g++) AddHeader(g + 1, 0, ws1.Groups[g].Name);
+        // 左上の角（固定列側）＝空。行ヘッダ＝群名（タップで行一括）。
+        var corner = new TextBlock { Text = "群 ＼ シフト", FontSize = 11, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(xs, 0, xs, 0) };
+        Grid.SetRow(corner, 0);
+        GroupShiftNameColumn.Children.Add(corner);
+        for (var g = 0; g < groupCount; g++)
+        {
+            var gg = g;
+            var rowBtn = HeaderButton($"{ws1.Groups[g].Kigou} {ws1.Groups[g].Name}", $"グループ {ws1.Groups[g].Name}: タップで全シフトを一括切替");
+            rowBtn.HorizontalAlignment = HorizontalAlignment.Stretch;
+            rowBtn.HorizontalContentAlignment = HorizontalAlignment.Left;
+            rowBtn.Click += (_, _) =>
+            {
+                if (_syncingFromModel) return;
+                var cur = _vm.Ws1();
+                if (cur is null || gg >= cur.GroupShift.Count) return;
+                var anyOff = cur.GroupShift[gg].Any(v => v == 0);
+                _vm.Ws1SetGroupShiftRow(gg, anyOff);
+            };
+            Grid.SetRow(rowBtn, g + 1);
+            GroupShiftNameColumn.Children.Add(rowBtn);
+        }
 
+        // 列ヘッダ＝シフト名（タップで列一括）。
+        for (var k = 0; k < shiftCount; k++)
+        {
+            var kk = k;
+            var colBtn = HeaderButton(ws1.Shifts[k].Kigou, $"シフト {ws1.Shifts[k].Kigou}: タップで全グループへ一括切替");
+            colBtn.Click += (_, _) =>
+            {
+                if (_syncingFromModel) return;
+                var cur = _vm.Ws1();
+                if (cur is null) return;
+                var anyOff = cur.GroupShift.Any(row => kk >= row.Count || row[kk] == 0);
+                _vm.Ws1SetGroupShiftColumn(kk, anyOff);
+            };
+            Grid.SetRow(colBtn, 0);
+            Grid.SetColumn(colBtn, k);
+            GroupShiftMatrixHost.Children.Add(colBtn);
+        }
+
+        // セル＝全面タップの Button（見た目は RenderGroupShiftMatrix が同期する）。
         for (var g = 0; g < groupCount; g++)
         {
             for (var k = 0; k < shiftCount; k++)
             {
-                // Padding(0) はチェックボックス既定余白の意図的な打消し（=0）でスペーシングトークンの対象外のため据え置き。
-                var check = new CheckBox { Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Center };
                 var gg = g;
                 var kk = k;
-                check.Checked += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupShift(gg, kk, true); };
-                check.Unchecked += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupShift(gg, kk, false); };
+                var cell = new Button
+                {
+                    MinWidth = MatrixCellW,
+                    MinHeight = MatrixRowH,
+                    Width = MatrixCellW,
+                    Height = MatrixRowH,
+                    Padding = new Thickness(0),
+                    CornerRadius = new CornerRadius(0),
+                    BorderThickness = new Thickness(0, 0, 1, 1),
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    FontSize = 16,
+                };
+                cell.Click += (_, _) =>
+                {
+                    if (_syncingFromModel) return;
+                    var cur = _vm.Ws1();
+                    if (cur is null || gg >= cur.GroupShift.Count || kk >= cur.GroupShift[gg].Count) return;
+                    _vm.Ws1SetGroupShift(gg, kk, cur.GroupShift[gg][kk] == 0);
+                };
+                Grid.SetRow(cell, g + 1);
+                Grid.SetColumn(cell, k);
+                GroupShiftMatrixHost.Children.Add(cell);
+                _matrixCells[(g, k)] = cell;
+            }
+        }
 
-                var apt = new TextBox { Width = 44, FontSize = 12 };
+        // 適切回数マトリクス（別表）。ヘッダは TextBlock、セルは数字欄。
+        void AddAptHeader(int row, int col, string text)
+        {
+            var block = new TextBlock
+            {
+                Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Padding = new Thickness(xs), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetRow(block, row);
+            Grid.SetColumn(block, col);
+            GroupAptMatrixHost.Children.Add(block);
+        }
+        AddAptHeader(0, 0, "");
+        for (var k = 0; k < shiftCount; k++) AddAptHeader(0, k + 1, ws1.Shifts[k].Kigou);
+        for (var g = 0; g < groupCount; g++) AddAptHeader(g + 1, 0, ws1.Groups[g].Name);
+        for (var g = 0; g < groupCount; g++)
+        {
+            for (var k = 0; k < shiftCount; k++)
+            {
+                var gg = g;
+                var kk = k;
+                var apt = new TextBox { Width = 44, FontSize = 12, Margin = new Thickness(xs) };
                 apt.LostFocus += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupApt(gg, kk, apt.Text); };
-
-                var cellPanel = new StackPanel { Spacing = 2, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]) };
-                cellPanel.Children.Add(check);
-                cellPanel.Children.Add(apt);
-                Grid.SetRow(cellPanel, g + 1);
-                Grid.SetColumn(cellPanel, k + 1);
-                GroupShiftMatrixHost.Children.Add(cellPanel);
-                _matrixCells[(g, k)] = (check, apt);
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(apt, $"{ws1.Groups[g].Name} × {ws1.Shifts[k].Kigou} の適切回数");
+                Grid.SetRow(apt, g + 1);
+                Grid.SetColumn(apt, k + 1);
+                GroupAptMatrixHost.Children.Add(apt);
+                _aptCells[(g, k)] = apt;
             }
         }
     }

@@ -409,4 +409,41 @@ public class Ws1OpsTest
 
         Assert.Same(st, Ws1Ops.RemoveSkillGroup(st, 9)); // 範囲外は何もしない
     }
+
+    // ---- [マトリックス一括] SetGroupShiftRow / SetGroupShiftColumn（群×シフトの行/列ヘッダのタップ） ----
+
+    private static MagiState MatrixState() => MinimalState.Build(
+        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 0, 1 }, new List<int> { 1, 1, 0 } });
+
+    [Fact]
+    public void SetGroupShiftRow_TurnsWholeRowOn_AndKeepsRestWhenTurningOff()
+    {
+        var st = MatrixState();
+        var on = Ws1Ops.SetGroupShiftRow(st, 0, true);
+        Assert.Equal(new[] { 1, 1, 1 }, on.GroupShift[0]);
+        Assert.Equal(new[] { 1, 1, 0 }, on.GroupShift[1]); // 他の群は不変
+
+        // OFF でも休(index0)は残る＝担当可能シフトの無い群を作らない（validate が拒否する状態を作らない）。
+        var off = Ws1Ops.SetGroupShiftRow(on, 0, false);
+        Assert.Equal(new[] { 1, 0, 0 }, off.GroupShift[0]);
+        Assert.Same(st, Ws1Ops.SetGroupShiftRow(st, 5, true)); // 範囲外は何もしない
+    }
+
+    [Fact]
+    public void SetGroupShiftColumn_AppliesToAllGroups_AndRefusesTurningRestOff()
+    {
+        var st = MatrixState();
+        var on = Ws1Ops.SetGroupShiftColumn(st, 2, true);
+        Assert.Equal(1, on.GroupShift[0][2]);
+        Assert.Equal(1, on.GroupShift[1][2]);
+        var off = Ws1Ops.SetGroupShiftColumn(on, 1, false);
+        Assert.Equal(0, off.GroupShift[0][1]);
+        Assert.Equal(0, off.GroupShift[1][1]);
+
+        // 休の列を OFF にする操作は無変更（ReferenceEquals で拒否を検知できる）。
+        Assert.Same(st, Ws1Ops.SetGroupShiftColumn(st, 0, false));
+        Assert.Same(st, Ws1Ops.SetGroupShiftColumn(st, 9, true)); // 範囲外は何もしない
+    }
 }

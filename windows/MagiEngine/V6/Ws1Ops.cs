@@ -130,6 +130,36 @@ public static class Ws1Ops
     }
 
     /// <summary>
+    /// [マトリックス一括] 群 g の全シフトを一括で担当ON/OFF（行ヘッダ＝群名のタップ）。
+    /// OFF のときも休(<see cref="ScheduleUtil.RestShiftIndex"/>)は残す＝担当可能シフトが1つも無い群は
+    /// validate が拒否し（「groupShift[g] に担当可能シフトがありません」）、その群の職員は行ごと
+    /// groupViol(HARD) になるため（3.418.0/3.442.0 と同じ理由）。Kotlin 原本 <c>Ws1Ops.setGroupShiftRow</c> と同値。
+    /// </summary>
+    public static MagiState SetGroupShiftRow(MagiState state, int g, bool allowed)
+    {
+        if (g < 0 || g >= state.GroupShift.Count) return state;
+        var rest = ScheduleUtil.RestShiftIndex(state);
+        var grid = state.GroupShift.Select(row => row.ToList()).ToList();
+        for (int k = 0; k < grid[g].Count; k++) grid[g][k] = (allowed || k == rest) ? 1 : 0;
+        return state with { GroupShift = grid };
+    }
+
+    /// <summary>
+    /// [マトリックス一括] シフト k を全群へ一括で担当ON/OFF（列ヘッダ＝シフト名のタップ）。
+    /// 休の列を OFF にする操作は**無変更で返す**（全群から休が消える＝上と同じ理由）。呼出側
+    /// （ViewModel）は <c>ReferenceEquals</c> で拒否を検知して理由を案内する。
+    /// </summary>
+    public static MagiState SetGroupShiftColumn(MagiState state, int k, bool allowed)
+    {
+        if (state.GroupShift.Count == 0) return state;
+        if (!allowed && k == ScheduleUtil.RestShiftIndex(state)) return state;
+        var grid = state.GroupShift.Select(row => row.ToList()).ToList();
+        if (k < 0 || grid.Any(row => k >= row.Count)) return state;
+        foreach (var row in grid) row[k] = allowed ? 1 : 0;
+        return state with { GroupShift = grid };
+    }
+
+    /// <summary>
     /// グループ別シフトの「適切回数 (groupShiftApt)」を1セル設定。Web版の
     /// 「グループ別 担当シフトと適切回数」エディタ相当。1人あたりの期間内目標回数（空欄＝目標なし）。
     /// groupShiftApt が未初期化/不揃いでも G×K に正規化してから設定する。

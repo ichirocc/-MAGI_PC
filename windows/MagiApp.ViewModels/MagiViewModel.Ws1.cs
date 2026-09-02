@@ -121,6 +121,32 @@ public sealed partial class MagiViewModel
         ApplyStructure(Ws1Ops.SetGroupShift(st, g, k, allowed));
     }
 
+    /// <summary>[マトリックス一括] 群 g の全シフトを一括ON/OFF（行ヘッダのタップ）。OFF でも休は残る。</summary>
+    public void Ws1SetGroupShiftRow(int g, bool allowed)
+    {
+        var st = _state;
+        if (st is null) return;
+        var name = g >= 0 && g < st.Groups.Count ? st.Groups[g].Name : $"[{g}]";
+        LogOp("I", $"担当可否(一括): グループ {name} の全シフト → {(allowed ? "担当できる" : "担当しない（休は残す）")}");
+        ApplyStructure(Ws1Ops.SetGroupShiftRow(st, g, allowed));
+    }
+
+    /// <summary>[マトリックス一括] シフト k を全群へ一括ON/OFF（列ヘッダのタップ）。休の列は OFF にできない。</summary>
+    public void Ws1SetGroupShiftColumn(int k, bool allowed)
+    {
+        var st = _state;
+        if (st is null) return;
+        var ns = Ws1Ops.SetGroupShiftColumn(st, k, allowed);
+        if (ReferenceEquals(ns, st))
+        {
+            if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
+                Notify("「休」はどのグループからも外せません（担当できるシフトが無い群を作らないため）", "W");
+            return;
+        }
+        LogOp("I", $"担当可否(一括): {OpSy(k)} を全グループ → {(allowed ? "担当できる" : "担当しない")}");
+        ApplyStructure(ns);
+    }
+
     /// <summary>グループ別シフトの適切回数（1人あたり期間内目標。空欄＝目標なし）を設定。</summary>
     public void Ws1SetGroupApt(int g, int k, string value)
     {

@@ -243,13 +243,29 @@
                 </StackPanel>
                 <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
 
-                <TextBlock Text="担当できるシフト・適切回数（群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="担当できるシフト（群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
-                           Text="チェック=そのグループが担当できるシフト。数字欄=1人あたりの適切回数の目標（空欄=目標なし。欄を離れると反映）。" />
+                           Text="セルをタップで担当ON/OFF（✓=担当できる）。群名をタップでその群を一括、シフト名をタップで全グループへ一括。「休」は外せません。" />
                 <ToggleSwitch x:Name="Use2Toggle" Header="上限人数（2パターン目）を使う" OnContent="ON" OffContent="OFF"
                               Toggled="OnUse2Toggled" />
+                <!-- [マトリックス] 左列（群名）は固定、右側（シフト名ヘッダ＋セル）だけ横スクロール。
+                     行の高さを両側で揃えて（44）ヘッダ/セルが横にずれないようにする。 -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid x:Name="GroupShiftNameColumn" Grid.Column="0" />
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <Grid x:Name="GroupShiftMatrixHost" />
+                    </ScrollViewer>
+                </Grid>
+
+                <TextBlock Text="適切回数（1人あたり・群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="1人あたりの期間内目標（空欄=目標なし。欄を離れると反映）。担当できないシフトの欄は入力できません。" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <Grid x:Name="GroupShiftMatrixHost" />
+                    <Grid x:Name="GroupAptMatrixHost" />
                 </ScrollViewer>
                 <Border x:Name="AptOverloadPanel" Visibility="Collapsed" Background="#FFFDEDED"
                         BorderBrush="#FFB00020" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,4,0,0">

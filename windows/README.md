@@ -193,6 +193,16 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
        業務UIとは前提が異なる**ことが今回の調査で判明した（Thickness/CornerRadiusより一致率が低い）。
      これで「デザイントークン全面移植」の残課題（Thickness/CornerRadius/FontSize）はすべて着手・
      判断済み。据え置いた箇所は全てその場に理由コメントがあり、無言のハードコードは残っていない。
+   - **群×シフトの担当可否を2次元マトリックスへ再設計（2026-09-02, ユーザー提示案・Android と同時対応）**:
+     旧: チェックボックス＋適切回数の数字欄を同じセルに重ねた表で、担当可否だけを一目で見比べられなかった。
+     新: 行=群・列=シフトの✓/—マトリクス。**左列（群名）は横スクロールの外に固定**（`GroupShiftNameColumn`、
+     行高44で右側と揃える）、右側（シフト名ヘッダ＋セル）だけ横スクロール。**セルは全面がタップ標的**の
+     Button（44×44、ON=主色地＋白✓ / OFF=薄い地＋—。色だけに依存しない）。**行ヘッダ（群名）タップで
+     その群の全シフトを一括、列ヘッダ（シフト名）タップでそのシフトを全群へ一括**（1つでもOFFがあれば全ON、
+     全ONなら全OFF）。適切回数は別マトリクス（`GroupAptMatrixHost`）へ分離（Android の③回数分離と同じ構成）。
+     エンジン: `Ws1Ops.SetGroupShiftRow/SetGroupShiftColumn`（Kotlin 原本と同値）を追加。**行OFFでも「休」は
+     残し、休の列はOFFにできない**（担当可能シフトが無い群を作ると validate が拒否し職員が行ごと groupViol に
+     なるため＝3.418.0/3.442.0 と同じ理由。列OFFの拒否は VM が `Notify` で案内）。テスト2件追加（`Ws1OpsTest`）。
    - **並行処理・決定性バグの監査（2026-08-28実施分）を再検証＋横断スイープ（2026-09-02）**:
      過去の監査で見つかった3件（`V6NativeOptimizer.Portfolio.cs`のCancellationToken未観測は監査当日中に
      既に修正済みと確認・対応不要／`SaOptimizer.Run`の`Task.WhenAll`が兄弟ワーカーの障害時に
