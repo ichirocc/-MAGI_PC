@@ -81,6 +81,11 @@ public sealed partial class SettingsView : UserControl
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;
             ExportCsvButton.IsEnabled = ui.Loaded && !ui.Running;
+            // [2026-09-02, 配線] RestorePreviousData（フェーズ9で移植・テスト済み）はこれまで
+            // 呼び出し口が無かった。Ui.PrevBackupAvailable（「データを開く」直前の1世代退避が
+            // 存在するか）が false の間はボタンごと隠す＝押しても何も起きないボタンを見せない。
+            RestorePreviousDataButton.Visibility = ui.PrevBackupAvailable ? Visibility.Visible : Visibility.Collapsed;
+            RestorePreviousDataButton.IsEnabled = !ui.Running;
 
             RenderShiftColors(ui);
             RenderViolationColors(ui);
@@ -317,6 +322,10 @@ public sealed partial class SettingsView : UserControl
             _vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), "勤務表CSV");
         }
     }
+
+    /// <summary>[2026-09-02, 配線] RestorePreviousData（クラスKDoc参照）。ファイルI/Oを伴わない
+    /// （ディスク上の退避ファイルを読むだけ）のでピッカーは不要、ボタン1つで完結する。</summary>
+    private void OnRestorePreviousDataClick(object sender, RoutedEventArgs e) => _vm.RestorePreviousData();
 
     private static string FormatBudget(int sec)
     {

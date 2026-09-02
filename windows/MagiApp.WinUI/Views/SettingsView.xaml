@@ -87,6 +87,8 @@
                 <Button x:Name="SaveDataButton" Content="データを保存（JSON）" Click="OnSaveDataClick" HorizontalAlignment="Stretch" />
                 <Button x:Name="ImportCsvButton" Content="勤務表CSVを取り込む" Click="OnImportCsvClick" HorizontalAlignment="Stretch" />
                 <Button x:Name="ExportCsvButton" Content="勤務表CSVを書き出す" Click="OnExportCsvClick" HorizontalAlignment="Stretch" />
+                <Button x:Name="RestorePreviousDataButton" Content="「データを開く」前の状態に戻す"
+                        Click="OnRestorePreviousDataClick" HorizontalAlignment="Stretch" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

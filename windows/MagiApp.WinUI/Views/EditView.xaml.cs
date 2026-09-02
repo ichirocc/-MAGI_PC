@@ -182,6 +182,8 @@ public sealed partial class EditView : UserControl
 
         WishListHost.Children.Clear();
         var rows = _vm.WishOverrides();
+        ApplyWishesButton.IsEnabled = editable && rows.Count > 0;
+        ClearAllWishesButton.IsEnabled = editable && rows.Count > 0;
         foreach (var v in rows.Take(MaxOverrideRows))
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -215,6 +217,50 @@ public sealed partial class EditView : UserControl
         }
         _vm.SetWish(i, day1 - 1, k);
         WishHintText.Text = "";
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] ApplyWishes/WishOutOfScopeCount（フェーズ9で移植・テスト済み）はこれまで
+    /// 呼び出し口が無かった——登録した希望を勤務表へ反映する手段が、1件ずつの手作業(SetCell)しか
+    /// 存在しなかった。担当外(そのスタッフのグループで担当できない)希望が混じっている場合だけ
+    /// 確認ダイアログで「含めて反映/除いて反映/キャンセル」を選ばせる（Kotlin原本の「希望で上書き」
+    /// 相当・ConfirmAsync とは別の3択のため専用ダイアログ）。
+    /// </summary>
+    private async void OnApplyWishesClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var oos = _vm.WishOutOfScopeCount();
+        if (oos > 0)
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "希望を勤務表へ反映しますか？",
+                Content = new TextBlock
+                {
+                    Text = $"担当外（所属グループで担当できない）希望が{oos}件あります。含めて反映しますか？",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                PrimaryButtonText = "担当外も含めて反映",
+                SecondaryButtonText = "担当外を除いて反映",
+                CloseButtonText = "キャンセル",
+                DefaultButton = ContentDialogButton.Secondary,
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary) _vm.ApplyWishes(true);
+            else if (result == ContentDialogResult.Secondary) _vm.ApplyWishes(false);
+            return;
+        }
+        _vm.ApplyWishes(false);
+    }
+
+    private async void OnClearAllWishesClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var ok = await ConfirmAsync("希望シフトをすべて削除しますか？",
+            "登録済みの希望シフトがすべて削除されます（勤務表自体は変わりません。「元に戻す」で戻せます）。");
+        if (!ok) return;
+        _vm.ClearAllWishes();
     }
 
     // ===== 日別の必要人数（例外, 月次条件） =====

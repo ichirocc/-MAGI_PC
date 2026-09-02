@@ -99,6 +99,17 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      (2パターン目)使用トグルを追加。職員管理にはスキル区分の割当欄(`StaffSkillCombo`)を追加
      （`Ws1AddStaff`/`Ws1EditStaff`自体はSkillIdxを受け取らないAPIのため、追加・改名の直後に
      `SetStaffSkill`を続けて呼ぶ）。
+   - **ホーム3機能＋希望一括操作＋即時保存の配線（2026-09-02）**: 同じ全数点検の続き。
+     `GenerateSmartInitial`（初期解生成・賢い版）/`RunSoftPolish`（仕上げ最適化のみ・破壊なし）/
+     `ApplyAlternative`（Portfolio探索の「他の案」適用、`Ui.Alternatives`が0件のときは節を隠す）を
+     ホームタブへボタン3つで追加。`ApplyWishes`/`ClearAllWishes`（登録済み希望の一括反映/一括削除）を
+     月次条件へ追加（担当外の希望が混じる場合は「含めて反映/除いて反映/キャンセル」の3択ダイアログ）。
+     **`SaveNow`（デバウンス無し即時同期保存、`MagiViewModel.SaveNow`のKDoc「autoSaveの1200msデバウンス
+     中にプロセスが破棄されても編集が失われないための保険」）がどこからも呼ばれておらず、直近の編集から
+     1200ms以内にウィンドウを閉じると自動保存に間に合わず編集が消えうる欠陥**を発見・修正——
+     `MainWindow.OnAppWindowClosing`の実行中でない通常終了経路で必ず呼ぶ。`RestorePreviousData`
+     （「データを開く」直前の状態へ戻す）も設定タブへボタンを追加（`Ui.PrevBackupAvailable`が
+     falseの間はボタンごと隠す）。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

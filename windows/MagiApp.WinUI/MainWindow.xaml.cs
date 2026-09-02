@@ -50,10 +50,21 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// 実行中（前景/背景いずれか）に閉じようとしたら確認する（クラスKDoc「プロセス生存戦略の決定」参照）。
     /// 確認後に自分自身が呼ぶ <see cref="Window.Close"/> で無限ループしないよう <see cref="_closeConfirmed"/> で防ぐ。
+    ///
+    /// [2026-09-02, 配線] 実行中でない通常の終了経路では <see cref="MagiViewModel.SaveNow"/>
+    /// （デバウンス無しの即時同期保存。フェーズ9で移植・テスト済み——KDoc「autoSaveの1200msデバウンス中に
+    /// プロセスが破棄されても編集が失われないための保険」参照）が一度も呼ばれておらず、直近の編集から
+    /// 1200ms以内にウィンドウを閉じると自動保存に間に合わず編集が消えうる欠陥があった。閉じる直前に
+    /// 必ず呼ぶ（確認ダイアログで終了する場合も同様）。
     /// </summary>
     private async void OnAppWindowClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
-        if (_closeConfirmed || !_vm.Ui.Running) return;
+        if (_closeConfirmed) return;
+        if (!_vm.Ui.Running)
+        {
+            _vm.SaveNow();
+            return;
+        }
         args.Cancel = true;
         var dialog = new ContentDialog
         {

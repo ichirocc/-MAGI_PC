@@ -9,15 +9,34 @@
       必須/合計違反）を読取専用で示す最小版。「勤務表をつくる」導線は既存の RunV6FullOptimize
       （フェーズ9ピース9で移植済み・テスト済み）へ直接委譲する。
       「バックグラウンドで計算」は Phase 10 で実装した RunInBackground（HomeView.xaml.cs 参照）。
+
+      [2026-09-02, 配線] 「初期解生成（賢い版）」(GenerateSmartInitial)・「仕上げ最適化」
+      (RunSoftPolish)・「他の案」の適用(ApplyAlternative)は、いずれもフェーズ9で移植・テスト済みの
+      ViewModel APIだったがこの画面から一度も呼べなかった（RunV6FullOptimize/RunInBackground/Stopの
+      3つしか導線が無かった）。3ボタンとも RunV6FullOptimize と同じ Ui.Loaded &amp;&amp; !Ui.Running の
+      表示上の抑止で並べる（実際の可否判定は各APIが内部で行う二重防御、既存ボタンと同じ方針）。
+      「他の案」は Portfolio(複数案並列探索)実行後にだけ Ui.Alternatives が埋まるため、0件のときは
+      節ごと隠す。
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
             <TextBlock Text="ホーム" FontSize="20" FontWeight="SemiBold" />
             <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="14" />
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+            <Button x:Name="SmartInitialButton" Content="初期解生成（賢い版・下書きだけ作る）"
+                    Click="OnSmartInitialClick" HorizontalAlignment="Stretch" />
             <Button x:Name="MakeButton" Content="勤務表をつくる" Click="OnMakeClick" HorizontalAlignment="Stretch" />
+            <Button x:Name="SoftPolishButton" Content="仕上げ最適化（今の勤務表をやさしく整える）"
+                    Click="OnSoftPolishClick" HorizontalAlignment="Stretch" />
             <Button x:Name="BackgroundButton" Content="バックグラウンドで計算" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
             <Button x:Name="StopButton" Content="やめる" Click="OnStopClick" HorizontalAlignment="Stretch" />
+
+            <StackPanel x:Name="AlternativesPanel" Spacing="4">
+                <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="Portfolio(並列複数案)実行で見つかった採用案以外の候補。適用すると今の勤務表を置き換えます。" />
+                <StackPanel x:Name="AlternativesListHost" Spacing="4" />
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
