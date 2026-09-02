@@ -7,7 +7,8 @@
       [フェーズ8→9] 「勤務表」タブ。S×T が可変でセルごとに違反色分けが要るため XAML の静的
       テンプレートで表現しづらく、コードビハインドで Grid を組み立てる（ScheduleView.xaml.cs の
       RenderSchedule 参照）。Kotlin原本 MagiScheduleViews.kt（1594行、ScheduleGrid/StaffCalendarCard/
-      TallyCard 等）の本格移植は今後の段階（ItemsRepeaterベース・違反フィルタ・週送り等）で行う。
+      TallyCard 等）の本格移植（ItemsRepeaterベース・違反フィルタ・週送り等）は今後の段階のままだが、
+      シフト集計（TallyCard＝職員別・日別）は最小版を実装済み（RenderStaffTally/RenderDayTally 参照）。
       セルタップで担当可能シフトの一覧から選んで編集できる（ScheduleView.xaml.cs の
       ShowCellEditor/MagiViewModel.SetCell 参照）。違反ハイライト（枠色）・希望バッジ・
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
@@ -28,7 +29,19 @@
         <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="14" TextWrapping="Wrap" />
 
         <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <Grid x:Name="ScheduleGridHost" />
+            <StackPanel Spacing="20">
+                <Grid x:Name="ScheduleGridHost" />
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="シフト集計（職員別）" FontSize="14" FontWeight="SemiBold" />
+                    <Grid x:Name="StaffTallyGridHost" />
+                </StackPanel>
+
+                <StackPanel Spacing="6">
+                    <TextBlock Text="シフト集計（日別）" FontSize="14" FontWeight="SemiBold" />
+                    <Grid x:Name="DayTallyGridHost" />
+                </StackPanel>
+            </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

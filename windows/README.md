@@ -57,7 +57,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
    - ViewModel層＝**移植完了**。Kotlin原本 `MagiViewModel.kt` の拡張関数86件・コアメンバ関数とも
      すべて対応物あり（`runInBackground`/`applyBgResult` も含め完了。詳細はフェーズ10）。
    - UI層＝5タブすべてに実体あり。勤務表タブはセル編集(タップ→担当可能シフト選択)・
-     元に戻す/やり直す・違反ハイライト/希望バッジまで実装。編集タブは月次条件(希望/日別必要人数の
+     元に戻す/やり直す・違反ハイライト/希望バッジ・**シフト集計(職員別/日別、Kotlin原本TallyCardの
+     最小移植=`RenderStaffTally`/`RenderDayTally`。生カウントは`Schedule`から都度計算・セル枠は
+     `CountViolations`/`NeedViolations`で色分け)**まで実装。編集タブは月次条件(希望/日別必要人数の
      一覧・追加・削除)・職員管理(追加/改名/削除、削除確認ダイアログ付き)・年間マスター
      (グループ/シフトの追加/改名/削除に加え、制約(ルール)10族=cons1/cons2/cons3系4/cons41(s)/
      cons42(s)の追加/変更/削除まで実装。種類ごとに入力欄の構成が異なる=`EditView.xaml.cs` の
@@ -66,9 +68,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      スクロール＋約2.5秒ハイライト=`MainWindow.JumpToCell`/`ScheduleView.FocusCell`）。設定タブは
      最適化設定＋データ入出力(JSON開く/保存・CSV取込/書出)。デザイントークン（ブランド色）も
      `Styles/MagiTheme.xaml` へ移植済み（余白/角丸/タイポグラフィスケールの全面移植は未着手）。
-     未対応（意図的にスコープ外）：`MagiScheduleViews.kt`（TallyCard/週送り/ItemsRepeater等）の
-     本格移植・covU/covO/c41系(日単位)やlow/high/apt/c2(職員単位)の違反箇所ジャンプ
-     （単一セルを指さないため対象外、上記「違反の場所」参照）。
+     未対応（意図的にスコープ外）：`MagiScheduleViews.kt`の残り（週ページング・横スクロール併用・
+     ItemsRepeaterベース化・違反種別フィルタ・検索/凡例折りたたみ等）・covU/covO/c41系(日単位)や
+     low/high/apt/c2(職員単位)の違反箇所ジャンプ（単一セルを指さないため対象外、上記「違反の場所」参照）。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの

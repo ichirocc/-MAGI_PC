@@ -96,6 +96,8 @@ public sealed partial class ScheduleView : UserControl
         UndoButton.IsEnabled = ui.CanUndo && !ui.Running;
         RedoButton.IsEnabled = ui.CanRedo && !ui.Running;
         RenderSchedule(ui);
+        RenderStaffTally(ui);
+        RenderDayTally(ui);
     }
 
     private void RenderSchedule(UiState ui)
@@ -200,6 +202,106 @@ public sealed partial class ScheduleView : UserControl
                 AddDataCell(i + 1, j + 1, i, j, row[j]);
             }
         }
+    }
+
+    /// <summary>
+    /// [シフト集計＝Kotlin原本 TallyCard の最小移植] 職員別（職員×シフト回数）。
+    /// 生カウントは <see cref="UiState.Schedule"/> から都度数える（S≤30・K≤12程度の規模なら軽い）。
+    /// セル枠は <see cref="UiState.CountViolations"/>（"i,k"→low/high/apt 等）で色分けし、
+    /// <see cref="RenderSchedule"/> の違反セルと同じ「必須=濃い赤／要調整=橙」の凡例を踏襲する。
+    /// </summary>
+    private void RenderStaffTally(UiState ui)
+    {
+        StaffTallyGridHost.Children.Clear();
+        StaffTallyGridHost.RowDefinitions.Clear();
+        StaffTallyGridHost.ColumnDefinitions.Clear();
+        if (!ui.Loaded || ui.Schedule.Count == 0) return;
+
+        var staffCount = ui.Schedule.Count;
+        var shiftCount = ui.ShiftSymbols.Count;
+        for (var r = 0; r <= staffCount; r++) StaffTallyGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var c = 0; c <= shiftCount; c++) StaffTallyGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        AddTallyCell(StaffTallyGridHost, 0, 0, "", header: true);
+        for (var k = 0; k < shiftCount; k++) AddTallyCell(StaffTallyGridHost, 0, k + 1, ui.ShiftSymbols[k], header: true);
+
+        for (var i = 0; i < staffCount; i++)
+        {
+            var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+            AddTallyCell(StaffTallyGridHost, i + 1, 0, name, header: true);
+            for (var k = 0; k < shiftCount; k++)
+            {
+                var count = ui.Schedule[i].Count(v => v == k);
+                ui.CountViolations.TryGetValue($"{i},{k}", out var vioClass);
+                var brush = VioBorderBrush(vioClass, out var thickness);
+                AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
+            }
+        }
+    }
+
+    /// <summary>
+    /// [シフト集計＝Kotlin原本 TallyCard の最小移植] 日別（シフト×日 人数）。
+    /// セル枠は <see cref="UiState.NeedViolations"/>（"k,j"→covU/covO 等）で色分けする。
+    /// </summary>
+    private void RenderDayTally(UiState ui)
+    {
+        DayTallyGridHost.Children.Clear();
+        DayTallyGridHost.RowDefinitions.Clear();
+        DayTallyGridHost.ColumnDefinitions.Clear();
+        if (!ui.Loaded || ui.Schedule.Count == 0) return;
+
+        var shiftCount = ui.ShiftSymbols.Count;
+        var dayCount = ui.Schedule[0].Count;
+        for (var r = 0; r <= shiftCount; r++) DayTallyGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var c = 0; c <= dayCount; c++) DayTallyGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        AddTallyCell(DayTallyGridHost, 0, 0, "", header: true);
+        for (var j = 0; j < dayCount; j++) AddTallyCell(DayTallyGridHost, 0, j + 1, $"{j + 1}", header: true);
+
+        for (var k = 0; k < shiftCount; k++)
+        {
+            AddTallyCell(DayTallyGridHost, k + 1, 0, ui.ShiftSymbols[k], header: true);
+            for (var j = 0; j < dayCount; j++)
+            {
+                var count = 0;
+                foreach (var row in ui.Schedule) if (j < row.Count && row[j] == k) count++;
+                ui.NeedViolations.TryGetValue($"{k},{j}", out var vioClass);
+                var brush = VioBorderBrush(vioClass, out var thickness);
+                AddTallyCell(DayTallyGridHost, k + 1, j + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
+            }
+        }
+    }
+
+    /// <summary>集計グリッド共通のセル描画（<see cref="RenderStaffTally"/>/<see cref="RenderDayTally"/> 共用）。</summary>
+    private static void AddTallyCell(Grid host, int row, int col, string text, bool header, Brush? borderBrush = null, Thickness? thickness = null)
+    {
+        var block = new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+            Padding = new Thickness(6, 4, 6, 4),
+            MinWidth = header && col == 0 ? 96 : 32,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        var border = new Border
+        {
+            Child = block,
+            BorderBrush = borderBrush ?? new SolidColorBrush(Colors.LightGray),
+            BorderThickness = thickness ?? new Thickness(0, 0, 1, 1),
+        };
+        Grid.SetRow(border, row);
+        Grid.SetColumn(border, col);
+        host.Children.Add(border);
+    }
+
+    /// <summary>違反クラス文字列("vio-xxx"等)から集計セルの枠色/太さを決める。null=違反なし=既定枠。</summary>
+    private static Brush? VioBorderBrush(string? vioClass, out Thickness? thickness)
+    {
+        if (vioClass is null) { thickness = null; return null; }
+        var family = vioClass.StartsWith("vio-", StringComparison.Ordinal) ? vioClass["vio-".Length..] : vioClass;
+        thickness = new Thickness(2);
+        return new SolidColorBrush(MirrorKeys.Hard.Contains(family) ? Colors.Crimson : Colors.DarkOrange);
     }
 
     /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
