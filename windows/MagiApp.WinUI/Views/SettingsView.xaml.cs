@@ -182,9 +182,13 @@ public sealed partial class SettingsView : UserControl
         {
             Width = 20,
             Height = 20,
+            // [トークン非適用, 意図的な微調整値] 20x20の小スウォッチの角丸=4はMagiCornerXS(10)より
+            // 60%小さく7段階スケールの対象外（小スウォッチに対して10だと丸すぎて視認性が落ちる）。
             CornerRadius = new CornerRadius(4),
             Background = new SolidColorBrush(ColorHex.Parse(resolvedHex, Colors.Gray)),
             BorderBrush = new SolidColorBrush(Colors.Gray),
+            // [トークン非適用, 意図的な微調整値] 枠線幅=1はヘアライン境界線で、スペーシング/角丸
+            // スケール（最小4）の対象外（枠線幅は別カテゴリのトークン）。
             BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -196,9 +200,20 @@ public sealed partial class SettingsView : UserControl
             MinWidth = 180,
             TextWrapping = TextWrapping.Wrap,
         };
-        var changeButton = new Button { Content = "変更", Padding = new Thickness(8, 2, 8, 2) };
+        // 左右=MagiSpacingSM(8)と厳密一致。上下=2はXS(4)から50%乖離＝ボタンを縦に詰める意図的な
+        // 微調整値のためトークン化せず残す（見た目を変えない範囲でのみ左右をトークン化）。
+        var changeButton = new Button
+        {
+            Content = "変更",
+            Padding = new Thickness((double)Application.Current.Resources["MagiSpacingSM"], 2, (double)Application.Current.Resources["MagiSpacingSM"], 2),
+        };
         changeButton.Flyout = BuildColorPickerFlyout(resolvedHex, onSet);
-        var resetButton = new Button { Content = "既定に戻す", Padding = new Thickness(8, 2, 8, 2), IsEnabled = custom };
+        var resetButton = new Button
+        {
+            Content = "既定に戻す",
+            Padding = new Thickness((double)Application.Current.Resources["MagiSpacingSM"], 2, (double)Application.Current.Resources["MagiSpacingSM"], 2),
+            IsEnabled = custom,
+        };
         resetButton.Click += (_, _) => onReset();
 
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -219,7 +234,8 @@ public sealed partial class SettingsView : UserControl
     private Flyout BuildColorPickerFlyout(string currentHex, Action<string> onSet)
     {
         var flyout = new Flyout();
-        var panel = new StackPanel { Spacing = 8, Padding = new Thickness(4) };
+        // Padding=4はMagiSpacingXS(4)と厳密一致。
+        var panel = new StackPanel { Spacing = 8, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]) };
 
         var swatchGrid = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         foreach (var hex in MagiAccent.All)
@@ -228,6 +244,9 @@ public sealed partial class SettingsView : UserControl
             {
                 Width = 28,
                 Height = 28,
+                // [トークン非適用, 意図的な微調整値] Padding=0はスウォッチ全面を色で塗る意図の
+                // ゼロ値でスペーシング段階の対象外。角丸=4はMagiCornerXS(10)より60%小さく、
+                // 28x28の小タイルに対して10だと丸すぎるための微調整値。
                 Padding = new Thickness(0),
                 CornerRadius = new CornerRadius(4),
                 Background = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray)),

@@ -297,6 +297,7 @@ public sealed partial class EditView : UserControl
             {
                 Text = weekdayLabels[c], FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(color), HorizontalAlignment = HorizontalAlignment.Center,
+                // 2px は7段階スケール(XS=4が最小)に無い意図的な微調整値のため据え置き（トークン化するとサイズが変わる）。
                 Padding = new Thickness(2),
             };
             Grid.SetRow(head, 0);
@@ -331,10 +332,11 @@ public sealed partial class EditView : UserControl
             var cellButton = new Button
             {
                 Content = content,
-                Padding = new Thickness(4),
+                Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]),
                 MinWidth = 36,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
                 Background = new SolidColorBrush(selected ? Colors.DodgerBlue : Colors.Transparent),
+                // 1px は枠線の太さでありスペーシングトークンの対象外のため据え置き。
                 BorderThickness = new Thickness(1),
                 BorderBrush = new SolidColorBrush(Colors.LightGray),
                 IsEnabled = editable && staffIdx >= 0,
@@ -1498,7 +1500,7 @@ public sealed partial class EditView : UserControl
             var block = new TextBlock
             {
                 Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Padding = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Center,
+                Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]), HorizontalAlignment = HorizontalAlignment.Center,
             };
             Grid.SetRow(block, row);
             Grid.SetColumn(block, col);
@@ -1513,6 +1515,7 @@ public sealed partial class EditView : UserControl
         {
             for (var k = 0; k < shiftCount; k++)
             {
+                // Padding(0) はチェックボックス既定余白の意図的な打消し（=0）でスペーシングトークンの対象外のため据え置き。
                 var check = new CheckBox { Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Center };
                 var gg = g;
                 var kk = k;
@@ -1522,7 +1525,7 @@ public sealed partial class EditView : UserControl
                 var apt = new TextBox { Width = 44, FontSize = 12 };
                 apt.LostFocus += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupApt(gg, kk, apt.Text); };
 
-                var cellPanel = new StackPanel { Spacing = 2, Padding = new Thickness(4) };
+                var cellPanel = new StackPanel { Spacing = 2, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]) };
                 cellPanel.Children.Add(check);
                 cellPanel.Children.Add(apt);
                 Grid.SetRow(cellPanel, g + 1);

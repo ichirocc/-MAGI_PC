@@ -168,6 +168,14 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      ハードコード値(Thickness/CornerRadius/FontSizeが計60箇所超)からの置換は未着手のまま残っている**
      （次の全数点検で拾うべき既知の残課題として明記）。実装の教訓: 「全数点検を完了」と明言した
      直後でも、コードは変わり続けるため定期的な再走査が要る＝一度の宣言を恒久の事実として扱わない。
+   - **MagiThemeトークンをThickness/CornerRadiusへ適用（2026-09-02）**: 上記の残課題のうち
+     Thickness/CornerRadius（計35箇所）を対象に、EditView/ScheduleView/SettingsView.xaml.csを
+     並列で精査。**トークン値と厳密一致する8箇所のみ`Application.Current.Resources["MagiSpacingXX"]`へ
+     置換**（見た目は不変）し、残り27箇所（密な勤務表グリッドのセル余白6,4/罫線1dp/違反枠2-3dp/
+     角丸0など、7段階スケール(4/8/12/16/20)に一致しない意図的な微調整値）は**据え置き＋その場に
+     理由コメントを追加**——数値を無理にトークンへ寄せてグリッドの見た目を変えることより、
+     デザインシステムに素直に繋がる箇所だけ繋ぐことを優先した。FontSize（31箇所）は`Style`
+     オブジェクト全体の割当が絡み判断がより難しいため今回は対象外のまま（次の残課題）。
    - **並行処理・決定性バグの監査（2026-08-28実施分）を再検証＋横断スイープ（2026-09-02）**:
      過去の監査で見つかった3件（`V6NativeOptimizer.Portfolio.cs`のCancellationToken未観測は監査当日中に
      既に修正済みと確認・対応不要／`SaOptimizer.Run`の`Task.WhenAll`が兄弟ワーカーの障害時に

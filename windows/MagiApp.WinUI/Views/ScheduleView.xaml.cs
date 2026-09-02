@@ -129,7 +129,8 @@ public sealed partial class ScheduleView : UserControl
             ItemsSource = new[] { "期間全体", "この曜日" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         string[] weekdayLabels = { "日", "月", "火", "水", "木", "金", "土" };
-        var weekdayChecks = weekdayLabels.Select(l => new CheckBox { Content = l, Padding = new Thickness(4, 0, 4, 0) }).ToList();
+        var weekdayXs = (double)Application.Current.Resources["MagiSpacingXS"];
+        var weekdayChecks = weekdayLabels.Select(l => new CheckBox { Content = l, Padding = new Thickness(weekdayXs, 0, weekdayXs, 0) }).ToList();
         var weekdayPanel = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 2, Visibility = Visibility.Collapsed,
@@ -292,6 +293,8 @@ public sealed partial class ScheduleView : UserControl
                 Text = text,
                 FontSize = 12,
                 FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+                // [Token] 6,4 は密なスケジュールグリッド用に調整済みの値でMagiSpacingスケール(4/8/12…)に
+                // 一致しないため据え置き（トークン化するとグリッド全体のセル間隔が変わってしまう）。
                 Padding = new Thickness(6, 4, 6, 4),
                 MinWidth = header && col == 0 ? 96 : 32,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -300,6 +303,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 Child = block,
                 BorderBrush = new SolidColorBrush(Colors.LightGray),
+                // [Token] 罫線1dpは意図的な最小値のため据え置き（スペーシングトークンの対象外）。
                 BorderThickness = new Thickness(0, 0, 1, 1),
             };
             Grid.SetRow(border, row);
@@ -318,6 +322,7 @@ public sealed partial class ScheduleView : UserControl
             var button = new Button
             {
                 Content = new TextBlock { Text = sym, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(fg) },
+                // [Token] セルパディング/枠/角丸は密グリッド用の意図的な値（据え置き。上のAddCellと同じ理由）。
                 Padding = new Thickness(6, 4, 6, 4),
                 MinWidth = 32,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -340,10 +345,13 @@ public sealed partial class ScheduleView : UserControl
                     Fill = new SolidColorBrush(reflected ? Colors.SeaGreen : Colors.HotPink),
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Bottom,
+                    // [Token] 希望バッジ(8x8)の位置微調整値でスペーシングトークンの対象外のため据え置き。
                     Margin = new Thickness(0, 0, 2, 2),
                 });
             }
 
+            // [Token] 罫線1dp/違反枠2dp/フォーカス枠3dpはいずれも意図的な強調段階の値で
+            // スペーシング/角丸トークンの対象外（据え置き）。
             Brush borderBrush = new SolidColorBrush(Colors.LightGray);
             var thickness = new Thickness(0, 0, 1, 1);
             if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
@@ -470,6 +478,8 @@ public sealed partial class ScheduleView : UserControl
         FrameworkElement content = block;
         if (onClick is not null)
         {
+            // [Token] セルパディング/枠/角丸は密グリッド用の意図的な値（据え置き。RenderSchedule の
+            // AddCell/AddDataCell と同じ理由でMagiSpacing/MagiCornerスケールに一致しない）。
             var button = new Button
             {
                 Content = block,
@@ -491,6 +501,7 @@ public sealed partial class ScheduleView : UserControl
         {
             Child = content,
             BorderBrush = borderBrush ?? new SolidColorBrush(Colors.LightGray),
+            // [Token] 罫線1dpは意図的な最小値のため据え置き（据え置き理由は AddCell と同じ）。
             BorderThickness = thickness ?? new Thickness(0, 0, 1, 1),
         };
         Grid.SetRow(border, row);
@@ -525,6 +536,7 @@ public sealed partial class ScheduleView : UserControl
     private static Brush? VioBorderBrush(UiState ui, string? vioClass, out Thickness? thickness)
     {
         if (vioClass is null) { thickness = null; return null; }
+        // [Token] 違反枠2dpは RenderSchedule の違反強調と同じ意図的な値のため据え置き。
         thickness = new Thickness(2);
         return ResolveVioBrush(ui, vioClass);
     }
