@@ -78,6 +78,7 @@ public sealed partial class AnalysisView : UserControl
             FixSection.Visibility = Visibility.Collapsed;
             IssuesSection.Visibility = Visibility.Collapsed;
             PinSection.Visibility = Visibility.Collapsed;
+            ForbiddenSection.Visibility = Visibility.Collapsed;
             LogSection.Visibility = Visibility.Collapsed;
             return;
         }
@@ -88,6 +89,7 @@ public sealed partial class AnalysisView : UserControl
         RenderFix(ui);
         RenderIssues(ui);
         RenderPinTargets(ui);
+        RenderForbiddenDiag(ui);
         RenderLogs(ui);
     }
 
@@ -252,8 +254,47 @@ public sealed partial class AnalysisView : UserControl
             "下の固定を緩めると、直せる違反が増える可能性があります。";
         foreach (var pin in ui.PinTargets)
         {
-            PinList.Children.Add(BodyText(
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(BodyText(
                 $"{pin.StaffName} の {pin.ShiftKigou}：{pin.PinnedCount}回に固定・{pin.Attempts}回ブロック"));
+            // [2026-09-02, 配線] RelaxStaffRangePin（フェーズ9で移植・テスト済み）はこれまで
+            // 呼び出し口が無かった——固定を緩めたい所を突き止められても、実際に緩める手段が
+            // 「編集タブで個人別の回数を探して直接書き換える」しか無かった。ここから±1で緩められる
+            // （下限-1・上限+1。もう一度「勤務表をつくる」を押すと効果が分かる）。
+            var relax = new Button { Content = "±1 緩める", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left };
+            var staff = pin.Staff;
+            var shift = pin.Shift;
+            relax.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, -1, 1);
+            row.Children.Add(relax);
+            PinList.Children.Add(row);
+        }
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] ④' 禁止の並び(c3n)診断。<see cref="UiState.ForbiddenDiag"/>
+    /// （<see cref="MagiViewModel.RelaxForbiddenRule"/> と対だが、これまでこの画面が
+    /// ForbiddenDiag自体を一度も読んでおらず、診断結果もその緩和手段もどちらも見えなかった）。
+    /// 「このデータ・希望のままでは崩せない」(!Escapable)と判定された run だけを列挙する
+    /// （崩せる見込みがある run まで並べると、緩和ボタンの意味が薄まる）。
+    /// </summary>
+    private void RenderForbiddenDiag(UiState ui)
+    {
+        ForbiddenList.Children.Clear();
+        var diag = ui.ForbiddenDiag;
+        var blocked = diag?.Runs.Where(r => !r.Escapable).ToList() ?? new List<ForbiddenRunDiag>();
+        ForbiddenSection.Visibility = blocked.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (blocked.Count == 0) return;
+
+        foreach (var run in blocked)
+        {
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(BodyText($"{run.StaffName} の {run.SeqLabel}（{run.StartDay + 1}日目〜）", semiBold: true));
+            row.Children.Add(BodyText(run.Hint, dim: true));
+            var relax = new Button { Content = "この禁止の並びを緩める（削除）", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left };
+            var seqLabel = run.SeqLabel;
+            relax.Click += (_, _) => _vm.RelaxForbiddenRule(seqLabel);
+            row.Children.Add(relax);
+            ForbiddenList.Children.Add(row);
         }
     }
 

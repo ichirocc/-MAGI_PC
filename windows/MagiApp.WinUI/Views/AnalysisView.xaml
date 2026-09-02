@@ -67,7 +67,15 @@
             <StackPanel x:Name="PinSection" Spacing="6">
                 <TextBlock Text="回数の固定で止まった手" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="PinSummaryText" FontSize="13" TextWrapping="Wrap" />
-                <StackPanel x:Name="PinList" Spacing="2" />
+                <StackPanel x:Name="PinList" Spacing="4" />
+            </StackPanel>
+
+            <!-- ④' 禁止の並び診断（なぜ崩せないか） -->
+            <StackPanel x:Name="ForbiddenSection" Spacing="6">
+                <TextBlock Text="禁止の並びで止まっている箇所" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock TextWrapping="Wrap" FontSize="13" Opacity="0.8"
+                           Text="このデータ・希望のままでは崩せないと判定された禁止の並び(c3n)です。緩める＝その制約行を削除します（元に戻す可）。" />
+                <StackPanel x:Name="ForbiddenList" Spacing="4" />
             </StackPanel>
 
             <!-- ⑤ 診断ログ -->

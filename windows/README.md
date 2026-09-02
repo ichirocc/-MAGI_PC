@@ -121,6 +121,12 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      選べる——`ImportCsvSmart`には無い選択肢）・操作ログ書出（`ExportLogs`/`ExportLogsJson`）・
      新規作成（`InitBlankState`、最小構成から作り直す。`Load()`経路のため現在のデータは
      `RestorePreviousData`で復元可能）を設定タブへ配線。
+   - **禁止の並び診断＋回数固定の緩和ボタンを分析タブへ配線（2026-09-02）**: `RelaxStaffRangePin`
+     （「回数の固定で止まった手」一覧に「±1 緩める」ボタンを追加）と、これまで画面が一度も
+     読んでいなかった`UiState.ForbiddenDiag`（禁止の並び(c3n)が「このデータ・希望のままでは
+     崩せない」と判定した箇所）＋`RelaxForbiddenRule`（新設の「禁止の並びで止まっている箇所」節、
+     崩せないと判定された行だけに「緩める（削除）」ボタン）を配線。前者は診断だけ見えて直す手段が
+     無く、後者は診断結果自体が全く表示されていなかった。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの
