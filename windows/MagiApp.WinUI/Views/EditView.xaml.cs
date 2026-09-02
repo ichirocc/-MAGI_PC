@@ -44,6 +44,7 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _constraintRowItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterSkillGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _staffSkillItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _staffRangeShiftItems = System.Array.Empty<string>();
 
     /// <summary>群×シフトの担当可否・適切回数マトリクス（Ws1SetGroupShift/Ws1SetGroupApt）が
     /// 直近に組み立てた行/列の記号。群数・シフト数・記号が変わったときだけ<see cref="BuildGroupShiftMatrix"/>
@@ -386,6 +387,56 @@ public sealed partial class EditView : UserControl
         StaffHintText.Text = editable
             ? "削除すると、その人の勤務・希望・個人の回数も消えます（「元に戻す」で戻せます）。"
             : (ui.Loaded ? "計算の実行中は職員を変更できません。終わってからにしてください。" : "");
+
+        RenderStaffRange(editable);
+    }
+
+    /// <summary>
+    /// [2026-09-02, 配線] SetStaffRange/RemoveStaffRange（個人別の回数=下限/上限、フェーズ9で移植・
+    /// テスト済み）はこれまで呼び出し口が無かった——分析タブの「回数の固定で止まった手」は
+    /// この値を読むが、そもそも値を設定する手段がここまで無かった（RelaxStaffRangePinの±1調整は
+    /// 既存値の微調整のみで、新規設定はできない）。対象職員は上の「対象の職員」(StaffCombo)を共有し、
+    /// 一覧は StaffCountRules（個人別レンジ+適切回数(apt)の実効目標を統合したビュー）から
+    /// HasRange=true（個人別上下限が設定されている）行だけを列挙する。
+    /// </summary>
+    private void RenderStaffRange(bool editable)
+    {
+        SyncItems(StaffRangeShiftCombo, _vm.Ui.ShiftSymbols, ref _staffRangeShiftItems);
+        SetStaffRangeButton.IsEnabled = editable && StaffCombo.SelectedIndex >= 0;
+
+        StaffRangeListHost.Children.Clear();
+        var rows = _vm.StaffCountRules().Where(v => v.HasRange).ToList();
+        foreach (var v in rows.Take(MaxOverrideRows))
+        {
+            var target = v.AptEff >= 0 ? $"・目標{v.AptEff}" : "";
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{v.StaffName} {v.Kigou}: 下限{DashIfBlank(v.Lo)}〜上限{DashIfBlank(v.Hi)}{target}",
+                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var i = v.I;
+            var k = v.K;
+            remove.Click += (_, _) => _vm.RemoveStaffRange(i, k);
+            row.Children.Add(remove);
+            StaffRangeListHost.Children.Add(row);
+        }
+        if (rows.Count > MaxOverrideRows)
+        {
+            StaffRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+        }
+    }
+
+    private void OnSetStaffRangeClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var i = StaffCombo.SelectedIndex;
+        var k = StaffRangeShiftCombo.SelectedIndex;
+        if (i < 0) { StaffRangeHintText.Text = "対象の職員を選んでください（上の「対象の職員」）。"; return; }
+        if (k < 0) { StaffRangeHintText.Text = "シフトを選んでください。"; return; }
+        _vm.SetStaffRange(i, k, StaffRangeLoBox.Text.Trim(), StaffRangeHiBox.Text.Trim());
+        StaffRangeHintText.Text = "";
     }
 
     /// <summary>選択中の職員の名前・所属を入力欄へ取り込む（選択が変わったときだけ）。</summary>

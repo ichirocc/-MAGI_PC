@@ -12,7 +12,9 @@
       本格移植ではなく、各ドアの骨格＋既存の公開 ViewModel メソッドへ確実に配線できる操作のみ:
         月次条件   … 対象期間の表示・「来月にする」(SetNextMonth)・希望/日別必要人数の一覧・追加/削除
                      (WishOverrides/SetWish/RemoveWish・NeedDayOverrides/SetNeedDay/RemoveNeedDay)
-        職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
+        職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)＋
+                     個人別の回数=下限/上限の設定/削除(SetStaffRange/RemoveStaffRange、2026-09-02追加。
+                     一覧はStaffCountRules=個人別レンジと適切回数(apt)の実効目標を統合したビュー)
         年間マスター … シフトの追加/改名/削除(Ws1AddShift/Ws1EditShift/Ws1RemoveShift)＋
                      グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)＋
                      スキル区分の追加/改名/削除(AddSkillGroup/EditSkillGroup/RemoveSkillGroup、
@@ -113,6 +115,16 @@
                 </StackPanel>
 
                 <TextBlock x:Name="StaffHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="個人別の回数（下限・上限。対象は上の「対象の職員」）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <StackPanel x:Name="StaffRangeListHost" Spacing="2" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="StaffRangeShiftCombo" Width="100" PlaceholderText="シフト" />
+                    <TextBox x:Name="StaffRangeLoBox" Width="56" PlaceholderText="下限" />
+                    <TextBox x:Name="StaffRangeHiBox" Width="56" PlaceholderText="上限" />
+                    <Button x:Name="SetStaffRangeButton" Content="設定" Click="OnSetStaffRangeClick" />
+                </StackPanel>
+                <TextBlock x:Name="StaffRangeHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
             </StackPanel>
 
             <!-- ===== 年間マスター（制度変更時のみ） ===== -->
