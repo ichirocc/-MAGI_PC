@@ -15,11 +15,22 @@
         職員管理   … 職員一覧の表示と 追加/改名・所属変更/削除 (Ws1AddStaff/Ws1EditStaff/Ws1RemoveStaff)
         年間マスター … シフトの追加/改名/削除(Ws1AddShift/Ws1EditShift/Ws1RemoveShift)＋
                      グループの追加/改名/削除(Ws1AddGroup/Ws1EditGroup/Ws1RemoveGroup)＋
+                     スキル区分の追加/改名/削除(AddSkillGroup/EditSkillGroup/RemoveSkillGroup、
+                     cons41s/cons42sの対象自体を作る手段。職員管理のスキル割当と対)＋
+                     群×シフトの担当可否・適切回数マトリクス(Ws1SetGroupShift/Ws1SetGroupApt/
+                     Ws1ResetGroupApt、EditView.xaml.cs の BuildGroupShiftMatrix 参照)＋
+                     上限人数(2パターン目)の使用可否(Ws1SetUse2)＋
                      制約(ルール)10族の追加/変更/削除(AddCons*/UpdateConstraint/RemoveConstraint、
                      フィールド構成は EditView.xaml.cs の ConstraintFamilyMetas 参照)
-      削除系（職員/グループ）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む
+      [2026-09-02, 配線] 上記のうちスキル区分CRUD・群×シフトマトリクス・Use2トグルは、対応する
+      ViewModel API がフェーズ9で移植済みだったにも関わらずこの画面に一度も呼び出し口が無かった
+      「配線されていない箱」——特に群×シフトのcanDo設定は新規データで誰も担当できるシフトを設定できない
+      という実運用上のギャップだった。職員管理のスキル区分選択(StaffSkillCombo)も同じタイミングで追加
+      （SetStaffSkillは追加/改名アクションと独立APIのため、追加・改名の直後に続けて呼ぶ）。
+      削除系（職員/グループ/スキル区分）は EditView.xaml.cs の ConfirmAsync（ContentDialog）で確認を挟む
       （シフト削除は該当マスがKotlin原本と同じく「休」/先頭シフトへ吸収されるだけで大量破壊的では
-      ないため、職員/グループと同じ確認ダイアログは課さず参照件数(Ws1ShiftRefCount)をヒント文で示す）。
+      ないため、職員/グループ/スキル区分と同じ確認ダイアログは課さず参照件数(Ws1ShiftRefCount)を
+      ヒント文で示す）。
       ドアの切替は ComboBox（SettingsView.xaml の計算方式セレクタと同じ書き方）で行い、各ドアの
       StackPanel の Visibility をコードビハインドで切り替える。
 
@@ -88,6 +99,9 @@
                 <TextBlock Text="所属グループ" />
                 <ComboBox x:Name="GroupCombo" HorizontalAlignment="Stretch" />
 
+                <TextBlock Text="スキル区分（cons41s/cons42sの対象。追加・改名・変更は「年間マスター」）" />
+                <ComboBox x:Name="StaffSkillCombo" HorizontalAlignment="Stretch" />
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="AddStaffButton" Content="追加" Click="OnAddStaffClick" />
                     <Button x:Name="EditStaffButton" Content="改名・所属変更" Click="OnEditStaffClick" />
@@ -141,6 +155,34 @@
                     <Button x:Name="RemoveMasterGroupButton" Content="削除" Click="OnRemoveMasterGroupClick" />
                 </StackPanel>
                 <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="スキル区分" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock x:Name="SkillGroupListText" TextWrapping="Wrap" FontSize="13" />
+
+                <TextBlock Text="スキル区分の追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <ComboBox x:Name="MasterSkillGroupCombo" HorizontalAlignment="Stretch"
+                          SelectionChanged="OnMasterSkillGroupSelectionChanged" />
+                <TextBlock Text="名前" />
+                <TextBox x:Name="MasterSkillGroupNameBox" HorizontalAlignment="Stretch" />
+                <TextBlock Text="記号" />
+                <TextBox x:Name="MasterSkillGroupKigouBox" HorizontalAlignment="Stretch" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="AddMasterSkillGroupButton" Content="追加" Click="OnAddMasterSkillGroupClick" />
+                    <Button x:Name="EditMasterSkillGroupButton" Content="改名" Click="OnEditMasterSkillGroupClick" />
+                    <Button x:Name="RemoveMasterSkillGroupButton" Content="削除" Click="OnRemoveMasterSkillGroupClick" />
+                </StackPanel>
+                <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <TextBlock Text="担当できるシフト・適切回数（群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="チェック=そのグループが担当できるシフト。数字欄=1人あたりの適切回数の目標（空欄=目標なし。欄を離れると反映）。" />
+                <ToggleSwitch x:Name="Use2Toggle" Header="上限人数（2パターン目）を使う" OnContent="ON" OffContent="OFF"
+                              Toggled="OnUse2Toggled" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Grid x:Name="GroupShiftMatrixHost" />
+                </ScrollViewer>
+                <Button x:Name="ResetAptButton" Content="適切回数を全リセット" Click="OnResetAptClick"
+                        HorizontalAlignment="Left" Margin="0,4,0,0" />
 
                 <TextBlock Text="登録済みのルール" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />

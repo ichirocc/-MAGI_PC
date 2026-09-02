@@ -42,6 +42,16 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _constraintRowItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _masterSkillGroupItems = System.Array.Empty<string>();
+    private IReadOnlyList<string> _staffSkillItems = System.Array.Empty<string>();
+
+    /// <summary>群×シフトの担当可否・適切回数マトリクス（Ws1SetGroupShift/Ws1SetGroupApt）が
+    /// 直近に組み立てた行/列の記号。群数・シフト数・記号が変わったときだけ<see cref="BuildGroupShiftMatrix"/>
+    /// でグリッドを作り直す（それ以外は既存コントロールの値だけ更新——毎回作り直すと入力中の
+    /// 適切回数テキストボックスからフォーカスが飛ぶため）。</summary>
+    private IReadOnlyList<string> _matrixGroupKigou = System.Array.Empty<string>();
+    private IReadOnlyList<string> _matrixShiftKigou = System.Array.Empty<string>();
+    private readonly Dictionary<(int G, int K), (CheckBox Check, TextBox Apt)> _matrixCells = new();
 
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
@@ -52,6 +62,9 @@ public sealed partial class EditView : UserControl
 
     /// <summary>年間マスターのシフト選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
     private int _syncedMasterShiftIndex = -1;
+
+    /// <summary>年間マスターのスキル区分選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
+    private int _syncedMasterSkillGroupIndex = -1;
 
     /// <summary>制約の種類(<see cref="ConstraintFamilyCombo"/>)選択も同じ理由。種類が変わったときは
     /// 行選択・入力欄を必ずリセットする（前の種類の行indexを新しい種類へ誤って持ち越さないため）。</summary>
@@ -89,6 +102,8 @@ public sealed partial class EditView : UserControl
             RenderNeedDay(ui, editable);
             RenderStaff(ui, editable);
             RenderMaster(ui, editable);
+            RenderSkillGroups(ui, editable);
+            RenderGroupShiftMatrix(ui, editable);
         }
         finally
         {
@@ -312,6 +327,9 @@ public sealed partial class EditView : UserControl
                 : (groupItems.Count > 0 ? 0 : -1);
         }
 
+        // スキル区分選択肢。先頭は「(なし)」= SkillIdx -1（年間マスターのスキル区分CRUDと共有）。
+        SyncItems(StaffSkillCombo, SkillComboItems(), ref _staffSkillItems);
+
         SyncStaffFields();
 
         var hasStaff = StaffCombo.SelectedIndex >= 0;
@@ -338,8 +356,17 @@ public sealed partial class EditView : UserControl
         {
             var g = ws1.Staff[i].GroupIdx;
             if (g >= 0 && g < _groupItems.Count) GroupCombo.SelectedIndex = g;
+            // スキル区分。-1(なし)は index0、区分[s]は index(s+1)（SkillComboItems の並びと対応）。
+            var skillIdx = ws1.Staff[i].SkillIdx;
+            var comboIdx = skillIdx + 1;
+            if (comboIdx >= 0 && comboIdx < _staffSkillItems.Count) StaffSkillCombo.SelectedIndex = comboIdx;
         }
     }
+
+    /// <summary>「(なし)」＋スキル区分一覧。index=0が「(なし)」(SkillIdx=-1)、index=g+1がSkillIdx=g。
+    /// 職員管理(スキル割当)・年間マスター(スキル区分CRUD)双方の元データを共有する唯一の並び。</summary>
+    private IReadOnlyList<string> SkillComboItems() =>
+        new[] { "(なし)" }.Concat(_vm.SkillGroups().Select(g => $"{g.Name}（{g.Kigou}）")).ToList();
 
     private void OnStaffSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -362,7 +389,14 @@ public sealed partial class EditView : UserControl
         var g = GroupCombo.SelectedIndex;
         if (name.Length == 0) { StaffHintText.Text = "名前を入れてください。"; return; }
         if (g < 0) { StaffHintText.Text = "所属グループを選んでください。"; return; }
+        // [スキル区分の同時設定] Ws1AddStaff(name,groupIdx) は SkillIdx を受け取らない
+        // （既定0=未所属で追加される）ため、追加直後にその新しい職員(=追加前の人数=末尾index)へ
+        // SetStaffSkill で選択中のスキル区分を書く。追加自体が失敗する経路（name/g空欄）は
+        // 既に上のガードで弾いているため、ここに来た時点で追加は必ず成功する。
+        var newIndex = _vm.Ui.StaffNames.Count;
         _vm.Ws1AddStaff(name, g);
+        var skillCombo = StaffSkillCombo.SelectedIndex;
+        if (skillCombo >= 0) _vm.SetStaffSkill(newIndex, skillCombo - 1);
         // 追加後は末尾に増えるだけで選択 index は変わらない＝入力欄の取り込みを促す。
         _syncedStaffIndex = -1;
     }
@@ -377,7 +411,10 @@ public sealed partial class EditView : UserControl
         if (name.Length == 0) { StaffHintText.Text = "名前を入れてください。"; return; }
         if (g < 0) { StaffHintText.Text = "所属グループを選んでください。"; return; }
         // Ws1EditStaff は名前と所属をまとめて書く（Kotlin原本と同じ単位）＝ボタンも「改名・所属変更」。
+        // SetStaffSkill は独立API（Ws1EditStaffがSkillIdxを受け取らない）なので、続けて別途書く。
         _vm.Ws1EditStaff(i, name, g);
+        var skillCombo = StaffSkillCombo.SelectedIndex;
+        if (skillCombo >= 0) _vm.SetStaffSkill(i, skillCombo - 1);
         _syncedStaffIndex = -1;
     }
 
@@ -401,6 +438,10 @@ public sealed partial class EditView : UserControl
         ShiftListText.Text = ui.ShiftSymbols.Count > 0
             ? string.Join(" ・ ", ui.ShiftSymbols)
             : "（未設定）";
+
+        Use2Toggle.IsOn = ui.Use2;
+        Use2Toggle.IsEnabled = editable;
+        ResetAptButton.IsEnabled = editable;
 
         var shifts = _vm.Ws1()?.Shifts;
         var shiftItems = shifts?.Select(s => s.Kigou.Length > 0 && s.Kigou != s.Name ? $"{s.Name}·{s.Kigou}" : s.Name).ToList()
@@ -783,6 +824,214 @@ public sealed partial class EditView : UserControl
         //   ないため、職員/グループのような確認ダイアログは課さない（クラスKDoc参照）。
         _vm.Ws1RemoveShift(k);
         _syncedMasterShiftIndex = -1;
+    }
+
+    // ===== スキル区分（年間マスター・新C41s/C42s 専用） =====
+
+    /// <summary>
+    /// [2026-09-02, 配線] SkillGroups/AddSkillGroup/EditSkillGroup/RemoveSkillGroup（フェーズ9で移植・
+    /// テスト済み）が、cons41s/cons42s の追加/変更/削除UIは既にあるのに、その対象であるスキル区分
+    /// 自体を作る/消す手段が無い「配線されていない箱」だった（スキル群制約を新規に使い始めることが
+    /// できなかった）。グループCRUD（<see cref="RenderMaster"/> 内）と同じパターンで実装する。
+    /// </summary>
+    private void RenderSkillGroups(UiState ui, bool editable)
+    {
+        var skillGroups = _vm.SkillGroups();
+        var labels = skillGroups.Select(g => $"{g.Name}（{g.Kigou}）").ToList();
+        SkillGroupListText.Text = labels.Count > 0 ? string.Join(" ・ ", labels) : "（未設定）";
+
+        SyncItems(MasterSkillGroupCombo, labels, ref _masterSkillGroupItems);
+        SyncMasterSkillGroupFields();
+        var hasSkillGroup = MasterSkillGroupCombo.SelectedIndex >= 0;
+        AddMasterSkillGroupButton.IsEnabled = editable;
+        EditMasterSkillGroupButton.IsEnabled = editable && hasSkillGroup;
+        RemoveMasterSkillGroupButton.IsEnabled = editable && hasSkillGroup;
+        MasterSkillGroupHintText.Text = editable
+            ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。"
+            : (ui.Loaded ? "計算の実行中はスキル区分を変更できません。終わってからにしてください。" : "");
+    }
+
+    /// <summary>選択中のスキル区分の名前・記号を入力欄へ取り込む（選択が変わったときだけ）。</summary>
+    private void SyncMasterSkillGroupFields()
+    {
+        var g = MasterSkillGroupCombo.SelectedIndex;
+        if (g < 0 || g == _syncedMasterSkillGroupIndex) return;
+        _syncedMasterSkillGroupIndex = g;
+        var groups = _vm.SkillGroups();
+        if (g < groups.Count)
+        {
+            MasterSkillGroupNameBox.Text = groups[g].Name;
+            MasterSkillGroupKigouBox.Text = groups[g].Kigou;
+        }
+    }
+
+    private void OnMasterSkillGroupSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _syncingFromModel = true;
+        try
+        {
+            SyncMasterSkillGroupFields();
+        }
+        finally
+        {
+            _syncingFromModel = false;
+        }
+    }
+
+    private void OnAddMasterSkillGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var name = MasterSkillGroupNameBox.Text.Trim();
+        var kigou = MasterSkillGroupKigouBox.Text.Trim();
+        if (name.Length == 0 || kigou.Length == 0) { MasterSkillGroupHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.AddSkillGroup(name, kigou);
+        _syncedMasterSkillGroupIndex = -1;
+    }
+
+    private void OnEditMasterSkillGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var g = MasterSkillGroupCombo.SelectedIndex;
+        var name = MasterSkillGroupNameBox.Text.Trim();
+        var kigou = MasterSkillGroupKigouBox.Text.Trim();
+        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキル区分を選んでください。"; return; }
+        if (name.Length == 0 || kigou.Length == 0) { MasterSkillGroupHintText.Text = "名前と記号を入れてください。"; return; }
+        _vm.EditSkillGroup(g, name, kigou);
+        _syncedMasterSkillGroupIndex = -1;
+    }
+
+    private async void OnRemoveMasterSkillGroupClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var g = MasterSkillGroupCombo.SelectedIndex;
+        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキル区分を選んでください。"; return; }
+        var ws1 = _vm.Ws1();
+        var members = ws1?.Staff.Count(s => s.SkillIdx == g) ?? 0;
+        var refs = _vm.Ws1SkillGroupRefCount(g);
+        var name = g < _masterSkillGroupItems.Count ? _masterSkillGroupItems[g] : "";
+        var msg = $"「{name}」を削除します。" +
+            (members > 0 ? $" 割り当てていた{members}名は「(なし)」に戻ります。" : "") +
+            (refs > 0 ? $" このスキル区分を参照する制約が{refs}件あります。" : "");
+        var ok = await ConfirmAsync("スキル区分を削除しますか？", msg);
+        if (!ok) return;
+        _vm.RemoveSkillGroup(g);
+        _syncedMasterSkillGroupIndex = -1;
+    }
+
+    // ===== 群×シフト 担当可否・適切回数マトリクス =====
+
+    /// <summary>
+    /// [2026-09-02, 配線] Ws1SetGroupShift/Ws1SetGroupApt/Ws1ResetGroupApt/Ws1SetUse2（フェーズ9で
+    /// 移植・テスト済み）が、この移植で一度も呼び出し口を持たなかった最大のギャップ。群がどのシフトを
+    /// 担当できるか(canDo)を設定する手段がここにしか無く、これが無いと新規データでは全シフト担当不可の
+    /// まま何も割り当てられない。既存の群/シフト数が可変な一覧は静的XAMLで組めないため
+    /// <see cref="ScheduleView"/> と同じ Grid のコードビハインド組立て方式を使う。
+    ///
+    /// [フォーカス保持] 群/シフト数が変わらない限り毎回作り直さず、既存 <see cref="CheckBox"/>/
+    /// <see cref="TextBox"/> の値だけ更新する（適切回数入力中にフォーカスが飛ぶのを防ぐ。テキストは
+    /// フォーカスが無いセルだけ上書き）。
+    /// </summary>
+    private void RenderGroupShiftMatrix(UiState ui, bool editable)
+    {
+        var ws1 = _vm.Ws1();
+        if (ws1 is null)
+        {
+            GroupShiftMatrixHost.Children.Clear();
+            _matrixCells.Clear();
+            _matrixGroupKigou = System.Array.Empty<string>();
+            _matrixShiftKigou = System.Array.Empty<string>();
+            return;
+        }
+
+        var groupKigou = ws1.Groups.Select(g => g.Kigou).ToList();
+        var shiftKigou = ws1.Shifts.Select(s => s.Kigou).ToList();
+        if (!_matrixGroupKigou.SequenceEqual(groupKigou) || !_matrixShiftKigou.SequenceEqual(shiftKigou))
+        {
+            BuildGroupShiftMatrix(ws1);
+            _matrixGroupKigou = groupKigou;
+            _matrixShiftKigou = shiftKigou;
+        }
+
+        for (var g = 0; g < ws1.Groups.Count; g++)
+        {
+            for (var k = 0; k < ws1.Shifts.Count; k++)
+            {
+                if (!_matrixCells.TryGetValue((g, k), out var cell)) continue;
+                var allowed = k < ws1.GroupShift[g].Count && ws1.GroupShift[g][k] != 0;
+                cell.Check.IsChecked = allowed;
+                cell.Check.IsEnabled = editable;
+                cell.Apt.IsEnabled = editable && allowed;
+                if (cell.Apt.FocusState == FocusState.Unfocused)
+                {
+                    cell.Apt.Text = k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
+                }
+            }
+        }
+    }
+
+    private void BuildGroupShiftMatrix(MagiViewModel.Ws1View ws1)
+    {
+        GroupShiftMatrixHost.Children.Clear();
+        GroupShiftMatrixHost.RowDefinitions.Clear();
+        GroupShiftMatrixHost.ColumnDefinitions.Clear();
+        _matrixCells.Clear();
+
+        var groupCount = ws1.Groups.Count;
+        var shiftCount = ws1.Shifts.Count;
+        for (var r = 0; r <= groupCount; r++) GroupShiftMatrixHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var c = 0; c <= shiftCount; c++) GroupShiftMatrixHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        void AddHeader(int row, int col, string text)
+        {
+            var block = new TextBlock
+            {
+                Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Padding = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            Grid.SetRow(block, row);
+            Grid.SetColumn(block, col);
+            GroupShiftMatrixHost.Children.Add(block);
+        }
+
+        AddHeader(0, 0, "");
+        for (var k = 0; k < shiftCount; k++) AddHeader(0, k + 1, ws1.Shifts[k].Kigou);
+        for (var g = 0; g < groupCount; g++) AddHeader(g + 1, 0, ws1.Groups[g].Name);
+
+        for (var g = 0; g < groupCount; g++)
+        {
+            for (var k = 0; k < shiftCount; k++)
+            {
+                var check = new CheckBox { Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Center };
+                var gg = g;
+                var kk = k;
+                check.Checked += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupShift(gg, kk, true); };
+                check.Unchecked += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupShift(gg, kk, false); };
+
+                var apt = new TextBox { Width = 44, FontSize = 12 };
+                apt.LostFocus += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupApt(gg, kk, apt.Text); };
+
+                var cellPanel = new StackPanel { Spacing = 2, Padding = new Thickness(4) };
+                cellPanel.Children.Add(check);
+                cellPanel.Children.Add(apt);
+                Grid.SetRow(cellPanel, g + 1);
+                Grid.SetColumn(cellPanel, k + 1);
+                GroupShiftMatrixHost.Children.Add(cellPanel);
+                _matrixCells[(g, k)] = (check, apt);
+            }
+        }
+    }
+
+    private void OnUse2Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.Ws1SetUse2(Use2Toggle.IsOn);
+    }
+
+    private void OnResetAptClick(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.Ws1ResetGroupApt();
     }
 
     // ===== ドア切替 =====

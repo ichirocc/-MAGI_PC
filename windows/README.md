@@ -62,8 +62,11 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      `CountViolations`/`NeedViolations`で色分け)**まで実装。編集タブは月次条件(希望/日別必要人数の
      一覧・追加・削除)・職員管理(追加/改名/削除、削除確認ダイアログ付き)・年間マスター
      (グループ/シフトの追加/改名/削除に加え、制約(ルール)10族=cons1/cons2/cons3系4/cons41(s)/
-     cons42(s)の追加/変更/削除まで実装。種類ごとに入力欄の構成が異なる=`EditView.xaml.cs` の
-     `ConstraintFamilyMetas` 参照)。分析タブは診断一覧＋「直し方を探す」＋**違反の場所**
+     cons42(s)の追加/変更/削除・**スキル区分の追加/改名/削除(`AddSkillGroup`等)・群×シフトの
+     担当可否/適切回数マトリクス(`Ws1SetGroupShift`/`Ws1SetGroupApt`/`Ws1ResetGroupApt`、
+     `EditView.xaml.cs`の`BuildGroupShiftMatrix`)・上限人数(2パターン目)の使用可否(`Ws1SetUse2`)**
+     まで実装。種類ごとに入力欄の構成が異なる=`EditView.xaml.cs` の`ConstraintFamilyMetas` 参照。
+     職員管理では職員ごとのスキル区分割当(`SetStaffSkill`)も追加/改名アクションに続けて書く。分析タブは診断一覧＋「直し方を探す」＋**違反の場所**
      （セル単位の違反=`UiState.ViolationCells`に載る族のみ。タップで勤務表タブへ切替＋該当セルへ
      スクロール＋約2.5秒ハイライト=`MainWindow.JumpToCell`/`ScheduleView.FocusCell`）。設定タブは
      最適化設定＋データ入出力(JSON開く/保存・CSV取込/書出)。デザイントークン（ブランド色）も
@@ -84,6 +87,18 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      （`OnOpenDataClick`等）は`FileOpenPicker`/`FileIO`の例外を素通りさせ`async void`ハンドラの
      未処理例外でアプリごとクラッシュしうる欠陥があったため、try/catchで`NotifySave`/`NotifyOpenFailure`
      （既存API・呼び出し口が無かった）へ受け止めるよう修正。
+   - **群×シフトのcanDo/適切回数マトリクス＋スキル区分CRUD（2026-09-02）**: 「実装済みViewModel APIの
+     呼び出し口を全数点検する」作業で発見した、色設定と同種の「配線されていない箱」——
+     `Ws1SetGroupShift`/`Ws1SetGroupApt`/`Ws1ResetGroupApt`/`Ws1SetUse2`と`SkillGroups`/
+     `AddSkillGroup`/`EditSkillGroup`/`RemoveSkillGroup`/`SetStaffSkill`はいずれもフェーズ9で
+     移植・テスト済みだったが、この画面から一度も呼ばれていなかった。**群がどのシフトを担当できるか
+     (canDo)を設定する手段がこれしか無く**、新規データでは誰も何のシフトも担当できないまま
+     何も割り当てられない状態だった。年間マスターに、群(行)×シフト(列)のチェックボックス(canDo)＋
+     テキスト欄(適切回数目標)のマトリクス（`EditView.BuildGroupShiftMatrix`、群/シフト数が変わらない
+     限り既存コントロールを使い回してフォーカスを保つ）と、スキル区分の追加/改名/削除、上限人数
+     (2パターン目)使用トグルを追加。職員管理にはスキル区分の割当欄(`StaffSkillCombo`)を追加
+     （`Ws1AddStaff`/`Ws1EditStaff`自体はSkillIdxを受け取らないAPIのため、追加・改名の直後に
+     `SetStaffSkill`を続けて呼ぶ）。
    - **OneDrive対応（2026-09-01, ユーザー確認）**: データ入出力(`SettingsView`)は
      `FileOpenPicker`/`FileSavePicker`（実ファイルパスを指す `StorageFile`）経由で読み書きするため、
      OneDrive同期フォルダ内のファイルも特別な対応なしにそのまま開く/保存できる（クラウドのみの
