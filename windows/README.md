@@ -258,6 +258,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## レビュー対応の記録
 
+- **2026-09-04（Android 3.496.0 と同時）** 希望島研磨 `ApplyWishIslandPolish`（`V6HotfixPasses.WishIsland.cs`）を移植。
+  実現可能な希望日を固定アンカーに、影響範囲が重なる希望を島へ統合、周辺に違反がある島だけ起動。同日→窓→両翼→必要時のみ
+  3者巡回、希望周辺も全体も改善する手だけ採用、停滞時のみ短いビーム。テスト `V6HotfixPassesWishIslandTest`（3件）。
 - **2026-09-04（Android 3.495.0 と同時）** ユーザー提示の設計「違反アンカー型・可変長ウィンドウ交換」を
   `ApplyAdaptiveBlockSwapPolish(mode: WindowMode.StrictWholeWindow)`（`V6HotfixPasses.AnchoredWindowSwap.cs`）として移植。
   3.494.0 の `ApplyRunSwapPolish` は削除。同じ日付範囲の一括交換（部分交換しない）・回数不足の逆引き・安価な優先度・
