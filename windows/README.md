@@ -258,6 +258,10 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## レビュー対応の記録
 
+- **2026-09-04（Android 3.493.0 と同時）** `V6HotfixPasses.ApplyNightRunSwapPolish`（夜勤連交換研磨）を移植。前日=夜勤
+  （Cons3n の先頭要素）×翌日=希望固定に挟まれたセルの違反を、夜勤の最大 run を他職員の同じ長さの run と窓ごと交換
+  （＋挟まれ日の付替え）で解く。keep-best・厳密ピン保護・境界の禁止の並びで枝刈り・正式評価上限400。RunPostOptimization
+  の巡回（C3Pattern の直後）に組込み、採用内訳に「夜勤連交換」を追加。テスト `V6HotfixPassesNightRunSwapTest`（2件）。
 - **2026-09-04（Android 3.492.0 と同時・エンジンのみ）** `CoverageSurplus.PinnedStaff`（人員過剰の枠を本人希望で固定している
   在勤者）を追加。Android は集計ダイアログ／ホームの過剰診断カードから「◯◯ の希望を取り消す」導線を出す。WinUI 側の
   表示はフェーズ9の残作業。
