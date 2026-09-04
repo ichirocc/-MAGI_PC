@@ -13,14 +13,17 @@ CI: [`.github/workflows/windows-installer.yml`](../../.github/workflows/windows-
 
 ## 更新版を出す手順（Release）
 
-```
-git tag win-v1.0.1 && git push origin win-v1.0.1
-```
+どちらでもよい:
+
+- **Actions の画面から**: 「Windows Installer」→ Run workflow → `version` に `1.0.1`（空欄なら appxmanifest の版）、
+  `publish_release` にチェック → Run。`release` ジョブが `gh release create --target <そのコミット>` でタグ `win-v1.0.1` を
+  打ち、Release を作る（git でタグを push できない環境向け。Claude Code のリモート環境はタグ push が 403 になる）。
+- **git から**: `git tag win-v1.0.1 && git push origin win-v1.0.1`
 
 タグ push で「Windows Installer」が起動し、`Resolve version` がタグの `1.0.1` を版にする（`Package.appxmanifest` の
 書き換え不要）。`installer-exe` ジョブの setup.exe を `release` ジョブが Release `win-v1.0.1` に添付する
 （版付きファイル＋固定名 `MagiShiftOptimizer-Setup-x64.exe`、ノートに SHA-256 と1行インストール）。
-`workflow_dispatch` の手動実行では Release は作らない（Artifacts のみ）。
+`publish_release` を付けない手動実行では Release は作らない（Artifacts のみ）。
 
 ## setup.exe の中身
 

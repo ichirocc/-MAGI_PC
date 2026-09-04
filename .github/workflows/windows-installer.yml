@@ -44,6 +44,11 @@ on:
         description: "インストーラのバージョン表記（空欄なら Package.appxmanifest の Version を使用）"
         required: false
         default: ""
+      publish_release:
+        description: "GitHub Release を作る（タグ win-v<版> をこの実行のコミットに打ち、setup.exe を添付。latest URL が更新される）"
+        type: boolean
+        required: false
+        default: false
   push:
     tags: ["win-v*"]
 
@@ -51,6 +56,8 @@ jobs:
   installer-exe:
     name: setup.exe (Inno Setup)
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     defaults:
       run:
         working-directory: windows
@@ -210,9 +217,11 @@ jobs:
     name: GitHub Release (tag win-v* only)
     # setup.exe を Release に添付する。固定名の複製 MagiShiftOptimizer-Setup-x64.exe も付けるので
     # releases/latest/download/... の URL が常に最新版を指す（README の1行インストール用）。
-    # workflow_dispatch では作らない（Artifacts のみ）。
+    # 起動条件: タグ win-v* の push、または workflow_dispatch で publish_release=true
+    #（後者は gh release create --target がタグを打つ。git tag を push できない環境でも Actions の
+    #  画面から Release を出せる）。それ以外の手動実行は Artifacts のみ。
     needs: installer-exe
-    if: startsWith(github.ref, 'refs/tags/win-v')
+    if: startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -225,10 +234,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/win-v') && github.ref_name || format('win-v{0}', needs.installer-exe.outputs.version) }}
+          TARGET_SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          [[ "$TAG" =~ ^win-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag: $TAG"; exit 1; }
           exe=$(ls dist/MagiShiftOptimizer-Setup-*-x64.exe | head -n 1)
           [ -n "$exe" ] || { echo "setup.exe not found in artifact"; exit 1; }
           cp "$exe" dist/MagiShiftOptimizer-Setup-x64.exe
@@ -249,7 +260,7 @@ jobs:
             gh release edit "$TAG" --repo "$REPO" --notes-file notes.md
           else
             gh release create "$TAG" "$exe" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" \
-              --title "Windows ${TAG#win-v}" --notes-file notes.md --latest
+              --target "$TARGET_SHA" --title "Windows ${TAG#win-v}" --notes-file notes.md --latest
           fi
           gh release view "$TAG" --repo "$REPO"
 
