@@ -277,6 +277,11 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   写して検証するステップを追加（欠けていればジョブを赤に）。「セキュリティ」は未署名 setup.exe の SmartScreen／未署名 MSIX の
   拒否＝入れ方を README 冒頭に明記。あわせて `Program.cs`（手書き Main・DISABLE_XAML_GENERATED_MAIN）と
   `StartupDiagnostics`（`%LOCALAPPDATA%\Magi\startup_error.log`＋Win32 MessageBox）で起動失敗を必ず見えるようにした。
+  **実走確認**: run 33897078757＝`Program.cs` の CS0029（ラムダ引数名 `_`）で赤→修正。run 33897806456＝MakePri の実出力名が
+  `MagiApp.WinUI.pri`（`resources.pri` ではない）で bundle 手順が赤→アプリ PRI を検出して `resources.pri` の名で写すよう修正。
+  **run 33898775401 で緑**（publish 264→275 ファイル、`resources.pri`＋VC ランタイム 9 DLL を Inno が同梱、setup.exe 生成）。
+  その run の VC ランタイムは `onecore\x64` 変種が選ばれていたため、デスクトップ用 `<ver>\x64\Microsoft.VC1xx.CRT` を
+  優先する選択へ直し再実行（下記の追記を参照）。
 - **2026-09-04（Android 3.496.0 と同時）** 希望島研磨 `ApplyWishIslandPolish`（`V6HotfixPasses.WishIsland.cs`）を移植。
   実現可能な希望日を固定アンカーに、影響範囲が重なる希望を島へ統合、周辺に違反がある島だけ起動。同日→窓→両翼→必要時のみ
   3者巡回、希望周辺も全体も改善する手だけ採用、停滞時のみ短いビーム。テスト `V6HotfixPassesWishIslandTest`（3件）。

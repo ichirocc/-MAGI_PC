@@ -131,9 +131,13 @@ jobs:
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vs = & $vswhere -latest -products * -property installationPath
           if (-not $vs) { throw "vswhere: Visual Studio not found" }
+          # run 33898775401 では onecore\x64\Microsoft.VC145.CRT（OneCore 向け変種）が先に拾われた。デスクトップ Windows 用の
+          # <ver>\x64\Microsoft.VC1xx.CRT を選ぶ（onecore / debug_nonredist(DebugCRT) は除外し、最も浅いパスを優先）。
           $crt = Get-ChildItem (Join-Path $vs "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
                  Sort-Object Name -Descending |
-                 ForEach-Object { Get-ChildItem $_.FullName -Directory -Filter "Microsoft.VC*.CRT" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*\x64\*" } } |
+                 ForEach-Object { Get-ChildItem $_.FullName -Directory -Filter "Microsoft.VC*.CRT" -Recurse -ErrorAction SilentlyContinue |
+                                  Where-Object { $_.FullName -like "*\x64\*" -and $_.FullName -notlike "*\onecore\*" -and $_.FullName -notlike "*\debug_nonredist\*" -and $_.Name -notlike "*Debug*" } |
+                                  Sort-Object { $_.FullName.Length } } |
                  Select-Object -First 1
           if (-not $crt) { throw "VC++ CRT redist folder (x64\Microsoft.VC1xx.CRT) not found under $vs\VC\Redist\MSVC" }
           Write-Host "VC CRT <- $($crt.FullName)"
