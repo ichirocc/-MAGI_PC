@@ -79,8 +79,14 @@ public static partial class V6HotfixPasses
         /// 結果は変わらない</b>。true にすると詰んだ候補へフル checker を呼ばなくなり評価枠を節約できる。
         /// </summary>
         bool? filterC3nIncrease = null,
-        Func<bool>? shouldStop = null)
+        Func<bool>? shouldStop = null,
+        /// <summary>[3.495.0 移植元] 窓の扱い。STRICT_WHOLE_WINDOW は違反アンカー型・可変長窓の一括交換へ委譲。既定は従来どおり。</summary>
+        WindowMode mode = WindowMode.PartialMovableDays,
+        int strictMaxLen = 7,
+        int strictLongLen = 14)
     {
+        if (mode == WindowMode.StrictWholeWindow)
+            return ApplyStrictWholeWindow(state, schedule, maxPasses, maxEvaluations, strictMaxLen, strictLongLen, shouldStop ?? (() => false));
         var lens = blockLens ?? AdaptiveBlockLengths;
         var filterC3n = filterC3nIncrease ?? PolishGate.FilterC3nIncrease;
         var stop = shouldStop ?? (() => false);

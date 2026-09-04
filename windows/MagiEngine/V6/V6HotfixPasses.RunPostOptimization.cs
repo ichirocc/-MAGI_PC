@@ -170,7 +170,7 @@ public static partial class V6HotfixPasses
         var round = 0;
         C1PlateauDiagnosis? c1Plateau = null;
         var totalCyc = 0; var totalC1 = 0; var totalC3 = 0; var totalC3r = 0; var totalC3mn = 0; var totalC3n = 0;
-        var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalRunSwap = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0;
+        var totalRange = 0; var totalC3run = 0; var totalC3pat = 0; var totalAnchorSwap = 0; var totalBlockSwap = 0; var totalApt = 0; var totalFair = 0;
         while (round < maxRounds && !ClusterStop())
         {
             var roundApplied = 0;
@@ -326,15 +326,16 @@ public static partial class V6HotfixPasses
             if (rC3pat.PinBlocks != null) pinBlocksAll.Merge(rC3pat.PinBlocks);
             if (round == 0) logs.AddRange(rC3pat.Logs);
 
-            // [RunSwapPolish・連交換, 3.494.0 移植元（3.493.0 の夜勤前提を撤廃した汎用版）] 違反に隣接する同一シフトの連を
-            //   他職員の同じ長さの連と窓ごと交換して解く。シフトの種類は問わない。keep-best 前提（採用0なら無害）。
-            onPhase?.Invoke($"後処理 連交換研磨 [巡{round + 1}]");
+            // [違反アンカー型・可変長ウィンドウ交換, 3.495.0 移植元（3.494.0 の RunSwap を置換）] AdaptiveBlockSwap の
+            //   STRICT_WHOLE_WINDOW モード: 違反セル／回数超過・不足／連続規則／週偏りをアンカーに、接する可変長の窓を
+            //   同じ日付範囲で一括交換（部分交換しない）。回数不足は相手の対象シフト日から逆引き。pass ごとに最良1手。
+            onPhase?.Invoke($"後処理 違反アンカー窓交換 [巡{round + 1}]");
             var __t16b = NowMs();
-            var rRunSwap = ApplyRunSwapPolish(state, work, maxPasses: 2, maxEvaluations: 600, shouldStop: ClusterStop);
-            MergePassMs("RunSwapPolish", NowMs() - __t16b);
-            work = rRunSwap.NewSchedule.Copy2D(); totalRunSwap += rRunSwap.Applied; roundApplied += rRunSwap.Applied;
-            if (rRunSwap.PinBlocks != null) pinBlocksAll.Merge(rRunSwap.PinBlocks);
-            if (round == 0) logs.AddRange(rRunSwap.Logs);
+            var rAnchor = ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: 3, maxEvaluations: 48, shouldStop: ClusterStop, mode: WindowMode.StrictWholeWindow);
+            MergePassMs("AnchoredWindowSwap", NowMs() - __t16b);
+            work = rAnchor.NewSchedule.Copy2D(); totalAnchorSwap += rAnchor.Applied; roundApplied += rAnchor.Applied;
+            if (rAnchor.PinBlocks != null) pinBlocksAll.Merge(rAnchor.PinBlocks);
+            if (round == 0) logs.AddRange(rAnchor.Logs);
 
             // [AdaptiveBlockSwap・長期ブロック丸ごと2人交換] 15日固定の旧手を、11/13/17/19/23/28日の
             //   非等間隔ポートフォリオへ拡張。同群に限らず、ブロック内の全セルを相互に担当可能な他者も
@@ -378,7 +379,7 @@ public static partial class V6HotfixPasses
             var softAfter = UnifiedViolationChecker.Check(state, work);
             int Bd(ViolationReport r, string k) => r.Breakdown.GetValueOrDefault(k, 0);
             var adopted = totalCyc + totalC1 + totalC3 + totalC3r + totalC3mn + totalC3n + totalRange +
-                totalC3run + totalC3pat + totalRunSwap + totalBlockSwap + totalApt + totalFair;
+                totalC3run + totalC3pat + totalAnchorSwap + totalBlockSwap + totalApt + totalFair;
             // [3.278.0/監査修正] CyclicSwapの正当な対象族(c2/c41/c42/c41s/c42s/covO)も対象数に含める
             //   （旧: c42等のみ違反の盤面で採用0のとき誤って「対象なし」と表示していた）。
             var targets = Bd(preSoftRep, "c1") + Bd(preSoftRep, "c3") + Bd(preSoftRep, "c3m") + Bd(preSoftRep, "c3mn") +
@@ -403,7 +404,7 @@ public static partial class V6HotfixPasses
                 $" / fair {Bd(preSoftRep, "fair")}->{Bd(softAfter, "fair")}" +
                 $" | HARD {hardNote} / total {preSoftRep.Total}->{softAfter.Total}" +
                 $" (採用内訳 循環:{totalCyc} c1:{totalC1} c3:{totalC3} c3回転:{totalC3r} c3mn玉突き:{totalC3mn} c3n:{totalC3n}" +
-                $" range玉突き:{totalRange} c3run玉突き:{totalC3run} c3pattern玉突き:{totalC3pat} 連交換:{totalRunSwap} ブロック交換:{totalBlockSwap}" +
+                $" range玉突き:{totalRange} c3run玉突き:{totalC3run} c3pattern玉突き:{totalC3pat} アンカー窓交換:{totalAnchorSwap} ブロック交換:{totalBlockSwap}" +
                 $" apt玉突き:{totalApt} fair玉突き:{totalFair})"));
         }
 

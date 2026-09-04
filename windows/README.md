@@ -258,11 +258,10 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## レビュー対応の記録
 
-- **2026-09-04（Android 3.494.0 と同時）** `V6HotfixPasses.ApplyRunSwapPolish`（連交換研磨・汎用）を移植。ユーザー指示
-  「汎用性を重視する。特定のシフトを特別扱いしない」で、直前の夜勤連交換（Cons3n 先頭・翌日希望固定の前提つき）を
-  置き換え。あらゆる違反（セル／回数）に隣接する同一シフトの最大連を、他職員の同じシフト・同じ長さの連と窓ごと交換
-  （＋違反セルの付替え）。keep-best・厳密ピン保護・境界の禁止の並びで枝刈り・付替えは被覆を欠かさないセルのみ・正式評価
-  上限600。テスト `V6HotfixPassesRunSwapTest`（挟まれセル／禁止の並び無しの休連交換で low 解消）。
+- **2026-09-04（Android 3.495.0 と同時）** ユーザー提示の設計「違反アンカー型・可変長ウィンドウ交換」を
+  `ApplyAdaptiveBlockSwapPolish(mode: WindowMode.StrictWholeWindow)`（`V6HotfixPasses.AnchoredWindowSwap.cs`）として移植。
+  3.494.0 の `ApplyRunSwapPolish` は削除。同じ日付範囲の一括交換（部分交換しない）・回数不足の逆引き・安価な優先度・
+  pass ごとに最良1手。テスト `V6HotfixPassesAnchoredWindowSwapTest`（3件）。
 - **2026-09-04（Android 3.492.0 と同時・エンジンのみ）** `CoverageSurplus.PinnedStaff`（人員過剰の枠を本人希望で固定している
   在勤者）を追加。Android は集計ダイアログ／ホームの過剰診断カードから「◯◯ の希望を取り消す」導線を出す。WinUI 側の
   表示はフェーズ9の残作業。
