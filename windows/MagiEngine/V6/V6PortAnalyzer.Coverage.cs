@@ -54,7 +54,12 @@ public sealed record CoverageSurplus(
     /// </summary>
     string? BlockedFamily,
     /// <summary>この枠の在勤者中、他シフトへ動かせる／動かせない内訳と理由。</summary>
-    string Reason);
+    string Reason,
+    /// <summary>
+    /// [3.492.0 移植元] この枠を本人希望で固定している在勤者（WishLocked かつ希望＝このシフト）。Reason の
+    /// 「希望固定N人」の中身。画面は「誰の希望を取り消せば解消に近づくか」を名指しする（WinUI 側の表示は未配線）。
+    /// </summary>
+    IReadOnlyList<int>? PinnedStaff = null);
 
 /// <summary>covU(人員不足)の原因診断。どの枠が「数学的に充足不可」か「充足可能だが未到達」かを切り分ける。</summary>
 public sealed record CoverageDiagnosis(
@@ -297,6 +302,7 @@ public static partial class V6PortAnalyzer
                 totalSurplus += excess;
                 var sym = k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
                 var pinned = 0; var forbid = 0; var cascade = 0; var free = 0;
+                var pinnedIdx = new List<int>();
                 // [3.406.0] 構造的に動かせる(free)ことと、最適化が採ることは別。covO は最も軽い族(重み1.0)で、
                 //   移動先で他の族が1点でも悪化すると betterReport に負ける——すぐ上のコメント自身が
                 //   「動かせるのに動いていない」ことの説明にはならないと書いているのに、下の hint は
@@ -312,7 +318,7 @@ public static partial class V6PortAnalyzer
                     if (norm[i][j] != k) continue;   // このシフトの在勤者だけが移動候補
                     // [3.391.0] 実現不能な希望は凍結しない＝「希望固定で動かせない」と案内するのは誤り
                     //   （むしろ動かすと担当外セル=groupViol も同時に消える）。WishLocked へ統一。
-                    if (p.WishLocked(i, j) && p.Wish[i][j] == k) { pinned++; continue; }   // 実現可能な本人希望＝動かすとpref化
+                    if (p.WishLocked(i, j) && p.Wish[i][j] == k) { pinned++; pinnedIdx.Add(i); continue; }   // 実現可能な本人希望＝動かすとpref化
                     var alts = p.AllowedShiftsForStaff(i).Where(m => m != k).ToArray();
                     if (alts.Length == 0) { forbid++; continue; }      // 担当可能な代替シフトが無い
                     var hasRoom = false; var blockedByC3n = true;
@@ -369,7 +375,8 @@ public static partial class V6PortAnalyzer
                     : null;
                 surplusList.Add(new CoverageSurplus(j, DayLabel(state.StartDate, j), k, sym, need, got, excess,
                     blockedFamily,
-                    $"在勤者中 動かせる{free}人・玉突き必要{cascade}人・希望固定{pinned}人・禁止連続{forbid}人。{hint}"));
+                    $"在勤者中 動かせる{free}人・玉突き必要{cascade}人・希望固定{pinned}人・禁止連続{forbid}人。{hint}",
+                    pinnedIdx));
             }
         }
         surplusList = surplusList.OrderByDescending(s => s.Excess).ToList();

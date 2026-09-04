@@ -258,6 +258,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## レビュー対応の記録
 
+- **2026-09-04（Android 3.492.0 と同時・エンジンのみ）** `CoverageSurplus.PinnedStaff`（人員過剰の枠を本人希望で固定している
+  在勤者）を追加。Android は集計ダイアログ／ホームの過剰診断カードから「◯◯ の希望を取り消す」導線を出す。WinUI 側の
+  表示はフェーズ9の残作業。
 - **2026-09-04（main 012960f への外部レビュー第7弾＋Android 側の自己見直しで見つかった同型、全件実在→修正）**
   ① `RunMultiWorker` の各仮説入口の「既に勝者がいれば何もせず抜ける」事前チェック→ 撤去（3.376.0 相当の全本継続
   の仕様に反し、起動順で本数が変わっていた。`V6NativeOptimizerMultiWorkerTest` の「バグではない」コメントは
