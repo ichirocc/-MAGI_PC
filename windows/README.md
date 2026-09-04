@@ -318,6 +318,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   `curl.exe`＋`Unblock-File` の1行インストール（MotW が付かない→SmartScreen が走らない）と、zip の「ブロックの解除」手順、
   ③ スマート アプリ コントロール（署名必須・逃げ道なし）の見分け方と対処、④ 自己署名は SmartScreen に効かない等の早見表。
   版はタグから取る（`Resolve version` がタグ優先）。ワークフローの `release` ジョブは ubuntu ランナー・`contents: write`。
+  この環境（Claude Code リモート）は git のタグ push が 403 で通らないため、`workflow_dispatch` の `publish_release` 入力
+  からも作れるようにした（`gh release create --target` がタグを打つ）。**実走 run 33903452253 で緑**: Release
+  <https://github.com/ichirocc/-MAGI_PC/releases/tag/win-v1.0.0> に版付き＋固定名の setup.exe（46,097,340 バイト、
+  SHA-256 `3eb81779…c0b2`）が添付され、`releases/latest/download/MagiShiftOptimizer-Setup-x64.exe` から実際に
+  落とせて先頭が `MZ`・SHA-256 一致を確認した。
 - **2026-09-04（実機報告「Windows11版が起動出来ない。セキュリティが不足。画面でない」）** run 33885296148 の publish 出力を
   数え直して原因を特定: ① `resources.pri` が publish フォルダに無い（MakePri は bin 側へ書き、msbuild /t:Publish は写さない）
   ② VC++ ランタイム DLL が同梱されていない（WindowsAppSDKSelfContained は WinAppSDK 自身しか同梱しない）→ どちらも
