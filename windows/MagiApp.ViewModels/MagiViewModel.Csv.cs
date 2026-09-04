@@ -597,6 +597,7 @@ public sealed partial class MagiViewModel
         UnauthorizedAccessException => "アクセスが許可されていません",
         FileNotFoundException => "ファイルが見つからないか、書き込みが許可されていません",
         _ when e.Message.Contains("space", StringComparison.OrdinalIgnoreCase) => "保存先の空き容量が足りません",
+        IOException io when io.Message.StartsWith("ファイルが大きすぎます", StringComparison.Ordinal) => io.Message,   // [レビュー指摘 2026-09-04] 取込サイズ上限
         _ => e.GetType().Name,
     };
 }

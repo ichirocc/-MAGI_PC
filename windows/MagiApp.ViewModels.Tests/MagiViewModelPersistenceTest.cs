@@ -281,6 +281,22 @@ public class MagiViewModelPersistenceTest : IDisposable
     // ===================================================================
 
     [Fact]
+    public void StaleAutosaveGenerationNeverOverwritesANewerOne()
+    {
+        // [レビュー指摘 2026-09-04] 古い世代の書き込みが新しい世代の後に完了しても、ファイルは新しい方のまま。
+        var vm = NewVm();
+        var path = Path.Combine(vm.DataDir, "magi_autosave.json");
+
+        Assert.True(vm.WriteAutosaveIfLatest(2, "{\"gen\":2}"));
+        Assert.Null(vm.WriteAutosaveIfLatest(1, "{\"gen\":1}"));   // 古い世代は捨てる
+        Assert.Equal("{\"gen\":2}", File.ReadAllText(path));
+
+        Assert.True(vm.WriteAutosaveIfLatest(2, "{\"gen\":2b}"));  // 同じ世代の再書き込みは許す
+        Assert.True(vm.WriteAutosaveIfLatest(3, "{\"gen\":3}"));
+        Assert.Equal("{\"gen\":3}", File.ReadAllText(path));
+    }
+
+    [Fact]
     public void SaveNowIsANoOpBeforeHydration()
     {
         var vm = NewVm();

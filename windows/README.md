@@ -270,6 +270,17 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   ため一度も動いていなかった→ ステップ出力 `steps.build.outputs.code` で判定。
   レビューの「.NET SDK が無い」は誤り（`dotnet` 8.0.424 あり）。`MagiEngine.Tests` 全件と
   `MagiApp.ViewModels` のビルドをローカルで確認。
+- **2026-09-04（第2弾・3件、全件実在→修正）**
+  ① `windows-installer.yml` が `workflow_dispatch` の `version` 入力を PowerShell 本文へ式展開していた
+  （引用符や改行で任意コマンド。後続ステップは署名証明書を扱う）→ 入力は `env:` で受け取り `X.Y.Z` だけ通す。
+  ISCC への版も `steps.ver.outputs` の式展開をやめ環境変数→引数へ。
+  ② 自動保存の**世代逆転**（`_saveCts.Cancel()` は始まった書き込みを止められず、古い自動保存が
+  `SaveNow()` の後に完了すると古い状態へ戻る）→ main で採番した世代を `WriteAutosaveIfLatest` がロック下で
+  比較し、古い世代を捨てる（`MagiViewModelPersistenceTest.StaleAutosaveGenerationNeverOverwritesANewerOne`）。
+  Kotlin 原本も同じ穴＝`magi7ichiro-fork` 3.485.0（`SaveGate`）で同時修正。
+  ③ 取込ファイルのサイズ上限が無かった（Android は 32MiB）→ `SettingsView.ReadImportBytesAsync` が
+  サイズ属性で先に拒否し、ストリーム側でも読み切らずに中断。JSON／勤務表CSV／種類別CSV／名簿CSV の4入口
+  すべてが通る。`IoReason` が上限超過の理由をそのまま表示。
 
 ## スコープ外
 

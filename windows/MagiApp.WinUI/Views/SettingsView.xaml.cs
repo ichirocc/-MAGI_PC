@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
@@ -301,14 +302,42 @@ public sealed partial class SettingsView : UserControl
     /// （用意済みだが呼び出し口が無かった）で受け止める。読込成功時は <see cref="MagiViewModel.LoadAsync"/>
     /// 自身が完了メッセージを出すため、ここで重ねて通知しない（クラスKDoc「成功時は呼ばない」参照）。
     /// </summary>
+    /// <summary>
+    /// [レビュー指摘 2026-09-04] 取込ファイルを**上限つき**で読む（Android の <c>readAtMost</c>/32MiB と同じ）。
+    /// 旧: <c>FileIO.ReadBufferAsync</c> で全体を無制限に読み、IBuffer/byte[]/string が同時に存在して
+    /// 大きなファイルでメモリがサイズの数倍になりアプリが落ちた。サイズ情報を先に見て拒否し、
+    /// 信用できない場合に備えてストリーム側でも読み切らずに中断する。
+    /// JSON／勤務表CSV／種類別CSV／名簿CSV の全入口が通る。
+    /// </summary>
+    private const long MaxImportBytes = 32L * 1024 * 1024;
+
+    private static async Task<byte[]> ReadImportBytesAsync(StorageFile file)
+    {
+        var tooBig = new System.IO.IOException($"ファイルが大きすぎます（{MaxImportBytes / 1024 / 1024}MB まで）");
+        var props = await file.GetBasicPropertiesAsync();
+        if (props.Size > (ulong)MaxImportBytes) throw tooBig;
+        using var stream = await file.OpenStreamForReadAsync();
+        using var ms = new System.IO.MemoryStream();
+        var buf = new byte[64 * 1024];
+        long total = 0;
+        int n;
+        while ((n = await stream.ReadAsync(buf, 0, buf.Length)) > 0)
+        {
+            total += n;
+            if (total > MaxImportBytes) throw tooBig;
+            ms.Write(buf, 0, n);
+        }
+        return ms.ToArray();
+    }
+
     private async void OnOpenDataClick(object sender, RoutedEventArgs e)
     {
         try
         {
             var file = await PickOpenFileAsync(".json");
             if (file is null) return;
-            var bytes = await FileIO.ReadBufferAsync(file);
-            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            var bytes = await ReadImportBytesAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes);
             _vm.LoadAsync(text);
         }
         catch (Exception ex)
@@ -344,8 +373,8 @@ public sealed partial class SettingsView : UserControl
         {
             var file = await PickOpenFileAsync(".csv");
             if (file is null) return;
-            var bytes = await FileIO.ReadBufferAsync(file);
-            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            var bytes = await ReadImportBytesAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes);
             _vm.ImportCsvSmart(text);
         }
         catch (Exception ex)
@@ -413,8 +442,8 @@ public sealed partial class SettingsView : UserControl
         {
             var file = await PickOpenFileAsync(".csv");
             if (file is null) return;
-            var bytes = await FileIO.ReadBufferAsync(file);
-            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            var bytes = await ReadImportBytesAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes);
             importer(text);
         }
         catch (Exception ex)
@@ -474,8 +503,8 @@ public sealed partial class SettingsView : UserControl
         {
             var file = await PickOpenFileAsync(".csv");
             if (file is null) return;
-            var bytes = await FileIO.ReadBufferAsync(file);
-            var text = CsvEncoding.DecodeCsvBytes(bytes.ToArray());
+            var bytes = await ReadImportBytesAsync(file);
+            var text = CsvEncoding.DecodeCsvBytes(bytes);
             var dialog = new ContentDialog
             {
                 XamlRoot = XamlRoot,

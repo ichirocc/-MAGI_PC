@@ -79,6 +79,41 @@ public sealed partial class MagiViewModel
 
     private CancellationTokenSource? _saveCts;
 
+    /// <summary>
+    /// [レビュー指摘 2026-09-04] 保存の世代番号。<c>_saveCts.Cancel()</c> は**既に始まった書き込みを止められない**
+    /// ので、古い自動保存（状態A）の書き込みが、後から始まった <see cref="SaveNow"/>（状態B）の後に完了すると
+    /// 自動保存ファイルが A へ戻る（原子置換は破損を防ぐが順序の逆転は防げない）。
+    /// 書き手は main で世代を採番し（<c>ExportJson</c> と同じ時点＝状態の順序と一致）、
+    /// <see cref="WriteAutosaveIfLatest"/> がロック下で「より新しい世代が書かれた後の古い世代」を捨てる。
+    /// </summary>
+    private int _saveGen;
+    private int _lastWrittenGen;
+    private readonly object _saveLock = new();
+
+    /// <summary>
+    /// 世代 <paramref name="gen"/> の JSON を、より新しい世代がまだ書かれていない場合だけ書く。
+    /// 戻り値: 書いた=true／書き込み失敗=false／古い世代なので捨てた=null。ロックで直列化するため
+    /// 「確認→書き込み」の間に別の書き手が割り込むことはない。
+    /// </summary>
+    internal bool? WriteAutosaveIfLatest(int gen, string json)
+    {
+        lock (_saveLock)
+        {
+            if (gen < _lastWrittenGen) return null;
+            bool ok;
+            try
+            {
+                ok = AtomicFileWrite.WriteFileAtomically(AutosaveFile, json, onNonAtomic: () => _nonAtomicSaveSeen = true);
+            }
+            catch
+            {
+                ok = false;
+            }
+            if (ok) _lastWrittenGen = gen;
+            return ok;
+        }
+    }
+
     /// <summary>[テスト可視性のための追加] 直近の <see cref="AutoSave"/> 呼出しが背後で走らせる
     /// Task。Kotlin原本の <c>saveJob</c> に相当するが、テストが完了を決定的に待てるよう公開する
     /// （クラスKDoc参照）。</summary>
@@ -102,19 +137,12 @@ public sealed partial class MagiViewModel
         try
         {
             await Task.Delay(1200, ct);
+            var gen = ++_saveGen;   // main で採番＝ExportJson の時点の状態順
             var json = ExportJson();
             if (json is null) return;
-            var ok = await Task.Run(() =>
-            {
-                try
-                {
-                    return AtomicFileWrite.WriteFileAtomically(AutosaveFile, json, onNonAtomic: () => _nonAtomicSaveSeen = true);
-                }
-                catch
-                {
-                    return false;
-                }
-            }, ct);
+            var result = await Task.Run(() => WriteAutosaveIfLatest(gen, json), ct);
+            if (result is null) return;   // より新しい世代が先に書かれた＝この世代は捨てる（通知しない）
+            var ok = result.Value;
             // [3.428.0/#7 相当] 記録は main（このコルーチン継続）へ戻ってから行う——LogOp は
             // 共有可変状態(_opLog)とUIプロパティを変更するため、バックグラウンドスレッドから
             // 直接呼ばない（3.176.0の由来コメント参照）。
@@ -160,17 +188,11 @@ public sealed partial class MagiViewModel
         if (!_hydrated) return;
         _saveCts?.Cancel();
         var t0 = System.Diagnostics.Stopwatch.StartNew();
+        var gen = ++_saveGen;
         var json = ExportJson();
         if (json is null) return;
-        var ok = false;
-        try
-        {
-            ok = AtomicFileWrite.WriteFileAtomically(AutosaveFile, json, onNonAtomic: () => _nonAtomicSaveSeen = true);
-        }
-        catch
-        {
-            ok = false;
-        }
+        // 同期呼出しなので世代は常に最新＝null（捨て）にはならないが、走行中の自動保存とはロックで直列化される。
+        var ok = WriteAutosaveIfLatest(gen, json) ?? true;
         // saveNow は同期なので旗を立てたその場で記録して構わない。
         ReportNonAtomicSave();
         ReportAutoSave(ok);
