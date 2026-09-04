@@ -256,6 +256,21 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 移植中に見つけた「それっぽくない」数値・閾値・重みを、翻訳の都合で勝手に補正しない。
 逐語的に移し、凍結したゴールデンフィクスチャの期待値で正しさを判定する。
 
+## レビュー対応の記録
+
+- **2026-09-04（main 53f60aa への外部レビュー3件、全件実在→修正）**
+  ① `Ws1Ops.SetGroupShift`（単一セル）に休の OFF 拒否が無く、行/列一括だけが保護していた→ 列一括と同じ
+  「同じ state を返す」契約で拒否し、`Ws1SetGroupShift` が `ReferenceEquals` で検知して同じ案内を出す
+  （`Ws1OpsTest.SetGroupShift_SingleCell_RefusesTurningRestOff`）。Kotlin 原本にも同じ穴があり、
+  `magi7ichiro-fork` 3.484.0 で同時に修正。
+  ② `EditView` の適切回数セルが `GroupShiftApt[g]` の行の存在を確認せず、`Validate` が許容する行数不足
+  （空配列・旧形式）の state で `IndexOutOfRangeException`→ 行の存在も確認（読込時の G×K 正規化は
+  保存ファイルの内容が変わるため採らず、読む側で守る＝エンジン側の既存の読み方と同じ）。
+  ③ `android-sdk.yml` のビルド失敗ログ保存が `if: failure()` で、ビルドステップが `set +e` で成功扱いの
+  ため一度も動いていなかった→ ステップ出力 `steps.build.outputs.code` で判定。
+  レビューの「.NET SDK が無い」は誤り（`dotnet` 8.0.424 あり）。`MagiEngine.Tests` 全件と
+  `MagiApp.ViewModels` のビルドをローカルで確認。
+
 ## スコープ外
 
 `app/src/main/cpp/magi_native.cpp`（JNI経由のC++高速化ミラー）はこの移植の対象外

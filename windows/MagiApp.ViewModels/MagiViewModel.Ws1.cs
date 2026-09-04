@@ -117,8 +117,16 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        var ns = Ws1Ops.SetGroupShift(st, g, k, allowed);
+        if (ReferenceEquals(ns, st))
+        {
+            // [レビュー指摘 2026-09-04] 単一セルでも休は外せない（列一括と同じ理由・同じ案内）。
+            if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
+                Notify("「休」はどのグループからも外せません（担当できるシフトが無い群を作らないため）", "W");
+            return;
+        }
         LogOp("I", $"担当可否: グループ[{g}] × {OpSy(k)} → {(allowed ? "担当できる" : "担当しない")}");
-        ApplyStructure(Ws1Ops.SetGroupShift(st, g, k, allowed));
+        ApplyStructure(ns);
     }
 
     /// <summary>[マトリックス一括] 群 g の全シフトを一括ON/OFF（行ヘッダのタップ）。OFF でも休は残る。</summary>

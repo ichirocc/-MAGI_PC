@@ -432,6 +432,21 @@ public class Ws1OpsTest
     }
 
     [Fact]
+    public void SetGroupShift_SingleCell_RefusesTurningRestOff()
+    {
+        // [レビュー指摘 2026-09-04] 行/列一括だけが休を守り、単一セルは素通しだった。
+        var st = MatrixState();
+        Assert.Same(st, Ws1Ops.SetGroupShift(st, 0, 0, false));   // 休(index0) を OFF → 無変更（拒否）
+        Assert.Same(st, Ws1Ops.SetGroupShift(st, 1, 0, false));
+        var on = Ws1Ops.SetGroupShift(st, 0, 1, true);            // 休以外は従来どおり
+        Assert.Equal(1, on.GroupShift[0][1]);
+        var off = Ws1Ops.SetGroupShift(on, 0, 2, false);
+        Assert.Equal(0, off.GroupShift[0][2]);
+        var restOn = Ws1Ops.SetGroupShift(st, 0, 0, true);        // 休を ON にするのは常に可
+        Assert.Equal(1, restOn.GroupShift[0][0]);
+    }
+
+    [Fact]
     public void SetGroupShiftColumn_AppliesToAllGroups_AndRefusesTurningRestOff()
     {
         var st = MatrixState();

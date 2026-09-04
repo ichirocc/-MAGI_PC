@@ -1482,7 +1482,9 @@ public sealed partial class EditView : UserControl
                     apt.IsEnabled = editable && allowed;
                     if (apt.FocusState == FocusState.Unfocused)
                     {
-                        apt.Text = k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
+                        // [レビュー指摘 2026-09-04] Validate は GroupShiftApt の行数不足（空配列・旧形式）を
+                        //   許容するので、行の存在も確認する（旧: 列だけ確認＝IndexOutOfRange で画面ごと落ちた）。
+                        apt.Text = g < ws1.GroupShiftApt.Count && k < ws1.GroupShiftApt[g].Count ? ws1.GroupShiftApt[g][k] : "";
                     }
                 }
             }

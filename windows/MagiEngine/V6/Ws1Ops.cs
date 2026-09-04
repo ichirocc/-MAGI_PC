@@ -120,9 +120,16 @@ public static class Ws1Ops
         return state with { StaffList = sl };
     }
 
+    /// <summary>
+    /// 群 g × シフト k の担当可否を1セル設定。**休の列を OFF にする操作は無変更で返す**
+    /// （<see cref="SetGroupShiftColumn"/> と同じ拒否契約＝呼出側は <c>ReferenceEquals</c> で検知）。
+    /// [レビュー指摘 2026-09-04] 行/列一括だけが休を保護し、単一セルは素通しだった＝UI の
+    /// 「休は外せません」と食い違い、休しか担当できない群で「担当可能シフトが無い群」を作れていた。
+    /// </summary>
     public static MagiState SetGroupShift(MagiState state, int g, int k, bool allowed)
     {
         if (g < 0 || g >= state.GroupShift.Count) return state;
+        if (!allowed && k == ScheduleUtil.RestShiftIndex(state)) return state;
         var grid = state.GroupShift.Select(row => row.ToList()).ToList();
         if (k < 0 || k >= grid[g].Count) return state;
         grid[g][k] = allowed ? 1 : 0;
