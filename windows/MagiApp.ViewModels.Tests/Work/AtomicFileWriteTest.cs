@@ -99,6 +99,40 @@ public class AtomicFileWriteTest : IDisposable
     }
 
     /// <summary>
+    /// [レビュー指摘 2026-09-04] rename に失敗して直接書きへ落ちるとき、所有権（commitGuard）をもう一度確認する。
+    /// 旧: 最初の確認のあと所有権が移っていても古い writer が target を書けた。
+    /// </summary>
+    [Fact]
+    public void CommitGuardIsReEvaluatedBeforeTheNonAtomicFallbackWrites()
+    {
+        var dir = FreshTempDir();
+        var target = Path.Combine(dir, "out.json");
+        File.WriteAllText(target, "original");
+        var calls = 0;
+        var nonAtomic = false;
+
+        var ok = AtomicFileWrite.WriteFileAtomically(target, "new content",
+            onNonAtomic: () => nonAtomic = true,
+            commitGuard: () => ++calls == 1,                       // 1回目=所有、2回目=所有権を失った
+            move: (_, _) => throw new IOException("rename unavailable"));
+
+        Assert.False(ok);
+        Assert.Equal(2, calls);
+        Assert.False(nonAtomic);
+        Assert.Equal("original", File.ReadAllText(target));
+        Assert.Single(Directory.GetFiles(dir));
+
+        // 所有権が続いていれば従来どおり直接書きへ落ち、諦めたことを知らせる。
+        calls = 0;
+        Assert.True(AtomicFileWrite.WriteFileAtomically(target, "newer",
+            onNonAtomic: () => nonAtomic = true,
+            commitGuard: () => { calls++; return true; },
+            move: (_, _) => throw new IOException("rename unavailable")));
+        Assert.True(nonAtomic);
+        Assert.Equal("newer", File.ReadAllText(target));
+    }
+
+    /// <summary>
     /// commitGuard は一時ファイルへの書込みが完了した**後**、対象への置換の**前**に呼ばれる
     /// （書込み中の内容を見てから採否を決められる、という契約）。
     /// </summary>

@@ -36,7 +36,8 @@ public static class AtomicFileWrite
         string target,
         string text,
         Action? onNonAtomic = null,
-        Func<bool>? commitGuard = null)
+        Func<bool>? commitGuard = null,
+        Action<string, string>? move = null)   // [レビュー指摘 2026-09-04] テストから rename 失敗を再現するための注入点
     {
         var dir = Path.GetDirectoryName(target);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
@@ -50,7 +51,7 @@ public static class AtomicFileWrite
             try
             {
                 // 成功時の rename 後は既に tmp が存在しない（下の finally で確認する）。
-                File.Move(tmp, target, overwrite: true);
+                if (move is null) File.Move(tmp, target, overwrite: true); else move(tmp, target);
             }
             catch
             {
@@ -58,6 +59,9 @@ public static class AtomicFileWrite
                 // この経路で書いている間にプロセスが落ちると壊れたファイルが残り、起動時の復元が
                 // 「結果も再開手段も両方失う」形になりうる——原子置換を入れた動機そのものなので、
                 // 諦めたこと自体は必ず呼出側へ知らせる。
+                // [レビュー指摘 2026-09-04] 直接書きへ落ちる前に所有権（commitGuard）をもう一度確認する。
+                //   旧: 最初の確認から直接書きまでの間に所有権が移っていても古い writer が target を書けた。
+                if (commitGuard is not null && !commitGuard()) return false;
                 onNonAtomic?.Invoke();
                 File.WriteAllText(target, text);
             }

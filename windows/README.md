@@ -290,6 +290,10 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   ⑧〜⑪（`catch (Throwable)` で OOM も捕捉／`largeHeap`／リリース APK のデバッグ鍵／成果物の毎日全削除）は
   **記録された意図的判断**（マニフェスト・build.gradle.kts・cleanup-artifacts.yml のコメント参照）のため変更せず、
   判断材料として本体リポジトリの履歴に整理。
+- **2026-09-04（第4弾・新規2件）** ① `AtomicFileWrite` が rename 失敗で直接書きへ落ちる前に `commitGuard`
+  （所有権）を再確認（旧: 稀な経路で古い writer が target を書けた。`move` を注入点にしてテストで rename 失敗を再現）。
+  ② `cleanup-artifacts.yml` は1件も消せなければ `core.setFailed`（旧: 警告だけで緑）。Actions の SHA 固定は
+  更新運用とセットの方針事項のため記録のみ（署名・リリース系から先に固定する案）。Kotlin 原本は 3.487.0。
 
 ## スコープ外
 

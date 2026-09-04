@@ -60,6 +60,10 @@ jobs:
             const mib = (freedBytes / (1024 * 1024)).toFixed(1);
             const msg = `Deleted ALL: ${deleted}/${all.length} artifacts (failed ${failed}), freed ~${mib} MiB`;
             core.notice(msg);
+            // [レビュー指摘 2026-09-04] 旧: 削除失敗は core.warning だけで、権限・API・容量の問題で1件も
+            //   消せなくても定期クリーンアップは緑のままだった。1件も消せなければジョブを失敗にする
+            //   （一部失敗は従来どおり警告＝次回の定期実行で拾える）。
+            if (all.length > 0 && deleted === 0) core.setFailed(`No artifact could be deleted (${failed} failures)`);
             await core.summary
               .addHeading('Artifact cleanup (delete ALL)')
               .addRaw(`${msg}. If total was 0, this repository holds no artifacts (quota is account-wide / other repos).`)
