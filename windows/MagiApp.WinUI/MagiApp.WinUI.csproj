@@ -29,6 +29,10 @@
     <WindowsPackageType>MSIX</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- [2026-09-04 起動診断] 生成される Program.g.cs の Main を無効化し、Program.cs の Main（try/catch＋
+         %LOCALAPPDATA%\Magi\startup_error.log＋MessageBox）で起動失敗を必ず見えるようにする。
+         旧: 起動時の例外（ランタイム DLL 欠落・XAML リソース解決失敗）は無言のプロセス終了＝「画面が出ない」。 -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

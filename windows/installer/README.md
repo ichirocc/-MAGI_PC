@@ -14,8 +14,9 @@ CI: [`.github/workflows/windows-installer.yml`](../../.github/workflows/windows-
 
 `dotnet publish -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true --self-contained true`
 （unpackaged＋全ランタイム同梱）の出力を [`MagiApp.iss`](./MagiApp.iss) で包む。
-配布先 PC に .NET / WindowsAppSDK の事前インストールは不要。
-インストール先は `%LOCALAPPDATA%\Programs\MAGI ShiftOptimizer`。
+配布先 PC に .NET / WindowsAppSDK / VC++ ランタイムの事前インストールは不要（2026-09-04 から `resources.pri` と
+VC++ ランタイム DLL を publish へ写すステップを追加。それ以前の setup.exe はこの2つが欠けて起動時に無言終了していた）。
+インストール先は `%LOCALAPPDATA%\Programs\MAGI ShiftOptimizer`。起動しないときは `%LOCALAPPDATA%\Magi\startup_error.log`。
 
 ## MSIX 署名の Secrets 設定（任意）
 

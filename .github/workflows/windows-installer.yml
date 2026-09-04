@@ -101,6 +101,45 @@ jobs:
           /p:EnableMsixTooling=false
           /p:PublishDir=$PWD\publish\win-x64\
 
+      - name: Bundle startup pieces the publish leaves out (resources.pri, VC++ runtime)
+        # [2026-09-04 実機報告「Windows11版が起動出来ない。画面でない」] run 33885296148 の publish 出力を
+        #   数え直したところ、unpackaged WinUI 3 の起動に必須の2つが publish フォルダに無かった:
+        #   ① resources.pri … MakePri は bin\x64\Release\...\win-x64\resources.pri へ書くが msbuild /t:Publish は
+        #      PublishDir へ写さない。無いと XAML の初期化（App.xaml のリソース解決）で例外＝ウィンドウが出ずに終了する。
+        #   ② Visual C++ ランタイム（vcruntime140/vcruntime140_1/msvcp140）… WindowsAppSDKSelfContained は
+        #      WinAppSDK 自身の DLL しか同梱しない。VC++ 再頒布が入っていない PC では Microsoft.ui.xaml.dll が
+        #      ロードできず、同じく無言で終了する。per-user インストール（昇格なし）と両立させるため、再頒布
+        #      インストーラでなく app-local（exe の隣へ DLL を置く）で解決する。
+        #   どちらも無ければジョブを赤にする（無言の欠落を二度と成果物にしない）。
+        shell: pwsh
+        run: |
+          $pub = "$PWD\publish\win-x64"
+          $pri = Get-ChildItem "$PWD\MagiApp.WinUI\bin\x64\Release" -Recurse -Filter resources.pri -ErrorAction SilentlyContinue |
+                 Where-Object { $_.FullName -like "*\win-x64\resources.pri" } | Select-Object -First 1
+          if (-not $pri) { throw "resources.pri not found under MagiApp.WinUI\bin\x64\Release (MakePri output)" }
+          Copy-Item $pri.FullName (Join-Path $pub "resources.pri") -Force
+          Write-Host "resources.pri <- $($pri.FullName)"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          if (-not $vs) { throw "vswhere: Visual Studio not found" }
+          $crt = Get-ChildItem (Join-Path $vs "VC\Redist\MSVC") -Directory -ErrorAction SilentlyContinue |
+                 Sort-Object Name -Descending |
+                 ForEach-Object { Get-ChildItem $_.FullName -Directory -Filter "Microsoft.VC*.CRT" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*\x64\*" } } |
+                 Select-Object -First 1
+          if (-not $crt) { throw "VC++ CRT redist folder (x64\Microsoft.VC1xx.CRT) not found under $vs\VC\Redist\MSVC" }
+          Write-Host "VC CRT <- $($crt.FullName)"
+          $required = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+          $optional = @("msvcp140_1.dll", "msvcp140_2.dll", "msvcp140_atomic_wait.dll", "msvcp140_codecvt_ids.dll", "concrt140.dll", "vccorlib140.dll")
+          foreach ($f in $required + $optional) {
+            $src = Join-Path $crt.FullName $f
+            if (Test-Path $src) { Copy-Item $src $pub -Force; Write-Host "  + $f" }
+            elseif ($required -contains $f) { throw "required VC runtime DLL missing in redist: $f" }
+          }
+          foreach ($f in @("resources.pri", "MagiApp.WinUI.exe", "Microsoft.ui.xaml.dll", "Microsoft.WindowsAppRuntime.dll") + $required) {
+            if (-not (Test-Path (Join-Path $pub $f))) { throw "publish output is missing $f" }
+          }
+          Write-Host "publish root files: $((Get-ChildItem $pub -File).Count)"
+
       - name: Sign app binary (optional, Authenticode)
         # 二重署名構成の①: インストーラへ入れる前に「中身の MagiApp.WinUI.exe」を署名する
         # （setup.exe だけ署名しても展開後の本体が未署名だと SmartScreen/AV の評価が下がるため）。

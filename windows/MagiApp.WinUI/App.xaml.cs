@@ -25,6 +25,11 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // [2026-09-04 起動診断] XAML ループ内の未処理例外もログへ残す（旧: 無言で落ちて「画面が出ない」）。
+        UnhandledException += (_, e) =>
+        {
+            StartupDiagnostics.Log("Application.UnhandledException", e.Exception);
+        };
 
         var services = new ServiceCollection();
         services.AddSingleton<IOptimizationService, EngineOptimizationService>();
@@ -34,7 +39,17 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow(Services.GetRequiredService<MagiViewModel>());
-        _window.Activate();
+        try
+        {
+            _window = new MainWindow(Services.GetRequiredService<MagiViewModel>());
+            _window.Activate();
+            StartupDiagnostics.Log("ウィンドウ表示", null);
+        }
+        catch (Exception ex)
+        {
+            // メインウィンドウの生成失敗＝画面が一度も出ない。原因を見せてから終了する。
+            StartupDiagnostics.Report("OnLaunched", ex);
+            Exit();
+        }
     }
 }

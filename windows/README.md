@@ -256,8 +256,27 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 移植中に見つけた「それっぽくない」数値・閾値・重みを、翻訳の都合で勝手に補正しない。
 逐語的に移し、凍結したゴールデンフィクスチャの期待値で正しさを判定する。
 
+## Windows 11 での入れ方・起動しないとき（2026-09-04）
+
+1. **成果物は Actions「Windows Installer」の `magi-windows-setup-exe`**（`MagiShiftOptimizer-Setup-<版>-x64.exe`）を使う。
+   MSIX（`magi-windows-msix`）は署名用 Secrets を入れていない限り**未署名**で、Windows は「セキュリティ」「証明書」を理由に
+   インストールを拒否する＝通常は使わない。
+2. setup.exe を初めて実行すると SmartScreen が「Windows によって PC が保護されました」と止める（未署名のため）。
+   **「詳細情報」→「実行」**で進む。インストールは per-user（`%LOCALAPPDATA%\Programs\MAGI ShiftOptimizer`）で UAC 昇格なし。
+3. **起動しても画面が出ない**ときは `%LOCALAPPDATA%\Magi\startup_error.log` を見る（起動時に必ず1行書く。失敗時は例外と
+   原因の要約を MessageBox でも表示する）。2026-09-04 以前の setup.exe は publish に `resources.pri` と VC++ ランタイム
+   （vcruntime140/vcruntime140_1/msvcp140）が入っておらず、この症状で無言終了していた。同日以降の Windows Installer 実行で
+   生成した setup.exe を入れ直すこと。
+
 ## レビュー対応の記録
 
+- **2026-09-04（実機報告「Windows11版が起動出来ない。セキュリティが不足。画面でない」）** run 33885296148 の publish 出力を
+  数え直して原因を特定: ① `resources.pri` が publish フォルダに無い（MakePri は bin 側へ書き、msbuild /t:Publish は写さない）
+  ② VC++ ランタイム DLL が同梱されていない（WindowsAppSDKSelfContained は WinAppSDK 自身しか同梱しない）→ どちらも
+  unpackaged WinUI 3 の起動に必須で、無いとウィンドウを出す前に無言終了する。`windows-installer.yml` に両方を publish へ
+  写して検証するステップを追加（欠けていればジョブを赤に）。「セキュリティ」は未署名 setup.exe の SmartScreen／未署名 MSIX の
+  拒否＝入れ方を README 冒頭に明記。あわせて `Program.cs`（手書き Main・DISABLE_XAML_GENERATED_MAIN）と
+  `StartupDiagnostics`（`%LOCALAPPDATA%\Magi\startup_error.log`＋Win32 MessageBox）で起動失敗を必ず見えるようにした。
 - **2026-09-04（Android 3.496.0 と同時）** 希望島研磨 `ApplyWishIslandPolish`（`V6HotfixPasses.WishIsland.cs`）を移植。
   実現可能な希望日を固定アンカーに、影響範囲が重なる希望を島へ統合、周辺に違反がある島だけ起動。同日→窓→両翼→必要時のみ
   3者巡回、希望周辺も全体も改善する手だけ採用、停滞時のみ短いビーム。テスト `V6HotfixPassesWishIslandTest`（3件）。
