@@ -104,7 +104,7 @@ jobs:
       - name: Bundle startup pieces the publish leaves out (resources.pri, VC++ runtime)
         # [2026-09-04 実機報告「Windows11版が起動出来ない。画面でない」] run 33885296148 の publish 出力を
         #   数え直したところ、unpackaged WinUI 3 の起動に必須の2つが publish フォルダに無かった:
-        #   ① resources.pri … MakePri は bin\x64\Release\...\win-x64\resources.pri へ書くが msbuild /t:Publish は
+        #   ① resources.pri … MakePri は bin\x64\Release\...\win-x64\MagiApp.WinUI.pri へ書くが msbuild /t:Publish は
         #      PublishDir へ写さない。無いと XAML の初期化（App.xaml のリソース解決）で例外＝ウィンドウが出ずに終了する。
         #   ② Visual C++ ランタイム（vcruntime140/vcruntime140_1/msvcp140）… WindowsAppSDKSelfContained は
         #      WinAppSDK 自身の DLL しか同梱しない。VC++ 再頒布が入っていない PC では Microsoft.ui.xaml.dll が
@@ -114,9 +114,18 @@ jobs:
         shell: pwsh
         run: |
           $pub = "$PWD\publish\win-x64"
-          $pri = Get-ChildItem "$PWD\MagiApp.WinUI\bin\x64\Release" -Recurse -Filter resources.pri -ErrorAction SilentlyContinue |
-                 Where-Object { $_.FullName -like "*\win-x64\resources.pri" } | Select-Object -First 1
-          if (-not $pri) { throw "resources.pri not found under MagiApp.WinUI\bin\x64\Release (MakePri output)" }
+          # MakePri の実際の出力名は "MagiApp.WinUI.pri"（-IndexName MagiApp.WinUI、run 33897806456 のログで確認。
+          # resources.pri という名では書かれない）。unpackaged の MRT Core は exe の隣の resources.pri を探すので、
+          # アプリ自身の PRI を見つけて resources.pri の名で写す。Microsoft.UI.Xaml.Controls.pri（WinUI の部品
+          # インデックス。アプリ PRI へ統合済み）と obj 配下の中間物は候補から外す。
+          $pri = Get-ChildItem "$PWD\MagiApp.WinUI\bin\x64\Release" -Recurse -Filter *.pri -ErrorAction SilentlyContinue |
+                 Where-Object { $_.FullName -like "*\win-x64\*" -and $_.Name -ne "Microsoft.UI.Xaml.Controls.pri" } |
+                 Sort-Object { if ($_.Name -eq "MagiApp.WinUI.pri") { 0 } elseif ($_.Name -eq "resources.pri") { 1 } else { 2 } } |
+                 Select-Object -First 1
+          if (-not $pri) {
+            Get-ChildItem "$PWD\MagiApp.WinUI" -Recurse -Filter *.pri -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  (pri) $($_.FullName)" }
+            throw "app PRI (MagiApp.WinUI.pri / resources.pri) not found under MagiApp.WinUI\bin\x64\Release (MakePri output)"
+          }
           Copy-Item $pri.FullName (Join-Path $pub "resources.pri") -Force
           Write-Host "resources.pri <- $($pri.FullName)"
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
