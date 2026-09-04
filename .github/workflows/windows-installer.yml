@@ -26,6 +26,13 @@ name: Windows Installer
 #        [Convert]::ToBase64String([IO.File]::ReadAllBytes("magi.pfx")) | Set-Clipboard
 #      → クリップボードの文字列を Secrets: MSIX_PFX_BASE64 へ、パスワードを MSIX_PFX_PASSWORD へ。
 #
+#   ③ GitHub Release（タグ win-vX.Y.Z の push 時のみ）… ①の setup.exe を Release の添付にする。
+#      固定名 MagiShiftOptimizer-Setup-x64.exe も添付するので、
+#        https://github.com/ichirocc/-MAGI_PC/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe
+#      が常に最新版を指す。curl.exe で落とすと Mark of the Web が付かず SmartScreen が一切出ない
+#      （SmartScreen は MotW 付きファイルの起動時にだけ評価する）＝証明書なしで「警告ゼロ」の入れ方。
+#      詳細は windows/README.md「Windows 11 での入れ方」。
+#
 # トリガは手動（workflow_dispatch）とリリースタグ（win-v*）のみ。
 # 通常 push のビルド検証は windows-app-build.yml が担当（毎 push でインストーラまで
 # 作ると windows ランナーの課金分数を浪費するため分離）。
@@ -63,8 +70,11 @@ jobs:
         #   入力は環境変数で受け取り、`X.Y.Z` 形式だけ通す。
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          GIT_REF: ${{ github.ref }}
         run: |
           $v = $env:INPUT_VERSION
+          # タグ push（refs/tags/win-vX.Y.Z）ならタグが版の正＝appxmanifest を毎回書き換えずに済む。
+          if ([string]::IsNullOrWhiteSpace($v) -and $env:GIT_REF -match '^refs/tags/win-v(\d+\.\d+\.\d+)$') { $v = $Matches[1] }
           if ([string]::IsNullOrWhiteSpace($v)) {
             [xml]$m = Get-Content MagiApp.WinUI/Package.appxmanifest
             # appxmanifest は 4 桁 (1.0.0.0)。インストーラ表記は 3 桁へ丸める。
@@ -195,6 +205,53 @@ jobs:
           path: windows/installer-out/*.exe
           retention-days: 14
           if-no-files-found: error
+
+  release:
+    name: GitHub Release (tag win-v* only)
+    # setup.exe を Release に添付する。固定名の複製 MagiShiftOptimizer-Setup-x64.exe も付けるので
+    # releases/latest/download/... の URL が常に最新版を指す（README の1行インストール用）。
+    # workflow_dispatch では作らない（Artifacts のみ）。
+    needs: installer-exe
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: magi-windows-setup-exe
+          path: dist
+      - name: Attach setup.exe to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          exe=$(ls dist/MagiShiftOptimizer-Setup-*-x64.exe | head -n 1)
+          [ -n "$exe" ] || { echo "setup.exe not found in artifact"; exit 1; }
+          cp "$exe" dist/MagiShiftOptimizer-Setup-x64.exe
+          sha=$(sha256sum "$exe" | cut -d' ' -f1)
+          cat > notes.md <<EOF_NOTES
+          MAGI ShiftOptimizer Windows 11 版 ${TAG#win-v}（setup.exe・per-user・証明書不要）
+
+          **警告なしで入れる（PowerShell に貼り付け）**
+          \`\`\`powershell
+          \$f="\$env:TEMP\\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o \$f https://github.com/${REPO}/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe; Unblock-File \$f -ErrorAction SilentlyContinue; & \$f
+          \`\`\`
+          ブラウザで落とした場合は SmartScreen の「詳細情報」→「実行」。詳細は windows/README.md。
+
+          SHA-256: \`${sha}\`
+          EOF_NOTES
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$exe" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" --clobber
+            gh release edit "$TAG" --repo "$REPO" --notes-file notes.md
+          else
+            gh release create "$TAG" "$exe" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" \
+              --title "Windows ${TAG#win-v}" --notes-file notes.md --latest
+          fi
+          gh release view "$TAG" --repo "$REPO"
 
   msix-package:
     name: MSIX package

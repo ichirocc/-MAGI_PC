@@ -7,8 +7,20 @@ CI: [`.github/workflows/windows-installer.yml`](../../.github/workflows/windows-
 
 | 形態 | Artifact 名 | 配布先での入れ方 | 証明書 |
 |---|---|---|---|
-| **setup.exe**（推奨） | `magi-windows-setup-exe` | ダブルクリック→ウィザード。per-user インストール（UAC 昇格なし）。未署名時は初回に SmartScreen の「詳細情報」→「実行」が必要 | 不要（Secrets 設定時のみ Authenticode 二重署名） |
+| **setup.exe**（推奨） | `magi-windows-setup-exe` | ダブルクリック→ウィザード。per-user インストール（UAC 昇格なし）。ブラウザ経由で落とすと初回に SmartScreen の「詳細情報」→「実行」。**`curl.exe` で落とすか zip を「ブロックの解除」してから展開すれば警告は出ない**（Mark of the Web が付かないため。`../README.md`「Windows 11 での入れ方」） | 不要（Secrets 設定時のみ Authenticode 二重署名） |
+| **GitHub Release**（タグ `win-vX.Y.Z` push 時のみ） | Release の添付 | `https://github.com/ichirocc/-MAGI_PC/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe` が常に最新の setup.exe。README の1行インストールはこれを使う | 不要 |
 | **MSIX** | `magi-windows-msix` | 署名済みならダブルクリック（初回のみ同梱 .cer を「信頼されたルート」へ導入）。未署名は開発者モード＋`Add-AppxPackage` のみ | Secrets 設定時のみ署名 |
+
+## 更新版を出す手順（Release）
+
+```
+git tag win-v1.0.1 && git push origin win-v1.0.1
+```
+
+タグ push で「Windows Installer」が起動し、`Resolve version` がタグの `1.0.1` を版にする（`Package.appxmanifest` の
+書き換え不要）。`installer-exe` ジョブの setup.exe を `release` ジョブが Release `win-v1.0.1` に添付する
+（版付きファイル＋固定名 `MagiShiftOptimizer-Setup-x64.exe`、ノートに SHA-256 と1行インストール）。
+`workflow_dispatch` の手動実行では Release は作らない（Artifacts のみ）。
 
 ## setup.exe の中身
 
@@ -61,7 +73,9 @@ PFX はランナーの一時ファイルへ展開し、成否に関わらず `fi
 注意:
 
 - 自己署名証明書でも署名自体は通るが、SmartScreen の警告は消えない（配布先が証明書を
-  信頼しない限り「不明な発行元」のまま）。警告を消すには CA 発行のコード署名証明書が必要。
+  信頼しても「不明な発行元」扱い）。スマート アプリ コントロールにも効かない。警告を消すには CA 発行の
+  コード署名証明書が必要。**証明書なしで警告を出さない方法**（Mark of the Web を付けない／外す）は
+  `../README.md`「Windows 11 での入れ方」。
 - EV 証明書（物理トークン必須）やクラウド管理鍵（Azure Key Vault / DigiCert ONE 等）を使う場合は、
   PFX をランナーへ展開するこの方式ではなく `Azure/trusted-signing-action` 等のベンダー提供
   アクションへ置き換える。

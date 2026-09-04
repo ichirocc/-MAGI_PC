@@ -258,18 +258,66 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## Windows 11 での入れ方・起動しないとき（2026-09-04）
 
-1. **成果物は Actions「Windows Installer」の `magi-windows-setup-exe`**（`MagiShiftOptimizer-Setup-<版>-x64.exe`）を使う。
-   MSIX（`magi-windows-msix`）は署名用 Secrets を入れていない限り**未署名**で、Windows は「セキュリティ」「証明書」を理由に
-   インストールを拒否する＝通常は使わない。
-2. setup.exe を初めて実行すると SmartScreen が「Windows によって PC が保護されました」と止める（未署名のため）。
-   **「詳細情報」→「実行」**で進む。インストールは per-user（`%LOCALAPPDATA%\Programs\MAGI ShiftOptimizer`）で UAC 昇格なし。
-3. **起動しても画面が出ない**ときは `%LOCALAPPDATA%\Magi\startup_error.log` を見る（起動時に必ず1行書く。失敗時は例外と
-   原因の要約を MessageBox でも表示する）。2026-09-04 以前の setup.exe は publish に `resources.pri` と VC++ ランタイム
-   （vcruntime140/vcruntime140_1/msvcp140）が入っておらず、この症状で無言終了していた。同日以降の Windows Installer 実行で
-   生成した setup.exe を入れ直すこと。
+### 警告なしで入れる（推奨・証明書不要・管理者不要）
+
+PowerShell（スタートで「powershell」）に次の1行を貼り付けて Enter。インストーラのウィザードが開く。
+
+```powershell
+$f="$env:TEMP\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o $f https://github.com/ichirocc/-MAGI_PC/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe; Unblock-File $f -ErrorAction SilentlyContinue; & $f
+```
+
+なぜ警告が出ないか: SmartScreen は「インターネットから来た印（Mark of the Web＝`Zone.Identifier` 代替ストリーム）」が
+付いたファイルを**起動した瞬間**に評価する。ブラウザや Explorer の zip 展開はこの印を付けるが、`curl.exe`（Windows 10 1803
+以降に同梱）は付けない。念のため `Unblock-File` で外してから起動するので、SmartScreen の評価自体が走らない。
+インストーラが書き出すファイルにも印は付かないので、以後の起動でも出ない。インストールは per-user
+（`%LOCALAPPDATA%\Programs\MAGI ShiftOptimizer`）で UAC 昇格なし。無人インストールは末尾を `& $f /VERYSILENT` にする。
+
+`releases/latest/download/...` はタグ `win-vX.Y.Z` を push したときに Actions「Windows Installer」が作る GitHub Release の
+固定名添付を指す（常に最新版）。更新の出し方は [`installer/README.md`](./installer/README.md)。
+
+### ブラウザや Actions の Artifacts から落とした場合
+
+- zip を展開する**前**に、zip を右クリック→「プロパティ」→ 下の「ブロックの解除」にチェック→ OK（または
+  `Unblock-File .\magi-windows-setup-exe.zip`）。展開後の setup.exe に印が継承されないので SmartScreen は出ない。
+- 先に展開してしまった／setup.exe を直接落とした場合は、SmartScreen の「Windows によって PC が保護されました」で
+  **「詳細情報」→「実行」**。または setup.exe を右クリック→プロパティ→「ブロックの解除」でも同じ。
+- MSIX（`magi-windows-msix`）は署名用 Secrets を入れていない限り未署名で、Windows は「証明書」「セキュリティ」を理由に
+  インストールを拒否する＝通常は使わない。
+
+### 「スマート アプリ コントロールによってブロックされました」と出る場合
+
+Windows 11 をクリーンインストールした PC は「スマート アプリ コントロール（SAC）」が有効（または評価モード）のことがあり、
+CA 発行の証明書で署名されていないアプリを**例外なく**止める（「詳細情報→実行」の逃げ道が無い）。証明書を買わない前提では
+SAC を切るしかない: Windows セキュリティ →「アプリとブラウザー コントロール」→「スマート アプリ コントロールの設定」→
+**オフ**。一度オフにすると Windows を再インストールするまで再有効化できない（Microsoft の仕様）。
+
+### 証明書で何が変わるか（早見表）
+
+| 手段 | SmartScreen | SAC | MSIX のダブルクリック | 費用 |
+|---|---|---|---|---|
+| MotW を付けない／外す（上の1行・ブロックの解除） | **出ない** | 効かない | ― | 0 |
+| 自己署名証明書で署名 | 消えない（「不明な発行元」のまま） | 効かない | ○（配布先で1回、管理者で信頼が必要） | 0 |
+| CA 発行のコード署名証明書（OV） | 評価が貯まるまで出る | ○ | ○ | 年数万円 |
+| EV 証明書／Azure Trusted Signing | ほぼ出ない | ○ | ○ | EV は高額、Trusted Signing は月額少額（個人利用の本人確認と提供地域は要確認） |
+| SignPath Foundation | OV 相当 | ○ | ○ | OSS 公開リポジトリなら無料（審査あり） |
+
+証明書を入手したら Secrets（`WINDOWS_CERTIFICATE_BASE64` / `WINDOWS_CERTIFICATE_PASSWORD`）に登録するだけで、
+既存のワークフローが中身の exe と setup.exe を二重署名する（[`installer/README.md`](./installer/README.md)）。
+
+### 起動しても画面が出ないとき
+
+`%LOCALAPPDATA%\Magi\startup_error.log` を見る（起動時に必ず1行書く。失敗時は例外と原因の要約を MessageBox でも表示する）。
+2026-09-04 以前の setup.exe は publish に `resources.pri` と VC++ ランタイム（vcruntime140/vcruntime140_1/msvcp140）が
+入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
 
+- **2026-09-04（ユーザー指示「これは署名証明書が無い限り残るので賢く解決する」）** SmartScreen は Mark of the Web 付きファイルの
+  起動時にしか評価しない事実を使い、証明書なしで警告ゼロにした: ① タグ `win-vX.Y.Z` の push で setup.exe を GitHub Release へ
+  添付（固定名 `MagiShiftOptimizer-Setup-x64.exe` も付け `releases/latest/download/…` を常に最新に）、② README に
+  `curl.exe`＋`Unblock-File` の1行インストール（MotW が付かない→SmartScreen が走らない）と、zip の「ブロックの解除」手順、
+  ③ スマート アプリ コントロール（署名必須・逃げ道なし）の見分け方と対処、④ 自己署名は SmartScreen に効かない等の早見表。
+  版はタグから取る（`Resolve version` がタグ優先）。ワークフローの `release` ジョブは ubuntu ランナー・`contents: write`。
 - **2026-09-04（実機報告「Windows11版が起動出来ない。セキュリティが不足。画面でない」）** run 33885296148 の publish 出力を
   数え直して原因を特定: ① `resources.pri` が publish フォルダに無い（MakePri は bin 側へ書き、msbuild /t:Publish は写さない）
   ② VC++ ランタイム DLL が同梱されていない（WindowsAppSDKSelfContained は WinAppSDK 自身しか同梱しない）→ どちらも
