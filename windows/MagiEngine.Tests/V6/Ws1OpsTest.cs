@@ -432,6 +432,21 @@ public class Ws1OpsTest
     }
 
     [Fact]
+    public void NormalizeEndDate_RecomputesFromDayCount_AndLeavesConsistentOrUnparsableAlone()
+    {
+        // [レビュー指摘 2026-09-04] 検証は行列サイズしか見ず、EndDate と日数の矛盾がそのまま通っていた。
+        var three = new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 } };
+        var stale = MinimalState.Build(startDate: "2026-07-01", endDate: "2026-07-31", schedule: three);
+        Assert.Equal("2026-07-03", Ws1Ops.NormalizeEndDate(stale).EndDate);
+
+        var ok = MinimalState.Build(startDate: "2026-07-01", endDate: "2026-07-03", schedule: three);
+        Assert.Same(ok, Ws1Ops.NormalizeEndDate(ok));
+
+        var bad = MinimalState.Build(startDate: "not-a-date", endDate: "whatever", schedule: three);
+        Assert.Same(bad, Ws1Ops.NormalizeEndDate(bad));   // StartDate が読めなければ触らない
+    }
+
+    [Fact]
     public void SetGroupShift_SingleCell_RefusesTurningRestOff()
     {
         // [レビュー指摘 2026-09-04] 行/列一括だけが休を守り、単一セルは素通しだった。

@@ -281,6 +281,15 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   ③ 取込ファイルのサイズ上限が無かった（Android は 32MiB）→ `SettingsView.ReadImportBytesAsync` が
   サイズ属性で先に拒否し、ストリーム側でも読み切らずに中断。JSON／勤務表CSV／種類別CSV／名簿CSV の4入口
   すべてが通る。`IoReason` が上限超過の理由をそのまま表示。
+- **2026-09-04（第3弾・総括12件）** 1〜6 は上記で対処済み。新規で実在した2件を修正:
+  ⑦ Android Lint が CI で一度も走っていなかった（`abortOnError=false`/`checkReleaseBuilds=false` のため assemble では
+  実行されず、lint レポートのアップロードは生成元の無い空振り）→ `android-sdk.yml` に `lintDebug` の報告専用ステップ
+  （赤くはしない＝閾値は `build.gradle.kts` の lint ブロックで決める）。
+  ⑫ `EndDate` と日数の矛盾が構造検証を通り抜けていた→ 読込時に `Ws1Ops.NormalizeEndDate`（StartDate＋日数−1）で
+  揃え、補正したときは警告ログ（`Ws1OpsTest.NormalizeEndDate_*`）。Kotlin 原本も 3.486.0 で同時修正。
+  ⑧〜⑪（`catch (Throwable)` で OOM も捕捉／`largeHeap`／リリース APK のデバッグ鍵／成果物の毎日全削除）は
+  **記録された意図的判断**（マニフェスト・build.gradle.kts・cleanup-artifacts.yml のコメント参照）のため変更せず、
+  判断材料として本体リポジトリの履歴に整理。
 
 ## スコープ外
 

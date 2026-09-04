@@ -337,11 +337,15 @@ public sealed partial class MagiViewModel
             }
 
             LoadedProblem lp;
+            string? endDateFixedFrom = null;   // [レビュー指摘 2026-09-04] EndDate を日数に合わせて補正したときの旧値
             try
             {
                 lp = await Task.Run(() =>
                 {
-                    var st = StateJsonSerializer.Parse(json);
+                    var parsed = StateJsonSerializer.Parse(json);
+                    // EndDate と日数の食い違いは検証を通り抜けていた＝日数を正として EndDate を揃える。
+                    var st = Ws1Ops.NormalizeEndDate(parsed);
+                    if (st.EndDate != parsed.EndDate) endDateFixedFrom = parsed.EndDate;
                     var err = Validate(st);
                     if (err is not null) throw new StateValidationException(err);
                     var p = new Problem(st);
@@ -380,6 +384,8 @@ public sealed partial class MagiViewModel
                 }, ct);
             }
 
+            if (endDateFixedFrom is not null)
+                LogOp("W", $"期間の終了日（endDate）が日数と合っていなかったため補正しました（{endDateFixedFrom} → {lp.State.EndDate}）。「データを保存」で保存し直すと次回からこの警告は出ません");
             _originalJson = json;
             _state = lp.State.WithSchedule(lp.Schedule);
             _currentSchedule = lp.Schedule.Copy2D();

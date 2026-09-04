@@ -78,6 +78,16 @@ jobs:
           #   `if: failure()` は真にならない。終了コードを出力にして後段の条件に使う。
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
+      # [レビュー指摘 2026-09-04] Android Lint が CI で一度も走っていなかった（build.gradle.kts は
+      #   abortOnError=false・checkReleaseBuilds=false のため assemble では実行されず、下の
+      #   「Upload lint reports」は生成元の無い空振り）。ビルドと独立に lintDebug を走らせて報告だけ残す
+      #   （abortOnError=false のまま＝赤くはしない。閾値は build.gradle.kts の lint ブロックで決める）。
+      - name: Android Lint (report only)
+        if: ${{ always() && steps.build.outputs.code == '0' }}
+        shell: bash
+        continue-on-error: true
+        run: gradle lintDebug --stacktrace > lint-debug.log 2>&1 || true; tail -40 lint-debug.log
+
       - name: Show build error summary
         if: ${{ always() }}
         shell: bash

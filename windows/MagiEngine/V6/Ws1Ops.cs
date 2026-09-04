@@ -204,6 +204,23 @@ public static class Ws1Ops
 
     public static MagiState SetUse2(MagiState state, bool on) => state with { Use2Patterns = on };
 
+    /// <summary>
+    /// [レビュー指摘 2026-09-04] <c>EndDate</c> を <c>StartDate + 日数 - 1</c> に揃える（読込時の正規化）。
+    /// 構造検証は勤務表の行列サイズしか見ず、EndDate が日数と食い違うファイルもそのまま通っていた
+    /// （エンジンは StartDate + 日 index で動くので評価は変わらないが、設定画面・ログ・CSV の期間表示が矛盾する）。
+    /// StartDate が日付として読めない／日数が 0 のときは触らない（検証側が別途拒否する）。
+    /// Kotlin 原本 <c>Ws1Ops.normalizeEndDate</c>（3.486.0）と同値。
+    /// </summary>
+    public static MagiState NormalizeEndDate(MagiState state)
+    {
+        if (state.DayCount <= 0) return state;
+        if (!DateOnly.TryParseExact(state.StartDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var start))
+            return state;
+        var expected = start.AddDays(state.DayCount - 1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return state.EndDate == expected ? state : state with { EndDate = expected };
+    }
+
     // ---- append (low-risk dimension change, no re-indexing) ------------------
 
     /// <summary>
