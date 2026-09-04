@@ -294,6 +294,14 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   （所有権）を再確認（旧: 稀な経路で古い writer が target を書けた。`move` を注入点にしてテストで rename 失敗を再現）。
   ② `cleanup-artifacts.yml` は1件も消せなければ `core.setFailed`（旧: 警告だけで緑）。Actions の SHA 固定は
   更新運用とセットの方針事項のため記録のみ（署名・リリース系から先に固定する案）。Kotlin 原本は 3.487.0。
+- **2026-09-04（第5弾・新規2件＋境界の一本化）** ① `MainWindow` の確認ダイアログ経由の終了で `SaveNow()` が呼ばれず
+  （2回目の Closing は `_closeConfirmed` で即 return）、デバウンス待ちの編集が消えていた→ `Stop()` の直後に `SaveNow()`。
+  ② 読めない `StartDate` を受理して `Problem.Dow0` が黙って日曜（0）へ落ちていた→ `Ws1Ops.StartDateError` を `Validate` の
+  先頭で（`yyyy-MM-dd` 厳密）。③ `GroupShiftApt` の行不足は読む側（EditView／診断／修復）が個別に添字を守っていたが、
+  境界を1か所に寄せて `LoadAsync` が検証後に `Ws1Ops.NormalizeGroupShiftApt`（G×K・空欄）で揃える。
+  ④ 背景計算のボタン文言に「（ウィンドウを閉じると中断）」＝プロセス内 Task のみという設計判断を画面で明示。
+  `Ws1OpsTest`／`MagiViewModelPersistenceTest` に回帰テスト。`skillIdx` の範囲外は `Ssk[i]==groupIdx` の比較で
+  無害（未所属と同じ）＝変更なし。Kotlin 原本は 3.488.0。
 
 ## スコープ外
 

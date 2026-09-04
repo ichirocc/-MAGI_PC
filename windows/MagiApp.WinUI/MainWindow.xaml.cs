@@ -144,6 +144,10 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         _closeConfirmed = true;
         _vm.Stop();
+        // [レビュー指摘 2026-09-04] 旧: 確認ダイアログ経由の終了では SaveNow() を呼ばず、2回目の Closing は
+        //   _closeConfirmed で即 return するため、1200ms のデバウンス待ちだった編集が消えていた
+        //   （上の KDoc「確認ダイアログで終了する場合も同様」と実装が一致していなかった）。
+        _vm.SaveNow();
         Close();
     }
 

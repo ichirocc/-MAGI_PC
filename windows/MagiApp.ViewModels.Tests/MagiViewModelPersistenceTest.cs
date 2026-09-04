@@ -281,6 +281,15 @@ public class MagiViewModelPersistenceTest : IDisposable
     // ===================================================================
 
     [Fact]
+    public void ValidateRejectsAnUnparsableStartDate()
+    {
+        // [レビュー指摘 2026-09-04] 旧: 受理して Problem.Dow0 が黙って日曜（0）へ落ちていた。
+        var bad = MinimalState.Build(startDate: "invalid");
+        Assert.Contains("startDate", MagiViewModel.Validate(bad)!);
+        Assert.Null(MagiViewModel.Validate(MinimalState.Build()));
+    }
+
+    [Fact]
     public void StaleAutosaveGenerationNeverOverwritesANewerOne()
     {
         // [レビュー指摘 2026-09-04] 古い世代の書き込みが新しい世代の後に完了しても、ファイルは新しい方のまま。

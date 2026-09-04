@@ -432,6 +432,35 @@ public class Ws1OpsTest
     }
 
     [Fact]
+    public void NormalizeGroupShiftApt_PadsMissingRowsAndColumns_AndKeepsAnExactGridAsIs()
+    {
+        // [レビュー指摘 2026-09-04] 空配列・行不足（旧形式）を G×K の空欄へ。既に G×K なら同じインスタンス。
+        var st = MatrixState();   // 2群 × 3シフト
+        var empty = st with { GroupShiftApt = new List<IReadOnlyList<string>>() };
+        var n = Ws1Ops.NormalizeGroupShiftApt(empty);
+        Assert.Equal(2, n.GroupShiftApt.Count);
+        Assert.All(n.GroupShiftApt, r => Assert.Equal(new[] { "", "", "" }, r));
+
+        var partial = st with { GroupShiftApt = new List<IReadOnlyList<string>> { new List<string> { "1", "2", "3", "9" } } };
+        var p = Ws1Ops.NormalizeGroupShiftApt(partial);
+        Assert.Equal(new[] { "1", "2", "3" }, p.GroupShiftApt[0]);   // 余分な列は落とす
+        Assert.Equal(new[] { "", "", "" }, p.GroupShiftApt[1]);       // 不足行は空欄
+
+        var exact = st with { GroupShiftApt = new List<IReadOnlyList<string>> { new List<string> { "", "", "" }, new List<string> { "", "4", "" } } };
+        Assert.Same(exact, Ws1Ops.NormalizeGroupShiftApt(exact));
+    }
+
+    [Fact]
+    public void StartDateError_RejectsUnparsableDates()
+    {
+        var three = new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 } };
+        Assert.Null(Ws1Ops.StartDateError(MinimalState.Build(startDate: "2026-07-01", schedule: three)));
+        Assert.NotNull(Ws1Ops.StartDateError(MinimalState.Build(startDate: "invalid", schedule: three)));
+        Assert.NotNull(Ws1Ops.StartDateError(MinimalState.Build(startDate: "", schedule: three)));
+        Assert.NotNull(Ws1Ops.StartDateError(MinimalState.Build(startDate: "2026/07/01", schedule: three)));
+    }
+
+    [Fact]
     public void NormalizeEndDate_RecomputesFromDayCount_AndLeavesConsistentOrUnparsableAlone()
     {
         // [レビュー指摘 2026-09-04] 検証は行列サイズしか見ず、EndDate と日数の矛盾がそのまま通っていた。

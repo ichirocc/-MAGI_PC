@@ -344,10 +344,12 @@ public sealed partial class MagiViewModel
                 {
                     var parsed = StateJsonSerializer.Parse(json);
                     // EndDate と日数の食い違いは検証を通り抜けていた＝日数を正として EndDate を揃える。
-                    var st = Ws1Ops.NormalizeEndDate(parsed);
-                    if (st.EndDate != parsed.EndDate) endDateFixedFrom = parsed.EndDate;
-                    var err = Validate(st);
+                    var st0 = Ws1Ops.NormalizeEndDate(parsed);
+                    if (st0.EndDate != parsed.EndDate) endDateFixedFrom = parsed.EndDate;
+                    var err = Validate(st0);
                     if (err is not null) throw new StateValidationException(err);
+                    // [レビュー指摘 2026-09-04] 検証を通ったあとで GroupShiftApt を G×K に揃える（空配列・行不足は空欄）。
+                    var st = Ws1Ops.NormalizeGroupShiftApt(st0);
                     var p = new Problem(st);
                     var init = p.InitialAssignment();
                     var report = UnifiedViolationChecker.Check(st, init);
@@ -484,6 +486,8 @@ public sealed partial class MagiViewModel
     internal static string? Validate(MagiState st)
     {
         if (st.StaffCount == 0) return "staff が空です";
+        // [レビュー指摘 2026-09-04] 読めない startDate を受理すると Problem.Dow0 が黙って日曜へ落ちる。
+        if (Ws1Ops.StartDateError(st) is { } sdErr) return sdErr;
         if (st.DayCount == 0) return "schedule が空です";
         if (st.ShiftCount == 0) return "shifts が空です";
         if (st.GroupCount == 0) return "groups が空です";

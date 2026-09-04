@@ -28,7 +28,7 @@
             <Button x:Name="MakeButton" Content="勤務表をつくる" Click="OnMakeClick" HorizontalAlignment="Stretch" />
             <Button x:Name="SoftPolishButton" Content="仕上げ最適化（今の勤務表をやさしく整える）"
                     Click="OnSoftPolishClick" HorizontalAlignment="Stretch" />
-            <Button x:Name="BackgroundButton" Content="バックグラウンドで計算" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
+            <Button x:Name="BackgroundButton" Content="バックグラウンドで計算（ウィンドウを閉じると中断）" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
             <Button x:Name="StopButton" Content="やめる" Click="OnStopClick" HorizontalAlignment="Stretch" />
 
             <StackPanel x:Name="AlternativesPanel" Spacing="4">

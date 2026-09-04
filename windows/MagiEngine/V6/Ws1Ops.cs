@@ -176,6 +176,27 @@ public static class Ws1Ops
         if (g < 0 || g >= state.Groups.Count) return state;
         int kCount = state.Shifts.Count;
         if (k < 0 || k >= kCount) return state;
+        var grid = BuildNormalizedApt(state);
+        grid[g][k] = value.Trim();
+        return state with { GroupShiftApt = grid };
+    }
+
+    /// <summary>
+    /// [レビュー指摘 2026-09-04] <c>GroupShiftApt</c> を G×K に揃える（読込時の正規化）。空配列・行不足・列不足
+    /// （旧形式）は空欄＝目標なしで埋め、余分な列は落とす。既に G×K なら同じインスタンスを返す。
+    /// 読む側（EditView／診断／修復）はそれぞれ添字を守っているが、境界を1か所に寄せて以後の追加読み手が
+    /// 同じ穴を踏まないようにする。Kotlin 原本 <c>Ws1Ops.normalizeGroupShiftApt</c>（3.488.0）と同値。
+    /// </summary>
+    public static MagiState NormalizeGroupShiftApt(MagiState state)
+    {
+        int g = state.Groups.Count, k = state.Shifts.Count;
+        if (state.GroupShiftApt.Count == g && state.GroupShiftApt.All(r => r.Count == k)) return state;
+        return state with { GroupShiftApt = BuildNormalizedApt(state) };
+    }
+
+    private static List<List<string>> BuildNormalizedApt(MagiState state)
+    {
+        int kCount = state.Shifts.Count;
         var grid = new List<List<string>>();
         for (int gi = 0; gi < state.Groups.Count; gi++)
         {
@@ -185,9 +206,18 @@ public static class Ws1Ops
                 newRow.Add(row is not null && kk < row.Count ? row[kk] : "");
             grid.Add(newRow);
         }
-        grid[g][k] = value.Trim();
-        return state with { GroupShiftApt = grid };
+        return grid;
     }
+
+    /// <summary>
+    /// [レビュー指摘 2026-09-04] <c>StartDate</c> が <c>yyyy-MM-dd</c> として読めなければ理由を返す（読込検証用）。
+    /// 旧: 検証していなかったため、読めない日付でも読込でき、<c>Problem.Dow0</c> が黙って 0（日曜）へ落ちて
+    /// 曜日平準化・曜日単位の修復・違反評価が実際のカレンダーと食い違っていた。
+    /// </summary>
+    public static string? StartDateError(MagiState state) =>
+        DateOnly.TryParseExact(state.StartDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
+            ? null
+            : $"startDate が日付として読めません（YYYY-MM-DD 形式で指定してください: \"{state.StartDate}\"）";
 
     /// <summary>
     /// [apt強制リセット] グループ別シフトの適切回数(groupShiftApt)を全て空欄(=目標なし)に戻す。
