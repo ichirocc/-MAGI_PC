@@ -831,6 +831,16 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void StaffCellLimitsKeepsAnExplicitZeroLowerBound()
+    {
+        // [2026-09-04 実機報告「個人の下限をゼロに出来ない」] 旧: 0 を未設定扱い＝適用しても「なし」へ戻って見えた。
+        var st = MinimalState.Build(staffRange: new Dictionary<string, Range> { ["0,1"] = new("0", "0"), ["1,1"] = new("0", "2") });
+        var vm = new MagiViewModel { _state = st };
+        Assert.Equal((0, 0), (vm.StaffCellLimits(0, 1).Item1, vm.StaffCellLimits(0, 1).Item2));
+        Assert.Equal((0, 2), (vm.StaffCellLimits(1, 1).Item1, vm.StaffCellLimits(1, 1).Item2));
+    }
+
+    [Fact]
     public void StaffCellLimitsReturnsNullForOutOfRangeIndices()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };

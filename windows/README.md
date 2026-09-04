@@ -302,6 +302,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
   ④ 背景計算のボタン文言に「（ウィンドウを閉じると中断）」＝プロセス内 Task のみという設計判断を画面で明示。
   `Ws1OpsTest`／`MagiViewModelPersistenceTest` に回帰テスト。`skillIdx` の範囲外は `Ssk[i]==groupIdx` の比較で
   無害（未所属と同じ）＝変更なし。Kotlin 原本は 3.488.0。
+- **2026-09-04（実機報告「個人の下限をゼロに出来ない」）** `StaffCellLimits` が `RangeLo == 0` を未設定扱いにして
+  いたため、下限 0 を適用しても再表示が「なし」へ戻り、表も「〜0」になっていた（エンジンは lo=0 を保持）。
+  `int.MinValue` のみ未設定に。回帰テスト追加。Kotlin 原本は 3.489.0。
 
 ## スコープ外
 

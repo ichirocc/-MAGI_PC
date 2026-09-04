@@ -513,7 +513,9 @@ public sealed partial class MagiViewModel
         if (st is null) return (null, null, null);
         var p = ScheduleUtil.CachedProblem(st);
         if (i < 0 || i >= p.S || k < 0 || k >= p.K) return (null, null, null);
-        int? lo = p.RangeLo[i][k] is var l && (l == int.MinValue || l == 0) ? null : l;
+        // [2026-09-04 実機報告「個人の下限をゼロに出来ない」] 旧: 0 も未設定扱い＝下限 0 を適用しても再表示が「なし」へ
+        //   戻り、表も「〜0」で利用者には「設定できない」に見えた。エンジンは lo=0 を保持している（Kotlin 3.489.0 と同じ）。
+        int? lo = p.RangeLo[i][k] is var l && l == int.MinValue ? null : l;
         int? hi = p.RangeHi[i][k] is var h && h == int.MaxValue ? null : h;
         int? apt = p.Apt[i][k] is var a && a < 0 ? null : a;
         return (lo, hi, apt);
