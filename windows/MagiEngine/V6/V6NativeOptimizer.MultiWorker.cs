@@ -59,7 +59,14 @@ public static partial class V6NativeOptimizer
         // [3.371.0/並列SA本格再有効化, Kotlin原本] spawn数×チェーン内訳は HypothesisSpawnPlan（単一ソース）から。
         var (hSpawn, plan) = HypothesisSpawnPlan(options.EffectiveWorkers, w);
         if (hSpawn <= 1)
-            return await run(0, options with { Workers = plan[0] }, onProgress ?? ((_, _, _, _) => { })).ConfigureAwait(false);
+        {
+            // [レビュー第7弾 2026-09-04] workers=1 経路も多仮説経路と同じく、停止は**例外で**返す。
+            //   旧: run の戻り値をそのまま返していたため、停止したのに正常終了扱いで途中盤面が「完了」として
+            //   採用され得た（多仮説経路は収集後に ThrowIfCancellationRequested していた＝非対称）。
+            var single = await run(0, options with { Workers = plan[0] }, onProgress ?? ((_, _, _, _) => { })).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return single;
+        }
 
         var baseSeed = ActualSeed(options.Seed);
         var completed = 0;
@@ -87,8 +94,10 @@ public static partial class V6NativeOptimizer
             var localI = i;
             tasks[localI] = Task.Run<V6OptimizerResult?>(async () =>
             {
-                // 開始時点で既に勝者が確定していれば(まれな競合)何もせず抜ける。
-                if (Volatile.Read(ref winner) >= 0 && Volatile.Read(ref winner) != localI) return null;
+                // [レビュー第7弾 2026-09-04] 旧: 「開始時点で既に勝者が確定していれば何もせず抜ける」事前チェックが
+                //   残っていた。3.376.0 相当で「HARD=0 到達で残りを即キャンセル」を撤廃し winner を記録専用にしたのに、
+                //   この1行だけが**仮説の起動を黙って省く**経路として生き残り、スレッドプールの起動順しだいで
+                //   仕様（全本継続）と違う本数しか走らなかった。撤去（Android と同時）。
                 try
                 {
                     // [HF290 役割分担＋論文活用, Kotlin原本] 各仮説に探索/精製プロファイル＋受理基準

@@ -17,13 +17,13 @@ namespace MagiEngine.Tests.V6;
 /// as a concrete, deterministic-enough "run one hypothesis" implementation — exercising the
 /// coordinator's own spawn/select/log logic in isolation from any particular algorithm's internals.
 ///
-/// Same cancellation-asymmetry family as <see cref="V6NativeOptimizerAlnsTest"/>: the single-
-/// hypothesis short-circuit (<c>hSpawn &lt;= 1</c>, forced here via <c>w: 1</c>) returns whatever the
-/// bound <c>run</c> delegate itself returns for cancellation (clean, non-throwing, since
-/// RunAlnsSingle unifies cancellation into a non-throwing poll); the genuine multi-hypothesis path
-/// (<c>hSpawn &gt; 1</c>) is an outer TPL coordinator and explicitly rethrows via
-/// <c>cancellationToken.ThrowIfCancellationRequested()</c> once all hypotheses have been collected —
-/// matching <see cref="V6NativeOptimizer.RunAlnsChains"/>'s precedent exactly.
+/// Cancellation semantics ([レビュー第7弾 2026-09-04]): BOTH the single-hypothesis short-circuit
+/// (<c>hSpawn &lt;= 1</c>, forced here via <c>w: 1</c>) and the genuine multi-hypothesis path
+/// (<c>hSpawn &gt; 1</c>) surface a cancelled token as <see cref="OperationCanceledException"/>.
+/// Before that fix the single path returned whatever the bound <c>run</c> delegate returned for a
+/// cancelled token (clean, non-throwing) — and <see cref="SingleHypothesisPathWithPreCancelledTokenReturnsCleanlyWithoutThrowing"/>
+/// pinned that asymmetry as if it were the spec. The ViewModel branches on the exception to keep the
+/// previous schedule, so a normal return after a stop would have been applied as "完了".
 /// </summary>
 public class V6NativeOptimizerMultiWorkerTest
 {
@@ -107,16 +107,11 @@ public class V6NativeOptimizerMultiWorkerTest
     [Fact]
     public async Task DiversifiesEachHypothesisRoleProfileAndKeepsHypothesisZeroAsTheBaseline()
     {
-        // [race-avoidance] Deliberately does NOT bind run() to the real RunAlnsSingle. If it did,
-        // hypothesis 0 could legitimately reach HARD=0 and set `winner` (via the coordinator's own
-        // progress-callback wrapper) before later hypotheses' Task.Run bodies even start executing
-        // under thread-pool contention — at which point they correctly bail via the "already-decided
-        // winner" pre-check *without ever calling run()* (this is the faithfully-ported optimization
-        // itself, not a bug — see RunMultiWorker's own doc comment). That race is exactly what made
-        // this test flaky when it *was* bound to RunAlnsSingle. Since `winner` is only ever set from
-        // inside the wrapper around the `prog` callback this test's fake run() never invokes, `winner`
-        // stays -1 for the whole test, so the pre-check never triggers and every spawned hypothesis is
-        // deterministically invoked regardless of scheduling order.
+        // Uses a fake run() so the role-profile assertions are deterministic. (Historical note:
+        // this test was once flaky when bound to the real RunAlnsSingle because a since-removed
+        // "already-decided winner" pre-check let hypotheses that had not started yet skip run()
+        // entirely once hypothesis 0 reached HARD=0. That pre-check contradicted the 全本継続 spec
+        // and was removed on 2026-09-04 — see AllHypothesesRunEvenWhenHypothesisZeroReportsHardZeroImmediately.)
         var state = MinimalState.Build();
         var initial = new Problem(state).InitialAssignment();
         var seen = new ConcurrentDictionary<int, V6OptimizerOptions>();
@@ -190,11 +185,11 @@ public class V6NativeOptimizerMultiWorkerTest
     }
 
     [Fact]
-    public async Task SingleHypothesisPathWithPreCancelledTokenReturnsCleanlyWithoutThrowing()
+    public async Task SingleHypothesisPathWithPreCancelledTokenThrowsOperationCanceled()
     {
-        // hSpawn<=1 bypasses the coordinator's own ThrowIfCancellationRequested() entirely — the
-        // result is purely whatever the bound run() delegate returns for a cancelled token, which
-        // (bound to RunAlnsSingle) is clean/non-throwing.
+        // [レビュー第7弾 2026-09-04] 旧テスト名 SingleHypothesisPathWithPreCancelledTokenReturnsCleanlyWithoutThrowing は
+        // workers=1 経路だけが停止を正常終了で返す非対称を「仕様」として固定していた。いまは両経路とも
+        // 停止を OperationCanceledException で返す（ViewModel の「直前の勤務表を保持」分岐に乗せるため）。
         var state = MinimalState.Build();
         var p = new Problem(state);
         var initial = p.InitialAssignment();
@@ -204,11 +199,48 @@ public class V6NativeOptimizerMultiWorkerTest
             Task.FromResult(V6NativeOptimizer.RunAlnsSingle(state, initial.Copy2D(), opts, budgetSec: 10, onProgress: prog, cancellationToken: cts.Token));
 
         var sw = Stopwatch.StartNew();
-        var result = await V6NativeOptimizer.RunMultiWorker(w: 1, new V6OptimizerOptions(Workers: 1, Seed: 1L), onProgress: null, run, cancellationToken: cts.Token);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            V6NativeOptimizer.RunMultiWorker(w: 1, new V6OptimizerOptions(Workers: 1, Seed: 1L), onProgress: null, run, cancellationToken: cts.Token));
         sw.Stop();
 
-        Assert.True(sw.ElapsedMilliseconds < 3_000, $"Pre-cancelled token must short-circuit (took {sw.ElapsedMilliseconds}ms).");
-        AssertValidShape(p, result.Schedule);
+        Assert.True(sw.ElapsedMilliseconds < 8_000, $"Pre-cancelled token must short-circuit (took {sw.ElapsedMilliseconds}ms).");
+    }
+
+    [Fact]
+    public async Task AllHypothesesRunEvenWhenHypothesisZeroReportsHardZeroImmediately()
+    {
+        // [レビュー第7弾 2026-09-04] 仮説0が起動と同時に HARD=0 を報告しても、残りの仮説は全部起動する
+        // （全本継続）。旧: 「既に勝者がいれば何もせず抜ける」事前チェックが、まだ起動していない仮説を
+        // スレッドプールの都合で黙って省いていた。
+        var state = MinimalState.Build();
+        var initial = new Problem(state).InitialAssignment();
+        var report = UnifiedViolationChecker.Check(state, initial);
+        var hardZero = report with { Hard = 0 };
+        const int w = 4;
+        var (hSpawn, _) = V6NativeOptimizer.HypothesisSpawnPlan(new V6OptimizerOptions(Workers: w, Seed: 1L).EffectiveWorkers, w);
+        Assert.True(hSpawn > 1, "This test needs the multi-hypothesis path.");
+        var invoked = new ConcurrentDictionary<int, byte>();
+        // 競合を**決定的に**再現する: スレッドプールのワーカーを1本だけ残して他を塞ぐ。仮説0がその1本で
+        //   先に走って winner を立て、残りはそのあと同じ1本で順に起動する＝旧実装の事前チェックなら仮説1以降が
+        //   run() を呼ばずに抜ける（変異検証: 事前チェックを戻すと本テストが赤）。塞がないと全本がほぼ同時に
+        //   起動し、競合窓が µs で緑になってしまう（旧テストのコメントが「フレーク」と呼んでいた現象）。
+        ThreadPool.GetMinThreads(out var minWorkers, out _);
+        var blockers = Enumerable.Range(1, Math.Max(0, minWorkers - 1))
+            .Select(_ => Task.Run(() => Thread.Sleep(1_500))).ToArray();
+        await Task.Delay(50);
+        V6NativeOptimizer.RunOneHypothesis run = async (i, opts, prog) =>
+        {
+            invoked[i] = 1;
+            if (i == 0) prog("test", hardZero, 1L, 0L);
+            else await Task.Delay(150);
+            return new V6OptimizerResult(initial.Copy2D(), i == 0 ? hardZero : report, V6Algorithm.Alns, Array.Empty<MirrorLog>(), 1L, 0L);
+        };
+
+        var result = await V6NativeOptimizer.RunMultiWorker(w: w, new V6OptimizerOptions(Workers: w, Seed: 1L), onProgress: null, run);
+        await Task.WhenAll(blockers);
+
+        Assert.Equal(Enumerable.Range(0, hSpawn).ToHashSet(), invoked.Keys.ToHashSet());
+        Assert.Contains(result.PhaseLogs, l => l.Message.Contains("合格あり(全本継続)"));
     }
 
     public static TheoryData<string> QualityFixtures => new() { "golden_state.json", "sample_state_v6.json" };

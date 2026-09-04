@@ -726,6 +726,11 @@ public static partial class V6FinalPort
         //   観測した結果。finalSched はこのあと ExtraRefine で差し替わる（refSched）か、最終番兵で入力へ
         //   戻る（normInput）ことがある。盤面が一致するときだけ診断を通す。
         var postForResult = finalSched.ContentDeepEquals(post.Schedule) ? post : null;
+        // [レビュー第7弾 2026-09-04] 停止は**必ず例外で**返す。各段は IsCancellationRequested を締切と同列の
+        //   「止まる条件」にしているため、停止要求のあとも keep-best の盤面を持って正常終了まで来られる。
+        //   ViewModel は OperationCanceledException で「直前の勤務表を保持」へ分岐する設計なので、ここで正常に
+        //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
+        cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
             Alternatives: chained.Alternatives);
     }

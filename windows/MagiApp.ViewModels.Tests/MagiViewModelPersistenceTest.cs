@@ -537,6 +537,30 @@ public class MagiViewModelPersistenceTest : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsyncPersistsTheEndDateCorrectionIntoTheExportedJson()
+    {
+        // [自己見直し 2026-09-04] 旧: 補正は _state にだけ効き、_originalJson は生のファイルのままだった。
+        //   StructureEdited=false の ExportJson はその生 JSON に schedule を差し込むだけなので、
+        //   直後の自動保存も「データを保存」も補正前の endDate を書き戻していた（警告文の
+        //   「保存し直すと次回から出ません」が成り立たない）。
+        var vm = NewVm();
+        var st = MinimalState.Build(startDate: "2025-12-01", endDate: "2025-12-31");  // schedule は7日ぶん
+        var json = StateJsonSerializer.Serialize(st, MinimalState.BuildSchedule());
+        Assert.Contains("2025-12-31", json);
+
+        vm.LoadAsync(json);
+        await vm.LastLoadTask!;
+
+        var expected = Ws1Ops.NormalizeEndDate(st).EndDate;
+        Assert.NotEqual("2025-12-31", expected);
+        Assert.Equal(expected, vm._state!.EndDate);
+        Assert.False(vm.Ui.StructureEdited);
+        var exported = vm.ExportJson()!;
+        Assert.Equal(expected, StateJsonSerializer.Parse(exported).EndDate);
+        Assert.DoesNotContain("2025-12-31", exported);
+    }
+
+    [Fact]
     public async Task LoadAsyncMarksTheScheduleAsAResultWhenMarkResultIsTrue()
     {
         var vm = NewVm();

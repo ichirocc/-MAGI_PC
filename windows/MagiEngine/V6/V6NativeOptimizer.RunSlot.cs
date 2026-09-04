@@ -19,7 +19,11 @@ namespace MagiEngine.V6;
 /// </summary>
 public static partial class V6NativeOptimizer
 {
-    private static long NowMs() => System.Diagnostics.Stopwatch.GetTimestamp() * 1000L / System.Diagnostics.Stopwatch.Frequency;
+    // [レビュー第7弾/自己見直し 2026-09-04] 旧: Stopwatch 由来の独自 ms。V6LateOperators.Improve へ渡す締切は
+    //   この時計で作られ、受け側の TimeUp() は EngineClock（TickCount64）で読む＝別々の単調時計を比較していた
+    //   （Windows/Linux では両方「起動からの ms」で偶然合うだけで、原点一致の契約は無い）。エンジン内の時刻は
+    //   すべて EngineClock に一本化する。
+    private static long NowMs() => EngineClock.NowMs();
 
     private static long ActualSeed(long seed) => seed == 0L ? DateTime.UtcNow.Ticks : seed;
 

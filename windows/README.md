@@ -258,6 +258,20 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## レビュー対応の記録
 
+- **2026-09-04（main 012960f への外部レビュー第7弾＋Android 側の自己見直しで見つかった同型、全件実在→修正）**
+  ① `RunMultiWorker` の各仮説入口の「既に勝者がいれば何もせず抜ける」事前チェック→ 撤去（3.376.0 相当の全本継続
+  の仕様に反し、起動順で本数が変わっていた。`V6NativeOptimizerMultiWorkerTest` の「バグではない」コメントは
+  矛盾した挙動の仕様化だったので履歴注記へ置換し、`AllHypothesesRunEvenWhenHypothesisZeroReportsHardZeroImmediately`
+  を追加）。② workers=1 の短絡（`hSpawn <= 1`）と `HandleOptimize` の終端が停止を正常終了で返していた→
+  `ThrowIfCancellationRequested()`（ViewModel は `OperationCanceledException` で「直前の勤務表を保持」へ分岐する
+  設計なので、正常終了は途中盤面を「完了」として採用してしまう）。旧テスト
+  `SingleHypothesisPathWithPreCancelledTokenReturnsCleanlyWithoutThrowing` はこの非対称を固定していたので
+  `…ThrowsOperationCanceled` へ置換。③ `RunSlot.NowMs`（Stopwatch）と `EngineClock`（TickCount64）の
+  2つの単調時計が `V6LateOperators.Improve` の締切で混ざっていた→ `EngineClock` に一本化。
+  ④ 読込時の正規化（EndDate/GroupShiftApt）が `_originalJson` に反映されず、自動保存・「データを保存」が補正前の値を
+  書き戻していた→ 正規化したときは `StateJsonSerializer.Serialize` の結果を原本に
+  （`LoadAsyncPersistsTheEndDateCorrectionIntoTheExportedJson`）。⑤ `_saveGen` を `Interlocked.Increment`、
+  `SettingsView` の二重 `<summary>` を整理。
 - **2026-09-04（main 53f60aa への外部レビュー3件、全件実在→修正）**
   ① `Ws1Ops.SetGroupShift`（単一セル）に休の OFF 拒否が無く、行/列一括だけが保護していた→ 列一括と同じ
   「同じ state を返す」契約で拒否し、`Ws1SetGroupShift` が `ReferenceEquals` で検知して同じ案内を出す

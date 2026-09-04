@@ -307,14 +307,15 @@ public sealed partial class SettingsView : UserControl
     /// ハンドラでの未処理例外はWinUI3ではアプリごとクラッシュしうるため、<see cref="MagiViewModel.NotifyOpenFailure"/>
     /// （用意済みだが呼び出し口が無かった）で受け止める。読込成功時は <see cref="MagiViewModel.LoadAsync"/>
     /// 自身が完了メッセージを出すため、ここで重ねて通知しない（クラスKDoc「成功時は呼ばない」参照）。
+    /// （この説明は <see cref="OnOpenDataClick"/> の経緯。定数の直前に残っていたので所属を明記する。）
     /// </summary>
-    /// <summary>
+    /// <remarks>
     /// [レビュー指摘 2026-09-04] 取込ファイルを**上限つき**で読む（Android の <c>readAtMost</c>/32MiB と同じ）。
     /// 旧: <c>FileIO.ReadBufferAsync</c> で全体を無制限に読み、IBuffer/byte[]/string が同時に存在して
     /// 大きなファイルでメモリがサイズの数倍になりアプリが落ちた。サイズ情報を先に見て拒否し、
     /// 信用できない場合に備えてストリーム側でも読み切らずに中断する。
     /// JSON／勤務表CSV／種類別CSV／名簿CSV の全入口が通る。
-    /// </summary>
+    /// </remarks>
     private const long MaxImportBytes = 32L * 1024 * 1024;
 
     private static async Task<byte[]> ReadImportBytesAsync(StorageFile file)

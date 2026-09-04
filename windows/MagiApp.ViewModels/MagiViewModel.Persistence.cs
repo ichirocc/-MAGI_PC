@@ -137,7 +137,7 @@ public sealed partial class MagiViewModel
         try
         {
             await Task.Delay(1200, ct);
-            var gen = ++_saveGen;   // main で採番＝ExportJson の時点の状態順
+            var gen = Interlocked.Increment(ref _saveGen);   // ExportJson の時点の状態順。UI スレッド直列が前提だが、テスト等の別コンテキストでも世代が重ならないよう原子加算にする
             var json = ExportJson();
             if (json is null) return;
             var result = await Task.Run(() => WriteAutosaveIfLatest(gen, json), ct);
@@ -188,7 +188,7 @@ public sealed partial class MagiViewModel
         if (!_hydrated) return;
         _saveCts?.Cancel();
         var t0 = System.Diagnostics.Stopwatch.StartNew();
-        var gen = ++_saveGen;
+        var gen = Interlocked.Increment(ref _saveGen);
         var json = ExportJson();
         if (json is null) return;
         // 同期呼出しなので世代は常に最新＝null（捨て）にはならないが、走行中の自動保存とはロックで直列化される。
@@ -338,6 +338,7 @@ public sealed partial class MagiViewModel
 
             LoadedProblem lp;
             string? endDateFixedFrom = null;   // [レビュー指摘 2026-09-04] EndDate を日数に合わせて補正したときの旧値
+            var normalizedOnLoad = false;      // [自己見直し 2026-09-04] 読込時の正規化で state が差し替わったか
             try
             {
                 lp = await Task.Run(() =>
@@ -350,6 +351,7 @@ public sealed partial class MagiViewModel
                     if (err is not null) throw new StateValidationException(err);
                     // [レビュー指摘 2026-09-04] 検証を通ったあとで GroupShiftApt を G×K に揃える（空配列・行不足は空欄）。
                     var st = Ws1Ops.NormalizeGroupShiftApt(st0);
+                    normalizedOnLoad = !ReferenceEquals(st, parsed);
                     var p = new Problem(st);
                     var init = p.InitialAssignment();
                     var report = UnifiedViolationChecker.Check(st, init);
@@ -388,7 +390,11 @@ public sealed partial class MagiViewModel
 
             if (endDateFixedFrom is not null)
                 LogOp("W", $"期間の終了日（endDate）が日数と合っていなかったため補正しました（{endDateFixedFrom} → {lp.State.EndDate}）。「データを保存」で保存し直すと次回からこの警告は出ません");
-            _originalJson = json;
+            // [自己見直し 2026-09-04] 旧: 正規化（EndDate 補正・GroupShiftApt の G×K 化）をしても _originalJson は
+            //   **生のファイル**のままで、StructureEdited=false の ExportJson はその生 JSON に schedule だけ差し込んで
+            //   返す＝直後の AutoSave も「データを保存」も補正前の endDate を書き戻し、警告文の「保存し直すと
+            //   次回から出ません」が嘘だった。正規化したときだけ、正規化後の state を Serialize したものを原本にする。
+            _originalJson = normalizedOnLoad ? StateJsonSerializer.Serialize(lp.State, lp.Schedule) : json;
             _state = lp.State.WithSchedule(lp.Schedule);
             _currentSchedule = lp.Schedule.Copy2D();
             // [bg復元相当] markResult=true は「バックグラウンド最適化の結果 JSON」の読込。schedule が
