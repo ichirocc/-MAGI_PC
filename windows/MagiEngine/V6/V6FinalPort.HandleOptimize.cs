@@ -66,7 +66,7 @@ public static partial class V6FinalPort
         Action<string, ViolationReport?, long, long>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
-        static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        static long NowMs() => EngineClock.NowMs();
         static int TryOrZero(Func<int> f)
         {
             try { return f(); }

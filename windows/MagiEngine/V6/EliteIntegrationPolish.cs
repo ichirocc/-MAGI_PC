@@ -452,7 +452,7 @@ internal static class EliteIntegrationPolish
     }
 
     private static bool Stopped(Func<bool> shouldStop, long deadlineMs) =>
-        shouldStop() || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= deadlineMs;
+        shouldStop() || EngineClock.NowMs() >= deadlineMs;
 
     private static bool Better(ViolationReport a, ViolationReport b) =>
         AdaptiveEliteArchive.Better(a, b);

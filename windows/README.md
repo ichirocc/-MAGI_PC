@@ -305,6 +305,16 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 - **2026-09-04（実機報告「個人の下限をゼロに出来ない」）** `StaffCellLimits` が `RangeLo == 0` を未設定扱いにして
   いたため、下限 0 を適用しても再表示が「なし」へ戻り、表も「〜0」になっていた（エンジンは lo=0 を保持）。
   `int.MinValue` のみ未設定に。回帰テスト追加。Kotlin 原本は 3.489.0。
+- **2026-09-04（第6弾・新規2件）** ① **タブを一度離れると状態更新を受け取らない**（High・実在）: タブはキャッシュされ
+  再利用されるのに、5画面ともコンストラクタで購読・Unloaded で解除だけ＝戻っても再購読されず、最適化の完了・停止・
+  設定変更後も表示とボタンの活性が古いままだった。`UiSubscription`（MagiApp.ViewModels・WinUI 非依存・多重購読しない）を
+  新設し、Loaded で `Attach()`（新規購読なら `Render()` で見えていなかった間の変化をまとめて描く）、Unloaded で `Detach()`。
+  `UiSubscriptionTest` でタブA→B→A の再購読・多重購読なし・解除中は届かない、を固定。
+  ② **締切に壁時計**（Medium・実在）: `EngineClock.NowMs()`（`Environment.TickCount64`＝単調）を新設し、エンジン内の
+  締切・経過・停滞判定 11 箇所（HandleOptimize／RunPostOptimization／HF66／HF67／C1Beam／EliteIntegration／
+  LateOperators／FixSuggester／CombinatorialRepair）とテストの `deadlineMs` 生成を統一。ログの実時刻（`MirrorLog.Ts`・
+  `StartedAt`）・乱数シード・CSV の年・ViewModel の経過表示は壁時計のまま（相対値のみ／表示専用）。
+  Kotlin 原本は 3.490.0（`EngineClock.nowMs()`＝`System.nanoTime()`）。
 
 ## スコープ外
 

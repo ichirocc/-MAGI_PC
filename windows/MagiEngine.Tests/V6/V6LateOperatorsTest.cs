@@ -67,7 +67,7 @@ public class V6LateOperatorsTest
 
         var res = V6LateOperators.Improve(
             state, sched, pre, new JavaRandom(7),
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 3000, rectTry: 60, blkTry: 60);
+            EngineClock.NowMs() + 3000, rectTry: 60, blkTry: 60);
 
         // (3) 入力不変
         for (var i = 0; i < sched.Length; i++) Assert.True(sched[i].SequenceEqual(snapshot[i]));

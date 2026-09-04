@@ -24,7 +24,7 @@ public static partial class V6HotfixPasses
         Func<bool>? shouldStop = null, long seed = 0x1CBEAL, int patience = 20)
     {
         var stop = shouldStop ?? (() => false);
-        long beamT0 = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        long beamT0 = EngineClock.NowMs();
         var pinBlocks = new PinBlockAttribution();
         var p = new Problem(state);
         var work0 = ScheduleUtil.NormalizeSchedule(schedule, p);
@@ -150,7 +150,7 @@ public static partial class V6HotfixPasses
         var patienceNote = stagnant >= patience ? $"/最良が{patience}手更新されず打ち切り" : "";
         var discardNote = best.Applied == 0 && !ReferenceEquals(candidate, best) && candidate.Applied > 0
             ? " [探索結果が根に勝てず破棄]" : "";
-        var elapsedMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - beamT0;
+        var elapsedMs = EngineClock.NowMs() - beamT0;
         var message = $"期間要件(c1)研磨[ビーム K={beamWidth} steps={step}/{elapsedMs}ms{patienceNote}]: " +
             $"c1 {c1Before}->{c1After} / total {before.Total}->{best.Rep.Total} " +
             $"score {(long)before.WeightedScore}->{(long)best.Rep.WeightedScore} " +

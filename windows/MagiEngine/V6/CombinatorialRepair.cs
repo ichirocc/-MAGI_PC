@@ -123,7 +123,7 @@ internal static class CombinatorialRepair
         var labelFn = label ?? (c => c.Hint);
 
         foreach (var c in rejected) stats.OnFeed(c);
-        var t0 = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();   // [3.375.0] 結合探索に費やした時間（summary で出す）
+        var t0 = EngineClock.NowMs();   // [3.375.0] 結合探索に費やした時間（summary で出す）
         var bestRep = bestRepIn;
         var pool = rejected.ToList();
         var misses = 0;
@@ -185,7 +185,7 @@ internal static class CombinatorialRepair
             if (!string.IsNullOrWhiteSpace(lbl)) stats.AcceptedLabels.Add(lbl);
             foreach (var idx in acceptedIdx.OrderByDescending(x => x)) pool.RemoveAt(idx);
         }
-        stats.ElapsedMs += DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - t0;
+        stats.ElapsedMs += EngineClock.NowMs() - t0;
         return bestRep;
     }
 

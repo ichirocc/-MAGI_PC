@@ -73,7 +73,7 @@ public static class V6LateOperators
         var logs = new List<MirrorLog>();
         var cur = report;
 
-        bool TimeUp() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= deadlineMs;
+        bool TimeUp() => EngineClock.NowMs() >= deadlineMs;
         int Lim(ViolationReport r) =>
             200 * r.Breakdown.GetValueOrDefault("high", 0) + 120 * r.Breakdown.GetValueOrDefault("low", 0);
         int C1Count(ViolationReport r) => r.Breakdown.GetValueOrDefault("c1", 0);

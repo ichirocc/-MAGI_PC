@@ -31,6 +31,7 @@ namespace MagiApp.WinUI.Views;
 public sealed partial class EditView : UserControl
 {
     private readonly MagiViewModel _vm;
+    private readonly UiSubscription _uiSub;
     private bool _syncingFromModel;
 
     /// <summary>開いているドア。0=月次条件 / 1=職員管理 / 2=年間マスター。</summary>
@@ -103,8 +104,13 @@ public sealed partial class EditView : UserControl
     {
         _vm = vm;
         InitializeComponent();
-        _vm.Ui.PropertyChanged += OnUiChanged;
-        Unloaded += (_, _) => _vm.Ui.PropertyChanged -= OnUiChanged;
+        // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
+        //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
+        //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
+        _uiSub = new UiSubscription(_vm.Ui, OnUiChanged);
+        _uiSub.Attach();
+        Loaded += (_, _) => { if (_uiSub.Attach()) Render(); };
+        Unloaded += (_, _) => _uiSub.Detach();
         Render();
     }
 

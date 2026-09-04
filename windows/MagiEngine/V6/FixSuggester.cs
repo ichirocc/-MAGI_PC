@@ -121,9 +121,9 @@ public static class FixSuggester
         }
 
         var found = new List<Quad>();
-        var start = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var start = EngineClock.NowMs();
         var evals = 0;
-        bool TimeUp() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - start > deadlineMs;
+        bool TimeUp() => EngineClock.NowMs() - start > deadlineMs;
 
         // ops をその場で適用→評価→復元（割当を作らず高速）。改善なら候補に追加。
         void TryOps(FixKind kind, IReadOnlyList<FixCell> ops, string label)

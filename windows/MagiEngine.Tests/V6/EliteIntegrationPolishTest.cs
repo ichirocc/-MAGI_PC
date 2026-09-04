@@ -100,7 +100,7 @@ public class EliteIntegrationPolishTest
                 Elite(st, b, HypothesisEpochRole.PersonalRsi, false),
             },
             () => false,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 3_000L,
+            EngineClock.NowMs() + 3_000L,
             new EliteIntegrationPolish.Config(MaxPairs: 0, MaxFusionGroups: 4, MaxFusionCells: 4));
         var after = UnifiedViolationChecker.Check(st, result.Schedule);
         Assert.True(AdaptiveEliteArchive.Better(after, before));
@@ -124,7 +124,7 @@ public class EliteIntegrationPolishTest
             st, root,
             new List<AdaptiveElite> { Elite(st, bridge, HypothesisEpochRole.HardDebtRsiPlus, true) },
             () => false,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1_000L);
+            EngineClock.NowMs() + 1_000L);
         for (var i = 0; i < root.Length; i++) Assert.True(root[i].SequenceEqual(result.Schedule[i]));
     }
 
@@ -146,7 +146,7 @@ public class EliteIntegrationPolishTest
                 AdaptiveElite.Create(worse, fakePerfect, HypothesisEpochRole.DayBlockAlns, 1, 1, false),
             },
             () => false,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1_000L);
+            EngineClock.NowMs() + 1_000L);
         for (var i = 0; i < root.Length; i++) Assert.True(root[i].SequenceEqual(result.Schedule[i]));
     }
 
@@ -163,7 +163,7 @@ public class EliteIntegrationPolishTest
             st, root,
             new List<AdaptiveElite> { Elite(st, candidate, HypothesisEpochRole.PersonalRsi, false) },
             () => false,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1_000L);
+            EngineClock.NowMs() + 1_000L);
         for (var i = 0; i < root.Length; i++) Assert.True(root[i].SequenceEqual(result.Schedule[i]));
     }
 
@@ -236,7 +236,7 @@ public class EliteIntegrationPolishTest
                 Elite(st, root.Copy2D(), HypothesisEpochRole.HardDebtRsiPlus, false),
             },
             () => false,
-            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 3_000L);
+            EngineClock.NowMs() + 3_000L);
         Assert.Equal(0, result.ElitesUsed); // 使えた素材は0件
         Assert.Single(result.Logs); // ログを1行返す
         Assert.Contains("すべて現在の勤務表と同一", result.Logs[0].Message); // 潰れたことが読める
@@ -255,7 +255,7 @@ public class EliteIntegrationPolishTest
         var root = st.Schedule.ToIntArray2D();
         var result = EliteIntegrationPolish.Apply(
             st, root, new List<AdaptiveElite>(),
-            () => false, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 3_000L);
+            () => false, EngineClock.NowMs() + 3_000L);
         Assert.Equal(0, result.ElitesUsed);
         Assert.Empty(result.Logs); // 素材ゼロのときは無言
     }

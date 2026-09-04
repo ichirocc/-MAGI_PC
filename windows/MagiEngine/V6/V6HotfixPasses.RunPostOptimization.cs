@@ -88,7 +88,7 @@ public static partial class V6HotfixPasses
     {
         var seedVal = seed ?? System.Diagnostics.Stopwatch.GetTimestamp();
         var stop = shouldStop ?? (() => false);
-        long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        long NowMs() => EngineClock.NowMs();
 
         var work = schedule.Copy2D();
         var logs = new List<MirrorLog>();

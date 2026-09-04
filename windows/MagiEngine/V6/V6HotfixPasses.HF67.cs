@@ -127,7 +127,7 @@ public static partial class V6HotfixPasses
         var shortage = 0;
         var capacity = 0;
         var rollback = 0;
-        bool OutOfTime() => stop() || DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() >= deadlineMs;
+        bool OutOfTime() => stop() || EngineClock.NowMs() >= deadlineMs;
 
         while (swaps < maxSwaps)
         {
