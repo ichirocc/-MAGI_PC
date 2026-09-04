@@ -32,11 +32,11 @@ public static class Program
             StartupDiagnostics.Log("起動", null);
             XamlCheckProcessRequirements();
             WinRT.ComWrappersSupport.InitializeComWrappers();
-            Application.Start(_ =>
+            Application.Start(p =>
             {
                 var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
                 SynchronizationContext.SetSynchronizationContext(context);
-                _ = new App();
+                new App();   // 生成 Main（Program.g.cs）と同じ: Application は自分自身を登録するので参照を保持しない
             });
             return 0;
         }
