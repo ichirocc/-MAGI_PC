@@ -14,6 +14,8 @@
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
       「元に戻す/やり直す」は MagiViewModel.Undo/Redo（Kotlin原本と同じ最大30段のスタック）へ配線。
       「まとめて割当」は複数セルへの一括代入（ScheduleView.xaml.cs の OnBulkAssignClick/MagiViewModel.SetCells 参照）。
+      [phase9 #7] 違反の種別フィルタ（Kotlin原本 ViolationFilterBar/VioBuckets, E7）＝6 バケツの件数付きトグルで
+      セル枠・集計枠・違反日を絞る（表示のみ）。「集中」は違反・未反映希望以外のセルを淡色化。VioBuckets は MagiApp.ViewModels。
       [phase9 #6] 画面下固定のナビバー（Kotlin原本 ScheduleNavBar, 3.481.0/3.483.0）＝前週/次週の横スクロールジャンプ・
       違反のある日の巡回（日ヘッダを約2.5秒強調）。セルをタップした行の職員名と列の日付も約2.5秒強調（3.444.0 クロスハイライト）。
     -->
@@ -31,7 +33,25 @@
             <Button x:Name="BulkAssignButton" Content="まとめて割当" Click="OnBulkAssignClick" />
         </StackPanel>
 
-        <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="14" TextWrapping="Wrap" />
+        <StackPanel Grid.Row="1" Spacing="6">
+            <TextBlock x:Name="StatusText" FontSize="14" TextWrapping="Wrap" />
+            <Border x:Name="FilterBar" Background="{StaticResource MagiSurfaceVariantBrush}"
+                    CornerRadius="{StaticResource MagiCornerSM}" Padding="12,8">
+                <StackPanel Spacing="4">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FilterTitle" VerticalAlignment="Center" Style="{StaticResource MagiLabelLargeTextStyle}" Opacity="0.8" />
+                        <HyperlinkButton x:Name="ShowAllButton" Grid.Column="1" Content="すべて表示" Click="OnShowAllVioClick" />
+                        <ToggleButton x:Name="FocusToggle" Grid.Column="2" Content="集中" Click="OnFocusToggleClick" />
+                    </Grid>
+                    <StackPanel x:Name="BucketChips" Orientation="Horizontal" Spacing="6" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <ScrollViewer x:Name="GridScroll" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                       ViewChanged="OnGridScrollViewChanged">

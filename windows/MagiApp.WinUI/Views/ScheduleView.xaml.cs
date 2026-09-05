@@ -7,6 +7,7 @@ using MagiEngine.V6;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
@@ -64,6 +65,10 @@ public sealed partial class ScheduleView : UserControl
     private List<List<int>> _weeks = new();
     private List<int> _vioDays = new();
     private int _navIdx = -1;
+
+    /// <summary>[phase9 #7 E7] 表示中のバケツ（初期は全 ON）と集中モード。表示のみ・スコアリング不変。</summary>
+    private readonly HashSet<string> _vioEnabled = new(VioBuckets.AllKeys);
+    private bool _focusMode;
 
     public ScheduleView(MagiViewModel vm)
     {
@@ -141,12 +146,60 @@ public sealed partial class ScheduleView : UserControl
         return weeks;
     }
 
-    private static List<int> VioDays(UiState ui)
+    private List<int> VioDays(UiState ui)
     {
         var days = new SortedSet<int>();
-        foreach (var key in ui.ViolationCells.Keys) if (int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
-        foreach (var key in ui.NeedViolations.Keys) if (int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+        foreach (var key in ui.ViolationCells.Keys)
+        {
+            if (VioBuckets.VisibleCellVio(ui, key, _vioEnabled) is not null && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+        }
+        foreach (var (key, cls) in ui.NeedViolations)
+        {
+            if (VioBuckets.VioVisible(cls, _vioEnabled) && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+        }
         return days.ToList();
+    }
+
+    /// <summary>[phase9 #7] 種別フィルタのバー（Kotlin原本 <c>ViolationBucketChips</c>）。違反ゼロなら隠す。</summary>
+    private void RenderFilterBar(UiState ui)
+    {
+        var counts = VioBuckets.BucketLocCounts(ui);
+        var any = ui.Loaded && counts.Values.Any(n => n > 0);
+        FilterBar.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        if (!any) return;
+        var loc = ui.ViolationCells.Count + ui.NeedViolations.Count + ui.CountViolations.Count;
+        FilterTitle.Text = $"違反フィルタ（種別）・要確認 {loc}か所";
+        ShowAllButton.Visibility = _vioEnabled.SetEquals(VioBuckets.AllKeys) ? Visibility.Collapsed : Visibility.Visible;
+        FocusToggle.IsChecked = _focusMode;
+        BucketChips.Children.Clear();
+        foreach (var b in VioBuckets.Buckets)
+        {
+            var n = counts.GetValueOrDefault(b.Key);
+            var chip = new ToggleButton
+            {
+                Content = $"{b.Label} {n}", IsChecked = _vioEnabled.Contains(b.Key), MinHeight = 40,
+                Opacity = n == 0 ? 0.5 : 1.0,
+            };
+            var key = b.Key;
+            chip.Click += (_, _) =>
+            {
+                if (!_vioEnabled.Remove(key)) _vioEnabled.Add(key);
+                Render();
+            };
+            BucketChips.Children.Add(chip);
+        }
+    }
+
+    private void OnShowAllVioClick(object sender, RoutedEventArgs e)
+    {
+        _vioEnabled.UnionWith(VioBuckets.AllKeys);
+        Render();
+    }
+
+    private void OnFocusToggleClick(object sender, RoutedEventArgs e)
+    {
+        _focusMode = FocusToggle.IsChecked == true;
+        Render();
     }
 
     private double HeaderX(int d) =>
@@ -416,6 +469,7 @@ public sealed partial class ScheduleView : UserControl
         // [まとめて割当] SetCell と同じ二重防御——EditBlockedNow が最終防御、ここは押せるのに拒否されるだけの
         // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
+        RenderFilterBar(ui);
         RenderSchedule(ui);
         RenderStaffTally(ui);
         RenderDayTally(ui);
@@ -525,11 +579,16 @@ public sealed partial class ScheduleView : UserControl
             // スペーシング/角丸トークンの対象外（据え置き）。
             Brush borderBrush = new SolidColorBrush(Colors.LightGray);
             var thickness = new Thickness(0, 0, 1, 1);
-            if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
+            var vioClass = VioBuckets.VisibleCellVio(ui, $"{i},{j}", _vioEnabled);
+            if (vioClass is not null)
             {
                 borderBrush = ResolveVioBrush(ui, vioClass);
                 thickness = new Thickness(2);
             }
+            // [集中モード] 違反・未反映希望・注目セル以外を淡色に沈める（非表示にはしない＝被覆の文脈は残す）。
+            var unreflectedWish = ui.Wishes.TryGetValue($"{i},{j}", out var wk0) && wk0 != k;
+            var cellFocused = _focusCell is { } fc0 && fc0.I == i && fc0.J == j;
+            if (_focusMode && vioClass is null && !unreflectedWish && !cellFocused) button.Opacity = 0.35;
             // [違反箇所へのジャンプ] 注目セルは一時的に強調色の太枠へ差し替える（FocusCell 参照）。
             var isFocused = _focusCell is { } fc && fc.I == i && fc.J == j;
             if (isFocused)
@@ -593,6 +652,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 var count = ui.Schedule[i].Count(v => v == k);
                 ui.CountViolations.TryGetValue($"{i},{k}", out var vioClass);
+                if (!VioBuckets.VioVisible(vioClass, _vioEnabled)) vioClass = null;
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
             }
@@ -626,6 +686,7 @@ public sealed partial class ScheduleView : UserControl
                 var count = 0;
                 foreach (var row in ui.Schedule) if (j < row.Count && row[j] == k) count++;
                 ui.NeedViolations.TryGetValue($"{k},{j}", out var vioClass);
+                if (!VioBuckets.VioVisible(vioClass, _vioEnabled)) vioClass = null;
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 // [2026-09-02, 配線] ShortageFixCandidates（フェーズ9で移植・テスト済み）はこれまで
                 // 呼び出し口が無かった。人員不足(covU)のセルだけボタン化し、タップで「動かせる人」の
