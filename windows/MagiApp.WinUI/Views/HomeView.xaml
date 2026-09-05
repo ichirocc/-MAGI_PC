@@ -17,6 +17,10 @@
       表示上の抑止で並べる（実際の可否判定は各APIが内部で行う二重防御、既存ボタンと同じ方針）。
       「他の案」は Portfolio(複数案並列探索)実行後にだけ Ui.Alternatives が埋まるため、0件のときは
       節ごと隠す。
+
+      [phase9 #1] 「人員不足の原因」「人員過剰がなぜ減らないか」（Kotlin原本 CoverageDiagnosisCard）を
+      同じ文言で移植。過剰枠の「希望固定N人」は CoverageSurplus.PinnedStaff を名指しし、ボタンで
+      RemoveWish(i, day) を呼ぶ（Android 3.492.0）。診断が無い／不足も過剰も無いときは節ごと隠す。
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
@@ -30,6 +34,29 @@
                     Click="OnSoftPolishClick" HorizontalAlignment="Stretch" />
             <Button x:Name="BackgroundButton" Content="バックグラウンドで計算（ウィンドウを閉じると中断）" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
             <Button x:Name="StopButton" Content="やめる" Click="OnStopClick" HorizontalAlignment="Stretch" />
+
+            <StackPanel x:Name="CoveragePanel" Spacing="10">
+                <StackPanel x:Name="ShortagePanel" Spacing="8">
+                    <TextBlock Text="人員不足の原因" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                    <TextBlock x:Name="ShortageHeadline" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
+                    <StackPanel x:Name="ShortageListHost" Spacing="8" />
+                    <TextBlock x:Name="ShortageMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                    <Border x:Name="RelaxationPanel" Background="{StaticResource MagiTertiaryContainerBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="解けるようにするには（担当追加の案）" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                            <StackPanel x:Name="RelaxationListHost" Spacing="2" />
+                            <TextBlock Text="※ 担当追加の提案です。設定変更は行いません（採否はご判断ください）。"
+                                       TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <StackPanel x:Name="SurplusPanel" Spacing="8">
+                    <TextBlock Text="人員過剰がなぜ減らないか" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                    <TextBlock x:Name="SurplusHeadline" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
+                    <StackPanel x:Name="SurplusListHost" Spacing="8" />
+                    <TextBlock x:Name="SurplusMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                </StackPanel>
+            </StackPanel>
 
             <StackPanel x:Name="AlternativesPanel" Spacing="4">
                 <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
