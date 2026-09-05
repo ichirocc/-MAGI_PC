@@ -13,8 +13,8 @@
 | 4 | ホーム | コパイロット（HARD 族の要約と導線） | `MagiDashboardCards.kt` `CopilotCard` | `HomeView` | 済 | 済 | 緑 | run 33996263185。`HomeView.RenderCopilot`。分析タブの文言だけの表示は既存、操作つきカードをホームへ |
 | 5 | ホーム | データ無し時の導線（空状態・セットアップ案内） | `MagiApp.kt` `EmptyStateCard`, `MagiSetupCards.kt` `SetupGuideCard` | `HomeView` | 済 | 済 | 緑 | run 33996508158。`HomeView` EmptyStateCard（開く→設定タブのピッカー委譲／サンプル→LoadFixtureAsync／新規→InitBlankState+編集タブ）。SetupGuide の件数行は EditView に既存、「次の一手」だけ追加 |
 | 6 | 勤務表 | 週送り・違反ジャンプの画面下固定バー＋行列クロスハイライト（3.444.0/3.481.0） | `MagiScheduleViews.kt` `ScheduleNavBar`, `rememberScheduleNavState` | `ScheduleView` | 済 | 済 | 緑 | run 33996772282。`ScheduleView` NavBar（`RenderNavBar`/`MondayWeeks`/`VioDays`/`MarkTapped`）。違反日は #7 のフィルタ導入までは全種別 |
-| 7 | 勤務表 | 違反の種別フィルタ（6分類・件数チップ・集中モード, E7） | `MagiScheduleViews.kt` `ViolationFilterBar`/`ViolationBucketChips`, `VioBuckets.kt` | `ScheduleView` | 済 | 済 | 未 | `MagiApp.ViewModels/VioBuckets.cs`（＋`VioBucketsTest` 3件）、`ScheduleView.RenderFilterBar`。セル枠・集計枠・違反日がフィルタ経由、集中モードはセル淡色化 |
-| 8 | 勤務表 | 職員名検索（行強調）＋凡例の折りたたみ | `MagiScheduleViews.kt` `SearchLegendBar`, `ViolationLegend`, `ShiftColorLegend` | `ScheduleView` | 未 | 未 | 未 | |
+| 7 | 勤務表 | 違反の種別フィルタ（6分類・件数チップ・集中モード, E7） | `MagiScheduleViews.kt` `ViolationFilterBar`/`ViolationBucketChips`, `VioBuckets.kt` | `ScheduleView` | 済 | 済 | 緑 | run 33997066886。`MagiApp.ViewModels/VioBuckets.cs`（＋`VioBucketsTest` 3件）、`ScheduleView.RenderFilterBar`。セル枠・集計枠・違反日がフィルタ経由、集中モードはセル淡色化 |
+| 8 | 勤務表 | 職員名検索（行強調）＋凡例の折りたたみ | `MagiScheduleViews.kt` `SearchLegendBar`, `ViolationLegend`, `ShiftColorLegend` | `ScheduleView` | 済 | 済 | 未 | `ScheduleView.RenderSearchLegend`（検索語は名前ヘッダを青太字、凡例は WinUI の実線色分けに合わせた文言） |
 | 9 | 勤務表 | 土日・祝日の色分け（祝日データは外部ファイル, 3.441.0） | `JapanHolidays.kt`, `MagiScheduleViews.kt` 日ヘッダ | `ScheduleView` | 未 | 未 | 未 | |
 | 10 | 勤務表 | シフト別不足サマリーの1行バナー（3.116.0） | `MagiScheduleViews.kt` `ScheduleGrid` 冒頭 | `ScheduleView` | 未 | 未 | 未 | |
 | 11 | 勤務表 | 集計セルの内訳ダイアログ（現在/下限/上限/目標・直し方・希望取消） | `MagiScheduleViews.kt` `TallyCard` の `TallyDetailUi` | `ScheduleView` | 未 | 未 | 未 | |

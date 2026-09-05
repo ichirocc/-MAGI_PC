@@ -70,6 +70,10 @@ public sealed partial class ScheduleView : UserControl
     private readonly HashSet<string> _vioEnabled = new(VioBuckets.AllKeys);
     private bool _focusMode;
 
+    /// <summary>[phase9 #8] 検索・凡例の開閉（既定は閉）と職員名の検索語。</summary>
+    private bool _searchLegendOpen;
+    private string _nameQuery = "";
+
     public ScheduleView(MagiViewModel vm)
     {
         _vm = vm;
@@ -188,6 +192,78 @@ public sealed partial class ScheduleView : UserControl
             };
             BucketChips.Children.Add(chip);
         }
+    }
+
+    /// <summary>[phase9 #8] 検索・凡例（Kotlin原本 <c>SearchLegendBar</c>／<c>ViolationLegend</c>／<c>ShiftColorLegend</c>）。</summary>
+    private void RenderSearchLegend(UiState ui)
+    {
+        SearchLegendBar.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!ui.Loaded) return;
+        var title = "検索・凡例" + (!_searchLegendOpen && _nameQuery.Length > 0 ? $"（検索中: {_nameQuery}）" : "");
+        SearchLegendToggle.Content = $"{title}  {(_searchLegendOpen ? "閉じる ▾" : "開く ▸")}";
+        SearchLegendPanel.Visibility = _searchLegendOpen ? Visibility.Visible : Visibility.Collapsed;
+        if (!_searchLegendOpen) return;
+        if (SearchBox.Text != _nameQuery) SearchBox.Text = _nameQuery;
+        SearchClearButton.Visibility = _nameQuery.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        ViolationLegendHost.Children.Clear();
+        ViolationLegendHost.Visibility = ui.ViolationCells.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (ui.ViolationCells.Count > 0)
+        {
+            var hard = ResolveVioBrush(ui, "vio-covU");
+            var soft = ResolveVioBrush(ui, "vio-covO");
+            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = hard, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(4) }, "赤枠＝絶対NG"));
+            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "橙枠＝できれば直す"));
+            ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
+            ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
+        }
+
+        ShiftLegendHost.Children.Clear();
+        for (var k = 0; k < ui.ShiftSymbols.Count; k++)
+        {
+            if (string.IsNullOrWhiteSpace(ui.ShiftSymbols[k])) continue;
+            var bg = k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.Transparent) : Colors.Transparent;
+            var fg = k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
+            ShiftLegendHost.Children.Add(new Border
+            {
+                Height = 32, MinWidth = 48, Padding = new Thickness(10, 0, 10, 0), CornerRadius = new CornerRadius(6),
+                Background = new SolidColorBrush(bg),
+                Child = new TextBlock
+                {
+                    Text = ui.ShiftSymbols[k], Foreground = new SolidColorBrush(fg), FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                    HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                },
+            });
+        }
+        var anyShift = ShiftLegendHost.Children.Count > 0;
+        ShiftLegendTitle.Visibility = anyShift ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static StackPanel LegendItem(UIElement swatch, string label)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        row.Children.Add(swatch);
+        row.Children.Add(new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 });
+        return row;
+    }
+
+    private void OnSearchLegendToggleClick(object sender, RoutedEventArgs e)
+    {
+        _searchLegendOpen = !_searchLegendOpen;
+        Render();
+    }
+
+    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (SearchBox.Text == _nameQuery) return;
+        _nameQuery = SearchBox.Text;
+        Render();
+    }
+
+    private void OnSearchClearClick(object sender, RoutedEventArgs e)
+    {
+        _nameQuery = "";
+        Render();
     }
 
     private void OnShowAllVioClick(object sender, RoutedEventArgs e)
@@ -470,6 +546,7 @@ public sealed partial class ScheduleView : UserControl
         // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         RenderFilterBar(ui);
+        RenderSearchLegend(ui);
         RenderSchedule(ui);
         RenderStaffTally(ui);
         RenderDayTally(ui);
@@ -505,6 +582,12 @@ public sealed partial class ScheduleView : UserControl
                 MinWidth = header && col == 0 ? 96 : 32,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
+            // [検索] 一致する職員名を太字＋青で強調（行は隠さず＝被覆の文脈を保つ）。
+            if (col == 0 && row > 0 && _nameQuery.Length > 0 && text.Contains(_nameQuery, StringComparison.OrdinalIgnoreCase))
+            {
+                block.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Blue, Colors.RoyalBlue));
+                block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+            }
             var border = new Border
             {
                 Child = block,

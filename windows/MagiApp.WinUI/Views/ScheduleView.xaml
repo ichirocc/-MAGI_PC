@@ -14,6 +14,8 @@
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
       「元に戻す/やり直す」は MagiViewModel.Undo/Redo（Kotlin原本と同じ最大30段のスタック）へ配線。
       「まとめて割当」は複数セルへの一括代入（ScheduleView.xaml.cs の OnBulkAssignClick/MagiViewModel.SetCells 参照）。
+      [phase9 #8] 検索・凡例の折りたたみ（Kotlin原本 SearchLegendBar, 既定=閉）＝職員名検索（該当行の名前を青太字、行は隠さない）＋
+      違反の凡例（WinUI の枠は実線の色分けなので色で説明）＋シフトの色凡例（記号チップ）。
       [phase9 #7] 違反の種別フィルタ（Kotlin原本 ViolationFilterBar/VioBuckets, E7）＝6 バケツの件数付きトグルで
       セル枠・集計枠・違反日を絞る（表示のみ）。「集中」は違反・未反映希望以外のセルを淡色化。VioBuckets は MagiApp.ViewModels。
       [phase9 #6] 画面下固定のナビバー（Kotlin原本 ScheduleNavBar, 3.481.0/3.483.0）＝前週/次週の横スクロールジャンプ・
@@ -49,6 +51,28 @@
                         <ToggleButton x:Name="FocusToggle" Grid.Column="2" Content="集中" Click="OnFocusToggleClick" />
                     </Grid>
                     <StackPanel x:Name="BucketChips" Orientation="Horizontal" Spacing="6" />
+                </StackPanel>
+            </Border>
+            <Border x:Name="SearchLegendBar" Background="{StaticResource MagiSurfaceVariantBrush}"
+                    CornerRadius="{StaticResource MagiCornerSM}" Padding="12,8">
+                <StackPanel Spacing="8">
+                    <HyperlinkButton x:Name="SearchLegendToggle" Click="OnSearchLegendToggleClick" Padding="0" HorizontalAlignment="Stretch"
+                                     HorizontalContentAlignment="Left" />
+                    <StackPanel x:Name="SearchLegendPanel" Spacing="8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="SearchBox" PlaceholderText="職員名で検索（該当行を強調）" TextChanged="OnSearchTextChanged" />
+                            <Button x:Name="SearchClearButton" Grid.Column="1" Content="消す" Click="OnSearchClearClick" />
+                        </Grid>
+                        <StackPanel x:Name="ViolationLegendHost" Orientation="Horizontal" Spacing="16" />
+                        <TextBlock x:Name="ShiftLegendTitle" Text="シフトの色" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="ShiftLegendHost" Orientation="Horizontal" Spacing="6" />
+                        </ScrollViewer>
+                    </StackPanel>
                 </StackPanel>
             </Border>
         </StackPanel>
