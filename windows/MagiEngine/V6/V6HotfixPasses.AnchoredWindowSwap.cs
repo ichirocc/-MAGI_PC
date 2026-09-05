@@ -13,12 +13,13 @@ public sealed record ViolationAnchor(int Staff, int? Day, int? Shift, CountDirec
 
 public static partial class V6HotfixPasses
 {
+    /// <summary>range/apt の見積り（順位付け専用）。重みは <see cref="MirrorKeys.WeightOf"/> の low/high を引く＝重み変更時にここだけ古い値で残る事故を防ぐ（3.499.0）。</summary>
     private static long PersonalPenaltyOf(Problem p, int staff, int shift, int count)
     {
         long o = 0;
         var lo = p.RangeLo[staff][shift]; var hi = p.RangeHi[staff][shift];
-        if (lo != int.MinValue && count < lo) o += (lo - count) * 90L;
-        if (hi != int.MaxValue && count > hi) o += (count - hi) * 45L;
+        if (lo != int.MinValue && count < lo) o += (lo - count) * (long)MirrorKeys.WeightOf("low");
+        if (hi != int.MaxValue && count > hi) o += (count - hi) * (long)MirrorKeys.WeightOf("high");
         var apt = p.Apt[staff][shift];
         if (apt >= 0) o += Math.Abs(count - apt);
         return o;
@@ -144,7 +145,7 @@ public static partial class V6HotfixPasses
                 {
                     if (b == a) continue;
                     var key = ((long)Math.Min(a, b) << 48) | ((long)Math.Max(a, b) << 32) | ((long)start << 16) | (long)length;
-                    if (!seen.Add(key)) continue;
+                    if (seen.Contains(key)) continue;
                     if (k is int kk0 && anc.Direction is { } dir)
                     {
                         int ca = 0, cb = 0;
@@ -152,6 +153,9 @@ public static partial class V6HotfixPasses
                         if (dir == CountDirection.High && cb >= ca) continue;
                         if (dir == CountDirection.Low && cb <= ca) continue;
                     }
+                    // [3.499.0/Android と同時] 方向フィルタはアンカーごとに違うので、重複排除は通過した窓だけに掛ける
+                    //   （旧: 先に seen へ入れていたため、回数超過アンカーが捨てた窓を別アンカーが二度と作れなかった）。
+                    seen.Add(key);
                     var ok = true; var changed = 0;
                     Array.Fill(delta, 0);
                     for (var d = start; d < start + length; d++)

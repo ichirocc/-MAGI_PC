@@ -132,8 +132,8 @@ public static partial class V6HotfixPasses
             var outVal = 0L;
             var lo = p.RangeLo[staff][shift];
             var hi = p.RangeHi[staff][shift];
-            if (lo != int.MinValue && count < lo) outVal += (long)(lo - count) * 90L;
-            if (hi != int.MaxValue && count > hi) outVal += (long)(count - hi) * 45L;
+            if (lo != int.MinValue && count < lo) outVal += (long)(lo - count) * (long)MirrorKeys.WeightOf("low");
+            if (hi != int.MaxValue && count > hi) outVal += (long)(count - hi) * (long)MirrorKeys.WeightOf("high");
             var apt = p.Apt[staff][shift];
             if (apt >= 0) outVal += Math.Abs(count - apt);
             return outVal;

@@ -60,4 +60,20 @@ public class V6HotfixPassesAnchoredWindowSwapTest
         Assert.Equal(0, r.NewSchedule[1][0]);
         Assert.Equal(1, r.NewSchedule[0][0]);
     }
+
+    /// <summary>[3.499.0] 退化した窓長（0・負）でも落ちず、keep-best で悪化しない（Kotlin <c>degenerateParamsDoNotCrashAndNeverWorsenTheBoard</c> の厳密窓側）。</summary>
+    [Fact]
+    public void DegenerateWindowLengthsDoNotCrashAndNeverWorsenTheBoard()
+    {
+        var s = Build(new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0, 2, 2, 2 }, new List<int> { 2, 2, 2, 2, 1, 1 } },
+            new Dictionary<string, int> { ["0,3"] = 2 }, new Dictionary<string, MagiEngine.Model.Range> { ["0,0"] = new("0", "0") },
+            new List<C3Row> { new(new List<string> { "N", "E", "", "", "" }) });
+        var board = s.Schedule.Select(r => r.ToArray()).ToArray();
+        var before = UnifiedViolationChecker.Check(s, board);
+        var r = V6HotfixPasses.ApplyAdaptiveBlockSwapPolish(s, board, maxPasses: 1, maxEvaluations: 1, mode: WindowMode.StrictWholeWindow, strictMaxLen: 0, strictLongLen: -5);
+        var after = UnifiedViolationChecker.Check(s, r.NewSchedule);
+        Assert.True(after.Hard <= before.Hard);
+        Assert.True(after.WeightedScore <= before.WeightedScore);
+        Assert.NotEmpty(r.Logs);
+    }
 }

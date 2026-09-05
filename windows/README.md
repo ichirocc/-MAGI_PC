@@ -312,6 +312,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+### 2026-09-05 可変長ブロック交換の自律レビュー第2段（Android 3.499.0 と同時）
+- `V6HotfixPasses.AnchoredWindowSwap.cs`: 厳密窓交換の重複排除を方向フィルタの後へ（旧: 回数超過アンカーが捨てた窓を
+  別アンカーが二度と作れなかった）。Android 側の実データ計測では盤面・採用は不変、実候補が各条件 +1〜+9 件。
+- `PersonalPenaltyOf` / `PersonalBalancePenalty` の range 重み 90/45 の手書きを `MirrorKeys.WeightOf("low"/"high")` に。
+- テスト `DegenerateWindowLengthsDoNotCrashAndNeverWorsenTheBoard` 追加。MagiEngine.Tests 758 緑。
+- Android 側の Session 化（CyclicSession/StrictSession・KeepBest/RejectStats 共通化）は C# へ未鏡映（既に 2 ファイル分割済み。
+  鏡映の要否は人間判断）。
+
 - **2026-09-05（Android 3.498.0 と同時）** 希望島研磨 `ApplyWishIslandPolish` を Kotlin 側の自律レビュー結果どおり再構成:
   `WishIslandSession` クラス化、候補の遅延生成（`IEnumerable`、評価順は旧実装の安定ソートと同一）、`WishIslandParams` record
   （既定値不変、負値は下限へ丸める）、前の島の採用で不活性になった島の評価スキップ。テスト 2 件追加（755→757 緑）。
