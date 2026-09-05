@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
@@ -54,6 +56,15 @@ public sealed partial class ScheduleView : UserControl
 
     private DispatcherTimer? _focusTimer;
 
+    /// <summary>[phase9 #6] 日ヘッダ要素（週送り・違反ジャンプの横スクロール先）と、直近タップしたセル（クロスハイライト）。</summary>
+    private readonly List<Border> _dayHeaders = new();
+    private Border? _nameHeader;
+    private (int I, int J)? _tapped;
+    private DispatcherTimer? _tappedTimer;
+    private List<List<int>> _weeks = new();
+    private List<int> _vioDays = new();
+    private int _navIdx = -1;
+
     public ScheduleView(MagiViewModel vm)
     {
         _vm = vm;
@@ -81,7 +92,7 @@ public sealed partial class ScheduleView : UserControl
     {
         _focusCell = (i, j);
         Render();
-        _focusCellElement?.StartBringIntoView();
+        if (i < 0) ScrollToDay(j); else _focusCellElement?.StartBringIntoView();
 
         _focusTimer?.Stop();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
@@ -94,6 +105,136 @@ public sealed partial class ScheduleView : UserControl
         _focusTimer = timer;
         timer.Start();
     }
+
+    /// <summary>[3.444.0 クロスハイライト] タップしたセルの職員名と日付を約2.5秒強調（セルの違反枠は変えない）。</summary>
+    private void MarkTapped(int i, int j)
+    {
+        _tapped = (i, j);
+        Render();
+        _tappedTimer?.Stop();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _tapped = null;
+            Render();
+        };
+        _tappedTimer = timer;
+        timer.Start();
+    }
+
+    /// <summary>Kotlin原本 <c>mondayWeeks</c>：月曜始まりで日 index を週ごとに分ける。</summary>
+    private static List<List<int>> MondayWeeks(string startDate, int days)
+    {
+        var sdow = 0;
+        if (DateOnly.TryParseExact(startDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d0))
+        {
+            sdow = ((int)d0.DayOfWeek + 6) % 7;
+        }
+        var weeks = new List<List<int>>();
+        for (var d = 0; d < days; d++)
+        {
+            if (weeks.Count == 0 || (sdow + d) % 7 == 0) weeks.Add(new List<int>());
+            weeks[^1].Add(d);
+        }
+        return weeks;
+    }
+
+    private static List<int> VioDays(UiState ui)
+    {
+        var days = new SortedSet<int>();
+        foreach (var key in ui.ViolationCells.Keys) if (int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+        foreach (var key in ui.NeedViolations.Keys) if (int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+        return days.ToList();
+    }
+
+    private double HeaderX(int d) =>
+        d >= 0 && d < _dayHeaders.Count
+            ? _dayHeaders[d].TransformToVisual(ScheduleGridHost).TransformPoint(new Windows.Foundation.Point(0, 0)).X
+            : 0;
+
+    /// <summary>左端に見えている日から現在週を求める（自由スクロールにも追従）。</summary>
+    private int CurrentWeek()
+    {
+        if (_weeks.Count == 0) return 0;
+        var left = GridScroll.HorizontalOffset + (_nameHeader?.ActualWidth ?? 0);
+        var d = 0;
+        for (; d < _dayHeaders.Count; d++) if (HeaderX(d) + _dayHeaders[d].ActualWidth > left + 1) break;
+        var w = _weeks.FindIndex(wk => d <= wk[^1]);
+        return w < 0 ? _weeks.Count - 1 : w;
+    }
+
+    private void ScrollToDay(int d)
+    {
+        if (d < 0 || d >= _dayHeaders.Count) return;
+        var x = HeaderX(d) - (_nameHeader?.ActualWidth ?? 0);
+        GridScroll.ChangeView(Math.Max(0, x), null, null);
+    }
+
+    /// <summary>[phase9 #6] ナビバー（Kotlin原本 <c>ScheduleNavBar</c>）。週も違反日も無いときは隠す。</summary>
+    private void RenderNavBar(UiState ui)
+    {
+        _weeks = ui.Loaded ? MondayWeeks(ui.StartDate, Math.Max(1, ui.Days)) : new List<List<int>>();
+        var vio = ui.Loaded ? VioDays(ui) : new List<int>();
+        if (!vio.SequenceEqual(_vioDays)) { _vioDays = vio; _navIdx = -1; }
+        var show = _weeks.Count > 1 || _vioDays.Count > 0;
+        NavBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        var hasWeeks = _weeks.Count > 1;
+        PrevWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
+        NextWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
+        var hasVio = _vioDays.Count > 0;
+        PrevVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
+        NextVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
+        UpdateNavLabel(ui);
+        // グリッドは作り直した直後で幅が未確定なので、レイアウト後にもう一度ラベルを出す。
+        DispatcherQueue.TryEnqueue(() => UpdateNavLabel(_vm.Ui));
+    }
+
+    private void UpdateNavLabel(UiState ui)
+    {
+        var cur = CurrentWeek();
+        var weekLabel = "";
+        if (_weeks.Count > 1 && cur < _weeks.Count && _weeks[cur].Count > 0)
+        {
+            weekLabel = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d0)
+                ? $"{d0.AddDays(_weeks[cur][0]).Month}月 第{cur + 1}/{_weeks.Count}週"
+                : $"第{cur + 1}/{_weeks.Count}週";
+        }
+        var vioLabel = _vioDays.Count == 0 ? ""
+            : _navIdx < 0 ? $"違反 {_vioDays.Count}/{ui.Days}日"
+            : $"違反日 {_navIdx + 1}/{_vioDays.Count}";
+        NavLabel.Text = string.Join(" ・ ", new[] { weekLabel, vioLabel }.Where(t => t.Length > 0));
+        PrevWeekButton.IsEnabled = cur > 0;
+        NextWeekButton.IsEnabled = cur < _weeks.Count - 1;
+    }
+
+    private void OnGridScrollViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) => UpdateNavLabel(_vm.Ui);
+
+    private void OnPrevWeekClick(object sender, RoutedEventArgs e)
+    {
+        var cur = CurrentWeek();
+        if (cur > 0) ScrollToDay(_weeks[cur - 1][0]);
+    }
+
+    private void OnNextWeekClick(object sender, RoutedEventArgs e)
+    {
+        var cur = CurrentWeek();
+        if (cur < _weeks.Count - 1) ScrollToDay(_weeks[cur + 1][0]);
+    }
+
+    private void JumpToVio(int n)
+    {
+        if (n < 0 || n >= _vioDays.Count) return;
+        _navIdx = n;
+        FocusCell(-1, _vioDays[n]);
+    }
+
+    private void OnPrevVioClick(object sender, RoutedEventArgs e) => JumpToVio(_navIdx <= 0 ? _vioDays.Count - 1 : _navIdx - 1);
+
+    private void OnNextVioClick(object sender, RoutedEventArgs e) => JumpToVio(_navIdx < 0 ? 0 : (_navIdx + 1) % _vioDays.Count);
 
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
     private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
@@ -278,6 +419,7 @@ public sealed partial class ScheduleView : UserControl
         RenderSchedule(ui);
         RenderStaffTally(ui);
         RenderDayTally(ui);
+        RenderNavBar(ui);
     }
 
     private void RenderSchedule(UiState ui)
@@ -286,6 +428,8 @@ public sealed partial class ScheduleView : UserControl
         ScheduleGridHost.RowDefinitions.Clear();
         ScheduleGridHost.ColumnDefinitions.Clear();
         _focusCellElement = null;
+        _dayHeaders.Clear();
+        _nameHeader = null;
         if (!ui.Loaded || ui.Schedule.Count == 0) return;
 
         var staffCount = ui.Schedule.Count;
@@ -294,7 +438,7 @@ public sealed partial class ScheduleView : UserControl
         for (var r = 0; r <= staffCount; r++) ScheduleGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var c = 0; c <= dayCount; c++) ScheduleGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        void AddCell(int row, int col, string text, bool header)
+        Border AddCell(int row, int col, string text, bool header)
         {
             var block = new TextBlock
             {
@@ -314,9 +458,24 @@ public sealed partial class ScheduleView : UserControl
                 // [Token] 罫線1dpは意図的な最小値のため据え置き（スペーシングトークンの対象外）。
                 BorderThickness = new Thickness(0, 0, 1, 1),
             };
+            // [クロスハイライト／違反ジャンプ] 行=職員名は淡い主色地、列=日付は主色の太枠（Kotlin原本と同じ）。
+            var dayIdx = col - 1;
+            var dayFocused = row == 0 && dayIdx >= 0 &&
+                ((_focusCell is { } fc && fc.I < 0 && fc.J == dayIdx) || (_tapped is { } tp && tp.J == dayIdx));
+            if (dayFocused)
+            {
+                border.BorderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
+                border.BorderThickness = new Thickness(3);
+            }
+            if (col == 0 && row > 0 && _tapped is { } tp2 && tp2.I == row - 1)
+            {
+                var c = ((SolidColorBrush)Application.Current.Resources["MagiPrimaryBrush"]).Color;
+                border.Background = new SolidColorBrush(Color.FromArgb(31, c.R, c.G, c.B));
+            }
             Grid.SetRow(border, row);
             Grid.SetColumn(border, col);
             ScheduleGridHost.Children.Add(border);
+            return border;
         }
 
         void AddDataCell(int row, int col, int i, int j, int k)
@@ -339,7 +498,11 @@ public sealed partial class ScheduleView : UserControl
                 CornerRadius = new CornerRadius(0),
                 IsEnabled = !ui.Running,
             };
-            button.Click += (sender, _) => ShowCellEditor((FrameworkElement)sender, i, j);
+            button.Click += (sender, _) =>
+            {
+                MarkTapped(i, j);
+                ShowCellEditor((FrameworkElement)sender, i, j);
+            };
 
             var cell = new Grid();
             cell.Children.Add(button);
@@ -381,8 +544,13 @@ public sealed partial class ScheduleView : UserControl
             ScheduleGridHost.Children.Add(border);
         }
 
-        AddCell(0, 0, "", header: true);
-        for (var j = 0; j < dayCount; j++) AddCell(0, j + 1, $"{j + 1}", header: true);
+        _nameHeader = AddCell(0, 0, "", header: true);
+        for (var j = 0; j < dayCount; j++)
+        {
+            var h = AddCell(0, j + 1, $"{j + 1}", header: true);
+            _dayHeaders.Add(h);
+            if (_focusCell is { } fc && fc.I < 0 && fc.J == j) _focusCellElement = h;
+        }
 
         for (var i = 0; i < staffCount; i++)
         {

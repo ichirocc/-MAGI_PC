@@ -14,12 +14,15 @@
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
       「元に戻す/やり直す」は MagiViewModel.Undo/Redo（Kotlin原本と同じ最大30段のスタック）へ配線。
       「まとめて割当」は複数セルへの一括代入（ScheduleView.xaml.cs の OnBulkAssignClick/MagiViewModel.SetCells 参照）。
+      [phase9 #6] 画面下固定のナビバー（Kotlin原本 ScheduleNavBar, 3.481.0/3.483.0）＝前週/次週の横スクロールジャンプ・
+      違反のある日の巡回（日ヘッダを約2.5秒強調）。セルをタップした行の職員名と列の日付も約2.5秒強調（3.444.0 クロスハイライト）。
     -->
     <Grid Padding="16" RowSpacing="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
@@ -30,7 +33,8 @@
 
         <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="14" TextWrapping="Wrap" />
 
-        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer x:Name="GridScroll" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      ViewChanged="OnGridScrollViewChanged">
             <StackPanel Spacing="20">
                 <Grid x:Name="ScheduleGridHost" />
 
@@ -45,5 +49,24 @@
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
+
+        <Border x:Name="NavBar" Grid.Row="3" Background="{StaticResource MagiSurfaceVariantBrush}"
+                CornerRadius="{StaticResource MagiCornerSM}" Padding="12,6">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button x:Name="PrevWeekButton" Grid.Column="0" Content="◀週" Click="OnPrevWeekClick" MinHeight="48" />
+                <Button x:Name="NextWeekButton" Grid.Column="1" Content="週▶" Click="OnNextWeekClick" MinHeight="48" />
+                <TextBlock x:Name="NavLabel" Grid.Column="2" TextAlignment="Center" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" Style="{StaticResource MagiLabelLargeTextStyle}" Opacity="0.8" />
+                <Button x:Name="PrevVioButton" Grid.Column="3" Content="◀違反" Click="OnPrevVioClick" MinHeight="48" />
+                <Button x:Name="NextVioButton" Grid.Column="4" Content="違反▶" Click="OnNextVioClick" MinHeight="48" />
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
