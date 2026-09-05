@@ -312,6 +312,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- **2026-09-05（Android 3.498.0 と同時）** 希望島研磨 `ApplyWishIslandPolish` を Kotlin 側の自律レビュー結果どおり再構成:
+  `WishIslandSession` クラス化、候補の遅延生成（`IEnumerable`、評価順は旧実装の安定ソートと同一）、`WishIslandParams` record
+  （既定値不変、負値は下限へ丸める）、前の島の採用で不活性になった島の評価スキップ。テスト 2 件追加（755→757 緑）。
+  採否の意味論と既定値は不変。
 - **2026-09-05（ユーザー提示の記事「ルールではなく skill に指示を書くことで、Claude のコメントを減らせた」）** 追加コメントの
   点検を手順化した `comment-check` スキル（`.claude/skills/comment-check/SKILL.md`）と `tools/comment_ratio.py` を Android 側と
   同じものとして導入し、最初の実走として 2026-09-04 の起動修正（08cb3aa..521151a）で追加したコメント行を1行ずつ判定した:

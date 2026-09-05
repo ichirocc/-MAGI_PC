@@ -4,7 +4,7 @@ using MagiEngine.V6;
 
 namespace MagiEngine.Tests.V6;
 
-/// <summary>[3.496.0 移植元] 希望島研磨の検証（Kotlin <c>WishIslandPolishTest</c> の3件）。</summary>
+/// <summary>[3.496.0 移植元] 希望島研磨の検証（Kotlin <c>WishIslandPolishTest</c> の3件＋3.498.0 の2件）。</summary>
 public class V6HotfixPassesWishIslandTest
 {
     private static MagiState Build(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyDictionary<string, int> wishes,
@@ -52,5 +52,38 @@ public class V6HotfixPassesWishIslandTest
         var r = V6HotfixPasses.ApplyWishIslandPolish(s, Sched(s));
         Assert.Equal(0, r.Applied);
         Assert.Equal(2, r.NewSchedule[2][5]);
+    }
+
+    [Fact]
+    public void IslandWhoseViolationWasFixedByAnEarlierIslandDoesNotSpendEvaluations()
+    {
+        // 甲: 希望A(3日目)、2日目の B が上限0超過。乙: 希望A(5日目)、B の下限1未達。甲↔乙の同日交換で両方消える。
+        var sched = new List<IReadOnlyList<int>> { new List<int> { 1, 2, 1, 0, 0, 0 }, new List<int> { 0, 0, 0, 0, 1, 0 }, new List<int> { 0, 0, 0, 0, 0, 0 } };
+        var both = Build(sched, new Dictionary<string, int> { ["0,2"] = 1, ["1,4"] = 1 },
+            new Dictionary<string, MagiEngine.Model.Range> { ["0,2"] = new("0", "0"), ["1,2"] = new("1", "") });
+        var prm = new V6HotfixPasses.WishIslandParams(MaxPasses: 1, MaxEvaluations: 100, MinIslandBudget: 50);
+        var r = V6HotfixPasses.ApplyWishIslandPolish(both, Sched(both), prm);
+        var after = UnifiedViolationChecker.Check(both, r.NewSchedule);
+        Assert.Equal(1, r.Applied);
+        Assert.Equal(0, after.Breakdown.GetValueOrDefault("high") + after.Breakdown.GetValueOrDefault("low"));
+        Assert.Contains("起動2件", r.Logs[0].Message);
+        var evaluated = int.Parse(System.Text.RegularExpressions.Regex.Match(r.Logs[0].Message, @"正式評価(\d+)").Groups[1].Value);
+        var alone = Build(sched, new Dictionary<string, int> { ["0,2"] = 1 }, new Dictionary<string, MagiEngine.Model.Range> { ["0,2"] = new("0", "0") });
+        var ra = V6HotfixPasses.ApplyWishIslandPolish(alone, Sched(alone), prm);
+        var evaluatedAlone = int.Parse(System.Text.RegularExpressions.Regex.Match(ra.Logs[0].Message, @"正式評価(\d+)").Groups[1].Value);
+        Assert.True(evaluated <= evaluatedAlone + 1, $"乙の島は評価されない: {evaluated} vs 甲だけ {evaluatedAlone}");
+    }
+
+    [Fact]
+    public void ZeroBudgetAndNegativeParamsDoNothingAndDoNotCrash()
+    {
+        var s = Build(new List<IReadOnlyList<int>> { new List<int> { 1, 2, 1, 0, 0, 0 }, new List<int> { 0, 1, 0, 0, 0, 0 }, new List<int> { 0, 0, 0, 0, 0, 0 } },
+            new Dictionary<string, int> { ["0,2"] = 1 }, new Dictionary<string, MagiEngine.Model.Range> { ["0,2"] = new("0", "0") });
+        var zero = V6HotfixPasses.ApplyWishIslandPolish(s, Sched(s), new V6HotfixPasses.WishIslandParams(MaxEvaluations: 0));
+        Assert.Equal(0, zero.Applied);
+        Assert.Equal(Sched(s).Select(r => string.Join(",", r)), zero.NewSchedule.Select(r => string.Join(",", r)));
+        var negative = V6HotfixPasses.ApplyWishIslandPolish(s, Sched(s),
+            new V6HotfixPasses.WishIslandParams(MaxPasses: -1, MaxEvaluations: -5, BeamWidth: 0, BeamDepth: -1, MinIslandBudget: 0, BeamBranchFactor: 0));
+        Assert.Equal(0, negative.Applied);
     }
 }

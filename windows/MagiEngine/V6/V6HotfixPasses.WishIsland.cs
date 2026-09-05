@@ -4,79 +4,158 @@ namespace MagiEngine.V6;
 
 public static partial class V6HotfixPasses
 {
-    private enum WishMoveKind { SameDay, Window, Wings, Rotate3 }
-    private static string WishMoveLabel(WishMoveKind k) => k switch { WishMoveKind.SameDay => "同日", WishMoveKind.Window => "窓", WishMoveKind.Wings => "両翼", _ => "巡回" };
-    private sealed record WishMove(WishMoveKind Kind, int[] Cells, bool SameGroup, int Island);
-    private sealed record WishIsland(int Staff, int[] WishDays, int ZoneFrom, int ZoneTo);
+    /// <summary>
+    /// 希望島研磨の探索予算と打ち切り（Android 3.498.0 の <c>WishIslandPolish.Params</c> と同じ意味・同じ既定値）。
+    /// </summary>
+    /// <param name="MaxPasses">島を一巡する回数の上限。採用 0 の pass はビームへ進み、ビームでも改善しなければ終了する。</param>
+    /// <param name="MaxEvaluations">正式評価（<c>UnifiedViolationChecker.Check</c>）の総数の上限＝研磨全体の時間予算。</param>
+    /// <param name="BeamWidth">停滞時ビームの幅。</param>
+    /// <param name="BeamDepth">停滞時ビームの深さ。3 は「両翼＋同日」程度の複合手を 1 本で表せる最小値。</param>
+    /// <param name="MinIslandBudget">起動した島 1 つに保証する評価数。同日交換の候補を数手は試せる量として 8。</param>
+    /// <param name="BeamBranchFactor">ビーム 1 ノードあたり保持する中立手の上限（幅の倍率）。中立手は無数にあるので打ち切りが要る。</param>
+    /// <param name="StuckNamesShown">ログに名前を出す残存職員の上限。</param>
+    public sealed record WishIslandParams(
+        int MaxPasses = 3, int MaxEvaluations = 120, int BeamWidth = 4, int BeamDepth = 3,
+        int MinIslandBudget = 8, int BeamBranchFactor = 6, int StuckNamesShown = 8)
+    {
+        /// <summary>不正な設定でも研磨パスが落ちないように下限へ丸める（負の予算＝何もしない、幅 0 のビーム＝幅 1）。</summary>
+        public WishIslandParams Normalized() => this with
+        {
+            MaxPasses = Math.Max(0, MaxPasses), MaxEvaluations = Math.Max(0, MaxEvaluations),
+            BeamWidth = Math.Max(1, BeamWidth), BeamDepth = Math.Max(0, BeamDepth),
+            MinIslandBudget = Math.Max(1, MinIslandBudget), BeamBranchFactor = Math.Max(1, BeamBranchFactor),
+            StuckNamesShown = Math.Max(0, StuckNamesShown),
+        };
+    }
 
     /// <summary>
-    /// [3.496.0 移植元/ユーザー提示の確定仕様] 希望島研磨。実現可能な希望日を固定アンカー（希望セルは不変）にし、影響範囲
-    /// （c1 窓長・c3 系パターン長から決まる半径 R）が重なる希望を島へ統合、周辺に違反がある島だけ起動。
-    /// 同日交換→可変長窓交換→両翼交換→必要時のみ3職員巡回。全セルで希望固定・担当可否を確認、同日交換優先、群違いは後順位。
-    /// 採否は正式チェッカー（HARD→weighted→total）で、通常は希望周辺（局所重み）も全体も改善する手だけ。停滞時のみ短い
-    /// ビームで中立手を許し、最終盤面が全体で改善したときだけ採用。最終結果は開始盤面より改善（keep-best）。0..T 内で完結。
+    /// 希望島研磨（ユーザー提示の確定仕様・Android 3.496.0、構造の見直し 3.498.0 の移植）。
+    /// 実現可能な希望日（<c>WishLocked</c>）を固定アンカーにし、影響半径（c1 窓長・c3 系パターン長）が重なる希望を島へ統合、
+    /// 周辺か本人の回数に違反がある島だけ起動。手は 同日→窓→両翼→必要時のみ巡回、同じ所属を先に。採否は HARD→weighted→total
+    /// で、通常は希望周辺も全体も改善する手だけ。停滞時のみ短いビーム（途中は中立手可）。keep-best。0..T 内で完結。
     /// </summary>
     public static CyclicSwapResult ApplyWishIslandPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, int maxEvaluations = 120, int beamWidth = 4, int beamDepth = 3, Func<bool>? shouldStop = null)
-    {
-        var stop = shouldStop ?? (() => false);
-        var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
-        var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
-        var bestRep = before;
-        int T = p.T, S = p.S, K = p.K;
-        var reach = 1;
-        foreach (var c in p.Cons1) reach = Math.Max(reach, c.Day1 - 1);
-        foreach (var list in new[] { p.Cons3, p.Cons3n, p.Cons3m, p.Cons3mn }) foreach (var c in list) reach = Math.Max(reach, c.Seq.Length - 1);
-        reach = Math.Min(reach, Math.Max(1, T - 1));
-        string Name(int i) => i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
-        bool SameGroup(int a, int b) => p.Sgrp[a] == p.Sgrp[b] && p.Ssk[a] == p.Ssk[b];
-        bool Locked(int i, int d) => p.WishLocked(i, d);
+        => ApplyWishIslandPolish(state, schedule, new WishIslandParams(maxPasses, maxEvaluations, beamWidth, beamDepth), shouldStop);
 
-        List<WishIsland> BuildIslands()
+    public static CyclicSwapResult ApplyWishIslandPolish(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool>? shouldStop = null)
+        => new WishIslandSession(state, schedule, prm, shouldStop ?? (() => false)).Run();
+
+    private enum WishMoveKind { SameDay, Window, Wings, Rotate3 }
+    private static string WishMoveLabel(WishMoveKind k) => k switch { WishMoveKind.SameDay => "同日", WishMoveKind.Window => "窓", WishMoveKind.Wings => "両翼", _ => "巡回" };
+
+    /// <summary>1手＝(職員, 日, 新しい値) の三つ組の並び。適用と巻き戻しが同じ形でできる。</summary>
+    private sealed record WishMove(WishMoveKind Kind, int[] Cells, bool SameGroup);
+
+    /// <summary>職員 Staff の希望日と影響範囲 ZoneFrom..ZoneTo（当月内に切り詰め済み）。キーは局所スコア用に事前計算。</summary>
+    private sealed class WishIsland
+    {
+        public readonly int Staff; public readonly int[] WishDays; public readonly int ZoneFrom; public readonly int ZoneTo;
+        public readonly string[] ZoneKeys; public readonly string CountPrefix;
+        public WishIsland(int staff, int[] wishDays, int zoneFrom, int zoneTo)
+        {
+            Staff = staff; WishDays = wishDays; ZoneFrom = zoneFrom; ZoneTo = zoneTo;
+            ZoneKeys = Enumerable.Range(zoneFrom, zoneTo - zoneFrom + 1).Select(d => $"{staff},{d}").ToArray();
+            CountPrefix = $"{staff},";
+        }
+    }
+
+    private sealed record WishNode(int[][] Board, ViolationReport Rep);
+    private sealed record WishChosen(WishMove Move, ViolationReport Rep);
+
+    private sealed class WishIslandSession
+    {
+        private readonly MagiState state; private readonly int[][] input; private readonly WishIslandParams prm; private readonly Func<bool> stop;
+        private readonly Problem p; private readonly int[][] work; private readonly ViolationReport before;
+        private ViolationReport bestRep;
+        private readonly int T, S, K, reach;
+        /// <summary>島は希望（固定）だけで決まり盤面に依らないので 1 回だけ作る。</summary>
+        private readonly List<WishIsland> islands;
+        private readonly PinBlockAttribution pinBlocks = new();
+        private readonly RejectCulpritStats rejectCulprits = new();
+        private readonly List<string> stuck = new();
+        private readonly Dictionary<string, int> byKind = new();
+        private int applied, evaluated, beamEvaluated, beamRuns, beamApplied, prunedC3n, activeCount;
+        /// <summary>今の島で使った評価数（通常候補と巡回候補で 1 つの枠を分け合う）。</summary>
+        private int islandUsed;
+
+        public WishIslandSession(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool> stop)
+        {
+            this.state = state; input = schedule; this.prm = prm.Normalized(); this.stop = stop;
+            p = new Problem(state);
+            work = ScheduleUtil.NormalizeSchedule(schedule, p);
+            before = UnifiedViolationChecker.Check(state, work);
+            bestRep = before;
+            T = p.T; S = p.S; K = p.K;
+            reach = ComputeReach();
+            islands = BuildIslands();
+        }
+
+        /// <summary>影響半径: c1 の窓長・c3 系パターン長の最大 −1（最低 1、最大 T−1）。</summary>
+        private int ComputeReach()
+        {
+            var r = 1;
+            foreach (var c in p.Cons1) r = Math.Max(r, c.Day1 - 1);
+            foreach (var list in new[] { p.Cons3, p.Cons3n, p.Cons3m, p.Cons3mn }) foreach (var c in list) r = Math.Max(r, c.Seq.Length - 1);
+            return Math.Min(r, Math.Max(1, T - 1));
+        }
+
+        private bool Locked(int i, int d) => p.WishLocked(i, d);
+        private bool SameGroup(int a, int b) => p.Sgrp[a] == p.Sgrp[b] && p.Ssk[a] == p.Ssk[b];
+        private string Name(int i) => i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+        private bool BudgetLeft() => !stop() && evaluated < prm.MaxEvaluations;
+        private static readonly bool[] GroupOrder = { true, false };
+
+        // ---- 希望島 ----
+        private List<WishIsland> BuildIslands()
         {
             var o = new List<WishIsland>();
             for (var i = 0; i < S; i++)
             {
                 var days = Enumerable.Range(0, T).Where(d => Locked(i, d)).ToList();
-                if (days.Count == 0) continue;
-                int from = days[0], to = days[0]; var cur = new List<int> { days[0] };
-                void Flush() { o.Add(new WishIsland(i, cur.ToArray(), Math.Max(0, from - reach), Math.Min(T - 1, to + reach))); cur.Clear(); }
-                for (var t = 1; t < days.Count; t++)
-                {
-                    var d = days[t];
-                    if (d - reach <= to + reach) { to = d; cur.Add(d); } else { Flush(); from = d; to = d; cur.Add(d); }
-                }
-                Flush();
+                if (days.Count > 0) MergeIntoIslands(i, days, o);
             }
             return o;
         }
-        long LocalScore(ViolationReport rep, WishIsland isl)
+
+        /// <summary>希望日をソート順に見て、影響範囲（±reach）が重なる限り同じ島へ入れる。</summary>
+        private void MergeIntoIslands(int i, List<int> days, List<WishIsland> o)
+        {
+            int from = days[0], to = days[0]; var cur = new List<int> { days[0] };
+            void Flush() { o.Add(new WishIsland(i, cur.ToArray(), Math.Max(0, from - reach), Math.Min(T - 1, to + reach))); cur.Clear(); }
+            for (var t = 1; t < days.Count; t++)
+            {
+                var d = days[t];
+                if (d - reach > to + reach) { Flush(); from = d; }
+                to = d; cur.Add(d);
+            }
+            Flush();
+        }
+
+        /// <summary>島の周辺の違反重み。セル違反＝影響範囲内、回数違反＝当該職員の全部。重み 0 の族も 1 と数える。</summary>
+        private long LocalScore(ViolationReport rep, WishIsland isl)
         {
             long s = 0;
-            for (var d = isl.ZoneFrom; d <= isl.ZoneTo; d++)
-                if (rep.CellFamilies.TryGetValue($"{isl.Staff},{d}", out var fams))
-                    foreach (var f in fams) s += Math.Max((long)MirrorKeys.WeightOf(f.StartsWith("vio-") ? f.Substring(4) : f), 1L);
-            foreach (var (key, cls) in rep.CountViolations)
-            {
-                var comma = key.IndexOf(',');
-                if (comma > 0 && int.TryParse(key.AsSpan(0, comma), out var i) && i == isl.Staff)
-                    s += Math.Max((long)MirrorKeys.WeightOf(cls.StartsWith("vio-") ? cls.Substring(4) : cls), 1L);
-            }
+            foreach (var key in isl.ZoneKeys)
+                if (rep.CellFamilies.TryGetValue(key, out var fams)) foreach (var f in fams) s += WeightOfClass(f);
+            foreach (var (key, cls) in rep.CountViolations) if (key.StartsWith(isl.CountPrefix, StringComparison.Ordinal)) s += WeightOfClass(cls);
             return s;
         }
-        bool Active(ViolationReport rep, WishIsland isl) => LocalScore(rep, isl) > 0;
 
-        int[] Apply(WishMove m)
+        private static long WeightOfClass(string cls) => Math.Max((long)MirrorKeys.WeightOf(cls.StartsWith("vio-", StringComparison.Ordinal) ? cls.Substring(4) : cls), 1L);
+
+        // ---- 手の適用・巻き戻し・事前枝刈り ----
+        private int[] Apply(WishMove m)
         {
             var old = new int[m.Cells.Length / 3];
             for (var t = 0; t < m.Cells.Length; t += 3) { var i = m.Cells[t]; var d = m.Cells[t + 1]; old[t / 3] = work[i][d]; work[i][d] = m.Cells[t + 2]; }
             return old;
         }
-        void Undo(WishMove m, int[] old) { for (var t = 0; t < m.Cells.Length; t += 3) work[m.Cells[t]][m.Cells[t + 1]] = old[t / 3]; }
-        var prunedC3n = 0;
-        bool MakesForbidden(WishMove m)
+
+        private void Undo(WishMove m, int[] old) { for (var t = 0; t < m.Cells.Length; t += 3) work[m.Cells[t]][m.Cells[t + 1]] = old[t / 3]; }
+
+        /// <summary>変更セルのどれかが禁止の並び（cons3n）を作るなら正式評価の前に落とす（チェッカーが最終判定＝見逃しは無害）。</summary>
+        private bool MakesForbidden(WishMove m)
         {
             if (p.Cons3n.Count == 0) return false;
             var old = Apply(m); var bad = false;
@@ -84,213 +163,257 @@ public static partial class V6HotfixPasses
             Undo(m, old);
             return bad;
         }
-        void GenSameDay(WishIsland isl, int ix, List<WishMove> o)
+
+        // ---- 候補生成（遅延・評価順＝手の種類 → 同じ所属 → 小さい手） ----
+        private bool Swappable(int a, int b, int d)
         {
-            var a = isl.Staff;
-            for (var d = isl.ZoneFrom; d <= isl.ZoneTo; d++)
-            {
-                if (Locked(a, d)) continue;
-                var ka = work[a][d]; if (ka < 0 || ka >= K) continue;
-                for (var b = 0; b < S; b++)
-                {
-                    if (b == a || Locked(b, d)) continue;
-                    var kb = work[b][d]; if (kb < 0 || kb >= K || kb == ka) continue;
-                    if (!p.CanDo(a, kb) || !p.CanDo(b, ka)) continue;
-                    o.Add(new WishMove(WishMoveKind.SameDay, new[] { a, d, kb, b, d, ka }, SameGroup(a, b), ix));
-                }
-            }
+            int ka = work[a][d], kb = work[b][d];
+            if (ka < 0 || ka >= K || kb < 0 || kb >= K) return false;
+            if (Locked(a, d) || Locked(b, d)) return false;
+            return p.CanDo(a, kb) && p.CanDo(b, ka);
         }
-        bool WindowOk(int a, int b, int s0, int s1)
+
+        /// <summary>窓 s0..s1 を a と b で丸ごと交換できて、かつ何かが変わるとき真。</summary>
+        private bool WindowOk(int a, int b, int s0, int s1)
         {
             var changes = false;
             for (var d = s0; d <= s1; d++)
             {
-                var ka = work[a][d]; var kb = work[b][d];
-                if (ka < 0 || ka >= K || kb < 0 || kb >= K) return false;
-                if (Locked(a, d) || Locked(b, d)) return false;
-                if (!p.CanDo(a, kb) || !p.CanDo(b, ka)) return false;
-                if (ka != kb) changes = true;
+                if (!Swappable(a, b, d)) return false;
+                if (work[a][d] != work[b][d]) changes = true;
             }
             return changes;
         }
-        void WindowCells(int a, int b, int s0, int s1, List<int> into)
+
+        private void WindowCells(int a, int b, int s0, int s1, List<int> into)
         {
             for (var d = s0; d <= s1; d++) { into.Add(a); into.Add(d); into.Add(work[b][d]); into.Add(b); into.Add(d); into.Add(work[a][d]); }
         }
-        void GenWindows(WishIsland isl, int ix, List<WishMove> o)
-        {
-            var a = isl.Staff; var zl = isl.ZoneTo - isl.ZoneFrom + 1;
-            for (var b = 0; b < S; b++)
-            {
-                if (b == a) continue;
-                for (var len = 2; len <= zl; len++)
-                    for (var s0 = isl.ZoneFrom; s0 <= isl.ZoneTo - len + 1; s0++)
-                    {
-                        var s1 = s0 + len - 1;
-                        if (!WindowOk(a, b, s0, s1)) continue;
-                        var cells = new List<int>(); WindowCells(a, b, s0, s1, cells);
-                        o.Add(new WishMove(WishMoveKind.Window, cells.ToArray(), SameGroup(a, b), ix));
-                    }
-            }
-        }
-        void GenWings(WishIsland isl, int ix, List<WishMove> o)
-        {
-            var a = isl.Staff; var first = isl.WishDays[0]; var last = isl.WishDays[^1];
-            if (first <= isl.ZoneFrom || last >= isl.ZoneTo) return;
-            for (var b = 0; b < S; b++)
-            {
-                if (b == a) continue;
-                for (var l0 = isl.ZoneFrom; l0 < first; l0++)
-                    for (var r1 = last + 1; r1 <= isl.ZoneTo; r1++)
-                    {
-                        if (!WindowOk(a, b, l0, first - 1) || !WindowOk(a, b, last + 1, r1)) continue;
-                        var cells = new List<int>(); WindowCells(a, b, l0, first - 1, cells); WindowCells(a, b, last + 1, r1, cells);
-                        o.Add(new WishMove(WishMoveKind.Wings, cells.ToArray(), SameGroup(a, b), ix));
-                    }
-            }
-        }
-        void GenRotate3(WishIsland isl, int ix, List<WishMove> o)
+
+        private IEnumerable<int> Partners(int a, bool sg) => Enumerable.Range(0, S).Where(b => b != a && SameGroup(a, b) == sg);
+
+        private IEnumerable<WishMove> SameDayMoves(WishIsland isl, bool sg)
         {
             var a = isl.Staff;
             for (var d = isl.ZoneFrom; d <= isl.ZoneTo; d++)
             {
-                if (Locked(a, d)) continue;
-                var ka = work[a][d]; if (ka < 0 || ka >= K) continue;
-                for (var b = 0; b < S; b++)
+                if (Locked(a, d) || work[a][d] < 0 || work[a][d] >= K) continue;
+                foreach (var b in Partners(a, sg))
                 {
-                    if (b == a || Locked(b, d)) continue;
-                    var kb = work[b][d]; if (kb < 0 || kb >= K || !p.CanDo(a, kb)) continue;
-                    for (var c = 0; c < S; c++)
-                    {
-                        if (c == a || c == b || Locked(c, d)) continue;
-                        var kc = work[c][d]; if (kc < 0 || kc >= K || !p.CanDo(b, kc) || !p.CanDo(c, ka)) continue;
-                        if (ka == kb && kb == kc) continue;
-                        o.Add(new WishMove(WishMoveKind.Rotate3, new[] { a, d, kb, b, d, kc, c, d, ka }, SameGroup(a, b) && SameGroup(b, c), ix));
-                    }
+                    if (work[b][d] == work[a][d] || !Swappable(a, b, d)) continue;
+                    yield return new WishMove(WishMoveKind.SameDay, new[] { a, d, work[b][d], b, d, work[a][d] }, sg);
                 }
             }
         }
-        void Order(List<WishMove> list) => list.Sort((x, y) =>
-        {
-            var c = ((int)x.Kind).CompareTo((int)y.Kind); if (c != 0) return c;
-            c = (x.SameGroup ? 0 : 1).CompareTo(y.SameGroup ? 0 : 1); if (c != 0) return c;
-            return x.Cells.Length.CompareTo(y.Cells.Length);
-        });
 
-        int applied = 0, evaluated = 0, beamRuns = 0, beamApplied = 0, wishCount = 0, islandCount = 0, activeCount = 0, candTotal = 0;
-        var byKind = new Dictionary<string, int>();
-        var rejectCulprits = new RejectCulpritStats();
-        var stuck = new List<string>();
-        var pass = 0;
-        while (pass < maxPasses && !stop() && evaluated < maxEvaluations)
+        private IEnumerable<WishMove> WindowMoves(WishIsland isl, bool sg, int len)
         {
-            var islands = BuildIslands();
-            wishCount = islands.Sum(x => x.WishDays.Length); islandCount = islands.Count;
-            var activeIslands = islands.Select((isl, ix) => (isl, ix)).Where(t => Active(bestRep, t.isl)).ToList();
-            activeCount = activeIslands.Count;
-            if (activeIslands.Count == 0) break;
-            var passApplied = 0;
-            var islandBudget = Math.Max(8, (maxEvaluations - evaluated) / activeIslands.Count);
-            foreach (var (isl, ix) in activeIslands)
-            {
-                if (stop() || evaluated >= maxEvaluations) break;
-                var islandEvals = 0;
-                var localBefore = LocalScore(bestRep, isl);
-                var cands = new List<WishMove>();
-                GenSameDay(isl, ix, cands); GenWindows(isl, ix, cands); GenWings(isl, ix, cands);
-                Order(cands);
-                WishMove? chosen = null; ViolationReport? chosenRep = null;
-                void EvalList(List<WishMove> list)
+            var a = isl.Staff;
+            foreach (var b in Partners(a, sg))
+                for (var s0 = isl.ZoneFrom; s0 <= isl.ZoneTo - len + 1; s0++)
                 {
-                    var baseWork = work.Copy2D();
-                    foreach (var m in list)
-                    {
-                        if (stop() || evaluated >= maxEvaluations || islandEvals >= islandBudget) return;
-                        if (MakesForbidden(m)) { prunedC3n++; continue; }
-                        islandEvals++;
-                        var old = Apply(m);
-                        var rep = UnifiedViolationChecker.Check(state, work);
-                        var pinBad = V6SearchOperators.ExactPinRegression(p, baseWork, work);
-                        evaluated++; candTotal++;
-                        var globalOk = UnifiedViolationChecker.BetterReport(rep, bestRep) && !pinBad;
-                        var localOk = LocalScore(rep, isl) < localBefore;
-                        if (pinBad && UnifiedViolationChecker.BetterReport(rep, bestRep)) pinBlocks.Record(p, baseWork, work);
-                        Undo(m, old);
-                        if (globalOk && localOk && (chosenRep is null || UnifiedViolationChecker.BetterReport(rep, chosenRep))) { chosen = m; chosenRep = rep; }
-                        else rejectCulprits.Record(rep, bestRep, pinBad);
-                    }
+                    var s1 = s0 + len - 1;
+                    if (!WindowOk(a, b, s0, s1)) continue;
+                    var cells = new List<int>(len * 6); WindowCells(a, b, s0, s1, cells);
+                    yield return new WishMove(WishMoveKind.Window, cells.ToArray(), sg);
                 }
-                EvalList(cands);
-                if (chosen is null && !stop() && evaluated < maxEvaluations)
-                {
-                    var rot = new List<WishMove>(); GenRotate3(isl, ix, rot); Order(rot); EvalList(rot);
-                }
-                if (chosen is not null && chosenRep is not null)
-                {
-                    Apply(chosen); bestRep = chosenRep; applied++; passApplied++;
-                    var lb = WishMoveLabel(chosen.Kind); byKind[lb] = byKind.GetValueOrDefault(lb) + 1;
-                }
-                else if (!stuck.Contains(Name(isl.Staff))) stuck.Add(Name(isl.Staff));
-            }
-            if (passApplied == 0)
-            {
-                beamRuns++;
-                var baseline = work.Copy2D();
-                var frontier = new List<(int[][] Board, ViolationReport Rep)> { (work.Copy2D(), bestRep) };
-                (int[][] Board, ViolationReport Rep)? bestNode = null;
-                for (var depth = 0; depth < beamDepth; depth++)
-                {
-                    if (stop() || evaluated >= maxEvaluations) break;
-                    var next = new List<(int[][] Board, ViolationReport Rep)>();
-                    foreach (var node in frontier)
-                    {
-                        for (var s = 0; s < S; s++) Array.Copy(node.Board[s], work[s], T);
-                        var isls = BuildIslands().Select((isl, ix) => (isl, ix)).Where(t => Active(node.Rep, t.isl)).ToList();
-                        var cands = new List<WishMove>();
-                        foreach (var (isl, ix) in isls) { GenSameDay(isl, ix, cands); GenWindows(isl, ix, cands); }
-                        Order(cands);
-                        foreach (var m in cands)
-                        {
-                            if (stop() || evaluated >= maxEvaluations) break;
-                            if (MakesForbidden(m)) { prunedC3n++; continue; }
-                            var old = Apply(m);
-                            var rep = UnifiedViolationChecker.Check(state, work);
-                            evaluated++;
-                            var pinBad = V6SearchOperators.ExactPinRegression(p, node.Board, work);
-                            if (!pinBad && !UnifiedViolationChecker.BetterReport(node.Rep, rep)) next.Add((work.Copy2D(), rep));
-                            Undo(m, old);
-                            if (next.Count >= beamWidth * 6) break;
-                        }
-                    }
-                    if (next.Count == 0) break;
-                    next.Sort((x, y) => UnifiedViolationChecker.ReportComparer.Compare(x.Rep, y.Rep));
-                    frontier = next.Take(beamWidth).ToList();
-                    var top = frontier[0];
-                    if (UnifiedViolationChecker.BetterReport(top.Rep, bestRep) && (bestNode is null || UnifiedViolationChecker.BetterReport(top.Rep, bestNode.Value.Rep))) bestNode = top;
-                }
-                for (var s = 0; s < S; s++) Array.Copy(baseline[s], work[s], T);
-                if (bestNode is { } bn && !V6SearchOperators.ExactPinRegression(p, baseline, bn.Board))
-                {
-                    for (var s = 0; s < S; s++) Array.Copy(bn.Board[s], work[s], T);
-                    bestRep = bn.Rep; applied++; beamApplied++;
-                }
-                else break;
-            }
-            pass++;
         }
-        var improved = UnifiedViolationChecker.BetterReport(bestRep, before);
-        var finalSched = improved ? work : ScheduleUtil.NormalizeSchedule(schedule, p);
-        var finalRep = improved ? bestRep : before;
-        var msg = $"希望島研磨: 希望{wishCount}件→島{islandCount}件(起動{activeCount}件・影響半径{reach}日) 候補評価{candTotal} 正式評価{evaluated}" +
-            $" / total {before.Total}->{finalRep.Total} HARD {before.Hard}->{finalRep.Hard} 採用{applied}回" +
-            (byKind.Count > 0 ? "(" + string.Join(" ", byKind.Select(kv => $"{kv.Key}:{kv.Value}")) + ")" : "") +
-            (beamRuns > 0 ? $" ビーム{beamRuns}回(採用{beamApplied})" : "") +
-            (prunedC3n > 0 ? $" 禁止の並びで枝刈り{prunedC3n}" : "") +
-            (applied == 0 && activeCount > 0 ? " [頭打ち=改善手なし]" : "") +
-            rejectCulprits.Summary() +
-            (stuck.Count > 0 ? $" 残存: {string.Join(", ", stuck.Take(8))}{(stuck.Count > 8 ? $" ほか{stuck.Count - 8}名" : "")}" : "");
-        var logs = new[] { new MirrorLog(tag: "WishIslandPolish", message: msg) };
-        return new CyclicSwapResult(finalSched, before.Total, finalRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+
+        private IEnumerable<WishMove> WindowMoves(WishIsland isl)
+        {
+            var zl = isl.ZoneTo - isl.ZoneFrom + 1;
+            foreach (var sg in GroupOrder) for (var len = 2; len <= zl; len++) foreach (var m in WindowMoves(isl, sg, len)) yield return m;
+        }
+
+        /// <summary>両翼＝島の前の窓 l0..first-1 と後の窓 last+1..r1 を同じ相手と同時に交換。合計長 total のものだけ生成。</summary>
+        private IEnumerable<WishMove> WingMoves(WishIsland isl, bool sg, int total)
+        {
+            var a = isl.Staff; var first = isl.WishDays[0]; var last = isl.WishDays[^1];
+            foreach (var b in Partners(a, sg))
+                for (var l0 = isl.ZoneFrom; l0 < first; l0++)
+                {
+                    var r1 = last + (total - (first - l0));
+                    if (r1 < last + 1 || r1 > isl.ZoneTo) continue;
+                    if (!WindowOk(a, b, l0, first - 1) || !WindowOk(a, b, last + 1, r1)) continue;
+                    var cells = new List<int>(total * 6); WindowCells(a, b, l0, first - 1, cells); WindowCells(a, b, last + 1, r1, cells);
+                    yield return new WishMove(WishMoveKind.Wings, cells.ToArray(), sg);
+                }
+        }
+
+        private IEnumerable<WishMove> WingMoves(WishIsland isl)
+        {
+            var first = isl.WishDays[0]; var last = isl.WishDays[^1];
+            if (first <= isl.ZoneFrom || last >= isl.ZoneTo) yield break;   // 月初・月末で片翼が無い＝両翼交換なし
+            var maxTotal = (first - isl.ZoneFrom) + (isl.ZoneTo - last);
+            foreach (var sg in GroupOrder) for (var total = 2; total <= maxTotal; total++) foreach (var m in WingMoves(isl, sg, total)) yield return m;
+        }
+
+        private IEnumerable<WishMove> Rotate3At(WishIsland isl, int d, bool sg)
+        {
+            var a = isl.Staff; var ka = work[a][d];
+            for (var b = 0; b < S; b++)
+            {
+                if (b == a || Locked(b, d)) continue;
+                var kb = work[b][d]; if (kb < 0 || kb >= K || !p.CanDo(a, kb)) continue;
+                for (var c = 0; c < S; c++)
+                {
+                    if (c == a || c == b || Locked(c, d)) continue;
+                    var kc = work[c][d]; if (kc < 0 || kc >= K || !p.CanDo(b, kc) || !p.CanDo(c, ka)) continue;
+                    if (ka == kb && kb == kc) continue;
+                    if ((SameGroup(a, b) && SameGroup(b, c)) != sg) continue;
+                    yield return new WishMove(WishMoveKind.Rotate3, new[] { a, d, kb, b, d, kc, c, d, ka }, sg);
+                }
+            }
+        }
+
+        private IEnumerable<WishMove> Rotate3Moves(WishIsland isl)
+        {
+            foreach (var sg in GroupOrder)
+                for (var d = isl.ZoneFrom; d <= isl.ZoneTo; d++)
+                {
+                    if (Locked(isl.Staff, d) || work[isl.Staff][d] < 0 || work[isl.Staff][d] >= K) continue;
+                    foreach (var m in Rotate3At(isl, d, sg)) yield return m;
+                }
+        }
+
+        private IEnumerable<WishMove> SameDayMoves(WishIsland isl) { foreach (var sg in GroupOrder) foreach (var m in SameDayMoves(isl, sg)) yield return m; }
+
+        /// <summary>通常 pass の候補: 同日 → 窓 → 両翼（巡回は採用 0 のときだけ別途）。</summary>
+        private IEnumerable<WishMove> IslandMoves(WishIsland isl) => SameDayMoves(isl).Concat(WindowMoves(isl)).Concat(WingMoves(isl));
+
+        /// <summary>ビームの候補: 起動中の全島の 同日 → 窓（種類 → 所属 → 手の大きさ → 島の順）。</summary>
+        private IEnumerable<WishMove> BeamMoves(List<WishIsland> active)
+        {
+            foreach (var sg in GroupOrder) foreach (var isl in active) foreach (var m in SameDayMoves(isl, sg)) yield return m;
+            var maxLen = active.Count == 0 ? 0 : active.Max(x => x.ZoneTo - x.ZoneFrom + 1);
+            foreach (var sg in GroupOrder) for (var len = 2; len <= maxLen; len++) foreach (var isl in active) foreach (var m in WindowMoves(isl, sg, len)) yield return m;
+        }
+
+        // ---- 評価 ----
+        /// <summary>moves を順に正式評価し、全体も希望周辺も改善する手のうち最良のものを返す（島の枠 budget 手まで）。</summary>
+        private WishChosen? PickBest(WishIsland isl, IEnumerable<WishMove> moves, int budget, long localBefore)
+        {
+            WishChosen? chosen = null;
+            var baseWork = work.Copy2D();
+            foreach (var m in moves)
+            {
+                if (!BudgetLeft() || islandUsed >= budget) break;
+                if (MakesForbidden(m)) { prunedC3n++; continue; }
+                islandUsed++; evaluated++;
+                var old = Apply(m);
+                var rep = UnifiedViolationChecker.Check(state, work);
+                var improves = UnifiedViolationChecker.BetterReport(rep, bestRep);
+                var pinBad = improves && V6SearchOperators.ExactPinRegression(p, baseWork, work);
+                if (pinBad) pinBlocks.Record(p, baseWork, work);
+                var accept = improves && !pinBad && LocalScore(rep, isl) < localBefore;
+                Undo(m, old);
+                if (!accept) { rejectCulprits.Record(rep, bestRep, pinBad); continue; }
+                if (chosen is null || UnifiedViolationChecker.BetterReport(rep, chosen.Rep)) chosen = new WishChosen(m, rep);
+            }
+            return chosen;
+        }
+
+        /// <summary>1 pass: 起動中の島を順に見て、島ごとに最良の 1 手を採用する。戻り値は採用数。</summary>
+        private int RunPass(List<WishIsland> active)
+        {
+            var passApplied = 0;
+            var islandBudget = Math.Max(prm.MinIslandBudget, (prm.MaxEvaluations - evaluated) / active.Count);
+            foreach (var isl in active)
+            {
+                if (!BudgetLeft()) break;
+                // 前の島の採用で周辺の違反が消えた島は、どの手も「希望周辺の改善」を満たせないので評価しない（枠の無駄）。
+                var localBefore = LocalScore(bestRep, isl);
+                if (localBefore == 0) continue;
+                islandUsed = 0;
+                var chosen = PickBest(isl, IslandMoves(isl), islandBudget, localBefore)
+                             ?? PickBest(isl, Rotate3Moves(isl), islandBudget, localBefore);   // 巡回は必要時のみ
+                if (chosen is null) { if (!stuck.Contains(Name(isl.Staff))) stuck.Add(Name(isl.Staff)); continue; }
+                Apply(chosen.Move); bestRep = chosen.Rep; applied++; passApplied++;
+                var lb = WishMoveLabel(chosen.Move.Kind); byKind[lb] = byKind.GetValueOrDefault(lb) + 1;
+            }
+            return passApplied;
+        }
+
+        /// <summary>停滞時の短いビーム。途中は中立手（悪化しない手）を許し、最終盤面が全体で改善したときだけ採用する。</summary>
+        private bool RunBeam()
+        {
+            beamRuns++;
+            var baseline = work.Copy2D();
+            var frontier = new List<WishNode> { new(work.Copy2D(), bestRep) };
+            WishNode? bestNode = null;
+            for (var depth = 0; depth < prm.BeamDepth; depth++)
+            {
+                if (!BudgetLeft()) break;
+                var next = new List<WishNode>();
+                foreach (var node in frontier) ExpandNode(node, next);
+                if (next.Count == 0) break;
+                next.Sort((x, y) => UnifiedViolationChecker.ReportComparer.Compare(x.Rep, y.Rep));
+                frontier = next.Take(prm.BeamWidth).ToList();
+                var top = frontier[0];
+                if (UnifiedViolationChecker.BetterReport(top.Rep, bestRep) && (bestNode is null || UnifiedViolationChecker.BetterReport(top.Rep, bestNode.Rep))) bestNode = top;
+            }
+            Restore(baseline);
+            if (bestNode is null || V6SearchOperators.ExactPinRegression(p, baseline, bestNode.Board)) return false;
+            Restore(bestNode.Board); bestRep = bestNode.Rep; applied++; beamApplied++;
+            return true;
+        }
+
+        private void ExpandNode(WishNode node, List<WishNode> next)
+        {
+            Restore(node.Board);
+            var active = islands.Where(isl => LocalScore(node.Rep, isl) > 0).ToList();
+            var limit = prm.BeamWidth * prm.BeamBranchFactor;
+            foreach (var m in BeamMoves(active))
+            {
+                if (!BudgetLeft() || next.Count >= limit) break;
+                if (MakesForbidden(m)) { prunedC3n++; continue; }
+                var old = Apply(m);
+                var rep = UnifiedViolationChecker.Check(state, work);
+                evaluated++; beamEvaluated++;
+                var neutral = !UnifiedViolationChecker.BetterReport(node.Rep, rep) && !V6SearchOperators.ExactPinRegression(p, node.Board, work);
+                if (neutral) next.Add(new WishNode(work.Copy2D(), rep));
+                Undo(m, old);
+            }
+        }
+
+        private void Restore(int[][] board) { for (var s = 0; s < S; s++) Array.Copy(board[s], work[s], T); }
+
+        public CyclicSwapResult Run()
+        {
+            var pass = 0;
+            while (pass < prm.MaxPasses && BudgetLeft())
+            {
+                var active = islands.Where(isl => LocalScore(bestRep, isl) > 0).ToList();
+                activeCount = active.Count;
+                if (active.Count == 0) break;
+                if (RunPass(active) == 0 && !RunBeam()) break;   // 通常もビームも改善なし＝停滞で終了
+                pass++;
+            }
+            var improved = UnifiedViolationChecker.BetterReport(bestRep, before);
+            var finalSched = improved ? work : ScheduleUtil.NormalizeSchedule(input, p);
+            var finalRep = improved ? bestRep : before;
+            var logs = new[] { new MirrorLog(tag: "WishIslandPolish", message: Summary(finalRep)) };
+            return new CyclicSwapResult(finalSched, before.Total, finalRep.Total, applied, logs, ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+        }
+
+        private string Summary(ViolationReport finalRep)
+        {
+            var wishCount = islands.Sum(x => x.WishDays.Length);
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"希望島研磨: 希望{wishCount}件→島{islands.Count}件(起動{activeCount}件・影響半径{reach}日) 正式評価{evaluated}");
+            if (beamEvaluated > 0) sb.Append($"(うちビーム{beamEvaluated})");
+            sb.Append($" / total {before.Total}->{finalRep.Total} HARD {before.Hard}->{finalRep.Hard} 採用{applied}回");
+            if (byKind.Count > 0) sb.Append('(').Append(string.Join(" ", byKind.Select(kv => $"{kv.Key}:{kv.Value}"))).Append(')');
+            if (beamRuns > 0) sb.Append($" ビーム{beamRuns}回(採用{beamApplied})");
+            if (prunedC3n > 0) sb.Append($" 禁止の並びで枝刈り{prunedC3n}");
+            if (applied == 0 && activeCount > 0) sb.Append(" [頭打ち=改善手なし]");
+            sb.Append(rejectCulprits.Summary());
+            if (stuck.Count > 0)
+            {
+                sb.Append(" 残存: ").Append(string.Join(", ", stuck.Take(prm.StuckNamesShown)));
+                if (stuck.Count > prm.StuckNamesShown) sb.Append($" ほか{stuck.Count - prm.StuckNamesShown}名");
+            }
+            return sb.ToString();
+        }
     }
 }
