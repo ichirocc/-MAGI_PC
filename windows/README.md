@@ -312,6 +312,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- **2026-09-05（ユーザー提示の記事「ルールではなく skill に指示を書くことで、Claude のコメントを減らせた」）** 追加コメントの
+  点検を手順化した `comment-check` スキル（`.claude/skills/comment-check/SKILL.md`）と `tools/comment_ratio.py` を Android 側と
+  同じものとして導入し、最初の実走として 2026-09-04 の起動修正（08cb3aa..521151a）で追加したコメント行を1行ずつ判定した:
+  39→22 行、比率 17.2%→10.5%、4行以上の塊 5→2（最大 9→5 行）。消したのは run ID・実機報告の引用・「旧: …」の履歴で、
+  すべてこの記録に既にある。コードは不変（コメントのみ）。
 - **2026-09-04（ユーザー指示「これは署名証明書が無い限り残るので賢く解決する」）** SmartScreen は Mark of the Web 付きファイルの
   起動時にしか評価しない事実を使い、証明書なしで警告ゼロにした: ① タグ `win-vX.Y.Z` の push で setup.exe を GitHub Release へ
   添付（固定名 `MagiShiftOptimizer-Setup-x64.exe` も付け `releases/latest/download/…` を常に最新に）、② README に

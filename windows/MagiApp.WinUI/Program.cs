@@ -6,11 +6,9 @@ using Microsoft.UI.Xaml;
 namespace MagiApp.WinUI;
 
 /// <summary>
-/// [2026-09-04 実機報告「Windows11版が起動出来ない。画面でない」] 起動失敗を必ず見えるようにするための
-/// 手書き Main（csproj の DISABLE_XAML_GENERATED_MAIN で生成 Main を止め、同じ手順を try/catch で包む）。
-/// 旧: 生成 Main は例外を捕まえず、unpackaged 実行で必須ファイル（resources.pri・VC++ ランタイム）が無いと
-/// ウィンドウを出す前にプロセスが無言で終了していた。ここでは <see cref="StartupDiagnostics"/> がログへ書き、
-/// XAML に依存しない Win32 MessageBox で原因とログの場所を表示する。
+/// 手書き Main（csproj の DISABLE_XAML_GENERATED_MAIN で生成 Main を止める）。生成 Main は例外を捕まえず、
+/// 必須ファイル欠落時にウィンドウを出す前に無言終了するため、同じ手順を try/catch で包み
+/// <see cref="StartupDiagnostics"/> がログと XAML 非依存の Win32 MessageBox で原因を見せる。
 /// </summary>
 public static class Program
 {

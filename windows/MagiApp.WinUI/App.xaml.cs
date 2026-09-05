@@ -25,7 +25,7 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
-        // [2026-09-04 起動診断] XAML ループ内の未処理例外もログへ残す（旧: 無言で落ちて「画面が出ない」）。
+        // XAML ループ内の未処理例外もログへ残す（無言で落とさない）。
         UnhandledException += (_, e) =>
         {
             StartupDiagnostics.Log("Application.UnhandledException", e.Exception);
