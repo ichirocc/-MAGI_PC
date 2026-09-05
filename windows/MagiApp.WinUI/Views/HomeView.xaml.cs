@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
@@ -24,6 +25,10 @@ public sealed partial class HomeView : UserControl
     /// <summary>「AIの解決提案」が自動で探索した盤面（同じ盤面で二度探さないための鍵）。</summary>
     private object? _autoFixBoard;
     private long _autoFixHard = -1;
+
+    /// <summary>「途中経過を見る」の開閉と、前回描いた途中盤面（赤枠＝今回変化、の比較元）。</summary>
+    private bool _liveOpen;
+    private IReadOnlyList<IReadOnlyList<int>>? _livePrev;
 
     public HomeView(MagiViewModel vm, MainWindow window)
     {
@@ -56,6 +61,7 @@ public sealed partial class HomeView : UserControl
         StopButton.IsEnabled = ui.Running;
 
         RenderNextAction(ui, editable);
+        RenderLive(ui);
         RenderSmartAction(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
@@ -156,6 +162,12 @@ public sealed partial class HomeView : UserControl
         DetailText.Visibility = showDetail && _detailOpen ? Visibility.Visible : Visibility.Collapsed;
         DetailText.Foreground = fgBrush;
 
+        ProgressRow.Visibility = ui.Running ? Visibility.Visible : Visibility.Collapsed;
+        ProgressSpinner.IsActive = ui.Running;
+        ProgressSpinner.Foreground = fgBrush;
+        ProgressText.Text = ui.Running ? ProgressSummary(ui) : "";
+        ProgressText.Foreground = fgBrush;
+
         BigButton.Visibility = bigEnabled ? Visibility.Visible : Visibility.Collapsed;
         BigButton.Content = bigLabel;
         BigButton.IsEnabled = editable;
@@ -165,6 +177,93 @@ public sealed partial class HomeView : UserControl
         RedraftLink.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
         RedraftLink.Foreground = fgBrush;
         RedraftLink.IsEnabled = editable;
+    }
+
+    /// <summary>Kotlin原本 <c>progressSummary</c>（3.393.0/3.396.0）。反復数は作り手の指標なので出さない。</summary>
+    private static string ProgressSummary(UiState ui)
+    {
+        var parts = new List<string>(4);
+        if (ui.BestHard > 0L)
+        {
+            parts.Add(ui.InitHard > ui.BestHard
+                ? $"必須違反 残り{ui.BestHard}件（開始{ui.InitHard}件）"
+                : $"必須違反 残り{ui.BestHard}件");
+        }
+        else if (ui.InitSoft > 0L)
+        {
+            var pct = System.Math.Max(0L, (ui.InitSoft - ui.BestSoft) * 100L / ui.InitSoft);
+            parts.Add($"気になる点 {ui.BestSoft}件（開始{ui.InitSoft}件・{pct}%減）");
+        }
+        else parts.Add("気になる点 –");
+        if (ui.BestHard > 0L && ui.TotalViolations > 0) parts.Add($"気になる点 全{ui.TotalViolations}件");
+        var secLeft = System.Math.Max(0L, ui.BudgetSec * 1000L - ui.ElapsedMs) / 1000L;
+        parts.Add($"残り {secLeft / 60}:{secLeft % 60:00}");
+        return string.Join("  ・  ", parts);
+    }
+
+    /// <summary>
+    /// [phase9 #3] 途中経過（Kotlin原本 <c>LiveScheduleCard</c>）。実行中に <see cref="UiState.LiveSchedule"/> が
+    /// 届くたびに色タイルの盤面を描き、前回から変わったセルを赤枠で示す。開いているときだけ描く。
+    /// </summary>
+    private void RenderLive(UiState ui)
+    {
+        var cur = ui.LiveSchedule;
+        if (!ui.Running || cur.Count == 0)
+        {
+            LiveCard.Visibility = Visibility.Collapsed;
+            LiveGridHost.Children.Clear();
+            _livePrev = null;
+            return;
+        }
+        LiveCard.Visibility = Visibility.Visible;
+        LiveToggle.Content = _liveOpen ? "途中経過を隠す" : "途中経過を見る";
+        LivePanel.Visibility = _liveOpen ? Visibility.Visible : Visibility.Collapsed;
+        if (!_liveOpen) return;
+        if (ReferenceEquals(_livePrev, cur) && LiveGridHost.Children.Count > 0) return;
+
+        var changed = new HashSet<(int, int)>();
+        var prev = _livePrev;
+        if (prev is not null && prev.Count == cur.Count)
+        {
+            for (var i = 0; i < cur.Count; i++)
+            {
+                if (prev[i].Count != cur[i].Count) continue;
+                for (var j = 0; j < cur[i].Count; j++) if (prev[i][j] != cur[i][j]) changed.Add((i, j));
+            }
+        }
+        _livePrev = cur;
+        LiveCaption.Text = $"状態遷移  赤枠＝今回変化 ({changed.Count})";
+        LiveGridHost.Children.Clear();
+        var rest = BrushOf("MagiSurfaceVariantBrush");
+        var err = BrushOf("MagiErrorBrush");
+        for (var i = 0; i < cur.Count; i++)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1 };
+            for (var j = 0; j < cur[i].Count; j++)
+            {
+                var k = cur[i][j];
+                var hex = k >= 0 && k < ui.ShiftColorHex.Count ? ui.ShiftColorHex[k] : null;
+                var tile = new Border
+                {
+                    Width = 11, Height = 11, CornerRadius = new CornerRadius(2),
+                    Background = k < 0 ? rest : new SolidColorBrush(ColorHex.Parse(hex, Colors.Transparent)),
+                };
+                if (changed.Contains((i, j)))
+                {
+                    tile.BorderBrush = err;
+                    tile.BorderThickness = new Thickness(2);
+                }
+                row.Children.Add(tile);
+            }
+            LiveGridHost.Children.Add(row);
+        }
+    }
+
+    private void OnLiveToggleClick(object sender, RoutedEventArgs e)
+    {
+        _liveOpen = !_liveOpen;
+        _livePrev = null;
+        Render();
     }
 
     /// <summary>
