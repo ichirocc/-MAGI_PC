@@ -168,6 +168,12 @@ public sealed partial class EditView : UserControl
         var c = _vm.GetSetupCounts();
         MonthlyCountsText.Text =
             $"登録済み: 希望 {c.Wishes}件 ・ 日別の必要人数（例外） {c.NeedDay}件 ・ 職員 {c.Staff}名";
+        // [phase9 #5] Kotlin原本 SetupGuideCard の「次の一手」（3.482.0 の文言）。件数の行は既にあるので差分だけ足す。
+        NextStepPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        NextStepText.Text = "次の一手: " + (
+            c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
+            : c.Wishes == 0 ? "次に『希望シフト』を登録すると できあがり度 が上がります。"
+            : "準備OK。ホームの『勤務表をつくる』で作成できます。");
     }
 
     /// <summary>「2026-07-01」＋31日 → 「2026年7月1日 から 31日間」。読めない開始日はそのまま出す。</summary>

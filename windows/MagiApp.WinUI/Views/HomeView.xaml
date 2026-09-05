@@ -30,6 +30,9 @@
       [phase9 #4] コパイロット（Kotlin原本 CopilotCard）＝実現できない希望の警告／操作の助言／研磨の限界（自動で整える・手修正）。
       単独の「仕上げ最適化」ボタンは Android と同じくこのカード内の「自動で整える」へ統合。
 
+      [phase9 #5] 空状態（Kotlin原本 EmptyStateCard）＝データ未読込のとき「データを開く／サンプルで試す／新規につくる（空から）」。
+      通常は起動時にフィクスチャが自動で入るため、読込に失敗した・空にしたときの導線。
+
       [phase9 #1] 「人員不足の原因」「人員過剰がなぜ減らないか」（Kotlin原本 CoverageDiagnosisCard）を
       同じ文言で移植。過剰枠の「希望固定N人」は CoverageSurplus.PinnedStaff を名指しし、ボタンで
       RemoveWish(i, day) を呼ぶ（Android 3.492.0）。診断が無い／不足も過剰も無いときは節ごと隠す。
@@ -39,6 +42,19 @@
             <TextBlock Text="ホーム" FontSize="20" FontWeight="SemiBold" />
             <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="14" />
             <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+
+            <Border x:Name="EmptyStateCard" Background="{StaticResource MagiSurfaceVariantBrush}"
+                    CornerRadius="{StaticResource MagiCornerLG}" Padding="24">
+                <StackPanel Spacing="16" HorizontalAlignment="Stretch">
+                    <FontIcon Glyph="&#xE787;" FontSize="44" Foreground="{StaticResource MagiPrimaryBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="勤務表データを開きましょう" Style="{StaticResource MagiTitleLargeTextStyle}" HorizontalAlignment="Center" />
+                    <TextBlock Text="保存済みのデータを開く、サンプルから始める、または空から新しく作れます。"
+                               TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
+                    <Button x:Name="EmptyOpenButton" Content="データを開く" Click="OnEmptyOpenClick" HorizontalAlignment="Stretch" MinHeight="56" />
+                    <Button x:Name="EmptySampleButton" Content="サンプルで試す" Click="OnEmptySampleClick" HorizontalAlignment="Stretch" MinHeight="56" />
+                    <Button x:Name="EmptyNewButton" Content="新規につくる（空から）" Click="OnEmptyNewClick" HorizontalAlignment="Stretch" MinHeight="56" />
+                </StackPanel>
+            </Border>
 
             <Border x:Name="NextActionCard" CornerRadius="{StaticResource MagiCornerSM}" Padding="20">
                 <StackPanel Spacing="14">

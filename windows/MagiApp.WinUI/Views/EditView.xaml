@@ -68,6 +68,11 @@
                     <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick" />
                 </StackPanel>
                 <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+                <Border x:Name="NextStepPanel" Background="{StaticResource MagiSecondaryContainerBrush}"
+                        CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <TextBlock x:Name="NextStepText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
+                               Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
+                </Border>
 
                 <TextBlock Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
 

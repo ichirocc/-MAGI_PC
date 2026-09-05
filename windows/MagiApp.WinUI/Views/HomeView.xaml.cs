@@ -55,6 +55,7 @@ public sealed partial class HomeView : UserControl
             ? $"満足度 {ui.Satisfaction} ・ 必須違反 {ui.BestHard} ・ 合計 {ui.BestSoft}"
             : "";
         var editable = ui.Loaded && !ui.Running;
+        EmptyStateCard.Visibility = !ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         MakeButton.IsEnabled = editable;
         BackgroundButton.IsEnabled = editable;
         StopButton.IsEnabled = ui.Running;
@@ -377,6 +378,17 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
+
+    private async void OnEmptyOpenClick(object sender, RoutedEventArgs e) => await _window.OpenDataAsync();
+
+    private async void OnEmptySampleClick(object sender, RoutedEventArgs e) => await _window.LoadFixtureAsync();
+
+    /// <summary>空から作る。未読込なので確認ダイアログは出さず（失うものが無い）、年間マスターを整える編集タブへ送る。</summary>
+    private void OnEmptyNewClick(object sender, RoutedEventArgs e)
+    {
+        _vm.InitBlankState();
+        _window.SelectTab("edit");
+    }
 
     /// <summary>不足・過剰の各節に出す枠数の上限（Kotlin原本 CoverageDiagnosisCard の take(6) と同じ）。</summary>
     private const int MaxCoverageSlots = 6;

@@ -197,6 +197,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>[phase9 #2] 勤務表CSVの書き出し。ピッカーの配線は設定タブに1つだけ置き、ここは委譲する。</summary>
+    /// <summary>[phase9 #5] 「データを開く」（ホームの空状態カード）。ピッカーは設定タブのものへ委譲。</summary>
+    internal Task OpenDataAsync() =>
+        GetOrCreateTab("settings") is SettingsView sv ? sv.OpenDataAsync() : Task.CompletedTask;
+
     internal Task ExportScheduleCsvAsync() =>
         GetOrCreateTab("settings") is SettingsView sv ? sv.ExportCsvAsync() : Task.CompletedTask;
 
@@ -229,7 +233,7 @@ public sealed partial class MainWindow : Window
     /// フェーズ8の同梱フィクスチャ（Assets/sample_state_v6.json）を読み込む。フェーズ9で
     /// 「データを開く」導線（ファイルピッカー）に置き換わるまでの暫定入口。
     /// </summary>
-    private async Task LoadFixtureAsync()
+    internal async Task LoadFixtureAsync()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Assets", "sample_state_v6.json");
         string json;

@@ -337,7 +337,10 @@ public sealed partial class SettingsView : UserControl
         return ms.ToArray();
     }
 
-    private async void OnOpenDataClick(object sender, RoutedEventArgs e)
+    private async void OnOpenDataClick(object sender, RoutedEventArgs e) => await OpenDataAsync();
+
+    /// <summary>「データを開く」。ホームの空状態カードからも呼ばれる（phase9 #5）。</summary>
+    internal async Task OpenDataAsync()
     {
         try
         {
