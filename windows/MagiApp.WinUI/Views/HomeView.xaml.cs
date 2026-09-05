@@ -56,13 +56,13 @@ public sealed partial class HomeView : UserControl
             : "";
         var editable = ui.Loaded && !ui.Running;
         MakeButton.IsEnabled = editable;
-        SoftPolishButton.IsEnabled = editable;
         BackgroundButton.IsEnabled = editable;
         StopButton.IsEnabled = ui.Running;
 
         RenderNextAction(ui, editable);
         RenderLive(ui);
         RenderSmartAction(ui, editable);
+        RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
     }
@@ -360,6 +360,23 @@ public sealed partial class HomeView : UserControl
         var ui = _vm.Ui;
         if (ui.FixSuggestions.Count > 0) _vm.ApplyFixSuggestion(ui.FixSuggestions[0]);
     }
+
+    /// <summary>[phase9 #4] コパイロット（Kotlin原本 <c>CopilotCard</c>）。3 つの助言はどれも「あるときだけ」出す。</summary>
+    private void RenderCopilot(UiState ui, bool editable)
+    {
+        var wish = ui.ImpossibleWishCount > 0;
+        var hint = !string.IsNullOrWhiteSpace(ui.CopilotHint);
+        var polish = ui.PolishExhausted && !ui.Running;
+        CopilotCard.Visibility = wish || hint || polish ? Visibility.Visible : Visibility.Collapsed;
+        ImpossibleWishPanel.Visibility = wish ? Visibility.Visible : Visibility.Collapsed;
+        ImpossibleWishText.Text = wish ? $"⚠ 実現できない希望が {ui.ImpossibleWishCount} 件（担当外シフトなど）。配布前に見直しを。" : "";
+        CopilotHintPanel.Visibility = hint ? Visibility.Visible : Visibility.Collapsed;
+        CopilotHintText.Text = hint ? $"💡 {ui.CopilotHint}" : "";
+        PolishPanel.Visibility = polish ? Visibility.Visible : Visibility.Collapsed;
+        SoftPolishButton.IsEnabled = editable;
+    }
+
+    private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
 
     /// <summary>不足・過剰の各節に出す枠数の上限（Kotlin原本 CoverageDiagnosisCard の take(6) と同じ）。</summary>
     private const int MaxCoverageSlots = 6;
