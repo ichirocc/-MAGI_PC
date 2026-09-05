@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using MagiApp.ViewModels;
 using MagiApp.WinUI.Views;
 using Microsoft.UI.Windowing;
@@ -167,13 +168,15 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>各タブの内容は初回選択時に構築してキャッシュする（クラスKDoc参照）。</summary>
-    private void ShowTab(string tag)
+    private void ShowTab(string tag) => HostContent.Content = GetOrCreateTab(tag);
+
+    private UIElement GetOrCreateTab(string tag)
     {
         if (!_tabCache.TryGetValue(tag, out var content))
         {
             content = tag switch
             {
-                "home" => new HomeView(_vm),
+                "home" => new HomeView(_vm, this),
                 "schedule" => new ScheduleView(_vm),
                 "edit" => new EditView(_vm),
                 "analysis" => new AnalysisView(_vm, JumpToCell),
@@ -182,8 +185,20 @@ public sealed partial class MainWindow : Window
             };
             _tabCache[tag] = content;
         }
-        HostContent.Content = content;
+        return content;
     }
+
+    /// <summary>[phase9 #2] タブ切替（<c>NavigationView</c> の選択表示も同期）。ホームの処方箋カードの導線が使う。</summary>
+    internal void SelectTab(string tag)
+    {
+        ShowTab(tag);
+        var item = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(it => (string?)it.Tag == tag);
+        if (item is not null) Nav.SelectedItem = item;
+    }
+
+    /// <summary>[phase9 #2] 勤務表CSVの書き出し。ピッカーの配線は設定タブに1つだけ置き、ここは委譲する。</summary>
+    internal Task ExportScheduleCsvAsync() =>
+        GetOrCreateTab("settings") is SettingsView sv ? sv.ExportCsvAsync() : Task.CompletedTask;
 
     /// <summary>
     /// [違反箇所へのジャンプ] <c>AnalysisView</c>「違反の場所」から呼ばれる。勤務表タブへ切替え
@@ -194,9 +209,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void JumpToCell(int i, int j)
     {
-        ShowTab("schedule");
-        var scheduleItem = Nav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(it => (string?)it.Tag == "schedule");
-        if (scheduleItem is not null) Nav.SelectedItem = scheduleItem;
+        SelectTab("schedule");
         if (_tabCache["schedule"] is ScheduleView sv) sv.FocusCell(i, j);
     }
 

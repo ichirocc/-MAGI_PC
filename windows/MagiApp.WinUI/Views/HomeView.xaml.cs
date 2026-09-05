@@ -1,9 +1,11 @@
+using System;
 using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 
 namespace MagiApp.WinUI.Views;
@@ -12,11 +14,21 @@ namespace MagiApp.WinUI.Views;
 public sealed partial class HomeView : UserControl
 {
     private readonly MagiViewModel _vm;
+    private readonly MainWindow _window;
     private readonly UiSubscription _uiSub;
 
-    public HomeView(MagiViewModel vm)
+    private bool _detailOpen;
+    private Action _bigAction = () => { };
+    private Action _helperAction = () => { };
+
+    /// <summary>「AIの解決提案」が自動で探索した盤面（同じ盤面で二度探さないための鍵）。</summary>
+    private object? _autoFixBoard;
+    private long _autoFixHard = -1;
+
+    public HomeView(MagiViewModel vm, MainWindow window)
     {
         _vm = vm;
+        _window = window;
         InitializeComponent();
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
@@ -38,14 +50,216 @@ public sealed partial class HomeView : UserControl
             ? $"満足度 {ui.Satisfaction} ・ 必須違反 {ui.BestHard} ・ 合計 {ui.BestSoft}"
             : "";
         var editable = ui.Loaded && !ui.Running;
-        SmartInitialButton.IsEnabled = editable;
         MakeButton.IsEnabled = editable;
         SoftPolishButton.IsEnabled = editable;
         BackgroundButton.IsEnabled = editable;
         StopButton.IsEnabled = ui.Running;
 
+        RenderNextAction(ui, editable);
+        RenderSmartAction(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
+    }
+
+    /// <summary>
+    /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c>（3.480.0/3.483.0）の状態分岐を
+    /// そのまま写す。実行中は見出し・解消度を出さない（進捗行は #3）。飛び先の判断は docs/phase9/blockers.md #2。
+    /// </summary>
+    private void RenderNextAction(UiState ui, bool editable)
+    {
+        if (!ui.Loaded)
+        {
+            NextActionCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+        NextActionCard.Visibility = Visibility.Visible;
+        var diag = ui.CoverageDiag;
+        var infeasible = diag?.AllInfeasible == true;
+        var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
+        var shortDays = shortfalls.Select(x => x.DayIndex).Distinct().Count();
+        var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
+
+        string bg, fg, headline, bigLabel, phase, phaseHex;
+        string? helperLabel;
+        bool bigEnabled;
+        if (ui.Running)
+        {
+            bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
+            headline = ""; bigLabel = ""; bigEnabled = false; helperLabel = null;
+            phase = ""; phaseHex = "";
+            _bigAction = () => { }; _helperAction = () => { };
+        }
+        else if (!ui.HasResult)
+        {
+            bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
+            headline = "② ボタンひとつで、勤務表を作ります。";
+            bigLabel = "勤務表をつくる"; bigEnabled = true;
+            helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
+            phase = "探索"; phaseHex = MagiAccent.Blue;
+            _bigAction = _vm.RunV6FullOptimize; _helperAction = _vm.GenerateSmartInitial;
+        }
+        else if (ui.BestHard == 0L)
+        {
+            bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
+            headline = "③ できました！ そのまま配れます。";
+            bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
+            phase = "完成"; phaseHex = MagiAccent.Green;
+            _bigAction = () => _ = _window.ExportScheduleCsvAsync(); _helperAction = () => _window.SelectTab("schedule");
+        }
+        else if (infeasible)
+        {
+            bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
+            headline = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
+            bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
+            phase = "狩猟"; phaseHex = MagiAccent.Orange;
+            _bigAction = () => _window.SelectTab("edit"); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+        }
+        else
+        {
+            bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
+            headline = "もう少しです。" + (worstDay is null ? $"必須違反が {ui.BestHard}件 残っています。" : $"{worstDay} が人手不足です。");
+            bigLabel = "なおすのを手伝って"; bigEnabled = shortfalls.Count > 0; helperLabel = null;
+            phase = "狩猟"; phaseHex = MagiAccent.Orange;
+            _bigAction = () => _window.SelectTab("schedule"); _helperAction = () => { };
+        }
+
+        NextActionCard.Background = BrushOf(bg);
+        var fgBrush = BrushOf(fg);
+        PhaseBadge.Visibility = phase.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (phase.Length > 0)
+        {
+            var phaseColor = ColorHex.Parse(phaseHex, Colors.Gray);
+            PhaseBadge.Background = new SolidColorBrush(phaseColor);
+            PhaseText.Text = phase;
+            PhaseText.Foreground = new SolidColorBrush(ReadableOn(phaseColor));
+        }
+        HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        HeadlineText.Text = headline;
+        HeadlineText.Foreground = fgBrush;
+
+        var remaining = ui.BestHard > 0L ? $"必須 残り{ui.BestHard}件"
+            : shortDays > 0 ? $"残り{shortDays}日"
+            : ui.BestSoft > 0L ? $"必須は解消・調整 {ui.BestSoft}件"
+            : "解消済み";
+        var showResolve = !ui.Running;
+        ResolveText.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
+        ResolveBar.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
+        ResolveText.Text = $"解消度：{ui.Satisfaction}%（{remaining}）";
+        ResolveText.Foreground = fgBrush;
+        ResolveBar.Value = System.Math.Clamp(ui.Satisfaction, 0, 100);
+        ResolveBar.Foreground = fgBrush;
+
+        var showDetail = !ui.Running && ui.HasResult;
+        DetailToggle.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
+        DetailToggle.Content = _detailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 解消度の意味";
+        DetailToggle.Foreground = fgBrush;
+        DetailText.Visibility = showDetail && _detailOpen ? Visibility.Visible : Visibility.Collapsed;
+        DetailText.Foreground = fgBrush;
+
+        BigButton.Visibility = bigEnabled ? Visibility.Visible : Visibility.Collapsed;
+        BigButton.Content = bigLabel;
+        BigButton.IsEnabled = editable;
+        HelperButton.Visibility = helperLabel is null ? Visibility.Collapsed : Visibility.Visible;
+        HelperButton.Content = helperLabel ?? "";
+        HelperButton.IsEnabled = editable;
+        RedraftLink.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
+        RedraftLink.Foreground = fgBrush;
+        RedraftLink.IsEnabled = editable;
+    }
+
+    /// <summary>
+    /// [phase9 #2] 「AIの解決提案」。Kotlin原本 <c>SmartActionCard</c>（3.480.0）＝分析タブと同じ改善提案の
+    /// 先頭候補を 1 ボタンで適用。必須違反が残る間だけ出し、盤面ごとに 1 回だけ自動で探す（盤面は変えない）。
+    /// </summary>
+    private void RenderSmartAction(UiState ui, bool editable)
+    {
+        if (ui.Running || !ui.HasResult || ui.BestHard <= 0L)
+        {
+            SmartActionCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var boardChanged = !ReferenceEquals(_autoFixBoard, ui.Schedule) || _autoFixHard != ui.BestHard;
+        if (boardChanged && !ui.FixSearching && (ui.FixSuggestions.Count == 0 || ui.FixFocusName.Length > 0))
+        {
+            _autoFixBoard = ui.Schedule;
+            _autoFixHard = ui.BestHard;
+            _vm.FindFixSuggestions();
+            return;
+        }
+        if (ui.FixFocusName.Length > 0 && !ui.FixSearching)
+        {
+            SmartActionCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+        SmartActionCard.Visibility = Visibility.Visible;
+        var top = ui.FixSuggestions.Count > 0 ? ui.FixSuggestions[0] : null;
+        if (ui.FixSearching)
+        {
+            SmartStatusText.Text = "いちばん効果のある直し方を探しています…";
+            SmartStatusText.Visibility = Visibility.Visible;
+            SmartTopPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (top is null)
+        {
+            SmartStatusText.Text = "1手で直せる候補は見つかりませんでした。下の詳細をご確認ください。";
+            SmartStatusText.Visibility = Visibility.Visible;
+            SmartTopPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        SmartStatusText.Visibility = Visibility.Collapsed;
+        SmartTopPanel.Visibility = Visibility.Visible;
+        var (tag, tagHex) = FixKindTag(top.Kind);
+        var tagColor = ColorHex.Parse(tagHex, Colors.Gray);
+        SmartKindBadge.Background = new SolidColorBrush(tagColor);
+        SmartKindText.Text = tag;
+        SmartKindText.Foreground = new SolidColorBrush(ReadableOn(tagColor));
+        SmartLabelText.Text = top.Label;
+        var diffTxt = string.Join("・", top.Diff.Select(d =>
+            (AnalysisView.BreakdownLabels.TryGetValue(d.Family, out var jp) ? jp : d.Family) + " " +
+            (d.Delta < 0 ? $"−{-d.Delta}" : $"+{d.Delta}")));
+        var totalTxt = top.DeltaTotal <= 0 ? $"−{-top.DeltaTotal}" : $"+{top.DeltaTotal}";
+        SmartDiffText.Text = $"違反 {totalTxt}" + (diffTxt.Length > 0 ? $"（{diffTxt}）" : "");
+        SmartApplyButton.IsEnabled = editable;
+        var more = ui.FixSuggestions.Count - 1;
+        SmartMoreText.Visibility = more > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SmartMoreText.Text = more > 0 ? $"ほかに {more} 案あります（分析タブで比較できます）。" : "";
+    }
+
+    /// <summary>Kotlin原本 <c>fixKindTag</c> と同じ手の種別ラベルと色。</summary>
+    private static (string, string) FixKindTag(FixKind k) => k switch
+    {
+        FixKind.Change => ("変更", MagiAccent.Green),
+        FixKind.ChangeMulti => ("複数変更", MagiAccent.Green),
+        FixKind.Swap => ("交換", MagiAccent.Blue),
+        FixKind.SwapXDay => ("別日交換", MagiAccent.Blue),
+        FixKind.SwapMulti => ("3人交換", MagiAccent.Purple),
+        FixKind.Chain => ("連鎖", MagiAccent.Red),
+        _ => ("再最適化", MagiAccent.Orange),
+    };
+
+    /// <summary>白文字のコントラストが 4.5:1 に届かない地色では黒文字にする（Kotlin原本 <c>ensureReadable</c>）。</summary>
+    private static Windows.UI.Color ReadableOn(Windows.UI.Color bg)
+    {
+        static double Lin(byte c) { var v = c / 255.0; return v <= 0.03928 ? v / 12.92 : System.Math.Pow((v + 0.055) / 1.055, 2.4); }
+        var lum = 0.2126 * Lin(bg.R) + 0.7152 * Lin(bg.G) + 0.0722 * Lin(bg.B);
+        return (1.05 / (lum + 0.05)) >= 4.5 ? Colors.White : Colors.Black;
+    }
+
+    private void OnDetailToggleClick(object sender, RoutedEventArgs e)
+    {
+        _detailOpen = !_detailOpen;
+        Render();
+    }
+
+    private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
+
+    private void OnHelperClick(object sender, RoutedEventArgs e) => _helperAction();
+
+    private void OnSmartApplyClick(object sender, RoutedEventArgs e)
+    {
+        var ui = _vm.Ui;
+        if (ui.FixSuggestions.Count > 0) _vm.ApplyFixSuggestion(ui.FixSuggestions[0]);
     }
 
     /// <summary>不足・過剰の各節に出す枠数の上限（Kotlin原本 CoverageDiagnosisCard の take(6) と同じ）。</summary>

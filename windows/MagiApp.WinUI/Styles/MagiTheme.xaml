@@ -48,6 +48,9 @@
     <Color x:Key="MagiErrorContainerColor">#FFFFDAD4</Color>
     <Color x:Key="MagiOnErrorContainerColor">#FF2D0001</Color>
     <Color x:Key="MagiOutlineColor">#FF000000</Color>
+    <!-- 警告（黄）: Kotlin原本 MagiTokens.kt の magiWarnColors（明テーマ側）。UD 固定なので暗側は持たない。 -->
+    <Color x:Key="MagiWarnContainerColor">#FFFBEAD0</Color>
+    <Color x:Key="MagiOnWarnContainerColor">#FF6B4E00</Color>
 
     <SolidColorBrush x:Key="MagiPrimaryBrush" Color="{StaticResource MagiPrimaryColor}" />
     <SolidColorBrush x:Key="MagiOnPrimaryBrush" Color="{StaticResource MagiOnPrimaryColor}" />
@@ -62,6 +65,12 @@
     <SolidColorBrush x:Key="MagiErrorBrush" Color="{StaticResource MagiErrorColor}" />
     <SolidColorBrush x:Key="MagiErrorContainerBrush" Color="{StaticResource MagiErrorContainerColor}" />
     <SolidColorBrush x:Key="MagiOutlineBrush" Color="{StaticResource MagiOutlineColor}" />
+    <SolidColorBrush x:Key="MagiOnPrimaryContainerBrush" Color="{StaticResource MagiOnPrimaryContainerColor}" />
+    <SolidColorBrush x:Key="MagiOnSecondaryContainerBrush" Color="{StaticResource MagiOnSecondaryContainerColor}" />
+    <SolidColorBrush x:Key="MagiOnTertiaryContainerBrush" Color="{StaticResource MagiOnTertiaryContainerColor}" />
+    <SolidColorBrush x:Key="MagiOnErrorContainerBrush" Color="{StaticResource MagiOnErrorContainerColor}" />
+    <SolidColorBrush x:Key="MagiWarnContainerBrush" Color="{StaticResource MagiWarnContainerColor}" />
+    <SolidColorBrush x:Key="MagiOnWarnContainerBrush" Color="{StaticResource MagiOnWarnContainerColor}" />
 
     <!-- ===== WinUI3 既定スタイルへの適用（クラスコメント「Light1-3/Dark1-3」参照） ===== -->
     <Color x:Key="SystemAccentColor">#FF00504A</Color>

@@ -7,8 +7,8 @@
 
 | # | 画面 | 機能 | Android 原本（正） | WinUI 置き場 | 仕様 | 実装 | CI | メモ |
 |---|---|---|---|---|---|---|---|---|
-| 1 | ホーム | 人員過剰の「希望固定N人」を名指しして、その場で希望を取り消す（3.492.0） | `MagiDashboardCards.kt` `CoverageDiagnosisCard`（`CoverageSurplus.pinnedStaff`, `vm.removeWish`） | `HomeView` | 済 | 済 | 未 | README「WinUI 側の表示はフェーズ9の残作業」→ `HomeView.RenderCoverage` |
-| 2 | ホーム | 処方箋カード＝次の一手を1つ提示・できあがり度・重複ボタン排除（3.480.0） | `MagiDashboardCards.kt` `OperatorNextActionCard`/`SmartActionCard`, `MagiViewModel` の完成度計算 | `HomeView` | 未 | 未 | 未 | |
+| 1 | ホーム | 人員過剰の「希望固定N人」を名指しして、その場で希望を取り消す（3.492.0） | `MagiDashboardCards.kt` `CoverageDiagnosisCard`（`CoverageSurplus.pinnedStaff`, `vm.removeWish`） | `HomeView` | 済 | 済 | 緑 | README「WinUI 側の表示はフェーズ9の残作業」→ `HomeView.RenderCoverage`（run 33995356094） |
+| 2 | ホーム | 処方箋カード＝次の一手を1つ提示・できあがり度・重複ボタン排除（3.480.0） | `MagiDashboardCards.kt` `OperatorNextActionCard`/`SmartActionCard`, `MagiViewModel` の完成度計算 | `HomeView` | 済 | 済 | 未 | `HomeView.RenderNextAction`/`RenderSmartAction`。書き出しは設定タブのピッカーへ委譲、「なおすのを手伝って」は勤務表タブへ（#24 まで） |
 | 3 | ホーム | 実行中の進捗（改善%・残り時間・回数・HARD残） | `MagiScheduleViews.kt` `progressSummary`/`LiveScheduleCard` | `HomeView` | 未 | 未 | 未 | |
 | 4 | ホーム | コパイロット（HARD 族の要約と導線） | `MagiDashboardCards.kt` `CopilotCard` | `HomeView` | 未 | 未 | 未 | |
 | 5 | ホーム | データ無し時の導線（空状態・セットアップ案内） | `MagiApp.kt` `EmptyStateCard`, `MagiSetupCards.kt` `SetupGuideCard` | `HomeView` | 未 | 未 | 未 | |

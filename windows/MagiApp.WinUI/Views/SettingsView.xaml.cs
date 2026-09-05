@@ -391,7 +391,10 @@ public sealed partial class SettingsView : UserControl
     }
 
     /// <summary>[2026-09-02] OnSaveDataClick と同じ理由。</summary>
-    private async void OnExportCsvClick(object sender, RoutedEventArgs e)
+    private async void OnExportCsvClick(object sender, RoutedEventArgs e) => await ExportCsvAsync();
+
+    /// <summary>勤務表CSVの書き出し。ホームの処方箋カード「印刷・書き出し」からも呼ばれる（phase9 #2）。</summary>
+    internal async Task ExportCsvAsync()
     {
         var csv = _vm.ExportCsv();
         if (csv is null) return;
