@@ -547,6 +547,33 @@ public sealed partial class MagiViewModel
         ApplyStructure(stNew);
     }
 
+    /// <summary>[3.506.0 同期] 「グループ単位の回数」で両方空欄を適用＝グループ全員の (i,k) 個人上下限を値に関係なく解除し、群の適切回数も空にする
+    /// （サマリの解除は同一レンジのメンバーしか消せない。経緯は README「レビュー対応の記録」2026-09-06）。</summary>
+    public void ClearGroupRangeAll(int g, int k)
+    {
+        var st0 = _state;
+        if (st0 is null) return;
+        var members = Enumerable.Range(0, st0.StaffList.Count).Where(i => st0.StaffList[i].GroupIdx == g).ToList();
+        if (members.Count == 0) return;
+        var m = new Dictionary<string, MagiEngine.Model.Range>(st0.StaffRange);
+        var cleared = 0;
+        foreach (var i in members) if (m.Remove($"{i},{k}")) cleared++;
+        var gname = g < st0.Groups.Count ? st0.Groups[g].Name : $"#{g}";
+        if (cleared == 0) { Notify($"{gname}「{OpSy(k)}」に解除する個人上下限はありません"); return; }
+        var stNew = Ws1Ops.SetGroupApt(st0 with { StaffRange = m }, g, k, "");
+        Notify($"{gname}「{OpSy(k)}」の個人上下限を全員ぶん「なし」にしました（{cleared}名ぶん・「元に戻す」で戻せます）");
+        ApplyStructure(stNew);
+    }
+
+    /// <summary>グループ g のメンバーのうち (i,k) に個人上下限（非空）を持つ人数。「なし」適用の可否と件数表示に使う。</summary>
+    public int GroupRangeMemberCount(int g, int k)
+    {
+        var st = _state;
+        if (st is null) return 0;
+        return Enumerable.Range(0, st.StaffList.Count).Count(i => st.StaffList[i].GroupIdx == g
+            && st.StaffRange.TryGetValue($"{i},{k}", out var r) && (r.Lo.Trim().Length > 0 || r.Hi.Trim().Length > 0));
+    }
+
     /// <summary>[共有ws5・スキップ方式] グループ既定の解除: 表示中レンジ(lo,hi)と一致するメンバーのws5だけ削除する。
     /// 個人で別値にした職員(レンジが違う)は保持する。サマリの×から呼ぶ。</summary>
     public void ClearGroupRange(int g, int k, string lo, string hi)

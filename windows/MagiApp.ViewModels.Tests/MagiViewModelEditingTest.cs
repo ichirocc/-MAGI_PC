@@ -845,6 +845,35 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void ClearGroupRangeAllRemovesEveryMemberRangeRegardlessOfValueAndClearsApt()
+    {
+        var st = MinimalState.Build(
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            staffList: new List<Staff> { new("職員1", 0), new("職員2", 0), new("職員3", 1) },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("2", "4"), ["1,1"] = new("", "1"), ["2,1"] = new("3", "3") },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "3" }, new List<string> { "", "" } });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.ClearGroupRangeAll(0, 1);
+
+        Assert.Equal(new[] { "2,1" }, vm._state!.StaffRange.Keys.OrderBy(x => x)); // 別グループの個人値は残る
+        Assert.Equal("", vm._state!.GroupShiftApt[0][1]);
+    }
+
+    [Fact]
+    public void GroupRangeMemberCountCountsOnlyMembersWithANonBlankRange()
+    {
+        var st = MinimalState.Build(
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            staffList: new List<Staff> { new("職員1", 0), new("職員2", 0), new("職員3", 1) },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("2", "4"), ["1,1"] = new(" ", ""), ["2,1"] = new("3", "3") });
+        var vm = new MagiViewModel { _state = st };
+
+        Assert.Equal(1, vm.GroupRangeMemberCount(0, 1));
+        Assert.Equal(0, vm.GroupRangeMemberCount(0, 0));
+    }
+
+    [Fact]
     public void SetGroupRangeIsANoOpForAGroupWithNoMembers()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };

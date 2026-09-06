@@ -1023,7 +1023,11 @@ public sealed partial class EditView : UserControl
         if (k < 0) { GroupRangeHintText.Text = "シフトを選んでください。"; return; }
         if (GroupRangeLoBox.Text.Trim().Length == 0 && GroupRangeHiBox.Text.Trim().Length == 0)
         {
-            GroupRangeHintText.Text = "下限・上限のどちらかは入れてください。";
+            // [3.506.0 同期] 両方空欄＝グループ全員ぶんの個人上下限を解除（解除対象が無ければ案内のみ）。
+            var n = _vm.GroupRangeMemberCount(g, k);
+            if (n == 0) { GroupRangeHintText.Text = "下限・上限のどちらかは入れてください（解除する個人上下限もありません）。"; return; }
+            _vm.ClearGroupRangeAll(g, k);
+            GroupRangeHintText.Text = "";
             return;
         }
         _vm.SetGroupRange(g, k, GroupRangeLoBox.Text.Trim(), GroupRangeHiBox.Text.Trim());

@@ -274,7 +274,7 @@
 
                 <TextBlock Text="グループ単位の回数（一括設定）" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
-                           Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限ならそのシフトの適切回数(apt)も同時に設定されます。" />
+                           Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限ならそのシフトの適切回数(apt)も同時に設定されます。両方空欄で一括設定すると全員ぶんの個人上下限を解除します。" />
                 <StackPanel x:Name="GroupRangeListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="GroupRangeGroupCombo" Width="120" PlaceholderText="グループ" />

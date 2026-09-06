@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 「グループ単位の回数」で下限・上限とも空欄を「全員ぶん解除」として受け付ける（Android 3.506.0 同期・実機報告「なし 設定出来ない」）:
+  `MagiViewModel.ClearGroupRangeAll(g,k)`（メンバー全員の個人上下限を値に関係なく削除し群 apt を空、件数つき通知）と
+  `GroupRangeMemberCount(g,k)` を追加。`EditView` の「一括設定」は両方空欄なら解除へ振り分け（対象 0 件は案内のみ）。
+  `SetGroupRange` の両方空欄 no-op は不変。テスト 2 本追加（ViewModels 429 本緑）。
+
 - 2026-09-06 CLAUDE.md を Windows 版向けに書き直し（Android 3.505.9 と同じ方針＝Claude 5 世代向けの見直し）: 旧 CLAUDE.md は移植時点の
   Android 版の写し（11,938 行・1.4MB・368 節、Windows の記述なし）だったので `docs/archive/android_claude_md_snapshot.md` へ移し、
   新しい CLAUDE.md は 5 節・約 50 行（環境の注意点: Linux でビルドできる範囲・.NET のパス・絶対パス・comment-check／判断の基準:
