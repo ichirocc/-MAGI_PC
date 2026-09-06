@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.503.0 と同時（自律レビュー第4段）: `V6PortAnalyzer.Coverage.cs` の `DiagnoseCoverage` を `DiagnoseShortfalls`／`BuildRelaxations`／
+  `DiagnoseSurpluses` に分割、`Probe`（ChainSeeds=8・SurplusProbeBudget=240・AdjacentSeed=7・MinRelaxCandidates=2。値は不変）と共有 `ChainFills`、
+  `Overview.cs` の `SpreadTerm`／`ParseKeyPair`。出力は不変（Android 側の同値検証 24/24 一致）。MagiEngine.Tests で確認。
+
 - 2026-09-06 Android 3.502.0 と同時: ビーム `ExpandNode` を「列挙順の先頭 limit 件」から「limit×2 件を走査して良い順に limit 件保持」へ
   （バックログ #9(c)。Android の計測は希望島単体 12 条件・後処理全体 4 件とも不変＝中立）。族名 c1 を Android の下流語彙「期間の制約」に統一
   （`AnalysisView.BreakdownLabels`・編集タブの族見出し「期間の制約（○日間で○回など）」・`AnalysisTriageTest`）。#9(d)（担当外希望の再判定）と

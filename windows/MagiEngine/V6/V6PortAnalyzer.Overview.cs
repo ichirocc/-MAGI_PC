@@ -294,18 +294,7 @@ public static partial class V6PortAnalyzer
                 }
                 else
                 {
-                    var sum = 0;
-                    foreach (var i in mem) sum += counts[i][k];
-                    var mean = sum / (double)mem.Count;
-                    var varSum = 0.0;
-                    var maxDev = 0.0;
-                    foreach (var i in mem)
-                    {
-                        var d = counts[i][k] - mean;
-                        varSum += d * d;
-                        maxDev = Math.Max(maxDev, Math.Abs(d));
-                    }
-                    raw += varSum + maxDev * 2.0;
+                    raw += SpreadTerm(mem, i => counts[i][k]);
                 }
             }
         }
@@ -337,18 +326,7 @@ public static partial class V6PortAnalyzer
                 {
                     var gsK = k < gs.Count ? gs[k] : (int?)null;
                     if (gsK != 1) continue;
-                    var sum = 0;
-                    foreach (var i in mem) sum += dowCnt[i][dow][k];
-                    var mean = sum / (double)mem.Count;
-                    var varSum = 0.0;
-                    var maxDev = 0.0;
-                    foreach (var i in mem)
-                    {
-                        var d = dowCnt[i][dow][k] - mean;
-                        varSum += d * d;
-                        maxDev = Math.Max(maxDev, Math.Abs(d));
-                    }
-                    raw += varSum + maxDev * 2.0;
+                    raw += SpreadTerm(mem, i => dowCnt[i][dow][k]);
                 }
             }
         }
@@ -370,6 +348,30 @@ public static partial class V6PortAnalyzer
     }
 
     /// <summary>Faithful port of Kotlin's <c>private fun sanityWarnings(...)</c>.</summary>
+    /// <summary>群メンバー間の散らばり: 平均からの二乗偏差和＋最大絶対偏差×2（V6 equalization の項。[Android 3.503.0] 2 か所の複製を統合）。</summary>
+    private static double SpreadTerm(List<int> mem, Func<int, int> value)
+    {
+        var sum = 0;
+        foreach (var i in mem) sum += value(i);
+        var mean = sum / (double)mem.Count;
+        var varSum = 0.0;
+        var maxDev = 0.0;
+        foreach (var i in mem)
+        {
+            var d = value(i) - mean;
+            varSum += d * d;
+            maxDev = Math.Max(maxDev, Math.Abs(d));
+        }
+        return varSum + maxDev * 2.0;
+    }
+
+    /// <summary>"i,j" 形式のキーを 2 つの int? に分解する（欠け・非数は null。[Android 3.503.0] wishes/staffRange の重複を統合）。</summary>
+    private static (int? A, int? B) ParseKeyPair(string key)
+    {
+        var parts = key.Split(',');
+        return (parts.Length > 0 ? KotlinInterop.ToIntOrNull(parts[0]) : null, parts.Length > 1 ? KotlinInterop.ToIntOrNull(parts[1]) : null);
+    }
+
     private static IReadOnlyList<string> SanityWarnings(MagiState state, Problem p, int[][] schedule)
     {
         var warns = new List<string>();
@@ -387,9 +389,7 @@ public static partial class V6PortAnalyzer
         var badWish = 0;
         foreach (var (key, k) in state.Wishes)
         {
-            var parts = key.Split(',');
-            var i = parts.Length > 0 ? KotlinInterop.ToIntOrNull(parts[0]) : null;
-            var j = parts.Length > 1 ? KotlinInterop.ToIntOrNull(parts[1]) : null;
+            var (i, j) = ParseKeyPair(key);
             if (i is null || j is null || i.Value < 0 || i.Value >= p.S
                 || j.Value < 0 || j.Value >= p.T || k < 0 || k >= p.K)
             {
@@ -405,9 +405,7 @@ public static partial class V6PortAnalyzer
         var badRange = 0;
         foreach (var (key, r) in state.StaffRange)
         {
-            var parts = key.Split(',');
-            var i = parts.Length > 0 ? KotlinInterop.ToIntOrNull(parts[0]) : null;
-            var k = parts.Length > 1 ? KotlinInterop.ToIntOrNull(parts[1]) : null;
+            var (i, k) = ParseKeyPair(key);
             var lo = KotlinInterop.ToIntOrNull(r.Lo.Trim());
             var hi = KotlinInterop.ToIntOrNull(r.Hi.Trim());
             if (i is null || k is null || i.Value < 0 || i.Value >= p.S || k.Value < 0 || k.Value >= p.K) badRange++;

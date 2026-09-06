@@ -232,8 +232,7 @@ public static partial class V6PortAnalyzer
         // 離脱で (cur, j) に covU 穴が空くか。空くなら FindCovUChain（探索本体と同一関数）で埋まるか実証する。
         var cnt = cur >= 0 && cur < p.K ? cov[j][cur] : 0;
         var departureHole = cur >= 0 && cur < p.K && p.CovUCell(cur, j, cnt - 1) > p.CovUCell(cur, j, cnt);
-        bool ChainFills(int[][] board) => Enumerable.Range(0, 8)
-            .Any(seed => V6SearchOperators.FindCovUChain(p, board, cur, j, new JavaRandom(seed), exclude: i) is not null);
+        bool ChainFills(int[][] board) => V6PortAnalyzer.ChainFills(p, board, cur, j, exclude: i);
 
         var c3nBlocked = 0;
         var noReceiver = 0;
@@ -278,7 +277,7 @@ public static partial class V6PortAnalyzer
                 if (adjOk == null && chainOk == null)
                 {
                     var tmp = norm.Copy2D();
-                    var extra = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, tmp, i, j, m, new JavaRandom(7L));
+                    var extra = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, tmp, i, j, m, new JavaRandom(Probe.AdjacentSeed));
                     if (extra != null)
                     {
                         // 隣接日の手＋本セルの変更を適用し、本セルの離脱穴が残るなら連鎖で埋まるかまで確認。

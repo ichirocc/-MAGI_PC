@@ -124,11 +124,29 @@ public sealed record CoverageDiagnosis(
 public static partial class V6PortAnalyzer
 {
     /// <summary>
+    /// [Android 3.503.0] 診断が探索本体の関数を「実際に試す」ときの回数・予算。値は従来どおり（HF77: 変えていない）。
+    /// 8 seed は rng 順に依存する網羅性の揺らぎを吸収する数（実データ 200 seed 総当たりと一致した最小の実用値、3.263.0）。
+    /// 過剰プローブ 240 は checker 約 72µs で数 ms に収まる上限。
+    /// </summary>
+    private static class Probe
+    {
+        public const int ChainSeeds = 8;
+        public const int SurplusProbeBudget = 240;
+        public const long AdjacentSeed = 7L;
+        public const int MinRelaxCandidates = 2;
+    }
+
+    /// <summary><c>FindCovUChain</c>（探索本体と同一関数）を <see cref="Probe.ChainSeeds"/> 通りの rng 順で試し、1 つでも成立すれば真。</summary>
+    private static bool ChainFills(Problem p, int[][] board, int k, int j, int exclude = -1) =>
+        Enumerable.Range(0, Probe.ChainSeeds).Any(seed => V6SearchOperators.FindCovUChain(p, board, k, j, new JavaRandom(seed), exclude: exclude) is not null);
+
+    /// <summary>
     /// 人員不足(covU)の枠ごとの原因診断。エンジンは変更せず、現在の解だけを読み取り、
     /// 各不足枠について「担当可能な職員の最大数(capacity)」を数え、必要数に届くかで判定する。
     ///  - capacity &lt; need → Infeasible（どう割り当ててもこの枠は埋まらない＝データ上充足不可）
     ///  - capacity &gt;= need → Fixable（枠は足りる。他シフトに就いている人を移せば理論上は解消し得るが、
     ///    並び/回数などの制約に阻まれ最適化が未到達）
+    /// [Android 3.503.0] 不足（<see cref="DiagnoseShortfalls"/>）・緩和案（<see cref="BuildRelaxations"/>）・過剰（<see cref="DiagnoseSurpluses"/>）に分割。出力は不変。
     /// </summary>
     public static CoverageDiagnosis DiagnoseCoverage(
         MagiState state,
@@ -140,7 +158,15 @@ public static partial class V6PortAnalyzer
         var p = ScheduleUtil.CachedProblem(state);
         var norm = ScheduleUtil.NormalizeSchedule(sched, p);
         var cov = ScheduleUtil.Coverage(p, norm);
+        var (list, total, infeasible, fixable) = DiagnoseShortfalls(state, p, norm, cov);
+        var relaxations = BuildRelaxations(state, p, norm, list);
+        var (surplusList, totalSurplus) = DiagnoseSurpluses(state, p, norm, cov, rep);
+        return new CoverageDiagnosis(total, infeasible, fixable, list, relaxations, totalSurplus, surplusList);
+    }
 
+    /// <summary>不足枠ごとに capacity と「なぜ今動かせないか」の 5 分類（在勤/空き番/玉突き/希望固定/禁止連続）。Infeasible→miss 降順。</summary>
+    private static (List<CoverageShortfall> List, int Total, int Infeasible, int Fixable) DiagnoseShortfalls(MagiState state, Problem p, int[][] norm, int[][] cov)
+    {
         // [なぜ埋まらないか / 三連・五連など任意長対応] 職員 i を日 j にシフト newK へ動かすと
         //   禁止連続(c3n)を作るか。Problem.MakesForbiddenRun が任意長ルールを一般判定する。
         bool C3nAt(int i, int j, int newK) => p.MakesForbiddenRun(norm, i, j, newK);
@@ -191,7 +217,9 @@ public static partial class V6PortAnalyzer
                     //   玉突き=引くと別のcovU / 希望固定=本人の希望で固定 / 禁止連続=移すと c3n。読取専用・スコア不変。
                     //   [敵対的レビュー修正] already を明示計上し free+cascade+pinned+forbid+already==capacity を
                     //   保証（旧: already を素通り=capacity と内訳合計が一致せず表示が混乱を招いた）。
-                    var already = 0; var free = 0; var cascade = 0; var pinned = 0; var forbid = 0;
+                    // 「希望固定」は上の事前フィルタ（別シフトへの実現可能な希望＝capacity 対象外）で既に除外済み＝ここでは常に 0。
+                    const int pinned = 0;
+                    var already = 0; var free = 0; var cascade = 0; var forbid = 0;
                     for (var i = 0; i < p.S; i++)
                     {
                         if (!p.CanDo(i, k)) continue;
@@ -199,12 +227,6 @@ public static partial class V6PortAnalyzer
                         // [3.391.0] 上の capacity と同じ事前フィルタ＝同じ条件に揃える（WishLocked）。
                         if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;   // 実現可能な希望が別シフト=capacity 対象外
                         if (m == k) { already++; continue; }                    // 既にこのシフト=移す対象でない
-                        // [監査(未レビュー領域再監査) 実バグ修正] p.WishLocked(i,j) は「希望が設定されている」の
-                        //   意味だが、上の事前フィルタで w!=k の候補は既に除外済み＝ここに残る WishLocked==true は
-                        //   必ず wish==k（=まさにこのシフトへの希望）。希望と移動先が一致する候補を「固定されて
-                        //   いて動かせない」と分類するのは意味が逆転している（むしろ動かすと希望未充足(pref)も
-                        //   同時に解消できる最良の候補）。他シフトへの希望固定は既に対象外なので、本関数では
-                        //   「希望固定」で除外すべき候補は存在せず、free/cascade判定へ委ねる。
                         if (C3nAt(i, j, k)) { forbid++; continue; }
                         // m から1人引くと covU が増える=玉突き（多人数入替=連鎖でしか解けない）。
                         if (m is >= 0 && m < p.K && p.CovUCell(m, j, cov[j][m] - 1) > p.CovUCell(m, j, cov[j][m]))
@@ -223,8 +245,7 @@ public static partial class V6PortAnalyzer
                     // 案内を出し分ける。複数seedを試すのは、rng順（候補の並べ替え）に依存する
                     // 網羅性の揺らぎを吸収し安定した判定にするため（実データで200 seed総当たりし
                     // 全て不成立だった局面を確認済み・8 seedは診断呼出コストとのバランス）。
-                    var chainVerified = cascade > 0 && Enumerable.Range(0, 8)
-                        .Any(seed => V6SearchOperators.FindCovUChain(p, norm, k, j, new JavaRandom(seed)) is not null);
+                    var chainVerified = cascade > 0 && ChainFills(p, norm, k, j);
                     blockedNow = free == 0 && !(cascade > 0 && chainVerified);
                     string hint;
                     if (free > 0)
@@ -248,18 +269,23 @@ public static partial class V6PortAnalyzer
             .ThenByDescending(s => s.Miss)
             .ToList();
 
-        // [緩和案/IIS] 構造的に充足不可なシフトについて、担当追加(クロストレーニング)で解ける見込みを提示する。
-        //   候補は未活用(需要のあるシフトへの稼働が少ない)職員を優先。これは担当追加の「提案」であって
-        //   データは一切変更しない（採否は業務担当者が判断）。HF77準拠。
+        return (list, total, infeasible, fixable);
+    }
+
+    /// <summary>
+    /// [緩和案/IIS] 構造的に充足不可なシフトについて、担当追加(クロストレーニング)で解ける見込みを提示する。
+    /// 候補は未活用(需要のあるシフトへの稼働が少ない)職員を優先。これは担当追加の「提案」であってデータは一切変更しない（採否は業務担当者が判断）。HF77準拠。
+    /// </summary>
+    private static List<string> BuildRelaxations(MagiState state, Problem p, int[][] norm, List<CoverageShortfall> shortfalls)
+    {
         var relaxations = new List<string>();
-        {
             // [同根修正] need1 単独判定だと need2 単独定義シフトの需要を見落とす（上の miss 計算と同じ穴）。
             var demandShifts = Enumerable.Range(0, p.K)
                 .Where(kk => Enumerable.Range(0, p.T).Any(jj => p.Need1[kk][jj] > 0 || (p.Use2 && p.Need2[kk][jj] > 0)))
                 .ToHashSet();
             int DemandLoad(int i) => Enumerable.Range(0, p.T).Count(jj => demandShifts.Contains(norm[i][jj]));
 
-            var infeasByShift = list.Where(s => s.Verdict == CoverageVerdict.Infeasible)
+            var infeasByShift = shortfalls.Where(s => s.Verdict == CoverageVerdict.Infeasible)
                 .GroupBy(s => s.ShiftIndex)
                 .Select(g => (Shift: g.Key, PeakMiss: g.Max(s => s.Miss)))
                 .OrderByDescending(x => x.PeakMiss);
@@ -270,7 +296,7 @@ public static partial class V6PortAnalyzer
                 var cands = Enumerable.Range(0, p.S)
                     .Where(i => !p.CanDo(i, k))
                     .OrderBy(DemandLoad)
-                    .Take(Math.Max(peakMiss + 1, 2))
+                    .Take(Math.Max(peakMiss + 1, Probe.MinRelaxCandidates))
                     .Select(i => i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}")
                     .ToList();
                 if (cands.Count > 0)
@@ -278,19 +304,23 @@ public static partial class V6PortAnalyzer
                     relaxations.Add($"「{sym}」は担当可能者が不足（ピーク不足{peakMiss}人）。{sym} を {string.Join("・", cands)}（稼働が少なめ）に担当追加すると解消に近づきます");
                 }
             }
-        }
+        return relaxations;
+    }
 
-        // [人員過剰(covO)の「なぜ減らないか」診断] covU診断(空き番/玉突き/希望固定/禁止連続)の対。
-        //   在勤者を他シフトへ動かせば消えるはずの過剰が、なぜ最適化で解消されないかを枠ごとに示す。
-        //   covO は全19族中もっとも軽い(重み1.0)ため、動かした先で他の族が1点でも悪化すると
-        //   isBetter に負けて採用されない＝件数自体は「動かせるか」の構造診断であり、
-        //   「動かせるのに動いていない」ことの説明にはならない点に注意（読取専用・スコア不変）。
+    /// <summary>
+    /// [人員過剰(covO)の「なぜ減らないか」診断] covU診断(空き番/玉突き/希望固定/禁止連続)の対。在勤者を他シフトへ動かせば消えるはずの過剰が、
+    /// なぜ最適化で解消されないかを枠ごとに示す。covO は全19族中もっとも軽い(重み1.0)ため、動かした先で他の族が1点でも悪化すると isBetter に負ける
+    /// ＝件数自体は「動かせるか」の構造診断であり「動かせるのに動いていない」ことの説明にはならない。[3.406.0] だから同じ目的関数で実際に 1 手試してから言う。
+    /// </summary>
+    private static (List<CoverageSurplus> List, int Total) DiagnoseSurpluses(MagiState state, Problem p, int[][] norm, int[][] cov, ViolationReport report)
+    {
+        bool C3nAt(int i, int j, int newK) => p.MakesForbiddenRun(norm, i, j, newK);
         var surplusList = new List<CoverageSurplus>();
         var totalSurplus = 0;
         // [3.406.0] 「動かせる」を目的関数で実際に試すための作業盤面と予算。checker は約72µs(3.395.0)なので
         //   実データ規模（過剰11枠×候補数人）なら数msに収まるが、上限を切って UI の再チェックを重くしない。
         var probe = norm.Copy2D();
-        var probeBudget = 240;
+        var probeBudget = Probe.SurplusProbeBudget;
         for (var j = 0; j < p.T; j++)
         {
             for (var k = 0; k < p.K; k++)
@@ -343,8 +373,8 @@ public static partial class V6PortAnalyzer
                             probe[i][j] = m;
                             var after = UnifiedViolationChecker.Check(state, probe);
                             probe[i][j] = k;
-                            if (UnifiedViolationChecker.BetterReport(after, rep)) { freeImproving++; break; }
-                            var worst = V6SearchOperators.WorstWorsenedFamily(after, rep);
+                            if (UnifiedViolationChecker.BetterReport(after, report)) { freeImproving++; break; }
+                            var worst = V6SearchOperators.WorstWorsenedFamily(after, report);
                             if (worst is not null) famHits[worst] = famHits.GetValueOrDefault(worst) + 1;
                         }
                     }
@@ -381,7 +411,7 @@ public static partial class V6PortAnalyzer
         }
         surplusList = surplusList.OrderByDescending(s => s.Excess).ToList();
 
-        return new CoverageDiagnosis(total, infeasible, fixable, list, relaxations, totalSurplus, surplusList);
+        return (surplusList, totalSurplus);
     }
 
     /// <summary>
