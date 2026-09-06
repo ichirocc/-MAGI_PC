@@ -60,6 +60,7 @@ public sealed partial class SettingsView : UserControl
         _vm = vm;
         _window = window;
         InitializeComponent();
+        RenderWeightTable();
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -134,6 +135,39 @@ public sealed partial class SettingsView : UserControl
     // ===== 表示色（クラスKDoc参照。RenderのXAML静的化が難しい可変長リスト2種） =====
 
     /// <summary>シフト記号の表示色。行=シフト1件、既定パレット色との差＝<c>Custom</c> が「既定に戻す」の有効/無効。</summary>
+    /// <summary>
+    /// [phase9 #22] 重み表（Kotlin原本 <c>WeightTableCard</c>、3.396.0 の文言）。<see cref="MirrorKeys.Weights"/> をそのまま重い順に描く＝
+    /// 表示と最適化器が常に一致（複製しない）。1000 以上を「絶対に守る」、未満を「できれば守る」。英字符号（HARD/SOFT）は出さない。
+    /// 定数なので起動時に 1 回だけ組む。
+    /// </summary>
+    private void RenderWeightTable()
+    {
+        static string Fmt(double w) => w == System.Math.Floor(w) ? ((long)w).ToString() : w.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        WeightTableHost.Children.Clear();
+        var sorted = MirrorKeys.Weights.OrderByDescending(kv => kv.Weight).ToList();
+        void Section(string title, IEnumerable<(string Key, double Weight)> rows, bool hard)
+        {
+            WeightTableHost.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+            foreach (var (key, w) in rows)
+            {
+                var line = new Grid { ColumnSpacing = 8 };
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var label = new TextBlock { Text = AnalysisView.BreakdownLabels.TryGetValue(key, out var jp) ? jp : key, FontSize = 13 };
+                var weight = new TextBlock
+                {
+                    Text = "×" + Fmt(w), FontSize = 13, FontFamily = new FontFamily("Consolas"),
+                    Foreground = hard ? (Brush)Application.Current.Resources["MagiErrorBrush"] : (Brush)Application.Current.Resources["MagiOnBackgroundBrush"],
+                };
+                Grid.SetColumn(label, 0); Grid.SetColumn(weight, 1);
+                line.Children.Add(label); line.Children.Add(weight);
+                WeightTableHost.Children.Add(line);
+            }
+        }
+        Section("絶対に守る", sorted.Where(kv => kv.Weight >= 1000.0), hard: true);
+        Section("できれば守る", sorted.Where(kv => kv.Weight < 1000.0), hard: false);
+    }
+
     private void RenderShiftColors(UiState ui)
     {
         ShiftColorList.Children.Clear();

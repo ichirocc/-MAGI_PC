@@ -61,6 +61,11 @@
             <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
 
+            <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
+            <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
+            <TextBlock Text="上にあるものから先に直します。" FontSize="13" Opacity="0.8" />
+            <StackPanel x:Name="WeightTableHost" Spacing="2" MaxWidth="420" HorizontalAlignment="Left" />
+
             <TextBlock Text="表示色" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <TextBlock TextWrapping="Wrap" FontSize="13" Opacity="0.8"
                        Text="シフトの記号色・違反枠の色を変更できます。「既定に戻す」で手動設定を消して既定色へ戻ります。" />
