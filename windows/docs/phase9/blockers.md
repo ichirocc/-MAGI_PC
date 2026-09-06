@@ -12,6 +12,7 @@
 - 論点: 「なおすのを手伝って」の飛び先。Android は人員不足の代用要員ピッカー（GuidedFixDialog＝#24）。
   採った案: 同じ機能を既に持つ勤務表タブ（日別集計の人員不足セル→候補フライアウト）へ `SelectTab("schedule")`。
   却下: 分析タブへ送る（改善提案は直下の「AIの解決提案」と重複）。後から変える手間: #24 実装時に `_bigAction` を 1 行差し替え。
+  **解消（#24）**: `_bigAction` を `ShowGuidedFixAsync` へ差し替えた。
 - 論点: 「印刷・書き出し」。Android は CSV 書き出し。WinUI のピッカーは設定タブにしか無いので `MainWindow.ExportScheduleCsvAsync` で委譲
   （設定タブを裏で生成）。印刷は WinUI に無い（気づき: 印刷機能は queue 外）。
 

@@ -127,7 +127,7 @@ public sealed partial class HomeView : UserControl
             headline = "もう少しです。" + (worstDay is null ? $"必須違反が {ui.BestHard}件 残っています。" : $"{worstDay} が人手不足です。");
             bigLabel = "なおすのを手伝って"; bigEnabled = shortfalls.Count > 0; helperLabel = null;
             phase = "狩猟"; phaseHex = MagiAccent.Orange;
-            _bigAction = () => _window.SelectTab("schedule"); _helperAction = () => { };
+            _bigAction = () => _ = ShowGuidedFixAsync(); _helperAction = () => { };
         }
 
         NextActionCard.Background = BrushOf(bg);
@@ -353,6 +353,96 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
+
+    /// <summary>
+    /// [phase9 #24] 「なおすのを手伝って」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。人員不足の枠を 1 つ選び、
+    /// 動かせる候補（<see cref="MagiViewModel.ShortageFixCandidates"/>）を大ボタンで並べて 1 タップで割り当てる。
+    /// 対象は Fixable かつ miss&gt;0 かつ <b>BlockedNow でない</b>枠だけ（BlockedNow は「いまの希望のままでは埋まらない」と
+    /// 同じ画面の診断が言っている枠＝ここで「動かせる人がいます」と言うと矛盾する）。対象が無くても BlockedNow／Infeasible が
+    /// 残っていれば「直し終わりました」とは言わない。1 回押したら再検査が盤面に追いつくまで全候補を無効化する
+    /// （押す前の盤面で「抜けても穴が空かない」と判定した候補を連打すると covO と covU を同時に作れる）。
+    /// ボタンは常に「閉じる」だけ（「もう一度つくる」は下部バーに一本化）。
+    /// </summary>
+    private async System.Threading.Tasks.Task ShowGuidedFixAsync()
+    {
+        var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
+            CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
+        };
+        var pending = false;
+        void Rebuild()
+        {
+            pending = false;
+            panel.Children.Clear();
+            var ui = _vm.Ui;
+            var shortfalls = ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>();
+            var target = shortfalls.FirstOrDefault(sf => sf.Verdict == CoverageVerdict.Fixable && sf.Miss > 0 && !sf.BlockedNow);
+            var blocked = shortfalls.Where(sf => sf.Miss > 0 && sf.BlockedNow && sf.Verdict != CoverageVerdict.Infeasible).ToList();
+            var infeasible = shortfalls.Where(sf => sf.Verdict == CoverageVerdict.Infeasible).ToList();
+            var allDone = target is null && blocked.Count == 0 && infeasible.Count == 0;
+            dialog.Title = allDone ? "直し終わりました！" : "なおすのを手伝います";
+
+            if (target is not null)
+            {
+                panel.Children.Add(new TextBlock { Text = $"{target.DayLabel} の「{target.ShiftSymbol}」が {target.Miss}人 足りません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = $"この日に動かせる人がいます。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
+                if (cands.Count == 0)
+                {
+                    panel.Children.Add(new TextBlock { Text = target.Reason, Foreground = BrushOf("MagiErrorBrush"), FontSize = 13, TextWrapping = TextWrapping.Wrap });
+                }
+                else
+                {
+                    var buttons = new List<Button>();
+                    foreach (var c in cands.Take(8))
+                    {
+                        var tail = c.FromRest ? "（休み）" : "";
+                        var b = new Button { Content = $"{c.Name}{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+                        var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex;
+                        b.Click += (_, _) =>
+                        {
+                            if (pending || _vm.EditBlockedNow()) return;
+                            pending = true;
+                            foreach (var x in buttons) x.IsEnabled = false;
+                            _vm.SetCell(i, day, shift);
+                        };
+                        buttons.Add(b);
+                        panel.Children.Add(b);
+                    }
+                    panel.Children.Add(new TextBlock { Text = "入れたら「元に戻す」でいつでも取り消せます。", FontSize = 12, Opacity = 0.8 });
+                }
+            }
+            else if (infeasible.Count > 0)
+            {
+                panel.Children.Add(new TextBlock { Text = "これ以上は自動で埋められません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+                foreach (var sf in infeasible.Take(4))
+                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            }
+            else if (blocked.Count > 0)
+            {
+                panel.Children.Add(new TextBlock { Text = "いまの希望・担当のままでは埋められない日が残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                foreach (var sf in blocked.Take(4))
+                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整するか、担当できるシフトを増やしてください（編集タブ＞月次条件）。", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            }
+            else
+            {
+                panel.Children.Add(new TextBlock { Text = "人手が足りない日はなくなりました。仕上げにもう一度つくると全体が整います。", TextWrapping = TextWrapping.Wrap });
+            }
+        }
+        // 開いている間だけ再検査の結果（CoverageDiag/Schedule）を追いかけて組み直す。
+        void OnChanged(object? s, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null or nameof(UiState.CoverageDiag) or nameof(UiState.Schedule)) Rebuild();
+        }
+        Rebuild();
+        _vm.Ui.PropertyChanged += OnChanged;
+        try { await dialog.ShowAsync(); }
+        finally { _vm.Ui.PropertyChanged -= OnChanged; }
+    }
 
     private void OnHelperClick(object sender, RoutedEventArgs e) => _helperAction();
 
