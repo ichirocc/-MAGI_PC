@@ -197,6 +197,7 @@ jobs:
                   /DPublishDir=..\publish\win-x64 `
                   /O"installer-out" `
                   installer\MagiApp.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
           Get-ChildItem installer-out
 
       - name: Sign setup.exe (Authenticode; required when REQUIRE_CODE_SIGNING=true)

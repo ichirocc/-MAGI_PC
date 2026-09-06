@@ -127,4 +127,47 @@ public class V6HotfixPassesWishIslandTest
         Assert.Equal(1, V6HotfixPasses.WishBeamCandidateLimit(2, 6, 0));
         Assert.Equal(1, V6HotfixPasses.WishBeamCandidateLimit(0, 0, -3));
     }
+
+    private static IReadOnlyList<IReadOnlyList<int>> AllAThenRest() => new List<IReadOnlyList<int>>
+    {
+        new List<int> { 1, 1, 1, 1, 1, 1 }, new List<int> { 0, 0, 0, 0, 0, 0 }, new List<int> { 0, 0, 0, 0, 0, 0 },
+    };
+    private static bool DaysInside(IEnumerable<(string Kind, int[] Cells)> moves, int t)
+        => moves.All(m => Enumerable.Range(0, m.Cells.Length / 3).All(q => m.Cells[q * 3 + 1] >= 0 && m.Cells[q * 3 + 1] < t));
+    private static bool TouchesCell(IEnumerable<(string Kind, int[] Cells)> moves, int staff, int day)
+        => moves.Any(m => Enumerable.Range(0, m.Cells.Length / 3).Any(q => m.Cells[q * 3] == staff && m.Cells[q * 3 + 1] == day));
+
+    /// <summary>月初の希望日には左翼が無いので両翼交換は生成されず、全候補の日は 0..T-1 に収まる（月跨ぎなし）。</summary>
+    [Fact]
+    public void WishOnTheFirstDayGeneratesNoWingMovesAndStaysInsideTheMonth()
+    {
+        var s = Build(AllAThenRest(), new Dictionary<string, int> { ["0,0"] = 1 }, new Dictionary<string, MagiEngine.Model.Range>());
+        var moves = V6HotfixPasses.EnumerateWishMovesForTest(s, Sched(s)).ToList();
+        Assert.NotEmpty(moves);
+        Assert.DoesNotContain(moves, m => m.Kind == "両翼");
+        Assert.True(DaysInside(moves, 6));
+        Assert.False(TouchesCell(moves, 0, 0));
+    }
+
+    /// <summary>月末の希望日には右翼が無いので両翼交換は生成されない。</summary>
+    [Fact]
+    public void WishOnTheLastDayGeneratesNoWingMoves()
+    {
+        var s = Build(AllAThenRest(), new Dictionary<string, int> { ["0,5"] = 1 }, new Dictionary<string, MagiEngine.Model.Range>());
+        var moves = V6HotfixPasses.EnumerateWishMovesForTest(s, Sched(s)).ToList();
+        Assert.NotEmpty(moves);
+        Assert.DoesNotContain(moves, m => m.Kind == "両翼");
+        Assert.True(DaysInside(moves, 6));
+        Assert.False(TouchesCell(moves, 0, 5));
+    }
+
+    /// <summary>対照: 月の中の希望日なら両翼交換が生成される。</summary>
+    [Fact]
+    public void WishInTheMiddleGeneratesWingMoves()
+    {
+        var s = Build(AllAThenRest(), new Dictionary<string, int> { ["0,2"] = 1 }, new Dictionary<string, MagiEngine.Model.Range>());
+        var moves = V6HotfixPasses.EnumerateWishMovesForTest(s, Sched(s)).ToList();
+        Assert.Contains(moves, m => m.Kind == "両翼");
+        Assert.True(DaysInside(moves, 6));
+    }
 }

@@ -163,24 +163,11 @@ public static partial class V6HotfixPasses
 
     private sealed record Beam(int[][] Work, ViolationReport Rep, int Applied);
 
-    /// <summary>ビーム各段の重複排除の鍵: 盤面ハッシュを一次キーに、衝突時だけ全セル比較（Distinct は最初の出現順を保つ＝並びも不変）。</summary>
+    /// <summary>ビーム各段の重複排除（盤面の同値は <see cref="ScheduleEqualityComparer"/>。Distinct は最初の出現順を保つ＝並びも不変）。</summary>
     private sealed class BeamScheduleComparer : IEqualityComparer<Beam>
     {
         public static readonly BeamScheduleComparer Instance = new();
-
-        public bool Equals(Beam? x, Beam? y)
-        {
-            if (ReferenceEquals(x, y)) return true;
-            if (x is null || y is null || x.Work.Length != y.Work.Length) return false;
-            for (var i = 0; i < x.Work.Length; i++)
-                if (!x.Work[i].AsSpan().SequenceEqual(y.Work[i])) return false;
-            return true;
-        }
-
-        public int GetHashCode(Beam obj)
-        {
-            var h = AdaptiveEliteArchive.ScheduleHash(obj.Work);
-            return unchecked((int)(h ^ (h >>> 32)));
-        }
+        public bool Equals(Beam? x, Beam? y) => ReferenceEquals(x, y) || (x is not null && y is not null && ScheduleEqualityComparer.Instance.Equals(x.Work, y.Work));
+        public int GetHashCode(Beam obj) => ScheduleEqualityComparer.Instance.GetHashCode(obj.Work);
     }
 }

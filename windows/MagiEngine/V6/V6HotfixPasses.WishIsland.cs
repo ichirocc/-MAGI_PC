@@ -41,6 +41,10 @@ public static partial class V6HotfixPasses
     public static CyclicSwapResult ApplyWishIslandPolish(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool>? shouldStop = null)
         => new WishIslandSession(state, schedule, prm, shouldStop ?? (() => false)).Run();
 
+    /// <summary>テスト用: 各島の通常候補（同日・窓・両翼）を (種類, セル列) で列挙する。月初・月末で両翼が出ないこと等を固定する。</summary>
+    internal static IEnumerable<(string Kind, int[] Cells)> EnumerateWishMovesForTest(MagiState state, int[][] schedule)
+        => new WishIslandSession(state, schedule, new WishIslandParams(), () => false).MovesForTest();
+
     /// <summary>ビーム 1 段で保持する候補数＝幅×分岐を残り予算で頭打ち（いずれも 1 以上に丸める）。</summary>
     internal static int WishBeamCandidateLimit(int width, int branchFactor, int remainingEvaluations)
     {
@@ -315,6 +319,11 @@ public static partial class V6HotfixPasses
             foreach (var move in V6SearchOperators.RoundRobin(active.Select(IslandMoves).ToArray())) yield return move;
         }
 
+        public IEnumerable<(string Kind, int[] Cells)> MovesForTest()
+        {
+            foreach (var isl in islands) foreach (var m in IslandMoves(isl)) yield return (WishMoveLabel(m.Kind), m.Cells);
+        }
+
         // ---- 評価 ----
         /// <summary>moves を順に正式評価し、全体も希望周辺も改善する手のうち最良のものを返す（島の枠 budget 手まで）。</summary>
         private WishChosen? PickBest(WishIsland isl, IEnumerable<WishMove> moves, int budget, long localBefore)
@@ -383,10 +392,11 @@ public static partial class V6HotfixPasses
                 var remaining = Math.Max(prm.MaxEvaluations - evaluated, 0);
                 var depthLimit = WishBeamCandidateLimit(prm.BeamWidth, prm.BeamBranchFactor, remaining);
                 var perNodeLimit = Math.Max(1, depthLimit / frontier.Count);
+                var seenBoards = new HashSet<int[][]>(ScheduleEqualityComparer.Instance);   // 別の交換列から同じ盤面へ着いた候補で幅と予算を重複消費しない
                 foreach (var node in frontier)
                 {
                     if (!BudgetLeft()) break;
-                    ExpandNode(node, next, perNodeLimit, depthLimit);
+                    ExpandNode(node, next, perNodeLimit, depthLimit, seenBoards);
                 }
                 if (next.Count == 0) break;
                 next.Sort((x, y) => UnifiedViolationChecker.ReportComparer.Compare(x.Rep, y.Rep));
@@ -407,7 +417,7 @@ public static partial class V6HotfixPasses
         /// 1 ノードの展開: nodeLimit×BeamScanFactor 手まで正式評価し（枝刈りした手は数えない）、段全体で共有する next に
         /// 良い順で depthLimit 件だけ保持する（Android 3.502.0: 列挙順の先頭で打ち切らない／3.504.0: 走査枠はノードごと、保持数は段ごと）。
         /// </summary>
-        private void ExpandNode(WishNode node, List<WishNode> next, int nodeLimit, int depthLimit)
+        private void ExpandNode(WishNode node, List<WishNode> next, int nodeLimit, int depthLimit, HashSet<int[][]> seenBoards)
         {
             Restore(node.Board);
             var active = islands.Where(isl => LocalScore(node.Rep, isl) > 0).ToList();
@@ -423,7 +433,11 @@ public static partial class V6HotfixPasses
                     var rep = UnifiedViolationChecker.Check(state, work);
                     evaluated++; beamEvaluated++; scanned++;
                     var neutral = !UnifiedViolationChecker.BetterReport(node.Rep, rep) && !V6SearchOperators.ExactPinRegression(p, node.Board, work);
-                    if (neutral) KeepBest(next, new WishNode(work.Copy2D(), rep), depthLimit);
+                    if (neutral)
+                    {
+                        var board = work.Copy2D();
+                        if (seenBoards.Add(board)) KeepBest(next, new WishNode(board, rep), depthLimit);
+                    }
                 }
                 finally { Undo(m, old); }
             }

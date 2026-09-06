@@ -326,6 +326,18 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 外部ドッグフーディング（対象 4070b2d）への対応（Android 3.505.0 と同時）:
+  - **ISCC の終了コード検査が無い** → Inno Setup ステップに `if ($LASTEXITCODE -ne 0) { throw }` を追加（`upload-artifact` の
+    `if-no-files-found: error` 頼みだった失敗検知を、ステップ自身で原因つきに）。
+  - **`RoundRobin` は `MoveNext` が例外を投げると取り出し中の cursor を破棄しない** → 取り出し中の cursor を catch で破棄してから伝播。
+    `RoundRobinDisposesEveryEnumeratorWhenASourceThrows` で「例外時も全列挙子を破棄」を固定。
+  - **月初・月末の専用回帰試験が無い** → `EnumerateWishMovesForTest`（テスト用の列挙口）を足し、月初・月末は両翼なし・全候補の日が
+    0..T-1・希望セル不変、対照として月中は両翼あり、を 3 テストで固定（Kotlin も同じ 3 件）。
+  - **希望島ビームに盤面の重複排除が無い** → `ScheduleEqualityComparer`（盤面ハッシュ＋衝突時全セル比較。C1 ビームの比較器も
+    これへ委譲）で段ごとに同一盤面を 1 回だけ保持。Android 計測: 単体 12 条件・後処理 4/4 とも不変。
+  - Android 側で Iteration 2 第一弾 `ViolationComponentRepair`（拒否候補の横断プール＋違反起点のトランザクション、既定 OFF）を実装し
+    ベンチ中。**C# への移植はゲートの結果を見てから**（合格したパスだけ置換、の手順）。MagiEngine.Tests 769（+4）。
+
 - 2026-09-06 外部提示の C# 6 ファイル（`V6SearchOperators` / `WishIsland` / `RunPostOptimization` / `C1Beam` / `AnchoredWindowSwap` /
   `CombinatorialRepair`）の優劣検証と移植（Android 3.504.0 と同時。探索動学に触れる差分は Kotlin で計測してから同期）:
   - **採用**: `V6SearchOperators.RoundRobin<T>`（希望島の同日/窓/両翼・ビームの島巡回で共用。**提示版は `yield` 中断中の cursor が

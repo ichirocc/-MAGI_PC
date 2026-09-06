@@ -32,7 +32,10 @@ internal static class V6SearchOperators
             while (cursors.Count > 0)
             {
                 var cursor = cursors.Dequeue();
-                if (cursor.MoveNext()) { cursors.Enqueue(cursor); yield return cursor.Current; }
+                bool hasNext;
+                try { hasNext = cursor.MoveNext(); }
+                catch { cursor.Dispose(); throw; }   // 取り出し中の cursor はキュー外＝finally の対象にならないので、ここで破棄する。
+                if (hasNext) { cursors.Enqueue(cursor); yield return cursor.Current; }
                 else cursor.Dispose();
             }
         }

@@ -81,4 +81,30 @@ public class V6SearchOperatorsTest
         Assert.Contains("a", disposed);
         Assert.Contains("b", disposed);
     }
+
+    /// <summary>MoveNext が例外を投げた列も含めて、全 enumerator を破棄してから例外を伝播する。</summary>
+    [Fact]
+    public void RoundRobinDisposesEveryEnumeratorWhenASourceThrows()
+    {
+        var disposed = new List<string>();
+        IEnumerable<string> Good(string name)
+        {
+            try { yield return name + "0"; yield return name + "1"; }
+            finally { disposed.Add(name); }
+        }
+        IEnumerable<string> Bad()
+        {
+            try { yield return "b0"; throw new InvalidOperationException("boom"); }
+            finally { disposed.Add("b"); }
+        }
+
+        var got = new List<string>();
+        Assert.Throws<InvalidOperationException>(() =>
+        {
+            foreach (var x in V6SearchOperators.RoundRobin(Good("a"), Bad(), Good("c"))) got.Add(x);
+        });
+        Assert.Equal(new[] { "a0", "b0", "c0", "a1" }, got);
+        Assert.Equal(3, disposed.Count);
+        Assert.Contains("b", disposed);
+    }
 }
