@@ -240,30 +240,52 @@ public sealed partial class SettingsView : UserControl
     /// WinUI3 の <see cref="Microsoft.UI.Xaml.Controls.ColorPicker"/>（HSVホイール等の高機能版）は
     /// このC#移植の最初の段階では過剰と判断し、既存の7色パレット＋16進入力に留める。
     /// </summary>
+    /// <summary>
+    /// [phase9 #21] 色ピッカー（Kotlin原本 <c>ColorPickerDialog</c>、3.460.0）: 現在の色＋36色（6×6）のタイル、現在値と一致するタイルに ✓。
+    /// 16進の直接入力は WinUI 側にもとからあった導線なので残す（原本には無い）。
+    /// </summary>
     private Flyout BuildColorPickerFlyout(string currentHex, Action<string> onSet)
     {
         var flyout = new Flyout();
-        // Padding=4はMagiSpacingXS(4)と厳密一致。
         var panel = new StackPanel { Spacing = 8, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]) };
 
-        var swatchGrid = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        foreach (var hex in MagiAccent.All)
+        var current = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        current.Children.Add(new Border
         {
-            var swatchButton = new Button
+            Width = 28, Height = 28, CornerRadius = new CornerRadius(4),
+            Background = new SolidColorBrush(ColorHex.Parse(currentHex, Colors.Gray)),
+            BorderBrush = new SolidColorBrush(Colors.Gray), BorderThickness = new Thickness(1),
+        });
+        current.Children.Add(new TextBlock { Text = "現在の色", FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(current);
+        panel.Children.Add(new TextBlock { Text = "色を選ぶ", FontSize = 12, Opacity = 0.8 });
+
+        var grid = new Grid { ColumnSpacing = 4, RowSpacing = 4 };
+        for (var c = 0; c < ShiftColorPalette.PerRow; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var rows = (ShiftColorPalette.All.Count + ShiftColorPalette.PerRow - 1) / ShiftColorPalette.PerRow;
+        for (var r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var idx = 0; idx < ShiftColorPalette.All.Count; idx++)
+        {
+            var hex = ShiftColorPalette.All[idx];
+            var selected = string.Equals(hex, currentHex?.Trim(), StringComparison.OrdinalIgnoreCase);
+            var tile = new Button
             {
-                Width = 28,
-                Height = 28,
-                // [トークン非適用, 意図的な微調整値] Padding=0はスウォッチ全面を色で塗る意図の
-                // ゼロ値でスペーシング段階の対象外。角丸=4はMagiCornerXS(10)より60%小さく、
-                // 28x28の小タイルに対して10だと丸すぎるための微調整値。
-                Padding = new Thickness(0),
-                CornerRadius = new CornerRadius(4),
+                Width = 32, Height = 32, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
                 Background = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray)),
+                BorderBrush = selected ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
+                BorderThickness = new Thickness(selected ? 3 : 1),
+                Content = selected
+                    ? new TextBlock { Text = "✓", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = new SolidColorBrush(ColorHex.Parse(ShiftColorPalette.PickFg(hex), Colors.Black)) }
+                    : null,
             };
-            swatchButton.Click += (_, _) => { onSet(hex); flyout.Hide(); };
-            swatchGrid.Children.Add(swatchButton);
+            // [a11y] 色のみの選択肢に読み上げ名を付与（原本と同じ文言）。
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, "色 " + hex + (selected ? "・選択中" : ""));
+            tile.Click += (_, _) => { onSet(hex); flyout.Hide(); };
+            Grid.SetRow(tile, idx / ShiftColorPalette.PerRow);
+            Grid.SetColumn(tile, idx % ShiftColorPalette.PerRow);
+            grid.Children.Add(tile);
         }
-        panel.Children.Add(swatchGrid);
+        panel.Children.Add(grid);
 
         var hexBox = new TextBox { Text = currentHex, PlaceholderText = "#rrggbb" };
         var applyButton = new Button { Content = "適用", HorizontalAlignment = HorizontalAlignment.Stretch };
