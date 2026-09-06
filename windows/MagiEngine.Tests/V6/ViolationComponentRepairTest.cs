@@ -189,4 +189,25 @@ public class ViolationComponentRepairTest
         var off = ViolationComponentRepair.Repair(st, work, Array.Empty<CombinatorialRepair.Candidate>(), new ViolationComponentRepair.Params(GenerateFromAnchors: false));
         Assert.Equal(0, off.Applied);
     }
+
+    /// <summary>[Iteration 6] 厳密ピン（lo==hi）を単独で崩す単セル候補は生成しない＝推定でピン枝刈りされる無駄弾が出ない。
+    /// 甲は A 1〜1 固定で 1 日目に A。3 日目の人員不足に対して甲の単セルは作らず行内の入替に置き換える。乙の単セルで直る。</summary>
+    [Fact]
+    public void PinBreakingSinglesAreReplacedByRowSwapsAtGeneration()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-03",
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") }, groups: new List<Group> { new("G", "G") },
+            staffList: new List<Staff> { new("甲", 0), new("乙", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 0, 0 }, new List<int> { 0, 1, 0 } }, wishes: new Dictionary<string, int>(),
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("1", "1") }, needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(), cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var r = ViolationComponentRepair.Repair(st, Work(st), Array.Empty<CombinatorialRepair.Candidate>());
+        var msg = r.Logs[0].Message;
+        Assert.Contains("ピン枝刈り0", msg);
+        Assert.Equal(0, UnifiedViolationChecker.Check(st, r.NewSchedule).Hard);
+        Assert.Equal(1, r.NewSchedule[0].Count(k => k == 1));
+    }
 }

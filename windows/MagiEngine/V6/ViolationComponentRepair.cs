@@ -372,17 +372,50 @@ public static class ViolationComponentRepair
             }
             string StaffName(int i) => i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
             string Kig(int k) => k < state.Shifts.Count ? state.Shifts[k].Kigou : $"#{k}";
+            // [Iteration 6] 厳密ピン（lo==hi）を単独で崩す候補は推定で必ず落ちる。生成の時点で「同じ職員の別の日で回数を戻す」相方を付けた形にする。
+            bool BreaksPin(int i, int from, int to)
+            {
+                foreach (var k in pinned[i])
+                {
+                    var dv = (k == to ? 1 : 0) - (k == from ? 1 : 0);
+                    if (dv == 0) continue;
+                    var lo = p.RangeLo[i][k]; var before = delta.CountForStaff(i, k);
+                    if (Math.Abs(before + dv - lo) > Math.Abs(before - lo)) return true;
+                }
+                return false;
+            }
+            IEnumerable<int> DaysNear(int j)
+            {
+                for (var r = 1; r < p.T; r++) { if (j - r >= 0) yield return j - r; if (j + r < p.T) yield return j + r; }
+            }
             void Single(int i, int j, int k2)
             {
                 if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.MayPlace(i, k2)) return;
-                Add(new List<int[]> { new[] { i, j, k2 } }, $"{StaffName(i)} {j + 1}日→{Kig(k2)}");
+                var old = work[i][j];
+                if (!BreaksPin(i, old, k2)) { Add(new List<int[]> { new[] { i, j, k2 } }, $"{StaffName(i)} {j + 1}日→{Kig(k2)}"); return; }
+                var made2 = 0;
+                foreach (var d in DaysNear(j))
+                {
+                    if (made2 >= 3) break;
+                    if (work[i][d] != k2 || p.WishLocked(i, d) || !p.MayPlace(i, old)) continue;
+                    Add(new List<int[]> { new[] { i, j, k2 }, new[] { i, d, old } }, $"{StaffName(i)} {j + 1}日⇄{d + 1}日");
+                    made2++;
+                }
             }
             void Swap(int x, int y, int j)
             {
                 if (x == y) return;
                 var kx = work[x][j]; var ky = work[y][j];
                 if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) return;
-                Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日");
+                if (!BreaksPin(x, kx, ky) && !BreaksPin(y, ky, kx)) { Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日"); return; }
+                var made2 = 0;
+                foreach (var d in DaysNear(j))
+                {
+                    if (made2 >= 2) break;
+                    if (work[x][d] != ky || work[y][d] != kx || p.WishLocked(x, d) || p.WishLocked(y, d)) continue;
+                    Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx }, new[] { x, d, kx }, new[] { y, d, ky } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日/{d + 1}日");
+                    made2++;
+                }
             }
             void Window(int x, int y, int s0, int s1)
             {

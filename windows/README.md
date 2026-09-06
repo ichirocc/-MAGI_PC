@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 起点生成をピン対応に（Android 3.507.1 同期）: `ViolationComponentRepair` の `Single`/`Swap` に `BreaksPin` を入れ、厳密ピン（lo==hi）を
+  単独で崩す候補は同じ職員の別の日で回数を戻す行内入替／2 日交換に置き換える。テスト `PinBreakingSinglesAreReplacedByRowSwapsAtGeneration`（エンジン 785 本緑）。
+
 - 2026-09-06 個人上限 0（0〜0）のシフトを最適化器が置かない（Android 3.507.0 同期・ユーザー決定「最適化器だけ除外、表示は今のまま」）:
   `Problem.Placeable/PlaceableHas`＋`ScheduleUtil.MayPlace`（担当可かつ上限 0 でない。休は除外しない）、`AllowedShiftsForStaff` は置けるシフトへ
   （UI は新設 `CanDoShiftsForStaff`）、`StaffForShift`・`InitialAssignment` の穴埋めも置けるシフトから。配置先を判定する `CanDo(` 101 箇所を
