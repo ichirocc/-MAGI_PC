@@ -162,7 +162,6 @@
                         CornerRadius="{StaticResource MagiCornerXS}" Padding="10,6">
                     <TextBlock x:Name="AptOverloadText" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource MagiOnErrorContainerBrush}" />
                 </Border>
-                <Button x:Name="ResetAptButton" Content="目標を全リセット" Click="OnResetAptClick" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="StaffShiftMatrixHost" />
                 </ScrollViewer>

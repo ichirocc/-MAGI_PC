@@ -1551,7 +1551,6 @@ public sealed partial class EditView : UserControl
         if (ws1 is null || ws1.Shifts.Count == 0 || ws1.Staff.Count == 0)
         {
             AptOverloadBanner.Visibility = Visibility.Collapsed;
-            ResetAptButton.IsEnabled = false;
             return;
         }
         var worst = _vm.AptBalances().Where(b => b.Overloaded).OrderByDescending(b => b.Shortfall).FirstOrDefault();
@@ -1561,7 +1560,6 @@ public sealed partial class EditView : UserControl
             AptOverloadText.Text = $"⚠ {KigouFormat.ToHankakuKigou(worst.Kigou)}：目標の合計{worst.AptSum}回 ＞ " +
                 (worst.IsRest ? $"休める日数の上限{worst.Capacity}日" : $"必要人数の合計{worst.Capacity}回") + $"（{worst.Shortfall}回ぶんは必ず届きません）";
         }
-        ResetAptButton.IsEnabled = editable && ws1.GroupShiftApt.Any(row => row.Any(v => !string.IsNullOrWhiteSpace(v)));
 
         var K = ws1.Shifts.Count;
         var S = ws1.Staff.Count;
@@ -1727,17 +1725,6 @@ public sealed partial class EditView : UserControl
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary) _vm.SetStaffRange(i, k, loBox.Text.Trim(), hiBox.Text.Trim());
         else if (result == ContentDialogResult.Secondary) _vm.RemoveStaffRange(i, k);
-    }
-
-    private async void OnResetAptClick(object sender, RoutedEventArgs e)
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, Title = "目標を全リセットしますか？",
-            Content = new TextBlock { Text = "すべての群×シフトの目標（適切回数）を空にします。「元に戻す」で戻せます。", TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "リセット", CloseButtonText = "キャンセル", DefaultButton = ContentDialogButton.Close,
-        };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary) _vm.Ws1ResetGroupApt();
     }
 
     private const double MatrixRowH = 44;
