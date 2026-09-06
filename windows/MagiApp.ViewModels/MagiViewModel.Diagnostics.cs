@@ -298,6 +298,7 @@ public sealed partial class MagiViewModel
 
         Ui.Staff = st.StaffCount;
         Ui.Days = st.DayCount;
+        Ui.CheckRev = Ui.CheckRev + 1;
         Ui.Shifts = st.ShiftCount;
         Ui.Groups = st.GroupCount;
         Ui.Use2 = st.Use2Patterns;

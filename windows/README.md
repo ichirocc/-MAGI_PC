@@ -266,13 +266,19 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
 
 ## Windows 11 での入れ方・起動しないとき（2026-09-04）
 
-### 警告なしで入れる（推奨・証明書不要・管理者不要）
+### 入れ方（証明書不要・管理者不要。SHA-256 を照合してから起動する）
 
-PowerShell（スタートで「powershell」）に次の1行を貼り付けて Enter。インストーラのウィザードが開く。
+[Releases](https://github.com/ichirocc/-MAGI_PC/releases/latest) の本文にある **SHA-256** を控え、PowerShell（スタートで「powershell」）に
+次を貼り付けて `<SHA-256>` を置き換えて Enter。ハッシュが一致したときだけインストーラのウィザードが開く（不一致なら止まる）。
+Release 本文にはバージョン固定 URL つきの同じ 1 行が SHA-256 込みで載っているので、そちらを貼るのが早い。
 
 ```powershell
-$f="$env:TEMP\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o $f https://github.com/ichirocc/-MAGI_PC/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe; Unblock-File $f -ErrorAction SilentlyContinue; & $f
+$expected="<SHA-256>"; $f="$env:TEMP\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o $f https://github.com/ichirocc/-MAGI_PC/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe; if ((Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw "SHA-256 mismatch" }; Unblock-File $f -ErrorAction SilentlyContinue; & $f
 ```
+
+`Unblock-File` は SmartScreen の印を外す＝ダウンロード物を無条件に信用する操作なので、**照合の後**にだけ行う（コード署名は未導入。
+`installer/sign-files.ps1` は証明書がある場合の手順）。公開済みバージョンの実体は差し替えない（同じタグを別コミットから再実行すると
+Actions が失敗する）。
 
 なぜ警告が出ないか: SmartScreen は「インターネットから来た印（Mark of the Web＝`Zone.Identifier` 代替ストリーム）」が
 付いたファイルを**起動した瞬間**に評価する。ブラウザや Explorer の zip 展開はこの印を付けるが、`curl.exe`（Windows 10 1803
@@ -319,6 +325,23 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+
+- 2026-09-06 外部レビュー第3・4段（対象 70c9d1d）への対応:
+  - **[高] 案内付き修正の連打防止が Schedule 通知で解除される** → `UiState.CheckRev`（`MakeUi` ごとに増える検査世代）を追加し、
+    押下後は押下時より新しい世代が反映されるまで全候補を無効（「再検査中…」表示）。判断（対象枠/BlockedNow/Infeasible/AllDone）を
+    `GuidedFixPlan`、有効/無効を `GuidedFixFlow` として ViewModels へ切り出し、`GuidedFixTest` 3 件で「Schedule だけでは解除しない・
+    押下前の世代では解除しない・閉じた後は無視」を固定。
+  - **[高] 公開済みバージョンのインストーラーを差し替えられる** → `windows-installer.yml`: 既存タグのコミットが `TARGET_SHA` と違えば失敗
+    （バージョンを上げることを要求）。同一コミットの再実行ではバージョン付き資産を `--clobber` しない（固定名 latest のみ更新）。
+  - **[高] 検証なしで SmartScreen 保護を外して実行** → Release 本文と README の 1 行を「SHA-256 照合→不一致なら throw→Unblock-File→起動」に。
+    Release 本文はバージョン固定 URL＋その版の SHA-256 を埋め込む。「警告なし」を主目的にした見出し・文言を改めた（コード署名は未導入と明記）。
+  - **[高] 範囲外シフトを勤務表へ保存できる** → `SetCell`/`SetCells` に共通ガード `RejectUnknownShift`（-1＝未割当は可、0..Shifts.Count-1）。
+    拒否時は Undo・自動保存・再検査を発生させない。`ApplyFixSuggestion` は前回の上限検査を維持。テスト +5。
+  - **[中] 制約読取 API が負インデックスで例外** → `ConstraintRowValues` の入口で `index < 0` を null に。テスト +1（10 族）。
+  - **[中] 制約の数値欄へ任意文字列を登録できる** → `MagiViewModel.ConstraintInputError`（非負整数・cons1 は 1≤回数≤日数≤期間・
+    cons41 系は空欄可＋下限≤上限・記号は現在の定義に存在）を追加し、`EditView` の追加/変更の両方で先に通す。テスト +1（14 ケース）。
+  - MagiApp.ViewModels.Tests 427 緑。Android 側: `setCell`/`setCells` の上限検査と `constraintRowValues` の負添字を 3.500.2 で同期
+    （案内付き修正の連打防止は Android も `remember(ui.schedule)` で同型＝バックログ #10）。
 
 - 2026-09-06 外部レビュー（2段・対象 968478b）への対応:
   - **[高] 改善提案の古い結果を適用できる** → Kotlin 3.475.0 の指紋照合を移植（`_fixBoardKey`/`_fixStateKey`＝探索時の盤面/設定、適用時に不一致なら拒否して再探索を促す）

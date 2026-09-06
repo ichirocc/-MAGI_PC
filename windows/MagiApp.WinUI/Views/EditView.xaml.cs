@@ -1484,6 +1484,9 @@ public sealed partial class EditView : UserControl
     {
         error = "";
         string G(int i) => i < v.Count ? v[i] : "";
+        // [レビュー指摘] 数値欄の非数・下限>上限・存在しない記号は登録できたように見えて最適化に効かない。VM の検証を先に通す。
+        var invalid = _vm.ConstraintInputError(key, v);
+        if (invalid is not null) { error = invalid; return false; }
         switch (key)
         {
             case "cons1":
@@ -1541,6 +1544,7 @@ public sealed partial class EditView : UserControl
         if (idx < 0) { ConstraintHintText.Text = "変更する行を選んでください。"; return; }
         var values = CollectConstraintFieldValues(meta);
         if (values.All(x => x.Length == 0)) { ConstraintHintText.Text = "内容を入れてください。"; return; }
+        if (_vm.ConstraintInputError(key, values) is { } invalid) { ConstraintHintText.Text = invalid; return; }
         _vm.UpdateConstraint(key, idx, values);
         ConstraintHintText.Text = "";
         _syncedConstraintRowIndex = -1;

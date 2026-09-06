@@ -128,6 +128,17 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
+    public void ApplyFixSuggestion_ToShiftEqualToShiftCount_ReturnsWithoutUndoAutoSaveOrRecheck()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 2))); // == Shifts.Count
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Null(vm.LastRefreshCheckTask);
+        Assert.Null(vm.LastAutoSaveTask);
+    }
+
+    [Fact]
     public void ApplyFixSuggestion_ToShiftBeyondShiftCount_ReturnsWithoutApplyingAnyOp()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };

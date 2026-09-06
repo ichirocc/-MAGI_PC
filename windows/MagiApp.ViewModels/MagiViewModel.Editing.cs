@@ -241,6 +241,18 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>Set a specific shift in a cell (bottom-sheet picker).</summary>
+    /// <summary>
+    /// 盤面に書けるシフト index か（-1＝未割当は可、それ以外は 0..Shifts.Count-1）。SetCell/SetCells の共通ガード。
+    /// 旧: 上限を見ておらず、古い UI イベントや提案からの範囲外 index が自動保存まで通り、再検査で初めて失敗していた。
+    /// </summary>
+    private bool RejectUnknownShift(MagiState st, int shift)
+    {
+        if (shift >= -1 && shift < st.Shifts.Count) return false;
+        Ui.MessageIsError = true;
+        Ui.Message = "選択したシフトは現在の設定に存在しません";
+        return true;
+    }
+
     public void SetCell(int i, int j, int shift)
     {
         var st = _state;
@@ -252,6 +264,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null) return;
         if (i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return;
+        if (RejectUnknownShift(st, shift)) return;
         if (sched[i][j] == shift) return;
         PushUndo();
         sched[i][j] = shift;
@@ -277,6 +290,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
         var sched = _currentSchedule;
         if (sched is null) return;
+        if (RejectUnknownShift(st, shift)) return;
         var changed = 0;
         var first = true;
         foreach (var (i, j) in cells)
@@ -1044,7 +1058,7 @@ public sealed partial class MagiViewModel
     public IReadOnlyList<string>? ConstraintRowValues(string family, int index)
     {
         var st = _state;
-        if (st is null) return null;
+        if (st is null || index < 0) return null;
         return family switch
         {
             "cons1" => index < st.Cons1.Count ? new List<string> { st.Cons1[index].Day1, st.Cons1[index].ShiftKigou, st.Cons1[index].Day2 } : null,
@@ -1059,6 +1073,63 @@ public sealed partial class MagiViewModel
             "cons42s" => index < st.Cons42s.Count ? new List<string> { st.Cons42s[index].G1Kigou, st.Cons42s[index].S1Kigou, st.Cons42s[index].G2Kigou, st.Cons42s[index].S2Kigou } : null,
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// [制約編集] 追加・変更の入力検証（Android は選択式と数字キーボードで構造的に防ぐ。WinUI は自由入力なので入口で止める）。
+    /// values の並びは <see cref="ConstraintRowValues"/>／入力欄と同じ。null＝問題なし、それ以外＝入力欄の近くに出す理由。
+    /// 数値欄は非負整数、cons1 は 1 ≤ 回数 ≤ 日数 ≤ 期間日数、cons41 系は空欄可・下限 ≤ 上限、記号は現在の定義に存在。
+    /// エンジンは数値変換の失敗を 0 などへ落とすため、登録できたのに効かない制約を作らない。
+    /// </summary>
+    public string? ConstraintInputError(string family, IReadOnlyList<string> values)
+    {
+        var st = _state;
+        if (st is null) return "データを読み込んでください。";
+        var v = values.Select(x => (x ?? "").Trim()).ToList();
+        string G(int i) => i < v.Count ? v[i] : "";
+        var shifts = st.Shifts.Select(x => x.Kigou).ToHashSet();
+        var groups = st.Groups.Select(x => x.Kigou).ToHashSet();
+        var skills = st.SkillGroups.Select(x => x.Kigou).ToHashSet();
+        static bool NonNeg(string s, out int n) => int.TryParse(s, out n) && n >= 0;
+        string? Shift(string s) => shifts.Contains(s) ? null : $"シフト記号「{s}」は現在の設定にありません。";
+        string? Group(string s, bool skill) => (skill ? skills : groups).Contains(s) ? null : $"{(skill ? "スキル群" : "群")}記号「{s}」は現在の設定にありません。";
+        switch (family)
+        {
+            case "cons1":
+                if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0) return "すべての項目を入れてください。";
+                if (!NonNeg(G(0), out var d1) || d1 < 1) return "窓の日数は 1 以上の整数で入れてください。";
+                if (!NonNeg(G(2), out var d2) || d2 < 1) return "最低回数は 1 以上の整数で入れてください。";
+                if (d2 > d1) return "最低回数は窓の日数以下にしてください。";
+                if (st.DayCount > 0 && d1 > st.DayCount) return $"窓の日数は期間（{st.DayCount}日）以下にしてください。";
+                return Shift(G(1));
+            case "cons2":
+                if (G(0).Length == 0 || G(1).Length == 0) return "すべての項目を入れてください。";
+                if (!NonNeg(G(1), out _)) return "合計回数は 0 以上の整数で入れてください。";
+                return Shift(G(0));
+            case "cons3": case "cons3n": case "cons3m": case "cons3mn":
+            {
+                if (v.All(x => x.Length == 0)) return "少なくとも1日目を入れてください。";
+                foreach (var x in v.Where(x => x.Length > 0)) { var e = Shift(x); if (e is not null) return e; }
+                return null;
+            }
+            case "cons41": case "cons41s":
+            {
+                var skill = family == "cons41s";
+                if (G(0).Length == 0 || G(1).Length == 0) return skill ? "スキル群記号とシフト記号を入れてください。" : "群記号とシフト記号を入れてください。";
+                if (G(2).Length > 0 && !NonNeg(G(2), out _)) return "下限は 0 以上の整数か空欄にしてください。";
+                if (G(3).Length > 0 && !NonNeg(G(3), out _)) return "上限は 0 以上の整数か空欄にしてください。";
+                if (V6SanityPort.RangeOrderConflict(G(2), G(3)) is not null) return "下限は上限以下にしてください。";
+                return Group(G(0), skill) ?? Shift(G(1));
+            }
+            case "cons42": case "cons42s":
+            {
+                var skill = family == "cons42s";
+                if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0 || G(3).Length == 0) return "すべての項目を入れてください。";
+                return Group(G(0), skill) ?? Shift(G(1)) ?? Group(G(2), skill) ?? Shift(G(3));
+            }
+            default:
+                return "種類を選んでください。";
+        }
     }
 
     /// <summary>[制約編集] 行を同じ位置で置き換える。values の並びは <see cref="ConstraintRowValues"/> と同一。

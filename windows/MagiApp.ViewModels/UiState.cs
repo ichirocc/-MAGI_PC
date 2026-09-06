@@ -53,6 +53,12 @@ public sealed partial class UiState : ObservableObject
     /// 「盤面がある」旗なので、分析の「計算済み／未計算」はこちらだけを読む（手操作で false に戻す）。
     /// </summary>
     [ObservableProperty] private bool engineRan;
+    /// <summary>
+    /// 表示中の検査結果の世代。<c>MakeUi</c>（検査完了・最適化完了など報告の反映）のたびに増える。
+    /// 「押したあとの再検査が盤面に追いついたか」を Schedule の変更通知でなくこの世代で判定する
+    /// （Schedule は SetCell 直後に変わるが CoverageDiag はまだ古い＝そこで候補を再有効化すると連打で covO/covU を同時に作れる）。
+    /// </summary>
+    [ObservableProperty] private long checkRev;
     [ObservableProperty] private long bestHard;
     [ObservableProperty] private long bestSoft;
     [ObservableProperty] private int totalViolations;

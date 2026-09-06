@@ -232,16 +232,25 @@ jobs:
           cat > notes.md <<EOF_NOTES
           MAGI ShiftOptimizer Windows 11 版 ${TAG#win-v}（setup.exe・per-user・証明書不要）
 
-          **警告なしで入れる（PowerShell に貼り付け）**
+          **入れ方（PowerShell に貼り付け。SHA-256 を照合してから起動する）**
           \`\`\`powershell
-          \$f="\$env:TEMP\\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o \$f https://github.com/${REPO}/releases/latest/download/MagiShiftOptimizer-Setup-x64.exe; Unblock-File \$f -ErrorAction SilentlyContinue; & \$f
+          \$expected="${sha}"; \$f="\$env:TEMP\\MagiShiftOptimizer-Setup.exe"; curl.exe -L -o \$f https://github.com/${REPO}/releases/download/${TAG}/$(basename "$exe"); if ((Get-FileHash \$f -Algorithm SHA256).Hash.ToLowerInvariant() -ne \$expected) { throw "SHA-256 mismatch" }; Unblock-File \$f -ErrorAction SilentlyContinue; & \$f
           \`\`\`
-          ブラウザで落とした場合は SmartScreen の「詳細情報」→「実行」。詳細は windows/README.md。
+          ブラウザで落とした場合は SmartScreen の「詳細情報」→「実行」の前に、上の SHA-256 と \`Get-FileHash\` の値を見比べる。詳細は windows/README.md。
 
           SHA-256: \`${sha}\`
           EOF_NOTES
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$exe" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" --clobber
+            # 公開済みバージョンの実体は差し替えない: 同じタグが別のコミットから再実行されたら失敗させ、新しいバージョンを要求する。
+            tag_sha=$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq '.object.sha')
+            if [ "$(gh api "repos/$REPO/git/tags/$tag_sha" --jq '.object.sha' 2>/dev/null || echo "$tag_sha")" != "$TARGET_SHA" ]; then
+              echo "tag $TAG already points at another commit ($tag_sha != $TARGET_SHA); bump the version instead of overwriting"; exit 1
+            fi
+            # 同じコミットの再実行: バージョン付き資産は既にあれば触らない（--clobber しない）。固定名の latest だけ更新する。
+            if ! gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' | grep -qx "$(basename "$exe")"; then
+              gh release upload "$TAG" "$exe" --repo "$REPO"
+            fi
+            gh release upload "$TAG" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" --clobber
             gh release edit "$TAG" --repo "$REPO" --notes-file notes.md
           else
             gh release create "$TAG" "$exe" dist/MagiShiftOptimizer-Setup-x64.exe --repo "$REPO" \

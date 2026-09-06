@@ -394,6 +394,46 @@ public class MagiViewModelEditingTest
         Assert.Null(vm.LastRefreshCheckTask);
     }
 
+    [Theory]
+    [InlineData(2)]   // == Shifts.Count（既定フィクスチャはシフト 2 種）
+    [InlineData(99)]
+    [InlineData(-2)]
+    public void SetCellRejectsUnknownShiftWithoutUndoAutoSaveOrRecheck(int shift)
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetCell(0, 0, shift);
+
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Null(vm.LastRefreshCheckTask);
+        Assert.Null(vm.LastAutoSaveTask);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("存在しません", vm.Ui.Message);
+    }
+
+    [Fact]
+    public void SetCellAcceptsMinusOneAsUnassigned()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.SetCell(0, 0, -1);
+        Assert.Equal(-1, vm._currentSchedule![0][0]);
+        Assert.Equal(1, vm.UndoStackCount);
+    }
+
+    [Fact]
+    public void SetCellsRejectsUnknownShiftForTheWholeBatch()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetCells(new[] { (0, 0), (0, 1), (1, 0) }, 2);
+
+        Assert.All(new[] { vm._currentSchedule![0][0], vm._currentSchedule![0][1], vm._currentSchedule![1][0] }, x => Assert.Equal(0, x));
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Null(vm.LastRefreshCheckTask);
+        Assert.True(vm.Ui.MessageIsError);
+    }
+
     [Fact]
     public async Task SetCellsChangesMultipleCellsInASingleUndoStep()
     {
@@ -1319,6 +1359,35 @@ public class MagiViewModelEditingTest
         var vm = new MagiViewModel { _state = MinimalState.Build() };
         vm.RemoveConstraint("cons-bogus", 0);
         Assert.Equal(0, vm.UndoStackCount);
+    }
+
+    [Fact]
+    public void ConstraintRowValuesReturnsNullForNegativeIndexInEveryFamily()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(cons1: new List<C1Row> { new("5", "休", "2") }) };
+        foreach (var fam in new[] { "cons1", "cons2", "cons3", "cons3n", "cons3m", "cons3mn", "cons41", "cons42", "cons41s", "cons42s" })
+            Assert.Null(vm.ConstraintRowValues(fam, -1));
+    }
+
+    [Fact]
+    public void ConstraintInputErrorRejectsNonNumericOutOfOrderAndUnknownSymbols()
+    {
+        // 既定フィクスチャ: シフト 休/A、群 G0、期間 7 日、スキル群なし。
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        Assert.Null(vm.ConstraintInputError("cons1", new[] { "5", "休", "1" }));
+        Assert.Contains("整数", vm.ConstraintInputError("cons1", new[] { "abc", "休", "1" })!);
+        Assert.Contains("以下", vm.ConstraintInputError("cons1", new[] { "3", "休", "5" })!);
+        Assert.Contains("期間", vm.ConstraintInputError("cons1", new[] { "20", "休", "1" })!);
+        Assert.Contains("ありません", vm.ConstraintInputError("cons1", new[] { "5", "X", "1" })!);
+        Assert.Contains("整数", vm.ConstraintInputError("cons2", new[] { "A", "-10" })!);
+        Assert.Null(vm.ConstraintInputError("cons41", new[] { "G0", "A", "", "" }));
+        Assert.Contains("下限は上限以下", vm.ConstraintInputError("cons41", new[] { "G0", "A", "20", "3" })!);
+        Assert.Contains("ありません", vm.ConstraintInputError("cons41", new[] { "ZZ", "A", "1", "2" })!);
+        Assert.Contains("ありません", vm.ConstraintInputError("cons41s", new[] { "G0", "A", "", "" })!); // スキル群は未定義
+        Assert.Contains("ありません", vm.ConstraintInputError("cons3n", new[] { "A", "Q", "", "", "" })!);
+        Assert.Null(vm.ConstraintInputError("cons3n", new[] { "A", "休", "", "", "" }));
+        Assert.Contains("ありません", vm.ConstraintInputError("cons42", new[] { "G0", "A", "G0", "Q" })!);
+        Assert.NotNull(new MagiViewModel().ConstraintInputError("cons1", new[] { "5", "休", "1" }));
     }
 
     [Fact]
