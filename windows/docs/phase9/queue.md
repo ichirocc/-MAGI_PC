@@ -15,7 +15,7 @@
 | 6 | 勤務表 | 週送り・違反ジャンプの画面下固定バー＋行列クロスハイライト（3.444.0/3.481.0） | `MagiScheduleViews.kt` `ScheduleNavBar`, `rememberScheduleNavState` | `ScheduleView` | 済 | 済 | 緑 | run 33996772282。`ScheduleView` NavBar（`RenderNavBar`/`MondayWeeks`/`VioDays`/`MarkTapped`）。違反日は #7 のフィルタ導入までは全種別 |
 | 7 | 勤務表 | 違反の種別フィルタ（6分類・件数チップ・集中モード, E7） | `MagiScheduleViews.kt` `ViolationFilterBar`/`ViolationBucketChips`, `VioBuckets.kt` | `ScheduleView` | 済 | 済 | 緑 | run 33997066886。`MagiApp.ViewModels/VioBuckets.cs`（＋`VioBucketsTest` 3件）、`ScheduleView.RenderFilterBar`。セル枠・集計枠・違反日がフィルタ経由、集中モードはセル淡色化 |
 | 8 | 勤務表 | 職員名検索（行強調）＋凡例の折りたたみ | `MagiScheduleViews.kt` `SearchLegendBar`, `ViolationLegend`, `ShiftColorLegend` | `ScheduleView` | 済 | 済 | 緑 | run 33997304264。`ScheduleView.RenderSearchLegend`（検索語は名前ヘッダを青太字、凡例は WinUI の実線色分けに合わせた文言） |
-| 9 | 勤務表 | 土日・祝日の色分け（祝日データは外部ファイル, 3.441.0） | `JapanHolidays.kt`, `MagiScheduleViews.kt` 日ヘッダ | `ScheduleView` | 未 | 未 | 未 | |
+| 9 | 勤務表 | 土日・祝日の色分け（祝日データは外部ファイル, 3.441.0） | `JapanHolidays.kt`, `MagiScheduleViews.kt` 日ヘッダ | `ScheduleView` | 済 | 済 | 未 | `Views/JapanHolidays.cs`（Assets/japan_holidays.json＝Android と同一データ）、日ヘッダに曜日・祝日/日曜=赤・土曜=青・今日=濃緑太字 |
 | 10 | 勤務表 | シフト別不足サマリーの1行バナー（3.116.0） | `MagiScheduleViews.kt` `ScheduleGrid` 冒頭 | `ScheduleView` | 未 | 未 | 未 | |
 | 11 | 勤務表 | 集計セルの内訳ダイアログ（現在/下限/上限/目標・直し方・希望取消） | `MagiScheduleViews.kt` `TallyCard` の `TallyDetailUi` | `ScheduleView` | 未 | 未 | 未 | |
 | 12 | 編集 | 職員×シフトのマトリクス（担当可否・目標・上下限・実績, 3.477.0） | `StaffShiftMatrix.kt` `StaffShiftMatrixCard`/`StaffShiftCellSheet` | `EditView` | 未 | 未 | 未 | |

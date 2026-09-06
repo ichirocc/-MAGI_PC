@@ -57,6 +57,8 @@ public sealed partial class ScheduleView : UserControl
 
     private DispatcherTimer? _focusTimer;
 
+    private static readonly string[] WeekdayJa = { "月", "火", "水", "木", "金", "土", "日" };
+
     /// <summary>[phase9 #6] 日ヘッダ要素（週送り・違反ジャンプの横スクロール先）と、直近タップしたセル（クロスハイライト）。</summary>
     private readonly List<Border> _dayHeaders = new();
     private Border? _nameHeader;
@@ -565,6 +567,9 @@ public sealed partial class ScheduleView : UserControl
 
         var staffCount = ui.Schedule.Count;
         var dayCount = ui.Schedule.Count > 0 ? ui.Schedule[0].Count : 0;
+        DateOnly? startDay = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var sd) ? sd : null;
+        var today = DateOnly.FromDateTime(DateTime.Today);
         // +1 列/行 = 職員名ヘッダー列・日番号ヘッダー行。
         for (var r = 0; r <= staffCount; r++) ScheduleGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var c = 0; c <= dayCount; c++) ScheduleGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -582,6 +587,31 @@ public sealed partial class ScheduleView : UserControl
                 MinWidth = header && col == 0 ? 96 : 32,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
+            // [phase9 #9] 日ヘッダ＝日番号＋曜日。祝日と日曜は赤、土曜は青の淡い地（Kotlin原本 DayHeader、祝日は日曜と同じ扱い）。
+            //   今日は濃緑の太字で、地色は重ねない（混同回避）。祝日名はツールチップへ。
+            Color? tint = null;
+            if (row == 0 && col > 0 && startDay is { } d0)
+            {
+                var date = d0.AddDays(col - 1);
+                var dow = ((int)date.DayOfWeek + 6) % 7;
+                var holiday = JapanHolidays.NameOf(date);
+                block.Text = $"{col}\n{WeekdayJa[dow]}";
+                block.TextAlignment = TextAlignment.Center;
+                var isToday = date == today;
+                if (holiday is not null || dow == 6) tint = ColorHex.Parse(MagiAccent.Red, Colors.Red);
+                else if (dow == 5) tint = ColorHex.Parse(MagiAccent.Blue, Colors.Blue);
+                if (isToday)
+                {
+                    block.Foreground = (Brush)Application.Current.Resources["MagiTertiaryBrush"];
+                    block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                }
+                else if (tint is { } tc)
+                {
+                    block.Foreground = new SolidColorBrush(tc);
+                }
+                if (isToday) tint = null;
+                if (holiday is not null) ToolTipService.SetToolTip(block, $"{col}日 {WeekdayJa[dow]}曜日 {holiday}");
+            }
             // [検索] 一致する職員名を太字＋青で強調（行は隠さず＝被覆の文脈を保つ）。
             if (col == 0 && row > 0 && _nameQuery.Length > 0 && text.Contains(_nameQuery, StringComparison.OrdinalIgnoreCase))
             {
@@ -595,6 +625,7 @@ public sealed partial class ScheduleView : UserControl
                 // [Token] 罫線1dpは意図的な最小値のため据え置き（スペーシングトークンの対象外）。
                 BorderThickness = new Thickness(0, 0, 1, 1),
             };
+            if (tint is { } tintColor) border.Background = new SolidColorBrush(Color.FromArgb(36, tintColor.R, tintColor.G, tintColor.B));
             // [クロスハイライト／違反ジャンプ] 行=職員名は淡い主色地、列=日付は主色の太枠（Kotlin原本と同じ）。
             var dayIdx = col - 1;
             var dayFocused = row == 0 && dayIdx >= 0 &&

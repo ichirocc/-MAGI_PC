@@ -66,6 +66,10 @@
     <Content Include="Assets\sample_state_v6.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- [phase9 #9] 日本の祝日（Android の assets/japan_holidays.json と同一。tools/generate_japan_holidays.py が生成、2026〜2036年）。 -->
+    <Content Include="Assets\japan_holidays.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
