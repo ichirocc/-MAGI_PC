@@ -128,6 +128,54 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
+    public void ApplyFixSuggestion_ToShiftBeyondShiftCount_ReturnsWithoutApplyingAnyOp()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        // 既定フィクスチャはシフト 2 種（休/A）。toShift=99 は探索中にシフトが削除された等の古い提案。
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 0, 99)));
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+    }
+
+    [Fact]
+    public async Task ApplyFixSuggestion_RejectsWhenTheBoardChangedSinceTheSearch()
+    {
+        // 探索した盤面と違う盤面へ古い提案を書き込まない（指紋照合＝Kotlin 3.475.0）。
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.FindFixSuggestions();
+        await vm.LastFindFixSuggestionsTask!;
+        vm._currentSchedule![1][3] = 1; // 探索後の手編集
+
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)));
+
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("もう一度", vm.Ui.Message);
+    }
+
+    [Fact]
+    public void UndoAndRedoDropEngineRanAndPendingSuggestions()
+    {
+        // 元に戻す/やり直しは手操作＝「計算済み」ではない。古い提案も画面に残さない。
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.PushUndo();
+        vm._currentSchedule![0][0] = 1;
+        vm.Ui.EngineRan = true;
+        vm.Ui.FixSuggestions = new[] { MakeSuggestion(new FixCell(0, 0, 1)) };
+
+        vm.Undo();
+        Assert.False(vm.Ui.EngineRan);
+        Assert.Empty(vm.Ui.FixSuggestions);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+
+        vm.Ui.EngineRan = true;
+        vm.Ui.FixSuggestions = new[] { MakeSuggestion(new FixCell(0, 0, 1)) };
+        vm.Redo();
+        Assert.False(vm.Ui.EngineRan);
+        Assert.Empty(vm.Ui.FixSuggestions);
+        Assert.Equal(1, vm._currentSchedule![0][0]);
+    }
+
+    [Fact]
     public void ApplyFixSuggestion_NoStateLoaded_IsNoOp()
     {
         var vm = new MagiViewModel();

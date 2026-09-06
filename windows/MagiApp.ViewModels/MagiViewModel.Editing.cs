@@ -738,16 +738,23 @@ public sealed partial class MagiViewModel
     /// <summary>[一括] すべての希望を削除。</summary>
     /// <summary>
     /// [3.480.0 / phase9 #19] 「担当外の希望」を一括クリア（設定の見直しカードの一括ボタン用）。
-    /// 対象は Kind=Wish かつ Action=RemoveWish の行だけ（他種別は行ごとにデータの形が違い一括の意味が薄い）。
-    /// ApplySettingFix を件数ぶん繰り返すと Undo と再検査が件数ぶん積むので、1回の差し替え・1回の Undo にまとめる。
+    /// 対象はいまの設定で担当できないシフトへの希望（<c>Problem.CanDo</c>＝<see cref="WishOutOfScopeCount"/> と同じ判定）。
+    /// 診断（Ui.SettingIssues）は非同期で古いことがあるので、そこに残るキーではなく現在の state から出す。
+    /// 1 回の差し替え・1 回の Undo にまとめる。
     /// </summary>
     public void ClearOutOfScopeWishes()
     {
         var st = _state;
         if (st is null) return;
-        var keys = Ui.SettingIssues
-            .Where(i => i.Kind == IssueKind.Wish && i.Action == SettingFixAction.RemoveWish && i.WishKey is not null)
-            .Select(i => i.WishKey!)
+        var p = new Problem(st);
+        var keys = st.Wishes
+            .Where(kv =>
+            {
+                var parts = kv.Key.Split(',');
+                return int.TryParse(parts.ElementAtOrDefault(0), out var i)
+                    && i >= 0 && i < p.S && kv.Value >= 0 && kv.Value < p.K && !p.CanDo(i, kv.Value);
+            })
+            .Select(kv => kv.Key)
             .ToHashSet();
         if (keys.Count == 0) return;
         LogOp("I", $"担当外の希望を一括クリア: {keys.Count}件");
@@ -1360,12 +1367,12 @@ public sealed partial class MagiViewModel
         }
     }
 
-    /// <summary>[目標の検算] シフトごとの「適切回数(apt)の合計 vs それを受け止められる上限」。
-    /// <see cref="V6SanityPort.AptBalances(MagiState, Problem?)"/> をそのまま返す＝設定ミス診断（検査6-C）と
-    /// 同じ単一ソース。盤面を参照しないので、勤務表を作る前（未計算）でも目標を触るたびに正しい値が出る。</summary>
     /// <summary>休シフトの index（記号解決。読み込み前は 0）。回数マトリクスが休の目標ズレを別色にするために読む。</summary>
     public int RestShiftIndex() => _state is null ? 0 : ScheduleUtil.RestShiftIndex(_state);
 
+    /// <summary>[目標の検算] シフトごとの「適切回数(apt)の合計 vs それを受け止められる上限」。
+    /// <see cref="V6SanityPort.AptBalances(MagiState, Problem?)"/> をそのまま返す＝設定ミス診断（検査6-C）と
+    /// 同じ単一ソース。盤面を参照しないので、勤務表を作る前（未計算）でも目標を触るたびに正しい値が出る。</summary>
     public IReadOnlyList<AptBalance> AptBalances()
     {
         var st = _state;

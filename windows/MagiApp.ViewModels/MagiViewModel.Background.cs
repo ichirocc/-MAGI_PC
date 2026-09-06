@@ -66,6 +66,8 @@ public sealed partial class MagiViewModel
     // （「Stop()後に旧タスクが遅れて完了し、新しい入力の結果を誤って上書きする」ことを防ぐ）。
     private long _bgStateKey;
     private long _bgRunId;
+    /// <summary>[3.475.0/論理監査] keep-best の比較先＝この背景実行に渡した入力盤面。無い（復元経路）ときだけ前回の結果と比較する。</summary>
+    private int[][]? _bgInput;
 
     /// <summary>[Kotlin原本との差①] 背景 Task 専用のキャンセルトークン。<c>_job</c>（前景専用）とは
     /// 別に持つ——前景と背景は同時に走らないが（<c>RunBlockedByInFlight</c> が排他する）、
@@ -94,6 +96,7 @@ public sealed partial class MagiViewModel
 
         _bgStateKey = StateKey(st0);
         _bgRunId = runId;
+        _bgInput = sched0.Copy2D();
         OptimizationRepository.Request = new OptimizationRepository.RequestPayload(st0, sched0.Copy2D());
         OptimizationRepository.Seconds = Ui.BudgetSec;
         OptimizationRepository.Workers = Ui.Workers;
@@ -225,6 +228,7 @@ public sealed partial class MagiViewModel
         {
             _bgStateKey = 0L;
             _bgRunId = 0L;
+            _bgInput = null;
             LogOp("W", "バックグラウンド計算の結果を破棄しました（計算中に設定またはデータが変わったため）");
             Ui.MessageIsError = false;
             Ui.Running = false;
@@ -234,8 +238,11 @@ public sealed partial class MagiViewModel
         _bgStateKey = 0L;
         _bgRunId = 0L;
 
-        // [再実行 keep-best] 背景完了結果が前回採用解より悪化なら前回を維持（前景と同じ方針）。
-        var prev = _resultSchedule;
+        // [再実行 keep-best] 背景完了結果がこの実行の入力より悪化なら入力を維持（前景と同じ方針）。
+        //   旧: 前回の結果(_resultSchedule)と比較していたため、前回結果のあとに手編集・元に戻した盤面で背景実行すると、
+        //   入力より悪化していないその編集が「前回の結果を維持」の名目で巻き戻された（Kotlin 3.475.0 と同じ修正）。
+        var prev = _bgInput ?? _resultSchedule;
+        _bgInput = null;
         if (prev is not null)
         {
             var prevReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, prev));

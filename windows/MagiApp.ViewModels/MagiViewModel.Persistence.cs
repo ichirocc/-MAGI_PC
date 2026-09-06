@@ -220,6 +220,11 @@ public sealed partial class MagiViewModel
         if (cur is not null) _redoStack.AddLast(cur);
         _state = snap.State;
         _currentSchedule = snap.Schedule.Copy2D();
+        // 元に戻す/やり直しは手操作＝「計算済み」ではない。前の結果盤面と改善提案は、この盤面とは別の実体なので外す
+        // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
+        _resultSchedule = null;
+        Ui.EngineRan = false;
+        Ui.FixSuggestions = System.Array.Empty<MagiEngine.V6.FixSuggestion>();
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = _undoStack.Count > 0;
@@ -242,6 +247,11 @@ public sealed partial class MagiViewModel
         if (cur is not null) _undoStack.AddLast(cur);
         _state = snap.State;
         _currentSchedule = snap.Schedule.Copy2D();
+        // 元に戻す/やり直しは手操作＝「計算済み」ではない。前の結果盤面と改善提案は、この盤面とは別の実体なので外す
+        // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
+        _resultSchedule = null;
+        Ui.EngineRan = false;
+        Ui.FixSuggestions = System.Array.Empty<MagiEngine.V6.FixSuggestion>();
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = true;

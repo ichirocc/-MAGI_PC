@@ -32,6 +32,10 @@ public sealed partial class MagiViewModel
     /// focusStaff != null のときはそのスタッフが関わる手だけに絞る（違反タップ起点）。重い処理のため非同期。
     /// Kotlin原本 <c>findFixSuggestions(focusStaff, focusShift)</c> の移植。
     /// </summary>
+    /// <summary>[3.475.0/論理監査] 改善提案を計算した盤面/設定の指紋（適用時に照合する。0=未計算）。</summary>
+    private long _fixBoardKey;
+    private long _fixStateKey;
+
     public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null)
     {
         var st = _state;
@@ -42,6 +46,8 @@ public sealed partial class MagiViewModel
             ? st.StaffList[focusStaff.Value].Name
             : "";
         var snap = sched.Copy2D();
+        _fixBoardKey = BoardKey(snap);
+        _fixStateKey = StateKey(st);
         // [3.392.0の由来をそのまま記録] `seq` を持つのは refreshCheck と同じ理由＝`Cancel()` は非同期なので、
         //   後続の探索が `fixSearching=true` を立てた**後**に古いジョブの後始末が走ると、新しい探索の旗を
         //   消してしまう。
@@ -95,11 +101,20 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null) return;
         if (s.Ops.Count == 0) return;
+        // 提案は計算時の盤面/設定に対する差分。その後のセル編集・元に戻す・別データ読込・職員/シフト削除のあとに
+        // 同じ ops を書き込むと staff/day/toShift が別の実体を指す。一致しなければ適用せず再探索を促す（Kotlin 3.475.0）。
+        if (_fixBoardKey != 0L && (_fixBoardKey != BoardKey(sched) || _fixStateKey != StateKey(st)))
+        {
+            Ui.MessageIsError = true;
+            Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+            Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「直し方を探す」をもう一度押してください";
+            return;
+        }
         foreach (var op in s.Ops)
         {
             if (op.Staff < 0 || op.Staff >= sched.Length) return;
             if (op.Day < 0 || op.Day >= sched[op.Staff].Length) return;
-            if (op.ToShift < 0) return;
+            if (op.ToShift < 0 || op.ToShift >= st.Shifts.Count) return;
         }
         PushUndo();
         foreach (var op in s.Ops) sched[op.Staff][op.Day] = op.ToShift;

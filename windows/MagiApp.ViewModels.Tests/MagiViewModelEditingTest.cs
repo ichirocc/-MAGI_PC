@@ -144,17 +144,12 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
-    public void ClearOutOfScopeWishesRemovesOnlyTheWishKeysNamedByRemoveWishIssuesInOneUndoStep()
+    public void ClearOutOfScopeWishesRemovesEveryWishTheStaffCannotDoInOneUndoStep()
     {
+        // 職員A(G0: 休,A のみ) の B 希望 2 件が担当外。診断(SettingIssues)が空でも現在の state から判定する。
         var st = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,0"] = 1, ["1,0"] = 2, ["0,1"] = 2, ["0,2"] = 2 });
         // Undo のスナップショットは盤面込み（SnapNow）なので _currentSchedule が要る。
         var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
-        vm.Ui.SettingIssues = new[]
-        {
-            new SettingIssue(IssueKind.Wish, "職員A 2日", "担当外", "削除", SettingFixAction.RemoveWish, "削除", WishKey: "0,1"),
-            new SettingIssue(IssueKind.Wish, "職員A 3日", "担当外", "削除", SettingFixAction.RemoveWish, "削除", WishKey: "0,2"),
-            new SettingIssue(IssueKind.Wish, "職員B 1日", "…", "…", SettingFixAction.None, "", WishKey: "1,0"), // 一括の対象外
-        };
 
         vm.ClearOutOfScopeWishes();
 
@@ -164,9 +159,11 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
-    public void ClearOutOfScopeWishesIsANoOpWithoutMatchingIssues()
+    public void ClearOutOfScopeWishesIgnoresStaleIssuesAndIsANoOpWhenEveryWishIsInScope()
     {
-        var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,1"] = 2 }) };
+        // 古い診断が「0,0 を削除」と言っていても、いまの設定で担当可能なら消さない。
+        var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,0"] = 1 }), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.SettingIssues = new[] { new SettingIssue(IssueKind.Wish, "職員A 1日", "…", "…", SettingFixAction.RemoveWish, "削除", WishKey: "0,0") };
         vm.ClearOutOfScopeWishes();
         Assert.Single(vm._state!.Wishes);
         vm.Undo(); // 何も積んでいないので状態は変わらない

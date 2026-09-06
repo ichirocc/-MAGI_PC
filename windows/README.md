@@ -312,6 +312,28 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 外部レビュー（2段・対象 968478b）への対応:
+  - **[高] 改善提案の古い結果を適用できる** → Kotlin 3.475.0 の指紋照合を移植（`_fixBoardKey`/`_fixStateKey`＝探索時の盤面/設定、適用時に不一致なら拒否して再探索を促す）
+    ＋ `ToShift >= Shifts.Count` を拒否。テスト +2（`ApplyFixSuggestion_RejectsWhenTheBoardChangedSinceTheSearch` ほか）。
+  - **[高] Undo/Redo が結果メタデータを復元しない** → Undo/Redo で `EngineRan=false`（手操作）・`FixSuggestions` を空に・`_resultSchedule=null`。
+    背景実行の keep-best は Kotlin 3.475.0 と同じく「この実行に渡した入力」（`_bgInput`）と比較するよう修正（旧: 前回の結果と比較＝手編集や
+    元に戻した盤面が黙って巻き戻され得た）。診断（C1Plateau/PinTargets）は盤面指紋で自動的に無効化される（`Diagnostics.cs` の diagFresh）。
+    テスト +1（`UndoAndRedoDropEngineRanAndPendingSuggestions`）。
+  - **[中] 下部バーが改善探索中の Undo/Redo を許可する** → 表示条件は Android と同じ（`canUndo && !running`）のまま。VM 側は上記の指紋照合で
+    古い提案の適用を拒否する（Android 3.475.0 の設計＝探索を止めるのではなく適用で照合）。
+  - **[中] 担当外希望の一括削除が古い診断を使う** → `ClearOutOfScopeWishes` を現在の state（`Problem.CanDo`）から判定する形に変更。
+    テストを差し替え（古い診断が名指ししても担当可能なら消さない）。Android 側は `settingIssues` 由来のまま＝同じ指摘を Android バックログへ。
+  - **[中] EngineRan と Undo の契約が未テスト** → 上記テストで最適化相当→Undo→Redo を固定。
+  - **[中] GroupShiftApt 正規化の一部が到達不能** → Kotlin も同順（validate→normalize、3.491.0 で「列不足は validate が先に拒否」と注記済み）。
+    C# の `NormalizeGroupShiftApt` の説明を同じ契約に訂正（動作は不変）。
+  - **[低] XML doc の付与先** → `AptBalances` の summary を正しい位置へ。
+  - **[高] 希望島で窓・両翼・巡回が評価されない／禁止連続を減らす候補まで枝刈り／[中] ビームが列挙順に依存** → いずれも C# は Kotlin
+    `WishIslandPolish.kt`（3.496.0 の確定仕様）と同一の挙動。探索動学の変更は Kotlin を正として Android 側で計測（PostProbe/`nsp_bench`）つきで
+    決め、その後に同期する方針＝Android のバックログに登録。C# 単独では変えない（パリティ維持）。
+  - **[中] Android 同等実装が存在しない** → 事実誤認。`ichirocc/magi7ichiro-fork` main（009e780）に `WishIslandPolish.kt`・
+    `AnchoredWindowSwapTest.kt`・`WishIslandPolishTest.kt`・`applyStrictWholeWindow` が存在する（upstream `ichirocc/magi7ichiro` を見た疑い）。
+  - MagiApp.ViewModels.Tests 416 緑。
+
 - 2026-09-06 3.500.0 と同時: `RunPostOptimization` を Android と同型に再構成（`PostChain` ランナー＝採用・ピン帰属合流・ログ・計時の 1 経路、
   `PostOptimizationParams`（既定値は従来値）・`SeedTag`、`RunPolishCluster`/`SoftPolishVerifyLog`/`FinalC1Plateau` に分割）。
   退化した予算（LNS 0ms）のゼロ除算をガード。テスト +2（`V6PostOptimizationParamsTest`）: MagiEngine.Tests 760 緑。
