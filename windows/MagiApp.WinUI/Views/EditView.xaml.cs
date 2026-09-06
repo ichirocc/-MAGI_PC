@@ -81,6 +81,11 @@ public sealed partial class EditView : UserControl
     /// （1始まり）。<see cref="WishStaffCombo"/> の選択が変わったら（別人の選択を持ち越さないよう）
     /// リセットする——直近に同期した職員 index は <see cref="_wishCalendarStaffIndex"/> に持つ。</summary>
     private readonly HashSet<int> _wishSelectedDays = new();
+
+    /// <summary>[phase9 #13] 必要人数カレンダーの選択日（1 始まり）と、選択を持ち越すシフト。</summary>
+    private readonly HashSet<int> _needSelectedDays = new();
+    private int _needCalendarShiftIndex = -1;
+    private IReadOnlyList<string> _needCalShiftItems = Array.Empty<string>();
     private int _wishCalendarStaffIndex = -1;
 
     /// <summary>年間マスターのグループ選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
@@ -511,8 +516,158 @@ public sealed partial class EditView : UserControl
 
     // ===== 日別の必要人数（例外, 月次条件） =====
 
+    /// <summary>[phase9 #13] 必要人数カレンダー（Kotlin原本 <c>NeedMonthGrid</c>）。<see cref="RenderWishCalendar"/> と同じ作り。
+    /// 各日は「必要人数の範囲」（—＝未設定／n／a–b）を出し、個別設定の日は太字＋●。複数日選択→下の適用パネル。</summary>
+    private void RenderNeedCalendar(UiState ui, bool editable)
+    {
+        SyncItems(NeedCalShiftCombo, ui.ShiftSymbols, ref _needCalShiftItems);
+        var k = NeedCalShiftCombo.SelectedIndex;
+        if (k != _needCalendarShiftIndex)
+        {
+            _needCalendarShiftIndex = k;
+            _needSelectedDays.Clear();
+        }
+        NeedCalendarHost.Children.Clear();
+        NeedCalendarHost.RowDefinitions.Clear();
+        NeedCalendarHost.ColumnDefinitions.Clear();
+        if (!ui.Loaded || ui.Days <= 0)
+        {
+            NeedApplyPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var dow0 = 0;
+        if (DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var start))
+        {
+            dow0 = (int)start.DayOfWeek;
+        }
+        var days = ui.Days;
+        var rowCount = (dow0 + days + 6) / 7;
+        for (var c = 0; c < 7; c++) NeedCalendarHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (var r = 0; r <= rowCount; r++) NeedCalendarHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        string[] weekdayLabels = { "日", "月", "火", "水", "木", "金", "土" };
+        for (var c = 0; c < 7; c++)
+        {
+            var head = new TextBlock
+            {
+                Text = weekdayLabels[c], FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(c == 0 ? Colors.Red : c == 6 ? Colors.RoyalBlue : Colors.Black),
+                HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(2),
+            };
+            Grid.SetRow(head, 0); Grid.SetColumn(head, c);
+            NeedCalendarHost.Children.Add(head);
+        }
+        var individual = new HashSet<int>();
+        if (k >= 0) foreach (var v in _vm.NeedDayOverrides()) if (v.K == k) individual.Add(v.J);
+        for (var d = 1; d <= days; d++)
+        {
+            var col = (dow0 + d - 1) % 7;
+            var row = 1 + (dow0 + d - 1) / 7;
+            var selected = _needSelectedDays.Contains(d);
+            var range = k >= 0 ? _vm.NeedCellLimits(k, d - 1) : null;
+            var isIndividual = range is not null && individual.Contains(d - 1);
+            var rangeLabel = range is null ? "—" : range.Value.Lo == range.Value.Hi ? range.Value.Lo.ToString() : $"{range.Value.Lo}–{range.Value.Hi}";
+            var content = new StackPanel { Spacing = 0, HorizontalAlignment = HorizontalAlignment.Center };
+            content.Children.Add(new TextBlock
+            {
+                Text = selected ? $"{d} ✓" : isIndividual ? $"{d} ●" : d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+                FontWeight = selected ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = rangeLabel, FontSize = 10, Opacity = range is null ? 0.5 : 0.9, HorizontalAlignment = HorizontalAlignment.Center,
+                FontWeight = isIndividual ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+            });
+            var cellButton = new Button
+            {
+                Content = content, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]), MinWidth = 44,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Background = new SolidColorBrush(selected ? Colors.DodgerBlue : Colors.Transparent),
+                BorderThickness = new Thickness(selected ? 2 : 1), BorderBrush = new SolidColorBrush(selected ? Colors.DodgerBlue : Colors.LightGray),
+                IsEnabled = editable && k >= 0,
+            };
+            var day = d;
+            cellButton.Click += (_, _) =>
+            {
+                if (_syncingFromModel) return;
+                if (!_needSelectedDays.Add(day)) _needSelectedDays.Remove(day);
+                _syncingFromModel = true;
+                try { RenderNeedCalendar(_vm.Ui, editable); }
+                finally { _syncingFromModel = false; }
+            };
+            Grid.SetRow(cellButton, row); Grid.SetColumn(cellButton, col);
+            NeedCalendarHost.Children.Add(cellButton);
+        }
+        var hasSelection = k >= 0 && _needSelectedDays.Count > 0;
+        NeedApplyPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
+        if (!hasSelection) return;
+        var sorted = _needSelectedDays.OrderBy(x => x).ToList();
+        var labels = sorted.Count <= 4 ? string.Join("、", sorted.Select(DayChipLabel))
+            : string.Join("、", sorted.Take(3).Select(DayChipLabel)) + $"、ほか{sorted.Count - 3}日";
+        NeedApplySummaryText.Text = $"{sorted.Count}日選択中: {labels}";
+        UpdateNeedApplyButtons(editable);
+    }
+
+    /// <summary>「M/D(曜)」（Kotlin原本 <c>dayChipLabel</c>）。開始日が読めなければ「N日」。</summary>
+    private string DayChipLabel(int day1)
+    {
+        if (!DateOnly.TryParseExact(_vm.Ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var start)) return $"{day1}日";
+        var d = start.AddDays(day1 - 1);
+        string[] wk = { "日", "月", "火", "水", "木", "金", "土" };
+        return $"{d.Month}/{d.Day}({wk[(int)d.DayOfWeek]})";
+    }
+
+    private void UpdateNeedApplyButtons(bool editable)
+    {
+        var p1 = NeedApplyP1Box.Text.Trim();
+        var p2 = NeedApplyP2Box.Text.Trim();
+        var invalid = V6SanityPort.RangeOrderConflict(p1, p2) is not null;
+        NeedApplyHintText.Text = "上限人数は最低人数以上にしてください。";
+        NeedApplyHintText.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
+        ApplyNeedForDaysButton.Content = $"{_needSelectedDays.Count}日に適用";
+        ApplyNeedForDaysButton.IsEnabled = editable && !invalid && (p1.Length > 0 || p2.Length > 0);
+        ClearNeedForDaysButton.IsEnabled = editable;
+    }
+
+    private void OnNeedCalShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        Render();
+    }
+
+    private void OnNeedApplyTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (NeedApplyPanel.Visibility == Visibility.Visible) UpdateNeedApplyButtons(_vm.Ui.Loaded && !_vm.Ui.Running);
+    }
+
+    private void OnApplyNeedForDaysClick(object sender, RoutedEventArgs e)
+    {
+        var k = NeedCalShiftCombo.SelectedIndex;
+        if (k < 0 || _needSelectedDays.Count == 0) return;
+        _vm.SetNeedDaysForDays(k, _needSelectedDays.Select(d => d - 1).OrderBy(x => x).ToList(), NeedApplyP1Box.Text.Trim(), NeedApplyP2Box.Text.Trim());
+        _needSelectedDays.Clear();
+        Render();
+    }
+
+    private void OnClearNeedForDaysClick(object sender, RoutedEventArgs e)
+    {
+        var k = NeedCalShiftCombo.SelectedIndex;
+        if (k < 0 || _needSelectedDays.Count == 0) return;
+        _vm.ClearNeedDaysForDays(k, _needSelectedDays.Select(d => d - 1).OrderBy(x => x).ToList());
+        _needSelectedDays.Clear();
+        Render();
+    }
+
+    private void OnCancelNeedSelectionClick(object sender, RoutedEventArgs e)
+    {
+        _needSelectedDays.Clear();
+        Render();
+    }
+
     private void RenderNeedDay(UiState ui, bool editable)
     {
+        RenderNeedCalendar(ui, editable);
         SyncItems(NeedDayShiftCombo, ui.ShiftSymbols, ref _needDayShiftItems);
         SetNeedDayButton.IsEnabled = editable;
 

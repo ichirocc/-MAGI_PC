@@ -944,6 +944,32 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void SetNeedDaysForDaysWritesBothSidesAndBlankSideRestoresTheDefault()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.SetNeedDaysForDays(1, new[] { 0, 2 }, "2", "3");
+        Assert.Equal(new Dictionary<string, string> { ["1,0"] = "2", ["1,2"] = "2" }, vm._state!.NeedDay1);
+        Assert.Equal(new Dictionary<string, string> { ["1,0"] = "3", ["1,2"] = "3" }, vm._state!.NeedDay2);
+        vm.SetNeedDaysForDays(1, new[] { 0 }, "", "4");
+        Assert.False(vm._state!.NeedDay1.ContainsKey("1,0"));
+        Assert.Equal("4", vm._state!.NeedDay2["1,0"]);
+        vm.SetNeedDaysForDays(9, new[] { 0 }, "1", "");
+        Assert.Equal(1, vm._state!.NeedDay1.Count);
+    }
+
+    [Fact]
+    public void ClearNeedDaysForDaysRemovesOnlyTheGivenDaysAndIsANoOpWhenNothingChanges()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.SetNeedDaysForDays(1, new[] { 0, 2, 4 }, "2", "");
+        var before = vm._state;
+        vm.ClearNeedDaysForDays(1, new[] { 5 });
+        Assert.Same(before, vm._state);
+        vm.ClearNeedDaysForDays(1, new[] { 0, 4 });
+        Assert.Equal(new Dictionary<string, string> { ["1,2"] = "2" }, vm._state!.NeedDay1);
+    }
+
+    [Fact]
     public void SetWishesForDaysAppliesToASingleStaffMemberAcrossTheGivenDays()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };

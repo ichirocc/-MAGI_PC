@@ -332,6 +332,39 @@ public sealed partial class MagiViewModel
         ApplyStructure(st with { NeedDay1 = nd1, NeedDay2 = nd2 });
     }
 
+    /// <summary>[一括] シフト k の複数日へ必要人数の例外を一括設定（空欄＝その側は既定に戻す）。Undo 1 回・再チェック 1 回。</summary>
+    public void SetNeedDaysForDays(int k, IReadOnlyList<int> days, string p1, string p2)
+    {
+        var st = _state;
+        if (st is null) return;
+        if (days.Count == 0 || k < 0 || k >= st.Shifts.Count) return;
+        var nd1 = new Dictionary<string, string>(st.NeedDay1);
+        var nd2 = new Dictionary<string, string>(st.NeedDay2);
+        foreach (var j in days)
+        {
+            if (j < 0 || j >= st.DayCount) continue;
+            var key = $"{k},{j}";
+            if (string.IsNullOrWhiteSpace(p1)) nd1.Remove(key); else nd1[key] = p1.Trim();
+            if (string.IsNullOrWhiteSpace(p2)) nd2.Remove(key); else nd2[key] = p2.Trim();
+        }
+        LogOp("I", $"需要一括: {OpSy(k)} {OpDays(days)} → P1={(string.IsNullOrWhiteSpace(p1) ? "-" : p1.Trim())} P2={(string.IsNullOrWhiteSpace(p2) ? "-" : p2.Trim())}");
+        ApplyStructure(st with { NeedDay1 = nd1, NeedDay2 = nd2 });
+    }
+
+    /// <summary>[一括] シフト k の複数日の例外を既定へ戻す。変化が無ければ何もしない。</summary>
+    public void ClearNeedDaysForDays(int k, IReadOnlyList<int> days)
+    {
+        var st = _state;
+        if (st is null) return;
+        if (days.Count == 0) return;
+        var nd1 = new Dictionary<string, string>(st.NeedDay1);
+        var nd2 = new Dictionary<string, string>(st.NeedDay2);
+        foreach (var j in days) { nd1.Remove($"{k},{j}"); nd2.Remove($"{k},{j}"); }
+        if (nd1.Count == st.NeedDay1.Count && nd2.Count == st.NeedDay2.Count) return;
+        LogOp("I", $"需要クリア: {OpSy(k)} {OpDays(days)}");
+        ApplyStructure(st with { NeedDay1 = nd1, NeedDay2 = nd2 });
+    }
+
     public void RemoveNeedDay(int k, int j)
     {
         var st = _state;
