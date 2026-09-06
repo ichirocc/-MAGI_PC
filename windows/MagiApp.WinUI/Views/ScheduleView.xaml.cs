@@ -72,6 +72,34 @@ public sealed partial class ScheduleView : UserControl
     private readonly HashSet<string> _vioEnabled = new(VioBuckets.AllKeys);
     private bool _focusMode;
 
+    /// <summary>[phase9 #10] シフト別の人員不足サマリー（covU のある日数をシフト別に多い順）。「人員」バケツ OFF なら他の covU 表示と同様に隠す。</summary>
+    private void RenderShortageBanner(UiState ui)
+    {
+        if (!ui.Loaded || !_vioEnabled.Contains("need"))
+        {
+            ShortageBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var byShift = new Dictionary<int, HashSet<int>>();
+        foreach (var (key, cls) in ui.NeedViolations)
+        {
+            if (cls != "vio-covU") continue;
+            var parts = key.Split(',');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out var k) || !int.TryParse(parts[1], out var j)) continue;
+            if (!byShift.TryGetValue(k, out var days)) byShift[k] = days = new HashSet<int>();
+            days.Add(j);
+        }
+        if (byShift.Count == 0)
+        {
+            ShortageBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+        ShortageBanner.Visibility = Visibility.Visible;
+        var body = string.Join(" ・ ", byShift.OrderByDescending(kv => kv.Value.Count)
+            .Select(kv => $"{(kv.Key < ui.ShiftSymbols.Count ? ui.ShiftSymbols[kv.Key] : kv.Key.ToString())} {kv.Value.Count}日"));
+        ShortageBannerText.Text = $"人員不足（全{Math.Max(1, ui.Days)}日中）: {body}";
+    }
+
     /// <summary>[phase9 #8] 検索・凡例の開閉（既定は閉）と職員名の検索語。</summary>
     private bool _searchLegendOpen;
     private string _nameQuery = "";
@@ -548,6 +576,7 @@ public sealed partial class ScheduleView : UserControl
         // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         RenderFilterBar(ui);
+        RenderShortageBanner(ui);
         RenderSearchLegend(ui);
         RenderSchedule(ui);
         RenderStaffTally(ui);
@@ -570,6 +599,10 @@ public sealed partial class ScheduleView : UserControl
         DateOnly? startDay = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out var sd) ? sd : null;
         var today = DateOnly.FromDateTime(DateTime.Today);
+        // [phase9 #10] 日別の不足人数「▼N」（covU 由来なので「人員」バケツ ON のときだけ）。
+        var dayShort = new int[dayCount];
+        if (_vioEnabled.Contains("need") && ui.V6 is { } v6)
+            foreach (var r in v6.DayRisks) if (r.DayIndex >= 0 && r.DayIndex < dayCount) dayShort[r.DayIndex] = r.Shortage;
         // +1 列/行 = 職員名ヘッダー列・日番号ヘッダー行。
         for (var r = 0; r <= staffCount; r++) ScheduleGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var c = 0; c <= dayCount; c++) ScheduleGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -611,6 +644,12 @@ public sealed partial class ScheduleView : UserControl
                 }
                 if (isToday) tint = null;
                 if (holiday is not null) ToolTipService.SetToolTip(block, $"{col}日 {WeekdayJa[dow]}曜日 {holiday}");
+                if (dayShort[col - 1] > 0)
+                {
+                    block.Text += $"\n▼{dayShort[col - 1]}";
+                    if (!isToday) block.Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"];
+                    block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                }
             }
             // [検索] 一致する職員名を太字＋青で強調（行は隠さず＝被覆の文脈を保つ）。
             if (col == 0 && row > 0 && _nameQuery.Length > 0 && text.Contains(_nameQuery, StringComparison.OrdinalIgnoreCase))

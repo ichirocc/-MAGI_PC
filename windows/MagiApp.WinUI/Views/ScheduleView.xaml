@@ -14,6 +14,8 @@
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
       「元に戻す/やり直す」は MagiViewModel.Undo/Redo（Kotlin原本と同じ最大30段のスタック）へ配線。
       「まとめて割当」は複数セルへの一括代入（ScheduleView.xaml.cs の OnBulkAssignClick/MagiViewModel.SetCells 参照）。
+      [phase9 #10] シフト別の人員不足サマリー 1 行（Kotlin原本 ScheduleGrid 冒頭、3.116.0）＝covU のある日数をシフト別に多い順。
+      日ヘッダの「▼N」（その日の不足人数、Ui.V6.DayRisks）も同じ「人員」バケツ配下で表示。
       [phase9 #8] 検索・凡例の折りたたみ（Kotlin原本 SearchLegendBar, 既定=閉）＝職員名検索（該当行の名前を青太字、行は隠さない）＋
       違反の凡例（WinUI の枠は実線の色分けなので色で説明）＋シフトの色凡例（記号チップ）。
       [phase9 #7] 違反の種別フィルタ（Kotlin原本 ViolationFilterBar/VioBuckets, E7）＝6 バケツの件数付きトグルで
@@ -52,6 +54,11 @@
                     </Grid>
                     <StackPanel x:Name="BucketChips" Orientation="Horizontal" Spacing="6" />
                 </StackPanel>
+            </Border>
+            <Border x:Name="ShortageBanner" Background="{StaticResource MagiErrorContainerBrush}"
+                    CornerRadius="{StaticResource MagiCornerXS}" Padding="10,6">
+                <TextBlock x:Name="ShortageBannerText" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}"
+                           Foreground="{StaticResource MagiOnErrorContainerBrush}" />
             </Border>
             <Border x:Name="SearchLegendBar" Background="{StaticResource MagiSurfaceVariantBrush}"
                     CornerRadius="{StaticResource MagiCornerSM}" Padding="12,8">
