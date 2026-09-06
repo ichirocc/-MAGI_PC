@@ -153,6 +153,19 @@
                     <Button x:Name="SetStaffRangeButton" Content="設定" Click="OnSetStaffRangeClick" />
                 </StackPanel>
                 <TextBlock x:Name="StaffRangeHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+
+                <!-- [phase9 #12] 回数マトリクス（Kotlin原本 StaffShiftMatrixCard, 3.477.0）: 行=職員・列=シフトに担当可否・目標・上下限・実績を統合。 -->
+                <TextBlock Text="回数マトリクス（職員 × シフト：月に何回か）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                           Text="セルをタップで目標・上下限を編集。「—」＝担当不可（担当可否は年間マスターで変更）。薄色＝目標(やわらかい)のズレ、濃色＝個人の上下限(かたい)の逸脱。" />
+                <Border x:Name="AptOverloadBanner" Background="{StaticResource MagiErrorContainerBrush}"
+                        CornerRadius="{StaticResource MagiCornerXS}" Padding="10,6">
+                    <TextBlock x:Name="AptOverloadText" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource MagiOnErrorContainerBrush}" />
+                </Border>
+                <Button x:Name="ResetAptButton" Content="目標を全リセット" Click="OnResetAptClick" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <Grid x:Name="StaffShiftMatrixHost" />
+                </ScrollViewer>
             </StackPanel>
 
             <!-- ===== 年間マスター（制度変更時のみ） ===== -->

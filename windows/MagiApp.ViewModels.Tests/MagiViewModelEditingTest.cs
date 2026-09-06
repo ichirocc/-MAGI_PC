@@ -33,6 +33,14 @@ public class MagiViewModelEditingTest
     // ===================================================================
 
     [Fact]
+    public void RestShiftIndexResolvesTheRestShiftAndDefaultsToZeroWhenUnloaded()
+    {
+        Assert.Equal(0, new MagiViewModel().RestShiftIndex());
+        var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState() };
+        Assert.Equal(ScheduleUtil.RestShiftIndex(ThreeShiftTwoGroupState()), vm.RestShiftIndex());
+    }
+
+    [Fact]
     public void AllowedShiftsForReturnsTheGroupsBucket()
     {
         var st = ThreeShiftTwoGroupState();

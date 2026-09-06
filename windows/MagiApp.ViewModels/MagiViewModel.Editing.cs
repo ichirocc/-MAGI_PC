@@ -1257,6 +1257,9 @@ public sealed partial class MagiViewModel
     /// <summary>[目標の検算] シフトごとの「適切回数(apt)の合計 vs それを受け止められる上限」。
     /// <see cref="V6SanityPort.AptBalances(MagiState, Problem?)"/> をそのまま返す＝設定ミス診断（検査6-C）と
     /// 同じ単一ソース。盤面を参照しないので、勤務表を作る前（未計算）でも目標を触るたびに正しい値が出る。</summary>
+    /// <summary>休シフトの index（記号解決。読み込み前は 0）。回数マトリクスが休の目標ズレを別色にするために読む。</summary>
+    public int RestShiftIndex() => _state is null ? 0 : ScheduleUtil.RestShiftIndex(_state);
+
     public IReadOnlyList<AptBalance> AptBalances()
     {
         var st = _state;

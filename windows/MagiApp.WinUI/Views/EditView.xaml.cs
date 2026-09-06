@@ -4,6 +4,9 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using MagiApp.ViewModels;
+using Windows.UI;
+using MagiEngine;
+using MagiEngine.V6;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -631,6 +634,7 @@ public sealed partial class EditView : UserControl
             : (ui.Loaded ? "計算の実行中は職員を変更できません。終わってからにしてください。" : "");
 
         RenderStaffRange(editable);
+        RenderStaffShiftMatrix(ui, editable);
     }
 
     /// <summary>
@@ -1535,6 +1539,207 @@ public sealed partial class EditView : UserControl
     ///  - 行ヘッダ（群名）タップ＝その群の全シフトを一括（1つでもOFFがあれば全ON、全ONなら全OFF＝休は残る）。
     ///    列ヘッダ（シフト名）タップ＝そのシフトを全群へ一括（同じ規則。休の列はOFFにできない＝VMが案内）。
     /// </summary>
+    /// <summary>[phase9 #12] 回数マトリクス（Kotlin原本 <c>StaffShiftMatrixCard</c>）。表示専用の再配置＝判定は
+    /// <see cref="UiState.CountViolations"/>・<see cref="MagiViewModel.StaffCellLimits"/>（チェッカー側が正）だけを読む。
+    /// 色は既存の 2 色言語（不足=赤系／超過=橙系）。目標(apt)のズレは薄く、個人上下限の逸脱は濃く。</summary>
+    private void RenderStaffShiftMatrix(UiState ui, bool editable)
+    {
+        StaffShiftMatrixHost.Children.Clear();
+        StaffShiftMatrixHost.RowDefinitions.Clear();
+        StaffShiftMatrixHost.ColumnDefinitions.Clear();
+        var ws1 = _vm.Ws1();
+        if (ws1 is null || ws1.Shifts.Count == 0 || ws1.Staff.Count == 0)
+        {
+            AptOverloadBanner.Visibility = Visibility.Collapsed;
+            ResetAptButton.IsEnabled = false;
+            return;
+        }
+        var worst = _vm.AptBalances().Where(b => b.Overloaded).OrderByDescending(b => b.Shortfall).FirstOrDefault();
+        AptOverloadBanner.Visibility = worst is null ? Visibility.Collapsed : Visibility.Visible;
+        if (worst is not null)
+        {
+            AptOverloadText.Text = $"⚠ {KigouFormat.ToHankakuKigou(worst.Kigou)}：目標の合計{worst.AptSum}回 ＞ " +
+                (worst.IsRest ? $"休める日数の上限{worst.Capacity}日" : $"必要人数の合計{worst.Capacity}回") + $"（{worst.Shortfall}回ぶんは必ず届きません）";
+        }
+        ResetAptButton.IsEnabled = editable && ws1.GroupShiftApt.Any(row => row.Any(v => !string.IsNullOrWhiteSpace(v)));
+
+        var K = ws1.Shifts.Count;
+        var S = ws1.Staff.Count;
+        var restIdx = _vm.RestShiftIndex();
+        var shortC = ColorHex.Parse(ui.ViolationColorHex, ColorHex.Parse(ColorHex.DefaultHardVioHex, Colors.Crimson));
+        var overC = ColorHex.Parse(ui.ViolationSoftColorHex, ColorHex.Parse(ColorHex.DefaultSoftVioHex, Colors.Orange));
+        for (var r = 0; r <= S; r++) StaffShiftMatrixHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var c = 0; c <= K; c++) StaffShiftMatrixHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        void Header(int row, int col, string text, bool left)
+        {
+            var b = new Border
+            {
+                Padding = new Thickness(6, 4, 6, 4), MinWidth = left ? 128 : 68, MinHeight = 52,
+                Background = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"],
+                Child = new TextBlock
+                {
+                    Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Center,
+                },
+            };
+            Grid.SetRow(b, row); Grid.SetColumn(b, col);
+            StaffShiftMatrixHost.Children.Add(b);
+        }
+        Header(0, 0, "職員 (群)", left: true);
+        for (var k = 0; k < K; k++) Header(0, k + 1, KigouFormat.ToHankakuKigou(ws1.Shifts[k].Kigou), left: false);
+
+        for (var i = 0; i < S; i++)
+        {
+            var staff = ws1.Staff[i];
+            var g = staff.GroupIdx;
+            var gk = g >= 0 && g < ws1.Groups.Count ? ws1.Groups[g].Kigou : "?";
+            Header(i + 1, 0, $"{staff.Name} ({gk})", left: true);
+            var counts = new int[K];
+            if (i < ui.Schedule.Count) foreach (var v in ui.Schedule[i]) if (v >= 0 && v < K) counts[v]++;
+            for (var k = 0; k < K; k++)
+            {
+                var allowed = g >= 0 && g < ws1.GroupShift.Count && k < ws1.GroupShift[g].Count && ws1.GroupShift[g][k] == 1;
+                ui.CountViolations.TryGetValue($"{i},{k}", out var vio);
+                var (text, sub, bg, bold, bordered) = MatrixCell(allowed, counts[k], _vm.StaffCellLimits(i, k), vio, k == restIdx, shortC, overC);
+                var content = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+                content.Children.Add(new TextBlock { Text = text, FontSize = 12, FontWeight = bold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center });
+                if (sub.Length > 0) content.Children.Add(new TextBlock { Text = sub, FontSize = 10, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
+                var cell = new Button
+                {
+                    Content = content, MinWidth = 68, MinHeight = 52, Padding = new Thickness(4, 2, 4, 2), CornerRadius = new CornerRadius(4),
+                    Background = bg is { } c ? new SolidColorBrush(c) : new SolidColorBrush(Colors.Transparent),
+                    BorderThickness = new Thickness(bordered ? 1 : 0), IsEnabled = editable && allowed,
+                };
+                var (si, sk) = (i, k);
+                cell.Click += async (_, _) => await ShowStaffShiftCellDialogAsync(si, sk);
+                Grid.SetRow(cell, i + 1); Grid.SetColumn(cell, k + 1);
+                StaffShiftMatrixHost.Children.Add(cell);
+            }
+        }
+    }
+
+    /// <summary>セルの見た目（Kotlin原本 <c>matrixCell</c>）。透明地・薄色（目標のズレ）・濃色（上下限の逸脱）の 3 段。</summary>
+    private static (string Text, string Sub, Color? Bg, bool Bold, bool Bordered) MatrixCell(
+        bool allowed, int count, (int? Lo, int? Hi, int? Apt) limits, string? vio, bool isRest, Color shortC, Color overC)
+    {
+        var (lo, hi, apt) = limits;
+        if (!allowed) return ("—", "", Color.FromArgb(90, 0xE3, 0xED, 0xEA), false, false);
+        string Range() => (lo, hi) switch
+        {
+            ({ } l, { } h) when l == h => $"={l}",
+            ({ } l, { } h) => $"{l}〜{h}",
+            ({ } l, null) => $"{l}〜",
+            (null, { } h) => $"〜{h}",
+            _ => "",
+        };
+        static Color A(Color c, byte a) => Color.FromArgb(a, c.R, c.G, c.B);
+        var orange = ColorHex.Parse(MagiAccent.Orange, Colors.Orange);
+        return vio switch
+        {
+            "vio-low" => ($"▼{count}", Range(), A(shortC, 115), true, false),
+            "vio-high" => ($"▲{count}", Range(), A(overC, 128), true, false),
+            "vio-aptLow" => ($"▼{count}", $"目標{apt ?? count}", isRest ? A(orange, 71) : A(shortC, 56), false, false),
+            "vio-aptHigh" => ($"▲{count}", $"目標{apt ?? count}", isRest ? A(orange, 71) : A(overC, 56), false, false),
+            null => lo is not null || hi is not null ? ($"{count}", Range(), null, false, true)
+                : apt is not null ? ($"{count}", $"目標{apt}", null, false, false)
+                : ($"{count}", "", null, false, false),
+            _ => ($"△{count}", "", A(overC, 46), false, false),
+        };
+    }
+
+    /// <summary>セルタップの編集ダイアログ（Kotlin原本 <c>StaffShiftCellSheet</c>）: ①群の目標（同じ群の全員に影響）②個人の上下限 の 2 系統だけ。</summary>
+    private async Task ShowStaffShiftCellDialogAsync(int i, int k)
+    {
+        var ui = _vm.Ui;
+        var v = _vm.Ws1();
+        if (v is null || i >= v.Staff.Count || k >= v.Shifts.Count) return;
+        var name = v.Staff[i].Name;
+        var g = v.Staff[i].GroupIdx;
+        var groupName = g >= 0 && g < v.Groups.Count ? v.Groups[g].Name : "?";
+        var kigou = KigouFormat.ToHankakuKigou(v.Shifts[k].Kigou);
+        var count = i < ui.Schedule.Count ? ui.Schedule[i].Count(x => x == k) : 0;
+        var (lo0, hi0, apt) = _vm.StaffCellLimits(i, k);
+        ui.CountViolations.TryGetValue($"{i},{k}", out var vio);
+        var hasRange = lo0 is not null || hi0 is not null;
+
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock { Text = $"現在 {count}回", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        var status = vio switch
+        {
+            "vio-low" when lo0 is { } l => $"下限{l}回に対し現在{count}回（{Math.Max(0, l - count)}回不足）",
+            "vio-high" when hi0 is { } h => $"上限{h}回に対し現在{count}回（{Math.Max(0, count - h)}回超過）",
+            "vio-aptLow" when apt is { } a => $"目標{a}回に対し現在{count}回（{Math.Max(0, a - count)}回未達）",
+            "vio-aptHigh" when apt is { } a => $"目標{a}回に対し現在{count}回（{Math.Max(0, count - a)}回超過）",
+            _ => apt is { } a2 ? $"目標{a2}回どおりです" : "",
+        };
+        if (status.Length > 0) panel.Children.Add(new TextBlock { Text = status, TextWrapping = TextWrapping.Wrap });
+
+        var raw = g >= 0 && g < v.GroupShiftApt.Count && k < v.GroupShiftApt[g].Count ? v.GroupShiftApt[g][k] : "";
+        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} 全員に適用）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        var aptRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var aptValue = new TextBlock { Text = string.IsNullOrWhiteSpace(raw) ? "なし" : raw.Trim(), MinWidth = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var minus = new Button { Content = "−", MinWidth = 44 };
+        var plus = new Button { Content = "＋", MinWidth = 44 };
+        void SetApt(string value) { _vm.Ws1SetGroupApt(g, k, value); raw = value; aptValue.Text = string.IsNullOrWhiteSpace(value) ? "なし" : value; }
+        minus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : (int?)null; SetApt(c is null ? "0" : c <= 0 ? "" : (c.Value - 1).ToString()); };
+        plus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : -1; SetApt(Math.Max(0, c + 1).ToString()); };
+        aptRow.Children.Add(new TextBlock { Text = kigou, MinWidth = 48, VerticalAlignment = VerticalAlignment.Center });
+        aptRow.Children.Add(minus); aptRow.Children.Add(aptValue); aptRow.Children.Add(plus);
+        panel.Children.Add(aptRow);
+        if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
+            panel.Children.Add(new TextBlock { Text = $"個人の上下限で {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 12, Opacity = 0.8 });
+
+        panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };
+        var hiBox = new TextBox { Header = "上限", PlaceholderText = "なし", Text = hi0?.ToString() ?? "", Width = 120 };
+        var rangeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        rangeRow.Children.Add(loBox); rangeRow.Children.Add(hiBox);
+        panel.Children.Add(rangeRow);
+        var conflict = new TextBlock { Text = "上限は下限以上にしてください。", FontSize = 12, Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], Visibility = Visibility.Collapsed };
+        panel.Children.Add(conflict);
+        if (vio == "vio-high" || vio == "vio-low")
+        {
+            var quick = new Button { Content = vio == "vio-high" ? $"上限を{count}に引き上げて解決" : $"下限を{count}に下げて解決", HorizontalAlignment = HorizontalAlignment.Stretch };
+            panel.Children.Add(quick);
+            quick.Click += (_, _) =>
+            {
+                if (vio == "vio-high") _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString());
+                else _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? "");
+            };
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = $"{name} ・ {kigou}", Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
+            PrimaryButtonText = "この上下限を適用", SecondaryButtonText = hasRange ? "上下限を解除" : null, CloseButtonText = "閉じる",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        void Validate()
+        {
+            var bad = V6SanityPort.RangeOrderConflict(loBox.Text, hiBox.Text) is not null;
+            conflict.Visibility = bad ? Visibility.Visible : Visibility.Collapsed;
+            dialog.IsPrimaryButtonEnabled = !bad && (loBox.Text.Trim().Length > 0 || hiBox.Text.Trim().Length > 0 || hasRange);
+        }
+        loBox.TextChanged += (_, _) => Validate();
+        hiBox.TextChanged += (_, _) => Validate();
+        Validate();
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary) _vm.SetStaffRange(i, k, loBox.Text.Trim(), hiBox.Text.Trim());
+        else if (result == ContentDialogResult.Secondary) _vm.RemoveStaffRange(i, k);
+    }
+
+    private async void OnResetAptClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "目標を全リセットしますか？",
+            Content = new TextBlock { Text = "すべての群×シフトの目標（適切回数）を空にします。「元に戻す」で戻せます。", TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = "リセット", CloseButtonText = "キャンセル", DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) _vm.Ws1ResetGroupApt();
+    }
+
     private const double MatrixRowH = 44;
     private const double MatrixCellW = 44;
 
