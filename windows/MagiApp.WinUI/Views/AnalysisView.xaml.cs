@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Linq;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -21,8 +22,9 @@ public sealed partial class AnalysisView : UserControl
     /// <summary>診断ログの表示上限（行）。これを超えた分は先頭からの打ち切りと明示する。</summary>
     private const int MaxLogLines = 200;
 
-    /// <summary>設定の見直し候補の表示上限（件）。これを超えた分は件数だけを添える。</summary>
-    private const int MaxIssueRows = 12;
+    /// <summary>設定の見直しの表示上限（件）。重要な順に整列済みなので、超えた分は「まず上から直す」と案内する（Kotlin原本と同じ 6）。</summary>
+    private const int MaxIssueRows = 6;
+    private bool _issuesOpen;
 
     /// <summary>
     /// 違反の族キー → 画面に出す日本語名。Kotlin原本 <c>ui/BreakdownLabels.kt</c> の
@@ -320,7 +322,10 @@ public sealed partial class AnalysisView : UserControl
         return (i, j, family);
     }
 
-    /// <summary>③ 設定の見直し候補。1件＝どこが / 何が問題か / どう直すか の3行。</summary>
+    /// <summary>
+    /// ③ 設定の見直し（Kotlin原本 <c>SettingIssuesCard</c>、3.480.0）。1件＝種類チップ＋どこが / 何が問題か / どう直すか＋ワンタップ修正。
+    /// 「担当外の希望」は同型行がまとまりやすいので一括クリアを先頭に置き、一覧は既定で畳む。
+    /// </summary>
     private void RenderIssues(UiState ui)
     {
         IssuesList.Children.Clear();
@@ -328,31 +333,75 @@ public sealed partial class AnalysisView : UserControl
         IssuesSection.Visibility = issues.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (issues.Count == 0) return;
 
+        IssuesTitle.Text = $"設定の見直し（{issues.Count}件）";
+        var wishClear = issues.Count(i => i.Kind == IssueKind.Wish && i.Action == SettingFixAction.RemoveWish);
+        ClearOutOfScopeWishesButton.Visibility = wishClear > 1 ? Visibility.Visible : Visibility.Collapsed;
+        ClearOutOfScopeWishesButton.Content = $"担当外の希望を一括クリア（{wishClear}件）";
+        ClearOutOfScopeWishesButton.IsEnabled = !ui.Running;
+        IssuesToggle.Content = _issuesOpen ? "ⓘ 一覧を閉じる" : $"ⓘ 一覧を見る（{issues.Count}件）";
+        IssuesList.Visibility = _issuesOpen ? Visibility.Visible : Visibility.Collapsed;
+        IssuesGoEditButton.Visibility = _goEdit is null ? Visibility.Collapsed : Visibility.Visible;
+        IssuesGoEditButton.IsEnabled = !ui.Running;
+        if (!_issuesOpen) return;
+
         foreach (var issue in issues.Take(MaxIssueRows))
         {
-            var row = new StackPanel { Spacing = 2 };
-            row.Children.Add(BodyText(issue.Where, semiBold: true));
-            row.Children.Add(BodyText(issue.Problem));
-            row.Children.Add(BodyText($"→ {issue.Fix}", dim: true));
+            var (tag, hex) = issue.Kind switch
+            {
+                IssueKind.Wish => ("希望", MagiAccent.Blue),
+                IssueKind.Constraint => ("制約", MagiAccent.Red),
+                IssueKind.Demand => ("必要人数", MagiAccent.Red),
+                _ => ("回数", MagiAccent.Orange),
+            };
+            var fg = BrushOf("MagiOnErrorContainerBrush");
+            var box = new StackPanel { Spacing = 4 };
+            var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var tagColor = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray));
+            head.Children.Add(new Border
+            {
+                BorderBrush = tagColor, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 1, 6, 1),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = tag, FontSize = 11, Foreground = tagColor },
+            });
+            head.Children.Add(new TextBlock
+            {
+                Text = issue.Where, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg,
+                TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
+            });
+            box.Children.Add(head);
+            box.Children.Add(new TextBlock { Text = issue.Problem, FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            box.Children.Add(new TextBlock { Text = $"→ {issue.Fix}", FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
             // [設定ミスのワンタップ修正] Action==None のものは提案文だけ（自動修正の当てが無い）。
             if (issue.Action != SettingFixAction.None)
             {
                 var apply = new Button
                 {
                     Content = issue.ActionLabel.Length > 0 ? issue.ActionLabel : "この修正を適用",
-                    FontSize = 12,
-                    HorizontalAlignment = HorizontalAlignment.Left,
+                    FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running,
                 };
                 apply.Click += (_, _) => _vm.ApplySettingFix(issue);
-                row.Children.Add(apply);
+                box.Children.Add(apply);
             }
-            IssuesList.Children.Add(row);
+            IssuesList.Children.Add(new Border
+            {
+                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+            });
         }
         if (issues.Count > MaxIssueRows)
         {
-            IssuesList.Children.Add(BodyText($"ほか {issues.Count - MaxIssueRows}件", dim: true));
+            IssuesList.Children.Add(BodyText($"ほか {issues.Count - MaxIssueRows} 件（重要な順に表示中。まず上から直してください）", dim: true));
         }
     }
+
+    private void OnClearOutOfScopeWishesClick(object sender, RoutedEventArgs e) => _vm.ClearOutOfScopeWishes();
+
+    private void OnIssuesToggleClick(object sender, RoutedEventArgs e)
+    {
+        _issuesOpen = !_issuesOpen;
+        Render();
+    }
+
+    private void OnIssuesGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
 
     /// <summary>
     /// ④ 回数の固定で止まった手。観測できた試行が1回以上あるときだけ出す

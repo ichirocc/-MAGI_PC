@@ -144,6 +144,35 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void ClearOutOfScopeWishesRemovesOnlyTheWishKeysNamedByRemoveWishIssuesInOneUndoStep()
+    {
+        var st = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,0"] = 1, ["1,0"] = 2, ["0,1"] = 2, ["0,2"] = 2 });
+        var vm = new MagiViewModel { _state = st };
+        vm.Ui.SettingIssues = new[]
+        {
+            new SettingIssue(IssueKind.Wish, "職員A 2日", "担当外", "削除", SettingFixAction.RemoveWish, "削除", WishKey: "0,1"),
+            new SettingIssue(IssueKind.Wish, "職員A 3日", "担当外", "削除", SettingFixAction.RemoveWish, "削除", WishKey: "0,2"),
+            new SettingIssue(IssueKind.Wish, "職員B 1日", "…", "…", SettingFixAction.None, "", WishKey: "1,0"), // 一括の対象外
+        };
+
+        vm.ClearOutOfScopeWishes();
+
+        Assert.Equal(new[] { "0,0", "1,0" }, vm._state!.Wishes.Keys.OrderBy(k => k));
+        vm.Undo(); // 1回の Undo で 4 件へ戻る（件数ぶん積んでいない）
+        Assert.Equal(4, vm._state!.Wishes.Count);
+    }
+
+    [Fact]
+    public void ClearOutOfScopeWishesIsANoOpWithoutMatchingIssues()
+    {
+        var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,1"] = 2 }) };
+        vm.ClearOutOfScopeWishes();
+        Assert.Single(vm._state!.Wishes);
+        vm.Undo(); // 何も積んでいないので状態は変わらない
+        Assert.Single(vm._state!.Wishes);
+    }
+
+    [Fact]
     public void WishOutOfScopeCountCountsOnlyWishesForShiftsTheStaffCannotDo()
     {
         var st = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int>

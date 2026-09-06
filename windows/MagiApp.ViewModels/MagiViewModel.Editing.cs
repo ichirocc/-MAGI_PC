@@ -736,6 +736,24 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>[一括] すべての希望を削除。</summary>
+    /// <summary>
+    /// [3.480.0 / phase9 #19] 「担当外の希望」を一括クリア（設定の見直しカードの一括ボタン用）。
+    /// 対象は Kind=Wish かつ Action=RemoveWish の行だけ（他種別は行ごとにデータの形が違い一括の意味が薄い）。
+    /// ApplySettingFix を件数ぶん繰り返すと Undo と再検査が件数ぶん積むので、1回の差し替え・1回の Undo にまとめる。
+    /// </summary>
+    public void ClearOutOfScopeWishes()
+    {
+        var st = _state;
+        if (st is null) return;
+        var keys = Ui.SettingIssues
+            .Where(i => i.Kind == IssueKind.Wish && i.Action == SettingFixAction.RemoveWish && i.WishKey is not null)
+            .Select(i => i.WishKey!)
+            .ToHashSet();
+        if (keys.Count == 0) return;
+        LogOp("I", $"担当外の希望を一括クリア: {keys.Count}件");
+        ApplyStructure(st with { Wishes = st.Wishes.Where(kv => !keys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value) });
+    }
+
     public void ClearAllWishes()
     {
         var st = _state;

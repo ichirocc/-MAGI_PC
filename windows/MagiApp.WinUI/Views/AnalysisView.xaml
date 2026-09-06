@@ -81,9 +81,13 @@
             </StackPanel>
 
             <!-- ③ 設定の見直し候補 -->
-            <StackPanel x:Name="IssuesSection" Spacing="6">
-                <TextBlock Text="設定の見直し候補" FontSize="16" FontWeight="SemiBold" />
-                <StackPanel x:Name="IssuesList" Spacing="10" />
+            <!-- [phase9 #19] Kotlin原本 SettingIssuesCard（3.480.0）: 一括クリア→既定で畳んだ一覧（上位6件）→編集導線。 -->
+            <StackPanel x:Name="IssuesSection" Spacing="8">
+                <TextBlock x:Name="IssuesTitle" Text="設定の見直し" FontSize="16" FontWeight="SemiBold" />
+                <Button x:Name="ClearOutOfScopeWishesButton" HorizontalAlignment="Stretch" Click="OnClearOutOfScopeWishesClick" />
+                <HyperlinkButton x:Name="IssuesToggle" Padding="0" Click="OnIssuesToggleClick" />
+                <StackPanel x:Name="IssuesList" Spacing="8" Visibility="Collapsed" />
+                <Button x:Name="IssuesGoEditButton" Content="設定・希望を編集する" HorizontalAlignment="Left" Click="OnIssuesGoEditClick" />
             </StackPanel>
 
             <!-- ④ 回数の固定で止まった手 -->
