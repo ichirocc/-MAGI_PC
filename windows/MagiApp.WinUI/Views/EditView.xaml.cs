@@ -184,6 +184,83 @@ public sealed partial class EditView : UserControl
             c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
             : c.Wishes == 0 ? "次に『希望シフト』を登録すると できあがり度 が上がります。"
             : "準備OK。ホームの『勤務表をつくる』で作成できます。");
+        RenderChecklist(ui);
+    }
+
+    /// <summary>
+    /// [phase9 #15] 「今月の作成条件」（Kotlin原本 <c>MonthlyChecklistCard</c>、3.483.0 E-3 の形）。read-only。
+    /// 希望の行はタップで下の希望シフト欄へ、入力診断の行はタップでその場に上位 6 件を開く（分析タブへ往復させない）。
+    /// 原本の「▶ 勤務表をつくる」は 3.482.0 で撤去済み（フッターに一本化）なので置かない。
+    /// </summary>
+    private void RenderChecklist(UiState ui)
+    {
+        ChecklistPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!ui.Loaded) return;
+        var v = _vm.MonthlyChecklist();
+        ChecklistHost.Children.Clear();
+        ChecklistHost.Children.Add(ChecklistRow("職員", $"{v.StaffN}名", ok: v.StaffN > 0));
+        ChecklistHost.Children.Add(ChecklistRow("希望・休暇", $"{v.WishStaff}/{v.StaffN}名 入力済み", ok: v.WishStaff > 0,
+            onClick: () => WishSectionTitle.StartBringIntoView()));
+        ChecklistHost.Children.Add(ChecklistRow("必要人数",
+            (v.NeedStdOk ? "標準あり" : "標準が未設定") + $"・例外{v.NeedExceptions}件", ok: v.NeedStdOk));
+        var issues = ui.SettingIssues;
+        var issueText = issues.Count == 0 ? "問題なし" : $"見直し {issues.Count}件" + (_checklistIssuesOpen ? " ▾" : " ▸");
+        ChecklistHost.Children.Add(ChecklistRow("入力診断", issueText, ok: issues.Count == 0,
+            onClick: issues.Count > 0 ? () => { _checklistIssuesOpen = !_checklistIssuesOpen; Render(); } : null));
+
+        ChecklistIssuesHost.Children.Clear();
+        var open = _checklistIssuesOpen && issues.Count > 0;
+        ChecklistIssuesHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        if (!open) return;
+        foreach (var iss in issues.Take(ChecklistIssueRows))
+        {
+            ChecklistIssuesHost.Children.Add(new TextBlock
+            {
+                Text = $"・{iss.Where}：{iss.Problem}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+            });
+        }
+        if (issues.Count > ChecklistIssueRows)
+        {
+            ChecklistIssuesHost.Children.Add(new TextBlock
+            {
+                Text = $"ほか{issues.Count - ChecklistIssueRows}件（分析タブの設定見直しに全件）", FontSize = 12, Opacity = 0.8,
+            });
+        }
+    }
+
+    private const int ChecklistIssueRows = 6;
+    private bool _checklistIssuesOpen;
+
+    /// <summary>✓/！＋ラベル＋値の 1 行。onClick があるときは行全体がボタン（値の末尾に「›」）。</summary>
+    private static FrameworkElement ChecklistRow(string label, string value, bool ok, Action? onClick = null)
+    {
+        var mark = new TextBlock
+        {
+            Text = ok ? "✓" : "！", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 16,
+            Foreground = (Brush)Application.Current.Resources[ok ? "MagiTertiaryBrush" : "MagiErrorBrush"],
+        };
+        var lbl = new TextBlock { Text = label, Style = (Style)Application.Current.Resources["MagiBodyMediumTextStyle"] };
+        var val = new TextBlock
+        {
+            Text = value + (onClick is null ? "" : " ›"),
+            Style = (Style)Application.Current.Resources["MagiBodyMediumTextStyle"],
+            Foreground = onClick is null ? new SolidColorBrush(Colors.Gray) : (Brush)Application.Current.Resources["MagiPrimaryBrush"],
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        var grid = new Grid { ColumnSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(mark, 0); Grid.SetColumn(lbl, 1); Grid.SetColumn(val, 2);
+        grid.Children.Add(mark); grid.Children.Add(lbl); grid.Children.Add(val);
+        if (onClick is null) return grid;
+        var btn = new Button
+        {
+            Content = grid, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0), Padding = new Thickness(0, 4, 0, 4),
+        };
+        btn.Click += (_, _) => onClick();
+        return btn;
     }
 
     /// <summary>「2026-07-01」＋31日 → 「2026年7月1日 から 31日間」。読めない開始日はそのまま出す。</summary>

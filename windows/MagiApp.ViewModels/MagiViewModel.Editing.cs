@@ -58,6 +58,26 @@ public sealed partial class MagiViewModel
             st.Wishes.Count, st.NeedDay1.Count + st.NeedDay2.Count, cons, st.StaffRange.Count, st.Use2Patterns);
     }
 
+    /// <summary>
+    /// [phase9 #15] 「今月の作成条件」チェックリストの数値（Kotlin原本 <c>MonthlyChecklistCard</c>）。
+    /// WishStaff=希望を 1 件以上持つ職員数。NeedStdOk=need1 が空でないシフトが 1 つ以上。
+    /// NeedExceptions=日別必要人数の例外（D6: 明示の例外リストを持つ needDay だけを数える）。Issues=入力診断の件数。
+    /// </summary>
+    public sealed record MonthlyChecklistView(int StaffN, int WishStaff, bool NeedStdOk, int NeedExceptions, int Issues);
+
+    public MonthlyChecklistView MonthlyChecklist()
+    {
+        var st = _state;
+        if (st is null) return new MonthlyChecklistView(0, 0, false, 0, Ui.SettingIssues.Count);
+        var wishStaff = st.Wishes.Keys
+            .Select(key => int.TryParse(key.Split(',')[0], out var i) ? i : -1)
+            .Where(i => i >= 0)
+            .Distinct()
+            .Count();
+        var needStdOk = st.Shifts.Any(sh => !string.IsNullOrWhiteSpace(sh.Need1));
+        return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, Ui.SettingIssues.Count);
+    }
+
     /// <summary>担当外（そのスタッフのグループで担当不可）な希望の件数。希望で上書き時の確認に使う。</summary>
     public int WishOutOfScopeCount()
     {

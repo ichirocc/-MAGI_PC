@@ -58,6 +58,30 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void MonthlyChecklistIsAllEmptyWithoutLoadedState()
+    {
+        var view = new MagiViewModel().MonthlyChecklist();
+        Assert.Equal(new MagiViewModel.MonthlyChecklistView(0, 0, false, 0, 0), view);
+    }
+
+    [Fact]
+    public void MonthlyChecklistCountsWishStaffDistinctlyAndNeedStdFromAnyNonBlankNeed1()
+    {
+        // 職員0 に希望 2 件・職員1 に 1 件 → 希望あり職員は 2 名（件数 3 ではない）。例外は needDay1/needDay2 の和集合キー数。
+        var st = MinimalState.Build(
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,3"] = 1, ["1,2"] = 0 },
+            needDay1: new Dictionary<string, string> { ["1,0"] = "2" },
+            needDay2: new Dictionary<string, string> { ["1,0"] = "3", ["1,4"] = "1" });
+        var vm = new MagiViewModel { _state = st };
+        Assert.Equal(new MagiViewModel.MonthlyChecklistView(2, 2, true, 2, 0), vm.MonthlyChecklist());
+
+        var noStd = new MagiViewModel { _state = MinimalState.Build() };
+        Assert.False(noStd.MonthlyChecklist().NeedStdOk);
+        Assert.Equal(0, noStd.MonthlyChecklist().WishStaff);
+    }
+
+    [Fact]
     public void GetSetupCountsReturnsZeroesWithoutLoadedState()
     {
         var vm = new MagiViewModel();

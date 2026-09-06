@@ -73,8 +73,16 @@
                     <TextBlock x:Name="NextStepText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
                                Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
                 </Border>
+                <Border x:Name="ChecklistPanel" Visibility="Collapsed" BorderThickness="1"
+                        BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="今月の作成条件" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                        <StackPanel x:Name="ChecklistHost" Spacing="4" />
+                        <StackPanel x:Name="ChecklistIssuesHost" Spacing="2" Margin="12,0,0,0" Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
-                <TextBlock Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock x:Name="WishSectionTitle" Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
 
                 <TextBlock Text="職員を選んでカレンダーから複数日をまとめて選択できます" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
                 <ComboBox x:Name="WishStaffCombo" HorizontalAlignment="Stretch" PlaceholderText="職員"
