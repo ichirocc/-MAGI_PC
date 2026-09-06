@@ -45,8 +45,10 @@ public static class ViolationComponentRepair
     /// <param name="MaxEstimates">推定（DeltaEvaluator）の上限。</param>
     /// <param name="MaxAnchors">起点にする違反の上限（HARD→回数→SOFT の順）。</param>
     /// <param name="MaxPatchesPerAnchor">1 起点あたり探索に入れる候補数（主候補を先に、助候補を後に詰める）。</param>
+    /// <param name="GenerateFromAnchors">[Iteration 4] 起点から直接候補を作る（拒否候補に依存しない）。</param>
     public sealed record Params(int MaxK = 4, int BeamWidth = 8, int MaxEvaluations = 64, int MaxEstimates = 6_000,
-        int MaxAnchors = 24, int MaxPatchesPerAnchor = 40);
+        int MaxAnchors = 24, int MaxPatchesPerAnchor = 40,
+        bool GenerateFromAnchors = true, int MaxGeneratedPerAnchor = 24, int MaxGenerated = 240);
 
     /// <summary>盤面差分。Ops は [職員, 日, 新シフト] の並び（<see cref="CombinatorialRepair.Candidate.Ops"/> と同じ形）。</summary>
     public sealed class Patch
@@ -125,7 +127,7 @@ public static class ViolationComponentRepair
             if (ParseKey(k) is var (sh, j)) needs.Add(new Anchor(MirrorKeys.Hard.Contains(Fam(cls)), Fam(cls), -1, j, sh));
         var counts = new List<Anchor>();
         foreach (var (k, cls) in report.CountViolations.OrderBy(e => e.Key, StringComparer.Ordinal))
-            if (ParseKey(k) is var (i, _)) counts.Add(new Anchor(false, Fam(cls), i, -1));
+            if (ParseKey(k) is var (i, sh)) counts.Add(new Anchor(false, Fam(cls), i, -1, sh));
         var cellsAndNeeds = cells.Concat(needs).ToList();
         var hardOnes = cellsAndNeeds.Where(a => a.Hard).ToList();
         bool Blocked(Anchor a) => a.Family == "covU" && infeasible != null && infeasible.Contains(a.Shift * 1000L + a.Day);
@@ -169,7 +171,7 @@ public static class ViolationComponentRepair
             work, before.Total, bestRep.Total, applied,
             new List<MirrorLog> { new(tag: "ComponentRepair", message: "違反連結成分修復: " + message) },
             ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
-        if (pool.Count < 2) return Done($"候補{pool.Count}件=スキップ");
+        if (pool.Count < 2 && !par.GenerateFromAnchors) return Done($"候補{pool.Count}件=スキップ");
         if (work.Any(row => row.Any(v => v < 0 || v >= p.K))) return Done("未割当セルあり=スキップ");
 
         // 候補→差分。現盤面で no-op のもの・範囲外のもの・希望固定セルを触るもの・同一差分は落とす。
@@ -183,7 +185,8 @@ public static class ViolationComponentRepair
             var pt = new Patch(c.Ops, c.Mechanism, c.Hint);
             if (seen.Add(pt.Signature)) patches.Add(pt);
         }
-        if (patches.Count < 2) return Done($"有効候補{patches.Count}件=スキップ");
+        var poolCount = patches.Count;
+        if (poolCount < 2 && !par.GenerateFromAnchors) return Done($"有効候補{poolCount}件=スキップ");
 
         var delta = new DeltaEvaluator(p);
         delta.Reset(work);
@@ -349,12 +352,67 @@ public static class ViolationComponentRepair
             return null;
         }
 
-        // 起点（違反）ごとに探索し、採用があれば盤面が変わるので起点を作り直す。1 周して採用が無ければ終わり。
+        // [Iteration 4] 起点から直接作る候補（半径 1）: セル違反＝そのセルの別シフトへの変更と同日 2 者交換、人数不足＝その日その
+        //   シフトへの単セル変更（過剰は休へ）、回数違反＝その職員の日でシフトを足す／休へ戻す。担当可・希望固定外のみ。
+        void GenerateFor(Anchor a, List<Patch> sink, HashSet<string> seenSig)
+        {
+            var made = 0;
+            void Add(List<int[]> ops, string hint)
+            {
+                if (made >= par.MaxGeneratedPerAnchor) return;
+                var pt = new Patch(ops, "起点生成", hint);
+                if (seenSig.Add(pt.Signature)) { sink.Add(pt); made++; }
+            }
+            string StaffName(int i) => i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+            string Kig(int k) => k < state.Shifts.Count ? state.Shifts[k].Kigou : $"#{k}";
+            void Single(int i, int j, int k2)
+            {
+                if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.CanDo(i, k2)) return;
+                Add(new List<int[]> { new[] { i, j, k2 } }, $"{StaffName(i)} {j + 1}日→{Kig(k2)}");
+            }
+            void Swap(int x, int y, int j)
+            {
+                if (x == y) return;
+                var kx = work[x][j]; var ky = work[y][j];
+                if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.CanDo(x, ky) || !p.CanDo(y, kx)) return;
+                Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日");
+            }
+            if (a.Staff >= 0 && a.Day >= 0)
+            {
+                foreach (var k2 in p.AllowedShiftsForStaff(a.Staff)) Single(a.Staff, a.Day, k2);
+                for (var b = 0; b < p.S; b++) Swap(a.Staff, b, a.Day);
+            }
+            else if (a.Staff < 0)
+            {
+                if (a.Family == "covU") for (var i = 0; i < p.S; i++) Single(i, a.Day, a.Shift);
+                else if (a.Family == "covO") for (var i = 0; i < p.S; i++) if (work[i][a.Day] == a.Shift) Single(i, a.Day, p.RestIdx);
+            }
+            else if (a.Family.EndsWith("low", StringComparison.OrdinalIgnoreCase))
+            {
+                for (var j = 0; j < p.T; j++) Single(a.Staff, j, a.Shift);
+            }
+            else if (a.Family.EndsWith("high", StringComparison.OrdinalIgnoreCase))
+            {
+                for (var j = 0; j < p.T; j++) if (work[a.Staff][j] == a.Shift) Single(a.Staff, j, p.RestIdx);
+            }
+        }
+
+        // 起点（違反）ごとに探索し、採用があれば盤面が変わるので起点（と起点生成の候補）を作り直す。1 周して採用が無ければ終わり。
         var used = new HashSet<int>();
-        int anchorCount = 0, maxSet = 0;
+        int anchorCount = 0, maxSet = 0, generatedTotal = 0;
         while (!stop() && evaluations < par.MaxEvaluations && estimates < par.MaxEstimates)
         {
-            var sets = AnchorSets(Anchors(bestRep, infeasibleSlots), patches, par.MaxPatchesPerAnchor)
+            var currentAnchors = Anchors(bestRep, infeasibleSlots);
+            if (patches.Count > poolCount) patches.RemoveRange(poolCount, patches.Count - poolCount);
+            if (par.GenerateFromAnchors)
+            {
+                var sig = new HashSet<string>(patches.Select(pt => pt.Signature), StringComparer.Ordinal);
+                foreach (var a in currentAnchors.Take(par.MaxAnchors)) { if (patches.Count - poolCount >= par.MaxGenerated) break; GenerateFor(a, patches, sig); }
+                generatedTotal = Math.Max(generatedTotal, patches.Count - poolCount);
+                deltas = patches.Select(CountDelta).ToList();
+            }
+            if (patches.Count < 1) break;
+            var sets = AnchorSets(currentAnchors, patches, par.MaxPatchesPerAnchor)
                 .Select(s => (s.Anchor, Ids: DropLonePinBreakers(s.Ids.Where(id => !used.Contains(id)).ToList())))
                 .Where(s => s.Ids.Count > 0).ToList();
             anchorCount = sets.Count;
@@ -368,7 +426,7 @@ public static class ViolationComponentRepair
                 var (chosen, rep) = found.Value;
                 foreach (var id in chosen) foreach (var op in patches[id].Ops)
                     if (work[op[0]][op[1]] != op[2]) { work[op[0]][op[1]] = op[2]; delta.Apply(op[0], op[1], op[2]); }
-                bestRep = rep; applied++; used.UnionWith(chosen);
+                bestRep = rep; applied++; used.UnionWith(chosen.Where(id => id < poolCount));   // 起点生成の候補は毎周作り直す
                 acceptedLabels.Add(anchor.Label + ": " + string.Join("+", chosen.Select(id => string.IsNullOrWhiteSpace(patches[id].Hint) ? patches[id].Mechanism : patches[id].Hint)) + $"(k={chosen.Length})");
                 committed = true;
                 break;
@@ -377,9 +435,9 @@ public static class ViolationComponentRepair
         }
 
         var mech = new List<string>(); var mechCount = new Dictionary<string, int>();
-        foreach (var pt in patches) { if (!mechCount.ContainsKey(pt.Mechanism)) mech.Add(pt.Mechanism); mechCount[pt.Mechanism] = mechCount.GetValueOrDefault(pt.Mechanism) + 1; }
+        foreach (var pt in patches.Take(poolCount)) { if (!mechCount.ContainsKey(pt.Mechanism)) mech.Add(pt.Mechanism); mechCount[pt.Mechanism] = mechCount.GetValueOrDefault(pt.Mechanism) + 1; }
         return Done(
-            $"候補{patches.Count}件(" + string.Join(" ", mech.Select(m => $"{m}×{mechCount[m]}")) + $") 起点{anchorCount}件(探索{anchorsTried}件・最大{maxSet}候補)" +
+            $"候補{poolCount}件(" + string.Join(" ", mech.Select(m => $"{m}×{mechCount[m]}")) + $")+起点生成{generatedTotal}件 起点{anchorCount}件(探索{anchorsTried}件・最大{maxSet}候補)" +
             $" 推定{estimates}回(ピン枝刈り{prunedPin}・相方なし除外{prunedLone.Count}) 正式評価{evaluations}回 採用{applied}件" +
             (acceptedLabels.Count > 0 ? "[" + string.Join(", ", acceptedLabels) + "]" : "") +
             (rejectReasons.Count > 0 ? " 不採用(" + string.Join(" ", rejectReasons.Select(r => $"{r.Key}:{r.Value}")) + ")" : "") +

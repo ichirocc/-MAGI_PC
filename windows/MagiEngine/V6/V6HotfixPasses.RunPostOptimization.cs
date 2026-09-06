@@ -92,7 +92,9 @@ public static partial class V6HotfixPasses
         int PassLogTopN = 8,
         /// <summary>[Iteration 2] 各パスの拒否候補を巡の末尾で違反起点のトランザクションに束ねる（ViolationComponentRepair）。Android 3.505.1 でハイブリッド併用＝既定 ON。</summary>
         bool ComponentRepairEnabled = true,
-        ViolationComponentRepair.Params? ComponentRepair = null);
+        ViolationComponentRepair.Params? ComponentRepair = null,
+        /// <summary>[Iteration 4] 起点生成つきの修復は共同 LNS の後に 1 回だけ（巡の中では拒否候補の結合のみ。理由は Android 3.505.4）。</summary>
+        bool ComponentRepairFinal = true);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -257,6 +259,12 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - tPersonalLns, 0L), p.PersonalLnsMaxMs);
             return PersonalBalanceJointLnsPolish.Apply(state, work, config: new PersonalBalanceJointLnsPolish.Config(MaxMillis: cap), shouldStop: stop);
         }));
+        if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
+        {
+            chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
+                ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), p.ComponentRepair, shouldStop: stop)));
+            chain.RejectedPool.Clear();
+        }
 
         var tHf = EngineClock.NowMs();
         if (stop())
@@ -381,7 +389,7 @@ public static partial class V6HotfixPasses
             if (p.ComponentRepairEnabled && pool.Count >= 2)
             {
                 Take("成分修復", chain.Timed($"後処理 違反連結成分修復{tag}", "ComponentRepair", work =>
-                    ViolationComponentRepair.Repair(state, work, pool, p.ComponentRepair, shouldStop: clusterStop)));
+                    ViolationComponentRepair.Repair(state, work, pool, (p.ComponentRepair ?? new ViolationComponentRepair.Params()) with { GenerateFromAnchors = false }, shouldStop: clusterStop)));
             }
 
             round++;

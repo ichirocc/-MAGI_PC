@@ -48,7 +48,8 @@ public class ViolationComponentRepairTest
             var w = Work(st); w[0][0] = 2;
             Assert.False(IsBetterLocal(UnifiedViolationChecker.Check(st, w), before), "単独は不採用(タイ)");
         }
-        var r = ViolationComponentRepair.Repair(st, work, new[] { candX, candY });
+        // 拒否候補の結合だけを見る（起点生成は別テスト）。
+        var r = ViolationComponentRepair.Repair(st, work, new[] { candX, candY }, new ViolationComponentRepair.Params(GenerateFromAnchors: false));
         var after = UnifiedViolationChecker.Check(st, r.NewSchedule);
         Assert.Equal(1, r.Applied);
         Assert.Equal(0, after.Breakdown.GetValueOrDefault("apt", -1));
@@ -70,7 +71,7 @@ public class ViolationComponentRepairTest
             new CombinatorialRepair.Candidate(new List<int[]> { new[] { 0, 0, 3 } }, "a", "X→D"),
             new CombinatorialRepair.Candidate(new List<int[]> { new[] { 2, 0, 3 } }, "c", "W1→D"),
         };
-        var r = ViolationComponentRepair.Repair(st, work, bad);
+        var r = ViolationComponentRepair.Repair(st, work, bad, new ViolationComponentRepair.Params(GenerateFromAnchors: false));
         Assert.Equal(0, r.Applied);
         for (var i = 0; i < snapshot.Length; i++) Assert.Equal(snapshot[i], r.NewSchedule[i]);
         Assert.Equal(r.BeforeTotal, r.AfterTotal);
@@ -164,5 +165,28 @@ public class ViolationComponentRepairTest
             new Dictionary<string, string>(), new Dictionary<string, int>(), Total: 2, Hard: 2, Soft: 0, WeightedScore: 16000.0);
         var ordered = ViolationComponentRepair.Anchors(rep, new HashSet<long> { 1 * 1000L + 3 });
         Assert.Equal(new[] { 5, 3 }, ordered.Select(a => a.Day).ToArray());
+    }
+
+    /// <summary>[Iteration 4] 拒否候補が無くても、起点（人員不足）から作った単セル候補で直せる。</summary>
+    [Fact]
+    public void GeneratesCandidatesFromAnchorsWhenThePoolIsEmpty()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-01",
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") }, groups: new List<Group> { new("G", "G") },
+            staffList: new List<Staff> { new("甲", 0), new("乙", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0 }, new List<int> { 0 } }, wishes: new Dictionary<string, int>(),
+            staffRange: new Dictionary<string, Range>(), needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(), cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var work = Work(st);
+        Assert.Equal(1, UnifiedViolationChecker.Check(st, work).Hard);
+        var r = ViolationComponentRepair.Repair(st, work, Array.Empty<CombinatorialRepair.Candidate>());
+        Assert.Equal(1, r.Applied);
+        Assert.Equal(0, UnifiedViolationChecker.Check(st, r.NewSchedule).Hard);
+        Assert.Contains("起点生成", r.Logs[0].Message);
+        var off = ViolationComponentRepair.Repair(st, work, Array.Empty<CombinatorialRepair.Candidate>(), new ViolationComponentRepair.Params(GenerateFromAnchors: false));
+        Assert.Equal(0, off.Applied);
     }
 }
