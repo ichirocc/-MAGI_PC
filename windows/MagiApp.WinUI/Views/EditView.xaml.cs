@@ -45,7 +45,9 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _groupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _wishStaffItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _wishShiftItems = System.Array.Empty<string>();
-    private IReadOnlyList<string> _wishApplyShiftItems = System.Array.Empty<string>();
+    /// <summary>[phase9 #14] 適用パネルで選んだシフト（−1＝未選択）と「その他（担当外）」の開閉。</summary>
+    private int _wishSelK = -1;
+    private bool _wishShowOther;
     private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
@@ -292,8 +294,6 @@ public sealed partial class EditView : UserControl
             _wishSelectedDays.Clear();
         }
 
-        SyncItems(WishApplyShiftCombo, ui.ShiftSymbols, ref _wishApplyShiftItems);
-
         WishCalendarHost.Children.Clear();
         WishCalendarHost.RowDefinitions.Clear();
         WishCalendarHost.ColumnDefinitions.Clear();
@@ -348,13 +348,23 @@ public sealed partial class EditView : UserControl
             var row = 1 + (dow0 + d - 1) / 7;
             var selected = _wishSelectedDays.Contains(d);
 
-            var content = new StackPanel { Spacing = 0, HorizontalAlignment = HorizontalAlignment.Center };
-            content.Children.Add(new TextBlock { Text = d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+            var content = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
+            content.Children.Add(new TextBlock
+            {
+                Text = selected ? $"{d} ✓" : d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+                FontWeight = selected ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+            });
+            // 登録済みの希望はシフト色のチップで（Kotlin原本と同じ＝色＋記号の二重符号化）。
             if (marked.TryGetValue(d, out var kigou))
             {
-                content.Children.Add(new TextBlock
+                var kk = ui.ShiftSymbols.IndexOf(kigou);
+                var chipBg = kk >= 0 && kk < ui.ShiftColorHex.Count ? ColorHex.Parse(ui.ShiftColorHex[kk], Colors.LightGray) : Colors.LightGray;
+                var chipFg = kk >= 0 && kk < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[kk], Colors.Black) : Colors.Black;
+                content.Children.Add(new Border
                 {
-                    Text = kigou, FontSize = 10, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center,
+                    Background = new SolidColorBrush(chipBg), CornerRadius = new CornerRadius(4), Padding = new Thickness(4, 1, 4, 1),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Child = new TextBlock { Text = kigou, FontSize = 10, Foreground = new SolidColorBrush(chipFg) },
                 });
             }
 
@@ -362,12 +372,11 @@ public sealed partial class EditView : UserControl
             {
                 Content = content,
                 Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]),
-                MinWidth = 36,
+                MinWidth = 44,
                 HorizontalContentAlignment = HorizontalAlignment.Center,
-                Background = new SolidColorBrush(selected ? Colors.DodgerBlue : Colors.Transparent),
-                // 1px は枠線の太さでありスペーシングトークンの対象外のため据え置き。
-                BorderThickness = new Thickness(1),
-                BorderBrush = new SolidColorBrush(Colors.LightGray),
+                Background = new SolidColorBrush(selected ? Color.FromArgb(60, 0x00, 0x50, 0x4A) : Colors.Transparent),
+                BorderThickness = new Thickness(selected ? 2 : 1),
+                BorderBrush = selected ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.LightGray),
                 IsEnabled = editable && staffIdx >= 0,
             };
             var day = d;
@@ -392,13 +401,73 @@ public sealed partial class EditView : UserControl
 
         var hasSelection = staffIdx >= 0 && _wishSelectedDays.Count > 0;
         WishApplyPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
-        if (hasSelection)
+        if (!hasSelection) return;
+        var sorted = _wishSelectedDays.OrderBy(x => x).ToList();
+        var labels = sorted.Count <= 4 ? string.Join("、", sorted.Select(DayChipLabel))
+            : string.Join("、", sorted.Take(3).Select(DayChipLabel)) + $"、ほか{sorted.Count - 3}日";
+        WishApplySummaryText.Text = $"{sorted.Count}日選択中: {labels}";
+        RenderWishShiftButtons(ui, staffIdx, editable);
+    }
+
+    /// <summary>[phase9 #14] 適用先シフトの大ボタン（Kotlin原本 <c>ShiftButtonGrid</c>）: 担当可能を主、担当外は「その他」の下に ⚠ つきで。</summary>
+    private void RenderWishShiftButtons(UiState ui, int staffIdx, bool editable)
+    {
+        var allowed = new HashSet<int>(_vm.AllowedShiftsFor(staffIdx));
+        var all = Enumerable.Range(0, ui.ShiftSymbols.Count).ToList();
+        var primary = all.Where(allowed.Contains).ToList();
+        var others = all.Where(k => !allowed.Contains(k)).ToList();
+        if (_wishSelK < 0 || _wishSelK >= all.Count) _wishSelK = primary.Count > 0 ? primary[0] : 0;
+        void Fill(StackPanel host, List<int> idxs, bool warn)
         {
-            WishApplySummaryText.Text = $"選択中: {_wishSelectedDays.Count}日";
-            ApplyWishesForDaysButton.Content = $"適用（{_wishSelectedDays.Count}日）";
-            ApplyWishesForDaysButton.IsEnabled = editable && WishApplyShiftCombo.SelectedIndex >= 0;
-            ClearWishesForDaysButton.IsEnabled = editable;
+            host.Children.Clear();
+            for (var start = 0; start < idxs.Count; start += 4)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                foreach (var k in idxs.Skip(start).Take(4))
+                {
+                    var sel = _wishSelK == k;
+                    var bg = k < ui.ShiftColorHex.Count ? ColorHex.Parse(ui.ShiftColorHex[k], Colors.LightGray) : Colors.LightGray;
+                    var fg = k < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
+                    var b = new Button
+                    {
+                        Content = new TextBlock { Text = (sel ? "✓ " : "") + ui.ShiftSymbols[k] + (warn ? " ⚠" : ""), Foreground = new SolidColorBrush(fg), FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal },
+                        Background = new SolidColorBrush(bg), MinWidth = 72, MinHeight = 52,
+                        BorderThickness = new Thickness(sel ? 3 : 2),
+                        BorderBrush = warn ? (Brush)Application.Current.Resources["MagiErrorBrush"] : sel ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
+                        IsEnabled = editable,
+                    };
+                    var kk = k;
+                    b.Click += (_, _) => { _wishSelK = kk; RenderWishShiftButtons(_vm.Ui, staffIdx, editable); };
+                    row.Children.Add(b);
+                }
+                host.Children.Add(row);
+            }
         }
+        Fill(WishShiftButtonsHost, primary, warn: false);
+        Fill(WishOtherButtonsHost, others, warn: true);
+        WishOtherToggle.Visibility = others.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        WishOtherToggle.Content = _wishShowOther ? "その他を閉じる" : "その他（担当外シフト）";
+        WishOtherButtonsHost.Visibility = _wishShowOther && others.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var outOfScope = !allowed.Contains(_wishSelK);
+        WishShiftWarnText.Visibility = outOfScope ? Visibility.Visible : Visibility.Collapsed;
+        if (outOfScope) WishShiftWarnText.Text = $"⚠「{ui.ShiftSymbols[_wishSelK]}」はこの職員の担当外です。希望は登録できますが、配置すると違反になります。";
+        ApplyWishesForDaysButton.Content = $"{_wishSelectedDays.Count}日に適用";
+        ApplyWishesForDaysButton.IsEnabled = editable;
+        ClearWishesForDaysButton.IsEnabled = editable;
+    }
+
+    private void OnWishOtherToggleClick(object sender, RoutedEventArgs e)
+    {
+        _wishShowOther = !_wishShowOther;
+        var i = WishStaffCombo.SelectedIndex;
+        if (i >= 0) RenderWishShiftButtons(_vm.Ui, i, _vm.Ui.Loaded && !_vm.Ui.Running);
+    }
+
+    private void OnCancelWishSelectionClick(object sender, RoutedEventArgs e)
+    {
+        _wishSelectedDays.Clear();
+        var ui = _vm.Ui;
+        RenderWishCalendar(ui, ui.Loaded && !ui.Running);
     }
 
     /// <summary>職員選択が変わったらカレンダーを作り直す（選択日リセット・「今持っている希望」チップの
@@ -419,22 +488,13 @@ public sealed partial class EditView : UserControl
         }
     }
 
-    /// <summary>適用先シフトの選択だけなら盤面全体を作り直す必要はなく、ボタンの活性判定だけ更新する。</summary>
-    private void OnWishApplyShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        if (_wishSelectedDays.Count == 0 || WishStaffCombo.SelectedIndex < 0) return;
-        var ui = _vm.Ui;
-        ApplyWishesForDaysButton.IsEnabled = ui.Loaded && !ui.Running && WishApplyShiftCombo.SelectedIndex >= 0;
-    }
-
     private void OnApplyWishesForDaysClick(object sender, RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
         var i = WishStaffCombo.SelectedIndex;
-        var k = WishApplyShiftCombo.SelectedIndex;
+        var k = _wishSelK;
         if (i < 0) { WishHintText.Text = "対象の職員を選んでください。"; return; }
-        if (k < 0) { WishHintText.Text = "シフトを選んでください。"; return; }
+        if (k < 0 || k >= _vm.Ui.ShiftSymbols.Count) { WishHintText.Text = "シフトを選んでください。"; return; }
         if (_wishSelectedDays.Count == 0) { WishHintText.Text = "日を選んでください。"; return; }
         var days = _wishSelectedDays.Select(d => d - 1).ToList();
         _vm.SetWishesForDays(i, days, k);

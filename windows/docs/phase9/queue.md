@@ -19,8 +19,8 @@
 | 10 | 勤務表 | シフト別不足サマリーの1行バナー（3.116.0） | `MagiScheduleViews.kt` `ScheduleGrid` 冒頭 | `ScheduleView` | 済 | 済 | 緑 | run 34010737411。`ScheduleView.RenderShortageBanner`（needViolations の covU 集計）。日ヘッダ「▼N」（Ui.V6.DayRisks）も同時に配線＝#9 の気づきを解消 |
 | 11 | 勤務表 | 集計セルの内訳ダイアログ（現在/下限/上限/目標・直し方・希望取消） | `MagiScheduleViews.kt` `TallyCard` の `TallyDetailUi` | `ScheduleView` | 済 | 済 | 緑 | run 34010969362。`ShowStaffTallyDetail`/`ShowDayTallyDetail`/`ShowTallyDetailAsync`。不足(covU)は既存の候補フライアウトを維持、過剰(covO)と職員別の回数違反がダイアログ |
 | 12 | 編集 | 職員×シフトのマトリクス（担当可否・目標・上下限・実績, 3.477.0） | `StaffShiftMatrix.kt` `StaffShiftMatrixCard`/`StaffShiftCellSheet` | `EditView` | 済 | 済 | 緑 | run 34011483575（1回目は ResetAptButton の二重定義で赤→修正）。`EditView.RenderStaffShiftMatrix`／`ShowStaffShiftCellDialogAsync`（群の目標ステッパー・個人上下限・解除・1タップ解決・目標全リセット）。VM に `RestShiftIndex()` を追加（テスト1件） |||
-| 13 | 編集 | 必要人数の日別例外カレンダー（複数日一括） | `NeedDayEditor.kt` `NeedMonthGrid`/`NeedApplyPanel` | `EditView` | 済 | 済 | 未 | `EditView.RenderNeedCalendar`＋適用パネル。VM に `SetNeedDaysForDays`/`ClearNeedDaysForDays`（一括・Undo 1 回、テスト 2 件） ||
-| 14 | 編集 | 希望シフトのカレンダー（複数日一括・移動の意味論） | `WishEditor.kt` `WishMonthGrid`/`WishApplyPanel` | `EditView` | 未 | 未 | 未 | `SetWishesForDays` は配線済み＝UI の形を突き合わせる |
+| 13 | 編集 | 必要人数の日別例外カレンダー（複数日一括） | `NeedDayEditor.kt` `NeedMonthGrid`/`NeedApplyPanel` | `EditView` | 済 | 済 | 緑 | run 34011755199。`EditView.RenderNeedCalendar`＋適用パネル。VM に `SetNeedDaysForDays`/`ClearNeedDaysForDays`（一括・Undo 1 回、テスト 2 件） |||
+| 14 | 編集 | 希望シフトのカレンダー（複数日一括・移動の意味論） | `WishEditor.kt` `WishMonthGrid`/`WishApplyPanel` | `EditView` | 済 | 済 | 未 | 既存の希望カレンダーに差分（登録済みをシフト色チップ・選択✓・「N日選択中: 日付」・担当可能シフトの大ボタン＋その他⚠・キャンセル）。`RenderWishShiftButtons` ||
 | 15 | 編集 | 月次チェックリスト（職員/希望/必要人数/診断→つくる） | `MagiSetupCards.kt` `MonthlyChecklistCard` | `EditView` | 未 | 未 | 未 | |
 | 16 | 編集 | 実働チェック（シフト別 担当人数・需要・欠勤余裕） | `MagiSetupCards.kt` `StaffingRealityCard` | `EditView` | 未 | 未 | 未 | |
 | 17 | 編集 | 制約10族の「詳しい説明」ⓘ展開（3.409.14） | `ConstraintHelp.kt`, `ConstraintEditor.kt` `ConstraintHelpExpander` | `EditView` | 未 | 未 | 未 | `ConstraintHelp.kt` は Android 非依存 |
