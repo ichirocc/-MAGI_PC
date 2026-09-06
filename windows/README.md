@@ -221,6 +221,14 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      プレースホルダーファイルも、ピッカー選択時にシェルが自動的に実体化する。アンパッケージ
      Win32アプリなので `CachedFileManager.CompleteUpdatesAsync` 等のブローカー越し更新通知も不要）。
      追加実装は無し（既定保存先の変更・自動保存のOneDrive化・Graph API直接連携は明示的に不要と確認済み）。
+   - **残画面の ralph-loop（2026-09-05〜06, 完了）**: `docs/phase9/queue.md` の 24 行を 1 周 1 行で移植。結果＝**済 24／済(既存) 0／保留 0／対象外 0**、
+     CI（`windows-app-build.yml`）は全行緑。仕様は `docs/phase9/specs/1.md`〜`24.md`、判断は `docs/phase9/blockers.md`（判断待ち 0・保留 0・
+     気づき 6 件＝#2 処方箋の暫定導線、#5 空状態とフィクスチャ自動読込、#9 日別不足 ▼N、#17 重み表の実在（#22 で解消）、#18 族名 c1 の
+     Android とのずれ、#23 ホーム大ボタンと下部バーの作成導線の重複）。主な追加: ホーム（被覆・次の一手・スマートアクション・進捗・副操縦・空状態）、
+     勤務表（週ナビ・違反フィルタ・検索・祝日色・不足サマリー・集計詳細）、編集（職員×シフト回数マトリクス・必要人数/希望のカレンダー一括・
+     月次チェックリスト・実働チェック・制約ヘルプ）、分析（要確認トリアージ `AnalysisTriage`・設定の見直し・C1 頭打ち／回数固定の影響）、
+     設定（36 色ピッカー・重み表）、シェル（状態バッジ・下部コマンドバー）、ホームの「なおすのを手伝って」。
+     VM 追加は各行のテストつき（MagiApp.ViewModels.Tests 416 緑）。
 10. ✅ 背景実行（**完了**。Android の WorkManager に直接対応する Windows デスクトップの機構は
     無いため、`OptimizationRepository` が元々プロセス内 pub/sub として設計されていた点を活かし、
     同一プロセス内の `Task` として実装した——設計判断の詳細は
