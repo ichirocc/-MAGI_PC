@@ -48,7 +48,9 @@ public static class ViolationComponentRepair
     /// <param name="GenerateFromAnchors">[Iteration 4] 起点から直接候補を作る（拒否候補に依存しない）。</param>
     public sealed record Params(int MaxK = 4, int BeamWidth = 8, int MaxEvaluations = 64, int MaxEstimates = 6_000,
         int MaxAnchors = 24, int MaxPatchesPerAnchor = 40,
-        bool GenerateFromAnchors = true, int MaxGeneratedPerAnchor = 24, int MaxGenerated = 240);
+        bool GenerateFromAnchors = true, int MaxGeneratedPerAnchor = 40, int MaxGenerated = 400,
+        /// <param name="MaxWindowLength">[Iteration 5] セル違反の起点で作る同長区間交換の最大長（制約の窓長から決めた半径をこれで頭打ち）。</param>
+        int MaxWindowLength = 7);
 
     /// <summary>盤面差分。Ops は [職員, 日, 新シフト] の並び（<see cref="CombinatorialRepair.Candidate.Ops"/> と同じ形）。</summary>
     public sealed class Patch
@@ -354,6 +356,11 @@ public static class ViolationComponentRepair
 
         // [Iteration 4] 起点から直接作る候補（半径 1）: セル違反＝そのセルの別シフトへの変更と同日 2 者交換、人数不足＝その日その
         //   シフトへの単セル変更（過剰は休へ）、回数違反＝その職員の日でシフトを足す／休へ戻す。担当可・希望固定外のみ。
+        // 影響半径: c1 の窓長・c3 系パターン長の最大 −1（最低 1）。区間交換の最大長はこれを MaxWindowLength で頭打ち。
+        var reach = 1;
+        foreach (var c in p.Cons1) reach = Math.Max(reach, c.Day1 - 1);
+        foreach (var list in new[] { p.Cons3, p.Cons3n, p.Cons3m, p.Cons3mn }) foreach (var c in list) reach = Math.Max(reach, c.Seq.Length - 1);
+        reach = Math.Min(reach, Math.Min(par.MaxWindowLength, Math.Max(1, p.T - 1)));
         void GenerateFor(Anchor a, List<Patch> sink, HashSet<string> seenSig)
         {
             var made = 0;
@@ -377,10 +384,39 @@ public static class ViolationComponentRepair
                 if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.CanDo(x, ky) || !p.CanDo(y, kx)) return;
                 Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日");
             }
+            void Window(int x, int y, int s0, int s1)
+            {
+                if (x == y) return;
+                var changes = false;
+                for (var d = s0; d <= s1; d++)
+                {
+                    var kx = work[x][d]; var ky = work[y][d];
+                    if (p.WishLocked(x, d) || p.WishLocked(y, d) || !p.CanDo(x, ky) || !p.CanDo(y, kx)) return;
+                    if (kx != ky) changes = true;
+                }
+                if (!changes) return;
+                var ops = new List<int[]>(2 * (s1 - s0 + 1));
+                for (var d = s0; d <= s1; d++) { ops.Add(new[] { x, d, work[y][d] }); ops.Add(new[] { y, d, work[x][d] }); }
+                Add(ops, $"{StaffName(x)}↔{StaffName(y)} {s0 + 1}〜{s1 + 1}日");
+            }
+            void Rotate3(int x, int y, int z, int j)
+            {
+                if (x == y || y == z || x == z) return;
+                var kx = work[x][j]; var ky = work[y][j]; var kz = work[z][j];
+                if (kx == ky || ky == kz || kx == kz) return;
+                if (p.WishLocked(x, j) || p.WishLocked(y, j) || p.WishLocked(z, j)) return;
+                if (!p.CanDo(x, ky) || !p.CanDo(y, kz) || !p.CanDo(z, kx)) return;
+                Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kz }, new[] { z, j, kx } }, $"{StaffName(x)}→{StaffName(y)}→{StaffName(z)} {j + 1}日");
+            }
             if (a.Staff >= 0 && a.Day >= 0)
             {
                 foreach (var k2 in p.AllowedShiftsForStaff(a.Staff)) Single(a.Staff, a.Day, k2);
                 for (var b = 0; b < p.S; b++) Swap(a.Staff, b, a.Day);
+                // [Iteration 5] 半径 2 以上: 起点の日を含む同長区間交換（長さは制約の窓長まで）と、同日の 3 職員巡回。
+                for (var len = 2; len <= Math.Min(reach, p.T); len++)
+                    for (var b = 0; b < p.S; b++)
+                        for (var s0 = Math.Max(0, a.Day - len + 1); s0 <= Math.Min(p.T - len, a.Day); s0++) Window(a.Staff, b, s0, s0 + len - 1);
+                for (var b = 0; b < p.S; b++) for (var c = 0; c < p.S; c++) Rotate3(a.Staff, b, c, a.Day);
             }
             else if (a.Staff < 0)
             {

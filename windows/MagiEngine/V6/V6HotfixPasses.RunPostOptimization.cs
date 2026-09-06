@@ -261,8 +261,15 @@ public static partial class V6HotfixPasses
         }));
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
+            // [Iteration 5] 最終段の予算は残り時間に応じて拡張（2 秒以上残っていれば推定 4 倍・正式評価 2.5 倍）。締切は stop に畳む。
+            var remainingFinal = Math.Max(deadlineMs - EngineClock.NowMs(), 0L);
+            var baseParams = p.ComponentRepair ?? new ViolationComponentRepair.Params();
+            var finalParams = remainingFinal >= 2_000L
+                ? baseParams with { MaxEstimates = baseParams.MaxEstimates * 4, MaxEvaluations = baseParams.MaxEvaluations * 5 / 2 }
+                : baseParams;
+            Func<bool> finalStop = () => stop() || EngineClock.NowMs() >= deadlineMs;
             chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
-                ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), p.ComponentRepair, shouldStop: stop)));
+                ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop)));
             chain.RejectedPool.Clear();
         }
 

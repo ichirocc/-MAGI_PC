@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.505.6 と同期（ループ Iteration 5 第一弾）: `ViolationComponentRepair` の起点生成に同長区間交換（起点の日を含む長さ 2〜影響半径、
+  `MaxWindowLength`=7）と同日 3 職員巡回を追加（起点ごと 40・全体 400）。最終段は残り 2 秒以上なら推定 4 倍・正式評価 2.5 倍、締切を stop に畳む。
+  MagiEngine.Tests 778 OK。Android 実データ 4/4 盤面同一、ベンチ iter5 は Android 側で報告。
+
 - 2026-09-06 Android 3.505.4 と同期（ループ Iteration 4 第一弾）: `ViolationComponentRepair` に起点からの候補生成（半径 1: セル違反の別シフト変更と
   同日交換、人員不足/過剰の単セル変更、回数違反の足す/休へ戻す。`GenerateFromAnchors`）。巡の中で生成すると単セル covU 修正が共同 LNS の余地を
   先に使い Android 実データで HARD 8→11 に退行したため、巡の中は拒否候補の結合のみ、生成つき修復は共同 LNS の後に 1 回
