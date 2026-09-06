@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.501.0 と同時（ユーザー指示）: `V6HotfixPasses.WishIsland.cs` の候補配分を Kotlin と同じ形へ。禁止連（cons3n）は
+  「残るだけで拒否」から「変更する職員の件数が増える手だけ拒否」（`IncreasesForbidden`＝`C1DeltaPrefilter.StaffC3nFires` の増分）、
+  同日・窓・両翼の候補を `Interleave` で 1 手ずつ交互評価、島の枠の 25% を 3 職員巡回に確保（通常候補は 75% まで）。
+  計測は Android 側（後処理全体の最終盤面は 4 実データで不変、単体は混在＝`docs/history/3.4xx.md` 3.501.0）。テスト +2（`V6HotfixPassesWishIslandTest`）。
+
 - 2026-09-06 外部レビュー第3・4段（対象 70c9d1d）への対応:
   - **[高] 案内付き修正の連打防止が Schedule 通知で解除される** → `UiState.CheckRev`（`MakeUi` ごとに増える検査世代）を追加し、
     押下後は押下時より新しい世代が反映されるまで全候補を無効（「再検査中…」表示）。判断（対象枠/BlockedNow/Infeasible/AllDone）を

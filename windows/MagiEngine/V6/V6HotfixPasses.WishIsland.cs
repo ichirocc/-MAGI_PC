@@ -154,14 +154,26 @@ public static partial class V6HotfixPasses
 
         private void Undo(WishMove m, int[] old) { for (var t = 0; t < m.Cells.Length; t += 3) work[m.Cells[t]][m.Cells[t + 1]] = old[t / 3]; }
 
-        /// <summary>変更セルのどれかが禁止の並び（cons3n）を作るなら正式評価の前に落とす（チェッカーが最終判定＝見逃しは無害）。</summary>
-        private bool MakesForbidden(WishMove m)
+        /// <summary>
+        /// 変更する職員の禁止の並び（cons3n）の件数が増えるなら正式評価の前に落とす（チェッカーが最終判定＝見逃しは無害）。
+        /// [Android 3.501.0] 旧: 変更セルに禁止の並びが 1 つでも残れば落としていた＝「2件→1件」に減らす手まで正式評価へ届かなかった。
+        /// <c>AdaptiveBlockSwap</c> の増分判定と同じ（<see cref="C1DeltaPrefilter.StaffC3nFires"/>＝チェッカーと同一意味論）。
+        /// </summary>
+        private bool IncreasesForbidden(WishMove m)
         {
             if (p.Cons3n.Count == 0) return false;
-            var old = Apply(m); var bad = false;
-            for (var t = 0; t < m.Cells.Length && !bad; t += 3) { var i = m.Cells[t]; var d = m.Cells[t + 1]; if (p.MakesForbiddenRun(work, i, d, work[i][d])) bad = true; }
+            int before = 0, after = 0;
+            for (var t = 0; t < m.Cells.Length; t += 3) if (FirstCellOfStaff(m, t)) before += C1DeltaPrefilter.StaffC3nFires(p, work[m.Cells[t]]);
+            var old = Apply(m);
+            for (var t = 0; t < m.Cells.Length; t += 3) if (FirstCellOfStaff(m, t)) after += C1DeltaPrefilter.StaffC3nFires(p, work[m.Cells[t]]);
             Undo(m, old);
-            return bad;
+            return after > before;
+        }
+
+        private static bool FirstCellOfStaff(WishMove m, int t)
+        {
+            for (var u = 0; u < t; u += 3) if (m.Cells[u] == m.Cells[t]) return false;
+            return true;
         }
 
         // ---- 候補生成（遅延・評価順＝手の種類 → 同じ所属 → 小さい手） ----
@@ -279,7 +291,25 @@ public static partial class V6HotfixPasses
         private IEnumerable<WishMove> SameDayMoves(WishIsland isl) { foreach (var sg in GroupOrder) foreach (var m in SameDayMoves(isl, sg)) yield return m; }
 
         /// <summary>通常 pass の候補: 同日 → 窓 → 両翼（巡回は採用 0 のときだけ別途）。</summary>
-        private IEnumerable<WishMove> IslandMoves(WishIsland isl) => SameDayMoves(isl).Concat(WindowMoves(isl)).Concat(WingMoves(isl));
+        /// <summary>通常 pass の候補: 同日・窓・両翼を 1 手ずつ交互に（[Android 3.501.0] 旧: 連結順で同日候補が島の枠を使い切り窓・両翼が評価されなかった）。</summary>
+        private IEnumerable<WishMove> IslandMoves(WishIsland isl) => Interleave(SameDayMoves(isl), WindowMoves(isl), WingMoves(isl));
+
+        private static IEnumerable<WishMove> Interleave(params IEnumerable<WishMove>[] seqs)
+        {
+            var its = seqs.Select(s => s.GetEnumerator()).ToList();
+            try
+            {
+                while (its.Count > 0)
+                {
+                    for (var k = 0; k < its.Count; k++)
+                    {
+                        if (its[k].MoveNext()) yield return its[k].Current;
+                        else { its[k].Dispose(); its.RemoveAt(k); k--; }
+                    }
+                }
+            }
+            finally { foreach (var e in its) e.Dispose(); }
+        }
 
         /// <summary>ビームの候補: 起動中の全島の 同日 → 窓（種類 → 所属 → 手の大きさ → 島の順）。</summary>
         private IEnumerable<WishMove> BeamMoves(List<WishIsland> active)
@@ -298,7 +328,7 @@ public static partial class V6HotfixPasses
             foreach (var m in moves)
             {
                 if (!BudgetLeft() || islandUsed >= budget) break;
-                if (MakesForbidden(m)) { prunedC3n++; continue; }
+                if (IncreasesForbidden(m)) { prunedC3n++; continue; }
                 islandUsed++; evaluated++;
                 var old = Apply(m);
                 var rep = UnifiedViolationChecker.Check(state, work);
@@ -325,8 +355,10 @@ public static partial class V6HotfixPasses
                 var localBefore = LocalScore(bestRep, isl);
                 if (localBefore == 0) continue;
                 islandUsed = 0;
-                var chosen = PickBest(isl, IslandMoves(isl), islandBudget, localBefore)
-                             ?? PickBest(isl, Rotate3Moves(isl), islandBudget, localBefore);   // 巡回は必要時のみ
+                // [Android 3.501.0] 島の枠の 25% を 3 職員巡回に確保する（通常候補は 75% まで）。巡回は採用 0 のときだけ（残り枠を全部使える）。
+                var mainBudget = islandBudget - islandBudget / 4;
+                var chosen = PickBest(isl, IslandMoves(isl), mainBudget, localBefore)
+                             ?? PickBest(isl, Rotate3Moves(isl), islandBudget, localBefore);
                 if (chosen is null) { if (!stuck.Contains(Name(isl.Staff))) stuck.Add(Name(isl.Staff)); continue; }
                 Apply(chosen.Move); bestRep = chosen.Rep; applied++; passApplied++;
                 var lb = WishMoveLabel(chosen.Move.Kind); byKind[lb] = byKind.GetValueOrDefault(lb) + 1;
@@ -366,7 +398,7 @@ public static partial class V6HotfixPasses
             foreach (var m in BeamMoves(active))
             {
                 if (!BudgetLeft() || next.Count >= limit) break;
-                if (MakesForbidden(m)) { prunedC3n++; continue; }
+                if (IncreasesForbidden(m)) { prunedC3n++; continue; }
                 var old = Apply(m);
                 var rep = UnifiedViolationChecker.Check(state, work);
                 evaluated++; beamEvaluated++;
