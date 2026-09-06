@@ -1037,6 +1037,35 @@ public sealed partial class EditView : UserControl
     /// <see cref="ScheduleView.ShowCellEditor"/> 参照）。年間マスターに置くのは Kotlin原本と同じ理由
     /// （「見直し候補」＝土台の設定を見直すべき箇所という位置づけ）。
     /// </summary>
+    private bool _constraintHelpOpen;
+
+    /// <summary>
+    /// [phase9 #17] 制約10族の「ⓘ 詳しい説明」（Kotlin原本 <c>ConstraintHelpExpander</c>、3.409.14）。既定で閉じる。
+    /// 本文は <see cref="ConstraintHelp"/>（族キーとの過不足はテストが固定）。
+    /// </summary>
+    private void RenderConstraintHelp(IReadOnlyList<MagiViewModel.ConstraintFamilyView> families)
+    {
+        ConstraintHelpToggle.Content = _constraintHelpOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 詳しい説明（それぞれの条件の意味）";
+        ConstraintHelpHost.Visibility = _constraintHelpOpen ? Visibility.Visible : Visibility.Collapsed;
+        ConstraintHelpHost.Children.Clear();
+        if (!_constraintHelpOpen) return;
+        foreach (var f in families)
+        {
+            if (!ConstraintHelp.Bodies.TryGetValue(f.Key, out var body)) continue;
+            var block = new StackPanel { Spacing = 2 };
+            block.Children.Add(new TextBlock { Text = f.Title, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            block.Children.Add(new TextBlock { Text = body, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            ConstraintHelpHost.Children.Add(block);
+        }
+        ConstraintHelpHost.Children.Add(new TextBlock { Text = ConstraintHelp.Footer, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+    }
+
+    private void OnConstraintHelpToggleClick(object sender, RoutedEventArgs e)
+    {
+        _constraintHelpOpen = !_constraintHelpOpen;
+        Render();
+    }
+
     /// <summary>
     /// [phase9 #16] 「この体制で回るか」（Kotlin原本 <c>StaffingRealityCard</c>）。年間マスターの先頭、見直し候補メモの直後。
     /// 「15人いるから大丈夫」ではなくシフトごとの担当可能人数で見る。数値は VM（<see cref="MagiViewModel.StaffingReality"/>）が
@@ -1264,6 +1293,7 @@ public sealed partial class EditView : UserControl
         // 表示は ConstraintFamilies/SkillConstraintFamilies の実 Rows 数を正とする）。
         ConstraintListHost.Children.Clear();
         var families = _vm.ConstraintFamilies().Concat(_vm.SkillConstraintFamilies()).ToList();
+        RenderConstraintHelp(families);
         var total = 0;
         foreach (var f in families)
         {
