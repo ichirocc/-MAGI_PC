@@ -28,6 +28,6 @@
 | 19 | 分析 | 設定の見直し（件数集約・上位6件） | `MagiDashboardCards.kt` `SettingIssuesCard` | `AnalysisView` | 済 | 済 | 緑 | run 34016003418（e7433ac は赤いテストのまま push→4fe54b3 で修正、CI は両方緑）。既存の「設定の見直し候補」節に差分: 件数見出し・担当外希望の一括クリア（VM `ClearOutOfScopeWishes`、テスト 2 件）・既定で畳む一覧（6件＋種類チップ）・「設定・希望を編集する」 |
 | 20 | 分析 | C1 頭打ち診断・回数固定の影響（表示の突き合わせ） | `MagiDashboardCards.kt` `C1PlateauCard`/`PinFixedImpactCard` | `AnalysisView` | 済 | 済 | 緑 | run 34016509375。`AnalysisView.RenderC1Plateau`（新設: 原因未確定／上位6件＋原因チップ＋推奨手・既定で畳む内訳）＋`RenderPinTargets` 改修（緩め幅を下限側/上限側に分離、上位5件、注記を畳む）。VM 変更なし |
 | 21 | 設定 | 色ピッカー 36色（6×6・淡いパステル・選択✓, 3.460.0） | `ShiftColorEditor.kt` `ColorPickerDialog` | `SettingsView` | 済 | 済 | 緑 | run 34016797539。`ShiftColorPalette`（ViewModels、テスト 2 件）＋`SettingsView.BuildColorPickerFlyout` を 6×6 タイル＋✓ に差し替え。16進入力は残す |
-| 22 | 設定 | 重み表（族・重み・HARD/SOFT） | `MagiDashboardCards.kt` `WeightTableCard` | `SettingsView` | 済 | 済 | 未 | `SettingsView.RenderWeightTable`（最適化設定の直後、MirrorKeys.Weights を重い順・絶対に守る/できれば守る）。分析タブの「重みつきスコア」は別物（合計値の表示）で重複なし |
-| 23 | シェル | トップバーの状態バッジ（実行中/配布可/必須違反N/未計算）＋下部コマンドバー | `MagiApp.kt` `MagiTopBar`/`BottomCommandBar` | `MainWindow` | 未 | 未 | 未 | |
+| 22 | 設定 | 重み表（族・重み・HARD/SOFT） | `MagiDashboardCards.kt` `WeightTableCard` | `SettingsView` | 済 | 済 | 緑 | run 34017009464。`SettingsView.RenderWeightTable`（最適化設定の直後、MirrorKeys.Weights を重い順・絶対に守る/できれば守る）。分析タブの「重みつきスコア」は別物（合計値の表示）で重複なし |
+| 23 | シェル | トップバーの状態バッジ（実行中/配布可/必須違反N/未計算）＋下部コマンドバー | `MagiApp.kt` `MagiTopBar`/`BottomCommandBar` | `MainWindow` | 済 | 済 | 未 | `MainWindow.RenderShell`（Ui の変化ごと）: トップバー＝MAGI チップ＋節名＋状態バッジ、下部＝元に戻す/やり直し（条件付き）＋主ボタン（やめる/勤務表をつくる/もう一度つくる）。VM 変更なし |
 | 24 | ホーム | 「なおすのを手伝って」（不足セルの候補ピッカー） | `MagiDashboardCards.kt` `GuidedFixDialog` | `HomeView` | 未 | 未 | 未 | 集計セルの候補フライアウトで一部充足＝要確認 |

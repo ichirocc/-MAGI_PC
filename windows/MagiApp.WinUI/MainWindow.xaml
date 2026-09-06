@@ -19,13 +19,31 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <InfoBar x:Name="GlobalMessageBar" Grid.Row="0" Margin="8,8,8,0"
+        <!-- [phase9 #23] トップバー（Kotlin原本 MagiTopBar）: MAGI チップ＋節名＋状態バッジ（実行中/配布可/必須違反N/未計算）。 -->
+        <Grid Grid.Row="0" Padding="16,10" ColumnSpacing="10" Background="{StaticResource MagiSurfaceVariantBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{StaticResource MagiPrimaryBrush}" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4">
+                <TextBlock Text="MAGI" FontWeight="Bold" Foreground="{StaticResource MagiOnPrimaryBrush}" />
+            </Border>
+            <TextBlock x:Name="SectionTitleText" Grid.Column="1" VerticalAlignment="Center" Opacity="0.8" />
+            <Border x:Name="StatusBadge" Grid.Column="2" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" Visibility="Collapsed">
+                <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
+            </Border>
+        </Grid>
+
+        <InfoBar x:Name="GlobalMessageBar" Grid.Row="1" Margin="8,8,8,0"
                  IsOpen="False" IsClosable="True" Closed="OnMessageBarClosed" />
 
-        <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Top"
+        <NavigationView x:Name="Nav" Grid.Row="2" PaneDisplayMode="Top"
                          IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
                          SelectionChanged="OnNavSelectionChanged">
             <NavigationView.MenuItems>
@@ -37,5 +55,17 @@
             </NavigationView.MenuItems>
             <ContentControl x:Name="HostContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
         </NavigationView>
+
+        <!-- [phase9 #23] 下部コマンドバー（Kotlin原本 BottomCommandBar）: 元に戻す／やり直し（できるときだけ）＋主ボタン（やめる／勤務表をつくる／もう一度つくる）。 -->
+        <Grid Grid.Row="3" Padding="16,10" ColumnSpacing="10" Background="{StaticResource MagiSurfaceVariantBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="UndoButton" Grid.Column="0" Content="元に戻す" MinHeight="48" Visibility="Collapsed" Click="OnUndoClick" />
+            <Button x:Name="RedoButton" Grid.Column="1" Content="やり直し" MinHeight="48" Visibility="Collapsed" Click="OnRedoClick" />
+            <Button x:Name="MainActionButton" Grid.Column="2" MinHeight="48" HorizontalAlignment="Stretch" FontSize="16" FontWeight="SemiBold" Click="OnMainActionClick" />
+        </Grid>
     </Grid>
 </Window>

@@ -6,6 +6,7 @@ using MagiApp.WinUI.Views;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace MagiApp.WinUI;
 
@@ -55,8 +56,10 @@ public sealed partial class MainWindow : Window
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First();
         AppWindow.Closing += OnAppWindowClosing;
         _vm.Ui.PropertyChanged += OnUiChangedForMessageBar;
+        _vm.Ui.PropertyChanged += (_, _) => RenderShell();
         ShowTab("home");
         UpdateMessageBar();
+        RenderShell();
         _ = InitializeAsync();
     }
 
@@ -168,7 +171,66 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>各タブの内容は初回選択時に構築してキャッシュする（クラスKDoc参照）。</summary>
-    private void ShowTab(string tag) => HostContent.Content = GetOrCreateTab(tag);
+    private void ShowTab(string tag)
+    {
+        _currentTag = tag;
+        HostContent.Content = GetOrCreateTab(tag);
+        RenderShell();
+    }
+
+    private string _currentTag = "home";
+
+    /// <summary>
+    /// [phase9 #23] シェル共通のトップバー（状態バッジ）と下部コマンドバー（Kotlin原本 <c>MagiTopBar</c>／<c>BottomCommandBar</c>）。
+    /// バッジ: 実行中（必須N か soft の init→best）／配布可（結果あり・必須0）／必須違反 N／未計算。読込前は出さない。
+    /// 主ボタンは文脈で 1 本: 実行中・提案探索中は「やめる」（<see cref="MagiViewModel.Stop"/> が両方を戻す）、それ以外は
+    /// 「勤務表をつくる」／「もう一度つくる」（どちらも本最適化）。元に戻す／やり直しは、できるときだけ出す。
+    /// </summary>
+    private void RenderShell()
+    {
+        var ui = _vm.Ui;
+        SectionTitleText.Text = _currentTag switch
+        {
+            "home" => "ホーム", "schedule" => "勤務表", "edit" => "編集", "analysis" => "分析", "settings" => "設定", _ => "",
+        };
+
+        StatusBadge.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (ui.Loaded)
+        {
+            string label, bg, fg;
+            if (ui.Running)
+            {
+                // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
+                var prog = ui.BestHard > 0 ? $" 必須{ui.BestHard}"
+                    : ui.InitSoft > 0 && ui.BestSoft >= 0 && ui.BestSoft < ui.InitSoft ? $" {ui.InitSoft}→{ui.BestSoft}"
+                    : "";
+                (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
+            }
+            else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = ("配布可", "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
+            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
+            else (label, bg, fg) = ("未計算", "MagiBackgroundBrush", "MagiOnBackgroundBrush");
+            StatusBadgeText.Text = label;
+            StatusBadge.Background = (Brush)Application.Current.Resources[bg];
+            StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
+        }
+
+        UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
+        RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
+        var stopping = ui.Running || ui.FixSearching;
+        MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ もう一度つくる" : "▶ 勤務表をつくる";
+        MainActionButton.IsEnabled = stopping || ui.Loaded;
+        MainActionButton.Background = (Brush)Application.Current.Resources[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
+        MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
+    }
+
+    private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
+    private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
+
+    private void OnMainActionClick(object sender, RoutedEventArgs e)
+    {
+        if (_vm.Ui.Running || _vm.Ui.FixSearching) _vm.Stop();
+        else _vm.RunV6FullOptimize();
+    }
 
     private UIElement GetOrCreateTab(string tag)
     {
