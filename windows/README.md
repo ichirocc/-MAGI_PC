@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.505.2 と同期（ループ Iteration 3 第一弾）: `ViolationComponentRepair` に①単独で厳密ピンを崩す候補は逆向きの
+  相方が同じ起点集合に無ければ探索へ入れない（候補ごとに 1 回だけ数える）、②`DiagnoseCoverage` の Infeasible な covU 起点を末尾へ、を追加。
+  Android 実データ 4/4 盤面同一・推定回数は最大 1/2。テスト +2。MagiEngine.Tests 777 OK。ベンチ iter3 の結果は Android 側で報告。
+
 - 2026-09-06 Android 3.505.0/3.505.1 と同期: **違反起点のトランザクション修復 `ViolationComponentRepair`**（ユーザー提示の
   自律改善ループ Iteration 2 第一弾）。各パスが結合に使わなかった拒否候補を `CyclicSwapResult.RejectedCandidates`（`CombineAndApply` の
   `leftover`）で巡ごとに集め、巡の末尾で違反（HARD セル/人数→回数→SOFT）を起点に「主候補＋職員か日を共有する助候補（上限 40）」を

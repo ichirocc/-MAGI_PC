@@ -138,4 +138,31 @@ public class ViolationComponentRepairTest
         Assert.True(r.Report.Hard <= before.Hard);
         Assert.False(UnifiedViolationChecker.BetterReport(before, r.Report));
     }
+
+    /// <summary>[Iteration 3] 単独で厳密ピン（lo==hi）を崩す候補は、同じ集合に逆向きの相方が無ければ最初から外す。</summary>
+    [Fact]
+    public void LonePinBreakersAreDroppedBeforeTheSearch()
+    {
+        var baseState = CombineTwoRejectedState();
+        var range = new Dictionary<string, Range>(baseState.StaffRange) { ["1,2"] = new("1", "1") };   // Y の Qres を 1 回に固定
+        var st = baseState with { StaffRange = range };
+        var work = Work(st);
+        var lone = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 1, 0, 3 } }, "range", "Y→D");     // Qres 1→0＝ピンを崩す。相方なし
+        var other = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 0, 0, 2 } }, "apt", "X→Qres");   // ピンには触れない
+        var r = ViolationComponentRepair.Repair(st, work, new[] { lone, other });
+        Assert.Contains("相方なし除外1", r.Logs[0].Message);
+        Assert.Equal(2, r.NewSchedule[1][0]);
+    }
+
+    /// <summary>[Iteration 3] 構造的に埋められない人員不足（covU）の起点は末尾へ回す（解ける HARD を先に）。</summary>
+    [Fact]
+    public void InfeasibleCoverageAnchorsAreOrderedLast()
+    {
+        var rep = new ViolationReport(
+            new Dictionary<string, string>(),
+            new Dictionary<string, string> { ["1,3"] = "vio-covU", ["1,5"] = "vio-covU" },
+            new Dictionary<string, string>(), new Dictionary<string, int>(), Total: 2, Hard: 2, Soft: 0, WeightedScore: 16000.0);
+        var ordered = ViolationComponentRepair.Anchors(rep, new HashSet<long> { 1 * 1000L + 3 });
+        Assert.Equal(new[] { 5, 3 }, ordered.Select(a => a.Day).ToArray());
+    }
 }

@@ -88,7 +88,8 @@ public static class ViolationComponentRepair
         public string Family { get; }
         public int Staff { get; }
         public int Day { get; }
-        public Anchor(bool hard, string family, int staff, int day) { Hard = hard; Family = family; Staff = staff; Day = day; }
+        public int Shift { get; }
+        public Anchor(bool hard, string family, int staff, int day, int shift = -1) { Hard = hard; Family = family; Staff = staff; Day = day; Shift = shift; }
 
         public bool Touches(Patch pt)
         {
@@ -110,20 +111,25 @@ public static class ViolationComponentRepair
 
     private static string Fam(string cls) => cls.StartsWith("vio-", StringComparison.Ordinal) ? cls.Substring(4) : cls;
 
-    /// <summary>起点の並び: HARD のセル・人数違反 → 回数違反 → SOFT のセル・人数違反（同種はキー順で決定的）。</summary>
-    public static List<Anchor> Anchors(ViolationReport report)
+    /// <summary>
+    /// 起点の並び: HARD のセル・人数違反 → 回数違反 → SOFT のセル・人数違反（同種はキー順で決定的）。
+    /// 構造的に埋められない人数不足 <paramref name="infeasible"/> は末尾＝起点の上限（MaxAnchors）を「解ける HARD」に使う。
+    /// </summary>
+    public static List<Anchor> Anchors(ViolationReport report, IReadOnlySet<long>? infeasible = null)
     {
         var cells = new List<Anchor>();
         foreach (var (k, cls) in report.Violations.OrderBy(e => e.Key, StringComparer.Ordinal))
             if (ParseKey(k) is var (i, j)) cells.Add(new Anchor(MirrorKeys.Hard.Contains(Fam(cls)), Fam(cls), i, j));
         var needs = new List<Anchor>();
         foreach (var (k, cls) in report.NeedViolations.OrderBy(e => e.Key, StringComparer.Ordinal))
-            if (ParseKey(k) is var (_, j)) needs.Add(new Anchor(MirrorKeys.Hard.Contains(Fam(cls)), Fam(cls), -1, j));
+            if (ParseKey(k) is var (sh, j)) needs.Add(new Anchor(MirrorKeys.Hard.Contains(Fam(cls)), Fam(cls), -1, j, sh));
         var counts = new List<Anchor>();
         foreach (var (k, cls) in report.CountViolations.OrderBy(e => e.Key, StringComparer.Ordinal))
             if (ParseKey(k) is var (i, _)) counts.Add(new Anchor(false, Fam(cls), i, -1));
         var cellsAndNeeds = cells.Concat(needs).ToList();
-        return cellsAndNeeds.Where(a => a.Hard).Concat(counts).Concat(cellsAndNeeds.Where(a => !a.Hard)).ToList();
+        var hardOnes = cellsAndNeeds.Where(a => a.Hard).ToList();
+        bool Blocked(Anchor a) => a.Family == "covU" && infeasible != null && infeasible.Contains(a.Shift * 1000L + a.Day);
+        return hardOnes.Where(a => !Blocked(a)).Concat(counts).Concat(cellsAndNeeds.Where(a => !a.Hard)).Concat(hardOnes.Where(Blocked)).ToList();
     }
 
     /// <summary>起点ごとの探索集合＝主候補（起点を触る）＋助候補（主と職員か日を共有）。主候補が無い起点は除く。</summary>
@@ -185,7 +191,55 @@ public static class ViolationComponentRepair
         var pinned = new int[p.S][];
         for (var i = 0; i < p.S; i++)
             pinned[i] = Enumerable.Range(0, p.K).Where(k => p.RangeLo[i][k] != int.MinValue && p.RangeHi[i][k] != int.MaxValue && p.RangeLo[i][k] == p.RangeHi[i][k]).ToArray();
+        // [Iteration 3] 構造的に埋められない人員不足の枠（担当できる人数 < 必要数）。起点の順位を下げるだけで、候補は除かない。
+        IReadOnlySet<long> infeasibleSlots;
+        try
+        {
+            infeasibleSlots = V6PortAnalyzer.DiagnoseCoverage(state, work, bestRep).Shortfalls
+                .Where(sf => sf.Verdict == CoverageVerdict.Infeasible).Select(sf => sf.ShiftIndex * 1000L + sf.DayIndex).ToHashSet();
+        }
+        catch (Exception) { infeasibleSlots = new HashSet<long>(); }
         int estimates = 0, evaluations = 0, anchorsTried = 0, prunedPin = 0;
+        var prunedLone = new HashSet<int>();   // 起点集合ごとに判定するので、同じ候補は 1 回だけ数える
+
+        /// 候補が (職員, シフト) の回数をどれだけ動かすか（現盤面基準）。ピンを崩す候補と、それを戻せる相方の判定に使う。
+        Dictionary<long, int> CountDelta(Patch pt)
+        {
+            var d = new Dictionary<long, int>();
+            foreach (var op in pt.Ops)
+            {
+                var old = work[op[0]][op[1]];
+                if (old == op[2]) continue;
+                d[op[0] * 1000L + old] = d.GetValueOrDefault(op[0] * 1000L + old) - 1;
+                d[op[0] * 1000L + op[2]] = d.GetValueOrDefault(op[0] * 1000L + op[2]) + 1;
+            }
+            return d;
+        }
+        var deltas = patches.Select(CountDelta).ToList();
+        List<long> BrokenPins(int idx)
+        {
+            var result = new List<long>();
+            foreach (var (key, dv) in deltas[idx])
+            {
+                var i = (int)(key / 1000L); var k = (int)(key % 1000L);
+                if (Array.IndexOf(pinned[i], k) < 0) continue;
+                var lo = p.RangeLo[i][k]; var bc = delta.CountForStaff(i, k);
+                if (Math.Abs(bc + dv - lo) > Math.Abs(bc - lo)) result.Add(key);
+            }
+            return result;
+        }
+        // 単独で厳密ピンを崩す候補は、同じ集合に逆向きの相方（セルが重ならない）が無ければ外す＝相方が居れば束ねて戻せるので残す。
+        List<int> DropLonePinBreakers(List<int> ids) => ids.Where(idx =>
+        {
+            var broken = BrokenPins(idx);
+            var keep = broken.Count == 0 || broken.All(key =>
+            {
+                var sign = deltas[idx].GetValueOrDefault(key);
+                return ids.Any(other => other != idx && deltas[other].GetValueOrDefault(key) * sign < 0 && !patches[other].Overlaps(patches[idx]));
+            });
+            if (!keep) prunedLone.Add(idx);
+            return keep;
+        }).ToList();
         var acceptedLabels = new List<string>();
         var rejectReasons = new Dictionary<string, int>();
 
@@ -300,8 +354,8 @@ public static class ViolationComponentRepair
         int anchorCount = 0, maxSet = 0;
         while (!stop() && evaluations < par.MaxEvaluations && estimates < par.MaxEstimates)
         {
-            var sets = AnchorSets(Anchors(bestRep), patches, par.MaxPatchesPerAnchor)
-                .Select(s => (s.Anchor, Ids: s.Ids.Where(id => !used.Contains(id)).ToList()))
+            var sets = AnchorSets(Anchors(bestRep, infeasibleSlots), patches, par.MaxPatchesPerAnchor)
+                .Select(s => (s.Anchor, Ids: DropLonePinBreakers(s.Ids.Where(id => !used.Contains(id)).ToList())))
                 .Where(s => s.Ids.Count > 0).ToList();
             anchorCount = sets.Count;
             var committed = false;
@@ -326,7 +380,7 @@ public static class ViolationComponentRepair
         foreach (var pt in patches) { if (!mechCount.ContainsKey(pt.Mechanism)) mech.Add(pt.Mechanism); mechCount[pt.Mechanism] = mechCount.GetValueOrDefault(pt.Mechanism) + 1; }
         return Done(
             $"候補{patches.Count}件(" + string.Join(" ", mech.Select(m => $"{m}×{mechCount[m]}")) + $") 起点{anchorCount}件(探索{anchorsTried}件・最大{maxSet}候補)" +
-            $" 推定{estimates}回(ピン枝刈り{prunedPin}) 正式評価{evaluations}回 採用{applied}件" +
+            $" 推定{estimates}回(ピン枝刈り{prunedPin}・相方なし除外{prunedLone.Count}) 正式評価{evaluations}回 採用{applied}件" +
             (acceptedLabels.Count > 0 ? "[" + string.Join(", ", acceptedLabels) + "]" : "") +
             (rejectReasons.Count > 0 ? " 不採用(" + string.Join(" ", rejectReasons.Select(r => $"{r.Key}:{r.Value}")) + ")" : "") +
             $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} score {(long)before.WeightedScore}->{(long)bestRep.WeightedScore}");
