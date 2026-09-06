@@ -195,4 +195,23 @@ public class CombinatorialRepairTest
         Assert.Equal(3, stats.CombosTried); // maxStagnantTries通りで打ち切り(45通り網羅しない)
         Assert.Equal(before, after); // 盤面は不変
     }
+
+    // 注入された isBetter が例外を投げても試行中の組合せを盤面に残さない（旧: 巻き戻し前に伝播し、
+    // 呼び出し元の keep-best が壊れた work を採用しうる）。
+    [Fact]
+    public void CombineAndApplyRestoresBoardWhenEvaluationThrows()
+    {
+        var st = CombineTwoRejectedState();
+        var work = st.Schedule.ToIntArray2D();
+        var snapshot = work.Copy2D();
+        var before = UnifiedViolationChecker.Check(st, work);
+        var candX = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 0, 0, 2 } }, "test", "X");
+        var candY = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 1, 0, 3 } }, "test", "Y");
+
+        Assert.Throws<InvalidOperationException>(() => CombinatorialRepair.CombineAndApply(
+            st, work, before, new List<CombinatorialRepair.Candidate> { candX, candY },
+            (_, _) => throw new InvalidOperationException("evaluator failed")));
+
+        for (var i = 0; i < work.Length; i++) Assert.Equal(snapshot[i], work[i]);
+    }
 }

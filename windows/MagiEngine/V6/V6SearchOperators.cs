@@ -20,6 +20,25 @@ public enum AcceptMode { Sa, GreatDeluge, LamAdaptive }
 /// </summary>
 internal static class V6SearchOperators
 {
+    /// <summary>
+    /// 複数の遅延候補列を先頭から 1 件ずつ巡回する決定的ラウンドロビン（先頭の候補族だけが評価予算を使い切るのを防ぐ）。
+    /// yield で中断している間も cursor をキューへ戻しておく＝呼出側が途中で列挙を止めても finally で全 enumerator を破棄できる。
+    /// </summary>
+    internal static IEnumerable<T> RoundRobin<T>(params IEnumerable<T>[] sources)
+    {
+        var cursors = new Queue<IEnumerator<T>>(sources.Select(x => x.GetEnumerator()));
+        try
+        {
+            while (cursors.Count > 0)
+            {
+                var cursor = cursors.Dequeue();
+                if (cursor.MoveNext()) { cursors.Enqueue(cursor); yield return cursor.Current; }
+                else cursor.Dispose();
+            }
+        }
+        finally { foreach (var cursor in cursors) cursor.Dispose(); }
+    }
+
     // ── FindXxx: ターゲット型 single-cell 修正を [i, j, newK] で返す（無ければ null）。
     // 集合構築は 2 パス（個数を数えてから N 番目を選ぶ）で ArrayList/filter を排し GC 圧を下げる。
     // ALNS の直接評価アームから eval+cur へ copy2D なしで適用される。

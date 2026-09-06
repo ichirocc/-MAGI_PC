@@ -117,4 +117,14 @@ public class V6HotfixPassesWishIslandTest
             new V6HotfixPasses.WishIslandParams(MaxPasses: -1, MaxEvaluations: -5, BeamWidth: 0, BeamDepth: -1, MinIslandBudget: 0, BeamBranchFactor: 0));
         Assert.Equal(0, negative.Applied);
     }
+
+    /// <summary>ビーム 1 段の保持数は幅×分岐を残り予算で頭打ちにし、0 以下の入力は 1 に丸める（Android 3.504.0）。</summary>
+    [Fact]
+    public void WishBeamCandidateLimitIsCappedByRemainingBudgetAndNeverBelowOne()
+    {
+        Assert.Equal(12, V6HotfixPasses.WishBeamCandidateLimit(2, 6, 400));
+        Assert.Equal(5, V6HotfixPasses.WishBeamCandidateLimit(2, 6, 5));
+        Assert.Equal(1, V6HotfixPasses.WishBeamCandidateLimit(2, 6, 0));
+        Assert.Equal(1, V6HotfixPasses.WishBeamCandidateLimit(0, 0, -3));
+    }
 }

@@ -326,6 +326,25 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 外部提示の C# 6 ファイル（`V6SearchOperators` / `WishIsland` / `RunPostOptimization` / `C1Beam` / `AnchoredWindowSwap` /
+  `CombinatorialRepair`）の優劣検証と移植（Android 3.504.0 と同時。探索動学に触れる差分は Kotlin で計測してから同期）:
+  - **採用**: `V6SearchOperators.RoundRobin<T>`（希望島の同日/窓/両翼・ビームの島巡回で共用。**提示版は `yield` 中断中の cursor が
+    キューの外にあり、途中終了で enumerator を破棄漏れ**＝`RoundRobinInterleavesSourcesAndDisposesEnumeratorsOnEarlyExit` で捕捉して
+    「enqueue してから yield」に修正）。希望島ビームを島ごと・種類ごとの巡回＋段の保持数を残り予算で頭打ち（`WishBeamCandidateLimit`）
+    ＋走査枠を frontier へ均等配分（Android 計測: 単体 12 条件中 1 改善・11 不変、後処理 4/4 不変）。`ApplyC1BeamPolish` の重複排除を
+    `BeamScheduleComparer`（盤面ハッシュ）へ。`AnchoredWindowSwap` の候補プールを `maxEvaluations` 上限の有界ヒープへ（順位鍵の最後に
+    生成順＝Kotlin の安定ソートと同じ同点順。旧 `List.Sort` は不安定）、相手ループに `stop()`、正式評価に try/finally。
+    `CombinatorialRepair` / `WishIsland`（増分判定・PickBest・ExpandNode）の評価を try/finally で巻き戻し（テスト
+    `CombineAndApplyRestoresBoardWhenEvaluationThrows`）。MagiEngine.Tests 765（+3）。
+  - **否決（Android で計測）**: 島予算の逐次公平分配＋`mainBudget` の床（golden 2 件退行・`MinIslandBudget` が事実上効かなくなる）、
+    枝刈り分の枠計上（sample で HARD 14→15）、C1 ビームの `bestEver = root`（blocked_covu 退行）、後処理チェーンの族ゲートと
+    C1 4 段の再判定（最終盤面 4/4 不変・時間は雑音内・4 実データではどのパスも飛ばない）、`OpsAreValid`（内部候補の防御検査は
+    不変条件違反を隠す）。数値は `docs/history/3.4xx.md` 3.504.0。
+  - `windows-installer.yml`（提示版との差分）: MSIX の Secrets 片方だけ設定を失敗に、PFX を `RUNNER_TEMP` へ展開して try/finally で
+    削除、msbuild の終了コード検査＝採用。**公開 Release で署名を必須にする**案は、証明書未導入のいま入れるとタグ push が必ず失敗する
+    ので、リポジトリ変数 `REQUIRE_CODE_SIGNING=true` で有効化する opt-in にした（`sign-files.ps1` に `-RequireSignature` /
+    `-ValidateOnly` を追加、publish 前の「Validate release signing policy」で早期に落とす。Release 本文の「署名済み」も同じ変数で切替）。
+
 - 2026-09-06 Android 3.503.0 と同時（自律レビュー第4段）: `V6PortAnalyzer.Coverage.cs` の `DiagnoseCoverage` を `DiagnoseShortfalls`／`BuildRelaxations`／
   `DiagnoseSurpluses` に分割、`Probe`（ChainSeeds=8・SurplusProbeBudget=240・AdjacentSeed=7・MinRelaxCandidates=2。値は不変）と共有 `ChainFills`、
   `Overview.cs` の `SpreadTerm`／`ParseKeyPair`。出力は不変（Android 側の同値検証 24/24 一致）。MagiEngine.Tests で確認。

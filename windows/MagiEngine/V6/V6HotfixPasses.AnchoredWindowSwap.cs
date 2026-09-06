@@ -25,7 +25,7 @@ public static partial class V6HotfixPasses
         return o;
     }
 
-    private sealed record StrictWindowCandidate(int A, int B, int Start, int Length, long Priority, int Changed, bool SameGroup);
+    private sealed record StrictWindowCandidate(int A, int B, int Start, int Length, long Priority, int Changed, bool SameGroup, int Seq);
 
     /// <summary>
     /// [3.495.0 移植元/ユーザー提示の設計「違反アンカー型・可変長ウィンドウ交換」] STRICT_WHOLE_WINDOW の本体。
@@ -134,7 +134,15 @@ public static partial class V6HotfixPasses
             anchorsTotal += anchors.Count;
 
             var seen = new HashSet<long>();
-            var candidates = new List<StrictWindowCandidate>();
+            // 正式評価は上位 maxEvaluations 件だけ＝最悪候補を根に置く有界ヒープで候補を O(maxEvaluations) に固定する。
+            // 順位鍵は後段の Sort と同じで、最後の生成順は Kotlin 原本の sortWith（安定ソート）と同点順を揃えるため。
+            var candidateCap = Math.Max(1, maxEvaluations);
+            var candidatePool = new PriorityQueue<StrictWindowCandidate, (long Priority, int Changed, int NegStart, int NegA, int NegB, int NegSeq)>();
+            void KeepCandidate(StrictWindowCandidate c)
+            {
+                candidatePool.Enqueue(c, (c.Priority, c.Changed, -c.Start, -c.A, -c.B, -c.Seq));
+                if (candidatePool.Count > candidateCap) candidatePool.Dequeue();
+            }
             var delta = new int[p.K];
             void TryWindow(ViolationAnchor anc, int start, int length)
             {
@@ -143,6 +151,7 @@ public static partial class V6HotfixPasses
                 windowsTried++;
                 for (var b = 0; b < p.S; b++)
                 {
+                    if (stop()) return;
                     if (b == a) continue;
                     var key = ((long)Math.Min(a, b) << 48) | ((long)Math.Max(a, b) << 32) | ((long)start << 16) | (long)length;
                     if (seen.Contains(key)) continue;
@@ -206,7 +215,7 @@ public static partial class V6HotfixPasses
                     var same = SameGroup(a, b);
                     var priority = hardGain * 1_000_000L + anchorGain * 100_000L + countGain * 10_000L +
                         (pressure[a] + pressure[b]) * 16L - changed * 10L - (same ? 0L : 20_000L);
-                    candidates.Add(new StrictWindowCandidate(a, b, start, length, priority, changed, same));
+                    KeepCandidate(new StrictWindowCandidate(a, b, start, length, priority, changed, same, built));
                     built++;
                 }
             }
@@ -236,14 +245,16 @@ public static partial class V6HotfixPasses
                     TryWindow(anc, j + 1, l);
                 }
             }
-            if (candidates.Count == 0) break;
+            if (candidatePool.Count == 0) break;
+            var candidates = candidatePool.UnorderedItems.Select(x => x.Element).ToList();
             candidates.Sort((x, y) =>
             {
                 var c = y.Priority.CompareTo(x.Priority); if (c != 0) return c;
                 c = y.Changed.CompareTo(x.Changed); if (c != 0) return c;
                 c = x.Start.CompareTo(y.Start); if (c != 0) return c;
                 c = x.A.CompareTo(y.A); if (c != 0) return c;
-                return x.B.CompareTo(y.B);
+                c = x.B.CompareTo(y.B); if (c != 0) return c;
+                return x.Seq.CompareTo(y.Seq);
             });
 
             var baseWork = work.Copy2D();
@@ -254,10 +265,19 @@ public static partial class V6HotfixPasses
             {
                 if (stop() || checkedThisPass >= maxEvaluations) break;
                 Swap(c);
-                var r = UnifiedViolationChecker.Check(state, work);
-                var pinRegression = V6SearchOperators.ExactPinRegression(p, baseWork, work);
-                if (pinRegression && UnifiedViolationChecker.BetterReport(r, bestRep)) pinBlocks.Record(p, baseWork, work);
-                Swap(c);
+                ViolationReport r;
+                bool pinRegression;
+                try
+                {
+                    r = UnifiedViolationChecker.Check(state, work);
+                    pinRegression = V6SearchOperators.ExactPinRegression(p, baseWork, work);
+                    if (pinRegression && UnifiedViolationChecker.BetterReport(r, bestRep)) pinBlocks.Record(p, baseWork, work);
+                }
+                finally
+                {
+                    // 正式評価中に例外が起きても、試行中の窓交換を呼出元の盤面へ残さない。
+                    Swap(c);
+                }
                 checkedThisPass++; evaluated++;
                 if (!pinRegression && UnifiedViolationChecker.BetterReport(r, bestRep) && (chosenRep is null || UnifiedViolationChecker.BetterReport(r, chosenRep)))
                 {

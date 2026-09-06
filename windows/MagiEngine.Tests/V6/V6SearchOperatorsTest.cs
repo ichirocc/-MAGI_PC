@@ -55,4 +55,30 @@ public class V6SearchOperatorsTest
         Assert.Equal(0, p.CovOCell(1, 0, eval.CountOnDay(1, 0)));
         Assert.Null(V6SearchOperators.FindCovOFix(p, eval, new JavaRandom(1)));
     }
+
+    /// <summary>
+    /// 候補族の巡回は先頭から 1 件ずつ交互で、尽きた列は飛ばす。列挙を途中で止めても残る enumerator を
+    /// 必ず破棄する（希望島研磨の同日・窓・両翼の交互評価が依存する契約）。
+    /// </summary>
+    [Fact]
+    public void RoundRobinInterleavesSourcesAndDisposesEnumeratorsOnEarlyExit()
+    {
+        var disposed = new List<string>();
+        IEnumerable<string> Source(string name, int count)
+        {
+            try { for (var i = 0; i < count; i++) yield return $"{name}{i}"; }
+            finally { disposed.Add(name); }
+        }
+
+        var all = V6SearchOperators.RoundRobin(Source("a", 3), Source("b", 1), Source("c", 2)).ToList();
+        Assert.Equal(new[] { "a0", "b0", "c0", "a1", "c1", "a2" }, all);
+        Assert.Equal(new[] { "b", "c", "a" }, disposed);
+
+        disposed.Clear();
+        var firstTwo = V6SearchOperators.RoundRobin(Source("a", 3), Source("b", 3)).Take(2).ToList();
+        Assert.Equal(new[] { "a0", "b0" }, firstTwo);
+        Assert.Equal(2, disposed.Count);
+        Assert.Contains("a", disposed);
+        Assert.Contains("b", disposed);
+    }
 }

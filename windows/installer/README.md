@@ -82,7 +82,10 @@ PFX はランナーの一時ファイルへ展開し、成否に関わらず `fi
 - EV 証明書（物理トークン必須）やクラウド管理鍵（Azure Key Vault / DigiCert ONE 等）を使う場合は、
   PFX をランナーへ展開するこの方式ではなく `Azure/trusted-signing-action` 等のベンダー提供
   アクションへ置き換える。
-- Secrets 未設定ならこのステップは何もせず成功する（署名なし配布＝従来どおり）。
+- Secrets 未設定ならこのステップは何もせず成功する（署名なし配布＝従来どおり）。片方だけ設定されていれば失敗する。
+- **署名を必須にする**: 証明書を導入したら、リポジトリ変数（Settings → Variables）に `REQUIRE_CODE_SIGNING=true` を置く。
+  以後、公開 Release（タグ `win-v*` の push／`publish_release=true`）は Secrets が無いと publish の前
+  （「Validate release signing policy」）で失敗し、Release 本文も「Authenticode 署名済み」になる。手動 Artifact は従来どおり署名なし可。
 
 ## バージョン表記
 

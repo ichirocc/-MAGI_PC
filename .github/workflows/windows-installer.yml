@@ -9,6 +9,8 @@ name: Windows Installer
 #      署名なしでも実行可（初回に SmartScreen の「詳細情報→実行」が出るのは仕様）。
 #      Secrets に WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD があれば
 #      signtool で Authenticode 二重署名（中身の .exe → setup.exe、タイムスタンプ付き）。
+#      リポジトリ変数 REQUIRE_CODE_SIGNING=true を置くと、公開 Release（タグ win-v* / publish_release）では
+#      署名が無い run を publish 前に失敗させる（証明書を導入したら有効化する。既定＝未設定は従来どおり署名なし可）。
 #
 #   ② msix-package … MSIX サイドロードパッケージ（WinUI3 の正式なパッケージ形態）
 #      Secrets に MSIX_PFX_BASE64 / MSIX_PFX_PASSWORD があれば署名付き .msix
@@ -88,6 +90,15 @@ jobs:
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "installer version = $v"
 
+      - name: Validate release signing policy
+        # 署名が必須な run（REQUIRE_CODE_SIGNING=true の公開 Release）で Secrets が無ければ、publish に時間を使う前にここで落とす。
+        shell: pwsh
+        env:
+          CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
+        run: ./installer/sign-files.ps1 -ValidateOnly -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
+
       - name: Setup MSBuild
         # dotnet CLI では publish できない（run 33284484499 で実測）: WindowsAppSDK の
         # MrtCore.PriGen.targets が要求する Microsoft.Build.Packaging.Pri.Tasks は
@@ -158,16 +169,17 @@ jobs:
           }
           Write-Host "publish root files: $((Get-ChildItem $pub -File).Count)"
 
-      - name: Sign app binary (optional, Authenticode)
+      - name: Sign app binary (Authenticode; required when REQUIRE_CODE_SIGNING=true)
         # 二重署名構成の①: インストーラへ入れる前に「中身の MagiApp.WinUI.exe」を署名する
         # （setup.exe だけ署名しても展開後の本体が未署名だと SmartScreen/AV の評価が下がるため）。
         # Secrets: WINDOWS_CERTIFICATE_BASE64 / WINDOWS_CERTIFICATE_PASSWORD が無ければ何もせず成功
-        # （署名なし配布＝従来どおり）。詳細は installer/sign-files.ps1 と installer/README.md。
+        # （署名なし配布＝従来どおり）。署名必須の run だけ失敗させる。詳細は installer/sign-files.ps1 と installer/README.md。
         shell: pwsh
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: ./installer/sign-files.ps1 -Paths @("$PWD\publish\win-x64\MagiApp.WinUI.exe")
+          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
+        run: ./installer/sign-files.ps1 -Paths @("$PWD\publish\win-x64\MagiApp.WinUI.exe") -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
 
       - name: Build setup.exe (Inno Setup)
         shell: pwsh
@@ -185,13 +197,14 @@ jobs:
                   installer\MagiApp.iss
           Get-ChildItem installer-out
 
-      - name: Sign setup.exe (optional, Authenticode)
+      - name: Sign setup.exe (Authenticode; required when REQUIRE_CODE_SIGNING=true)
         # 二重署名構成の②: 生成されたセットアップファイル自体を署名（タイムスタンプ付き）。
         shell: pwsh
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: ./installer/sign-files.ps1 -Paths @("$PWD\installer-out")
+          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
+        run: ./installer/sign-files.ps1 -Paths @("$PWD\installer-out") -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
 
       - name: Upload artifact (setup.exe)
         uses: actions/upload-artifact@v4
@@ -222,15 +235,18 @@ jobs:
           TAG: ${{ startsWith(github.ref, 'refs/tags/win-v') && github.ref_name || format('win-v{0}', needs.installer-exe.outputs.version) }}
           TARGET_SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
+          SIGNED: ${{ vars.REQUIRE_CODE_SIGNING == 'true' }}
         run: |
           set -euo pipefail
+          # 署名必須の run だけ「署名済み」と書く（署名なしの配布に署名済みと書かない）。
+          if [ "$SIGNED" = "true" ]; then signing_note="Authenticode 署名済み"; else signing_note="証明書不要"; fi
           [[ "$TAG" =~ ^win-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad tag: $TAG"; exit 1; }
           exe=$(ls dist/MagiShiftOptimizer-Setup-*-x64.exe | head -n 1)
           [ -n "$exe" ] || { echo "setup.exe not found in artifact"; exit 1; }
           cp "$exe" dist/MagiShiftOptimizer-Setup-x64.exe
           sha=$(sha256sum "$exe" | cut -d' ' -f1)
           cat > notes.md <<EOF_NOTES
-          MAGI ShiftOptimizer Windows 11 版 ${TAG#win-v}（setup.exe・per-user・証明書不要）
+          MAGI ShiftOptimizer Windows 11 版 ${TAG#win-v}（setup.exe・per-user・${signing_note}）
 
           **入れ方（PowerShell に貼り付け。SHA-256 を照合してから起動する）**
           \`\`\`powershell
@@ -283,6 +299,9 @@ jobs:
           PFX_B64: ${{ secrets.MSIX_PFX_BASE64 }}
           PFX_PASS: ${{ secrets.MSIX_PFX_PASSWORD }}
         run: |
+          $hasPfx = -not [string]::IsNullOrWhiteSpace($env:PFX_B64)
+          $hasPass = -not [string]::IsNullOrWhiteSpace($env:PFX_PASS)
+          if ($hasPfx -ne $hasPass) { throw "MSIX_PFX_BASE64 と MSIX_PFX_PASSWORD は両方設定してください。" }
           $props = @(
             "/restore", "/p:Configuration=Release", "/p:Platform=x64",
             "/p:GenerateAppxPackageOnBuild=true",
@@ -290,20 +309,27 @@ jobs:
             "/p:UapAppxPackageBuildMode=SideloadOnly",
             "/p:AppxBundle=Never"
           )
-          if (-not [string]::IsNullOrWhiteSpace($env:PFX_B64)) {
+          # PFX はワークスペース外（RUNNER_TEMP）へ展開し、ビルドの成否に関わらず finally で消す（旧: $PWD\signing.pfx＝
+          #   msbuild が失敗すると残ったまま。成果物の収集対象に混ざりうる）。
+          $pfxPath = "$env:RUNNER_TEMP\magi-msix-$([Guid]::NewGuid().ToString('N')).pfx"
+          if ($hasPfx) {
             Write-Host "署名あり（Secrets の PFX を使用）"
-            [IO.File]::WriteAllBytes("$PWD\signing.pfx", [Convert]::FromBase64String($env:PFX_B64))
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_B64))
             $props += @(
               "/p:AppxPackageSigningEnabled=true",
-              "/p:PackageCertificateKeyFile=$PWD\signing.pfx",
+              "/p:PackageCertificateKeyFile=$pfxPath",
               "/p:PackageCertificatePassword=$env:PFX_PASS"
             )
           } else {
             Write-Host "署名なし（Secrets: MSIX_PFX_BASE64 未設定）→ 未署名 .msix を生成"
             $props += "/p:AppxPackageSigningEnabled=false"
           }
-          msbuild MagiApp.WinUI/MagiApp.WinUI.csproj @props
-          if (Test-Path "$PWD\signing.pfx") { Remove-Item "$PWD\signing.pfx" -Force }
+          try {
+            msbuild MagiApp.WinUI/MagiApp.WinUI.csproj @props
+            if ($LASTEXITCODE -ne 0) { throw "MSIX build failed with exit code $LASTEXITCODE" }
+          } finally {
+            if (Test-Path $pfxPath) { Remove-Item $pfxPath -Force }
+          }
           Get-ChildItem msix-out -Recurse | Select-Object FullName
 
       - name: Upload artifact (msix)

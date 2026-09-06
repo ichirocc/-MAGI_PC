@@ -149,19 +149,28 @@ internal static class CombinatorialRepair
                     {
                         var saved = new int[ops.Count];
                         for (var oi = 0; oi < ops.Count; oi++) saved[oi] = work[ops[oi][0]][ops[oi][1]];
-                        foreach (var op in ops) work[op[0]][op[1]] = op[2];
-                        // [厳密ピン保護] 束ねた候補群も複数職員の回数を同時に変えうるため、staffRange
-                        //   厳密ピン(lo==hi)を新たに崩す組合せは不採用にする（keep-best/重みは不変）。
-                        //
-                        // [3.331.0] **安いピン検査を先に**置く。旧はフル checker を必ず呼んでから
-                        //   `isBetter(...) && !exactPinRegression(...)` を評価しており、ピンを崩す組合せにも
-                        //   毎回フル評価を払っていた。`&&` は両方を要求するので**採否は完全に同一**で、
-                        //   ピン破りの組合せぶんだけ checker 呼び出しが減る（実データではプールの大半が
-                        //   ピン破り＝AptPolish 69/71・FairPolish 20/20）。
-                        var pinBad = p != null && V6SearchOperators.ExactPinRegression(p, workBeforeCombo, work);
-                        var rep = pinBad ? null : UnifiedViolationChecker.Check(state, work);
-                        var ok = rep != null && isBetter(rep, bestRep);
-                        for (var oi = 0; oi < ops.Count; oi++) work[ops[oi][0]][ops[oi][1]] = saved[oi];
+                        ViolationReport? rep = null;
+                        var ok = false;
+                        try
+                        {
+                            foreach (var op in ops) work[op[0]][op[1]] = op[2];
+                            // [厳密ピン保護] 束ねた候補群も複数職員の回数を同時に変えうるため、staffRange
+                            //   厳密ピン(lo==hi)を新たに崩す組合せは不採用にする（keep-best/重みは不変）。
+                            //
+                            // [3.331.0] **安いピン検査を先に**置く。旧はフル checker を必ず呼んでから
+                            //   `isBetter(...) && !exactPinRegression(...)` を評価しており、ピンを崩す組合せにも
+                            //   毎回フル評価を払っていた。`&&` は両方を要求するので**採否は完全に同一**で、
+                            //   ピン破りの組合せぶんだけ checker 呼び出しが減る（実データではプールの大半が
+                            //   ピン破り＝AptPolish 69/71・FairPolish 20/20）。
+                            var pinBad = p != null && V6SearchOperators.ExactPinRegression(p, workBeforeCombo, work);
+                            rep = pinBad ? null : UnifiedViolationChecker.Check(state, work);
+                            ok = rep != null && isBetter(rep, bestRep);
+                        }
+                        finally
+                        {
+                            // 評価器・ピン検査・isBetter のどこで例外になっても試行手を残さない。
+                            for (var oi = 0; oi < ops.Count; oi++) work[ops[oi][0]][ops[oi][1]] = saved[oi];
+                        }
                         if (ok)
                         {
                             acceptedIdx = combo.ToList();
