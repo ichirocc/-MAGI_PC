@@ -12,7 +12,7 @@ public static partial class V6HotfixPasses
     /// <param name="BeamWidth">停滞時ビームの幅。</param>
     /// <param name="BeamDepth">停滞時ビームの深さ。3 は「両翼＋同日」程度の複合手を 1 本で表せる最小値。</param>
     /// <param name="MinIslandBudget">起動した島 1 つに保証する評価数。同日交換の候補を数手は試せる量として 8。</param>
-    /// <param name="BeamBranchFactor">ビーム 1 ノードあたり保持する中立手の上限（幅の倍率）。中立手は無数にあるので打ち切りが要る。</param>
+    /// <param name="BeamBranchFactor">ビーム 1 段で保持する中立手の上限（幅の倍率。残り予算で頭打ち＝<see cref="WishBeamCandidateLimit"/>）。中立手は無数にあるので打ち切りが要る。</param>
     /// <param name="StuckNamesShown">ログに名前を出す残存職員の上限。</param>
     public sealed record WishIslandParams(
         int MaxPasses = 3, int MaxEvaluations = 120, int BeamWidth = 4, int BeamDepth = 3,
@@ -312,9 +312,7 @@ public static partial class V6HotfixPasses
         /// </summary>
         private IEnumerable<WishMove> BeamMoves(List<WishIsland> active)
         {
-            var perIsland = active.Select(isl => V6SearchOperators.RoundRobin(
-                SameDayMoves(isl), WindowMoves(isl), WingMoves(isl))).ToArray();
-            foreach (var move in V6SearchOperators.RoundRobin(perIsland)) yield return move;
+            foreach (var move in V6SearchOperators.RoundRobin(active.Select(IslandMoves).ToArray())) yield return move;
         }
 
         // ---- 評価 ----
@@ -406,8 +404,8 @@ public static partial class V6HotfixPasses
         private const int BeamScanFactor = 2;
 
         /// <summary>
-        /// [Android 3.502.0/バックログ#9(c)] 旧: 中立手を列挙順に limit 件集めたところで打ち切ってから並べ替えていた＝上位候補が列挙順に依存した。
-        /// いまは limit×BeamScanFactor 件まで走査し、良い順に limit 件だけ保持する（評価は 1 手 1 回のまま）。
+        /// 1 ノードの展開: nodeLimit×BeamScanFactor 手まで正式評価し（枝刈りした手は数えない）、段全体で共有する next に
+        /// 良い順で depthLimit 件だけ保持する（Android 3.502.0: 列挙順の先頭で打ち切らない／3.504.0: 走査枠はノードごと、保持数は段ごと）。
         /// </summary>
         private void ExpandNode(WishNode node, List<WishNode> next, int nodeLimit, int depthLimit)
         {
@@ -418,13 +416,12 @@ public static partial class V6HotfixPasses
             foreach (var m in BeamMoves(active))
             {
                 if (!BudgetLeft() || scanned >= scanLimit) break;
-                scanned++;
                 if (IncreasesForbidden(m)) { prunedC3n++; continue; }
                 var old = Apply(m);
                 try
                 {
                     var rep = UnifiedViolationChecker.Check(state, work);
-                    evaluated++; beamEvaluated++;
+                    evaluated++; beamEvaluated++; scanned++;
                     var neutral = !UnifiedViolationChecker.BetterReport(node.Rep, rep) && !V6SearchOperators.ExactPinRegression(p, node.Board, work);
                     if (neutral) KeepBest(next, new WishNode(work.Copy2D(), rep), depthLimit);
                 }

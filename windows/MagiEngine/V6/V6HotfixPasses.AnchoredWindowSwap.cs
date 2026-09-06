@@ -245,7 +245,7 @@ public static partial class V6HotfixPasses
                     TryWindow(anc, j + 1, l);
                 }
             }
-            if (candidatePool.Count == 0) break;
+            if (candidatePool.Count == 0 || stop()) break;   // 生成が時間切れで途中終了したプールは正式評価へ回さない。
             var candidates = candidatePool.UnorderedItems.Select(x => x.Element).ToList();
             candidates.Sort((x, y) =>
             {

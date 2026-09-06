@@ -60,6 +60,10 @@ jobs:
     defaults:
       run:
         working-directory: windows
+    env:
+      # 署名が必須な run＝公開 Release（タグ win-v* / publish_release）かつリポジトリ変数 REQUIRE_CODE_SIGNING=true。
+      # release ジョブの本文（署名済み表記）も同じ変数で判定する（そのジョブは公開時にしか動かない）。
+      REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -96,7 +100,6 @@ jobs:
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
         run: ./installer/sign-files.ps1 -ValidateOnly -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
 
       - name: Setup MSBuild
@@ -178,7 +181,6 @@ jobs:
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
         run: ./installer/sign-files.ps1 -Paths @("$PWD\publish\win-x64\MagiApp.WinUI.exe") -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
 
       - name: Build setup.exe (Inno Setup)
@@ -203,7 +205,6 @@ jobs:
         env:
           CERT_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
           CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          REQUIRE_SIGNING: ${{ (startsWith(github.ref, 'refs/tags/win-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true')) && vars.REQUIRE_CODE_SIGNING == 'true' }}
         run: ./installer/sign-files.ps1 -Paths @("$PWD\installer-out") -RequireSignature:($env:REQUIRE_SIGNING -eq 'true')
 
       - name: Upload artifact (setup.exe)

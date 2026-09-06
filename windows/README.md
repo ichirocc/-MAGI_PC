@@ -344,6 +344,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
     削除、msbuild の終了コード検査＝採用。**公開 Release で署名を必須にする**案は、証明書未導入のいま入れるとタグ push が必ず失敗する
     ので、リポジトリ変数 `REQUIRE_CODE_SIGNING=true` で有効化する opt-in にした（`sign-files.ps1` に `-RequireSignature` /
     `-ValidateOnly` を追加、publish 前の「Validate release signing policy」で早期に落とす。Release 本文の「署名済み」も同じ変数で切替）。
+  - **最終コードレビュー（Android 3.504.1 と同時）**: ビーム `ExpandNode` の走査枠は正式評価した手だけ数える（枝刈りした手を数える形は
+    pass 側で否決した方針と同じだった。Android 再計測は 3.504.0 と同一）、`BeamMoves` を `IslandMoves` の島巡回に一本化、
+    `BeamBranchFactor`/`ExpandNode` の説明を新実装に合わせる、`AnchoredWindowSwap` は生成が `stop()` で途中終了したプールを正式評価へ
+    回さない、`windows-installer.yml` の署名必須式を installer-exe ジョブの `env.REQUIRE_SIGNING` に 1 回だけ定義。MagiEngine.Tests 765 OK。
 
 - 2026-09-06 Android 3.503.0 と同時（自律レビュー第4段）: `V6PortAnalyzer.Coverage.cs` の `DiagnoseCoverage` を `DiagnoseShortfalls`／`BuildRelaxations`／
   `DiagnoseSurpluses` に分割、`Probe`（ChainSeeds=8・SurplusProbeBudget=240・AdjacentSeed=7・MinRelaxCandidates=2。値は不変）と共有 `ChainFills`、
