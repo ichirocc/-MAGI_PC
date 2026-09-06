@@ -390,22 +390,41 @@ public static partial class V6HotfixPasses
             return true;
         }
 
+        /// <summary>ビーム 1 段で走査する中立手の上限＝保持数の何倍か（Android 3.502.0）。評価予算はこれとは別に MaxEvaluations で頭打ち。</summary>
+        private const int BeamScanFactor = 2;
+
+        /// <summary>
+        /// [Android 3.502.0/バックログ#9(c)] 旧: 中立手を列挙順に limit 件集めたところで打ち切ってから並べ替えていた＝上位候補が列挙順に依存した。
+        /// いまは limit×BeamScanFactor 件まで走査し、良い順に limit 件だけ保持する（評価は 1 手 1 回のまま）。
+        /// </summary>
         private void ExpandNode(WishNode node, List<WishNode> next)
         {
             Restore(node.Board);
             var active = islands.Where(isl => LocalScore(node.Rep, isl) > 0).ToList();
             var limit = prm.BeamWidth * prm.BeamBranchFactor;
+            var scanLimit = limit * BeamScanFactor;
+            var scanned = 0;
             foreach (var m in BeamMoves(active))
             {
-                if (!BudgetLeft() || next.Count >= limit) break;
+                if (!BudgetLeft() || scanned >= scanLimit) break;
                 if (IncreasesForbidden(m)) { prunedC3n++; continue; }
                 var old = Apply(m);
                 var rep = UnifiedViolationChecker.Check(state, work);
-                evaluated++; beamEvaluated++;
+                evaluated++; beamEvaluated++; scanned++;
                 var neutral = !UnifiedViolationChecker.BetterReport(node.Rep, rep) && !V6SearchOperators.ExactPinRegression(p, node.Board, work);
-                if (neutral) next.Add(new WishNode(work.Copy2D(), rep));
+                if (neutral) KeepBest(next, new WishNode(work.Copy2D(), rep), limit);
                 Undo(m, old);
             }
+        }
+
+        /// <summary>next を良い順に保ったまま node を挿入し、limit 件を超えた末尾（最も悪い手）を落とす。</summary>
+        private static void KeepBest(List<WishNode> next, WishNode node, int limit)
+        {
+            var pos = next.Count;
+            while (pos > 0 && UnifiedViolationChecker.ReportComparer.Compare(node.Rep, next[pos - 1].Rep) < 0) pos--;
+            if (pos >= limit) return;
+            next.Insert(pos, node);
+            if (next.Count > limit) next.RemoveAt(next.Count - 1);
         }
 
         private void Restore(int[][] board) { for (var s = 0; s < S; s++) Array.Copy(board[s], work[s], T); }

@@ -32,12 +32,14 @@
 - **解消（#22）**: 表を設定タブの最適化設定の直後に置いた＝Footer の文言どおり。
 
 ## #18 気づき: 族の表示名が Android と WinUI でずれている（c1）
+- **解消（2026-09-06）**: WinUI を Android の下流語彙「期間の制約」に統一（BreakdownLabels・編集タブ見出し・テスト）。
 - Android `BreakdownLabels.kt` は c1 を「期間の制約」に改称済み。WinUI `AnalysisView.BreakdownLabels` は「窓の要件」のまま
   （編集タブの族見出し「窓の要件（○日間に△回以上）」とも揃っている）。手順書の「下流の語彙＝WinUI の BreakdownLabels が正」に従い
   #18 では変えない。Android へ寄せるなら BreakdownLabels・編集タブ見出し・ConstraintHelp の 3 か所を同時に直す（1 行の作業として別途）。
 - 採った案: `AnalysisTriage.Build` は表示名を UI 層から `labelOf` で受ける（VM 側に表を複製しない＝ドリフト防止）。
 
 ## #23 気づき: 作成導線の重複（ホームの大ボタンと下部バー）
+- **非問題と判断（2026-09-06）**: Android の `OperatorNextActionCard` も未作成状態では大ボタン「勤務表をつくる」を持つ（3.480 で撤去したのは補助ボタン「もう一度つくる」と GuidedFix 内のボタン）。WinUI は同じ形＝重複ではない。
 - Android は 3.480.0/3.482.0/3.483.0 で作成ボタンを固定フッターへ一本化した（ホーム・編集・分析の同名ボタンを撤去）。
   WinUI の HomeView には「勤務表をつくる」大ボタン（#3 スマートアクション）が残っており、#23 の下部バーと同じ動作が 2 か所になる。
 - 採った案: #23 の範囲では触らない（1 行に閉じる）。撤去するなら HomeView の bigLabel="勤務表をつくる" 分岐だけを「なおすのを手伝って」等の

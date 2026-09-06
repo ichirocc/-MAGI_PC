@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.502.0 と同時: ビーム `ExpandNode` を「列挙順の先頭 limit 件」から「limit×2 件を走査して良い順に limit 件保持」へ
+  （バックログ #9(c)。Android の計測は希望島単体 12 条件・後処理全体 4 件とも不変＝中立）。族名 c1 を Android の下流語彙「期間の制約」に統一
+  （`AnalysisView.BreakdownLabels`・編集タブの族見出し「期間の制約（○日間で○回など）」・`AnalysisTriageTest`）。#9(d)（担当外希望の再判定）と
+  #10（連打防止の検査世代）は C# 側が先行済みで Android が同期。
+
 - 2026-09-06 Android 3.501.0 と同時（ユーザー指示）: `V6HotfixPasses.WishIsland.cs` の候補配分を Kotlin と同じ形へ。禁止連（cons3n）は
   「残るだけで拒否」から「変更する職員の件数が増える手だけ拒否」（`IncreasesForbidden`＝`C1DeltaPrefilter.StaffC3nFires` の増分）、
   同日・窓・両翼の候補を `Interleave` で 1 手ずつ交互評価、島の枠の 25% を 3 職員巡回に確保（通常候補は 75% まで）。

@@ -905,7 +905,7 @@ public sealed partial class MagiViewModel
         return new List<ConstraintFamilyView>
         {
             // [用語統一/下流→上流] 節タイトルは違反チップ(breakdownLabels)の語彙を正として一致させる。
-            new("cons1", "窓の要件（○日間に△回以上）",
+            new("cons1", "期間の制約（○日間で○回など）",
                 st.Cons1.Select(c => $"{c.ShiftKigou}   {c.Day1}日で{c.Day2}回以上").ToList()),
             new("cons2", "個人の合計（回数）",
                 st.Cons2.Select(c => $"{c.ShiftKigou}   合計{c.Count}回以上").ToList()),

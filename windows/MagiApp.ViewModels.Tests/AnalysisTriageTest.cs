@@ -11,7 +11,7 @@ public class AnalysisTriageTest
 {
     private static string L(string f) => f switch
     {
-        "c1" => "窓の要件", "c3" => "必須の並び", "weekly" => "曜日の偏り",
+        "c1" => "期間の制約", "c3" => "必須の並び", "weekly" => "曜日の偏り",
         "covU" => "人員不足", "c3n" => "禁止の並び", "covO" => "人員過剰", _ => f,
     };
 
@@ -43,7 +43,7 @@ public class AnalysisTriageTest
         var t = AnalysisTriage.Build(Ui(B(("c1", 6), ("c3", 97), ("weekly", 186))), L);
         Assert.False(t.Computed);
         Assert.Empty(t.Blockers);
-        Assert.Equal(new HashSet<string> { "窓の要件", "必須の並び", "曜日の偏り" }, t.Searching.Select(r => r.Label).ToHashSet());
+        Assert.Equal(new HashSet<string> { "期間の制約", "必須の並び", "曜日の偏り" }, t.Searching.Select(r => r.Label).ToHashSet());
         Assert.Contains("計算後も残る場合があります", t.SearchNote);
     }
 
@@ -51,14 +51,14 @@ public class AnalysisTriageTest
     public void C1MovesToBlockersOnlyWhenThePlateauDiagnosisObservedSomething()
     {
         var observed = AnalysisTriage.Build(Ui(B(("c1", 6)), hasResult: true, c1Plateau: Plateau(true)), L);
-        Assert.Equal(new[] { "窓の要件" }, observed.Blockers.Select(r => r.Label));
+        Assert.Equal(new[] { "期間の制約" }, observed.Blockers.Select(r => r.Label));
         Assert.True(observed.Blockers.Single().Promoted);
         Assert.Contains("回数を固定", observed.Blockers.Single().Detail);
         Assert.Empty(observed.Searching);
 
         var unknown = AnalysisTriage.Build(Ui(B(("c1", 6)), hasResult: true, c1Plateau: Plateau(false)), L);
         Assert.Empty(unknown.Blockers);
-        Assert.Equal(new[] { "窓の要件" }, unknown.Searching.Select(r => r.Label));
+        Assert.Equal(new[] { "期間の制約" }, unknown.Searching.Select(r => r.Label));
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class AnalysisTriageTest
     {
         var t = AnalysisTriage.Build(Ui(B(("weekly", 186), ("c1", 6))), L);
         Assert.Equal("pt", t.Searching.First(r => r.Label == "曜日の偏り").Unit);
-        Assert.Equal("件", t.Searching.First(r => r.Label == "窓の要件").Unit);
+        Assert.Equal("件", t.Searching.First(r => r.Label == "期間の制約").Unit);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class AnalysisTriageTest
     {
         var t = AnalysisTriage.Build(Ui(B(("c1", 6))), L);
         Assert.Equal(19, t.OkFamilies.Count + t.BusyFamilies.Count);
-        Assert.Equal(new[] { "窓の要件" }, t.BusyFamilies);
+        Assert.Equal(new[] { "期間の制約" }, t.BusyFamilies);
         Assert.Contains("人員不足", t.OkFamilies);
     }
 
