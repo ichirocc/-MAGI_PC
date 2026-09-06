@@ -177,7 +177,7 @@ public sealed partial class MainWindow : Window
             content = tag switch
             {
                 "home" => new HomeView(_vm, this),
-                "schedule" => new ScheduleView(_vm),
+                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis")),
                 "edit" => new EditView(_vm),
                 "analysis" => new AnalysisView(_vm, JumpToCell),
                 "settings" => new SettingsView(_vm, this),

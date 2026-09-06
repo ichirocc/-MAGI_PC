@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
 using Microsoft.UI;
@@ -104,9 +105,13 @@ public sealed partial class ScheduleView : UserControl
     private bool _searchLegendOpen;
     private string _nameQuery = "";
 
-    public ScheduleView(MagiViewModel vm)
+    /// <summary>[phase9 #11] 内訳ダイアログの「直し方を探す」の飛び先（分析タブ）。</summary>
+    private readonly Action? _goAnalysis;
+
+    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null)
     {
         _vm = vm;
+        _goAnalysis = goAnalysis;
         InitializeComponent();
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
@@ -807,7 +812,9 @@ public sealed partial class ScheduleView : UserControl
                 ui.CountViolations.TryGetValue($"{i},{k}", out var vioClass);
                 if (!VioBuckets.VioVisible(vioClass, _vioEnabled)) vioClass = null;
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
-                AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness);
+                var (si, sk, sc, sv) = (i, k, count, vioClass);
+                Action<FrameworkElement>? onClick = vioClass is null ? null : _ => ShowStaffTallyDetail(ui, si, sk, sc, sv!);
+                AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness, onClick: onClick);
             }
         }
     }
@@ -845,9 +852,11 @@ public sealed partial class ScheduleView : UserControl
                 // 呼び出し口が無かった。人員不足(covU)のセルだけボタン化し、タップで「動かせる人」の
                 // 候補（担当可能・希望固定でない・禁止連続にならない・抜けても穴が空かない）をフライアウトで
                 // 出し、選ぶと即 SetCell で割り当てる。
+                // 不足は既存の候補フライアウト（動かせる人を 1 タップで割当）、過剰は内訳ダイアログ（希望固定の名指し・取消）。
+                var (dk, dj, dc) = (k, j, count);
                 Action<FrameworkElement>? onClick = vioClass == "vio-covU"
-                    ? anchor => ShowShortageFixFlyout(anchor, j, k)
-                    : null;
+                    ? anchor => ShowShortageFixFlyout(anchor, dj, dk)
+                    : vioClass == "vio-covO" ? _ => ShowDayTallyDetail(ui, dk, dj, dc) : null;
                 AddTallyCell(DayTallyGridHost, k + 1, j + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness, onClick: onClick);
             }
         }
@@ -901,6 +910,76 @@ public sealed partial class ScheduleView : UserControl
 
     /// <summary>人員不足セルのタップ→動かせる候補一覧→ワンタップ割当。候補0件なら理由を出す
     /// （「動かせる人がいない」＝この画面の手には余る＝別の対処が要ることの表明）。</summary>
+    /// <summary>[phase9 #11] 職員別セル(i,k)の内訳（Kotlin原本 <c>staffViolDetail</c>）: 現在回数と 下限/上限/目標 の差を数字で。</summary>
+    private void ShowStaffTallyDetail(UiState ui, int i, int k, int count, string vio)
+    {
+        var (lo, hi, apt) = _vm.StaffCellLimits(i, k);
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : i.ToString();
+        var sym = k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+        var lines = new List<string> { $"現在 {count}回" };
+        switch (vio)
+        {
+            case "vio-low" when lo is { } l: lines.Add($"下限 {l}回 → {Math.Max(0, l - count)}回 不足"); break;
+            case "vio-high" when hi is { } h: lines.Add($"上限 {h}回 → {Math.Max(0, count - h)}回 超過"); break;
+            case "vio-aptLow" when apt is { } a: lines.Add($"目標 {a}回 → {Math.Max(0, a - count)}回 不足"); break;
+            case "vio-aptHigh" when apt is { } a: lines.Add($"目標 {a}回 → {Math.Max(0, count - a)}回 超過"); break;
+        }
+        _ = ShowTallyDetailAsync($"{name} ・ {sym}", lines, focusStaff: i, shift: k, day: null, pinned: Array.Empty<int>());
+    }
+
+    /// <summary>[phase9 #11] 日別セル(k,j)の内訳（Kotlin原本 <c>dayViolDetail</c>、過剰のとき）: 現在人数と適正の差、希望で固定している在勤者。</summary>
+    private void ShowDayTallyDetail(UiState ui, int k, int j, int count)
+    {
+        var sym = k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+        var lines = new List<string> { $"現在 {count}人" };
+        if (_vm.NeedCellLimits(k, j) is { } lim) lines.Add($"適正 {lim.Hi}人 → {Math.Max(0, count - lim.Hi)}人 過剰");
+        // 希望で固定している在勤者＝配置済みかつ希望一致（CoverageDiag と同じ判定）。取り消さない限り過剰は残る。
+        var pinned = new List<int>();
+        for (var i = 0; i < ui.Schedule.Count; i++)
+        {
+            if (j < ui.Schedule[i].Count && ui.Schedule[i][j] == k && ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == k) pinned.Add(i);
+        }
+        if (pinned.Count > 0)
+        {
+            lines.Add("希望で固定: " + string.Join("・", pinned.Select(i => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")) +
+                "（必須の希望どうしが同じ日に重なり、どちらかの希望を取り消さない限り過剰は残ります）");
+        }
+        _ = ShowTallyDetailAsync($"{sym} ・ {j + 1}日", lines, focusStaff: null, shift: k, day: j, pinned: pinned);
+    }
+
+    private async Task ShowTallyDetailAsync(string title, IReadOnlyList<string> lines, int? focusStaff, int shift, int? day, IReadOnlyList<int> pinned)
+    {
+        var ui = _vm.Ui;
+        var panel = new StackPanel { Spacing = 4 };
+        foreach (var l in lines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = title, Content = panel,
+            PrimaryButtonText = "直し方を探す", CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
+        };
+        if (day is { } dj && pinned.Count > 0)
+        {
+            foreach (var i in pinned)
+            {
+                var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+                var cancel = new Button
+                {
+                    Content = $"{name} の希望を取り消す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                    Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], IsEnabled = !ui.Running,
+                };
+                var staff = i;
+                cancel.Click += (_, _) => { dialog.Hide(); _vm.RemoveWish(staff, dj); };
+                panel.Children.Add(cancel);
+            }
+        }
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            _vm.FindFixSuggestions(focusStaff, shift);
+            _goAnalysis?.Invoke();
+        }
+    }
+
     private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)
     {
         // [2026-09-02, 配線] EditBlockedNow。ShowCellEditor と同じ理由＝ SetCell を呼ぶ入口はここも同じで、
