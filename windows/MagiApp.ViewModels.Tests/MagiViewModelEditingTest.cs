@@ -147,7 +147,8 @@ public class MagiViewModelEditingTest
     public void ClearOutOfScopeWishesRemovesOnlyTheWishKeysNamedByRemoveWishIssuesInOneUndoStep()
     {
         var st = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,0"] = 1, ["1,0"] = 2, ["0,1"] = 2, ["0,2"] = 2 });
-        var vm = new MagiViewModel { _state = st };
+        // Undo のスナップショットは盤面込み（SnapNow）なので _currentSchedule が要る。
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
         vm.Ui.SettingIssues = new[]
         {
             new SettingIssue(IssueKind.Wish, "職員A 2日", "担当外", "削除", SettingFixAction.RemoveWish, "削除", WishKey: "0,1"),
