@@ -85,6 +85,7 @@ public sealed partial class MagiViewModel
                 ui.MessageIsError = false;
                 ui.Running = false;
                 ui.HasResult = true;
+                ui.EngineRan = true;
                 ui.ElapsedMs = 0;
                 ui.Message = $"下書きをつくりました: 必須違反={res.Report.Hard} 合計={res.Report.Total}";
             }, ct: ct);

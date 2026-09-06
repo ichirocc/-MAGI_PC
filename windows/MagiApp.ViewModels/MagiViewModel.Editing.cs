@@ -165,6 +165,7 @@ public sealed partial class MagiViewModel
         LogOp(oos > 0 ? "W" : "I", $"希望を勤務表へ反映 {applied}件{note}");
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Message = $"希望を反映: {applied}件{note}";
         RefreshCheck();
@@ -225,6 +226,7 @@ public sealed partial class MagiViewModel
             {
                 ui.MessageIsError = false;
                 ui.HasResult = true;
+                ui.EngineRan = false;
                 ui.Message = $"他の案 {i + 1} を適用";
             });
             LogOp("I", $"他の案 {i + 1} を適用 必須={rep.Hard} 合計={rep.Total}");
@@ -260,6 +262,7 @@ public sealed partial class MagiViewModel
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Message = $"{staffName} / {j + 1}日 を {shiftKigou} に変更";
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
@@ -291,6 +294,7 @@ public sealed partial class MagiViewModel
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Message = $"{changed}マスを {shiftKigou} に一括変更";
         LogOp("I", $"一括編集: {changed}マス → {OpSy(shift)}");

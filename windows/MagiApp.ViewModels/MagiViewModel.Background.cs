@@ -254,6 +254,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
+                    ui.EngineRan = true;
                     ui.Message = $"今回(必須{newHard}/合計{newTotal})は前回(必須{prevReport.Hard}/合計{prevReport.Total})より改善せず。前回の結果を維持しました。";
                 });
                 LogOp("I", $"バックグラウンド: 今回 必須{newHard}/合計{newTotal} は前回 以下に改善せず → 前回を維持");
@@ -272,6 +273,7 @@ public sealed partial class MagiViewModel
             ui.MessageIsError = false;
             ui.Running = false;
             ui.HasResult = true;
+            ui.EngineRan = true;
             ui.Message = $"バックグラウンド最適化 完了: 必須={r.Report.Hard} 合計={r.Report.Total}";
         });
         LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total}");

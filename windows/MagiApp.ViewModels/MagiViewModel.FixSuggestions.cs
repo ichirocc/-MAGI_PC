@@ -108,6 +108,7 @@ public sealed partial class MagiViewModel
         AutoSave();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.FixSuggestions = Array.Empty<FixSuggestion>(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         Ui.Message = $"改善手を適用: {s.Label}";

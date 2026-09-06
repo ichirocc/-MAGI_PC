@@ -408,6 +408,7 @@ public sealed partial class MagiViewModel
                 ui.Loaded = true;
                 ui.Running = false;
                 ui.HasResult = markResult;
+                ui.EngineRan = markResult;
                 ui.ConstraintsEdited = false;
                 ui.StructureEdited = false;
                 ui.Staff = lp.State.StaffCount;

@@ -205,6 +205,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
+                    ui.EngineRan = true;
                     ui.Message = $"今回(必須{newHard}/合計{newTotal})は前回(必須{baseHard}/合計{baseTotal})より改善しませんでした。前回の結果を維持します。";
                 }, ct: ct);
                 LogOp("I", $"再実行: 今回 必須{newHard}/合計{newTotal} は前回 必須{baseHard}/合計{baseTotal} 以下に改善せず → 前回を維持");
@@ -222,6 +223,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
+                    ui.EngineRan = true;
                     ui.Message = $"勤務表ができました: 必須={res.Report.Hard} 合計={res.Report.Total} ({NowMs() - startMs}ms)";
                 }, ct: ct);
                 _lastResultHard = newHard;
@@ -269,6 +271,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
+                    ui.EngineRan = true;
                     ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 });
             }
@@ -276,6 +279,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.Running = false;
                 Ui.HasResult = true;
+                Ui.EngineRan = true;
                 Ui.MessageIsError = false;
                 Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");
@@ -358,6 +362,7 @@ public sealed partial class MagiViewModel
                 ui.MessageIsError = false;
                 ui.Running = false;
                 ui.HasResult = true;
+                ui.EngineRan = true;
                 ui.Message = gain > 0
                     ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"
                     : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは構造的要因の可能性。";
@@ -380,6 +385,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
+                    ui.EngineRan = true;
                     ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 });
             }
@@ -387,6 +393,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.Running = false;
                 Ui.HasResult = true;
+                Ui.EngineRan = true;
                 Ui.MessageIsError = false;
                 Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");

@@ -375,6 +375,7 @@ public sealed partial class MagiViewModel
                 ui.MessageIsError = res.UnknownCells > 0 || res.UnclosedQuote;
                 ui.Running = false;
                 ui.HasResult = true;
+                ui.EngineRan = false;
                 ui.Message = msg;
             }, ct: ct);
             if (res.Matched >= 1 && res.Matched < total)

@@ -179,7 +179,7 @@ public sealed partial class MainWindow : Window
                 "home" => new HomeView(_vm, this),
                 "schedule" => new ScheduleView(_vm, () => SelectTab("analysis")),
                 "edit" => new EditView(_vm),
-                "analysis" => new AnalysisView(_vm, JumpToCell),
+                "analysis" => new AnalysisView(_vm, JumpToCell, () => SelectTab("edit")),
                 "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };

@@ -48,6 +48,11 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private bool running;
 
     [ObservableProperty] private bool hasResult;
+    /// <summary>
+    /// [3.475.0/論理監査] エンジンが実際に走った事実。<see cref="HasResult"/> は手編集・取込でも true になる
+    /// 「盤面がある」旗なので、分析の「計算済み／未計算」はこちらだけを読む（手操作で false に戻す）。
+    /// </summary>
+    [ObservableProperty] private bool engineRan;
     [ObservableProperty] private long bestHard;
     [ObservableProperty] private long bestSoft;
     [ObservableProperty] private int totalViolations;

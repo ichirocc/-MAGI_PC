@@ -4,6 +4,7 @@ using MagiApp.ViewModels;
 using MagiEngine.V6;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace MagiApp.WinUI.Views;
 
@@ -56,10 +57,11 @@ public sealed partial class AnalysisView : UserControl
     /// 該当セルへスクロール＋一時ハイライト（<c>ScheduleView.FocusCell</c> 参照）。</summary>
     private readonly Action<int, int> _jumpToCell;
 
-    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell)
+    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action? goEdit = null)
     {
         _vm = vm;
         _jumpToCell = jumpToCell;
+        _goEdit = goEdit;
         InitializeComponent();
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
@@ -79,6 +81,7 @@ public sealed partial class AnalysisView : UserControl
         EmptyText.Visibility = ui.Loaded ? Visibility.Collapsed : Visibility.Visible;
         if (!ui.Loaded)
         {
+            TriageSection.Visibility = Visibility.Collapsed;
             SummarySection.Visibility = Visibility.Collapsed;
             BreakdownSection.Visibility = Visibility.Collapsed;
             LocationsSection.Visibility = Visibility.Collapsed;
@@ -90,6 +93,7 @@ public sealed partial class AnalysisView : UserControl
             return;
         }
 
+        RenderTriage(ui);
         RenderSummary(ui);
         RenderBreakdown(ui);
         RenderLocations(ui);
@@ -101,6 +105,111 @@ public sealed partial class AnalysisView : UserControl
     }
 
     private void OnFixSearchClick(object sender, RoutedEventArgs e) => _vm.FindFixSuggestions();
+
+    private readonly Action? _goEdit;
+    private bool _triageSummaryOpen;
+
+    private static Brush BrushOf(string key) => (Brush)Application.Current.Resources[key];
+
+    /// <summary>
+    /// [phase9 #18] 「要確認」（Kotlin原本 <c>AnalysisTriageCard</c>、3.471.0）。分類は <see cref="AnalysisTriage.Build"/>（純関数）。
+    /// 上段=直さないと消えない項目（必須違反＋診断が壁と判定した族＋設定の破綻）、中段=エンジンが挑戦する項目、
+    /// 下段=0件の族を畳んだサマリー。必須違反の場所は下の「違反の場所」節が担う（Kotlin の ConfirmRow 相当）。
+    /// </summary>
+    private void RenderTriage(UiState ui)
+    {
+        TriageSection.Visibility = Visibility.Visible;
+        var t = AnalysisTriage.Build(ui, LabelOf);
+
+        TriageBadge.Background = BrushOf(t.Computed ? "MagiTertiaryContainerBrush" : "MagiSurfaceVariantBrush");
+        TriageBadgeText.Foreground = t.Computed ? BrushOf("MagiOnTertiaryContainerBrush") : new SolidColorBrush(Microsoft.UI.Colors.DimGray);
+        TriageBadgeText.Text = t.Computed ? "計算済み" : "未計算";
+        TriageAllClearText.Visibility = !t.HasAnything && ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
+
+        var upper = t.Blockers.Count > 0 || t.Issues.Count > 0;
+        TriageBlockersTitle.Visibility = upper ? Visibility.Visible : Visibility.Collapsed;
+        TriageBlockersList.Visibility = upper ? Visibility.Visible : Visibility.Collapsed;
+        TriageBlockersList.Children.Clear();
+        foreach (var row in t.Blockers)
+        {
+            var box = new StackPanel { Spacing = 2 };
+            box.Children.Add(new TextBlock
+            {
+                Text = $"{row.Label} {row.Count}{row.Unit}" + (row.Promoted ? "（構造的に残ると判定）" : ""),
+                FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap,
+            });
+            if (row.Detail.Length > 0)
+                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 12, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap });
+            TriageBlockersList.Children.Add(new Border
+            {
+                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
+            });
+        }
+        foreach (var row in t.Issues)
+        {
+            var grid = new Grid { ColumnSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var box = new StackPanel { Spacing = 2 };
+            box.Children.Add(new TextBlock
+            {
+                Text = $"{row.Label} {row.Count}件", FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap,
+            });
+            if (row.Detail.Length > 0)
+                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 12, Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
+            Grid.SetColumn(box, 0); grid.Children.Add(box);
+            if (_goEdit is not null)
+            {
+                var go = new Button { Content = "設定へ", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+                go.Click += (_, _) => _goEdit();
+                Grid.SetColumn(go, 1); grid.Children.Add(go);
+            }
+            TriageBlockersList.Children.Add(new Border
+            {
+                Background = BrushOf("MagiWarnContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = grid,
+            });
+        }
+
+        var mid = t.Searching.Count > 0;
+        TriageSearchTitle.Visibility = mid ? Visibility.Visible : Visibility.Collapsed;
+        TriageSearchPanel.Visibility = mid ? Visibility.Visible : Visibility.Collapsed;
+        TriageSearchTitle.Text = t.Computed ? "計算後に残っている項目" : "エンジンが挑戦する項目（未計算）";
+        TriageSearchList.Children.Clear();
+        foreach (var row in t.Searching)
+        {
+            var line = new Grid { ColumnSpacing = 8 };
+            line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock { Text = "・" + row.Label, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
+            var count = new TextBlock { Text = $"{row.Count}{row.Unit}", FontSize = 13, Opacity = 0.8 };
+            Grid.SetColumn(label, 0); Grid.SetColumn(count, 1);
+            line.Children.Add(label); line.Children.Add(count);
+            TriageSearchList.Children.Add(line);
+        }
+        if (mid) TriageSearchList.Children.Add(new TextBlock { Text = "※" + t.SearchNote, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+
+        // 0件の族は畳む（全19族を並べると画面の半分を占める）。
+        var all = t.OkFamilies.Count + t.BusyFamilies.Count;
+        TriageSummaryToggle.Content = $"制約充足サマリー（正常 {t.OkFamilies.Count} / 残り {t.BusyFamilies.Count}）　" +
+            (_triageSummaryOpen ? "閉じる ∧" : $"全{all}項目を展開 ∨");
+        TriageSummaryList.Visibility = _triageSummaryOpen ? Visibility.Visible : Visibility.Collapsed;
+        TriageSummaryList.Children.Clear();
+        if (_triageSummaryOpen)
+        {
+            if (t.OkFamilies.Count > 0)
+                TriageSummaryList.Children.Add(BodyText($"✔ 正常（{t.OkFamilies.Count}項目）: " + string.Join(" / ", t.OkFamilies), dim: true));
+            if (t.BusyFamilies.Count > 0)
+                TriageSummaryList.Children.Add(BodyText($"⚠ 残っている（{t.BusyFamilies.Count}項目）: " + string.Join(" / ", t.BusyFamilies), dim: true));
+        }
+        TriageRunningNote.Visibility = ui.Running ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnTriageSummaryToggleClick(object sender, RoutedEventArgs e)
+    {
+        _triageSummaryOpen = !_triageSummaryOpen;
+        Render();
+    }
 
     /// <summary>
     /// 「直し方を探す」。<see cref="UiState.FixSuggestions"/> は空リストが既定値（未検索/0件を区別しない
