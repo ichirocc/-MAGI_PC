@@ -192,7 +192,7 @@ public static partial class V6PortAnalyzer
                 var capacity = 0;
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (!p.CanDo(i, k)) continue;
+                    if (!p.MayPlace(i, k)) continue;
                     // [3.391.0] 生の `w != k` は実現不能な希望（担当できないシフトへの希望）まで
                     //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
                     //   （WishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
@@ -222,7 +222,7 @@ public static partial class V6PortAnalyzer
                     var already = 0; var free = 0; var cascade = 0; var forbid = 0;
                     for (var i = 0; i < p.S; i++)
                     {
-                        if (!p.CanDo(i, k)) continue;
+                        if (!p.MayPlace(i, k)) continue;
                         var m = norm[i][j];
                         // [3.391.0] 上の capacity と同じ事前フィルタ＝同じ条件に揃える（WishLocked）。
                         if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;   // 実現可能な希望が別シフト=capacity 対象外

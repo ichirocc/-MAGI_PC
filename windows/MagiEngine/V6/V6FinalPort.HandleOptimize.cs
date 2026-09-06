@@ -99,7 +99,13 @@ public static partial class V6FinalPort
 
         var baseProblem = ScheduleUtil.CachedProblem(state);
         var normInput = ScheduleUtil.NormalizeSchedule(sched, baseProblem);
-        var inputReport = UnifiedViolationChecker.Check(state, normInput);
+        // [3.507.0] 番兵の基準は「個人上限 0 のセルを外した入力」。上限 0 のセルは最適化器が置かない（MayPlace）ので、
+        //   生の入力（上限超過 45 のまま）と比べると、外した代償のぶん結果が「悪化」に見えて入力へ戻ってしまう。
+        var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput);
+        var inputReport = UnifiedViolationChecker.Check(state, cappedInput);
+        IReadOnlyList<MirrorLog> cappedLog = cappedCount > 0
+            ? new[] { new MirrorLog(tag: "CapZero", message: $"個人上限 0 のセル {cappedCount} 件を最適化の対象外として置き直しから開始（設定どおり 0 にする。表示・重みは不変）") }
+            : Array.Empty<MirrorLog>();
 
         var label = GetAlgorithmLabel(seconds);
         var plan = GetOptimizationPlan(seconds);
@@ -709,6 +715,7 @@ public static partial class V6FinalPort
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
+        logs.AddRange(cappedLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);
         logs.AddRange(extraLog);

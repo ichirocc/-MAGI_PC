@@ -640,7 +640,7 @@ internal static class C1JointLnsPolish
     private static bool Allowed(Problem p, int staff, int day, int shift)
     {
         int wish = p.Wish[staff][day];
-        return p.WishLocked(staff, day) ? wish == shift : p.CanDo(staff, shift);
+        return p.WishLocked(staff, day) ? wish == shift : p.MayPlace(staff, shift);
     }
 
     private static List<Node> SelectBeam(

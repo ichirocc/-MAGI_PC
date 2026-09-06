@@ -159,7 +159,7 @@ internal static class C1TemporalFlowPolish
                     if (changed)
                     {
                         // [3.417.0] 記号「希」を割当先から外すガードを撤去（詳細は V6HotfixPasses の同種箇所）。
-                        if (p.WishLocked(i, j) || !p.CanDo(i, newK)) continue;
+                        if (p.WishLocked(i, j) || !p.MayPlace(i, newK)) continue;
                         board[i][j] = newK;
                         bool bad = p.MakesForbiddenRun(board, i, j, newK);
                         board[i][j] = oldK;

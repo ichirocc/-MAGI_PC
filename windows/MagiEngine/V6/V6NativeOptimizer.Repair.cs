@@ -33,10 +33,31 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
-                if (k < 0 || k >= p.K || !p.CanDo(i, k)) outSched[i][j] = fallback;
+                // [3.507.0] 個人上限 0 のセル（希望でそのシフトに固定されたものは除く）も入口で外す＝探索は置き直しから始める。
+                var capped = k >= 0 && k < p.K && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k);
+                if (k < 0 || k >= p.K || !p.CanDo(i, k) || capped) outSched[i][j] = fallback;
             }
         }
         return outSched;
+    }
+
+    /// <summary>[3.507.0] 個人上限 0 のセル（希望固定を除く）だけを置けるシフトへ戻した盤面と、その件数。最終番兵の「入力」基準に使う
+    /// （群外セルは触らない＝従来の基準のまま）。</summary>
+    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule)
+    {
+        var p = ScheduleUtil.CachedProblem(state);
+        var outSched = schedule.Select(r => r.ToArray()).ToArray();
+        var n = 0;
+        for (var i = 0; i < p.S; i++)
+        {
+            var fallback = ScheduleUtil.FillShiftIndex(p.AllowedShiftsForStaff(i), p.RestIdx);
+            for (var j = 0; j < p.T; j++)
+            {
+                var k = outSched[i][j];
+                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k)) { outSched[i][j] = fallback; n++; }
+            }
+        }
+        return (outSched, n);
     }
 
     internal sealed record RepairResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs);
@@ -101,7 +122,7 @@ public static partial class V6NativeOptimizer
                 for (var k = 0; k < p.K; k++)
                 {
                     var lo = p.RangeLo[i][k];
-                    if (lo == int.MinValue || !p.CanDo(i, k)) continue;
+                    if (lo == int.MinValue || !p.MayPlace(i, k)) continue;
                     var need = lo - counts[i][k];
                     var guard = 0;
                     while (need > 0 && guard++ < p.T)
@@ -137,7 +158,7 @@ public static partial class V6NativeOptimizer
         var bestScore = int.MaxValue;
         for (var i = 0; i < p.S; i++)
         {
-            if (!p.CanDo(i, k)) continue;
+            if (!p.MayPlace(i, k)) continue;
             if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
             var old = schedule[i][j];
             if (old == k) continue; // [監査#3] 既就業者はスキップ
@@ -255,7 +276,7 @@ public static partial class V6NativeOptimizer
         // destroy: 非希望セルを休へ。休を担当できない職員は対象外（群外割当を作らない）。cnt も同期。
         for (var i = 0; i < p.S; i++)
         {
-            if (p.WishLocked(i, j) || !p.CanDo(i, rest)) continue;
+            if (p.WishLocked(i, j) || !p.MayPlace(i, rest)) continue;
             var old = schedule[i][j];
             if (old != rest && old >= 0 && old < p.K) { schedule[i][j] = rest; cnt[i][old]--; cnt[i][rest]++; }
         }
@@ -314,7 +335,7 @@ public static partial class V6NativeOptimizer
                 var tied = 0;
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (schedule[i][j] != rest || p.WishLocked(i, j) || !p.CanDo(i, k)) continue;
+                    if (schedule[i][j] != rest || p.WishLocked(i, j) || !p.MayPlace(i, k)) continue;
                     var delta = StaffCountPenaltyAt(p, i, k, cnt[i][k] + 1) - StaffCountPenaltyAt(p, i, k, cnt[i][k]) +
                         C41DayMarg(p.Sgrp[i], k) +
                         WeeklyMarginalAt(wd[i], bucket, rest, k) +
@@ -353,7 +374,7 @@ public static partial class V6NativeOptimizer
         var allowed = p.AllowedShiftsForStaff(i);
         if (allowed.Length == 0) return;
         var rest = ScheduleUtil.RestShiftIndex(state);
-        if (!p.CanDo(i, rest)) return; // 休を担当できない職員は破壊修復の対象外
+        if (!p.MayPlace(i, rest)) return; // 休を担当できない職員は破壊修復の対象外
 
         var counts = new int[p.S][];
         for (var s = 0; s < p.S; s++)
@@ -397,7 +418,7 @@ public static partial class V6NativeOptimizer
             var tied = 0;
             for (var k = 0; k < p.K; k++)
             {
-                if (k == rest || !p.CanDo(i, k)) continue;
+                if (k == rest || !p.MayPlace(i, k)) continue;
                 if (p.CovUCell(k, j, cov[j][k]) <= 0) continue;
                 var delta = StaffCountPenaltyAt(p, i, k, cntI[k] + 1) - StaffCountPenaltyAt(p, i, k, cntI[k]) +
                     WeeklyMarginalAt(wd, bucket, rest, k) +

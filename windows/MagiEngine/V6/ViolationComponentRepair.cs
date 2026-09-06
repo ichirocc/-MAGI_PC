@@ -374,14 +374,14 @@ public static class ViolationComponentRepair
             string Kig(int k) => k < state.Shifts.Count ? state.Shifts[k].Kigou : $"#{k}";
             void Single(int i, int j, int k2)
             {
-                if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.CanDo(i, k2)) return;
+                if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.MayPlace(i, k2)) return;
                 Add(new List<int[]> { new[] { i, j, k2 } }, $"{StaffName(i)} {j + 1}日→{Kig(k2)}");
             }
             void Swap(int x, int y, int j)
             {
                 if (x == y) return;
                 var kx = work[x][j]; var ky = work[y][j];
-                if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.CanDo(x, ky) || !p.CanDo(y, kx)) return;
+                if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) return;
                 Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日");
             }
             void Window(int x, int y, int s0, int s1)
@@ -391,7 +391,7 @@ public static class ViolationComponentRepair
                 for (var d = s0; d <= s1; d++)
                 {
                     var kx = work[x][d]; var ky = work[y][d];
-                    if (p.WishLocked(x, d) || p.WishLocked(y, d) || !p.CanDo(x, ky) || !p.CanDo(y, kx)) return;
+                    if (p.WishLocked(x, d) || p.WishLocked(y, d) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) return;
                     if (kx != ky) changes = true;
                 }
                 if (!changes) return;
@@ -405,7 +405,7 @@ public static class ViolationComponentRepair
                 var kx = work[x][j]; var ky = work[y][j]; var kz = work[z][j];
                 if (kx == ky || ky == kz || kx == kz) return;
                 if (p.WishLocked(x, j) || p.WishLocked(y, j) || p.WishLocked(z, j)) return;
-                if (!p.CanDo(x, ky) || !p.CanDo(y, kz) || !p.CanDo(z, kx)) return;
+                if (!p.MayPlace(x, ky) || !p.MayPlace(y, kz) || !p.MayPlace(z, kx)) return;
                 Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kz }, new[] { z, j, kx } }, $"{StaffName(x)}→{StaffName(y)}→{StaffName(z)} {j + 1}日");
             }
             if (a.Staff >= 0 && a.Day >= 0)

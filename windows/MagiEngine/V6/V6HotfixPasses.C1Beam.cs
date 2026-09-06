@@ -78,7 +78,7 @@ public static partial class V6HotfixPasses
             int a0 = w[i][j];
             for (int i2 = 0; i2 < p.S; i2++)
             {
-                if (i2 == i || w[i2][j] != x || !Movable(i2, j) || !p.CanDo(i2, a0)) continue;
+                if (i2 == i || w[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a0)) continue;
                 w[i][j] = x; w[i2][j] = a0;
                 return w;
             }

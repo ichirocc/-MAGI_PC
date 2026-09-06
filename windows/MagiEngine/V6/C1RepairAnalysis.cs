@@ -188,7 +188,7 @@ public static class C1RepairAnalysis
         bool truncated = false;
         for (int i = 0; i < p.S; i++)
         {
-            if (mSeen.Contains(i) || !p.CanDo(i, v.Shift)) continue;
+            if (mSeen.Contains(i) || !p.MayPlace(i, v.Shift)) continue;
             if (mList.Count >= cfg.MaxInvolvedStaff) { truncated = true; break; }
             mSeen.Add(i);
             mList.Add(i);
@@ -347,7 +347,7 @@ public static class C1RepairAnalysis
                     if (used[si]) continue;
                     int sh = multiset[si];
                     if (tried[sh + 1]) continue;
-                    if (!p.CanDo(i, sh)) continue;
+                    if (!p.MayPlace(i, sh)) continue;
                     if (wl >= 0 && sh != wl) continue;
                     if (mi == 0 && branchCount >= cfg.PerDayBranchCap) { budgetHit = true; break; }
                     tried[sh + 1] = true;

@@ -107,7 +107,7 @@ public static partial class V6HotfixPasses
                 var a = work[i][j]; var b = work[i2][j];
                 if (a != sharedK || b == sharedK) continue;
                 if (!Movable(i, j) || !Movable(i2, j)) continue;
-                if (!p.CanDo(i, b) || !p.CanDo(i2, a)) continue;
+                if (!p.MayPlace(i, b) || !p.MayPlace(i2, a)) continue;
                 if (p.MakesForbiddenRun(work, i, j, b) || p.MakesForbiddenRun(work, i2, j, a)) continue;
                 var workBefore = work.Copy2D();
                 work[i][j] = b; work[i2][j] = a;
@@ -193,7 +193,7 @@ public static partial class V6HotfixPasses
                 for (var k2 = 0; k2 < p.K; k2++)
                 {
                     if (stop()) break;
-                    if (k2 == k || !p.CanDo(i, k2)) continue;
+                    if (k2 == k || !p.MayPlace(i, k2)) continue;
                     if (!lowTargets.Any(t => t.Item1 == i && t.Item2 == k2)) continue;
                     while (TrySelfSwap(i, k, k2)) { improved = true; done = true; }
                 }
@@ -229,7 +229,7 @@ public static partial class V6HotfixPasses
             foreach (var (i, k) in lowTargets)
             {
                 if (stop()) break;
-                if (!p.CanDo(i, k)) continue;
+                if (!p.MayPlace(i, k)) continue;
                 var done = false;
                 for (var j = 0; j < p.T; j++)
                 {

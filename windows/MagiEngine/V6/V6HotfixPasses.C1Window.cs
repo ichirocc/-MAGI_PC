@@ -229,7 +229,7 @@ public static partial class V6HotfixPasses
                         // 手A: 同日スワップ。
                         for (var i2 = 0; i2 < p.S; i2++)
                         {
-                            if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.CanDo(i2, a)) continue;
+                            if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a)) continue;
                             work[i][j] = x; work[i2][j] = a;                 // 同日スワップ（被覆不変）
                             var rep = UnifiedViolationChecker.Check(state, work);
                             var pinBadA = V6SearchOperators.ExactPinRegression(p, workBeforeDay, work);
@@ -265,7 +265,7 @@ public static partial class V6HotfixPasses
                                 if (i2 == i) continue;
                                 if (work[i2][j1] != a || work[i2][j] != x) continue;      // 完全鏡像の相手のみ
                                 if (!Movable(i2, j1) || !Movable(i2, j)) continue;
-                                if (!p.CanDo(i, x) || !p.CanDo(i2, a)) continue;           // 構造上恒真・規律として明示
+                                if (!p.MayPlace(i, x) || !p.MayPlace(i2, a)) continue;           // 構造上恒真・規律として明示
                                 work[i][j1] = a; work[i][j] = x; work[i2][j1] = x; work[i2][j] = a;
                                 var bad3n = p.MakesForbiddenRun(work, i, j1, a) || p.MakesForbiddenRun(work, i, j, x) ||
                                     p.MakesForbiddenRun(work, i2, j1, x) || p.MakesForbiddenRun(work, i2, j, a);

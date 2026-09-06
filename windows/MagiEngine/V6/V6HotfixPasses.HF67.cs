@@ -36,7 +36,7 @@ public static partial class V6HotfixPasses
         for (var j = 0; j < p.T; j++)
         {
             if (schedule[from][j] == shift && !p.WishLocked(from, j)) fromDays.Add(j);
-            if (schedule[to][j] != shift && !p.WishLocked(to, j) && p.CanDo(to, shift) && p.CanDo(from, schedule[to][j]))
+            if (schedule[to][j] != shift && !p.WishLocked(to, j) && p.MayPlace(to, shift) && p.MayPlace(from, schedule[to][j]))
                 toDays.Add(j);
         }
         foreach (var jf in fromDays)
@@ -77,7 +77,7 @@ public static partial class V6HotfixPasses
                     if (p.WishLocked(i, j) || p.WishLocked(i2, j)) continue;
                     var a = work[i][j];
                     var b = work[i2][j];
-                    if (a == b || !p.CanDo(i, b) || !p.CanDo(i2, a)) continue;
+                    if (a == b || !p.MayPlace(i, b) || !p.MayPlace(i2, a)) continue;
                     var cand = work.Copy2D();
                     cand[i][j] = b;
                     cand[i2][j] = a;

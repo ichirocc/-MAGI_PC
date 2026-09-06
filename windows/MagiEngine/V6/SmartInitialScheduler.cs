@@ -68,7 +68,7 @@ public static class SmartInitialScheduler
             var rules = rulesByShift[x];
             for (int i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, x)) continue;
+                if (!p.MayPlace(i, x)) continue;
                 var forced = new int[p.T];
                 for (int j = 0; j < p.T; j++)
                     forced[j] = schedule[i][j] == -1 ? -1 : schedule[i][j] == x ? 1 : 0;
@@ -106,7 +106,7 @@ public static class SmartInitialScheduler
                     int bestI = -1, bestPenalty = int.MaxValue;
                     for (int i = 0; i < p.S; i++)
                     {
-                        if (schedule[i][j] >= 0 || !p.CanDo(i, k)) continue;
+                        if (schedule[i][j] >= 0 || !p.MayPlace(i, k)) continue;
                         int hi = p.RangeHi[i][k];
                         bool over = hi != int.MaxValue && counts[i][k] >= hi;
                         int penalty = (over ? 1000 : 0) + counts[i][k] * 2;

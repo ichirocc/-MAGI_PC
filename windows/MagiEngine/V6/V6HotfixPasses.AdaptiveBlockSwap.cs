@@ -271,7 +271,7 @@ public static partial class V6HotfixPasses
                 {
                     var incoming = vals[(t + 1) % n];
                     if (incoming != vals[t]) changes = true;
-                    if (!p.CanDo(cycle[t], incoming)) { ok = false; break; }
+                    if (!p.MayPlace(cycle[t], incoming)) { ok = false; break; }
                 }
                 if (!ok || !changes) continue;
                 swapDays.Add(j);
@@ -428,7 +428,7 @@ public static partial class V6HotfixPasses
                                 var a = work[u][j];
                                 var b = work[v][j];
                                 if (a == b || a < 0 || a >= p.K || b < 0 || b >= p.K) continue;
-                                if (!p.CanDo(u, b)) continue;
+                                if (!p.MayPlace(u, b)) continue;
                                 delta[a]--; delta[b]++; any = true;
                             }
                             if (!any) continue;

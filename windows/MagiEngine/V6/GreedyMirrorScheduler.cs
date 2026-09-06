@@ -107,7 +107,7 @@ public static class GreedyMirrorScheduler
                     int bestI = -1, bestPenalty = int.MaxValue;
                     for (int i = 0; i < p.S; i++)
                     {
-                        if (schedule[i][j] >= 0 || !p.CanDo(i, k)) continue;
+                        if (schedule[i][j] >= 0 || !p.MayPlace(i, k)) continue;
                         int hi = p.RangeHi[i][k];
                         bool over = hi != int.MaxValue && counts[i][k] >= hi;
                         int penalty = (over ? 1000 : 0) + counts[i][k] * 2;

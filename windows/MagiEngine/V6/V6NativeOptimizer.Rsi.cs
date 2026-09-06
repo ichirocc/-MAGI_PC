@@ -209,7 +209,7 @@ public static partial class V6NativeOptimizer
                 {
                     var baseline = UnifiedViolationChecker.Check(state, sched);
                     var offShift = Enumerable.Range(0, p.S)
-                        .Where(it => grp[it] == c.GroupIdx && sched[it][j] != c.ShiftIdx && p.CanDo(it, c.ShiftIdx))
+                        .Where(it => grp[it] == c.GroupIdx && sched[it][j] != c.ShiftIdx && p.MayPlace(it, c.ShiftIdx))
                         .ToList();
                     var candidates = new List<List<int[]>>();
                     foreach (var i in offShift)

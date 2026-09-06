@@ -88,8 +88,13 @@ public sealed class Problem
     /// <summary>groupMembers[g] = 群gに属する staff index。グループ内公平化(fair)で群メンバー間の回数偏差を均すのに使う。</summary>
     public int[][] GroupMembers { get; }
 
-    /// <summary>Staff indices that may take a given shift (used by block-fill moves).</summary>
+    /// <summary>Staff indices the optimizer may give a shift to (used by block-fill moves). [3.507.0] 置ける職員＝Placeable。</summary>
     public int[][] StaffForShift { get; }
+
+    /// <summary>[3.507.0 同期] 最適化器が置いてよいシフト（職員別）＝担当可（Bucket）から個人上限 0（休を除く）を外したもの。評価・表示は CanDo のまま
+    /// （候補生成・入口 Hf66・最終番兵の基準だけが見る。希望固定は WishLocked が優先。経緯は README「レビュー対応の記録」2026-09-06）。</summary>
+    public int[][] Placeable { get; }
+    public bool[][] PlaceableHas { get; }
 
     /// <summary>wish[i][j] = desired shift index, or -1.</summary>
     public int[][] Wish { get; }
@@ -187,14 +192,6 @@ public sealed class Problem
             GroupMembers[g] = list.ToArray();
         }
 
-        StaffForShift = new int[K][];
-        for (int k = 0; k < K; k++)
-        {
-            var list = new List<int>();
-            for (int i = 0; i < S; i++) if (Array.IndexOf(Bucket[Sgrp[i]], k) >= 0) list.Add(i);
-            StaffForShift[k] = list.ToArray();
-        }
-
         Wish = new int[S][];
         for (int i = 0; i < S; i++)
         {
@@ -253,6 +250,28 @@ public sealed class Problem
                 var hi = KotlinInterop.ToIntOrNull(r.Hi.Trim());
                 if (hi is int hiV) RangeHi[i2][k2] = hiV;
             }
+        }
+
+        PlaceableHas = new bool[S][];
+        Placeable = new int[S][];
+        for (int i = 0; i < S; i++)
+        {
+            var b = Sgrp[i] >= 0 && Sgrp[i] < Bucket.Length ? Bucket[Sgrp[i]] : Array.Empty<int>();
+            PlaceableHas[i] = new bool[K];
+            var list = new List<int>();
+            for (int k = 0; k < K; k++)
+            {
+                PlaceableHas[i][k] = Array.IndexOf(b, k) >= 0 && !(RangeHi[i][k] == 0 && k != RestIdx);
+                if (PlaceableHas[i][k]) list.Add(k);
+            }
+            Placeable[i] = list.ToArray();
+        }
+        StaffForShift = new int[K][];
+        for (int k = 0; k < K; k++)
+        {
+            var list = new List<int>();
+            for (int i = 0; i < S; i++) if (PlaceableHas[i][k]) list.Add(i);
+            StaffForShift[k] = list.ToArray();
         }
 
         // 適切回数（双方向目標）: state.groupShiftApt[群][シフト] を個人別 apt[i][k] へ展開（群単位＝同群全員に同一目標）。
@@ -541,13 +560,13 @@ public sealed class Problem
         var result = new int[S][];
         for (int i = 0; i < S; i++)
         {
-            var b = Bucket[Sgrp[i]];
+            var b = Placeable[i];   // [3.507.0] 穴埋めは置けるシフトから。希望の反映は CanDo 基準（WishLocked と同じ）
             var row = new int[T];
             for (int j = 0; j < T; j++)
             {
                 int k = (i < State.Schedule.Count && j < State.Schedule[i].Count) ? State.Schedule[i][j] : -1;
                 int w = Wish[i][j];
-                if (w >= 0 && Array.IndexOf(b, w) >= 0) k = w;
+                if (w >= 0 && this.CanDo(i, w)) k = w;
                 // [3.410.0/P-01, 3.419.0 移植元] 範囲外セルの寄せ先(restIdx)をこの職員が担当できるか
                 // 確認せずに直接使うと、担当不可の群で意図しない groupViol(HARD) を作る。共通規則
                 // FillShiftIndex へ委譲する（Ws1Ops 相当の3経路と同じ判断）。

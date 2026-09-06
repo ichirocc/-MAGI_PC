@@ -326,6 +326,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 個人上限 0（0〜0）のシフトを最適化器が置かない（Android 3.507.0 同期・ユーザー決定「最適化器だけ除外、表示は今のまま」）:
+  `Problem.Placeable/PlaceableHas`＋`ScheduleUtil.MayPlace`（担当可かつ上限 0 でない。休は除外しない）、`AllowedShiftsForStaff` は置けるシフトへ
+  （UI は新設 `CanDoShiftsForStaff`）、`StaffForShift`・`InitialAssignment` の穴埋めも置けるシフトから。配置先を判定する `CanDo(` 101 箇所を
+  `MayPlace(` へ（c1/c2/low の適用ガード複製・群外セルの数え上げ・評価器・チェッカー・SanityPort は `CanDo` のまま＝採点不変）。
+  入口 `Hf66DataHardening` が上限 0 のセル（希望固定を除く）を休へ戻し、`HandleOptimize` の最終番兵は `ClearCappedCells` した入力を基準に
+  （`CapZero` ログ）。テスト `ZeroCapExclusionTest` 6 本（Kotlin 同名の移植）。
+
 - 2026-09-06 「グループ単位の回数」で下限・上限とも空欄を「全員ぶん解除」として受け付ける（Android 3.506.0 同期・実機報告「なし 設定出来ない」）:
   `MagiViewModel.ClearGroupRangeAll(g,k)`（メンバー全員の個人上下限を値に関係なく削除し群 apt を空、件数つき通知）と
   `GroupRangeMemberCount(g,k)` を追加。`EditView` の「一括設定」は両方空欄なら解除へ振り分け（対象 0 件は案内のみ）。

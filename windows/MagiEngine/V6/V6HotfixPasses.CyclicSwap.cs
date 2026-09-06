@@ -55,7 +55,7 @@ public static partial class V6HotfixPasses
                         if (!Movable(b, j)) continue;
                         var sa = work[a][j];
                         var sb = work[b][j];
-                        if (sa == sb || !p.CanDo(a, sb) || !p.CanDo(b, sa)) continue;
+                        if (sa == sb || !p.MayPlace(a, sb) || !p.MayPlace(b, sa)) continue;
                         // [厳密ピン保護] 異なるシフト同士の同日交換はa/bの自身のシフト回数を変えるため、
                         //   staffRange厳密ピン(lo==hi)を新たに崩す候補は不採用にする（keep-best/重み不変）。
                         var workBeforeSwap2 = work.Copy2D();
@@ -88,7 +88,7 @@ public static partial class V6HotfixPasses
                             var sc = work[c][j];
                             if (sa == sb && sb == sc) continue;
                             // a←sb, b←sc, c←sa（feasibleなら適用→評価→不採用なら巻き戻し）
-                            if (p.CanDo(a, sb) && p.CanDo(b, sc) && p.CanDo(c, sa))
+                            if (p.MayPlace(a, sb) && p.MayPlace(b, sc) && p.MayPlace(c, sa))
                             {
                                 var workBeforeRotate3 = work.Copy2D();
                                 work[a][j] = sb; work[b][j] = sc; work[c][j] = sa;
@@ -185,7 +185,7 @@ public static partial class V6HotfixPasses
                             var same = true;
                             for (var t = 0; t < w; t++)
                             {
-                                if (!p.CanDo(i, work[i2][j + t]) || !p.CanDo(i2, work[i][j + t])) { feasible = false; break; }
+                                if (!p.MayPlace(i, work[i2][j + t]) || !p.MayPlace(i2, work[i][j + t])) { feasible = false; break; }
                                 if (work[i][j + t] != work[i2][j + t]) same = false;
                             }
                             if (!feasible || same) continue;
@@ -326,7 +326,7 @@ public static partial class V6HotfixPasses
                                 var feasible = true;
                                 for (var t = 0; t < w; t++)
                                 {
-                                    if (!p.CanDo(ai, work[bi][j + t]) || !p.CanDo(bi, work[ci][j + t]) || !p.CanDo(ci, work[ai][j + t]))
+                                    if (!p.MayPlace(ai, work[bi][j + t]) || !p.MayPlace(bi, work[ci][j + t]) || !p.MayPlace(ci, work[ai][j + t]))
                                     { feasible = false; break; }
                                 }
                                 if (!feasible) continue;
@@ -487,7 +487,7 @@ public static partial class V6HotfixPasses
                                 if (work[ip][j2] != x) continue;
                                 var z = work[ip][j1];
                                 if (z == x || z < 0 || z >= p.K) continue;
-                                if (!p.CanDo(i, z) || !p.CanDo(ip, y)) continue;
+                                if (!p.MayPlace(i, z) || !p.MayPlace(ip, y)) continue;
                                 // 長方形交換を適用（被覆保存）→ フル評価 → 改善時のみ採用、不採用なら完全巻き戻し。
                                 // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、
                                 //   raw total が改善してもweightedScoreが悪化する組合せ(重い厳密ピン破りを軽い

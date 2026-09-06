@@ -404,7 +404,7 @@ public static partial class V6NativeOptimizer
                         {
                             var k1 = eval.At(i1, j);
                             var k2 = eval.At(i2, j);
-                            if (k1 != k2 && p.CanDo(i1, k2) && p.CanDo(i2, k1))
+                            if (k1 != k2 && p.MayPlace(i1, k2) && p.MayPlace(i2, k1))
                             {
                                 eval.Apply(i1, j, k2);
                                 eval.Apply(i2, j, k1);

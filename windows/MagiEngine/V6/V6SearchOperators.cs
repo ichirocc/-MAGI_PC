@@ -78,7 +78,7 @@ internal static class V6SearchOperators
         int bestNw = -1, bestDef = int.MinValue;
         for (int k = 0; k < p.K; k++)
         {
-            if (k == overK || !p.CanDo(i0, k)) continue;
+            if (k == overK || !p.MayPlace(i0, k)) continue;
             int def = p.CovUCell(k, j, eval.CountOnDay(k, j));
             if (def > bestDef) { bestDef = def; bestNw = k; }
         }
@@ -92,7 +92,7 @@ internal static class V6SearchOperators
         int dCnt = 0;
         for (int i = 0; i < p.S; i++)
         {
-            if (!p.CanDo(i, c.ShiftIdx)) continue;
+            if (!p.MayPlace(i, c.ShiftIdx)) continue;
             if (eval.CountForStaff(i, c.ShiftIdx) < c.Count) dCnt++;
         }
         if (dCnt == 0) return null;
@@ -100,7 +100,7 @@ internal static class V6SearchOperators
         int stf = 0;
         for (int i = 0; i < p.S; i++)
         {
-            if (!p.CanDo(i, c.ShiftIdx)) continue;
+            if (!p.MayPlace(i, c.ShiftIdx)) continue;
             if (eval.CountForStaff(i, c.ShiftIdx) < c.Count) { if (pickI-- == 0) { stf = i; break; } }
         }
         int dayCnt = 0;
@@ -123,7 +123,7 @@ internal static class V6SearchOperators
             for (int k = 0; k < p.K; k++)
             {
                 int lo = p.RangeLo[i][k];
-                if (lo == int.MinValue || !p.CanDo(i, k)) continue;
+                if (lo == int.MinValue || !p.MayPlace(i, k)) continue;
                 if (eval.CountForStaff(i, k) < lo) cCnt++;
             }
         }
@@ -135,7 +135,7 @@ internal static class V6SearchOperators
             for (int k = 0; k < p.K; k++)
             {
                 int lo = p.RangeLo[i][k];
-                if (lo == int.MinValue || !p.CanDo(i, k)) continue;
+                if (lo == int.MinValue || !p.MayPlace(i, k)) continue;
                 if (eval.CountForStaff(i, k) < lo)
                 {
                     if (pickC-- == 0) { rlI = i; rlK = k; goto FoundLowTarget; }
@@ -195,13 +195,13 @@ internal static class V6SearchOperators
         {
             int aCnt = 0;
             for (int i = 0; i < p.S; i++)
-                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.CanDo(i, c.ShiftIdx)) aCnt++;
+                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx)) aCnt++;
             if (aCnt == 0) return null;
             int pickA = rng.NextInt(aCnt);
             int ai = 0;
             for (int i = 0; i < p.S; i++)
             {
-                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.CanDo(i, c.ShiftIdx))
+                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx))
                 {
                     if (pickA-- == 0) { ai = i; break; }
                 }
@@ -253,13 +253,13 @@ internal static class V6SearchOperators
         {
             int aCnt = 0;
             for (int i = 0; i < p.S; i++)
-                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.CanDo(i, c.ShiftIdx)) aCnt++;
+                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx)) aCnt++;
             if (aCnt == 0) return null;
             int pickA = rng.NextInt(aCnt);
             int ai = 0;
             for (int i = 0; i < p.S; i++)
             {
-                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.CanDo(i, c.ShiftIdx))
+                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx))
                 {
                     if (pickA-- == 0) { ai = i; break; }
                 }
@@ -357,7 +357,7 @@ internal static class V6SearchOperators
                     if (miss == 1 && missL >= 0)
                     {
                         int ml = j + missL;
-                        if (!p.WishLocked(i, ml) && p.CanDo(i, seq[missL])) return new[] { i, ml, seq[missL] };
+                        if (!p.WishLocked(i, ml) && p.MayPlace(i, seq[missL])) return new[] { i, ml, seq[missL] };
                     }
                 }
                 j++;
@@ -651,7 +651,7 @@ internal static class V6SearchOperators
                 if (i == exclude) continue;   // [C1×E11] 呼出元が別途動かした職員を連鎖の候補から除外（無効な回帰手を防ぐ）
                 int m = sched[i][j];
                 if (m < 0 || m >= p.K || m == fillShift) continue;
-                if (!p.CanDo(i, fillShift) || p.WishLocked(i, j)) continue;
+                if (!p.MayPlace(i, fillShift) || p.WishLocked(i, j)) continue;
                 var q = prev;
                 bool used = false;
                 while (q != null) { if (q.Staff == i) { used = true; break; } q = q.Prev; }

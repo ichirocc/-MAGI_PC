@@ -224,7 +224,7 @@ internal static class EliteIntegrationPolish
             if (Stopped(shouldStop, deadlineMs)) break;
             var k = target.Schedule[i][j];
             if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
-            if (!p.CanDo(i, k)) continue;
+            if (!p.MayPlace(i, k)) continue;
             current[i][j] = k;
             var report = UnifiedViolationChecker.Check(state, current);
             if (Better(report, bestReport) && !V6SearchOperators.ExactPinRegression(p, rootSchedule, current))
@@ -315,7 +315,7 @@ internal static class EliteIntegrationPolish
                 foreach (var k in valuesList)
                 {
                     if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
-                    if (!p.CanDo(i, k)) continue;
+                    if (!p.MayPlace(i, k)) continue;
                     var changed = node.Schedule[i][j] == k ? node.Changed : node.Changed + 1;
                     var schedule = node.Schedule.Copy2D();
                     schedule[i][j] = k;

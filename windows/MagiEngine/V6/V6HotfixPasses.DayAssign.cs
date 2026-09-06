@@ -64,7 +64,7 @@ public static partial class V6HotfixPasses
                 for (var c = 0; c < n; c++)
                 {
                     var k = slots[c];
-                    if (k < 0 || k >= p.K || !p.CanDo(i, k))
+                    if (k < 0 || k >= p.K || !p.MayPlace(i, k))
                     {
                         row[c] = MinCostAssignment.Inf;
                     }
@@ -199,7 +199,7 @@ public static partial class V6HotfixPasses
                     for (var c = 0; c < n; c++)
                     {
                         var k = slots[c];
-                        if (k < 0 || k >= p.K || !p.CanDo(i, k))
+                        if (k < 0 || k >= p.K || !p.MayPlace(i, k))
                         {
                             row[c] = MinCostAssignment.Inf;
                         }

@@ -198,7 +198,7 @@ public static partial class V6HotfixPasses
             int ka = work[a][d], kb = work[b][d];
             if (ka < 0 || ka >= K || kb < 0 || kb >= K) return false;
             if (Locked(a, d) || Locked(b, d)) return false;
-            return p.CanDo(a, kb) && p.CanDo(b, ka);
+            return p.MayPlace(a, kb) && p.MayPlace(b, ka);
         }
 
         /// <summary>窓 s0..s1 を a と b で丸ごと交換できて、かつ何かが変わるとき真。</summary>
@@ -282,11 +282,11 @@ public static partial class V6HotfixPasses
             for (var b = 0; b < S; b++)
             {
                 if (b == a || Locked(b, d)) continue;
-                var kb = work[b][d]; if (kb < 0 || kb >= K || !p.CanDo(a, kb)) continue;
+                var kb = work[b][d]; if (kb < 0 || kb >= K || !p.MayPlace(a, kb)) continue;
                 for (var c = 0; c < S; c++)
                 {
                     if (c == a || c == b || Locked(c, d)) continue;
-                    var kc = work[c][d]; if (kc < 0 || kc >= K || !p.CanDo(b, kc) || !p.CanDo(c, ka)) continue;
+                    var kc = work[c][d]; if (kc < 0 || kc >= K || !p.MayPlace(b, kc) || !p.MayPlace(c, ka)) continue;
                     if (ka == kb && kb == kc) continue;
                     if ((SameGroup(a, b) && SameGroup(b, c)) != sg) continue;
                     yield return new WishMove(WishMoveKind.Rotate3, new[] { a, d, kb, b, d, kc, c, d, ka }, sg);

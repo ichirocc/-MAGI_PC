@@ -172,7 +172,7 @@ public static partial class V6HotfixPasses
                         var ka = work[a][d]; var kb = work[b][d];
                         if (ka < 0 || ka >= p.K || kb < 0 || kb >= p.K) { ok = false; break; }
                         if (p.WishLocked(a, d) || p.WishLocked(b, d)) { ok = false; break; }
-                        if (!p.CanDo(a, kb) || !p.CanDo(b, ka)) { ok = false; break; }
+                        if (!p.MayPlace(a, kb) || !p.MayPlace(b, ka)) { ok = false; break; }
                         if (ka != kb) { changed++; delta[kb]++; delta[ka]--; }
                     }
                     if (!ok || changed == 0) continue;

@@ -184,7 +184,7 @@ public static partial class V6HotfixPasses
                 for (var k2 = 0; k2 < p.K; k2++)
                 {
                     if (stop()) break;
-                    if (k2 == k || !p.CanDo(i, k2)) continue;
+                    if (k2 == k || !p.MayPlace(i, k2)) continue;
                     if (!lowTargets.Any(t => t.Item1 == i && t.Item2 == k2)) continue;
                     while (TrySelfSwap(i, k, k2)) { improved = true; done = true; }
                 }
@@ -220,7 +220,7 @@ public static partial class V6HotfixPasses
             foreach (var (i, k) in lowTargets)
             {
                 if (stop()) break;
-                if (!p.CanDo(i, k)) continue;
+                if (!p.MayPlace(i, k)) continue;
                 var done = false;
                 for (var j = 0; j < p.T; j++)
                 {

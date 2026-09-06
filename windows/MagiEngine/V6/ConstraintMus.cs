@@ -279,7 +279,7 @@ public static class ConstraintMus
 
         bool CanServe(int i, int shift)
         {
-            if (!p.CanDo(i, shift)) return false;
+            if (!p.MayPlace(i, shift)) return false;
             if (!pinned.TryGetValue(i, out var pin)) return true;
             return pin == shift;
         }

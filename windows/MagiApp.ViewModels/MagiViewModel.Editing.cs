@@ -40,7 +40,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return System.Array.Empty<int>();
-        return ScheduleUtil.CachedProblem(st).AllowedShiftsForStaff(i);
+        return ScheduleUtil.CachedProblem(st).CanDoShiftsForStaff(i);   // [3.507.0 同期] UI は担当可否そのもの（上限 0 は最適化器だけが除外）
     }
 
     /// <summary>入力ガイド（月次/年次の入力手順）用の各項目の件数。</summary>

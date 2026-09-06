@@ -55,8 +55,22 @@ public static class ScheduleUtil
         return w >= 0 && p.CanDo(i, w);
     }
 
-    /// <summary>The shift indices staff <paramref name="staffI"/> is allowed to take (their group's bucket, or empty).</summary>
+    /// <summary>[3.507.0] 最適化器が (i,k) を置いてよいか＝担当可かつ個人上限 0 でない（休は除外しない）。評価・表示は CanDo。</summary>
+    public static bool MayPlace(this Problem p, int staffI, int shiftK)
+    {
+        if (staffI < 0 || staffI >= p.S || shiftK < 0 || shiftK >= p.K) return false;
+        return p.PlaceableHas[staffI][shiftK];
+    }
+
+    /// <summary>最適化器の候補生成用＝置けるシフト（Placeable）。[3.507.0] 旧: 群 bucket そのもの。担当可否そのものは CanDoShiftsForStaff。</summary>
     public static int[] AllowedShiftsForStaff(this Problem p, int staffI)
+    {
+        if (staffI < 0 || staffI >= p.Placeable.Length) return Array.Empty<int>();
+        return p.Placeable[staffI];
+    }
+
+    /// <summary>担当できるシフト（群 bucket＝CanDo と同値）。UI の選択肢と設定診断が使う。</summary>
+    public static int[] CanDoShiftsForStaff(this Problem p, int staffI)
     {
         if (staffI < 0 || staffI >= p.Sgrp.Length) return Array.Empty<int>();
         int g = p.Sgrp[staffI];

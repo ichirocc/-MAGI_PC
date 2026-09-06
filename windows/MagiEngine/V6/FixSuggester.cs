@@ -216,7 +216,7 @@ public static class FixSuggester
                         if (p.WishLocked(i, j) || p.WishLocked(i2, j)) continue;
                         var a = s[i][j];
                         var b = s[i2][j];
-                        if (a == b || !p.CanDo(i, b) || !p.CanDo(i2, a)) continue;
+                        if (a == b || !p.MayPlace(i, b) || !p.MayPlace(i2, a)) continue;
                         TryOps(FixKind.Swap, new[] { new FixCell(i, j, b), new FixCell(i2, j, a) },
                             $"{Nm(i)} 「{Sym(a)}」 ↔ {Nm(i2)} 「{Sym(b)}」（{Dlab(j)}）");
                     }
@@ -420,7 +420,7 @@ public static class FixSuggester
                             var sa = s[a][j]; var sb = s[b][j]; var sc = s[c][j];
                             if (sa == sb && sb == sc) continue;
                             // 巡回: a<-sb, b<-sc, c<-sa
-                            if (!p.CanDo(a, sb) || !p.CanDo(b, sc) || !p.CanDo(c, sa)) continue;
+                            if (!p.MayPlace(a, sb) || !p.MayPlace(b, sc) || !p.MayPlace(c, sa)) continue;
                             TryOps(FixKind.SwapMulti,
                                 new[] { new FixCell(a, j, sb), new FixCell(b, j, sc), new FixCell(c, j, sa) },
                                 $"（3人）{Nm(a)}・{Nm(b)}・{Nm(c)} を {Dlab(j)} で入替");
@@ -453,7 +453,7 @@ public static class FixSuggester
                         if (j2 == j1 && i2 == i1) continue;
                         if (p.WishLocked(i2, j2) || TimeUp()) continue;
                         var b = s[i2][j2];
-                        if (a == b || !p.CanDo(i1, b) || !p.CanDo(i2, a)) continue;
+                        if (a == b || !p.MayPlace(i1, b) || !p.MayPlace(i2, a)) continue;
                         var label = i1 == i2
                             ? $"{Nm(i1)} {Dlab(j1)}「{Sym(a)}」 ↔ {Dlab(j2)}「{Sym(b)}」（別日）"
                             : $"{Nm(i1)} {Dlab(j1)}「{Sym(a)}」 ↔ {Nm(i2)} {Dlab(j2)}「{Sym(b)}」（別日）";

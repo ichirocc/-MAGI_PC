@@ -267,7 +267,7 @@ internal static class PersonalBalanceJointLnsPolish
     /// <summary>希望固定・担当可否・range/aptだけを使う、職員単位の厳密count下限。</summary>
     internal static int StaffLowerBound(Problem p, int staff)
     {
-        var allowed = Enumerable.Range(0, p.K).Where(k => p.CanDo(staff, k)).ToList();
+        var allowed = Enumerable.Range(0, p.K).Where(k => p.MayPlace(staff, k)).ToList();
         if (allowed.Count == 0) return 0;
         var forced = new int[p.K];
         int fixedCount = 0;
@@ -358,7 +358,7 @@ internal static class PersonalBalanceJointLnsPolish
                 if (old < 0 || old >= p.K) continue;
                 for (int target = 0; target < p.K; target++)
                 {
-                    if (target == old || !p.CanDo(i, target)) continue;
+                    if (target == old || !p.MayPlace(i, target)) continue;
                     counts[i][old]--;
                     counts[i][target]++;
                     int after = CountPenalty(p, i, counts[i]);
@@ -430,14 +430,14 @@ internal static class PersonalBalanceJointLnsPolish
         int j = goal.Day;
         int target = goal.Target;
         int old = baseSchedule[i][j];
-        if (old == target || p.WishLocked(i, j) || !p.CanDo(i, target)) return new List<Candidate>();
+        if (old == target || p.WishLocked(i, j) || !p.MayPlace(i, target)) return new List<Candidate>();
         var outCandidates = new List<Candidate>();
 
         // 同日1対1交換。coverageを完全保存するため最優先。
         var donors = Enumerable.Range(0, p.S).Shuffled(rng);
         foreach (int d in donors)
         {
-            if (d == i || baseSchedule[d][j] != target || p.WishLocked(d, j) || !p.CanDo(d, old)) continue;
+            if (d == i || baseSchedule[d][j] != target || p.WishLocked(d, j) || !p.MayPlace(d, old)) continue;
             var w = baseSchedule.Copy2D();
             w[i][j] = target;
             w[d][j] = old;
@@ -497,7 +497,7 @@ internal static class PersonalBalanceJointLnsPolish
         // 本人の別日targetと自己交換。月間回数は不変だが、下限内移替やc1/c3/weeklyの副作用改善に使う。
         foreach (int d2 in Enumerable.Range(0, p.T).Shuffled(rng))
         {
-            if (d2 == j || baseSchedule[i][d2] != target || p.WishLocked(i, d2) || !p.CanDo(i, old)) continue;
+            if (d2 == j || baseSchedule[i][d2] != target || p.WishLocked(i, d2) || !p.MayPlace(i, old)) continue;
             var w = baseSchedule.Copy2D();
             w[i][j] = target;
             w[i][d2] = old;
@@ -515,7 +515,7 @@ internal static class PersonalBalanceJointLnsPolish
                 foreach (int d2 in Enumerable.Range(0, p.T).Shuffled(rng))
                 {
                     if (d == i && d2 == j) continue;
-                    if (baseSchedule[d][d2] != target || p.WishLocked(d, d2) || !p.CanDo(d, old)) continue;
+                    if (baseSchedule[d][d2] != target || p.WishLocked(d, d2) || !p.MayPlace(d, old)) continue;
                     var w = baseSchedule.Copy2D();
                     w[i][j] = target;
                     w[d][d2] = old;

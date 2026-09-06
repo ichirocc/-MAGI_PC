@@ -220,7 +220,7 @@ public sealed class SaOptimizer
         void Revert() { int k = bn - 1; while (k >= 0) { de.Apply(bi[k], bj[k], bOld[k]); k--; } bn = 0; }
         int RandShiftFor(int i)
         {
-            var b = _problem.Bucket[_problem.Sgrp[i]];
+            var b = _problem.AllowedShiftsForStaff(i);
             return b.Length == 0 ? de.At(i, 0) : b[rng.NextInt(b.Length)];
         }
         // [3.334.0, Kotlin原本コメント] 近傍は**実現可能な希望が入ったセルを触らない**。後処理研磨の
@@ -237,7 +237,7 @@ public sealed class SaOptimizer
             int tries = 0;
             while (Locked(i, j) && tries < 4) { j = rng.NextInt(T); tries++; }
             if (Locked(i, j)) return;
-            var b = _problem.Bucket[_problem.Sgrp[i]];
+            var b = _problem.AllowedShiftsForStaff(i);
             if (b.Length == 0) return;
             ApplyCell(i, j, b[rng.NextInt(b.Length)]);
         }

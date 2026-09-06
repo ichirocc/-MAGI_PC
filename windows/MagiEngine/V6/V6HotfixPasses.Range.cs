@@ -237,7 +237,7 @@ public static partial class V6HotfixPasses
                 if (work[hi][j] != k || !Movable(hi, j) || !Movable(lo, j)) continue;
                 var loK = work[lo][j];
                 if (loK == k || loK < 0 || loK >= p.K) continue;
-                if (!p.CanDo(hi, loK) || !p.CanDo(lo, k)) continue;
+                if (!p.MayPlace(hi, loK) || !p.MayPlace(lo, k)) continue;
                 if (p.MakesForbiddenRun(work, hi, j, loK) || p.MakesForbiddenRun(work, lo, j, k)) continue;
                 var workBeforeSwap = work.Copy2D();
                 work[hi][j] = loK; work[lo][j] = k;
@@ -327,7 +327,7 @@ public static partial class V6HotfixPasses
                     r != hi &&
                     work[r][j] != k &&
                     Movable(r, j) &&
-                    p.CanDo(r, k) &&
+                    p.MayPlace(r, k) &&
                     ReceiverRoom(r) > 0).ToList();
                 if (rawReceivers.Count == 0) continue;
                 var maxFlex = rawReceivers.Max(r => flex[r]);
@@ -362,7 +362,7 @@ public static partial class V6HotfixPasses
                                 // [3.417.0] 旧: 記号が「希」のシフトを割当先から外していた（3.278.0）。撤去の根拠は
                                 //   TryFlexibleDayFlow 側の同種箇所に記載（HF77: コメント≠実装／実測で中立／
                                 //   別の職場では黙って効かない、の3点）。
-                                if (!Movable(i, j) || !p.CanDo(i, newK)) continue;
+                                if (!Movable(i, j) || !p.MayPlace(i, newK)) continue;
                                 work[i][j] = newK;
                                 var badRun = p.MakesForbiddenRun(work, i, j, newK);
                                 work[i][j] = oldK;
@@ -518,7 +518,7 @@ public static partial class V6HotfixPasses
                                 //     関数側でも全て負けていた。
                                 //   ③**別の職場では黙って効かない**: 記号が「希望」「W」等なら同じ意図でも
                                 //     一切適用されない。
-                                if (!Movable(i, j) || !p.CanDo(i, newK)) continue;
+                                if (!Movable(i, j) || !p.MayPlace(i, newK)) continue;
                                 work[i][j] = newK;
                                 var badRun = p.MakesForbiddenRun(work, i, j, newK);
                                 work[i][j] = oldK;
@@ -533,7 +533,7 @@ public static partial class V6HotfixPasses
                                     if (fix.Count == 0) continue;
                                 }
                             }
-                            else if (i == victim && !p.CanDo(i, newK))
+                            else if (i == victim && !p.MayPlace(i, newK))
                             {
                                 // groupViol対象をそのまま残す辺は禁止。他職員の固定済み不正セルは
                                 // この1手の実行可能性を壊さないため現状維持だけ許す。
@@ -624,12 +624,12 @@ public static partial class V6HotfixPasses
                 for (var j = 0; j < p.T; j++)
                 {
                     var k = work[i][j];
-                    if (k >= 0 && k < p.K && !p.CanDo(i, k)) groupTargets.Add((i, j, k));
+                    if (k >= 0 && k < p.K && !p.MayPlace(i, k)) groupTargets.Add((i, j, k));
                 }
             foreach (var (i, j, k) in groupTargets)
             {
                 if (stop()) break;
-                if (work[i][j] != k || p.CanDo(i, k)) continue;
+                if (work[i][j] != k || p.MayPlace(i, k)) continue;
                 var target = (i, k);
                 if (!Movable(i, j))
                 {
@@ -706,7 +706,7 @@ public static partial class V6HotfixPasses
             foreach (var (i, k) in lowTargets)
             {
                 if (stop()) break;
-                if (!p.CanDo(i, k)) continue;
+                if (!p.MayPlace(i, k)) continue;
                 var target = (i, k);
                 var done = false;
                 // [複数ターゲット同時解決] まず同一シフトkのhigh(超過)職員との直接ペアスワップを試す
