@@ -1,12 +1,17 @@
 # SUDO モデル（システム関連図 / ユースケース図 / ドメインモデル図 / オブジェクト図）
 
-> **最終更新**：2026-08-17（3.389.0 で新規作成）
+> **最終更新**：2026-09-06（3.505.7 で実装と再照合＝重み c1/c3mn 30・covO 5.0、O の実測 5015、欠損セルの -1、S に Windows 版、D に拒否候補の再利用）
+> **初版**：2026-08-17（3.389.0）
 > **これは何か**：ログラス松岡さん（@little_hand_s）提唱の **SUDO モデリング**（DDD のモデリングを実装へ落とし込む
 > ための最小ラインナップ）を、このリポジトリの**実装から**起こしたもの。4図それぞれの役割は本家記事のとおり:
 > **S**=システム関連図（登場人物と外部システム）／**U**=ユースケース図（利用者が何をするか）／
 > **D**=ドメインモデル図（型と不変条件）／**O**=オブジェクト図（実データ1件を具体値で埋めた例）。
 
 ## この文書の立ち位置（読む前に）
+
+- **この写しは Android 版の文書と同一内容**（Kotlin が正なので、ドメイン D・オブジェクト O・重みは Windows 版でもそのまま成り立つ）。
+  S の「Android OS」枠（WorkManager／前景サービス／通知／バブル／SAF）だけは Windows 版に無く、`MagiApp.WinUI` は
+  同一プロセス内の非同期タスクと `MainWindow` の上部状態バー／下部コマンドバーで代替する（`windows/README.md`）。
 
 - **実装が正**。この文書は `app/src/main` と `app/src/test/resources` を実際に読んで書いた。
   既存の `docs/*.md` と食い違うところは実装側を採り、末尾の「docs と実装の食い違い」に列挙した。
@@ -45,6 +50,7 @@ flowchart LR
   end
 
   NATIVE["magi_native (C++/JNI)<br/>評価器・探索チャンク"]
+  WIN["Windows 版 MAGI<br/>(-MAGI_PC: C#/WinUI3 の同期移植)"]
 
   subgraph Data["外部データ形式"]
     SJ["state JSON<br/>Web版 MAGI と同一スキーマ"]
@@ -74,6 +80,7 @@ flowchart LR
   APP -->|"Kotlin 評価器と照合（不一致なら以後ネイティブ経路を閉じる）"| NATIVE
 
   SJ <-->|"取込／書き出し"| APP
+  SJ <-->|"同一スキーマで往復（Kotlin が正・C# は同期移植）"| WIN
   TCSV -->|"既存の月間勤務表を丸ごと取込（勤務表として／希望として）"| APP
   APP <-->|"配布用CSV出力 ／ 外部編集の取り込み直し（往復）"| DCSV
   APP -->|"操作ログ・診断ログ・違反内訳＋実行環境1行"| LOG
@@ -88,6 +95,7 @@ flowchart LR
 | `filesDir` の **所有権マーカー** | 固定ファイル名＋`REPLACE` なので、置き換えられた旧実行が新実行のファイルを消せる。`RunFiles.owns()` がこれを塞ぐ（3.327.0/3.388.0）。 |
 | `magi_native` は**必ず Kotlin と照合される** | C++ は「高速版」であって正ではない。不一致なら `NativeGate` が閉じて Kotlin へ退避＝**誤った勤務表でなく速度低下**として現れる。 |
 | ログの矢印が**片方向** | ログは書き出すだけで読み戻さない。診断はすべて実行時に作り直す。 |
+| Windows 版は**同じ state JSON を読む別プロセス** | `-MAGI_PC`（C#/WinUI3）はエンジン・チェッカー・後処理を Kotlin から忠実に移植したもので、盤面の意味論は同じ。両者を同期させる規律は「Kotlin が正、C# は同日に同期」（CLAUDE.md）。 |
 | 文字化け修復は**元ファイルを書き換えない** | 取込時に復元するだけ。外部ツール／旧Web書き出し由来の二重エンコードに対する防御。 |
 
 ---
@@ -321,7 +329,8 @@ classDiagram
 | 希望 wish | キー無し | `-1` |
 | 群レンジ l / u | `""` | `0` / `Int.MAX_VALUE` |
 
-`normalizeSchedule` は範囲外セルを **`-1`（センチネル＝不正な値）** へ写す。行が短ければ `0` で埋める。
+`normalizeSchedule` は範囲外セルも欠損セル（行が短い／行が無い）も **`-1`（センチネル＝未割当・不正な値）** へ写す
+（3.475.0。旧: 欠損は `0`＝先頭シフトへ写しており、休が index0 でないデータでは欠損が勤務として被覆に計上された）。
 
 ### 不変条件（すべて実装から）
 
@@ -330,9 +339,10 @@ HARD 4族 = `groupViol` / `c3n` / `covU` / `pref`、SOFT 15族。
 
 ```
 groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
-  > c3mn 15 = c1 15 > c3 3 > c3m 2
-  > c2 = c41 = c42 = c41s = c42s = apt = fair = weekly = covO = 1.0
+  > c3mn 30 = c1 30 > covO 5 > c3 3 > c3m 2
+  > c2 = c41 = c42 = c41s = c42s = apt = fair = weekly = 1.0
 ```
+（c1/c3mn は 3.409.24 で 15→30、covO は 2026-08-27 に 1.0→5.0。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実）
 
 `weights` を `linkedMapOf` で持つのは**挿入順＝加算順を固定して Double の加算結果を不変に保つ**ため
 （浮動小数の加算は非結合）。UI の重み表がこのマップをそのまま描画するので、ここに行を足すと画面に生キーが出る
@@ -366,6 +376,10 @@ groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
 - **辞書式パック**：`score = hard × SCORE_HARD_UNIT + soft`。`soft < SCORE_HARD_UNIT`(1e9) を
   `Evaluator.fullEval` が強制する（超えると HARD ゲートが静かに壊れる）。
 - **厳密ピン**：`rangeLo == rangeHi` は「回数固定」として扱われ、研磨は `exactPinRegression` でこれを崩す手を却下する。
+- **拒否候補の再利用**（3.505.x）：各研磨パスは単独では不採用にした候補を `CyclicSwapResult.rejectedCandidates` で返し、
+  後処理チェーンが巡の末尾（拒否候補の結合）と共同 LNS の後の最終段（違反起点からの候補生成つき）で `ViolationComponentRepair` に
+  束ねさせる。採用の判定はどこでも同じ `betterReport`＋`exactPinRegression`＝新しい採用基準は増えていない
+（`QualityVector` は計測専用）。
 
 **「休」の扱い** — 識別は**記号ベース**（`shifts.indexOfFirst { it.kigou == "休" } ?: 0`）で、
 見つからないと**先頭シフトを黙って休として扱う**（検査 2g が警告する）。`Problem.restIdx` が単一ソース。
@@ -428,13 +442,13 @@ flowchart TB
   C11["<b>cons1[1] : C1Row</b><br/>day1=14 shiftKigou=Dﾃ day2=2"]
   C20["<b>cons2[0] : C2Row</b><br/>shiftKigou=有 count=1<br/>（実測 breakdown c2=4）"]
   CN0["<b>cons3n[0] : C3Row</b><br/>pattern=[Dﾃ,B4,'','','']<br/>夜勤の翌日に日勤は禁止（HARD 7000）"]
-  CM2["<b>cons3mn[2] : C3Row</b><br/>pattern=[Dﾃ,休,Dﾃ,'','']<br/>3連パターン（Hate・SOFT 15）"]
+  CM2["<b>cons3mn[2] : C3Row</b><br/>pattern=[Dﾃ,休,Dﾃ,'','']<br/>3連パターン（Hate・SOFT 30）"]
   C421["<b>cons42[1] : C42Row</b><br/>g1=吉 g2=古 s1=A4 s2=A4<br/>2群のA4が同じ日に併存不可"]
 
   W017["<b>wishes['0,17']</b> = 8<br/>古泉×12/18 に B4 を希望<br/>schedule[0][17]=8 ＝充足済み"]
   SC3["<b>schedule[3]</b>（桒澤美幸の1か月・31要素）<br/>[9,8,8,8,8,0,8,8,8,8,0,0,0,0,8,8,0,8,8,8,8,8,0,8,8,8,8,8,0,0,0]<br/>= 休10回 / B4 20回 / 有1回"]
 
-  RP["<b>report : ViolationReport</b>（実測）<br/><b>hard=0 total=437 weightedScore=4999.0</b><br/>c1:115 weekly:183 c3:36 c3m:36 apt:28<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:4 high:2<br/>violations=116件 needViolations=4件 countViolations=15件"]
+  RP["<b>report : ViolationReport</b>（実測）<br/><b>hard=0 total=437 weightedScore=5015.0</b><br/>c1:115 weekly:183 c3:36 c3m:36 apt:28<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:4 high:2<br/>violations=116件 needViolations=4件 countViolations=15件"]
 
   ST --- SH0 & SH2 & SH9
   ST --- G7
@@ -452,9 +466,9 @@ flowchart TB
 **この1件から読み取れること**
 
 - **`hard=0` は「配布できる」を意味する**。golden は既に配布可の盤面で、残っているのは全部 SOFT。
-  `weightedScore=4999` は `golden_eval_expected.txt` の `soft=4999` と一致する（3.409.24 で c1/c3mn の重みを
-  15→30 にしたので 3109 から上がっている＝族の件数は1つも変わっていない）（`hard=0` なので
-  `weightedScore == soft の重み付き和`）。これが **Kotlin↔C++ の言語跨ぎパリティの固定値**（3.357.0）。
+  `weightedScore=5015` は `golden_eval_expected.txt` の `soft=5015` と一致する（3.409.24 で c1/c3mn の重みを
+  15→30 にして 3109→4999、2026-08-27 に covO を 1→5 にして 4999→5015＝covO 4 件 × 4。族の件数は1つも変わっていない）
+  （`hard=0` なので `weightedScore == soft の重み付き和`）。これが **Kotlin↔C++ の言語跨ぎパリティの固定値**（3.357.0）。
 - **担当可否が apt を無効化する具体例**：`groupShiftApt[7]` は Dﾃ に目標10 を持つが、`groupShift[7][2]=0`＝
   群Bは Dﾃ を担当できない。`Problem.apt` 構築時に `bucket=canDo` ガードが効くので、この目標は**実効しない**
   （到達不能な幻の apt 違反を作らないための設計）。
@@ -485,10 +499,10 @@ flowchart TB
    ドリフトしていた。**→ 3.390.0 で §4 を全82フィールドへ刷新**（旧記述は30フィールドが未記載＝`*Families` 3種・
    result 専用マップ7種・調整トグル4種・診断5種などが丸ごと落ちていた）。以後は各グループの**件数**を
    `MagiUiState.kt` の `val` 宣言数と機械照合できる形にしてある。
-4. **`docs/business-logic.md` は重み・族数とも実装と一致**（19族・c1=15・c3mn=15・covO=1.0・c42 の C(n,2)・
-   keep-best の hard→weightedScore→total）。ここは信用してよい。
-5. **コード内コメントの stale が1件**：`MirrorKeys.weights` に「窓の要件(c1)=5」というコメントが残っており、
-   次の行が「3.253.0 で 5→15 へ（上のコメントは 5 のままで実装とずれていた）」と自己訂正している。実装値は **15**。
+4. **`docs/business-logic.md` は重み・族数とも実装と一致**（19族・c1=30・c3mn=30・covO=5.0・c42 の C(n,2)・
+   keep-best の hard→weightedScore→total。3.505.7 で再照合）。ここは信用してよい。
+5. ~~**コード内コメントの stale が1件**：`MirrorKeys.weights` の「窓の要件(c1)=5」~~ → 3.428.0 までに「現在値はどちらも 30」へ
+   書き直し済み（HF77 の変遷を 1 行で持つ形）。
 
 ## 図を描くときに取り違えやすい点
 
