@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 CLAUDE.md を Windows 版向けに書き直し（Android 3.505.9 と同じ方針＝Claude 5 世代向けの見直し）: 旧 CLAUDE.md は移植時点の
+  Android 版の写し（11,938 行・1.4MB・368 節、Windows の記述なし）だったので `docs/archive/android_claude_md_snapshot.md` へ移し、
+  新しい CLAUDE.md は 5 節・約 50 行（環境の注意点: Linux でビルドできる範囲・.NET のパス・絶対パス・comment-check／判断の基準:
+  Kotlin から降ろす・C# 単独で動学を変えない／確認ゲート: HF77・決定記録・インストーラー差し替え禁止／必要時に読むもの）。
+
 - 2026-09-06 Android 3.505.6 と同期（ループ Iteration 5 第一弾）: `ViolationComponentRepair` の起点生成に同長区間交換（起点の日を含む長さ 2〜影響半径、
   `MaxWindowLength`=7）と同日 3 職員巡回を追加（起点ごと 40・全体 400）。最終段は残り 2 秒以上なら推定 4 倍・正式評価 2.5 倍、締切を stop に畳む。
   MagiEngine.Tests 778 OK。Android 実データ 4/4 盤面同一、ベンチ iter5 は Android 側で報告。

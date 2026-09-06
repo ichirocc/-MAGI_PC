@@ -22,7 +22,8 @@ This project contains a Kotlin/Jetpack Compose Android app that ports the MAGI w
 | [`docs/algorithm_portfolio.md`](./docs/algorithm_portfolio.md) | 探索・研磨の**入口と責務の台帳**（どの手がどこで走るか・横断機構・既定OFF・廃止済み・未実施の提案） |
 | [`docs/sudo_model.md`](./docs/sudo_model.md) | **SUDO モデル**（S 関連図／U ユースケース／D ドメイン／O オブジェクト。実装から起こした全体像。D の不変条件と O の実測値つき） |
 | [`docs/lessons.md`](./docs/lessons.md) | **教訓メモ**（修正した点↔機能した点・作る前にやめた判断・測り方・検証手段の穴。新規作成せず更新する） |
-| [`CLAUDE.md`](./CLAUDE.md) | 引き継ぎ・直近の状態・作業の進め方（grilling 等） |
+| [`CLAUDE.md`](./CLAUDE.md) | Windows 版の引き継ぎ（環境の注意点・判断の基準・確認ゲート。約 50 行） |
+| [`docs/archive/android_claude_md_snapshot.md`](./docs/archive/android_claude_md_snapshot.md) | 移植時点の Android CLAUDE.md の写し（12,000 行。経緯を引くときだけ） |
 
 **最終更新**：2026-08-26（3.464.0＝外部レビュー(対象3.462.0)を検証し2件を修正。①`ViolationHubCard`の
 達成表示が`fair`/`weekly`のみの違反（場所を持たない集計指標のため`confirmItems`の母数に現れない）を
