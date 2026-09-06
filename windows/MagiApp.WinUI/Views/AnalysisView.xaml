@@ -90,11 +90,35 @@
                 <Button x:Name="IssuesGoEditButton" Content="設定・希望を編集する" HorizontalAlignment="Left" Click="OnIssuesGoEditClick" />
             </StackPanel>
 
-            <!-- ④ 回数の固定で止まった手 -->
-            <StackPanel x:Name="PinSection" Spacing="6">
-                <TextBlock Text="回数の固定で止まった手" FontSize="16" FontWeight="SemiBold" />
+            <!-- [phase9 #20] 期間の制約(c1)がなぜ直せなかったか（Kotlin原本 C1PlateauCard）。観測が無ければ「原因未確定」とだけ言う。 -->
+            <StackPanel x:Name="C1PlateauSection" Spacing="8">
+                <TextBlock x:Name="C1Title" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="C1UnknownText" FontSize="13" TextWrapping="Wrap" Opacity="0.8" />
+                <TextBlock x:Name="C1NoteText" FontSize="13" TextWrapping="Wrap" Opacity="0.8"
+                           Text="※ 直近の計算で試した直し方の記録です。期間の制約は職員・シフト・決まりごとに分けています（同じ決まりの中に複数の期間がある場合はまとめて数えています）。" />
+                <StackPanel x:Name="C1List" Spacing="8" />
+                <TextBlock x:Name="C1MoreText" FontSize="12" Opacity="0.8" />
+                <HyperlinkButton x:Name="C1DetailToggle" Padding="0" Click="OnC1DetailToggleClick" />
+                <Button x:Name="C1GoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
+            </StackPanel>
+
+            <!-- ④ 回数の固定が計算に与えた影響（Kotlin原本 PinFixedImpactCard、3.325.0 で c1 診断から分離）。 -->
+            <StackPanel x:Name="PinSection" Spacing="8">
+                <TextBlock Text="回数の固定が計算に与えた影響" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="PinSummaryText" FontSize="13" TextWrapping="Wrap" />
-                <StackPanel x:Name="PinList" Spacing="4" />
+                <HyperlinkButton x:Name="PinDetailToggle" Padding="0" Click="OnPinDetailToggleClick" />
+                <StackPanel x:Name="PinDetailPanel" Spacing="4" Visibility="Collapsed">
+                    <TextBlock FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                               Text="※ 全部の手数ではなく、仕上げの整えのうち計測できた範囲の試行回数です（同じ手を複数回数えている場合があります）。この数が 0 でも、緩めて変わらないとは限りません。" />
+                    <TextBlock FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                               Text="試すときは、対象の職員とシフト、そして緩める幅を決めて、変更する前と後を見比べてください。" />
+                </StackPanel>
+                <TextBlock x:Name="PinTargetsTitle" Text="止めていた回数固定" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel x:Name="PinList" Spacing="6" />
+                <TextBlock x:Name="PinMoreText" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="PinHintText" FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                           Text="押すと設定が変わります。「元に戻す」で戻せます。効果はもう一度つくると分かります。" />
+                <Button x:Name="PinGoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
             </StackPanel>
 
             <!-- ④' 禁止の並び診断（なぜ崩せないか） -->

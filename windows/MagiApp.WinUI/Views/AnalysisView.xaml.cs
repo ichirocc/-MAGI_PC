@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Collections.Generic;
 using System.Linq;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
@@ -89,6 +90,7 @@ public sealed partial class AnalysisView : UserControl
             LocationsSection.Visibility = Visibility.Collapsed;
             FixSection.Visibility = Visibility.Collapsed;
             IssuesSection.Visibility = Visibility.Collapsed;
+            C1PlateauSection.Visibility = Visibility.Collapsed;
             PinSection.Visibility = Visibility.Collapsed;
             ForbiddenSection.Visibility = Visibility.Collapsed;
             LogSection.Visibility = Visibility.Collapsed;
@@ -101,6 +103,7 @@ public sealed partial class AnalysisView : UserControl
         RenderLocations(ui);
         RenderFix(ui);
         RenderIssues(ui);
+        RenderC1Plateau(ui);
         RenderPinTargets(ui);
         RenderForbiddenDiag(ui);
         RenderLogs(ui);
@@ -356,13 +359,7 @@ public sealed partial class AnalysisView : UserControl
             var fg = BrushOf("MagiOnErrorContainerBrush");
             var box = new StackPanel { Spacing = 4 };
             var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            var tagColor = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray));
-            head.Children.Add(new Border
-            {
-                BorderBrush = tagColor, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 1, 6, 1),
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock { Text = tag, FontSize = 11, Foreground = tagColor },
-            });
+            head.Children.Add(TagChip(tag, hex));
             head.Children.Add(new TextBlock
             {
                 Text = issue.Where, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg,
@@ -403,37 +400,146 @@ public sealed partial class AnalysisView : UserControl
 
     private void OnIssuesGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
 
+    /// <summary>MagiTagChip 相当（枠と文字を同じアクセント色にした小さなラベル）。</summary>
+    private static Border TagChip(string text, string hex)
+    {
+        var color = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray));
+        return new Border
+        {
+            BorderBrush = color, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 1, 6, 1),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock { Text = text, FontSize = 11, Foreground = color },
+        };
+    }
+
+    private bool _c1DetailOpen;
+    private bool _pinDetailOpen;
+    private const int MaxC1Rows = 6;
+    private const int MaxPinRows = 5;
+
     /// <summary>
-    /// ④ 回数の固定で止まった手。観測できた試行が1回以上あるときだけ出す
-    /// （0 は「緩めても変わらない」の証明にはならない＝<see cref="PinTargetView"/> のKDoc参照。
-    /// 根拠の無い「緩めても無駄」を読ませないため、0 のときは節ごと隠す）。
+    /// [phase9 #20] 期間の制約(c1)がなぜ直せなかったか（Kotlin原本 <c>C1PlateauCard</c>）。根拠は「研磨が実際に候補を作って却下した」
+    /// 観測なので「構造的に不能」とは言わない。観測が無い（CauseUnknown）ときは理由を語らず「原因未確定」とだけ言う。
+    /// 内訳の数字とエンジン内部の注記は既定で畳む（3.480.0）。
+    /// </summary>
+    private void RenderC1Plateau(UiState ui)
+    {
+        var diag = ui.C1Plateau;
+        var show = diag is not null && (diag.CauseUnknown || diag.HasEntries);
+        C1PlateauSection.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        C1List.Children.Clear();
+        if (!show) return;
+
+        if (diag!.CauseUnknown)
+        {
+            C1Title.Text = "期間の制約が残っています（原因未確定）";
+            C1UnknownText.Text = $"残り {diag.RemainingC1} 件。今回の整えでは、この残りについて直し方を試した記録が残っていません。" +
+                "原因は特定できていません。もう一度つくると記録が取れる場合があります。";
+            C1UnknownText.Visibility = Visibility.Visible;
+            C1NoteText.Visibility = C1MoreText.Visibility = C1DetailToggle.Visibility = C1GoEditButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        C1Title.Text = "期間の制約がなぜ直せなかったか";
+        C1UnknownText.Visibility = Visibility.Collapsed;
+        C1NoteText.Visibility = _c1DetailOpen ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var e in diag.Entries.Take(MaxC1Rows))
+        {
+            var pin = e.Cause == C1PlateauCause.PinConstrained;
+            var fg = BrushOf(pin ? "MagiOnErrorContainerBrush" : "MagiOnSecondaryContainerBrush");
+            var box = new StackPanel { Spacing = 4 };
+            var head = new Grid { ColumnSpacing = 8 };
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock { Text = e.Label, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg, TextWrapping = TextWrapping.Wrap };
+            var chip = TagChip(e.Cause switch
+            {
+                C1PlateauCause.PinConstrained => "回数固定で却下",
+                C1PlateauCause.ScoreTradeoff => "他とのトレードオフ",
+                _ => "この直し方では候補なし",
+            }, pin ? MagiAccent.Red : MagiAccent.Blue);
+            Grid.SetColumn(label, 0); Grid.SetColumn(chip, 1);
+            head.Children.Add(label); head.Children.Add(chip);
+            box.Children.Add(head);
+            if (_c1DetailOpen)
+            {
+                // 根拠の内訳。「試した手が何件あって、何で落ちたか」を数で示す（推測でなく観測）。
+                var parts = new List<string>();
+                if (e.RejectedByPin > 0) parts.Add($"回数固定で却下 {e.RejectedByPin}件");
+                if (e.RejectedByScore > 0) parts.Add($"総合評価で却下 {e.RejectedByScore}件");
+                if (e.NoCandidate > 0) parts.Add($"候補なし {e.NoCandidate}件");
+                box.Children.Add(new TextBlock { Text = string.Join(" ・ ", parts), FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            }
+            box.Children.Add(new TextBlock { Text = e.RecommendedAction(LabelOf), FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            C1List.Children.Add(new Border
+            {
+                Background = BrushOf(pin ? "MagiErrorContainerBrush" : "MagiSecondaryContainerBrush"),
+                CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+            });
+        }
+        C1MoreText.Visibility = diag.Entries.Count > MaxC1Rows ? Visibility.Visible : Visibility.Collapsed;
+        C1MoreText.Text = $"ほか {diag.Entries.Count - MaxC1Rows} 件（詳細はログ出力を参照）";
+        C1DetailToggle.Visibility = Visibility.Visible;
+        C1DetailToggle.Content = _c1DetailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 詳しい説明（数え方と内訳）";
+        C1GoEditButton.Visibility = diag.PinConstrained > 0 && _goEdit is not null ? Visibility.Visible : Visibility.Collapsed;
+        C1GoEditButton.IsEnabled = !ui.Running;
+    }
+
+    /// <summary>
+    /// ④ 回数の固定が計算に与えた影響（Kotlin原本 <c>PinFixedImpactCard</c>）。観測できた試行が1回以上あるときだけ出す
+    /// （0 は「緩めても変わらない」の証明にはならない＝<see cref="PinTargetView"/> のKDoc参照）。
+    /// 緩め幅は決め打ちしない（実測で ±1 と ±3 の優劣が逆転した）＝下限側・上限側を別々に1段だけ。
     /// </summary>
     private void RenderPinTargets(UiState ui)
     {
         PinList.Children.Clear();
-        PinSection.Visibility = ui.ObservedPinBlockedAttempts > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (ui.ObservedPinBlockedAttempts <= 0) return;
+        var attempts = ui.ObservedPinBlockedAttempts;
+        PinSection.Visibility = attempts > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (attempts <= 0) return;
 
-        PinSummaryText.Text =
-            $"回数の固定だけが理由で見送った手が {ui.ObservedPinBlockedAttempts}回ありました（計測できた分）。" +
-            "下の固定を緩めると、直せる違反が増える可能性があります。";
-        foreach (var pin in ui.PinTargets)
+        PinSummaryText.Text = $"回数を固定していることだけが理由で見送られた試行が、少なくとも {attempts} 回ありました。これらは他の条件では採用できる手でした。";
+        PinDetailToggle.Content = _pinDetailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 詳しい説明（数の読み方）";
+        PinDetailPanel.Visibility = _pinDetailOpen ? Visibility.Visible : Visibility.Collapsed;
+
+        var targets = ui.PinTargets;
+        var hasTargets = targets.Count > 0;
+        PinTargetsTitle.Visibility = PinHintText.Visibility = hasTargets ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var t in targets.Take(MaxPinRows))
         {
-            var row = new StackPanel { Spacing = 2 };
-            row.Children.Add(BodyText(
-                $"{pin.StaffName} の {pin.ShiftKigou}：{pin.PinnedCount}回に固定・{pin.Attempts}回ブロック"));
-            // [2026-09-02, 配線] RelaxStaffRangePin（フェーズ9で移植・テスト済み）はこれまで
-            // 呼び出し口が無かった——固定を緩めたい所を突き止められても、実際に緩める手段が
-            // 「編集タブで個人別の回数を探して直接書き換える」しか無かった。ここから±1で緩められる
-            // （下限-1・上限+1。もう一度「勤務表をつくる」を押すと効果が分かる）。
-            var relax = new Button { Content = "±1 緩める", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left };
-            var staff = pin.Staff;
-            var shift = pin.Shift;
-            relax.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, -1, 1);
-            row.Children.Add(relax);
-            PinList.Children.Add(row);
+            var fg = BrushOf("MagiOnSecondaryContainerBrush");
+            var box = new StackPanel { Spacing = 4 };
+            box.Children.Add(new TextBlock
+            {
+                Text = $"{t.StaffName} {t.ShiftKigou}：{t.PinnedCount}回に固定（{t.Attempts}回の試行を止めました）",
+                FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap,
+            });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var staff = t.Staff; var shift = t.Shift;
+            // 0回に固定されている行では「下限を1下げる」が 0 でクランプされて無操作になるので、下げられるときだけ出す。
+            if (t.PinnedCount > 0)
+            {
+                var lo = new Button { Content = $"下限を1下げる（{t.PinnedCount - 1}〜{t.PinnedCount}）", FontSize = 12, IsEnabled = !ui.Running };
+                lo.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, -1, 0);
+                buttons.Children.Add(lo);
+            }
+            var hi = new Button { Content = $"上限を1上げる（{t.PinnedCount}〜{t.PinnedCount + 1}）", FontSize = 12, IsEnabled = !ui.Running };
+            hi.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, 0, 1);
+            buttons.Children.Add(hi);
+            box.Children.Add(buttons);
+            PinList.Children.Add(new Border
+            {
+                Background = BrushOf("MagiSecondaryContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+            });
         }
+        PinMoreText.Visibility = targets.Count > MaxPinRows ? Visibility.Visible : Visibility.Collapsed;
+        PinMoreText.Text = $"ほか {targets.Count - MaxPinRows} 件（詳細はログ出力を参照）";
+        PinGoEditButton.Visibility = _goEdit is null ? Visibility.Collapsed : Visibility.Visible;
+        PinGoEditButton.IsEnabled = !ui.Running;
     }
+
+    private void OnC1DetailToggleClick(object sender, RoutedEventArgs e) { _c1DetailOpen = !_c1DetailOpen; Render(); }
+    private void OnPinDetailToggleClick(object sender, RoutedEventArgs e) { _pinDetailOpen = !_pinDetailOpen; Render(); }
+    private void OnGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
 
     /// <summary>
     /// [2026-09-02, 配線] ④' 禁止の並び(c3n)診断。<see cref="UiState.ForbiddenDiag"/>
