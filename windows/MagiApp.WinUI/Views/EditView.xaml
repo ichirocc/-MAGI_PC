@@ -215,6 +215,15 @@
                     <Button x:Name="AddReviewMemoButton" Content="追加" Click="OnAddReviewMemoClick" />
                 </StackPanel>
 
+                <Border x:Name="StaffingRealityPanel" Visibility="Collapsed" BorderThickness="1" Margin="0,8,0,0"
+                        BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="この体制で回るか" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                        <TextBlock Text="シフト別に「担当できる人数」で確認。余裕=1人欠けても回るか。" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                        <StackPanel x:Name="StaffingRealityHost" Spacing="4" />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="期間（日数）" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <TextBlock Text="暦通りの月以外（例：15日間の一部期間）を使うときはここで直接変えます。通常は「月次条件」の月移動で足ります。"
                            TextWrapping="Wrap" FontSize="12" Opacity="0.8" />

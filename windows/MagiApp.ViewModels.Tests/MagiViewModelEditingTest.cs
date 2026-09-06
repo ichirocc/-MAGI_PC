@@ -82,6 +82,28 @@ public class MagiViewModelEditingTest
     }
 
     [Fact]
+    public void StaffingRealityIsEmptyWithoutLoadedStateOrWithoutAnyDemand()
+    {
+        Assert.Empty(new MagiViewModel().StaffingReality());
+        Assert.Empty(new MagiViewModel { _state = MinimalState.Build() }.StaffingReality());
+    }
+
+    [Fact]
+    public void StaffingRealityCountsCanDoStaffAndSumsDailyDemandIncludingDayOverrides()
+    {
+        // G0 は 休/A のみ担当可（B は担当不可）。A: need1=1 ×7日、B: need1=2 ×7日 ＋ 3日目だけ例外で 3。
+        var st = MinimalState.Build(
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", ""), new("B", "B", "2", "") },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } },
+            needDay1: new Dictionary<string, string> { ["2,2"] = "3" });
+        var rows = new MagiViewModel { _state = st }.StaffingReality();
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(new MagiViewModel.StaffingRealityRow("A", 2, 7, 1), rows[0]);
+        Assert.Equal(new MagiViewModel.StaffingRealityRow("B", 0, 15, 3), rows[1]);
+    }
+
+    [Fact]
     public void GetSetupCountsReturnsZeroesWithoutLoadedState()
     {
         var vm = new MagiViewModel();

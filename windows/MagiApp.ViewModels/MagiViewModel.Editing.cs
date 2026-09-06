@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using MagiEngine;
 using MagiEngine.Model;
 using MagiEngine.V6;
 
@@ -76,6 +77,36 @@ public sealed partial class MagiViewModel
             .Count();
         var needStdOk = st.Shifts.Any(sh => !string.IsNullOrWhiteSpace(sh.Need1));
         return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, Ui.SettingIssues.Count);
+    }
+
+    /// <summary>
+    /// [phase9 #16] 「この体制で回るか」（Kotlin原本 <c>StaffingRealityCard</c>）の行。Q=担当できる人数、
+    /// D=月間需要人日（Σ日次 lo）、MaxNeed=1日に同時に必要な最大人数。欠勤余裕は Q−MaxNeed（表示側で判定）。
+    /// 需要 0 のシフトは含めない。値は <see cref="NeedCellLimits"/>（need1＋日別例外込み）＝チェッカーと同じ実効値。
+    /// </summary>
+    public sealed record StaffingRealityRow(string Kigou, int Q, int D, int MaxNeed);
+
+    public IReadOnlyList<StaffingRealityRow> StaffingReality()
+    {
+        var st = _state;
+        if (st is null) return System.Array.Empty<StaffingRealityRow>();
+        var days = _currentSchedule is { Length: > 0 } sc ? sc[0].Length : st.DayCount;
+        var canDo = new int[st.Shifts.Count];
+        for (var i = 0; i < st.StaffList.Count; i++)
+            foreach (var k in AllowedShiftsFor(i)) if (k >= 0 && k < canDo.Length) canDo[k]++;
+        var rows = new List<StaffingRealityRow>();
+        for (var k = 0; k < st.Shifts.Count; k++)
+        {
+            var d = 0; var mx = 0;
+            for (var j = 0; j < days; j++)
+            {
+                var lo = NeedCellLimits(k, j)?.Lo ?? 0;
+                d += lo; if (lo > mx) mx = lo;
+            }
+            if (d == 0) continue;
+            rows.Add(new StaffingRealityRow(KigouFormat.ToHankakuKigou(st.Shifts[k].Kigou), canDo[k], d, mx));
+        }
+        return rows;
     }
 
     /// <summary>担当外（そのスタッフのグループで担当不可）な希望の件数。希望で上書き時の確認に使う。</summary>

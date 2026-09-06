@@ -1037,6 +1037,42 @@ public sealed partial class EditView : UserControl
     /// <see cref="ScheduleView.ShowCellEditor"/> 参照）。年間マスターに置くのは Kotlin原本と同じ理由
     /// （「見直し候補」＝土台の設定を見直すべき箇所という位置づけ）。
     /// </summary>
+    /// <summary>
+    /// [phase9 #16] 「この体制で回るか」（Kotlin原本 <c>StaffingRealityCard</c>）。年間マスターの先頭、見直し候補メモの直後。
+    /// 「15人いるから大丈夫」ではなくシフトごとの担当可能人数で見る。数値は VM（<see cref="MagiViewModel.StaffingReality"/>）が
+    /// チェッカーと同じ実効需要から出す。read-only。
+    /// </summary>
+    private void RenderStaffingReality(UiState ui)
+    {
+        var rows = ui.Loaded ? _vm.StaffingReality() : System.Array.Empty<MagiViewModel.StaffingRealityRow>();
+        StaffingRealityPanel.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        StaffingRealityHost.Children.Clear();
+        foreach (var r in rows)
+        {
+            var slack = r.Q - r.MaxNeed;
+            var tenths = r.Q > 0 ? (r.D * 10 + r.Q / 2) / r.Q : 0;
+            var (mark, brushKey) = slack < 0 ? ("⚠", "MagiErrorBrush")
+                : slack == 0 ? ("！", "MagiOnWarnContainerBrush")
+                : ("✓", "MagiTertiaryBrush");
+            var detail = slack < 0 ? $"日最大{r.MaxNeed}人 → 担当不足"
+                : slack == 0 ? $"日最大{r.MaxNeed}人 → 欠勤余裕なし"
+                : $"欠勤余裕{slack}人";
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = mark, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 16,
+                Foreground = (Brush)Application.Current.Resources[brushKey],
+            });
+            row.Children.Add(new TextBlock { Text = r.Kigou, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 44 });
+            row.Children.Add(new TextBlock
+            {
+                Text = $"担当{r.Q}人・月{r.D}人日（1人あたり{tenths / 10}.{tenths % 10}回）・{detail}",
+                FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+            });
+            StaffingRealityHost.Children.Add(row);
+        }
+    }
+
     private void RenderReviewMemos(UiState ui)
     {
         ReviewMemoListHost.Children.Clear();
@@ -1160,6 +1196,7 @@ public sealed partial class EditView : UserControl
     private void RenderMaster(UiState ui, bool editable)
     {
         RenderReviewMemos(ui);
+        RenderStaffingReality(ui);
 
         // [2026-09-02, 配線] Ws1ResizeDays（フェーズ9で移植・テスト済み）はこれまで呼び出し口が無かった。
         // 期間の日数は「対象月を選ぶ」(SetMonth/ShiftMonth/SetNextMonth＝常に暦通りの月)でしか変えられず、
