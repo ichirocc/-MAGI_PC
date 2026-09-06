@@ -22,7 +22,7 @@ namespace MagiEngine.V6;
 /// （悪化する組合せは採用されない。最悪ケースは「見つからず終わる」だけ＝既存の単独手の結果より
 /// 悪化することはない）。
 /// </summary>
-internal static class CombinatorialRepair
+public static class CombinatorialRepair
 {
     /// <summary>
     /// 単独では isBetter に拒否された1候補。Ops=[staff,day,newShift]の差分列（適用順・巻き戻し済み）。
@@ -116,7 +116,9 @@ internal static class CombinatorialRepair
         int maxStagnantTries = 200,
         Stats? stats = null,
         Func<Candidate, string>? label = null,
-        Problem? p = null)
+        Problem? p = null,
+        /// <summary>[Iteration 2] 結合に使われず残った候補の受け皿（後処理チェーン全体の違反起点修復へ回す）。</summary>
+        List<Candidate>? leftover = null)
     {
         stats ??= new Stats();
         var shouldStopFn = shouldStop ?? (() => false);
@@ -195,6 +197,7 @@ internal static class CombinatorialRepair
             foreach (var idx in acceptedIdx.OrderByDescending(x => x)) pool.RemoveAt(idx);
         }
         stats.ElapsedMs += EngineClock.NowMs() - t0;
+        leftover?.AddRange(pool);
         return bestRep;
     }
 

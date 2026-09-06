@@ -235,10 +235,11 @@ public static partial class V6HotfixPasses
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] stuckNames より前に実行し、結合で解消した箇所が
         //   「残存」に残らないようにする。
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var aptCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: aptCombStats, p: p);
+            shouldStop: stop, stats: aptCombStats, p: p, leftover: rejectedOut);
         applied += aptCombStats.CombosAccepted;
         var stuckNames = bestRep.CountViolations
             .Where(kv => kv.Value == "vio-aptHigh" || kv.Value == "vio-aptLow")
@@ -266,6 +267,6 @@ public static partial class V6HotfixPasses
         if (aptCombSummary.Length > 0) msg += $" / {aptCombSummary}";
         var logs = new[] { new MirrorLog(tag: "AptPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
     }
 }

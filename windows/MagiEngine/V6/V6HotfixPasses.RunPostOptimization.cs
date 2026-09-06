@@ -89,7 +89,10 @@ public static partial class V6HotfixPasses
         long C1LnsMaxMs = 8_000L,
         long PersonalLnsMaxMs = 6_000L,
         long RemainingClampMs = 100_000L,
-        int PassLogTopN = 8);
+        int PassLogTopN = 8,
+        /// <summary>[Iteration 2] 各パスの拒否候補を巡の末尾で違反起点のトランザクションに束ねる（ViolationComponentRepair）。Android 3.505.1 でハイブリッド併用＝既定 ON。</summary>
+        bool ComponentRepairEnabled = true,
+        ViolationComponentRepair.Params? ComponentRepair = null);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -112,7 +115,7 @@ public static partial class V6HotfixPasses
     private static readonly string[] AdoptionKeys =
     {
         "循環", "c1", "c3", "c3回転", "c3mn玉突き", "c3n", "range玉突き", "c3run玉突き", "c3pattern玉突き",
-        "アンカー窓交換", "希望島", "ブロック交換", "apt玉突き", "fair玉突き",
+        "アンカー窓交換", "希望島", "ブロック交換", "apt玉突き", "fair玉突き", "成分修復",
     };
 
     /// <summary>SoftPolishVerify で「対象」に数える族（3.278.0 で CyclicSwap の対象族、3.475.0 で c3n を追加）。</summary>
@@ -132,6 +135,8 @@ public static partial class V6HotfixPasses
         public List<MirrorLog> Logs { get; } = new();
         public Dictionary<string, long> PassMs { get; } = new();
         public PinBlockAttribution PinBlocksAll { get; } = new();
+        /// <summary>[Iteration 2] 巡の中で各パスが残した拒否候補。巡の末尾で違反起点修復へ渡して空にする。</summary>
+        public List<CombinatorialRepair.Candidate> RejectedPool { get; } = new();
 
         public PostChain(Action<string>? onPhase, int[][] schedule)
         {
@@ -154,6 +159,7 @@ public static partial class V6HotfixPasses
         public int Adopt(CyclicSwapResult r, bool keepLogs = true)
         {
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
+            if (r.RejectedCandidates != null) RejectedPool.AddRange(r.RejectedCandidates);
             Work = r.NewSchedule.Copy2D();
             if (keepLogs) Logs.AddRange(r.Logs);
             return r.Applied;
@@ -370,6 +376,13 @@ public static partial class V6HotfixPasses
                 ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round))));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
                 ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round))));
+            // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
+            var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();
+            if (p.ComponentRepairEnabled && pool.Count >= 2)
+            {
+                Take("成分修復", chain.Timed($"後処理 違反連結成分修復{tag}", "ComponentRepair", work =>
+                    ViolationComponentRepair.Repair(state, work, pool, p.ComponentRepair, shouldStop: clusterStop)));
+            }
 
             round++;
             if (roundApplied == 0) break; // この巡で 1 手も採用なし＝joint 局所最適に到達

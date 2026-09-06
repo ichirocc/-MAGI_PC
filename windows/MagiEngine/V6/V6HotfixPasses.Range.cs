@@ -732,10 +732,11 @@ public static partial class V6HotfixPasses
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] stuckNames より前に実行し、結合で解消した箇所が
         //   「残存」に残らないようにする。
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var rangeCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: rangeCombStats, p: p);
+            shouldStop: stop, stats: rangeCombStats, p: p, leftover: rejectedOut);
         applied += rangeCombStats.CombosAccepted;
         // [ログから職員が分かるように・頭打ちの理由を可視化] 研磨後もなお残っている(staff,shift)を、
         //   最も多かった頭打ち理由(希望固定/禁止連続/候補なし/range後回し/不採用)付きで列挙。
@@ -783,6 +784,6 @@ public static partial class V6HotfixPasses
         if (rangeCombSummary.Length > 0) msg += $" / {rangeCombSummary}";
         var logs = new[] { new MirrorLog(tag: "RangePolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
     }
 }

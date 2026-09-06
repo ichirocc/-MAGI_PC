@@ -165,10 +165,11 @@ public static partial class V6HotfixPasses
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] stuckNames より前に実行し、結合で解消した箇所が
         //   「残存」に残らないようにする。
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var c3mnCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: c3mnCombStats, p: p);
+            shouldStop: stop, stats: c3mnCombStats, p: p, leftover: rejectedOut);
         applied += c3mnCombStats.CombosAccepted;
         var stuckNames = StuckStaffNames(state, bestRep.CellFamilies, "vio-c3mn");
         var c3mnCombSummary = c3mnCombStats.Summary();
@@ -182,6 +183,6 @@ public static partial class V6HotfixPasses
         if (c3mnCombSummary.Length > 0) msg += $" / {c3mnCombSummary}";
         var logs = new[] { new MirrorLog(tag: "C3mnPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
     }
 }

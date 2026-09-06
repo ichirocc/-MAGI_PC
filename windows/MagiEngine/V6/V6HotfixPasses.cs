@@ -39,5 +39,7 @@ public static partial class V6HotfixPasses
         /// </summary>
         int ObservedPinBlockedAttempts = 0,
         /// <summary>[3.326.0] どのピン(職員,シフト)が何回止めたか。緩和対象の提示に使う。</summary>
-        PinBlockAttribution? PinBlocks = null);
+        PinBlockAttribution? PinBlocks = null,
+        /// <summary>[Iteration 2] このパスが単独では不採用にし、結合にも使わなかった候補（違反起点修復の材料）。</summary>
+        IReadOnlyList<CombinatorialRepair.Candidate>? RejectedCandidates = null);
 }

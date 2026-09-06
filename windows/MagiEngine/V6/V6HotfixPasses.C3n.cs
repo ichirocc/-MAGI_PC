@@ -145,10 +145,11 @@ public static partial class V6HotfixPasses
             pass++;
             if (!improved) break;
         }
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var c3nCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: c3nCombStats, p: p);
+            shouldStop: stop, stats: c3nCombStats, p: p, leftover: rejectedOut);
         applied += c3nCombStats.CombosAccepted;
         var stuckNames = StuckStaffNames(state, bestRep.CellFamilies, "vio-c3n");
         var c3nCombSummary = c3nCombStats.Summary();
@@ -165,6 +166,6 @@ public static partial class V6HotfixPasses
         if (c3nCombSummary.Length > 0) msg += $" / {c3nCombSummary}";
         var logs = new[] { new MirrorLog(tag: "C3nPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
     }
 }

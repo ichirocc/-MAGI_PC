@@ -244,10 +244,11 @@ public static partial class V6HotfixPasses
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] stuckNames(distLocations由来)より前に実行する。
         //   結合でwork/bestRepが変わってもdistLocationsはbestRep自身から再取得するため自動整合。
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var fairCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: fairCombStats, p: p);
+            shouldStop: stop, stats: fairCombStats, p: p, leftover: rejectedOut);
         applied += fairCombStats.CombosAccepted;
         // [AptPolishと同型] work は毎手の成功時のみコミットしbestRepと同期を保つ（失敗時は必ず巻き戻し）
         //   ため、bestRep.distLocations がそのまま最終盤面の残存箇所＝再チェック不要。
@@ -268,6 +269,6 @@ public static partial class V6HotfixPasses
         if (fairCombSummary.Length > 0) msg += $" / {fairCombSummary}";
         var logs = new[] { new MirrorLog(tag: "FairPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
     }
 }

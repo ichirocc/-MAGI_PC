@@ -326,6 +326,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 Android 3.505.0/3.505.1 と同期: **違反起点のトランザクション修復 `ViolationComponentRepair`**（ユーザー提示の
+  自律改善ループ Iteration 2 第一弾）。各パスが結合に使わなかった拒否候補を `CyclicSwapResult.RejectedCandidates`（`CombineAndApply` の
+  `leftover`）で巡ごとに集め、巡の末尾で違反（HARD セル/人数→回数→SOFT）を起点に「主候補＋職員か日を共有する助候補（上限 40）」を
+  深さ 1〜4・幅 8 のビームで束ねる。推定は `DeltaEvaluator`、厳密ピンを新たに崩す枝は推定段階で枝刈り、commit は正式チェッカー＋
+  `ExactPinRegression`。`QualityVector` は計測専用。`PostOptimizationParams.ComponentRepairEnabled` は Android 3.505.1 の判断
+  （340 ペアで必須退行 0・新良 68/同等 249/旧良 23・速度 -3%＝10% ゲート不合格→§6 ハイブリッド併用）に合わせ**既定 ON**。
+  テスト +6（Kotlin と同じ 6 件）。MagiEngine.Tests 775 OK。
+
 - 2026-09-06 外部ドッグフーディング（対象 4070b2d）への対応（Android 3.505.0 と同時）:
   - **ISCC の終了コード検査が無い** → Inno Setup ステップに `if ($LASTEXITCODE -ne 0) { throw }` を追加（`upload-artifact` の
     `if-no-files-found: error` 頼みだった失敗検知を、ステップ自身で原因つきに）。

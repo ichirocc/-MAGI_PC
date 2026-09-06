@@ -438,10 +438,11 @@ public static partial class V6HotfixPasses
         // [汎用玉突き結合フレームワーク, 3.249.0] 単独では不採用だった候補群を2〜4件束ねて再挑戦
         //   （c1/range/c3mn/apt/fair横断の共通ヘルパ）。stuckNames より前に実行し、結合で解消した箇所が
         //   「残存」に残らないようにする。
+        var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var c1CombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: c1CombStats, p: p);
+            shouldStop: stop, stats: c1CombStats, p: p, leftover: rejectedOut);
         applied += c1CombStats.CombosAccepted;
 
         // [頭打ちの理由を可視化/RangePolish=3.222.0と同型] 手B(直接移動+玉突き)が最終的に失敗した
@@ -505,6 +506,6 @@ public static partial class V6HotfixPasses
         if (stuckNames.Count > 0) msg += $" 残存: {string.Join(", ", stuckNames)}";
         if (c1CombSummary.Length > 0) msg += $" / {c1CombSummary}";
         var logs = new[] { new MirrorLog(tag: "C1Polish", message: msg) };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, plateau, pinBlocks.Attempts, pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, plateau, pinBlocks.Attempts, pinBlocks, rejectedOut);
     }
 }
