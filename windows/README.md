@@ -312,6 +312,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-06 3.500.0 と同時: `RunPostOptimization` を Android と同型に再構成（`PostChain` ランナー＝採用・ピン帰属合流・ログ・計時の 1 経路、
+  `PostOptimizationParams`（既定値は従来値）・`SeedTag`、`RunPolishCluster`/`SoftPolishVerifyLog`/`FinalC1Plateau` に分割）。
+  退化した予算（LNS 0ms）のゼロ除算をガード。テスト +2（`V6PostOptimizationParamsTest`）: MagiEngine.Tests 760 緑。
+- 2026-09-05 3.499.0 と同時: `AnchoredWindowSwap` の重複排除を方向フィルタの後へ、range 重みの出典を `MirrorKeys.WeightOf` に。テスト +1: 758 緑。
+
 ### 2026-09-05 可変長ブロック交換の自律レビュー第2段（Android 3.499.0 と同時）
 - `V6HotfixPasses.AnchoredWindowSwap.cs`: 厳密窓交換の重複排除を方向フィルタの後へ（旧: 回数超過アンカーが捨てた窓を
   別アンカーが二度と作れなかった）。Android 側の実データ計測では盤面・採用は不変、実候補が各条件 +1〜+9 件。
