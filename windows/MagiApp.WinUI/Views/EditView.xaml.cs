@@ -357,7 +357,9 @@ public sealed partial class EditView : UserControl
             // 登録済みの希望はシフト色のチップで（Kotlin原本と同じ＝色＋記号の二重符号化）。
             if (marked.TryGetValue(d, out var kigou))
             {
-                var kk = ui.ShiftSymbols.IndexOf(kigou);
+                // IReadOnlyList には IndexOf が無いので手で探す（LINQ 版は無い）。
+                var kk = -1;
+                for (var q = 0; q < ui.ShiftSymbols.Count; q++) if (ui.ShiftSymbols[q] == kigou) { kk = q; break; }
                 var chipBg = kk >= 0 && kk < ui.ShiftColorHex.Count ? ColorHex.Parse(ui.ShiftColorHex[kk], Colors.LightGray) : Colors.LightGray;
                 var chipFg = kk >= 0 && kk < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[kk], Colors.Black) : Colors.Black;
                 content.Children.Add(new Border
