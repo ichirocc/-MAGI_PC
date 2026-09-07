@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 HF80 の `LocalBestImprovement` を「その場で 1 セル書き換え→不採用なら戻す」に（試行ごとの盤面コピーを撤去、
+  `Problem`/`Evaluator` は入口で 1 回。Android 3.508.1 第 10 段の同期）。`Hf80StrategicOscillationTest` 3 件追加。MagiEngine.Tests 814 緑。
+
 - 2026-09-07 適切回数（apt）の群目標を「構造的に到達できる範囲」へクランプ（Android 3.508.0 同期）。`Problem.Apt` は到達下限
   `T−Σ他の置けるシフトの実効上限`・到達上限 `T−Σ他シフトの実効下限`（希望固定込み、個人 [lo,hi] 優先）へ収め、`Problem.AptRaw`（従来の
   クランプまでの設定値）を新設。Sanity 6b/6d/6-C は AptRaw で判定し「計算では N 回を目標として扱っています」と案内。

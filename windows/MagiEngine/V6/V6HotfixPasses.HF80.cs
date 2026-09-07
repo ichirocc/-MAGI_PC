@@ -37,11 +37,11 @@ public static partial class V6HotfixPasses
     /// （このコードベース全体の「候補生成は近似でよい・最終採否は必ずchecker+isBetter」契約と同型）。
     /// </summary>
     private static int[][] LocalBestImprovement(
-        MagiState state, int[][] schedule, int tries, JavaRandom rng, Func<bool>? shouldStop = null)
+        Problem p, Evaluator ev, int[][] schedule, int tries, JavaRandom rng, Func<bool>? shouldStop = null)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
-        var ev = new Evaluator(p);
+        // [Android 3.508.1] 1 セルをその場で書き換えて評価し、改善しなければ戻す（盤面のコピーは入口の 1 回だけ）。
+        //   同じ値への書き換えは同点＝不採用なので飛ばす。乱数の消費順は変えない。
         var best = schedule.Copy2D();
         var bestScore = ev.FullEval(best);
         var t = 0;
@@ -51,7 +51,6 @@ public static partial class V6HotfixPasses
             if (stop()) break;
             if (p.S > 0 && p.T > 0)
             {
-                var cand = best.Copy2D();
                 var i = rng.NextInt(p.S);
                 var j = rng.NextInt(p.T);
                 if (!p.WishLocked(i, j))
@@ -59,12 +58,13 @@ public static partial class V6HotfixPasses
                     var allowed = p.AllowedShiftsForStaff(i);
                     if (allowed.Length > 0)
                     {
-                        cand[i][j] = allowed[rng.NextInt(allowed.Length)];
-                        var score = ev.FullEval(cand);
-                        if (score < bestScore)
+                        var nw = allowed[rng.NextInt(allowed.Length)];
+                        var old = best[i][j];
+                        if (nw != old)
                         {
-                            best = cand;
-                            bestScore = score;
+                            best[i][j] = nw;
+                            var score = ev.FullEval(best);
+                            if (score < bestScore) bestScore = score; else best[i][j] = old;
                         }
                     }
                 }
@@ -93,6 +93,7 @@ public static partial class V6HotfixPasses
     {
         var stop = shouldStop ?? (() => false);
         var p = new Problem(state);
+        var ev = new Evaluator(p);   // 内側探索用（サイクルごとに作り直さない）
         var rng = new JavaRandom(seed ?? System.Diagnostics.Stopwatch.GetTimestamp());
         var before = UnifiedViolationChecker.Check(state, schedule);
         var best = ScheduleUtil.NormalizeSchedule(schedule, p);
@@ -121,7 +122,7 @@ public static partial class V6HotfixPasses
                 }
                 t++;
             }
-            var polished = LocalBestImprovement(state, cand, 250 + cycle * 120, rng, stop);
+            var polished = LocalBestImprovement(p, ev, cand, 250 + cycle * 120, rng, stop);
             var rep = UnifiedViolationChecker.Check(state, polished);
             usedCycles = cycle + 1;
             if (IsBetter(rep, bestReport))
