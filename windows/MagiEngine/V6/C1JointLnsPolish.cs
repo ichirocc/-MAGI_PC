@@ -51,7 +51,9 @@ internal static class C1JointLnsPolish
         int C1Debt = 4,
         long MaxMillis = 8_000L,
         /// <summary>最良がこの時間更新されなければ打ち切る（0以下＝無効）。既定の根拠はクラスの doc comment。</summary>
-        long PatienceMs = 4_000L);
+        long PatienceMs = 4_000L,
+        /// <summary>[Iteration 7] 正式評価の回数上限（0＝無効）。決定的モードでは時間でなくこれで止める。</summary>
+        int MaxEvaluations = 0);
 
     private enum GoalKind { C1, Temporal, Coverage, RangeLow }
 
@@ -129,7 +131,9 @@ internal static class C1JointLnsPolish
         long patienceTicks = cfg.PatienceMs > 0L ? TicksFromMillis(cfg.PatienceMs) : long.MaxValue;
         bool Stalled() => patienceTicks != long.MaxValue &&
             System.Diagnostics.Stopwatch.GetTimestamp() - lastImproveTicks >= patienceTicks;
-        bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || Stalled();
+        var evaluations = 0;
+        bool EvalCapped() => cfg.MaxEvaluations > 0 && evaluations >= cfg.MaxEvaluations;
+        bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || Stalled() || EvalCapped();
 
         int lowerBound = StructuralC1LowerBound(p);
         int improvable = Math.Max(rootC1 - lowerBound, 0);
@@ -179,7 +183,7 @@ internal static class C1JointLnsPolish
                             if (Stopped()) break;
                             var next = parent.Schedule.Copy2D();
                             if (!ApplyMove(next, move)) continue;
-                            generated++;
+                            generated++; evaluations++;
                             var report = UnifiedViolationChecker.Check(state, next);
                             int c1 = report.Breakdown.GetValueOrDefault("c1", 0);
                             bool overHard = report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0);
@@ -246,6 +250,7 @@ internal static class C1JointLnsPolish
         {
             _ when chosenC1 <= lowerBound => "構造下限到達",
             _ when stop() => "外部停止",
+            _ when EvalCapped() => $"評価回数上限{cfg.MaxEvaluations}",
             _ when System.Diagnostics.Stopwatch.GetTimestamp() >= deadline => "期限",
             _ when Stalled() => $"最良が{cfg.PatienceMs}ms更新されず打ち切り",
             _ => "探索停滞",

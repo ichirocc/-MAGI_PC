@@ -94,7 +94,12 @@ public static partial class V6HotfixPasses
         bool ComponentRepairEnabled = true,
         ViolationComponentRepair.Params? ComponentRepair = null,
         /// <summary>[Iteration 4] 起点生成つきの修復は共同 LNS の後に 1 回だけ（巡の中では拒否候補の結合のみ。理由は Android 3.505.4）。</summary>
-        bool ComponentRepairFinal = true);
+        bool ComponentRepairFinal = true,
+        /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
+        /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
+        bool Deterministic = false,
+        int C1LnsMaxEvaluations = 90_000,
+        int PersonalLnsMaxEvaluations = 60_000);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -211,7 +216,7 @@ public static partial class V6HotfixPasses
         var r67 = chain.Timed("後処理 HF67 職員間スワップ", "HF67InterStaffSwap", work =>
         {
             var cap = Math.Min(Math.Max(deadlineMs - t67, 0L) / 2, p.Hf67CapMs);
-            return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: t67 + cap);
+            return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t67 + cap);
         });
         chain.ReplaceBoard(r67.NewSchedule, r67.Logs);
 
@@ -220,15 +225,15 @@ public static partial class V6HotfixPasses
         {
             // HF66 は手ごとに全候補をフル check する高コストパス＝残予算の半分（後段の研磨群へ残り半分）で打ち切る。
             var cap = Math.Min(Math.Max(deadlineMs - t66, 0L) / 2, p.Hf66CapMs);
-            return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: t66 + cap);
+            return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap);
         });
         chain.ReplaceBoard(r66.NewSchedule, r66.Logs);
         var t66Done = EngineClock.NowMs();
 
         // 巡回研磨クラスタは自身の締切を持たないため、共同 LNS 2 本の取り分を先に確保して ClusterStop に畳む（3.271.0）。
-        var jointLnsReserve = deadlineMs == long.MaxValue ? 0L
+        var jointLnsReserve = deadlineMs == long.MaxValue || p.Deterministic ? 0L
             : Math.Min(Math.Max(deadlineMs - t66Done, 0L) / 2, p.JointLnsReserveMaxMs);
-        var clusterDeadline = deadlineMs == long.MaxValue ? long.MaxValue : deadlineMs - jointLnsReserve;
+        var clusterDeadline = deadlineMs == long.MaxValue || p.Deterministic ? long.MaxValue : deadlineMs - jointLnsReserve;
         bool ClusterStop() => stop() || EngineClock.NowMs() >= clusterDeadline;
 
         chain.Adopt(chain.Timed("後処理 厳密日割当", "DayAssignmentPolish", work =>
@@ -251,23 +256,27 @@ public static partial class V6HotfixPasses
         {
             var remaining = Math.Min(Math.Max(deadlineMs - tC1Lns, 0L), p.RemainingClampMs);
             var cap = lnsTotal <= 0L ? 0L : Math.Min(remaining * p.C1LnsMaxMs / lnsTotal, p.C1LnsMaxMs);
-            return C1RepairOperators.JointLns(state, work, config: new C1JointLnsPolish.Config(MaxMillis: cap), shouldStop: stop);
+            var cfg = p.Deterministic ? new C1JointLnsPolish.Config(MaxMillis: 60_000L, PatienceMs: 0L, MaxEvaluations: p.C1LnsMaxEvaluations)
+                : new C1JointLnsPolish.Config(MaxMillis: cap);
+            return C1RepairOperators.JointLns(state, work, config: cfg, shouldStop: stop);
         }));
         var tPersonalLns = EngineClock.NowMs();
         chain.Adopt(chain.Timed("後処理 個人回数/適切回数 共同LNS", "個人回数共同LNS", work =>
         {
             var cap = Math.Min(Math.Max(deadlineMs - tPersonalLns, 0L), p.PersonalLnsMaxMs);
-            return PersonalBalanceJointLnsPolish.Apply(state, work, config: new PersonalBalanceJointLnsPolish.Config(MaxMillis: cap), shouldStop: stop);
+            var cfg = p.Deterministic ? new PersonalBalanceJointLnsPolish.Config(MaxMillis: 60_000L, MaxEvaluations: p.PersonalLnsMaxEvaluations)
+                : new PersonalBalanceJointLnsPolish.Config(MaxMillis: cap);
+            return PersonalBalanceJointLnsPolish.Apply(state, work, config: cfg, shouldStop: stop);
         }));
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
             // [Iteration 5] 最終段の予算は残り時間に応じて拡張（2 秒以上残っていれば推定 4 倍・正式評価 2.5 倍）。締切は stop に畳む。
             var remainingFinal = Math.Max(deadlineMs - EngineClock.NowMs(), 0L);
             var baseParams = p.ComponentRepair ?? new ViolationComponentRepair.Params();
-            var finalParams = remainingFinal >= 2_000L
+            var finalParams = p.Deterministic || remainingFinal >= 2_000L
                 ? baseParams with { MaxEstimates = baseParams.MaxEstimates * 4, MaxEvaluations = baseParams.MaxEvaluations * 5 / 2 }
                 : baseParams;
-            Func<bool> finalStop = () => stop() || EngineClock.NowMs() >= deadlineMs;
+            Func<bool> finalStop = p.Deterministic ? stop : () => stop() || EngineClock.NowMs() >= deadlineMs;
             chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
                 ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop)));
             chain.RejectedPool.Clear();

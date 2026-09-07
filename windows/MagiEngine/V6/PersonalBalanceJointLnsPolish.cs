@@ -30,7 +30,9 @@ internal static class PersonalBalanceJointLnsPolish
         int HardDebt = 1,
         int TotalDebt = 16,
         int PersonalDebt = 4,
-        long MaxMillis = 6_000L);
+        long MaxMillis = 6_000L,
+        /// <summary>[Iteration 7] 正式評価の回数上限（0＝無効）。決定的モードでは時間でなくこれで止める。</summary>
+        int MaxEvaluations = 0);
 
     private sealed record Goal(int Staff, int Day, int Target, int Marginal, int Weight, string Reason);
 
@@ -83,7 +85,9 @@ internal static class PersonalBalanceJointLnsPolish
         //   （docstring 冒頭のとおり候補空間が狭く自然に尽きるため元から不要）。
         long TicksFromMillis(long ms) => ms <= 0L ? 0L : ms * System.Diagnostics.Stopwatch.Frequency / 1000L;
         long deadline = System.Diagnostics.Stopwatch.GetTimestamp() + TicksFromMillis(budgetMillis);
-        bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline;
+        var evaluations = 0;
+        bool EvalCapped() => cfg.MaxEvaluations > 0 && evaluations >= cfg.MaxEvaluations;
+        bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || EvalCapped();
 
         var root = new Node(rootSchedule.Copy2D(), rootReport, rootPersonal, rootFocus, new List<string>(), 0);
         var best = root;
@@ -122,7 +126,7 @@ internal static class PersonalBalanceJointLnsPolish
                         foreach (var candidate in variants)
                         {
                             if (Stopped()) break;
-                            generated++;
+                            generated++; evaluations++;
                             var report = UnifiedViolationChecker.Check(state, candidate.Schedule);
                             var personal = PersonalPenaltyByStaff(p, candidate.Schedule);
                             int focusTotal = focus.Sum(i => personal[i]);
@@ -179,6 +183,7 @@ internal static class PersonalBalanceJointLnsPolish
         }));
         string reason = valid && focus.All(i => chosenPersonal[i] <= lower[i]) ? "個人構造下限到達"
             : stop() ? "外部停止"
+            : EvalCapped() ? $"評価回数上限{cfg.MaxEvaluations}"
             : System.Diagnostics.Stopwatch.GetTimestamp() >= deadline ? "期限"
             : "探索停滞";
         var log = new MirrorLog(

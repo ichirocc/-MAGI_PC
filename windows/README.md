@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 後処理の決定的モード（Android 3.507.3 同期）: `C1JointLnsPolish.Config.MaxEvaluations`／`PersonalBalanceJointLnsPolish.Config.MaxEvaluations`
+  と `PostOptimizationParams.Deterministic`（ms キャップ・締切・残り時間の判定を回数上限へ。既定 false＝挙動不変）。テスト `DeterministicPostChainTest` 3 本。
+
 - 2026-09-07 仕様 §4「機能同等性」の 14 機能回帰スイート `LoopFeatureRegressionTest.cs`（Android 3.507.2 の移植）: 各機能を最小盤面で作り、
   `RunPostOptimization` を旧腕（`ComponentRepairEnabled=false`）と新腕（true）の両方で走らせて不変条件を検査する。
 
