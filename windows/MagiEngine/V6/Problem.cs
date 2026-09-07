@@ -112,6 +112,9 @@ public sealed class Problem
     /// 担当可能(canDo=bucket)なシフトのみ展開し、解消不能な幻のapt偏差を作らない（c1 と同じ方針）。
     /// </summary>
     public int[][] Apt { get; }
+    /// <summary>[Android 3.508.0] 群目標を個人 [lo,hi] でだけクランプした値（到達範囲クランプ前）。設定ミス診断が
+    /// 「設定した目標が構造的に届かない」ことを言い続けるために読む。評価・最適化は <see cref="Apt"/> だけを見る。</summary>
+    public int[][] AptRaw { get; }
 
     public IReadOnlyList<C1> Cons1 { get; }
     public IReadOnlyList<C2> Cons2 { get; }
@@ -277,10 +280,19 @@ public sealed class Problem
         // 適切回数（双方向目標）: state.groupShiftApt[群][シフト] を個人別 apt[i][k] へ展開（群単位＝同群全員に同一目標）。
         // 担当ONシフトのみ（bucket=canDo）有効化し、担当不可シフトの幻のapt偏差を除外する。
         Apt = new int[S][];
+        AptRaw = new int[S][];
         for (int i = 0; i < S; i++)
         {
             Apt[i] = new int[K];
-            for (int k = 0; k < K; k++) Apt[i][k] = -1;
+            AptRaw[i] = new int[K];
+            for (int k = 0; k < K; k++) { Apt[i][k] = -1; AptRaw[i][k] = -1; }
+        }
+        // [Android 3.508.0] 職員×シフトの希望固定数（到達範囲クランプの実効下限/上限に織り込む）。
+        var wishCnt = new int[S][];
+        for (int i = 0; i < S; i++)
+        {
+            wishCnt[i] = new int[K];
+            for (int j = 0; j < T; j++) { int w = Wish[i][j]; if (w >= 0 && w < K && this.CanDo(i, w)) wishCnt[i][w]++; }
         }
         for (int i = 0; i < S; i++)
         {
@@ -300,6 +312,22 @@ public sealed class Problem
                 int rlo = RangeLo[i][k], rhi = RangeHi[i][k];
                 if (rlo != int.MinValue && t < rlo) t = rlo;
                 if (rhi != int.MaxValue && t > rhi) t = rhi;
+                AptRaw[i][k] = t;
+                // [Android 3.508.0] さらに到達範囲へ収める（他シフトの実効上限/下限の合計から決まる、このシフトに
+                //   必ず来る日数）。個人 [lo,hi] と矛盾するときは個人設定を優先して従来どおり。
+                int sumHi = 0, sumLo = 0;
+                for (int k2 = 0; k2 < K; k2++)
+                {
+                    if (k2 == k) continue;
+                    int wc = wishCnt[i][k2];
+                    int lo2 = RangeLo[i][k2] == int.MinValue ? 0 : RangeLo[i][k2];
+                    int hi2 = PlaceableHas[i][k2] ? (RangeHi[i][k2] == int.MaxValue ? T : RangeHi[i][k2]) : 0;
+                    sumLo += Math.Max(lo2, wc);
+                    sumHi += Math.Max(hi2, wc);
+                }
+                int reachLo = Math.Max(Math.Max(T - sumHi, wishCnt[i][k]), rlo == int.MinValue ? 0 : rlo);
+                int reachHi = Math.Min(T - sumLo, rhi == int.MaxValue ? T : rhi);
+                if (reachLo <= reachHi) { if (t < reachLo) t = reachLo; if (t > reachHi) t = reachHi; }
                 Apt[i][k] = t;
             }
         }

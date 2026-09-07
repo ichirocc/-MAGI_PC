@@ -642,7 +642,9 @@ public static partial class V6SanityPort
             var name = Nm(i);
             for (var k = 0; k < p.K; k++)
             {
-                var t = p.Apt[i][k];
+                // [Android 3.508.0] 設定した目標(AptRaw)で判定する。実効目標(Apt)は到達下限へ切り上げ済みなので
+                //   違反としては出ないが、設定が届かないことは言い続ける（直すのはデータ側）。
+                var t = p.AptRaw[i][k];
                 if (t < 0 || !p.CanDo(i, k)) continue;
                 var otherHiSum = OtherShiftCapSum(p, i, k);
                 var forcedMin = p.T - otherHiSum;
@@ -651,7 +653,7 @@ public static partial class V6SanityPort
                     var sym = Sym(k);
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」適切回数",
                         $"担当できるシフトの構成上、他の担当シフトの個人上限（合計{otherHiSum}回）を守る限り「{sym}」は最低{forcedMin}回になります（{p.T}日を埋めきれないぶんが必ず回ってくる）。" +
-                            $"適切回数{t}回との差{forcedMin - t}回は、個人上限を破って別のシフトへ逃がさない限り消えません（上限超過は上限違反として同じだけ残ります）",
+                            $"設定の適切回数{t}回には届かないため、計算では{p.Apt[i][k]}回を目標として扱っています（差{forcedMin - t}回は違反には出ません）",
                         $"「{sym}」の適切回数を{forcedMin}回以上にするか空欄にする、または他シフトの担当・上限を見直してください"));
                 }
             }
@@ -664,7 +666,7 @@ public static partial class V6SanityPort
             var name = Nm(i);
             for (var k = 0; k < p.K; k++)
             {
-                var t = p.Apt[i][k];
+                var t = p.AptRaw[i][k];   // [Android 3.508.0] 6b と同じく設定した目標で判定
                 if (t < 0 || !p.CanDo(i, k)) continue;
                 var wished = 0;
                 for (var j = 0; j < p.T; j++) if (p.WishLocked(i, j) && p.Wish[i][j] == k) wished++;
@@ -673,7 +675,7 @@ public static partial class V6SanityPort
                     var sym = Sym(k);
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」適切回数と希望",
                         $"「{sym}」の希望が{wished}件あり、適切回数の目標{t}回を超えています。希望どおりに配置する限り" +
-                            $"「{sym}」は必ず{wished}回以上になるため、差{wished - t}回ぶんの超過は最適化では消せません",
+                            $"「{sym}」は必ず{wished}回以上になります。計算では{p.Apt[i][k]}回を目標として扱うため差{wished - t}回は違反には出ませんが、設定の目標には届きません",
                         $"「{sym}」の適切回数を{wished}回以上にするか、{name}さんの「{sym}」の希望を{wished - t}件減らしてください"));
                 }
             }

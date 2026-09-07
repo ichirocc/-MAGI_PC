@@ -216,7 +216,7 @@ public static partial class V6SanityPort
             for (var i = 0; i < p.S; i++)
             {
                 if (!p.CanDo(i, k)) continue;
-                var a = p.Apt[i][k];
+                var a = p.AptRaw[i][k];   // [Android 3.508.0] 設定した目標を検算する（実効目標 Apt は到達範囲へ丸め済み）
                 if (a >= 0) { aptSum += a; anyApt = true; }
             }
             if (!anyApt) continue;

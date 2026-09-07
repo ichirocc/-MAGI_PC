@@ -342,6 +342,48 @@ public class ProblemTest
         Assert.Contains(("群のレンジ", "〈NOPE〉 の A（1〜5）"), p.UnresolvedRows);
     }
 
+    // ---- Apt: 到達範囲クランプ（Android 3.508.0 同期）---------------------------
+
+    private static MagiState AptState(IReadOnlyDictionary<string, Range> ranges, string aptA, IReadOnlyDictionary<string, int>? wishes = null) => new(
+        StartDate: "2026-01-01", EndDate: "2026-01-05",
+        Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        Groups: new List<Group> { new("G", "G") },
+        StaffList: new List<Staff> { new("s0", 0) },
+        Use2Patterns: false,
+        GroupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+        GroupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", aptA, "" } },
+        Schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0, 0, 0 } },
+        Wishes: wishes ?? new Dictionary<string, int>(), StaffRange: ranges,
+        NeedDay1: new Dictionary<string, string>(), NeedDay2: new Dictionary<string, string>(),
+        Cons1: new List<C1Row>(), Cons2: new List<C2Row>(),
+        Cons3: new List<C3Row>(), Cons3n: new List<C3Row>(), Cons3m: new List<C3Row>(), Cons3mn: new List<C3Row>(),
+        Cons41: new List<C41Row>(), Cons42: new List<C42Row>(),
+        SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
+        ShiftColors: new Dictionary<string, string>(), Extras: new Dictionary<string, System.Text.Json.JsonElement>());
+
+    [Fact]
+    public void Apt_TargetRisesToTheDaysThatMustLandOnTheShift()
+    {
+        // 休 2〜2・B 0〜0 → 5 日のうち 3 日は A にしか置けない。群目標 1 は到達不能なので 3 へ。
+        var st = AptState(new Dictionary<string, Range> { ["0,0"] = new("2", "2"), ["0,2"] = new("0", "0") }, "1");
+        Assert.Equal(3, new Problem(st).Apt[0][1]);
+        Assert.Equal(1, new Problem(AptState(new Dictionary<string, Range> { ["0,0"] = new("2", "2") }, "1")).Apt[0][1]);
+    }
+
+    [Fact]
+    public void Apt_WishPinnedCellsCountAsLowerBoundsOfOtherShifts()
+    {
+        var st = AptState(new Dictionary<string, Range>(), "4", new Dictionary<string, int> { ["0,0"] = 0, ["0,1"] = 0, ["0,2"] = 0 });
+        Assert.Equal(2, new Problem(st).Apt[0][1]);
+    }
+
+    [Fact]
+    public void Apt_PersonalRangeWinsWhenTheReachContradictsIt()
+    {
+        var st = AptState(new Dictionary<string, Range> { ["0,0"] = new("2", "2"), ["0,2"] = new("0", "0"), ["0,1"] = new("", "1") }, "1");
+        Assert.Equal(1, new Problem(st).Apt[0][1]);
+    }
+
     [Fact]
     public void UnresolvedRows_Cons41BothBoundsBlank_IsRecordedAndExcluded()
     {
@@ -474,7 +516,8 @@ public class ProblemTest
             ["1,1"] = new Range("", "6"),
             ["2,1"] = new Range("12", ""),
         };
-        var schedule = Enumerable.Range(0, 4).Select(_ => (IReadOnlyList<int>)new List<int> { 0 }).ToList();
+        // [Android 3.508.0] 31 日にする（1 日では到達範囲クランプで A の目標が 1 に丸まり、[lo,hi] クランプだけを見る検査にならない）。
+        var schedule = Enumerable.Range(0, 4).Select(_ => (IReadOnlyList<int>)Enumerable.Repeat(0, 31).ToList()).ToList();
         var state = MinimalState.Build(
             shifts: TwoShiftsRestA, groups: groups, groupShift: groupShift, groupShiftApt: groupShiftApt,
             staffList: staffList, staffRange: staffRange, schedule: schedule);

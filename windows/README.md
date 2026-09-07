@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 適切回数（apt）の群目標を「構造的に到達できる範囲」へクランプ（Android 3.508.0 同期）。`Problem.Apt` は到達下限
+  `T−Σ他の置けるシフトの実効上限`・到達上限 `T−Σ他シフトの実効下限`（希望固定込み、個人 [lo,hi] 優先）へ収め、`Problem.AptRaw`（従来の
+  クランプまでの設定値）を新設。Sanity 6b/6d/6-C は AptRaw で判定し「計算では N 回を目標として扱っています」と案内。
+  既存テスト `BuildAptProblem` は 1 日盤面だったため 31 日へ（1 日では到達範囲で目標が 1 に丸まる）。MagiEngine.Tests 811 緑。
+
 - 2026-09-07 CSV 層を Android 3.474.0/3.475.0（論理監査）へ同期（Android 3.507.8 第 8 段で未同期が判明）。
   `ScheduleCsvBridge.Parse`: ヘッダは先頭セルが職員名に解決しないときだけ飛ばす、一致は職員単位（`staff一致 N名`）／
   `WishesCsvIO`・`ConstraintsCsvIO`（個人レンジ）: 同キーの重複は同値なら 1 件・値が違えば読めない行／`StaffCsvIO.ParseUpsert`: 同一既存職員は更新 1 名／

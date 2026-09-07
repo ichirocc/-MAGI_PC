@@ -78,7 +78,9 @@ public class V6SanityPortTest
         });
         var p = new Problem(st);
         Assert.Equal(11, V6SanityPort.OtherShiftCapSum(p, 0, 1)); // 休10 + 有1
-        Assert.Equal(19, V6SanityPort.StructuralPersonalFloor(p)); // (31-11) - 目標1
+        // [Android 3.508.0] 実効目標は到達下限 20 へ切り上がる（設定の 1 は AptRaw に残り 6b が案内）ので構造下限は 0。
+        Assert.Equal(1, p.AptRaw[0][1]); Assert.Equal(20, p.Apt[0][1]);
+        Assert.Equal(0, V6SanityPort.StructuralPersonalFloor(p));
     }
 
     [Fact]
