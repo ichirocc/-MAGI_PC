@@ -506,8 +506,8 @@ public sealed partial class MagiViewModel
         if (res.Rejected > 0)
         {
             Ui.MessageIsError = false;
-            Ui.Message = $"希望シフトの取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: {res.Sample}";
-            LogOp("W", $"希望シフトCSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {res.Sample}");
+            Ui.Message = $"希望シフトの取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
+            LogOp("W", $"希望シフトCSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
         }
         LogOp("I", $"希望シフトCSV取込: {res.Accepted}件を反映（全置換）");
@@ -542,8 +542,8 @@ public sealed partial class MagiViewModel
         if (res.Rejected > 0)
         {
             Ui.MessageIsError = false;
-            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: {res.Sample}";
-            LogOp("W", $"各制約CSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {res.Sample}");
+            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
+            LogOp("W", $"各制約CSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
         }
         LogOp("I", $"各制約CSV取込: {res.Accepted}件を反映（制約一式を置換）");

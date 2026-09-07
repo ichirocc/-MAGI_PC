@@ -112,8 +112,8 @@ public sealed class Problem
     /// 担当可能(canDo=bucket)なシフトのみ展開し、解消不能な幻のapt偏差を作らない（c1 と同じ方針）。
     /// </summary>
     public int[][] Apt { get; }
-    /// <summary>[Android 3.508.0] 群目標を個人 [lo,hi] でだけクランプした値（到達範囲クランプ前）。設定ミス診断が
-    /// 「設定した目標が構造的に届かない」ことを言い続けるために読む。評価・最適化は <see cref="Apt"/> だけを見る。</summary>
+    /// <summary>[Android 3.508.0/3.509.0] 群目標の設定値（到達範囲クランプ前。個人設定がある組は <see cref="Apt"/> と同じく -1）。
+    /// 設定ミス診断が「設定した目標が構造的に届かない」ことを言い続けるために読む。評価・最適化は <see cref="Apt"/> だけを見る。</summary>
     public int[][] AptRaw { get; }
 
     public IReadOnlyList<C1> Cons1 { get; }
@@ -248,10 +248,11 @@ public sealed class Problem
             if (kOpt is not int k2) continue;
             if (i2 >= 0 && i2 < S && k2 >= 0 && k2 < K)
             {
+                // [Android 3.509.1] 負数は未設定扱い（D9 の「個人設定あり」にも数えない。Sanity 2h が案内する）。
                 var lo = KotlinInterop.ToIntOrNull(r.Lo.Trim());
-                if (lo is int loV) RangeLo[i2][k2] = loV;
+                if (lo is int loV && loV >= 0) RangeLo[i2][k2] = loV;
                 var hi = KotlinInterop.ToIntOrNull(r.Hi.Trim());
-                if (hi is int hiV) RangeHi[i2][k2] = hiV;
+                if (hi is int hiV && hiV >= 0) RangeHi[i2][k2] = hiV;
             }
         }
 

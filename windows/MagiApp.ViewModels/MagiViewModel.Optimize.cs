@@ -447,6 +447,7 @@ public sealed partial class MagiViewModel
             // [3.284.0相当] 前景の違反チェック(_checkCts)/改善探索(_fixCts)は自身の catch(OperationCanceledException)
             //   で running/fixSearching を戻す機会があるが、ここでの即時リセットは冪等
             //   （後からジョブ側の確定メッセージが上書きする）。
+            var wasFixSearching = Ui.FixSearching;   // [Android 3.509.1 同期] リセット前に取る
             Ui.MessageIsError = false;
             Ui.Running = false;
             Ui.FixSearching = false;
@@ -461,7 +462,7 @@ public sealed partial class MagiViewModel
             //   「MagiViewModel.Background.cs」の WireBackgroundSubscriptions 節参照）ため、
             //   これが無いと背景最適化の停止が誤って既定の「違反チェック」に分類されていた。
             if (OptimizationRepository.Running) what.Add("バックグラウンド最適化");
-            if (Ui.FixSearching) what.Add("改善探索");
+            if (wasFixSearching) what.Add("改善探索");
             if (what.Count == 0) what.Add("違反チェック");
             LogOp("I", $"停止を押しました（対象: {string.Join("・", what)}）");
         }

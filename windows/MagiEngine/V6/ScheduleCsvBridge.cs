@@ -49,6 +49,15 @@ public static class ScheduleCsvBridge
         return outSb.ToString();
     }
 
+    /// <summary>勤務表CSVのヘッダ行か: 先頭セルが「スタッフ」等を含むか、2 列目以降の非空セルがすべて日付列（数字・日付書式）。</summary>
+    private static bool LooksLikeHeaderRow(IReadOnlyList<string> row)
+    {
+        var head = row.Count > 0 ? row[0].Trim() : "";
+        if (head.Contains("スタッフ") || head.Contains("日付") || head.Contains("氏名")) return true;
+        var rest = row.Skip(1).Select(c => c.Trim()).Where(c => c.Length > 0).ToList();
+        return rest.Count > 0 && rest.All(c => c.All(ch => char.IsDigit(ch) || ch == '/' || ch == '-' || ch == '.'));
+    }
+
     public static ScheduleRunResult Parse(string text, MagiState state, int[][] baseSchedule)
     {
         // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える。ここは非nullを返す経路なので
@@ -73,7 +82,8 @@ public static class ScheduleCsvBridge
         // [Android 3.475.0 同期] 先頭行はヘッダ「スタッフ \ 日付,…」のときだけ飛ばす（旧: 無条件に rr=1 で、
         //   ヘッダ無しCSVの先頭職員が黙って落ち「氏名不一致でスキップ」と誤案内していた）。判定は
         //   「先頭セルが職員名に解決しない」＝CsvBody() と同じ考え方。
-        var rr = rows.Count > 0 && !nameToI.ContainsKey(CsvUtil.NameMatchKey(rows[0].Count > 0 ? rows[0][0] : "")) ? 1 : 0;
+        // [Android 3.509.1] 先頭が職員名に解決しないだけでは飛ばさない。ヘッダ「スタッフ \ 日付」か 2 列目以降が日付列のときだけ。
+        var rr = rows.Count > 0 && !nameToI.ContainsKey(CsvUtil.NameMatchKey(rows[0].Count > 0 ? rows[0][0] : "")) && LooksLikeHeaderRow(rows[0]) ? 1 : 0;
         while (rr < rows.Count)
         {
             var r = rows[rr];

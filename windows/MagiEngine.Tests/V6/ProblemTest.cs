@@ -378,6 +378,15 @@ public class ProblemTest
     }
 
     [Fact]
+    public void NegativeBoundsAreUnsetAndDoNotDisableTheGroupTarget()   // [Android 3.509.1]
+    {
+        var st = AptState(new Dictionary<string, Range> { ["0,1"] = new("-1", "-1") }, "2");
+        var p = new Problem(st);
+        Assert.Equal(int.MinValue, p.RangeLo[0][1]); Assert.Equal(int.MaxValue, p.RangeHi[0][1]);
+        Assert.Equal(2, p.Apt[0][1]);
+    }
+
+    [Fact]
     public void Apt_BlankOnlyKeyKeepsTheGroupTarget_FixedValueDisablesItWithoutDoubleCounting()
     {
         Assert.Equal(2, new Problem(AptState(new Dictionary<string, Range> { ["0,1"] = new("", "") }, "2")).Apt[0][1]);

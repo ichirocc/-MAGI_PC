@@ -326,6 +326,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 外部レビュー一覧（Android 3.509.1 の仕分け）: 負数の個人回数を未設定扱い（`Problem`・Sanity 2h「負の値」）／勤務表 CSV の
+  ヘッダ判定を構造で（`LooksLikeHeaderRow`）／停止ログの「改善探索」判定をリセット前の値で／CSV 取込の例を `Samples` 全件表示／
+  EditView: 「群の目標（X の個人設定がない職員に適用）」、クイック解決で入力欄も同期、動的ボタンに `AutomationProperties` の Name/AutomationId／
+  `AptRaw` の XML doc を D9 後の仕様へ／`CrossLanguageFixtureTest`（Android と同じ fixture・期待値ファイルで hard/soft を固定＝3 実装の契約）。
+  MagiEngine.Tests 818 / ViewModels 430 緑。EditView（WinUI）はこの環境でビルドできないため CI の Windows ビルドが最終確認。
+  据え置き（決定待ち）: D9 の片側優先化・公平性の扱い・群目標のトランザクション化・MSIX 失敗時の Release 条件・署名必須化。
+
 - 2026-09-07 決定 D9（Android 3.509.0）: 個人の下限または上限がある (職員,シフト) には群目標（apt）を適用しない。`Problem.Apt`/`AptRaw` を -1 に、
   旧「個人 [lo,hi] へクランプ」は削除、到達範囲クランプ（3.508.0）は適用される組にだけ残す。EditView のセル編集に
   「この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません」。`ProblemTest`（D9 の 8 ケース＋二重計上なし）・

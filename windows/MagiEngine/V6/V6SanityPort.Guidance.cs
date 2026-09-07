@@ -350,7 +350,8 @@ public static partial class V6SanityPort
         }
 
         // 2h) 数値でない設定値
-        bool BadNum(string v) => !string.IsNullOrWhiteSpace(v) && KotlinInterop.ToIntOrNull(v.Trim()) is null;
+        // [Android 3.509.1] 負数も対象（Problem は負数を未設定として捨てる＝空欄と同じ扱いになる）。
+        bool BadNum(string v) => !string.IsNullOrWhiteSpace(v) && (KotlinInterop.ToIntOrNull(v.Trim()) ?? -1) < 0;
 
         foreach (var (key, r) in state.StaffRange)
         {
@@ -361,7 +362,7 @@ public static partial class V6SanityPort
             var sy = idx.Length > 1 && KotlinInterop.ToIntOrNull(idx[1]) is int k0 && k0 >= 0 && k0 < state.Shifts.Count
                 ? state.Shifts[k0].Kigou : "";
             outList.Add(new SettingIssue(IssueKind.Constraint, $"個人の回数「{nm} {sy}」",
-                $"下限「{r.Lo}」上限「{r.Hi}」に数値でない値があります。その側は**制限なし**として" +
+                $"下限「{r.Lo}」上限「{r.Hi}」に数値でない値または負の値があります。その側は**制限なし**として" +
                     "扱われるため、意図より弱い条件で計算されます",
                 "個人の回数で数値を入れ直すか、制限しないなら空欄にしてください"));
         }

@@ -67,4 +67,16 @@ public class ScheduleCsvBridgeTest
         Assert.Equal(1, dup.Matched);   // 旧: 行単位で 2＝欠けている職員B がいても「全員更新」に見えた
         Assert.Contains("staff一致 1名", dup.Report.Logs[0].Message);
     }
+
+    /// <summary>[Android 3.509.1 同期] 先頭が未知の職員名なだけの行はヘッダ扱いしない。ヘッダ「スタッフ \ 日付」と日付だけの行は飛ばす。</summary>
+    [Fact]
+    public void UnknownFirstStaffRowIsNotTreatedAsHeader()
+    {
+        var st = BuildState();
+        var baseSchedule = new[] { new[] { 0, 0 }, new[] { 0, 0 } };
+        var r = ScheduleCsvBridge.Parse("誰か,A,休\n職員A,A,休\n", st, baseSchedule);
+        Assert.Equal(1, r.Matched); Assert.Equal(1, r.Schedule[0][0]);
+        Assert.Equal(1, ScheduleCsvBridge.Parse("スタッフ \\ 日付,1,2\n職員A,A,休\n", st, baseSchedule).Matched);
+        Assert.Equal(1, ScheduleCsvBridge.Parse(",2026/06/01,2026/06/02\n職員A,A,休\n", st, baseSchedule).Matched);
+    }
 }

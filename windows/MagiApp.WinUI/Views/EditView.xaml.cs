@@ -2043,11 +2043,15 @@ public sealed partial class EditView : UserControl
         if (status.Length > 0) panel.Children.Add(new TextBlock { Text = status, TextWrapping = TextWrapping.Wrap });
 
         var raw = g >= 0 && g < v.GroupShiftApt.Count && k < v.GroupShiftApt[g].Count ? v.GroupShiftApt[g][k] : "";
-        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} 全員に適用）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} の個人設定がない職員に適用）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
         var aptRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var aptValue = new TextBlock { Text = string.IsNullOrWhiteSpace(raw) ? "なし" : raw.Trim(), MinWidth = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var minus = new Button { Content = "−", MinWidth = 44 };
         var plus = new Button { Content = "＋", MinWidth = 44 };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(minus, $"{kigou} の目標を減らす");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(minus, "GroupAptMinus");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(plus, $"{kigou} の目標を増やす");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(plus, "GroupAptPlus");
         void SetApt(string value) { _vm.Ws1SetGroupApt(g, k, value); raw = value; aptValue.Text = string.IsNullOrWhiteSpace(value) ? "なし" : value; }
         minus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : (int?)null; SetApt(c is null ? "0" : c <= 0 ? "" : (c.Value - 1).ToString()); };
         plus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : -1; SetApt(Math.Max(0, c + 1).ToString()); };
@@ -2072,10 +2076,13 @@ public sealed partial class EditView : UserControl
         {
             var quick = new Button { Content = vio == "vio-high" ? $"上限を{count}に引き上げて解決" : $"下限を{count}に下げて解決", HorizontalAlignment = HorizontalAlignment.Stretch };
             panel.Children.Add(quick);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(quick, (string)quick.Content);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(quick, "StaffRangeQuickFix");
             quick.Click += (_, _) =>
             {
-                if (vio == "vio-high") _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString());
-                else _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? "");
+                // [Android 3.509.1 同期] 入力欄も同じ値に揃える（旧: モデルだけ変わり、続けて「この上下限を適用」を押すと旧値で上書きされた）。
+                if (vio == "vio-high") { hiBox.Text = count.ToString(); _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString()); }
+                else { loBox.Text = count.ToString(); _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? ""); }
             };
         }
 
