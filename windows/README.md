@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 `V6LateOperators` の RectSwap2 の違反者抽出を `BaseViolators` に統一、`IsBalanceable` をシフト別に記憶（Android 3.507.7 第 7 段の同期）。
+  Kotlin の `LateSession` 分割は読みやすさの改修で挙動差なしのため C# は構造を変えない。
+
 - 2026-09-07 `V6SanityPort` の「担当できる人数」を最適化器が置ける人数（`PlaceableFor`＝`MayPlace`＋その日の希望固定）で数える（Android 3.507.5 同期）:
   `ForcedCovU`（構造 HARD 下限）・検査 3・`ImpossibleDemandDays`・c1 の作業需要・代用可（上下チェック／6c）。3.507.0 の取り残し。
 

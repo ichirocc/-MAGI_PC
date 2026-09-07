@@ -158,7 +158,15 @@ public static class V6LateOperators
         bool C3nHit(int i, int j, int newK) => p.MakesForbiddenRun(sched, i, j, newK);
 
         // [HF411 Level Zero準拠] 平準化対象シフト: need定義済み かつ 担当可能2名以上(番号非依存=全シフト同等)
+        var balanceableMemo = new Dictionary<int, bool>();
         bool IsBalanceable(int bk)
+        {
+            if (balanceableMemo.TryGetValue(bk, out var memo)) return memo;
+            var r = ComputeBalanceable(bk);
+            balanceableMemo[bk] = r;
+            return r;
+        }
+        bool ComputeBalanceable(int bk)
         {
             if (bk < 0 || bk >= kN) return false;
             // [3.309.0] 旧実装は生 state の need1 / needDay1 しか見ず、**P2 だけで需要が定義された
@@ -361,16 +369,7 @@ public static class V6LateOperators
                     if (kk is >= 0 && kk < k) ssn[i][kk]++;
                 }
             }
-            var violators = new List<int>();
-            for (var i = 0; i < s; i++)
-            {
-                var bad = false;
-                for (var kk = 0; kk < k; kk++)
-                {
-                    if (ssn[i][kk] < p.RangeLo[i][kk] || ssn[i][kk] > p.RangeHi[i][kk]) { bad = true; break; }
-                }
-                if (bad) violators.Add(i);
-            }
+            var violators = BaseViolators(ssn);   // [Android 3.507.7 同期] ChainSwap と同じ判定（旧: 同じループの複製）
             var tr = 0;
             while (tr < rectTry)
             {
