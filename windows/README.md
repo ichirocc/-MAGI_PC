@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 仕様 §4「機能同等性」の 14 機能回帰スイート `LoopFeatureRegressionTest.cs`（Android 3.507.2 の移植）: 各機能を最小盤面で作り、
+  `RunPostOptimization` を旧腕（`ComponentRepairEnabled=false`）と新腕（true）の両方で走らせて不変条件を検査する。
+
 - 2026-09-06 起点生成をピン対応に（Android 3.507.1 同期）: `ViolationComponentRepair` の `Single`/`Swap` に `BreaksPin` を入れ、厳密ピン（lo==hi）を
   単独で崩す候補は同じ職員の別の日で回数を戻す行内入替／2 日交換に置き換える。テスト `PinBreakingSinglesAreReplacedByRowSwapsAtGeneration`（エンジン 785 本緑）。
 
