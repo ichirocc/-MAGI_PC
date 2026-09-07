@@ -35,16 +35,8 @@ public static partial class V6HotfixPasses
         var bestRep = before;
         var applied = 0;
 
-        // 適切回数(apt)目標: state.GroupShiftApt[群][シフト] の整数（空=なし）。
-        int? AptTarget(int i, int k)
-        {
-            if (i < 0 || i >= state.StaffList.Count) return null;
-            var g = state.StaffList[i].GroupIdx;
-            if (g < 0 || g >= state.GroupShiftApt.Count) return null;
-            var row = state.GroupShiftApt[g];
-            if (k < 0 || k >= row.Count) return null;
-            return KotlinInterop.ToIntOrNull(row[k].Trim());
-        }
+        // [Android 3.509.2] 適切回数(apt)目標は Problem.Apt（実効目標＝担当可ゲート・到達クランプ・D9 の個人設定除外込み）。
+        int? AptTarget(int i, int k) => p.Apt[i][k] >= 0 ? p.Apt[i][k] : null;
 
         int[][] Cnt() => ScheduleUtil.CountMatrix(p, work);
         var counts = Cnt();
@@ -142,15 +134,7 @@ public static partial class V6HotfixPasses
         var bestRep = before;
         var applied = 0;
 
-        int? AptTarget(int i, int k)
-        {
-            if (i < 0 || i >= state.StaffList.Count) return null;
-            var g = state.StaffList[i].GroupIdx;
-            if (g < 0 || g >= state.GroupShiftApt.Count) return null;
-            var row = state.GroupShiftApt[g];
-            if (k < 0 || k >= row.Count) return null;
-            return KotlinInterop.ToIntOrNull(row[k].Trim());
-        }
+        int? AptTarget(int i, int k) => p.Apt[i][k] >= 0 ? p.Apt[i][k] : null;   // [Android 3.509.2] 上と同じく実効目標
 
         // [3.345.0] weekly の wd バケットは職員×シフト×曜日（休も1シフト＝特別扱いしない）。
         //   目標は WeeklyDevOfBucket が内部で round(そのシフトの回数/7) として持つ。被覆保存の再配置ごとに更新。

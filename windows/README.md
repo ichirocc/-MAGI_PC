@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 日割当研磨（`V6HotfixPasses.DayAssign.cs` の厳密/交互）の `AptTarget` を生の `GroupShiftApt` から `Problem.Apt`（実効目標）へ
+  （Android 3.509.2 同期）。「頭打ち(採用0=改善手なし・正常)」を「現在の探索範囲では改善手なし」へ。
+
 - 2026-09-07 外部レビュー一覧（Android 3.509.1 の仕分け）: 負数の個人回数を未設定扱い（`Problem`・Sanity 2h「負の値」）／勤務表 CSV の
   ヘッダ判定を構造で（`LooksLikeHeaderRow`）／停止ログの「改善探索」判定をリセット前の値で／CSV 取込の例を `Samples` 全件表示／
   EditView: 「群の目標（X の個人設定がない職員に適用）」、クイック解決で入力欄も同期、動的ボタンに `AutomationProperties` の Name/AutomationId／

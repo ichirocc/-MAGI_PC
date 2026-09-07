@@ -425,7 +425,7 @@ public static partial class V6HotfixPasses
         var targets = SoftTargetFamilies.Sum(k => Bd(preSoftRep, k));
         var verdict = adoptedTotal > 0 ? $"有効(採用{adoptedTotal}手)"
             : targets == 0 ? "対象なし"
-            : "頭打ち(採用0=改善手なし・正常)";
+            : "頭打ち(採用0=現在の探索範囲では改善手なし)";
         var hardNote = softAfter.Hard == preSoftRep.Hard ? "不変" : $"変化{preSoftRep.Hard}->{softAfter.Hard}!";
         return new MirrorLog(tag: "SoftPolishVerify", message:
             $"ソフトc1/c3系研磨 可否={verdict} ({rounds}巡・各パス行は巡1のみ表示/本行は全巡合計) | c1 {Bd(preSoftRep, "c1")}->{Bd(softAfter, "c1")}" +
