@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 `FixSuggester` を Android 3.507.4（自律レビュー第 5 段）と同型に改修＝`Session`/`Limits`、連鎖の `MayPlace` ガード、冗長評価と同日重複列挙の撤去。
+  併せて移植のドリフト 2 件を修正: Phase 3 の休が index 0 決め打ち（Kotlin は 3.475.0 で `RestIdx`＋担当可否）／重複排除の署名に日が無かった
+  （別の日の同じ手を同一視）。テスト `ChainDoesNotPlaceShiftsWithZeroCap` 追加。
+
 - 2026-09-07 後処理の決定的モード（Android 3.507.3 同期）: `C1JointLnsPolish.Config.MaxEvaluations`／`PersonalBalanceJointLnsPolish.Config.MaxEvaluations`
   と `PostOptimizationParams.Deterministic`（ms キャップ・締切・残り時間の判定を回数上限へ。既定 false＝挙動不変）。テスト `DeterministicPostChainTest` 3 本。
 

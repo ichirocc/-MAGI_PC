@@ -1,4 +1,5 @@
 using MagiEngine.Model;
+using MagiEngine.Tests.TestSupport;
 using MagiEngine.V6;
 // System.Range (built-in C# 8+ slice type, brought into scope by the SDK's implicit
 // `global using global::System;`) collides by simple name with MagiEngine.Model.Range.
@@ -90,5 +91,25 @@ public class FixSuggesterTest
                 && real.Any(op => op.Staff == 1 && op.Day == 0 && op.ToShift == 0);
         }).ToList();
         Assert.Single(fullFix);
+    }
+
+    /// <summary>[Android 3.507.4 同期] 下限割れ（lo=2）でも上限 0 のシフトは連鎖でも置かない＝最適化器（MayPlace）と同じ。</summary>
+    [Fact]
+    public void ChainDoesNotPlaceShiftsWithZeroCap()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-03",
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            groups: new List<Group> { new("G", "G") }, staffList: new List<Staff> { new("X", 0), new("Y", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 }, new List<int> { 1, 1, 0 } }, wishes: new Dictionary<string, int>(),
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("2", "0") },
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(), cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var sched = st.Schedule.Select(r => r.ToArray()).ToArray();
+        Assert.True(UnifiedViolationChecker.Check(st, sched).CountViolations.ContainsKey("0,1"));
+        var results = FixSuggester.Suggest(st, sched, maxResults: 20, deadlineMs: 4000L);
+        Assert.DoesNotContain(results, r => r.Ops.Any(op => op.Staff == 0 && op.ToShift == 1));
     }
 }
