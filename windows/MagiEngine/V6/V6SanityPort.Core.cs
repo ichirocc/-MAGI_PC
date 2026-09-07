@@ -89,15 +89,11 @@ public static partial class V6SanityPort
         var result = new List<ForcedCovU>();
         for (var k = 0; k < p.K; k++)
         {
-            var capable = 0;
-            for (var i = 0; i < p.S; i++)
-                if (p.CanDo(i, k)) capable++;
-
             var cells = 0;
             var amount = 0;
             for (var j = 0; j < p.T; j++)
             {
-                var u = p.CovUCell(k, j, capable);
+                var u = p.CovUCell(k, j, PlaceableFor(p, k, j));   // [3.507.5] 置ける人数（上限 0 は除外、希望固定は含む）
                 if (u > 0) { cells++; amount += u; }
             }
             if (amount > 0)
@@ -273,6 +269,15 @@ public static partial class V6SanityPort
 
     /// <summary>Faithful port of Kotlin's private <c>effectiveDemand</c>.</summary>
     private static int EffectiveDemand(Problem p, int k, int j) => p.CovUCell(k, j, 0);
+
+    /// <summary>[Android 3.507.5 同期] その日にシフト k を実際に置ける人数＝最適化器が置ける（MayPlace）職員＋その日の希望でそのシフトに固定された職員。
+    /// 3.507.0 で個人上限 0 の職員は最適化器が置かなくなったので、「担当できる人数」を CanDo で数えると人員不足の必然を見落とす。</summary>
+    private static int PlaceableFor(Problem p, int k, int j)
+    {
+        var n = 0;
+        for (var i = 0; i < p.S; i++) if (p.MayPlace(i, k) || (p.WishLocked(i, j) && p.Wish[i][j] == k)) n++;
+        return n;
+    }
 
     /// <summary>Faithful port of Kotlin's private <c>effectiveCap</c>.</summary>
     private static int EffectiveCap(Problem p, int k, int j)

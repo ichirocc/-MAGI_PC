@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 `V6SanityPort` の「担当できる人数」を最適化器が置ける人数（`PlaceableFor`＝`MayPlace`＋その日の希望固定）で数える（Android 3.507.5 同期）:
+  `ForcedCovU`（構造 HARD 下限）・検査 3・`ImpossibleDemandDays`・c1 の作業需要・代用可（上下チェック／6c）。3.507.0 の取り残し。
+
 - 2026-09-07 `FixSuggester` を Android 3.507.4（自律レビュー第 5 段）と同型に改修＝`Session`/`Limits`、連鎖の `MayPlace` ガード、冗長評価と同日重複列挙の撤去。
   併せて移植のドリフト 2 件を修正: Phase 3 の休が index 0 決め打ち（Kotlin は 3.475.0 で `RestIdx`＋担当可否）／重複排除の署名に日が無かった
   （別の日の同じ手を同一視）。テスト `ChainDoesNotPlaceShiftsWithZeroCap` 追加。

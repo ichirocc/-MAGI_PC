@@ -164,7 +164,7 @@ public static partial class V6SanityPort
                         if (n > hi)
                         {
                             var subCount = 0;
-                            for (var it = 0; it < p.S; it++) if (it != i && p.CanDo(it, k)) subCount++;
+                            for (var it = 0; it < p.S; it++) if (it != i && p.MayPlace(it, k)) subCount++;   // [3.507.5] 置ける人だけ
                             highs.Add($"{Nm(i)} {n}>{hi}(代用可{subCount}名)");
                         }
                     }

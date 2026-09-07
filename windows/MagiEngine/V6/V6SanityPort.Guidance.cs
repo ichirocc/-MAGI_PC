@@ -173,7 +173,8 @@ public static partial class V6SanityPort
             // [3.409.22] 旧: need1 直読み＝need2 単独定義の需要を 0 と数え、休の供給を過大評価していた
             //   （＝真の壁を見逃す側。false wall は作らないので実害は軽いが値が不正確だった）。
             //   effectiveDemand はセルごとの真の最小＝過大にはならない（3.76.0「false wall を出さない」と両立）。
-            for (var k = 0; k < p.K; k++) for (var j = 0; j < p.T; j++) workMinDemand += EffectiveDemand(p, k, j);
+            // [3.475.0/3.507.5 同期] セルごとに min(需要, 置ける人数)。埋まらない席は作業セルを消費しない。
+            for (var k = 0; k < p.K; k++) for (var j = 0; j < p.T; j++) workMinDemand += Math.Min(EffectiveDemand(p, k, j), PlaceableFor(p, k, j));
             foreach (var c in p.Cons1)
             {
                 var si = c.ShiftIdx;
@@ -507,8 +508,7 @@ public static partial class V6SanityPort
             {
                 var need = EffectiveDemand(p, k, j);
                 if (need <= 0) continue;
-                var capable = 0;
-                for (var i = 0; i < p.S; i++) if (p.CanDo(i, k)) capable++;
+                var capable = PlaceableFor(p, k, j);   // [3.507.5] 置ける人数（ForcedCovU と同じ定義）
                 if (need > capable)
                 {
                     var sym = Sym(k);
@@ -696,7 +696,7 @@ public static partial class V6SanityPort
                     var sym = Sym(k);
                     var substitutes = new List<string>();
                     for (var s = 0; s < p.S; s++)
-                        if (s != i && p.CanDo(s, k)) substitutes.Add(Nm(s));
+                        if (s != i && p.MayPlace(s, k)) substitutes.Add(Nm(s));   // [3.507.5] 置ける人だけ
                     var subText = substitutes.Count == 0 ? "代用できる他の担当者がいません"
                         : $"代用要員候補: {string.Join("・", substitutes)}";
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」上限と担当構成の衝突",

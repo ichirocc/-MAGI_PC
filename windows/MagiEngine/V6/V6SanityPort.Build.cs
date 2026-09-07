@@ -195,9 +195,7 @@ public static partial class V6SanityPort
         {
             var need = EffectiveDemand(p, k, j);
             if (need <= 0) continue;
-            var capable = 0;
-            for (var i = 0; i < p.S; i++)
-                if (p.CanDo(i, k)) capable++;
+            var capable = PlaceableFor(p, k, j);
             if (need > capable)
             {
                 var sym = k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
