@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 決定 D9（Android 3.509.0）: 個人の下限または上限がある (職員,シフト) には群目標（apt）を適用しない。`Problem.Apt`/`AptRaw` を -1 に、
+  旧「個人 [lo,hi] へクランプ」は削除、到達範囲クランプ（3.508.0）は適用される組にだけ残す。EditView のセル編集に
+  「この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません」。`ProblemTest`（D9 の 8 ケース＋二重計上なし）・
+  `MirrorEngineTest` を新仕様へ。3.508.2 同期: `ShortageFixCandidates` を CanDo→MayPlace（上限 0 の職員を候補に出さない）＋検査。
+
 - 2026-09-07 HF80 の `LocalBestImprovement` を「その場で 1 セル書き換え→不採用なら戻す」に（試行ごとの盤面コピーを撤去、
   `Problem`/`Evaluator` は入口で 1 回。Android 3.508.1 第 10 段の同期）。`Hf80StrategicOscillationTest` 3 件追加。MagiEngine.Tests 814 緑。
 

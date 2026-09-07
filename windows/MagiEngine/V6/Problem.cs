@@ -306,15 +306,10 @@ public sealed class Problem
                 var parsed = KotlinInterop.ToIntOrNull(row[k].Trim());
                 if (parsed is not int t) continue;
                 if (t < 0 || canK is null || Array.IndexOf(canK, k) < 0) continue;
-                // [整合] 個人別回数(staffRange=LimMin/LimMax)の[lo,hi]外の群目標は到達不能。範囲端に
-                // クランプし、staffRangeで固定/制限された職員に解消不能な幻のapt違反が出るのを防ぐ
-                // （例: Dﾃを2-2固定の職員に群目標10）。
-                int rlo = RangeLo[i][k], rhi = RangeHi[i][k];
-                if (rlo != int.MinValue && t < rlo) t = rlo;
-                if (rhi != int.MaxValue && t > rhi) t = rhi;
+                // [Android 3.509.0/決定 D9] 個人の下限または上限が入っている組には群目標を適用しない（個人設定だけが効く）。
+                if (RangeLo[i][k] != int.MinValue || RangeHi[i][k] != int.MaxValue) continue;
                 AptRaw[i][k] = t;
-                // [Android 3.508.0] さらに到達範囲へ収める（他シフトの実効上限/下限の合計から決まる、このシフトに
-                //   必ず来る日数）。個人 [lo,hi] と矛盾するときは個人設定を優先して従来どおり。
+                // [Android 3.508.0] 到達範囲へ収める（他シフトの実効上限/下限の合計から決まる、このシフトに必ず来る日数）。
                 int sumHi = 0, sumLo = 0;
                 for (int k2 = 0; k2 < K; k2++)
                 {
@@ -325,8 +320,8 @@ public sealed class Problem
                     sumLo += Math.Max(lo2, wc);
                     sumHi += Math.Max(hi2, wc);
                 }
-                int reachLo = Math.Max(Math.Max(T - sumHi, wishCnt[i][k]), rlo == int.MinValue ? 0 : rlo);
-                int reachHi = Math.Min(T - sumLo, rhi == int.MaxValue ? T : rhi);
+                int reachLo = Math.Max(T - sumHi, wishCnt[i][k]);
+                int reachHi = T - sumLo;
                 if (reachLo <= reachHi) { if (t < reachLo) t = reachLo; if (t > reachHi) t = reachHi; }
                 Apt[i][k] = t;
             }

@@ -513,6 +513,15 @@ public class MagiViewModelEditingTest
         Assert.True(candidates[0].FromRest);
     }
 
+    /// <summary>[Android 3.508.2] 上限 0〜0 のシフトは候補に出さない（最適化器・FixSuggester・Sanity 代用要員と同じ mayPlace 基準）。</summary>
+    [Fact]
+    public void ShortageFixCandidatesExcludesStaffWithZeroCapOnTheShift()
+    {
+        var st = ThreeShiftTwoGroupState() with { StaffRange = new Dictionary<string, Range> { ["1,2"] = new("0", "0") } };
+        var vm = new MagiViewModel { _state = st, _currentSchedule = ThreeShiftSchedule() };
+        Assert.Empty(vm.ShortageFixCandidates(dayIndex: 0, shiftIndex: 2 /* B */));   // 職員B は B の上限 0、職員A は担当不可
+    }
+
     [Fact]
     public void ShortageFixCandidatesExcludesOnlyWishLockForADifferentShiftNotAMatchingOne()
     {

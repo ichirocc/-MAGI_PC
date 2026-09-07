@@ -331,7 +331,8 @@ public sealed partial class MagiViewModel
         for (var i = 0; i < p.S; i++)
         {
             if (i >= sched.Length || dayIndex >= sched[i].Length) continue;
-            if (!p.CanDo(i, shiftIndex)) continue;            // 担当できないシフトは出さない
+            // [Android 3.508.2] 担当できない・上限 0 のシフトは出さない（最適化器・FixSuggester・Sanity 代用要員と同じ基準）。
+            if (!p.MayPlace(i, shiftIndex)) continue;
             if (sched[i][dayIndex] == shiftIndex) continue;   // すでにそのシフト
             // [監査A5] 実現可能な希望のみ固定扱い（不可能希望のセルはエンジン同様に可動）。
             if (p.WishLocked(i, dayIndex) && p.Wish[i][dayIndex] != shiftIndex) continue;

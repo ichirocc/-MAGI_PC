@@ -378,10 +378,31 @@ public class ProblemTest
     }
 
     [Fact]
-    public void Apt_PersonalRangeWinsWhenTheReachContradictsIt()
+    public void Apt_BlankOnlyKeyKeepsTheGroupTarget_FixedValueDisablesItWithoutDoubleCounting()
     {
-        var st = AptState(new Dictionary<string, Range> { ["0,0"] = new("2", "2"), ["0,2"] = new("0", "0"), ["0,1"] = new("", "1") }, "1");
-        Assert.Equal(1, new Problem(st).Apt[0][1]);
+        Assert.Equal(2, new Problem(AptState(new Dictionary<string, Range> { ["0,1"] = new("", "") }, "2")).Apt[0][1]);
+        var fixedSt = AptState(new Dictionary<string, Range> { ["0,1"] = new("1", "1") }, "2");
+        Assert.Equal(-1, new Problem(fixedSt).Apt[0][1]);
+        // 固定値 1〜1 の職員が A を 3 回持つと high だけが出て apt は出ない
+        var rep = UnifiedViolationChecker.Check(fixedSt, new[] { new[] { 1, 1, 1, 0, 0 } });
+        Assert.Equal(2, rep.Breakdown.GetValueOrDefault("high"));
+        Assert.Equal(0, rep.Breakdown.GetValueOrDefault("apt"));
+        Assert.Equal(new[] { "vio-high" }, rep.CountFamilies["0,1"]);
+    }
+
+    [Fact]
+    public void Apt_PersonalSettingActsOnlyOnItsOwnStaffAndShift()
+    {
+        // 別シフト（B）の個人設定は A の群目標に影響しない
+        Assert.Equal(2, new Problem(AptState(new Dictionary<string, Range> { ["0,2"] = new("1", "4") }, "2")).Apt[0][1]);
+        // 別職員（s1）の個人設定は s0 に影響しない
+        var st = AptState(new Dictionary<string, Range> { ["1,1"] = new("1", "4") }, "2") with
+        {
+            StaffList = new List<Staff> { new("s0", 0), new("s1", 0) },
+            Schedule = new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0, 0, 0 }, new List<int> { 0, 0, 0, 0, 0 } },
+        };
+        var p = new Problem(st);
+        Assert.Equal(2, p.Apt[0][1]); Assert.Equal(-1, p.Apt[1][1]);
     }
 
     [Fact]
@@ -524,22 +545,15 @@ public class ProblemTest
         return new Problem(state);
     }
 
+    // [Android 3.509.0/決定 D9] 個人の下限または上限がある組には群目標を適用しない（旧: 個人 [lo,hi] へクランプして併用）。
     [Fact]
-    public void Apt_TargetWithinRange_PassesThroughUnclamped()
+    public void Apt_PersonalRange_DisablesTheGroupTarget()
     {
-        Assert.Equal(10, BuildAptProblem().Apt[0][1]); // s0, shift A
-    }
-
-    [Fact]
-    public void Apt_TargetAboveRangeHi_ClampsDown()
-    {
-        Assert.Equal(6, BuildAptProblem().Apt[1][1]); // s1, shift A, RangeHi=6
-    }
-
-    [Fact]
-    public void Apt_TargetBelowRangeLo_ClampsUp()
-    {
-        Assert.Equal(12, BuildAptProblem().Apt[2][1]); // s2, shift A, RangeLo=12
+        var p = BuildAptProblem();
+        Assert.Equal(-1, p.Apt[0][1]); // s0: 下限・上限
+        Assert.Equal(-1, p.Apt[1][1]); // s1: 上限のみ
+        Assert.Equal(-1, p.Apt[2][1]); // s2: 下限のみ
+        Assert.Equal(-1, p.AptRaw[0][1]);
     }
 
     [Fact]

@@ -155,13 +155,13 @@ public class MirrorEngineTest
     /// 消える。実データ3件でも golden 5件・real 8件・user 1件がこの形で隠れていた。
     /// </summary>
     [Fact]
-    public void CountFamiliesKeepsAptWhenItOverlapsWithHeavierRangeViolation()
+    public void PersonalRangeDisablesTheGroupTargetWithoutDoubleCounting()   // [Android 3.509.0/決定 D9]
     {
         var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
-        var staff = new List<Staff> { new("s0", 0) };
+        var staff = new List<Staff> { new("s0", 0), new("s1", 0) };
         // X を1回だけ勤務: 個人下限3(low)と 適切回数目標3(aptLow) が同じ (staff0, X) で同時に発火する。
-        var schedule = new List<IReadOnlyList<int>> { new List<int> { 1, 0, 0, 0 } };
+        var schedule = new List<IReadOnlyList<int>> { new List<int> { 1, 0, 0, 0 }, new List<int> { 1, 0, 0, 0 } };
         var st = new MagiState(
             StartDate: "2025-01-01", EndDate: "2025-01-04",
             Shifts: shifts, Groups: groups, StaffList: staff,
@@ -178,10 +178,12 @@ public class MirrorEngineTest
             SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
             ShiftColors: new Dictionary<string, string>(), Extras: new Dictionary<string, System.Text.Json.JsonElement>());
         var report = UnifiedViolationChecker.Check(st);
-        Assert.Equal(2, report.Breakdown["low"]);      // lo(3) - got(1)
-        Assert.Equal(2, report.Breakdown["apt"]);      // |1 - 3|
+        Assert.Equal(2, report.Breakdown["low"]);      // s0: lo(3) - got(1)
+        Assert.Equal(2, report.Breakdown["apt"]);      // s1 だけ: |1 - 3|
         Assert.Equal("vio-low", report.CountViolations["0,1"]);
-        Assert.Equal(new List<string> { "vio-low", "vio-aptLow" }, report.CountFamilies["0,1"]);
+        Assert.Equal(new List<string> { "vio-low" }, report.CountFamilies["0,1"]);       // apt は残らない
+        Assert.Equal("vio-aptLow", report.CountViolations["1,1"]);
+        Assert.Equal(new List<string> { "vio-aptLow" }, report.CountFamilies["1,1"]);
     }
 
     /// <summary>

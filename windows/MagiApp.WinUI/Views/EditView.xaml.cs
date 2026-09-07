@@ -2054,8 +2054,11 @@ public sealed partial class EditView : UserControl
         aptRow.Children.Add(new TextBlock { Text = kigou, MinWidth = 48, VerticalAlignment = VerticalAlignment.Center });
         aptRow.Children.Add(minus); aptRow.Children.Add(aptValue); aptRow.Children.Add(plus);
         panel.Children.Add(aptRow);
-        if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
-            panel.Children.Add(new TextBlock { Text = $"個人の上下限で {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 12, Opacity = 0.8 });
+        // [Android 3.509.0/決定 D9] 個人の下限・上限がある組には群目標を適用しない。適用される組は到達範囲へ調整されうる（3.508.0）。
+        if ((lo0 is not null || hi0 is not null) && int.TryParse(raw.Trim(), out _))
+            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません", FontSize = 12, Opacity = 0.8 });
+        else if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
+            panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 12, Opacity = 0.8 });
 
         panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
         var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };
