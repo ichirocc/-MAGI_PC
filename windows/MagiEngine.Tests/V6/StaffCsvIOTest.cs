@@ -114,4 +114,30 @@ public class StaffCsvIOTest
         Assert.Equal(0, r.State.StaffList.First(s => s.Name == "新人").GroupIdx);   // 新規は先頭グループ
         Assert.Equal(0, r.State.StaffList.First(s => s.Name == "既存").GroupIdx);   // 既存の所属は維持
     }
+
+    /// <summary>[Android 3.475.0 同期] 同じ既存職員が 2 行あっても「更新」は 1 名と数える。</summary>
+    [Fact]
+    public void ExistingStaffListedTwiceCountsAsOneUpdate()
+    {
+        var st = new MagiState(
+            StartDate: "2026-06-01", EndDate: "2026-06-02",
+            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            Groups: new List<Group> { new("G1", "G1"), new("G2", "G2") },
+            StaffList: new List<Staff> { new("既存", 0, 0) },
+            Use2Patterns: false,
+            GroupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 1 } },
+            GroupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" }, new List<string> { "", "" } },
+            Schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0 } },
+            Wishes: new Dictionary<string, int>(), StaffRange: new Dictionary<string, Range>(),
+            NeedDay1: new Dictionary<string, string>(), NeedDay2: new Dictionary<string, string>(),
+            Cons1: new List<C1Row>(), Cons2: new List<C2Row>(),
+            Cons3: new List<C3Row>(), Cons3n: new List<C3Row>(), Cons3m: new List<C3Row>(), Cons3mn: new List<C3Row>(),
+            Cons41: new List<C41Row>(), Cons42: new List<C42Row>(),
+            SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
+            ShiftColors: new Dictionary<string, string>(), Extras: new Dictionary<string, System.Text.Json.JsonElement>());
+        var r = StaffCsvIO.ParseUpsert("氏名,グループ\n既存,G2\n既存,G1\n", st, new[] { new[] { 0, 0 } })!;
+        Assert.Equal(1, r.Updated);   // 旧: 2（「2名を更新」）
+        Assert.Equal(0, r.Added);
+        Assert.Equal(0, r.State.StaffList[0].GroupIdx);   // 値は後勝ち（従来どおり）
+    }
 }

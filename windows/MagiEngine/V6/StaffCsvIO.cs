@@ -110,6 +110,7 @@ public static class StaffCsvIO
         var t = sched.Length > 0 ? sched[0].Length : state.DayCount;
         var extraRows = new List<int[]>();
         var seenNew = new Dictionary<string, int>();
+        var seenExisting = new HashSet<int>();   // [Android 3.475.0 同期] 既存職員は1人1回だけ「更新」に数える
         var updated = 0;
         var added = 0;
         // [3.413.0/I-07] 空でないのに解決できなかった群/スキル記号を数える。旧実装は「新規＝先頭グループ・
@@ -143,7 +144,8 @@ public static class StaffCsvIO
             {
                 var cur = newStaff[existing];
                 newStaff[existing] = cur with { GroupIdx = hasGi ? gi : cur.GroupIdx, SkillIdx = hasSi ? si : cur.SkillIdx };
-                updated++;
+                // [Android 3.475.0 同期/論理監査] 旧: 同じ既存職員が2行あると updated=2（「2名を更新」）になっていた。
+                if (seenExisting.Add(existing)) updated++;
             }
             else if (seenNew.TryGetValue(key, out var dup))
             {

@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-07 CSV 層を Android 3.474.0/3.475.0（論理監査）へ同期（Android 3.507.8 第 8 段で未同期が判明）。
+  `ScheduleCsvBridge.Parse`: ヘッダは先頭セルが職員名に解決しないときだけ飛ばす、一致は職員単位（`staff一致 N名`）／
+  `WishesCsvIO`・`ConstraintsCsvIO`（個人レンジ）: 同キーの重複は同値なら 1 件・値が違えば読めない行／`StaffCsvIO.ParseUpsert`: 同一既存職員は更新 1 名／
+  `ConstraintsCsvIO`: 評価されない行は「読めない」側だけに計上（旧: 取込可にも数えていた）／`ComponentImport.Samples`（≤3 件、旧 `Sample` は先頭を返す互換）。検査 5 件追加。
+
 - 2026-09-07 `V6LateOperators` の RectSwap2 の違反者抽出を `BaseViolators` に統一、`IsBalanceable` をシフト別に記憶（Android 3.507.7 第 7 段の同期）。
   Kotlin の `LateSession` 分割は読みやすさの改修で挙動差なしのため C# は構造を変えない。
 

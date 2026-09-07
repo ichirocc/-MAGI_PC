@@ -53,7 +53,7 @@ public static class WishesCsvIO
         //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
         var body = CsvUtil.CsvBody(rows, "氏名");
         var bad = 0;
-        var sample = "";
+        var samples = new List<string>();
         foreach (var r in body)
         {
             var name = Cell(r, 0);
@@ -67,13 +67,23 @@ public static class WishesCsvIO
             if (!hasI || !hasK || day is null || day < 1 || day > state.DayCount)
             {
                 bad++;
-                if (sample.Length == 0) sample = string.Join(",", r).Take(60);
+                // [Android 3.474.0 同期] 例は上限まで集める（誤ったファイル選択で拒否行ぶんの String を丸ごと確保しない）。
+                if (samples.Count < ComponentImport.MaxSamples) samples.Add(CsvUtil.RowSample(r));
                 continue;
             }
-            m[$"{i},{day - 1}"] = k;
+            // [Android 3.475.0 同期/論理監査] 同じ職員×同じ日が2行あるとき、旧: 後勝ちで上書きしつつ n は2件と数えて
+            //   「2件を反映」と言いながら1件しか残らず、食い違う前の行は黙って消えていた。同値の重複は
+            //   1件として数え、値が違う衝突は「読めない行」として置換を止める（全置換の方針＝3.329.0）。
+            var key = $"{i},{day - 1}";
+            if (m.TryGetValue(key, out var prev))
+            {
+                if (prev != k) { bad++; if (samples.Count < ComponentImport.MaxSamples) samples.Add("重複(値が違う): " + CsvUtil.RowSample(r)); }
+                continue;
+            }
+            m[key] = k;
             n++;
         }
         if (n == 0 && bad == 0) return null;
-        return new ComponentImport(state with { Wishes = m }, n, bad, sample);
+        return new ComponentImport(state with { Wishes = m }, n, bad, samples);
     }
 }

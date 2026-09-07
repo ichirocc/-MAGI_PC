@@ -78,4 +78,30 @@ public class WishesCsvIOTest
         Assert.Equal(0, ok!.Rejected);
         Assert.Equal(2, ok.Accepted);
     }
+
+    /// <summary>[Android 3.475.0 同期] 同じ職員×日の重複行は同値なら 1 件、値が違えば読めない行。</summary>
+    [Fact]
+    public void DuplicateWishRowsCountOnceAndConflictsAreRejected()
+    {
+        var st = CsvState();
+        var same = WishesCsvIO.Parse("花子,1,A\n花子,1,A", st)!;
+        Assert.Equal(1, same.Accepted);
+        Assert.Equal(0, same.Rejected);
+        var conflict = WishesCsvIO.Parse("花子,1,A\n花子,1,休", st)!;
+        Assert.Equal(1, conflict.Accepted);
+        Assert.Equal(1, conflict.Rejected);
+        Assert.Equal(1, conflict.State.Wishes["0,0"]);   // 先の行が残る
+        Assert.Equal(new[] { "重複(値が違う): 花子,1,休" }, conflict.Samples);
+    }
+
+    /// <summary>[Android 3.474.0 同期/外部レビュー#76] 読めない行の例は最大 3 件まで集める。</summary>
+    [Fact]
+    public void RejectedSamplesAreCollectedUpToThree()
+    {
+        var st = CsvState();
+        var r = WishesCsvIO.Parse("誰,1,A\n花子,9,A\n花子,1,Z\n花子,2,Z", st)!;
+        Assert.Equal(4, r.Rejected);
+        Assert.Equal(new[] { "誰,1,A", "花子,9,A", "花子,1,Z" }, r.Samples);
+        Assert.Equal("誰,1,A", r.Sample);
+    }
 }

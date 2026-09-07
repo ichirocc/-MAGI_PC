@@ -63,8 +63,8 @@ public class ConstraintsCsvIOTest
         var st = CsvState();
         var empty = ConstraintsCsvIO.Parse("連勤,2,休,1\n連勤,,,", st);
         Assert.NotNull(empty);
-        Assert.Equal(2, empty!.Accepted);   // 読める行は従来どおり数える
-        Assert.Equal(1, empty.Rejected);    // 評価されない行を数える
+        Assert.Equal(1, empty!.Accepted);   // [Android 3.474.0 同期] 評価されない行は「読めない」側だけに数える
+        Assert.Equal(1, empty.Rejected);
 
         // 群・スキル群も同じ（記号が今のデータに無い＝その行は一切効かない）。
         var unknownGroup = ConstraintsCsvIO.Parse("群回数,ZZ,A,0,1", st);
@@ -127,5 +127,20 @@ public class ConstraintsCsvIOTest
         var r2 = ConstraintsCsvIO.Parse("個人レンジ,太郎,A,1,2", st);
         Assert.Equal(0, r2!.Accepted);
         Assert.Equal(1, r2.Rejected);
+    }
+
+    /// <summary>[Android 3.475.0 同期] 個人レンジの重複行は同値なら 1 件、値が違えば読めない行。</summary>
+    [Fact]
+    public void DuplicateStaffRangeRowsCountOnceAndConflictsAreRejected()
+    {
+        var st = CsvState();
+        var same = ConstraintsCsvIO.Parse("個人レンジ,花子,A,1,2\n個人レンジ,花子,A,1,2", st)!;
+        Assert.Equal(1, same.Accepted);
+        Assert.Equal(0, same.Rejected);
+        var conflict = ConstraintsCsvIO.Parse("個人レンジ,花子,A,1,2\n個人レンジ,花子,A,1,3", st)!;
+        Assert.Equal(1, conflict.Accepted);
+        Assert.Equal(1, conflict.Rejected);
+        Assert.Equal(new Range("1", "2"), conflict.State.StaffRange["0,1"]);
+        Assert.Equal(new[] { "個人レンジ,花子,A,1,3" }, conflict.Samples);
     }
 }

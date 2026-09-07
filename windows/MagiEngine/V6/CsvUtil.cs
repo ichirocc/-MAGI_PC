@@ -89,6 +89,9 @@ internal static class CsvUtil
         }
     }
 
+    /// <summary>取込できなかった行の表示用（Kotlin 原本 <c>rowSample</c>＝カンマ連結の先頭 60 文字）。</summary>
+    internal static string RowSample(IReadOnlyList<string> r) => string.Join(",", r).Take(60);
+
     internal static IReadOnlyList<IReadOnlyList<string>> ParseCsvRows(string raw) => ParseCsvFull(raw).Rows;
 
     internal static CsvParse ParseCsvFull(string raw)

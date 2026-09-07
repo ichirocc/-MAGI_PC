@@ -100,11 +100,12 @@ public static class ConstraintsCsvIO
         //   照合で、キーワードを増やすたびに取込側も直す必要があった）。
         var body = CsvUtil.CsvBody(rows, "種別");
         var bad = 0;
-        var sample = "";
+        var samples = new List<string>();
         void Reject(IReadOnlyList<string> r)
         {
             bad++;
-            if (sample.Length == 0) sample = string.Join(",", r).Take(60);
+            // [Android 3.474.0 同期] 例は上限まで集める（WishesCsvIO.Parse と同じ理由）。
+            if (samples.Count < ComponentImport.MaxSamples) samples.Add(CsvUtil.RowSample(r));
         }
         foreach (var r in body)
         {
@@ -152,7 +153,13 @@ public static class ConstraintsCsvIO
                     }
                     // [3.329.0/外部レビュー H-02] 氏名・記号が今のデータに無い行は黙って捨てない。
                     //   捨てたまま置換すると、その職員の個人レンジが**消える**。
-                    if (hasI && k >= 0) { ranges[$"{i},{k}"] = new Range(Cell(r, 3), Cell(r, 4)); n++; }
+                    if (hasI && k >= 0)
+                    {
+                        // [Android 3.475.0 同期/論理監査] 同じ職員×シフトの重複行（希望CSVと同じ扱い＝同値は1件、衝突は拒否）。
+                        var key = $"{i},{k}"; var rng = new Range(Cell(r, 3), Cell(r, 4));
+                        if (!ranges.TryGetValue(key, out var prev)) { ranges[key] = rng; n++; }
+                        else if (prev != rng) Reject(r);
+                    }
                     else Reject(r);
                     break;
                 }
@@ -188,13 +195,16 @@ public static class ConstraintsCsvIO
         }
         if (unresolved.Count > 0)
         {
+            // [Android 3.474.0 同期] 評価されない行は when 分岐で n に数えた行そのもの＝同じ行を
+            //   「取込可」と「読めない」の両方に数えていた。n から差し引き「読めない」側だけにする。
+            n = Math.Max(0, n - unresolved.Count);
             bad += unresolved.Count;
-            if (sample.Length == 0)
+            foreach (var u in unresolved)
             {
-                var first = unresolved[0];
-                sample = $"{first.Family}「{first.Text}」".Take(60);
+                if (samples.Count >= ComponentImport.MaxSamples) break;
+                samples.Add($"{u.Family}「{u.Text}」".Take(60));
             }
         }
-        return new ComponentImport(candidate, n, bad, sample);
+        return new ComponentImport(candidate, n, bad, samples);
     }
 }

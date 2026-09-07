@@ -61,14 +61,19 @@ public static class ScheduleCsvBridge
         //   旧: 後勝ちで、制約評価(最初)とCSV取込(最後)が同じ記号を別シフトとして扱っていた。
         var nameToI = CsvUtil.FirstWinsMap(state.StaffList.Count, i => CsvUtil.NameMatchKey(state.StaffList[i].Name));
         var kigouToK = CsvUtil.FirstWinsMap(state.Shifts.Count, i => state.Shifts[i].Kigou.Trim());
-        var matched = 0;
+        // [Android 3.475.0 同期/論理監査] 一致は**職員単位**で数える（旧: 行単位＝同じ職員の行が2つあると 2 と
+        //   数え、欠けている職員がいても「全員更新」に見えた。値は後勝ちで前の行が黙って上書きされる）。
+        var matchedStaff = new HashSet<int>();
         // [3.410.0/I-01] 未知記号を数える（旧: 黙って読み飛ばしていた）。
         // [監査再検証で判明した再発] 下の OrderByDescending は安定ソートだが、素の Dictionary は
         //   列挙順を契約保証しない（現CoreCLR実装が挿入順を保つのは実装詳細）ため、件数が同点の
         //   未知記号の並び順（=どれを先に見せるか）が「ファイル中の初出順」というKotlin原本
         //   （LinkedHashMap）の契約を満たせなくなる。CsvUtil.OrderedCounter で明示的に保証する。
         var unknown = new CsvUtil.OrderedCounter();
-        var rr = 1;
+        // [Android 3.475.0 同期] 先頭行はヘッダ「スタッフ \ 日付,…」のときだけ飛ばす（旧: 無条件に rr=1 で、
+        //   ヘッダ無しCSVの先頭職員が黙って落ち「氏名不一致でスキップ」と誤案内していた）。判定は
+        //   「先頭セルが職員名に解決しない」＝CsvBody() と同じ考え方。
+        var rr = rows.Count > 0 && !nameToI.ContainsKey(CsvUtil.NameMatchKey(rows[0].Count > 0 ? rows[0][0] : "")) ? 1 : 0;
         while (rr < rows.Count)
         {
             var r = rows[rr];
@@ -80,7 +85,7 @@ public static class ScheduleCsvBridge
             {
                 if (nameToI.TryGetValue(CsvUtil.NameMatchKey(r[0]), out var staffIndex))
                 {
-                    matched++;
+                    matchedStaff.Add(staffIndex);
                     var last = Math.Min(p.T, r.Count - 1);
                     var j = 0;
                     while (j < last)
@@ -95,10 +100,11 @@ public static class ScheduleCsvBridge
             rr++;
         }
         var report = UnifiedViolationChecker.Check(state, schedule);
+        var matched = matchedStaff.Count;
         var unknownTotal = unknown.Values.Sum();
         var unknownTop = unknown.OrderByDescending(kv => kv.Value).Take(5)
             .Select(kv => $"{kv.Key}({kv.Value})").ToList();
-        var message = $"CSV取込: staff一致 {matched}行" +
+        var message = $"CSV取込: staff一致 {matched}名" +
             (unknownTotal > 0 ? $" / 読めない記号 {unknownTotal}セル: {string.Join("・", unknownTop)}" : "");
         var log = new MirrorLog(tag: "CSVImport", message: message);
         var logs = new List<MirrorLog> { log };

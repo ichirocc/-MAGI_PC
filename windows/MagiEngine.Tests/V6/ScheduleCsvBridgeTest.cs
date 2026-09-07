@@ -53,4 +53,18 @@ public class ScheduleCsvBridgeTest
         Assert.True(ng.UnclosedQuote, "引用符が閉じないことを検出する");
         Assert.True(ng.Matched < 2, "実際に行が失われている（一致が減る）");
     }
+
+    /// <summary>[Android 3.475.0 同期] ヘッダ無し CSV の先頭職員を落とさず、一致は職員単位で数える。</summary>
+    [Fact]
+    public void HeaderlessScheduleCsvKeepsFirstRowAndMatchedCountsStaffNotRows()
+    {
+        var st = BuildState();
+        var baseSchedule = new[] { new[] { 0, 0 }, new[] { 0, 0 } };
+        var headerless = ScheduleCsvBridge.Parse("職員A,A,休\n職員B,休,A\n", st, baseSchedule);
+        Assert.Equal(2, headerless.Matched);
+        Assert.Equal(1, headerless.Schedule[0][0]);
+        var dup = ScheduleCsvBridge.Parse("スタッフ \\ 日付,1,2\n職員A,A,休\n職員A,休,A\n", st, baseSchedule);
+        Assert.Equal(1, dup.Matched);   // 旧: 行単位で 2＝欠けている職員B がいても「全員更新」に見えた
+        Assert.Contains("staff一致 1名", dup.Report.Logs[0].Message);
+    }
 }
