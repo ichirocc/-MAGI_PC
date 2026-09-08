@@ -32,5 +32,16 @@ public class ChangeSummaryTest
         Assert.Equal(2, s.WishTotal); Assert.Equal(2, s.WishKept);
         Assert.False(s.RangeAllOk);
         Assert.Equal("変更 2人・4セル／希望 2/2／個人回数 範囲外あり", s.Line());
+        Assert.Equal(-1, s.FamilyDeltas["pref"]); Assert.Equal(1, s.FamilyDeltas["high"]);   // s0 の希望が通り、s2 が上限超過
+        Assert.Equal("改善 pref -1（重み 9000）", s.FamilyLine().Split('／')[0]);
+        Assert.StartsWith("悪化 上限超過 +1・", s.FamilyLine(k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 重み 45 が先頭、fair/weekly が続く
+    }
+
+    [Fact]
+    public void FamilyLineOrdersByWeightedImpactAndReportsEmptySides()
+    {
+        var line = ChangeSummary.FamilyLine(new Dictionary<string, int> { ["weekly"] = 3, ["c1"] = -1, ["c3mn"] = -2, ["fair"] = 4 });
+        Assert.Equal("改善 c3mn -2・c1 -1（重み 90）／悪化 fair +4・weekly +3（重み 7）", line);
+        Assert.Equal("改善 なし／悪化 なし", ChangeSummary.FamilyLine(new Dictionary<string, int>()));
     }
 }

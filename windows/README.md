@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-08 族別 Credit/Debt の可視化（Android 3.510.3 同期）: `ChangeSummary.FamilyDeltas`（族別の件数増減）と `FamilyLine`（改善した族・悪化した族を重み×増減の大きい順、重み付き合計つき）、
+  `Of` は `beforeReport` を受け取る。`RunPostOptimization` は入口で 1 回評価し末尾に「後処理 収支」ログ。採否判定は不変。HomeView への 2 行目表示は WinUI ビルド環境で（未）。
+
 - 2026-09-08 研磨パス共通の採用ゲート `V6SearchOperators.AdoptionGate`（Android 3.509.5 同期）: `IsBetter(...) && !pinBlocks.BlocksImproving(...)` 13 箇所を置換。挙動不変、MagiEngine.Tests 822 緑。
 
 - 2026-09-08 改善提案の適用直前ゲート `FixApplyGate`（仮盤面で完全再評価、辞書式改善・回数固定/希望固定不変のときだけ反映、見送り理由を表示）と

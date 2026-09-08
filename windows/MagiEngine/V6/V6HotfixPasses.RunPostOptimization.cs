@@ -207,6 +207,7 @@ public static partial class V6HotfixPasses
         var stop = shouldStop ?? (() => false);
         var chain = new PostChain(onPhase, schedule);
         var t0 = EngineClock.NowMs();
+        var report0 = UnifiedViolationChecker.Check(state, schedule);
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
             ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop));
@@ -311,6 +312,8 @@ public static partial class V6HotfixPasses
                     .Take(p.PassLogTopN)
                     .Select(kv => $"{kv.Key}={kv.Value}ms({kv.Value * 100 / sum}%)"))));
         }
+
+        chain.Logs.Add(new MirrorLog(level: "I", tag: "POST", message: "後処理 収支: " + ChangeSummary.FamilyLine(ChangeSummary.DeltasOf(report0, report))));
 
         var plateauOut = FinalC1Plateau(state, work, report, c1Plateau);
         var allLogs = new List<MirrorLog>(chain.Logs);
