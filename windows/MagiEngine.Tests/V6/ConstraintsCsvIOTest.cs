@@ -143,4 +143,19 @@ public class ConstraintsCsvIOTest
         Assert.Equal(new Range("1", "2"), conflict.State.StaffRange["0,1"]);
         Assert.Equal(new[] { "個人レンジ,花子,A,1,3" }, conflict.Samples);
     }
+
+    /// <summary>[Android 3.509.3 同期] 個人レンジ行は「空欄か 0 以上の整数、下限≤上限」だけを受理する。</summary>
+    [Fact]
+    public void InvalidStaffRangeRowsAreRejected()
+    {
+        var st = CsvState();
+        int Rejected(string cells) => ConstraintsCsvIO.Parse($"個人レンジ,花子,A,{cells}", st)!.Rejected;
+        Assert.Equal(1, Rejected("abc,"));
+        Assert.Equal(1, Rejected("-1,"));
+        Assert.Equal(1, Rejected(",-2"));
+        Assert.Equal(1, Rejected("5,2"));
+        Assert.Equal(0, Rejected("2,5"));
+        Assert.Equal(0, Rejected(",3"));
+        Assert.Equal(0, Rejected("0,0"));
+    }
 }

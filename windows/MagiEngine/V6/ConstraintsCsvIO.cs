@@ -153,7 +153,12 @@ public static class ConstraintsCsvIO
                     }
                     // [3.329.0/外部レビュー H-02] 氏名・記号が今のデータに無い行は黙って捨てない。
                     //   捨てたまま置換すると、その職員の個人レンジが**消える**。
-                    if (hasI && k >= 0)
+                    // [Android 3.509.3] 下限/上限は空欄か 0 以上の整数、両方あれば下限≤上限（Problem が捨てる値で置換しない）。
+                    var loV = Cell(r, 3); var hiV = Cell(r, 4);
+                    var loN = KotlinInterop.ToIntOrNull(loV); var hiN = KotlinInterop.ToIntOrNull(hiV);
+                    var numOk = (loV.Length == 0 || (loN is int l1 && l1 >= 0)) && (hiV.Length == 0 || (hiN is int h1 && h1 >= 0)) &&
+                        (loN is null || hiN is null || loN.Value <= hiN.Value);
+                    if (hasI && k >= 0 && numOk)
                     {
                         // [Android 3.475.0 同期/論理監査] 同じ職員×シフトの重複行（希望CSVと同じ扱い＝同値は1件、衝突は拒否）。
                         var key = $"{i},{k}"; var rng = new Range(Cell(r, 3), Cell(r, 4));
