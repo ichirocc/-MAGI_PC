@@ -85,7 +85,7 @@ public static partial class V6HotfixPasses
                     trial[staff][d] = shift;
                     // (a) 直接移動のみで改善（旧シフトに余裕がある場合）。
                     var repDirect = UnifiedViolationChecker.Check(state, trial);
-                    if (IsBetter(repDirect, bestRep) && !pinBlocks.BlocksImproving(p, work, trial))
+                    if (V6SearchOperators.AdoptionGate(p, work, trial, repDirect, bestRep, pinBlocks).Accepted)
                     {
                         work = trial; bestRep = repDirect; applied++; adopted = true;
                         goto WindowLoopDone;
@@ -99,7 +99,7 @@ public static partial class V6HotfixPasses
                         {
                             foreach (var mv in chain) trial[mv[0]][mv[1]] = mv[2];
                             var repChain = UnifiedViolationChecker.Check(state, trial);
-                            if (IsBetter(repChain, bestRep) && !pinBlocks.BlocksImproving(p, work, trial))
+                            if (V6SearchOperators.AdoptionGate(p, work, trial, repChain, bestRep, pinBlocks).Accepted)
                             {
                                 work = trial; bestRep = repChain; applied++; chainUsed++; adopted = true;
                                 goto WindowLoopDone;

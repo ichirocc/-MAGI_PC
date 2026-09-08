@@ -93,7 +93,7 @@ public static partial class V6HotfixPasses
             var rep = UnifiedViolationChecker.Check(state, cand);
             // [厳密ピン保護] 日ブロック内Hungarian再割当は複数職員の回数を同時に変えうるため、
             //   staffRange厳密ピン(lo==hi)を新たに崩す日案は不採用にする（keep-best/重みは不変）。
-            if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, work, cand))
+            if (V6SearchOperators.AdoptionGate(p, work, cand, rep, bestRep, pinBlocks).Accepted)
             {
                 work = cand; bestRep = rep; counts = Cnt(); applied++;
             }
@@ -230,7 +230,7 @@ public static partial class V6HotfixPasses
                 var rep = UnifiedViolationChecker.Check(state, cand);
                 // [厳密ピン保護] 日ブロック内Hungarian再割当は複数職員の回数を同時に変えうるため、
                 //   staffRange厳密ピン(lo==hi)を新たに崩す日案は不採用にする（keep-best/重みは不変）。
-                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, work, cand))
+                if (V6SearchOperators.AdoptionGate(p, work, cand, rep, bestRep, pinBlocks).Accepted)
                 {
                     work = cand; bestRep = rep; counts = Cnt();
                     wd = BuildWd();

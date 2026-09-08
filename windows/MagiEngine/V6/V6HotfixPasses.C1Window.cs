@@ -331,7 +331,7 @@ public static partial class V6HotfixPasses
                         var oldVals = chain?.Select(mv => work[mv[0]][mv[1]]).ToArray();
                         if (chain != null) foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
                         var rep2 = UnifiedViolationChecker.Check(state, work);
-                        if (IsBetter(rep2, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeDay, work))
+                        if (V6SearchOperators.AdoptionGate(p, workBeforeDay, work, rep2, bestRep, pinBlocks).Accepted)
                         {
                             bestRep = rep2; applied++; improved = true;
                             donorsCache = null;

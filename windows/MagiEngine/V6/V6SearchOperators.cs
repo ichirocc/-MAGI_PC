@@ -885,6 +885,16 @@ internal static class V6SearchOperators
     /// (データ側の既存不整合)場合は、そこから遠ざける変更のみを禁じ、現状維持やピンへ近づける変更は
     /// 妨げない。
     /// </summary>
+    /// <summary>[Android 3.509.5] 研磨パス共通の採用ゲート: 正式比較で改善し、かつ厳密ピンを目標から遠ざけない。ピン判定は改善したときだけ。</summary>
+    internal readonly record struct Adoption(bool Better, bool PinBad) { public bool Accepted => Better && !PinBad; }
+
+    internal static Adoption AdoptionGate(Problem p, int[][] before, int[][] after, ViolationReport rep, ViolationReport best, PinBlockAttribution? pinBlocks = null)
+    {
+        if (!UnifiedViolationChecker.BetterReport(rep, best)) return new Adoption(false, false);
+        var pinBad = pinBlocks is not null ? pinBlocks.BlocksImproving(p, before, after) : ExactPinRegression(p, before, after);
+        return new Adoption(true, pinBad);
+    }
+
     internal static bool ExactPinRegression(Problem p, int[][] before, int[][] after)
     {
         for (int i = 0; i < p.S; i++)

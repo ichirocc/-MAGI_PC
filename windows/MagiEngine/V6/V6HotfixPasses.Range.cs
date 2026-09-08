@@ -197,7 +197,7 @@ public static partial class V6HotfixPasses
             if (!needsChain)
             {
                 var rep = UnifiedViolationChecker.Check(state, work);
-                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRelocate, work)) { bestRep = rep; applied++; return true; }
+                if (V6SearchOperators.AdoptionGate(p, workBeforeRelocate, work, rep, bestRep, pinBlocks).Accepted) { bestRep = rep; applied++; return true; }
                 work[i][j] = fromK;
                 combinable.Add(new CombinatorialRepair.Candidate(
                     new List<int[]> { new[] { i, j, toK } }, "tryRelocate", Label(target.Item1, target.Item2)));
@@ -212,7 +212,7 @@ public static partial class V6HotfixPasses
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
             var rep2 = UnifiedViolationChecker.Check(state, work);
-            if (IsBetter(rep2, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRelocate, work)) { bestRep = rep2; applied++; return true; }
+            if (V6SearchOperators.AdoptionGate(p, workBeforeRelocate, work, rep2, bestRep, pinBlocks).Accepted) { bestRep = rep2; applied++; return true; }
             for (var idx = 0; idx < chain.Count; idx++) work[chain[idx][0]][chain[idx][1]] = oldVals[idx];
             work[i][j] = fromK;
             combinable.Add(new CombinatorialRepair.Candidate(
@@ -242,7 +242,7 @@ public static partial class V6HotfixPasses
                 var workBeforeSwap = work.Copy2D();
                 work[hi][j] = loK; work[lo][j] = k;
                 var rep = UnifiedViolationChecker.Check(state, work);
-                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeSwap, work)) { bestRep = rep; applied++; return true; }
+                if (V6SearchOperators.AdoptionGate(p, workBeforeSwap, work, rep, bestRep, pinBlocks).Accepted) { bestRep = rep; applied++; return true; }
                 work[hi][j] = k; work[lo][j] = loK;
             }
             return false;

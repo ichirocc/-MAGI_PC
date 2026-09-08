@@ -103,7 +103,7 @@ public static partial class V6HotfixPasses
                     if (!needsChain)
                     {
                         var rep = UnifiedViolationChecker.Check(state, work);
-                        if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforePattern, work))
+                        if (V6SearchOperators.AdoptionGate(p, workBeforePattern, work, rep, bestRep, pinBlocks).Accepted)
                         { bestRep = rep; applied++; improved = true; done = true; }
                         else work[i][j] = curK;
                         continue;

@@ -326,6 +326,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-08 研磨パス共通の採用ゲート `V6SearchOperators.AdoptionGate`（Android 3.509.5 同期）: `IsBetter(...) && !pinBlocks.BlocksImproving(...)` 13 箇所を置換。挙動不変、MagiEngine.Tests 822 緑。
+
 - 2026-09-08 改善提案の適用直前ゲート `FixApplyGate`（仮盤面で完全再評価、辞書式改善・回数固定/希望固定不変のときだけ反映、見送り理由を表示）と
   完了表示用の前後比較 `ChangeSummary`（Android 3.509.4 同期）。`ApplyFixSuggestion` はゲート経由。VM 検査 2 件を新仕様へ（改善する提案で通す／範囲外は見送り）。
   HomeView の完了表示への `ChangeSummary` 表示は WinUI ビルド環境で行う（未）。

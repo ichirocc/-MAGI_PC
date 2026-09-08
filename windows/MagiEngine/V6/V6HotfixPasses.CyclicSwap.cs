@@ -61,7 +61,7 @@ public static partial class V6HotfixPasses
                         var workBeforeSwap2 = work.Copy2D();
                         work[a][j] = sb; work[b][j] = sa;
                         var rep = UnifiedViolationChecker.Check(state, work);
-                        if (UnifiedViolationChecker.BetterReport(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeSwap2, work))
+                        if (V6SearchOperators.AdoptionGate(p, workBeforeSwap2, work, rep, bestRep, pinBlocks).Accepted)
                         {
                             bestRep = rep; applied++; improved = true;
                         }
@@ -93,7 +93,7 @@ public static partial class V6HotfixPasses
                                 var workBeforeRotate3 = work.Copy2D();
                                 work[a][j] = sb; work[b][j] = sc; work[c][j] = sa;
                                 var rep = UnifiedViolationChecker.Check(state, work);
-                                if (UnifiedViolationChecker.BetterReport(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRotate3, work))
+                                if (V6SearchOperators.AdoptionGate(p, workBeforeRotate3, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true;
                                     continue;
@@ -210,7 +210,7 @@ public static partial class V6HotfixPasses
                                 }
                             }
                             var rep = UnifiedViolationChecker.Check(state, work);
-                            if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeBlock, work))
+                            if (V6SearchOperators.AdoptionGate(p, workBeforeBlock, work, rep, bestRep, pinBlocks).Accepted)
                             {
                                 bestRep = rep; applied++; improved = true;
                             }
@@ -355,7 +355,7 @@ public static partial class V6HotfixPasses
                                     }
                                 }
                                 var rep = UnifiedViolationChecker.Check(state, work);
-                                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRotate, work))
+                                if (V6SearchOperators.AdoptionGate(p, workBeforeRotate, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true;
                                 }
@@ -496,7 +496,7 @@ public static partial class V6HotfixPasses
                                 var workBeforeRect = work.Copy2D();
                                 work[i][j1] = z; work[i][j2] = x; work[ip][j1] = x; work[ip][j2] = y;
                                 var rep = UnifiedViolationChecker.Check(state, work);
-                                if (IsBetter(rep, bestRep) && !pinBlocks.BlocksImproving(p, workBeforeRect, work))
+                                if (V6SearchOperators.AdoptionGate(p, workBeforeRect, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true; done = true; break;
                                 }

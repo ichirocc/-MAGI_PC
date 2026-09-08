@@ -141,7 +141,7 @@ public static partial class V6HotfixPasses
         var candidate = bestEver
             ?? beam.OrderBy(b => b.Rep, UnifiedViolationChecker.ReportComparer).FirstOrDefault()
             ?? new Beam(work0, before, 0);
-        var best = IsBetter(candidate.Rep, before) && !pinBlocks.BlocksImproving(p, work0, candidate.Work)
+        var best = V6SearchOperators.AdoptionGate(p, work0, candidate.Work, candidate.Rep, before, pinBlocks).Accepted
             ? candidate
             : new Beam(work0, before, 0);
 
