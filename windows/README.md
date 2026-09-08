@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-08 改善提案の適用直前ゲート `FixApplyGate`（仮盤面で完全再評価、辞書式改善・回数固定/希望固定不変のときだけ反映、見送り理由を表示）と
+  完了表示用の前後比較 `ChangeSummary`（Android 3.509.4 同期）。`ApplyFixSuggestion` はゲート経由。VM 検査 2 件を新仕様へ（改善する提案で通す／範囲外は見送り）。
+  HomeView の完了表示への `ChangeSummary` 表示は WinUI ビルド環境で行う（未）。
+
 - 2026-09-08 制約 CSV の個人レンジ行は「空欄か 0 以上の整数、下限≤上限」だけ受理（Android 3.509.3 同期、自動化方針の必須修正③）。検査追加、MagiEngine.Tests 819 緑。
 
 - 2026-09-07 日割当研磨（`V6HotfixPasses.DayAssign.cs` の厳密/交互）の `AptTarget` を生の `GroupShiftApt` から `Problem.Apt`（実効目標）へ

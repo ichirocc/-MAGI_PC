@@ -110,23 +110,27 @@ public sealed partial class MagiViewModel
             Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「直し方を探す」をもう一度押してください";
             return;
         }
-        foreach (var op in s.Ops)
+        // [Android 3.509.4/自動化方針] 適用直前に仮盤面で完全再評価し、辞書式で改善しない・固定を崩す提案は反映しない。
+        var gate = FixApplyGate.Apply(st, sched, s.Ops);
+        if (!gate.Applied)
         {
-            if (op.Staff < 0 || op.Staff >= sched.Length) return;
-            if (op.Day < 0 || op.Day >= sched[op.Staff].Length) return;
-            if (op.ToShift < 0 || op.ToShift >= st.Shifts.Count) return;
+            LogOp("W", $"改善手を見送り: {s.Label}（{gate.Reason}）");
+            Ui.MessageIsError = true;
+            Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+            Ui.Message = $"この提案は見送りました（{gate.Reason}）。「直し方を探す」で探し直してください";
+            return;
         }
         PushUndo();
-        foreach (var op in s.Ops) sched[op.Staff][op.Day] = op.ToShift;
-        _currentSchedule = sched;
-        _state = st.WithSchedule(sched);
+        var applied = gate.Schedule!;
+        _currentSchedule = applied;
+        _state = st.WithSchedule(applied);
         AutoSave();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
-        Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.FixSuggestions = Array.Empty<FixSuggestion>(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
-        Ui.Message = $"改善手を適用: {s.Label}";
+        Ui.Message = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         RefreshCheck();
     }
 }

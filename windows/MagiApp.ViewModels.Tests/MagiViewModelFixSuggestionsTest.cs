@@ -1,3 +1,4 @@
+using MagiEngine.Model;
 using MagiApp.ViewModels.Tests.TestSupport;
 using MagiApp.ViewModels.Work;
 using MagiEngine.V6;
@@ -71,9 +72,10 @@ public class MagiViewModelFixSuggestionsTest
     [Fact]
     public async Task ApplyFixSuggestion_AppliesOpsAndClearsSuggestions()
     {
+        // [Android 3.509.4] 適用直前ゲートは改善する提案だけ通す＝A に必要人数 1 を置き、全員 休 の盤面で (0,0)→A が人員不足を減らす形にする。
         var vm = new MagiViewModel
         {
-            _state = MinimalState.Build(),
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") }),
             _currentSchedule = MinimalState.BuildSchedule(),
         };
         vm.Ui.FixSuggestions = new List<FixSuggestion> { MakeSuggestion(new FixCell(0, 0, 1)) };
@@ -124,7 +126,8 @@ public class MagiViewModelFixSuggestionsTest
         vm.ApplyFixSuggestion(s);
 
         Assert.Equal(0, vm._currentSchedule![0][0]); // 1つ目も適用されていない
-        Assert.Null(vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);            // [Android 3.509.4] 見送りを告げる
+        Assert.Contains("見送りました", vm.Ui.Message);
     }
 
     [Fact]
