@@ -245,10 +245,20 @@ public sealed class DeltaEvaluator
         foreach (var c in _p.Cons2)
         {
             if (!_p.CanDo(i, c.ShiftIdx)) continue;
-            if (c.ShiftIdx == old)
-                d2 += Viol01(_cntSS[i][old] - 1 < c.Count) - Viol01(_cntSS[i][old] < c.Count);
-            else if (c.ShiftIdx == nw)
-                d2 += Viol01(_cntSS[i][nw] + 1 < c.Count) - Viol01(_cntSS[i][nw] < c.Count);
+            if (_p.QuantitativeRangeEval)
+            {
+                if (c.ShiftIdx == old)
+                    d2 += Evaluator.C2Amount(_cntSS[i][old] - 1, c.Count) - Evaluator.C2Amount(_cntSS[i][old], c.Count);
+                else if (c.ShiftIdx == nw)
+                    d2 += Evaluator.C2Amount(_cntSS[i][nw] + 1, c.Count) - Evaluator.C2Amount(_cntSS[i][nw], c.Count);
+            }
+            else
+            {
+                if (c.ShiftIdx == old)
+                    d2 += Viol01(_cntSS[i][old] - 1 < c.Count) - Viol01(_cntSS[i][old] < c.Count);
+                else if (c.ShiftIdx == nw)
+                    d2 += Viol01(_cntSS[i][nw] + 1 < c.Count) - Viol01(_cntSS[i][nw] < c.Count);
+            }
         }
         _dC2 = d2;
 
@@ -317,7 +327,9 @@ public sealed class DeltaEvaluator
             int z = 0;
             for (int ii = 0; ii < S; ii++) if (_p.Sgrp[ii] == c.GroupIdx && _a[ii][j] == c.ShiftIdx) z++;
             int za = z + (c.ShiftIdx == nw ? 1 : 0) - (c.ShiftIdx == old ? 1 : 0);
-            d41 += Viol01(za < c.L || c.U < za) - Viol01(z < c.L || c.U < z);
+            d41 += _p.QuantitativeRangeEval
+                ? Evaluator.RangeDistance(za, c.L, c.U) - Evaluator.RangeDistance(z, c.L, c.U)
+                : Viol01(za < c.L || c.U < za) - Viol01(z < c.L || c.U < z);
         }
         _dC41 = d41;
 
@@ -350,7 +362,9 @@ public sealed class DeltaEvaluator
             int z = 0;
             for (int ii = 0; ii < S; ii++) if (_p.Ssk[ii] == c.GroupIdx && _a[ii][j] == c.ShiftIdx) z++;
             int za = z + (c.ShiftIdx == nw ? 1 : 0) - (c.ShiftIdx == old ? 1 : 0);
-            d41s += Viol01(za < c.L || c.U < za) - Viol01(z < c.L || c.U < z);
+            d41s += _p.QuantitativeRangeEval
+                ? Evaluator.RangeDistance(za, c.L, c.U) - Evaluator.RangeDistance(z, c.L, c.U)
+                : Viol01(za < c.L || c.U < za) - Viol01(z < c.L || c.U < z);
         }
         _dC41s = d41s;
 
@@ -561,7 +575,11 @@ public sealed class DeltaEvaluator
         // [監査#5] 担当不可の職員は対象外（チェッカーと同一条件）
         foreach (var c in _p.Cons2)
             for (int i = 0; i < S; i++)
-                if (_p.CanDo(i, c.ShiftIdx) && _cntSS[i][c.ShiftIdx] < c.Count) tot += 1;
+            {
+                if (!_p.CanDo(i, c.ShiftIdx)) continue;
+                tot += _p.QuantitativeRangeEval ? Evaluator.C2Amount(_cntSS[i][c.ShiftIdx], c.Count)
+                    : (_cntSS[i][c.ShiftIdx] < c.Count ? 1L : 0L);
+            }
         return tot;
     }
 
@@ -574,7 +592,7 @@ public sealed class DeltaEvaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Sgrp[i] == c.GroupIdx && _a[i][j] == c.ShiftIdx) z++;
-                if (z < c.L || c.U < z) tot += 1;
+                tot += _p.QuantitativeRangeEval ? Evaluator.RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
             }
         }
         return tot;
@@ -608,7 +626,7 @@ public sealed class DeltaEvaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Ssk[i] == c.GroupIdx && _a[i][j] == c.ShiftIdx) z++;
-                if (z < c.L || c.U < z) tot += 1;
+                tot += _p.QuantitativeRangeEval ? Evaluator.RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
             }
         }
         return tot;

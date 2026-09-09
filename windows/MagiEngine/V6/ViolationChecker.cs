@@ -105,10 +105,10 @@ public static class UnifiedViolationChecker
 
     public static bool BetterReport(ViolationReport a, ViolationReport b) => ReportComparer.Compare(a, b) < 0;
 
-    public static ViolationReport Check(MagiState state, int[][]? schedule = null)
+    public static ViolationReport Check(MagiState state, int[][]? schedule = null, bool quantitativeRangeEval = false)
     {
         var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var s = ScheduleUtil.NormalizeSchedule(schedule ?? state.Schedule.ToIntArray2D(), p);
 
         // [3.395.0/高速化 移植元] 集計は添字加算の int[] で行い、最後に MirrorKeys.All の順で
@@ -196,7 +196,12 @@ public static class UnifiedViolationChecker
             for (int i = 0; i < p.S; i++)
             {
                 if (!p.CanDo(i, c.ShiftIdx)) continue;
-                if (counts[i][c.ShiftIdx] < c.Count)
+                if (quantitativeRangeEval)
+                {
+                    var amt = Evaluator.C2Amount(counts[i][c.ShiftIdx], c.Count);
+                    if (amt > 0) { Inc("c2", (int)amt); MarkCount(i, c.ShiftIdx, "c2"); }
+                }
+                else if (counts[i][c.ShiftIdx] < c.Count)
                 {
                     Inc("c2");
                     MarkCount(i, c.ShiftIdx, "c2");
@@ -211,7 +216,12 @@ public static class UnifiedViolationChecker
             {
                 int z = 0;
                 for (int i = 0; i < p.S; i++) if (p.Sgrp[i] == c.GroupIdx && CellIs(i, j, c.ShiftIdx)) z++;
-                if (z < c.L || z > c.U)
+                if (quantitativeRangeEval)
+                {
+                    var amt = Evaluator.RangeDistance(z, c.L, c.U);
+                    if (amt > 0) { Inc("c41", (int)amt); MarkNeed(c.ShiftIdx, j, "c41"); }
+                }
+                else if (z < c.L || z > c.U)
                 {
                     Inc("c41");
                     MarkNeed(c.ShiftIdx, j, "c41");
@@ -259,7 +269,12 @@ public static class UnifiedViolationChecker
             {
                 int z = 0;
                 for (int i = 0; i < p.S; i++) if (p.Ssk[i] == c.GroupIdx && CellIs(i, j, c.ShiftIdx)) z++;
-                if (z < c.L || z > c.U) { Inc("c41s"); MarkNeed(c.ShiftIdx, j, "c41s"); }
+                if (quantitativeRangeEval)
+                {
+                    var amt = Evaluator.RangeDistance(z, c.L, c.U);
+                    if (amt > 0) { Inc("c41s", (int)amt); MarkNeed(c.ShiftIdx, j, "c41s"); }
+                }
+                else if (z < c.L || z > c.U) { Inc("c41s"); MarkNeed(c.ShiftIdx, j, "c41s"); }
             }
         }
         foreach (var c in p.Cons42s)

@@ -168,23 +168,27 @@ public static class ScheduleUtil
         private sealed class Entry
         {
             public readonly MagiState Key;
+            public readonly bool Flag;
             public readonly Problem Value;
-            public Entry(MagiState key, Problem value) { Key = key; Value = value; }
+            public Entry(MagiState key, bool flag, Problem value) { Key = key; Flag = flag; Value = value; }
         }
 
         private static volatile Entry? _entry;
 
-        public static Problem Get(MagiState state)
+        // [backlog #12(a)・実験段階] quantitativeRangeEval は Problem の内容を変えるので、
+        // state と一緒にキャッシュキーへ含める（Kotlin MirrorCore.kt の ProblemCache と同じ）。
+        public static Problem Get(MagiState state, bool quantitativeRangeEval)
         {
             var e = _entry;
-            if (e is not null && ReferenceEquals(e.Key, state)) return e.Value;
-            var np = new Problem(state);
-            _entry = new Entry(state, np); // 単一参照の公開はアトミック。race時の重複生成は等価で無害。
+            if (e is not null && ReferenceEquals(e.Key, state) && e.Flag == quantitativeRangeEval) return e.Value;
+            var np = new Problem(state, quantitativeRangeEval);
+            _entry = new Entry(state, quantitativeRangeEval, np); // 単一参照の公開はアトミック。race時の重複生成は等価で無害。
             return np;
         }
     }
 
-    public static Problem CachedProblem(MagiState state) => ProblemCache.Get(state);
+    public static Problem CachedProblem(MagiState state, bool quantitativeRangeEval = false) =>
+        ProblemCache.Get(state, quantitativeRangeEval);
 
     /// <summary>Converts <see cref="MagiState.Schedule"/>'s jagged read-only lists to a mutable jagged array.</summary>
     public static int[][] ToIntArray2D(this IReadOnlyList<IReadOnlyList<int>> rows)

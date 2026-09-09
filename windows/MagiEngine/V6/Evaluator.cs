@@ -18,6 +18,16 @@ public sealed class Evaluator
     /// </summary>
     public const long SCORE_HARD_UNIT = 1_000_000_000L;
 
+    /// <summary>[backlog #12(a)・実験段階] c2 の量的評価（不足量）。<see cref="Problem.QuantitativeRangeEval"/>
+    /// が true のときだけ、Checker・Evaluator・DeltaEvaluator の共通ソースとしてこの関数を使う（既定は二値のまま呼ばない）。
+    /// Kotlin <c>Evaluator.kt</c> の <c>c2Amount</c> と同一式。</summary>
+    internal static long C2Amount(int z, int count) => z < count ? (long)(count - z) : 0L;
+
+    /// <summary>[backlog #12(a)・実験段階] c41/c41s の量的評価（[l,u] からの距離）。用途は <see cref="C2Amount"/> と同じ。
+    /// Kotlin <c>Evaluator.kt</c> の <c>rangeDistance</c> と同一式。</summary>
+    internal static long RangeDistance(int z, int l, int u) =>
+        (z < l ? (long)(l - z) : 0L) + (z > u ? (long)(z - u) : 0L);
+
     private readonly Problem _p;
 
     public Evaluator(Problem p)
@@ -78,7 +88,7 @@ public sealed class Evaluator
                 if (!_p.CanDo(i, c.ShiftIdx)) continue; // [監査#5] 担当不可の職員は対象外（チェッカーと同一条件）
                 int z = 0;
                 for (int j = 0; j < T; j++) if (a[i][j] == c.ShiftIdx) z++;
-                if (z < c.Count) soft += 1;
+                soft += _p.QuantitativeRangeEval ? C2Amount(z, c.Count) : (z < c.Count ? 1L : 0L);
             }
         }
 
@@ -89,7 +99,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Sgrp[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                if (z < c.L || c.U < z) soft += 1;
+                soft += _p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
             }
         }
 
@@ -116,7 +126,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Ssk[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                if (z < c.L || c.U < z) soft += 1;
+                soft += _p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
             }
         }
         foreach (var c in _p.Cons42s)

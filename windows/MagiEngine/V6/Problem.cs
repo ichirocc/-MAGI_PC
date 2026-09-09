@@ -57,6 +57,10 @@ public sealed class Problem
 {
     public MagiState State { get; }
 
+    /// <summary>[backlog #12(a)・実験段階] true のとき c2/c41/c41s を二値でなく不足量/距離量で評価する
+    /// （既定 false=挙動不変）。Kotlin <c>Problem.quantitativeRangeEval</c> と同じ。</summary>
+    public bool QuantitativeRangeEval { get; }
+
     public int S { get; }
     public int T { get; }
     public int K { get; }
@@ -149,9 +153,10 @@ public sealed class Problem
     public IReadOnlyList<C41> Cons41s { get; }
     public IReadOnlyList<C42> Cons42s { get; }
 
-    public Problem(MagiState state)
+    public Problem(MagiState state, bool quantitativeRangeEval = false)
     {
         State = state;
+        QuantitativeRangeEval = quantitativeRangeEval;
         S = state.StaffCount;
         T = state.DayCount;
         K = state.ShiftCount;
