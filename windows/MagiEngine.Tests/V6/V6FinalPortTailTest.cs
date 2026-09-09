@@ -49,4 +49,20 @@ public class V6FinalPortTailTest
 
         Assert.Null(V6FinalPort.CheckResultWorse(null, Rep(9, 99, 999.0)));
     }
+
+    /// <summary>
+    /// [3.513.0/バグ修正・Kotlin原本 SessionRegressionTest.kt の sentinelSchedule_fallsBackToCappedInputNotRawInput
+    /// を逐語移植] 番兵発火時は cappedInput（個人上限 0 のセルを外した入力）へ戻る。旧実装は
+    /// 上限 0 を外す前の生入力（normInput相当）へ戻していたため、finalReport（cappedInput基準）と
+    /// finalSched が食い違い得た。
+    /// </summary>
+    [Fact]
+    public void SentinelSchedule_FallsBackToCappedInputNotRawInput()
+    {
+        var cappedInput = new[] { new[] { 0, 0, 0 } };
+        var refSched = new[] { new[] { 1, 1, 1 } };
+
+        Assert.Equal(new[] { 0, 0, 0 }, V6FinalPort.SentinelSchedule("HARDが悪化しました", cappedInput, refSched)[0]);
+        Assert.Equal(new[] { 1, 1, 1 }, V6FinalPort.SentinelSchedule(null, cappedInput, refSched)[0]);
+    }
 }

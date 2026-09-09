@@ -539,8 +539,11 @@ public static partial class V6FinalPort
 
         // [最終番兵/多重防御] 全段 keep-best のため通常は発火しないが、万一パイプラインが入力より
         // 悪い結果を返した場合は入力を採用し退化を防ぐ（CheckResultWorse をここで配線）。
+        // [3.513.0/バグ修正・Kotlin原本と同日同期] 復帰先は inputReport と同じ盤面（cappedInput）でなければ
+        //   ならない。旧実装は normInput（上限 0 のセルを外す前の生入力）へ戻していたため、番兵発火時に
+        //   finalReport と finalSched が食い違い得た（詳細は SentinelSchedule の doc comment 参照）。
         var regression = CheckResultWorse(inputReport, refReport);
-        var finalSched = regression != null ? normInput : refSched;
+        var finalSched = SentinelSchedule(regression, cappedInput, refSched);
         var finalReport = regression != null ? inputReport : refReport;
         IReadOnlyList<MirrorLog> sentinelLog = regression != null
             ? new List<MirrorLog>
@@ -731,7 +734,7 @@ public static partial class V6FinalPort
 
         // [3.327.0/外部レビュー High1] post の診断（C1頭打ち・回数固定の却下記録）は post.schedule を
         //   観測した結果。finalSched はこのあと ExtraRefine で差し替わる（refSched）か、最終番兵で入力へ
-        //   戻る（normInput）ことがある。盤面が一致するときだけ診断を通す。
+        //   戻る（cappedInput）ことがある。盤面が一致するときだけ診断を通す。
         var postForResult = finalSched.ContentDeepEquals(post.Schedule) ? post : null;
         // [レビュー第7弾 2026-09-04] 停止は**必ず例外で**返す。各段は IsCancellationRequested を締切と同列の
         //   「止まる条件」にしているため、停止要求のあとも keep-best の盤面を持って正常終了まで来られる。

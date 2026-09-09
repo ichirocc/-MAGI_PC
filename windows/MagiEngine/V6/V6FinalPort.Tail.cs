@@ -51,6 +51,16 @@ public static partial class V6FinalPort
     };
 
     /// <summary>
+    /// [3.513.0/バグ修正・Kotlin原本と同日同期] 番兵発火時の復帰盤面は <c>inputReport</c>（比較の基準）と
+    /// 揃うよう常に <paramref name="cappedInput"/>（個人上限 0 のセルを外した入力）を返す。旧実装は
+    /// <c>normInput</c>（外す前の生入力）へ戻していたため、番兵発火時に finalReport（cappedInput 基準＝
+    /// 上限 0 のセルを外した集計）と finalSched（外す前の盤面）が食い違い、「report は違反なしと言うのに
+    /// 実際の盤面には残っている」状態を返し得た。
+    /// </summary>
+    internal static int[][] SentinelSchedule(string? regression, int[][] cappedInput, int[][] refSched) =>
+        regression != null ? cappedInput : refSched;
+
+    /// <summary>
     /// [3.287.0 keep-best統一] 判定順を hard→weightedScore→total へ（<c>betterReport</c> と同順）。
     /// 旧: total が第2キーで、weighted改善・total悪化の正当な結果（重い族を直し軽い族を差し出す取引）まで
     /// 「違反総数が悪化」として入力へ復帰させ得た。weighted を第2キーに昇格し、total は weighted 非改善時のみ判定。
