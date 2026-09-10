@@ -37,6 +37,10 @@ public static class PolishGate
     /// </summary>
     public static volatile bool FilterC3nIncrease = false;
 
+    /// <summary>[3.514.0/UIトグル化] <see cref="CombinatorialRepair.CombineAndApply"/> の exhaustPairs
+    /// （経緯: history 3.512.6）。既定OFF・未計測。</summary>
+    public static volatile bool CombineExhaustPairs = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

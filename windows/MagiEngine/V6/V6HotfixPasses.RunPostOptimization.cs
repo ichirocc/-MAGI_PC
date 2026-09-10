@@ -356,7 +356,7 @@ public static partial class V6HotfixPasses
             if (C1DeltaPrefilter.HasActionableC1(C1RepairIndex.Build(pC1, chain.Work)))
             {
                 var rC1 = chain.Timed($"後処理 期間要件(c1)研磨{tag}", "C1同日交換", work =>
-                    C1RepairOperators.SelfRelocateAndSameDaySwap(state, work, maxPasses: p.C1WindowPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Window, round)));
+                    C1RepairOperators.SelfRelocateAndSameDaySwap(state, work, maxPasses: p.C1WindowPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Window, round), combineExhaustPairs: PolishGate.CombineExhaustPairs));
                 Take("c1", rC1);
                 // 構造化診断は巡ごとに合算（3.331.0。最後の巡だけだと観測が減る）。末尾で最終盤面に対して再フィルタする。
                 if (rC1.Plateau != null) c1Plateau = c1Plateau?.MergedWith(rC1.Plateau) ?? rC1.Plateau;
@@ -382,11 +382,11 @@ public static partial class V6HotfixPasses
                     ApplyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses: p.C3RotatePasses, shouldStop: clusterStop)));
             }
             Take("c3mn玉突き", chain.Timed($"後処理 回避パターン(c3mn)玉突き研磨{tag}", "C3mnPolish", work =>
-                ApplyC3mnPolish(state, work, maxPasses: p.C3mnPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3mn, round))));
+                ApplyC3mnPolish(state, work, maxPasses: p.C3mnPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3mn, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("c3n", chain.Timed($"後処理 禁止連続(c3n)研磨{tag}", "C3nPolish", work =>
-                ApplyC3nPolish(state, work, maxPasses: p.C3nPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3n, round))));
+                ApplyC3nPolish(state, work, maxPasses: p.C3nPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3n, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("range玉突き", chain.Timed($"後処理 個人回数(low/high)玉突き研磨{tag}", "RangePolish", work =>
-                ApplyRangePolish(state, work, maxPasses: p.RangePasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round))));
+                ApplyRangePolish(state, work, maxPasses: p.RangePasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("c3run玉突き", chain.Timed($"後処理 連続規則(c3/c3m単一シフト連)玉突き研磨{tag}", "C3RunPolish", work =>
                 ApplyC3RunPolish(state, work, maxPasses: p.C3RunPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Run, round))));
             Take("c3pattern玉突き", chain.Timed($"後処理 連続規則(c3/c3m複数シフトパターン)玉突き研磨{tag}", "C3PatternPolish", work =>
@@ -400,9 +400,9 @@ public static partial class V6HotfixPasses
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
                     maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
-                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round))));
+                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round))));
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();
             if (p.ComponentRepairEnabled && pool.Count >= 2)

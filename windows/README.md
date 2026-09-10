@@ -326,6 +326,22 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 `combineExhaustPairs`（Android 3.514.0 同期。エンジン挙動自体が未移植だった分）:
+  `CombinatorialRepair.CombineAndApply` に `exhaustPairs`/`pairCap`（既定5000）引数を追加——ONなら
+  2人組(k=2)の全組合せぶん（`min(C(pool,2), pairCap)`）は連続不採用でも停滞打ち切りしない。isBetter
+  ゲートは不変のため退化なし・効果は未計測（既定OFF、Kotlin原本と同じ位置付け）。`ApplyC1WindowPolish`/
+  `ApplyC3mnPolish`/`ApplyC3nPolish`/`ApplyRangePolish`/`ApplyAptPolish`/`ApplyFairPolish`（6箇所、
+  Kotlin原本の5ファイル6関数に対応）と`C1RepairOperators.SelfRelocateAndSameDaySwap`へ`combineExhaustPairs`
+  引数を追加し`RunPostOptimization`から`PolishGate.CombineExhaustPairs`を読んで通す。UI側は`UiState`に
+  `CombineExhaustPairs`、`MagiViewModel.SetCombineExhaustPairs`、`SettingsView`に「職員どうしの交換探索を
+  粘り強く」トグルを追加（既存の`BlockSwapC3nFilter`/`WideC3nBreak`と同じ配線パターン）。
+  `CombinatorialRepairTest.cs`に2件（Kotlin `combineAndApplyExhaustPairs*`の逐語移植）、
+  `MagiViewModelTest.cs`に1件追加。MagiEngine.Tests 838緑（836+2）・MagiApp.ViewModels.Tests 440緑（436+4、
+  うち3件は同日の完了カード前後比較`RunSummary`のテスト）。
+  **`lnsAdaptive`は対象外**: Kotlin原本はC1共同LNS/個人共同LNSの「短い試行→停滞なら幅を広げて再試行」制御
+  （`StallEscalationConfig`・`stalled`判定・`lnsWeightDebt`/`debtFactor`を伴う）で、この移植には土台となる
+  停滞エスカレーション機構自体がまだ無い＝単純なフラグ追加でなく別スコープの移植が必要（別途判断）。
+
 - 2026-09-10 `Package.appxmanifest` のバージョンを 1.0.0.0→1.0.1.0 へ（CI失敗の調査）: `windows-installer.yml`
   の手動実行（run #12・#13）が「GitHub Release (tag win-v* only)」ジョブで失敗。原因はコードの不具合でなく、
   ワークフロー自身の意図的なガード（README 516-517 行に既述）——`win-v1.0.0` タグは2026-09-04の別コミット

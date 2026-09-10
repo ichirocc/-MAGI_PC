@@ -21,7 +21,8 @@ public static partial class V6HotfixPasses
     /// (movable)・禁止連続(makesForbiddenRun)を事前ガード。
     /// </summary>
     public static CyclicSwapResult ApplyFairPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xFA12L)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xFA12L,
+        bool combineExhaustPairs = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -248,7 +249,7 @@ public static partial class V6HotfixPasses
         var fairCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: fairCombStats, p: p, leftover: rejectedOut);
+            shouldStop: stop, stats: fairCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += fairCombStats.CombosAccepted;
         // [AptPolishと同型] work は毎手の成功時のみコミットしbestRepと同期を保つ（失敗時は必ず巻き戻し）
         //   ため、bestRep.distLocations がそのまま最終盤面の残存箇所＝再チェック不要。

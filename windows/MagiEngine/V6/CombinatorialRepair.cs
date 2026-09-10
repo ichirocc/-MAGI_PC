@@ -118,7 +118,11 @@ public static class CombinatorialRepair
         Func<Candidate, string>? label = null,
         Problem? p = null,
         /// <summary>[Iteration 2] 結合に使われず残った候補の受け皿（後処理チェーン全体の違反起点修復へ回す）。</summary>
-        List<Candidate>? leftover = null)
+        List<Candidate>? leftover = null,
+        /// <summary>[測定中/3.512.6] true なら2人組(k=2)の全組合せぶん（<paramref name="pairCap"/> 上限）は
+        /// 連続不採用でも打ち切らない。isBetter ゲートは不変＝退化なし、増えるのは試す回数のみ。</summary>
+        bool exhaustPairs = false,
+        int pairCap = 5_000)
     {
         stats ??= new Stats();
         var shouldStopFn = shouldStop ?? (() => false);
@@ -138,6 +142,9 @@ public static class CombinatorialRepair
             //   旧は組合せごとに Copy2D() していた（同じ内容を最大200回作り直していた）。
             var workBeforeCombo = p != null ? work.Copy2D() : Array.Empty<int[]>();
             var upperK = Math.Min(maxK, pool.Count);
+            var effectiveMaxStagnantTries = !exhaustPairs
+                ? maxStagnantTries
+                : Math.Max(maxStagnantTries, (int)Math.Min((long)pool.Count * (pool.Count - 1) / 2, (long)pairCap));
             for (var k = 2; k <= upperK; k++)
             {
                 var combo = new int[k];
@@ -181,7 +188,7 @@ public static class CombinatorialRepair
                         }
                     }
                     misses++;
-                    if (misses >= maxStagnantTries) { stats.StagnantExit = true; goto SearchKDone; }
+                    if (misses >= effectiveMaxStagnantTries) { stats.StagnantExit = true; goto SearchKDone; }
                     if (!NextCombination(combo, pool.Count)) break;
                 }
             }

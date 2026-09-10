@@ -62,7 +62,8 @@ public static partial class V6HotfixPasses
     /// 完了条件はユニットテストのみ(grilling決定)。
     /// </summary>
     public static CyclicSwapResult ApplyC3mnPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3AL)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3AL,
+        bool combineExhaustPairs = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -169,7 +170,7 @@ public static partial class V6HotfixPasses
         var c3mnCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: c3mnCombStats, p: p, leftover: rejectedOut);
+            shouldStop: stop, stats: c3mnCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += c3mnCombStats.CombosAccepted;
         var stuckNames = StuckStaffNames(state, bestRep.CellFamilies, "vio-c3mn");
         var c3mnCombSummary = c3mnCombStats.Summary();

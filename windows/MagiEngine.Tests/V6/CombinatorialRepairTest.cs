@@ -196,6 +196,49 @@ public class CombinatorialRepairTest
         Assert.Equal(before, after); // 盤面は不変
     }
 
+    // [Android 3.512.6同期] 上のCombineAndApplyGivesUpEarlyAfterConsecutiveMissesと同じ10件重複プール
+    // （C(10,2)=45通り）で、exhaustPairs=true なら maxStagnantTries=3 のままでも45通り全部試す。
+    [Fact]
+    public void CombineAndApplyExhaustPairsExploresFullPairwiseSpaceInsteadOfStoppingEarly()
+    {
+        var st = CombineTwoRejectedState();
+        var work = st.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(st, work);
+
+        var dupes = Enumerable.Range(0, 10)
+            .Select(_ => new CombinatorialRepair.Candidate(new List<int[]> { new[] { 0, 0, 1 } }, "dup"))
+            .ToList();
+
+        var stats = new CombinatorialRepair.Stats();
+        var after = CombinatorialRepair.CombineAndApply(
+            st, work, before, dupes, IsBetterLocal, maxStagnantTries: 3, exhaustPairs: true, stats: stats);
+
+        Assert.Equal(45, stats.CombosTried); // C(10,2)=45通り全部を試す(既定3で早期終了しない)
+        Assert.True(stats.StagnantExit, "45通り使い切った時点では停滞終了フラグは立つ");
+        Assert.Equal(0, stats.CombosAccepted); // 採用0件(全て同一セルで重複)
+        Assert.Equal(before, after); // 盤面は不変
+    }
+
+    // exhaustPairs=true でも、既存の「単独では不採用だが結合で採用」の経路は変わらず動く
+    // （新パラメータが通常の採用ロジックを壊していないことの回帰確認）。
+    [Fact]
+    public void CombineAndApplyExhaustPairsStillAcceptsAWinningComboNormally()
+    {
+        var st = CombineTwoRejectedState();
+        var work = st.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(st, work);
+        var candX = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 0, 0, 2 } }, "test", "X");
+        var candY = new CombinatorialRepair.Candidate(new List<int[]> { new[] { 1, 0, 3 } }, "test", "Y");
+
+        var stats = new CombinatorialRepair.Stats();
+        var after = CombinatorialRepair.CombineAndApply(
+            st, work, before, new List<CombinatorialRepair.Candidate> { candX, candY }, IsBetterLocal,
+            exhaustPairs: true, stats: stats);
+
+        Assert.Equal(0, after.Breakdown.GetValueOrDefault("apt", -1)); // 結合後はapt=0
+        Assert.Equal(1, stats.CombosAccepted);
+    }
+
     // 注入された isBetter が例外を投げても試行中の組合せを盤面に残さない（旧: 巻き戻し前に伝播し、
     // 呼び出し元の keep-best が壊れた work を採用しうる）。
     [Fact]

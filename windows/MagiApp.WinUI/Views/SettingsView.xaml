@@ -61,6 +61,10 @@
             <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
 
+            <!-- [Android 3.514.0同期] isBetterゲート不変=退化しない安全な変更のみUI化。 -->
+            <ToggleSwitch x:Name="CombineExhaustPairsToggle" Header="職員どうしの交換探索を粘り強く"
+                          OnContent="ON" OffContent="OFF" Toggled="OnCombineExhaustPairsToggled" />
+
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
             <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <TextBlock Text="上にあるものから先に直します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />

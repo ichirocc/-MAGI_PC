@@ -21,7 +21,7 @@ namespace MagiApp.WinUI.Views;
 /// <summary>
 /// [フェーズ9→データ入出力] 「設定」タブ。既存の <see cref="MagiViewModel"/> セッター（<c>SetWorkers</c>/
 /// <c>SetBudget</c>/<c>SetV6Algorithm</c>/<c>SetSoftPolish</c>/<c>SetBlockSwapC3nFilter</c>/
-/// <c>SetWideC3nBreak</c>、いずれもフェーズ9ピース5で移植済み・テスト済み）への薄い配線。
+/// <c>SetWideC3nBreak</c>/<c>SetCombineExhaustPairs</c>、いずれもテスト済み）への薄い配線。
 ///
 /// [双方向反映のガード] コントロールの初期値を <see cref="Render"/> でプログラム的に設定すると、
 /// その代入自体が各コントロールの <c>ValueChanged</c>/<c>Toggled</c>/<c>SelectionChanged</c> を
@@ -87,6 +87,7 @@ public sealed partial class SettingsView : UserControl
             NativeAccelToggle.IsOn = ui.NativeAccel;
             BlockSwapC3nFilterToggle.IsOn = ui.BlockSwapC3nFilter;
             WideC3nBreakToggle.IsOn = ui.WideC3nBreak;
+            CombineExhaustPairsToggle.IsOn = ui.CombineExhaustPairs;
 
             var tag = ui.V6Algorithm.ToString();
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
@@ -636,6 +637,12 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         _vm.SetWideC3nBreak(WideC3nBreakToggle.IsOn);
+    }
+
+    private void OnCombineExhaustPairsToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.SetCombineExhaustPairs(CombineExhaustPairsToggle.IsOn);
     }
 
     private void OnAlgorithmChanged(object sender, SelectionChangedEventArgs e)

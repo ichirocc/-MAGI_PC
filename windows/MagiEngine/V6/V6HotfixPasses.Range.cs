@@ -110,7 +110,8 @@ public static partial class V6HotfixPasses
     /// 上限まで反復して落とす。採否は常に checker + isBetter + exactPinRegression(厳密ピン保護)。
     /// </summary>
     public static CyclicSwapResult ApplyRangePolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x8A9EL)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x8A9EL,
+        bool combineExhaustPairs = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -736,7 +737,7 @@ public static partial class V6HotfixPasses
         var rangeCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: rangeCombStats, p: p, leftover: rejectedOut);
+            shouldStop: stop, stats: rangeCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += rangeCombStats.CombosAccepted;
         // [ログから職員が分かるように・頭打ちの理由を可視化] 研磨後もなお残っている(staff,shift)を、
         //   最も多かった頭打ち理由(希望固定/禁止連続/候補なし/range後回し/不採用)付きで列挙。

@@ -79,7 +79,8 @@ public static partial class V6HotfixPasses
     /// (covUCell)＋makesForbiddenRun事前枝刈り＋isBetter最終ゲート。
     /// </summary>
     public static CyclicSwapResult ApplyC1WindowPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x1C1L)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x1C1L,
+        bool combineExhaustPairs = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -442,7 +443,7 @@ public static partial class V6HotfixPasses
         var c1CombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: c1CombStats, p: p, leftover: rejectedOut);
+            shouldStop: stop, stats: c1CombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += c1CombStats.CombosAccepted;
 
         // [頭打ちの理由を可視化/RangePolish=3.222.0と同型] 手B(直接移動+玉突き)が最終的に失敗した

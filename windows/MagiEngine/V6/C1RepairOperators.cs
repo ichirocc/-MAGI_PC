@@ -36,8 +36,8 @@ internal static class C1RepairOperators
     /// <summary>自己内移設 + 同日 coverage保存 swap/permutation（手A/R1/R2/R3）。</summary>
     public static V6HotfixPasses.CyclicSwapResult SelfRelocateAndSameDaySwap(
         MagiState state, int[][] schedule, int maxPasses = 3,
-        Func<bool>? shouldStop = null, long seed = 0x1C1L) =>
-        V6HotfixPasses.ApplyC1WindowPolish(state, schedule, maxPasses, shouldStop, seed);
+        Func<bool>? shouldStop = null, long seed = 0x1C1L, bool combineExhaustPairs = false) =>
+        V6HotfixPasses.ApplyC1WindowPolish(state, schedule, maxPasses, shouldStop, seed, combineExhaustPairs);
 
     /// <summary>Temporal DP + FlexibleDayFlow。</summary>
     public static V6HotfixPasses.CyclicSwapResult TemporalFlow(

@@ -28,7 +28,8 @@ public static partial class V6HotfixPasses
     /// (makesForbiddenRun)を事前ガード。
     /// </summary>
     public static CyclicSwapResult ApplyAptPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xA97L)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xA97L,
+        bool combineExhaustPairs = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -239,7 +240,7 @@ public static partial class V6HotfixPasses
         var aptCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
             state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
-            shouldStop: stop, stats: aptCombStats, p: p, leftover: rejectedOut);
+            shouldStop: stop, stats: aptCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += aptCombStats.CombosAccepted;
         var stuckNames = bestRep.CountViolations
             .Where(kv => kv.Value == "vio-aptHigh" || kv.Value == "vio-aptLow")

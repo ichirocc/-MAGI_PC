@@ -115,6 +115,22 @@ public class MagiViewModelTest
         }
     }
 
+    [Fact]
+    public void SetCombineExhaustPairsUpdatesUiAndPolishGate()
+    {
+        var vm = new MagiViewModel();
+        try
+        {
+            vm.SetCombineExhaustPairs(true);
+            Assert.True(vm.Ui.CombineExhaustPairs);
+            Assert.True(PolishGate.CombineExhaustPairs);
+        }
+        finally
+        {
+            PolishGate.CombineExhaustPairs = false;
+        }
+    }
+
     [Theory]
     [InlineData(1, 10)]                                  // 下限未満は10秒へ
     [InlineData(10, 10)]

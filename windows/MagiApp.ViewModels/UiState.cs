@@ -112,6 +112,10 @@ public sealed partial class UiState : ObservableObject
     /// <summary>禁止連続を崩す日を j±1 から違反パターン全域へ広げるか。既定OFF（実データで利得が一貫しない）。</summary>
     [ObservableProperty] private bool wideC3nBreak;
 
+    /// <summary>[Android 3.514.0同期] 職員2人の交換探索を打ち切らず粘り強く試すか。既定OFF・未計測
+    /// （isBetterゲート不変で退化なし。<see cref="MagiEngine.V6.PolishGate.CombineExhaustPairs"/> 参照）。</summary>
+    [ObservableProperty] private bool combineExhaustPairs;
+
     // adaptiveEscape / portfolioRoleParallelSa はKotlin原本で単体A/B中立につき機構ごと撤去済み＝移植対象外。
 
     /// <summary>仕上げ最適化（品質研磨）。既定ON。keep-best で悪化しない。</summary>

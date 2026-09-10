@@ -355,6 +355,15 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 禁止連続の崩し範囲 → {(on ? "パターン全域" : "前後1日")}");
     }
 
+    /// <summary>[Android 3.514.0同期] 結合探索の停滞打ち切りを2人組(k=2)の全組合せぶん緩める。
+    /// isBetterゲート不変＝退化なし・効果は未計測（既定OFF）。</summary>
+    public void SetCombineExhaustPairs(bool on)
+    {
+        PolishGate.CombineExhaustPairs = on;
+        Ui.CombineExhaustPairs = on;
+        LogOp("I", $"設定変更: 結合探索を粘り強く → {(on ? "ON" : "OFF")}");
+    }
+
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み
     //   （単体A/B中立＝機構ごと撤去）＝この移植でも対応不要。
 
