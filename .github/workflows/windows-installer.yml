@@ -110,6 +110,9 @@ jobs:
               $parts[2]++
             }
             $v = $parts -join '.'
+            # [実行時バグ修正 run #19] ループの正常終了は gh release view が非ゼロで抜ける経路のため
+            #   $LASTEXITCODE が残ったまま＝pwshステップの終了コードに伝播し失敗扱いになっていた。
+            $global:LASTEXITCODE = 0
           }
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "installer version = $v"
