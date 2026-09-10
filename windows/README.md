@@ -326,6 +326,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 `windows-installer.yml`の公開済みタグ判定バグ修正（run 34504569550で発見）:
+  同一コミット（`dede677`）からの再実行にも関わらず「タグは別コミットを指す」と誤判定して失敗した
+  （エラーメッセージ上は両辺とも同じSHAが表示されるという矛盾した壊れ方）。旧実装は
+  `gh api .../git/tags/$tag_sha --jq '.object.sha' 2>/dev/null || echo "$tag_sha"`で軽量/注釈付き
+  タグを1回のフォールバックだけで区別しようとしていたが、このワークフロー自身が作るタグは常に軽量
+  （`gh release create --target`、`.object.type=="commit"`）で、フォールバック分岐の実際の終了コード/
+  出力の組合せが期待通りに動かなかった。`.object.type`を先に見て、注釈付き（`type=="tag"`）のときだけ
+  実際に逆参照するよう修正（軽量タグでは逆参照自体をスキップ＝そもそも壊れようがない形）。
+
 - 2026-09-10 `combineExhaustPairs`（Android 3.514.0 同期。エンジン挙動自体が未移植だった分）:
   `CombinatorialRepair.CombineAndApply` に `exhaustPairs`/`pairCap`（既定5000）引数を追加——ONなら
   2人組(k=2)の全組合せぶん（`min(C(pool,2), pairCap)`）は連続不採用でも停滞打ち切りしない。isBetter
