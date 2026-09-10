@@ -793,6 +793,84 @@ public class MagiViewModelWs1Test
     }
 
     // ===================================================================
+    // Ws1MoveStaff / Ws1MoveShiftTo / Ws1MoveGroupTo（3.515.3/3.515.6 Android 同期）
+    // ===================================================================
+
+    [Fact]
+    public void Ws1MoveStaffSwapsAdjacentStaffAndLogs()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.Ws1MoveStaff(0, +1);
+
+        Assert.Equal(new[] { "職員B", "職員A" }, vm._state!.StaffList.Select(s => s.Name));
+        Assert.Contains(vm.Ui.OpLog, line => line.Contains("職員の並び替え: 職員A を下へ"));
+    }
+
+    [Fact]
+    public void Ws1MoveStaffIsNoOpWithoutASchedule()
+    {
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel { _state = st };
+
+        vm.Ws1MoveStaff(0, +1);
+
+        Assert.Same(st, vm._state);
+    }
+
+    [Fact]
+    public void Ws1MoveShiftToWalksMultiplePositionsInOneCall()
+    {
+        var st = MinimalState.Build(
+            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } });
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.Ws1MoveShiftTo(0, 2); // 休を末尾へ
+
+        Assert.Equal(new[] { "A", "B", "休" }, vm._state!.Shifts.Select(s => s.Kigou));
+        Assert.Contains(vm.Ui.OpLog, line => line.Contains("シフトの並び替え: 休 を1→3番目へ"));
+    }
+
+    [Fact]
+    public void Ws1MoveShiftToIsNoOpWhenFromEqualsTo()
+    {
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.Ws1MoveShiftTo(1, 1);
+
+        Assert.Same(st, vm._state);
+    }
+
+    [Fact]
+    public void Ws1MoveGroupToWalksMultiplePositionsAndKeepsStaffGroupIdxFollowing()
+    {
+        var st = MinimalState.Build(
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") },
+            staffList: new List<Staff> { new("職員A", 0), new("職員B", 2) });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.Ws1MoveGroupTo(0, 2); // G0を末尾へ
+
+        Assert.Equal(new[] { "G1", "G2", "G0" }, vm._state!.Groups.Select(g => g.Name));
+        Assert.Equal(2, vm._state!.StaffList[0].GroupIdx); // 職員Aの所属(旧G0)が追従
+        Assert.Equal(1, vm._state!.StaffList[1].GroupIdx); // 職員Bの所属(旧G2)も追従
+        Assert.Contains(vm.Ui.OpLog, line => line.Contains("グループの並び替え: G0 を1→3番目へ"));
+    }
+
+    [Fact]
+    public void Ws1MoveGroupToIsNoOpForAnOutOfRangeIndex()
+    {
+        var st = MinimalState.Build(groups: new List<Group> { new("G0", "G0"), new("G1", "G1") });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.Ws1MoveGroupTo(0, 99);
+
+        Assert.Same(st, vm._state);
+    }
+
+    // ===================================================================
     // ApplyStructureWithMessage(Ws1Result, string) — direct infra test
     // (its only Kotlin-side caller belongs to a not-yet-ported later piece; see the class KDoc
     // of MagiViewModel.Ws1.cs for why this is `internal` and tested directly here.)

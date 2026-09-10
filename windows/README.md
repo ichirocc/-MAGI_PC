@@ -326,6 +326,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 職員／シフト種別／グループの並び替え（Android 3.515.3/3.515.6 同期）: `Ws1Ops.MoveStaff`/`MoveShift`（隣接swap、逐語移植）と
+  新規 `MoveGroup`（Android 3.515.6 で新設された機能。担当可否・群目標の行(軸g)・職員の`GroupIdx`が追従、scheduleは無変化のため`MagiState`を返す＝`RemoveGroup`と同形）。
+  ViewModel層は `Ws1MoveStaff`（単発、隣接swap）と `Ws1MoveShiftTo`/`Ws1MoveGroupTo`（任意位置、隣接swapをfrom→to方向へ繰り返し適用し検査・ログ・undoチェックポイントは最後に1回だけ）。
+  Android側はUI（WinUIに対応する画面）がドラッグ&ドロップ（片手一本指の既定からの明示的な例外、ユーザー指示）へ刷新されたが、
+  対応するWinUI画面はこのリポジトリにまだ無い（ViewModel/Engine層のみ先行同期。UI実装は別途）。
+  `Ws1OpsMoveTest.cs`（6件、`Ws1OpsMoveTest.kt`の逐語移植）・`MagiViewModelWs1Test.cs`に6件追加。MagiEngine.Tests 836緑・MagiApp.ViewModels.Tests 436緑。
+
 - 2026-09-08 族別 Credit/Debt の可視化（Android 3.510.3 同期）: `ChangeSummary.FamilyDeltas`（族別の件数増減）と `FamilyLine`（改善した族・悪化した族を重み×増減の大きい順、重み付き合計つき）、
   `Of` は `beforeReport` を受け取る。`RunPostOptimization` は入口で 1 回評価し末尾に「後処理 収支」ログ。採否判定は不変。HomeView への 2 行目表示は WinUI ビルド環境で（未）。
 

@@ -392,6 +392,103 @@ public static class Ws1Ops
         return new Ws1Result(ns.WithSchedule(newSched), newSched);
     }
 
+    // ---- move (reorder within the same size; Android 3.515.3/3.515.6 同期) --
+
+    private static int SwapIdx(int v, int x, int y) => v == x ? y : (v == y ? x : v);
+
+    /// <summary>"a,b"キーの片方の軸で index <paramref name="x"/> と <paramref name="y"/> を入れ替える
+    ///  （<see cref="ReindexKeys{TV}"/>の並び替え版）。</summary>
+    private static IReadOnlyDictionary<string, TV> SwapKeys<TV>(IReadOnlyDictionary<string, TV> m, int axis, int x, int y)
+    {
+        var result = new Dictionary<string, TV>();
+        foreach (var (key, v) in m)
+        {
+            var parts = key.Split(',');
+            if (parts.Length < 2) continue;
+            var a = KotlinInterop.ToIntOrNull(parts[0]);
+            var b = KotlinInterop.ToIntOrNull(parts[1]);
+            if (a is null || b is null) continue;
+            int idx = SwapIdx(axis == 0 ? a.Value : b.Value, x, y);
+            result[axis == 0 ? $"{idx},{b.Value}" : $"{a.Value},{idx}"] = v;
+        }
+        return result;
+    }
+
+    /// <summary>職員 <paramref name="i"/> を隣（i+dir）と入れ替える。勤務行・希望・個人の回数（軸i）が追従。
+    ///  範囲外は同じ state を返す（呼出側は参照比較で no-op を検知）。</summary>
+    public static Ws1Result MoveStaff(MagiState state, int[][] sched, int i, int dir)
+    {
+        int j = i + dir;
+        if (i < 0 || i >= state.StaffList.Count || j < 0 || j >= state.StaffList.Count || i == j)
+            return new Ws1Result(state, sched);
+        var staff = new List<Staff>(state.StaffList);
+        (staff[i], staff[j]) = (staff[j], staff[i]);
+        var arr = sched.Copy2D();
+        if (i < arr.Length && j < arr.Length) (arr[i], arr[j]) = (arr[j], arr[i]);
+        var ns = state with
+        {
+            StaffList = staff,
+            Wishes = SwapKeys(state.Wishes, 0, i, j),
+            StaffRange = SwapKeys(state.StaffRange, 0, i, j),
+        };
+        return new Ws1Result(ns.WithSchedule(arr), arr);
+    }
+
+    /// <summary>シフト <paramref name="k"/> を隣（k+dir）と入れ替える。担当可否・群目標の列、勤務表/希望の値、
+    ///  個人の回数（軸k）、日別必要人数（軸k）が追従。記号で参照するもの（制約行・表示色・休の解決）は不変。</summary>
+    public static Ws1Result MoveShift(MagiState state, int[][] sched, int k, int dir)
+    {
+        int k2 = k + dir;
+        if (k < 0 || k >= state.Shifts.Count || k2 < 0 || k2 >= state.Shifts.Count || k == k2)
+            return new Ws1Result(state, sched);
+        var shifts = new List<Shift>(state.Shifts);
+        (shifts[k], shifts[k2]) = (shifts[k2], shifts[k]);
+        static IReadOnlyList<IReadOnlyList<T>> SwapCols<T>(IReadOnlyList<IReadOnlyList<T>> rows, int k, int k2) =>
+            rows.Select(row =>
+            {
+                if (k >= row.Count || k2 >= row.Count) return row;
+                var r = new List<T>(row);
+                (r[k], r[k2]) = (r[k2], r[k]);
+                return (IReadOnlyList<T>)r;
+            }).ToList();
+        var arr = sched.Select(row => row.Select(v => SwapIdx(v, k, k2)).ToArray()).ToArray();
+        var wishes = state.Wishes.ToDictionary(kv => kv.Key, kv => SwapIdx(kv.Value, k, k2));
+        var ns = state with
+        {
+            Shifts = shifts,
+            GroupShift = SwapCols(state.GroupShift, k, k2),
+            GroupShiftApt = SwapCols(state.GroupShiftApt, k, k2),
+            Wishes = wishes,
+            NeedDay1 = SwapKeys(state.NeedDay1, 0, k, k2),
+            NeedDay2 = SwapKeys(state.NeedDay2, 0, k, k2),
+            StaffRange = SwapKeys(state.StaffRange, 1, k, k2),
+        };
+        return new Ws1Result(ns.WithSchedule(arr), arr);
+    }
+
+    /// <summary>グループ <paramref name="g"/> を隣（g+dir）と入れ替える。担当可否・群目標の行（軸g）、職員の
+    ///  所属(GroupIdx)が追従。勤務表・希望は職員行(軸i)基準のため無変化＝<see cref="MoveStaff"/>/<see cref="MoveShift"/>
+    ///  と違い MagiState を返す（<see cref="RemoveGroup"/>と同形）。</summary>
+    public static MagiState MoveGroup(MagiState state, int g, int dir)
+    {
+        int g2 = g + dir;
+        if (g < 0 || g >= state.Groups.Count || g2 < 0 || g2 >= state.Groups.Count || g == g2) return state;
+        static List<T> SwapRows<T>(IReadOnlyList<T> rows, int g, int g2)
+        {
+            var r = new List<T>(rows);
+            if (g < r.Count && g2 < r.Count) (r[g], r[g2]) = (r[g2], r[g]);
+            return r;
+        }
+        var groups = SwapRows(state.Groups, g, g2);
+        var groupShift = SwapRows(state.GroupShift, g, g2);
+        var groupShiftApt = state.GroupShiftApt.Count == 0
+            ? state.GroupShiftApt
+            : (IReadOnlyList<IReadOnlyList<string>>)SwapRows(state.GroupShiftApt, g, g2);
+        var staff = state.StaffList.Select(s =>
+            s.GroupIdx == g ? s with { GroupIdx = g2 } : (s.GroupIdx == g2 ? s with { GroupIdx = g } : s)).ToList();
+        return state with { Groups = groups, GroupShift = groupShift, GroupShiftApt = groupShiftApt, StaffList = staff };
+    }
+
     // ---- period resize -------------------------------------------------------
 
     /// <summary>Resize the period to <paramref name="newT"/> days: schedule columns padded with 休 or

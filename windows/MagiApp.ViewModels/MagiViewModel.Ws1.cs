@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using MagiEngine;
 using MagiEngine.Model;
 using MagiEngine.V6;
 
@@ -453,6 +454,55 @@ public sealed partial class MagiViewModel
         if (sched is null) return;
         LogOp("I", $"職員削除: {OpNm(i)}（勤務行・希望・個人の回数も削除）");
         ApplyStructure(Ws1Ops.RemoveStaff(st, sched, i));
+    }
+
+    /// <summary>職員の並び替え（dir=-1 上へ / +1 下へ）。端では何もしない。</summary>
+    public void Ws1MoveStaff(int i, int dir)
+    {
+        var st = _state;
+        if (st is null) return;
+        var sched = _currentSchedule;
+        if (sched is null) return;
+        var r = Ws1Ops.MoveStaff(st, sched, i, dir);
+        if (ReferenceEquals(r.State, st)) return;
+        LogOp("I", $"職員の並び替え: {OpNm(i)} を{(dir < 0 ? "上" : "下")}へ");
+        ApplyStructure(r);
+    }
+
+    /// <summary>シフト種別を任意位置へ移動。行のドラッグを離した瞬間に1回だけ呼ぶ想定（隣接swapの
+    ///  <see cref="Ws1Ops.MoveShift"/>をfrom→toの方向へ繰り返し適用し、検査・ログ・undoチェックポイントは
+    ///  最後に1回だけにする＝ドラッグ中に何度も検査が走るのを避ける）。</summary>
+    public void Ws1MoveShiftTo(int from, int to)
+    {
+        var st0 = _state;
+        if (st0 is null) return;
+        var sched0 = _currentSchedule;
+        if (sched0 is null) return;
+        if (from == to || from < 0 || from >= st0.Shifts.Count || to < 0 || to >= st0.Shifts.Count) return;
+        var name = OpSy(from);
+        int dir = to > from ? 1 : -1;
+        var r = Ws1Ops.MoveShift(st0, sched0, from, dir);
+        int pos = from + dir;
+        while (pos != to) { r = Ws1Ops.MoveShift(r.State, r.Schedule, pos, dir); pos += dir; }
+        LogOp("I", $"シフトの並び替え: {name} を{from + 1}→{to + 1}番目へ");
+        ApplyStructure(r);
+    }
+
+    /// <summary>グループを任意位置へ移動。<see cref="Ws1MoveShiftTo"/>と同じ理由・同じ形。
+    ///  <see cref="Ws1Ops.MoveGroup"/>はscheduleを返さないため MagiState 版の ApplyStructure（
+    ///  <see cref="Ws1RemoveGroup"/>と同じ）を使う。</summary>
+    public void Ws1MoveGroupTo(int from, int to)
+    {
+        var st0 = _state;
+        if (st0 is null) return;
+        if (from == to || from < 0 || from >= st0.Groups.Count || to < 0 || to >= st0.Groups.Count) return;
+        var name = from >= 0 && from < st0.Groups.Count ? KigouFormat.ToHankakuKigou(st0.Groups[from].Kigou) : $"#{from}";
+        int dir = to > from ? 1 : -1;
+        var ns = Ws1Ops.MoveGroup(st0, from, dir);
+        int pos = from + dir;
+        while (pos != to) { ns = Ws1Ops.MoveGroup(ns, pos, dir); pos += dir; }
+        LogOp("I", $"グループの並び替え: {name} を{from + 1}→{to + 1}番目へ");
+        ApplyStructure(ns);
     }
 
     public void Ws1RemoveGroup(int g)
