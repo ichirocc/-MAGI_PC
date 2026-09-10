@@ -162,6 +162,30 @@ public class MagiViewModelBackgroundTest : IDisposable
         Assert.False(OptimizationRepository.Running);
     }
 
+    /// <summary>[Android 3.509.4/3.510.3 同期] Kotlin原本 <c>runSummary = prev?.let { ... }</c>
+    /// （背景完了は前景と違い <c>baseReport</c> 引数を渡さない4引数版 <c>ChangeSummary.of</c>）の移植検証。
+    /// <c>prev</c> は開始時点の入力盤面（<c>_bgInput</c>）——ここでは <c>_currentSchedule</c>。</summary>
+    [Fact]
+    public async Task ImprovedResult_SetsRunSummaryReflectingScheduleChange()
+    {
+        var resultSchedule = new[] { new[] { 1, 0, 0, 0, 0, 0, 0 }, new[] { 0, 0, 0, 0, 0, 0, 0 } };
+        var fake = new FakeOptimizationService { Result = (_, _) => new V6FinalPort.ActionResult(
+            Schedule: resultSchedule,
+            Report: Report(hard: 0, total: 0),
+            Phase: "test:Fake",
+            BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"),
+            Logs: Array.Empty<MirrorLog>()) };
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunInBackground();
+        await vm.LastRunInBackgroundTask!;
+
+        Assert.NotNull(vm.Ui.RunSummary);
+        Assert.Equal(1, vm.Ui.RunSummary!.ChangedStaff);
+        Assert.Equal(1, vm.Ui.RunSummary!.ChangedCells);
+    }
+
     [Fact]
     public async Task WorseResult_KeepsPreviousResultAndDiscardsNewOne()
     {

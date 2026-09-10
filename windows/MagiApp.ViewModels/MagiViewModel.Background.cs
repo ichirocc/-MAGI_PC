@@ -282,6 +282,7 @@ public sealed partial class MagiViewModel
             ui.HasResult = true;
             ui.EngineRan = true;
             ui.Message = $"バックグラウンド最適化 完了: 必須={r.Report.Hard} 合計={r.Report.Total}";
+            ui.RunSummary = prev is not null ? ChangeSummary.Of(st0, prev, sched, r.Report) : null;
         });
         LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total}");
         _lastResultHard = r.Report.Hard;

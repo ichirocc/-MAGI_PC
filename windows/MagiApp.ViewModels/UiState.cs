@@ -166,6 +166,12 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private int satisfaction;
     [ObservableProperty] private bool polishExhausted;
     [ObservableProperty] private string? copilotHint;
+
+    /// <summary>[Android 3.509.4/3.510.3 同期] 直近の最適化・自動修正の前後比較（完了カード用）。Kotlin原本の
+    /// <c>runSummary</c> は整形済み文字列だが、族名の日本語化（<c>BreakdownLabels</c>）が View 層にあるため、
+    /// 生の <see cref="MagiEngine.V6.ChangeSummary"/> を保持し整形は <c>HomeView.xaml.cs</c> 側で行う。</summary>
+    [ObservableProperty] private ChangeSummary? runSummary;
+
     [ObservableProperty] private int impossibleWishCount;
     [ObservableProperty] private IReadOnlyList<string> opLog = Array.Empty<string>();
 

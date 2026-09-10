@@ -108,7 +108,11 @@ public sealed partial class HomeView : UserControl
         else if (ui.BestHard == 0L)
         {
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
-            headline = "③ できました！ そのまま配れます。";
+            // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
+            // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
+            headline = "③ できました！ そのまま配れます。" + (ui.RunSummary is { } rs
+                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
+                : "");
             bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
             phase = "完成"; phaseHex = MagiAccent.Green;
             _bigAction = () => _ = _window.ExportScheduleCsvAsync(); _helperAction = () => _window.SelectTab("schedule");

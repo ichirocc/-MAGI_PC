@@ -225,6 +225,7 @@ public sealed partial class MagiViewModel
                     ui.HasResult = true;
                     ui.EngineRan = true;
                     ui.Message = $"勤務表ができました: 必須={res.Report.Hard} 合計={res.Report.Total} ({NowMs() - startMs}ms)";
+                    ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
                 }, ct: ct);
                 _lastResultHard = newHard;
             }
@@ -366,6 +367,7 @@ public sealed partial class MagiViewModel
                 ui.Message = gain > 0
                     ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"
                     : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは構造的要因の可能性。";
+                ui.RunSummary = ChangeSummary.Of(st0, sched0, finalSched, finalReport, baseReport);
             }, ct: ct);
             LogOp("I", $"ソフト研磨 完了 必須={finalReport.Hard} 合計={finalReport.Total}（{(gain > 0 ? $"-{gain}" : "増減なし")}）");
             terminalLogged = true;

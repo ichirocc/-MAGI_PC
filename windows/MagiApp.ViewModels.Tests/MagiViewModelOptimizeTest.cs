@@ -143,6 +143,32 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("最適化 完了"));
     }
 
+    /// <summary>[Android 3.509.4/3.510.3 同期] 完了カード用の前後比較 <c>ChangeSummary</c> が入力/結果盤面の
+    /// 差から正しく作られ、<c>Ui.RunSummary</c> へ反映されることを検証する。</summary>
+    [Fact]
+    public async Task ImprovedResult_SetsRunSummaryReflectingScheduleChange()
+    {
+        var resultSchedule = new[] { new[] { 1, 0, 0, 0, 0, 0, 0 }, new[] { 0, 0, 0, 0, 0, 0, 0 } };
+        var fake = new FakeOptimizationService
+        {
+            Result = (state, _) => new V6FinalPort.ActionResult(
+                Schedule: resultSchedule,
+                Report: Report(hard: 0, total: 0),
+                Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"),
+                Logs: Array.Empty<MirrorLog>()),
+        };
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.NotNull(vm.Ui.RunSummary);
+        Assert.Equal(1, vm.Ui.RunSummary!.ChangedStaff);
+        Assert.Equal(1, vm.Ui.RunSummary!.ChangedCells);
+    }
+
     [Fact]
     public async Task WorseResult_KeepsInputScheduleAndSaysSoInMessage()
     {
@@ -241,6 +267,25 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("これ以上は整いませんでした", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("ソフト研磨 完了"));
+    }
+
+    /// <summary>[Android 3.509.4/3.510.3 同期] ソフト研磨完了時も <c>Ui.RunSummary</c> が設定される。keep-best は
+    /// 実エンジンで再検査するため、フィクスチャは入力と同点（総合4件）になる2職員間スワップを使う
+    /// （単純な1セル追加は fair/weekly/apt の偏差で入力より悪化し、0セルのまま検証にならない）。</summary>
+    [Fact]
+    public async Task SoftPolish_SetsRunSummaryReflectingScheduleChange()
+    {
+        var input = new[] { new[] { 1, 0, 0, 0, 0, 0, 0 }, new[] { 0, 1, 0, 0, 0, 0, 0 } };
+        var polished = new[] { new[] { 0, 1, 0, 0, 0, 0, 0 }, new[] { 1, 0, 0, 0, 0, 0, 0 } };
+        var fake = new FakeOptimizationService { PolishedSchedule = (_, _) => polished };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = input };
+
+        vm.RunSoftPolish();
+        await vm.LastRunSoftPolishTask!;
+
+        Assert.NotNull(vm.Ui.RunSummary);
+        Assert.Equal(2, vm.Ui.RunSummary!.ChangedStaff);
+        Assert.Equal(4, vm.Ui.RunSummary!.ChangedCells);
     }
 
     [Fact]

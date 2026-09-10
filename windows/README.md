@@ -326,6 +326,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 完了カードの前後比較を HomeView へ表示（Android 3.509.4/3.510.3 同期・エンジン層は同期済みで
+  積み残していた分）: `UiState.RunSummary`（生の `ChangeSummary`。族名日本語化は View 層 `AnalysisView.BreakdownLabels`
+  にあるため、Kotlin原本のように文字列へ先に整形せず保持し、整形は表示側で行う）。設定箇所は Kotlin原本の3箇所に対応する
+  `MagiViewModel.Optimize.cs`（`RunV6FullOptimize`成功時・`RunSoftPolish`完了時）と `MagiViewModel.Background.cs`
+  （バックグラウンド最適化完了時、`prev`(=`_bgInput`)からの4引数版）。`HomeView.xaml.cs`の`ui.BestHard==0`分岐で
+  見出しへ2行追記。`MagiApp.ViewModels.Tests`に3件追加（436→439緑）。ソフト研磨のテストはkeep-bestが実エンジンで
+  再検査するため、フィクスチャに入力と同点(総合4件)になる2職員間スワップが必要だった（単純な1セル追加は
+  fair/weekly/apt の偏差で入力より悪化し検証にならない）。WinUI側の見た目確認はビルド環境で（未）。
+
 - 2026-09-10 職員／シフト種別／グループの並び替え（Android 3.515.3/3.515.6 同期）: `Ws1Ops.MoveStaff`/`MoveShift`（隣接swap、逐語移植）と
   新規 `MoveGroup`（Android 3.515.6 で新設された機能。担当可否・群目標の行(軸g)・職員の`GroupIdx`が追従、scheduleは無変化のため`MagiState`を返す＝`RemoveGroup`と同形）。
   ViewModel層は `Ws1MoveStaff`（単発、隣接swap）と `Ws1MoveShiftTo`/`Ws1MoveGroupTo`（任意位置、隣接swapをfrom→to方向へ繰り返し適用し検査・ログ・undoチェックポイントは最後に1回だけ）。
