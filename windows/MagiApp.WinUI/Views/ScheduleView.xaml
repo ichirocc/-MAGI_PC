@@ -48,7 +48,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock x:Name="FilterTitle" VerticalAlignment="Center" Style="{StaticResource MagiLabelLargeTextStyle}" Opacity="0.8" />
+                        <TextBlock x:Name="FilterTitle" VerticalAlignment="Center" Style="{StaticResource MagiTitleSmallTextStyle}" Opacity="0.8" />
                         <HyperlinkButton x:Name="ShowAllButton" Grid.Column="1" Content="すべて表示" Click="OnShowAllVioClick" />
                         <ToggleButton x:Name="FocusToggle" Grid.Column="2" Content="集中" Click="OnFocusToggleClick" />
                     </Grid>
@@ -90,12 +90,12 @@
                 <Grid x:Name="ScheduleGridHost" />
 
                 <StackPanel Spacing="6">
-                    <TextBlock Text="シフト集計（職員別）" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="シフト集計（職員別）" Style="{StaticResource MagiTitleSmallTextStyle}" />
                     <Grid x:Name="StaffTallyGridHost" />
                 </StackPanel>
 
                 <StackPanel Spacing="6">
-                    <TextBlock Text="シフト集計（日別）" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="シフト集計（日別）" Style="{StaticResource MagiTitleSmallTextStyle}" />
                     <Grid x:Name="DayTallyGridHost" />
                 </StackPanel>
             </StackPanel>

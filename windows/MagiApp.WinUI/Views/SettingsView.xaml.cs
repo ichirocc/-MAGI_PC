@@ -290,9 +290,11 @@ public sealed partial class SettingsView : UserControl
             Background = new SolidColorBrush(ColorHex.Parse(currentHex, Colors.Gray)),
             BorderBrush = new SolidColorBrush(Colors.Gray), BorderThickness = new Thickness(1),
         });
-        current.Children.Add(new TextBlock { Text = "現在の色", FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+        // [Android 3.515.4同期] ピッカーの見出し=labelMedium（docs/DESIGN.md §3.3）。
+        var pickerLabelStyle = (Style)Application.Current.Resources["MagiLabelMediumTextStyle"];
+        current.Children.Add(new TextBlock { Text = "現在の色", Style = pickerLabelStyle, VerticalAlignment = VerticalAlignment.Center });
         panel.Children.Add(current);
-        panel.Children.Add(new TextBlock { Text = "色を選ぶ", FontSize = 12, Opacity = 0.8 });
+        panel.Children.Add(new TextBlock { Text = "色を選ぶ", Style = pickerLabelStyle, Opacity = 0.8 });
 
         var grid = new Grid { ColumnSpacing = 4, RowSpacing = 4 };
         for (var c = 0; c < ShiftColorPalette.PerRow; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

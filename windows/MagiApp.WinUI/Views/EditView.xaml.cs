@@ -2088,7 +2088,7 @@ public sealed partial class EditView : UserControl
         var hasRange = lo0 is not null || hi0 is not null;
 
         var panel = new StackPanel { Spacing = 8 };
-        panel.Children.Add(new TextBlock { Text = $"現在 {count}回", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = $"現在 {count}回", Style = StyleOf("MagiTitleSmallTextStyle") });
         var status = vio switch
         {
             "vio-low" when lo0 is { } l => $"下限{l}回に対し現在{count}回（{Math.Max(0, l - count)}回不足）",
@@ -2100,7 +2100,7 @@ public sealed partial class EditView : UserControl
         if (status.Length > 0) panel.Children.Add(new TextBlock { Text = status, TextWrapping = TextWrapping.Wrap });
 
         var raw = g >= 0 && g < v.GroupShiftApt.Count && k < v.GroupShiftApt[g].Count ? v.GroupShiftApt[g][k] : "";
-        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} の個人設定がない職員に適用）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} の個人設定がない職員に適用）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var aptRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var aptValue = new TextBlock { Text = string.IsNullOrWhiteSpace(raw) ? "なし" : raw.Trim(), MinWidth = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var minus = new Button { Content = "−", MinWidth = 44 };
@@ -2121,7 +2121,7 @@ public sealed partial class EditView : UserControl
         else if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
             panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 12, Opacity = 0.8 });
 
-        panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", FontWeight = Microsoft.UI.Text.FontWeights.Bold });
+        panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };
         var hiBox = new TextBox { Header = "上限", PlaceholderText = "なし", Text = hi0?.ToString() ?? "", Width = 120 };
         var rangeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -2339,4 +2339,8 @@ public sealed partial class EditView : UserControl
         _door = i;
         Render();
     }
+
+    // [HomeView.xaml.cs と同じ手筋] コードビハインドで組む TextBlock の意味階層スタイル参照。
+    // private のためファイルを跨いで共有できず、同じ1行ヘルパーをこのファイルにも置く。
+    private static Style StyleOf(string key) => (Style)Application.Current.Resources[key];
 }

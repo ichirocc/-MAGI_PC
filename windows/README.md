@@ -326,6 +326,20 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 タイポグラフィの意味階層統一（Android 3.515.4/3.515.5 同期）: `docs/DESIGN.md` §3.3 の規則
+  （章=titleMedium／節=titleSmall／本文・行・切替の名前=bodyMedium／補足説明・注意書き=bodySmall／
+  `label*`は部品ラベル・チップ・凡例だけ）を`EditView`（Android `Ws1Editor`/`ConstraintEditor`/
+  `StaffManageCard`/`SkillGroupEditor`/`StaffRangeEditor`相当、3.515.4）・`SettingsView`（Android
+  `MagiSetupCards`相当、3.515.5）・`AnalysisView`（Android側に直接の対応履歴なし、規則をそのまま適用）・
+  `ScheduleView`（Android `MagiScheduleViews`相当、3.515.5）へ適用。`MagiTheme.xaml`の共有スタイル定義
+  （`MagiTitleMediumTextStyle`等）自体は既にKotlin原本と同値で正しく、個々の`TextBlock`が生の
+  `FontSize=`を直書きして節見出しを`label*`＋太字で代用する取り違えが残っていた（Android 3.515.4の
+  「見出し＝説明＝行＝全部14sp」と同型）。密なグリッドセル（`ScheduleView`の`AddCell`/`AddDataCell`、
+  凡例/チップ/バッジ）は据え置き。`ScheduleView.xaml`の`FilterTitle`（labelLarge→titleSmall、Android
+  3.515.5で先に直した`ViolationFilterBar`と同じ見出し）とシフト集計の2節見出し（14sp直書き→titleSmall）、
+  `SettingsView.xaml.cs`の色ピッカー見出し2箇所（labelMedium、Androidの「入力欄・ピッカーの見出し」規則）
+  は背景作業の後に個別追加で揃えた。WinUIコード-behind/XAMLのためローカルビルド不可、CIでのみ検証可能。
+
 - 2026-09-10 人員過剰(covO)セル詳細ダイアログに在勤者全員と直し方の導線（Android 3.515.2 同期・積み残し分）:
   `ScheduleView.xaml.cs`の`ShowDayTallyDetail`は旧実装が希望で固定している在勤者「だけ」を名指ししており、
   誰が入っているか・希望固定でない人の動かし方が分からなかった（Android実機報告と同型）。その枠の在勤者

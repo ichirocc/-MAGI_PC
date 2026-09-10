@@ -27,63 +27,63 @@
             <TextBlock Text="分析" FontSize="20" FontWeight="SemiBold" />
 
             <!-- 未読込のときだけ出す案内（下の各節はすべて非表示になる）。 -->
-            <TextBlock x:Name="EmptyText" FontSize="13" TextWrapping="Wrap" Opacity="0.7"
+            <TextBlock x:Name="EmptyText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.7"
                        Text="データを読み込むと、ここに診断が出ます。" />
 
             <!-- ① サマリー -->
             <StackPanel x:Name="SummarySection" Spacing="6">
-                <TextBlock Text="サマリー" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock x:Name="SummaryText" FontSize="13" TextWrapping="Wrap" />
-                <TextBlock x:Name="HintText" FontSize="13" TextWrapping="Wrap" Opacity="0.8" />
+                <TextBlock Text="サマリー" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock x:Name="SummaryText" Style="{StaticResource MagiBodyMediumTextStyle}" TextWrapping="Wrap" />
+                <TextBlock x:Name="HintText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8" />
             </StackPanel>
 
             <!-- [phase9 #18] 要確認（Kotlin原本 AnalysisTriageCard, 3.471.0）: 分類の軸は「族」でなく「診断」。 -->
             <StackPanel x:Name="TriageSection" Spacing="8">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="要確認" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Text="要確認" Style="{StaticResource MagiTitleMediumTextStyle}" VerticalAlignment="Center" />
                     <Border x:Name="TriageBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="8,2" VerticalAlignment="Center">
-                        <TextBlock x:Name="TriageBadgeText" FontSize="12" />
+                        <TextBlock x:Name="TriageBadgeText" Style="{StaticResource MagiLabelSmallTextStyle}" />
                     </Border>
                 </StackPanel>
-                <TextBlock x:Name="TriageAllClearText" FontSize="13" Foreground="{StaticResource MagiTertiaryBrush}"
+                <TextBlock x:Name="TriageAllClearText" Style="{StaticResource MagiBodyMediumTextStyle}" Foreground="{StaticResource MagiTertiaryBrush}"
                            Text="確認事項はありません（すべての条件を満たしています）。" />
-                <TextBlock x:Name="TriageBlockersTitle" Text="直さないと消えない項目" FontSize="14" FontWeight="SemiBold"
+                <TextBlock x:Name="TriageBlockersTitle" Text="直さないと消えない項目" Style="{StaticResource MagiTitleSmallTextStyle}"
                            Foreground="{StaticResource MagiErrorBrush}" />
                 <StackPanel x:Name="TriageBlockersList" Spacing="6" />
-                <TextBlock x:Name="TriageSearchTitle" FontSize="14" FontWeight="SemiBold" />
+                <TextBlock x:Name="TriageSearchTitle" Style="{StaticResource MagiTitleSmallTextStyle}" />
                 <Border x:Name="TriageSearchPanel" Background="{StaticResource MagiSurfaceVariantBrush}"
                         CornerRadius="{StaticResource MagiCornerSM}" Padding="10">
                     <StackPanel x:Name="TriageSearchList" Spacing="2" />
                 </Border>
                 <HyperlinkButton x:Name="TriageSummaryToggle" Padding="0" Click="OnTriageSummaryToggleClick" />
                 <StackPanel x:Name="TriageSummaryList" Spacing="2" Visibility="Collapsed" />
-                <TextBlock x:Name="TriageRunningNote" FontSize="12" Opacity="0.8" Text="※実行中のため確定前の値です（確定後に最新化）" />
+                <TextBlock x:Name="TriageRunningNote" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="※実行中のため確定前の値です（確定後に最新化）" />
             </StackPanel>
 
             <!-- ② 違反の内訳 -->
             <StackPanel x:Name="BreakdownSection" Spacing="6">
-                <TextBlock Text="違反の内訳" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="違反の内訳" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <StackPanel x:Name="BreakdownList" Spacing="2" />
             </StackPanel>
 
             <!-- 違反の場所（タップで勤務表タブへジャンプ） -->
             <StackPanel x:Name="LocationsSection" Spacing="6">
-                <TextBlock Text="違反の場所" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="違反の場所" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <StackPanel x:Name="LocationsList" Spacing="4" />
             </StackPanel>
 
             <!-- 直し方を探す -->
             <StackPanel x:Name="FixSection" Spacing="6">
-                <TextBlock Text="直し方を探す" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="直し方を探す" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <Button x:Name="FixSearchButton" Content="直し方を探す" Click="OnFixSearchClick" HorizontalAlignment="Left" />
-                <TextBlock x:Name="FixSearchingText" FontSize="13" Opacity="0.8" Text="探索中…" />
+                <TextBlock x:Name="FixSearchingText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="探索中…" />
                 <StackPanel x:Name="FixList" Spacing="10" />
             </StackPanel>
 
             <!-- ③ 設定の見直し候補 -->
             <!-- [phase9 #19] Kotlin原本 SettingIssuesCard（3.480.0）: 一括クリア→既定で畳んだ一覧（上位6件）→編集導線。 -->
             <StackPanel x:Name="IssuesSection" Spacing="8">
-                <TextBlock x:Name="IssuesTitle" Text="設定の見直し" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="IssuesTitle" Text="設定の見直し" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <Button x:Name="ClearOutOfScopeWishesButton" HorizontalAlignment="Stretch" Click="OnClearOutOfScopeWishesClick" />
                 <HyperlinkButton x:Name="IssuesToggle" Padding="0" Click="OnIssuesToggleClick" />
                 <StackPanel x:Name="IssuesList" Spacing="8" Visibility="Collapsed" />
@@ -92,46 +92,46 @@
 
             <!-- [phase9 #20] 期間の制約(c1)がなぜ直せなかったか（Kotlin原本 C1PlateauCard）。観測が無ければ「原因未確定」とだけ言う。 -->
             <StackPanel x:Name="C1PlateauSection" Spacing="8">
-                <TextBlock x:Name="C1Title" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock x:Name="C1UnknownText" FontSize="13" TextWrapping="Wrap" Opacity="0.8" />
-                <TextBlock x:Name="C1NoteText" FontSize="13" TextWrapping="Wrap" Opacity="0.8"
+                <TextBlock x:Name="C1Title" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock x:Name="C1UnknownText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8" />
+                <TextBlock x:Name="C1NoteText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8"
                            Text="※ 直近の計算で試した直し方の記録です。期間の制約は職員・シフト・決まりごとに分けています（同じ決まりの中に複数の期間がある場合はまとめて数えています）。" />
                 <StackPanel x:Name="C1List" Spacing="8" />
-                <TextBlock x:Name="C1MoreText" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="C1MoreText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <HyperlinkButton x:Name="C1DetailToggle" Padding="0" Click="OnC1DetailToggleClick" />
                 <Button x:Name="C1GoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
             </StackPanel>
 
             <!-- ④ 回数の固定が計算に与えた影響（Kotlin原本 PinFixedImpactCard、3.325.0 で c1 診断から分離）。 -->
             <StackPanel x:Name="PinSection" Spacing="8">
-                <TextBlock Text="回数の固定が計算に与えた影響" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock x:Name="PinSummaryText" FontSize="13" TextWrapping="Wrap" />
+                <TextBlock Text="回数の固定が計算に与えた影響" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock x:Name="PinSummaryText" Style="{StaticResource MagiBodyMediumTextStyle}" TextWrapping="Wrap" />
                 <HyperlinkButton x:Name="PinDetailToggle" Padding="0" Click="OnPinDetailToggleClick" />
                 <StackPanel x:Name="PinDetailPanel" Spacing="4" Visibility="Collapsed">
-                    <TextBlock FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap"
                                Text="※ 全部の手数ではなく、仕上げの整えのうち計測できた範囲の試行回数です（同じ手を複数回数えている場合があります）。この数が 0 でも、緩めて変わらないとは限りません。" />
-                    <TextBlock FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap"
                                Text="試すときは、対象の職員とシフト、そして緩める幅を決めて、変更する前と後を見比べてください。" />
                 </StackPanel>
-                <TextBlock x:Name="PinTargetsTitle" Text="止めていた回数固定" FontSize="14" FontWeight="SemiBold" />
+                <TextBlock x:Name="PinTargetsTitle" Text="止めていた回数固定" Style="{StaticResource MagiTitleSmallTextStyle}" />
                 <StackPanel x:Name="PinList" Spacing="6" />
-                <TextBlock x:Name="PinMoreText" FontSize="12" Opacity="0.8" />
-                <TextBlock x:Name="PinHintText" FontSize="12" Opacity="0.8" TextWrapping="Wrap"
+                <TextBlock x:Name="PinMoreText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                <TextBlock x:Name="PinHintText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap"
                            Text="押すと設定が変わります。「元に戻す」で戻せます。効果はもう一度つくると分かります。" />
                 <Button x:Name="PinGoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
             </StackPanel>
 
             <!-- ④' 禁止の並び診断（なぜ崩せないか） -->
             <StackPanel x:Name="ForbiddenSection" Spacing="6">
-                <TextBlock Text="禁止の並びで止まっている箇所" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock TextWrapping="Wrap" FontSize="13" Opacity="0.8"
+                <TextBlock Text="禁止の並びで止まっている箇所" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="このデータ・希望のままでは崩せないと判定された禁止の並び(c3n)です。緩める＝その制約行を削除します（元に戻す可）。" />
                 <StackPanel x:Name="ForbiddenList" Spacing="4" />
             </StackPanel>
 
             <!-- ⑤ 診断ログ -->
             <StackPanel x:Name="LogSection" Spacing="6">
-                <TextBlock Text="診断ログ" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="診断ログ" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <Border BorderBrush="LightGray" BorderThickness="1" Padding="8">
                     <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Auto">

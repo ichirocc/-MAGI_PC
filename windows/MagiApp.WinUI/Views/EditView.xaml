@@ -55,19 +55,19 @@
                     <ComboBoxItem Content="職員管理（随時）" />
                     <ComboBoxItem Content="年間マスター（制度変更時のみ）" />
                 </ComboBox>
-                <TextBlock x:Name="DoorHintText" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                <TextBlock x:Name="DoorHintText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- ===== 月次条件（毎月） ===== -->
             <StackPanel x:Name="MonthlyPanel" Spacing="8">
-                <TextBlock Text="月次条件" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="月次条件" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock x:Name="PeriodText" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="PrevMonthButton" Content="前の月" Click="OnPrevMonthClick" />
                     <Button x:Name="NextStepMonthButton" Content="次の月" Click="OnNextStepMonthClick" />
                     <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick" />
                 </StackPanel>
-                <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+                <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <Border x:Name="NextStepPanel" Background="{StaticResource MagiSecondaryContainerBrush}"
                         CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
                     <TextBlock x:Name="NextStepText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
@@ -82,9 +82,9 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock x:Name="WishSectionTitle" Text="希望シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock x:Name="WishSectionTitle" Text="希望シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
 
-                <TextBlock Text="職員を選んでカレンダーから複数日をまとめて選択できます" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                <TextBlock Text="職員を選んでカレンダーから複数日をまとめて選択できます" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <ComboBox x:Name="WishStaffCombo" HorizontalAlignment="Stretch" PlaceholderText="職員"
                           SelectionChanged="OnWishStaffSelectionChanged" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -92,11 +92,11 @@
                 </ScrollViewer>
                 <!-- [phase9 #14] 適用パネル（Kotlin原本 WishApplyPanel/ShiftButtonGrid）: 担当可能シフトを色つき大ボタン、担当外は「その他」で開く。 -->
                 <StackPanel x:Name="WishApplyPanel" Spacing="6" Visibility="Collapsed">
-                    <TextBlock x:Name="WishApplySummaryText" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                    <TextBlock x:Name="WishApplySummaryText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                     <StackPanel x:Name="WishShiftButtonsHost" Spacing="6" />
                     <Button x:Name="WishOtherToggle" Content="その他（担当外シフト）" Click="OnWishOtherToggleClick" />
                     <StackPanel x:Name="WishOtherButtonsHost" Spacing="6" Visibility="Collapsed" />
-                    <TextBlock x:Name="WishShiftWarnText" FontSize="12" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+                    <TextBlock x:Name="WishShiftWarnText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button x:Name="ApplyWishesForDaysButton" Content="適用" Click="OnApplyWishesForDaysClick" />
                         <Button x:Name="ClearWishesForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearWishesForDaysClick" />
@@ -104,7 +104,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <TextBlock Text="登録済みの希望（1件ずつ確認・削除）" FontSize="12" Opacity="0.8" Margin="0,8,0,0" />
+                <TextBlock Text="登録済みの希望（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
                 <StackPanel x:Name="WishListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="WishDayBox" Width="56" PlaceholderText="日" />
@@ -115,30 +115,30 @@
                     <Button x:Name="ApplyWishesButton" Content="希望をすべて勤務表へ反映" Click="OnApplyWishesClick" />
                     <Button x:Name="ClearAllWishesButton" Content="希望をすべて削除" Click="OnClearAllWishesClick" />
                 </StackPanel>
-                <TextBlock x:Name="WishHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="WishHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="日別の必要人数（例外）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="日別の必要人数（例外）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <!-- [phase9 #13] 必要人数カレンダー（Kotlin原本 NeedDayEditor.kt NeedMonthGrid/NeedApplyPanel）: シフトを選び複数日をまとめて設定。 -->
-                <TextBlock Text="シフトを選んでカレンダーから複数日をまとめて選択できます（各日の表示＝その日の必要人数、太字＝個別設定）" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                <TextBlock Text="シフトを選んでカレンダーから複数日をまとめて選択できます（各日の表示＝その日の必要人数、太字＝個別設定）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <ComboBox x:Name="NeedCalShiftCombo" HorizontalAlignment="Stretch" PlaceholderText="シフト"
                           SelectionChanged="OnNeedCalShiftSelectionChanged" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="NeedCalendarHost" />
                 </ScrollViewer>
                 <StackPanel x:Name="NeedApplyPanel" Spacing="4" Visibility="Collapsed">
-                    <TextBlock x:Name="NeedApplySummaryText" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                    <TextBlock x:Name="NeedApplySummaryText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBox x:Name="NeedApplyP1Box" Width="80" Header="最低人数" PlaceholderText="既定" TextChanged="OnNeedApplyTextChanged" />
                         <TextBox x:Name="NeedApplyP2Box" Width="80" Header="上限人数" PlaceholderText="既定" TextChanged="OnNeedApplyTextChanged" />
                     </StackPanel>
-                    <TextBlock x:Name="NeedApplyHintText" FontSize="12" Foreground="{StaticResource MagiErrorBrush}" Visibility="Collapsed" />
+                    <TextBlock x:Name="NeedApplyHintText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" Visibility="Collapsed" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button x:Name="ApplyNeedForDaysButton" Content="適用" Click="OnApplyNeedForDaysClick" />
                         <Button x:Name="ClearNeedForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearNeedForDaysClick" />
                         <Button x:Name="CancelNeedSelectionButton" Content="キャンセル" Click="OnCancelNeedSelectionClick" />
                     </StackPanel>
                 </StackPanel>
-                <TextBlock Text="登録済みの例外（1件ずつ確認・削除）" FontSize="12" Opacity="0.8" Margin="0,8,0,0" />
+                <TextBlock Text="登録済みの例外（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
                 <StackPanel x:Name="NeedDayListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="NeedDayShiftCombo" Width="100" PlaceholderText="シフト" />
@@ -147,13 +147,13 @@
                     <TextBox x:Name="NeedDayP2Box" Width="56" PlaceholderText="上限" />
                     <Button x:Name="SetNeedDayButton" Content="設定" Click="OnSetNeedDayClick" />
                 </StackPanel>
-                <TextBlock x:Name="NeedDayHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="NeedDayHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
             </StackPanel>
 
             <!-- ===== 職員管理（随時） ===== -->
             <StackPanel x:Name="StaffPanel" Spacing="8">
-                <TextBlock Text="職員管理" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock x:Name="StaffSummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+                <TextBlock Text="職員管理" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock x:Name="StaffSummaryText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <StackPanel x:Name="StaffListHost" Spacing="2" />
 
                 <TextBlock Text="対象の職員（改名・所属変更・削除）" />
@@ -175,9 +175,9 @@
                     <Button x:Name="RemoveStaffButton" Content="削除" Click="OnRemoveStaffClick" />
                 </StackPanel>
 
-                <TextBlock x:Name="StaffHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="StaffHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="個人別の回数（下限・上限。対象は上の「対象の職員」）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="個人別の回数（下限・上限。対象は上の「対象の職員」）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <StackPanel x:Name="StaffRangeListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="StaffRangeShiftCombo" Width="100" PlaceholderText="シフト" />
@@ -185,15 +185,15 @@
                     <TextBox x:Name="StaffRangeHiBox" Width="56" PlaceholderText="上限" />
                     <Button x:Name="SetStaffRangeButton" Content="設定" Click="OnSetStaffRangeClick" />
                 </StackPanel>
-                <TextBlock x:Name="StaffRangeHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="StaffRangeHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
                 <!-- [phase9 #12] 回数マトリクス（Kotlin原本 StaffShiftMatrixCard, 3.477.0）: 行=職員・列=シフトに担当可否・目標・上下限・実績を統合。 -->
-                <TextBlock Text="回数マトリクス（職員 × シフト：月に何回か）" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock Text="回数マトリクス（職員 × シフト：月に何回か）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="セルをタップで目標・上下限を編集。「—」＝担当不可（担当可否は年間マスターで変更）。薄色＝目標(やわらかい)のズレ、濃色＝個人の上下限(かたい)の逸脱。" />
                 <Border x:Name="AptOverloadBanner" Background="{StaticResource MagiErrorContainerBrush}"
                         CornerRadius="{StaticResource MagiCornerXS}" Padding="10,6">
-                    <TextBlock x:Name="AptOverloadText" TextWrapping="Wrap" FontSize="12" Foreground="{StaticResource MagiOnErrorContainerBrush}" />
+                    <TextBlock x:Name="AptOverloadText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiOnErrorContainerBrush}" />
                 </Border>
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="StaffShiftMatrixHost" />
@@ -202,12 +202,12 @@
 
             <!-- ===== 年間マスター（制度変更時のみ） ===== -->
             <StackPanel x:Name="MasterPanel" Spacing="8">
-                <TextBlock Text="年間マスター" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock Text="年間マスター" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock Text="土台の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
-                           TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+                           TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="見直し候補メモ" FontWeight="SemiBold" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock Text="見直し候補メモ" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="勤務表タブでセルの違反枠をタップ→「見直し候補にする」で積めます（このセッション内のみ・保存されません）。" />
                 <StackPanel x:Name="ReviewMemoListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -219,28 +219,28 @@
                         BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
                     <StackPanel Spacing="6">
                         <TextBlock Text="この体制で回るか" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                        <TextBlock Text="シフト別に「担当できる人数」で確認。余裕=1人欠けても回るか。" FontSize="12" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock Text="シフト別に「担当できる人数」で確認。余裕=1人欠けても回るか。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                         <StackPanel x:Name="StaffingRealityHost" Spacing="4" />
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="期間（日数）" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="期間（日数）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock Text="暦通りの月以外（例：15日間の一部期間）を使うときはここで直接変えます。通常は「月次条件」の月移動で足ります。"
-                           TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                           TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="MasterDaysBox" Width="80" PlaceholderText="日数(1-31)" />
                     <Button x:Name="EditMasterDaysButton" Content="変更" Click="OnEditMasterDaysClick" />
                 </StackPanel>
-                <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期。片手一本指の既定からの例外はAndroidと同じくこの2箇所限定）。"
-                           FontSize="11" Opacity="0.7" />
+                           Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
                 <ListView x:Name="ShiftListView" SelectionMode="Single" IsItemClickEnabled="False"
                           CanDragItems="True" CanReorderItems="True" AllowDrop="True"
                           DragItemsStarting="OnShiftListDragItemsStarting" DragItemsCompleted="OnShiftListDragItemsCompleted" />
 
-                <TextBlock Text="シフトの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="シフトの追加・改名・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterShiftCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnMasterShiftSelectionChanged" />
                 <TextBlock Text="名前" />
@@ -257,15 +257,15 @@
                     <Button x:Name="EditMasterShiftButton" Content="改名・変更" Click="OnEditMasterShiftClick" />
                     <Button x:Name="RemoveMasterShiftButton" Content="削除" Click="OnRemoveMasterShiftClick" />
                 </StackPanel>
-                <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="グループ" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期）。" FontSize="11" Opacity="0.7" />
+                <TextBlock Text="グループ" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期）。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
                 <ListView x:Name="GroupListView" SelectionMode="Single" IsItemClickEnabled="False"
                           CanDragItems="True" CanReorderItems="True" AllowDrop="True"
                           DragItemsStarting="OnGroupListDragItemsStarting" DragItemsCompleted="OnGroupListDragItemsCompleted" />
 
-                <TextBlock Text="グループの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="グループの追加・改名・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterGroupCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnMasterGroupSelectionChanged" />
                 <TextBlock Text="名前" />
@@ -277,10 +277,10 @@
                     <Button x:Name="EditMasterGroupButton" Content="改名" Click="OnEditMasterGroupClick" />
                     <Button x:Name="RemoveMasterGroupButton" Content="削除" Click="OnRemoveMasterGroupClick" />
                 </StackPanel>
-                <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="グループ単位の回数（一括設定）" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock Text="グループ単位の回数（一括設定）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限ならそのシフトの適切回数(apt)も同時に設定されます。両方空欄で一括設定すると全員ぶんの個人上下限を解除します。" />
                 <StackPanel x:Name="GroupRangeListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -290,12 +290,12 @@
                     <TextBox x:Name="GroupRangeHiBox" Width="56" PlaceholderText="上限" />
                     <Button x:Name="SetGroupRangeButton" Content="一括設定" Click="OnSetGroupRangeClick" />
                 </StackPanel>
-                <TextBlock x:Name="GroupRangeHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="GroupRangeHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="スキル区分" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock x:Name="SkillGroupListText" TextWrapping="Wrap" FontSize="13" />
+                <TextBlock Text="スキル区分" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock x:Name="SkillGroupListText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" />
 
-                <TextBlock Text="スキル区分の追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="スキル区分の追加・改名・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterSkillGroupCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnMasterSkillGroupSelectionChanged" />
                 <TextBlock Text="名前" />
@@ -307,10 +307,10 @@
                     <Button x:Name="EditMasterSkillGroupButton" Content="改名" Click="OnEditMasterSkillGroupClick" />
                     <Button x:Name="RemoveMasterSkillGroupButton" Content="削除" Click="OnRemoveMasterSkillGroupClick" />
                 </StackPanel>
-                <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="担当できるシフト（群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock Text="担当できるシフト（群×シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="セルをタップで担当ON/OFF（✓=担当できる）。群名をタップでその群を一括、シフト名をタップで全グループへ一括。「休」は外せません。" />
                 <ToggleSwitch x:Name="Use2Toggle" Header="上限人数（2パターン目）を使う" OnContent="ON" OffContent="OFF"
                               Toggled="OnUse2Toggled" />
@@ -327,8 +327,8 @@
                     </ScrollViewer>
                 </Grid>
 
-                <TextBlock Text="適切回数（1人あたり・群×シフト）" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock Text="適切回数（1人あたり・群×シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="1人あたりの期間内目標（空欄=目標なし。欄を離れると反映）。担当できないシフトの欄は入力できません。" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="GroupAptMatrixHost" />
@@ -336,20 +336,20 @@
                 <Border x:Name="AptOverloadPanel" Visibility="Collapsed" Background="#FFFDEDED"
                         BorderBrush="#FFB00020" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,4,0,0">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="この目標は達成できません" FontWeight="SemiBold" FontSize="13" Foreground="#FFB00020" />
+                        <TextBlock Text="この目標は達成できません" Style="{StaticResource MagiBodySmallTextStyle}" FontWeight="SemiBold" Foreground="{StaticResource MagiErrorBrush}" />
                         <StackPanel x:Name="AptOverloadList" Spacing="2" />
                     </StackPanel>
                 </Border>
                 <Button x:Name="ResetAptButton" Content="適切回数を全リセット" Click="OnResetAptClick"
                         HorizontalAlignment="Left" Margin="0,4,0,0" />
 
-                <TextBlock Text="登録済みのルール" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="登録済みのルール" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <HyperlinkButton x:Name="ConstraintHelpToggle" Padding="0" Click="OnConstraintHelpToggleClick"
                                  Content="ⓘ 詳しい説明（それぞれの条件の意味）" />
                 <StackPanel x:Name="ConstraintHelpHost" Spacing="8" Visibility="Collapsed" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />
 
-                <TextBlock Text="ルールの追加・変更・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <TextBlock Text="ルールの追加・変更・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock Text="種類" />
                 <ComboBox x:Name="ConstraintFamilyCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnConstraintFamilyChanged">
@@ -398,7 +398,7 @@
                     <Button x:Name="UpdateConstraintButton" Content="変更" Click="OnUpdateConstraintClick" />
                     <Button x:Name="RemoveConstraintButton" Content="削除" Click="OnRemoveConstraintClick" />
                 </StackPanel>
-                <TextBlock x:Name="ConstraintHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
+                <TextBlock x:Name="ConstraintHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
