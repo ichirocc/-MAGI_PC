@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -51,6 +52,14 @@ public sealed partial class EditView : UserControl
     private IReadOnlyList<string> _needDayShiftItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterShiftItems = System.Array.Empty<string>();
+    /// <summary>[3.515.6同期] シフト種別/グループのドラッグ並び替え用リスト。<see cref="ListView.ItemsSource"/>
+    ///  に据え置き、内容が変わったときだけ作り直す（<see cref="SyncReorderList"/>）。ドラッグ中はWinUIが
+    ///  この中身を直接並べ替えるため、確定(<c>DragItemsCompleted</c>)時に from/to を読み取って
+    ///  <c>Ws1MoveShiftTo</c>/<c>Ws1MoveGroupTo</c> を呼び、その後の再描画で真の状態へ揃え直す。</summary>
+    private readonly ObservableCollection<string> _shiftListItems = new();
+    private readonly ObservableCollection<string> _groupListItems = new();
+    private int _shiftDragFromIndex = -1;
+    private int _groupDragFromIndex = -1;
     private IReadOnlyList<string> _constraintRowItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _masterSkillGroupItems = System.Array.Empty<string>();
     private IReadOnlyList<string> _staffSkillItems = System.Array.Empty<string>();
@@ -114,6 +123,11 @@ public sealed partial class EditView : UserControl
     {
         _vm = vm;
         InitializeComponent();
+        // [3.515.6同期] ItemsSource はここで一度だけ束ねる（ObservableCollectionの変更はListViewへ自動反映
+        //   されるため、以後は_shiftListItems/_groupListItemsの中身だけ更新する。RenderMasterのたびに
+        //   ItemsSourceを差し替えるとドラッグ中の内部状態を壊しかねないため避ける）。
+        ShiftListView.ItemsSource = _shiftListItems;
+        GroupListView.ItemsSource = _groupListItems;
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -314,6 +328,51 @@ public sealed partial class EditView : UserControl
         var keep = combo.SelectedIndex;
         combo.ItemsSource = items.ToList();
         combo.SelectedIndex = keep >= 0 && keep < items.Count ? keep : (items.Count > 0 ? 0 : -1);
+    }
+
+    /// <summary>[3.515.6同期] <see cref="_shiftListItems"/>/<see cref="_groupListItems"/>を
+    ///  真の状態(<paramref name="items"/>)へ揃える。ドラッグ完了直後の再描画では、WinUIが自前で
+    ///  並べ替えた見た目を、ここで<c>Ws1MoveShiftTo</c>/<c>Ws1MoveGroupTo</c>確定後の実際の順序で
+    ///  上書きする（framework側の見た目が真の状態とずれても、次の描画で必ず正される）。</summary>
+    private static void SyncReorderList(ObservableCollection<string> collection, IReadOnlyList<string> items)
+    {
+        if (collection.SequenceEqual(items)) return;
+        collection.Clear();
+        foreach (var item in items) collection.Add(item);
+    }
+
+    private void OnShiftListDragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        var item = e.Items.Count > 0 ? e.Items[0] as string : null;
+        _shiftDragFromIndex = item is null ? -1 : _shiftListItems.IndexOf(item);
+    }
+
+    private void OnShiftListDragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        var from = _shiftDragFromIndex;
+        _shiftDragFromIndex = -1;
+        if (from < 0) return;
+        var item = args.Items.Count > 0 ? args.Items[0] as string : null;
+        var to = item is null ? -1 : _shiftListItems.IndexOf(item);
+        if (to < 0 || to == from) return;
+        _vm.Ws1MoveShiftTo(from, to);
+    }
+
+    private void OnGroupListDragItemsStarting(object sender, DragItemsStartingEventArgs e)
+    {
+        var item = e.Items.Count > 0 ? e.Items[0] as string : null;
+        _groupDragFromIndex = item is null ? -1 : _groupListItems.IndexOf(item);
+    }
+
+    private void OnGroupListDragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+    {
+        var from = _groupDragFromIndex;
+        _groupDragFromIndex = -1;
+        if (from < 0) return;
+        var item = args.Items.Count > 0 ? args.Items[0] as string : null;
+        var to = item is null ? -1 : _groupListItems.IndexOf(item);
+        if (to < 0 || to == from) return;
+        _vm.Ws1MoveGroupTo(from, to);
     }
 
     private void RenderWish(UiState ui, bool editable)
@@ -1245,9 +1304,7 @@ public sealed partial class EditView : UserControl
             ? ""
             : (ui.Loaded ? "計算の実行中は期間を変更できません。終わってからにしてください。" : "");
 
-        ShiftListText.Text = ui.ShiftSymbols.Count > 0
-            ? string.Join(" ・ ", ui.ShiftSymbols)
-            : "（未設定）";
+        SyncReorderList(_shiftListItems, ui.ShiftSymbols);
 
         Use2Toggle.IsOn = ui.Use2;
         Use2Toggle.IsEnabled = editable;
@@ -1275,7 +1332,7 @@ public sealed partial class EditView : UserControl
         }
 
         var groups = _vm.GroupLabels();
-        GroupListText.Text = groups.Count > 0 ? string.Join(" ・ ", groups) : "（未設定）";
+        SyncReorderList(_groupListItems, groups);
 
         SyncItems(MasterGroupCombo, groups, ref _masterGroupItems);
         SyncMasterGroupFields();

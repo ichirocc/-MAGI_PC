@@ -234,7 +234,11 @@
                 <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
 
                 <TextBlock Text="シフト" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock x:Name="ShiftListText" TextWrapping="Wrap" FontSize="13" />
+                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期。片手一本指の既定からの例外はAndroidと同じくこの2箇所限定）。"
+                           FontSize="11" Opacity="0.7" />
+                <ListView x:Name="ShiftListView" SelectionMode="Single" IsItemClickEnabled="False"
+                          CanDragItems="True" CanReorderItems="True" AllowDrop="True"
+                          DragItemsStarting="OnShiftListDragItemsStarting" DragItemsCompleted="OnShiftListDragItemsCompleted" />
 
                 <TextBlock Text="シフトの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterShiftCombo" HorizontalAlignment="Stretch"
@@ -256,7 +260,10 @@
                 <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" FontSize="12" Opacity="0.8" />
 
                 <TextBlock Text="グループ" FontWeight="SemiBold" Margin="0,8,0,0" />
-                <TextBlock x:Name="GroupListText" TextWrapping="Wrap" FontSize="13" />
+                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期）。" FontSize="11" Opacity="0.7" />
+                <ListView x:Name="GroupListView" SelectionMode="Single" IsItemClickEnabled="False"
+                          CanDragItems="True" CanReorderItems="True" AllowDrop="True"
+                          DragItemsStarting="OnGroupListDragItemsStarting" DragItemsCompleted="OnGroupListDragItemsCompleted" />
 
                 <TextBlock Text="グループの追加・改名・削除" FontWeight="SemiBold" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterGroupCombo" HorizontalAlignment="Stretch"
