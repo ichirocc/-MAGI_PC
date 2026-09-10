@@ -16,7 +16,15 @@
       Ui.Message/Ui.MessageIsError が変わるたび MainWindow.xaml.cs が開閉させる
       （どのタブを見ていても通知が見える＝Kotlin原本と同じ「シェル全体で1つ」の通知面）。
     -->
-    <Grid>
+    <!-- [2026-09-10, ユーザー報告「配色が見にくい」] RequestedTheme を明示しない既定では WinUI3 が
+         OS のダーク/ライト設定へ追従する。Android原本は MainActivity.kt:43 で MagiTheme(3)＝UD高
+         コントラスト配色を常に固定で呼び出し、システム設定を一切見ない（D8「外観はUD固定」）。
+         WinUI 側に同じ強制が無かったため、OS がダークモードのとき既定スタイルの未上書き部分（既定の
+         ボタン/スクロールバー等の chrome）だけダーク化し、MagiTheme.xaml のブランド色（白背景・
+         黒文字の高コントラスト固定）と混ざって一貫性のない見た目になっていたと考えられる。
+         ルートへ RequestedTheme="Light" を明示し、Android と同じ「システム設定に関わらず常に同じ配色」
+         を強制する。 -->
+    <Grid RequestedTheme="Light">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
