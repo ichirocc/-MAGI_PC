@@ -326,6 +326,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 `Package.appxmanifest` のバージョンを 1.0.0.0→1.0.1.0 へ（CI失敗の調査）: `windows-installer.yml`
+  の手動実行（run #12・#13）が「GitHub Release (tag win-v* only)」ジョブで失敗。原因はコードの不具合でなく、
+  ワークフロー自身の意図的なガード（README 516-517 行に既述）——`win-v1.0.0` タグは2026-09-04の別コミット
+  （`0c8868a`）から既に公開済みで、新しいコミットから同じタグを打とうとすると「公開済みバージョンの実体は
+  差し替えない」判定で意図的に失敗する（`tag win-v1.0.0 already points at another commit ... bump the version
+  instead of overwriting`）。マニフェストが1.0.0.0のままだったため、バージョン入力なしの手動実行は毎回
+  この失敗を繰り返す。次にバージョン入力なしで実行すると `win-v1.0.1` を打つよう更新（`Resolve version` が
+  マニフェストへフォールバックする既存仕様どおり）。
+
 - 2026-09-10 タイポグラフィの意味階層統一（Android 3.515.4/3.515.5 同期）: `docs/DESIGN.md` §3.3 の規則
   （章=titleMedium／節=titleSmall／本文・行・切替の名前=bodyMedium／補足説明・注意書き=bodySmall／
   `label*`は部品ラベル・チップ・凡例だけ）を`EditView`（Android `Ws1Editor`/`ConstraintEditor`/
