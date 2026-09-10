@@ -326,6 +326,43 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 UIの応答性・可読性・勤務表セル編集の3件（ユーザー報告「カクつく/フリーズする/キャンセルが
+  効かない」「画面が見にくい」「勤務表をクリックしてもシフトを変更できない」）:
+  - **調査で判明した実態**: マルチスレッド化・キャンセル機構は元々実装済みだった（`SaOptimizer`が
+    `Task.Run`でワーカー毎に並列実行・既定でCPUコア数まで自動利用、`Stop()`の`CancellationTokenSource`
+    連鎖も正しく配線済み）。実際の原因は別: 進捗コールバックが1秒ごと約220msのバースト窓へワーカー数
+    （最大8）×プロパティ6個ぶんの`PropertyChanged`を集中発火させ、5タブすべての`OnUiChanged`が
+    プロパティを絞らず毎回フル`Render()`（グリッド全消去→再構築等）を呼んでいたため、UIスレッドの
+    ディスパッチキューが詰まっていた（Android版はCompose recompositionがフレーム単位で自動的に間引くため
+    同じ頻度でも症状が出ない）。Stopボタンのクリックもこのキューの後ろに並ぶため「キャンセルが効かない」
+    ように見えていた。
+  - **修正**: `CoalescedRender`（新規、`MagiApp.WinUI/CoalescedRender.cs`）を追加し、5タブ
+    （ScheduleView/HomeView/EditView/SettingsView/AnalysisView）の`OnUiChanged`が直接`Render()`を
+    呼ぶのをやめ、`DispatcherQueue`の次サイクルへ1回だけ間引いて要求する形へ変更。バースト全体で
+    最大1回の再描画に収束し、取りこぼし（最後の状態を描き損なう）は無い（`MagiViewModel.Ui`を直接
+    読むため）。`Loaded`直後・コンストラクタ初回の`Render()`はバーストと無関係のため従来どおり直接呼ぶ。
+  - **可読性**: `docs/DESIGN.md`の本文最小14spを下回るFontSize（10〜13、約70箇所、5View全て）を
+    14へ引き上げ（2026-09-02の2回のタイポグラフィ作業では「グリッドが大きくなる」という理由で意図的に
+    据え置いていたが、今回の明示的な可読性報告を受けユーザー確認のうえ引き上げ）。副次テキストの弱調が
+    `Opacity=0.7/0.8`（背景へ向けて単純に薄めるだけ）で代用され、本家が定義済みで4.5:1コントラストを
+    実測保証する`onSurfaceVariant`色に対応する`Brush`が無かったため`MagiOnSurfaceVariantBrush`を追加
+    （既存85箇所の`Opacity`使用は無効化状態の表現等と混在しており、実機確認なしの一括置換はリスクが
+    高いためスコープ外＝将来の実機確認つき作業として残す）。
+    **[訂正]** 当初「配色トークン(`MagiTheme.xaml`)も本家から乖離している（純黒のonBackground/outline）」
+    と報告しユーザーの承認を得たが、これは誤りだった——本家`MainActivity.kt`が実際に出荷する唯一の配色
+    （`mode=3`=UD高コントラスト、CLAUDE.mdのD8決定）と19項目すべて完全一致しており、`DESIGN.md`も
+    「純黒はUD/mode=3の意図的な最大可読時のみ」と明記している。比較対象を誤った（出荷されない
+    `lightColorScheme`と比較した）ため、配色の変更は行っていない。
+  - **勤務表セル編集**: `ScheduleView.ShowCellEditor`/`ShowShortageFixFlyout`の`MenuFlyout`が
+    `XamlRoot`を未設定のまま`ShowAt(anchor)`していた。このアプリの`ContentDialog`は全箇所（7箇所・
+    5ファイル）で`XamlRoot`を明示設定する統一規約があり（`MainWindow.xaml.cs:141`等）、この2つの
+    `MenuFlyout`だけがそこから外れていた。ユーザー報告「クリックしてもシフトを変更できない／メニューが
+    出ない」と症状が一致するため、他のpopupと同じ`XamlRoot = anchor.XamlRoot`を明示設定。
+  - **検証**: サンドボックスからは`MagiApp.WinUI`（Windows専用、XAMLコンパイラがネイティブexeで
+    Linux実行不可）を一切ビルド・実行できないため、上記いずれも実機未検証。構文は目視レビュー・波括弧
+    対応チェックのみ。影響を受けない`MagiApp.ViewModels.Tests`（440件）・`MagiEngine.Tests`（838件）は
+    green。実機確認（Windows 11またはwindows-latest CI起動）を必ず経てから完了とすること。
+
 - 2026-09-10 HF77明示指示で上限超過(high)の重みを45→25に変更（Android 3.516.0 同期）:
   Android側の設定タブ重み表スクリーンショットで「上限超過を人員過剰と期間の制約の間に移動する」という
   要望→表は`MirrorKeys.weights`の実値でソートされる（手動並べ替え不可）ため実際には重み値の変更が要り、

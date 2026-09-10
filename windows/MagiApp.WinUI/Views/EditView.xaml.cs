@@ -36,6 +36,7 @@ public sealed partial class EditView : UserControl
 {
     private readonly MagiViewModel _vm;
     private readonly UiSubscription _uiSub;
+    private readonly CoalescedRender _renderCoalescer;
     private bool _syncingFromModel;
 
     /// <summary>開いているドア。0=月次条件 / 1=職員管理 / 2=年間マスター。</summary>
@@ -128,6 +129,7 @@ public sealed partial class EditView : UserControl
         //   ItemsSourceを差し替えるとドラッグ中の内部状態を壊しかねないため避ける）。
         ShiftListView.ItemsSource = _shiftListItems;
         GroupListView.ItemsSource = _groupListItems;
+        _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -138,7 +140,8 @@ public sealed partial class EditView : UserControl
         Render();
     }
 
-    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+    // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
+    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     private void Render()
     {
@@ -230,14 +233,14 @@ public sealed partial class EditView : UserControl
         {
             ChecklistIssuesHost.Children.Add(new TextBlock
             {
-                Text = $"・{iss.Where}：{iss.Problem}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+                Text = $"・{iss.Where}：{iss.Problem}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
             });
         }
         if (issues.Count > ChecklistIssueRows)
         {
             ChecklistIssuesHost.Children.Add(new TextBlock
             {
-                Text = $"ほか{issues.Count - ChecklistIssueRows}件（分析タブの設定見直しに全件）", FontSize = 12, Opacity = 0.8,
+                Text = $"ほか{issues.Count - ChecklistIssueRows}件（分析タブの設定見直しに全件）", FontSize = 14, Opacity = 0.8,
             });
         }
     }
@@ -387,18 +390,17 @@ public sealed partial class EditView : UserControl
         var rows = _vm.WishOverrides();
         ApplyWishesButton.IsEnabled = editable && rows.Count > 0;
         ClearAllWishesButton.IsEnabled = editable && rows.Count > 0;
-        // [トークン非適用, ファイル共通] このファイルのFontSize値(10/11/12/13)はMagiThemeタイポ
-        // スケール(14始まり=BodySmall)より小さい一覧行/密グリッド用の意図的な調整値で、どれとも
-        // 厳密一致しない。Button.FontSizeはStyle(TargetType=TextBlock)を型的に受け付けられない
-        // （Button.Styleの対象型が違う）ため、そもそもトークン化の対象外。
+        // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
+        //   引き上げ済み（一覧行/密グリッド用に10〜13へ据え置いていたのを解消。Button.FontSizeは
+        //   Style(TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず）。
         foreach (var v in rows.Take(MaxOverrideRows))
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
-                Text = $"{v.StaffName} {v.Day}日 → {v.Kigou}", FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+                Text = $"{v.StaffName} {v.Day}日 → {v.Kigou}", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
-            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var i = v.I; var j = v.J;
             remove.Click += (_, _) => _vm.RemoveWish(i, j);
             row.Children.Add(remove);
@@ -406,7 +408,7 @@ public sealed partial class EditView : UserControl
         }
         if (rows.Count > MaxOverrideRows)
         {
-            WishListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+            WishListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 14, Opacity = 0.8 });
         }
     }
 
@@ -460,7 +462,7 @@ public sealed partial class EditView : UserControl
             var color = c == 0 ? Colors.Red : (c == 6 ? Colors.RoyalBlue : Colors.Black);
             var head = new TextBlock
             {
-                Text = weekdayLabels[c], FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = weekdayLabels[c], FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(color), HorizontalAlignment = HorizontalAlignment.Center,
                 // 2px は7段階スケール(XS=4が最小)に無い意図的な微調整値のため据え置き（トークン化するとサイズが変わる）。
                 Padding = new Thickness(2),
@@ -487,7 +489,7 @@ public sealed partial class EditView : UserControl
             var content = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Center };
             content.Children.Add(new TextBlock
             {
-                Text = selected ? $"{d} ✓" : d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+                Text = selected ? $"{d} ✓" : d.ToString(), FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center,
                 FontWeight = selected ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
             });
             // 登録済みの希望はシフト色のチップで（Kotlin原本と同じ＝色＋記号の二重符号化）。
@@ -502,7 +504,7 @@ public sealed partial class EditView : UserControl
                 {
                     Background = new SolidColorBrush(chipBg), CornerRadius = new CornerRadius(4), Padding = new Thickness(4, 1, 4, 1),
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Child = new TextBlock { Text = kigou, FontSize = 10, Foreground = new SolidColorBrush(chipFg) },
+                    Child = new TextBlock { Text = kigou, FontSize = 14, Foreground = new SolidColorBrush(chipFg) },
                 });
             }
 
@@ -748,7 +750,7 @@ public sealed partial class EditView : UserControl
         {
             var head = new TextBlock
             {
-                Text = weekdayLabels[c], FontSize = 11, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = weekdayLabels[c], FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = new SolidColorBrush(c == 0 ? Colors.Red : c == 6 ? Colors.RoyalBlue : Colors.Black),
                 HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(2),
             };
@@ -768,12 +770,12 @@ public sealed partial class EditView : UserControl
             var content = new StackPanel { Spacing = 0, HorizontalAlignment = HorizontalAlignment.Center };
             content.Children.Add(new TextBlock
             {
-                Text = selected ? $"{d} ✓" : isIndividual ? $"{d} ●" : d.ToString(), FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center,
+                Text = selected ? $"{d} ✓" : isIndividual ? $"{d} ●" : d.ToString(), FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center,
                 FontWeight = selected ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
             });
             content.Children.Add(new TextBlock
             {
-                Text = rangeLabel, FontSize = 10, Opacity = range is null ? 0.5 : 0.9, HorizontalAlignment = HorizontalAlignment.Center,
+                Text = rangeLabel, FontSize = 14, Opacity = range is null ? 0.5 : 0.9, HorizontalAlignment = HorizontalAlignment.Center,
                 FontWeight = isIndividual ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
             });
             var cellButton = new Button
@@ -877,9 +879,9 @@ public sealed partial class EditView : UserControl
             row.Children.Add(new TextBlock
             {
                 Text = $"{v.Kigou} {v.J + 1}日 → 最低{DashIfBlank(v.P1)}/上限{DashIfBlank(v.P2)}",
-                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
-            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var k = v.K; var j = v.J;
             remove.Click += (_, _) => _vm.RemoveNeedDay(k, j);
             row.Children.Add(remove);
@@ -887,7 +889,7 @@ public sealed partial class EditView : UserControl
         }
         if (rows.Count > MaxOverrideRows)
         {
-            NeedDayListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+            NeedDayListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 14, Opacity = 0.8 });
         }
     }
 
@@ -942,7 +944,7 @@ public sealed partial class EditView : UserControl
             StaffListHost.Children.Add(new TextBlock
             {
                 Text = sym.Length > 0 ? $"{i + 1}. {names[i]}（{sym}）" : $"{i + 1}. {names[i]}",
-                FontSize = 13,
+                FontSize = 14,
             });
         }
 
@@ -1012,9 +1014,9 @@ public sealed partial class EditView : UserControl
             row.Children.Add(new TextBlock
             {
                 Text = $"{v.StaffName} {v.Kigou}: 下限{DashIfBlank(v.Lo)}〜上限{DashIfBlank(v.Hi)}{target}",
-                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
-            var remove = new Button { Content = "削除", FontSize = 12, IsEnabled = editable };
+            var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var i = v.I;
             var k = v.K;
             remove.Click += (_, _) => _vm.RemoveStaffRange(i, k);
@@ -1023,7 +1025,7 @@ public sealed partial class EditView : UserControl
         }
         if (rows.Count > MaxOverrideRows)
         {
-            StaffRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+            StaffRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 14, Opacity = 0.8 });
         }
     }
 
@@ -1059,9 +1061,9 @@ public sealed partial class EditView : UserControl
             row.Children.Add(new TextBlock
             {
                 Text = $"{v.GroupName} {v.Kigou}: 下限{DashIfBlank(v.Lo)}〜上限{DashIfBlank(v.Hi)}（{v.Shared}/{v.Members}名が共有）",
-                FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
-            var clear = new Button { Content = "解除", FontSize = 12, IsEnabled = editable };
+            var clear = new Button { Content = "解除", FontSize = 14, IsEnabled = editable };
             var g = v.G; var k = v.K; var lo = v.Lo; var hi = v.Hi;
             clear.Click += (_, _) => _vm.ClearGroupRange(g, k, lo, hi);
             row.Children.Add(clear);
@@ -1069,7 +1071,7 @@ public sealed partial class EditView : UserControl
         }
         if (rows.Count > MaxOverrideRows)
         {
-            GroupRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 13, Opacity = 0.8 });
+            GroupRangeListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 14, Opacity = 0.8 });
         }
     }
 
@@ -1116,11 +1118,11 @@ public sealed partial class EditView : UserControl
         {
             if (!ConstraintHelp.Bodies.TryGetValue(f.Key, out var body)) continue;
             var block = new StackPanel { Spacing = 2 };
-            block.Children.Add(new TextBlock { Text = f.Title, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-            block.Children.Add(new TextBlock { Text = body, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            block.Children.Add(new TextBlock { Text = f.Title, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            block.Children.Add(new TextBlock { Text = body, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             ConstraintHelpHost.Children.Add(block);
         }
-        ConstraintHelpHost.Children.Add(new TextBlock { Text = ConstraintHelp.Footer, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        ConstraintHelpHost.Children.Add(new TextBlock { Text = ConstraintHelp.Footer, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
     }
 
     private void OnConstraintHelpToggleClick(object sender, RoutedEventArgs e)
@@ -1159,7 +1161,7 @@ public sealed partial class EditView : UserControl
             row.Children.Add(new TextBlock
             {
                 Text = $"担当{r.Q}人・月{r.D}人日（1人あたり{tenths / 10}.{tenths % 10}回）・{detail}",
-                FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+                FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
             });
             StaffingRealityHost.Children.Add(row);
         }
@@ -1174,10 +1176,10 @@ public sealed partial class EditView : UserControl
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
-                Text = memos[idx], FontSize = 13, TextWrapping = TextWrapping.Wrap,
+                Text = memos[idx], FontSize = 14, TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center, MaxWidth = 380,
             });
-            var remove = new Button { Content = "削除", FontSize = 12 };
+            var remove = new Button { Content = "削除", FontSize = 14 };
             var i = idx;
             remove.Click += (_, _) => _vm.RemoveReviewMemo(i);
             row.Children.Add(remove);
@@ -1362,14 +1364,14 @@ public sealed partial class EditView : UserControl
             ConstraintListHost.Children.Add(new TextBlock
             {
                 Text = $"{f.Title}: {f.Rows.Count}件",
-                FontSize = 13,
+                FontSize = 14,
                 Opacity = f.Rows.Count == 0 ? 0.5 : 1.0,
             });
         }
         ConstraintListHost.Children.Add(new TextBlock
         {
             Text = $"合計 {total}件",
-            FontSize = 13,
+            FontSize = 14,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         });
 
@@ -1951,7 +1953,7 @@ public sealed partial class EditView : UserControl
             var reason = b.IsRest
                 ? $"「{b.Kigou}」目標の合計 {b.AptSum}回 に対し、他シフトの上限を差し引いた最大可能日数の合計は {b.Capacity}回。{b.Shortfall}回ぶんは必ず届きません。"
                 : $"「{b.Kigou}」目標の合計 {b.AptSum}回 に対し、必要人数の合計は {b.Capacity}回。{b.Shortfall}回ぶんは必ず届きません。";
-            AptOverloadList.Children.Add(new TextBlock { Text = reason, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            AptOverloadList.Children.Add(new TextBlock { Text = reason, FontSize = 14, TextWrapping = TextWrapping.Wrap });
         }
     }
 
@@ -2003,7 +2005,7 @@ public sealed partial class EditView : UserControl
                 Background = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"],
                 Child = new TextBlock
                 {
-                    Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+                    Text = text, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
                     VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Center,
                 },
             };
@@ -2027,8 +2029,8 @@ public sealed partial class EditView : UserControl
                 ui.CountViolations.TryGetValue($"{i},{k}", out var vio);
                 var (text, sub, bg, bold, bordered) = MatrixCell(allowed, counts[k], _vm.StaffCellLimits(i, k), vio, k == restIdx, shortC, overC);
                 var content = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
-                content.Children.Add(new TextBlock { Text = text, FontSize = 12, FontWeight = bold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center });
-                if (sub.Length > 0) content.Children.Add(new TextBlock { Text = sub, FontSize = 10, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
+                content.Children.Add(new TextBlock { Text = text, FontSize = 14, FontWeight = bold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal, HorizontalAlignment = HorizontalAlignment.Center });
+                if (sub.Length > 0) content.Children.Add(new TextBlock { Text = sub, FontSize = 14, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
                 var cell = new Button
                 {
                     Content = content, MinWidth = 68, MinHeight = 52, Padding = new Thickness(4, 2, 4, 2), CornerRadius = new CornerRadius(4),
@@ -2117,9 +2119,9 @@ public sealed partial class EditView : UserControl
         panel.Children.Add(aptRow);
         // [Android 3.509.0/決定 D9] 個人の下限・上限がある組には群目標を適用しない。適用される組は到達範囲へ調整されうる（3.508.0）。
         if ((lo0 is not null || hi0 is not null) && int.TryParse(raw.Trim(), out _))
-            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません", FontSize = 12, Opacity = 0.8 });
+            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません", FontSize = 14, Opacity = 0.8 });
         else if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
-            panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 12, Opacity = 0.8 });
+            panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 14, Opacity = 0.8 });
 
         panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };
@@ -2127,7 +2129,7 @@ public sealed partial class EditView : UserControl
         var rangeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         rangeRow.Children.Add(loBox); rangeRow.Children.Add(hiBox);
         panel.Children.Add(rangeRow);
-        var conflict = new TextBlock { Text = "上限は下限以上にしてください。", FontSize = 12, Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], Visibility = Visibility.Collapsed };
+        var conflict = new TextBlock { Text = "上限は下限以上にしてください。", FontSize = 14, Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], Visibility = Visibility.Collapsed };
         panel.Children.Add(conflict);
         if (vio == "vio-high" || vio == "vio-low")
         {
@@ -2197,7 +2199,7 @@ public sealed partial class EditView : UserControl
             var b = new Button
             {
                 Content = text,
-                FontSize = 12,
+                FontSize = 14,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 MinHeight = MatrixRowH,
                 MinWidth = MatrixCellW,
@@ -2212,7 +2214,7 @@ public sealed partial class EditView : UserControl
         }
 
         // 左上の角（固定列側）＝空。行ヘッダ＝群名（タップで行一括）。
-        var corner = new TextBlock { Text = "群 ＼ シフト", FontSize = 11, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(xs, 0, xs, 0) };
+        var corner = new TextBlock { Text = "群 ＼ シフト", FontSize = 14, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(xs, 0, xs, 0) };
         Grid.SetRow(corner, 0);
         GroupShiftNameColumn.Children.Add(corner);
         for (var g = 0; g < groupCount; g++)
@@ -2290,7 +2292,7 @@ public sealed partial class EditView : UserControl
         {
             var block = new TextBlock
             {
-                Text = text, FontSize = 12, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = text, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Padding = new Thickness(xs), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             };
             Grid.SetRow(block, row);
@@ -2306,7 +2308,7 @@ public sealed partial class EditView : UserControl
             {
                 var gg = g;
                 var kk = k;
-                var apt = new TextBox { Width = 44, FontSize = 12, Margin = new Thickness(xs) };
+                var apt = new TextBox { Width = 44, FontSize = 14, Margin = new Thickness(xs) };
                 apt.LostFocus += (_, _) => { if (!_syncingFromModel) _vm.Ws1SetGroupApt(gg, kk, apt.Text); };
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(apt, $"{ws1.Groups[g].Name} × {ws1.Shifts[k].Kigou} の適切回数");
                 Grid.SetRow(apt, g + 1);

@@ -135,7 +135,7 @@
                 <Border BorderBrush="LightGray" BorderThickness="1" Padding="8">
                     <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto"
                                   VerticalScrollBarVisibility="Auto">
-                        <TextBlock x:Name="LogText" FontSize="12" FontFamily="Consolas"
+                        <TextBlock x:Name="LogText" FontSize="14" FontFamily="Consolas"
                                    IsTextSelectionEnabled="True" />
                     </ScrollViewer>
                 </Border>

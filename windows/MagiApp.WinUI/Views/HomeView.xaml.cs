@@ -17,6 +17,7 @@ public sealed partial class HomeView : UserControl
     private readonly MagiViewModel _vm;
     private readonly MainWindow _window;
     private readonly UiSubscription _uiSub;
+    private readonly CoalescedRender _renderCoalescer;
 
     private bool _detailOpen;
     private Action _bigAction = () => { };
@@ -35,6 +36,7 @@ public sealed partial class HomeView : UserControl
         _vm = vm;
         _window = window;
         InitializeComponent();
+        _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -45,7 +47,8 @@ public sealed partial class HomeView : UserControl
         Render();
     }
 
-    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+    // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
+    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     private void Render()
     {
@@ -384,11 +387,11 @@ public sealed partial class HomeView : UserControl
             if (target is not null)
             {
                 panel.Children.Add(new TextBlock { Text = $"{target.DayLabel} の「{target.ShiftSymbol}」が {target.Miss}人 足りません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = $"この日に動かせる人がいます。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = $"この日に動かせる人がいます。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
                 if (cands.Count == 0)
                 {
-                    panel.Children.Add(new TextBlock { Text = target.Reason, Foreground = BrushOf("MagiErrorBrush"), FontSize = 13, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = target.Reason, Foreground = BrushOf("MagiErrorBrush"), FontSize = 14, TextWrapping = TextWrapping.Wrap });
                 }
                 else
                 {
@@ -413,7 +416,7 @@ public sealed partial class HomeView : UserControl
                     panel.Children.Add(new TextBlock
                     {
                         Text = flow.Pending ? "再検査中…（結果が反映されるまで候補は押せません）" : "入れたら「元に戻す」でいつでも取り消せます。",
-                        FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+                        FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
                     });
                 }
             }
@@ -421,15 +424,15 @@ public sealed partial class HomeView : UserControl
             {
                 panel.Children.Add(new TextBlock { Text = "これ以上は自動で埋められません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
                 foreach (var sf in plan.Infeasible.Take(4))
-                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             }
             else if (plan.Blocked.Count > 0)
             {
                 panel.Children.Add(new TextBlock { Text = "いまの希望・担当のままでは埋められない日が残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
-                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整するか、担当できるシフトを増やしてください（編集タブ＞月次条件）。", FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整するか、担当できるシフトを増やしてください（編集タブ＞月次条件）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             }
             else
             {
@@ -655,17 +658,17 @@ public sealed partial class HomeView : UserControl
         }
         AlternativesPanel.Visibility = Visibility.Visible;
         AlternativesListHost.Children.Clear();
-        // [トークン非適用, ファイル共通] FontSize=13(TextBlock)/12(Button)はMagiThemeタイポ
-        // スケール(14始まり)より小さい一覧行用の調整値で厳密一致せず、Button.FontSizeはStyle
-        // (TargetType=TextBlock)を型的に受け付けられないため、いずれもトークン化の対象外。
+        // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
+        //   引き上げ済み（一覧行用に10〜13へ据え置いていたのを解消。Button.FontSizeはStyle
+        //   (TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず）。
         for (var i = 0; i < ui.Alternatives.Count; i++)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
-                Text = ui.Alternatives[i], FontSize = 13, VerticalAlignment = VerticalAlignment.Center,
+                Text = ui.Alternatives[i], FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
-            var apply = new Button { Content = "適用", FontSize = 12, IsEnabled = editable };
+            var apply = new Button { Content = "適用", FontSize = 14, IsEnabled = editable };
             var idx = i;
             apply.Click += (_, _) => _vm.ApplyAlternative(idx);
             row.Children.Add(apply);

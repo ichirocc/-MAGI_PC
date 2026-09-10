@@ -55,6 +55,7 @@ public sealed partial class AnalysisView : UserControl
     private readonly MagiViewModel _vm;
 
     private readonly UiSubscription _uiSub;
+    private readonly CoalescedRender _renderCoalescer;
 
     /// <summary>[違反箇所へのジャンプ] <c>MainWindow.JumpToCell</c> — 勤務表タブへ切替＋
     /// 該当セルへスクロール＋一時ハイライト（<c>ScheduleView.FocusCell</c> 参照）。</summary>
@@ -66,6 +67,7 @@ public sealed partial class AnalysisView : UserControl
         _jumpToCell = jumpToCell;
         _goEdit = goEdit;
         InitializeComponent();
+        _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -76,7 +78,8 @@ public sealed partial class AnalysisView : UserControl
         Render();
     }
 
-    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+    // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
+    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     private void Render()
     {
@@ -141,10 +144,10 @@ public sealed partial class AnalysisView : UserControl
             box.Children.Add(new TextBlock
             {
                 Text = $"{row.Label} {row.Count}{row.Unit}" + (row.Promoted ? "（構造的に残ると判定）" : ""),
-                FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap,
+                FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap,
             });
             if (row.Detail.Length > 0)
-                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 12, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap });
+                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 14, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap });
             TriageBlockersList.Children.Add(new Border
             {
                 Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
@@ -158,15 +161,15 @@ public sealed partial class AnalysisView : UserControl
             var box = new StackPanel { Spacing = 2 };
             box.Children.Add(new TextBlock
             {
-                Text = $"{row.Label} {row.Count}件", FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = $"{row.Label} {row.Count}件", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap,
             });
             if (row.Detail.Length > 0)
-                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 12, Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
+                box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 14, Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
             Grid.SetColumn(box, 0); grid.Children.Add(box);
             if (_goEdit is not null)
             {
-                var go = new Button { Content = "設定へ", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+                var go = new Button { Content = "設定へ", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
                 go.Click += (_, _) => _goEdit();
                 Grid.SetColumn(go, 1); grid.Children.Add(go);
             }
@@ -186,13 +189,13 @@ public sealed partial class AnalysisView : UserControl
             var line = new Grid { ColumnSpacing = 8 };
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var label = new TextBlock { Text = "・" + row.Label, FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
-            var count = new TextBlock { Text = $"{row.Count}{row.Unit}", FontSize = 13, Opacity = 0.8 };
+            var label = new TextBlock { Text = "・" + row.Label, FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis };
+            var count = new TextBlock { Text = $"{row.Count}{row.Unit}", FontSize = 14, Opacity = 0.8 };
             Grid.SetColumn(label, 0); Grid.SetColumn(count, 1);
             line.Children.Add(label); line.Children.Add(count);
             TriageSearchList.Children.Add(line);
         }
-        if (mid) TriageSearchList.Children.Add(new TextBlock { Text = "※" + t.SearchNote, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        if (mid) TriageSearchList.Children.Add(new TextBlock { Text = "※" + t.SearchNote, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
 
         // 0件の族は畳む（全19族を並べると画面の半分を占める）。
         var all = t.OkFamilies.Count + t.BusyFamilies.Count;
@@ -304,7 +307,7 @@ public sealed partial class AnalysisView : UserControl
             var name = loc.I < ui.StaffNames.Count ? ui.StaffNames[loc.I] : $"#{loc.I}";
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
             row.Children.Add(BodyText($"{name}　{loc.J + 1}日　{LabelOf(loc.Family)}"));
-            var jump = new Button { Content = "勤務表へ", FontSize = 12 };
+            var jump = new Button { Content = "勤務表へ", FontSize = 14 };
             var i = loc.I; var j = loc.J;
             jump.Click += (_, _) => _jumpToCell(i, j);
             row.Children.Add(jump);
@@ -362,19 +365,19 @@ public sealed partial class AnalysisView : UserControl
             head.Children.Add(TagChip(tag, hex));
             head.Children.Add(new TextBlock
             {
-                Text = issue.Where, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg,
+                Text = issue.Where, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg,
                 TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
             });
             box.Children.Add(head);
-            box.Children.Add(new TextBlock { Text = issue.Problem, FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
-            box.Children.Add(new TextBlock { Text = $"→ {issue.Fix}", FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            box.Children.Add(new TextBlock { Text = issue.Problem, FontSize = 14, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            box.Children.Add(new TextBlock { Text = $"→ {issue.Fix}", FontSize = 14, Foreground = fg, TextWrapping = TextWrapping.Wrap });
             // [設定ミスのワンタップ修正] Action==None のものは提案文だけ（自動修正の当てが無い）。
             if (issue.Action != SettingFixAction.None)
             {
                 var apply = new Button
                 {
                     Content = issue.ActionLabel.Length > 0 ? issue.ActionLabel : "この修正を適用",
-                    FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running,
+                    FontSize = 14, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running,
                 };
                 apply.Click += (_, _) => _vm.ApplySettingFix(issue);
                 box.Children.Add(apply);
@@ -408,7 +411,7 @@ public sealed partial class AnalysisView : UserControl
         {
             BorderBrush = color, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6, 1, 6, 1),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock { Text = text, FontSize = 11, Foreground = color },
+            Child = new TextBlock { Text = text, FontSize = 14, Foreground = color },
         };
     }
 
@@ -451,7 +454,7 @@ public sealed partial class AnalysisView : UserControl
             var head = new Grid { ColumnSpacing = 8 };
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var label = new TextBlock { Text = e.Label, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg, TextWrapping = TextWrapping.Wrap };
+            var label = new TextBlock { Text = e.Label, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = fg, TextWrapping = TextWrapping.Wrap };
             var chip = TagChip(e.Cause switch
             {
                 C1PlateauCause.PinConstrained => "回数固定で却下",
@@ -468,9 +471,9 @@ public sealed partial class AnalysisView : UserControl
                 if (e.RejectedByPin > 0) parts.Add($"回数固定で却下 {e.RejectedByPin}件");
                 if (e.RejectedByScore > 0) parts.Add($"総合評価で却下 {e.RejectedByScore}件");
                 if (e.NoCandidate > 0) parts.Add($"候補なし {e.NoCandidate}件");
-                box.Children.Add(new TextBlock { Text = string.Join(" ・ ", parts), FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                box.Children.Add(new TextBlock { Text = string.Join(" ・ ", parts), FontSize = 14, Foreground = fg, TextWrapping = TextWrapping.Wrap });
             }
-            box.Children.Add(new TextBlock { Text = e.RecommendedAction(LabelOf), FontSize = 12, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+            box.Children.Add(new TextBlock { Text = e.RecommendedAction(LabelOf), FontSize = 14, Foreground = fg, TextWrapping = TextWrapping.Wrap });
             C1List.Children.Add(new Border
             {
                 Background = BrushOf(pin ? "MagiErrorContainerBrush" : "MagiSecondaryContainerBrush"),
@@ -511,18 +514,18 @@ public sealed partial class AnalysisView : UserControl
             box.Children.Add(new TextBlock
             {
                 Text = $"{t.StaffName} {t.ShiftKigou}：{t.PinnedCount}回に固定（{t.Attempts}回の試行を止めました）",
-                FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap,
+                FontSize = 14, Foreground = fg, TextWrapping = TextWrapping.Wrap,
             });
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             var staff = t.Staff; var shift = t.Shift;
             // 0回に固定されている行では「下限を1下げる」が 0 でクランプされて無操作になるので、下げられるときだけ出す。
             if (t.PinnedCount > 0)
             {
-                var lo = new Button { Content = $"下限を1下げる（{t.PinnedCount - 1}〜{t.PinnedCount}）", FontSize = 12, IsEnabled = !ui.Running };
+                var lo = new Button { Content = $"下限を1下げる（{t.PinnedCount - 1}〜{t.PinnedCount}）", FontSize = 14, IsEnabled = !ui.Running };
                 lo.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, -1, 0);
                 buttons.Children.Add(lo);
             }
-            var hi = new Button { Content = $"上限を1上げる（{t.PinnedCount}〜{t.PinnedCount + 1}）", FontSize = 12, IsEnabled = !ui.Running };
+            var hi = new Button { Content = $"上限を1上げる（{t.PinnedCount}〜{t.PinnedCount + 1}）", FontSize = 14, IsEnabled = !ui.Running };
             hi.Click += (_, _) => _vm.RelaxStaffRangePin(staff, shift, 0, 1);
             buttons.Children.Add(hi);
             box.Children.Add(buttons);
@@ -561,7 +564,7 @@ public sealed partial class AnalysisView : UserControl
             var row = new StackPanel { Spacing = 2 };
             row.Children.Add(BodyText($"{run.StaffName} の {run.SeqLabel}（{run.StartDay + 1}日目〜）", semiBold: true));
             row.Children.Add(BodyText(run.Hint, dim: true));
-            var relax = new Button { Content = "この禁止の並びを緩める（削除）", FontSize = 12, HorizontalAlignment = HorizontalAlignment.Left };
+            var relax = new Button { Content = "この禁止の並びを緩める（削除）", FontSize = 14, HorizontalAlignment = HorizontalAlignment.Left };
             var seqLabel = run.SeqLabel;
             relax.Click += (_, _) => _vm.RelaxForbiddenRule(seqLabel);
             row.Children.Add(relax);
@@ -588,16 +591,16 @@ public sealed partial class AnalysisView : UserControl
     private static string LabelOf(string family) =>
         BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
 
-    /// <summary>本文1行。節の中身はすべてこの形（13px・折り返しあり）で作る。</summary>
+    /// <summary>本文1行。節の中身はすべてこの形（14px・折り返しあり）で作る。</summary>
     /// <remarks>
-    /// [トークン非適用] FontSize=13はMagiThemeタイポスケール(14始まり)より小さい一覧行用の
-    /// 調整値で厳密一致しない。このファイルのButton.FontSize(12、行186/227/264/293)も、
-    /// Style(TargetType=TextBlock)を型的に受け付けられないためトークン化の対象外。
+    /// [2026-09-10, 可読性] MagiThemeタイポスケールの本文最小(14)まで引き上げ済み（一覧行用に13へ
+    /// 据え置いていたのを解消）。このファイルのButton.FontSize(14、行186/227/264/293)も同様に
+    /// 引き上げ済みだが、Style(TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず。
     /// </remarks>
     private static TextBlock BodyText(string text, bool semiBold = false, bool dim = false) => new()
     {
         Text = text,
-        FontSize = 13,
+        FontSize = 14,
         TextWrapping = TextWrapping.Wrap,
         FontWeight = semiBold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         Opacity = dim ? 0.8 : 1.0,

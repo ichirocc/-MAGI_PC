@@ -41,7 +41,7 @@
         <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
             <TextBlock Text="ホーム" FontSize="20" FontWeight="SemiBold" />
             <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="14" />
-            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="13" Opacity="0.8" />
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontSize="14" Opacity="0.8" />
 
             <Border x:Name="EmptyStateCard" Background="{StaticResource MagiSurfaceVariantBrush}"
                     CornerRadius="{StaticResource MagiCornerLG}" Padding="24">
@@ -185,7 +185,7 @@
 
             <StackPanel x:Name="AlternativesPanel" Spacing="4">
                 <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
-                <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.8"
+                <TextBlock TextWrapping="Wrap" FontSize="14" Opacity="0.8"
                            Text="Portfolio(並列複数案)実行で見つかった採用案以外の候補。適用すると今の勤務表を置き換えます。" />
                 <StackPanel x:Name="AlternativesListHost" Spacing="4" />
             </StackPanel>

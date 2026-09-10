@@ -48,6 +48,7 @@ public sealed partial class ScheduleView : UserControl
 {
     private readonly MagiViewModel _vm;
     private readonly UiSubscription _uiSub;
+    private readonly CoalescedRender _renderCoalescer;
 
     /// <summary>[違反箇所へのジャンプ] 分析タブから飛んできた注目セル。<see cref="FocusCell"/> 参照。</summary>
     private (int I, int J)? _focusCell;
@@ -113,6 +114,7 @@ public sealed partial class ScheduleView : UserControl
         _vm = vm;
         _goAnalysis = goAnalysis;
         InitializeComponent();
+        _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -123,7 +125,9 @@ public sealed partial class ScheduleView : UserControl
         Render();
     }
 
-    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+    // [2026-09-10, カクつき/フリーズ対策] 進捗バーストで Render() が連打されないよう CoalescedRender で間引く
+    //   （CoalescedRender のKDoc参照）。
+    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     /// <summary>
     /// [違反箇所へのジャンプ] 分析タブの「違反の場所」からの遷移先。Kotlin原本の
@@ -278,7 +282,7 @@ public sealed partial class ScheduleView : UserControl
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         row.Children.Add(swatch);
-        row.Children.Add(new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 });
+        row.Children.Add(new TextBlock { Text = label, FontSize = 14, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 });
         return row;
     }
 
@@ -466,18 +470,18 @@ public sealed partial class ScheduleView : UserControl
             ItemsSource = ui.ShiftSymbols.ToList(), HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
-        // [トークン非適用, ファイル共通] このファイルのFontSize=12はMagiThemeタイポスケール(14始まり)
-        // より小さい密グリッド/ダイアログ用の調整値で、どのStyleとも厳密一致しない（据え置き）。
-        var previewText = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.85 };
+        // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで引き上げ済み
+        //   （ユーザー報告「画面が見にくい」。密グリッド/ダイアログ用に10〜13へ据え置いていたのを解消）。
+        var previewText = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, Opacity = 0.85 };
 
         var panel = new StackPanel { Spacing = 8, Width = 340 };
-        panel.Children.Add(new TextBlock { Text = "対象範囲", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(new TextBlock { Text = "対象範囲", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 14 });
         panel.Children.Add(scopeCombo);
         panel.Children.Add(weekdayPanel);
-        panel.Children.Add(new TextBlock { Text = "対象（誰に）", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(new TextBlock { Text = "対象（誰に）", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 14 });
         panel.Children.Add(targetCombo);
         panel.Children.Add(staffList);
-        panel.Children.Add(new TextBlock { Text = "シフト", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 12 });
+        panel.Children.Add(new TextBlock { Text = "シフト", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 14 });
         panel.Children.Add(shiftCombo);
         panel.Children.Add(previewText);
 
@@ -617,7 +621,7 @@ public sealed partial class ScheduleView : UserControl
             var block = new TextBlock
             {
                 Text = text,
-                FontSize = 12,
+                FontSize = 14,
                 FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
                 // [Token] 6,4 は密なスケジュールグリッド用に調整済みの値でMagiSpacingスケール(4/8/12…)に
                 // 一致しないため据え置き（トークン化するとグリッド全体のセル間隔が変わってしまう）。
@@ -700,7 +704,7 @@ public sealed partial class ScheduleView : UserControl
             var fg = k >= 0 && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
             var button = new Button
             {
-                Content = new TextBlock { Text = sym, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(fg) },
+                Content = new TextBlock { Text = sym, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(fg) },
                 // [Token] セルパディング/枠/角丸は密グリッド用の意図的な値（据え置き。上のAddCellと同じ理由）。
                 Padding = new Thickness(6, 4, 6, 4),
                 MinWidth = 32,
@@ -870,7 +874,7 @@ public sealed partial class ScheduleView : UserControl
         var block = new TextBlock
         {
             Text = text,
-            FontSize = 12,
+            FontSize = 14,
             FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
             HorizontalAlignment = HorizontalAlignment.Center,
         };
@@ -1008,7 +1012,11 @@ public sealed partial class ScheduleView : UserControl
         // 旧実装はガード自体が無く実行中でも候補が出て SetCell が黙って弾かれるだけだった。
         if (_vm.EditBlockedNow()) return;
         var candidates = _vm.ShortageFixCandidates(day, shift);
-        var flyout = new MenuFlyout();
+        // [2026-09-10, ユーザー報告「メニューが出ない」] ContentDialog はこのファイル/他View含め全箇所で
+        //   XamlRoot を明示設定している（MainWindow.xaml.cs:141 等）のに、この2つの MenuFlyout だけ未設定
+        //   だった。ShowAt(placementTarget) は理論上 placementTarget の XamlRoot を自動継承するはずだが、
+        //   実機でメニューが出ない報告と符合するため、他の popup と同じ明示設定へ揃える（安全な追加のみ）。
+        var flyout = new MenuFlyout { XamlRoot = anchor.XamlRoot };
         foreach (var c in candidates)
         {
             var item = new MenuFlyoutItem { Text = c.FromRest ? $"{c.Name}（休み中）" : c.Name };
@@ -1067,7 +1075,8 @@ public sealed partial class ScheduleView : UserControl
         if (_vm.EditBlockedNow()) return;
         var ui = _vm.Ui;
         var allowed = _vm.AllowedShiftsFor(i);
-        var flyout = new MenuFlyout();
+        // [2026-09-10, ユーザー報告「メニューが出ない」] ShowShortageFixFlyout と同じ理由でXamlRootを明示。
+        var flyout = new MenuFlyout { XamlRoot = anchor.XamlRoot };
         foreach (var k in allowed)
         {
             var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();

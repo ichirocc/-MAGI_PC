@@ -52,6 +52,7 @@ public sealed partial class SettingsView : UserControl
 {
     private readonly MagiViewModel _vm;
     private readonly UiSubscription _uiSub;
+    private readonly CoalescedRender _renderCoalescer;
     private readonly Window _window;
     private bool _syncingFromModel;
 
@@ -61,6 +62,7 @@ public sealed partial class SettingsView : UserControl
         _window = window;
         InitializeComponent();
         RenderWeightTable();
+        _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
         //   古いままだった）。再表示時は見えていなかった間の変化をまとめて描く（UiSubscription の KDoc 参照）。
@@ -71,7 +73,8 @@ public sealed partial class SettingsView : UserControl
         Render();
     }
 
-    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => Render();
+    // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
+    private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     private void Render()
     {
@@ -148,16 +151,16 @@ public sealed partial class SettingsView : UserControl
         var sorted = MirrorKeys.Weights.OrderByDescending(kv => kv.Weight).ToList();
         void Section(string title, IEnumerable<(string Key, double Weight)> rows, bool hard)
         {
-            WeightTableHost.Children.Add(new TextBlock { Text = title, FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
+            WeightTableHost.Children.Add(new TextBlock { Text = title, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
             foreach (var (key, w) in rows)
             {
                 var line = new Grid { ColumnSpacing = 8 };
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                var label = new TextBlock { Text = AnalysisView.BreakdownLabels.TryGetValue(key, out var jp) ? jp : key, FontSize = 13 };
+                var label = new TextBlock { Text = AnalysisView.BreakdownLabels.TryGetValue(key, out var jp) ? jp : key, FontSize = 14 };
                 var weight = new TextBlock
                 {
-                    Text = "×" + Fmt(w), FontSize = 13, FontFamily = new FontFamily("Consolas"),
+                    Text = "×" + Fmt(w), FontSize = 14, FontFamily = new FontFamily("Consolas"),
                     Foreground = hard ? (Brush)Application.Current.Resources["MagiErrorBrush"] : (Brush)Application.Current.Resources["MagiOnBackgroundBrush"],
                 };
                 Grid.SetColumn(label, 0); Grid.SetColumn(weight, 1);
@@ -234,12 +237,11 @@ public sealed partial class SettingsView : UserControl
             BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        // [トークン非適用] FontSize=13はMagiThemeタイポスケール(14始まり)より小さい設定行用の
-        // 調整値で、どのStyleとも厳密一致しない（据え置き）。
+        // [2026-09-10, 可読性] MagiThemeタイポスケールの本文最小(14)まで引き上げ済み（据え置きを解消）。
         var labelBlock = new TextBlock
         {
             Text = label,
-            FontSize = 13,
+            FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
             MinWidth = 180,
             TextWrapping = TextWrapping.Wrap,

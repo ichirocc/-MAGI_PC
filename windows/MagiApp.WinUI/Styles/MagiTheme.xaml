@@ -62,6 +62,10 @@
     <SolidColorBrush x:Key="MagiBackgroundBrush" Color="{StaticResource MagiBackgroundColor}" />
     <SolidColorBrush x:Key="MagiOnBackgroundBrush" Color="{StaticResource MagiOnBackgroundColor}" />
     <SolidColorBrush x:Key="MagiSurfaceVariantBrush" Color="{StaticResource MagiSurfaceVariantColor}" />
+    <!-- [2026-09-10, 可読性] Color は定義済みだったが対応する Brush が無く、副次テキストの弱調は
+         コード側で Opacity=0.7/0.8 を主要文字色に掛けて代用されていた（背景へ向けて単純に薄めるだけ
+         なので、本家が実測保証する4.5:1コントラストのトークンより読みにくくなりうる）。 -->
+    <SolidColorBrush x:Key="MagiOnSurfaceVariantBrush" Color="{StaticResource MagiOnSurfaceVariantColor}" />
     <SolidColorBrush x:Key="MagiErrorBrush" Color="{StaticResource MagiErrorColor}" />
     <SolidColorBrush x:Key="MagiErrorContainerBrush" Color="{StaticResource MagiErrorContainerColor}" />
     <SolidColorBrush x:Key="MagiOutlineBrush" Color="{StaticResource MagiOutlineColor}" />
