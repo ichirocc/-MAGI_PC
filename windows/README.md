@@ -326,6 +326,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 人員過剰(covO)セル詳細ダイアログに在勤者全員と直し方の導線（Android 3.515.2 同期・積み残し分）:
+  `ScheduleView.xaml.cs`の`ShowDayTallyDetail`は旧実装が希望で固定している在勤者「だけ」を名指ししており、
+  誰が入っているか・希望固定でない人の動かし方が分からなかった（Android実機報告と同型）。その枠の在勤者
+  全員を`assigned`として列挙し「在勤: X・Y（希望固定）」を追加、希望固定でない人ごとに「○○の直し方を探す」
+  ボタン（`FindFixSuggestions(staff, shift)`→分析タブ）を追加。WinUIコード-behindのため（ローカルにWindows
+  ビルド環境が無く）CIでのみ検証可能——ビルド確認後に別途報告。
+
 - 2026-09-10 完了カードの前後比較を HomeView へ表示（Android 3.509.4/3.510.3 同期・エンジン層は同期済みで
   積み残していた分）: `UiState.RunSummary`（生の `ChangeSummary`。族名日本語化は View 層 `AnalysisView.BreakdownLabels`
   にあるため、Kotlin原本のように文字列へ先に整形せず保持し、整形は表示側で行う）。設定箇所は Kotlin原本の3箇所に対応する

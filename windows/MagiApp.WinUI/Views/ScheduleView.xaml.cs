@@ -927,27 +927,36 @@ public sealed partial class ScheduleView : UserControl
         _ = ShowTallyDetailAsync($"{name} ・ {sym}", lines, focusStaff: i, shift: k, day: null, pinned: Array.Empty<int>());
     }
 
-    /// <summary>[phase9 #11] 日別セル(k,j)の内訳（Kotlin原本 <c>dayViolDetail</c>、過剰のとき）: 現在人数と適正の差、希望で固定している在勤者。</summary>
+    /// <summary>[phase9 #11 → Android 3.515.2 同期] 日別セル(k,j)の内訳（Kotlin原本 <c>dayViolDetail</c>、過剰のとき）:
+    /// 現在人数と適正の差、その枠の在勤者全員（希望で固定している人は注記）。旧実装は希望で固定している在勤者
+    /// 「だけ」を名指ししていた（実機報告「誰と誰がA4の設定になっているか表示されない」）。</summary>
     private void ShowDayTallyDetail(UiState ui, int k, int j, int count)
     {
         var sym = k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
         var lines = new List<string> { $"現在 {count}人" };
         if (_vm.NeedCellLimits(k, j) is { } lim) lines.Add($"適正 {lim.Hi}人 → {Math.Max(0, count - lim.Hi)}人 過剰");
-        // 希望で固定している在勤者＝配置済みかつ希望一致（CoverageDiag と同じ判定）。取り消さない限り過剰は残る。
-        var pinned = new List<int>();
+        // 在勤者＝現在その枠に配置されている全員。希望で固定＝配置済みかつ希望一致（CoverageDiag と同じ判定）。
+        var assigned = new List<int>();
         for (var i = 0; i < ui.Schedule.Count; i++)
+            if (j < ui.Schedule[i].Count && ui.Schedule[i][j] == k) assigned.Add(i);
+        var pinned = assigned.Where(i => ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == k).ToList();
+        if (assigned.Count > 0)
         {
-            if (j < ui.Schedule[i].Count && ui.Schedule[i][j] == k && ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == k) pinned.Add(i);
+            lines.Add("在勤: " + string.Join("・", assigned.Select(i =>
+            {
+                var nm = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+                return pinned.Contains(i) ? $"{nm}（希望固定）" : nm;
+            })));
         }
         if (pinned.Count > 0)
         {
             lines.Add("希望で固定: " + string.Join("・", pinned.Select(i => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")) +
                 "（必須の希望どうしが同じ日に重なり、どちらかの希望を取り消さない限り過剰は残ります）");
         }
-        _ = ShowTallyDetailAsync($"{sym} ・ {j + 1}日", lines, focusStaff: null, shift: k, day: j, pinned: pinned);
+        _ = ShowTallyDetailAsync($"{sym} ・ {j + 1}日", lines, focusStaff: null, shift: k, day: j, pinned: pinned, assigned: assigned);
     }
 
-    private async Task ShowTallyDetailAsync(string title, IReadOnlyList<string> lines, int? focusStaff, int shift, int? day, IReadOnlyList<int> pinned)
+    private async Task ShowTallyDetailAsync(string title, IReadOnlyList<string> lines, int? focusStaff, int shift, int? day, IReadOnlyList<int> pinned, IReadOnlyList<int>? assigned = null)
     {
         var ui = _vm.Ui;
         var panel = new StackPanel { Spacing = 4 };
@@ -957,7 +966,7 @@ public sealed partial class ScheduleView : UserControl
             XamlRoot = XamlRoot, Title = title, Content = panel,
             PrimaryButtonText = "直し方を探す", CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
-        if (day is { } dj && pinned.Count > 0)
+        if (day is { } dj)
         {
             foreach (var i in pinned)
             {
@@ -970,6 +979,19 @@ public sealed partial class ScheduleView : UserControl
                 var staff = i;
                 cancel.Click += (_, _) => { dialog.Hide(); _vm.RemoveWish(staff, dj); };
                 panel.Children.Add(cancel);
+            }
+            // [Android 3.515.2 同期] 希望で固定していない在勤者にも1人にしぼった「直し方を探す」への導線を足す。
+            foreach (var i in (assigned ?? Array.Empty<int>()).Where(i => !pinned.Contains(i)))
+            {
+                var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+                var fix = new Button
+                {
+                    Content = $"{name} の直し方を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                    IsEnabled = !ui.Running,
+                };
+                var staff = i;
+                fix.Click += (_, _) => { dialog.Hide(); _vm.FindFixSuggestions(staff, shift); _goAnalysis?.Invoke(); };
+                panel.Children.Add(fix);
             }
         }
         var result = await dialog.ShowAsync();
