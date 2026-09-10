@@ -326,6 +326,26 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-10 HF77明示指示で上限超過(high)の重みを45→25に変更（Android 3.516.0 同期）:
+  Android側の設定タブ重み表スクリーンショットで「上限超過を人員過剰と期間の制約の間に移動する」という
+  要望→表は`MirrorKeys.weights`の実値でソートされる（手動並べ替え不可）ため実際には重み値の変更が要り、
+  AskUserQuestionでHF77（業務担当者の明示数値指示）に従い新しい値を確認→25。`MirrorKeys.cs`
+  （`("high", 45.0)` → `25.0`）を起点に`Evaluator.cs`・`DeltaEvaluator.cs`・`C1TemporalFlowPolish.cs`・
+  `V6NativeOptimizer.Repair.cs`・`V6HotfixPasses.Range.cs`（2箇所）・`V6HotfixPasses.DayAssign.cs`
+  （2箇所、`45L * Math.Max(...)`の**乗数が左**＝`grep '\* 45L'`では引っかからない逆順パターン。最終sweepで
+  発見）・`ParityTest.cs`（2箇所）のリテラルを同期。`MagiEngine.Tests/Fixtures/*_eval_expected.txt`
+  （Android側`app/src/test/resources/`の別コピー）も個別に同期が必要と判明（最初の`dotnet test`で
+  `CrossLanguageFixtureTest`が期待4987/2732 vs実測4947/2692で失敗→修正）。
+  `ShiftAppearance.cs`の`SeverityFromVioKey`はhigh(25)がc1/c3mn(30)を下回ったためHIGH→WARNへ降格
+  （Android側でAskUserQuestion確認済みの判断をそのまま踏襲）。`V6HotfixPasses.C1Window.cs`の
+  手R1/R2追加根拠コメント（「X追加はlow/high>c1で必ずisBetterに棄却される」）が単窓局面で不成立になった
+  ため、対応する`V6HotfixPassesC1WindowTest.cs`の`ResolvesViaExhaustiveRepackWhenNoPartnerOrDonorExists`を
+  `ResolvesViaDirectIncreaseNowThatHighIsCheaperThanC1`へ改名・アサーション再設計（Android
+  `C1RelocationPolishTest.kt`と同型）。`SmartInitialScheduler.cs`/`C1JointLnsPolish.cs`/
+  `V6LateOperators.cs`は重み比較の根拠コメントが古い数値のままだと誤誘導する箇所のみコメント更新に留め、
+  実際の挙動（`isBetter`/`BetterReport`で最終的に保護される）は意図的に無変更。
+  `dotnet build`（0 error）・`dotnet test MagiEngine.Tests`（838件、修正前は3件fail→修正後green）で確認。
+
 - 2026-09-10 `windows-installer.yml`のバージョン自動採番（ユーザー指示「自動でバージョン上がるように」）:
   `Package.appxmanifest`のバージョンを毎回手で上げないと、Release を作る run（タグ push／
   `publish_release=true`）が既に公開済みの `win-vX.Y.Z` タグに衝突して失敗する問題（実際に

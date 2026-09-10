@@ -55,7 +55,7 @@ public class V6HotfixPassesC1WindowTest
     /// 手R1(day0とday2を同時に交換)は: i 1→0fire(-1)・i2 1→1fire(±0, 窓[0,1]解消/窓[1,2]新規で相殺)=総和-1で採用。
     /// 両職員とも同一グループ・両シフト担当可、needもwishもcons3nも無し＝covU/HARD不変。
     /// [3.287.0 keep-best統一で強化] docstring どおりの「回数固定職員」を staffRange の厳密ピン(X=2固定)で
-    /// 実際に表現する。ピンを立てることで count-changing 手は low/high(90/45)+exactPinRegression で拒否され、
+    /// 実際に表現する。ピンを立てることで count-changing 手は low/high(90/25)+exactPinRegression で拒否され、
     /// 本テストの意図（移設だけが唯一の改善手である局面で R1 が機能する）が成立する。
     /// </summary>
     private static MagiState MirrorState()
@@ -276,8 +276,14 @@ public class V6HotfixPassesC1WindowTest
     /// [CI失敗で判明した見落とし修正] staffRangeでXの上限を保有回数(2)に固定しないと、手B(直接移動)が
     /// 「アンカー日を無条件にXへ追加する」だけでX回数を3回に増やし解決してしまう（単独職員かつneed無しの
     /// ためfindCovUChainの「玉突きが必要か」の判定自体が意味をなさず、直接追加がisBetterに素通りしていた）。
-    /// X上限を現在の保有回数2に固定することで、手Bの回数増加による解決をhigh違反(重み90)として封じ、
-    /// 手R3(回数保存)のみが解となるようにする。
+    /// X上限を現在の保有回数2に固定することで、手Bの回数増加による解決をhigh違反として封じ、
+    /// 手R3(回数保存)のみが解となるようにしていた。
+    ///
+    /// [2026-09-10/HF77明示指示 high 45→25] high(25) &lt; c1(30) になったため、この封じ込みが効かなくなった
+    /// （high違反1件を作る手Bの正味コスト -30+25=-5 は、資源を動かすだけの手R3(-30)より数値上は劣るが、
+    /// 手B は手R3より先に試され、探索は「最良を選ぶ」でなく「その時点で改善する最初の手を採用する」方式
+    /// のため、手Bが先に採用され手R3まで到達しなくなった）。手R3自体のロジックは変更していない
+    /// （このテストが検証できなくなっただけ）。手R3専用の検証は別テストの追加が必要（未着手）。
     /// </summary>
     private static MagiState IsolatedRepackState()
     {
@@ -298,24 +304,23 @@ public class V6HotfixPassesC1WindowTest
     }
 
     [Fact]
-    public void ResolvesViaExhaustiveRepackWhenNoPartnerOrDonorExists()
+    public void ResolvesViaDirectIncreaseNowThatHighIsCheaperThanC1()
     {
         var st = IsolatedRepackState();
         var sched = st.Schedule.ToIntArray2D();
         var before = UnifiedViolationChecker.Check(st, sched);
         Assert.Equal(1, before.Breakdown.GetValueOrDefault("c1", 0)); // 初期 c1=1（窓1が不足）
+        Assert.Equal(0, before.Breakdown.GetValueOrDefault("high", 0)); // 初期 high=0（Xは上限2ちょうど）
 
         var res = V6HotfixPasses.ApplyC1WindowPolish(st, sched, maxPasses: 1);
         var after = UnifiedViolationChecker.Check(st, res.NewSchedule);
 
-        Assert.True(res.Applied > 0, "手R3(全ペア再配置)が採用されたこと");
-        Assert.Equal(0, after.Breakdown.GetValueOrDefault("c1", 0)); // c1 が完全解消されたこと（窓を全カバーする配置へ再構成）
+        Assert.True(res.Applied > 0, "何らかの手が採用されたこと");
+        Assert.Equal(0, after.Breakdown.GetValueOrDefault("c1", 0)); // c1 が完全解消されたこと
         Assert.Equal(0, after.Hard); // HARD 不変(=0)
-        Assert.True(res.Logs.Any(l => l.Message.Contains("再配置:1")), "再配置のログが記録されていること");
-        // X の総回数は保存される（配置だけが変わる）。
-        var cxBefore = sched[0].Count(v => v == 1);
-        var cxAfter = res.NewSchedule[0].Count(v => v == 1);
-        Assert.Equal(cxBefore, cxAfter); // X 回数保存
+        // [2026-09-10] high(25) < c1(30) のため、Xを1件増やしhigh違反を1件作ってでもc1を解消する方が
+        //   正味で得（-30+25=-5）になり、資源を動かすだけの再配置(-30、手R3)より先に採用される。
+        Assert.Equal(1, after.Breakdown.GetValueOrDefault("high", 0)); // X上限超過を1件作ってc1を解消する
     }
 
     [Fact]

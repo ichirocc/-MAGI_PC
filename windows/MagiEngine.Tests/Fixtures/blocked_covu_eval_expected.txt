@@ -1,2 +1,2 @@
 hard=4
-soft=2732
+soft=2692

@@ -30,9 +30,10 @@ public static class MirrorKeys
     private static readonly (string Key, double Weight)[] WeightsOrdered =
     {
         ("groupViol", 10000.0), ("pref", 9000.0), ("covU", 8000.0), ("c3n", 7000.0),
-        ("low", 90.0), ("high", 45.0),
+        ("low", 90.0), ("high", 25.0),
         // [HF77明示数値指示] 回避の並び(c3mn)=30・窓の要件(c1)=30。経緯: 3.249.0 で c3mn 12→15・c1 4→5、
         //   3.253.0 で c1 5→15、3.409.24 で両方 15→30。**現在値はどちらも 30**。
+        //   high(上限超過)は 45→25（2026-09-10、HF77明示指示、Android 3.5xx.x同期）。
         ("c3mn", 30.0), ("c1", 30.0), ("c3", 3.0), ("c3m", 2.0),
         ("c2", 1.0), ("c41", 1.0), ("c42", 1.0), ("c41s", 1.0), ("c42s", 1.0),
         ("apt", 1.0), ("fair", 1.0), ("weekly", 1.0),

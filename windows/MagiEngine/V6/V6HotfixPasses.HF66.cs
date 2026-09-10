@@ -25,7 +25,7 @@ public static partial class V6HotfixPasses
 
     /// <summary>
     /// [フェーズ6, ピース24] Kotlin原本 <c>applyHF66IntraStaffRedistribution</c>（<c>V6HotfixPasses.kt</c>
-    /// 2.65.0/3.161.0/3.282.0 由来）の忠実な移植。個人回数(low=下限割れ/high=上限超過, 重み90/45)を、
+    /// 2.65.0/3.161.0/3.282.0 由来）の忠実な移植。個人回数(low=下限割れ/high=上限超過, 重み90/25)を、
     /// 各職員が自分の超過シフト(<c>give</c>)を不足シフト(<c>want</c>)へ付け替える手として探索する
     /// （HF67の職員間交換とは異なり、この職員1人だけで完結する手）。
     ///

@@ -70,8 +70,8 @@ public class ParityTest
         int highExpected = report.Breakdown.TryGetValue("high", out var hv) ? hv : 0;
         Assert.Equal(lowExpected, lowRaw);
         Assert.Equal(highExpected, highRaw);
-        Assert.Equal(lowRaw * 90L + highRaw * 45L, de.RangeWeighted());
-        Assert.Equal(lowExpected * 90L + highExpected * 45L, de.RangeWeighted());
+        Assert.Equal(lowRaw * 90L + highRaw * 25L, de.RangeWeighted());
+        Assert.Equal(lowExpected * 90L + highExpected * 25L, de.RangeWeighted());
 
         // every one of the 19 families is accounted for exactly once across the two checks above
         Assert.Equal(19, familyRaw.Count + 2);

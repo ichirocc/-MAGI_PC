@@ -94,7 +94,7 @@ public static partial class V6HotfixPasses
     private sealed record FlowPlan(int Day, int[] Assignment, ViolationReport Report, int Changed, long FlowCost, IReadOnlyList<int[]> Extras);
 
     /// <summary>
-    /// [RangePolish・個人回数(staffRange low/high, 重み90/45)専用の研磨パス] 桒澤美幸の実例（唯一の代替
+    /// [RangePolish・個人回数(staffRange low/high, 重み90/25)専用の研磨パス] 桒澤美幸の実例（唯一の代替
     /// 要員が現在のシフトを担当できず直接交換相手が存在しない局面）を受け、玉突き連鎖（<see cref="V6SearchOperators.FindCovUChain"/>）
     /// だけでなく、手M(<see cref="MinCostPerfectAssignment"/>による当日の完全割当の組み替え)・手F
     /// (<see cref="FlexibleDayFlow"/>による当日の人数構成そのものを変える最小費用フロー) を追加した研磨パス。
@@ -277,7 +277,7 @@ public static partial class V6HotfixPasses
                 var lo = p.RangeLo[i][kk];
                 var hiLim = p.RangeHi[i][kk];
                 if (lo != int.MinValue && count < lo) outv += (long)(lo - count) * 90L;
-                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * 45L;
+                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * 25L;
                 return outv;
             }
 
@@ -464,7 +464,7 @@ public static partial class V6HotfixPasses
                     var lo = p.RangeLo[i][kk];
                     var hi = p.RangeHi[i][kk];
                     if (lo != int.MinValue && c < lo) outv += (long)(lo - c) * 90L;
-                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * 45L;
+                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * 25L;
                     var a = p.Apt[i][kk];
                     if (a >= 0) outv += Math.Abs(c - a);
                 }

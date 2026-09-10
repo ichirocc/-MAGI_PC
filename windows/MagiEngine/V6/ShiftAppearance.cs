@@ -96,8 +96,9 @@ public static class ShiftAppearance
         return k switch
         {
             "groupViol" or "covU" or "pref" or "c3n" => "CRITICAL", // HARD
-            "low" or "high" or "c3mn" => "HIGH",                    // 重い soft(90/45/30)
-            "c1" or "c3" or "c3m" or "c2" or "c41" or "c42" or "c41s" or "c42s" or "apt" or "covO" => "WARN",
+            "low" or "c3mn" => "HIGH",                              // 重い soft(90/30)
+            // [2026-09-10] high は HF77 明示指示で 45→25 に変更され c1/c3mn(30) を下回ったため、WARN 側へ降格。
+            "c1" or "high" or "c3" or "c3m" or "c2" or "c41" or "c42" or "c41s" or "c42s" or "apt" or "covO" => "WARN",
             // c1=30 は最多件数で飽和回避(3.367.0)・他は1〜3/過剰配置。下流(V6RemainingScreens)はHIGH/WARNを同一表示に畳む
             "fair" or "weekly" => "INFO", // 整え(常時非ゼロ)
             _ => "INFO",

@@ -101,7 +101,7 @@ public static partial class V6HotfixPasses
 
     /// <summary>
     /// [フェーズ6, ピース23] Kotlin原本 <c>applyHF67InterStaffSwap</c>（<c>V6HotfixPasses.kt</c> 3.282.0
-    /// 由来）の忠実な移植。個人回数(low=下限割れ/high=上限超過, 重み90/45)の解消を、下限割れの職員
+    /// 由来）の忠実な移植。個人回数(low=下限割れ/high=上限超過, 重み90/25)の解消を、下限割れの職員
     /// (<c>to</c>)へ上限超過の職員(<c>from</c>)から同日シフトを譲る交換として探索する。
     ///
     /// 各ラウンド、全シフト<c>k</c>を走査し「その<c>k</c>でlow/highに該当する職員の全組合せ」から

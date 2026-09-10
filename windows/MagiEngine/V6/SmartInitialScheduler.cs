@@ -213,7 +213,9 @@ public static class SmartInitialScheduler
     /// </summary>
     /// <param name="forced">forced[day]: 1=希望等で既にx確定・0=希望等で既に他シフト確定(選べない)・-1=自由。</param>
     /// <param name="maxCount">対象日数の上限（staffRangeの個人上限=rangeHi。未設定はint.MaxValue）。
-    /// high違反(重み45)はc1(重み30)より重いため、C1充足のためだけに個人上限を超えて割り当てない。
+    /// 初期構築では個人上限(rangeHi)を厳密に守る設計方針＝C1充足のためだけに超えて割り当てない
+    /// （[2026-09-10] high の重みは25でc1(30)より軽いが、初期構築はあくまで出発点であり、本採否は
+    /// 後段の isBetter/keep-best が担うため、この保守的な方針自体は変更しない）。
     /// forced済み(希望由来)の対象日もこの上限に含める＝希望だけで既に上限超過なら
     /// (=既存の別問題)これ以上は増やさず null で安全側に諦める。</param>
     /// <returns>目的= まず違反窓数を最小化、次に対象日数を最小化（他制約(③④⑤)への自由度を残す）、

@@ -138,10 +138,10 @@ public sealed class DeltaEvaluator
     };
 
     /// <summary>
-    /// [3.371.0/soft全族の完全差分] <c>_hct</c> は low(重み90)/high(重み45) を**その場で重み適用済み**の
+    /// [3.371.0/soft全族の完全差分] <c>_hct</c> は low(重み90)/high(重み25) を**その場で重み適用済み**の
     /// 1つの running total へ合算している（<see cref="RangeViol"/> 参照）。checker の
     /// <c>Breakdown["low"]</c>/<c>Breakdown["high"]</c> は生カウント(UNweighted)なので、単体では直接
-    /// 比較できない。検証は <c>Breakdown["low"]*90 + Breakdown["high"]*45 == RangeWeighted()</c> の
+    /// 比較できない。検証は <c>Breakdown["low"]*90 + Breakdown["high"]*25 == RangeWeighted()</c> の
     /// 形で行う。
     /// </summary>
     internal long RangeWeighted() => _hct;
@@ -480,11 +480,11 @@ public sealed class DeltaEvaluator
 
     private long RangeViol(int i, int k, int n)
     {
-        // [統一b] UnifiedViolationChecker と同分類(SOFT)・同重み: low(lo!=0, canDo必須)=amount×90 / high=amount×45。
+        // [統一b] UnifiedViolationChecker と同分類(SOFT)・同重み: low(lo!=0, canDo必須)=amount×90 / high=amount×25。
         int lo = _p.RangeLo[i][k], hi = _p.RangeHi[i][k];
         long v = 0L;
         if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) v += (long)(lo - n) * 90L;
-        if (hi != int.MaxValue && n > hi) v += (long)(n - hi) * 45L;
+        if (hi != int.MaxValue && n > hi) v += (long)(n - hi) * 25L;
         return v;
     }
 

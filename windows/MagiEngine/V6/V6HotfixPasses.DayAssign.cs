@@ -66,10 +66,10 @@ public static partial class V6HotfixPasses
                         var x1 = x0 + 1; // k を割当てた後
                         var lo = p.RangeLo[i][k];
                         var hi = EffectiveHi(p, i, k);
-                        // [ソフト研磨・候補生成の重み整合] proxy を真の目的関数(low=90/high=45/apt=1)へ整合。
+                        // [ソフト研磨・候補生成の重み整合] proxy を真の目的関数(low=90/high=25/apt=1)へ整合。
                         //   採否は従来どおり keep-best(IsBetter)が担うため退化なし＝スコアリング不変。
                         long RangePen(int x) =>
-                            (lo != int.MinValue ? 90L * Math.Max(0, lo - x) : 0L) + 45L * Math.Max(0, x - hi);
+                            (lo != int.MinValue ? 90L * Math.Max(0, lo - x) : 0L) + 25L * Math.Max(0, x - hi);
                         var cost = RangePen(x1) - RangePen(x0); // range の限界費用
                         var t = AptTarget(i, k);
                         if (t != null) cost += Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value); // apt の限界費用
@@ -111,7 +111,7 @@ public static partial class V6HotfixPasses
     /// [ソフト研磨・交互最適化(Alternating Optimization / 交代最適化)] 全変数を同時に解かず「1ブロックずつ
     /// 順に最適化して巡回する」座標降下法（block coordinate descent）をソフト制約研磨に導入する新アルゴリズム。
     /// ブロック＝各日(列): その日の (シフト人数=被覆) を固定したまま、希望未固定(wish&lt;0)の職員を
-    /// 「個人別回数(range 90/45)・適切回数(apt 1)・<b>曜日平準化(weekly 1)</b>」の限界費用が最小になるよう
+    /// 「個人別回数(range 90/25)・適切回数(apt 1)・<b>曜日平準化(weekly 1)</b>」の限界費用が最小になるよう
     /// <b>最小費用割当(Hungarian＝割当LP＝凸最適化)</b>で最適再配置し、日 j を 0..T-1 と巡回して
     /// 1スイープで1日も変化しなくなるまで（＝座標降下の不動点）反復する。
     ///
@@ -193,9 +193,9 @@ public static partial class V6HotfixPasses
                             var x1 = x0 + 1;
                             var lo = p.RangeLo[i][k];
                             var hi = EffectiveHi(p, i, k);
-                            // range/apt は ApplyDayAssignmentPolish と同一の目的関数整合 proxy（90/45/1）。
+                            // range/apt は ApplyDayAssignmentPolish と同一の目的関数整合 proxy（90/25/1）。
                             long RangePen(int x) =>
-                                (lo != int.MinValue ? 90L * Math.Max(0, lo - x) : 0L) + 45L * Math.Max(0, x - hi);
+                                (lo != int.MinValue ? 90L * Math.Max(0, lo - x) : 0L) + 25L * Math.Max(0, x - hi);
                             var cost = RangePen(x1) - RangePen(x0);
                             var t = AptTarget(i, k);
                             if (t != null) cost += Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value);

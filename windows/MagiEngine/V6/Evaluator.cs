@@ -169,7 +169,7 @@ public sealed class Evaluator
 
         // ---- range (low/high) + apt -----------------------------------------------------------
         // [統一a/b] range (LimMin/LimMax) は SOFT。UnifiedViolationChecker と同じ amount×重み
-        // (low=90/high=45)・同じガード(lo!=0, low は canDo 必須)。
+        // (low=90/high=25)・同じガード(lo!=0, low は canDo 必須)。
         var ssn = new int[S][];
         for (int i = 0; i < S; i++) ssn[i] = new int[K];
         // [レビュー#7 3.213.0] a[i][j] は範囲外(正規化前の -1 センチネル等)を取りうるため、範囲内の
@@ -190,7 +190,7 @@ public sealed class Evaluator
                 int hi = _p.RangeHi[i][k];
                 int n = ssn[i][k];
                 if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * 90L;
-                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 45L;
+                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 25L;
                 // [統一apt] 適切回数(双方向目標) SOFT・重み1・L1偏差|n-t|。UnifiedViolationChecker の "apt" と一致。
                 int t = _p.Apt[i][k];
                 if (t >= 0) soft += Math.Abs(n - t);
