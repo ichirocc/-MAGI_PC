@@ -81,16 +81,36 @@ jobs:
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           GIT_REF: ${{ github.ref }}
+          PUBLISH_RELEASE: ${{ github.event.inputs.publish_release }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           $v = $env:INPUT_VERSION
           # タグ push（refs/tags/win-vX.Y.Z）ならタグが版の正＝appxmanifest を毎回書き換えずに済む。
           if ([string]::IsNullOrWhiteSpace($v) -and $env:GIT_REF -match '^refs/tags/win-v(\d+\.\d+\.\d+)$') { $v = $Matches[1] }
+          $fromManifest = $false
           if ([string]::IsNullOrWhiteSpace($v)) {
             [xml]$m = Get-Content MagiApp.WinUI/Package.appxmanifest
             # appxmanifest は 4 桁 (1.0.0.0)。インストーラ表記は 3 桁へ丸める。
             $v = ($m.Package.Identity.Version -replace '\.\d+$', '')
+            $fromManifest = $true
           }
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid version: '$v' (expected X.Y.Z)" }
+          # [自動採番] Release を作る run（タグ push／publish_release=true）で、明示指定もタグ由来でもない
+          #   （＝appxmanifestから取った）バージョンが既に公開済みなら、空いているパッチ番号まで自動で
+          #   繰り上げる（マニフェストを手で編集し続けなくても衝突しない。win-v1.0.0/win-v1.0.1 の
+          #   衝突を2回手動で踏んだ経緯からの対策）。
+          $willPublish = ($env:GIT_REF -match '^refs/tags/win-v') -or ($env:PUBLISH_RELEASE -eq 'true')
+          if ($fromManifest -and $willPublish) {
+            $parts = $v -split '\.' | ForEach-Object { [int]$_ }
+            while ($true) {
+              $tag = "win-v$($parts -join '.')"
+              gh release view $tag --repo $env:REPO *> $null
+              if ($LASTEXITCODE -ne 0) { break }
+              $parts[2]++
+            }
+            $v = $parts -join '.'
+          }
           "version=$v" >> $env:GITHUB_OUTPUT
           Write-Host "installer version = $v"
 
