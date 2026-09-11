@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,14 +18,22 @@ namespace MagiApp.WinUI.Views;
 
 /// <summary>
 /// [フェーズ8→9] 「勤務表」タブの内容。フェーズ8の縦断スライスで <c>MainWindow</c> に直接書いていた
-/// グリッド描画コードを、フェーズ9のマルチタブ化に伴いこの <see cref="UserControl"/> へ切り出した
-/// （コードビハインド駆動レンダリングのまま）。
+/// グリッド描画コードを、フェーズ9のマルチタブ化に伴いこの <see cref="UserControl"/> へ切り出した。
+///
+/// [2026-09-11, ItemsView化] マトリックス本体は <c>ItemsView</c>（<c>ScheduleView.xaml</c>）＋
+/// <see cref="ScheduleRowVm"/>/<see cref="ScheduleCellVm"/>（<c>ScheduleGridModels.cs</c>）へ移行。
+/// <see cref="RenderSchedule"/> は毎回セルの UI 要素を作り直すのでなく、行・セルのコレクション自体は
+/// 使い回して値だけ書き換える（<see cref="SyncCount{T}"/>）。実体化済みセルの参照は
+/// <see cref="_cellElements"/> へ<see cref="OnScheduleCellLoaded"/>/<see cref="OnScheduleCellUnloaded"/>が
+/// 自己登録・解除する（<c>ItemsRepeater</c>がコンテナを使い回すため、固定リストでなくこの方式で追う）。
 ///
 /// [セル編集] データセルは <see cref="Border"/>＋<c>Tapped</c>（2026-09-11、旧: <see cref="Button"/>。
 /// 大盤面ではセル数が数百〜千を超え、<see cref="Button"/> 1個ごとのControlTemplate/VisualStateManager
 /// のコストが総描画時間を支配していた＝タップやフィルタ操作のたびに<see cref="RenderSchedule"/>が
 /// グリッド全体を作り直す設計と組み合わさって体感カクつきの主因になっていた。軽量な
-/// <see cref="Border"/>へ替え、押下フィードバックは手動のOpacity切替のみに縮小）でタップを拾い、
+/// <see cref="Border"/>へ替え、押下フィードバックは薄暗いオーバーレイ<c>Rectangle</c>の表示/非表示のみに
+/// 縮小（<see cref="Border.Opacity"/>自体は<see cref="ScheduleCellVm"/>から一方向バインドされているため、
+/// 押下中だけ手動で書き換えるとバインディングと衝突する＝2026-09-11のItemsView化で変更）でタップを拾い、
 /// <see cref="MenuFlyout"/> を開いて
 /// <see cref="MagiViewModel.AllowedShiftsFor"/>（そのスタッフが担当可能なシフト一覧）から選ばせ、
 /// <see cref="MagiViewModel.SetCell"/> で確定する。<c>SetCell</c> 自身が実行中(<c>OptimizeInFlight</c>)を
@@ -58,17 +67,28 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>[違反箇所へのジャンプ] 分析タブから飛んできた注目セル。<see cref="FocusCell"/> 参照。</summary>
     private (int I, int J)? _focusCell;
 
-    /// <summary>直近の <see cref="RenderSchedule"/> が作った注目セルの要素（無ければ null）。
-    /// <see cref="FocusCell"/> が <c>StartBringIntoView</c> を呼ぶために使う。</summary>
+    /// <summary>注目セルの実体化済み要素（無ければ null）。<see cref="OnScheduleCellLoaded"/>が
+    /// 実体化のたびに更新する。<see cref="FocusCell"/> が <c>StartBringIntoView</c> を呼ぶために使う。</summary>
     private Border? _focusCellElement;
 
     private DispatcherTimer? _focusTimer;
 
     private static readonly string[] WeekdayJa = { "月", "火", "水", "木", "金", "土", "日" };
 
-    /// <summary>[phase9 #6] 日ヘッダ要素（週送り・違反ジャンプの横スクロール先）と、直近タップしたセル（クロスハイライト）。</summary>
-    private readonly List<Border> _dayHeaders = new();
-    private Border? _nameHeader;
+    /// <summary>[2026-09-11, ItemsView化] <see cref="ScheduleItemsView"/> の <c>ItemsSource</c>。
+    /// <see cref="RenderSchedule"/> はこのコレクション自体を使い回し、値だけを書き換える
+    /// （<see cref="ScheduleCellVm"/> のKDoc参照）。</summary>
+    private readonly ObservableCollection<ScheduleRowVm> _rows = new();
+
+    /// <summary>[2026-09-11, ItemsView化] 実体化済みセルの(行,列)→<see cref="Border"/>逆引き
+    /// （<see cref="OnScheduleCellLoaded"/>/<see cref="OnScheduleCellUnloaded"/>が自己登録・解除する）。
+    /// 旧実装の <c>_dayHeaders</c>/<c>_nameHeader</c> をこの1つへ統合。</summary>
+    private readonly Dictionary<(int Row, int Col), Border> _cellElements = new();
+
+    /// <summary>職員名ヘッダー(row=0,col=0)の実体。幅(<c>ActualWidth</c>)だけを読むために持つ
+    /// （旧 <c>_nameHeader</c>）。</summary>
+    private Border? _nameHeaderWidth;
+
     private (int I, int J)? _tapped;
     private DispatcherTimer? _tappedTimer;
     private List<List<int>> _weeks = new();
@@ -119,6 +139,7 @@ public sealed partial class ScheduleView : UserControl
         _vm = vm;
         _goAnalysis = goAnalysis;
         InitializeComponent();
+        ScheduleItemsView.ItemsSource = _rows;
         _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
         //   （旧: コンストラクタで一度だけ購読＝一度離れたタブは以後の状態変化を受け取らず、表示もボタンの活性も
@@ -140,12 +161,15 @@ public sealed partial class ScheduleView : UserControl
     /// この移植では枠色を一時的に強調色へ差し替え、タイマー満了で再描画して元に戻す
     /// （<see cref="Render"/> が毎回グリッドを作り直す設計のため、アニメーションではなく
     /// 「ハイライトを付けて描く／付けずに描き直す」の2状態で表現する）。
+    /// [2026-09-11, ItemsView化] <see cref="_focusCellElement"/>は<see cref="OnScheduleCellLoaded"/>が
+    /// レイアウト後に非同期で設定するため（旧実装はRenderSchedule内で同期的に作っていた）、
+    /// スクロール操作はRenderNavBarと同じ「レイアウト後にもう一度」パターンへ委ねる。
     /// </summary>
     public void FocusCell(int i, int j)
     {
         _focusCell = (i, j);
         Render();
-        if (i < 0) ScrollToDay(j); else _focusCellElement?.StartBringIntoView();
+        DispatcherQueue.TryEnqueue(() => { if (i < 0) ScrollToDay(j); else _focusCellElement?.StartBringIntoView(); });
 
         _focusTimer?.Stop();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
@@ -327,26 +351,38 @@ public sealed partial class ScheduleView : UserControl
         _renderCoalescer.Request();
     }
 
+    /// <summary>現在の日数（ヘッダー行の列数-1）。<see cref="_rows"/>から読む＝<see cref="RenderSchedule"/>と
+    /// 独立に呼べる。</summary>
+    private int DayCount() => _rows.Count > 0 ? _rows[0].Cells.Count - 1 : 0;
+
+    /// <summary>[2026-09-11, ItemsView化] 日ヘッダーの実体は<see cref="_cellElements"/>から都度引く
+    /// （旧 <c>_dayHeaders</c>固定リストの代わり。<see cref="ItemsRepeater"/>はコンテナを使い回すため、
+    /// 固定インデックスのリストで持たずキー引きにする）。未実体化（未Loaded）なら0を返す。</summary>
     private double HeaderX(int d) =>
-        d >= 0 && d < _dayHeaders.Count
-            ? _dayHeaders[d].TransformToVisual(ScheduleGridHost).TransformPoint(new Windows.Foundation.Point(0, 0)).X
+        d >= 0 && _cellElements.TryGetValue((0, d + 1), out var header)
+            ? header.TransformToVisual(ScheduleItemsView).TransformPoint(new Windows.Foundation.Point(0, 0)).X
             : 0;
 
     /// <summary>左端に見えている日から現在週を求める（自由スクロールにも追従）。</summary>
     private int CurrentWeek()
     {
         if (_weeks.Count == 0) return 0;
-        var left = GridScroll.HorizontalOffset + (_nameHeader?.ActualWidth ?? 0);
+        var left = GridScroll.HorizontalOffset + (_nameHeaderWidth?.ActualWidth ?? 0);
         var d = 0;
-        for (; d < _dayHeaders.Count; d++) if (HeaderX(d) + _dayHeaders[d].ActualWidth > left + 1) break;
+        var dayCount = DayCount();
+        for (; d < dayCount; d++)
+        {
+            if (!_cellElements.TryGetValue((0, d + 1), out var header)) break;
+            if (HeaderX(d) + header.ActualWidth > left + 1) break;
+        }
         var w = _weeks.FindIndex(wk => d <= wk[^1]);
         return w < 0 ? _weeks.Count - 1 : w;
     }
 
     private void ScrollToDay(int d)
     {
-        if (d < 0 || d >= _dayHeaders.Count) return;
-        var x = HeaderX(d) - (_nameHeader?.ActualWidth ?? 0);
+        if (d < 0 || d >= DayCount()) return;
+        var x = HeaderX(d) - (_nameHeaderWidth?.ActualWidth ?? 0);
         GridScroll.ChangeView(Math.Max(0, x), null, null);
     }
 
@@ -603,15 +639,22 @@ public sealed partial class ScheduleView : UserControl
         RenderNavBar(ui);
     }
 
+    /// <summary>[2026-09-11, ItemsView化] コレクション(<paramref name="coll"/>)の要素数を<paramref name="count"/>に
+    /// 合わせる。既存要素は使い回す（先頭から）＝<see cref="ScheduleItemsView"/>のコンテナ再利用・
+    /// スクロール位置維持のため、行・列数が変わらない限り毎回新しいインスタンスを作らない。</summary>
+    private static void SyncCount<T>(ObservableCollection<T> coll, int count, Func<int, T> factory)
+    {
+        while (coll.Count < count) coll.Add(factory(coll.Count));
+        while (coll.Count > count) coll.RemoveAt(coll.Count - 1);
+    }
+
     private void RenderSchedule(UiState ui)
     {
-        ScheduleGridHost.Children.Clear();
-        ScheduleGridHost.RowDefinitions.Clear();
-        ScheduleGridHost.ColumnDefinitions.Clear();
-        _focusCellElement = null;
-        _dayHeaders.Clear();
-        _nameHeader = null;
-        if (!ui.Loaded || ui.Schedule.Count == 0) return;
+        if (!ui.Loaded || ui.Schedule.Count == 0)
+        {
+            _rows.Clear();
+            return;
+        }
 
         var staffCount = ui.Schedule.Count;
         var dayCount = ui.Schedule.Count > 0 ? ui.Schedule[0].Count : 0;
@@ -622,23 +665,28 @@ public sealed partial class ScheduleView : UserControl
         var dayShort = new int[dayCount];
         if (_vioEnabled.Contains("need") && ui.V6 is { } v6)
             foreach (var r in v6.DayRisks) if (r.DayIndex >= 0 && r.DayIndex < dayCount) dayShort[r.DayIndex] = r.Shortage;
-        // +1 列/行 = 職員名ヘッダー列・日番号ヘッダー行。
-        for (var r = 0; r <= staffCount; r++) ScheduleGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var c = 0; c <= dayCount; c++) ScheduleGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        Border AddCell(int row, int col, string text, bool header)
+        // +1 行/列 = 日番号ヘッダー行(row 0)・職員名ヘッダー列(col 0)。
+        SyncCount(_rows, staffCount + 1, _ => new ScheduleRowVm());
+        for (var r = 0; r <= staffCount; r++)
         {
-            var block = new TextBlock
-            {
-                Text = text,
-                FontSize = 14,
-                FontWeight = header ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
-                // [Token] 6,4 は密なスケジュールグリッド用に調整済みの値でMagiSpacingスケール(4/8/12…)に
-                // 一致しないため据え置き（トークン化するとグリッド全体のセル間隔が変わってしまう）。
-                Padding = new Thickness(6, 4, 6, 4),
-                MinWidth = header && col == 0 ? 96 : 32,
-                HorizontalAlignment = HorizontalAlignment.Center,
-            };
+            var rr = r; // ローカルへコピー（クロージャ捕捉対策）
+            SyncCount(_rows[r].Cells, dayCount + 1, c => new ScheduleCellVm { Row = rr, Col = c });
+        }
+
+        void UpdateHeaderCell(int row, int col, string text)
+        {
+            var cell = _rows[row].Cells[col];
+            cell.IsHeader = true;
+            cell.I = -1;
+            cell.J = -1;
+            cell.Text = text;
+            cell.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+            cell.MinWidth = col == 0 ? 96 : 32;
+            cell.TextAlignment = TextAlignment.Center;
+            cell.Foreground = new SolidColorBrush(Colors.Black);
+            cell.Tooltip = null;
+            cell.WishDotVisibility = Visibility.Collapsed;
             // [phase9 #9] 日ヘッダ＝日番号＋曜日。祝日と日曜は赤、土曜は青の淡い地（Kotlin原本 DayHeader、祝日は日曜と同じ扱い）。
             //   今日は濃緑の太字で、地色は重ねない（混同回避）。祝日名はツールチップへ。
             Color? tint = null;
@@ -647,94 +695,88 @@ public sealed partial class ScheduleView : UserControl
                 var date = d0.AddDays(col - 1);
                 var dow = ((int)date.DayOfWeek + 6) % 7;
                 var holiday = JapanHolidays.NameOf(date);
-                block.Text = $"{col}\n{WeekdayJa[dow]}";
-                block.TextAlignment = TextAlignment.Center;
+                cell.Text = $"{col}\n{WeekdayJa[dow]}";
                 var isToday = date == today;
                 if (holiday is not null || dow == 6) tint = ColorHex.Parse(MagiAccent.Red, Colors.Red);
                 else if (dow == 5) tint = ColorHex.Parse(MagiAccent.Blue, Colors.Blue);
                 if (isToday)
                 {
-                    block.Foreground = (Brush)Application.Current.Resources["MagiTertiaryBrush"];
-                    block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                    cell.Foreground = (Brush)Application.Current.Resources["MagiTertiaryBrush"];
+                    cell.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
                 }
                 else if (tint is { } tc)
                 {
-                    block.Foreground = new SolidColorBrush(tc);
+                    cell.Foreground = new SolidColorBrush(tc);
                 }
                 if (isToday) tint = null;
-                if (holiday is not null) ToolTipService.SetToolTip(block, $"{col}日 {WeekdayJa[dow]}曜日 {holiday}");
+                if (holiday is not null) cell.Tooltip = $"{col}日 {WeekdayJa[dow]}曜日 {holiday}";
                 if (dayShort[col - 1] > 0)
                 {
-                    block.Text += $"\n▼{dayShort[col - 1]}";
-                    if (!isToday) block.Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"];
-                    block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                    cell.Text += $"\n▼{dayShort[col - 1]}";
+                    if (!isToday) cell.Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"];
+                    cell.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
                 }
             }
             // [検索] 一致する職員名を太字＋青で強調（行は隠さず＝被覆の文脈を保つ）。
             if (col == 0 && row > 0 && _nameQuery.Length > 0 && text.Contains(_nameQuery, StringComparison.OrdinalIgnoreCase))
             {
-                block.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Blue, Colors.RoyalBlue));
-                block.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                cell.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Blue, Colors.RoyalBlue));
+                cell.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
             }
-            var border = new Border
-            {
-                Child = block,
-                // [2026-09-11] Kotlin原本 FlatCell は既定で無枠・角丸6dp・セル間は罫線でなく余白で分離
-                // （plainBorder既定false）。旧実装は全セルに常時1dp灰色罫線を引いており、原本に無い
-                // 「表計算ソフトの格子線」的な見た目のズレ＝張りぼて感・バラツキの主因だった。
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(6),
-                Margin = new Thickness(1),
-            };
-            if (tint is { } tintColor) border.Background = new SolidColorBrush(Color.FromArgb(36, tintColor.R, tintColor.G, tintColor.B));
+            // [2026-09-11] Kotlin原本 FlatCell は既定で無枠・角丸6dp・セル間は罫線でなく余白で分離
+            // （plainBorder既定false）。旧実装は全セルに常時1dp灰色罫線を引いており、原本に無い
+            // 「表計算ソフトの格子線」的な見た目のズレ＝張りぼて感・バラツキの主因だった。
+            cell.BorderBrush = new SolidColorBrush(Colors.Transparent);
+            cell.BorderThickness = new Thickness(0);
+            cell.Background = tint is { } tintColor
+                ? new SolidColorBrush(Color.FromArgb(36, tintColor.R, tintColor.G, tintColor.B))
+                : new SolidColorBrush(Colors.Transparent);
             // [クロスハイライト／違反ジャンプ] 行=職員名は淡い主色地、列=日付は主色の太枠（Kotlin原本と同じ）。
             var dayIdx = col - 1;
             var dayFocused = row == 0 && dayIdx >= 0 &&
                 ((_focusCell is { } fc && fc.I < 0 && fc.J == dayIdx) || (_tapped is { } tp && tp.J == dayIdx));
             if (dayFocused)
             {
-                border.BorderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
-                border.BorderThickness = new Thickness(3);
+                cell.BorderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
+                cell.BorderThickness = new Thickness(3);
             }
             if (col == 0 && row > 0 && _tapped is { } tp2 && tp2.I == row - 1)
             {
                 var c = ((SolidColorBrush)Application.Current.Resources["MagiPrimaryBrush"]).Color;
-                border.Background = new SolidColorBrush(Color.FromArgb(31, c.R, c.G, c.B));
+                cell.Background = new SolidColorBrush(Color.FromArgb(31, c.R, c.G, c.B));
             }
-            Grid.SetRow(border, row);
-            Grid.SetColumn(border, col);
-            ScheduleGridHost.Children.Add(border);
-            return border;
+            cell.Opacity = 1.0;
         }
 
-        void AddDataCell(int row, int col, int i, int j, int k)
+        void UpdateDataCell(int row, int col, int i, int j, int k)
         {
+            var cell = _rows[row].Cells[col];
+            cell.IsHeader = false;
+            cell.I = i;
+            cell.J = j;
+            cell.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
+            cell.MinWidth = 32;
+            cell.TextAlignment = TextAlignment.Center;
+            cell.Tooltip = null;
             var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
             // [2026-09-02, 配線] ui.ShiftColorHex/ShiftTextHex は常に解決済みの色を持つ（既定パレット
             // または SettingsView の色設定で保存したもの）。従来はここで一切読んでおらず、色設定を
             // 変更しても勤務表グリッドの見た目が変わらない「論理的な箱」だった。
             var bg = k >= 0 && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.Transparent) : Colors.Transparent;
             var fg = k >= 0 && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
-            var symbolBlock = new TextBlock
-            {
-                Text = sym, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(fg),
-            };
-            var content = new Grid();
-            content.Children.Add(symbolBlock);
+            cell.Text = sym;
+            cell.Foreground = new SolidColorBrush(fg);
+            cell.Background = new SolidColorBrush(bg);
+
             if (ui.Wishes.TryGetValue($"{i},{j}", out var wishK))
             {
                 var reflected = wishK == k;
-                content.Children.Add(new Ellipse
-                {
-                    Width = 8,
-                    Height = 8,
-                    Fill = new SolidColorBrush(reflected ? Colors.SeaGreen : Colors.HotPink),
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Bottom,
-                    // [Token] 希望バッジ(8x8)の位置微調整値でスペーシングトークンの対象外のため据え置き。
-                    Margin = new Thickness(0, 0, 2, 2),
-                });
+                cell.WishDotVisibility = Visibility.Visible;
+                cell.WishDotColor = new SolidColorBrush(reflected ? Colors.SeaGreen : Colors.HotPink);
+            }
+            else
+            {
+                cell.WishDotVisibility = Visibility.Collapsed;
             }
 
             // [2026-09-11/Kotlin原本FlatCell準拠] 違反の無いセルは既定で無枠（plainBorder既定false）。
@@ -759,59 +801,64 @@ public sealed partial class ScheduleView : UserControl
                 borderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
                 thickness = new Thickness(3);
             }
-
-            var cellSurface = new Border
-            {
-                Child = content,
-                // [Token] セルパディング/角丸/余白は Kotlin原本 FlatCell（角丸6dp・1.5dp間隔）に合わせた値。
-                Padding = new Thickness(6, 4, 6, 4),
-                MinWidth = 32,
-                Background = new SolidColorBrush(bg),
-                CornerRadius = new CornerRadius(6),
-                Margin = new Thickness(1),
-                BorderBrush = borderBrush,
-                BorderThickness = thickness,
-                Opacity = dimmed ? 0.35 : (ui.Running ? 0.5 : 1.0),
-            };
-            if (!ui.Running)
-            {
-                // [2026-09-11] Button の PointerOver/Pressed 視覚状態を、押下中だけ薄くする最小限の
-                // 手動フィードバックへ置換（軽量化が目的のため、Reveal相当の演出は追わない＝最小デザイン）。
-                var restOpacity = cellSurface.Opacity;
-                cellSurface.PointerPressed += (_, _) => cellSurface.Opacity = 0.6;
-                cellSurface.PointerReleased += (_, _) => cellSurface.Opacity = restOpacity;
-                cellSurface.PointerExited += (_, _) => cellSurface.Opacity = restOpacity;
-                cellSurface.PointerCanceled += (_, _) => cellSurface.Opacity = restOpacity;
-                cellSurface.Tapped += (sender, _) =>
-                {
-                    MarkTapped(i, j);
-                    ShowCellEditor((FrameworkElement)sender, i, j);
-                };
-            }
-            if (isFocused) _focusCellElement = cellSurface;
-            Grid.SetRow(cellSurface, row);
-            Grid.SetColumn(cellSurface, col);
-            ScheduleGridHost.Children.Add(cellSurface);
+            cell.BorderBrush = borderBrush;
+            cell.BorderThickness = thickness;
+            cell.Opacity = dimmed ? 0.35 : (ui.Running ? 0.5 : 1.0);
         }
 
-        _nameHeader = AddCell(0, 0, "", header: true);
-        for (var j = 0; j < dayCount; j++)
-        {
-            var h = AddCell(0, j + 1, $"{j + 1}", header: true);
-            _dayHeaders.Add(h);
-            if (_focusCell is { } fc && fc.I < 0 && fc.J == j) _focusCellElement = h;
-        }
+        UpdateHeaderCell(0, 0, "");
+        for (var j = 0; j < dayCount; j++) UpdateHeaderCell(0, j + 1, $"{j + 1}");
 
         for (var i = 0; i < staffCount; i++)
         {
             var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-            AddCell(i + 1, 0, name, header: true);
+            UpdateHeaderCell(i + 1, 0, name);
             var row = ui.Schedule[i];
-            for (var j = 0; j < row.Count; j++)
-            {
-                AddDataCell(i + 1, j + 1, i, j, row[j]);
-            }
+            for (var j = 0; j < row.Count; j++) UpdateDataCell(i + 1, j + 1, i, j, row[j]);
         }
+    }
+
+    /// <summary>[2026-09-11, ItemsView化] 実体化しているセル要素を(行,列)で引けるように、
+    /// 各セルの<c>Border</c>が読み込み/破棄されるたびに自分で登録/解除する（<see cref="ItemsRepeater"/>
+    /// はコンテナを使い回すため、固定の参照を持たずこの方式で最新の実体を追う）。</summary>
+    private void OnScheduleCellLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Border { DataContext: ScheduleCellVm vm } border) return;
+        _cellElements[(vm.Row, vm.Col)] = border;
+        if (vm.Row == 0 && vm.Col == 0) _nameHeaderWidth = border;
+        if (_focusCell is { } fc && ((fc.I < 0 && vm.Row == 0 && fc.J == vm.Col - 1) || (fc.I >= 0 && vm.Row == fc.I + 1 && vm.Col == fc.J + 1)))
+            _focusCellElement = border;
+    }
+
+    private void OnScheduleCellUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Border { DataContext: ScheduleCellVm vm } border) return;
+        var key = (vm.Row, vm.Col);
+        if (_cellElements.TryGetValue(key, out var existing) && ReferenceEquals(existing, border)) _cellElements.Remove(key);
+        if (ReferenceEquals(_focusCellElement, border)) _focusCellElement = null;
+        if (ReferenceEquals(_nameHeaderWidth, border)) _nameHeaderWidth = null;
+    }
+
+    private static Rectangle? PressOverlayOf(Border cell) =>
+        cell.Child is Grid { Children.Count: > 0 } g && g.Children[^1] is Rectangle r ? r : null;
+
+    private void OnScheduleCellPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is Border { DataContext: ScheduleCellVm { IsDataCell: true } } border && !_vm.Ui.Running)
+            if (PressOverlayOf(border) is { } overlay) overlay.Visibility = Visibility.Visible;
+    }
+
+    private void OnScheduleCellPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (sender is Border border && PressOverlayOf(border) is { } overlay) overlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnScheduleCellTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+    {
+        if (sender is not Border { DataContext: ScheduleCellVm { IsDataCell: true } vm } border) return;
+        if (_vm.Ui.Running) return;
+        MarkTapped(vm.I, vm.J);
+        ShowCellEditor(border, vm.I, vm.J);
     }
 
     /// <summary>

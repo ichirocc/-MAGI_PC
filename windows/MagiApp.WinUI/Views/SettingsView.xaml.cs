@@ -271,25 +271,25 @@ public sealed partial class SettingsView : UserControl
     }
 
     /// <summary>
-    /// 「変更」ボタンのフライアウト＝<see cref="MagiAccent.All"/>（既存7色パレット、色設定の唯一の
-    /// 一次ソース）のスウォッチをタップで即適用、または16進テキストで任意色を指定して「適用」。
-    /// Kotlin原本 <c>ColorPickerDialog</c>（プリセットパレット＋現在色表示）の簡易移植——
-    /// WinUI3 の <see cref="Microsoft.UI.Xaml.Controls.ColorPicker"/>（HSVホイール等の高機能版）は
-    /// このC#移植の最初の段階では過剰と判断し、既存の7色パレット＋16進入力に留める。
-    /// </summary>
-    /// <summary>
-    /// [phase9 #21] 色ピッカー（Kotlin原本 <c>ColorPickerDialog</c>、3.460.0）: 現在の色＋36色（6×6）のタイル、現在値と一致するタイルに ✓。
-    /// 16進の直接入力は WinUI 側にもとからあった導線なので残す（原本には無い）。
+    /// [2026-09-11, Windows11「設定 &gt; 個人設定 &gt; 色」風UIへ刷新, ユーザー指示]
+    /// 色ピッカー（Kotlin原本 <c>ColorPickerDialog</c>、3.460.0の36色パレットを踏襲）。
+    /// Windows11設定アプリの配色ページと同じ見た目——丸いプリセットを横一列（収まらない分は横スクロール）に
+    /// 並べ、現在値と一致するタイルに ✓、末尾に「その他の色」円。そこをタップすると
+    /// <see cref="Microsoft.UI.Xaml.Controls.ColorPicker"/>（色域＋色相スライダー＋16進/RGB入力の
+    /// Windows標準カラーピッカー）がその場に展開する（同じ場所に本物を使うのが最も確実に「設定アプリと
+    /// 同じ」を実現する＝手組みの色域/スライダーは作らない）。旧実装（フライアウト内の6×6グリッド＋
+    /// 別立ての16進テキスト欄）はこの1メソッドへ統合し、16進入力はColorPicker自身のIsHexInputVisibleに
+    /// 一本化（重複した自前パースを撤去）。
     /// </summary>
     private Flyout BuildColorPickerFlyout(string currentHex, Action<string> onSet)
     {
         var flyout = new Flyout();
-        var panel = new StackPanel { Spacing = 8, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]) };
+        var panel = new StackPanel { Spacing = 8, Padding = new Thickness((double)Application.Current.Resources["MagiSpacingXS"]), MinWidth = 280 };
 
         var current = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         current.Children.Add(new Border
         {
-            Width = 28, Height = 28, CornerRadius = new CornerRadius(4),
+            Width = 28, Height = 28, CornerRadius = new CornerRadius(14),
             Background = new SolidColorBrush(ColorHex.Parse(currentHex, Colors.Gray)),
             BorderBrush = new SolidColorBrush(Colors.Gray), BorderThickness = new Thickness(1),
         });
@@ -299,17 +299,14 @@ public sealed partial class SettingsView : UserControl
         panel.Children.Add(current);
         panel.Children.Add(new TextBlock { Text = "色を選ぶ", Style = pickerLabelStyle, Opacity = 0.8 });
 
-        var grid = new Grid { ColumnSpacing = 4, RowSpacing = 4 };
-        for (var c = 0; c < ShiftColorPalette.PerRow; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var rows = (ShiftColorPalette.All.Count + ShiftColorPalette.PerRow - 1) / ShiftColorPalette.PerRow;
-        for (var r = 0; r < rows; r++) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        for (var idx = 0; idx < ShiftColorPalette.All.Count; idx++)
+        // [Windows11風] プリセットは丸いタイルを横一列に（旧: 角丸4pxの正方形6×6グリッド）。
+        var swatchRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        foreach (var hex in ShiftColorPalette.All)
         {
-            var hex = ShiftColorPalette.All[idx];
             var selected = string.Equals(hex, currentHex?.Trim(), StringComparison.OrdinalIgnoreCase);
             var tile = new Button
             {
-                Width = 32, Height = 32, Padding = new Thickness(0), CornerRadius = new CornerRadius(4),
+                Width = 32, Height = 32, Padding = new Thickness(0), CornerRadius = new CornerRadius(16),
                 Background = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray)),
                 BorderBrush = selected ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
                 BorderThickness = new Thickness(selected ? 3 : 1),
@@ -320,25 +317,45 @@ public sealed partial class SettingsView : UserControl
             // [a11y] 色のみの選択肢に読み上げ名を付与（原本と同じ文言）。
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, "色 " + hex + (selected ? "・選択中" : ""));
             tile.Click += (_, _) => { onSet(hex); flyout.Hide(); };
-            Grid.SetRow(tile, idx / ShiftColorPalette.PerRow);
-            Grid.SetColumn(tile, idx % ShiftColorPalette.PerRow);
-            grid.Children.Add(tile);
+            swatchRow.Children.Add(tile);
         }
-        panel.Children.Add(grid);
 
-        var hexBox = new TextBox { Text = currentHex, PlaceholderText = "#rrggbb" };
-        var applyButton = new Button { Content = "適用", HorizontalAlignment = HorizontalAlignment.Stretch };
-        applyButton.Click += (_, _) =>
+        // [Windows11風] 列の末尾＝「その他の色」円。タップで下にColorPickerを展開する
+        // （Windows11設定の配色ページと同じ「行の最後がカスタムカラーへの入口」という配置）。
+        var picker = new ColorPicker
         {
-            var text = hexBox.Text?.Trim() ?? "";
-            if (text.Length == 0) return;
-            onSet(text.StartsWith("#", StringComparison.Ordinal) ? text : $"#{text}");
-            flyout.Hide();
+            Color = ColorHex.Parse(currentHex, Colors.Gray),
+            IsAlphaEnabled = false,
+            IsHexInputVisible = true,
+            Visibility = Visibility.Collapsed,
         };
-        var hexRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        hexRow.Children.Add(hexBox);
-        hexRow.Children.Add(applyButton);
-        panel.Children.Add(hexRow);
+        var applyCustomButton = new Button { Content = "この色を使う", HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
+        applyCustomButton.Click += (_, _) => { onSet(ColorHex.ToHex(picker.Color)); flyout.Hide(); };
+
+        var customTile = new Button
+        {
+            Width = 32, Height = 32, Padding = new Thickness(0), CornerRadius = new CornerRadius(16),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderBrush = new SolidColorBrush(Colors.Gray), BorderThickness = new Thickness(1),
+            Content = new TextBlock { Text = "+", FontSize = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(customTile, "その他の色（カスタムカラー）");
+        customTile.Click += (_, _) =>
+        {
+            var expand = picker.Visibility != Visibility.Visible;
+            picker.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+            applyCustomButton.Visibility = picker.Visibility;
+        };
+        swatchRow.Children.Add(customTile);
+
+        panel.Children.Add(new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = swatchRow,
+        });
+        panel.Children.Add(picker);
+        panel.Children.Add(applyCustomButton);
 
         flyout.Content = panel;
         return flyout;

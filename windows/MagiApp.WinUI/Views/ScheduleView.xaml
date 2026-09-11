@@ -1,14 +1,20 @@
 <UserControl
     x:Class="MagiApp.WinUI.Views.ScheduleView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MagiApp.WinUI.Views">
 
     <!--
-      [フェーズ8→9] 「勤務表」タブ。S×T が可変でセルごとに違反色分けが要るため XAML の静的
-      テンプレートで表現しづらく、コードビハインドで Grid を組み立てる（ScheduleView.xaml.cs の
-      RenderSchedule 参照）。Kotlin原本 MagiScheduleViews.kt（1594行、ScheduleGrid/StaffCalendarCard/
-      TallyCard 等）の本格移植（ItemsRepeaterベース・違反フィルタ・週送り等）は今後の段階のままだが、
-      シフト集計（TallyCard＝職員別・日別）は最小版を実装済み（RenderStaffTally/RenderDayTally 参照）。
+      [フェーズ8→9] 「勤務表」タブ。S×T が可変でセルごとに違反色分けが要る。
+      [2026-09-11, ItemsView化] マトリックス本体（ScheduleItemsView）は Microsoft.UI.Xaml.Controls.ItemsView
+      （StackLayout・仮想化対応）＋データバインディングで組む（ScheduleGridModels.cs の
+      ScheduleRowVm/ScheduleCellVm、ScheduleView.xaml.cs の RenderSchedule 参照）。行(職員)を
+      ItemsView が仮想化し、行内の日セルは ItemsRepeater（横方向 StackLayout、列数が小さいため
+      仮想化不要）で並べる。RenderSchedule は行・セルのコレクション自体は使い回し、値だけを
+      書き換える（ItemsSource を毎回差し替えるとスクロール位置を失うため）。Kotlin原本
+      MagiScheduleViews.kt（1594行、ScheduleGrid/StaffCalendarCard/TallyCard 等）のうち
+      シフト集計（TallyCard＝職員別・日別）は最小版のまま従来どおり Grid 直組み（RenderStaffTally/
+      RenderDayTally 参照、このItemsView化の対象外）。
       セルタップで担当可能シフトの一覧から選んで編集できる（ScheduleView.xaml.cs の
       ShowCellEditor/MagiViewModel.SetCell 参照）。違反ハイライト（枠色）・希望バッジ・
       分析タブからの違反箇所ジャンプ（FocusCell）は実装済み（クラスKDoc参照）。
@@ -87,7 +93,63 @@
         <ScrollViewer x:Name="GridScroll" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                       ViewChanged="OnGridScrollViewChanged">
             <StackPanel Spacing="20">
-                <Grid x:Name="ScheduleGridHost" />
+                <ItemsView x:Name="ScheduleItemsView" SelectionMode="None" IsItemInvokedEnabled="False"
+                           HorizontalAlignment="Left" VerticalAlignment="Top">
+                    <ItemsView.Layout>
+                        <StackLayout Orientation="Vertical" Spacing="0" />
+                    </ItemsView.Layout>
+                    <ItemsView.ItemTemplate>
+                        <DataTemplate x:DataType="local:ScheduleRowVm">
+                            <ItemsRepeater ItemsSource="{x:Bind Cells}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Horizontal" Spacing="0" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="local:ScheduleCellVm">
+                                        <Border Background="{x:Bind Background, Mode=OneWay}"
+                                                BorderBrush="{x:Bind BorderBrush, Mode=OneWay}"
+                                                BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
+                                                CornerRadius="6"
+                                                Margin="1"
+                                                Padding="6,4,6,4"
+                                                MinWidth="{x:Bind MinWidth, Mode=OneWay}"
+                                                Opacity="{x:Bind Opacity, Mode=OneWay}"
+                                                ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}"
+                                                Tapped="OnScheduleCellTapped"
+                                                PointerPressed="OnScheduleCellPointerPressed"
+                                                PointerReleased="OnScheduleCellPointerReleased"
+                                                PointerExited="OnScheduleCellPointerReleased"
+                                                PointerCanceled="OnScheduleCellPointerReleased"
+                                                Loaded="OnScheduleCellLoaded"
+                                                Unloaded="OnScheduleCellUnloaded">
+                                            <Grid>
+                                                <TextBlock Text="{x:Bind Text, Mode=OneWay}"
+                                                           TextAlignment="{x:Bind TextAlignment, Mode=OneWay}"
+                                                           FontWeight="{x:Bind FontWeight, Mode=OneWay}"
+                                                           Foreground="{x:Bind Foreground, Mode=OneWay}"
+                                                           FontSize="14"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                                <!-- [希望バッジ] 右下の丸。ShowWishDot でなく Visibility を直接持つ理由は
+                                                     ScheduleGridModels.cs 参照（x:Bind の暗黙 bool→Visibility 変換に依存しない）。 -->
+                                                <Ellipse Width="8" Height="8"
+                                                         Fill="{x:Bind WishDotColor, Mode=OneWay}"
+                                                         Visibility="{x:Bind WishDotVisibility, Mode=OneWay}"
+                                                         HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                                         Margin="0,0,2,2" />
+                                                <!-- [押下フィードバック] コードビハインドが Children の末尾要素として直接
+                                                     参照する（DataTemplate内のx:Nameはコードビハインドから素朴に
+                                                     引けないため、インデックス参照の方が確実）。 -->
+                                                <Rectangle Fill="Black" Opacity="0.25" Visibility="Collapsed" IsHitTestVisible="False"
+                                                           RadiusX="6" RadiusY="6" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </DataTemplate>
+                    </ItemsView.ItemTemplate>
+                </ItemsView>
 
                 <StackPanel Spacing="6">
                     <TextBlock Text="シフト集計（職員別）" Style="{StaticResource MagiTitleSmallTextStyle}" />

@@ -326,6 +326,29 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 勤務表マトリックスをItemsView化・色選択UIをWindows11「設定＞個人設定＞色」風へ
+  （ユーザー指示）: **(1)** `ScheduleView`のマトリックス本体を、コードビハインドで毎回`Grid`を
+  組み立てる方式から`Microsoft.UI.Xaml.Controls.ItemsView`＋`ScheduleRowVm`/`ScheduleCellVm`
+  （新規`ScheduleGridModels.cs`、`CommunityToolkit.Mvvm`の`ObservableObject`）へ刷新。行(職員)を
+  `ItemsView`（`StackLayout`縦方向）、行内の日セルを`ItemsRepeater`（`StackLayout`横方向、列数が
+  小さいため仮想化不要）で並べる。`RenderSchedule`は行・セルのコレクション自体を使い回し値だけ
+  書き換える（`ItemsSource`を毎回差し替えるとスクロール位置を失うため）。実体化済みセルの参照は
+  `Loaded`/`Unloaded`の自己登録で追う（旧`_dayHeaders`/`_nameHeader`固定リストを統合）。
+  `FocusCell`のスクロール処理は実体化が非同期になった分、既存の`RenderNavBar`と同じ
+  「レイアウト後にもう一度」パターンへ委ねた。外側の`GridScroll`（2軸スクロール）・シフト集計
+  （`StaffTallyGridHost`/`DayTallyGridHost`、`Grid`直組みのまま）はこの変更の対象外。
+  **(2)** `SettingsView`の色選択フライアウト（`BuildColorPickerFlyout`）を刷新——プリセットは
+  丸いタイルの横一列（旧: 角丸正方形の6×6グリッド）、末尾の「その他の色」円をタップすると
+  Windows標準の`ColorPicker`（色域＋色相スライダー＋16進入力）がその場に展開する構成へ
+  （旧: 独自の16進テキスト欄。`ColorPicker.IsHexInputVisible`に一本化し重複実装を撤去）。
+  **検証の限界（重要）**: `MagiApp.WinUI`はこのLinuxサンドボックスでビルド・実行・視覚確認が
+  一切できない（XAMLコンパイラがWindows専用ネイティブバイナリのため、既出の制約）。この2件は
+  他のC#変更と異なり**コンパイル確認すら出来ていない**（`MagiEngine`/`MagiApp.ViewModels`等の
+  プレーンなnet8.0ライブラリと違い、`net8.0-windows10.0.19041.0`のXAMLコンパイルはこの環境で
+  動かない）。XAML/C#とも目視レビューのみで作成し、`ItemsView`/`ItemsRepeater`/`StackLayout`/
+  `ColorPicker`はこのコードベースで初めて使うAPIのため前例による裏取りも無い。実機での
+  ビルド・動作確認を強く推奨し、ビルドエラーや見た目の不具合があれば知らせてほしい。
+
 - 2026-09-11 共同LNSの「短時間試行→採用時だけ本予算」lnsAdaptive を移植（ユーザー指示「同期する」、
   Android 3.510.2/3.518.0）: `PostOptimizationParams.LnsAdaptive`（既定true）・
   `C1LnsFirstEvaluations`/`PersonalLnsFirstEvaluations`/`C1LnsFirstMs`/`PersonalLnsFirstMs` を追加し、
