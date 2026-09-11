@@ -326,6 +326,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 既定OFFトグルのAB結果確定（Android 3.519.0と同時）:
+  `CombineExhaustPairs`はAndroid側の正式A/B（170ペア）でlarge/infeasibleの1ペアに必須件数増を確認、
+  既定OFFで確定（再提案しない）。コード内コメント「isBetterゲート不変＝退化しない」は個々の手の話で
+  あって全体の話ではなかった（探索経路が変わることで最終盤面が別の局所解に着地し得る）ため訂正
+  （`SettingsView.xaml`・`MagiViewModel.cs`・`UiState.cs`）。`LnsAdaptive`はC#未移植のため対象外
+  （既知のギャップ、前回の記録どおり）。`MagiApp.ViewModels.Tests` 440件green。
+
 - 2026-09-11 勤務表マトリックスのカクつき・張りぼて感・バラツキ（ユーザー報告「カクつき無くす。
   張りぼて感、バラツキある。スムーズおよびスマートなデザインにする」）:
   - **張りぼて感・バラツキの原因**: `RenderSchedule`のデータセルがKotlin原本`FlatCell`

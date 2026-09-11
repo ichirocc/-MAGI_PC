@@ -61,7 +61,9 @@
             <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
 
-            <!-- [Android 3.514.0同期] isBetterゲート不変=退化しない安全な変更のみUI化。 -->
+            <!-- [Android 3.514.0同期/3.519.0訂正] 個々の手はisBetterゲートを通るが、探索経路が変わるため
+                 最終盤面が別の局所解に着地することがある＝「退化しない」は正確でなかった（Android iter24計測で
+                 170ペア中1件の必須退行を確認）。既定OFFで確定（Android 3.519.0）。 -->
             <ToggleSwitch x:Name="CombineExhaustPairsToggle" Header="職員どうしの交換探索を粘り強く"
                           OnContent="ON" OffContent="OFF" Toggled="OnCombineExhaustPairsToggled" />
 

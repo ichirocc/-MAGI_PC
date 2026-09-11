@@ -356,7 +356,7 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>[Android 3.514.0同期] 結合探索の停滞打ち切りを2人組(k=2)の全組合せぶん緩める。
-    /// isBetterゲート不変＝退化なし・効果は未計測（既定OFF）。</summary>
+    /// 既定OFFで確定（Android 3.519.0、iter24＝170ペアで必須退行1件・速度-5.6%平均のため不合格）。</summary>
     public void SetCombineExhaustPairs(bool on)
     {
         PolishGate.CombineExhaustPairs = on;
