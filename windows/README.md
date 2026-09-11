@@ -326,6 +326,17 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 UX改善: UI用語統一・ゲーム要素廃止（ユーザー指示、Android 3.520.0と同時）:
+  フェーズ名バッジ「狩猟」→「未完成」、感嘆符/進捗を煽る前置き（「できました！」「もう少しです。」）を
+  平易な文へ、旧語「できあがり度」を正式語「解消度」へ統一、「最適化」vs「計算」の混在を「最適化を実行
+  したか」という同一概念に絞って統一（`違反数の再計算`等の別概念は残置）。
+  `HomeView.xaml(.cs)`/`EditView.xaml.cs`/`SettingsView.xaml(.cs)`/`AnalysisView.xaml(.cs)`/
+  `MagiViewModel.Background.cs`/`MagiViewModel.SmartInitial.cs`/`MagiViewModel.cs`/`AnalysisTriage.cs`を
+  同時に更新。既存テスト5件がハードコードされた旧文言を検証しており修正（`AnalysisTriageTest.cs`・
+  `MagiViewModelBackgroundTest.cs`・`MagiViewModelCsvTest.cs`・`MagiViewModelSmartInitialTest.cs`・
+  `MagiViewModelTest.cs`）。`MagiApp.ViewModels.Tests` 440件green。`MagiApp.WinUI`側の`.xaml`/`.xaml.cs`
+  編集は既出の理由（このサンドボックスでビルド不可）によりコンパイル未確認。
+
 - 2026-09-11 勤務表マトリックスをItemsView化・色選択UIをWindows11「設定＞個人設定＞色」風へ
   （ユーザー指示）: **(1)** `ScheduleView`のマトリックス本体を、コードビハインドで毎回`Grid`を
   組み立てる方式から`Microsoft.UI.Xaml.Controls.ItemsView`＋`ScheduleRowVm`/`ScheduleCellVm`

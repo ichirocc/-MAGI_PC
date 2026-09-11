@@ -625,7 +625,7 @@ public sealed partial class SettingsView : UserControl
     {
         var min = sec / 60;
         var remainder = sec % 60;
-        return remainder == 0 ? $"計算の制限時間 {sec}秒（{min}分）" : $"計算の制限時間 {sec}秒";
+        return remainder == 0 ? $"最適化の制限時間 {sec}秒（{min}分）" : $"最適化の制限時間 {sec}秒";
     }
 
     private void OnWorkersChanged(object sender, RangeBaseValueChangedEventArgs e)

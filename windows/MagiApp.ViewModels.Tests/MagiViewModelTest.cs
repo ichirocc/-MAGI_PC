@@ -29,7 +29,7 @@ public class MagiViewModelTest
 
         Assert.NotNull(vm.Ui);
         Assert.False(vm.OptimizeInFlight());
-        Assert.Equal("バックグラウンド計算", vm.BusyWhat());
+        Assert.Equal("バックグラウンド最適化", vm.BusyWhat());
         Assert.Null(vm.SnapNow());
         Assert.Equal(0, vm.UndoStackCount);
         Assert.Equal(0, vm.RedoStackCount);
@@ -176,7 +176,7 @@ public class MagiViewModelTest
 
         vm.EndBoardJob(token);
         Assert.False(vm.OptimizeInFlight());
-        Assert.Equal("バックグラウンド計算", vm.BusyWhat());
+        Assert.Equal("バックグラウンド最適化", vm.BusyWhat());
     }
 
     /// <summary>

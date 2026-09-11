@@ -19,7 +19,7 @@ namespace MagiApp.ViewModels;
 ///  - 元に戻す/やり直すの**データ構造**（<c>pushUndo</c>/<c>clearUndo</c>/<c>snapNow</c> — ただし
 ///    公開の <c>undo()</c>/<c>redo()</c> 自体は <c>refreshCheck()</c>/<c>autoSave()</c>（後続ピースで
 ///    移植する非同期処理）を呼ぶため、このピースにはまだ含めない）
-///  - 単純な同期設定セッター（並列数・予算秒数・計算方式 等）
+///  - 単純な同期設定セッター（並列数・予算秒数・最適化方式 等）
 ///
 /// [背景実行の切り分け] Kotlin原本の <c>OptimizationRepository</c>（<c>work/OptimizationRepository.kt</c>）
 /// はAndroid/WorkManagerに一切依存しない純粋な状態ブリッジであることが判明したため、
@@ -188,7 +188,7 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>画面のメッセージで「何の実行中か」を言うための名前。背景実行には名前が無いので既定を返す。</summary>
-    internal string BusyWhat() => _boardJobLabel ?? "バックグラウンド計算";
+    internal string BusyWhat() => _boardJobLabel ?? "バックグラウンド最適化";
 
     /// <summary>
     /// [3.328.0 → 3.336.0/外部レビュー P1 の由来をそのまま記録] 編集・実行の可否は**ここだけ**を見る。

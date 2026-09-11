@@ -495,7 +495,7 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.LastImportCsvTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("バックグラウンド計算の実行中です", vm.Ui.Message);
+        Assert.Contains("バックグラウンド最適化の実行中です", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("CSV取込 を取り消しました"));
     }
 

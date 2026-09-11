@@ -84,7 +84,7 @@ public sealed partial class MagiViewModel
         var st0 = _state;
         var sched0 = _currentSchedule;
         if (st0 is null || sched0 is null) return;
-        if (RunBlockedByInFlight("バックグラウンド計算の開始")) return;
+        if (RunBlockedByInFlight("バックグラウンド最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         PushUndo();
         OptimizationRepository.Clear();
@@ -131,7 +131,7 @@ public sealed partial class MagiViewModel
         MagiState st0, int[][] sched0, long runId, int budgetSec, int workers, CancellationToken ct)
     {
         var terminalLogged = false;
-        void BgNote(string msg, string level = "I") => LogOp(level, $"バックグラウンド計算: {msg}");
+        void BgNote(string msg, string level = "I") => LogOp(level, $"バックグラウンド最適化: {msg}");
         void Terminal(string msg, string level = "I")
         {
             if (terminalLogged) return;
@@ -184,7 +184,7 @@ public sealed partial class MagiViewModel
             // [Kotlin原本との差③] Android通知が無いため、ここで直接 Ui を更新する（クラスKDoc参照）。
             Ui.MessageIsError = false;
             Ui.Running = false;
-            Ui.Message = "バックグラウンド計算を停止しました";
+            Ui.Message = "バックグラウンド最適化を停止しました";
             throw;
         }
         catch (Exception e)
@@ -193,7 +193,7 @@ public sealed partial class MagiViewModel
             // [Kotlin原本との差③] Android通知が無いため、ここで直接 Ui を更新する（クラスKDoc参照）。
             Ui.MessageIsError = true;
             Ui.Running = false;
-            Ui.Message = $"バックグラウンド計算に失敗しました（{e.GetType().Name}）";
+            Ui.Message = $"バックグラウンド最適化に失敗しました（{e.GetType().Name}）";
         }
         finally
         {
@@ -219,7 +219,7 @@ public sealed partial class MagiViewModel
         //   通してしまう。runId==0 は識別子を持たない経路（この移植では実質未使用）。
         if (_bgRunId != 0L && r.RunId != 0L && r.RunId != _bgRunId)
         {
-            LogOp("W", "バックグラウンド計算の結果を破棄しました（置き換えられた古い実行の結果）");
+            LogOp("W", "バックグラウンド最適化の結果を破棄しました（置き換えられた古い実行の結果）");
             return;
         }
         // [3.328.0/外部レビューの由来をそのまま記録] 背景の結果は「開始時の入力」に対して計算されたもの。
@@ -229,10 +229,10 @@ public sealed partial class MagiViewModel
             _bgStateKey = 0L;
             _bgRunId = 0L;
             _bgInput = null;
-            LogOp("W", "バックグラウンド計算の結果を破棄しました（計算中に設定またはデータが変わったため）");
+            LogOp("W", "バックグラウンド最適化の結果を破棄しました（最適化中に設定またはデータが変わったため）");
             Ui.MessageIsError = false;
             Ui.Running = false;
-            Ui.Message = "計算中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。";
+            Ui.Message = "最適化中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。";
             return;
         }
         _bgStateKey = 0L;

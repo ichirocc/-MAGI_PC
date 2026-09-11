@@ -122,8 +122,8 @@ public sealed record AnalysisTriage(
         }
 
         var note = computed
-            ? "計算後も残っている項目です。構造的に残ると判定されたものは上へ移しています。"
-            : "実行前の概算です。期間の制約・禁止の並びなどの構造的な要因により、計算後も残る場合があります。";
+            ? "最適化後も残っている項目です。構造的に残ると判定されたものは上へ移しています。"
+            : "実行前の概算です。期間の制約・禁止の並びなどの構造的な要因により、最適化後も残る場合があります。";
         return new AnalysisTriage(computed, blockers, AggregateIssues(ui.SettingIssues), searching, ok, busy, note);
     }
 }

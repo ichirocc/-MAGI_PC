@@ -489,7 +489,7 @@ public sealed partial class AnalysisView : UserControl
     }
 
     /// <summary>
-    /// ④ 回数の固定が計算に与えた影響（Kotlin原本 <c>PinFixedImpactCard</c>）。観測できた試行が1回以上あるときだけ出す
+    /// ④ 回数の固定が最適化に与えた影響（Kotlin原本 <c>PinFixedImpactCard</c>）。観測できた試行が1回以上あるときだけ出す
     /// （0 は「緩めても変わらない」の証明にはならない＝<see cref="PinTargetView"/> のKDoc参照）。
     /// 緩め幅は決め打ちしない（実測で ±1 と ±3 の優劣が逆転した）＝下限側・上限側を別々に1段だけ。
     /// </summary>

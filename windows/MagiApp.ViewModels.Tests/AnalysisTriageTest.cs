@@ -44,7 +44,7 @@ public class AnalysisTriageTest
         Assert.False(t.Computed);
         Assert.Empty(t.Blockers);
         Assert.Equal(new HashSet<string> { "期間の制約", "必須の並び", "曜日の偏り" }, t.Searching.Select(r => r.Label).ToHashSet());
-        Assert.Contains("計算後も残る場合があります", t.SearchNote);
+        Assert.Contains("最適化後も残る場合があります", t.SearchNote);
     }
 
     [Fact]

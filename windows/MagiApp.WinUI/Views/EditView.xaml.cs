@@ -199,7 +199,7 @@ public sealed partial class EditView : UserControl
         NextStepPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         NextStepText.Text = "次の一手: " + (
             c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
-            : c.Wishes == 0 ? "次に『希望シフト』を登録すると できあがり度 が上がります。"
+            : c.Wishes == 0 ? "次に『希望シフト』を登録すると 解消度 が上がります。"
             : "準備OK。ホームの『勤務表をつくる』で作成できます。");
         RenderChecklist(ui);
     }
@@ -986,7 +986,7 @@ public sealed partial class EditView : UserControl
         RemoveStaffButton.IsEnabled = editable && hasStaff;
         StaffHintText.Text = editable
             ? "削除すると、その人の勤務・希望・個人の回数も消えます（「元に戻す」で戻せます）。"
-            : (ui.Loaded ? "計算の実行中は職員を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "最適化の実行中は職員を変更できません。終わってからにしてください。" : "");
 
         RenderStaffRange(editable);
         RenderStaffShiftMatrix(ui, editable);
@@ -1304,7 +1304,7 @@ public sealed partial class EditView : UserControl
         EditMasterDaysButton.IsEnabled = editable;
         MasterDaysHintText.Text = editable
             ? ""
-            : (ui.Loaded ? "計算の実行中は期間を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "最適化の実行中は期間を変更できません。終わってからにしてください。" : "");
 
         SyncReorderList(_shiftListItems, ui.ShiftSymbols);
 
@@ -1330,7 +1330,7 @@ public sealed partial class EditView : UserControl
         }
         else
         {
-            MasterShiftHintText.Text = editable ? "" : (ui.Loaded ? "計算の実行中はシフトを変更できません。終わってからにしてください。" : "");
+            MasterShiftHintText.Text = editable ? "" : (ui.Loaded ? "最適化の実行中はシフトを変更できません。終わってからにしてください。" : "");
         }
 
         var groups = _vm.GroupLabels();
@@ -1348,7 +1348,7 @@ public sealed partial class EditView : UserControl
         MasterGroupHintText.Text = editable
             ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。" +
               $" 使用中の記号: {string.Join("・", _vm.GroupKigouList())}"
-            : (ui.Loaded ? "計算の実行中はグループを変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "最適化の実行中はグループを変更できません。終わってからにしてください。" : "");
 
         RenderGroupRange(editable);
 
@@ -1382,7 +1382,7 @@ public sealed partial class EditView : UserControl
         UpdateConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
         RemoveConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
         if (!editable)
-            ConstraintHintText.Text = ui.Loaded ? "計算の実行中はルールを変更できません。終わってからにしてください。" : "";
+            ConstraintHintText.Text = ui.Loaded ? "最適化の実行中はルールを変更できません。終わってからにしてください。" : "";
     }
 
     /// <summary>
@@ -1791,7 +1791,7 @@ public sealed partial class EditView : UserControl
         MasterSkillGroupHintText.Text = editable
             ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。" +
               (_vm.SkillGroupKigouList().Count > 0 ? $" 使用中の記号: {string.Join("・", _vm.SkillGroupKigouList())}" : "")
-            : (ui.Loaded ? "計算の実行中はスキル区分を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "最適化の実行中はスキル区分を変更できません。終わってからにしてください。" : "");
     }
 
     /// <summary>選択中のスキル区分の名前・記号を入力欄へ取り込む（選択が変わったときだけ）。</summary>

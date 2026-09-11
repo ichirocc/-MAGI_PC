@@ -95,16 +95,16 @@
                 <TextBlock x:Name="C1Title" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock x:Name="C1UnknownText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8" />
                 <TextBlock x:Name="C1NoteText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8"
-                           Text="※ 直近の計算で試した直し方の記録です。期間の制約は職員・シフト・決まりごとに分けています（同じ決まりの中に複数の期間がある場合はまとめて数えています）。" />
+                           Text="※ 直近の最適化で試した直し方の記録です。期間の制約は職員・シフト・決まりごとに分けています（同じ決まりの中に複数の期間がある場合はまとめて数えています）。" />
                 <StackPanel x:Name="C1List" Spacing="8" />
                 <TextBlock x:Name="C1MoreText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <HyperlinkButton x:Name="C1DetailToggle" Padding="0" Click="OnC1DetailToggleClick" />
                 <Button x:Name="C1GoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
             </StackPanel>
 
-            <!-- ④ 回数の固定が計算に与えた影響（Kotlin原本 PinFixedImpactCard、3.325.0 で c1 診断から分離）。 -->
+            <!-- ④ 回数の固定が最適化に与えた影響（Kotlin原本 PinFixedImpactCard、3.325.0 で c1 診断から分離）。 -->
             <StackPanel x:Name="PinSection" Spacing="8">
-                <TextBlock Text="回数の固定が計算に与えた影響" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <TextBlock Text="回数の固定が最適化に与えた影響" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock x:Name="PinSummaryText" Style="{StaticResource MagiBodyMediumTextStyle}" TextWrapping="Wrap" />
                 <HyperlinkButton x:Name="PinDetailToggle" Padding="0" Click="OnPinDetailToggleClick" />
                 <StackPanel x:Name="PinDetailPanel" Spacing="4" Visibility="Collapsed">

@@ -5,7 +5,7 @@
 
     <!--
       [フェーズ9] 「設定」タブ。Kotlin原本 SettingsCard（最適化設定）に相当する部分——
-      並列数・計算時間・計算方式・仕上げ最適化・ネイティブ加速表示・パリティ照合表示・禁止連続の
+      並列数・最適化時間・最適化方式・仕上げ最適化・ネイティブ加速表示・パリティ照合表示・禁止連続の
       事前フィルタ/崩し範囲。いずれも既存の MagiViewModel セッター（SetWorkers 等、フェーズ9ピース5で
       移植済み・テスト済み）へ直接委譲するだけの薄い配線。
       表示色（シフトの記号色・違反枠の基準色/族別色、Kotlin原本 ColorSettingsView 相当）は
@@ -27,14 +27,14 @@
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock x:Name="BudgetLabel" Text="計算の制限時間" />
+                <TextBlock x:Name="BudgetLabel" Text="最適化の制限時間" />
                 <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
                         TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
                         ValueChanged="OnBudgetChanged" />
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock Text="計算方式" />
+                <TextBlock Text="最適化方式" />
                 <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnAlgorithmChanged">
                     <ComboBoxItem Content="おまかせ（予算から自動選択）" Tag="Auto" />

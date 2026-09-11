@@ -54,7 +54,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = false;
-            Ui.Message = "計算の実行中は下書きをつくれません（完了または「やめる」の後にどうぞ）";
+            Ui.Message = "最適化の実行中は下書きをつくれません（完了または「やめる」の後にどうぞ）";
             return;
         }
         if (!EnsureValidForRun(st, sched)) return;

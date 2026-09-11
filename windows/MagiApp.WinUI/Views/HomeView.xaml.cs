@@ -89,6 +89,8 @@ public sealed partial class HomeView : UserControl
         var shortDays = shortfalls.Select(x => x.DayIndex).Distinct().Count();
         var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
 
+        // [UX改善/Android同期, ユーザー指示「ゲーム要素廃止」] phase「狩猟」はRPG風の演出語のため、
+        //   「完成」の対語である平易な「未完成」へ変更。
         string bg, fg, headline, bigLabel, phase, phaseHex;
         string? helperLabel;
         bool bigEnabled;
@@ -113,7 +115,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
-            headline = "③ できました！ そのまま配れます。" + (ui.RunSummary is { } rs
+            headline = "③ 完成しました。そのまま配れます。" + (ui.RunSummary is { } rs
                 ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
             bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
@@ -125,15 +127,15 @@ public sealed partial class HomeView : UserControl
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             headline = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
-            phase = "狩猟"; phaseHex = MagiAccent.Orange;
+            phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _window.SelectTab("edit"); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
         }
         else
         {
             bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
-            headline = "もう少しです。" + (worstDay is null ? $"必須違反が {ui.BestHard}件 残っています。" : $"{worstDay} が人手不足です。");
+            headline = worstDay is null ? $"必須違反が {ui.BestHard}件 残っています。" : $"{worstDay} が人手不足です。";
             bigLabel = "なおすのを手伝って"; bigEnabled = shortfalls.Count > 0; helperLabel = null;
-            phase = "狩猟"; phaseHex = MagiAccent.Orange;
+            phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _ = ShowGuidedFixAsync(); _helperAction = () => { };
         }
 

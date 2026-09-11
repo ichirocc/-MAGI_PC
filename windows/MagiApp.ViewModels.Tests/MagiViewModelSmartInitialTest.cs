@@ -64,7 +64,7 @@ public class MagiViewModelSmartInitialTest
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("計算の実行中は下書きをつくれません", vm.Ui.Message);
+        Assert.Contains("最適化の実行中は下書きをつくれません", vm.Ui.Message);
         // 盤面は元の全休のまま——生成もPushUndoも一切走っていない。
         Assert.All(vm._currentSchedule!, row => Assert.All(row, cell => Assert.Equal(0, cell)));
     }

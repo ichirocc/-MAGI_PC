@@ -274,7 +274,7 @@ public class MagiViewModelBackgroundTest : IDisposable
 
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("バックグラウンド計算に失敗しました", vm.Ui.Message);
+        Assert.Contains("バックグラウンド最適化に失敗しました", vm.Ui.Message);
         Assert.False(OptimizationRepository.Running);
     }
 
