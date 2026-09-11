@@ -326,6 +326,31 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 勤務表マトリックスのカクつき・張りぼて感・バラツキ（ユーザー報告「カクつき無くす。
+  張りぼて感、バラツキある。スムーズおよびスマートなデザインにする」）:
+  - **張りぼて感・バラツキの原因**: `RenderSchedule`のデータセルがKotlin原本`FlatCell`
+    （`MagiScheduleViews.kt`）と構造的に乖離していた。原本は「角丸6dp・セル間は1.5dp相当の余白で
+    分離・違反の無いセルは既定で無枠(`plainBorder`既定false)」という設計だが、この移植は
+    「全セル角丸0(直角)・セル同士が密着・全セルへ常時1dp灰色罫線」という**原本に存在しない
+    表計算ソフト風の格子線**を描いていた（`grep`で`MagiScheduleViews.kt`のFlatCell/plainBorderの
+    定義を確認して発覚）。フォーカス枠も原本の`cs.primary`でなく独自色`DodgerBlue`を使っていた。
+    → データセル・ヘッダーセルとも角丸6・`Margin(1)`の余白分離・既定無枠（違反/フォーカス時のみ
+    枠を出す）へ変更、フォーカス色を`MagiPrimaryBrush`へ統一。集計グリッド(職員別/日別)は今回は
+    対象外（原本の対応Composableが別系統`TallyCard`のため、必要なら別途）。
+  - **カクつきの原因（2件）**: (1) データセル1個ごとに完全なFluent `Button`（ControlTemplate＋
+    VisualStateManager一式）を使っており、大盤面（最大30職員×31日=約930セル）では
+    `RenderSchedule`が毎回グリッド全体を作り直す設計と相まって描画コストが支配的だった
+    → 軽量な`Border`＋手動`Tapped`/`Pointer*`（押下時のみOpacityを0.6へ、離すと復帰）へ置換
+    （実行中の無効化もOpacity＋ハンドラ未登録で表現）。(2) 2026-09-10のカクつき対策
+    (`CoalescedRender`)がバースト対策（進捗イベント連打）だけをカバーしており、
+    検索ボックスの1文字ごと(`OnSearchTextChanged`)・セルタップ(`MarkTapped`)・フィルタ切替など
+    同ファイル内の直接`Render()`呼び出し9箇所が素通りだった＝文字入力のたびにグリッド全体
+    （数百〜千要素）を再構築していた → `_focusCellElement.StartBringIntoView()`が直後の描画結果に
+    依存する`FocusCell`の1箇所を除き、全て`_renderCoalescer.Request()`経由へ統一。
+  - サンドボックスでは実機検証不可（`XamlCompiler.exe`がWindows専用ネイティブバイナリのため
+    このLinux環境ではビルド自体が不可、前回までのコミット同様）。手動コードレビュー＋
+    C#構文の目視確認・波括弧/丸括弧の対応数チェックのみで検証。
+
 - 2026-09-11 既定OFFトグルのAB評価（ユーザー指示・Android 3.518.0 と同時）: `PolishGate.FilterC3nIncrease`を
   既定`true`へ昇格（Android既存測定＝ON/OFFで最終盤面完全一致・速度のみの純増、新規A/B不要）。
   `UiState.BlockSwapC3nFilter`の既定も同時に`true`へ（Kotlin側でPolishGateとUiStateの既定が乖離すると

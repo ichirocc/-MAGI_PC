@@ -20,7 +20,12 @@ namespace MagiApp.WinUI.Views;
 /// グリッド描画コードを、フェーズ9のマルチタブ化に伴いこの <see cref="UserControl"/> へ切り出した
 /// （コードビハインド駆動レンダリングのまま）。
 ///
-/// [セル編集] データセルを <see cref="Button"/> にし、タップで <see cref="MenuFlyout"/> を開いて
+/// [セル編集] データセルは <see cref="Border"/>＋<c>Tapped</c>（2026-09-11、旧: <see cref="Button"/>。
+/// 大盤面ではセル数が数百〜千を超え、<see cref="Button"/> 1個ごとのControlTemplate/VisualStateManager
+/// のコストが総描画時間を支配していた＝タップやフィルタ操作のたびに<see cref="RenderSchedule"/>が
+/// グリッド全体を作り直す設計と組み合わさって体感カクつきの主因になっていた。軽量な
+/// <see cref="Border"/>へ替え、押下フィードバックは手動のOpacity切替のみに縮小）でタップを拾い、
+/// <see cref="MenuFlyout"/> を開いて
 /// <see cref="MagiViewModel.AllowedShiftsFor"/>（そのスタッフが担当可能なシフト一覧）から選ばせ、
 /// <see cref="MagiViewModel.SetCell"/> で確定する。<c>SetCell</c> 自身が実行中(<c>OptimizeInFlight</c>)を
 /// ガードして無言で拒否するため、ここでも <see cref="UiState.Running"/> の間はボタンを無効化して
@@ -148,7 +153,7 @@ public sealed partial class ScheduleView : UserControl
         {
             timer.Stop();
             _focusCell = null;
-            Render();
+            _renderCoalescer.Request();
         };
         _focusTimer = timer;
         timer.Start();
@@ -158,14 +163,16 @@ public sealed partial class ScheduleView : UserControl
     private void MarkTapped(int i, int j)
     {
         _tapped = (i, j);
-        Render();
+        // [2026-09-11/カクつき対策] StartBringIntoView等の描画結果への依存が無いためCoalescedRenderで
+        // 間引く（FocusCellの直呼びは_focusCellElementへの依存があるため対象外のまま）。
+        _renderCoalescer.Request();
         _tappedTimer?.Stop();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
             _tapped = null;
-            Render();
+            _renderCoalescer.Request();
         };
         _tappedTimer = timer;
         timer.Start();
@@ -227,7 +234,7 @@ public sealed partial class ScheduleView : UserControl
             chip.Click += (_, _) =>
             {
                 if (!_vioEnabled.Remove(key)) _vioEnabled.Add(key);
-                Render();
+                _renderCoalescer.Request();
             };
             BucketChips.Children.Add(chip);
         }
@@ -286,35 +293,38 @@ public sealed partial class ScheduleView : UserControl
         return row;
     }
 
+    // [2026-09-11/カクつき対策] 以下5つは検索・フィルタのUI操作に伴う再描画で、直前の描画結果への
+    //   依存が無いためCoalescedRenderで間引く。OnSearchTextChangedは特に、キー入力のたびに
+    //   グリッド全体（数百〜千要素）を作り直していた分岐のため効果が大きい。
     private void OnSearchLegendToggleClick(object sender, RoutedEventArgs e)
     {
         _searchLegendOpen = !_searchLegendOpen;
-        Render();
+        _renderCoalescer.Request();
     }
 
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
     {
         if (SearchBox.Text == _nameQuery) return;
         _nameQuery = SearchBox.Text;
-        Render();
+        _renderCoalescer.Request();
     }
 
     private void OnSearchClearClick(object sender, RoutedEventArgs e)
     {
         _nameQuery = "";
-        Render();
+        _renderCoalescer.Request();
     }
 
     private void OnShowAllVioClick(object sender, RoutedEventArgs e)
     {
         _vioEnabled.UnionWith(VioBuckets.AllKeys);
-        Render();
+        _renderCoalescer.Request();
     }
 
     private void OnFocusToggleClick(object sender, RoutedEventArgs e)
     {
         _focusMode = FocusToggle.IsChecked == true;
-        Render();
+        _renderCoalescer.Request();
     }
 
     private double HeaderX(int d) =>
@@ -669,9 +679,12 @@ public sealed partial class ScheduleView : UserControl
             var border = new Border
             {
                 Child = block,
-                BorderBrush = new SolidColorBrush(Colors.LightGray),
-                // [Token] 罫線1dpは意図的な最小値のため据え置き（スペーシングトークンの対象外）。
-                BorderThickness = new Thickness(0, 0, 1, 1),
+                // [2026-09-11] Kotlin原本 FlatCell は既定で無枠・角丸6dp・セル間は罫線でなく余白で分離
+                // （plainBorder既定false）。旧実装は全セルに常時1dp灰色罫線を引いており、原本に無い
+                // 「表計算ソフトの格子線」的な見た目のズレ＝張りぼて感・バラツキの主因だった。
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(1),
             };
             if (tint is { } tintColor) border.Background = new SolidColorBrush(Color.FromArgb(36, tintColor.R, tintColor.G, tintColor.B));
             // [クロスハイライト／違反ジャンプ] 行=職員名は淡い主色地、列=日付は主色の太枠（Kotlin原本と同じ）。
@@ -702,30 +715,17 @@ public sealed partial class ScheduleView : UserControl
             // 変更しても勤務表グリッドの見た目が変わらない「論理的な箱」だった。
             var bg = k >= 0 && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.Transparent) : Colors.Transparent;
             var fg = k >= 0 && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
-            var button = new Button
+            var symbolBlock = new TextBlock
             {
-                Content = new TextBlock { Text = sym, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center, Foreground = new SolidColorBrush(fg) },
-                // [Token] セルパディング/枠/角丸は密グリッド用の意図的な値（据え置き。上のAddCellと同じ理由）。
-                Padding = new Thickness(6, 4, 6, 4),
-                MinWidth = 32,
-                HorizontalContentAlignment = HorizontalAlignment.Center,
-                Background = new SolidColorBrush(bg),
-                BorderThickness = new Thickness(0),
-                CornerRadius = new CornerRadius(0),
-                IsEnabled = !ui.Running,
+                Text = sym, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(fg),
             };
-            button.Click += (sender, _) =>
-            {
-                MarkTapped(i, j);
-                ShowCellEditor((FrameworkElement)sender, i, j);
-            };
-
-            var cell = new Grid();
-            cell.Children.Add(button);
+            var content = new Grid();
+            content.Children.Add(symbolBlock);
             if (ui.Wishes.TryGetValue($"{i},{j}", out var wishK))
             {
                 var reflected = wishK == k;
-                cell.Children.Add(new Ellipse
+                content.Children.Add(new Ellipse
                 {
                     Width = 8,
                     Height = 8,
@@ -737,10 +737,10 @@ public sealed partial class ScheduleView : UserControl
                 });
             }
 
-            // [Token] 罫線1dp/違反枠2dp/フォーカス枠3dpはいずれも意図的な強調段階の値で
-            // スペーシング/角丸トークンの対象外（据え置き）。
-            Brush borderBrush = new SolidColorBrush(Colors.LightGray);
-            var thickness = new Thickness(0, 0, 1, 1);
+            // [2026-09-11/Kotlin原本FlatCell準拠] 違反の無いセルは既定で無枠（plainBorder既定false）。
+            // 枠は必須違反(赤・実線2dp)/要調整(橙・実線2dp)/フォーカス(主色・3dp)のときだけ出す。
+            Brush borderBrush = new SolidColorBrush(Colors.Transparent);
+            var thickness = new Thickness(0);
             var vioClass = VioBuckets.VisibleCellVio(ui, $"{i},{j}", _vioEnabled);
             if (vioClass is not null)
             {
@@ -750,19 +750,48 @@ public sealed partial class ScheduleView : UserControl
             // [集中モード] 違反・未反映希望・注目セル以外を淡色に沈める（非表示にはしない＝被覆の文脈は残す）。
             var unreflectedWish = ui.Wishes.TryGetValue($"{i},{j}", out var wk0) && wk0 != k;
             var cellFocused = _focusCell is { } fc0 && fc0.I == i && fc0.J == j;
-            if (_focusMode && vioClass is null && !unreflectedWish && !cellFocused) button.Opacity = 0.35;
-            // [違反箇所へのジャンプ] 注目セルは一時的に強調色の太枠へ差し替える（FocusCell 参照）。
+            var dimmed = _focusMode && vioClass is null && !unreflectedWish && !cellFocused;
+            // [違反箇所へのジャンプ] 注目セルは一時的に主色の太枠へ差し替える（FocusCell 参照。
+            // Kotlin原本は cs.primary、旧実装のDodgerBlueは原本に無い独自色だったため差し替え）。
             var isFocused = _focusCell is { } fc && fc.I == i && fc.J == j;
             if (isFocused)
             {
-                borderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                borderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
                 thickness = new Thickness(3);
             }
-            var border = new Border { Child = cell, BorderBrush = borderBrush, BorderThickness = thickness };
-            if (isFocused) _focusCellElement = border;
-            Grid.SetRow(border, row);
-            Grid.SetColumn(border, col);
-            ScheduleGridHost.Children.Add(border);
+
+            var cellSurface = new Border
+            {
+                Child = content,
+                // [Token] セルパディング/角丸/余白は Kotlin原本 FlatCell（角丸6dp・1.5dp間隔）に合わせた値。
+                Padding = new Thickness(6, 4, 6, 4),
+                MinWidth = 32,
+                Background = new SolidColorBrush(bg),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(1),
+                BorderBrush = borderBrush,
+                BorderThickness = thickness,
+                Opacity = dimmed ? 0.35 : (ui.Running ? 0.5 : 1.0),
+            };
+            if (!ui.Running)
+            {
+                // [2026-09-11] Button の PointerOver/Pressed 視覚状態を、押下中だけ薄くする最小限の
+                // 手動フィードバックへ置換（軽量化が目的のため、Reveal相当の演出は追わない＝最小デザイン）。
+                var restOpacity = cellSurface.Opacity;
+                cellSurface.PointerPressed += (_, _) => cellSurface.Opacity = 0.6;
+                cellSurface.PointerReleased += (_, _) => cellSurface.Opacity = restOpacity;
+                cellSurface.PointerExited += (_, _) => cellSurface.Opacity = restOpacity;
+                cellSurface.PointerCanceled += (_, _) => cellSurface.Opacity = restOpacity;
+                cellSurface.Tapped += (sender, _) =>
+                {
+                    MarkTapped(i, j);
+                    ShowCellEditor((FrameworkElement)sender, i, j);
+                };
+            }
+            if (isFocused) _focusCellElement = cellSurface;
+            Grid.SetRow(cellSurface, row);
+            Grid.SetColumn(cellSurface, col);
+            ScheduleGridHost.Children.Add(cellSurface);
         }
 
         _nameHeader = AddCell(0, 0, "", header: true);
