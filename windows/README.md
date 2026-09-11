@@ -326,6 +326,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 既定OFFトグルのAB評価（ユーザー指示・Android 3.518.0 と同時）: `PolishGate.FilterC3nIncrease`を
+  既定`true`へ昇格（Android既存測定＝ON/OFFで最終盤面完全一致・速度のみの純増、新規A/B不要）。
+  `UiState.BlockSwapC3nFilter`の既定も同時に`true`へ（Kotlin側でPolishGateとUiStateの既定が乖離すると
+  「表示はOFFなのに実際の挙動はON」になる不整合を発見・両言語で同時に直した）。`UiStateTest`/
+  `MagiViewModelTest`の既定値前提を更新（後者は既定→ONのままではsetter方向の検証にならないため
+  true→falseの向きに変更）。`MagiEngine.Tests`(838件)・`MagiApp.ViewModels.Tests`(440件)green。
+  `lnsAdaptive`はC#未移植（Kotlin 3.510.2で追加された機能。今回の指示は既存トグルの既定値変更が主旨のため
+  新規移植はスコープ外＝既知のギャップとして記録）。
+
 - 2026-09-10 配色がOSのダーク/ライト設定に追従してしまっていた（ユーザー実機報告「配色などが見にくい」、
   直前の可読性修正コミットの後もなお発生）:
   `MainWindow.xaml` のルート `Grid` に `RequestedTheme` を一切指定していなかったため、WinUI3 既定の

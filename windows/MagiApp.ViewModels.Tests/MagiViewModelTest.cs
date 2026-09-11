@@ -86,16 +86,17 @@ public class MagiViewModelTest
     [Fact]
     public void SetBlockSwapC3nFilterUpdatesUiAndPolishGate()
     {
+        var original = PolishGate.FilterC3nIncrease; // [3.518.0] 既定がtrueへ変わったため元の値を保存して戻す
         var vm = new MagiViewModel();
         try
         {
-            vm.SetBlockSwapC3nFilter(true);
-            Assert.True(vm.Ui.BlockSwapC3nFilter);
-            Assert.True(PolishGate.FilterC3nIncrease);
+            vm.SetBlockSwapC3nFilter(false);
+            Assert.False(vm.Ui.BlockSwapC3nFilter);
+            Assert.False(PolishGate.FilterC3nIncrease);
         }
         finally
         {
-            PolishGate.FilterC3nIncrease = false; // 既定へ戻す（他テストへ漏らさない）
+            PolishGate.FilterC3nIncrease = original; // 他テストへ漏らさない
         }
     }
 

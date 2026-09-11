@@ -106,8 +106,9 @@ public sealed partial class UiState : ObservableObject
     /// <summary>Kotlinパリティ照合トグル。同上の理由で保持。</summary>
     [ObservableProperty] private bool nativeParity = true;
 
-    /// <summary>ブロック巡回交換で c3n が増える候補を候補生成段階で捨てるか。採用結果は不変・評価枠の節約のみ。</summary>
-    [ObservableProperty] private bool blockSwapC3nFilter;
+    /// <summary>ブロック巡回交換で c3n が増える候補を候補生成段階で捨てるか。採用結果は不変・評価枠の節約のみ。
+    /// 既定 <b>true</b>（Kotlin 3.518.0/ユーザー指示でPolishGate側の既定を昇格した際に同時に揃えた）。</summary>
+    [ObservableProperty] private bool blockSwapC3nFilter = true;
 
     /// <summary>禁止連続を崩す日を j±1 から違反パターン全域へ広げるか。既定OFF（実データで利得が一貫しない）。</summary>
     [ObservableProperty] private bool wideC3nBreak;

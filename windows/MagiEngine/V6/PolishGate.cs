@@ -28,14 +28,16 @@ public static class PolishGate
     public static volatile bool WideC3nBreakDays = false;
 
     /// <summary>
-    /// ブロック巡回交換で、禁止連続(c3n)が正味増える候補を<b>候補生成の段階で</b>捨てるか。既定 false。
+    /// ブロック巡回交換で、禁止連続(c3n)が正味増える候補を<b>候補生成の段階で</b>捨てるか。既定 <b>true</b>
+    /// （Kotlin 3.518.0/ユーザー指示「既定OFFの処理をAB評価しメリットあれば既定Onに」で確定。
+    /// ON/OFFで採用結果は変わらないため新規A/Bは不要＝既存測定をそのまま適用）。
     ///
     /// c3n は HARD なので増える候補は最終的に <c>isBetter</c> が必ず却下する＝ON/OFF で<b>採用結果は
     /// 変わらない</b>（Kotlin 3.296.0 の A/B 実測で最終盤面・採用数が完全一致することを確認済み）。
     /// ON にすると構造的に詰んだ候補へフル checker を呼ばなくなり、評価枠を soft 判定まで進める
     /// 候補へ回せる（実測: 正式評価 48→14〜38 件）。
     /// </summary>
-    public static volatile bool FilterC3nIncrease = false;
+    public static volatile bool FilterC3nIncrease = true;
 
     /// <summary>[3.514.0/UIトグル化] <see cref="CombinatorialRepair.CombineAndApply"/> の exhaustPairs
     /// （経緯: history 3.512.6）。既定OFF・未計測。</summary>
