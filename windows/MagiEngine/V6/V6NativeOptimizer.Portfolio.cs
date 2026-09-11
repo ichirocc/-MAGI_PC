@@ -145,6 +145,77 @@ public static partial class V6NativeOptimizer
     }
 
     /// <summary>
+    /// [Kotlin 3.517.0] PERSON_SWAP_ILS: 同群2名の1ヶ月分割当を丸ごと交換するILS摂動。交換相手は全ペア
+    /// 総当たりでなく「fair 負担が大きい職員」優先（経緯・実証データは Android <c>docs/history/3.4xx.md</c>
+    /// 3.517.0/3.519.0参照）。
+    ///
+    /// [C#移植上の判断・可視性] <see cref="ForceDiverseKick"/> と同じ理由で <c>internal</c> へ格上げ
+    /// （fair負担の集計式・同群ペア選定という非自明な振る舞いを直接検証するため）。
+    /// </summary>
+    internal static void PersonSwapKick(Problem p, int[][] outSched, JavaRandom rng, int pairs)
+    {
+        if (p.S < 2 || p.T == 0) return;
+        var counts = new int[p.S][];
+        for (var i = 0; i < p.S; i++) counts[i] = new int[p.K];
+        for (var i = 0; i < p.S; i++)
+            for (var j = 0; j < p.T; j++)
+            {
+                var k = outSched[i][j];
+                if (k >= 0 && k < p.K) counts[i][k]++;
+            }
+        // MirrorCore（評価器）のfair計算と同一式（群×担当ONシフトごとに round(平均) からのL1偏差）で
+        // 職員ごとの負担を集計する。
+        var burden = new double[p.S];
+        for (var g = 0; g < p.G; g++)
+        {
+            var mem = p.GroupMembers[g];
+            if (mem.Length < 2) continue;
+            foreach (var k in p.Bucket[g])
+            {
+                var sum = 0;
+                foreach (var x in mem) sum += counts[x][k];
+                var tgt = (int)Math.Round(sum / (double)mem.Length, MidpointRounding.AwayFromZero);
+                foreach (var x in mem) burden[x] += Math.Abs(counts[x][k] - tgt);
+            }
+        }
+        var swapped = new bool[p.S];
+        var done = 0;
+        var attempts = 0;
+        var maxAttempts = Math.Max(32, p.S * 4);
+        while (done < pairs && attempts++ < maxAttempts)
+        {
+            var a = WeightedBurdenPick(burden, swapped, rng);
+            if (a < 0) break;
+            var g = p.Sgrp[a];
+            var candidates = p.GroupMembers[g].Where(x => x != a && !swapped[x]).ToArray();
+            if (candidates.Length == 0) { swapped[a] = true; continue; }
+            var b = candidates.OrderByDescending(x => burden[x]).First();
+            for (var j = 0; j < p.T; j++)
+            {
+                (outSched[a][j], outSched[b][j]) = (outSched[b][j], outSched[a][j]);
+            }
+            swapped[a] = true;
+            swapped[b] = true;
+            done++;
+        }
+    }
+
+    private static int WeightedBurdenPick(double[] burden, bool[] excluded, JavaRandom rng)
+    {
+        var candidates = Enumerable.Range(0, burden.Length).Where(i => !excluded[i]).ToArray();
+        if (candidates.Length == 0) return -1;
+        var total = candidates.Sum(i => burden[i]);
+        if (total <= 0.0) return candidates[rng.NextInt(candidates.Length)];
+        var r = rng.NextDouble() * total;
+        foreach (var i in candidates)
+        {
+            r -= burden[i];
+            if (r <= 0.0) return i;
+        }
+        return candidates[^1];
+    }
+
+    /// <summary>
     /// Faithful port of Kotlin's public <c>elitePathRelink</c> (Glover, Laguna &amp; Martí 2000 /
     /// Scatter Search). Force-marches <paramref name="best"/> toward each of
     /// <paramref name="alternatives"/> one differing cell at a time (violation cells first, so the
@@ -418,6 +489,13 @@ public static partial class V6NativeOptimizer
             {
                 var outSched = globalBest.Copy2D();
                 ForceMaxDistanceKick(p, outSched, peers, rng, 3 + n);
+                return outSched;
+            }
+
+            case HypothesisEpochRole.PersonSwapIls:
+            {
+                var outSched = globalBest.Copy2D();
+                PersonSwapKick(p, outSched, rng, n);
                 return outSched;
             }
 

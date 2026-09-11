@@ -43,7 +43,18 @@ public class AdaptiveHypothesisEpochPolicyTest
     [InlineData(1, 6, HypothesisEpochRole.DayBlockAlns)]
     public void AssignmentFor_EscapeSlotsCycleThroughSixRoles(int index, int reassignments, HypothesisEpochRole expected)
     {
-        Assert.Equal(expected, AdaptiveHypothesisEpochPolicy.AssignmentFor(index, reassignments).Role);
+        // [3.519.0同期] PersonSwapKickの既定がtrueのため、元来の6役割ローテーションの不変条件は
+        // ゲートを明示offへ固定して検査する。
+        var original = PolishGate.PersonSwapKick;
+        PolishGate.PersonSwapKick = false;
+        try
+        {
+            Assert.Equal(expected, AdaptiveHypothesisEpochPolicy.AssignmentFor(index, reassignments).Role);
+        }
+        finally
+        {
+            PolishGate.PersonSwapKick = original;
+        }
     }
 
     [Theory]
@@ -184,8 +195,82 @@ public class AdaptiveHypothesisEpochPolicyTest
             [HypothesisEpochRole.LargeDestroyAlns] = "LARGE_DESTROY_ALNS",
             [HypothesisEpochRole.PersonalRsi] = "PERSONAL_RSI",
             [HypothesisEpochRole.MaxDistanceRsiPlus] = "MAX_DISTANCE_RSI_PLUS",
+            [HypothesisEpochRole.PersonSwapIls] = "PERSON_SWAP_ILS",
         };
         foreach (var (role, name) in expected)
             Assert.Equal(name, AdaptiveHypothesisEpochPolicy.RoleName(role));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // [3.519.0同期] PERSON_SWAP_ILS（PolishGate.PersonSwapKick gate）。Kotlin側HypothesisEpochPolicyTest.kt
+    // と同型。
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void PersonSwapIls_NeverAppearsWhenGateIsOff()
+    {
+        var original = PolishGate.PersonSwapKick;
+        PolishGate.PersonSwapKick = false;
+        try
+        {
+            foreach (var slot in new[] { 1, 2, 3, 5, 6, 7 })
+                for (var r = 0; r <= 20; r++)
+                    Assert.NotEqual(HypothesisEpochRole.PersonSwapIls, AdaptiveHypothesisEpochPolicy.AssignmentFor(slot, r).Role);
+
+            var expected = new HashSet<HypothesisEpochRole>
+            {
+                HypothesisEpochRole.DayBlockAlns,
+                HypothesisEpochRole.HardFamilyRsi,
+                HypothesisEpochRole.HardDebtRsiPlus,
+                HypothesisEpochRole.LargeDestroyAlns,
+                HypothesisEpochRole.PersonalRsi,
+                HypothesisEpochRole.MaxDistanceRsiPlus,
+            };
+            foreach (var slot in new[] { 1, 2, 3, 5, 6, 7 })
+            {
+                var roles = Enumerable.Range(0, 6).Select(r => AdaptiveHypothesisEpochPolicy.AssignmentFor(slot, r).Role).ToHashSet();
+                Assert.Equal(expected, roles);
+            }
+        }
+        finally
+        {
+            PolishGate.PersonSwapKick = original;
+        }
+    }
+
+    [Fact]
+    public void PersonSwapIls_JoinsRotationWhenGateIsOn()
+    {
+        var original = PolishGate.PersonSwapKick;
+        PolishGate.PersonSwapKick = true;
+        try
+        {
+            var seen = new HashSet<HypothesisEpochRole>();
+            for (var r = 0; r <= 20; r++) seen.Add(AdaptiveHypothesisEpochPolicy.AssignmentFor(1, r).Role);
+            Assert.Contains(HypothesisEpochRole.PersonSwapIls, seen);
+        }
+        finally
+        {
+            PolishGate.PersonSwapKick = original;
+        }
+    }
+
+    [Fact]
+    public void PersonSwapIls_MapsToRsiPlusWithBigEscapeQuantum()
+    {
+        Assert.Equal(V6Algorithm.RsiPlus, AdaptiveHypothesisEpochPolicy.AlgorithmFor(HypothesisEpochRole.PersonSwapIls));
+        var assignment = new HypothesisEpochAssignment(HypothesisEpochRole.PersonSwapIls, V6Algorithm.RsiPlus, 1);
+        Assert.Equal(
+            AdaptiveHypothesisEpochPolicy.RSI_PLUS_BASE_QUANTUM_SEC,
+            AdaptiveHypothesisEpochPolicy.QuantumSeconds(assignment, improvedPreviousEpoch: false, remainingSeconds: 999));
+    }
+
+    [Fact]
+    public void PersonSwapIls_BaseIntensityIsOnePairAndGrowsWithStagnation()
+    {
+        Assert.Equal(1, AdaptiveHypothesisEpochPolicy.IntensityFor(HypothesisEpochRole.PersonSwapIls, 0));
+        Assert.True(
+            AdaptiveHypothesisEpochPolicy.IntensityFor(HypothesisEpochRole.PersonSwapIls, 6) >
+            AdaptiveHypothesisEpochPolicy.IntensityFor(HypothesisEpochRole.PersonSwapIls, 0));
     }
 }

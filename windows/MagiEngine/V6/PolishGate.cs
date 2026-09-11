@@ -79,4 +79,9 @@ public static class PolishGate
         get => Volatile.Read(ref _normalStallFraction);
         set => Volatile.Write(ref _normalStallFraction, value);
     }
+
+    /// <summary>[Kotlin 3.517.0/3.519.0同期] AdaptivePortfolio の新ロール <c>PersonSwapIls</c>（全月入替→
+    /// 再最適化のILS摂動）を役割ローテーションに含めるか。既定 <b>true</b>（実データ4件×5seedで必須退行0件、
+    /// 根拠は Android <c>docs/algorithm_portfolio.md</c>「既定ONへ昇格」参照）。</summary>
+    public static volatile bool PersonSwapKick = true;
 }

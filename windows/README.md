@@ -326,6 +326,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 PORTFOLIO の新役割 PersonSwapIls を移植（ユーザー指示「同期する」、Android 3.517.0/3.519.0）:
+  `HypothesisEpochRole.PersonSwapIls`（`AdaptiveHypothesisEpochPolicy.cs`）・`PolishGate.PersonSwapKick`
+  （既定true）・`V6NativeOptimizer.PersonSwapKick`/`WeightedBurdenPick`（`V6NativeOptimizer.Portfolio.cs`、
+  `internal`昇格＝Kotlin原本の`ForceDiverseKick`等と同じ前例）を追加。同群2名の1ヶ月分割当を丸ごと交換して
+  からRSI+でフル再最適化するILS摂動。既存テスト`AssignmentFor_EscapeSlotsCycleThroughSixRoles`が
+  ゲート既定値へ暗黙依存していたのをAndroid側と同じ理由で発見・修正、新規`PersonSwapKickTest.cs`
+  （Kotlin側と同型のfair不変性・決定的ペア選定の固定）を追加。`MagiEngine.Tests` 844件(838+6)green。
+
 - 2026-09-11 既定OFFトグルのAB結果確定（Android 3.519.0と同時）:
   `CombineExhaustPairs`はAndroid側の正式A/B（170ペア）でlarge/infeasibleの1ペアに必須件数増を確認、
   既定OFFで確定（再提案しない）。コード内コメント「isBetterゲート不変＝退化しない」は個々の手の話で

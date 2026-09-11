@@ -11,6 +11,10 @@ public enum HypothesisEpochRole
     LargeDestroyAlns,
     PersonalRsi,
     MaxDistanceRsiPlus,
+
+    /// <summary>[Kotlin 3.517.0] 同群2名の1ヶ月分割当を丸ごと交換するILS摂動＝fairは交換不変だが他族の
+    /// 局所解構造を変える。<see cref="PolishGate.PersonSwapKick"/> が false の間は出現しない。</summary>
+    PersonSwapIls,
 }
 
 /// <summary>
@@ -51,6 +55,15 @@ public static class AdaptiveHypothesisEpochPolicy
         HypothesisEpochRole.MaxDistanceRsiPlus,
     };
 
+    // [Kotlin 3.517.0] PolishGate.PersonSwapKick が true(既定)のときだけ使う7要素版。false時は
+    // EscapeRoles(6要素)がそのまま使われ続けるので、BaseEscapeOffset/reassignmentsの剰余算術は
+    // フラグOFF時ビット単位で不変。
+    private static readonly HypothesisEpochRole[] EscapeRolesWithSwap =
+        EscapeRoles.Append(HypothesisEpochRole.PersonSwapIls).ToArray();
+
+    private static HypothesisEpochRole[] CurrentEscapeRoles() =>
+        PolishGate.PersonSwapKick ? EscapeRolesWithSwap : EscapeRoles;
+
     private static int BaseEscapeOffset(int index) => KotlinInterop.FloorMod(index, 8) switch
     {
         1 => 0,
@@ -65,12 +78,13 @@ public static class AdaptiveHypothesisEpochPolicy
     public static HypothesisEpochAssignment AssignmentFor(int index, int reassignments)
     {
         var slot = KotlinInterop.FloorMod(index, 8);
+        var roles = CurrentEscapeRoles();
         var role = slot switch
         {
             0 => HypothesisEpochRole.BaselineRefine,
             4 when reassignments == 0 => HypothesisEpochRole.BaselineRefine,
             4 => HypothesisEpochRole.EliteRelink,
-            _ => EscapeRoles[KotlinInterop.FloorMod(BaseEscapeOffset(slot) + reassignments, EscapeRoles.Length)],
+            _ => roles[KotlinInterop.FloorMod(BaseEscapeOffset(slot) + reassignments, roles.Length)],
         };
         return new HypothesisEpochAssignment(role, AlgorithmFor(role), IntensityFor(role, reassignments));
     }
@@ -80,7 +94,8 @@ public static class AdaptiveHypothesisEpochPolicy
         HypothesisEpochRole.DayBlockAlns or HypothesisEpochRole.LargeDestroyAlns => V6Algorithm.Alns,
         HypothesisEpochRole.HardFamilyRsi or HypothesisEpochRole.PersonalRsi => V6Algorithm.Rsi,
         HypothesisEpochRole.BaselineRefine or HypothesisEpochRole.EliteRelink
-            or HypothesisEpochRole.HardDebtRsiPlus or HypothesisEpochRole.MaxDistanceRsiPlus => V6Algorithm.RsiPlus,
+            or HypothesisEpochRole.HardDebtRsiPlus or HypothesisEpochRole.MaxDistanceRsiPlus
+            or HypothesisEpochRole.PersonSwapIls => V6Algorithm.RsiPlus,
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
     };
 
@@ -107,6 +122,8 @@ public static class AdaptiveHypothesisEpochPolicy
             HypothesisEpochRole.DayBlockAlns or HypothesisEpochRole.HardFamilyRsi or HypothesisEpochRole.PersonalRsi => 1,
             HypothesisEpochRole.HardDebtRsiPlus => 2,
             HypothesisEpochRole.LargeDestroyAlns or HypothesisEpochRole.MaxDistanceRsiPlus => 3,
+            // [Kotlin 3.517.0] intensity=交換するペア数。
+            HypothesisEpochRole.PersonSwapIls => 1,
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
         };
         return baseIntensity + growth;
@@ -172,6 +189,7 @@ public static class AdaptiveHypothesisEpochPolicy
         HypothesisEpochRole.LargeDestroyAlns => "LARGE_DESTROY_ALNS",
         HypothesisEpochRole.PersonalRsi => "PERSONAL_RSI",
         HypothesisEpochRole.MaxDistanceRsiPlus => "MAX_DISTANCE_RSI_PLUS",
+        HypothesisEpochRole.PersonSwapIls => "PERSON_SWAP_ILS",
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
     };
 }
