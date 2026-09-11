@@ -326,6 +326,17 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-11 共同LNSの「短時間試行→採用時だけ本予算」lnsAdaptive を移植（ユーザー指示「同期する」、
+  Android 3.510.2/3.518.0）: `PostOptimizationParams.LnsAdaptive`（既定true）・
+  `C1LnsFirstEvaluations`/`PersonalLnsFirstEvaluations`/`C1LnsFirstMs`/`PersonalLnsFirstMs` を追加し、
+  `RunPostOptimization`のC1共同LNS・個人共同LNS呼出を「先に短い試行→不採用ならそこで終了・採用があれば
+  本予算で続行」の2段構成へ変更。Android原本が参照する`stallEscalation`（停滞時の幅拡大）・
+  `lnsWeightDebt`（負債係数）はいずれもAndroid側で既に測定・不合格・未昇格のトグルのため、C#側でも
+  意図的に移植せず（両方とも既定OFFのまま＝この2段ロジックは常に「本予算で1回」相当に単純化される）。
+  本番呼出（`V6FinalPort.HandleOptimize.cs`）は`PostOptimizationParams`を明示構築せず既定値を使うため、
+  レコードの既定値変更がそのまま実機挙動に反映される。`MagiEngine.Tests` 844件green（既存挙動を検査する
+  テストの回帰なし）。
+
 - 2026-09-11 PORTFOLIO の新役割 PersonSwapIls を移植（ユーザー指示「同期する」、Android 3.517.0/3.519.0）:
   `HypothesisEpochRole.PersonSwapIls`（`AdaptiveHypothesisEpochPolicy.cs`）・`PolishGate.PersonSwapKick`
   （既定true）・`V6NativeOptimizer.PersonSwapKick`/`WeightedBurdenPick`（`V6NativeOptimizer.Portfolio.cs`、

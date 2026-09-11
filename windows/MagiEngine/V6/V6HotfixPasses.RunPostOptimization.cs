@@ -99,7 +99,14 @@ public static partial class V6HotfixPasses
         /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
         bool Deterministic = false,
         int C1LnsMaxEvaluations = 90_000,
-        int PersonalLnsMaxEvaluations = 60_000);
+        int PersonalLnsMaxEvaluations = 60_000,
+        /// <summary>[Android 3.510.2/3.518.0同期] 共同LNSを「短い試行→採用があったときだけ本予算で続行」に
+        /// するか。既定 <b>true</b>（Android iter9: 必須退行0・品質±0・速度は実データ-23%〜大規模-32%）。</summary>
+        bool LnsAdaptive = true,
+        int C1LnsFirstEvaluations = 20_000,
+        int PersonalLnsFirstEvaluations = 15_000,
+        long C1LnsFirstMs = 1_500L,
+        long PersonalLnsFirstMs = 1_500L);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -259,7 +266,14 @@ public static partial class V6HotfixPasses
             var cap = lnsTotal <= 0L ? 0L : Math.Min(remaining * p.C1LnsMaxMs / lnsTotal, p.C1LnsMaxMs);
             var cfg = p.Deterministic ? new C1JointLnsPolish.Config(MaxMillis: 60_000L, PatienceMs: 0L, MaxEvaluations: p.C1LnsMaxEvaluations)
                 : new C1JointLnsPolish.Config(MaxMillis: cap);
-            return C1RepairOperators.JointLns(state, work, config: cfg, shouldStop: stop);
+            if (!p.LnsAdaptive) return C1RepairOperators.JointLns(state, work, config: cfg, shouldStop: stop);
+            // [Android 3.510.2/3.518.0同期] 短い試行で採用が無ければそこで止める（ログでは共同LNSが
+            // 後処理時間の大半を使って採用0が多い）。
+            var first = p.Deterministic ? cfg with { MaxEvaluations = p.C1LnsFirstEvaluations } : cfg with { MaxMillis = Math.Min(cap, p.C1LnsFirstMs) };
+            var r1 = C1RepairOperators.JointLns(state, work, config: first, shouldStop: stop);
+            if (r1.Applied == 0) return r1;
+            var r2 = C1RepairOperators.JointLns(state, r1.NewSchedule, config: cfg, shouldStop: stop);
+            return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
         var tPersonalLns = EngineClock.NowMs();
         chain.Adopt(chain.Timed("後処理 個人回数/適切回数 共同LNS", "個人回数共同LNS", work =>
@@ -267,7 +281,12 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - tPersonalLns, 0L), p.PersonalLnsMaxMs);
             var cfg = p.Deterministic ? new PersonalBalanceJointLnsPolish.Config(MaxMillis: 60_000L, MaxEvaluations: p.PersonalLnsMaxEvaluations)
                 : new PersonalBalanceJointLnsPolish.Config(MaxMillis: cap);
-            return PersonalBalanceJointLnsPolish.Apply(state, work, config: cfg, shouldStop: stop);
+            if (!p.LnsAdaptive) return PersonalBalanceJointLnsPolish.Apply(state, work, config: cfg, shouldStop: stop);
+            var first = p.Deterministic ? cfg with { MaxEvaluations = p.PersonalLnsFirstEvaluations } : cfg with { MaxMillis = Math.Min(cap, p.PersonalLnsFirstMs) };
+            var r1 = PersonalBalanceJointLnsPolish.Apply(state, work, config: first, shouldStop: stop);
+            if (r1.Applied == 0) return r1;
+            var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop);
+            return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
