@@ -13,8 +13,10 @@ internal static class ColorHex
     /// <summary>必須違反の既定色（<c>Styles/MagiTheme.xaml</c> の <c>MagiErrorColor</c> と同値のRGB）。</summary>
     public const string DefaultHardVioHex = "#8C0009";
 
-    /// <summary>要調整(ソフト違反)の既定色（<c>MagiAccent.Orange</c> と同値）。</summary>
-    public const string DefaultSoftVioHex = "#E08A1E";
+    /// <summary>要調整(ソフト違反)の既定色。[色覚アクセシビリティ, Android同期] 深紅(必須)との明度差を
+    /// 最大化したアンバーへ変更（ユーザー指示：P型/D型色覚での誤認対策）。<c>MagiAccent.Orange</c>
+    /// （シフト記号パレットのアンカー色、別の用途）とはもう同値ではない＝意図的な分離。</summary>
+    public const string DefaultSoftVioHex = "#F59E0B";
 
     public static Color Parse(string? hex, Color fallback)
     {

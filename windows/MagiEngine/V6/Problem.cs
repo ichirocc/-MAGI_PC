@@ -43,6 +43,14 @@ public sealed class C42
     public C42(int g1, int s1, int g2, int s2) { G1 = g1; S1 = s1; G2 = g2; S2 = s2; }
 }
 
+/// <summary>[3.542.0] 希望で固定した WishIdx の前日に PrevIdx を禁止（Cons3w, HARD）。</summary>
+public sealed class C3w
+{
+    public readonly int WishIdx;
+    public readonly int PrevIdx;
+    public C3w(int wishIdx, int prevIdx) { WishIdx = wishIdx; PrevIdx = prevIdx; }
+}
+
 /// <summary>
 /// Immutable, index-resolved view of a <see cref="MagiState"/> ready for fast evaluation.
 /// Faithfully mirrors the Kotlin/Android app's <c>Problem.kt</c> (which itself mirrors the Web
@@ -126,6 +134,10 @@ public sealed class Problem
     public IReadOnlyList<C3> Cons3n { get; }
     public IReadOnlyList<C3> Cons3m { get; }
     public IReadOnlyList<C3> Cons3mn { get; }
+    public IReadOnlyList<C3w> Cons3w { get; }
+    /// <summary>[3.542.0] C3wBan[i][j][k] = 翌日 j+1 が希望固定（WishLocked）の X で、Cons3w に (X→k) がある＝
+    /// セル (i,j) に k を置くと違反。希望は探索中に動かないので盤面非依存の静的表。Cons3w が空なら null（評価・Δの分岐を無料にする）。</summary>
+    public bool[][][]? C3wBan { get; }
 
     // [監査#9 移植元] 期間より長い連続パターンはパース段階で除外し、(族, パターン表示) をここに記録する。
     private readonly List<(string Family, string Text)> _c3OverT = new();
@@ -363,6 +375,41 @@ public sealed class Problem
         }
         Cons2 = cons2List;
 
+        var cons3wList = new List<C3w>();
+        foreach (var it in state.Cons3w ?? Array.Empty<C3wRow>())
+        {
+            int x = ShiftIdxOf(it.WishKigou);
+            int y = ShiftIdxOf(it.PrevKigou);
+            if (x >= 0 && y >= 0) cons3wList.Add(new C3w(x, y));
+            else _unresolvedRows.Add(("希望の前日に禁止", $"{Mark(it.WishKigou, x >= 0)} の希望の前日は {Mark(it.PrevKigou, y >= 0)}"));
+        }
+        Cons3w = cons3wList;
+        if (cons3wList.Count == 0)
+        {
+            C3wBan = null;
+        }
+        else
+        {
+            var ban = new bool[S][][];
+            for (int i = 0; i < S; i++)
+            {
+                var row = new bool[T][];
+                for (int j = 0; j < T; j++)
+                {
+                    var cell = new bool[K];
+                    if (j + 1 < T)
+                    {
+                        int w = Wish[i][j + 1];
+                        if (w >= 0 && w < K && this.CanDo(i, w))
+                            foreach (var c in cons3wList) if (c.WishIdx == w) cell[c.PrevIdx] = true;
+                    }
+                    row[j] = cell;
+                }
+                ban[i] = row;
+            }
+            C3wBan = ban;
+        }
+
         Cons3 = ResolveC3(state.Cons3, "c3");
         Cons3n = ResolveC3(state.Cons3n, "c3n");
         Cons3m = ResolveC3(state.Cons3m, "c3m");
@@ -559,6 +606,7 @@ public sealed class Problem
     /// </summary>
     public bool MakesForbiddenRun(int[][] schedule, int i, int j, int newK)
     {
+        if (C3wBanned(i, j, newK)) return true; // [3.542.0] 希望の前日に禁止（Cons3w, HARD）も同じ枝刈りで避ける
         foreach (var c in Cons3n)
         {
             var seq = c.Seq;
@@ -578,6 +626,14 @@ public sealed class Problem
             }
         }
         return false;
+    }
+
+    /// <summary>[3.542.0] セル (i,j) にシフト k を置くと「希望の前日に禁止」(Cons3w) に当たるか。範囲外は false。</summary>
+    public bool C3wBanned(int i, int j, int k)
+    {
+        var ban = C3wBan;
+        if (ban == null || i < 0 || i >= S || j < 0 || j >= T || k < 0 || k >= K) return false;
+        return ban[i][j][k];
     }
 
     /// <summary>

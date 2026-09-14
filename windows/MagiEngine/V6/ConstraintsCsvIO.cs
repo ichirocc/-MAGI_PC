@@ -29,6 +29,7 @@ public static class ConstraintsCsvIO
         foreach (var c in state.Cons41s) CsvUtil.AppendCsvRow(sb, new List<string> { "スキル群回数", c.GroupKigou, c.ShiftKigou, c.L, c.U });
         foreach (var c in state.Cons42) CsvUtil.AppendCsvRow(sb, new List<string> { "群組合せ禁止", c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou });
         foreach (var c in state.Cons42s) CsvUtil.AppendCsvRow(sb, new List<string> { "スキル群組合せ禁止", c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou });
+        foreach (var c in state.Cons3w ?? Array.Empty<C3wRow>()) CsvUtil.AppendCsvRow(sb, new List<string> { "希望前日禁止", c.WishKigou, c.PrevKigou });
         foreach (var kv in state.StaffRange)
         {
             var p = kv.Key.Split(',');
@@ -94,6 +95,7 @@ public static class ConstraintsCsvIO
         var cons3m = new List<C3Row>(); var cons3mn = new List<C3Row>();
         var cons41 = new List<C41Row>(); var cons41s = new List<C41Row>();
         var cons42 = new List<C42Row>(); var cons42s = new List<C42Row>();
+        var cons3w = new List<C3wRow>();
         var ranges = new Dictionary<string, Range>();
         var n = 0;
         // [3.314.0] ヘッダ判定を Build() が出す実ヘッダ「種別」の一致へ（旧: 既知キーワード集合との
@@ -142,6 +144,7 @@ public static class ConstraintsCsvIO
                 case "スキル群回数": cons41s.Add(new C41Row(Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 4))); n++; break;
                 case "群組合せ禁止": cons42.Add(new C42Row(Cell(r, 1), Cell(r, 3), Cell(r, 2), Cell(r, 4))); n++; break;
                 case "スキル群組合せ禁止": cons42s.Add(new C42Row(Cell(r, 1), Cell(r, 3), Cell(r, 2), Cell(r, 4))); n++; break;
+                case "希望前日禁止": cons3w.Add(new C3wRow(Cell(r, 1), Cell(r, 2))); n++; break;
                 case "個人レンジ":
                 {
                     var hasI = nameToI.TryGetValue(CsvUtil.NameMatchKey(Cell(r, 1)), out var i);
@@ -177,7 +180,7 @@ public static class ConstraintsCsvIO
         {
             Cons1 = cons1, Cons2 = cons2, Cons3 = cons3, Cons3n = cons3n,
             Cons3m = cons3m, Cons3mn = cons3mn, Cons41 = cons41, Cons41s = cons41s,
-            Cons42 = cons42, Cons42s = cons42s, StaffRange = ranges,
+            Cons42 = cons42, Cons42s = cons42s, Cons3w = cons3w, StaffRange = ranges,
         };
         // [3.333.0/外部レビュー Critical] 種別が既知なだけの行を**無条件に受理**していた。
         //   例えば `連勤,,,` は C1Row("","","") として n に数えられ、Problem は

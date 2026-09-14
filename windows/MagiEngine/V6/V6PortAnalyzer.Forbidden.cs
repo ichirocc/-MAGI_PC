@@ -11,7 +11,7 @@ public enum ForbiddenCellEscape
     Chain,
     /// <summary>代替は全て新たな禁止連続を作るが、隣接日調整（<see cref="V6SearchOperators.TryFixForbiddenRunViaAdjacentDay"/>）で崩せることを実証済み。</summary>
     Adjacent,
-    /// <summary>本人の希望で固定（動かすと pref(9000)&gt;c3n(7000) の悪化＝isBetter が正しく却下する）。</summary>
+    /// <summary>本人の希望で固定（動かすと正味の HARD 件数が減らない＝isBetter が正しく却下する。分類自体は下記の raw hard 件数比較で決まり重みには依存しない）。</summary>
     Pinned,
     /// <summary>全ての代替が塞がっている（新たな禁止連続・covU受け皿なし・代替シフトなし）。</summary>
     Blocked,
@@ -149,7 +149,7 @@ public static partial class V6PortAnalyzer
                             "（探索は候補を持っています＝再実行で解消し得ます）";
                     }
                     // [3.284.0/外部レビュー] 「証明」の強さを分ける: 全セル希望固定は「本人希望どおりの並びが
-                    //   禁止パターンを構成」＝辞書式意味論(pref9000>c3n7000)の下で証明相当。それ以外の塞がり
+                    //   禁止パターンを構成」＝raw hard 件数の下で証明相当（分類は重みに依存しない）。それ以外の塞がり
                     //   (受け皿なし等)は「現在の探索手(単独変更・玉突き連鎖・隣接日調整)を検証して全て不成立」
                     //   という強い証拠であり、全勤務表空間の数学的な非充足証明ではない＝断定を避けた表現にする。
                     else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned))
@@ -211,10 +211,11 @@ public static partial class V6PortAnalyzer
         var curSym = ShiftSym(state, cur);
         // [3.311.0] 希望どおりのセルでも即 Pinned にはしない。
         //   旧実装は wishLocked && wish == cur で HARD 差分を一切見ずに早期 return しており、
-        //   その根拠（「pref(9000) の増加が c3n(7000) の減少を上回る」）は、そのセルが c3n fire
+        //   旧実装の根拠（「pref の増加が c3n の減少を上回る」という raw hard 件数の主張）は、そのセルが c3n fire
         //   1件にしか関与しない場合しか成り立たない。例: 禁止「A→A」・行 A,A,A の中央セルは
         //   2件の fire に関与し、B へ動かすと c3n 2→0 / pref 0→1 ＝ betterReport の第1キー hard が
-        //   2→1 と厳密に改善する（weighted も 14000→9000）。つまり isBetter は採用する＝固定ではない。
+        //   2→1 と厳密に改善する。つまり isBetter は採用する＝固定ではない（この判定は raw hard 件数のみで決まり、
+        //   weightedScore の重み値には依存しない＝3.522.0 の重み全面見直しでも挙動不変）。
         //   偽の Pinned は run 全体を「構造壁」と誤診し、3.281.0 の短い停滞タイムアウトを早期に
         //   発火させうる。そこで pref の増加分を c3n の正味減と同じ土俵で勘定する。
         var prefCost = p.WishLocked(i, j) && p.Wish[i][j] == cur ? 1 : 0;
@@ -287,7 +288,7 @@ public static partial class V6PortAnalyzer
                         //   prefCost を入れたとき、この分岐（隣接日調整）には入れ忘れていた。隣接日調整は
                         //   この職員の複数日を動かすので、本セルだけでなく行全体の希望違反が増えうる。
                         //   実データで「本人希望のセルを休へ変えれば崩せる」と誤って Adjacent を出しており
-                        //   （c3n −1 に対し pref +1 ＝ 正味 0・weighted は 9000−7000=+2000 悪化で採用され得ない）、
+                        //   （c3n −1 に対し pref +1 ＝ raw hard 件数が正味 0 で不変・isBetter の第1キーで採用され得ない）、
                         //   利用者に「探索が見つけていないだけ」という誤った期待を与えていた。さらに
                         //   3.281.0 の停滞打ち切り（全 run 塞がりなら短い閾値）が発火せず時間も余計に使う。
                         if (NetHardImproves(p, norm, tmp, i, firesBefore) &&

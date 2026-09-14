@@ -84,4 +84,8 @@ public static class PolishGate
     /// 再最適化のILS摂動）を役割ローテーションに含めるか。既定 <b>true</b>（実データ4件×5seedで必須退行0件、
     /// 根拠は Android <c>docs/algorithm_portfolio.md</c>「既定ONへ昇格」参照）。</summary>
     public static volatile bool PersonSwapKick = true;
+
+    /// <summary>[Kotlin 3.540.0同期] 回数連鎖研磨（<see cref="CountChainPolish"/>）を後処理に入れるか。
+    /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
+    public static volatile bool CountChainPolish = false;
 }

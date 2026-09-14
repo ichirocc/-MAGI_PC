@@ -235,9 +235,10 @@ public static partial class V6FinalPort
                         var gv = report.Breakdown.GetValueOrDefault("groupViol", 0);
                         var pf = report.Breakdown.GetValueOrDefault("pref", 0);
                         var c3n = report.Breakdown.GetValueOrDefault("c3n", 0);
-                        Volatile.Write(ref bestNonCovUHard, gv + pf + c3n);
-                        // [3.281.0/A] 非covU HARD が c3n のみか＋best世代を進める。
-                        Volatile.Write(ref bestNonCovUAllC3n, gv == 0 && pf == 0 && c3n > 0);
+                        var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
+                        Volatile.Write(ref bestNonCovUHard, gv + pf + c3n + c3w);
+                        // [3.281.0/A] 非covU HARD が c3n のみか（c3n構造壁チェックの適用条件）＋best世代を進める。[3.542.0] c3w追加。
+                        Volatile.Write(ref bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w == 0 && c3n > 0);
                         Interlocked.Increment(ref bestVersion);
                     }
                 }

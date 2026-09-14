@@ -56,7 +56,7 @@ public static class GreedyMirrorScheduler
                     if (w < 0 || w >= p.K) continue;
                     // [3.391.0/実バグ回帰] 旧実装は担当できないシフトへの希望まで盤面へ置いていた。
                     //   pref は実現可能な希望しか数えないため置いても得は無い一方、担当外セル＝
-                    //   groupViol(HARD 10000)が確実に立つ＝純損。SmartInitialScheduler と同じくcanDoで守る。
+                    //   groupViol(HARD 11000)が確実に立つ＝純損。SmartInitialScheduler と同じくcanDoで守る。
                     if (p.CanDo(i, w)) { schedule[i][j] = w; wishIn++; } else wishOut++;
                 }
             }

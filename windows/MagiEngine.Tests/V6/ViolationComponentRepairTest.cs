@@ -27,11 +27,20 @@ public class ViolationComponentRepairTest
         groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "0", "", "1" } },
         schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 2 }, new List<int> { 0 }, new List<int> { 0 } },
         wishes: new Dictionary<string, int>(),
-        staffRange: new Dictionary<string, Range> { ["0,3"] = new("", "0"), ["2,3"] = new("", "0"), ["3,3"] = new("", "0") },
+        // [3.541.0] W2 の D は上限 0 でなく 0〜1。fair v2 は担当不可(上限0)で 0 回の職員を母集団から外すため、上限 0 のままだと
+        //   D バケットが Y 1 人＝偏差 0 になり、Y 単独の移動が「タイ」でなく改善になって結合の検証にならない。
+        staffRange: new Dictionary<string, Range> { ["0,3"] = new("", "0"), ["2,3"] = new("", "0"), ["3,3"] = new("0", "1") },
         needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
         cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(),
         cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
-        cons41: new List<C41Row> { new("G0", "Qres", "1", "1") }, cons42: new List<C42Row>());
+        // [3.522.0] apt重み1→4でX/Y単独移動が「タイ」でなくなったため、c41行を4重複させ
+        //   1違反=4件計上にして単独では確実に悪化するよう調整（CombinatorialRepairTestと同型）。
+        cons41: new List<C41Row>
+        {
+            new("G0", "Qres", "1", "1"), new("G0", "Qres", "1", "1"),
+            new("G0", "Qres", "1", "1"), new("G0", "Qres", "1", "1"),
+        },
+        cons42: new List<C42Row>());
 
     private static int[][] Work(MagiState st) => st.Schedule.Select(r => r.ToArray()).ToArray();
 

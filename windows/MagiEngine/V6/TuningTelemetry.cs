@@ -39,6 +39,8 @@ public static class TuningTelemetry
     private static int _wideC3nCalls;
     private static int _lahcEntered;
     private static int _parityChecks;
+    /// <summary>[3.540.0] 回数連鎖研磨が採用した連鎖数。</summary>
+    private static int _countChainApplied;
 
     /// <summary>禁止連続の事前フィルタが checker を呼ばずに落とした候補数。</summary>
     public static void IncrementC3nFilterSkipped() => Interlocked.Increment(ref _c3nFilterSkipped);
@@ -54,6 +56,9 @@ public static class TuningTelemetry
 
     /// <summary>Kotlin照合を実施した回数（ネイティブ結果を採用する直前の再評価）。</summary>
     public static void IncrementParityChecks() => Interlocked.Increment(ref _parityChecks);
+
+    /// <summary>[3.540.0] 回数連鎖研磨が1連鎖を採用するたびに呼ぶ（採用連鎖数の加算）。</summary>
+    public static void AddCountChainApplied(int n) => Interlocked.Add(ref _countChainApplied, n);
 
     /// <summary>
     /// <see cref="IncrementParityChecks"/> の現在値を読む。Kotlin原本は5カウンタ全てを公開フィールドと
@@ -80,6 +85,7 @@ public static class TuningTelemetry
         Volatile.Write(ref _wideC3nCalls, 0);
         Volatile.Write(ref _lahcEntered, 0);
         Volatile.Write(ref _parityChecks, 0);
+        Volatile.Write(ref _countChainApplied, 0);
     }
 
     /// <summary>各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。</summary>
@@ -108,6 +114,7 @@ public static class TuningTelemetry
             " / Kotlin照合=" + Eff(parityOn, parityChecks, "回") +
             " / 禁止連続の事前フィルタ=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
-            " / 仕上げ最適化=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替");
+            " / 仕上げ最適化=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替") +
+            " / 回数連鎖研磨=" + Eff(PolishGate.CountChainPolish, Volatile.Read(ref _countChainApplied), "連鎖を採用");
     }
 }

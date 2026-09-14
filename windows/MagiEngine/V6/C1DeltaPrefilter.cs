@@ -45,7 +45,7 @@ public static class C1DeltaPrefilter
     ///  - C1-01: 新しい禁止連続を1件作りつつ既存の禁止連続を1件以上壊す手（c3n 正味0以下）＝checker は採用しうる。
     ///  - C1-02: 既に希望違反中のセルを別の非希望シフトへ変える手（pref 1→1 不変）＝checker は採用しうる。
     /// 反例をホストJVMで実証済み（screenCell=HARD_REJECT だが isBetter=true）。契約を sound にするため、
-    /// <b>単一セル変更の全 HARD 族（groupViol/pref/c3n/covU）の正味Δを厳密に計算し、Δ&gt;0 のときだけ却下</b>する
+    /// <b>単一セル変更の全 HARD 族（groupViol/pref/c3n/c3w/covU）の正味Δを厳密に計算し、Δ&gt;0 のときだけ却下</b>する
     /// （cand.hard = best.hard + Δ が厳密に成立＝Δ&gt;0 なら isBetter は hard 比較で必ず false）。
     /// per-family の相殺（c3n+1 を covU−2 が打ち消す等）も正しく通す。C1-12 の座標境界チェックも追加。
     /// </summary>
@@ -74,6 +74,9 @@ public static class C1DeltaPrefilter
             int w = p.Wish[staff][day];
             delta += (newShift != w ? 1 : 0) - (old != w ? 1 : 0);
         }
+
+        // c3w: 希望の前日に禁止（セル単位、checker と同一の静的表）。
+        delta += (p.C3wBanned(staff, day, newShift) ? 1 : 0) - (p.C3wBanned(staff, day, old) ? 1 : 0);
 
         // c3n: 行内の禁止連続 fire 数の正味差分（生成と破壊の両方を勘定＝C1-01）。
         var row = new int[p.T];

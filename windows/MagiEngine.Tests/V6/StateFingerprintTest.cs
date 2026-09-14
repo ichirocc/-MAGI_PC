@@ -42,6 +42,7 @@ public class StateFingerprintTest
         Cons41s: new List<C41Row> { new("S", "A", "0", "1") },
         Cons42s: new List<C42Row> { new("S", "S", "A", "休") },
         ShiftColors: new Dictionary<string, string>(),
+        Cons3w: new List<C3wRow> { new("A", "休") },
         Extras: MinimalState.NoExtras
     );
 
@@ -92,6 +93,7 @@ public class StateFingerprintTest
         yield return ("スキル群のレンジ", b with { Cons41s = new List<C41Row> { new("S", "A", "1", "1") } });
         yield return ("群ペア禁止", b with { Cons42 = new List<C42Row> { new("G", "H", "休", "A") } });
         yield return ("スキル群ペア禁止", b with { Cons42s = new List<C42Row> { new("S", "S", "休", "A") } });
+        yield return ("希望の前日に禁止", b with { Cons3w = new List<C3wRow> { new("休", "A") } });
     }
 
     [Fact]

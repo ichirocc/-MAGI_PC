@@ -106,7 +106,10 @@ public static partial class V6HotfixPasses
         int C1LnsFirstEvaluations = 20_000,
         int PersonalLnsFirstEvaluations = 15_000,
         long C1LnsFirstMs = 1_500L,
-        long PersonalLnsFirstMs = 1_500L);
+        long PersonalLnsFirstMs = 1_500L,
+        /// <summary>[Android 3.540.0同期/測定中] 回数連鎖研磨（<see cref="CountChainPolish"/>）を入れるか。
+        /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
+        bool CountChainEnabled = false);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -422,6 +425,23 @@ public static partial class V6HotfixPasses
                 ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
                 ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+            // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)は常に既定の PostOptimizationParams
+            //   （parameters:null）を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
+            //   等と同じく PolishGate を直接読み、UI トグルが実際に効くようにする（Android は V6FinalPort.kt で
+            //   PostOptimizationParams 構築時に countChainEnabled=PolishGate.countChainPolish を都度渡す設計だが、
+            //   この C# 版は呼出元を変えずに済む軽量な配線を選ぶ）。
+            if (PolishGate.CountChainPolish)
+            {
+                Take("回数連鎖", chain.Timed($"後処理 回数連鎖研磨{tag}", "CountChainPolish", work =>
+                {
+                    var r = CountChainPolish.ApplyCountChainPolish(
+                        state, work,
+                        config: p.Deterministic ? new CountChainPolish.Config(MaxMillis: 60_000L) : new CountChainPolish.Config(),
+                        shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round));
+                    TuningTelemetry.AddCountChainApplied(r.Applied);
+                    return r;
+                }));
+            }
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();
             if (p.ComponentRepairEnabled && pool.Count >= 2)

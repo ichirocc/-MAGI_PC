@@ -35,6 +35,7 @@ public sealed class DeltaEvaluator
     // [3.318.0] groupViol（担当できないシフトに就いているセル）。MirrorKeys.Hard は元から4族なのに
     // 評価器側だけ3族（c3n/pref/covU）で、同じ盤面に対しチェッカーと評価器の hard が食い違っていた。
     private long _hGrpV;
+    private long _hc3w;    // [3.542.0] 希望の前日に禁止(c3w, HARD)。セル単位＝Δもこの1セルだけ
     private long _sApt;    // [統一apt] 適切回数(双方向目標)の running total（SOFT, 重み1）
     private long _sFair;   // [統一fair] グループ内公平化の running total（SOFT, 重み1）
     private long _sWeekly; // [統一weekly] 曜日平準化の running total（SOFT, 重み1）
@@ -46,7 +47,7 @@ public sealed class DeltaEvaluator
     private long _dC1, _dC2, _dC41, _dC42;
     private long _dC41s, _dC42s;
     private long _dC3, _dC3n, _dC3m, _dC3mn;
-    private long _dPref, _dGrpV, _dCt, _dApt, _dFair, _dWeekly, _dCovO, _nCovU;
+    private long _dPref, _dGrpV, _dC3w, _dCt, _dApt, _dFair, _dWeekly, _dCovO, _nCovU;
 
     public DeltaEvaluator(Problem p)
     {
@@ -133,7 +134,7 @@ public sealed class DeltaEvaluator
     {
         ["c1"] = _sc1, ["c2"] = _sc2, ["c41"] = _sc41, ["c42"] = _sc42, ["c41s"] = _sc41s, ["c42s"] = _sc42s,
         ["c3"] = _sc3, ["c3n"] = _hc3n, ["c3m"] = _sc3m, ["c3mn"] = _sc3mn,
-        ["pref"] = _hpref, ["groupViol"] = _hGrpV, ["apt"] = _sApt, ["fair"] = _sFair, ["weekly"] = _sWeekly,
+        ["pref"] = _hpref, ["groupViol"] = _hGrpV, ["c3w"] = _hc3w, ["apt"] = _sApt, ["fair"] = _sFair, ["weekly"] = _sWeekly,
         ["covO"] = _scovO, ["covU"] = _covUTot,
     };
 
@@ -184,14 +185,14 @@ public sealed class DeltaEvaluator
 
     private long ScoreFrom(long cu)
     {
-        long h1 = _hc3n + cu + _hpref + _hGrpV;
+        long h1 = _hc3n + cu + _hpref + _hGrpV + _hc3w;
         // [統一a/b] range(_hct, 重み付き) と covO(_scovO) を SOFT に含める。
-        // [統一c] c3/c3m/c3mn に checker 重み(3/2/30)を適用（_sc3等は #fire/run-deficit の生カウント）。
-        // [統一c1] c1 にも checker 重み(30)を適用（_sc1 は #fire 生カウント、canDoガード済）。
-        // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める
-        // （共に重み1）。[HF77明示数値指示] c1: 4→5→15→30。c3mn: 12→15→30。covO: 1→5(2026-08-27)。
-        long soft = _sc1 * 30 + _sc2 + _sc41 + _sc42 + _sc41s + _sc42s + _sc3 * 3 + _sc3m * 2 + _sc3mn * 30
-                    + _hct + _sApt + _sFair + _sWeekly + _scovO * 5;
+        // [統一c] c3/c3m/c3mn に checker 重み(15/10/90)を適用（_sc3等は #fire/run-deficit の生カウント）。
+        // [統一c1] c1 にも checker 重み(50)を適用（_sc1 は #fire 生カウント、canDoガード済）。
+        // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める。
+        // [3.522.0/HF77明示数値指示・全面見直し] 重み表全面改定（経緯は Android docs/history/3.4xx.md）。
+        long soft = _sc1 * 50 + _sc2 * 4 + _sc41 + _sc42 + _sc41s * 6 + _sc42s * 6 + _sc3 * 15 + _sc3m * 10 + _sc3mn * 90
+                    + _hct + _sApt * 4 + _sFair * 2 + _sWeekly * 2 + _scovO * 10;
         return h1 * Evaluator.SCORE_HARD_UNIT + soft;
     }
 
@@ -207,7 +208,7 @@ public sealed class DeltaEvaluator
         if (nw == old)
         {
             _dC1 = 0; _dC2 = 0; _dC41 = 0; _dC42 = 0; _dC41s = 0; _dC42s = 0; _dC3 = 0; _dC3n = 0; _dC3m = 0; _dC3mn = 0;
-            _dPref = 0; _dGrpV = 0; _dCt = 0; _dApt = 0; _dFair = 0; _dWeekly = 0; _dCovO = 0; _nCovU = _covUTot;
+            _dPref = 0; _dGrpV = 0; _dC3w = 0; _dCt = 0; _dApt = 0; _dFair = 0; _dWeekly = 0; _dCovO = 0; _nCovU = _covUTot;
             return Score();
         }
 
@@ -318,6 +319,9 @@ public sealed class DeltaEvaluator
         _dGrpV = ((nw >= 0 && nw < K && !_p.CanDo(i, nw)) ? 1L : 0L)
                - ((old >= 0 && old < K && !_p.CanDo(i, old)) ? 1L : 0L);
 
+        // [3.542.0] 希望の前日に禁止(c3w)もセル単位なので差分もこの1セルだけ。
+        _dC3w = (_p.C3wBanned(i, j, nw) ? 1L : 0L) - (_p.C3wBanned(i, j, old) ? 1L : 0L);
+
         // c41 (group/day range) on day j — only constraints touching this staff's group & shifts
         int gi = _p.Sgrp[i];
         long d41 = 0;
@@ -398,11 +402,13 @@ public sealed class DeltaEvaluator
                + (_p.CovOCell(nw, j, cn + 1) - _p.CovOCell(nw, j, cn));
 
         // [統一b] dCt(range) は SOFT へ移動（hard から除外）。
-        long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV;
-        // [統一c] c3/c3m/c3mn の delta にも checker 重み(3/2/30)を適用（full soft と同一係数）。
-        // [統一c1] c1 の delta にも ×30。
-        long dSoft = _dC1 * 30 + _dC2 + _dC41 + _dC42 + _dC41s + _dC42s + _dC3 * 3 + _dC3m * 2 + _dC3mn * 30
-                   + _dCt + _dApt + _dFair + _dWeekly + _dCovO;
+        long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV + _dC3w;
+        // [3.522.0] c3/c3m/c3mn/c1/c41s/c42s/c2/apt/fair/weekly/covO の delta にも ScoreFrom と同じ係数を適用。
+        // [C#移植上の修正] dCovO に重み(×10)が欠けていた（ScoreFrom の _scovO*10 と不一致）。PreviewMove の
+        // 戻り値は現状どの呼出側も参照しない（Apply は Commit 後の Score() を返す）ため実害は無かったが、
+        // 将来この戻り値を直接使うテスト/呼出が増えたときの静かな不一致を防ぐため揃えておく。
+        long dSoft = _dC1 * 50 + _dC2 * 4 + _dC41 + _dC42 + _dC41s * 6 + _dC42s * 6 + _dC3 * 15 + _dC3m * 10 + _dC3mn * 90
+                   + _dCt + _dApt * 4 + _dFair * 2 + _dWeekly * 2 + _dCovO * 10;
         return Score() + dHard * Evaluator.SCORE_HARD_UNIT + dSoft;
     }
 
@@ -440,7 +446,7 @@ public sealed class DeltaEvaluator
             }
             _sc1 += _dC1; _sc2 += _dC2; _sc41 += _dC41; _sc42 += _dC42; _sc41s += _dC41s; _sc42s += _dC42s;
             _sc3 += _dC3; _hc3n += _dC3n; _sc3m += _dC3m; _sc3mn += _dC3mn;
-            _hpref += _dPref; _hGrpV += _dGrpV; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
+            _hpref += _dPref; _hGrpV += _dGrpV; _hc3w += _dC3w; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
             _covUTot = _nCovU;
         }
         finally
@@ -470,7 +476,7 @@ public sealed class DeltaEvaluator
         _sc1 = C1All(); _sc2 = C2All(); _sc41 = C41All(); _sc42 = C42All(); _sc41s = C41sAll(); _sc42s = C42sAll();
         _sc3 = C3All(_p.Cons3, false); _hc3n = C3All(_p.Cons3n, true);
         _sc3m = C3All(_p.Cons3m, false); _sc3mn = C3All(_p.Cons3mn, true);
-        _hpref = PrefAll(); _hGrpV = GroupViolAll(); _hct = CtAll(); _sApt = AptAll(); _sFair = FairAll(); _sWeekly = WeeklyAll(); _scovO = CovOAll();
+        _hpref = PrefAll(); _hGrpV = GroupViolAll(); _hc3w = C3wAll(); _hct = CtAll(); _sApt = AptAll(); _sFair = FairAll(); _sWeekly = WeeklyAll(); _scovO = CovOAll();
         _covUTot = CovUAll();
     }
 
@@ -480,10 +486,10 @@ public sealed class DeltaEvaluator
 
     private long RangeViol(int i, int k, int n)
     {
-        // [統一b] UnifiedViolationChecker と同分類(SOFT)・同重み: low(lo!=0, canDo必須)=amount×90 / high=amount×25。
+        // [統一b] UnifiedViolationChecker と同分類(SOFT)・同重み: low(lo!=0, canDo必須)=amount×120 / high=amount×25。[3.522.0] low 90→120。
         int lo = _p.RangeLo[i][k], hi = _p.RangeHi[i][k];
         long v = 0L;
-        if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) v += (long)(lo - n) * 90L;
+        if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) v += (long)(lo - n) * 120L;
         if (hi != int.MaxValue && n > hi) v += (long)(n - hi) * 25L;
         return v;
     }
@@ -713,6 +719,17 @@ public sealed class DeltaEvaluator
         return h;
     }
 
+    /// <summary>[3.542.0] 希望の前日に禁止（Cons3w, HARD）に当たるセル数。</summary>
+    private long C3wAll()
+    {
+        if (_p.C3wBan == null) return 0L;
+        long h = 0L;
+        for (int i = 0; i < S; i++)
+            for (int j = 0; j < T; j++)
+                if (_p.C3wBanned(i, j, _a[i][j])) h++;
+        return h;
+    }
+
     private long CtAll()
     {
         long h = 0L;
@@ -720,7 +737,7 @@ public sealed class DeltaEvaluator
         return h;
     }
 
-    /// <summary>[統一apt] 1セル(staff i, shift k)の適切回数偏差。重み1の L1 |n-t|。UnifiedViolationChecker の "apt" と一致。</summary>
+    /// <summary>[統一apt] 1セル(staff i, shift k)の適切回数偏差。生カウント L1 |n-t|（重みは ScoreFrom で適用）。UnifiedViolationChecker の "apt" と一致。</summary>
     private long AptViol(int i, int k, int n)
     {
         int t = _p.Apt[i][k];
@@ -735,30 +752,13 @@ public sealed class DeltaEvaluator
     }
 
     /// <summary>
-    /// [統一fair] 群g・シフトk の公平化偏差。staff <paramref name="special"/> のカウントに
-    /// <paramref name="delta"/> を加味（preview用）。round(平均) からのメンバー L1 偏差和。
+    /// [統一fair/3.538.0] 群g・シフトk の公平化偏差。staff <paramref name="special"/> のカウントに
+    /// <paramref name="delta"/> を加味（preview用）。<see cref="ScheduleUtil.FairDevOfBucket"/>（達成率
+    /// モード、全員に基準が無ければ従来の生回数round(平均)方式）をそのまま呼ぶだけ。
     /// UnifiedViolationChecker の "fair" と一致.
     /// </summary>
-    private long FairDevAt(int g, int k, int special, int delta)
-    {
-        var mem = _p.GroupMembers[g];
-        int m = mem.Length;
-        if (m < 2) return 0L;
-        int sum = 0;
-        foreach (var x in mem) sum += _cntSS[x][k] + (x == special ? delta : 0);
-        // [Kotlin Math.round(Double):Long の忠実移植] fair の目標は「群人数 m」で割った平均の丸めであり、
-        // c1/weekly の 7 割り（.5 が構造的に出ない）とは違い m によっては厳密に .5 の中間値へ到達しうる
-        // ため、丸めモードが結果に影響しうる唯一の箇所。KotlinInterop.MathRound で Java の
-        // "四捨五入（.5は+∞側）" 契約を再現する（C# の既定 Math.Round は银行丸めで異なる）。
-        int tgt = (int)KotlinInterop.MathRound(sum / (double)m);
-        long d = 0L;
-        foreach (var x in mem)
-        {
-            int c = _cntSS[x][k] + (x == special ? delta : 0);
-            d += Math.Abs(c - tgt);
-        }
-        return d;
-    }
+    private long FairDevAt(int g, int k, int special, int delta) =>
+        _p.FairDevOfBucket(g, k, x => _cntSS[x][k] + (x == special ? delta : 0)).Total;
 
     private long FairAll()
     {

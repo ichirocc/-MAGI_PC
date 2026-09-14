@@ -13,6 +13,10 @@ namespace MagiEngine.V6;
 /// The C++ layer bitmask-ified the same window match in the same way (out of scope for this port);
 /// this is the pure-managed Kotlin/C# equivalent.
 ///
+/// [3.542.0] <see cref="Problem.MakesForbiddenRun"/> also returns true for 希望の前日に禁止(cons3w),
+/// but this class scans only the c3n window match — the final accept/reject still goes through the
+/// checker (matches Kotlin's <c>C3nBitScan.kt</c> note).
+///
 /// T&gt;64 doesn't fit in a <c>long</c>, so callers go through <see cref="C3nRowScan"/> to fall back
 /// to the scalar semantics for those cases (same policy as the bitmask introduction elsewhere in
 /// this codebase). The raw bit API here is restricted to 64-day horizons.

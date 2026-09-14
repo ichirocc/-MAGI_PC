@@ -13,9 +13,10 @@ namespace MagiEngine.Tests.V6;
 /// <see cref="UnifiedViolationChecker"/> (full recompute, the source of truth for correctness),
 /// <see cref="Evaluator"/> (full recompute, packed lexicographic score used by SA/ALNS scoring),
 /// and <see cref="DeltaEvaluator"/> (incremental, used inside the hot search loop) — must agree
-/// on every one of the 19 violation families, on every fixture, at every point along a sequence
+/// on every one of the 20 violation families (19 + c3w, 3.542.0), on every fixture, at every point along a sequence
 /// of moves. A total-score match alone is not enough: several families share the same weight
-/// (c1 and c3mn both = 30; c2/c41/c42/c41s/c42s/apt/fair/weekly all = 1), so a +1/-1 error split
+/// (c3m and covO both = 10; c41s and c42s both = 6; c2 and apt both = 4; fair and weekly both = 2;
+/// c41 and c42 both = 1 — 3.522.0 weight-table overhaul), so a +1/-1 error split
 /// across two same-weight families would cancel out and be invisible in the aggregate — this is
 /// exactly why <see cref="DeltaEvaluator.FamilyRaw"/> exists (checked here against
 /// <see cref="ViolationReport.Breakdown"/> family-by-family).
@@ -58,7 +59,7 @@ public class ParityTest
         Assert.Equal(expectedPacked, de.Score());
 
         var familyRaw = de.FamilyRaw();
-        Assert.Equal(17, familyRaw.Count); // 19 families - {low, high} (covered by RangeRaw below)
+        Assert.Equal(18, familyRaw.Count); // 20 families - {low, high} (covered by RangeRaw below)
         foreach (var (key, value) in familyRaw)
         {
             int expected = report.Breakdown.TryGetValue(key, out var bv) ? bv : 0;
@@ -70,11 +71,11 @@ public class ParityTest
         int highExpected = report.Breakdown.TryGetValue("high", out var hv) ? hv : 0;
         Assert.Equal(lowExpected, lowRaw);
         Assert.Equal(highExpected, highRaw);
-        Assert.Equal(lowRaw * 90L + highRaw * 25L, de.RangeWeighted());
-        Assert.Equal(lowExpected * 90L + highExpected * 25L, de.RangeWeighted());
+        Assert.Equal(lowRaw * 120L + highRaw * 25L, de.RangeWeighted()); // [3.522.0] low 90→120
+        Assert.Equal(lowExpected * 120L + highExpected * 25L, de.RangeWeighted());
 
-        // every one of the 19 families is accounted for exactly once across the two checks above
-        Assert.Equal(19, familyRaw.Count + 2);
+        // every one of the 20 families is accounted for exactly once across the two checks above
+        Assert.Equal(20, familyRaw.Count + 2);
     }
 
     // ---- real fixtures, as loaded (exercises Rebuild(), not PreviewMove/Commit) --------------
@@ -203,12 +204,14 @@ public class ParityTest
             Cons41s: new List<C41Row> { new("Sk0", "A", "0", "1") },
             Cons42s: new List<C42Row> { new("Sk0", "Sk1", "A", "B") },
             ShiftColors: new Dictionary<string, string>(),
-            Extras: MinimalState.NoExtras
+            Extras: MinimalState.NoExtras,
+            // [3.542.0] staff0 の希望(0,2)="A" の前日(0,1)は初期値 休 のまま → t=0 から c3w が1件立つ。
+            Cons3w: new List<C3wRow> { new("A", "休") }
         );
     }
 
     [Fact]
-    public void SyntheticFixture_AllNineteenFamiliesFireAtLeastOnceAcrossTheRun_AndParityHolds()
+    public void SyntheticFixture_AllTwentyFamiliesFireAtLeastOnceAcrossTheRun_AndParityHolds()
     {
         var state = BuildAllFamiliesState();
         var p = new Problem(state);

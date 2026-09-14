@@ -20,7 +20,7 @@ public static class StateJsonSerializer
         "shifts", "groups", "staff", "groupShift", "groupShiftApt", "schedule", "wishes", "staffRange",
         "needDay1", "needDay2", "cons1", "cons2", "cons3", "cons3n", "cons3m", "cons3mn",
         "cons41", "cons42", "shiftColors", "startDate", "endDate", "use2Patterns",
-        "skillGroups", "cons41s", "cons42s",
+        "skillGroups", "cons41s", "cons42s", "cons3w",
     };
 
     /// <summary>Keys derived from `schedule`/edits that must be dropped before re-emitting the
@@ -89,6 +89,8 @@ public static class StateJsonSerializer
             new C41Row(OptString(it, "groupKigou"), OptString(it, "shiftKigou"), AsStr(Opt(it, "l")), AsStr(Opt(it, "u"))));
         var cons42s = MapObjects(OptArray(o, "cons42s"), "cons42s", it =>
             new C42Row(OptString(it, "g1Kigou"), OptString(it, "g2Kigou"), OptString(it, "s1Kigou"), OptString(it, "s2Kigou")));
+        var cons3w = MapObjects(OptArray(o, "cons3w"), "cons3w", it =>
+            new C3wRow(OptString(it, "wishKigou"), OptString(it, "prevKigou")));
 
         // Keep unmodelled top-level keys verbatim for lossless export. Clone() detaches each
         // element from `doc`'s backing buffer so it stays valid after `doc` is disposed.
@@ -111,7 +113,8 @@ public static class StateJsonSerializer
             Cons41: cons41, Cons42: cons42,
             SkillGroups: skillGroups, Cons41s: cons41s, Cons42s: cons42s,
             ShiftColors: shiftColors,
-            Extras: extras
+            Extras: extras,
+            Cons3w: cons3w
         );
     }
 
@@ -151,6 +154,7 @@ public static class StateJsonSerializer
         //   このエクスポート経路(constraintsEditedのみ)から無言で欠落していた）。
         o["cons41s"] = ConsArr(state.Cons41s, it => Obj(("groupKigou", it.GroupKigou), ("shiftKigou", it.ShiftKigou), ("l", it.L), ("u", it.U)));
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
+        o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
         return o.ToJsonString(PrettyOptions);
     }
 
@@ -204,6 +208,7 @@ public static class StateJsonSerializer
         o["cons42"] = ConsArr(state.Cons42, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons41s"] = ConsArr(state.Cons41s, it => Obj(("groupKigou", it.GroupKigou), ("shiftKigou", it.ShiftKigou), ("l", it.L), ("u", it.U)));
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
+        o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
 
         foreach (var (k, v) in state.Extras)
         {

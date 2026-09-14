@@ -6,7 +6,7 @@ namespace MagiEngine.V6;
 /// </summary>
 public static class MirrorKeys
 {
-    public static readonly IReadOnlyList<string> Hard = new[] { "groupViol", "c3n", "covU", "pref" };
+    public static readonly IReadOnlyList<string> Hard = new[] { "groupViol", "c3n", "covU", "pref", "c3w" };
 
     public static readonly IReadOnlyList<string> Soft = new[]
     {
@@ -14,10 +14,11 @@ public static class MirrorKeys
         "low", "high", "apt", "fair", "weekly",
     };
 
+    // [3.542.0] c3w は末尾＝言語跨ぎ期待値ファイル・C++ kBreakdownNames の添字を既存19族から動かさない。
     public static readonly IReadOnlyList<string> All = new[]
     {
         "c1", "c2", "c3", "c3n", "c3m", "c3mn", "c41", "c42", "c41s", "c42s",
-        "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly",
+        "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly", "c3w",
     };
 
     /// <summary>
@@ -26,19 +27,21 @@ public static class MirrorKeys
     /// <see cref="Dictionary{TKey,TValue}"/> の列挙順は .NET の公開契約ではない（実装は現状
     /// 挿入順を保つが、将来変わらない保証はない）ため、順序を明示的に保持する配列を単一の真実にし、
     /// O(1) ルックアップ用の辞書はそこから派生させる。
+    /// [3.522.0/HF77明示数値指示・全面見直し] Android tools/loop 34ケース×10seedのbaseline対比
+    /// ベンチマークで決定（経緯は Android docs/history/3.4xx.md）。旧: groupViol(10000)>pref(9000)>
+    /// covU(8000)>c3n(7000)>low(90)>c3mn(30)=c1(30)>high(25)>covO(5)>c3(3)>c3m(2)>他(1)。
+    /// covOは0.5→1.0→5.0→10、c1は4→5→15→30→50、c3mnは12→15→30→90、highは45→25で不変＝
+    /// いずれもHF77明示指示。
     /// </summary>
     private static readonly (string Key, double Weight)[] WeightsOrdered =
     {
-        ("groupViol", 10000.0), ("pref", 9000.0), ("covU", 8000.0), ("c3n", 7000.0),
-        ("low", 90.0), ("high", 25.0),
-        // [HF77明示数値指示] 回避の並び(c3mn)=30・窓の要件(c1)=30。経緯: 3.249.0 で c3mn 12→15・c1 4→5、
-        //   3.253.0 で c1 5→15、3.409.24 で両方 15→30。**現在値はどちらも 30**。
-        //   high(上限超過)は 45→25（2026-09-10、HF77明示指示、Android 3.5xx.x同期）。
-        ("c3mn", 30.0), ("c1", 30.0), ("c3", 3.0), ("c3m", 2.0),
-        ("c2", 1.0), ("c41", 1.0), ("c42", 1.0), ("c41s", 1.0), ("c42s", 1.0),
-        ("apt", 1.0), ("fair", 1.0), ("weekly", 1.0),
-        // [目的関数統一] covO: 0.5→1.0(2026-07-13,HF77明示指示)→5.0(2026-08-27,HF77明示指示)。
-        ("covO", 5.0),
+        ("groupViol", 11000.0), ("covU", 10000.0), ("c3n", 9000.0), ("pref", 8000.0),
+        ("low", 120.0), ("c3mn", 90.0), ("c1", 50.0), ("high", 25.0), ("covO", 10.0),
+        ("c3", 15.0), ("c3m", 10.0),
+        ("c41", 1.0), ("c42", 1.0), ("c41s", 6.0), ("c42s", 6.0),
+        ("c2", 4.0), ("apt", 4.0), ("fair", 2.0), ("weekly", 2.0),
+        // [3.542.0/ユーザー明示指示] 希望の前日に禁止。c3n と同格。
+        ("c3w", 9000.0),
     };
 
     public static IReadOnlyList<(string Key, double Weight)> Weights => WeightsOrdered;

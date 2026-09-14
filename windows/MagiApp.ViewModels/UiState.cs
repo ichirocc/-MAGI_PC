@@ -117,6 +117,10 @@ public sealed partial class UiState : ObservableObject
     /// （Android 3.519.0、iter24＝170ペアで必須退行1件のため不合格。<see cref="MagiEngine.V6.PolishGate.CombineExhaustPairs"/> 参照）。</summary>
     [ObservableProperty] private bool combineExhaustPairs;
 
+    /// <summary>[Android 3.540.0同期] 回数の超過を数日がかりで減らす（回数連鎖研磨）。既定OFF・測定中
+    /// （A/B 138 ペアで新2/同等135/旧1＝ゲート不合格。<see cref="MagiEngine.V6.PolishGate.CountChainPolish"/> 参照）。</summary>
+    [ObservableProperty] private bool countChainPolish;
+
     // adaptiveEscape / portfolioRoleParallelSa はKotlin原本で単体A/B中立につき機構ごと撤去済み＝移植対象外。
 
     /// <summary>仕上げ最適化（品質研磨）。既定ON。keep-best で悪化しない。</summary>

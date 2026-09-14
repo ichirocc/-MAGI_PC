@@ -128,6 +128,23 @@ public static partial class V6SanityPort
                 WishKey: canOneTap ? $"{w.StaffIndex},{w.DayIndex}" : null));
         }
 
+        // 1b) [3.542.0] 希望の前日に禁止(c3w)が希望どうしで衝突＝前日の Y も希望固定なら最適化器は解消できない。
+        if (p.C3wBan != null)
+        {
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T - 1; j++)
+                {
+                    if (!p.WishLocked(i, j) || !p.C3wBanned(i, j, p.Wish[i][j])) continue;
+                    var name = i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+                    var y = Sym(p.Wish[i][j]); var x = Sym(p.Wish[i][j + 1]);
+                    outList.Add(new SettingIssue(IssueKind.Wish,
+                        $"{name} {SafeDayLabel(state.StartDate, j)} 希望「{y}」→ {SafeDayLabel(state.StartDate, j + 1)} 希望「{x}」",
+                        $"「{x} の希望の前日は {y} 禁止」に希望どうしで当たっています。希望は固定なので計算では解消できません",
+                        "どちらかの希望を取り消すか、制約「希望の前日に禁止」の行を見直してください",
+                        Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}"));
+                }
+        }
+
         // 2) 連続パターン制約の重複（例: c3n:Dﾃ→A4）
         foreach (var d in FindDuplicateSeqConstraints(state))
         {

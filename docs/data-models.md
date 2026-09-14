@@ -36,6 +36,7 @@
 | `cons42` | `List<C42Row>` | 群ペア（同日併存不可） |
 | `skillGroups` | `List<Group>` = `[]` | スキルグループ（ユニットとは別の第2分類。担当可否には使わない） |
 | `cons41s` / `cons42s` | `List<C41Row>` / `List<C42Row>` = `[]` | スキル群版の C41 / C42 |
+| `cons3w` | `List<C3wRow>` = `[]` | 希望の前日に禁止（3.542.0）。希望(`wishes`)で固定された `wishKigou` の前日セルが `prevKigou` なら違反（HARD `c3w`、c3n と同格）。JSON キー無しは空 |
 | `shiftColors` | `Map<String, String>` = `{}` | 表示色の上書き。キー＝シフト記号 → `"#rrggbb"`（**表示のみ・エンジン無影響**）。特殊キー `"__vio__"` ＝違反色 |
 | `extras` | `Map<String, Any?>` = `{}` | 未モデル化の項目を逐語保持（往復の無損失化） |
 
@@ -57,6 +58,7 @@
 | `C3Row` | `pattern: List<String>` | 連勤の列パターン（記号の並び） |
 | `C41Row` | `groupKigou: String`, `shiftKigou: String`, `l: String`, `u: String` | 群 X のシフト Y を1日に [l,u] 回 |
 | `C42Row` | `g1Kigou: String`, `g2Kigou: String`, `s1Kigou: String`, `s2Kigou: String` | 群 g1 の s1 と 群 g2 の s2 が同日併存不可 |
+| `C3wRow` | `wishKigou: String`, `prevKigou: String` | 希望で固定した wishKigou の前日に prevKigou を置けない（3.542.0） |
 
 > 数値項目（need1/need2/count/lo/hi/l/u 等）は**文字列**で保持する（空欄＝未設定を表現するため）。利用時に整数へ解釈する。
 

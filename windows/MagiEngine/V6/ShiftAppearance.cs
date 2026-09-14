@@ -95,11 +95,12 @@ public static class ShiftAppearance
         var k = key.StartsWith("vio-", StringComparison.Ordinal) ? key.Substring(4) : key;
         return k switch
         {
-            "groupViol" or "covU" or "pref" or "c3n" => "CRITICAL", // HARD
-            "low" or "c3mn" => "HIGH",                              // 重い soft(90/30)
-            // [2026-09-10] high は HF77 明示指示で 45→25 に変更され c1/c3mn(30) を下回ったため、WARN 側へ降格。
+            "groupViol" or "covU" or "pref" or "c3n" or "c3w" => "CRITICAL", // HARD [3.542.0] c3w追加
+            "low" or "c3mn" => "HIGH",                              // 重い soft(120/90、3.522.0)
+            // high は 45→25（2026-09-10 HF77明示指示）で c1/c3mn を下回りWARN側。[3.522.0]全面見直し後も
+            // high(25) は依然 c1(50)/c3mn(90) より軽く分類は不変。
             "c1" or "high" or "c3" or "c3m" or "c2" or "c41" or "c42" or "c41s" or "c42s" or "apt" or "covO" => "WARN",
-            // c1=30 は最多件数で飽和回避(3.367.0)・他は1〜3/過剰配置。下流(V6RemainingScreens)はHIGH/WARNを同一表示に畳む
+            // c1=50 は最多件数で飽和回避(3.367.0)・他は1〜15/過剰配置。下流(V6RemainingScreens)はHIGH/WARNを同一表示に畳む
             "fair" or "weekly" => "INFO", // 整え(常時非ゼロ)
             _ => "INFO",
         };

@@ -81,6 +81,10 @@ public static class StateFingerprint
             foreach (var c in fam) { Txt(c.G1Kigou); Txt(c.G2Kigou); Txt(c.S1Kigou); Txt(c.S2Kigou); }
         }
 
+        // [3.542.0] c3w（希望の前日に禁止）。
+        Mix(5);
+        foreach (var c in st.Cons3w ?? Array.Empty<C3wRow>()) { Txt(c.WishKigou); Txt(c.PrevKigou); }
+
         return h;
     }
 }

@@ -65,7 +65,15 @@ public class CombinatorialRepairTest
             needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
             cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(),
             cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
-            cons41: new List<C41Row> { new("G0", "Qres", "1", "1") }, cons42: new List<C42Row>());
+            // [3.522.0] apt重み1→4でX/Y単独移動が「タイ」でなくなった（apt改善1件がc41悪化1件を
+            //   上回ってしまう）ため、c41行を4重複させ1違反=4件計上にして単独では確実に悪化するよう調整。
+            //   結合時はQres在籍数が相殺されゼロのままなので4重複の影響を受けない（意図した性質は不変）。
+            cons41: new List<C41Row>
+            {
+                new("G0", "Qres", "1", "1"), new("G0", "Qres", "1", "1"),
+                new("G0", "Qres", "1", "1"), new("G0", "Qres", "1", "1"),
+            },
+            cons42: new List<C42Row>());
     }
 
     [Fact]

@@ -364,6 +364,15 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 結合探索を粘り強く → {(on ? "ON" : "OFF")}");
     }
 
+    /// <summary>[Android 3.540.0同期] 回数連鎖研磨（個人上限/群目標の超過を同日巡回交換の複数日連鎖で解消）。
+    /// 既定OFF・測定中（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格）。</summary>
+    public void SetCountChainPolish(bool on)
+    {
+        PolishGate.CountChainPolish = on;
+        Ui.CountChainPolish = on;
+        LogOp("I", $"設定変更: 回数の超過を数日がかりで減らす → {(on ? "ON" : "OFF")}");
+    }
+
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み
     //   （単体A/B中立＝機構ごと撤去）＝この移植でも対応不要。
 

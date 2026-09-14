@@ -76,6 +76,12 @@ public static class Ws1Ops
                 S1Kigou = c.S1Kigou == old ? newKigou : c.S1Kigou,
                 S2Kigou = c.S2Kigou == old ? newKigou : c.S2Kigou,
             }).ToList(),
+            // [3.542.0] c3w も記号(文字列)参照。
+            Cons3w = (s.Cons3w ?? Array.Empty<C3wRow>()).Select(c => c with
+            {
+                WishKigou = c.WishKigou == old ? newKigou : c.WishKigou,
+                PrevKigou = c.PrevKigou == old ? newKigou : c.PrevKigou,
+            }).ToList(),
         };
     }
 
@@ -291,6 +297,7 @@ public static class Ws1Ops
         n += state.Cons42.Count(c => c.S1Kigou == kigou || c.S2Kigou == kigou);
         n += state.Cons41s.Count(c => c.ShiftKigou == kigou);
         n += state.Cons42s.Count(c => c.S1Kigou == kigou || c.S2Kigou == kigou);
+        n += (state.Cons3w ?? Array.Empty<C3wRow>()).Count(c => c.WishKigou == kigou || c.PrevKigou == kigou);
         return n;
     }
 
@@ -350,7 +357,7 @@ public static class Ws1Ops
     ///
     /// [3.418.0] 旧: 埋める側は一律 <c>restShiftIndex</c> で、**その職員がそのシフトを担当できるかを見て
     /// いなかった**。担当可否から休を外した群（UI の担当可否チップで実際にできる操作）に職員を足す／
-    /// 期間を伸ばす／シフトを消すと、**埋めたマス全部が groupViol(HARD 重み10000)** になった
+    /// 期間を伸ばす／シフトを消すと、**埋めたマス全部が groupViol(HARD 重み11000)** になった
     /// （31日なら1クリックで必須違反31件）。最適化を回せば <c>hf67HardRepair</c> が正規化するが、
     /// その前に画面が真っ赤になる＝利用者には理由が分からない。
     ///

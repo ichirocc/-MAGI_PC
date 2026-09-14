@@ -41,6 +41,9 @@ public sealed record C3Row(IReadOnlyList<string> Pattern);
 public sealed record C41Row(string GroupKigou, string ShiftKigou, string L, string U);
 public sealed record C42Row(string G1Kigou, string G2Kigou, string S1Kigou, string S2Kigou);
 
+/// <summary>[3.542.0] 希望(ws3)で固定した WishKigou の前日に PrevKigou を置けない。素の連続禁止は Cons3n。</summary>
+public sealed record C3wRow(string WishKigou, string PrevKigou);
+
 /// <summary>
 /// Immutable snapshot of the full scheduling problem + current draft schedule.
 ///
@@ -82,7 +85,10 @@ public sealed record MagiState(
     /// <summary>Per-shift display colour overrides, keyed by shift kigou -&gt; "#rrggbb". Display only (no engine effect).</summary>
     IReadOnlyDictionary<string, string> ShiftColors,
     /// <summary>Anything we do not model yet, kept verbatim (cloned JsonElements) so export round-trips losslessly.</summary>
-    IReadOnlyDictionary<string, JsonElement> Extras
+    IReadOnlyDictionary<string, JsonElement> Extras,
+    /// <summary>[3.542.0] 希望の前日に禁止（HARD、c3n と同格）。既存 JSON にキーが無ければ null＝空として読む
+    /// （既存の22箇所の <c>new MagiState(...)</c> 呼出元を変えずに済むよう既定値つきの末尾パラメータにする）。</summary>
+    IReadOnlyList<C3wRow>? Cons3w = null
 )
 {
     public int StaffCount => StaffList.Count;

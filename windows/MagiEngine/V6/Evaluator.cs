@@ -62,7 +62,7 @@ public sealed class Evaluator
 
         // ---- c1: every window of length day1 must contain >= day2 of shiftIdx --------------
         // [統一] (1)担当不可スタッフは対象外(canDoガード=チェッカーと一致、解消不能な幻の違反を除去)、
-        // (2)#fire 計上(soft += 30×重み)。[HF77] 窓の要件(c1)の重みは 4→5→15→30 と変遷、現在値は30。
+        // (2)#fire 計上(soft += 50×重み)。[3.522.0/HF77] 窓の要件(c1)の重みは 4→5→15→30→50 と変遷。
         foreach (var c in _p.Cons1)
         {
             int d1 = c.Day1, si = c.ShiftIdx, d2 = c.Day2;
@@ -74,13 +74,14 @@ public sealed class Evaluator
                 {
                     int z = 0;
                     for (int l = 0; l < d1; l++) if (a[i][j + l] == si) z++;
-                    if (z < d2) soft += 30L;
+                    if (z < d2) soft += 50L;
                     j++;
                 }
             }
         }
 
         // ---- c2: per-staff total of a shift must reach count -------------------------------
+        // [3.522.0] c2 重み 1→4。
         foreach (var c in _p.Cons2)
         {
             for (int i = 0; i < S; i++)
@@ -88,7 +89,7 @@ public sealed class Evaluator
                 if (!_p.CanDo(i, c.ShiftIdx)) continue; // [監査#5] 担当不可の職員は対象外（チェッカーと同一条件）
                 int z = 0;
                 for (int j = 0; j < T; j++) if (a[i][j] == c.ShiftIdx) z++;
-                soft += _p.QuantitativeRangeEval ? C2Amount(z, c.Count) : (z < c.Count ? 1L : 0L);
+                soft += (_p.QuantitativeRangeEval ? C2Amount(z, c.Count) : (z < c.Count ? 1L : 0L)) * 4L;
             }
         }
 
@@ -119,14 +120,14 @@ public sealed class Evaluator
         }
 
         // ---- c41s / c42s: スキルグループ版（ssk = スキル群index。既存 sgrp とは独立） -----------
-        // 罰則は c41/c42 と同等(soft)。
+        // [3.522.0] c41s/c42s 重み 1→6（c41/c42 の 1 と分岐）。
         foreach (var c in _p.Cons41s)
         {
             for (int j = 0; j < T; j++)
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Ssk[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                soft += _p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
+                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 6L;
             }
         }
         foreach (var c in _p.Cons42s)
@@ -139,23 +140,31 @@ public sealed class Evaluator
                     if (_p.Ssk[i] == c.G1 && a[i][j] == c.S1) n1++;
                     if (_p.Ssk[i] == c.G2 && a[i][j] == c.S2) n2++;
                 }
-                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2);
+                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 6L;
             }
         }
 
-        // ---- c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=3/c3m=2/c3mn=30)を soft に適用。
+        // ---- c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=15/c3m=10/c3mn=90)を soft に適用。
         // c3n は forbidden=HARD として hard1 のまま。窓マッチは #fire 計上(後述の sub += 1)。
-        // [HF77] 回避の並び(c3mn)の重みは 12→15→30 と変遷、現在値は30。
-        soft += C3Check(a, _p.Cons3, forbidden: false) * 3L;
+        // [3.522.0/HF77] c3=3→15・c3m=2→10・c3mn=12→15→30→90 と変遷。
+        soft += C3Check(a, _p.Cons3, forbidden: false) * 15L;
         hard1 += C3Check(a, _p.Cons3n, forbidden: true);
-        soft += C3Check(a, _p.Cons3m, forbidden: false) * 2L;
-        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 30L;
+        soft += C3Check(a, _p.Cons3m, forbidden: false) * 10L;
+        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 90L;
+
+        // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
+        if (_p.C3wBan != null)
+        {
+            for (int i = 0; i < S; i++)
+                for (int j = 0; j < T; j++)
+                    if (_p.C3wBanned(i, j, a[i][j])) hard1 += 1;
+        }
 
         // ---- pref / groupViol ----------------------------------------------------------------
         // pref: wished cell not honored -> display HARD（[監査#11②] 実現可能な希望のみ計上。
         //   不可能希望は計数から対称除外）。
         // groupViol: 担当できないシフトに就いているセル。3.318.0 でチェッカーの MirrorKeys.hard
-        //   （groupViol/c3n/covU/pref の4族）と揃えた。
+        //   （groupViol/c3n/covU/pref/c3w の5族）と揃えた。
         for (int i = 0; i < S; i++)
         {
             for (int j = 0; j < T; j++)
@@ -169,7 +178,7 @@ public sealed class Evaluator
 
         // ---- range (low/high) + apt -----------------------------------------------------------
         // [統一a/b] range (LimMin/LimMax) は SOFT。UnifiedViolationChecker と同じ amount×重み
-        // (low=90/high=25)・同じガード(lo!=0, low は canDo 必須)。
+        // (low=120/high=25)・同じガード(lo!=0, low は canDo 必須)。[3.522.0] low 90→120。
         var ssn = new int[S][];
         for (int i = 0; i < S; i++) ssn[i] = new int[K];
         // [レビュー#7 3.213.0] a[i][j] は範囲外(正規化前の -1 センチネル等)を取りうるため、範囲内の
@@ -189,35 +198,30 @@ public sealed class Evaluator
                 int lo = _p.RangeLo[i][k];
                 int hi = _p.RangeHi[i][k];
                 int n = ssn[i][k];
-                if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * 90L;
+                if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * 120L;
                 if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 25L;
-                // [統一apt] 適切回数(双方向目標) SOFT・重み1・L1偏差|n-t|。UnifiedViolationChecker の "apt" と一致。
+                // [統一apt] 適切回数(双方向目標) SOFT・L1偏差|n-t|。UnifiedViolationChecker の "apt" と一致。[3.522.0] 重み1→4。
                 int t = _p.Apt[i][k];
-                if (t >= 0) soft += Math.Abs(n - t);
+                if (t >= 0) soft += Math.Abs(n - t) * 4L;
             }
         }
 
         // ---- fair: within-group equalization ---------------------------------------------------
-        // [統一fair] グループ内公平化 SOFT・重み1。群×担当ONシフトごと、メンバー回数の round(平均)
-        // からの L1偏差和（UnifiedViolationChecker の "fair" と一致）。
+        // [統一fair/3.538.0] グループ内公平化 SOFT。群×担当ONシフトごと、Problem.FairDevOfBucket（達成率
+        // モード、全員に基準が無ければ従来の生回数round(平均)方式）からのL1偏差和（UnifiedViolationChecker
+        // の "fair" と一致）。[3.522.0] 重み1→2、[3.541.0] 達成率モード v2 に改定。
         for (int g = 0; g < _p.G; g++)
         {
             var mem = _p.GroupMembers[g];
-            int m = mem.Length;
-            if (m < 2) continue;
+            if (mem.Length < 2) continue;
             foreach (var k in _p.Bucket[g])
-            {
-                int sum = 0;
-                foreach (var x in mem) sum += ssn[x][k];
-                int tgt = (int)KotlinInterop.MathRound(sum / (double)m);
-                foreach (var x in mem) soft += Math.Abs(ssn[x][k] - tgt);
-            }
+                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k]).Total * 2L;
         }
 
         // ---- weekly: 7-day-cycle shift equalization ----------------------------------------------
-        // [統一weekly] 7日周期のシフト平準化 SOFT・重み1。職員ごとシフトごとに、そのシフトが入る日の
+        // [統一weekly] 7日周期のシフト平準化 SOFT。職員ごとシフトごとに、そのシフトが入る日の
         // 曜日別カウントの round(回数/7) からの L1偏差和（UnifiedViolationChecker の "weekly" と一致）。
-        // [3.345.0] 休も1シフトとして数える（旧: 勤務日=非休の二値）。
+        // [3.345.0] 休も1シフトとして数える（旧: 勤務日=非休の二値）。[3.522.0] 重み1→2。
         for (int i = 0; i < S; i++)
         {
             var wd = new int[K][];
@@ -227,7 +231,7 @@ public sealed class Evaluator
                 int k = a[i][j];
                 if (k >= 0 && k < K) wd[k][(_p.Dow0 + j) % 7]++;
             }
-            for (int k = 0; k < K; k++) soft += ScheduleUtil.WeeklyDevOfBucket(wd[k]);
+            for (int k = 0; k < K; k++) soft += ScheduleUtil.WeeklyDevOfBucket(wd[k]) * 2L;
         }
 
         // ---- covU / covO ------------------------------------------------------------------------
@@ -240,8 +244,8 @@ public sealed class Evaluator
                 int dsn = 0;
                 for (int i = 0; i < S; i++) if (a[i][j] == k) dsn++;
                 covU += _p.CovUCell(k, j, dsn);
-                // [HF77明示指示 2026-08-27] covO 重み 1→5。MirrorKeys.Weights["covO"] と同時に変更。
-                soft += (long)_p.CovOCell(k, j, dsn) * 5L;
+                // [3.522.0] covO 重み5→10。MirrorKeys.Weights["covO"] と同時に変更。
+                soft += (long)_p.CovOCell(k, j, dsn) * 10L;
             }
         }
         hard1 += covU;

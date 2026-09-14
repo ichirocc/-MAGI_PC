@@ -194,18 +194,18 @@ public static partial class V6NativeOptimizer
         var pen = 0L;
         var lo = p.RangeLo[i][k];
         var hi = p.RangeHi[i][k];
-        // [3.319.0] low は担当できるシフトだけ。
-        if (lo != int.MinValue && lo != 0 && n < lo && p.CanDo(i, k)) pen += (lo - n) * 90L;
+        // [3.319.0] low は担当できるシフトだけ。[3.522.0] low 90→120。
+        if (lo != int.MinValue && lo != 0 && n < lo && p.CanDo(i, k)) pen += (lo - n) * 120L;
         if (hi != int.MaxValue && n > hi) pen += (n - hi) * 25L;
         var t = p.Apt[i][k];
-        if (t >= 0) pen += Math.Abs(n - t);
+        if (t >= 0) pen += Math.Abs(n - t) * 4L; // [3.522.0] apt 1→4
         return pen;
     }
 
     /// <summary>
     /// [3.267.0/weekly+fair統合] weekly(7日周期のシフト平準化)の marginal cost。wd は staff のシフト別
     /// 曜日カウント([K][7]、呼出元が維持)。[3.345.0] oldK→newK のシフト移動を受け、動くのは oldK と
-    /// newK の2バケットだけ（oldK==newK は 0）。wd 自体は変更しない(コミットは呼出元)。
+    /// newK の2バケットだけ（oldK==newK は 0）。wd 自体は変更しない(コミットは呼出元)。[3.522.0] 重み1→2。
     /// </summary>
     internal static long WeeklyMarginalAt(int[][] wd, int bucket, int oldK, int newK)
     {
@@ -227,35 +227,25 @@ public static partial class V6NativeOptimizer
             acc += ScheduleUtil.WeeklyDevOfBucket(b) - before;
             b[bucket]--;
         }
-        return acc;
+        return acc * 2L; // [3.522.0] weekly 1→2
     }
 
     /// <summary>
-    /// fair(グループ内公平化)の marginal cost。staff i の shift k 保有回数が delta 変化した際の、群
-    /// g=p.Sgrp[i] のシフト k における L1偏差(checkerと同一式)の変化。m&lt;2(公平化対象外)・k が群の
-    /// 担当外なら 0。counts/grpTotal は呼出元が維持する S×K・G×K 集計。
+    /// [3.538.0] fair(グループ内公平化)の marginal cost。staff i の shift k 保有回数が delta 変化した際の
+    /// <see cref="ScheduleUtil.FairDevOfBucket"/>（群 g=p.Sgrp[i]・シフト k）の変化。m&lt;2・k が群の担当外
+    /// なら 0。counts は呼出元が維持するS×K集計（達成率モードは個々人の回数が要るため、旧実装のG×K群合計
+    /// grpTotal は不要）。
     /// </summary>
-    internal static long FairMarginalAt(Problem p, int i, int k, int delta, int[][] counts, int[][] grpTotal)
+    internal static long FairMarginalAt(Problem p, int i, int k, int delta, int[][] counts)
     {
         if (delta == 0 || k < 0 || k >= p.K) return 0L;
         var g = p.Sgrp[i];
-        var mem = p.GroupMembers[g];
-        var m = mem.Length;
-        if (m < 2 || !p.Bucket[g].Contains(k)) return 0L;
-
-        int Dev(int sum)
-        {
-            var tgt = (int)KotlinInterop.MathRound(sum / (double)m);
-            var d = 0;
-            foreach (var x in mem) d += Math.Abs(counts[x][k] - tgt);
-            return d;
-        }
-
-        var before = Dev(grpTotal[g][k]);
+        if (p.GroupMembers[g].Length < 2 || !p.Bucket[g].Contains(k)) return 0L;
+        var before = p.FairDevOfBucket(g, k, x => counts[x][k]).Total;
         counts[i][k] += delta;
-        var after = Dev(grpTotal[g][k] + delta);
+        var after = p.FairDevOfBucket(g, k, x => counts[x][k]).Total;
         counts[i][k] -= delta;
-        return after - before;
+        return (after - before) * 2L; // [3.522.0] fair 1→2（WeeklyMarginalAtと同型で内部適用）
     }
 
     /// <summary>
@@ -308,10 +298,8 @@ public static partial class V6NativeOptimizer
             return d;
         }
 
-        // [3.267.0/weekly+fair統合] 群合計(fair, 月間total)と職員別曜日バケット(weekly)を一度だけ構築。
-        var grpTotal = new int[p.G][];
-        for (var g = 0; g < p.G; g++) grpTotal[g] = new int[p.K];
-        for (var i = 0; i < p.S; i++) for (var k = 0; k < p.K; k++) grpTotal[p.Sgrp[i]][k] += cnt[i][k];
+        // [3.267.0/weekly統合] 職員別曜日バケット(weekly)を一度だけ構築（destroy後のschedule基準＝c41の
+        // grpCntと同じ順序）。day j は固定のため bucket は全候補共通。
         var wd = new int[p.S][][];
         for (var s = 0; s < p.S; s++)
         {
@@ -339,8 +327,8 @@ public static partial class V6NativeOptimizer
                     var delta = StaffCountPenaltyAt(p, i, k, cnt[i][k] + 1) - StaffCountPenaltyAt(p, i, k, cnt[i][k]) +
                         C41DayMarg(p.Sgrp[i], k) +
                         WeeklyMarginalAt(wd[i], bucket, rest, k) +
-                        FairMarginalAt(p, i, rest, -1, cnt, grpTotal) +
-                        FairMarginalAt(p, i, k, 1, cnt, grpTotal);
+                        FairMarginalAt(p, i, rest, -1, cnt) +
+                        FairMarginalAt(p, i, k, 1, cnt);
                     if (delta < bestDelta) { bestDelta = delta; bestI = i; tied = 1; }
                     else if (delta == bestDelta)
                     {
@@ -351,7 +339,6 @@ public static partial class V6NativeOptimizer
                 if (bestI < 0) break;
                 schedule[bestI][j] = k; cnt[bestI][k]++; cnt[bestI][rest]--; covJ[k]++; miss--;
                 if (hasC41) grpCnt[p.Sgrp[bestI]][k]++;
-                grpTotal[p.Sgrp[bestI]][k]++; grpTotal[p.Sgrp[bestI]][rest]--;
                 wd[bestI][rest][bucket]--; wd[bestI][k][bucket]++;
             }
         }
@@ -384,9 +371,6 @@ public static partial class V6NativeOptimizer
             counts[s] = a;
         }
         var cntI = counts[i];
-        var grpTotal = new int[p.G][];
-        for (var g = 0; g < p.G; g++) grpTotal[g] = new int[p.K];
-        for (var s = 0; s < p.S; s++) for (var k = 0; k < p.K; k++) grpTotal[p.Sgrp[s]][k] += counts[s][k];
         var wd = new int[p.K][];
         for (var k = 0; k < p.K; k++) wd[k] = new int[7];
         for (var jj = 0; jj < p.T; jj++) { var k2 = schedule[i][jj]; if (k2 >= 0 && k2 < p.K) wd[k2][(p.Dow0 + jj) % 7]++; }
@@ -399,7 +383,6 @@ public static partial class V6NativeOptimizer
             {
                 schedule[i][j] = rest;
                 cntI[old]--; cntI[rest]++;
-                grpTotal[p.Sgrp[i]][old]--; grpTotal[p.Sgrp[i]][rest]++;
                 wd[old][(p.Dow0 + j) % 7]--; wd[rest][(p.Dow0 + j) % 7]++;
             }
         }
@@ -422,8 +405,8 @@ public static partial class V6NativeOptimizer
                 if (p.CovUCell(k, j, cov[j][k]) <= 0) continue;
                 var delta = StaffCountPenaltyAt(p, i, k, cntI[k] + 1) - StaffCountPenaltyAt(p, i, k, cntI[k]) +
                     WeeklyMarginalAt(wd, bucket, rest, k) +
-                    FairMarginalAt(p, i, rest, -1, counts, grpTotal) +
-                    FairMarginalAt(p, i, k, 1, counts, grpTotal);
+                    FairMarginalAt(p, i, rest, -1, counts) +
+                    FairMarginalAt(p, i, k, 1, counts);
                 if (delta < bestDelta) { bestDelta = delta; bestK = k; tied = 1; }
                 else if (delta == bestDelta)
                 {
@@ -435,7 +418,6 @@ public static partial class V6NativeOptimizer
             {
                 schedule[i][j] = bestK;
                 cntI[bestK]++; cntI[rest]--;
-                grpTotal[p.Sgrp[i]][bestK]++; grpTotal[p.Sgrp[i]][rest]--;
                 wd[rest][bucket]--; wd[bestK][bucket]++;
                 cov[j][bestK]++; cov[j][rest]--;
             }
@@ -475,10 +457,6 @@ public static partial class V6NativeOptimizer
                 for (var jj = 0; jj < p.T; jj++) { var k = schedule[s][jj]; if (k >= 0 && k < p.K) a[k]++; }
                 counts[s] = a;
             }
-            var grpTotal = new int[p.G][];
-            for (var g = 0; g < p.G; g++) grpTotal[g] = new int[p.K];
-            for (var s = 0; s < p.S; s++) for (var k = 0; k < p.K; k++) grpTotal[p.Sgrp[s]][k] += counts[s][k];
-
             var bucket = (p.Dow0 + j.Value) % 7;
             var old = schedule[i.Value][j.Value];
             var bestK = old;
@@ -492,8 +470,8 @@ public static partial class V6NativeOptimizer
                     : 0L;
                 var dK = StaffCountPenaltyAt(p, i.Value, k, cntI[k] + 1) - StaffCountPenaltyAt(p, i.Value, k, cntI[k]);
                 var dWeekly = WeeklyMarginalAt(wd, bucket, old, k);
-                var dFair = (old >= 0 && old < p.K ? FairMarginalAt(p, i.Value, old, -1, counts, grpTotal) : 0L) +
-                    FairMarginalAt(p, i.Value, k, 1, counts, grpTotal);
+                var dFair = (old >= 0 && old < p.K ? FairMarginalAt(p, i.Value, old, -1, counts) : 0L) +
+                    FairMarginalAt(p, i.Value, k, 1, counts);
                 var delta = dOld + dK + dWeekly + dFair;
                 if (delta < bestDelta) { bestDelta = delta; bestK = k; tied = 1; }
                 else if (delta == bestDelta)

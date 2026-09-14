@@ -111,18 +111,104 @@ public static class ScheduleUtil
     }
 
     /// <summary>
-    /// [統一weekly 移植元] 曜日バケット(size 7)の平準化偏差 = round(平均) からの L1 偏差和。
+    /// [統一weekly 移植元] 曜日バケット(size 7)の平準化偏差 = 実数平均 sum/7 からの L1 偏差和
+    /// （Σ|7w-sum|/7、整数のまま計算し最後に1回だけ割ることで丸め誤差を避ける）。
     /// <see cref="ViolationChecker"/> / <see cref="Evaluator"/> / <see cref="DeltaEvaluator"/> の
     /// "weekly" 共通ソース（3面のドリフト防止）。
     /// </summary>
     public static int WeeklyDevOfBucket(int[] wd)
     {
+        // [発見/このセッション] |w - round(sum/7)| の総和(旧実装)は Kotlin の式と**一致しない**。
+        //   Kotlin は「各曜日を real-valued 平均 sum/7 からの距離」を丸めずに保持し、7倍して整数のまま
+        //   総和してから最後に1回だけ割る： Σ|w-sum/7| = Σ|7w-sum|/7（代数的に厳密に等しい）。
+        //   単一の丸めた目標値 round(sum/7) を先に作って距離を測る旧実装は、sum が7で割り切れない時に
+        //   実データで±数件ずれる（golden/sample_state_v6 の3言語期待値との照合で判明）。
         int sum = 0;
         foreach (var w in wd) sum += w;
-        int tgt = (int)KotlinInterop.MathRound(sum / 7.0);
         int d = 0;
-        foreach (var w in wd) d += Math.Abs(w - tgt);
-        return d;
+        foreach (var w in wd) d += Math.Abs(7 * w - sum);
+        return d / 7;
+    }
+
+    /// <summary>[3.538.0] <see cref="FairDevOfBucket"/> の1件分の結果。PerMember は偏差&gt;0の(職員index, 偏差件数)のみ（場所表示用）。</summary>
+    public sealed record FairDevResult(int Total, IReadOnlyList<(int Member, int Dev)> PerMember);
+
+    /// <summary>
+    /// [3.541.0/ユーザー指示・案E 移植元] 公平化（達成率モード v2）: 各職員を「自分の基準に対する達成率」へ写してから群内で比べる。
+    /// 基準＝範囲 lo/hi（両方有限、回数は帯へクランプ＝帯の外は high/low の担当）優先、無ければ実効 apt 目標（中心 t・幅 t）。
+    /// 母集団＝MayPlace または回数&gt;0。基準達成率＝幅を重みにした中央値（Σ幅×|達成率−基準| の最小点＝帯の端の1人に引きずられない）。
+    /// 偏差＝round(|達成率−基準|×自分の幅)。基準が1人でも無ければ同じ母集団で生回数 round(平均) の L1 へ。
+    /// <see cref="ViolationChecker"/> / <see cref="Evaluator"/> / <see cref="DeltaEvaluator"/> の "fair" 共通ソース。
+    /// </summary>
+    public static FairDevResult FairDevOfBucket(this Problem p, int g, int k, Func<int, int> count)
+    {
+        var all = p.GroupMembers[g];
+        var mem = new int[all.Length];
+        int n = 0;
+        foreach (var x in all) if (p.MayPlace(x, k) || count(x) > 0) mem[n++] = x;
+        if (n < 2) return new FairDevResult(0, Array.Empty<(int, int)>());
+        var ach = new double[n];
+        var scale = new double[n];
+        for (int idx = 0; idx < n; idx++)
+        {
+            int x = mem[idx];
+            int lo = p.RangeLo[x][k], hi = p.RangeHi[x][k], c = count(x);
+            if (lo != int.MinValue && hi != int.MaxValue)
+            {
+                // lo>hi（設定ミス）は幅0扱い。C++/Kotlinと同じ手動クランプ（coerceIn は lo>hi で例外）。
+                int e = c < lo ? lo : (c > hi ? hi : c);
+                double s = hi > lo ? (hi - lo) / 2.0 : 0.0;
+                scale[idx] = s;
+                ach[idx] = s > 0.0 ? (e - (lo + hi) / 2.0) / s : 0.0;
+            }
+            else if (p.Apt[x][k] >= 0)
+            {
+                int t = p.Apt[x][k];
+                scale[idx] = t;
+                ach[idx] = t > 0 ? (c - t) / (double)t : 0.0;
+            }
+            else
+            {
+                return LegacyFairDevOfBucket(mem, n, count);
+            }
+        }
+        double w = 0.0;
+        for (int idx = 0; idx < n; idx++) w += scale[idx];
+        if (w <= 0.0) return new FairDevResult(0, Array.Empty<(int, int)>());
+        var order = Enumerable.Range(0, n).OrderBy(i => ach[i]).ToArray();
+        double acc = 0.0;
+        double tgt = ach[order[n - 1]];
+        foreach (var idx in order)
+        {
+            acc += scale[idx];
+            if (acc * 2 >= w) { tgt = ach[idx]; break; }
+        }
+        int total = 0;
+        var perMember = new List<(int, int)>();
+        for (int idx = 0; idx < n; idx++)
+        {
+            int dx = (int)KotlinInterop.MathRound(Math.Abs(ach[idx] - tgt) * scale[idx]);
+            total += dx;
+            if (dx > 0) perMember.Add((mem[idx], dx));
+        }
+        return new FairDevResult(total, perMember);
+    }
+
+    /// <summary><see cref="FairDevOfBucket"/> のフォールバック先＝生回数の round(平均) からの L1 偏差（母集団 mem[0..n)）。</summary>
+    private static FairDevResult LegacyFairDevOfBucket(int[] mem, int n, Func<int, int> count)
+    {
+        int sum = 0;
+        for (int idx = 0; idx < n; idx++) sum += count(mem[idx]);
+        int tgt = (int)KotlinInterop.MathRound(sum / (double)n);
+        int total = 0;
+        var perMember = new List<(int, int)>();
+        for (int idx = 0; idx < n; idx++)
+        {
+            int dx = Math.Abs(count(mem[idx]) - tgt);
+            total += dx;
+            if (dx > 0) perMember.Add((mem[idx], dx));
+        }
+        return new FairDevResult(total, perMember);
     }
 
     public static int[][] CountMatrix(Problem p, int[][] schedule)

@@ -94,7 +94,7 @@ public static partial class V6NativeOptimizer
     ///
     /// [3.391.0, Kotlin原本] 生の <c>wish==k</c> は実現不能な希望（担当できないシフトへの希望）まで
     /// 固定扱いにしていた。pref は実現可能な希望しか数えないので、その場合ここを動かしても pref は増えず
-    /// 担当外セル＝groupViol(10000) が消える＝必須違反が厳密に減る手を丸ごと捨てていた。規約の
+    /// 担当外セル＝groupViol(11000) が消える＝必須違反が厳密に減る手を丸ごと捨てていた。規約の
     /// <see cref="ScheduleUtil.WishLocked"/> へ統一（3.351.0 と同型）。
     /// </summary>
     internal static int ApplyCovOFree(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null)
@@ -391,7 +391,7 @@ public static partial class V6NativeOptimizer
         avoid ??= new HashSet<string>();
         var order = new[]
         {
-            "groupViol", "covU", "pref", "c3n", "low", "high", "c41", "c41s", "c2", "covO",
+            "groupViol", "covU", "pref", "c3n", "c3w", "low", "high", "c41", "c41s", "c2", "covO",
             "c42", "c42s", "apt", "weekly", "fair", "c1", "c3", "c3m", "c3mn",
         };
         // [D1/A1, Kotlin原本] 解ける HARD 族は件数に関わらず SOFT より先に focus する。avoid(HF63=構造的に

@@ -81,7 +81,7 @@ public static class UnifiedViolationChecker
     // C# の静的フィールド初期化は宣言順で確定的に走るため lazy にする必要が無い）。
     private static readonly Dictionary<string, string> VioClass = new()
     {
-        ["c1"] = "vio-c1", ["c2"] = "vio-c2", ["c3"] = "vio-c3", ["c3n"] = "vio-c3n",
+        ["c1"] = "vio-c1", ["c2"] = "vio-c2", ["c3"] = "vio-c3", ["c3n"] = "vio-c3n", ["c3w"] = "vio-c3w",
         ["c3m"] = "vio-c3m", ["c3mn"] = "vio-c3mn", ["c41"] = "vio-c41", ["c42"] = "vio-c42",
         ["c41s"] = "vio-c41s", ["c42s"] = "vio-c42s",
         ["covU"] = "vio-covU", ["covO"] = "vio-covO", ["pref"] = "vio-pref",
@@ -312,6 +312,15 @@ public static class UnifiedViolationChecker
         CheckC3Family(p, s, p.Cons3m, "c3m", forbidden: false, (key, amt) => Inc(key, amt), Mark);
         CheckC3Family(p, s, p.Cons3mn, "c3mn", forbidden: true, (key, amt) => Inc(key, amt), Mark);
 
+        // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
+        // 前日側のセル（動かせる側）を違反箇所にする。静的表 Problem.C3wBan を引くだけ。
+        if (p.C3wBan != null)
+        {
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T; j++)
+                    if (p.C3wBanned(i, j, s[i][j])) { Inc("c3w"); Mark(i, j, "c3w"); }
+        }
+
         // ---- pref: wished cell not honored ---------------------------------------------------
         for (int i = 0; i < p.S; i++)
         {
@@ -356,25 +365,18 @@ public static class UnifiedViolationChecker
         }
 
         // ---- fair: within-group equalization --------------------------------------------------
+        // [統一fair/3.538.0] グループ内公平化: 群×担当ONシフトごと、Problem.FairDevOfBucket（達成率モード、
+        // 全員に基準が無ければ従来の生回数round(平均)方式）からのL1偏差和。SOFT。最適化器(Evaluator/Delta)と同一指標。
         var fairLocs = new List<List<int>>();
         for (int g = 0; g < p.G; g++)
         {
             var mem = p.GroupMembers[g];
-            int m = mem.Length;
-            if (m < 2) continue;
+            if (mem.Length < 2) continue;
             foreach (var k in p.Bucket[g])
             {
-                int sum = 0;
-                foreach (var x in mem) sum += counts[x][k];
-                int tgt = (int)KotlinInterop.MathRound(sum / (double)m);
-                int d = 0;
-                foreach (var x in mem)
-                {
-                    int dx = Math.Abs(counts[x][k] - tgt);
-                    d += dx;
-                    if (dx > 0) fairLocs.Add(new List<int> { x, k, dx });
-                }
-                if (d > 0) Inc("fair", d);
+                var res = p.FairDevOfBucket(g, k, x => counts[x][k]);
+                foreach (var (x, dx) in res.PerMember) fairLocs.Add(new List<int> { x, k, dx });
+                if (res.Total > 0) Inc("fair", res.Total);
             }
         }
 

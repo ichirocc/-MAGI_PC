@@ -326,6 +326,61 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-14 Android 3.522.0〜3.542.0 を同期（ユーザー指示「3.542.0まで全て（c3w新制約・CountChainPolish含む）」）:
+  - **重み表全面見直し（3.522.0）**: `MirrorKeys.WeightsOrdered`をAndroidのtools/loop 34ケース×10seedベンチマーク
+    結果へ合わせて全面改定（HARD含む: groupViol 11000>covU 10000>c3n 9000>pref 8000、SOFT: low 120>c3mn 90>
+    c1 50>high 25>c3 15>c3m 10=covO 10>c41s 6=c42s 6>c2 4=apt 4>fair 2=weekly 2>c41 1=c42 1）。
+    `Evaluator`/`DeltaEvaluator`/`V6NativeOptimizer.Repair.cs`/`V6HotfixPasses.{Range,DayAssign}.cs`/
+    `C1TemporalFlowPolish.cs`の重み付き集約式、`ParityTest.cs`の期待値、`MagiEngine.Tests/Fixtures/*_eval_expected.txt`
+    （Androidの`app/src/test/resources/`と同一の複製、Kotlin側で既に3.542.0まで更新済みの版をそのまま複製）を同期。
+    `DeltaEvaluator.PreviewMove`のdSoftにcovO×10の重み乗算が抜けていた既存バグ（戻り値は現状無使用のため実害なし）も
+    ついでに修正。
+  - **公平化(fair)達成率モードv2（3.538.0→3.541.0）**: `ScheduleUtil.FairDevOfBucket`を新設し、Evaluator/
+    DeltaEvaluator/ViolationChecker/`V6NativeOptimizer.Repair.cs`の`FairMarginalAt`（旧`grpTotal`引数を撤去）を
+    共通ソースへ統一。範囲staffRange.lo/hi優先・無ければ実効apt目標、母集団はmayPlaceまたは回数>0、基準は幅を
+    重みにした中央値、偏差はround(|達成率-基準|×幅)。基準が1人でも無ければ従来の生回数round(平均)へフォールバック。
+  - **回数連鎖研磨 CountChainPolish（3.540.0/3.541.1、既定OFF）**: `CountChainPolish.cs`を新規移植（デバウンス
+    付き反復深化DFS、low/high/apt/covO救済）。`PolishGate.CountChainPolish`（既定false）でトグル、
+    `V6HotfixPasses.RunPostOptimization.cs`は呼出元(`V6FinalPort.HandleOptimize.cs`)を変えずに済むよう
+    `PolishGate`を直接読む方式（Android は`PostOptimizationParams`へ配線、C#は`CombineExhaustPairs`と同じ軽量経路）。
+    `UiState.CountChainPolish`/`MagiViewModel.SetCountChainPolish`まで配線。WinUIのトグルUI(`SettingsView.xaml`)は
+    このサンドボックスでビルド確認不可のため未着手（次回Windows環境での確認が必要）。
+  - **新制約 c3w／`cons3w`「希望の前日に禁止」（3.542.0、HARD 9000＝c3n同格）**: `MagiState.Cons3w`
+    （末尾・既定null）、JSON `cons3w`キー、CSV種別「希望前日禁止」、`Problem.C3wBan[i][j][k]`（希望は探索中不変の
+    静的表）と`Problem.C3wBanned`/`MakesForbiddenRun`枝刈り、Checker/Evaluator/DeltaEvaluator/`C1DeltaPrefilter`
+    の5面、`Ws1Ops`の記号改名伝播とシフト参照カウント、`StateFingerprint`、`V6SanityPort.Guidance`の設定ミス診断1b
+    （希望どうしの衝突）を移植。**移植中に発見しAndroid側と同型に追加した既存の見落とし**（c3w新設ではなく
+    3.522.0/3.538.0時点で既に必要だった箇所）: `V6NativeOptimizer.Rsi.cs`のRSI focus優先順位表・
+    `ShiftAppearance.SeverityFromVioKey`のCRITICAL分類・`V6PortAnalyzer.Overview.cs`のhardCore集計（2箇所）・
+    `V6FinalPort.HandleOptimize.cs`のbestNonCovUHard/bestNonCovUAllC3n判定にc3wが漏れていた（いずれもAndroidの
+    対応箇所は既にc3wを含んでいたが、この移植ではまだ入っていなかった）。新規テスト`C3wConstraintTest.cs`
+    （`C3wConstraintTest.kt`の1対1移植、6件）を追加。`ParityTest.cs`の`familyRaw.Count`を17→18、
+    「19族」表記を「20族」へ、synthetic fixtureに`Cons3w`を追加。
+  - **`ScheduleUtil.WeeklyDevOfBucket`の計算式バグを発見・修正**: 旧実装`Σ|w-round(sum/7)|`（単一の丸めた目標値
+    への距離）はKotlinの`Σ|7w-sum|/7`（実数平均sum/7への距離を丸めずに7倍整数のまま計算し最後に1回だけ割る、
+    代数的に厳密に等価）と**一致しない**。sumが7で割り切れない実データで±数件ずれ、`CrossLanguageFixtureTest`
+    （golden/sample_state_v6 fixture）で発見。この式差はAndroid側でも3.526.0（HF77明示指示）で全く同じ理由
+    （旧式は合計が3回以下だと目標が0に丸まり同一曜日集中を検出できない死角があった）で既に修正済みだったが、
+    C#側は今回まで未同期だった。`dotnet test`: 850件中849緑（1件は下記の既知の未解決）。
+  - **⚠️ 発見した未解決の懸念（Android側の判断が必要、今回のC#移植では手を付けていない）**:
+    `PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates`のrandom#1（seed 0x91A7L由来の12反復目の1つ）
+    が3.522.0の重み表適用後に**再現性のある失敗**として残った（`git worktree`でAndroid同期前のHEADへ戻すと緑、
+    `MirrorKeys.cs`だけを新表に差し替えると単独で再現＝重み表そのものが引き金）。原因の当たり：keep-bestの比較
+    （`ReportComparer`＝hard→weightedScore→totalの辞書式）はHARD件数が同点のときweightedScoreで決着するが、
+    3.522.0はHARD族どうしの相対順位も変えた（旧: groupViol>pref>covU>c3n、新: groupViol>covU>c3n(=c3w)>pref）。
+    「実現可能な希望を1件壊す(pref+1)代わりにc3n(禁止連続)またはcovU(人員不足)を1件解消する」というHARD件数
+    据え置きの取引が、新表では旧表と逆にweightedScore上「改善」に見えてしまう組合せが存在しうる（`movable`ガード
+    が本来一次防御・スコアは二次防御という設計で、この逆転はその二次防御を無効化しうる）。34ケース×10seed
+    ベンチマーク（3.522.0の採否根拠）は集計上の違反件数を見るため、この種の低頻度な希望破棄までは検出しない
+    可能性がある。**C#単独で探索動学・採用基準を変えない**というこのrepoの方針（Kotlinが正）に従い、C#側での
+    ガード追加は見送った。Android側で同じ設計（同じ重み表・同じhard→weightedScore→total比較）を使っている以上
+    理論上同じ懸念が当てはまるため、Android側で同種の敵対的fuzzテスト（ランダムseedを多数振っての
+    `PostOptimizationHoldsPinsAcrossRandomStates`相当）を通すか、対象パスに`movable`相当のガードを追加するかの
+    判断を業務担当者/Android側の検討に委ねる。C#側は現状1件のknown failureとして残置（`MagiEngine.Tests`は
+    849/850）。
+  - `docs/business-logic.md`・`docs/data-models.md`をAndroidの現行版（3.542.0時点）で丸ごと再同期（このrepoの
+    契約どおり同一の複製）。`CLAUDE.md`の重み表記載行も更新。
+
 - 2026-09-11 UX改善: UI用語統一・ゲーム要素廃止（ユーザー指示、Android 3.520.0と同時）:
   フェーズ名バッジ「狩猟」→「未完成」、感嘆符/進捗を煽る前置き（「できました！」「もう少しです。」）を
   平易な文へ、旧語「できあがり度」を正式語「解消度」へ統一、「最適化」vs「計算」の混在を「最適化を実行
