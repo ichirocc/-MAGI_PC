@@ -326,6 +326,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-15 Android 3.554.0 を同期（人員過剰(covO)の退避研磨 `V6HotfixPasses.CovORelief.cs`＝Kotlin `CovOReliefPolish`）:
+  過剰セルの在勤者を受け皿のある担当可シフト（需要 0 のシフト＝B4 等を含む）へ 1 セルずつ動かし `BetterReport` で採る。
+  `RunPostOptimization` の HF66 直後と共同 LNS の後（成分修復の前）に挿入、`PostOptimizationParams.CovOReliefEnabled`（既定 ON）。
+  テスト `V6HotfixPassesCovOReliefTest.cs`（Kotlin 3 件の移植）。`dotnet test`（CovORelief＋LoopFeatureRegression）17 件緑。
 - 2026-09-14 Android 3.522.0〜3.542.0 を同期（ユーザー指示「3.542.0まで全て（c3w新制約・CountChainPolish含む）」）:
   - **重み表全面見直し（3.522.0）**: `MirrorKeys.WeightsOrdered`をAndroidのtools/loop 34ケース×10seedベンチマーク
     結果へ合わせて全面改定（HARD含む: groupViol 11000>covU 10000>c3n 9000>pref 8000、SOFT: low 120>c3mn 90>
