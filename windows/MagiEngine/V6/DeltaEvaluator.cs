@@ -191,7 +191,7 @@ public sealed class DeltaEvaluator
         // [統一c1] c1 にも checker 重み(50)を適用（_sc1 は #fire 生カウント、canDoガード済）。
         // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める。
         // [3.522.0/HF77明示数値指示・全面見直し] 重み表全面改定（経緯は Android docs/history/3.4xx.md）。
-        long soft = _sc1 * 50 + _sc2 * 4 + _sc41 + _sc42 + _sc41s * 6 + _sc42s * 6 + _sc3 * 15 + _sc3m * 10 + _sc3mn * 90
+        long soft = _sc1 * 50 + _sc2 * 4 + _sc41 * 9 + _sc42 * 9 + _sc41s * 10 + _sc42s * 10 + _sc3 * 15 + _sc3m * 6 + _sc3mn * 90
                     + _hct + _sApt * 4 + _sFair * 2 + _sWeekly * 2 + _scovO * 10;
         return h1 * Evaluator.SCORE_HARD_UNIT + soft;
     }

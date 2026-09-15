@@ -326,6 +326,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-15 Android 3.556.0 を同期（重み変更、HF77 明示指示）: c41/c42 1→9、c41s/c42s 6→10、c3m 10→6。
+  `MirrorKeys.WeightsOrdered`・`Evaluator.cs`（c41/c42 に ×9 新設、c41s/c42s ×10、c3m ×6）・`DeltaEvaluator.cs` 集約式・
+  `Fixtures/*_eval_expected.txt` 3 件の soft を再計算（golden 8990・sample_v6 2530・blocked_covu 4725）。
 - 2026-09-15 Android 3.555.0 を同期（休0日の窓LNS `V6HotfixPasses.RestZeroLns.cs`＝Kotlin `RestZeroWindowLns`、既定 OFF）:
   休の必要人数を明示した日に休が余るとき、前後の窓を職員ごとの窓内並べ替えで組み直す。夜勤型シフトの担当列を列挙し、窓の外の
   同日交換で夜勤を人から人へ移す候補も試し、残りをビーム、完成盤面を `BetterReport` で keep-best。`RunPostOptimization` の

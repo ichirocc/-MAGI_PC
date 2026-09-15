@@ -100,7 +100,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Sgrp[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                soft += _p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L);
+                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 9L;
             }
         }
 
@@ -115,7 +115,7 @@ public sealed class Evaluator
                     if (_p.Sgrp[i] == c.G1 && a[i][j] == c.S1) n1++;
                     if (_p.Sgrp[i] == c.G2 && a[i][j] == c.S2) n2++;
                 }
-                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2);
+                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 9L;
             }
         }
 
@@ -127,7 +127,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Ssk[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 6L;
+                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 10L;
             }
         }
         foreach (var c in _p.Cons42s)
@@ -140,7 +140,7 @@ public sealed class Evaluator
                     if (_p.Ssk[i] == c.G1 && a[i][j] == c.S1) n1++;
                     if (_p.Ssk[i] == c.G2 && a[i][j] == c.S2) n2++;
                 }
-                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 6L;
+                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 10L;
             }
         }
 
@@ -149,7 +149,7 @@ public sealed class Evaluator
         // [3.522.0/HF77] c3=3→15・c3m=2→10・c3mn=12→15→30→90 と変遷。
         soft += C3Check(a, _p.Cons3, forbidden: false) * 15L;
         hard1 += C3Check(a, _p.Cons3n, forbidden: true);
-        soft += C3Check(a, _p.Cons3m, forbidden: false) * 10L;
+        soft += C3Check(a, _p.Cons3m, forbidden: false) * 6L;
         soft += C3Check(a, _p.Cons3mn, forbidden: true) * 90L;
 
         // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
