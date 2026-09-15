@@ -97,8 +97,8 @@ public static partial class V6HotfixPasses
         bool ComponentRepairFinal = true,
         /// <summary>[測定中] 人員過剰(covO)の退避研磨（ApplyCovOReliefPolish）を HF66 直後と共同 LNS の後に置く（Android 同名フラグ）。</summary>
         bool CovOReliefEnabled = true,
-        /// <summary>HF66 直後の早期退避も行う（false なら共同 LNS 後の最終掃除だけ＝後続パスの経路を変えない）。</summary>
-        bool CovOReliefEarly = true,
+        /// <summary>HF66 直後にも退避する（既定 false＝最終段だけ。早期に置くと後続パスの経路が変わる、Android tools/loop 測定）。</summary>
+        bool CovOReliefEarly = false,
         /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
         /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
         bool Deterministic = false,
@@ -300,13 +300,6 @@ public static partial class V6HotfixPasses
             var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
-        if (p.CovOReliefEnabled && !stop())
-        {
-            // apt/fair 研磨や共同 LNS が新たに作った過剰を、最終の成分修復の前に掃く（Android 同順）。
-            bool ReliefStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
-            var rRelief = chain.Timed("後処理 人員過剰の退避(最終)", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: ReliefStop));
-            chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs);
-        }
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
             // [Iteration 5] 最終段の予算は残り時間に応じて拡張（2 秒以上残っていれば推定 4 倍・正式評価 2.5 倍）。締切は stop に畳む。
@@ -319,6 +312,14 @@ public static partial class V6HotfixPasses
             chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
                 ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop)));
             chain.RejectedPool.Clear();
+        }
+
+        if (p.CovOReliefEnabled && !stop())
+        {
+            // 最後に置く＝後続パスが無いので keep-best の 1 セル手だけが盤面に足され、旧チェーンの結果より悪くならない（Android 同順）。
+            bool ReliefStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
+            var rRelief = chain.Timed("後処理 人員過剰の退避(最終)", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: ReliefStop));
+            chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs);
         }
 
         var tHf = EngineClock.NowMs();
