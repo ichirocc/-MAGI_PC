@@ -97,6 +97,8 @@ public static partial class V6HotfixPasses
         bool ComponentRepairFinal = true,
         /// <summary>[測定中] 人員過剰(covO)の退避研磨（ApplyCovOReliefPolish）を HF66 直後と共同 LNS の後に置く（Android 同名フラグ）。</summary>
         bool CovOReliefEnabled = true,
+        /// <summary>HF66 直後の早期退避も行う（false なら共同 LNS 後の最終掃除だけ＝後続パスの経路を変えない）。</summary>
+        bool CovOReliefEarly = true,
         /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
         /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
         bool Deterministic = false,
@@ -241,7 +243,7 @@ public static partial class V6HotfixPasses
             return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap);
         });
         chain.ReplaceBoard(r66.NewSchedule, r66.Logs);
-        if (p.CovOReliefEnabled && !stop())
+        if (p.CovOReliefEnabled && p.CovOReliefEarly && !stop())
         {
             var rRelief = chain.Timed("後処理 人員過剰の退避", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: stop));
             chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs);
