@@ -326,6 +326,12 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-15 Android 3.555.0 を同期（休0日の窓LNS `V6HotfixPasses.RestZeroLns.cs`＝Kotlin `RestZeroWindowLns`、既定 OFF）:
+  休の必要人数を明示した日に休が余るとき、前後の窓を職員ごとの窓内並べ替えで組み直す。夜勤型シフトの担当列を列挙し、窓の外の
+  同日交換で夜勤を人から人へ移す候補も試し、残りをビーム、完成盤面を `BetterReport` で keep-best。`RunPostOptimization` の
+  最終段（成分修復の後・退避の前）、`PostOptimizationParams.RestZeroWindowLnsEnabled`（既定 OFF）。推定は Evaluator に族別内訳が
+  無いのでチェッカーの Breakdown を使う（結果同一・速度は劣る）。乱択順は Kotlin と乱数列が異なりビット同一ではない。
+  テスト `V6HotfixPassesRestZeroLnsTest.cs`（Kotlin 3 件の移植）。`dotnet test`（RestZeroLns＋CovORelief＋LoopFeatureRegression）20 件緑。
 - 2026-09-15 Android 3.554.0 を同期（人員過剰(covO)の退避研磨 `V6HotfixPasses.CovORelief.cs`＝Kotlin `CovOReliefPolish`）:
   過剰セルの在勤者を受け皿のある担当可シフト（需要 0 のシフト＝B4 等を含む）へ 1 セルずつ動かし `BetterReport` で採る。
   `RunPostOptimization` の最終段（成分修復の後・HF70 の前）に挿入、`PostOptimizationParams.CovOReliefEnabled`（既定 ON）。

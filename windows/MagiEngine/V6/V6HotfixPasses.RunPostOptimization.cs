@@ -97,6 +97,9 @@ public static partial class V6HotfixPasses
         bool ComponentRepairFinal = true,
         /// <summary>[測定中] 人員過剰(covO)の退避研磨（ApplyCovOReliefPolish）を HF66 直後と共同 LNS の後に置く（Android 同名フラグ）。</summary>
         bool CovOReliefEnabled = true,
+        /// <summary>休の必要人数を明示した日に休が余るとき、前後の窓を夜勤列の列挙＋人間移動＋ビームで組み直す（ApplyRestZeroWindowLns）。
+        /// 最終段・退避の前。既定 OFF＝ユーザー決定（Android 3.555.0）。</summary>
+        bool RestZeroWindowLnsEnabled = false,
         /// <summary>HF66 直後にも退避する（既定 false＝最終段だけ。早期に置くと後続パスの経路が変わる、Android tools/loop 測定）。</summary>
         bool CovOReliefEarly = false,
         /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
@@ -312,6 +315,13 @@ public static partial class V6HotfixPasses
             chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
                 ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop)));
             chain.RejectedPool.Clear();
+        }
+
+        if (p.RestZeroWindowLnsEnabled && !stop())
+        {
+            bool LnsStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
+            var rLns = chain.Timed("後処理 休0日の窓LNS(最終)", "RestZeroLNS", work => ApplyRestZeroWindowLns(state, work, shouldStop: LnsStop));
+            chain.ReplaceBoard(rLns.NewSchedule, rLns.Logs);
         }
 
         if (p.CovOReliefEnabled && !stop())
