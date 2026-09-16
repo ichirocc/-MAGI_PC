@@ -134,6 +134,7 @@ internal static class C1JointLnsPolish
         var evaluations = 0;
         bool EvalCapped() => cfg.MaxEvaluations > 0 && evaluations >= cfg.MaxEvaluations;
         bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || Stalled() || EvalCapped();
+        bool HaltNow() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || Stalled();   // 評価数上限を含まない（生成時に見る）
 
         int lowerBound = StructuralC1LowerBound(p);
         int improvable = Math.Max(rootC1 - lowerBound, 0);
@@ -176,63 +177,71 @@ internal static class C1JointLnsPolish
                     var goals = CollectGoals(p, parent.Schedule, goalLimit, rng, includeTemporal: parent.Path.Count == 0);
                     // [3.569.0 同期] 候補の生成（rng 順）と採否（seen・best）は逐次のまま、評価だけ並列にする。
                     //   評価数の上限は生成時に数えるので、決定論モード（MaxEvaluations）の評価集合は旧実装と同一。
+                    //   締切・停止は塊の境目で見る＝行き過ぎは 1 塊ぶん。
                     var pending = new List<(Move Move, int[][] Next)>();
+                    bool CapReached() => cfg.MaxEvaluations > 0 && evaluations + pending.Count >= cfg.MaxEvaluations;
                     foreach (var goal in goals)
                     {
-                        if (Stopped()) break;
+                        if (HaltNow() || CapReached()) break;
                         var moves = GenerateMoves(p, parent.Schedule, goal, moveLimit, rng);
                         foreach (var move in moves)
                         {
-                            if (Stopped()) break;
+                            if (HaltNow() || CapReached()) break;
                             var next = parent.Schedule.Copy2D();
                             if (!ApplyMove(next, move)) continue;
-                            generated++; evaluations++;
                             pending.Add((move, next));
                         }
                     }
-                    var reports = ParallelEval.MapParallel(pending, pn => UnifiedViolationChecker.Check(state, pn.Next));
-                    for (var idx = 0; idx < pending.Count; idx++)
+                    var from = 0;
+                    while (from < pending.Count && !HaltNow())
                     {
-                        var (move, next) = pending[idx];
+                        var chunk = pending.GetRange(from, Math.Min(ParallelEval.Chunk, pending.Count - from));
+                        var reports = ParallelEval.MapParallel(chunk, pn => UnifiedViolationChecker.Check(state, pn.Next));
+                        generated += chunk.Count; evaluations += chunk.Count;
+                        from += chunk.Count;
+                        for (var idx = 0; idx < chunk.Count; idx++)
                         {
-                            var report = reports[idx];
-                            int c1 = report.Breakdown.GetValueOrDefault("c1", 0);
-                            bool overHard = report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0);
-                            bool overTotal = report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0);
-                            bool overC1 = c1 > rootC1 + Math.Max(cfg.C1Debt, 0);
-                            if (overHard || overTotal || overC1)
+                            var (move, next) = chunk[idx];
                             {
-                                debtRejected++;
-                                if (overHard)
+                                var report = reports[idx];
+                                int c1 = report.Breakdown.GetValueOrDefault("c1", 0);
+                                bool overHard = report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0);
+                                bool overTotal = report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0);
+                                bool overC1 = c1 > rootC1 + Math.Max(cfg.C1Debt, 0);
+                                if (overHard || overTotal || overC1)
                                 {
-                                    debtHard++;
-                                    var fam = V6SearchOperators.WorstWorsenedFamily(report, rootReport);
-                                    if (fam != null)
+                                    debtRejected++;
+                                    if (overHard)
                                     {
-                                        if (!debtCulprits.ContainsKey(fam)) debtCulpritOrder.Add(fam);
-                                        debtCulprits[fam] = debtCulprits.GetValueOrDefault(fam, 0) + 1;
+                                        debtHard++;
+                                        var fam = V6SearchOperators.WorstWorsenedFamily(report, rootReport);
+                                        if (fam != null)
+                                        {
+                                            if (!debtCulprits.ContainsKey(fam)) debtCulpritOrder.Add(fam);
+                                            debtCulprits[fam] = debtCulprits.GetValueOrDefault(fam, 0) + 1;
+                                        }
                                     }
+                                    else if (overTotal) debtTotal++;
+                                    else debtC1++;
+                                    continue;
                                 }
-                                else if (overTotal) debtTotal++;
-                                else debtC1++;
-                                continue;
-                            }
-                            var childPath = new List<Move>(parent.Path.Count + 1);
-                            childPath.AddRange(parent.Path);
-                            childPath.Add(move);
-                            var child = new Node(next, report, c1, childPath, ChangedCellCount(rootSchedule, next));
-                            if (!Remember(seen, child))
-                            {
-                                duplicateRejected++;
-                                continue;
-                            }
-                            children.Add(child);
+                                var childPath = new List<Move>(parent.Path.Count + 1);
+                                childPath.AddRange(parent.Path);
+                                childPath.Add(move);
+                                var child = new Node(next, report, c1, childPath, ChangedCellCount(rootSchedule, next));
+                                if (!Remember(seen, child))
+                                {
+                                    duplicateRejected++;
+                                    continue;
+                                }
+                                children.Add(child);
 
-                            bool finalCandidate = IsFinalCandidate(p, child, root, pinBlocks);
-                            if (finalCandidate && Better(child.Report, best.Report))
-                            {
-                                best = child;
-                                lastImproveTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                                bool finalCandidate = IsFinalCandidate(p, child, root, pinBlocks);
+                                if (finalCandidate && Better(child.Report, best.Report))
+                                {
+                                    best = child;
+                                    lastImproveTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                                }
                             }
                         }
                     }

@@ -7,6 +7,9 @@ namespace MagiEngine.V6;
 /// </summary>
 internal static class ParallelEval
 {
+    /// <summary>締切・停止を見る塊の大きさ（Kotlin <c>PARALLEL_EVAL_CHUNK</c>）。行き過ぎは 1 塊ぶんに収まる。</summary>
+    public const int Chunk = 64;
+
     public static R[] MapParallel<T, R>(IReadOnlyList<T> items, Func<T, R> f, int minParallel = 8)
     {
         var outArr = new R[items.Count];

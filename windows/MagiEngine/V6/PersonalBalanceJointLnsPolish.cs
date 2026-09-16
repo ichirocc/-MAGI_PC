@@ -88,6 +88,7 @@ internal static class PersonalBalanceJointLnsPolish
         var evaluations = 0;
         bool EvalCapped() => cfg.MaxEvaluations > 0 && evaluations >= cfg.MaxEvaluations;
         bool Stopped() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline || EvalCapped();
+        bool HaltNow() => stop() || System.Diagnostics.Stopwatch.GetTimestamp() >= deadline;   // 評価数上限を含まない（生成時に見る）
 
         var root = new Node(rootSchedule.Copy2D(), rootReport, rootPersonal, rootFocus, new List<string>(), 0);
         var best = root;
@@ -121,44 +122,51 @@ internal static class PersonalBalanceJointLnsPolish
                     var goals = CollectGoals(p, parent.Schedule, focus, lower, cfg.MaxGoals, rng);
                     // [3.569.0 同期] C1JointLnsPolish と同じ形: 生成と採否は逐次、評価（Check＋個人罰点）だけ並列。
                     var pending = new List<Candidate>();
+                    bool CapReached() => cfg.MaxEvaluations > 0 && evaluations + pending.Count >= cfg.MaxEvaluations;
                     foreach (var goal in goals)
                     {
-                        if (Stopped()) break;
+                        if (HaltNow() || CapReached()) break;
                         var variants = BuildCandidates(p, parent.Schedule, goal, cfg.MaxVariantsPerGoal, rng);
                         foreach (var candidate in variants)
                         {
-                            if (Stopped()) break;
-                            generated++; evaluations++;
+                            if (HaltNow() || CapReached()) break;
                             pending.Add(candidate);
                         }
                     }
-                    var evaluated = ParallelEval.MapParallel(pending, c => (Report: UnifiedViolationChecker.Check(state, c.Schedule), Personal: PersonalPenaltyByStaff(p, c.Schedule)));
-                    for (var idx = 0; idx < pending.Count; idx++)
+                    var from = 0;
+                    while (from < pending.Count && !HaltNow())
                     {
-                        var candidate = pending[idx];
+                        var chunk = pending.GetRange(from, Math.Min(ParallelEval.Chunk, pending.Count - from));
+                        var evaluated = ParallelEval.MapParallel(chunk, c => (Report: UnifiedViolationChecker.Check(state, c.Schedule), Personal: PersonalPenaltyByStaff(p, c.Schedule)));
+                        generated += chunk.Count; evaluations += chunk.Count;
+                        from += chunk.Count;
+                        for (var idx = 0; idx < chunk.Count; idx++)
                         {
-                            var (report, personal) = evaluated[idx];
-                            int focusTotal = focus.Sum(i => personal[i]);
-                            if (report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0) ||
-                                report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0) ||
-                                focusTotal > rootFocus + Math.Max(cfg.PersonalDebt, 0))
+                            var candidate = chunk[idx];
                             {
-                                debtRejected++;
-                                continue;
-                            }
-                            if (!Remember(seen, candidate.Schedule))
-                            {
-                                duplicateRejected++;
-                                continue;
-                            }
-                            var childPath = new List<string>(parent.Path) { candidate.Label };
-                            var child = new Node(
-                                candidate.Schedule, report, personal, focusTotal,
-                                childPath, ChangedCellCount(rootSchedule, candidate.Schedule));
-                            children.Add(child);
-                            if (IsFinalCandidate(p, child, root, focus, pinBlocks))
-                            {
-                                if (ReferenceEquals(best, root) || BetterFinal(child, best, focus, lower)) best = child;
+                                var (report, personal) = evaluated[idx];
+                                int focusTotal = focus.Sum(i => personal[i]);
+                                if (report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0) ||
+                                    report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0) ||
+                                    focusTotal > rootFocus + Math.Max(cfg.PersonalDebt, 0))
+                                {
+                                    debtRejected++;
+                                    continue;
+                                }
+                                if (!Remember(seen, candidate.Schedule))
+                                {
+                                    duplicateRejected++;
+                                    continue;
+                                }
+                                var childPath = new List<string>(parent.Path) { candidate.Label };
+                                var child = new Node(
+                                    candidate.Schedule, report, personal, focusTotal,
+                                    childPath, ChangedCellCount(rootSchedule, candidate.Schedule));
+                                children.Add(child);
+                                if (IsFinalCandidate(p, child, root, focus, pinBlocks))
+                                {
+                                    if (ReferenceEquals(best, root) || BetterFinal(child, best, focus, lower)) best = child;
+                                }
                             }
                         }
                     }
