@@ -174,6 +174,9 @@ internal static class C1JointLnsPolish
                     if (Stopped()) break;
                     expanded++;
                     var goals = CollectGoals(p, parent.Schedule, goalLimit, rng, includeTemporal: parent.Path.Count == 0);
+                    // [3.569.0 同期] 候補の生成（rng 順）と採否（seen・best）は逐次のまま、評価だけ並列にする。
+                    //   評価数の上限は生成時に数えるので、決定論モード（MaxEvaluations）の評価集合は旧実装と同一。
+                    var pending = new List<(Move Move, int[][] Next)>();
                     foreach (var goal in goals)
                     {
                         if (Stopped()) break;
@@ -184,7 +187,15 @@ internal static class C1JointLnsPolish
                             var next = parent.Schedule.Copy2D();
                             if (!ApplyMove(next, move)) continue;
                             generated++; evaluations++;
-                            var report = UnifiedViolationChecker.Check(state, next);
+                            pending.Add((move, next));
+                        }
+                    }
+                    var reports = ParallelEval.MapParallel(pending, pn => UnifiedViolationChecker.Check(state, pn.Next));
+                    for (var idx = 0; idx < pending.Count; idx++)
+                    {
+                        var (move, next) = pending[idx];
+                        {
+                            var report = reports[idx];
                             int c1 = report.Breakdown.GetValueOrDefault("c1", 0);
                             bool overHard = report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0);
                             bool overTotal = report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0);

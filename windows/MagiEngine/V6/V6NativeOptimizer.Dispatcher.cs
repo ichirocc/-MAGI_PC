@@ -164,30 +164,30 @@ public static partial class V6NativeOptimizer
         // [E11/多人数ブロック移動, Kotlin原本] エピローグで残 covU を「勤務→勤務」連鎖で充填（ALNS単独や
         //   covU を focus しなかった経路でも走る保険）。keep-best 照合＝退化不能。
         var resultSched = result.Schedule;
+        // [3.569.0 同期] この盤面の評価は研磨の入口と出口でも要る＝同じ盤面を 3 回 Check しない（report は盤面と対で持ち回る）。
+        var resultRep = UnifiedViolationChecker.Check(state, resultSched);
+        if (resultRep.Hard > 0 && resultRep.Breakdown.GetValueOrDefault("covU", 0) > 0 && !shouldStop())
         {
-            var preRep = UnifiedViolationChecker.Check(state, resultSched);
-            if (preRep.Hard > 0 && preRep.Breakdown.GetValueOrDefault("covU", 0) > 0 && !shouldStop())
+            var cand = resultSched.Copy2D();
+            var n = ApplyCovUChains(state, cand, new JavaRandom(ActualSeed(options.Seed) ^ 0xC0FFEEL));
+            if (n > 0)
             {
-                var cand = resultSched.Copy2D();
-                var n = ApplyCovUChains(state, cand, new JavaRandom(ActualSeed(options.Seed) ^ 0xC0FFEEL));
-                if (n > 0)
+                var candRep = UnifiedViolationChecker.Check(state, cand);
+                if (Better(candRep, resultRep))
                 {
-                    var candRep = UnifiedViolationChecker.Check(state, cand);
-                    if (Better(candRep, preRep))
-                    {
-                        resultSched = cand;
-                        logs.Add(new MirrorLog(tag: "ChainFill",
-                            message: $"多人数ブロック移動で covU 充填: HARD {preRep.Hard}→{candRep.Hard} / total {preRep.Total}→{candRep.Total}（連鎖{n}件）"));
-                    }
+                    logs.Add(new MirrorLog(tag: "ChainFill",
+                        message: $"多人数ブロック移動で covU 充填: HARD {resultRep.Hard}→{candRep.Hard} / total {resultRep.Total}→{candRep.Total}（連鎖{n}件）"));
+                    resultSched = cand;
+                    resultRep = candRep;
                 }
             }
         }
 
         // [review #3, Kotlin原本] Final epilogue polish only when the caller isn't running its own post chain.
         var polished = options.PostPolish && !shouldStop()
-            ? Hf80PostPolish(state, resultSched, Math.Max(1, Math.Min(30, options.TotalBudgetSec / 20)), ActualSeed(options.Seed) ^ 0x80L, shouldStop, cancellationToken)
-            : new PolishResult(resultSched, Array.Empty<MirrorLog>(), 0);
-        var finalReport = UnifiedViolationChecker.Check(state, polished.Schedule);
+            ? Hf80PostPolish(state, resultSched, Math.Max(1, Math.Min(30, options.TotalBudgetSec / 20)), ActualSeed(options.Seed) ^ 0x80L, shouldStop, cancellationToken, initialReport: resultRep)
+            : new PolishResult(resultSched, Array.Empty<MirrorLog>(), 0, resultRep);
+        var finalReport = polished.Report;
         logs.AddRange(polished.Logs);
         logs.Add(new MirrorLog(tag: "V6Dispatcher",
             message: $"完了 algorithm={chosen} HARD={finalReport.Hard} total={finalReport.Total} elapsed={NowMs() - started}ms"));

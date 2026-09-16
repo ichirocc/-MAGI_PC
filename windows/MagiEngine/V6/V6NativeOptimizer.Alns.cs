@@ -186,7 +186,7 @@ public static partial class V6NativeOptimizer
             .OrderBy(r => r.Report, UnifiedViolationChecker.ReportComparer)
             .Select(r => $"[必須{r.Report.Hard}/合計{r.Report.Total}{(ReferenceEquals(r, best) ? "★採用" : "")}]"));
         var distinctSols = results
-            .Select(r => string.Join("|", r.Schedule.Select(row => string.Join(",", row))))
+            .Select(r => new BoardKey(r.Schedule))
             .Distinct().Count();
         var failNote = results.Count < chains ? $"・失敗{chains - results.Count}本(例外/キャンセル)" : "";
         var extra = new MirrorLog(tag: "AlnsChains",

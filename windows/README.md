@@ -326,6 +326,16 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-16 Android 3.569.0 を同期（末尾の待ち時間。結果を変えない改修のみ）: ① `BoardKey.cs` 新設＝盤面の distinct を
+  文字列連結でなく `ScheduleHash`＋全セル比較で（`V6NativeOptimizer.{Alns,MultiWorker,Portfolio}.cs` の 4 箇所）。
+  ② `PolishResult` に `Report` を持たせ `Hf80PostPolish(initialReport:)` で入口の Check を省く＝Dispatcher の
+  ChainFill→研磨→finalReport で同じ盤面を 3 回 Check しない（RsiPlus も `polish.Report`）。③ `ParallelEval.MapParallel`
+  新設＝共同 LNS 2 本（`C1JointLnsPolish` / `PersonalBalanceJointLnsPolish`）の候補評価だけを `Parallel.For` で
+  入力順に評価し、生成（rng 順）と採否（seen・best）は逐次のまま＝決定論モード（MaxEvaluations）の評価集合は旧実装と同一
+  （Kotlin 側は実データ 4 件で旧新の盤面ハッシュ一致を確認、時間 −17〜−40%）。MagiEngine.Tests 856 中 855 緑。
+  **残る 1 件 `PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates`（random#1: 実現可能な希望（職員0 日5）が
+  後処理で動いた）は同期前の 6276edf でも同じ文言で赤＝今回の変更と無関係の既存不一致**（Kotlin 側の同名テストは緑）。
+  C# 単独では直さない（パリティの原則）＝Android 側で原因を特定してから同期する。
 - 2026-09-15 Android 3.556.0 を同期（重み変更、HF77 明示指示）: c41/c42 1→9、c41s/c42s 6→10、c3m 10→6。
   `MirrorKeys.WeightsOrdered`・`Evaluator.cs`（c41/c42 に ×9 新設、c41s/c42s ×10、c3m ×6）・`DeltaEvaluator.cs` 集約式・
   `Fixtures/*_eval_expected.txt` 3 件の soft を再計算（golden 8990・sample_v6 2530・blocked_covu 4725）。

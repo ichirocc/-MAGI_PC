@@ -17,7 +17,8 @@ namespace MagiEngine.V6;
 public static partial class V6NativeOptimizer
 {
     /// <summary>Faithful port of Kotlin's private <c>PolishResult</c> data class.</summary>
-    internal sealed record PolishResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs, long Iterations);
+    /// <remarks><c>Report</c> は常に <c>Schedule</c> の評価（Hf80PostPolish 内で盤面と対で更新される）。</remarks>
+    internal sealed record PolishResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs, long Iterations, ViolationReport Report);
 
     /// <summary>
     /// [ソフト研磨専用, Kotlin原本] 現在の盤面をHARDガード付きで局所研磨し、SOFTのみ削減する公開エントリ。
@@ -64,7 +65,8 @@ public static partial class V6NativeOptimizer
         int seconds,
         long seed,
         Func<bool>? shouldStop = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ViolationReport? initialReport = null)
     {
         var stop = shouldStop ?? (() => false);
         bool TimeUp() => stop() || cancellationToken.IsCancellationRequested;
@@ -73,7 +75,8 @@ public static partial class V6NativeOptimizer
         var rng = new JavaRandom(seed);
         var p = ScheduleUtil.CachedProblem(state);
         var best = initial.Copy2D();
-        var bestReport = UnifiedViolationChecker.Check(state, best);
+        // [3.569.0 同期] 呼出側が initial の評価を既に持つならそれを使う（同じ盤面を Check し直さない）。
+        var bestReport = initialReport ?? UnifiedViolationChecker.Check(state, best);
         // 入力スナップショット（best は改善時に別配列へ差し替わる）。
         var baseSched = best;
         var baseReport = bestReport;
@@ -289,6 +292,6 @@ public static partial class V6NativeOptimizer
         {
             new MirrorLog(tag: "HF80", message: $"PostPolish {NowMs() - started}ms HARD={bestReport.Hard} total={bestReport.Total}{stallNote}", iter: iters),
         };
-        return new PolishResult(best, logs, iters);
+        return new PolishResult(best, logs, iters, bestReport);
     }
 }

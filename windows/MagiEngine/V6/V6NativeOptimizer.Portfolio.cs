@@ -895,7 +895,7 @@ public static partial class V6NativeOptimizer
         //   母集団が違うため矛盾に見えた。意味があるのは**ワーカー解が潰れているか**（同一解に収束＝
         //   並列の無駄）なので、そちらを出す。
         var distinctWorkers = outcomes
-            .Select(o => string.Join("|", o.Elite.Select(row => string.Join(",", row))))
+            .Select(o => new BoardKey(o.Elite))
             .Distinct().Count();
         var pairDistances = new List<int>();
         for (var a = 0; a < outcomes.Length; a++)

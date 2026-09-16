@@ -119,6 +119,8 @@ internal static class PersonalBalanceJointLnsPolish
                     if (Stopped()) break;
                     expanded++;
                     var goals = CollectGoals(p, parent.Schedule, focus, lower, cfg.MaxGoals, rng);
+                    // [3.569.0 同期] C1JointLnsPolish と同じ形: 生成と採否は逐次、評価（Check＋個人罰点）だけ並列。
+                    var pending = new List<Candidate>();
                     foreach (var goal in goals)
                     {
                         if (Stopped()) break;
@@ -127,8 +129,15 @@ internal static class PersonalBalanceJointLnsPolish
                         {
                             if (Stopped()) break;
                             generated++; evaluations++;
-                            var report = UnifiedViolationChecker.Check(state, candidate.Schedule);
-                            var personal = PersonalPenaltyByStaff(p, candidate.Schedule);
+                            pending.Add(candidate);
+                        }
+                    }
+                    var evaluated = ParallelEval.MapParallel(pending, c => (Report: UnifiedViolationChecker.Check(state, c.Schedule), Personal: PersonalPenaltyByStaff(p, c.Schedule)));
+                    for (var idx = 0; idx < pending.Count; idx++)
+                    {
+                        var candidate = pending[idx];
+                        {
+                            var (report, personal) = evaluated[idx];
                             int focusTotal = focus.Sum(i => personal[i]);
                             if (report.Hard > rootReport.Hard + Math.Max(cfg.HardDebt, 0) ||
                                 report.Total > rootReport.Total + Math.Max(cfg.TotalDebt, 0) ||

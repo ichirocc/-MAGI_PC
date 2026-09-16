@@ -93,7 +93,7 @@ public static partial class V6NativeOptimizer
         }
 
         var polish = Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
-        var report = UnifiedViolationChecker.Check(state, polish.Schedule);
+        var report = polish.Report;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase3/4 Refine+Polish: HARD={report.Hard} total={report.Total}"));
 
         return new V6OptimizerResult(
