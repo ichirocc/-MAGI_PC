@@ -68,6 +68,12 @@ public static partial class V6HotfixPasses
                 var cands = Enumerable.Range(w.Start, w.WindowDays)
                     .Where(d =>
                     {
+                        // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 希望固定日は
+                        //   候補から除外。ScreenCell の delta 合算は pref+1 が他族-1 と相殺して Neutral に
+                        //   なり得る＝checker 委任の AdoptionGate も WishLocked を見ないため、生成側でここを
+                        //   塞がないと希望固定セルが動きうる（PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates
+                        //   random#1 の再現で発見: 職員0 日5 の希望がこのフィルタ経由で動いていた）。
+                        if (p.WishLocked(staff, d)) { if (work[staff][d] != shift) screened++; return false; }
                         var neutral = C1DeltaPrefilter.ScreenCell(p, work, staff, d, shift) == C1DeltaPrefilter.Verdict.Neutral;
                         if (!neutral && work[staff][d] != shift) screened++;
                         return neutral;

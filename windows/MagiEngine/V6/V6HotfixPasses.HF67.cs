@@ -82,7 +82,7 @@ public static partial class V6HotfixPasses
                     cand[i][j] = b;
                     cand[i2][j] = a;
                     var rep = UnifiedViolationChecker.Check(state, cand);
-                    if (IsBetter(rep, current))
+                    if (IsBetter(rep, current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
                     {
                         work = cand;
                         current = rep;
@@ -155,7 +155,9 @@ public static partial class V6HotfixPasses
                         if (cand == null) continue;
                         var rep = UnifiedViolationChecker.Check(state, cand.Value.Schedule);
                         var refRep = bestReport ?? current;
-                        if (IsBetter(rep, refRep))
+                        // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 職員間交換は
+                        //   from/to の2者の回数を同時に変えうるため他パスと同じガードが要る。
+                        if (IsBetter(rep, refRep) && !V6SearchOperators.ExactPinRegression(p, work, cand.Value.Schedule))
                         {
                             best = cand.Value.Swap;
                             bestReport = rep;

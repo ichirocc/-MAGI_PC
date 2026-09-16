@@ -326,6 +326,24 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-16（3.570.0、C# 単独修正・Kotlin/C++は無変更＝既にKotlin側で正しかった）
+  **`PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates` random#1/#4 の赤を根本修正**。
+  Android 側で同じ乱数列（`JavaRandom(0x91A7L)`）を再現し、Kotlinの同名テストは全12状態で緑＝
+  RNGのパリティは正しく、C#側の後処理チェーン実装にのみ2種類の欠落があると特定（`docs/history/3.4xx.md`
+  3.570.0節に再現手順と切り分け過程を記録）。
+  ① `V6HotfixPasses.ApplyC1IndexChainRepair` の候補日フィルタに **`WishLocked` チェックが無く**
+  （Kotlin `applyC1IndexChainRepair` は 3.522.0 でこの一行を追加済みだったが C# 未移植）、希望固定日が
+  動きうる状態だった。random#1（職員0 日5）で実際に発生を確認。
+  ② `ApplyHF66IntraStaffRedistribution`/`ApplyHF67InterStaffSwap` の **4 箇所すべて**（メイン探索2＋
+  フォールバック2）に `ExactPinRegression` ガードが無かった（Kotlin `HfSwapPolish.kt` は4箇所とも
+  `!exactPinRegression(...)` 付き）。
+  ③ `ApplyHF80StrategicOscillation` の受理条件にも `ExactPinRegression` ガードが無く、かつ比較基準を
+  `original`（全サイクル共通の入口盤面）でなく可変の `best` から取る変数が存在しなかった（Kotlin は
+  3.522.0 で `original` を導入済み）。random#4（職員2 シフト0=4回固定）はこの③が原因と特定・修正。
+  いずれも `V6SearchOperators.ExactPinRegression(p, 基準盤面, 候補盤面)` を追加するだけの移植漏れ修正。
+  検証: MagiEngine.Tests **856/856 緑**（修正前は2件赤）。再現・切り分けは一時的なデバッグ計装
+  （`PostChain` に env var 監視フックを追加→原因特定→リバート）で行い、コミットには含めない。
+
 - 2026-09-16 Android 3.569.0 を同期（末尾の待ち時間。結果を変えない改修のみ）: ① `BoardKey.cs` 新設＝盤面の distinct を
   文字列連結でなく `ScheduleHash`＋全セル比較で（`V6NativeOptimizer.{Alns,MultiWorker,Portfolio}.cs` の 4 箇所）。
   ② `PolishResult` に `Report` を持たせ `Hf80PostPolish(initialReport:)` で入口の Check を省く＝Dispatcher の

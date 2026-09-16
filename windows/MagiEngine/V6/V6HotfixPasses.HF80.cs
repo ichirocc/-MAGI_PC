@@ -97,6 +97,7 @@ public static partial class V6HotfixPasses
         var rng = new JavaRandom(seed ?? System.Diagnostics.Stopwatch.GetTimestamp());
         var before = UnifiedViolationChecker.Check(state, schedule);
         var best = ScheduleUtil.NormalizeSchedule(schedule, p);
+        var original = best;   // [厳密ピン保護] 全サイクル共通の基準盤面（ExactPinRegression の比較元）
         var bestReport = before;
         var applied = false;
         var usedCycles = 0;
@@ -125,7 +126,11 @@ public static partial class V6HotfixPasses
             var polished = LocalBestImprovement(p, ev, cand, 250 + cycle * 120, rng, stop);
             var rep = UnifiedViolationChecker.Check(state, polished);
             usedCycles = cycle + 1;
-            if (IsBetter(rep, bestReport))
+            // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 摂動+再研磨は複数職員の
+            //   回数を同時に変えうるため、他パス（RangePolish等）と同じ ExactPinRegression ガードが要る。
+            //   旧実装はこのパスだけ欠けており、SOFT重みの相対関係が十分ずれると weightedScore 改善との
+            //   トレードで staffRange 厳密ピン(lo==hi)が崩れうる不具合があった（PinInvariantTest）。
+            if (IsBetter(rep, bestReport) && !V6SearchOperators.ExactPinRegression(p, original, polished))
             {
                 best = polished;
                 bestReport = rep;

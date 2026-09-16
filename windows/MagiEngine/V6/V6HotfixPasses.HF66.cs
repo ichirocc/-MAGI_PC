@@ -77,7 +77,9 @@ public static partial class V6HotfixPasses
                             var cand = work.Copy2D();
                             cand[i][j] = want;
                             var rep = UnifiedViolationChecker.Check(state, cand);
-                            if (IsBetter(rep, bestReport ?? current))
+                            // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 職員内の
+                            //   担当替えも自身の回数を変えるため他パスと同じガードが要る。
+                            if (IsBetter(rep, bestReport ?? current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
                             {
                                 bestMove = new MoveCandidate(i, j, give, want);
                                 bestReport = rep;
@@ -117,7 +119,7 @@ public static partial class V6HotfixPasses
                             if (cand[i][j] != old)
                             {
                                 var rep = UnifiedViolationChecker.Check(state, cand);
-                                if (IsBetter(rep, current))
+                                if (IsBetter(rep, current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
                                 {
                                     work = cand;
                                     current = rep;
