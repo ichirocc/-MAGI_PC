@@ -326,6 +326,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（前コミットのCS0246修正が別の赤=CS0103を露呈、Windows CIログで確認して即修正）:
+  `ScheduleGridModels.cs`の`FontWeight`修正でビルドが1歩進んだ結果、同ファイルの`Colors.Black`等
+  （4箇所）が`using Windows.UI;`では解決できず`CS0103`（名前が存在しない）で落ちることが判明。
+  このコードベースの`Colors.Xxx`はどこも`using Microsoft.UI;`経由（`AnalysisView.xaml.cs`等5ファイルで
+  確認、`Microsoft.UI.Colors`がWinAppSDK提供の実体）＝`Windows.UI`ではなかった。`using Windows.UI;`を
+  `using Microsoft.UI;`へ置換（`Windows.UI.Color`型自体はこのファイルで未使用のため道連れの喪失なし）。
+  **依然サンドボックスでは`MagiApp.WinUI`をビルドできず未検証**——3回連続で別々のビルドエラーを後追いで
+  踏んだことは、この種の修正を「1回のpushで確定」と扱うべきでない実例として記録する。
+
 - 2026-09-20（1b33b5b の回帰修正、CI待たずに自己発見）: 直前コミットで `V6FinalPort.HandleOptimize` に
   追加した `extraRefineRequirePostHardDrop` を `onProgress`/`cancellationToken` より前に挿入したため、
   `EngineOptimizationService.OptimizeAsync`（位置引数で9個渡す）の実引数がずれ `CS1503` でビルド不能に
