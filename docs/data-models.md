@@ -2,7 +2,10 @@
 
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
 > **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
-> **最終更新**：2026-08-18（3.394.0 — 3.393.0 で UiState から撤去した**結果スナップショット8種**
+> **最終更新**：2026-09-20（§4 UiState を実装と再照合し、3.394.0 以降に追加されて丸ごと未記載だった
+> 9フィールド `checkRev`/`engineRan`/`keepScreenOn`/`runSummary`/`combineExhaustPairs`/`countChainPolish`/
+> `aptFairSoftTolerance`/`lnsAdaptive`/`saveState` を追加、件数を 71 → **80** へ訂正）。
+> 2026-08-18（3.394.0 — 3.393.0 で UiState から撤去した**結果スナップショット8種**
 > （`resultSchedule` / `hasResultSnapshot` / result 専用マップ6種）を §4 から削除し、件数を 82 → 74 へ。
 > 3.396.0 で `iters` / `itersPerSec`（反復数＝作り手の指標。操作画面から外し診断ログへ一本化）を削除し **72** へ。
 > 3.390.0 で **§4 の UiState 一覧を全フィールドへ刷新**。旧記述は30フィールドが未記載で、
@@ -88,18 +91,21 @@
 ## 4. UiState（画面表示用の派生状態）
 
 `data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
-状態。**全71フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
+状態。**全80フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
 
 **読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
 
 **規模**（5）：`staff`, `days`, `shifts`, `groups`, `use2`
 
-**最適化の状態**（9）：`running`, `hasResult`, `initHard`/`initSoft`(Long), `bestHard`/`bestSoft`(Long),
-`totalViolations`, `weightedScore`(Double), `elapsedMs`
+**最適化の状態**（13）：`running`, `hasResult`, `initHard`/`initSoft`(Long), `bestHard`/`bestSoft`(Long),
+`totalViolations`, `weightedScore`(Double), `elapsedMs`, `checkRev`（表示中の検査結果の世代・3.502.0）,
+`engineRan`（エンジンがこの盤面に対して一度でも走ったか・3.475.0）,
+`keepScreenOn`（画面消灯防止の可否・3.568.0）, `runSummary`（直近の最適化の前後比較1行・3.509.4）
 
-**計算の設定**（8）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
+**計算の設定**（12）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
 `softPolish`(=true), `nativeAccel`(=true), `nativeParity`(=true) と、**既定 OFF の調整トグル**
-`blockSwapC3nFilter` / `wideC3nBreak`
+`blockSwapC3nFilter` / `wideC3nBreak` / `combineExhaustPairs`（3.514.0） / `countChainPolish`（3.540.0） /
+`aptFairSoftTolerance`（3.535.0）、**既定 ON の調整トグル** `lnsAdaptive`（3.514.0/3.518.0）
 （意味と見直しの条件は [`algorithm_portfolio.md`](./algorithm_portfolio.md)。
 `adaptiveEscape` / `portfolioRoleParallelSa` は 3.409.21 で削除＝単体 A/B 中立）
 
@@ -107,7 +113,7 @@
 
 | フィールド | 型 | 意味 |
 |---|---|---|
-| `breakdown` | `Map<String,Int>` | 19族の件数（キー = `MirrorKeys.all`） |
+| `breakdown` | `Map<String,Int>` | 20族の件数（キー = `MirrorKeys.all`） |
 | `violationCells` | `"i,j"→"vio-xxx"` | セル系。**最重1クラスのみ** |
 | `countViolations` | `"i,k"→"vio-xxx"` | 回数系。**最重1クラスのみ** |
 | `needViolations` | `"k,j"→"vio-xxx"` | 被覆系。**最重1クラスのみ** |
@@ -125,7 +131,8 @@
 `violationSoftColorHex`（要調整・`__vioSoft__` 由来）, `violationFamilyColorHex`（族別の個別色・`__vioFam_<fam>__` 由来）,
 `reviewMemos`（見直し候補メモ・セッション内のみ）
 
-**編集/再構成**（4）：`constraintsEdited`, `structureEdited`, `editRev`, `prevBackupAvailable`
+**編集/再構成**（5）：`constraintsEdited`, `structureEdited`, `editRev`, `prevBackupAvailable`,
+`saveState`（自動保存の状態・3.529.0）
 
 > `editRev` は構造編集ごとに単調増加する。`structureEdited` は Boolean なので既に true だと `copy` が同値になり
 > StateFlow が emit せず、`currentSchedule == null` のときは `refreshCheck` も早期 return するため、
@@ -142,7 +149,7 @@
 
 **その他**（6）：`v6`(`V6PortReport?`), `message`, `messageIsError`(Snackbar を失敗色にするか), `opLog`(操作ログ), `logs`(診断ログ), `startDate`
 
-> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+9+8+8+12+4+14+2+6 = **71** で
+> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+13+12+8+12+5+14+2+6 = **80** で
 > `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
 > **フィールドが増減したのにここを直し忘れた**ことが件数のずれとして出る（実際、本文を書いた直後の照合で
 > 4グループとも数字が間違っていた）。件数を落とすと照合は無意味になるので、更新のたびに数字も直すこと。
