@@ -326,6 +326,40 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（C#同期ギャップ解消: Android 3.573.0〜3.600.0のうちエンジン層に触れる6版を移植）:
+  `docs/backlog.md`の3.572.0〜3.601.0（30版）を精査し、UI/WorkManager/CSV/docs/CI専用の24版を除いた
+  6版をKotlinから1対1で移植した（`dotnet test` 856/856緑で各版ごとに確認）。
+  - **3.592.0**（HF63 self-correction）: `Hf63Infeasibility.Update()`/`UpdateFromBreakdownFocused()`の
+    `curV==0`到達分岐に`_gInfeasibleLikely`解除を追加（0到達もself-correction対象）。
+    `V6FinalPort.HandleOptimize`の`c3nWallCheckedVersion`/`c3nWallResult`をKotlin原本と同じ単一
+    `Tuple<int,bool>`キャッシュへ統合（TOCTOU的な競合の芽を除去）。
+  - **3.575.0**（多重防御の全段比較化）: `StageCandidate`/`PickBestStage`を新設し、`V6FinalPort.HandleOptimize`の
+    「入力 vs 最終結果」2点比較を「入力/探索/統合/後処理」4段の`BetterReport`辞書式比較へ拡張
+    （途中段の改善が後段の退化で丸ごと戻される機会損失バグの修正）。
+  - **3.573.0**（HARD族オフセット防止）: `ViolationChecker.NewHardFamilyViolation`を新設し、
+    `FixApplyGate`/`FixSuggester`の採用判定に「別のHARD族が新たに崩れていないか」ガードを追加
+    （weighted単層比較だとHARD族間のオフセットで悪化を採用しうるバグの修正）。
+  - **3.596.0/3.573.0系**（`SmartInitialScheduler`）: `MinDaysForFullCompliance`を指数DPから
+    O(T×rules)貪欲（右から詰める）へ置換（Kotlin原本のbrute-forceオラクル照合済み構成と同値）、
+    `SolveConstructionDp`に`MaxDpStates=200_000`の決定的カットオフを追加。
+  - **3.597.0**（最小費用割当の契約修正）: `MinCostAssignment.Solve`にINF辺を含む解を返さない
+    ガード（`j1==-1`だけでは全INF行しか捕まえず、全INF列や2行1列競合の禁止辺混入解を見逃していた）。
+    `V6HotfixPasses.DayAssign`の日ごと厳密割当に`identityFallback`（対角線=自分の元slotを常に有限化）を
+    配線、`PostOptimizationParams.DayAssignIdentityFallback`（既定OFF）で切替。
+  - **3.600.0**（締切・ロール予算の正しさ）: `V6NativeOptimizer.Portfolio`の各ロール呼出し前に
+    「既に締切／停止済みならロールを始めない」ガードを追加（始めれば位相下限ぶん必ず超過するため）。
+    `V6OptimizerOptions.RoleBudgetFit`（既定OFF、時間配分を変える実験フラグ）と
+    `RsiPlusPhaseBudgets`（RSI+の4位相秒数を予算ちょうどに収める配分式、Kotlin原本の
+    `maxBy`が常に同じ添字を選ぶ挙動込みで忠実に移植）を追加。`RunRsiPlus`は入口で停止済みなら
+    入力をそのまま返す（位相下限ぶんの無駄走りをしない）。
+  - **保留（backlog#26/#27①相当、3.580.0/3.590.0）**: 両版とも「既定OFFの専用修復腕を条件付きに
+    再活性化する」実験で、依存する腕本体（`C2Polish`/`C42FlowPolish`/`C3nMarginLnsPolish`/
+    `AptFairPolish`）がいずれもC#に一度も移植されていない（Kotlin側でも3.511.x〜3.540.0の
+    「測定中」既定OFF実験がベース）。Android側のtools/loopベンチ（3.582.0〜3.584.0/3.591.0）でも
+    5腕中3腕（c2/c42Flow/countChain）はゲート不合格で既定OFF確定、残り2腕（c1成分修復/
+    c3nMarginLns）は専用合成ケースが作れず未計測のまま。**測定で無効と確定した/未計測の既定OFF
+    実験を、対応するベース機能ごと新規にC#へ持ち込むのは費用対効果が低い**と判断し見送る。
+    Android側の判定が既定ONへ覆った場合はbacklog化して再検討する。
 - 2026-09-20（`MagiApp.ViewModels.Tests`の既知欠落2件を修正・検証、`git status`で誤commitされていた
   未サンドボックス実行のフォークworkflowを整理）: 前エントリで「未着手（別対応）」としていた`c3w`の
   UI分類漏れを解消。Kotlin原本`ui/VioBuckets.kt`は`seq`（連勤）バケットに`c3w`を含むが、C#の

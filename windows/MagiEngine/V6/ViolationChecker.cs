@@ -1,3 +1,4 @@
+using System.Linq;
 using MagiEngine.Model;
 
 namespace MagiEngine.V6;
@@ -104,6 +105,14 @@ public static class UnifiedViolationChecker
     });
 
     public static bool BetterReport(ViolationReport a, ViolationReport b) => ReportComparer.Compare(a, b) < 0;
+
+    /// <summary>[3.573.0, Kotlin原本] BetterReportはHARDの合計件数を先頭に見るため、ある HARD 族（例: covU）
+    /// を減らす代わりに別の HARD 族（例: c3n＝禁止連）を新規発生させても、合計が同じか減れば「改善」と
+    /// 判定されうる。FixSuggester/FixApplyGate（利用者に見せる「1手」の提案・適用境界）だけに使う——
+    /// 探索本体（SA/ALNS/Polish）の中間状態はこの限りではない（一時的な族間のトレードを許して大域探索
+    /// するのは意図的な設計）。戻り値は最初に見つかった悪化族名（無ければ null）＝拒否理由の表示に使う。</summary>
+    public static string? NewHardFamilyViolation(ViolationReport before, ViolationReport after) =>
+        MirrorKeys.Hard.FirstOrDefault(fam => after.Breakdown.GetValueOrDefault(fam, 0) > before.Breakdown.GetValueOrDefault(fam, 0));
 
     public static ViolationReport Check(MagiState state, int[][]? schedule = null, bool quantitativeRangeEval = false)
     {

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading;
 using MagiEngine.Model;
 
@@ -34,6 +35,51 @@ namespace MagiEngine.V6;
 /// </summary>
 public static partial class V6NativeOptimizer
 {
+    /// <summary>
+    /// [3.600.0/RoleBudgetFit, Kotlin原本 <c>rsiPlusPhaseBudgets</c>] RSI+ の位相秒数。合計は必ず
+    /// <paramref name="budgetSec"/> に一致する（不変条件）。予算が床を賄える（&gt;=40s）ときだけ従来の
+    /// 10s/5s 床を保ち、短いときは比率配分へ落とす＝短時間でも各段階を一度は試す。
+    /// </summary>
+    internal static int[] RsiPlusPhaseBudgets(int budgetSec)
+    {
+        var b = Math.Max(budgetSec, 0);
+        if (b <= 0) return new[] { 0, 0, 0, 0 };
+        if (b <= 3) return new[] { b, 0, 0, 0 };
+        var useFloor = b >= 40;
+        var phaseFloor = useFloor ? 10 : 1;
+        var polishFloor = useFloor ? 5 : 0;
+        var seed = Math.Max(phaseFloor, (int)(b * 0.20));
+        var rsi = Math.Max(phaseFloor, (int)(b * 0.35));
+        var alns = Math.Max(phaseFloor, (int)(b * 0.30));
+        var polish = b - seed - rsi - alns;
+        if (polish < polishFloor || seed + rsi + alns + Math.Max(polish, 0) > b)
+        {
+            var weights = new[] { 0.20, 0.35, 0.30, 0.15 };
+            var raw = weights.Select(w => Math.Max(1, (int)(b * w))).ToArray();
+            var sum = raw.Sum();
+            while (sum > b)
+            {
+                var i = 0;
+                for (var k = 1; k < raw.Length; k++) if (raw[k] > raw[i]) i = k;
+                if (raw[i] <= 1) break;
+                raw[i]--;
+                sum--;
+            }
+            while (sum < b)
+            {
+                var i = 0;
+                for (var k = 1; k < weights.Length; k++) if (weights[k] > weights[i]) i = k;
+                raw[i]++;
+                sum++;
+            }
+            seed = raw[0]; rsi = raw[1]; alns = raw[2]; polish = raw[3];
+        }
+        polish = Math.Max(polish, 0);
+        var total = seed + rsi + alns + polish;
+        if (total != b) polish = Math.Max(polish + (b - total), 0);
+        return new[] { seed, rsi, alns, polish };
+    }
+
     /// <summary>Faithful port of Kotlin's <c>runRsiPlus</c>.</summary>
     internal static async Task<V6OptimizerResult> RunRsiPlus(
         MagiState state,
@@ -47,22 +93,42 @@ public static partial class V6NativeOptimizer
     {
         var started = NowMs();
         var stop = shouldStop ?? (() => false);
-        var seedSec = Math.Max(10, (int)(budgetSec * 0.20));
-        var rsiSec = Math.Max(10, (int)(budgetSec * 0.35));
-        var alnsSec = Math.Max(10, (int)(budgetSec * 0.30));
-        var polishSec = Math.Max(5, budgetSec - seedSec - rsiSec - alnsSec);
         var logs = new List<MirrorLog>();
 
-        var seed = await RunV5(state, initial, options, seedSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
+        // [3.600.0, Kotlin原本] 入口で既に停止済みなら位相下限ぶんの無駄走りをせず入力をそのまま返す
+        //   （keep-best不変）。
+        if (stop())
+        {
+            var rep0 = UnifiedViolationChecker.Check(state, initial);
+            return new V6OptimizerResult(initial, rep0, V6Algorithm.RsiPlus, logs, 0L, 0L);
+        }
+
+        int seedSec, rsiSec, alnsSec, polishSec;
+        if (options.RoleBudgetFit)
+        {
+            var phases = RsiPlusPhaseBudgets(budgetSec);
+            seedSec = phases[0]; rsiSec = phases[1]; alnsSec = phases[2]; polishSec = phases[3];
+        }
+        else
+        {
+            seedSec = Math.Max(10, (int)(budgetSec * 0.20));
+            rsiSec = Math.Max(10, (int)(budgetSec * 0.35));
+            alnsSec = Math.Max(10, (int)(budgetSec * 0.30));
+            polishSec = Math.Max(5, budgetSec - seedSec - rsiSec - alnsSec);
+        }
+
+        var seed = seedSec <= 0
+            ? new V6OptimizerResult(initial, UnifiedViolationChecker.Check(state, initial), V6Algorithm.V5, Array.Empty<MirrorLog>(), 0L, 0L)
+            : await RunV5(state, initial, options, seedSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase1 Seed: HARD={seed.Report.Hard} total={seed.Report.Total}"));
 
-        var rsi = stop()
+        var rsi = stop() || rsiSec <= 0
             ? seed
             : await RunRsi(state, seed.Schedule, options, rsiSec, stop, onProgress, sharedHf63, cancellationToken).ConfigureAwait(false);
         var baseResult = Better(rsi.Report, seed.Report) ? rsi : seed;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase2 Hypothesis: HARD={baseResult.Report.Hard} total={baseResult.Report.Total}"));
 
-        var refine = stop()
+        var refine = stop() || alnsSec <= 0
             ? baseResult
             : await RunAlns(state, baseResult.Schedule, options with { Restarts = Math.Max(1, options.Restarts) }, alnsSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
         var best = Better(refine.Report, baseResult.Report) ? refine : baseResult;
@@ -92,7 +158,9 @@ public static partial class V6NativeOptimizer
             }
         }
 
-        var polish = Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
+        var polish = polishSec <= 0 || stop()
+            ? new PolishResult(bestSched, Array.Empty<MirrorLog>(), 0L, UnifiedViolationChecker.Check(state, bestSched))
+            : Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
         var report = polish.Report;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase3/4 Refine+Polish: HARD={report.Hard} total={report.Total}"));
 

@@ -74,6 +74,10 @@ public static class MinCostAssignment
         {
             if (p[j] >= 1 && p[j] <= n) assign[p[j] - 1] = j - 1;
         }
+        // [3.597.0, Kotlin原本] j1==-1 のガードは全INF行しか捕まえない。全INF列や「2行が同じ1列しか
+        //   置けない」形では、INFは十分大きいだけの有限値なので最小費用割当として禁止辺を1本含む解が
+        //   返る＝完全割当ではないのでnull。
+        for (int i = 0; i < n; i++) if (cost[i][assign[i]] >= Inf) return null;
         return assign;
     }
 }

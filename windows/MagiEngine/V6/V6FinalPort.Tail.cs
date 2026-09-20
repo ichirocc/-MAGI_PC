@@ -60,6 +60,15 @@ public static partial class V6FinalPort
     internal static int[][] SentinelSchedule(string? regression, int[][] cappedInput, int[][] refSched) =>
         regression != null ? cappedInput : refSched;
 
+    /// <summary>[3.575.0, Kotlin原本] 最終番兵が比較する「パイプラインの主要な段」の1つ（入力/探索/統合/後処理）。
+    /// <paramref name="Sched"/> はその段が実際に持つ盤面（[3.513.0]の教訓＝「入力」段は正規化前の生入力ではなく
+    /// cappedInput＝inputReportと同じ基準の盤面を渡すこと）。</summary>
+    internal sealed record StageCandidate(string Label, int[][] Sched, ViolationReport Report);
+
+    /// <summary>[3.575.0, Kotlin原本] ReportComparer で候補中の最良を選ぶ（同値なら早い段を残す）。</summary>
+    internal static StageCandidate PickBestStage(IReadOnlyList<StageCandidate> candidates) =>
+        candidates.Aggregate((a, b) => UnifiedViolationChecker.BetterReport(b.Report, a.Report) ? b : a);
+
     /// <summary>
     /// [3.287.0 keep-best統一] 判定順を hard→weightedScore→total へ（<c>betterReport</c> と同順）。
     /// 旧: total が第2キーで、weighted改善・total悪化の正当な結果（重い族を直し軽い族を差し出す取引）まで

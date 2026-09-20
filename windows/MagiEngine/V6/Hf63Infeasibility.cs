@@ -81,6 +81,7 @@ public sealed class Hf63Infeasibility
             // （これを怠ると、0到達後に摂動で再違反した瞬間 gIter-旧改善 が即 STALL を超え、
             //  解けた族を誤って infeasible 判定し RSI focus から外してしまう）。
             _gLastImproveIter[c] = gIter;
+            if (_gInfeasibleLikely[c]) _gInfeasibleLikely[c] = false; // [3.592.0] 0到達もself-correction対象
         }
         else if (gIter - _gLastImproveIter[c] >= INFEAS_STALL_ITERS)
         {
@@ -122,6 +123,7 @@ public sealed class Hf63Infeasibility
             else if (curV == 0)
             {
                 _gFocusedStall[idx] = 0; // 充足済みの族は「不能」ではない（Update() の 0 到達分岐と同義）
+                if (_gInfeasibleLikely[idx]) _gInfeasibleLikely[idx] = false; // [3.592.0]
             }
             else if (key == focusedKey)
             {

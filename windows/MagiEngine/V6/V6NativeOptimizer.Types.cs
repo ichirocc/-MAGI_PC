@@ -63,7 +63,13 @@ public sealed record V6OptimizerOptions(
     /// <c>RunRsi</c> 呼出し単位でなく、共有 <see cref="Hf63Infeasibility"/> が持続するカウンタで計る。
     /// 既定 OFF（経緯は windows/README.md レビュー対応の記録）。
     /// </summary>
-    bool RsiFocusRotationPersist = false)
+    bool RsiFocusRotationPersist = false,
+    /// <summary>
+    /// [3.600.0] ロールへ渡す秒数を <c>min(量子, 探索締切までの残り)</c> にし、RSI+ の位相合計も
+    /// その予算ちょうどに収める。既定 OFF＝探索の時間配分が変わるため計測後に採否（経緯は
+    /// windows/README.md レビュー対応の記録）。
+    /// </summary>
+    bool RoleBudgetFit = false)
 {
     public int EffectiveWorkers => Workers ?? Math.Clamp(Environment.ProcessorCount, 1, 8);
 }

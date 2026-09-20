@@ -116,7 +116,10 @@ public static partial class V6HotfixPasses
         long PersonalLnsFirstMs = 1_500L,
         /// <summary>[Android 3.540.0同期/測定中] 回数連鎖研磨（<see cref="CountChainPolish"/>）を入れるか。
         /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
-        bool CountChainEnabled = false);
+        bool CountChainEnabled = false,
+        /// <summary>[測定中/backlog#30] 日ごと厳密割当で「自分の現シフトを保つ」対角を常に有限にする。
+        /// 恒等割当が常に実行可能になり、置けない職員/スロットがある日も残りを研磨できる。既定 OFF。</summary>
+        bool DayAssignIdentityFallback = false);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -260,7 +263,7 @@ public static partial class V6HotfixPasses
         bool ClusterStop() => stop() || EngineClock.NowMs() >= clusterDeadline;
 
         chain.Adopt(chain.Timed("後処理 厳密日割当", "DayAssignmentPolish", work =>
-            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop)));
+            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop, identityFallback: p.DayAssignIdentityFallback)));
 
         var preSoftRep = UnifiedViolationChecker.Check(state, chain.Work);
         var c1Plateau = RunPolishCluster(state, chain, p, seedVal, ClusterStop, preSoftRep);
@@ -270,7 +273,7 @@ public static partial class V6HotfixPasses
             ApplyWeeklyRebalancePolish(state, work, maxPasses: p.WeeklyRebalancePasses, shouldStop: ClusterStop)));
         // 長方形交換（クロス日）が届かない同日内の割当先を Hungarian で再配置＝相補的なので両方走らせる。
         chain.Adopt(chain.Timed("後処理 交互最適化(日ブロック割当)", "AlternatingSoftPolish", work =>
-            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop)));
+            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, identityFallback: p.DayAssignIdentityFallback)));
 
         // 最終 LNS 2 本（高コストなので巡回ループでなく最終 1 回）。残予算は既定比 8:6 で按分（3.255.0）。
         var tC1Lns = EngineClock.NowMs();

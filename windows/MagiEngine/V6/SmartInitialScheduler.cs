@@ -20,6 +20,10 @@ public static class SmartInitialScheduler
 {
     private readonly record struct C1Rule(int Days, int Minimum);
 
+    /// <summary>[3.596.0, Kotlin原本] SolveConstructionDpの状態数上限（ユーザー指示の数値。実測の根拠は
+    /// docs/history）。時間でなく状態数で切るのは、同じ入力・同じseedなら必ず同じ初期解になる決定性を保つため。</summary>
+    private const int MaxDpStates = 200_000;
+
     /// <summary>DP内部状態のレコード（Kotlinの<c>solveConstructionDp</c>ローカル<c>data class Rec</c>
     /// に相当。C#はメソッド内でのローカル型宣言を許さないためクラス直下のprivateネスト型に置く —
     /// スコープの違いのみで意味は同一、この型を使うのは <see cref="SolveConstructionDp"/> だけ）。</summary>
@@ -183,28 +187,40 @@ public static class SmartInitialScheduler
 
     /// <summary>
     /// [3.262.0/V6SanityPort検査2b-3(個人内壁検知)向け] 個人上限(rangeHi)を無視した場合に、指定の
-    /// 窓ルール群(同一シフトの複数規則も可)を**同時に**完全充足するには最低何日必要かを、構築本体
-    /// (<see cref="SolveConstructionDp"/>)自身で計算する。無制限cap・全日自由で呼び、0違反を達成する
-    /// 解のうち対象日数最小のものを返す（DPの優先順位=違反数最優先→対象日数次点、と一致するため正確）。
-    /// 0違反が原理的に不可能（規則の日数が期間を超える等）なら null を返す。
+    /// 窓ルール群(同一シフトの複数規則も可)を**同時に**完全充足するには最低何日必要かを求める。
+    /// 窓を右端の昇順に見て、不足している窓へ**右端に近い空き日から**足す貪欲。窓制約の係数行列は
+    /// consecutive-ones＝全単模なので、この貪欲が厳密な最小値を与える（交換論法: 右端へ置く方が
+    /// 以降の窓を必ず同等以上に覆う）。0違反が原理的に不可能（窓長より多い回数を要求する等）なら null。
+    /// 3.596.0 で指数的なDPから置換（経緯と実測は docs/history、厳密性は総当たりオラクル照合で担保）。
     /// </summary>
-    public static int? MinDaysForFullCompliance(int t, IReadOnlyList<(int Days, int Minimum)> rules, long seed = 0x517A2L)
+    public static int? MinDaysForFullCompliance(int t, IReadOnlyList<(int Days, int Minimum)> rules)
     {
-        var c1Rules = rules.Select(r => new C1Rule(r.Days, r.Minimum)).ToList();
-        var forced = new int[t];
-        for (int i = 0; i < t; i++) forced[i] = -1;
-        var targetDays = SolveConstructionDp(t, c1Rules, forced, seed, t);
-        if (targetDays is null) return null;
-        foreach (var rule in c1Rules)
+        // 旧DPのビットマスク由来の上限を踏襲＝対象外の長期間で診断の挙動を変えない（業務上限は31日）。
+        if (t <= 0 || t > 62) return null;
+        var valid = rules.Where(r => r.Days is >= 1 && r.Days <= t && r.Minimum > 0).ToList();
+        if (valid.Count == 0) return null;
+        var chosen = new bool[t];
+        var used = 0;
+        for (var end = 0; end < t; end++)
         {
-            for (int j0 = 0; j0 <= t - rule.Days; j0++)
+            foreach (var (days, minimum) in valid)
             {
-                int cnt = 0;
-                for (int j = j0; j < j0 + rule.Days; j++) if (targetDays[j]) cnt++;
-                if (cnt < rule.Minimum) return null;
+                if (end + 1 < days) continue;
+                var from = end - days + 1;
+                var cnt = 0;
+                for (var j = from; j <= end; j++) if (chosen[j]) cnt++;
+                var j2 = end;
+                while (cnt < minimum)
+                {
+                    while (j2 >= from && chosen[j2]) j2--;
+                    if (j2 < from) return null;
+                    chosen[j2] = true;
+                    used++;
+                    cnt++;
+                }
             }
         }
-        return targetDays.Count(v => v);
+        return used;
     }
 
     /// <summary>
@@ -274,6 +290,7 @@ public static class SmartInitialScheduler
                         (cost == old.Cost && (ulong)bits < (ulong)old.Bits))
                     {
                         next[nk] = new Rec(cost, bits);
+                        if (next.Count > MaxDpStates) return null;
                     }
                 }
             }

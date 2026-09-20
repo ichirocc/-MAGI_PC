@@ -221,11 +221,14 @@ public static class FixSuggester
                 new FixSuggestion(kind, ops, label, rep.Hard - _base.Hard, rep.Total - _base.Total, DiffOf(rep)),
                 rep.Hard - _base.Hard, rep.Total - _base.Total, rep.WeightedScore - _base.WeightedScore));
         }
-        /// <summary>ops をその場で適用→評価→復元。base より良ければ候補に追加。</summary>
+        /// <summary>ops をその場で適用→評価→復元。base より良く、かつ別の HARD 族を新規に崩さなければ候補に
+        /// 追加（<see cref="UnifiedViolationChecker.NewHardFamilyViolation"/>、3.573.0。FixApplyGate と同じ規則
+        /// ＝提案の時点で弾く）。</summary>
         private void TryOps(FixKind kind, IReadOnlyList<FixCell> ops, string label)
         {
             var rep = EvalOps(ops);
-            if (UnifiedViolationChecker.BetterReport(rep, _base)) Record(kind, ops, label, rep);
+            if (UnifiedViolationChecker.BetterReport(rep, _base) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null)
+                Record(kind, ops, label, rep);
         }
 
         public List<FixSuggestion> Run(int maxResults)
@@ -400,7 +403,8 @@ public static class FixSuggester
                 {
                     for (var c = 0; c < n; c++) _s[cells[c]][j] = cellOpts[c][idx[c]];
                     var rep = UnifiedViolationChecker.Check(_state, _s);
-                    if (UnifiedViolationChecker.BetterReport(rep, _base) && (bestComboRep == null || UnifiedViolationChecker.BetterReport(rep, bestComboRep)))
+                    if (UnifiedViolationChecker.BetterReport(rep, _base) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
+                        (bestComboRep == null || UnifiedViolationChecker.BetterReport(rep, bestComboRep)))
                     {
                         bestComboRep = rep;
                         var combo = new int[n];

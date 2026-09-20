@@ -31,6 +31,8 @@ public static class FixApplyGate
         var after = UnifiedViolationChecker.Check(state, work);
         if (!UnifiedViolationChecker.BetterReport(after, before)) return new Outcome(null, before, after, "今の勤務表では改善になりません");
         if (V6SearchOperators.ExactPinRegression(p, schedule, work)) return new Outcome(null, before, after, "回数固定（下限＝上限）を崩す提案です");
+        var newHard = UnifiedViolationChecker.NewHardFamilyViolation(before, after);
+        if (newHard != null) return new Outcome(null, before, after, $"別の必須条件（{newHard}）が新たに崩れる提案です");
         return new Outcome(work, before, after, null);
     }
 }

@@ -204,8 +204,9 @@ public static partial class V6FinalPort
         // [3.281.0/停滞レビューA] c3n構造壁の動的床。
         bool bestNonCovUAllC3n = false;
         int bestVersion = 0;
-        int c3nWallCheckedVersion = -1;
-        bool c3nWallResult = false;
+        // [3.592.0, Kotlin原本] 世代とresultを別フィールドで持つと、並行診断するワーカー間で新世代の
+        //   「checked」に旧世代のresultが結び付く競合があった。(version,result)組を単一参照で置換する。
+        Tuple<int, bool> c3nWallCache = Tuple.Create(-1, false);
         int bTotal = int.MaxValue;
         double bWeighted = double.MaxValue;
         var lastPhase = "";
@@ -264,7 +265,7 @@ public static partial class V6FinalPort
         bool C3nWallProven()
         {
             var v = Volatile.Read(ref bestVersion);
-            if (Volatile.Read(ref c3nWallCheckedVersion) != v)
+            if (Volatile.Read(ref c3nWallCache).Item1 != v)
             {
                 var board = V6NativeOptimizer.LiveBest;
                 bool proven;
@@ -284,10 +285,9 @@ public static partial class V6FinalPort
                     }
                     catch (Exception) { proven = false; }
                 }
-                Volatile.Write(ref c3nWallResult, proven);
-                Volatile.Write(ref c3nWallCheckedVersion, v);
+                Volatile.Write(ref c3nWallCache, Tuple.Create(v, proven));
             }
-            return Volatile.Read(ref c3nWallResult);
+            return Volatile.Read(ref c3nWallCache).Item2;
         }
 
         bool ShouldStop()
@@ -498,7 +498,7 @@ public static partial class V6FinalPort
             var nonCovU = Volatile.Read(ref bestNonCovUHard);
             var kind = Volatile.Read(ref bestHard) <= hardFloor && nonCovU == 0
                 ? $"plateau=短{stallHardMs / 1000}s"
-                : Volatile.Read(ref c3nWallResult) && Volatile.Read(ref bestNonCovUAllC3n)
+                : Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
                     ? $"c3n壁=短{stallHardMs / 1000}s"
                     : $"通常=長{stallMs / 1000}s";
             // [3.375.2/実測で判明] 発火しなかったとき、どの条件が塞いだかを出す。
@@ -525,8 +525,8 @@ public static partial class V6FinalPort
             var afterNote = Volatile.Read(ref lastBestImproveMs) > tChain1
                 ? $"・探索後も改善あり(経過{(Volatile.Read(ref lastBestImproveMs) - startMs) / 1000}s＝後処理/追加精製)"
                 : "";
-            var wallNote = Volatile.Read(ref c3nWallCheckedVersion) >= 0
-                ? $"・c3n壁診断={(Volatile.Read(ref c3nWallResult) ? "構造的な壁と判定" : "壁ではない（崩す手が実在）")}"
+            var wallNote = Volatile.Read(ref c3nWallCache).Item1 >= 0
+                ? $"・c3n壁診断={(Volatile.Read(ref c3nWallCache).Item2 ? "構造的な壁と判定" : "壁ではない（崩す手が実在）")}"
                 : "";
             return new List<MirrorLog>
             {
@@ -554,29 +554,37 @@ public static partial class V6FinalPort
                             : "") +
                         "・解は最良を維持）" +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
-                        (Volatile.Read(ref c3nWallResult) && Volatile.Read(ref bestNonCovUAllC3n)
+                        (Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
                             ? "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）"
                             : "")),
             }
             : Array.Empty<MirrorLog>();
 
-        // [最終番兵/多重防御] 全段 keep-best のため通常は発火しないが、万一パイプラインが入力より
-        // 悪い結果を返した場合は入力を採用し退化を防ぐ（CheckResultWorse をここで配線）。
-        // [3.513.0/バグ修正・Kotlin原本と同日同期] 復帰先は inputReport と同じ盤面（cappedInput）でなければ
-        //   ならない。旧実装は normInput（上限 0 のセルを外す前の生入力）へ戻していたため、番兵発火時に
-        //   finalReport と finalSched が食い違い得た（詳細は SentinelSchedule の doc comment 参照）。
-        var regression = CheckResultWorse(inputReport, refReport);
-        var finalSched = SentinelSchedule(regression, cappedInput, refSched);
-        var finalReport = regression != null ? inputReport : refReport;
+        // [最終番兵/多重防御・3.575.0で強化, Kotlin原本] 「入力」と最終結果の2点比較だと、途中の段の改善が
+        //   後段の悪化で丸ごと失われる（経緯: docs/history 3.575.0）。主要な段を全部候補にし
+        //   PickBestStage で最良を選ぶ。
+        var bestStage = PickBestStage(new[]
+        {
+            new StageCandidate("入力", cappedInput, inputReport),
+            new StageCandidate("探索", chained.Schedule, chained.Report),
+            new StageCandidate("統合", integrated.Schedule, integrated.Report),
+            new StageCandidate("後処理", refSched, refReport),
+        });
+        var finalSched = bestStage.Sched;
+        var finalReport = bestStage.Report;
+        // [レビュー修正/3.575.0, Kotlin原本] 全段が同値（無改善）のときも Aggregate は最初の候補（入力）を
+        //   残す＝label が「後処理」でなくなるが、これは退化ではないので警告しない。実際に refReport
+        //   （後処理の最終値）が bestStage より悪いとき（= CheckResultWorse が非null）だけ多重防御ログを出す。
+        var regression = bestStage.Label != "後処理" ? CheckResultWorse(bestStage.Report, refReport) : null;
         IReadOnlyList<MirrorLog> sentinelLog = regression != null
             ? new List<MirrorLog>
             {
                 new(level: "W", tag: "Sentinel",
-                    message: $"後処理結果が入力より悪化を検知したため入力を採用しました（多重防御）: {regression}"),
+                    message: $"後処理結果が{bestStage.Label}より悪化を検知したため{bestStage.Label}を採用しました（多重防御）: {regression}"),
                 // [N3] ログ末尾には棄却盤面(post)の UnifiedCheck/診断行が履歴として残るため、採用した
                 //   勤務表の集計を明示して読者の取り違えを防ぐ。
                 new(level: "I", tag: "UnifiedCheck",
-                    message: $"採用した勤務表の集計: HARD={inputReport?.Hard} 合計={inputReport?.Total}（直近のUnifiedCheck行・違反詳細は棄却盤面の診断）"),
+                    message: $"採用した勤務表の集計: HARD={finalReport.Hard} 合計={finalReport.Total}（直近のUnifiedCheck行・違反詳細は棄却盤面の診断）"),
             }
             : Array.Empty<MirrorLog>();
 
@@ -593,7 +601,7 @@ public static partial class V6FinalPort
         {
             var bd = finalReport.Breakdown;
             var infeasLearned = chained.InfeasibleFamilies;
-            var c3nWall = Volatile.Read(ref c3nWallResult) && Volatile.Read(ref bestNonCovUAllC3n);
+            var c3nWall = Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n);
             var walls = new List<string>();
             var open = new List<string>();
             // [3.375.0/実機ログ起因] 構造床は族ループより先に計算する。open 側から差し引くため。
