@@ -16,7 +16,7 @@ public static class VioBuckets
     {
         new VioBucket("need", "人員", new HashSet<string> { "covU", "covO" }),
         new VioBucket("pref", "希望", new HashSet<string> { "pref" }),
-        new VioBucket("seq", "連勤", new HashSet<string> { "c3", "c3n", "c3m", "c3mn" }),
+        new VioBucket("seq", "連勤", new HashSet<string> { "c3", "c3n", "c3m", "c3mn", "c3w" }),
         new VioBucket("count", "回数", new HashSet<string> { "low", "high", "apt", "c2" }),
         new VioBucket("group", "群ルール", new HashSet<string> { "groupViol", "c41", "c42", "c41s", "c42s" }),
         new VioBucket("window", "窓", new HashSet<string> { "c1" }),

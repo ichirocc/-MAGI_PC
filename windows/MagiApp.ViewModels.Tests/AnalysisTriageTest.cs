@@ -96,7 +96,7 @@ public class AnalysisTriageTest
     public void ZeroCountFamiliesGoToTheCollapsedSummary()
     {
         var t = AnalysisTriage.Build(Ui(B(("c1", 6))), L);
-        Assert.Equal(19, t.OkFamilies.Count + t.BusyFamilies.Count);
+        Assert.Equal(MirrorKeys.All.Count, t.OkFamilies.Count + t.BusyFamilies.Count);
         Assert.Equal(new[] { "期間の制約" }, t.BusyFamilies);
         Assert.Contains("人員不足", t.OkFamilies);
     }

@@ -326,6 +326,18 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（`MagiApp.ViewModels.Tests`の既知欠落2件を修正・検証、`git status`で誤commitされていた
+  未サンドボックス実行のフォークworkflowを整理）: 前エントリで「未着手（別対応）」としていた`c3w`の
+  UI分類漏れを解消。Kotlin原本`ui/VioBuckets.kt`は`seq`（連勤）バケットに`c3w`を含むが、C#の
+  `VioBuckets.cs`は`c3, c3n, c3m, c3mn`のみで`c3w`が抜けていた（1対1移植の単純な追随漏れ）。
+  `AnalysisTriageTest.ZeroCountFamiliesGoToTheCollapsedSummary`も期待値を`19`のハードコードで持っていたが、
+  Kotlin原本のテストは`MirrorKeys.all.size`を動的参照している＝C#側の乖離を`MirrorKeys.All.Count`へ
+  修正しKotlinと1対1に揃えた。`MagiApp.ViewModels.Tests` 440/440緑（`dotnet test`を初めてこのサンドボックス
+  へ`dotnet-install.sh`でセットアップして直接検証、既知のflaky`Cancelled_ReportsStoppedAndReleasesRunningFlag`
+  は単体実行では常に緑）。あわせて`android-sdk.yml`・`v6-engine-check.yml`を削除
+  （リポジトリ直下の`app/`はフォーク時の1コミット2026-09-06から一度も更新されず実質未使用＝
+  このコピーをビルドする2ワークフローは常時無関係な赤としてCIダッシュボードを汚すだけだった。
+  `native-parity.yml`・`release-build.yml`も同じ`app/`向けだが今回は対象外＝ユーザー未承認）。
 - 2026-09-20（前コミットのCS0246修正が別の赤=CS0103を露呈、Windows CIログで確認して即修正）:
   `ScheduleGridModels.cs`の`FontWeight`修正でビルドが1歩進んだ結果、同ファイルの`Colors.Black`等
   （4箇所）が`using Windows.UI;`では解決できず`CS0103`（名前が存在しない）で落ちることが判明。
