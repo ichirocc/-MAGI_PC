@@ -326,6 +326,16 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（C# 単独修正・Kotlin/C++は無変更、windows-app-build.yml のビルド赤を修正）:
+  **`ScheduleGridModels.cs`（`ScheduleCellVm.FontWeight`）が `CS0246` でビルド不能だった**。
+  `using Microsoft.UI.Text;` ＋裸の `FontWeight` を書いていたが、`TextBlock.FontWeight` の実体型
+  `Windows.UI.Text.FontWeight` はその名前空間に再定義されておらず（値のコンビニエンス定数
+  `Microsoft.UI.Text.FontWeights` のほうは `EditView.xaml.cs` 等で使用実績あり＝存在する）、型名だけ
+  解決できずビルドが落ちていた（2026-09-02 の `using Windows.UI;` 抜け＝`CS0246`と同型）。少なくとも
+  直近2コミット（17ea8fa・b1f4b64）連続で `windows-app-build.yml` が赤だったが、いずれもエンジン層
+  のみの変更で気づかれていなかった。型・既定値の両方を完全修飾（`Windows.UI.Text.FontWeight`／
+  `Microsoft.UI.Text.FontWeights.Normal`）して解消。**サンドボックスでは`MagiApp.WinUI`をビルドできず
+  未検証**（既出の制約）＝Windows CI での緑化確認が必要。
 - 2026-09-16（3.570.0、C# 単独修正・Kotlin/C++は無変更＝既にKotlin側で正しかった）
   **`PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates` random#1/#4 の赤を根本修正**。
   Android 側で同じ乱数列（`JavaRandom(0x91A7L)`）を再現し、Kotlinの同名テストは全12状態で緑＝

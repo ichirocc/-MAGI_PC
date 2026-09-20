@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
@@ -39,7 +38,9 @@ public sealed partial class ScheduleCellVm : ObservableObject
 
     [ObservableProperty] private string text = "";
     [ObservableProperty] private TextAlignment textAlignment = TextAlignment.Center;
-    [ObservableProperty] private FontWeight fontWeight = FontWeights.Normal;
+    // [CS0246対策] TextBlock.FontWeight の実体は Windows.UI.Text.FontWeight（Microsoft.UI.Text 名前空間
+    //   には再定義されていない）。型・既定値とも完全修飾で参照する（経緯は README レビュー対応の記録）。
+    [ObservableProperty] private Windows.UI.Text.FontWeight fontWeight = Microsoft.UI.Text.FontWeights.Normal;
     [ObservableProperty] private Brush foreground = new SolidColorBrush(Colors.Black);
     [ObservableProperty] private Brush background = new SolidColorBrush(Colors.Transparent);
     [ObservableProperty] private Brush borderBrush = new SolidColorBrush(Colors.Transparent);
