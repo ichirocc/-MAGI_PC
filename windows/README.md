@@ -326,6 +326,18 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（1b33b5b の回帰修正、CI待たずに自己発見）: 直前コミットで `V6FinalPort.HandleOptimize` に
+  追加した `extraRefineRequirePostHardDrop` を `onProgress`/`cancellationToken` より前に挿入したため、
+  `EngineOptimizationService.OptimizeAsync`（位置引数で9個渡す）の実引数がずれ `CS1503` でビルド不能に
+  （`windows-app-build.yml` が赤化・Windows CI のログで確認）。**新規オプション引数は必ず末尾に足す**
+  （このコードベースの既存規約、他の`bool`フラグは全て末尾追加）という原則を1回破った例。引数順を
+  修正して解消。`MagiEngine.Tests` 856/856・`MagiApp.ViewModels.Tests` 438/440 緑（残り2件は本修正と
+  無関係の既存赤、後述）。**この2テストは新規に判明した既知の欠落**: `VioBucketsTest`/
+  `AnalysisTriageTest` が `c3w`（3.542.0で追加したHARD制約）をUI側のバケット分類・族数(19→20)に
+  未反映のまま検出——エンジン層は`ParityTest`で20族に更新済みだが`MagiApp.ViewModels`側の
+  `VioBuckets`が追随していなかった。**`MagiApp.ViewModels.Tests`はどのCIワークフローからも実行されて
+  おらず**（`windows-engine-check.yml`は`MagiEngine.Tests`のみ対象）、この乖離が何ヶ月も検出されずに
+  残っていた。Kotlin側のc3w相当のUI分類を確認してから直す必要があり本コミットでは未着手（別対応）。
 - 2026-09-20（3.602.0, backlog#28/#35。既定OFFの測定用フラグ2件を同期。#24はAndroid側も保留継続の
   ためスコープ外）:
   **`V6OptimizerOptions.RsiFocusRotationPersist`（backlog#28）**: `V6NativeOptimizer.MaxViolatedFamily`

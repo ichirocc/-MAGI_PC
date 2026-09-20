@@ -63,11 +63,14 @@ public static partial class V6FinalPort
         bool softPolish = false,
         V6Algorithm requestedAlgorithm = V6Algorithm.Auto,
         bool allowImpossible = false,
+        Action<string, ViolationReport?, long, long>? onProgress = null,
+        CancellationToken cancellationToken = default,
         // [測定中/backlog#35] ExtraRefine を、後処理後の残りHARDが構造的に解けないと証明済み（covU床のみ／
         // ForbiddenDiag確定のc3n壁）のときだけ省略する。改善可能なHARD残・HARD=0では従来どおり実行。既定OFF。
-        bool extraRefineRequirePostHardDrop = false,
-        Action<string, ViolationReport?, long, long>? onProgress = null,
-        CancellationToken cancellationToken = default)
+        // [regression対策] onProgress/cancellationTokenより前に挿入すると、既存の位置引数呼出し
+        //   （EngineOptimizationService.cs 等）の実引数がずれてCS1503になる（1b33b5bで実際に発生・修正）。
+        //   新規オプション引数は必ず末尾に足す。
+        bool extraRefineRequirePostHardDrop = false)
     {
         static long NowMs() => EngineClock.NowMs();
         static int TryOrZero(Func<int> f)
