@@ -41,6 +41,13 @@ public sealed record ExactResult(
 public sealed record CoverageNeutralWall(int Staff, int Shift, int Start, int WindowDays);
 
 /// <summary>
+/// [C1 重複窓の連結成分, Kotlin原本] 同一職員の Cons1 窓のうち区間が重なり合うもの一式（≥1件）。
+/// <see cref="C1RepairAnalysis.SolveWindow"/> の「1件の違反だけを起点にパディング」を、近接・重複する
+/// 窓もまとめて1回の厳密探索へ渡せるよう一般化するための単位（[Start, End) は併合後の区間）。
+/// </summary>
+public sealed record WindowComponent(IReadOnlyList<C1WindowViolation> Members, int Staff, int Start, int End);
+
+/// <summary>
 /// [C1 Repair Analysis + Exact Window Repair / 3.273.0] C1（窓の要件）を「評価」と「修復」で完全分離する。
 ///
 /// 設計原則（ユーザー合意 A1-A6 / v8第2段）:
@@ -107,6 +114,41 @@ public static class C1RepairAnalysis
         return result;
     }
 
+    /// <summary>
+    /// [C1 重複窓の連結成分, Kotlin原本] <see cref="Analyze"/> の出力を同一 staff 内の区間重なりでグラフ化し
+    /// 連結成分へ分割する（staff をまたぐエッジは張らない＝職員間は常に独立）。<paramref name="cfg"/> の
+    /// <see cref="Config.MaxWindowDays"/> を超える手前で併合を止める（<see cref="SolveComponent"/> の span が
+    /// この上限内に収まる前提を守るため）。
+    /// </summary>
+    public static List<WindowComponent> Components(Problem p, int[][] schedule, Config? cfg = null)
+    {
+        cfg ??= new Config();
+        var byStaff = Analyze(p, schedule).GroupBy(v => v.Staff);
+        var result = new List<WindowComponent>();
+        foreach (var g in byStaff)
+        {
+            var sorted = g.OrderBy(v => v.Start).ToList();
+            var idx = 0;
+            while (idx < sorted.Count)
+            {
+                int start = sorted[idx].Start, end = start + sorted[idx].WindowDays;
+                var members = new List<C1WindowViolation> { sorted[idx] };
+                int k = idx + 1;
+                while (k < sorted.Count && sorted[k].Start < end)
+                {
+                    int newEnd = Math.Max(end, sorted[k].Start + sorted[k].WindowDays);
+                    if (newEnd - start > cfg.MaxWindowDays) break;
+                    end = newEnd;
+                    members.Add(sorted[k]);
+                    k++;
+                }
+                result.Add(new WindowComponent(members, g.Key, start, end));
+                idx = k;
+            }
+        }
+        return result;
+    }
+
     /// <summary>窓内の各候補日（現在 shift でない・movable な日）の局所情報を作る（探索なし）。</summary>
     public static List<RepairOpportunity> Opportunities(Problem p, int[][] schedule, C1WindowViolation v)
     {
@@ -158,28 +200,38 @@ public static class C1RepairAnalysis
     // ---- A2/A3: 窓スコープ厳密探索（coverage保存 permutation の分枝限定） -----------------------
 
     /// <summary>1つの不足窓を起点に、窓を含む日スパンをまたぐ coverage保存 permutation で joint c1 を最小化する。</summary>
-    public static ExactResult SolveWindow(Problem p, int[][] schedule, C1WindowViolation v, Config? cfg = null)
+    public static ExactResult SolveWindow(Problem p, int[][] schedule, C1WindowViolation v, Config? cfg = null) =>
+        SolveComponent(p, schedule, new WindowComponent(new[] { v }, v.Staff, v.Start, v.Start + v.WindowDays), cfg);
+
+    /// <summary>
+    /// [C1 重複窓の連結成分, Kotlin原本] <see cref="SolveWindow"/> の一般化: 起点を単一の違反 <c>v</c> でなく、
+    /// 近接・重複する複数窓をまとめた <see cref="WindowComponent"/> にする（同一職員の窓が重なるのに片方だけを
+    /// 起点にすると別窓の違反が探索から漏れ、<see cref="ExactResult.Exhaustive"/> の証明が偽陽性になりうるため）。
+    /// <paramref name="comp"/><c>.Members</c> が1件のときは <see cref="SolveWindow"/> と完全に同じ結果を返す。
+    /// </summary>
+    public static ExactResult SolveComponent(Problem p, int[][] schedule, WindowComponent comp, Config? cfg = null)
     {
         cfg ??= new Config();
         var s = ScheduleUtil.NormalizeSchedule(schedule, p);
         // [多日連動] days は単一窓幅でなく、窓を含む maxWindowDays 幅の連続スパン。狭いと「別日で連動して
         //   初めて解ける」多職員手（同日swapの合成では到達不能）を表現できないため（実測でこの拡張が必須）。
         int span = Math.Min(cfg.MaxWindowDays, p.T);
-        int startD = Math.Max(Math.Min(v.Start, p.T - span), 0);
+        int startD = Math.Max(Math.Min(comp.Start, p.T - span), 0);
         var days = Enumerable.Range(startD, span).ToList();
 
-        // 関与職員 M = i0 ∪ スパン内で shift x を持つ職員（cap 内）。coverage保存はこの M の日別多重集合を
-        //   M 内で並べ替えることで担保（M外・スパン外は固定）。
+        // 関与職員 M = i0 ∪ スパン内で成分内いずれかの shift を持つ職員（cap 内）。coverage保存はこの M の
+        //   日別多重集合を M 内で並べ替えることで担保（M外・スパン外は固定）。
         // [移植メモ] Kotlin の LinkedHashSet と同じ「挿入順を保持する集合」を、List(順序)+HashSet(O(1)判定)の
-        //   組で明示的に再現する（.NET の HashSet<T> の列挙順は未規定のため依存しない）。v.Staff が必ず
+        //   組で明示的に再現する（.NET の HashSet<T> の列挙順は未規定のため依存しない）。comp.Staff が必ず
         //   先頭（index 0）に来るという下の focusResidualOf の前提はこの List の先頭挿入で担保される。
-        var mList = new List<int> { v.Staff };
-        var mSeen = new HashSet<int> { v.Staff };
+        var shiftsInComp = comp.Members.Select(mem => mem.Shift).ToHashSet();
+        var mList = new List<int> { comp.Staff };
+        var mSeen = new HashSet<int> { comp.Staff };
         foreach (int d in days)
             for (int i = 0; i < p.S; i++)
-                if (s[i][d] == v.Shift && i != v.Staff && mSeen.Add(i))
+                if (i != comp.Staff && shiftsInComp.Contains(s[i][d]) && mSeen.Add(i))
                     mList.Add(i);
-        // 余力: x を担当できる職員を加える（3者以上の連動を可能に）。
+        // 余力: 成分内いずれかの shift を担当できる職員を加える（3者以上の連動を可能に）。
         // [3.314.0] 旧実装は同群限定で、別群を経由する3者循環を見落としたまま exhaustive=true ＝「証明済み
         //   壁」を名乗っていた。coverage 保存の並べ替えが要求するのは受け手の canDo だけで、DFS の Place() は
         //   配置ごとに p.CanDo(i, sh) を検査するため、群をまたいで M に加えても不正な解は生まれない。
@@ -188,7 +240,7 @@ public static class C1RepairAnalysis
         bool truncated = false;
         for (int i = 0; i < p.S; i++)
         {
-            if (mSeen.Contains(i) || !p.MayPlace(i, v.Shift)) continue;
+            if (mSeen.Contains(i) || !shiftsInComp.Any(sh => p.MayPlace(i, sh))) continue;
             if (mList.Count >= cfg.MaxInvolvedStaff) { truncated = true; break; }
             mSeen.Add(i);
             mList.Add(i);
@@ -227,21 +279,28 @@ public static class C1RepairAnalysis
             return total;
         }
         int baseline = JointC1();
-        // [3.279.0/外部レビューC1-03] 焦点職員 i0 の**対象窓（v.Start〜v.Start+v.WindowDays）だけ**の残 fire。
-        //   旧: 全ルール×全窓の残数＝対象窓が解消可能でも別窓が残るだけで「この窓は壁」と誤認していた。
-        int fi = Array.IndexOf(m, v.Staff);
+        // [3.279.0/外部レビューC1-03] 焦点職員 i0 の**成分の各メンバー窓だけ**の残 fire 合計。
+        //   旧: 全ルール×全窓の残数＝対象窓が解消可能でも別窓（別シフトのルール含む）が残るだけで
+        //   「この窓は壁」と誤認していた。単一メンバーのときは 0/1 のままで旧実装と完全一致
+        //   （メンバーが増えると 0..Members.Count に拡張）。
+        int fi = Array.IndexOf(m, comp.Staff);
         int FocusResidualOf(int[][] arr)
         {
-            // [3.279.1] fi<0 は現行構造では到達不能（m は v.Staff を先頭に構築される）。将来 m の構築が
+            // [3.279.1] fi<0 は現行構造では到達不能（m は comp.Staff を先頭に構築される）。将来 m の構築が
             //   変わった場合に焦点残を誤らせない防御として残置（0=「壁と主張しない」安全側）。
             if (fi < 0) return 0;
-            int z = 0;
-            for (int l = 0; l < v.WindowDays; l++)
+            int total = 0;
+            foreach (var member in comp.Members)
             {
-                int d = v.Start + l;
-                if (d >= 0 && d < p.T && arr[fi][d] == v.Shift) z++;
+                int z = 0;
+                for (int l = 0; l < member.WindowDays; l++)
+                {
+                    int d = member.Start + l;
+                    if (d >= 0 && d < p.T && arr[fi][d] == member.Shift) z++;
+                }
+                if (z < member.Required) total++;
             }
-            return z < v.Required ? 1 : 0;
+            return total;
         }
         if (baseline == 0) return new ExactResult(0, 0, null, true, 0);
 
@@ -324,7 +383,7 @@ public static class C1RepairAnalysis
                 {
                     int sh = multiset[si];
                     int pri = 0;
-                    if (m[mi] == v.Staff && sh == v.Shift) pri += 100;
+                    if (m[mi] == comp.Staff && shiftsInComp.Contains(sh)) pri += 100;
                     if (sh == s[m[mi]][d]) pri += 10; // 現状維持
                     return pri;
                 })

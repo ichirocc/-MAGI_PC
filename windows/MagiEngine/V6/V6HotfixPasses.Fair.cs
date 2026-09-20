@@ -22,7 +22,10 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyFairPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xFA12L,
-        bool combineExhaustPairs = false)
+        bool combineExhaustPairs = false,
+        // [3.590.0/測定中/backlog#27①] 候補分類をFairTargetの生回数平均でなくFairDevOfBucketの黒箱観測
+        //   （仮想入力±1）へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝既定OFF維持が確定。
+        bool fairAchievementDirection = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -55,6 +58,18 @@ public static partial class V6HotfixPasses
             return (int)KotlinInterop.MathRound(sum / (double)mem.Length);
         }
 
+        // [3.590.0/測定中/backlog#27] fairTargetの生回数平均が偶然counts[x][k]と一致すると偏差ありの
+        //   セルが握り潰される（3.588.0実測）。FairDevOfBucketを仮想入力(±1)で黒箱観測して分類する。
+        string? FairAchievementDir(int g, int k, int[][] counts, int x)
+        {
+            var baseDev = p.FairDevOfBucket(g, k, xx => counts[xx][k]);
+            var down = p.FairDevOfBucket(g, k, xx => xx == x ? counts[xx][k] - 1 : counts[xx][k]);
+            var up = p.FairDevOfBucket(g, k, xx => xx == x ? counts[xx][k] + 1 : counts[xx][k]);
+            if (down.Total < baseDev.Total) return "high";
+            if (up.Total < baseDev.Total) return "low";
+            return null;
+        }
+
         // [玉突きチェーンのavoid述語] 候補がfillShiftを1つ得ると、候補自身の群目標(スナップショット近似)
         //   からちょうど新規に乖離するか（既に乖離済みなら中立扱い＝対象外）。
         bool WorsensOwnFair(int staff, int fillShift)
@@ -63,6 +78,14 @@ public static partial class V6HotfixPasses
             var g = p.Sgrp[staff];
             if (g < 0 || g >= p.Bucket.Length || !p.Bucket[g].Contains(fillShift)) return false;
             var counts = ScheduleUtil.CountMatrix(p, work);
+            if (fairAchievementDirection)
+            {
+                var beforeDev = p.FairDevOfBucket(g, fillShift, xx => counts[xx][fillShift]);
+                var afterDev = p.FairDevOfBucket(g, fillShift, xx => xx == staff ? counts[xx][fillShift] + 1 : counts[xx][fillShift]);
+                var dxBefore = beforeDev.PerMember.FirstOrDefault(pm => pm.Member == staff).Dev;
+                var dxAfter = afterDev.PerMember.FirstOrDefault(pm => pm.Member == staff).Dev;
+                return dxBefore == 0 && dxAfter > 0;
+            }
             var tgt = FairTarget(g, fillShift, counts);
             return counts[staff][fillShift] == tgt;
         }
@@ -179,9 +202,20 @@ public static partial class V6HotfixPasses
                 if (x >= p.Sgrp.Length) continue;
                 var g = p.Sgrp[x];
                 if (g < 0 || g >= p.Bucket.Length) continue;
-                var tgt = FairTarget(g, k, counts);
-                if (counts[x][k] > tgt) highTargets.Add((x, k));
-                else if (counts[x][k] < tgt) lowTargets.Add((x, k));
+                if (fairAchievementDirection)
+                {
+                    switch (FairAchievementDir(g, k, counts, x))
+                    {
+                        case "high": highTargets.Add((x, k)); break;
+                        case "low": lowTargets.Add((x, k)); break;
+                    }
+                }
+                else
+                {
+                    var tgt = FairTarget(g, k, counts);
+                    if (counts[x][k] > tgt) highTargets.Add((x, k));
+                    else if (counts[x][k] < tgt) lowTargets.Add((x, k));
+                }
             }
             if (highTargets.Count == 0 && lowTargets.Count == 0) break;
 

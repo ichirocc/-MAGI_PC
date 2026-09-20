@@ -16,7 +16,7 @@ public static partial class V6HotfixPasses
     /// 相殺され isBetter に却下される手を引き続けて頭打ちになるケースを確認。C3mnPolish/RangePolish/
     /// C3RunPolishの3箇所で findCovUChain 呼出に渡し、そのような候補を後回し（除外はしない）にする。
     /// </summary>
-    private static bool ExceedsOwnRangeHi(Problem p, int[][] work, int staff, int fillShift)
+    internal static bool ExceedsOwnRangeHi(Problem p, int[][] work, int staff, int fillShift)
     {
         var hi = p.RangeHi[staff][fillShift];
         if (hi == int.MaxValue) return false;
@@ -26,7 +26,7 @@ public static partial class V6HotfixPasses
     }
 
     /// <summary>[ログから職員が分かるように] cellFamiliesに famKey を含むセルの職員名を重複なく列挙（登場順）。</summary>
-    private static List<string> StuckStaffNames(
+    internal static List<string> StuckStaffNames(
         MagiState state, IReadOnlyDictionary<string, IReadOnlyList<string>> cellFamilies, string famKey)
     {
         var outSet = new HashSet<string>();

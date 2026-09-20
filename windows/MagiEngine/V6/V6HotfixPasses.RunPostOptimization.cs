@@ -119,7 +119,40 @@ public static partial class V6HotfixPasses
         bool CountChainEnabled = false,
         /// <summary>[測定中/backlog#30] 日ごと厳密割当で「自分の現シフトを保つ」対角を常に有限にする。
         /// 恒等割当が常に実行可能になり、置けない職員/スロットがある日も残りを研磨できる。既定 OFF。</summary>
-        bool DayAssignIdentityFallback = false);
+        bool DayAssignIdentityFallback = false,
+        /// <summary>[3.511.3/測定中] 個人合計(c2)専用研磨（<see cref="C2Polish"/>、backlog #12(b)）。既定 OFF。</summary>
+        bool C2PolishEnabled = false,
+        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C2PolishEnabled"/> がOFFでも、c2違反が残っている
+        /// 局面でだけ試す。Android tools/loop ベンチ（3.582.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
+        bool C2PolishReactivate = false,
+        int C2Passes = 3,
+        /// <summary>[測定中] 群ペア禁止(c42/c42s)専用の min-cost-flow 研磨（<see cref="C42FlowPolish"/>、backlog #12(b)）。既定 OFF。</summary>
+        bool C42FlowPolishEnabled = false,
+        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C42FlowPolishEnabled"/> がOFFでも、c42/c42s違反が
+        /// 残っている局面でだけ試す。Android tools/loop ベンチ（3.583.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
+        bool C42FlowPolishReactivate = false,
+        int C42FlowPasses = 3,
+        /// <summary>[測定中] 最終段の「c3n(禁止連続) 前後余白込みLNS」（<see cref="C3nMarginLnsPolish"/>）。
+        /// 採否は tools/loop のペア比較で決める＝既定 OFF。</summary>
+        bool C3nMarginLnsEnabled = false,
+        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C3nMarginLnsEnabled"/> がOFFでも、c3n違反が
+        /// 残っている局面でだけ試す。Android側は専用合成ケースが作れず未計測のまま既定OFF。既定 OFF。</summary>
+        bool C3nMarginLnsReactivate = false,
+        int C3nMarginLnsMarginDays = 2,
+        int C3nMarginLnsEvaluations = 3_000,
+        /// <summary>[C1 重複窓の連結成分化/測定中] 厳密窓修復(<see cref="C1RepairOperators.ExactWindow"/>)の起点を、
+        /// 1件の違反でなく近接・重複窓を束ねた連結成分にする（backlog「C1 重複窓の連結成分化」）。既定 OFF＝挙動不変。</summary>
+        bool C1ComponentRepair = false,
+        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C1ComponentRepair"/> がOFFでも、c1違反が残っている
+        /// 局面でだけ試す。Android側は専用合成ケースが作れず未計測のまま既定OFF。既定 OFF。</summary>
+        bool C1ComponentRepairReactivate = false,
+        /// <summary>[3.580.0/測定中/backlog#26] <see cref="CountChainEnabled"/> がOFFでも、high/apt超過が
+        /// 残っている局面でだけ試す。Android tools/loop ベンチ（3.584.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
+        bool CountChainReactivate = false,
+        /// <summary>[3.590.0/測定中/backlog#27①] fairの候補分類をFairTargetの生回数平均でなく
+        /// FairDevOfBucketの黒箱観測へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝
+        /// 既定OFF維持が確定。既定 OFF。</summary>
+        bool FairAchievementDirection = false);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -142,7 +175,7 @@ public static partial class V6HotfixPasses
     private static readonly string[] AdoptionKeys =
     {
         "循環", "c1", "c3", "c3回転", "c3mn玉突き", "c3n", "range玉突き", "c3run玉突き", "c3pattern玉突き",
-        "アンカー窓交換", "希望島", "ブロック交換", "apt玉突き", "fair玉突き", "成分修復",
+        "アンカー窓交換", "希望島", "ブロック交換", "apt玉突き", "fair玉突き", "c2玉突き", "回数連鎖", "c42フロー", "成分修復",
     };
 
     /// <summary>SoftPolishVerify で「対象」に数える族（3.278.0 で CyclicSwap の対象族、3.475.0 で c3n を追加）。</summary>
@@ -306,6 +339,19 @@ public static partial class V6HotfixPasses
             var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
+        var c3nMarginActive = p.C3nMarginLnsEnabled ||
+            (p.C3nMarginLnsReactivate && TargetFamiliesRemain(state, chain.Work, false, "c3n"));
+        if (c3nMarginActive && !stop())
+        {
+            // [測定中, Kotlin原本] 共同 LNS の後・成分修復の前。c3n(禁止連続)のパターン日+前後余白を複数セル
+            //   同時destroy-rebuildして、1セル付け替え(C3nPolish)が構造的に届かない局面を拾う。
+            bool MarginStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
+            var rMargin = chain.Timed("後処理 禁止連続(c3n)前後余白込みLNS", "C3nMarginLNS", work =>
+                C3nMarginLnsPolish.Apply(state, work, marginDays: p.C3nMarginLnsMarginDays,
+                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop));
+            chain.Adopt(rMargin);
+        }
+
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
             // [Iteration 5] 最終段の予算は残り時間に応じて拡張（2 秒以上残っていれば推定 4 倍・正式評価 2.5 倍）。締切は stop に畳む。
@@ -421,8 +467,10 @@ public static partial class V6HotfixPasses
                     shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Flow, round))));
             Take("c1", chain.Timed($"後処理 期間要件(c1)広域ビーム研磨{tag}", "C1広域ビーム", work =>
                 C1RepairOperators.WideBeam(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Beam, round))));
+            var c1ComponentActive = p.C1ComponentRepair ||
+                (p.C1ComponentRepairReactivate && TargetFamiliesRemain(state, chain.Work, false, "c1"));
             Take("c1", chain.Timed($"後処理 期間要件(c1)厳密窓修復{tag}", "C1厳密窓", work =>
-                C1RepairOperators.ExactWindow(state, work, shouldStop: clusterStop)));
+                C1RepairOperators.ExactWindow(state, work, shouldStop: clusterStop, useComponents: c1ComponentActive)));
 
             var rC3 = chain.Timed($"後処理 連続規則(c3系)研磨{tag}", "C3SequencePolish", work =>
                 ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: clusterStop));
@@ -454,13 +502,19 @@ public static partial class V6HotfixPasses
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
                 ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, fairAchievementDirection: p.FairAchievementDirection)));
+            if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, false, "c2")))
+            {
+                Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>
+                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: clusterStop)));
+            }
             // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)は常に既定の PostOptimizationParams
             //   （parameters:null）を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
             //   等と同じく PolishGate を直接読み、UI トグルが実際に効くようにする（Android は V6FinalPort.kt で
             //   PostOptimizationParams 構築時に countChainEnabled=PolishGate.countChainPolish を都度渡す設計だが、
             //   この C# 版は呼出元を変えずに済む軽量な配線を選ぶ）。
-            if (PolishGate.CountChainPolish)
+            if (PolishGate.CountChainPolish ||
+                (p.CountChainReactivate && TargetFamiliesRemain(state, chain.Work, false, "high", "apt")))
             {
                 Take("回数連鎖", chain.Timed($"後処理 回数連鎖研磨{tag}", "CountChainPolish", work =>
                 {
@@ -471,6 +525,12 @@ public static partial class V6HotfixPasses
                     TuningTelemetry.AddCountChainApplied(r.Applied);
                     return r;
                 }));
+            }
+            if (p.C42FlowPolishEnabled ||
+                (p.C42FlowPolishReactivate && TargetFamiliesRemain(state, chain.Work, false, "c42", "c42s")))
+            {
+                Take("c42フロー", chain.Timed($"後処理 群ペア禁止(c42/c42s)フロー研磨{tag}", "C42FlowPolish", work =>
+                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: clusterStop)));
             }
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();

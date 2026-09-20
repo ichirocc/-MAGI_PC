@@ -326,6 +326,35 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（backlog#26/#27相当: 3.580.0/3.590.0の既定OFF専用修復腕4クラス＋再活性化フラグをC#へ新規移植）:
+  前エントリで「ベース機能未移植のため見送り」としていた3.580.0（既定OFF専用修復腕5種の再活性化）と
+  3.590.0（fair候補分類の黒箱観測統一）を、ベース機能ごとフル移植する方針に転換して実施。
+  - **新規クラス3つ**（Kotlinと同名の独立クラス、既存の`PinBlockAttribution`/`RejectCulpritStats`/
+    `V6SearchOperators.FindCovUChain`/`AdoptionGate`等の共有ヘルパをそのまま再利用）: `C2Polish.cs`
+    （個人合計c2専用研磨、不足分を一括適用してから1回だけ判定）、`C42FlowPolish.cs`（群ペア禁止c42/c42s
+    専用のmin-cost-flow研磨、`FlexibleDayFlow`を流用）、`C3nMarginLnsPolish.cs`（c3n禁止連続の前後余白込み
+    destroy-rebuild LNS）。
+  - **`AptFairPolish`は既に`V6HotfixPasses.Fair.cs`として移植済み**と判明（`FairTarget`/`WorsensOwnFair`が
+    同構造で存在）だったため、新規移植は不要。`ApplyFairPolish`に`fairAchievementDirection`フラグと
+    `FairAchievementDir`（`Problem.FairDevOfBucket`の仮想入力±1による黒箱分類）を追加する小規模拡張のみ。
+  - **c1ComponentRepair（連結成分化）は既存の稼働中パスの改造を要した**: `C1RepairAnalysis.cs`へ
+    `WindowComponent`record・`Components()`（同一職員内の重複窓を連結成分へグラフ分割）・`SolveComponent`
+    （既存`SolveWindow`の一般化＝単一違反でなく複数窓の成分を起点に厳密探索）を追加し、`SolveWindow`自体は
+    `SolveComponent`への委譲へ書き換え（既存11件のC1RepairAnalysis/C1ExactWindow系テストで無退行を確認）。
+    `V6HotfixPasses.ApplyC1ExactWindowRepair`/`C1RepairOperators.ExactWindow`に`useComponents`引数を追加し、
+    Analyze/SolveWindow経路とComponents/SolveComponent経路を分岐（採否ロジックは`ApplyResult`へ共通化）。
+  - **`V6HotfixPasses.TargetFamiliesRemain`**（Kotlin `targetFamiliesRemain`の移植）を新設し、5つの
+    `xxxReactivate`フラグ（`C2PolishReactivate`/`C42FlowPolishReactivate`/`C1ComponentRepairReactivate`/
+    `C3nMarginLnsReactivate`/`CountChainReactivate`）を`PostOptimizationParams`へ追加、対象違反が
+    breakdownに残っている局面でだけ既定OFFの腕を条件付きで呼ぶよう`RunPostOptimization`へ配線した。
+    全フラグ既定OFF＝挙動不変（Android実測: c2/c42Flow/countChainの3腕はtools/loopベンチでゲート不合格・
+    既定OFF確定、c1成分修復/c3nMarginLnsは専用合成ケースが作れず未計測のまま）。
+  - `ArmReactivationTest.cs`（4件、`TargetFamiliesRemain`の判定を固定）と、Kotlin原本の
+    `C2PolishTest`/`C42FlowPolishTest`/`C3nMarginLnsPolishTest`/`FairAchievementDirectionTest`を1対1で
+    移植（計17件の新規テスト）。`AdoptionKeys`に新規パス名（`c2玉突き`/`c42フロー`、ついでに既存の
+    `回数連鎖`の抜け）を追加しないと`RunPostOptimization`がKeyNotFoundExceptionで落ちることをテストで発見・修正。
+    `dotnet test MagiEngine.Tests` 873/873緑（既存856+新規17）。
+
 - 2026-09-20（C#同期ギャップ解消: Android 3.573.0〜3.600.0のうちエンジン層に触れる6版を移植）:
   `docs/backlog.md`の3.572.0〜3.601.0（30版）を精査し、UI/WorkManager/CSV/docs/CI専用の24版を除いた
   6版をKotlinから1対1で移植した（`dotnet test` 856/856緑で各版ごとに確認）。

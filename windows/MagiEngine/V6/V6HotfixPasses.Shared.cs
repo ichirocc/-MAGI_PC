@@ -20,6 +20,18 @@ public static partial class V6HotfixPasses
     // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
     private static bool IsBetter(ViolationReport a, ViolationReport b) => UnifiedViolationChecker.BetterReport(a, b);
 
+    /// <summary>
+    /// [3.580.0/backlog#26, Kotlin原本 <c>targetFamiliesRemain</c>] 既定OFFの専用修復腕を再活性化フラグ
+    /// 経由で呼ぶかどうかの判定材料。腕自身の自己申告カウンタ（TuningTelemetryの適用数など）でなく、
+    /// 正式チェッカーの breakdown 生値で「対象違反が今まだ残っているか」を見る。各 xxxReactivate フラグが
+    /// OFF なら一切呼ばれない＝挙動不変。
+    /// </summary>
+    internal static bool TargetFamiliesRemain(MagiState state, int[][] work, bool quantitativeRangeEval, params string[] families)
+    {
+        var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+        return families.Any(f => rep.Breakdown.GetValueOrDefault(f, 0) > 0);
+    }
+
     /// <summary>個人上限(<c>Problem.RangeHi</c>)の未設定センチネル(<see cref="int.MaxValue"/>)を
     /// 「実質無制限」を表す大きな有限値へ丸める。日別の highs/lows 走査や Hungarian のコスト行列で
     /// <see cref="int.MaxValue"/> をそのまま算術に使うとオーバーフローするため。</summary>

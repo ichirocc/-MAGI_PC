@@ -53,8 +53,8 @@ internal static class C1RepairOperators
 
     /// <summary>厳密窓修復（coverage保存 permutation の分枝限定探索）。</summary>
     public static V6HotfixPasses.CyclicSwapResult ExactWindow(
-        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null) =>
-        V6HotfixPasses.ApplyC1ExactWindowRepair(state, schedule, cfg, shouldStop);
+        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null, bool useComponents = false) =>
+        V6HotfixPasses.ApplyC1ExactWindowRepair(state, schedule, cfg, shouldStop, useComponents);
 
     /// <summary>
     /// [3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖のC1修復（Index/Prefilterを実駆動する経路）。

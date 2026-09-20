@@ -16,7 +16,10 @@ public static partial class V6HotfixPasses
     ///    返す patch はあくまで候補（node予算超過時は best-effort＝多様化として安全）。
     /// </summary>
     public static CyclicSwapResult ApplyC1ExactWindowRepair(
-        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null,
+        // [C1 重複窓の連結成分化/測定中, Kotlin原本] 既定 false = 旧経路そのまま（1件の違反を起点にパディング）。
+        //   true にすると Analyze() の代わりに Components() で近接・重複窓を束ね、SolveComponent へ渡す。
+        bool useComponents = false)
     {
         var stop = shouldStop ?? (() => false);
         cfg ??= new Config();
@@ -43,27 +46,29 @@ public static partial class V6HotfixPasses
             foreach (var d in days) for (var i = 0; i < p.S; i++) sb.Append(work[i][d]).Append(',');
             return sb.ToString();
         }
+        // [C1 重複窓の連結成分化/測定中, Kotlin原本] Components() 経路用（単一 shift を持たないため
+        //   comp.Start/End で束ねる）。
+        string CompSpanKey(int staff, int start, int end, List<int> days)
+        {
+            var sb = new StringBuilder().Append(staff).Append('|').Append(start).Append('|').Append(end).Append('|');
+            foreach (var d in days) for (var i = 0; i < p.S; i++) sb.Append(work[i][d]).Append(',');
+            return sb.ToString();
+        }
         // 焦点ごとに1回だけ厳密探索する。
         // [3.314.0] キーを (職員, シフト) → **(職員, シフト, スパン開始)** へ。同一職員・同一シフトの
         //   複数の独立した不足窓が、離れていても同一対象とみなされ探索されないままスキップされる旧欠陥を
         //   避ける。同一スパンの重複は下の deadSpans（スパン内容ハッシュ）が引き続き弾く。
         var seenFocus = new HashSet<string>();
-        foreach (var v in C1RepairAnalysis.Analyze(p, work))
+        // [C1 重複窓の連結成分化/測定中, Kotlin原本] 探索結果(patch)の採否だけを共通化する（Analyze/Components
+        //   どちら経由でも adopt-or-reject の意味論を完全に揃える＝分岐で挙動が分かれるのはループの起点だけ）。
+        void ApplyResult(ExactResult res, string key)
         {
-            if (stop()) break;
-            var span = Math.Min(cfg.MaxWindowDays, p.T);
-            var startD = Math.Max(Math.Min(v.Start, p.T - span), 0);
-            if (!seenFocus.Add($"{v.Staff}|{v.Shift}|{startD}")) continue;
-            var days = Enumerable.Range(startD, span).ToList();
-            var key = SpanKey(v.Staff, v.Shift, days);
-            if (deadSpans.Contains(key)) continue;
-            var res = C1RepairAnalysis.SolveWindow(p, work, v, cfg);
             solved++;
             if (res.Patch == null)
             {
                 // 改善候補なし。exhaustive なら「coverage保存では解消不能」と証明済み＝memo。
                 if (res.Exhaustive) { deadSpans.Add(key); provenWalls++; }
-                continue;
+                return;
             }
             var workBefore = work.Copy2D();
             foreach (var op in res.Patch) work[op[0]][op[1]] = op[2];
@@ -81,6 +86,38 @@ public static partial class V6HotfixPasses
             {
                 rejectCulprits.Record(rep, bestRep, pinBad);
                 for (var mi = 0; mi < work.Length; mi++) work[mi] = workBefore[mi];
+            }
+        }
+        if (useComponents)
+        {
+            // [C1 重複窓の連結成分化/測定中, Kotlin原本] 重複除去キーは comp.Staff/Start/End
+            //   （Analyze 経路の staff/shift/startD の代わり）。Components() は同一 staff 内で重ならない
+            //   区間しか作らないため本来は不要な保険だが、他パスと同じ「起点ごとに1回」の形を揃えておく。
+            var seenComp = new HashSet<string>();
+            foreach (var comp in C1RepairAnalysis.Components(p, work, cfg))
+            {
+                if (stop()) break;
+                if (!seenComp.Add($"{comp.Staff}|{comp.Start}|{comp.End}")) continue;
+                var span = Math.Min(cfg.MaxWindowDays, p.T);
+                var startD = Math.Max(Math.Min(comp.Start, p.T - span), 0);
+                var days = Enumerable.Range(startD, span).ToList();
+                var key = CompSpanKey(comp.Staff, comp.Start, comp.End, days);
+                if (deadSpans.Contains(key)) continue;
+                ApplyResult(C1RepairAnalysis.SolveComponent(p, work, comp, cfg), key);
+            }
+        }
+        else
+        {
+            foreach (var v in C1RepairAnalysis.Analyze(p, work))
+            {
+                if (stop()) break;
+                var span = Math.Min(cfg.MaxWindowDays, p.T);
+                var startD = Math.Max(Math.Min(v.Start, p.T - span), 0);
+                if (!seenFocus.Add($"{v.Staff}|{v.Shift}|{startD}")) continue;
+                var days = Enumerable.Range(startD, span).ToList();
+                var key = SpanKey(v.Staff, v.Shift, days);
+                if (deadSpans.Contains(key)) continue;
+                ApplyResult(C1RepairAnalysis.SolveWindow(p, work, v, cfg), key);
             }
         }
         var c1b = before.Breakdown.GetValueOrDefault("c1", 0);
