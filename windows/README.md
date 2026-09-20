@@ -326,6 +326,27 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（3.535.0: `aptFairSoftTolerance`をC#へ新規移植。grillingで設計を確定）:
+  Android側は実装済み（`AptFairPolish.toleratedBetter`/`nonFamilySoftTolerance`）だが、C#側は
+  `ApplyAptPolish`/`ApplyFairPolish`の全採否箇所が生の`IsBetter`のままで一度も移植されていなかった。
+  - `V6HotfixPasses.Shared.cs`へ`SoftToleranceFraction`(0.06)・`NonFamilySoftTotal`・`ToleratedBetter`
+    をKotlinと同じ算術で追加（研磨開始時点比+6%の累積予算、`count`引数でpinBad診断分岐からの
+    二重計上を防ぐガードも含め忠実に移植）。
+  - `ApplyAptPolish`/`ApplyFairPolish`の全採否判定（自己振替・相互交換・玉突きチェーン・
+    `CombinatorialRepair.CombineAndApply`の比較デリゲート含む）を`IsBetter`から`ToleratedBetter`へ置換。
+  - `TuningTelemetry`に`AptFairToleranceUsed`カウンタを追加し、`Summary`をKotlinと同じ7引数
+    （combineExhaustPairs/lnsAdaptive/aptFairSoftTolerance/countChainPolishの4つを追加）へ拡張。
+    grillingで「4つ全て今回含める」と決定（C#はこれまで3引数のままでこの4トグルが「設定の効き」
+    ログに一切出ていなかった）。
+  - `PolishGate.AptFairSoftTolerance`を新設（`CombineExhaustPairs`/`CountChainPolish`と同型の
+    既定OFF static トグル）。grillingで「C#はRunPostOptimizationを常にparameters:nullで呼ぶため
+    PostOptimizationParamsのフィールドだけでは実際に効かない」既存の設計（CountChainEnabledの
+    迂回配線と同型）を踏襲する方針に決定、`RunPostOptimization`のApt/Fair呼出しと
+    `V6FinalPort.HandleOptimize`のログ行の両方から参照する。`LnsAdaptive`はUIトグルが無いため
+    `PostOptimizationParams`の既定値(true)を文字どおりログへ反映。
+  - Kotlin原本`AptFairPolishToleranceTest`（5件）を1対1移植。`dotnet test MagiEngine.Tests` 878/878緑
+    （既存873+新規5）。
+
 - 2026-09-20（backlog#26/#27相当: 3.580.0/3.590.0の既定OFF専用修復腕4クラス＋再活性化フラグをC#へ新規移植）:
   前エントリで「ベース機能未移植のため見送り」としていた3.580.0（既定OFF専用修復腕5種の再活性化）と
   3.590.0（fair候補分類の黒箱観測統一）を、ベース機能ごとフル移植する方針に転換して実施。

@@ -41,6 +41,8 @@ public static class TuningTelemetry
     private static int _parityChecks;
     /// <summary>[3.540.0] 回数連鎖研磨が採用した連鎖数。</summary>
     private static int _countChainApplied;
+    /// <summary>[3.535.0] 公平化/適切回数の他ソフト許容(6%)が、素のbetterReportなら却下された手を採用に転じさせた回数。</summary>
+    private static int _aptFairToleranceUsed;
 
     /// <summary>禁止連続の事前フィルタが checker を呼ばずに落とした候補数。</summary>
     public static void IncrementC3nFilterSkipped() => Interlocked.Increment(ref _c3nFilterSkipped);
@@ -60,12 +62,18 @@ public static class TuningTelemetry
     /// <summary>[3.540.0] 回数連鎖研磨が1連鎖を採用するたびに呼ぶ（採用連鎖数の加算）。</summary>
     public static void AddCountChainApplied(int n) => Interlocked.Add(ref _countChainApplied, n);
 
+    /// <summary>[3.535.0] <see cref="V6HotfixPasses.ToleratedBetter"/> が容認で採用に転じさせるたびに呼ぶ。</summary>
+    public static void IncrementAptFairToleranceUsed() => Interlocked.Increment(ref _aptFairToleranceUsed);
+
     /// <summary>
     /// <see cref="IncrementParityChecks"/> の現在値を読む。Kotlin原本は5カウンタ全てを公開フィールドと
     /// して直接読めるが、このC#移植では読み取りアクセサは実際に必要な箇所（並行性の回帰テスト）にのみ
     /// 用意する（残り4カウンタは <see cref="Summary"/> 経由でしか読まれないため、専用アクセサは不要）。
     /// </summary>
     public static int ParityChecksCount() => Volatile.Read(ref _parityChecks);
+
+    /// <summary>同・<see cref="IncrementAptFairToleranceUsed"/> の現在値を読む（並行性の回帰テスト用）。</summary>
+    public static int AptFairToleranceUsedCount() => Volatile.Read(ref _aptFairToleranceUsed);
 
     /// <summary>
     /// 実行ごとに 0 へ戻す（<c>Optimize()</c> 入口）。
@@ -86,10 +94,14 @@ public static class TuningTelemetry
         Volatile.Write(ref _lahcEntered, 0);
         Volatile.Write(ref _parityChecks, 0);
         Volatile.Write(ref _countChainApplied, 0);
+        Volatile.Write(ref _aptFairToleranceUsed, 0);
     }
 
-    /// <summary>各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。</summary>
-    public static string Summary(bool nativeOn, bool parityOn, bool softPolishOn)
+    /// <summary>各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。
+    /// [3.587.0, Kotlin原本] 4トグルは呼び出し元が実行に使ったスナップショットをそのまま渡す
+    /// （<see cref="PolishGate"/>直読みだと表示が食い違いうる）。</summary>
+    public static string Summary(bool nativeOn, bool parityOn, bool softPolishOn,
+        bool combineExhaustPairs, bool lnsAdaptive, bool aptFairSoftTolerance, bool countChainPolish)
     {
         static string Eff(bool on, int n, string unit) =>
             !on ? "OFF" : n > 0 ? $"ON({n}{unit})" : "ON(この実行では観測なし)";
@@ -115,6 +127,9 @@ public static class TuningTelemetry
             " / 禁止連続の事前フィルタ=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の無駄な検査を省略・勤務表は不変") +
             " / 禁止連続の崩し範囲=" + wide +
             " / 仕上げ最適化=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替") +
-            " / 回数連鎖研磨=" + Eff(PolishGate.CountChainPolish, Volatile.Read(ref _countChainApplied), "連鎖を採用");
+            " / 結合探索を粘り強く=" + (combineExhaustPairs ? "ON" : "OFF") +
+            " / 一括見直しの自動調整=" + (lnsAdaptive ? "ON" : "OFF") +
+            " / 公平化/適切回数の他ソフト許容(6%)=" + Eff(aptFairSoftTolerance, Volatile.Read(ref _aptFairToleranceUsed), "回、却下されるはずの手を採用") +
+            " / 回数連鎖研磨=" + Eff(countChainPolish, Volatile.Read(ref _countChainApplied), "連鎖を採用");
     }
 }

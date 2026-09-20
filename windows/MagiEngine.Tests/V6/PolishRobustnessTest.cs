@@ -145,21 +145,23 @@ public class PolishRobustnessTest
             TuningTelemetry.Reset();
             PolishGate.WideC3nBreakDays = false;
             PolishGate.FilterC3nIncrease = true;
-            var off = TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: false);
+            var off = TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: false,
+                combineExhaustPairs: false, lnsAdaptive: false, aptFairSoftTolerance: false, countChainPolish: false);
             Assert.Contains("禁止連続の崩し範囲=OFF", off);
             Assert.Contains("禁止連続の事前フィルタ=ON(この実行では観測なし)", off);
 
             // Kotlin原本の `TuningTelemetry.c3nFilterSkipped.set(12)` に相当（このC#移植では直接の
             // Set は公開していないため、同じ終値になるまで公開の増分メソッドを繰り返す）。
             for (var i = 0; i < 12; i++) TuningTelemetry.IncrementC3nFilterSkipped();
-            var on = TuningTelemetry.Summary(nativeOn: true, parityOn: true, softPolishOn: true);
+            var on = TuningTelemetry.Summary(nativeOn: true, parityOn: true, softPolishOn: true,
+                combineExhaustPairs: false, lnsAdaptive: false, aptFairSoftTolerance: false, countChainPolish: false);
             Assert.Contains("ネイティブ加速=ON", on);
             Assert.Contains("禁止連続の事前フィルタ=ON(12件", on);
             // reset で実行ごとの計測に戻ること（前の実行の数字を持ち越さない）。
             TuningTelemetry.Reset();
             Assert.Contains(
                 "禁止連続の事前フィルタ=ON(この実行では観測なし)",
-                TuningTelemetry.Summary(true, true, true));
+                TuningTelemetry.Summary(true, true, true, false, false, false, false));
         }
         finally
         {

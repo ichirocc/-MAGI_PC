@@ -1,3 +1,4 @@
+using System.Linq;
 using MagiEngine.Model;
 
 namespace MagiEngine.V6;
@@ -19,6 +20,44 @@ public static partial class V6HotfixPasses
 {
     // [3.287.0 keep-best統一] hard→weightedScore→total（単一ソース betterReport へ委譲。MirrorCore.kt 参照）。
     private static bool IsBetter(ViolationReport a, ViolationReport b) => UnifiedViolationChecker.BetterReport(a, b);
+
+    /// <summary>[3.535.0/HF77明示数値指示, Kotlin原本 <c>AptFairPolish.SOFT_TOLERANCE_FRACTION</c>]
+    /// 研磨開始時点の対象家族(apt/fair)以外のSOFT合計の6%を上限に、その悪化を容認する累積予算。
+    /// 既定OFF（<see cref="PolishGate.AptFairSoftTolerance"/>）。</summary>
+    internal const double SoftToleranceFraction = 0.06;
+
+    /// <summary>internal＝<c>AptFairPolishToleranceTest</c> から直接検証するため（Kotlin原本と同じ可視性）。</summary>
+    internal static double NonFamilySoftTotal(ViolationReport rep, string excludeFamily) =>
+        MirrorKeys.Soft.Where(f => f != excludeFamily).Sum(f => rep.Breakdown.GetValueOrDefault(f, 0) * MirrorKeys.WeightOf(f));
+
+    /// <summary>
+    /// [3.535.0, Kotlin原本 <c>AptFairPolish.toleratedBetter</c>] OFF時はbetterReport(keep-best)のまま。
+    /// ON時はHARD不増加は変えず、対象家族以外のSOFT悪化分を研磨開始時点(before)比+6%の累積予算まで
+    /// 差し引いて weightedScore を比較する。
+    /// </summary>
+    internal static bool ToleratedBetter(ViolationReport rep, ViolationReport bestRep, ViolationReport before, string family, bool enabled, bool count = true)
+    {
+        if (!enabled) return IsBetter(rep, bestRep);
+        if (rep.Hard != bestRep.Hard) return rep.Hard < bestRep.Hard;
+        var baseline = NonFamilySoftTotal(before, family);
+        var budget = baseline * SoftToleranceFraction;
+        var usedByBest = Math.Max(NonFamilySoftTotal(bestRep, family) - baseline, 0.0);
+        var remaining = Math.Max(budget - usedByBest, 0.0);
+        var increase = Math.Max(NonFamilySoftTotal(rep, family) - NonFamilySoftTotal(bestRep, family), 0.0);
+        var forgiven = Math.Min(increase, remaining);
+        var rawDelta = rep.WeightedScore - bestRep.WeightedScore;
+        var effectiveDelta = rawDelta - forgiven;
+        var accepted = effectiveDelta < 0.0 || (effectiveDelta == 0.0 && rep.Total < bestRep.Total);
+        // [3.535.0/実機ログで発覚, Kotlin原本] 素のbetterReport（＝rawDeltaだけで同じ判定）なら却下されるはずの
+        //   手を、容認で採用に転じさせた回数だけを数える。
+        // [3.592.0, Kotlin原本] countはpinBad診断分岐からの呼び出し(実際には不採用)を数えないためのガード。
+        if (count && accepted && forgiven > 0.0)
+        {
+            var rawAccepted = rawDelta < 0.0 || (rawDelta == 0.0 && rep.Total < bestRep.Total);
+            if (!rawAccepted) TuningTelemetry.IncrementAptFairToleranceUsed();
+        }
+        return accepted;
+    }
 
     /// <summary>
     /// [3.580.0/backlog#26, Kotlin原本 <c>targetFamiliesRemain</c>] 既定OFFの専用修復腕を再活性化フラグ

@@ -500,9 +500,9 @@ public static partial class V6HotfixPasses
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
                     maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
-                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance)));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, fairAchievementDirection: p.FairAchievementDirection)));
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection)));
             if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, false, "c2")))
             {
                 Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>

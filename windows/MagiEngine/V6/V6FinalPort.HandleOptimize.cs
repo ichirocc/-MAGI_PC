@@ -591,8 +591,14 @@ public static partial class V6FinalPort
         // [3.356.0/ユーザー指示] 詳細設定の調整トグルがその実行で実際に何をしたかを1行で開示する。
         //   このC#移植には native/parity 層が無いため nativeOn/parityOn は常に false で呼ぶ
         //   （クラス doc comment 参照）。
+        // [配線注意, Kotlin原本のPostOptimizationParamsに相当するものが無い] RunPostOptimizationは常に
+        //   既定のPostOptimizationParams(parameters:null)で呼ぶため、CountChainEnabled等と同じくPolishGate
+        //   を直接読む（実際にRunPostOptimizationが使った値と一致する。LnsAdaptiveのみUIトグルが無く
+        //   PostOptimizationParamsの既定値trueをそのまま反映）。
         var tuningLog = new MirrorLog(level: "I", tag: "設定の効き",
-            message: TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: softPolish));
+            message: TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: softPolish,
+                combineExhaustPairs: PolishGate.CombineExhaustPairs, lnsAdaptive: true,
+                aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish));
 
         // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
         //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁・HF63が学習した充足困難族）

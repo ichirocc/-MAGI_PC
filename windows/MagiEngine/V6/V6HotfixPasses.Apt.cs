@@ -29,7 +29,7 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyAptPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xA97L,
-        bool combineExhaustPairs = false)
+        bool combineExhaustPairs = false, bool aptFairSoftTolerance = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
@@ -71,8 +71,8 @@ public static partial class V6HotfixPasses
             work[i][j] = toK;
             var rep = UnifiedViolationChecker.Check(state, work);
             var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
-            if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBefore, work);
-            if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+            if (pinBad && ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
+            if (ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
             rejectCulprits.Record(rep, bestRep, pinBad);
             work[i][j] = fromK;
             return false;
@@ -109,8 +109,8 @@ public static partial class V6HotfixPasses
                 work[i][j] = b; work[i2][j] = a;
                 var rep = UnifiedViolationChecker.Check(state, work);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
-                if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBefore, work);
-                if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+                if (pinBad && ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
+                if (ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
                 rejectCulprits.Record(rep, bestRep, pinBad);
                 work[i][j] = a; work[i2][j] = b;
             }
@@ -130,8 +130,8 @@ public static partial class V6HotfixPasses
             {
                 var rep = UnifiedViolationChecker.Check(state, work);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
-                if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBeforeRelocate, work);
-                if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+                if (pinBad && ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
+                if (ToleratedBetter(rep, bestRep, before, "apt", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
                 rejectCulprits.Record(rep, bestRep, pinBad);
                 work[i][j] = fromK;
                 combinable.Add(new CombinatorialRepair.Candidate(
@@ -145,8 +145,8 @@ public static partial class V6HotfixPasses
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
             var rep2 = UnifiedViolationChecker.Check(state, work);
             var pinBad2 = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
-            if (pinBad2 && IsBetter(rep2, bestRep)) pinBlocks.Record(p, workBeforeRelocate, work);
-            if (IsBetter(rep2, bestRep) && !pinBad2) { bestRep = rep2; applied++; return true; }
+            if (pinBad2 && ToleratedBetter(rep2, bestRep, before, "apt", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
+            if (ToleratedBetter(rep2, bestRep, before, "apt", aptFairSoftTolerance, count: !pinBad2) && !pinBad2) { bestRep = rep2; applied++; return true; }
             rejectCulprits.Record(rep2, bestRep, pinBad2);
             for (var idx = 0; idx < chain.Count; idx++) work[chain[idx][0]][chain[idx][1]] = oldVals[idx];
             work[i][j] = fromK;
@@ -239,7 +239,8 @@ public static partial class V6HotfixPasses
         var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var aptCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
-            state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
+            state, work, bestRep, Enumerable.Reverse(combinable).ToList(),
+            (a, b) => ToleratedBetter(a, b, before, "apt", aptFairSoftTolerance),
             shouldStop: stop, stats: aptCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += aptCombStats.CombosAccepted;
         var stuckNames = bestRep.CountViolations

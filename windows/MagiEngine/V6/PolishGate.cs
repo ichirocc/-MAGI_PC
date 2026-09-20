@@ -43,6 +43,10 @@ public static class PolishGate
     /// （経緯: history 3.512.6）。既定OFF・未計測。</summary>
     public static volatile bool CombineExhaustPairs = false;
 
+    /// <summary>[3.535.0/HF77明示数値指示] 公平化(fair)/適切回数(apt)研磨で、対象家族以外のSOFT悪化を
+    /// 研磨開始時点比+6%まで容認するか（<see cref="V6HotfixPasses.ToleratedBetter"/>）。既定OFF。</summary>
+    public static volatile bool AptFairSoftTolerance = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

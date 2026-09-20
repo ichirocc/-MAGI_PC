@@ -23,6 +23,7 @@ public static partial class V6HotfixPasses
     public static CyclicSwapResult ApplyFairPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xFA12L,
         bool combineExhaustPairs = false,
+        bool aptFairSoftTolerance = false,
         // [3.590.0/測定中/backlog#27①] 候補分類をFairTargetの生回数平均でなくFairDevOfBucketの黒箱観測
         //   （仮想入力±1）へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝既定OFF維持が確定。
         bool fairAchievementDirection = false)
@@ -98,8 +99,8 @@ public static partial class V6HotfixPasses
             work[i][j] = toK;
             var rep = UnifiedViolationChecker.Check(state, work);
             var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
-            if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBefore, work);
-            if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+            if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
+            if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
             rejectCulprits.Record(rep, bestRep, pinBad);
             work[i][j] = fromK;
             return false;
@@ -137,8 +138,8 @@ public static partial class V6HotfixPasses
                 work[i][j] = b; work[i2][j] = a;
                 var rep = UnifiedViolationChecker.Check(state, work);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
-                if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBefore, work);
-                if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+                if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
+                if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
                 rejectCulprits.Record(rep, bestRep, pinBad);
                 work[i][j] = a; work[i2][j] = b;
             }
@@ -158,8 +159,8 @@ public static partial class V6HotfixPasses
             {
                 var rep = UnifiedViolationChecker.Check(state, work);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
-                if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBeforeRelocate, work);
-                if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
+                if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
+                if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
                 rejectCulprits.Record(rep, bestRep, pinBad);
                 work[i][j] = fromK;
                 combinable.Add(new CombinatorialRepair.Candidate(
@@ -173,8 +174,8 @@ public static partial class V6HotfixPasses
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
             var rep2 = UnifiedViolationChecker.Check(state, work);
             var pinBad2 = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
-            if (pinBad2 && IsBetter(rep2, bestRep)) pinBlocks.Record(p, workBeforeRelocate, work);
-            if (IsBetter(rep2, bestRep) && !pinBad2) { bestRep = rep2; applied++; return true; }
+            if (pinBad2 && ToleratedBetter(rep2, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
+            if (ToleratedBetter(rep2, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad2) && !pinBad2) { bestRep = rep2; applied++; return true; }
             rejectCulprits.Record(rep2, bestRep, pinBad2);
             for (var idx = 0; idx < chain.Count; idx++) work[chain[idx][0]][chain[idx][1]] = oldVals[idx];
             work[i][j] = fromK;
@@ -282,7 +283,8 @@ public static partial class V6HotfixPasses
         var rejectedOut = new List<CombinatorialRepair.Candidate>();
         var fairCombStats = new CombinatorialRepair.Stats();
         bestRep = CombinatorialRepair.CombineAndApply(
-            state, work, bestRep, Enumerable.Reverse(combinable).ToList(), IsBetter,
+            state, work, bestRep, Enumerable.Reverse(combinable).ToList(),
+            (a, b) => ToleratedBetter(a, b, before, "fair", aptFairSoftTolerance),
             shouldStop: stop, stats: fairCombStats, p: p, leftover: rejectedOut, exhaustPairs: combineExhaustPairs);
         applied += fairCombStats.CombosAccepted;
         // [AptPolishと同型] work は毎手の成功時のみコミットしbestRepと同期を保つ（失敗時は必ず巻き戻し）
