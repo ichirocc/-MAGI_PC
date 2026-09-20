@@ -46,6 +46,9 @@ public sealed class Hf63Infeasibility
     // [レビュー#5 3.213.0, Kotlin原本] focus 投入量ベースの停滞累積（UpdateFromBreakdownFocused 用）。
     //   gIter 時計と独立に「実際に focus した無改善ラウンドの概算反復数」だけを族ごとに積む。
     private readonly int[] _gFocusedStall = new int[N_CONSTRAINTS];
+    // [backlog#28, Kotlin原本] 本来の不能性追跡とは無関係だが、runRsi呼出しをまたいでワーカー専属で
+    //   共有される本インスタンスを流用し、apt/covO周期枠(round%3)を呼出し単位でなく持続させる（既定OFF時は未使用）。
+    private int _gFocusRotationRound;
 
     public void Reset()
     {
@@ -56,7 +59,11 @@ public sealed class Hf63Infeasibility
             _gInfeasibleLikely[c] = false;
             _gFocusedStall[c] = 0;
         }
+        _gFocusRotationRound = 0;
     }
+
+    /// <summary>[測定中/backlog#28, Kotlin原本] 呼出しのたびに1つ進む持続カウンタを返す（同一ラウンド内では1回だけ呼ぶこと）。</summary>
+    public int NextFocusRotationRound() => _gFocusRotationRound++;
 
     /// <summary>制約 c の改善状況を追跡し、不可能性を判定する（VBA UpdateInfeasibilityState 等価）。</summary>
     public void Update(int c, int curV, int gIter)

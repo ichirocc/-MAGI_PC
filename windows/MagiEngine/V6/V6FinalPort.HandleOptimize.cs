@@ -63,6 +63,9 @@ public static partial class V6FinalPort
         bool softPolish = false,
         V6Algorithm requestedAlgorithm = V6Algorithm.Auto,
         bool allowImpossible = false,
+        // [測定中/backlog#35] ExtraRefine を、後処理後の残りHARDが構造的に解けないと証明済み（covU床のみ／
+        // ForbiddenDiag確定のc3n壁）のときだけ省略する。改善可能なHARD残・HARD=0では従来どおり実行。既定OFF。
+        bool extraRefineRequirePostHardDrop = false,
         Action<string, ViolationReport?, long, long>? onProgress = null,
         CancellationToken cancellationToken = default)
     {
@@ -71,6 +74,11 @@ public static partial class V6FinalPort
         {
             try { return f(); }
             catch (Exception) { return 0; }
+        }
+        static bool TryOrFalse(Func<bool> f)
+        {
+            try { return f(); }
+            catch (Exception) { return false; }
         }
         static string SecF(long ms) => (ms / 1000.0).ToString(CultureInfo.InvariantCulture);
 
@@ -382,10 +390,21 @@ public static partial class V6FinalPort
             //   説明で共有する（isActive相当を2度読むと食い違い得るため）。
             var stopRequested = cancellationToken.IsCancellationRequested;
             var stagnated = Volatile.Read(ref stagnationFired);
-            var canExtra = !stopRequested && !stagnated && post.Report.Total > 0;
+            // [測定中/backlog#35] post.Report の残りHARDが「解けないと証明済み」かどうか。HARD=0（SOFT仕上げの
+            //   余地）や、証明できない残りHARD（改善可能かもしれない）は false のまま＝常にExtraRefineを許可する。
+            var postNonCovUHard = post.Report.Hard - post.Report.Breakdown.GetValueOrDefault("covU", 0);
+            var structuralHardResidual = extraRefineRequirePostHardDrop && post.Report.Hard > 0 && (
+                postNonCovUHard == 0 ? post.Report.Breakdown.GetValueOrDefault("covU", 0) <= hardFloor
+                : postNonCovUHard == post.Report.Breakdown.GetValueOrDefault("c3n", 0) && TryOrFalse(() =>
+                {
+                    var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, post.Schedule);
+                    return diag.HasRuns && diag.AllBlocked;
+                }));
+            var canExtra = !stopRequested && !stagnated && post.Report.Total > 0 && !structuralHardResidual;
             if (extraMs >= 5_000 && !canExtra)
             {
                 var why = stopRequested ? "停止要求"
+                    : structuralHardResidual ? "残るHARDが解けないと証明済み（構造的covU床のみ、またはc3n壁）"
                     : stagnated ? "停滞検知で早期終了済み（無改善なら早く返す方針）"
                     : "違反が残っていない";
                 // [3.379.0/レビュー] extraMs は予約枠(postReserveMs)でクランプ済みなので「予算残」と呼ぶと

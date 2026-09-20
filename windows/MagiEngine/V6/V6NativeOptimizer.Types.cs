@@ -57,7 +57,13 @@ public sealed record V6OptimizerOptions(
     /// アスピレーションで解禁）。並列仮説の一部にのみ割当て（W0はOFFでベースライン保持）。
     /// destroy/repair等の大近傍手は対象外。
     /// </summary>
-    bool Tabu = false)
+    bool Tabu = false,
+    /// <summary>
+    /// [backlog#28] <see cref="V6NativeOptimizer.MaxViolatedFamily"/> の apt/covO 周期枠(<c>round%3</c>)を
+    /// <c>RunRsi</c> 呼出し単位でなく、共有 <see cref="Hf63Infeasibility"/> が持続するカウンタで計る。
+    /// 既定 OFF（経緯は windows/README.md レビュー対応の記録）。
+    /// </summary>
+    bool RsiFocusRotationPersist = false)
 {
     public int EffectiveWorkers => Workers ?? Math.Clamp(Environment.ProcessorCount, 1, 8);
 }

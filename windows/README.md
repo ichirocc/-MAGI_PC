@@ -326,6 +326,23 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-20（3.602.0, backlog#28/#35。既定OFFの測定用フラグ2件を同期。#24はAndroid側も保留継続の
+  ためスコープ外）:
+  **`V6OptimizerOptions.RsiFocusRotationPersist`（backlog#28）**: `V6NativeOptimizer.MaxViolatedFamily`
+  （Kotlin `RsiFocusSelection.maxViolatedFamily` 相当、C#では独立ファイルへ切り出さず本体に残置）の
+  apt/covO 周期枠（`round%3`）が `RunRsi` 呼出し単位でリセットされる問題。ワーカー専属で共有される
+  `Hf63Infeasibility` へ持続カウンタ `NextFocusRotationRound()` を追加（本来の不能性追跡とは無関係だが
+  既存の寿命を流用、Kotlinと同じ設計）。`MaxViolatedFamily` に `rotationRound`（`int?`、既定 `null`＝
+  `round` を使う。Kotlinの`rotationRound: Int = round`は他パラメータ参照の既定値でC#のレコード/メソッド
+  既定値制約に反するため nullable+フォールバックへ置換）を追加し、`RunRsi` の2箇所（focus選択・
+  停滞2ラウンド目の早期終了pivot判定）に配線。既定OFF時は`round`のみを使う旧来の計算式と完全に同じ。
+  **`V6FinalPort.HandleOptimize` の `extraRefineRequirePostHardDrop`（backlog#35）**: ExtraRefine
+  （後処理後の追加精製ALNS）を「残りHARDが構造的に解けないと証明済み」（非covU HARD=0でcovUが
+  `hardFloor`以下、または非covU HARDがc3nのみで`V6PortAnalyzer.DiagnoseForbiddenRuns`の
+  `HasRuns && AllBlocked`＝c3n壁確定）のときだけ省略するオプションを追加（既定OFF）。C#には元々
+  `hardFloor`（構造的covU床）と`DiagnoseForbiddenRuns`が移植済みだったため機械的に配線できた。
+  両フラグとも既定OFF＝出力不変。`MagiEngine.Tests` 856/856 緑（回帰なし）。新規テストは追加せず
+  （Kotlin側もこの2件には専用テストを追加していない＝1対1）。
 - 2026-09-20（C# 単独修正・Kotlin/C++は無変更、windows-app-build.yml のビルド赤を修正）:
   **`ScheduleGridModels.cs`（`ScheduleCellVm.FontWeight`）が `CS0246` でビルド不能だった**。
   `using Microsoft.UI.Text;` ＋裸の `FontWeight` を書いていたが、`TextBlock.FontWeight` の実体型

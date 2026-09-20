@@ -386,9 +386,15 @@ public static partial class V6NativeOptimizer
     /// = null</c> ＋ 本体先頭での <c>avoid ??= new HashSet&lt;string&gt;();</c> という、このコードベース
     /// 既存の nullable-default 慣用へ揃える。
     /// </summary>
-    internal static string MaxViolatedFamily(ViolationReport report, IReadOnlySet<string>? avoid = null, int round = -1, int roundsTotal = -1)
+    /// <param name="rotationRound">
+    /// [backlog#28] apt/covO 周期判定(<c>%3</c>)専用。既定 <c>null</c> は <paramref name="round"/> と同じ。
+    /// Kotlin の <c>= round</c>（他引数参照の既定値）は C# のコンパイル時定数制約に反するため
+    /// nullable+フォールバックで表す（<c>finalRound</c> 判定は <paramref name="round"/> のまま不変）。
+    /// </param>
+    internal static string MaxViolatedFamily(ViolationReport report, IReadOnlySet<string>? avoid = null, int round = -1, int roundsTotal = -1, int? rotationRound = null)
     {
         avoid ??= new HashSet<string>();
+        var effRotation = rotationRound ?? round;
         var order = new[]
         {
             "groupViol", "covU", "pref", "c3n", "c3w", "low", "high", "c41", "c41s", "c2", "covO",
@@ -410,8 +416,8 @@ public static partial class V6NativeOptimizer
         // [3.208.0/3.239.0, Kotlin原本] apt も covO と全く同じ欠陥を抱えていた（covOとは別の周期
         //   round%3==1、covOのround%3==2と衝突しない）。最終ラウンドで両方が候補になる場合のみ、実際の
         //   件数を比較し「より少ない方（より構造的に不利＝件数最大選択に絶対勝てない方）」を優先する。
-        var aptEligible = round >= 0 && !avoid.Contains("apt") && report.Breakdown.GetValueOrDefault("apt", 0) > 0 && (round % 3 == 1 || finalRound);
-        var covOEligible = round >= 0 && !avoid.Contains("covO") && report.Breakdown.GetValueOrDefault("covO", 0) > 0 && (round % 3 == 2 || finalRound);
+        var aptEligible = round >= 0 && !avoid.Contains("apt") && report.Breakdown.GetValueOrDefault("apt", 0) > 0 && (effRotation % 3 == 1 || finalRound);
+        var covOEligible = round >= 0 && !avoid.Contains("covO") && report.Breakdown.GetValueOrDefault("covO", 0) > 0 && (effRotation % 3 == 2 || finalRound);
         if (aptEligible && covOEligible)
             return report.Breakdown.GetValueOrDefault("covO", 0) <= report.Breakdown.GetValueOrDefault("apt", 0) ? "covO" : "apt";
         if (aptEligible) return "apt";
@@ -528,7 +534,10 @@ public static partial class V6NativeOptimizer
             if (covUFloor > 0 && bestReport.Breakdown.GetValueOrDefault("covU", 0) <= covUFloor) avoid.Add("covU");
             // [E9, Kotlin原本] 冷却は focus 選択にのみ合流（HF63 ログ・N4 発火条件には混ぜない＝恒久判定と区別）。
             var focusAvoid = cooldownFocus != null ? new HashSet<string>(avoid) { cooldownFocus } : avoid;
-            var focus = MaxViolatedFamily(bestReport, focusAvoid, round, rounds);
+            // [backlog#28] 1ラウンドにつき1回だけ hf63.NextFocusRotationRound() を進め、下段の早期終了
+            //   判定(pivot)にも同じ値を使う（そちらで再度進めない）。既定OFF時はroundをそのまま使う。
+            var rotationRound = options.RsiFocusRotationPersist ? hf63.NextFocusRotationRound() : round;
+            var focus = MaxViolatedFamily(bestReport, focusAvoid, round, rounds, rotationRound);
             if (avoid.Count > 0 && (lastLoggedAvoid == null || !avoid.SetEquals(lastLoggedAvoid)))
             {
                 // [3.288.0/スパム対応, Kotlin原本] 集合が変化したラウンドのみログ（旧: 毎ラウンド同文）。
@@ -598,7 +607,7 @@ public static partial class V6NativeOptimizer
             //   族が尽きた(pivot=="total" or 件数0)ときだけ従来どおり空転停止する。
             if (stagnantRounds >= 2 && dynamicAvoid.Count > 0)
             {
-                var pivot = MaxViolatedFamily(bestReport, avoid, round, rounds);   // avoid=dynamicAvoid＋静的covU床
+                var pivot = MaxViolatedFamily(bestReport, avoid, round, rounds, rotationRound);   // avoid=dynamicAvoid＋静的covU床
                 if (pivot == "total" || bestReport.Breakdown.GetValueOrDefault(pivot, 0) == 0)
                 {
                     logs.Add(new MirrorLog(tag: "RunMAGI_RSI",
