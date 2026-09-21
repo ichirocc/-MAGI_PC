@@ -252,6 +252,9 @@
                     <TextBox x:Name="MasterShiftNeed1Box" Width="80" PlaceholderText="最低" />
                     <TextBox x:Name="MasterShiftNeed2Box" Width="80" PlaceholderText="上限" />
                 </StackPanel>
+                <!-- [backlog#24] 休の識別はここで明示指定する（記号一致ではない）。単一選択＝ONにすると
+                     改名・変更時に他の全シフトのRestは自動でOFF（Ws1Ops.ApplyRestRole）。 -->
+                <ToggleSwitch x:Name="MasterShiftRestToggle" Header="休みとして扱う" OnContent="ON" OffContent="OFF" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="AddMasterShiftButton" Content="追加" Click="OnAddMasterShiftClick" />
                     <Button x:Name="EditMasterShiftButton" Content="改名・変更" Click="OnEditMasterShiftClick" />

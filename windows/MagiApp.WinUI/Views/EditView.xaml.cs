@@ -1321,6 +1321,7 @@ public sealed partial class EditView : UserControl
         AddMasterShiftButton.IsEnabled = editable;
         EditMasterShiftButton.IsEnabled = editable && hasShift;
         RemoveMasterShiftButton.IsEnabled = editable && hasShift;
+        MasterShiftRestToggle.IsEnabled = editable;
         if (editable && hasShift)
         {
             var refs = _vm.Ws1ShiftRefCount(MasterShiftCombo.SelectedIndex);
@@ -1706,6 +1707,7 @@ public sealed partial class EditView : UserControl
             MasterShiftKigouBox.Text = shifts[k].Kigou;
             MasterShiftNeed1Box.Text = shifts[k].Need1;
             MasterShiftNeed2Box.Text = shifts[k].Need2;
+            MasterShiftRestToggle.IsOn = shifts[k].Role == MagiEngine.Model.ShiftRole.Rest;
         }
     }
 
@@ -1729,7 +1731,7 @@ public sealed partial class EditView : UserControl
         var name = MasterShiftNameBox.Text.Trim();
         var kigou = MasterShiftKigouBox.Text.Trim();
         if (name.Length == 0 || kigou.Length == 0) { MasterShiftHintText.Text = "名前と記号を入れてください。"; return; }
-        _vm.Ws1AddShift(name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim());
+        _vm.Ws1AddShift(name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim(), MasterShiftRestToggle.IsOn);
         _syncedMasterShiftIndex = -1;
     }
 
@@ -1741,11 +1743,8 @@ public sealed partial class EditView : UserControl
         var kigou = MasterShiftKigouBox.Text.Trim();
         if (k < 0) { MasterShiftHintText.Text = "対象のシフトを選んでください。"; return; }
         if (name.Length == 0 || kigou.Length == 0) { MasterShiftHintText.Text = "名前と記号を入れてください。"; return; }
-        // [backlog#24] このダイアログにはまだ「休みとして扱う」トグルが無い＝既存のRoleをそのまま保持する
-        //   （XAML側のトグル追加はサンドボックスでビルド検証できないため見送り。詳細は windows/README.md）。
-        var curShifts = _vm.Ws1()?.Shifts;
-        var isRest = curShifts is not null && k < curShifts.Count && curShifts[k].Role == MagiEngine.Model.ShiftRole.Rest;
-        _vm.Ws1EditShift(k, name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim(), isRest);
+        // [backlog#24] 休の識別は記号でなく MasterShiftRestToggle（単一選択、Ws1Ops.ApplyRestRoleが担保）。
+        _vm.Ws1EditShift(k, name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim(), MasterShiftRestToggle.IsOn);
         _syncedMasterShiftIndex = -1;
     }
 

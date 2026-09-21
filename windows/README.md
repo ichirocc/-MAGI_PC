@@ -342,9 +342,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - `Ws1Ops.EditShift`/`AddShift`に`isRest`引数を追加（単一選択トグル、`ApplyRestRole`ヘルパー新設）。
     `EditShift`の改名ロジックが裸の`new Shift(...)`で`Role`を落とす実バグも同時に修正（`with`式へ）。
   - ViewModel層（`MagiViewModel.Ws1EditShift/Ws1AddShift/SetShiftNeed`）に`isRest`を配線。
-    `MagiApp.WinUI/Views/EditView.xaml.cs`のシフト編集ダイアログにはまだ「休みとして扱う」トグルUIが
-    無い＝既存`Role`を保持するだけの暫定対応（XAML側のトグル追加はサンドボックスでビルド検証できない
-    ため見送り）。
+    `MagiApp.WinUI/Views/EditView.xaml`のシフト追加・改名ダイアログに`MasterShiftRestToggle`
+    （ToggleSwitch「休みとして扱う」）を追加し、選択中シフトのRoleを反映・改名/追加時に送信
+    （Android版`ShiftDialog`の単一選択トグルと同型）。WinUI自体はこのサンドボックスでビルド検証
+    できないため、`android-sdk.yml`相当のCIワークフロー（このリポジトリの`windows-app-build.yml`）
+    での実コンパイル確認は次回のWindows実機/CI検証待ち。
   - CSV取込（`RosterCsvImport.cs`/`FlatRosterCsvImport.cs`）が生成する「休」シフトにも`Role`を付与。
   - テスト: `MinimalState`（両テストプロジェクト）と個別テストの「休」シフト fixture 約70箇所に
     `ShiftRole.Rest`を追加（`Ws1OpsTest`の旧フォールバック挙動アサーションは新仕様へ更新）。
