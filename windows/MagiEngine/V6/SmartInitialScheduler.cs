@@ -35,7 +35,8 @@ public static class SmartInitialScheduler
         var p = new Problem(state);
         if (p.T <= 0 || p.S <= 0 || p.K <= 0)
             throw new ArgumentException("期間/職員/シフトが不足しています");
-        int restK = ScheduleUtil.RestShiftIndex(state);
+        // [backlog#24] 休シフト未設定はここも入口＝ブロックする。
+        int restK = ScheduleUtil.RestShiftIndex(state) ?? throw new ArgumentException("休みシフトが設定されていません");
         var schedule = new int[p.S][];
         for (int i = 0; i < p.S; i++)
         {

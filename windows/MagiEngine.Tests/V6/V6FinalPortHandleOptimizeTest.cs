@@ -33,7 +33,7 @@ public class V6FinalPortHandleOptimizeTest
     /// <summary>Kotlin原本 <c>PolishRobustnessTest.emptyBucketState()</c> と同型の最小盤面。</summary>
     private static MagiState EmptyBucketState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") };
         return new MagiState(
             StartDate: "2026-01-01", EndDate: "2026-01-03",
             Shifts: shifts, Groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },

@@ -13,12 +13,16 @@ namespace MagiEngine.V6;
 /// </summary>
 public static class ScheduleUtil
 {
-    /// <summary>Index of the shift symbol "休" (rest), or 0 if none is defined.</summary>
-    public static int RestShiftIndex(MagiState state)
+    /// <summary>
+    /// [backlog#24] 記号"休"の字面一致でなく ShiftRole.Rest の付与先を返す。どのシフトにも付与が
+    /// なければ null（旧: 見つからなければ index 0 へ無言で倒し、削除等で別のシフトが「休」として
+    /// 誤解釈される実害があった＝実データで再現・確認済み。Kotlin MirrorCore.kt 同期）。
+    /// </summary>
+    public static int? RestShiftIndex(MagiState state)
     {
         for (int i = 0; i < state.Shifts.Count; i++)
-            if (state.Shifts[i].Kigou == "休") return i;
-        return 0;
+            if (state.Shifts[i].Role == ShiftRole.Rest) return i;
+        return null;
     }
 
     /// <summary>
@@ -27,10 +31,10 @@ public static class ScheduleUtil
     /// <paramref name="rest"/> anyway (so this never throws — an invalid input just leaves a
     /// pre-existing inconsistency, rather than crashing the edit operation that surfaced it).
     /// </summary>
-    public static int FillShiftIndex(int[] allowed, int rest)
+    public static int FillShiftIndex(int[] allowed, int? rest)
     {
-        if (Array.IndexOf(allowed, rest) >= 0) return rest;
-        return allowed.Length > 0 ? allowed[0] : rest;
+        if (rest is int r && Array.IndexOf(allowed, r) >= 0) return r;
+        return allowed.Length > 0 ? allowed[0] : (rest ?? -1);
     }
 
     /// <summary>

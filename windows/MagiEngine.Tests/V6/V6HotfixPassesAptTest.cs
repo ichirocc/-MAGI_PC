@@ -29,7 +29,7 @@ public class V6HotfixPassesAptTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "", ""),
             new("Y", "Y", "", ""),
         };
@@ -66,7 +66,7 @@ public class V6HotfixPassesAptTest
     // 逆方向シフトが無いため自己振替は成立せず、相互交換のみが解となる）。
     private static MagiState MutualSwapState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1 } };
         var groupShiftApt = new List<IReadOnlyList<string>> { new List<string> { "", "1" } }; // X目標1（休は目標なし＝自己振替の相手になり得ない）
@@ -109,7 +109,7 @@ public class V6HotfixPassesAptTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "1", ""),
             new("Y", "Y", "", ""), // Aの逃げ先
             new("Z", "Z", "", ""), // Bの現在地
@@ -164,7 +164,7 @@ public class V6HotfixPassesAptTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "", ""),
             new("Y", "Y", "", ""),
         };

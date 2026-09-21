@@ -22,7 +22,10 @@ namespace MagiEngine.Model;
 ///  - NeedDay1/NeedDay2["k,j"]    : per-day need override for shift k on day j.
 ///  - Cons1..Cons42s  : the constraint families (see Problem / Evaluator, phases 2-3).
 /// </summary>
-public sealed record Shift(string Name, string Kigou, string Need1, string Need2);
+/// <summary>[backlog#24] シフトの特別な役割。休みの識別を記号"休"の字面一致から切り離すために導入（Kotlin 3.603.0 同期）。</summary>
+public enum ShiftRole { None, Rest }
+
+public sealed record Shift(string Name, string Kigou, string Need1, string Need2, ShiftRole Role = ShiftRole.None);
 
 public sealed record Group(string Name, string Kigou);
 

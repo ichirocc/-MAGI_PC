@@ -21,7 +21,7 @@ public class C3nMarginLnsPolishTest
         var kigou = new[] { "休", "A", "B" };
         return MinimalState.Build(
             startDate: "2026-12-01", endDate: "2026-12-12",
-            shifts: kigou.Select(k => new Shift(k, k, "", "")).ToList(),
+            shifts: kigou.Select((k, i) => new Shift(k, k, "", "", i == Rest ? ShiftRole.Rest : ShiftRole.None)).ToList(),
             groups: new List<Group> { new("G", "G") },
             staffList: Enumerable.Range(0, schedule.Count).Select(i => new Staff($"s{i}", 0)).ToList(),
             groupShift: new List<IReadOnlyList<int>> { Enumerable.Repeat(1, kigou.Length).ToList() },

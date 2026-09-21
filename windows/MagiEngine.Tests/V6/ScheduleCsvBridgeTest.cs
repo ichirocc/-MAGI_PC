@@ -21,7 +21,7 @@ public class ScheduleCsvBridgeTest
 {
     private static MagiState BuildState() => new(
         StartDate: "2026-06-01", EndDate: "2026-06-02",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
         Groups: new List<Group> { new("G1", "G1") },
         StaffList: new List<Staff> { new("職員A", 0), new("職員B", 0) },
         Use2Patterns: false,

@@ -38,7 +38,7 @@ public class CombinatorialRepairTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("P", "P", "", ""),
             new("Qres", "Qres", "", ""),
             new("D", "D", "", ""),

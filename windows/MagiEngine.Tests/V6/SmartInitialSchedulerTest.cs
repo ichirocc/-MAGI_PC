@@ -16,7 +16,7 @@ public class SmartInitialSchedulerTest
 {
     private static MagiState BlankState(IReadOnlyList<C1Row>? cons1 = null) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-11",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("a", 0) },
         use2Patterns: false,
@@ -69,7 +69,7 @@ public class SmartInitialSchedulerTest
         // （CLAUDE.md記載の実運用例 cons1=[5日窓休≥1, 14日窓休≥4, ...] と同型の同一シフト複数規則）。
         var st = MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-14",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("a", 0) },
             use2Patterns: false,
@@ -93,7 +93,7 @@ public class SmartInitialSchedulerTest
         // 各規則が軽い(5日窓≥1)ため両立できることを確認する。
         var st = MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-11",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("a", 0) },
             use2Patterns: false,
@@ -116,7 +116,7 @@ public class SmartInitialSchedulerTest
         // 重いため、C1充足のためだけに上限を超えてXを増やしてはならない。
         MagiState State(bool withCap) => MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-10",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("a", 0) },
             use2Patterns: false,
@@ -175,7 +175,7 @@ public class SmartInitialSchedulerTest
     {
         var st = MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-01",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "2") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "2") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
             use2Patterns: true,
@@ -202,7 +202,7 @@ public class SmartInitialSchedulerTest
         var st = MinimalState.Build(
             startDate: "2025-12-01",
             endDate: "2025-12-03",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "1"), new("遅番", "B", "", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "1"), new("遅番", "B", "", "") },
             groups: new List<Group> { new("G", "G"), new("H", "H") },
             staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
             use2Patterns: true,

@@ -9,7 +9,7 @@ namespace MagiEngine.Tests.V6;
 /// 後処理チェーンを旧腕（成分修復 OFF）と新腕（ON）の両方で走らせて不変条件を検査する。</summary>
 public class LoopFeatureRegressionTest
 {
-    private static readonly Shift Rest = new("休", "休", "", "");
+    private static readonly Shift Rest = new("休", "休", "", "", ShiftRole.Rest);
     private static Shift Sh(string k, string need = "") => new(k, k, need, "");
 
     private static MagiState St(

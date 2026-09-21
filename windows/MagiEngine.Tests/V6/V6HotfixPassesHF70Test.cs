@@ -38,7 +38,7 @@ public class V6HotfixPassesHF70Test
         // も発火するため hardCore>0 の両方が1つの盤面で同時に立つ。
         var s = MinimalState.Build(
             startDate: "2026-06-01", endDate: "2026-06-02",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
             staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 0 } },
@@ -64,7 +64,7 @@ public class V6HotfixPassesHF70Test
         // 対称除外されるため(3.311.0系の規約)、hardCore は0のまま＝この分岐だけが単独で立つ。
         var s = MinimalState.Build(
             startDate: "2026-06-01", endDate: "2026-06-02",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
             staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 0 } },

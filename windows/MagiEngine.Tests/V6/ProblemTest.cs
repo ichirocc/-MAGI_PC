@@ -23,7 +23,7 @@ public class ProblemTest
     // InitialAssignment regions below.
     private static readonly IReadOnlyList<Shift> ThreeShifts = new List<Shift>
     {
-        new("休", "休", "", ""), // 0 = rest
+        new("休", "休", "", "", ShiftRole.Rest), // 0 = rest
         new("A", "A", "", ""),   // 1
         new("B", "B", "", ""),   // 2
     };
@@ -132,7 +132,7 @@ public class ProblemTest
 
     private static Problem BuildCovProblem(string need1, string need2, bool use2)
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", need1, need2) };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", need1, need2) };
         return new Problem(MinimalState.Build(shifts: shifts, use2Patterns: use2));
     }
 
@@ -346,7 +346,7 @@ public class ProblemTest
 
     private static MagiState AptState(IReadOnlyDictionary<string, Range> ranges, string aptA, IReadOnlyDictionary<string, int>? wishes = null) => new(
         StartDate: "2026-01-01", EndDate: "2026-01-05",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         Groups: new List<Group> { new("G", "G") },
         StaffList: new List<Staff> { new("s0", 0) },
         Use2Patterns: false,
@@ -458,7 +458,7 @@ public class ProblemTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),   // 0: both Need1/Need2 blank
+            new("休", "休", "", "", ShiftRole.Rest),   // 0: both Need1/Need2 blank
             new("A", "A", "7", "9"),  // 1: Need1 default "7", Need2 default "9"
         };
         var needDay1 = new Dictionary<string, string>
@@ -518,7 +518,7 @@ public class ProblemTest
     // ---- Apt: group-target clamping to the staff's own [RangeLo,RangeHi] --
 
     private static readonly IReadOnlyList<Shift> TwoShiftsRestA =
-        new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") };
+        new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") };
 
     private static Problem BuildAptProblem()
     {

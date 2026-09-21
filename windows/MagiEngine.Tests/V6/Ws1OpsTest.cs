@@ -28,7 +28,7 @@ public class Ws1OpsTest
 
     private static MagiState RefCountState() => new MagiState(
         StartDate: "2026-07-01", EndDate: "2026-07-02",
-        Shifts: new List<Shift> { new("日勤", "日", "", ""), new("休み", "休", "", ""), new("夜勤", "夜", "", "") },
+        Shifts: new List<Shift> { new("日勤", "日", "", ""), new("休み", "休", "", "", ShiftRole.Rest), new("夜勤", "夜", "", "") },
         Groups: new List<Group> { new("A", "A"), new("B", "B") },
         StaffList: new List<Staff> { new("s1", 0) },
         Use2Patterns: false,
@@ -108,7 +108,7 @@ public class Ws1OpsTest
 
     private static MagiState AptState(IReadOnlyList<IReadOnlyList<string>>? apt = null) => new MagiState(
         StartDate: "2026-07-01", EndDate: "2026-07-02",
-        Shifts: new List<Shift> { new("日勤", "日", "", ""), new("休み", "休", "", "") },
+        Shifts: new List<Shift> { new("日勤", "日", "", ""), new("休み", "休", "", "", ShiftRole.Rest) },
         Groups: new List<Group> { new("A", "A"), new("B", "B") },
         StaffList: new List<Staff> { new("s1", 0) },
         Use2Patterns: false,
@@ -181,7 +181,7 @@ public class Ws1OpsTest
     private static MagiState ThreeShiftState() => new MagiState(
         StartDate: "2026-06-01", EndDate: "2026-06-03",
         // 休が index0 でない配置（旧実装のハードコード0が露呈するケース）
-        Shifts: new List<Shift> { new("A", "A", "1", ""), new("休", "休", "", ""), new("B", "B", "1", "") },
+        Shifts: new List<Shift> { new("A", "A", "1", ""), new("休", "休", "", "", ShiftRole.Rest), new("B", "B", "1", "") },
         Groups: new List<Group> { new("G", "G") },
         StaffList: new List<Staff> { new("s0", 0, 2) }, // skillIdx=2
         Use2Patterns: false,
@@ -246,7 +246,7 @@ public class Ws1OpsTest
     {
         var st = ThreeShiftState() with
         {
-            Shifts = new List<Shift> { new("A", "A", "1", ""), new("B", "B", "1", ""), new("休", "休", "", "") },
+            Shifts = new List<Shift> { new("A", "A", "1", ""), new("B", "B", "1", ""), new("休", "休", "", "", ShiftRole.Rest) },
             Schedule = new List<IReadOnlyList<int>> { new List<int> { 0, 1, 2 } },
         };
         var sched = new[] { new[] { 0, 1, 2 } };
@@ -258,16 +258,16 @@ public class Ws1OpsTest
 
     /// <summary>
     /// [3.416.0] 休シフトの改名も通常経路＝制約参照（記号の文字列）が RenameShiftInConstraints で
-    /// 追従し、「休」記号が消えた場合の既定シフト解決は先頭へ倒れる（検査2g が案内する既定挙動）。
+    /// 追従する。[backlog#24] 休の識別は記号でなく ShiftRole(isRest)＝改名しても index は不変。
     /// </summary>
     [Fact]
     public void EditShiftRenamingRestFollowsConstraintsLikeAnyShift()
     {
         var st = ThreeShiftState() with { Cons1 = new List<C1Row> { new("5", "休", "2") } };
-        var r = Ws1Ops.EditShift(st, 1, "公休", "公", "", "");
+        var r = Ws1Ops.EditShift(st, 1, "公休", "公", "", "", isRest: true);
         Assert.Equal("公", r.Shifts[1].Kigou);
         Assert.Equal("公", r.Cons1[0].ShiftKigou); // 窓ルールが改名へ追従＝同じシフトを指し続ける
-        Assert.Equal(0, ScheduleUtil.RestShiftIndex(r)); // 「休」記号は消えた＝既定解決は先頭へ
+        Assert.Equal(1, ScheduleUtil.RestShiftIndex(r)); // 記号が変わっても Role は保持＝index 不変
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class Ws1OpsTest
         // index 0 ではなく休で埋まること。
         var st = new MagiState(
             StartDate: "2026-08-01", EndDate: "2026-08-02",
-            Shifts: new List<Shift> { new("A", "A", "0", ""), new("B", "B", "0", ""), new("休", "休", "0", "") },
+            Shifts: new List<Shift> { new("A", "A", "0", ""), new("B", "B", "0", ""), new("休", "休", "0", "", ShiftRole.Rest) },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0) },
             Use2Patterns: false,
@@ -329,7 +329,7 @@ public class Ws1OpsTest
     {
         var st = new MagiState(
             StartDate: "2026-08-01", EndDate: "2026-08-02",
-            Shifts: new List<Shift> { new("A", "A", "0", ""), new("B", "B", "0", ""), new("休", "休", "0", "") },
+            Shifts: new List<Shift> { new("A", "A", "0", ""), new("B", "B", "0", ""), new("休", "休", "0", "", ShiftRole.Rest) },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0) },
             Use2Patterns: false,
@@ -372,7 +372,7 @@ public class Ws1OpsTest
         // 黙って掛かる ②最後の1群を消すと全員 0 になり、あとで群を足すと全員がそこに所属した扱い。
         var st = new MagiState(
             StartDate: "2026-08-01", EndDate: "2026-08-02",
-            Shifts: new List<Shift> { new("休", "休", "0", ""), new("A", "A", "0", "") },
+            Shifts: new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest), new("A", "A", "0", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff>
             {
@@ -413,7 +413,7 @@ public class Ws1OpsTest
     // ---- [マトリックス一括] SetGroupShiftRow / SetGroupShiftColumn（群×シフトの行/列ヘッダのタップ） ----
 
     private static MagiState MatrixState() => MinimalState.Build(
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 0, 1 }, new List<int> { 1, 1, 0 } });
 

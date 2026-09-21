@@ -17,7 +17,7 @@ public class V6SearchOperatorsTest
     // shift 0="休"(needなし), shift 1="X"(need1未設定・need2=1のみで上限定義)
     private static MagiState State() => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "1") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "1") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         use2Patterns: true,

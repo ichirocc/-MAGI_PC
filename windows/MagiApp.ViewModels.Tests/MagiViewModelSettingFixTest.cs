@@ -87,7 +87,7 @@ public class MagiViewModelSettingFixTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "10", "12"),
         };
         var st = MinimalState.Build(shifts: shifts);
@@ -107,7 +107,7 @@ public class MagiViewModelSettingFixTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "3", "12"),
         };
         var st = MinimalState.Build(shifts: shifts);
@@ -127,7 +127,7 @@ public class MagiViewModelSettingFixTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "3", "4"),
         };
         var st = MinimalState.Build(shifts: shifts);

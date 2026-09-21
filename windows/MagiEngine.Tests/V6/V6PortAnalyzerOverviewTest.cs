@@ -24,7 +24,7 @@ public class V6PortAnalyzerOverviewTest
         var st = new MagiState(
             StartDate: "2025-12-01",
             EndDate: "2025-12-03",
-            Shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "1") },
+            Shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "1") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
             Use2Patterns: true,

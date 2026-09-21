@@ -50,7 +50,7 @@ internal static class MinimalState
     {
         var shifts2 = shifts ?? new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "", ""),
         };
         const int t = 7;

@@ -20,7 +20,7 @@ public class C1RepairOperatorsTest
         int days, int staff, IReadOnlyList<IReadOnlyList<int>> sched, IReadOnlyList<C1Row> cons1) =>
         MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-" + days.ToString("D2"),
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: Enumerable.Range(0, staff).Select(i => new Staff($"s{i}", 0)).ToList(),
             use2Patterns: false,

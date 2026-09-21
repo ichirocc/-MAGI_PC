@@ -16,7 +16,7 @@ public class FairAchievementDirectionTest
     // 生回数平均は(7+8+9)/3=8=中央の職員(idx1)の回数と一致し「match」判定で候補生成が握り潰される。
     private static MagiState ThreeMemberState()
     {
-        var shifts = new List<Shift> { new("休み", "休", "", ""), new("X", "X", "", "") };
+        var shifts = new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") };
         const int t = 9;
         var counts = new[] { 7, 8, 9 };
         var schedule = Enumerable.Range(0, 3)

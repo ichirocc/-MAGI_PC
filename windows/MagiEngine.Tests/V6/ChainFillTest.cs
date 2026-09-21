@@ -28,7 +28,7 @@ public class ChainFillTest
         // shift: 0=休(need無) 1=P(need1) 2=Q(need1) 3=R(need1)
         shifts: new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "1", ""), new("R", "R", "1", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "1", ""), new("R", "R", "1", ""),
         },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") },
         // G0=休/P/Q, G1=休/Q/R, G2=休/R
@@ -79,7 +79,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
             new("R", "R", "1", ""), new("S", "S", "1", ""),
         };
         var groups = new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2"), new("G3", "G3") };
@@ -126,7 +126,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
             new("R", "R", "1", ""), new("S", "S", "1", ""), new("T", "T", "1", ""), new("U", "U", "1", ""),
         };
         var groups = new List<Group>
@@ -185,7 +185,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "1", ""),
             new("R", "R", "1", ""), new("S", "S", "1", ""), new("T", "T", "1", ""),
             new("U", "U", "1", ""), new("V", "V", "1", ""),
         };
@@ -245,7 +245,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("Co", "Co", "1", ""), // need1=1
             new("B4", "B4", "1", ""), // need1=1（現状2＝過剰）
         };
@@ -287,7 +287,7 @@ public class ChainFillTest
     public void ChainFillAvoidsTripleForbiddenRun()
     {
         // shift: 0=休 1=P(need1・cons3n=P,P,P三連禁止) 2=Q
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } };
         var staff = new List<Staff> { new("a", 0), new("b", 0) };
@@ -328,7 +328,7 @@ public class ChainFillTest
     [Fact]
     public void ChainFillResolvesC3nBlockViaAdjacentDayFix()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } };
         var staff = new List<Staff> { new("a", 0), new("b", 0) };
@@ -368,7 +368,7 @@ public class ChainFillTest
     [Fact]
     public void MakesForbiddenRunDetectsTripleAndQuintuple()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("P", "P", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var staff = new List<Staff> { new("a", 0) };
         MagiState StateWith(List<int> sched, List<C3Row> cons3n) => MinimalState.Build(
@@ -412,7 +412,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "", ""),
             new("N", "N", "", ""), new("O", "O", "", ""),
         };
         var groups = new List<Group> { new("G0", "G0") };
@@ -463,7 +463,7 @@ public class ChainFillTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("P", "P", "1", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""),
             new("Q", "Q", "2", ""), new("M", "M", "1", ""),
         };
         var groups = new List<Group> { new("G0", "G0"), new("G1", "G1") };
@@ -508,7 +508,7 @@ public class ChainFillTest
     // （渡さない場合は shuffle 次第で bad が選ばれ得ることも併せて確認＝旧実装の脆さの実証）。
     private static MagiState RangeAvoidState() => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-02",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("P", "P", "1", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", "") },
         groups: new List<Group> { new("G0", "G0") },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, // 休/Pとも担当可
         staffList: new List<Staff> { new("bad", 0), new("good", 0) },

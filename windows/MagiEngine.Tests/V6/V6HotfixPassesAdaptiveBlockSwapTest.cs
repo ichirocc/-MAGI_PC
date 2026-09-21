@@ -25,7 +25,7 @@ public class V6HotfixPassesAdaptiveBlockSwapTest
     /// </summary>
     private static MagiState CrossGroupState(IReadOnlyDictionary<string, int>? wishes = null) => MinimalState.Build(
         startDate: "2026-02-01", endDate: "2026-02-11",
-        shifts: new List<Shift> { new("休み", "休", "", ""), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
+        shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         staffList: new List<Staff> { new("A", 0), new("B", 1) },
         use2Patterns: false,
@@ -112,7 +112,7 @@ public class V6HotfixPassesAdaptiveBlockSwapTest
         startDate: "2026-02-01", endDate: "2026-02-11",
         shifts: new List<Shift>
         {
-            new("休み", "休", "", ""), new("X", "X", "1", "1"), new("Y", "Y", "1", "1"), new("Z", "Z", "1", "1"),
+            new("休み", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "1"), new("Y", "Y", "1", "1"), new("Z", "Z", "1", "1"),
         },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") },
         staffList: new List<Staff> { new("A", 0), new("B", 1), new("C", 2) },
@@ -170,7 +170,7 @@ public class V6HotfixPassesAdaptiveBlockSwapTest
         startDate: "2026-02-01", endDate: "2026-02-11",
         shifts: new List<Shift>
         {
-            new("休み", "休", "", ""), new("P", "P", "1", "1"), new("Q", "Q", "1", "1"),
+            new("休み", "休", "", "", ShiftRole.Rest), new("P", "P", "1", "1"), new("Q", "Q", "1", "1"),
             new("R", "R", "1", "1"), new("S", "S", "1", "1"),
         },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2"), new("G3", "G3") },
@@ -231,7 +231,7 @@ public class V6HotfixPassesAdaptiveBlockSwapTest
     /// </summary>
     private static MagiState PinnedRestState() => MinimalState.Build(
         startDate: "2026-02-01", endDate: "2026-02-11",
-        shifts: new List<Shift> { new("休み", "休", "1", "1"), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
+        shifts: new List<Shift> { new("休み", "休", "1", "1", ShiftRole.Rest), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") },
         staffList: new List<Staff> { new("A", 0), new("B", 1), new("C", 2) },
         use2Patterns: false,

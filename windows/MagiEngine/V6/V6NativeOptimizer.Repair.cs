@@ -29,7 +29,8 @@ public static partial class V6NativeOptimizer
         for (var i = 0; i < p.S; i++)
         {
             var allowed = p.AllowedShiftsForStaff(i);
-            var fallback = ScheduleUtil.FillShiftIndex(allowed, p.RestIdx);
+            // [backlog#24] 休が無い設定は入口で止める（安全側フォールバックの黙認は不可）。
+            var fallback = ScheduleUtil.FillShiftIndex(allowed, p.RestIdx ?? throw new ArgumentException("休みシフトが設定されていません"));
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
@@ -50,7 +51,8 @@ public static partial class V6NativeOptimizer
         var n = 0;
         for (var i = 0; i < p.S; i++)
         {
-            var fallback = ScheduleUtil.FillShiftIndex(p.AllowedShiftsForStaff(i), p.RestIdx);
+            // [backlog#24] 同上（休が無い設定はここも入口で止める）。
+            var fallback = ScheduleUtil.FillShiftIndex(p.AllowedShiftsForStaff(i), p.RestIdx ?? throw new ArgumentException("休みシフトが設定されていません"));
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
@@ -256,7 +258,8 @@ public static partial class V6NativeOptimizer
     {
         var p = ScheduleUtil.CachedProblem(state);
         if (p.T == 0) return;
-        var rest = ScheduleUtil.RestShiftIndex(state); // [監査#2] 休はindex0固定でなく記号から解決
+        // [backlog#24] 休シフト未設定なら休へ寄せるdestroy自体が無意味＝no-op
+        if (ScheduleUtil.RestShiftIndex(state) is not int rest) return;
         var cnt = new int[p.S][];
         for (var i = 0; i < p.S; i++)
         {
@@ -360,7 +363,8 @@ public static partial class V6NativeOptimizer
         var p = ScheduleUtil.CachedProblem(state);
         var allowed = p.AllowedShiftsForStaff(i);
         if (allowed.Length == 0) return;
-        var rest = ScheduleUtil.RestShiftIndex(state);
+        // [backlog#24] 休シフト未設定ならno-op
+        if (ScheduleUtil.RestShiftIndex(state) is not int rest) return;
         if (!p.MayPlace(i, rest)) return; // 休を担当できない職員は破壊修復の対象外
 
         var counts = new int[p.S][];

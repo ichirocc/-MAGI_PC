@@ -29,7 +29,7 @@ public class V6HotfixPassesFairTest
     // ちょうど目標どおり=中立）。自己振替(A: X→Y 1日)だけで両シフトとも厳密に0まで解消する。
     private static MagiState SelfSwapState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } };
         var staff = new List<Staff> { new("A", 0), new("B", 0), new("C", 0), new("D", 0) };
@@ -69,7 +69,7 @@ public class V6HotfixPassesFairTest
     // 必要とせず両者とも独立に解消し、最終的にfair=0まで到達することを確認する。
     private static MagiState TwoStaffState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1 } };
         var staff = new List<Staff> { new("A", 0), new("B", 0) };
@@ -109,7 +109,7 @@ public class V6HotfixPassesFairTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "1", ""),
             new("Y", "Y", "", ""),
             new("Z", "Z", "", ""),
@@ -164,7 +164,7 @@ public class V6HotfixPassesFairTest
     // 次のhighTargetsへ移っており、excess/deficitが複数単位ある職員は1パスで1単位しか解消できなかった。
     private static MagiState MultiUnitSelfSwapState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } };
         var staff = new List<Staff> { new("A", 0), new("B", 0), new("C", 0), new("D", 0) };

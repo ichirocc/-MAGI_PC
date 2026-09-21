@@ -39,7 +39,7 @@ public class V6HotfixPassesCyclicSwapTest
     // [Kotlin原本 sampleState()] 2日間・2シフト（日勤/休み）・1グループ・2職員。
     private static MagiState SampleState() => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-02",
-        shifts: new List<Shift> { new("日勤", "日", "1", "1"), new("休み", "休", "", "") },
+        shifts: new List<Shift> { new("日勤", "日", "1", "1"), new("休み", "休", "", "", ShiftRole.Rest) },
         groups: new List<Group> { new("A", "A") },
         staffList: new List<Staff> { new("s1", 0), new("s2", 0) },
         use2Patterns: false,
@@ -242,7 +242,7 @@ public class V6HotfixPassesCyclicSwapTest
     // B はその補集合で対称に weekly-L1=6（合計12）。長方形交換で過剰曜日→過少曜日へ勤務を移せる。
     private static MagiState WeeklyState() => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-14",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("W", "W", "1", "") },
         groups: new List<Group> { new("G0", "G0") },
         staffList: new List<Staff> { new("A", 0), new("B", 0) },
         schedule: new List<IReadOnlyList<int>>
@@ -283,7 +283,7 @@ public class V6HotfixPassesCyclicSwapTest
         // 7日・1職員が毎日 W（各曜日ちょうど1回＝weekly=0）。need を満たすため2人目は毎日休。
         var st = MinimalState.Build(
             startDate: "2026-08-01", endDate: "2026-08-07",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("W", "W", "1", "") },
             groups: new List<Group> { new("G0", "G0") },
             staffList: new List<Staff> { new("A", 0), new("B", 0) },
             schedule: new List<IReadOnlyList<int>>

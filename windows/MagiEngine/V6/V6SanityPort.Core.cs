@@ -177,7 +177,8 @@ public static partial class V6SanityPort
     /// </summary>
     internal static int RestCapacity(Problem p)
     {
-        var k = p.RestIdx;
+        // [backlog#24] 休が無ければ「休の上限」という概念自体が無い＝0（呼び出し元は p.restIdx==k のときだけ呼ぶ）。
+        if (p.RestIdx is not int k) return 0;
         var cap = 0;
         for (var i = 0; i < p.S; i++)
         {

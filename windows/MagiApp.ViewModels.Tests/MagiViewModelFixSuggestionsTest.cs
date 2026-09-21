@@ -75,7 +75,7 @@ public class MagiViewModelFixSuggestionsTest
         // [Android 3.509.4] 適用直前ゲートは改善する提案だけ通す＝A に必要人数 1 を置き、全員 休 の盤面で (0,0)→A が人員不足を減らす形にする。
         var vm = new MagiViewModel
         {
-            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") }),
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") }),
             _currentSchedule = MinimalState.BuildSchedule(),
         };
         vm.Ui.FixSuggestions = new List<FixSuggestion> { MakeSuggestion(new FixCell(0, 0, 1)) };

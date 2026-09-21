@@ -23,7 +23,7 @@ public class V6HotfixPassesHF66Test
     // 同一職員内でA→Bへ付け替える手が実際にある盤面。need/cons41は未設定＝covU/covOはこの検証では発火しない。
     private static MagiState St() => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-04",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
@@ -61,7 +61,7 @@ public class V6HotfixPassesHF66Test
         // A=1(下限0上限1に一致)・B=1(下限1上限1に一致)＝すでに理想通り。動かす理由がない。
         var s = MinimalState.Build(
             startDate: "2026-06-01", endDate: "2026-06-02",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("s0", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

@@ -12,7 +12,7 @@ public class C1RepairIndexTest
     private static MagiState St(int days, int staff, IReadOnlyList<IReadOnlyList<int>> sched, IReadOnlyList<C1Row> cons1)
     {
         string end = "2026-01-" + days.ToString().PadLeft(2, '0');
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         return MinimalState.Build(
             startDate: "2026-01-01", endDate: end,
             shifts: shifts, groups: new List<Group> { new("G", "G") },

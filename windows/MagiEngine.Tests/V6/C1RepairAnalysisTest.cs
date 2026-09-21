@@ -27,7 +27,7 @@ public class C1RepairAnalysisTest
         IReadOnlyDictionary<string, Range>? staffRange = null, IReadOnlyList<C3Row>? cons3n = null)
     {
         string end = "2026-01-" + days.ToString().PadLeft(2, '0');
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         return MinimalState.Build(
             startDate: "2026-01-01", endDate: end,
             shifts: shifts, groups: new List<Group> { new("G", "G") },

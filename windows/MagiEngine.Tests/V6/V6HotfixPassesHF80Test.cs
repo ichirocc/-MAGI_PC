@@ -21,7 +21,7 @@ public class V6HotfixPassesHF80Test
     // 決定的でない(乱択)テストで、実際に改善余地がある盤面として使う。
     private static MagiState St() => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-08",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

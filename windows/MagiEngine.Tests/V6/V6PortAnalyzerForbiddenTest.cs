@@ -43,7 +43,7 @@ public class V6PortAnalyzerForbiddenTest
         IReadOnlyList<Staff>? staff = null,
         IReadOnlyList<IReadOnlyList<int>>? groupShift = null)
     {
-        shifts ??= new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        shifts ??= new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         staff ??= new List<Staff> { new("s0", 0) };
         groupShift ??= new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } };
         var days = schedule[0].Count;
@@ -113,7 +113,7 @@ public class V6PortAnalyzerForbiddenTest
         var st = ForbiddenState(
             schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
             cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
-            shifts: new List<Shift> { new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } });
 
@@ -134,7 +134,7 @@ public class V6PortAnalyzerForbiddenTest
             schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
             cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
             wishes: new Dictionary<string, int> { ["1,0"] = 0, ["1,1"] = 0 },   // s1 は両日とも休へ希望固定＝連鎖の受け皿なし
-            shifts: new List<Shift> { new("休", "休", "", ""), new("P", "P", "1", ""), new("Q", "Q", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } });
 
@@ -165,7 +165,7 @@ public class V6PortAnalyzerForbiddenTest
                 new(new List<string> { "Q", "休" }),
                 new(new List<string> { "Q", "Q" }),
             },
-            shifts: new List<Shift> { new("休", "休", "", ""), new("P", "P", "", ""), new("Q", "Q", "", "") });
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "", ""), new("Q", "Q", "", "") });
 
         var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(st);
         var run = diag.Runs.Single(r => r.SeqLabel == "P→P");

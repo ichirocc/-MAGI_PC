@@ -11,7 +11,7 @@ public class V6HotfixPassesRestZeroLnsTest
     private static MagiState St(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyDictionary<string, int>? wishes = null, IReadOnlyDictionary<string, string>? needDay = null)
         => MinimalState.Build(
             startDate: "2026-08-01", endDate: "2026-08-06",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("D", "D", "1", ""), new("A", "A", "1", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "1", ""), new("A", "A", "1", ""), new("B", "B", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("X", 0), new("Y", 0), new("Z", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },

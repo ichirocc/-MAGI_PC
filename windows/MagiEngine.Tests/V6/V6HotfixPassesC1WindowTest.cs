@@ -229,7 +229,7 @@ public class V6HotfixPassesC1WindowTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "1", ""),
             new("Y", "Y", "", ""),
             new("Z", "Z", "", ""),
@@ -359,7 +359,7 @@ public class V6HotfixPassesC1WindowTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""), new("X", "X", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""),
             new("A", "A", "1", ""), new("B", "B", "1", ""),
         };
         var groups = new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") };

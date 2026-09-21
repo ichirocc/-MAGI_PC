@@ -12,7 +12,7 @@ public class C1DeltaPrefilterTest
 {
     private static readonly List<Shift> Shifts = new()
     {
-        new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", ""),
+        new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", ""),
     };
 
     /// <summary>単一群（全シフト担当可）。</summary>

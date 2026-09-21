@@ -31,7 +31,7 @@ public class V6SanityPortViolationDebugTest
     {
         var st = new MagiState(
             StartDate: "2026-06-01", EndDate: "2026-06-07",
-            Shifts: new List<Shift> { new("休", "休", "0", ""), new("A", "A", "0", "") },
+            Shifts: new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest), new("A", "A", "0", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
             Use2Patterns: false,
@@ -74,7 +74,7 @@ public class V6SanityPortViolationDebugTest
     {
         var st = new MagiState(
             StartDate: "2026-06-01", EndDate: "2026-06-03",
-            Shifts: new List<Shift> { new("休", "休", "0", ""), new("A", "A", "0", "") },
+            Shifts: new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest), new("A", "A", "0", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0) },
             Use2Patterns: false,
@@ -110,7 +110,7 @@ public class V6SanityPortViolationDebugTest
         // 1日・休の必要人数0に対し3人とも休＝covO は 1枠で 3件。
         var st = new MagiState(
             StartDate: "2026-09-01", EndDate: "2026-09-01",
-            Shifts: new List<Shift> { new("休", "休", "0", "") },
+            Shifts: new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest) },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("A", 0), new("B", 0), new("C", 0) },
             Use2Patterns: false,

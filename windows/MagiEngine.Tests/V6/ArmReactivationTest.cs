@@ -15,7 +15,7 @@ public class ArmReactivationTest
     /// <summary>3職員×31日。X は毎日1人(need1=1)、A の X 上限超過1件のみを持つ。</summary>
     private static MagiState HighOnlyState()
     {
-        var shifts = new List<Shift> { new("休み", "休", "", ""), new("X", "X", "1", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("X", "X", "1", ""), new("Y", "Y", "", "") };
         var groups = new List<Group> { new("G", "G") };
         const int t = 31;
         var a = Enumerable.Repeat(2, t).ToArray();

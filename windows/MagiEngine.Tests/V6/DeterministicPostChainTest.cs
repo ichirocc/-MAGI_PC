@@ -9,7 +9,7 @@ public class DeterministicPostChainTest
 {
     private static MagiState State() => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-08",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "2", "") }, groups: new List<Group> { new("G", "G") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "2", "") }, groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("X", 0), new("Y", 0), new("Z", 0) }, use2Patterns: false,
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
         schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 0, 1, 1, 1, 0 }, new List<int> { 0, 0, 1, 1, 0, 0, 1, 1 }, new List<int> { 1, 0, 0, 1, 1, 0, 0, 1 } },

@@ -14,7 +14,7 @@ public class V6HotfixPassesCovOReliefTest
         var t = schedule[0].Count;
         return MinimalState.Build(
             startDate: "2026-08-01", endDate: $"2026-08-{t:00}",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", ""), new("B", "B", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("X", 0), new("Y", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

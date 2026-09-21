@@ -11,7 +11,7 @@ public class ChangeSummaryTest
     {
         var st = new MagiState(
             StartDate: "2026-01-01", EndDate: "2026-01-03",
-            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0), new("s1", 0), new("s2", 0) },
             Use2Patterns: false,

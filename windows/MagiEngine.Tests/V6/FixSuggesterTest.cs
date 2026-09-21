@@ -99,7 +99,7 @@ public class FixSuggesterTest
     {
         var st = MinimalState.Build(
             startDate: "2026-08-01", endDate: "2026-08-03",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             groups: new List<Group> { new("G", "G") }, staffList: new List<Staff> { new("X", 0), new("Y", 0) }, use2Patterns: false,
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
             schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 }, new List<int> { 1, 1, 0 } }, wishes: new Dictionary<string, int>(),

@@ -30,7 +30,7 @@ public class V6HotfixPassesC3mnTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "1", ""),
             new("Y", "Y", "", ""),
             new("Z", "Z", "", ""),

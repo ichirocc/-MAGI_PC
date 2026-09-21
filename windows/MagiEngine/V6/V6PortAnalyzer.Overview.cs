@@ -185,6 +185,8 @@ public static partial class V6PortAnalyzer
         // [監査(未レビュー領域再監査) 実バグ修正 移植元] 休記号改名時に rest=-1 となり
         //   「schedule!=-1」が常に真＝全職員を全日勤務と誤カウントしていた
         //   （3.103.0でweeklyに適用済みの p.restIdx フォールバックへ統一）。
+        // [backlog#24] 休シフト未設定(null)なら同じ理由で「全日勤務」表示に自然劣化する（診断表示のみ・
+        //   ブロックは入口のV6SanityPortが担う）。
         var rest = p.RestIdx;
         var profiles = new List<V6StaffProfile>(p.S);
         for (var i = 0; i < p.S; i++)

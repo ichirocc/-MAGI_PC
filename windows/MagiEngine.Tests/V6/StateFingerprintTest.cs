@@ -19,7 +19,7 @@ public class StateFingerprintTest
 {
     private static MagiState Base() => new MagiState(
         StartDate: "2026-08-01", EndDate: "2026-08-03",
-        Shifts: new List<Shift> { new("休", "休", "0", "1"), new("A", "A", "1", "2") },
+        Shifts: new List<Shift> { new("休", "休", "0", "1", ShiftRole.Rest), new("A", "A", "1", "2") },
         Groups: new List<Group> { new("G", "G"), new("H", "H") },
         StaffList: new List<Staff> { new("s0", 0, 0), new("s1", 1, 0) },
         Use2Patterns: false,

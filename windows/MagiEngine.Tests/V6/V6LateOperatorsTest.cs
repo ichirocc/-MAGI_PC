@@ -24,7 +24,7 @@ public class V6LateOperatorsTest
         {
             new("日勤A", "A", "2", ""),
             new("日勤B", "B", "1", ""),
-            new("休み", "休", "", ""),
+            new("休み", "休", "", "", ShiftRole.Rest),
         },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0), new("s2", 0), new("s3", 0) },

@@ -33,7 +33,10 @@ public static partial class V6HotfixPasses
         var cfg = config ?? new RestZeroLnsConfig();
         var stop = shouldStop ?? (() => false);
         var p = new Problem(state);
-        var rest = p.RestIdx;
+        // [backlog#24] 休シフト未設定ならno-op（このパス自体が「休が余る窓」を扱うので前提が成立しない）。
+        if (p.RestIdx is not int rest)
+            return new RestZeroLnsResult(ScheduleUtil.NormalizeSchedule(schedule, p), 0,
+                new[] { Log("休0日の窓LNS: 休シフトなし=スキップ") });
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var before = UnifiedViolationChecker.Check(state, work);
         var bestRep = before;

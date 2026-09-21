@@ -35,7 +35,7 @@ public class MagiViewModelWs1Test
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
 
-        vm.Ws1EditShift(1, "夜勤", "夜", "2", "3");
+        vm.Ws1EditShift(1, "夜勤", "夜", "2", "3", false);
 
         var sh = vm._state!.Shifts[1];
         Assert.Equal("夜勤", sh.Name);
@@ -50,7 +50,7 @@ public class MagiViewModelWs1Test
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
 
-        vm.Ws1EditShift(1, "A", "A", "", "  ");
+        vm.Ws1EditShift(1, "A", "A", "", "  ", false);
 
         Assert.Contains("最低-/上限-", vm.Ui.OpLog[0]);
     }
@@ -60,7 +60,7 @@ public class MagiViewModelWs1Test
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() }; // shifts: 休(0), A(1)
 
-        vm.Ws1EditShift(1, "休み扱い", "休", "", ""); // renaming "A" to "休" collides with shift 0
+        vm.Ws1EditShift(1, "休み扱い", "休", "", "", false); // renaming "A" to "休" collides with shift 0
 
         Assert.Equal("A", vm._state!.Shifts[1].Kigou); // unchanged
         Assert.True(vm.Ui.MessageIsError);
@@ -72,7 +72,7 @@ public class MagiViewModelWs1Test
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
 
-        vm.Ws1EditShift(0, "休み", "休", "", ""); // renaming shift 0 to its own current symbol
+        vm.Ws1EditShift(0, "休み", "休", "", "", true); // renaming shift 0 to its own current symbol
 
         Assert.Equal("休み", vm._state!.Shifts[0].Name);
     }
@@ -686,7 +686,7 @@ public class MagiViewModelWs1Test
     public void Ws1RemoveShiftDropsTheShiftAndRemapsCells()
     {
         var st = MinimalState.Build(
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
             schedule: new List<IReadOnlyList<int>>
             {
@@ -822,7 +822,7 @@ public class MagiViewModelWs1Test
     public void Ws1MoveShiftToWalksMultiplePositionsInOneCall()
     {
         var st = MinimalState.Build(
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } });
         var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 

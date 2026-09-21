@@ -30,7 +30,7 @@ public class V6HotfixPassesC1BeamTest
     // 玉突きチェーンの組合せで解消可能な最小盤面（BeamC1PolishV2Test/C1WindowTestと同一盤面を再利用）。
     private static MagiState DeficientState() => new MagiState(
         StartDate: "2026-08-01", EndDate: "2026-08-07",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
         Groups: new List<Group> { new("G0", "G0") },
         StaffList: new List<Staff> { new("target", 0), new("partner1", 0), new("partner2", 0) },
         Use2Patterns: false,

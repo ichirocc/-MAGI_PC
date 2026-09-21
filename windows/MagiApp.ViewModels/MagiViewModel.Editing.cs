@@ -1466,8 +1466,9 @@ public sealed partial class MagiViewModel
         }
     }
 
-    /// <summary>休シフトの index（記号解決。読み込み前は 0）。回数マトリクスが休の目標ズレを別色にするために読む。</summary>
-    public int RestShiftIndex() => _state is null ? 0 : ScheduleUtil.RestShiftIndex(_state);
+    /// <summary>休シフトの index（ShiftRole.Rest解決。読み込み前・休が無い設定は -1＝番兵、[backlog#24]）。
+    /// 回数マトリクスが休の目標ズレを別色にするために読む。</summary>
+    public int RestShiftIndex() => _state is null ? -1 : ScheduleUtil.RestShiftIndex(_state) ?? -1;
 
     /// <summary>[目標の検算] シフトごとの「適切回数(apt)の合計 vs それを受け止められる上限」。
     /// <see cref="V6SanityPort.AptBalances(MagiState, Problem?)"/> をそのまま返す＝設定ミス診断（検査6-C）と

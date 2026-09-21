@@ -31,7 +31,7 @@ public class V6HotfixPassesC3nTest
         IReadOnlyList<C3Row> cons3n,
         IReadOnlyDictionary<string, int>? wishes = null)
     {
-        var shifts = Kigou.Select(k => new Shift(k, k, "", "")).ToList();
+        var shifts = Kigou.Select((k, i) => new Shift(k, k, "", "", i == Rest ? ShiftRole.Rest : ShiftRole.None)).ToList();
         var groups = new List<Group> { new("G", "G") };
         var staff = Enumerable.Range(0, schedule.Count).Select(i => new Staff($"s{i}", 0)).ToList();
         var groupShift = new List<IReadOnlyList<int>> { Enumerable.Repeat(1, Kigou.Count).ToList() };

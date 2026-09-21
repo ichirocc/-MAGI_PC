@@ -1741,7 +1741,11 @@ public sealed partial class EditView : UserControl
         var kigou = MasterShiftKigouBox.Text.Trim();
         if (k < 0) { MasterShiftHintText.Text = "対象のシフトを選んでください。"; return; }
         if (name.Length == 0 || kigou.Length == 0) { MasterShiftHintText.Text = "名前と記号を入れてください。"; return; }
-        _vm.Ws1EditShift(k, name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim());
+        // [backlog#24] このダイアログにはまだ「休みとして扱う」トグルが無い＝既存のRoleをそのまま保持する
+        //   （XAML側のトグル追加はサンドボックスでビルド検証できないため見送り。詳細は windows/README.md）。
+        var curShifts = _vm.Ws1()?.Shifts;
+        var isRest = curShifts is not null && k < curShifts.Count && curShifts[k].Role == MagiEngine.Model.ShiftRole.Rest;
+        _vm.Ws1EditShift(k, name, kigou, MasterShiftNeed1Box.Text.Trim(), MasterShiftNeed2Box.Text.Trim(), isRest);
         _syncedMasterShiftIndex = -1;
     }
 

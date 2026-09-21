@@ -111,7 +111,8 @@ public static class FlatRosterCsvImport
         foreach (var s in symList) if (s != Rest) symbols.Add(s);
         var symToK = new Dictionary<string, int>();
         for (var i = 0; i < symbols.Count; i++) symToK[symbols[i]] = i;
-        var shiftsOut = symbols.Select(s => new Shift(s, s, "", "")).ToList();
+        // [backlog#24] 記号一致でなく ShiftRole.Rest が唯一の正＝先頭(休)にRoleを付与する。
+        var shiftsOut = symbols.Select((s, i) => new Shift(s, s, "", "", i == 0 ? ShiftRole.Rest : ShiftRole.None)).ToList();
         var restK = symToK[Rest];
 
         // ユニット→グループ（出現順）。

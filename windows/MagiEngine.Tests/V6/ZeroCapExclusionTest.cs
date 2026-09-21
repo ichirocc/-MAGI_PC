@@ -17,7 +17,7 @@ public class ZeroCapExclusionTest
         if (extraRange is not null) foreach (var kv in extraRange) range[kv.Key] = kv.Value;
         return MinimalState.Build(
             startDate: "2026-08-01", endDate: "2026-08-04",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") },
             groups: new List<Group> { new("G0", "G0") },
             staffList: new List<Staff> { new("X", 0), new("Y", 0), new("Z", 0) }, use2Patterns: false,
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },

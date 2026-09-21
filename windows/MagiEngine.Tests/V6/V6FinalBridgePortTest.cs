@@ -33,7 +33,7 @@ public class V6FinalBridgePortTest
     private static MagiState SampleState() => new(
         StartDate: "2026-06-01",
         EndDate: "2026-06-02",
-        Shifts: new List<Shift> { new("日勤", "日", "1", "1"), new("休み", "休", "", "") },
+        Shifts: new List<Shift> { new("日勤", "日", "1", "1"), new("休み", "休", "", "", ShiftRole.Rest) },
         Groups: new List<Group> { new("A", "A") },
         StaffList: new List<Staff> { new("s1", 0), new("s2", 0) },
         Use2Patterns: false,

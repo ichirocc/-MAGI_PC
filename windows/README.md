@@ -326,6 +326,32 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-21（backlog#24: ShiftRole/restIdxの実データ破損バグ修正を同日移植）:
+  Android側が確認・修正した実バグ「休みシフトの解決を記号"休"の字面一致に頼り、見つからなければ
+  index0へ黙って倒す」（削除・改名でHARD違反が0→60/15→73へ急増、実データで確認済み）をC#へ同日移植。
+  - `MagiState.cs`: `ShiftRole{None,Rest}`を新設、`Shift`に`Role`（既定`None`）を追加。
+  - `StateJsonSerializer.cs`: `role`フィールドの読み書き（`"rest"`⇔`ShiftRole.Rest`）＋旧JSON
+    （roleフィールド無し）の後方互換自動移行（付与が無ければ記号"休"の最初の1件へ付与）。
+  - `ScheduleUtil.RestShiftIndex`: 記号一致を撤去し`ShiftRole.Rest`解決・戻り値`int?`（無ければ`null`、
+    旧`return 0`フォールバック撤去）。`FillShiftIndex`/`Problem.RestIdx`も`int?`へ。
+  - 呼出元は方針ごとに分岐: 入口（`GreedyMirrorScheduler`/`SmartInitialScheduler`/
+    `V6NativeOptimizer.Hf66DataHardening`等のHARD修復2箇所）は`?? throw`でブロック、`V6SanityPort.Build`
+    のwarns/検査2gの案内文を更新。destroy-repair系（`V6NativeOptimizer.DestroyRepairDayAt/StaffAt`・
+    `V6HotfixPasses.RestZeroLns`）とcovO/high起点の`ViolationComponentRepair`はno-opへ。診断専用
+    （`V6PortAnalyzer.Overview`）とinert sentinel（`FixSuggester`の`?? -1`）は自然劣化。
+  - `Ws1Ops.EditShift`/`AddShift`に`isRest`引数を追加（単一選択トグル、`ApplyRestRole`ヘルパー新設）。
+    `EditShift`の改名ロジックが裸の`new Shift(...)`で`Role`を落とす実バグも同時に修正（`with`式へ）。
+  - ViewModel層（`MagiViewModel.Ws1EditShift/Ws1AddShift/SetShiftNeed`）に`isRest`を配線。
+    `MagiApp.WinUI/Views/EditView.xaml.cs`のシフト編集ダイアログにはまだ「休みとして扱う」トグルUIが
+    無い＝既存`Role`を保持するだけの暫定対応（XAML側のトグル追加はサンドボックスでビルド検証できない
+    ため見送り）。
+  - CSV取込（`RosterCsvImport.cs`/`FlatRosterCsvImport.cs`）が生成する「休」シフトにも`Role`を付与。
+  - テスト: `MinimalState`（両テストプロジェクト）と個別テストの「休」シフト fixture 約70箇所に
+    `ShiftRole.Rest`を追加（`Ws1OpsTest`の旧フォールバック挙動アサーションは新仕様へ更新）。
+    `dotnet test MagiEngine.Tests` 878/878・`MagiApp.ViewModels.Tests` 440/440 緑。
+  - スコープ外: `HardRepairCore.kt`相当の独立ファイルはこの移植に存在せず該当箇所なし（`NativeEval.kt`の
+    JNI meta配列も本移植にはネイティブブリッジが無いため対象外）。
+
 - 2026-09-20（3.535.0: `aptFairSoftTolerance`をC#へ新規移植。grillingで設計を確定）:
   Android側は実装済み（`AptFairPolish.toleratedBetter`/`nonFamilySoftTolerance`）だが、C#側は
   `ApplyAptPolish`/`ApplyFairPolish`の全採否箇所が生の`IsBetter`のままで一度も移植されていなかった。

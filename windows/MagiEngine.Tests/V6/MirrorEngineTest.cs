@@ -28,7 +28,7 @@ public class MirrorEngineTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "1", "2"),
             new("B", "B", "1", "1"),
             new("C", "C", "1", ""),
@@ -118,7 +118,7 @@ public class MirrorEngineTest
     [Fact]
     public void CountViolationsPrefersHeavierFamilyOverLighterAtSameCell()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var staff = new List<Staff> { new("s0", 0) };
         // X を1回しか勤務していない: cons2(count>=3)とstaffRange低(lo=3)の両方が同一セル(0,1=staff0,shift X)で発火。
@@ -157,7 +157,7 @@ public class MirrorEngineTest
     [Fact]
     public void PersonalRangeDisablesTheGroupTargetWithoutDoubleCounting()   // [Android 3.509.0/決定 D9]
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var staff = new List<Staff> { new("s0", 0), new("s1", 0) };
         // X を1回だけ勤務: 個人下限3(low)と 適切回数目標3(aptLow) が同じ (staff0, X) で同時に発火する。
@@ -194,7 +194,7 @@ public class MirrorEngineTest
     [Fact]
     public void NeedFamiliesKeepsC41WhenItOverlapsWithCovU()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "3", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "3", "") };
         var groups = new List<Group> { new("G0", "G0") };
         var staff = new List<Staff> { new("s0", 0) };
         // day0: s0のみXへ配置＝need1(3)に対しcovU(不足2)、かつG0のXレンジ[2,5]に対してもc41(不足)が同時発火。

@@ -10,7 +10,7 @@ public class V6PostOptimizationParamsTest
 {
     private static MagiState PinnedState() => MinimalState.Build(
         startDate: "2026-02-01", endDate: "2026-02-11",
-        shifts: new List<Shift> { new("休み", "休", "1", "1"), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
+        shifts: new List<Shift> { new("休み", "休", "1", "1", ShiftRole.Rest), new("X", "X", "1", "1"), new("Y", "Y", "1", "1") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1"), new("G2", "G2") },
         staffList: new List<Staff> { new("A", 0), new("B", 1), new("C", 2) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 1 } },

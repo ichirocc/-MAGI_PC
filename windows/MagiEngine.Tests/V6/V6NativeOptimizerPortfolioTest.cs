@@ -76,7 +76,7 @@ public class V6NativeOptimizerPortfolioTest
         // A single-shift fixture: every AllowedShiftsForStaff() bucket has exactly one entry, so
         // ForceDiverseKick's fallback can never find a differing alternative — this exercises its
         // bounded-attempts loop (not an infinite loop) via HypothesisStartFor's collapse check.
-        var state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "") });
+        var state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest) });
         var p = new Problem(state);
         var baseSched = p.InitialAssignment();
 
@@ -133,7 +133,7 @@ public class V6NativeOptimizerPortfolioTest
 
     private static MagiState ThreeShiftState(IReadOnlyDictionary<string, int>? wishes = null) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G0", "G0") },
         staffList: new List<Staff> { new("s0", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
@@ -172,7 +172,7 @@ public class V6NativeOptimizerPortfolioTest
 
     private static MagiState PrefWishState(string wishKey, IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-02",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
         groups: new List<Group> { new("G0", "G0") },
         staffList: new List<Staff> { new("s0", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },

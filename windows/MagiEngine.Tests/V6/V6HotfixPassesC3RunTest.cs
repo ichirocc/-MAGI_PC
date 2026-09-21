@@ -26,7 +26,7 @@ public class V6HotfixPassesC3RunTest
         // shift: 0=休(need無) 1=X(need無、連続させたい対象) 2=Y(need1=1、全日担保が必要) 3=Z(need無)
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "", ""),
             new("Y", "Y", "1", ""),
             new("Z", "Z", "", ""),

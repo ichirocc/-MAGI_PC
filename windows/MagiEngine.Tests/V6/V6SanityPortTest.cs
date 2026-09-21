@@ -51,7 +51,7 @@ public class V6SanityPortTest
 
     private static MagiState PersonalFloorState(IReadOnlyDictionary<string, Range> staffRange) => new(
         StartDate: "2025-01-01", EndDate: "2025-01-31",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("B4", "B4", "", ""), new("有", "有", "", "") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("B4", "B4", "", ""), new("有", "有", "", "") },
         Groups: new List<Group> { new("G0", "G0") },
         StaffList: new List<Staff> { new("s0", 0) },
         Use2Patterns: false,
@@ -95,7 +95,7 @@ public class V6SanityPortTest
 
     private static MagiState AptVsNeedState(int days, string need1, string aptTarget) => new(
         StartDate: "2026-08-01", EndDate: $"2026-08-{days:D2}",
-        Shifts: new List<Shift> { new("休", "休", need1, ""), new("X", "X", need1, "") },
+        Shifts: new List<Shift> { new("休", "休", need1, "", ShiftRole.Rest), new("X", "X", need1, "") },
         Groups: new List<Group> { new("G", "G") },
         StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         Use2Patterns: false,

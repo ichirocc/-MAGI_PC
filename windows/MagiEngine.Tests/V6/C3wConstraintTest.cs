@@ -22,7 +22,7 @@ public class C3wConstraintTest
         groupShift ??= new List<List<int>> { new() { 1, 1, 1 } };
         return new MagiState(
             StartDate: "2026-01-01", EndDate: "2026-01-05",
-            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
             Use2Patterns: false,

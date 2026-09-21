@@ -31,7 +31,7 @@ public class C3nBitScanTest
     {
         var result = MinimalState.Build(
             startDate: "2026-12-01", endDate: "",
-            shifts: Kigou.Select(k => new Shift(k, k, "", "")).ToList(),
+            shifts: Kigou.Select((k, i) => new Shift(k, k, "", "", i == Rest ? ShiftRole.Rest : ShiftRole.None)).ToList(),
             groups: new List<Group> { new("G", "G") },
             staffList: Enumerable.Range(0, schedule.Count).Select(i => new Staff($"s{i}", 0)).ToList(),
             groupShift: new List<IReadOnlyList<int>> { Enumerable.Repeat(1, Kigou.Count).ToList() },

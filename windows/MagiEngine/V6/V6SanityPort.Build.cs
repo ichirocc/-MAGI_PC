@@ -55,6 +55,11 @@ public static partial class V6SanityPort
         var warns = new List<string>();
         var notes = new List<string>();
 
+        // [backlog#24] restIdx の全面 nullable 化＝休が1つも無い設定は最適化/チェックの入口でブロック
+        //   する（旧: 記号"休"の字面一致に失敗すると黙って index 0 へフォールバックし、実データ破損の
+        //   原因になった）。ok=false で warns に積むこの入口の既存契約に乗せる。
+        if (p.RestIdx is null) warns.Add("休みシフトが設定されていません");
+
         var invalidAssignments = InvalidAssignmentCells(state, p, s);
         if (invalidAssignments.Count > 0)
             warns.Add($"担当不可または範囲外の配置が {invalidAssignments.Count} セルあります");

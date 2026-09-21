@@ -104,7 +104,7 @@ public class PinInvariantTest
     {
         var groups = new List<Group> { new("G", "G") };
         var staff = Enumerable.Range(0, s).Select(i => new Staff($"S{i}", 0)).ToList();
-        var shifts = new List<Shift> { new("休", "休", "0", "") };
+        var shifts = new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest) };
         for (var x = 1; x < k; x++)
             shifts.Add(new Shift($"S{x}", $"S{x}", "1", (1 + rng.NextInt(2)).ToString()));
 

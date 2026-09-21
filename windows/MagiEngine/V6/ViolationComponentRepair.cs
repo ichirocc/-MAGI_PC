@@ -454,15 +454,16 @@ public static class ViolationComponentRepair
             else if (a.Staff < 0)
             {
                 if (a.Family == "covU") for (var i = 0; i < p.S; i++) Single(i, a.Day, a.Shift);
-                else if (a.Family == "covO") for (var i = 0; i < p.S; i++) if (work[i][a.Day] == a.Shift) Single(i, a.Day, p.RestIdx);
+                // [backlog#24] 休が無い設定は「休へ逃がす」候補を作れない＝生成しない。
+                else if (a.Family == "covO" && p.RestIdx is int restC) for (var i = 0; i < p.S; i++) if (work[i][a.Day] == a.Shift) Single(i, a.Day, restC);
             }
             else if (a.Family.EndsWith("low", StringComparison.OrdinalIgnoreCase))
             {
                 for (var j = 0; j < p.T; j++) Single(a.Staff, j, a.Shift);
             }
-            else if (a.Family.EndsWith("high", StringComparison.OrdinalIgnoreCase))
+            else if (a.Family.EndsWith("high", StringComparison.OrdinalIgnoreCase) && p.RestIdx is int restH)
             {
-                for (var j = 0; j < p.T; j++) if (work[a.Staff][j] == a.Shift) Single(a.Staff, j, p.RestIdx);
+                for (var j = 0; j < p.T; j++) if (work[a.Staff][j] == a.Shift) Single(a.Staff, j, restH);
             }
         }
 

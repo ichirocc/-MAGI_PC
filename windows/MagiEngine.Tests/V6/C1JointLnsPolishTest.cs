@@ -63,7 +63,7 @@ public class C1JointLnsPolishTest
         // ②同時に別窓(day1-2/day2-3)はday2へXを置くことで正しく解消できる、の両方を確認する。
         // 事前フィルタが無くても最終正しさ(isFinalCandidate+defensive re-check)は保たれる設計だが、
         // これは「事前に弾いても解ける能力を失っていない」ことの回帰ガード。
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         var groups = new List<Group> { new("G", "G") };
         var staffList = new List<Staff> { new("target", 0) };
         var st = MinimalState.Build(

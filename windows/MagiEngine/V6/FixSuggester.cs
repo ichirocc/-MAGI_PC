@@ -295,7 +295,8 @@ public static class FixSuggester
                 // 目標シフト = そのstaffの下限割れシフト ∪ 休（記号で解決した RestIdx）。なければ置けるシフト全部。
                 //   [Android 3.475.0 の同期] 旧移植は休を index 0 決め打ちにし、担当可否も見ていなかった。
                 var shortList = _shortShift.TryGetValue(i, out var ss) ? ss.ToList() : new List<int>();
-                var targets = (shortList.Count == 0 ? allowed.ToList() : shortList.Append(_p.RestIdx).ToList())
+                // [backlog#24] 休が無い設定は `?? -1`（後段の allowed.Contains で自然に弾かれる無害な番兵）。
+                var targets = (shortList.Count == 0 ? allowed.ToList() : shortList.Append(_p.RestIdx ?? -1).ToList())
                     .Distinct().Where(k => allowed.Contains(k)).ToList();
                 var cells = new List<int>();
                 for (var j = 0; j < _p.T; j++) if (!_p.WishLocked(i, j)) cells.Add(j);

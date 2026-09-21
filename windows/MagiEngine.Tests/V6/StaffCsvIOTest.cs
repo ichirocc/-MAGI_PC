@@ -22,7 +22,7 @@ public class StaffCsvIOTest
     /// <summary>群 G0 は X しか担当できない（休は担当外）。休は index1＝旧実装との差が観測できる。</summary>
     private static MagiState StRestNotAllowed() => new(
         StartDate: "2026-01-01", EndDate: "2026-01-03",
-        Shifts: new List<Shift> { new("X", "X", "", ""), new("休", "休", "", "") },
+        Shifts: new List<Shift> { new("X", "X", "", ""), new("休", "休", "", "", ShiftRole.Rest) },
         Groups: new List<Group> { new("G0", "G0") },
         StaffList: new List<Staff> { new("s0", 0) },
         Use2Patterns: false,
@@ -88,7 +88,7 @@ public class StaffCsvIOTest
     {
         var st = new MagiState(
             StartDate: "2026-06-01", EndDate: "2026-06-02",
-            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             Groups: new List<Group> { new("G1", "G1") },
             StaffList: new List<Staff> { new("既存", 0, 0) },
             Use2Patterns: false,
@@ -121,7 +121,7 @@ public class StaffCsvIOTest
     {
         var st = new MagiState(
             StartDate: "2026-06-01", EndDate: "2026-06-02",
-            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") },
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
             Groups: new List<Group> { new("G1", "G1"), new("G2", "G2") },
             StaffList: new List<Staff> { new("既存", 0, 0) },
             Use2Patterns: false,

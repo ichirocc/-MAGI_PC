@@ -27,7 +27,7 @@ public class V6HotfixPassesC3PatternTest
         // shift: 0=休(need無) 1=X(need1=1) 2=Y(need無) 3=Z(need無)
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X", "X", "1", ""),
             new("Y", "Y", "", ""),
             new("Z", "Z", "", ""),

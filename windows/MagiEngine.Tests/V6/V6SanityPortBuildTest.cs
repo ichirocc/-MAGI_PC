@@ -28,7 +28,7 @@ public class V6SanityPortBuildTest
         // 割り当て済み（groupShift[0][1]=0）＝invalidAssignmentCells の対象。
         var st = new MagiState(
             StartDate: "2026-06-01", EndDate: "2026-06-02",
-            Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") },
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("s0", 0) },
             Use2Patterns: false,

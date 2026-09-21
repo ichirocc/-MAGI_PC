@@ -19,7 +19,7 @@ public class Ws1OpsMoveTest
     // 休=0 / A=1 / B=2 の3シフト、s0(G0)・s1(G1)・s2(G0) の3職員、2日。
     private static MagiState State() => new MagiState(
         StartDate: "2026-07-01", EndDate: "2026-07-02",
-        Shifts: new List<Shift> { new("休み", "休", "", ""), new("A", "A", "1", ""), new("B", "B", "2", "") },
+        Shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("A", "A", "1", ""), new("B", "B", "2", "") },
         Groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         StaffList: new List<Staff> { new("s0", 0, 1), new("s1", 1, -1), new("s2", 0, 0) },
         Use2Patterns: false,

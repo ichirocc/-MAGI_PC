@@ -30,15 +30,26 @@ public static class Ws1Ops
 
     // ---- no dimension change -------------------------------------------------
 
-    public static MagiState EditShift(MagiState state, int k, string name, string kigou, string need1, string need2)
+    public static MagiState EditShift(MagiState state, int k, string name, string kigou, string need1, string need2, bool isRest)
     {
         if (k < 0 || k >= state.Shifts.Count) return state;
         var old = state.Shifts[k].Kigou;
-        var s = new List<Shift>(state.Shifts) { [k] = new Shift(name, kigou, need1, need2) };
+        // [backlog#24] role(ShiftRole)は記号でなく付与先そのもの＝改名でも保持する
+        //   (`with` で作り直す。裸の `new Shift(...)` は role を落とすバグになるので使わない)。
+        var s = new List<Shift>(state.Shifts) { [k] = state.Shifts[k] with { Name = name, Kigou = kigou, Need1 = need1, Need2 = need2 } };
         // [記号変更の伝播] 制約はシフト記号(文字列)で参照するため、記号を変えたら参照行も一括置換し
         //   旧記号の幽霊行化(評価では無視されるが表示に残る)を防ぐ。index保存(staffRange/希望/apt/勤務表)は
         //   indexで参照するため自動追従＝対象外。
-        return RenameShiftInConstraints(state with { Shifts = s }, old, kigou);
+        return ApplyRestRole(RenameShiftInConstraints(state with { Shifts = s }, old, kigou), k, isRest);
+    }
+
+    /// <summary>[backlog#24] shifts[target]のShiftRoleを単一選択で更新する（trueなら他は全てNoneへ）。</summary>
+    private static MagiState ApplyRestRole(MagiState state, int target, bool isRest)
+    {
+        var cur = GetOrNull(state.Shifts, target)?.Role == ShiftRole.Rest;
+        if (isRest == cur) return state;
+        var s = state.Shifts.Select((sh, i) => sh with { Role = i == target && isRest ? ShiftRole.Rest : ShiftRole.None }).ToList();
+        return state with { Shifts = s };
     }
 
     public static MagiState EditGroup(MagiState state, int g, string name, string kigou)
@@ -319,14 +330,14 @@ public static class Ws1Ops
         return n;
     }
 
-    public static MagiState AddShift(MagiState state, string name, string kigou, string need1, string need2)
+    public static MagiState AddShift(MagiState state, string name, string kigou, string need1, string need2, bool isRest = false)
     {
         var shifts = state.Shifts.Append(new Shift(name, kigou, need1, need2)).ToList();
         var gs = state.GroupShift.Select(row => (IReadOnlyList<int>)row.Append(0).ToList()).ToList(); // new shift not allowed by default
         var apt = state.GroupShiftApt.Count == 0
             ? state.GroupShiftApt
             : state.GroupShiftApt.Select(row => (IReadOnlyList<string>)row.Append("").ToList()).ToList();
-        return state with { Shifts = shifts, GroupShift = gs, GroupShiftApt = apt };
+        return ApplyRestRole(state with { Shifts = shifts, GroupShift = gs, GroupShiftApt = apt }, shifts.Count - 1, isRest);
     }
 
     /// <summary>Add a group (index G). groupShift/apt gain a row; staff group indices stay valid.
@@ -335,7 +346,7 @@ public static class Ws1Ops
     public static MagiState AddGroup(MagiState state, string name, string kigou)
     {
         int k = state.Shifts.Count;
-        int rest = ScheduleUtil.RestShiftIndex(state);
+        int? rest = ScheduleUtil.RestShiftIndex(state);
         var groups = state.Groups.Append(new Group(name, kigou)).ToList();
         var newRow = Enumerable.Range(0, k).Select(idx => idx == rest ? 1 : 0).ToList();
         var gs = state.GroupShift.Append((IReadOnlyList<int>)newRow).ToList();
@@ -372,9 +383,12 @@ public static class Ws1Ops
     /// [3.442.0/H3] CSV取込(<c>StaffCsvIO.ParseUpsert</c>)も同じ判断を読むため internal 化した。
     /// 写すと必ず片方が取り残される（3.418.0/3.419.0 でこの規則を1箇所へ寄せたのと同じ理由）。
     /// </remarks>
-    internal static int FillShift(IReadOnlyList<int>? groupShiftRow, int rest)
+    // [backlog#24] rest は null 許容（休が無い設定）。groupShiftRow が無いときの `?? rest` は
+    //   休が無いと -1 になり得るが、この経路は「担当可能シフトが1つも無い群」向けの最終手段で、
+    //   その不整合は検査2k/2l が別途指摘する（throw しない方針は Kotlin Ws1Ops.kt 同期）。
+    internal static int FillShift(IReadOnlyList<int>? groupShiftRow, int? rest)
     {
-        if (groupShiftRow is null) return rest;
+        if (groupShiftRow is null) return rest ?? -1;
         var allowed = new List<int>();
         for (int idx = 0; idx < groupShiftRow.Count; idx++)
             if (groupShiftRow[idx] == 1) allowed.Add(idx);
@@ -504,7 +518,7 @@ public static class Ws1Ops
     public static Ws1Result ResizeDays(MagiState state, int[][] sched, int newT)
     {
         int t = Math.Clamp(newT, 1, 31);
-        int rest = ScheduleUtil.RestShiftIndex(state);
+        int? rest = ScheduleUtil.RestShiftIndex(state);
         var newSched = new int[sched.Length][];
         for (int i = 0; i < sched.Length; i++)
         {
@@ -588,7 +602,7 @@ public static class Ws1Ops
         //   （「休」があればそれ、無ければ先頭）。k が休以外なら旧 newRest（削除後の休index追従＝3.106.0 の
         //   本体であるハードコード0バグの修正）と厳密に一致し、k が休自身でも範囲内の正しい既定へ落ちる
         //   （旧式 `rest>k ? rest-1 : rest` は k==rest のとき削除済みindexを指し、末尾削除では範囲外だった）。
-        int newRest = ScheduleUtil.RestShiftIndex(state with { Shifts = shifts });
+        int? newRest = ScheduleUtil.RestShiftIndex(state with { Shifts = shifts });
         var gs = state.GroupShift.Select(row => row.Where((_, i) => i != k).ToList()).ToList();
         var apt = state.GroupShiftApt.Count == 0
             ? state.GroupShiftApt

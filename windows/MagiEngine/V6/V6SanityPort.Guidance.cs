@@ -341,14 +341,15 @@ public static partial class V6SanityPort
                 "制約設定でこの行を今ある記号・正しい数値に直すか、行を削除してください"));
         }
 
-        // 2g) 「休」記号なし
-        if (!state.Shifts.Any(s => s.Kigou == "休"))
+        // 2g) [backlog#24] 休(ShiftRole.Rest)がどのシフトにも付与されていない＝最適化/検査の入口
+        //   (build()のwarns)でブロックされる設定。ここでは案内の詳細を出す（旧: 記号"休"の字面一致に
+        //   失敗すると index0 へ黙ってフォールバックしていたが撤去済み）。
+        if (!state.Shifts.Any(s => s.Role == ShiftRole.Rest))
         {
-            var head = state.Shifts.FirstOrDefault()?.Kigou ?? "(シフト未登録)";
             outList.Add(new SettingIssue(IssueKind.Constraint, "「休」のシフトがありません",
-                $"記号が「休」のシフトが無いため、先頭の「{head}」を休として扱っています" +
-                    "（曜日の偏りや休み関連の診断がこの前提で動きます）",
-                "シフト設定で休みのシフトの記号を「休」にしてください"));
+                "休みとして扱うシフトが設定されていないため、最適化・検査を実行できません" +
+                    "（曜日の偏りや休み関連の診断も休を前提に動きます）",
+                "シフト設定で休みのシフトを「休みとして扱う」に設定してください"));
         }
 
         // 2j) 期間/職員数の上限

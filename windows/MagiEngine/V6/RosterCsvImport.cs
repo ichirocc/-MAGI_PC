@@ -120,10 +120,13 @@ public static class RosterCsvImport
         if (!symToK.ContainsKey(Rest))
         {
             symToK[Rest] = shiftsOut.Count;
-            shiftsOut.Add(new Shift("公休", Rest, "", ""));
+            shiftsOut.Add(new Shift("公休", Rest, "", "", ShiftRole.Rest));
         }
         if (shiftsOut.Count == 0) return null;
         var restK = symToK[Rest];
+        // [backlog#24] 記号一致でなく ShiftRole.Rest が唯一の正＝凡例に既にあった「休」シフトにも付与する
+        //   （どのシフトにも付与が無いと下流(Problem.RestIdx等)がnullとして扱い最適化がブロックされる）。
+        if (shiftsOut[restK].Role != ShiftRole.Rest) shiftsOut[restK] = shiftsOut[restK] with { Role = ShiftRole.Rest };
 
         // --- ユニット(グループ)・スタッフ・勤務表グリッド ---
         var groupsOut = new List<Group>();

@@ -68,7 +68,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "", "2") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "", "2") },
             groups: new List<Group> { new("G", "G") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             use2: true,
@@ -92,7 +92,7 @@ public class V6PortAnalyzerCoverageTest
     // 変え、chainVerified の有無で案内文が変わることを固定する。
     private static MagiState CascadeChainState(bool cWished) => St(
         startDate: "2026-08-01", endDate: "2026-08-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", ""), new("Y", "Y", "1", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", ""), new("Y", "Y", "1", "") },
         groups: new List<Group> { new("GA", "GA"), new("GC", "GC") },
         staff: new List<Staff> { new("A", 0), new("C", 1) },
         use2: false,
@@ -184,7 +184,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "") },
             groups: new List<Group> { new("G", "G") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             use2: false,
@@ -226,7 +226,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "") },
             groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
             staff: new List<Staff> { new("s0", 0), new("s1", 1) },
             use2: false,
@@ -250,7 +250,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "") },
             groups: new List<Group> { new("G", "G") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             use2: false,
@@ -276,7 +276,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "2", "2"), new("遅番", "B", "", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "2", "2"), new("遅番", "B", "", "") },
             groups: new List<Group> { new("G", "G"), new("H", "H") },
             staff: new List<Staff> { new("s0", 0), new("s1", 0) },
             use2: true,
@@ -305,7 +305,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var st = St(
             startDate: "2025-12-01", endDate: "2025-12-01",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "0", "0") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "0", "0") },
             groups: new List<Group> { new("G", "G"), new("H", "H") },
             staff: new List<Staff> { new("s0", 0), new("s1", 1) },
             use2: true,

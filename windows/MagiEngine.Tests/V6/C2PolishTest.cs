@@ -19,7 +19,7 @@ public class C2PolishTest
         var schedule = new List<IReadOnlyList<int>> { Enumerable.Range(0, t).Select(j => j % 7 == 0 ? 1 : 2).ToList() };
         return MinimalState.Build(
             startDate: "2026-02-01", endDate: "2026-03-03",
-            shifts: new List<Shift> { new("休み", "休", "", ""), new("P", "P", "", ""), new("Q", "Q", "", "") },
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("P", "P", "", ""), new("Q", "Q", "", "") },
             groups: new List<Group> { new("GA", "GA") },
             staffList: new List<Staff> { new("A", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

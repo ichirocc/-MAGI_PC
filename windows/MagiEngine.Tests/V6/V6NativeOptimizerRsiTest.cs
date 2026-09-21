@@ -323,7 +323,7 @@ public class V6NativeOptimizerRsiTest
     // shift 0="休"(no need), shift 1="X"(need2=1 only) — matches V6SearchOperatorsTest's FindCovOFix fixture.
     private static MagiState CovOState(IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "1") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "1") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         use2Patterns: true,
@@ -367,7 +367,7 @@ public class V6NativeOptimizerRsiTest
 
     private static MagiState C41State(string l, string u, IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
@@ -407,7 +407,7 @@ public class V6NativeOptimizerRsiTest
         // A single-member group sidesteps "fair" altogether (m&lt;2 groups are excluded from it).
         var state = MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-01",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: new List<Staff> { new("s0", 0) },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
@@ -431,7 +431,7 @@ public class V6NativeOptimizerRsiTest
 
     private static MagiState C42State(IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
         groups: new List<Group> { new("G1", "G1"), new("G2", "G2") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 1 } },

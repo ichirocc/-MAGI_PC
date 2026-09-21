@@ -26,7 +26,8 @@ public static class GreedyMirrorScheduler
         var p = new Problem(state);
         if (p.T <= 0 || p.S <= 0 || p.K <= 0)
             throw new ArgumentException("期間/職員/シフトが不足しています");
-        int restK = ScheduleUtil.RestShiftIndex(state);
+        // [backlog#24] 休シフト未設定はここも入口＝ブロックする（V6SanityPortの起動前チェックと同じ判断）。
+        int restK = ScheduleUtil.RestShiftIndex(state) ?? throw new ArgumentException("休みシフトが設定されていません");
         var existing = state.Schedule.ToIntArray2D();
         int filled = 0;
         foreach (var row in existing) foreach (var v in row) if (v >= 0) filled++;

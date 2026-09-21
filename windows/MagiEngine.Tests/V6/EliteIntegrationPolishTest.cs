@@ -21,7 +21,7 @@ public class EliteIntegrationPolishTest
         startDate: "2026-08-01", endDate: "2026-08-01",
         shifts: new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("X勤務", "X", "1", ""),
             new("Y勤務", "Y", "1", ""),
         },
@@ -50,7 +50,7 @@ public class EliteIntegrationPolishTest
         startDate: "2026-08-01", endDate: "2026-08-01",
         shifts: new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("固定勤務", "X", "", ""),
             new("不足勤務", "Y", "1", ""),
         },

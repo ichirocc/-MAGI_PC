@@ -29,7 +29,7 @@ public class V6HotfixPassesDayAssignTest
     /// <summary>G1 = 担当可否が1つもチェックされていない群（正規のエディタ操作で作れるデータ）。</summary>
     private static MagiState EmptyBucketState() => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-03",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
@@ -59,7 +59,7 @@ public class V6HotfixPassesDayAssignTest
     // fair の対象外のため、weekly のみが目的関数に効く純粋な検証になる。
     private static MagiState WeeklyStateSeparateGroups() => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-14",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("W", "W", "1", "") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         staffList: new List<Staff> { new("A", 0), new("B", 1) }, // A∈G0, B∈G1（各単独＝fair対象外）
         schedule: new List<IReadOnlyList<int>>
@@ -98,7 +98,7 @@ public class V6HotfixPassesDayAssignTest
         // weekly が増える(改善余地なし)ため交互最適化は1日も採用しない(no-op)。
         var st = MinimalState.Build(
             startDate: "2026-08-01", endDate: "2026-08-07",
-            shifts: new List<Shift> { new("休", "休", "", ""), new("W", "W", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("W", "W", "1", "") },
             groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
             staffList: new List<Staff> { new("A", 0), new("B", 1) },
             schedule: new List<IReadOnlyList<int>>

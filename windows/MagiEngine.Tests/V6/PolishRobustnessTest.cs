@@ -42,7 +42,7 @@ public class PolishRobustnessTest
     /// <summary>G1 = 担当可否が1つもチェックされていない群（正規のエディタ操作で作れるデータ）。</summary>
     private static MagiState EmptyBucketState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") };
         return new MagiState(
             StartDate: "2026-01-01", EndDate: "2026-01-03",
             Shifts: shifts, Groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
@@ -63,7 +63,7 @@ public class PolishRobustnessTest
     /// <summary>範囲外セル(99)入り＝normalizeSchedule が -1 センチネルへ写像する盤面。c1不足窓が -1 日を含む。</summary>
     private static MagiState Neg1CellState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "1", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "1", "") };
         return new MagiState(
             StartDate: "2026-01-01", EndDate: "2026-01-03",
             Shifts: shifts, Groups: new List<Group> { new("G", "G") },

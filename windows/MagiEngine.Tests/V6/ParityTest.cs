@@ -145,7 +145,7 @@ public class ParityTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),  // 0 = rest
+            new("休", "休", "", "", ShiftRole.Rest),  // 0 = rest
             new("A", "A", "1", "2"),  // 1 = daily need1=1 / need2=2 (P2/OR upper)
             new("B", "B", "", ""),    // 2
         };

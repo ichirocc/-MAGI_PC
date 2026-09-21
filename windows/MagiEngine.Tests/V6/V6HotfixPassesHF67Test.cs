@@ -20,7 +20,7 @@ public class V6HotfixPassesHF67Test
     // s0 は A 過多(下限1上限1に対し3)・s1 は A 不足(0<1) ＝ 主スキャンに実際の低/高ペアがある盤面。
     private static MagiState St() => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-04",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G", "G") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

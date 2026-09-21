@@ -33,9 +33,10 @@ public class MagiViewModelEditingTest
     // ===================================================================
 
     [Fact]
-    public void RestShiftIndexResolvesTheRestShiftAndDefaultsToZeroWhenUnloaded()
+    public void RestShiftIndexResolvesTheRestShiftAndDefaultsToSentinelWhenUnloaded()
     {
-        Assert.Equal(0, new MagiViewModel().RestShiftIndex());
+        // [backlog#24] 未読み込み/休が無い設定はどのシフトにも一致しない番兵 -1（旧: 0固定）。
+        Assert.Equal(-1, new MagiViewModel().RestShiftIndex());
         var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState() };
         Assert.Equal(ScheduleUtil.RestShiftIndex(ThreeShiftTwoGroupState()), vm.RestShiftIndex());
     }
@@ -69,7 +70,7 @@ public class MagiViewModelEditingTest
     {
         // 職員0 に希望 2 件・職員1 に 1 件 → 希望あり職員は 2 名（件数 3 ではない）。例外は needDay1/needDay2 の和集合キー数。
         var st = MinimalState.Build(
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,3"] = 1, ["1,2"] = 0 },
             needDay1: new Dictionary<string, string> { ["1,0"] = "2" },
             needDay2: new Dictionary<string, string> { ["1,0"] = "3", ["1,4"] = "1" });
@@ -93,7 +94,7 @@ public class MagiViewModelEditingTest
     {
         // G0 は 休/A のみ担当可（B は担当不可）。A: need1=1 ×7日、B: need1=2 ×7日 ＋ 3日目だけ例外で 3。
         var st = MinimalState.Build(
-            shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", ""), new("B", "B", "2", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", ""), new("B", "B", "2", "") },
             groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } },
             needDay1: new Dictionary<string, string> { ["2,2"] = "3" });
         var rows = new MagiViewModel { _state = st }.StaffingReality();
@@ -525,7 +526,7 @@ public class MagiViewModelEditingTest
     [Fact]
     public void ShortageFixCandidatesExcludesOnlyWishLockForADifferentShiftNotAMatchingOne()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") };
         var staff = new List<Staff> { new("職員1", 0), new("職員2", 0), new("職員3", 0) };
         var schedule = new List<IReadOnlyList<int>> { new[] { 0 }, new[] { 0 }, new[] { 0 } };
         var st = MinimalState.Build(
@@ -547,7 +548,7 @@ public class MagiViewModelEditingTest
     [Fact]
     public void ShortageFixCandidatesExcludesStaffWhoWouldCreateAForbiddenRun()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") };
         var staff = new List<Staff> { new("職員1", 0), new("職員2", 0) };
         // day0/day1: staff0 stays 休/休 (assigning A on day1 completes the forbidden run 休->A);
         // staff1 is A/休 (assigning A on day1 does NOT match the forbidden run's first element).
@@ -569,7 +570,7 @@ public class MagiViewModelEditingTest
     {
         var shifts = new List<Shift>
         {
-            new("休", "休", "", ""),
+            new("休", "休", "", "", ShiftRole.Rest),
             new("A", "A", "2", ""), // need1=2 -> moving someone off A when exactly 2 are on it opens a hole
             new("B", "B", "", ""),
             new("C", "C", "", ""),
@@ -786,7 +787,7 @@ public class MagiViewModelEditingTest
     [Fact]
     public void AllowedShiftsForGroupIntersectsAllMembersCanDo()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") };
         var groupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } }; // G0 canDo 休,A only
         var staff = new List<Staff> { new("職員1", 0), new("職員2", 0) };
         var st = MinimalState.Build(shifts: shifts, groupShift: groupShift, staffList: staff);
@@ -932,7 +933,7 @@ public class MagiViewModelEditingTest
             new("職員1", 0), new("職員2", 0), new("職員3", 0), // G0: 3 members
             new("職員4", 1), // G1: 1 member (singleton)
         };
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") };
         var staffRange = new Dictionary<string, Range>
         {
             // shift 1 (A): 2 of 3 G0 members share (2,2) -> majority, included
@@ -1035,7 +1036,7 @@ public class MagiViewModelEditingTest
     [Fact]
     public void StaffCountRulesIncludesOnlyCellsWithARangeOrAnAptTarget()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") };
         var staff = new List<Staff> { new("職員1", 0) };
         var st = MinimalState.Build(
             shifts: shifts, staffList: staff,
@@ -1586,7 +1587,7 @@ public class MagiViewModelEditingTest
     [Fact]
     public void AptBalancesDelegatesToV6SanityPortForALoadedState()
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "2", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "2", "") };
         var st = MinimalState.Build(
             shifts: shifts,
             groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "3" } });
@@ -1669,7 +1670,7 @@ public class MagiViewModelEditingTest
         IReadOnlyDictionary<string, int>? wishes = null,
         IReadOnlyList<C3Row>? cons3n = null)
     {
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") };
         var groups = new List<Group> { new("G0", "G0"), new("G1", "G1") };
         var groupShift = new List<IReadOnlyList<int>>
         {

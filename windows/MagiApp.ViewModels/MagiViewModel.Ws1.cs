@@ -74,15 +74,15 @@ public sealed partial class MagiViewModel
 
     // ===== ws1 initial setup: 編集 =====
 
-    public void Ws1EditShift(int k, string name, string kigou, string need1, string need2)
+    public void Ws1EditShift(int k, string name, string kigou, string need1, string need2, bool isRest)
     {
         var st = _state;
         if (st is null) return;
         if (SymbolTaken(st.Shifts.Select(x => x.Kigou).ToList(), kigou, "シフト", exceptIndex: k)) return;
         // [3.416.0] 休シフトの改名禁止（旧R-04ガード）は方針「休は通常のシフト定義」により撤回済み。
-        //   改名は他シフトと同じ経路——記号「休」が無くなった場合の帰結は検査2gが案内する。
+        //   改名は他シフトと同じ経路——休の識別は[backlog#24] 記号でなく isRest トグル(ShiftRole)＝改名しても壊れない。
         LogOp("I", $"シフト編集: {OpSy(k)} → {name.Trim()}({kigou.Trim()}) 最低{DashIfBlank(need1)}/上限{DashIfBlank(need2)}");
-        ApplyStructure(Ws1Ops.EditShift(st, k, name.Trim(), kigou.Trim(), need1.Trim(), need2.Trim()));
+        ApplyStructure(Ws1Ops.EditShift(st, k, name.Trim(), kigou.Trim(), need1.Trim(), need2.Trim(), isRest));
     }
 
     /// <summary>[必要人数カレンダー] シフト既定のneed1/need2だけをその場で編集する（name/kigouは不変）。
@@ -94,7 +94,7 @@ public sealed partial class MagiViewModel
         var sh = k >= 0 && k < st.Shifts.Count ? st.Shifts[k] : null;
         if (sh is null) return;
         LogOp("I", $"必要人数編集: {OpSy(k)} → 最低{DashIfBlank(need1)}/上限{DashIfBlank(need2)}");
-        ApplyStructure(Ws1Ops.EditShift(st, k, sh.Name, sh.Kigou, need1.Trim(), need2.Trim()));
+        ApplyStructure(Ws1Ops.EditShift(st, k, sh.Name, sh.Kigou, need1.Trim(), need2.Trim(), sh.Role == MagiEngine.Model.ShiftRole.Rest));
     }
 
     public void Ws1EditGroup(int g, string name, string kigou)
@@ -202,14 +202,14 @@ public sealed partial class MagiViewModel
 
     // ===== ws1 initial setup: 追加 =====
 
-    public void Ws1AddShift(string name, string kigou, string need1, string need2)
+    public void Ws1AddShift(string name, string kigou, string need1, string need2, bool isRest = false)
     {
         var st = _state;
         if (st is null) return;
         if (kigou.Trim().Length == 0) return;
         if (SymbolTaken(st.Shifts.Select(x => x.Kigou).ToList(), kigou, "シフト")) return;
         LogOp("I", $"シフト追加: {name.Trim()}({kigou.Trim()}) 最低{DashIfBlank(need1)}/上限{DashIfBlank(need2)}");
-        ApplyStructure(Ws1Ops.AddShift(st, name.Trim(), kigou.Trim(), need1.Trim(), need2.Trim()));
+        ApplyStructure(Ws1Ops.AddShift(st, name.Trim(), kigou.Trim(), need1.Trim(), need2.Trim(), isRest));
     }
 
     public void Ws1AddGroup(string name, string kigou)

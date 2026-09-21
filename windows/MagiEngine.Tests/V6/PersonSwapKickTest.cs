@@ -16,7 +16,7 @@ public class PersonSwapKickTest
     // a,b が唯一の最大負担ペアなので、乱数種によらず交換相手は決定的に a<->b になる。
     private static MagiState Fixture() => new(
         StartDate: "2026-08-01", EndDate: "2026-08-04",
-        Shifts: new List<Shift> { new("休み", "休", "", ""), new("早番", "A", "1", "") },
+        Shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "") },
         Groups: new List<Group> { new("G0", "G0") },
         StaffList: new List<Staff> { new("a", 0), new("b", 0), new("c", 0), new("d", 0) },
         Use2Patterns: false,

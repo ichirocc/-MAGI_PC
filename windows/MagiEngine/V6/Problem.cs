@@ -82,8 +82,10 @@ public sealed class Problem
 
     public int[] Sgrp { get; }
 
-    /// <summary>休シフトの index（記号"休"解決、無ければ0）。曜日平準化(weekly)で「勤務日か休か」を判定。</summary>
-    public int RestIdx { get; }
+    /// <summary>[backlog#24] 休シフトの index（ShiftRole.Rest解決、どのシフトにも付与が無ければnull）。
+    /// 曜日平準化(weekly)で「勤務日か休か」を判定。nullのときは最適化/検査の入口(V6SanityPort)で
+    /// ブロックする＝ここへ到達する時点でnullは「呼出元がブロックせずに進めた」異常系。</summary>
+    public int? RestIdx { get; }
 
     /// <summary>
     /// startDate の曜日オフセット（%7）。weekday(j)=(dow0+j)%7。曜日平準化(weekly)の曜日バケットに使う。

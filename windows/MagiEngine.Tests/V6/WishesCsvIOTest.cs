@@ -20,7 +20,7 @@ public class WishesCsvIOTest
 {
     private static MagiState CsvState() => new(
         StartDate: "2026-06-01", EndDate: "2026-06-06",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") },
         Groups: new List<Group> { new("G", "G") },
         StaffList: new List<Staff> { new("花子", 0) },
         Use2Patterns: false,
@@ -54,7 +54,7 @@ public class WishesCsvIOTest
     {
         var st = new MagiState(
             StartDate: "2026-08-01", EndDate: "2026-08-03",
-            Shifts: new List<Shift> { new("休", "休", "0", ""), new("A", "A", "0", "") },
+            Shifts: new List<Shift> { new("休", "休", "0", "", ShiftRole.Rest), new("A", "A", "0", "") },
             Groups: new List<Group> { new("G", "G") },
             StaffList: new List<Staff> { new("花子", 0) },
             Use2Patterns: false,

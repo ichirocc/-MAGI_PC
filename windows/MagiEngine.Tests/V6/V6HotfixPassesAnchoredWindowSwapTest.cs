@@ -10,7 +10,7 @@ public class V6HotfixPassesAnchoredWindowSwapTest
     private static MagiState Build(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyDictionary<string, int> wishes,
         IReadOnlyDictionary<string, MagiEngine.Model.Range> staffRange, IReadOnlyList<C3Row> cons3n) => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-06",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("N", "N", "", ""), new("E", "E", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("N", "N", "", ""), new("E", "E", "", "") },
         groups: new List<Group> { new("A", "A") },
         staffList: new List<Staff> { new("甲", 0), new("乙", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

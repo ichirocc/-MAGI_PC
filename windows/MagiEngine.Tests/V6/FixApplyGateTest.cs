@@ -11,7 +11,7 @@ public class FixApplyGateTest
 
     private static MagiState State(IReadOnlyDictionary<string, int>? wishes = null, IReadOnlyDictionary<string, Range>? ranges = null) => new(
         StartDate: "2026-01-01", EndDate: "2026-01-02",
-        Shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "1", "1") },
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "1") },
         Groups: new List<Group> { new("G", "G") },
         StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
         Use2Patterns: true,

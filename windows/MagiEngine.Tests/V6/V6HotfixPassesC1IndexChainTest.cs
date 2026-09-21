@@ -18,7 +18,7 @@ public class V6HotfixPassesC1IndexChainTest
         int days, int staff, IReadOnlyList<IReadOnlyList<int>> sched, IReadOnlyList<C1Row> cons1) =>
         MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-" + days.ToString("D2"),
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", ""), new("Y", "Y", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") },
             groups: new List<Group> { new("G", "G") },
             staffList: Enumerable.Range(0, staff).Select(i => new Staff($"s{i}", 0)).ToList(),
             use2Patterns: false,
@@ -49,7 +49,7 @@ public class V6HotfixPassesC1IndexChainTest
     {
         // 被覆要件 X=1・Y=1/日。s0=[Y,Y]・s1=[X,X]。ルール「X 2日窓≥1」で s0 が不足。
         //   直接移動 s0:Y→X は Y@day0 に covU 穴（Y需要1）を作り却下 → findCovUChain が s1:X→Y で埋め直し採用。
-        var shifts = new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", ""), new("Y", "Y", "1", "") };
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", ""), new("Y", "Y", "1", "") };
         var s = MinimalState.Build(
             startDate: "2026-01-01", endDate: "2026-01-02",
             shifts: shifts, groups: new List<Group> { new("G", "G") },

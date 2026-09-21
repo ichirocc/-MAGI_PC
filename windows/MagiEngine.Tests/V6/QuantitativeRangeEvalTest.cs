@@ -33,7 +33,7 @@ public class QuantitativeRangeEvalTest
 
     private static MagiState BuildState(IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2025-01-01", endDate: $"2025-01-0{schedule[0].Count}",
-        shifts: new List<Shift> { new("休", "休", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("B", "B", "", "") },
         groups: new List<Group> { new("G0", "G0") },
         staffList: new List<Staff> { new("s0", 0), new("s1", 0), new("s2", 0), new("s3", 0) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },

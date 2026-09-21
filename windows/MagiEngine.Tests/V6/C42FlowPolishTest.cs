@@ -14,7 +14,7 @@ public class C42FlowPolishTest
 {
     private static MagiState State(IReadOnlyDictionary<string, int>? wishes = null) => MinimalState.Build(
         startDate: "2026-02-01", endDate: "2026-02-01",
-        shifts: new List<Shift> { new("休み", "休", "", ""), new("P", "P", "", ""), new("Q", "Q", "", "") },
+        shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("P", "P", "", ""), new("Q", "Q", "", "") },
         groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
         staffList: new List<Staff> { new("A", 0), new("B", 0), new("C", 1), new("D", 1) },
         groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 1 } },

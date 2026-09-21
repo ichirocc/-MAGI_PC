@@ -59,7 +59,7 @@ public class ConstraintMusTest
         // X上限1に対しXへの固定希望が2件 → {上限, 希望, 希望} の3件が極小コア。
         var st = State(
             days: 5,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,2"] = 1 },
             staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("", "1") });
         var res = ConstraintMus.AnalyzeStaffConflicts(new Problem(st));
@@ -76,7 +76,7 @@ public class ConstraintMusTest
         // T=5でX下限3＋休への固定希望3件 → 需要合計6>5（鳩の巣）。どの1件を外しても5以下=コアは4件で一意。
         var st = State(
             days: 5,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 0, ["0,1"] = 0, ["0,2"] = 0 },
             staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("3", "") });
         var res = ConstraintMus.AnalyzeStaffConflicts(new Problem(st));
@@ -93,7 +93,7 @@ public class ConstraintMusTest
         // 窓ルール「X 5日で1回以上」(最小1日) ＋ 全5日が休への固定希望 → 1+5=6>5（鳩の巣）。
         var st = State(
             days: 5,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 0, ["0,1"] = 0, ["0,2"] = 0, ["0,3"] = 0, ["0,4"] = 0 },
             cons1: new List<C1Row> { new("5", "X", "1") });
         var res = ConstraintMus.AnalyzeStaffConflicts(new Problem(st));
@@ -111,7 +111,7 @@ public class ConstraintMusTest
         // 日1は希望なしで充足可能=矛盾なし。
         var st = State(
             days: 2,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 0, ["1,0"] = 0 },
             staffCount: 2);
         var res = ConstraintMus.AnalyzeDayConflicts(new Problem(st));
@@ -134,7 +134,7 @@ public class ConstraintMusTest
     {
         var st = State(
             days: 10,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
             staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("", "1") },
             cons1: new List<C1Row> { new("5", "X", "2") });
         var res = ConstraintMus.AnalyzeStaffConflicts(new Problem(st));
@@ -149,7 +149,7 @@ public class ConstraintMusTest
     {
         var st = State(
             days: 5,
-            shifts: new List<Shift> { new("休", "休", "", ""), new("X", "X", "1", "") },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") },
             wishes: new Dictionary<string, int> { ["0,0"] = 1 },
             staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("1", "5") },
             staffCount: 2);
