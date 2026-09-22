@@ -28,4 +28,31 @@ public class V6NativeOptimizerPortfolioSizingTest
         var result = V6NativeOptimizer.PortfolioWorkerCount(8);
         Assert.InRange(result, 1, Math.Max(8, Environment.ProcessorCount));
     }
+
+    // [Kotlin原本 V6NativeOptimizerChoiceTest] 整形だけを固定（検出側は遅いロールを注入しないと踏めない）。
+    [Fact]
+    public void EpochOverrunLogKeepsRoleNamesAndStaysSilentWhenEmpty()
+    {
+        Assert.Null(V6NativeOptimizer.EpochOverrunLog(Array.Empty<string>()));
+        var one = V6NativeOptimizer.EpochOverrunLog(new[] { "W4:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)" })!;
+        Assert.Equal("W", one.Level);
+        Assert.Contains("W4:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)", one.Message);
+        var many = V6NativeOptimizer.EpochOverrunLog(Enumerable.Range(1, 10).Select(i => $"W{i}:ROLE(q=5s→実60s)").ToList())!;
+        Assert.Contains("ほか2件", many.Message);
+    }
+
+    // 実機ログ（2026-09-22）の3回の超過は、全ロールが同じ秒数だけ超過＝プロセス凍結。ばらつくときだけ経路漏れと書く。
+    [Fact]
+    public void EpochOverrunLogDistinguishesProcessFreezeFromPerRoleLeak()
+    {
+        var freeze = V6NativeOptimizer.EpochOverrunLog(new[] {
+            "W0:BASELINE_REFINE(q=35s→実8150s)", "W2:LARGE_DESTROY_ALNS(q=5s→実8138s)", "W5:MAX_DISTANCE_RSI_PLUS(q=45s→実8166s)" })!;
+        Assert.Contains("プロセス全体が止まっていた", freeze.Message);
+        Assert.DoesNotContain("締切を見ない経路", freeze.Message);
+        var leak = V6NativeOptimizer.EpochOverrunLog(new[] {
+            "W0:BASELINE_REFINE(q=35s→実40s)", "W5:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)" })!;
+        Assert.Contains("締切を見ない経路", leak.Message);
+        var single = V6NativeOptimizer.EpochOverrunLog(new[] { "W4:MAX_DISTANCE_RSI_PLUS(q=45s→実412s)" })!;
+        Assert.Contains("締切を見ない経路", single.Message);
+    }
 }

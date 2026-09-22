@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-22（Kotlin 07e9335 同期: エポック超過の診断をプロセス凍結と締切漏れで出し分け）:
+  実機ログの予算超過3回は全ロールが同秒数だけ超過＝プロセス凍結だった。`EpochOverrunLog`（`V6NativeOptimizer.Sizing.cs`）が
+  実秒数の幅≤max(30s,最大の5%)なら凍結と書く（探索動学不変）。Kotlinの既存テストと新テストを1対1で
+  `V6NativeOptimizerPortfolioSizingTest`へ移植（C#側は元々未移植だった）。`dotnet test MagiEngine.Tests` 880/880緑。
+
 - 2026-09-22（Android backlog#28/#34/#35/#36 のtools/loop A/B判定結果を同期。計装のみ移植・機能は既定OFFのまま）:
   Android側でこのセッションに実施した4件のA/Bベンチ判定はいずれも**既定OFF維持**（Kotlin側もフラグ・コードは
   残すのみで昇格していない）＝C#側の対応する挙動を変える必要はない。

@@ -213,12 +213,23 @@ public static partial class V6NativeOptimizer
     internal static MirrorLog? EpochOverrunLog(IReadOnlyList<string> notes)
     {
         if (notes.Count == 0) return null;
+        // [2026-09-22, Kotlin原本] 全ロールがほぼ同じ秒数だけ超過＝ロール個別の締切漏れではなくプロセス全体の停止。
+        var actual = notes
+            .Select(n => System.Text.RegularExpressions.Regex.Match(n, @"実(\d+)s"))
+            .Where(m => m.Success)
+            .Select(m => long.Parse(m.Groups[1].Value))
+            .ToList();
+        var uniform = actual.Count >= 2 && actual.Count == notes.Count &&
+            actual.Max() - actual.Min() <= Math.Max(30L, actual.Max() / 20);
+        var cause = uniform
+            ? "（全ロールがほぼ同じ秒数だけ超過＝個別の締切漏れではなく、プロセス全体が止まっていた可能性が高い" +
+              "（端末のスリープ/バックグラウンドでの凍結）。再開後は各ロールが直ちに締切を検知して終了している）"
+            : "（量子q秒のロールが実N秒走った＝内部で締切を見ない経路がある。役割名から特定する）";
         return new MirrorLog(
             tag: "エポック超過",
             level: "W",
             message: "ロールが停止確認(stopRole)を大きく超過: " + string.Join(",", notes.Take(8)) +
-                (notes.Count > 8 ? $" ほか{notes.Count - 8}件" : "") +
-                "（量子q秒のロールが実N秒走った＝内部で締切を見ない経路がある。役割名から特定する）");
+                (notes.Count > 8 ? $" ほか{notes.Count - 8}件" : "") + cause);
     }
 
     /// <summary>
