@@ -326,6 +326,22 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-22（Android backlog#28/#34/#35/#36 のtools/loop A/B判定結果を同期。計装のみ移植・機能は既定OFFのまま）:
+  Android側でこのセッションに実施した4件のA/Bベンチ判定はいずれも**既定OFF維持**（Kotlin側もフラグ・コードは
+  残すのみで昇格していない）＝C#側の対応する挙動を変える必要はない。
+  - `RunRsiPlus`（`V6NativeOptimizer.RsiPlus.cs`）の4フェーズ（Seed/Hypothesis/Refine/Polish）へ実測ms計装を
+    追加（Kotlin commit c7abfab を同期）。実機で観測された量子比最大約181倍（backlog#34）がどのフェーズで
+    生じたか従来ログでは特定できなかったため。探索動学・スコアは無変更。`dotnet test MagiEngine.Tests` 878/878緑。
+  - `RsiFocusRotationPersist`（backlog#28、既に3.592.0でC#へ実装済み）: Android実データ4件のA/Bで全件悪化
+    （golden +2.49%等）と判定・既定OFF維持を確認。C#側は元々既定OFFなので変更不要。
+  - `PostChainRunningKeepBest`（backlog#36、Kotlin 3.608.0で新規実装・既定OFF）／`ExtraRefineRequirePostHardDrop`
+    （backlog#35、Kotlin 3.600.0で新規実装・既定OFF）は**C#へポートしない**。Android実データ/合成ベンチとも
+    採用基準未達で既定OFF確定＝C#単独で先行実装する必要性が薄いとユーザー判断（2026-09-22）。将来Kotlin側で
+    ON昇格の判断が動いた場合に合わせてポートする。
+  - backlog#26「停滞判定の精緻化」はAndroid側が調査のみ実施（`improvedThisEpoch`は既に`Better()`の
+    hard→weightedScore→total辞書式でHARD優先＝想定した欠陥は無いと確認、コード変更なし）。C#の
+    `AdaptiveHypothesisEpochPolicy`も同型の`Better()`辞書式比較を使用済みのため対応不要。
+
 - 2026-09-21（backlog#24: ShiftRole/restIdxの実データ破損バグ修正を同日移植）:
   Android側が確認・修正した実バグ「休みシフトの解決を記号"休"の字面一致に頼り、見つからなければ
   index0へ黙って倒す」（削除・改名でHARD違反が0→60/15→73へ急増、実データで確認済み）をC#へ同日移植。
