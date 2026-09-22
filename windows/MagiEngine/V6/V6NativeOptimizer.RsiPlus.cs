@@ -117,22 +117,28 @@ public static partial class V6NativeOptimizer
             polishSec = Math.Max(5, budgetSec - seedSec - rsiSec - alnsSec);
         }
 
+        // [2026-09-22, Kotlin原本] 各フェーズの実測msを予算msと並べてログへ出す（backlog#34、
+        //   実機で観測された量子比最大約181倍がどのフェーズで生じたか従来ログでは特定できなかったため）。
+        var seedT0 = NowMs();
         var seed = seedSec <= 0
             ? new V6OptimizerResult(initial, UnifiedViolationChecker.Check(state, initial), V6Algorithm.V5, Array.Empty<MirrorLog>(), 0L, 0L)
             : await RunV5(state, initial, options, seedSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase1 Seed: HARD={seed.Report.Hard} total={seed.Report.Total}"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase1 Seed: HARD={seed.Report.Hard} total={seed.Report.Total} 実測{NowMs() - seedT0}ms(予算{seedSec}000ms)"));
 
+        var rsiT0 = NowMs();
         var rsi = stop() || rsiSec <= 0
             ? seed
             : await RunRsi(state, seed.Schedule, options, rsiSec, stop, onProgress, sharedHf63, cancellationToken).ConfigureAwait(false);
         var baseResult = Better(rsi.Report, seed.Report) ? rsi : seed;
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase2 Hypothesis: HARD={baseResult.Report.Hard} total={baseResult.Report.Total}"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase2 Hypothesis: HARD={baseResult.Report.Hard} total={baseResult.Report.Total} 実測{NowMs() - rsiT0}ms(予算{rsiSec}000ms)"));
 
+        var alnsT0 = NowMs();
         var refine = stop() || alnsSec <= 0
             ? baseResult
             : await RunAlns(state, baseResult.Schedule, options with { Restarts = Math.Max(1, options.Restarts) }, alnsSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
         var best = Better(refine.Report, baseResult.Report) ? refine : baseResult;
         var bestSched = best.Schedule;
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase3 Refine: HARD={refine.Report.Hard} total={refine.Report.Total} 実測{NowMs() - alnsT0}ms(予算{alnsSec}000ms)"));
 
         // [HF361/528/541移植, Kotlin原本] EarlyChain: Refine 確定後の停滞境界で Chain3/4(常時)+Rect/BlkN(rectSwap)を発火
         {
@@ -158,11 +164,12 @@ public static partial class V6NativeOptimizer
             }
         }
 
+        var polishT0 = NowMs();
         var polish = polishSec <= 0 || stop()
             ? new PolishResult(bestSched, Array.Empty<MirrorLog>(), 0L, UnifiedViolationChecker.Check(state, bestSched))
             : Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
         var report = polish.Report;
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase3/4 Refine+Polish: HARD={report.Hard} total={report.Total}"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase4 Polish: HARD={report.Hard} total={report.Total} 実測{NowMs() - polishT0}ms(予算{polishSec}000ms) 全体実測{NowMs() - started}ms(予算{budgetSec}000ms)"));
 
         return new V6OptimizerResult(
             polish.Schedule,
