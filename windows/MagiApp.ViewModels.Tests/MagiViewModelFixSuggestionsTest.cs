@@ -167,6 +167,18 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
+    public void PushUndoDropsPendingSuggestionsAndAlternatives()
+    {
+        // [Android 3.475.0/3.529.0] 盤面を変える操作（PushUndo を通る）のあとに、別の盤面で計算した提案・他の案を残さない。
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.FixSuggestions = new[] { MakeSuggestion(new FixCell(0, 0, 1)) };
+        vm.Ui.Alternatives = new[] { "案1" };
+        vm.PushUndo();
+        Assert.Empty(vm.Ui.FixSuggestions);
+        Assert.Empty(vm.Ui.Alternatives);
+    }
+
+    [Fact]
     public void UndoAndRedoDropEngineRanAndPendingSuggestions()
     {
         // 元に戻す/やり直しは手操作＝「計算済み」ではない。古い提案も画面に残さない。

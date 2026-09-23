@@ -340,6 +340,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - `RsiFocusRotationPersist`（backlog#28、既に3.592.0でC#へ実装済み）: Android実データ4件のA/Bで全件悪化
     （golden +2.49%等）と判定・既定OFF維持を確認。C#側は元々既定OFFなので変更不要。
     （2026-09-22 Android側の机上見直しで「有意差なし・便益の証拠なし」へ訂正。結論＝既定OFFは不変）
+  - `PushUndo()` が改善提案と「他の案」を消していなかった（Kotlin `pushUndo` は 3.475.0/3.529.0 から消す）＝セル編集・取込の
+    あとも別の盤面で計算した提案が残りえた→Kotlin と同じく消す（2026-09-23、`PushUndoDropsPendingSuggestionsAndAlternatives`）。
+    これで `MagiViewModelBackgroundTest` の潜在的な順序依存が表に出た（止めた背景 Task を待たずに次のテストへ進み、その後片付けの
+    `SetRunning(false)` が次のテストの実行中フラグを下ろす）→止めた Task の終了を待つ `StopAndDrain` に（15/15 回緑、修正前 2/8 回赤）。
   - `C3nMarginLnsPolish` の呼び出しに seed（`seedVal ^ SeedTag.C3nMargin`＝Kotlin `seed xor SeedTag.C3N_MARGIN`）を渡すよう修正
     （旧: 既定値固定で Kotlin と乱数列が違った。既定 OFF のため既定出力は不変、2026-09-23）。
   - **`PostChainRunningKeepBest` を移植・既定 ON（Kotlin 3.610.0 同期、2026-09-23）**: 後処理チェーンの走行 keep-best

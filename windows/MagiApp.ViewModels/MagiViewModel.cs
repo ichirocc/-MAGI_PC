@@ -223,6 +223,11 @@ public sealed partial class MagiViewModel
         _redoStack.Clear(); // 新しい操作は redo 履歴を無効化（標準的な undo/redo 挙動）
         Ui.CanUndo = true;
         Ui.CanRedo = false;
+        // [Android 3.475.0/3.529.0 同期] 盤面/設定が変わる操作は必ずここを通る＝別の盤面で計算した改善提案と
+        //   「他の案」をその場で無効化する（旧 C#: 消しておらず、セル編集・取込のあとも古い提案が残った）。
+        _alternativeScheds = System.Array.Empty<int[][]>();
+        Ui.FixSuggestions = System.Array.Empty<MagiEngine.V6.FixSuggestion>();
+        Ui.Alternatives = System.Array.Empty<string>();
     }
 
     internal void ClearUndo()

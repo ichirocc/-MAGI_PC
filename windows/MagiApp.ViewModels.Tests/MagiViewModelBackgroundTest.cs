@@ -40,6 +40,14 @@ public class MagiViewModelBackgroundTest : IDisposable
         }
     }
 
+    /// <summary>止めた背景 Task の終了まで待つ。待たずに次のテストへ進むと、その後片付け
+    /// （<c>OptimizationRepository.SetRunning(false)</c>）が次のテストの実行中フラグを下ろしてしまう。</summary>
+    private static async Task StopAndDrain(MagiViewModel vm)
+    {
+        vm.Stop();
+        try { await vm.LastRunInBackgroundTask!; } catch (OperationCanceledException) { }
+    }
+
     private string FreshTempDir()
     {
         var dir = Path.Combine(Path.GetTempPath(), "magi-vm-bg-test-" + Guid.NewGuid());
@@ -116,7 +124,7 @@ public class MagiViewModelBackgroundTest : IDisposable
     }
 
     [Fact]
-    public void SecondCall_WhileFirstBackgroundRunInFlight_IsBlocked()
+    public async Task SecondCall_WhileFirstBackgroundRunInFlight_IsBlocked()
     {
         // [クラスKDoc「Kotlin原本との差①」検証] OptimizationRepository.SetRunning(true) を
         // RunInBackground() が同期的に立てるため、Task がまだ完了していなくても
@@ -135,7 +143,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("実行中です", vm.Ui.Message);
 
-        vm.Stop();
+        await StopAndDrain(vm);
     }
 
     [Fact]
@@ -295,7 +303,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         // 破棄されたので HasResult は立たない（このテストでは他に結果を反映していない）。
         Assert.False(vm.Ui.HasResult);
 
-        vm.Stop();
+        await StopAndDrain(vm);
     }
 
     [Fact]
@@ -315,6 +323,6 @@ public class MagiViewModelBackgroundTest : IDisposable
         Assert.False(vm.Ui.Running);
         Assert.False(vm.Ui.HasResult);
 
-        vm.Stop();
+        await StopAndDrain(vm);
     }
 }
