@@ -279,6 +279,10 @@ public sealed partial class MainWindow : Window
         if (_tabCache["schedule"] is ScheduleView sv) sv.FocusCell(i, j);
     }
 
+    /// <summary>[Android 3.612.0 思考誘導S3] ホームの「ぶつかっている希望」から対象セルへ移る。Android はそのセルのシートを開くが、
+    /// この移植のセル編集はタップ位置を起点に出すため、ここでは勤務表のそのセルへスクロール＋ハイライトまで。</summary>
+    internal void OpenCell(int i, int j) => JumpToCell(i, j);
+
     /// <summary>
     /// [フェーズ9] 未知のタグに対する防御（5タグはすべて実装済みのため通常は到達しない）。
     /// switch 式の網羅性を静的に証明できない以上、黙って空を出すよりは理由を画面に出す。

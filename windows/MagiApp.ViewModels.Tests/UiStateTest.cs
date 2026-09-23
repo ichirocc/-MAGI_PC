@@ -41,6 +41,8 @@ public class UiStateTest
         Assert.InRange(s.Workers, 1, 8);
 
         Assert.Equal("", s.FixFocusName);
+        Assert.False(s.FixSearched);
+        Assert.Empty(s.StalledHardFamilies);
         Assert.Equal("", s.ViolationColorHex);
         Assert.Equal("", s.ViolationSoftColorHex);
         Assert.Equal("", s.StartDate);

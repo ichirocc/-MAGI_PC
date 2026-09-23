@@ -132,11 +132,51 @@ public sealed partial class HomeView : UserControl
         }
         else
         {
+            // [Android 3.612.0 思考誘導S0/S4] 未完成は「足りる？→必須を減らす1手ある？→下限の見込み？→希望が関わる？」の順に
+            //   主ボタンを1つだけ出す（旧: 不足が無いと大ボタンが消え、並び・希望の必須に行き先が無かった）。
             bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
-            headline = worstDay is null ? $"必須違反が {ui.BestHard}件 残っています。" : $"{worstDay} が人手不足です。";
-            bigLabel = "なおすのを手伝って"; bigEnabled = shortfalls.Count > 0; helperLabel = null;
             phase = "未完成"; phaseHex = MagiAccent.Orange;
-            _bigAction = () => _ = ShowGuidedFixAsync(); _helperAction = () => { };
+            helperLabel = null; _helperAction = () => { };
+            var hardFix = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
+            var wishes = NextActionGuide.InvolvedWishes(ui);
+            var remain = $"必須違反が {ui.BestHard}件 残っています。";
+            if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
+            {
+                headline = worstDay is null ? "人手が足りない日があります。" : $"{worstDay} が人手不足です。";
+                bigLabel = "なおすのを手伝って"; bigEnabled = true;
+                _bigAction = () => _ = ShowGuidedFixAsync();
+            }
+            else if (hardFix && ui.FixFocusName.Length == 0)
+            {
+                headline = remain + "直す手があります。";
+                bigLabel = "直す1手を見る"; bigEnabled = true;
+                _bigAction = () => _window.SelectTab("analysis");
+            }
+            else if (ui.FixSearching)
+            {
+                headline = remain + "直し方を探しています…";
+                bigLabel = ""; bigEnabled = false;
+                _bigAction = () => { };
+            }
+            else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && wishes.Count > 0)
+            {
+                headline = $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
+                bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
+                _bigAction = () => _ = ShowWishConflictsAsync();
+                helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+            }
+            else if (ui.ViolationCellFamilies.Values.Any(f => f.Contains("vio-pref") || f.Contains("vio-c3w")))
+            {
+                headline = remain + "希望とルールがぶつかっています。";
+                bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
+                _bigAction = () => _ = ShowWishConflictsAsync();
+            }
+            else
+            {
+                headline = remain;
+                bigLabel = "問題を見る"; bigEnabled = true;
+                _bigAction = () => _window.SelectTab("analysis");
+            }
         }
 
         NextActionCard.Background = BrushOf(bg);
@@ -324,6 +364,10 @@ public sealed partial class HomeView : UserControl
         SmartKindText.Text = tag;
         SmartKindText.Foreground = new SolidColorBrush(ReadableOn(tagColor));
         SmartLabelText.Text = top.Label;
+        var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
+        SmartHardLineText.Text = hardLine;
+        SmartCautionText.Text = caution ?? "";
+        SmartCautionText.Visibility = caution is null ? Visibility.Collapsed : Visibility.Visible;
         var diffTxt = string.Join("・", top.Diff.Select(d =>
             (AnalysisView.BreakdownLabels.TryGetValue(d.Family, out var jp) ? jp : d.Family) + " " +
             (d.Delta < 0 ? $"−{-d.Delta}" : $"+{d.Delta}")));
@@ -364,6 +408,32 @@ public sealed partial class HomeView : UserControl
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
 
     /// <summary>
+    /// <summary>[Android 3.612.0 思考誘導S3] 必須違反に関わる希望を、名前・日付・理由つきで並べる（Kotlin <c>WishConflictDialog</c>）。
+    /// 押すとダイアログを閉じて勤務表のそのセルへ移る。</summary>
+    private async Task ShowWishConflictsAsync()
+    {
+        var items = NextActionGuide.InvolvedWishes(_vm.Ui);
+        var panel = new StackPanel { Spacing = 4 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "ぶつかっている希望",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
+            CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
+        };
+        if (items.Count == 0) panel.Children.Add(new TextBlock { Text = "いま必須違反に関わる希望はありません。", TextWrapping = TextWrapping.Wrap });
+        else
+        {
+            panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、希望を変えるか勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+            foreach (var w in items)
+            {
+                var b = new Button { Content = $"{w.Name} ・ {w.Day + 1}日　{w.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+                b.Click += (_, _) => { dialog.Hide(); _window.OpenCell(w.Staff, w.Day); };
+                panel.Children.Add(b);
+            }
+        }
+        await dialog.ShowAsync();
+    }
+
     /// [phase9 #24] 「なおすのを手伝って」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。判断は <see cref="GuidedFixPlan"/>、
     /// 候補の有効/無効は <see cref="GuidedFixFlow"/>（どちらも UI 非依存でテスト済み）。押したら押下後の再検査（<see cref="UiState.CheckRev"/>）が
     /// 反映されるまで全候補を無効にし「再検査中…」を出す。Schedule の変更だけでは再有効化しない（古い診断と新しい盤面の混在を防ぐ）。

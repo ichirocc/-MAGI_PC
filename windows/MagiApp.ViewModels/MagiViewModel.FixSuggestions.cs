@@ -60,6 +60,14 @@ public sealed partial class MagiViewModel
         LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, seq, cts.Token);
     }
 
+    /// <summary>1手の候補・「探索済み」・下限判定の材料を消す（盤面が変わった／使えなくなったとき。Kotlin の各リセット箇所と同じ）。</summary>
+    internal void ClearFixState()
+    {
+        Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+        Ui.FixSearched = false;
+        Ui.StalledHardFamilies = Array.Empty<string>();
+    }
+
     private async Task FindFixSuggestionsCoreAsync(
         MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, long seq, CancellationToken ct)
     {
@@ -68,9 +76,19 @@ public sealed partial class MagiViewModel
             var list = await Task.Run(
                 () => FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct);
             if (seq != _fixSeq) return; // 後続の探索が始まっている＝古い結果で上書きしない
+            // [Android 3.612.0] 探索中に盤面か設定が変わったら（元に戻す・セル編集・実行の完了など）、古い盤面の
+            //   結果と「探索済み」を書き戻さず、今の盤面で探し直す。
+            var curSched = _currentSchedule; var curSt = _state;
+            if (curSched is null || curSt is null || BoardKey(curSched) != BoardKey(snap) || StateKey(curSt) != StateKey(st))
+            {
+                Ui.FixSearching = false;
+                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift);
+                return;
+            }
             Ui.FixSuggestions = list;
             Ui.FixSearching = false;
             Ui.FixFocusName = focusName;
+            Ui.FixSearched = focusName.Length == 0;
         }
         catch (OperationCanceledException)
         {
@@ -106,7 +124,7 @@ public sealed partial class MagiViewModel
         if (_fixBoardKey != 0L && (_fixBoardKey != BoardKey(sched) || _fixStateKey != StateKey(st)))
         {
             Ui.MessageIsError = true;
-            Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+            ClearFixState();
             Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「直し方を探す」をもう一度押してください";
             return;
         }
@@ -116,7 +134,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"改善手を見送り: {s.Label}（{gate.Reason}）");
             Ui.MessageIsError = true;
-            Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+            ClearFixState();
             Ui.Message = $"この提案は見送りました（{gate.Reason}）。「直し方を探す」で探し直してください";
             return;
         }
@@ -129,7 +147,7 @@ public sealed partial class MagiViewModel
         Ui.HasResult = true;
         Ui.EngineRan = false;
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.FixSuggestions = Array.Empty<FixSuggestion>(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
+        ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         Ui.Message = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         RefreshCheck();
     }

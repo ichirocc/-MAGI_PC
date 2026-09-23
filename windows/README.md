@@ -340,6 +340,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - `RsiFocusRotationPersist`（backlog#28、既に3.592.0でC#へ実装済み）: Android実データ4件のA/Bで全件悪化
     （golden +2.49%等）と判定・既定OFF維持を確認。C#側は元々既定OFFなので変更不要。
     （2026-09-22 Android側の机上見直しで「有意差なし・便益の証拠なし」へ訂正。結論＝既定OFFは不変）
+  - **Android 3.612.0 思考誘導 UX（S0/S1/S3/S4）を移植（2026-09-23）**: ホームの未完成時の主ボタンを「今すぐ直せる不足→必須を
+    減らす1手→（探索中は見出しのみ）→下限の見込み→希望が関わる→問題」の順に1つ（`HomeView.RenderNextAction`）、1手カードと分析タブの
+    候補に「必須の約束: 減る/変わらない/増える」「注意」（`NextActionGuide.FixImpactLines`）、ボタンは「この手を使う（元に戻せます）」、
+    「ぶつかっている希望」の一覧（`NextActionGuide.InvolvedWishes`＋`ShowWishConflictsAsync`）。`UiState.FixSearched`/`StalledHardFamilies`
+    と、盤面が変わったら古い探索結果を書き戻さず探し直す照合も同じ。テストは Kotlin `FixImpactLinesTest`/`InvolvedWishesTest` を写した。
+    **C# だけの差**: 希望の一覧から押したとき、Android はそのセルのシートを開くが、この移植のセル編集はタップ位置を起点に出すため、
+    勤務表のそのセルへスクロール＋ハイライトまで（`MainWindow.OpenCell`）。セルシート側の変更（3.612.0 の必須/要調整の見出し・折りたたみ）は、
+    この移植のセル編集がセルごとの違反を列挙していないので対応箇所なし。あわせて `_lastTopHardFamily` を採用盤面から取るよう修正
+    （Kotlin 3.475.0 と同じ。旧 C#: 入力維持の分岐でも捨てた盤面の族を次回のヒントに使っていた）。
   - `PushUndo()` が改善提案と「他の案」を消していなかった（Kotlin `pushUndo` は 3.475.0/3.529.0 から消す）＝セル編集・取込の
     あとも別の盤面で計算した提案が残りえた→Kotlin と同じく消す（2026-09-23、`PushUndoDropsPendingSuggestionsAndAlternatives`）。
     これで `MagiViewModelBackgroundTest` の潜在的な順序依存が表に出た（止めた背景 Task を待たずに次のテストへ進み、その後片付けの

@@ -85,6 +85,7 @@ public sealed partial class MagiViewModel
         Ui.CopilotHint = hint;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
+        ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
         Ui.Message = "勤務表をつくり始めました";
         LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
         var startMs = NowMs();
@@ -231,7 +232,9 @@ public sealed partial class MagiViewModel
             }
             foreach (var line in (_lastC1Plateau?.LogLines() ?? Array.Empty<string>()).Take(4))
                 LogOp("W", line.StartsWith("[W] ", StringComparison.Ordinal) ? line["[W] ".Length..] : line);
-            _lastTopHardFamily = res.Report.Hard > 0 ? TopHardFamilyJp(res.Report.Breakdown) : null;
+            // [Android 3.475.0 同期] 採用した盤面の族を覚える（旧 C#: 入力維持の分岐でも捨てた盤面 res.Report から取っていた）。
+            var adoptedReport = inputBeatsResult ? baseReport : res.Report;
+            _lastTopHardFamily = adoptedReport.Hard > 0 ? TopHardFamilyJp(adoptedReport.Breakdown) : null;
             LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase})");
             // [3.409.17/実機ログ起因の由来をそのまま記録] 予算超過の実行は内訳が診断ログ（次の実行で消える）
             //   にしか残らず特定不能だった。超過時は TIME/エポック超過/後処理パス別 を操作ログへ写す。
@@ -247,6 +250,9 @@ public sealed partial class MagiViewModel
             terminalLogged = true;
             // HF63 検出: 50秒改善のない制約族＝データ上満たせない可能性が高い（業務担当者へ提示）。
             var staleKeys = hf63.InfeasibleBreakdownKeys().Where(k => res.Report.Breakdown.GetValueOrDefault(k, 0) > 0).ToList();
+            // [Android 3.612.0 思考誘導S4] 画面の下限判定は採用した盤面で見る（入力維持の分岐では捨てた盤面の族を出さない）。
+            Ui.StalledHardFamilies = hf63.InfeasibleBreakdownKeys()
+                .Where(k => MirrorKeys.Hard.Contains(k) && adoptedReport.Breakdown.GetValueOrDefault(k, 0) > 0).ToList();
             if (staleKeys.Count > 0)
             {
                 var names = staleKeys
@@ -330,6 +336,7 @@ public sealed partial class MagiViewModel
         Ui.Running = true;
         Ui.HasResult = false;
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
+        ClearFixState();
         Ui.Message = "自動で整えています…";
         LogOp("I", $"ソフト研磨 開始 (予算{Ui.BudgetSec}s)");
         var startMs = NowMs();

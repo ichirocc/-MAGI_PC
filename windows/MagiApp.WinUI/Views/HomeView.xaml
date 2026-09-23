@@ -113,8 +113,10 @@
                             <TextBlock x:Name="SmartLabelText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                        Style="{StaticResource MagiBodyMediumTextStyle}" />
                         </Grid>
+                        <TextBlock x:Name="SmartHardLineText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
+                        <TextBlock x:Name="SmartCautionText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" />
                         <TextBlock x:Name="SmartDiffText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.85" />
-                        <Button x:Name="SmartApplyButton" Content="この手を適用（推奨）" Click="OnSmartApplyClick" HorizontalAlignment="Stretch" MinHeight="52" />
+                        <Button x:Name="SmartApplyButton" Content="この手を使う（元に戻せます）" Click="OnSmartApplyClick" HorizontalAlignment="Stretch" MinHeight="52" />
                         <TextBlock x:Name="SmartMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                     </StackPanel>
                 </StackPanel>

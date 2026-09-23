@@ -234,8 +234,12 @@ public sealed partial class AnalysisView : UserControl
         {
             var row = new StackPanel { Spacing = 2 };
             row.Children.Add(BodyText(s.Label, semiBold: true));
+            // [Android 3.612.0 思考誘導S1] 先頭に「必須は減るか」、次に増える要調整を「注意」として出す。
+            var (hardLine, caution) = NextActionGuide.FixImpactLines(s, LabelOf);
+            row.Children.Add(BodyText(hardLine, semiBold: true));
+            if (caution is not null) row.Children.Add(BodyText(caution));
             row.Children.Add(BodyText($"必須 {DeltaText(s.DeltaHard)} ・ 合計 {DeltaText(s.DeltaTotal)}", dim: true));
-            var apply = new Button { Content = "適用", HorizontalAlignment = HorizontalAlignment.Left };
+            var apply = new Button { Content = "この手を使う（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.ApplyFixSuggestion(s);
             row.Children.Add(apply);
             FixList.Children.Add(row);
@@ -588,7 +592,7 @@ public sealed partial class AnalysisView : UserControl
         LogText.Text = string.Join("\n", lines);
     }
 
-    private static string LabelOf(string family) =>
+    internal static string LabelOf(string family) =>
         BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
 
     /// <summary>本文1行。節の中身はすべてこの形（14px・折り返しあり）で作る。</summary>

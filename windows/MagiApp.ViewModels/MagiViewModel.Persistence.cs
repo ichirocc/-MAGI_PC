@@ -224,7 +224,7 @@ public sealed partial class MagiViewModel
         // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
         _resultSchedule = null;
         Ui.EngineRan = false;
-        Ui.FixSuggestions = System.Array.Empty<MagiEngine.V6.FixSuggestion>();
+        ClearFixState();
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = _undoStack.Count > 0;
@@ -251,7 +251,7 @@ public sealed partial class MagiViewModel
         // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
         _resultSchedule = null;
         Ui.EngineRan = false;
-        Ui.FixSuggestions = System.Array.Empty<MagiEngine.V6.FixSuggestion>();
+        ClearFixState();
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = true;

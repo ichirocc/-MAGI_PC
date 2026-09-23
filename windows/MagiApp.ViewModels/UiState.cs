@@ -91,6 +91,12 @@ public sealed partial class UiState : ObservableObject
     /// <summary>改善手を探索中。</summary>
     [ObservableProperty] private bool fixSearching;
 
+    /// <summary>[Android 3.612.0 思考誘導S0] 盤面全体の1手探索を今の盤面で終えたか（未探索と「探して0件」を分ける）。</summary>
+    [ObservableProperty] private bool fixSearched;
+
+    /// <summary>[Android 3.612.0 思考誘導S4] 直近の実行で長く改善せず採用盤面にも残った必須族（盤面を変えたら空）。</summary>
+    [ObservableProperty] private IReadOnlyList<string> stalledHardFamilies = Array.Empty<string>();
+
     /// <summary>絞り込み対象スタッフ名（空=全体）。</summary>
     [ObservableProperty] private string fixFocusName = "";
 
