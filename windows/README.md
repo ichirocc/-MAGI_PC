@@ -340,7 +340,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - `RsiFocusRotationPersist`（backlog#28、既に3.592.0でC#へ実装済み）: Android実データ4件のA/Bで全件悪化
     （golden +2.49%等）と判定・既定OFF維持を確認。C#側は元々既定OFFなので変更不要。
     （2026-09-22 Android側の机上見直しで「有意差なし・便益の証拠なし」へ訂正。結論＝既定OFFは不変）
-  - `PostChainRunningKeepBest`（backlog#36、Kotlin 3.608.0で新規実装・既定OFF）／`ExtraRefineRequirePostHardDrop`
+  - **`PostChainRunningKeepBest` を移植・既定 ON（Kotlin 3.610.0 同期、2026-09-23）**: 後処理チェーンの走行 keep-best
+    （畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す）。構造的 covU 床 > 0 の盤面では
+    働かない。Android tools/loop 許容 ON 同士 230 ペアで勝108/負54・必須退行0・必須増0。許容 OFF（既定）ではチェーンが
+    単調＝出力不変。同点受け入れ変種 `PostChainRunningKeepBestAcceptTies` も同名で移植（不合格・既定 OFF）。
+    **C# だけの差**: Kotlin はパスが評価済みの報告書（`CyclicSwapResult.report`）を再利用するが、C# の結果型は報告書を
+    持たないので畳み込みごとに `UnifiedViolationChecker.Check` で評価する。判定が同値である前提＝Kotlin でパスが渡す
+    報告書と実盤面の報告書（hard/weightedScore/total）が一致すること。Kotlin の計装ビルドで確認中（合成 28 ケースまで不一致 0）。`PostChain` はテストから
+    駆動するため `internal` に（Kotlin も `internal`）。テストは Kotlin `DeterministicPostChainTest` の 4 件を写した。
+  - 以下は当時の記録（`PostChainRunningKeepBest` は上で移植済み）: `PostChainRunningKeepBest`（backlog#36、Kotlin 3.608.0で新規実装・既定OFF）／`ExtraRefineRequirePostHardDrop`
     （backlog#35、Kotlin 3.600.0で新規実装・既定OFF）は**C#へポートしない**。Android実データ/合成ベンチとも
     採用基準未達で既定OFF確定＝C#単独で先行実装する必要性が薄いとユーザー判断（2026-09-22）。将来Kotlin側で
     ON昇格の判断が動いた場合に合わせてポートする。

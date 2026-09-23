@@ -152,7 +152,14 @@ public static partial class V6HotfixPasses
         /// <summary>[3.590.0/測定中/backlog#27①] fairの候補分類をFairTargetの生回数平均でなく
         /// FairDevOfBucketの黒箱観測へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝
         /// 既定OFF維持が確定。既定 OFF。</summary>
-        bool FairAchievementDirection = false);
+        bool FairAchievementDirection = false,
+        /// <summary>[Android 3.608.0/3.610.0同期] <see cref="PostChain"/> 自身がチェーン内の走行 keep-best を持つ＝各パスの結果を
+        /// 畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す。構造的 covU 床
+        /// （<see cref="V6SanityPort.StructuralHardFloor"/>）> 0 の盤面では働かない。既定 <b>true</b>（Android tools/loop 許容ON 同士
+        /// 230 ペアで勝108/負54・必須退行0・必須増0）。許容 OFF ではチェーンが単調＝巻き戻しが起きず出力不変。</summary>
+        bool PostChainRunningKeepBest = true,
+        /// <summary>[不合格・既定 OFF, Android同名] 同点の手も受け入れ、厳密に悪化したときだけ巻き戻す。</summary>
+        bool PostChainRunningKeepBestAcceptTies = false);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -188,9 +195,16 @@ public static partial class V6HotfixPasses
     /// 後処理チェーンの作業域＝盤面・ログ・パス別所要・ピン帰属の合流点。各パスは必ず <see cref="Adopt(CyclicSwapResult, bool)"/> を通す＝
     /// 「PinBlocks の合流を書き忘れる」（3.350.0・3.409.9 で実際に起きた）を構造的に防ぐ。
     /// </summary>
-    private sealed class PostChain
+    internal sealed class PostChain
     {
+        /// <summary>チェーン内巻き戻しで不採用になった行の目印（Kotlin <c>PostChain.ROLLBACK_MARKER</c>）。</summary>
+        public const string RollbackMarker = "[チェーン内巻き戻しで不採用] ";
         private readonly Action<string>? _onPhase;
+        private readonly MagiState? _state;
+        private readonly bool _runningKeepBest;
+        private readonly bool _acceptTies;
+        private int[][] _bestWork;
+        private ViolationReport? _bestReport;
         public int[][] Work { get; private set; }
         public List<MirrorLog> Logs { get; } = new();
         public Dictionary<string, long> PassMs { get; } = new();
@@ -198,10 +212,37 @@ public static partial class V6HotfixPasses
         /// <summary>[Iteration 2] 巡の中で各パスが残した拒否候補。巡の末尾で違反起点修復へ渡して空にする。</summary>
         public List<CombinatorialRepair.Candidate> RejectedPool { get; } = new();
 
-        public PostChain(Action<string>? onPhase, int[][] schedule)
+        /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
+        public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool runningKeepBest = false,
+            ViolationReport? initialReport = null, bool acceptTies = false)
         {
             _onPhase = onPhase;
             Work = schedule.Copy2D();
+            _state = state;
+            _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state)) == 0;
+            _acceptTies = acceptTies;
+            _bestWork = Work.Copy2D();
+            _bestReport = initialReport;
+        }
+
+        /// <summary>
+        /// 直前に畳み込んだ <see cref="Work"/> をチェーン最良と比べ、悪化していれば最良盤面へ巻き戻して
+        /// <paramref name="passLogs"/> を棄却マーカー付きで返す（ログは落とさない）。Kotlin はパスが評価済みの報告書を
+        /// 再利用するが、C# の結果型は報告書を持たないので常にチェッカーで評価する（同じ盤面の同じ報告書＝出力同値）。
+        /// </summary>
+        private IReadOnlyList<MirrorLog> RunningKeepBestFold(IReadOnlyList<MirrorLog> passLogs)
+        {
+            if (!_runningKeepBest) return passLogs;
+            var rep = UnifiedViolationChecker.Check(_state!, Work);
+            var best = _bestReport;
+            if (best == null || UnifiedViolationChecker.BetterReport(rep, best) || (_acceptTies && !UnifiedViolationChecker.BetterReport(best, rep)))
+            {
+                _bestReport = rep;
+                _bestWork = Work.Copy2D();
+                return passLogs;
+            }
+            Work = _bestWork.Copy2D();
+            return passLogs.Select(l => l with { Message = RollbackMarker + l.Message }).ToList();
         }
 
         /// <summary>フェーズ名を UI へ通知し、所要 ms を <paramref name="key"/> に累算しながら <paramref name="block"/> を実行する。</summary>
@@ -221,7 +262,8 @@ public static partial class V6HotfixPasses
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             if (r.RejectedCandidates != null) RejectedPool.AddRange(r.RejectedCandidates);
             Work = r.NewSchedule.Copy2D();
-            if (keepLogs) Logs.AddRange(r.Logs);
+            var folded = RunningKeepBestFold(r.Logs);
+            if (keepLogs) Logs.AddRange(folded);
             return r.Applied;
         }
 
@@ -229,13 +271,13 @@ public static partial class V6HotfixPasses
         {
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             Work = r.NewSchedule.Copy2D();
-            Logs.AddRange(r.Logs);
+            Logs.AddRange(RunningKeepBestFold(r.Logs));
         }
 
         public void ReplaceBoard(int[][] newSchedule, IReadOnlyList<MirrorLog> passLogs)
         {
             Work = newSchedule.Copy2D();
-            Logs.AddRange(passLogs);
+            Logs.AddRange(RunningKeepBestFold(passLogs));
         }
     }
 
@@ -258,9 +300,9 @@ public static partial class V6HotfixPasses
         var p = parameters ?? new PostOptimizationParams();
         var seedVal = seed ?? System.Diagnostics.Stopwatch.GetTimestamp();
         var stop = shouldStop ?? (() => false);
-        var chain = new PostChain(onPhase, schedule);
-        var t0 = EngineClock.NowMs();
         var report0 = UnifiedViolationChecker.Check(state, schedule);
+        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0, p.PostChainRunningKeepBestAcceptTies);
+        var t0 = EngineClock.NowMs();
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
             ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop));

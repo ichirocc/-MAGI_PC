@@ -29,6 +29,9 @@
 > `PolishGate.aptFairSoftTolerance`をONにすると、対象家族以外のSOFT合計の悪化を研磨パス開始時点比
 > +6%まで容認する（`AptFairPolish.toleratedBetter`、累積予算）。HARDの不増加は不変。他の全ての
 > keep-best比較（`betterReport`単体）には影響しない。
+> 容認した悪化が後続パスで回収されずチェーン全体が退行したときは、後処理チェーンの**走行 keep-best**
+> （`postChainRunningKeepBest`、3.610.0 で既定 ON）が次パスの前にチェーン内の最良盤面へ巻き戻す。
+> 構造的 covU 床（`V6SanityPort.structuralHardFloor`）> 0 の盤面では働かない。許容 OFF では各パスが単調なので巻き戻しは起きない。
 >
 > **人員過剰(covO)の退避（3.554.0）**: 過剰セルの在勤者を受け皿のある担当可シフト（需要 0 のシフト＝B4 等を含む）へ動かす 1 セル手は
 > `CovOReliefPolish` が後処理の最終段（成分修復の後）で決定的に総当たりする。それまでは HF67 の乱択に頼っていたため、実機の
