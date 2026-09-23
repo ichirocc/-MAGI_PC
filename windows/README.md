@@ -346,7 +346,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
     単調＝出力不変。同点受け入れ変種 `PostChainRunningKeepBestAcceptTies` も同名で移植（不合格・既定 OFF）。
     **C# だけの差**: Kotlin はパスが評価済みの報告書（`CyclicSwapResult.report`）を再利用するが、C# の結果型は報告書を
     持たないので畳み込みごとに `UnifiedViolationChecker.Check` で評価する。判定が同値である前提＝Kotlin でパスが渡す
-    報告書と実盤面の報告書（hard/weightedScore/total）が一致すること。Kotlin の計装ビルドで確認中（合成 28 ケースまで不一致 0）。`PostChain` はテストから
+    報告書と実盤面の報告書（hard/weightedScore/total）が一致すること。Kotlin の計装ビルド（LoopBench 1seed・46 ケース、
+    実データ 4 件込み）で畳み込み 5,928 回を照合し不一致 0＝判定は同値。`PostChain` はテストから
     駆動するため `internal` に（Kotlin も `internal`）。テストは Kotlin `DeterministicPostChainTest` の 4 件を写した。
   - 以下は当時の記録（`PostChainRunningKeepBest` は上で移植済み）: `PostChainRunningKeepBest`（backlog#36、Kotlin 3.608.0で新規実装・既定OFF）／`ExtraRefineRequirePostHardDrop`
     （backlog#35、Kotlin 3.600.0で新規実装・既定OFF）は**C#へポートしない**。Android実データ/合成ベンチとも
