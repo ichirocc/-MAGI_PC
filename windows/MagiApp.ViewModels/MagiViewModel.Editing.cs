@@ -937,7 +937,7 @@ public sealed partial class MagiViewModel
                 st.Cons1.Select(c => $"{c.ShiftKigou}   {c.Day1}日で{c.Day2}回以上").ToList()),
             new("cons2", "個人の合計（回数）",
                 st.Cons2.Select(c => $"{c.ShiftKigou}   合計{c.Count}回以上").ToList()),
-            new("cons3", "必須の並び", st.Cons3.Select(c => Seq(c.Pattern)).ToList()),
+            new("cons3", "守るとよい並び", st.Cons3.Select(c => Seq(c.Pattern)).ToList()),
             new("cons3n", "禁止の並び", st.Cons3n.Select(c => Seq(c.Pattern)).ToList()),
             new("cons3m", "推奨の並び", st.Cons3m.Select(c => Seq(c.Pattern)).ToList()),
             new("cons3mn", "回避の並び", st.Cons3mn.Select(c => Seq(c.Pattern)).ToList()),

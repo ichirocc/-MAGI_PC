@@ -358,7 +358,7 @@
                           SelectionChanged="OnConstraintFamilyChanged">
                     <ComboBoxItem Content="窓の要件（cons1）" Tag="cons1" />
                     <ComboBoxItem Content="個人の合計（cons2）" Tag="cons2" />
-                    <ComboBoxItem Content="必須の並び（cons3）" Tag="cons3" />
+                    <ComboBoxItem Content="守るとよい並び（cons3）" Tag="cons3" />
                     <ComboBoxItem Content="禁止の並び（cons3n）" Tag="cons3n" />
                     <ComboBoxItem Content="推奨の並び（cons3m）" Tag="cons3m" />
                     <ComboBoxItem Content="回避の並び（cons3mn）" Tag="cons3mn" />

@@ -840,7 +840,7 @@ public static partial class V6SanityPort
     /// <summary>Faithful port of Kotlin's private <c>c3FamilyJp</c>.</summary>
     private static string C3FamilyJp(string fam) => fam switch
     {
-        "c3" => "必須の並び",
+        "c3" => "守るとよい並び",
         "c3n" => "禁止の並び",
         "c3m" => "推奨の並び",
         "c3mn" => "回避の並び",
