@@ -176,6 +176,7 @@ public static partial class V6HotfixPasses
         public const long C3Pattern = 0xC3B4L;
         public const long Apt = 0xA97L;
         public const long Fair = 0xFA12L;
+        public const long C3nMargin = 0xC3E9L;
     }
 
     /// <summary>SoftPolishVerify の「採用内訳」の並び（ログ文言の順序を固定する）。</summary>
@@ -390,7 +391,7 @@ public static partial class V6HotfixPasses
             bool MarginStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
             var rMargin = chain.Timed("後処理 禁止連続(c3n)前後余白込みLNS", "C3nMarginLNS", work =>
                 C3nMarginLnsPolish.Apply(state, work, marginDays: p.C3nMarginLnsMarginDays,
-                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop));
+                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop, seed: seedVal ^ SeedTag.C3nMargin));
             chain.Adopt(rMargin);
         }
 

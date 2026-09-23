@@ -340,6 +340,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - `RsiFocusRotationPersist`（backlog#28、既に3.592.0でC#へ実装済み）: Android実データ4件のA/Bで全件悪化
     （golden +2.49%等）と判定・既定OFF維持を確認。C#側は元々既定OFFなので変更不要。
     （2026-09-22 Android側の机上見直しで「有意差なし・便益の証拠なし」へ訂正。結論＝既定OFFは不変）
+  - `C3nMarginLnsPolish` の呼び出しに seed（`seedVal ^ SeedTag.C3nMargin`＝Kotlin `seed xor SeedTag.C3N_MARGIN`）を渡すよう修正
+    （旧: 既定値固定で Kotlin と乱数列が違った。既定 OFF のため既定出力は不変、2026-09-23）。
   - **`PostChainRunningKeepBest` を移植・既定 ON（Kotlin 3.610.0 同期、2026-09-23）**: 後処理チェーンの走行 keep-best
     （畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す）。構造的 covU 床 > 0 の盤面では
     働かない。Android tools/loop 許容 ON 同士 230 ペアで勝108/負54・必須退行0・必須増0。許容 OFF（既定）ではチェーンが
