@@ -30,7 +30,12 @@ public sealed record CoverageShortfall(
     /// なっていた。判定は Reason と同じ根拠（空き番が居るか／findCovUChain で玉突きが実在するか）で、
     /// 文字列でなく値として持つ。
     /// </summary>
-    bool BlockedNow = false);
+    bool BlockedNow = false,
+    /// <summary>[S5b] 担当できる（MayPlace）のに、この日は別の勤務で希望固定されている職員（capacity から外した人。職員順）。</summary>
+    IReadOnlyList<int>? WishPinned = null)
+{
+    public IReadOnlyList<int> WishPinned { get; init; } = WishPinned ?? Array.Empty<int>();
+}
 
 /// <summary>人員過剰(covO)が残る 1 つの (日, シフト) 枠の診断。読み取り専用・エンジン非変更。</summary>
 public sealed record CoverageSurplus(
@@ -190,6 +195,7 @@ public static partial class V6PortAnalyzer
                 var need = got + miss;   // [表示用] 実際に不足を生んだ実効しきい値（CovUCellのOR選択と整合）
                 total += miss;
                 var capacity = 0;
+                var wishPinned = new List<int>();
                 for (var i = 0; i < p.S; i++)
                 {
                     if (!p.MayPlace(i, k)) continue;
@@ -197,7 +203,7 @@ public static partial class V6PortAnalyzer
                     //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
                     //   （WishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
                     //   verdict を Fixable→Infeasible へ倒し「データ上、充足不可」という誤った断定を生む。
-                    if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;   // 実現可能な希望が別シフト → この枠には回せない
+                    if (p.WishLocked(i, j) && p.Wish[i][j] != k) { wishPinned.Add(i); continue; }   // 実現可能な希望が別シフト → この枠には回せない
                     capacity++;
                 }
                 var verdict = capacity < need ? CoverageVerdict.Infeasible : CoverageVerdict.Fixable;
@@ -206,7 +212,12 @@ public static partial class V6PortAnalyzer
                 // [3.344.0] reason と同じ根拠で「いまの希望のままでは埋められない」かを値として持つ。
                 var blockedNow = false;
                 string reason;
-                if (verdict == CoverageVerdict.Infeasible)
+                if (verdict == CoverageVerdict.Infeasible && wishPinned.Count > 0)
+                {
+                    // 希望固定の人を外して数えた結果＝「データ上」は言い過ぎ（希望を取り消せば届きうる）。
+                    reason = $"いまの希望のままでは担当できる人が{capacity}人で必要数{need}に届きません（希望で別の勤務に固定: {wishPinned.Count}人）";
+                }
+                else if (verdict == CoverageVerdict.Infeasible)
                 {
                     reason = $"担当可能な職員が{capacity}人で必要数{need}に届きません（データ上、充足不可）";
                 }
@@ -260,7 +271,7 @@ public static partial class V6PortAnalyzer
                     reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・希望固定{pinned}・禁止連続{forbid}）。{hint}";
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
-                    verdict, reason, blockedNow));
+                    verdict, reason, blockedNow, wishPinned));
             }
         }
         // Kotlin の sortWith は安定ソート。C# List<T>.Sort は不安定なので LINQ の OrderBy 系（安定）で揃える。

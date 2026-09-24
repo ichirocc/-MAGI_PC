@@ -157,6 +157,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>ws3 希望 "i,j"->shiftIdx（表示融合用）。</summary>
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
+    /// <summary>[S5] WishLocked の希望のキー（試算できる希望）。</summary>
+    [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
 
     /// <summary>[DefragLiveView] 計算中の最良盤面（実行中のみ）。</summary>
     [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> liveSchedule = Array.Empty<IReadOnlyList<int>>();
