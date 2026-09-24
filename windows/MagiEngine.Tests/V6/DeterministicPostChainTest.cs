@@ -160,4 +160,25 @@ public class DeterministicPostChainTest
         Assert.True(Same(RunChain(true, lateral, lateralReport), lateral));
         Assert.True(Same(RunChain(true, work0, report0), improved));
     }
+
+    // rollbackCountsZero: 巻き戻したパスの採用数は 0（既定は結果の採用数をそのまま返す）。
+    [Fact]
+    public void RollbackCountsZeroReturnsZeroAppliedOnRollback()
+    {
+        var s = State();
+        var work0 = Work(s);
+        var report0 = UnifiedViolationChecker.Check(s, work0);
+        var improved = With(work0, (1, 1, 1));
+        var improvedReport = UnifiedViolationChecker.Check(s, improved);
+        (int good, int bad) RunChain(bool countsZero)
+        {
+            var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0, rollbackCountsZero: countsZero);
+            var g = c.Adopt(Result(improved, improvedReport, "Good"));
+            var b = c.Adopt(Result(work0, report0, "Bad"));
+            Assert.True(Same(c.Work, improved));
+            return (g, b);
+        }
+        Assert.Equal((1, 1), RunChain(false));
+        Assert.Equal((1, 0), RunChain(true));
+    }
 }

@@ -47,6 +47,9 @@ public static class PolishGate
     /// 研磨開始時点比+6%まで容認するか（<see cref="V6HotfixPasses.ToleratedBetter"/>）。既定OFF。</summary>
     public static volatile bool AptFairSoftTolerance = false;
 
+    /// <summary>[Android N9 同期] PostChain の keep-best で巻き戻したパスの採用数を 0 と数える。既定 <b>false</b>。</summary>
+    public static volatile bool PostChainRollbackCountsZero = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

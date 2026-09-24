@@ -159,7 +159,9 @@ public static partial class V6HotfixPasses
         /// 230 ペアで勝108/負54・必須退行0・必須増0）。許容 OFF ではチェーンが単調＝巻き戻しが起きず出力不変。</summary>
         bool PostChainRunningKeepBest = true,
         /// <summary>[不合格・既定 OFF, Android同名] 同点の手も受け入れ、厳密に悪化したときだけ巻き戻す。</summary>
-        bool PostChainRunningKeepBestAcceptTies = false);
+        bool PostChainRunningKeepBestAcceptTies = false,
+        /// <summary>[不合格・既定 OFF, Android同名 N9: 勝2/負4 p=0.69] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
+        bool? PostChainRollbackCountsZero = null);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -204,6 +206,8 @@ public static partial class V6HotfixPasses
         private readonly MagiState? _state;
         private readonly bool _runningKeepBest;
         private readonly bool _acceptTies;
+        private readonly bool _rollbackCountsZero;
+        private bool _lastFoldRolledBack;
         private int[][] _bestWork;
         private ViolationReport? _bestReport;
         public int[][] Work { get; private set; }
@@ -215,13 +219,14 @@ public static partial class V6HotfixPasses
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
         public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool runningKeepBest = false,
-            ViolationReport? initialReport = null, bool acceptTies = false)
+            ViolationReport? initialReport = null, bool acceptTies = false, bool rollbackCountsZero = false)
         {
             _onPhase = onPhase;
             Work = schedule.Copy2D();
             _state = state;
             _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state)) == 0;
             _acceptTies = acceptTies;
+            _rollbackCountsZero = rollbackCountsZero;
             _bestWork = Work.Copy2D();
             _bestReport = initialReport;
         }
@@ -233,6 +238,7 @@ public static partial class V6HotfixPasses
         /// </summary>
         private IReadOnlyList<MirrorLog> RunningKeepBestFold(IReadOnlyList<MirrorLog> passLogs)
         {
+            _lastFoldRolledBack = false;
             if (!_runningKeepBest) return passLogs;
             var rep = UnifiedViolationChecker.Check(_state!, Work);
             var best = _bestReport;
@@ -244,6 +250,7 @@ public static partial class V6HotfixPasses
             }
             if (Work.ContentDeepEquals(_bestWork)) return passLogs;   // 無変更のパスは巻き戻していない＝印を付けない
             Work = _bestWork.Copy2D();
+            _lastFoldRolledBack = true;
             return passLogs.Select(l => l with { Message = RollbackMarker + l.Message }).ToList();
         }
 
@@ -266,6 +273,7 @@ public static partial class V6HotfixPasses
             Work = r.NewSchedule.Copy2D();
             var folded = RunningKeepBestFold(r.Logs);
             if (keepLogs) Logs.AddRange(folded);
+            if (_rollbackCountsZero && _lastFoldRolledBack) return 0;
             return r.Applied;
         }
 
@@ -303,7 +311,8 @@ public static partial class V6HotfixPasses
         var seedVal = seed ?? System.Diagnostics.Stopwatch.GetTimestamp();
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule);
-        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0, p.PostChainRunningKeepBestAcceptTies);
+        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0, p.PostChainRunningKeepBestAcceptTies,
+            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero);
         var t0 = EngineClock.NowMs();
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
