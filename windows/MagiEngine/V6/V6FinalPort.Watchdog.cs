@@ -27,6 +27,16 @@ public static partial class V6FinalPort
     /// </summary>
     internal const int StallOverrideFactor = 2;
 
+    /// <summary>[backlog#35] 残りHARDが「解けないと証明済み」か＝covU は床以下で、非covU は c3n だけかつ c3n 壁（<paramref name="c3nWall"/>）。</summary>
+    internal static bool IsStructuralHardResidual(ViolationReport report, int hardFloor, Func<bool> c3nWall)
+    {
+        if (report.Hard <= 0) return false;
+        var covU = report.Breakdown.GetValueOrDefault("covU", 0);
+        if (covU > hardFloor) return false;
+        var nonCovU = report.Hard - covU;
+        return nonCovU == 0 || (nonCovU == report.Breakdown.GetValueOrDefault("c3n", 0) && c3nWall());
+    }
+
     /// <summary>Faithful port of Kotlin's <c>internal fun watchdogStagnationFired(...)</c>. See <see cref="StallOverrideFactor"/> for the design rationale.</summary>
     internal static bool WatchdogStagnationFired(
         long now, long startMs, long minRunMs,

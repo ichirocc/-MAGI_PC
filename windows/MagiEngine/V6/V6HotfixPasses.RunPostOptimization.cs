@@ -242,6 +242,7 @@ public static partial class V6HotfixPasses
                 _bestWork = Work.Copy2D();
                 return passLogs;
             }
+            if (Work.ContentDeepEquals(_bestWork)) return passLogs;   // 無変更のパスは巻き戻していない＝印を付けない
             Work = _bestWork.Copy2D();
             return passLogs.Select(l => l with { Message = RollbackMarker + l.Message }).ToList();
         }

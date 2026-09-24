@@ -187,7 +187,17 @@ public static partial class V6PortAnalyzer
         var afterRow = new int[p.T];
         for (var t = 0; t < p.T; t++) afterRow[t] = after[i][t];
         var c3nAfter = C1DeltaPrefilter.StaffC3nFires(p, afterRow);
-        return c3nAfter + PrefMissesOf(p, after, i) < c3nBefore + PrefMissesOf(p, before, i);
+        return c3nAfter + PrefMissesOf(p, after, i) + C3wOf(p, after, i) <
+            c3nBefore + PrefMissesOf(p, before, i) + C3wOf(p, before, i);
+    }
+
+    /// <summary>職員 [i] の行の c3w（希望の前日に禁止, HARD）件数。</summary>
+    private static int C3wOf(Problem p, int[][] board, int i)
+    {
+        var n = 0;
+        for (var d = 0; d < p.T; d++)
+            if (p.C3wBanned(i, d, board[i][d])) n++;
+        return n;
     }
 
     /// <summary>職員 [i] の行で「実現可能な希望どおりでない」日数（＝pref の HARD 件数）。</summary>
@@ -238,6 +248,8 @@ public static partial class V6PortAnalyzer
         var c3nBlocked = 0;
         var noReceiver = 0;
         var prefBlocked = 0;   // c3n は減るが、希望を破る代金（pref +1）を払えない代替の数
+        var c3wBlocked = 0;    // c3n は減るが、代わりに希望の前日に禁止（c3w）を作る代替の数
+        var c3wCur = p.C3wBanned(i, j, cur) ? 1 : 0;
         int? chainOk = null;   // Chain が成立した代替シフト
         int? adjOk = null;     // Adjacent が成立した代替シフト
         var alts = 0;
@@ -247,7 +259,8 @@ public static partial class V6PortAnalyzer
             alts++;
             var after = C3nAfter(m);
             // 正味 HARD が減るか（希望を破る手は pref が 1 増える。hard は族横断の件数和なので同じ単位）。
-            var netOk = after + prefCost < firesBefore;
+            var c3wDelta = (p.C3wBanned(i, j, m) ? 1 : 0) - c3wCur;
+            var netOk = after + prefCost + c3wDelta < firesBefore;
             // 「新たな禁止連続を作る（＝そもそも c3n が減らない）」かどうかは pref 代とは別問題。
             //   両者を混ぜると、c3n は減るのに pref 代を払えないだけの代替まで隣接日調整へ流れてしまう。
             var createsNewRun = after >= firesBefore;
@@ -266,6 +279,10 @@ public static partial class V6PortAnalyzer
                     if (ChainFills(tmp)) chainOk = m; else noReceiver++;
                 }
                 else noReceiver++;   // 既に Chain 成立済み＝以降の重い連鎖検証は省略（分類は不変）
+            }
+            else if (!createsNewRun && after + c3wDelta >= firesBefore)
+            {
+                c3wBlocked++;
             }
             else if (!createsNewRun)
             {
@@ -333,6 +350,7 @@ public static partial class V6PortAnalyzer
                 $"本人希望={curSym}（動かしても正味の必須違反が減らない）");
         }
         return new ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.Blocked,
-            $"代替{alts}件全滅: 新たな禁止連続{c3nBlocked}・covU受け皿なし{noReceiver}");
+            $"代替{alts}件全滅: 新たな禁止連続{c3nBlocked}・covU受け皿なし{noReceiver}" +
+                (c3wBlocked > 0 ? $"・希望の前日に禁止{c3wBlocked}" : ""));
     }
 }

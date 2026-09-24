@@ -328,6 +328,12 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-24（外部レビュー R2/R3/R5/N9/N10 を同期、Android ab9c9a4・72d682f・監査で見つけた N10 の取り残し）: R2＝制約CSVの並びを行末まで読む
+  （`ConstraintsCsvIO.Pat`/`PatHasGap`）。R3＝c3n 診断の正味 HARD に c3w を算入（`V6PortAnalyzer.Forbidden.cs`、c3n 壁の停滞閾値選択にも効く）。
+  R5＝`V6FinalPort.IsStructuralHardResidual`（covU が床以下のときだけ真、既定 OFF の `extraRefineRequirePostHardDrop` 用）。N9＝無変更パスに巻き戻し印を
+  付けない。N10＝`FixSuggester.TryOps` とミニ再最適化（Window）で回数固定を崩す手を弾く（Window は Kotlin 側も同日に修正）。R4 は C# に
+  `EpochOverrunCount` が無く対象外。業務ルールの写し `docs/business-logic.md` を Android と揃えた（N11 の明記と許容 ON の判定結果）。
+
 - 2026-09-24（外部レビュー N1/N2 を同期、Android 同日）: N1＝休みOFFが保存→再読込で ON に戻る（保存が非休を `role:""` で書き、読込の後方互換が
   「Rest 無し＝旧JSON」と見て記号"休"へ付け直していた）。`StateJsonSerializer` の保存を `"rest"`/`"none"` にし、明示の role が1つも無いときだけ付与
   （`""` は従来どおり付与＝既存の保存の互換）。CSV 取込（Roster/FlatRosterCsvImport）は C# では元から休みを付けていた（Kotlin 側を今回そろえた）。

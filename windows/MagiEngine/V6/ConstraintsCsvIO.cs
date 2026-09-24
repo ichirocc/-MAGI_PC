@@ -69,7 +69,7 @@ public static class ConstraintsCsvIO
         static List<string> Pat(IReadOnlyList<string> r)
         {
             var result = new List<string>();
-            for (var idx = 1; idx <= 5; idx++)
+            for (var idx = 1; idx < r.Count; idx++)
             {
                 var v = Cell(r, idx);
                 if (v.Length == 0) break;
@@ -81,10 +81,10 @@ public static class ConstraintsCsvIO
         /// <summary>途中に空セルがあり、その後ろにまだ中身がある＝並びが途切れている（書式の誤り）。</summary>
         static bool PatHasGap(IReadOnlyList<string> r)
         {
-            var cells = new string[5];
-            for (var idx = 0; idx < 5; idx++) cells[idx] = Cell(r, idx + 1);
+            var cells = new string[Math.Max(r.Count - 1, 0)];
+            for (var idx = 0; idx < cells.Length; idx++) cells[idx] = Cell(r, idx + 1);
             var last = -1;
-            for (var idx = 0; idx < 5; idx++) if (cells[idx].Length != 0) last = idx;
+            for (var idx = 0; idx < cells.Length; idx++) if (cells[idx].Length != 0) last = idx;
             if (last < 0) return false;
             for (var idx = 0; idx < last; idx++) if (cells[idx].Length == 0) return true;
             return false;

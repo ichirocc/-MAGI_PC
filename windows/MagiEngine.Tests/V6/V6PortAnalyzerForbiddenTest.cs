@@ -41,7 +41,8 @@ public class V6PortAnalyzerForbiddenTest
         IReadOnlyDictionary<string, int>? wishes = null,
         IReadOnlyList<Shift>? shifts = null,
         IReadOnlyList<Staff>? staff = null,
-        IReadOnlyList<IReadOnlyList<int>>? groupShift = null)
+        IReadOnlyList<IReadOnlyList<int>>? groupShift = null,
+        IReadOnlyList<C3wRow>? cons3w = null)
     {
         shifts ??= new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") };
         staff ??= new List<Staff> { new("s0", 0) };
@@ -65,7 +66,24 @@ public class V6PortAnalyzerForbiddenTest
             Cons41: new List<C41Row>(), Cons42: new List<C42Row>(),
             SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
             ShiftColors: new Dictionary<string, string>(),
-            Extras: NoExtras);
+            Extras: NoExtras,
+            Cons3w: cons3w);
+    }
+
+    // 外部レビュー R3: 前日セルの代替が全て c3w（希望の前日に禁止）を作る＝正味 HARD は減らない。
+    [Fact]
+    public void DiagnoseForbiddenRuns_CountsC3wCreatedByAlternative()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            wishes: new Dictionary<string, int> { ["0,1"] = 1 },
+            cons3w: new List<C3wRow> { new("X", "休"), new("X", "Y") });
+
+        var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(st);
+        var run = Assert.Single(diag.Runs);
+        Assert.DoesNotContain(run.Cells, c => c.Escape == ForbiddenCellEscape.Free);
+        Assert.True(diag.AllBlocked);
     }
 
     // 需要も希望も無い盤面の禁止連続は、どのセルも休へ変えるだけで安全に崩せる＝Free。

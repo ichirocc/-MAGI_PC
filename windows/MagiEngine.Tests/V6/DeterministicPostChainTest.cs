@@ -102,6 +102,22 @@ public class DeterministicPostChainTest
         Assert.Contains(chainOn.Logs, l => l.Tag == "Good" && !l.Message.Contains("チェーン内巻き戻しで不採用"));
     }
 
+    // 外部レビュー N9: 盤面を変えなかったパス（最良と同点・同盤面）には巻き戻し印を付けない。
+    [Fact]
+    public void RunningKeepBestDoesNotMarkUnchangedPass()
+    {
+        var s = State();
+        var work0 = Work(s);
+        var report0 = UnifiedViolationChecker.Check(s, work0);
+        var improved = With(work0, (1, 1, 1));
+        var improvedReport = UnifiedViolationChecker.Check(s, improved);
+        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        chain.Adopt(Result(improved, improvedReport, "Good"));
+        chain.Adopt(Result(With(improved), improvedReport, "Noop"));
+        Assert.True(Same(chain.Work, improved));
+        Assert.DoesNotContain(chain.Logs, l => l.Message.Contains("チェーン内巻き戻しで不採用"));
+    }
+
     // 構造的 covU 床 > 0（必要人数 5 > 職員 3）の盤面では巻き戻さない＝必須件数が増えた試行はすべてこの形だった。
     [Fact]
     public void RunningKeepBestIsInactiveWhenStructuralHardFloorIsPositive()

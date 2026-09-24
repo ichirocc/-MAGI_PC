@@ -28,6 +28,42 @@ public class FixApplyGateTest
 
     private static int[][] Sched(MagiState st) => st.Schedule.Select(r => r.ToArray()).ToArray();
 
+    /// <summary>外部レビュー N10: 提案の生成側も回数固定（下限＝上限）を崩す手を出さない＝出した提案は適用ゲートを通る。</summary>
+    [Fact]
+    public void SuggesterDoesNotProposePinBreakingOps()
+    {
+        var st = State(ranges: new Dictionary<string, Range> { ["0,1"] = new("1", "1"), ["1,1"] = new("1", "1") }); var s = Sched(st);
+        var sugs = FixSuggester.Suggest(st, s);
+        Assert.DoesNotContain(sugs, sug => sug.Ops.Count == 1 && sug.Ops[0].Day == 0 && sug.Ops[0].ToShift == A);
+        foreach (var sug in sugs)
+        {
+            var r = FixApplyGate.Apply(st, s, sug.Ops);
+            Assert.True(r.Applied, $"{sug.Label}: {r.Reason}");
+        }
+    }
+
+    /// <summary>外部レビュー N10: ミニ再最適化（Window）も回数固定を崩す組み合わせを提案しない。
+    /// s0 は A、s1 は B しか担当できず、1 日目の不足を埋める唯一の 2 人組み合わせが両者の回数固定を崩す。</summary>
+    [Fact]
+    public void WindowSuggestionDoesNotBreakPins()
+    {
+        var st = State(ranges: new Dictionary<string, Range> { ["0,1"] = new("1", "1"), ["1,2"] = new("1", "1") }) with
+        {
+            Shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "1"), new("B", "B", "1", "1") },
+            Groups = new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            StaffList = new List<Staff> { new("s0", 0), new("s1", 1) },
+            GroupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 }, new List<int> { 1, 0, 1 } },
+            GroupShiftApt = new List<IReadOnlyList<string>> { new List<string> { "", "", "" }, new List<string> { "", "", "" } },
+            Schedule = new List<IReadOnlyList<int>> { new List<int> { REST, A }, new List<int> { REST, 2 } },
+        };
+        var s = Sched(st);
+        foreach (var sug in FixSuggester.Suggest(st, s))
+        {
+            var r = FixApplyGate.Apply(st, s, sug.Ops);
+            Assert.True(r.Applied, $"{sug.Kind} {sug.Label}: {r.Reason}");
+        }
+    }
+
     [Fact]
     public void ImprovingOpsAreAppliedToACopy()
     {

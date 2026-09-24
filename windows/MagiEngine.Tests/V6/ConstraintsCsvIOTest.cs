@@ -100,6 +100,19 @@ public class ConstraintsCsvIOTest
         Assert.Equal(new List<string> { "休", "A" }, ok.State.Cons3[0].Pattern);
     }
 
+    /// <summary>[外部レビュー R2 移植元] 取込が 5 セルで頭打ちし、6 要素の並びが往復で 5 要素へ切れていた。</summary>
+    [Fact]
+    public void SixCellRunPatternSurvivesRoundTrip()
+    {
+        var st0 = CsvState();
+        var six = Enumerable.Repeat("休", 6).ToList();
+        var st = st0 with { Cons3n = new List<C3Row> { new(six) }, Cons3mn = new List<C3Row> { new(six.Append("").ToList()) } };
+        var r = ConstraintsCsvIO.Parse(ConstraintsCsvIO.Build(st), st)!;
+        Assert.Equal(six, r.State.Cons3n.Single().Pattern);
+        Assert.Equal(six, r.State.Cons3mn.Single().Pattern);
+        Assert.Equal(1, ConstraintsCsvIO.Parse("禁止連続,休,休,休,休,休,,休", st)!.Rejected);
+    }
+
     /// <summary>H-02: 種別の綴り違いで制約一式が消えるのを防ぐ。</summary>
     [Fact]
     public void ConstraintsImportRejectsUnknownKindInsteadOfWipingEverything()

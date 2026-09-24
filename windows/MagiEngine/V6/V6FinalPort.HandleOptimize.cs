@@ -395,10 +395,8 @@ public static partial class V6FinalPort
             var stagnated = Volatile.Read(ref stagnationFired);
             // [測定中/backlog#35] post.Report の残りHARDが「解けないと証明済み」かどうか。HARD=0（SOFT仕上げの
             //   余地）や、証明できない残りHARD（改善可能かもしれない）は false のまま＝常にExtraRefineを許可する。
-            var postNonCovUHard = post.Report.Hard - post.Report.Breakdown.GetValueOrDefault("covU", 0);
-            var structuralHardResidual = extraRefineRequirePostHardDrop && post.Report.Hard > 0 && (
-                postNonCovUHard == 0 ? post.Report.Breakdown.GetValueOrDefault("covU", 0) <= hardFloor
-                : postNonCovUHard == post.Report.Breakdown.GetValueOrDefault("c3n", 0) && TryOrFalse(() =>
+            var structuralHardResidual = extraRefineRequirePostHardDrop &&
+                IsStructuralHardResidual(post.Report, hardFloor, () => TryOrFalse(() =>
                 {
                     var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, post.Schedule);
                     return diag.HasRuns && diag.AllBlocked;

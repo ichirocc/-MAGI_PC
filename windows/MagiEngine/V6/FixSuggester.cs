@@ -223,12 +223,14 @@ public static class FixSuggester
         }
         /// <summary>ops をその場で適用→評価→復元。base より良く、かつ別の HARD 族を新規に崩さなければ候補に
         /// 追加（<see cref="UnifiedViolationChecker.NewHardFamilyViolation"/>、3.573.0。FixApplyGate と同じ規則
-        /// ＝提案の時点で弾く）。</summary>
+        /// ＝提案の時点で弾く）。回数固定（下限＝上限）を崩す手も同じく弾く。</summary>
         private void TryOps(FixKind kind, IReadOnlyList<FixCell> ops, string label)
         {
             var rep = EvalOps(ops);
-            if (UnifiedViolationChecker.BetterReport(rep, _base) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null)
-                Record(kind, ops, label, rep);
+            if (!UnifiedViolationChecker.BetterReport(rep, _base) || UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) != null) return;
+            var after = _s.Copy2D();
+            foreach (var op in ops) after[op.Staff][op.Day] = op.ToShift;
+            if (!V6SearchOperators.ExactPinRegression(_p, _s, after)) Record(kind, ops, label, rep);
         }
 
         public List<FixSuggestion> Run(int maxResults)
@@ -400,12 +402,14 @@ public static class FixSuggester
                 var idx = new int[n];
                 ViolationReport? bestComboRep = null;
                 int[]? bestCombo = null;
+                var s0 = _s.Copy2D();
                 while (true)
                 {
                     for (var c = 0; c < n; c++) _s[cells[c]][j] = cellOpts[c][idx[c]];
                     var rep = UnifiedViolationChecker.Check(_state, _s);
+                    // TryOps と同じ規則（回数固定を崩す組み合わせは最良に選ばない）。
                     if (UnifiedViolationChecker.BetterReport(rep, _base) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
-                        (bestComboRep == null || UnifiedViolationChecker.BetterReport(rep, bestComboRep)))
+                        (bestComboRep == null || UnifiedViolationChecker.BetterReport(rep, bestComboRep)) && !V6SearchOperators.ExactPinRegression(_p, s0, _s))
                     {
                         bestComboRep = rep;
                         var combo = new int[n];
