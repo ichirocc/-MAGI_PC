@@ -47,7 +47,7 @@ public static partial class V6HotfixPasses
         //   ①どの必須族も best より増やさない（合計が同点でも covU→c3n の付け替えを拒む＝1手の提案ゲートと同型）。
         if (UnifiedViolationChecker.NewHardFamilyViolation(bestRep, rep) is not null) return false;
         if (rep.Hard != bestRep.Hard) return rep.Hard < bestRep.Hard;
-        //   ②重い SOFT が 1 件でも増える手は許容の有無にかかわらず採らない。
+        //   ②必須が減る手は OFF と同じく採る（上の行）。必須が同点のとき、重い SOFT が 1 件でも増える手は採らない。
         if (ToleranceBlockedFamilies.Any(f => rep.Breakdown.GetValueOrDefault(f, 0) > bestRep.Breakdown.GetValueOrDefault(f, 0))) return false;
         var baseline = NonFamilySoftTotal(before, family);
         var budget = baseline * SoftToleranceFraction;

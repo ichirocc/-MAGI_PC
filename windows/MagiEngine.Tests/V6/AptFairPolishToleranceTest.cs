@@ -120,4 +120,14 @@ public class AptFairPolishToleranceTest
         var withFairGain = RepOf(("fair", 9), ("weekly", 47), ("apt", 2)); // fair も減るなら容認で採る
         Assert.True(V6HotfixPasses.ToleratedBetter(withFairGain, before, before, "fair", enabled: true));
     }
+
+    [Fact]
+    public void HardDecreaseIsAcceptedEvenIfAHeavySoftFamilyGrows()
+    {
+        // 必須が減る手は OFF（BetterReport）と同じく採る＝重い SOFT の増加禁止は必須が同点の比較だけに掛かる。
+        var best = RepOf(("covU", 1), ("c1", 0), ("apt", 2));
+        var cand = RepOf(("covU", 0), ("c1", 1), ("apt", 0));
+        Assert.True(UnifiedViolationChecker.BetterReport(cand, best));
+        Assert.True(V6HotfixPasses.ToleratedBetter(cand, best, best, "apt", enabled: true));
+    }
 }
