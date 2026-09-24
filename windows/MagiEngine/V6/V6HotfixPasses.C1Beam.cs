@@ -90,6 +90,7 @@ public static partial class V6HotfixPasses
             return w;
         }
 
+        var prefilter = PolishGate.HardDeltaPrefilter;
         var beam = new List<Beam> { new Beam(work0, before, 0) };
         Beam? bestEver = null;
         int stagnant = 0;
@@ -112,6 +113,7 @@ public static partial class V6HotfixPasses
                     int x = p.Cons1[ci].ShiftIdx;
                     var w2 = TryOneMove(b.Work, i, j, x);
                     if (w2 == null) continue;
+                    if (prefilter && b.Rep.Hard + HardDelta.Delta(p, b.Work, w2) > before.Hard) continue;
                     var rep2 = UnifiedViolationChecker.Check(state, w2);
                     if (rep2.Hard > before.Hard) continue;
                     nextCandidates.Add(new Beam(w2, rep2, b.Applied + 1));

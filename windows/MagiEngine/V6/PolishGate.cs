@@ -39,6 +39,12 @@ public static class PolishGate
     /// </summary>
     public static volatile bool FilterC3nIncrease = true;
 
+    /// <summary>
+    /// 循環交換研磨（k=2,3）と C1広域ビームで、必ず却下される候補（HARD 正味増）を <see cref="HardDelta"/> の厳密差分で
+    /// checker の前に捨てるか。既定 <b>true</b>。速度専用＝ON/OFF で盤面は同一（<c>HardDeltaPrefilterTests</c>）。UI トグルは無し。
+    /// </summary>
+    public static volatile bool HardDeltaPrefilter = true;
+
     /// <summary>[3.514.0/UIトグル化] <see cref="CombinatorialRepair.CombineAndApply"/> の exhaustPairs
     /// （経緯: history 3.512.6）。既定OFF・未計測。</summary>
     public static volatile bool CombineExhaustPairs = false;

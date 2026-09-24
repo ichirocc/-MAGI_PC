@@ -35,6 +35,7 @@ public static partial class V6HotfixPasses
         //   同型のバグ）。実現不能な希望はpref計上上も定数=動かして良い＝canDoガード込みの
         //   wishLocked が正しい判定。安全側（isBetter/checkerが最終ゲート）で候補が広がるのみ。
         bool Movable(int i, int j) => !p.WishLocked(i, j);
+        var prefilter = PolishGate.HardDeltaPrefilter;
         var pass = 0;
         while (pass < maxPasses)
         {
@@ -60,6 +61,12 @@ public static partial class V6HotfixPasses
                         //   staffRange厳密ピン(lo==hi)を新たに崩す候補は不採用にする（keep-best/重み不変）。
                         var workBeforeSwap2 = work.Copy2D();
                         work[a][j] = sb; work[b][j] = sa;
+                        // bestRep は work の現在値の報告＝HARD が増える候補は BetterReport が副作用なく却下する。
+                        if (prefilter && HardDelta.SameDayPermutationDelta(p, work, j, new[] { a, b }, new[] { sa, sb }) > 0)
+                        {
+                            work[a][j] = sa; work[b][j] = sb;
+                            continue;
+                        }
                         var rep = UnifiedViolationChecker.Check(state, work);
                         if (V6SearchOperators.AdoptionGate(p, workBeforeSwap2, work, rep, bestRep, pinBlocks).Accepted)
                         {
@@ -92,6 +99,11 @@ public static partial class V6HotfixPasses
                             {
                                 var workBeforeRotate3 = work.Copy2D();
                                 work[a][j] = sb; work[b][j] = sc; work[c][j] = sa;
+                                if (prefilter && HardDelta.SameDayPermutationDelta(p, work, j, new[] { a, b, c }, new[] { sa, sb, sc }) > 0)
+                                {
+                                    work[a][j] = sa; work[b][j] = sb; work[c][j] = sc;
+                                    continue;
+                                }
                                 var rep = UnifiedViolationChecker.Check(state, work);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRotate3, work, rep, bestRep, pinBlocks).Accepted)
                                 {
