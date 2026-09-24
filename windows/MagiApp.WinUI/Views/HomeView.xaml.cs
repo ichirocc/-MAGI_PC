@@ -124,10 +124,12 @@ public sealed partial class HomeView : UserControl
             phase = "完成"; phaseHex = MagiAccent.Green;
             _bigAction = () => _ = _window.ExportScheduleCsvAsync(); _helperAction = () => _window.SelectTab("schedule");
         }
-        else if (infeasible && cands.Shortfall.Count > 0)
+        else if (infeasible && shortfalls.Any(s => s.WishPinned.Count > 0))
         {
+            // 重複除去の前で決める（S5a の行に吸収された S5b の人も数える）。例の日も希望で固定された人がいる日から。
+            var pinnedDay = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0)?.DayLabel;
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
-            headline = "いまの希望のままでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
+            headline = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = "ぶつかっている希望を見る"; bigEnabled = true; helperLabel = "データを見直す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => _window.SelectTab("edit");
@@ -198,11 +200,14 @@ public sealed partial class HomeView : UserControl
             PhaseText.Text = phase;
             PhaseText.Foreground = new SolidColorBrush(ReadableOn(phaseColor));
         }
-        // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
-        if (!ui.Running && headline.Length > 0 && _vm.WishCancelOutcomeLine() is { } outcomeLine) headline += "\n" + outcomeLine;
         HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
+        // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
+        var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine();
+        OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
+        OutcomeText.Text = outcomeLine ?? "";
+        OutcomeText.Foreground = fgBrush;
 
         var remaining = ui.BestHard > 0L ? $"必須 残り{ui.BestHard}件"
             : shortDays > 0 ? $"残り{shortDays}日"
@@ -418,9 +423,8 @@ public sealed partial class HomeView : UserControl
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
 
-    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人手不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。
-    /// 行を押すとダイアログを閉じて勤務表のそのセルへ移る。各行の「取り消したら？」で 1 行ずつ試算し（<c>docs/s5_wish_trial.md</c> §5）、
-    /// 結果が出た行は確定できる。結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
+    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人手不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
+    /// 試算の結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
     private async Task ShowWishConflictsAsync()
     {
         var panel = new StackPanel { Spacing = 4, MinWidth = 360 };

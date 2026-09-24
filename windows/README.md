@@ -328,6 +328,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-24（S5 VM・画面のレビュー対応を同期、Kotlin 同日）: 本実行の失敗分岐は「盤面は未変更」を前提にしていたが、維持・採用の書き込みの後
+  （`PushReportAsync`/`CaptureAlternatives`）で投げると、S5 は入力 (ns, B) を描き直して「つくれませんでした」と出し、VM と自動保存は結果を持つ
+  食い違いになっていた（S5 以前の非 S5 も文言だけ失敗で画面は古いまま）。`_state` が st0 から差し替わっていたら今の (state, 盤面) で数え直し
+  「勤務表の作成は終わりましたが、最後の処理でエラーが起きました」（S5 は取り消しの注記つき）を出す。差し替え前の失敗は従来どおり。ホームの
+  充足不可カードの S5b 版は重複除去前の `WishPinned` で判定し、例の日も希望で固定された人がいる日から取る。§9 の結果行は見出し（太字）に足さず
+  別の `OutcomeText`（本文）へ（Kotlin と同じ見た目）。テスト: 採用後の他の案の取り込みで投げる（S5/非 S5）・確定直後の `Ui.Wishes`（I14）・
+  Stop/BeginBoardJob で試算の Busy が消える・V1/V12 を B より厳密に良い結果にして採用分岐を通す。`dotnet test MagiEngine.Tests` 912/912・
+  `MagiApp.ViewModels.Tests` 468/468 緑。
+
 - 2026-09-24（外部レビュー R2/R3/R5/N9/N10 を同期、Android ab9c9a4・72d682f・監査で見つけた N10 の取り残し）: R2＝制約CSVの並びを行末まで読む
   （`ConstraintsCsvIO.Pat`/`PatHasGap`）。R3＝c3n 診断の正味 HARD に c3w を算入（`V6PortAnalyzer.Forbidden.cs`、c3n 壁の停滞閾値選択にも効く）。
   R5＝`V6FinalPort.IsStructuralHardResidual`（covU が床以下のときだけ真、既定 OFF の `extraRefineRequirePostHardDrop` 用）。N9＝無変更パスに巻き戻し印を

@@ -20,10 +20,7 @@ public abstract record WishTrialView
 /// <summary>[S5] 確定の照合に使う試算時の文脈（§6 の 3）。<see cref="Result"/>＝null は試算できなかった行（確定できない）。</summary>
 public sealed record WishTrialToken(MagiState State, long BoardKey, int Staff, int Day, int Shift, WishTrial.Result? Result);
 
-/// <summary>
-/// [S5] 「この希望を取り消したら」試算と確定（Kotlin <c>MagiViewModel.kt</c> の S5 節、<c>docs/s5_wish_trial.md</c> §6・§8・§14 D）。
-/// 結果と対照は ctx（state の参照＋盤面キー）つきで VM が持ち、画面は読むたびに問い合わせる。
-/// </summary>
+/// <summary>[S5] 「この希望を取り消したら」試算と確定（Kotlin <c>MagiViewModel.kt</c> の S5 節、<c>docs/s5_wish_trial.md</c> §6・§8・§14 D）。</summary>
 public sealed partial class MagiViewModel
 {
     /// <summary>試算の文脈。state は参照で見る（どの編集でも state が差し替わる＝指紋より厳しい、§7 I4）。</summary>

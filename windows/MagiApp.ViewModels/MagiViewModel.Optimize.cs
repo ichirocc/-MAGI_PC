@@ -326,7 +326,31 @@ public sealed partial class MagiViewModel
             LogOp("W", $"最適化 失敗: {e.GetType().Name}: {e.Message}");
             terminalLogged = true;
             var failMsg = $"勤務表をつくれませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
-            if (s5 is null)
+            if (!ReferenceEquals(_state, st0) && _state is { } curSt && _currentSchedule is { } curSched)
+            {
+                // [S5 §10] 維持・採用の書き込みの後で投げた＝VM と自動保存は今回の結果。捨てずに今の (state, 盤面) で描き直す。
+                var lateMsg = $"勤務表の作成は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。{s5Suffix}";
+                var curB = curSched.Copy2D();
+                try
+                {
+                    var rep = await Task.Run(() => UnifiedViolationChecker.Check(curSt, curB), CancellationToken.None);
+                    await PushReportAsync(curSt, curB, rep, nonCancellable: true, transform: ui =>
+                    {
+                        ui.Running = false;
+                        ui.HasResult = true;
+                        ui.MessageIsError = true;
+                        ui.Message = lateMsg;
+                    });
+                }
+                catch (Exception)
+                {
+                    Ui.Running = false;
+                    Ui.Wishes = curSt.Wishes;
+                    Ui.Message = lateMsg;
+                    Ui.MessageIsError = true;
+                }
+            }
+            else if (s5 is null)
             {
                 Ui.Running = false;
                 Ui.Message = failMsg;

@@ -72,6 +72,15 @@ public class MagiViewModelWishTrialTest : IDisposable
         Schedule: sch.Copy2D(), Report: new ViolationReport(EmptyS, EmptyS, EmptyS, EmptyI, Total: 999, Hard: 99, Soft: 900, WeightedScore: 999),
         Phase: "test:Fake", BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "fake"), Logs: Array.Empty<MirrorLog>());
 
+    /// <summary>B より厳密に良い結果: 残る希望 (1,3) を満たす（ns 基準で必須 0）。</summary>
+    private static readonly int[][] BetterBoard = { new[] { 0, 0, 0, 0, 0, 0, 0 }, new[] { 0, 0, 0, 1, 0, 0, 0 } };
+
+    private static V6FinalPort.ActionResult Better(MagiState st, int[][] _) => SameBoard(st, BetterBoard);
+
+    /// <summary>採用の書き込みの後（他の案の取り込み）で投げる: 行が null の案は複製で落ちる。</summary>
+    private static V6FinalPort.ActionResult BetterThenAltThrows(MagiState st, int[][] sch) =>
+        Better(st, sch) with { Alternatives = new[] { new int[][] { null!, null! } } };
+
     private (MagiViewModel Vm, FakeOptimizationService Fake) NewVm(Func<MagiState, int[][], V6FinalPort.ActionResult>? result = null)
     {
         var st = MinimalState.Build(wishes: new Dictionary<string, int> { ["0,2"] = 1, ["1,3"] = 1 });
@@ -94,7 +103,7 @@ public class MagiViewModelWishTrialTest : IDisposable
     [Fact]
     public async Task V1_ConfirmThenUndoOnce_RestoresWishAndBoard()
     {
-        var (vm, _) = NewVm();
+        var (vm, _) = NewVm(Better);
         var st0 = vm._state!;
         var b0 = vm._currentSchedule!.Copy2D();
         var ready = await TrialReady(vm, 0, 2, 1);
@@ -103,6 +112,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         vm.CancelWishAndRebuild(ready.Token);
         await vm.LastRunOptimizeTask!;
         Assert.Equal(undo0 + 1, vm.UndoStackCount);
+        Assert.Equal(BetterBoard, vm._currentSchedule);
 
         vm.Undo();
         Assert.Same(st0, vm._state);
@@ -142,6 +152,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         var ready = await TrialReady(vm, 0, 2, 1);
 
         vm.CancelWishAndRebuild(ready.Token);
+        Assert.False(vm.Ui.Wishes.ContainsKey("0,2"));   // I14: 確定の瞬間から画面の希望は ns
         vm.Stop();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
 
@@ -297,8 +308,7 @@ public class MagiViewModelWishTrialTest : IDisposable
     [Fact]
     public async Task V12_Autosave_NeverHasWishWithResult()
     {
-        var result = new[] { new[] { 1, 0, 0, 0, 0, 0, 0 }, new[] { 0, 0, 0, 0, 0, 0, 0 } };
-        var (vm, _) = NewVm((st, _) => SameBoard(st, result));
+        var (vm, _) = NewVm(Better);
         var b0 = vm._currentSchedule!.Copy2D();
         var ready = await TrialReady(vm, 0, 2, 1);
         var path = Path.Combine(vm.DataDir, "magi_autosave.json");
@@ -312,6 +322,55 @@ public class MagiViewModelWishTrialTest : IDisposable
         await vm.LastAutoSaveTask!;
         var done = StateJsonSerializer.Parse(File.ReadAllText(path));
         Assert.False(done.Wishes.ContainsKey("0,2"));
+        Assert.Equal(BetterBoard.Select(r => (IReadOnlyList<int>)r.ToList()), done.Schedule, new RowComparer());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LateFailure_AfterAdoption_ShowsAdoptedBoardWithLateMessage(bool s5)
+    {
+        var (vm, _) = NewVm(BetterThenAltThrows);
+        if (s5)
+        {
+            var ready = await TrialReady(vm, 0, 2, 1);
+            vm.CancelWishAndRebuild(ready.Token);
+        }
+        else
+        {
+            vm.RunV6FullOptimize();
+        }
+        await vm.LastRunOptimizeTask!;
+
+        Assert.Equal(BetterBoard, vm._currentSchedule);
+        Assert.Equal(BetterBoard.Select(r => (IReadOnlyList<int>)r.ToList()), vm.Ui.Schedule, new RowComparer());
+        Assert.Equal(CheckHard(vm._state!, BetterBoard), vm.Ui.BestHard);
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.HasResult);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("勤務表の作成は終わりましたが", vm.Ui.Message);
+        Assert.DoesNotContain("つくれませんでした", vm.Ui.Message);
+        Assert.Equal(s5, vm.Ui.Message!.Contains("希望の取り消しはそのままです"));
+        Assert.Equal(!s5, vm.Ui.Wishes.ContainsKey("0,2"));
+    }
+
+    [Fact]
+    public async Task StopOrBoardJob_WhileTrialRunning_ClearsBusy()
+    {
+        var (vm, _) = NewVm();
+        vm.StartWishTrial(0, 2);
+        var first = vm.LastWishTrialTask!;
+        vm.Stop();
+        Assert.Null(vm.Ui.WishTrialBusy);
+
+        vm.StartWishTrial(0, 2);
+        var second = vm.LastWishTrialTask!;
+        var token = vm.BeginBoardJob("読み込み");
+        Assert.Null(vm.Ui.WishTrialBusy);
+        vm.EndBoardJob(token);
+
+        await Task.WhenAll(first, second);
+        Assert.Null(vm.Ui.WishTrialBusy);
     }
 
     [Fact]

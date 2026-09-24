@@ -62,6 +62,7 @@
                         <TextBlock x:Name="PhaseText" Style="{StaticResource MagiLabelMediumTextStyle}" FontWeight="Bold" />
                     </Border>
                     <TextBlock x:Name="HeadlineText" TextWrapping="Wrap" Style="{StaticResource MagiTitleLargeTextStyle}" FontWeight="Bold" />
+                    <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="ResolveText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
                     <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" />
                     <HyperlinkButton x:Name="DetailToggle" Click="OnDetailToggleClick" Padding="0" />
