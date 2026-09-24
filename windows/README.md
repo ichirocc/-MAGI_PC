@@ -326,6 +326,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-24（Kotlin 3.475.0 の取り残しを同期: `ScheduleUtil.NormalizeSchedule` の欠損セル）: 行が短い・行が無いセルを `0`（先頭シフトの勤務）
+  で埋めていたのを、Kotlin と同じ `-1`（未割当）へ。自前の doc コメントは元から -1 と書いていた。S×T の盤面では出力不変。Android の S5 設計
+  （`magi7ichiro-fork` の `docs/s5_wish_trial.md`、C# 移植計画は §11）の敵対的検証で見つかった。`dotnet test MagiEngine.Tests` 888/888・
+  `MagiApp.ViewModels.Tests` 445/445 緑（`NormalizeSchedule_MissingCellsBecomeTheUnassignedSentinel` を追加）。
+
 - 2026-09-22（Kotlin 07e9335 同期: エポック超過の診断をプロセス凍結と締切漏れで出し分け）:
   実機ログの予算超過3回は全ロールが同秒数だけ超過＝プロセス凍結だった。`EpochOverrunLog`（`V6NativeOptimizer.Sizing.cs`）が
   実秒数の幅≤max(30s,最大の5%)なら凍結と書く（探索動学不変）。Kotlinの既存テストと新テストを1対1で

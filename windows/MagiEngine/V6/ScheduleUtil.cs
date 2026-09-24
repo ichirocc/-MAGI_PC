@@ -95,7 +95,8 @@ public static class ScheduleUtil
             var srcRow = i < schedule.Length ? schedule[i] : null;
             for (int j = 0; j < p.T; j++)
             {
-                int k = (srcRow is not null && j < srcRow.Length) ? srcRow[j] : 0;
+                // [Android 3.475.0 同期] 欠損セル（行が短い／行が無い）も -1。旧 `: 0` は先頭シフトの勤務として被覆・回数に数えていた。
+                int k = (srcRow is not null && j < srcRow.Length) ? srcRow[j] : -1;
                 row[j] = (k >= 0 && k < p.K) ? k : -1;
             }
             result[i] = row;

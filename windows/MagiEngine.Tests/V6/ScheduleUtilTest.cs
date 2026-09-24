@@ -1,3 +1,5 @@
+using MagiEngine.Model;
+using MagiEngine.Tests.Fixtures;
 using MagiEngine.V6;
 
 namespace MagiEngine.Tests.V6;
@@ -98,5 +100,20 @@ public class ScheduleUtilTest
         // range is 1-9999 (no BC/proleptic-negative-year support), so this throws internally and
         // falls to the same fallback branch as genuinely unparseable input.
         Assert.Equal("1日", ScheduleUtil.FormatDay("0000-06-01", 0));
+    }
+
+    // [Android 3.475.0 同期] 欠損セル（行が短い・行が無い）は範囲外の値と同じ -1（旧: 0＝先頭シフトの勤務として数えていた）。
+    [Fact]
+    public void NormalizeSchedule_MissingCellsBecomeTheUnassignedSentinel()
+    {
+        var state = StateJsonSerializer.Parse(FixtureLoader.ReadRaw("sample_state_v6.json"));
+        var p = new Problem(state);
+        var ragged = new[] { new[] { 0 }, new[] { 99 } };
+        var norm = ScheduleUtil.NormalizeSchedule(ragged, p);
+        Assert.Equal(p.S, norm.Length);
+        Assert.Equal(0, norm[0][0]);
+        Assert.All(norm[0].Skip(1), v => Assert.Equal(-1, v));
+        Assert.All(norm[1], v => Assert.Equal(-1, v));
+        Assert.All(norm[p.S - 1], v => Assert.Equal(-1, v));
     }
 }
