@@ -26,6 +26,11 @@ public static partial class V6HotfixPasses
     /// 既定OFF（<see cref="PolishGate.AptFairSoftTolerance"/>）。</summary>
     internal const double SoftToleranceFraction = 0.06;
 
+    /// <summary>[無害化, Kotlin原本 <c>AptFairPolish.TOLERANCE_BLOCKED_FAMILIES</c>（2026-09-24 ユーザー指定の集合）]
+    /// 許容 ON でも 1 件でも増えたら採らない重い SOFT（apt/fair/weekly/c2/c3/c3m は軽い側として許容しうる）。</summary>
+    internal static readonly IReadOnlySet<string> ToleranceBlockedFamilies =
+        new HashSet<string> { "c1", "low", "high", "covO", "c3mn", "c41", "c42", "c41s", "c42s" };
+
     /// <summary>internal＝<c>AptFairPolishToleranceTest</c> から直接検証するため（Kotlin原本と同じ可視性）。</summary>
     internal static double NonFamilySoftTotal(ViolationReport rep, string excludeFamily) =>
         MirrorKeys.Soft.Where(f => f != excludeFamily).Sum(f => rep.Breakdown.GetValueOrDefault(f, 0) * MirrorKeys.WeightOf(f));
@@ -38,7 +43,12 @@ public static partial class V6HotfixPasses
     internal static bool ToleratedBetter(ViolationReport rep, ViolationReport bestRep, ViolationReport before, string family, bool enabled, bool count = true)
     {
         if (!enabled) return IsBetter(rep, bestRep);
+        // [無害化, Kotlin原本 2026-09-24] 許容 ON の敗因（重い SOFT の増加・必須どうしの付け替え）を切る。
+        //   ①どの必須族も best より増やさない（合計が同点でも covU→c3n の付け替えを拒む＝1手の提案ゲートと同型）。
+        if (UnifiedViolationChecker.NewHardFamilyViolation(bestRep, rep) is not null) return false;
         if (rep.Hard != bestRep.Hard) return rep.Hard < bestRep.Hard;
+        //   ②重い SOFT が 1 件でも増える手は許容の有無にかかわらず採らない。
+        if (ToleranceBlockedFamilies.Any(f => rep.Breakdown.GetValueOrDefault(f, 0) > bestRep.Breakdown.GetValueOrDefault(f, 0))) return false;
         var baseline = NonFamilySoftTotal(before, family);
         var budget = baseline * SoftToleranceFraction;
         var usedByBest = Math.Max(NonFamilySoftTotal(bestRep, family) - baseline, 0.0);
@@ -47,7 +57,9 @@ public static partial class V6HotfixPasses
         var forgiven = Math.Min(increase, remaining);
         var rawDelta = rep.WeightedScore - bestRep.WeightedScore;
         var effectiveDelta = rawDelta - forgiven;
-        var accepted = effectiveDelta < 0.0 || (effectiveDelta == 0.0 && rep.Total < bestRep.Total);
+        //   ③容認を使うなら、研磨対象の族（apt/fair）の件数が best より減っていること。
+        var targetImproved = rep.Breakdown.GetValueOrDefault(family, 0) < bestRep.Breakdown.GetValueOrDefault(family, 0);
+        var accepted = (effectiveDelta < 0.0 || (effectiveDelta == 0.0 && rep.Total < bestRep.Total)) && (forgiven <= 0.0 || targetImproved);
         // [3.535.0/実機ログで発覚, Kotlin原本] 素のbetterReport（＝rawDeltaだけで同じ判定）なら却下されるはずの
         //   手を、容認で採用に転じさせた回数だけを数える。
         // [3.592.0, Kotlin原本] countはpinBad診断分岐からの呼び出し(実際には不採用)を数えないためのガード。

@@ -11,14 +11,18 @@ namespace MagiEngine.Tests.V6;
 /// </summary>
 public class AptFairPolishToleranceTest
 {
-    private static ViolationReport Rep(int fair, int apt, int low)
+    private static ViolationReport Rep(int fair, int apt, int low) => RepOf(("fair", fair), ("apt", apt), ("low", low));
+
+    private static ViolationReport RepOf(params (string Family, int Count)[] fams)
     {
-        var bd = new Dictionary<string, int> { ["fair"] = fair, ["apt"] = apt, ["low"] = low };
-        var weighted = fair * MirrorKeys.WeightOf("fair") + apt * MirrorKeys.WeightOf("apt") + low * MirrorKeys.WeightOf("low");
+        var bd = fams.ToDictionary(f => f.Family, f => f.Count);
+        var weighted = bd.Sum(kv => kv.Value * MirrorKeys.WeightOf(kv.Key));
+        var hard = bd.Where(kv => MirrorKeys.Hard.Contains(kv.Key)).Sum(kv => kv.Value);
+        var total = bd.Values.Sum();
         return new ViolationReport(
             Violations: new Dictionary<string, string>(), NeedViolations: new Dictionary<string, string>(),
             CountViolations: new Dictionary<string, string>(), Breakdown: bd,
-            Total: fair + apt + low, Hard: 0, Soft: fair + apt + low, WeightedScore: weighted);
+            Total: total, Hard: hard, Soft: total - hard, WeightedScore: weighted);
     }
 
     [Fact]
@@ -79,5 +83,41 @@ public class AptFairPolishToleranceTest
         Assert.Equal(0, TuningTelemetry.AptFairToleranceUsedCount());
         Assert.True(V6HotfixPasses.ToleratedBetter(candidate, bestRep, before, "fair", enabled: true, count: true));
         Assert.Equal(1, TuningTelemetry.AptFairToleranceUsedCount());
+    }
+
+    // ==== [無害化, Kotlin原本 2026-09-24] 許容 ON でも重い SOFT の増加・必須どうしの付け替え・対象族の改善なしの容認は採らない ====
+
+    [Fact]
+    public void HeavySoftIncreaseIsRejectedEvenWhenTheRawScoreImproves()
+    {
+        // c1 が 1 増えても fair が大きく減れば素の betterReport は採るが、許容 ON では c1 の増加を 1 件も許さない。
+        var before = RepOf(("fair", 60), ("c1", 0), ("weekly", 5));
+        var candidate = RepOf(("fair", 30), ("c1", 1), ("weekly", 5));
+        Assert.True(UnifiedViolationChecker.BetterReport(candidate, before));
+        Assert.False(V6HotfixPasses.ToleratedBetter(candidate, before, before, "fair", enabled: true));
+        var lowUp = RepOf(("fair", 30), ("low", 1), ("weekly", 5));
+        Assert.False(V6HotfixPasses.ToleratedBetter(lowUp, before, before, "fair", enabled: true));
+    }
+
+    [Fact]
+    public void HardFamilySwapIsRejectedEvenAtTheSameHardTotal()
+    {
+        // 必須の合計は同点(1)でも covU→c3n の付け替えは採らない（fair は改善していても）。
+        var bestRep = RepOf(("covU", 1), ("c3n", 0), ("fair", 10));
+        var candidate = RepOf(("covU", 0), ("c3n", 1), ("fair", 2));
+        Assert.False(V6HotfixPasses.ToleratedBetter(candidate, bestRep, bestRep, "fair", enabled: true));
+    }
+
+    [Fact]
+    public void ToleranceIsNotUsedWhenTheTargetFamilyDoesNotImprove()
+    {
+        // weekly −3(−6)・apt +2(+8) で加重 +2・件数 −1。容認(2 ≤ 予算 6)で実効 0・件数減なので旧判定なら採るが、
+        //   対象の fair が減っていない＝他の族を入れ替えただけの手は採らない。
+        var before = RepOf(("fair", 10), ("weekly", 50), ("apt", 0)); // 非 fair SOFT = 100 → 予算 6
+        var candidate = RepOf(("fair", 10), ("weekly", 47), ("apt", 2));
+        Assert.False(UnifiedViolationChecker.BetterReport(candidate, before));
+        Assert.False(V6HotfixPasses.ToleratedBetter(candidate, before, before, "fair", enabled: true));
+        var withFairGain = RepOf(("fair", 9), ("weekly", 47), ("apt", 2)); // fair も減るなら容認で採る
+        Assert.True(V6HotfixPasses.ToleratedBetter(withFairGain, before, before, "fair", enabled: true));
     }
 }

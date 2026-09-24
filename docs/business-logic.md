@@ -29,6 +29,9 @@
 > `PolishGate.aptFairSoftTolerance`をONにすると、対象家族以外のSOFT合計の悪化を研磨パス開始時点比
 > +6%まで容認する（`AptFairPolish.toleratedBetter`、累積予算）。HARDの不増加は不変。他の全ての
 > keep-best比較（`betterReport`単体）には影響しない。
+> **無害化（2026-09-24 ユーザー指示）**: ON でも ①どの必須族も best より増やさない（合計が同点でも付け替えを拒む）、
+> ②重い SOFT（c1・low・high・covO・c3mn・c41・c42・c41s・c42s）が 1 件でも増える手は採らない、③容認を使うなら対象族
+> （apt/fair）の件数が減っていること。予算の母数（対象外 SOFT 合計×6%）は不変。OFF は従来どおり。
 > 容認した悪化が後続パスで回収されずチェーン全体が退行したときは、後処理チェーンの**走行 keep-best**
 > （`postChainRunningKeepBest`、3.610.0 で既定 ON）が次パスの前にチェーン内の最良盤面へ巻き戻す。
 > 構造的 covU 床（`V6SanityPort.structuralHardFloor`）> 0 の盤面では働かない。許容 OFF では各パスが単調なので巻き戻しは起きない。
