@@ -113,11 +113,11 @@ public sealed partial class MagiViewModel
         Ui.Running = true;
         Ui.HasResult = false;
         Ui.Message = "バックグラウンドで最適化を開始しました（完了時に通知）";
-        LogOp("I", $"バックグラウンド最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers})");
+        LogOp("I", $"バックグラウンド最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
 
         var cts = new CancellationTokenSource();
         _bgCts = cts;
-        LastRunInBackgroundTask = RunInBackgroundCoreAsync(st0, sched0.Copy2D(), runId, Ui.BudgetSec, Ui.Workers, cts.Token);
+        LastRunInBackgroundTask = RunInBackgroundCoreAsync(st0, sched0.Copy2D(), runId, Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm, cts.Token);
     }
 
     /// <summary>
@@ -129,7 +129,7 @@ public sealed partial class MagiViewModel
     /// 同型の、純粋なインメモリ処理になった。
     /// </summary>
     private async Task RunInBackgroundCoreAsync(
-        MagiState st0, int[][] sched0, long runId, int budgetSec, int workers, CancellationToken ct)
+        MagiState st0, int[][] sched0, long runId, int budgetSec, int workers, bool softPolish, V6Algorithm algorithm, CancellationToken ct)
     {
         var terminalLogged = false;
         void BgNote(string msg, string level = "I") => LogOp(level, $"バックグラウンド最適化: {msg}");
@@ -166,10 +166,8 @@ public sealed partial class MagiViewModel
 
             var res = await _optimizationService.OptimizeAsync(
                 st0, sched0.Copy2D(), budgetSec, workers,
-                // [Kotlin原本との差なし・逐語] Worker.doWork() は softPolish/requestedAlgorithm を
-                //   指定せず handleOptimize の既定値（softPolish=false, AUTO）に任せている
-                //   （V6FinalPort.kt:257-258）——前景の Ui.SoftPolish/Ui.V6Algorithm は使わない。
-                softPolish: false, requestedAlgorithm: V6Algorithm.Auto,
+                // [外部レビュー N6] 前景と同じく開始時の方式・仕上げ最適化で計算する（Kotlin RunConfig 同期）。
+                softPolish: softPolish, requestedAlgorithm: algorithm,
                 allowImpossible: true, onProgress: OnProgress, cancellationToken: ct);
 
             Terminal($"完了（必須{res.Report.Hard} 合計{res.Report.Total}）");

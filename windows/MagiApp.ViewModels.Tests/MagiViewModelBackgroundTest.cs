@@ -158,16 +158,30 @@ public class MagiViewModelBackgroundTest : IDisposable
         await vm.LastRunInBackgroundTask!;
 
         Assert.Equal(1, fake.OptimizeCallCount);
-        // [Kotlin原本との差なし・逐語検証] Worker.doWork() は softPolish/requestedAlgorithm を
-        //   指定しない＝V6FinalPort.handleOptimize の既定値(false/AUTO)のまま——前景の設定を継承しない。
-        Assert.False(fake.RequestedSoftPolish);
-        Assert.Equal(V6Algorithm.Auto, fake.RequestedAlgorithm);
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.HasResult);
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("バックグラウンド最適化 完了", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("バックグラウンド最適化 完了"));
         Assert.False(OptimizationRepository.Running);
+    }
+
+    /// <summary>[外部レビュー N6] 背景実行も前景と同じく画面の方式・仕上げ最適化で計算する。</summary>
+    [Theory]
+    [InlineData(true, V6Algorithm.Portfolio)]
+    [InlineData(false, V6Algorithm.Alns)]
+    public async Task UsesTheScreenAlgorithmAndSoftPolish(bool softPolish, V6Algorithm algorithm)
+    {
+        var fake = new FakeOptimizationService { Result = (_, _) => ActionResult(hard: 0, total: 0) };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.SoftPolish = softPolish;
+        vm.Ui.V6Algorithm = algorithm;
+
+        vm.RunInBackground();
+        await vm.LastRunInBackgroundTask!;
+
+        Assert.Equal(softPolish, fake.RequestedSoftPolish);
+        Assert.Equal(algorithm, fake.RequestedAlgorithm);
     }
 
     /// <summary>[Android 3.509.4/3.510.3 同期] Kotlin原本 <c>runSummary = prev?.let { ... }</c>
