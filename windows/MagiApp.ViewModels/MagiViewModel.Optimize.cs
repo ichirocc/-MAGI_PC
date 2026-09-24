@@ -323,10 +323,11 @@ public sealed partial class MagiViewModel
             // [3.271.0/3.382.0相当の由来をそのまま記録] 失敗を操作ログにも残す。C#に Kotlin の
             //   Throwable/Error 相当の区別は無いため、この移植では確立済みの規約
             //   （RefreshCheckCoreAsync 等）に倣い単一の Exception 捕捉とする。
-            LogOp("W", $"最適化 失敗: {e.GetType().Name}: {e.Message}");
+            var late = !ReferenceEquals(_state, st0) ? _state : null;   // 非 null＝この実行が state を差し替えた後の失敗
+            LogOp("W", $"最適化 失敗{(late is not null ? "（結果の採用後）" : "")}: {e.GetType().Name}: {e.Message}");
             terminalLogged = true;
             var failMsg = $"勤務表をつくれませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
-            if (!ReferenceEquals(_state, st0) && _state is { } curSt && _currentSchedule is { } curSched)
+            if (late is { } curSt && _currentSchedule is { } curSched)
             {
                 // [S5 §10] 維持・採用の書き込みの後で投げた＝VM と自動保存は今回の結果。捨てずに今の (state, 盤面) で描き直す。
                 var lateMsg = $"勤務表の作成は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。{s5Suffix}";
@@ -344,8 +345,11 @@ public sealed partial class MagiViewModel
                 }
                 catch (Exception)
                 {
+                    // 診断がまた落ちても盤面だけは今のものを出す（Kotlin と同じ）。
                     Ui.Running = false;
+                    Ui.HasResult = true;
                     Ui.Wishes = curSt.Wishes;
+                    Ui.Schedule = curB.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
                     Ui.Message = lateMsg;
                     Ui.MessageIsError = true;
                 }

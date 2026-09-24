@@ -355,6 +355,30 @@ public class MagiViewModelWishTrialTest : IDisposable
     }
 
     [Fact]
+    public async Task LateFailure_RedrawAlsoFails_FallbackStillShowsAdoptedBoard()
+    {
+        // 採用の文言と、描き直しの文言の 1 回目で投げる＝どちらの pushReport も盤面を描かず、代替の分岐だけが画面を作る。
+        var (vm, _) = NewVm(Better);
+        var lateSeen = 0;
+        vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(UiState.Message) || vm.Ui.Message is not { } m) return;
+            if (m.StartsWith("勤務表ができました", StringComparison.Ordinal)) throw new InvalidOperationException("adopted");
+            if (m.StartsWith("勤務表の作成は終わりましたが", StringComparison.Ordinal) && lateSeen++ == 0) throw new InvalidOperationException("redraw");
+        };
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.Equal(1, lateSeen);
+        Assert.Equal(BetterBoard, vm._currentSchedule);
+        Assert.Equal(BetterBoard.Select(r => (IReadOnlyList<int>)r.ToList()), vm.Ui.Schedule, new RowComparer());
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.HasResult);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.StartsWith("勤務表の作成は終わりましたが", vm.Ui.Message);
+    }
+
+    [Fact]
     public async Task StopOrBoardJob_WhileTrialRunning_ClearsBusy()
     {
         var (vm, _) = NewVm();

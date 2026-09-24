@@ -88,7 +88,7 @@ public sealed partial class HomeView : UserControl
         var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
         var shortDays = shortfalls.Select(x => x.DayIndex).Distinct().Count();
         var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
-        // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR・充足不可の分岐がこれを見る。
+        // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR の分岐がこれを見る。
         var cands = NextActionGuide.WishTrialCandidatesOf(ui);
 
         // [UX改善/Android同期, ユーザー指示「ゲーム要素廃止」] phase「狩猟」はRPG風の演出語のため、

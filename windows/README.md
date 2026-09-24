@@ -335,7 +335,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   充足不可カードの S5b 版は重複除去前の `WishPinned` で判定し、例の日も希望で固定された人がいる日から取る。§9 の結果行は見出し（太字）に足さず
   別の `OutcomeText`（本文）へ（Kotlin と同じ見た目）。テスト: 採用後の他の案の取り込みで投げる（S5/非 S5）・確定直後の `Ui.Wishes`（I14）・
   Stop/BeginBoardJob で試算の Busy が消える・V1/V12 を B より厳密に良い結果にして採用分岐を通す。`dotnet test MagiEngine.Tests` 912/912・
-  `MagiApp.ViewModels.Tests` 468/468 緑。
+  `MagiApp.ViewModels.Tests` 468/468 緑。検証での追補（Kotlin 同日）: 描き直しの `PushReportAsync` もまた落ちたときの代替は盤面を入れず、
+  採用の分岐では画面が B のまま「表示は今の勤務表です」と出えた＝代替でも `Ui.Schedule`（と Kotlin にある `HasResult`）を今のものへ。操作ログの
+  「失敗（結果の採用後）」と §2.1 のコメントも Kotlin に揃え、代替の分岐のテストを足した。
 
 - 2026-09-24（外部レビュー R2/R3/R5/N9/N10 を同期、Android ab9c9a4・72d682f・監査で見つけた N10 の取り残し）: R2＝制約CSVの並びを行末まで読む
   （`ConstraintsCsvIO.Pat`/`PatHasGap`）。R3＝c3n 診断の正味 HARD に c3w を算入（`V6PortAnalyzer.Forbidden.cs`、c3n 壁の停滞閾値選択にも効く）。
