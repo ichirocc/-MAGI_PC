@@ -66,16 +66,19 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// 勤務表を最初からつくる（本最適化）。Kotlin原本 <c>runV6FullOptimize()</c> の移植。
     /// </summary>
-    public void RunV6FullOptimize()
+    public void RunV6FullOptimize() => StartFullOptimize(pushUndo: true, null);
+
+    /// <summary>本実行。<paramref name="pushUndo"/>＝false は Undo を積まない（S5 の確定がすでに積んでいる）。</summary>
+    private void StartFullOptimize(bool pushUndo, S5Ctx? s5)
     {
         var st0 = _state;
         var sched0 = _currentSchedule;
         if (st0 is null || sched0 is null) return;
         if (RunBlockedByInFlight("勤務表の作成")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
-        PushUndo();
+        if (pushUndo) PushUndo();
         var sig = $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
-        var hint = sig == _lastSettingsSig && _lastResultHard > 0
+        var hint = s5 is null && sig == _lastSettingsSig && _lastResultHard > 0
             ? $"前回と同じ設定での再実行です。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
             : null;
         _lastSettingsSig = sig;
@@ -83,6 +86,7 @@ public sealed partial class MagiViewModel
         Ui.Running = true;
         Ui.HasResult = false;
         Ui.CopilotHint = hint;
+        Ui.WishCancelOutcome = null;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
@@ -93,7 +97,7 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, cts.Token);
+        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, cts.Token);
     }
 
     private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -106,10 +110,11 @@ public sealed partial class MagiViewModel
     }
 
     private async Task RunV6FullOptimizeCoreAsync(
-        MagiState st0, int[][] sched0, long startMs, Hf63Infeasibility hf63, int boardToken, CancellationToken ct)
+        MagiState st0, int[][] sched0, long startMs, Hf63Infeasibility hf63, int boardToken, S5Ctx? s5, CancellationToken ct)
     {
         // [3.372.0/実機ログ起因の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
+        var s5Suffix = s5 is not null ? "（希望の取り消しはそのままです。元に戻すで希望も戻ります）" : "";
         // ---- 最適化中ログ強化用のスロットル状態（Kotlin原本のコルーチンローカル var 群） ----
         var liveHard = long.MaxValue;
         var livePhase = "";
@@ -201,13 +206,20 @@ public sealed partial class MagiViewModel
                 AutoSave();
                 _resultSchedule = kept;
                 _state = st0.WithSchedule(kept);
+                // [S5 §9] 維持の分岐は「前回の結果を維持します」だと希望が消えたことが伝わらない＝置き換える。
+                var keptMsg = s5 is null
+                    ? $"今回(必須{newHard}/合計{newTotal})は前回(必須{baseHard}/合計{baseTotal})より改善しませんでした。前回の結果を維持します。"
+                    : s5.H0 - baseReport.Hard > 0
+                        ? $"希望（{s5.Label}）を取り消しました。必須違反は {s5.H0} → {baseReport.Hard}（取り消しの分だけ）。もう一度つくっても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
+                        : $"希望（{s5.Label}）を取り消しましたが、もう一度つくっても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
                 await PushReportAsync(_state ?? st0, kept, baseReport, transform: ui =>
                 {
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
-                    ui.Message = $"今回(必須{newHard}/合計{newTotal})は前回(必須{baseHard}/合計{baseTotal})より改善しませんでした。前回の結果を維持します。";
+                    ui.Message = keptMsg;
+                    ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, baseReport.Hard, keptMsg);
                 }, ct: ct);
                 LogOp("I", $"再実行: 今回 必須{newHard}/合計{newTotal} は前回 必須{baseHard}/合計{baseTotal} 以下に改善せず → 前回を維持");
                 _lastResultHard = baseHard;
@@ -219,13 +231,18 @@ public sealed partial class MagiViewModel
                 AutoSave();
                 _resultSchedule = res.Schedule.Copy2D();
                 _state = st0.WithSchedule(res.Schedule);
+                var adoptedMsg = s5 is null
+                    ? $"勤務表ができました: 必須={res.Report.Hard} 合計={res.Report.Total} ({NowMs() - startMs}ms)"
+                    : $"希望（{s5.Label}）を取り消して、もう一度つくりました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
+                      (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。もう一度つくるか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
                 {
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
-                    ui.Message = $"勤務表ができました: 必須={res.Report.Hard} 合計={res.Report.Total} ({NowMs() - startMs}ms)";
+                    ui.Message = adoptedMsg;
+                    ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, res.Report.Hard, adoptedMsg);
                     ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
                 }, ct: ct);
                 _lastResultHard = newHard;
@@ -236,6 +253,11 @@ public sealed partial class MagiViewModel
             var adoptedReport = inputBeatsResult ? baseReport : res.Report;
             _lastTopHardFamily = adoptedReport.Hard > 0 ? TopHardFamilyJp(adoptedReport.Breakdown) : null;
             LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase})");
+            if (s5 is not null)
+            {
+                _cancelOutcomeCtx = _state is { } cst && _currentSchedule is { } csch ? new TrialCtx(cst, BoardKey(csch)) : null;
+                LogOp("I", $"S5 結果: {s5.H0}/{s5.Hx}/{s5.Rk}/{s5.Rr}/{s5.PCancel} → {adoptedReport.Hard}");
+            }
             // [3.409.17/実機ログ起因の由来をそのまま記録] 予算超過の実行は内訳が診断ログ（次の実行で消える）
             //   にしか残らず特定不能だった。超過時は TIME/エポック超過/後処理パス別 を操作ログへ写す。
             if (res.Logs.Any(l => l.Tag == "TIME" && l.Level == "W"))
@@ -279,7 +301,7 @@ public sealed partial class MagiViewModel
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
-                    ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
+                    ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
                 });
             }
             catch (Exception t)
@@ -288,7 +310,8 @@ public sealed partial class MagiViewModel
                 Ui.HasResult = true;
                 Ui.EngineRan = true;
                 Ui.MessageIsError = false;
-                Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
+                Ui.Wishes = st0.Wishes;
+                Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
                 LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");
             }
             LogOp("I", $"停止: 直前の勤務表 必須={keptReport.Hard}/合計={keptReport.Total} を保持");
@@ -302,9 +325,35 @@ public sealed partial class MagiViewModel
             //   （RefreshCheckCoreAsync 等）に倣い単一の Exception 捕捉とする。
             LogOp("W", $"最適化 失敗: {e.GetType().Name}: {e.Message}");
             terminalLogged = true;
-            Ui.Running = false;
-            Ui.Message = $"勤務表をつくれませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
-            Ui.MessageIsError = true;
+            var failMsg = $"勤務表をつくれませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
+            if (s5 is null)
+            {
+                Ui.Running = false;
+                Ui.Message = failMsg;
+                Ui.MessageIsError = true;
+            }
+            else
+            {
+                // [S5 §10] 希望は消えたまま＝画面もその state で数え直す（RefreshCheck は失敗文を上書きするので使わない）。
+                try
+                {
+                    var rep = await Task.Run(() => UnifiedViolationChecker.Check(st0, sched0), CancellationToken.None);
+                    await PushReportAsync(st0, sched0, rep, nonCancellable: true, transform: ui =>
+                    {
+                        ui.Running = false;
+                        ui.HasResult = true;
+                        ui.MessageIsError = true;
+                        ui.Message = failMsg + s5Suffix;
+                    });
+                }
+                catch (Exception)
+                {
+                    Ui.Running = false;
+                    Ui.Wishes = st0.Wishes;
+                    Ui.Message = failMsg + s5Suffix;
+                    Ui.MessageIsError = true;
+                }
+            }
         }
         finally
         {
@@ -446,6 +495,7 @@ public sealed partial class MagiViewModel
     /// </summary>
     public void Stop()
     {
+        CancelWishTrial();
         _job?.Cancel();
         _checkCts?.Cancel();
         _fixCts?.Cancel();

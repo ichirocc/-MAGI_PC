@@ -169,6 +169,7 @@ public sealed partial class MagiViewModel
     /// </summary>
     internal int BeginBoardJob(string label, bool engineRun = false)
     {
+        CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
         _boardJobLabel = label;
         if (engineRun)
         {

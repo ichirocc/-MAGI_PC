@@ -159,6 +159,12 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
     /// <summary>[S5] WishLocked の希望のキー（試算できる希望）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
+    /// <summary>[S5] 試算が終わるたびに進む（画面は <c>WishTrialFor</c> で読み直す）。</summary>
+    [ObservableProperty] private int wishTrialRev;
+    /// <summary>[S5] 試算中の行 "i,j"（null＝なし）。</summary>
+    [ObservableProperty] private string? wishTrialBusy;
+    /// <summary>[S5] 直近の「希望を取り消して、もう一度つくる」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
+    [ObservableProperty] private WishCancelOutcome? wishCancelOutcome;
 
     /// <summary>[DefragLiveView] 計算中の最良盤面（実行中のみ）。</summary>
     [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> liveSchedule = Array.Empty<IReadOnlyList<int>>();
@@ -239,3 +245,6 @@ public sealed record PinTargetView(
     /// <summary>固定されている回数（lo==hi の値）。</summary>
     int PinnedCount,
     int Attempts);
+
+/// <summary>[S5] 「希望を取り消して、もう一度つくる」の結果（<c>docs/s5_wish_trial.md</c> §9）。<see cref="Line"/> は次にやることカードに出す 1 行。</summary>
+public sealed record WishCancelOutcome(string Name, int Day, string Symbol, int H0, int PCancel, int G, string Line);

@@ -88,6 +88,8 @@ public sealed partial class HomeView : UserControl
         var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
         var shortDays = shortfalls.Select(x => x.DayIndex).Distinct().Count();
         var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
+        // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR・充足不可の分岐がこれを見る。
+        var cands = NextActionGuide.WishTrialCandidatesOf(ui);
 
         // [UX改善/Android同期, ユーザー指示「ゲーム要素廃止」] phase「狩猟」はRPG風の演出語のため、
         //   「完成」の対語である平易な「未完成」へ変更。
@@ -122,6 +124,14 @@ public sealed partial class HomeView : UserControl
             phase = "完成"; phaseHex = MagiAccent.Green;
             _bigAction = () => _ = _window.ExportScheduleCsvAsync(); _helperAction = () => _window.SelectTab("schedule");
         }
+        else if (infeasible && cands.Shortfall.Count > 0)
+        {
+            bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
+            headline = "いまの希望のままでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
+            bigLabel = "ぶつかっている希望を見る"; bigEnabled = true; helperLabel = "データを見直す";
+            phase = "未完成"; phaseHex = MagiAccent.Orange;
+            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => _window.SelectTab("edit");
+        }
         else if (infeasible)
         {
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
@@ -138,7 +148,6 @@ public sealed partial class HomeView : UserControl
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             helperLabel = null; _helperAction = () => { };
             var hardFix = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
-            var wishes = NextActionGuide.InvolvedWishes(ui);
             var remain = $"必須違反が {ui.BestHard}件 残っています。";
             if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
             {
@@ -158,14 +167,14 @@ public sealed partial class HomeView : UserControl
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
-            else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && wishes.Count > 0)
+            else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
             {
                 headline = $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
                 bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
             }
-            else if (ui.ViolationCellFamilies.Values.Any(f => f.Contains("vio-pref") || f.Contains("vio-c3w")))
+            else if (!cands.IsEmpty)
             {
                 headline = remain + "希望とルールがぶつかっています。";
                 bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
@@ -189,6 +198,8 @@ public sealed partial class HomeView : UserControl
             PhaseText.Text = phase;
             PhaseText.Foreground = new SolidColorBrush(ReadableOn(phaseColor));
         }
+        // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
+        if (!ui.Running && headline.Length > 0 && _vm.WishCancelOutcomeLine() is { } outcomeLine) headline += "\n" + outcomeLine;
         HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
@@ -407,33 +418,123 @@ public sealed partial class HomeView : UserControl
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
 
-    /// <summary>
-    /// <summary>[Android 3.612.0 思考誘導S3] 必須違反に関わる希望を、名前・日付・理由つきで並べる（Kotlin <c>WishConflictDialog</c>）。
-    /// 押すとダイアログを閉じて勤務表のそのセルへ移る。</summary>
+    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人手不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。
+    /// 行を押すとダイアログを閉じて勤務表のそのセルへ移る。各行の「取り消したら？」で 1 行ずつ試算し（<c>docs/s5_wish_trial.md</c> §5）、
+    /// 結果が出た行は確定できる。結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
     private async Task ShowWishConflictsAsync()
     {
-        var items = NextActionGuide.InvolvedWishes(_vm.Ui);
-        var panel = new StackPanel { Spacing = 4 };
+        var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = "ぶつかっている希望",
             Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
             CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
-        if (items.Count == 0) panel.Children.Add(new TextBlock { Text = "いま必須違反に関わる希望はありません。", TextWrapping = TextWrapping.Wrap });
-        else
+        var expanded = new HashSet<(int Day, int Shift)>();
+        TextBlock Small(string text, bool dim = true) =>
+            new() { Text = text, FontSize = 14, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0), Opacity = dim ? 0.8 : 1.0 };
+        Button TrialButton(WishTrialRow row, bool enabled)
         {
-            panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、希望を変えるか勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
-            foreach (var w in items)
+            var b = new Button { Content = "取り消したら？", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0), IsEnabled = enabled };
+            b.Click += (_, _) => _vm.StartWishTrial(row.Staff, row.Day);
+            return b;
+        }
+        void AddRow(WishTrialRow row, UiState ui)
+        {
+            var open = new Button { Content = $"{row.Name} ・ {row.Day + 1}日　{row.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+            open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
+            panel.Children.Add(open);
+            if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
-                var b = new Button { Content = $"{w.Name} ・ {w.Day + 1}日　{w.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
-                b.Click += (_, _) => { dialog.Hide(); _window.OpenCell(w.Staff, w.Day); };
-                panel.Children.Add(b);
+                panel.Children.Add(Small(NextActionGuide.WishTrialNotLocked));
+                return;
+            }
+            var canTrial = ui.WishTrialBusy is null && !ui.Running;
+            switch (_vm.WishTrialFor(row.Staff, row.Day, k))
+            {
+                case WishTrialView.BusyView:
+                    panel.Children.Add(Small("試算しています…"));
+                    break;
+                case WishTrialView.StaleView:
+                    panel.Children.Add(Small("勤務表が変わりました。もう一度試算してください。"));
+                    panel.Children.Add(TrialButton(row, canTrial));
+                    break;
+                case WishTrialView.Ready ready:
+                    if (NextActionGuide.WishTrialText(ready.Outcome) is { } text) panel.Children.Add(Small(text, dim: false));
+                    if (ready.Token.Result is not null)
+                    {
+                        var confirm = new Button
+                        {
+                            Content = "希望を取り消して、もう一度つくる", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
+                            Foreground = BrushOf("MagiErrorBrush"), IsEnabled = !ui.Running,
+                        };
+                        var token = ready.Token;
+                        confirm.Click += (_, _) => { dialog.Hide(); _vm.CancelWishAndRebuild(token); };
+                        panel.Children.Add(confirm);
+                    }
+                    break;
+                default:
+                    panel.Children.Add(TrialButton(row, canTrial));
+                    break;
             }
         }
-        await dialog.ShowAsync();
+        void Rebuild()
+        {
+            panel.Children.Clear();
+            var ui = _vm.Ui;
+            var cands = NextActionGuide.WishTrialCandidatesOf(ui);
+            if (cands.IsEmpty)
+            {
+                panel.Children.Add(new TextBlock { Text = "いま必須違反に関わる希望はありません。", TextWrapping = TextWrapping.Wrap });
+                return;
+            }
+            if (_vm.WishTrialControlFor() is { } control && NextActionGuide.WishTrialKeepOnlyText(control) is { } keepOnly)
+            {
+                panel.Children.Add(new TextBlock { Text = keepOnly, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                var rebuild = new Button { Content = "もう一度つくる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44, IsEnabled = !ui.Running };
+                rebuild.Click += (_, _) => { dialog.Hide(); _vm.RunV6FullOptimize(); };
+                panel.Children.Add(rebuild);
+            }
+            if (cands.Direct.Count > 0)
+            {
+                panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、希望を変えるか勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+                foreach (var row in cands.Direct) AddRow(row, ui);
+            }
+            if (cands.Shortfall.Count > 0)
+            {
+                panel.Children.Add(new TextBlock { Text = "人手不足の日に、別の勤務の希望がある人", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
+                foreach (var g in cands.Shortfall)
+                {
+                    panel.Children.Add(new TextBlock { Text = g.Header, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    var slot = (g.Day, g.Shift);
+                    var rows = expanded.Contains(slot) ? g.Rows : g.Rows.Take(NextActionGuide.WishTrialGroupLimit).ToList();
+                    foreach (var row in rows) AddRow(row, ui);
+                    if (rows.Count < g.Rows.Count)
+                    {
+                        var more = new Button { Content = $"ほか {g.Rows.Count - rows.Count}人", MinHeight = 44 };
+                        more.Click += (_, _) => { expanded.Add(slot); Rebuild(); };
+                        panel.Children.Add(more);
+                    }
+                }
+            }
+        }
+        void OnChanged(object? s, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null or nameof(UiState.WishTrialRev) or nameof(UiState.WishTrialBusy) or nameof(UiState.Wishes)
+                or nameof(UiState.Running)) Rebuild();
+        }
+        Rebuild();
+        _vm.Ui.PropertyChanged += OnChanged;
+        try { await dialog.ShowAsync(); }
+        finally
+        {
+            // 閉じる・行を押してセルへ移る・確定、どの閉じ方でもここ 1 か所で試算を止める（§8）。
+            _vm.CancelWishTrial();
+            _vm.Ui.PropertyChanged -= OnChanged;
+        }
     }
 
+    /// <summary>
     /// [phase9 #24] 「なおすのを手伝って」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。判断は <see cref="GuidedFixPlan"/>、
     /// 候補の有効/無効は <see cref="GuidedFixFlow"/>（どちらも UI 非依存でテスト済み）。押したら押下後の再検査（<see cref="UiState.CheckRev"/>）が
     /// 反映されるまで全候補を無効にし「再検査中…」を出す。Schedule の変更だけでは再有効化しない（古い診断と新しい盤面の混在を防ぐ）。

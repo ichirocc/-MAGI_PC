@@ -225,6 +225,7 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         Ui.EngineRan = false;
         ClearFixState();
+        Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = _undoStack.Count > 0;
@@ -252,6 +253,7 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         Ui.EngineRan = false;
         ClearFixState();
+        Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
         Ui.MessageIsError = false;
         Ui.StructureEdited = true;
         Ui.CanUndo = true;

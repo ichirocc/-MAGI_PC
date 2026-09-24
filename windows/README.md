@@ -56,6 +56,8 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
    実移植時は必ず元のKotlinソースを直接確認すること）
    - ViewModel層＝**移植完了**。Kotlin原本 `MagiViewModel.kt` の拡張関数86件・コアメンバ関数とも
      すべて対応物あり（`runInBackground`/`applyBgResult` も含め完了。詳細はフェーズ10）。
+   - S5「この希望を取り消したら」（2026-09-24、Kotlin cc17c27 同期）: エンジン `WishTrial.cs`、VM `MagiViewModel.WishTrial.cs`
+     （試算・鮮度照合・確定 `CancelWishAndRebuild`＝Undo 1 段）、ホームの入口拡大と `ShowWishConflictsAsync` の試算行。仕様は Android の `docs/s5_wish_trial.md`。
    - UI層＝5タブすべてに実体あり。勤務表タブはセル編集(タップ→担当可能シフト選択)・
      元に戻す/やり直す・違反ハイライト/希望バッジ・**シフト集計(職員別/日別、Kotlin原本TallyCardの
      最小移植=`RenderStaffTally`/`RenderDayTally`。生カウントは`Schedule`から都度計算・セル枠は
@@ -325,6 +327,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+
+- 2026-09-24（S5 VM・画面を同期、Kotlin cc17c27）: `RunV6FullOptimize` を `StartFullOptimize(pushUndo, s5)` へ分け、確定は Undo を 1 回だけ積む。
+  C# だけの差: 試算の取消（`CancelWishTrial`）は `ClearFixState`/`PushUndo`/`Undo`/`Redo` に入れない（C# の `ClearFixState` は PushUndo 等から
+  呼ばれる＝入れると結果保持の規則が崩れる）。WinUI は `dialog.Hide()` の後に確定、finally で試算を止める。`MagiViewModelWishTrialTest`（V1〜V12＋2）を追加。
 
 - 2026-09-24（Kotlin 3.475.0 の取り残しを同期: `ScheduleUtil.NormalizeSchedule` の欠損セル）: 行が短い・行が無いセルを `0`（先頭シフトの勤務）
   で埋めていたのを、Kotlin と同じ `-1`（未割当）へ。自前の doc コメントは元から -1 と書いていた。S×T の盤面では出力不変。Android の S5 設計
