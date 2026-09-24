@@ -328,6 +328,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-24（外部レビュー N1/N2 を同期、Android 同日）: N1＝休みOFFが保存→再読込で ON に戻る（保存が非休を `role:""` で書き、読込の後方互換が
+  「Rest 無し＝旧JSON」と見て記号"休"へ付け直していた）。`StateJsonSerializer` の保存を `"rest"`/`"none"` にし、明示の role が1つも無いときだけ付与
+  （`""` は従来どおり付与＝既存の保存の互換）。CSV 取込（Roster/FlatRosterCsvImport）は C# では元から休みを付けていた（Kotlin 側を今回そろえた）。
+  N2＝`StateFingerprint` に `Shift.Role` を混ぜる。`StateParserTest`（Kotlin `StateParserTest.kt` の 1 対 1 移植、N1 の 4 件を含む）・
+  `StateFingerprintTest` に休みの付け替え/OFF を追加。N5（`tools/native/state_to_flat.py`）は Android だけ（この repo 直下の `tools/`・`app/` は
+  フォーク時の写しで未使用＝触らない）。`dotnet test MagiEngine.Tests` 905/905・`MagiApp.ViewModels.Tests` 463/463 緑。
+
 - 2026-09-24（S5 VM・画面を同期、Kotlin cc17c27）: `RunV6FullOptimize` を `StartFullOptimize(pushUndo, s5)` へ分け、確定は Undo を 1 回だけ積む。
   C# だけの差: 試算の取消（`CancelWishTrial`）は `ClearFixState`/`PushUndo`/`Undo`/`Redo` に入れない（C# の `ClearFixState` は PushUndo 等から
   呼ばれる＝入れると結果保持の規則が崩れる）。WinUI は `dialog.Hide()` の後に確定、finally で試算を止める。`MagiViewModelWishTrialTest`（V1〜V12＋2）を追加。

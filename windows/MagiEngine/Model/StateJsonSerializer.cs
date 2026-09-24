@@ -29,18 +29,28 @@ public static class StateJsonSerializer
     private static readonly string[] DerivedKeysToDrop =
         { "violations", "needViolations", "countViolations", "lastResult", "lastPhase" };
 
+    private const string RoleRest = "rest";
+    private const string RoleNone = "none";
+
     public static MagiState Parse(string json)
     {
         using var doc = JsonDocument.Parse(json);
         var o = doc.RootElement;
 
+        var explicitRole = false;
         var shiftsRaw = MapObjects(OptArray(o, "shifts"), "shifts", it =>
-            new Shift(OptString(it, "name"), OptString(it, "kigou"), AsStr(Opt(it, "need1")), AsStr(Opt(it, "need2")),
-                OptString(it, "role") == "rest" ? ShiftRole.Rest : ShiftRole.None));
+        {
+            var r = OptString(it, "role");
+            if (r == RoleRest || r == RoleNone) explicitRole = true;
+            return new Shift(OptString(it, "name"), OptString(it, "kigou"), AsStr(Opt(it, "need1")), AsStr(Opt(it, "need2")),
+                r == RoleRest ? ShiftRole.Rest : ShiftRole.None);
+        });
         // [backlog#24] 旧JSON（roleフィールド無し）の後方互換: どのシフトにもRestが付与されていなければ、
         //   記号"休"のシフト(最初の1件)へ自動で付与する。移行後はroleが唯一の正（Kotlin StateParser.kt 同期）。
+        // [外部レビュー N1] 明示の role（"rest"/"none"）が1つでもあれば付与しない＝休みOFFの保存が往復する。
+        //   "" は付与する（非休を "" で書いていた既存の保存の互換。Android の CSV 取込のまま保存した原本は全シフト ""）。
         var shifts = shiftsRaw;
-        if (!shiftsRaw.Any(s => s.Role == ShiftRole.Rest))
+        if (!explicitRole)
         {
             var restPos = shiftsRaw.FindIndex(s => s.Kigou == "休");
             if (restPos >= 0)
@@ -183,7 +193,7 @@ public static class StateJsonSerializer
             ["endDate"] = state.EndDate,
             ["use2Patterns"] = state.Use2Patterns,
             ["shifts"] = ConsArr(state.Shifts, it => Obj(("name", it.Name), ("kigou", it.Kigou), ("need1", it.Need1), ("need2", it.Need2),
-                ("role", it.Role == ShiftRole.Rest ? "rest" : ""))),
+                ("role", it.Role == ShiftRole.Rest ? RoleRest : RoleNone))),
             ["groups"] = ConsArr(state.Groups, it => Obj(("name", it.Name), ("kigou", it.Kigou))),
         };
 

@@ -71,6 +71,8 @@ public class StateFingerprintTest
         yield return ("シフト記号", b with { Shifts = ReplaceAt(b.Shifts, 1, b.Shifts[1] with { Kigou = "B" }) });
         yield return ("必要人数(既定)", b with { Shifts = ReplaceAt(b.Shifts, 1, b.Shifts[1] with { Need1 = "2" }) });
         yield return ("上限人数(既定)", b with { Shifts = ReplaceAt(b.Shifts, 1, b.Shifts[1] with { Need2 = "9" }) });
+        yield return ("休みの付け替え", b with { Shifts = b.Shifts.Select((s, i) => s with { Role = i == 1 ? ShiftRole.Rest : ShiftRole.None }).ToList() });
+        yield return ("休みOFF", b with { Shifts = b.Shifts.Select(s => s with { Role = ShiftRole.None }).ToList() });
         yield return ("群", b with { Groups = new List<Group>(b.Groups) { new("I", "I") } });
         yield return ("スキル群", b with { SkillGroups = new List<Group>(b.SkillGroups) { new("T", "T") } });
         yield return ("職員名", b with { StaffList = ReplaceAt(b.StaffList, 0, b.StaffList[0] with { Name = "x" }) });

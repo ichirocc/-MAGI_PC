@@ -26,7 +26,7 @@ public sealed record WishTrialToken(MagiState State, long BoardKey, int Staff, i
 /// </summary>
 public sealed partial class MagiViewModel
 {
-    /// <summary>試算の文脈。state は参照で見る＝StateFingerprint は Shift.Role を読まない（§7 I4）。</summary>
+    /// <summary>試算の文脈。state は参照で見る（どの編集でも state が差し替わる＝指紋より厳しい、§7 I4）。</summary>
     private sealed class TrialCtx(MagiState st, long boardKey)
     {
         public MagiState St { get; } = st;

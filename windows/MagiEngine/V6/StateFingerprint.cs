@@ -46,7 +46,8 @@ public static class StateFingerprint
         Txt(st.EndDate);
         Mix(st.Use2Patterns ? 1 : 0);
 
-        foreach (var sh in st.Shifts) { Txt(sh.Name); Txt(sh.Kigou); Txt(sh.Need1); Txt(sh.Need2); }
+        // [外部レビュー N2] Role（休みとして扱う）も読む。旧: 休みの付け替え・OFFだけの変更で指紋が変わらなかった。
+        foreach (var sh in st.Shifts) { Txt(sh.Name); Txt(sh.Kigou); Txt(sh.Need1); Txt(sh.Need2); Mix((long)sh.Role); }
         foreach (var g in st.Groups) { Txt(g.Name); Txt(g.Kigou); }
         foreach (var g in st.SkillGroups) { Txt(g.Name); Txt(g.Kigou); }
         foreach (var p in st.StaffList) { Txt(p.Name); Mix(p.GroupIdx); Mix(p.SkillIdx); }
