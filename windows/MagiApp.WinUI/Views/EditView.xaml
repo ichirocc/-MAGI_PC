@@ -166,7 +166,7 @@
                 <TextBlock Text="所属グループ" />
                 <ComboBox x:Name="GroupCombo" HorizontalAlignment="Stretch" />
 
-                <TextBlock Text="スキル区分（cons41s/cons42sの対象。追加・改名・変更は「年間マスター」）" />
+                <TextBlock Text="スキルグループ（cons41s/cons42sの対象。追加・改名・変更は「年間マスター」）" />
                 <ComboBox x:Name="StaffSkillCombo" HorizontalAlignment="Stretch" />
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -247,7 +247,7 @@
                 <TextBox x:Name="MasterShiftNameBox" HorizontalAlignment="Stretch" />
                 <TextBlock Text="記号" />
                 <TextBox x:Name="MasterShiftKigouBox" HorizontalAlignment="Stretch" />
-                <TextBlock Text="最低人数 / 上限人数（1日あたり・空欄可）" />
+                <TextBlock Text="最低人数 / 上限人数(2パターン時)（1日あたり・空欄可）" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="MasterShiftNeed1Box" Width="80" PlaceholderText="最低" />
                     <TextBox x:Name="MasterShiftNeed2Box" Width="80" PlaceholderText="上限" />
@@ -284,7 +284,7 @@
 
                 <TextBlock Text="グループ単位の回数（一括設定）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                           Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限ならそのシフトの適切回数(apt)も同時に設定されます。両方空欄で一括設定すると全員ぶんの個人上下限を解除します。" />
+                           Text="グループ全員に同じ下限/上限をまとめて設定します（既に個人別で設定済みの職員はスキップ・保持されます）。下限=上限のときはグループの適切回数も記録しますが、個人の上下限がある職員には使われません。両方空欄で一括設定すると全員ぶんの個人上下限を解除します。" />
                 <StackPanel x:Name="GroupRangeListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="GroupRangeGroupCombo" Width="120" PlaceholderText="グループ" />
@@ -295,10 +295,10 @@
                 </StackPanel>
                 <TextBlock x:Name="GroupRangeHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="スキル区分" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="スキルグループ" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock x:Name="SkillGroupListText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" />
 
-                <TextBlock Text="スキル区分の追加・改名・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="スキルグループの追加・改名・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <ComboBox x:Name="MasterSkillGroupCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnMasterSkillGroupSelectionChanged" />
                 <TextBlock Text="名前" />
@@ -312,9 +312,9 @@
                 </StackPanel>
                 <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="担当できるシフト（群×シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="担当できるシフト（グループ × シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                           Text="セルをタップで担当ON/OFF（✓=担当できる）。群名をタップでその群を一括、シフト名をタップで全グループへ一括。「休」は外せません。" />
+                           Text="セルをタップで担当ON/OFF（✓=担当できる）。グループ名をタップでそのグループを一括、シフト名をタップで全グループへ一括。「休」は外せません。" />
                 <ToggleSwitch x:Name="Use2Toggle" Header="上限人数（2パターン目）を使う" OnContent="ON" OffContent="OFF"
                               Toggled="OnUse2Toggled" />
                 <!-- [マトリックス] 左列（群名）は固定、右側（シフト名ヘッダ＋セル）だけ横スクロール。
@@ -330,7 +330,7 @@
                     </ScrollViewer>
                 </Grid>
 
-                <TextBlock Text="適切回数（1人あたり・群×シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock Text="適切回数（1人あたり・グループ × シフト）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="1人あたりの期間内目標（空欄=目標なし。欄を離れると反映）。担当できないシフトの欄は入力できません。" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -362,10 +362,10 @@
                     <ComboBoxItem Content="禁止の並び（cons3n）" Tag="cons3n" />
                     <ComboBoxItem Content="推奨の並び（cons3m）" Tag="cons3m" />
                     <ComboBoxItem Content="回避の並び（cons3mn）" Tag="cons3mn" />
-                    <ComboBoxItem Content="群のレンジ（cons41）" Tag="cons41" />
-                    <ComboBoxItem Content="群ペア禁止（cons42）" Tag="cons42" />
-                    <ComboBoxItem Content="スキル群のレンジ（cons41s）" Tag="cons41s" />
-                    <ComboBoxItem Content="スキル群ペア禁止（cons42s）" Tag="cons42s" />
+                    <ComboBoxItem Content="グループのレンジ（cons41）" Tag="cons41" />
+                    <ComboBoxItem Content="グループペア禁止（cons42）" Tag="cons42" />
+                    <ComboBoxItem Content="スキルグループのレンジ（cons41s）" Tag="cons41s" />
+                    <ComboBoxItem Content="スキルグループペア禁止（cons42s）" Tag="cons42s" />
                 </ComboBox>
                 <TextBlock Text="変更・削除する行（新規追加なら未選択のまま）" />
                 <ComboBox x:Name="ConstraintRowCombo" HorizontalAlignment="Stretch"

@@ -363,7 +363,7 @@ public sealed partial class ScheduleView : UserControl
             ? header.TransformToVisual(ScheduleItemsView).TransformPoint(new Windows.Foundation.Point(0, 0)).X
             : 0;
 
-    /// <summary>左端に見えている日から現在週を求める（自由スクロールにも追従）。</summary>
+    /// <summary>左端に見えている日から現在週を求める（自由スクロールにも追従）。右端まで来ていれば最終週。</summary>
     private int CurrentWeek()
     {
         if (_weeks.Count == 0) return 0;
@@ -375,9 +375,11 @@ public sealed partial class ScheduleView : UserControl
             if (!_cellElements.TryGetValue((0, d + 1), out var header)) break;
             if (HeaderX(d) + header.ActualWidth > left + 1) break;
         }
-        var w = _weeks.FindIndex(wk => d <= wk[^1]);
-        return w < 0 ? _weeks.Count - 1 : w;
+        var atEnd = GridScroll.ScrollableWidth > 0 && !CanScrollForward();
+        return ScheduleNav.CurrentWeekIndex(_weeks, d, atEnd);
     }
+
+    private bool CanScrollForward() => GridScroll.HorizontalOffset < GridScroll.ScrollableWidth - 1;
 
     private void ScrollToDay(int d)
     {
@@ -422,7 +424,7 @@ public sealed partial class ScheduleView : UserControl
             : $"違反日 {_navIdx + 1}/{_vioDays.Count}";
         NavLabel.Text = string.Join(" ・ ", new[] { weekLabel, vioLabel }.Where(t => t.Length > 0));
         PrevWeekButton.IsEnabled = cur > 0;
-        NextWeekButton.IsEnabled = cur < _weeks.Count - 1;
+        NextWeekButton.IsEnabled = cur < _weeks.Count - 1 && CanScrollForward();
     }
 
     private void OnGridScrollViewChanged(object? sender, ScrollViewerViewChangedEventArgs e) => UpdateNavLabel(_vm.Ui);
@@ -658,6 +660,13 @@ public sealed partial class ScheduleView : UserControl
 
         var staffCount = ui.Schedule.Count;
         var dayCount = ui.Schedule.Count > 0 ? ui.Schedule[0].Count : 0;
+        // 希望の丸は実現できる希望（担当できるシフト）だけ＝チェッカーの pref と同じ（Android の勤務表と同じ）。
+        var allowedByStaff = new Dictionary<int, int[]>();
+        bool CanDo(int i, int k)
+        {
+            if (!allowedByStaff.TryGetValue(i, out var a)) allowedByStaff[i] = a = _vm.AllowedShiftsFor(i);
+            return a.Contains(k);
+        }
         DateOnly? startDay = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out var sd) ? sd : null;
         var today = DateOnly.FromDateTime(DateTime.Today);
@@ -768,7 +777,7 @@ public sealed partial class ScheduleView : UserControl
             cell.Foreground = new SolidColorBrush(fg);
             cell.Background = new SolidColorBrush(bg);
 
-            if (ui.Wishes.TryGetValue($"{i},{j}", out var wishK))
+            if (ui.Wishes.TryGetValue($"{i},{j}", out var wishK) && CanDo(i, wishK))
             {
                 var reflected = wishK == k;
                 cell.WishDotVisibility = Visibility.Visible;

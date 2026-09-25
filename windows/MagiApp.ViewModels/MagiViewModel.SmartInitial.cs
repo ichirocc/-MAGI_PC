@@ -68,11 +68,12 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("下書きづくり", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), boardToken, cts.Token);
+        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, boardToken, cts.Token);
     }
 
-    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int boardToken, CancellationToken ct)
+    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, int boardToken, CancellationToken ct)
     {
+        var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
         {
             var res = await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true), ct);
@@ -80,6 +81,7 @@ public sealed partial class MagiViewModel
             AutoSave();
             _resultSchedule = res.Schedule.Copy2D();
             _state = st.WithSchedule(res.Schedule);
+            committed = true;
             await PushReportAsync(_state ?? st, res.Schedule, res.Report, runLabel: "下書きづくり", transform: ui =>
             {
                 ui.MessageIsError = false;
@@ -89,11 +91,13 @@ public sealed partial class MagiViewModel
                 ui.ElapsedMs = 0;
                 ui.Message = $"下書きをつくりました: 必須違反={res.Report.Hard} 合計={res.Report.Total}";
             }, ct: ct);
+            committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total}");
         }
         catch (OperationCanceledException)
         {
             // [3.404.0の由来をそのまま記録] 停止・ジョブ上書きを「失敗」と呼ばない。
+            if (committed) RollbackBoardCommit(st, sched, result0);
             LogOp("I", "初期解生成 停止");
             Ui.MessageIsError = false;
             Ui.Running = false;
@@ -102,6 +106,7 @@ public sealed partial class MagiViewModel
         }
         catch (Exception e)
         {
+            if (committed) RollbackBoardCommit(st, sched, result0);
             // [3.271.0の由来をそのまま記録] 失敗を操作ログにも残す。
             LogOp("W", $"初期解生成 失敗: {e.GetType().Name}: {e.Message}");
             Ui.Running = false;

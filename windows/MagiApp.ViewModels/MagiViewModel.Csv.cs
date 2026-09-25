@@ -334,6 +334,7 @@ public sealed partial class MagiViewModel
     private async Task ImportCsvCoreAsync(
         string text, bool repaired, MagiState st, int[][] sched, int boardToken, CancellationToken ct)
     {
+        var pushedUndo = false;
         try
         {
             // [3.282.0相当] JSON側(LoadAsync)と同じ是正: BOM除去だけの健全なCSVで誤警告しない。
@@ -352,6 +353,7 @@ public sealed partial class MagiViewModel
                 return;
             }
             PushUndo();
+            pushedUndo = true;
             _currentSchedule = res.Schedule.Copy2D();
             AutoSave();
             _resultSchedule = res.Schedule.Copy2D();
@@ -390,6 +392,9 @@ public sealed partial class MagiViewModel
         }
         catch (OperationCanceledException)
         {
+            // [Android 3.592.0] PushUndo 済み（＝盤面を既に書き換え済み）なら取込前へ戻す。旧 C#: 診断の中止・例外を
+            //   捕まえても内部盤面・自動保存は書き換えたままだった。
+            if (pushedUndo) RollbackBoardCommit(st, sched);
             Ui.MessageIsError = false;
             Ui.Running = false;
             Ui.Message = "CSV取込を中止しました";   // [3.404.0相当]
@@ -397,6 +402,7 @@ public sealed partial class MagiViewModel
         }
         catch (Exception e)
         {
+            if (pushedUndo) RollbackBoardCommit(st, sched);
             Ui.Running = false;
             Ui.Message = $"CSVを取り込めませんでした（{e.GetType().Name}）";
             Ui.MessageIsError = true;
@@ -405,6 +411,20 @@ public sealed partial class MagiViewModel
         {
             EndBoardJob(boardToken);
         }
+    }
+
+    /// <summary>[Android 3.592.0] CSV取込・下書きづくりの診断失敗時、PushUndo 直後の状態（st/sched）へ戻す。PushUndo が積んだ段も外す。</summary>
+    private void RollbackBoardCommit(MagiState st, int[][] sched, int[][]? result = null)
+    {
+        _currentSchedule = sched;
+        _state = st;
+        _resultSchedule = result;
+        // 外した段の盤面へ戻る＝元に戻すと同じく、その段に退避した「他の案」も戻す。
+        AltSnap? alts = null;
+        if (_undoStack.Last is { } last) { alts = last.Value.Alts; _undoStack.RemoveLast(); }
+        RestoreAlts(alts);
+        Ui.CanUndo = _undoStack.Count > 0;
+        AutoSave();
     }
 
     /// <summary>取込種別を取り違えた可能性の判定: 勤務表(スケジュール)CSVらしいか。</summary>
@@ -418,13 +438,14 @@ public sealed partial class MagiViewModel
         return lines.Any(l => l.TrimStart().StartsWith("集計,"));
     }
 
-    /// <summary>希望/制約の取込が0件のとき、別形式CSVの取り違えを推定して利用者向けヒントを返す（無ければ空）。</summary>
-    private static string ComponentImportMismatchHint(string repairedText)
+    /// <summary>種類別取込で別形式CSVの取り違えを推定して利用者向けヒントを返す（無ければ空）。職員一覧は取込の前、ほかは0件のとき。
+    /// 案内先はこのアプリの設定タブにあるボタン名（Android の取込種別・出力タブの語は C# の画面に無い）。</summary>
+    private static string ComponentImportMismatchHint(string repairedText, string what = "希望・制約", string buttons = "『希望シフトCSVを書き出す』『各制約CSVを書き出す』")
     {
         if (RosterCsvImport.Detect(repairedText) || FlatRosterCsvImport.Detect(repairedText))
-            return "これは勤務表全体（テンプレ/ユニット列形式）のCSVのようです。取込種別で『データ全体（新規）』を選んでください。";
+            return "これは勤務表全体（テンプレ/ユニット列形式）のCSVのようです。設定タブの『名簿CSVを新規データとして取り込む』で取り込んでください。";
         if (LooksLikeScheduleCsv(repairedText))
-            return "これは勤務表（スケジュール）CSVのようで、希望・制約は含まれていません。専用CSVを、出力タブの『希望』『制約』ボタンで出して取り込んでください。";
+            return $"これは勤務表（スケジュール）CSVのようで、{what}は含まれていません。専用CSVを、設定タブの『データ（種類別のCSV）』にある{buttons}で出して取り込んでください。";
         return "";
     }
 
@@ -440,14 +461,23 @@ public sealed partial class MagiViewModel
             return;
         }
         var text = MojibakeRepair.Repair(rawText);
+        // 未知の氏名を新規追加する経路なので、別形式のCSVは0件を待たずに断る（見出し・集計行・種別タグが職員として入る）。
+        var mis = ComponentImportMismatchHint(text, what: "職員一覧", buttons: "『職員一覧CSVを書き出す』");
+        if (mis.Length == 0 && StaffCsvIO.OtherKindOf(text) is { } other)
+            mis = $"これは{other}のCSVのようです。" + (other == "シフト色" ? "" : $"『{other}CSVを取り込む』で取り込んでください。");
+        if (mis.Length > 0)
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = $"職員一覧の取込を中止しました。{mis}";
+            LogOp("W", "職員一覧CSV取込 中止: 別形式CSVの取り違えの可能性");
+            return;
+        }
         StaffCsvIO.StaffUpsertResult? res;
         try { res = StaffCsvIO.ParseUpsert(text, st, sched); } catch { res = null; }
         if (res is null)
         {
-            var hint = ComponentImportMismatchHint(text);
-            var tail = hint.Length == 0 ? "形式『氏名,グループ,スキル』（1行=1名）をご確認ください。" : hint;
             Ui.MessageIsError = true;
-            Ui.Message = $"職員一覧の取込失敗（追加0・更新0）。{tail}";
+            Ui.Message = "職員一覧の取込失敗（追加0・更新0）。形式『氏名,グループ,スキル』（1行=1名）をご確認ください。";
             LogOp("W", "職員一覧CSV取込 失敗: 0件");
             return;
         }

@@ -81,6 +81,9 @@ public sealed partial class MagiViewModel
         if (SymbolTaken(st.Shifts.Select(x => x.Kigou).ToList(), kigou, "シフト", exceptIndex: k)) return;
         // [3.416.0] 休シフトの改名禁止（旧R-04ガード）は方針「休は通常のシフト定義」により撤回済み。
         //   改名は他シフトと同じ経路——休の識別は[backlog#24] 記号でなく isRest トグル(ShiftRole)＝改名しても壊れない。
+        // 何も変えずに OK＝undo を積まず、他の案・改善提案も消さない。
+        if (k >= 0 && k < st.Shifts.Count && st.Shifts[k] is var sh0 && sh0.Name == name.Trim() && sh0.Kigou == kigou.Trim() &&
+            sh0.Need1 == need1.Trim() && sh0.Need2 == need2.Trim() && (sh0.Role == MagiEngine.Model.ShiftRole.Rest) == isRest) return;
         LogOp("I", $"シフト編集: {OpSy(k)} → {name.Trim()}({kigou.Trim()}) 最低{DashIfBlank(need1)}/上限{DashIfBlank(need2)}");
         ApplyStructure(Ws1Ops.EditShift(st, k, name.Trim(), kigou.Trim(), need1.Trim(), need2.Trim(), isRest));
     }
@@ -123,7 +126,7 @@ public sealed partial class MagiViewModel
         {
             // [レビュー指摘 2026-09-04] 単一セルでも休は外せない（列一括と同じ理由・同じ案内）。
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify("「休」はどのグループからも外せません（担当できるシフトが無い群を作らないため）", "W");
+                Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
             return;
         }
         LogOp("I", $"担当可否: グループ[{g}] × {OpSy(k)} → {(allowed ? "担当できる" : "担当しない")}");
@@ -149,7 +152,7 @@ public sealed partial class MagiViewModel
         if (ReferenceEquals(ns, st))
         {
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify("「休」はどのグループからも外せません（担当できるシフトが無い群を作らないため）", "W");
+                Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
             return;
         }
         LogOp("I", $"担当可否(一括): {OpSy(k)} を全グループ → {(allowed ? "担当できる" : "担当しない")}");
@@ -238,6 +241,8 @@ public sealed partial class MagiViewModel
         if (st is null) return;
         var sched = _currentSchedule;
         if (sched is null) return;
+        var t = Math.Clamp(newT, 1, 31);
+        if (t == st.DayCount && sched.All(row => row.Length == t)) return;   // 同じ日数で「変更」＝何もしない
         LogOp("I", $"期間変更: {st.DayCount}日 → {newT}日");
         ApplyStructure(Ws1Ops.ResizeDays(st, sched, newT));
     }
@@ -303,7 +308,7 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null) return;
         if (kigou.Trim().Length == 0) return;
-        if (SymbolTaken(st.SkillGroups.Select(x => x.Kigou).ToList(), kigou, "スキル区分")) return;
+        if (SymbolTaken(st.SkillGroups.Select(x => x.Kigou).ToList(), kigou, "スキルグループ")) return;
         LogOp("I", $"スキル区分追加: {name.Trim()}({kigou.Trim()})");
         // [backlog#38] 最初の 1 群では全員を未所属(-1)にしてから足す（規則は Ws1Ops.AddSkillGroup）。
         ApplyStructure(Ws1Ops.AddSkillGroup(st, name.Trim(), kigou.Trim()));
@@ -313,7 +318,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
-        if (SymbolTaken(st.SkillGroups.Select(x => x.Kigou).ToList(), kigou, "スキル区分", exceptIndex: g)) return;
+        if (SymbolTaken(st.SkillGroups.Select(x => x.Kigou).ToList(), kigou, "スキルグループ", exceptIndex: g)) return;
         var old = g >= 0 && g < st.SkillGroups.Count ? st.SkillGroups[g].Kigou : "";
         var renamed = st with
         {

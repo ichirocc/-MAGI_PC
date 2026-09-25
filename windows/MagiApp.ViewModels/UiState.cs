@@ -194,7 +194,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>[Android 3.509.4/3.510.3 同期] 直近の最適化・自動修正の前後比較（完了カード用）。Kotlin原本の
     /// <c>runSummary</c> は整形済み文字列だが、族名の日本語化（<c>BreakdownLabels</c>）が View 層にあるため、
-    /// 生の <see cref="MagiEngine.V6.ChangeSummary"/> を保持し整形は <c>HomeView.xaml.cs</c> 側で行う。</summary>
+    /// 生の <see cref="MagiEngine.V6.ChangeSummary"/> を保持し整形は <c>HomeView.xaml.cs</c> 側で行う。
+    /// 盤面が変わる操作（PushUndo）・元に戻す・読込で消す＝別の盤面の比較を完了カードに残さない。</summary>
     [ObservableProperty] private ChangeSummary? runSummary;
 
     [ObservableProperty] private int impossibleWishCount;
@@ -202,6 +203,9 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>他の案（採用案以外の候補サマリ）。</summary>
     [ObservableProperty] private IReadOnlyList<string> alternatives = Array.Empty<string>();
+
+    /// <summary>いま盤面に適用している他の案の添字（-1=どれでもない）。</summary>
+    [ObservableProperty] private int alternativeApplied = -1;
 
     /// <summary>人員不足(covU)/人員過剰(covO)の原因診断（充足不可/充足可能の切り分け・過剰がなぜ動かせないか）。</summary>
     [ObservableProperty] private CoverageDiagnosis? coverageDiag;
@@ -236,7 +240,7 @@ public sealed partial class UiState : ObservableObject
 /// 回数固定(lo==hi)の緩和対象1件。<see cref="Attempts"/> は「目的関数が採用を認めた手を、
 /// このピンのガードだけが止めた**計測できた回数**」。手の数ではなく試行の回数で、研磨の巡
 /// （最大4）を重複排除せず数えている。**0 件でも緩和が無意味とは限らない**——緩和は下限割れ
-/// (low, 重み90)の罰も外すため、「ピン以外の理由で」却下されていた候補が通るようになる経路が
+/// (low)の罰も外すため、「ピン以外の理由で」却下されていた候補が通るようになる経路が
 /// 別にある（Kotlin原本で実測確認済み）。
 /// </summary>
 public sealed record PinTargetView(

@@ -209,10 +209,7 @@ public sealed partial class HomeView : UserControl
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
 
-        var remaining = ui.BestHard > 0L ? $"必須 残り{ui.BestHard}件"
-            : shortDays > 0 ? $"残り{shortDays}日"
-            : ui.BestSoft > 0L ? $"必須は解消・調整 {ui.BestSoft}件"
-            : "解消済み";
+        var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown);
         var showResolve = !ui.Running;
         ResolveText.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
         ResolveBar.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
@@ -343,8 +340,11 @@ public sealed partial class HomeView : UserControl
             SmartActionCard.Visibility = Visibility.Collapsed;
             return;
         }
+        // 別の職員に絞った探索の結果（途中でも）はホームでは全体探索へ差し替える＝同じ盤面でもカードを隠したままにしない。
+        //   全体探索を「探して0件」で終えた盤面（FixSearched）では探し直さない。
         var boardChanged = !ReferenceEquals(_autoFixBoard, ui.Schedule) || _autoFixHard != ui.BestHard;
-        if (boardChanged && !ui.FixSearching && (ui.FixSuggestions.Count == 0 || ui.FixFocusName.Length > 0))
+        if (ui.FixFocusName.Length > 0 ||
+            (boardChanged && !ui.FixSearching && ui.FixSuggestions.Count == 0 && !ui.FixSearched))
         {
             _autoFixBoard = ui.Schedule;
             _autoFixHard = ui.BestHard;
@@ -609,7 +609,7 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = "いまの希望・担当のままでは埋められない日が残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整するか、担当できるシフトを増やしてください（編集タブ＞月次条件）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             }
             else
             {
@@ -657,6 +657,11 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
+
+    // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
+    private void OnEditWishesClick(object sender, RoutedEventArgs e) => _window.OpenEditDoor(0);
+
+    private void OnManualEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("schedule");
 
     private async void OnEmptyOpenClick(object sender, RoutedEventArgs e) => await _window.OpenDataAsync();
 
@@ -838,14 +843,17 @@ public sealed partial class HomeView : UserControl
         // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
         //   引き上げ済み（一覧行用に10〜13へ据え置いていたのを解消。Button.FontSizeはStyle
         //   (TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず）。
+        // 適用中の案は太字＋「適用中」（VM が持つ＝元に戻すで一覧ごと戻る）。残りの案へはそのまま切り替えられる。
         for (var i = 0; i < ui.Alternatives.Count; i++)
         {
+            var applied = i == ui.AlternativeApplied;
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
                 Text = ui.Alternatives[i], FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = applied ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
             });
-            var apply = new Button { Content = "適用", FontSize = 14, IsEnabled = editable };
+            var apply = new Button { Content = applied ? "適用中" : "適用", FontSize = 14, IsEnabled = editable && !applied };
             var idx = i;
             apply.Click += (_, _) => _vm.ApplyAlternative(idx);
             row.Children.Add(apply);

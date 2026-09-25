@@ -39,8 +39,17 @@ public static class Ws1Ops
         var s = new List<Shift>(state.Shifts) { [k] = state.Shifts[k] with { Name = name, Kigou = kigou, Need1 = need1, Need2 = need2 } };
         // [記号変更の伝播] 制約はシフト記号(文字列)で参照するため、記号を変えたら参照行も一括置換し
         //   旧記号の幽霊行化(評価では無視されるが表示に残る)を防ぐ。index保存(staffRange/希望/apt/勤務表)は
-        //   indexで参照するため自動追従＝対象外。
-        return ApplyRestRole(RenameShiftInConstraints(state with { Shifts = s }, old, kigou), k, isRest);
+        //   indexで参照するため自動追従＝対象外。表示色(shiftColors)も記号キーなので同じく付け替える。
+        return ApplyRestRole(RenameShiftInConstraints(state with { Shifts = s, ShiftColors = RenameColorKey(state.ShiftColors, old, kigou) }, old, kigou), k, isRest);
+    }
+
+    /// <summary>表示色の記号キーを old→new へ移す。新しい記号に残っていた孤児の色は捨てる（別のシフトの色を引き継がない）。</summary>
+    private static IReadOnlyDictionary<string, string> RenameColorKey(IReadOnlyDictionary<string, string> colors, string old, string newKigou)
+    {
+        if (string.IsNullOrWhiteSpace(old) || old == newKigou) return colors;
+        var m = colors.Where(kv => kv.Key != old && kv.Key != newKigou).ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (colors.TryGetValue(old, out var c)) m[newKigou] = c;
+        return m;
     }
 
     /// <summary>[backlog#24] shifts[target]のShiftRoleを単一選択で更新する（trueなら他は全てNoneへ）。</summary>
@@ -635,6 +644,8 @@ public static class Ws1Ops
             GroupShift = gs.Select(row => (IReadOnlyList<int>)row).ToList(),
             GroupShiftApt = apt,
             Wishes = wishes,
+            // 消したシフトの表示色は残さない（同じ記号で作り直したシフトが黙って引き継がないように）。
+            ShiftColors = state.ShiftColors.Where(kv => kv.Key != state.Shifts[k].Kigou).ToDictionary(kv => kv.Key, kv => kv.Value),
             NeedDay1 = ReindexKeys(state.NeedDay1, 0, k),
             NeedDay2 = ReindexKeys(state.NeedDay2, 0, k),
             StaffRange = ReindexKeys(state.StaffRange, 1, k),

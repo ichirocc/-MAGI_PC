@@ -80,13 +80,15 @@ public static partial class V6FinalPort
     /// <summary>Faithful port of Kotlin's <c>fun getAlgorithmLabel(seconds: Int): AlgorithmLabel</c>.</summary>
     public static AlgorithmLabel GetAlgorithmLabel(int seconds)
     {
+        // Name は設定画面の「おまかせ」の説明に出る＝方式チップと同じ語にする（Kotlin と同じ）。
         if (seconds <= 10) return new AlgorithmLabel("⚡", "高速", "短時間でサッと作成", "v5");
-        if (seconds <= 30) return new AlgorithmLabel("★", "標準", "速さと品質のバランス", "v5");
+        if (seconds <= 30) return new AlgorithmLabel("★", "高速", "速さと品質のバランス", "v5");
         // [実機指摘, Kotlin原本] 31〜210s は複合（違反集中→研磨）に統一。表示ラベルもプランと同期。
-        if (seconds <= 210) return new AlgorithmLabel("🧬", "学習+研磨", "RSI違反集中→ALNS研磨", "RSI→ALNS");
+        // [Kotlin 3.551.0] Desc は利用者向け文（内部名 RSI/ALNS を出さない）。Tech は内部用・テスト固定。
+        if (seconds <= 210) return new AlgorithmLabel("🧬", "違反集中→組み替え", "違反集中のあと組み替えで仕上げ", "RSI→ALNS");
         // [Kotlin 3.266.0] 表示ラベルもプラン(Portfolio)と同期。同型RSI++クローン8本でなく、
         //   ALNS/RSI/RSI++が異なる基盤・役割から非同期に探索し、停滞/重複を検知して再配属する。
-        if (seconds <= 300) return new AlgorithmLabel("🌈", "究極(5分)", "ALNS/RSI/RSI++ 異種並列探索(適応epoch)", "PORTFOLIO");
-        return new AlgorithmLabel("🌈", "究極", $"最大限の品質 ({seconds / 60}分)", "PORTFOLIO拡張");
+        if (seconds <= 300) return new AlgorithmLabel("🌈", "方式ミックス", "複数の方式を同時に走らせて最良を採用", "PORTFOLIO");
+        return new AlgorithmLabel("🌈", "方式ミックス", $"最大限の品質 ({seconds / 60}分)", "PORTFOLIO拡張");
     }
 }

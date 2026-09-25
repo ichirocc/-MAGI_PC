@@ -170,6 +170,7 @@ public sealed partial class MagiViewModel
     internal int BeginBoardJob(string label, bool engineRun = false)
     {
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
+        CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
         _boardJobLabel = label;
         if (engineRun)
         {
@@ -200,8 +201,12 @@ public sealed partial class MagiViewModel
     internal bool OptimizeInFlight() => _boardJobLabel is not null || OptimizationRepository.Running;
 
     // ===== 元に戻す（undo/redo）: データ構造のみ。公開の Undo()/Redo() は後続ピースで移植する =====
-    /// <summary>[テスト可視性のためinternal化] <see cref="SnapNow"/> の戻り値型として internal 昇格が必要。</summary>
-    internal sealed record UndoSnap(MagiState State, int[][] Schedule);
+    /// <summary>[テスト可視性のためinternal化] <see cref="SnapNow"/> の戻り値型として internal 昇格が必要。
+    /// <paramref name="Alts"/> は snap の盤面/設定に対して有効だった「他の案」＝元に戻す/やり直すで盤面と一緒に一覧も戻す。
+    /// <paramref name="DisplayEdit"/> は表示色の変更の直前に積んだ段（続けての色変更をまとめる目印。Kotlin の undo 名「表示色の変更」）。</summary>
+    internal sealed record UndoSnap(MagiState State, int[][] Schedule, AltSnap? Alts = null, bool DisplayEdit = false);
+
+    internal sealed record AltSnap(IReadOnlyList<int[][]> Scheds, IReadOnlyList<string> Summaries, int Applied, long BoardKey, long StateKey);
 
     private readonly LinkedList<UndoSnap> _undoStack = new();
     private readonly LinkedList<UndoSnap> _redoStack = new();
@@ -212,23 +217,41 @@ public sealed partial class MagiViewModel
         var st = _state;
         var sc = _currentSchedule;
         if (st is null || sc is null) return null;
-        return new UndoSnap(st, sc.Copy2D());
+        var alts = _alternativeScheds.Count > 0 && _altBoardKey == BoardKey(sc) && _altStateKey == StateKey(st)
+            ? new AltSnap(_alternativeScheds, Ui.Alternatives, Ui.AlternativeApplied, _altBoardKey, _altStateKey)
+            : null;
+        return new UndoSnap(st, sc.Copy2D(), alts);
     }
 
-    internal void PushUndo()
+    /// <summary>undo/redo の復元先に退避してあった「他の案」を戻す（無ければ外す）。</summary>
+    private void RestoreAlts(AltSnap? a)
+    {
+        _alternativeScheds = a?.Scheds ?? System.Array.Empty<int[][]>();
+        _altBoardKey = a?.BoardKey ?? 0L;
+        _altStateKey = a?.StateKey ?? 0L;
+        Ui.Alternatives = a?.Summaries ?? System.Array.Empty<string>();
+        Ui.AlternativeApplied = a?.Applied ?? -1;
+    }
+
+    /// <param name="invalidate">false＝表示だけの変更（<see cref="ApplyDisplayOnly"/>）。他の案・改善提案・完了要約を残す。</param>
+    internal void PushUndo(bool invalidate = true)
     {
         var snap = SnapNow();
         if (snap is null) return;
+        if (!invalidate) snap = snap with { DisplayEdit = true };
         _undoStack.AddLast(snap);
         while (_undoStack.Count > 30) _undoStack.RemoveFirst();
         _redoStack.Clear(); // 新しい操作は redo 履歴を無効化（標準的な undo/redo 挙動）
         Ui.CanUndo = true;
         Ui.CanRedo = false;
+        if (!invalidate) return;
         // [Android 3.475.0/3.529.0 同期] 盤面/設定が変わる操作は必ずここを通る＝別の盤面で計算した改善提案と
         //   「他の案」をその場で無効化する（旧 C#: 消しておらず、セル編集・取込のあとも古い提案が残った）。
         _alternativeScheds = System.Array.Empty<int[][]>();
         ClearFixState();
         Ui.Alternatives = System.Array.Empty<string>();
+        // 完了カードの前後比較（RunSummary）も直前の実行の盤面の話＝同じ理由で外す。
+        Ui.RunSummary = null;
     }
 
     internal void ClearUndo()

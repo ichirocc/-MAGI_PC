@@ -339,4 +339,65 @@ public class MagiViewModelBackgroundTest : IDisposable
 
         await StopAndDrain(vm);
     }
+
+    private static ViolationReport CovUReport(int hard) =>
+        new(EmptyS, EmptyS, EmptyS, new Dictionary<string, int> { ["covU"] = hard }, Total: hard, Hard: hard, Soft: 0, WeightedScore: hard * 10000.0);
+
+    /// <summary>[Android vm 取りこぼし] 背景の結果を採用したら、次回ヒントの族も採用した盤面から取る
+    /// （旧: <c>_lastResultHard</c> だけ更新し、前の前景実行の族が残って別の族を名指ししていた）。</summary>
+    [Fact]
+    public async Task ApplyBgResult_AdoptedResultUpdatesTheHintFamily()
+    {
+        var vm = new MagiViewModel { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm._lastTopHardFamily = "禁止の並び（連勤など）";
+
+        await vm.ApplyBgResult(new OptimizationRepository.BgResult(MinimalState.BuildSchedule(), CovUReport(2), "test", 0L));
+
+        Assert.Equal(2, vm._lastResultHard);
+        Assert.Equal("人員不足（必要人数）", vm._lastTopHardFamily);
+    }
+
+    /// <summary>維持の分岐も前景と同じ＝次回ヒントは維持した盤面（ここでは必須0）から取る。</summary>
+    [Fact]
+    public async Task ApplyBgResult_KeptInputUpdatesTheHintFromTheKeptBoard()
+    {
+        var fake = new FakeOptimizationService
+        {
+            Result = (_, _) => new V6FinalPort.ActionResult(MinimalState.BuildSchedule(), CovUReport(2), "test:Fake",
+                new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 2件"), Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm._lastResultHard = 5;
+        vm._lastTopHardFamily = "人員不足（必要人数）";
+
+        vm.RunInBackground();   // 入力（違反0）より悪い結果＝入力を維持する
+        await vm.LastRunInBackgroundTask!;
+
+        Assert.Contains("前回の結果を維持しました", vm.Ui.Message);
+        Assert.Equal(0, vm._lastResultHard);
+        Assert.Null(vm._lastTopHardFamily);
+    }
+
+    /// <summary>[Android vm-2] 結果を反映した後の最後の処理で投げても「失敗しました」とは言わない
+    /// （盤面は既に差し替え済み＝前景の §10 と同じく、今の勤務表で描き直す）。</summary>
+    [Fact]
+    public async Task FailureAfterAdoptingTheResultIsReportedAsALateErrorAndRedraws()
+    {
+        var fake = new FakeOptimizationService { Result = (_, _) => ActionResult(0, 0) };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(UiState.Message) && vm.Ui.Message is { } m && m.StartsWith("バックグラウンド最適化 完了", StringComparison.Ordinal))
+                throw new InvalidOperationException("late");
+        };
+
+        vm.RunInBackground();
+        await vm.LastRunInBackgroundTask!;
+
+        Assert.False(vm.Ui.Running);
+        Assert.True(vm.Ui.HasResult);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.StartsWith("バックグラウンド最適化は終わりましたが", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("背景結果の反映に失敗"));
+    }
 }

@@ -325,19 +325,7 @@ public sealed partial class MagiViewModel
                 s.GroupIdx >= 0 && s.GroupIdx < st.Groups.Count ? st.Groups[s.GroupIdx].Kigou : ""))
             .ToList();
         Ui.ShiftSymbols = st.Shifts.Select(sh => KigouFormat.ToHankakuKigou(sh.Kigou)).ToList();
-        Ui.ShiftColorHex = st.Shifts
-            .Select((sh, i) => ShiftAppearance.ResolveShiftColor(st.ShiftColors.GetValueOrDefault(sh.Kigou), i))
-            .ToList();
-        Ui.ShiftTextHex = st.Shifts
-            .Select((sh, i) => ShiftAppearance.PickTextColor(
-                ShiftAppearance.ResolveShiftColor(st.ShiftColors.GetValueOrDefault(sh.Kigou), i)))
-            .ToList();
-        Ui.ViolationColorHex = st.ShiftColors.GetValueOrDefault("__vio__", "");
-        Ui.ViolationSoftColorHex = st.ShiftColors.GetValueOrDefault("__vioSoft__", "");
-        Ui.ViolationFamilyColorHex = st.ShiftColors
-            .Where(kv => kv.Key.StartsWith("__vioFam_", StringComparison.Ordinal) &&
-                         kv.Key.EndsWith("__", StringComparison.Ordinal))
-            .ToDictionary(kv => kv.Key["__vioFam_".Length..^"__".Length], kv => kv.Value);
+        ApplyShiftColorsToUi(st);
         Ui.Schedule = schedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Wishes = st.Wishes;
         Ui.LockedWishKeys = WishTrial.LockedWishKeys(st);
@@ -392,5 +380,23 @@ public sealed partial class MagiViewModel
                 Attempts: n));
         }
         return result;
+    }
+
+    /// <summary>表示色（ShiftColors 由来）の UI 項目。MakeUi と <see cref="ApplyDisplayOnly"/>（検査を回さない）の単一ソース。</summary>
+    private void ApplyShiftColorsToUi(MagiState st)
+    {
+        Ui.ShiftColorHex = st.Shifts
+            .Select((sh, i) => ShiftAppearance.ResolveShiftColor(st.ShiftColors.GetValueOrDefault(sh.Kigou), i))
+            .ToList();
+        Ui.ShiftTextHex = st.Shifts
+            .Select((sh, i) => ShiftAppearance.PickTextColor(
+                ShiftAppearance.ResolveShiftColor(st.ShiftColors.GetValueOrDefault(sh.Kigou), i)))
+            .ToList();
+        Ui.ViolationColorHex = st.ShiftColors.GetValueOrDefault("__vio__", "");
+        Ui.ViolationSoftColorHex = st.ShiftColors.GetValueOrDefault("__vioSoft__", "");
+        Ui.ViolationFamilyColorHex = st.ShiftColors
+            .Where(kv => kv.Key.StartsWith("__vioFam_", StringComparison.Ordinal) &&
+                         kv.Key.EndsWith("__", StringComparison.Ordinal))
+            .ToDictionary(kv => kv.Key["__vioFam_".Length..^"__".Length], kv => kv.Value);
     }
 }

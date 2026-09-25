@@ -50,7 +50,7 @@ public class MagiViewModelWs1Test
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
 
-        vm.Ws1EditShift(1, "A", "A", "", "  ", false);
+        vm.Ws1EditShift(1, "A2", "A", "", "  ", false);
 
         Assert.Contains("最低-/上限-", vm.Ui.OpLog[0]);
     }
@@ -1000,5 +1000,26 @@ public class MagiViewModelWs1Test
 
         Assert.Same(st, vm._state);
         Assert.True(vm.Ui.MessageIsError);
+    }
+
+    /// <summary>[Android editors-5] 何も変えずに OK／同じ日数で「変更」は何もしない（undo を積まず、他の案・改善提案も消さない）。</summary>
+    [Fact]
+    public async Task UnchangedShiftEditAndSameDayCountAreNoOps()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var alt = MinimalState.BuildSchedule();
+        alt[0][0] = 1;
+        await vm.CaptureAlternatives(new[] { alt });
+        var st = vm._state;
+
+        vm.Ws1EditShift(1, "A", "A", "", "", false);
+        vm.Ws1ResizeDays(7);
+
+        Assert.Same(st, vm._state);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Single(vm.Ui.Alternatives);
+
+        vm.Ws1EditShift(1, "A", "A", "", "", true);   // 休の指定を変えるのは変更
+        Assert.Equal(1, vm.UndoStackCount);
     }
 }

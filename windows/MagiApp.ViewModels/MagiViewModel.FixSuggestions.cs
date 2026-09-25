@@ -76,6 +76,8 @@ public sealed partial class MagiViewModel
             var list = await Task.Run(
                 () => FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct);
             if (seq != _fixSeq) return; // 後続の探索が始まっている＝古い結果で上書きしない
+            // 盤面を差し替えるジョブの最中は書き戻さず探し直しもしない（完了後の盤面で探し直す）。
+            if (OptimizeInFlight()) { Ui.FixSearching = false; return; }
             // [Android 3.612.0] 探索中に盤面か設定が変わったら（元に戻す・セル編集・実行の完了など）、古い盤面の
             //   結果と「探索済み」を書き戻さず、今の盤面で探し直す。
             var curSched = _currentSchedule; var curSt = _state;
@@ -105,6 +107,15 @@ public sealed partial class MagiViewModel
                 Ui.Message = "直し方を探せませんでした";
             }
         }
+    }
+
+    /// <summary>走行中の直し方の探索を捨てる（世代を進めるので、完了間際の結果も書き戻さない）。</summary>
+    private void CancelFixSearch()
+    {
+        ++_fixSeq;
+        _fixCts?.Cancel();
+        _fixCts = null;
+        if (Ui.FixSearching) Ui.FixSearching = false;
     }
 
     /// <summary>[改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。

@@ -339,7 +339,7 @@ public class ProblemTest
     {
         var p = new Problem(MinimalState.Build(cons41: new List<C41Row> { new("NOPE", "A", "1", "5") }));
         Assert.Empty(p.Cons41);
-        Assert.Contains(("群のレンジ", "〈NOPE〉 の A（1〜5）"), p.UnresolvedRows);
+        Assert.Contains(("グループのレンジ", "〈NOPE〉 の A（1〜5）"), p.UnresolvedRows);
     }
 
     // ---- Apt: 到達範囲クランプ（Android 3.508.0 同期）---------------------------
@@ -421,7 +421,7 @@ public class ProblemTest
         // no lower AND no upper bound at all (hasLo=false, hasHi=false).
         var p = new Problem(MinimalState.Build(cons41: new List<C41Row> { new("G0", "A", "", "") }));
         Assert.Empty(p.Cons41);
-        Assert.Contains(("群のレンジ", "G0 の A（〜）"), p.UnresolvedRows);
+        Assert.Contains(("グループのレンジ", "G0 の A（〜）"), p.UnresolvedRows);
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public class ProblemTest
     {
         var p = new Problem(MinimalState.Build(cons42: new List<C42Row> { new("NOPE", "G0", "A", "A") }));
         Assert.Empty(p.Cons42);
-        Assert.Contains(("群ペア禁止", "〈NOPE〉/A × G0/A"), p.UnresolvedRows);
+        Assert.Contains(("グループペア禁止", "〈NOPE〉/A × G0/A"), p.UnresolvedRows);
     }
 
     [Fact]
@@ -439,7 +439,7 @@ public class ProblemTest
             skillGroups: new List<Group> { new("S0", "S0") },
             cons41s: new List<C41Row> { new("NOPE", "A", "1", "2") }));
         Assert.Empty(p.Cons41s);
-        Assert.Contains(("スキル群のレンジ", "〈NOPE〉 の A（1〜2）"), p.UnresolvedRows);
+        Assert.Contains(("スキルグループのレンジ", "〈NOPE〉 の A（1〜2）"), p.UnresolvedRows);
     }
 
     [Fact]
@@ -449,7 +449,7 @@ public class ProblemTest
             skillGroups: new List<Group> { new("S0", "S0") },
             cons42s: new List<C42Row> { new("NOPE", "S0", "A", "A") }));
         Assert.Empty(p.Cons42s);
-        Assert.Contains(("スキル群ペア禁止", "〈NOPE〉/A × S0/A"), p.UnresolvedRows);
+        Assert.Contains(("スキルグループペア禁止", "〈NOPE〉/A × S0/A"), p.UnresolvedRows);
     }
 
     // ---- NeedAt fallthrough behavior ---------------------------------------

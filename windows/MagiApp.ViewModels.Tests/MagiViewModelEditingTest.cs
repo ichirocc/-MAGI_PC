@@ -1336,7 +1336,7 @@ public class MagiViewModelEditingTest
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
 
-        vm.AddCons3("cons3", new[] { "休", "A", "", "B", "C" }); // stops at the blank -> ["休","A"]
+        vm.AddCons3("cons3", new[] { "休", "A", "", "", "" }); // stops at the blank -> ["休","A"]
 
         Assert.Equal(new[] { "休", "A" }, vm._state!.Cons3[0].Pattern);
     }
@@ -1418,10 +1418,12 @@ public class MagiViewModelEditingTest
         Assert.Contains("期間", vm.ConstraintInputError("cons1", new[] { "20", "休", "1" })!);
         Assert.Contains("ありません", vm.ConstraintInputError("cons1", new[] { "5", "X", "1" })!);
         Assert.Contains("整数", vm.ConstraintInputError("cons2", new[] { "A", "-10" })!);
-        Assert.Null(vm.ConstraintInputError("cons41", new[] { "G0", "A", "", "" }));
+        Assert.Contains("どちらか", vm.ConstraintInputError("cons41", new[] { "G0", "A", "", "" })!);   // 両方空欄は評価されない
+        Assert.Null(vm.ConstraintInputError("cons41", new[] { "G0", "A", "", "2" }));
+        Assert.Contains("1 以上", vm.ConstraintInputError("cons2", new[] { "A", "0" })!);   // 合計0は必ず満たす＝意味の無い行
         Assert.Contains("下限は上限以下", vm.ConstraintInputError("cons41", new[] { "G0", "A", "20", "3" })!);
         Assert.Contains("ありません", vm.ConstraintInputError("cons41", new[] { "ZZ", "A", "1", "2" })!);
-        Assert.Contains("ありません", vm.ConstraintInputError("cons41s", new[] { "G0", "A", "", "" })!); // スキル群は未定義
+        Assert.Contains("ありません", vm.ConstraintInputError("cons41s", new[] { "G0", "A", "1", "" })!); // スキル群は未定義
         Assert.Contains("ありません", vm.ConstraintInputError("cons3n", new[] { "A", "Q", "", "", "" })!);
         Assert.Null(vm.ConstraintInputError("cons3n", new[] { "A", "休", "", "", "" }));
         Assert.Contains("ありません", vm.ConstraintInputError("cons42", new[] { "G0", "A", "G0", "Q" })!);
@@ -1481,9 +1483,111 @@ public class MagiViewModelEditingTest
         var st = MinimalState.Build(cons3: new List<C3Row> { new(new List<string> { "休", "A" }) });
         var vm = new MagiViewModel { _state = st };
 
-        vm.UpdateConstraint("cons3", 0, new[] { "B", "C", "", "D" }); // truncates at the blank
+        vm.UpdateConstraint("cons3", 0, new[] { "B", "C", "", "" }); // trailing blanks end the pattern
 
         Assert.Equal(new[] { "B", "C" }, vm._state!.Cons3[0].Pattern);
+    }
+
+    /// <summary>[Android editors 取りこぼし] 途中に空欄のある並び（1番目=A, 2番目=空, 3番目=休）は黙って切らずに断る
+    /// （切ると「A だけ」の禁止＝全日禁止になりうる。CSV 取込は同じ形を形式エラーにする）。</summary>
+    [Fact]
+    public void AddAndUpdateCons3RejectAPatternWithABlankInTheMiddle()
+    {
+        var st = MinimalState.Build(cons3n: new List<C3Row> { new(new List<string> { "休", "A" }) });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.AddCons3("cons3n", new[] { "A", "", "休" });
+        Assert.Single(vm._state!.Cons3n);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("途中に空欄", vm.Ui.Message);
+
+        vm.UpdateConstraint("cons3n", 0, new[] { "", "A" });   // 1番目が空で後ろがある（旧 C#: 入力検査を通って黙って捨てた）
+        Assert.Equal(new[] { "休", "A" }, vm._state!.Cons3n[0].Pattern);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Contains("途中に空欄", vm.ConstraintInputError("cons3n", new[] { "", "A", "", "", "" })!);
+    }
+
+    /// <summary>[Android editors-2] 1つだけの並びは受け付ける（意味論は不変）が、X→X と読めないよう「X（1つだけ）」と出し、
+    /// 禁止の並びでは全日禁止になることを添える。</summary>
+    [Fact]
+    public void SingleShiftPatternIsShownAsOneShiftWithANoteForForbidden()
+    {
+        var st = MinimalState.Build(
+            cons3: new List<C3Row> { new(new List<string> { "A" }) },
+            cons3n: new List<C3Row> { new(new List<string> { "A" }) });
+        var vm = new MagiViewModel { _state = st };
+        var fams = vm.ConstraintFamilies();
+
+        Assert.Equal("A（1つだけ）", fams.Single(f => f.Key == "cons3").Rows[0]);
+        Assert.Contains("A（1つだけ）", fams.Single(f => f.Key == "cons3n").Rows[0]);
+        Assert.Contains("A をどの日にも置けなくします", fams.Single(f => f.Key == "cons3n").Rows[0]);
+        Assert.Equal(MagiViewModel.SingleForbiddenNote("A"), vm.SeqSingleNote("cons3n", new[] { "A", "", "", "", "" }));
+        Assert.Null(vm.SeqSingleNote("cons3", new[] { "A", "", "", "", "" }));
+        Assert.Null(vm.SeqSingleNote("cons3n", new[] { "A", "休", "", "", "" }));
+    }
+
+    /// <summary>[Android MagiConstraintsViewTest.gapInsideThePatternIsDetected の移植]</summary>
+    [Fact]
+    public void GapInsideThePatternIsDetected()
+    {
+        Assert.True(MagiViewModel.SeqHasGap(new[] { "A", "", "B", "", "" }));
+        Assert.True(MagiViewModel.SeqHasGap(new[] { "", "B", "", "", "" }));   // 1番目が空で後ろがある
+        Assert.False(MagiViewModel.SeqHasGap(new[] { "A", "B", "", "", "" }));  // 末尾の空欄は切れ目ではない
+        Assert.False(MagiViewModel.SeqHasGap(new[] { "A", "", "", "", "" }));   // 1つだけの並びは受け付ける
+        Assert.False(MagiViewModel.SeqHasGap(new[] { "", "", "", "", "" }));
+    }
+
+    /// <summary>[Android MagiConstraintsViewTest.duplicateRowIsDetectedWithinTheFamily の移植] 同じ値の行は違反が2倍に数えられる＝入口で止める。
+    /// 数値の 05 と 5 は同じ、自分自身（変更時）は除く。</summary>
+    [Fact]
+    public void DuplicateRowIsDetectedWithinTheFamily()
+    {
+        var st = MinimalState.Build(
+            cons1: new List<C1Row> { new("5", "休", "1") },
+            cons42: new List<C42Row> { new("A", "B", "Dﾃ", "Dﾃ") });
+        Assert.True(MagiViewModel.RowDuplicate(st, "cons1", new[] { "5", "休", "1" }));
+        Assert.True(MagiViewModel.RowDuplicate(st, "cons1", new[] { " 05", "休", "1 " }));   // 数値の前ゼロ・前後の空白は同じ
+        Assert.False(MagiViewModel.RowDuplicate(st, "cons1", new[] { "5", "休", "1" }, excludeIndex: 0));   // 自分自身は除く
+        Assert.False(MagiViewModel.RowDuplicate(st, "cons1", new[] { "5", "休", "2" }));
+        Assert.True(MagiViewModel.RowDuplicate(st, "cons42", new[] { "A", "Dﾃ", "B", "Dﾃ" }));   // 画面の入力順（g1,s1,g2,s2）で比べる
+        Assert.False(MagiViewModel.RowDuplicate(st, "cons2", new[] { "5", "休", "1" }));   // 別の族とは比べない
+    }
+
+    /// <summary>[Android MagiConstraintsViewTest.duplicateIsDetectedAcrossFamilies / patternIsNormalizedBeforeComparing の移植]</summary>
+    [Fact]
+    public void SeqDuplicateIsDetectedAcrossFamiliesAfterNormalizing()
+    {
+        var st = MinimalState.Build(cons3n: new List<C3Row> { new(new List<string> { "A", "B" }) });
+        Assert.Equal("禁止の並び", MagiViewModel.SeqDuplicateOf(st, "cons3mn", new[] { "A", "B" }));
+        Assert.Equal("禁止の並び", MagiViewModel.SeqDuplicateOf(st, "cons3n", new[] { "A", "B" }));
+        Assert.Null(MagiViewModel.SeqDuplicateOf(st, "cons3n", new[] { "A", "B" }, excludeIndex: 0));
+        Assert.Null(MagiViewModel.SeqDuplicateOf(st, "cons3n", new[] { "A", "C" }));
+        Assert.Null(MagiViewModel.SeqDuplicateOf(st, "cons3n", new[] { "", "B" }));
+        Assert.Equal(new List<string> { "A", "B" }, MagiViewModel.NormalizeSeq(new[] { " A ", "B", "", "X" }));
+    }
+
+    /// <summary>[Android editors-15] 同じ条件の行は画面経由では足せない（既存の重複は消さない＝エンジンも dedup しない）。</summary>
+    [Fact]
+    public void AddingOrEditingIntoAnExactDuplicateRowIsRefused()
+    {
+        var st = MinimalState.Build(
+            cons1: new List<C1Row> { new("5", "休", "1"), new("3", "A", "1") },
+            cons3n: new List<C3Row> { new(new List<string> { "A", "休" }) });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.AddCons1("05", "休", "1");
+        Assert.Equal(2, vm._state!.Cons1.Count);
+        Assert.Equal("同じ条件がすでにあります", vm.Ui.Message);
+        Assert.Contains("同じ条件", vm.ConstraintInputError("cons1", new[] { "5", "休", "1" })!);
+        Assert.Null(vm.ConstraintInputError("cons1", new[] { "5", "休", "1" }, editIndex: 0));   // 変更で自分自身は除く
+
+        vm.UpdateConstraint("cons1", 1, new[] { "5", "休", "1" });
+        Assert.Equal(new C1Row("3", "A", "1"), vm._state!.Cons1[1]);
+
+        vm.AddCons3("cons3mn", new[] { "A", "休" });   // 族をまたいでも同じ並び
+        Assert.Empty(vm._state!.Cons3mn);
+        Assert.Contains("禁止の並び", vm.Ui.Message);
+        Assert.Equal(0, vm.UndoStackCount);
     }
 
     [Fact]
@@ -1688,6 +1792,182 @@ public class MagiViewModelEditingTest
         new[] { 0, 0, 0, 0, 0, 0, 0 },
         new[] { 0, 0, 0, 0, 0, 0, 0 },
     };
+
+    // ===================================================================
+    // 画面層の精読 #2（Android 3.6xx）の C# 移植分
+    // ===================================================================
+
+    private static int[][] AltBoard(int i, int j, int k)
+    {
+        var b = MinimalState.BuildSchedule();
+        b[i][j] = k;
+        return b;
+    }
+
+    /// <summary>[Android dashboard-3] 案は盤面まるごと＝適用後も残りの案へ切り替えられる。適用中の案を覚え、
+    /// 元に戻す/やり直すで盤面と一緒に一覧も戻す。</summary>
+    [Fact]
+    public async Task ApplyingAnAlternativeKeepsTheListAndUndoRestoresBoardAndList()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        await vm.CaptureAlternatives(new[] { AltBoard(0, 0, 1), AltBoard(1, 1, 1) });
+        Assert.Equal(-1, vm.Ui.AlternativeApplied);
+
+        vm.ApplyAlternative(0);
+        await vm.LastApplyAlternativeTask!;
+        Assert.Equal(2, vm.Ui.Alternatives.Count);
+        Assert.Equal(0, vm.Ui.AlternativeApplied);
+
+        vm.ApplyAlternative(1);   // 残りの案へそのまま切り替えられる
+        await vm.LastApplyAlternativeTask!;
+        Assert.Equal(1, vm._currentSchedule![1][1]);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(1, vm.Ui.AlternativeApplied);
+
+        vm.Undo();
+        Assert.Equal(1, vm._currentSchedule![0][0]);   // 案1の盤面
+        Assert.Equal(2, vm.Ui.Alternatives.Count);
+        Assert.Equal(0, vm.Ui.AlternativeApplied);
+        vm.Undo();
+        Assert.Equal(0, vm._currentSchedule![0][0]);   // 案を適用する前の盤面
+        Assert.Equal(-1, vm.Ui.AlternativeApplied);
+        Assert.Equal(2, vm.Ui.Alternatives.Count);
+        vm.Redo();
+        Assert.Equal(1, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.Ui.AlternativeApplied);
+
+        vm.SetCell(1, 3, 1);   // 手編集で案は古くなる＝外す（元に戻すと戻る）
+        Assert.Empty(vm.Ui.Alternatives);
+        vm.Undo();
+        Assert.Equal(2, vm.Ui.Alternatives.Count);
+    }
+
+    /// <summary>[Android 3.529.0] 案を計算した後に盤面/設定が変わっていれば、その案は適用しない。</summary>
+    [Fact]
+    public async Task ApplyAlternativeRejectsWhenTheBoardChangedSinceTheAlternativesWereComputed()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        await vm.CaptureAlternatives(new[] { AltBoard(0, 0, 1) });
+        vm._currentSchedule![1][3] = 1;   // PushUndo を通らない書き換え（防御の確認）
+
+        vm.ApplyAlternative(0);
+
+        Assert.Null(vm.LastApplyAlternativeTask);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Empty(vm.Ui.Alternatives);
+        Assert.True(vm.Ui.MessageIsError);
+    }
+
+    /// <summary>[Android editors-5] 表示色は表示だけの変更＝他の案・改善提案を消さず検査も回さない。続けての色変更は1つの「元に戻す」。</summary>
+    [Fact]
+    public async Task ColourChangesKeepAlternativesAndShareOneUndoEntry()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        await vm.CaptureAlternatives(new[] { AltBoard(0, 0, 1) });
+
+        vm.SetShiftColor("休", "#111111");
+        vm.SetShiftColor("休", "#222222");
+        vm.SetViolationColor("#333333");
+
+        Assert.Single(vm.Ui.Alternatives);
+        Assert.Null(vm.LastRefreshCheckTask);
+        Assert.Equal(1, vm.UndoStackCount);
+        Assert.Equal("#222222", vm.Ui.ShiftColorHex[0]);
+        Assert.Equal("#333333", vm.Ui.ViolationColorHex);
+
+        vm.SetShiftColor("休", "#222222");   // 同じ色＝何もしない
+        Assert.Equal(1, vm.UndoStackCount);
+
+        vm.Undo();
+        Assert.False(vm._state!.ShiftColors.ContainsKey("休"));
+        Assert.False(vm._state!.ShiftColors.ContainsKey("__vio__"));
+
+        vm.SetCell(1, 3, 1);   // 盤面の編集のあとは新しい段になる
+        vm.SetShiftColor("休", "#444444");
+        Assert.Equal(2, vm.UndoStackCount);
+    }
+
+    /// <summary>[Android schedule-6] 全員への一括の希望は、そのシフトを担当できる職員だけに付ける
+    /// （担当外の希望は実現も表示もされず、その人の既存の希望を黙って消すだけだった）。</summary>
+    [Fact]
+    public void SetWishesForDaysForAllStaffSkipsStaffWhoCannotWorkTheShift()
+    {
+        var st = MinimalState.Build(
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            staffList: new List<Staff> { new("職員1", 0), new("職員2", 1) },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 0 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" }, new List<string> { "", "" } },
+            wishes: new Dictionary<string, int> { ["1,2"] = 0 });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.SetWishesForDays(null, new[] { 2 }, 1);
+
+        Assert.Equal(1, vm._state!.Wishes["0,2"]);
+        Assert.Equal(0, vm._state!.Wishes["1,2"]);   // 担当外の職員の既存の希望は残る
+        Assert.Contains("担当外1名を除く", vm.Ui.OpLog[0]);
+    }
+
+    /// <summary>[Android schedule-11] 同じメモは二重に積まない。</summary>
+    [Fact]
+    public void AddReviewMemoRefusesADuplicate()
+    {
+        var vm = new MagiViewModel();
+        vm.AddReviewMemo("夜勤明けの休を見直す");
+        vm.AddReviewMemo(" 夜勤明けの休を見直す ");
+        Assert.Single(vm.Ui.ReviewMemos);
+        Assert.Equal("すでに見直し候補にあります", vm.Ui.Message);
+    }
+
+    /// <summary>[Android editors 取りこぼし] 全員が個人設定済みなら何も書かない（適切回数の書き換えも undo もしない）で知らせる。</summary>
+    [Fact]
+    public void SetGroupRangeWritesNothingWhenEveryMemberAlreadyHasAPersonalRange()
+    {
+        var st = MinimalState.Build(
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("1", "1"), ["1,1"] = new("2", "2") },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "3" } });
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetGroupRange(0, 1, "2", "4");
+
+        Assert.Same(st, vm._state);
+        Assert.Equal("3", vm._state!.GroupShiftApt[0][1]);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("全員が個人設定済み", vm.Ui.Message);
+    }
+
+    /// <summary>[Android dashboard-15] 回数固定の緩和は「N回に固定」の行だけ＝再検査で行が消える前の2回目のタップで幅を更に広げない。</summary>
+    [Fact]
+    public void RelaxStaffRangePinDoesNotWidenTwiceOnADoubleTap()
+    {
+        var st = MinimalState.Build(staffRange: new Dictionary<string, Range> { ["0,1"] = new("2", "2") });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.RelaxStaffRangePin(0, 1, 0, 1);
+        vm.RelaxStaffRangePin(0, 1, 0, 1);
+
+        Assert.Equal(new Range("2", "3"), vm._state!.StaffRange["0,1"]);
+    }
+
+    /// <summary>[Android editors-16] 入力ガイドの「ルール N件」は全族の行数の和（スキルグループの2族・希望の前日に禁止も数える）。</summary>
+    [Fact]
+    public void GetSetupCountsIncludesSkillGroupRulesAndCons3w()
+    {
+        var st = MinimalState.Build(
+            cons41s: new List<C41Row> { new("L", "A", "1", "") },
+            cons42s: new List<C42Row> { new("L", "L", "A", "A") }) with { Cons3w = new List<C3wRow> { new("A", "休") } };
+        var vm = new MagiViewModel { _state = st };
+        Assert.Equal(3, vm.GetSetupCounts().Constraints);
+    }
+
+    [Fact]
+    public void NeedUpperLabelCarriesTheSecondPatternCaveatWhenItIsOff()
+    {
+        Assert.Equal("上限人数", MagiViewModel.NeedUpperLabel(use2: true));
+        Assert.Equal("上限人数(2パターン時)", MagiViewModel.NeedUpperLabel(use2: false));
+        Assert.Equal("上限(2パターン時)", MagiViewModel.NeedUpperLabel(use2: false, shortLabel: true));
+    }
+
 }
 
 file static class TestFixtureExtensions

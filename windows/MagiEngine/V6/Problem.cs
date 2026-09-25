@@ -429,7 +429,7 @@ public sealed class Problem
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41List.Add(new C41(gi, si, lo, hi));
             else
             {
-                _unresolvedRows.Add(("群のレンジ",
+                _unresolvedRows.Add(("グループのレンジ",
                     $"{Mark(it.GroupKigou, gi >= 0)} の {Mark(it.ShiftKigou, si >= 0)}（{it.L}〜{it.U}）"));
             }
         }
@@ -445,7 +445,7 @@ public sealed class Problem
             if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) cons42List.Add(new C42(g1, s1, g2, s2));
             else
             {
-                _unresolvedRows.Add(("群ペア禁止",
+                _unresolvedRows.Add(("グループペア禁止",
                     $"{Mark(it.G1Kigou, g1 >= 0)}/{Mark(it.S1Kigou, s1 >= 0)} × {Mark(it.G2Kigou, g2 >= 0)}/{Mark(it.S2Kigou, s2 >= 0)}"));
             }
         }
@@ -463,7 +463,7 @@ public sealed class Problem
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41sList.Add(new C41(gi, si, lo, hi));
             else
             {
-                _unresolvedRows.Add(("スキル群のレンジ",
+                _unresolvedRows.Add(("スキルグループのレンジ",
                     $"{Mark(it.GroupKigou, gi >= 0)} の {Mark(it.ShiftKigou, si >= 0)}（{it.L}〜{it.U}）"));
             }
         }
@@ -479,7 +479,7 @@ public sealed class Problem
             if (g1 >= 0 && g2 >= 0 && s1 >= 0 && s2 >= 0) cons42sList.Add(new C42(g1, s1, g2, s2));
             else
             {
-                _unresolvedRows.Add(("スキル群ペア禁止",
+                _unresolvedRows.Add(("スキルグループペア禁止",
                     $"{Mark(it.G1Kigou, g1 >= 0)}/{Mark(it.S1Kigou, s1 >= 0)} × {Mark(it.G2Kigou, g2 >= 0)}/{Mark(it.S2Kigou, s2 >= 0)}"));
             }
         }

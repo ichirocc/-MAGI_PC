@@ -258,6 +258,13 @@ public sealed partial class MainWindow : Window
         if (item is not null) Nav.SelectedItem = item;
     }
 
+    /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。</summary>
+    internal void OpenEditDoor(int door)
+    {
+        SelectTab("edit");
+        if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.OpenDoor(door);
+    }
+
     /// <summary>[phase9 #2] 勤務表CSVの書き出し。ピッカーの配線は設定タブに1つだけ置き、ここは委譲する。</summary>
     /// <summary>[phase9 #5] 「データを開く」（ホームの空状態カード）。ピッカーは設定タブのものへ委譲。</summary>
     internal Task OpenDataAsync() =>

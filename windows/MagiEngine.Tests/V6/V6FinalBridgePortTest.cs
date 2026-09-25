@@ -73,6 +73,17 @@ public class V6FinalBridgePortTest
         Assert.Equal("PORTFOLIO拡張", V6FinalPort.GetAlgorithmLabel(600).Tech);
     }
 
+    /// <summary>「おまかせ」の説明は方式チップの語で言う（究極(5分)・学習+研磨・標準は選べる方式に無い名前だった）。
+    /// Kotlin <c>algorithmLabelNamesUseChipVocabulary</c> の移植。</summary>
+    [Fact]
+    public void AlgorithmLabelNamesUseChipVocabulary()
+    {
+        Assert.Equal("高速", V6FinalPort.GetAlgorithmLabel(30).Name);
+        Assert.Equal("違反集中→組み替え", V6FinalPort.GetAlgorithmLabel(120).Name);
+        Assert.Equal("方式ミックス", V6FinalPort.GetAlgorithmLabel(240).Name);
+        Assert.Equal("方式ミックス", V6FinalPort.GetAlgorithmLabel(600).Name);
+    }
+
     /// <summary>
     /// [フェーズ7ピース6, 新規テスト] <c>optimizationPlan</c> には対応する Kotlin テストが存在しない
     /// （<c>grep -rn "optimizationPlan(" app/src/test/</c> で確認済み、0件）。この C# 移植で最も

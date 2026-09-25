@@ -53,7 +53,8 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null) return new SetupCounts(0, 0, 0, 0, 0, 0, 0, 0, false);
         var cons = st.Cons1.Count + st.Cons2.Count + st.Cons3.Count + st.Cons3n.Count +
-            st.Cons3m.Count + st.Cons3mn.Count + st.Cons41.Count + st.Cons42.Count;
+            st.Cons3m.Count + st.Cons3mn.Count + st.Cons41.Count + st.Cons42.Count + (st.Cons3w?.Count ?? 0) +
+            st.Cons41s.Count + st.Cons42s.Count;
         return new SetupCounts(
             st.DayCount, st.StaffCount, st.ShiftCount, st.GroupCount,
             st.Wishes.Count, st.NeedDay1.Count + st.NeedDay2.Count, cons, st.StaffRange.Count, st.Use2Patterns);
@@ -172,6 +173,9 @@ public sealed partial class MagiViewModel
     }
 
     private IReadOnlyList<int[][]> _alternativeScheds = System.Array.Empty<int[][]>();
+    /// <summary>[Android 3.529.0] 案を計算した（適用後は適用した）盤面/設定の指紋。0=未計算。</summary>
+    private long _altBoardKey;
+    private long _altStateKey;
 
     /// <summary>
     /// 直近の並列最適化で得た「他の案」を取り込み、サマリをUIへ反映。
@@ -184,6 +188,8 @@ public sealed partial class MagiViewModel
         if (st is null) return;
         var alts = source.Select(a => a.Copy2D()).ToList();
         _alternativeScheds = alts;
+        _altBoardKey = _currentSchedule is { } cur ? BoardKey(cur) : 0L;
+        _altStateKey = StateKey(st);
         // [Main負荷回避] 他案（最大3件）の違反チェックは同期CPU → Default で実行してから反映。
         var summaries = await System.Threading.Tasks.Task.Run(() =>
             alts.Select((sch, idx) =>
@@ -192,6 +198,7 @@ public sealed partial class MagiViewModel
                 return $"案{idx + 1}: 必須={rep.Hard} 合計={rep.Total}";
             }).ToList());
         Ui.Alternatives = summaries;
+        Ui.AlternativeApplied = -1;
     }
 
     /// <summary>「他の案」を勤務表へ適用（Undo・操作ログ付き）。</summary>
@@ -204,24 +211,47 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
         if (i < 0 || i >= _alternativeScheds.Count) return;
         var sch = _alternativeScheds[i].Copy2D();
+        // [Android 3.529.0] 案を計算した後に盤面/設定が変わっていれば拒否（職員数・期間の違いもここで弾ける）。
+        var curSched = _currentSchedule;
+        if (_altBoardKey != 0L && curSched is not null && (_altBoardKey != BoardKey(curSched) || _altStateKey != StateKey(st)))
+        {
+            _alternativeScheds = System.Array.Empty<int[][]>();
+            Ui.Alternatives = System.Array.Empty<string>();
+            Ui.MessageIsError = true;
+            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。もう一度最適化してください";
+            LogOp("W", $"他の案 {i + 1}: 案の計算後に盤面/設定が変わったため適用せず");
+            return;
+        }
+        // 案は盤面まるごと（差分ではない）＝適用後も残りの案へ切り替えられる。PushUndo() が外した一覧を戻し、
+        //   指紋を適用後の盤面へ付け替える（この後に手編集が入れば PushUndo でまた外れる）。
+        var keptAlts = _alternativeScheds;
+        var keptSummaries = Ui.Alternatives;
         PushUndo();
         _currentSchedule = sch;
         _resultSchedule = sch;
         _state = st.WithSchedule(sch);
+        _alternativeScheds = keptAlts;
+        _altBoardKey = BoardKey(sch);
+        Ui.Alternatives = keptSummaries;
+        Ui.AlternativeApplied = i;
         AutoSave();
-        LastApplyAlternativeTask = ApplyAlternativeCoreAsync(i, sch, st);
+        // [Android 3.475.0] 再検査は _checkSeq に乗せる＝案1→案2 と続けて押したとき先の案の報告で上書きしない。
+        var seq = ++_checkSeq;
+        _checkCts?.Cancel();
+        LastApplyAlternativeTask = ApplyAlternativeCoreAsync(i, sch, st, seq);
     }
 
     /// <summary>[テスト可視性のための追加] <see cref="ApplyAlternative"/> が起動する背景再チェック。</summary>
     internal System.Threading.Tasks.Task? LastApplyAlternativeTask { get; private set; }
 
-    private async System.Threading.Tasks.Task ApplyAlternativeCoreAsync(int i, int[][] sch, MagiState fallbackSt)
+    private async System.Threading.Tasks.Task ApplyAlternativeCoreAsync(int i, int[][] sch, MagiState fallbackSt, long seq)
     {
         // [3.392.0] 盤面は呼出元で既に差し替わっている。ここが例外で落ちると報告だけ届かず
         //   「盤面は変わったのに違反数は前の案のまま」になるので、必ず理由を残す。
         try
         {
             var rep = await System.Threading.Tasks.Task.Run(() => UnifiedViolationChecker.Check(_state ?? fallbackSt, sch));
+            if (seq != _checkSeq) return;
             await PushReportAsync(_state ?? fallbackSt, sch, rep, transform: ui =>
             {
                 ui.MessageIsError = false;
@@ -402,6 +432,10 @@ public sealed partial class MagiViewModel
         ApplyStructure(st with { NeedDay1 = nd1, NeedDay2 = nd2 });
     }
 
+    /// <summary>上限人数（need2）の見出し。2パターン目を使わない月は効かないので、シフト編集と同じ但し書きを付ける。</summary>
+    public static string NeedUpperLabel(bool use2, bool shortLabel = false) =>
+        (shortLabel ? "上限" : "上限人数") + (use2 ? "" : "(2パターン時)");
+
     /// <summary>[一括] シフト k の複数日へ必要人数の例外を一括設定（空欄＝その側は既定に戻す）。Undo 1 回・再チェック 1 回。</summary>
     public void SetNeedDaysForDays(int k, IReadOnlyList<int> days, string p1, string p2)
     {
@@ -481,6 +515,8 @@ public sealed partial class MagiViewModel
         if (!st.StaffRange.TryGetValue($"{i},{k}", out var cur)) return;
         if (!int.TryParse(cur.Lo.Trim(), out var lo)) return;
         if (!int.TryParse(cur.Hi.Trim(), out var hi)) return;
+        // 行の前提は「N回に固定」＝緩めた後の2回目のタップ（再検査で行が消える前）で幅を更に広げない。
+        if (lo != hi) return;
         var newLo = System.Math.Max(lo + loDelta, 0);
         var newHi = System.Math.Max(hi + hiDelta, newLo);
         if (newLo == lo && newHi == hi) return;
@@ -497,7 +533,7 @@ public sealed partial class MagiViewModel
     }
 
     // ---- グループ単位の回数（一括）: 既存 staffRange をグループ所属職員に展開する。
-    //   新しい制約種別やスコア評価器の変更は不要（low/high は既に重み90/45で最適化対象）＝退行リスクなし。
+    //   新しい制約種別やスコア評価器の変更は不要（low/high は既に最適化対象。重みは MirrorKeys.WeightOf）＝退行リスクなし。
     //   業務担当者が値を入力しボタンで適用する operator ツール（HF77準拠）。 ----
 
     public IReadOnlyList<string> GroupLabels() =>
@@ -517,8 +553,8 @@ public sealed partial class MagiViewModel
             .Aggregate((a, b) => { a.IntersectWith(b); return a; });
     }
 
-    /// <summary>グループ g 所属の全職員に、ws5 個人別[lo,hi](staffRange, low/high 重み90/45=強い境界) を一括設定し、
-    /// さらに ws1 C のグループ別 適切回数(groupShiftApt, apt 重み1=弱い目標) も同時に書く。
+    /// <summary>グループ g 所属の全職員に、ws5 個人別[lo,hi](staffRange, low/high=強い境界) を一括設定し、
+    /// さらに ws1 C のグループ別 適切回数(groupShiftApt, apt=弱い目標) も同時に書く。
     /// apt は「最低=最高」の単一値のときのみ設定（範囲指定や空欄時はクリア）＝Excelの ws1 C→ws5 展開を1操作で再現。</summary>
     public void SetGroupRange(int g, int k, string lo, string hi)
     {
@@ -540,10 +576,16 @@ public sealed partial class MagiViewModel
             m[key] = new MagiEngine.Model.Range(loT, hiT);
             wrote++;
         }
+        var gname = g < st0.Groups.Count ? st0.Groups[g].Name : $"#{g}";
+        // 全員が個人設定済み＝何も書かない（適切回数の書き換えも undo もしない）。黙って変わらない形を避けて知らせる。
+        if (wrote == 0)
+        {
+            Notify($"{gname}「{OpSy(k)}」は全員が個人設定済みのため変更はありません（変えるときは『解除』で外してから適用）", "W");
+            return;
+        }
         // ws1 C: グループ別 適切回数（弱い目標）。単一値(最低=最高)のときのみ設定。
         var aptVal = loT == hiT ? loT : "";
         var stNew = Ws1Ops.SetGroupApt(st0 with { StaffRange = m }, g, k, aptVal);
-        var gname = g < st0.Groups.Count ? st0.Groups[g].Name : $"#{g}";
         LogOp("I", $"グループ一括: {gname} {OpSy(k)} → ws5={(loT.Length == 0 ? "?" : loT)}〜{(hiT.Length == 0 ? "?" : hiT)} (書込{wrote}名/スキップ{skipped}名・既存個人値は保持)");
         ApplyStructure(stNew);
     }
@@ -746,18 +788,24 @@ public sealed partial class MagiViewModel
         ApplyStructure(st with { Wishes = Without(st.Wishes, $"{i},{j}") });
     }
 
-    /// <summary>[一括] スタッフ(null=全員)×日群に希望 k を一括設定。Undo1回・再チェック1回。</summary>
+    /// <summary>[一括] スタッフ(null=全員)×日群に希望 k を一括設定。Undo1回・再チェック1回。
+    /// 全員のときは k を担当できる職員だけ（担当外の希望は実現も表示もされず、その人の既存の希望を消すだけ）。</summary>
     public void SetWishesForDays(int? staffIdx, IReadOnlyList<int> days, int k)
     {
         var st = _state;
         if (st is null) return;
         if (days.Count == 0 || k < 0 || k >= st.Shifts.Count) return;
         var m = new Dictionary<string, int>(st.Wishes);
-        var staffRange = staffIdx is not null ? new[] { staffIdx.Value } : Enumerable.Range(0, st.StaffList.Count).ToArray();
+        var staffRange = staffIdx is not null
+            ? new[] { staffIdx.Value }
+            : Enumerable.Range(0, st.StaffList.Count).Where(i => ScheduleUtil.CachedProblem(st).CanDo(i, k)).ToArray();
+        if (staffRange.Length == 0) return;
         foreach (var i in staffRange)
             foreach (var j in days)
                 if (i >= 0 && i < st.StaffList.Count && j >= 0 && j < st.DayCount) m[$"{i},{j}"] = k;
-        LogOp("I", $"希望一括: {(staffIdx is not null ? OpNm(staffIdx.Value) : "全員")} {OpDays(days)} → {OpSy(k)}");
+        var excluded = st.StaffList.Count - staffRange.Length;
+        var who = staffIdx is not null ? OpNm(staffIdx.Value) : "全員" + (excluded > 0 ? $"（担当外{excluded}名を除く）" : "");
+        LogOp("I", $"希望一括: {who} {OpDays(days)} → {OpSy(k)}");
         ApplyStructure(st with { Wishes = m });
     }
 
@@ -813,6 +861,7 @@ public sealed partial class MagiViewModel
     }
 
     // ---- colors: シフトの表示色 shiftColors[kigou]="#rrggbb"（表示専用）----
+    //   表示専用なので ApplyDisplayOnly（他の案・改善提案を残す／続けての色変更は1つの undo）を通す。
     public sealed record ShiftColorView(string Kigou, string Name, string Hex, bool Custom);
 
     public IReadOnlyList<ShiftColorView> ShiftColorList()
@@ -831,14 +880,14 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null || kigou.Length == 0) return;
         var m = new Dictionary<string, string>(st.ShiftColors) { [kigou] = hex.Trim() };
-        ApplyStructure(st with { ShiftColors = m });
+        ApplyDisplayOnly(st with { ShiftColors = m });
     }
 
     public void ResetShiftColor(string kigou)
     {
         var st = _state;
         if (st is null) return;
-        ApplyStructure(st with { ShiftColors = Without(st.ShiftColors, kigou) });
+        ApplyDisplayOnly(st with { ShiftColors = Without(st.ShiftColors, kigou) });
     }
 
     /// <summary>[違反色] 違反セルの枠/マーカー色。予約キー "__vio__" に保存（状態スキーマ非変更）。</summary>
@@ -847,14 +896,14 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null || hex.Length == 0) return;
         var m = new Dictionary<string, string>(st.ShiftColors) { ["__vio__"] = hex.Trim() };
-        ApplyStructure(st with { ShiftColors = m });
+        ApplyDisplayOnly(st with { ShiftColors = m });
     }
 
     public void ResetViolationColor()
     {
         var st = _state;
         if (st is null) return;
-        ApplyStructure(st with { ShiftColors = Without(st.ShiftColors, "__vio__") });
+        ApplyDisplayOnly(st with { ShiftColors = Without(st.ShiftColors, "__vio__") });
     }
 
     /// <summary>[違反色] 要調整(ソフト違反)の枠/マーカー色。予約キー "__vioSoft__"（空=既定の橙）。</summary>
@@ -863,14 +912,14 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null || hex.Length == 0) return;
         var m = new Dictionary<string, string>(st.ShiftColors) { ["__vioSoft__"] = hex.Trim() };
-        ApplyStructure(st with { ShiftColors = m });
+        ApplyDisplayOnly(st with { ShiftColors = m });
     }
 
     public void ResetViolationSoftColor()
     {
         var st = _state;
         if (st is null) return;
-        ApplyStructure(st with { ShiftColors = Without(st.ShiftColors, "__vioSoft__") });
+        ApplyDisplayOnly(st with { ShiftColors = Without(st.ShiftColors, "__vioSoft__") });
     }
 
     /// <summary>[違反色/族別] 違反種別（族）ごとの個別色。予約キー "__vioFam_&lt;fam&gt;__"（例: __vioFam_c3n__）。
@@ -880,22 +929,24 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null || hex.Length == 0 || fam.Length == 0) return;
         var m = new Dictionary<string, string>(st.ShiftColors) { [$"__vioFam_{fam}__"] = hex.Trim() };
-        ApplyStructure(st with { ShiftColors = m });
+        ApplyDisplayOnly(st with { ShiftColors = m });
     }
 
     public void ResetViolationFamilyColor(string fam)
     {
         var st = _state;
         if (st is null) return;
-        ApplyStructure(st with { ShiftColors = Without(st.ShiftColors, $"__vioFam_{fam}__") });
+        ApplyDisplayOnly(st with { ShiftColors = Without(st.ShiftColors, $"__vioFam_{fam}__") });
     }
 
     // ---- [見直し候補] 月次の修正から「基本ルールの見直し候補」を積む軽量メモ（セッション内のみ・state 非保存） ----
     public void AddReviewMemo(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        var t = text.Trim();
         Ui.MessageIsError = false;
-        Ui.ReviewMemos = Ui.ReviewMemos.Append(text.Trim()).ToList();
+        if (Ui.ReviewMemos.Contains(t)) { Ui.Message = "すでに見直し候補にあります"; return; }
+        Ui.ReviewMemos = Ui.ReviewMemos.Append(t).ToList();
         Ui.Message = "見直し候補に追加しました";
     }
 
@@ -930,6 +981,13 @@ public sealed partial class MagiViewModel
             var body = string.Join(" -> ", p.Where(x => x.Length > 0));
             return body.Length == 0 ? "(空)" : body;
         }
+        // 1つだけの行は「X（1つだけ）」＝X→X と読めないように。禁止の並びでは全日禁止になることも添える。
+        static string SeqRow(string family, IReadOnlyList<string> p)
+        {
+            var n = NormalizeSeq(p);
+            if (n.Count != 1) return Seq(p);
+            return family == "cons3n" ? $"{n[0]}（1つだけ）　{SingleForbiddenNote(n[0])}" : $"{n[0]}（1つだけ）";
+        }
         return new List<ConstraintFamilyView>
         {
             // [用語統一/下流→上流] 節タイトルは違反チップ(breakdownLabels)の語彙を正として一致させる。
@@ -937,15 +995,15 @@ public sealed partial class MagiViewModel
                 st.Cons1.Select(c => $"{c.ShiftKigou}   {c.Day1}日で{c.Day2}回以上").ToList()),
             new("cons2", "個人の合計（回数）",
                 st.Cons2.Select(c => $"{c.ShiftKigou}   合計{c.Count}回以上").ToList()),
-            new("cons3", "守るとよい並び", st.Cons3.Select(c => Seq(c.Pattern)).ToList()),
-            new("cons3n", "禁止の並び", st.Cons3n.Select(c => Seq(c.Pattern)).ToList()),
-            new("cons3m", "推奨の並び", st.Cons3m.Select(c => Seq(c.Pattern)).ToList()),
-            new("cons3mn", "回避の並び", st.Cons3mn.Select(c => Seq(c.Pattern)).ToList()),
-            new("cons41", "群のレンジ（1日の人数の下限〜上限）",
+            new("cons3", "守るとよい並び", st.Cons3.Select(c => SeqRow("cons3", c.Pattern)).ToList()),
+            new("cons3n", "禁止の並び", st.Cons3n.Select(c => SeqRow("cons3n", c.Pattern)).ToList()),
+            new("cons3m", "推奨の並び", st.Cons3m.Select(c => SeqRow("cons3m", c.Pattern)).ToList()),
+            new("cons3mn", "回避の並び", st.Cons3mn.Select(c => SeqRow("cons3mn", c.Pattern)).ToList()),
+            new("cons41", "グループのレンジ（1日の人数の下限〜上限）",
                 st.Cons41.Select(c => $"{c.GroupKigou}・{c.ShiftKigou}   {BoundLabel(c.L, c.U)}").ToList()),
             // [3.409.18] 「禁止/不可」はラベルとして実態（最軽量のソフト条件）と逆の約束をするため
             //   「できるだけ守る」を見出しへ明示。
-            new("cons42", "群ペア禁止（同じ日に不可・できるだけ守る）",
+            new("cons42", "グループペア禁止（同じ日に不可・できるだけ守る）",
                 st.Cons42.Select(c => $"{c.G1Kigou}の{c.S1Kigou} ✕ {c.G2Kigou}の{c.S2Kigou}").ToList()),
         };
     }
@@ -957,19 +1015,127 @@ public sealed partial class MagiViewModel
         if (st is null) return System.Array.Empty<ConstraintFamilyView>();
         return new List<ConstraintFamilyView>
         {
-            new("cons41s", "スキル群のレンジ（1日の人数の下限〜上限）",
+            new("cons41s", "スキルグループのレンジ（1日の人数の下限〜上限）",
                 st.Cons41s.Select(c => $"{c.GroupKigou}・{c.ShiftKigou}   {BoundLabel(c.L, c.U)}").ToList()),
-            new("cons42s", "スキル群ペア禁止（同じ日に不可・できるだけ守る）",
+            new("cons42s", "スキルグループペア禁止（同じ日に不可・できるだけ守る）",
                 st.Cons42s.Select(c => $"{c.G1Kigou}の{c.S1Kigou} ✕ {c.G2Kigou}の{c.S2Kigou}").ToList()),
         };
     }
 
     public IReadOnlyList<string> SkillGroupKigouList() => _state?.SkillGroups.Select(g => g.Kigou).ToList() ?? new List<string>();
 
+    // ---- 入力の入口ガード（Kotlin MagiConstraintsView.kt の純関数と同じ規則） ----
+
+    internal const string DuplicateRowHint = "同じ条件がすでにあります";
+
+    /// <summary>並びの正規化（先頭から最初の空白まで・最大5）。追加・変更・重複判定で同じ規則を使う。</summary>
+    internal static List<string> NormalizeSeq(IReadOnlyList<string> pattern) =>
+        pattern.Select(x => (x ?? "").Trim()).TakeWhile(x => x.Length > 0).Take(5).ToList();
+
+    /// <summary>途中に空欄があるか（空欄の後ろに記号がある）。正規化で黙って切れる＝CSV 取込は同じ形を形式エラーで断る。</summary>
+    internal static bool SeqHasGap(IReadOnlyList<string> pattern)
+    {
+        var cells = pattern.Select(x => (x ?? "").Trim()).ToList();
+        var last = cells.FindLastIndex(x => x.Length > 0);
+        return cells.Take(System.Math.Max(last, 0)).Any(x => x.Length == 0);
+    }
+
+    internal static string SeqFamilyJp(string family) => family switch
+    {
+        "cons3" => "守るとよい並び",
+        "cons3n" => "禁止の並び",
+        "cons3m" => "推奨の並び",
+        "cons3mn" => "回避の並び",
+        _ => family,
+    };
+
+    /// <summary>記号1つだけの禁止の並び＝そのシフトを置いた日がすべて違反になる（エンジンの意味論どおり）。</summary>
+    internal static string SingleForbiddenNote(string kigou) => $"1つだけの禁止は、{kigou} をどの日にも置けなくします";
+
+    /// <summary>禁止の並びへ記号1つだけを入れたときに入力欄の下へ添える注記（それ以外は null）。</summary>
+    public string? SeqSingleNote(string family, IReadOnlyList<string> values)
+    {
+        if (family != "cons3n" || SeqHasGap(values)) return null;
+        var n = NormalizeSeq(values);
+        return n.Count == 1 ? SingleForbiddenNote(n[0]) : null;
+    }
+
+    /// <summary>族の全行の生値（<see cref="ConstraintRowValues"/> と同じ並び）。</summary>
+    private static IReadOnlyList<IReadOnlyList<string>> RowsOf(MagiState st, string family) => family switch
+    {
+        "cons1" => st.Cons1.Select(c => (IReadOnlyList<string>)new[] { c.Day1, c.ShiftKigou, c.Day2 }).ToList(),
+        "cons2" => st.Cons2.Select(c => (IReadOnlyList<string>)new[] { c.ShiftKigou, c.Count }).ToList(),
+        "cons3" => st.Cons3.Select(c => c.Pattern).ToList(),
+        "cons3n" => st.Cons3n.Select(c => c.Pattern).ToList(),
+        "cons3m" => st.Cons3m.Select(c => c.Pattern).ToList(),
+        "cons3mn" => st.Cons3mn.Select(c => c.Pattern).ToList(),
+        "cons41" => st.Cons41.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
+        "cons41s" => st.Cons41s.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
+        "cons42" => st.Cons42.Select(c => (IReadOnlyList<string>)new[] { c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou }).ToList(),
+        "cons42s" => st.Cons42s.Select(c => (IReadOnlyList<string>)new[] { c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou }).ToList(),
+        _ => System.Array.Empty<IReadOnlyList<string>>(),
+    };
+
+    /// <summary>並び以外の族で値がすべて同じ行があるか（05 と 5 は同じ）。同じ行が2本だと違反が2倍に数えられ、
+    /// 重みを変えずに優先度だけ変わる。既存の重複は消さない（入口で止めるだけ＝エンジンも dedup しない）。</summary>
+    internal static bool RowDuplicate(MagiState st, string family, IReadOnlyList<string> values, int? excludeIndex = null)
+    {
+        static List<string> Norm(IReadOnlyList<string> v) =>
+            v.Select(x => (x ?? "").Trim()).Select(x => int.TryParse(x, out var n) ? n.ToString() : x).ToList();
+        var key = Norm(values);
+        return RowsOf(st, family).Select((raw, idx) => (raw, idx)).Any(r => r.idx != excludeIndex && Norm(r.raw).SequenceEqual(key));
+    }
+
+    /// <summary>同じ並びが既にあれば、その族の日本語名（族をまたいで見る＝HARD の禁止と SOFT の回避へ同じ並びを
+    /// 二重掛けしても評価は禁止側が支配し回避側は無意味）。Kotlin <c>ConstraintsView.duplicateOf</c>（3.482.0）。</summary>
+    internal static string? SeqDuplicateOf(MagiState st, string family, IReadOnlyList<string> pattern, int? excludeIndex = null)
+    {
+        var key = string.Join("→", NormalizeSeq(pattern));
+        if (key.Length == 0) return null;
+        foreach (var fam in new[] { "cons3", "cons3n", "cons3m", "cons3mn" })
+        {
+            var rows = RowsOf(st, fam);
+            for (var idx = 0; idx < rows.Count; idx++)
+                if (!(fam == family && idx == excludeIndex) && string.Join("→", NormalizeSeq(rows[idx])) == key) return SeqFamilyJp(fam);
+        }
+        return null;
+    }
+
+    /// <summary>値がすべて同じ行があれば知らせて true（画面も <see cref="ConstraintInputError"/> で確定を止める）。</summary>
+    private bool RowAlreadyExists(MagiState st, string family, IReadOnlyList<string> values, int? excludeIndex = null)
+    {
+        if (!RowDuplicate(st, family, values, excludeIndex)) return false;
+        LogOp("W", $"制約の追加/変更を無視({family}): {string.Join(" ", values)} は登録済み");
+        Ui.MessageIsError = true;
+        Ui.Message = DuplicateRowHint;
+        return true;
+    }
+
+    /// <summary>途中に空欄のある並びは断る（後ろが黙って切れ、1番目だけの禁止になりうる。CSV 取込も同じ形を形式エラーにする）。</summary>
+    private bool SeqGapRejected(string family, IReadOnlyList<string> pattern)
+    {
+        if (!SeqHasGap(pattern)) return false;
+        LogOp("W", $"制約の追加/変更を無視({family}): 並びの途中に空欄 {string.Join(",", pattern)}");
+        Ui.MessageIsError = true;
+        Ui.Message = "並びの途中に空欄があります。上から詰めて入れてください";
+        return true;
+    }
+
+    /// <summary>同じ並びが（族をまたいで）既にあれば知らせて true。</summary>
+    private bool SeqAlreadyExists(MagiState st, string family, List<string> pat, int? excludeIndex = null)
+    {
+        if (SeqDuplicateOf(st, family, pat, excludeIndex) is not { } dupFam) return false;
+        LogOp("W", $"制約の追加/変更を無視({family}): {string.Join("→", pat)} は「{dupFam}」に登録済み");
+        Ui.MessageIsError = true;
+        Ui.Message = $"同じ並び「{string.Join("→", pat)}」は「{dupFam}」に登録済みです";
+        return true;
+    }
+
     public void AddCons41s(string groupKigou, string shiftKigou, string l, string u)
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons41s", new[] { groupKigou, shiftKigou, l, u })) return;
         LogOp("I", $"制約追加(スキル群回数): {groupKigou} {shiftKigou} {l.Trim()}〜{u.Trim()}");
         MutateConstraints(st with { Cons41s = st.Cons41s.Append(new C41Row(groupKigou, shiftKigou, l.Trim(), u.Trim())).ToList() });
     }
@@ -978,6 +1144,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons42s", new[] { g1, s1, g2, s2 })) return;
         LogOp("I", $"制約追加(スキル群組合せ禁止): {g1}{s1} & {g2}{s2}");
         MutateConstraints(st with { Cons42s = st.Cons42s.Append(new C42Row(g1, g2, s1, s2)).ToList() });
     }
@@ -986,6 +1153,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons1", new[] { day1, shiftKigou, day2 })) return;
         LogOp("I", $"制約追加(連勤/休): {day1.Trim()}日に{shiftKigou}{day2.Trim()}回以上");
         MutateConstraints(st with { Cons1 = st.Cons1.Append(new C1Row(day1.Trim(), shiftKigou, day2.Trim())).ToList() });
     }
@@ -994,6 +1162,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons2", new[] { shiftKigou, count })) return;
         LogOp("I", $"制約追加(cons2): {shiftKigou} {count.Trim()}");
         MutateConstraints(st with { Cons2 = st.Cons2.Append(new C2Row(shiftKigou, count.Trim())).ToList() });
     }
@@ -1002,6 +1171,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons41", new[] { groupKigou, shiftKigou, l, u })) return;
         LogOp("I", $"制約追加(群回数): {groupKigou} {shiftKigou} {l.Trim()}〜{u.Trim()}");
         MutateConstraints(st with { Cons41 = st.Cons41.Append(new C41Row(groupKigou, shiftKigou, l.Trim(), u.Trim())).ToList() });
     }
@@ -1010,6 +1180,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (RowAlreadyExists(st, "cons42", new[] { g1, s1, g2, s2 })) return;
         LogOp("I", $"制約追加(群組合せ禁止): {g1}{s1} & {g2}{s2}");
         MutateConstraints(st with { Cons42 = st.Cons42.Append(new C42Row(g1, g2, s1, s2)).ToList() });
     }
@@ -1018,10 +1189,12 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        if (SeqGapRejected(family, pattern)) return;
         // Level Zero loads cons3 by reading day columns until the first blank (truncate at
         // first blank, max 5 days), not by removing all blanks. Match that here.
-        var pat = pattern.Select(p => p.Trim()).TakeWhile(p => p.Length > 0).Take(5).ToList();
+        var pat = NormalizeSeq(pattern);
         if (pat.Count == 0) return;
+        if (SeqAlreadyExists(st, family, pat)) return;
         LogOp("I", $"制約追加({family}): {string.Join("→", pat)}");
         MagiState? next = family switch
         {
@@ -1109,7 +1282,17 @@ public sealed partial class MagiViewModel
     /// 数値欄は非負整数、cons1 は 1 ≤ 回数 ≤ 日数 ≤ 期間日数、cons41 系は空欄可・下限 ≤ 上限、記号は現在の定義に存在。
     /// エンジンは数値変換の失敗を 0 などへ落とすため、登録できたのに効かない制約を作らない。
     /// </summary>
-    public string? ConstraintInputError(string family, IReadOnlyList<string> values)
+    /// <param name="editIndex">変更中の行（重複判定で自分自身を除く）。追加は null。</param>
+    public string? ConstraintInputError(string family, IReadOnlyList<string> values, int? editIndex = null)
+    {
+        var err = ConstraintInputErrorCore(family, values);
+        if (err is not null || _state is not { } st) return err;
+        if (family is "cons3" or "cons3n" or "cons3m" or "cons3mn")
+            return SeqDuplicateOf(st, family, values, editIndex) is { } dupFam ? $"この並びは「{dupFam}」に登録済みです。" : null;
+        return RowDuplicate(st, family, values, editIndex) ? DuplicateRowHint + "。" : null;
+    }
+
+    private string? ConstraintInputErrorCore(string family, IReadOnlyList<string> values)
     {
         var st = _state;
         if (st is null) return "データを読み込んでください。";
@@ -1120,7 +1303,7 @@ public sealed partial class MagiViewModel
         var skills = st.SkillGroups.Select(x => x.Kigou).ToHashSet();
         static bool NonNeg(string s, out int n) => int.TryParse(s, out n) && n >= 0;
         string? Shift(string s) => shifts.Contains(s) ? null : $"シフト記号「{s}」は現在の設定にありません。";
-        string? Group(string s, bool skill) => (skill ? skills : groups).Contains(s) ? null : $"{(skill ? "スキル群" : "群")}記号「{s}」は現在の設定にありません。";
+        string? Group(string s, bool skill) => (skill ? skills : groups).Contains(s) ? null : $"{(skill ? "スキルグループ" : "グループ")}記号「{s}」は現在の設定にありません。";
         switch (family)
         {
             case "cons1":
@@ -1132,20 +1315,22 @@ public sealed partial class MagiViewModel
                 return Shift(G(1));
             case "cons2":
                 if (G(0).Length == 0 || G(1).Length == 0) return "すべての項目を入れてください。";
-                if (!NonNeg(G(1), out _)) return "合計回数は 0 以上の整数で入れてください。";
+                if (!NonNeg(G(1), out var c2) || c2 < 1) return "合計回数は 1 以上の整数で入れてください。";
                 return Shift(G(0));
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
             {
                 if (v.All(x => x.Length == 0)) return "少なくとも1日目を入れてください。";
+                if (SeqHasGap(v)) return "並びの途中に空欄があります。上から詰めて入れてください。";
                 foreach (var x in v.Where(x => x.Length > 0)) { var e = Shift(x); if (e is not null) return e; }
                 return null;
             }
             case "cons41": case "cons41s":
             {
                 var skill = family == "cons41s";
-                if (G(0).Length == 0 || G(1).Length == 0) return skill ? "スキル群記号とシフト記号を入れてください。" : "群記号とシフト記号を入れてください。";
+                if (G(0).Length == 0 || G(1).Length == 0) return skill ? "スキルグループ記号とシフト記号を入れてください。" : "グループ記号とシフト記号を入れてください。";
                 if (G(2).Length > 0 && !NonNeg(G(2), out _)) return "下限は 0 以上の整数か空欄にしてください。";
                 if (G(3).Length > 0 && !NonNeg(G(3), out _)) return "上限は 0 以上の整数か空欄にしてください。";
+                if (G(2).Length == 0 && G(3).Length == 0) return "下限か上限のどちらかを入れてください。";
                 if (V6SanityPort.RangeOrderConflict(G(2), G(3)) is not null) return "下限は上限以下にしてください。";
                 return Group(G(0), skill) ?? Shift(G(1));
             }
@@ -1169,6 +1354,8 @@ public sealed partial class MagiViewModel
         var v = values.Select(x => x.Trim()).ToList();
         string G(int i) => i < v.Count ? v[i] : "";
         static List<T> Replaced<T>(IReadOnlyList<T> l, int i, T x) => l.Select((e, idx) => idx == i ? x : e).ToList();
+        // 変更でも値の重複を止める（並び4族は下の SeqAlreadyExists）。
+        if ((family is "cons1" or "cons2" or "cons41" or "cons41s" or "cons42" or "cons42s") && RowAlreadyExists(st, family, v, index)) return;
 
         MagiState? next;
         switch (family)
@@ -1198,8 +1385,10 @@ public sealed partial class MagiViewModel
                 next = st with { Cons42s = Replaced(st.Cons42s, index, new C42Row(G(0), G(2), G(1), G(3))) };
                 break;
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
-                var pat = v.TakeWhile(x => x.Length > 0).Take(5).ToList();
+                if (SeqGapRejected(family, v)) return;
+                var pat = NormalizeSeq(v);
                 if (pat.Count == 0) return;
+                if (SeqAlreadyExists(st, family, pat, index)) return;
                 next = family switch
                 {
                     "cons3" => index < st.Cons3.Count ? st with { Cons3 = Replaced(st.Cons3, index, new C3Row(pat)) } : null,
@@ -1395,6 +1584,30 @@ public sealed partial class MagiViewModel
         RefreshCheck();
         AutoSave();
     }
+
+    /// <summary>表示だけの変更（ShiftColors はエンジンに影響しない＝<see cref="StateFingerprint"/> も読まない）。他の案・改善提案を消さず
+    /// 検査も回さない。直前の undo がこの経路で差が表示色だけなら積み増さない（見本色の試行を1つの「元に戻す」に）。</summary>
+    internal void ApplyDisplayOnly(MagiState ns)
+    {
+        var st = _state;
+        if (st is null) return;
+        if (SameColors(ns.ShiftColors, st.ShiftColors)) return;
+        if (StructuralEditBlocked()) return;
+        var top = _undoStack.Last?.Value;
+        var sched = _currentSchedule;
+        var continuing = top is { DisplayEdit: true } && sched is not null && top.Schedule.Length == sched.Length &&
+            top.Schedule.Zip(sched).All(r => r.First.AsSpan().SequenceEqual(r.Second)) &&
+            top.State with { ShiftColors = st.ShiftColors } == st;
+        if (continuing) { _redoStack.Clear(); Ui.CanRedo = false; }
+        else PushUndo(invalidate: false);
+        _state = ns;
+        Ui.StructureEdited = true;
+        ApplyShiftColorsToUi(ns);
+        AutoSave();
+    }
+
+    private static bool SameColors(IReadOnlyDictionary<string, string> a, IReadOnlyDictionary<string, string> b) =>
+        a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out var v) && v == kv.Value);
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="ApplyStructureWithMessage(MagiState, string)"/>
     /// 呼出しが起動する背景再チェック（構造未読込・スケジュール未読込の即応パスでは null のまま）。</summary>

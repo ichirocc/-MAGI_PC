@@ -463,6 +463,35 @@ public class MagiViewModelCsvTest
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("CSV取込 完了 2名一致"));
     }
 
+    /// <summary>[Android 3.592.0 の C# 移植漏れ] 取り込んで差し替えた後の診断が中止・失敗したら取込前へ戻し、PushUndo の段も外す。</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ImportCsvRollsBackWhenTheDiagnosisStopsOrFailsAfterCommitting(bool cancel)
+    {
+        var st = MinimalState.Build();
+        var sched = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = sched };
+        var edited = MinimalState.BuildSchedule();
+        edited[0][0] = 1;
+        vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(UiState.Message) || vm.Ui.Message is not { } m || !m.StartsWith("CSV取込完了", StringComparison.Ordinal)) return;
+            if (cancel) throw new OperationCanceledException();
+            throw new InvalidOperationException("late");
+        };
+
+        vm.ImportCsv(ScheduleCsvBridge.Build(st, edited));
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastImportCsvTask!);
+        else await vm.LastImportCsvTask!;
+
+        Assert.Same(st, vm._state);
+        Assert.Same(sched, vm._currentSchedule);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Contains(cancel ? "中止" : "取り込めませんでした", vm.Ui.Message);
+    }
+
     [Fact]
     public async Task ImportCsvZeroMatchFailsWithoutMutatingState()
     {
@@ -545,9 +574,26 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.LastApplyStructureWithMessageTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("追加0・更新0", vm.Ui.Message);
-        Assert.Contains("データ全体（新規）", vm.Ui.Message);
-        Assert.Contains(vm.Ui.OpLog, l => l.Contains("職員一覧CSV取込 失敗: 0件"));
+        Assert.Contains("職員一覧の取込を中止しました", vm.Ui.Message);   // 取込の前に断る（0件を待たない）
+        Assert.Contains("名簿CSVを新規データとして取り込む", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("職員一覧CSV取込 中止"));
+    }
+
+    /// <summary>[Android vmio-work-6 同期] 希望シフトCSVを職員一覧として取り込むと、見出し「氏名,日,…」の行の後の氏名が
+    /// 職員として足されていた。見出しで別形式と分かれば何も足さずに断る。</summary>
+    [Fact]
+    public void ImportStaffCsvRefusesOtherComponentCsvBeforeAddingStaff()
+    {
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.ImportStaffCsv("氏名,日,希望シフト\n新人,1,休\n");
+
+        Assert.Null(vm.LastApplyStructureWithMessageTask);
+        Assert.Same(st, vm._state);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("希望シフトのCSVのようです", vm.Ui.Message);
+        Assert.Contains("『希望シフトCSVを取り込む』", vm.Ui.Message);
     }
 
     // ===================================================================
@@ -602,7 +648,7 @@ public class MagiViewModelCsvTest
         Assert.Null(vm.LastApplyStructureWithMessageTask);
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("取り込める行が0件", vm.Ui.Message);
-        Assert.Contains("データ全体（新規）", vm.Ui.Message);
+        Assert.Contains("名簿CSVを新規データとして取り込む", vm.Ui.Message);
     }
 
     // ===================================================================
@@ -658,7 +704,7 @@ public class MagiViewModelCsvTest
         Assert.Null(vm.LastApplyStructureWithMessageTask);
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("取り込める行が0件", vm.Ui.Message);
-        Assert.Contains("データ全体（新規）", vm.Ui.Message);
+        Assert.Contains("名簿CSVを新規データとして取り込む", vm.Ui.Message);
     }
 
     // ===================================================================

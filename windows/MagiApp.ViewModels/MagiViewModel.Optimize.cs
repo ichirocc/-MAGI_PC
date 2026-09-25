@@ -35,9 +35,10 @@ namespace MagiApp.ViewModels;
 public sealed partial class MagiViewModel
 {
     // Kotlin原本 1021-1023行: runV6FullOptimize が「前回と同じ設定での再実行」を検知するための状態。
-    private string? _lastSettingsSig;
-    private long _lastResultHard = -1L;
-    private string? _lastTopHardFamily;
+    //   [テスト可視性のためinternal化] 読込・背景結果での更新／リセットを直接確かめる。
+    internal string? _lastSettingsSig;
+    internal long _lastResultHard = -1L;
+    internal string? _lastTopHardFamily;
 
     /// <summary>Kotlin原本 <c>hardFamilyJp</c>（1087行）の逐語移植。</summary>
     private static string HardFamilyJp(string key) => key switch
@@ -82,11 +83,15 @@ public sealed partial class MagiViewModel
             ? $"前回と同じ設定での再実行です。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
             : null;
         _lastSettingsSig = sig;
+        // 停止・失敗で入力の盤面へ戻すときは、実行前の旗へ戻す（一度も計算していない盤面を「計算済み」にしない）。
+        var hadResult = Ui.HasResult;
+        var engineRanBefore = Ui.EngineRan;
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
         Ui.CopilotHint = hint;
         Ui.WishCancelOutcome = null;
+        Ui.RunSummary = null;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
@@ -97,7 +102,7 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, cts.Token);
+        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token);
     }
 
     private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -110,7 +115,8 @@ public sealed partial class MagiViewModel
     }
 
     private async Task RunV6FullOptimizeCoreAsync(
-        MagiState st0, int[][] sched0, long startMs, Hf63Infeasibility hf63, int boardToken, S5Ctx? s5, CancellationToken ct)
+        MagiState st0, int[][] sched0, long startMs, Hf63Infeasibility hf63, int boardToken, S5Ctx? s5,
+        bool hadResult, bool engineRanBefore, CancellationToken ct)
     {
         // [3.372.0/実機ログ起因の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
@@ -300,7 +306,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
-                    ui.EngineRan = true;
+                    ui.EngineRan = engineRanBefore;
                     ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
                 });
             }
@@ -308,7 +314,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.Running = false;
                 Ui.HasResult = true;
-                Ui.EngineRan = true;
+                Ui.EngineRan = engineRanBefore;
                 Ui.MessageIsError = false;
                 Ui.Wishes = st0.Wishes;
                 Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
@@ -354,22 +360,17 @@ public sealed partial class MagiViewModel
                     Ui.MessageIsError = true;
                 }
             }
-            else if (s5 is null)
-            {
-                Ui.Running = false;
-                Ui.Message = failMsg;
-                Ui.MessageIsError = true;
-            }
             else
             {
                 // [S5 §10] 希望は消えたまま＝画面もその state で数え直す（RefreshCheck は失敗文を上書きするので使わない）。
+                //   通常の実行も同じ＝進捗が書いた途中の件数を、入力の盤面の件数へ戻す。
                 try
                 {
                     var rep = await Task.Run(() => UnifiedViolationChecker.Check(st0, sched0), CancellationToken.None);
                     await PushReportAsync(st0, sched0, rep, nonCancellable: true, transform: ui =>
                     {
                         ui.Running = false;
-                        ui.HasResult = true;
+                        ui.HasResult = s5 is not null || hadResult;
                         ui.MessageIsError = true;
                         ui.Message = failMsg + s5Suffix;
                     });
@@ -409,9 +410,11 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("仕上げ最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         PushUndo();
+        var engineRanBefore = Ui.EngineRan;   // 停止で入力へ戻すとき用（StartFullOptimize と同じ）
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
+        Ui.RunSummary = null;
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState();
         Ui.Message = "自動で整えています…";
@@ -420,10 +423,10 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("仕上げ最適化", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, cts.Token);
+        LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, engineRanBefore, cts.Token);
     }
 
-    private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, CancellationToken ct)
+    private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, bool engineRanBefore, CancellationToken ct)
     {
         // [3.372.0相当の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
@@ -471,7 +474,7 @@ public sealed partial class MagiViewModel
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
-                    ui.EngineRan = true;
+                    ui.EngineRan = engineRanBefore;
                     ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 });
             }
@@ -479,7 +482,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.Running = false;
                 Ui.HasResult = true;
-                Ui.EngineRan = true;
+                Ui.EngineRan = engineRanBefore;
                 Ui.MessageIsError = false;
                 Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。";
                 LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");

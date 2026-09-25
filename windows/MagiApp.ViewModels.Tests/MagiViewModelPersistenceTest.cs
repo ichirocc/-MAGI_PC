@@ -607,6 +607,71 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("読込失敗:"));
     }
 
+    /// <summary>[Android vm-3] 差し替えた後の診断が中止・失敗したら読込前へ戻す（旧: 「中止」「失敗」と出すのに新しいデータが残った）。
+    /// 元に戻すの履歴も表示の成功まで消さない。</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LoadAsyncRollsBackWhenTheDiagnosisStopsOrFailsAfterCommitting(bool cancel)
+    {
+        var vm = NewVm();
+        vm.LoadAsync(StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule()));
+        await vm.LastLoadTask!;
+        vm.PushUndo();
+        var before = vm._state;
+        var beforeSched = vm._currentSchedule;
+        vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(UiState.Message) || vm.Ui.Message is not { } m || !m.StartsWith("読込完了", StringComparison.Ordinal)) return;
+            if (cancel) throw new OperationCanceledException();
+            throw new InvalidOperationException("late");
+        };
+
+        var other = MinimalState.Build(startDate: "2025-12-08", endDate: "2025-12-14");
+        vm.LoadAsync(StateJsonSerializer.Serialize(other, MinimalState.BuildSchedule()));
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastLoadTask!);
+        else await vm.LastLoadTask!;
+
+        Assert.Same(before, vm._state);
+        Assert.Same(beforeSched, vm._currentSchedule);
+        Assert.Equal(1, vm.UndoStackCount);
+        Assert.Contains(cancel ? "中止" : "読み込めませんでした", vm.Ui.Message);
+    }
+
+    /// <summary>[Android vm-4/vm-5] 別のデータを開いたら、前のデータの完了要約・ヒント・他の案・直し方と「前回と同じ設定」の記憶を捨てる。</summary>
+    [Fact]
+    public async Task LoadAsyncDropsThePreviousDataSummaryHintAlternativesAndFixState()
+    {
+        var vm = NewVm();
+        vm.LoadAsync(StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule()));
+        await vm.LastLoadTask!;
+        var st = vm._state!;
+        var changed = MinimalState.BuildSchedule();
+        changed[0][0] = 1;
+        vm.Ui.RunSummary = ChangeSummary.Of(st, MinimalState.BuildSchedule(), changed, UnifiedViolationChecker.Check(st, changed));
+        vm.Ui.CopilotHint = "前回と同じ設定での再実行です。";
+        await vm.CaptureAlternatives(new[] { changed });
+        vm.Ui.FixSearched = true;
+        vm.Ui.FixFocusName = "職員1";
+        vm._lastSettingsSig = "sig";
+        vm._lastResultHard = 3;
+        vm._lastTopHardFamily = "人員不足（必要人数）";
+
+        vm.LoadAsync(StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule()));
+        await vm.LastLoadTask!;
+
+        Assert.Null(vm.Ui.RunSummary);
+        Assert.Null(vm.Ui.CopilotHint);
+        Assert.Empty(vm.Ui.Alternatives);
+        Assert.False(vm.Ui.FixSearched);
+        Assert.Equal("", vm.Ui.FixFocusName);
+        Assert.Null(vm._lastSettingsSig);
+        Assert.Equal(-1L, vm._lastResultHard);
+        Assert.Null(vm._lastTopHardFamily);
+        vm.ApplyAlternative(0);   // 捨てた案は適用できない
+        Assert.Null(vm.LastApplyAlternativeTask);
+    }
+
     [Fact]
     public async Task LoadAsyncIsBlockedWhileAnotherJobIsInFlightUnlessFromRestore()
     {

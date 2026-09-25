@@ -375,4 +375,81 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.Equal("停止しました", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("停止を押しました") && l.Contains("勤務表づくり"));
     }
+
+    /// <summary>[Android vm-7] 停止で入力の盤面へ戻すとき、一度も計算していない盤面を「計算済み」にしない（実行前の旗へ戻す）。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CancelledRun_RestoresEngineRanOfTheInputBoard(bool engineRanBefore)
+    {
+        var fake = new FakeOptimizationService { ThrowInstead = new OperationCanceledException() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.EngineRan = engineRanBefore;
+
+        vm.RunV6FullOptimize();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
+
+        Assert.Equal(engineRanBefore, vm.Ui.EngineRan);
+        Assert.True(vm.Ui.HasResult);
+    }
+
+    [Fact]
+    public async Task SoftPolish_Cancelled_RestoresEngineRanOfTheInputBoard()
+    {
+        var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new OperationCanceledException() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunSoftPolish();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunSoftPolishTask!);
+
+        Assert.False(vm.Ui.EngineRan);
+    }
+
+    /// <summary>[Android vm-6] 通常の実行が採用前に失敗したら、進捗が書いた途中の件数を入力の盤面の件数へ戻し、
+    /// 「結果あり」も実行前の値へ戻す（旧: 途中の件数と HasResult=false が残った）。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedRun_RecountsTheInputBoardAndRestoresHasResult(bool hadResult)
+    {
+        var fake = new FakeOptimizationService { ThrowInstead = new InvalidOperationException("boom") };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.HasResult = hadResult;
+        vm.Ui.BestHard = 99;   // 進捗が書いた途中の件数を模す
+
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.Equal(0, vm.Ui.BestHard);   // 入力（制約なし）の件数
+        Assert.Equal(hadResult, vm.Ui.HasResult);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("つくれませんでした", vm.Ui.Message);
+    }
+
+    /// <summary>[Android vm-4] 完了カードの前後比較は、その後に盤面が変わる操作・次の実行の開始で消す。</summary>
+    [Fact]
+    public async Task RunSummaryIsDroppedByTheNextEditAndByTheNextRun()
+    {
+        var resultSchedule = new[] { new[] { 1, 0, 0, 0, 0, 0, 0 }, new[] { 0, 0, 0, 0, 0, 0, 0 } };
+        var fake = new FakeOptimizationService
+        {
+            Result = (_, _) => new V6FinalPort.ActionResult(resultSchedule.Copy2D(), Report(0, 0), "test:Fake",
+                new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"), Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+        Assert.NotNull(vm.Ui.RunSummary);
+        vm.SetCell(1, 1, 1);
+        Assert.Null(vm.Ui.RunSummary);
+
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+        Assert.NotNull(vm.Ui.RunSummary);
+        fake.ThrowInstead = new InvalidOperationException("boom");
+        vm.RunV6FullOptimize();
+        Assert.Null(vm.Ui.RunSummary);   // 開始の時点で消す
+        await vm.LastRunOptimizeTask!;
+    }
 }

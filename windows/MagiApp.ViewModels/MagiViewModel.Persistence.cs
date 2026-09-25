@@ -223,6 +223,8 @@ public sealed partial class MagiViewModel
         // 元に戻す/やり直しは手操作＝「計算済み」ではない。前の結果盤面と改善提案は、この盤面とは別の実体なので外す
         // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
         _resultSchedule = null;
+        RestoreAlts(snap.Alts);   // 盤面と一緒に、その盤面で有効だった「他の案」も戻す
+        Ui.RunSummary = null;
         Ui.EngineRan = false;
         ClearFixState();
         Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
@@ -251,6 +253,8 @@ public sealed partial class MagiViewModel
         // 元に戻す/やり直しは手操作＝「計算済み」ではない。前の結果盤面と改善提案は、この盤面とは別の実体なので外す
         // （提案は指紋照合でも弾かれるが、画面に古い候補を残さない）。
         _resultSchedule = null;
+        RestoreAlts(snap.Alts);
+        Ui.RunSummary = null;
         Ui.EngineRan = false;
         ClearFixState();
         Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
@@ -340,6 +344,7 @@ public sealed partial class MagiViewModel
     private async Task LoadAsyncCoreAsync(
         string json, bool repaired, bool markResult, string note, int boardToken, CancellationToken ct)
     {
+        Action? rollback = null;
         try
         {
             if (repaired)
@@ -406,13 +411,15 @@ public sealed partial class MagiViewModel
             //   **生のファイル**のままで、StructureEdited=false の ExportJson はその生 JSON に schedule だけ差し込んで
             //   返す＝直後の AutoSave も「データを保存」も補正前の endDate を書き戻し、警告文の「保存し直すと
             //   次回から出ません」が嘘だった。正規化したときだけ、正規化後の state を Serialize したものを原本にする。
+            // 差し替えの後で診断(PushReportAsync)が中止・失敗したら読込前へ戻す（ImportCsv の 3.592.0 と同じ）。
+            var json0 = _originalJson; var st0 = _state; var cur0 = _currentSchedule; var res0 = _resultSchedule;
+            rollback = () => { _originalJson = json0; _state = st0; _currentSchedule = cur0; _resultSchedule = res0; AutoSave(); };
             _originalJson = normalizedOnLoad ? StateJsonSerializer.Serialize(lp.State, lp.Schedule) : json;
             _state = lp.State.WithSchedule(lp.Schedule);
             _currentSchedule = lp.Schedule.Copy2D();
             // [bg復元相当] markResult=true は「バックグラウンド最適化の結果 JSON」の読込。schedule が
             //   結果そのものなので resultSchedule/hasResult を立て、上位バーの「未計算」表示を防ぐ。
             _resultSchedule = markResult ? lp.Schedule.Copy2D() : null;
-            ClearUndo();
             AutoSave();
             await PushReportAsync(lp.State, lp.Schedule, lp.Report, transform: ui =>
             {
@@ -433,12 +440,29 @@ public sealed partial class MagiViewModel
                 ui.ElapsedMs = 0;
                 // [3.289.0相当] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
                 ui.PrevBackupAvailable = prevSaved || ui.PrevBackupAvailable;
+                // 前のデータの完了要約・ヒント・他の案・直し方は、このデータのものではない。
+                ui.RunSummary = null;
+                ui.CopilotHint = null;
+                ui.Alternatives = Array.Empty<string>();
+                ui.FixSuggestions = Array.Empty<FixSuggestion>();
+                ui.FixSearched = false;
+                ui.FixFocusName = "";
+                ui.StalledHardFamilies = Array.Empty<string>();
                 ui.Message = $"読込完了: {lp.State.StaffCount}名 / {lp.State.DayCount}日 / {lp.State.ShiftCount}シフト{note}";
             }, ct: ct);
+            rollback = null;
+            _alternativeScheds = Array.Empty<int[][]>();
+            ClearUndo();
+            // [Android 3.475.0] コパイロットの「前回と同じ設定」ヒントは前回のデータの記憶＝別データを開いたら忘れる
+            //   （旧 C#: リセットせず、初回の実行でも前のデータの必須違反族を名指ししていた）。
+            _lastSettingsSig = null;
+            _lastResultHard = -1L;
+            _lastTopHardFamily = null;
             LogOp("I", $"読込 {lp.State.StaffCount}名/{lp.State.DayCount}日/{lp.State.ShiftCount}シフト");
         }
         catch (OperationCanceledException)
         {
+            rollback?.Invoke();
             Ui.MessageIsError = false;
             Ui.Running = false;
             Ui.Message = "読み込みを中止しました"; // 停止は失敗ではない。
@@ -446,6 +470,7 @@ public sealed partial class MagiViewModel
         }
         catch (Exception e)
         {
+            rollback?.Invoke();
             Ui.Running = false;
             Ui.Message = $"読み込めませんでした（{e.GetType().Name}）。ファイルの中身を確認してください";
             Ui.MessageIsError = true;

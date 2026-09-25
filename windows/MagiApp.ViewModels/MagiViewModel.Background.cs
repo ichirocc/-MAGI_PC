@@ -87,6 +87,7 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("バックグラウンド最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         CancelWishTrial();   // [S5 §8] 背景実行は BeginBoardJob を通らない
+        CancelFixSearch();
         PushUndo();
         OptimizationRepository.Clear();
 
@@ -175,7 +176,21 @@ public sealed partial class MagiViewModel
             //   別途購読された applyBgResult() を呼ぶが、この移植では同じオブジェクトの
             //   メソッドとして直接 await する（結果の採否判定＝keep-best は ApplyBgResult の
             //   責務のまま分離を保つ——呼び方だけを直接呼出しへ変える）。
-            await ApplyBgResult(new OptimizationRepository.BgResult(res.Schedule, res.Report, res.Phase, runId));
+            try
+            {
+                await ApplyBgResult(new OptimizationRepository.BgResult(res.Schedule, res.Report, res.Phase, runId));
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // 前景の §10（結果の採用後の失敗）と同じ扱い＝差し替え後なので「失敗しました」でなく今の勤務表で描き直す。
+                LogOp("W", $"背景結果の反映に失敗: {e.GetType().Name}: {e.Message}");
+                var cur = _currentSchedule;
+                Ui.Running = false;
+                Ui.HasResult = cur is not null;
+                Ui.MessageIsError = true;
+                Ui.Message = $"バックグラウンド最適化は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。";
+                if (cur is not null) Ui.Schedule = cur.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -264,6 +279,9 @@ public sealed partial class MagiViewModel
                     ui.Message = $"今回(必須{newHard}/合計{newTotal})は前回(必須{prevReport.Hard}/合計{prevReport.Total})より改善せず。前回の結果を維持しました。";
                 });
                 LogOp("I", $"バックグラウンド: 今回 必須{newHard}/合計{newTotal} は前回 以下に改善せず → 前回を維持");
+                // 前景の維持分岐と同じ＝次回ヒントの族は維持した盤面から取る。
+                _lastResultHard = prevReport.Hard;
+                _lastTopHardFamily = prevReport.Hard > 0 ? TopHardFamilyJp(prevReport.Breakdown) : null;
                 OptimizationRepository.Request = null;
                 OptimizationRepository.PublishResult(null);
                 return;
@@ -285,6 +303,7 @@ public sealed partial class MagiViewModel
         });
         LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total}");
         _lastResultHard = r.Report.Hard;
+        _lastTopHardFamily = r.Report.Hard > 0 ? TopHardFamilyJp(r.Report.Breakdown) : null;
         // 消費したらクリア（再生成時の二重適用を防ぐ）。
         OptimizationRepository.Request = null;
         OptimizationRepository.PublishResult(null);

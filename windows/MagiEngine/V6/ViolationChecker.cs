@@ -363,7 +363,7 @@ public static class UnifiedViolationChecker
                     Inc("high", n - hi);
                     MarkCount(i, k, "high");
                 }
-                // [統一apt 移植元] 適切回数(群単位の双方向目標)。SOFT・重み1・L1偏差|n-t|。
+                // [統一apt 移植元] 適切回数(群単位の双方向目標)。SOFT・L1偏差|n-t|。
                 int t = p.Apt[i][k];
                 if (t >= 0 && n != t)
                 {

@@ -133,7 +133,7 @@
                     <StackPanel Spacing="6">
                         <TextBlock x:Name="ImpossibleWishText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
                                    Foreground="{StaticResource MagiOnErrorContainerBrush}" />
-                        <Button Content="希望シフトを編集" Click="OnGoEditClick" MinHeight="48" />
+                        <Button Content="希望シフトを編集" Click="OnEditWishesClick" MinHeight="48" />
                     </StackPanel>
                 </Border>
                 <Border x:Name="CopilotHintPanel" Background="{StaticResource MagiSecondaryContainerBrush}"
@@ -157,7 +157,7 @@
                             </Grid.ColumnDefinitions>
                             <Button x:Name="SoftPolishButton" Content="自動で整える" Click="OnSoftPolishClick"
                                     HorizontalAlignment="Stretch" MinHeight="48" />
-                            <Button Grid.Column="1" Content="手修正" Click="OnGoEditClick" HorizontalAlignment="Stretch" MinHeight="48" />
+                            <Button Grid.Column="1" Content="手修正" Click="OnManualEditClick" HorizontalAlignment="Stretch" MinHeight="48" />
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -189,7 +189,7 @@
             <StackPanel x:Name="AlternativesPanel" Spacing="4">
                 <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock TextWrapping="Wrap" FontSize="14" Opacity="0.8"
-                           Text="Portfolio(並列複数案)実行で見つかった採用案以外の候補。適用すると今の勤務表を置き換えます。" />
+                           Text="Portfolio(並列複数案)実行で見つかった採用案以外の候補。適用すると今の勤務表を置き換えます（元に戻すで一覧ごと戻せます）。" />
                 <StackPanel x:Name="AlternativesListHost" Spacing="4" />
             </StackPanel>
         </StackPanel>

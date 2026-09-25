@@ -43,7 +43,7 @@
 | `skillGroups` | `List<Group>` = `[]` | スキルグループ（ユニットとは別の第2分類。担当可否には使わない） |
 | `cons41s` / `cons42s` | `List<C41Row>` / `List<C42Row>` = `[]` | スキル群版の C41 / C42 |
 | `cons3w` | `List<C3wRow>` = `[]` | 希望の前日に禁止（3.542.0）。希望(`wishes`)で固定された `wishKigou` の前日セルが `prevKigou` なら違反（HARD `c3w`、c3n と同格）。JSON キー無しは空 |
-| `shiftColors` | `Map<String, String>` = `{}` | 表示色の上書き。キー＝シフト記号 → `"#rrggbb"`（**表示のみ・エンジン無影響**）。特殊キー `"__vio__"` ＝違反色 |
+| `shiftColors` | `Map<String, String>` = `{}` | 表示色の上書き。キー＝シフト記号 → `"#rrggbb"`（**表示のみ・エンジン無影響**。シフトの記号変更でキーを付け替え、シフト削除で取り除く）。特殊キー `"__vio__"` ＝違反色 |
 | `extras` | `Map<String, Any?>` = `{}` | 未モデル化の項目を逐語保持（往復の無損失化） |
 
 ### 計算プロパティ（保持しない／導出）
@@ -108,7 +108,7 @@
 **最適化の状態**（13）：`running`, `hasResult`, `initHard`/`initSoft`(Long), `bestHard`/`bestSoft`(Long),
 `totalViolations`, `weightedScore`(Double), `elapsedMs`, `checkRev`（表示中の検査結果の世代・3.502.0）,
 `engineRan`（エンジンがこの盤面に対して一度でも走ったか・3.475.0）,
-`keepScreenOn`（画面消灯防止の可否・3.568.0）, `runSummary`（直近の最適化の前後比較1行・3.509.4）
+`keepScreenOn`（画面消灯防止の可否・3.568.0）, `runSummary`（直近の最適化の前後比較1行・3.509.4。盤面が変わる操作・元に戻す・読込で消える）
 
 **計算の設定**（12）：`workers`(既定=コア数を1..8でクランプ), `budgetSec`(=300), `v6Algorithm`(=AUTO),
 `softPolish`(=true), `nativeAccel`(=true), `nativeParity`(=true) と、**既定 OFF の調整トグル**

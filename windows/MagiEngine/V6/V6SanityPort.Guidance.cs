@@ -346,7 +346,7 @@ public static partial class V6SanityPort
         {
             outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{rowStr}」",
                 "この行は評価されていません。〈〉で囲んだ記号が今の一覧にないか、日数・回数が空か数値でない" +
-                    "ためです（シフトや群を改名・削除するとこうなります）",
+                    "ためです（シフトやグループを改名・削除するとこうなります）",
                 "制約設定でこの行を今ある記号・正しい数値に直すか、行を削除してください"));
         }
 
@@ -425,8 +425,8 @@ public static partial class V6SanityPort
                 }
             }
         }
-        CheckRange("群のレンジ", "c41", state.Cons41);
-        CheckRange("スキル群のレンジ", "c41s", state.Cons41s);
+        CheckRange("グループのレンジ", "c41", state.Cons41);
+        CheckRange("スキルグループのレンジ", "c41s", state.Cons41s);
 
         void CheckNeedDayNumeric(IReadOnlyDictionary<string, string> map, string jp)
         {
@@ -487,10 +487,10 @@ public static partial class V6SanityPort
             {
                 var names = string.Join("・", bad.Take(4).Select(t =>
                     string.IsNullOrWhiteSpace(t.Staff.Name) ? $"#{t.Index}" : t.Staff.Name));
-                outList.Add(new SettingIssue(IssueKind.Constraint, "スキル群の割当",
-                    $"{bad.Count}名（{names}{(bad.Count > 4 ? " ほか" : "")}）のスキル群が今の一覧の範囲外です。" +
-                        "この職員はスキル群の制約から外れて計算されます",
-                    "職員管理でスキル群を選び直すか、所属させないなら「(なし)」にしてください"));
+                outList.Add(new SettingIssue(IssueKind.Constraint, "スキルグループの割当",
+                    $"{bad.Count}名（{names}{(bad.Count > 4 ? " ほか" : "")}）のスキルグループが今の一覧の範囲外です。" +
+                        "この職員はスキルグループのルールから外れて計算されます",
+                    "職員管理でスキルグループを選び直すか、所属させないなら「(なし)」にしてください"));
             }
         }
 
@@ -527,7 +527,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Constraint, "担当できるシフト",
                 $"グループ「{gname}」（{members}名）は担当できるシフトが1つもありません。この職員は休しか置けず、" +
                     "必要人数のある日はすべて人員不足になります",
-                "年間マスターの「担当できるシフト（群×シフト）」で担当するシフトを選んでください"));
+                "年間マスターの「担当できるシフト（グループ × シフト）」で担当するシフトを選んでください"));
         }
 
         // 3) 需要>担当可能人数

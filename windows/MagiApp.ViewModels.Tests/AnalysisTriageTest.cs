@@ -125,4 +125,29 @@ public class AnalysisTriageTest
         ui.EngineRan = false;
         Assert.False(AnalysisTriage.Build(ui, L).Computed);
     }
+
+    /// <summary>[Android dashboard-10] ホームの残り: 必須0のときの要調整は件数の族だけ（公平化・曜日の偏りの pt を件として足さない）。</summary>
+    [Fact]
+    public void HomeRemainingLabelCountsOnlyCountFamilies()
+    {
+        Assert.Equal("必須 残り2件", AnalysisTriage.HomeRemainingLabel(2L, 0, B(("covU", 2), ("c1", 5))));
+        Assert.Equal("残り1日", AnalysisTriage.HomeRemainingLabel(0L, 1, B()));
+        Assert.Equal("必須は解消・要調整 5件", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("apt", 5), ("fair", 80), ("weekly", 60))));
+        Assert.Equal("必須は解消・残りは偏りのみ", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 3))));   // pt だけなら解消済みとは言わない
+        Assert.Equal("解消済み", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 0))));
+    }
+
+    /// <summary>[Android schedule-5] 最終週が 7 日に満たない月でも、右端まで送れば最終週になる（左端の日だけだと最後から 2 番目で止まる）。</summary>
+    [Fact]
+    public void CurrentWeekReachesAPartialLastWeekAtTheRightEdge()
+    {
+        IReadOnlyList<int> R(int a, int b) => Enumerable.Range(a, b - a + 1).ToList();
+        var weeks = new List<IReadOnlyList<int>> { R(0, 6), R(7, 13), R(14, 20), R(21, 27), R(28, 30) };
+        Assert.Equal(0, ScheduleNav.CurrentWeekIndex(weeks, leftDay: 0, atEnd: false));
+        Assert.Equal(2, ScheduleNav.CurrentWeekIndex(weeks, leftDay: 14, atEnd: false));
+        Assert.Equal(3, ScheduleNav.CurrentWeekIndex(weeks, leftDay: 24, atEnd: false));   // 31日・7日表示の右端は左端が 24日目
+        Assert.Equal(4, ScheduleNav.CurrentWeekIndex(weeks, leftDay: 24, atEnd: true));
+        Assert.Equal(0, ScheduleNav.CurrentWeekIndex(new List<IReadOnlyList<int>> { R(0, 6) }, leftDay: 0, atEnd: true));
+        Assert.Equal(0, ScheduleNav.CurrentWeekIndex(new List<IReadOnlyList<int>>(), leftDay: 3, atEnd: false));
+    }
 }

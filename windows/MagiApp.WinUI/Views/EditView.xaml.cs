@@ -202,7 +202,7 @@ public sealed partial class EditView : UserControl
         NextStepText.Text = "次の一手: " + (
             c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
             : c.Wishes == 0 ? "次に『希望シフト』を登録すると 解消度 が上がります。"
-            : "準備OK。ホームの『勤務表をつくる』で作成できます。");
+            : $"準備OK。画面下の『{(ui.HasResult ? "もう一度つくる" : "勤務表をつくる")}』で作成できます。");
         RenderChecklist(ui);
     }
 
@@ -827,7 +827,10 @@ public sealed partial class EditView : UserControl
         NeedApplyHintText.Text = "上限人数は最低人数以上にしてください。";
         NeedApplyHintText.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
         ApplyNeedForDaysButton.Content = $"{_needSelectedDays.Count}日に適用";
-        ApplyNeedForDaysButton.IsEnabled = editable && !invalid && (p1.Length > 0 || p2.Length > 0);
+        // 2パターン目を使わない月は上限人数が効かない＝上限だけでは適用しない。
+        var use2 = _vm.Ui.Use2;
+        NeedApplyP2Box.Header = MagiViewModel.NeedUpperLabel(use2);
+        ApplyNeedForDaysButton.IsEnabled = editable && !invalid && (p1.Length > 0 || (use2 && p2.Length > 0));
         ClearNeedForDaysButton.IsEnabled = editable;
     }
 
@@ -871,6 +874,7 @@ public sealed partial class EditView : UserControl
         RenderNeedCalendar(ui, editable);
         SyncItems(NeedDayShiftCombo, ui.ShiftSymbols, ref _needDayShiftItems);
         SetNeedDayButton.IsEnabled = editable;
+        NeedDayP2Box.PlaceholderText = MagiViewModel.NeedUpperLabel(ui.Use2, shortLabel: true);
 
         NeedDayListHost.Children.Clear();
         var rows = _vm.NeedDayOverrides();
@@ -879,7 +883,7 @@ public sealed partial class EditView : UserControl
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
-                Text = $"{v.Kigou} {v.J + 1}日 → 最低{DashIfBlank(v.P1)}/上限{DashIfBlank(v.P2)}",
+                Text = $"{v.Kigou} {v.J + 1}日 → 最低{DashIfBlank(v.P1)}/{MagiViewModel.NeedUpperLabel(ui.Use2, shortLabel: true)}{DashIfBlank(v.P2)}",
                 FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
             var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
@@ -1408,10 +1412,10 @@ public sealed partial class EditView : UserControl
         new("cons3n", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3m", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3mn", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
-        new("cons41", new[] { "群記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
-        new("cons42", new[] { "群1記号", "シフト1記号", "群2記号", "シフト2記号" }, new[] { 1, 3 }),
-        new("cons41s", new[] { "スキル群記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
-        new("cons42s", new[] { "スキル群1記号", "シフト1記号", "スキル群2記号", "シフト2記号" }, new[] { 1, 3 }),
+        new("cons41", new[] { "グループ記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
+        new("cons42", new[] { "グループ1記号", "シフト1記号", "グループ2記号", "シフト2記号" }, new[] { 1, 3 }),
+        new("cons41s", new[] { "スキルグループ記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
+        new("cons42s", new[] { "スキルグループ1記号", "シフト1記号", "スキルグループ2記号", "シフト2記号" }, new[] { 1, 3 }),
     };
 
     private string? ConstraintFamilyKey() => (ConstraintFamilyCombo.SelectedItem as ComboBoxItem)?.Tag as string;
@@ -1563,11 +1567,11 @@ public sealed partial class EditView : UserControl
                 _vm.AddCons3(key, v);
                 return true;
             case "cons41":
-                if (G(0).Length == 0 || G(1).Length == 0) { error = "群記号とシフト記号を入れてください。"; return false; }
+                if (G(0).Length == 0 || G(1).Length == 0) { error = "グループ記号とシフト記号を入れてください。"; return false; }
                 _vm.AddCons41(G(0), G(1), G(2), G(3));
                 return true;
             case "cons41s":
-                if (G(0).Length == 0 || G(1).Length == 0) { error = "スキル群記号とシフト記号を入れてください。"; return false; }
+                if (G(0).Length == 0 || G(1).Length == 0) { error = "スキルグループ記号とシフト記号を入れてください。"; return false; }
                 _vm.AddCons41s(G(0), G(1), G(2), G(3));
                 return true;
             case "cons42":
@@ -1590,8 +1594,9 @@ public sealed partial class EditView : UserControl
         var key = ConstraintFamilyKey();
         var meta = key is null ? null : ConstraintFamilyMetas.FirstOrDefault(m => m.Key == key);
         if (key is null || meta is null) { ConstraintHintText.Text = "種類を選んでください。"; return; }
-        if (!TryAddConstraint(key, CollectConstraintFieldValues(meta), out var error)) { ConstraintHintText.Text = error; return; }
-        ConstraintHintText.Text = "";
+        var values = CollectConstraintFieldValues(meta);
+        if (!TryAddConstraint(key, values, out var error)) { ConstraintHintText.Text = error; return; }
+        ConstraintHintText.Text = _vm.SeqSingleNote(key, values) ?? "";
         _syncedConstraintRowIndex = -1;
     }
 
@@ -1605,9 +1610,9 @@ public sealed partial class EditView : UserControl
         if (idx < 0) { ConstraintHintText.Text = "変更する行を選んでください。"; return; }
         var values = CollectConstraintFieldValues(meta);
         if (values.All(x => x.Length == 0)) { ConstraintHintText.Text = "内容を入れてください。"; return; }
-        if (_vm.ConstraintInputError(key, values) is { } invalid) { ConstraintHintText.Text = invalid; return; }
+        if (_vm.ConstraintInputError(key, values, idx) is { } invalid) { ConstraintHintText.Text = invalid; return; }
         _vm.UpdateConstraint(key, idx, values);
-        ConstraintHintText.Text = "";
+        ConstraintHintText.Text = _vm.SeqSingleNote(key, values) ?? "";
         _syncedConstraintRowIndex = -1;
     }
 
@@ -1756,7 +1761,7 @@ public sealed partial class EditView : UserControl
         _syncedMasterShiftIndex = -1;
     }
 
-    private void OnEditMasterDaysClick(object sender, RoutedEventArgs e)
+    private async void OnEditMasterDaysClick(object sender, RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
         if (!int.TryParse(MasterDaysBox.Text.Trim(), out var n) || n < 1 || n > 31)
@@ -1764,6 +1769,10 @@ public sealed partial class EditView : UserControl
             MasterDaysHintText.Text = "日数は 1〜31 で入れてください。";
             return;
         }
+        // 縮めると後ろの日の希望・日別の必要人数が消える＝確認を挟む（Android と同じ）。
+        var cur = _vm.Ui.Days;
+        if (n < cur && !await ConfirmAsync("期間を縮めますか？",
+                $"{cur}日 → {n}日にします。{n + 1}日目以降の希望と日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
         _vm.Ws1ResizeDays(n);
     }
 
@@ -1791,7 +1800,7 @@ public sealed partial class EditView : UserControl
         MasterSkillGroupHintText.Text = editable
             ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。" +
               (_vm.SkillGroupKigouList().Count > 0 ? $" 使用中の記号: {string.Join("・", _vm.SkillGroupKigouList())}" : "")
-            : (ui.Loaded ? "最適化の実行中はスキル区分を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "最適化の実行中はスキルグループを変更できません。終わってからにしてください。" : "");
     }
 
     /// <summary>選択中のスキル区分の名前・記号を入力欄へ取り込む（選択が変わったときだけ）。</summary>
@@ -1838,7 +1847,7 @@ public sealed partial class EditView : UserControl
         var g = MasterSkillGroupCombo.SelectedIndex;
         var name = MasterSkillGroupNameBox.Text.Trim();
         var kigou = MasterSkillGroupKigouBox.Text.Trim();
-        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキル区分を選んでください。"; return; }
+        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキルグループを選んでください。"; return; }
         if (name.Length == 0 || kigou.Length == 0) { MasterSkillGroupHintText.Text = "名前と記号を入れてください。"; return; }
         _vm.EditSkillGroup(g, name, kigou);
         _syncedMasterSkillGroupIndex = -1;
@@ -1848,15 +1857,15 @@ public sealed partial class EditView : UserControl
     {
         if (_syncingFromModel) return;
         var g = MasterSkillGroupCombo.SelectedIndex;
-        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキル区分を選んでください。"; return; }
+        if (g < 0) { MasterSkillGroupHintText.Text = "対象のスキルグループを選んでください。"; return; }
         var ws1 = _vm.Ws1();
         var members = ws1?.Staff.Count(s => s.SkillIdx == g) ?? 0;
         var refs = _vm.Ws1SkillGroupRefCount(g);
         var name = g < _masterSkillGroupItems.Count ? _masterSkillGroupItems[g] : "";
         var msg = $"「{name}」を削除します。" +
             (members > 0 ? $" 割り当てていた{members}名は「(なし)」に戻ります。" : "") +
-            (refs > 0 ? $" このスキル区分を参照する制約が{refs}件あります。" : "");
-        var ok = await ConfirmAsync("スキル区分を削除しますか？", msg);
+            (refs > 0 ? $" このスキルグループを参照する制約が{refs}件あります。" : "");
+        var ok = await ConfirmAsync("スキルグループを削除しますか？", msg);
         if (!ok) return;
         _vm.RemoveSkillGroup(g);
         _syncedMasterSkillGroupIndex = -1;
@@ -2012,7 +2021,7 @@ public sealed partial class EditView : UserControl
             Grid.SetRow(b, row); Grid.SetColumn(b, col);
             StaffShiftMatrixHost.Children.Add(b);
         }
-        Header(0, 0, "職員 (群)", left: true);
+        Header(0, 0, "職員 (グループ)", left: true);
         for (var k = 0; k < K; k++) Header(0, k + 1, KigouFormat.ToHankakuKigou(ws1.Shifts[k].Kigou), left: false);
 
         for (var i = 0; i < S; i++)
@@ -2102,7 +2111,7 @@ public sealed partial class EditView : UserControl
         if (status.Length > 0) panel.Children.Add(new TextBlock { Text = status, TextWrapping = TextWrapping.Wrap });
 
         var raw = g >= 0 && g < v.GroupShiftApt.Count && k < v.GroupShiftApt[g].Count ? v.GroupShiftApt[g][k] : "";
-        panel.Children.Add(new TextBlock { Text = $"群の目標（{groupName} の個人設定がない職員に適用）", Style = StyleOf("MagiTitleSmallTextStyle") });
+        panel.Children.Add(new TextBlock { Text = $"グループの目標（{groupName} の個人設定がない職員に適用）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var aptRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var aptValue = new TextBlock { Text = string.IsNullOrWhiteSpace(raw) ? "なし" : raw.Trim(), MinWidth = 40, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var minus = new Button { Content = "−", MinWidth = 44 };
@@ -2119,7 +2128,7 @@ public sealed partial class EditView : UserControl
         panel.Children.Add(aptRow);
         // [Android 3.509.0/決定 D9] 個人の下限・上限がある組には群目標を適用しない。適用される組は到達範囲へ調整されうる（3.508.0）。
         if ((lo0 is not null || hi0 is not null) && int.TryParse(raw.Trim(), out _))
-            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、群の目標は適用されません", FontSize = 14, Opacity = 0.8 });
+            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、グループの目標は適用されません", FontSize = 14, Opacity = 0.8 });
         else if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
             panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 14, Opacity = 0.8 });
 
@@ -2214,7 +2223,7 @@ public sealed partial class EditView : UserControl
         }
 
         // 左上の角（固定列側）＝空。行ヘッダ＝群名（タップで行一括）。
-        var corner = new TextBlock { Text = "群 ＼ シフト", FontSize = 14, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(xs, 0, xs, 0) };
+        var corner = new TextBlock { Text = "グループ ＼ シフト", FontSize = 14, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(xs, 0, xs, 0) };
         Grid.SetRow(corner, 0);
         GroupShiftNameColumn.Children.Add(corner);
         for (var g = 0; g < groupCount; g++)
@@ -2332,6 +2341,13 @@ public sealed partial class EditView : UserControl
     }
 
     // ===== ドア切替 =====
+
+    /// <summary>外から入口を指定して開く（ホームの「希望シフトを編集」は月次条件＝前に開いていた入口に任せない）。</summary>
+    internal void OpenDoor(int door)
+    {
+        _door = System.Math.Clamp(door, 0, 2);
+        Render();
+    }
 
     private void OnDoorChanged(object sender, SelectionChangedEventArgs e)
     {

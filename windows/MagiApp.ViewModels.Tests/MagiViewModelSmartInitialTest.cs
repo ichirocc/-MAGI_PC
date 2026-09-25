@@ -1,5 +1,6 @@
 using MagiApp.ViewModels.Tests.TestSupport;
 using MagiApp.ViewModels.Work;
+using MagiEngine.V6;
 
 namespace MagiApp.ViewModels.Tests;
 
@@ -67,5 +68,33 @@ public class MagiViewModelSmartInitialTest
         Assert.Contains("最適化の実行中は下書きをつくれません", vm.Ui.Message);
         // 盤面は元の全休のまま——生成もPushUndoも一切走っていない。
         Assert.All(vm._currentSchedule!, row => Assert.All(row, cell => Assert.Equal(0, cell)));
+    }
+
+    /// <summary>[Android vm-3] 下書きで差し替えた後の診断が中止・失敗したら下書き前へ戻す（CSV 取込の 3.592.0 と同じ）。
+    /// PushUndo が積んだ段も外す＝元に戻すの履歴は下書き前のまま。</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RollsBackWhenTheDiagnosisStopsOrFailsAfterCommitting(bool cancel)
+    {
+        var st = MinimalState.Build();
+        var sched = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = sched };
+        vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(UiState.Message) || vm.Ui.Message is not { } m || !m.StartsWith("下書きをつくりました", StringComparison.Ordinal)) return;
+            if (cancel) throw new OperationCanceledException();
+            throw new InvalidOperationException("late");
+        };
+
+        vm.GenerateSmartInitial();
+        if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastGenerateSmartInitialTask!);
+        else await vm.LastGenerateSmartInitialTask!;
+
+        Assert.Same(st, vm._state);
+        Assert.Equal(sched, vm._currentSchedule);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.False(vm.Ui.CanUndo);
+        Assert.Contains(cancel ? "停止" : "つくれませんでした", vm.Ui.Message);
     }
 }

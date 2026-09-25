@@ -45,8 +45,8 @@ public sealed partial class AnalysisView : UserControl
         ["low"] = "下限割れ", ["high"] = "上限超過", ["apt"] = "適切回数のズレ", ["fair"] = "公平化のズレ",
         ["weekly"] = "曜日の偏り",
         ["c1"] = "期間の制約", ["c2"] = "個人の合計", ["c3"] = "守るとよい並び", ["c3m"] = "推奨の並び",
-        ["c3mn"] = "回避の並び", ["c41"] = "群のレンジ", ["c42"] = "群ペア",
-        ["c41s"] = "スキル群のレンジ", ["c42s"] = "スキル群ペア", ["covO"] = "人員過剰",
+        ["c3mn"] = "回避の並び", ["c41"] = "グループのレンジ", ["c42"] = "グループペア",
+        ["c41s"] = "スキルグループのレンジ", ["c42s"] = "スキルグループペア", ["covO"] = "人員過剰",
     };
 
     /// <summary>違反の場所の表示上限（件）。930件(30名×31日)まで起こり得るため
@@ -345,7 +345,8 @@ public sealed partial class AnalysisView : UserControl
         if (issues.Count == 0) return;
 
         IssuesTitle.Text = $"設定の見直し（{issues.Count}件）";
-        var wishClear = issues.Count(i => i.Kind == IssueKind.Wish && i.Action == SettingFixAction.RemoveWish);
+        // 一括クリアが実際に消す件数（VM の担当可否判定）。行の種別で数えると希望どうしの c3w 衝突まで混ざる。
+        var wishClear = _vm.WishOutOfScopeCount();
         ClearOutOfScopeWishesButton.Visibility = wishClear > 1 ? Visibility.Visible : Visibility.Collapsed;
         ClearOutOfScopeWishesButton.Content = $"担当外の希望を一括クリア（{wishClear}件）";
         ClearOutOfScopeWishesButton.IsEnabled = !ui.Running;

@@ -140,4 +140,18 @@ public class StaffCsvIOTest
         Assert.Equal(0, r.Added);
         Assert.Equal(0, r.State.StaffList[0].GroupIdx);   // 値は後勝ち（従来どおり）
     }
+
+    /// <summary>[Android CsvRoundTripTest 同期] 職員一覧の取込は、別形式のコンポーネントCSVを見出しで見分けて断る
+    /// （<see cref="StaffCsvIO.ParseUpsert"/> は未知の氏名を足すので、見出し・種別タグが職員として入る）。
+    /// C# にシフト色CSVの書出しは無いので、その見出しは Kotlin の <c>ShiftColorsCsvIO.build</c> と同じ文字列で確かめる。</summary>
+    [Fact]
+    public void StaffImportRecognisesOtherComponentHeaders()
+    {
+        var st = StRestNotAllowed();
+        Assert.Null(StaffCsvIO.OtherKindOf(StaffCsvIO.Build(st)));
+        Assert.Equal("希望シフト", StaffCsvIO.OtherKindOf(WishesCsvIO.Build(st)));
+        Assert.Equal("各制約", StaffCsvIO.OtherKindOf(ConstraintsCsvIO.Build(st)));
+        Assert.Equal("シフト色", StaffCsvIO.OtherKindOf("記号,色\nX,#112233\n"));
+        Assert.Null(StaffCsvIO.OtherKindOf("新人 一郎,A,\n"));
+    }
 }

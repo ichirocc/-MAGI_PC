@@ -54,4 +54,31 @@ public class VioBucketsTest
         Assert.Equal(1, counts["window"]);
         Assert.Equal(1, counts["count"]);
     }
+
+    /// <summary>[Android vmio-work-5] 違反フィルタのチップ件数も重なった全クラスから数える
+    /// （needViolations だけを数えると c41s に隠れた過剰が「人員 0」になる）。</summary>
+    [Fact]
+    public void BucketChipCountsSeeClassesHiddenBehindEqualWeightFamilies()
+    {
+        var ui = new UiState
+        {
+            NeedViolations = new Dictionary<string, string> { ["1,0"] = "vio-c41s" },
+            NeedFamilies = new Dictionary<string, IReadOnlyList<string>> { ["1,0"] = new[] { "vio-c41s", "vio-covO" } },
+        };
+        var counts = VioBuckets.BucketLocCounts(ui);
+        Assert.Equal(1, counts["need"]);    // c41s に隠れた過剰も人員に数える
+        Assert.Equal(1, counts["group"]);   // グループルールは 1 箇所のまま
+        ui.NeedFamilies = new Dictionary<string, IReadOnlyList<string>>();
+        var fallback = VioBuckets.BucketLocCounts(ui);
+        Assert.False(fallback.ContainsKey("need"));   // families 未充填の経路は最重1クラスへフォールバック
+        Assert.Equal(1, fallback["group"]);
+    }
+
+    /// <summary>[Android dashboard-12] フィルタのチップも族の表示名と同じ語（c1 を「窓」と呼ぶと分析タブの「期間の制約」と結びつかない）。</summary>
+    [Fact]
+    public void WindowBucketUsesTheSameWordAsTheBreakdownLabel()
+    {
+        Assert.Equal("期間の制約", VioBuckets.Buckets.Single(b => b.Families.Contains("c1")).Label);
+        Assert.Equal("グループルール", VioBuckets.Buckets.Single(b => b.Families.Contains("c41")).Label);
+    }
 }

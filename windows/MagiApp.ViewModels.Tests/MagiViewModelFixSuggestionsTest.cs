@@ -226,4 +226,51 @@ public class MagiViewModelFixSuggestionsTest
 
         Assert.Null(vm.Ui.Message);
     }
+
+    /// <summary>[Android vm-1] 走行中の直し方の探索は、盤面を差し替えるジョブの開始で捨てる
+    /// （旧: 実行の途中で完了して古い盤面の提案と「探索済み」を書き戻し、実行後も残っていた）。</summary>
+    [Fact]
+    public void BoardJobDiscardsAFixSearchThatIsStillRunning()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var ui = new QueuedSyncContext();
+        Task? search = null;
+        ui.Run(() =>
+        {
+            vm.FindFixSuggestions();
+            search = vm.LastFindFixSuggestionsTask;
+            ui.WaitForPosted();   // 探索は計算を終え、UI の列で書き戻しを待っている
+            vm.BeginBoardJob("勤務表づくり");
+            Assert.False(vm.Ui.FixSearching);
+            ui.RunUntil(search!);
+        });
+        Assert.False(vm.Ui.FixSearched);
+        Assert.Empty(vm.Ui.FixSuggestions);
+    }
+
+    /// <summary>盤面を差し替えるジョブの最中に終わった探索は、書き戻しも探し直しもしない（完了後の盤面で探し直す）。</summary>
+    [Fact]
+    public void FixSearchFinishingDuringABoardJobWritesNothing()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        var ui = new QueuedSyncContext();
+        try
+        {
+            ui.Run(() =>
+            {
+                vm.FindFixSuggestions();
+                var search = vm.LastFindFixSuggestionsTask!;
+                ui.WaitForPosted();
+                OptimizationRepository.SetRunning(true);   // 取消を経ずに実行中になった経路（防御）
+                ui.RunUntil(search);
+                Assert.Same(search, vm.LastFindFixSuggestionsTask);   // 探し直していない
+            });
+            Assert.False(vm.Ui.FixSearching);
+            Assert.False(vm.Ui.FixSearched);
+        }
+        finally
+        {
+            OptimizationRepository.SetRunning(false);
+        }
+    }
 }

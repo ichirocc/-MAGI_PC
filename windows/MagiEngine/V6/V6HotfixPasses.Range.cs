@@ -94,7 +94,7 @@ public static partial class V6HotfixPasses
     private sealed record FlowPlan(int Day, int[] Assignment, ViolationReport Report, int Changed, long FlowCost, IReadOnlyList<int[]> Extras);
 
     /// <summary>
-    /// [RangePolish・個人回数(staffRange low/high, 重み90/25)専用の研磨パス] 桒澤美幸の実例（唯一の代替
+    /// [RangePolish・個人回数(staffRange low/high, SOFT)専用の研磨パス] 桒澤美幸の実例（唯一の代替
     /// 要員が現在のシフトを担当できず直接交換相手が存在しない局面）を受け、玉突き連鎖（<see cref="V6SearchOperators.FindCovUChain"/>）
     /// だけでなく、手M(<see cref="MinCostPerfectAssignment"/>による当日の完全割当の組み替え)・手F
     /// (<see cref="FlexibleDayFlow"/>による当日の人数構成そのものを変える最小費用フロー) を追加した研磨パス。

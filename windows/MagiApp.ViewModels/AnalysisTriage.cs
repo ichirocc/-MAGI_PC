@@ -38,6 +38,19 @@ public sealed record AnalysisTriage(
     /// <summary>weekly/fair は件数でなく L1 偏差の合計。単位を分けないと「186件」と読めてしまう。</summary>
     private static string UnitOf(string family) => family is "fair" or "weekly" ? "pt" : "件";
 
+    /// <summary>ホームの解消度に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
+    /// pt だけ残っても解消度は 100% でないので「解消済み」とは言わない。</summary>
+    public static string HomeRemainingLabel(long bestHard, int shortDays, IReadOnlyDictionary<string, int> breakdown)
+    {
+        var softN = MirrorKeys.Soft.Where(f => UnitOf(f) == "件").Sum(f => breakdown.GetValueOrDefault(f, 0));
+        var ptN = MirrorKeys.Soft.Where(f => UnitOf(f) == "pt").Sum(f => breakdown.GetValueOrDefault(f, 0));
+        if (bestHard > 0L) return $"必須 残り{bestHard}件";
+        if (shortDays > 0) return $"残り{shortDays}日";
+        if (softN > 0) return $"必須は解消・要調整 {softN}件";
+        if (ptN > 0) return "必須は解消・残りは偏りのみ";
+        return "解消済み";
+    }
+
     /// <summary>SettingIssue の種類 → 画面に出す見出し（英字符号を出さない）。</summary>
     private static string IssueKindLabel(IssueKind kind) => kind switch
     {

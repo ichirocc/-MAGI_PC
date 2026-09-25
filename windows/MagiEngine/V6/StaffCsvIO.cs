@@ -84,6 +84,20 @@ public static class StaffCsvIO
         return (state with { StaffList = newStaff }, matched);
     }
 
+    /// <summary>先頭行が別のコンポーネントCSV（<c>Build()</c> の見出し）なら、その取込種別の名前。<see cref="ParseUpsert"/> は未知の氏名を
+    /// 新規追加するので、見出し・種別タグが職員として入る前に呼出側が断るために使う。</summary>
+    public static string? OtherKindOf(string text)
+    {
+        var rows = CsvUtil.ParseCsvRows(text);
+        if (rows.Count == 0) return null;
+        var head = rows[0];
+        var c0 = Cell(head, 0);
+        if (c0 == "種別") return "各制約";
+        if (c0 == "記号") return "シフト色";
+        if (c0 == "氏名" && Cell(head, 1) == "日") return "希望シフト";
+        return null;
+    }
+
     /// <summary>
     /// [氏名,グループ,スキル] を upsert で取込: 既存氏名は所属群/スキルを更新、未知の氏名は
     /// 新規スタッフとして追加し勤務表に1行足す。空き日を何で埋めるかは <see cref="FillShift"/>

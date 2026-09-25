@@ -18,8 +18,8 @@ public static class VioBuckets
         new VioBucket("pref", "希望", new HashSet<string> { "pref" }),
         new VioBucket("seq", "連勤", new HashSet<string> { "c3", "c3n", "c3m", "c3mn", "c3w" }),
         new VioBucket("count", "回数", new HashSet<string> { "low", "high", "apt", "c2" }),
-        new VioBucket("group", "群ルール", new HashSet<string> { "groupViol", "c41", "c42", "c41s", "c42s" }),
-        new VioBucket("window", "窓", new HashSet<string> { "c1" }),
+        new VioBucket("group", "グループルール", new HashSet<string> { "groupViol", "c41", "c42", "c41s", "c42s" }),
+        new VioBucket("window", "期間の制約", new HashSet<string> { "c1" }),
     };
 
     /// <summary>セル/日の場所マップを持たない族＝絞り込みの対象外（常に表示）。</summary>
@@ -56,18 +56,23 @@ public static class VioBuckets
     public static string? VisibleCellVio(UiState ui, string key, IReadOnlySet<string> enabled) =>
         CellVioClasses(ui, key).FirstOrDefault(c => VioVisible(c, enabled));
 
-    /// <summary>各バケツの「違反ロケーション数」（セル/エントリ件数＝見出し『要確認 Nか所』と同単位）。</summary>
+    /// <summary>各バケツの「違反ロケーション数」（セル/エントリ件数＝見出し『要確認 Nか所』と同単位）。
+    /// 被覆キーもセルと同じく重なった全クラスから数える（最重1クラスだけだと c41s に隠れた covO が「人員 0」になる）。</summary>
     public static IReadOnlyDictionary<string, int> BucketLocCounts(UiState ui)
     {
         var counts = new Dictionary<string, int>();
-        void Tally(string b) => counts[b] = counts.GetValueOrDefault(b) + 1;
-        foreach (var key in ui.ViolationCells.Keys)
+        void TallyKey(IEnumerable<string> classes)
         {
-            foreach (var b in CellVioClasses(ui, key).Select(c => BucketOfFamily(FamilyOfVioClass(c))).OfType<string>().Distinct())
-                Tally(b);
+            foreach (var b in classes.Select(c => BucketOfFamily(FamilyOfVioClass(c))).OfType<string>().Distinct())
+                counts[b] = counts.GetValueOrDefault(b) + 1;
         }
-        foreach (var cls in ui.NeedViolations.Values) if (BucketOfFamily(FamilyOfVioClass(cls)) is { } b) Tally(b);
-        foreach (var cls in ui.CountViolations.Values) if (BucketOfFamily(FamilyOfVioClass(cls)) is { } b) Tally(b);
+        foreach (var key in ui.ViolationCells.Keys) TallyKey(CellVioClasses(ui, key));
+        foreach (var key in ui.NeedFamilies.Count > 0 ? ui.NeedFamilies.Keys : ui.NeedViolations.Keys)
+        {
+            TallyKey(ui.NeedFamilies.TryGetValue(key, out var fams) ? fams
+                : ui.NeedViolations.TryGetValue(key, out var one) ? new[] { one } : Array.Empty<string>());
+        }
+        foreach (var cls in ui.CountViolations.Values) TallyKey(new[] { cls });
         return counts;
     }
 }
