@@ -1,7 +1,8 @@
 name: Windows Port - Engine Check
 
-# MagiEngine（プラットフォーム非依存の .NET クラスライブラリ）と MagiEngine.Tests は
-# Linux ランナーでビルド・テストできる。MagiApp.WinUI（Windows App SDK）はここでは対象外
+# MagiEngine（プラットフォーム非依存の .NET クラスライブラリ）と MagiEngine.Tests、
+# MagiApp.ViewModels（net8.0）と MagiApp.ViewModels.Tests は Linux ランナーでビルド・テストできる。
+# MagiApp.WinUI（Windows App SDK）はここでは対象外
 # （windows-app-build.yml で windows-latest ランナーが担当）。
 # 対象は windows/ 配下のみ（Android版の Kotlin/Gradle CI とは独立）。
 
@@ -42,6 +43,12 @@ jobs:
 
       - name: Test (MagiEngine.Tests)
         run: dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+
+      - name: Restore (MagiApp.ViewModels.Tests)
+        run: dotnet restore MagiApp.ViewModels.Tests/MagiApp.ViewModels.Tests.csproj
+
+      - name: Test (MagiApp.ViewModels.Tests)
+        run: dotnet test MagiApp.ViewModels.Tests/MagiApp.ViewModels.Tests.csproj --configuration Release --logger "console;verbosity=normal"
 
       - name: Build (MagiEngine.GoldenGen)
         run: dotnet build MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj --configuration Release

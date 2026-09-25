@@ -293,13 +293,19 @@ public class MagiViewModelWishTrialTest : IDisposable
     }
 
     [Fact]
-    public async Task V11_CancelledTrial_DoesNotStoreResult()
+    public void V11_CancelledTrial_DoesNotStoreResult()
     {
         var (vm, _) = NewVm();
-        vm.StartWishTrial(0, 2);
-        var task = vm.LastWishTrialTask!;
-        vm.CancelWishTrial();
-        await task;
+        var ui = new QueuedSyncContext();
+        // The trial finishes in about 0.5 ms; as on the app's UI thread, its completion waits for the queue
+        // and so cannot store a result before the cancel.
+        ui.Run(() =>
+        {
+            vm.StartWishTrial(0, 2);
+            var task = vm.LastWishTrialTask!;
+            vm.CancelWishTrial();
+            ui.RunUntil(task);
+        });
 
         Assert.Same(WishTrialView.None, vm.WishTrialFor(0, 2, 1));
         Assert.Null(vm.Ui.WishTrialBusy);

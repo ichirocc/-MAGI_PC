@@ -216,8 +216,8 @@ public class MagiViewModelEditingTest
         Assert.True(vm.Ui.HasResult);
         // Ui.Message は末尾の RefreshCheck() が同期的に「違反チェック中…」へ即座に上書きするため、
         // ここでは（LogOp が RefreshCheck より前に書く）操作ログで「希望を反映」の件数を確認する。
-        Assert.Contains("[I]", vm.Ui.OpLog[0]);
-        Assert.Contains("希望を勤務表へ反映 2件", vm.Ui.OpLog[0]);
+        // 背景チェックの完了ログが先に先頭へ積まれることがあるので、位置でなく中身で探す。
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("[I]") && l.Contains("希望を勤務表へ反映 2件"));
     }
 
     [Fact]
@@ -234,8 +234,7 @@ public class MagiViewModelEditingTest
         vm.ApplyWishes(includeOutOfScope: true);
 
         Assert.Equal(2, vm._currentSchedule![0][1]);
-        Assert.Contains("[W]", vm.Ui.OpLog[0]); // oos>0 → warn level
-        Assert.Contains("希望を勤務表へ反映 3件（担当外 1件含む）", vm.Ui.OpLog[0]);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("[W]") && l.Contains("希望を勤務表へ反映 3件（担当外 1件含む）")); // oos>0 → warn level
     }
 
     [Fact]
@@ -459,7 +458,7 @@ public class MagiViewModelEditingTest
 
         // Ui.Message は末尾の RefreshCheck() が同期的に「違反チェック中…」へ即座に上書きするため、
         // ここでは（LogOp が RefreshCheck より前に書く）操作ログで実際に変更したマス数を確認する。
-        Assert.Contains("一括編集: 1マス → A", vm.Ui.OpLog[0]);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
     }
 
     [Fact]
@@ -481,7 +480,7 @@ public class MagiViewModelEditingTest
         vm.SetCells(new[] { (0, 0), (-1, 0), (0, 999) }, 1);
 
         // 範囲外の2マスは無視され、有効な1マスだけが変更される。
-        Assert.Contains("一括編集: 1マス → A", vm.Ui.OpLog[0]);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
     }
 
     [Fact]

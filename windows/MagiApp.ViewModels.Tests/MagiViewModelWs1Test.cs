@@ -883,12 +883,17 @@ public class MagiViewModelWs1Test
         var vm = new MagiViewModel { _state = MinimalState.Build(staffList: new List<Staff> { new("旧", 0) }) };
         var newSched = MinimalState.BuildSchedule();
         var r = new Ws1Result(st, newSched);
+        // The background check can finish (≈0.3 ms) and overwrite Ui.Message before the next line runs,
+        // so the in-progress text is captured when it is set rather than read back afterwards.
+        var messages = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+        vm.Ui.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(UiState.Message)) messages.Enqueue(vm.Ui.Message); };
 
         vm.ApplyStructureWithMessage(r, "テスト完了");
 
         Assert.Same(st, vm._state);
         Assert.Equal(newSched, vm._currentSchedule);
-        Assert.Contains("テスト完了（違反チェック中…）", vm.Ui.Message);
+        Assert.True(messages.TryPeek(out var first));
+        Assert.Equal("テスト完了（違反チェック中…）", first);
         Assert.NotNull(vm.LastApplyStructureWithMessageTask);
         await vm.LastApplyStructureWithMessageTask!;
         Assert.Contains("テスト完了｜必須=", vm.Ui.Message);

@@ -328,6 +328,18 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（独立レビュー: `MagiApp.ViewModels.Tests` を CI で回す・間欠的に赤いテストの原因を直す。C# のみ＝出力不変）: このテストは
+  どのワークフローからも実行されていなかった（2026-09-20 の記録どおり）＝`windows-engine-check.yml` の ubuntu ジョブに Restore/Test の
+  2 ステップを足した（`MagiEngine.Tests` と同じ書き方）。入れる前に、手元で約 4 回に 1 回赤かった
+  `ApplyStructureWithMessageWs1ResultAppliesStateAndScheduleAndReportsOnCompletion` の原因を詰めた: xUnit の `AsyncTestSyncContext` は
+  `await` の継続をスレッドプールへ投げるだけで（実アプリの UI スレッドのように直列化しない）、背景の違反チェック（最小データで約 0.3 ms）が
+  テスト本体の次の行と並行して終わる。このテストは呼び出し直後の「（違反チェック中…）」を読むが、間の `Assert.Equal(int[][])` が
+  そのプロセスで初回（JIT 約 7.5 ms）だとエンジン側が温まっていれば毎回完了文に上書きされていた（その条件で 3/3 赤 → 修正後 3/3 緑）。
+  途中の文言は `PropertyChanged` で設定された瞬間に捉える形に。同じ型（背景の完了を「まだ」と決め打ち）は、背景チェックを呼び出しの中で
+  完了させる一時改造で全件洗い出した: `OpLog[0]` を読む 4 件（完了ログが先頭に積まれる）は位置でなく中身で探す、
+  `RefreshCheckDiscardsAStaleRunWhenASecondCallSupersedesTheFirst`（2 ms 止めると赤）と `V11_CancelledTrial_DoesNotStoreResult`（試算
+  約 0.5 ms、20 回に 1 回赤）は UI スレッド代わりの `TestSupport/QueuedSyncContext`（継続を溜めてテストが回す）で走らせる＝前者は古い
+  チェックが計算を終えてから追い越して seq による破棄を決定的に確かめる。スキップ・無効化はしていない。製品コードは不変。
 - 2026-09-25（実データ精読の検証で判明、設定ミス診断の文言 1 件）: 「「X」の必要人数」（全担当者の上限の合計 < 必要数）の本文の 2 か所目が
   `$` の無い文字列で、画面に「合わせて{gap}回ぶん必ず残ります」とそのまま出ていた（Kotlin は数値）。Kotlin と C# の診断を無作為な盤面 300 件で
   突き合わせて見つかった唯一の差（ほかの 298 件は希望どうしの衝突・日別/職員別 MUS・S5 の候補まで一致）。`$` を付けて Kotlin と同じ文に。

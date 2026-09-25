@@ -739,23 +739,34 @@ public class MagiViewModelPersistenceTest : IDisposable
     /// <summary>[review #6の由来] 後から始まったチェックが古いチェックの完了を追い越しても、古い方の
     /// 結果でUIを上書きしない（seq番号による使い捨て判定）。</summary>
     [Fact]
-    public async Task RefreshCheckDiscardsAStaleRunWhenASecondCallSupersedesTheFirst()
+    public void RefreshCheckDiscardsAStaleRunWhenASecondCallSupersedesTheFirst()
     {
         var vm = NewVm();
         vm._state = MinimalState.Build();
         vm._currentSchedule = MinimalState.BuildSchedule();
+        var ui = new QueuedSyncContext();
+        Task? firstTask = null, secondTask = null;
 
-        vm.RefreshCheck();
-        var firstTask = vm.LastRefreshCheckTask;
-        Assert.NotNull(firstTask);
+        ui.Run(() =>
+        {
+            vm.RefreshCheck();
+            firstTask = vm.LastRefreshCheckTask;
+            Assert.NotNull(firstTask);
+            // The first check has finished computing and waits on the UI queue, so cancelling it is too late:
+            // only the seq check can keep its result off the screen.
+            ui.WaitForPosted();
 
-        vm.RefreshCheck(); // supersedes — cancels the first CTS and bumps the seq counter
-        var secondTask = vm.LastRefreshCheckTask;
-        Assert.NotNull(secondTask);
-        Assert.NotSame(firstTask, secondTask);
+            vm.RefreshCheck(); // supersedes — cancels the first CTS and bumps the seq counter
+            secondTask = vm.LastRefreshCheckTask;
+            Assert.NotNull(secondTask);
+            Assert.NotSame(firstTask, secondTask);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstTask!);
-        await secondTask!; // the current (second) call completes normally
+            ui.RunUntil(Task.WhenAll(firstTask!, secondTask!));
+        });
+
+        Assert.True(firstTask!.IsCompletedSuccessfully); // dropped without publishing
+        Assert.True(secondTask!.IsCompletedSuccessfully);
+        Assert.Single(vm.Ui.OpLog, l => l.Contains("違反チェック 必須="));
         Assert.Contains("違反チェック完了", vm.Ui.Message);
     }
 
