@@ -328,6 +328,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（`HandleOptimize` に任意の `seed` を同期、Kotlin 同日）: 末尾引数 `long? seed = null`。非 null のとき `optsR.Seed` へ渡す（後段 ALNS・ExtraRefine は `optsR with` で継ぐ）。
+  null は従来の `Seed = 0`（時刻由来）＝既定出力は不変、0 も時刻由来。並列ワーカー・壁時計予算・後処理の時刻由来の種は残るので盤面の再現は保証しない。
+  テストは `ZeroCapExclusionTest.Seed`（静的な `lastOptimizerSeed` を読むので並列化しない collection）。Android backlog #38 D2（`Staff.SkillIdx` 既定 0、
+  `Model/MagiState.cs:36`）・#39 SI-3（初期解の C1 充足がシフト順依存）は C# も同じ挙動＝Android の決定待ち。
 - 2026-09-25（既定OFF台帳の整理を同期、Kotlin 同日）: Android が測定で否決済みの既定OFF分岐 8 件を撤去（出力不変、決定的後処理の盤面ハッシュ 8/8 一致）。
   C# にあったのは `PostOptimizationParams.CovOReliefEarly`（HF66 直後にも covO 退避、Android 3.554.0 で必須増 4＝不合格）だけ＝分岐ごと撤去、
   最終段の `CovOReliefEnabled` は不変。残り 7 件（`lnsWeightDebt`・`useDynamicBlockLens`・`stallEscalation`・VCR の `familyPriorityScoring`/`bestOfK`/

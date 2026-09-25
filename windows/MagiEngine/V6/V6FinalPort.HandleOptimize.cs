@@ -49,6 +49,9 @@ namespace MagiEngine.V6;
 /// </summary>
 public static partial class V6FinalPort
 {
+    /// <summary>直近の <see cref="HandleOptimize"/> が最適化器へ渡した種（テスト用）。</summary>
+    internal static long lastOptimizerSeed;
+
     /// <summary>
     /// 最適化本体。予算(<paramref name="secondsRaw"/>秒、上限は <see cref="MaxOptimizeSec"/>)に応じて
     /// V5/ALNS/RSIThenALNS/Portfolio のいずれかを選択し（<see cref="GetOptimizationPlan"/>）、
@@ -70,7 +73,10 @@ public static partial class V6FinalPort
         // [regression対策] onProgress/cancellationTokenより前に挿入すると、既存の位置引数呼出し
         //   （EngineOptimizationService.cs 等）の実引数がずれてCS1503になる（1b33b5bで実際に発生・修正）。
         //   新規オプション引数は必ず末尾に足す。
-        bool extraRefineRequirePostHardDrop = false)
+        bool extraRefineRequirePostHardDrop = false,
+        // ベンチ用の乱数種。null（既定）は従来どおり Seed=0＝時刻由来。0 も時刻由来。
+        // 種を固定しても、ワーカー並列と壁時計の予算・後処理の時刻由来の種があるため盤面の再現は保証しない。
+        long? seed = null)
     {
         static long NowMs() => EngineClock.NowMs();
         static int TryOrZero(Func<int> f)
@@ -155,7 +161,8 @@ public static partial class V6FinalPort
                 _ => throw new InvalidOperationException($"未知の OptimizationPlan: {plan}"),
             };
         // [HF532移植] optFlags.rectSwap 既定ON。
-        var optsR = opts with { RectSwap = V6LateOperators.OptFlagBool(state, "rectSwap", true) };
+        var optsR = opts with { RectSwap = V6LateOperators.OptFlagBool(state, "rectSwap", true), Seed = seed ?? opts.Seed };
+        Volatile.Write(ref lastOptimizerSeed, optsR.Seed);
 
         // ----- 予算一本化: optimize() + runPostOptimization() を一つの予算で管理する -----
         var budgetMs = (long)seconds * 1000L;

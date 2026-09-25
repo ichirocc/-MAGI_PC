@@ -92,6 +92,21 @@ public class ZeroCapExclusionTest
         Assert.DoesNotContain(res.Logs, l => l.Tag == "Sentinel");
     }
 
+    /// <summary>lastOptimizerSeed は静的なので、他の HandleOptimize と並列に走らない collection に置く。</summary>
+    [Collection(nameof(HandleOptimizeSeedCollection))]
+    public class Seed
+    {
+        [Fact]
+        public async Task HandleOptimizeSeedReachesOptimizerOptionsAndDefaultKeepsZero()
+        {
+            var s = State();
+            await V6FinalPort.HandleOptimize(s, secondsRaw: 1, workers: 1, requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, onProgress: NoOpProgress, seed: 42L);
+            Assert.Equal(42L, V6FinalPort.lastOptimizerSeed);
+            await V6FinalPort.HandleOptimize(s, secondsRaw: 1, workers: 1, requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, onProgress: NoOpProgress);
+            Assert.Equal(0L, V6FinalPort.lastOptimizerSeed);
+        }
+    }
+
     [Fact]
     public async Task WishForCappedShiftStaysPinnedAndIsTheOnlyPlacement()
     {
@@ -102,3 +117,6 @@ public class ZeroCapExclusionTest
         Assert.Equal(1, CountA(r.Schedule, 0));
     }
 }
+
+[CollectionDefinition(nameof(HandleOptimizeSeedCollection), DisableParallelization = true)]
+public class HandleOptimizeSeedCollection { }
