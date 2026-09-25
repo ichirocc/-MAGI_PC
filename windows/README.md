@@ -328,6 +328,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（勤務表の表示専用の印・その場の直し方探しの C# 移植、Kotlin `claude/merge-wub4fq` dd35c1e／dd90119 同日）: チェッカーの場所マップは不変、
+  `ViolationReport.C1Runs`（表示専用）と `GridDisplayMarks`／`FixSearchText`（ViewModels、テストは Kotlin `GridDisplayMarksTest` の写し＋実データ
+  `oct2026_grid_state.json`）。WinUI: 名前の横の ▼/▲・日ヘッダの「休▲」（旧 ▼N を置換）・c1 は窓幅おきの印・隠れた族の左上の点・セルの
+  「この職員の回数・偏り」「連続 N 区間」・凡例の形ごとの族名。違反セル・集計の内訳・印のシートは開いた時点で `FindFixSuggestions(…, focusKey)` を
+  始め、`FixDoneKey` で自分の結果を見分けて同じ場所に手／確かめた理由（`NoFixReasons`）と「希望を見る」「設定を見直す」（編集タブの入口 0/2）を出し、
+  閉じると `CancelFixSearch`。シフト集計は職員別・日別とも最重 1 クラスでなく族マップの先頭の表示中クラスで塗る（Kotlin 3.559.0 とのパリティ）、
+  職員別に「計（期間）」行を足して人員の日数。チップ「連勤」→「並び」、ForbiddenDiag の文言は検証した範囲だけを書く。探索・評価・重みは不変。
+
 - 2026-09-25（画面層の精読 #2 の統合後レビュー 18 件の C# 移植、Kotlin 9f36ad7〈`claude/merge-wub4fq`〉同日）: C# に当たるものだけ。
   停止/失敗の `HasResult` を実行前の値へ（最適化の停止＝`s5 is not null || hadResult`、仕上げの失敗、下書きの停止/失敗）。読込の退避
   （開く前のデータに戻す）は差し替えの確定後に書く（中止で戻しても退避を失わない）。設定の見直しに並び以外の族の同じ行

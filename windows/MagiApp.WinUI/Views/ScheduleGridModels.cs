@@ -50,6 +50,9 @@ public sealed partial class ScheduleCellVm : ObservableObject
     // [x:Bindの自動bool→Visibility変換に依存しないため、Visibility型そのものを持つ]
     [ObservableProperty] private Visibility wishDotVisibility = Visibility.Collapsed;
     [ObservableProperty] private Brush wishDotColor = new SolidColorBrush(Colors.Transparent);
+    // 最重の族に隠れた別の族がある＝左上の小さな点（Kotlin FlatCell の secondDot）。
+    [ObservableProperty] private Visibility secondDotVisibility = Visibility.Collapsed;
+    [ObservableProperty] private Brush secondDotColor = new SolidColorBrush(Colors.Transparent);
     [ObservableProperty] private string? tooltip;
 }
 

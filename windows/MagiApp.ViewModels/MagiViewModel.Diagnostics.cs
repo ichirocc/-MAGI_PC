@@ -318,6 +318,7 @@ public sealed partial class MagiViewModel
         Ui.CountFamilies = report.CountFamilies;
         Ui.NeedFamilies = report.NeedFamilies;
         Ui.DistLocations = report.DistLocations;
+        Ui.C1Runs = report.C1Runs;
         Ui.Logs = v6Logs.Concat(CompressDiagLogs(mappedDiag)).ToList();
         Ui.StaffNames = st.StaffList.Select(s => s.Name).ToList();
         Ui.StaffGroupSymbols = st.StaffList

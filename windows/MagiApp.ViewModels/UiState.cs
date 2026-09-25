@@ -85,6 +85,9 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty]
     private IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>> distLocations = new Dictionary<string, IReadOnlyList<IReadOnlyList<int>>>();
 
+    /// <summary>c1 の違反窓ラン（<c>ViolationReport.C1Runs</c>）。画面の表示専用の印を作る元。</summary>
+    [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> c1Runs = Array.Empty<IReadOnlyList<int>>();
+
     /// <summary>改善提案（違反を減らす1手＝変更/交換）。</summary>
     [ObservableProperty] private IReadOnlyList<FixSuggestion> fixSuggestions = Array.Empty<FixSuggestion>();
 
@@ -99,6 +102,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>絞り込み対象スタッフ名（空=全体）。</summary>
     [ObservableProperty] private string fixFocusName = "";
+    /// <summary>直し方の探索を終えた依頼の鍵（<see cref="FixFocus.Key"/>、空＝画面全体や未完了）。印・セルのシートが自分の結果か見分ける。</summary>
+    [ObservableProperty] private string fixDoneKey = "";
 
     [ObservableProperty] private IReadOnlyList<string> logs = Array.Empty<string>();
     [ObservableProperty] private long elapsedMs;

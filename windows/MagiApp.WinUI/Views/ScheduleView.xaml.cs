@@ -108,9 +108,9 @@ public sealed partial class ScheduleView : UserControl
             return;
         }
         var byShift = new Dictionary<int, HashSet<int>>();
-        foreach (var (key, cls) in ui.NeedViolations)
+        foreach (var (key, fams) in NeedClassesAll(ui))
         {
-            if (cls != "vio-covU") continue;
+            if (!fams.Contains("vio-covU")) continue;
             var parts = key.Split(',');
             if (parts.Length != 2 || !int.TryParse(parts[0], out var k) || !int.TryParse(parts[1], out var j)) continue;
             if (!byShift.TryGetValue(k, out var days)) byShift[k] = days = new HashSet<int>();
@@ -134,10 +134,14 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>[phase9 #11] 内訳ダイアログの「直し方を探す」の飛び先（分析タブ）。</summary>
     private readonly Action? _goAnalysis;
 
-    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null)
+    /// <summary>手が見つからなかったときの次の一歩（編集タブの入口: 0=月次条件の希望／2=年間マスターの設定）。</summary>
+    private readonly Action<int>? _openEditDoor;
+
+    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null)
     {
         _vm = vm;
         _goAnalysis = goAnalysis;
+        _openEditDoor = openEditDoor;
         InitializeComponent();
         ScheduleItemsView.ItemsSource = _rows;
         _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
@@ -220,6 +224,18 @@ public sealed partial class ScheduleView : UserControl
         return weeks;
     }
 
+    /// <summary>被覆キーごとの重なった全クラス（<c>NeedViolations</c> は最重 1 クラスだけ＝同じ重みの族に隠れた covO を取りこぼす）。</summary>
+    private static IEnumerable<(string Key, IReadOnlyList<string> Classes)> NeedClassesAll(UiState ui) =>
+        ui.NeedFamilies.Count > 0
+            ? ui.NeedFamilies.Select(kv => (kv.Key, kv.Value))
+            : ui.NeedViolations.Select(kv => (kv.Key, (IReadOnlyList<string>)new[] { kv.Value }));
+
+    private static string? FirstVisible(IReadOnlyDictionary<string, IReadOnlyList<string>> fams, IReadOnlyDictionary<string, string> heaviest, string key, IReadOnlySet<string> enabled)
+    {
+        IReadOnlyList<string> classes = fams.TryGetValue(key, out var f) ? f : heaviest.TryGetValue(key, out var one) ? new[] { one } : Array.Empty<string>();
+        return classes.FirstOrDefault(c => VioBuckets.VioVisible(c, enabled));
+    }
+
     private List<int> VioDays(UiState ui)
     {
         var days = new SortedSet<int>();
@@ -227,9 +243,9 @@ public sealed partial class ScheduleView : UserControl
         {
             if (VioBuckets.VisibleCellVio(ui, key, _vioEnabled) is not null && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
         }
-        foreach (var (key, cls) in ui.NeedViolations)
+        foreach (var (key, fams) in NeedClassesAll(ui))
         {
-            if (VioBuckets.VioVisible(cls, _vioEnabled) && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
+            if (fams.Any(c => VioBuckets.VioVisible(c, _vioEnabled)) && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
         }
         return days.ToList();
     }
@@ -284,6 +300,9 @@ public sealed partial class ScheduleView : UserControl
             var soft = ResolveVioBrush(ui, "vio-covO");
             ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = hard, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(4) }, "赤枠＝絶対NG"));
             ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "橙枠＝できれば直す"));
+            ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = soft }, "左上の点＝ほかの種類も重なっている"));
+            ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "名前の横の ▼▲＝回数の不足・超過／日付の下の「休▲」＝そのシフトの人員不足▼・過剰▲（タップで内訳）", TextWrapping = TextWrapping.Wrap });
+            ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
         }
@@ -671,9 +690,10 @@ public sealed partial class ScheduleView : UserControl
             System.Globalization.DateTimeStyles.None, out var sd) ? sd : null;
         var today = DateOnly.FromDateTime(DateTime.Today);
         // [phase9 #10] 日別の不足人数「▼N」（covU 由来なので「人員」バケツ ON のときだけ）。
-        var dayShort = new int[dayCount];
-        if (_vioEnabled.Contains("need") && ui.V6 is { } v6)
-            foreach (var r in v6.DayRisks) if (r.DayIndex >= 0 && r.DayIndex < dayCount) dayShort[r.DayIndex] = r.Shortage;
+        // 人員の印はシフトを名指す（「休▲」）。旧「▼N」は人数だけでどのシフトかが読めなかった（Kotlin DayHeader と同じ）。
+        _covMarks = GridDisplayMarks.CoverageHeaderMarks(ui, _vioEnabled, dayCount);
+        _countBadges = GridDisplayMarks.CountBadges(ui, _vioEnabled);
+        var c1Anchors = GridDisplayMarks.C1DisplayAnchors(ui);
 
         // +1 行/列 = 日番号ヘッダー行(row 0)・職員名ヘッダー列(col 0)。
         SyncCount(_rows, staffCount + 1, _ => new ScheduleRowVm());
@@ -696,6 +716,13 @@ public sealed partial class ScheduleView : UserControl
             cell.Foreground = new SolidColorBrush(Colors.Black);
             cell.Tooltip = null;
             cell.WishDotVisibility = Visibility.Collapsed;
+            cell.SecondDotVisibility = Visibility.Collapsed;
+            // 回数の族（下限・上限・適切回数・個人の合計）はセルを持たないので名前の横に小さく ▼/▲（Kotlin と同じ）。
+            if (col == 0 && row > 0 && _countBadges.TryGetValue(row - 1, out var badge))
+            {
+                cell.Text = $"{text} {badge.Glyph}";
+                cell.Tooltip = "回数・偏り: タップで内訳";
+            }
             // [phase9 #9] 日ヘッダ＝日番号＋曜日。祝日と日曜は赤、土曜は青の淡い地（Kotlin原本 DayHeader、祝日は日曜と同じ扱い）。
             //   今日は濃緑の太字で、地色は重ねない（混同回避）。祝日名はツールチップへ。
             Color? tint = null;
@@ -719,11 +746,13 @@ public sealed partial class ScheduleView : UserControl
                 }
                 if (isToday) tint = null;
                 if (holiday is not null) cell.Tooltip = $"{col}日 {WeekdayJa[dow]}曜日 {holiday}";
-                if (dayShort[col - 1] > 0)
+                var marks = _covMarks[col - 1];
+                if (marks.Count > 0)
                 {
-                    cell.Text += $"\n▼{dayShort[col - 1]}";
-                    if (!isToday) cell.Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"];
+                    cell.Text += "\n" + GridDisplayMarks.CoverageHeaderLabel(ui, marks);
+                    if (!isToday) cell.Foreground = marks[0].Under ? (Brush)Application.Current.Resources["MagiErrorBrush"] : new SolidColorBrush(DefaultSoftVioColor);
                     cell.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                    cell.Tooltip = string.Join("\n", GridDisplayMarks.DayCoverageLines(ui, col - 1, marks, LabelOf)) + "\nタップで内訳";
                 }
             }
             // [検索] 一致する職員名を太字＋青で強調（行は隠さず＝被覆の文脈を保つ）。
@@ -792,7 +821,11 @@ public sealed partial class ScheduleView : UserControl
             // 枠は必須違反(赤・実線2dp)/要調整(橙・実線2dp)/フォーカス(主色・3dp)のときだけ出す。
             Brush borderBrush = new SolidColorBrush(Colors.Transparent);
             var thickness = new Thickness(0);
-            var vioClass = VioBuckets.VisibleCellVio(ui, $"{i},{j}", _vioEnabled);
+            var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Anchors);
+            var vioClass = displayClasses.FirstOrDefault(c => VioBuckets.VioVisible(c, _vioEnabled));
+            var second = GridDisplayMarks.SecondVisibleClass(displayClasses, _vioEnabled);
+            cell.SecondDotVisibility = second is null ? Visibility.Collapsed : Visibility.Visible;
+            if (second is not null) cell.SecondDotColor = ResolveVioBrush(ui, second);
             if (vioClass is not null)
             {
                 borderBrush = ResolveVioBrush(ui, vioClass);
@@ -864,6 +897,7 @@ public sealed partial class ScheduleView : UserControl
 
     private void OnScheduleCellTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
+        if (sender is Border { DataContext: ScheduleCellVm { IsHeader: true } hv }) { ShowHeaderMarkDialog(hv); return; }
         if (sender is not Border { DataContext: ScheduleCellVm { IsDataCell: true } vm } border) return;
         if (_vm.Ui.Running) return;
         MarkTapped(vm.I, vm.J);
@@ -885,7 +919,7 @@ public sealed partial class ScheduleView : UserControl
 
         var staffCount = ui.Schedule.Count;
         var shiftCount = ui.ShiftSymbols.Count;
-        for (var r = 0; r <= staffCount; r++) StaffTallyGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (var r = 0; r <= staffCount + 1; r++) StaffTallyGridHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         for (var c = 0; c <= shiftCount; c++) StaffTallyGridHost.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         AddTallyCell(StaffTallyGridHost, 0, 0, "", header: true);
@@ -898,13 +932,30 @@ public sealed partial class ScheduleView : UserControl
             for (var k = 0; k < shiftCount; k++)
             {
                 var count = ui.Schedule[i].Count(v => v == k);
-                ui.CountViolations.TryGetValue($"{i},{k}", out var vioClass);
-                if (!VioBuckets.VioVisible(vioClass, _vioEnabled)) vioClass = null;
+                var vioClass = FirstVisible(ui.CountFamilies, ui.CountViolations, $"{i},{k}", _vioEnabled);
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 var (si, sk, sc, sv) = (i, k, count, vioClass);
                 Action<FrameworkElement>? onClick = vioClass is null ? null : _ => ShowStaffTallyDetail(ui, si, sk, sc, sv!);
                 AddTallyCell(StaffTallyGridHost, i + 1, k + 1, count.ToString(), header: false, borderBrush: brush, thickness: thickness, onClick: onClick);
             }
+        }
+        // 「計（期間）」: そのシフトに人員不足▼・過剰▲の日があれば日数を添え、タップで日の一覧（Kotlin TallyCard と同じ）。
+        var totals = FixSearchText.ShiftCoverageTotals(GridDisplayMarks.CoverageHeaderMarks(ui, _vioEnabled, ui.Schedule[0].Count));
+        AddTallyCell(StaffTallyGridHost, staffCount + 1, 0, "計（期間）", header: true);
+        for (var k = 0; k < shiftCount; k++)
+        {
+            var total = ui.Schedule.Sum(r => r.Count(v => v == k));
+            if (!totals.TryGetValue(k, out var ct))
+            {
+                AddTallyCell(StaffTallyGridHost, staffCount + 1, k + 1, total.ToString(), header: false);
+                continue;
+            }
+            var kk = k;
+            var brush = VioBorderBrush(ui, ct.UnderDays.Count > 0 ? "vio-covU" : "vio-covO", out var thickness);
+            AddTallyCell(StaffTallyGridHost, staffCount + 1, k + 1, $"{total} {ct.Glyph}", header: false, borderBrush: brush, thickness: thickness,
+                onClick: _ => ShowMarkDialog($"「{ui.ShiftSymbols[kk]}」の人員",
+                    ct.Days.SelectMany(j => GridDisplayMarks.DayCoverageLines(ui, j, new[] { new CoverageMark(kk, ct.UnderDays.Contains(j)) }, LabelOf, _vm.NeedCellLimits).Select(l => $"{j + 1}日 {l}")).ToList(),
+                    new FixFocus(null, kk, ct.Days[0])));
         }
     }
 
@@ -934,8 +985,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 var count = 0;
                 foreach (var row in ui.Schedule) if (j < row.Count && row[j] == k) count++;
-                ui.NeedViolations.TryGetValue($"{k},{j}", out var vioClass);
-                if (!VioBuckets.VioVisible(vioClass, _vioEnabled)) vioClass = null;
+                var vioClass = FirstVisible(ui.NeedFamilies, ui.NeedViolations, $"{k},{j}", _vioEnabled);
                 var brush = VioBorderBrush(ui, vioClass, out var thickness);
                 // [2026-09-02, 配線] ShortageFixCandidates（フェーズ9で移植・テスト済み）はこれまで
                 // 呼び出し口が無かった。人員不足(covU)のセルだけボタン化し、タップで「動かせる人」の
@@ -1053,8 +1103,10 @@ public sealed partial class ScheduleView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = title, Content = panel,
-            PrimaryButtonText = "直し方を探す", CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
+            CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
+        // 開いた時点でこの職員×シフト（日別は日×シフト）の直し方を探し、同じダイアログに並べる（Kotlin FixSearchPanel）。
+        panel.Children.Add(AttachFixSearch(dialog, new FixFocus(focusStaff, shift, day)));
         if (day is { } dj)
         {
             foreach (var i in pinned)
@@ -1083,12 +1135,75 @@ public sealed partial class ScheduleView : UserControl
                 panel.Children.Add(fix);
             }
         }
-        var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary)
+        await dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// ダイアログを開いた時点で対象の直し方を探し、進み具合 → 手（「この手を使う」）→ 無ければ確かめた理由と次の一歩を出す。
+    /// 盤面が変われば探し直し、閉じれば探索を取り消す（古い結果を書き戻さない）。Kotlin <c>FixSearchPanel</c> の移植。
+    /// </summary>
+    private StackPanel AttachFixSearch(ContentDialog dialog, FixFocus focus) =>
+        AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), focus);
+
+    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus)
+    {
+        var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
+        void Start() { if (!_vm.Ui.Running) _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key); }
+        void Refresh()
         {
-            _vm.FindFixSuggestions(focusStaff, shift);
-            _goAnalysis?.Invoke();
+            var ui = _vm.Ui;
+            host.Children.Clear();
+            host.Children.Add(new TextBlock { Text = "直し方", Opacity = 0.8 });
+            var done = !ui.FixSearching && ui.FixDoneKey == focus.Key;
+            if (ui.Running) { host.Children.Add(new TextBlock { Text = "計算中は探せません。終わってから開き直してください。", TextWrapping = TextWrapping.Wrap }); return; }
+            if (!done)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                row.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
+                row.Children.Add(new TextBlock { Text = "この場所の直し方を探しています…" });
+                host.Children.Add(row);
+                return;
+            }
+            if (ui.FixSuggestions.Count > 0)
+            {
+                foreach (var sug in ui.FixSuggestions.Take(3))
+                {
+                    var (hardLine, caution) = NextActionGuide.FixImpactLines(sug, LabelOf);
+                    host.Children.Add(new TextBlock { Text = sug.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                    host.Children.Add(new TextBlock { Text = hardLine, TextWrapping = TextWrapping.Wrap });
+                    if (caution is not null) host.Children.Add(new TextBlock { Text = caution, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+                    var use = new Button { Content = "この手を使う（元に戻せます）", MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right };
+                    var chosen = sug;
+                    use.Click += (_, _) => { hide(); _vm.ApplyFixSuggestion(chosen); };
+                    host.Children.Add(use);
+                }
+                return;
+            }
+            var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
+            foreach (var l in why.Lines) host.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (why.WishRelated)
+            {
+                var w = new Button { Content = "希望を見る", MinHeight = 48 };
+                w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
+                buttons.Children.Add(w);
+            }
+            var st = new Button { Content = "設定を見直す", MinHeight = 48 };
+            st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
+            buttons.Children.Add(st);
+            host.Children.Add(buttons);
         }
+        PropertyChangedEventHandler handler = (_, e) =>
+        {
+            if (e.PropertyName == nameof(UiState.Schedule)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
+            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixSuggestions) or nameof(UiState.Running))
+                DispatcherQueue.TryEnqueue(Refresh);
+        };
+        _vm.Ui.PropertyChanged += handler;
+        registerClosed(() => { _vm.Ui.PropertyChanged -= handler; _vm.CancelFixSearch(); });
+        Start();
+        Refresh();
+        return host;
     }
 
     private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)
@@ -1150,6 +1265,83 @@ public sealed partial class ScheduleView : UserControl
 
     private static Color ParseHexColor(string? hex, Color fallback) => ColorHex.Parse(hex, fallback);
 
+    private IReadOnlyList<IReadOnlyList<CoverageMark>> _covMarks = Array.Empty<IReadOnlyList<CoverageMark>>();
+    private IReadOnlyDictionary<int, CountBadge> _countBadges = new Dictionary<int, CountBadge>();
+
+    private static string LabelOf(string family) => AnalysisView.BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
+
+    /// <summary>行末の回数の印／日ヘッダの人員の印の内訳（Kotlin <c>GridMarkDialog</c>）。印の無い見出しは何もしない。</summary>
+    private void ShowHeaderMarkDialog(ScheduleCellVm hv)
+    {
+        var ui = _vm.Ui;
+        string title; IReadOnlyList<string> lines; FixFocus focus;
+        if (hv.Row == 0 && hv.Col > 0 && hv.Col - 1 < _covMarks.Count && _covMarks[hv.Col - 1].Count > 0)
+        {
+            var j = hv.Col - 1;
+            title = $"{j + 1}日の人員";
+            lines = GridDisplayMarks.DayCoverageLines(ui, j, _covMarks[j], LabelOf, _vm.NeedCellLimits);
+            focus = new FixFocus(null, _covMarks[j][0].Shift, j);
+        }
+        else if (hv.Col == 0 && hv.Row > 0 && _countBadges.ContainsKey(hv.Row - 1))
+        {
+            var i = hv.Row - 1;
+            title = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+            lines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
+            focus = new FixFocus(i, null);
+        }
+        else return;
+        ShowMarkDialog(title, lines, focus);
+    }
+
+    private void ShowMarkDialog(string title, IReadOnlyList<string> lines, FixFocus? focus)
+    {
+        var panel = new StackPanel { Spacing = 4 };
+        foreach (var l in lines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる" };
+        if (focus is not null) panel.Children.Add(AttachFixSearch(dialog, focus));
+        _ = dialog.ShowAsync();
+    }
+
+    /// <summary>違反のあるセル: 違反の一覧・この職員の回数・偏り・開いた時点で始める直し方探し（Kotlin セルシート）と、
+    /// その下にいつでも使える手動の割当ボタン。閉じると探索を取り消す。</summary>
+    private void ShowViolationCellEditor(FrameworkElement anchor, int i, int j, IReadOnlyList<string> classes,
+        IReadOnlyDictionary<string, int> anchors, int[] allowed)
+    {
+        var ui = _vm.Ui;
+        var panel = new StackPanel { Spacing = 4, MaxWidth = 380 };
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+        panel.Children.Add(new TextBlock { Text = $"{name} ・ {j + 1}日", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        foreach (var cls in classes)
+        {
+            var fam = VioBuckets.FamilyOfVioClass(cls);
+            var run = fam == "c1" && anchors.TryGetValue($"{i},{j}", out var n) && n > 1 ? $"（連続 {n} 区間）" : "";
+            panel.Children.Add(new TextBlock { Text = (MirrorKeys.Hard.Contains(fam) ? "⚠ " : "△ ") + LabelOf(fam) + run, Foreground = ResolveVioBrush(ui, cls), TextWrapping = TextWrapping.Wrap });
+        }
+        var staffLines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
+        if (staffLines.Count > 0)
+        {
+            panel.Children.Add(new TextBlock { Text = "この職員の回数・偏り", Opacity = 0.8 });
+            foreach (var l in staffLines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        }
+        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 560 } };
+        panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
+        panel.Children.Add(new TextBlock { Text = "割当を変更", Opacity = 0.8, Margin = new Thickness(0, 8, 0, 0) });
+        var picks = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 64, ItemHeight = 48 };
+        foreach (var k in allowed)
+        {
+            var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+            var b = new Button { Content = sym, Width = 60, Height = 44 };
+            var kk = k;
+            b.Click += (_, _) => { flyout.Hide(); _vm.SetCell(i, j, kk); };
+            picks.Children.Add(b);
+        }
+        panel.Children.Add(picks);
+        var memo = new Button { Content = "この違反を見直し候補にする", MinHeight = 48 };
+        memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {j + 1}日: {string.Join("・", classes.Select(c => LabelOf(VioBuckets.FamilyOfVioClass(c))))}"); };
+        panel.Children.Add(memo);
+        flyout.ShowAt(anchor);
+    }
+
     /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
     private void ShowCellEditor(FrameworkElement anchor, int i, int j)
     {
@@ -1161,7 +1353,25 @@ public sealed partial class ScheduleView : UserControl
         var ui = _vm.Ui;
         var allowed = _vm.AllowedShiftsFor(i);
         // [2026-09-10, ユーザー報告「メニューが出ない」] ShowShortageFixFlyout と同じ理由でXamlRootを明示。
+        var anchorsV = GridDisplayMarks.C1DisplayAnchors(ui);
+        var cellClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", anchorsV);
+        if (cellClasses.Count > 0) { ShowViolationCellEditor(anchor, i, j, cellClasses, anchorsV, allowed); return; }
         var flyout = new MenuFlyout { XamlRoot = anchor.XamlRoot };
+        // このセルの違反（c1 の表示アンカー込み、連続する窓は「連続 N 区間」）と、この職員の回数・偏り（Kotlin セルシートと同じ）。
+        var anchors = GridDisplayMarks.C1DisplayAnchors(ui);
+        foreach (var cls in GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", anchors))
+        {
+            var fam = VioBuckets.FamilyOfVioClass(cls);
+            var run = fam == "c1" && anchors.TryGetValue($"{i},{j}", out var n) && n > 1 ? $"（連続 {n} 区間）" : "";
+            flyout.Items.Add(new MenuFlyoutItem { Text = (MirrorKeys.Hard.Contains(fam) ? "⚠ " : "△ ") + LabelOf(fam) + run, IsEnabled = false });
+        }
+        var staffLines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
+        if (staffLines.Count > 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "この職員の回数・偏り", IsEnabled = false });
+            foreach (var l in staffLines) flyout.Items.Add(new MenuFlyoutItem { Text = l, IsEnabled = false });
+        }
+        if (flyout.Items.Count > 0) flyout.Items.Add(new MenuFlyoutSeparator());
         foreach (var k in allowed)
         {
             var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();

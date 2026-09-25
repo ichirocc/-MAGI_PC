@@ -52,7 +52,10 @@ public sealed record ViolationReport(
     // [場所表示 移植元] fair/weekly はセル単位でなく職員/群×シフト単位の偏りのため violations(mark)
     //   に出せない。"weekly" -> [[staffIdx, dev], ...] / "fair" -> [[staffIdx, shiftIdx, dev], ...]（dev降順）。
     IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>>? DistLocations = null,
-    IReadOnlyList<MirrorLog>? Logs = null)
+    IReadOnlyList<MirrorLog>? Logs = null,
+    // [Kotlin c1Runs 移植元] 期間の制約(c1)の違反窓ラン [職員, 先頭窓の開始日, 窓数, 窓幅]。画面の表示専用の元データ
+    //   （Violations はランの先頭 1 セルだけ＝探索の手掛かりは不変）。
+    IReadOnlyList<IReadOnlyList<int>>? C1Runs = null)
 {
     // Kotlin's emptyMap()/emptyList() defaults, realized as non-null accessors (records can't
     // default a reference-typed positional parameter to a *shared* non-null instance without
@@ -67,6 +70,7 @@ public sealed record ViolationReport(
     public IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>> DistLocations { get; init; } =
         DistLocations ?? EmptyLocations;
     public IReadOnlyList<MirrorLog> Logs { get; init; } = Logs ?? Array.Empty<MirrorLog>();
+    public IReadOnlyList<IReadOnlyList<int>> C1Runs { get; init; } = C1Runs ?? Array.Empty<IReadOnlyList<int>>();
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> EmptyFamilies =
         new Dictionary<string, IReadOnlyList<string>>();
@@ -136,6 +140,7 @@ public static class UnifiedViolationChecker
         var cellFams = new InsertionOrderDictionary<string, List<string>>();
         var countFams = new InsertionOrderDictionary<string, List<string>>();
         var needFams = new InsertionOrderDictionary<string, List<string>>();
+        var c1Runs = new List<IReadOnlyList<int>>();
 
         void Mark(int i, int j, string family)
         {
@@ -171,6 +176,7 @@ public static class UnifiedViolationChecker
                 if (!p.CanDo(i, c.ShiftIdx)) continue;
                 int j = 0;
                 bool prevViol = false;
+                int runStart = 0;
                 // [3.412.0/P-04 と同型] c.Day1 が i に依存しない判定だが、Kotlin 原本の位置
                 // （canDo ガードの後、i ループの内側）をそのまま保つ。
                 if (c.Day1 > p.T) continue;
@@ -190,11 +196,13 @@ public static class UnifiedViolationChecker
                     if (viol)
                     {
                         Inc("c1");
-                        if (!prevViol) Mark(i, j, "c1");
+                        if (!prevViol) { Mark(i, j, "c1"); runStart = j; }
                     }
+                    else if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
                     prevViol = viol;
                     j++;
                 }
+                if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
             }
         }
 
@@ -487,6 +495,7 @@ public static class UnifiedViolationChecker
             CountFamilies = countFamilies,
             NeedFamilies = needFamilies,
             DistLocations = distLocations,
+            C1Runs = c1Runs,
             Logs = new[] { new MirrorLog("UnifiedCheck", $"{msg} ({elapsedMs}ms)", iter: 0, level: level) },
         };
     }

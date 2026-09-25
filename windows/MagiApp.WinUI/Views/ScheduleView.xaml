@@ -137,6 +137,11 @@
                                                          Visibility="{x:Bind WishDotVisibility, Mode=OneWay}"
                                                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                                          Margin="0,0,2,2" />
+                                                <Ellipse Width="8" Height="8"
+                                                         Fill="{x:Bind SecondDotColor, Mode=OneWay}"
+                                                         Visibility="{x:Bind SecondDotVisibility, Mode=OneWay}"
+                                                         HorizontalAlignment="Left" VerticalAlignment="Top"
+                                                         Margin="1,1,0,0" IsHitTestVisible="False" />
                                                 <!-- [押下フィードバック] コードビハインドが Children の末尾要素として直接
                                                      参照する（DataTemplate内のx:Nameはコードビハインドから素朴に
                                                      引けないため、インデックス参照の方が確実）。 -->

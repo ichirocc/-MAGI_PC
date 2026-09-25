@@ -36,7 +36,7 @@ public sealed partial class MagiViewModel
     private long _fixBoardKey;
     private long _fixStateKey;
 
-    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null)
+    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "")
     {
         var st = _state;
         if (st is null) return;
@@ -55,9 +55,10 @@ public sealed partial class MagiViewModel
         _fixCts?.Cancel(); // 連続タップ時の前探索を破棄（古い結果で UI を上書きしない）
         Ui.FixSearching = true;
         Ui.FixFocusName = focusName;
+        Ui.FixDoneKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
-        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, seq, cts.Token);
+        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token);
     }
 
     /// <summary>1手の候補・「探索済み」・下限判定の材料を消す（盤面が変わった／使えなくなったとき。Kotlin の各リセット箇所と同じ）。</summary>
@@ -69,7 +70,7 @@ public sealed partial class MagiViewModel
     }
 
     private async Task FindFixSuggestionsCoreAsync(
-        MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, long seq, CancellationToken ct)
+        MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct)
     {
         try
         {
@@ -84,13 +85,14 @@ public sealed partial class MagiViewModel
             if (curSched is null || curSt is null || BoardKey(curSched) != BoardKey(snap) || StateKey(curSt) != StateKey(st))
             {
                 Ui.FixSearching = false;
-                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift);
+                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey);
                 return;
             }
             Ui.FixSuggestions = list;
             Ui.FixSearching = false;
             Ui.FixFocusName = focusName;
             Ui.FixSearched = focusName.Length == 0;
+            Ui.FixDoneKey = focusKey;
         }
         catch (OperationCanceledException)
         {
@@ -110,7 +112,7 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>走行中の直し方の探索を捨てる（世代を進めるので、完了間際の結果も書き戻さない）。</summary>
-    private void CancelFixSearch()
+    public void CancelFixSearch()
     {
         ++_fixSeq;
         _fixCts?.Cancel();
