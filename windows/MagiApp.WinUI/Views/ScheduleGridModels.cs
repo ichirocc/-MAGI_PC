@@ -53,6 +53,8 @@ public sealed partial class ScheduleCellVm : ObservableObject
     // 最重の族に隠れた別の族がある＝左上の小さな点（Kotlin FlatCell の secondDot）。
     [ObservableProperty] private Visibility secondDotVisibility = Visibility.Collapsed;
     [ObservableProperty] private Brush secondDotColor = new SolidColorBrush(Colors.Transparent);
+    // 期間の制約の帯＝セルの下端の細い線（Kotlin FlatCell の band）。
+    [ObservableProperty] private Visibility bandVisibility = Visibility.Collapsed;
     [ObservableProperty] private string? tooltip;
 }
 

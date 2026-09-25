@@ -694,7 +694,9 @@ public sealed partial class ScheduleView : UserControl
         // 人員の印はシフトを名指す（「休▲」）。旧「▼N」は人数だけでどのシフトかが読めなかった（Kotlin DayHeader と同じ）。
         _covMarks = GridDisplayMarks.CoverageHeaderMarks(ui, _vioEnabled, dayCount);
         _countBadges = GridDisplayMarks.CountBadges(ui, _vioEnabled);
-        var c1Anchors = GridDisplayMarks.C1DisplayAnchors(ui);
+        var c1Marks = GridDisplayMarks.C1DisplayMarks(ui);
+        var c1Band = GridDisplayMarks.C1Band(ui, _vioEnabled, staffCount, dayCount);
+        _c1Stuck = GridDisplayMarks.C1Stuck(ui);
 
         // +1 行/列 = 日番号ヘッダー行(row 0)・職員名ヘッダー列(col 0)。
         SyncCount(_rows, staffCount + 1, _ => new ScheduleRowVm());
@@ -718,6 +720,7 @@ public sealed partial class ScheduleView : UserControl
             cell.Tooltip = null;
             cell.WishDotVisibility = Visibility.Collapsed;
             cell.SecondDotVisibility = Visibility.Collapsed;
+            cell.BandVisibility = Visibility.Collapsed;
             // 回数の族（下限・上限・適切回数・個人の合計）はセルを持たないので名前の横に小さく ▼/▲（Kotlin と同じ）。
             if (col == 0 && row > 0 && _countBadges.TryGetValue(row - 1, out var badge))
             {
@@ -822,7 +825,8 @@ public sealed partial class ScheduleView : UserControl
             // 枠は必須違反(赤・実線2dp)/要調整(橙・実線2dp)/フォーカス(主色・3dp)のときだけ出す。
             Brush borderBrush = new SolidColorBrush(Colors.Transparent);
             var thickness = new Thickness(0);
-            var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Anchors);
+            var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Marks);
+            cell.BandVisibility = i < c1Band.Length && j < c1Band[i].Length && c1Band[i][j] ? Visibility.Visible : Visibility.Collapsed;
             var vioClass = displayClasses.FirstOrDefault(c => VioBuckets.VioVisible(c, _vioEnabled));
             var second = GridDisplayMarks.SecondVisibleClass(displayClasses, _vioEnabled);
             cell.SecondDotVisibility = second is null ? Visibility.Collapsed : Visibility.Visible;
@@ -1295,22 +1299,39 @@ public sealed partial class ScheduleView : UserControl
             lines = GridDisplayMarks.DayCoverageLines(ui, j, _covMarks[j], LabelOf, _vm.NeedCellLimits);
             focus = new FixFocus(null, _covMarks[j][0].Shift, j);
         }
-        else if (hv.Col == 0 && hv.Row > 0 && _countBadges.ContainsKey(hv.Row - 1))
+        else if (hv.Col == 0 && hv.Row > 0 && (_countBadges.ContainsKey(hv.Row - 1) || _c1Stuck.Contains(hv.Row - 1)))
         {
             var i = hv.Row - 1;
             title = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
             lines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
             focus = new FixFocus(i, null);
+            ShowMarkDialog(title, lines, focus, _c1Stuck.Contains(i));
+            return;
         }
         else return;
         ShowMarkDialog(title, lines, focus);
     }
 
-    private void ShowMarkDialog(string title, IReadOnlyList<string> lines, FixFocus? focus)
+    private IReadOnlySet<int> _c1Stuck = new HashSet<int>();
+
+    /// <summary>期間の制約を勤務表だけでは満たせないときの次の一歩（希望を見る／設定を見直す）。</summary>
+    private StackPanel C1StuckButtons(Action hide)
+    {
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var w = new Button { Content = "希望を見る", MinHeight = 48 };
+        w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
+        var st = new Button { Content = "設定を見直す", MinHeight = 48 };
+        st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
+        buttons.Children.Add(w); buttons.Children.Add(st);
+        return buttons;
+    }
+
+    private void ShowMarkDialog(string title, IReadOnlyList<string> lines, FixFocus? focus, bool c1Stuck = false)
     {
         var panel = new StackPanel { Spacing = 4 };
         foreach (var l in lines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
         var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる" };
+        if (c1Stuck) panel.Children.Add(C1StuckButtons(() => dialog.Hide()));
         if (focus is not null) panel.Children.Add(AttachFixSearch(dialog, focus));
         _ = dialog.ShowAsync();
     }
@@ -1366,8 +1387,9 @@ public sealed partial class ScheduleView : UserControl
         var statusText = new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 };
         statusBox.Children.Add(statusText);
         panel.Children.Add(statusBox);
+        if (_vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide()));
 
-        // 「詳しく」: このセルに重なった違反すべて（期間の制約は連続 N 区間）とこの職員の回数・偏り。
+        // 「詳しく」: このセルに重なった違反すべてとこの職員の回数・偏り。
         var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
         void FillDetails()
         {

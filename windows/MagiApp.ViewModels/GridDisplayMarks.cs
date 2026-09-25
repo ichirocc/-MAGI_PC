@@ -21,31 +21,29 @@ public static class GridDisplayMarks
     private static int? First(string key) => int.TryParse(key.AsSpan(0, Math.Max(0, key.IndexOf(','))), out var v) ? v : null;
     private static int? Second(string key) => int.TryParse(key.AsSpan(key.IndexOf(',') + 1), out var v) ? v : null;
 
-    /// <summary>c1 の表示アンカー（セルキー → そのランの違反窓数）。ランの先頭に加えて窓幅おきに置き、ランが覆う日の中に
-    /// 収める＝どの違反窓にも少なくとも 1 つ入る。</summary>
-    public static IReadOnlyDictionary<string, int> C1DisplayAnchors(UiState ui)
+    /// <summary>c1 の表示専用の印（セルキー）。不足窓の中で、いま そのシフトでなく そのシフトに変えられる日だけ。</summary>
+    public static IReadOnlySet<string> C1DisplayMarks(UiState ui) =>
+        ui.C1Shortages.SelectMany(sh => sh.Marks.Select(d => $"{sh.Staff},{d}")).ToHashSet();
+
+    /// <summary>c1Band[i][j] = 職員 i の行の j 日の下に期間の制約の帯を引くか（「期間の制約」チップが OFF なら引かない）。</summary>
+    public static bool[][] C1Band(UiState ui, IReadOnlySet<string> enabled, int staffCount, int dayCount)
     {
-        var outMap = new Dictionary<string, int>();
-        foreach (var r in ui.C1Runs)
-        {
-            if (r.Count < 4) continue;
-            int i = r[0], j0 = r[1], n = r[2], w = r[3];
-            if (n <= 0 || w <= 0) continue;
-            var last = j0 + n - 1 + w - 1;
-            for (var a = j0; a <= last; a += w)
-            {
-                var key = $"{i},{a}";
-                outMap[key] = Math.Max(outMap.GetValueOrDefault(key), n);
-            }
-        }
-        return outMap;
+        var b = Enumerable.Range(0, staffCount).Select(_ => new bool[dayCount]).ToArray();
+        if (!VioBuckets.VioVisible("vio-c1", enabled)) return b;
+        foreach (var sh in ui.C1Shortages)
+            if (sh.Band && sh.Staff < staffCount)
+                for (var d = sh.From; d <= Math.Min(sh.To, dayCount - 1); d++) b[sh.Staff][d] = true;
+        return b;
     }
 
-    /// <summary>画面に出すセルの違反クラス（重み降順）。チェッカーのクラスに c1 の表示アンカーを足したもの。</summary>
-    public static IReadOnlyList<string> DisplayCellClasses(UiState ui, string key, IReadOnlyDictionary<string, int> c1Anchors)
+    /// <summary>勤務表だけでは期間の制約を満たせない職員（行末の内訳を開けるようにする）。</summary>
+    public static IReadOnlySet<int> C1Stuck(UiState ui) => ui.C1Shortages.Where(x => x.Stuck).Select(x => x.Staff).ToHashSet();
+
+    /// <summary>画面に出すセルの違反クラス（重み降順）。チェッカーの c1（ランの先頭）は描かず、表示専用の印に置き換える。</summary>
+    public static IReadOnlyList<string> DisplayCellClasses(UiState ui, string key, IReadOnlySet<string> c1Marks)
     {
-        var bas = VioBuckets.CellVioClasses(ui, key);
-        if (!c1Anchors.ContainsKey(key) || bas.Contains("vio-c1")) return bas;
+        var bas = VioBuckets.CellVioClasses(ui, key).Where(c => c != "vio-c1").ToList();
+        if (!c1Marks.Contains(key)) return bas;
         return bas.Append("vio-c1").OrderByDescending(c => MirrorKeys.WeightOf(VioBuckets.FamilyOfVioClass(c))).ToList();
     }
 
@@ -134,6 +132,8 @@ public static class GridDisplayMarks
     {
         var outList = new List<string>();
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
+        foreach (var sh in ui.C1Shortages.Where(x => x.Staff == i && x.Stuck).DistinctBy(x => x.Shift))
+            outList.Add($"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日）— {C1Display.StuckText}");
         foreach (var key in CountKeys(ui).Where(k => First(k) == i).OrderBy(k => Second(k) ?? 0))
         {
             if (Second(key) is not { } k) continue;
@@ -167,7 +167,7 @@ public static class GridDisplayMarks
     /// <summary>凡例の「枠の形 → 族」の 1 行。セルに印を持つ族だけを名指す。</summary>
     public static string LegendShapeFamilies(Func<string, string> labelOf) =>
         "実線: " + string.Join("・", new[] { "c3n", "c3w", "pref", "groupViol" }.Select(labelOf)) +
-        "／破線: " + string.Join("・", new[] { "c1", "c3mn" }.Select(labelOf));
+        "／破線: 期間の約束：この日を○○にすると届く・" + labelOf("c3mn");
 }
 
 /// <summary>探す対象（Kotlin <c>FixFocus</c>）。Staff/Shift は <c>FixSuggester</c> の絞り込み、Day は理由の読み取りだけに使う。</summary>

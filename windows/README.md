@@ -329,6 +329,12 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 ## レビュー対応の記録
 
 - 2026-09-25（テスト移植の欠落補填）: Kotlin `SaWishLockTest`（3.334.0）を `MagiEngine.Tests/V6/SaWishLockTest.cs` へ 1 対 1 で写した。`SearchNeverMovesACellThatHoldsAFeasibleWish` は C# でもそのまま通過（パリティ不一致なし、エンジン変更なし）。`StrongPerturbNeverMovesAFeasibleWish` は対象の `strongPerturbFlat` がネイティブ経路専用で C# に移植していない（`SaOptimizer.cs` の移植判断）ため、名前だけ残して Skip とした。
+- 2026-09-26（期間の制約（c1）の表示の再設計の C# 移植、Kotlin `claude/merge-wub4fq` 584333f 同日）: `C1Display.Shortages`（新規 `C1Display.cs`）が
+  不足区間（From〜To・窓数・印の日・変えられる日の無い窓）を出し、印は不足窓の中の「いまそのシフトでなく、そのシフトに変えられる日」（`Changeable`＝希望固定なら希望どおり、
+  それ以外は `MayPlace`）だけ。`DisplayCellClasses` はチェッカーの `vio-c1`（ランの先頭）を落として印に置き換え（チェッカーの場所マップ・採点・探索は不変）、
+  窓数 >1 の区間はセル下端の 2px の帯（`BandVisibility`）。セルシート・詳しくは「期間の約束: …」の文と「（この日の○○はすでに数に入っています）」、
+  変えられる日の無い窓は「希望や担当の都合で、勤務表だけでは期間の約束を満たせません。」＋希望を見る／設定を見直す（セルシートと職員名の内訳）。
+  `UiState.C1Runs` は `C1Shortages` に置き換え、凡例の破線は「期間の約束：この日を○○にすると届く」。テストは Kotlin `GridDisplayMarksTest` の新 5 件を 1 対 1 で写した。
 - 2026-09-26（外部レビュー e07bbd5 の是正の C# 移植、Kotlin `claude/merge-wub4fq` b2fe1e7 同日）: 板挟みのボタンを「希望は残して別のシフトを割り当てる
   （希望は未反映になります）」（挙動は据え置き）。`UndoableMessage` を `UiState.OpNotice`（`OpNotice` record、検査の進み具合の `Message` と別のイベント）へ置き換え、
   通知バーは通知の表示中に失敗以外の文言で置き換えない（`CellSheetLogic.MessageMayReplaceNotice`）、「元に戻す」は `UndoSnap.Serial` が先頭のときだけ

@@ -127,10 +127,7 @@ public static class CellSheetLogic
                 return $"{labelOf(fam)}：{Sym(cur)}が{n}人（{c.L}〜{c.U}人）";
             }
             case "c1":
-            {
-                var w = C1WindowAt(p, s, i, j);
-                return w is null ? null : $"期間の制約：{Day(w.Value.J0)}〜{Day(w.Value.J0 + w.Value.C.Day1 - 1)}に{Sym(w.Value.C.ShiftIdx)}が{w.Value.N}回（{w.Value.C.Day2}回以上）";
-            }
+                return C1Display.CellText(C1Display.Shortages(p, s), s, i, j, Sym, Day);
             case "pref":
                 return p.Wish[i][j] >= 0 ? $"希望は{Sym(p.Wish[i][j])}（今は{Sym(cur)}）" : null;
             case "groupViol": return $"{Sym(cur)}は{Name(i)}の担当外";
@@ -160,19 +157,6 @@ public static class CellSheetLogic
                 if (ok) return (c.Seq, j0);
             }
         }
-        return null;
-    }
-
-    private static (C1 C, int J0, int N)? C1WindowAt(Problem p, int[][] s, int i, int j)
-    {
-        for (var j0 = j; j0 >= 0; j0--)
-            foreach (var c in p.Cons1)
-            {
-                if (!p.CanDo(i, c.ShiftIdx) || j0 + c.Day1 > p.T || j >= j0 + c.Day1) continue;
-                var n = 0;
-                for (var d = j0; d < j0 + c.Day1; d++) if (s[i][d] == c.ShiftIdx) n++;
-                if (n < c.Day2) return (c, j0, n);
-            }
         return null;
     }
 
@@ -272,19 +256,17 @@ public static class CellSheetLogic
         list.Where(s => s.Ops.All(o => o.Staff != except) && s.Ops.Any(o => o.Day == day)).ToList();
 
     /// <summary>セルを 1 つ変えたときの Snackbar 相当の文言（「元に戻す」付き）。</summary>
-    /// <summary>セル詳細（「詳しく」）の行: 重なった族をすべて重い順に「必須・原因」「要調整・原因」。<paramref name="c1Runs"/>＝期間の制約のランの違反窓数（無ければ null）。</summary>
-    public static IReadOnlyList<string> CellDetailLines(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, int? c1Runs, Func<string, string> labelOf) =>
+    /// <summary>セル詳細（「詳しく」）の行: 重なった族をすべて重い順に「必須・原因」「要調整・原因」。</summary>
+    public static IReadOnlyList<string> CellDetailLines(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, Func<string, string> labelOf) =>
         families.Select(fam =>
         {
-            var label = labelOf(fam);
-            var d = FamilyDetail(state, p, s, i, j, fam, labelOf) ?? label;
-            if (fam == "c1" && c1Runs is > 0)
-            {
-                var withRuns = $"{label}（連続 {c1Runs} 区間）";
-                d = d.StartsWith(label, StringComparison.Ordinal) ? withRuns + d[label.Length..] : $"{withRuns}：{d}";
-            }
+            var d = FamilyDetail(state, p, s, i, j, fam, labelOf) ?? labelOf(fam);
             return (MirrorKeys.Hard.Contains(fam) ? "必須・" : "要調整・") + d;
         }).ToList();
+
+    /// <summary>セルシートの族のクラス。印の無い日でも不足区間の中なら期間の制約を読めるようにする（すでに数に入っている日など）。</summary>
+    public static IReadOnlyList<string> SheetCellClasses(IReadOnlyList<string> display, bool inC1Shortage) =>
+        !inC1Shortage || display.Contains("vio-c1") ? display : display.Append("vio-c1").ToList();
 
     /// <summary>その場の直し方探しの状態。スピナーは <see cref="FixPanelState.Running"/> だけ。</summary>
     public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key) =>

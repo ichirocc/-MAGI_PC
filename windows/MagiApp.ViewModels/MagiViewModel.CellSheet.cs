@@ -16,26 +16,27 @@ public sealed partial class MagiViewModel
         if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return new CellStatus(CellSeverity.None, "違反なし");
         var cur = sched[i][j];
         var fams = CellSheetLogic.StatusFamilies(
-            GridDisplayMarks.DisplayCellClasses(Ui, $"{i},{j}", GridDisplayMarks.C1DisplayAnchors(Ui)),
+            CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, $"{i},{j}", GridDisplayMarks.C1DisplayMarks(Ui)), C1ShortageAt(i, j) is not null),
             cur >= 0 ? FamiliesAt(Ui.NeedFamilies, $"{cur},{j}") : Array.Empty<string>(),
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
         return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, labelOf);
     }
 
-    /// <summary>「詳しく」のこのセルの違反（重なった族すべて、期間の制約は連続 N 区間つき）。</summary>
+    /// <summary>セル (i,j) に掛かる期間の制約の不足区間（無ければ null）。</summary>
+    public C1Shortage? C1ShortageAt(int i, int j) => Ui.C1Shortages.FirstOrDefault(x => x.Staff == i && j >= x.From && j <= x.To);
+
+    /// <summary>「詳しく」のこのセルの違反（重なった族すべて）。</summary>
     public IReadOnlyList<string> CellDetailLinesFor(int i, int j, Func<string, string> labelOf)
     {
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return Array.Empty<string>();
         var cur = sched[i][j];
-        var anchors = GridDisplayMarks.C1DisplayAnchors(Ui);
         var fams = CellSheetLogic.StatusFamilies(
-            GridDisplayMarks.DisplayCellClasses(Ui, $"{i},{j}", anchors),
+            CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, $"{i},{j}", GridDisplayMarks.C1DisplayMarks(Ui)), C1ShortageAt(i, j) is not null),
             cur >= 0 ? FamiliesAt(Ui.NeedFamilies, $"{cur},{j}") : Array.Empty<string>(),
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
-        int? runs = anchors.TryGetValue($"{i},{j}", out var n) ? n : null;
-        return CellSheetLogic.CellDetailLines(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, runs, labelOf);
+        return CellSheetLogic.CellDetailLines(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, labelOf);
     }
 
     /// <summary>ボタンに出すシフト（誰か 1 人でも担当できるもの）。</summary>

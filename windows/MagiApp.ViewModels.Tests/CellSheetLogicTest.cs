@@ -203,16 +203,14 @@ public class CellSheetLogicTest
     }
 
     [Fact]
-    public void DetailListsEveryOverlappingFamilyAndC1Runs()
+    public void DetailListsEveryOverlappingFamily()
     {
         var (key, cls) = Rep.CellFamilies!.First(kv => kv.Value.Select(VioBuckets.FamilyOfVioClass).Distinct().Count() >= 2);
         var parts = key.Split(',');
         int i = int.Parse(parts[0]), j = int.Parse(parts[1]);
         var fams = CellSheetLogic.StatusFamilies(cls, Array.Empty<string>(), Array.Empty<string>());
-        var lines = CellSheetLogic.CellDetailLines(St, P, S, i, j, fams, null, Label);
+        var lines = CellSheetLogic.CellDetailLines(St, P, S, i, j, fams, Label);
         Assert.Equal(fams.Count, lines.Count);
         Assert.All(lines, l => Assert.True(l.StartsWith("必須・") || l.StartsWith("要調整・"), l));
-        var c1 = CellSheetLogic.CellDetailLines(St, P, S, i, j, new[] { "c1" }, 3, f => f == "c1" ? "期間の制約" : f);
-        Assert.Contains("期間の制約（連続 3 区間）", Assert.Single(c1));
     }
 }

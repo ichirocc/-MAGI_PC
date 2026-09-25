@@ -85,8 +85,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty]
     private IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>> distLocations = new Dictionary<string, IReadOnlyList<IReadOnlyList<int>>>();
 
-    /// <summary>c1 の違反窓ラン（<c>ViolationReport.C1Runs</c>）。画面の表示専用の印を作る元。</summary>
-    [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> c1Runs = Array.Empty<IReadOnlyList<int>>();
+    /// <summary>期間の制約の不足区間（<see cref="C1Display.Shortages"/>）。画面の表示専用の印と帯を作る元。</summary>
+    [ObservableProperty] private IReadOnlyList<C1Shortage> c1Shortages = Array.Empty<C1Shortage>();
 
     /// <summary>改善提案（違反を減らす1手＝変更/交換）。</summary>
     [ObservableProperty] private IReadOnlyList<FixSuggestion> fixSuggestions = Array.Empty<FixSuggestion>();
