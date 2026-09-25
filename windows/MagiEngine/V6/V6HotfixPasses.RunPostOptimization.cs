@@ -158,7 +158,7 @@ public static partial class V6HotfixPasses
         bool PostChainRunningKeepBest = true,
         /// <summary>[不合格・既定 OFF, Android同名] 同点の手も受け入れ、厳密に悪化したときだけ巻き戻す。</summary>
         bool PostChainRunningKeepBestAcceptTies = false,
-        /// <summary>[不合格・既定 OFF, Android同名 N9: 勝2/負4 p=0.69] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
+        /// <summary>[既定 OFF, Android同名 N9] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
         bool? PostChainRollbackCountsZero = null,
         /// <summary>[既定 OFF, Android同名 #36] 既定は <see cref="PolishGate.PostChainKeepBestFinalOnly"/>。</summary>
         bool? PostChainKeepBestFinalOnly = null);
