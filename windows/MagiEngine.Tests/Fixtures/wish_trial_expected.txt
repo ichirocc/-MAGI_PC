@@ -1,0 +1,9 @@
+# WishTrial (S5 T8) cross-language expectation: key -> H0,Hx,Rk,Rr,a,att,aPrime,b,pKeep,pCancel (control -> h0,rk)
+sample_state_v6.json|control -> 15,11
+sample_state_v6.json|0,0 -> 15,14,11,10,1,1,1,0,11,10
+sample_state_v6.json|0,3 -> 15,15,11,10,0,1,0,1,11,10
+sample_state_v6.json|0,4 -> 15,15,11,11,0,0,0,0,11,11
+blocked_covu_state.json|control -> 4,4
+blocked_covu_state.json|0,0 -> 4,4,4,4,0,0,0,0,4,4
+blocked_covu_state.json|0,3 -> 4,4,4,4,0,0,0,0,4,4
+blocked_covu_state.json|0,6 -> 4,4,4,4,0,0,0,0,4,4
