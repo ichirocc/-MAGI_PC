@@ -130,7 +130,7 @@ public static class Ws1Ops
         if (i < 0 || i >= state.StaffList.Count) return state;
         int gi = Math.Clamp(groupIdx, 0, Math.Max(state.Groups.Count - 1, 0));
         var sl = new List<Staff>(state.StaffList);
-        // [P1修正/レビュー指摘] 名前だけ直しても skillIdx が既定0へ戻らないよう、既存のコピーで保持する
+        // [P1修正/レビュー指摘] 名前だけ直しても skillIdx が既定値へ戻らないよう、既存のコピーで保持する
         // （旧 `new Staff(name, gi)` は skillIdx を既定0へ戻し、スキル区分が無言で消えて
         //   cons41s/cons42s の評価が変わっていた）。
         sl[i] = sl[i] with { Name = name, GroupIdx = gi };

@@ -3,6 +3,8 @@
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
 > **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
 > **最終更新**：2026-09-25（backlog#38 — `Staff.skillIdx` の既定を 0 → **-1（未所属）**、最初のスキル群を作るときは全員を -1 にしてから足す）。
+> 2026-09-24（外部レビュー N1 — `shifts[].role` の保存を `"rest"`/`"none"` に、`""` は旧JSONと同じ扱い）。
+> 2026-09-21（3.603.0 — `Shift.role: ShiftRole`追加。休の識別を記号一致から分離、詳細は§下記）。
 > 2026-09-20（§4 UiState を実装と再照合し、3.394.0 以降に追加されて丸ごと未記載だった
 > 9フィールド `checkRev`/`engineRan`/`keepScreenOn`/`runSummary`/`combineExhaustPairs`/`countChainPolish`/
 > `aptFairSoftTolerance`/`lnsAdaptive`/`saveState` を追加、件数を 71 → **80** へ訂正）。
@@ -53,7 +55,7 @@
 
 | 型 | フィールド | 備考 |
 |---|---|---|
-| `Shift` | `name: String`, `kigou: String`, `need1: String`, `need2: String` | need1/need2 = P1/P2 の既定必要数（`""`/null＝要件なし） |
+| `Shift` | `name: String`, `kigou: String`, `need1: String`, `need2: String`, `role: ShiftRole = None` | need1/need2 = P1/P2 の既定必要数（`""`/null＝要件なし）。`role`＝`ShiftRole{None,Rest}`（3.603.0、休の識別。詳細は下記） |
 | `Group` | `name: String`, `kigou: String` | kigou＝制約で使う記号 |
 | `Staff` | `name: String`, `groupIdx: Int`, `skillIdx: Int = -1` | groupIdx→ユニット群（担当可否/covU）、skillIdx→スキル群（C41s/C42s 専用）。**`skillIdx = -1` は「未所属」の正規の値で既定**（UI の「(なし)」・3.70.0。既定は backlog#38 で 0 → -1＝職員追加・名簿取込・`skillIdx` の無い JSON は -1、保存済みの明示の値はそのまま）。`ssk[i] == groupIdx(>=0)` が常に偽になるので cons41s/cons42s から安全に外れる。群削除時の再割当も `-1` へ寄せる（3.328.0）。スキル群が 0 件の状態で最初の 1 群を作るときは全員を `-1` にしてから足す（`Ws1Ops.addSkillGroup`、backlog#38） |
 | `Range` | `lo: String`, `hi: String` | 個人×シフトの下限/上限（LimMin/LimMax） |
@@ -79,17 +81,15 @@
 **`schedule[i][j]` は必ず有効なシフト index**（0..K-1）。希望が反映済みか＝ `wishes["i,j"] == schedule[i][j]`。
 
 > **[3.389.0 訂正]** 旧記述「`schedule[i][j] < 0` ＝ 公休（未割当）」は**誤り**だった。
-> 「休」は**通常のシフト index**であって負値ではない。負値は `MirrorCore.normalizeSchedule` が
-> **範囲外セルへ付けるセンチネル `-1`**で、意味は「公休」ではなく**「不正な値」**（行が短い場合は `0` で埋める）。
-> `Problem.initialAssignment` は範囲外の `k` を `restIdx`（既定シフト解決）へ倒す（3.410.0/P-01。旧記述の
-> 「0へクランプ」は stale だった）。
->
-> **[backlog#24, 3.603.0 訂正]** 休の解決は記号 `kigou == "休"` の字面一致では**ない**（削除・改名で
-> 別のシフトが誤って「休」として解釈される実害が確認されたため撤去）。`Shift` に `role: ShiftRole`
-> （`None`/`Rest`）フィールドを追加し、`Problem.restIdx: Int?` は `shifts.indexOfFirst { it.role == ShiftRole.Rest }`
-> で解決する（どのシフトにも付与が無ければ `null`＝最適化/検査の入口でブロックする異常系）。
-> 保存は `"rest"`/`"none"`（外部レビュー N1＝休みOFFの往復）。明示の role が1つも無い JSON（旧JSON・非休を `""` で
-> 書いていた保存）だけ、読込時に後方互換の自動移行を行う（記号「休」の最初の1件へ自動で付与）。
+> 「休」は**通常のシフト index**であって負値ではない。負値は `MirrorCore.normalizeSchedule` が**範囲外セルへ
+> 付けるセンチネル `-1`**で、意味は「公休」ではなく**「不正な値」**（行が短い場合は `0` で埋める）。
+> `Problem.initialAssignment` は範囲外の `k` を `restIdx`（既定シフト解決）へ倒す（3.410.0/P-01）。
+> **[3.603.0 更新/backlog#24]** 休の解決は記号 `kigou == "休"` の字面一致ではなく、`Shift.role ==
+> ShiftRole.Rest` の付与先（`fun restShiftIndex(state): Int?`）。どのシフトにも付与が無ければ **`null`**
+> （旧: `?: 0` で無言に先頭シフトへフォールバックしていたが、休の削除・改名で別シフトが誤って「休」と
+> 解釈されHARD違反が実データで激増する実害があったため撤去。詳細は `docs/history/3.4xx.md` 3.603.0節）。
+> `Problem.restIdx` も同型で `Int?`。保存は `"rest"`/`"none"`（外部レビュー N1＝休みOFFの往復）。明示の role が1つも無い JSON
+> （旧JSON・非休を `""` で書いていた保存）だけ、読込時に記号"休"のシフトへ自動付与する後方互換パスが `StateParser` にある。
 > 「休は特殊な OFF ではなく通常のシフト種の一つ」は 3.345.0 で全面的に徹底された前提で、weekly も
 > シフト別に均すので休を特別扱いしない。**編集規則も同じ**（3.416.0）＝休シフトの削除・改名は他シフトと
 > 同一経路（削除セルは削除後一覧の既定シフトへ・改名は制約参照が追従）。

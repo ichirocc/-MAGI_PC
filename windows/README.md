@@ -328,12 +328,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
-- 2026-09-25（backlog #38 を同期、Kotlin 9764924・c03a5ca 同日＝利用者の決定）: `Staff.SkillIdx` の既定を 0 → **-1（未所属）**＝`MagiState.cs` の
+- 2026-09-25（backlog #38 を同期、Kotlin 9764924・60e79d4〈#221、作業ブランチの c03a5ca を squash〉同日＝利用者の決定）: `Staff.SkillIdx` の既定を 0 → **-1（未所属）**＝`MagiState.cs` の
   既定値・`StateJsonSerializer` の `OptInt("skillIdx", -1)`・`tools/native/state_to_flat.py`（native-parity）。職員追加・名簿取込（テンプレ/一覧）・
   キーの無い JSON（白紙開始の種）は -1、保存済みの明示の値はそのまま。`Ws1Ops.AddSkillGroup` を新設して `MagiViewModel.AddSkillGroup` から呼ぶ＝
   スキル群が 0 件で最初の 1 群を作るときだけ全員を -1 にしてから足す（群 0 件の間の値は採点に効かない＝その時点で点は変わらない。
   3.327.0 の検査 2i「自動で書き換えない」からの意図的な逸脱）。群が 1 件以上なら割当は触らない。検査 2i のコメントを実態（範囲外だけを見る）に
   合わせた。探索の組分け（等しい skillIdx で職員をまとめる研磨）はキーの無い JSON で全員一律 0→-1＝組分け不変（Kotlin 側で盤面ハッシュ 8/8 一致）。
+  ただし明示の 0 で保存した古いファイルに後から職員を足すと新しい職員だけ -1 になり、`WishIslandPolish`・`AdaptiveBlockSwapPolish`・
+  `C3RotationPolish` の組分けが変わる＝スキル群 0 件でも最終盤面は変わりうる（採点は不変。Kotlin の history と同じ注意）。
   `StateFingerprint` はキーの無い JSON で読込直後の値が変わる（鮮度判定だけ、保存ファイルは明示の値を書く）。テスト: `Ws1OpsSkillGroupTest` 6 件を
   1 対 1、`Ws1OpsTest` の群の再追加を `Ws1Ops.AddSkillGroup` 経由へ、`MagiViewModelWs1Test` の既定値の期待を -1 へ（範囲外の 0 を見るテストは
   明示の 0 で組み立て直し）＋最初の群の配線 1 件。docs（data-models・sudo_model）を Android と揃えた。重み・探索は不変。
