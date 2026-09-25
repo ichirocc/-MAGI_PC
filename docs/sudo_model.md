@@ -1,6 +1,7 @@
 # SUDO モデル（システム関連図 / ユースケース図 / ドメインモデル図 / オブジェクト図）
 
-> **最終更新**：2026-09-06（3.505.7 で実装と再照合＝重み c1/c3mn 30・covO 5.0、O の実測 5015、欠損セルの -1、S に Windows 版、D に拒否候補の再利用）
+> **最終更新**：2026-09-25（2026-09-25（3.612.0 時点の main）と再照合＝20族・HARD 5族（c3w）・3.556.0 の重み、O の実測 8990、fair 達成率モード v2・apt の D9、HardDelta 前段・WishTrial・RunMarker）
+> **前回**：2026-09-06（3.505.7）
 > **初版**：2026-08-17（3.389.0）
 > **これは何か**：ログラス松岡さん（@little_hand_s）提唱の **SUDO モデリング**（DDD のモデリングを実装へ落とし込む
 > ための最小ラインナップ）を、このリポジトリの**実装から**起こしたもの。4図それぞれの役割は本家記事のとおり:
@@ -12,10 +13,11 @@
 - **この写しは Android 版の文書と同一内容**（Kotlin が正なので、ドメイン D・オブジェクト O・重みは Windows 版でもそのまま成り立つ）。
   S の「Android OS」枠（WorkManager／前景サービス／通知／バブル／SAF）だけは Windows 版に無く、`MagiApp.WinUI` は
   同一プロセス内の非同期タスクと `MainWindow` の上部状態バー／下部コマンドバーで代替する（`windows/README.md`）。
+  U の S5 のうち `WishTrial`・`HardDelta` は C# にも同名で移植済み、`RunMarker`（再起動後の中断案内）は Android のみ。
 
 - **実装が正**。この文書は `app/src/main` と `app/src/test/resources` を実際に読んで書いた。
   既存の `docs/*.md` と食い違うところは実装側を採り、末尾の「docs と実装の食い違い」に列挙した。
-- **D と O は数値まで実測**。O の `ViolationReport` はホストJVM（kotlin-compiler-embeddable 2.0.21）で
+- **D と O は数値まで実測**。O の `ViolationReport` はホストJVM（kotlin-compiler-embeddable 2.3.21、2026-09-25 に再実測）で
   `UnifiedViolationChecker.check(state, state.schedule)` を実行して得た値で、推定値は1つも無い。
 - **行番号は書かない**。参照はファイル名とシンボル名まで。作成中に `OptimizationWorker.kt` を編集した結果、
   収集時の行番号が最大 +26 ずれた（内容は正しいのに数字だけ古くなる）。**行番号は最も早く腐る**ので、
@@ -173,6 +175,7 @@ flowchart TB
 | 希望シフトを登録する | 編集＞月次条件の希望カレンダー →「N日に適用」 | `setWishesForDays` |
 | 診断の指摘に沿って設定を直す | 設定ミスカードの修正ボタン／「この並びの禁止をやめる」／「下限を1下げる」 | `relaxForbiddenRule` / `relaxStaffRangePin` |
 | データを開く・書き出す | 設定＞データ操作「データを開く」「データを保存」「CSV取込」「CSV出力」／コンポーネント別「職員」「希望」「制約」 | `loadAsync` / `exportJson` / `importCsvSmart` |
+| 希望を取り消したら何が減るか試す（S5） | ホームの赤カードの希望行「取り消したら？」 | `WishTrial`（試算のみ・入力は書かない）→確定で再実行。中断時の案内は `RunMarker` が取り消した希望を名指し |
 | 取り消して元に戻す | 下部コマンドバー「元に戻す」「やり直し」／設定「開く前のデータに戻す（もう一度押すと入れ替え）」 | `undo` / `redo` / `restorePreviousData` |
 
 **`includes` の意味**：`違反をチェックする`（= `UnifiedViolationChecker.check`）は独立したユースケースであると同時に、
@@ -205,6 +208,7 @@ classDiagram
     +wishes: Map~String,Int~
     +staffRange: Map~String,Range~
     +needDay1/needDay2: Map~String,String~
+    +cons3w: List~C3wRow~
     +shiftColors: Map~String,String~
     +extras: Map~String,Any?~
     +staffCount/dayCount/shiftCount/groupCount: Int
@@ -234,6 +238,8 @@ classDiagram
   class C2Row { +shiftKigou: String
     +count: String }
   class C3Row { +pattern: List~String~ }
+  class C3wRow { +wishKigou: String
+    +prevKigou: String }
   class C41Row { +groupKigou: String
     +shiftKigou: String
     +l: String
@@ -255,6 +261,7 @@ classDiagram
     +rangeLo/rangeHi/apt: Array~IntArray~
     +c3OverT/c3UnknownShift/unresolvedRows
     +canDo(i,k) Boolean
+    +mayPlace(i,k) Boolean
     +wishLocked(i,j) Boolean
     +covUCell(k,j,got) Int
   }
@@ -287,13 +294,14 @@ classDiagram
   MagiState "1" *-- "0..*" C1Row : cons1
   MagiState "1" *-- "0..*" C2Row : cons2
   MagiState "1" *-- "0..*" C3Row : cons3/cons3n/cons3m/cons3mn（4本）
+  MagiState "1" *-- "0..*" C3wRow : cons3w（希望の前日に禁止・HARD）
   MagiState "1" *-- "0..*" C41Row : cons41 / cons41s
   MagiState "1" *-- "0..*" C42Row : cons42 / cons42s
   Staff ..> Group : groupIdx → groups[g]
   Staff ..> Group : skillIdx → skillGroups[g]（-1=未所属）
   Problem ..> MagiState : 純粋関数（===でメモ化）
   ViolationReport ..> Problem : check(state, schedule)
-  ViolationReport ..> MirrorKeys : breakdown のキー = all（19）
+  ViolationReport ..> MirrorKeys : breakdown のキー = all（20）
 ```
 
 ### なぜ `Problem` と `ViolationReport` を別集約にしないか
@@ -334,22 +342,23 @@ classDiagram
 
 ### 不変条件（すべて実装から）
 
-**19族と重み** — `breakdown` は `MirrorKeys.all` の19キーを 0 で初期化してから加算するのでキー数は常に19。
-HARD 4族 = `groupViol` / `c3n` / `covU` / `pref`、SOFT 15族。
+**20族と重み** — `breakdown` は `MirrorKeys.all` の20キーを 0 で初期化してから加算するのでキー数は常に20。
+HARD 5族 = `groupViol` / `c3n` / `covU` / `pref` / `c3w`、SOFT 15族。
 
 ```
-groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
-  > c3mn 30 = c1 30 > covO 5 > c3 3 > c3m 2
-  > c2 = c41 = c42 = c41s = c42s = apt = fair = weekly = 1.0
+groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 > low 120
+  > c3mn 90 > c1 50 > high 25 > c3 15 > c41s 10 = c42s 10 = covO 10
+  > c41 9 = c42 9 > c3m 6 > c2 4 = apt 4 > fair 2 = weekly 2
 ```
-（c1/c3mn は 3.409.24 で 15→30、covO は 2026-08-27 に 1.0→5.0。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実）
+（3.522.0 の全面見直し＋3.556.0 の c41/c42 1→9・c41s/c42s 6→10・c3m 10→6。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実。
+**履歴**（3.505.7 時点の旧値）: groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45 > c3mn 30 = c1 30 > covO 5 > c3 3 > c3m 2 > 残り 1.0）
 
 `weights` を `linkedMapOf` で持つのは**挿入順＝加算順を固定して Double の加算結果を不変に保つ**ため
 （浮動小数の加算は非結合）。UI の重み表がこのマップをそのまま描画するので、ここに行を足すと画面に生キーが出る
-（`aptLow`/`aptHigh` を入れず `weightOf` で apt の 1.0 へエイリアスしているのはこのため）。
+（`aptLow`/`aptHigh` を入れず `weightOf` で apt の重みへエイリアスしているのはこのため）。
 
 - `weightedScore = Σ breakdown[key] × weights[key]`（小さいほど良い）
-- `total = Σ breakdown.values`（重み無視の生カウント）／`hard = HARD 4族の合計`／`soft = total − hard`
+- `total = Σ breakdown.values`（重み無視の生カウント）／`hard = HARD 5族の合計`／`soft = total − hard`
 
 **keep-best の比較順序** — `reportComparator` / `betterReport` の **hard → weightedScore → total** の辞書式。
 単一ソースは `reportComparator` 1つで、`betterReport` も並べ替えもここへ委譲する。
@@ -368,11 +377,12 @@ groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
   ＝**表示件数と breakdown 件数が食い違うのはこのため**。
 - **pref は実現可能な希望のみ**計上（`canDo(i,w) && s[i][j] != w`）。担当不可への希望は充足しようがないので
   対称除外し、`impossibleWishCount` として別に案内する。
+- **`mayPlace(i,k) = canDo(i,k) && !(rangeHi==0 && k!=restIdx)`**（3.507.0）— 最適化器の候補生成・入口 hf66・最終番兵の基準だけが見る。評価は canDo のまま＝上限 0 に置かれていれば high 25。
 - **`wishLocked(i,j) = wish>=0 && canDo(i,wish)`** — 実現不能な希望はロックしない（凍結すると座礁する）。
-- **fair**：群 × 担当ONシフトごとに、メンバー回数の `round(平均)` からの L1 偏差和。**m<2 の群は対象外**。
+- **fair**（達成率モード v2、3.541.0）：群 × 担当ONシフトごとに `Problem.fairDevOfBucket`。個人の範囲帯または実効 apt 目標を基準に達成率を出し、幅を重みにした中央値からの偏差 `round(|達成率−基準|×幅)` を足す。基準の無い人が1人でもいれば生回数の `round(平均)` からの L1 偏差へフォールバック。**m<2 の群は対象外**。
 - **weekly**：職員 × **シフト**ごとに、曜日別カウントの `round(そのシフトの回数/7)` からの L1 偏差和。
   回数が7の倍数でない (職員,シフト) は**構造的な下限**を持つ（`weeklyFloorOfCount`）。
-- **apt** は群目標を個人 `staffRange[lo,hi]` でクランプし、担当可能シフトのみ展開する。
+- **apt** は担当可能シフトのみ展開し、**個人の下限/上限がある (職員,シフト) には群目標を適用しない**（D9、3.509.0。旧: 個人範囲でクランプ）。適用される組は構造的に到達できる範囲へクランプする（3.508.0）。
 - **辞書式パック**：`score = hard × SCORE_HARD_UNIT + soft`。`soft < SCORE_HARD_UNIT`(1e9) を
   `Evaluator.fullEval` が強制する（超えると HARD ゲートが静かに壊れる）。
 - **厳密ピン**：`rangeLo == rangeHi` は「回数固定」として扱われ、研磨は `exactPinRegression` でこれを崩す手を却下する。
@@ -380,6 +390,8 @@ groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
   後処理チェーンが巡の末尾（拒否候補の結合）と共同 LNS の後の最終段（違反起点からの候補生成つき）で `ViolationComponentRepair` に
   束ねさせる。採用の判定はどこでも同じ `betterReport`＋`exactPinRegression`＝新しい採用基準は増えていない
 （`QualityVector` は計測専用）。
+- **HARD Δの前段**（`HardDelta`／`PolishGate.hardDeltaPrefilter`、既定 ON）：候補の HARD 正味差分を変わったセル・行・日だけから数え、「必ず却下する」候補だけ checker を省く＝採用集合・盤面は不変の速度専用。
+- **c3w**（3.542.0）：希望固定（`wishLocked`）した X の**前日**が Y なら前日側セルに違反（HARD 9000）。希望でない X・初日は対象外。
 
 **「休」の扱い** — 識別は**記号ベース**（`shifts.indexOfFirst { it.kigou == "休" } ?: 0`）で、
 見つからないと**先頭シフトを黙って休として扱う**（検査 2g が警告する）。`Problem.restIdx` が単一ソース。
@@ -402,7 +414,7 @@ groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45
 3リストに理由つきで記録し、`V6SanityPort` が「この行は評価されていません」と案内する（3.309.0/3.320.0）。
 
 **HF77（変更規律）** — 重みを変えるときは `MirrorKeys.weights` / `Evaluator.fullEvalParts` のリテラル /
-`DeltaEvaluator` / `magi_native.cpp` の**4面を同時に**変える（Kotlin 側のずれは `ObjectiveParityTest`、
+`DeltaEvaluator` / `magi_native.cpp` の**4面を同時に**変える（加えて言語跨ぎ期待値と `docs/business-logic.md`）（Kotlin 側のずれは `ObjectiveParityTest`、
 C++ 側は native-parity CI が捕まえる）。
 
 ---
@@ -411,14 +423,14 @@ C++ 側は native-parity CI が捕まえる）。
 
 **素材**：`app/src/test/resources/golden_state.json`（実データ由来の fixture）。
 **規模**：10職員 × 31日 × 10シフト × 10グループ（2025-12-01〜2025-12-31、`use2Patterns=true`）。
-制約は cons1=2 / cons2=1 / cons3=1 / cons3n=8 / cons3m=2 / cons3mn=4 / cons41=0 / cons42=7。
+制約は cons1=2 / cons2=1 / cons3=1 / cons3n=8 / cons3m=2 / cons3mn=4 / cons3w=0 / cons41=0 / cons42=7。
 希望 84件（**全件が担当可＝実現不能希望 0**）、staffRange 51件、needDay1/2 = 0、skillGroups/cons41s/cons42s = 0。
 この規模は `V6WebGoldenParityTest.loadDataBitMatchesWeb` がそのままアサートしている。
 
 **なぜ golden を選んだか**：実データ由来の fixture は2つある（もう1つは `sample_state_v6.json`＝
 native-parity CI の2つ目の形状で、入力盤面 `hard=15`＝C++ の HARD 族パスを実データで exercise するために
 3.362.0 で追加した）。**golden は `hard=0` に到達済み＝「配布できる盤面」の具体例**として O 図に向く。
-`hard=15` の方はどの族がどう壊れているかの例としては良いが、19族が同時に発火して図が読めなくなる。
+`hard=15` の方はどの族がどう壊れているかの例としては良いが、20族が同時に発火して図が読めなくなる。
 
 ```mermaid
 flowchart TB
@@ -436,19 +448,19 @@ flowchart TB
   GA7["<b>groupShiftApt[7]</b><br/>[10,'',10,'','','','','',1,'']<br/>休=10 Dﾃ=10 B4=1<br/>※Dﾃ目標10は担当不可なので実効せず"]
 
   R09["<b>staffRange['0,9'] : Range</b><br/>lo=1 hi=1<br/>古泉×有給をちょうど1回に固定<br/><b>= 厳密ピン</b>（実配置0回→vio-low）"]
-  R38["<b>staffRange['3,8'] : Range</b><br/>lo=1 hi=23<br/>桒澤×B4。群目標1は[1,23]で<br/>クランプされ実効1（実配置20→vio-aptHigh）"]
+  R38["<b>staffRange['3,8'] : Range</b><br/>lo=1 hi=23<br/>桒澤×B4。群目標1は[1,23]で<br/>個人範囲があるので群目標は適用しない（D9）<br/>実配置20は範囲内＝違反なし"]
 
   C10["<b>cons1[0] : C1Row</b><br/>day1=14 shiftKigou=休 day2=5<br/>任意の14日窓に休が5回以上"]
   C11["<b>cons1[1] : C1Row</b><br/>day1=14 shiftKigou=Dﾃ day2=2"]
   C20["<b>cons2[0] : C2Row</b><br/>shiftKigou=有 count=1<br/>（実測 breakdown c2=4）"]
-  CN0["<b>cons3n[0] : C3Row</b><br/>pattern=[Dﾃ,B4,'','','']<br/>夜勤の翌日に日勤は禁止（HARD 7000）"]
-  CM2["<b>cons3mn[2] : C3Row</b><br/>pattern=[Dﾃ,休,Dﾃ,'','']<br/>3連パターン（Hate・SOFT 30）"]
+  CN0["<b>cons3n[0] : C3Row</b><br/>pattern=[Dﾃ,B4,'','','']<br/>夜勤の翌日に日勤は禁止（HARD 9000）"]
+  CM2["<b>cons3mn[2] : C3Row</b><br/>pattern=[Dﾃ,休,Dﾃ,'','']<br/>3連パターン（Hate・SOFT 90）"]
   C421["<b>cons42[1] : C42Row</b><br/>g1=吉 g2=古 s1=A4 s2=A4<br/>2群のA4が同じ日に併存不可"]
 
   W017["<b>wishes['0,17']</b> = 8<br/>古泉×12/18 に B4 を希望<br/>schedule[0][17]=8 ＝充足済み"]
   SC3["<b>schedule[3]</b>（桒澤美幸の1か月・31要素）<br/>[9,8,8,8,8,0,8,8,8,8,0,0,0,0,8,8,0,8,8,8,8,8,0,8,8,8,8,8,0,0,0]<br/>= 休10回 / B4 20回 / 有1回"]
 
-  RP["<b>report : ViolationReport</b>（実測）<br/><b>hard=0 total=437 weightedScore=5015.0</b><br/>c1:115 weekly:183 c3:36 c3m:36 apt:28<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:4 high:2<br/>violations=116件 needViolations=4件 countViolations=15件"]
+  RP["<b>report : ViolationReport</b>（3.612.0 時点の実測）<br/><b>hard=0 total=409 weightedScore=8990.0</b><br/>c1:115 weekly:184 c3:36 c3m:36<br/>c3mn:11 low:8 c42:6 c2:4 covO:4 fair:3 high:2<br/>violations=116件 needViolations=4件 countViolations=10件"]
 
   ST --- SH0 & SH2 & SH9
   ST --- G7
@@ -466,20 +478,21 @@ flowchart TB
 **この1件から読み取れること**
 
 - **`hard=0` は「配布できる」を意味する**。golden は既に配布可の盤面で、残っているのは全部 SOFT。
-  `weightedScore=5015` は `golden_eval_expected.txt` の `soft=5015` と一致する（3.409.24 で c1/c3mn の重みを
-  15→30 にして 3109→4999、2026-08-27 に covO を 1→5 にして 4999→5015＝covO 4 件 × 4。族の件数は1つも変わっていない）
+  `weightedScore=8990` は `golden_eval_expected.txt` の `soft=8990` と一致する（2026-09-25（3.612.0）にホストJVMで再実測）。
+  **履歴**: 5015（3.505.7）→ 盤面は同じで評価式が変わった（3.509.0 の D9 で apt 28→0、その後 fair 4→3・weekly 183→184）、
+  3.522.0/3.556.0 の重み見直しで 8990
   （`hard=0` なので `weightedScore == soft の重み付き和`）。これが **Kotlin↔C++ の言語跨ぎパリティの固定値**（3.357.0）。
 - **担当可否が apt を無効化する具体例**：`groupShiftApt[7]` は Dﾃ に目標10 を持つが、`groupShift[7][2]=0`＝
   群Bは Dﾃ を担当できない。`Problem.apt` 構築時に `bucket=canDo` ガードが効くので、この目標は**実効しない**
   （到達不能な幻の apt 違反を作らないための設計）。
 - **厳密ピンの実物**：`staffRange["0,9"]` が `lo==hi==1`。研磨パスはこれを崩す手を `exactPinRegression` で却下する。
-  実配置は0回なので `vio-low`（重み90）が立っており、**ピンを守ることと違反が残ることは両立する**。
+  実配置は0回なので `vio-low`（重み120）が立っており、**ピンを守ることと違反が残ることは両立する**。
 - **cons3n は全8行**、すべて Dﾃ / Cｵ / Cｱ の翌日に勤務シフトを置くことを禁止する（Dﾃ×5、Cｵ×2、Cｱ×1）。
   つまりこのデータの禁止連続は**夜勤・準夜勤の翌日**という単一の業務ルールを8行に展開したもの。
 - **`needViolations` 4件はすべて `vio-covO`**：キーは `"2,8"` `"2,9"` `"2,21"` `"2,27"`＝
   被覆キー空間 `"k,j"` で shift 2（Dﾃ）が 12/9・12/10・12/22・12/28 に2人配置＝`need1=1` を超過。
   covU（人員不足）は0＝この盤面は「足りない」のではなく「多い日がある」。
-  `countViolations` 15件の内訳は `vio-low` 8 / `vio-aptLow` 4 / `vio-high` 2 / `vio-aptHigh` 1。
+  `countViolations` 10件の内訳は `vio-low` 8 / `vio-high` 2（3.505.7 時点は aptLow 4・aptHigh 1 を含む15件＝D9 で apt が消えた）。
 - **cons41 は0件**なので、`C41Row` の具体インスタンスは golden から取得できない（`(未設定)` として扱う）。
 
 ---
@@ -499,8 +512,9 @@ flowchart TB
    ドリフトしていた。**→ 3.390.0 で §4 を全82フィールドへ刷新**（旧記述は30フィールドが未記載＝`*Families` 3種・
    result 専用マップ7種・調整トグル4種・診断5種などが丸ごと落ちていた）。以後は各グループの**件数**を
    `MagiUiState.kt` の `val` 宣言数と機械照合できる形にしてある。
-4. **`docs/business-logic.md` は重み・族数とも実装と一致**（19族・c1=30・c3mn=30・covO=5.0・c42 の C(n,2)・
-   keep-best の hard→weightedScore→total。3.505.7 で再照合）。ここは信用してよい。
+4. **`docs/business-logic.md` は重み・族数とも実装と一致**（20族・c1=50・c3mn=90・covO=10・c42 の C(n,2)・
+   keep-best の hard→weightedScore→total。3.522.0の全面見直し後の値で3.577.0再照合）。ここは信用してよい
+   （この節自身が古い値のまま3.572.0の族数修正まで放置されていた＝backlog#23で発見・3.577.0で修正）。
 5. ~~**コード内コメントの stale が1件**：`MirrorKeys.weights` の「窓の要件(c1)=5」~~ → 3.428.0 までに「現在値はどちらも 30」へ
    書き直し済み（HF77 の変遷を 1 行で持つ形）。
 
