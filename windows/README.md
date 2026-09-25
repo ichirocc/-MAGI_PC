@@ -328,6 +328,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `V6OptimizerOptions.RoleBudgetFit`・`RsiPlusPhaseBudgets` と、`RunRsiPlus` の
+  位相 0 秒ガード（既定式では各位相 ≥10s/5s で常に偽）を撤去（Android 3.601.0 で有意差なし、出力不変）。3.600.0 の既定 ON ガードは不変。
 - 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PolishGate.PostChainKeepBestFinalOnly`／`PostOptimizationParams.PostChainKeepBestFinalOnly`／
   `PostChain.RestoreBestIfWorse` とテスト `FinalOnlyDefersRollbackToChainEnd` を撤去（Android #36 で勝11/負36 p=0.0003＝不合格、出力不変）。
 - 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PostOptimizationParams.PostChainRunningKeepBestAcceptTies` と `PostChain(acceptTies:)` を撤去
@@ -523,8 +525,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - **3.600.0**（締切・ロール予算の正しさ）: `V6NativeOptimizer.Portfolio`の各ロール呼出し前に
     「既に締切／停止済みならロールを始めない」ガードを追加（始めれば位相下限ぶん必ず超過するため）。
     `V6OptimizerOptions.RoleBudgetFit`（既定OFF、時間配分を変える実験フラグ）と
-    `RsiPlusPhaseBudgets`（RSI+の4位相秒数を予算ちょうどに収める配分式、Kotlin原本の
-    `maxBy`が常に同じ添字を選ぶ挙動込みで忠実に移植）を追加。`RunRsiPlus`は入口で停止済みなら
+    `RsiPlusPhaseBudgets`（RSI+の4位相秒数を予算ちょうどに収める配分式）も移植していた（Android 3.601.0 で有意差なし、
+    2026-09-25 撤去）。`RunRsiPlus`は入口で停止済みなら
     入力をそのまま返す（位相下限ぶんの無駄走りをしない）。
   - **保留（backlog#26/#27①相当、3.580.0/3.590.0）**: 両版とも「既定OFFの専用修復腕を条件付きに
     再活性化する」実験で、依存する腕本体（`C2Polish`/`C42FlowPolish`/`C3nMarginLnsPolish`/

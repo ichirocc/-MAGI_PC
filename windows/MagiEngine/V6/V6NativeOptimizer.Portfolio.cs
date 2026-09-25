@@ -726,12 +726,10 @@ public static partial class V6NativeOptimizer
                             Tabu = assignment.Role != HypothesisEpochRole.BaselineRefine,
                         };
                         bool StopRole() => shouldStop() || NowMs() >= roleDeadline;
-                        // [3.600.0, Kotlin原本] ロールへ渡す秒数。RoleBudgetFit 既定は従来どおり量子そのもの。
-                        var roleBudgetSec = options.RoleBudgetFit ? Math.Max(Math.Min(quantum, remainingSec), 0) : quantum;
                         var roleT0 = NowMs();
                         V6OptimizerResult? result;
                         // [3.600.0, Kotlin原本] 既に締切／停止済みならロールを始めない（始めれば位相下限ぶん必ず超過する）。
-                        if (StopRole() || roleBudgetSec <= 0)
+                        if (StopRole() || quantum <= 0)
                         {
                             result = null;
                         }
@@ -749,9 +747,9 @@ public static partial class V6NativeOptimizer
                             }
                             result = assignment.Algorithm switch
                             {
-                                V6Algorithm.Alns => await RunAlns(state, start.Copy2D(), roleOptions, roleBudgetSec, StopRole, Progress, cancellationToken).ConfigureAwait(false),
-                                V6Algorithm.Rsi => await RunRsi(state, start.Copy2D(), roleOptions, roleBudgetSec, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
-                                _ => await RunRsiPlus(state, start.Copy2D(), roleOptions, roleBudgetSec, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
+                                V6Algorithm.Alns => await RunAlns(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, cancellationToken).ConfigureAwait(false),
+                                V6Algorithm.Rsi => await RunRsi(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
+                                _ => await RunRsiPlus(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
                             };
                         }
                         catch (OperationCanceledException) { throw; }
