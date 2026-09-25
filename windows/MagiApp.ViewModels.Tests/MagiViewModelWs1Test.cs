@@ -515,6 +515,47 @@ public class MagiViewModelWs1Test
         Assert.Contains("スキル割当: 職員A → 区分[2]", vm.Ui.OpLog[0]);
     }
 
+    [Fact]
+    public void StaffSkillComboIndexShowsNoneForUnassignedAndOutOfRangeValues()
+    {
+        var st = MinimalState.Build(
+            staffList: new List<Staff> { new("A", 0, -1), new("B", 0, 0), new("C", 0, 1), new("D", 0, 5) },
+            skillGroups: new List<Group> { new("夜勤可", "SK0"), new("新人", "SK1") });
+        var vm = new MagiViewModel { _state = st };
+
+        Assert.Equal(0, vm.StaffSkillComboIndex(0));
+        Assert.Equal(1, vm.StaffSkillComboIndex(1));
+        Assert.Equal(2, vm.StaffSkillComboIndex(2));
+        Assert.Equal(0, vm.StaffSkillComboIndex(3));
+        Assert.Equal(0, new MagiViewModel { _state = MinimalState.Build() }.StaffSkillComboIndex(0)); // 0 with no skill groups
+    }
+
+    [Fact]
+    public void SetStaffSkillFromComboLeavesAnUntouchedOutOfRangeValueAlone()
+    {
+        var st = MinimalState.Build(); // no skill groups; staff keep SkillIdx 0
+        var vm = new MagiViewModel { _state = st };
+        var shown = vm.StaffSkillComboIndex(0);
+
+        vm.SetStaffSkillFromCombo(0, shown, shown);
+
+        Assert.Same(st, vm._state);
+        Assert.Equal(0, vm.UndoStackCount);
+    }
+
+    [Fact]
+    public void SetStaffSkillFromComboWritesTheChosenGroupOrNone()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(skillGroups: new List<Group> { new("夜勤可", "SK0"), new("新人", "SK1") }) };
+
+        vm.SetStaffSkillFromCombo(0, shownIdx: 1, comboIdx: 2);
+        Assert.Equal(1, vm._state!.StaffList[0].SkillIdx);
+
+        vm.SetStaffSkillFromCombo(0, shownIdx: 2, comboIdx: 0);
+        Assert.Equal(-1, vm._state!.StaffList[0].SkillIdx);
+        Assert.Equal(0, vm._state!.StaffList[1].SkillIdx); // untouched
+    }
+
     // ===================================================================
     // Ws1CanRemoveGroup / Ws1GroupMemberCount / ref-count queries
     // ===================================================================

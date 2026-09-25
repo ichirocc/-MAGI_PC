@@ -88,6 +88,8 @@ public sealed partial class EditView : UserControl
     /// <summary>入力欄へ最後に取り込んだ職員 index。選択が変わったときだけ名前欄を上書きする
     /// （毎回上書きすると入力途中の名前が消えるため）。</summary>
     private int _syncedStaffIndex = -1;
+    /// <summary>その職員についてスキル区分コンボへ取り込んだ位置。「改名・所属変更」はコンボがここから動いたときだけ区分を書く。</summary>
+    private int _syncedSkillComboIndex = -1;
 
     /// <summary>希望シフトの月間カレンダー（<see cref="RenderWishCalendar"/>）でタップ選択中の日
     /// （1始まり）。<see cref="WishStaffCombo"/> の選択が変わったら（別人の選択を持ち越さないよう）
@@ -974,7 +976,9 @@ public sealed partial class EditView : UserControl
         }
 
         // スキル区分選択肢。先頭は「(なし)」= SkillIdx -1（年間マスターのスキル区分CRUDと共有）。
+        var skillItemsBefore = _staffSkillItems;
         SyncItems(StaffSkillCombo, SkillComboItems(), ref _staffSkillItems);
+        if (!ReferenceEquals(skillItemsBefore, _staffSkillItems)) _syncedStaffIndex = -1; // 区分の増減で番号がずれる＝取り込み直す
 
         SyncStaffFields();
 
@@ -1195,7 +1199,7 @@ public sealed partial class EditView : UserControl
         ReviewMemoBox.Text = "";
     }
 
-    /// <summary>選択中の職員の名前・所属を入力欄へ取り込む（選択が変わったときだけ）。</summary>
+    /// <summary>選択中の職員の名前・所属・スキル区分を入力欄へ取り込む（選択が変わったときだけ）。</summary>
     private void SyncStaffFields()
     {
         var i = StaffCombo.SelectedIndex;
@@ -1209,11 +1213,11 @@ public sealed partial class EditView : UserControl
         {
             var g = ws1.Staff[i].GroupIdx;
             if (g >= 0 && g < _groupItems.Count) GroupCombo.SelectedIndex = g;
-            // スキル区分。-1(なし)は index0、区分[s]は index(s+1)（SkillComboItems の並びと対応）。
-            var skillIdx = ws1.Staff[i].SkillIdx;
-            var comboIdx = skillIdx + 1;
-            if (comboIdx >= 0 && comboIdx < _staffSkillItems.Count) StaffSkillCombo.SelectedIndex = comboIdx;
         }
+        // スキル区分は常にこの職員の値へ（-1・範囲外は「(なし)」）。前の職員の選択を残さない。
+        var skillCombo = _vm.StaffSkillComboIndex(i);
+        _syncedSkillComboIndex = skillCombo < _staffSkillItems.Count ? skillCombo : -1;
+        StaffSkillCombo.SelectedIndex = _syncedSkillComboIndex;
     }
 
     /// <summary>「(なし)」＋スキル区分一覧。index=0が「(なし)」(SkillIdx=-1)、index=g+1がSkillIdx=g。
@@ -1242,14 +1246,8 @@ public sealed partial class EditView : UserControl
         var g = GroupCombo.SelectedIndex;
         if (name.Length == 0) { StaffHintText.Text = "名前を入れてください。"; return; }
         if (g < 0) { StaffHintText.Text = "所属グループを選んでください。"; return; }
-        // [スキル区分の同時設定] Ws1AddStaff(name,groupIdx) は SkillIdx を受け取らない
-        // （既定0=未所属で追加される）ため、追加直後にその新しい職員(=追加前の人数=末尾index)へ
-        // SetStaffSkill で選択中のスキル区分を書く。追加自体が失敗する経路（name/g空欄）は
-        // 既に上のガードで弾いているため、ここに来た時点で追加は必ず成功する。
-        var newIndex = _vm.Ui.StaffNames.Count;
+        // スキル区分は書かない（Android addStaff と同じく Staff の既定値のまま）。コンボは選択中の職員の値を映しているだけ。
         _vm.Ws1AddStaff(name, g);
-        var skillCombo = StaffSkillCombo.SelectedIndex;
-        if (skillCombo >= 0) _vm.SetStaffSkill(newIndex, skillCombo - 1);
         // 追加後は末尾に増えるだけで選択 index は変わらない＝入力欄の取り込みを促す。
         _syncedStaffIndex = -1;
     }
@@ -1264,10 +1262,10 @@ public sealed partial class EditView : UserControl
         if (name.Length == 0) { StaffHintText.Text = "名前を入れてください。"; return; }
         if (g < 0) { StaffHintText.Text = "所属グループを選んでください。"; return; }
         // Ws1EditStaff は名前と所属をまとめて書く（Kotlin原本と同じ単位）＝ボタンも「改名・所属変更」。
-        // SetStaffSkill は独立API（Ws1EditStaffがSkillIdxを受け取らない）なので、続けて別途書く。
-        _vm.Ws1EditStaff(i, name, g);
+        // スキル区分は独立API。コンボを動かしたときだけ続けて書く。
         var skillCombo = StaffSkillCombo.SelectedIndex;
-        if (skillCombo >= 0) _vm.SetStaffSkill(i, skillCombo - 1);
+        _vm.Ws1EditStaff(i, name, g);
+        _vm.SetStaffSkillFromCombo(i, _syncedSkillComboIndex, skillCombo);
         _syncedStaffIndex = -1;
     }
 

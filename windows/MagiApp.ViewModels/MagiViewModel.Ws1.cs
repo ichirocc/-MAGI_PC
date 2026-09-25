@@ -343,6 +343,24 @@ public sealed partial class MagiViewModel
         });
     }
 
+    /// <summary>職員管理のスキル区分コンボで職員 i に出す位置（0=「(なし)」、g+1=区分 g）。-1 と範囲外の値は「(なし)」
+    /// ＝Android <c>StaffManageCard</c> の <c>skills.getOrNull(st.skillIdx) ?: "(なし)"</c> と同じ読み。</summary>
+    public int StaffSkillComboIndex(int i)
+    {
+        var st = _state;
+        if (st is null || i < 0 || i >= st.StaffList.Count) return 0;
+        var s = st.StaffList[i].SkillIdx;
+        return s >= 0 && s < st.SkillGroups.Count ? s + 1 : 0;
+    }
+
+    /// <summary>コンボの位置 <paramref name="comboIdx"/> を職員 i の SkillIdx へ書く。取り込んだときの位置
+    /// <paramref name="shownIdx"/> から動いていなければ書かない＝触っていない範囲外の値（区分が無いのに 0 など）を黙って書き換えない。</summary>
+    public void SetStaffSkillFromCombo(int i, int shownIdx, int comboIdx)
+    {
+        if (comboIdx < 0 || comboIdx == shownIdx) return;
+        SetStaffSkill(i, comboIdx - 1);
+    }
+
     // ===== 削除確認・参照件数クエリ =====
 
     /// <summary>グループを削除できるか（2グループ以上あれば可。所属者がいても先頭グループへ移動して削除）。</summary>
