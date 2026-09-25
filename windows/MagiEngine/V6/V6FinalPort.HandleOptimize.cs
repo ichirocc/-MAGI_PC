@@ -662,7 +662,7 @@ public static partial class V6FinalPort
                 if (n > 0) open.Add($"{key} {n}件");
             }
             if (selfConflictShown.Count > 0)
-                walls.Add($"希望どうしの衝突 {selfConflictShown.Sum(it => it.N)}件(" +
+                walls.Add($"希望と禁止の衝突 {selfConflictShown.Sum(it => it.N)}件(" +
                     string.Join("・", selfConflictShown.Select(it => $"{it.Key} {it.N}")) + "＝希望を1件取り消すまで解消しない)");
             if (covUWall > 0)
             {

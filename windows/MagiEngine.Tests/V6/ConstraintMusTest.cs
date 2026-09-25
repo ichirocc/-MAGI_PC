@@ -8,17 +8,14 @@ using Range = MagiEngine.Model.Range;
 namespace MagiEngine.Tests.V6;
 
 /// <summary>
-/// [フェーズ7ピース13] <see cref="ConstraintMus"/> の移植元テストの抽出（Kotlin原本
-/// <c>ConstraintMusTest.kt</c>、~7件のうちエンジン単体（<c>AnalyzeStaffConflicts</c>/
-/// <c>AnalyzeDayConflicts</c>のみ）を検証する6件）。各テストは「極小コアの正確な構成」まで固定する
+/// [フェーズ7ピース13] <see cref="ConstraintMus"/> の移植元テスト（Kotlin原本 <c>ConstraintMusTest.kt</c>）。
+/// 各テストは「極小コアの正確な構成」まで固定する
 /// （極小性: どの1件を外しても証明が崩れる構成を手計算で設計済み＝コアは一意）。
 ///
-/// <c>guidanceEmitsDayConflictWithWishLabels</c>（全体が <c>V6SanityPort.BuildGuidance</c> 経由）は
-/// piece 14/15（<c>V6SanityPort.Guidance*.cs</c>）が対象＝<c>BuildGuidance</c> 未移植のためここでは
-/// 対象外。<c>engineFindsWishFreeConflictButGuidanceSuppressesIt</c> はエンジン部分（前半、
+/// <c>engineFindsWishFreeConflictButGuidanceSuppressesIt</c> はエンジン部分（前半、
 /// <see cref="EngineFindsWishFreeConflict"/>）のみ移植し、後半の
 /// <c>V6SanityPort.BuildGuidance</c> 呼び出し以降（「希望なしコアは検査9から出さない」の確認）は
-/// 同じ理由で piece 14/15 のテストファイルへ委ねる。
+/// piece 14/15 のテストファイルへ委ねる。
 /// </summary>
 public class ConstraintMusTest
 {
@@ -142,6 +139,39 @@ public class ConstraintMusTest
         Assert.Equal(2, res[0].Core.Count);
         Assert.Single(res[0].Core.OfType<ConstraintMus.RangeCap>());
         Assert.Single(res[0].Core.OfType<ConstraintMus.WindowRule>());
+    }
+
+    [Fact]
+    public void GuidanceEmitsDayConflictWithWishLabels()
+    {
+        var st = State(
+            days: 2,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 0, ["1,0"] = 0 },
+            staffCount: 2);
+        var hit = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Where.Contains("必要人数と固定希望の衝突"));
+        Assert.Contains("同時に成立しません", hit.Problem);
+        Assert.Contains("希望「", hit.Problem);
+        Assert.Contains("希望を1件調整", hit.Fix);
+        Assert.DoesNotContain("個人上限が0", hit.Problem);
+    }
+
+    [Fact]
+    public void DayMusNamesStaffLeftOutByZeroCap()
+    {
+        // X 必要 1 人: s0 は休の希望固定、s1 は X の上限 0（希望なし＝MayPlace が偽で席に就けない）。証明の前提として s1 を名指しする。
+        var st = State(
+            days: 1,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "1", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 0 },
+            staffRange: new Dictionary<string, Range> { ["1,1"] = new Range("", "0") },
+            staffCount: 2);
+        Assert.Equal(2, Assert.Single(ConstraintMus.AnalyzeDayConflicts(new Problem(st))).Core.Count);
+        var hit = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Where.Contains("必要人数と固定希望の衝突"));
+        Assert.Equal(
+            "固定された希望の組合せでは、この日の必要人数を満たせません。次の2件は同時に成立しません（証明つき）: " +
+                "必要人数「Xに1人」 ・ 希望「s0 1/1(木)=休」。個人上限が0のため置けない人: s1（X）",
+            hit.Problem);
     }
 
     [Fact]

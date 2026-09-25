@@ -328,6 +328,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（診断の文言 2 件を同期、Kotlin 0658d0d 同日）: 設定ミス診断 1c は禁止の並びの窓が 1 セル（単独の禁止シフト）なら関わる希望が
+  1 件＝「禁止の並び「X」に希望が当たっています。…」「この希望を取り消すか、…」（複数セルの文言は不変）。HF70・残存分析の集計は 1 件の組も
+  数えるので「希望どうしの衝突 N 件」→「希望と禁止の衝突 N 件」（数え方・仕分けは不変）。検査 9 の日別 MUS は証明がコアで希望固定されて
+  いない人を `MayPlace` で数える＝上限 0 の人を「。個人上限が0のため置けない人: 名前（シフト）」と名指し（証明・検出は不変）。
+  テストは Kotlin の追加・変更を 1 対 1（`WishSelfConflictTest` の 1 セルの窓と複数セルの文言、`ConstraintMusTest` の上限 0 の名指し）。
+  `ConstraintMusTest` は Kotlin の `guidanceEmitsDayConflictWithWishLabels` も写した（ヘッダの「`BuildGuidance` 未移植のため対象外」は
+  既に移植済みで陳腐化していた）。業務ルールの写し `docs/business-logic.md` を Android と byte 一致に。文言とログだけ＝盤面は不変。
+  `dotnet test MagiEngine.Tests` 941/941 緑。
 - 2026-09-25（native-parity の道具を Android a493677 と同期、C# 側のツールだけ＝エンジン出力は不変）: この repo の native-parity は直下の
   `app/src/main/cpp/magi_native.cpp`・`tools/native/host_parity_bench.cpp`（フォーク時の写し＝Android 3.442.0〈1e3afa4〉と同一）と、
   3.522.0 より前の重みの期待値（`app/src/test/resources/*_eval_expected.txt`、C# の `MagiEngine.Tests/Fixtures` の複製とも別物）を突き合わせて

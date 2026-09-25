@@ -75,7 +75,24 @@ public class WishSelfConflictTest
         var issue = Assert.Single(issues);
         Assert.Equal(IssueKind.Wish, issue.Kind);
         Assert.Equal("大島 10/3(土)・10/4(日)・10/5(月) 希望「休→休→休」", issue.Where);
+        Assert.Equal("禁止の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では解消できません", issue.Problem);
+        Assert.Equal("いずれか1件の希望を取り消すか、禁止の並び「休→休→休」を見直してください", issue.Fix);
         Assert.Equal(SettingFixAction.None, issue.Action);
+    }
+
+    [Fact]
+    public void OneCellForbiddenWindowOnAWishIsWordedAsOneWish()
+    {
+        var st = State(new Dictionary<string, int> { ["0,2"] = D }, cons3n: new List<C3Row> { new(new List<string> { "Dﾃ" }) });
+        Assert.Equal(new[] { new[] { 2 } }, V6SanityPort.WishSelfConflicts(st).Select(g => g.Days.ToArray()));
+        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Kind == IssueKind.Wish && it.Problem.Contains("禁止の並び「Dﾃ」"));
+        Assert.Equal("大島 10/3(土) 希望「Dﾃ」", issue.Where);
+        Assert.Equal("禁止の並び「Dﾃ」に希望が当たっています。希望は固定なので計算では解消できません", issue.Problem);
+        Assert.Equal("この希望を取り消すか、禁止の並び「Dﾃ」を見直してください", issue.Fix);
+        var sched = new[] { new[] { A, A, D, A, A, A, A }, Enumerable.Repeat(A, 7).ToArray() };
+        var msg = V6HotfixPasses.DetectHF70Anomalies(st, sched, "t").Message;
+        Assert.Contains("希望と禁止の衝突 1 件", msg);
+        Assert.DoesNotContain("希望以外HARD", msg);
     }
 
     [Fact]
@@ -120,7 +137,7 @@ public class WishSelfConflictTest
         var rep = UnifiedViolationChecker.Check(st, sched);
         Assert.Equal(1, rep.Breakdown["c3n"]); Assert.Equal(1, rep.Breakdown["c3w"]);
         var msg = V6HotfixPasses.DetectHF70Anomalies(st, sched, "t", rep).Message;
-        Assert.Contains("希望どうしの衝突 2 件", msg);
+        Assert.Contains("希望と禁止の衝突 2 件", msg);
         Assert.DoesNotContain("希望以外HARD", msg);
     }
 
@@ -132,7 +149,7 @@ public class WishSelfConflictTest
             onProgress: (_, _, _, _) => { });
         Assert.Equal(1, res.Report.Hard);
         var line = Assert.Single(res.Logs, it => it.Tag == "残存分析").Message;
-        Assert.Contains("希望どうしの衝突", line.Split('／')[0]);
+        Assert.Contains("希望と禁止の衝突", line.Split('／')[0]);
         const string openMark = "まだ狙える: ";
         var at = line.IndexOf(openMark, StringComparison.Ordinal);
         var open = at < 0 ? line : line[(at + openMark.Length)..];

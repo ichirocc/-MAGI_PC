@@ -61,7 +61,7 @@ public static partial class V6HotfixPasses
         var issues = new List<string>();
         if (invalid > 0) issues.Add($"担当不可/範囲外配置 {invalid} 件");
         if (impossible > 0) issues.Add($"不可能希望 {impossible} 件");
-        if (selfConflict.Count > 0) issues.Add($"希望どうしの衝突 {selfConflict.Values.Sum()} 件");
+        if (selfConflict.Count > 0) issues.Add($"希望と禁止の衝突 {selfConflict.Values.Sum()} 件");
         if (hardCore > 0) issues.Add($"希望以外HARD {hardCore} 件");
         var msg = issues.Count == 0 ? $"HF70: {algoName} 異常なし" : $"HF70: {string.Join(" / ", issues)}";
         var advice = issues.Count == 0 ? "" : "設定(担当範囲), 希望, 必要人数, 連勤禁止条件を確認してください";

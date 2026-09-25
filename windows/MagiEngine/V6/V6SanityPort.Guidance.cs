@@ -142,14 +142,16 @@ public static partial class V6SanityPort
                 Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}"));
         }
         // 1c) 禁止の並び(c3n)の窓がまるごと希望固定（例: 休の希望 3 連日と「休→休→休」禁止）。どれを取り消すかは利用者が選ぶ＝ワンタップなし。
+        //     窓が 1 セル（単独の禁止シフト）なら関わる希望は 1 件＝単数の文言。
         foreach (var g in selfConflicts)
         {
             if (g.Family != "c3n") continue;
             var seq = string.Join("→", g.Shifts.Select(Sym));
+            var one = g.Days.Count == 1;
             outList.Add(new SettingIssue(IssueKind.Wish,
                 $"{Nm(g.Staff)} {string.Join("・", g.Days.Select(d => SafeDayLabel(state.StartDate, d)))} 希望「{seq}」",
-                $"禁止の並び「{seq}」に希望どうしで当たっています。希望は固定なので計算では解消できません",
-                $"いずれか1件の希望を取り消すか、禁止の並び「{seq}」を見直してください"));
+                $"禁止の並び「{seq}」に{(one ? "希望が" : "希望どうしで")}当たっています。希望は固定なので計算では解消できません",
+                $"{(one ? "この希望" : "いずれか1件の希望")}を取り消すか、禁止の並び「{seq}」を見直してください"));
         }
 
         // 2) 連続パターン制約の重複（例: c3n:Dﾃ→A4）
@@ -836,13 +838,24 @@ public static partial class V6SanityPort
                     $"次の{sc.Core.Count}件は同時に成立しません（証明つき）: {labels}",
                     $"いずれか1件を緩めてください（例: {hints}）"));
             }
+            // 日別の証明（ConstraintMus の CanServe）はコアで希望固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。
+            string CapZeroNote(ConstraintMus.DayConflict dc)
+            {
+                var pinned = dc.Core.OfType<ConstraintMus.WishPin>().Select(it => it.Staff).ToHashSet();
+                var parts = dc.Core.OfType<ConstraintMus.DayNeed>().Select(it => it.Shift).Distinct().Select(k =>
+                {
+                    var names = Enumerable.Range(0, p.S).Where(i => !pinned.Contains(i) && p.CanDo(i, k) && !p.MayPlace(i, k)).ToList();
+                    return names.Count == 0 ? null : $"{string.Join("・", names.Select(Nm))}（{Sym(k)}）";
+                }).Where(it => it is not null).ToList();
+                return parts.Count == 0 ? "" : $"。個人上限が0のため置けない人: {string.Join("、", parts)}";
+            }
             foreach (var dc in ConstraintMus.AnalyzeDayConflicts(p).Where(x => HasWish(x.Core)).OrderBy(x => x.Core.Count).Take(3))
             {
                 var labels = string.Join(" ・ ", dc.Core.Select(ItemLabel));
                 var wishItem = dc.Core.FirstOrDefault(it => it is ConstraintMus.WishPin);
                 var wishHint = wishItem is null ? null : RelaxHint(wishItem);
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{SafeDayLabel(state.StartDate, dc.Day)} の必要人数と固定希望の衝突",
-                    $"固定された希望の組合せでは、この日の必要人数を満たせません。次の{dc.Core.Count}件は同時に成立しません（証明つき）: {labels}",
+                    $"固定された希望の組合せでは、この日の必要人数を満たせません。次の{dc.Core.Count}件は同時に成立しません（証明つき）: {labels}" + CapZeroNote(dc),
                     "この日の希望を1件調整するか、必要人数を下げてください" + (wishHint is null ? "" : $"（例: {wishHint}）")));
             }
         }
