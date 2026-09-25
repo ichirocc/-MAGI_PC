@@ -171,9 +171,9 @@ public static class GridDisplayMarks
 }
 
 /// <summary>探す対象（Kotlin <c>FixFocus</c>）。Staff/Shift は <c>FixSuggester</c> の絞り込み、Day は理由の読み取りだけに使う。</summary>
-public sealed record FixFocus(int? Staff, int? Shift, int? Day = null)
+public sealed record FixFocus(int? Staff, int? Shift, int? Day = null, int? ExceptStaff = null)
 {
-    public string Key => $"{Staff?.ToString() ?? "-"},{Shift?.ToString() ?? "-"},{Day?.ToString() ?? "-"}";
+    public string Key => $"{Staff?.ToString() ?? "-"},{Shift?.ToString() ?? "-"},{Day?.ToString() ?? "-"}" + (ExceptStaff is { } x ? $",x{x}" : "");
 }
 
 /// <summary>手が見つからなかったときの説明。Lines は確かめた事実だけ、WishRelated なら「希望を見る」を出す。</summary>

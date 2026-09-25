@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using MagiApp.ViewModels;
 using MagiEngine.V6;
@@ -829,7 +830,8 @@ public sealed partial class ScheduleView : UserControl
             if (vioClass is not null)
             {
                 borderBrush = ResolveVioBrush(ui, vioClass);
-                thickness = new Thickness(2);
+                // 必須は太く、要調整は細く（Android MagiMarks: 3dp / 2dp）＝必須が先に目に入る。
+                thickness = new Thickness(MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(vioClass)) ? 3 : 1.5);
             }
             // [集中モード] 違反・未反映希望・注目セル以外を淡色に沈める（非表示にはしない＝被覆の文脈は残す）。
             var unreflectedWish = ui.Wishes.TryGetValue($"{i},{j}", out var wk0) && wk0 != k;
@@ -1148,7 +1150,7 @@ public sealed partial class ScheduleView : UserControl
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus)
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
-        void Start() { if (!_vm.Ui.Running) _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key); }
+        void Start() { if (!_vm.Ui.Running) _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day); }
         void Refresh()
         {
             var ui = _vm.Ui;
@@ -1304,99 +1306,182 @@ public sealed partial class ScheduleView : UserControl
 
     /// <summary>違反のあるセル: 違反の一覧・この職員の回数・偏り・開いた時点で始める直し方探し（Kotlin セルシート）と、
     /// その下にいつでも使える手動の割当ボタン。閉じると探索を取り消す。</summary>
-    private void ShowViolationCellEditor(FrameworkElement anchor, int i, int j, IReadOnlyList<string> classes,
-        IReadOnlyDictionary<string, int> anchors, int[] allowed)
-    {
-        var ui = _vm.Ui;
-        var panel = new StackPanel { Spacing = 4, MaxWidth = 380 };
-        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-        panel.Children.Add(new TextBlock { Text = $"{name} ・ {j + 1}日", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        foreach (var cls in classes)
-        {
-            var fam = VioBuckets.FamilyOfVioClass(cls);
-            var run = fam == "c1" && anchors.TryGetValue($"{i},{j}", out var n) && n > 1 ? $"（連続 {n} 区間）" : "";
-            panel.Children.Add(new TextBlock { Text = (MirrorKeys.Hard.Contains(fam) ? "⚠ " : "△ ") + LabelOf(fam) + run, Foreground = ResolveVioBrush(ui, cls), TextWrapping = TextWrapping.Wrap });
-        }
-        var staffLines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
-        if (staffLines.Count > 0)
-        {
-            panel.Children.Add(new TextBlock { Text = "この職員の回数・偏り", Opacity = 0.8 });
-            foreach (var l in staffLines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        }
-        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 560 } };
-        panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
-        panel.Children.Add(new TextBlock { Text = "割当を変更", Opacity = 0.8, Margin = new Thickness(0, 8, 0, 0) });
-        var picks = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 64, ItemHeight = 48 };
-        foreach (var k in allowed)
-        {
-            var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-            var b = new Button { Content = sym, Width = 60, Height = 44 };
-            var kk = k;
-            b.Click += (_, _) => { flyout.Hide(); _vm.SetCell(i, j, kk); };
-            picks.Children.Add(b);
-        }
-        panel.Children.Add(picks);
-        var memo = new Button { Content = "この違反を見直し候補にする", MinHeight = 48 };
-        memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {j + 1}日: {string.Join("・", classes.Select(c => LabelOf(VioBuckets.FamilyOfVioClass(c))))}"); };
-        panel.Children.Add(memo);
-        flyout.ShowAt(anchor);
-    }
+    private CancellationTokenSource? _marksCts;
 
-    /// <summary>タップされたセルの担当可能シフト一覧をフライアウトで出し、選択で <c>SetCell</c> を呼ぶ。</summary>
-    private void ShowCellEditor(FrameworkElement anchor, int i, int j)
+    /// <summary>
+    /// セル編集（Android <c>CellEditSheet</c> の移植、2026-09-25）。上から: 見出し・1 行の状態・直し方（読む）→［割当］［希望］＋補足 →
+    /// 前日/翌日 → 固定配置のシフトボタン（誰も担当できないシフトは出さない、担当外は「外」、利き手で左右反転、右上の角に印）→ 閉じる。
+    /// 押したら即反映（通知バーに「元に戻す」）。希望どおりのセルに違反があれば「他の人で補う（推奨）」を先に出す。
+    /// </summary>
+    private void ShowCellEditor(FrameworkElement anchor, int i, int j, int mode = 0)
     {
-        // [2026-09-02, 配線] EditBlockedNow（Kotlin 3.405.0 相当）。旧: Ui.Running の素通し判定のみで、
-        // ボタン無効化の取りこぼし（Render 直後のタップ等）は理由も出さず無反応に見えていた。
-        // SetCell 自身が使うのと同じ文言を Ui.Message へセットするので、StatusText（Render 側）に
-        // 「なぜ何も起きなかったか」が出る。
         if (_vm.EditBlockedNow()) return;
         var ui = _vm.Ui;
-        var allowed = _vm.AllowedShiftsFor(i);
-        // [2026-09-10, ユーザー報告「メニューが出ない」] ShowShortageFixFlyout と同じ理由でXamlRootを明示。
-        var anchorsV = GridDisplayMarks.C1DisplayAnchors(ui);
-        var cellClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", anchorsV);
-        if (cellClasses.Count > 0) { ShowViolationCellEditor(anchor, i, j, cellClasses, anchorsV, allowed); return; }
-        var flyout = new MenuFlyout { XamlRoot = anchor.XamlRoot };
-        // このセルの違反（c1 の表示アンカー込み、連続する窓は「連続 N 区間」）と、この職員の回数・偏り（Kotlin セルシートと同じ）。
-        var anchors = GridDisplayMarks.C1DisplayAnchors(ui);
-        foreach (var cls in GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", anchors))
+        if (i < 0 || i >= ui.Schedule.Count || j < 0 || j >= ui.Days) return;
+        var allowed = _vm.AllowedShiftsFor(i).ToHashSet();
+        var canDo = allowed.Count > 0 ? allowed : Enumerable.Range(0, ui.ShiftSymbols.Count).ToHashSet();
+        var cur = ui.Schedule[i][j];
+        int? wish = ui.Wishes.TryGetValue($"{i},{j}", out var w) ? w : null;
+        string Sym(int? k) => k is { } kk && kk >= 0 && kk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[kk] : "—";
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+        var status = _vm.CellStatusFor(i, j, LabelOf);
+        var dilemma = CellSheetLogic.IsWishDilemma(wish, cur, status.Severity);
+        var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
+        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
+        void Reopen(int ni, int nj, int m) { flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
+
+        var head = new Grid();
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        head.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        var next = CellSheetLogic.NextTourCell(CellSheetLogic.ViolationTour(ui), (i, j));
+        if (next is { } nx && nx != (i, j))
         {
-            var fam = VioBuckets.FamilyOfVioClass(cls);
-            var run = fam == "c1" && anchors.TryGetValue($"{i},{j}", out var n) && n > 1 ? $"（連続 {n} 区間）" : "";
-            flyout.Items.Add(new MenuFlyoutItem { Text = (MirrorKeys.Hard.Contains(fam) ? "⚠ " : "△ ") + LabelOf(fam) + run, IsEnabled = false });
+            var tour = new Button { Content = "次の違反 ▶", MinHeight = 48 };
+            tour.Click += (_, _) => Reopen(nx.I, nx.J, 0);
+            Grid.SetColumn(tour, 1);
+            head.Children.Add(tour);
         }
-        var staffLines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
-        if (staffLines.Count > 0)
+        panel.Children.Add(head);
+
+        var (bg, fg) = status.Severity switch
         {
-            flyout.Items.Add(new MenuFlyoutItem { Text = "この職員の回数・偏り", IsEnabled = false });
-            foreach (var l in staffLines) flyout.Items.Add(new MenuFlyoutItem { Text = l, IsEnabled = false });
+            CellSeverity.Hard => (Color.FromArgb(0xFF, 0xF9, 0xDE, 0xDC), ColorHex.Parse(MagiAccent.Red, Colors.Red)),
+            CellSeverity.Soft => (Color.FromArgb(0xFF, 0xFB, 0xEA, 0xD0), ColorHex.Parse(MagiAccent.Orange, Colors.Orange)),
+            _ => (Color.FromArgb(0xFF, 0xEC, 0xEF, 0xEE), Colors.Gray),
+        };
+        var statusBox = new StackPanel { Background = new SolidColorBrush(bg), Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(12) };
+        if (dilemma) statusBox.Children.Add(new TextBlock { Text = CellSheetLogic.WishKeptLine(Sym(wish)), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        statusBox.Children.Add(new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
+        panel.Children.Add(statusBox);
+
+        var showGrid = mode == 1 || !dilemma;
+        if (mode == 0 && dilemma)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var others = new Button { Content = "他の人で補う（推奨）", MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var breakWish = new Button { Content = "希望を取り消して別のシフトを割り当てる", MinHeight = 48 };
+            row.Children.Add(others);
+            row.Children.Add(breakWish);
+            panel.Children.Add(row);
+            var slot = new StackPanel();
+            panel.Children.Add(slot);
+            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i))); };
+            breakWish.Click += (_, _) => Reopen(i, j, 2);
         }
-        if (flyout.Items.Count > 0) flyout.Items.Add(new MenuFlyoutSeparator());
-        foreach (var k in allowed)
+        else if (mode != 1 && status.Severity != CellSeverity.None)
         {
-            var sym = k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-            var item = new MenuFlyoutItem { Text = sym };
-            item.Click += (_, _) => _vm.SetCell(i, j, k);
-            flyout.Items.Add(item);
+            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
         }
-        if (flyout.Items.Count == 0)
+        if (mode == 2) { showGrid = true; mode = 0; }
+
+        var ctx = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        foreach (var (label, m) in new[] { ("割当", 0), ("希望", 1) })
         {
-            flyout.Items.Add(new MenuFlyoutItem { Text = "担当可能なシフトがありません", IsEnabled = false });
+            var b = new ToggleButton { Content = label, IsChecked = mode == m, MinHeight = 48 };
+            var mm = m;
+            b.Click += (_, _) => Reopen(i, j, mm);
+            ctx.Children.Add(b);
+        }
+        var count = _vm.StaffCountShortFor(i);
+        ctx.Children.Add(new TextBlock
+        {
+            Text = $"希望 {Sym(wish)}（{CellSheetLogic.WishTabState(wish, cur)}）" + (count.Length > 0 ? $"　回数 {count}" : ""),
+            Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260,
+        });
+        panel.Children.Add(ctx);
+
+        var left = ui.LeftHand;
+        var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        var prevL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j - 1);
+        var nextL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j + 1);
+        var prevB = new Button { Content = $"◀ {prevL ?? "前日"}", MinHeight = 48, IsEnabled = prevL is not null };
+        var nextB = new Button { Content = $"{nextL ?? "翌日"} ▶", MinHeight = 48, IsEnabled = nextL is not null };
+        prevB.Click += (_, _) => Reopen(i, j - 1, mode);
+        nextB.Click += (_, _) => Reopen(i, j + 1, mode);
+        days.Children.Add(prevB);
+        days.Children.Add(nextB);
+        panel.Children.Add(days);
+
+        var marksByShift = new Dictionary<int, TextBlock>();
+        if (showGrid)
+        {
+            var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
+            for (var c = 0; c < CellSheetLogic.Columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var slots = CellSheetLogic.Slots(_vm.SheetShifts(), canDo, left);
+            for (var r = 0; r < slots.Count; r++)
+            {
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                for (var c = 0; c < CellSheetLogic.Columns; c++)
+                {
+                    if (slots[r][c] is not { } sl) continue;
+                    var k = sl.Shift;
+                    var sel = mode == 0 ? k == cur : k == wish;
+                    var sbg = sl.CanDo && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.LightGray) : Colors.Gainsboro;
+                    var sfg = sl.CanDo && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.DimGray;
+                    var cell = new Grid();
+                    cell.Children.Add(new TextBlock { Text = (sel ? "✓ " : "") + Sym(k) + (sl.CanDo ? "" : " 外"), Foreground = new SolidColorBrush(sfg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                    var mark = new TextBlock { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+                    cell.Children.Add(mark);
+                    marksByShift[k] = mark;
+                    var btn = new Button
+                    {
+                        Content = cell, MinHeight = 52, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                        Background = new SolidColorBrush(sbg), BorderThickness = new Thickness(sel ? 4 : 1), IsEnabled = mode == 1 || sl.CanDo,
+                    };
+                    var kk = k;
+                    btn.Click += (_, _) =>
+                    {
+                        if (mode == 0) { if (kk != cur) { _vm.SetCell(i, j, kk); Reopen(i, j, 0); } }
+                        else { _vm.SetWish(i, j, kk); Reopen(i, j, 1); }
+                    };
+                    Grid.SetRow(btn, r);
+                    Grid.SetColumn(btn, c);
+                    grid.Children.Add(btn);
+                }
+            }
+            panel.Children.Add(grid);
         }
 
-        // [2026-09-02, 配線] AddReviewMemo（クラスKDoc参照）。違反セルのときだけ「見直し候補にする」を
-        // 出す（違反の無いセルを見直し候補にする意味が無いため）。
-        if (ui.ViolationCells.TryGetValue($"{i},{j}", out var vioClass))
+        var bottom = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        var close = new Button { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
+        close.Click += (_, _) => flyout.Hide();
+        Button? remove = null;
+        if (mode == 1 && wish is not null)
         {
-            flyout.Items.Add(new MenuFlyoutSeparator());
-            var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-            var family = vioClass.StartsWith("vio-", StringComparison.Ordinal) ? vioClass["vio-".Length..] : vioClass;
-            var label = AnalysisView.BreakdownLabels.TryGetValue(family, out var jp) ? jp : family;
-            var memoItem = new MenuFlyoutItem { Text = "この違反を見直し候補にする" };
-            memoItem.Click += (_, _) => _vm.AddReviewMemo($"{name} {j + 1}日: {label}");
-            flyout.Items.Add(memoItem);
+            remove = new Button { Content = "希望を取り消す", MinHeight = 48 };
+            remove.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, 1); };
+        }
+        if (!left && remove is not null) bottom.Children.Add(remove);
+        bottom.Children.Add(close);
+        if (left && remove is not null) bottom.Children.Add(remove);
+        panel.Children.Add(bottom);
+        if (status.Severity != CellSeverity.None)
+        {
+            var memo = new HyperlinkButton { Content = "⚑ ルールの見直しへ" };
+            memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {j + 1}日={Sym(cur)}：{status.Cause}"); };
+            panel.Children.Add(memo);
         }
 
+        _marksCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _marksCts = cts;
+        flyout.Closed += (_, _) => cts.Cancel();
+        if (mode == 0 && showGrid) _ = FillMarksAsync();
+        async Task FillMarksAsync()
+        {
+            try
+            {
+                var m = await _vm.ShiftMarksForAsync(i, j, status.Severity, cts.Token);
+                if (cts.IsCancellationRequested) return;
+                foreach (var (k, tb) in marksByShift)
+                {
+                    if (m.HardRisk.Contains(k)) { tb.Text = "⚠"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)); }
+                    else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
+                }
+            }
+            catch (OperationCanceledException) { }
+        }
         flyout.ShowAt(anchor);
     }
 }

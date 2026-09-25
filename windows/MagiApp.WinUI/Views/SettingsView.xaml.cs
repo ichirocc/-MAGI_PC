@@ -87,6 +87,7 @@ public sealed partial class SettingsView : UserControl
             BudgetSlider.Value = ui.BudgetSec;
             BudgetLabel.Text = FormatBudget(ui.BudgetSec);
             SoftPolishToggle.IsOn = ui.SoftPolish;
+        LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
             BlockSwapC3nFilterToggle.IsOn = ui.BlockSwapC3nFilter;
             WideC3nBreakToggle.IsOn = ui.WideC3nBreak;
@@ -639,6 +640,8 @@ public sealed partial class SettingsView : UserControl
         if (_syncingFromModel) return;
         _vm.SetBudget((int)e.NewValue);
     }
+
+    private void OnLeftHandToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.Ui.LeftHand = LeftHandToggle.IsOn;
 
     private void OnSoftPolishToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {

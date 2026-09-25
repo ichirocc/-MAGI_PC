@@ -93,6 +93,14 @@ public sealed partial class MainWindow : Window
         _shownMessage = msg;
         GlobalMessageBar.Message = msg;
         GlobalMessageBar.Severity = _vm.Ui.MessageIsError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
+        // セルを 1 つ変えた直後だけ「元に戻す」（Android の Snackbar のアクションと同じ、1 段戻す）。
+        if (msg == _vm.Ui.UndoableMessage && _vm.Ui.CanUndo)
+        {
+            var undo = new Button { Content = "元に戻す" };
+            undo.Click += (_, _) => { GlobalMessageBar.IsOpen = false; _vm.Undo(); };
+            GlobalMessageBar.ActionButton = undo;
+        }
+        else GlobalMessageBar.ActionButton = null;
         GlobalMessageBar.IsOpen = true;
 
         _messageTimer?.Stop();

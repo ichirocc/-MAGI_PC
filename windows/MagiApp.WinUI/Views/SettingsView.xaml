@@ -46,6 +46,9 @@
                 </ComboBox>
             </StackPanel>
 
+            <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
+                          Toggled="OnLeftHandToggled" />
+
             <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ最適化" OnContent="ON" OffContent="OFF"
                           Toggled="OnSoftPolishToggled" />
 

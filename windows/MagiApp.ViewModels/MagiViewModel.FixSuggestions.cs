@@ -36,7 +36,7 @@ public sealed partial class MagiViewModel
     private long _fixBoardKey;
     private long _fixStateKey;
 
-    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "")
+    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null)
     {
         var st = _state;
         if (st is null) return;
@@ -58,7 +58,7 @@ public sealed partial class MagiViewModel
         Ui.FixDoneKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
-        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token);
+        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day);
     }
 
     /// <summary>1手の候補・「探索済み」・下限判定の材料を消す（盤面が変わった／使えなくなったとき。Kotlin の各リセット箇所と同じ）。</summary>
@@ -70,12 +70,16 @@ public sealed partial class MagiViewModel
     }
 
     private async Task FindFixSuggestionsCoreAsync(
-        MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct)
+        MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct,
+        int? exceptStaff = null, int? day = null)
     {
         try
         {
             var list = await Task.Run(
-                () => FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct);
+                () => exceptStaff is { } ex && day is { } dd
+                    // 「他の人で補う」（Android CellSheetLogic.fixesByOthers）: 全体で探し、本人を含まずその日を含む手だけ。
+                    ? CellSheetLogic.FixesByOthers(FixSuggester.Suggest(st, snap, focusStaff: null, focusShift: focusShift, maxResults: 40), dd, ex).Take(8).ToList()
+                    : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct);
             if (seq != _fixSeq) return; // 後続の探索が始まっている＝古い結果で上書きしない
             // 盤面を差し替えるジョブの最中は書き戻さず探し直しもしない（完了後の盤面で探し直す）。
             if (OptimizeInFlight()) { Ui.FixSearching = false; return; }
@@ -85,7 +89,7 @@ public sealed partial class MagiViewModel
             if (curSched is null || curSt is null || BoardKey(curSched) != BoardKey(snap) || StateKey(curSt) != StateKey(st))
             {
                 Ui.FixSearching = false;
-                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey);
+                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey, exceptStaff, day);
                 return;
             }
             Ui.FixSuggestions = list;

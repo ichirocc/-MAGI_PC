@@ -307,7 +307,8 @@ public sealed partial class MagiViewModel
         Ui.HasResult = true;
         Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.Message = $"{staffName} / {j + 1}日 を {shiftKigou} に変更";
+        Ui.Message = CellSheetLogic.CellChangedMessage(staffName, j, shiftKigou);
+        Ui.UndoableMessage = Ui.Message;
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
         RefreshCheck();
     }

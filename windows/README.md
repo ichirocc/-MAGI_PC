@@ -328,6 +328,12 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（セル編集シートの再設計の C# 移植、Kotlin `claude/merge-wub4fq` 03f3a2c 同日）: 純ロジックは `CellSheetLogic`（固定配置＝誰も担当できないシフトは出さない・
+  利き手で左右反転、1 行の状態＝原因と相手・日・数、印＝おすすめ／必須が増える、板挟み、巡回、回数の 1 行、`FixesByOthers`）を 1 対 1 で移植し、
+  `CellSheetLogicTest` は Kotlin と同じ文言を実データで照合する。VM は `MagiViewModel.CellSheet`（状態・印の背景評価）、`FindFixSuggestions` に
+  exceptStaff/day、`SetCell` の文言と `UndoableMessage`（通知バーに「元に戻す」）、`UiState.LeftHand`（設定のトグル）。WinUI はデスクトップの
+  Flyout のまま同じ順序（見出し→状態→直し方→切替と補足→前日/翌日→固定配置のボタン→閉じる）で薄く組む（画面下の固定パネル・自動スクロール・
+  32dp のクッションはタッチ端末の配置なので移植しない＝出力の意味は同じ）。勤務表の要調整の枠を 1.5（必須 3）に。探索・評価は不変。
 - 2026-09-25（勤務表の表示専用の印・その場の直し方探しの C# 移植、Kotlin `claude/merge-wub4fq` dd35c1e／dd90119 同日）: チェッカーの場所マップは不変、
   `ViolationReport.C1Runs`（表示専用）と `GridDisplayMarks`／`FixSearchText`（ViewModels、テストは Kotlin `GridDisplayMarksTest` の写し＋実データ
   `oct2026_grid_state.json`）。WinUI: 名前の横の ▼/▲・日ヘッダの「休▲」（旧 ▼N を置換）・c1 は窓幅おきの印・隠れた族の左上の点・セルの

@@ -183,6 +183,10 @@ public sealed partial class UiState : ObservableObject
     // editRev（Compose再構成トリガー用ワークアラウンド）はここでは移植しない。理由はクラスKDoc参照。
 
     [ObservableProperty] private string? message;
+    /// <summary>この文言のメッセージに「元に戻す」を付ける（セルを 1 つ変えた直後だけ。1 段戻す）。</summary>
+    [ObservableProperty] private string? undoableMessage;
+    /// <summary>セル編集シートの利き手（false=右手・既定）。左手はボタンの行を左右反転し、日送りと閉じるを左へ。</summary>
+    [ObservableProperty] private bool leftHand;
 
     /// <summary>直近メッセージが「失敗・拒否」か。表示側の色（エラー系）と表示時間（長め）を分ける根拠として使う。
     /// notify(text, "W") が唯一の true の書き手という契約は ViewModel 側の実装責務（このプロパティ自体は
