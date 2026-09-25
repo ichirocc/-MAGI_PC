@@ -229,24 +229,23 @@ public sealed partial class EditView : UserControl
         var open = _checklistIssuesOpen && issues.Count > 0;
         ChecklistIssuesHost.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         if (!open) return;
-        foreach (var iss in issues.Take(ChecklistIssueRows))
+        var shown = _checklistIssuesAll ? issues.Count : Math.Min(issues.Count, ChecklistIssueRows);
+        foreach (var iss in issues.Take(shown))
         {
             ChecklistIssuesHost.Children.Add(new TextBlock
             {
                 Text = $"・{iss.Where}：{iss.Problem}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
             });
         }
-        if (issues.Count > ChecklistIssueRows)
+        if (shown < issues.Count)
         {
-            ChecklistIssuesHost.Children.Add(new TextBlock
-            {
-                Text = $"ほか{issues.Count - ChecklistIssueRows}件（分析タブの設定見直しに全件）", FontSize = 14, Opacity = 0.8,
-            });
+            ChecklistIssuesHost.Children.Add(AnalysisView.ShowAllIssuesButton(issues.Count - shown, () => { _checklistIssuesAll = true; Render(); }));
         }
     }
 
     private const int ChecklistIssueRows = 6;
     private bool _checklistIssuesOpen;
+    private bool _checklistIssuesAll;
 
     /// <summary>✓/！＋ラベル＋値の 1 行。onClick があるときは行全体がボタン（値の末尾に「›」）。</summary>
     private static FrameworkElement ChecklistRow(string label, string value, bool ok, Action? onClick = null)

@@ -60,12 +60,13 @@ public static class NextActionGuide
     /// <summary>
     /// [S5] 試算の候補（Kotlin <c>wishTrialCandidates</c>、§2.2・§2.3）。S5a＝必須違反に関わる希望を (職員, 日) で重複除去し、
     /// 代表の理由を pref＞c3w＞c3n で選ぶ（他は「ほか: …」）。c3w は翌日の希望 X と、印の付く前日自身が WishLocked の希望 Y の両方。
+    /// 満たされない希望が希望どうしの衝突（<c>UiState.WishSelfConflicts</c>）の組に入っていれば、組のほかの希望も S5a の行にする（§2.2）。
     /// S5b＝人手不足の枠の WishPinned（日→シフト、職員順）。S5a と重なる (職員, 日) は S5a を代表にし「ほか: 人手不足の日」を足す。
     /// </summary>
     public static WishTrialCandidates WishTrialCandidatesOf(UiState ui)
     {
         // 優先度（小さいほど代表）と「ほか」に出す短い名前。
-        string[] shortNames = { "希望の勤務になっていない", "前日の禁止", "禁止の並び" };
+        string[] shortNames = { "希望の勤務になっていない", "前日の禁止", "禁止の並び", "希望どうし" };
         var hits = new List<(int Staff, int Day, int Prio, string Reason)>();
         foreach (var (key, fams) in ui.ViolationCellFamilies)
         {
@@ -79,6 +80,15 @@ public static class NextActionGuide
             }
             if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, "希望が禁止の並びに掛かっています"));
         }
+        var hitKeys = hits.Select(h => (h.Staff, h.Day)).ToHashSet();
+        var prefKeys = ui.ViolationCellFamilies.Where(kv => kv.Value.Contains("vio-pref")).Select(kv => kv.Key).ToHashSet();
+        var siblings = ui.WishSelfConflicts.Where(g => g.WishKeys.Any(prefKeys.Contains)).SelectMany(g =>
+        {
+            var pat = string.Join("→", g.Shifts.Select(k => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "?"));
+            var reason = g.Family == "c3w" ? $"希望どうしが前日の禁止「{pat}」に当たっています" : $"希望どうしが禁止の並び「{pat}」を作っています";
+            return g.Days.Where(d => !hitKeys.Contains((g.Staff, d))).Select(d => (Staff: g.Staff, Day: d, Prio: 3, Reason: reason));
+        }).DistinctBy(h => (h.Staff, h.Day)).ToList();
+        hits.AddRange(siblings);
         var pinned = (ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>()).Where(s => s.WishPinned.Count > 0)
             .OrderBy(s => s.DayIndex).ThenBy(s => s.ShiftIndex).ToList();
         var pinnedKeys = pinned.SelectMany(s => s.WishPinned.Select(i => (i, s.DayIndex))).ToHashSet();

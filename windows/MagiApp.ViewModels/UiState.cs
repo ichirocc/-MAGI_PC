@@ -159,6 +159,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
     /// <summary>[S5] WishLocked の希望のキー（試算できる希望）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
+    /// <summary>[S5] 希望どうしの衝突（兄弟の希望を試算の候補に足す）。</summary>
+    [ObservableProperty] private IReadOnlyList<WishSelfConflict> wishSelfConflicts = Array.Empty<WishSelfConflict>();
     /// <summary>[S5] 試算が終わるたびに進む（画面は <c>WishTrialFor</c> で読み直す）。</summary>
     [ObservableProperty] private int wishTrialRev;
     /// <summary>[S5] 試算中の行 "i,j"（null＝なし）。</summary>

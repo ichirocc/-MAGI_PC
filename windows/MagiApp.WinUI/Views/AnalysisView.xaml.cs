@@ -23,9 +23,10 @@ public sealed partial class AnalysisView : UserControl
     /// <summary>診断ログの表示上限（行）。これを超えた分は先頭からの打ち切りと明示する。</summary>
     private const int MaxLogLines = 200;
 
-    /// <summary>設定の見直しの表示上限（件）。重要な順に整列済みなので、超えた分は「まず上から直す」と案内する（Kotlin原本と同じ 6）。</summary>
+    /// <summary>設定の見直しで最初に出す件数（重要な順に整列済み、Kotlin原本 <c>SETTING_ISSUE_PREVIEW</c> と同じ 6）。残りは「すべて表示」で開く。</summary>
     private const int MaxIssueRows = 6;
     private bool _issuesOpen;
+    private bool _issuesAll;
 
     /// <summary>
     /// 違反の族キー → 画面に出す日本語名。Kotlin原本 <c>ui/BreakdownLabels.kt</c> の
@@ -354,7 +355,8 @@ public sealed partial class AnalysisView : UserControl
         IssuesGoEditButton.IsEnabled = !ui.Running;
         if (!_issuesOpen) return;
 
-        foreach (var issue in issues.Take(MaxIssueRows))
+        var shown = _issuesAll ? issues.Count : Math.Min(issues.Count, MaxIssueRows);
+        foreach (var issue in issues.Take(shown))
         {
             var (tag, hex) = issue.Kind switch
             {
@@ -391,10 +393,18 @@ public sealed partial class AnalysisView : UserControl
                 Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
             });
         }
-        if (issues.Count > MaxIssueRows)
+        if (shown < issues.Count)
         {
-            IssuesList.Children.Add(BodyText($"ほか {issues.Count - MaxIssueRows} 件（重要な順に表示中。まず上から直してください）", dim: true));
+            IssuesList.Children.Add(ShowAllIssuesButton(issues.Count - shown, () => { _issuesAll = true; Render(); }));
         }
+    }
+
+    /// <summary>Kotlin原本 <c>SettingIssuesShowAll</c>。編集タブの入力診断と共有する。</summary>
+    internal static Button ShowAllIssuesButton(int hidden, Action onClick)
+    {
+        var b = new Button { Content = $"すべて表示（ほか {hidden}件）", FontSize = 14, MinHeight = 48 };
+        b.Click += (_, _) => onClick();
+        return b;
     }
 
     private void OnClearOutOfScopeWishesClick(object sender, RoutedEventArgs e) => _vm.ClearOutOfScopeWishes();

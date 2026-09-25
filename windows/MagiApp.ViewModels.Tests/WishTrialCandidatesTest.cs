@@ -53,6 +53,70 @@ public class WishTrialCandidatesTest
         Assert.Equal(new[] { 2 }, NextActionGuide.WishTrialCandidatesOf(ui).Direct.Select(r => r.Day));
     }
 
+    // 実データ（古泉 10/25-27 の休の希望と「休→休→休」禁止、福澤 10/1 Dﾃ・10/2 休と前日の禁止）の形。
+    private static UiState SelfUi(Dictionary<string, IReadOnlyList<string>> fams) => new()
+    {
+        StaffNames = new[] { "古泉", "福澤" },
+        ShiftSymbols = new[] { "休", "日", "Dﾃ" },
+        Wishes = new Dictionary<string, int> { ["0,24"] = 0, ["0,25"] = 0, ["0,26"] = 0, ["1,0"] = 2, ["1,1"] = 0 },
+        LockedWishKeys = new HashSet<string> { "0,24", "0,25", "0,26", "1,0", "1,1" },
+        WishSelfConflicts = new[]
+        {
+            new WishSelfConflict(0, "c3n", new[] { 24, 25, 26 }, new[] { 0, 0, 0 }),
+            new WishSelfConflict(1, "c3w", new[] { 0, 1 }, new[] { 2, 0 }),
+        },
+        ViolationCellFamilies = fams,
+    };
+
+    [Fact]
+    public void T9_PrefCellInWishSelfConflictListsItsSiblingWishes()
+    {
+        var ui = SelfUi(new() { ["0,24"] = new[] { "vio-pref" }, ["1,1"] = new[] { "vio-pref" } });
+        Assert.Equal(new[]
+        {
+            new WishTrialRow(0, 24, "古泉", "希望の勤務になっていません", true),
+            new WishTrialRow(0, 25, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true),
+            new WishTrialRow(0, 26, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true),
+            new WishTrialRow(1, 0, "福澤", "希望どうしが前日の禁止「Dﾃ→休」に当たっています", true),
+            new WishTrialRow(1, 1, "福澤", "希望の勤務になっていません", true),
+        }, NextActionGuide.WishTrialCandidatesOf(ui).Direct);
+    }
+
+    [Fact]
+    public void T9_SelfConflictWithoutPrefCellAddsNothing()
+    {
+        // 並びが成立している（c3n の印が窓の全セル）＝行は今までどおり。pref の無い組は兄弟を足さない。
+        var held = SelfUi(new() { ["0,24"] = new[] { "vio-c3n" }, ["0,25"] = new[] { "vio-c3n" }, ["0,26"] = new[] { "vio-c3n" } });
+        var direct = NextActionGuide.WishTrialCandidatesOf(held).Direct;
+        Assert.Equal(new[] { 24, 25, 26 }, direct.Select(r => r.Day));
+        Assert.Equal(new[] { "希望が禁止の並びに掛かっています" }, direct.Select(r => r.Reason).Distinct());
+        Assert.Empty(NextActionGuide.WishTrialCandidatesOf(SelfUi(new())).Direct);
+    }
+
+    [Fact]
+    public void T9_SiblingRowsDedupeAcrossOverlappingWindowsAndWithShortfall()
+    {
+        // 休の希望 4 連日＝窓 [1,2,3] と [2,3,4]。2日が崩れると兄弟は 1・3・4日 を 1 行ずつ。4日 は人手不足の枠にも出る＝S5a が代表。
+        var ui = new UiState
+        {
+            StaffNames = new[] { "大島" },
+            ShiftSymbols = new[] { "休", "日" },
+            Wishes = Enumerable.Range(1, 4).ToDictionary(d => $"0,{d}", _ => 0),
+            LockedWishKeys = Enumerable.Range(1, 4).Select(d => $"0,{d}").ToHashSet(),
+            WishSelfConflicts = new[]
+            {
+                new WishSelfConflict(0, "c3n", new[] { 1, 2, 3 }, new[] { 0, 0, 0 }),
+                new WishSelfConflict(0, "c3n", new[] { 2, 3, 4 }, new[] { 0, 0, 0 }),
+            },
+            ViolationCellFamilies = new Dictionary<string, IReadOnlyList<string>> { ["0,2"] = new[] { "vio-pref" } },
+            CoverageDiag = new CoverageDiagnosis(1, 1, 0, new[] { Shortfall(4, 1, 0) }, Array.Empty<string>(), 0, Array.Empty<CoverageSurplus>()),
+        };
+        var c = NextActionGuide.WishTrialCandidatesOf(ui);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, c.Direct.Select(r => r.Day));
+        Assert.Equal("希望どうしが禁止の並び「休→休→休」を作っています（ほか: 人手不足の日）", c.Direct.Last().Reason);
+        Assert.Empty(c.Shortfall);
+    }
+
     private static WishTrial.Result R(int h0, int hx, int rk, int rr)
     {
         var a = h0 - hx; var pk = Math.Min(h0, rk); var pc = Math.Min(hx, rr); var att = pk - pc;

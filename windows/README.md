@@ -328,6 +328,11 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（実データ精読の UI 層を同期、Kotlin ce6b1c2 同日）: S5 の候補に希望どうしの衝突の兄弟の希望を足す＝`MakeUi` が
+  `V6SanityPort.WishSelfConflicts(st)` を `UiState.WishSelfConflicts` に載せ、`NextActionGuide.WishTrialCandidatesOf` は pref のセルを含む組の
+  ほかの希望を S5a の行にする（古泉 10/25 が pref のとき 10/26・10/27 も並ぶ。既に行がある (職員, 日) には足さない）。設定の見直しの一覧は
+  編集タブの入力診断・分析タブとも 6 件で切れ、「分析タブの設定見直しに全件」は誤りだった＝両方に 48px の「すべて表示（ほか N件）」
+  （`AnalysisView.ShowAllIssuesButton` を共有）。テストは Kotlin `WishTrialCandidatesTest` の 3 件を 1 対 1 で写した。UI のみ＝盤面は不変。
 - 2026-09-25（設定ミス診断の取り残し 2 件を同期、上の実データ照合で判明）: 同じ実データで C# の診断が Kotlin と 3 件食い違っていた。
   ①検査 6e（希望件数＞個人上限＝上限超過は解消できない、Kotlin 3.521.0）が未移植＝荒井 Cｵ 上限 0×希望 12 件（high 12 の原因）と
   大島 有 上限 0×希望 1 件が出ていなかった。②`AptBalances` に Kotlin の capKnown ゲート（必要人数が 1 日でも未定義なら上限として比べない）
