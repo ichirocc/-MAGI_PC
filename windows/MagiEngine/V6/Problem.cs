@@ -350,9 +350,9 @@ public sealed class Problem
         var cons1List = new List<C1>();
         foreach (var it in state.Cons1)
         {
-            int d1 = KotlinInterop.ToIntOrNull(it.Day1) ?? 0;
+            int d1 = KotlinInterop.ToIntOrNull(it.Day1.Trim()) ?? 0;
             int si = ShiftIdxOf(it.ShiftKigou);
-            int d2 = KotlinInterop.ToIntOrNull(it.Day2) ?? 0;
+            int d2 = KotlinInterop.ToIntOrNull(it.Day2.Trim()) ?? 0;
             if (d1 > 0 && si >= 0 && d2 > 0)
             {
                 // [3.412.0/P-04] 行としては解決できるが窓が期間を超える＝チェッカーが無言で飛ばす。
@@ -371,7 +371,7 @@ public sealed class Problem
         foreach (var it in state.Cons2)
         {
             int si = ShiftIdxOf(it.ShiftKigou);
-            int c = KotlinInterop.ToIntOrNull(it.Count) ?? 0;
+            int c = KotlinInterop.ToIntOrNull(it.Count.Trim()) ?? 0;
             if (si >= 0 && c > 0) cons2List.Add(new C2(si, c));
             else _unresolvedRows.Add(("個人の合計", $"{Mark(it.ShiftKigou, si >= 0)} を{it.Count}回以上"));
         }
@@ -424,8 +424,8 @@ public sealed class Problem
             int si = ShiftIdxOf(it.ShiftKigou);
             bool hasLo = !string.IsNullOrWhiteSpace(it.L);
             bool hasHi = !string.IsNullOrWhiteSpace(it.U);
-            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L) ?? 0) : 0;
-            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U) ?? int.MaxValue) : int.MaxValue;
+            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L.Trim()) ?? 0) : 0;
+            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U.Trim()) ?? int.MaxValue) : int.MaxValue;
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41List.Add(new C41(gi, si, lo, hi));
             else
             {
@@ -458,8 +458,8 @@ public sealed class Problem
             int si = ShiftIdxOf(it.ShiftKigou);
             bool hasLo = !string.IsNullOrWhiteSpace(it.L);
             bool hasHi = !string.IsNullOrWhiteSpace(it.U);
-            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L) ?? 0) : 0;
-            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U) ?? int.MaxValue) : int.MaxValue;
+            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L.Trim()) ?? 0) : 0;
+            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U.Trim()) ?? int.MaxValue) : int.MaxValue;
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41sList.Add(new C41(gi, si, lo, hi));
             else
             {

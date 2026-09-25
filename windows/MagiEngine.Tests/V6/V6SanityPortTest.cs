@@ -275,4 +275,42 @@ public class V6SanityPortTest
     {
         Assert.Equal("1日", V6SanityPort.SafeDayLabel(startDate, 0));
     }
+
+    /// <summary>並び以外の族の同じ行を設定の見直しに出す（解決後の値で比べる・ワンタップなし）。Kotlin 原本と同じ。</summary>
+    [Fact]
+    public void DuplicateNonSequenceRulesAreListedWithoutAutoFix()
+    {
+        var baseSt = new MagiState(
+            StartDate: "2026-06-01", EndDate: "2026-06-03",
+            Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
+            Groups: new List<Group> { new("G", "G") },
+            StaffList: new List<Staff> { new("s0", 0), new("s1", 0) },
+            Use2Patterns: false,
+            GroupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            GroupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            Schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 }, new List<int> { 0, 0, 0 } },
+            Wishes: new Dictionary<string, int>(), StaffRange: new Dictionary<string, Range>(),
+            NeedDay1: new Dictionary<string, string>(), NeedDay2: new Dictionary<string, string>(),
+            Cons1: new List<C1Row> { new("3", "A", "1") }, Cons2: new List<C2Row>(),
+            Cons3: new List<C3Row>(), Cons3n: new List<C3Row>(), Cons3m: new List<C3Row>(), Cons3mn: new List<C3Row>(),
+            Cons41: new List<C41Row>(), Cons42: new List<C42Row>(),
+            SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
+            ShiftColors: new Dictionary<string, string>(),
+            Extras: new Dictionary<string, System.Text.Json.JsonElement>());
+        static List<SettingIssue> Dup(MagiState st) => V6SanityPort.BuildGuidance(st).Where(i => i.Problem.StartsWith("同じ行が")).ToList();
+        Assert.Empty(Dup(baseSt));
+        var twice = baseSt with
+        {
+            Cons1 = new List<C1Row> { new("3", "A", "1"), new(" 03", "A", "1") },
+            Cons3w = new List<C3wRow> { new("A", "休"), new("A", "休") },
+            Cons41 = new List<C41Row> { new("G", "A", "1", ""), new("G", "A", "1", "") },
+        };
+        var issues = Dup(twice);
+        Assert.Equal(3, issues.Count);
+        Assert.All(issues, i => { Assert.Equal(IssueKind.Constraint, i.Kind); Assert.Equal(SettingFixAction.None, i.Action); });
+        var c1 = issues.Single(i => i.Where.StartsWith("期間の制約"));
+        Assert.Contains("2本", c1.Problem);
+        Assert.Contains("2倍", c1.Problem);
+        Assert.Contains("1本分", issues.Single(i => i.Where.StartsWith("希望の前日に禁止")).Problem);
+    }
 }

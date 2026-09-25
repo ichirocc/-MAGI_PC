@@ -214,7 +214,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
 
         Assert.False(vm.Ui.Running);
-        Assert.True(vm.Ui.HasResult);
+        Assert.False(vm.Ui.HasResult);   // 実行前に結果なし→停止しても結果なし
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("停止しました", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("停止: 直前の勤務表"));
@@ -390,7 +390,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
 
         Assert.Equal(engineRanBefore, vm.Ui.EngineRan);
-        Assert.True(vm.Ui.HasResult);
+        Assert.False(vm.Ui.HasResult);   // 実行前に結果なし→停止しても結果なし
     }
 
     [Fact]
@@ -424,6 +424,37 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.Equal(hadResult, vm.Ui.HasResult);
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("つくれませんでした", vm.Ui.Message);
+    }
+
+    /// <summary>[Android 統合後レビュー] 停止・失敗は「結果あり」を実行前の値へ戻す（旧: 最適化の停止は常に true、
+    /// 仕上げの失敗・下書きの停止/失敗は false のまま）。</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StoppedRun_RestoresHasResult(bool hadResult)
+    {
+        var fake = new FakeOptimizationService { ThrowInstead = new OperationCanceledException() };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.HasResult = hadResult;
+
+        vm.RunV6FullOptimize();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
+
+        Assert.Equal(hadResult, vm.Ui.HasResult);
+    }
+
+    [Fact]
+    public async Task FailedSoftPolish_RestoresHasResult()
+    {
+        var fake = new FakeOptimizationService { ThrowInsteadOnSoftPolish = new InvalidOperationException("boom") };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.HasResult = true;
+
+        vm.RunSoftPolish();
+        await vm.LastRunSoftPolishTask!;
+
+        Assert.True(vm.Ui.HasResult);
+        Assert.True(vm.Ui.MessageIsError);
     }
 
     /// <summary>[Android vm-4] 完了カードの前後比較は、その後に盤面が変わる操作・次の実行の開始で消す。</summary>

@@ -2,7 +2,9 @@
 
 > **このファイルの役割**：エンティティ定義・項目名・型の**唯一の正解**。AI が存在しないフィールドを創作するのを防ぐ。ここに無い項目は「存在しない」とみなす。
 > **コード基準**：`app/src/main/java/com/magi/app/model/MagiState.kt`。Web 版の `state` オブジェクトと名前・意味が一致し、JSON が往復する。
-> **最終更新**：2026-09-25（backlog#38 — `Staff.skillIdx` の既定を 0 → **-1（未所属）**、最初のスキル群を作るときは全員を -1 にしてから足す）。
+> **最終更新**：2026-09-25（画面層の精読 #2 — §4 UiState を `val` 宣言と再照合し、未記載だった 8 フィールド
+> `fixSearched`/`stalledHardFamilies`/`alternativeApplied` と希望の試算 5 種を追加、件数を 80 → **88** へ訂正）。
+> 2026-09-25（backlog#38 — `Staff.skillIdx` の既定を 0 → **-1（未所属）**、最初のスキル群を作るときは全員を -1 にしてから足す）。
 > 2026-09-24（外部レビュー N1 — `shifts[].role` の保存を `"rest"`/`"none"` に、`""` は旧JSONと同じ扱い）。
 > 2026-09-21（3.603.0 — `Shift.role: ShiftRole`追加。休の識別を記号一致から分離、詳細は§下記）。
 > 2026-09-20（§4 UiState を実装と再照合し、3.394.0 以降に追加されて丸ごと未記載だった
@@ -99,7 +101,7 @@
 ## 4. UiState（画面表示用の派生状態）
 
 `data class UiState`（`ui/MagiUiState.kt`）。MagiState と `ViolationReport` から ViewModel が生成する**表示専用**の
-状態。**全80フィールド**（下記は全数。`MagiUiState.kt` と機械照合済み）。
+状態。**全88フィールド**（下記は全数。2026-09-25 に `MagiUiState.kt` の `val` 宣言と機械照合）。
 
 **読込/履歴**（3）：`loaded`, `canUndo`, `canRedo`
 
@@ -147,17 +149,24 @@
 > 編集画面が再構成されず「+/- で数字が変わらない」実機バグを生んでいた（3.185.0/3.189.0）。
 > `editRev` があると必ず distinct な UiState になる。
 
-**誘導/診断**（14）：`satisfaction`(%), `copilotHint`, `polishExhausted`, `impossibleWishCount`,
-`settingIssues`, `fixSuggestions`, `fixSearching`, `fixFocusName`, `alternatives`,
+**誘導/診断**（17）：`satisfaction`(%), `copilotHint`, `polishExhausted`, `impossibleWishCount`,
+`settingIssues`, `fixSuggestions`, `fixSearching`, `fixFocusName`,
+`fixSearched`（盤面全体の 1 手探索を今の盤面で終えたか＝未探索と「探して 0 件」を分ける）,
+`stalledHardFamilies`（直近の実行で長く改善せず採用盤面にも残った必須族・盤面を変えたら空）, `alternatives`,
+`alternativeApplied`（いま盤面に適用している他の案の添字・-1＝なし）,
 `coverageDiag`(covU/covO の原因診断), `forbiddenDiag`(禁止連続の壁・3.280.0),
 `c1Plateau`(窓の要件が直せなかった理由・3.322.0), `observedPinBlockedAttempts` と `pinTargets`
 （回数固定が却下した候補の**計測できた下限**と対象・3.326.0）
+
+**希望の試算（S5）**（5）：`lockedWishKeys`（希望で固定したセルのキー＝試算できる希望）,
+`wishSelfConflicts`（希望どうしの衝突）, `wishTrialRev`（試算が終わるたびに進む）, `wishTrialBusy`（試算中の行 `"i,j"`・null＝なし）,
+`wishCancelOutcome`（直近の「希望を取り消して、もう一度つくる」の結果）
 
 **中断**（2）：`interruptedRun`, `interruptedInfo`
 
 **その他**（6）：`v6`(`V6PortReport?`), `message`, `messageIsError`(Snackbar を失敗色にするか), `opLog`(操作ログ), `logs`(診断ログ), `startDate`
 
-> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+13+12+8+12+5+14+2+6 = **80** で
+> **各グループに件数を書いてあるのは機械照合できるようにするため。** 合計 3+5+13+12+8+12+5+17+5+2+6 = **88** で
 > `MagiUiState.kt` の `val` 宣言数と一致する。グループ本文の名前を数えて宣言側と突き合わせれば、
 > **フィールドが増減したのにここを直し忘れた**ことが件数のずれとして出る（実際、本文を書いた直後の照合で
 > 4グループとも数字が間違っていた）。件数を落とすと照合は無意味になるので、更新のたびに数字も直すこと。

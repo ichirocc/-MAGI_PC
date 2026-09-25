@@ -1772,7 +1772,7 @@ public sealed partial class EditView : UserControl
         // 縮めると後ろの日の希望・日別の必要人数が消える＝確認を挟む（Android と同じ）。
         var cur = _vm.Ui.Days;
         if (n < cur && !await ConfirmAsync("期間を縮めますか？",
-                $"{cur}日 → {n}日にします。{n + 1}日目以降の希望と日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
+                $"{cur}日 → {n}日にします。{n + 1}日目以降の勤務表の割り当て・希望・日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
         _vm.Ws1ResizeDays(n);
     }
 

@@ -1308,10 +1308,10 @@ public sealed partial class MagiViewModel
         {
             case "cons1":
                 if (G(0).Length == 0 || G(1).Length == 0 || G(2).Length == 0) return "すべての項目を入れてください。";
-                if (!NonNeg(G(0), out var d1) || d1 < 1) return "窓の日数は 1 以上の整数で入れてください。";
+                if (!NonNeg(G(0), out var d1) || d1 < 1) return "「窓の日数」は 1 以上の整数で入れてください。";
                 if (!NonNeg(G(2), out var d2) || d2 < 1) return "最低回数は 1 以上の整数で入れてください。";
-                if (d2 > d1) return "最低回数は窓の日数以下にしてください。";
-                if (st.DayCount > 0 && d1 > st.DayCount) return $"窓の日数は期間（{st.DayCount}日）以下にしてください。";
+                if (d2 > d1) return "「最低回数」は「窓の日数」以下にしてください（超えると必ず違反になります）。";
+                if (st.DayCount > 0 && d1 > st.DayCount) return $"「窓の日数」は期間（{st.DayCount}日）以下にしてください。";
                 return Shift(G(1));
             case "cons2":
                 if (G(0).Length == 0 || G(1).Length == 0) return "すべての項目を入れてください。";

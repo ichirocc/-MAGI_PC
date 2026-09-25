@@ -328,6 +328,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（画面層の精読 #2 の統合後レビュー 18 件の C# 移植、Kotlin 9f36ad7〈`claude/merge-wub4fq`〉同日）: C# に当たるものだけ。
+  停止/失敗の `HasResult` を実行前の値へ（最適化の停止＝`s5 is not null || hadResult`、仕上げの失敗、下書きの停止/失敗）。読込の退避
+  （開く前のデータに戻す）は差し替えの確定後に書く（中止で戻しても退避を失わない）。設定の見直しに並び以外の族の同じ行
+  （cons1/cons2/cons3w/cons41/cons42/cons41s/cons42s、解決後の値で比較・ワンタップなし）。その比較で `Problem` が Android 3.475.0 の
+  数値の trim（cons1/cons2/cons41(s)）を未移植だったと分かり揃えた（前後空白つきの値が 0/∞ に倒れていた＝パリティの修正）。
+  期間を縮める確認に勤務表の割り当て、cons1 の入力エラーで欄名を「」で括る。docs の data-models/business-logic は Android の写しへ。
+  C# に無いもの: 背景の WorkManager 経路（vm-2 の後始末・再起動後の停止）、表示色の undo（C# の色変更は undo の段を積まない）、要確認バッジ。
 - 2026-09-25（画面層の精読 #2 の C# 移植、Kotlin c66a834〈`claude/merge-wub4fq`・main 未マージ〉同日）: Android の検証済み指摘のうち C# に
   当たるものを挙動で 1 対 1 に移植（VM は `MagiApp.ViewModels` にテスト付き、WinUI は配線だけ）。
   **VM**: vm-1 盤面を差し替えるジョブ（`BeginBoardJob`・`RunInBackground`）の開始で直し方の探索を捨てる（`CancelFixSearch`）＋ジョブ中に

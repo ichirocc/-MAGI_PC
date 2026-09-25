@@ -59,6 +59,7 @@ public sealed partial class MagiViewModel
         }
         if (!EnsureValidForRun(st, sched)) return;
         PushUndo();
+        var hadResult = Ui.HasResult;
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
@@ -68,10 +69,10 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("下書きづくり", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, boardToken, cts.Token);
+        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token);
     }
 
-    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, int boardToken, CancellationToken ct)
+    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct)
     {
         var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
@@ -101,6 +102,7 @@ public sealed partial class MagiViewModel
             LogOp("I", "初期解生成 停止");
             Ui.MessageIsError = false;
             Ui.Running = false;
+            Ui.HasResult = hadResult;
             Ui.Message = "下書きづくりを停止しました";
             throw;
         }
@@ -110,6 +112,7 @@ public sealed partial class MagiViewModel
             // [3.271.0の由来をそのまま記録] 失敗を操作ログにも残す。
             LogOp("W", $"初期解生成 失敗: {e.GetType().Name}: {e.Message}");
             Ui.Running = false;
+            Ui.HasResult = hadResult;
             Ui.Message = $"下書きをつくれませんでした（{e.GetType().Name}）";
             Ui.MessageIsError = true;
         }

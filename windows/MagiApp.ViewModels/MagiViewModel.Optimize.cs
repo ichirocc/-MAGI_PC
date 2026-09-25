@@ -305,7 +305,7 @@ public sealed partial class MagiViewModel
                 {
                     ui.MessageIsError = false;
                     ui.Running = false;
-                    ui.HasResult = true;
+                    ui.HasResult = s5 is not null || hadResult;
                     ui.EngineRan = engineRanBefore;
                     ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
                 });
@@ -313,7 +313,7 @@ public sealed partial class MagiViewModel
             catch (Exception t)
             {
                 Ui.Running = false;
-                Ui.HasResult = true;
+                Ui.HasResult = s5 is not null || hadResult;
                 Ui.EngineRan = engineRanBefore;
                 Ui.MessageIsError = false;
                 Ui.Wishes = st0.Wishes;
@@ -411,6 +411,7 @@ public sealed partial class MagiViewModel
         if (!EnsureValidForRun(st0, sched0)) return;
         PushUndo();
         var engineRanBefore = Ui.EngineRan;   // 停止で入力へ戻すとき用（StartFullOptimize と同じ）
+        var hadResult = Ui.HasResult;
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.HasResult = false;
@@ -423,10 +424,10 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("仕上げ最適化", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, engineRanBefore, cts.Token);
+        LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, engineRanBefore, hadResult, cts.Token);
     }
 
-    private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, bool engineRanBefore, CancellationToken ct)
+    private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, bool engineRanBefore, bool hadResult, CancellationToken ct)
     {
         // [3.372.0相当の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
@@ -499,6 +500,7 @@ public sealed partial class MagiViewModel
             terminalLogged = true;
             Ui.MessageIsError = true;
             Ui.Running = false;
+            Ui.HasResult = hadResult;
             Ui.Message = $"整えられませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
         }
         finally

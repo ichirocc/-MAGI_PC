@@ -167,6 +167,31 @@ public static partial class V6SanityPort
                 SeqFamily: famRaw, SeqKey: seq));
         }
 
+        // 2') 並び以外の族の同じ行（CSV 取込・既存データはダイアログを通らない）。エンジンは dedup しない＝知らせるだけ。
+        //     Problem の解決後の値で比べる＝評価が実際に 2 回数える行だけ。希望の前日に禁止は禁止表（C3wBan）に畳まれ 1 本分。
+        string GSym(int g) => g >= 0 && g < state.Groups.Count ? state.Groups[g].Kigou : $"#{g}";
+        string SSym(int g) => g >= 0 && g < state.SkillGroups.Count ? state.SkillGroups[g].Kigou : $"#{g}";
+        string Bound(int l, int u) => $"{(l > 0 ? l.ToString() : "")}〜{(u == int.MaxValue ? "" : u.ToString())}";
+        void ReportDup<T>(IEnumerable<T> rows, Func<T, string> key, Func<T, string> where, bool counted = true)
+        {
+            foreach (var same in rows.GroupBy(key))
+            {
+                var n = same.Count();
+                if (n < 2) continue;
+                outList.Add(new SettingIssue(IssueKind.Constraint, where(same.First()),
+                    counted ? $"同じ行が{n}本あります。違反を{n}回数えるので、この決まりだけ重みが{n}倍になります"
+                            : $"同じ行が{n}本あります（評価は1本分で変わりません）",
+                    "制約設定でこの行の重複を削除してください（自動では消しません）"));
+            }
+        }
+        ReportDup(p.Cons1, c => $"{c.Day1},{c.ShiftIdx},{c.Day2}", c => $"期間の制約「{Sym(c.ShiftIdx)} {c.Day1}日で{c.Day2}回以上」");
+        ReportDup(p.Cons2, c => $"{c.ShiftIdx},{c.Count}", c => $"個人の合計「{Sym(c.ShiftIdx)} 合計{c.Count}回以上」");
+        ReportDup(p.Cons3w, c => $"{c.WishIdx},{c.PrevIdx}", c => $"希望の前日に禁止「{Sym(c.WishIdx)} の希望の前日は {Sym(c.PrevIdx)}」", counted: false);
+        ReportDup(p.Cons41, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"グループのレンジ「{GSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」");
+        ReportDup(p.Cons42, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"グループペア禁止「{GSym(c.G1)}の{Sym(c.S1)} ✕ {GSym(c.G2)}の{Sym(c.S2)}」");
+        ReportDup(p.Cons41s, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"スキルグループのレンジ「{SSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」");
+        ReportDup(p.Cons42s, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"スキルグループペア禁止「{SSym(c.G1)}の{Sym(c.S1)} ✕ {SSym(c.G2)}の{Sym(c.S2)}」");
+
         // 2b) [監査#8 / Web HF557 A4 の native 移植] 連勤・回数窓制約(cons1)の不能設定
         //   d1>期間: 窓が期間を超え、判定が一度も走らず無言で無効。 d2>d1: 物理的に不可能で全員・全窓が発火し続ける。
         foreach (var c in p.Cons1)

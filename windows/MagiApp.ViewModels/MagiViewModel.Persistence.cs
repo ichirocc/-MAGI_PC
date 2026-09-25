@@ -389,22 +389,6 @@ public sealed partial class MagiViewModel
             // [判断設計監査 #3相当] 「データを開く」直前の状態を1世代退避。「開く前のデータに戻す」
             //   （RestorePreviousData）で往復できる（戻す操作自体も退避を挟む＝スワップ）。
             var prevJson = _state is not null ? ExportJson() : null;
-            var prevSaved = false;
-            if (prevJson is not null)
-            {
-                prevSaved = await Task.Run(() =>
-                {
-                    try
-                    {
-                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson);
-                    }
-                    catch
-                    {
-                        return false;
-                    }
-                }, ct);
-            }
-
             if (endDateFixedFrom is not null)
                 LogOp("W", $"期間の終了日（endDate）が日数と合っていなかったため補正しました（{endDateFixedFrom} → {lp.State.EndDate}）。「データを保存」で保存し直すと次回からこの警告は出ません");
             // [自己見直し 2026-09-04] 旧: 正規化（EndDate 補正・GroupShiftApt の G×K 化）をしても _originalJson は
@@ -438,8 +422,6 @@ public sealed partial class MagiViewModel
                 ui.InitHard = lp.Report.Hard;
                 ui.InitSoft = lp.Report.Soft;
                 ui.ElapsedMs = 0;
-                // [3.289.0相当] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
-                ui.PrevBackupAvailable = prevSaved || ui.PrevBackupAvailable;
                 // 前のデータの完了要約・ヒント・他の案・直し方は、このデータのものではない。
                 ui.RunSummary = null;
                 ui.CopilotHint = null;
@@ -451,6 +433,25 @@ public sealed partial class MagiViewModel
                 ui.Message = $"読込完了: {lp.State.StaffCount}名 / {lp.State.DayCount}日 / {lp.State.ShiftCount}シフト{note}";
             }, ct: ct);
             rollback = null;
+            // 退避は差し替えの確定後に書く（中止で読込前へ戻しても「開く前のデータ」を失わない）。
+            var prevSaved = false;
+            if (prevJson is not null)
+            {
+                prevSaved = await Task.Run(() =>
+                {
+                    try
+                    {
+                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson);
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                }, CancellationToken.None);
+            }
+
+            // [3.289.0相当] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
+            if (prevSaved) Ui.PrevBackupAvailable = true;
             _alternativeScheds = Array.Empty<int[][]>();
             ClearUndo();
             // [Android 3.475.0] コパイロットの「前回と同じ設定」ヒントは前回のデータの記憶＝別データを開いたら忘れる
