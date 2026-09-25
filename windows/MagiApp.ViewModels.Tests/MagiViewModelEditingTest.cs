@@ -1968,6 +1968,37 @@ public class MagiViewModelEditingTest
         Assert.Equal("上限(2パターン時)", MagiViewModel.NeedUpperLabel(use2: false, shortLabel: true));
     }
 
+    [Fact]
+    public async Task UndoAndRedoRestoreWishDisplayImmediatelyFromTheSameSnapshot()
+    {
+        var st = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int> { ["0,0"] = 1 });
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        vm.SetWish(0, 0, 0);
+        if (vm.LastRefreshCheckTask is { } t) await t;
+        Assert.Equal(0, vm.Ui.Wishes["0,0"]);
+        vm.Undo();   // 検査の完了を待たずに、元に戻すだけで表示が戻る
+        Assert.Equal(1, vm.Ui.Wishes["0,0"]);
+        Assert.Equal(vm._currentSchedule!.Select(r => r.ToList()), vm.Ui.Schedule.Select(r => r.ToList()));
+        vm.Redo();
+        Assert.Equal(0, vm.Ui.Wishes["0,0"]);
+    }
+
+    [Fact]
+    public void CellNoticeUndoesOnlyItsOwnOperation()
+    {
+        var vm = new MagiViewModel { _state = ThreeShiftTwoGroupState(wishes: new Dictionary<string, int>()), _currentSchedule = MinimalState.BuildSchedule() };
+        var before = vm._currentSchedule![0][0];
+        var other = before == 1 ? 2 : 1;
+        vm.SetCell(0, 0, other);
+        var first = vm.Ui.OpNotice!;
+        vm.SetCell(0, 1, vm._currentSchedule![0][1] == 1 ? 2 : 1);
+        vm.UndoNotice(first);   // 後に別の操作がある＝戻さない
+        Assert.Equal(other, vm._currentSchedule![0][0]);
+        var second = vm.Ui.OpNotice!;
+        vm.UndoNotice(second);   // 自分の操作は戻る（1 日目の変更は残る）
+        Assert.Equal(other, vm._currentSchedule![0][0]);
+        Assert.NotEqual(second.Id, first.Id);
+    }
 }
 
 file static class TestFixtureExtensions
@@ -1975,4 +2006,5 @@ file static class TestFixtureExtensions
     /// <summary>int[][] -> IReadOnlyList&lt;IReadOnlyList&lt;int&gt;&gt; for MinimalState.Build's schedule param.</summary>
     public static IReadOnlyList<IReadOnlyList<int>> ToIntArray2DRows(this int[][] a) =>
         a.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+
 }

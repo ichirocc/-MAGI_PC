@@ -56,6 +56,7 @@ public sealed partial class MagiViewModel
         Ui.FixSearching = true;
         Ui.FixFocusName = focusName;
         Ui.FixDoneKey = "";
+        Ui.FixFailedKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
         LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day);
@@ -66,8 +67,19 @@ public sealed partial class MagiViewModel
     {
         Ui.FixSuggestions = Array.Empty<FixSuggestion>();
         Ui.FixSearched = false;
+        Ui.FixDoneKey = "";
+        Ui.FixFailedKey = "";
         Ui.StalledHardFamilies = Array.Empty<string>();
     }
+
+    /// <summary>通知の「元に戻す」。その操作がまだ元に戻すの先頭にあるときだけ戻す。</summary>
+    public void UndoNotice(OpNotice n)
+    {
+        if (CellSheetLogic.NoticeUndoApplies(_undoStack.Last?.Value.Serial, n.UndoSerial)) Undo();
+        else { Ui.MessageIsError = false; Ui.Message = "このあとに別の操作があるため、通知からは戻せません（「元に戻す」ボタンで順に戻せます）"; }
+    }
+
+    public void ClearOpNotice(long id) { if (Ui.OpNotice?.Id == id) Ui.OpNotice = null; }
 
     private async Task FindFixSuggestionsCoreAsync(
         MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct,
@@ -110,6 +122,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = false;
                 Ui.FixSearching = false;
+                Ui.FixFailedKey = focusKey;
                 Ui.Message = "直し方を探せませんでした";
             }
         }

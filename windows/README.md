@@ -328,6 +328,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-26（外部レビュー e07bbd5 の是正の C# 移植、Kotlin `claude/merge-wub4fq` b2fe1e7 同日）: 板挟みのボタンを「希望は残して別のシフトを割り当てる
+  （希望は未反映になります）」（挙動は据え置き）。`UndoableMessage` を `UiState.OpNotice`（`OpNotice` record、検査の進み具合の `Message` と別のイベント）へ置き換え、
+  通知バーは通知の表示中に失敗以外の文言で置き換えない（`CellSheetLogic.MessageMayReplaceNotice`）、「元に戻す」は `UndoSnap.Serial` が先頭のときだけ
+  （`UndoNotice`・`NoticeUndoApplies`）。直し方探しは `CellSheetLogic.PanelState`（WaitCheck/NotStarted/Running/Done/Failed、`UiState.FixFailedKey`、
+  失敗は［もう一度探す］）で、Running→false・盤面・希望の変化で探し直す。Undo/Redo は `Ui.Schedule` と希望の表示（`ApplyWishDisplay`＝Wishes・
+  LockedWishKeys・WishSelfConflicts、報告の反映と共有）を同じ段から即時に戻す。セルの Flyout に［詳しく ▼］（`CellDetailLinesFor`＝重なった族すべて・
+  期間の制約（連続 N 区間）、`StaffCountLines`）。Kotlin の `cellSheetRev`（Compose の remember 鍵）は、C# では Flyout が開いている間 `CheckRev`・
+  `Wishes` の変更通知で状態の 1 行・補足・印・詳しくを作り直す形にした（editRev は移植していないため。出力の意味は同じ）。テストは Kotlin の追加 4 件のうち
+  純ロジック 3 件を `CellSheetLogicTest` に写し、元に戻す/やり直すの希望表示と通知の元に戻すを `MagiViewModelEditingTest` で VM ごと固定。
 - 2026-09-25（セル編集シートの再設計の C# 移植、Kotlin `claude/merge-wub4fq` 03f3a2c 同日）: 純ロジックは `CellSheetLogic`（固定配置＝誰も担当できないシフトは出さない・
   利き手で左右反転、1 行の状態＝原因と相手・日・数、印＝おすすめ／必須が増える、板挟み、巡回、回数の 1 行、`FixesByOthers`）を 1 対 1 で移植し、
   `CellSheetLogicTest` は Kotlin と同じ文言を実データで照合する。VM は `MagiViewModel.CellSheet`（状態・印の背景評価）、`FindFixSuggestions` に

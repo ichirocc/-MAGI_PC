@@ -202,6 +202,14 @@ public sealed partial class MagiViewModel
 
     // ===== 元に戻す/やり直す（公開の入口） =====
 
+    /// <summary>希望の表示（希望・試算できる希望・希望どうしの衝突）を設定から作り直す。報告の反映と元に戻す/やり直すで共有する。</summary>
+    internal void ApplyWishDisplay(MagiState st)
+    {
+        Ui.Wishes = st.Wishes;
+        Ui.LockedWishKeys = WishTrial.LockedWishKeys(st);
+        Ui.WishSelfConflicts = V6SanityPort.WishSelfConflicts(st);
+    }
+
     /// <summary>直前の編集・取込・計算開始前の状態へ戻す（最大30段）。現在状態は redo へ退避。</summary>
     public void Undo()
     {
@@ -232,6 +240,8 @@ public sealed partial class MagiViewModel
         Ui.StructureEdited = true;
         Ui.CanUndo = _undoStack.Count > 0;
         Ui.CanRedo = true;
+        Ui.Schedule = _currentSchedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        ApplyWishDisplay(snap.State);
         Ui.Message = "1つ前に戻しました";
         LogOp("I", "元に戻す");
         RefreshCheck();
@@ -262,6 +272,8 @@ public sealed partial class MagiViewModel
         Ui.StructureEdited = true;
         Ui.CanUndo = true;
         Ui.CanRedo = _redoStack.Count > 0;
+        Ui.Schedule = _currentSchedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        ApplyWishDisplay(snap.State);
         Ui.Message = "やり直しました";
         LogOp("I", "やり直し");
         RefreshCheck();

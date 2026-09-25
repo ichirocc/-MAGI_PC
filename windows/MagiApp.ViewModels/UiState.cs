@@ -104,6 +104,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private string fixFocusName = "";
     /// <summary>直し方の探索を終えた依頼の鍵（<see cref="FixFocus.Key"/>、空＝画面全体や未完了）。印・セルのシートが自分の結果か見分ける。</summary>
     [ObservableProperty] private string fixDoneKey = "";
+    /// <summary>直し方の探索が失敗した依頼の鍵。</summary>
+    [ObservableProperty] private string fixFailedKey = "";
 
     [ObservableProperty] private IReadOnlyList<string> logs = Array.Empty<string>();
     [ObservableProperty] private long elapsedMs;
@@ -183,8 +185,8 @@ public sealed partial class UiState : ObservableObject
     // editRev（Compose再構成トリガー用ワークアラウンド）はここでは移植しない。理由はクラスKDoc参照。
 
     [ObservableProperty] private string? message;
-    /// <summary>この文言のメッセージに「元に戻す」を付ける（セルを 1 つ変えた直後だけ。1 段戻す）。</summary>
-    [ObservableProperty] private string? undoableMessage;
+    /// <summary>操作の通知（「元に戻す」付き）。検査の進み具合の <see cref="Message"/> とは別のイベント＝再検査で上書きされない。</summary>
+    [ObservableProperty] private OpNotice? opNotice;
     /// <summary>セル編集シートの利き手（false=右手・既定）。左手はボタンの行を左右反転し、日送りと閉じるを左へ。</summary>
     [ObservableProperty] private bool leftHand;
 

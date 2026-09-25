@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
     /// （<see cref="OnMessageBarClosed"/> が <see cref="MagiViewModel.ClearMessage"/> へ compare-and-clear
     /// 用に渡す——別の新しい通知が表示中に上書きしていたら消さないため）。</summary>
     private string? _shownMessage;
+    private OpNotice? _shownNotice;
 
     /// <summary>[通知バー] 自動消滅タイマー（Kotlin原本の Snackbar の自動消滅に対応。<c>DispatcherTimer</c>
     /// を使う既存規約は <c>ScheduleView.FocusCell</c> と同じ）。</summary>
@@ -70,7 +71,24 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OnUiChangedForMessageBar(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
+        if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
+        else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
+    }
+
+    /// <summary>操作の通知（「元に戻す」付き）を出す。検査の進み具合の文言とは別のイベントで、出ている間は通常の文言で置き換えない。</summary>
+    private void ShowOpNotice()
+    {
+        var n = _vm.Ui.OpNotice;
+        if (n is null || n == _shownNotice) return;
+        _shownNotice = n;
+        _shownMessage = null;
+        GlobalMessageBar.Message = n.Text;
+        GlobalMessageBar.Severity = InfoBarSeverity.Informational;
+        var undo = new Button { Content = "元に戻す" };
+        undo.Click += (_, _) => { GlobalMessageBar.IsOpen = false; _vm.UndoNotice(n); };
+        GlobalMessageBar.ActionButton = undo;
+        GlobalMessageBar.IsOpen = true;
+        StartMessageTimer(4);
     }
 
     /// <summary>
@@ -82,6 +100,9 @@ public sealed partial class MainWindow : Window
     private void UpdateMessageBar()
     {
         var msg = _vm.Ui.Message;
+        var noticeShowing = _shownNotice is not null && GlobalMessageBar.IsOpen;
+        if (msg is not null && !CellSheetLogic.MessageMayReplaceNotice(noticeShowing, _vm.Ui.MessageIsError)) { _vm.ClearMessage(msg); return; }
+        if (msg is null && noticeShowing) return;
         if (msg is null)
         {
             _messageTimer?.Stop();
@@ -93,18 +114,22 @@ public sealed partial class MainWindow : Window
         _shownMessage = msg;
         GlobalMessageBar.Message = msg;
         GlobalMessageBar.Severity = _vm.Ui.MessageIsError ? InfoBarSeverity.Error : InfoBarSeverity.Informational;
-        // セルを 1 つ変えた直後だけ「元に戻す」（Android の Snackbar のアクションと同じ、1 段戻す）。
-        if (msg == _vm.Ui.UndoableMessage && _vm.Ui.CanUndo)
-        {
-            var undo = new Button { Content = "元に戻す" };
-            undo.Click += (_, _) => { GlobalMessageBar.IsOpen = false; _vm.Undo(); };
-            GlobalMessageBar.ActionButton = undo;
-        }
-        else GlobalMessageBar.ActionButton = null;
+        ClearShownNotice();
+        GlobalMessageBar.ActionButton = null;
         GlobalMessageBar.IsOpen = true;
+        StartMessageTimer(_vm.Ui.MessageIsError ? 6 : 4);
+    }
 
+    private void ClearShownNotice()
+    {
+        if (_shownNotice is { } n) _vm.ClearOpNotice(n.Id);
+        _shownNotice = null;
+    }
+
+    private void StartMessageTimer(int seconds)
+    {
         _messageTimer?.Stop();
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_vm.Ui.MessageIsError ? 6 : 4) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
@@ -122,7 +147,8 @@ public sealed partial class MainWindow : Window
     private void OnMessageBarClosed(InfoBar sender, InfoBarClosedEventArgs args)
     {
         _messageTimer?.Stop();
-        _vm.ClearMessage(_shownMessage);
+        ClearShownNotice();
+        if (_shownMessage is not null) _vm.ClearMessage(_shownMessage);
     }
 
     /// <summary>

@@ -1150,15 +1150,25 @@ public sealed partial class ScheduleView : UserControl
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus)
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
-        void Start() { if (!_vm.Ui.Running) _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day); }
+        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day);
+        void Start() { if (!_vm.Ui.Running) Find(); }
         void Refresh()
         {
             var ui = _vm.Ui;
             host.Children.Clear();
             host.Children.Add(new TextBlock { Text = "直し方", Opacity = 0.8 });
-            var done = !ui.FixSearching && ui.FixDoneKey == focus.Key;
-            if (ui.Running) { host.Children.Add(new TextBlock { Text = "計算中は探せません。終わってから開き直してください。", TextWrapping = TextWrapping.Wrap }); return; }
-            if (!done)
+            var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key);
+            if (state == FixPanelState.WaitCheck) { host.Children.Add(new TextBlock { Text = "計算・チェックが終わると探します。", TextWrapping = TextWrapping.Wrap }); return; }
+            if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
+            if (state == FixPanelState.Failed)
+            {
+                host.Children.Add(new TextBlock { Text = "直し方を探せませんでした。", TextWrapping = TextWrapping.Wrap });
+                var again = new Button { Content = "もう一度探す", MinHeight = 48 };
+                again.Click += (_, _) => Find();
+                host.Children.Add(again);
+                return;
+            }
+            if (state == FixPanelState.Running)
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
                 row.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
@@ -1197,8 +1207,9 @@ public sealed partial class ScheduleView : UserControl
         }
         PropertyChangedEventHandler handler = (_, e) =>
         {
-            if (e.PropertyName == nameof(UiState.Schedule)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
-            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixSuggestions) or nameof(UiState.Running))
+            // 盤面・希望が変わったときと、計算・チェックが終わった時点（Running→false）で探し直す。
+            if (e.PropertyName is nameof(UiState.Schedule) or nameof(UiState.Wishes) or nameof(UiState.Running)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
+            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions))
                 DispatcherQueue.TryEnqueue(Refresh);
         };
         _vm.Ui.PropertyChanged += handler;
@@ -1352,15 +1363,41 @@ public sealed partial class ScheduleView : UserControl
         };
         var statusBox = new StackPanel { Background = new SolidColorBrush(bg), Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(12) };
         if (dilemma) statusBox.Children.Add(new TextBlock { Text = CellSheetLogic.WishKeptLine(Sym(wish)), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        statusBox.Children.Add(new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
+        var statusText = new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 };
+        statusBox.Children.Add(statusText);
         panel.Children.Add(statusBox);
+
+        // 「詳しく」: このセルに重なった違反すべて（期間の制約は連続 N 区間）とこの職員の回数・偏り。
+        var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
+        void FillDetails()
+        {
+            details.Children.Clear();
+            details.Children.Add(new TextBlock { Text = "このセルの違反", Opacity = 0.8 });
+            var dl = _vm.CellDetailLinesFor(i, j, LabelOf);
+            if (dl.Count == 0) details.Children.Add(new TextBlock { Text = "違反はありません。" });
+            foreach (var l in dl) details.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+            details.Children.Add(new TextBlock { Text = "この職員の回数・偏り", Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
+            var sl = GridDisplayMarks.StaffCountLines(_vm.Ui, i, LabelOf, _vm.StaffCellLimits);
+            if (sl.Count == 0) details.Children.Add(new TextBlock { Text = "回数・偏りの違反はありません。" });
+            foreach (var l in sl) details.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        }
+        var detailsToggle = new Button { Content = "詳しく ▼", MinHeight = 48 };
+        detailsToggle.Click += (_, _) =>
+        {
+            var open = details.Visibility != Visibility.Visible;
+            if (open) FillDetails();
+            details.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            detailsToggle.Content = open ? "詳しく ▲" : "詳しく ▼";
+        };
+        panel.Children.Add(detailsToggle);
+        panel.Children.Add(details);
 
         var showGrid = mode == 1 || !dilemma;
         if (mode == 0 && dilemma)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             var others = new Button { Content = "他の人で補う（推奨）", MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-            var breakWish = new Button { Content = "希望を取り消して別のシフトを割り当てる", MinHeight = 48 };
+            var breakWish = new Button { Content = new TextBlock { Text = "希望は残して別のシフトを割り当てる（希望は未反映になります）", TextWrapping = TextWrapping.Wrap }, MinHeight = 48, MaxWidth = 220 };
             row.Children.Add(others);
             row.Children.Add(breakWish);
             panel.Children.Add(row);
@@ -1383,12 +1420,15 @@ public sealed partial class ScheduleView : UserControl
             b.Click += (_, _) => Reopen(i, j, mm);
             ctx.Children.Add(b);
         }
-        var count = _vm.StaffCountShortFor(i);
-        ctx.Children.Add(new TextBlock
+        string CtxLine()
         {
-            Text = $"希望 {Sym(wish)}（{CellSheetLogic.WishTabState(wish, cur)}）" + (count.Length > 0 ? $"　回数 {count}" : ""),
-            Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260,
-        });
+            var u = _vm.Ui;
+            int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
+            var count = _vm.StaffCountShortFor(i);
+            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (count.Length > 0 ? $"　回数 {count}" : "");
+        }
+        var ctxText = new TextBlock { Text = CtxLine(), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
+        ctx.Children.Add(ctxText);
         panel.Children.Add(ctx);
 
         var left = ui.LeftHand;
@@ -1468,6 +1508,23 @@ public sealed partial class ScheduleView : UserControl
         _marksCts = cts;
         flyout.Closed += (_, _) => cts.Cancel();
         if (mode == 0 && showGrid) _ = FillMarksAsync();
+        // 状態の 1 行・回数・印・詳しくは、検査の完了（CheckRev）と希望の変化で同じ盤面から作り直す（元に戻す/やり直すも含む）。
+        var refreshMode = mode;
+        void RefreshEvaluated()
+        {
+            if (cts.IsCancellationRequested) return;
+            status = _vm.CellStatusFor(i, j, LabelOf);
+            statusText.Text = status.Text;
+            ctxText.Text = CtxLine();
+            if (details.Visibility == Visibility.Visible) FillDetails();
+            if (refreshMode == 0 && showGrid) _ = FillMarksAsync();
+        }
+        PropertyChangedEventHandler evalHandler = (_, e) =>
+        {
+            if (e.PropertyName is nameof(UiState.CheckRev) or nameof(UiState.Wishes)) DispatcherQueue.TryEnqueue(RefreshEvaluated);
+        };
+        _vm.Ui.PropertyChanged += evalHandler;
+        flyout.Closed += (_, _) => _vm.Ui.PropertyChanged -= evalHandler;
         async Task FillMarksAsync()
         {
             try
@@ -1476,6 +1533,7 @@ public sealed partial class ScheduleView : UserControl
                 if (cts.IsCancellationRequested) return;
                 foreach (var (k, tb) in marksByShift)
                 {
+                    tb.Text = "";
                     if (m.HardRisk.Contains(k)) { tb.Text = "⚠"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)); }
                     else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
                 }

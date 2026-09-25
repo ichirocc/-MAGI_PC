@@ -179,4 +179,40 @@ public class CellSheetLogicTest
         Assert.Equal(new[] { a }, CellSheetLogic.FixesByOthers(new[] { a, b, c }, 2, 7));
         Assert.NotEqual(new FixFocus(null, null, 2, 7).Key, new FixFocus(null, null, 2).Key);
     }
+
+    [Fact]
+    public void FixPanelStatesSpinOnlyWhileRunning()
+    {
+        Assert.Equal(FixPanelState.WaitCheck, CellSheetLogic.PanelState(running: true, fixSearching: false, doneKey: "k", failedKey: "", key: "k"));
+        Assert.Equal(FixPanelState.NotStarted, CellSheetLogic.PanelState(false, false, "", "", "k"));
+        Assert.Equal(FixPanelState.Running, CellSheetLogic.PanelState(false, true, "", "", "k"));
+        Assert.Equal(FixPanelState.Done, CellSheetLogic.PanelState(false, false, "k", "", "k"));
+        Assert.Equal(FixPanelState.Failed, CellSheetLogic.PanelState(false, false, "", "k", "k"));
+        Assert.Equal(FixPanelState.NotStarted, CellSheetLogic.PanelState(false, false, "other", "", "k"));
+    }
+
+    [Fact]
+    public void NoticeUndoOnlyForItsOwnOperationAndProgressDoesNotReplaceIt()
+    {
+        Assert.True(CellSheetLogic.NoticeUndoApplies(7L, 7L));
+        Assert.False(CellSheetLogic.NoticeUndoApplies(8L, 7L));
+        Assert.False(CellSheetLogic.NoticeUndoApplies(null, 7L));
+        Assert.False(CellSheetLogic.MessageMayReplaceNotice(noticeShowing: true, isError: false));
+        Assert.True(CellSheetLogic.MessageMayReplaceNotice(noticeShowing: true, isError: true));
+        Assert.True(CellSheetLogic.MessageMayReplaceNotice(noticeShowing: false, isError: false));
+    }
+
+    [Fact]
+    public void DetailListsEveryOverlappingFamilyAndC1Runs()
+    {
+        var (key, cls) = Rep.CellFamilies!.First(kv => kv.Value.Select(VioBuckets.FamilyOfVioClass).Distinct().Count() >= 2);
+        var parts = key.Split(',');
+        int i = int.Parse(parts[0]), j = int.Parse(parts[1]);
+        var fams = CellSheetLogic.StatusFamilies(cls, Array.Empty<string>(), Array.Empty<string>());
+        var lines = CellSheetLogic.CellDetailLines(St, P, S, i, j, fams, null, Label);
+        Assert.Equal(fams.Count, lines.Count);
+        Assert.All(lines, l => Assert.True(l.StartsWith("必須・") || l.StartsWith("要調整・"), l));
+        var c1 = CellSheetLogic.CellDetailLines(St, P, S, i, j, new[] { "c1" }, 3, f => f == "c1" ? "期間の制約" : f);
+        Assert.Contains("期間の制約（連続 3 区間）", Assert.Single(c1));
+    }
 }

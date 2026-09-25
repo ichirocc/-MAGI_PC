@@ -204,7 +204,9 @@ public sealed partial class MagiViewModel
     /// <summary>[テスト可視性のためinternal化] <see cref="SnapNow"/> の戻り値型として internal 昇格が必要。
     /// <paramref name="Alts"/> は snap の盤面/設定に対して有効だった「他の案」＝元に戻す/やり直すで盤面と一緒に一覧も戻す。
     /// <paramref name="DisplayEdit"/> は表示色の変更の直前に積んだ段（続けての色変更をまとめる目印。Kotlin の undo 名「表示色の変更」）。</summary>
-    internal sealed record UndoSnap(MagiState State, int[][] Schedule, AltSnap? Alts = null, bool DisplayEdit = false);
+    internal sealed record UndoSnap(MagiState State, int[][] Schedule, AltSnap? Alts = null, bool DisplayEdit = false, long Serial = 0);
+    private long _undoSerialSeq;
+    private long _opNoticeSeq;
 
     internal sealed record AltSnap(IReadOnlyList<int[][]> Scheds, IReadOnlyList<string> Summaries, int Applied, long BoardKey, long StateKey);
 
@@ -220,7 +222,7 @@ public sealed partial class MagiViewModel
         var alts = _alternativeScheds.Count > 0 && _altBoardKey == BoardKey(sc) && _altStateKey == StateKey(st)
             ? new AltSnap(_alternativeScheds, Ui.Alternatives, Ui.AlternativeApplied, _altBoardKey, _altStateKey)
             : null;
-        return new UndoSnap(st, sc.Copy2D(), alts);
+        return new UndoSnap(st, sc.Copy2D(), alts, Serial: ++_undoSerialSeq);
     }
 
     /// <summary>undo/redo の復元先に退避してあった「他の案」を戻す（無ければ外す）。</summary>

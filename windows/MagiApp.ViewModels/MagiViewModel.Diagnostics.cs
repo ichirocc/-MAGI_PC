@@ -328,9 +328,7 @@ public sealed partial class MagiViewModel
         Ui.ShiftSymbols = st.Shifts.Select(sh => KigouFormat.ToHankakuKigou(sh.Kigou)).ToList();
         ApplyShiftColorsToUi(st);
         Ui.Schedule = schedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.Wishes = st.Wishes;
-        Ui.LockedWishKeys = WishTrial.LockedWishKeys(st);
-        Ui.WishSelfConflicts = V6SanityPort.WishSelfConflicts(st);
+        ApplyWishDisplay(st);
         Ui.V6 = v6;
         Ui.Satisfaction = sat;
         // 研磨の限界: 必須は解決済みだが微調整が残る → 手修正の検討を促す

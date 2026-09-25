@@ -8,6 +8,12 @@ public sealed record ShiftSlot(int Shift, bool CanDo);
 
 public enum CellSeverity { Hard, Soft, None }
 
+/// <summary>直し方探しの状態（計算・チェック待ち／未開始／探索中／完了／失敗）。</summary>
+public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
+
+/// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。</summary>
+public sealed record OpNotice(long Id, string Text, long UndoSerial);
+
 /// <summary>Cause は接頭辞（必須/要調整）を除いた原因だけ（希望を守っている板挟みの 2 行目に使う）。</summary>
 public sealed record CellStatus(CellSeverity Severity, string Text, string Cause = "");
 
@@ -266,5 +272,33 @@ public static class CellSheetLogic
         list.Where(s => s.Ops.All(o => o.Staff != except) && s.Ops.Any(o => o.Day == day)).ToList();
 
     /// <summary>セルを 1 つ変えたときの Snackbar 相当の文言（「元に戻す」付き）。</summary>
+    /// <summary>セル詳細（「詳しく」）の行: 重なった族をすべて重い順に「必須・原因」「要調整・原因」。<paramref name="c1Runs"/>＝期間の制約のランの違反窓数（無ければ null）。</summary>
+    public static IReadOnlyList<string> CellDetailLines(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, int? c1Runs, Func<string, string> labelOf) =>
+        families.Select(fam =>
+        {
+            var label = labelOf(fam);
+            var d = FamilyDetail(state, p, s, i, j, fam, labelOf) ?? label;
+            if (fam == "c1" && c1Runs is > 0)
+            {
+                var withRuns = $"{label}（連続 {c1Runs} 区間）";
+                d = d.StartsWith(label, StringComparison.Ordinal) ? withRuns + d[label.Length..] : $"{withRuns}：{d}";
+            }
+            return (MirrorKeys.Hard.Contains(fam) ? "必須・" : "要調整・") + d;
+        }).ToList();
+
+    /// <summary>その場の直し方探しの状態。スピナーは <see cref="FixPanelState.Running"/> だけ。</summary>
+    public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key) =>
+        fixSearching ? FixPanelState.Running
+        : running ? FixPanelState.WaitCheck
+        : doneKey == key ? FixPanelState.Done
+        : failedKey == key ? FixPanelState.Failed
+        : FixPanelState.NotStarted;
+
+    /// <summary>通知の「元に戻す」は、その操作が今も元に戻すの先頭にあるときだけ効く（後の別の操作を戻さない）。</summary>
+    public static bool NoticeUndoApplies(long? topSerial, long noticeSerial) => topSerial is { } t && t == noticeSerial;
+
+    /// <summary>操作の通知を出している間、通常の文言では置き換えない（失敗・拒否だけは置き換える）。</summary>
+    public static bool MessageMayReplaceNotice(bool noticeShowing, bool isError) => !noticeShowing || isError;
+
     public static string CellChangedMessage(string name, int day, string symbol) => $"{name} {day + 1}日を{symbol}に変更しました";
 }

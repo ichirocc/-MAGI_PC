@@ -307,8 +307,7 @@ public sealed partial class MagiViewModel
         Ui.HasResult = true;
         Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.Message = CellSheetLogic.CellChangedMessage(staffName, j, shiftKigou);
-        Ui.UndoableMessage = Ui.Message;
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
         RefreshCheck();
     }
