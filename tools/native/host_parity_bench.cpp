@@ -54,9 +54,8 @@ static void finalizeProblem(MagiProblem& p) {
     for (int i = 0; i < p.S; i++) { int g = p.sgrp[i]; if (g >= 0 && g < p.G) p.members[g].push_back(i); }
     p.bucketHas.assign((size_t)p.G * p.K, 0);
     for (int g = 0; g < p.G; g++) for (int k : p.bucket[g]) if (k >= 0 && k < p.K) p.bucketHas[(size_t)g * p.K + k] = 1;
-    p.staffForShift.assign((size_t)p.K, {});
-    for (int i = 0; i < p.S; i++) { int g = p.sgrp[i]; if (g < 0 || g >= p.G) continue;
-        for (int k : p.bucket[g]) if (k >= 0 && k < p.K) p.staffForShift[k].push_back(i); }
+    p.buildPlacementTables();   // allowed / staffForShift（3.507.0: 個人上限 0 を除いた置けるシフト）
+    p.buildC3wBan();            // [3.542.0] 希望の前日に禁止（wish 確定後）
 }
 
 static C3r mkC3(std::initializer_list<int> seq) {
@@ -104,6 +103,7 @@ static bool loadFlat(const char* path, MagiProblem& p, std::vector<int>& board) 
     n = rd(); for (int c = 0; c < n; c++) { int g1 = rd(), s1 = rd(), g2 = rd(), s2 = rd(); p.cons42.push_back({g1, s1, g2, s2}); }
     n = rd(); for (int c = 0; c < n; c++) { int g = rd(), s = rd(), l = rd(), u = rd(); p.cons41s.push_back({g, s, l, u}); }
     n = rd(); for (int c = 0; c < n; c++) { int g1 = rd(), s1 = rd(), g2 = rd(), s2 = rd(); p.cons42s.push_back({g1, s1, g2, s2}); }
+    n = rd(); for (int c = 0; c < n; c++) { int x = rd(), y = rd(); p.cons3w.push_back({x, y}); }
     size_t cx = 0;
     auto rdc = [&]() { return c3[cx++]; };
     for (std::vector<C3r>* fam : {&p.cons3, &p.cons3n, &p.cons3m, &p.cons3mn}) {
@@ -186,6 +186,8 @@ static MagiProblem buildProblem(int S, int T, int K, int G, uint64_t seed, bool 
     for (int c = 0; c < ri(1, 3); c++) { int s = ri(1, K - 1); p.cons3n.push_back(mkC3({s, s, s})); }   // forbidden triple-run
     for (int c = 0; c < ri(1, 2); c++) { int s = ri(1, K - 1); p.cons3m.push_back(mkC3({s, s})); }        // single-run want
     for (int c = 0; c < ri(1, 2); c++) p.cons3mn.push_back(mkC3({ri(1, K - 1), 0}));
+    // [3.542.0] 希望の前日に禁止: 希望に多いシフトを起点に 1〜3 行（wish は上で ~10% 埋め済み＝実際に ban セルが生える）。
+    for (int c = 0; c < ri(1, 3); c++) p.cons3w.push_back({ri(0, K - 1), ri(0, K - 1)});
     // [c3 窓マッチのビット化(3.174.0)を明示的に踏む] 多シフト D>=3 の非forbidden/forbidden を追加。
     //   これらは singleRun=false の窓マッチ経路＝新しい popcount パスの主対象。
     if (K >= 4) {
@@ -257,21 +259,51 @@ static void runParityLoop(const MagiProblem& p, const std::vector<int>& board, c
 //   直した」意味的乖離（3.345.0 の weekly 定義変更がまさにその形）は**どちらの経路でも検出できなかった**。
 //   実機の番兵は捕まえるが、そのときネイティブは黙って無効化される＝速度が落ちるだけで気づけない。
 //   両側を1つの数字に固定することで、片側だけの変更が必ず CI で落ちる。
+//
+// [3.524.0/backlog#6] expect ファイルに族ごとの行（`c1=115` 等、MirrorKeys.all の19族）があれば
+//   族単位でも突き合わせる（無ければ旧来どおり hard/soft の2値のみ＝後方互換。経緯は docs/history/3.4xx.md）。
 static bool checkCrossLanguage(const MagiProblem& p, const std::vector<int>& board, const char* expectPath) {
     std::ifstream f(expectPath);
     if (!f) { printf("CROSS: cannot open %s\n", expectPath); return false; }
     long long expHard = -1, expSoft = -1;
+    long long expBd[kBreakdownCount]; for (int i = 0; i < kBreakdownCount; i++) expBd[i] = -1;
     std::string line;
     while (std::getline(f, line)) {
         if (line.rfind("hard=", 0) == 0) expHard = atoll(line.c_str() + 5);
         else if (line.rfind("soft=", 0) == 0) expSoft = atoll(line.c_str() + 5);
+        else {
+            for (int i = 0; i < kBreakdownCount; i++) {
+                const std::string prefix = std::string(kBreakdownNames[i]) + "=";
+                if (line.rfind(prefix, 0) == 0) { expBd[i] = atoll(line.c_str() + prefix.size()); break; }
+            }
+        }
     }
     if (expHard < 0 || expSoft < 0) { printf("CROSS: bad expectation file %s\n", expectPath); return false; }
+    const int bdPresent = (int)std::count_if(std::begin(expBd), std::end(expBd), [](long long v) { return v >= 0; });
+    // [3.524.0] 0件(旧来2値)と19件(全族)だけ受理。1〜18件は壊れたファイルの徴候＝黙って2値へ後退せず
+    //   fail-loud にする（--expect の件数不一致と同型の「無言スキップは罠」対策）。
+    if (bdPresent != 0 && bdPresent != kBreakdownCount) {
+        printf("CROSS: %s has a partial family block (%d/%d lines) — write all %d or none\n",
+               expectPath, bdPresent, kBreakdownCount, kBreakdownCount);
+        return false;
+    }
+    const bool hasBreakdown = bdPresent == kBreakdownCount;
     long long out[2];
-    fullEvalParts(p, board.data(), out);
-    const bool ok = (out[0] == expHard && out[1] == expSoft);
+    long long bd[kBreakdownCount];
+    fullEvalParts(p, board.data(), out, hasBreakdown ? bd : nullptr);
+    bool ok = (out[0] == expHard && out[1] == expSoft);
     printf("CROSS Kotlin-vs-C++ (%s): C++ hard=%lld soft=%lld / Kotlin hard=%lld soft=%lld -> %s\n",
            expectPath, out[0], out[1], expHard, expSoft, ok ? "MATCH" : "MISMATCH");
+    if (hasBreakdown) {
+        for (int i = 0; i < kBreakdownCount; i++) {
+            if (bd[i] != expBd[i]) {
+                ok = false;
+                printf("CROSS-FAMILY MISMATCH (%s): %s C++=%lld Kotlin=%lld\n",
+                       expectPath, kBreakdownNames[i], bd[i], expBd[i]);
+            }
+        }
+        if (ok) printf("CROSS-FAMILY (%s): all %d families MATCH\n", expectPath, kBreakdownCount);
+    }
     return ok;
 }
 
@@ -439,14 +471,10 @@ static int runMarginalCostTest() {
             }
         long long d = 0;
         for (int g = 0; g < p.G; g++) {
-            const auto& mem = p.members[g];
-            if ((int)mem.size() < 2) continue;
+            if ((int)p.members[g].size() < 2) continue;
             for (int k = 0; k < p.K; k++) {
                 if (!p.bucketHas[(size_t)g * p.K + k]) continue;
-                int sum = 0;
-                for (int x : mem) sum += counts[(size_t)x * p.K + k];
-                long long tgt = jround((double)sum / (double)mem.size());
-                for (int x : mem) d += std::llabs((long long)counts[(size_t)x * p.K + k] - tgt);
+                d += fairDevOfBucket(p, g, k, [&](int x) { return counts[(size_t)x * p.K + k]; });
             }
         }
         return d;
@@ -474,15 +502,11 @@ static int runMarginalCostTest() {
                 if (k >= 0 && k < p.K) counts[(size_t)s2 * p.K + k]++;
             }
         std::vector<int> countsCopy = counts;
-        std::vector<int> grpTotal((size_t)p.G * p.K, 0);
-        for (int s2 = 0; s2 < p.S; s2++)
-            for (int k = 0; k < p.K; k++)
-                grpTotal[(size_t)p.sgrp[s2] * p.K + k] += counts[(size_t)s2 * p.K + k];
 
         const int bucket = (p.dow0 + j) % 7;
         long long mWeekly = weeklyMarginalN(wd.data(), p.K, bucket, oldK, newK);
-        long long mFair = fairMarginalN(p, i, oldK, -1, counts, grpTotal)
-                        + fairMarginalN(p, i, newK, 1, counts, grpTotal);
+        long long mFair = fairMarginalN(p, i, oldK, -1, counts)
+                        + fairMarginalN(p, i, newK, 1, counts);
 
         if (wd != wdCopy) { printf("MARGINAL-TEST FAIL: weeklyMarginalN が作業配列を戻していない\n"); failures++; break; }
         if (counts != countsCopy) { printf("MARGINAL-TEST FAIL: fairMarginalN が counts を戻していない\n"); failures++; break; }
@@ -659,6 +683,7 @@ static int runConsIndexGuardTest() {
         // [3.442.0/M4] cons1/cons2 も正当な値なら通す（Kotlin の Problem 構築と同じ意味論）。
         p.cons1.push_back({3, 1, 2});
         p.cons2.push_back({0, 4});
+        p.cons3w.push_back({1, 0});
         if (!consIndicesValidN(p)) { printf("CONS-GUARD FAIL: 正当な制約を拒否した\n"); failures++; }
     }
     // 不正: 負の群 id / 範囲外シフト id を4族それぞれで拒否する。
@@ -667,8 +692,8 @@ static int runConsIndexGuardTest() {
     const char* names[] = {"cons41.g<0", "cons41.s>=K", "cons41s.s<0",
                            "cons42.g2<0", "cons42.s1>=K", "cons42s.s2>=K",
                            "cons1.si<0", "cons1.si>=K", "cons1.d1<=0", "cons1.d2<=0",
-                           "cons2.si>=K", "cons2.c<=0"};
-    for (int c = 0; c < 12; c++) {
+                           "cons2.si>=K", "cons2.c<=0", "cons3w.wishK>=K", "cons3w.prevK<0"};
+    for (int c = 0; c < 14; c++) {
         MagiProblem p = base();
         switch (c) {
             case 0: p.cons41.push_back({-1, 0, 0, 1}); break;
@@ -683,6 +708,8 @@ static int runConsIndexGuardTest() {
             case 9: p.cons1.push_back({3, 1, 0}); break;
             case 10: p.cons2.push_back({p.K, 1}); break;
             case 11: p.cons2.push_back({0, 0}); break;
+            case 12: p.cons3w.push_back({p.K, 0}); break;
+            case 13: p.cons3w.push_back({0, -1}); break;
         }
         if (consIndicesValidN(p)) {
             printf("CONS-GUARD FAIL: %s を受け入れた\n", names[c]);

@@ -328,6 +328,23 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（native-parity の道具を Android a493677 と同期、C# 側のツールだけ＝エンジン出力は不変）: この repo の native-parity は直下の
+  `app/src/main/cpp/magi_native.cpp`・`tools/native/host_parity_bench.cpp`（フォーク時の写し＝Android 3.442.0〈1e3afa4〉と同一）と、
+  3.522.0 より前の重みの期待値（`app/src/test/resources/*_eval_expected.txt`、C# の `MagiEngine.Tests/Fixtures` の複製とも別物）を突き合わせて
+  いただけで、緑でも現行の Kotlin とは切れていた。`state_to_flat.py` だけ #38 の skillIdx で部分的に進んでいた。
+  差分: `state_to_flat.py`＝restIdx を `Shift.role`（`"rest"`/`"none"`）で解決し明示の role が無いときだけ記号"休"、無ければ -1（旧: 記号"休"、
+  無ければ 0。3.603.0/N5）・欠損/null セルを -1（旧: 0。3.475.0）・負の staffRange は未設定（3.509.1）・apt は個人の下限/上限がある組を除外（D9）
+  ＋到達範囲クランプ（3.508.0。旧: 個人範囲へのクランプ）・cons3w ブロック（3.542.0）。`host_parity_bench.cpp`＝cons3w の読込と CONS-GUARD・
+  `buildPlacementTables`/`buildC3wBan`（3.507.0/3.542.0）・`--expect` の族単位照合（3.524.0）・fair の `fairDevOfBucket`（3.538.0）。
+  flat 形式（cons3w）と C++ の関数が 3 ファイルで噛み合うので、変換器だけでは同期できない（旧 bench は cons3w を読まず後続の読み位置がずれる）。
+  対応: `tools/native/`（`state_to_flat.py`・`host_parity_bench.cpp`・新規 `test_state_to_flat.py`・`gen_toc.py`）、`app/src/main/cpp/magi_native.cpp`、
+  native-parity が読む `app/src/test/resources/`（期待値 3 件を更新、`full_coverage_state.json`/`full_coverage_eval_expected.txt`/
+  `sept2026_eval_expected.txt` を追加）を Android と byte 一致にした（期待値は `MagiEngine.Tests/Fixtures` の複製とも一致）。`native-parity.yml` は
+  Android と同じく変換の前に変換器の自己テスト（`test_state_to_flat.py`＝restIdx・欠損セル・skillIdx の既定）を回し、fixture を 5 件
+  （full_coverage＝20 族すべて非ゼロ、sept2026＝fair の達成率モード）にした。Android との意図的な差は `uses:` の 4 行だけ＝`@v4` のまま
+  （Android 3.570.0 の SHA ピン留めはこの repo のほかのワークフローに無い＝repo 内の書式に揃える）。2026-09-24 の「`tools/`・`app/` は触らない」は
+  native-parity が読む範囲について撤回＝Android と同日に同期する（`app/` の Kotlin ソースと `release-build.yml`〈`v*` タグのみ〉は対象外のまま）。
+  検証（ローカル、ワークフローと同じ手順）: 自己テスト 6/6、変換 5 件、g++ ビルド、`--expect` 5 件 MATCH（族単位 20 族も一致）・約 600 万手で mismatch 0、TSAN `--shared-only` 緑。
 - 2026-09-25（backlog #38 を同期、Kotlin 9764924・60e79d4〈#221、作業ブランチの c03a5ca を squash〉同日＝利用者の決定）: `Staff.SkillIdx` の既定を 0 → **-1（未所属）**＝`MagiState.cs` の
   既定値・`StateJsonSerializer` の `OptInt("skillIdx", -1)`・`tools/native/state_to_flat.py`（native-parity）。職員追加・名簿取込（テンプレ/一覧）・
   キーの無い JSON（白紙開始の種）は -1、保存済みの明示の値はそのまま。`Ws1Ops.AddSkillGroup` を新設して `MagiViewModel.AddSkillGroup` から呼ぶ＝
@@ -1307,4 +1324,5 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 `app/src/main/cpp/magi_native.cpp`（JNI経由のC++高速化ミラー）はこの移植の対象外
 （Android/ARM上のJNIオーバーヘッド対策であり、Windows デスクトップでは純粋なマネージドC#で
 十分な可能性が高い。ネイティブ層の要否はフェーズ5終盤の粗いタイミング計測後、証拠が出てから
-プロファイラで検討する）。
+プロファイラで検討する）。直下の `app/src/main/cpp/magi_native.cpp`・`tools/native/`・`app/src/test/resources/` は native-parity 専用の
+Android の写しで、Android と同日に byte 一致で同期する（2026-09-25 の記録）。

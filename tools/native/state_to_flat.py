@@ -44,6 +44,19 @@ def is_blank(v):
     return v is None or str(v).strip() == ""
 
 
+def rest_index(shifts):
+    """restIdx — StateParser.parse の role 解決＋MirrorCore.restShiftIndex、無ければ -1（NativeEval の `?: -1`）。
+
+    明示の role（"rest"/"none"）が1つも無い JSON（旧JSON・"" で書いた保存）だけ記号"休"へ付ける。
+    """
+    for i, s in enumerate(shifts):
+        if s.get("role") == "rest":
+            return i
+    if any(s.get("role") == "none" for s in shifts):
+        return -1
+    return next((i for i, s in enumerate(shifts) if s.get("kigou") == "休"), -1)
+
+
 def main():
     if len(sys.argv) != 3:
         print(__doc__)
@@ -79,8 +92,7 @@ def main():
                 return i
         return -1
 
-    # restIdx = 記号"休"のindex（無ければ0）— MirrorCore.restShiftIndex
-    rest_idx = next((i for i, s in enumerate(shifts) if s["kigou"] == "休"), 0)
+    rest_idx = rest_index(shifts)
     # dow0 = ISO dayOfWeek(月=1..日=7) % 7 — Problem.dow0
     y, m, d = (int(x) for x in st["startDate"].split("-"))
     dow0 = (date(y, m, d).isoweekday()) % 7
@@ -141,6 +153,9 @@ def main():
             continue
         lo = to_int_or_none(r.get("lo"))
         hi = to_int_or_none(r.get("hi"))
+        # [3.509.1] 負数は未設定扱い — Problem.rangeLo/Hi
+        lo = lo if lo is not None and lo >= 0 else None
+        hi = hi if hi is not None and hi >= 0 else None
         if lo is not None:
             range_lo[i * K + k] = lo
         if hi is not None:
@@ -159,12 +174,26 @@ def main():
             t = to_int_or_none(row[k]) if k < len(row) else None
             if t is None or t < 0 or k not in can_k:
                 continue
-            rlo = range_lo[i * K + k]
-            rhi = range_hi[i * K + k]
-            if rlo != INT32_MIN and t < rlo:
-                t = rlo
-            if rhi != INT32_MAX and t > rhi:
-                t = rhi
+            # [3.509.0/決定 D9] 個人の下限または上限がある組には群目標を適用しない — Problem.apt
+            if range_lo[i * K + k] != INT32_MIN or range_hi[i * K + k] != INT32_MAX:
+                continue
+            # [3.508.0] 到達範囲クランプ — Problem.apt と同式（希望固定込みの実効下限/上限の他シフト合計）
+            def wish_cnt(kk):
+                return sum(1 for j in range(T) if wish[i * T + j] == kk and kk in can_k)
+            def eff_lo(kk):
+                lo2 = 0 if range_lo[i * K + kk] == INT32_MIN else range_lo[i * K + kk]
+                return max(lo2, wish_cnt(kk))
+            def eff_hi(kk):
+                placeable = kk in can_k and not (range_hi[i * K + kk] == 0 and kk != rest_idx)
+                hi2 = (T if range_hi[i * K + kk] == INT32_MAX else range_hi[i * K + kk]) if placeable else 0
+                return max(hi2, wish_cnt(kk))
+            sum_hi = sum(eff_hi(k2) for k2 in range(K) if k2 != k)
+            sum_lo = sum(eff_lo(k2) for k2 in range(K) if k2 != k)
+            reach_lo = max(T - sum_hi, wish_cnt(k))
+            reach_hi = T - sum_lo
+            if reach_lo <= reach_hi:
+                t = max(t, reach_lo)
+                t = min(t, reach_hi)
             apt[i * K + k] = t
 
     # cons blob（NativeEval.createHandle と同順）
@@ -235,6 +264,16 @@ def main():
     cons.append(len(c42s))
     for r in c42s:
         cons.extend(r)
+    # [3.542.0] cons3w: [n, (wishK, prevK)*]（Problem.cons3w: 両記号が解決できる行だけ）
+    c3w = []
+    for c in st.get("cons3w", []):
+        x = shift_idx(c.get("wishKigou", ""))
+        y = shift_idx(c.get("prevKigou", ""))
+        if x >= 0 and y >= 0:
+            c3w.append((x, y))
+    cons.append(len(c3w))
+    for r in c3w:
+        cons.extend(r)
 
     # c3 blob: 各族 count, (len, seq...)*
     def resolve_c3(rows):
@@ -276,13 +315,13 @@ def main():
         bucket_blob.append(len(b))
         bucket_blob.extend(b)
 
-    # board: normalizeSchedule 相当（範囲外→-1。-1 セルは実ランタイムで正当に現れる）
+    # board: normalizeSchedule 相当（範囲外・欠損・null→-1。-1 セルは実ランタイムで正当に現れる）
     board = []
     for i in range(S):
         row = schedule[i] if i < len(schedule) else []
         for j in range(T):
             k = to_int_or_none(row[j]) if j < len(row) else None
-            k = k if k is not None else 0
+            k = k if k is not None else -1
             board.append(k if 0 <= k < K else -1)
 
     meta = [S, T, K, G, rest_idx, dow0, use2]
