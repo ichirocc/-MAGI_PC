@@ -145,6 +145,37 @@ public class ConstraintMusTest
     }
 
     [Fact]
+    public void DayMusWishPinOnZeroCapShiftServesItsSeat()
+    {
+        // 実データ 10/11 の形: 上限 0 の C へ希望固定した人はその席に就ける（希望固定は MayPlace より優先）。
+        var st = State(
+            days: 1,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "1", ""), new("C", "C", "1", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 0, ["1,0"] = 2 },
+            staffRange: new Dictionary<string, Range> { ["1,2"] = new Range("", "0") },
+            staffCount: 3);
+        var p = new Problem(st);
+        Assert.False(p.MayPlace(1, 2));
+        Assert.Empty(ConstraintMus.AnalyzeDayConflicts(p));
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), it => it.Where.Contains("必要人数と固定希望の衝突"));
+    }
+
+    [Fact]
+    public void StaffForcedMinSubtractsDaysPinnedToUnplaceableShift()
+    {
+        // Z は上限 0（置けない）だが 2 日が Z の希望固定。残り 3 日は 休≤2・A≤1 で埋まる＝矛盾なし（強制下限は Z の日を差し引く）。
+        var st = State(
+            days: 5,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", ""), new("Z", "Z", "", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 2, ["0,1"] = 2 },
+            staffRange: new Dictionary<string, Range> { ["0,0"] = new Range("", "2"), ["0,1"] = new Range("", "1"), ["0,2"] = new Range("", "0") });
+        Assert.Empty(ConstraintMus.AnalyzeStaffConflicts(new Problem(st)));
+        // 希望が 1 日だけなら残り 4 日を 休≤2・A≤1 で埋められない＝真の矛盾は引き続き出る。
+        var st1 = st with { Wishes = new Dictionary<string, int> { ["0,0"] = 2 } };
+        Assert.Single(ConstraintMus.AnalyzeStaffConflicts(new Problem(st1)));
+    }
+
+    [Fact]
     public void NoConflictYieldsNothing()
     {
         var st = State(

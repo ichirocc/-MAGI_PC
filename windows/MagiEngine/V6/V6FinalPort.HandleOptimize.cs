@@ -637,6 +637,11 @@ public static partial class V6FinalPort
             var covUBlocked = covUNow <= 0 ? 0 : TryOrZero(() =>
                 CovUBlockedAmount(V6PortAnalyzer.DiagnoseCoverage(state, finalSched, finalReport)));
             var covUWall = CovUStructuralWall(covUNow, hardFloor, covUBlocked);
+            // 希望どうしの衝突（希望を1件取り消すまで c3n/c3w か pref が必ず残る）。族別に open から差し引く。
+            IReadOnlyDictionary<string, int> selfConflict;
+            try { selfConflict = V6SanityPort.WishSelfConflictHard(ScheduleUtil.CachedProblem(state), finalSched); }
+            catch (Exception) { selfConflict = new Dictionary<string, int>(); }
+            var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)
             {
                 var n0 = bd.GetValueOrDefault(key, 0);
@@ -646,14 +651,19 @@ public static partial class V6FinalPort
                     : infeasLearned.Contains(key) ? "探索が充足困難と学習"
                     : null;
                 if (structural != null) { walls.Add($"{key} {n0}件({structural})"); continue; }
+                var self = Math.Min(n0, selfConflict.GetValueOrDefault(key, 0));
+                if (self > 0) selfConflictShown.Add((key, self));
                 var n = key switch
                 {
                     "weekly" => n0 - weeklyWall,
                     "covU" => n0 - covUWall,
                     _ => n0,
-                };
+                } - self;
                 if (n > 0) open.Add($"{key} {n}件");
             }
+            if (selfConflictShown.Count > 0)
+                walls.Add($"希望どうしの衝突 {selfConflictShown.Sum(it => it.N)}件(" +
+                    string.Join("・", selfConflictShown.Select(it => $"{it.Key} {it.N}")) + "＝希望を1件取り消すまで解消しない)");
             if (covUWall > 0)
             {
                 // 床が全部を覆うときだけ従来どおり「構造的下限」（供給不足）と名乗る。それ以外は

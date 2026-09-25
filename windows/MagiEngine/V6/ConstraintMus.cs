@@ -235,6 +235,9 @@ public static class ConstraintMus
         foreach (var x in allowed) sum += Demand(x);
         if (sum > p.T) return true;
         // C) forced floor: only when every other assignable shift has a cap (undefined = unlimited, so this never fires there — conservative)
+        //   Days wish-pinned to an unplaceable shift (outside allowed) can't hold x = subtract them (else the forced floor is overestimated).
+        long pinnedOutside = 0;
+        foreach (var (k, n) in pins) if (Array.IndexOf(allowed, k) < 0) pinnedOutside += n;
         foreach (var x in allowed)
         {
             var cap = caps.GetValueOrDefault(x, int.MaxValue);
@@ -247,7 +250,7 @@ public static class ConstraintMus
                 otherCapSum += Math.Min(cy, p.T);
             }
             if (!allCapped) continue;
-            var forcedMin = p.T - otherCapSum;
+            var forcedMin = p.T - otherCapSum - pinnedOutside;
             if (forcedMin > cap) return true;
         }
         return false;
@@ -277,10 +280,10 @@ public static class ConstraintMus
         var slotMatch = new int[slots.Count]; // slot -> staff
         Array.Fill(slotMatch, -1);
 
+        // A wish pin takes precedence over MayPlace (same as V6NativeOptimizer.Hf66DataHardening) = a pin on a cap-0 shift still serves that seat.
         bool CanServe(int i, int shift)
         {
-            if (!p.MayPlace(i, shift)) return false;
-            if (!pinned.TryGetValue(i, out var pin)) return true;
+            if (!pinned.TryGetValue(i, out var pin)) return p.MayPlace(i, shift);
             return pin == shift;
         }
 

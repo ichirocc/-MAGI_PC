@@ -40,7 +40,7 @@ public static partial class V6HotfixPasses
     ///  - 担当不可/範囲外配置（<see cref="InvalidAssignmentCount"/>＝正規化後もなお不正なセル）。
     ///  - 実現不能希望（<see cref="V6SanityPort.DetectImpossibleWishes"/>＝グループが担当できない
     ///    シフトへの希望等）。
-    ///  - 希望以外のHARD（<c>report.Hard</c>から<c>pref</c>族の寄与を除いた残り＝groupViol/c3n/covU）。
+    ///  - 希望以外のHARD（<c>report.Hard</c>から<c>pref</c>族と希望どうしの衝突の c3n/c3w を除いた残り＝groupViol/c3n/covU）。
     ///
     /// [C#化の注記] Kotlinの既定引数 <c>report: ViolationReport =
     /// UnifiedViolationChecker.check(state, schedule)</c> は非定数式（関数呼出）のため、C#の既定引数
@@ -54,10 +54,14 @@ public static partial class V6HotfixPasses
         var rep = report ?? UnifiedViolationChecker.Check(state, schedule);
         var invalid = InvalidAssignmentCount(state, schedule);
         var impossible = V6SanityPort.DetectImpossibleWishes(state).Count;
-        var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0);
+        // 希望どうしの衝突が生む c3n/c3w は希望起因＝「希望以外」に数えない（pref と同じ扱い）。
+        var selfConflict = V6SanityPort.WishSelfConflictHard(ScheduleUtil.CachedProblem(state), schedule);
+        var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0)
+            - selfConflict.GetValueOrDefault("c3n", 0) - selfConflict.GetValueOrDefault("c3w", 0);
         var issues = new List<string>();
         if (invalid > 0) issues.Add($"担当不可/範囲外配置 {invalid} 件");
         if (impossible > 0) issues.Add($"不可能希望 {impossible} 件");
+        if (selfConflict.Count > 0) issues.Add($"希望どうしの衝突 {selfConflict.Values.Sum()} 件");
         if (hardCore > 0) issues.Add($"希望以外HARD {hardCore} 件");
         var msg = issues.Count == 0 ? $"HF70: {algoName} 異常なし" : $"HF70: {string.Join(" / ", issues)}";
         var advice = issues.Count == 0 ? "" : "設定(担当範囲), 希望, 必要人数, 連勤禁止条件を確認してください";

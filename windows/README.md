@@ -328,6 +328,15 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（実データ精読の是正・エンジン層を同期、Kotlin d2421af 同日）: B1＝`ConstraintMus.DayProvablyInfeasible.CanServe` が希望固定より先に
+  `MayPlace` を見て、上限 0 のシフトへ希望固定した人を席に数えず「N件は同時に成立しません（証明つき）」を誤って出していた＝希望固定を優先
+  （`Hf66DataHardening` と同じ）。同型で `StaffProvablyInfeasible` の強制下限(C)が置けないシフトへの希望固定の日を差し引く。N2＝
+  `V6SanityPort.WishSelfConflicts`（`WishSelfConflict` 組、c3n の窓がまるごと希望固定／c3w の前日も希望固定）を新設し、設定ミス診断 1b を
+  それから読み（文言不変）、1c（禁止の並びに希望どうしで当たる、ワンタップなし）を追加。B4/B5＝HF70 の「希望以外HARD」と残存分析の
+  「まだ狙える」から組が必ず生む分（`WishSelfConflictHard`）を除き、別項目で出す（ログだけ）。B3＝`SaOptimizer` のコメント是正（挙動不変）。
+  テスト `WishSelfConflictTest`（9 件）と `ConstraintMusTest` の 2 件を 1 対 1 で写した。業務ルールの写し `docs/business-logic.md` を Android と揃えた。
+  実データ（11 名×31 日）で Kotlin と同じ組（古泉 c3n 10/25-27・福澤 c3w 10/1-2・大島 c3n 10/10-12）・10/11 の誤検出の消失・HF70「希望どうしの衝突 3 件」を確認。
+  探索・採否は不変（変更は診断とログだけ）。`dotnet test MagiEngine.Tests` 929/929・`MagiApp.ViewModels.Tests` 469/469 緑。
 - 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `V6OptimizerOptions.RoleBudgetFit`・`RsiPlusPhaseBudgets` と、`RunRsiPlus` の
   位相 0 秒ガード（既定式では各位相 ≥10s/5s で常に偽）を撤去（Android 3.601.0 で有意差なし、出力不変）。3.600.0 の既定 ON ガードは不変。
 - 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PolishGate.PostChainKeepBestFinalOnly`／`PostOptimizationParams.PostChainKeepBestFinalOnly`／

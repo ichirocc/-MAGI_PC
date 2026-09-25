@@ -38,6 +38,13 @@ public sealed record ImpossibleWish(
     string ShiftSymbol,
     string Reason);
 
+/// <summary>希望どうしの衝突（<see cref="V6SanityPort.WishSelfConflicts(Problem)"/>、定義は docs/business-logic.md）。Family="c3n"＝Days は禁止の並びの窓、
+/// "c3w"＝Days は [前日, 希望日]。Shifts は Days と同じ順の希望の勤務。</summary>
+public sealed record WishSelfConflict(int Staff, string Family, IReadOnlyList<int> Days, IReadOnlyList<int> Shifts)
+{
+    public IReadOnlyList<string> WishKeys => Days.Select(d => $"{Staff},{d}").ToList();
+}
+
 public static partial class V6SanityPort
 {
     /// <summary>
@@ -77,5 +84,69 @@ public static partial class V6SanityPort
                 Reason: reason));
         }
         return result.OrderBy(w => w.StaffIndex).ThenBy(w => w.DayIndex).ToList();
+    }
+
+    /// <summary>希望どうしの衝突を職員→先頭日→族の順に返す（盤面に依存しない）。同じ職員・同じ日の並びは 1 組（重複行は検査 2 が扱う）。</summary>
+    public static IReadOnlyList<WishSelfConflict> WishSelfConflicts(MagiState state) => WishSelfConflicts(ScheduleUtil.CachedProblem(state));
+
+    public static IReadOnlyList<WishSelfConflict> WishSelfConflicts(Problem p)
+    {
+        var result = new List<WishSelfConflict>();
+        var seen = new HashSet<(int Staff, int Start, int Len)>();
+        for (var i = 0; i < p.S; i++)
+        {
+            var mine = new List<WishSelfConflict>();
+            foreach (var c in p.Cons3n)
+            {
+                var seq = c.Seq;
+                var d = seq.Length;
+                if (d == 0 || d > p.T) continue;
+                for (var j = 0; j <= p.T - d; j++)
+                {
+                    var all = true;
+                    for (var l = 0; l < d && all; l++) all = p.WishLocked(i, j + l) && p.Wish[i][j + l] == seq[l];
+                    if (all && seen.Add((i, j, d)))
+                        mine.Add(new WishSelfConflict(i, "c3n", Enumerable.Range(j, d).ToList(), seq.ToList()));
+                }
+            }
+            if (p.C3wBan != null)
+            {
+                for (var j = 0; j < p.T - 1; j++)
+                {
+                    if (p.WishLocked(i, j) && p.C3wBanned(i, j, p.Wish[i][j]))
+                        mine.Add(new WishSelfConflict(i, "c3w", new List<int> { j, j + 1 }, new List<int> { p.Wish[i][j], p.Wish[i][j + 1] }));
+                }
+            }
+            result.AddRange(mine.OrderBy(g => g.Days[0]).ThenBy(g => g.Family, StringComparer.Ordinal));
+        }
+        return result;
+    }
+
+    /// <summary>盤面の HARD のうち希望どうしの衝突が必ず生む分の族別件数（下限）。セルを共有しない組ごとに成立なら c3n/c3w・崩れなら pref を 1 件
+    /// （職員ごとに区間を終わりの早い順に取る＝最大個数）。ログの仕分け専用＝探索・採否には使わない。</summary>
+    public static IReadOnlyDictionary<string, int> WishSelfConflictHard(Problem p, int[][] schedule, IReadOnlyList<WishSelfConflict>? groups = null)
+    {
+        groups ??= WishSelfConflicts(p);
+        var result = new Dictionary<string, int>();
+        static int? Cell(int[] row, int d) => d >= 0 && d < row.Length ? row[d] : null;
+        foreach (var gs in groups.GroupBy(g => g.Staff))
+        {
+            var lastEnd = -1;
+            foreach (var g in gs.OrderBy(g => g.Days[^1]))
+            {
+                if (g.Days[0] <= lastEnd) continue;
+                lastEnd = g.Days[^1];
+                if (g.Staff < 0 || g.Staff >= schedule.Length) continue;
+                var row = schedule[g.Staff];
+                var holds = g.Family switch
+                {
+                    "c3w" => Cell(row, g.Days[0]) == g.Shifts[0],
+                    _ => Enumerable.Range(0, g.Days.Count).All(t => Cell(row, g.Days[t]) == g.Shifts[t]),
+                };
+                var key = holds ? g.Family : "pref";
+                result[key] = result.GetValueOrDefault(key, 0) + 1;
+            }
+        }
+        return result;
     }
 }
