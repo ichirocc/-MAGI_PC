@@ -236,13 +236,16 @@ public static partial class V6SanityPort
             {
                 var seatsHi = 0;
                 var hasDemand = false;
+                var capKnown = true;
                 for (var j = 0; j < p.T; j++)
                 {
-                    if (!NeedDefined(p, k, j)) continue;
+                    if (!NeedDefined(p, k, j)) { capKnown = false; continue; }
                     hasDemand = true;
                     seatsHi += Math.Max(EffectiveCap(p, k, j), 0);
                 }
                 if (!hasDemand) continue;
+                // 未定義の日は「席0」でなく「上限なし」＝1日でも未定義なら seatsHi は上限として成立しない。
+                if (!capKnown) continue;
                 result.Add(new AptBalance(k, sym, aptSum, seatsHi, IsRest: false));
             }
         }

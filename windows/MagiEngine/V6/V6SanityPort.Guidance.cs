@@ -734,6 +734,28 @@ public static partial class V6SanityPort
             }
         }
 
+        // 6e) [希望件数>個人上限] 6d の個人上限版。希望どおりに置かれるセルは動かせないため、
+        //   希望件数が個人上限を超えていれば上限超過(high)は解消できない。読み取り専用。
+        for (var i = 0; i < p.S; i++)
+        {
+            var name = Nm(i);
+            for (var k = 0; k < p.K; k++)
+            {
+                var hi = p.RangeHi[i][k];
+                if (hi == int.MaxValue || !p.CanDo(i, k)) continue;
+                var wished = 0;
+                for (var j = 0; j < p.T; j++) if (p.WishLocked(i, j) && p.Wish[i][j] == k) wished++;
+                if (wished > hi)
+                {
+                    var sym = Sym(k);
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」個人上限と希望の衝突",
+                        $"「{sym}」の希望が{wished}件あり、個人上限{hi}回を超えています。希望どおりに配置する限り" +
+                            $"「{sym}」は必ず{wished}回以上になるため、上限超過は解消できません",
+                        $"{name}さんの「{sym}」個人上限を{wished}回以上に上げるか、「{sym}」の希望を{wished - hi}件減らしてください"));
+                }
+            }
+        }
+
         // 7) 配布不可・forcedCovU
         foreach (var fc in ForcedCovU(state, p))
         {

@@ -328,6 +328,12 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（設定ミス診断の取り残し 2 件を同期、上の実データ照合で判明）: 同じ実データで C# の診断が Kotlin と 3 件食い違っていた。
+  ①検査 6e（希望件数＞個人上限＝上限超過は解消できない、Kotlin 3.521.0）が未移植＝荒井 Cｵ 上限 0×希望 12 件（high 12 の原因）と
+  大島 有 上限 0×希望 1 件が出ていなかった。②`AptBalances` に Kotlin の capKnown ゲート（必要人数が 1 日でも未定義なら上限として比べない）
+  が無く、「有」の適切回数の合計 4 を席 0 と比べて誤警告していた。両方を Kotlin どおり入れ、実データの 10 件が Where/Problem/Fix/WishKey まで
+  Kotlin と一致。Kotlin に該当テストが無いため C# 側に `WishCountAboveStaffCapIsReported`・`AptBalances_SkipsShiftWithAnUndefinedDay` を追加
+  （外すと両方赤を確認）。診断だけ＝盤面は不変。上流の同日コミットへ rebase 後 `dotnet test MagiEngine.Tests` 931/931・`MagiApp.ViewModels.Tests` 469/469 緑。
 - 2026-09-25（実データ精読の是正・エンジン層を同期、Kotlin d2421af 同日）: B1＝`ConstraintMus.DayProvablyInfeasible.CanServe` が希望固定より先に
   `MayPlace` を見て、上限 0 のシフトへ希望固定した人を席に数えず「N件は同時に成立しません（証明つき）」を誤って出していた＝希望固定を優先
   （`Hf66DataHardening` と同じ）。同型で `StaffProvablyInfeasible` の強制下限(C)が置けないシフトへの希望固定の日を差し引く。N2＝

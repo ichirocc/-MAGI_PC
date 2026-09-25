@@ -148,6 +148,32 @@ public class V6SanityPortTest
         Assert.Empty(V6SanityPort.AptBalances(st)); // 目標なしなら行そのものを出さない
     }
 
+    [Fact]
+    public void AptBalances_SkipsShiftWithAnUndefinedDay()
+    {
+        // 必要人数が 1 日だけ定義（0）＝残り 9 日は上限なし。目標の合計 12 を「席 0」と比べて誤警告しない（Kotlin aptBalances の capKnown）。
+        var st = AptVsNeedState(days: 10, need1: "", aptTarget: "6") with { NeedDay1 = new Dictionary<string, string> { ["1,0"] = "0" } };
+        Assert.DoesNotContain(V6SanityPort.AptBalances(st), b => b.Kigou == "X");
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), i => i.Where.Contains("X") && i.Where.Contains("適切回数の合計"));
+    }
+
+    [Fact]
+    public void WishCountAboveStaffCapIsReported()
+    {
+        // 検査 6e: X の希望 3 件 vs 個人上限 1 回 → 希望を守る限り上限超過は解消できない。
+        var st = AptVsNeedState(days: 10, need1: "1", aptTarget: "") with
+        {
+            Wishes = new Dictionary<string, int> { ["0,0"] = 1, ["0,2"] = 1, ["0,4"] = 1 },
+            StaffRange = new Dictionary<string, Range> { ["0,1"] = new Range("", "1") },
+        };
+        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), i => i.Where == "s0さんの「X」個人上限と希望の衝突");
+        Assert.Equal(IssueKind.Range, issue.Kind);
+        Assert.Contains("希望が3件", issue.Problem);
+        Assert.Contains("希望を2件減らして", issue.Fix);
+        var within = st with { StaffRange = new Dictionary<string, Range> { ["0,1"] = new Range("", "3") } };
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(within), i => i.Where.Contains("個人上限と希望の衝突"));
+    }
+
     // ---- RangeOrderConflict ------------------------------------------------------------------
 
     [Theory]
