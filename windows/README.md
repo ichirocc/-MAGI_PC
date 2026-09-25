@@ -328,6 +328,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（テスト移植の欠落補填）: Kotlin `SaWishLockTest`（3.334.0）を `MagiEngine.Tests/V6/SaWishLockTest.cs` へ 1 対 1 で写した。`SearchNeverMovesACellThatHoldsAFeasibleWish` は C# でもそのまま通過（パリティ不一致なし、エンジン変更なし）。`StrongPerturbNeverMovesAFeasibleWish` は対象の `strongPerturbFlat` がネイティブ経路専用で C# に移植していない（`SaOptimizer.cs` の移植判断）ため、名前だけ残して Skip とした。
 - 2026-09-26（外部レビュー e07bbd5 の是正の C# 移植、Kotlin `claude/merge-wub4fq` b2fe1e7 同日）: 板挟みのボタンを「希望は残して別のシフトを割り当てる
   （希望は未反映になります）」（挙動は据え置き）。`UndoableMessage` を `UiState.OpNotice`（`OpNotice` record、検査の進み具合の `Message` と別のイベント）へ置き換え、
   通知バーは通知の表示中に失敗以外の文言で置き換えない（`CellSheetLogic.MessageMayReplaceNotice`）、「元に戻す」は `UndoSnap.Serial` が先頭のときだけ
