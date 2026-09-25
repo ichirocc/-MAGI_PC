@@ -174,6 +174,19 @@ public class V6SanityPortTest
         Assert.DoesNotContain(V6SanityPort.BuildGuidance(within), i => i.Where.Contains("個人上限と希望の衝突"));
     }
 
+    [Fact]
+    public void DemandAboveStaffCapsStatesTheGapInBothPlaces()
+    {
+        // 必要数 10 回 vs 担当者の上限 3+4=7 回 → 差 3 回。文中の 2 か所とも数値で出る。
+        var st = AptVsNeedState(days: 10, need1: "1", aptTarget: "") with
+        {
+            StaffRange = new Dictionary<string, Range> { ["0,1"] = new Range("", "3"), ["1,1"] = new Range("", "4") },
+        };
+        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), i => i.Where == "「X」の必要人数");
+        Assert.Contains("限り3回ぶんは埋まりません", issue.Problem);
+        Assert.Contains("合わせて3回ぶん", issue.Problem);
+    }
+
     // ---- RangeOrderConflict ------------------------------------------------------------------
 
     [Theory]

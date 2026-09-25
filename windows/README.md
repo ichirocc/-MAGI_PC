@@ -328,6 +328,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（実データ精読の検証で判明、設定ミス診断の文言 1 件）: 「「X」の必要人数」（全担当者の上限の合計 < 必要数）の本文の 2 か所目が
+  `$` の無い文字列で、画面に「合わせて{gap}回ぶん必ず残ります」とそのまま出ていた（Kotlin は数値）。Kotlin と C# の診断を無作為な盤面 300 件で
+  突き合わせて見つかった唯一の差（ほかの 298 件は希望どうしの衝突・日別/職員別 MUS・S5 の候補まで一致）。`$` を付けて Kotlin と同じ文に。
+  回帰テスト `DemandAboveStaffCapsStatesTheGapInBothPlaces` を Kotlin と両方に置いた（C# は修正を外すと赤）。診断の文言だけ＝盤面は不変。
 - 2026-09-25（実データ精読の UI 層を同期、Kotlin ce6b1c2 同日）: S5 の候補に希望どうしの衝突の兄弟の希望を足す＝`MakeUi` が
   `V6SanityPort.WishSelfConflicts(st)` を `UiState.WishSelfConflicts` に載せ、`NextActionGuide.WishTrialCandidatesOf` は pref のセルを含む組の
   ほかの希望を S5a の行にする（古泉 10/25 が pref のとき 10/26・10/27 も並ぶ。既に行がある (職員, 日) には足さない）。設定の見直しの一覧は
