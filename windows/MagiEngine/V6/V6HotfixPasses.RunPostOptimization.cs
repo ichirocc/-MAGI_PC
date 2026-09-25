@@ -159,7 +159,9 @@ public static partial class V6HotfixPasses
         /// <summary>[不合格・既定 OFF, Android同名] 同点の手も受け入れ、厳密に悪化したときだけ巻き戻す。</summary>
         bool PostChainRunningKeepBestAcceptTies = false,
         /// <summary>[不合格・既定 OFF, Android同名 N9: 勝2/負4 p=0.69] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
-        bool? PostChainRollbackCountsZero = null);
+        bool? PostChainRollbackCountsZero = null,
+        /// <summary>[既定 OFF, Android同名 #36] 既定は <see cref="PolishGate.PostChainKeepBestFinalOnly"/>。</summary>
+        bool? PostChainKeepBestFinalOnly = null);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -205,6 +207,7 @@ public static partial class V6HotfixPasses
         private readonly bool _runningKeepBest;
         private readonly bool _acceptTies;
         private readonly bool _rollbackCountsZero;
+        private readonly bool _finalOnly;
         private bool _lastFoldRolledBack;
         private int[][] _bestWork;
         private ViolationReport? _bestReport;
@@ -217,7 +220,8 @@ public static partial class V6HotfixPasses
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
         public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool runningKeepBest = false,
-            ViolationReport? initialReport = null, bool acceptTies = false, bool rollbackCountsZero = false)
+            ViolationReport? initialReport = null, bool acceptTies = false, bool rollbackCountsZero = false,
+            bool finalOnly = false)
         {
             _onPhase = onPhase;
             Work = schedule.Copy2D();
@@ -225,6 +229,7 @@ public static partial class V6HotfixPasses
             _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state)) == 0;
             _acceptTies = acceptTies;
             _rollbackCountsZero = rollbackCountsZero;
+            _finalOnly = finalOnly;
             _bestWork = Work.Copy2D();
             _bestReport = initialReport;
         }
@@ -246,10 +251,23 @@ public static partial class V6HotfixPasses
                 _bestWork = Work.Copy2D();
                 return passLogs;
             }
-            if (Work.ContentDeepEquals(_bestWork)) return passLogs;   // 無変更のパスは巻き戻していない＝印を付けない
+            if (_finalOnly || Work.ContentDeepEquals(_bestWork)) return passLogs;   // 無変更のパスは巻き戻していない＝印を付けない
             Work = _bestWork.Copy2D();
             _lastFoldRolledBack = true;
             return passLogs.Select(l => l with { Message = RollbackMarker + l.Message }).ToList();
+        }
+
+        /// <summary>[finalOnly] チェーン末尾で最良盤面より悪ければ戻す。戻したら true。</summary>
+        public bool RestoreBestIfWorse()
+        {
+            if (!_runningKeepBest || !_finalOnly) return false;
+            var best = _bestReport;
+            if (best == null) return false;
+            var rep = UnifiedViolationChecker.Check(_state!, Work);
+            if (!UnifiedViolationChecker.BetterReport(best, rep) || Work.ContentDeepEquals(_bestWork)) return false;
+            Work = _bestWork.Copy2D();
+            Logs.Add(new MirrorLog(tag: "POST", message: RollbackMarker + "チェーン末尾で最良盤面へ復帰"));
+            return true;
         }
 
         /// <summary>フェーズ名を UI へ通知し、所要 ms を <paramref name="key"/> に累算しながら <paramref name="block"/> を実行する。</summary>
@@ -310,7 +328,8 @@ public static partial class V6HotfixPasses
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule);
         var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0, p.PostChainRunningKeepBestAcceptTies,
-            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero);
+            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero,
+            p.PostChainKeepBestFinalOnly ?? PolishGate.PostChainKeepBestFinalOnly);
         var t0 = EngineClock.NowMs();
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
@@ -434,6 +453,7 @@ public static partial class V6HotfixPasses
                 message: "予算超過のため後処理は締切で短縮されました(各パスは内部で打ち切り済み・以降は最終検査のみ)"));
         }
 
+        chain.RestoreBestIfWorse();
         onPhase?.Invoke("後処理 HF70 異常検知");
         var work = chain.Work;
         var report = UnifiedViolationChecker.Check(state, work);

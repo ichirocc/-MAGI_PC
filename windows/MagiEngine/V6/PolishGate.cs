@@ -56,6 +56,9 @@ public static class PolishGate
     /// <summary>[Android N9 同期] PostChain の keep-best で巻き戻したパスの採用数を 0 と数える。既定 <b>false</b>。</summary>
     public static volatile bool PostChainRollbackCountsZero = false;
 
+    /// <summary>[Android #36 同期] 走行 keep-best をパス間で巻き戻さず、チェーン末尾（HF70 の前）で最良盤面へ 1 回だけ戻す。既定 <b>false</b>。</summary>
+    public static volatile bool PostChainKeepBestFinalOnly = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

@@ -181,4 +181,24 @@ public class DeterministicPostChainTest
         Assert.Equal((1, 1), RunChain(false));
         Assert.Equal((1, 0), RunChain(true));
     }
+
+    // #36 finalOnly: パス間では巻き戻さず、RestoreBestIfWorse で末尾に 1 回だけ最良盤面へ戻す。
+    [Fact]
+    public void FinalOnlyDefersRollbackToChainEnd()
+    {
+        var s = State();
+        var work0 = Work(s);
+        var report0 = UnifiedViolationChecker.Check(s, work0);
+        var improved = With(work0, (1, 1, 1));
+        var improvedReport = UnifiedViolationChecker.Check(s, improved);
+        var regressed = With(improved, (1, 0, 1));
+        var regressedReport = UnifiedViolationChecker.Check(s, regressed);
+        var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0, finalOnly: true);
+        c.Adopt(Result(improved, improvedReport, "Good"));
+        c.Adopt(Result(regressed, regressedReport, "Bad"));
+        Assert.True(Same(c.Work, regressed));
+        Assert.True(c.RestoreBestIfWorse());
+        Assert.True(Same(c.Work, improved));
+        Assert.False(c.RestoreBestIfWorse());
+    }
 }
