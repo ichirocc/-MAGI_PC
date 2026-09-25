@@ -86,7 +86,7 @@ def main():
     dow0 = (date(y, m, d).isoweekday()) % 7
 
     sgrp = [s["groupIdx"] for s in staff]
-    ssk = [s.get("skillIdx", 0) for s in staff]
+    ssk = [s.get("skillIdx", -1) for s in staff]  # 既定 -1＝未所属（StateParser と同じ）
 
     # bucket[g] = groupShift[g][k]==1 のシフト index
     gshift = st["groupShift"]

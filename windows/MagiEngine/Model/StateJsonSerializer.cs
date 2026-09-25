@@ -59,7 +59,7 @@ public static class StateJsonSerializer
         var groups = MapObjects(OptArray(o, "groups"), "groups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
         var staff = MapObjects(OptArray(o, "staff"), "staff", it =>
-            new Staff(OptString(it, "name"), OptInt(it, "groupIdx", 0), OptInt(it, "skillIdx", 0)));
+            new Staff(OptString(it, "name"), OptInt(it, "groupIdx", 0), OptInt(it, "skillIdx", -1)));
         var skillGroups = MapObjects(OptArray(o, "skillGroups"), "skillGroups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
         var groupShift = MapArrays(OptArray(o, "groupShift"), "groupShift", row =>

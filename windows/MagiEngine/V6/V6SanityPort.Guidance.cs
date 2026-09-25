@@ -470,7 +470,8 @@ public static partial class V6SanityPort
             }
         }
 
-        // 2i) skillIdx範囲外
+        // 2i) skillIdx範囲外（-1＝未所属でも一覧の index でもない値）。範囲内の値が意図した所属かは見ない
+        //   （最初の 1 群を作るときの取り違えは Ws1Ops.AddSkillGroup が防ぐ）。
         if (state.SkillGroups.Count > 0)
         {
             var bad = new List<(Staff Staff, int Index)>();

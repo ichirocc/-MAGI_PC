@@ -403,8 +403,7 @@ public class Ws1OpsTest
         var s2 = st;
         for (int g = st.SkillGroups.Count - 1; g >= 0; g--) s2 = Ws1Ops.RemoveSkillGroup(s2, g);
         Assert.All(s2.StaffList, p => Assert.Equal(-1, p.SkillIdx)); // 全員が未所属
-        // 群の追加は skillGroups に1件足すだけ（MagiViewModel.AddSkillGroup と同じ操作）。
-        var readded = s2 with { SkillGroups = s2.SkillGroups.Append(new Group("S9", "S9")).ToList() };
+        var readded = Ws1Ops.AddSkillGroup(s2, "S9", "S9");
         Assert.All(readded.StaffList, p => Assert.Equal(-1, p.SkillIdx)); // 群を足しても誰も所属しない
 
         Assert.Same(st, Ws1Ops.RemoveSkillGroup(st, 9)); // 範囲外は何もしない

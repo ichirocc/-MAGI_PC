@@ -443,6 +443,20 @@ public class MagiViewModelWs1Test
     }
 
     [Fact]
+    public void AddSkillGroupOnAFileWithoutSkillGroupsUnassignsEveryoneFirst()
+    {
+        var st = MinimalState.Build(staffList: new List<Staff> { new("職員A", 0, 0), new("職員B", 0, 0) });
+        var vm = new MagiViewModel { _state = st };
+
+        vm.AddSkillGroup("夜勤可", "SK0");
+        Assert.Equal(new[] { -1, -1 }, vm._state!.StaffList.Select(s => s.SkillIdx));
+
+        vm.SetStaffSkill(0, 0);
+        vm.AddSkillGroup("新人", "SK1");
+        Assert.Equal(new[] { 0, -1 }, vm._state!.StaffList.Select(s => s.SkillIdx)); // existing assignments are kept
+    }
+
+    [Fact]
     public void AddSkillGroupIsNoOpForABlankSymbol()
     {
         var st = MinimalState.Build();
@@ -511,7 +525,7 @@ public class MagiViewModelWs1Test
         vm.SetStaffSkill(0, 2);
 
         Assert.Equal(2, vm._state!.StaffList[0].SkillIdx);
-        Assert.Equal(0, vm._state!.StaffList[1].SkillIdx); // untouched
+        Assert.Equal(-1, vm._state!.StaffList[1].SkillIdx); // untouched
         Assert.Contains("スキル割当: 職員A → 区分[2]", vm.Ui.OpLog[0]);
     }
 
@@ -527,13 +541,14 @@ public class MagiViewModelWs1Test
         Assert.Equal(1, vm.StaffSkillComboIndex(1));
         Assert.Equal(2, vm.StaffSkillComboIndex(2));
         Assert.Equal(0, vm.StaffSkillComboIndex(3));
-        Assert.Equal(0, new MagiViewModel { _state = MinimalState.Build() }.StaffSkillComboIndex(0)); // 0 with no skill groups
+        var oldSave = MinimalState.Build(staffList: new List<Staff> { new("A", 0, 0) });
+        Assert.Equal(0, new MagiViewModel { _state = oldSave }.StaffSkillComboIndex(0)); // 0 with no skill groups
     }
 
     [Fact]
     public void SetStaffSkillFromComboLeavesAnUntouchedOutOfRangeValueAlone()
     {
-        var st = MinimalState.Build(); // no skill groups; staff keep SkillIdx 0
+        var st = MinimalState.Build(staffList: new List<Staff> { new("職員A", 0, 0), new("職員B", 0, 0) }); // no skill groups; an old save's explicit 0
         var vm = new MagiViewModel { _state = st };
         var shown = vm.StaffSkillComboIndex(0);
 
@@ -553,7 +568,7 @@ public class MagiViewModelWs1Test
 
         vm.SetStaffSkillFromCombo(0, shownIdx: 2, comboIdx: 0);
         Assert.Equal(-1, vm._state!.StaffList[0].SkillIdx);
-        Assert.Equal(0, vm._state!.StaffList[1].SkillIdx); // untouched
+        Assert.Equal(-1, vm._state!.StaffList[1].SkillIdx); // untouched
     }
 
     // ===================================================================

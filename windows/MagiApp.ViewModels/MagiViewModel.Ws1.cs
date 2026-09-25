@@ -305,7 +305,8 @@ public sealed partial class MagiViewModel
         if (kigou.Trim().Length == 0) return;
         if (SymbolTaken(st.SkillGroups.Select(x => x.Kigou).ToList(), kigou, "スキル区分")) return;
         LogOp("I", $"スキル区分追加: {name.Trim()}({kigou.Trim()})");
-        ApplyStructure(st with { SkillGroups = st.SkillGroups.Append(new Group(name.Trim(), kigou.Trim())).ToList() });
+        // [backlog#38] 最初の 1 群では全員を未所属(-1)にしてから足す（規則は Ws1Ops.AddSkillGroup）。
+        ApplyStructure(Ws1Ops.AddSkillGroup(st, name.Trim(), kigou.Trim()));
     }
 
     public void EditSkillGroup(int g, string name, string kigou)

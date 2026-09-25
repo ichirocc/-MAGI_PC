@@ -32,8 +32,9 @@ public sealed record Group(string Name, string Kigou);
 /// <summary>
 /// StaffList[i]: GroupIdx -&gt; ユニットグループ(既存・担当可否/covU)、
 /// SkillIdx -&gt; スキルグループ(新設・新C41s/C42s専用)。
+/// SkillIdx の既定は -1＝未所属（backlog#38。0 は先頭のスキルグループ）。
 /// </summary>
-public sealed record Staff(string Name, int GroupIdx, int SkillIdx = 0);
+public sealed record Staff(string Name, int GroupIdx, int SkillIdx = -1);
 
 public sealed record Range(string Lo, string Hi);
 

@@ -682,6 +682,17 @@ public static class Ws1Ops
     }
 
     /// <summary>
+    /// [backlog#38] スキル群を末尾に足す。**0 件から最初の 1 群を作るときだけ先に全員を <c>-1</c>（未所属）にする**＝群が 0 件の間の
+    /// <c>SkillIdx</c> は採点に効かず、既定 0 の頃に保存された 0 は「先頭を選んだ」と区別できない（そのまま足すと全員が所属した扱い）。
+    /// 群が 1 件以上あるときの値は明示の割当として触らない。
+    /// </summary>
+    public static MagiState AddSkillGroup(MagiState state, string name, string kigou)
+    {
+        var staff = state.SkillGroups.Count == 0 ? state.StaffList.Select(s => s with { SkillIdx = -1 }).ToList() : state.StaffList;
+        return state with { SkillGroups = state.SkillGroups.Append(new Group(name, kigou)).ToList(), StaffList = staff };
+    }
+
+    /// <summary>
     /// [3.330.0/外部レビュー] スキル群 <paramref name="g"/> を削除する。担当グループの <see cref="RemoveGroup"/>
     /// と対になる操作。
     ///

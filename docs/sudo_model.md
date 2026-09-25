@@ -441,8 +441,8 @@ flowchart TB
   SH9["<b>shifts[9] : Shift</b><br/>name=有給 kigou=有<br/>need1='' need2=''"]
 
   G7["<b>groups[7] : Group</b><br/>name=桒澤 kigou=B<br/>（所属1名＝fair は m&lt;2 で対象外）"]
-  S0["<b>staff[0] : Staff</b><br/>name=古泉 健一<br/>groupIdx=9 skillIdx=0(既定)"]
-  S3["<b>staff[3] : Staff</b><br/>name=桒澤美幸<br/>groupIdx=7 skillIdx=0(既定)"]
+  S0["<b>staff[0] : Staff</b><br/>name=古泉 健一<br/>groupIdx=9 skillIdx=-1(既定＝未所属)"]
+  S3["<b>staff[3] : Staff</b><br/>name=桒澤美幸<br/>groupIdx=7 skillIdx=-1(既定＝未所属)"]
 
   GS7["<b>groupShift[7]</b><br/>[1,0,0,0,0,0,0,0,1,1]<br/>群Bが担当できるのは 休/B4/有 の3種のみ"]
   GA7["<b>groupShiftApt[7]</b><br/>[10,'',10,'','','','','',1,'']<br/>休=10 Dﾃ=10 B4=1<br/>※Dﾃ目標10は担当不可なので実効せず"]
@@ -504,9 +504,9 @@ flowchart TB
 1. **`docs/data-models.md` §3「`schedule[i][j] < 0` ＝ 公休（未割当）」は誤り。**
    休は `kigou=="休"` で解決される**通常のシフト index**であって負値ではない。負値は `normalizeSchedule` が
    範囲外セルへ付ける**センチネル `-1`**で、意味は「不正な値」。`Problem.initialAssignment` も `k<0` を 0 へクランプする。
-2. **`docs/data-models.md` は `Staff.skillIdx` を「`Int = 0`」としか書いていないが、実装では `-1`（未所属）が正規の値。**
+2. ~~**`docs/data-models.md` は `Staff.skillIdx` を「`Int = 0`」としか書いていないが、実装では `-1`（未所属）が正規の値。**~~
    UI の「(なし)」がこれを設定し、`ssk[i]==groupIdx(>=0)` が常に偽になるので cons41s/cons42s から安全に外れる。
-   群削除時の再割当も `-1` へ寄せる（3.328.0）。
+   群削除時の再割当も `-1` へ寄せる（3.328.0）。**→ 2026-09-25（backlog#38）で既定そのものを `-1` へ変更し、data-models も `Int = -1` に揃えた。**
 3. **`docs/data-models.md` のヘッダが stale**（「最終更新 2026-06-30 / main commit `6769806` 時点」）。
    §1・§2 の MagiState フィールド表そのものは実装と完全一致だが、§3 のキー規約の注記と §4 の UiState 一覧が
    ドリフトしていた。**→ 3.390.0 で §4 を全82フィールドへ刷新**（旧記述は30フィールドが未記載＝`*Families` 3種・
