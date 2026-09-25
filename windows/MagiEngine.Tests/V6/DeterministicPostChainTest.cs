@@ -134,9 +134,9 @@ public class DeterministicPostChainTest
         Assert.True(Same(chain.Work, regressed));
     }
 
-    // acceptTies: 同点の横移動は受け入れ、厳密な悪化は巻き戻す（既定は同点でも最良盤面へ戻す）。
+    // 同点の横移動も最良盤面へ戻す（同点は採らない）。
     [Fact]
-    public void RunningKeepBestAcceptTiesKeepsLateralMove()
+    public void RunningKeepBestRollsBackLateralMove()
     {
         var s = State();
         var work0 = Work(s);
@@ -149,16 +149,10 @@ public class DeterministicPostChainTest
         var lateralReport = UnifiedViolationChecker.Check(s, lateral);
         Assert.True(!UnifiedViolationChecker.BetterReport(lateralReport, improvedReport) && !UnifiedViolationChecker.BetterReport(improvedReport, lateralReport));
         Assert.False(Same(lateral, improved));
-        int[][] RunChain(bool acceptTies, int[][] last, ViolationReport lastReport)
-        {
-            var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0, acceptTies: acceptTies);
-            c.Adopt(Result(improved, improvedReport, "Good"));
-            c.Adopt(Result(last, lastReport, "Last"));
-            return c.Work;
-        }
-        Assert.True(Same(RunChain(false, lateral, lateralReport), improved));
-        Assert.True(Same(RunChain(true, lateral, lateralReport), lateral));
-        Assert.True(Same(RunChain(true, work0, report0), improved));
+        var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        c.Adopt(Result(improved, improvedReport, "Good"));
+        c.Adopt(Result(lateral, lateralReport, "Last"));
+        Assert.True(Same(c.Work, improved));
     }
 
     // rollbackCountsZero: 巻き戻したパスの採用数は 0（既定は結果の採用数をそのまま返す）。

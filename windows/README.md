@@ -328,6 +328,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PostOptimizationParams.PostChainRunningKeepBestAcceptTies` と `PostChain(acceptTies:)` を撤去
+  （Android 3.610.0 #36 B で必須増 1＝不合格、出力不変）。テスト `RunningKeepBestAcceptTiesKeepsLateralMove` は既定側だけ残し
+  `RunningKeepBestRollsBackLateralMove` へ改名（Kotlin と 1 対 1）。
 - 2026-09-25（`HandleOptimize` に任意の `seed` を同期、Kotlin 同日）: 末尾引数 `long? seed = null`。非 null のとき `optsR.Seed` へ渡す（後段 ALNS・ExtraRefine は `optsR with` で継ぐ）。
   null は従来の `Seed = 0`（時刻由来）＝既定出力は不変、0 も時刻由来。並列ワーカー・壁時計予算・後処理の時刻由来の種は残るので盤面の再現は保証しない。
   テストは `ZeroCapExclusionTest.Seed`（静的な `lastOptimizerSeed` を読むので並列化しない collection）。Android backlog #38 D2（`Staff.SkillIdx` 既定 0、
@@ -403,7 +406,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   - **`PostChainRunningKeepBest` を移植・既定 ON（Kotlin 3.610.0 同期、2026-09-23）**: 後処理チェーンの走行 keep-best
     （畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す）。構造的 covU 床 > 0 の盤面では
     働かない。Android tools/loop 許容 ON 同士 230 ペアで勝108/負54・必須退行0・必須増0。許容 OFF（既定）ではチェーンが
-    単調＝出力不変。同点受け入れ変種 `PostChainRunningKeepBestAcceptTies` も同名で移植（不合格・既定 OFF）。
+    単調＝出力不変。同点受け入れ変種 `PostChainRunningKeepBestAcceptTies` も同名で移植していた（不合格、2026-09-25 撤去）。
     **C# だけの差**: Kotlin はパスが評価済みの報告書（`CyclicSwapResult.report`）を再利用するが、C# の結果型は報告書を
     持たないので畳み込みごとに `UnifiedViolationChecker.Check` で評価する。判定が同値である前提＝Kotlin でパスが渡す
     報告書と実盤面の報告書（hard/weightedScore/total）が一致すること。Kotlin の計装ビルド（LoopBench 1seed・46 ケース、

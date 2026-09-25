@@ -156,8 +156,6 @@ public static partial class V6HotfixPasses
         /// （<see cref="V6SanityPort.StructuralHardFloor"/>）> 0 の盤面では働かない。既定 <b>true</b>（Android tools/loop 許容ON 同士
         /// 230 ペアで勝108/負54・必須退行0・必須増0）。許容 OFF ではチェーンが単調＝巻き戻しが起きず出力不変。</summary>
         bool PostChainRunningKeepBest = true,
-        /// <summary>[不合格・既定 OFF, Android同名] 同点の手も受け入れ、厳密に悪化したときだけ巻き戻す。</summary>
-        bool PostChainRunningKeepBestAcceptTies = false,
         /// <summary>[既定 OFF, Android同名 N9] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
         bool? PostChainRollbackCountsZero = null,
         /// <summary>[既定 OFF, Android同名 #36] 既定は <see cref="PolishGate.PostChainKeepBestFinalOnly"/>。</summary>
@@ -205,7 +203,6 @@ public static partial class V6HotfixPasses
         private readonly Action<string>? _onPhase;
         private readonly MagiState? _state;
         private readonly bool _runningKeepBest;
-        private readonly bool _acceptTies;
         private readonly bool _rollbackCountsZero;
         private readonly bool _finalOnly;
         private bool _lastFoldRolledBack;
@@ -220,14 +217,13 @@ public static partial class V6HotfixPasses
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
         public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool runningKeepBest = false,
-            ViolationReport? initialReport = null, bool acceptTies = false, bool rollbackCountsZero = false,
+            ViolationReport? initialReport = null, bool rollbackCountsZero = false,
             bool finalOnly = false)
         {
             _onPhase = onPhase;
             Work = schedule.Copy2D();
             _state = state;
             _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state)) == 0;
-            _acceptTies = acceptTies;
             _rollbackCountsZero = rollbackCountsZero;
             _finalOnly = finalOnly;
             _bestWork = Work.Copy2D();
@@ -245,7 +241,7 @@ public static partial class V6HotfixPasses
             if (!_runningKeepBest) return passLogs;
             var rep = UnifiedViolationChecker.Check(_state!, Work);
             var best = _bestReport;
-            if (best == null || UnifiedViolationChecker.BetterReport(rep, best) || (_acceptTies && !UnifiedViolationChecker.BetterReport(best, rep)))
+            if (best == null || UnifiedViolationChecker.BetterReport(rep, best))
             {
                 _bestReport = rep;
                 _bestWork = Work.Copy2D();
@@ -327,7 +323,7 @@ public static partial class V6HotfixPasses
         var seedVal = seed ?? System.Diagnostics.Stopwatch.GetTimestamp();
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule);
-        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0, p.PostChainRunningKeepBestAcceptTies,
+        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0,
             p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero,
             p.PostChainKeepBestFinalOnly ?? PolishGate.PostChainKeepBestFinalOnly);
         var t0 = EngineClock.NowMs();
