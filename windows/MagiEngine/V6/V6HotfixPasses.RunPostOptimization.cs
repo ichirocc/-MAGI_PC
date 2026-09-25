@@ -100,8 +100,6 @@ public static partial class V6HotfixPasses
         /// <summary>休の必要人数を明示した日に休が余るとき、前後の窓を夜勤列の列挙＋人間移動＋ビームで組み直す（ApplyRestZeroWindowLns）。
         /// 最終段・退避の前。既定 OFF＝ユーザー決定（Android 3.555.0）。</summary>
         bool RestZeroWindowLnsEnabled = false,
-        /// <summary>HF66 直後にも退避する（既定 false＝最終段だけ。早期に置くと後続パスの経路が変わる、Android tools/loop 測定）。</summary>
-        bool CovOReliefEarly = false,
         /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
         /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
         bool Deterministic = false,
@@ -335,11 +333,6 @@ public static partial class V6HotfixPasses
             return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap);
         });
         chain.ReplaceBoard(r66.NewSchedule, r66.Logs);
-        if (p.CovOReliefEnabled && p.CovOReliefEarly && !stop())
-        {
-            var rRelief = chain.Timed("後処理 人員過剰の退避", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: stop));
-            chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs);
-        }
         var t66Done = EngineClock.NowMs();
 
         // 巡回研磨クラスタは自身の締切を持たないため、共同 LNS 2 本の取り分を先に確保して ClusterStop に畳む（3.271.0）。

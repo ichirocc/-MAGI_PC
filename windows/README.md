@@ -328,6 +328,10 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（既定OFF台帳の整理を同期、Kotlin 同日）: Android が測定で否決済みの既定OFF分岐 8 件を撤去（出力不変、決定的後処理の盤面ハッシュ 8/8 一致）。
+  C# にあったのは `PostOptimizationParams.CovOReliefEarly`（HF66 直後にも covO 退避、Android 3.554.0 で必須増 4＝不合格）だけ＝分岐ごと撤去、
+  最終段の `CovOReliefEnabled` は不変。残り 7 件（`lnsWeightDebt`・`useDynamicBlockLens`・`stallEscalation`・VCR の `familyPriorityScoring`/`bestOfK`/
+  `debtLaneSlots`・`SaParams.officialTieBreak`）は C# へ移植していなかった＝変更なし。
 - 2026-09-25（S5 T8 言語跨ぎ契約を追加、Kotlin 同日）: `Fixtures/wish_trial_expected.txt`（Android と同一の複製、Kotlin で生成）を `WishTrialCrossLanguageTest` が `WishTrial.ControlOf/Trial` で再計算して照合。調整なしで一致＝出力不変のテスト追加のみ。
 - 2026-09-25（HARD 差分の事前却下を同期、Kotlin edbce82 同日）: `HardDelta.cs`＋`PolishGate.HardDeltaPrefilter`（既定ON・UI 無し）を循環交換 k=2,3 と C1広域ビームへ。パスが必ず却下する候補（HARD 正味増）だけ checker を省く速度専用＝盤面は ON/OFF で同一。テスト `HardDeltaPrefilterTest` を 1 対 1 で写した（Δ＝checker 差の性質テスト、ON/OFF 盤面一致）。
 - 2026-09-24（S5 VM・画面のレビュー対応を同期、Kotlin 同日）: 本実行の失敗分岐は「盤面は未変更」を前提にしていたが、維持・採用の書き込みの後
