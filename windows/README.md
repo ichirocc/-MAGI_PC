@@ -328,6 +328,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PolishGate.PostChainKeepBestFinalOnly`／`PostOptimizationParams.PostChainKeepBestFinalOnly`／
+  `PostChain.RestoreBestIfWorse` とテスト `FinalOnlyDefersRollbackToChainEnd` を撤去（Android #36 で勝11/負36 p=0.0003＝不合格、出力不変）。
 - 2026-09-25（既定OFF台帳の整理②を同期、Kotlin 同日）: `PostOptimizationParams.PostChainRunningKeepBestAcceptTies` と `PostChain(acceptTies:)` を撤去
   （Android 3.610.0 #36 B で必須増 1＝不合格、出力不変）。テスト `RunningKeepBestAcceptTiesKeepsLateralMove` は既定側だけ残し
   `RunningKeepBestRollsBackLateralMove` へ改名（Kotlin と 1 対 1）。
