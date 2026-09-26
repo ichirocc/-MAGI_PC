@@ -98,6 +98,22 @@ public static class PolishGate
     /// 根拠は Android <c>docs/algorithm_portfolio.md</c>「既定ONへ昇格」参照）。</summary>
     public static volatile bool PersonSwapKick = true;
 
+    /// <summary>
+    /// [希望固定の徹底] 規則 A（利用者決定 2026-09-25、Kotlin <c>PolishGate.wishPinStrict</c> と同値）: 最適化器は希望固定セル（<c>WishLocked</c>）を
+    /// 「希望へ」か「今のまま」にしかしない＝希望どおりのセルは動かさない・未反映のセルは希望へ戻してよい（あとから足した希望も従来どおり載る）・
+    /// 未反映のセルを希望でも今の値でもない値へは動かさない。判定は <see cref="ScheduleUtil.WishMoveAllowed"/>（セル）と
+    /// <see cref="ScheduleUtil.KeepsWishPins"/>（盤面）。多くの経路は元から希望固定セルを動かさないか希望の値しか書かない
+    /// （経路ごとの分類は Android docs/history/3.4xx.md「希望固定セルの規則 A」）。このフラグが効くのは、それ以外の経路:
+    /// <see cref="V6NativeOptimizer.ElitePathRelink"/>（希望以外は写さない）・<c>V6NativeOptimizer.PersonSwapKick</c>（希望固定の日は交換しない）・
+    /// <c>EliteIntegrationPolish</c>（規則 A を破るエリート/中間解を採らない）・<c>ApplyCovOReliefPolish</c> と RSI の free 系
+    /// （「希望どおりの値だけ固定」だった）・入口 <c>Hf66DataHardening</c>/<c>ClearCappedCells</c>（外すセルは埋めシフトでなく希望へ）。
+    /// 採否（pref=HARD）だけでは守れない: 希望どうしの衝突では c3n(9000)→pref(8000) が HARD 件数を変えず
+    /// weighted だけ下げ、未反映のセルを別の値へ動かしても pref は変わらないので、keep-best は崩した盤面を採る。
+    /// 手で変えたセルが残ることは保証しない（希望へ戻すのは可＝明示の手動固定は別課題）。
+    /// 既定 <b>true</b>。false は旧挙動（A/B 用、UI トグルは無し）。
+    /// </summary>
+    public static volatile bool WishPinStrict = true;
+
     /// <summary>[Kotlin 3.540.0同期] 回数連鎖研磨（<see cref="CountChainPolish"/>）を後処理に入れるか。
     /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
     public static volatile bool CountChainPolish = false;

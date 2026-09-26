@@ -10,7 +10,8 @@ namespace MagiEngine.V6;
 ///  2. disagreement-region beam fusion using only values present in the elites.
 ///
 /// Bridge schedules are never returned directly. Every adopted schedule is re-evaluated by the
-/// official checker, must improve HARD -&gt; weightedScore -&gt; total, and must not regress exact pins.
+/// official checker, must improve HARD -&gt; weightedScore -&gt; total, must not regress exact pins, and
+/// must not break a wish the root keeps (<see cref="PolishGate.WishPinStrict"/>).
 /// </summary>
 internal static class EliteIntegrationPolish
 {
@@ -51,9 +52,11 @@ internal static class EliteIntegrationPolish
         IReadOnlyList<AdaptiveElite> elites,
         Func<bool> shouldStop,
         long deadlineMs,
-        Config? config = null)
+        Config? config = null,
+        bool? wishPinStrict = null)
     {
         config ??= new Config();
+        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state);
         var root = rootSchedule.Copy2D();
         var rootReport = UnifiedViolationChecker.Check(state, root);
@@ -96,8 +99,7 @@ internal static class EliteIntegrationPolish
         {
             if (candidate.Bridge || Stopped(shouldStop, deadlineMs)) continue;
             var checkedReport = UnifiedViolationChecker.Check(state, candidate.Schedule);
-            if (Better(checkedReport, bestReport) &&
-                !V6SearchOperators.ExactPinRegression(p, root, candidate.Schedule))
+            if (Better(checkedReport, bestReport) && PinsHold(p, root, candidate.Schedule, strict))
             {
                 bestSchedule = candidate.Schedule.Copy2D();
                 bestReport = checkedReport;
@@ -120,7 +122,7 @@ internal static class EliteIntegrationPolish
                     if (Stopped(shouldStop, deadlineMs)) break;
                     relinkPaths++;
                     var improved = RelinkOnePath(
-                        state, p, root, source, target, variant, shouldStop, deadlineMs, bestReport);
+                        state, p, root, source, target, variant, shouldStop, deadlineMs, bestReport, strict);
                     if (improved != null && Better(improved.Value.Report, bestReport))
                     {
                         bestSchedule = improved.Value.Schedule;
@@ -146,7 +148,7 @@ internal static class EliteIntegrationPolish
             var improved = FuseGroup(
                 state, p, root, bestSchedule, bestReport,
                 group.Select(idx => fusionCandidates[idx]).ToList(),
-                shouldStop, deadlineMs, config);
+                shouldStop, deadlineMs, config, strict);
             if (improved != null && Better(improved.Value.Report, bestReport))
             {
                 bestSchedule = improved.Value.Schedule;
@@ -156,8 +158,7 @@ internal static class EliteIntegrationPolish
         }
 
         var finalChecked = UnifiedViolationChecker.Check(state, bestSchedule);
-        var valid = Better(finalChecked, rootReport) &&
-            !V6SearchOperators.ExactPinRegression(p, root, bestSchedule);
+        var valid = Better(finalChecked, rootReport) && PinsHold(p, root, bestSchedule, strict);
         var chosen = valid ? bestSchedule.Copy2D() : root.Copy2D();
         var chosenReport = valid ? finalChecked : rootReport;
         var log = new MirrorLog(
@@ -185,7 +186,8 @@ internal static class EliteIntegrationPolish
         int variant,
         Func<bool> shouldStop,
         long deadlineMs,
-        ViolationReport incumbentReport)
+        ViolationReport incumbentReport,
+        bool wishPinStrict)
     {
         var current = source.Schedule.Copy2D();
         var diffs = new List<(int I, int J)>();
@@ -227,7 +229,7 @@ internal static class EliteIntegrationPolish
             if (!p.MayPlace(i, k)) continue;
             current[i][j] = k;
             var report = UnifiedViolationChecker.Check(state, current);
-            if (Better(report, bestReport) && !V6SearchOperators.ExactPinRegression(p, rootSchedule, current))
+            if (Better(report, bestReport) && PinsHold(p, rootSchedule, current, wishPinStrict))
             {
                 bestSchedule = current.Copy2D();
                 bestReport = report;
@@ -245,7 +247,8 @@ internal static class EliteIntegrationPolish
         List<Candidate> group,
         Func<bool> shouldStop,
         long deadlineMs,
-        Config config)
+        Config config,
+        bool wishPinStrict)
     {
         if (group.Count < 2) return null;
 
@@ -331,8 +334,7 @@ internal static class EliteIntegrationPolish
                     if (!WithinDebt(report, currentBestReport, config)) continue;
                     var child = new BeamNode(schedule, report, changed);
                     next.Add(child);
-                    if (Better(report, bestReport) &&
-                        !V6SearchOperators.ExactPinRegression(p, rootSchedule, schedule))
+                    if (Better(report, bestReport) && PinsHold(p, rootSchedule, schedule, wishPinStrict))
                     {
                         bestSchedule = schedule.Copy2D();
                         bestReport = report;
@@ -348,10 +350,18 @@ internal static class EliteIntegrationPolish
     }
 
     /// <summary>
+    /// 採用の共通条件（<see cref="Better"/> の後）: 厳密ピンを崩さない＋[希望固定の徹底] root から希望を新たに崩さない
+    /// （<see cref="ScheduleUtil.KeepsWishPins"/>）。エリートは別の経路の盤面ごと入るので、relink/fusion のセル単位の
+    /// <c>WishLocked</c> 判定だけでは、端点の採用と崩れたエリートを起点にした relink から希望の崩れが持ち込まれる。
+    /// </summary>
+    private static bool PinsHold(Problem p, int[][] root, int[][] s, bool wishPinStrict) =>
+        !V6SearchOperators.ExactPinRegression(p, root, s) && (!wishPinStrict || p.KeepsWishPins(root, s));
+
+    /// <summary>
     /// ビーム中間ノードの許容幅。<paramref name="baseline"/> は**呼出時点の現在最良**（<see cref="FuseGroup"/>の
     /// <c>currentBestReport</c>）であって入口盤面ではない。[3.349.2] 引数名が <c>root</c> だったため
     /// 「入口比の debt」と読めたが、実際は現在最良比＝窓はより狭い。名前を実態へ合わせた。
-    /// 中間ノードの緩さは探索にしか効かず、採用は必ず <see cref="Better"/> ＋ <c>ExactPinRegression</c> が決める。
+    /// 中間ノードの緩さは探索にしか効かず、採用は必ず <see cref="Better"/> ＋ <see cref="PinsHold"/> が決める。
     /// </summary>
     private static bool WithinDebt(ViolationReport report, ViolationReport baseline, Config config)
     {

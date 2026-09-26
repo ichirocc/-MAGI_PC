@@ -22,8 +22,9 @@ public static partial class V6NativeOptimizer
     /// の1箇所に置く。休が担当可なら休を選び、担当可能が空なら休へ倒す（記号から解決した rest index
     /// を使う＝Level Zero: 全シフト同等・番号非依存）。
     /// </summary>
-    internal static int[][] Hf66DataHardening(MagiState state, int[][] schedule, string tag)
+    internal static int[][] Hf66DataHardening(MagiState state, int[][] schedule, string tag, bool? wishPinStrict = null)
     {
+        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state);
         var outSched = ScheduleUtil.NormalizeSchedule(schedule, p);
         for (var i = 0; i < p.S; i++)
@@ -36,7 +37,7 @@ public static partial class V6NativeOptimizer
                 var k = outSched[i][j];
                 // [3.507.0] 個人上限 0 のセル（希望でそのシフトに固定されたものは除く）も入口で外す＝探索は置き直しから始める。
                 var capped = k >= 0 && k < p.K && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k);
-                if (k < 0 || k >= p.K || !p.CanDo(i, k) || capped) outSched[i][j] = fallback;
+                if (k < 0 || k >= p.K || !p.CanDo(i, k) || capped) outSched[i][j] = Refill(p, i, j, fallback, strict);
             }
         }
         return outSched;
@@ -44,8 +45,9 @@ public static partial class V6NativeOptimizer
 
     /// <summary>[3.507.0] 個人上限 0 のセル（希望固定を除く）だけを置けるシフトへ戻した盤面と、その件数。最終番兵の「入力」基準に使う
     /// （群外セルは触らない＝従来の基準のまま）。</summary>
-    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule)
+    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule, bool? wishPinStrict = null)
     {
+        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state);
         var outSched = schedule.Select(r => r.ToArray()).ToArray();
         var n = 0;
@@ -56,11 +58,16 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
-                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k)) { outSched[i][j] = fallback; n++; }
+                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k)) { outSched[i][j] = Refill(p, i, j, fallback, strict); n++; }
             }
         }
         return (outSched, n);
     }
+
+    /// <summary>外したセルを何で埋めるか。[希望固定の徹底] 規則 A の間は、希望固定セル（未反映）は埋めシフトでなく希望へ戻す
+    /// （希望でも今の値でもない値へは動かさない）。</summary>
+    private static int Refill(Problem p, int i, int j, int fallback, bool wishPinStrict) =>
+        wishPinStrict && p.WishLocked(i, j) ? p.Wish[i][j] : fallback;
 
     internal sealed record RepairResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs);
 

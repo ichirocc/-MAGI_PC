@@ -331,6 +331,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-26（希望固定セルの規則 A を同期、Kotlin 同日）: 利用者決定「最適化器は希望固定セルを『希望へ』か『今のまま』にしかしない」
+  （希望どおりのセルは動かさない・未反映は希望へ戻してよい・希望でも今の値でもない値へは動かさない）。`PolishGate.WishPinStrict`（既定 true、UI 無し）、
+  判定は `ScheduleUtil.WishMoveAllowed`（セル）／`KeepsWishPins`（盤面、規則 A へ緩めた＝未反映セルの持ち越しと希望への復帰を許す）。塞いだ経路は Kotlin と同じ:
+  `V6NativeOptimizer.ElitePathRelink`（希望以外は写さない）・`PersonSwapKick`（希望固定の日は交換しない）・`EliteIntegrationPolish`（採用 4 か所を `PinsHold`）・
+  `V6HotfixPasses.ApplyCovOReliefPolish` と `V6NativeOptimizer.ApplyCovOFree`/`ApplyC41Free`（2 か所）/`ApplyC42Free`（「希望どおりの値だけ守る」だった）・
+  入口 `Hf66DataHardening`／`ClearCappedCells`（上限 0 で外すセルが未反映の希望固定なら埋めシフトでなく希望へ、`Refill`）。hf67・初期解・入口の希望修復は止めない
+  （先に検討した「値によらず凍結」はあとから足した希望が載らなくなるので Kotlin でも不採用）。C++ は不変。テストは Kotlin `WishPinStrictTest` の追加 5 件を 1 対 1 で写した
+  （あとから足した希望は入口＋決定的後処理の ON/OFF 一致）。業務ルールの写し `docs/business-logic.md` を Android と揃えた。
 - 2026-09-26（S6 を同期、Kotlin 058ee56 同日）: 実データ fixture `oct2026_grid_state.json` を `MagiEngine.Tests/Fixtures` にも複製（Android と byte 一致）。
   C# の `RelaxTrial.Result` は IReadOnlyList を持つので値の等価を明示（R4 の決定性の比較用）＝出力は Kotlin と同じ（組 {職員11 Cｵ, 職員10 Pｼ}・5→4）。
 - 2026-09-25（テスト移植の欠落補填）: Kotlin `SaWishLockTest`（3.334.0）を `MagiEngine.Tests/V6/SaWishLockTest.cs` へ 1 対 1 で写した。`SearchNeverMovesACellThatHoldsAFeasibleWish` は C# でもそのまま通過（パリティ不一致なし、エンジン変更なし）。`StrongPerturbNeverMovesAFeasibleWish` は対象の `strongPerturbFlat` がネイティブ経路専用で C# に移植していない（`SaOptimizer.cs` の移植判断）ため、名前だけ残して Skip とした。

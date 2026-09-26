@@ -59,6 +59,22 @@ public static class ScheduleUtil
         return w >= 0 && p.CanDo(i, w);
     }
 
+    /// <summary>[希望固定の徹底] 規則 A: 最適化器がセル (i,j) を <paramref name="cur"/> から <paramref name="next"/> へ変えてよいか。希望固定セルは「希望へ」か「今のまま」だけ
+    /// ＝希望どおりのセルは動かさず、未反映のセル（希望と違う値）は希望へ戻すのだけ可で、希望でも今の値でもない値へは動かさない。
+    /// <paramref name="strict"/> 省略時は <see cref="PolishGate.WishPinStrict"/>、false は旧挙動＝常に可。</summary>
+    public static bool WishMoveAllowed(this Problem p, int i, int j, int cur, int next, bool? strict = null) =>
+        !(strict ?? PolishGate.WishPinStrict) || !p.WishLocked(i, j) || next == p.Wish[i][j] || next == cur;
+
+    /// <summary>[希望固定の徹底] 盤面単位の規則 A: <paramref name="cand"/> の希望固定セルはどれも「希望どおり」か「<paramref name="baseSched"/> と同じ値」。
+    /// 盤面ごと採る経路の採否に使う（<see cref="PolishGate.WishPinStrict"/> の間だけ呼ぶ）。</summary>
+    public static bool KeepsWishPins(this Problem p, int[][] baseSched, int[][] cand)
+    {
+        for (var i = 0; i < p.S; i++)
+            for (var j = 0; j < p.T; j++)
+                if (!p.WishMoveAllowed(i, j, baseSched[i][j], cand[i][j], strict: true)) return false;
+        return true;
+    }
+
     /// <summary>[3.507.0] 最適化器が (i,k) を置いてよいか＝担当可かつ個人上限 0 でない（休は除外しない）。評価・表示は CanDo。</summary>
     public static bool MayPlace(this Problem p, int staffI, int shiftK)
     {

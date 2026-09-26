@@ -18,9 +18,11 @@ public static partial class V6HotfixPasses
     /// 診断（<c>V6PortAnalyzer</c> の過剰診断）が「移すだけで良くなる」と見つける手と同じ探索を修復として行う。
     /// </summary>
     public static CovOReliefResult ApplyCovOReliefPolish(
-        MagiState state, int[][] schedule, int maxMoves = 64, int maxEvaluations = 3_000, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxMoves = 64, int maxEvaluations = 3_000, Func<bool>? shouldStop = null,
+        bool? wishPinStrict = null)
     {
         var stop = shouldStop ?? (() => false);
+        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = new Problem(state);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var before = UnifiedViolationChecker.Check(state, work);
@@ -63,6 +65,7 @@ public static partial class V6HotfixPasses
                     foreach (var m in p.AllowedShiftsForStaff(i))
                     {
                         if (m == k || p.MakesForbiddenRun(work, i, j, m)) continue;
+                        if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
                         if (p.CovOCell(m, j, cov[j][m] + 1) > p.CovOCell(m, j, cov[j][m])) continue;   // 受け皿なし
                         if (evaluations >= maxEvaluations) break;
                         tried = true; evaluations++;
