@@ -164,8 +164,10 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>ws3 希望 "i,j"->shiftIdx（表示融合用）。</summary>
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
-    /// <summary>[S5] WishLocked の希望のキー（試算できる希望）。</summary>
+    /// <summary>[S5] 試算できる希望のキー（実現可能で手動固定でない）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
+    /// <summary>[#41] 手動固定のセル "i,j"。</summary>
+    [ObservableProperty] private IReadOnlySet<string> manualPins = new HashSet<string>();
     /// <summary>[S5] 希望どうしの衝突（兄弟の希望を試算の候補に足す）。</summary>
     [ObservableProperty] private IReadOnlyList<WishSelfConflict> wishSelfConflicts = Array.Empty<WishSelfConflict>();
     /// <summary>[S5] 試算が終わるたびに進む（画面は <c>WishTrialFor</c> で読み直す）。</summary>

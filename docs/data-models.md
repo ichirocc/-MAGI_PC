@@ -45,6 +45,7 @@
 | `skillGroups` | `List<Group>` = `[]` | スキルグループ（ユニットとは別の第2分類。担当可否には使わない） |
 | `cons41s` / `cons42s` | `List<C41Row>` / `List<C42Row>` = `[]` | スキル群版の C41 / C42 |
 | `cons3w` | `List<C3wRow>` = `[]` | 希望の前日に禁止（3.542.0）。希望(`wishes`)で固定された `wishKigou` の前日セルが `prevKigou` なら違反（HARD `c3w`、c3n と同格）。JSON キー無しは空 |
+| `manualPins` | `List<ManualPin>` = `[]` | 手動固定（backlog #41）。JSON は `[{"staff":i,"day":j,"shift":k}, …]`＝職員 i・日 j をシフト k に固定（1 セル 1 件、重なれば後の行）。最適化器は書き換えない。手の編集で値が追従。採点は読まない。JSON キー無しは空（古いデータはそのまま開く）。構造編集（職員・シフトの削除/並べ替え・期間の変更）で添字が追従し、消えたシフト・期間外は落とす |
 | `shiftColors` | `Map<String, String>` = `{}` | 表示色の上書き。キー＝シフト記号 → `"#rrggbb"`（**表示のみ・エンジン無影響**。シフトの記号変更でキーを付け替え、シフト削除で取り除く）。特殊キー `"__vio__"` ＝違反色 |
 | `extras` | `Map<String, Any?>` = `{}` | 未モデル化の項目を逐語保持（往復の無損失化） |
 
@@ -67,6 +68,7 @@
 | `C41Row` | `groupKigou: String`, `shiftKigou: String`, `l: String`, `u: String` | 群 X のシフト Y を1日に [l,u] 回 |
 | `C42Row` | `g1Kigou: String`, `g2Kigou: String`, `s1Kigou: String`, `s2Kigou: String` | 群 g1 の s1 と 群 g2 の s2 が同日併存不可 |
 | `C3wRow` | `wishKigou: String`, `prevKigou: String` | 希望で固定した wishKigou の前日に prevKigou を置けない（3.542.0） |
+| `ManualPin` | `staff: Int`, `day: Int`, `shift: Int` | 手動固定 1 件（backlog #41）。添字は `schedule` と同じ |
 
 > 数値項目（need1/need2/count/lo/hi/l/u 等）は**文字列**で保持する（空欄＝未設定を表現するため）。利用時に整数へ解釈する。
 

@@ -300,7 +300,7 @@ internal static class PersonalBalanceJointLnsPolish
             //   書いているのに、この分岐だけ CanDo を見ていなかった）。規約は Problem.WishLocked
             //   ＝実現可能な希望だけが凍結される（3.264.0 / 3.270.0 / 3.278.0 と同じ retrofit）。
             if (!p.WishLocked(staff, j)) continue;
-            int w = p.Wish[staff][j];
+            int w = p.LockTo(staff, j);
             if (w >= 0 && w < p.K)
             {
                 forced[w]++;

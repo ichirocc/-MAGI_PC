@@ -160,13 +160,13 @@ public static class RelaxTrial
         return stop() ? Stopped : NoWall;
     }
 
-    /// <summary>確定の盤面（§6 の 3）: 試算時の盤面に手順を当てる。どれかのセルが手順の From と違えば null。入力は書かない。</summary>
-    public static int[][]? ApplyMoves(int[][] board, IReadOnlyList<Move> moves)
+    /// <summary>確定の盤面（§6 の 3）: 試算時の盤面に手順を当てる。どれかのセルが手順の From と違うか、手動固定（<paramref name="pinned"/>、#41）なら null。入力は書かない。</summary>
+    public static int[][]? ApplyMoves(int[][] board, IReadOnlyList<Move> moves, Func<int, int, bool> pinned)
     {
         var nb = board.Copy2D();
         foreach (var m in moves)
         {
-            if (m.Staff < 0 || m.Staff >= nb.Length || m.Day < 0 || m.Day >= nb[m.Staff].Length || nb[m.Staff][m.Day] != m.From) return null;
+            if (m.Staff < 0 || m.Staff >= nb.Length || m.Day < 0 || m.Day >= nb[m.Staff].Length || nb[m.Staff][m.Day] != m.From || pinned(m.Staff, m.Day)) return null;
             nb[m.Staff][m.Day] = m.To;
         }
         return nb;
@@ -220,7 +220,7 @@ public static class RelaxTrial
 
     /// <summary>board が上限 0 の (職員, シフト) を使っている組（希望で固定したセルは除く）。上げ幅は最小の 1。</summary>
     private static List<Relax> UsedWalls(Problem p, List<(int Staff, int Shift)> walls, int[][] board) =>
-        walls.Where(w => Enumerable.Range(0, p.T).Any(j => board[w.Staff][j] == w.Shift && !(p.WishLocked(w.Staff, j) && p.Wish[w.Staff][j] == w.Shift)))
+        walls.Where(w => Enumerable.Range(0, p.T).Any(j => board[w.Staff][j] == w.Shift && !(p.WishLocked(w.Staff, j) && p.LockTo(w.Staff, j) == w.Shift)))
             .Select(w => new Relax(w.Staff, w.Shift, 1)).ToList();
 
     private static List<Move> Diff(int[][] a, int[][] b)

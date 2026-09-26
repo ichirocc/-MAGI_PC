@@ -203,7 +203,7 @@ public static partial class V6PortAnalyzer
                     //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
                     //   （WishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
                     //   verdict を Fixable→Infeasible へ倒し「データ上、充足不可」という誤った断定を生む。
-                    if (p.WishLocked(i, j) && p.Wish[i][j] != k) { wishPinned.Add(i); continue; }   // 実現可能な希望が別シフト → この枠には回せない
+                    if (p.WishLocked(i, j) && p.LockTo(i, j) != k) { wishPinned.Add(i); continue; }   // 実現可能な希望が別シフト → この枠には回せない
                     capacity++;
                 }
                 var verdict = capacity < need ? CoverageVerdict.Infeasible : CoverageVerdict.Fixable;
@@ -236,7 +236,7 @@ public static partial class V6PortAnalyzer
                         if (!p.MayPlace(i, k)) continue;
                         var m = norm[i][j];
                         // [3.391.0] 上の capacity と同じ事前フィルタ＝同じ条件に揃える（WishLocked）。
-                        if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;   // 実現可能な希望が別シフト=capacity 対象外
+                        if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;   // 実現可能な希望が別シフト=capacity 対象外
                         if (m == k) { already++; continue; }                    // 既にこのシフト=移す対象でない
                         if (C3nAt(i, j, k)) { forbid++; continue; }
                         // m から1人引くと covU が増える=玉突き（多人数入替=連鎖でしか解けない）。
@@ -359,7 +359,7 @@ public static partial class V6PortAnalyzer
                     if (norm[i][j] != k) continue;   // このシフトの在勤者だけが移動候補
                     // [3.391.0] 実現不能な希望は凍結しない＝「希望固定で動かせない」と案内するのは誤り
                     //   （むしろ動かすと担当外セル=groupViol も同時に消える）。WishLocked へ統一。
-                    if (p.WishLocked(i, j) && p.Wish[i][j] == k) { pinned++; pinnedIdx.Add(i); continue; }   // 実現可能な本人希望＝動かすとpref化
+                    if (p.WishLocked(i, j) && p.LockTo(i, j) == k) { pinned++; pinnedIdx.Add(i); continue; }   // 実現可能な本人希望＝動かすとpref化
                     var alts = p.AllowedShiftsForStaff(i).Where(m => m != k).ToArray();
                     if (alts.Length == 0) { forbid++; continue; }      // 担当可能な代替シフトが無い
                     var hasRoom = false; var blockedByC3n = true;

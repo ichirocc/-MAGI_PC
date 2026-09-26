@@ -145,7 +145,7 @@ public static class NextActionGuide
         string Name(int i) => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "?";
         var board = ui.Schedule.Select(row => row.ToArray()).ToArray();
-        var after = RelaxTrial.ApplyMoves(board, r.Moves) ?? board;
+        var after = RelaxTrial.ApplyMoves(board, r.Moves, (i, j) => ui.ManualPins.Contains($"{i},{j}")) ?? board;
         IReadOnlyList<string> Fams(int i, int j) => ui.ViolationCellFamilies.TryGetValue($"{i},{j}", out var f) ? f : Array.Empty<string>();
         var fams = Fams(r.Staff, r.Day);
         var what = fams.Contains("vio-c3n") ? "禁止の並び" : fams.Contains("vio-c3w") ? "希望の前日に禁止"

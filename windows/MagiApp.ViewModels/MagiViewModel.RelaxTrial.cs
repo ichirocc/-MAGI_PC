@@ -96,7 +96,8 @@ public sealed partial class MagiViewModel
         }
         var r = token.Result;
         var ns0 = RelaxTrial.Apply(st, r.Prerequisite.Concat(r.Relaxes).ToList());
-        var nb = RelaxTrial.ApplyMoves(b, r.Moves);
+        var pinP = ScheduleUtil.CachedProblem(st);
+        var nb = RelaxTrial.ApplyMoves(b, r.Moves, (i, j) => i >= 0 && i < pinP.S && j >= 0 && j < pinP.T && pinP.Pinned(i, j));
         var got = nb is null ? (int?)null : UnifiedViolationChecker.Check(ns0, nb.Copy2D()).Hard;
         if (nb is null || got != r.Rr)
         {

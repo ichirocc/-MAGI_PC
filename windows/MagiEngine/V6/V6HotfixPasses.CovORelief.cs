@@ -60,7 +60,7 @@ public static partial class V6HotfixPasses
                 for (var i = 0; i < p.S; i++)
                 {
                     if (work[i][j] != k) continue;
-                    if (p.WishLocked(i, j) && p.Wish[i][j] == k) { pinned++; continue; }
+                    if (p.WishLocked(i, j) && p.LockTo(i, j) == k) { pinned++; continue; }
                     var tried = false;
                     foreach (var m in p.AllowedShiftsForStaff(i))
                     {

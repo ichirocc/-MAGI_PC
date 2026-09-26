@@ -34,7 +34,7 @@ public static class WishTrial
     }
 
     /// <summary>
-    /// 希望 (staff, day) を取り消した試算。希望が無い・WishLocked でなければ null（試算の対象外）。
+    /// 希望 (staff, day) を取り消した試算。希望が無い・実現可能でない・手動固定のセル（[#41]）は null（試算の対象外）。
     /// <paramref name="control"/> を渡さなければここで計算する。
     /// </summary>
     public static Outcome? Trial(MagiState state, int[][] schedule, int staff, int day,
@@ -44,7 +44,7 @@ public static class WishTrial
         var key = $"{staff},{day}";
         if (!state.Wishes.ContainsKey(key)) return null;
         var p = ScheduleUtil.CachedProblem(state);
-        if (staff < 0 || staff >= p.S || day < 0 || day >= p.T || !p.WishLocked(staff, day)) return null;
+        if (staff < 0 || staff >= p.S || day < 0 || day >= p.T || !p.WishFixed(staff, day) || p.Pinned(staff, day)) return null;
         if (UnavailableReason(state, schedule) is { } why) return new Unavailable(why);
         Control ctl;
         if (control is not null) ctl = control;
@@ -65,7 +65,7 @@ public static class WishTrial
         return new Result(ctl.H0, hx, ctl.Rk, rr, a, att, Math.Min(a, Math.Max(0, att)), Math.Max(0, att - a), pKeep, pCancel);
     }
 
-    /// <summary>WishLocked の希望のキー（"i,j"）。担当できない勤務の希望は入らない＝試算の対象外（§2.2）。</summary>
+    /// <summary>試算できる希望のキー（"i,j"）。担当できない勤務の希望と手動固定のセル（[#41]）は入らない＝試算の対象外（§2.2）。</summary>
     public static IReadOnlySet<string> LockedWishKeys(MagiState state)
     {
         var p = ScheduleUtil.CachedProblem(state);
@@ -75,7 +75,7 @@ public static class WishTrial
             var parts = key.Split(',');
             var i = parts.Length > 0 && int.TryParse(parts[0].Trim(), out var a) ? a : -1;
             var j = parts.Length > 1 && int.TryParse(parts[1].Trim(), out var b) ? b : -1;
-            if (i >= 0 && i < p.S && j >= 0 && j < p.T && p.WishLocked(i, j)) set.Add(key);
+            if (i >= 0 && i < p.S && j >= 0 && j < p.T && p.WishFixed(i, j) && !p.Pinned(i, j)) set.Add(key);
         }
         return set;
     }

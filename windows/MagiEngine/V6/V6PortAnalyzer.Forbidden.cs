@@ -206,7 +206,7 @@ public static partial class V6PortAnalyzer
     {
         var n = 0;
         for (var d = 0; d < p.T; d++)
-            if (p.WishLocked(i, d) && p.Wish[i][d] != board[i][d]) n++;
+            if (p.WishFixed(i, d) && p.Wish[i][d] != board[i][d]) n++;
         return n;
     }
 
@@ -229,7 +229,7 @@ public static partial class V6PortAnalyzer
         //   weightedScore の重み値には依存しない＝3.522.0 の重み全面見直しでも挙動不変）。
         //   偽の Pinned は run 全体を「構造壁」と誤診し、3.281.0 の短い停滞タイムアウトを早期に
         //   発火させうる。そこで pref の増加分を c3n の正味減と同じ土俵で勘定する。
-        var prefCost = p.WishLocked(i, j) && p.Wish[i][j] == cur ? 1 : 0;
+        var prefCost = p.WishFixed(i, j) && p.Wish[i][j] == cur ? 1 : 0;
         // 行 fires の正味減判定（C1DeltaPrefilter.StaffC3nFires を共用）。
         var row = new int[p.T];
         for (var t = 0; t < p.T; t++) row[t] = norm[i][t];

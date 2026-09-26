@@ -306,6 +306,7 @@ public sealed partial class ScheduleView : UserControl
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
+            ViolationLegendHost.Children.Add(LegendItem(new FontIcon { Glyph = "\uE72E", FontSize = 9 }, "左下の錠＝手動固定（最適化で変わらない）"));
         }
 
         ShiftLegendHost.Children.Clear();
@@ -721,6 +722,7 @@ public sealed partial class ScheduleView : UserControl
             cell.WishDotVisibility = Visibility.Collapsed;
             cell.SecondDotVisibility = Visibility.Collapsed;
             cell.BandVisibility = Visibility.Collapsed;
+            cell.PinVisibility = Visibility.Collapsed;
             // 回数の族（下限・上限・適切回数・個人の合計）はセルを持たないので名前の横に小さく ▼/▲（Kotlin と同じ）。
             if (col == 0 && row > 0 && _countBadges.TryGetValue(row - 1, out var badge))
             {
@@ -826,6 +828,7 @@ public sealed partial class ScheduleView : UserControl
             Brush borderBrush = new SolidColorBrush(Colors.Transparent);
             var thickness = new Thickness(0);
             var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Marks);
+            cell.PinVisibility = ui.ManualPins.Contains($"{i},{j}") ? Visibility.Visible : Visibility.Collapsed;
             cell.BandVisibility = i < c1Band.Length && j < c1Band[i].Length && c1Band[i][j] ? Visibility.Visible : Visibility.Collapsed;
             var vioClass = displayClasses.FirstOrDefault(c => VioBuckets.VioVisible(c, _vioEnabled));
             var second = GridDisplayMarks.SecondVisibleClass(displayClasses, _vioEnabled);
@@ -1509,7 +1512,13 @@ public sealed partial class ScheduleView : UserControl
         var close = new Button { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
         close.Click += (_, _) => flyout.Hide();
         Button? remove = null;
-        if (mode == 1 && wish is not null)
+        if (mode == 0 && cur >= 0)
+        {
+            var pinnedNow = _vm.Ui.ManualPins.Contains($"{i},{j}");
+            remove = new Button { Content = pinnedNow ? "固定を外す" : "固定する", MinHeight = 48 };
+            remove.Click += (_, _) => { _vm.TogglePin(i, j); Reopen(i, j, 0); };
+        }
+        else if (mode == 1 && wish is not null)
         {
             remove = new Button { Content = "希望を取り消す", MinHeight = 48 };
             remove.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, 1); };
@@ -1543,7 +1552,7 @@ public sealed partial class ScheduleView : UserControl
         }
         PropertyChangedEventHandler evalHandler = (_, e) =>
         {
-            if (e.PropertyName is nameof(UiState.CheckRev) or nameof(UiState.Wishes)) DispatcherQueue.TryEnqueue(RefreshEvaluated);
+            if (e.PropertyName is nameof(UiState.CheckRev) or nameof(UiState.Wishes) or nameof(UiState.ManualPins)) DispatcherQueue.TryEnqueue(RefreshEvaluated);
         };
         _vm.Ui.PropertyChanged += evalHandler;
         flyout.Closed += (_, _) => _vm.Ui.PropertyChanged -= evalHandler;

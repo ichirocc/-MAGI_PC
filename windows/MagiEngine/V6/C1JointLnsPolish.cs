@@ -359,7 +359,7 @@ internal static class C1JointLnsPolish
         {
             var next = new int[hi + 1][];
             for (int cc = 0; cc <= hi; cc++) { next[cc] = new int[maskLimit]; Array.Fill(next[cc], inf); }
-            int wished = p.Wish[staff][day];
+            int wished = p.LockTo(staff, day);
             bool locked = p.WishLocked(staff, day);
             int minBit = locked ? (wished == c.ShiftIdx ? 1 : 0) : 0;
             int maxBit = locked ? minBit : 1;
@@ -411,7 +411,7 @@ internal static class C1JointLnsPolish
         {
             int possible = 0;
             for (int day = start; day < start + d; day++)
-                if (!p.WishLocked(staff, day) || p.Wish[staff][day] == c.ShiftIdx) possible++;
+                if (!p.WishLocked(staff, day) || p.LockTo(staff, day) == c.ShiftIdx) possible++;
             if (possible < c.Day2) unavoidable++;
         }
         return unavoidable;
@@ -664,7 +664,7 @@ internal static class C1JointLnsPolish
 
     private static bool Allowed(Problem p, int staff, int day, int shift)
     {
-        int wish = p.Wish[staff][day];
+        int wish = p.LockTo(staff, day);
         return p.WishLocked(staff, day) ? wish == shift : p.MayPlace(staff, shift);
     }
 

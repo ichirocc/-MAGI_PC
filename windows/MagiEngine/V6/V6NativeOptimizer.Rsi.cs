@@ -120,7 +120,7 @@ public static partial class V6NativeOptimizer
                     var candidates = new List<List<int[]>>();
                     foreach (var i in staffOnK)
                     {
-                        if (p.WishLocked(i, j) && p.Wish[i][j] == k) continue;   // 実現可能な本人希望＝動かすとpref未充足化
+                        if (p.WishLocked(i, j) && p.LockTo(i, j) == k) continue;   // 実現可能な本人希望＝動かすとpref未充足化
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != k))
                         {
                             if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
@@ -185,7 +185,7 @@ public static partial class V6NativeOptimizer
                     var candidates = new List<List<int[]>>();
                     foreach (var i in onShift)
                     {
-                        if (p.WishLocked(i, j) && p.Wish[i][j] == c.ShiftIdx) continue;   // 実現可能な本人希望＝対象外
+                        if (p.WishLocked(i, j) && p.LockTo(i, j) == c.ShiftIdx) continue;   // 実現可能な本人希望＝対象外
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != c.ShiftIdx))
                         {
                             if (!p.WishMoveAllowed(i, j, c.ShiftIdx, m, strict)) continue;
@@ -219,7 +219,7 @@ public static partial class V6NativeOptimizer
                     foreach (var i in offShift)
                     {
                         var old = sched[i][j];
-                        if (old < 0 || old >= p.K || (p.WishLocked(i, j) && p.Wish[i][j] == old)) continue;   // 現シフトが実現可能な本人希望＝対象外
+                        if (old < 0 || old >= p.K || (p.WishLocked(i, j) && p.LockTo(i, j) == old)) continue;   // 現シフトが実現可能な本人希望＝対象外
                         if (!p.WishMoveAllowed(i, j, old, c.ShiftIdx, strict)) continue;
                         if (p.MakesForbiddenRun(sched, i, j, c.ShiftIdx)) continue;
                         candidates.Add(new List<int[]> { new[] { i, j, c.ShiftIdx } });
@@ -269,7 +269,7 @@ public static partial class V6NativeOptimizer
         {
             foreach (var i in candidateStaff)
             {
-                if (p.WishLocked(i, j) && p.Wish[i][j] == fromShift) continue;   // 実現可能な本人希望＝対象外
+                if (p.WishLocked(i, j) && p.LockTo(i, j) == fromShift) continue;   // 実現可能な本人希望＝対象外
                 foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != fromShift))
                 {
                     if (!p.WishMoveAllowed(i, j, fromShift, m, strict)) continue;

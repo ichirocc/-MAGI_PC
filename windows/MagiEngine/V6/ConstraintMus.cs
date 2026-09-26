@@ -126,7 +126,7 @@ public static class ConstraintMus
                 var hi = p.RangeHi[i][k];
                 if (hi != int.MaxValue) universe.Add(new RangeCap(i, k, hi));
             }
-            for (var j = 0; j < p.T; j++) if (p.WishLocked(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
             if (universe.Count == 0) continue;
             if (!StaffProvablyInfeasible(p, allowed, universe)) continue;
             var core = Shrink(universe, items => StaffProvablyInfeasible(p, allowed, items));
@@ -153,7 +153,7 @@ public static class ConstraintMus
                 if (eff > 0) universe.Add(new DayNeed(j, k, eff));
             }
             if (!universe.Any(it => it is DayNeed)) continue;
-            for (var i = 0; i < p.S; i++) if (p.WishLocked(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            for (var i = 0; i < p.S; i++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
             if (!DayProvablyInfeasible(p, universe)) continue;
             var core = Shrink(universe, items => DayProvablyInfeasible(p, items));
             if (core.Count > 0) outList.Add(new DayConflict(j, core));

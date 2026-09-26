@@ -723,7 +723,7 @@ public static partial class V6SanityPort
                 var t = p.AptRaw[i][k];   // [Android 3.508.0] 6b と同じく設定した目標で判定
                 if (t < 0 || !p.CanDo(i, k)) continue;
                 var wished = 0;
-                for (var j = 0; j < p.T; j++) if (p.WishLocked(i, j) && p.Wish[i][j] == k) wished++;
+                for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
                 if (wished > t)
                 {
                     var sym = Sym(k);
@@ -772,7 +772,7 @@ public static partial class V6SanityPort
                 var hi = p.RangeHi[i][k];
                 if (hi == int.MaxValue || !p.CanDo(i, k)) continue;
                 var wished = 0;
-                for (var j = 0; j < p.T; j++) if (p.WishLocked(i, j) && p.Wish[i][j] == k) wished++;
+                for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
                 if (wished > hi)
                 {
                     var sym = Sym(k);

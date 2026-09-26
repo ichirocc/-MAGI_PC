@@ -34,9 +34,11 @@ public static partial class V6NativeOptimizer
             var fallback = ScheduleUtil.FillShiftIndex(allowed, p.RestIdx ?? throw new ArgumentException("休みシフトが設定されていません"));
             for (var j = 0; j < p.T; j++)
             {
+                // [#41] 手動固定セルは固定の値へ（担当外・上限 0 でも利用者の固定が勝つ）。
+                if (p.Pinned(i, j)) { outSched[i][j] = p.Pin[i][j]; continue; }
                 var k = outSched[i][j];
                 // [3.507.0] 個人上限 0 のセル（希望でそのシフトに固定されたものは除く）も入口で外す＝探索は置き直しから始める。
-                var capped = k >= 0 && k < p.K && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k);
+                var capped = k >= 0 && k < p.K && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k);
                 if (k < 0 || k >= p.K || !p.CanDo(i, k) || capped) outSched[i][j] = Refill(p, i, j, fallback, strict);
             }
         }
@@ -58,7 +60,7 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
-                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.Wish[i][j] == k)) { outSched[i][j] = Refill(p, i, j, fallback, strict); n++; }
+                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k)) { outSched[i][j] = Refill(p, i, j, fallback, strict); n++; }
             }
         }
         return (outSched, n);
@@ -67,7 +69,7 @@ public static partial class V6NativeOptimizer
     /// <summary>外したセルを何で埋めるか。[希望固定の徹底] 規則 A の間は、希望固定セル（未反映）は埋めシフトでなく希望へ戻す
     /// （希望でも今の値でもない値へは動かさない）。</summary>
     private static int Refill(Problem p, int i, int j, int fallback, bool wishPinStrict) =>
-        wishPinStrict && p.WishLocked(i, j) ? p.Wish[i][j] : fallback;
+        (wishPinStrict || p.Pinned(i, j)) && p.WishLocked(i, j) ? p.LockTo(i, j) : fallback;
 
     internal sealed record RepairResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs);
 
@@ -83,13 +85,14 @@ public static partial class V6NativeOptimizer
         var logs = new List<MirrorLog>();
         var changed = 0;
 
-        // Apply feasible wishes first; infeasible wishes are logged by Sanity, not forced.
+        // Apply feasible wishes first (a manual pin wins over its wish); infeasible wishes are logged by Sanity, not forced.
         for (var i = 0; i < p.S; i++)
         {
             for (var j = 0; j < p.T; j++)
             {
-                var w = p.Wish[i][j];
-                if (w >= 0 && w < p.K && p.CanDo(i, w) && outSched[i][j] != w)
+                if (!p.WishLocked(i, j)) continue;
+                var w = p.LockTo(i, j);
+                if (outSched[i][j] != w)
                 {
                     outSched[i][j] = w;
                     changed++;
@@ -168,7 +171,7 @@ public static partial class V6NativeOptimizer
         for (var i = 0; i < p.S; i++)
         {
             if (!p.MayPlace(i, k)) continue;
-            if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
+            if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
             var old = schedule[i][j];
             if (old == k) continue; // [監査#3] 既就業者はスキップ
             var hi = p.RangeHi[i][k];

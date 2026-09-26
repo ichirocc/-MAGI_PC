@@ -20,7 +20,7 @@ public static class C1Display
 
     /// <summary>セル (i,d) を k に変えられるか。最適化器と同じ基準（希望固定なら希望どおりだけ、それ以外は MayPlace）。</summary>
     public static bool Changeable(Problem p, int i, int d, int k) =>
-        p.WishLocked(i, d) ? p.Wish[i][d] == k : p.MayPlace(i, k);
+        p.WishLocked(i, d) ? p.LockTo(i, d) == k : p.MayPlace(i, k);
 
     /// <summary>盤面 s の期間の制約の不足区間。窓の数え方はチェッカー（担当不可の職員は対象外）と同じ。</summary>
     public static IReadOnlyList<C1Shortage> Shortages(Problem p, int[][] s)

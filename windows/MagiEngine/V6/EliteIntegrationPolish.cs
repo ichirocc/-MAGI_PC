@@ -225,7 +225,7 @@ internal static class EliteIntegrationPolish
         {
             if (Stopped(shouldStop, deadlineMs)) break;
             var k = target.Schedule[i][j];
-            if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
+            if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
             if (!p.MayPlace(i, k)) continue;
             current[i][j] = k;
             var report = UnifiedViolationChecker.Check(state, current);
@@ -317,7 +317,7 @@ internal static class EliteIntegrationPolish
             {
                 foreach (var k in valuesList)
                 {
-                    if (p.WishLocked(i, j) && p.Wish[i][j] != k) continue;
+                    if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
                     if (!p.MayPlace(i, k)) continue;
                     var changed = node.Schedule[i][j] == k ? node.Changed : node.Changed + 1;
                     var schedule = node.Schedule.Copy2D();
@@ -355,7 +355,7 @@ internal static class EliteIntegrationPolish
     /// <c>WishLocked</c> 判定だけでは、端点の採用と崩れたエリートを起点にした relink から希望の崩れが持ち込まれる。
     /// </summary>
     private static bool PinsHold(Problem p, int[][] root, int[][] s, bool wishPinStrict) =>
-        !V6SearchOperators.ExactPinRegression(p, root, s) && (!wishPinStrict || p.KeepsWishPins(root, s));
+        !V6SearchOperators.ExactPinRegression(p, root, s) && p.KeepsWishPins(root, s, wishPinStrict);
 
     /// <summary>
     /// ビーム中間ノードの許容幅。<paramref name="baseline"/> は**呼出時点の現在最良**（<see cref="FuseGroup"/>の

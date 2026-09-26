@@ -49,30 +49,65 @@ public static class ScheduleUtil
         return Array.IndexOf(p.Bucket[g], shiftK) >= 0;
     }
 
-    /// <summary>
-    /// [監査#11①移植元] セル(i,j)の希望を「不可侵（凍結）」として扱うか。実現可能な希望のみ凍結する
-    /// （担当不可の不可能希望は凍結しない＝セルを被覆等の最適化へ復帰させる）。
-    /// </summary>
-    public static bool WishLocked(this Problem p, int i, int j)
+    /// <summary>[監査#11①移植元] セル(i,j)に「実現可能な希望」が入っているか（希望の意味＝pref の計数・希望の診断・S5 が読む）。
+    /// 担当不可の不可能希望は含めない。</summary>
+    public static bool WishFixed(this Problem p, int i, int j)
     {
         int w = p.Wish[i][j];
         return w >= 0 && p.CanDo(i, w);
     }
 
+    /// <summary>最適化器がセル(i,j)を縛るか＝手動固定（[#41]）または実現可能な希望（WishFixed）。縛る値は LockTo。
+    /// 盤面へ書く経路はすべてこれで判定する（「動かさない」「縛る値へだけ書く」）。採点は読まない。</summary>
+    public static bool WishLocked(this Problem p, int i, int j) => p.Pin[i][j] >= 0 || p.WishFixed(i, j);
+
+    /// <summary>[#41] 縛るセルの値＝手動固定の値、無ければ希望（WishLocked のセルでだけ意味を持つ）。手動固定は希望より強い。</summary>
+    public static int LockTo(this Problem p, int i, int j) { int v = p.Pin[i][j]; return v >= 0 ? v : p.Wish[i][j]; }
+
+    public static bool Pinned(this Problem p, int i, int j) => p.Pin[i][j] >= 0;
+
     /// <summary>[希望固定の徹底] 規則 A: 最適化器がセル (i,j) を <paramref name="cur"/> から <paramref name="next"/> へ変えてよいか。希望固定セルは「希望へ」か「今のまま」だけ
     /// ＝希望どおりのセルは動かさず、未反映のセル（希望と違う値）は希望へ戻すのだけ可で、希望でも今の値でもない値へは動かさない。
-    /// <paramref name="strict"/> 省略時は <see cref="PolishGate.WishPinStrict"/>、false は旧挙動＝常に可。</summary>
-    public static bool WishMoveAllowed(this Problem p, int i, int j, int cur, int next, bool? strict = null) =>
-        !(strict ?? PolishGate.WishPinStrict) || !p.WishLocked(i, j) || next == p.Wish[i][j] || next == cur;
-
-    /// <summary>[希望固定の徹底] 盤面単位の規則 A: <paramref name="cand"/> の希望固定セルはどれも「希望どおり」か「<paramref name="baseSched"/> と同じ値」。
-    /// 盤面ごと採る経路の採否に使う（<see cref="PolishGate.WishPinStrict"/> の間だけ呼ぶ）。</summary>
-    public static bool KeepsWishPins(this Problem p, int[][] baseSched, int[][] cand)
+    /// <paramref name="strict"/> 省略時は <see cref="PolishGate.WishPinStrict"/>、false は旧挙動＝希望は常に可。[#41] 手動固定はフラグによらず「固定の値へ」か「今のまま」だけ。</summary>
+    public static bool WishMoveAllowed(this Problem p, int i, int j, int cur, int next, bool? strict = null)
     {
+        int pv = p.Pin[i][j];
+        if (pv >= 0) return next == pv || next == cur;
+        return !(strict ?? PolishGate.WishPinStrict) || !p.WishFixed(i, j) || next == p.Wish[i][j] || next == cur;
+    }
+
+    /// <summary>[希望固定の徹底] 盤面単位の規則 A: <paramref name="cand"/> の希望固定セルはどれも「希望どおり」か「<paramref name="baseSched"/> と同じ値」。[#41] 手動固定は常に同じ判定
+    /// （strict=false でも見る）。盤面ごと採る経路の採否に使う（WishPinStrict か手動固定があるときだけ呼ぶ）。</summary>
+    public static bool KeepsWishPins(this Problem p, int[][] baseSched, int[][] cand, bool strict = true)
+    {
+        if (!strict && !p.HasPins) return true;
         for (var i = 0; i < p.S; i++)
             for (var j = 0; j < p.T; j++)
-                if (!p.WishMoveAllowed(i, j, baseSched[i][j], cand[i][j], strict: true)) return false;
+                if (!p.WishMoveAllowed(i, j, baseSched[i][j], cand[i][j], strict)) return false;
         return true;
+    }
+
+    /// <summary>[#41] 盤面の手動固定セルがどれも固定の値か（最終番兵）。</summary>
+    public static bool HoldsManualPins(this Problem p, int[][] s)
+    {
+        if (!p.HasPins) return true;
+        for (var i = 0; i < p.S; i++)
+            for (var j = 0; j < p.T; j++)
+            {
+                int v = p.Pin[i][j];
+                if (v >= 0 && (i >= s.Length || j >= s[i].Length || s[i][j] != v)) return false;
+            }
+        return true;
+    }
+
+    /// <summary>[#41] 手動固定セルへ固定の値を書いた写し（入口で盤面を固定に合わせる）。固定が無ければ同じ参照を返す。</summary>
+    public static int[][] WithManualPins(this Problem p, int[][] s)
+    {
+        if (p.HoldsManualPins(s)) return s;
+        var outS = s.Select(r => (int[])r.Clone()).ToArray();
+        for (var i = 0; i < Math.Min(p.S, outS.Length); i++)
+            for (var j = 0; j < Math.Min(p.T, outS[i].Length); j++) { int v = p.Pin[i][j]; if (v >= 0) outS[i][j] = v; }
+        return outS;
     }
 
     /// <summary>[3.507.0] 最適化器が (i,k) を置いてよいか＝担当可かつ個人上限 0 でない（休は除外しない）。評価・表示は CanDo。</summary>

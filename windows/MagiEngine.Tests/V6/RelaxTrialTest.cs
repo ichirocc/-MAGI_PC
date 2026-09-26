@@ -121,9 +121,10 @@ public class RelaxTrialTest
     {
         var bd = new[] { new[] { A, A }, new[] { Rest, Rest } };
         var m = new[] { new RelaxTrial.Move(0, 1, A, Rest), new RelaxTrial.Move(1, 1, Rest, A) };
-        Assert.Equal(new[] { new[] { A, Rest }, new[] { Rest, A } }, RelaxTrial.ApplyMoves(bd, m));
+        Assert.Equal(new[] { new[] { A, Rest }, new[] { Rest, A } }, RelaxTrial.ApplyMoves(bd, m, (_, _) => false));
         Assert.Equal(A, bd[0][1]);
-        Assert.Null(RelaxTrial.ApplyMoves(new[] { new[] { A, B }, new[] { Rest, Rest } }, m));
+        Assert.Null(RelaxTrial.ApplyMoves(new[] { new[] { A, B }, new[] { Rest, Rest } }, m, (_, _) => false));
+        Assert.Null(RelaxTrial.ApplyMoves(bd, m, (i, j) => i == 1 && j == 1));
     }
 
     [Fact]
@@ -142,7 +143,7 @@ public class RelaxTrialTest
         Assert.Equal(5, r.H0); Assert.Equal(4, r.Rr); Assert.Equal(1, r.Att);
         Assert.Equal(RelaxTrial.HandPlaced(st, board), r.Prerequisite);
         var ns = RelaxTrial.Apply(st, r.Prerequisite.Concat(r.Relaxes).ToList());
-        var nb = RelaxTrial.ApplyMoves(board, r.Moves)!;
+        var nb = RelaxTrial.ApplyMoves(board, r.Moves, (_, _) => false)!;
         Assert.Equal(r.Rr, UnifiedViolationChecker.Check(ns, nb).Hard);
         var issue = Assert.Single(V6SanityPort.Build(st, board).Guidance, g => g.Problem.Contains("上限 0 と食い違っています"));
         Assert.Equal("手で置いた勤務 4件 が上限 0 と食い違っています。もう一度つくると外されます", issue.Problem);

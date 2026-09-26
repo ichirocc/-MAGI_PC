@@ -331,6 +331,14 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-26（手動固定 backlog #41 を同期、Kotlin 0e08cd2 同日）: セル編集シートの［固定する］／［固定を外す］で、そのセルを最適化器だけが書き換えない（`MagiState.ManualPins`、JSON `manualPins`）。
+  判定は Kotlin と同じく規則 A の仕組みに載せた: `ScheduleUtil.WishLocked`＝手動固定または実現可能な希望（`WishFixed`）、縛る値 `LockTo`（手動＞希望）、
+  `WishMoveAllowed`/`KeepsWishPins(base, cand, strict)` は手動固定を `WishPinStrict` によらず判定。書く経路で `p.Wish` を縛る値として読んでいた所は `LockTo`、
+  希望の意味を読む所（`V6SanityPort` 全体・`ConstraintMus`・`ChangeSummary`・`C1DeltaPrefilter`・`V6PortAnalyzer` の pref 件数・S5）は `WishFixed`。
+  初期解・入口 Hf66/Hf67・`SoftPolishOnly`・`HandleOptimize` の入口（`WithManualPins`）と最終番兵（固定を崩した段を外す）、`PersonSwapKick`・`ElitePathRelink`、
+  S6 `RelaxTrial.ApplyMoves`（固定セルに触れる手順は null）、`FixApplyGate`、「希望で上書き」も Kotlin と同じ。構造編集の添字追従（`Ws1Ops`）・指紋（固定があるときだけ）も同じ。
+  WinUI: シートの［割当］で「固定する／固定を外す」、グリッドは左下の錠（希望の丸が右下のため位置は Android の右下と逆）。採点は不変。テストは Kotlin `ManualPinTest` の 1 対 1
+  （`MagiEngine.Tests/V6/ManualPinTest.cs`、状態の 1 行は `MagiApp.ViewModels.Tests/ManualPinStatusTest.cs`）。業務ルール・データ項目の写しを Android と揃えた。
 - 2026-09-26（希望固定セルの規則 A を同期、Kotlin 同日）: 利用者決定「最適化器は希望固定セルを『希望へ』か『今のまま』にしかしない」
   （希望どおりのセルは動かさない・未反映は希望へ戻してよい・希望でも今の値でもない値へは動かさない）。`PolishGate.WishPinStrict`（既定 true、UI 無し）、
   判定は `ScheduleUtil.WishMoveAllowed`（セル）／`KeepsWishPins`（盤面、規則 A へ緩めた＝未反映セルの持ち越しと希望への復帰を許す）。塞いだ経路は Kotlin と同じ:

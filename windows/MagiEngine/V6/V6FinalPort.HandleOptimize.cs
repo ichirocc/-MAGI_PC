@@ -115,7 +115,8 @@ public static partial class V6FinalPort
         var startMs = NowMs();
 
         var baseProblem = ScheduleUtil.CachedProblem(state);
-        var normInput = ScheduleUtil.NormalizeSchedule(sched, baseProblem);
+        // [#41] 手動固定セルは入口で固定の値に合わせる（画面の編集で常に揃っているので通常は同じ盤面）。
+        var normInput = baseProblem.WithManualPins(ScheduleUtil.NormalizeSchedule(sched, baseProblem));
         // [3.507.0] 番兵の基準は「個人上限 0 のセルを外した入力」。上限 0 のセルは最適化器が置かない（MayPlace）ので、
         //   生の入力（上限超過 45 のまま）と比べると、外した代償のぶん結果が「悪化」に見えて入力へ戻ってしまう。
         var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput);
@@ -568,13 +569,18 @@ public static partial class V6FinalPort
         // [最終番兵/多重防御・3.575.0で強化, Kotlin原本] 「入力」と最終結果の2点比較だと、途中の段の改善が
         //   後段の悪化で丸ごと失われる（経緯: docs/history 3.575.0）。主要な段を全部候補にし
         //   PickBestStage で最良を選ぶ。
-        var bestStage = PickBestStage(new[]
+        //   [#41] 手動固定を崩した段は候補から外す（入力は入口で固定に合わせてあるので必ず残る）。
+        var stages = new[]
         {
             new StageCandidate("入力", cappedInput, inputReport),
             new StageCandidate("探索", chained.Schedule, chained.Report),
             new StageCandidate("統合", integrated.Schedule, integrated.Report),
             new StageCandidate("後処理", refSched, refReport),
-        });
+        };
+        var pinSafeStages = stages.Where(c => baseProblem.HoldsManualPins(c.Sched)).ToList();
+        var pinLog = stages.Where(c => !pinSafeStages.Contains(c)).Select(c => new MirrorLog(level: "W", tag: "Sentinel",
+            message: $"{c.Label}の盤面が手動固定を崩していたため候補から外しました（多重防御）")).ToList();
+        var bestStage = PickBestStage(pinSafeStages);
         var finalSched = bestStage.Sched;
         var finalReport = bestStage.Report;
         // [レビュー修正/3.575.0, Kotlin原本] 全段が同値（無改善）のときも Aggregate は最初の候補（入力）を
@@ -771,6 +777,7 @@ public static partial class V6FinalPort
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
         logs.AddRange(cappedLog);
+        logs.AddRange(pinLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);
         logs.AddRange(extraLog);

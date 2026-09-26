@@ -47,6 +47,8 @@ public sealed record C42Row(string G1Kigou, string G2Kigou, string S1Kigou, stri
 
 /// <summary>[3.542.0] 希望(ws3)で固定した WishKigou の前日に PrevKigou を置けない。素の連続禁止は Cons3n。</summary>
 public sealed record C3wRow(string WishKigou, string PrevKigou);
+/// <summary>[#41] 手動固定 1 件＝職員 Staff の Day 日目を Shift に固定（最適化器は書き換えない。手の編集は可で、値はそれに追従する）。</summary>
+public sealed record ManualPin(int Staff, int Day, int Shift);
 
 /// <summary>
 /// Immutable snapshot of the full scheduling problem + current draft schedule.
@@ -92,7 +94,9 @@ public sealed record MagiState(
     IReadOnlyDictionary<string, JsonElement> Extras,
     /// <summary>[3.542.0] 希望の前日に禁止（HARD、c3n と同格）。既存 JSON にキーが無ければ null＝空として読む
     /// （既存の22箇所の <c>new MagiState(...)</c> 呼出元を変えずに済むよう既定値つきの末尾パラメータにする）。</summary>
-    IReadOnlyList<C3wRow>? Cons3w = null
+    IReadOnlyList<C3wRow>? Cons3w = null,
+    /// <summary>[#41] 手動固定（1 セル 1 件）。null＝空。採点・希望の意味は変えない。</summary>
+    IReadOnlyList<ManualPin>? ManualPins = null
 )
 {
     public int StaffCount => StaffList.Count;

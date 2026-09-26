@@ -279,7 +279,7 @@ public static partial class V6SanityPort
     private static int PlaceableFor(Problem p, int k, int j)
     {
         var n = 0;
-        for (var i = 0; i < p.S; i++) if (p.MayPlace(i, k) || (p.WishLocked(i, j) && p.Wish[i][j] == k)) n++;
+        for (var i = 0; i < p.S; i++) if (p.MayPlace(i, k) || (p.WishFixed(i, j) && p.Wish[i][j] == k)) n++;
         return n;
     }
 

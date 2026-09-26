@@ -24,7 +24,9 @@ public static class FixApplyGate
         {
             if (op.Staff < 0 || op.Staff >= work.Length || op.Day < 0 || op.Day >= work[op.Staff].Length || op.ToShift < 0 || op.ToShift >= p.K)
                 return new Outcome(null, before, null, "提案の範囲が今の勤務表と合いません");
-            if (p.WishLocked(op.Staff, op.Day) && p.Wish[op.Staff][op.Day] != op.ToShift)
+            if (p.Pinned(op.Staff, op.Day) && p.Pin[op.Staff][op.Day] != op.ToShift)
+                return new Outcome(null, before, null, "手動固定のセルを変える提案です");
+            if (p.WishLocked(op.Staff, op.Day) && p.LockTo(op.Staff, op.Day) != op.ToShift)
                 return new Outcome(null, before, null, "希望で固定されたセルを変える提案です");
             work[op.Staff][op.Day] = op.ToShift;
         }

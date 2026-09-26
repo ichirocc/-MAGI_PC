@@ -460,6 +460,7 @@ public static class Ws1Ops
             StaffList = staff,
             Wishes = SwapKeys(state.Wishes, 0, i, j),
             StaffRange = SwapKeys(state.StaffRange, 0, i, j),
+            ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Select(m => m with { Staff = SwapIdx(m.Staff, i, j) }).ToList(),
         };
         return new Ws1Result(ns.WithSchedule(arr), arr);
     }
@@ -489,6 +490,7 @@ public static class Ws1Ops
             GroupShift = SwapCols(state.GroupShift, k, k2),
             GroupShiftApt = SwapCols(state.GroupShiftApt, k, k2),
             Wishes = wishes,
+            ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Select(m => m with { Shift = SwapIdx(m.Shift, k, k2) }).ToList(),
             NeedDay1 = SwapKeys(state.NeedDay1, 0, k, k2),
             NeedDay2 = SwapKeys(state.NeedDay2, 0, k, k2),
             StaffRange = SwapKeys(state.StaffRange, 1, k, k2),
@@ -565,7 +567,7 @@ public static class Ws1Ops
             end = state.EndDate;
         }
 
-        var ns = state with { NeedDay1 = need1, NeedDay2 = need2, Wishes = wishes, EndDate = end };
+        var ns = state with { NeedDay1 = need1, NeedDay2 = need2, Wishes = wishes, EndDate = end, ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Day < t).ToList() };
         return new Ws1Result(ns.WithSchedule(newSched), newSched);
     }
 
@@ -644,6 +646,8 @@ public static class Ws1Ops
             GroupShift = gs.Select(row => (IReadOnlyList<int>)row).ToList(),
             GroupShiftApt = apt,
             Wishes = wishes,
+            // [#41] 消したシフトの手動固定は外す（マスは上の埋めシフトへ変わる）。
+            ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Shift != k).Select(m => m.Shift > k ? m with { Shift = m.Shift - 1 } : m).ToList(),
             // 消したシフトの表示色は残さない（同じ記号で作り直したシフトが黙って引き継がないように）。
             ShiftColors = state.ShiftColors.Where(kv => kv.Key != state.Shifts[k].Kigou).ToDictionary(kv => kv.Key, kv => kv.Value),
             NeedDay1 = ReindexKeys(state.NeedDay1, 0, k),
@@ -668,6 +672,7 @@ public static class Ws1Ops
             StaffList = staff,
             Wishes = ReindexKeys(state.Wishes, 0, i),
             StaffRange = ReindexKeys(state.StaffRange, 0, i),
+            ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Staff != i).Select(m => m.Staff > i ? m with { Staff = m.Staff - 1 } : m).ToList(),
         };
         return new Ws1Result(ns.WithSchedule(arr), arr);
     }

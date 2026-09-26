@@ -55,6 +55,8 @@ public sealed partial class ScheduleCellVm : ObservableObject
     [ObservableProperty] private Brush secondDotColor = new SolidColorBrush(Colors.Transparent);
     // 期間の制約の帯＝セルの下端の細い線（Kotlin FlatCell の band）。
     [ObservableProperty] private Visibility bandVisibility = Visibility.Collapsed;
+    /// <summary>[#41] 手動固定の錠（左下。希望の丸は右下＝位置と形で区別）。</summary>
+    [ObservableProperty] private Visibility pinVisibility = Visibility.Collapsed;
     [ObservableProperty] private string? tooltip;
 }
 

@@ -37,7 +37,7 @@ public static class GreedyMirrorScheduler
         int wishIn = 0, wishOut = 0;
         if (filled >= Math.Max(1, p.S * p.T / 2))
         {
-            schedule = ScheduleUtil.NormalizeSchedule(existing, p);
+            schedule = p.WithManualPins(ScheduleUtil.NormalizeSchedule(existing, p));
             baseMode = "既存表ベース";
         }
         else
@@ -53,6 +53,7 @@ public static class GreedyMirrorScheduler
             {
                 for (int j = 0; j < p.T; j++)
                 {
+                    if (p.Pinned(i, j)) { schedule[i][j] = p.Pin[i][j]; continue; }   // [#41] 手動固定が先
                     int w = p.Wish[i][j];
                     if (w < 0 || w >= p.K) continue;
                     // [3.391.0/実バグ回帰] 旧実装は担当できないシフトへの希望まで盤面へ置いていた。

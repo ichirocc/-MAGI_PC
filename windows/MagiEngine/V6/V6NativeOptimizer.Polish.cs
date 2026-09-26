@@ -42,7 +42,7 @@ public static partial class V6NativeOptimizer
         long seed = 0x50F11L,
         Func<bool>? shouldStop = null,
         CancellationToken cancellationToken = default) =>
-        Task.Run(() => Hf80PostPolish(state, schedule, Math.Max(1, seconds), seed, shouldStop, cancellationToken).Schedule);
+        Task.Run(() => Hf80PostPolish(state, ScheduleUtil.CachedProblem(state).WithManualPins(schedule), Math.Max(1, seconds), seed, shouldStop, cancellationToken).Schedule);
 
     /// <summary>
     /// [差分化移植, Kotlin原本] 最終研磨フェーズ。DeltaEvaluator を生スコア源にして直接評価で回す

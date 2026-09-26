@@ -113,6 +113,10 @@ public sealed class Problem
     /// <summary>wish[i][j] = desired shift index, or -1.</summary>
     public int[][] Wish { get; }
 
+    /// <summary>[#41] Pin[i][j] = 手動固定の値, or -1。最適化器はこのセルを書き換えない（WishLocked/LockTo が読む）。採点は見ない。</summary>
+    public int[][] Pin { get; }
+    public bool HasPins { get; }
+
     /// <summary>need1[k][j] / need2[k][j] = required count, or -1 (= no requirement).</summary>
     public int[][] Need1 { get; }
     public int[][] Need2 { get; }
@@ -137,7 +141,7 @@ public sealed class Problem
     public IReadOnlyList<C3> Cons3m { get; }
     public IReadOnlyList<C3> Cons3mn { get; }
     public IReadOnlyList<C3w> Cons3w { get; }
-    /// <summary>[3.542.0] C3wBan[i][j][k] = 翌日 j+1 が希望固定（WishLocked）の X で、Cons3w に (X→k) がある＝
+    /// <summary>[3.542.0] C3wBan[i][j][k] = 翌日 j+1 が希望固定（WishFixed）の X で、Cons3w に (X→k) がある＝
     /// セル (i,j) に k を置くと違反。希望は探索中に動かないので盤面非依存の静的表。Cons3w が空なら null（評価・Δの分岐を無料にする）。</summary>
     public bool[][][]? C3wBan { get; }
 
@@ -236,6 +240,12 @@ public sealed class Problem
             if (jOpt is not int j2) continue;
             if (i2 >= 0 && i2 < S && j2 >= 0 && j2 < T) Wish[i2][j2] = v;
         }
+        Pin = new int[S][];
+        for (int i = 0; i < S; i++) { Pin[i] = new int[T]; Array.Fill(Pin[i], -1); }
+        var pinCount = 0;
+        foreach (var m in state.ManualPins ?? Array.Empty<ManualPin>())
+            if (m.Staff >= 0 && m.Staff < S && m.Day >= 0 && m.Day < T && m.Shift >= 0 && m.Shift < K) { Pin[m.Staff][m.Day] = m.Shift; pinCount++; }
+        HasPins = pinCount > 0;
 
         Need1 = new int[K][];
         Need2 = new int[K][];
@@ -652,8 +662,7 @@ public sealed class Problem
             for (int j = 0; j < T; j++)
             {
                 int k = (i < State.Schedule.Count && j < State.Schedule[i].Count) ? State.Schedule[i][j] : -1;
-                int w = Wish[i][j];
-                if (w >= 0 && this.CanDo(i, w)) k = w;
+                if (this.WishLocked(i, j)) k = this.LockTo(i, j);
                 // [3.410.0/P-01, 3.419.0 移植元] 範囲外セルの寄せ先(restIdx)をこの職員が担当できるか
                 // 確認せずに直接使うと、担当不可の群で意図しない groupViol(HARD) を作る。共通規則
                 // FillShiftIndex へ委譲する（Ws1Ops 相当の3経路と同じ判断）。

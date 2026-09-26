@@ -152,6 +152,7 @@ public sealed partial class MagiViewModel
             if (i < 0 || i >= p.S || j < 0 || j >= p.T || k < 0 || k >= p.K) continue;
             var can = p.CanDo(i, k);
             if (!can && !includeOutOfScope) continue;
+            if (p.Pinned(i, j)) continue;   // [#41] 手動固定は希望より強い（一括の反映でも書かない）
             if (i < sched.Length && j < sched[i].Length && sched[i][j] != k)
             {
                 sched[i][j] = k;
@@ -299,7 +300,7 @@ public sealed partial class MagiViewModel
         PushUndo();
         sched[i][j] = shift;
         _currentSchedule = sched;
-        _state = st.WithSchedule(sched);
+        _state = st.WithSchedule(sched).WithPinsFollowing(new[] { (i, j) }, shift);
         AutoSave();
         var staffName = i >= 0 && i < st.StaffList.Count ? st.StaffList[i].Name : i.ToString();
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
@@ -310,6 +311,28 @@ public sealed partial class MagiViewModel
         Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
         RefreshCheck();
+    }
+
+    /// <summary>[#41] セル (i,j) の手動固定を付ける（いまの値で）／外す。採点は変わらないので検査は回さない。元に戻すで付け外しと値が一緒に戻る。</summary>
+    public void TogglePin(int i, int j)
+    {
+        var st = _state;
+        if (st is null) return;
+        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
+        var sched = _currentSchedule;
+        if (sched is null) return;
+        if (i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return;
+        var cur = sched[i][j];
+        if (cur < 0 || cur >= st.ShiftCount) return;
+        var on = st.PinAt(i, j) is null;
+        PushUndo();
+        var ns = st.WithSchedule(sched).TogglePin(i, j, cur);
+        _state = ns;
+        AutoSave();
+        Ui.MessageIsError = false;
+        ApplyWishDisplay(ns);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {j + 1}日を" + (on ? "固定しました（最適化で変わりません）" : "固定から外しました"), _undoStack.Last?.Value.Serial ?? 0L);
+        LogOp("I", $"{(on ? "手動固定" : "手動固定を外す")}: {OpNm(i)} {j + 1}日 {OpSy(cur)}");
     }
 
     /// <summary>[プロ一括編集] 複数セル(i,j)を1シフトへ一括設定。Undoは1回・再チェックも1回（keep-best互換）。</summary>
@@ -333,7 +356,7 @@ public sealed partial class MagiViewModel
         }
         if (changed == 0) return;
         _currentSchedule = sched;
-        _state = st.WithSchedule(sched);
+        _state = st.WithSchedule(sched).WithPinsFollowing(cells.Select(c => (c.I, c.J)), shift);
         AutoSave();
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
         Ui.MessageIsError = false;
@@ -365,7 +388,7 @@ public sealed partial class MagiViewModel
             if (!p.MayPlace(i, shiftIndex)) continue;
             if (sched[i][dayIndex] == shiftIndex) continue;   // すでにそのシフト
             // [監査A5] 実現可能な希望のみ固定扱い（不可能希望のセルはエンジン同様に可動）。
-            if (p.WishLocked(i, dayIndex) && p.Wish[i][dayIndex] != shiftIndex) continue;
+            if (p.WishLocked(i, dayIndex) && p.LockTo(i, dayIndex) != shiftIndex) continue;
             // [3.401.0] ここまでは「担当できる・希望で固定されていない」だけの判定で、押しても必須違反が
             //   減らない候補が混ざっていた。CoverageDiagnosis が「空き番」と数えるのと同じ2条件を足して、
             //   実際に動かせる人だけを出す。

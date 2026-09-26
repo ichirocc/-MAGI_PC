@@ -69,7 +69,7 @@ public static class C1DeltaPrefilter
         if (!p.CanDo(staff, newShift)) delta++;
         if (old is >= 0 && old < p.K && !p.CanDo(staff, old)) delta--;
         // pref: 実現可能希望の未充足（checker と同一）。既に違反中なら別シフトへ変えても不変（C1-02）。
-        if (p.WishLocked(staff, day))
+        if (p.WishFixed(staff, day))
         {
             int w = p.Wish[staff][day];
             delta += (newShift != w ? 1 : 0) - (old != w ? 1 : 0);

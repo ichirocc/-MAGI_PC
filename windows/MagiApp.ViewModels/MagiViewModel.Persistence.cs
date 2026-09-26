@@ -202,10 +202,11 @@ public sealed partial class MagiViewModel
 
     // ===== 元に戻す/やり直す（公開の入口） =====
 
-    /// <summary>希望の表示（希望・試算できる希望・希望どうしの衝突）を設定から作り直す。報告の反映と元に戻す/やり直すで共有する。</summary>
+    /// <summary>希望の表示（希望・試算できる希望・希望どうしの衝突・手動固定）を設定から作り直す。報告の反映と元に戻す/やり直すで共有する。</summary>
     internal void ApplyWishDisplay(MagiState st)
     {
         Ui.Wishes = st.Wishes;
+        Ui.ManualPins = st.PinsOf().Select(m => $"{m.Staff},{m.Day}").ToHashSet();
         Ui.LockedWishKeys = WishTrial.LockedWishKeys(st);
         Ui.WishSelfConflicts = V6SanityPort.WishSelfConflicts(st);
     }

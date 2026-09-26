@@ -145,6 +145,10 @@
                                                 <Rectangle Height="2" VerticalAlignment="Bottom" Opacity="0.45"
                                                            Fill="{ThemeResource MagiOnSurfaceVariantBrush}"
                                                            Visibility="{x:Bind BandVisibility, Mode=OneWay}" IsHitTestVisible="False" />
+                                                <FontIcon Glyph="&#xE72E;" FontSize="9"
+                                                          Visibility="{x:Bind PinVisibility, Mode=OneWay}"
+                                                          HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                                          Margin="1,0,0,1" IsHitTestVisible="False" />
                                                 <!-- [押下フィードバック] コードビハインドが Children の末尾要素として直接
                                                      参照する（DataTemplate内のx:Nameはコードビハインドから素朴に
                                                      引けないため、インデックス参照の方が確実）。 -->

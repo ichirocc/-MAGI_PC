@@ -51,6 +51,7 @@ public static class SmartInitialScheduler
             for (int j = 0; j < p.T; j++)
             {
                 if (schedule[i][j] >= 0) continue;
+                if (p.Pinned(i, j)) { schedule[i][j] = p.Pin[i][j]; continue; }   // [#41] 手動固定が先（希望より強い）。以降の段は空きセルだけ埋める
                 int w = p.Wish[i][j];
                 if (w < 0 || w >= p.K) continue;
                 if (p.CanDo(i, w)) { schedule[i][j] = w; wishIn++; } else wishOut++;

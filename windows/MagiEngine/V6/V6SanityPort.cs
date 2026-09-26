@@ -104,7 +104,7 @@ public static partial class V6SanityPort
                 for (var j = 0; j <= p.T - d; j++)
                 {
                     var all = true;
-                    for (var l = 0; l < d && all; l++) all = p.WishLocked(i, j + l) && p.Wish[i][j + l] == seq[l];
+                    for (var l = 0; l < d && all; l++) all = p.WishFixed(i, j + l) && p.Wish[i][j + l] == seq[l];
                     if (all && seen.Add((i, j, d)))
                         mine.Add(new WishSelfConflict(i, "c3n", Enumerable.Range(j, d).ToList(), seq.ToList()));
                 }
@@ -113,7 +113,7 @@ public static partial class V6SanityPort
             {
                 for (var j = 0; j < p.T - 1; j++)
                 {
-                    if (p.WishLocked(i, j) && p.C3wBanned(i, j, p.Wish[i][j]))
+                    if (p.WishFixed(i, j) && p.C3wBanned(i, j, p.Wish[i][j]))
                         mine.Add(new WishSelfConflict(i, "c3w", new List<int> { j, j + 1 }, new List<int> { p.Wish[i][j], p.Wish[i][j + 1] }));
                 }
             }

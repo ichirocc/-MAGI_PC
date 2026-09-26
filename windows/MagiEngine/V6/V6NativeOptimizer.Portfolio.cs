@@ -195,7 +195,7 @@ public static partial class V6NativeOptimizer
             var b = candidates.OrderByDescending(x => burden[x]).First();
             for (var j = 0; j < p.T; j++)
             {
-                if (strict && (p.WishLocked(a, j) || p.WishLocked(b, j))) continue;
+                if ((strict && (p.WishLocked(a, j) || p.WishLocked(b, j))) || p.Pinned(a, j) || p.Pinned(b, j)) continue;
                 (outSched[a][j], outSched[b][j]) = (outSched[b][j], outSched[a][j]);
             }
             swapped[a] = true;
@@ -271,7 +271,7 @@ public static partial class V6NativeOptimizer
             {
                 if (shouldStop()) break;
                 // [希望固定の徹底] 希望固定セルへ希望以外の値は写さない（希望どうしの衝突では崩した方が keep-best に勝つ）。
-                if (strict && p.WishLocked(i, j) && alt[i][j] != p.Wish[i][j]) continue;
+                if ((strict || p.Pinned(i, j)) && p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
                 cur[i][j] = alt[i][j]; // forced march toward alt
                 curRep = UnifiedViolationChecker.Check(state, cur);
                 if (UnifiedViolationChecker.BetterReport(curRep, bestRep)) { bestSched = cur.Copy2D(); bestRep = curRep; }

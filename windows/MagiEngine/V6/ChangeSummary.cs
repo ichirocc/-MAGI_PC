@@ -28,7 +28,7 @@ public sealed record ChangeSummary(int ChangedStaff, int ChangedCells, int WishK
         }
         int wishTotal = 0, wishKept = 0;
         for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++)
-            if (p.WishLocked(i, j)) { wishTotal++; if (i < after.Length && j < after[i].Length && after[i][j] == p.Wish[i][j]) wishKept++; }
+            if (p.WishFixed(i, j)) { wishTotal++; if (i < after.Length && j < after[i].Length && after[i][j] == p.Wish[i][j]) wishKept++; }
         var rangeOk = report.Breakdown.GetValueOrDefault("low") == 0 && report.Breakdown.GetValueOrDefault("high") == 0;
         var deltas = DeltasOf(beforeReport ?? UnifiedViolationChecker.Check(state, before), report);
         return new ChangeSummary(staff, cells, wishKept, wishTotal, rangeOk, deltas);
