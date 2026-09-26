@@ -262,6 +262,7 @@ public class WishPinStrictTest
 
     // あとから足した希望（盤面は変えない＝setWish と同じ）: 規則 A は反映を妨げない（旧案「値によらず凍結」の退行の再発防止）。
     // 入口 hf67 → 決定的な後処理チェーンを同じ種で ON/OFF 走らせ、足した希望の反映が一致する（壁時計の探索は揺れるので測定側で見る）。
+    // 共同 LNS の回数は既定だと golden でヒープ 1GB 超（Kotlin CI のテスト JVM は 512MB）なので絞る（Kotlin と同じ）。
     [Fact]
     public void AddedWishIsReflectedWithTheFlagOnExactlyWhenItIsWithItOff()
     {
@@ -287,7 +288,8 @@ public class WishPinStrictTest
             PolishGate.WishPinStrict = strict;
             var entry = V6NativeOptimizer.Hf67HardRepair(st, board.Copy2D(), new JavaRandom(7)).Schedule;
             return V6HotfixPasses.RunPostOptimization(st, entry, "t", seed: 1L, deadlineMs: EngineClock.NowMs() + 3_600_000L,
-                parameters: new V6HotfixPasses.PostOptimizationParams(Deterministic: true)).Schedule[i][j];
+                parameters: new V6HotfixPasses.PostOptimizationParams(Deterministic: true,
+                    C1LnsMaxEvaluations: 5_000, PersonalLnsMaxEvaluations: 5_000)).Schedule[i][j];
         }
         try
         {
