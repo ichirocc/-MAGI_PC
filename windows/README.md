@@ -339,6 +339,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   入口 `Hf66DataHardening`／`ClearCappedCells`（上限 0 で外すセルが未反映の希望固定なら埋めシフトでなく希望へ、`Refill`）。hf67・初期解・入口の希望修復は止めない
   （先に検討した「値によらず凍結」はあとから足した希望が載らなくなるので Kotlin でも不採用）。C++ は不変。テストは Kotlin `WishPinStrictTest` の追加 5 件を 1 対 1 で写した
   （あとから足した希望は入口＋決定的後処理の ON/OFF 一致）。業務ルールの写し `docs/business-logic.md` を Android と揃えた。
+  Kotlin 側の測定（240 秒×入力 5 件×種 1〜3×OFF/ON）で合格＝既定 ON のまま（開始時に守られていた希望を崩した実行 0・同じ種の HARD 全組一致・
+  weighted の差は A/A の揺れの内・あとから足した希望の反映件数は減らない。数値は Android `docs/history/3.4xx.md`「希望固定セルの規則 A」）。
 - 2026-09-26（S6 を同期、Kotlin 058ee56 同日）: 実データ fixture `oct2026_grid_state.json` を `MagiEngine.Tests/Fixtures` にも複製（Android と byte 一致）。
   C# の `RelaxTrial.Result` は IReadOnlyList を持つので値の等価を明示（R4 の決定性の比較用）＝出力は Kotlin と同じ（組 {職員11 Cｵ, 職員10 Pｼ}・5→4）。
 - 2026-09-25（テスト移植の欠落補填）: Kotlin `SaWishLockTest`（3.334.0）を `MagiEngine.Tests/V6/SaWishLockTest.cs` へ 1 対 1 で写した。`SearchNeverMovesACellThatHoldsAFeasibleWish` は C# でもそのまま通過（パリティ不一致なし、エンジン変更なし）。`StrongPerturbNeverMovesAFeasibleWish` は対象の `strongPerturbFlat` がネイティブ経路専用で C# に移植していない（`SaOptimizer.cs` の移植判断）ため、名前だけ残して Skip とした。
