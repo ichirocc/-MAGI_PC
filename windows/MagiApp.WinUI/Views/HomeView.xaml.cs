@@ -169,6 +169,14 @@ public sealed partial class HomeView : UserControl
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
+            else if (ui.FixSearched && !hardFix && _vm.RelaxTrialFor() is not null)
+            {
+                // [S6 §2.1] 必須違反の一部が利用者自身の設定（上限 0）で塞がれているときだけ、希望の段より先に出す。
+                headline = remain + "設定が壁になっています。";
+                bigLabel = "緩める候補を見る"; bigEnabled = true;
+                _bigAction = () => _ = ShowRelaxTrialAsync();
+                if (!cands.IsEmpty) { helperLabel = "ぶつかっている希望を見る"; _helperAction = () => _ = ShowWishConflictsAsync(); }
+            }
             else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
             {
                 headline = $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
@@ -204,10 +212,12 @@ public sealed partial class HomeView : UserControl
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
-        var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine();
+        var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
+        RelaxSearchRow.Visibility = !ui.Running && ui.RelaxSearching ? Visibility.Visible : Visibility.Collapsed;
+        RelaxSearchText.Foreground = fgBrush;
 
         var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown);
         var showResolve = !ui.Running;
@@ -422,6 +432,53 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
+
+    private void OnStopRelaxClick(object sender, RoutedEventArgs e) => _vm.CancelRelaxTrial();
+
+    /// <summary>[S6] 設定を緩める候補（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5）。盤面は見せず手順を言葉で出し、押したときだけ当てる。</summary>
+    private async Task ShowRelaxTrialAsync()
+    {
+        var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "設定を緩める候補",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
+            CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
+        };
+        TextBlock Line(string text, double size = 14, bool dim = false, bool bold = false) => new()
+        {
+            Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Opacity = dim ? 0.8 : 1.0,
+            FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+        };
+        var token = _vm.RelaxTrialFor();
+        if (token is null) panel.Children.Add(Line("勤務表か設定が変わりました。もう一度試算してください。"));
+        else
+        {
+            var t = NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui);
+            panel.Children.Add(Line(t.Title, 16, bold: true));
+            if (t.PrerequisiteLead is { } lead)
+            {
+                panel.Children.Add(Line(lead, dim: true));
+                foreach (var r in t.PrerequisiteRows) panel.Children.Add(Line("・" + r));
+            }
+            panel.Children.Add(Line(t.Lead, 16));
+            panel.Children.Add(Line("この組で解けます", dim: true));
+            foreach (var r in t.Rows) panel.Children.Add(Line("・" + r));
+            panel.Children.Add(Line("手順", bold: true));
+            foreach (var m in t.MoveLines) panel.Children.Add(Line(m));
+            if (t.OtherMoves > 0) panel.Children.Add(Line($"ほか {t.OtherMoves}セル", dim: true));
+            if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
+            var confirm = new Button
+            {
+                Content = "この組で緩めて、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
+            };
+            confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); };
+            panel.Children.Add(confirm);
+            panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
+        }
+        await dialog.ShowAsync();
+    }
 
     /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人手不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
     /// 試算の結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>

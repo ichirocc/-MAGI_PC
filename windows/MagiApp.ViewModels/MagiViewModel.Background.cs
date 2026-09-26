@@ -87,6 +87,7 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("バックグラウンド最適化の開始")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         CancelWishTrial();   // [S5 §8] 背景実行は BeginBoardJob を通らない
+        CancelRelaxTrial();
         CancelFixSearch();
         PushUndo();
         OptimizationRepository.Clear();

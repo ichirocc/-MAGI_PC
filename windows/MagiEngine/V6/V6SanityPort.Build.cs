@@ -101,7 +101,30 @@ public static partial class V6SanityPort
             ShiftCountDiagnostics: BuildShiftCountDiagnostic(state, p, s),
             ImpossibleWishes: impossible,
             DuplicateSeqConstraints: dup,
-            Guidance: BuildGuidance(state, p));
+            Guidance: BuildGuidance(state, p).Concat(HandPlacedUpperZeroIssue(state, p, s) is { } hz ? new[] { hz } : Array.Empty<SettingIssue>()).ToList());
+    }
+
+    /// <summary>
+    /// [S6 §14 Q5] 個人の上限 0 のシフトが手で置いてある（希望で固定したセルを除く）。本実行の入口の clear が外すので、
+    /// もう一度つくると消える。盤面に依存するため <see cref="BuildGuidance"/>（設定だけの診断）には入れない。
+    /// </summary>
+    public static SettingIssue? HandPlacedUpperZeroIssue(MagiState state, Problem p, int[][] s)
+    {
+        var cells = new List<string>();
+        for (var i = 0; i < Math.Min(p.S, s.Length); i++)
+            for (var j = 0; j < Math.Min(p.T, s[i].Length); j++)
+            {
+                var k = s[i][j];
+                if (k < 0 || k >= p.K || k == p.RestIdx || !p.CanDo(i, k) || p.RangeHi[i][k] != 0) continue;
+                if (p.WishLocked(i, j) && p.Wish[i][j] == k) continue;
+                var name = i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+                var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : $"{k}";
+                cells.Add($"{name} {j + 1}日「{sym}」");
+            }
+        if (cells.Count == 0) return null;
+        return new SettingIssue(IssueKind.Range, $"上限 0 の勤務（{string.Join("・", cells.Take(3))}{(cells.Count > 3 ? " ほか" : "")}）",
+            $"手で置いた勤務 {cells.Count}件 が上限 0 と食い違っています。もう一度つくると外されます",
+            "残すなら、その人のそのシフトの個人上限を 1 以上に上げてください");
     }
 
     private static string BuildLoadDataBitSummary(MagiState state, Problem p, int[][] schedule)

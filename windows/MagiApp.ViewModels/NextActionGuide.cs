@@ -21,6 +21,11 @@ public sealed record WishTrialCandidates(IReadOnlyList<WishTrialRow> Direct, IRe
     public bool IsEmpty => Direct.Count == 0 && Shortfall.All(g => g.Rows.Count == 0);
 }
 
+/// <summary>[S6] 試算ダイアログの文（<c>docs/s6_relax_trial.md</c> §5）。Kotlin <c>RelaxTrialText</c>。</summary>
+public sealed record RelaxTrialText(
+    string Title, string? PrerequisiteLead, IReadOnlyList<string> PrerequisiteRows, string Lead,
+    IReadOnlyList<string> Rows, IReadOnlyList<string> MoveLines, int OtherMoves, string? KeepNote);
+
 public static class NextActionGuide
 {
     public const string WishTrialNotLocked = "担当できない勤務の希望なので、取り消しても勤務表は変わりません。";
@@ -130,4 +135,47 @@ public static class NextActionGuide
     /// <summary>[S5] Rk &lt; H0 の盤面でダイアログの先頭に出す文（§5）。対照だけで減らないなら null。</summary>
     public static string? WishTrialKeepOnlyText(WishTrial.Control control) =>
         control.Rk < control.H0 ? $"希望を残したまま、もう一度つくるだけで必須違反が{control.H0 - control.Rk}件 減る見込みです。" : null;
+
+    /// <summary>
+    /// [S6] 結果を文にする（Kotlin <c>relaxTrialText</c>）。上限の行は 0→1。当てた後の回数が 2 回以上になる行は
+    /// 要調整（上限超過）に数えることを添える。組は探索が見つけた十分条件＝「この組で」と言い、最小とは言わない。
+    /// </summary>
+    public static RelaxTrialText RelaxTrialTextOf(RelaxTrial.Result r, UiState ui)
+    {
+        string Name(int i) => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
+        string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "?";
+        var board = ui.Schedule.Select(row => row.ToArray()).ToArray();
+        var after = RelaxTrial.ApplyMoves(board, r.Moves) ?? board;
+        IReadOnlyList<string> Fams(int i, int j) => ui.ViolationCellFamilies.TryGetValue($"{i},{j}", out var f) ? f : Array.Empty<string>();
+        var fams = Fams(r.Staff, r.Day);
+        var what = fams.Contains("vio-c3n") ? "禁止の並び" : fams.Contains("vio-c3w") ? "希望の前日に禁止"
+            : fams.Contains("vio-pref") ? "希望の勤務になっていません" : "担当できない勤務";
+        var hardDays = Enumerable.Range(r.WindowFirst, r.WindowLast - r.WindowFirst + 1)
+            .Where(j => Fams(r.Staff, j).Any(v => MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(v)))).ToList();
+        var span = hardDays.Count > 1 ? $"{hardDays[0] + 1}日〜{hardDays[^1] + 1}日" : $"{r.Day + 1}日";
+        string Row(RelaxTrial.Relax x)
+        {
+            var n = x.Staff < after.Length ? after[x.Staff].Count(v => v == x.Shift) : 0;
+            var note = n > x.NewHi ? $"（この月は {n}回になります。要調整に数えます）" : "";
+            return $"{Name(x.Staff)} {Sym(x.Shift)} 上限 0→{x.NewHi}{note}";
+        }
+        var preRows = r.Prerequisite.Select(x =>
+        {
+            var days = x.Staff < board.Length ? Enumerable.Range(0, board[x.Staff].Length).Where(j => board[x.Staff][j] == x.Shift) : Enumerable.Empty<int>();
+            return $"{Row(x)}（{string.Join("・", days.Select(d => $"{d + 1}日"))} に置いてあります）";
+        }).ToList();
+        var inWin = r.Moves.Where(m => m.Day >= r.WindowFirst && m.Day <= r.WindowLast).ToList();
+        var moveLines = inWin.GroupBy(m => m.Day).OrderBy(g => g.Key)
+            .Select(g => $"{g.Key + 1}日　" + string.Join("、", g.Select(m => $"{Name(m.Staff)} {Sym(m.From)}→{Sym(m.To)}"))).ToList();
+        var lead = r.Prerequisite.Count == 0 ? $"この組で緩めると、必須違反が {r.Att}件 減る見込みです。"
+            : $"手で置いた勤務に合わせて上限を上げ、この組も緩めると、必須違反が {r.Att}件 減る見込みです。";
+        var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、手で置いた勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
+        return new RelaxTrialText($"{Name(r.Staff)} {span}　{what}",
+            preRows.Count == 0 ? null : "先に、手で置いた勤務に合わせて上限を上げます（上げないと、もう一度つくると外されます）",
+            preRows, lead, r.Relaxes.Select(Row).ToList(), moveLines, r.Moves.Count - inWin.Count, keep);
+    }
+
+    /// <summary>[S6 §9] 確定の後、次にやることカードに出す 1 行。</summary>
+    public static string RelaxDoneLine(int h0, int after) =>
+        $"設定を緩めて手順を当てました: 必須違反 {h0} → {after}。元に戻すで設定と勤務表をまとめて戻せます。";
 }

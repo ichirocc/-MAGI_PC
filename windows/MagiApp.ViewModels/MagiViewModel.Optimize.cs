@@ -529,6 +529,7 @@ public sealed partial class MagiViewModel
     public void Stop()
     {
         CancelWishTrial();
+        CancelRelaxTrial();
         _job?.Cancel();
         _checkCts?.Cancel();
         _fixCts?.Cancel();

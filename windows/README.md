@@ -58,6 +58,9 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      すべて対応物あり（`runInBackground`/`applyBgResult` も含め完了。詳細はフェーズ10）。
    - S5「この希望を取り消したら」（2026-09-24、Kotlin cc17c27 同期）: エンジン `WishTrial.cs`、VM `MagiViewModel.WishTrial.cs`
      （試算・鮮度照合・確定 `CancelWishAndRebuild`＝Undo 1 段）、ホームの入口拡大と `ShowWishConflictsAsync` の試算行。仕様は Android の `docs/s5_wish_trial.md`。
+   - S6「設定を緩めたら」（2026-09-26、Kotlin claude/merge-wub4fq 058ee56 同日）: エンジン `RelaxTrial.cs`（R1〜R13）・`V6SanityPort.HandPlacedUpperZeroIssue`、
+     VM `MagiViewModel.RelaxTrial.cs`（1 手探索が候補なしの後に背景で試算・`CancelRelaxTrial`・確定 `RelaxAndApply`＝上限 0→1＋手順を Undo 1 段、
+     古い試算・再現しない手順は断る）、`NextActionGuide.RelaxTrialTextOf`、ホームの段（希望の段より先）と `ShowRelaxTrialAsync`。仕様は Android の `docs/s6_relax_trial.md`。
    - UI層＝5タブすべてに実体あり。勤務表タブはセル編集(タップ→担当可能シフト選択)・
      元に戻す/やり直す・違反ハイライト/希望バッジ・**シフト集計(職員別/日別、Kotlin原本TallyCardの
      最小移植=`RenderStaffTally`/`RenderDayTally`。生カウントは`Schedule`から都度計算・セル枠は
@@ -328,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-26（S6 を同期、Kotlin 058ee56 同日）: 実データ fixture `oct2026_grid_state.json` を `MagiEngine.Tests/Fixtures` にも複製（Android と byte 一致）。
+  C# の `RelaxTrial.Result` は IReadOnlyList を持つので値の等価を明示（R4 の決定性の比較用）＝出力は Kotlin と同じ（組 {職員11 Cｵ, 職員10 Pｼ}・5→4）。
 - 2026-09-25（テスト移植の欠落補填）: Kotlin `SaWishLockTest`（3.334.0）を `MagiEngine.Tests/V6/SaWishLockTest.cs` へ 1 対 1 で写した。`SearchNeverMovesACellThatHoldsAFeasibleWish` は C# でもそのまま通過（パリティ不一致なし、エンジン変更なし）。`StrongPerturbNeverMovesAFeasibleWish` は対象の `strongPerturbFlat` がネイティブ経路専用で C# に移植していない（`SaOptimizer.cs` の移植判断）ため、名前だけ残して Skip とした。
 - 2026-09-26（期間の制約（c1）の表示の再設計の C# 移植、Kotlin `claude/merge-wub4fq` 584333f 同日）: `C1Display.Shortages`（新規 `C1Display.cs`）が
   不足区間（From〜To・窓数・印の日・変えられる日の無い窓）を出し、印は不足窓の中の「いまそのシフトでなく、そのシフトに変えられる日」（`Changeable`＝希望固定なら希望どおり、

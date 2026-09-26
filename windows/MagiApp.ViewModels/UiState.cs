@@ -172,6 +172,10 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private int wishTrialRev;
     /// <summary>[S5] 試算中の行 "i,j"（null＝なし）。</summary>
     [ObservableProperty] private string? wishTrialBusy;
+    /// <summary>[S6] 試算が終わるたびに進む（画面は <c>RelaxTrialFor</c> で読み直す）。</summary>
+    [ObservableProperty] private int relaxRev;
+    /// <summary>[S6] 背景で設定の壁を探している。</summary>
+    [ObservableProperty] private bool relaxSearching;
     /// <summary>[S5] 直近の「希望を取り消して、もう一度つくる」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
     [ObservableProperty] private WishCancelOutcome? wishCancelOutcome;
 

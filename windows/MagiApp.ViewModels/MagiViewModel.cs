@@ -170,6 +170,7 @@ public sealed partial class MagiViewModel
     internal int BeginBoardJob(string label, bool engineRun = false)
     {
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
+        CancelRelaxTrial();  // [S6 §8] 同じ
         CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
         _boardJobLabel = label;
         if (engineRun)
