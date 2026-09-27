@@ -129,11 +129,15 @@ public class WishTrialCandidatesTest
         Assert.Equal("取り消すと必須違反が確実に1件 減り、もう一度つくるとさらに2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 5, 2)));
         Assert.Equal("取り消すと必須違反が確実に1件 減ります。", NextActionGuide.WishTrialText(R(5, 4, 5, 4)));
         Assert.Equal("取り消してもう一度つくると、必須違反が2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 5, 3)));
-        Assert.Equal("この試算では、減る見込みは見つかりませんでした（もう一度つくると減ることはあります）。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
+        Assert.Equal("この希望を取り消しても、必須は減らない見込みです（必須 5件 → 5件）。これは全探索で解けない証明ではありません。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
         Assert.Equal("もう一度つくるだけの場合より、さらに1件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 3, 2)));
         Assert.Equal("取り消さなくても、もう一度つくるだけで同じだけ減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 3, 3)));
         Assert.Equal("試算できませんでした（未割当のセルがあります）。", NextActionGuide.WishTrialText(new WishTrial.Unavailable("未割当のセルがあります")));
         Assert.Null(NextActionGuide.WishTrialText(WishTrial.Stopped));
+        Assert.True(NextActionGuide.WishTrialNoGain(R(5, 5, 5, 5)));
+        Assert.Equal("A4はこの禁止の並びに関係しています。", NextActionGuide.WishTabInvolvedLine("A4", new[] { "c3n", "covO" }));
+        Assert.Null(NextActionGuide.WishTabInvolvedLine("A4", new[] { "covO" }));
+        Assert.True(!NextActionGuide.WishTrialNoGain(R(5, 4, 3, 3)) && !NextActionGuide.WishTrialNoGain(R(5, 5, 5, 3)) && !NextActionGuide.WishTrialNoGain(WishTrial.Stopped));
         Assert.Equal("希望を残したまま、もう一度つくるだけで必須違反が2件 減る見込みです。", NextActionGuide.WishTrialKeepOnlyText(new WishTrial.Control(5, 3)));
         Assert.Null(NextActionGuide.WishTrialKeepOnlyText(new WishTrial.Control(5, 5)));
     }

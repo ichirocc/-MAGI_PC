@@ -11,7 +11,7 @@ public sealed record InvolvedWish(int Staff, int Day, string Name, string Reason
 /// 族名の日本語は UI 層が持つので <c>labelOf</c> で受け取る（<see cref="AnalysisTriage"/> と同じ形）。
 /// </summary>
 /// <summary>[S5] 試算の候補 1 行。Locked=false（担当できない勤務の希望）は試算ボタンを出さず <see cref="NextActionGuide.WishTrialNotLocked"/> を出す。</summary>
-public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked);
+public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false);
 
 /// <summary>[S5b] 人手不足の枠 1 つ（見出し「12日 日勤 1人不足」）と、その日に別の勤務で希望固定されている人の行（職員順）。</summary>
 public sealed record ShortfallWishGroup(int Day, int Shift, string Header, IReadOnlyList<WishTrialRow> Rows);
@@ -35,6 +35,16 @@ public sealed record RelaxCardText(string Headline, string Body, string? Note);
 public static class NextActionGuide
 {
     public const string WishTrialNotLocked = "担当できない勤務の希望なので、取り消しても勤務表は変わりません。";
+    /// <summary>[#41] 手動固定のセルは試算の候補にしない（LockedWishKeys が外す）＝担当外と混ぜず、固定が理由だと言う。</summary>
+    public const string WishTrialPinned = "このセルは手動固定のため、自動では変更しません。固定を外すと試算できます。";
+    /// <summary>希望タブの注記（希望が必須違反の並びに掛かっているとき）。希望を変えても盤面のセルはそのまま＝黙って崩さない。</summary>
+    public const string WishTabKeepNote = "希望を変えても勤務表のセルはそのままです（未反映になります）。もう一度つくると希望に合わせます。";
+    public static string? WishTabInvolvedLine(string wishSymbol, IReadOnlyList<string> families) =>
+        families.Contains("c3n") ? $"{wishSymbol}はこの禁止の並びに関係しています。"
+        : families.Contains("c3w") ? $"{wishSymbol}はこの希望の前日の禁止に関係しています。"
+        : null;
+    public const string WishKeepFooter = "希望は、あなたが選ぶまで取り消しません。";
+    public const string WishToRelaxLabel = "希望を残したまま、設定を緩めて試す";
     /// <summary>[S5b] 1 枠に並べる行の上限（超えたら「ほか N人」）。</summary>
     public const int WishTrialGroupLimit = 8;
     public const string RelaxWishLine = "希望: 変更しません";
@@ -114,7 +124,7 @@ public static class NextActionGuide
             var others = g.Select(h => h.Prio).Distinct().Where(p => p != rep.Prio).OrderBy(p => p).Select(p => shortNames[p]).ToList();
             if (pinnedKeys.Contains(g.Key)) others.Add("人手不足の日");
             var reason = others.Count == 0 ? rep.Reason : $"{rep.Reason}（ほか: {string.Join("・", others)}）";
-            return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"));
+            return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), ui.ManualPins.Contains($"{g.Key.Staff},{g.Key.Day}"));
         }).OrderBy(r => r.Staff).ThenBy(r => r.Day).ToList();
         var directKeys = direct.Select(r => (r.Staff, r.Day)).ToHashSet();
         var shortfall = pinned.Select(s =>
@@ -122,7 +132,7 @@ public static class NextActionGuide
             var rows = s.WishPinned.OrderBy(i => i).Where(i => !directKeys.Contains((i, s.DayIndex))).Select(i =>
             {
                 var sym = ui.Wishes.TryGetValue($"{i},{s.DayIndex}", out var k) && k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "別の勤務";
-                return new WishTrialRow(i, s.DayIndex, Name(i), $"{sym}の希望", ui.LockedWishKeys.Contains($"{i},{s.DayIndex}"));
+                return new WishTrialRow(i, s.DayIndex, Name(i), $"{sym}の希望", ui.LockedWishKeys.Contains($"{i},{s.DayIndex}"), ui.ManualPins.Contains($"{i},{s.DayIndex}"));
             }).ToList();
             return new ShortfallWishGroup(s.DayIndex, s.ShiftIndex, $"{s.DayLabel} {s.ShiftSymbol} {s.Miss}人不足", rows);
         }).Where(g => g.Rows.Count > 0).ToList();
@@ -132,7 +142,7 @@ public static class NextActionGuide
     /// <summary>[S5] 試算結果 1 行の文（§5 の表）。止めた試算は null（数字を出さない）。</summary>
     public static string? WishTrialText(WishTrial.Outcome o) => o switch
     {
-        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => "この試算では、減る見込みは見つかりませんでした（もう一度つくると減ることはあります）。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を取り消しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。これは全探索で解けない証明ではありません。",
         WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減り、もう一度つくるとさらに{r.B}件 減る見込みです。",
         WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減ります。",
         WishTrial.Result r when r.Rk >= r.H0 => $"取り消してもう一度つくると、必須違反が{r.B}件 減る見込みです。",
@@ -141,6 +151,9 @@ public static class NextActionGuide
         WishTrial.Unavailable u => $"試算できませんでした（{u.Reason}）。",
         _ => null,
     };
+
+    /// <summary>[S5] 取り消しても必須が減らない見込みの行（S6 の組があれば「希望を残したまま、設定を緩めて試す」を添える）。</summary>
+    public static bool WishTrialNoGain(WishTrial.Outcome o) => o is WishTrial.Result r && r.Rk >= r.H0 && r.Att <= 0;
 
     /// <summary>[S5] Rk &lt; H0 の盤面でダイアログの先頭に出す文（§5）。対照だけで減らないなら null。</summary>
     public static string? WishTrialKeepOnlyText(WishTrial.Control control) =>

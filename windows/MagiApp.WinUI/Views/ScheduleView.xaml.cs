@@ -1461,6 +1461,11 @@ public sealed partial class ScheduleView : UserControl
         {
             panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), settingsLabel));
         }
+        if (mode == 1 && wish is not null)
+        {
+            if (_vm.WishTabInvolvedLineFor(i, j) is { } involved) panel.Children.Add(new TextBlock { Text = involved, TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = NextActionGuide.WishTabKeepNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+        }
         if (mode != 1 && status.Severity == CellSeverity.Hard)
         {
             if (handoff == RelaxHandoff.Offer && relax is not null)

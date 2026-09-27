@@ -529,7 +529,7 @@ public sealed partial class HomeView : UserControl
             panel.Children.Add(open);
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
-                panel.Children.Add(Small(NextActionGuide.WishTrialNotLocked));
+                panel.Children.Add(Small(row.Pinned ? NextActionGuide.WishTrialPinned : NextActionGuide.WishTrialNotLocked));
                 return;
             }
             var canTrial = ui.WishTrialBusy is null && !ui.Running;
@@ -544,6 +544,12 @@ public sealed partial class HomeView : UserControl
                     break;
                 case WishTrialView.Ready ready:
                     if (NextActionGuide.WishTrialText(ready.Outcome) is { } text) panel.Children.Add(Small(text, dim: false));
+                    if (_vm.RelaxTrialFor() is not null && NextActionGuide.WishTrialNoGain(ready.Outcome))
+                    {
+                        var toRelax = new HyperlinkButton { Content = NextActionGuide.WishToRelaxLabel, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0) };
+                        toRelax.Click += (_, _) => { dialog.Hide(); _ = ShowRelaxTrialAsync(); };
+                        panel.Children.Add(toRelax);
+                    }
                     if (ready.Token.Result is not null)
                     {
                         var confirm = new Button
@@ -600,6 +606,7 @@ public sealed partial class HomeView : UserControl
                     }
                 }
             }
+            panel.Children.Add(new TextBlock { Text = NextActionGuide.WishKeepFooter, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
         }
         void OnChanged(object? s, PropertyChangedEventArgs e)
         {

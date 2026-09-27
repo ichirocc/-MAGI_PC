@@ -32,6 +32,14 @@ public sealed partial class MagiViewModel
         return CellSheetLogic.ViolationPartnerDays(ScheduleUtil.CachedProblem(st), sched, i, j, fams, Ui.ViolationCellFamilies);
     }
 
+    /// <summary>希望タブの注記＝このセルの希望が必須違反の並びに掛かっているとき（無ければ null）。</summary>
+    public string? WishTabInvolvedLineFor(int i, int j)
+    {
+        if (!Ui.Wishes.TryGetValue($"{i},{j}", out var w) || w < 0 || w >= Ui.ShiftSymbols.Count) return null;
+        var fams = CellSheetLogic.StatusFamilies(FamiliesAt(Ui.ViolationCellFamilies, $"{i},{j}"), Array.Empty<string>(), Array.Empty<string>());
+        return NextActionGuide.WishTabInvolvedLine(Ui.ShiftSymbols[w], fams);
+    }
+
     /// <summary>セル (i,j) に掛かる期間の制約の不足区間（無ければ null）。</summary>
     public C1Shortage? C1ShortageAt(int i, int j) => Ui.C1Shortages.FirstOrDefault(x => x.Staff == i && j >= x.From && j <= x.To);
 
