@@ -435,13 +435,16 @@ public sealed partial class HomeView : UserControl
 
     private void OnStopRelaxClick(object sender, RoutedEventArgs e) => _vm.CancelRelaxTrial();
 
-    /// <summary>[S6] 設定を緩める候補（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5）。盤面は見せず手順を言葉で出し、押したときだけ当てる。</summary>
-    private async Task ShowRelaxTrialAsync()
+    /// <summary>[S6] 設定を緩める候補（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5）。盤面は見せず手順を言葉で出し、押したときだけ当てる。
+    /// 確定の前に全部の変更（設定・手順の全セル）を読める＝窓の外の手も畳むだけで隠さない。</summary>
+    internal async Task ShowRelaxTrialAsync()
     {
         var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
+        var token = _vm.RelaxTrialFor();
+        var t = token is null ? null : NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui, AnalysisView.LabelOf);
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "設定を緩める候補",
+            XamlRoot = XamlRoot, Title = t?.DialogTitle ?? "設定を緩める候補",
             Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
             CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
@@ -450,23 +453,33 @@ public sealed partial class HomeView : UserControl
             Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Opacity = dim ? 0.8 : 1.0,
             FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         };
-        var token = _vm.RelaxTrialFor();
-        if (token is null) panel.Children.Add(Line("勤務表か設定が変わりました。もう一度試算してください。"));
+        if (token is null || t is null) panel.Children.Add(Line("勤務表か設定が変わりました。もう一度試算してください。"));
         else
         {
-            var t = NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui);
-            panel.Children.Add(Line(t.Title, 16, bold: true));
-            if (t.PrerequisiteLead is { } lead)
+            panel.Children.Add(Line(NextActionGuide.RelaxWishLine, bold: true));
+            panel.Children.Add(Line(t.HardLine, bold: true));
+            panel.Children.Add(Line(t.ScaleLine, dim: true));
+            if (t.PrerequisiteRows.Count > 0)
             {
-                panel.Children.Add(Line(lead, dim: true));
+                panel.Children.Add(Line(NextActionGuide.RelaxPrereqHead, bold: true));
+                panel.Children.Add(Line(NextActionGuide.RelaxPrereqWhy, dim: true));
                 foreach (var r in t.PrerequisiteRows) panel.Children.Add(Line("・" + r));
             }
+            panel.Children.Add(Line(NextActionGuide.RelaxSetHead, bold: true));
             panel.Children.Add(Line(t.Lead, 16));
-            panel.Children.Add(Line("この組で解けます", dim: true));
             foreach (var r in t.Rows) panel.Children.Add(Line("・" + r));
+            panel.Children.Add(Line(t.SolveNote, dim: true));
             panel.Children.Add(Line("手順", bold: true));
             foreach (var m in t.MoveLines) panel.Children.Add(Line(m));
-            if (t.OtherMoves > 0) panel.Children.Add(Line($"ほか {t.OtherMoves}セル", dim: true));
+            if (t.OtherMoves > 0)
+            {
+                var others = new StackPanel { Spacing = 4, Visibility = Visibility.Collapsed };
+                foreach (var m in t.OtherMoveLines) others.Children.Add(Line(m));
+                var showAll = new HyperlinkButton { Content = $"ほか {t.OtherMoves}セル（タップですべて表示）", MinHeight = 44, Padding = new Thickness(0) };
+                showAll.Click += (_, _) => { showAll.Visibility = Visibility.Collapsed; others.Visibility = Visibility.Visible; };
+                panel.Children.Add(showAll);
+                panel.Children.Add(others);
+            }
             if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
             var confirm = new Button
             {

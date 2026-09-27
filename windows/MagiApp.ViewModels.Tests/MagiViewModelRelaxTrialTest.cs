@@ -144,11 +144,27 @@ public class MagiViewModelRelaxTrialTest : IDisposable
             ViolationCellFamilies = UnifiedViolationChecker.Check(Oct, board).CellFamilies,
         };
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
-        var t = NextActionGuide.RelaxTrialTextOf(r, ui);
+        var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
         Assert.Equal(new[] { "職員10 Pｼ 上限 0→1", "職員11 Cｵ 上限 0→1" }, t.Rows.Select(x => x.Split('（')[0]));
         Assert.Equal("手で置いた勤務に合わせて上限を上げ、この組も緩めると、必須違反が 1件 減る見込みです。", t.Lead);
         Assert.StartsWith("職員10 ", t.Title);
         Assert.EndsWith("禁止の並び", t.Title);
+        Assert.True(t.MoveLines.Count > 0 && t.MoveLines.All(l => l.Contains('→')));
         Assert.Equal(r.Moves.Count, t.MoveLines.Sum(l => l.Count(c => c == '→')) + t.OtherMoves);
+        // 窓の外の手も全件が読める（畳むだけで隠さない）
+        Assert.Equal(t.OtherMoves, t.OtherMoveLines.Sum(l => l.Count(c => c == '→')));
+        Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var d = int.Parse(l[..l.IndexOf('日')]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
+        Assert.Equal("設定を緩める候補 — 職員10 8日〜9日 禁止の並び", t.DialogTitle);
+        Assert.Equal("必須違反: 5件 → 4件", t.HardLine);
+        var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
+        Assert.Equal($"変更規模: 設定 5項目・{people}人・{r.Moves.Count}セル", t.ScaleLine);
+        Assert.Equal(3, t.PrerequisiteRows.Count);
+        Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
+        Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
     }
+
+    /// <summary>族名は下流の語彙（AnalysisView.BreakdownLabels）を UI 層から受けるので、ここでは同じ語彙の写しを渡す。</summary>
+    private static readonly Dictionary<string, string> Labels = new()
+        { ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止", ["pref"] = "希望違反", ["groupViol"] = "担当外シフト" };
+    private static string Label(string f) => Labels.GetValueOrDefault(f, f);
 }
