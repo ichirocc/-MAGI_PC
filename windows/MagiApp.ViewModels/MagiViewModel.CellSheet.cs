@@ -32,6 +32,15 @@ public sealed partial class MagiViewModel
         return CellSheetLogic.ViolationPartnerDays(ScheduleUtil.CachedProblem(st), sched, i, j, fams, Ui.ViolationCellFamilies);
     }
 
+    /// <summary>巡回の 1 件ずつ（必須違反単位。盤面が無ければ空）。</summary>
+    public IReadOnlyList<TourItem> HardViolationItemsFor(Func<string, string> labelOf)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        return st is null || sched is null ? Array.Empty<TourItem>()
+            : CellSheetLogic.HardViolationItems(st, ScheduleUtil.CachedProblem(st), sched, Ui.ViolationCellFamilies, labelOf);
+    }
+
     /// <summary>状態の下の「関連セル: …」（同じ違反のもう一方のセル。必須のセルだけ。無ければ null）。</summary>
     public string? RelatedCellsLineFor(int i, int j, IReadOnlyList<int> partners)
     {

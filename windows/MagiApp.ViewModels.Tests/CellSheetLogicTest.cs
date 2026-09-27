@@ -11,7 +11,7 @@ public class CellSheetLogicTest
     private static readonly int[][] S = St.Schedule.ToIntArray2D();
     private static readonly ViolationReport Rep = UnifiedViolationChecker.Check(St, S);
     private static readonly Problem P = ScheduleUtil.CachedProblem(St);
-    private static readonly Dictionary<string, string> Labels = new() { ["c3n"] = "禁止の並び", ["c42s"] = "スキルグループペア" };
+    private static readonly Dictionary<string, string> Labels = new() { ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止", ["c42s"] = "スキルグループペア" };
     private static string Label(string f) => Labels.GetValueOrDefault(f, f);
 
     private static int Staff(string name) => St.StaffList.ToList().FindIndex(x => x.Name == name);
@@ -201,6 +201,26 @@ public class CellSheetLogicTest
         Assert.Equal((2, 1), CellSheetLogic.NextTourCell(tour, (3, 5)));
         Assert.Equal((2, 1), CellSheetLogic.NextTourCell(tour, (9, 9)));
         Assert.Null(CellSheetLogic.NextTourCell(Array.Empty<(int, int)>(), (0, 0)));
+    }
+
+    /// <summary>巡回は違反単位: 実データの必須 5 件（c3n 4＋c3w 1）が 5 件、日→職員の順、職員10 は 10/8〜10/9 の 1 件、人員不足は別の 1 行。</summary>
+    [Fact]
+    public void TourItemsAreOnePerHardViolation()
+    {
+        var items = CellSheetLogic.HardViolationItems(St, P, S, Rep.CellFamilies!, Label);
+        Assert.Equal((int)Rep.Hard - Rep.Breakdown.GetValueOrDefault("covU"), items.Count);
+        Assert.Equal(items.OrderBy(t => t.Days[0]).ThenBy(t => t.Staff).ToList(), items);
+        var a = Assert.Single(items, t => t.Staff == Staff("職員10"));
+        Assert.Equal(new[] { 7, 8 }, a.Days);
+        Assert.Equal("禁止の並び Dﾃ→A4 ・ 10/8〜10/9", a.Heading);
+        var w = Assert.Single(items, t => t.Family == "c3w");
+        Assert.Equal((Staff("職員03"), 0), w.Cell);
+        Assert.Equal(new[] { 0, 1 }, w.Days);
+        var at = items.ToList().IndexOf(a);
+        Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9", CellSheetLogic.TourHeading(items, at));
+        Assert.Null(CellSheetLogic.TourHeading(items, 9));
+        Assert.Equal("ほかに人員不足 2件（日ヘッダから）", CellSheetLogic.TourCovULine(2));
+        Assert.Null(CellSheetLogic.TourCovULine(0));
     }
 
     [Fact]

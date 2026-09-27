@@ -1379,15 +1379,26 @@ public sealed partial class ScheduleView : UserControl
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        var next = CellSheetLogic.NextTourCell(CellSheetLogic.ViolationTour(ui), (i, j));
-        if (next is { } nx && nx != (i, j))
+        // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
+        //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
+        var tourItems = _vm.HardViolationItemsFor(LabelOf);
+        var tourAt = tourItems.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        var tourNext = tourItems.Count == 0 ? null : tourItems[tourAt < 0 ? 0 : (tourAt + 1) % tourItems.Count];
+        if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0))
         {
             var tour = new Button { Content = "次の違反 ▶", MinHeight = 48 };
-            tour.Click += (_, _) => Reopen(nx.I, nx.J, 0);
+            var nx = tourNext.Cell;
+            tour.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
             Grid.SetColumn(tour, 1);
             head.Children.Add(tour);
         }
         panel.Children.Add(head);
+        if (CellSheetLogic.TourHeading(tourItems, tourAt) is { } tourHeading)
+        {
+            panel.Children.Add(new TextBlock { Text = tourHeading, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
+                panel.Children.Add(new TextBlock { Text = covLine, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        }
 
         var (bg, fg) = status.Severity switch
         {

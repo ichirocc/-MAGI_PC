@@ -419,6 +419,12 @@ public sealed partial class MagiViewModel
         if (i < 0 || i >= p.S || j < 0 || j >= p.T) return null;
         switch (cls)
         {
+            // 禁止の並びは一致した並びの全日、希望の前日の禁止は前日と希望の翌日（巡回と同じ関連セル）。
+            case "vio-c3n":
+                if (CellSheetLogic.ForbiddenRunAt(p, sched, i, j, p.Cons3n) is { } run) return (run.J0, run.J0 + run.Seq.Length - 1);
+                break;
+            case "vio-c3w":
+                return (j, Math.Min(j + 1, p.T - 1));
             case "vio-c1":
                 foreach (var c in p.Cons1)
                 {

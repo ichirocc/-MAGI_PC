@@ -345,7 +345,21 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   （`AttachFixSearch(settingsLabel)`、行き先は同じ）。テスト `CellSheetLogicTest.RelaxHandoffOnlyForCellsTheFoundSetTouches`（Kotlin 1 対 1）。
   J(7)＝C# 単独のパリティ欠陥: `AnalysisView.BreakdownLabels`／`MagiViewModel.HardFamilyJp` に c3w が無く生キー「c3w」が画面に出ていた（3.542.0 の c3w 追加時の漏れ）。
   族名は計画 §5-d の決定「希望の前日の禁止」で追加（Kotlin `BreakdownLabels.kt`/`hardFamilyJp` は「希望前日の禁止」のまま＝Kotlin 側 J で同語へ揃える）。
-  A〜C の同期は Kotlin の 3 コミットに 1 対 1。後続の Kotlin パッケージ（D〜K）がこれらの文言に触れたら別途同期する。
+  A〜C の同期は Kotlin の 3 コミットに 1 対 1。後続の D〜K（同日）も Kotlin の各コミットに 1 対 1 で、いずれも表示・導線のみ・採点不変:
+  D＝板挟みで他の人の手が 0 件なら「同じ違反のもう一方のセル（10/8(木)）を見る」（`CellSheetLogic.ViolationPartnerDays`/`PartnerCellLabel`、`AttachFixSearch(whenNoFix)`）。
+  E＝全部 ⚠ でおすすめ無しなら「1 マスでは直りません。前後の日の組み合わせが必要です。」（`SingleCellHopeless`、印が出た後に状態の下へ）。
+  E2＝全 ⚠ の理由 1 行（`AllRiskReason`）・「関連セル: 10/9(金) A4（希望・反映済）」（`RelatedCellsLine`）・`FixSearchText.NoFixReasons` の「この並びには本人の希望（…）が入っています。」
+  「本人の希望（…）は守ったままです。」（どちらも WishRelated）。
+  F＝S5 の改善なしの行「この希望を取り消しても、必須は減らない見込みです（必須 h0件 → pCancel件）。これは全探索で解けない証明ではありません。」＋S6 の組があるときだけ
+  ［希望を残したまま、設定を緩めて試す］、フッタ「希望は、あなたが選ぶまで取り消しません。」、手動固定の行は `WishTrialPinned`、希望タブの注記 2 行。
+  未移植＝行タップでセルシートを希望タブで開く（C# のセル編集はタップ位置起点のフライアウト。`MainWindow.OpenCell` はスクロール＋強調まで）。
+  G＝手動固定の語（`PinBlockedNote`＝「このセルは手動固定のため、自動では変更しません」、［手動固定する］／［手動固定を外す］、凡例は WinUI が錠を描く位置どおり「左下の錠＝…」）。
+  H＝`DayText.Full/Short/Range`（`NextActionGuide.cs`）で日付の表記を 1 か所に。J＝語彙の統一（人員不足・実線の枠＝必須／破線の枠＝要調整（重）・「希望と違う勤務」・
+  「本人の希望」「禁止の並び」＝`V6PortAnalyzer` の理由文も・`SettingsLabel.For` の節ごとの行き先＝C の `RelaxSettingsLabel` は撤回）。中断バナー・RunMarker・セルの読み上げ文は C# に無い。
+  K＝巡回を違反単位に（`TourItem`/`HardViolationItems`/`TourHeading`/`TourCovULine`、`ViolationRange` が c3n の全日・c3w の 2 日を返す）。C# に巡回の開始ボタンは無いので、
+  セルが属する件を「必須違反 k / N ・ …」で示し「次の違反 ▶」が次の件へ移る（旧 `ViolationTour` は据え置き）。
+  I＝ホームの主ボタンの優先順位（実行中→未作成→完成→充足不可→不足→1手→探索中→S6 の組→S6 探索中は進捗が主→下限の見込み→関わる希望→問題を見る）は
+  Android の `docs/operator_ux.md` §3 の表が正＝`HomeView` の分岐はその順を写す。
 - 2026-09-26（手動固定 backlog #41 を同期、Kotlin 0e08cd2 同日）: セル編集シートの［固定する］／［固定を外す］で、そのセルを最適化器だけが書き換えない（`MagiState.ManualPins`、JSON `manualPins`）。
   判定は Kotlin と同じく規則 A の仕組みに載せた: `ScheduleUtil.WishLocked`＝手動固定または実現可能な希望（`WishFixed`）、縛る値 `LockTo`（手動＞希望）、
   `WishMoveAllowed`/`KeepsWishPins(base, cand, strict)` は手動固定を `WishPinStrict` によらず判定。書く経路で `p.Wish` を縛る値として読んでいた所は `LockTo`、

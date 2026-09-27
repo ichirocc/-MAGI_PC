@@ -20,6 +20,13 @@ public sealed record OpNotice(long Id, string Text, long UndoSerial);
 /// <summary>Cause は接頭辞（必須/要調整）を除いた原因だけ（希望を守っている板挟みの 2 行目に使う）。</summary>
 public sealed record CellStatus(CellSeverity Severity, string Text, string Cause = "");
 
+/// <summary>巡回の 1 件＝必須違反 1 件（族・職員・関連セルの日・見出し）。1 セルが 2 件に属せば 2 回止まる（<c>report.hard</c> の数え方と同じ）。
+/// セルで辿れる族だけ（c3n＝並びの全日、c3w＝前日＋希望の翌日、pref/groupViol＝1 セル）。人員不足は日ヘッダから＝件数は別に添える。Kotlin <c>TourItem</c>。</summary>
+public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading)
+{
+    public (int I, int J) Cell => (Staff, Days[0]);
+}
+
 /// <summary>シフトボタンの印。Recommended＝緑の点、HardRisk＝置くと必須の族が増える（警告の印）。</summary>
 public sealed record ShiftMarks(IReadOnlySet<int> Recommended, IReadOnlySet<int> HardRisk)
 {
@@ -153,7 +160,8 @@ public static class CellSheetLogic
         }
     }
 
-    private static (int[] Seq, int J0)? ForbiddenRunAt(Problem p, int[][] s, int i, int j, IReadOnlyList<C3> list)
+    /// <summary>セル (i,j) を含む、完全に一致した禁止の並び（最初の 1 つ）と開始日。</summary>
+    public static (int[] Seq, int J0)? ForbiddenRunAt(Problem p, int[][] s, int i, int j, IReadOnlyList<C3> list)
     {
         foreach (var c in list)
         {
@@ -310,6 +318,54 @@ public static class CellSheetLogic
         var pick = hard.Count > 0 && !includeSoft ? hard : cells;
         return pick.OrderBy(x => !x.Hard).ThenBy(x => x.J).ThenBy(x => x.I).Select(x => (x.I, x.J)).ToList();
     }
+
+    /// <summary>巡回を違反単位に（Kotlin <c>hardViolationItems</c>）。順は日→職員。族名は labelOf で受ける。</summary>
+    public static IReadOnlyList<TourItem> HardViolationItems(MagiState state, Problem p, int[][] s,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> cellFamilies, Func<string, string> labelOf)
+    {
+        string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
+        string Span(IReadOnlyList<int> days) => DayText.Range(state.StartDate, days[0], days[^1]);
+        var outMap = new Dictionary<string, TourItem>();
+        foreach (var (key, fams) in cellFamilies)
+        {
+            var c = key.IndexOf(',');
+            if (c < 0 || !int.TryParse(key.AsSpan(0, c), out var i) || !int.TryParse(key.AsSpan(c + 1), out var j)) continue;
+            if (i < 0 || i >= p.S || j < 0 || j >= p.T) continue;
+            foreach (var cls in fams)
+            {
+                var fam = VioBuckets.FamilyOfVioClass(cls);
+                switch (fam)
+                {
+                    case "c3n":
+                        if (ForbiddenRunAt(p, s, i, j, p.Cons3n) is { } run)
+                        {
+                            var days = Enumerable.Range(run.J0, run.Seq.Length).ToList();
+                            outMap.TryAdd($"c3n,{i},{run.J0},{string.Join(",", run.Seq)}",
+                                new TourItem(fam, i, days, $"{labelOf("c3n")} {string.Join("→", run.Seq.Select(Sym))} ・ {Span(days)}"));
+                        }
+                        break;
+                    case "c3w":
+                    {
+                        var days = new[] { j, Math.Min(j + 1, p.T - 1) }.Distinct().ToList();
+                        outMap.TryAdd($"c3w,{i},{j}", new TourItem(fam, i, days, $"{labelOf("c3w")} {Sym(s[i][j])}→{Sym(s[i][days[^1]])} ・ {Span(days)}"));
+                        break;
+                    }
+                    case "pref":
+                    case "groupViol":
+                        outMap.TryAdd($"{fam},{i},{j}", new TourItem(fam, i, new[] { j }, $"{labelOf(fam)} {Sym(s[i][j])} ・ {DayText.Full(state.StartDate, j)}"));
+                        break;
+                }
+            }
+        }
+        return outMap.Values.OrderBy(t => t.Days[0]).ThenBy(t => t.Staff).ToList();
+    }
+
+    /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
+    public static string? TourHeading(IReadOnlyList<TourItem> items, int at) =>
+        at >= 0 && at < items.Count ? $"必須違反 {at + 1} / {items.Count} ・ {items[at].Heading}" : null;
+
+    /// <summary>巡回に入らない人員不足の件数の 1 行（0 なら null）。</summary>
+    public static string? TourCovULine(int covU) => covU > 0 ? $"ほかに人員不足 {covU}件（日ヘッダから）" : null;
 
     /// <summary>巡回の次のセル（今が巡回に無ければ先頭、末尾なら先頭へ）。空なら null。</summary>
     public static (int I, int J)? NextTourCell(IReadOnlyList<(int I, int J)> tour, (int I, int J)? current)
