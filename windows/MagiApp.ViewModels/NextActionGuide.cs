@@ -2,6 +2,14 @@ using MagiEngine.V6;
 
 namespace MagiApp.ViewModels;
 
+/// <summary>日付の表記の単一ソース（利用者決定 2026-09-26）: 既定「10/8(木)」、密な所（手順・一覧）「10/8」、範囲「10/8〜10/9」。開始日が読めなければ「8日」。Kotlin <c>DayText</c>。</summary>
+public static class DayText
+{
+    public static string Full(string startDate, int j) => ScheduleUtil.FormatDay(startDate, j);
+    public static string Short(string startDate, int j) { var f = Full(startDate, j); var q = f.IndexOf('('); return q >= 0 ? f[..q] : f; }
+    public static string Range(string startDate, int a, int b) => a == b ? Full(startDate, a) : $"{Short(startDate, a)}〜{Short(startDate, b)}";
+}
+
 /// <summary>[Android 3.612.0 思考誘導S3] 残っている必須違反に関わる希望 1 件（職員・日・理由）。Kotlin <c>InvolvedWish</c>。</summary>
 public sealed record InvolvedWish(int Staff, int Day, string Name, string Reason);
 
@@ -76,7 +84,7 @@ public static class NextActionGuide
             if (parts.Length < 2 || !int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) continue;
             var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
             if (fams.Contains("vio-pref")) list.Add(new InvolvedWish(i, j, name, "希望の勤務になっていません"));
-            if (fams.Contains("vio-c3w")) list.Add(new InvolvedWish(i, j + 1, name, $"前日（{j + 1}日）に置けない勤務が入っています"));
+            if (fams.Contains("vio-c3w")) list.Add(new InvolvedWish(i, j + 1, name, $"前日（{DayText.Short(ui.StartDate, j)}）に置けない勤務が入っています"));
             if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) list.Add(new InvolvedWish(i, j, name, "希望が禁止の並びに掛かっています"));
         }
         return list.Distinct().OrderBy(w => w.Staff).ThenBy(w => w.Day).ToList();
@@ -100,8 +108,8 @@ public static class NextActionGuide
             if (fams.Contains("vio-pref")) hits.Add((i, j, 0, "希望の勤務になっていません"));
             if (fams.Contains("vio-c3w"))
             {
-                hits.Add((i, j + 1, 1, $"前日（{j + 1}日）に置けない勤務が入っています"));
-                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, $"翌日（{j + 2}日）の希望の勤務の前日に置けない勤務の希望です"));
+                hits.Add((i, j + 1, 1, $"前日（{DayText.Short(ui.StartDate, j)}）に置けない勤務が入っています"));
+                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, $"翌日（{DayText.Short(ui.StartDate, j + 1)}）の希望の勤務の前日に置けない勤務の希望です"));
             }
             if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, "希望が禁止の並びに掛かっています"));
         }
@@ -170,7 +178,7 @@ public static class NextActionGuide
         var fam = new[] { "c3n", "c3w", "pref", "groupViol" }.FirstOrDefault(f => fams.Contains("vio-" + f)) ?? "groupViol";
         var hardDays = Enumerable.Range(r.WindowFirst, r.WindowLast - r.WindowFirst + 1)
             .Where(j => FamsAt(ui, r.Staff, j).Any(v => MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(v)))).ToList();
-        var span = hardDays.Count > 1 ? $"{hardDays[0] + 1}日〜{hardDays[^1] + 1}日" : $"{r.Day + 1}日";
+        var span = hardDays.Count > 1 ? DayText.Range(ui.StartDate, hardDays[0], hardDays[^1]) : DayText.Full(ui.StartDate, r.Day);
         return new RelaxTarget(name, span, labelOf(fam));
     }
 
@@ -195,10 +203,10 @@ public static class NextActionGuide
         var preRows = r.Prerequisite.Select(x =>
         {
             var days = x.Staff < board.Length ? Enumerable.Range(0, board[x.Staff].Length).Where(j => board[x.Staff][j] == x.Shift) : Enumerable.Empty<int>();
-            return $"{Row(x)}（{string.Join("・", days.Select(d => $"{d + 1}日"))} に置いてあります）";
+            return $"{Row(x)}（{string.Join("・", days.Select(d => DayText.Short(ui.StartDate, d)))} に置いてあります）";
         }).ToList();
         IReadOnlyList<string> DayLines(IEnumerable<RelaxTrial.Move> ms) => ms.GroupBy(m => m.Day).OrderBy(g => g.Key)
-            .Select(g => $"{g.Key + 1}日　" + string.Join("、", g.Select(m => $"{Name(m.Staff)} {Sym(m.From)}→{Sym(m.To)}"))).ToList();
+            .Select(g => $"{DayText.Short(ui.StartDate, g.Key)}　" + string.Join("、", g.Select(m => $"{Name(m.Staff)} {Sym(m.From)}→{Sym(m.To)}"))).ToList();
         var inWin = r.Moves.Where(m => m.Day >= r.WindowFirst && m.Day <= r.WindowLast).ToList();
         var outWin = r.Moves.Where(m => m.Day < r.WindowFirst || m.Day > r.WindowLast).ToList();
         var lead = r.Prerequisite.Count == 0 ? $"この組で緩めると、必須違反が {r.Att}件 減る見込みです。"
@@ -226,9 +234,8 @@ public static class NextActionGuide
     public static RelaxCardText RelaxCardTextOf(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf)
     {
         var t = RelaxTargetOf(r, ui, labelOf);
-        var span = t.Span.Replace("日〜", "〜");
         return new RelaxCardText(
-            Headline: $"{t.Name} {span}の{t.What}（必須 {r.H0}件中 {r.H0 - r.Rr}件）は、設定が壁になっています",
+            Headline: $"{t.Name} {t.Span}の{t.What}（必須 {r.H0}件中 {r.H0 - r.Rr}件）は、設定が壁になっています",
             Body: "希望を残したまま、設定と勤務表を手順で変えられます",
             Note: r.Rr > 0 ? $"残りの必須違反 {r.Rr}件はそのまま残ります" : null);
     }

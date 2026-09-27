@@ -200,10 +200,10 @@ public class CellSheetLogicTest
     {
         Assert.Equal("休 11(適10)▲ Cｵ 9(適5)▲", CellSheetLogic.StaffCountShort(St, P, S, 0, Rep.CountFamilies!));
         Assert.Equal("", CellSheetLogic.StaffCountShort(St, P, S, 0, new Dictionary<string, IReadOnlyList<string>>()));
-        Assert.Equal("7日(水)", CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 6));
+        Assert.Equal("10/7(水)", CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 6));
         Assert.Null(CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 31));
         Assert.Null(CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, -1));
-        Assert.Equal("職員01 3日をA4に変更しました", CellSheetLogic.CellChangedMessage("職員01", 2, "A4"));
+        Assert.Equal("職員01 10/3 をA4に変更しました", CellSheetLogic.CellChangedMessage("職員01", "2026-10-01", 2, "A4"));
         Assert.Equal("未登録", CellSheetLogic.WishTabState(null, 1));
         Assert.Equal("反映済", CellSheetLogic.WishTabState(1, 1));
         Assert.Equal("未反映", CellSheetLogic.WishTabState(2, 1));
@@ -228,8 +228,11 @@ public class CellSheetLogicTest
         IReadOnlyList<string> Fams(int j) => CellSheetLogic.StatusFamilies(Of(Rep.CellFamilies, $"{i},{j}"), Array.Empty<string>(), Array.Empty<string>());
         Assert.Equal(new[] { 7 }, CellSheetLogic.ViolationPartnerDays(P, S, i, 8, Fams(8), Rep.CellFamilies!));
         Assert.Equal(new[] { 8 }, CellSheetLogic.ViolationPartnerDays(P, S, i, 7, Fams(7), Rep.CellFamilies!));
-        Assert.Equal("同じ違反のもう一方のセル（8日）を見る", CellSheetLogic.PartnerCellLabel(7, true));
-        Assert.Equal("同じ違反のほかのセル（8日）を見る", CellSheetLogic.PartnerCellLabel(7, false));
+        Assert.Equal("同じ違反のもう一方のセル（10/8(木)）を見る", CellSheetLogic.PartnerCellLabel(St.StartDate, 7, true));
+        Assert.Equal("同じ違反のほかのセル（10/8(木)）を見る", CellSheetLogic.PartnerCellLabel(St.StartDate, 7, false));
+        Assert.Equal("10/8〜10/9", DayText.Range(St.StartDate, 7, 8));
+        Assert.Equal("10/8(木)", DayText.Range(St.StartDate, 7, 7));
+        Assert.Equal("8日", DayText.Full("", 7));
         var w = Staff("職員03");
         Assert.Equal(new[] { 1 }, CellSheetLogic.ViolationPartnerDays(P, S, w, 0, new[] { "c3w" }, Rep.CellFamilies!));
         Assert.Equal(new[] { 0 }, CellSheetLogic.ViolationPartnerDays(P, S, w, 1, Array.Empty<string>(), Rep.CellFamilies!));

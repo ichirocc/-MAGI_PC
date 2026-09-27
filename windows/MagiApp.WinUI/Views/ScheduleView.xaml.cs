@@ -1448,7 +1448,7 @@ public sealed partial class ScheduleView : UserControl
                 var partners = _vm.ViolationPartnerDaysFor(i, j);
                 foreach (var d in partners)
                 {
-                    var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
+                    var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(_vm.Ui.StartDate, d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
                     var dd = d;
                     b.Click += (_, _) => Reopen(i, dd, 0);
                     yield return b;

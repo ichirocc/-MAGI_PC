@@ -308,7 +308,7 @@ public sealed partial class MagiViewModel
         Ui.HasResult = true;
         Ui.EngineRan = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, st.StartDate, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
         RefreshCheck();
     }
@@ -331,7 +331,7 @@ public sealed partial class MagiViewModel
         AutoSave();
         Ui.MessageIsError = false;
         ApplyWishDisplay(ns);
-        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {j + 1}日を" + (on ? "手動固定しました（自動では変更しません）" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {DayText.Short(st.StartDate, j)} を" + (on ? "手動固定しました（自動では変更しません）" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"{(on ? "手動固定" : "手動固定を外す")}: {OpNm(i)} {j + 1}日 {OpSy(cur)}");
     }
 

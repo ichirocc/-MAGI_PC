@@ -524,7 +524,7 @@ public sealed partial class HomeView : UserControl
         }
         void AddRow(WishTrialRow row, UiState ui)
         {
-            var open = new Button { Content = $"{row.Name} ・ {row.Day + 1}日　{row.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+            var open = new Button { Content = $"{row.Name} ・ {DayText.Short(ui.StartDate, row.Day)}　{row.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))

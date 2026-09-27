@@ -217,7 +217,7 @@ public static class FixSearchText
         bool WishIs(int i, int j, int k) => ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == k;
         if (f.Staff is { } si && f.Day is { } sd && CellAt(si, sd) is { } cur && WishIs(si, sd, cur))
         {
-            outList.Add($"このセル（{sd + 1}日の「{Sym(cur)}」）は本人の希望で固定されています。"); wish = true;
+            outList.Add($"このセル（{DayText.Short(ui.StartDate, sd)} の「{Sym(cur)}」）は本人の希望で固定されています。"); wish = true;
         }
         if (f.Staff is { } i && f.Shift is { } k)
         {
@@ -228,7 +228,7 @@ public static class FixSearchText
             var hi = limits?.Invoke(i, k).Hi;
             if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は上限 0（置かない設定）です。");
             var tight = days.Where(j => needLimits?.Invoke(k, j) is { } lim && Headcount(k, j) <= lim.Lo).ToList();
-            if (tight.Count > 0) outList.Add(string.Join("・", tight.Select(j => $"{j + 1}日")) + $" は「{Sym(k)}」がその日の必要人数ぎりぎりで、抜けると人員不足になります。");
+            if (tight.Count > 0) outList.Add(string.Join("・", tight.Select(j => DayText.Short(ui.StartDate, j))) + $" は「{Sym(k)}」がその日の必要人数ぎりぎりで、抜けると人員不足になります。");
             if (limits is not null)
             {
                 var n = Math.Max(ui.Shifts, ui.ShiftSymbols.Count);
@@ -247,7 +247,7 @@ public static class FixSearchText
             var pinned = Enumerable.Range(0, ui.Schedule.Count).Where(s => CellAt(s, dd) == dk && WishIs(s, dd, dk)).ToList();
             if (pinned.Count > 0)
             {
-                outList.Add($"{dd + 1}日の「{Sym(dk)}」のうち " + string.Join("・", pinned.Select(s => s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}")) + " は本人の希望で固定されています。");
+                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + string.Join("・", pinned.Select(s => s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}")) + " は本人の希望で固定されています。");
                 wish = true;
             }
         }

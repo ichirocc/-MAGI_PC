@@ -77,7 +77,8 @@ public static class CellSheetLogic
     {
         string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
         string Name(int x) => x >= 0 && x < state.StaffList.Count ? state.StaffList[x].Name : $"#{x}";
-        string Day(int d) { var f = ScheduleUtil.FormatDay(state.StartDate, d); var q = f.IndexOf('('); return q >= 0 ? f[..q] : f; }
+        string Day(int d) => DayText.Short(state.StartDate, d);
+        string DayFull(int d) => DayText.Full(state.StartDate, d);
         var cur = i < s.Length && j < s[i].Length ? s[i][j] : -1;
         int Count(int k) => s[i].Count(x => x == k);
         switch (fam)
@@ -94,7 +95,7 @@ public static class CellSheetLogic
             case "c3m":
             {
                 var c = (fam == "c3" ? p.Cons3 : p.Cons3m).FirstOrDefault(x => x.Seq.Length > 0 && x.Seq[0] == cur);
-                return c is null ? null : $"{labelOf(fam)} {string.Join("→", c.Seq.Select(Sym))} が{Day(j)}から続かない";
+                return c is null ? null : $"{labelOf(fam)} {string.Join("→", c.Seq.Select(Sym))} が{DayFull(j)}から続かない";
             }
             case "c42s":
             case "c42":
@@ -121,7 +122,7 @@ public static class CellSheetLogic
                 var lo = p.Need1[cur][j];
                 var hi = p.Use2 && p.Need2[cur][j] >= 0 ? p.Need2[cur][j] : lo;
                 var n = Enumerable.Range(0, p.S).Count(x => s[x][j] == cur);
-                return fam == "covU" ? $"{Day(j)}の{Sym(cur)}が人員不足（必要{lo}人に{n}人）" : $"{Day(j)}の{Sym(cur)}が人員過剰（適正{hi}人に{n}人）";
+                return fam == "covU" ? $"{DayFull(j)}の{Sym(cur)}が人員不足（必要{lo}人に{n}人）" : $"{DayFull(j)}の{Sym(cur)}が人員過剰（適正{hi}人に{n}人）";
             }
             case "c41s":
             case "c41":
@@ -187,8 +188,8 @@ public static class CellSheetLogic
         return outSet.Where(d => d >= 0 && d < p.T).OrderBy(d => d).ToList();
     }
 
-    public static string PartnerCellLabel(int day, bool single) =>
-        single ? $"同じ違反のもう一方のセル（{day + 1}日）を見る" : $"同じ違反のほかのセル（{day + 1}日）を見る";
+    public static string PartnerCellLabel(string startDate, int day, bool single) =>
+        single ? $"同じ違反のもう一方のセル（{DayText.Full(startDate, day)}）を見る" : $"同じ違反のほかのセル（{DayText.Full(startDate, day)}）を見る";
 
     public const string SingleCellNote = "1 マスでは直りません。前後の日の組み合わせが必要です。";
 
@@ -248,16 +249,8 @@ public static class CellSheetLogic
         return string.Join(" ", parts);
     }
 
-    /// <summary>日送りボタンの日付「7日(水)」（範囲外は null）。</summary>
-    public static string? AdjacentDayLabel(string startDate, int days, int j)
-    {
-        if (j < 0 || j >= days) return null;
-        var f = ScheduleUtil.FormatDay(startDate, j);
-        if (!f.Contains('/')) return f;
-        var rest = f[(f.IndexOf('/') + 1)..];
-        var q = rest.IndexOf('(');
-        return q >= 0 ? rest[..q] + "日" + rest[q..] : rest;
-    }
+    /// <summary>日送りボタンの日付「10/7(水)」（範囲外は null）。</summary>
+    public static string? AdjacentDayLabel(string startDate, int days, int j) => j < 0 || j >= days ? null : DayText.Full(startDate, j);
 
     public static string WishTabState(int? wish, int current) => wish is null ? "未登録" : wish == current ? "反映済" : "未反映";
 
@@ -335,5 +328,5 @@ public static class CellSheetLogic
     /// <summary>操作の通知を出している間、通常の文言では置き換えない（失敗・拒否だけは置き換える）。</summary>
     public static bool MessageMayReplaceNotice(bool noticeShowing, bool isError) => !noticeShowing || isError;
 
-    public static string CellChangedMessage(string name, int day, string symbol) => $"{name} {day + 1}日を{symbol}に変更しました";
+    public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name} {DayText.Short(startDate, day)} を{symbol}に変更しました";
 }

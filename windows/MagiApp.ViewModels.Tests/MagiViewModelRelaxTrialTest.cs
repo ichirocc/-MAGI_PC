@@ -142,6 +142,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
             ShiftSymbols = Oct.Shifts.Select(s => s.Kigou).ToList(),
             Schedule = Oct.Schedule,
             ViolationCellFamilies = UnifiedViolationChecker.Check(Oct, board).CellFamilies,
+            StartDate = Oct.StartDate,
         };
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
         var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
@@ -153,16 +154,17 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(r.Moves.Count, t.MoveLines.Sum(l => l.Count(c => c == '→')) + t.OtherMoves);
         // 窓の外の手も全件が読める（畳むだけで隠さない）
         Assert.Equal(t.OtherMoves, t.OtherMoveLines.Sum(l => l.Count(c => c == '→')));
-        Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var d = int.Parse(l[..l.IndexOf('日')]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
-        Assert.Equal("設定を緩める候補 — 職員10 8日〜9日 禁止の並び", t.DialogTitle);
+        Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var head = l[..l.IndexOf('　')]; var d = int.Parse(head[(head.IndexOf('/') + 1)..]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
+        Assert.Equal("設定を緩める候補 — 職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
         Assert.Equal("必須違反: 5件 → 4件", t.HardLine);
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         Assert.Equal($"変更規模: 設定 5項目・{people}人・{r.Moves.Count}セル", t.ScaleLine);
         Assert.Equal(3, t.PrerequisiteRows.Count);
+        Assert.True(t.PrerequisiteRows[0].Contains("（10/") && t.MoveLines[0].StartsWith("10/7　"), t.PrerequisiteRows[0]);
         Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
         Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
         var c = NextActionGuide.RelaxCardTextOf(r, ui, Label);
-        Assert.Equal("職員10 8〜9日の禁止の並び（必須 5件中 1件）は、設定が壁になっています", c.Headline);
+        Assert.Equal("職員10 10/8〜10/9の禁止の並び（必須 5件中 1件）は、設定が壁になっています", c.Headline);
         Assert.Equal("希望を残したまま、設定と勤務表を手順で変えられます", c.Body);
         Assert.Equal("残りの必須違反 4件はそのまま残ります", c.Note);
         Assert.Null(NextActionGuide.RelaxCardTextOf(r with { Rr = 0 }, ui, Label).Note);
