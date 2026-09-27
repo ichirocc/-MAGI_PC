@@ -204,6 +204,21 @@ public class CellSheetLogicTest
         Assert.NotEqual(new FixFocus(null, null, 2, 7).Key, new FixFocus(null, null, 2).Key);
     }
 
+    /// <summary>職員10 10/9（A4 の希望を守る板挟み）: 同じ禁止の並びのもう一方は 10/8。10/8 から見れば 10/9。c3w は印の前日と希望の翌日。</summary>
+    [Fact]
+    public void PartnerCellOfTheSameViolation()
+    {
+        var i = Staff("職員10");
+        IReadOnlyList<string> Fams(int j) => CellSheetLogic.StatusFamilies(Of(Rep.CellFamilies, $"{i},{j}"), Array.Empty<string>(), Array.Empty<string>());
+        Assert.Equal(new[] { 7 }, CellSheetLogic.ViolationPartnerDays(P, S, i, 8, Fams(8), Rep.CellFamilies!));
+        Assert.Equal(new[] { 8 }, CellSheetLogic.ViolationPartnerDays(P, S, i, 7, Fams(7), Rep.CellFamilies!));
+        Assert.Equal("同じ違反のもう一方のセル（8日）を見る", CellSheetLogic.PartnerCellLabel(7, true));
+        Assert.Equal("同じ違反のほかのセル（8日）を見る", CellSheetLogic.PartnerCellLabel(7, false));
+        var w = Staff("職員03");
+        Assert.Equal(new[] { 1 }, CellSheetLogic.ViolationPartnerDays(P, S, w, 0, new[] { "c3w" }, Rep.CellFamilies!));
+        Assert.Equal(new[] { 0 }, CellSheetLogic.ViolationPartnerDays(P, S, w, 1, Array.Empty<string>(), Rep.CellFamilies!));
+    }
+
     [Fact]
     public void FixPanelStatesSpinOnlyWhileRunning()
     {

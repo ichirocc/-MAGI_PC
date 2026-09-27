@@ -168,6 +168,28 @@ public static class CellSheetLogic
         return null;
     }
 
+    /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先）。禁止の並びは一致した並びの他の日、
+    /// 希望前日の禁止は印のある前日⇄希望の翌日。チェッカーの印だけから決め、希望は触らない。Kotlin <c>violationPartnerDays</c>。</summary>
+    public static IReadOnlyList<int> ViolationPartnerDays(Problem p, int[][] s, int i, int j, IReadOnlyList<string> families,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> cellFamilies)
+    {
+        var outSet = new HashSet<int>();
+        foreach (var fam in families)
+        {
+            if (fam is "c3n" or "c3mn")
+            {
+                if (ForbiddenRunAt(p, s, i, j, fam == "c3n" ? p.Cons3n : p.Cons3mn) is { } run)
+                    for (var d = run.J0; d < run.J0 + run.Seq.Length; d++) if (d != j) outSet.Add(d);
+            }
+            else if (fam == "c3w" && j + 1 < p.T) outSet.Add(j + 1);
+        }
+        if (j > 0 && cellFamilies.TryGetValue($"{i},{j - 1}", out var prev) && prev.Contains("vio-c3w")) outSet.Add(j - 1);
+        return outSet.Where(d => d >= 0 && d < p.T).OrderBy(d => d).ToList();
+    }
+
+    public static string PartnerCellLabel(int day, bool single) =>
+        single ? $"同じ違反のもう一方のセル（{day + 1}日）を見る" : $"同じ違反のほかのセル（{day + 1}日）を見る";
+
     /// <summary>セル (i,j) を各候補にしたときの印（Kotlin <c>evaluateShiftMarks</c>）。stillWanted が false で打ち切る。</summary>
     public static ShiftMarks EvaluateShiftMarks(MagiState state, int[][] s, int i, int j, CellSeverity severity, IEnumerable<int> candidates,
         Func<bool>? stillWanted = null)

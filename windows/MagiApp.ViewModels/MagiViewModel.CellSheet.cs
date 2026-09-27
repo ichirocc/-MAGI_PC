@@ -22,6 +22,16 @@ public sealed partial class MagiViewModel
         return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, labelOf);
     }
 
+    /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先。無ければ空）。</summary>
+    public IReadOnlyList<int> ViolationPartnerDaysFor(int i, int j)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return Array.Empty<int>();
+        var fams = CellSheetLogic.StatusFamilies(FamiliesAt(Ui.ViolationCellFamilies, $"{i},{j}"), Array.Empty<string>(), Array.Empty<string>());
+        return CellSheetLogic.ViolationPartnerDays(ScheduleUtil.CachedProblem(st), sched, i, j, fams, Ui.ViolationCellFamilies);
+    }
+
     /// <summary>セル (i,j) に掛かる期間の制約の不足区間（無ければ null）。</summary>
     public C1Shortage? C1ShortageAt(int i, int j) => Ui.C1Shortages.FirstOrDefault(x => x.Staff == i && j >= x.From && j <= x.To);
 

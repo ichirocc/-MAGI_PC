@@ -1159,7 +1159,9 @@ public sealed partial class ScheduleView : UserControl
         AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), focus);
 
     /// <param name="settingsLabel">手が無いときの設定への行き先の名（S6 も組なしなら「回数などの設定を開く」）。</param>
-    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string settingsLabel = "設定を見直す")
+    /// <param name="whenNoFix">手が 0 件のときに理由の下へ足す要素（板挟みの「同じ違反のもう一方のセル」へのボタン）。</param>
+    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string settingsLabel = "設定を見直す",
+        Func<IEnumerable<UIElement>>? whenNoFix = null)
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day);
@@ -1216,6 +1218,7 @@ public sealed partial class ScheduleView : UserControl
             st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
             buttons.Children.Add(st);
             host.Children.Add(buttons);
+            if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
         }
         PropertyChangedEventHandler handler = (_, e) =>
         {
@@ -1436,7 +1439,19 @@ public sealed partial class ScheduleView : UserControl
             panel.Children.Add(row);
             var slot = new StackPanel();
             panel.Children.Add(slot);
-            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), settingsLabel)); };
+            // 他の人の手が無いとき、同じ違反のもう一方のセルへ（希望は触らない）。
+            IEnumerable<UIElement> PartnerButtons()
+            {
+                var partners = _vm.ViolationPartnerDaysFor(i, j);
+                foreach (var d in partners)
+                {
+                    var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
+                    var dd = d;
+                    b.Click += (_, _) => Reopen(i, dd, 0);
+                    yield return b;
+                }
+            }
+            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), settingsLabel, PartnerButtons)); };
             breakWish.Click += (_, _) => Reopen(i, j, 2);
         }
         else if (mode != 1 && status.Severity != CellSeverity.None)
