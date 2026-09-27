@@ -172,6 +172,6 @@ public class MagiViewModelRelaxTrialTest : IDisposable
 
     /// <summary>族名は下流の語彙（AnalysisView.BreakdownLabels）を UI 層から受けるので、ここでは同じ語彙の写しを渡す。</summary>
     private static readonly Dictionary<string, string> Labels = new()
-        { ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止", ["pref"] = "希望違反", ["groupViol"] = "担当外シフト" };
+        { ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止", ["pref"] = "希望と違う勤務", ["groupViol"] = "担当外シフト" };
     private static string Label(string f) => Labels.GetValueOrDefault(f, f);
 }

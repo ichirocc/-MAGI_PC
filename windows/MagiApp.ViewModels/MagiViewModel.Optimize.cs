@@ -81,7 +81,7 @@ public sealed partial class MagiViewModel
         if (pushUndo) PushUndo();
         var sig = $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
         var hint = s5 is null && sig == _lastSettingsSig && _lastResultHard > 0
-            ? $"前回と同じ設定での再実行です。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
+            ? $"前回と同じ設定でもう一度つくります。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
             : null;
         _lastSettingsSig = sig;
         // 停止・失敗で入力の盤面へ戻すときは、実行前の旗へ戻す（一度も計算していない盤面を「計算済み」にしない）。

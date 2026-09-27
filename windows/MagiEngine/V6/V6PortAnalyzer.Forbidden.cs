@@ -71,7 +71,7 @@ public sealed record ForbiddenRunDiagnosis(
                     ForbiddenCellEscape.Free => "崩せる",
                     ForbiddenCellEscape.Chain => "玉突きで崩せる",
                     ForbiddenCellEscape.Adjacent => "隣接日調整で崩せる",
-                    ForbiddenCellEscape.Pinned => "希望固定",
+                    ForbiddenCellEscape.Pinned => "本人の希望",
                     ForbiddenCellEscape.Blocked => "塞がり",
                     _ => c.Escape.ToString(),
                 };
@@ -154,13 +154,13 @@ public static partial class V6PortAnalyzer
                     //   という強い証拠であり、全勤務表空間の数学的な非充足証明ではない＝断定を避けた表現にする。
                     else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned))
                     {
-                        hint = $"本人希望どおりの並びが禁止パターンを構成しています（希望固定: {pinnedDays}）。" +
-                            "希望を変えない限りどう組んでもこの禁止連続は残ります。どちらか1件の希望を調整してください";
+                        hint = $"本人希望どおりの並びが禁止パターンを構成しています（本人の希望: {pinnedDays}）。" +
+                            "希望を変えない限りどう組んでもこの禁止の並びは残ります。どちらか1件の希望を調整してください";
                     }
                     else
                     {
                         hint = "全セルが塞がっています" +
-                            (pinnedDays.Length > 0 ? $"（希望固定: {pinnedDays}）" : "") +
+                            (pinnedDays.Length > 0 ? $"（本人の希望: {pinnedDays}）" : "") +
                             "。各セルで試したのは 1 セルの変更・そのセルを起点にした人員の玉突き・隣の日の調整までで、" +
                             "いずれも不成立でした（複数日にまたがる 2 人の入れ替えなどは試していません）。" +
                             "周辺の希望を1件調整するか、担当を追加してください";
@@ -351,7 +351,7 @@ public static partial class V6PortAnalyzer
                 $"本人希望={curSym}（動かしても正味の必須違反が減らない）");
         }
         return new ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.Blocked,
-            $"代替{alts}件全滅: 新たな禁止連続{c3nBlocked}・covU受け皿なし{noReceiver}" +
+            $"代替{alts}件全滅: 新たな禁止の並び{c3nBlocked}・人員不足の受け皿なし{noReceiver}" +
                 (c3wBlocked > 0 ? $"・希望の前日に禁止{c3wBlocked}" : ""));
     }
 }

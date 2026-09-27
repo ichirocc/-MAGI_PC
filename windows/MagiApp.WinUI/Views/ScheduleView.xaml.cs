@@ -303,8 +303,8 @@ public sealed partial class ScheduleView : UserControl
         {
             var hard = ResolveVioBrush(ui, "vio-covU");
             var soft = ResolveVioBrush(ui, "vio-covO");
-            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = hard, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(4) }, "赤枠＝絶対NG"));
-            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "橙枠＝できれば直す"));
+            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = hard, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(4) }, "実線の枠＝必須"));
+            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "破線の枠＝要調整（重）"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = soft }, "左上の点＝ほかの種類も重なっている"));
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "名前の横の ▼▲＝回数の不足・超過／日付の下の「休▲」＝そのシフトの人員不足▼・過剰▲（タップで内訳）", TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
@@ -1097,12 +1097,12 @@ public sealed partial class ScheduleView : UserControl
             lines.Add("在勤: " + string.Join("・", assigned.Select(i =>
             {
                 var nm = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-                return pinned.Contains(i) ? $"{nm}（希望固定）" : nm;
+                return pinned.Contains(i) ? $"{nm}（本人の希望）" : nm;
             })));
         }
         if (pinned.Count > 0)
         {
-            lines.Add("希望で固定: " + string.Join("・", pinned.Select(i => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")) +
+            lines.Add("本人の希望: " + string.Join("・", pinned.Select(i => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")) +
                 "（必須の希望どうしが同じ日に重なり、どちらかの希望を取り消さない限り過剰は残ります）");
         }
         _ = ShowTallyDetailAsync($"{sym} ・ {j + 1}日", lines, focusStaff: null, shift: k, day: j, pinned: pinned, assigned: assigned);
@@ -1158,9 +1158,9 @@ public sealed partial class ScheduleView : UserControl
     private StackPanel AttachFixSearch(ContentDialog dialog, FixFocus focus) =>
         AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), focus);
 
-    /// <param name="settingsLabel">手が無いときの設定への行き先の名（S6 も組なしなら「回数などの設定を開く」）。</param>
+    /// <param name="settingsLabel">手が無いときの設定への行き先の名（null＝節ごとの名 <see cref="SettingsLabel.For"/>）。</param>
     /// <param name="whenNoFix">手が 0 件のときに理由の下へ足す要素（板挟みの「同じ違反のもう一方のセル」へのボタン）。</param>
-    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string settingsLabel = "設定を見直す",
+    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
         Func<IEnumerable<UIElement>>? whenNoFix = null)
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
@@ -1214,7 +1214,7 @@ public sealed partial class ScheduleView : UserControl
                 w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
                 buttons.Children.Add(w);
             }
-            var st = new Button { Content = settingsLabel, MinHeight = 48 };
+            var st = new Button { Content = settingsLabel ?? SettingsLabel.For(why.SettingsSection), MinHeight = 48 };
             st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
             buttons.Children.Add(st);
             host.Children.Add(buttons);
@@ -1325,13 +1325,13 @@ public sealed partial class ScheduleView : UserControl
 
     private IReadOnlySet<int> _c1Stuck = new HashSet<int>();
 
-    /// <summary>期間の制約を勤務表だけでは満たせないときの次の一歩（希望を見る／設定を見直す）。</summary>
+    /// <summary>期間の制約を勤務表だけでは満たせないときの次の一歩（希望を見る／並び・期間の制約の設定を開く）。</summary>
     private StackPanel C1StuckButtons(Action hide)
     {
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var w = new Button { Content = "希望を見る", MinHeight = 48 };
         w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
-        var st = new Button { Content = "設定を見直す", MinHeight = 48 };
+        var st = new Button { Content = SettingsLabel.For("yr_cons"), MinHeight = 48 };
         st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
         buttons.Children.Add(w); buttons.Children.Add(st);
         return buttons;
@@ -1371,7 +1371,6 @@ public sealed partial class ScheduleView : UserControl
         var dilemma = CellSheetLogic.IsWishDilemma(wish, cur, status.Severity);
         var relax = _vm.RelaxTrialFor();
         var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j);
-        var settingsLabel = handoff == RelaxHandoff.NoWall ? CellSheetLogic.RelaxSettingsLabel : "設定を見直す";
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
         void Reopen(int ni, int nj, int m) { flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
@@ -1458,12 +1457,12 @@ public sealed partial class ScheduleView : UserControl
                     yield return b;
                 }
             }
-            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), settingsLabel, PartnerButtons)); };
+            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), null, PartnerButtons)); };
             breakWish.Click += (_, _) => Reopen(i, j, 2);
         }
         else if (mode != 1 && status.Severity != CellSeverity.None)
         {
-            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), settingsLabel));
+            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
         }
         if (mode == 1 && wish is not null)
         {

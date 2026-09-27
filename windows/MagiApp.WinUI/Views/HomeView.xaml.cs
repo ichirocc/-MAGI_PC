@@ -154,7 +154,7 @@ public sealed partial class HomeView : UserControl
             var remain = $"必須違反が {ui.BestHard}件 残っています。";
             if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
             {
-                headline = worstDay is null ? "人手が足りない日があります。" : $"{worstDay} が人手不足です。";
+                headline = worstDay is null ? "人員不足の日があります。" : $"{worstDay} が人員不足です。";
                 bigLabel = "なおすのを手伝って"; bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
@@ -502,7 +502,7 @@ public sealed partial class HomeView : UserControl
         await dialog.ShowAsync();
     }
 
-    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人手不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
+    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
     /// 試算の結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
     private async Task ShowWishConflictsAsync()
     {
@@ -591,7 +591,7 @@ public sealed partial class HomeView : UserControl
             }
             if (cands.Shortfall.Count > 0)
             {
-                panel.Children.Add(new TextBlock { Text = "人手不足の日に、別の勤務の希望がある人", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
+                panel.Children.Add(new TextBlock { Text = "人員不足の日に、別の勤務の希望がある人", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
                 foreach (var g in cands.Shortfall)
                 {
                     panel.Children.Add(new TextBlock { Text = g.Header, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
@@ -699,7 +699,7 @@ public sealed partial class HomeView : UserControl
             }
             else
             {
-                panel.Children.Add(new TextBlock { Text = "人手が足りない日はなくなりました。仕上げにもう一度つくると全体が整います。", TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。仕上げにもう一度つくると全体が整います。", TextWrapping = TextWrapping.Wrap });
             }
         }
         void OnChanged(object? s, PropertyChangedEventArgs e)
@@ -802,9 +802,9 @@ public sealed partial class HomeView : UserControl
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。希望を1件調整するか、担当を追加してください。"
                 : diag.BlockedNowSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠はいまの希望のままでは埋められません（残りは再実行で解消し得ます）。"
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠はいまの希望のままでは埋められません（残りはもう一度つくると解消し得ます）。"
                     : diag.InfeasibleSlots == 0
-                        ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再実行や設定の見直しで解消し得ます。"
+                        ? $"不足 {diag.TotalShortfall} 人は枠が足りています。もう一度つくるか設定の見直しで解消し得ます。"
                         : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {

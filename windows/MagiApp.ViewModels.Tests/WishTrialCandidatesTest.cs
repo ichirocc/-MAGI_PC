@@ -30,7 +30,7 @@ public class WishTrialCandidatesTest
         var c = NextActionGuide.WishTrialCandidatesOf(ui);
         Assert.Equal(new[]
         {
-            new WishTrialRow(0, 2, "山田", "希望の勤務になっていません（ほか: 禁止の並び・人手不足の日）", true),
+            new WishTrialRow(0, 2, "山田", "希望の勤務になっていません（ほか: 禁止の並び・人員不足の日）", true),
             new WishTrialRow(1, 3, "佐藤", "翌日（5日）の希望の勤務の前日に置けない勤務の希望です", true),
             new WishTrialRow(1, 4, "佐藤", "前日（4日）に置けない勤務が入っています", true),
             new WishTrialRow(2, 5, "鈴木", "希望が禁止の並びに掛かっています", false),
@@ -96,7 +96,7 @@ public class WishTrialCandidatesTest
     [Fact]
     public void T9_SiblingRowsDedupeAcrossOverlappingWindowsAndWithShortfall()
     {
-        // 休の希望 4 連日＝窓 [1,2,3] と [2,3,4]。2日が崩れると兄弟は 1・3・4日 を 1 行ずつ。4日 は人手不足の枠にも出る＝S5a が代表。
+        // 休の希望 4 連日＝窓 [1,2,3] と [2,3,4]。2日が崩れると兄弟は 1・3・4日 を 1 行ずつ。4日 は人員不足の枠にも出る＝S5a が代表。
         var ui = new UiState
         {
             StaffNames = new[] { "大島" },
@@ -113,7 +113,7 @@ public class WishTrialCandidatesTest
         };
         var c = NextActionGuide.WishTrialCandidatesOf(ui);
         Assert.Equal(new[] { 1, 2, 3, 4 }, c.Direct.Select(r => r.Day));
-        Assert.Equal("希望どうしが禁止の並び「休→休→休」を作っています（ほか: 人手不足の日）", c.Direct.Last().Reason);
+        Assert.Equal("希望どうしが禁止の並び「休→休→休」を作っています（ほか: 人員不足の日）", c.Direct.Last().Reason);
         Assert.Empty(c.Shortfall);
     }
 

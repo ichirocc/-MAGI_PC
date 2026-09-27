@@ -264,11 +264,11 @@ public static partial class V6PortAnalyzer
                     else if (cascade > 0 && chainVerified)
                         hint = "空き番が無く、過剰シフトからの多人数入替（玉突き=ブロック移動）が必要";
                     else if (cascade > 0)
-                        hint = $"玉突き候補{cascade}人はいますが、移動先の受け皿もすべて希望固定/禁止連続で塞がっており、" +
+                        hint = $"玉突き候補{cascade}人はいますが、移動先の受け皿もすべて本人の希望/禁止の並びで塞がっており、" +
                             "現在の希望のままではどう組んでも解消できません。希望を1件調整するか担当を追加してください";
                     else
-                        hint = "候補が希望/禁止連続で塞がっており、希望を1件調整するか担当を追加すると解消に近づく";
-                    reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・希望固定{pinned}・禁止連続{forbid}）。{hint}";
+                        hint = "候補が本人の希望/禁止の並びで塞がっており、希望を1件調整するか担当を追加すると解消に近づく";
+                    reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・本人の希望{pinned}・禁止の並び{forbid}）。{hint}";
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
                     verdict, reason, blockedNow, wishPinned));
@@ -409,14 +409,14 @@ public static partial class V6PortAnalyzer
                 else if (cascade > 0)
                     hint = "移動先はどこも定員一杯で、過剰シフトからの多人数入替（玉突き）が必要";
                 else
-                    hint = "在籍者は希望固定/禁止連続で動かせず、希望を1件調整するか担当を減らすと解消に近づく";
+                    hint = "在籍者は本人の希望/禁止の並びで動かせず、希望を1件調整するか担当を減らすと解消に近づく";
 
                 var blockedFamily = freeImproving == 0 && probedAny && famHits.Count > 0
                     ? famHits.MaxBy(kv => kv.Value).Key
                     : null;
                 surplusList.Add(new CoverageSurplus(j, DayLabel(state.StartDate, j), k, sym, need, got, excess,
                     blockedFamily,
-                    $"在勤者中 動かせる{free}人・玉突き必要{cascade}人・希望固定{pinned}人・禁止連続{forbid}人。{hint}",
+                    $"在勤者中 動かせる{free}人・玉突き必要{cascade}人・本人の希望{pinned}人・禁止の並び{forbid}人。{hint}",
                     pinnedIdx));
             }
         }

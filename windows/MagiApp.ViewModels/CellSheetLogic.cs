@@ -170,7 +170,7 @@ public static class CellSheetLogic
     }
 
     /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先）。禁止の並びは一致した並びの他の日、
-    /// 希望前日の禁止は印のある前日⇄希望の翌日。チェッカーの印だけから決め、希望は触らない。Kotlin <c>violationPartnerDays</c>。</summary>
+    /// 希望の前日の禁止は印のある前日⇄希望の翌日。チェッカーの印だけから決め、希望は触らない。Kotlin <c>violationPartnerDays</c>。</summary>
     public static IReadOnlyList<int> ViolationPartnerDays(Problem p, int[][] s, int i, int j, IReadOnlyList<string> families,
         IReadOnlyDictionary<string, IReadOnlyList<string>> cellFamilies)
     {
@@ -200,14 +200,14 @@ public static class CellSheetLogic
         return marks.Recommended.Count == 0 && others.Count > 0 && others.All(marks.HardRisk.Contains);
     }
 
-    /// <summary>全部 ⚠ の理由 1 行（無ければ null）: 本人の希望のセル→希望違反、前日（翌日）から続く禁止の並び→その日の勤務を名指し。
+    /// <summary>全部 ⚠ の理由 1 行（無ければ null）: 本人の希望のセル→希望と違う勤務、前日（翌日）から続く禁止の並び→その日の勤務を名指し。
     /// 候補ごとの増える必須の形が混ざるときは言わない（推測を書かない）。Kotlin <c>allRiskReason</c>。</summary>
     public static string? AllRiskReason(MagiState state, Problem p, int[][] s, int i, int j, ShiftMarks marks, IReadOnlyCollection<int> candidates)
     {
         var cur = s[i][j];
         if (!SingleCellHopeless(marks, candidates, cur)) return null;
         string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
-        if (p.Wish[i][j] == cur) return $"{Sym(cur)} は本人の希望なので、ほかへ変えると希望違反になります";
+        if (p.Wish[i][j] == cur) return $"{Sym(cur)} は本人の希望なので、ほかへ変えると希望と違う勤務になります";
         var trial = s.Select(r => (int[])r.Clone()).ToArray();
         var fromPrev = true; var fromNext = true;
         foreach (var k in marks.HardRisk)
@@ -345,7 +345,7 @@ public static class CellSheetLogic
         : FixPanelState.NotStarted;
 
     /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
-    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い（1 手も無ければ設定の行き先の名を具体にする）。</summary>
+    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い。</summary>
     public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j) =>
         r is not null && ((r.Staff == i && j >= r.WindowFirst && j <= r.WindowLast) || r.Moves.Any(m => m.Staff == i && m.Day == j)) ? RelaxHandoff.Offer
         : r is not null ? RelaxHandoff.None
@@ -355,8 +355,6 @@ public static class CellSheetLogic
 
     public static string RelaxHandoffLine(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf) =>
         $"設定を緩めると、この{NextActionGuide.RelaxTargetOf(r, ui, labelOf).What}を解消できる見込みです（上限 {r.Relaxes.Count}件）";
-
-    public const string RelaxSettingsLabel = "回数などの設定を開く";
 
     /// <summary>通知の「元に戻す」は、その操作が今も元に戻すの先頭にあるときだけ効く（後の別の操作を戻さない）。</summary>
     public static bool NoticeUndoApplies(long? topSerial, long noticeSerial) => topSerial is { } t && t == noticeSerial;

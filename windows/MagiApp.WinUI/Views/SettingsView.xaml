@@ -61,7 +61,7 @@
             <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ"
                           OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
 
-            <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止連続の崩し範囲（パターン全域）"
+            <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止の並びの崩し範囲（パターン全域）"
                           OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
 
             <!-- [Android 3.514.0同期/3.519.0訂正] 個々の手はisBetterゲートを通るが、探索経路が変わるため

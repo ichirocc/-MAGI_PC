@@ -164,7 +164,7 @@ public class GridDisplayMarksTest
         var why = FixSearchText.NoFixReasons(u, new FixFocus(0, 1), Limits, Need);
         Assert.True(why.WishRelated);
         Assert.Contains(why.Lines, l => l.Contains("どれも本人の希望で固定"));
-        Assert.Contains(why.Lines, l => l.Contains("上限 0"));
+        Assert.Contains(why.Lines, l => l.Contains("個人の上限が 0 回"));
         Assert.Contains(why.Lines, l => l.Contains("必要人数ぎりぎり"));
         Assert.Contains(why.Lines, l => l.Contains("下限＝上限で固定") && l.Contains("休 1回"));
         Assert.Equal(FixSearchText.NoFixScope, why.Lines[^1]);
@@ -172,6 +172,9 @@ public class GridDisplayMarksTest
         Assert.Equal(new[] { FixSearchText.NoFixScope }, FixSearchText.NoFixReasons(u, new FixFocus(1, 2)).Lines);
         Assert.Equal("yr_headcount", FixSearchText.NoFixReasons(u, new FixFocus(null, 1, 0)).SettingsSection);
         Assert.Contains("このセル", FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0)).Lines[0]);
+        Assert.Equal("必要人数の設定を開く", SettingsLabel.For("yr_headcount"));
+        Assert.Equal("並び・期間の制約の設定を開く", SettingsLabel.For("yr_cons"));
+        Assert.Equal("回数の設定を開く", SettingsLabel.For("yr_count"));
         // 禁止の並びの相手が本人の希望＝希望が関わる（［希望を見る］が出る）。板挟みの「他の人で補う」も同じ。
         var c3 = new UiState
         {

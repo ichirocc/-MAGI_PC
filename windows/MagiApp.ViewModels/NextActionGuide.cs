@@ -21,7 +21,7 @@ public sealed record InvolvedWish(int Staff, int Day, string Name, string Reason
 /// <summary>[S5] 試算の候補 1 行。Locked=false（担当できない勤務の希望）は試算ボタンを出さず <see cref="NextActionGuide.WishTrialNotLocked"/> を出す。</summary>
 public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false);
 
-/// <summary>[S5b] 人手不足の枠 1 つ（見出し「12日 日勤 1人不足」）と、その日に別の勤務で希望固定されている人の行（職員順）。</summary>
+/// <summary>[S5b] 人員不足の枠 1 つ（見出し「12日 日勤 1人不足」）と、その日に別の勤務で希望固定されている人の行（職員順）。</summary>
 public sealed record ShortfallWishGroup(int Day, int Shift, string Header, IReadOnlyList<WishTrialRow> Rows);
 
 public sealed record WishTrialCandidates(IReadOnlyList<WishTrialRow> Direct, IReadOnlyList<ShortfallWishGroup> Shortfall)
@@ -73,7 +73,7 @@ public static class NextActionGuide
 
     /// <summary>
     /// 必須違反に関わる希望を、名前・日付・理由つきで列挙する（職員順→日順）。関わる＝そのセルに希望違反(pref)がある、
-    /// 希望前日の禁止(c3w)の翌日の希望（c3w の印は前日側のセルに付く）、または禁止の並び(c3n)が希望で固定したセルに掛かっている。
+    /// 希望の前日の禁止(c3w)の翌日の希望（c3w の印は前日側のセルに付く）、または禁止の並び(c3n)が本人の希望のセルに掛かっている。
     /// </summary>
     public static IReadOnlyList<InvolvedWish> InvolvedWishes(UiState ui)
     {
@@ -94,7 +94,7 @@ public static class NextActionGuide
     /// [S5] 試算の候補（Kotlin <c>wishTrialCandidates</c>、§2.2・§2.3）。S5a＝必須違反に関わる希望を (職員, 日) で重複除去し、
     /// 代表の理由を pref＞c3w＞c3n で選ぶ（他は「ほか: …」）。c3w は翌日の希望 X と、印の付く前日自身が WishLocked の希望 Y の両方。
     /// 満たされない希望が希望どうしの衝突（<c>UiState.WishSelfConflicts</c>）の組に入っていれば、組のほかの希望も S5a の行にする（§2.2）。
-    /// S5b＝人手不足の枠の WishPinned（日→シフト、職員順）。S5a と重なる (職員, 日) は S5a を代表にし「ほか: 人手不足の日」を足す。
+    /// S5b＝人員不足の枠の WishPinned（日→シフト、職員順）。S5a と重なる (職員, 日) は S5a を代表にし「ほか: 人員不足の日」を足す。
     /// </summary>
     public static WishTrialCandidates WishTrialCandidatesOf(UiState ui)
     {
@@ -130,7 +130,7 @@ public static class NextActionGuide
         {
             var rep = g.OrderBy(h => h.Prio).First();
             var others = g.Select(h => h.Prio).Distinct().Where(p => p != rep.Prio).OrderBy(p => p).Select(p => shortNames[p]).ToList();
-            if (pinnedKeys.Contains(g.Key)) others.Add("人手不足の日");
+            if (pinnedKeys.Contains(g.Key)) others.Add("人員不足の日");
             var reason = others.Count == 0 ? rep.Reason : $"{rep.Reason}（ほか: {string.Join("・", others)}）";
             return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), ui.ManualPins.Contains($"{g.Key.Staff},{g.Key.Day}"));
         }).OrderBy(r => r.Staff).ThenBy(r => r.Day).ToList();

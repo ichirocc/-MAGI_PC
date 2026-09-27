@@ -118,7 +118,7 @@ public class V6PortAnalyzerForbiddenTest
         Assert.True(run.Cells.All(c => c.Escape == ForbiddenCellEscape.Pinned), "全セル希望固定");
         Assert.True(diag.AllBlocked);
         Assert.True(
-            run.Hint.Contains("希望固定") && run.Hint.Contains("残ります"),
+            run.Hint.Contains("本人の希望") && run.Hint.Contains("残ります"),
             "希望固定の明示と対処の案内");
     }
 

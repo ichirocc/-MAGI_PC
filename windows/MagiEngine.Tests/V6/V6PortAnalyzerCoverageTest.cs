@@ -263,7 +263,7 @@ public class V6PortAnalyzerCoverageTest
         Assert.Equal(1, diag.TotalSurplus);
         var sp = diag.Surpluses.Single();
         Assert.Equal(1, sp.Excess);
-        Assert.Contains("希望固定2人", sp.Reason);
+        Assert.Contains("本人の希望2人", sp.Reason);
         Assert.Contains("希望", sp.Reason);
     }
 
@@ -323,7 +323,7 @@ public class V6PortAnalyzerCoverageTest
         var sp = V6PortAnalyzer.DiagnoseCoverage(st).Surpluses.Single();
         Assert.Equal(1, sp.Excess); // A の過剰1件
         // reason は 0 件でも「希望固定0人」というラベルを必ず含むので、件数で見る。
-        Assert.Contains("希望固定0人", sp.Reason);
+        Assert.Contains("本人の希望0人", sp.Reason);
         Assert.Contains("動かせる1人", sp.Reason);
     }
 

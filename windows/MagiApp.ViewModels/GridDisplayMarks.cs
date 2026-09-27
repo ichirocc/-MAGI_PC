@@ -167,13 +167,24 @@ public static class GridDisplayMarks
     /// <summary>凡例の「枠の形 → 族」の 1 行。セルに印を持つ族だけを名指す。</summary>
     public static string LegendShapeFamilies(Func<string, string> labelOf) =>
         "実線: " + string.Join("・", new[] { "c3n", "c3w", "pref", "groupViol" }.Select(labelOf)) +
-        "／破線: 期間の約束：この日を○○にすると届く・" + labelOf("c3mn");
+        "／破線: " + labelOf("c1") + "（この日を○○にすると届く）・" + labelOf("c3mn");
 }
 
 /// <summary>探す対象（Kotlin <c>FixFocus</c>）。Staff/Shift は <c>FixSuggester</c> の絞り込み、Day は理由の読み取りだけに使う。</summary>
 public sealed record FixFocus(int? Staff, int? Shift, int? Day = null, int? ExceptStaff = null)
 {
     public string Key => $"{Staff?.ToString() ?? "-"},{Shift?.ToString() ?? "-"},{Day?.ToString() ?? "-"}" + (ExceptStaff is { } x ? $",x{x}" : "");
+}
+
+/// <summary>設定への行き先の名（節ごと。「設定を見直す」の一語で済ませない＝利用者決定 2026-09-27）。Kotlin <c>settingsLabelFor</c>。</summary>
+public static class SettingsLabel
+{
+    public static string For(string section) => section switch
+    {
+        "yr_headcount" => "必要人数の設定を開く",
+        "yr_cons" => "並び・期間の制約の設定を開く",
+        _ => "回数の設定を開く",
+    };
 }
 
 /// <summary>手が見つからなかったときの説明。Lines は確かめた事実だけ、WishRelated なら「希望を見る」を出す。</summary>
@@ -237,7 +248,7 @@ public static class FixSearchText
             if (days.Count > 0 && pinned.Count == days.Count) { outList.Add($"「{Sym(k)}」の {days.Count} 回はどれも本人の希望で固定されています。"); wish = true; }
             else if (pinned.Count > 0) { outList.Add($"「{Sym(k)}」の {days.Count} 回のうち {pinned.Count} 回は本人の希望で固定されています。"); wish = true; }
             var hi = limits?.Invoke(i, k).Hi;
-            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は上限 0（置かない設定）です。");
+            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は個人の上限が 0 回（置かない設定）です。");
             var tight = days.Where(j => needLimits?.Invoke(k, j) is { } lim && Headcount(k, j) <= lim.Lo).ToList();
             if (tight.Count > 0) outList.Add(string.Join("・", tight.Select(j => DayText.Short(ui.StartDate, j))) + $" は「{Sym(k)}」がその日の必要人数ぎりぎりで、抜けると人員不足になります。");
             if (limits is not null)

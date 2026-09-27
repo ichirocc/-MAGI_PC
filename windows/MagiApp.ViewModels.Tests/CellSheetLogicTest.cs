@@ -148,7 +148,7 @@ public class CellSheetLogicTest
         var m8 = CellSheetLogic.EvaluateShiftMarks(St, S, i, 7, CellSeverity.Hard, cands.OrderBy(x => x));
         Assert.Equal("前日が Dﾃ なので、Dﾃ 以外はどれも禁止の並びになります", CellSheetLogic.AllRiskReason(St, P, S, i, 7, m8, cands));
         var m9 = CellSheetLogic.EvaluateShiftMarks(St, S, i, 8, CellSeverity.Hard, cands.OrderBy(x => x));
-        Assert.Equal("A4 は本人の希望なので、ほかへ変えると希望違反になります", CellSheetLogic.AllRiskReason(St, P, S, i, 8, m9, cands));
+        Assert.Equal("A4 は本人の希望なので、ほかへ変えると希望と違う勤務になります", CellSheetLogic.AllRiskReason(St, P, S, i, 8, m9, cands));
         Assert.Null(CellSheetLogic.AllRiskReason(St, P, S, i, 7, ShiftMarks.Empty, cands));
         Assert.Equal("関連セル: 10/9(金) A4（希望・反映済）", CellSheetLogic.RelatedCellsLine(St, S, i, new[] { 8 }));
         Assert.Equal("関連セル: 10/8(木) Dﾃ", CellSheetLogic.RelatedCellsLine(St, S, i, new[] { 7 }));
