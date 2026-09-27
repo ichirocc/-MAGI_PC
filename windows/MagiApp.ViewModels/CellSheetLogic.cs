@@ -190,6 +190,15 @@ public static class CellSheetLogic
     public static string PartnerCellLabel(int day, bool single) =>
         single ? $"同じ違反のもう一方のセル（{day + 1}日）を見る" : $"同じ違反のほかのセル（{day + 1}日）を見る";
 
+    public const string SingleCellNote = "1 マスでは直りません。前後の日の組み合わせが必要です。";
+
+    /// <summary>おすすめが無く、置ける候補（今の値を除く）がすべて必須を増やす印なら、この 1 マスだけでは直らない。印の計算前（空）は false。</summary>
+    public static bool SingleCellHopeless(ShiftMarks marks, IEnumerable<int> candidates, int current)
+    {
+        var others = candidates.Where(k => k != current).ToList();
+        return marks.Recommended.Count == 0 && others.Count > 0 && others.All(marks.HardRisk.Contains);
+    }
+
     /// <summary>セル (i,j) を各候補にしたときの印（Kotlin <c>evaluateShiftMarks</c>）。stillWanted が false で打ち切る。</summary>
     public static ShiftMarks EvaluateShiftMarks(MagiState state, int[][] s, int i, int j, CellSeverity severity, IEnumerable<int> candidates,
         Func<bool>? stillWanted = null)

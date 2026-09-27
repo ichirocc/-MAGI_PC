@@ -134,6 +134,22 @@ public class CellSheetLogicTest
         Assert.Empty(stopped.HardRisk);
     }
 
+    /// <summary>職員10 10/8・10/9: おすすめ 0・置ける候補が全部警告＝1 マスでは直らない注記。印の計算前や、おすすめがあるセルには出ない。</summary>
+    [Fact]
+    public void AllRiskCellGetsTheSingleCellNote()
+    {
+        var i = Staff("職員10");
+        var cands = P.CanDoShiftsForStaff(i).ToHashSet();
+        foreach (var j in new[] { 7, 8 })
+        {
+            var m = CellSheetLogic.EvaluateShiftMarks(St, S, i, j, CellSeverity.Hard, cands.OrderBy(x => x));
+            Assert.True(CellSheetLogic.SingleCellHopeless(m, cands, S[i][j]), $"10/{j + 1}");
+        }
+        Assert.False(CellSheetLogic.SingleCellHopeless(ShiftMarks.Empty, cands, S[i][7]));
+        Assert.False(CellSheetLogic.SingleCellHopeless(new ShiftMarks(new HashSet<int> { 0 }, cands.Where(k => k != 0).ToHashSet()), cands, S[i][7]));
+        Assert.False(CellSheetLogic.SingleCellHopeless(new ShiftMarks(new HashSet<int>(), cands), new[] { S[i][7] }, S[i][7]));
+    }
+
     [Fact]
     public void A4OnStaff10Oct8IsMarkedAsHardRisk()
     {
