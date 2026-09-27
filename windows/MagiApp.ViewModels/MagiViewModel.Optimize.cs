@@ -45,6 +45,7 @@ public sealed partial class MagiViewModel
     {
         "covU" => "人員不足（必要人数）",
         "c3n" => "禁止の並び（連勤など）",
+        "c3w" => "希望の前日の禁止",
         "pref" => "希望シフト",
         "groupViol" => "担当外シフト",
         "low" => "個人の回数下限",

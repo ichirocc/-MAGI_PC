@@ -30,7 +30,7 @@ public sealed partial class AnalysisView : UserControl
 
     /// <summary>
     /// 違反の族キー → 画面に出す日本語名。Kotlin原本 <c>ui/BreakdownLabels.kt</c> の
-    /// <c>breakdownLabels</c> の逐語移植（19族＝<c>MirrorKeys.All</c> と過不足なく一致する）。
+    /// <c>breakdownLabels</c> の逐語移植（20族＝<c>MirrorKeys.All</c> と過不足なく一致する）。
     ///
     /// 引けなかったキーは生の英字キーがそのまま画面に出る＝<c>docs/operator_ux.md</c> の
     /// 「英字符号を画面に出さない」に正面から反するため、族を増やしたらここへ必ず足す
@@ -41,7 +41,7 @@ public sealed partial class AnalysisView : UserControl
     /// </summary>
     internal static readonly Dictionary<string, string> BreakdownLabels = new()
     {
-        ["groupViol"] = "担当外シフト", ["pref"] = "希望違反", ["covU"] = "人員不足", ["c3n"] = "禁止の並び",
+        ["groupViol"] = "担当外シフト", ["pref"] = "希望違反", ["covU"] = "人員不足", ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止",
         ["low"] = "下限割れ", ["high"] = "上限超過", ["apt"] = "適切回数のズレ", ["fair"] = "公平化のズレ",
         ["weekly"] = "曜日の偏り",
         ["c1"] = "期間の制約", ["c2"] = "個人の合計", ["c3"] = "守るとよい並び", ["c3m"] = "推奨の並び",

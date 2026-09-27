@@ -343,6 +343,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   起点の窓か手順のセル（必須）なら「設定を緩めると、この禁止の並びを解消できる見込みです（上限 N件）」＋［緩める候補を見る］＝`MainWindow.ShowRelaxTrial` で
   ホームの同じダイアログを開く（セルごとの再試算はしない）。探索中は同じ進捗文。探し終えて組も 1 手も無いときは［設定を見直す］を「回数などの設定を開く」に
   （`AttachFixSearch(settingsLabel)`、行き先は同じ）。テスト `CellSheetLogicTest.RelaxHandoffOnlyForCellsTheFoundSetTouches`（Kotlin 1 対 1）。
+  J(7)＝C# 単独のパリティ欠陥: `AnalysisView.BreakdownLabels`／`MagiViewModel.HardFamilyJp` に c3w が無く生キー「c3w」が画面に出ていた（3.542.0 の c3w 追加時の漏れ）。
+  族名は計画 §5-d の決定「希望の前日の禁止」で追加（Kotlin `BreakdownLabels.kt`/`hardFamilyJp` は「希望前日の禁止」のまま＝Kotlin 側 J で同語へ揃える）。
+  A〜C の同期は Kotlin の 3 コミットに 1 対 1。後続の Kotlin パッケージ（D〜K）がこれらの文言に触れたら別途同期する。
 - 2026-09-26（手動固定 backlog #41 を同期、Kotlin 0e08cd2 同日）: セル編集シートの［固定する］／［固定を外す］で、そのセルを最適化器だけが書き換えない（`MagiState.ManualPins`、JSON `manualPins`）。
   判定は Kotlin と同じく規則 A の仕組みに載せた: `ScheduleUtil.WishLocked`＝手動固定または実現可能な希望（`WishFixed`）、縛る値 `LockTo`（手動＞希望）、
   `WishMoveAllowed`/`KeepsWishPins(base, cand, strict)` は手動固定を `WishPinStrict` によらず判定。書く経路で `p.Wish` を縛る値として読んでいた所は `LockTo`、
