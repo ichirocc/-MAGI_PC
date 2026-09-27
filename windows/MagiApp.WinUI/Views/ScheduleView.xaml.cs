@@ -138,11 +138,15 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>手が見つからなかったときの次の一歩（編集タブの入口: 0=月次条件の希望／2=年間マスターの設定）。</summary>
     private readonly Action<int>? _openEditDoor;
 
-    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null)
+    /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。</summary>
+    private readonly Action? _showRelax;
+
+    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null, Action? showRelax = null)
     {
         _vm = vm;
         _goAnalysis = goAnalysis;
         _openEditDoor = openEditDoor;
+        _showRelax = showRelax;
         InitializeComponent();
         ScheduleItemsView.ItemsSource = _rows;
         _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
@@ -1154,7 +1158,8 @@ public sealed partial class ScheduleView : UserControl
     private StackPanel AttachFixSearch(ContentDialog dialog, FixFocus focus) =>
         AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), focus);
 
-    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus)
+    /// <param name="settingsLabel">手が無いときの設定への行き先の名（S6 も組なしなら「回数などの設定を開く」）。</param>
+    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string settingsLabel = "設定を見直す")
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day);
@@ -1207,7 +1212,7 @@ public sealed partial class ScheduleView : UserControl
                 w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
                 buttons.Children.Add(w);
             }
-            var st = new Button { Content = "設定を見直す", MinHeight = 48 };
+            var st = new Button { Content = settingsLabel, MinHeight = 48 };
             st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
             buttons.Children.Add(st);
             host.Children.Add(buttons);
@@ -1361,6 +1366,9 @@ public sealed partial class ScheduleView : UserControl
         var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
         var status = _vm.CellStatusFor(i, j, LabelOf);
         var dilemma = CellSheetLogic.IsWishDilemma(wish, cur, status.Severity);
+        var relax = _vm.RelaxTrialFor();
+        var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j);
+        var settingsLabel = handoff == RelaxHandoff.NoWall ? CellSheetLogic.RelaxSettingsLabel : "設定を見直す";
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
         void Reopen(int ni, int nj, int m) { flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
@@ -1428,12 +1436,24 @@ public sealed partial class ScheduleView : UserControl
             panel.Children.Add(row);
             var slot = new StackPanel();
             panel.Children.Add(slot);
-            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i))); };
+            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), settingsLabel)); };
             breakWish.Click += (_, _) => Reopen(i, j, 2);
         }
         else if (mode != 1 && status.Severity != CellSeverity.None)
         {
-            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
+            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), settingsLabel));
+        }
+        if (mode != 1 && status.Severity == CellSeverity.Hard)
+        {
+            if (handoff == RelaxHandoff.Offer && relax is not null)
+            {
+                panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxHandoffLine(relax.Result, ui, LabelOf), TextWrapping = TextWrapping.Wrap });
+                var showRelax = new Button { Content = "緩める候補を見る", MinHeight = 48 };
+                showRelax.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke(); };
+                panel.Children.Add(showRelax);
+            }
+            else if (handoff == RelaxHandoff.Searching)
+                panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxSearchingText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         }
         if (mode == 2) { showGrid = true; mode = 0; }
 

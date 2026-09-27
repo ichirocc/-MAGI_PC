@@ -273,7 +273,7 @@ public sealed partial class MainWindow : Window
             content = tag switch
             {
                 "home" => new HomeView(_vm, this),
-                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), OpenEditDoor),
+                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), OpenEditDoor, ShowRelaxTrial),
                 "edit" => new EditView(_vm),
                 "analysis" => new AnalysisView(_vm, JumpToCell, () => SelectTab("edit")),
                 "settings" => new SettingsView(_vm, this),
@@ -297,6 +297,13 @@ public sealed partial class MainWindow : Window
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.OpenDoor(door);
+    }
+
+    /// <summary>[S6] ホームの「設定を緩める候補」ダイアログを開く（セルシートの受け渡し。組は VM が持つので画面はどこからでも同じ）。</summary>
+    internal void ShowRelaxTrial()
+    {
+        SelectTab("home");
+        if (_tabCache.TryGetValue("home", out var c) && c is HomeView hv) _ = hv.ShowRelaxTrialAsync();
     }
 
     /// <summary>[phase9 #2] 勤務表CSVの書き出し。ピッカーの配線は設定タブに1つだけ置き、ここは委譲する。</summary>

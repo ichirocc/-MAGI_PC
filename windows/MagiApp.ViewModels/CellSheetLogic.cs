@@ -11,6 +11,9 @@ public enum CellSeverity { Hard, Soft, None }
 /// <summary>直し方探しの状態（計算・チェック待ち／未開始／探索中／完了／失敗）。</summary>
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
 
+/// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
+public enum RelaxHandoff { None, Searching, Offer, NoWall }
+
 /// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。</summary>
 public sealed record OpNotice(long Id, string Text, long UndoSerial);
 
@@ -280,6 +283,20 @@ public static class CellSheetLogic
         : doneKey == key ? FixPanelState.Done
         : failedKey == key ? FixPanelState.Failed
         : FixPanelState.NotStarted;
+
+    /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
+    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い（1 手も無ければ設定の行き先の名を具体にする）。</summary>
+    public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j) =>
+        r is not null && ((r.Staff == i && j >= r.WindowFirst && j <= r.WindowLast) || r.Moves.Any(m => m.Staff == i && m.Day == j)) ? RelaxHandoff.Offer
+        : r is not null ? RelaxHandoff.None
+        : searching ? RelaxHandoff.Searching
+        : noWall ? RelaxHandoff.NoWall
+        : RelaxHandoff.None;
+
+    public static string RelaxHandoffLine(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf) =>
+        $"設定を緩めると、この{NextActionGuide.RelaxTargetOf(r, ui, labelOf).What}を解消できる見込みです（上限 {r.Relaxes.Count}件）";
+
+    public const string RelaxSettingsLabel = "回数などの設定を開く";
 
     /// <summary>通知の「元に戻す」は、その操作が今も元に戻すの先頭にあるときだけ効く（後の別の操作を戻さない）。</summary>
     public static bool NoticeUndoApplies(long? topSerial, long noticeSerial) => topSerial is { } t && t == noticeSerial;

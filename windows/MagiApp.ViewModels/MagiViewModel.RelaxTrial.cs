@@ -78,6 +78,10 @@ public sealed partial class MagiViewModel
     public RelaxToken? RelaxTrialFor() =>
         _relaxCtx is { } c && _relaxResult is RelaxTrial.Result r && RelaxCtxNow() == c ? new RelaxToken(c.StateKey, c.BoardKey, r) : null;
 
+    /// <summary>いまのデータで探し終えて組が無かった（NoWall・試算不可）。走っている・未着手・古いなら false。</summary>
+    public bool RelaxNoWall() =>
+        _relaxCtx is { } c && c == RelaxCtxNow() && _relaxResult is not null && _relaxResult is not RelaxTrial.Result;
+
     /// <summary>直近の確定の結果 1 行。確定の後のデータから変わったら出さない（§9）。</summary>
     public string? RelaxDoneLine() => _relaxDone is { } d && d.Ctx == RelaxCtxNow() ? d.Line : null;
 

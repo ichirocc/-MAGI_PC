@@ -53,6 +53,30 @@ public class CellSheetLogicTest
         foreach (var c in canDo) Assert.Equal(layout, Ids(CellSheetLogic.Slots(real, c)));
     }
 
+    /// <summary>[S6] 起点の窓と手順のセルだけがホームの組を引き継ぐ。探索中・組なしはそれぞれの言い方、セルごとの試算はしない。</summary>
+    [Fact]
+    public void RelaxHandoffOnlyForCellsTheFoundSetTouches()
+    {
+        var r = (RelaxTrial.Result)RelaxTrial.FirstWall(St, S);
+        var i = Staff("職員10");
+        Assert.Equal((i, 7), (r.Staff, r.Day));
+        Assert.Equal(RelaxHandoff.Offer, CellSheetLogic.RelaxHandoffOf(r, false, false, i, 7));
+        Assert.Equal(RelaxHandoff.Offer, CellSheetLogic.RelaxHandoffOf(r, false, false, i, 8));
+        var touched = r.Moves.First(m => m.Staff != i);
+        Assert.Equal(RelaxHandoff.Offer, CellSheetLogic.RelaxHandoffOf(r, false, false, touched.Staff, touched.Day));
+        Assert.Equal(RelaxHandoff.None, CellSheetLogic.RelaxHandoffOf(r, false, false, i, 20));
+        Assert.Equal(RelaxHandoff.None, CellSheetLogic.RelaxHandoffOf(r, true, true, i, 20));
+        Assert.Equal(RelaxHandoff.Searching, CellSheetLogic.RelaxHandoffOf(null, true, false, i, 7));
+        Assert.Equal(RelaxHandoff.NoWall, CellSheetLogic.RelaxHandoffOf(null, false, true, i, 7));
+        Assert.Equal(RelaxHandoff.None, CellSheetLogic.RelaxHandoffOf(null, false, false, i, 7));
+        var ui = new UiState
+        {
+            StaffNames = St.StaffList.Select(x => x.Name).ToList(), ShiftSymbols = St.Shifts.Select(x => x.Kigou).ToList(),
+            ViolationCellFamilies = Rep.CellFamilies,
+        };
+        Assert.Equal("設定を緩めると、この禁止の並びを解消できる見込みです（上限 2件）", CellSheetLogic.RelaxHandoffLine(r, ui, Label));
+    }
+
     [Fact]
     public void C3wLineNamesTheNextDayWish()
     {
