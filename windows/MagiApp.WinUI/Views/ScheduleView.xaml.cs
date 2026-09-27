@@ -310,7 +310,7 @@ public sealed partial class ScheduleView : UserControl
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
-            ViolationLegendHost.Children.Add(LegendItem(new FontIcon { Glyph = "\uE72E", FontSize = 9 }, "左下の錠＝手動固定（最適化で変わらない）"));
+            ViolationLegendHost.Children.Add(LegendItem(new FontIcon { Glyph = "\uE72E", FontSize = 9 }, "左下の錠＝手動固定（自動では変更しません。周囲のセルを変えて解消できる場合はあります）"));
         }
 
         ShiftLegendHost.Children.Clear();
@@ -1493,7 +1493,7 @@ public sealed partial class ScheduleView : UserControl
             var u = _vm.Ui;
             int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
             var count = _vm.StaffCountShortFor(i);
-            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (count.Length > 0 ? $"　回数 {count}" : "");
+            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (u.ManualPins.Contains($"{i},{j}") ? "・手動固定" : "") + (count.Length > 0 ? $"　回数 {count}" : "");
         }
         var ctxText = new TextBlock { Text = CtxLine(), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
         ctx.Children.Add(ctxText);
@@ -1558,7 +1558,7 @@ public sealed partial class ScheduleView : UserControl
         if (mode == 0 && cur >= 0)
         {
             var pinnedNow = _vm.Ui.ManualPins.Contains($"{i},{j}");
-            remove = new Button { Content = pinnedNow ? "固定を外す" : "固定する", MinHeight = 48 };
+            remove = new Button { Content = pinnedNow ? "手動固定を外す" : "手動固定する", MinHeight = 48 };
             remove.Click += (_, _) => { _vm.TogglePin(i, j); Reopen(i, j, 0); };
         }
         else if (mode == 1 && wish is not null)

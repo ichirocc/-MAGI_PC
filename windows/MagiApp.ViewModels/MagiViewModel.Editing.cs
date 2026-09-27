@@ -331,7 +331,7 @@ public sealed partial class MagiViewModel
         AutoSave();
         Ui.MessageIsError = false;
         ApplyWishDisplay(ns);
-        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {j + 1}日を" + (on ? "固定しました（最適化で変わりません）" : "固定から外しました"), _undoStack.Last?.Value.Serial ?? 0L);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {j + 1}日を" + (on ? "手動固定しました（自動では変更しません）" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"{(on ? "手動固定" : "手動固定を外す")}: {OpNm(i)} {j + 1}日 {OpSy(cur)}");
     }
 

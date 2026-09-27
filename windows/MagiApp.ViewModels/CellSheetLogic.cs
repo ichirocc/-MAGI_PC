@@ -57,8 +57,8 @@ public static class CellSheetLogic
             .OrderByDescending(MirrorKeys.WeightOf).ToList();
 
     /// <summary>1 行の状態。最も重い族について、原因と関わる人・日・数をチェッカーと同じ盤面から言う。</summary>
-    /// <summary>[#41] 手動固定のセルに違反が残るときの状態の 1 行の言い方。</summary>
-    public const string PinBlockedNote = "手動固定のため直せません";
+    /// <summary>[#41] 手動固定のセルに違反が残るときの状態の 1 行の言い方（「直せない」と言わない＝周囲のセルを変えて解消できる場合はある）。</summary>
+    public const string PinBlockedNote = "このセルは手動固定のため、自動では変更しません";
 
     public static CellStatus StatusLine(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, Func<string, string> labelOf)
     {
@@ -66,7 +66,7 @@ public static class CellSheetLogic
         var top = families[0];
         var hard = families.Any(f => MirrorKeys.Hard.Contains(f));
         var detail = FamilyDetail(state, p, s, i, j, top, labelOf) ?? labelOf(top);
-        // [#41] 手動固定のセルは違反を数えて見せたまま、最適化器も直し方も動かさないことを言う。
+        // [#41] 手動固定のセルは違反を数えて見せたまま、最適化器がこのセルを動かさないことを言う。
         var more = (families.Count > 1 ? $"（ほか{families.Count - 1}件）" : "") +
             (i >= 0 && i < p.S && j >= 0 && j < p.T && p.Pinned(i, j) ? $"。{PinBlockedNote}" : "");
         return hard ? new CellStatus(CellSeverity.Hard, $"⚠ 必須：{detail}{more}", detail + more)
