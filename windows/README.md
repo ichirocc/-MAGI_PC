@@ -336,6 +336,9 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   「希望: 変更しません」「必須違反: h0件 → rr件」「変更規模: 設定 N項目・M人・Kセル」、前提（理由 1 行）／解消に使う設定の見出し分け、
   「この{族}を解消できます。他の必須違反 N件 は残ります。」、窓の外の手は「ほか Nセル（タップですべて表示）」で全件展開（`OtherMoveLines`）。
   族名は C# の慣例どおり `labelOf`（`AnalysisView.BreakdownLabels`）で受ける。テストは `MagiViewModelRelaxTrialTest.TextNamesTheSetAndTheMoves` に Kotlin `RelaxTrialTextTest` の assert を写した。
+  B＝ホームの S6 の段（`NextActionGuide.RelaxCardTextOf`＝Kotlin `relaxCardText`）: 見出し「氏名 8〜9日の禁止の並び（必須 5件中 1件）は、設定が壁になっています」＋本文＋
+  注記「残りの必須違反 N件はそのまま残ります」（`HomeView.xaml` に `BodyText`/`NoteText`）。S6 の探索中（`RelaxSearching`）は「下限の見込み」と言わず「必須違反が N件 残っています。」、
+  進捗行は「希望を変えずに、設定側で直す方法を調べています…」（`RelaxSearchingText`）。主ボタンの順序は不変。
 - 2026-09-26（手動固定 backlog #41 を同期、Kotlin 0e08cd2 同日）: セル編集シートの［固定する］／［固定を外す］で、そのセルを最適化器だけが書き換えない（`MagiState.ManualPins`、JSON `manualPins`）。
   判定は Kotlin と同じく規則 A の仕組みに載せた: `ScheduleUtil.WishLocked`＝手動固定または実現可能な希望（`WishFixed`）、縛る値 `LockTo`（手動＞希望）、
   `WishMoveAllowed`/`KeepsWishPins(base, cand, strict)` は手動固定を `WishPinStrict` によらず判定。書く経路で `p.Wish` を縛る値として読んでいた所は `LockTo`、

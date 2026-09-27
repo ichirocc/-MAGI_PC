@@ -161,6 +161,11 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(3, t.PrerequisiteRows.Count);
         Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
         Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
+        var c = NextActionGuide.RelaxCardTextOf(r, ui, Label);
+        Assert.Equal("職員10 8〜9日の禁止の並び（必須 5件中 1件）は、設定が壁になっています", c.Headline);
+        Assert.Equal("希望を残したまま、設定と勤務表を手順で変えられます", c.Body);
+        Assert.Equal("残りの必須違反 4件はそのまま残ります", c.Note);
+        Assert.Null(NextActionGuide.RelaxCardTextOf(r with { Rr = 0 }, ui, Label).Note);
     }
 
     /// <summary>族名は下流の語彙（AnalysisView.BreakdownLabels）を UI 層から受けるので、ここでは同じ語彙の写しを渡す。</summary>

@@ -62,9 +62,11 @@
                         <TextBlock x:Name="PhaseText" Style="{StaticResource MagiLabelMediumTextStyle}" FontWeight="Bold" />
                     </Border>
                     <TextBlock x:Name="HeadlineText" TextWrapping="Wrap" Style="{StaticResource MagiTitleLargeTextStyle}" FontWeight="Bold" />
+                    <TextBlock x:Name="BodyText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                    <TextBlock x:Name="NoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Grid x:Name="RelaxSearchRow" Visibility="Collapsed" ColumnDefinitions="*,Auto">
-                        <TextBlock x:Name="RelaxSearchText" Text="設定が壁になっていないか調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
+                        <TextBlock x:Name="RelaxSearchText" Text="希望を変えずに、設定側で直す方法を調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
                         <HyperlinkButton Grid.Column="1" Content="やめる" MinHeight="44" Click="OnStopRelaxClick" />
                     </Grid>
                     <TextBlock x:Name="ResolveText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />

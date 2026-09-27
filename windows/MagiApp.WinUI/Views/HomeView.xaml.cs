@@ -95,6 +95,7 @@ public sealed partial class HomeView : UserControl
         //   「完成」の対語である平易な「未完成」へ変更。
         string bg, fg, headline, bigLabel, phase, phaseHex;
         string? helperLabel;
+        string? body = null, note = null;   // 見出しの下の本文と注記（S6 の段だけ使う）
         bool bigEnabled;
         if (ui.Running)
         {
@@ -169,17 +170,19 @@ public sealed partial class HomeView : UserControl
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
-            else if (ui.FixSearched && !hardFix && _vm.RelaxTrialFor() is not null)
+            else if (ui.FixSearched && !hardFix && _vm.RelaxTrialFor() is { } relax)
             {
                 // [S6 §2.1] 必須違反の一部が利用者自身の設定（上限 0）で塞がれているときだけ、希望の段より先に出す。
-                headline = remain + "設定が壁になっています。";
+                var t = NextActionGuide.RelaxCardTextOf(relax.Result, ui, AnalysisView.LabelOf);
+                headline = t.Headline; body = t.Body; note = t.Note;
                 bigLabel = "緩める候補を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowRelaxTrialAsync();
                 if (!cands.IsEmpty) { helperLabel = "ぶつかっている希望を見る"; _helperAction = () => _ = ShowWishConflictsAsync(); }
             }
             else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
             {
-                headline = $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
+                // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
+                headline = ui.RelaxSearching ? remain : $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
                 bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
@@ -211,6 +214,12 @@ public sealed partial class HomeView : UserControl
         HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
+        BodyText.Visibility = body is null ? Visibility.Collapsed : Visibility.Visible;
+        BodyText.Text = body ?? "";
+        BodyText.Foreground = fgBrush;
+        NoteText.Visibility = note is null ? Visibility.Collapsed : Visibility.Visible;
+        NoteText.Text = note ?? "";
+        NoteText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
         var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;

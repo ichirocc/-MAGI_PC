@@ -29,6 +29,9 @@ public sealed record RelaxTrialText(
     string Title, string DialogTitle, string HardLine, string ScaleLine, IReadOnlyList<string> PrerequisiteRows, string Lead,
     IReadOnlyList<string> Rows, string SolveNote, IReadOnlyList<string> MoveLines, IReadOnlyList<string> OtherMoveLines, int OtherMoves, string? KeepNote);
 
+/// <summary>[S6] ホームの次にやることカードの文（見出し・本文・残る件数の注記）。Kotlin <c>RelaxCardText</c>。</summary>
+public sealed record RelaxCardText(string Headline, string Body, string? Note);
+
 public static class NextActionGuide
 {
     public const string WishTrialNotLocked = "担当できない勤務の希望なので、取り消しても勤務表は変わりません。";
@@ -202,6 +205,19 @@ public static class NextActionGuide
             OtherMoveLines: DayLines(outWin),
             OtherMoves: outWin.Count,
             KeepNote: keep);
+    }
+
+    public const string RelaxSearchingText = "希望を変えずに、設定側で直す方法を調べています…";
+
+    /// <summary>[S6] ホームの次にやることカードの文（Kotlin <c>relaxCardText</c>）。起点の違反と件数を名指しする。</summary>
+    public static RelaxCardText RelaxCardTextOf(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf)
+    {
+        var t = RelaxTargetOf(r, ui, labelOf);
+        var span = t.Span.Replace("日〜", "〜");
+        return new RelaxCardText(
+            Headline: $"{t.Name} {span}の{t.What}（必須 {r.H0}件中 {r.H0 - r.Rr}件）は、設定が壁になっています",
+            Body: "希望を残したまま、設定と勤務表を手順で変えられます",
+            Note: r.Rr > 0 ? $"残りの必須違反 {r.Rr}件はそのまま残ります" : null);
     }
 
     /// <summary>[S6 §9] 確定の後、次にやることカードに出す 1 行。</summary>
