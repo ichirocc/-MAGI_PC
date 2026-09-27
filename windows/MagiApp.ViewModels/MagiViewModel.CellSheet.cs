@@ -32,6 +32,23 @@ public sealed partial class MagiViewModel
         return CellSheetLogic.ViolationPartnerDays(ScheduleUtil.CachedProblem(st), sched, i, j, fams, Ui.ViolationCellFamilies);
     }
 
+    /// <summary>状態の下の「関連セル: …」（同じ違反のもう一方のセル。必須のセルだけ。無ければ null）。</summary>
+    public string? RelatedCellsLineFor(int i, int j, IReadOnlyList<int> partners)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        return st is null || sched is null ? null : CellSheetLogic.RelatedCellsLine(st, sched, i, partners);
+    }
+
+    /// <summary>全部 ⚠ の理由 1 行（無ければ null）。</summary>
+    public string? AllRiskReasonFor(int i, int j, ShiftMarks marks)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return null;
+        return CellSheetLogic.AllRiskReason(st, ScheduleUtil.CachedProblem(st), sched, i, j, marks, AllowedShiftsFor(i).ToList());
+    }
+
     /// <summary>希望タブの注記＝このセルの希望が必須違反の並びに掛かっているとき（無ければ null）。</summary>
     public string? WishTabInvolvedLineFor(int i, int j)
     {

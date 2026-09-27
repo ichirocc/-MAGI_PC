@@ -219,6 +219,17 @@ public static class FixSearchText
         {
             outList.Add($"このセル（{DayText.Short(ui.StartDate, sd)} の「{Sym(cur)}」）は本人の希望で固定されています。"); wish = true;
         }
+        IReadOnlyList<string> FamsAt(int i, int j) => ui.ViolationCellFamilies.TryGetValue($"{i},{j}", out var fs) ? fs : Array.Empty<string>();
+        // 禁止の並びの相手が本人の希望のセル＝このセルを動かしても並びは希望側に残る。
+        if (f.Staff is { } ci && f.Day is { } cd && FamsAt(ci, cd).Contains("vio-c3n"))
+        {
+            var near = new[] { cd - 1, cd + 1 }.Where(n => CellAt(ci, n) is { } v && WishIs(ci, n, v) && FamsAt(ci, n).Contains("vio-c3n")).ToList();
+            if (near.Count > 0)
+            {
+                outList.Add("この並びには本人の希望（" + string.Join("・", near.Select(n => $"{DayText.Short(ui.StartDate, n)} の「{Sym(CellAt(ci, n)!.Value)}」")) + "）が入っています。");
+                wish = true;
+            }
+        }
         if (f.Staff is { } i && f.Shift is { } k)
         {
             var days = i < ui.Schedule.Count ? Enumerable.Range(0, ui.Schedule[i].Count).Where(j => ui.Schedule[i][j] == k).ToList() : new List<int>();
@@ -241,6 +252,10 @@ public static class FixSearchText
                 if (fixedOthers.Count > 0)
                     outList.Add("ほかの勤務は下限＝上限で固定です（" + string.Join("・", fixedOthers.Select(k2 => $"{Sym(k2)} {limits(i, k2).Lo}回")) + "）。");
             }
+        }
+        if (f.ExceptStaff is { } ex && f.Day is { } xd && ui.Wishes.TryGetValue($"{ex},{xd}", out var xw) && CellAt(ex, xd) == xw)
+        {
+            outList.Add($"本人の希望（{DayText.Short(ui.StartDate, xd)} の「{Sym(xw)}」）は守ったままです。"); wish = true;
         }
         if (f.Staff is null && f.Shift is { } dk && f.Day is { } dd)
         {

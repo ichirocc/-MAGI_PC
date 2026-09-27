@@ -1401,9 +1401,14 @@ public sealed partial class ScheduleView : UserControl
         var statusText = new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 };
         statusBox.Children.Add(statusText);
         panel.Children.Add(statusBox);
+        var partners = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
+        if (mode == 0 && _vm.RelatedCellsLineFor(i, j, partners) is { } related)
+            panel.Children.Add(new TextBlock { Text = related, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         // 全部 ⚠ でおすすめ無しなら、状態の下に 1 行（印は増やさない。印が出た後に FillMarksAsync が埋める）。
         var singleNote = new TextBlock { Text = CellSheetLogic.SingleCellNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
         panel.Children.Add(singleNote);
+        var riskReason = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
+        panel.Children.Add(riskReason);
         if (_vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide()));
 
         // 「詳しく」: このセルに重なった違反すべてとこの職員の回数・偏り。
@@ -1445,7 +1450,6 @@ public sealed partial class ScheduleView : UserControl
             // 他の人の手が無いとき、同じ違反のもう一方のセルへ（希望は触らない）。
             IEnumerable<UIElement> PartnerButtons()
             {
-                var partners = _vm.ViolationPartnerDaysFor(i, j);
                 foreach (var d in partners)
                 {
                     var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(_vm.Ui.StartDate, d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
@@ -1605,7 +1609,10 @@ public sealed partial class ScheduleView : UserControl
             {
                 var m = await _vm.ShiftMarksForAsync(i, j, status.Severity, cts.Token);
                 if (cts.IsCancellationRequested) return;
-                singleNote.Visibility = mode == 0 && status.Severity != CellSeverity.None && CellSheetLogic.SingleCellHopeless(m, canDo, cur) ? Visibility.Visible : Visibility.Collapsed;
+                var hopeless = mode == 0 && status.Severity != CellSeverity.None && CellSheetLogic.SingleCellHopeless(m, canDo, cur);
+                singleNote.Visibility = hopeless ? Visibility.Visible : Visibility.Collapsed;
+                riskReason.Text = hopeless ? _vm.AllRiskReasonFor(i, j, m) ?? "" : "";
+                riskReason.Visibility = riskReason.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
                 foreach (var (k, tb) in marksByShift)
                 {
                     tb.Text = "";

@@ -145,6 +145,14 @@ public class CellSheetLogicTest
             var m = CellSheetLogic.EvaluateShiftMarks(St, S, i, j, CellSeverity.Hard, cands.OrderBy(x => x));
             Assert.True(CellSheetLogic.SingleCellHopeless(m, cands, S[i][j]), $"10/{j + 1}");
         }
+        var m8 = CellSheetLogic.EvaluateShiftMarks(St, S, i, 7, CellSeverity.Hard, cands.OrderBy(x => x));
+        Assert.Equal("前日が Dﾃ なので、Dﾃ 以外はどれも禁止の並びになります", CellSheetLogic.AllRiskReason(St, P, S, i, 7, m8, cands));
+        var m9 = CellSheetLogic.EvaluateShiftMarks(St, S, i, 8, CellSeverity.Hard, cands.OrderBy(x => x));
+        Assert.Equal("A4 は本人の希望なので、ほかへ変えると希望違反になります", CellSheetLogic.AllRiskReason(St, P, S, i, 8, m9, cands));
+        Assert.Null(CellSheetLogic.AllRiskReason(St, P, S, i, 7, ShiftMarks.Empty, cands));
+        Assert.Equal("関連セル: 10/9(金) A4（希望・反映済）", CellSheetLogic.RelatedCellsLine(St, S, i, new[] { 8 }));
+        Assert.Equal("関連セル: 10/8(木) Dﾃ", CellSheetLogic.RelatedCellsLine(St, S, i, new[] { 7 }));
+        Assert.Null(CellSheetLogic.RelatedCellsLine(St, S, i, Array.Empty<int>()));
         Assert.False(CellSheetLogic.SingleCellHopeless(ShiftMarks.Empty, cands, S[i][7]));
         Assert.False(CellSheetLogic.SingleCellHopeless(new ShiftMarks(new HashSet<int> { 0 }, cands.Where(k => k != 0).ToHashSet()), cands, S[i][7]));
         Assert.False(CellSheetLogic.SingleCellHopeless(new ShiftMarks(new HashSet<int>(), cands), new[] { S[i][7] }, S[i][7]));

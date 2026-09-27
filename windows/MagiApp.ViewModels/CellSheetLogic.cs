@@ -200,6 +200,42 @@ public static class CellSheetLogic
         return marks.Recommended.Count == 0 && others.Count > 0 && others.All(marks.HardRisk.Contains);
     }
 
+    /// <summary>全部 ⚠ の理由 1 行（無ければ null）: 本人の希望のセル→希望違反、前日（翌日）から続く禁止の並び→その日の勤務を名指し。
+    /// 候補ごとの増える必須の形が混ざるときは言わない（推測を書かない）。Kotlin <c>allRiskReason</c>。</summary>
+    public static string? AllRiskReason(MagiState state, Problem p, int[][] s, int i, int j, ShiftMarks marks, IReadOnlyCollection<int> candidates)
+    {
+        var cur = s[i][j];
+        if (!SingleCellHopeless(marks, candidates, cur)) return null;
+        string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
+        if (p.Wish[i][j] == cur) return $"{Sym(cur)} は本人の希望なので、ほかへ変えると希望違反になります";
+        var trial = s.Select(r => (int[])r.Clone()).ToArray();
+        var fromPrev = true; var fromNext = true;
+        foreach (var k in marks.HardRisk)
+        {
+            trial[i][j] = k;
+            if (ForbiddenRunAt(p, trial, i, j, p.Cons3n) is not { } run) return null;
+            if (!(run.J0 < j && trial[i][j - 1] == s[i][j - 1])) fromPrev = false;
+            if (!(run.J0 == j && run.Seq.Length > 1)) fromNext = false;
+        }
+        var keep = string.Join("・", candidates.Where(k => !marks.HardRisk.Contains(k)).Select(Sym));
+        var tail = keep.Length == 0 ? "どれに変えても禁止の並びになります" : $"{keep} 以外はどれも禁止の並びになります";
+        return fromPrev && j > 0 ? $"前日が {Sym(s[i][j - 1])} なので、{tail}"
+            : fromNext && j + 1 < p.T ? $"翌日が {Sym(s[i][j + 1])} なので、{tail}"
+            : null;
+    }
+
+    /// <summary>状態の下の「関連セル: 10/9(金) A4（希望・反映済）」（同じ違反のもう一方のセル。無ければ null）。</summary>
+    public static string? RelatedCellsLine(MagiState state, int[][] s, int i, IReadOnlyList<int> partners)
+    {
+        if (partners.Count == 0) return null;
+        string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
+        return "関連セル: " + string.Join("、", partners.Select(d =>
+        {
+            var w = state.Wishes.TryGetValue($"{i},{d}", out var v) ? v : (int?)null;
+            return DayText.Full(state.StartDate, d) + " " + Sym(s[i][d]) + (w is null ? "" : w == s[i][d] ? "（希望・反映済）" : "（希望・未反映）");
+        }));
+    }
+
     /// <summary>セル (i,j) を各候補にしたときの印（Kotlin <c>evaluateShiftMarks</c>）。stillWanted が false で打ち切る。</summary>
     public static ShiftMarks EvaluateShiftMarks(MagiState state, int[][] s, int i, int j, CellSeverity severity, IEnumerable<int> candidates,
         Func<bool>? stillWanted = null)

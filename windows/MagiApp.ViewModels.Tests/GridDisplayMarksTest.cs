@@ -172,6 +172,19 @@ public class GridDisplayMarksTest
         Assert.Equal(new[] { FixSearchText.NoFixScope }, FixSearchText.NoFixReasons(u, new FixFocus(1, 2)).Lines);
         Assert.Equal("yr_headcount", FixSearchText.NoFixReasons(u, new FixFocus(null, 1, 0)).SettingsSection);
         Assert.Contains("このセル", FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0)).Lines[0]);
+        // 禁止の並びの相手が本人の希望＝希望が関わる（［希望を見る］が出る）。板挟みの「他の人で補う」も同じ。
+        var c3 = new UiState
+        {
+            StartDate = "2026-10-01", Schedule = new IReadOnlyList<int>[] { new[] { 2, 3 } }, Wishes = new Dictionary<string, int> { ["0,1"] = 3 },
+            ShiftSymbols = new[] { "休", "Pｼ", "Dﾃ", "A4" },
+            ViolationCellFamilies = new Dictionary<string, IReadOnlyList<string>> { ["0,0"] = new[] { "vio-c3n" }, ["0,1"] = new[] { "vio-c3n" } },
+        };
+        var w0 = FixSearchText.NoFixReasons(c3, new FixFocus(0, null, 0));
+        Assert.True(w0.WishRelated);
+        Assert.Equal("この並びには本人の希望（10/2 の「A4」）が入っています。", w0.Lines[0]);
+        var w1 = FixSearchText.NoFixReasons(c3, new FixFocus(null, null, 1, ExceptStaff: 0));
+        Assert.True(w1.WishRelated);
+        Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[0]);
     }
 
     [Fact]
