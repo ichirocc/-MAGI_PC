@@ -56,12 +56,33 @@ public static class GridDisplayMarks
     /// <summary>勤務表だけでは期間の制約を満たせない職員（行末の内訳を開けるようにする）。</summary>
     public static IReadOnlySet<int> C1Stuck(UiState ui) => ui.C1Shortages.Where(x => x.Stuck).Select(x => x.Staff).ToHashSet();
 
-    /// <summary>画面に出すセルの違反クラス（重み降順）。チェッカーの c1（ランの先頭）は描かず、表示専用の印に置き換える。</summary>
+    /// <summary>上限0のセルの表示クラス。族は high（回数チップに従う）、枠は破線（どのセルが超過か一意なので）。</summary>
+    public const string ZeroCapClass = "vio-high0";
+
+    /// <summary>個人の上限0（休を除く）のシフトが入っているセル。上限0なら入っている日はどれも超過なのでセルに印を付けられる
+    /// （上限1以上の超過はどの日が余分か決まらないので名前の横の ▲ だけ）。</summary>
+    public static IReadOnlySet<string> ZeroCapCells(Problem p, int[][] s)
+    {
+        var o = new HashSet<string>();
+        for (var i = 0; i < Math.Min(p.S, s.Length); i++)
+            for (var j = 0; j < s[i].Length; j++)
+            {
+                var k = s[i][j];
+                if (k >= 0 && k < p.K && k != p.RestIdx && p.RangeHi[i][k] == 0) o.Add($"{i},{j}");
+            }
+        return o;
+    }
+
+    /// <summary>画面に出すセルの違反クラス（重み降順）。チェッカーの c1（ランの先頭）は描かず、表示専用の印に置き換える。
+    /// 上限0のセルには表示専用の <see cref="ZeroCapClass"/> を足す。</summary>
     public static IReadOnlyList<string> DisplayCellClasses(UiState ui, string key, IReadOnlySet<string> c1Marks)
     {
         var bas = VioBuckets.CellVioClasses(ui, key).Where(c => c != "vio-c1").ToList();
-        if (!c1Marks.Contains(key)) return bas;
-        return bas.Append("vio-c1").OrderByDescending(c => MirrorKeys.WeightOf(VioBuckets.FamilyOfVioClass(c))).ToList();
+        var extra = new List<string>();
+        if (c1Marks.Contains(key)) extra.Add("vio-c1");
+        if (ui.ZeroCapCells.Contains(key)) extra.Add(ZeroCapClass);
+        if (extra.Count == 0) return bas;
+        return bas.Concat(extra).OrderByDescending(c => MirrorKeys.WeightOf(VioBuckets.FamilyOfVioClass(c))).ToList();
     }
 
     /// <summary>最重の族に隠れた 2 番目の族のクラス（セルの小さな点。無ければ null）。</summary>

@@ -31,7 +31,7 @@ public static class VioBuckets
     public static string FamilyOfVioClass(string cls)
     {
         var f = cls.StartsWith("vio-", StringComparison.Ordinal) ? cls["vio-".Length..] : cls;
-        return f is "aptLow" or "aptHigh" ? "apt" : f;
+        return f is "aptLow" or "aptHigh" ? "apt" : f is "high0" ? "high" : f;
     }
 
     /// <summary>族キー → バケツキー（対象外＝null）。</summary>

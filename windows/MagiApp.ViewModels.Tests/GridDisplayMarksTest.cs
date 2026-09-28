@@ -251,4 +251,49 @@ public class GridDisplayMarksTest
         var needKeys = Rep.NeedFamilies.Where(kv => kv.Value.Any(c => c is "vio-covU" or "vio-covO")).Select(kv => int.Parse(kv.Key[..kv.Key.IndexOf(',')])).ToHashSet();
         Assert.Equal(needKeys, totals.Keys.ToHashSet());
     }
+
+    [Fact]
+    public void ZeroCapCellsAreMarkedAndFollowTheCountChip()
+    {
+        var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
+        var z = GridDisplayMarks.ZeroCapCells(p, s);
+        var ui2 = new UiState
+        {
+            Schedule = Ui.Schedule, ShiftSymbols = Ui.ShiftSymbols, ViolationCells = Ui.ViolationCells, ViolationCellFamilies = Ui.ViolationCellFamilies,
+            CountViolations = Ui.CountViolations, CountFamilies = Ui.CountFamilies, ZeroCapCells = z,
+        };
+        string Sym(int k) => St.Shifts[k].Kigou;
+        var expect = new HashSet<string>();
+        for (var i = 0; i < St.StaffCount; i++)
+            for (var j = 0; j < St.DayCount; j++)
+                if (Sym(s[i][j]) != "休" && p.RangeHi[i][s[i][j]] == 0) expect.Add($"{i},{j}");
+        Assert.Equal(expect, z.ToHashSet());
+        var s3 = Enumerable.Range(0, St.DayCount).Where(d => z.Contains($"3,{d}")).Select(d => $"10/{d + 1} {Sym(s[3][d])}").ToList();
+        Assert.Equal(new[] { "10/10 Aｱ", "10/11 Cｵ" }, s3);
+        var none = new HashSet<string>();
+        foreach (var key in z)
+        {
+            var parts = key.Split(','); int i = int.Parse(parts[0]), j = int.Parse(parts[1]);
+            Assert.Contains("vio-high", Rep.CountFamilies.GetValueOrDefault($"{i},{s[i][j]}") ?? new List<string>());
+            var cls = GridDisplayMarks.DisplayCellClasses(ui2, key, none);
+            Assert.Contains(GridDisplayMarks.ZeroCapClass, cls);
+        }
+        var off = VioBuckets.AllKeys.Where(b => b != VioBuckets.BucketOfFamily("high")).ToHashSet();
+        Assert.DoesNotContain(GridDisplayMarks.DisplayCellClasses(ui2, "3,9", none), c => VioBuckets.VioVisible(c, off));
+        foreach (var key in Rep.CountFamilies.Where(kv => kv.Value.Contains("vio-high")).Select(kv => kv.Key))
+        {
+            var parts = key.Split(','); int i = int.Parse(parts[0]), k = int.Parse(parts[1]);
+            if (p.RangeHi[i][k] > 0)
+                for (var j = 0; j < St.DayCount; j++) if (s[i][j] == k) Assert.DoesNotContain($"{i},{j}", z);
+        }
+    }
+
+    [Fact]
+    public void ZeroCapStatusLineIsNeutralAndNamesTheWish()
+    {
+        var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
+        Assert.Equal("⚠ 要調整：" + CellSheetLogic.ZeroCapText, CellSheetLogic.StatusLine(St, p, s, 3, 9, new[] { "high" }, Label).Text);
+        var i11 = St.StaffList.ToList().FindIndex(x => x.Name == "職員11");
+        Assert.Equal("⚠ 要調整：" + CellSheetLogic.ZeroCapWishText, CellSheetLogic.StatusLine(St, p, s, i11, 5, new[] { "high" }, Label).Text);
+    }
 }

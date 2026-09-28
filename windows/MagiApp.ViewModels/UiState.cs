@@ -88,6 +88,9 @@ public sealed partial class UiState : ObservableObject
     /// <summary>期間の制約の不足区間（<see cref="C1Display.Shortages"/>）。画面の表示専用の印と帯を作る元。</summary>
     [ObservableProperty] private IReadOnlyList<C1Shortage> c1Shortages = Array.Empty<C1Shortage>();
 
+    /// <summary>個人の上限0のシフトが入っているセル（<see cref="GridDisplayMarks.ZeroCapCells"/>）。画面の表示専用の印。</summary>
+    [ObservableProperty] private IReadOnlySet<string> zeroCapCells = new HashSet<string>();
+
     /// <summary>改善提案（違反を減らす1手＝変更/交換）。</summary>
     [ObservableProperty] private IReadOnlyList<FixSuggestion> fixSuggestions = Array.Empty<FixSuggestion>();
 

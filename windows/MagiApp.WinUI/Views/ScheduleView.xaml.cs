@@ -307,6 +307,7 @@ public sealed partial class ScheduleView : UserControl
             ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "破線の枠＝要調整（重）"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = soft }, "左上の点＝ほかの種類も重なっている"));
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "名前の横の ▼▲＝回数の不足・超過／日付の下の「休▲」＝そのシフトの人員不足▼・過剰▲（タップで内訳）", TextWrapping = TextWrapping.Wrap });
+            ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "個人の上限0のシフトが入った日は破線の枠（要調整）", TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));

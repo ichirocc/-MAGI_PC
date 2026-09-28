@@ -67,6 +67,9 @@ public static class CellSheetLogic
     /// <summary>[#41] 手動固定のセルに違反が残るときの状態の 1 行の言い方（「直せない」と言わない＝周囲のセルを変えて解消できる場合はある）。</summary>
     public const string PinBlockedNote = "このセルは手動固定のため、自動では変更しません";
 
+    public const string ZeroCapText = "個人の上限0（入れない指定）のシフトです。残るのは要調整です";
+    public const string ZeroCapWishText = "本人の希望が個人の上限0（入れない指定）のシフトに載っています。残るのは要調整です";
+
     public static CellStatus StatusLine(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, Func<string, string> labelOf)
     {
         if (families.Count == 0) return new CellStatus(CellSeverity.None, "違反なし");
@@ -148,7 +151,10 @@ public static class CellSheetLogic
                 return p.Wish[i][j] >= 0 ? $"希望は{Sym(p.Wish[i][j])}（今は{Sym(cur)}）" : null;
             case "groupViol": return $"{Sym(cur)}は{Name(i)}の担当外";
             case "low": return cur < 0 ? null : $"{Sym(cur)}が{Count(cur)}回（下限{p.RangeLo[i][cur]}）";
-            case "high": return cur < 0 ? null : $"{Sym(cur)}が{Count(cur)}回（上限{p.RangeHi[i][cur]}）";
+            case "high":
+                if (cur < 0) return null;
+                if (p.RangeHi[i][cur] == 0 && cur != p.RestIdx) return p.Wish[i][j] == cur ? ZeroCapWishText : ZeroCapText;
+                return $"{Sym(cur)}が{Count(cur)}回（上限{p.RangeHi[i][cur]}）";
             case "apt": return cur < 0 ? null : $"{Sym(cur)}が{Count(cur)}回（適切{p.Apt[i][cur]}回）";
             case "c2":
             {
