@@ -320,6 +320,7 @@ public sealed partial class MagiViewModel
         Ui.DistLocations = report.DistLocations;
         Ui.C1Shortages = C1Display.Shortages(ScheduleUtil.CachedProblem(st), schedule);
         Ui.ZeroCapCells = GridDisplayMarks.ZeroCapCells(ScheduleUtil.CachedProblem(st), schedule);
+        Ui.ZeroAllowCells = GridDisplayMarks.ZeroAllowCells(ScheduleUtil.CachedProblem(st), schedule);
         Ui.Logs = v6Logs.Concat(CompressDiagLogs(mappedDiag)).ToList();
         Ui.StaffNames = st.StaffList.Select(s => s.Name).ToList();
         Ui.StaffGroupSymbols = st.StaffList

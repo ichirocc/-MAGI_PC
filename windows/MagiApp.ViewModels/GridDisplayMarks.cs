@@ -73,14 +73,54 @@ public static class GridDisplayMarks
         return o;
     }
 
+    /// <summary>許容0の超過のセルの表示クラス（族→クラス）。人員の上限0・グループの上限0・適切回数0は、入っているセルが
+    /// どれも超過なので一意に印を付けられる（上限1以上の超過はどのセルが余分か決まらないので日付/名前の印だけ）。</summary>
+    public static readonly IReadOnlyDictionary<string, string> ZeroAllowClass = new Dictionary<string, string>
+    {
+        ["covO"] = "vio-covO0", ["c41"] = "vio-c410", ["c41s"] = "vio-c41s0", ["apt"] = "vio-apt0",
+    };
+
+    /// <summary>許容0の超過のセル → 表示クラス。covO は人員の上限（CovOCell の基準）が0の日、c41/c41s は上限0の日、
+    /// apt は実効目標0（個人設定のある組は -1 で対象外）。</summary>
+    public static IReadOnlyDictionary<string, string> ZeroAllowCells(Problem p, int[][] s)
+    {
+        var o = new Dictionary<string, string>();
+        var nS = Math.Min(p.S, s.Length);
+        int At(int i, int j) => j < s[i].Length ? s[i][j] : -1;
+        for (var j = 0; j < p.T; j++)
+            for (var k = 0; k < p.K; k++)
+            {
+                var on = Enumerable.Range(0, nS).Where(i => At(i, j) == k).ToList();
+                if (on.Count > 0 && p.CovOCell(k, j, on.Count) == on.Count) foreach (var i in on) o.TryAdd($"{i},{j}", ZeroAllowClass["covO"]);
+            }
+        void GroupDay(IReadOnlyList<C41> rows, int[] grp, string fam)
+        {
+            foreach (var c in rows)
+                if (c.U == 0)
+                    for (var j = 0; j < p.T; j++)
+                        for (var i = 0; i < nS; i++)
+                            if (grp[i] == c.GroupIdx && At(i, j) == c.ShiftIdx) o.TryAdd($"{i},{j}", ZeroAllowClass[fam]);
+        }
+        GroupDay(p.Cons41, p.Sgrp, "c41");
+        GroupDay(p.Cons41s, p.Ssk, "c41s");
+        for (var i = 0; i < nS; i++)
+            for (var j = 0; j < s[i].Length; j++)
+            {
+                var k = s[i][j];
+                if (k >= 0 && k < p.K && p.Apt[i][k] == 0) o.TryAdd($"{i},{j}", ZeroAllowClass["apt"]);
+            }
+        return o;
+    }
+
     /// <summary>画面に出すセルの違反クラス（重み降順）。チェッカーの c1（ランの先頭）は描かず、表示専用の印に置き換える。
-    /// 上限0のセルには表示専用の <see cref="ZeroCapClass"/> を足す。</summary>
+    /// 上限0のセルには表示専用の <see cref="ZeroCapClass"/>、許容0の超過のセルには <see cref="ZeroAllowCells"/> のクラスを足す。</summary>
     public static IReadOnlyList<string> DisplayCellClasses(UiState ui, string key, IReadOnlySet<string> c1Marks)
     {
         var bas = VioBuckets.CellVioClasses(ui, key).Where(c => c != "vio-c1").ToList();
         var extra = new List<string>();
         if (c1Marks.Contains(key)) extra.Add("vio-c1");
         if (ui.ZeroCapCells.Contains(key)) extra.Add(ZeroCapClass);
+        if (ui.ZeroAllowCells.TryGetValue(key, out var za)) extra.Add(za);
         if (extra.Count == 0) return bas;
         return bas.Concat(extra).OrderByDescending(c => MirrorKeys.WeightOf(VioBuckets.FamilyOfVioClass(c))).ToList();
     }

@@ -296,4 +296,32 @@ public class GridDisplayMarksTest
         var i11 = St.StaffList.ToList().FindIndex(x => x.Name == "職員11");
         Assert.Equal("⚠ 要調整：" + CellSheetLogic.ZeroCapWishText, CellSheetLogic.StatusLine(St, p, s, i11, 5, new[] { "high" }, Label).Text);
     }
+
+    /// <summary>許容0の超過（人員の上限0・グループの上限0・適切回数0）: 入っているセルはどれも超過＝全部に印。</summary>
+    [Fact]
+    public void ZeroAllowCellsMarkEveryCellOnlyWhenTheAllowanceIsZero()
+    {
+        var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
+        var z = GridDisplayMarks.ZeroAllowCells(p, s);
+        foreach (var (key, cls) in z)
+        {
+            var parts = key.Split(','); int i = int.Parse(parts[0]), j = int.Parse(parts[1]); var k = s[i][j];
+            switch (VioBuckets.FamilyOfVioClass(cls))
+            {
+                case "covO": var n = Enumerable.Range(0, p.S).Count(x => s[x][j] == k); Assert.Equal(n, p.CovOCell(k, j, n)); break;
+                case "c41": Assert.Contains(p.Cons41, c => c.U == 0 && c.ShiftIdx == k && c.GroupIdx == p.Sgrp[i]); break;
+                case "c41s": Assert.Contains(p.Cons41s, c => c.U == 0 && c.ShiftIdx == k && c.GroupIdx == p.Ssk[i]); break;
+                case "apt": Assert.Equal(0, p.Apt[i][k]); break;
+                default: Assert.Fail(cls); break;
+            }
+        }
+        Assert.Equal(2, z.Count);
+        Assert.All(z.Values, c => Assert.Equal("vio-covO0", c));
+        var g = p.Sgrp[0]; var k0 = s[0][0];
+        var st2 = St with { Cons41 = new List<C41Row> { new(St.Groups[g].Kigou, St.Shifts[k0].Kigou, "0", "0") } };
+        var z2 = GridDisplayMarks.ZeroAllowCells(ScheduleUtil.CachedProblem(st2), s);
+        Assert.Equal("vio-c410", z2["0,0"]);
+        var ui2 = new UiState { Schedule = Ui.Schedule, ShiftSymbols = Ui.ShiftSymbols, ViolationCells = Ui.ViolationCells, ViolationCellFamilies = Ui.ViolationCellFamilies, ZeroAllowCells = z2 };
+        Assert.Contains("vio-c410", GridDisplayMarks.DisplayCellClasses(ui2, "0,0", new HashSet<string>()));
+    }
 }

@@ -226,7 +226,7 @@ public class CellSheetLogicTest
     [Fact]
     public void CountLineAndDayLabels()
     {
-        Assert.Equal("休 11(適10)▲ Cｵ 9(適5)▲", CellSheetLogic.StaffCountShort(St, P, S, 0, Rep.CountFamilies!));
+        Assert.Equal("休 11(適切10)▲ Cｵ 9(適切5)▲", CellSheetLogic.StaffCountShort(St, P, S, 0, Rep.CountFamilies!));
         Assert.Equal("", CellSheetLogic.StaffCountShort(St, P, S, 0, new Dictionary<string, IReadOnlyList<string>>()));
         Assert.Equal("10/7(水)", CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 6));
         Assert.Null(CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 31));
@@ -298,5 +298,21 @@ public class CellSheetLogicTest
         var lines = CellSheetLogic.CellDetailLines(St, P, S, i, j, fams, Label);
         Assert.Equal(fams.Count, lines.Count);
         Assert.All(lines, l => Assert.True(l.StartsWith("必須・") || l.StartsWith("要調整・"), l));
+    }
+
+    /// <summary>職員08 10/10: 上限0 の Cｱ・有 を回数の行で言い、シフトボタンに「上限0」を添える。360dp で 2 行に収まる。</summary>
+    [Fact]
+    public void ZeroCapIsSpelledOutInTheCountLineAndButtons()
+    {
+        var i = Staff("職員08");
+        var line = "回数 " + CellSheetLogic.StaffCountShort(St, P, S, i, Rep.CountFamilies!);
+        Assert.Equal("回数 Pｼ 18(下限19)▼ Cｱ 2回（上限0＝入れない指定）▲ 有 1回（上限0）▲", line);
+        Assert.True(CellSheetLogic.FitsTwoLines(line, CellSheetLogic.CountLineEm));
+        var caps = CellSheetLogic.ZeroCapShifts(P, i).Select(k => St.Shifts[k].Kigou).ToList();
+        Assert.Contains("Cｱ", caps); Assert.Contains("有", caps); Assert.DoesNotContain("休", caps); Assert.DoesNotContain("B1", caps);
+        Assert.Equal("Cｱは個人の上限0（入れない指定）のシフトです。希望どおり入れると要調整に数えます", CellSheetLogic.WishZeroCapLine("Cｱ"));
+        for (var x = 0; x < St.StaffCount; x++)
+            Assert.True(CellSheetLogic.FitsTwoLines("回数 " + CellSheetLogic.StaffCountShort(St, P, S, x, Rep.CountFamilies!), CellSheetLogic.CountLineEm), $"職員{x + 1}");
+        Assert.False(CellSheetLogic.FitsTwoLines(new string('あ', 55), CellSheetLogic.CountLineEm));
     }
 }

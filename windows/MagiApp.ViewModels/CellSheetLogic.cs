@@ -278,25 +278,62 @@ public static class CellSheetLogic
         return new ShiftMarks(rec, risk);
     }
 
-    /// <summary>1 行の回数（例「Aｱ 7(適8)▼」）。この職員の回数の族があるシフトだけ。</summary>
+    /// <summary>回数の行（例「Aｱ 7(適切8)▼ Dﾃ 4(下限5)▼」）。この職員の回数の族があるシフトだけ、目安（下限/上限/適切/合計）と ▼▲。
+    /// 個人の上限0（休を除く）は「Cｱ 2回（上限0＝入れない指定）▲」（2 つ目からは「（上限0）」）。
+    /// 行頭の「回数 」込みで 360dp の 2 行（<see cref="CountLineEm"/>）に収まらなければ目安を 1 字（下/上/適/計）に縮める。</summary>
     public static string StaffCountShort(MagiState state, Problem p, int[][] s, int i, IReadOnlyDictionary<string, IReadOnlyList<string>> countClasses)
     {
-        var parts = new List<string>();
-        for (var k = 0; k < p.K; k++)
+        string Build(bool lng)
         {
-            if (!countClasses.TryGetValue($"{i},{k}", out var cls) || cls.Count == 0) continue;
-            var fams = cls.Select(c => c.StartsWith("vio-", StringComparison.Ordinal) ? c[4..] : c).ToList();
-            var n = s[i].Count(x => x == k);
-            (string Ref, bool Under) t =
-                fams.Contains("low") ? ($"下{p.RangeLo[i][k]}", true) :
-                fams.Contains("high") ? ($"上{p.RangeHi[i][k]}", false) :
-                fams.Contains("aptLow") ? ($"適{p.Apt[i][k]}", true) :
-                fams.Contains("aptHigh") ? ($"適{p.Apt[i][k]}", false) :
-                (p.Cons2.FirstOrDefault(c => c.ShiftIdx == k) is { } c2 ? $"計{c2.Count}" : "", true);
-            var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
-            parts.Add($"{sym} {n}{(t.Ref.Length == 0 ? "" : $"({t.Ref})")}{(t.Under ? "▼" : "▲")}");
+            var parts = new List<string>();
+            var zeroSeen = false;
+            for (var k = 0; k < p.K; k++)
+            {
+                if (!countClasses.TryGetValue($"{i},{k}", out var cls) || cls.Count == 0) continue;
+                var fams = cls.Select(c => c.StartsWith("vio-", StringComparison.Ordinal) ? c[4..] : c).ToList();
+                var n = s[i].Count(x => x == k);
+                var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
+                if (fams.Contains("high") && p.RangeHi[i][k] == 0 && k != p.RestIdx)
+                {
+                    parts.Add($"{sym} {n}回（{(zeroSeen ? "上限0" : ZeroCapNote)}）▲"); zeroSeen = true; continue;
+                }
+                string R(string l, string sh, int v) => $"{(lng ? l : sh)}{v}";
+                (string Ref, bool Under) t =
+                    fams.Contains("low") ? (R("下限", "下", p.RangeLo[i][k]), true) :
+                    fams.Contains("high") ? (R("上限", "上", p.RangeHi[i][k]), false) :
+                    fams.Contains("aptLow") ? (R("適切", "適", p.Apt[i][k]), true) :
+                    fams.Contains("aptHigh") ? (R("適切", "適", p.Apt[i][k]), false) :
+                    (p.Cons2.FirstOrDefault(c => c.ShiftIdx == k) is { } c2 ? R("合計", "計", c2.Count) : "", true);
+                parts.Add($"{sym} {n}{(t.Ref.Length == 0 ? "" : $"({t.Ref})")}{(t.Under ? "▼" : "▲")}");
+            }
+            return string.Join(" ", parts);
         }
-        return string.Join(" ", parts);
+        var full = Build(true);
+        return FitsTwoLines("回数 " + full, CountLineEm) ? full : Build(false);
+    }
+
+    public const string ZeroCapNote = "上限0＝入れない指定";
+
+    /// <summary>セルシートの回数の行の 1 行の字数（360dp−左右 16dp＝328dp を 12sp で割った数）。</summary>
+    public const double CountLineEm = 27.0;
+
+    /// <summary>この職員の個人の上限0（休を除く・担当できるもの）のシフト。シフトボタンの「上限0」の添え字。</summary>
+    public static IReadOnlySet<int> ZeroCapShifts(Problem p, int i) =>
+        i < 0 || i >= p.S ? new HashSet<int>() : Enumerable.Range(0, p.K).Where(k => k != p.RestIdx && p.RangeHi[i][k] == 0 && p.CanDo(i, k)).ToHashSet();
+
+    /// <summary>希望タブ: 希望が個人の上限0のシフトのときの 1 行（希望は優先して入る。残るのは要調整）。</summary>
+    public static string WishZeroCapLine(string wishSymbol) => $"{wishSymbol}は個人の上限0（入れない指定）のシフトです。希望どおり入れると要調整に数えます";
+
+    /// <summary>回数の行が 2 行に収まるか（全角 1・半角 0.5 の字幅で、<paramref name="emPerLine"/> 字ぶん × 2 行）。</summary>
+    public static bool FitsTwoLines(string text, double emPerLine)
+    {
+        double line = 0; var lines = 1;
+        foreach (var ch in text)
+        {
+            var w = ch < 0x80 || (ch >= '\uFF61' && ch <= '\uFF9F') ? 0.5 : 1.0;
+            if (line + w > emPerLine) { lines++; line = w; } else line += w;
+        }
+        return lines <= 2;
     }
 
     /// <summary>日送りボタンの日付「10/7(水)」（範囲外は null）。</summary>

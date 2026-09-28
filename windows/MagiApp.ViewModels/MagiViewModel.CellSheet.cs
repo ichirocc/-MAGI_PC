@@ -94,6 +94,10 @@ public sealed partial class MagiViewModel
         return st is null || sched is null ? "" : CellSheetLogic.StaffCountShort(st, ScheduleUtil.CachedProblem(st), sched, i, Ui.CountFamilies);
     }
 
+    /// <summary>この職員の個人の上限0のシフト（ボタンの「上限0」）。</summary>
+    public IReadOnlySet<int> ZeroCapShiftsFor(int i) =>
+        _state is { } st ? CellSheetLogic.ZeroCapShifts(ScheduleUtil.CachedProblem(st), i) : new HashSet<int>();
+
     /// <summary>シフトボタンの印を背景で評価する（取り消しでも空を返す）。</summary>
     public Task<ShiftMarks> ShiftMarksForAsync(int i, int j, CellSeverity severity, CancellationToken ct)
     {

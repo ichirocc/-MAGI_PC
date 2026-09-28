@@ -307,7 +307,7 @@ public sealed partial class ScheduleView : UserControl
             ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "破線の枠＝要調整（重）"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = soft }, "左上の点＝ほかの種類も重なっている"));
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "名前の横の ▼▲＝回数の不足・超過／日付の下の「休▲」＝そのシフトの人員不足▼・過剰▲（タップで内訳）", TextWrapping = TextWrapping.Wrap });
-            ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "個人の上限0のシフトが入った日は破線の枠（要調整）", TextWrapping = TextWrapping.Wrap });
+            ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "個人の上限0のシフトが入った日は破線の枠（要調整）／人員・グループの上限0や適切回数0のシフトが入った日は右上の角", TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = GridDisplayMarks.LegendShapeFamilies(LabelOf), TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.HotPink) }, "桃ドット＝希望が未反映"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
@@ -1527,6 +1527,7 @@ public sealed partial class ScheduleView : UserControl
         if (mode == 1 && wish is not null)
         {
             if (_vm.WishTabInvolvedLineFor(i, j) is { } involved) panel.Children.Add(new TextBlock { Text = involved, TextWrapping = TextWrapping.Wrap });
+            if (_vm.ZeroCapShiftsFor(i).Contains(wish.Value)) panel.Children.Add(new TextBlock { Text = CellSheetLogic.WishZeroCapLine(Sym(wish)), TextWrapping = TextWrapping.Wrap });
             panel.Children.Add(new TextBlock { Text = NextActionGuide.WishTabKeepNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         }
         if (mode != 1 && status.Severity == CellSeverity.Hard)
@@ -1555,12 +1556,15 @@ public sealed partial class ScheduleView : UserControl
         {
             var u = _vm.Ui;
             int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
-            var count = _vm.StaffCountShortFor(i);
-            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (u.ManualPins.Contains($"{i},{j}") ? "・手動固定" : "") + (count.Length > 0 ? $"　回数 {count}" : "");
+            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (u.ManualPins.Contains($"{i},{j}") ? "・手動固定" : "");
         }
         var ctxText = new TextBlock { Text = CtxLine(), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
         ctx.Children.Add(ctxText);
         panel.Children.Add(ctx);
+        // 回数は全幅で 2 行まで（字数の見積もりは CellSheetLogic.CountLineEm）。
+        var countLine = _vm.StaffCountShortFor(i);
+        if (countLine.Length > 0) panel.Children.Add(new TextBlock { Text = "回数 " + countLine, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
+        var zeroCaps = _vm.ZeroCapShiftsFor(i);
 
         var left = ui.LeftHand;
         var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
@@ -1591,7 +1595,10 @@ public sealed partial class ScheduleView : UserControl
                     var sbg = sl.CanDo && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.LightGray) : Colors.Gainsboro;
                     var sfg = sl.CanDo && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.DimGray;
                     var cell = new Grid();
-                    cell.Children.Add(new TextBlock { Text = (sel ? "✓ " : "") + Sym(k) + (sl.CanDo ? "" : " 外"), Foreground = new SolidColorBrush(sfg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                    var label = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                    label.Children.Add(new TextBlock { Text = (sel ? "✓ " : "") + Sym(k) + (sl.CanDo ? "" : " 外"), Foreground = new SolidColorBrush(sfg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center });
+                    if (zeroCaps.Contains(k)) label.Children.Add(new TextBlock { Text = "上限0", FontSize = 11, Foreground = new SolidColorBrush(sfg), HorizontalAlignment = HorizontalAlignment.Center });
+                    cell.Children.Add(label);
                     var mark = new TextBlock { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
                     cell.Children.Add(mark);
                     marksByShift[k] = mark;

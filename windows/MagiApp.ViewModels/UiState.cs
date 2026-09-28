@@ -91,6 +91,9 @@ public sealed partial class UiState : ObservableObject
     /// <summary>個人の上限0のシフトが入っているセル（<see cref="GridDisplayMarks.ZeroCapCells"/>）。画面の表示専用の印。</summary>
     [ObservableProperty] private IReadOnlySet<string> zeroCapCells = new HashSet<string>();
 
+    /// <summary>許容0の超過のセル → 表示クラス（<see cref="GridDisplayMarks.ZeroAllowCells"/>）。画面の表示専用の印。</summary>
+    [ObservableProperty] private IReadOnlyDictionary<string, string> zeroAllowCells = new Dictionary<string, string>();
+
     /// <summary>改善提案（違反を減らす1手＝変更/交換）。</summary>
     [ObservableProperty] private IReadOnlyList<FixSuggestion> fixSuggestions = Array.Empty<FixSuggestion>();
 
