@@ -445,6 +445,19 @@ public static class CellSheetLogic
 
     /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
     /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い。</summary>
+    /// <summary>ちら見に出す上位 <paramref name="n"/> シフト: 今の割当・希望を先に、残りは担当できるものを枠の順で（Kotlin <c>peekShifts</c>）。</summary>
+    public static IReadOnlyList<int> PeekShifts(IReadOnlyList<int> shown, IReadOnlySet<int> canDo, int current, int? wish, int n = 4)
+    {
+        var head = new List<int>();
+        if (current >= 0) head.Add(current);
+        if (wish is >= 0) head.Add(wish.Value);
+        return head.Concat(shown.Where(canDo.Contains)).Where(shown.Contains).Distinct().Take(n).ToList();
+    }
+
+    /// <summary>[S6] 既にある組の手順がこのセルを動かすなら、その行き先（新しく試算しない。Kotlin <c>peekRecommendation</c>）。</summary>
+    public static int? PeekRecommendation(RelaxTrial.Result? r, int i, int j) =>
+        r?.Moves.FirstOrDefault(m => m.Staff == i && m.Day == j)?.To;
+
     public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j) =>
         r is not null && ((r.Staff == i && j >= r.WindowFirst && j <= r.WindowLast) || r.Moves.Any(m => m.Staff == i && m.Day == j)) ? RelaxHandoff.Offer
         : r is not null ? RelaxHandoff.None

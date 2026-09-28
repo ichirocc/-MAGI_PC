@@ -1399,6 +1399,8 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>違反のあるセル: 違反の一覧・この職員の回数・偏り・開いた時点で始める直し方探し（Kotlin セルシート）と、
     /// その下にいつでも使える手動の割当ボタン。閉じると探索を取り消す。</summary>
     private CancellationTokenSource? _marksCts;
+    /// <summary>セル編集の全体表示（既定＝ちら見。閉じると戻す）。</summary>
+    private bool _cellSheetExpanded;
 
     /// <summary>
     /// セル編集（Android <c>CellEditSheet</c> の移植、2026-09-25）。上から: 見出し・1 行の状態・直し方（読む）→［割当］［希望］＋補足 →
@@ -1422,7 +1424,9 @@ public sealed partial class ScheduleView : UserControl
         var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j);
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
-        void Reopen(int ni, int nj, int m) { flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
+        var reopening = false;
+        void Reopen(int ni, int nj, int m) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
+        flyout.Closed += (_, _) => { if (!reopening) _cellSheetExpanded = false; };
 
         var head = new Grid();
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -1447,6 +1451,122 @@ public sealed partial class ScheduleView : UserControl
             panel.Children.Add(new TextBlock { Text = tourHeading, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
                 panel.Children.Add(new TextBlock { Text = covLine, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        }
+
+        if (!_cellSheetExpanded)
+        {
+            ShowPeek();
+            return;
+        }
+        var collapse = new Button { Content = "すべてのシフト ▴", MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        collapse.Click += (_, _) => { _cellSheetExpanded = false; Reopen(i, j, mode); };
+        panel.Children.Insert(0, collapse);
+
+        // ちら見（Kotlin PeekBody）: ①違反の 1 行＋✕ ②対象＋前/次 ③希望を取り消す・S6 の既存の推奨・上位 4 シフト・他 ▸。
+        void ShowPeek()
+        {
+            var peek = new StackPanel { Spacing = 4, MaxWidth = 400 };
+            var r1 = new Grid();
+            r1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            r1.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            r1.Children.Add(new TextBlock
+            {
+                Text = CellSheetLogic.TourHeading(tourItems, tourAt) ?? status.Text.Replace("⚠ ", ""), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
+                Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
+            });
+            var x = new Button { Content = "✕", MinHeight = 48, MinWidth = 48 };
+            ToolTipService.SetToolTip(x, "閉じる");
+            x.Click += (_, _) => flyout.Hide();
+            Grid.SetColumn(x, 1);
+            r1.Children.Add(x);
+            peek.Children.Add(r1);
+            var r2 = new Grid();
+            r2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            r2.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            r2.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+            if (tourAt >= 0 && tourItems.Count > 1)
+            {
+                var nav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                var pv = tourItems[(tourAt - 1 + tourItems.Count) % tourItems.Count].Cell;
+                var nx = tourItems[(tourAt + 1) % tourItems.Count].Cell;
+                var pb = new Button { Content = "◀ 前", MinHeight = 48 };
+                var nb = new Button { Content = "次 ▶", MinHeight = 48 };
+                pb.Click += (_, _) => { FocusCell(pv.I, pv.J); Reopen(pv.I, pv.J, 0); };
+                nb.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
+                nav.Children.Add(pb);
+                nav.Children.Add(nb);
+                Grid.SetColumn(nav, 1);
+                r2.Children.Add(nav);
+            }
+            peek.Children.Add(r2);
+            // 希望を取り消す・推奨は幅が足りないので上の行へ折り返す（横スクロールしない）。
+            var extra = new StackPanel { Orientation = Orientation.Horizontal };
+            var acts = new StackPanel { Orientation = Orientation.Horizontal };
+            if (wish is not null)
+            {
+                var rw = new Button { Content = "希望を取り消す", MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
+                rw.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, mode); };
+                extra.Children.Add(rw);
+            }
+            if (mode == 0 && CellSheetLogic.PeekRecommendation(relax?.Result, i, j) is { } rec && rec != cur && canDo.Contains(rec))
+            {
+                var rb = new Button { Content = $"推奨: {Sym(rec)} に変更", MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
+                rb.Click += (_, _) => { _vm.SetCell(i, j, rec); Reopen(i, j, 0); };
+                extra.Children.Add(rb);
+            }
+            var picks = CellSheetLogic.PeekShifts(_vm.SheetShifts(), canDo, cur, wish);
+            var zc = _vm.ZeroCapShiftsFor(i);
+            var marks = new Dictionary<int, TextBlock>();
+            foreach (var k in ui.LeftHand ? picks.Reverse() : picks)
+            {
+                var sel = mode == 0 ? k == cur : k == wish;
+                var sbg = k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.LightGray) : Colors.Gainsboro;
+                var sfg = k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.DimGray;
+                var g = new Grid();
+                var lab = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+                lab.Children.Add(new TextBlock { Text = (sel ? "✓ " : "") + Sym(k), Foreground = new SolidColorBrush(sfg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center });
+                if (zc.Contains(k)) lab.Children.Add(new TextBlock { Text = "上限0", FontSize = 11, Foreground = new SolidColorBrush(sfg), HorizontalAlignment = HorizontalAlignment.Center });
+                g.Children.Add(lab);
+                var mk = new TextBlock { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+                g.Children.Add(mk);
+                marks[k] = mk;
+                var b = new Button { Content = g, MinHeight = 48, Width = 56, Margin = new Thickness(0, 0, 6, 0), HorizontalContentAlignment = HorizontalAlignment.Stretch, Background = new SolidColorBrush(sbg), BorderThickness = new Thickness(sel ? 4 : 1) };
+                var kk = k;
+                b.Click += (_, _) =>
+                {
+                    if (mode == 0) { if (kk != cur) { _vm.SetCell(i, j, kk); Reopen(i, j, 0); } }
+                    else { _vm.SetWish(i, j, kk); Reopen(i, j, 1); }
+                };
+                acts.Children.Add(b);
+            }
+            var more = new Button { Content = "他 ▸", MinHeight = 48 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "すべてのシフト ▾");
+            more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
+            acts.Children.Add(more);
+            if (extra.Children.Count > 0) peek.Children.Add(extra);
+            peek.Children.Add(acts);
+            flyout.Content = peek;
+            _marksCts?.Cancel();
+            var pc = new CancellationTokenSource();
+            _marksCts = pc;
+            flyout.Closed += (_, _) => pc.Cancel();
+            if (mode == 0) _ = FillPeekMarksAsync();
+            async Task FillPeekMarksAsync()
+            {
+                try
+                {
+                    var m = await _vm.ShiftMarksForAsync(i, j, status.Severity, pc.Token);
+                    if (pc.IsCancellationRequested) return;
+                    foreach (var (k, tb) in marks)
+                    {
+                        if (m.HardRisk.Contains(k)) { tb.Text = "⚠"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)); }
+                        else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
+                    }
+                }
+                catch (OperationCanceledException) { }
+            }
+            flyout.ShowAt(anchor);
         }
 
         var (bg, fg) = status.Severity switch

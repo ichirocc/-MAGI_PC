@@ -315,4 +315,22 @@ public class CellSheetLogicTest
             Assert.True(CellSheetLogic.FitsTwoLines("回数 " + CellSheetLogic.StaffCountShort(St, P, S, x, Rep.CountFamilies!), CellSheetLogic.CountLineEm), $"職員{x + 1}");
         Assert.False(CellSheetLogic.FitsTwoLines(new string('あ', 55), CellSheetLogic.CountLineEm));
     }
+
+    [Fact]
+    public void PeekPutsCurrentAndWishFirstThenShiftOrder()
+    {
+        Assert.Equal(new[] { 3, 5, 0, 1 }, CellSheetLogic.PeekShifts(new[] { 0, 1, 2, 3, 4, 5 }, new HashSet<int> { 0, 1, 3, 5 }, 3, 5));
+        Assert.Equal(new[] { 0, 1, 2 }, CellSheetLogic.PeekShifts(new[] { 0, 1, 2 }, new HashSet<int> { 0, 1, 2 }, -1, null));
+        Assert.Equal(new[] { 2, 0, 1, 3 }, CellSheetLogic.PeekShifts(new[] { 0, 1, 2, 3, 4 }, new HashSet<int> { 0, 1, 2, 3, 4 }, 2, 2));
+    }
+
+    [Fact]
+    public void PeekRecommendationOnlyFromAnExistingRelaxMove()
+    {
+        var r = new RelaxTrial.Result(1, 4, 2, 6, Array.Empty<RelaxTrial.Relax>(), Array.Empty<RelaxTrial.Relax>(), 1, 1, 1, 0,
+            new[] { new RelaxTrial.Move(1, 4, 0, 2) });
+        Assert.Equal(2, CellSheetLogic.PeekRecommendation(r, 1, 4));
+        Assert.Null(CellSheetLogic.PeekRecommendation(r, 1, 5));
+        Assert.Null(CellSheetLogic.PeekRecommendation(null, 1, 4));
+    }
 }
