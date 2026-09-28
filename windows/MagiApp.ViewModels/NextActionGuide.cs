@@ -209,13 +209,13 @@ public static class NextActionGuide
             .Select(g => $"{DayText.Short(ui.StartDate, g.Key)}　" + string.Join("、", g.Select(m => $"{Name(m.Staff)} {Sym(m.From)}→{Sym(m.To)}"))).ToList();
         var inWin = r.Moves.Where(m => m.Day >= r.WindowFirst && m.Day <= r.WindowLast).ToList();
         var outWin = r.Moves.Where(m => m.Day < r.WindowFirst || m.Day > r.WindowLast).ToList();
-        var lead = r.Prerequisite.Count == 0 ? $"この組で緩めると、必須違反が {r.Att}件 減る見込みです。"
-            : $"手で置いた勤務に合わせて上限を上げ、この組も緩めると、必須違反が {r.Att}件 減る見込みです。";
+        var lead = r.Prerequisite.Count == 0 ? $"この組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。"
+            : $"手で置いた勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
         var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、手で置いた勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         return new RelaxTrialText(
             Title: $"{target.Name} {target.Span}　{target.What}",
-            DialogTitle: $"設定を緩める候補 — {target.Name} {target.Span} {target.What}",
+            DialogTitle: $"例外として上限を緩める候補 — {target.Name} {target.Span} {target.What}",
             HardLine: $"必須違反: {r.H0}件 → {r.Rr}件",
             ScaleLine: $"変更規模: 設定 {r.Prerequisite.Count + r.Relaxes.Count}項目・{people}人・{r.Moves.Count}セル",
             PrerequisiteRows: preRows,
@@ -228,14 +228,14 @@ public static class NextActionGuide
             KeepNote: keep);
     }
 
-    public const string RelaxSearchingText = "希望を変えずに、設定側で直す方法を調べています…";
+    public const string RelaxSearchingText = "希望を変えずに、個人の上限0を例外で緩める方法を調べています…";
 
     /// <summary>[S6] ホームの次にやることカードの文（Kotlin <c>relaxCardText</c>）。起点の違反と件数を名指しする。</summary>
     public static RelaxCardText RelaxCardTextOf(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf)
     {
         var t = RelaxTargetOf(r, ui, labelOf);
         return new RelaxCardText(
-            Headline: $"{t.Name} {t.Span}の{t.What}（必須 {r.H0}件中 {r.H0 - r.Rr}件）は、設定が壁になっています",
+            Headline: $"{t.Name} {t.Span}の{t.What}（必須 {r.H0}件中 {r.H0 - r.Rr}件）は、個人の上限0を例外で緩めると解消できる見込みです",
             Body: "希望を残したまま、設定と勤務表を手順で変えられます",
             Note: r.Rr > 0 ? $"残りの必須違反 {r.Rr}件はそのまま残ります" : null);
     }

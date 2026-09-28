@@ -14,7 +14,7 @@ public static class PreRunCheck
     /// <summary>個人の上限（0回）の密度。TopStaff は組の数が最も多い職員（同数は番号の小さい方）。</summary>
     public sealed record WallHint(int Pairs, int StaffCount, int TopStaff, int TopPairs);
 
-    /// <summary>本人の希望の件数が個人の上限を超える（BuildGuidance の 6e と同じ判定）。</summary>
+    /// <summary>本人の希望の件数が個人の上限を超える（BuildGuidance の 6e と同じ判定）。上限超過は要調整＝シートを出す条件に数えない。</summary>
     public sealed record WishOverCap(int Staff, int Shift, int Wished, int Hi);
 
     public sealed record Summary(
@@ -28,7 +28,7 @@ public static class PreRunCheck
         WallHint? Wall)
     {
         public int FloorCount => WishConflicts.Count + ImpossibleWishes.Count + ForcedShortfalls.Count +
-            DayProofs.Count + StaffProofs.Count + WishOverCaps.Count;
+            DayProofs.Count + StaffProofs.Count;
         /// <summary>利用者決定 2026-09-28: どちらかの節に 1 件でもあるときだけシートを出す。</summary>
         public bool NeedsSheet => FloorCount > 0 || RerunClears.Count > 0;
     }

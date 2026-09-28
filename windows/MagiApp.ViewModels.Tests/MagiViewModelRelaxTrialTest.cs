@@ -147,7 +147,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
         var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
         Assert.Equal(new[] { "職員10 Pｼ 上限 0→1", "職員11 Cｵ 上限 0→1" }, t.Rows.Select(x => x.Split('（')[0]));
-        Assert.Equal("手で置いた勤務に合わせて上限を上げ、この組も緩めると、必須違反が 1件 減る見込みです。", t.Lead);
+        Assert.Equal("手で置いた勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
         Assert.StartsWith("職員10 ", t.Title);
         Assert.EndsWith("禁止の並び", t.Title);
         Assert.True(t.MoveLines.Count > 0 && t.MoveLines.All(l => l.Contains('→')));
@@ -155,7 +155,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         // 窓の外の手も全件が読める（畳むだけで隠さない）
         Assert.Equal(t.OtherMoves, t.OtherMoveLines.Sum(l => l.Count(c => c == '→')));
         Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var head = l[..l.IndexOf('　')]; var d = int.Parse(head[(head.IndexOf('/') + 1)..]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
-        Assert.Equal("設定を緩める候補 — 職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
+        Assert.Equal("例外として上限を緩める候補 — 職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
         Assert.Equal("必須違反: 5件 → 4件", t.HardLine);
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         Assert.Equal($"変更規模: 設定 5項目・{people}人・{r.Moves.Count}セル", t.ScaleLine);
@@ -164,7 +164,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
         Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
         var c = NextActionGuide.RelaxCardTextOf(r, ui, Label);
-        Assert.Equal("職員10 10/8〜10/9の禁止の並び（必須 5件中 1件）は、設定が壁になっています", c.Headline);
+        Assert.Equal("職員10 10/8〜10/9の禁止の並び（必須 5件中 1件）は、個人の上限0を例外で緩めると解消できる見込みです", c.Headline);
         Assert.Equal("希望を残したまま、設定と勤務表を手順で変えられます", c.Body);
         Assert.Equal("残りの必須違反 4件はそのまま残ります", c.Note);
         Assert.Null(NextActionGuide.RelaxCardTextOf(r with { Rr = 0 }, ui, Label).Note);

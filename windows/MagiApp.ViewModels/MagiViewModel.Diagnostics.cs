@@ -199,7 +199,7 @@ public sealed partial class MagiViewModel
             v6Logs.AddRange(sanity.Warns.Select(w => $"[W] SanityCheck: {w}"));
             v6Logs.AddRange(sanity.Notes.Select(n => $"[I] V6Port: {n}"));
             v6Logs.AddRange(sanity.DuplicateSeqConstraints.Take(4).Select(d => $"[W] DuplicateSeq: {d}"));
-            v6Logs.AddRange(sanity.Guidance.Take(12).Select(g => $"[W] 設定ミス: {g.Where} — {g.Problem} → {g.Fix}"));
+            v6Logs.AddRange(sanity.Guidance.Take(12).Select(g => $"{(g.Neutral ? "[I] 設定の案内" : "[W] 設定ミス")}: {g.Where} — {g.Problem} → {g.Fix}"));
             if (coverageDiag is not null) v6Logs.AddRange(coverageDiag.LogLines());
             if (forbiddenDiag is not null) v6Logs.AddRange(forbiddenDiag.LogLines());
 

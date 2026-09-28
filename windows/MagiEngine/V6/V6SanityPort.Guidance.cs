@@ -47,7 +47,9 @@ public sealed record SettingIssue(
     int? DemandShiftIdx = null,
     int? DemandCap = null,
     string? GroupRangeFamily = null,
-    C41Row? GroupRangeRow = null);
+    C41Row? GroupRangeRow = null,
+    // 意図した設定に由来する案内（上限 0 × 希望）。ログで「設定ミス」と呼ばない。
+    bool Neutral = false);
 
 /// <summary>
 /// [フェーズ7ピース14/15統合] Faithful port of Kotlin's settings-mistake advisor —
@@ -773,7 +775,14 @@ public static partial class V6SanityPort
                 if (hi == int.MaxValue || !p.CanDo(i, k)) continue;
                 var wished = 0;
                 for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
-                if (wished > hi)
+                if (wished > hi && hi == 0)
+                {
+                    // 上限 0 は意図した「入れない指定」（3.507.0）＝設定ミスと呼ばない。
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{Sym(k)}」",
+                        $"個人の上限0（入れない指定）に希望が{wished}件載っています。残るのは要調整です",
+                        "希望を変えるか、例外として上限を緩めてください", Neutral: true));
+                }
+                else if (wished > hi)
                 {
                     var sym = Sym(k);
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」個人上限と希望の衝突",

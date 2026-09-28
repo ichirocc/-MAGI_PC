@@ -453,7 +453,7 @@ public sealed partial class HomeView : UserControl
         var t = token is null ? null : NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui, AnalysisView.LabelOf);
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = t?.DialogTitle ?? "設定を緩める候補",
+            XamlRoot = XamlRoot, Title = t?.DialogTitle ?? "例外として上限を緩める候補",
             Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
             CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
@@ -492,7 +492,7 @@ public sealed partial class HomeView : UserControl
             if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
             var confirm = new Button
             {
-                Content = "この組で緩めて、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                Content = "例外として上限を緩め、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
                 Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
             };
             confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); };

@@ -175,6 +175,22 @@ public class V6SanityPortTest
     }
 
     [Fact]
+    public void WishOnUpperZeroIsNeutral()
+    {
+        // 上限 0 は意図した入れない指定＝「衝突」と呼ばず、要調整が残ると案内する。
+        var st = AptVsNeedState(days: 10, need1: "1", aptTarget: "") with
+        {
+            Wishes = new Dictionary<string, int> { ["0,0"] = 1 },
+            StaffRange = new Dictionary<string, Range> { ["0,1"] = new Range("", "0") },
+        };
+        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), i => i.Where == "s0さんの「X」");
+        Assert.True(issue.Neutral);
+        Assert.Equal("個人の上限0（入れない指定）に希望が1件載っています。残るのは要調整です", issue.Problem);
+        Assert.Equal("希望を変えるか、例外として上限を緩めてください", issue.Fix);
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), i => i.Where.Contains("衝突"));
+    }
+
+    [Fact]
     public void DemandAboveStaffCapsStatesTheGapInBothPlaces()
     {
         // 必要数 10 回 vs 担当者の上限 3+4=7 回 → 差 3 回。文中の 2 か所とも数値で出る。

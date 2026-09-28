@@ -11,12 +11,17 @@ public sealed record PreRunSheetText(
     string? RerunHeader,
     IReadOnlyList<PreRunRow> RerunRows,
     string? WallLine,
-    bool HasWishRows);
+    bool HasWishRows,
+    string? OverCapNote = null,
+    IReadOnlyList<PreRunRow>? OverCapRows = null);
 
 /// <summary><see cref="PreRunCheck"/> の結果を行にする。Kotlin <c>preRunSheetText</c>（MagiViewState.kt）の移植。WinUI のシートは後日。</summary>
 public static class PreRunCheckText
 {
     public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。";
+    public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
+    public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、例外として後から「設定を緩めたら」で試せます。";
+    public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、例外として上限を緩めてください。";
     public const string RerunNote = "手で置いた勤務が個人の上限（0回）と食い違っています。つくると外されます。";
 
     public static PreRunSheetText Of(PreRunCheck.Summary s, UiState ui)
@@ -51,16 +56,23 @@ public static class PreRunCheckText
             var w = Pin(c.Core);
             floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません・証明つき）", w?.Staff, w?.Day, w is not null));
         }
-        foreach (var w in s.WishOverCaps) floor.Add(new PreRunRow($"{Name(w.Staff)}「{Sym(w.Shift)}」本人の希望{w.Wished}件が個人の上限（{w.Hi}回）を超えています"));
         foreach (var f in s.ForcedShortfalls) floor.Add(new PreRunRow($"「{f.ShiftSymbol}」 {f.Cells}日で担当できる人より必要人数が多く、人員不足が合計{f.Amount}人残ります"));
 
         var rerun = s.RerunClears.Select(c => new PreRunRow($"{Name(c.Staff)} {Day(c.Day)} {Sym(c.Shift)}", c.Staff, c.Day)).ToList();
         var wall = s.Wall is { } h
-            ? $"個人の上限（0回）が {h.Pairs}組（{h.StaffCount}人）あります。多いのは {Name(h.TopStaff)}（{h.TopPairs}組）。つくった後に「設定を緩めたら」で試せます。"
+            ? $"個人の上限0：{h.Pairs}組（{h.StaffCount}人）。入れないシフトの指定です。つくったあとに、例外として緩める試算もできます。"
             : null;
+        string? overNote = null;
+        if (s.WishOverCaps.Count > 0)
+        {
+            var f = s.WishOverCaps[0];
+            var who = $"{Name(f.Staff)}「{Sym(f.Shift)}」{(s.WishOverCaps.Count > 1 ? "など" : "")}";
+            overNote = $"{who}：{(s.WishOverCaps.All(w => w.Hi == 0) ? OverCapZero : OverCapOther)}";
+        }
+        var overRows = s.WishOverCaps.Select(w => new PreRunRow($"{Name(w.Staff)}「{Sym(w.Shift)}」 本人の希望{w.Wished}件（個人の上限{w.Hi}回）")).ToList();
         return new PreRunSheetText(
             floor.Count == 0 ? null : $"計算では消えない（{floor.Count}件）", floor,
             rerun.Count == 0 ? null : $"もう一度つくると外れる（{rerun.Count}件）", rerun,
-            wall, floor.Any(r => r.Wish));
+            wall, floor.Any(r => r.Wish), overNote, overRows);
     }
 }

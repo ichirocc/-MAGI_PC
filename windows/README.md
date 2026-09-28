@@ -335,6 +335,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   分類 `MagiEngine/V6/PreRunCheck.cs`（希望どうしの衝突・反映できない希望・配布不可・証明つきの矛盾（コアに希望）・希望件数＞個人の上限／
   手置き×上限 0／上限 0 の密度ヒント／指紋）と行の文 `MagiApp.ViewModels/PreRunCheckText.cs` を Kotlin と同名で移植、テストは
   `PreRunCheckTest`（エンジン）・`PreRunCheckTextTest`（ViewModels、実データの 11 件＋4 件の文を逐語）を 1 対 1。VM の入口ゲートと WinUI のシートは後日（利用者決定 5）。
+  同日追記（Kotlin 58e24d0）: 希望件数＞個人の上限は要調整の節へ（シートの条件に数えない）、上限 0 を「入れない指定」と呼び S6 を「例外として上限を緩める」へ
+  （NextActionGuide・HomeView の文と確定ボタン）、設定ミス診断 6e の上限 0 は中立の文（`SettingIssue.Neutral`、ログ「[I] 設定の案内」）。採点・MayPlace は不変。
 - 2026-09-28（行末の印のシート「回数・偏り」の再構成の同期、Kotlin 5fad61d 同日。表示のみ、採点不変）:
   `GridDisplayMarks.StaffCountSheetOf`（Kotlin `staffCountSheet`、C# は型名 `StaffCountSheet` と衝突するので `Of` を付けた）・`CountChip`・
   `WeeklySkewPhrase`・`Dow0Of`。回数は 2 列のチップ（`Dﾃ  -1回 (3/4)`、個人の下限・上限は `(17/下限20)`）、色は `CountChipBrushes` の 1 箇所
