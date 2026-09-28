@@ -28,13 +28,17 @@ public static partial class V6FinalPort
     internal const int StallOverrideFactor = 2;
 
     /// <summary>[backlog#35] 残りHARDが「解けないと証明済み」か＝covU は床以下で、非covU は c3n だけかつ c3n 壁（<paramref name="c3nWall"/>）。</summary>
-    internal static bool IsStructuralHardResidual(ViolationReport report, int hardFloor, Func<bool> c3nWall)
+    /// <remarks>[E0] <paramref name="wishReached"/>（<see cref="WishFloorReached"/>）も解けない残りと数え、c3w は希望どうしの衝突で証明された件数（<paramref name="c3wProven"/>）まで c3n と同列。既定は従来と同一。</remarks>
+    internal static bool IsStructuralHardResidual(ViolationReport report, int hardFloor, Func<bool> c3nWall, bool wishReached = false, int c3wProven = 0)
     {
         if (report.Hard <= 0) return false;
+        if (wishReached) return true;
         var covU = report.Breakdown.GetValueOrDefault("covU", 0);
         if (covU > hardFloor) return false;
         var nonCovU = report.Hard - covU;
-        return nonCovU == 0 || (nonCovU == report.Breakdown.GetValueOrDefault("c3n", 0) && c3nWall());
+        var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
+        var c3wOk = c3w <= c3wProven ? c3w : 0;
+        return nonCovU == 0 || (nonCovU == report.Breakdown.GetValueOrDefault("c3n", 0) + c3wOk && c3nWall());
     }
 
     /// <summary>Faithful port of Kotlin's <c>internal fun watchdogStagnationFired(...)</c>. See <see cref="StallOverrideFactor"/> for the design rationale.</summary>
@@ -60,11 +64,19 @@ public static partial class V6FinalPort
     /// <b>証明</b>した（c3nWallProven）場合も plateau とみなし stallHardMs へ移行する。証明つきのため
     /// 誤発火なし・早期終了は時間/電池の節約のみで品質は keep-best が担保（退化不能）。
     /// </summary>
+    /// <summary>[E0] 希望衝突の床に「到達」＝HARD がちょうど床 <paramref name="floor"/> で、残る HARD が全て希望由来（<paramref name="allWishOrigin"/>＝<c>V6SanityPort.HardAllWishOrigin</c>）。
+    /// 床を超えていれば未到達（検査もしない）。構造的 covU の床とは混ぜない。</summary>
+    internal static bool WishFloorReached(int hard, int floor, Func<bool> allWishOrigin) =>
+        floor > 0 && hard == floor && allWishOrigin();
+
+    /// <summary>ログ表記は Kotlin の enum 名（OFF/E0A/E0B）に揃える。</summary>
+    internal static string WishFloorModeName(WishFloorMode m) => m switch { WishFloorMode.E0A => "E0A", WishFloorMode.E0B => "E0B", _ => "OFF" };
+
     internal static long EffectiveStallMs(
         int bestHard, int hardFloor, int nonCovUHard, bool nonCovUAllC3n,
-        bool c3nWallProven, long stallHardMs, long stallMs)
+        bool c3nWallProven, long stallHardMs, long stallMs, bool wishReached = false)
     {
-        var basePlateau = bestHard <= hardFloor && nonCovUHard == 0;
+        var basePlateau = (bestHard <= hardFloor && nonCovUHard == 0) || wishReached;
         var c3nWallPlateau = nonCovUHard > 0 && nonCovUAllC3n
             && bestHard <= hardFloor + nonCovUHard && c3nWallProven;
         return basePlateau || c3nWallPlateau ? stallHardMs : stallMs;

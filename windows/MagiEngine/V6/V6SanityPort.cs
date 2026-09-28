@@ -122,31 +122,4 @@ public static partial class V6SanityPort
         return result;
     }
 
-    /// <summary>盤面の HARD のうち希望どうしの衝突が必ず生む分の族別件数（下限）。セルを共有しない組ごとに成立なら c3n/c3w・崩れなら pref を 1 件
-    /// （職員ごとに区間を終わりの早い順に取る＝最大個数）。ログの仕分け専用＝探索・採否には使わない。</summary>
-    public static IReadOnlyDictionary<string, int> WishSelfConflictHard(Problem p, int[][] schedule, IReadOnlyList<WishSelfConflict>? groups = null)
-    {
-        groups ??= WishSelfConflicts(p);
-        var result = new Dictionary<string, int>();
-        static int? Cell(int[] row, int d) => d >= 0 && d < row.Length ? row[d] : null;
-        foreach (var gs in groups.GroupBy(g => g.Staff))
-        {
-            var lastEnd = -1;
-            foreach (var g in gs.OrderBy(g => g.Days[^1]))
-            {
-                if (g.Days[0] <= lastEnd) continue;
-                lastEnd = g.Days[^1];
-                if (g.Staff < 0 || g.Staff >= schedule.Length) continue;
-                var row = schedule[g.Staff];
-                var holds = g.Family switch
-                {
-                    "c3w" => Cell(row, g.Days[0]) == g.Shifts[0],
-                    _ => Enumerable.Range(0, g.Days.Count).All(t => Cell(row, g.Days[t]) == g.Shifts[t]),
-                };
-                var key = holds ? g.Family : "pref";
-                result[key] = result.GetValueOrDefault(key, 0) + 1;
-            }
-        }
-        return result;
-    }
 }

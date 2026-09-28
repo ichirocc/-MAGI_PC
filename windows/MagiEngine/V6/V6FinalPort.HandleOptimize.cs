@@ -76,7 +76,10 @@ public static partial class V6FinalPort
         bool extraRefineRequirePostHardDrop = false,
         // ベンチ用の乱数種。null（既定）は従来どおり Seed=0＝時刻由来。0 も時刻由来。
         // 種を固定しても、ワーカー並列と壁時計の予算・後処理の時刻由来の種があるため盤面の再現は保証しない。
-        long? seed = null)
+        long? seed = null,
+        // [E0/測定中] 希望衝突の床に到達（WishFloorReached）したら頭打ち。E0A＝後処理は通常どおり、E0B＝後処理の研磨を省いて時間を返す。
+        // 既定 OFF。前面の実行だけが PolishGate.WishConflictFloorMode を渡す（背景は渡さない）。
+        WishFloorMode wishFloorMode = WishFloorMode.Off)
     {
         static long NowMs() => EngineClock.NowMs();
         static int TryOrZero(Func<int> f)
@@ -192,6 +195,24 @@ public static partial class V6FinalPort
         // [賢い早期脱出] 証明可能に解消不能な「データ起因HARD」の下限（構造的covU）。構造(assignability/need)
         //   のみ依存で最適化中に不変＝一度だけ算出する。
         var hardFloor = TryOrZero(() => V6SanityPort.StructuralHardFloor(state));
+        // [E0] 希望衝突の床。ログには常に出し、探索への配線は wishFloorMode≠Off のときだけ（Off なら挙動不変）。
+        var wishP = ScheduleUtil.CachedProblem(state);
+        (int Conflict, int Days) wishParts;
+        try { wishParts = V6SanityPort.WishConflictFloorParts(wishP); } catch (Exception) { wishParts = (0, 0); }
+        var wishFloorLogged = wishParts.Conflict + wishParts.Days;
+        var wishFloorMp = TryOrZero(() => { var (c, d) = V6SanityPort.WishConflictFloorParts(wishP, zeroCapBinding: true); return c + d; });
+        var wishOn = wishFloorMode != WishFloorMode.Off;
+        var wishC3wProven = wishOn ? V6SanityPort.WishConflictC3wCount(wishP) : 0;
+        var e0Fired = false;
+        bool WishReachedOn(int[][]? board, int hard) => board != null && WishFloorReached(hard, wishFloorLogged, () =>
+        {
+            try
+            {
+                var r = UnifiedViolationChecker.Check(state, board);
+                return r.Hard == wishFloorLogged && V6SanityPort.HardAllWishOrigin(wishP, board, r, wishParts.Days);
+            }
+            catch (Exception) { return false; }
+        });
 
         // [レビュー#9/3.230.0] 「最良改善」と「フェーズ遷移」の時計を分離。フェーズ遷移は短い個別猶予
         //   (phaseGraceMs)としてのみ機能させ、「本当に改善が無い時間」は lastBestImproveMs 単独で計測する。
@@ -258,7 +279,7 @@ public static partial class V6FinalPort
                         var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
                         Volatile.Write(ref bestNonCovUHard, gv + pf + c3n + c3w);
                         // [3.281.0/A] 非covU HARD が c3n のみか（c3n構造壁チェックの適用条件）＋best世代を進める。[3.542.0] c3w追加。
-                        Volatile.Write(ref bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w == 0 && c3n > 0);
+                        Volatile.Write(ref bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w <= wishC3wProven && c3n > 0);
                         Interlocked.Increment(ref bestVersion);
                     }
                 }
@@ -268,6 +289,29 @@ public static partial class V6FinalPort
 
         // [3.230.0] 現フェーズ自身にも与える短い個別猶予。
         var phaseGraceMs = Math.Clamp(budgetMs / 40, 2_000L, 15_000L);
+
+        // [E0] 到達判定は best 世代ごとに一度だけ（床ちょうどのときだけ盤面を検査する）。
+        Tuple<int, bool> wishReachedCache = Tuple.Create(-1, false);
+        bool BestWishReached()
+        {
+            var v = Volatile.Read(ref bestVersion);
+            if (Volatile.Read(ref wishReachedCache).Item1 != v)
+            {
+                var live = V6NativeOptimizer.LiveBest;
+                int[][]? board = null;
+                if (live != null)
+                {
+                    board = new int[live.Count][];
+                    for (var r = 0; r < live.Count; r++)
+                    {
+                        board[r] = new int[live[r].Count];
+                        for (var c = 0; c < live[r].Count; c++) board[r][c] = live[r][c];
+                    }
+                }
+                Volatile.Write(ref wishReachedCache, Tuple.Create(v, WishReachedOn(board, Volatile.Read(ref bestHard))));
+            }
+            return Volatile.Read(ref wishReachedCache).Item2;
+        }
 
         // [3.281.0/A] c3n構造壁の遅延証明。best 世代ごとに一度だけ ForbiddenDiag を実行しキャッシュする。
         bool C3nWallProven()
@@ -310,13 +354,15 @@ public static partial class V6FinalPort
                 Volatile.Read(ref bestHard) <= hardFloor + nonCovU &&
                 now - Volatile.Read(ref lastBestImproveMs) > stallHardMs && C3nWallProven();
             var effStall = EffectiveStallMs(
-                Volatile.Read(ref bestHard), hardFloor, nonCovU, Volatile.Read(ref bestNonCovUAllC3n), wall, stallHardMs, stallMs);
+                Volatile.Read(ref bestHard), hardFloor, nonCovU, Volatile.Read(ref bestNonCovUAllC3n), wall, stallHardMs, stallMs,
+                wishOn && Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached());
             if (now >= searchDeadlineMs || cancellationToken.IsCancellationRequested) return true;
             if (WatchdogStagnationFired(now, startMs, minRunMs, Volatile.Read(ref lastPhaseChangeMs), phaseGraceMs,
                     Volatile.Read(ref lastBestImproveMs), effStall))
             {
                 Volatile.Write(ref stagnationDurationMs, now - Volatile.Read(ref lastBestImproveMs));
                 Volatile.Write(ref stagnationIters, Volatile.Read(ref observedIters));   // [3.375.0]
+                Volatile.Write(ref e0Fired, wishOn && Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached());
                 Volatile.Write(ref stagnationFired, true);
                 return true;
             }
@@ -328,7 +374,8 @@ public static partial class V6FinalPort
         //   再確認する（一瞬のシグナルで片肺運転にしないため）。
         bool StopIsFinal() => NowMs() >= searchDeadlineMs || cancellationToken.IsCancellationRequested;
         // 後処理(runPostOptimization)用の別締切。stall では止めず予約枠 hardDeadlineMs まで使える。
-        bool PostShouldStop() => NowMs() >= hardDeadlineMs || cancellationToken.IsCancellationRequested;
+        bool E0bSkip() => wishFloorMode == WishFloorMode.E0B && Volatile.Read(ref stagnationFired) && Volatile.Read(ref e0Fired);
+        bool PostShouldStop() => NowMs() >= hardDeadlineMs || cancellationToken.IsCancellationRequested || E0bSkip();
 
         var tFirst0 = NowMs();
         var first = await V6NativeOptimizer.Optimize(state, sched, optsR, ShouldStop, ProgressWatch, StopIsFinal, cancellationToken)
@@ -361,7 +408,7 @@ public static partial class V6FinalPort
         //   （両者 keep-best＝退化なし）。
         var integrationDeadline = Math.Max(
             Math.Min(hardDeadlineMs - postReserveMs / 2, NowMs() + integrationBudgetMs), NowMs());
-        bool IntegrationStop() => NowMs() >= integrationDeadline || cancellationToken.IsCancellationRequested;
+        bool IntegrationStop() => NowMs() >= integrationDeadline || cancellationToken.IsCancellationRequested || E0bSkip();
         // [3.335.0/外部レビュー P1] 可変 static でなく**この実行の返り値**から読む（実行が重なっても
         //   別の実行の値を拾わない）。読む対象は従来どおり最後の段（RSIThenALNS なら ALNS 段）。
         var archivedElites = chained.FusionElites;
@@ -380,11 +427,14 @@ public static partial class V6FinalPort
             deadlineMs: integrationDeadline);
         var tIntegration1 = NowMs();
 
-        var post = V6HotfixPasses.RunPostOptimization(
-            state, integrated.Schedule, label.Tech,
-            shouldStop: PostShouldStop,
-            onPhase: phase => ProgressWatch(phase, null, NowMs() - startMs, budgetMs),
-            deadlineMs: hardDeadlineMs);   // [残予算ガード] HF66 が後段パスを押し出さないよう全体締切を渡す
+        // [E0B] 希望衝突の床で頭打ちしたら後処理の研磨を丸ごと省き、検査・HF70 だけにする（最終番兵は下で通常どおり）。
+        var post = E0bSkip()
+            ? V6HotfixPasses.MinimalPost(state, integrated.Schedule, label.Tech)
+            : V6HotfixPasses.RunPostOptimization(
+                state, integrated.Schedule, label.Tech,
+                shouldStop: PostShouldStop,
+                onPhase: phase => ProgressWatch(phase, null, NowMs() - startMs, budgetMs),
+                deadlineMs: hardDeadlineMs);   // [残予算ガード] HF66 が後段パスを押し出さないよう全体締切を渡す
         var tPost1 = NowMs();
 
         // [高精度化/予算残の活用] 後処理予約枠(budget/12, 8〜25s)は後処理が早期にフィックスポイント到達すると
@@ -408,7 +458,7 @@ public static partial class V6FinalPort
                 {
                     var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, post.Schedule);
                     return diag.HasRuns && diag.AllBlocked;
-                }));
+                }), wishOn && WishReachedOn(post.Schedule, post.Report.Hard), wishC3wProven);
             var canExtra = !stopRequested && !stagnated && post.Report.Total > 0 && !structuralHardResidual;
             if (extraMs >= 5_000 && !canExtra)
             {
@@ -495,15 +545,22 @@ public static partial class V6FinalPort
             message: $"予算配分: 総{seconds}s = 探索{(searchDeadlineMs - startMs) / 1000}s + 後処理予約{postReserveMs / 1000}s" +
                 $" / 早期終了の条件: 最短実行{minRunMs / 1000}s経過かつ現フェーズ{phaseGraceMs / 1000}s経過かつ無改善が" +
                 $"{stallMs / 1000}s(通常)〜{stallHardMs / 1000}s(頭打ち=HARD下限到達 or c3n構造壁)続いたとき" +
-                $" / 構造的HARD下限={hardFloor}");
+                $" / 構造的HARD下限={hardFloor} / 希望衝突の床={wishFloorLogged}(衝突{wishParts.Conflict}+日の証明{wishParts.Days}・" +
+                (wishOn ? $"到達で頭打ち={WishFloorModeName(wishFloorMode)}" : "記録のみ") + $"・上限0を拘束とみなすと{wishFloorMp}・covU の床とは別)");
 
         List<MirrorLog> BuildWatchdogLog()
         {
             var lastImp = lastImpAtSearchEnd;
             var endStallS = Math.Max(tChain1 - lastImp, 0L) / 1000;
             var nonCovU = Volatile.Read(ref bestNonCovUHard);
-            var kind = Volatile.Read(ref bestHard) <= hardFloor && nonCovU == 0
+            var wishReachedEnd = Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached();
+            var covUPlateau = Volatile.Read(ref bestHard) <= hardFloor && nonCovU == 0;
+            var kind = covUPlateau && wishOn && wishReachedEnd
+                ? $"plateau+希望衝突の床=短{stallHardMs / 1000}s"
+                : covUPlateau
                 ? $"plateau=短{stallHardMs / 1000}s"
+                : wishOn && wishReachedEnd
+                    ? $"希望衝突の床=短{stallHardMs / 1000}s"
                 : Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
                     ? $"c3n壁=短{stallHardMs / 1000}s"
                     : $"通常=長{stallMs / 1000}s";
@@ -538,7 +595,9 @@ public static partial class V6FinalPort
             {
                 new(level: "I", tag: "Watchdog",
                     message: $"停滞監視: 最終改善=経過{Math.Max((lastImp - startMs) / 1000, 0)}s・" +
-                        $"探索終了時の停滞{endStallS}s・実効閾値({kind})・発火={(Volatile.Read(ref stagnationFired) ? "あり" : "なし")}" +
+                        $"探索終了時の停滞{endStallS}s・実効閾値({kind})・" +
+                        $"希望衝突の床{wishFloorLogged}={(wishReachedEnd ? "到達" : "未到達")}(best {Volatile.Read(ref bestHard)})・" +
+                        $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(Volatile.Read(ref stagnationFired) ? "あり" : "なし")}" +
                         $"・反復(進捗報告ぶん・目安)=最終改善時{FmtIter(lastImpItersAtSearchEnd)}→" +
                         $"探索終了時{FmtIter(itersAtSearchEnd)}（無改善のまま約{FmtIter(itersAtSearchEnd - lastImpItersAtSearchEnd)}転・" +
                         $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}"),
@@ -559,6 +618,9 @@ public static partial class V6FinalPort
                             ? $"・発火までに無改善のまま約{FmtIter(Volatile.Read(ref stagnationIters) - Volatile.Read(ref lastBestImproveIters))}転(進捗報告ぶん・目安)"
                             : "") +
                         "・解は最良を維持）" +
+                        (Volatile.Read(ref e0Fired)
+                            ? $"（希望衝突の床に到達＝{WishFloorModeName(wishFloorMode)}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
+                            : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                         (Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
                             ? "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）"
@@ -645,7 +707,7 @@ public static partial class V6FinalPort
             var covUWall = CovUStructuralWall(covUNow, hardFloor, covUBlocked);
             // 希望どうしの衝突（希望を1件取り消すまで c3n/c3w か pref が必ず残る）。族別に open から差し引く。
             IReadOnlyDictionary<string, int> selfConflict;
-            try { selfConflict = V6SanityPort.WishSelfConflictHard(ScheduleUtil.CachedProblem(state), finalSched); }
+            try { selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state), finalSched); }
             catch (Exception) { selfConflict = new Dictionary<string, int>(); }
             var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)

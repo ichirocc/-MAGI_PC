@@ -117,16 +117,18 @@ public class WishSelfConflictTest
     }
 
     [Fact]
-    public void SelfConflictHardCountsOnePerDisjointGroup()
+    public void SelfConflictHardUsesReportUnitsAndFloorIsMinimum()
     {
         var st = State(RestWindow(("0,5", Rest)));
         var p = ScheduleUtil.CachedProblem(st);
         var honored = new[] { new[] { A, A, Rest, Rest, Rest, Rest, A }, Enumerable.Repeat(A, 7).ToArray() };
-        Assert.Equal(new[] { ("c3n", 1) }, V6SanityPort.WishSelfConflictHard(p, honored).Select(kv => (kv.Key, kv.Value)));
+        // report.Hard と同じ単位＝重なる 2 窓は c3n 2 件（checker と一致）。
+        Assert.Equal(new[] { ("c3n", 2) }, V6SanityPort.WishConflictHard(p, honored).Select(kv => (kv.Key, kv.Value)));
         Assert.Equal(2, UnifiedViolationChecker.Check(st, honored).Breakdown["c3n"]);
-        // 重なる 2 窓は真ん中の 1 件を破れば両方解ける＝下限は 1。
+        // 真ん中の 1 件を破れば両方解ける＝床は 1。
         var brokeMiddle = new[] { new[] { A, A, Rest, A, Rest, Rest, A }, Enumerable.Repeat(A, 7).ToArray() };
-        Assert.Equal(new[] { ("pref", 1) }, V6SanityPort.WishSelfConflictHard(p, brokeMiddle).Select(kv => (kv.Key, kv.Value)));
+        Assert.Equal(new[] { ("pref", 1) }, V6SanityPort.WishConflictHard(p, brokeMiddle).Select(kv => (kv.Key, kv.Value)));
+        Assert.Equal((1, 0), V6SanityPort.WishConflictFloorParts(p));
     }
 
     [Fact]

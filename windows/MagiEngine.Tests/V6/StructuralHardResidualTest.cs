@@ -29,4 +29,15 @@ public class StructuralHardResidualTest
         Assert.False(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 1)), hardFloor: 0, () => false));
         Assert.False(V6FinalPort.IsStructuralHardResidual(Rep(("pref", 1)), hardFloor: 5, () => true));
     }
+
+    // [E0] 希望衝突の床に届いた HARD は解けない残り。c3w は希望どうしの衝突で証明された件数までだけ c3n と同列。
+    [Fact]
+    public void WishConflictFloorAndProvenC3wAreStructural()
+    {
+        Assert.True(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 3), ("c3w", 2)), hardFloor: 0, () => false, wishReached: true));
+        Assert.False(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 3), ("c3w", 2)), hardFloor: 0, () => false));
+        Assert.True(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 3), ("c3w", 2)), hardFloor: 0, () => true, c3wProven: 2));
+        Assert.False(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 3), ("c3w", 2)), hardFloor: 0, () => true, c3wProven: 1));
+        Assert.False(V6FinalPort.IsStructuralHardResidual(Rep(("c3n", 3), ("c3w", 2)), hardFloor: 0, () => true));
+    }
 }

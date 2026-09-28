@@ -138,6 +138,23 @@ public class V6FinalPortWatchdogTest
     }
 
     [Fact]
+    public void EffectiveStallUsesShortStallAtWishConflictFloor()
+    {
+        // [E0] 実機ログ run#4 の形: 構造床0・残る HARD は c3n 3＋c3w 2＝希望衝突の床5 → 短い閾値。床未満ならまだ長い。
+        Assert.Equal(StallHard, V6FinalPort.EffectiveStallMs(5, 0, 5, false, false, StallHard, StallLong, wishReached: true));
+        Assert.Equal(StallLong, V6FinalPort.EffectiveStallMs(5, 0, 5, false, false, StallHard, StallLong));
+    }
+
+    [Fact]
+    public void WishFloorReachedOnlyWhenHardEqualsFloorAndAllWishOrigin()
+    {
+        Assert.True(V6FinalPort.WishFloorReached(5, 5, () => true));
+        Assert.False(V6FinalPort.WishFloorReached(6, 5, () => throw new InvalidOperationException("床を超えたら検査しない")));
+        Assert.False(V6FinalPort.WishFloorReached(5, 5, () => false));
+        Assert.False(V6FinalPort.WishFloorReached(0, 0, () => true));
+    }
+
+    [Fact]
     public void EffectiveStallKeepsLongStallWhenWallUnproven()
     {
         // 証明が無い（診断未実行/崩す手が実在する）間は従来どおり長い閾値で粘る＝品質側に倒す。

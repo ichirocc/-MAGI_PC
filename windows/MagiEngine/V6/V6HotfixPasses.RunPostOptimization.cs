@@ -291,6 +291,21 @@ public static partial class V6HotfixPasses
     /// 「時間の使い方」だけを変え、退化はしない。<paramref name="shouldStop"/> は全体予算超過とキャンセルを束ねる。
     /// HF70（異常検知＝安価）は診断のため常に実行する。<paramref name="onPhase"/> は各パス開始時に UI 進捗へ。
     /// </summary>
+    /// <summary>[E0B] 研磨なしの後処理＝検査と HF70 だけ（盤面は入力のまま）。</summary>
+    public static V6PostOptimizationResult MinimalPost(MagiState state, int[][] schedule, string algoName)
+    {
+        var work = schedule.Copy2D();
+        var report = UnifiedViolationChecker.Check(state, work);
+        var r70 = DetectHF70Anomalies(state, work, algoName, report);
+        var note = new MirrorLog(level: "I", tag: "POST", message: "希望衝突の床で頭打ち（E0B）: 後処理の研磨を省略（検査・HF70 のみ）");
+        var r80 = new HF80Result(work, report.Hard, report.Hard, report.WeightedScore, report.WeightedScore, 0, false, "E0B", Array.Empty<MirrorLog>());
+        var r67 = new HF67Result(work, report.Total, report.Total, 0, 0, 0, 0, Array.Empty<MirrorLog>());
+        var r66 = new HF66Result(work, report.Total, report.Total, 0, 0, 0, 0, Array.Empty<MirrorLog>());
+        var logs = new List<MirrorLog> { note };
+        logs.AddRange(r70.Logs);
+        return new V6PostOptimizationResult(work, report with { Logs = logs.Concat(report.Logs).ToList() }, r80, r67, r66, r70, logs);
+    }
+
     public static V6PostOptimizationResult RunPostOptimization(
         MagiState state,
         int[][] schedule,

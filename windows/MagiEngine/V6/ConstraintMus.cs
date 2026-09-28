@@ -161,6 +161,26 @@ public static class ConstraintMus
         return outList;
     }
 
+    /// <summary><see cref="AnalyzeDayConflicts"/> と同じ判定を上限 0（SOFT high＝払えば抜けられる）に頼らず CanDo だけで行う。不成立の日には
+    /// covU・groupViol・pref のどれかが必ずその日に 1 件残る＝HARD の下限に使える。</summary>
+    public static List<int> DayProofsWithoutZeroCap(Problem p)
+    {
+        var outList = new List<int>();
+        for (var j = 0; j < p.T; j++)
+        {
+            var universe = new List<Item>();
+            for (var k = 0; k < p.K; k++)
+            {
+                var eff = EffectiveLowerBound(p, k, j);
+                if (eff > 0) universe.Add(new DayNeed(j, k, eff));
+            }
+            if (universe.Count == 0) continue;
+            for (var i = 0; i < p.S; i++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            if (DayProvablyInfeasible(p, universe, zeroCapExcluded: false)) outList.Add(j);
+        }
+        return outList;
+    }
+
     /// <summary>The smallest headcount, derived from <c>covUCell</c> (source of truth), that produces no shortfall. Even S staff can still leave a shortfall, in which case this returns S+1.</summary>
     private static int EffectiveLowerBound(Problem p, int k, int j)
     {
@@ -256,7 +276,7 @@ public static class ConstraintMus
         return false;
     }
 
-    private static bool DayProvablyInfeasible(Problem p, List<Item> items)
+    private static bool DayProvablyInfeasible(Problem p, List<Item> items, bool zeroCapExcluded = true)
     {
         var pinned = new Dictionary<int, int>();
         var slots = new List<int>();
@@ -283,7 +303,7 @@ public static class ConstraintMus
         // A wish pin takes precedence over MayPlace (same as V6NativeOptimizer.Hf66DataHardening) = a pin on a cap-0 shift still serves that seat.
         bool CanServe(int i, int shift)
         {
-            if (!pinned.TryGetValue(i, out var pin)) return p.MayPlace(i, shift);
+            if (!pinned.TryGetValue(i, out var pin)) return zeroCapExcluded ? p.MayPlace(i, shift) : p.CanDo(i, shift);
             return pin == shift;
         }
 

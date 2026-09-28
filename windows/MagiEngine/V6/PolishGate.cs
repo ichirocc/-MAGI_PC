@@ -45,6 +45,10 @@ public static class PolishGate
     /// </summary>
     public static volatile bool HardDeltaPrefilter = true;
 
+    /// <summary>[E0/測定中, Kotlin 3.613.0] HARD が希望衝突の床に到達したら頭打ち（E0A＝後処理は通常／E0B＝研磨を省いて時間を返す）。
+    /// 既定 Off＝実データ A/B を見て利用者が決める。VM への配線は既定を決めてから（前面だけに渡す）。</summary>
+    public static volatile WishFloorMode WishConflictFloorMode = WishFloorMode.Off;
+
     /// <summary>[3.514.0/UIトグル化] <see cref="CombinatorialRepair.CombineAndApply"/> の exhaustPairs
     /// （経緯: history 3.512.6）。既定OFF・未計測。</summary>
     public static volatile bool CombineExhaustPairs = false;
@@ -118,3 +122,6 @@ public static class PolishGate
     /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
     public static volatile bool CountChainPolish = false;
 }
+
+/// <summary>[E0] 希望衝突の床での頭打ちの型（A/B 用、Kotlin <c>WishFloorMode</c>）。</summary>
+public enum WishFloorMode { Off, E0A, E0B }

@@ -114,6 +114,116 @@ public static partial class V6SanityPort
     /// already wraps the call in a try/catch defaulting to 0, so this real implementation slots in
     /// with no caller changes.
     /// </summary>
+    /// <summary>希望どうしの衝突が生む HARD の区間（report.Hard の単位＝cons3n は行ごと・窓ごとに 1、c3w はセルごとに 1）。
+    /// c3n＝窓の全セルが希望で固定され禁止の並びそのもの、c3w＝希望 Y で固定したセル（翌日の希望 X が禁じる）。</summary>
+    private sealed record WishHardSpan(int Staff, int From, int To, string Family);
+
+    private static List<WishHardSpan> WishHardSpans(Problem p)
+    {
+        var result = new List<WishHardSpan>();
+        for (var i = 0; i < p.S; i++)
+        {
+            foreach (var c in p.Cons3n)
+            {
+                var d = c.Seq.Length;
+                if (d == 0 || d > p.T) continue;
+                for (var j = 0; j <= p.T - d; j++)
+                {
+                    var all = true;
+                    for (var l = 0; l < d && all; l++) all = p.WishFixed(i, j + l) && p.Wish[i][j + l] == c.Seq[l];
+                    if (all) result.Add(new WishHardSpan(i, j, j + d - 1, "c3n"));
+                }
+            }
+            if (p.C3wBan != null)
+                for (var j = 0; j < p.T; j++)
+                    if (p.WishFixed(i, j) && p.C3wBanned(i, j, p.Wish[i][j])) result.Add(new WishHardSpan(i, j, j, "c3w"));
+        }
+        return result;
+    }
+
+    /// <summary>「希望と禁止の衝突」の件数（HF70・残存分析・E0 の到達判定が共有する単一ソース、report.Hard と同じ単位）。
+    /// c3n/c3w＝盤面で成立している衝突の窓/セル、pref＝衝突の区間にかかる希望を崩したセル。</summary>
+    public static IReadOnlyDictionary<string, int> WishConflictHard(Problem p, int[][] schedule)
+    {
+        var result = new Dictionary<string, int>();
+        var prefCells = new HashSet<(int, int)>();
+        foreach (var sp in WishHardSpans(p))
+        {
+            if (sp.Staff < 0 || sp.Staff >= schedule.Length) continue;
+            var row = schedule[sp.Staff];
+            var held = true;
+            for (var j = sp.From; j <= sp.To; j++)
+                if (j >= row.Length || row[j] != p.Wish[sp.Staff][j]) { held = false; prefCells.Add((sp.Staff, j)); }
+            if (held) result[sp.Family] = result.GetValueOrDefault(sp.Family, 0) + 1;
+        }
+        if (prefCells.Count > 0) result["pref"] = prefCells.Count;
+        return result;
+    }
+
+    /// <summary>[E0] 希望衝突の床（report.Hard と同単位、<see cref="StructuralHardFloor"/> とは別に扱う）＝衝突の最小 HARD＋日の証明の日数。</summary>
+    public static int WishConflictHardFloor(Problem p)
+    {
+        var (c, d) = WishConflictFloorParts(p);
+        return c + d;
+    }
+
+    /// <summary><see cref="WishConflictHardFloor"/> の内訳（衝突の最小 HARD, 日の証明の日数）。衝突は職員ごとに「崩すセル数＋崩れずに残る区間数」の最小を
+    /// 区間 DP で出す（どの盤面でも <see cref="WishConflictHard"/> の合計以下）。日の証明は衝突の区間の日と構造的 covU の日を数えない。
+    /// <paramref name="zeroCapBinding"/>＝上限 0 に頼る日の証明も数える（ログの参考値 N_mayPlace。MayPlace を守る盤面でだけ健全＝頭打ちには使わない）。</summary>
+    public static (int Conflict, int Days) WishConflictFloorParts(Problem p, bool zeroCapBinding = false)
+    {
+        const int Inf = int.MaxValue / 2;
+        var spans = WishHardSpans(p);
+        var conflict = 0;
+        var conflictDays = new HashSet<int>();
+        foreach (var ss in spans.GroupBy(s => s.Staff))
+        {
+            foreach (var sp in ss) for (var j = sp.From; j <= sp.To; j++) conflictDays.Add(j);
+            var byEnd = ss.ToLookup(s => s.To);
+            // f[b+1]＝最後に崩したセルが b（-1＝まだ無し）のときの最小費用。
+            var f = new int[p.T + 1];
+            for (var b = 1; b <= p.T; b++) f[b] = Inf;
+            for (var t = 0; t < p.T; t++)
+            {
+                var g = new int[p.T + 1];
+                Array.Fill(g, Inf);
+                for (var b = 0; b <= p.T; b++)
+                {
+                    if (f[b] >= Inf) continue;
+                    g[b] = Math.Min(g[b], f[b]);
+                    g[t + 1] = Math.Min(g[t + 1], f[b] + 1);
+                }
+                foreach (var sp in byEnd[t]) for (var b = 0; b <= p.T; b++) if (b - 1 < sp.From) g[b] += 1;
+                f = g;
+            }
+            conflict += f.Min();
+        }
+        var days = 0;
+        var proofDays = zeroCapBinding ? ConstraintMus.AnalyzeDayConflicts(p).Select(c => c.Day).ToList() : ConstraintMus.DayProofsWithoutZeroCap(p);
+        foreach (var j in proofDays)
+        {
+            if (conflictDays.Contains(j)) continue;
+            var forced = false;
+            for (var k = 0; k < p.K && !forced; k++) forced = p.CovUCell(k, j, PlaceableFor(p, k, j)) > 0;
+            if (forced) continue;
+            days++;
+        }
+        return (conflict, days);
+    }
+
+    /// <summary>[E0] 希望どうしの c3w の件数（c3w がこの件数までなら、pref==0 のとき全て希望由来）。</summary>
+    public static int WishConflictC3wCount(Problem p) => WishHardSpans(p).Count(s => s.Family == "c3w");
+
+    /// <summary>[E0] 盤面の HARD が全て希望由来か（衝突の窓・セル・崩した希望＋日の証明の日数までの残り）。</summary>
+    public static bool HardAllWishOrigin(Problem p, int[][] schedule, ViolationReport report, int dayProofs)
+    {
+        var w = WishConflictHard(p, schedule);
+        if (w.GetValueOrDefault("c3n", 0) > report.Breakdown.GetValueOrDefault("c3n", 0)
+            || w.GetValueOrDefault("c3w", 0) > report.Breakdown.GetValueOrDefault("c3w", 0)) return false;
+        var rest = report.Hard - w.Values.Sum();
+        return rest >= 0 && rest <= dayProofs;
+    }
+
     public static int StructuralHardFloor(MagiState state, Problem? p = null)
     {
         p ??= new Problem(state);

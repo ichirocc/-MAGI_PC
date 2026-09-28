@@ -55,7 +55,7 @@ public static partial class V6HotfixPasses
         var invalid = InvalidAssignmentCount(state, schedule);
         var impossible = V6SanityPort.DetectImpossibleWishes(state).Count;
         // 希望どうしの衝突が生む c3n/c3w は希望起因＝「希望以外」に数えない（pref と同じ扱い）。
-        var selfConflict = V6SanityPort.WishSelfConflictHard(ScheduleUtil.CachedProblem(state), schedule);
+        var selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state), schedule);
         var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0)
             - selfConflict.GetValueOrDefault("c3n", 0) - selfConflict.GetValueOrDefault("c3w", 0);
         var issues = new List<string>();
