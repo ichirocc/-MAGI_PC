@@ -331,10 +331,17 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-28（つくる前の確認のゲートとシート、Kotlin 0d085a1 の `runV6FullOptimize`/`proceedPreRun`/`PreRunCheckSheet`）:
+  `RunV6FullOptimize` の入口で `PreRunCheck.Build` が `NeedsSheet`（消えない or 外れる ≥1）なら `UiState.PreRunCheck` を立てて止まる。
+  `ProceedPreRun`（このままつくる）は指紋を記録して 1 タップで開始（同じ指紋では再表示しない、繰り返しヒントはシート側で出したので
+  `hintShown`）、`DismissPreRun` は閉じるだけ。S5 の確定は `StartFullOptimize` を直接呼ぶので通らない。中断の再開は C# に無い（撤去済み）。
+  WinUI は `MainWindow.ShowPreRunCheckAsync` の ContentDialog（コードで組む、節と文言は Android と同じ）。行はそのセルへ移る
+  （Android の「希望の行は希望シートで開く」は C# のセル編集がタップ起点のため勤務表のセルへの移動まで＝`OpenCell` と同じ扱い）。
+  テスト: Android に VM ゲートの単体テストは無いため、C# 側で `MagiViewModelOptimizeTest.PreRunGate_*` の 2 件を追加。
 - 2026-09-28（つくる前の確認の同期、Kotlin e8e3648 同日。表示・導線のみ、採点・探索・重みは不変）:
   分類 `MagiEngine/V6/PreRunCheck.cs`（希望どうしの衝突・反映できない希望・配布不可・証明つきの矛盾（コアに希望）・希望件数＞個人の上限／
   手置き×上限 0／上限 0 の密度ヒント／指紋）と行の文 `MagiApp.ViewModels/PreRunCheckText.cs` を Kotlin と同名で移植、テストは
-  `PreRunCheckTest`（エンジン）・`PreRunCheckTextTest`（ViewModels、実データの 11 件＋4 件の文を逐語）を 1 対 1。VM の入口ゲートと WinUI のシートは後日（利用者決定 5）。
+  `PreRunCheckTest`（エンジン）・`PreRunCheckTextTest`（ViewModels、実データの 11 件＋4 件の文を逐語）を 1 対 1。VM の入口ゲートと WinUI のシートは後日（利用者決定 5）→ 同日に上の項で実装。
   同日追記（Kotlin 58e24d0）: 希望件数＞個人の上限は要調整の節へ（シートの条件に数えない）、上限 0 を「入れない指定」と呼び S6 を「例外として上限を緩める」へ
   （NextActionGuide・HomeView の文と確定ボタン）、設定ミス診断 6e の上限 0 は中立の文（`SettingIssue.Neutral`、ログ「[I] 設定の案内」）。採点・MayPlace は不変。
 - 2026-09-28（行末の印のシート「回数・偏り」の再構成の同期、Kotlin 5fad61d 同日。表示のみ、採点不変）:

@@ -65,13 +65,51 @@ public sealed partial class MagiViewModel
     /// <summary>[テスト可視性のための追加] 直近の <see cref="RunV6FullOptimize"/> 呼出しが背後で走らせる Task。</summary>
     internal Task? LastRunOptimizeTask { get; private set; }
 
-    /// <summary>
-    /// 勤務表を最初からつくる（本最適化）。Kotlin原本 <c>runV6FullOptimize()</c> の移植。
-    /// </summary>
-    public void RunV6FullOptimize() => StartFullOptimize(pushUndo: true, null);
+    /// <summary>勤務表を最初からつくる（Kotlin <c>runV6FullOptimize()</c>）。計算では消えない／もう一度つくると外れる項目があれば <see cref="UiState.PreRunCheck"/> を出して止まる（つくる前の確認）。</summary>
+    public void RunV6FullOptimize()
+    {
+        var st = _state; var sched = _currentSchedule;
+        if (st is not null && sched is not null && !Ui.Running && PreRunCheck.Fingerprint(st, sched) != _preRunAckKey)
+        {
+            var sum = PreRunCheck.Build(st, sched);
+            if (sum.NeedsSheet)
+            {
+                Ui.PreRunRepeatHint = RepeatHint();
+                Ui.PreRunCheck = sum;
+                LogOp("I", $"つくる前の確認 表示 (消えない{sum.FloorCount}件, 外れる{sum.RerunClears.Count}件)");
+                return;
+            }
+        }
+        StartFullOptimize(pushUndo: true, null);
+    }
+
+    /// <summary>「このままつくる」。同じ指紋のあいだは同じ理由で止めない。</summary>
+    public void ProceedPreRun()
+    {
+        var st = _state; var sched = _currentSchedule;
+        if (st is null || sched is null) return;
+        _preRunAckKey = PreRunCheck.Fingerprint(st, sched);
+        DismissPreRun();
+        LogOp("I", "つくる前の確認 このままつくる");
+        StartFullOptimize(pushUndo: true, null, hintShown: true);
+    }
+
+    public void DismissPreRun()
+    {
+        Ui.PreRunCheck = null;
+        Ui.PreRunRepeatHint = null;
+    }
+
+    private long? _preRunAckKey;
+
+    private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
+
+    private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0
+        ? $"前回と同じ設定でもう一度つくります。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
+        : null;
 
     /// <summary>本実行。<paramref name="pushUndo"/>＝false は Undo を積まない（S5 の確定がすでに積んでいる）。</summary>
-    private void StartFullOptimize(bool pushUndo, S5Ctx? s5)
+    private void StartFullOptimize(bool pushUndo, S5Ctx? s5, bool hintShown = false)
     {
         var st0 = _state;
         var sched0 = _currentSchedule;
@@ -79,10 +117,8 @@ public sealed partial class MagiViewModel
         if (RunBlockedByInFlight("勤務表の作成")) return;
         if (!EnsureValidForRun(st0, sched0)) return;
         if (pushUndo) PushUndo();
-        var sig = $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
-        var hint = s5 is null && sig == _lastSettingsSig && _lastResultHard > 0
-            ? $"前回と同じ設定でもう一度つくります。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
-            : null;
+        var sig = RunSig();
+        var hint = s5 is null && !hintShown ? RepeatHint() : null;
         _lastSettingsSig = sig;
         // 停止・失敗で入力の盤面へ戻すときは、実行前の旗へ戻す（一度も計算していない盤面を「計算済み」にしない）。
         var hadResult = Ui.HasResult;

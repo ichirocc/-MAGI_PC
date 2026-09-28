@@ -504,7 +504,7 @@ public sealed partial class HomeView : UserControl
 
     /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
     /// 試算の結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
-    private async Task ShowWishConflictsAsync()
+    internal async Task ShowWishConflictsAsync()
     {
         var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
         var dialog = new ContentDialog

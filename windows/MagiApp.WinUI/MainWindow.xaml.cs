@@ -71,7 +71,8 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OnUiChangedForMessageBar(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
+        if (e.PropertyName == nameof(UiState.PreRunCheck)) { if (_vm.Ui.PreRunCheck is { } sum) _ = ShowPreRunCheckAsync(sum); }
+        else if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
         else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
     }
 
@@ -297,6 +298,71 @@ public sealed partial class MainWindow : Window
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.OpenDoor(door);
+    }
+
+    /// <summary>[つくる前の確認] Android <c>PreRunCheckSheet</c>。行を押すとセルへ、「このままつくる」は 1 タップで始める。</summary>
+    private async Task ShowPreRunCheckAsync(MagiEngine.V6.PreRunCheck.Summary sum)
+    {
+        var ui = _vm.Ui;
+        var t = PreRunCheckText.Of(sum, ui);
+        var panel = new StackPanel { Spacing = 8 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = "つくる前の確認",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
+            PrimaryButtonText = "このままつくる",
+            SecondaryButtonText = "先にデータを直す",
+            CloseButtonText = "閉じる",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        Action? after = null;
+        void Head(string text) => panel.Children.Add(new TextBlock { Text = "■ " + text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
+        void Note(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
+        void Link(string label, Action go)
+        {
+            var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+            b.Click += (_, _) => { after = go; dialog.Hide(); };
+            panel.Children.Add(b);
+        }
+        void Rows(IEnumerable<PreRunRow> rows)
+        {
+            foreach (var r in rows)
+            {
+                if (r.Staff is int i && r.Day is int j)
+                {
+                    var b = new HyperlinkButton { Content = new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+                    b.Click += (_, _) => { after = () => OpenCell(i, j); dialog.Hide(); };
+                    panel.Children.Add(b);
+                }
+                else panel.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0) });
+            }
+        }
+        if (t.FloorHeader is { } fh)
+        {
+            Head(fh); Note(PreRunCheckText.FloorNote); Rows(t.FloorRows);
+            if (t.HasWishRows && !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty) Link("ぶつかっている希望を見る", ShowWishConflicts);
+        }
+        if (t.RerunHeader is { } rh)
+        {
+            Head(rh); Note(PreRunCheckText.RerunNote); Rows(t.RerunRows);
+            if (t.RerunRows.FirstOrDefault() is { } r0) Link("該当セルを見る", () => OpenCell(r0.Staff ?? 0, r0.Day ?? 0));
+        }
+        if (t.OverCapNote is { } on) { Head(PreRunCheckText.OverCapHead); Note(on); Rows(t.OverCapRows ?? Array.Empty<PreRunRow>()); }
+        if (t.WallLine is { } w) { Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap }); }
+        if (ui.PreRunRepeatHint is { } hint) Note(hint);
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary) { _vm.ProceedPreRun(); return; }
+        _vm.DismissPreRun();
+        if (result == ContentDialogResult.Secondary) SelectTab("edit");
+        after?.Invoke();
+    }
+
+    private void ShowWishConflicts()
+    {
+        SelectTab("home");
+        if (_tabCache.TryGetValue("home", out var c) && c is HomeView hv) _ = hv.ShowWishConflictsAsync();
     }
 
     /// <summary>[S6] ホームの「設定を緩める候補」ダイアログを開く（セルシートの受け渡し。組は VM が持つので画面はどこからでも同じ）。</summary>

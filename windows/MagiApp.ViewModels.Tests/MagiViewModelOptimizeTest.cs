@@ -483,4 +483,52 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.Null(vm.Ui.RunSummary);   // 開始の時点で消す
         await vm.LastRunOptimizeTask!;
     }
+
+    private (FakeOptimizationService, MagiViewModel) PreRunVm()
+    {
+        var st = StateJsonSerializer.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "oct2026_grid_state.json")));
+        var fake = new FakeOptimizationService
+        {
+            Result = (_, sched) => new V6FinalPort.ActionResult(
+                Schedule: sched, Report: Report(hard: 0, total: 0), Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "", ""), Logs: Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = st.Schedule.ToIntArray2D() };
+        return (fake, vm);
+    }
+
+    /// <summary>[つくる前の確認] 消えない項目がある盤面では本実行を始めずにシートを出す。</summary>
+    [Fact]
+    public void PreRunGate_ShowsSheetAndDoesNotStart()
+    {
+        var (fake, vm) = PreRunVm();
+        vm.RunV6FullOptimize();
+        Assert.NotNull(vm.Ui.PreRunCheck);
+        Assert.True(vm.Ui.PreRunCheck!.NeedsSheet);
+        Assert.Null(vm.LastRunOptimizeTask);
+        Assert.Equal(0, fake.OptimizeCallCount);
+    }
+
+    /// <summary>「このままつくる」は 1 タップで始まり、同じ指紋のあいだは再び止めない。閉じただけなら次も出す。</summary>
+    [Fact]
+    public async Task PreRunGate_ProceedStartsAndSameFingerprintIsNotReshown()
+    {
+        var (fake, vm) = PreRunVm();
+        vm.RunV6FullOptimize();
+        vm.DismissPreRun();
+        Assert.Null(vm.Ui.PreRunCheck);
+        vm.RunV6FullOptimize();
+        Assert.NotNull(vm.Ui.PreRunCheck);
+
+        vm.ProceedPreRun();
+        Assert.Null(vm.Ui.PreRunCheck);
+        Assert.NotNull(vm.LastRunOptimizeTask);
+        await vm.LastRunOptimizeTask!;
+        Assert.Equal(1, fake.OptimizeCallCount);
+
+        vm.RunV6FullOptimize();
+        Assert.Null(vm.Ui.PreRunCheck);
+        await vm.LastRunOptimizeTask!;
+        Assert.Equal(2, fake.OptimizeCallCount);
+    }
 }

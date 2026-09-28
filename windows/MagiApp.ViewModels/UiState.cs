@@ -181,6 +181,10 @@ public sealed partial class UiState : ObservableObject
     /// <summary>[S5] 直近の「希望を取り消して、もう一度つくる」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
     [ObservableProperty] private WishCancelOutcome? wishCancelOutcome;
 
+    /// <summary>[つくる前の確認] 非 null の間シートを出す。</summary>
+    [ObservableProperty] private MagiEngine.V6.PreRunCheck.Summary? preRunCheck;
+    [ObservableProperty] private string? preRunRepeatHint;
+
     /// <summary>[DefragLiveView] 計算中の最良盤面（実行中のみ）。</summary>
     [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> liveSchedule = Array.Empty<IReadOnlyList<int>>();
 

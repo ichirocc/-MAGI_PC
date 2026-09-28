@@ -15,7 +15,7 @@ public sealed record PreRunSheetText(
     string? OverCapNote = null,
     IReadOnlyList<PreRunRow>? OverCapRows = null);
 
-/// <summary><see cref="PreRunCheck"/> の結果を行にする。Kotlin <c>preRunSheetText</c>（MagiViewState.kt）の移植。WinUI のシートは後日。</summary>
+/// <summary><see cref="PreRunCheck"/> の結果を行にする。Kotlin <c>preRunSheetText</c>（MagiViewState.kt）の移植。WinUI のシートは <c>MainWindow.ShowPreRunCheckAsync</c>。</summary>
 public static class PreRunCheckText
 {
     public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。";
