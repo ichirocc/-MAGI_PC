@@ -12,6 +12,23 @@ public sealed record CountBadge(bool Under, bool Over)
 public sealed record CoverageMark(int Shift, bool Under);
 
 /// <summary>
+/// 回数の過不足の 1 枚（例「Dﾃ  +2回 (6/4)」）。Ref は目標（apt）か下限・上限、RefLabel は下限・上限のときだけ付ける。
+/// Under＝不足側の色（下限割れ・適切回数の不足・個人の合計）。
+/// </summary>
+public sealed record CountChip(string Shift, int Count, int? Ref, string RefLabel, bool Under)
+{
+    public int? Delta => Ref is { } r ? Count - r : null;
+    public string Text => $"{Shift}  " + (Delta is { } d ? (d > 0 ? "+" : "") + $"{d}回 " : "") +
+        $"({Count}/" + (Ref is { } r ? RefLabel + r : "—") + ")";
+}
+
+/// <summary>行末の印のシートの中身。Weekly は 1 シフト 1 行、Fair は「差 N回 : シフト, …」を差の大きい順。</summary>
+public sealed record StaffCountSheet(IReadOnlyList<CountChip> Chips, IReadOnlyList<string> Weekly, IReadOnlyList<string> Fair, IReadOnlyList<string> C1)
+{
+    public bool IsEmpty => C1.Count == 0 && Chips.Count == 0 && Weekly.Count == 0 && Fair.Count == 0;
+}
+
+/// <summary>
 /// 勤務表の表示専用の印。Kotlin <c>MagiViewState.kt</c> の同名関数の移植。チェッカーの場所マップ
 /// （Violations/CountViolations/NeedViolations）は探索の手掛かりも読むので変えず、報告から別に組み立てる。
 /// 族名の日本語化は View 層（<c>AnalysisView.BreakdownLabels</c>）にあるので labelOf で受ける。
@@ -113,42 +130,89 @@ public static class GridDisplayMarks
         return sym + (m.Under ? "▼" : "▲") + (marks.Count > 1 ? $"+{marks.Count - 1}" : "");
     }
 
-    private static string CountDetail(string cls, int count, int? lo, int? hi, int? apt)
+    private static readonly string[] WeekdayJp = { "日", "月", "火", "水", "木", "金", "土" };
+
+    /// <summary>startDate の曜日（0=日）。<c>Problem.Dow0</c> と同じ式、読めなければ 0。</summary>
+    public static int Dow0Of(string startDate) =>
+        DateOnly.TryParseExact(startDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var d) ? (int)d.DayOfWeek : 0;
+
+    /// <summary>
+    /// 曜日別の回数 wd（0=日）の偏りを 1 句で言う。e=7×回数−合計（<c>WeeklyDevOfBucket</c> の各項）。
+    /// 平均より半回以上多い（e≥4）曜日を「集中」、半回以上少ない（e≤−4）曜日を「少ない」として名指し、両側あれば「／」で並べる。
+    /// どちらも無ければ最も外れた 1 日。各側の数値は round(その側の |e| の和 ÷7)。Σe=0 なので両側の和は等しく、
+    /// 片側は採点 Σ|e|÷7 のおよそ半分になる。
+    /// </summary>
+    public static string? WeeklySkewPhrase(int[] wd)
     {
-        var body = cls switch
+        var c = wd.Sum();
+        var e = Enumerable.Range(0, 7).Select(d => 7 * wd[d] - c).ToArray();
+        if (e.All(x => x == 0)) return null;
+        var amount = (int)Math.Round(e.Where(x => x > 0).Sum() / 7.0, MidpointRounding.AwayFromZero);
+        var over = Enumerable.Range(0, 7).Where(d => e[d] >= 4).ToList();
+        var under = Enumerable.Range(0, 7).Where(d => e[d] <= -4).ToList();
+        if (over.Count == 0 && under.Count == 0)
         {
-            "vio-low" => lo is { } l ? $"現在 {count}回・下限 {l}回" : null,
-            "vio-high" => hi is { } h ? $"現在 {count}回・上限 {h}回" : null,
-            "vio-aptLow" or "vio-aptHigh" => apt is { } a ? $"現在 {count}回・目標 {a}回" : null,
-            _ => $"現在 {count}回",
-        };
-        return body is null ? "" : $"（{body}）";
+            if (e.Max() >= -e.Min()) over.Add(Enumerable.Range(0, 7).MaxBy(d => e[d]));
+            else under.Add(Enumerable.Range(0, 7).MinBy(d => e[d]));
+        }
+        string Names(List<int> ds) => string.Join("・", ds.Select(d => WeekdayJp[d]));
+        var parts = new List<string>();
+        if (over.Count > 0) parts.Add($"{Names(over)}に集中 (+{amount})");
+        if (under.Count > 0) parts.Add($"{Names(under)}が少ない (-{amount})");
+        return string.Join("／", parts);
     }
 
-    /// <summary>職員 i の回数・偏りの一覧（行末の印のシートとセルの「この職員の回数・偏り」で共有）。
-    /// 回数の族は報告の回数キー、公平化・曜日は <c>DistLocations</c> から。</summary>
-    public static IReadOnlyList<string> StaffCountLines(UiState ui, int i, Func<string, string> labelOf,
+    /// <summary>
+    /// 職員 i の回数・偏りのシート（行末の印・セルの「この職員の回数・偏り」で共有）。
+    /// 回数の族は報告の回数キー、公平化・曜日は <c>DistLocations</c> から。limits は (職員,シフト) → (下限, 上限, 目標)。
+    /// </summary>
+    public static StaffCountSheet StaffCountSheetOf(UiState ui, int i, Func<string, string> labelOf,
         Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null)
     {
-        var outList = new List<string>();
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-        foreach (var sh in ui.C1Shortages.Where(x => x.Staff == i && x.Stuck).DistinctBy(x => x.Shift))
-            outList.Add($"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日）— {C1Display.StuckText}");
+        IReadOnlyList<int> row = i < ui.Schedule.Count ? ui.Schedule[i] : Array.Empty<int>();
+        var c1 = ui.C1Shortages.Where(x => x.Staff == i && x.Stuck).DistinctBy(x => x.Shift)
+            .Select(sh => $"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日）— {C1Display.StuckText}").ToList();
+        var chips = new List<CountChip>();
         foreach (var key in CountKeys(ui).Where(k => First(k) == i).OrderBy(k => Second(k) ?? 0))
         {
             if (Second(key) is not { } k) continue;
-            var count = i < ui.Schedule.Count ? ui.Schedule[i].Count(v => v == k) : 0;
+            var count = row.Count(v => v == k);
             var (lo, hi, apt) = limits?.Invoke(i, k) ?? (null, null, null);
             foreach (var cls in CountClasses(ui, key))
             {
-                outList.Add((IsUnderCountClass(cls) ? "▼ " : "▲ ") + $"{Sym(k)}: {labelOf(VioBuckets.FamilyOfVioClass(cls))}" + CountDetail(cls, count, lo, hi, apt));
+                chips.Add(cls switch
+                {
+                    "vio-low" => new CountChip(Sym(k), count, lo, "下限", true),
+                    "vio-high" => new CountChip(Sym(k), count, hi, "上限", false),
+                    "vio-aptLow" or "vio-aptHigh" => new CountChip(Sym(k), count, apt, "", cls == "vio-aptLow"),
+                    _ => new CountChip(Sym(k), count, null, "", IsUnderCountClass(cls)),
+                });
             }
         }
-        if (ui.DistLocations.TryGetValue("fair", out var fair))
-            foreach (var e in fair) if (e.Count >= 3 && e[0] == i) outList.Add($"・{Sym(e[1])}: {labelOf("fair")}（グループ内の差 {e[2]}回）");
-        if (ui.DistLocations.TryGetValue("weekly", out var weekly))
-            foreach (var e in weekly) if (e.Count >= 3 && e[0] == i) outList.Add($"・{Sym(e[1])}: {labelOf("weekly")}（偏り {e[2]}）");
-        return outList;
+        var dow0 = Dow0Of(ui.StartDate);
+        var weekly = (ui.DistLocations.GetValueOrDefault("weekly") ?? Array.Empty<IReadOnlyList<int>>())
+            .Where(e => e.Count >= 3 && e[0] == i).OrderBy(e => e[1]).Select(e =>
+            {
+                var wd = new int[7];
+                for (var j = 0; j < row.Count; j++) if (row[j] == e[1]) wd[(dow0 + j) % 7]++;
+                return WeeklySkewPhrase(wd) is { } ph ? $"{Sym(e[1])} : {ph}" : null;
+            }).OfType<string>().ToList();
+        var fair = (ui.DistLocations.GetValueOrDefault("fair") ?? Array.Empty<IReadOnlyList<int>>())
+            .Where(e => e.Count >= 3 && e[0] == i).GroupBy(e => e[2]).OrderByDescending(g => g.Key)
+            .Select(g => $"差 {g.Key}回 : " + string.Join(", ", g.Select(e => e[1]).Distinct().Order().Select(Sym))).ToList();
+        return new StaffCountSheet(chips, weekly, fair, c1);
+    }
+
+    /// <summary>セルの「この職員の回数・偏り」用の平文（シートと同じ中身を 1 行ずつ）。</summary>
+    public static IReadOnlyList<string> StaffCountLines(UiState ui, int i, Func<string, string> labelOf,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null)
+    {
+        var sh = StaffCountSheetOf(ui, i, labelOf, limits);
+        return sh.C1.Concat(sh.Chips.Select(c => (c.Under ? "▼ " : "▲ ") + c.Text))
+            .Concat(sh.Weekly.Select(w => $"{labelOf("weekly")} {w}"))
+            .Concat(sh.Fair.Select(f => $"{labelOf("fair")} {f}")).ToList();
     }
 
     /// <summary>日 j の人員の一覧（日ヘッダの印のシート）。</summary>

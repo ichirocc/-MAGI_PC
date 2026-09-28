@@ -146,6 +146,46 @@ public class GridDisplayMarksTest
                 Assert.Contains(GridDisplayMarks.StaffCountLines(Ui, e[0], Label), l => l.Contains(fam));
     }
 
+    /// <summary>行末の印のシート（実データ 職員02）: 回数は 2 列のチップ、曜日は 1 シフト 1 句、公平化は差ごとに 1 行。</summary>
+    [Fact]
+    public void StaffCountSheetOnTheRealBoard()
+    {
+        var u = new UiState
+        {
+            Schedule = St.Schedule, ShiftSymbols = Ui.ShiftSymbols, StartDate = St.StartDate,
+            CountViolations = Rep.CountViolations, CountFamilies = Rep.CountFamilies, DistLocations = Rep.DistLocations,
+        };
+        var p = ScheduleUtil.CachedProblem(St);
+        (int?, int?, int?) Lim(int i, int k) => (p.RangeLo[i][k] == int.MinValue ? null : p.RangeLo[i][k],
+            p.RangeHi[i][k] == int.MaxValue ? null : p.RangeHi[i][k], p.Apt[i][k] < 0 ? null : p.Apt[i][k]);
+        var sh = GridDisplayMarks.StaffCountSheetOf(u, 1, Label, Lim);
+        Assert.Equal(new[] { "Dﾃ  -1回 (3/4)", "Cｵ  +3回 (8/5)", "有  -1回 (0/1)" }, sh.Chips.Select(c => c.Text));
+        Assert.Equal(new[] { true, false, true }, sh.Chips.Select(c => c.Under));
+        Assert.Equal(new[] { "差 1回 : A4, 有" }, sh.Fair);
+        Assert.Equal(Rep.DistLocations["weekly"].Count(e => e[0] == 1), sh.Weekly.Count);
+        var s3 = GridDisplayMarks.StaffCountSheetOf(u, 3, Label, Lim).Chips;
+        Assert.Equal("B1  -3回 (17/下限20)", s3.Single(c => c.Shift == "B1").Text);
+        Assert.Equal("Aｱ  +1回 (1/上限0)", s3[0].Text);
+    }
+
+    /// <summary>曜日の句の数値＝各側の |e| の和÷7 を丸めたもの（両側で同じ値）。採点 Σ|e|/7 のおよそ半分で、偏りがあれば 1 以上。</summary>
+    [Fact]
+    public void WeeklySkewPhraseMatchesTheScoredDeviation()
+    {
+        Assert.Null(GridDisplayMarks.WeeklySkewPhrase(new[] { 1, 1, 1, 1, 1, 1, 1 }));
+        Assert.Equal("日・月に集中 (+1)", GridDisplayMarks.WeeklySkewPhrase(new[] { 2, 2, 1, 1, 1, 1, 1 }));
+        Assert.Equal("金が少ない (-1)", GridDisplayMarks.WeeklySkewPhrase(new[] { 1, 1, 1, 1, 1, 0, 1 }));
+        Assert.Equal("日・月に集中 (+2)／水が少ない (-2)", GridDisplayMarks.WeeklySkewPhrase(new[] { 3, 3, 2, 0, 2, 2, 2 }));
+        foreach (var e in Rep.DistLocations["weekly"])
+        {
+            var wd = new int[7];
+            for (var j = 0; j < St.Schedule[e[0]].Count; j++) if (St.Schedule[e[0]][j] == e[1]) wd[(GridDisplayMarks.Dow0Of(St.StartDate) + j) % 7]++;
+            Assert.Equal(e[2], ScheduleUtil.WeeklyDevOfBucket(wd));
+            var ns = System.Text.RegularExpressions.Regex.Matches(GridDisplayMarks.WeeklySkewPhrase(wd)!, @"\(([+-])(\d+)\)").Select(m => int.Parse(m.Groups[2].Value)).ToList();
+            Assert.True(ns.Count > 0 && ns.Distinct().Count() == 1 && ns.All(n => n >= 1 && Math.Abs(2 * n - e[2]) <= 1), $"{string.Join(",", e)} {string.Join(",", ns)}");
+        }
+    }
+
     [Fact]
     public void SequenceBucketIsNamedNarabi() =>
         Assert.Equal("並び", VioBuckets.Buckets.Single(b => b.Key == "seq").Label);

@@ -1314,9 +1314,7 @@ public sealed partial class ScheduleView : UserControl
         {
             var i = hv.Row - 1;
             title = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-            lines = GridDisplayMarks.StaffCountLines(ui, i, LabelOf, _vm.StaffCellLimits);
-            focus = new FixFocus(i, null);
-            ShowMarkDialog(title, lines, focus, _c1Stuck.Contains(i));
+            ShowStaffCountDialog(title, GridDisplayMarks.StaffCountSheetOf(ui, i, LabelOf, _vm.StaffCellLimits), new FixFocus(i, null), _c1Stuck.Contains(i));
             return;
         }
         else return;
@@ -1335,6 +1333,56 @@ public sealed partial class ScheduleView : UserControl
         st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
         buttons.Children.Add(w); buttons.Children.Add(st);
         return buttons;
+    }
+
+    /// <summary>回数の過不足の色（背景, 文字のブラシ名）。不足＝赤系・超過＝橙系（シフト集計の ▼▲ と同じ色言語）。差し替えはここだけ。</summary>
+    private static (string Bg, string Fg) CountChipBrushes(bool under) =>
+        under ? ("MagiErrorContainerBrush", "MagiOnErrorContainerBrush") : ("MagiWarnContainerBrush", "MagiOnWarnContainerBrush");
+
+    /// <summary>行末の印のシート（Kotlin <c>StaffCountDialog</c>）: 回数の過不足（2 列のチップ）・曜日の偏り（既定は閉じる）・公平化・直し方。</summary>
+    private void ShowStaffCountDialog(string title, StaffCountSheet sheet, FixFocus focus, bool c1Stuck)
+    {
+        var res = Application.Current.Resources;
+        var panel = new StackPanel { Spacing = 8 };
+        if (sheet.IsEmpty) panel.Children.Add(new TextBlock { Text = "回数・偏りの違反はありません。" });
+        foreach (var l in sheet.C1) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        if (sheet.Chips.Count > 0)
+        {
+            panel.Children.Add(new TextBlock { Text = "回数の過不足", Style = (Style)res["BodyStrongTextBlockStyle"] });
+            var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition());
+            for (var n = 0; n < sheet.Chips.Count; n++)
+            {
+                if (n % 2 == 0) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var c = sheet.Chips[n];
+                var (bg, fg) = CountChipBrushes(c.Under);
+                var chip = new Border { Background = (Brush)res[bg], CornerRadius = new CornerRadius(10), Padding = new Thickness(8, 4, 8, 4),
+                    Child = new TextBlock { Text = c.Text, Foreground = (Brush)res[fg], TextTrimming = TextTrimming.CharacterEllipsis } };
+                Grid.SetRow(chip, n / 2); Grid.SetColumn(chip, n % 2);
+                grid.Children.Add(chip);
+            }
+            panel.Children.Add(grid);
+        }
+        if (sheet.Weekly.Count > 0)
+        {
+            var list = new StackPanel { Spacing = 2 };
+            foreach (var w in sheet.Weekly) list.Children.Add(new TextBlock { Text = "・" + w, TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new Expander
+            {
+                Header = $"{LabelOf("weekly")}（{sheet.Weekly.Count}件）", IsExpanded = false, MinHeight = 48,
+                HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Content = new ScrollViewer { MaxHeight = 160, Content = list },
+            });
+        }
+        if (sheet.Fair.Count > 0)
+        {
+            panel.Children.Add(new TextBlock { Text = LabelOf("fair"), Style = (Style)res["BodyStrongTextBlockStyle"] });
+            foreach (var f in sheet.Fair) panel.Children.Add(new TextBlock { Text = f, TextWrapping = TextWrapping.Wrap });
+        }
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる" };
+        if (c1Stuck) panel.Children.Add(C1StuckButtons(() => dialog.Hide()));
+        panel.Children.Add(AttachFixSearch(dialog, focus));
+        _ = dialog.ShowAsync();
     }
 
     private void ShowMarkDialog(string title, IReadOnlyList<string> lines, FixFocus? focus, bool c1Stuck = false)

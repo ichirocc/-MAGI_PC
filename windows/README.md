@@ -331,6 +331,13 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-28（行末の印のシート「回数・偏り」の再構成の同期、Kotlin 5fad61d 同日。表示のみ、採点不変）:
+  `GridDisplayMarks.StaffCountSheetOf`（Kotlin `staffCountSheet`、C# は型名 `StaffCountSheet` と衝突するので `Of` を付けた）・`CountChip`・
+  `WeeklySkewPhrase`・`Dow0Of`。回数は 2 列のチップ（`Dﾃ  -1回 (3/4)`、個人の下限・上限は `(17/下限20)`）、色は `CountChipBrushes` の 1 箇所
+  （不足＝`MagiErrorContainerBrush`・超過＝`MagiWarnContainerBrush`）。曜日の偏りは `Expander`（既定は閉じる、中は `MaxHeight=160` でスクロール）、
+  句は e=7×回数−合計・|e|≥4 の曜日を名指し両側併記・各側 round(Σ正のe/7)（`MidpointRounding.AwayFromZero`＝Kotlin `Math.round` と同じ、値は正のみ）。
+  公平化は「差 1回 : A4, 有」。`StaffCountLines` はシートの平文。テストは Kotlin の 2 件を 1 対 1（`StaffCountSheetOnTheRealBoard`・`WeeklySkewPhraseMatchesTheScoredDeviation`）。
+
 - 2026-09-27（連携思考誘導UX A〜C の同期、Kotlin f58823f・b2693e8・df41987 同日。表示・導線のみ、採点不変）:
   A＝S6 ダイアログ（`NextActionGuide.RelaxTargetOf`/`RelaxTrialTextOf`＝Kotlin `relaxTarget`/`relaxTrialText`）: 題「設定を緩める候補 — 氏名 8日〜9日 禁止の並び」、
   「希望: 変更しません」「必須違反: h0件 → rr件」「変更規模: 設定 N項目・M人・Kセル」、前提（理由 1 行）／解消に使う設定の見出し分け、
