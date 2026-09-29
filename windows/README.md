@@ -334,7 +334,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 - 2026-09-29（C# 単独のテスト修正 0cea50c、製品コード不変）:
   `MagiViewModelEditingTest.UndoAndRedoRestoreWishDisplayImmediatelyFromTheSameSnapshot` が CI で 1 回赤（be28bba、ローカル 8 回は再現せず）。
   Undo が起こした背景の違反チェックが鮮度照合を通った直後に Redo が走ると、Undo 時点の希望表示で上書きする競合。テストで Redo の前に
-  Undo の検査を待つようにした（Undo 直後に表示が戻る検証は維持）。Kotlin 側に同じ背景検査の競合は無いため 1 対 1 の例外として記録。
+  Undo の検査を待つようにした（Undo 直後に表示が戻る検証は維持）。テストの 1 対 1 の例外として記録（Kotlin 側に同型の競合があるかは未確認）。
 - 2026-09-28（つくる前の確認のゲートとシート、Kotlin 0d085a1 の `runV6FullOptimize`/`proceedPreRun`/`PreRunCheckSheet`）:
   `RunV6FullOptimize` の入口で `PreRunCheck.Build` が `NeedsSheet`（消えない or 外れる ≥1）なら `UiState.PreRunCheck` を立てて止まる。
   `ProceedPreRun`（このままつくる）は指紋を記録して 1 タップで開始（同じ指紋では再表示しない、繰り返しヒントはシート側で出したので
