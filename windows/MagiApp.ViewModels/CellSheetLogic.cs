@@ -452,6 +452,18 @@ public static class CellSheetLogic
         return head.Concat(shown.Where(canDo.Contains)).Where(shown.Contains).Distinct().Take(n).ToList();
     }
 
+    /// <summary>ちら見の操作行に並べるシフトの数: 「他 ▸」(56dp) と同じ行に 52dp＋間 6dp で入るだけ（1〜4。Kotlin <c>peekPickCount</c>）。</summary>
+    public static int PeekPickCount(int contentWidthDp) => Math.Clamp((contentWidthDp - 56 + 6) / 58, 1, 4);
+
+    /// <summary>ちら見の見出し: 巡回の見出しから日付の範囲を落とす（Kotlin <c>peekHeading</c>）。</summary>
+    public static string PeekHeading(string tourHeading)
+    {
+        var at = tourHeading.LastIndexOf(" ・ ", StringComparison.Ordinal);
+        return at < 0 ? tourHeading : tourHeading[..at];
+    }
+
+    public const string PeekHardRiskNote = "⚠＝変えると必須違反";
+
     /// <summary>[S6] 既にある組の手順がこのセルを動かすなら、その行き先（新しく試算しない。Kotlin <c>peekRecommendation</c>）。</summary>
     public static int? PeekRecommendation(RelaxTrial.Result? r, int i, int j) =>
         r?.Moves.FirstOrDefault(m => m.Staff == i && m.Day == j)?.To;

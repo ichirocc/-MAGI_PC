@@ -223,6 +223,7 @@ public class CellSheetLogicTest
         var at = items.ToList().IndexOf(a);
         Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9", CellSheetLogic.TourHeading(items, at));
         Assert.Null(CellSheetLogic.TourHeading(items, 9));
+        Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4", CellSheetLogic.PeekHeading(CellSheetLogic.TourHeading(items, at)!));
         Assert.Equal("ほかに人員不足 2件（日ヘッダから）", CellSheetLogic.TourCovULine(2));
         Assert.Null(CellSheetLogic.TourCovULine(0));
     }
@@ -336,5 +337,16 @@ public class CellSheetLogicTest
         Assert.Equal(2, CellSheetLogic.PeekRecommendation(r, 1, 4));
         Assert.Null(CellSheetLogic.PeekRecommendation(r, 1, 5));
         Assert.Null(CellSheetLogic.PeekRecommendation(null, 1, 4));
+    }
+
+    [Fact]
+    public void PeekPickCountFitsFourAtPhoneWidths()
+    {
+        Assert.Equal(4, CellSheetLogic.PeekPickCount(360 - 32));
+        Assert.Equal(4, CellSheetLogic.PeekPickCount(390 - 32));
+        Assert.Equal(4, CellSheetLogic.PeekPickCount(282));
+        Assert.Equal(3, CellSheetLogic.PeekPickCount(281));
+        Assert.Equal(1, CellSheetLogic.PeekPickCount(40));
+        Assert.Equal(4, CellSheetLogic.PeekPickCount(800));
     }
 }

@@ -426,12 +426,22 @@ public sealed partial class ScheduleView : UserControl
         var hasWeeks = _weeks.Count > 1;
         PrevWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
         NextWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
-        var hasVio = _vioDays.Count > 0;
+        var hasVio = _vioDays.Count > 0 && !_hideVioNav;
         PrevVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
         NextVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
         UpdateNavLabel(ui);
         // グリッドは作り直した直後で幅が未確定なので、レイアウト後にもう一度ラベルを出す。
         DispatcherQueue.TryEnqueue(() => UpdateNavLabel(_vm.Ui));
+    }
+
+    private bool _hideVioNav;
+
+    private void SetVioNavHidden(bool hide)
+    {
+        _hideVioNav = hide;
+        var v = _vioDays.Count > 0 && !hide ? Visibility.Visible : Visibility.Collapsed;
+        PrevVioButton.Visibility = v;
+        NextVioButton.Visibility = v;
     }
 
     private void UpdateNavLabel(UiState ui)
@@ -1436,6 +1446,9 @@ public sealed partial class ScheduleView : UserControl
         //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
         var tourItems = _vm.HardViolationItemsFor(LabelOf);
         var tourAt = tourItems.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        // 巡回中にシートを開いている間は、下部バーの違反ナビを隠す（シートの［◀ 前］［次 ▶］と重複）。
+        SetVioNavHidden(tourAt >= 0);
+        flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
         var tourNext = tourItems.Count == 0 ? null : tourItems[tourAt < 0 ? 0 : (tourAt + 1) % tourItems.Count];
         if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0))
         {
@@ -1471,7 +1484,7 @@ public sealed partial class ScheduleView : UserControl
             r1.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             r1.Children.Add(new TextBlock
             {
-                Text = CellSheetLogic.TourHeading(tourItems, tourAt) ?? status.Text.Replace("⚠ ", ""), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = (CellSheetLogic.TourHeading(tourItems, tourAt) is { } th ? CellSheetLogic.PeekHeading(th) : null) ?? status.Text.Replace("⚠ ", ""), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
                 Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
             });
@@ -1516,7 +1529,7 @@ public sealed partial class ScheduleView : UserControl
                 rb.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke((i, j)); };
                 extra.Children.Add(rb);
             }
-            var picks = CellSheetLogic.PeekShifts(_vm.SheetShifts(), canDo, cur, wish);
+            var picks = CellSheetLogic.PeekShifts(_vm.SheetShifts(), canDo, cur, wish).Take(CellSheetLogic.PeekPickCount((int)peek.MaxWidth - 32)).ToList();
             var zc = _vm.ZeroCapShiftsFor(i);
             var marks = new Dictionary<int, TextBlock>();
             foreach (var k in ui.LeftHand ? picks.Reverse() : picks)
@@ -1547,6 +1560,8 @@ public sealed partial class ScheduleView : UserControl
             acts.Children.Add(more);
             if (extra.Children.Count > 0) peek.Children.Add(extra);
             peek.Children.Add(acts);
+            var riskNote = new TextBlock { Text = CellSheetLogic.PeekHardRiskNote, FontSize = 12, Opacity = 0.8, Visibility = Visibility.Collapsed };
+            peek.Children.Add(riskNote);
             flyout.Content = peek;
             _marksCts?.Cancel();
             var pc = new CancellationTokenSource();
@@ -1564,6 +1579,7 @@ public sealed partial class ScheduleView : UserControl
                         if (m.HardRisk.Contains(k)) { tb.Text = "⚠"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)); }
                         else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
                     }
+                    if (marks.Keys.Any(m.HardRisk.Contains)) riskNote.Visibility = Visibility.Visible;
                 }
                 catch (OperationCanceledException) { }
             }
