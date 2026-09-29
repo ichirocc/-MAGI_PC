@@ -340,7 +340,7 @@ public sealed partial class MainWindow : Window
         }
         if (t.FloorHeader is { } fh)
         {
-            Head(fh); Note(PreRunCheckText.FloorNote); Rows(t.FloorRows);
+            Head(fh); Note(PreRunCheckText.FloorNote); if (t.ZeroCapNote is { } zn) Note(zn); Rows(t.FloorRows);
             if (t.HasWishRows && !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty) Link("ぶつかっている希望を見る", ShowWishConflicts);
         }
         if (t.RerunHeader is { } rh)

@@ -373,7 +373,7 @@ public static class FixSearchText
             if (days.Count > 0 && pinned.Count == days.Count) { outList.Add($"「{Sym(k)}」の {days.Count} 回はどれも本人の希望で固定されています。"); wish = true; }
             else if (pinned.Count > 0) { outList.Add($"「{Sym(k)}」の {days.Count} 回のうち {pinned.Count} 回は本人の希望で固定されています。"); wish = true; }
             var hi = limits?.Invoke(i, k).Hi;
-            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は個人の上限が 0 回（置かない設定）です。");
+            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は個人の上限が 0 回（入れない指定）です。");
             var tight = days.Where(j => needLimits?.Invoke(k, j) is { } lim && Headcount(k, j) <= lim.Lo).ToList();
             if (tight.Count > 0) outList.Add(string.Join("・", tight.Select(j => DayText.Short(ui.StartDate, j))) + $" は「{Sym(k)}」がその日の必要人数ぎりぎりで、抜けると人員不足になります。");
             if (limits is not null)

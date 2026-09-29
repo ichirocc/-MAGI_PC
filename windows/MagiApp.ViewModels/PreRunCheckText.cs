@@ -13,11 +13,14 @@ public sealed record PreRunSheetText(
     string? WallLine,
     bool HasWishRows,
     string? OverCapNote = null,
-    IReadOnlyList<PreRunRow>? OverCapRows = null);
+    IReadOnlyList<PreRunRow>? OverCapRows = null,
+    string? ZeroCapNote = null);
 
 /// <summary><see cref="PreRunCheck"/> の結果を行にする。Kotlin <c>preRunSheetText</c>（MagiViewState.kt）の移植。WinUI のシートは <c>MainWindow.ShowPreRunCheckAsync</c>。</summary>
 public static class PreRunCheckText
 {
+    public const string ZeroCapTag = "（入れない指定が絡む）";
+    public const string ZeroCapNoteText = "「入れない指定が絡む」行は、個人の上限0（入れない指定）が原因で残ります。希望のせいではありません。例外として緩めると解ける場合があります。つくったあとに「設定を緩めたら」で試せます。";
     public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。";
     public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
     public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、例外として後から「設定を緩めたら」で試せます。";
@@ -49,14 +52,14 @@ public static class PreRunCheckText
         foreach (var d in s.DayProofs)
         {
             var w = Pin(d.Core);
-            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と本人の希望の衝突（{d.Core.Count}件は同時に成立しません・証明つき）", w?.Staff, w?.Day, w is not null));
+            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と本人の希望の衝突（{d.Core.Count}件は同時に成立しません・証明つき）{(s.ZeroCapDays.Contains(d.Day) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null));
         }
         foreach (var c in s.StaffProofs)
         {
             var w = Pin(c.Core);
-            floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません・証明つき）", w?.Staff, w?.Day, w is not null));
+            floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません・証明つき）{(PreRunCheck.Summary.ZeroCapStaffProof(c) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null));
         }
-        foreach (var f in s.ForcedShortfalls) floor.Add(new PreRunRow($"「{f.ShiftSymbol}」 {f.Cells}日で担当できる人より必要人数が多く、人員不足が合計{f.Amount}人残ります"));
+        foreach (var f in s.ForcedShortfalls) floor.Add(new PreRunRow($"「{f.ShiftSymbol}」 {f.Cells}日で担当できる人より必要人数が多く、人員不足が合計{f.Amount}人残ります{(s.ZeroCapShorts.Contains(f.ShiftIndex) ? ZeroCapTag : "")}"));
 
         var rerun = s.RerunClears.Select(c => new PreRunRow($"{Name(c.Staff)} {Day(c.Day)} {Sym(c.Shift)}", c.Staff, c.Day)).ToList();
         var wall = s.Wall is { } h
@@ -73,6 +76,7 @@ public static class PreRunCheckText
         return new PreRunSheetText(
             floor.Count == 0 ? null : $"計算では消えない（{floor.Count}件）", floor,
             rerun.Count == 0 ? null : $"もう一度つくると外れる（{rerun.Count}件）", rerun,
-            wall, floor.Any(r => r.Wish), overNote, overRows);
+            wall, floor.Any(r => r.Wish), overNote, overRows,
+            floor.Any(r => r.Text.EndsWith(ZeroCapTag)) ? ZeroCapNoteText : null);
     }
 }

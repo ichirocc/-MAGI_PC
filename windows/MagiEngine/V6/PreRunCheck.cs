@@ -25,8 +25,15 @@ public static class PreRunCheck
         IReadOnlyList<ConstraintMus.StaffConflict> StaffProofs,
         IReadOnlyList<WishOverCap> WishOverCaps,
         IReadOnlyList<HandPlacedCell> RerunClears,
-        WallHint? Wall)
+        WallHint? Wall,
+        IReadOnlySet<int>? ZeroCapProofDays = null,
+        IReadOnlySet<int>? ZeroCapShortShifts = null)
     {
+        /// <summary>個人の上限0（入れない指定）を外すと成立する日の証明＝上限0が絡む（S6 で例外として緩めて確かめる）。</summary>
+        public IReadOnlySet<int> ZeroCapDays => ZeroCapProofDays ?? new HashSet<int>();
+        /// <summary>上限0を数えなければ不足が減るシフト。</summary>
+        public IReadOnlySet<int> ZeroCapShorts => ZeroCapShortShifts ?? new HashSet<int>();
+        public static bool ZeroCapStaffProof(ConstraintMus.StaffConflict c) => c.Core.Any(it => it is ConstraintMus.RangeCap { Hi: 0 });
         public int FloorCount => WishConflicts.Count + ImpossibleWishes.Count + ForcedShortfalls.Count +
             DayProofs.Count + StaffProofs.Count;
         /// <summary>利用者決定 2026-09-28: どちらかの節に 1 件でもあるときだけシートを出す。</summary>
@@ -37,15 +44,32 @@ public static class PreRunCheck
     {
         var p = ScheduleUtil.CachedProblem(state);
         var s = ScheduleUtil.NormalizeSchedule(schedule, p);
+        var dayProofs = ConstraintMus.AnalyzeDayConflicts(p).Where(c => HasWish(c.Core)).OrderBy(c => c.Day).ToList();
+        var strict = ConstraintMus.DayProofsWithoutZeroCap(p).ToHashSet();
+        var forced = V6SanityPort.ForcedCovU(state, p);
         return new Summary(
             V6SanityPort.WishSelfConflicts(p),
             V6SanityPort.DetectImpossibleWishes(state, p),
-            V6SanityPort.ForcedCovU(state, p),
-            ConstraintMus.AnalyzeDayConflicts(p).Where(c => HasWish(c.Core)).OrderBy(c => c.Day).ToList(),
+            forced,
+            dayProofs,
             ConstraintMus.AnalyzeStaffConflicts(p).Where(c => HasWish(c.Core)).OrderBy(c => c.Staff).ToList(),
             WishOverCaps(p),
             HandPlacedCells(p, s),
-            WallHintOf(RelaxTrial.UpperZeroWalls(state)));
+            WallHintOf(RelaxTrial.UpperZeroWalls(state)),
+            dayProofs.Select(c => c.Day).Where(d => !strict.Contains(d)).ToHashSet(),
+            forced.Where(f => CanDoShortfall(p, f.ShiftIndex) < f.Amount).Select(f => f.ShiftIndex).ToHashSet());
+    }
+
+    private static int CanDoShortfall(Problem p, int k)
+    {
+        var sum = 0;
+        for (var j = 0; j < p.T; j++)
+        {
+            var n = 0;
+            for (var i = 0; i < p.S; i++) if (p.CanDo(i, k) || (p.WishFixed(i, j) && p.Wish[i][j] == k)) n++;
+            sum += Math.Max(0, p.CovUCell(k, j, n));
+        }
+        return sum;
     }
 
     private static bool HasWish(IReadOnlyList<ConstraintMus.Item> core) => core.Any(it => it is ConstraintMus.WishPin);
