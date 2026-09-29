@@ -12,7 +12,7 @@ public enum CellSeverity { Hard, Soft, None }
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
 
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
-public enum RelaxHandoff { None, Searching, Offer, NoWall }
+public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped }
 
 /// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。</summary>
 public sealed record OpNotice(long Id, string Text, long UndoSerial);
@@ -443,8 +443,6 @@ public static class CellSheetLogic
         : failedKey == key ? FixPanelState.Failed
         : FixPanelState.NotStarted;
 
-    /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
-    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い。</summary>
     /// <summary>ちら見に出す上位 <paramref name="n"/> シフト: 今の割当・希望を先に、残りは担当できるものを枠の順で（Kotlin <c>peekShifts</c>）。</summary>
     public static IReadOnlyList<int> PeekShifts(IReadOnlyList<int> shown, IReadOnlySet<int> canDo, int current, int? wish, int n = 4)
     {
@@ -458,11 +456,14 @@ public static class CellSheetLogic
     public static int? PeekRecommendation(RelaxTrial.Result? r, int i, int j) =>
         r?.Moves.FirstOrDefault(m => m.Staff == i && m.Day == j)?.To;
 
-    public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j) =>
+    /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
+    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い、Stopped＝途中で止めた（やり直しを出す）。</summary>
+    public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j, bool stopped = false) =>
         r is not null && ((r.Staff == i && j >= r.WindowFirst && j <= r.WindowLast) || r.Moves.Any(m => m.Staff == i && m.Day == j)) ? RelaxHandoff.Offer
         : r is not null ? RelaxHandoff.None
         : searching ? RelaxHandoff.Searching
         : noWall ? RelaxHandoff.NoWall
+        : stopped ? RelaxHandoff.Stopped
         : RelaxHandoff.None;
 
     public static string RelaxHandoffLine(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf) =>

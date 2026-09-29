@@ -17,6 +17,7 @@ public sealed partial class MagiViewModel
     private RelaxCtx? _relaxCtx;
     private RelaxTrial.Outcome? _relaxResult;
     private (RelaxCtx Ctx, string Line)? _relaxDone;
+    private RelaxCtx? _relaxStoppedCtx;
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="StartRelaxTrial"/> が背後で走らせる Task。</summary>
     internal Task? LastRelaxTrialTask { get; private set; }
@@ -37,6 +38,7 @@ public sealed partial class MagiViewModel
         var seq = ++_relaxSeq;
         _relaxCtx = ctx;
         _relaxResult = null;
+        _relaxStoppedCtx = null;
         var cts = new CancellationTokenSource();
         _relaxCts = cts;
         Ui.RelaxSearching = true;
@@ -69,6 +71,7 @@ public sealed partial class MagiViewModel
     /// <summary>試算を止める（結果は出さない）。利用者の「やめる」と盤面ジョブの入口から呼ぶ。</summary>
     public void CancelRelaxTrial()
     {
+        if (LastRelaxTrialTask is { IsCompleted: false }) _relaxStoppedCtx = _relaxCtx;
         _relaxCts?.Cancel();
         ++_relaxSeq;
         if (Ui.RelaxSearching) Ui.RelaxSearching = false;
@@ -81,6 +84,12 @@ public sealed partial class MagiViewModel
     /// <summary>いまのデータで探し終えて組が無かった（NoWall・試算不可）。走っている・未着手・古いなら false。</summary>
     public bool RelaxNoWall() =>
         _relaxCtx is { } c && c == RelaxCtxNow() && _relaxResult is not null && _relaxResult is not RelaxTrial.Result;
+
+    /// <summary>いまのデータで試算を途中で止めた（結果なし）。「もう一度試す」を出す。</summary>
+    public bool RelaxStopped() => _relaxStoppedCtx is { } c && c == RelaxCtxNow() && _relaxResult is null;
+
+    /// <summary>止めた試算を利用者の操作でやり直す。</summary>
+    public void RetryRelaxTrial() => StartRelaxTrial();
 
     /// <summary>直近の確定の結果 1 行。確定の後のデータから変わったら出さない（§9）。</summary>
     public string? RelaxDoneLine() => _relaxDone is { } d && d.Ctx == RelaxCtxNow() ? d.Line : null;

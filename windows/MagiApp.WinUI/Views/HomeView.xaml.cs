@@ -225,7 +225,10 @@ public sealed partial class HomeView : UserControl
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
-        RelaxSearchRow.Visibility = !ui.Running && ui.RelaxSearching ? Visibility.Visible : Visibility.Collapsed;
+        var relaxStopped = !ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxStopped();
+        RelaxSearchRow.Visibility = !ui.Running && (ui.RelaxSearching || relaxStopped) ? Visibility.Visible : Visibility.Collapsed;
+        RelaxSearchText.Text = relaxStopped ? NextActionGuide.RelaxStoppedText : NextActionGuide.RelaxSearchingText;
+        RelaxStopButton.Content = relaxStopped ? NextActionGuide.RelaxRetryLabel : "やめる";
         RelaxSearchText.Foreground = fgBrush;
 
         var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown);
@@ -442,11 +445,15 @@ public sealed partial class HomeView : UserControl
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
 
-    private void OnStopRelaxClick(object sender, RoutedEventArgs e) => _vm.CancelRelaxTrial();
+    private void OnStopRelaxClick(object sender, RoutedEventArgs e)
+    {
+        if (_vm.Ui.RelaxSearching) _vm.CancelRelaxTrial();
+        else _vm.RetryRelaxTrial();
+    }
 
     /// <summary>[S6] 設定を緩める候補（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5）。盤面は見せず手順を言葉で出し、押したときだけ当てる。
     /// 確定の前に全部の変更（設定・手順の全セル）を読める＝窓の外の手も畳むだけで隠さない。</summary>
-    internal async Task ShowRelaxTrialAsync()
+    internal async Task ShowRelaxTrialAsync((int I, int J)? from = null)
     {
         var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
         var token = _vm.RelaxTrialFor();
@@ -495,7 +502,7 @@ public sealed partial class HomeView : UserControl
                 Content = "例外として上限を緩め、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
                 Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
             };
-            confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); };
+            confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); if (from is { } c) _window.OpenCell(c.I, c.J); };
             panel.Children.Add(confirm);
             panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
         }

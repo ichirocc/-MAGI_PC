@@ -366,10 +366,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>[S6] ホームの「設定を緩める候補」ダイアログを開く（セルシートの受け渡し。組は VM が持つので画面はどこからでも同じ）。</summary>
-    internal void ShowRelaxTrial()
+    internal void ShowRelaxTrial((int I, int J)? from = null)
     {
         SelectTab("home");
-        if (_tabCache.TryGetValue("home", out var c) && c is HomeView hv) _ = hv.ShowRelaxTrialAsync();
+        if (_tabCache.TryGetValue("home", out var c) && c is HomeView hv) _ = hv.ShowRelaxTrialAsync(from);
     }
 
     /// <summary>[phase9 #2] 勤務表CSVの書き出し。ピッカーの配線は設定タブに1つだけ置き、ここは委譲する。</summary>

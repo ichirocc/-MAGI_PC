@@ -68,6 +68,10 @@ public class CellSheetLogicTest
         Assert.Equal(RelaxHandoff.None, CellSheetLogic.RelaxHandoffOf(r, true, true, i, 20));
         Assert.Equal(RelaxHandoff.Searching, CellSheetLogic.RelaxHandoffOf(null, true, false, i, 7));
         Assert.Equal(RelaxHandoff.NoWall, CellSheetLogic.RelaxHandoffOf(null, false, true, i, 7));
+        Assert.Equal(RelaxHandoff.Stopped, CellSheetLogic.RelaxHandoffOf(null, false, false, i, 7, stopped: true));
+        Assert.Equal(RelaxHandoff.Searching, CellSheetLogic.RelaxHandoffOf(null, true, false, i, 7, stopped: true));
+        Assert.Equal(RelaxHandoff.Offer, CellSheetLogic.RelaxHandoffOf(r, false, false, i, 7, stopped: true));
+        Assert.Equal("例外として緩める候補: A", NextActionGuide.RelaxPeekLabel("A"));
         Assert.Equal(RelaxHandoff.None, CellSheetLogic.RelaxHandoffOf(null, false, false, i, 7));
         var ui = new UiState
         {

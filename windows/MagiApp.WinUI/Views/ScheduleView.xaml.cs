@@ -138,10 +138,10 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>手が見つからなかったときの次の一歩（編集タブの入口: 0=月次条件の希望／2=年間マスターの設定）。</summary>
     private readonly Action<int>? _openEditDoor;
 
-    /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。</summary>
-    private readonly Action? _showRelax;
+    /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。確定の後は渡したセルへ戻る。</summary>
+    private readonly Action<(int I, int J)?>? _showRelax;
 
-    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null, Action? showRelax = null)
+    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null, Action<(int I, int J)?>? showRelax = null)
     {
         _vm = vm;
         _goAnalysis = goAnalysis;
@@ -1421,7 +1421,7 @@ public sealed partial class ScheduleView : UserControl
         var status = _vm.CellStatusFor(i, j, LabelOf);
         var dilemma = CellSheetLogic.IsWishDilemma(wish, cur, status.Severity);
         var relax = _vm.RelaxTrialFor();
-        var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j);
+        var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j, _vm.RelaxStopped());
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
         var reopening = false;
@@ -1500,7 +1500,7 @@ public sealed partial class ScheduleView : UserControl
                 r2.Children.Add(nav);
             }
             peek.Children.Add(r2);
-            // 希望を取り消す・推奨は幅が足りないので上の行へ折り返す（横スクロールしない）。
+            // 希望を取り消す・緩める候補は幅が足りないので上の行へ折り返す（横スクロールしない）。
             var extra = new StackPanel { Orientation = Orientation.Horizontal };
             var acts = new StackPanel { Orientation = Orientation.Horizontal };
             if (wish is not null)
@@ -1511,8 +1511,9 @@ public sealed partial class ScheduleView : UserControl
             }
             if (mode == 0 && CellSheetLogic.PeekRecommendation(relax?.Result, i, j) is { } rec && rec != cur && canDo.Contains(rec))
             {
-                var rb = new Button { Content = $"推奨: {Sym(rec)} に変更", MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
-                rb.Click += (_, _) => { _vm.SetCell(i, j, rec); Reopen(i, j, 0); };
+                // このセルだけを変えず、上限の緩和と手順をまとめて確定するダイアログを開く。
+                var rb = new Button { Content = NextActionGuide.RelaxPeekLabel(Sym(rec)), MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
+                rb.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke((i, j)); };
                 extra.Children.Add(rb);
             }
             var picks = CellSheetLogic.PeekShifts(_vm.SheetShifts(), canDo, cur, wish);
@@ -1656,11 +1657,23 @@ public sealed partial class ScheduleView : UserControl
             {
                 panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxHandoffLine(relax.Result, ui, LabelOf), TextWrapping = TextWrapping.Wrap });
                 var showRelax = new Button { Content = "緩める候補を見る", MinHeight = 48 };
-                showRelax.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke(); };
+                showRelax.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke((i, j)); };
                 panel.Children.Add(showRelax);
             }
             else if (handoff == RelaxHandoff.Searching)
                 panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxSearchingText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            else if (handoff == RelaxHandoff.NoWall)
+                panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxNoWallText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            else if (handoff == RelaxHandoff.Stopped)
+            {
+                var row = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } } };
+                row.Children.Add(new TextBlock { Text = NextActionGuide.RelaxStoppedText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
+                var retry = new HyperlinkButton { Content = NextActionGuide.RelaxRetryLabel, MinHeight = 48 };
+                retry.Click += (_, _) => { _vm.RetryRelaxTrial(); Reopen(i, j, mode); };
+                Grid.SetColumn(retry, 1);
+                row.Children.Add(retry);
+                panel.Children.Add(row);
+            }
         }
         if (mode == 2) { showGrid = true; mode = 0; }
 
