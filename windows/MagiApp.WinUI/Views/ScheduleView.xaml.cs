@@ -1532,7 +1532,7 @@ public sealed partial class ScheduleView : UserControl
             var picks = CellSheetLogic.PeekShifts(_vm.SheetShifts(), canDo, cur, wish).Take(CellSheetLogic.PeekPickCount((int)peek.MaxWidth - 32)).ToList();
             var zc = _vm.ZeroCapShiftsFor(i);
             var marks = new Dictionary<int, TextBlock>();
-            foreach (var k in ui.LeftHand ? picks.Reverse() : picks)
+            foreach (var k in ui.LeftHand ? Enumerable.Reverse(picks) : picks)
             {
                 var sel = mode == 0 ? k == cur : k == wish;
                 var sbg = k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.LightGray) : Colors.Gainsboro;
