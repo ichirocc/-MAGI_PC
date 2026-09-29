@@ -250,8 +250,10 @@ public sealed partial class MagiViewModel
                 _resultSchedule = kept;
                 _state = st0.WithSchedule(kept);
                 // [S5 §9] 維持の分岐は「前回の結果を維持します」だと希望が消えたことが伝わらない＝置き換える。
+                var nowScore = new KeptResultText.Score(newHard, res.Report.WeightedScore, newTotal);
+                var baseScore = new KeptResultText.Score(baseHard, baseReport.WeightedScore, baseTotal);
                 var keptMsg = s5 is null
-                    ? $"今回(必須{newHard}/合計{newTotal})は前回(必須{baseHard}/合計{baseTotal})より改善しませんでした。前回の結果を維持します。"
+                    ? KeptResultText.Screen(nowScore, baseScore)
                     : s5.H0 - baseReport.Hard > 0
                         ? $"希望（{s5.Label}）を取り消しました。必須違反は {s5.H0} → {baseReport.Hard}（取り消しの分だけ）。もう一度つくっても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
                         : $"希望（{s5.Label}）を取り消しましたが、もう一度つくっても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
@@ -264,7 +266,7 @@ public sealed partial class MagiViewModel
                     ui.Message = keptMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, baseReport.Hard, keptMsg);
                 }, ct: ct);
-                LogOp("I", $"再実行: 今回 必須{newHard}/合計{newTotal} は前回 必須{baseHard}/合計{baseTotal} 以下に改善せず → 前回を維持");
+                LogOp("I", KeptResultText.Log("再実行", nowScore, baseScore));
                 _lastResultHard = baseHard;
             }
             else

@@ -266,6 +266,8 @@ public sealed partial class MagiViewModel
             var worse = UnifiedViolationChecker.ReportComparer.Compare(prevReport, r.Report) < 0;
             if (worse)
             {
+                var nowScore = new KeptResultText.Score(newHard, r.Report.WeightedScore, newTotal);
+                var prevScore = new KeptResultText.Score((long)prevReport.Hard, prevReport.WeightedScore, prevReport.Total);
                 var kept = prev.Copy2D();
                 _currentSchedule = kept;
                 _resultSchedule = kept;
@@ -277,9 +279,9 @@ public sealed partial class MagiViewModel
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
-                    ui.Message = $"今回(必須{newHard}/合計{newTotal})は前回(必須{prevReport.Hard}/合計{prevReport.Total})より改善せず。前回の結果を維持しました。";
+                    ui.Message = KeptResultText.Screen(nowScore, prevScore);
                 });
-                LogOp("I", $"バックグラウンド: 今回 必須{newHard}/合計{newTotal} は前回 以下に改善せず → 前回を維持");
+                LogOp("I", KeptResultText.Log("バックグラウンド", nowScore, prevScore));
                 // 前景の維持分岐と同じ＝次回ヒントの族は維持した盤面から取る。
                 _lastResultHard = prevReport.Hard;
                 _lastTopHardFamily = prevReport.Hard > 0 ? TopHardFamilyJp(prevReport.Breakdown) : null;
