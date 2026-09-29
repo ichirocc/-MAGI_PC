@@ -122,7 +122,8 @@ public static class UnifiedViolationChecker
     {
         var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
-        var s = ScheduleUtil.NormalizeSchedule(schedule ?? state.Schedule.ToIntArray2D(), p);
+        var scratch = (t_checkScratch ??= new CheckScratch()).Fit(p);
+        var s = scratch.Normalize(schedule ?? state.Schedule.ToIntArray2D(), p);
 
         // [3.395.0/高速化 移植元] 集計は添字加算の int[] で行い、最後に MirrorKeys.All の順で
         // Dictionary へ起こす（内容も順序も従来と同じ）。
@@ -137,32 +138,35 @@ public static class UnifiedViolationChecker
         // 効く（正しさそのもの＝hard/soft/breakdown/weightedScore には影響しない）。素の Dictionary は
         // 削除を一切しない使い方の下では現行 .NET 実装が挿入順を保つが、それは公開契約ではなく将来の
         // BCL 変更で静かに崩れうるため、契約として挿入順を保証する InsertionOrderDictionary で持つ。
-        var cellFams = new InsertionOrderDictionary<string, List<string>>();
-        var countFams = new InsertionOrderDictionary<string, List<string>>();
-        var needFams = new InsertionOrderDictionary<string, List<string>>();
+        var cellFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
+        var countFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
+        var needFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
         var c1Runs = new List<IReadOnlyList<int>>();
 
         void Mark(int i, int j, string family)
         {
             var cls = VioClass.TryGetValue(family, out var c) ? c : family;
-            var key = $"{i},{j}";
-            if (!cellFams.TryGetValue(key, out var fams)) cellFams[key] = fams = new List<string>(2);
+            var key = PairKey(i, j);
+            if (!cellFams.TryGetValue(key, out var fams0)) cellFams[key] = fams0 = new List<string>(2);
+            var fams = (List<string>)fams0;
             if (!fams.Contains(cls)) fams.Add(cls);
         }
 
         void MarkNeed(int k, int j, string family)
         {
             var cls = VioClass.TryGetValue(family, out var c) ? c : family;
-            var key = $"{k},{j}";
-            if (!needFams.TryGetValue(key, out var fams)) needFams[key] = fams = new List<string>(2);
+            var key = PairKey(k, j);
+            if (!needFams.TryGetValue(key, out var fams0)) needFams[key] = fams0 = new List<string>(2);
+            var fams = (List<string>)fams0;
             if (!fams.Contains(cls)) fams.Add(cls);
         }
 
         void MarkCount(int i, int k, string family)
         {
             var cls = VioClass.TryGetValue(family, out var c) ? c : family;
-            var key = $"{i},{k}";
-            if (!countFams.TryGetValue(key, out var fams)) countFams[key] = fams = new List<string>(2);
+            var key = PairKey(i, k);
+            if (!countFams.TryGetValue(key, out var fams0)) countFams[key] = fams0 = new List<string>(2);
+            var fams = (List<string>)fams0;
             if (!fams.Contains(cls)) fams.Add(cls);
         }
 
@@ -207,7 +211,7 @@ public static class UnifiedViolationChecker
         }
 
         // ---- c2: per-staff total --------------------------------------------------------
-        var counts = ScheduleUtil.CountMatrix(p, s);
+        var counts = scratch.CountMatrix(s, p);
         foreach (var c in p.Cons2)
         {
             for (int i = 0; i < p.S; i++)
@@ -399,10 +403,10 @@ public static class UnifiedViolationChecker
 
         // ---- weekly: 7-day-cycle shift equalization ---------------------------------------------
         var weeklyLocs = new List<List<int>>();
+        var wd = scratch.Wd;
         for (int i = 0; i < p.S; i++)
         {
-            var wd = new int[p.K][];
-            for (int k = 0; k < p.K; k++) wd[k] = new int[7];
+            foreach (var w in wd) Array.Clear(w);
             for (int j = 0; j < p.T; j++)
             {
                 int k = s[i][j];
@@ -421,7 +425,7 @@ public static class UnifiedViolationChecker
         };
 
         // ---- covU / covO --------------------------------------------------------------------
-        var cov = ScheduleUtil.Coverage(p, s);
+        var cov = scratch.Coverage(s, p);
         for (int j = 0; j < p.T; j++)
         {
             for (int k = 0; k < p.K; k++)
@@ -508,19 +512,89 @@ public static class UnifiedViolationChecker
     /// で持つ（<c>fams</c> の挿入順＝下流修復パスの処理順をここでも保つ理由は呼出元コメント参照）。
     /// </summary>
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> BuildFamilyMaps(
-        IReadOnlyDictionary<string, List<string>> fams, out IReadOnlyDictionary<string, string> singleFamily)
+        InsertionOrderDictionary<string, IReadOnlyList<string>> fams, out IReadOnlyDictionary<string, string> singleFamily)
     {
-        var families = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
         var single = new InsertionOrderDictionary<string, string>();
-        foreach (var (ck, cv) in fams)
+        foreach (var ck in fams.Keys)
         {
+            var cv = fams[ck];
             var sorted = cv.Count <= 1 ? cv : cv.OrderByDescending(x => ClassWeight.TryGetValue(x, out var w) ? w : 0.0).ToList();
-            families[ck] = sorted;
+            fams[ck] = sorted;
             single[ck] = sorted[0];
         }
         singleFamily = single;
-        return families;
+        return fams;
     }
+
+    /// <summary>Check() 内だけで使う作業配列（戻り値へ出ない）。1 スレッド 1 組を寸法が合う限り使い回す。</summary>
+    private sealed class CheckScratch
+    {
+        private int[][] _s = Array.Empty<int[]>(), _counts = Array.Empty<int[]>(), _cov = Array.Empty<int[]>();
+        public int[][] Wd = Array.Empty<int[]>();
+
+        private static int[][] Fit(int[][] a, int rows, int cols)
+        {
+            if (a.Length == rows && (rows == 0 || a[0].Length == cols)) return a;
+            var r = new int[rows][];
+            for (int x = 0; x < rows; x++) r[x] = new int[cols];
+            return r;
+        }
+
+        public CheckScratch Fit(Problem p)
+        {
+            _s = Fit(_s, p.S, p.T); _counts = Fit(_counts, p.S, p.K); _cov = Fit(_cov, p.T, p.K); Wd = Fit(Wd, p.K, 7);
+            return this;
+        }
+
+        /// <summary><see cref="ScheduleUtil.NormalizeSchedule"/> と同じ値を書く。</summary>
+        public int[][] Normalize(int[][] schedule, Problem p)
+        {
+            for (int i = 0; i < p.S; i++)
+            {
+                var src = i < schedule.Length ? schedule[i] : null;
+                var row = _s[i];
+                for (int j = 0; j < p.T; j++)
+                {
+                    int k = (src is not null && j < src.Length) ? src[j] : -1;
+                    row[j] = (k >= 0 && k < p.K) ? k : -1;
+                }
+            }
+            return _s;
+        }
+
+        /// <summary><see cref="ScheduleUtil.CountMatrix"/> と同じ値を書く。</summary>
+        public int[][] CountMatrix(int[][] sc, Problem p)
+        {
+            foreach (var r in _counts) Array.Clear(r);
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T; j++) { int k = sc[i][j]; if (k >= 0 && k < p.K) _counts[i][k]++; }
+            return _counts;
+        }
+
+        /// <summary><see cref="ScheduleUtil.Coverage"/> と同じ値を書く。</summary>
+        public int[][] Coverage(int[][] sc, Problem p)
+        {
+            foreach (var r in _cov) Array.Clear(r);
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T; j++) { int k = sc[i][j]; if (k >= 0 && k < p.K) _cov[j][k]++; }
+            return _cov;
+        }
+    }
+
+    [ThreadStatic] private static CheckScratch? t_checkScratch;
+
+    private const int PairKeyN = 64;
+    private static readonly string[] PairKeys = BuildPairKeys();
+    private static string[] BuildPairKeys()
+    {
+        var a = new string[PairKeyN * PairKeyN];
+        for (int x = 0; x < a.Length; x++) a[x] = $"{x / PairKeyN},{x % PairKeyN}";
+        return a;
+    }
+
+    /// <summary>違反マップのキー "a,b"。業務上限（30 名・31 日）の範囲は作り置きを返す。</summary>
+    internal static string PairKey(int a, int b) =>
+        a >= 0 && a < PairKeyN && b >= 0 && b < PairKeyN ? PairKeys[a * PairKeyN + b] : $"{a},{b}";
 
     private static void CheckC3Family(
         Problem p, int[][] schedule, IReadOnlyList<C3> list, string key, bool forbidden,

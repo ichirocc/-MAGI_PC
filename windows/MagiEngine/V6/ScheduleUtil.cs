@@ -231,7 +231,15 @@ public static class ScheduleUtil
         double w = 0.0;
         for (int idx = 0; idx < n; idx++) w += scale[idx];
         if (w <= 0.0) return new FairDevResult(0, Array.Empty<(int, int)>());
-        var order = Enumerable.Range(0, n).OrderBy(i => ach[i]).ToArray();
+        // 達成率の昇順・同値は添字順（安定）。n は群の人数なので挿入整列で足りる。
+        var order = new int[n];
+        for (int x = 0; x < n; x++) order[x] = x;
+        for (int x = 1; x < n; x++)
+        {
+            int v = order[x], y = x - 1;
+            while (y >= 0 && ach[order[y]].CompareTo(ach[v]) > 0) { order[y + 1] = order[y]; y--; }
+            order[y + 1] = v;
+        }
         double acc = 0.0;
         double tgt = ach[order[n - 1]];
         foreach (var idx in order)
