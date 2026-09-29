@@ -307,6 +307,9 @@ internal static class C1JointLnsPolish
     // [3.287.0 keep-best統一] hard→weighted→total（MirrorCore.betterReport）
     private static bool Better(ViolationReport a, ViolationReport b) => UnifiedViolationChecker.BetterReport(a, b);
 
+    // 下界は Problem だけで決まる（盤面に依らない）＝同じ Problem での再計算（適応 LNS の 2 本目）を省く。
+    private static volatile Tuple<Problem, int>? lowerBoundCache;
+
     /// <summary>
     /// Optimistic C1 lower bound. Each staff/rule is minimized independently under wishes,
     /// capability and that shift's monthly range. Summing independent minima is still a valid
@@ -314,16 +317,31 @@ internal static class C1JointLnsPolish
     /// </summary>
     internal static int StructuralC1LowerBound(Problem p)
     {
+        var cached = lowerBoundCache;
+        if (cached != null && ReferenceEquals(cached.Item1, p)) return cached.Item2;
         int total = 0;
+        // 同じ規則・同じ希望固定の並びの職員は同じ値＝1 回だけ解く。
+        var memo = new Dictionary<string, int>();
         foreach (var c in p.Cons1)
         {
             if (c.Day1 <= 0 || c.Day1 > p.T || c.ShiftIdx < 0 || c.ShiftIdx >= p.K) continue;
             for (int i = 0; i < p.S; i++)
             {
                 if (!p.CanDo(i, c.ShiftIdx)) continue;
-                total += SingleRuleLowerBound(p, i, c);
+                var sb = new System.Text.StringBuilder();
+                sb.Append(c.Day1).Append(',').Append(c.Day2).Append(',').Append(c.ShiftIdx).Append(':');
+                for (int day = 0; day < p.T; day++)
+                    sb.Append(!p.WishLocked(i, day) ? '.' : p.LockTo(i, day) == c.ShiftIdx ? '1' : '0');
+                string key = sb.ToString();
+                if (!memo.TryGetValue(key, out int v))
+                {
+                    v = SingleRuleLowerBound(p, i, c);
+                    memo[key] = v;
+                }
+                total += v;
             }
         }
+        lowerBoundCache = Tuple.Create(p, total);
         return total;
     }
 
@@ -352,45 +370,40 @@ internal static class C1JointLnsPolish
         if (dpCells > MaxExactLowerBoundCells) return CheapSingleRuleLowerBound(p, staff, c);
         int maskKeep = maskLimit - 1;
         const int inf = 1_000_000;
-        var dp = new int[hi + 1][];
-        for (int cc = 0; cc <= hi; cc++) { dp[cc] = new int[maskLimit]; Array.Fill(dp[cc], inf); }
-        dp[0][0] = 0;
+        // 回数次元は hi=T で制約にならない（nc<=day+1<=T）＝回数ごとの最小を保つ必要がなく、mask だけで同じ最小値になる。
+        var dp = new int[maskLimit];
+        Array.Fill(dp, inf);
+        var next = new int[maskLimit];
+        dp[0] = 0;
         for (int day = 0; day < p.T; day++)
         {
-            var next = new int[hi + 1][];
-            for (int cc = 0; cc <= hi; cc++) { next[cc] = new int[maskLimit]; Array.Fill(next[cc], inf); }
+            Array.Fill(next, inf);
             int wished = p.LockTo(staff, day);
             bool locked = p.WishLocked(staff, day);
             int minBit = locked ? (wished == c.ShiftIdx ? 1 : 0) : 0;
             int maxBit = locked ? minBit : 1;
-            for (int cnt = 0; cnt <= Math.Min(day, hi); cnt++)
+            for (int mask = 0; mask < maskLimit; mask++)
             {
-                for (int mask = 0; mask < maskLimit; mask++)
+                int baseVal = dp[mask];
+                if (baseVal >= inf) continue;
+                for (int bit = minBit; bit <= maxBit; bit++)
                 {
-                    int baseVal = dp[cnt][mask];
-                    if (baseVal >= inf) continue;
-                    for (int bit = minBit; bit <= maxBit; bit++)
+                    int windowPenalty = 0;
+                    if (day + 1 >= d)
                     {
-                        int nc = cnt + bit;
-                        if (nc > hi) continue;
-                        int windowPenalty = 0;
-                        if (day + 1 >= d)
-                        {
-                            int ones = System.Numerics.BitOperations.PopCount((uint)mask) + bit;
-                            windowPenalty = ones < c.Day2 ? 1 : 0;
-                        }
-                        int nm = suffixBits == 0 ? 0 : ((mask << 1) | bit) & maskKeep;
-                        int v = baseVal + windowPenalty;
-                        if (v < next[nc][nm]) next[nc][nm] = v;
+                        int ones = System.Numerics.BitOperations.PopCount((uint)mask) + bit;
+                        windowPenalty = ones < c.Day2 ? 1 : 0;
                     }
+                    int nm = suffixBits == 0 ? 0 : ((mask << 1) | bit) & maskKeep;
+                    int v = baseVal + windowPenalty;
+                    if (v < next[nm]) next[nm] = v;
                 }
             }
-            dp = next;
+            (dp, next) = (next, dp);
         }
         int best = inf;
-        for (int cnt = 0; cnt <= hi; cnt++)
-            for (int mask = 0; mask < maskLimit; mask++)
-                best = Math.Min(best, dp[cnt][mask]);
+        for (int mask = 0; mask < maskLimit; mask++)
+            best = Math.Min(best, dp[mask]);
         return best >= inf ? 0 : best;
     }
 

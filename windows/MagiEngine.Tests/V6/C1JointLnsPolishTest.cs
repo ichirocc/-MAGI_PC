@@ -153,6 +153,49 @@ public class C1JointLnsPolishTest
             0, C1JointLnsPolish.StructuralC1LowerBound(p)); // "SOFT の個人上限は c1 の構造下限を押し上げてはいけない"
     }
 
+    /// <summary>構造下限は、希望固定を守った全割当の総当たり最小と一致する（同じ希望の並びの職員は同じ値を足す）。</summary>
+    [Fact]
+    public void StructuralLowerBoundMatchesBruteForceUnderWishes()
+    {
+        var shifts = new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") };
+        int t = 10;
+        var lockedY = new HashSet<int> { 1, 2, 3, 6 };
+        var lockedX = new HashSet<int> { 8 };
+        var wishes = new Dictionary<string, int>();
+        for (int i = 0; i <= 1; i++)
+        {
+            foreach (int j in lockedY) wishes[$"{i},{j}"] = 0;
+            foreach (int j in lockedX) wishes[$"{i},{j}"] = 1;
+        }
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-10",
+            shifts: shifts, groups: new List<Group> { new("G", "G") },
+            staffList: new List<Staff> { new("s0", 0), new("s1", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { Enumerable.Repeat(0, t).ToList(), Enumerable.Repeat(0, t).ToList() },
+            wishes: wishes,
+            staffRange: new Dictionary<string, Range>(),
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row> { new("4", "X", "2") },
+            cons2: new List<C2Row>(), cons3: new List<C3Row>(), cons3n: new List<C3Row>(),
+            cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        int best = int.MaxValue;
+        for (int bits = 0; bits < (1 << t); bits++)
+        {
+            var x = new bool[t];
+            for (int k = 0; k < t; k++) x[k] = ((bits >> k) & 1) == 1;
+            if (lockedY.Any(k => x[k]) || lockedX.Any(k => !x[k])) continue;
+            int viol = 0;
+            for (int start = 0; start <= t - 4; start++)
+                if (Enumerable.Range(start, 4).Count(k => x[k]) < 2) viol++;
+            best = Math.Min(best, viol);
+        }
+        Assert.True(best > 0);
+        Assert.Equal(2 * best, C1JointLnsPolish.StructuralC1LowerBound(new Problem(st)));
+    }
+
     /// <summary>
     /// [3.342.0] 停滞打ち切り（<c>PatienceMs</c>）を入れても keep-best は壊れない。
     ///
