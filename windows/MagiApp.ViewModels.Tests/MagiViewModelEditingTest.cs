@@ -1979,6 +1979,8 @@ public class MagiViewModelEditingTest
         vm.Undo();   // 検査の完了を待たずに、元に戻すだけで表示が戻る
         Assert.Equal(1, vm.Ui.Wishes["0,0"]);
         Assert.Equal(vm._currentSchedule!.Select(r => r.ToList()), vm.Ui.Schedule.Select(r => r.ToList()));
+        // Undo の背景検査が Redo の後に古い表示を書き戻す競合を避ける。
+        if (vm.LastRefreshCheckTask is { } tu) await tu;
         vm.Redo();
         Assert.Equal(0, vm.Ui.Wishes["0,0"]);
     }
