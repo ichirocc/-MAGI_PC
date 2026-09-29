@@ -1,5 +1,6 @@
 using MagiEngine.Model;
 using MagiEngine.Tests.Fixtures;
+using MagiEngine.Tests.TestSupport;
 using MagiEngine.V6;
 // System.Range (built-in C# 8+ slice type) collides by simple name with MagiEngine.Model.Range.
 using Range = MagiEngine.Model.Range;
@@ -328,5 +329,23 @@ public class V6SanityPortTest
         Assert.Contains("2本", c1.Problem);
         Assert.Contains("2倍", c1.Problem);
         Assert.Contains("1本分", issues.Single(i => i.Where.StartsWith("希望の前日に禁止")).Problem);
+    }
+
+    /// <summary>診断7: 不足が上限0で生じるときだけ入れない指定の一文を添える（G3、Kotlin capacityCountsPlaceableStaffAndWishPinnedCells の追加分）。</summary>
+    [Fact]
+    public void ForcedCovU_Issue_MentionsZeroCapWhenUpperZeroCauses()
+    {
+        MagiState St(Dictionary<string, Range> range) => MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-03",
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "2", "") },
+            groups: new List<Group> { new("G", "G") },
+            staffList: new List<Staff> { new("X", 0), new("Y", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 0 }, new List<int> { 0, 0, 0 } },
+            staffRange: range);
+        var plain = St(new Dictionary<string, Range> { ["0,1"] = new("0", "0") });
+        Assert.Equal(3, V6SanityPort.StructuralHardFloor(plain));
+        var seven = V6SanityPort.BuildGuidance(plain).Single(x => x.Where.Contains("担当者不足"));
+        Assert.EndsWith(V6SanityPort.ZeroCapShortfallNote, seven.Problem);
     }
 }

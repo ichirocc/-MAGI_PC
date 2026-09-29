@@ -797,7 +797,8 @@ public static partial class V6SanityPort
         foreach (var fc in ForcedCovU(state, p))
         {
             outList.Add(new SettingIssue(IssueKind.Demand, $"「{fc.ShiftSymbol}」の担当者不足（配布不可の原因）",
-                $"{fc.Cells}日で、担当できる人数より必要人数が多く、人員不足(covU)が必ず出ます（不足の合計{fc.Amount}）。この不足は最適化では解消できません",
+                $"{fc.Cells}日で、担当できる人数より必要人数が多く、人員不足(covU)が必ず出ます（不足の合計{fc.Amount}）。この不足は最適化では解消できません" +
+                    (ZeroCapInShortfall(p, fc) ? "。" + ZeroCapShortfallNote : ""),
                 $"「{fc.ShiftSymbol}」を担当できる職員を増やすか、その日の必要人数を下げてください"));
         }
 

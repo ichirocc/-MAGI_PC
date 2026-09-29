@@ -57,19 +57,7 @@ public static class PreRunCheck
             HandPlacedCells(p, s),
             WallHintOf(RelaxTrial.UpperZeroWalls(state)),
             dayProofs.Select(c => c.Day).Where(d => !strict.Contains(d)).ToHashSet(),
-            forced.Where(f => CanDoShortfall(p, f.ShiftIndex) < f.Amount).Select(f => f.ShiftIndex).ToHashSet());
-    }
-
-    private static int CanDoShortfall(Problem p, int k)
-    {
-        var sum = 0;
-        for (var j = 0; j < p.T; j++)
-        {
-            var n = 0;
-            for (var i = 0; i < p.S; i++) if (p.CanDo(i, k) || (p.WishFixed(i, j) && p.Wish[i][j] == k)) n++;
-            sum += Math.Max(0, p.CovUCell(k, j, n));
-        }
-        return sum;
+            forced.Where(f => V6SanityPort.ZeroCapInShortfall(p, f)).Select(f => f.ShiftIndex).ToHashSet());
     }
 
     private static bool HasWish(IReadOnlyList<ConstraintMus.Item> core) => core.Any(it => it is ConstraintMus.WishPin);

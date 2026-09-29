@@ -224,6 +224,21 @@ public static partial class V6SanityPort
         return rest >= 0 && rest <= dayProofs;
     }
 
+    public const string ZeroCapShortfallNote = "個人の上限0（入れない指定）が絡みます。例外として緩めると解ける場合があります";
+
+    /// <summary>上限0を数えなければ（CanDo で数えると）不足が減る＝この配布不可に個人の上限0（入れない指定）が絡む。</summary>
+    public static bool ZeroCapInShortfall(Problem p, ForcedCovU f)
+    {
+        var k = f.ShiftIndex; var sum = 0;
+        for (var j = 0; j < p.T; j++)
+        {
+            var n = 0;
+            for (var i = 0; i < p.S; i++) if (p.CanDo(i, k) || (p.WishFixed(i, j) && p.Wish[i][j] == k)) n++;
+            sum += Math.Max(0, p.CovUCell(k, j, n));
+        }
+        return sum < f.Amount;
+    }
+
     public static int StructuralHardFloor(MagiState state, Problem? p = null)
     {
         p ??= new Problem(state);
