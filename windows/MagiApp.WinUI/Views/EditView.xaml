@@ -247,7 +247,7 @@
                 <TextBox x:Name="MasterShiftNameBox" HorizontalAlignment="Stretch" />
                 <TextBlock Text="記号" />
                 <TextBox x:Name="MasterShiftKigouBox" HorizontalAlignment="Stretch" />
-                <TextBlock Text="最低人数 / 上限人数(2パターン時)（1日あたり・空欄可）" />
+                <TextBlock Text="最低人数 / 上限人数（1日あたり・空欄可）" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="MasterShiftNeed1Box" Width="80" PlaceholderText="最低" />
                     <TextBox x:Name="MasterShiftNeed2Box" Width="80" PlaceholderText="上限" />

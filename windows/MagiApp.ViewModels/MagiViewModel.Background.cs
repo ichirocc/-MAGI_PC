@@ -279,6 +279,7 @@ public sealed partial class MagiViewModel
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
+                    ui.RelaxedBoard = false;
                     ui.Message = KeptResultText.Screen(nowScore, prevScore);
                 });
                 LogOp("I", KeptResultText.Log("バックグラウンド", nowScore, prevScore));
@@ -301,6 +302,7 @@ public sealed partial class MagiViewModel
             ui.Running = false;
             ui.HasResult = true;
             ui.EngineRan = true;
+            ui.RelaxedBoard = false;
             ui.Message = $"バックグラウンド最適化 完了: 必須={r.Report.Hard} 合計={r.Report.Total}";
             ui.RunSummary = prev is not null ? ChangeSummary.Of(st0, prev, sched, r.Report) : null;
         });

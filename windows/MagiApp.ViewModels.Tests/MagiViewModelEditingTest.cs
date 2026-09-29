@@ -1964,8 +1964,8 @@ public class MagiViewModelEditingTest
     public void NeedUpperLabelCarriesTheSecondPatternCaveatWhenItIsOff()
     {
         Assert.Equal("上限人数", MagiViewModel.NeedUpperLabel(use2: true));
-        Assert.Equal("上限人数(2パターン時)", MagiViewModel.NeedUpperLabel(use2: false));
-        Assert.Equal("上限(2パターン時)", MagiViewModel.NeedUpperLabel(use2: false, shortLabel: true));
+        Assert.Equal("上限人数", MagiViewModel.NeedUpperLabel(use2: false));
+        Assert.Equal("上限", MagiViewModel.NeedUpperLabel(use2: false, shortLabel: true));
     }
 
     [Fact]

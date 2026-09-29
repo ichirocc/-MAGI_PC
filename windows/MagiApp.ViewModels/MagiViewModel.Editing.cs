@@ -168,6 +168,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Message = $"希望を反映: {applied}件{note}";
         RefreshCheck();
@@ -258,6 +259,7 @@ public sealed partial class MagiViewModel
                 ui.MessageIsError = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
+                ui.RelaxedBoard = false;
                 ui.Message = $"他の案 {i + 1} を適用";
             });
             LogOp("I", $"他の案 {i + 1} を適用 必須={rep.Hard} 合計={rep.Total}");
@@ -307,6 +309,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, st.StartDate, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
@@ -362,6 +365,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.Message = $"{changed}マスを {shiftKigou} に一括変更";
         LogOp("I", $"一括編集: {changed}マス → {OpSy(shift)}");
@@ -455,9 +459,9 @@ public sealed partial class MagiViewModel
         ApplyStructure(st with { NeedDay1 = nd1, NeedDay2 = nd2 });
     }
 
-    /// <summary>上限人数（need2）の見出し。2パターン目を使わない月は効かないので、シフト編集と同じ但し書きを付ける。</summary>
+    /// <summary>上限人数（need2）の見出し。use2 の切替は画面に無いので但し書きは付けない（use2 は呼び出し側の互換で残す）。</summary>
     public static string NeedUpperLabel(bool use2, bool shortLabel = false) =>
-        (shortLabel ? "上限" : "上限人数") + (use2 ? "" : "(2パターン時)");
+        shortLabel ? "上限" : "上限人数";
 
     /// <summary>[一括] シフト k の複数日へ必要人数の例外を一括設定（空欄＝その側は既定に戻す）。Undo 1 回・再チェック 1 回。</summary>
     public void SetNeedDaysForDays(int k, IReadOnlyList<int> days, string p1, string p2)

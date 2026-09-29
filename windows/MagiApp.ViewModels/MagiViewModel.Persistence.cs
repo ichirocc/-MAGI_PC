@@ -235,6 +235,7 @@ public sealed partial class MagiViewModel
         RestoreAlts(snap.Alts);   // 盤面と一緒に、その盤面で有効だった「他の案」も戻す
         Ui.RunSummary = null;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         ClearFixState();
         Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
         Ui.MessageIsError = false;
@@ -267,6 +268,7 @@ public sealed partial class MagiViewModel
         RestoreAlts(snap.Alts);
         Ui.RunSummary = null;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         ClearFixState();
         Ui.StalledHardFamilies = StalledAfterRestore(snap.State, _currentSchedule);   // [S5 §14 D]
         Ui.MessageIsError = false;
@@ -425,6 +427,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = markResult;
                 ui.EngineRan = markResult;
+                ui.RelaxedBoard = false;
                 ui.ConstraintsEdited = false;
                 ui.StructureEdited = false;
                 ui.Staff = lp.State.StaffCount;

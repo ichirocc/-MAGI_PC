@@ -178,6 +178,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         Ui.Message = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";

@@ -130,6 +130,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.EngineRan = false;
+        Ui.RelaxedBoard = true;
         Ui.StructureEdited = true;
         Ui.Schedule = nb.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.RunSummary = null;

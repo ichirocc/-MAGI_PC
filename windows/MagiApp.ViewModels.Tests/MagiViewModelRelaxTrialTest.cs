@@ -79,8 +79,10 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(4, UnifiedViolationChecker.Check(vm._state!, vm._currentSchedule!.Copy2D()).Hard);
         Assert.Equal("1", vm._state!.StaffRange["10,6"].Hi);
         Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", vm.RelaxDoneLine());
+        Assert.True(vm.Ui.RelaxedBoard);
 
         vm.Undo();
+        Assert.False(vm.Ui.RelaxedBoard);
         Assert.Same(st0, vm._state);
         Assert.Equal(b0, vm._currentSchedule);
         Assert.Null(vm.RelaxDoneLine());

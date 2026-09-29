@@ -378,6 +378,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
+                ui.RelaxedBoard = false;
                 ui.Message = msg;
             }, ct: ct);
             if (res.Matched >= 1 && res.Matched < total)

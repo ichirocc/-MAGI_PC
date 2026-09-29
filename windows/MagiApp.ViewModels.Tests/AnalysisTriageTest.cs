@@ -35,6 +35,20 @@ public class AnalysisTriageTest
                 RejectedByPin: 12, RejectedByScore: 0, NoCandidate: 0, TopScoreCulprits: Array.Empty<(string, int)>()),
         });
 
+    /// <summary>S6（設定を緩めて手順を当てる）の直後は「実行前」でなく、緩めた盤面の概算と言う。</summary>
+    [Fact]
+    public void RelaxedBoardSaysItIsTheRelaxedBoardNotBeforeRun()
+    {
+        var ui = Ui(B(("c3", 2)));
+        ui.RelaxedBoard = true;
+        var t = AnalysisTriage.Build(ui, L);
+        Assert.False(t.Computed);
+        Assert.Equal("設定を緩めて手順を当てた盤面の概算です（もう一度つくる前）。", t.SearchNote);
+        var done = Ui(B(("c3", 2)), hasResult: true);
+        done.RelaxedBoard = true;
+        Assert.StartsWith("最適化後も残っている", AnalysisTriage.Build(done, L).SearchNote);
+    }
+
     private static Dictionary<string, int> B(params (string, int)[] kv) => kv.ToDictionary(x => x.Item1, x => x.Item2);
 
     [Fact]

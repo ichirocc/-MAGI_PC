@@ -1555,7 +1555,7 @@ public sealed partial class ScheduleView : UserControl
                 acts.Children.Add(b);
             }
             var more = new Button { Content = "他 ▸", MinHeight = 48 };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "すべてのシフト ▾");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "すべてのシフトを表示");
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
             if (extra.Children.Count > 0) peek.Children.Add(extra);
