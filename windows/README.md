@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-30（Android ce2969a 同期、外部レビュー P1・P2）: 手動固定が構造・制約の編集がない保存経路で落ちていた（`ExportWithSchedule`）のに加え、C# は `ExportWithEdits` も `manualPins` を書いていなかった（Kotlin は書く＝移植漏れ）。経路選択を `StateJsonSerializer.ExportCurrent` に切り出して両方直した。同じ名前の職員が複数いる勤務表CSVの行は取り込まず警告（`AmbiguousNames`）。WinUI 側は無変更。
 - 2026-09-30（`CheckerReportDigestTest` の移植、Kotlin 同名テスト）: 乱数列（`System.Random` と `kotlin.random.Random`）が違うため
   期待ダイジェストは C# 独自の値。割当削減の移植 be28bba の前（93f7090）と現 main で同じ値になることを確認済み。言語跨ぎの照合はしていない。
 - 2026-09-29（C# 単独のテスト修正 0cea50c、製品コード不変）:

@@ -717,17 +717,11 @@ public sealed partial class MagiViewModel
     // ===== JSON書き出し =====
 
     /// <summary>現在のJSONを書き出す。年次マスター編集 -> 全体シリアライズ、制約編集 -> 制約のみ上書き、
-    /// それ以外 -> 盤面のみ上書き。</summary>
+    /// それ以外 -> 盤面と手動固定を上書き。</summary>
     public string? ExportJson()
     {
         var sched = _currentSchedule ?? _resultSchedule;
         if (sched is null) return null;
-        var st = _state;
-        if (Ui.StructureEdited && st is not null) return StateJsonSerializer.Serialize(st, sched);
-        var orig = _originalJson;
-        if (orig is null) return null;
-        return Ui.ConstraintsEdited && st is not null
-            ? StateJsonSerializer.ExportWithEdits(orig, st, sched)
-            : StateJsonSerializer.ExportWithSchedule(orig, sched);
+        return StateJsonSerializer.ExportCurrent(_originalJson, _state, sched, Ui.StructureEdited, Ui.ConstraintsEdited);
     }
 }

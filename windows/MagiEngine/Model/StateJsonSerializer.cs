@@ -155,13 +155,29 @@ public static class StateJsonSerializer
     /// original text (as a mutable node tree) so every field — including ones this app
     /// does not model — is preserved exactly, then overwrites only "schedule".
     /// </summary>
-    public static string ExportWithSchedule(string originalJson, int[][] newSchedule)
+    public static string ExportWithSchedule(string originalJson, int[][] newSchedule, IReadOnlyList<ManualPin>? manualPins = null)
     {
         var o = JsonNode.Parse(originalJson)!.AsObject();
         foreach (var k in DerivedKeysToDrop) o.Remove(k);
         o["schedule"] = IntGridNode(newSchedule);
+        // 手動固定は構造・制約の編集フラグを立てずに付け外しできる＝元のファイルの値でなく今の値を書く（元に無く今も無ければキーを足さない）。
+        if (manualPins is not null && (manualPins.Count > 0 || o.ContainsKey("manualPins")))
+            o["manualPins"] = ManualPinsNode(manualPins);
         return o.ToJsonString(PrettyOptions);
     }
+
+    /// <summary>保存経路の選択（ExportJson の本体）。構造編集＝全体を書き出す／制約編集＝制約を上書き／それ以外＝元のファイルへ勤務表と手動固定だけ。</summary>
+    public static string? ExportCurrent(string? originalJson, MagiState? state, int[][] schedule, bool structureEdited, bool constraintsEdited)
+    {
+        if (structureEdited && state is not null) return Serialize(state, schedule);
+        if (originalJson is null) return null;
+        return constraintsEdited && state is not null
+            ? ExportWithEdits(originalJson, state, schedule)
+            : ExportWithSchedule(originalJson, schedule, state?.ManualPins ?? Array.Empty<ManualPin>());
+    }
+
+    private static JsonArray ManualPinsNode(IEnumerable<ManualPin> pins) =>
+        ConsArr(pins.ToList(), it => new JsonObject { ["staff"] = it.Staff, ["day"] = it.Day, ["shift"] = it.Shift });
 
     /// <summary>
     /// Like <see cref="ExportWithSchedule"/> but also overwrites the 10 constraint arrays
@@ -187,6 +203,7 @@ public static class StateJsonSerializer
         o["cons41s"] = ConsArr(state.Cons41s, it => Obj(("groupKigou", it.GroupKigou), ("shiftKigou", it.ShiftKigou), ("l", it.L), ("u", it.U)));
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
+        o["manualPins"] = ManualPinsNode(state.ManualPins ?? Array.Empty<ManualPin>());
         return o.ToJsonString(PrettyOptions);
     }
 

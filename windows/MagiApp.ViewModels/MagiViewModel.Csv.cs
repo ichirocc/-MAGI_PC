@@ -348,7 +348,9 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = true;
                 Ui.Running = false;
-                Ui.Message = "CSV取込失敗: 一致する職員名がありませんでした（0名）。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
+                Ui.Message = res.AmbiguousNames.Count > 0
+                    ? $"CSV取込失敗: {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}"
+                    : "CSV取込失敗: 一致する職員名がありませんでした（0名）。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
                 LogOp("W", "CSV取込 失敗: 職員名が0件一致のため取込を中止しました（氏名/列レイアウトを確認）");
                 return;
             }
@@ -369,12 +371,14 @@ public sealed partial class MagiViewModel
             var unk = res.UnknownCells > 0
                 ? $"｜読めない記号 {res.UnknownCells}セル({string.Join("・", res.UnknownSymbols)})は取り込めませんでした"
                 : "";
+            var dupWarn = (res.AmbiguousNames.Count > 0 ? $"｜⚠ {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}" : "") +
+                (res.DuplicateRowNames.Count > 0 ? $"｜⚠ 同じ職員の行が複数あり、後の行で上書きしました: {string.Join("・", res.DuplicateRowNames)}" : "");
             var msg = res.Matched >= 1 && res.Matched < total
-                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}"
-                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}";
+                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}"
+                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}";
             await PushReportAsync(_state ?? st, res.Schedule, res.Report, transform: ui =>
             {
-                ui.MessageIsError = res.UnknownCells > 0 || res.UnclosedQuote;
+                ui.MessageIsError = res.UnknownCells > 0 || res.UnclosedQuote || dupWarn.Length > 0;
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
@@ -389,6 +393,7 @@ public sealed partial class MagiViewModel
             {
                 LogOp("W", $"CSV取込 読めない記号 {res.UnknownCells}セル: {string.Join("・", res.UnknownSymbols)}（シフト一覧に無い記号）");
             }
+            if (dupWarn.Length > 0) LogOp("W", "CSV取込 " + dupWarn.Substring("｜⚠ ".Length).Replace("｜⚠ ", " / "));
             LogOp("I", $"CSV取込 完了 {res.Matched}名一致 必須={res.Report.Hard} 合計={res.Report.Total}");
         }
         catch (OperationCanceledException)

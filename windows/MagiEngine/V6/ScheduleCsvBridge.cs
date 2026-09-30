@@ -70,6 +70,10 @@ public static class ScheduleCsvBridge
         //   旧: 後勝ちで、制約評価(最初)とCSV取込(最後)が同じ記号を別シフトとして扱っていた。
         var nameToI = CsvUtil.FirstWinsMap(state.StaffList.Count, i => CsvUtil.NameMatchKey(state.StaffList[i].Name));
         var kigouToK = CsvUtil.FirstWinsMap(state.Shifts.Count, i => state.Shifts[i].Kigou.Trim());
+        // 同じ照合キーの職員が2人以上いる名前は、どの職員の行か決められない＝取り込まない（先勝ちだと後の職員の行が前の職員を上書きする）。
+        var ambiguousKeys = state.StaffList.GroupBy(s => CsvUtil.NameMatchKey(s.Name)).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        var ambiguousNames = new List<string>();
+        var duplicateRowNames = new List<string>();
         // [Android 3.475.0 同期/論理監査] 一致は**職員単位**で数える（旧: 行単位＝同じ職員の行が2つあると 2 と
         //   数え、欠けている職員がいても「全員更新」に見えた。値は後勝ちで前の行が黙って上書きされる）。
         var matchedStaff = new HashSet<int>();
@@ -93,9 +97,15 @@ public static class ScheduleCsvBridge
             if (r[0].Trim() == "集計") break;
             if (r[0].Trim().Length != 0)
             {
-                if (nameToI.TryGetValue(CsvUtil.NameMatchKey(r[0]), out var staffIndex))
+                var key = CsvUtil.NameMatchKey(r[0]);
+                if (ambiguousKeys.Contains(key))
                 {
-                    matchedStaff.Add(staffIndex);
+                    if (!ambiguousNames.Contains(r[0].Trim())) ambiguousNames.Add(r[0].Trim());
+                }
+                else if (nameToI.TryGetValue(key, out var staffIndex))
+                {
+                    if (!matchedStaff.Add(staffIndex) && !duplicateRowNames.Contains(state.StaffList[staffIndex].Name))
+                        duplicateRowNames.Add(state.StaffList[staffIndex].Name);
                     var last = Math.Min(p.T, r.Count - 1);
                     var j = 0;
                     while (j < last)
@@ -122,6 +132,11 @@ public static class ScheduleCsvBridge
         return new ScheduleRunResult(
             schedule, report with { Logs = logs }, Matched: matched,
             UnknownCells: unknownTotal, UnknownSymbols: unknownTop,
-            UnclosedQuote: parsedAll.UnclosedQuote);
+            UnclosedQuote: parsedAll.UnclosedQuote,
+            AmbiguousNames: ambiguousNames, DuplicateRowNames: duplicateRowNames);
     }
+
+    /// <summary>同名の職員が複数いて取り込まなかった氏名の案内（画面とログで同じ文言）。</summary>
+    public static string AmbiguousText(IEnumerable<string> names) =>
+        $"同じ名前の職員が複数いるため取り込みませんでした: {string.Join("・", names)}";
 }

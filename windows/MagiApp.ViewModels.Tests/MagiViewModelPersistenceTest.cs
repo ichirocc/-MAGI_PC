@@ -998,4 +998,54 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         Assert.DoesNotContain(vm.Ui.OpLog, l => l.Contains("迷子の一時ファイル"));
     }
+
+    // [Android 外部レビュー P1] 構造・制約を編集せずに手動固定だけ付け外ししても、保存に今の固定が載る。
+    private async Task<MagiViewModel> LoadedVm(IReadOnlyList<ManualPin>? pins = null)
+    {
+        var vm = NewVm();
+        var st = MinimalState.Build() with { ManualPins = pins };
+        vm.LoadAsync(StateJsonSerializer.Serialize(st, MinimalState.BuildSchedule()));
+        await vm.LastLoadTask!;
+        Assert.False(vm.Ui.StructureEdited);
+        Assert.False(vm.Ui.ConstraintsEdited);
+        return vm;
+    }
+
+    [Fact]
+    public async Task AddedPinSurvivesScheduleOnlySave()
+    {
+        var vm = await LoadedVm();
+        vm.TogglePin(0, 2);
+        var back = StateJsonSerializer.Parse(vm.ExportJson()!);
+        Assert.Equal(new[] { new ManualPin(0, 2, 0) }, back.ManualPins);
+    }
+
+    [Fact]
+    public async Task RemovedPinIsGoneAfterScheduleOnlySave()
+    {
+        var vm = await LoadedVm(new[] { new ManualPin(0, 2, 0), new ManualPin(1, 3, 0) });
+        vm.TogglePin(0, 2);
+        Assert.Equal(new[] { new ManualPin(1, 3, 0) }, StateJsonSerializer.Parse(vm.ExportJson()!).ManualPins);
+        vm.TogglePin(1, 3);
+        Assert.Empty(StateJsonSerializer.Parse(vm.ExportJson()!).ManualPins ?? Array.Empty<ManualPin>());
+    }
+
+    [Fact]
+    public async Task PinnedCellEditFollowsIntoScheduleOnlySave()
+    {
+        var vm = await LoadedVm(new[] { new ManualPin(0, 2, 0) });
+        vm.SetCell(0, 2, 1);
+        var back = StateJsonSerializer.Parse(vm.ExportJson()!);
+        Assert.Equal(new[] { new ManualPin(0, 2, 1) }, back.ManualPins);
+        Assert.Equal(1, back.Schedule[0][2]);
+    }
+
+    [Fact]
+    public async Task PinSurvivesConstraintsEditedSave()
+    {
+        var vm = await LoadedVm();
+        vm.TogglePin(1, 0);
+        vm.Ui.ConstraintsEdited = true;
+        Assert.Equal(new[] { new ManualPin(1, 0, 0) }, StateJsonSerializer.Parse(vm.ExportJson()!).ManualPins);
+    }
 }

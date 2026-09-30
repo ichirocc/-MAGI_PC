@@ -691,9 +691,15 @@ public sealed record ScheduleRunResult(
     /// <summary>その未知記号（多い順・上位）。</summary>
     IReadOnlyList<string>? UnknownSymbols = null,
     /// <summary>引用符が閉じないまま入力が終わった（開いた引用符以降が1セルへ吸い込まれ、残りの行が丸ごと消えた）。</summary>
-    bool UnclosedQuote = false)
+    bool UnclosedQuote = false,
+    /// <summary>同じ名前の職員が複数いるため取り込まなかった CSV の氏名（CSV の表記のまま）。</summary>
+    IReadOnlyList<string>? AmbiguousNames = null,
+    /// <summary>1人に解決する氏名の行が CSV に2行以上あった職員（後の行が前の行を上書きした）。</summary>
+    IReadOnlyList<string>? DuplicateRowNames = null)
 {
     public IReadOnlyList<string> UnknownSymbols { get; init; } = UnknownSymbols ?? Array.Empty<string>();
+    public IReadOnlyList<string> AmbiguousNames { get; init; } = AmbiguousNames ?? Array.Empty<string>();
+    public IReadOnlyList<string> DuplicateRowNames { get; init; } = DuplicateRowNames ?? Array.Empty<string>();
 }
 
 // LightOptimizeResult (also declared in MirrorCore.kt) is deferred to phase 5 (SA optimizer
