@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-30（`CheckerReportDigestTest` の移植、Kotlin 同名テスト）: 乱数列（`System.Random` と `kotlin.random.Random`）が違うため
+  期待ダイジェストは C# 独自の値。割当削減の移植 be28bba の前（93f7090）と現 main で同じ値になることを確認済み。言語跨ぎの照合はしていない。
 - 2026-09-29（C# 単独のテスト修正 0cea50c、製品コード不変）:
   `MagiViewModelEditingTest.UndoAndRedoRestoreWishDisplayImmediatelyFromTheSameSnapshot` が CI で 1 回赤（be28bba、ローカル 8 回は再現せず）。
   Undo が起こした背景の違反チェックが鮮度照合を通った直後に Redo が走ると、Undo 時点の希望表示で上書きする競合。テストで Redo の前に
