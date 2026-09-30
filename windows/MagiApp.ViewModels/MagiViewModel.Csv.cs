@@ -379,7 +379,7 @@ public sealed partial class MagiViewModel
                 Ui.MessageIsError = true;
                 Ui.Running = false;
                 Ui.Message = $"CSV取込失敗: {CsvPartialImport.NothingReadable}";
-                LogOp("W", "CSV取込 失敗: 引用符が閉じていて読めた職員の行がないため取込を中止しました");
+                LogOp("W", "CSV取込 失敗: 引用符が閉じていなくて読めた職員の行がないため取込を中止しました");
                 return null;
         }
         return await Task.Run(() => ScheduleCsvBridge.Parse(text, st, sched), ct);

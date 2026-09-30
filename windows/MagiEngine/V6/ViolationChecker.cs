@@ -690,7 +690,7 @@ public sealed record ScheduleRunResult(
     int UnknownCells = 0,
     /// <summary>その未知記号（多い順・上位）。</summary>
     IReadOnlyList<string>? UnknownSymbols = null,
-    /// <summary>引用符が閉じないまま入力が終わった（開いた引用符以降が1セルへ吸い込まれ、残りの行が丸ごと消えた）。</summary>
+    /// <summary>引用符が閉じないまま入力が終わった（開いた引用符以降が1セルへ吸い込まれ、残りの行が丸ごと消えた）。旗は <c>CsvPartialImport.Judge</c> が読み、読めた範囲だけ取り込むかの確認（職員の行が無ければ断り）へ振り分ける。</summary>
     bool UnclosedQuote = false,
     /// <summary>同じ名前の職員が複数いるため取り込まなかった CSV の氏名（CSV の表記のまま）。</summary>
     IReadOnlyList<string>? AmbiguousNames = null,

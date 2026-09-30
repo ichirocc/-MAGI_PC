@@ -179,6 +179,19 @@ public class CsvPartialImportTest
     }
 
     [Fact]
+    public void JudgeCountsTheLinesOfAMultiLineNameCellThatStillMatchesTheStaff()
+    {
+        // docs/ux_test_checklist.md 16(d): 氏名の途中で改行した引用セルは空白を除いた鍵で職員に一致する。
+        var text = "スタッフ \\ 日付,1,2,3\n\"山\n田\",日,夜,休\n鈴木,休,休,日\n佐藤,\"日,日,日\n";
+        var v = Assert.IsType<CsvPartialImport.Verdict.Ask>(CsvPartialImport.Judge(text, BuildState(), Base()));
+        Assert.Equal(4, v.EndLine);
+        Assert.Equal(2, v.Matched);
+        Assert.Equal(new[] { 0, 1, 2 }, v.Result.Schedule[0]);
+        Assert.Equal(new[] { 2, 2, 0 }, v.Result.Schedule[1]);
+        Assert.Equal(new[] { 2, 2, 2 }, v.Result.Schedule[2]);
+    }
+
+    [Fact]
     public void JudgeNeverAppliesTheRecordThatSwallowsTheRest()
     {
         // 鈴木の行は 2 日目の「夜」のあとで引用符が開く＝その行は「読めた」に入らない（手前のセルも反映しない）。

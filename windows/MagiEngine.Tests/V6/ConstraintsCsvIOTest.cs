@@ -171,4 +171,37 @@ public class ConstraintsCsvIOTest
         Assert.Equal(0, Rejected(",3"));
         Assert.Equal(0, Rejected("0,0"));
     }
+
+    /// <summary>[Android GroupRangeCsvValidationTest 同期] グループ回数・スキルグループ回数の行も個人レンジと同じ「空欄か 0 以上の整数、下限≤上限」だけを受理する。</summary>
+    [Fact]
+    public void InvalidBoundsAreRejectedWithSamples()
+    {
+        var st = CsvState() with { SkillGroups = new List<Group> { new("S", "S") } };
+        foreach (var (kind, group, label) in new[] { ("群回数", "G", "グループのレンジ"), ("スキル群回数", "S", "スキルグループのレンジ") })
+        {
+            foreach (var cells in new[] { "abc,xyz", "abc,", ",xyz", "1,xyz", "1.5,2", "99999999999,", "-1,-1", "-1,", ",-2", "5,2" })
+            {
+                var r = ConstraintsCsvIO.Parse($"{kind},{group},A,{cells}", st)!;
+                Assert.True(r.Rejected == 1 && r.Accepted == 0, $"{kind} {cells}");
+                Assert.NotEmpty(r.Samples);
+                Assert.StartsWith($"{label}「", r.Samples[0]);
+            }
+        }
+        Assert.Equal("グループのレンジ「G の A（abc〜xyz）」", ConstraintsCsvIO.Parse("群回数,G,A,abc,xyz", st)!.Samples[0]);
+    }
+
+    [Fact]
+    public void ValidBoundsAreAccepted()
+    {
+        var st = CsvState() with { SkillGroups = new List<Group> { new("S", "S") } };
+        foreach (var (kind, group) in new[] { ("群回数", "G"), ("スキル群回数", "S") })
+        {
+            foreach (var cells in new[] { ",3", "2,", "0,0", "3,3", "2,5", "１,２", " 1 , 2 " })
+            {
+                var r = ConstraintsCsvIO.Parse($"{kind},{group},A,{cells}", st)!;
+                Assert.True(r.Rejected == 0 && r.Accepted == 1, $"{kind} {cells}");
+            }
+            Assert.Equal(1, ConstraintsCsvIO.Parse($"{kind},{group},A,,", st)!.Rejected);
+        }
+    }
 }

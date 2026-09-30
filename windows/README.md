@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-09-30（Android 364a9bd 同期）: 制約CSVの `群回数`／`スキル群回数` 行も、個人レンジと同じ共有判定 `ConstraintsCsvIO.RangeCellsOk`（空欄か 0 以上の整数・下限≤上限）で取込を中止する（`abc,xyz` 等が 0〜無制限として受理され前の制約一式を置換していた）。すでに不正な c41 値を持つ状態の CSV は直すまで再取込できない（個人レンジと同方針）。CSV 部分取込の文言（「閉じていなくて」）・`UnclosedQuote` のコメントも是正。`KotlinInterop.ToIntOrNull` は全角数字を受理済みで変更なし。
 - 2026-09-30（Android 5aa9f1d 同期、利用者決定 B）: 引用符が閉じていない勤務表CSV（重ね合わせ取込）は、読めた部分を確認なしに適用せず、先に「CSV の ○行目までは読めました（N 名分）。…この部分だけ取り込みますか？」［この部分だけ取り込む］［やめる］で確かめる。`CsvPartialImport`（Kotlin 同名・純粋）と `CsvUtil.ParseCsvFull` の行追跡、`UiState.CsvPartialPrompt`、`MagiViewModel.ConfirmCsvPartialImport`/`CancelCsvPartialImport`、WinUI は `MainWindow.ShowCsvPartialPromptAsync`（ContentDialog）。Kotlin の `fun readable` は型 `Readable` と衝突するため `ReadableOf`。C# の ViewModel は単体テストできるので、Kotlin では手順書だけの確認待ちの流れ（保留・適用・破棄・指紋）を `MagiViewModelCsvTest` で固定した（8 件）。乱択の一致テストは `System.Random` のため文字列は Kotlin と別で、検証する性質は同じ。
 - 2026-09-30（Android ce2969a 同期、外部レビュー P1・P2）: 手動固定が構造・制約の編集がない保存経路で落ちていた（`ExportWithSchedule`）のに加え、C# は `ExportWithEdits` も `manualPins` を書いていなかった（Kotlin は書く＝移植漏れ）。経路選択を `StateJsonSerializer.ExportCurrent` に切り出して両方直した。同じ名前の職員が複数いる勤務表CSVの行は取り込まず警告（`AmbiguousNames`）。WinUI 側は無変更。
 - 2026-09-30（`CheckerReportDigestTest` の移植、Kotlin 同名テスト）: 乱数列（`System.Random` と `kotlin.random.Random`）が違うため

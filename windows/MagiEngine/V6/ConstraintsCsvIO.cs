@@ -13,6 +13,18 @@ namespace MagiEngine.V6;
 /// </summary>
 public static class ConstraintsCsvIO
 {
+    /// <summary>
+    /// [Android 2026-09-30/外部レビュー B1・B2 同期] 下限/上限セルは空欄か 0 以上の整数、両方あれば下限≤上限。
+    /// Problem は数値でない側を 0／無制限へ読み替えて行を残すので、ここで通すと意図と違う制約で既存の制約一式を置換する。
+    /// </summary>
+    internal static bool RangeCellsOk(string lo, string hi)
+    {
+        var l = lo.Trim(); var h = hi.Trim();
+        var ln = KotlinInterop.ToIntOrNull(l); var hn = KotlinInterop.ToIntOrNull(h);
+        return (l.Length == 0 || (ln is int a && a >= 0)) && (h.Length == 0 || (hn is int b && b >= 0)) &&
+            (ln is null || hn is null || ln.Value <= hn.Value);
+    }
+
     private static string Cell(IReadOnlyList<string> r, int idx) => (idx >= 0 && idx < r.Count ? r[idx] : "").Trim();
 
     public static string Build(MagiState state)
@@ -103,11 +115,20 @@ public static class ConstraintsCsvIO
         var body = CsvUtil.CsvBody(rows, "種別");
         var bad = 0;
         var samples = new List<string>();
-        void Reject(IReadOnlyList<string> r)
+        void Reject(IReadOnlyList<string> r, string? sample = null)
         {
             bad++;
             // [Android 3.474.0 同期] 例は上限まで集める（WishesCsvIO.Parse と同じ理由）。
-            if (samples.Count < ComponentImport.MaxSamples) samples.Add(CsvUtil.RowSample(r));
+            if (samples.Count < ComponentImport.MaxSamples) samples.Add(sample ?? CsvUtil.RowSample(r));
+        }
+        void RangeRow(IReadOnlyList<string> r, string family, List<C41Row> into)
+        {
+            if (RangeCellsOk(Cell(r, 3), Cell(r, 4))) { into.Add(new C41Row(Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 4))); n++; }
+            else
+            {
+                var text = $"{family}「{Cell(r, 1)} の {Cell(r, 2)}（{Cell(r, 3)}〜{Cell(r, 4)}）」";
+                Reject(r, text.Length > 60 ? text[..60] : text);
+            }
         }
         foreach (var r in body)
         {
@@ -140,8 +161,8 @@ public static class ConstraintsCsvIO
                     if (p.Count > 0 && !PatHasGap(r)) { cons3mn.Add(new C3Row(p)); n++; } else Reject(r);
                     break;
                 }
-                case "群回数": cons41.Add(new C41Row(Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 4))); n++; break;
-                case "スキル群回数": cons41s.Add(new C41Row(Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 4))); n++; break;
+                case "群回数": RangeRow(r, "グループのレンジ", cons41); break;
+                case "スキル群回数": RangeRow(r, "スキルグループのレンジ", cons41s); break;
                 case "群組合せ禁止": cons42.Add(new C42Row(Cell(r, 1), Cell(r, 3), Cell(r, 2), Cell(r, 4))); n++; break;
                 case "スキル群組合せ禁止": cons42s.Add(new C42Row(Cell(r, 1), Cell(r, 3), Cell(r, 2), Cell(r, 4))); n++; break;
                 case "希望前日禁止": cons3w.Add(new C3wRow(Cell(r, 1), Cell(r, 2))); n++; break;
@@ -157,11 +178,7 @@ public static class ConstraintsCsvIO
                     // [3.329.0/外部レビュー H-02] 氏名・記号が今のデータに無い行は黙って捨てない。
                     //   捨てたまま置換すると、その職員の個人レンジが**消える**。
                     // [Android 3.509.3] 下限/上限は空欄か 0 以上の整数、両方あれば下限≤上限（Problem が捨てる値で置換しない）。
-                    var loV = Cell(r, 3); var hiV = Cell(r, 4);
-                    var loN = KotlinInterop.ToIntOrNull(loV); var hiN = KotlinInterop.ToIntOrNull(hiV);
-                    var numOk = (loV.Length == 0 || (loN is int l1 && l1 >= 0)) && (hiV.Length == 0 || (hiN is int h1 && h1 >= 0)) &&
-                        (loN is null || hiN is null || loN.Value <= hiN.Value);
-                    if (hasI && k >= 0 && numOk)
+                    if (hasI && k >= 0 && RangeCellsOk(Cell(r, 3), Cell(r, 4)))
                     {
                         // [Android 3.475.0 同期/論理監査] 同じ職員×シフトの重複行（希望CSVと同じ扱い＝同値は1件、衝突は拒否）。
                         var key = $"{i},{k}"; var rng = new Range(Cell(r, 3), Cell(r, 4));
