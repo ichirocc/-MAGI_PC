@@ -109,11 +109,11 @@ public class CsvPartialImportTest
     [Fact]
     public void BomIsSkippedAndDoesNotShiftTheLineNumbers()
     {
-        var r = CsvPartialImport.ReadableOf("﻿a,b\nc,\"d\ne,f\n");
+        var r = CsvPartialImport.ReadableOf("\uFEFFa,b\nc,\"d\ne,f\n");
         Assert.True(r.UnclosedQuote);
         Assert.Equal(1, r.Records);
         Assert.Equal(1, r.EndLine);
-        Assert.Equal("﻿a,b\n", r.PrefixText);
+        Assert.Equal("\uFEFFa,b\n", r.PrefixText);
     }
 
     [Fact]
