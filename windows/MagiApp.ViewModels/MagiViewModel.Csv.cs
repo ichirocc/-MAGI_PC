@@ -320,29 +320,92 @@ public sealed partial class MagiViewModel
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null) return;
+        RunCsvImport(st, sched, partial: false, ct => ParseCsvOrAskAsync(st, sched, rawText, ct));
+    }
+
+    /// <summary>確認待ちの部分取込。<see cref="UiState.CsvPartialPrompt"/> と同時に立て外す（<see cref="DropCsvPartial"/>）。保存しない。</summary>
+    private CsvPartialImport.Pending? _csvPartialPending;
+
+    /// <summary>「この部分だけ取り込む」。指紋が作成時と同じときだけ、通常の取込と同じ適用（<see cref="RunCsvImport"/>）へ渡す。</summary>
+    public void ConfirmCsvPartialImport()
+    {
+        var pending = _csvPartialPending;
+        DropCsvPartial();
+        if (pending is null) return;
+        if (RunBlockedByInFlight("CSV取込")) return;
+        var st = _state;
+        var sched = _currentSchedule;
+        CsvPartialImport.Resolution resolution = st is not null && sched is not null
+            ? CsvPartialImport.Resolve(pending, StateKey(st), BoardKey(sched))
+            : CsvPartialImport.Resolution.Stale.Instance;
+        if (resolution is CsvPartialImport.Resolution.Apply apply && st is not null && sched is not null)
+            RunCsvImport(st, sched, partial: true, _ => Task.FromResult<ScheduleRunResult?>(apply.Pending.Ask.Result));
+        else Notify(CsvPartialImport.Stale, "W");
+    }
+
+    public void CancelCsvPartialImport()
+    {
+        var had = _csvPartialPending is not null;
+        DropCsvPartial();
+        if (had) Notify(CsvPartialImport.Cancelled);
+    }
+
+    private void DropCsvPartial()
+    {
+        _csvPartialPending = null;
+        if (Ui.CsvPartialPrompt is not null) Ui.CsvPartialPrompt = null;
+    }
+
+    /// <summary>適用してよい結果を返す。引用符が閉じていないときは確認待ち／断りを画面に出して null。</summary>
+    private async Task<ScheduleRunResult?> ParseCsvOrAskAsync(MagiState st, int[][] sched, string rawText, CancellationToken ct)
+    {
         var text = MojibakeRepair.Repair(rawText);
-        var repaired = MojibakeRepair.WasDecoded(rawText, text);
+        // [3.282.0相当] JSON側(LoadAsync)と同じ是正: BOM除去だけの健全なCSVで誤警告しない。
+        if (MojibakeRepair.WasDecoded(rawText, text))
+        {
+            LogOp("W", "文字化け（二重エンコード）を自動修復してCSVを取り込みました。元のファイル自体は修復されません");
+        }
+        switch (await Task.Run(() => CsvPartialImport.Judge(text, st, sched), ct))
+        {
+            case CsvPartialImport.Verdict.Ask ask:
+                _csvPartialPending = new CsvPartialImport.Pending(ask, StateKey(st), BoardKey(sched));
+                Ui.Running = false;
+                Ui.MessageIsError = false;
+                Ui.Message = null;
+                Ui.CsvPartialPrompt = ask.Prompt;
+                LogOp("I", $"CSV取込 確認待ち: 引用符が閉じていません（{ask.EndLine}行目まで {ask.Matched}名分が読めました）");
+                return null;
+            case CsvPartialImport.Verdict.NothingReadable:
+                Ui.MessageIsError = true;
+                Ui.Running = false;
+                Ui.Message = $"CSV取込失敗: {CsvPartialImport.NothingReadable}";
+                LogOp("W", "CSV取込 失敗: 引用符が閉じていて読めた職員の行がないため取込を中止しました");
+                return null;
+        }
+        return await Task.Run(() => ScheduleCsvBridge.Parse(text, st, sched), ct);
+    }
+
+    /// <summary>取込の適用本体。<paramref name="produce"/> が null なら適用しない。<paramref name="partial"/>＝確認済みの部分取込（結果メッセージに注意を残す）。</summary>
+    private void RunCsvImport(MagiState st, int[][] sched, bool partial, Func<CancellationToken, Task<ScheduleRunResult?>> produce)
+    {
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.Message = "CSV取込中…";
         var boardToken = BeginBoardJob("CSV取込");
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastImportCsvTask = ImportCsvCoreAsync(text, repaired, st, sched, boardToken, cts.Token);
+        LastImportCsvTask = ImportCsvCoreAsync(st, sched, partial, produce, boardToken, cts.Token);
     }
 
     private async Task ImportCsvCoreAsync(
-        string text, bool repaired, MagiState st, int[][] sched, int boardToken, CancellationToken ct)
+        MagiState st, int[][] sched, bool partial, Func<CancellationToken, Task<ScheduleRunResult?>> produce,
+        int boardToken, CancellationToken ct)
     {
         var pushedUndo = false;
         try
         {
-            // [3.282.0相当] JSON側(LoadAsync)と同じ是正: BOM除去だけの健全なCSVで誤警告しない。
-            if (repaired)
-            {
-                LogOp("W", "文字化け（二重エンコード）を自動修復してCSVを取り込みました。元のファイル自体は修復されません");
-            }
-            var res = await Task.Run(() => ScheduleCsvBridge.Parse(text, st, sched), ct);
+            var res = await produce(ct);
+            if (res is null) return;
             // 取込失敗の明示: 氏名が1件も一致しなければ適用せず、オペレーターに原因を表示する。
             if (res.Matched == 0)
             {
@@ -365,9 +428,7 @@ public sealed partial class MagiViewModel
             //   誤字や凡例漏れが「休のまま」「元のまま」として静かに混入した。件数と記号を必ず出す。
             // [3.413.0/I-08相当] 引用符が閉じないCSVは残りの行が丸ごと消える＝「氏名不一致でスキップ」と
             //   区別が付かず部分的な成功に見える。必ず名指しする。
-            var quoteWarn = res.UnclosedQuote
-                ? "｜⚠ 引用符（\"）が閉じていません。ここから後ろの行は読めていません"
-                : "";
+            var quoteWarn = partial ? CsvPartialImport.AppliedWarning : "";
             var unk = res.UnknownCells > 0
                 ? $"｜読めない記号 {res.UnknownCells}セル({string.Join("・", res.UnknownSymbols)})は取り込めませんでした"
                 : "";
@@ -378,7 +439,7 @@ public sealed partial class MagiViewModel
                 : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}";
             await PushReportAsync(_state ?? st, res.Schedule, res.Report, transform: ui =>
             {
-                ui.MessageIsError = res.UnknownCells > 0 || res.UnclosedQuote || dupWarn.Length > 0;
+                ui.MessageIsError = res.UnknownCells > 0 || partial || dupWarn.Length > 0;
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
@@ -389,6 +450,7 @@ public sealed partial class MagiViewModel
             {
                 LogOp("W", $"CSV取込 一部のみ反映: {res.Matched}/{total}名一致（{total - res.Matched}名は氏名不一致）");
             }
+            if (partial) LogOp("W", "CSV取込 引用符が閉じていないため、読めた部分だけを取り込みました");
             if (res.UnknownCells > 0)
             {
                 LogOp("W", $"CSV取込 読めない記号 {res.UnknownCells}セル: {string.Join("・", res.UnknownSymbols)}（シフト一覧に無い記号）");

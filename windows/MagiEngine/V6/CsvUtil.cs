@@ -81,11 +81,21 @@ internal static class CsvUtil
     {
         internal IReadOnlyList<IReadOnlyList<string>> Rows { get; }
         internal bool UnclosedQuote { get; }
+        /// <summary>引用符の外の改行で終わった行の数（吸い込まれた行は含めない。閉じていれば全行）。</summary>
+        internal int ReadableRows { get; }
+        /// <summary>その最後の行の最終物理行（1 始まり。引用符の中の改行も数える）。読めた行が無ければ 0。</summary>
+        internal int ReadableEndLine { get; }
+        /// <summary>読めた部分の終わりの位置（<see cref="ParseCsvFull"/> に渡した文字列の添字。BOM を含めて数える）。</summary>
+        internal int ReadableEndOffset { get; }
 
-        internal CsvParse(IReadOnlyList<IReadOnlyList<string>> rows, bool unclosedQuote)
+        internal CsvParse(IReadOnlyList<IReadOnlyList<string>> rows, bool unclosedQuote,
+            int readableRows, int readableEndLine, int readableEndOffset)
         {
             Rows = rows;
             UnclosedQuote = unclosedQuote;
+            ReadableRows = readableRows;
+            ReadableEndLine = readableEndLine;
+            ReadableEndOffset = readableEndOffset;
         }
     }
 
@@ -98,11 +108,16 @@ internal static class CsvUtil
     {
         // UTF-8 BOM(U+FEFF) 除去: 付いていると先頭セルが "(BOM)ユニット" 等になり、Trim()でも消えず
         //   ヘッダ判定(== "ユニット" 等)が失敗して取り込めなくなる。Excel/UTF-8出力由来で頻出。
-        var text = raw.Length > 0 && raw[0] == (char)0xFEFF ? raw.Substring(1) : raw;
+        var bomLen = raw.Length > 0 && raw[0] == (char)0xFEFF ? 1 : 0;
+        var text = raw.Substring(bomLen);
         var rows = new List<IReadOnlyList<string>>();
         var row = new List<string>();
         var cell = new StringBuilder();
         var inQuote = false;
+        var line = 1;
+        var readableRows = 0;
+        var readableEndLine = 0;
+        var readableEnd = bomLen;
         var i = 0;
         while (i < text.Length)
         {
@@ -128,10 +143,13 @@ internal static class CsvUtil
                 cell.Clear();
                 rows.Add(new List<string>(row));
                 row.Clear();
+                readableRows = rows.Count; readableEndLine = line; readableEnd = bomLen + i + 1;
+                line++;
             }
             else
             {
                 cell.Append(c);
+                if (c == '\n' || (c == '\r' && !(i + 1 < text.Length && text[i + 1] == '\n'))) line++;
             }
             i++;
         }
@@ -139,8 +157,10 @@ internal static class CsvUtil
         {
             row.Add(cell.ToString());
             rows.Add(new List<string>(row));
+            if (!inQuote) { readableRows = rows.Count; readableEndLine = line; }
         }
-        return new CsvParse(rows, inQuote);
+        if (!inQuote) readableEnd = bomLen + text.Length;
+        return new CsvParse(rows, inQuote, readableRows, readableEndLine, readableEnd);
     }
 
     /// <summary>

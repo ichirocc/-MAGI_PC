@@ -223,6 +223,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight()) return;
         var lastNode = _undoStack.Last;
         if (lastNode is null) return;
+        DropCsvPartial();
         _undoStack.RemoveLast();
         var snap = lastNode.Value;
         var cur = SnapNow();
@@ -256,6 +257,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight()) return; // 上記 Undo() と同じ簡略化の根拠。
         var lastNode = _redoStack.Last;
         if (lastNode is null) return;
+        DropCsvPartial();
         _redoStack.RemoveLast();
         var snap = lastNode.Value;
         var cur = SnapNow();

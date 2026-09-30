@@ -528,6 +528,155 @@ public class MagiViewModelCsvTest
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("CSV取込 を取り消しました"));
     }
 
+    private const string UnclosedCsv = "スタッフ \\ 日付,1,2,3,4,5,6,7\n職員A,A,A,A,A,A,A,A\n職員B,A,\"A,A\n";
+
+    private static async Task<MagiViewModel> AskedVmAsync()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.ImportCsv(UnclosedCsv);
+        await vm.LastImportCsvTask!;
+        return vm;
+    }
+
+    [Fact]
+    public async Task ImportCsvWithUnclosedQuoteAsksBeforeApplyingAndChangesNothing()
+    {
+        var sched = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = sched };
+
+        vm.ImportCsv(UnclosedCsv);
+        await vm.LastImportCsvTask!;
+
+        Assert.Equal(
+            "CSV の 2行目までは読めました（1 名分）。その先は引用符が閉じていないため読めません。この部分だけ取り込みますか？",
+            vm.Ui.CsvPartialPrompt);
+        Assert.False(vm.Ui.Running);
+        Assert.False(vm.Ui.MessageIsError);
+        Assert.Null(vm.Ui.Message);
+        Assert.Same(sched, vm._currentSchedule);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("CSV取込 確認待ち"));
+    }
+
+    [Fact]
+    public async Task ConfirmCsvPartialImportAppliesTheReadablePartWithOneUndoStepAndKeepsTheWarning()
+    {
+        var vm = await AskedVmAsync();
+
+        vm.ConfirmCsvPartialImport();
+        await vm.LastImportCsvTask!;
+
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.Equal(new[] { 1, 1, 1, 1, 1, 1, 1 }, vm._currentSchedule![0]);
+        Assert.Equal(new[] { 0, 0, 0, 0, 0, 0, 0 }, vm._currentSchedule[1]);   // 引用符を開いた行は手前のセルも取り込まない
+        Assert.Equal(1, vm.UndoStackCount);
+        Assert.Contains("CSV取込完了", vm.Ui.Message);
+        Assert.Contains("1/2名を更新", vm.Ui.Message);
+        Assert.Contains(CsvPartialImport.AppliedWarning, vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.False(vm.Ui.Running);
+    }
+
+    [Fact]
+    public async Task CancelCsvPartialImportChangesNothingAndClearsThePending()
+    {
+        var vm = await AskedVmAsync();
+        var applied = vm.LastImportCsvTask;
+
+        vm.CancelCsvPartialImport();
+
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.Equal("取込をやめました", vm.Ui.Message);
+        Assert.False(vm.Ui.MessageIsError);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+
+        vm.ConfirmCsvPartialImport();   // 保留は消えている＝何も起きない
+        Assert.Same(applied, vm.LastImportCsvTask);
+        Assert.Equal(0, vm._currentSchedule[0][0]);
+    }
+
+    [Fact]
+    public async Task ConfirmAfterTheBoardChangedIsDiscardedWithAMessage()
+    {
+        var vm = await AskedVmAsync();
+        var asked = vm.LastImportCsvTask;
+        vm._currentSchedule![1][0] = 1;
+
+        vm.ConfirmCsvPartialImport();
+
+        Assert.Same(asked, vm.LastImportCsvTask);
+        Assert.Equal("盤面が変わったため取込をやめました。もう一度取り込んでください", vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.Equal(0, vm._currentSchedule[0][0]);
+        Assert.Equal(0, vm.UndoStackCount);
+    }
+
+    [Fact]
+    public async Task PendingIsDroppedWhenAnEditPushesUndoButNotByADisplayOnlyChange()
+    {
+        var vm = await AskedVmAsync();
+        vm.PushUndo(invalidate: false);
+        Assert.NotNull(vm.Ui.CsvPartialPrompt);
+
+        vm.PushUndo();
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+
+        var asked = vm.LastImportCsvTask;
+        vm.ConfirmCsvPartialImport();
+        Assert.Same(asked, vm.LastImportCsvTask);
+    }
+
+    [Fact]
+    public async Task PickingANewCsvDropsThePendingOne()
+    {
+        var vm = await AskedVmAsync();
+        Assert.NotNull(vm.Ui.CsvPartialPrompt);
+
+        vm.ImportCsv("スタッフ \\ 日付,1\n職員A,A\n");
+        await vm.LastImportCsvTask!;
+
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.Contains("CSV取込完了", vm.Ui.Message);
+    }
+
+    [Fact]
+    public async Task UnclosedQuoteWithNoReadableStaffRowRefusesWithoutADialog()
+    {
+        var sched = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = sched };
+
+        vm.ImportCsv("\"職員A,A,A\n職員B,A,A\n");
+        await vm.LastImportCsvTask!;
+
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal("CSV取込失敗: 取り込める行がありませんでした（引用符が閉じていません）", vm.Ui.Message);
+        Assert.False(vm.Ui.Running);
+        Assert.Same(sched, vm._currentSchedule);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("読めた職員の行がない"));
+    }
+
+    [Fact]
+    public async Task ConfirmCsvPartialImportIsBlockedWhileOptimizationRunning()
+    {
+        var vm = await AskedVmAsync();
+        var asked = vm.LastImportCsvTask;
+        OptimizationRepository.SetRunning(true);
+
+        vm.ConfirmCsvPartialImport();
+
+        Assert.Same(asked, vm.LastImportCsvTask);
+        Assert.Null(vm.Ui.CsvPartialPrompt);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Contains("バックグラウンド最適化の実行中です", vm.Ui.Message);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+    }
+
     // ===================================================================
     // ImportStaffCsv
     // ===================================================================

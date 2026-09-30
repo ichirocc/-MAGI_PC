@@ -193,6 +193,9 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private MagiEngine.V6.PreRunCheck.Summary? preRunCheck;
     [ObservableProperty] private string? preRunRepeatHint;
 
+    /// <summary>引用符が閉じていない勤務表CSVの「読めた部分だけ取り込むか」確認。非 null の間ダイアログを出す（保存しない）。</summary>
+    [ObservableProperty] private string? csvPartialPrompt;
+
     /// <summary>[DefragLiveView] 計算中の最良盤面（実行中のみ）。</summary>
     [ObservableProperty] private IReadOnlyList<IReadOnlyList<int>> liveSchedule = Array.Empty<IReadOnlyList<int>>();
 

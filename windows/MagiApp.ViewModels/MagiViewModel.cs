@@ -169,6 +169,7 @@ public sealed partial class MagiViewModel
     /// </summary>
     internal int BeginBoardJob(string label, bool engineRun = false)
     {
+        DropCsvPartial();    // 確認待ちの部分取込は、盤面を動かすジョブが始まった時点で古い
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
         CancelRelaxTrial();  // [S6 §8] 同じ
         CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
@@ -239,6 +240,7 @@ public sealed partial class MagiViewModel
     /// <param name="invalidate">false＝表示だけの変更（<see cref="ApplyDisplayOnly"/>）。他の案・改善提案・完了要約を残す。</param>
     internal void PushUndo(bool invalidate = true)
     {
+        if (invalidate) DropCsvPartial();
         var snap = SnapNow();
         if (snap is null) return;
         if (!invalidate) snap = snap with { DisplayEdit = true };

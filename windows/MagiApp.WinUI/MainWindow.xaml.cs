@@ -72,6 +72,11 @@ public sealed partial class MainWindow : Window
     private void OnUiChangedForMessageBar(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(UiState.PreRunCheck)) { if (_vm.Ui.PreRunCheck is { } sum) _ = ShowPreRunCheckAsync(sum); }
+        else if (e.PropertyName == nameof(UiState.CsvPartialPrompt))
+        {
+            if (_vm.Ui.CsvPartialPrompt is { } prompt) _ = ShowCsvPartialPromptAsync(prompt);
+            else _csvPartialDialog?.Hide();
+        }
         else if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
         else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
     }
@@ -298,6 +303,27 @@ public sealed partial class MainWindow : Window
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.OpenDoor(door);
+    }
+
+    private ContentDialog? _csvPartialDialog;
+
+    /// <summary>[引用符が閉じていない勤務表CSV] Android の確認ダイアログ。［この部分だけ取り込む］で適用、［やめる］（閉じるも同じ）は何も変えない。</summary>
+    private async Task ShowCsvPartialPromptAsync(string prompt)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = "引用符が閉じていないCSV",
+            Content = new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = MagiEngine.V6.CsvPartialImport.ConfirmLabel,
+            CloseButtonText = MagiEngine.V6.CsvPartialImport.CancelLabel,
+            DefaultButton = ContentDialogButton.Close,
+        };
+        _csvPartialDialog = dialog;
+        var result = await dialog.ShowAsync();
+        _csvPartialDialog = null;
+        if (result == ContentDialogResult.Primary) _vm.ConfirmCsvPartialImport();
+        else _vm.CancelCsvPartialImport();
     }
 
     /// <summary>[つくる前の確認] Android <c>PreRunCheckSheet</c>。行を押すとセルへ、「このままつくる」は 1 タップで始める。</summary>
