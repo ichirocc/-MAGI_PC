@@ -61,7 +61,7 @@ public class GridDisplayMarksTest
     {
         var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
         var text = Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 2, new[] { "c1" }, Label));
-        Assert.Equal("要調整・期間の約束: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日を休にするとこの約束の日数に届きます（ほかの約束への影響は見ていません）。（この日の休はすでに数に入っています）", text);
+        Assert.Equal("要調整・期間の約束: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日をうまく選べば、いちばん少なくて2日を休にするとこの約束の日数に届きます（ほかの約束への影響は見ていません）。（この日の休はすでに数に入っています）", text);
         Assert.DoesNotContain("（この日の", Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 3, new[] { "c1" }, Label)));
         Assert.Contains("vio-c1", CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, "0,2", Marks), true));
     }
@@ -77,7 +77,7 @@ public class GridDisplayMarksTest
         foreach (var x in sh) foreach (var d in x.Marks) Assert.True(s[x.Staff][d] != a4 && C1Display.Changeable(p, x.Staff, d, a4));
         var y = sh.First(x => x.Marks.Count > 0);
         var line = Assert.Single(CellSheetLogic.CellDetailLines(st2, p, s, y.Staff, y.Marks[0], new[] { "c1" }, Label));
-        Assert.True(line.Contains("「A4」が2日必要") && line.Contains("印の日をA4にすると"), line);
+        Assert.True(line.Contains("「A4」が2日必要") && line.Contains("A4に") && (line.Contains("すべて") || line.Contains("いちばん少なくて")), line);
     }
 
     [Fact]
@@ -117,6 +117,46 @@ public class GridDisplayMarksTest
         Assert.DoesNotContain("届", line);
         Assert.Contains("不足は減ります", line);
         Assert.Contains(C1Display.StuckText, line);
+    }
+
+    /// <summary>届かせるのに変える日数の最小は、印の日の全部分集合の総当たりと一致する。全部変える必要があるときだけ「すべて」と言う。</summary>
+    [Fact]
+    public void C1MinChangesMatchesBruteForceAndTheTextDoesNotOverclaim()
+    {
+        var s = St.Schedule.ToIntArray2D();
+        var checkedCount = 0;
+        foreach (var sh in Ui.C1Shortages.Where(x => !x.Stuck && x.Marks.Count > 0 && x.Marks.Count <= 12))
+        {
+            var best = int.MaxValue;
+            for (var mask = 0; mask < (1 << sh.Marks.Count); mask++)
+            {
+                var ch = sh.Marks.Where((_, idx) => (mask & (1 << idx)) != 0).ToHashSet();
+                var ok = true;
+                for (var w = sh.From; w <= sh.To - sh.Day1 + 1 && ok; w++)
+                {
+                    var cnt = 0;
+                    for (var d = w; d < w + sh.Day1; d++) if (s[sh.Staff][d] == sh.Shift || ch.Contains(d)) cnt++;
+                    ok = cnt >= sh.Day2;
+                }
+                if (ok) best = Math.Min(best, ch.Count);
+            }
+            Assert.Equal(best, sh.MinChanges);
+            var line = C1Display.CellText(new[] { sh }, s, sh.Staff, sh.From, k => St.Shifts[k].Kigou, d => $"{d + 1}日")!;
+            if (sh.MinChanges >= sh.Marks.Count) Assert.Contains("すべて", line);
+            else { Assert.DoesNotContain("すべて", line); Assert.Contains($"いちばん少なくて{sh.MinChanges}日", line); }
+            checkedCount++;
+        }
+        Assert.True(checkedCount > 0);
+    }
+
+    [Fact]
+    public void LegendAndStuckTextDoNotPromiseReaching()
+    {
+        var legend = GridDisplayMarks.LegendShapeFamilies(Label);
+        Assert.DoesNotContain("届く", legend);
+        Assert.Contains("近づく", legend);
+        Assert.Contains("手動固定", C1Display.StuckText);
+        Assert.Contains("入れない指定", C1Display.StuckText);
     }
 
     [Fact]

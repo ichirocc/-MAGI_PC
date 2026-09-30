@@ -130,6 +130,16 @@ public class ManualPinTest
     }
 
     [Fact]
+    public void PinFollowingDropsThePinWhenTheNewShiftIsNotAShift()
+    {
+        var st = Sample() with { ManualPins = new List<ManualPin> { new(0, 1, 0), new(2, 3, 1) } };
+        var ns = st.WithPinsFollowing(new[] { (0, 1) }, -1);
+        Assert.Null(ns.PinAt(0, 1));
+        Assert.Equal(new ManualPin(2, 3, 1), ns.PinAt(2, 3));
+        Assert.Null(st.WithPinsFollowing(new[] { (0, 1) }, st.ShiftCount).PinAt(0, 1));
+    }
+
+    [Fact]
     public void ManualEditKeepsThePinAndUpdatesTheValue()
     {
         var st = Sample() with { ManualPins = new List<ManualPin> { new(0, 1, 0), new(2, 3, 1) } };

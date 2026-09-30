@@ -292,7 +292,7 @@ public static class GridDisplayMarks
     /// <summary>凡例の「枠の形 → 族」の 1 行。セルに印を持つ族だけを名指す。</summary>
     public static string LegendShapeFamilies(Func<string, string> labelOf) =>
         "実線: " + string.Join("・", new[] { "c3n", "c3w", "pref", "groupViol" }.Select(labelOf)) +
-        "／破線: " + labelOf("c1") + "（この日を○○にすると届く）・" + labelOf("c3mn");
+        "／破線: " + labelOf("c1") + "（この日を○○にすると近づく）・" + labelOf("c3mn");
 }
 
 /// <summary>探す対象（Kotlin <c>FixFocus</c>）。Staff/Shift は <c>FixSuggester</c> の絞り込み、Day は理由の読み取りだけに使う。</summary>

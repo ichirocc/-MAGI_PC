@@ -7,13 +7,14 @@ public static class ManualPins
 
     public static ManualPin? PinAt(this MagiState s, int i, int j) => s.PinsOf().FirstOrDefault(p => p.Staff == i && p.Day == j);
 
-    /// <summary>手の編集で <paramref name="cells"/> が <paramref name="shift"/> になったとき、固定されたセルの値を追従させる（固定は残す）。固定に当たらなければ同じ state。</summary>
+    /// <summary>手の編集で <paramref name="cells"/> が <paramref name="shift"/> になったとき、固定されたセルの値を追従させる（固定は残す）。固定に当たらなければ同じ state。<paramref name="shift"/> がシフト範囲外なら固定は外す。</summary>
     public static MagiState WithPinsFollowing(this MagiState s, IEnumerable<(int, int)> cells, int shift)
     {
         var pins = s.PinsOf();
         if (pins.Count == 0) return s;
         var set = cells.ToHashSet();
         if (!pins.Any(p => set.Contains((p.Staff, p.Day)) && p.Shift != shift)) return s;
+        if (shift < 0 || shift >= s.ShiftCount) return s with { ManualPins = pins.Where(p => !set.Contains((p.Staff, p.Day))).ToList() };
         return s with { ManualPins = pins.Select(p => set.Contains((p.Staff, p.Day)) ? p with { Shift = shift } : p).ToList() };
     }
 
