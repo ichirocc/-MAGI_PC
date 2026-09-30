@@ -12,7 +12,7 @@ public enum CellSeverity { Hard, Soft, None }
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
 
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
-public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped }
+public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped, Unavailable, Failed }
 
 /// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。</summary>
 public sealed record OpNotice(long Id, string Text, long UndoSerial);
@@ -40,6 +40,11 @@ public sealed record ShiftMarks(IReadOnlySet<int> Recommended, IReadOnlySet<int>
 public static class CellSheetLogic
 {
     public const int Columns = 4;
+
+    /// <summary>職員 i の担当できるシフト（Kotlin <c>sheetCanDo</c>）。データ未読込（一覧が空）のときだけ全部。担当できるシフトが 0 件の職員は空のまま（「外」を押せる扱いにしない）。</summary>
+    public static IReadOnlySet<int> SheetCanDo(IReadOnlyList<IReadOnlyCollection<int>> allowedByStaff, int i, int shiftCount) =>
+        allowedByStaff.Count == 0 ? Enumerable.Range(0, shiftCount).ToHashSet()
+        : i >= 0 && i < allowedByStaff.Count ? allowedByStaff[i].ToHashSet() : new HashSet<int>();
 
     /// <summary>枠に出すシフト＝データの中で誰か 1 人でも担当できるもの（データごとに 1 回。誰も担当できなければ全部）。</summary>
     public static IReadOnlyList<int> SheetShifts(int shiftCount, IEnumerable<IEnumerable<int>> allowedByStaff)
@@ -469,14 +474,23 @@ public static class CellSheetLogic
         r?.Moves.FirstOrDefault(m => m.Staff == i && m.Day == j)?.To;
 
     /// <summary>[S6] セルシートから設定の緩和へ渡す状態（Kotlin <c>relaxHandoff</c>）。Offer＝ホームで見つかった組の起点の窓か手順のセル（同じ結果を同じ確定で開く。
-    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い、Stopped＝途中で止めた（やり直しを出す）。</summary>
-    public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j, bool stopped = false) =>
+    /// セルごとに試算はしない）、Searching＝背景で探している、NoWall＝探し終えて組が無い、Stopped＝途中で止めた／Failed＝失敗した（どちらもやり直しを出す）、
+    /// Unavailable＝試算できない盤面（未割当など。理由を出す）。</summary>
+    public static RelaxHandoff RelaxHandoffOf(RelaxTrial.Result? r, bool searching, bool noWall, int i, int j, bool stopped = false,
+        string? unavailable = null, bool failed = false) =>
         r is not null && ((r.Staff == i && j >= r.WindowFirst && j <= r.WindowLast) || r.Moves.Any(m => m.Staff == i && m.Day == j)) ? RelaxHandoff.Offer
         : r is not null ? RelaxHandoff.None
         : searching ? RelaxHandoff.Searching
+        : unavailable is not null ? RelaxHandoff.Unavailable
         : noWall ? RelaxHandoff.NoWall
+        : failed ? RelaxHandoff.Failed
         : stopped ? RelaxHandoff.Stopped
         : RelaxHandoff.None;
+
+    public static string RelaxUnavailableText(string reason) => $"設定を緩める試算はできません（{reason}）";
+
+    /// <summary>[S6] 背景の試算の結果を反映してよいか: 最新の試算で、始めたときのデータが今も同じとき（古い失敗で今の状態を上書きしない）。</summary>
+    public static bool RelaxOutcomeApplies<C>(long seq, long latestSeq, C ctx, C? ctxNow) => seq == latestSeq && Equals(ctx, ctxNow);
 
     public static string RelaxHandoffLine(RelaxTrial.Result r, UiState ui, Func<string, string> labelOf) =>
         $"設定を緩めると、この{NextActionGuide.RelaxTargetOf(r, ui, labelOf).What}を解消できる見込みです（上限 {r.Relaxes.Count}件）";

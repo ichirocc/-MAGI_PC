@@ -43,6 +43,10 @@ public sealed partial class MagiViewModel
         return ScheduleUtil.CachedProblem(st).CanDoShiftsForStaff(i);   // [3.507.0 同期] UI は担当可否そのもの（上限 0 は最適化器だけが除外）
     }
 
+    /// <summary>職員ごとの担当できるシフト。データ未読込なら空の一覧（Kotlin <c>ConditionsView.allowedByStaff</c>）。</summary>
+    public IReadOnlyList<IReadOnlyCollection<int>> AllowedByStaff() =>
+        _state is null ? System.Array.Empty<IReadOnlyCollection<int>>() : Enumerable.Range(0, Ui.StaffNames.Count).Select(k => (IReadOnlyCollection<int>)AllowedShiftsFor(k)).ToList();
+
     /// <summary>入力ガイド（月次/年次の入力手順）用の各項目の件数。</summary>
     public sealed record SetupCounts(
         int Days, int Staff, int Shifts, int Groups,

@@ -61,7 +61,7 @@ public class GridDisplayMarksTest
     {
         var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
         var text = Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 2, new[] { "c1" }, Label));
-        Assert.Equal("要調整・期間の約束: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日を休にすると届く見込みです。（この日の休はすでに数に入っています）", text);
+        Assert.Equal("要調整・期間の約束: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日を休にするとこの約束の日数に届きます（ほかの約束への影響は見ていません）。（この日の休はすでに数に入っています）", text);
         Assert.DoesNotContain("（この日の", Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 3, new[] { "c1" }, Label)));
         Assert.Contains("vio-c1", CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, "0,2", Marks), true));
     }
@@ -96,6 +96,27 @@ public class GridDisplayMarksTest
         Assert.Contains(0, GridDisplayMarks.C1Stuck(u2));
         Assert.Contains(GridDisplayMarks.StaffCountLines(u2, 0, Label), l => l.Contains(C1Display.StuckText));
         Assert.Contains(Ui.C1Shortages, x => x.Staff == 10 && x.Stuck);
+    }
+
+    /// <summary>窓の不足が 2 日で変えられる日が 1 日だけ: 届く見込みとは言わず、減るだけ＋勤務表だけでは満たせない旨。</summary>
+    [Fact]
+    public void WindowWithFewerChangeableDaysThanTheDeficitIsStuck()
+    {
+        var p0 = ScheduleUtil.CachedProblem(St);
+        var w = Enumerable.Range(0, St.ShiftCount).First(k => k != Rest && p0.CanDo(0, k));
+        var wishes = St.Wishes.Where(kv => !kv.Key.StartsWith("0,")).ToDictionary(kv => kv.Key, kv => kv.Value);
+        for (var d = 0; d < St.DayCount; d++) if (d != 3) wishes[$"0,{d}"] = w;
+        var st2 = St with { Wishes = wishes, Cons1 = new[] { new C1Row(St.DayCount.ToString(), "休", "2") } };
+        var p = ScheduleUtil.CachedProblem(st2); var s = st2.Schedule.ToIntArray2D();
+        for (var d = 0; d < St.DayCount; d++) s[0][d] = w;
+        Assert.True(C1Display.Changeable(p, 0, 3, Rest));
+        var s0 = C1Display.Shortages(p, s).Single(x => x.Staff == 0);
+        Assert.Equal(new[] { 3 }, s0.Marks);
+        Assert.True(s0.Stuck);
+        var line = C1Display.CellText(new[] { s0 }, s, 0, 3, k => St.Shifts[k].Kigou, d => $"{d + 1}日")!;
+        Assert.DoesNotContain("届", line);
+        Assert.Contains("不足は減ります", line);
+        Assert.Contains(C1Display.StuckText, line);
     }
 
     [Fact]

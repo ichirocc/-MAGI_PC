@@ -53,6 +53,34 @@ public class CellSheetLogicTest
         foreach (var c in canDo) Assert.Equal(layout, Ids(CellSheetLogic.Slots(real, c)));
     }
 
+    /// <summary>担当できるシフトが 0 件の職員は空（全部を押せる扱いにしない）。全部になるのはデータ未読込のときだけ。</summary>
+    [Fact]
+    public void StaffWithNoDoableShiftGetsNoDoableButtons()
+    {
+        var by = new List<IReadOnlyCollection<int>> { new[] { 0, 2 }, Array.Empty<int>() };
+        Assert.Equal(new HashSet<int> { 0, 2 }, CellSheetLogic.SheetCanDo(by, 0, 5));
+        Assert.Empty(CellSheetLogic.SheetCanDo(by, 1, 5));
+        Assert.Empty(CellSheetLogic.SheetCanDo(by, 7, 5));
+        Assert.Equal(Enumerable.Range(0, 5).ToHashSet(), CellSheetLogic.SheetCanDo(Array.Empty<IReadOnlyCollection<int>>(), 0, 5));
+    }
+
+    /// <summary>[S6] 試算できない盤面（未割当のセル）は「組が無い」と言わず理由を出す。失敗はやり直しを出す。</summary>
+    [Fact]
+    public void RelaxUnavailableAndFailedAreNotNoWall()
+    {
+        var s2 = S.Select(r => (int[])r.Clone()).ToArray();
+        s2[0][0] = -1;
+        var u = Assert.IsType<RelaxTrial.Unavailable>(RelaxTrial.FirstWall(St, s2));
+        Assert.Equal(RelaxHandoff.Unavailable, CellSheetLogic.RelaxHandoffOf(null, false, false, 0, 0, unavailable: u.Reason));
+        Assert.Equal("設定を緩める試算はできません（未割当のセルがあります）", CellSheetLogic.RelaxUnavailableText(u.Reason));
+        Assert.Equal(RelaxHandoff.Failed, CellSheetLogic.RelaxHandoffOf(null, false, false, 0, 0, failed: true));
+        Assert.Equal(RelaxHandoff.Searching, CellSheetLogic.RelaxHandoffOf(null, true, false, 0, 0, failed: true));
+        Assert.True(CellSheetLogic.RelaxOutcomeApplies(3L, 3L, "a", "a"));
+        Assert.False(CellSheetLogic.RelaxOutcomeApplies(2L, 3L, "a", "a"));
+        Assert.False(CellSheetLogic.RelaxOutcomeApplies(3L, 3L, "a", "b"));
+        Assert.False(CellSheetLogic.RelaxOutcomeApplies<string>(3L, 3L, "a", null));
+    }
+
     /// <summary>[S6] 起点の窓と手順のセルだけがホームの組を引き継ぐ。探索中・組なしはそれぞれの言い方、セルごとの試算はしない。</summary>
     [Fact]
     public void RelaxHandoffOnlyForCellsTheFoundSetTouches()

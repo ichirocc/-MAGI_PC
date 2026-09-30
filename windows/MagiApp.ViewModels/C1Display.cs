@@ -5,7 +5,7 @@ namespace MagiApp.ViewModels;
 /// <summary>
 /// 期間の制約（c1）の表示専用の不足区間。Kotlin <c>ui/C1Display.kt</c> の移植。職員 Staff × 規則（Shift を Day1 日のなかに Day2 日）の
 /// 続けて不足した窓の和 From〜To。Marks は不足窓の中で、いま Shift でなく Shift に変えられる日（変えられる日が 1 つも無い窓の日は含めない）。
-/// Stuck は変えられる日が 1 つも無い不足窓があること。チェッカーの c1 の印（ランの先頭）は探索が読むので残し、画面には描かない。
+/// Stuck は変えられる日が足りない日数より少ない不足窓があること（印をすべて変えても届かない）。チェッカーの c1 の印（ランの先頭）は探索が読むので残し、画面には描かない。
 /// </summary>
 public sealed record C1Shortage(int Staff, int Shift, int Day1, int Day2, int From, int To, int Windows, IReadOnlyList<int> Marks, bool Stuck)
 {
@@ -49,9 +49,9 @@ public static class C1Display
                     if (z >= c.Day2) { Close(); continue; }
                     if (runStart < 0) runStart = j;
                     n++;
-                    var any = false;
-                    for (var d = j; d < j + c.Day1; d++) if (cand[d]) { marks.Add(d); any = true; }
-                    if (!any) stuck = true;
+                    var got = 0;
+                    for (var d = j; d < j + c.Day1; d++) if (cand[d]) { marks.Add(d); got++; }
+                    if (got < c.Day2 - z) stuck = true;
                 }
                 Close();
             }
@@ -67,7 +67,8 @@ public static class C1Display
         var k = sym(sh.Shift);
         var head = $"期間の約束: {sh.Day1}日のなかに「{k}」が{sh.Day2}日必要です。";
         var body = sh.Marks.Count == 0 ? StuckText
-            : $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、印の日を{k}にすると届く見込みです。" + (sh.Stuck ? StuckText : "");
+            : sh.Stuck ? $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、印の日を{k}にすると不足は減ります。{StuckText}"
+            : $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、印の日を{k}にするとこの約束の日数に届きます（ほかの約束への影響は見ていません）。";
         var held = i < s.Length && j < s[i].Length && s[i][j] == sh.Shift ? $"（この日の{k}はすでに数に入っています）" : "";
         return head + body + held;
     }

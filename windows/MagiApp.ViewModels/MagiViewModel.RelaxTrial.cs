@@ -18,6 +18,7 @@ public sealed partial class MagiViewModel
     private RelaxTrial.Outcome? _relaxResult;
     private (RelaxCtx Ctx, string Line)? _relaxDone;
     private RelaxCtx? _relaxStoppedCtx;
+    private RelaxCtx? _relaxFailedCtx;
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="StartRelaxTrial"/> が背後で走らせる Task。</summary>
     internal Task? LastRelaxTrialTask { get; private set; }
@@ -39,13 +40,14 @@ public sealed partial class MagiViewModel
         _relaxCtx = ctx;
         _relaxResult = null;
         _relaxStoppedCtx = null;
+        _relaxFailedCtx = null;
         var cts = new CancellationTokenSource();
         _relaxCts = cts;
         Ui.RelaxSearching = true;
-        LastRelaxTrialTask = RelaxTrialCoreAsync(st, b.Copy2D(), seq, cts.Token);
+        LastRelaxTrialTask = RelaxTrialCoreAsync(st, b.Copy2D(), seq, cts.Token, ctx);
     }
 
-    private async Task RelaxTrialCoreAsync(MagiState st, int[][] board, long seq, CancellationToken ct)
+    private async Task RelaxTrialCoreAsync(MagiState st, int[][] board, long seq, CancellationToken ct, RelaxCtx ctx)
     {
         try
         {
@@ -57,6 +59,7 @@ public sealed partial class MagiViewModel
         catch (Exception e)
         {
             LogOp("W", $"設定の緩和の試算 失敗: {e.GetType().Name}: {e.Message}");
+            if (CellSheetLogic.RelaxOutcomeApplies(seq, _relaxSeq, ctx, RelaxCtxNow())) _relaxFailedCtx = ctx;
         }
         finally
         {
@@ -81,9 +84,16 @@ public sealed partial class MagiViewModel
     public RelaxToken? RelaxTrialFor() =>
         _relaxCtx is { } c && _relaxResult is RelaxTrial.Result r && RelaxCtxNow() == c ? new RelaxToken(c.StateKey, c.BoardKey, r) : null;
 
-    /// <summary>いまのデータで探し終えて組が無かった（NoWall・試算不可）。走っている・未着手・古いなら false。</summary>
+    /// <summary>いまのデータで探し終えて組が無かった（NoWall）。走っている・未着手・古い・試算不可なら false。</summary>
     public bool RelaxNoWall() =>
-        _relaxCtx is { } c && c == RelaxCtxNow() && _relaxResult is not null && _relaxResult is not RelaxTrial.Result;
+        _relaxCtx is { } c && c == RelaxCtxNow() && _relaxResult is RelaxTrial.NoWallOutcome;
+
+    /// <summary>いまのデータでは試算できない理由（未割当のセルなど）。無い・古いなら null。</summary>
+    public string? RelaxUnavailable() =>
+        _relaxCtx is { } c && c == RelaxCtxNow() && _relaxResult is RelaxTrial.Unavailable u ? u.Reason : null;
+
+    /// <summary>いまのデータで試算が失敗した（結果なし）。「もう一度試す」を出す。</summary>
+    public bool RelaxFailed() => _relaxFailedCtx is { } c && c == RelaxCtxNow() && _relaxResult is null;
 
     /// <summary>いまのデータで試算を途中で止めた（結果なし）。「もう一度試す」を出す。</summary>
     public bool RelaxStopped() => _relaxStoppedCtx is { } c && c == RelaxCtxNow() && _relaxResult is null;

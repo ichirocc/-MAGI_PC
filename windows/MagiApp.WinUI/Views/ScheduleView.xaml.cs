@@ -1422,8 +1422,7 @@ public sealed partial class ScheduleView : UserControl
         if (_vm.EditBlockedNow()) return;
         var ui = _vm.Ui;
         if (i < 0 || i >= ui.Schedule.Count || j < 0 || j >= ui.Days) return;
-        var allowed = _vm.AllowedShiftsFor(i).ToHashSet();
-        var canDo = allowed.Count > 0 ? allowed : Enumerable.Range(0, ui.ShiftSymbols.Count).ToHashSet();
+        var canDo = CellSheetLogic.SheetCanDo(_vm.AllowedByStaff(), i, ui.ShiftSymbols.Count);
         var cur = ui.Schedule[i][j];
         int? wish = ui.Wishes.TryGetValue($"{i},{j}", out var w) ? w : null;
         string Sym(int? k) => k is { } kk && kk >= 0 && kk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[kk] : "—";
@@ -1431,7 +1430,7 @@ public sealed partial class ScheduleView : UserControl
         var status = _vm.CellStatusFor(i, j, LabelOf);
         var dilemma = CellSheetLogic.IsWishDilemma(wish, cur, status.Severity);
         var relax = _vm.RelaxTrialFor();
-        var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j, _vm.RelaxStopped());
+        var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j, _vm.RelaxStopped(), _vm.RelaxUnavailable(), _vm.RelaxFailed());
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
         var reopening = false;
@@ -1680,10 +1679,12 @@ public sealed partial class ScheduleView : UserControl
                 panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxSearchingText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
             else if (handoff == RelaxHandoff.NoWall)
                 panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxNoWallText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-            else if (handoff == RelaxHandoff.Stopped)
+            else if (handoff == RelaxHandoff.Unavailable)
+                panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxUnavailableText(_vm.RelaxUnavailable() ?? ""), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            else if (handoff is RelaxHandoff.Stopped or RelaxHandoff.Failed)
             {
                 var row = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } } };
-                row.Children.Add(new TextBlock { Text = NextActionGuide.RelaxStoppedText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(new TextBlock { Text = handoff == RelaxHandoff.Failed ? NextActionGuide.RelaxFailedText : NextActionGuide.RelaxStoppedText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
                 var retry = new HyperlinkButton { Content = NextActionGuide.RelaxRetryLabel, MinHeight = 48 };
                 retry.Click += (_, _) => { _vm.RetryRelaxTrial(); Reopen(i, j, mode); };
                 Grid.SetColumn(retry, 1);

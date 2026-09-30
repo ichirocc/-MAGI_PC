@@ -225,9 +225,10 @@ public sealed partial class HomeView : UserControl
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
-        var relaxStopped = !ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxStopped();
+        var relaxFailed = !ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxFailed();
+        var relaxStopped = relaxFailed || (!ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxStopped());
         RelaxSearchRow.Visibility = !ui.Running && (ui.RelaxSearching || relaxStopped) ? Visibility.Visible : Visibility.Collapsed;
-        RelaxSearchText.Text = relaxStopped ? NextActionGuide.RelaxStoppedText : NextActionGuide.RelaxSearchingText;
+        RelaxSearchText.Text = relaxFailed ? NextActionGuide.RelaxFailedText : relaxStopped ? NextActionGuide.RelaxStoppedText : NextActionGuide.RelaxSearchingText;
         RelaxStopButton.Content = relaxStopped ? NextActionGuide.RelaxRetryLabel : "やめる";
         RelaxSearchText.Foreground = fgBrush;
 

@@ -231,6 +231,7 @@ public static class NextActionGuide
     public const string RelaxSearchingText = "希望を変えずに、個人の上限0を例外で緩める方法を調べています…";
     public const string RelaxNoWallText = "緩めても解ける組はありませんでした";
     public const string RelaxStoppedText = "試算を止めました";
+    public const string RelaxFailedText = "試算に失敗しました";
     public const string RelaxRetryLabel = "もう一度試す";
     public static string RelaxPeekLabel(string sym) => $"例外として緩める候補: {sym}";
 
