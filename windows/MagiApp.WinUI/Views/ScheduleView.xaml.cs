@@ -1437,8 +1437,20 @@ public sealed partial class ScheduleView : UserControl
         void Reopen(int ni, int nj, int m) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
         flyout.Closed += (_, _) => { if (!reopening) _cellSheetExpanded = false; };
 
+        // 見出し行の［↶ 元に戻す］（Kotlin CellEditSheet の SheetUndoButton）。有効条件は下部バーと同じ（CanUndo かつ実行中でない）。
+        //   戻すと盤面が変わるのでシートを開き直す。
+        Button MakeUndoButton(int column)
+        {
+            var u = new Button { Content = "↶", MinHeight = 48, MinWidth = 48, IsEnabled = ui.CanUndo && !ui.Running };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(u, "元に戻す");
+            ToolTipService.SetToolTip(u, "元に戻す");
+            u.Click += (_, _) => { _vm.Undo(); Reopen(i, j, mode); };
+            Grid.SetColumn(u, column);
+            return u;
+        }
         var head = new Grid();
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
@@ -1457,6 +1469,7 @@ public sealed partial class ScheduleView : UserControl
             Grid.SetColumn(tour, 1);
             head.Children.Add(tour);
         }
+        head.Children.Add(MakeUndoButton(2));
         panel.Children.Add(head);
         if (CellSheetLogic.TourHeading(tourItems, tourAt) is { } tourHeading)
         {
@@ -1481,6 +1494,8 @@ public sealed partial class ScheduleView : UserControl
             var r1 = new Grid();
             r1.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             r1.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            r1.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            r1.Children.Add(MakeUndoButton(1));
             r1.Children.Add(new TextBlock
             {
                 Text = (CellSheetLogic.TourHeading(tourItems, tourAt) is { } th ? CellSheetLogic.PeekHeading(th) : null) ?? status.Text.Replace("⚠ ", ""), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
@@ -1490,7 +1505,7 @@ public sealed partial class ScheduleView : UserControl
             var x = new Button { Content = "✕", MinHeight = 48, MinWidth = 48 };
             ToolTipService.SetToolTip(x, "閉じる");
             x.Click += (_, _) => flyout.Hide();
-            Grid.SetColumn(x, 1);
+            Grid.SetColumn(x, 2);
             r1.Children.Add(x);
             peek.Children.Add(r1);
             var r2 = new Grid();
