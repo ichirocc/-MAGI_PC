@@ -422,7 +422,10 @@ public sealed partial class MagiViewModel
             _currentSchedule = res.Schedule.Copy2D();
             AutoSave();
             _resultSchedule = res.Schedule.Copy2D();
-            _state = st.WithSchedule(res.Schedule);
+            // 取込で値が変わったセルの手動固定は取り込んだ値へ追従させる（手の編集 SetCell と同じ規約）。同じ undo 段。
+            var (followed, pinsMoved) = st.WithPinsFollowingBoard(sched, res.Schedule);
+            _state = followed.WithSchedule(res.Schedule);
+            var pinNote = pinsMoved > 0 ? $"｜手動固定 {pinsMoved} 件を取り込んだ値に合わせました" : "";
             var total = st.StaffCount;
             // [3.410.0/I-01相当] シフト一覧に無い記号は取り込めない。旧: 黙って読み飛ばしていたため、
             //   誤字や凡例漏れが「休のまま」「元のまま」として静かに混入した。件数と記号を必ず出す。
@@ -435,8 +438,8 @@ public sealed partial class MagiViewModel
             var dupWarn = (res.AmbiguousNames.Count > 0 ? $"｜⚠ {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}" : "") +
                 (res.DuplicateRowNames.Count > 0 ? $"｜⚠ 同じ職員の行が複数あり、後の行で上書きしました: {string.Join("・", res.DuplicateRowNames)}" : "");
             var msg = res.Matched >= 1 && res.Matched < total
-                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}"
-                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}";
+                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}{pinNote}"
+                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}{pinNote}";
             await PushReportAsync(_state ?? st, res.Schedule, res.Report, transform: ui =>
             {
                 ui.MessageIsError = res.UnknownCells > 0 || partial || dupWarn.Length > 0;

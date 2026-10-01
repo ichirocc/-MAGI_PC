@@ -60,9 +60,8 @@ public static class ScheduleCsvBridge
 
     public static ScheduleRunResult Parse(string text, MagiState state, int[][] baseSchedule)
     {
-        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える。ここは非nullを返す経路なので
-        //   非nullを返す経路なので旗（UnclosedQuote）を立てて返し、呼出側（CsvPartialImport.Judge）が
-        //   「読めた範囲だけ取り込むか」の確認か断りかを決める。
+        // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える。ここは null を返せないので、
+        //   旗（UnclosedQuote）を立てて返し、呼出側（CsvPartialImport.Judge）が読めた範囲だけ取り込むか断るかを決める。
         var parsedAll = CsvUtil.ParseCsvFull(text);
         var rows = parsedAll.Rows;
         var p = new Problem(state);

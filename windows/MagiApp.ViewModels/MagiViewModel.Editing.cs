@@ -334,11 +334,12 @@ public sealed partial class MagiViewModel
         var on = st.PinAt(i, j) is null;
         PushUndo();
         var ns = st.WithSchedule(sched).TogglePin(i, j, cur);
+        var pinHint = on ? CellSheetLogic.PinRegisterHint(Array.IndexOf(ScheduleUtil.CachedProblem(st).CanDoShiftsForStaff(i), cur) >= 0, FamiliesAt(Ui.ViolationCellFamilies, $"{i},{j}")) : "";
         _state = ns;
         AutoSave();
         Ui.MessageIsError = false;
         ApplyWishDisplay(ns);
-        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {DayText.Short(st.StartDate, j)} を" + (on ? "手動固定しました（自動では変更しません）" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {DayText.Short(st.StartDate, j)} を" + (on ? $"手動固定しました（自動では変更しません）{pinHint}" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"{(on ? "手動固定" : "手動固定を外す")}: {OpNm(i)} {j + 1}日 {OpSy(cur)}");
     }
 

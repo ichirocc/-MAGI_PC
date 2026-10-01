@@ -501,5 +501,15 @@ public static class CellSheetLogic
     /// <summary>操作の通知を出している間、通常の文言では置き換えない（失敗・拒否だけは置き換える）。</summary>
     public static bool MessageMayReplaceNotice(bool noticeShowing, bool isError) => !noticeShowing || isError;
 
+    public const string PinHardHint = "このセルには必須違反があります。固定すると自動では動かしません。";
+    public const string PinNotCanDoHint = "担当外のシフトです。固定すると必須違反が残ったまま自動では動かしません。";
+    private static readonly string[] PinHardCellFamilies = { "c3n", "c3w", "pref", "groupViol" };
+
+    /// <summary>手動固定を付けたセルが担当外／必須違反を抱えているときの一文（付けない＝空）。固定の挙動は変えない＝知らせるだけ（Kotlin <c>pinRegisterHint</c>）。</summary>
+    public static string PinRegisterHint(bool canDo, IEnumerable<string> families) =>
+        !canDo ? PinNotCanDoHint
+        : families.Any(f => PinHardCellFamilies.Contains(VioBuckets.FamilyOfVioClass(f))) ? PinHardHint
+        : "";
+
     public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name} {DayText.Short(startDate, day)} を{symbol}に変更しました";
 }
