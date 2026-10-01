@@ -187,7 +187,7 @@ public static partial class V6HotfixPasses
                 {
                     if (stop()) break;
                     if (!anchorStaff.Contains(i)) continue;
-                    if (!p.CanDo(i, x)) continue;
+                    if (!p.MayPlace(i, x)) continue;
 
                     // [移設ドナー] i 自身の X 保有日のうち「抜いても this ルールの窓が新規に不足化しない」余剰位置。
                     //   盤面が変わるたび(i,x)単位で無効化し次の j で再構築する（遅延キャッシュ）。

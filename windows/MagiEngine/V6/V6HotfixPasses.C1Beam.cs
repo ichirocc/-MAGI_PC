@@ -61,7 +61,7 @@ public static partial class V6HotfixPasses
                 if (x < 0 || x >= p.K || d <= 0) continue;
                 for (int i = 0; i < p.S; i++)
                 {
-                    if (!p.CanDo(i, x)) continue;
+                    if (!p.MayPlace(i, x)) continue;
                     for (int j = 0; j < p.T; j++)
                     {
                         if (work[i][j] == x || !Movable(i, j)) continue;

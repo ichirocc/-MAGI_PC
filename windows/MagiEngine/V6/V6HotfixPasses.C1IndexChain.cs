@@ -65,6 +65,7 @@ public static partial class V6HotfixPasses
                 if (stop()) break;
                 var staff = w.Staff;
                 var shift = w.Shift;
+                if (!p.MayPlace(staff, shift)) continue;   // [3.507.0] 上限0は置かない
                 var cands = Enumerable.Range(w.Start, w.WindowDays)
                     .Where(d =>
                     {
