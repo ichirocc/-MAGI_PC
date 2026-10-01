@@ -695,7 +695,9 @@ public sealed record ScheduleRunResult(
     /// <summary>同じ名前の職員が複数いるため取り込まなかった CSV の氏名（CSV の表記のまま）。</summary>
     IReadOnlyList<string>? AmbiguousNames = null,
     /// <summary>1人に解決する氏名の行が CSV に2行以上あった職員（後の行が前の行を上書きした）。</summary>
-    IReadOnlyList<string>? DuplicateRowNames = null)
+    IReadOnlyList<string>? DuplicateRowNames = null,
+    /// <summary>ヘッダが実日付形式（M/D(曜)）のとき、今の期間の同じ列の日付と食い違う列の数。</summary>
+    int HeaderDateMismatches = 0)
 {
     public IReadOnlyList<string> UnknownSymbols { get; init; } = UnknownSymbols ?? Array.Empty<string>();
     public IReadOnlyList<string> AmbiguousNames { get; init; } = AmbiguousNames ?? Array.Empty<string>();

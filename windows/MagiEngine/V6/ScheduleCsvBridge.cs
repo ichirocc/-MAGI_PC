@@ -58,6 +58,9 @@ public static class ScheduleCsvBridge
         return rest.Count > 0 && rest.All(c => c.All(ch => char.IsDigit(ch) || ch == '/' || ch == '-' || ch == '.'));
     }
 
+    private static readonly System.Text.RegularExpressions.Regex HeaderDateCellRe =
+        new(@"^\d{1,2}/\d{1,2}\([月火水木金土日]\)$");
+
     public static ScheduleRunResult Parse(string text, MagiState state, int[][] baseSchedule)
     {
         // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える。ここは null を返せないので、
@@ -88,6 +91,17 @@ public static class ScheduleCsvBridge
         //   「先頭セルが職員名に解決しない」＝CsvBody() と同じ考え方。
         // [Android 3.509.1] 先頭が職員名に解決しないだけでは飛ばさない。ヘッダ「スタッフ \ 日付」か 2 列目以降が日付列のときだけ。
         var rr = rows.Count > 0 && !nameToI.ContainsKey(CsvUtil.NameMatchKey(rows[0].Count > 0 ? rows[0][0] : "")) && LooksLikeHeaderRow(rows[0]) ? 1 : 0;
+        // [Android 3.592.0 同期] ヘッダが Build() の実日付形式(M/D(曜))のときだけ、現在の期間と列位置で突き合わせる。
+        //   数字のみの日番号ヘッダ（位置指定・日付なしCSV）は対象外。
+        var headerDateMismatches = 0;
+        if (rr == 1)
+        {
+            for (var hj = 0; hj < Math.Min(p.T, rows[0].Count - 1); hj++)
+            {
+                var cell = (hj + 1 < rows[0].Count ? rows[0][hj + 1] : "").Trim();
+                if (HeaderDateCellRe.IsMatch(cell) && cell != ScheduleUtil.FormatDay(state.StartDate, hj)) headerDateMismatches++;
+            }
+        }
         while (rr < rows.Count)
         {
             var r = rows[rr];
@@ -133,7 +147,8 @@ public static class ScheduleCsvBridge
             schedule, report with { Logs = logs }, Matched: matched,
             UnknownCells: unknownTotal, UnknownSymbols: unknownTop,
             UnclosedQuote: parsedAll.UnclosedQuote,
-            AmbiguousNames: ambiguousNames, DuplicateRowNames: duplicateRowNames);
+            AmbiguousNames: ambiguousNames, DuplicateRowNames: duplicateRowNames,
+            HeaderDateMismatches: headerDateMismatches);
     }
 
     /// <summary>同名の職員が複数いて取り込まなかった氏名の案内（画面とログで同じ文言）。</summary>

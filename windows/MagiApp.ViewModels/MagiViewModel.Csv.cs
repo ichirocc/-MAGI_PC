@@ -435,14 +435,16 @@ public sealed partial class MagiViewModel
             var unk = res.UnknownCells > 0
                 ? $"｜読めない記号 {res.UnknownCells}セル({string.Join("・", res.UnknownSymbols)})は取り込めませんでした"
                 : "";
+            var dateWarn = res.HeaderDateMismatches > 0
+                ? $"｜⚠ CSVヘッダの日付が今の期間と{res.HeaderDateMismatches}列ズレています（列の位置で取り込みました）" : "";
             var dupWarn = (res.AmbiguousNames.Count > 0 ? $"｜⚠ {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}" : "") +
                 (res.DuplicateRowNames.Count > 0 ? $"｜⚠ 同じ職員の行が複数あり、後の行で上書きしました: {string.Join("・", res.DuplicateRowNames)}" : "");
             var msg = res.Matched >= 1 && res.Matched < total
-                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}{pinNote}"
-                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dupWarn}{pinNote}";
+                ? $"CSV取込完了: {res.Matched}/{total}名を更新（{total - res.Matched}名は氏名不一致でスキップ）｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dateWarn}{dupWarn}{pinNote}"
+                : $"CSV取込完了: {res.Matched}名を更新｜必須={res.Report.Hard} 合計={res.Report.Total}{unk}{quoteWarn}{dateWarn}{dupWarn}{pinNote}";
             await PushReportAsync(_state ?? st, res.Schedule, res.Report, transform: ui =>
             {
-                ui.MessageIsError = res.UnknownCells > 0 || partial || dupWarn.Length > 0;
+                ui.MessageIsError = res.UnknownCells > 0 || partial || res.HeaderDateMismatches > 0 || dupWarn.Length > 0;
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
