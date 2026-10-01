@@ -199,6 +199,42 @@ public class MagiViewModelSettingFixTest
         Assert.Single(vm._state!.Cons3n); // 先頭1件のみ削除・もう1件は残る
     }
 
+    [Fact]
+    public void ApplySettingFixDeleteDupSeqTellsTheUserWhenNothingMatches()
+    {
+        var st = MinimalState.Build(cons3n: new List<C3Row> { new(new[] { "A", "", "休" }) });
+        var vm = new MagiViewModel { _state = st };
+        var issue = new SettingIssue(
+            IssueKind.Constraint, "連続パターン「A→休」(c3n)", "重複した制約です", "片方を削除してください",
+            Action: SettingFixAction.DeleteDupSeq, SeqFamily: "c3n", SeqKey: "A→休");
+
+        vm.ApplySettingFix(issue);
+
+        Assert.Single(vm._state!.Cons3n);   // 空白を詰めた別の規則とは照合しない
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal("削除する重複が見つかりませんでした（すでに変更されています）", vm.Ui.Message);
+    }
+
+    [Fact]
+    public void ApplySettingFixCapDemandWithADayWritesOnlyThatDaysException()
+    {
+        var shifts = new List<Shift>
+        {
+            new("休", "休", "", "", ShiftRole.Rest),
+            new("A", "A", "3", ""),
+        };
+        var vm = new MagiViewModel { _state = MinimalState.Build(shifts: shifts) };
+        var issue = new SettingIssue(
+            IssueKind.Demand, "2日目 A", "必要3人ですが担当できるのは1人だけです", "下げてください",
+            Action: SettingFixAction.CapDemand, DemandShiftIdx: 1, DemandCap: 1, DemandDayIdx: 1);
+
+        vm.ApplySettingFix(issue);
+
+        Assert.Equal("3", vm._state!.Shifts[1].Need1);   // 標準は動かさない
+        Assert.Equal("1", vm._state!.NeedDay1["1,1"]);
+        Assert.False(vm._state!.NeedDay2.ContainsKey("1,1"));
+    }
+
     // ===================================================================
     // ApplySettingFix — ClampGroupRangeLo
     // ===================================================================

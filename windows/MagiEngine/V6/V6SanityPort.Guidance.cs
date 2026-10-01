@@ -46,6 +46,8 @@ public sealed record SettingIssue(
     string? NewLo = null,
     int? DemandShiftIdx = null,
     int? DemandCap = null,
+    // CapDemand: 日付つきの不足はその日の例外(NeedDay1/2)だけを書く。null は「全日が同じ上限で不足」の1件＝標準の必要数を下げる。
+    int? DemandDayIdx = null,
     string? GroupRangeFamily = null,
     C41Row? GroupRangeRow = null,
     // 意図した設定に由来する案内（上限 0 × 希望）。ログで「設定ミス」と呼ばない。
@@ -558,22 +560,46 @@ public static partial class V6SanityPort
         }
 
         // 3) 需要>担当可能人数
-        for (var j = 0; j < p.T; j++)
+        //    直し方は「その日の例外」が基本（標準の必要数を下げると他の日まで動く）。全日が同じ上限で不足し、
+        //    日別の例外が1つも無いときだけ、1件にまとめて標準を下げる（31 回タップさせない）。
+        for (var k = 0; k < p.K; k++)
         {
-            for (var k = 0; k < p.K; k++)
+            var sym = Sym(k);
+            var shortDays = new List<(int Day, int Need, int Capable)>();
+            for (var j = 0; j < p.T; j++)
             {
                 var need = EffectiveDemand(p, k, j);
                 if (need <= 0) continue;
                 var capable = PlaceableFor(p, k, j);   // [3.507.5] 置ける人数（ForcedCovU と同じ定義）
-                if (need > capable)
-                {
-                    var sym = Sym(k);
-                    outList.Add(new SettingIssue(IssueKind.Demand, $"{SafeDayLabel(state.StartDate, j)} {sym}",
-                        $"必要{need}人ですが担当できるのは{capable}人だけです",
-                        $"担当できる職員を増やすか、必要人数を{capable}人以下に下げてください",
-                        Action: SettingFixAction.CapDemand, ActionLabel: $"必要数を{capable}人に下げる",
-                        DemandShiftIdx: k, DemandCap: capable));
-                }
+                if (need > capable) shortDays.Add((j, need, capable));
+            }
+            if (shortDays.Count == 0) continue;
+            var caps = shortDays.Select(x => x.Capable).ToHashSet();
+            var kk = k;
+            var hasDayException = Enumerable.Range(0, p.T).Any(j =>
+            {
+                var key = $"{kk},{j}";
+                return (state.NeedDay1.TryGetValue(key, out var a1) && !string.IsNullOrWhiteSpace(a1))
+                    || (state.NeedDay2.TryGetValue(key, out var a2) && !string.IsNullOrWhiteSpace(a2));
+            });
+            if (p.T >= 2 && shortDays.Count == p.T && caps.Count == 1 && !hasDayException)
+            {
+                var capable = caps.First();
+                var need = shortDays[0].Need;
+                outList.Add(new SettingIssue(IssueKind.Demand, $"全日 {sym}",
+                    $"必要{need}人ですが担当できるのは{capable}人だけです",
+                    $"担当できる職員を増やすか、必要人数を{capable}人以下に下げてください",
+                    Action: SettingFixAction.CapDemand, ActionLabel: $"必要数を{capable}人に下げる",
+                    DemandShiftIdx: k, DemandCap: capable));
+                continue;
+            }
+            foreach (var (j, need, capable) in shortDays)
+            {
+                outList.Add(new SettingIssue(IssueKind.Demand, $"{SafeDayLabel(state.StartDate, j)} {sym}",
+                    $"必要{need}人ですが担当できるのは{capable}人だけです",
+                    $"担当できる職員を増やすか、必要人数を{capable}人以下に下げてください",
+                    Action: SettingFixAction.CapDemand, ActionLabel: $"必要数を{capable}人に下げる",
+                    DemandShiftIdx: k, DemandCap: capable, DemandDayIdx: j));
             }
         }
 
@@ -946,15 +972,19 @@ public static partial class V6SanityPort
         var seen = new HashSet<string>();
         foreach (var r in rows)
         {
-            var parts = new List<string>();
-            foreach (var item in r.Pattern)
-            {
-                if (string.IsNullOrWhiteSpace(item)) break;
-                parts.Add(item);
-            }
-            var key = string.Join("→", parts);
+            var key = C3SeqKey(r.Pattern);
             if (string.IsNullOrWhiteSpace(key)) continue;
             if (!seen.Add(key)) outList.Add($"{name}:{key}");
         }
     }
+
+    /// <summary>連続パターン行の本体＝<b>最初の空白まで</b>（<c>Problem.ResolveC3</c> と同じ。詰めない）。重複検出・削除・禁止の並びの照合はこれを共有する。</summary>
+    public static IReadOnlyList<string> C3SeqBody(IReadOnlyList<string> pattern)
+    {
+        for (var i = 0; i < pattern.Count; i++)
+            if (string.IsNullOrWhiteSpace(pattern[i])) return pattern.Take(i).ToList();
+        return pattern;
+    }
+
+    public static string C3SeqKey(IReadOnlyList<string> pattern) => string.Join("→", C3SeqBody(pattern));
 }
