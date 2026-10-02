@@ -328,6 +328,7 @@ public static class FixSuggester
         /// <summary>Phase 6: エジェクションチェーン（不足シフトを貪欲に最大 ChainRounds コマ充足。文書§2 玉突き）。</summary>
         private void Chains()
         {
+            var s0 = _s.Copy2D();
             foreach (var i in TargetStaff())
             {
                 if (TimeUp()) break;
@@ -340,7 +341,8 @@ public static class FixSuggester
                     var applied = new List<(int Day, int SavedShift)>();   // 復元用
                     while (picked.Count < Limits.ChainRounds && !TimeUp())
                     {
-                        // 現在の積み上げ盤面のスコアを基準に、x へ変えて更に改善する可動コマを1つ選ぶ（単調改善を保証）
+                        // 現在の積み上げ盤面のスコアを基準に、x へ変えて更に改善する可動コマを1つ選ぶ（単調改善を保証）。
+                        // 選ぶ規則は TryOps・Windows と同じ（別の HARD 族への入替えや回数固定を崩すコマを途中で選ぶと連鎖ごと棄却される）。
                         var bestRep = UnifiedViolationChecker.Check(_state, _s);
                         var bestJ = -1;
                         var bestSaved = -1;
@@ -351,8 +353,10 @@ public static class FixSuggester
                             if (a == x) continue;
                             _s[i][j] = x;
                             var rep = UnifiedViolationChecker.Check(_state, _s);
+                            var ok = UnifiedViolationChecker.BetterReport(rep, bestRep) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
+                                !V6SearchOperators.ExactPinRegression(_p, s0, _s);
                             _s[i][j] = a;
-                            if (UnifiedViolationChecker.BetterReport(rep, bestRep)) { bestRep = rep; bestJ = j; bestSaved = a; }
+                            if (ok) { bestRep = rep; bestJ = j; bestSaved = a; }
                         }
                         if (bestJ < 0) break;
                         _s[i][bestJ] = x;

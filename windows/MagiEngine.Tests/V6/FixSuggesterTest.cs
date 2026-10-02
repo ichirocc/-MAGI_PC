@@ -112,4 +112,33 @@ public class FixSuggesterTest
         var results = FixSuggester.Suggest(st, sched, maxResults: 20, deadlineMs: 4000L);
         Assert.DoesNotContain(results, r => r.Ops.Any(op => op.Staff == 0 && op.ToShift == 1));
     }
+
+    /// <summary>[Android 同日同期] 連鎖の途中のコマも TryOps と同じ規則で選ぶ。D 必要 1・禁止連 D-D・A の D 下限 3、不足は隣り合う日1・日2。
+    /// 旧: 2 コマ目に日2（不足−1 と引き換えに禁止連＋1＝HARD 同数で weighted が小さい）を選び、最後に連鎖ごと棄却されて
+    /// Chain 0 件。新: 日1→日3→日5 の 3 コマ（2 コマの手と重ならない）が出る。</summary>
+    [Fact]
+    public void ChainRoundDoesNotPickCellThatTradesIntoAnotherHardFamily()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-08-03", endDate: "2026-08-08",
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "1", ""), new("N", "N", "", "") },
+            groups: new List<Group> { new("G0", "G0") }, staffList: new List<Staff> { new("A", 0), new("B", 0), new("C", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
+            schedule: new List<IReadOnlyList<int>>
+            {
+                new List<int> { 0, 0, 0, 0, 0, 0 },   // A: 休休休休休休
+                new List<int> { 1, 0, 0, 1, 0, 1 },   // B: D休休D休D
+                new List<int> { 0, 0, 0, 0, 1, 0 },   // C: 休休休休D休
+            },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new("3", "") },
+            cons3n: new[] { new C3Row(new[] { "D", "D" }) });
+        var sched = st.Schedule.Select(r => r.ToArray()).ToArray();
+        var baseRep = UnifiedViolationChecker.Check(st, sched);
+        Assert.Equal(2, baseRep.Breakdown.GetValueOrDefault("covU", 0));
+        Assert.Equal(0, baseRep.Breakdown.GetValueOrDefault("c3n", 0));
+        var chains = FixSuggester.Suggest(st, sched, maxResults: 200, deadlineMs: 20000L).Where(r => r.Kind == FixKind.Chain).ToList();
+        var want = new HashSet<FixCell> { new(0, 1, 1), new(0, 3, 1), new(0, 5, 1) };
+        Assert.True(chains.Any(c => c.Ops.ToHashSet().SetEquals(want) && c.DeltaHard == -1),
+            string.Join(" / ", chains.Select(c => string.Join(",", c.Ops.Select(op => $"{op.Staff}.{op.Day}.{op.ToShift}")))));
+    }
 }
