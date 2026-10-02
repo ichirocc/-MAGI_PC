@@ -166,8 +166,9 @@ public static partial class V6NativeOptimizer
                 var k = outSched[i][j];
                 if (k >= 0 && k < p.K) counts[i][k]++;
             }
-        // MirrorCore（評価器）のfair計算と同一式（群×担当ONシフトごとに round(平均) からのL1偏差）で
-        // 職員ごとの負担を集計する。
+        // 職員ごとの負担＝群×担当ONシフトごとに、群の全メンバーの生回数 round(平均) からの L1 偏差の和。
+        // 評価器の fair（Problem.FairDevOfBucket＝3.541.0 達成率モード、母集団は MayPlace/回数>0）とは別の旧式。
+        // 評価器の式へ揃えるのは交換相手の選び方＝探索動学の変更なので別件（Kotlin が先）。
         var burden = new double[p.S];
         for (var g = 0; g < p.G; g++)
         {
