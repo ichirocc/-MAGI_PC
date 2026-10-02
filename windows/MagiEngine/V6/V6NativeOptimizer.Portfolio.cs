@@ -759,7 +759,7 @@ public static partial class V6NativeOptimizer
                             {
                                 V6Algorithm.Alns => await RunAlns(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, cancellationToken).ConfigureAwait(false),
                                 V6Algorithm.Rsi => await RunRsi(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
-                                _ => await RunRsiPlus(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken).ConfigureAwait(false),
+                                _ => await RunRsiPlus(state, start.Copy2D(), roleOptions, quantum, StopRole, Progress, workerHf63, cancellationToken, workerLabel: $"W{i} epoch{epoch + 1}").ConfigureAwait(false),
                             };
                         }
                         catch (OperationCanceledException) { throw; }

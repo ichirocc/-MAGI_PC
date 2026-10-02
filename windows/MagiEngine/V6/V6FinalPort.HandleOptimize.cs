@@ -217,6 +217,7 @@ public static partial class V6FinalPort
         // [レビュー#9/3.230.0] 「最良改善」と「フェーズ遷移」の時計を分離。フェーズ遷移は短い個別猶予
         //   (phaseGraceMs)としてのみ機能させ、「本当に改善が無い時間」は lastBestImproveMs 単独で計測する。
         long lastBestImproveMs = startMs;
+        long lastBeatInputMs = -1;
         long lastPhaseChangeMs = startMs;
         bool stagnationFired = false;
         // [停滞時間のログ出力] 発火の瞬間に「何ms無改善だったか」を記録する。
@@ -268,6 +269,7 @@ public static partial class V6FinalPort
                         Volatile.Write(ref bestHard, h); bTotal = t; bWeighted = wgt;
                         Volatile.Write(ref lastBestImproveMs, NowMs());
                         Volatile.Write(ref lastBestImproveIters, Volatile.Read(ref observedIters));   // [3.375.0]
+                        if (UnifiedViolationChecker.BetterReport(report, inputReport)) Volatile.Write(ref lastBeatInputMs, Volatile.Read(ref lastBestImproveMs));
                         // [3.346.0/実機ログ] 停滞ラッチを解除する。shouldStop は単調でない。
                         Volatile.Write(ref stagnationFired, false);
                         Volatile.Write(ref stagnationDurationMs, -1L);
@@ -395,6 +397,7 @@ public static partial class V6FinalPort
         // [3.377.0/実機ログ起因] 停滞ウォッチドッグの遠隔測定は探索フェーズの話。探索終了時点でスナップショット
         //   し、ウォッチドッグの数字は全てこの時刻基準で揃える（後処理・追加精製の影響を受けない）。
         var lastImpAtSearchEnd = Volatile.Read(ref lastBestImproveMs);
+        var lastBeatInputAtSearchEnd = Volatile.Read(ref lastBeatInputMs);
         var lastPhaseAtSearchEnd = Volatile.Read(ref lastPhaseChangeMs);
         var itersAtSearchEnd = Volatile.Read(ref observedIters);
         var lastImpItersAtSearchEnd = Volatile.Read(ref lastBestImproveIters);
@@ -595,6 +598,7 @@ public static partial class V6FinalPort
             {
                 new(level: "I", tag: "Watchdog",
                     message: $"停滞監視: 最終改善=経過{Math.Max((lastImp - startMs) / 1000, 0)}s・" +
+                        $"入力超えの最終改善={(lastBeatInputAtSearchEnd < 0 ? "なし" : $"経過{Math.Max((lastBeatInputAtSearchEnd - startMs) / 1000, 0)}s")}・" +
                         $"探索終了時の停滞{endStallS}s・実効閾値({kind})・" +
                         $"希望衝突の床{wishFloorLogged}={(wishReachedEnd ? "到達" : "未到達")}(best {Volatile.Read(ref bestHard)})・" +
                         $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(Volatile.Read(ref stagnationFired) ? "あり" : "なし")}" +

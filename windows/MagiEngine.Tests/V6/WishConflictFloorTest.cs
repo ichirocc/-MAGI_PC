@@ -116,6 +116,7 @@ public class WishConflictFloorTest
         Assert.Equal(1, res.Report.Hard);
         Assert.Contains(res.Logs, l => l.Tag == "EarlyStop" && l.Message.Contains("希望衝突の床に到達＝E0B"));
         Assert.Contains(res.Logs, l => l.Tag == "Watchdog" && l.Message.Contains("希望衝突の床1=到達"));
+        Assert.Contains(res.Logs, l => l.Tag == "Watchdog" && System.Text.RegularExpressions.Regex.IsMatch(l.Message, "入力超えの最終改善=(なし|経過\\d+s)・"));
         Assert.True(sw.ElapsedMilliseconds < 55_000, $"早く返す: {sw.ElapsedMilliseconds}ms");
     }
 }

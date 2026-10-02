@@ -44,11 +44,15 @@ public static partial class V6NativeOptimizer
         Func<bool>? shouldStop = null,
         Action<string, ViolationReport?, long, long>? onProgress = null,
         Hf63Infeasibility? sharedHf63 = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string workerLabel = "")
     {
         var started = NowMs();
         var stop = shouldStop ?? (() => false);
         var logs = new List<MirrorLog>();
+        var who = workerLabel.Length == 0 ? "" : $"[{workerLabel}] ";
+        static string ScoreOf(ViolationReport r) =>
+            $"HARD={r.Hard} total={r.Total} weighted={r.WeightedScore.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}";
 
         // [3.600.0, Kotlin原本] 入口で既に停止済みなら位相下限ぶんの無駄走りをせず入力をそのまま返す
         //   （keep-best不変）。
@@ -67,22 +71,24 @@ public static partial class V6NativeOptimizer
         //   実機で観測された量子比最大約181倍がどのフェーズで生じたか従来ログでは特定できなかったため）。
         var seedT0 = NowMs();
         var seed = await RunV5(state, initial, options, seedSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase1 Seed: HARD={seed.Report.Hard} total={seed.Report.Total} 実測{NowMs() - seedT0}ms(予算{seedSec}000ms)"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase1 Seed: {ScoreOf(seed.Report)} 実測{NowMs() - seedT0}ms(予算{seedSec}000ms)"));
 
         var rsiT0 = NowMs();
-        var rsi = stop()
+        var rsiSkipped = stop();
+        var rsi = rsiSkipped
             ? seed
             : await RunRsi(state, seed.Schedule, options, rsiSec, stop, onProgress, sharedHf63, cancellationToken).ConfigureAwait(false);
         var baseResult = Better(rsi.Report, seed.Report) ? rsi : seed;
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase2 Hypothesis: HARD={baseResult.Report.Hard} total={baseResult.Report.Total} 実測{NowMs() - rsiT0}ms(予算{rsiSec}000ms)"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase2 Hypothesis{(rsiSkipped ? "(スキップ)" : "")}: {ScoreOf(baseResult.Report)} 実測{NowMs() - rsiT0}ms(予算{rsiSec}000ms)"));
 
         var alnsT0 = NowMs();
-        var refine = stop()
+        var refineSkipped = stop();
+        var refine = refineSkipped
             ? baseResult
             : await RunAlns(state, baseResult.Schedule, options with { Restarts = Math.Max(1, options.Restarts) }, alnsSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
         var best = Better(refine.Report, baseResult.Report) ? refine : baseResult;
         var bestSched = best.Schedule;
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase3 Refine: HARD={refine.Report.Hard} total={refine.Report.Total} 実測{NowMs() - alnsT0}ms(予算{alnsSec}000ms)"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase3 Refine{(refineSkipped ? "(スキップ)" : "")}: {ScoreOf(refine.Report)} 実測{NowMs() - alnsT0}ms(予算{alnsSec}000ms)"));
 
         // [HF361/528/541移植, Kotlin原本] EarlyChain: Refine 確定後の停滞境界で Chain3/4(常時)+Rect/BlkN(rectSwap)を発火
         {
@@ -109,11 +115,12 @@ public static partial class V6NativeOptimizer
         }
 
         var polishT0 = NowMs();
-        var polish = stop()
+        var polishSkipped = stop();
+        var polish = polishSkipped
             ? new PolishResult(bestSched, Array.Empty<MirrorLog>(), 0L, UnifiedViolationChecker.Check(state, bestSched))
             : Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
         var report = polish.Report;
-        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"Phase4 Polish: HARD={report.Hard} total={report.Total} 実測{NowMs() - polishT0}ms(予算{polishSec}000ms) 全体実測{NowMs() - started}ms(予算{budgetSec}000ms)"));
+        logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase4 Polish{(polishSkipped ? "(スキップ)" : "")}: {ScoreOf(report)} 実測{NowMs() - polishT0}ms(予算{polishSec}000ms) 全体実測{NowMs() - started}ms(予算{budgetSec}000ms)"));
 
         return new V6OptimizerResult(
             polish.Schedule,

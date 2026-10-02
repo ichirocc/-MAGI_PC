@@ -151,7 +151,7 @@ public static partial class V6NativeOptimizer
                 (i, o, prog) => RunRsi(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, cancellationToken: cancellationToken),
                 cancellationToken).ConfigureAwait(false),
             V6Algorithm.RsiPlus => await RunMultiWorker(w, options, OnProgress,
-                (i, o, prog) => RunRsiPlus(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, cancellationToken: cancellationToken),
+                (i, o, prog) => RunRsiPlus(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, workerLabel: $"仮説{i}", cancellationToken: cancellationToken),
                 cancellationToken).ConfigureAwait(false),
             // [3.267.0/adaptive hypothesis epochs, Kotlin原本] 停滞/basin重複を検知し、エリートを保存
             //   しながら役割を再配属する非同期適応ポートフォリオ。

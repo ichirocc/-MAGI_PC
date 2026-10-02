@@ -188,3 +188,20 @@ public class V6NativeOptimizerRsiPlusTest
         Assert.Equal(V6Algorithm.RsiPlus, result.Algorithm);
     }
 }
+
+public class RsiPlusPhaseLogTest
+{
+    [Fact]
+    public async Task phaseLinesCarryWeightedScoreWorkerLabelAndSkipMarker()
+    {
+        var st = StateJsonSerializer.Parse(FixtureLoader.ReadRaw("golden_state.json"));
+        var sw = Stopwatch.StartNew();
+        var res = await V6NativeOptimizer.RunRsiPlus(st, new Problem(st).InitialAssignment(), new V6OptimizerOptions(Workers: 1), budgetSec: 40,
+            shouldStop: () => sw.ElapsedMilliseconds > 500, workerLabel: "仮説0");
+        var lines = res.PhaseLogs.Where(l => l.Tag == "RSIPlus").Select(l => l.Message).ToList();
+        var all = string.Join("\n", lines);
+        Assert.True(lines.Any(m => m.StartsWith("[仮説0] Phase1 Seed: ") && m.Contains("weighted=")), all);
+        foreach (var ph in new[] { "Phase2 Hypothesis(スキップ)", "Phase3 Refine(スキップ)", "Phase4 Polish(スキップ)" })
+            Assert.True(lines.Any(m => m.Contains(ph) && m.Contains("weighted=")), all);
+    }
+}
