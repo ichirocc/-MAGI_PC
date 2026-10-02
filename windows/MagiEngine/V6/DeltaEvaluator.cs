@@ -191,13 +191,19 @@ public sealed class DeltaEvaluator
         // [統一c1] c1 にも checker 重み(50)を適用（_sc1 は #fire 生カウント、canDoガード済）。
         // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める。
         // [3.522.0/HF77明示数値指示・全面見直し] 重み表全面改定（経緯は Android docs/history/3.4xx.md）。
-        long soft = _sc1 * 50 + _sc2 * 4 + _sc41 * 9 + _sc42 * 9 + _sc41s * 10 + _sc42s * 10 + _sc3 * 15 + _sc3m * 6 + _sc3mn * 90
-                    + _hct + _sApt * 4 + _sFair * 2 + _sWeekly * 2 + _scovO * 10;
+        long soft = WeightedSoft(_sc1, _sc2, _sc41, _sc42, _sc41s, _sc42s, _sc3, _sc3m, _sc3mn, _hct, _sApt, _sFair, _sWeekly, _scovO);
         return h1 * Evaluator.SCORE_HARD_UNIT + soft;
     }
 
+    /// <summary>SOFT の重み付き和。線形なので合計にも差分にも同じ式を使う（ScoreFrom と PreviewMove の単一ソース）。</summary>
+    private static long WeightedSoft(
+        long c1, long c2, long c41, long c42, long c41s, long c42s, long c3, long c3m, long c3mn,
+        long ct, long apt, long fair, long weekly, long covO)
+        => c1 * 50 + c2 * 4 + c41 * 9 + c42 * 9 + c41s * 10 + c42s * 10 + c3 * 15 + c3m * 6 + c3mn * 90
+           + ct + apt * 4 + fair * 2 + weekly * 2 + covO * 10;
+
     /// <summary>Preview the score after moving (i,j) -&gt; nw, stashing deltas for <see cref="Commit"/>. No mutation of totals.</summary>
-    private long PreviewMove(int i, int j, int nw)
+    internal long PreviewMove(int i, int j, int nw)
     {
         // [3.410.0/D-02] 旧: nw を無検証で cntDay[nw][j] 等の添字に使っており、範囲外で即座に
         // 添字例外になった。正規の探索オペレータは allowedShiftsForStaff から選ぶので到達しないが、
@@ -403,12 +409,7 @@ public sealed class DeltaEvaluator
 
         // [統一b] dCt(range) は SOFT へ移動（hard から除外）。
         long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV + _dC3w;
-        // [3.522.0] c3/c3m/c3mn/c1/c41s/c42s/c2/apt/fair/weekly/covO の delta にも ScoreFrom と同じ係数を適用。
-        // [C#移植上の修正] dCovO に重み(×10)が欠けていた（ScoreFrom の _scovO*10 と不一致）。PreviewMove の
-        // 戻り値は現状どの呼出側も参照しない（Apply は Commit 後の Score() を返す）ため実害は無かったが、
-        // 将来この戻り値を直接使うテスト/呼出が増えたときの静かな不一致を防ぐため揃えておく。
-        long dSoft = _dC1 * 50 + _dC2 * 4 + _dC41 + _dC42 + _dC41s * 6 + _dC42s * 6 + _dC3 * 15 + _dC3m * 10 + _dC3mn * 90
-                   + _dCt + _dApt * 4 + _dFair * 2 + _dWeekly * 2 + _dCovO * 10;
+        long dSoft = WeightedSoft(_dC1, _dC2, _dC41, _dC42, _dC41s, _dC42s, _dC3, _dC3m, _dC3mn, _dCt, _dApt, _dFair, _dWeekly, _dCovO);
         return Score() + dHard * Evaluator.SCORE_HARD_UNIT + dSoft;
     }
 

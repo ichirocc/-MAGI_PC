@@ -55,7 +55,7 @@ public class V6HotfixPassesC1WindowTest
     /// 手R1(day0とday2を同時に交換)は: i 1→0fire(-1)・i2 1→1fire(±0, 窓[0,1]解消/窓[1,2]新規で相殺)=総和-1で採用。
     /// 両職員とも同一グループ・両シフト担当可、needもwishもcons3nも無し＝covU/HARD不変。
     /// [3.287.0 keep-best統一で強化] docstring どおりの「回数固定職員」を staffRange の厳密ピン(X=2固定)で
-    /// 実際に表現する。ピンを立てることで count-changing 手は low/high(90/25)+exactPinRegression で拒否され、
+    /// 実際に表現する。ピンを立てることで count-changing 手は low/high(120/25)+exactPinRegression で拒否され、
     /// 本テストの意図（移設だけが唯一の改善手である局面で R1 が機能する）が成立する。
     /// </summary>
     private static MagiState MirrorState()

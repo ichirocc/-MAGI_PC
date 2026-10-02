@@ -250,4 +250,27 @@ public class ParityTest
         var missing = MirrorKeys.All.Where(k => !everFired.Contains(k)).ToList();
         Assert.True(missing.Count == 0, $"families that never fired across the whole run: {string.Join(", ", missing)}");
     }
+
+    /// <summary>PreviewMove の戻り値（差分の見積り）が Commit 後の Score と一致する＝ScoreFrom と同じ係数（c41/c42/c41s/c42s/c3m を含む）。</summary>
+    [Fact]
+    public void PreviewMoveReturnEqualsScoreAfterCommit()
+    {
+        var state = BuildAllFamiliesState();
+        var p = new Problem(state);
+        var de = new DeltaEvaluator(p);
+        de.Reset(ScheduleUtil.NormalizeSchedule(state.Schedule.ToIntArray2D(), p));
+        var fams = new HashSet<string> { "c41", "c42", "c41s", "c42s", "c3m" };
+        var moved = new HashSet<string>();
+        var rng = new Random(777);
+        for (int step = 0; step < 20_000; step++)
+        {
+            int i = rng.Next(p.S), j = rng.Next(p.T), nw = rng.Next(p.K);
+            var before = de.FamilyRaw();
+            long predicted = de.PreviewMove(i, j, nw);
+            long after = de.Apply(i, j, nw);
+            Assert.True(after == predicted, $"PreviewMove({i},{j},{nw}): predicted={predicted} after={after}");
+            foreach (var (k, v) in de.FamilyRaw()) if (fams.Contains(k) && v != before[k]) moved.Add(k);
+        }
+        Assert.Equal(fams.OrderBy(x => x), moved.OrderBy(x => x));
+    }
 }
