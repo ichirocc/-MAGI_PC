@@ -156,11 +156,12 @@ public static partial class V6PortAnalyzer
     public static CoverageDiagnosis DiagnoseCoverage(
         MagiState state,
         int[][]? schedule = null,
-        ViolationReport? report = null)
+        ViolationReport? report = null,
+        bool quantitativeRangeEval = false)
     {
         var sched = schedule ?? state.Schedule.ToIntArray2D();
         var rep = report ?? UnifiedViolationChecker.Check(state, sched);
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var norm = ScheduleUtil.NormalizeSchedule(sched, p);
         var cov = ScheduleUtil.Coverage(p, norm);
         var (list, total, infeasible, fixable) = DiagnoseShortfalls(state, p, norm, cov);
@@ -382,7 +383,7 @@ public static partial class V6PortAnalyzer
                             probeBudget--;
                             probedAny = true;
                             probe[i][j] = m;
-                            var after = UnifiedViolationChecker.Check(state, probe);
+                            var after = UnifiedViolationChecker.Check(state, probe, p.QuantitativeRangeEval);
                             probe[i][j] = k;
                             if (UnifiedViolationChecker.BetterReport(after, report)) { freeImproving++; break; }
                             var worst = V6SearchOperators.WorstWorsenedFamily(after, report);

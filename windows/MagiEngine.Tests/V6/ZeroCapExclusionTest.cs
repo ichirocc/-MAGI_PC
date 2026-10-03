@@ -92,6 +92,21 @@ public class ZeroCapExclusionTest
         Assert.DoesNotContain(res.Logs, l => l.Tag == "Sentinel");
     }
 
+    /// <summary>[Android 3.512.1/回帰] 本番の呼出元（EngineOptimizationService）は onProgress/cancellationToken を
+    /// **位置引数**で渡す（Kotlin のトレーリングラムダに当たる）。quantitativeRangeEval を末尾以外へ足すと
+    /// 実引数がずれる＝同じ呼出形をここで固定する。</summary>
+    [Fact]
+    public async Task HandleOptimizeAcceptsOnProgressAsTrailingLambdaLikeProductionCallers()
+    {
+        var s = State();
+        var progressCalls = 0;
+        var res = await V6FinalPort.HandleOptimize(s, 1, null, 1, false, V6Algorithm.V5, true,
+            (phase, _, _, _) => { if (phase.Length > 0) Interlocked.Increment(ref progressCalls); },
+            CancellationToken.None);
+        Assert.True(progressCalls > 0);
+        Assert.Equal(0, res.Report.Hard);
+    }
+
     /// <summary>lastOptimizerSeed は静的なので、他の HandleOptimize と並列に走らない collection に置く。</summary>
     [Collection(nameof(HandleOptimizeSeedCollection))]
     public class Seed

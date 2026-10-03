@@ -58,7 +58,7 @@ public static partial class V6NativeOptimizer
         //   （keep-best不変）。
         if (stop())
         {
-            var rep0 = UnifiedViolationChecker.Check(state, initial);
+            var rep0 = UnifiedViolationChecker.Check(state, initial, options.QuantitativeRangeEval);
             return new V6OptimizerResult(initial, rep0, V6Algorithm.RsiPlus, logs, 0L, 0L);
         }
 
@@ -93,7 +93,7 @@ public static partial class V6NativeOptimizer
         // [HF361/528/541移植, Kotlin原本] EarlyChain: Refine 確定後の停滞境界で Chain3/4(常時)+Rect/BlkN(rectSwap)を発火
         {
             var lr = V6LateOperators.Improve(state, bestSched, best.Report,
-                new JavaRandom(ActualSeed(options.Seed) ^ 0x528L), started + budgetSec * 1000L, rectEnabled: options.RectSwap);
+                new JavaRandom(ActualSeed(options.Seed) ^ 0x528L), started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval);
             var fired = lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0;
             // [監査#1, Kotlin原本コメント] Chain3/4の受理(gateW)はweighted単層でHARD増を相殺受理し得るため、
             //   採用は runRsi と同じ Better（hard→weighted→total）でゲートする（素通しでHARD悪化を最終出力しない）。
@@ -117,8 +117,8 @@ public static partial class V6NativeOptimizer
         var polishT0 = NowMs();
         var polishSkipped = stop();
         var polish = polishSkipped
-            ? new PolishResult(bestSched, Array.Empty<MirrorLog>(), 0L, UnifiedViolationChecker.Check(state, bestSched))
-            : Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken);
+            ? new PolishResult(bestSched, Array.Empty<MirrorLog>(), 0L, UnifiedViolationChecker.Check(state, bestSched, options.QuantitativeRangeEval))
+            : Hf80PostPolish(state, bestSched, polishSec, ActualSeed(options.Seed) ^ 0x555L, stop, cancellationToken, options.QuantitativeRangeEval);
         var report = polish.Report;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase4 Polish{(polishSkipped ? "(スキップ)" : "")}: {ScoreOf(report)} 実測{NowMs() - polishT0}ms(予算{polishSec}000ms) 全体実測{NowMs() - started}ms(予算{budgetSec}000ms)"));
 

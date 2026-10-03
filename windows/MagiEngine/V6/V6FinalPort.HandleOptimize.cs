@@ -79,7 +79,8 @@ public static partial class V6FinalPort
         long? seed = null,
         // [E0/測定中] 希望衝突の床に到達（WishFloorReached）したら頭打ち。E0A＝後処理は通常どおり、E0B＝後処理の研磨を省いて時間を返す。
         // 既定 OFF。前面の実行だけが PolishGate.WishConflictFloorMode を渡す（背景は渡さない）。
-        WishFloorMode wishFloorMode = WishFloorMode.Off)
+        WishFloorMode wishFloorMode = WishFloorMode.Off,
+        bool quantitativeRangeEval = false)
     {
         static long NowMs() => EngineClock.NowMs();
         static int TryOrZero(Func<int> f)
@@ -117,13 +118,13 @@ public static partial class V6FinalPort
 
         var startMs = NowMs();
 
-        var baseProblem = ScheduleUtil.CachedProblem(state);
+        var baseProblem = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         // [#41] 手動固定セルは入口で固定の値に合わせる（画面の編集で常に揃っているので通常は同じ盤面）。
         var normInput = baseProblem.WithManualPins(ScheduleUtil.NormalizeSchedule(sched, baseProblem));
         // [3.507.0] 番兵の基準は「個人上限 0 のセルを外した入力」。上限 0 のセルは最適化器が置かない（MayPlace）ので、
         //   生の入力（上限超過 45 のまま）と比べると、外した代償のぶん結果が「悪化」に見えて入力へ戻ってしまう。
-        var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput);
-        var inputReport = UnifiedViolationChecker.Check(state, cappedInput);
+        var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput, quantitativeRangeEval);
+        var inputReport = UnifiedViolationChecker.Check(state, cappedInput, quantitativeRangeEval);
         IReadOnlyList<MirrorLog> cappedLog = cappedCount > 0
             ? new[] { new MirrorLog(tag: "CapZero", message: $"個人上限 0 のセル {cappedCount} 件を最適化の対象外として置き直しから開始（設定どおり 0 にする。表示・重みは不変）") }
             : Array.Empty<MirrorLog>();
@@ -147,21 +148,21 @@ public static partial class V6FinalPort
         var opts = requestedAlgorithm != V6Algorithm.Auto
             ? new V6OptimizerOptions(
                 Algorithm: requestedAlgorithm, TotalBudgetSec: Math.Max(seconds, 1), Workers: effWorkers,
-                SoftPolish: softPolish, Restarts: 2, PostPolish: false)
+                SoftPolish: softPolish, Restarts: 2, PostPolish: false, QuantitativeRangeEval: quantitativeRangeEval)
             : plan switch
             {
                 OptimizationPlan.V5 v5 => new V6OptimizerOptions(
                     Algorithm: V6Algorithm.V5, TotalBudgetSec: v5.Seconds, Workers: effWorkers,
-                    SoftPolish: softPolish, Restarts: 1, PostPolish: false),
+                    SoftPolish: softPolish, Restarts: 1, PostPolish: false, QuantitativeRangeEval: quantitativeRangeEval),
                 OptimizationPlan.ALNS alns => new V6OptimizerOptions(
                     Algorithm: V6Algorithm.Alns, TotalBudgetSec: alns.Seconds, Workers: effWorkers,
-                    SoftPolish: softPolish, Restarts: alns.Restarts, PostPolish: false),
+                    SoftPolish: softPolish, Restarts: alns.Restarts, PostPolish: false, QuantitativeRangeEval: quantitativeRangeEval),
                 OptimizationPlan.RSIThenALNS rsiThenAlns => new V6OptimizerOptions(
                     Algorithm: V6Algorithm.Rsi, TotalBudgetSec: rsiThenAlns.RsiSec, Workers: effWorkers,
-                    SoftPolish: softPolish, Restarts: rsiThenAlns.AlnsRestarts, PostPolish: false),
+                    SoftPolish: softPolish, Restarts: rsiThenAlns.AlnsRestarts, PostPolish: false, QuantitativeRangeEval: quantitativeRangeEval),
                 OptimizationPlan.Portfolio portfolio => new V6OptimizerOptions(
                     Algorithm: V6Algorithm.Portfolio, TotalBudgetSec: portfolio.Seconds, Workers: effWorkers,
-                    SoftPolish: softPolish, Restarts: 2, PostPolish: false),
+                    SoftPolish: softPolish, Restarts: 2, PostPolish: false, QuantitativeRangeEval: quantitativeRangeEval),
                 _ => throw new InvalidOperationException($"未知の OptimizationPlan: {plan}"),
             };
         // [HF532移植] optFlags.rectSwap 既定ON。
@@ -208,7 +209,7 @@ public static partial class V6FinalPort
         {
             try
             {
-                var r = UnifiedViolationChecker.Check(state, board);
+                var r = UnifiedViolationChecker.Check(state, board, quantitativeRangeEval);
                 return r.Hard == wishFloorLogged && V6SanityPort.HardAllWishOrigin(wishP, board, r, wishParts.Days);
             }
             catch (Exception) { return false; }
@@ -419,7 +420,7 @@ public static partial class V6FinalPort
             ? archivedElites
             : chained.Alternatives
                 .Select((sc, index) => AdaptiveElite.Create(
-                    sc.Copy2D(), UnifiedViolationChecker.Check(state, sc),
+                    sc.Copy2D(), UnifiedViolationChecker.Check(state, sc, quantitativeRangeEval),
                     HypothesisEpochRole.EliteRelink, index, 0, false))
                 .ToList();
         var integrated = EliteIntegrationPolish.Apply(
@@ -432,12 +433,13 @@ public static partial class V6FinalPort
 
         // [E0B] 希望衝突の床で頭打ちしたら後処理の研磨を丸ごと省き、検査・HF70 だけにする（最終番兵は下で通常どおり）。
         var post = E0bSkip()
-            ? V6HotfixPasses.MinimalPost(state, integrated.Schedule, label.Tech)
+            ? V6HotfixPasses.MinimalPost(state, integrated.Schedule, label.Tech, quantitativeRangeEval)
             : V6HotfixPasses.RunPostOptimization(
                 state, integrated.Schedule, label.Tech,
                 shouldStop: PostShouldStop,
                 onPhase: phase => ProgressWatch(phase, null, NowMs() - startMs, budgetMs),
-                deadlineMs: hardDeadlineMs);   // [残予算ガード] HF66 が後段パスを押し出さないよう全体締切を渡す
+                deadlineMs: hardDeadlineMs,   // [残予算ガード] HF66 が後段パスを押し出さないよう全体締切を渡す
+                parameters: new V6HotfixPasses.PostOptimizationParams(QuantitativeRangeEval: quantitativeRangeEval));
         var tPost1 = NowMs();
 
         // [高精度化/予算残の活用] 後処理予約枠(budget/12, 8〜25s)は後処理が早期にフィックスポイント到達すると
@@ -668,8 +670,8 @@ public static partial class V6FinalPort
         // [3.356.0/ユーザー指示] 詳細設定の調整トグルがその実行で実際に何をしたかを1行で開示する。
         //   このC#移植には native/parity 層が無いため nativeOn/parityOn は常に false で呼ぶ
         //   （クラス doc comment 参照）。
-        // [配線注意, Kotlin原本のPostOptimizationParamsに相当するものが無い] RunPostOptimizationは常に
-        //   既定のPostOptimizationParams(parameters:null)で呼ぶため、CountChainEnabled等と同じくPolishGate
+        // [配線注意, Kotlin原本のPostOptimizationParamsに相当するものが無い] RunPostOptimizationは
+        //   QuantitativeRangeEval以外を既定のPostOptimizationParamsで呼ぶため、CountChainEnabled等と同じくPolishGate
         //   を直接読む（実際にRunPostOptimizationが使った値と一致する。LnsAdaptiveのみUIトグルが無く
         //   PostOptimizationParamsの既定値trueをそのまま反映）。
         var tuningLog = new MirrorLog(level: "I", tag: "設定の効き",

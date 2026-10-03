@@ -66,9 +66,10 @@ public static class V6LateOperators
         int chainTry3 = 20,
         int chainTry4 = 12,
         int rectTry = 12,
-        int blkTry = 8)
+        int blkTry = 8,
+        bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var sched = schedule.Copy2D();
         var logs = new List<MirrorLog>();
         var cur = report;
@@ -81,7 +82,7 @@ public static class V6LateOperators
         // 採否ゲート [HF537]: 採用なら cur 更新 + ログ。不採用なら false(呼び元で revert)。
         bool Gate(string tag, string detail)
         {
-            var nv = UnifiedViolationChecker.Check(state, sched);
+            var nv = UnifiedViolationChecker.Check(state, sched, p.QuantitativeRangeEval);
             // [3.287.0 keep-best統一→3.335.0 委譲] 判定は `BetterReport`（hard→weightedScore→total）へ。
             //   3.287.0 は第2キーだけ weightedScore へ寄せて**第3キー total へ落ちる分岐を書き忘れて**おり、
             //   weighted 同値・total 改善の候補（例: c1×1 と c42×30 は weighted 30 で同値・total は29違う。
@@ -196,7 +197,7 @@ public static class V6LateOperators
         //   まで見る（3.309.0 は hard→weightedScore を手書きで複製しており total へ落ちなかった）。
         bool GateW()
         {
-            var nv = UnifiedViolationChecker.Check(state, sched);
+            var nv = UnifiedViolationChecker.Check(state, sched, p.QuantitativeRangeEval);
             var ok = UnifiedViolationChecker.BetterReport(nv, cur); // [3.335.0] Gate と同じく BetterReport へ委譲（第3キー total まで見る）
             if (ok) { cur = nv; return true; }
             return false;

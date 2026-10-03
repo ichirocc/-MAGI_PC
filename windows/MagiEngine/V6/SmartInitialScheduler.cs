@@ -29,10 +29,10 @@ public static class SmartInitialScheduler
     /// スコープの違いのみで意味は同一、この型を使うのは <see cref="SolveConstructionDp"/> だけ）。</summary>
     private readonly record struct Rec(long Cost, long Bits);
 
-    public static ScheduleRunResult Generate(MagiState state, long seed = 0x517A2L)
+    public static ScheduleRunResult Generate(MagiState state, long seed = 0x517A2L, bool quantitativeRangeEval = false)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         if (p.T <= 0 || p.S <= 0 || p.K <= 0)
             throw new ArgumentException("期間/職員/シフトが不足しています");
         // [backlog#24] 休シフト未設定はここも入口＝ブロックする。
@@ -176,7 +176,7 @@ public static class SmartInitialScheduler
             }
         }
 
-        var report = UnifiedViolationChecker.Check(state, schedule);
+        var report = UnifiedViolationChecker.Check(state, schedule, quantitativeRangeEval);
         long elapsedMs = sw.ElapsedMilliseconds;
         var log = new MirrorLog(
             tag: "SmartInitial",

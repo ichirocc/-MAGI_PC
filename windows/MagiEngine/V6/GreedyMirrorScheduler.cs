@@ -20,10 +20,10 @@ namespace MagiEngine.V6;
 /// </summary>
 public static class GreedyMirrorScheduler
 {
-    public static ScheduleRunResult Generate(MagiState state)
+    public static ScheduleRunResult Generate(MagiState state, bool quantitativeRangeEval = false)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         if (p.T <= 0 || p.S <= 0 || p.K <= 0)
             throw new ArgumentException("期間/職員/シフトが不足しています");
         // [backlog#24] 休シフト未設定はここも入口＝ブロックする（V6SanityPortの起動前チェックと同じ判断）。
@@ -150,7 +150,7 @@ public static class GreedyMirrorScheduler
             }
         }
 
-        var report = UnifiedViolationChecker.Check(state, schedule);
+        var report = UnifiedViolationChecker.Check(state, schedule, quantitativeRangeEval);
         long elapsedMs = sw.ElapsedMilliseconds;
         var log = new MirrorLog(
             tag: "GenerateInitial",

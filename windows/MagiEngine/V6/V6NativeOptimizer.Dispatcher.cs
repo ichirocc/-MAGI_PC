@@ -100,14 +100,14 @@ public static partial class V6NativeOptimizer
         }
 
         var chosen = ChooseAlgorithm(options.Algorithm, options.TotalBudgetSec);
-        var p = ScheduleUtil.CachedProblem(state);
-        var schedule = Hf66DataHardening(state, ScheduleUtil.NormalizeSchedule(initial, p), "pre");
+        var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
+        var schedule = Hf66DataHardening(state, ScheduleUtil.NormalizeSchedule(initial, p), "pre", options.QuantitativeRangeEval);
         // [N1b, Kotlin原本] 入口修復(hf67)は better(hard→weighted→total) 改善時のみ採用。既に良好な
         //   入力（前回結果の再最適化など）を破壊し、探索を劣化seedに係留する事故を防ぐ（運用ログ実例:
         //   入力214 → 修復後HARD4/250 → 275秒が回復に浪費）。hf66(群内正規化)は無条件維持。
-        var entryReport = UnifiedViolationChecker.Check(state, schedule);
-        var repaired = Hf67HardRepair(state, schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x67L)).Schedule;
-        var repairedReport = UnifiedViolationChecker.Check(state, repaired);
+        var entryReport = UnifiedViolationChecker.Check(state, schedule, options.QuantitativeRangeEval);
+        var repaired = Hf67HardRepair(state, schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x67L), options.QuantitativeRangeEval).Schedule;
+        var repairedReport = UnifiedViolationChecker.Check(state, repaired, options.QuantitativeRangeEval);
         var hf67Adopted = Better(repairedReport, entryReport);
         if (hf67Adopted) schedule = repaired;
         var entryBoard = schedule.Copy2D();   // [N1c, Kotlin原本] 内側番兵用に入力の勤務表を保持
@@ -145,13 +145,13 @@ public static partial class V6NativeOptimizer
             // [3.266.0/hypothesis basin diversity, Kotlin原本] 各仮説の入口盤面を HypothesisStartFor で
             //   多様化（W0/W4のみ現行盤面のコピー=安全フロア維持）。
             V6Algorithm.Alns => await RunMultiWorker(w, options, OnProgress,
-                (i, o, prog) => RunAlns(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, cancellationToken),
+                (i, o, prog) => RunAlns(state, HypothesisStartFor(state, schedule, i, o.Seed, o.QuantitativeRangeEval), o, full, shouldStop, prog, cancellationToken),
                 cancellationToken).ConfigureAwait(false),
             V6Algorithm.Rsi => await RunMultiWorker(w, options, OnProgress,
-                (i, o, prog) => RunRsi(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, cancellationToken: cancellationToken),
+                (i, o, prog) => RunRsi(state, HypothesisStartFor(state, schedule, i, o.Seed, o.QuantitativeRangeEval), o, full, shouldStop, prog, cancellationToken: cancellationToken),
                 cancellationToken).ConfigureAwait(false),
             V6Algorithm.RsiPlus => await RunMultiWorker(w, options, OnProgress,
-                (i, o, prog) => RunRsiPlus(state, HypothesisStartFor(state, schedule, i, o.Seed), o, full, shouldStop, prog, workerLabel: $"仮説{i}", cancellationToken: cancellationToken),
+                (i, o, prog) => RunRsiPlus(state, HypothesisStartFor(state, schedule, i, o.Seed, o.QuantitativeRangeEval), o, full, shouldStop, prog, workerLabel: $"仮説{i}", cancellationToken: cancellationToken),
                 cancellationToken).ConfigureAwait(false),
             // [3.267.0/adaptive hypothesis epochs, Kotlin原本] 停滞/basin重複を検知し、エリートを保存
             //   しながら役割を再配属する非同期適応ポートフォリオ。
@@ -165,14 +165,14 @@ public static partial class V6NativeOptimizer
         //   covU を focus しなかった経路でも走る保険）。keep-best 照合＝退化不能。
         var resultSched = result.Schedule;
         // [3.569.0 同期] この盤面の評価は研磨の入口と出口でも要る＝同じ盤面を 3 回 Check しない（report は盤面と対で持ち回る）。
-        var resultRep = UnifiedViolationChecker.Check(state, resultSched);
+        var resultRep = UnifiedViolationChecker.Check(state, resultSched, options.QuantitativeRangeEval);
         if (resultRep.Hard > 0 && resultRep.Breakdown.GetValueOrDefault("covU", 0) > 0 && !shouldStop())
         {
             var cand = resultSched.Copy2D();
-            var n = ApplyCovUChains(state, cand, new JavaRandom(ActualSeed(options.Seed) ^ 0xC0FFEEL));
+            var n = ApplyCovUChains(state, cand, new JavaRandom(ActualSeed(options.Seed) ^ 0xC0FFEEL), quantitativeRangeEval: options.QuantitativeRangeEval);
             if (n > 0)
             {
-                var candRep = UnifiedViolationChecker.Check(state, cand);
+                var candRep = UnifiedViolationChecker.Check(state, cand, options.QuantitativeRangeEval);
                 if (Better(candRep, resultRep))
                 {
                     logs.Add(new MirrorLog(tag: "ChainFill",
@@ -185,7 +185,7 @@ public static partial class V6NativeOptimizer
 
         // [review #3, Kotlin原本] Final epilogue polish only when the caller isn't running its own post chain.
         var polished = options.PostPolish && !shouldStop()
-            ? Hf80PostPolish(state, resultSched, Math.Max(1, Math.Min(30, options.TotalBudgetSec / 20)), ActualSeed(options.Seed) ^ 0x80L, shouldStop, cancellationToken, initialReport: resultRep)
+            ? Hf80PostPolish(state, resultSched, Math.Max(1, Math.Min(30, options.TotalBudgetSec / 20)), ActualSeed(options.Seed) ^ 0x80L, shouldStop, cancellationToken, options.QuantitativeRangeEval, initialReport: resultRep)
             : new PolishResult(resultSched, Array.Empty<MirrorLog>(), 0, resultRep);
         var finalReport = polished.Report;
         logs.AddRange(polished.Logs);

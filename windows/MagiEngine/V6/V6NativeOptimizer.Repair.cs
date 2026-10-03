@@ -22,10 +22,10 @@ public static partial class V6NativeOptimizer
     /// の1箇所に置く。休が担当可なら休を選び、担当可能が空なら休へ倒す（記号から解決した rest index
     /// を使う＝Level Zero: 全シフト同等・番号非依存）。
     /// </summary>
-    internal static int[][] Hf66DataHardening(MagiState state, int[][] schedule, string tag, bool? wishPinStrict = null)
+    internal static int[][] Hf66DataHardening(MagiState state, int[][] schedule, string tag, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
     {
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var outSched = ScheduleUtil.NormalizeSchedule(schedule, p);
         for (var i = 0; i < p.S; i++)
         {
@@ -47,10 +47,10 @@ public static partial class V6NativeOptimizer
 
     /// <summary>[3.507.0] 個人上限 0 のセル（希望固定を除く）だけを置けるシフトへ戻した盤面と、その件数。最終番兵の「入力」基準に使う
     /// （群外セルは触らない＝従来の基準のまま）。</summary>
-    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule, bool? wishPinStrict = null)
+    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
     {
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var outSched = schedule.Select(r => r.ToArray()).ToArray();
         var n = 0;
         for (var i = 0; i < p.S; i++)
@@ -78,10 +78,10 @@ public static partial class V6NativeOptimizer
     /// per-cell OR/AND demand via <see cref="Problem.CovUCell"/>), then fill personal range lower
     /// bounds without touching locked wishes.
     /// </summary>
-    internal static RepairResult Hf67HardRepair(MagiState state, int[][] schedule, JavaRandom rng)
+    internal static RepairResult Hf67HardRepair(MagiState state, int[][] schedule, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
-        var outSched = Hf66DataHardening(state, schedule, "hf67");
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
+        var outSched = Hf66DataHardening(state, schedule, "hf67", quantitativeRangeEval);
         var logs = new List<MirrorLog>();
         var changed = 0;
 
@@ -193,11 +193,11 @@ public static partial class V6NativeOptimizer
         return p.CovUCell(k, j, cov - 1) > p.CovUCell(k, j, cov) ? 50 : 0;
     }
 
-    private static void DestroyRepairDay(MagiState state, int[][] schedule, JavaRandom rng)
+    private static void DestroyRepairDay(MagiState state, int[][] schedule, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.T == 0) return;
-        DestroyRepairDayAt(state, schedule, rng.NextInt(p.T), rng);
+        DestroyRepairDayAt(state, schedule, rng.NextInt(p.T), rng, quantitativeRangeEval);
     }
 
     /// <summary>[soft-aware repair] 割当 i→shift k の per-staff soft(low/high/apt, checker と同一式)を count n で評価。</summary>
@@ -264,9 +264,9 @@ public static partial class V6NativeOptimizer
     /// [soft-aware destroy-repair] 非希望セルを休へ destroy → 各需要を「割当の marginal soft が最小の
     /// 休スタッフ」で repair。休→k のみ移すため被覆穴を新たに作らない。希望固定は保持。
     /// </summary>
-    internal static void DestroyRepairDayAt(MagiState state, int[][] schedule, int j, JavaRandom rng)
+    internal static void DestroyRepairDayAt(MagiState state, int[][] schedule, int j, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.T == 0) return;
         // [backlog#24] 休シフト未設定なら休へ寄せるdestroy自体が無意味＝no-op
         if (ScheduleUtil.RestShiftIndex(state) is not int rest) return;
@@ -357,20 +357,20 @@ public static partial class V6NativeOptimizer
         }
     }
 
-    private static void DestroyRepairStaff(MagiState state, int[][] schedule, JavaRandom rng)
+    private static void DestroyRepairStaff(MagiState state, int[][] schedule, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0) return;
-        DestroyRepairStaffAt(state, schedule, rng.NextInt(p.S), rng);
+        DestroyRepairStaffAt(state, schedule, rng.NextInt(p.S), rng, quantitativeRangeEval);
     }
 
     /// <summary>
     /// [soft-aware staff-DR] 非希望セルを休へ destroy → 各日の被覆穴を「staff i の marginal soft
     /// 最小のシフト」で repair。被覆穴のみ埋める(過剰=covO を作らない)。希望固定は保持。
     /// </summary>
-    internal static void DestroyRepairStaffAt(MagiState state, int[][] schedule, int i, JavaRandom rng)
+    internal static void DestroyRepairStaffAt(MagiState state, int[][] schedule, int i, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var allowed = p.AllowedShiftsForStaff(i);
         if (allowed.Length == 0) return;
         // [backlog#24] 休シフト未設定ならno-op
@@ -442,11 +442,11 @@ public static partial class V6NativeOptimizer
     /// [soft-aware violations] 違反セルを、staff i の現状回数で marginal soft(old→k)最小のシフトへ
     /// 再割当(従来はランダム)。件数は最大8回に限られ盤面規模も小さいため、毎回の再走査を許容する。
     /// </summary>
-    private static void DestroyRepairViolations(MagiState state, int[][] schedule, ViolationReport report, JavaRandom rng)
+    private static void DestroyRepairViolations(MagiState state, int[][] schedule, ViolationReport report, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var keys = report.Violations.Keys.ToList();
-        if (keys.Count == 0) { RandomAllowedCell(state, schedule, rng); return; }
+        if (keys.Count == 0) { RandomAllowedCell(state, schedule, rng, quantitativeRangeEval); return; }
         var reps = Math.Min(8, keys.Count);
         for (var rep = 0; rep < reps; rep++)
         {
@@ -498,9 +498,9 @@ public static partial class V6NativeOptimizer
         }
     }
 
-    private static void RandomAllowedCell(MagiState state, int[][] schedule, JavaRandom rng)
+    private static void RandomAllowedCell(MagiState state, int[][] schedule, JavaRandom rng, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return;
         var i = rng.NextInt(p.S);
         var j = rng.NextInt(p.T);
@@ -509,12 +509,12 @@ public static partial class V6NativeOptimizer
         if (allowed.Length > 0) schedule[i][j] = allowed[rng.NextInt(allowed.Length)];
     }
 
-    private static int[][] Perturb(MagiState state, int[][] baseSched, JavaRandom rng, double strength)
+    private static int[][] Perturb(MagiState state, int[][] baseSched, JavaRandom rng, double strength, bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var outSched = baseSched.Copy2D();
         var n = Math.Max(1, (int)(p.S * p.T * strength));
-        for (var rep = 0; rep < n; rep++) RandomAllowedCell(state, outSched, rng);
+        for (var rep = 0; rep < n; rep++) RandomAllowedCell(state, outSched, rng, quantitativeRangeEval);
         return outSched;
     }
 

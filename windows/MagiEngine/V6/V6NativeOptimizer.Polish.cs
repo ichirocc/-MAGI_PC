@@ -41,8 +41,9 @@ public static partial class V6NativeOptimizer
         int seconds,
         long seed = 0x50F11L,
         Func<bool>? shouldStop = null,
-        CancellationToken cancellationToken = default) =>
-        Task.Run(() => Hf80PostPolish(state, ScheduleUtil.CachedProblem(state).WithManualPins(schedule), Math.Max(1, seconds), seed, shouldStop, cancellationToken).Schedule);
+        CancellationToken cancellationToken = default,
+        bool quantitativeRangeEval = false) =>
+        Task.Run(() => Hf80PostPolish(state, ScheduleUtil.CachedProblem(state, quantitativeRangeEval).WithManualPins(schedule), Math.Max(1, seconds), seed, shouldStop, cancellationToken, quantitativeRangeEval).Schedule);
 
     /// <summary>
     /// [差分化移植, Kotlin原本] 最終研磨フェーズ。DeltaEvaluator を生スコア源にして直接評価で回す
@@ -66,6 +67,7 @@ public static partial class V6NativeOptimizer
         long seed,
         Func<bool>? shouldStop = null,
         CancellationToken cancellationToken = default,
+        bool quantitativeRangeEval = false,
         ViolationReport? initialReport = null)
     {
         var stop = shouldStop ?? (() => false);
@@ -73,10 +75,10 @@ public static partial class V6NativeOptimizer
 
         var started = NowMs();
         var rng = new JavaRandom(seed);
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var best = initial.Copy2D();
-        // [3.569.0 同期] 呼出側が initial の評価を既に持つならそれを使う（同じ盤面を Check し直さない）。
-        var bestReport = initialReport ?? UnifiedViolationChecker.Check(state, best);
+        // [3.569.0 同期] 呼出側が initial の評価（同じ quantitativeRangeEval で取ったもの）を既に持つならそれを使う（同じ盤面を Check し直さない）。
+        var bestReport = initialReport ?? UnifiedViolationChecker.Check(state, best, quantitativeRangeEval);
         // 入力スナップショット（best は改善時に別配列へ差し替わる）。
         var baseSched = best;
         var baseReport = bestReport;
@@ -136,7 +138,7 @@ public static partial class V6NativeOptimizer
                                     cur[i][j] = nw;
                                     curScore = ns;
                                     if (V6SearchOperators.BetterScore(ns, bestScore))
-                                    { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur); }
+                                    { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval); }
                                 }
                                 else eval.Apply(i, j, oldK);
                             }
@@ -169,7 +171,7 @@ public static partial class V6NativeOptimizer
                                 cur[i][jb] = ka;
                                 curScore = ns;
                                 if (V6SearchOperators.BetterScore(ns, bestScore))
-                                { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur); }
+                                { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval); }
                             }
                             else { eval.Apply(i, ja, ka); eval.Apply(i, jb, kb); }
                         }
@@ -201,7 +203,7 @@ public static partial class V6NativeOptimizer
                                 cur[i2][j] = k1;
                                 curScore = ns;
                                 if (V6SearchOperators.BetterScore(ns, bestScore))
-                                { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur); }
+                                { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval); }
                             }
                             else { eval.Apply(i1, j, k1); eval.Apply(i2, j, k2); }
                         }
@@ -225,7 +227,7 @@ public static partial class V6NativeOptimizer
                             cur[fix[0]][fix[1]] = fix[2];
                             curScore = ns;
                             if (V6SearchOperators.BetterScore(ns, bestScore))
-                            { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur); }
+                            { best = cur.Copy2D(); bestScore = ns; bestReport = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval); }
                         }
                         else eval.Apply(fix[0], fix[1], oldK);
                     }
@@ -238,17 +240,17 @@ public static partial class V6NativeOptimizer
                 int drDay2;
                 if (rng.NextBoolean())
                 {
-                    DestroyRepairViolations(state, cand, bestReport, rng);
+                    DestroyRepairViolations(state, cand, bestReport, rng, quantitativeRangeEval);
                     drDay2 = -1;
                 }
                 else
                 {
                     var j = p.T > 0 ? rng.NextInt(p.T) : -1;
-                    if (j >= 0) DestroyRepairDayAt(state, cand, j, rng);
+                    if (j >= 0) DestroyRepairDayAt(state, cand, j, rng, quantitativeRangeEval);
                     drDay2 = j;
                 }
                 // hard-feasible のときは hf67 を省略（DeltaEvaluator が hard 退化を弾く）。
-                var repairedCell = curHard > 0L ? Hf67HardRepair(state, cand, rng).Schedule : cand;
+                var repairedCell = curHard > 0L ? Hf67HardRepair(state, cand, rng, quantitativeRangeEval).Schedule : cand;
                 int nDiffs;
                 if (drDay2 >= 0 && ReferenceEquals(repairedCell, cand))
                 {
@@ -270,7 +272,7 @@ public static partial class V6NativeOptimizer
                     cur = repairedCell;
                     curScore = ns2;
                     if (V6SearchOperators.BetterScore(ns2, bestScore))
-                    { best = repairedCell.Copy2D(); bestScore = ns2; bestReport = UnifiedViolationChecker.Check(state, repairedCell); }
+                    { best = repairedCell.Copy2D(); bestScore = ns2; bestReport = UnifiedViolationChecker.Check(state, repairedCell, quantitativeRangeEval); }
                 }
                 else
                 {

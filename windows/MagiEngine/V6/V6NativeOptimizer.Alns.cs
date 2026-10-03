@@ -31,7 +31,7 @@ public static partial class V6NativeOptimizer
         CancellationToken cancellationToken = default)
     {
         var t0 = NowMs();
-        var p = new Problem(state.WithSchedule(initial));
+        var p = new Problem(state.WithSchedule(initial), options.QuantitativeRangeEval);
         var ev = new Evaluator(p);
         // [Kotlin原本] `lastReport` はコールバック内で読まれるが、SaOptimizer.Run が完了するまで
         // 再代入されない（このメソッド内の代入は Run の呼出の**後**）＝コールバックからは常に null に
@@ -49,9 +49,9 @@ public static partial class V6NativeOptimizer
                 if (pr.ElapsedMs % 1000L < 220L) onProgress?.Invoke("V5 SA", lastReport, pr.TotalIters, pr.ElapsedMs);
             },
             cancellationToken).ConfigureAwait(false);
-        var repaired = Hf67HardRepair(state, res.Schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x5L));
+        var repaired = Hf67HardRepair(state, res.Schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x5L), options.QuantitativeRangeEval);
         var outSched = repaired.Schedule;
-        var report = UnifiedViolationChecker.Check(state, outSched);
+        var report = UnifiedViolationChecker.Check(state, outSched, options.QuantitativeRangeEval);
         // [退化防止番兵 / 実機ログ起因, Kotlin原本コメント] runAlns と同じ入力比keep-best。従来 runV5 だけ
         //   番兵が無く、SA+修復が入力より悪化した結果をそのまま返していた。RSI++ は Phase1 Seed に runV5
         //   を使い、以降の各段は前段比 keep-best のため、Phase1 の劣化が全チェーンへ伝播し、最後に
@@ -59,7 +59,7 @@ public static partial class V6NativeOptimizer
         //   全フェーズが「入力以上」から積み上がる。SA が入力より良い解を見つけた場合は素通し＝多様化は
         //   維持。スコアリング不変(選択のみ・better()=hard→weighted→total)。
         var baseSched = ScheduleUtil.NormalizeSchedule(initial, p);
-        var baseReport = UnifiedViolationChecker.Check(state, baseSched);
+        var baseReport = UnifiedViolationChecker.Check(state, baseSched, options.QuantitativeRangeEval);
         var keptInput = UnifiedViolationChecker.BetterReport(baseReport, report);
         if (keptInput) { outSched = baseSched; report = baseReport; }
         lastReport = report;
@@ -248,11 +248,11 @@ public static partial class V6NativeOptimizer
 
         var started = NowMs();
         var rng = new JavaRandom(ActualSeed(options.Seed) ^ 0xA17A5L);
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
         var restarts = Math.Max(1, options.Restarts);
         var per = Math.Max(1, budgetSec / restarts);
         var globalBest = ScheduleUtil.NormalizeSchedule(initial, p);
-        var globalReport = UnifiedViolationChecker.Check(state, globalBest);
+        var globalReport = UnifiedViolationChecker.Check(state, globalBest, options.QuantitativeRangeEval);
         // [退化防止, Kotlin原本コメント] hot-loop は生スコア(DeltaEvaluator)で最良を追うが、生スコアと
         //   weightedScore は目的が異なる。最終結果が入力(best)より hard→weighted→total の辞書順で
         //   悪化しないよう、開始時の盤面を baseline として保持し最後に番兵比較する。
@@ -278,11 +278,11 @@ public static partial class V6NativeOptimizer
             if (TimeUp()) break;
             // [restart 摂動, Kotlin原本コメント] 一律 strength=0.18（3.310.0/2.51 の非線形スケジュールは
             //   nsp_bench --real の final 品質で +101% 悪化と実測されたため revert 済み）。
-            var cur = r == 0 ? globalBest.Copy2D() : Perturb(state, globalBest, rng, Math.Clamp(0.18 * options.Explore, 0.05, 0.6));
-            cur = Hf67HardRepair(state, cur, rng).Schedule;
+            var cur = r == 0 ? globalBest.Copy2D() : Perturb(state, globalBest, rng, Math.Clamp(0.18 * options.Explore, 0.05, 0.6), options.QuantitativeRangeEval);
+            cur = Hf67HardRepair(state, cur, rng, options.QuantitativeRangeEval).Schedule;
             var deadline = NowMs() + per * 1000L;
 
-            var curReport = UnifiedViolationChecker.Check(state, cur);
+            var curReport = UnifiedViolationChecker.Check(state, cur, options.QuantitativeRangeEval);
             eval.Reset(cur);
             var curScore = eval.Score();
             var curAug = gls.Augment(cur);
@@ -428,7 +428,7 @@ public static partial class V6NativeOptimizer
                             if (ns < globalScore)
                             {
                                 globalBest = cur.Copy2D(); globalScore = ns;
-                                globalReport = UnifiedViolationChecker.Check(state, cur);
+                                globalReport = UnifiedViolationChecker.Check(state, cur, options.QuantitativeRangeEval);
                                 lastImproveIter = itersTotal;
                                 reward = 4.0;
                             }
@@ -451,12 +451,12 @@ public static partial class V6NativeOptimizer
                     var drStaff = op == 1 && p.S > 0 ? rng.NextInt(p.S) : -1;
                     switch (op)
                     {
-                        case 0: if (drDay >= 0) DestroyRepairDayAt(state, cand, drDay, rng); break;
-                        case 1: if (drStaff >= 0) DestroyRepairStaffAt(state, cand, drStaff, rng); break;
-                        default: DestroyRepairViolations(state, cand, curReport, rng); break;
+                        case 0: if (drDay >= 0) DestroyRepairDayAt(state, cand, drDay, rng, options.QuantitativeRangeEval); break;
+                        case 1: if (drStaff >= 0) DestroyRepairStaffAt(state, cand, drStaff, rng, options.QuantitativeRangeEval); break;
+                        default: DestroyRepairViolations(state, cand, curReport, rng, options.QuantitativeRangeEval); break;
                     }
                     // hf67 は hard 違反がある時のみ必要。
-                    var repairedCell = iter % 7L == 0L && curHard > 0L ? Hf67HardRepair(state, cand, rng).Schedule : cand;
+                    var repairedCell = iter % 7L == 0L && curHard > 0L ? Hf67HardRepair(state, cand, rng, options.QuantitativeRangeEval).Schedule : cand;
                     int nDiffs;
                     if (op == 0 && drDay >= 0 && ReferenceEquals(repairedCell, cand))
                     {
@@ -498,7 +498,7 @@ public static partial class V6NativeOptimizer
                         if (ns < globalScore)
                         {
                             globalBest = repairedCell.Copy2D(); globalScore = ns;
-                            globalReport = UnifiedViolationChecker.Check(state, repairedCell);
+                            globalReport = UnifiedViolationChecker.Check(state, repairedCell, options.QuantitativeRangeEval);
                             lastImproveIter = itersTotal;
                             reward = 4.0;
                         }
@@ -536,7 +536,7 @@ public static partial class V6NativeOptimizer
                     }
                 }
                 // destroyRepairViolations 用に curReport を周期更新（hint の鮮度確保）。
-                if (iter % 200L == 0L) curReport = UnifiedViolationChecker.Check(state, cur);
+                if (iter % 200L == 0L) curReport = UnifiedViolationChecker.Check(state, cur, options.QuantitativeRangeEval);
                 if (++sinceUpdate >= 64)
                 {
                     for (var k = 0; k < opW.Length; k++)

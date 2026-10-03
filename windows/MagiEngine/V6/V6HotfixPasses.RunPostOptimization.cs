@@ -569,8 +569,8 @@ public static partial class V6HotfixPasses
                 Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>
                     C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
-            // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)は常に既定の PostOptimizationParams
-            //   （parameters:null）を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
+            // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)はQuantitativeRangeEval 以外は既定の
+            //   PostOptimizationParams を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
             //   等と同じく PolishGate を直接読み、UI トグルが実際に効くようにする（Android は V6FinalPort.kt で
             //   PostOptimizationParams 構築時に countChainEnabled=PolishGate.countChainPolish を都度渡す設計だが、
             //   この C# 版は呼出元を変えずに済む軽量な配線を選ぶ）。

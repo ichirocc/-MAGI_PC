@@ -29,7 +29,8 @@ public static partial class V6NativeOptimizer
     /// </summary>
     private static ViolationReport? CommitBestMove(
         MagiState state, int[][] sched,
-        ViolationReport baseline, List<List<int[]>> candidates)
+        ViolationReport baseline, List<List<int[]>> candidates,
+        bool quantitativeRangeEval = false)
     {
         List<int[]>? bestOps = null;
         ViolationReport? bestRep = null;
@@ -38,7 +39,7 @@ public static partial class V6NativeOptimizer
             var saved = new int[ops.Count];
             for (var idx = 0; idx < ops.Count; idx++) saved[idx] = sched[ops[idx][0]][ops[idx][1]];
             foreach (var mv in ops) sched[mv[0]][mv[1]] = mv[2];
-            var rep = UnifiedViolationChecker.Check(state, sched);
+            var rep = UnifiedViolationChecker.Check(state, sched, quantitativeRangeEval);
             for (var idx = 0; idx < ops.Count; idx++) sched[ops[idx][0]][ops[idx][1]] = saved[idx];
             if (Better(rep, baseline) && (bestRep == null || Better(rep, bestRep)))
             {
@@ -57,10 +58,10 @@ public static partial class V6NativeOptimizer
     /// 返す。連鎖は同日内交換＝被覆総量保存で、canDo/非wishLocked/c3n枝刈り済み。最終採否は呼び出し側の
     /// keep-best（ラウンド <see cref="Better"/> or エピローグの checker 照合）が担保。
     /// </summary>
-    private static int ApplyCovUChains(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null)
+    private static int ApplyCovUChains(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var applied = 0;
         var cnt = new int[p.K];
@@ -97,11 +98,11 @@ public static partial class V6NativeOptimizer
     /// 担当外セル＝groupViol(11000) が消える＝必須違反が厳密に減る手を丸ごと捨てていた。規約の
     /// <see cref="ScheduleUtil.WishLocked"/> へ統一（3.351.0 と同型）。
     /// </summary>
-    internal static int ApplyCovOFree(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null, bool? wishPinStrict = null)
+    internal static int ApplyCovOFree(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
     {
         var stop = shouldStop ?? (() => false);
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var applied = 0;
         for (var j = 0; j < p.T; j++)
@@ -115,7 +116,7 @@ public static partial class V6NativeOptimizer
                     var cov = new int[p.K];
                     for (var i = 0; i < p.S; i++) { var kk = sched[i][j]; if (kk >= 0 && kk < p.K) cov[kk]++; }
                     if (p.CovOCell(k, j, cov[k]) <= 0) break;
-                    var baseline = UnifiedViolationChecker.Check(state, sched);
+                    var baseline = UnifiedViolationChecker.Check(state, sched, quantitativeRangeEval);
                     var staffOnK = Enumerable.Range(0, p.S).Where(it => sched[it][j] == k).ToList();
                     var candidates = new List<List<int[]>>();
                     foreach (var i in staffOnK)
@@ -138,7 +139,7 @@ public static partial class V6NativeOptimizer
                         }
                     }
                     if (candidates.Count == 0) break;
-                    if (CommitBestMove(state, sched, baseline, candidates) == null) break;
+                    if (CommitBestMove(state, sched, baseline, candidates, quantitativeRangeEval) == null) break;
                     applied++;
                 }
             }
@@ -153,11 +154,11 @@ public static partial class V6NativeOptimizer
     /// 候補のみ動かす。sched を in-place 変更し適用手数を返す。最終採否は呼び出し側の keep-best が
     /// 担保＝退化不能。
     /// </summary>
-    internal static int ApplyC41Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool? wishPinStrict = null)
+    internal static int ApplyC41Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
     {
         var stop = shouldStop ?? (() => false);
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var rules = skill ? p.Cons41s : p.Cons41;
         if (rules.Count == 0) return 0;
@@ -180,7 +181,7 @@ public static partial class V6NativeOptimizer
                 // 超過(z>u): 群在籍者を他シフトへ移す。
                 while (GroupCount(c, j) > c.U)
                 {
-                    var baseline = UnifiedViolationChecker.Check(state, sched);
+                    var baseline = UnifiedViolationChecker.Check(state, sched, quantitativeRangeEval);
                     var onShift = Enumerable.Range(0, p.S).Where(it => grp[it] == c.GroupIdx && sched[it][j] == c.ShiftIdx).ToList();
                     var candidates = new List<List<int[]>>();
                     foreach (var i in onShift)
@@ -205,13 +206,13 @@ public static partial class V6NativeOptimizer
                         }
                     }
                     if (candidates.Count == 0) break;
-                    if (CommitBestMove(state, sched, baseline, candidates) == null) break;
+                    if (CommitBestMove(state, sched, baseline, candidates, quantitativeRangeEval) == null) break;
                     applied++;
                 }
                 // 不足(z<l): 群内の他シフト在籍者を引き入れる。
                 while (GroupCount(c, j) < c.L)
                 {
-                    var baseline = UnifiedViolationChecker.Check(state, sched);
+                    var baseline = UnifiedViolationChecker.Check(state, sched, quantitativeRangeEval);
                     var offShift = Enumerable.Range(0, p.S)
                         .Where(it => grp[it] == c.GroupIdx && sched[it][j] != c.ShiftIdx && p.MayPlace(it, c.ShiftIdx))
                         .ToList();
@@ -234,7 +235,7 @@ public static partial class V6NativeOptimizer
                         }
                     }
                     if (candidates.Count == 0) break;
-                    if (CommitBestMove(state, sched, baseline, candidates) == null) break;
+                    if (CommitBestMove(state, sched, baseline, candidates, quantitativeRangeEval) == null) break;
                     applied++;
                 }
             }
@@ -251,11 +252,11 @@ public static partial class V6NativeOptimizer
     /// skill=true は cons42s(ssk) を対象にする（DRY化）。sched を in-place 変更し適用手数を返す。
     /// 最終採否は呼び出し側のkeep-best（ラウンド <see cref="Better"/>）が担保＝退化不能。
     /// </summary>
-    internal static int ApplyC42Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool? wishPinStrict = null)
+    internal static int ApplyC42Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
     {
         var stop = shouldStop ?? (() => false);
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var rules = skill ? p.Cons42s : p.Cons42;
         if (rules.Count == 0) return 0;
@@ -300,12 +301,12 @@ public static partial class V6NativeOptimizer
                     var left = Enumerable.Range(0, p.S).Where(it => grp[it] == c.G1 && sched[it][j] == c.S1).ToList();
                     var right = Enumerable.Range(0, p.S).Where(it => grp[it] == c.G2 && sched[it][j] == c.S2).ToList();
                     if (left.Count == 0 || right.Count == 0) break;   // ペアが存在しない＝この日は解消済み
-                    var baseline = UnifiedViolationChecker.Check(state, sched);
+                    var baseline = UnifiedViolationChecker.Check(state, sched, quantitativeRangeEval);
                     var candidates = new List<List<int[]>>();
                     GatherSide(left, j, c.S1, candidates);
                     GatherSide(right, j, c.S2, candidates);
                     if (candidates.Count == 0) break;
-                    if (CommitBestMove(state, sched, baseline, candidates) == null) break;
+                    if (CommitBestMove(state, sched, baseline, candidates, quantitativeRangeEval) == null) break;
                     applied++;
                 }
             }
@@ -322,34 +323,35 @@ public static partial class V6NativeOptimizer
     /// </summary>
     internal static int[][] RsiGenerateHypothesis(
         MagiState state, int[][] baseSched, ViolationReport report, string focus, JavaRandom rng,
-        Func<bool>? shouldStop = null)
+        Func<bool>? shouldStop = null,
+        bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var outSched = baseSched.Copy2D();
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         switch (focus)
         {
             // [E11, Kotlin原本] covU は「勤務→勤務」の多人数連鎖で充填（既存 DestroyRepairDay は休→勤務
             //   のみ＝候補が過剰シフト/連鎖からしか引けない局面を踏めない）。
             case "covU":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyCovUChains(state, outSched, rng, stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyCovUChains(state, outSched, rng, stop, quantitativeRangeEval);
                 break;
             case "c41":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyC41Free(state, outSched, rng, skill: false, shouldStop: stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyC41Free(state, outSched, rng, skill: false, shouldStop: stop, quantitativeRangeEval: quantitativeRangeEval);
                 break;
             case "c41s":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyC41Free(state, outSched, rng, skill: true, shouldStop: stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyC41Free(state, outSched, rng, skill: true, shouldStop: stop, quantitativeRangeEval: quantitativeRangeEval);
                 break;
             case "c42":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyC42Free(state, outSched, rng, skill: false, shouldStop: stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyC42Free(state, outSched, rng, skill: false, shouldStop: stop, quantitativeRangeEval: quantitativeRangeEval);
                 break;
             case "c42s":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyC42Free(state, outSched, rng, skill: true, shouldStop: stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyC42Free(state, outSched, rng, skill: true, shouldStop: stop, quantitativeRangeEval: quantitativeRangeEval);
                 break;
             // [実機ログ起因=apt未focus, Kotlin原本] destroyRepairStaff の marginal cost(StaffCountPenaltyAt)
             //   は既に apt(重み1) を織込み済みのため、low/high/c2 と同じ経路へ合流するだけで apt 専用の
@@ -357,12 +359,12 @@ public static partial class V6NativeOptimizer
             case "low": case "high": case "c2": case "apt": case "weekly": case "fair":
             {
                 var reps = DestroyRepairStaffReps(p.S, p.T);
-                for (var r = 0; r < reps; r++) DestroyRepairStaff(state, outSched, rng);
+                for (var r = 0; r < reps; r++) DestroyRepairStaff(state, outSched, rng, quantitativeRangeEval);
                 break;
             }
             case "covO":
-                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng);
-                ApplyCovOFree(state, outSched, rng, stop);
+                for (var r = 0; r < 6; r++) DestroyRepairDay(state, outSched, rng, quantitativeRangeEval);
+                ApplyCovOFree(state, outSched, rng, stop, quantitativeRangeEval);
                 break;
             // [実機ログ起因, Kotlin原本] groupViol/pref は hf67 の作用対象(群外修正・希望反映)。c3n(禁止
             //   連続=HARD)には hf67 は一切作用しないため、そちらは else 分岐(destroyRepairViolations)へ回る。
@@ -375,7 +377,7 @@ public static partial class V6NativeOptimizer
                 break;
             }
             default:
-                for (var r = 0; r < 12; r++) DestroyRepairViolations(state, outSched, report, rng);
+                for (var r = 0; r < 12; r++) DestroyRepairViolations(state, outSched, report, rng, quantitativeRangeEval);
                 break;
         }
         return outSched;
@@ -488,8 +490,8 @@ public static partial class V6NativeOptimizer
         var started = NowMs();
         var stop = shouldStop ?? (() => false);
         var rng = new JavaRandom(ActualSeed(options.Seed) ^ 0x451L);
-        var best = ScheduleUtil.NormalizeSchedule(initial, ScheduleUtil.CachedProblem(state));
-        var bestReport = UnifiedViolationChecker.Check(state, best);
+        var best = ScheduleUtil.NormalizeSchedule(initial, ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval));
+        var bestReport = UnifiedViolationChecker.Check(state, best, options.QuantitativeRangeEval);
         var iters = 0L;
         var rounds = Math.Max(2, Math.Min(8, budgetSec / 30 + 2));
         var per = Math.Max(1, budgetSec / rounds);
@@ -560,7 +562,7 @@ public static partial class V6NativeOptimizer
             focusTrail.Add(focus);
             var focusedBefore = bestReport.Breakdown.GetValueOrDefault(focus, 0);
             lastFocus = focus;   // [レビュー#5] 次ラウンド頭の HF63 更新へ「このラウンドの投入先」を渡す
-            var hypothesis = RsiGenerateHypothesis(state, best, bestReport, focus, rng, stop);
+            var hypothesis = RsiGenerateHypothesis(state, best, bestReport, focus, rng, stop, options.QuantitativeRangeEval);
             // [HF361/528/541移植, Kotlin原本] EarlyChain: Web 内部V5の停滞(reheat)フック(L11705-)に対応する
             //   RSI ラウンド境界で発火。Chain3/4 は常時、Rect/BlkN は optFlags.rectSwap(既定ON)に従う。
             var phase = round % 2 == 0
@@ -570,7 +572,7 @@ public static partial class V6NativeOptimizer
             var candSched = phase.Schedule;
             var candReport = phase.Report;
             {
-                var lr = V6LateOperators.Improve(state, candSched, candReport, rng, started + budgetSec * 1000L, rectEnabled: options.RectSwap);
+                var lr = V6LateOperators.Improve(state, candSched, candReport, rng, started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval);
                 if (lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0)
                 {
                     candSched = lr.Schedule;

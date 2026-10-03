@@ -28,26 +28,26 @@ public static partial class V6NativeOptimizer
     /// board (can happen for small boards/light intensities), <see cref="ForceDiverseKick"/>
     /// guarantees at least one genuinely different cell.
     /// </summary>
-    internal static int[][] HypothesisStartFor(MagiState state, int[][] baseSched, int index, long seed)
+    internal static int[][] HypothesisStartFor(MagiState state, int[][] baseSched, int index, long seed, bool quantitativeRangeEval = false)
     {
         var outSched = baseSched.Copy2D();
         var plan = HypothesisDiversityPolicy.StartPlanFor(index);
         if (plan.Mode == HypothesisStartMode.Baseline) return outSched;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var rng = new JavaRandom(ActualSeed(seed) ^ 0xD1A5EEDL ^ ((long)index * -0x61c8864680b583ebL));
         for (var n = 0; n < plan.Intensity; n++)
         {
             switch (plan.Mode)
             {
                 case HypothesisStartMode.DayRepair:
-                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng);
+                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng, quantitativeRangeEval);
                     break;
                 case HypothesisStartMode.StaffRepair:
-                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng);
+                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng, quantitativeRangeEval);
                     break;
                 case HypothesisStartMode.MixedRepair:
-                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng);
-                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng);
+                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng, quantitativeRangeEval);
+                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng, quantitativeRangeEval);
                     break;
                 case HypothesisStartMode.Baseline:
                     break;
@@ -235,18 +235,19 @@ public static partial class V6NativeOptimizer
         int[][] best,
         IReadOnlyList<int[][]> alternatives,
         Func<bool> shouldStop,
+        bool quantitativeRangeEval = false,
         bool? wishPinStrict = null)
     {
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var bestSched = best.Copy2D();
-        var bestRep = UnifiedViolationChecker.Check(state, bestSched);
+        var bestRep = UnifiedViolationChecker.Check(state, bestSched, quantitativeRangeEval);
         if (alternatives.Count == 0) return (bestSched, bestRep);
         foreach (var alt in alternatives)
         {
             if (shouldStop()) break;
             var cur = bestSched.Copy2D(); // always re-march from the current best — no regression.
-            var curRep = UnifiedViolationChecker.Check(state, cur);
+            var curRep = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval);
             var diffs = new List<(int I, int J)>();
             for (var i = 0; i < cur.Length; i++)
             {
@@ -274,7 +275,7 @@ public static partial class V6NativeOptimizer
                 // [希望固定の徹底] 希望固定セルへ希望以外の値は写さない（希望どうしの衝突では崩した方が keep-best に勝つ）。
                 if ((strict || p.Pinned(i, j)) && p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
                 cur[i][j] = alt[i][j]; // forced march toward alt
-                curRep = UnifiedViolationChecker.Check(state, cur);
+                curRep = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval);
                 if (UnifiedViolationChecker.BetterReport(curRep, bestRep)) { bestSched = cur.Copy2D(); bestRep = curRep; }
             }
         }
@@ -413,9 +414,10 @@ public static partial class V6NativeOptimizer
         int[][][] peers,
         HypothesisEpochAssignment assignment,
         long seed,
-        Func<bool> shouldStop)
+        Func<bool> shouldStop,
+        bool quantitativeRangeEval = false)
     {
-        var p = ScheduleUtil.CachedProblem(state);
+        var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var rng = new JavaRandom(seed);
         var n = Math.Max(1, assignment.Intensity);
         switch (assignment.Role)
@@ -431,10 +433,10 @@ public static partial class V6NativeOptimizer
                     .Take(3)
                     .Select(peer => peer.Copy2D())
                     .ToList();
-                var (relinked, _) = ElitePathRelink(state, globalBest, alternatives, shouldStop);
+                var (relinked, _) = ElitePathRelink(state, globalBest, alternatives, shouldStop, quantitativeRangeEval);
                 return AdaptiveEliteArchive.ScheduleDistance(globalBest, relinked) > 0
                     ? relinked
-                    : HypothesisStartFor(state, globalBest, 7, seed);
+                    : HypothesisStartFor(state, globalBest, 7, seed, quantitativeRangeEval);
             }
 
             case HypothesisEpochRole.DayBlockAlns:
@@ -443,7 +445,7 @@ public static partial class V6NativeOptimizer
                 if (p.T > 0)
                 {
                     var first = rng.NextInt(p.T);
-                    for (var x = 0; x < n * 2; x++) DestroyRepairDayAt(state, outSched, (first + x) % p.T, rng);
+                    for (var x = 0; x < n * 2; x++) DestroyRepairDayAt(state, outSched, (first + x) % p.T, rng, quantitativeRangeEval);
                 }
                 return outSched;
             }
@@ -453,11 +455,11 @@ public static partial class V6NativeOptimizer
                 var outSched = globalBest.Copy2D();
                 for (var r = 0; r < n; r++)
                 {
-                    var rep = UnifiedViolationChecker.Check(state, outSched);
+                    var rep = UnifiedViolationChecker.Check(state, outSched, quantitativeRangeEval);
                     var focus = rep.Breakdown.GetValueOrDefault("covU", 0) > 0 ? "covU"
                         : rep.Breakdown.GetValueOrDefault("c3n", 0) > 0 ? "c3n"
                         : MaxViolatedFamily(rep);
-                    outSched = RsiGenerateHypothesis(state, outSched, rep, focus, rng);
+                    outSched = RsiGenerateHypothesis(state, outSched, rep, focus, rng, quantitativeRangeEval: quantitativeRangeEval);
                 }
                 return outSched;
             }
@@ -474,8 +476,8 @@ public static partial class V6NativeOptimizer
                 var outSched = globalBest.Copy2D();
                 for (var r = 0; r < n * 2; r++)
                 {
-                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng);
-                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng);
+                    if (p.T > 0) DestroyRepairDayAt(state, outSched, rng.NextInt(p.T), rng, quantitativeRangeEval);
+                    if (p.S > 0) DestroyRepairStaffAt(state, outSched, rng.NextInt(p.S), rng, quantitativeRangeEval);
                 }
                 return outSched;
             }
@@ -485,13 +487,13 @@ public static partial class V6NativeOptimizer
                 var outSched = globalBest.Copy2D();
                 for (var r = 0; r < n; r++)
                 {
-                    var rep = UnifiedViolationChecker.Check(state, outSched);
+                    var rep = UnifiedViolationChecker.Check(state, outSched, quantitativeRangeEval);
                     var focus = rep.Breakdown.GetValueOrDefault("apt", 0) > 0 ? "apt"
                         : rep.Breakdown.GetValueOrDefault("high", 0) > 0 ? "high"
                         : rep.Breakdown.GetValueOrDefault("low", 0) > 0 ? "low"
                         : rep.Breakdown.GetValueOrDefault("fair", 0) > 0 ? "fair"
                         : "total";
-                    outSched = RsiGenerateHypothesis(state, outSched, rep, focus, rng);
+                    outSched = RsiGenerateHypothesis(state, outSched, rep, focus, rng, quantitativeRangeEval: quantitativeRangeEval);
                 }
                 return outSched;
             }
@@ -566,12 +568,12 @@ public static partial class V6NativeOptimizer
         var archive = new AdaptiveEliteArchive();
 
         var sharedTrajectories = new int[workers][][];
-        for (var i = 0; i < workers; i++) sharedTrajectories[i] = HypothesisStartFor(state, entry, i, baseSeed);
+        for (var i = 0; i < workers; i++) sharedTrajectories[i] = HypothesisStartFor(state, entry, i, baseSeed, options.QuantitativeRangeEval);
         var initialReports = new ViolationReport[workers];
-        for (var i = 0; i < workers; i++) initialReports[i] = UnifiedViolationChecker.Check(state, sharedTrajectories[i]);
+        for (var i = 0; i < workers; i++) initialReports[i] = UnifiedViolationChecker.Check(state, sharedTrajectories[i], options.QuantitativeRangeEval);
 
         var globalBest = entry.Copy2D();
-        var globalReport = UnifiedViolationChecker.Check(state, globalBest);
+        var globalReport = UnifiedViolationChecker.Check(state, globalBest, options.QuantitativeRangeEval);
         IReadOnlyList<MirrorLog> globalLogs = Array.Empty<MirrorLog>();
         archive.Register(entry, globalReport, HypothesisEpochRole.BaselineRefine, worker: 0, epoch: 0, bridge: false);
         for (var i = 0; i < workers; i++)
@@ -684,8 +686,9 @@ public static partial class V6NativeOptimizer
                             peers: snapPeers,
                             assignment: assignment,
                             seed: roleSeed,
-                            shouldStop: shouldStop);
-                        var startReport = UnifiedViolationChecker.Check(state, start);
+                            shouldStop: shouldStop,
+                            quantitativeRangeEval: options.QuantitativeRangeEval);
+                        var startReport = UnifiedViolationChecker.Check(state, start, options.QuantitativeRangeEval);
                         archive.Register(start, startReport, assignment.Role, i, epoch,
                             bridge: startReport.Hard == snapGlobalReport.Hard + 1);
                         trajectory = start;
