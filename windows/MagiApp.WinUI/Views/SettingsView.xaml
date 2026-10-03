@@ -70,11 +70,11 @@
             <ToggleSwitch x:Name="CombineExhaustPairsToggle" Header="職員どうしの交換探索を粘り強く"
                           OnContent="ON" OffContent="OFF" Toggled="OnCombineExhaustPairsToggled" />
 
-            <!-- [Android 2026-10-03 同期] 既定OFFの測定用フラグ 3 件（文言は Android と同一）。 -->
+            <!-- [Android 2026-10-03 同期] 探索フラグ 3 件（文言は Android と同一。一括見直しは 3.614.0 で既定ON）。 -->
             <ToggleSwitch x:Name="C1DeltaChildEvalToggle" Header="期間の制約の一括見直しを速く試す"
                           OnContent="ON" OffContent="OFF" Toggled="OnC1DeltaChildEvalToggled" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="「期間の制約」を職員の回数と一緒に見直すとき、候補の良し悪しを速い方法で見積もります。効果はまだ確かめられておらず、結果が変わらないこともあります。既定はOFFです。" />
+                       Text="「期間の制約」を職員の回数と一緒に見直すとき、候補の良し悪しを速い方法で見積もります。同じ時間で多くの候補を試せるため、平均すると結果がわずかに良くなります（変わらない勤務表もあります）。既定はONです。" />
             <ToggleSwitch x:Name="ExtraRefineRequirePostHardDropToggle" Header="計算では消えない違反だけ残ったら追加の見直しを省く"
                           OnContent="ON" OffContent="OFF" Toggled="OnExtraRefineRequirePostHardDropToggled" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"

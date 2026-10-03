@@ -57,8 +57,8 @@ internal static class C1JointLnsPolish
         /// <summary>子の評価を <see cref="DeltaEvaluator"/> の差分で行う（親へ1回 reset、1〜3セルを当てて戻す）。最終の正式 check は不変。</summary>
         bool? DeltaChildEval = null);
 
-    /// <summary><see cref="Config.DeltaChildEval"/> の既定。実験段階のため既定 OFF（計測で切り替える）。</summary>
-    internal static volatile bool DeltaChildEvalDefault = false;
+    /// <summary><see cref="Config.DeltaChildEval"/> の既定。順番均衡 A/B（78 盤面）が事前基準を満たしたため既定 ON。</summary>
+    internal static volatile bool DeltaChildEvalDefault = true;
 
     private sealed record Pending(Move Move, int[][]? Next, int[]? Cells);
 

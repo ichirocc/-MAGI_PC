@@ -138,13 +138,14 @@ public class MagiViewModelTest
         var vm = new MagiViewModel();
         try
         {
-            vm.SetC1DeltaChildEval(true);
             Assert.True(vm.Ui.C1DeltaChildEval);
-            Assert.True(C1JointLnsPolish.DeltaChildEvalDefault);
+            vm.SetC1DeltaChildEval(false);
+            Assert.False(vm.Ui.C1DeltaChildEval);
+            Assert.False(C1JointLnsPolish.DeltaChildEvalDefault);
         }
         finally
         {
-            C1JointLnsPolish.DeltaChildEvalDefault = false;
+            C1JointLnsPolish.DeltaChildEvalDefault = true;
         }
     }
 
@@ -165,10 +166,10 @@ public class MagiViewModelTest
     }
 
     [Fact]
-    public void NewSearchFlagsDefaultOff()
+    public void NewSearchFlagsDefaults()
     {
         var vm = new MagiViewModel();
-        Assert.False(vm.Ui.C1DeltaChildEval);
+        Assert.True(vm.Ui.C1DeltaChildEval);
         Assert.Equal(WishFloorMode.Off, vm.Ui.WishFloorMode);
         Assert.False(vm.Ui.ExtraRefineRequirePostHardDrop);
     }

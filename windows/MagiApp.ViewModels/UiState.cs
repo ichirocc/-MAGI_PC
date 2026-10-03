@@ -142,8 +142,8 @@ public sealed partial class UiState : ObservableObject
     /// （A/B 138 ペアで新2/同等135/旧1＝ゲート不合格。<see cref="MagiEngine.V6.PolishGate.CountChainPolish"/> 参照）。</summary>
     [ObservableProperty] private bool countChainPolish;
 
-    /// <summary>[Android 同期/測定中] <see cref="MagiEngine.V6.C1JointLnsPolish"/> の DeltaChildEvalDefault の写し。既定OFF。</summary>
-    [ObservableProperty] private bool c1DeltaChildEval;
+    /// <summary>[Android 同期] <see cref="MagiEngine.V6.C1JointLnsPolish"/> の DeltaChildEvalDefault の写し。既定ON。</summary>
+    [ObservableProperty] private bool c1DeltaChildEval = true;
 
     /// <summary>[Android 同期/E0・測定中] <see cref="MagiEngine.V6.PolishGate.WishConflictFloorMode"/> の写し。既定OFF。</summary>
     [ObservableProperty] private MagiEngine.V6.WishFloorMode wishFloorMode = MagiEngine.V6.WishFloorMode.Off;
