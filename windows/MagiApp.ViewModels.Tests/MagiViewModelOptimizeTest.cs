@@ -71,6 +71,19 @@ public class MagiViewModelOptimizeTest : IDisposable
             return Result!(state, schedule);
         }
 
+        public bool? LastExtraRefineRequirePostHardDrop { get; private set; }
+        public WishFloorMode? LastWishFloorMode { get; private set; }
+
+        public Task<V6FinalPort.ActionResult> OptimizeWithFlagsAsync(
+            MagiState state, int[][] schedule, int secondsRaw, int? workers, bool softPolish,
+            V6Algorithm requestedAlgorithm, bool allowImpossible, bool extraRefineRequirePostHardDrop, WishFloorMode wishFloorMode,
+            Action<string, ViolationReport?, long, long>? onProgress, CancellationToken cancellationToken)
+        {
+            LastExtraRefineRequirePostHardDrop = extraRefineRequirePostHardDrop;
+            LastWishFloorMode = wishFloorMode;
+            return OptimizeAsync(state, schedule, secondsRaw, workers, softPolish, requestedAlgorithm, allowImpossible, onProgress, cancellationToken);
+        }
+
         public int SoftPolishCallCount { get; private set; }
         public Func<MagiState, int[][], int[][]>? PolishedSchedule { get; set; }
         public Exception? ThrowInsteadOnSoftPolish { get; set; }
@@ -167,6 +180,34 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.NotNull(vm.Ui.RunSummary);
         Assert.Equal(1, vm.Ui.RunSummary!.ChangedStaff);
         Assert.Equal(1, vm.Ui.RunSummary!.ChangedCells);
+    }
+
+    [Fact]
+    public async Task ForegroundRun_PassesExtraRefineAndWishFloorFlags()
+    {
+        var fake = new FakeOptimizationService
+        {
+            Result = (state, schedule) => new V6FinalPort.ActionResult(
+                Schedule: schedule,
+                Report: Report(hard: 0, total: 0),
+                Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"),
+                Logs: Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        try
+        {
+            vm.SetExtraRefineRequirePostHardDrop(true);
+            vm.SetWishFloorMode(WishFloorMode.E0A);
+            vm.RunV6FullOptimize();
+            await vm.LastRunOptimizeTask!;
+            Assert.True(fake.LastExtraRefineRequirePostHardDrop);
+            Assert.Equal(WishFloorMode.E0A, fake.LastWishFloorMode);
+        }
+        finally
+        {
+            PolishGate.WishConflictFloorMode = WishFloorMode.Off;
+        }
     }
 
     [Fact]

@@ -92,6 +92,10 @@ public sealed partial class SettingsView : UserControl
             BlockSwapC3nFilterToggle.IsOn = ui.BlockSwapC3nFilter;
             WideC3nBreakToggle.IsOn = ui.WideC3nBreak;
             CombineExhaustPairsToggle.IsOn = ui.CombineExhaustPairs;
+            C1DeltaChildEvalToggle.IsOn = ui.C1DeltaChildEval;
+            ExtraRefineRequirePostHardDropToggle.IsOn = ui.ExtraRefineRequirePostHardDrop;
+            var wishTag = ui.WishFloorMode.ToString();
+            WishFloorModeCombo.SelectedItem = WishFloorModeCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == wishTag);
 
             var tag = ui.V6Algorithm.ToString();
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
@@ -665,6 +669,26 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         _vm.SetCombineExhaustPairs(CombineExhaustPairsToggle.IsOn);
+    }
+
+    private void OnC1DeltaChildEvalToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.SetC1DeltaChildEval(C1DeltaChildEvalToggle.IsOn);
+    }
+
+    private void OnExtraRefineRequirePostHardDropToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.SetExtraRefineRequirePostHardDrop(ExtraRefineRequirePostHardDropToggle.IsOn);
+    }
+
+    private void OnWishFloorModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        var tag = (WishFloorModeCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+        if (tag is null || !Enum.TryParse<WishFloorMode>(tag, out var mode)) return;
+        _vm.SetWishFloorMode(mode);
     }
 
     private void OnAlgorithmChanged(object sender, SelectionChangedEventArgs e)

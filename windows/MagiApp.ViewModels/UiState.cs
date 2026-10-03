@@ -142,6 +142,15 @@ public sealed partial class UiState : ObservableObject
     /// （A/B 138 ペアで新2/同等135/旧1＝ゲート不合格。<see cref="MagiEngine.V6.PolishGate.CountChainPolish"/> 参照）。</summary>
     [ObservableProperty] private bool countChainPolish;
 
+    /// <summary>[Android 同期/測定中] <see cref="MagiEngine.V6.C1JointLnsPolish"/> の DeltaChildEvalDefault の写し。既定OFF。</summary>
+    [ObservableProperty] private bool c1DeltaChildEval;
+
+    /// <summary>[Android 同期/E0・測定中] <see cref="MagiEngine.V6.PolishGate.WishConflictFloorMode"/> の写し。既定OFF。</summary>
+    [ObservableProperty] private MagiEngine.V6.WishFloorMode wishFloorMode = MagiEngine.V6.WishFloorMode.Off;
+
+    /// <summary>[Android 同期/測定中・backlog#35] 前面の実行だけが HandleOptimize へ渡す。既定OFF。</summary>
+    [ObservableProperty] private bool extraRefineRequirePostHardDrop;
+
     // adaptiveEscape / portfolioRoleParallelSa はKotlin原本で単体A/B中立につき機構ごと撤去済み＝移植対象外。
 
     /// <summary>仕上げ最適化（品質研磨）。既定ON。keep-best で悪化しない。</summary>

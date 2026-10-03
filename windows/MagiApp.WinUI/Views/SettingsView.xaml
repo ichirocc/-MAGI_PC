@@ -70,6 +70,23 @@
             <ToggleSwitch x:Name="CombineExhaustPairsToggle" Header="職員どうしの交換探索を粘り強く"
                           OnContent="ON" OffContent="OFF" Toggled="OnCombineExhaustPairsToggled" />
 
+            <!-- [Android 2026-10-03 同期] 既定OFFの測定用フラグ 3 件（文言は Android と同一）。 -->
+            <ToggleSwitch x:Name="C1DeltaChildEvalToggle" Header="期間の制約の一括見直しを速く試す"
+                          OnContent="ON" OffContent="OFF" Toggled="OnC1DeltaChildEvalToggled" />
+            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                       Text="「期間の制約」を職員の回数と一緒に見直すとき、候補の良し悪しを速い方法で見積もります。効果はまだ確かめられておらず、結果が変わらないこともあります。既定はOFFです。" />
+            <ToggleSwitch x:Name="ExtraRefineRequirePostHardDropToggle" Header="解けない違反だけ残ったら追加の見直しを省く"
+                          OnContent="ON" OffContent="OFF" Toggled="OnExtraRefineRequirePostHardDropToggled" />
+            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                       Text="仕上げのあと、残った違反が「計算では消えない」と分かっているときだけ、最後の追加の見直しを省いて早く終えます。効果はまだ確かめられておらず、結果が変わらないこともあります。既定はOFFです。" />
+            <ComboBox x:Name="WishFloorModeCombo" Header="希望どうしの衝突で止める" SelectionChanged="OnWishFloorModeChanged">
+                <ComboBoxItem Content="OFF" Tag="Off" />
+                <ComboBoxItem Content="仕上げは続ける" Tag="E0A" />
+                <ComboBoxItem Content="仕上げも省く" Tag="E0B" />
+            </ComboBox>
+            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                       Text="希望どうしがぶつかって消せない違反だけが残ったら、それ以上減らすのをやめます。「仕上げは続ける」は仕上げを通常どおり行い、「仕上げも省く」は仕上げを省いて早く終えます。効果はまだ確かめられておらず、結果が変わらないことも、変わることもあります。既定はOFFです。" />
+
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
             <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <TextBlock Text="上にあるものから先に直します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />

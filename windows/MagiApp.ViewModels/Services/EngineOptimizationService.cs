@@ -30,6 +30,31 @@ public sealed class EngineOptimizationService : IOptimizationService
             onProgress,
             cancellationToken);
 
+    public Task<V6FinalPort.ActionResult> OptimizeWithFlagsAsync(
+        MagiState state,
+        int[][] schedule,
+        int secondsRaw,
+        int? workers,
+        bool softPolish,
+        V6Algorithm requestedAlgorithm,
+        bool allowImpossible,
+        bool extraRefineRequirePostHardDrop,
+        WishFloorMode wishFloorMode,
+        Action<string, ViolationReport?, long, long>? onProgress,
+        CancellationToken cancellationToken) =>
+        V6FinalPort.HandleOptimize(
+            state,
+            secondsRaw,
+            schedule,
+            workers,
+            softPolish,
+            requestedAlgorithm,
+            allowImpossible,
+            onProgress,
+            cancellationToken,
+            extraRefineRequirePostHardDrop: extraRefineRequirePostHardDrop,
+            wishFloorMode: wishFloorMode);
+
     public Task<int[][]> SoftPolishAsync(
         MagiState state,
         int[][] schedule,

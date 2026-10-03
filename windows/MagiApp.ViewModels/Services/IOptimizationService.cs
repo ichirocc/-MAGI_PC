@@ -35,6 +35,22 @@ public interface IOptimizationService
         Action<string, ViolationReport?, long, long>? onProgress,
         CancellationToken cancellationToken);
 
+    /// <summary>[Kotlin 前面の実行と同値] <see cref="OptimizeAsync"/> に既定 OFF の測定用 2 引数
+    /// （<c>extraRefineRequirePostHardDrop</c>・<c>wishFloorMode</c>）を足した入口。既定実装は両方を捨てて委譲する。</summary>
+    Task<V6FinalPort.ActionResult> OptimizeWithFlagsAsync(
+        MagiState state,
+        int[][] schedule,
+        int secondsRaw,
+        int? workers,
+        bool softPolish,
+        V6Algorithm requestedAlgorithm,
+        bool allowImpossible,
+        bool extraRefineRequirePostHardDrop,
+        WishFloorMode wishFloorMode,
+        Action<string, ViolationReport?, long, long>? onProgress,
+        CancellationToken cancellationToken) =>
+        OptimizeAsync(state, schedule, secondsRaw, workers, softPolish, requestedAlgorithm, allowImpossible, onProgress, cancellationToken);
+
     /// <summary><see cref="V6NativeOptimizer.SoftPolishOnly"/> への薄い委譲。</summary>
     Task<int[][]> SoftPolishAsync(
         MagiState state,

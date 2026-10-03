@@ -407,6 +407,26 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 回数の超過を数日がかりで減らす → {(on ? "ON" : "OFF")}");
     }
 
+    public void SetC1DeltaChildEval(bool on)
+    {
+        C1JointLnsPolish.DeltaChildEvalDefault = on;
+        Ui.C1DeltaChildEval = on;
+        LogOp("I", $"設定変更: 期間の制約の一括見直しを差分で評価 → {(on ? "ON" : "OFF")}");
+    }
+
+    public void SetWishFloorMode(WishFloorMode mode)
+    {
+        PolishGate.WishConflictFloorMode = mode;
+        Ui.WishFloorMode = mode;
+        LogOp("I", $"設定変更: 希望どうしの衝突で止める → {V6FinalPort.WishFloorModeName(mode)}");
+    }
+
+    public void SetExtraRefineRequirePostHardDrop(bool on)
+    {
+        Ui.ExtraRefineRequirePostHardDrop = on;
+        LogOp("I", $"設定変更: 解けない違反だけなら追加の見直しを省く → {(on ? "ON" : "OFF")}");
+    }
+
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み
     //   （単体A/B中立＝機構ごと撤去）＝この移植でも対応不要。
 

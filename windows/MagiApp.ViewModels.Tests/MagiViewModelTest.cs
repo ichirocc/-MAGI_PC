@@ -132,6 +132,47 @@ public class MagiViewModelTest
         }
     }
 
+    [Fact]
+    public void SetC1DeltaChildEvalUpdatesUiAndEngineDefault()
+    {
+        var vm = new MagiViewModel();
+        try
+        {
+            vm.SetC1DeltaChildEval(true);
+            Assert.True(vm.Ui.C1DeltaChildEval);
+            Assert.True(C1JointLnsPolish.DeltaChildEvalDefault);
+        }
+        finally
+        {
+            C1JointLnsPolish.DeltaChildEvalDefault = false;
+        }
+    }
+
+    [Fact]
+    public void SetWishFloorModeUpdatesUiAndPolishGate()
+    {
+        var vm = new MagiViewModel();
+        try
+        {
+            vm.SetWishFloorMode(WishFloorMode.E0B);
+            Assert.Equal(WishFloorMode.E0B, vm.Ui.WishFloorMode);
+            Assert.Equal(WishFloorMode.E0B, PolishGate.WishConflictFloorMode);
+        }
+        finally
+        {
+            PolishGate.WishConflictFloorMode = WishFloorMode.Off;
+        }
+    }
+
+    [Fact]
+    public void NewSearchFlagsDefaultOff()
+    {
+        var vm = new MagiViewModel();
+        Assert.False(vm.Ui.C1DeltaChildEval);
+        Assert.Equal(WishFloorMode.Off, vm.Ui.WishFloorMode);
+        Assert.False(vm.Ui.ExtraRefineRequirePostHardDrop);
+    }
+
     [Theory]
     [InlineData(1, 10)]                                  // 下限未満は10秒へ
     [InlineData(10, 10)]

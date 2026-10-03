@@ -231,9 +231,12 @@ public sealed partial class MagiViewModel
                 }
             });
 
-            var res = await _optimizationService.OptimizeAsync(
+            var res = await _optimizationService.OptimizeWithFlagsAsync(
                 st0, sched0.Copy2D(), Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm,
-                allowImpossible: true, onProgress: OnProgress, cancellationToken: ct);
+                allowImpossible: true,
+                extraRefineRequirePostHardDrop: Ui.ExtraRefineRequirePostHardDrop,
+                wishFloorMode: PolishGate.WishConflictFloorMode,
+                onProgress: OnProgress, cancellationToken: ct);
 
             // [再実行 keep-best] 完了結果が入力より悪化なら、入力解を維持して通知する。
             var newHard = (long)res.Report.Hard; var newTotal = res.Report.Total;

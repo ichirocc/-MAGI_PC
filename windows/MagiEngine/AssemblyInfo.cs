@@ -7,3 +7,6 @@ using System.Runtime.CompilerServices;
 // the full evaluator, and the delta evaluator without those accessors being part of the engine's
 // public surface for downstream (WinUI) consumers.
 [assembly: InternalsVisibleTo("MagiEngine.Tests")]
+// Kotlin は同一モジュールで ui/ から internal の C1JointLnsPolish.deltaChildEvalDefault を切り替える。
+[assembly: InternalsVisibleTo("MagiApp.ViewModels")]
+[assembly: InternalsVisibleTo("MagiApp.ViewModels.Tests")]
