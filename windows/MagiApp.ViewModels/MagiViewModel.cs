@@ -424,7 +424,7 @@ public sealed partial class MagiViewModel
     public void SetExtraRefineRequirePostHardDrop(bool on)
     {
         Ui.ExtraRefineRequirePostHardDrop = on;
-        LogOp("I", $"設定変更: 解けない違反だけなら追加の見直しを省く → {(on ? "ON" : "OFF")}");
+        LogOp("I", $"設定変更: 計算では消えない違反だけなら追加の見直しを省く → {(on ? "ON" : "OFF")}");
     }
 
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み
