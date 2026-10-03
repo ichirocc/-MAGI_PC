@@ -136,7 +136,7 @@ internal static class C1JointLnsPolish
         long deadline = startTicks + TicksFromMillis(budgetMillis);
         // [3.342.0] 最良が patienceMs 更新されなければ打ち切る。keep-best は不変＝早く止めるだけ。
         long lastImproveTicks = startTicks;
-        long patienceTicks = cfg.PatienceMs > 0L ? TicksFromMillis(cfg.PatienceMs) : long.MaxValue;
+        long patienceTicks = cfg.PatienceMs > 0L ? TicksFromMillis(Math.Min(cfg.PatienceMs, 60_000L)) : long.MaxValue;
         bool Stalled() => patienceTicks != long.MaxValue &&
             System.Diagnostics.Stopwatch.GetTimestamp() - lastImproveTicks >= patienceTicks;
         var evaluations = 0;
@@ -306,7 +306,7 @@ internal static class C1JointLnsPolish
         string debtTxt = debtRejected == 0 ? "" : $"(必須{debtHard} 合計{debtTotal} c1 {debtC1}{debtCulpritsTxt})";
         var log = new MirrorLog(
             tag: "C1JointLNS",
-            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, 50%目標={(targetReached ? "到達" : "未達")})" +
+            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, {pct}%目標={(targetReached ? "到達" : "未達")})" +
                 $" / total {rootReport.Total}->{chosenReport.Total} HARD {rootReport.Hard}->{chosenReport.Hard}" +
                 $" 採用{(valid ? 1 : 0)}束 手数{(valid ? best.Path.Count : 0)}" +
                 $" restart{restartsDone} 展開{expanded} 候補{generated} debt除外{debtRejected}" +

@@ -92,9 +92,10 @@ public sealed class DeltaEvaluator
             {
                 int k = row[j];
                 if (k < 0 || k >= K) throw new ArgumentException($"reset: cell({i},{j})={k} out of [0,{K})");
-                _a[i][j] = k;
             }
         }
+        // 検証を書き込みの前に終える＝拒否したとき盤面と集計が食い違わない。
+        for (int i = 0; i < S; i++) Array.Copy(init[i], _a[i], T);
         Rebuild();
     }
 

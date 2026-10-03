@@ -210,6 +210,23 @@ public class ParityTest
         );
     }
 
+    [Theory]
+    [MemberData(nameof(FixtureLoader.AllFiles), MemberType = typeof(FixtureLoader))]
+    public void ResetRejectingOutOfRangeCellLeavesStateUntouched(string fixtureFile)
+    {
+        var state = LoadFixture(fixtureFile);
+        var p = new Problem(state);
+        var de = new DeltaEvaluator(p);
+        de.Reset(ScheduleUtil.NormalizeSchedule(state.Schedule.ToIntArray2D(), p));
+        var before = de.Snapshot();
+        long scoreBefore = de.Score();
+        var bad = before.Select(r => (int[])r.Clone()).ToArray();
+        bad[p.S - 1][p.T - 1] = p.K;
+        Assert.Throws<ArgumentException>(() => de.Reset(bad));
+        Assert.Equal(before, de.Snapshot());
+        Assert.Equal(scoreBefore, de.Score());
+    }
+
     [Fact]
     public void SyntheticFixture_AllTwentyFamiliesFireAtLeastOnceAcrossTheRun_AndParityHolds()
     {
