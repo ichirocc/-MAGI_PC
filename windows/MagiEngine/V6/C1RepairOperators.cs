@@ -36,33 +36,33 @@ internal static class C1RepairOperators
     /// <summary>自己内移設 + 同日 coverage保存 swap/permutation（手A/R1/R2/R3）。</summary>
     public static V6HotfixPasses.CyclicSwapResult SelfRelocateAndSameDaySwap(
         MagiState state, int[][] schedule, int maxPasses = 3,
-        Func<bool>? shouldStop = null, long seed = 0x1C1L, bool combineExhaustPairs = false) =>
-        V6HotfixPasses.ApplyC1WindowPolish(state, schedule, maxPasses, shouldStop, seed, combineExhaustPairs);
+        Func<bool>? shouldStop = null, long seed = 0x1C1L, bool combineExhaustPairs = false, bool quantitativeRangeEval = false) =>
+        V6HotfixPasses.ApplyC1WindowPolish(state, schedule, maxPasses, shouldStop, seed, combineExhaustPairs, quantitativeRangeEval);
 
     /// <summary>Temporal DP + FlexibleDayFlow。</summary>
     public static V6HotfixPasses.CyclicSwapResult TemporalFlow(
         MagiState state, int[][] schedule, int maxPasses = 2, int maxRelocations = 4,
-        int trials = 4, Func<bool>? shouldStop = null, long seed = 0xC1F10FL) =>
-        C1TemporalFlowPolish.Apply(state, schedule, maxPasses, maxRelocations, trials, shouldStop, seed);
+        int trials = 4, Func<bool>? shouldStop = null, long seed = 0xC1F10FL, bool quantitativeRangeEval = false) =>
+        C1TemporalFlowPolish.Apply(state, schedule, maxPasses, maxRelocations, trials, shouldStop, seed, quantitativeRangeEval);
 
     /// <summary>広域時空間ビーム。</summary>
     public static V6HotfixPasses.CyclicSwapResult WideBeam(
         MagiState state, int[][] schedule, int beamWidth = 16, int maxSteps = 60,
-        Func<bool>? shouldStop = null, long seed = 0x1CBEAL) =>
-        V6HotfixPasses.ApplyC1BeamPolish(state, schedule, beamWidth, maxSteps, shouldStop, seed);
+        Func<bool>? shouldStop = null, long seed = 0x1CBEAL, bool quantitativeRangeEval = false) =>
+        V6HotfixPasses.ApplyC1BeamPolish(state, schedule, beamWidth, maxSteps, shouldStop, seed, quantitativeRangeEval: quantitativeRangeEval);
 
     /// <summary>厳密窓修復（coverage保存 permutation の分枝限定探索）。</summary>
     public static V6HotfixPasses.CyclicSwapResult ExactWindow(
-        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null, bool useComponents = false) =>
-        V6HotfixPasses.ApplyC1ExactWindowRepair(state, schedule, cfg, shouldStop, useComponents);
+        MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null, bool useComponents = false, bool quantitativeRangeEval = false) =>
+        V6HotfixPasses.ApplyC1ExactWindowRepair(state, schedule, cfg, shouldStop, useComponents, quantitativeRangeEval);
 
     /// <summary>
     /// [3.276.0] index駆動の候補生成＋prefilter選別＋玉突き連鎖のC1修復（Index/Prefilterを実駆動する経路）。
     /// </summary>
     public static V6HotfixPasses.CyclicSwapResult IndexChainRepair(
         MagiState state, int[][] schedule, int maxPasses = 2,
-        Func<bool>? shouldStop = null, long seed = 0x1C1D2L) =>
-        V6HotfixPasses.ApplyC1IndexChainRepair(state, schedule, maxPasses, shouldStop, seed);
+        Func<bool>? shouldStop = null, long seed = 0x1C1D2L, bool quantitativeRangeEval = false) =>
+        V6HotfixPasses.ApplyC1IndexChainRepair(state, schedule, maxPasses, shouldStop, seed, quantitativeRangeEval);
 
     /// <summary>Joint LNS（c1 + covU/range-low を同一 goal pool で）。</summary>
     public static V6HotfixPasses.CyclicSwapResult JointLns(

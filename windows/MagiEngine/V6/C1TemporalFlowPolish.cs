@@ -35,12 +35,12 @@ internal static class C1TemporalFlowPolish
         int maxRelocations = 4,
         int trials = 4,
         Func<bool>? shouldStop = null,
-        long seed = 0xC1F10FL)
+        long seed = 0xC1F10FL, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         int applied = 0;
         int rowNoGain = 0;                       // 行の c1 が減らず候補にならなかった数
@@ -224,7 +224,7 @@ internal static class C1TemporalFlowPolish
             }
             int newRowFires = RowC1Fires(trialWork, i);
             if (newRowFires >= RowC1Fires(work, i)) { rowNoGain++; return null; }
-            var rep = UnifiedViolationChecker.Check(state, trialWork);
+            var rep = UnifiedViolationChecker.Check(state, trialWork, quantitativeRangeEval);
             // [3.356.0/実機ログ起因] 旧ログは「DP候補12 flow失敗0 採用0回」までで、12件が
             //   ①行のc1が減らない ②目的関数に負けた ③厳密ピンを崩す のどれで落ちたかが読めなかった。
             //   判定の順序は変えず（better → ピン）、落ちた理由だけを数える。

@@ -21,13 +21,13 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CovOReliefResult ApplyCovOReliefPolish(
         MagiState state, int[][] schedule, int maxMoves = 64, int maxEvaluations = 3_000, Func<bool>? shouldStop = null,
-        bool? wishPinStrict = null)
+        bool? wishPinStrict = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var strict = wishPinStrict ?? PolishGate.WishPinStrict;
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0; var evaluations = 0;
         var adopted = new List<string>();
@@ -72,7 +72,7 @@ public static partial class V6HotfixPasses
                         if (evaluations >= maxEvaluations) break;
                         tried = true; evaluations++;
                         work[i][j] = m;
-                        var after = UnifiedViolationChecker.Check(state, work);
+                        var after = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                         work[i][j] = k;
                         if (UnifiedViolationChecker.BetterReport(after, bestAfter ?? bestRep)) { bestI = i; bestM = m; bestAfter = after; }
                         else

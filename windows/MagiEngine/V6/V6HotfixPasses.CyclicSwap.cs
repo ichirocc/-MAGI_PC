@@ -20,14 +20,14 @@ public static partial class V6HotfixPasses
     /// 値の入替えのみ）。<c>maxPasses</c> 回まで巡回し、1巡で1件も改善しなければ早期終了する。
     /// </summary>
     public static CyclicSwapResult ApplyCyclicSwapPolish(
-        MagiState state, int[][] schedule, int maxPasses = 4, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxPasses = 4, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         // [監査で発見・3.270.0] p.wish[i][j]<0 は「希望が一切ない」判定で、実現不能な希望
@@ -67,7 +67,7 @@ public static partial class V6HotfixPasses
                             work[a][j] = sa; work[b][j] = sb;
                             continue;
                         }
-                        var rep = UnifiedViolationChecker.Check(state, work);
+                        var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                         if (V6SearchOperators.AdoptionGate(p, workBeforeSwap2, work, rep, bestRep, pinBlocks).Accepted)
                         {
                             bestRep = rep; applied++; improved = true;
@@ -104,7 +104,7 @@ public static partial class V6HotfixPasses
                                     work[a][j] = sa; work[b][j] = sb; work[c][j] = sc;
                                     continue;
                                 }
-                                var rep = UnifiedViolationChecker.Check(state, work);
+                                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRotate3, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true;
@@ -135,14 +135,14 @@ public static partial class V6HotfixPasses
     /// 部分目的が改善しない手をフル checker を呼ばずに省く（近似・keep-bestの正しさには無関係）。
     /// </summary>
     public static CyclicSwapResult ApplyC3SequencePolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var skipped = 0; // [#5] 前フィルタでフル評価を省いた手数
@@ -169,7 +169,7 @@ public static partial class V6HotfixPasses
             //   "vio-c3/c3m/c3mn"が消える。該当職員の全マーク位置が同様にシャドーイングされていると
             //   anchorStaffから丸ごと漏れ、一度も研磨が試されない。cellFamilies（1セルの全クラス保持）
             //   に切替え、上書きされても検出できるようにする。起点が広がるだけの後方互換な修正。
-            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var anchorStaff = new HashSet<int>();
             foreach (var (key, fams) in rep0.CellFamilies)
             {
@@ -221,7 +221,7 @@ public static partial class V6HotfixPasses
                                     continue;
                                 }
                             }
-                            var rep = UnifiedViolationChecker.Check(state, work);
+                            var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                             if (V6SearchOperators.AdoptionGate(p, workBeforeBlock, work, rep, bestRep, pinBlocks).Accepted)
                             {
                                 bestRep = rep; applied++; improved = true;
@@ -265,14 +265,14 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyBlockRotationPolish(
         MagiState state, int[][] schedule, IReadOnlySet<string> anchorClasses, string tag,
-        int maxPasses = 2, Func<bool>? shouldStop = null)
+        int maxPasses = 2, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var skipped = 0; // [#5] 前フィルタでフル評価を省いた手数(有効性ログ用)
@@ -300,7 +300,7 @@ public static partial class V6HotfixPasses
             //   anchorClassesのマーク位置に更に重い他族が同居する場合そのセルの分類が上書きされ検出漏れ
             //   になる。cellFamilies（1セルの全クラス保持）に切替え、上書きされても検出できるようにする。
             //   起点が広がるだけの後方互換な修正（C1Rotate/C3Rotate 両呼出に共通して適用される）。
-            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var anchorStaff = new HashSet<int>();
             foreach (var (key, fams) in rep0.CellFamilies)
             {
@@ -366,7 +366,7 @@ public static partial class V6HotfixPasses
                                         continue;
                                     }
                                 }
-                                var rep = UnifiedViolationChecker.Check(state, work);
+                                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRotate, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true;
@@ -425,14 +425,14 @@ public static partial class V6HotfixPasses
     /// （2.49.0 の「専用パスは冗長」の結論を踏襲）。
     /// </summary>
     public static CyclicSwapResult ApplyWeeklyRebalancePolish(
-        MagiState state, int[][] schedule, int maxPasses = 2, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxPasses = 2, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
@@ -507,7 +507,7 @@ public static partial class V6HotfixPasses
                                 //   exactPinRegression ガードをここにも追加（3.256.0の retrofit 漏れ）。
                                 var workBeforeRect = work.Copy2D();
                                 work[i][j1] = z; work[i][j2] = x; work[ip][j1] = x; work[ip][j2] = y;
-                                var rep = UnifiedViolationChecker.Check(state, work);
+                                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRect, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true; done = true; break;

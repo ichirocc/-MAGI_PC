@@ -27,13 +27,13 @@ public static partial class V6HotfixPasses
     /// （<see cref="UnifiedViolationChecker"/>）で担保する。
     /// </summary>
     public static DayAssignResult ApplyDayAssignmentPolish(
-        MagiState state, int[][] schedule, Func<bool>? shouldStop = null, bool identityFallback = false)
+        MagiState state, int[][] schedule, Func<bool>? shouldStop = null, bool identityFallback = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
 
@@ -100,7 +100,7 @@ public static partial class V6HotfixPasses
                 if (cand[i][j] != k) { cand[i][j] = k; changed = true; }
             }
             if (!changed) continue;
-            var rep = UnifiedViolationChecker.Check(state, cand);
+            var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
             // [厳密ピン保護] 日ブロック内Hungarian再割当は複数職員の回数を同時に変えうるため、
             //   staffRange厳密ピン(lo==hi)を新たに崩す日案は不採用にする（keep-best/重みは不変）。
             if (V6SearchOperators.AdoptionGate(p, work, cand, rep, bestRep, pinBlocks).Accepted)
@@ -134,13 +134,13 @@ public static partial class V6HotfixPasses
     /// が担保する（費用に無い族も採用判定で悪化しないことを保証）。
     /// </summary>
     public static DayAssignResult ApplyAlternatingSoftPolish(
-        MagiState state, int[][] schedule, int maxSweeps = 4, Func<bool>? shouldStop = null, bool identityFallback = false)
+        MagiState state, int[][] schedule, int maxSweeps = 4, Func<bool>? shouldStop = null, bool identityFallback = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
 
@@ -242,7 +242,7 @@ public static partial class V6HotfixPasses
                     if (cand[i][j] != k) { cand[i][j] = k; changed = true; }
                 }
                 if (!changed) continue;
-                var rep = UnifiedViolationChecker.Check(state, cand);
+                var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
                 // [厳密ピン保護] 日ブロック内Hungarian再割当は複数職員の回数を同時に変えうるため、
                 //   staffRange厳密ピン(lo==hi)を新たに崩す日案は不採用にする（keep-best/重みは不変）。
                 if (V6SearchOperators.AdoptionGate(p, work, cand, rep, bestRep, pinBlocks).Accepted)

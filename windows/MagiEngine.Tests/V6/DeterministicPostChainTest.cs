@@ -78,7 +78,7 @@ public class DeterministicPostChainTest
         Assert.True(UnifiedViolationChecker.BetterReport(improvedReport, report0));
         Assert.True(UnifiedViolationChecker.BetterReport(improvedReport, regressedReport));
 
-        var chainOff = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: false, initialReport: report0);
+        var chainOff = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: false, initialReport: report0);
         chainOff.Adopt(Result(improved, improvedReport, "Good"));
         chainOff.Adopt(Result(regressed, regressedReport, "Bad"));
         Assert.True(Same(chainOff.Work, regressed));
@@ -94,7 +94,7 @@ public class DeterministicPostChainTest
         var improved = With(work0, (1, 1, 1));
         var regressed = With(improved, (1, 0, 1));
 
-        var chainOn = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        var chainOn = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: report0);
         chainOn.Adopt(Result(improved, UnifiedViolationChecker.Check(s, improved), "Good"));
         chainOn.Adopt(Result(regressed, UnifiedViolationChecker.Check(s, regressed), "Bad"));
         Assert.True(Same(chainOn.Work, improved));
@@ -111,7 +111,7 @@ public class DeterministicPostChainTest
         var report0 = UnifiedViolationChecker.Check(s, work0);
         var improved = With(work0, (1, 1, 1));
         var improvedReport = UnifiedViolationChecker.Check(s, improved);
-        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: report0);
         chain.Adopt(Result(improved, improvedReport, "Good"));
         chain.Adopt(Result(With(improved), improvedReport, "Noop"));
         Assert.True(Same(chain.Work, improved));
@@ -128,7 +128,7 @@ public class DeterministicPostChainTest
         var report0 = UnifiedViolationChecker.Check(s, work0);
         var improved = With(work0, (1, 1, 1));
         var regressed = With(improved, (1, 0, 0), (0, 0, 0));
-        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: report0);
         chain.Adopt(Result(improved, UnifiedViolationChecker.Check(s, improved), "Good"));
         chain.Adopt(Result(regressed, UnifiedViolationChecker.Check(s, regressed), "Bad"));
         Assert.True(Same(chain.Work, regressed));
@@ -149,7 +149,7 @@ public class DeterministicPostChainTest
         var lateralReport = UnifiedViolationChecker.Check(s, lateral);
         Assert.True(!UnifiedViolationChecker.BetterReport(lateralReport, improvedReport) && !UnifiedViolationChecker.BetterReport(improvedReport, lateralReport));
         Assert.False(Same(lateral, improved));
-        var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0);
+        var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: report0);
         c.Adopt(Result(improved, improvedReport, "Good"));
         c.Adopt(Result(lateral, lateralReport, "Last"));
         Assert.True(Same(c.Work, improved));
@@ -166,7 +166,7 @@ public class DeterministicPostChainTest
         var improvedReport = UnifiedViolationChecker.Check(s, improved);
         (int good, int bad) RunChain(bool countsZero)
         {
-            var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, runningKeepBest: true, initialReport: report0, rollbackCountsZero: countsZero);
+            var c = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: report0, rollbackCountsZero: countsZero);
             var g = c.Adopt(Result(improved, improvedReport, "Good"));
             var b = c.Adopt(Result(work0, report0, "Bad"));
             Assert.True(Same(c.Work, improved));

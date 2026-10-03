@@ -21,14 +21,14 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyC1BeamPolish(
         MagiState state, int[][] schedule, int beamWidth = 16, int maxSteps = 60,
-        Func<bool>? shouldStop = null, long seed = 0x1CBEAL, int patience = 20)
+        Func<bool>? shouldStop = null, long seed = 0x1CBEAL, int patience = 20, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         long beamT0 = EngineClock.NowMs();
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work0 = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work0);
+        var before = UnifiedViolationChecker.Check(state, work0, quantitativeRangeEval);
 
         if (p.Cons1.Count == 0)
         {
@@ -114,7 +114,7 @@ public static partial class V6HotfixPasses
                     var w2 = TryOneMove(b.Work, i, j, x);
                     if (w2 == null) continue;
                     if (prefilter && b.Rep.Hard + HardDelta.Delta(p, b.Work, w2) > before.Hard) continue;
-                    var rep2 = UnifiedViolationChecker.Check(state, w2);
+                    var rep2 = UnifiedViolationChecker.Check(state, w2, quantitativeRangeEval);
                     if (rep2.Hard > before.Hard) continue;
                     nextCandidates.Add(new Beam(w2, rep2, b.Applied + 1));
                     anyExpanded = true;

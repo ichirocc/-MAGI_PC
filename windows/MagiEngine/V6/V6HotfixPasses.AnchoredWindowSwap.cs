@@ -36,12 +36,12 @@ public static partial class V6HotfixPasses
     /// 正式採否は既存と同一（BetterReport keep-best・ExactPinRegression）。pass ごとに最良1手を採用し再アンカー。
     /// </summary>
     private static CyclicSwapResult ApplyStrictWholeWindow(
-        MagiState state, int[][] schedule, int maxPasses, int maxEvaluations, int maxLen, int longLen, Func<bool> stop)
+        MagiState state, int[][] schedule, int maxPasses, int maxEvaluations, int maxLen, int longLen, Func<bool> stop, bool quantitativeRangeEval)
     {
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         if (p.S < 2 || p.T < 1 || maxPasses <= 0 || maxEvaluations <= 0)
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
@@ -269,7 +269,7 @@ public static partial class V6HotfixPasses
                 bool pinRegression;
                 try
                 {
-                    r = UnifiedViolationChecker.Check(state, work);
+                    r = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     pinRegression = V6SearchOperators.ExactPinRegression(p, baseWork, work);
                     if (pinRegression && UnifiedViolationChecker.BetterReport(r, bestRep)) pinBlocks.Record(p, baseWork, work);
                 }

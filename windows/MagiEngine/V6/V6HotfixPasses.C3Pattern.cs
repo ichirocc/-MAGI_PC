@@ -24,14 +24,14 @@ public static partial class V6HotfixPasses
     /// keep-best＝退化不能。
     /// </summary>
     public static CyclicSwapResult ApplyC3PatternPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3B4L)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3B4L, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var rules = new List<C3>();
@@ -102,7 +102,7 @@ public static partial class V6HotfixPasses
                     work[i][j] = alt;
                     if (!needsChain)
                     {
-                        var rep = UnifiedViolationChecker.Check(state, work);
+                        var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                         if (V6SearchOperators.AdoptionGate(p, workBeforePattern, work, rep, bestRep, pinBlocks).Accepted)
                         { bestRep = rep; applied++; improved = true; done = true; }
                         else work[i][j] = curK;
@@ -114,7 +114,7 @@ public static partial class V6HotfixPasses
                     if (chain == null) { work[i][j] = curK; continue; }
                     var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
                     foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
-                    var rep2 = UnifiedViolationChecker.Check(state, work);
+                    var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforePattern, work);
                     if (pinBad && IsBetter(rep2, bestRep)) pinBlocks.Record(p, workBeforePattern, work);
                     if (IsBetter(rep2, bestRep) && !pinBad) { bestRep = rep2; applied++; improved = true; done = true; }

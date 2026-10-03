@@ -19,15 +19,15 @@ public static partial class V6HotfixPasses
         MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null,
         // [C1 重複窓の連結成分化/測定中, Kotlin原本] 既定 false = 旧経路そのまま（1件の違反を起点にパディング）。
         //   true にすると Analyze() の代わりに Components() で近接・重複窓を束ね、SolveComponent へ渡す。
-        bool useComponents = false)
+        bool useComponents = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         cfg ??= new Config();
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var solved = 0;
@@ -72,7 +72,7 @@ public static partial class V6HotfixPasses
             }
             var workBefore = work.Copy2D();
             foreach (var op in res.Patch) work[op[0]][op[1]] = op[2];
-            var rep = UnifiedViolationChecker.Check(state, work);
+            var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             // [3.321.0] このパスだけ却下理由をまったく残しておらず、ログは applied==0 のとき
             //   一律「頭打ち=改善手なし」としか言えなかった。他の研磨パスと同じ RejectCulpritStats で分類する。
             var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);

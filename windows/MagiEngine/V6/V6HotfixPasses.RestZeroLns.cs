@@ -28,24 +28,24 @@ public static partial class V6HotfixPasses
     /// 子の並びの乱択は Kotlin と乱数列が異なるため、盤面はビットまで同一にはならない（採用基準は同じ）。
     /// </summary>
     public static RestZeroLnsResult ApplyRestZeroWindowLns(
-        MagiState state, int[][] schedule, RestZeroLnsConfig? config = null, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, RestZeroLnsConfig? config = null, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var cfg = config ?? new RestZeroLnsConfig();
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         // [backlog#24] 休シフト未設定ならno-op（このパス自体が「休が余る窓」を扱うので前提が成立しない）。
         if (p.RestIdx is not int rest)
             return new RestZeroLnsResult(ScheduleUtil.NormalizeSchedule(schedule, p), 0,
                 new[] { Log("休0日の窓LNS: 休シフトなし=スキップ") });
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         // 途中盤面の推定は日内で決まる族だけ（Android 同式）: 未割当の日が旧値のため、境界をまたぐ禁止連続や回数系は子ごとに歪む。
         // C# の Evaluator は族別内訳を返さないので正式チェッカーの Breakdown（同じ生カウント）を使う＝結果は同一、速度は劣る。
         var estFams = new[] { "c1", "c3", "c3m", "c3mn", "c41", "c42", "c41s", "c42s", "covO", "covU" };
         long Estimate(int[][] board)
         {
-            var bd = UnifiedViolationChecker.Check(state, board).Breakdown;
+            var bd = UnifiedViolationChecker.Check(state, board, quantitativeRangeEval).Breakdown;
             long sum = 0;
             foreach (var f in estFams) sum += (long)(bd.GetValueOrDefault(f) * MirrorKeys.WeightOf(f));
             return sum;
@@ -302,7 +302,7 @@ public static partial class V6HotfixPasses
                         if (leaf.Score < bestEst) bestEst = leaf.Score;
                         if (leaf.Board.ContentDeepEquals(work)) continue;
                         checkedN++; checkedHere++;
-                        var rep = UnifiedViolationChecker.Check(state, leaf.Board);
+                        var rep = UnifiedViolationChecker.Check(state, leaf.Board, quantitativeRangeEval);
                         if (bestVerified == null || UnifiedViolationChecker.BetterReport(rep, bestVerified))
                         {
                             bestVerified = rep;

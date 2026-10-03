@@ -172,7 +172,7 @@ public static class CombinatorialRepair
                             //   ピン破りの組合せぶんだけ checker 呼び出しが減る（実データではプールの大半が
                             //   ピン破り＝AptPolish 69/71・FairPolish 20/20）。
                             var pinBad = p != null && V6SearchOperators.ExactPinRegression(p, workBeforeCombo, work);
-                            rep = pinBad ? null : UnifiedViolationChecker.Check(state, work);
+                            rep = pinBad ? null : UnifiedViolationChecker.Check(state, work, p?.QuantitativeRangeEval ?? false);
                             ok = rep != null && isBetter(rep, bestRep);
                         }
                         finally

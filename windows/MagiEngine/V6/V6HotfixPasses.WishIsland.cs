@@ -35,15 +35,17 @@ public static partial class V6HotfixPasses
     /// で、通常は希望周辺も全体も改善する手だけ。停滞時のみ短いビーム（途中は中立手可）。keep-best。0..T 内で完結。
     /// </summary>
     public static CyclicSwapResult ApplyWishIslandPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, int maxEvaluations = 120, int beamWidth = 4, int beamDepth = 3, Func<bool>? shouldStop = null)
-        => ApplyWishIslandPolish(state, schedule, new WishIslandParams(maxPasses, maxEvaluations, beamWidth, beamDepth), shouldStop);
+        MagiState state, int[][] schedule, int maxPasses = 3, int maxEvaluations = 120, int beamWidth = 4, int beamDepth = 3, Func<bool>? shouldStop = null,
+        bool quantitativeRangeEval = false)
+        => ApplyWishIslandPolish(state, schedule, new WishIslandParams(maxPasses, maxEvaluations, beamWidth, beamDepth), shouldStop, quantitativeRangeEval);
 
-    public static CyclicSwapResult ApplyWishIslandPolish(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool>? shouldStop = null)
-        => new WishIslandSession(state, schedule, prm, shouldStop ?? (() => false)).Run();
+    public static CyclicSwapResult ApplyWishIslandPolish(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool>? shouldStop = null,
+        bool quantitativeRangeEval = false)
+        => new WishIslandSession(state, schedule, prm, shouldStop ?? (() => false), quantitativeRangeEval).Run();
 
     /// <summary>テスト用: 各島の通常候補（同日・窓・両翼）を (種類, セル列) で列挙する。月初・月末で両翼が出ないこと等を固定する。</summary>
     internal static IEnumerable<(string Kind, int[] Cells)> EnumerateWishMovesForTest(MagiState state, int[][] schedule)
-        => new WishIslandSession(state, schedule, new WishIslandParams(), () => false).MovesForTest();
+        => new WishIslandSession(state, schedule, new WishIslandParams(), () => false, false).MovesForTest();
 
     /// <summary>ビーム 1 段で保持する候補数＝幅×分岐を残り予算で頭打ち（いずれも 1 以上に丸める）。</summary>
     internal static int WishBeamCandidateLimit(int width, int branchFactor, int remainingEvaluations)
@@ -79,6 +81,7 @@ public static partial class V6HotfixPasses
     private sealed class WishIslandSession
     {
         private readonly MagiState state; private readonly int[][] input; private readonly WishIslandParams prm; private readonly Func<bool> stop;
+        private readonly bool quantitativeRangeEval;
         private readonly Problem p; private readonly int[][] work; private readonly ViolationReport before;
         private ViolationReport bestRep;
         private readonly int T, S, K, reach;
@@ -92,12 +95,12 @@ public static partial class V6HotfixPasses
         /// <summary>今の島で使った評価数（通常候補と巡回候補で 1 つの枠を分け合う）。</summary>
         private int islandUsed;
 
-        public WishIslandSession(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool> stop)
+        public WishIslandSession(MagiState state, int[][] schedule, WishIslandParams prm, Func<bool> stop, bool quantitativeRangeEval)
         {
-            this.state = state; input = schedule; this.prm = prm.Normalized(); this.stop = stop;
-            p = new Problem(state);
+            this.state = state; input = schedule; this.prm = prm.Normalized(); this.stop = stop; this.quantitativeRangeEval = quantitativeRangeEval;
+            p = new Problem(state, quantitativeRangeEval);
             work = ScheduleUtil.NormalizeSchedule(schedule, p);
-            before = UnifiedViolationChecker.Check(state, work);
+            before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             bestRep = before;
             T = p.T; S = p.S; K = p.K;
             reach = ComputeReach();
@@ -341,7 +344,7 @@ public static partial class V6HotfixPasses
                 bool accept;
                 try
                 {
-                    rep = UnifiedViolationChecker.Check(state, work);
+                    rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     var improves = UnifiedViolationChecker.BetterReport(rep, bestRep);
                     pinBad = improves && V6SearchOperators.ExactPinRegression(p, baseWork, work);
                     if (pinBad) pinBlocks.Record(p, baseWork, work);
@@ -430,7 +433,7 @@ public static partial class V6HotfixPasses
                 var old = Apply(m);
                 try
                 {
-                    var rep = UnifiedViolationChecker.Check(state, work);
+                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     evaluated++; beamEvaluated++; scanned++;
                     var neutral = !UnifiedViolationChecker.BetterReport(node.Rep, rep) && !V6SearchOperators.ExactPinRegression(p, node.Board, work);
                     if (neutral)

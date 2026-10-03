@@ -23,14 +23,14 @@ public static partial class V6HotfixPasses
     /// （C1Polish/C3mnPolish/RangePolishと同一パターン）で玉突き修復。採否はisBetter keep-best＝退化不能。
     /// </summary>
     public static CyclicSwapResult ApplyC3RunPolish(
-        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3A2L)
+        MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0xC3A2L, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var rules = new List<(int K, int Len)>();
@@ -59,7 +59,7 @@ public static partial class V6HotfixPasses
             work[i][extDay] = toK;
             if (!needsChain)
             {
-                var rep = UnifiedViolationChecker.Check(state, work);
+                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeExtend, work);
                 if (pinBad && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBeforeExtend, work);
                 if (IsBetter(rep, bestRep) && !pinBad) { bestRep = rep; applied++; return true; }
@@ -72,7 +72,7 @@ public static partial class V6HotfixPasses
             if (chain == null) { work[i][extDay] = fromK; return false; }
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
-            var rep2 = UnifiedViolationChecker.Check(state, work);
+            var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var pinBad2 = V6SearchOperators.ExactPinRegression(p, workBeforeExtend, work);
             if (pinBad2 && IsBetter(rep2, bestRep)) pinBlocks.Record(p, workBeforeExtend, work);
             if (IsBetter(rep2, bestRep) && !pinBad2) { bestRep = rep2; applied++; return true; }
@@ -87,7 +87,7 @@ public static partial class V6HotfixPasses
         {
             if (stop()) break;
             var improved = false;
-            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var anchors = new List<(int I, int J)>();
             foreach (var (key, fams) in rep0.CellFamilies)
             {

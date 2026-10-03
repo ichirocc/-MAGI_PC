@@ -26,14 +26,14 @@ public static partial class V6HotfixPasses
         bool aptFairSoftTolerance = false,
         // [3.590.0/測定中/backlog#27①] 候補分類をFairTargetの生回数平均でなくFairDevOfBucketの黒箱観測
         //   （仮想入力±1）へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝既定OFF維持が確定。
-        bool fairAchievementDirection = false)
+        bool fairAchievementDirection = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var rng = new JavaRandom(seed);
@@ -97,7 +97,7 @@ public static partial class V6HotfixPasses
         {
             var workBefore = work.Copy2D();
             work[i][j] = toK;
-            var rep = UnifiedViolationChecker.Check(state, work);
+            var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
             if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
             if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
@@ -136,7 +136,7 @@ public static partial class V6HotfixPasses
                 if (p.MakesForbiddenRun(work, i, j, b) || p.MakesForbiddenRun(work, i2, j, a)) continue;
                 var workBefore = work.Copy2D();
                 work[i][j] = b; work[i2][j] = a;
-                var rep = UnifiedViolationChecker.Check(state, work);
+                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBefore, work);
                 if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBefore, work);
                 if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
@@ -157,7 +157,7 @@ public static partial class V6HotfixPasses
             work[i][j] = toK;
             if (!needsChain)
             {
-                var rep = UnifiedViolationChecker.Check(state, work);
+                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
                 if (pinBad && ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
                 if (ToleratedBetter(rep, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad) && !pinBad) { bestRep = rep; applied++; return true; }
@@ -172,7 +172,7 @@ public static partial class V6HotfixPasses
             if (chain == null) { work[i][j] = fromK; return false; }
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
-            var rep2 = UnifiedViolationChecker.Check(state, work);
+            var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var pinBad2 = V6SearchOperators.ExactPinRegression(p, workBeforeRelocate, work);
             if (pinBad2 && ToleratedBetter(rep2, bestRep, before, "fair", aptFairSoftTolerance, count: false)) pinBlocks.Record(p, workBeforeRelocate, work);
             if (ToleratedBetter(rep2, bestRep, before, "fair", aptFairSoftTolerance, count: !pinBad2) && !pinBad2) { bestRep = rep2; applied++; return true; }
@@ -189,7 +189,7 @@ public static partial class V6HotfixPasses
         {
             if (stop()) break;
             var improved = false;
-            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var locs = rep0.DistLocations.TryGetValue("fair", out var l) ? l : Array.Empty<IReadOnlyList<int>>();
             if (locs.Count == 0) break;
             var counts = ScheduleUtil.CountMatrix(p, work);

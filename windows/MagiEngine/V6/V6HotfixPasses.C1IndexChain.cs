@@ -29,14 +29,14 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyC1IndexChainRepair(
         MagiState state, int[][] schedule, int maxPasses = 2,
-        Func<bool>? shouldStop = null, long seed = 0x1C1D2L)
+        Func<bool>? shouldStop = null, long seed = 0x1C1D2L, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         if (p.Cons1.Count == 0 || before.Breakdown.GetValueOrDefault("c1", 0) == 0)
         {
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
@@ -91,7 +91,7 @@ public static partial class V6HotfixPasses
                     var trial = work.Copy2D();
                     trial[staff][d] = shift;
                     // (a) 直接移動のみで改善（旧シフトに余裕がある場合）。
-                    var repDirect = UnifiedViolationChecker.Check(state, trial);
+                    var repDirect = UnifiedViolationChecker.Check(state, trial, quantitativeRangeEval);
                     if (V6SearchOperators.AdoptionGate(p, work, trial, repDirect, bestRep, pinBlocks).Accepted)
                     {
                         work = trial; bestRep = repDirect; applied++; adopted = true;
@@ -105,7 +105,7 @@ public static partial class V6HotfixPasses
                         if (chain != null)
                         {
                             foreach (var mv in chain) trial[mv[0]][mv[1]] = mv[2];
-                            var repChain = UnifiedViolationChecker.Check(state, trial);
+                            var repChain = UnifiedViolationChecker.Check(state, trial, quantitativeRangeEval);
                             if (V6SearchOperators.AdoptionGate(p, work, trial, repChain, bestRep, pinBlocks).Accepted)
                             {
                                 work = trial; bestRep = repChain; applied++; chainUsed++; adopted = true;

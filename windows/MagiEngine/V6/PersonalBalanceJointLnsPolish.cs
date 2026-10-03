@@ -55,13 +55,13 @@ internal static class PersonalBalanceJointLnsPolish
         int[][] schedule,
         Config? config = null,
         Func<bool>? shouldStop = null,
-        long seed = 0xA97B4L)
+        long seed = 0xA97B4L, bool quantitativeRangeEval = false)
     {
         var cfg = config ?? new Config();
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var rootSchedule = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var rootReport = UnifiedViolationChecker.Check(state, rootSchedule);
+        var rootReport = UnifiedViolationChecker.Check(state, rootSchedule, quantitativeRangeEval);
         if (p.S <= 0 || p.T <= 0 || p.K <= 0) return NoOp(rootSchedule, rootReport, "対象なし");
         if (cfg.BeamWidth <= 0 || cfg.MaxDepth <= 0 || cfg.MaxRestarts <= 0 ||
             cfg.MaxFocusStaff <= 0 || cfg.MaxGoals <= 0 || cfg.MaxVariantsPerGoal <= 0 ||
@@ -137,7 +137,7 @@ internal static class PersonalBalanceJointLnsPolish
                     while (from < pending.Count && !HaltNow())
                     {
                         var chunk = pending.GetRange(from, Math.Min(ParallelEval.Chunk, pending.Count - from));
-                        var evaluated = ParallelEval.MapParallel(chunk, c => (Report: UnifiedViolationChecker.Check(state, c.Schedule), Personal: PersonalPenaltyByStaff(p, c.Schedule)));
+                        var evaluated = ParallelEval.MapParallel(chunk, c => (Report: UnifiedViolationChecker.Check(state, c.Schedule, quantitativeRangeEval), Personal: PersonalPenaltyByStaff(p, c.Schedule)));
                         generated += chunk.Count; evaluations += chunk.Count;
                         from += chunk.Count;
                         for (var idx = 0; idx < chunk.Count; idx++)
@@ -176,7 +176,7 @@ internal static class PersonalBalanceJointLnsPolish
             }
         }
 
-        var checkedReport = UnifiedViolationChecker.Check(state, best.Schedule);
+        var checkedReport = UnifiedViolationChecker.Check(state, best.Schedule, quantitativeRangeEval);
         var checkedPersonal = PersonalPenaltyByStaff(p, best.Schedule);
         // [receiving-code-review] focusTotal は「悪化させない(<=)」まで緩和。以前は狭義減少(<)を
         // 要求しており、クラスの doc comment が明記する「下限到達済みの違反は、同じ下限値の別配置が

@@ -61,12 +61,12 @@ public static partial class V6HotfixPasses
     /// keep-best で採用していく（最も原始的だが確実な手）。
     /// </summary>
     private static (int[][] Schedule, int Applied, int Rollback) LocalPairwiseStaffSwap(
-        MagiState state, int[][] schedule, int maxSwaps, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxSwaps, Func<bool>? shouldStop, bool quantitativeRangeEval)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = schedule.Copy2D();
-        var current = UnifiedViolationChecker.Check(state, work);
+        var current = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var applied = 0;
         var rollback = 0;
         for (var i = 0; i < p.S; i++)
@@ -83,7 +83,7 @@ public static partial class V6HotfixPasses
                     var cand = work.Copy2D();
                     cand[i][j] = b;
                     cand[i2][j] = a;
-                    var rep = UnifiedViolationChecker.Check(state, cand);
+                    var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
                     if (IsBetter(rep, current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
                     {
                         work = cand;
@@ -118,12 +118,12 @@ public static partial class V6HotfixPasses
     /// 追加（keep-best のため途中中断でも退化なし）。
     /// </summary>
     public static HF67Result ApplyHF67InterStaffSwap(
-        MagiState state, int[][] schedule, int maxSwaps = 30, Func<bool>? shouldStop = null, long deadlineMs = long.MaxValue)
+        MagiState state, int[][] schedule, int maxSwaps = 30, Func<bool>? shouldStop = null, long deadlineMs = long.MaxValue, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var current = before;
         var swaps = 0;
         var shortage = 0;
@@ -155,7 +155,7 @@ public static partial class V6HotfixPasses
                         if (to == from) continue;
                         var cand = TrySwapShiftBetweenStaff(p, work, from, to, k);
                         if (cand == null) continue;
-                        var rep = UnifiedViolationChecker.Check(state, cand.Value.Schedule);
+                        var rep = UnifiedViolationChecker.Check(state, cand.Value.Schedule, quantitativeRangeEval);
                         var refRep = bestReport ?? current;
                         // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 職員間交換は
                         //   from/to の2者の回数を同時に変えうるため他パスと同じガードが要る。
@@ -182,11 +182,11 @@ public static partial class V6HotfixPasses
         }
         if (swaps == 0 && !OutOfTime())
         {
-            var improved = LocalPairwiseStaffSwap(state, work, maxSwaps, OutOfTime);
+            var improved = LocalPairwiseStaffSwap(state, work, maxSwaps, OutOfTime, quantitativeRangeEval);
             work = improved.Schedule;
             swaps = improved.Applied;
             rollback = improved.Rollback;
-            current = UnifiedViolationChecker.Check(state, work);
+            current = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             capacity = swaps;
         }
         var logs = new List<MirrorLog>

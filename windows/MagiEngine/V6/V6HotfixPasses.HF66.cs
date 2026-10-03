@@ -39,12 +39,12 @@ public static partial class V6HotfixPasses
     /// <c>OutOfTime</c> 確認（2.65.0/3.161.0の確立方針）を持つ（HF66はこちらが先に確立された側）。
     /// </summary>
     public static HF66Result ApplyHF66IntraStaffRedistribution(
-        MagiState state, int[][] schedule, int maxMoves = 30, Func<bool>? shouldStop = null, long deadlineMs = long.MaxValue)
+        MagiState state, int[][] schedule, int maxMoves = 30, Func<bool>? shouldStop = null, long deadlineMs = long.MaxValue, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var current = before;
         var moves = 0;
         var shortageMoves = 0;
@@ -78,7 +78,7 @@ public static partial class V6HotfixPasses
                             if (work[i][j] != give || p.WishLocked(i, j)) continue;
                             var cand = work.Copy2D();
                             cand[i][j] = want;
-                            var rep = UnifiedViolationChecker.Check(state, cand);
+                            var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
                             // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 職員内の
                             //   担当替えも自身の回数を変えるため他パスと同じガードが要る。
                             if (IsBetter(rep, bestReport ?? current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
@@ -94,7 +94,7 @@ public static partial class V6HotfixPasses
             if (bestMove == null) break;
             var mv = bestMove;
             work[mv.Staff][mv.Day] = mv.ToShift;
-            current = bestReport ?? UnifiedViolationChecker.Check(state, work);
+            current = bestReport ?? UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             moves++;
             shortageMoves++;
             if (current.Soft < before.Soft) capacityMoves++;
@@ -120,7 +120,7 @@ public static partial class V6HotfixPasses
                             cand[i][j] = allowed[rng.NextInt(allowed.Length)];
                             if (cand[i][j] != old)
                             {
-                                var rep = UnifiedViolationChecker.Check(state, cand);
+                                var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
                                 if (IsBetter(rep, current) && !V6SearchOperators.ExactPinRegression(p, work, cand))
                                 {
                                     work = cand;

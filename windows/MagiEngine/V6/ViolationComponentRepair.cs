@@ -159,13 +159,13 @@ public static class ViolationComponentRepair
 
     public static V6HotfixPasses.CyclicSwapResult Repair(
         MagiState state, int[][] schedule, IReadOnlyList<CombinatorialRepair.Candidate> pool,
-        Params? prm = null, Func<bool>? shouldStop = null)
+        Params? prm = null, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var stop = shouldStop ?? (() => false);
         var par = prm ?? new Params();
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var pinBlocks = new PinBlockAttribution();
         var applied = 0;
@@ -310,7 +310,7 @@ public static class ViolationComponentRepair
                     try
                     {
                         foreach (var op in ops) work[op[0]][op[1]] = op[2];
-                        rep = UnifiedViolationChecker.Check(state, work);
+                        rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                         var improves = UnifiedViolationChecker.BetterReport(rep, bestRep);
                         pinBad = improves && V6SearchOperators.ExactPinRegression(p, baseWork, work);
                         if (pinBad) pinBlocks.Record(p, baseWork, work);

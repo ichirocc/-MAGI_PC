@@ -111,14 +111,14 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyRangePolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x8A9EL,
-        bool combineExhaustPairs = false)
+        bool combineExhaustPairs = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var rng = new JavaRandom(seed);
@@ -197,7 +197,7 @@ public static partial class V6HotfixPasses
             work[i][j] = toK;
             if (!needsChain)
             {
-                var rep = UnifiedViolationChecker.Check(state, work);
+                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 if (V6SearchOperators.AdoptionGate(p, workBeforeRelocate, work, rep, bestRep, pinBlocks).Accepted) { bestRep = rep; applied++; return true; }
                 work[i][j] = fromK;
                 combinable.Add(new CombinatorialRepair.Candidate(
@@ -212,7 +212,7 @@ public static partial class V6HotfixPasses
             var usedAvoided = chain.Any(mv => ExceedsOwnRangeHi(p, work, mv[0], mv[2]));
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
-            var rep2 = UnifiedViolationChecker.Check(state, work);
+            var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             if (V6SearchOperators.AdoptionGate(p, workBeforeRelocate, work, rep2, bestRep, pinBlocks).Accepted) { bestRep = rep2; applied++; return true; }
             for (var idx = 0; idx < chain.Count; idx++) work[chain[idx][0]][chain[idx][1]] = oldVals[idx];
             work[i][j] = fromK;
@@ -242,7 +242,7 @@ public static partial class V6HotfixPasses
                 if (p.MakesForbiddenRun(work, hi, j, loK) || p.MakesForbiddenRun(work, lo, j, k)) continue;
                 var workBeforeSwap = work.Copy2D();
                 work[hi][j] = loK; work[lo][j] = k;
-                var rep = UnifiedViolationChecker.Check(state, work);
+                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 if (V6SearchOperators.AdoptionGate(p, workBeforeSwap, work, rep, bestRep, pinBlocks).Accepted) { bestRep = rep; applied++; return true; }
                 work[hi][j] = k; work[lo][j] = loK;
             }
@@ -389,7 +389,7 @@ public static partial class V6HotfixPasses
                         heuristic += cost[i][assignment[i]];
                         work[i][j] = newDay[i];
                     }
-                    var rep = UnifiedViolationChecker.Check(state, work);
+                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeDayMatch, work);
                     for (var i = 0; i < p.S; i++) work[i][j] = tokens[i];
 
@@ -580,7 +580,7 @@ public static partial class V6HotfixPasses
                     }
                     var extraOld = extras.Select(mv => work[mv[0]][mv[1]]).ToArray();
                     foreach (var mv in extras) work[mv[0]][mv[1]] = mv[2];
-                    var rep = UnifiedViolationChecker.Check(state, work);
+                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeFlow, work);
                     for (var idx = 0; idx < extras.Count; idx++) work[extras[idx][0]][extras[idx][1]] = extraOld[idx];
                     for (var i = 0; i < p.S; i++) work[i][j] = oldDay[i];
@@ -646,7 +646,7 @@ public static partial class V6HotfixPasses
 
             // [3.278.0/監査修正] pass 0 でも直前の groupTargets ループ(手F)が盤面を変更済み(improved)なら
             //   before は陳腐＝解消済みターゲットへの空振り・新規違反の見落としを防ぐため再検査する。
-            var rep0 = (pass == 0 && !improved) ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = (pass == 0 && !improved) ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var highTargets = new List<(int, int)>();
             var lowTargets = new List<(int, int)>();
             foreach (var (key, cls) in rep0.CountViolations)

@@ -83,14 +83,14 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CyclicSwapResult ApplyC1WindowPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x1C1L,
-        bool combineExhaustPairs = false)
+        bool combineExhaustPairs = false, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var bestRep = before;
         var applied = 0;
         var aRect = 0; var aSelf = 0;
@@ -168,7 +168,7 @@ public static partial class V6HotfixPasses
             //   c1マークが violations 上では上書きされて消え、該当職員のc1違反自体が研磨の起点候補から
             //   漏れうる潜在バグだった。cellFamilies（1セル=重み降順の全クラスリスト、weight-priorityで
             //   discard しない）に切替えれば漏れなく検出できる。
-            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work);
+            var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
             var anchorStaff = new HashSet<int>();
             foreach (var (key, fams) in rep0.CellFamilies)
             {
@@ -235,7 +235,7 @@ public static partial class V6HotfixPasses
                         {
                             if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a)) continue;
                             work[i][j] = x; work[i2][j] = a;                 // 同日スワップ（被覆不変）
-                            var rep = UnifiedViolationChecker.Check(state, work);
+                            var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                             var pinBadA = V6SearchOperators.ExactPinRegression(p, workBeforeDay, work);
                             if (pinBadA && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBeforeDay, work);
                             if (IsBetter(rep, bestRep) && !pinBadA)
@@ -275,7 +275,7 @@ public static partial class V6HotfixPasses
                                     p.MakesForbiddenRun(work, i2, j1, x) || p.MakesForbiddenRun(work, i2, j, a);
                                 if (!bad3n)
                                 {
-                                    var rep = UnifiedViolationChecker.Check(state, work);
+                                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                     if (IsBetter(rep, bestRep))
                                     {
                                         bestRep = rep; applied++; aRect++; improved = true; done = true;
@@ -312,7 +312,7 @@ public static partial class V6HotfixPasses
                                 var bad3n = p.MakesForbiddenRun(work, i, j1, a) || p.MakesForbiddenRun(work, i, j, x);
                                 if (!bad3n)
                                 {
-                                    var rep = UnifiedViolationChecker.Check(state, work);
+                                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                     if (IsBetter(rep, bestRep))
                                     {
                                         bestRep = rep; applied++; aSelf++; improved = true; done = true; donorsCache = null;
@@ -334,7 +334,7 @@ public static partial class V6HotfixPasses
                             c1Pref: (s2, sh, dy) => C1Deficient(s2, sh, dy));
                         var oldVals = chain?.Select(mv => work[mv[0]][mv[1]]).ToArray();
                         if (chain != null) foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
-                        var rep2 = UnifiedViolationChecker.Check(state, work);
+                        var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                         if (V6SearchOperators.AdoptionGate(p, workBeforeDay, work, rep2, bestRep, pinBlocks).Accepted)
                         {
                             bestRep = rep2; applied++; improved = true;
@@ -418,7 +418,7 @@ public static partial class V6HotfixPasses
                 {
                     var a = work[i][bestJo];
                     work[i][bestJx] = a; work[i][bestJo] = x;
-                    var rep = UnifiedViolationChecker.Check(state, work);
+                    var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                     if (IsBetter(rep, bestRep))
                     {
                         bestRep = rep; applied++; aRepack++;

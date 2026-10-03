@@ -91,13 +91,13 @@ public static partial class V6HotfixPasses
     /// C# 既定の "True"/"False" ではなく明示的に小文字化して埋め込む。
     /// </summary>
     public static HF80Result ApplyHF80StrategicOscillation(
-        MagiState state, int[][] schedule, int maxCycles = 3, long? seed = null, Func<bool>? shouldStop = null)
+        MagiState state, int[][] schedule, int maxCycles = 3, long? seed = null, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var ev = new Evaluator(p);   // 内側探索用（サイクルごとに作り直さない）
         var rng = new JavaRandom(seed ?? System.Diagnostics.Stopwatch.GetTimestamp());
-        var before = UnifiedViolationChecker.Check(state, schedule);
+        var before = UnifiedViolationChecker.Check(state, schedule, quantitativeRangeEval);
         var best = ScheduleUtil.NormalizeSchedule(schedule, p);
         var original = best;   // [厳密ピン保護] 全サイクル共通の基準盤面（ExactPinRegression の比較元）
         var bestReport = before;
@@ -126,7 +126,7 @@ public static partial class V6HotfixPasses
                 t++;
             }
             var polished = LocalBestImprovement(p, ev, cand, 250 + cycle * 120, rng, stop);
-            var rep = UnifiedViolationChecker.Check(state, polished);
+            var rep = UnifiedViolationChecker.Check(state, polished, quantitativeRangeEval);
             usedCycles = cycle + 1;
             // [厳密ピン保護/3.522.0、Kotlin原本にあった移植漏れを 3.570.0 で修正] 摂動+再研磨は複数職員の
             //   回数を同時に変えうるため、他パス（RangePolish等）と同じ ExactPinRegression ガードが要る。

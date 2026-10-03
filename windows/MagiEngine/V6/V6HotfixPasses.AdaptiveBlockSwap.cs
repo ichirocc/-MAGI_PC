@@ -83,19 +83,19 @@ public static partial class V6HotfixPasses
         /// <summary>[3.495.0 移植元] 窓の扱い。STRICT_WHOLE_WINDOW は違反アンカー型・可変長窓の一括交換へ委譲。既定は従来どおり。</summary>
         WindowMode mode = WindowMode.PartialMovableDays,
         int strictMaxLen = 7,
-        int strictLongLen = 14)
+        int strictLongLen = 14, bool quantitativeRangeEval = false)
     {
         if (mode == WindowMode.StrictWholeWindow)
-            return ApplyStrictWholeWindow(state, schedule, maxPasses, maxEvaluations, strictMaxLen, strictLongLen, shouldStop ?? (() => false));
+            return ApplyStrictWholeWindow(state, schedule, maxPasses, maxEvaluations, strictMaxLen, strictLongLen, shouldStop ?? (() => false), quantitativeRangeEval);
         var lens = blockLens ?? AdaptiveBlockLengths;
         var filterC3n = filterC3nIncrease ?? PolishGate.FilterC3nIncrease;
         var stop = shouldStop ?? (() => false);
 
         // [3.326.0] 回数固定(lo==hi)だけが却下した候補試行を対象別に数える（緩和対象の提示用）。
         var pinBlocks = new PinBlockAttribution();
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var before = UnifiedViolationChecker.Check(state, work);
+        var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var lengths = lens.Where(l => l >= 1 && l <= p.T).Distinct().OrderBy(l => l).ToList();
         var cycleCap = Math.Max(maxCycle, 2);
         if (p.S < 2 || lengths.Count == 0 || maxPasses <= 0 || candidatesPerLength <= 0 || maxEvaluations <= 0 || maxFocusStaff <= 0)
@@ -521,7 +521,7 @@ public static partial class V6HotfixPasses
             {
                 if (stop() || checkedThisPass >= maxEvaluations) break;
                 Rotate(candidate, forward: true);
-                var report = UnifiedViolationChecker.Check(state, work);
+                var report = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                 var pinRegression = V6SearchOperators.ExactPinRegression(p, workBeforeEval, work);
                 // [3.326.0] ピンだけが止めた候補を対象別に記録する。**盤面を戻す前に**呼ぶ
                 //   （Record は after 盤面を読むため、Rotate で復元したあとでは間に合わない）。

@@ -151,6 +151,9 @@ public static partial class V6HotfixPasses
         /// FairDevOfBucketの黒箱観測へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝
         /// 既定OFF維持が確定。既定 OFF。</summary>
         bool FairAchievementDirection = false,
+        /// <summary>[backlog #12(a)・実験段階] c2/c41/c41sを二値でなく不足量/距離量で評価する（既定false=挙動不変）。
+        /// 全Polishパス・checker呼出へ明示伝播（Kotlin Stage2）。</summary>
+        bool QuantitativeRangeEval = false,
         /// <summary>[Android 3.608.0/3.610.0同期] <see cref="PostChain"/> 自身がチェーン内の走行 keep-best を持つ＝各パスの結果を
         /// 畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す。構造的 covU 床
         /// （<see cref="V6SanityPort.StructuralHardFloor"/>）> 0 の盤面では働かない。既定 <b>true</b>（Android tools/loop 許容ON 同士
@@ -200,6 +203,7 @@ public static partial class V6HotfixPasses
         public const string RollbackMarker = "[チェーン内巻き戻しで不採用] ";
         private readonly Action<string>? _onPhase;
         private readonly MagiState? _state;
+        private readonly bool _quantitativeRangeEval;
         private readonly bool _runningKeepBest;
         private readonly bool _rollbackCountsZero;
         private bool _lastFoldRolledBack;
@@ -213,13 +217,14 @@ public static partial class V6HotfixPasses
         public List<CombinatorialRepair.Candidate> RejectedPool { get; } = new();
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
-        public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool runningKeepBest = false,
+        public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool quantitativeRangeEval = false, bool runningKeepBest = false,
             ViolationReport? initialReport = null, bool rollbackCountsZero = false)
         {
             _onPhase = onPhase;
             Work = schedule.Copy2D();
             _state = state;
-            _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state)) == 0;
+            _quantitativeRangeEval = quantitativeRangeEval;
+            _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state, quantitativeRangeEval)) == 0;
             _rollbackCountsZero = rollbackCountsZero;
             _bestWork = Work.Copy2D();
             _bestReport = initialReport;
@@ -233,7 +238,7 @@ public static partial class V6HotfixPasses
         {
             _lastFoldRolledBack = false;
             if (!_runningKeepBest) return passLogs;
-            var rep = report ?? UnifiedViolationChecker.Check(_state!, Work);
+            var rep = report ?? UnifiedViolationChecker.Check(_state!, Work, _quantitativeRangeEval);
             var best = _bestReport;
             if (best == null || UnifiedViolationChecker.BetterReport(rep, best))
             {
@@ -291,11 +296,11 @@ public static partial class V6HotfixPasses
     /// HF70（異常検知＝安価）は診断のため常に実行する。<paramref name="onPhase"/> は各パス開始時に UI 進捗へ。
     /// </summary>
     /// <summary>[E0B] 研磨なしの後処理＝検査と HF70 だけ（盤面は入力のまま）。</summary>
-    public static V6PostOptimizationResult MinimalPost(MagiState state, int[][] schedule, string algoName)
+    public static V6PostOptimizationResult MinimalPost(MagiState state, int[][] schedule, string algoName, bool quantitativeRangeEval = false)
     {
         var work = schedule.Copy2D();
-        var report = UnifiedViolationChecker.Check(state, work);
-        var r70 = DetectHF70Anomalies(state, work, algoName, report);
+        var report = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+        var r70 = DetectHF70Anomalies(state, work, algoName, report, quantitativeRangeEval);
         var note = new MirrorLog(level: "I", tag: "POST", message: "希望衝突の床で頭打ち（E0B）: 後処理の研磨を省略（検査・HF70 のみ）");
         var r80 = new HF80Result(work, report.Hard, report.Hard, report.WeightedScore, report.WeightedScore, 0, false, "E0B", Array.Empty<MirrorLog>());
         var r67 = new HF67Result(work, report.Total, report.Total, 0, 0, 0, 0, Array.Empty<MirrorLog>());
@@ -318,20 +323,20 @@ public static partial class V6HotfixPasses
         var p = parameters ?? new PostOptimizationParams();
         var seedVal = seed ?? System.Diagnostics.Stopwatch.GetTimestamp();
         var stop = shouldStop ?? (() => false);
-        var report0 = UnifiedViolationChecker.Check(state, schedule);
-        var chain = new PostChain(onPhase, schedule, state, p.PostChainRunningKeepBest, report0,
+        var report0 = UnifiedViolationChecker.Check(state, schedule, p.QuantitativeRangeEval);
+        var chain = new PostChain(onPhase, schedule, state, p.QuantitativeRangeEval, p.PostChainRunningKeepBest, report0,
             p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero);
         var t0 = EngineClock.NowMs();
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
-            ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop));
+            ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval));
         chain.ReplaceBoard(r80.NewSchedule, r80.Logs, r80.Report);
 
         var t67 = EngineClock.NowMs();
         var r67 = chain.Timed("後処理 HF67 職員間スワップ", "HF67InterStaffSwap", work =>
         {
             var cap = Math.Min(Math.Max(deadlineMs - t67, 0L) / 2, p.Hf67CapMs);
-            return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t67 + cap);
+            return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t67 + cap, quantitativeRangeEval: p.QuantitativeRangeEval);
         });
         chain.ReplaceBoard(r67.NewSchedule, r67.Logs, r67.Report);
 
@@ -340,7 +345,7 @@ public static partial class V6HotfixPasses
         {
             // HF66 は手ごとに全候補をフル check する高コストパス＝残予算の半分（後段の研磨群へ残り半分）で打ち切る。
             var cap = Math.Min(Math.Max(deadlineMs - t66, 0L) / 2, p.Hf66CapMs);
-            return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap);
+            return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap, quantitativeRangeEval: p.QuantitativeRangeEval);
         });
         chain.ReplaceBoard(r66.NewSchedule, r66.Logs, r66.Report);
         var t66Done = EngineClock.NowMs();
@@ -352,17 +357,17 @@ public static partial class V6HotfixPasses
         bool ClusterStop() => stop() || EngineClock.NowMs() >= clusterDeadline;
 
         chain.Adopt(chain.Timed("後処理 厳密日割当", "DayAssignmentPolish", work =>
-            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop, identityFallback: p.DayAssignIdentityFallback)));
+            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval, identityFallback: p.DayAssignIdentityFallback)));
 
-        var preSoftRep = UnifiedViolationChecker.Check(state, chain.Work);
+        var preSoftRep = UnifiedViolationChecker.Check(state, chain.Work, p.QuantitativeRangeEval);
         var c1Plateau = RunPolishCluster(state, chain, p, seedVal, ClusterStop, preSoftRep);
 
         // weekly は同日 2 者スワップでは動かない（曜日別の勤務/休が不変）→ 被覆保存の 2 職員×2 日 長方形交換。
         chain.Adopt(chain.Timed("後処理 曜日平準化(長方形交換)", "WeeklyRebalancePolish", work =>
-            ApplyWeeklyRebalancePolish(state, work, maxPasses: p.WeeklyRebalancePasses, shouldStop: ClusterStop)));
+            ApplyWeeklyRebalancePolish(state, work, maxPasses: p.WeeklyRebalancePasses, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
         // 長方形交換（クロス日）が届かない同日内の割当先を Hungarian で再配置＝相補的なので両方走らせる。
         chain.Adopt(chain.Timed("後処理 交互最適化(日ブロック割当)", "AlternatingSoftPolish", work =>
-            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, identityFallback: p.DayAssignIdentityFallback)));
+            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval, identityFallback: p.DayAssignIdentityFallback)));
 
         // 最終 LNS 2 本（高コストなので巡回ループでなく最終 1 回）。残予算は既定比 8:6 で按分（3.255.0）。
         var tC1Lns = EngineClock.NowMs();
@@ -373,13 +378,13 @@ public static partial class V6HotfixPasses
             var cap = lnsTotal <= 0L ? 0L : Math.Min(remaining * p.C1LnsMaxMs / lnsTotal, p.C1LnsMaxMs);
             var cfg = p.Deterministic ? new C1JointLnsPolish.Config(MaxMillis: 60_000L, PatienceMs: 0L, MaxEvaluations: p.C1LnsMaxEvaluations)
                 : new C1JointLnsPolish.Config(MaxMillis: cap);
-            if (!p.LnsAdaptive) return C1RepairOperators.JointLns(state, work, config: cfg, shouldStop: stop);
+            if (!p.LnsAdaptive) return C1RepairOperators.JointLns(state, work, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             // [Android 3.510.2/3.518.0同期] 短い試行で採用が無ければそこで止める（ログでは共同LNSが
             // 後処理時間の大半を使って採用0が多い）。
             var first = p.Deterministic ? cfg with { MaxEvaluations = p.C1LnsFirstEvaluations } : cfg with { MaxMillis = Math.Min(cap, p.C1LnsFirstMs) };
-            var r1 = C1RepairOperators.JointLns(state, work, config: first, shouldStop: stop);
+            var r1 = C1RepairOperators.JointLns(state, work, config: first, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             if (r1.Applied == 0) return r1;
-            var r2 = C1RepairOperators.JointLns(state, r1.NewSchedule, config: cfg, shouldStop: stop);
+            var r2 = C1RepairOperators.JointLns(state, r1.NewSchedule, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
         var tPersonalLns = EngineClock.NowMs();
@@ -388,15 +393,15 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - tPersonalLns, 0L), p.PersonalLnsMaxMs);
             var cfg = p.Deterministic ? new PersonalBalanceJointLnsPolish.Config(MaxMillis: 60_000L, MaxEvaluations: p.PersonalLnsMaxEvaluations)
                 : new PersonalBalanceJointLnsPolish.Config(MaxMillis: cap);
-            if (!p.LnsAdaptive) return PersonalBalanceJointLnsPolish.Apply(state, work, config: cfg, shouldStop: stop);
+            if (!p.LnsAdaptive) return PersonalBalanceJointLnsPolish.Apply(state, work, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             var first = p.Deterministic ? cfg with { MaxEvaluations = p.PersonalLnsFirstEvaluations } : cfg with { MaxMillis = Math.Min(cap, p.PersonalLnsFirstMs) };
-            var r1 = PersonalBalanceJointLnsPolish.Apply(state, work, config: first, shouldStop: stop);
+            var r1 = PersonalBalanceJointLnsPolish.Apply(state, work, config: first, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             if (r1.Applied == 0) return r1;
-            var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop);
+            var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
         var c3nMarginActive = p.C3nMarginLnsEnabled ||
-            (p.C3nMarginLnsReactivate && TargetFamiliesRemain(state, chain.Work, false, "c3n"));
+            (p.C3nMarginLnsReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c3n"));
         if (c3nMarginActive && !stop())
         {
             // [測定中, Kotlin原本] 共同 LNS の後・成分修復の前。c3n(禁止連続)のパターン日+前後余白を複数セル
@@ -404,7 +409,7 @@ public static partial class V6HotfixPasses
             bool MarginStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
             var rMargin = chain.Timed("後処理 禁止連続(c3n)前後余白込みLNS", "C3nMarginLNS", work =>
                 C3nMarginLnsPolish.Apply(state, work, marginDays: p.C3nMarginLnsMarginDays,
-                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop, seed: seedVal ^ SeedTag.C3nMargin));
+                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop, seed: seedVal ^ SeedTag.C3nMargin, quantitativeRangeEval: p.QuantitativeRangeEval));
             chain.Adopt(rMargin);
         }
 
@@ -418,14 +423,14 @@ public static partial class V6HotfixPasses
                 : baseParams;
             Func<bool> finalStop = p.Deterministic ? stop : () => stop() || EngineClock.NowMs() >= deadlineMs;
             chain.Adopt(chain.Timed("後処理 違反起点修復(最終)", "ComponentRepair", work =>
-                ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop)));
+                ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             chain.RejectedPool.Clear();
         }
 
         if (p.RestZeroWindowLnsEnabled && !stop())
         {
             bool LnsStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
-            var rLns = chain.Timed("後処理 休0日の窓LNS(最終)", "RestZeroLNS", work => ApplyRestZeroWindowLns(state, work, shouldStop: LnsStop));
+            var rLns = chain.Timed("後処理 休0日の窓LNS(最終)", "RestZeroLNS", work => ApplyRestZeroWindowLns(state, work, shouldStop: LnsStop, quantitativeRangeEval: p.QuantitativeRangeEval));
             chain.ReplaceBoard(rLns.NewSchedule, rLns.Logs, rLns.Report);
         }
 
@@ -433,7 +438,7 @@ public static partial class V6HotfixPasses
         {
             // 最後に置く＝後続パスが無いので keep-best の 1 セル手だけが盤面に足され、旧チェーンの結果より悪くならない（Android 同順）。
             bool ReliefStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
-            var rRelief = chain.Timed("後処理 人員過剰の退避(最終)", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: ReliefStop));
+            var rRelief = chain.Timed("後処理 人員過剰の退避(最終)", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: ReliefStop, quantitativeRangeEval: p.QuantitativeRangeEval));
             chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs, rRelief.Report);
         }
 
@@ -446,8 +451,8 @@ public static partial class V6HotfixPasses
 
         onPhase?.Invoke("後処理 HF70 異常検知");
         var work = chain.Work;
-        var report = UnifiedViolationChecker.Check(state, work);
-        var r70 = DetectHF70Anomalies(state, work, algoName, report);
+        var report = UnifiedViolationChecker.Check(state, work, p.QuantitativeRangeEval);
+        var r70 = DetectHF70Anomalies(state, work, algoName, report, p.QuantitativeRangeEval);
         chain.Logs.AddRange(r70.Logs);
 
         var tEnd = EngineClock.NowMs();
@@ -469,7 +474,7 @@ public static partial class V6HotfixPasses
 
         chain.Logs.Add(new MirrorLog(level: "I", tag: "POST", message: "後処理 収支: " + ChangeSummary.FamilyLine(ChangeSummary.DeltasOf(report0, report))));
 
-        var plateauOut = FinalC1Plateau(state, work, report, c1Plateau);
+        var plateauOut = FinalC1Plateau(state, work, report, c1Plateau, p.QuantitativeRangeEval);
         var allLogs = new List<MirrorLog>(chain.Logs);
         allLogs.AddRange(report.Logs);
         return new V6PostOptimizationResult(
@@ -488,7 +493,7 @@ public static partial class V6HotfixPasses
         var adopted = new Dictionary<string, int>();
         foreach (var k in AdoptionKeys) adopted[k] = 0;
         var c3Anchor = new HashSet<string> { "vio-c3", "vio-c3m", "vio-c3mn" };
-        var pC1 = new Problem(state);   // state の純関数＝巡回間で不変（C1DeltaPrefilter のゲート用）
+        var pC1 = new Problem(state, p.QuantitativeRangeEval);   // state の純関数＝巡回間で不変（C1DeltaPrefilter のゲート用）
         C1PlateauDiagnosis? c1Plateau = null;
         var round = 0;
         while (round < p.MaxRounds && !clusterStop())
@@ -504,65 +509,65 @@ public static partial class V6HotfixPasses
             }
 
             Take("循環", chain.Timed($"後処理 循環交換(k=2,3){tag}", "CyclicSwapPolish", work =>
-                ApplyCyclicSwapPolish(state, work, maxPasses: p.CyclicSwapPasses, shouldStop: clusterStop)));
+                ApplyCyclicSwapPolish(state, work, maxPasses: p.CyclicSwapPasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
 
             // c1 違反セルに厳密アンカーする 2 op は、不足窓が無ければ必ず no-op＝C1DeltaPrefilter で 1 回判定して飛ばす（3.275.0/3.276.0）。
             if (C1DeltaPrefilter.HasActionableC1(C1RepairIndex.Build(pC1, chain.Work)))
             {
                 var rC1 = chain.Timed($"後処理 期間要件(c1)研磨{tag}", "C1同日交換", work =>
-                    C1RepairOperators.SelfRelocateAndSameDaySwap(state, work, maxPasses: p.C1WindowPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Window, round), combineExhaustPairs: PolishGate.CombineExhaustPairs));
+                    C1RepairOperators.SelfRelocateAndSameDaySwap(state, work, maxPasses: p.C1WindowPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Window, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, quantitativeRangeEval: p.QuantitativeRangeEval));
                 Take("c1", rC1);
                 // 構造化診断は巡ごとに合算（3.331.0。最後の巡だけだと観測が減る）。末尾で最終盤面に対して再フィルタする。
                 if (rC1.Plateau != null) c1Plateau = c1Plateau?.MergedWith(rC1.Plateau) ?? rC1.Plateau;
                 Take("c1", chain.Timed($"後処理 期間要件(c1)index駆動修復{tag}", "C1索引修復", work =>
-                    C1RepairOperators.IndexChainRepair(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Index, round))));
+                    C1RepairOperators.IndexChainRepair(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Index, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // 時系列 DP＋同日ジョイント再割当（3.254.0 の ablation で一本化）。広域ビームより前に置く。
             Take("c1", chain.Timed($"後処理 期間要件(c1)時系列DP+ジョイント再割当研磨{tag}", "C1時系列フロー", work =>
                 C1RepairOperators.TemporalFlow(state, work, maxPasses: p.C1FlowPasses, maxRelocations: p.C1FlowRelocations, trials: p.C1FlowTrials,
-                    shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Flow, round))));
+                    shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Flow, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c1", chain.Timed($"後処理 期間要件(c1)広域ビーム研磨{tag}", "C1広域ビーム", work =>
-                C1RepairOperators.WideBeam(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Beam, round))));
+                C1RepairOperators.WideBeam(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Beam, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             var c1ComponentActive = p.C1ComponentRepair ||
-                (p.C1ComponentRepairReactivate && TargetFamiliesRemain(state, chain.Work, false, "c1"));
+                (p.C1ComponentRepairReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c1"));
             Take("c1", chain.Timed($"後処理 期間要件(c1)厳密窓修復{tag}", "C1厳密窓", work =>
-                C1RepairOperators.ExactWindow(state, work, shouldStop: clusterStop, useComponents: c1ComponentActive)));
+                C1RepairOperators.ExactWindow(state, work, shouldStop: clusterStop, useComponents: c1ComponentActive, quantitativeRangeEval: p.QuantitativeRangeEval)));
 
             var rC3 = chain.Timed($"後処理 連続規則(c3系)研磨{tag}", "C3SequencePolish", work =>
-                ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: clusterStop));
+                ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval));
             Take("c3", rC3);
             // 3 者回転は O(候補^3) で通常時の寄与ゼロ（3.300.0 ablation）＝主手が詰まった巡と最終巡だけの脱出手。
             if (rC3.Applied == 0 || round == p.MaxRounds - 1)
             {
                 Take("c3回転", chain.Timed($"後処理 連続規則(c3系)3者回転研磨{tag}", "BlockRotationPolish", work =>
-                    ApplyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses: p.C3RotatePasses, shouldStop: clusterStop)));
+                    ApplyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses: p.C3RotatePasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             Take("c3mn玉突き", chain.Timed($"後処理 回避パターン(c3mn)玉突き研磨{tag}", "C3mnPolish", work =>
-                ApplyC3mnPolish(state, work, maxPasses: p.C3mnPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3mn, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+                ApplyC3mnPolish(state, work, maxPasses: p.C3mnPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3mn, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c3n", chain.Timed($"後処理 禁止連続(c3n)研磨{tag}", "C3nPolish", work =>
-                ApplyC3nPolish(state, work, maxPasses: p.C3nPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3n, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+                ApplyC3nPolish(state, work, maxPasses: p.C3nPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3n, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("range玉突き", chain.Timed($"後処理 個人回数(low/high)玉突き研磨{tag}", "RangePolish", work =>
-                ApplyRangePolish(state, work, maxPasses: p.RangePasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round), combineExhaustPairs: PolishGate.CombineExhaustPairs)));
+                ApplyRangePolish(state, work, maxPasses: p.RangePasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c3run玉突き", chain.Timed($"後処理 連続規則(c3/c3m単一シフト連)玉突き研磨{tag}", "C3RunPolish", work =>
-                ApplyC3RunPolish(state, work, maxPasses: p.C3RunPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Run, round))));
+                ApplyC3RunPolish(state, work, maxPasses: p.C3RunPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Run, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c3pattern玉突き", chain.Timed($"後処理 連続規則(c3/c3m複数シフトパターン)玉突き研磨{tag}", "C3PatternPolish", work =>
-                ApplyC3PatternPolish(state, work, maxPasses: p.C3PatternPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Pattern, round))));
+                ApplyC3PatternPolish(state, work, maxPasses: p.C3PatternPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Pattern, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("アンカー窓交換", chain.Timed($"後処理 違反アンカー窓交換{tag}", "AnchoredWindowSwap", work =>
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.AnchorWindowPasses, maxEvaluations: p.AnchorWindowEvaluations,
-                    shouldStop: clusterStop, mode: WindowMode.StrictWholeWindow)));
+                    shouldStop: clusterStop, mode: WindowMode.StrictWholeWindow, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("希望島", chain.Timed($"後処理 希望島研磨{tag}", "WishIslandPolish", work =>
-                ApplyWishIslandPolish(state, work, maxPasses: p.WishIslandPasses, maxEvaluations: p.WishIslandEvaluations, shouldStop: clusterStop)));
+                ApplyWishIslandPolish(state, work, maxPasses: p.WishIslandPasses, maxEvaluations: p.WishIslandEvaluations, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("ブロック交換", chain.Timed($"後処理 長期ブロック丸ごと交換(11/13/17/19/23/28日){tag}", "AdaptiveBlockSwapPolish", work =>
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
-                    maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop)));
+                    maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
-                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance)));
+                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection)));
-            if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, false, "c2")))
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection, quantitativeRangeEval: p.QuantitativeRangeEval)));
+            if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c2")))
             {
                 Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>
-                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: clusterStop)));
+                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)は常に既定の PostOptimizationParams
             //   （parameters:null）を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
@@ -570,44 +575,44 @@ public static partial class V6HotfixPasses
             //   PostOptimizationParams 構築時に countChainEnabled=PolishGate.countChainPolish を都度渡す設計だが、
             //   この C# 版は呼出元を変えずに済む軽量な配線を選ぶ）。
             if (PolishGate.CountChainPolish ||
-                (p.CountChainReactivate && TargetFamiliesRemain(state, chain.Work, false, "high", "apt")))
+                (p.CountChainReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "high", "apt")))
             {
                 Take("回数連鎖", chain.Timed($"後処理 回数連鎖研磨{tag}", "CountChainPolish", work =>
                 {
                     var r = CountChainPolish.ApplyCountChainPolish(
                         state, work,
                         config: p.Deterministic ? new CountChainPolish.Config(MaxMillis: 60_000L) : new CountChainPolish.Config(),
-                        shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round));
+                        shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Range, round), quantitativeRangeEval: p.QuantitativeRangeEval);
                     TuningTelemetry.AddCountChainApplied(r.Applied);
                     return r;
                 }));
             }
             if (p.C42FlowPolishEnabled ||
-                (p.C42FlowPolishReactivate && TargetFamiliesRemain(state, chain.Work, false, "c42", "c42s")))
+                (p.C42FlowPolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c42", "c42s")))
             {
                 Take("c42フロー", chain.Timed($"後処理 群ペア禁止(c42/c42s)フロー研磨{tag}", "C42FlowPolish", work =>
-                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: clusterStop)));
+                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();
             if (p.ComponentRepairEnabled && pool.Count >= 2)
             {
                 Take("成分修復", chain.Timed($"後処理 違反連結成分修復{tag}", "ComponentRepair", work =>
-                    ViolationComponentRepair.Repair(state, work, pool, (p.ComponentRepair ?? new ViolationComponentRepair.Params()) with { GenerateFromAnchors = false }, shouldStop: clusterStop)));
+                    ViolationComponentRepair.Repair(state, work, pool, (p.ComponentRepair ?? new ViolationComponentRepair.Params()) with { GenerateFromAnchors = false }, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
 
             round++;
             if (roundApplied == 0) break; // この巡で 1 手も採用なし＝joint 局所最適に到達
         }
 
-        chain.Logs.Add(SoftPolishVerifyLog(state, chain.Work, preSoftRep, round, adopted));
+        chain.Logs.Add(SoftPolishVerifyLog(state, chain.Work, preSoftRep, round, adopted, p.QuantitativeRangeEval));
         return c1Plateau;
     }
 
     /// <summary>研磨可否の検証ログ。採用 0 かつ対象 &gt; 0 なら「頭打ち（正常）」、対象 0 なら「対象なし」と明示する。</summary>
-    private static MirrorLog SoftPolishVerifyLog(MagiState state, int[][] work, ViolationReport preSoftRep, int rounds, Dictionary<string, int> adopted)
+    private static MirrorLog SoftPolishVerifyLog(MagiState state, int[][] work, ViolationReport preSoftRep, int rounds, Dictionary<string, int> adopted, bool quantitativeRangeEval)
     {
-        var softAfter = UnifiedViolationChecker.Check(state, work);
+        var softAfter = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         int Bd(ViolationReport r, string k) => r.Breakdown.GetValueOrDefault(k, 0);
         var adoptedTotal = adopted.Values.Sum();
         var targets = SoftTargetFamilies.Sum(k => Bd(preSoftRep, k));
@@ -632,13 +637,13 @@ public static partial class V6HotfixPasses
     /// C1 研磨の時点で作った構造化診断（3.322.0）を最終盤面に合わせ直す（共同 LNS 等が直した箇所を「直せなかった」と見せない）。
     /// c1 が残っているなら観測が 1 件も無くても診断を返す＝UI が「原因未確定」と出す（3.325.0）。
     /// </summary>
-    private static C1PlateauDiagnosis? FinalC1Plateau(MagiState state, int[][] work, ViolationReport report, C1PlateauDiagnosis? plateau)
+    private static C1PlateauDiagnosis? FinalC1Plateau(MagiState state, int[][] work, ViolationReport report, C1PlateauDiagnosis? plateau, bool quantitativeRangeEval)
     {
         var c1Left = report.Breakdown.GetValueOrDefault("c1", 0);
         C1PlateauDiagnosis? refreshed = null;
         if (plateau != null)
         {
-            var pFin = ScheduleUtil.CachedProblem(state);
+            var pFin = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
             bool StillDeficient(int i, int x, int ri)
             {
                 var c = ri >= 0 && ri < pFin.Cons1.Count ? pFin.Cons1[ri] : null;

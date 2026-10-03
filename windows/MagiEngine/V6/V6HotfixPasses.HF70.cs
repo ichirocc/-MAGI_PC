@@ -15,9 +15,9 @@ public static partial class V6HotfixPasses
     /// 盤面 <paramref name="schedule"/>（正規化後）のうち、シフト値が有効範囲外か、その職員のグループが
     /// 担当できないセルの件数を数える。<see cref="DetectHF70Anomalies"/>専用の内部ヘルパ。
     /// </summary>
-    private static int InvalidAssignmentCount(MagiState state, int[][] schedule)
+    private static int InvalidAssignmentCount(MagiState state, int[][] schedule, bool quantitativeRangeEval)
     {
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var s = ScheduleUtil.NormalizeSchedule(schedule, p);
         var n = 0;
         for (var i = 0; i < p.S; i++)
@@ -49,13 +49,13 @@ public static partial class V6HotfixPasses
     /// （<c>shouldStop</c>系のnull合体パターンと同じ扱い）。
     /// </summary>
     public static HF70Result DetectHF70Anomalies(
-        MagiState state, int[][] schedule, string algoName, ViolationReport? report = null)
+        MagiState state, int[][] schedule, string algoName, ViolationReport? report = null, bool quantitativeRangeEval = false)
     {
-        var rep = report ?? UnifiedViolationChecker.Check(state, schedule);
-        var invalid = InvalidAssignmentCount(state, schedule);
+        var rep = report ?? UnifiedViolationChecker.Check(state, schedule, quantitativeRangeEval);
+        var invalid = InvalidAssignmentCount(state, schedule, quantitativeRangeEval);
         var impossible = V6SanityPort.DetectImpossibleWishes(state).Count;
         // 希望どうしの衝突が生む c3n/c3w は希望起因＝「希望以外」に数えない（pref と同じ扱い）。
-        var selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state), schedule);
+        var selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state, quantitativeRangeEval), schedule);
         var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0)
             - selfConflict.GetValueOrDefault("c3n", 0) - selfConflict.GetValueOrDefault("c3w", 0);
         var issues = new List<string>();
