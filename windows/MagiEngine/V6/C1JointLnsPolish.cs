@@ -53,7 +53,14 @@ internal static class C1JointLnsPolish
         /// <summary>最良がこの時間更新されなければ打ち切る（0以下＝無効）。既定の根拠はクラスの doc comment。</summary>
         long PatienceMs = 4_000L,
         /// <summary>[Iteration 7] 正式評価の回数上限（0＝無効）。決定的モードでは時間でなくこれで止める。</summary>
-        int MaxEvaluations = 0);
+        int MaxEvaluations = 0,
+        /// <summary>子の評価を <see cref="DeltaEvaluator"/> の差分で行う（親へ1回 reset、1〜3セルを当てて戻す）。最終の正式 check は不変。</summary>
+        bool? DeltaChildEval = null);
+
+    /// <summary><see cref="Config.DeltaChildEval"/> の既定。実験段階のため既定 OFF（計測で切り替える）。</summary>
+    internal static volatile bool DeltaChildEvalDefault = false;
+
+    private sealed record Pending(Move Move, int[][]? Next, int[]? Cells);
 
     private enum GoalKind { C1, Temporal, Coverage, RangeLow }
 
@@ -142,6 +149,9 @@ internal static class C1JointLnsPolish
         int targetC1 = rootC1 - ((improvable * pct + 99) / 100);
 
         var root = new Node(rootSchedule.Copy2D(), rootReport, rootC1, new List<Move>(), 0);
+        // センチネル(-1)を含む盤面は DeltaEvaluator が受け付けない＝従来の check へ戻す。
+        var deltaPool = (cfg.DeltaChildEval ?? DeltaChildEvalDefault) && rootSchedule.All(row => row.All(v => v >= 0 && v < p.K))
+            ? new DeltaPool(p) : null;
         var best = root;
         int expanded = 0;
         int generated = 0;
@@ -178,7 +188,7 @@ internal static class C1JointLnsPolish
                     // [3.569.0 同期] 候補の生成（rng 順）と採否（seen・best）は逐次のまま、評価だけ並列にする。
                     //   評価数の上限は生成時に数えるので、決定論モード（MaxEvaluations）の評価集合は旧実装と同一。
                     //   締切・停止は塊の境目で見る＝行き過ぎは 1 塊ぶん。
-                    var pending = new List<(Move Move, int[][] Next)>();
+                    var pending = new List<Pending>();
                     bool CapReached() => cfg.MaxEvaluations > 0 && evaluations + pending.Count >= cfg.MaxEvaluations;
                     foreach (var goal in goals)
                     {
@@ -187,21 +197,33 @@ internal static class C1JointLnsPolish
                         foreach (var move in moves)
                         {
                             if (HaltNow() || CapReached()) break;
-                            var next = parent.Schedule.Copy2D();
-                            if (!ApplyMove(next, move)) continue;
-                            pending.Add((move, next));
+                            if (deltaPool != null)
+                            {
+                                var cells = MoveCells(parent.Schedule, move);
+                                if (cells == null) continue;
+                                pending.Add(new Pending(move, null, cells));
+                            }
+                            else
+                            {
+                                var next = parent.Schedule.Copy2D();
+                                if (!ApplyMove(next, move)) continue;
+                                pending.Add(new Pending(move, next, null));
+                            }
                         }
                     }
                     var from = 0;
                     while (from < pending.Count && !HaltNow())
                     {
                         var chunk = pending.GetRange(from, Math.Min(ParallelEval.Chunk, pending.Count - from));
-                        var reports = ParallelEval.MapParallel(chunk, pn => UnifiedViolationChecker.Check(state, pn.Next));
+                        var reports = deltaPool != null
+                            ? deltaPool.Evaluate(parent.Schedule, chunk.Select(pn => pn.Cells!).ToList())
+                            : ParallelEval.MapParallel(chunk, pn => UnifiedViolationChecker.Check(state, pn.Next!));
                         generated += chunk.Count; evaluations += chunk.Count;
                         from += chunk.Count;
                         for (var idx = 0; idx < chunk.Count; idx++)
                         {
-                            var (move, next) = chunk[idx];
+                            var pn = chunk[idx];
+                            var move = pn.Move;
                             {
                                 var report = reports[idx];
                                 int c1 = report.Breakdown.GetValueOrDefault("c1", 0);
@@ -225,6 +247,7 @@ internal static class C1JointLnsPolish
                                     else debtC1++;
                                     continue;
                                 }
+                                var next = pn.Next ?? ApplyCells(parent.Schedule.Copy2D(), pn.Cells!);
                                 var childPath = new List<Move>(parent.Path.Count + 1);
                                 childPath.AddRange(parent.Path);
                                 childPath.Add(move);
@@ -672,6 +695,103 @@ internal static class C1JointLnsPolish
             }
             default:
                 throw new ArgumentOutOfRangeException(nameof(move), move, null);
+        }
+    }
+
+    /// <summary><see cref="ApplyMove"/> と同じ変更を (staff, day, 新値) の並びで返す（変更なしは null）。親の盤面は書き換えない。</summary>
+    private static int[]? MoveCells(int[][] s, Move move)
+    {
+        switch (move)
+        {
+            case Move.Direct d:
+                return s[d.Staff][d.Day] == d.Target ? null : new[] { d.Staff, d.Day, d.Target };
+            case Move.SameDaySwap w:
+            {
+                int x = s[w.A][w.Day], y = s[w.B][w.Day];
+                return x == y ? null : new[] { w.A, w.Day, y, w.B, w.Day, x };
+            }
+            case Move.Rotate3 r:
+            {
+                int a = s[r.Receiver][r.Day], x = s[r.Donor][r.Day], y = s[r.Bridge][r.Day];
+                return a == x || x == y || y == a ? null
+                    : new[] { r.Receiver, r.Day, x, r.Donor, r.Day, y, r.Bridge, r.Day, a };
+            }
+            case Move.SelfDaySwap sd:
+            {
+                int a = s[sd.Staff][sd.DayA], b = s[sd.Staff][sd.DayB];
+                return a == b ? null : new[] { sd.Staff, sd.DayA, b, sd.Staff, sd.DayB, a };
+            }
+            case Move.CrossDayTransfer c:
+            {
+                int a = s[c.Receiver][c.ReceiveDay], x = s[c.Donor][c.DonateDay];
+                return a == x ? null : new[] { c.Receiver, c.ReceiveDay, x, c.Donor, c.DonateDay, a };
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(move), move, null);
+        }
+    }
+
+    private static int[][] ApplyCells(int[][] s, int[] cells)
+    {
+        for (int c = 0; c < cells.Length; c += 3) s[cells[c]][cells[c + 1]] = cells[c + 2];
+        return s;
+    }
+
+    /// <summary>
+    /// 子の評価用の <see cref="DeltaEvaluator"/> をワーカー数だけ持つ。各インスタンスは親の盤面に保たれ（当てた手は戻す）、
+    /// 親が変わったときだけ reset する。返す report は正式 check と同じ breakdown/total/hard/weightedScore
+    /// （場所マップは空）＝この探索が読む項目だけ。
+    /// </summary>
+    internal sealed class DeltaPool
+    {
+        private readonly int _workers = Math.Clamp(Environment.ProcessorCount, 1, 8);
+        private readonly DeltaEvaluator[] _des;
+        private readonly int[][]?[] _heldParent;
+
+        public DeltaPool(Problem p)
+        {
+            _des = new DeltaEvaluator[_workers];
+            for (int w = 0; w < _workers; w++) _des[w] = new DeltaEvaluator(p);
+            _heldParent = new int[][]?[_workers];
+        }
+
+        public ViolationReport[] Evaluate(int[][] parent, IReadOnlyList<int[]> chunk)
+        {
+            var outArr = new ViolationReport[chunk.Count];
+            int slices = chunk.Count < 8 ? 1 : Math.Min(_workers, chunk.Count);
+            int per = (chunk.Count + slices - 1) / slices;
+            void Run(int w)
+            {
+                var de = _des[w];
+                if (!ReferenceEquals(_heldParent[w], parent)) { _heldParent[w] = null; de.Reset(parent); _heldParent[w] = parent; }
+                int end = Math.Min(chunk.Count, (w + 1) * per);
+                for (int idx = w * per; idx < end; idx++)
+                {
+                    var cells = chunk[idx];
+                    var old = new int[cells.Length / 3];
+                    int c = 0;
+                    try
+                    {
+                        while (c < cells.Length) { old[c / 3] = de.At(cells[c], cells[c + 1]); de.Apply(cells[c], cells[c + 1], cells[c + 2]); c += 3; }
+                        outArr[idx] = ReportOf(de);
+                    }
+                    finally
+                    {
+                        while (c > 0) { c -= 3; de.Apply(cells[c], cells[c + 1], old[c / 3]); }
+                    }
+                }
+            }
+            if (slices == 1) Run(0); else Parallel.For(0, slices, Run);
+            return outArr;
+        }
+
+        private static ViolationReport ReportOf(DeltaEvaluator de)
+        {
+            var raw = de.FamilyRaw();
+            var (low, high) = de.RangeRaw();
+            var bd = new Dictionary<string, int>(MirrorKeys.All.Count);
+            foreach (var k in MirrorKeys.All) bd[k] = (int)(k switch { "low" => low, "high" => high, _ => raw[k] });
+            return UnifiedViolationChecker.SummaryReport(bd);
         }
     }
 

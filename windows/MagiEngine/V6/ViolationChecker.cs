@@ -662,6 +662,20 @@ public static class UnifiedViolationChecker
         }
     }
 
+    /// <summary><see cref="Check"/> の breakdown から total/hard/soft/weightedScore だけを同じ式で起こす（場所マップ・ログは空）。</summary>
+    internal static ViolationReport SummaryReport(IReadOnlyDictionary<string, int> breakdown)
+    {
+        int total = 0;
+        foreach (var v in breakdown.Values) total += v;
+        int hard = 0;
+        foreach (var key0 in MirrorKeys.Hard) hard += breakdown.TryGetValue(key0, out var hv) ? hv : 0;
+        var empty = new Dictionary<string, string>();
+        return new ViolationReport(
+            Violations: empty, NeedViolations: empty, CountViolations: empty,
+            Breakdown: breakdown, Total: total, Hard: hard, Soft: total - hard,
+            WeightedScore: WeightedScore(breakdown));
+    }
+
     private static double WeightedScore(IReadOnlyDictionary<string, int> b)
     {
         // [N2/⛏11 移植元] 重みは MirrorKeys.Weights を単一の真実として参照。列挙順を保持しているため
