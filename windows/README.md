@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-04（Android 9039f38 同期、正式 checker の出力同一の高速化）: C# 単独の差が 3 つ（出力不変）。①報告マップの初期容量ヒント `mapCapacity` は移植しない（`InsertionOrderDictionary` に当てはまらない）②`CheckerEquivalenceTest` の乱択は `JavaRandom` なので盤面系列は Android と別③`full_coverage_state.json` は C# に fixture が無く照合対象外（Android 6 件・C# 5 件）。1 回の check は golden 67.8→54.0µs・oct2026 74.9→63.6µs。
 - 2026-10-03（Android 05df246 同期、既定 OFF の探索フラグの画面スイッチ）: C# 単独の差分が 2 つ。①`MagiEngine/AssemblyInfo.cs` に `InternalsVisibleTo`（MagiApp.ViewModels・MagiApp.ViewModels.Tests）＝internal の `C1JointLnsPolish.DeltaChildEvalDefault` を画面とテストから切り替えるため（Kotlin は同一モジュールなので不要）。②画面からの実行が `WishConflictFloorMode` を `HandleOptimize` に渡していなかった（Kotlin は渡す＝移植漏れ）ため、`IOptimizationService.OptimizeWithFlagsAsync`（既定実装つき）で 2 引数とも渡す。WinUI の既存スイッチは実行中も無効化しない作りに合わせた。WinUI に「回数の超過を数日がかりで減らす」「公平化/適切回数の研磨をもう一歩広げる」のスイッチが無いのは既存の不足（範囲外）。
 - 2026-10-01（Android 勤務表タブの縦寸法の同期、表示のみ・採点・探索は不変）: 移したのは ①セル編集フライアウトの見出し行の［↶ 元に戻す］（ちら見・全体とも。有効条件は `CanUndo && !Running`、押すと戻してシートを開き直す。Kotlin `SheetUndoButton`）②純ロジック `ScheduleLayout`（`BottomBarModeOf`／`ShouldScrollToGridTop`／`WeekRangeCaption`）とテスト 3 本（Kotlin `ScheduleLayoutMetricsTest` の関数部分）。
   移さない: 下部バーの統合（WinUI は `MainWindow` の全タブ共通コマンドバーと `ScheduleView` の `NavBar` が別行で常設、デスクトップは縦に余裕がある）／シートを開く間のバー隠し（フライアウトは軽く閉じる浮き窓で、バーの上に出るだけで下を覆わない）／dp 定数と見える行数の計算（Android 固有の寸法）／タブ入場スクロール・週範囲の左上表示（`ScheduleView` はグリッドを別の ScrollViewer に持ち、日ヘッダの「職員」見出しは固定の別セル。Android の縦スクロール 1 本構成を前提とした変更）。`ScheduleLayout` は表示側から未使用（Kotlin との同名・同値を保つ純関数＝将来 WinUI が使うときの契約）。テスト: ViewModels 612 件（新規 3）。
