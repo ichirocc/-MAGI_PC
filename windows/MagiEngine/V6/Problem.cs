@@ -99,6 +99,9 @@ public sealed class Problem
     /// <summary>Allowed shift indices per group (groupShift[g][k]==1).</summary>
     public int[][] Bucket { get; }
 
+    /// <summary>CanDoHas[i][k] = <c>CanDo(i, k)</c>（担当可）の表。正式チェッカーのセル走査が引く。</summary>
+    public bool[][] CanDoHas { get; }
+
     /// <summary>groupMembers[g] = 群gに属する staff index。グループ内公平化(fair)で群メンバー間の回数偏差を均すのに使う。</summary>
     public int[][] GroupMembers { get; }
 
@@ -208,6 +211,14 @@ public sealed class Problem
                 if (row is not null && k < row.Count && row[k] == 1) list.Add(k);
             }
             Bucket[g] = list.ToArray();
+        }
+
+        CanDoHas = new bool[S][];
+        for (int i = 0; i < S; i++)
+        {
+            var b = Sgrp[i] >= 0 && Sgrp[i] < Bucket.Length ? Bucket[Sgrp[i]] : null;
+            CanDoHas[i] = new bool[K];
+            for (int k = 0; k < K; k++) CanDoHas[i][k] = b is not null && Array.IndexOf(b, k) >= 0;
         }
 
         GroupMembers = new int[G][];

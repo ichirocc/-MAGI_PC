@@ -1,89 +1,14 @@
-using System.Linq;
 using MagiEngine.Model;
+using MagiEngine.V6;
 
-namespace MagiEngine.V6;
-
-/// <summary>Faithful port of Kotlin's <c>MirrorLog</c> data class.</summary>
-public sealed record MirrorLog
-{
-    public long Ts { get; init; }
-    public long Iter { get; init; }
-    public string Level { get; init; }
-    public string Tag { get; init; }
-    public string Message { get; init; }
-
-    public MirrorLog(string tag, string message, long iter = 0, string level = "I", long? ts = null)
-    {
-        Tag = tag;
-        Message = message;
-        Iter = iter;
-        Level = level;
-        Ts = ts ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    }
-}
+namespace MagiEngine.Tests.V6;
 
 /// <summary>
-/// Faithful port of Kotlin's <c>ViolationReport</c> data class — the return type of
-/// <see cref="UnifiedViolationChecker.Check"/>.
-///
-/// Parameter order here (required fields first, then the ones with a default value) differs
-/// from the Kotlin declaration's textual order (which freely interleaves defaulted and
-/// non-defaulted parameters, something Kotlin allows but C# does not for a single constructor
-/// signature) — every field's name, type, and default value is otherwise identical; this is a
-/// pure declaration-order accommodation, not a behavioral change. The one production call site
-/// (<see cref="UnifiedViolationChecker.Check"/>) supplies every field explicitly regardless.
+/// 2026-10-03 の check 高速化（c41/c42 の前計算・ログの遅延生成）より前の <see cref="UnifiedViolationChecker"/> の写し。
+/// <see cref="CheckerEquivalenceTest"/> が新旧の報告を全フィールドで突き合わせるための基準＝ここは直さない。
 /// </summary>
-public sealed record ViolationReport(
-    IReadOnlyDictionary<string, string> Violations,
-    IReadOnlyDictionary<string, string> NeedViolations,
-    IReadOnlyDictionary<string, string> CountViolations,
-    IReadOnlyDictionary<string, int> Breakdown,
-    int Total,
-    int Hard,
-    int Soft,
-    double WeightedScore,
-    // [Set化 移植元] セル("i,j")に重なった全違反クラスを重み降順で保持（Violations は最重1クラス＝
-    //   後方互換）。先頭は常に Violations[key] と一致する（不変条件）。
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? CellFamilies = null,
-    // [3.353.0 移植元] 回数キー("i,k")版。
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? CountFamilies = null,
-    // [/code-review 移植元] 被覆キー("k,j")版。
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? NeedFamilies = null,
-    // [場所表示 移植元] fair/weekly はセル単位でなく職員/群×シフト単位の偏りのため violations(mark)
-    //   に出せない。"weekly" -> [[staffIdx, dev], ...] / "fair" -> [[staffIdx, shiftIdx, dev], ...]（dev降順）。
-    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>>? DistLocations = null,
-    IReadOnlyList<MirrorLog>? Logs = null,
-    // [Kotlin c1Runs 移植元] 期間の制約(c1)の違反窓ラン [職員, 先頭窓の開始日, 窓数, 窓幅]。画面の表示専用の元データ
-    //   （Violations はランの先頭 1 セルだけ＝探索の手掛かりは不変）。
-    IReadOnlyList<IReadOnlyList<int>>? C1Runs = null)
+internal static class CheckerReferenceV0
 {
-    // Kotlin's emptyMap()/emptyList() defaults, realized as non-null accessors (records can't
-    // default a reference-typed positional parameter to a *shared* non-null instance without
-    // this null-coalescing indirection, since default parameter values must be compile-time
-    // constants in C#).
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> CellFamilies { get; init; } =
-        CellFamilies ?? EmptyFamilies;
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> CountFamilies { get; init; } =
-        CountFamilies ?? EmptyFamilies;
-    public IReadOnlyDictionary<string, IReadOnlyList<string>> NeedFamilies { get; init; } =
-        NeedFamilies ?? EmptyFamilies;
-    public IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>> DistLocations { get; init; } =
-        DistLocations ?? EmptyLocations;
-    public IReadOnlyList<MirrorLog> Logs { get; init; } = Logs ?? Array.Empty<MirrorLog>();
-    public IReadOnlyList<IReadOnlyList<int>> C1Runs { get; init; } = C1Runs ?? Array.Empty<IReadOnlyList<int>>();
-
-    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> EmptyFamilies =
-        new Dictionary<string, IReadOnlyList<string>>();
-    private static readonly IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyList<int>>> EmptyLocations =
-        new Dictionary<string, IReadOnlyList<IReadOnlyList<int>>>();
-}
-
-/// <summary>Faithful port of Kotlin's <c>UnifiedViolationChecker</c> object.</summary>
-public static class UnifiedViolationChecker
-{
-    // [3.395.0/高速化 移植元] mark 系の重み優先比較のための事前表。VioClass を先に確定させてから
-    // ClassWeight を導出する（Kotlin の `by lazy` は宣言順ではなく初回アクセス順で安全だったが、
-    // C# の静的フィールド初期化は宣言順で確定的に走るため lazy にする必要が無い）。
     private static readonly Dictionary<string, string> VioClass = new()
     {
         ["c1"] = "vio-c1", ["c2"] = "vio-c2", ["c3"] = "vio-c3", ["c3n"] = "vio-c3n", ["c3w"] = "vio-c3w",
@@ -94,29 +19,9 @@ public static class UnifiedViolationChecker
         ["aptLow"] = "vio-aptLow", ["aptHigh"] = "vio-aptHigh",
     };
 
+
     private static readonly IReadOnlyDictionary<string, double> ClassWeight =
         VioClass.ToDictionary(kv => kv.Value, kv => MirrorKeys.WeightOf(kv.Key));
-
-    /// <summary>
-    /// [3.287.0 keep-best統一 移植元] 全 keep-best 比較器の単一ソース。順序は
-    /// hard → weightedScore → total。比較を足すときは写さずこれを使う。
-    /// </summary>
-    public static readonly IComparer<ViolationReport> ReportComparer = Comparer<ViolationReport>.Create((a, b) =>
-    {
-        if (a.Hard != b.Hard) return a.Hard.CompareTo(b.Hard);
-        if (a.WeightedScore != b.WeightedScore) return a.WeightedScore.CompareTo(b.WeightedScore);
-        return a.Total.CompareTo(b.Total);
-    });
-
-    public static bool BetterReport(ViolationReport a, ViolationReport b) => ReportComparer.Compare(a, b) < 0;
-
-    /// <summary>[3.573.0, Kotlin原本] BetterReportはHARDの合計件数を先頭に見るため、ある HARD 族（例: covU）
-    /// を減らす代わりに別の HARD 族（例: c3n＝禁止連）を新規発生させても、合計が同じか減れば「改善」と
-    /// 判定されうる。FixSuggester/FixApplyGate（利用者に見せる「1手」の提案・適用境界）だけに使う——
-    /// 探索本体（SA/ALNS/Polish）の中間状態はこの限りではない（一時的な族間のトレードを許して大域探索
-    /// するのは意図的な設計）。戻り値は最初に見つかった悪化族名（無ければ null）＝拒否理由の表示に使う。</summary>
-    public static string? NewHardFamilyViolation(ViolationReport before, ViolationReport after) =>
-        MirrorKeys.Hard.FirstOrDefault(fam => after.Breakdown.GetValueOrDefault(fam, 0) > before.Breakdown.GetValueOrDefault(fam, 0));
 
     public static ViolationReport Check(MagiState state, int[][]? schedule = null, bool quantitativeRangeEval = false)
     {
@@ -141,7 +46,6 @@ public static class UnifiedViolationChecker
         var cellFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
         var countFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
         var needFams = new InsertionOrderDictionary<string, IReadOnlyList<string>>();
-        var canDo = p.CanDoHas;
         var c1Runs = new List<IReadOnlyList<int>>();
 
         void Mark(int i, int j, string family)
@@ -232,13 +136,12 @@ public static class UnifiedViolationChecker
         }
 
         // ---- c41: group/day range --------------------------------------------------------
-        // 日ごとの (グループ, シフト) 人数を 1 回だけ数え、c41/c42 の規則ごとの職員走査を表引きにする。
-        var grpDay = p.Cons41.Count == 0 && p.Cons42.Count == 0 ? null : scratch.GroupDayCounts(s, p, p.Sgrp, p.G, skill: false);
         foreach (var c in p.Cons41)
         {
             for (int j = 0; j < p.T; j++)
             {
-                int z = CheckScratch.GroupDay(grpDay!, p.G, c.GroupIdx, c.ShiftIdx, j, p);
+                int z = 0;
+                for (int i = 0; i < p.S; i++) if (p.Sgrp[i] == c.GroupIdx && CellIs(i, j, c.ShiftIdx)) z++;
                 if (quantitativeRangeEval)
                 {
                     var amt = Evaluator.RangeDistance(z, c.L, c.U);
@@ -260,8 +163,6 @@ public static class UnifiedViolationChecker
         {
             for (int j = 0; j < p.T; j++)
             {
-                // 片側が 0 人の日は組が無い（大半の日）＝職員を走査しない。
-                if (CheckScratch.GroupDay(grpDay!, p.G, c.G1, c.S1, j, p) == 0 || CheckScratch.GroupDay(grpDay!, p.G, c.G2, c.S2, j, p) == 0) continue;
                 int nL = 0, nR = 0;
                 for (int i = 0; i < p.S; i++)
                 {
@@ -288,13 +189,12 @@ public static class UnifiedViolationChecker
         }
 
         // ---- c41s / c42s: skill-group variants ---------------------------------------------
-        int nSkill = SkillGroupSpan(p);
-        var skDay = nSkill == 0 ? null : scratch.GroupDayCounts(s, p, p.Ssk, nSkill, skill: true);
         foreach (var c in p.Cons41s)
         {
             for (int j = 0; j < p.T; j++)
             {
-                int z = CheckScratch.GroupDay(skDay!, nSkill, c.GroupIdx, c.ShiftIdx, j, p);
+                int z = 0;
+                for (int i = 0; i < p.S; i++) if (p.Ssk[i] == c.GroupIdx && CellIs(i, j, c.ShiftIdx)) z++;
                 if (quantitativeRangeEval)
                 {
                     var amt = Evaluator.RangeDistance(z, c.L, c.U);
@@ -307,7 +207,6 @@ public static class UnifiedViolationChecker
         {
             for (int j = 0; j < p.T; j++)
             {
-                if (CheckScratch.GroupDay(skDay!, nSkill, c.G1, c.S1, j, p) == 0 || CheckScratch.GroupDay(skDay!, nSkill, c.G2, c.S2, j, p) == 0) continue;
                 int nL = 0, nR = 0;
                 for (int i = 0; i < p.S; i++)
                 {
@@ -355,7 +254,7 @@ public static class UnifiedViolationChecker
             {
                 int w = p.Wish[i][j];
                 // [監査#11② 移植元] 実現可能な希望の未充足のみ HARD(pref) 計上・着色。
-                if (w >= 0 && w < p.K && canDo[i][w] && s[i][j] != w)
+                if (w >= 0 && w < p.K && p.CanDo(i, w) && s[i][j] != w)
                 {
                     Inc("pref");
                     Mark(i, j, "pref");
@@ -371,7 +270,7 @@ public static class UnifiedViolationChecker
                 int lo = p.RangeLo[i][k];
                 int hi = p.RangeHi[i][k];
                 int n = counts[i][k];
-                if (lo != int.MinValue && lo != 0 && canDo[i][k] && n < lo)
+                if (lo != int.MinValue && lo != 0 && p.CanDo(i, k) && n < lo)
                 {
                     Inc("low", lo - n);
                     MarkCount(i, k, "low");
@@ -450,7 +349,7 @@ public static class UnifiedViolationChecker
             for (int j = 0; j < p.T; j++)
             {
                 int k = s[i][j];
-                if (k >= 0 && k < p.K && !canDo[i][k])
+                if (k >= 0 && k < p.K && !p.CanDo(i, k))
                 {
                     Inc("groupViol");
                     Mark(i, j, "groupViol");
@@ -469,6 +368,22 @@ public static class UnifiedViolationChecker
         int soft = total - hard;
         long elapsedMs = (long)(System.Diagnostics.Stopwatch.GetElapsedTime(t0).TotalMilliseconds);
 
+        var hardParts = new List<string>();
+        foreach (var key0 in MirrorKeys.Hard)
+            hardParts.Add($"{key0}={(breakdown.TryGetValue(key0, out var hv2) ? hv2 : 0)}");
+        var hardStr = string.Join(" ", hardParts);
+
+        var softParts = new List<string>();
+        foreach (var key0 in MirrorKeys.Soft)
+        {
+            int n = breakdown.TryGetValue(key0, out var sv) ? sv : 0;
+            if (n > 0) softParts.Add($"{key0}={n}");
+        }
+        var softStr = string.Join(" ", softParts);
+
+        string msg = total == 0
+            ? "違反なし"
+            : $"合計={total} | HARD={hard} [{hardStr}]" + (soft > 0 ? $" | SOFT={soft} [{softStr}]" : "");
         string level = total == 0 ? "I" : "W";
 
         var cellFamilies = BuildFamilyMaps(cellFams, out var violations);
@@ -490,49 +405,8 @@ public static class UnifiedViolationChecker
             NeedFamilies = needFamilies,
             DistLocations = distLocations,
             C1Runs = c1Runs,
-            Logs = new CheckLog(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), level, bd, total, hard, soft, elapsedMs),
+            Logs = new[] { new MirrorLog("UnifiedCheck", $"{msg} ({elapsedMs}ms)", iter: 0, level: level) },
         };
-    }
-
-    /// <summary>check のログ 1 行。研磨の候補評価では読まれないので文面は初回の読み取りで作る（時刻・中身は即時と同じ）。
-    /// <c>bd</c> は Check の局所配列＝返した後に書き換わらない。</summary>
-    private sealed class CheckLog : IReadOnlyList<MirrorLog>
-    {
-        private readonly long _ts, _elapsedMs;
-        private readonly string _level;
-        private readonly int[] _bd;
-        private readonly int _total, _hard, _soft;
-        private MirrorLog? _log;
-
-        public CheckLog(long ts, string level, int[] bd, int total, int hard, int soft, long elapsedMs)
-        {
-            _ts = ts; _level = level; _bd = bd; _total = total; _hard = hard; _soft = soft; _elapsedMs = elapsedMs;
-        }
-
-        private MirrorLog Log => LazyInitializer.EnsureInitialized(ref _log,
-            () => new MirrorLog("UnifiedCheck", $"{Message()} ({_elapsedMs}ms)", iter: 0, level: _level, ts: _ts));
-        public int Count => 1;
-        public MirrorLog this[int index] => index == 0 ? Log : throw new ArgumentOutOfRangeException(nameof(index));
-        public IEnumerator<MirrorLog> GetEnumerator() { yield return Log; }
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-
-        private string Message()
-        {
-            if (_total == 0) return "違反なし";
-            int N(string key) => _bd[MirrorKeys.Index[key]];
-            var hardStr = string.Join(" ", MirrorKeys.Hard.Select(k => $"{k}={N(k)}"));
-            var softStr = string.Join(" ", MirrorKeys.Soft.Where(k => N(k) > 0).Select(k => $"{k}={N(k)}"));
-            return $"合計={_total} | HARD={_hard} [{hardStr}]" + (_soft > 0 ? $" | SOFT={_soft} [{softStr}]" : "");
-        }
-    }
-
-    /// <summary>c41s/c42s の規則が指すスキルグループの添字の上限+1（規則が無ければ 0）。これ以外の所属の職員はどの規則にも数えられない。</summary>
-    private static int SkillGroupSpan(Problem p)
-    {
-        int n = 0;
-        foreach (var c in p.Cons41s) n = Math.Max(n, c.GroupIdx + 1);
-        foreach (var c in p.Cons42s) n = Math.Max(n, Math.Max(c.G1, c.G2) + 1);
-        return n;
     }
 
     /// <summary>
@@ -610,29 +484,6 @@ public static class UnifiedViolationChecker
                 for (int j = 0; j < p.T; j++) { int k = sc[i][j]; if (k >= 0 && k < p.K) _cov[j][k]++; }
             return _cov;
         }
-
-        private int[] _grpTab = Array.Empty<int>(), _skTab = Array.Empty<int>();
-
-        /// <summary>日 j に所属 <c>grp</c> が g でシフト k の人数を <c>[(g*K+k)*T+j]</c> へ数えた表。範囲外の所属は数えない。</summary>
-        public int[] GroupDayCounts(int[][] sc, Problem p, int[] grp, int nG, bool skill)
-        {
-            int n = nG * p.K * p.T;
-            var tab = skill ? _skTab : _grpTab;
-            if (tab.Length < n) { tab = new int[n]; if (skill) _skTab = tab; else _grpTab = tab; }
-            else Array.Clear(tab, 0, n);
-            for (int i = 0; i < p.S; i++)
-            {
-                int g = grp[i];
-                if (g < 0 || g >= nG) continue;
-                var row = sc[i]; int bse = g * p.K;
-                for (int j = 0; j < p.T; j++) { int k = row[j]; if (k >= 0) tab[(bse + k) * p.T + j]++; }
-            }
-            return tab;
-        }
-
-        /// <summary><see cref="GroupDayCounts"/> の表引き。範囲外のグループ・シフトは 0 人（<c>CellIs</c> と同じ）。</summary>
-        public static int GroupDay(int[] tab, int nG, int g, int k, int j, Problem p) =>
-            g < 0 || g >= nG || k < 0 || k >= p.K ? 0 : tab[(g * p.K + k) * p.T + j];
     }
 
     [ThreadStatic] private static CheckScratch? t_checkScratch;
@@ -647,7 +498,7 @@ public static class UnifiedViolationChecker
     }
 
     /// <summary>違反マップのキー "a,b"。業務上限（30 名・31 日）の範囲は作り置きを返す。</summary>
-    internal static string PairKey(int a, int b) =>
+    private static string PairKey(int a, int b) =>
         a >= 0 && a < PairKeyN && b >= 0 && b < PairKeyN ? PairKeys[a * PairKeyN + b] : $"{a},{b}";
 
     private static void CheckC3Family(
@@ -716,20 +567,6 @@ public static class UnifiedViolationChecker
         }
     }
 
-    /// <summary><see cref="Check"/> の breakdown から total/hard/soft/weightedScore だけを同じ式で起こす（場所マップ・ログは空）。</summary>
-    internal static ViolationReport SummaryReport(IReadOnlyDictionary<string, int> breakdown)
-    {
-        int total = 0;
-        foreach (var v in breakdown.Values) total += v;
-        int hard = 0;
-        foreach (var key0 in MirrorKeys.Hard) hard += breakdown.TryGetValue(key0, out var hv) ? hv : 0;
-        var empty = new Dictionary<string, string>();
-        return new ViolationReport(
-            Violations: empty, NeedViolations: empty, CountViolations: empty,
-            Breakdown: breakdown, Total: total, Hard: hard, Soft: total - hard,
-            WeightedScore: WeightedScore(breakdown));
-    }
-
     private static double WeightedScore(IReadOnlyDictionary<string, int> b)
     {
         // [N2/⛏11 移植元] 重みは MirrorKeys.Weights を単一の真実として参照。列挙順を保持しているため
@@ -740,37 +577,3 @@ public static class UnifiedViolationChecker
         return outVal;
     }
 }
-
-/// <summary>
-/// Faithful port of Kotlin's <c>ScheduleRunResult</c> data class (also declared in
-/// <c>MirrorCore.kt</c>). Shared return type of the schedule generators
-/// (<see cref="SmartInitialScheduler"/>, <see cref="GreedyMirrorScheduler"/>, phase 4) and later
-/// (phase 7) of <c>ScheduleCsvBridge</c>'s CSV import path — hence the 4 CSV-only fields below
-/// are ported now (with their Kotlin default values) even though nothing populates them until
-/// phase 7, so this record's shape does not need to change again when that phase wires them up.
-/// </summary>
-public sealed record ScheduleRunResult(
-    int[][] Schedule,
-    ViolationReport Report,
-    /// <summary>CSV取込で氏名が一致したスタッフ行数。最適化系の結果では未使用(-1)。</summary>
-    int Matched = -1,
-    /// <summary>CSV取込でシフト一覧に無い記号だったセルの数。</summary>
-    int UnknownCells = 0,
-    /// <summary>その未知記号（多い順・上位）。</summary>
-    IReadOnlyList<string>? UnknownSymbols = null,
-    /// <summary>引用符が閉じないまま入力が終わった（開いた引用符以降が1セルへ吸い込まれ、残りの行が丸ごと消えた）。旗は <c>CsvPartialImport.Judge</c> が読み、読めた範囲だけ取り込むかの確認（職員の行が無ければ断り）へ振り分ける。</summary>
-    bool UnclosedQuote = false,
-    /// <summary>同じ名前の職員が複数いるため取り込まなかった CSV の氏名（CSV の表記のまま）。</summary>
-    IReadOnlyList<string>? AmbiguousNames = null,
-    /// <summary>1人に解決する氏名の行が CSV に2行以上あった職員（後の行が前の行を上書きした）。</summary>
-    IReadOnlyList<string>? DuplicateRowNames = null,
-    /// <summary>ヘッダが実日付形式（M/D(曜)）のとき、今の期間の同じ列の日付と食い違う列の数。</summary>
-    int HeaderDateMismatches = 0)
-{
-    public IReadOnlyList<string> UnknownSymbols { get; init; } = UnknownSymbols ?? Array.Empty<string>();
-    public IReadOnlyList<string> AmbiguousNames { get; init; } = AmbiguousNames ?? Array.Empty<string>();
-    public IReadOnlyList<string> DuplicateRowNames { get; init; } = DuplicateRowNames ?? Array.Empty<string>();
-}
-
-// LightOptimizeResult (also declared in MirrorCore.kt) is deferred to phase 5 (SA optimizer
-// results) — not needed by anything in phase 4's scope.
