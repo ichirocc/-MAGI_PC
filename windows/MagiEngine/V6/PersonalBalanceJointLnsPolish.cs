@@ -216,13 +216,13 @@ internal static class PersonalBalanceJointLnsPolish
                 (valid ? $" 経路: {string.Join("+", best.Path)}" : " [頭打ち=正式目的を改善する個人違反減少束なし]"));
         return new V6HotfixPasses.CyclicSwapResult(
             chosen, rootReport.Total, chosenReport.Total, valid ? 1 : 0, new[] { log },
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: chosenReport);
     }
 
     private static V6HotfixPasses.CyclicSwapResult NoOp(
         int[][] schedule, ViolationReport report, string reason) => new V6HotfixPasses.CyclicSwapResult(
             schedule.Copy2D(), report.Total, report.Total, 0,
-            new[] { new MirrorLog(tag: "PersonalJointLNS", message: reason) });
+            new[] { new MirrorLog(tag: "PersonalJointLNS", message: reason) }, Report: report);
 
     private static int[] ChooseFocusStaff(
         Problem p, int[][] schedule, int[] current, int[] lower, int limit)

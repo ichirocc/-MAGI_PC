@@ -40,7 +40,7 @@ public static partial class V6HotfixPasses
         if (p.Cons1.Count == 0 || before.Breakdown.GetValueOrDefault("c1", 0) == 0)
         {
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
-                new List<MirrorLog> { new MirrorLog(tag: "C1IndexRepair", message: "c1対象なし=スキップ") });
+                new List<MirrorLog> { new MirrorLog(tag: "C1IndexRepair", message: "c1対象なし=スキップ") }, Report: before);
         }
         var rng = new JavaRandom(seed);
         var bestRep = before;
@@ -129,6 +129,6 @@ public static partial class V6HotfixPasses
                         $"採用{applied}(連鎖{chainUsed}) prefilter除外(延べ){screened}" +
                         (capHit ? $" 採用上限{maxAdoptions}到達=打ち切り" : "")),
             },
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

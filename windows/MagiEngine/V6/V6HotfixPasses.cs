@@ -41,5 +41,8 @@ public static partial class V6HotfixPasses
         /// <summary>[3.326.0] どのピン(職員,シフト)が何回止めたか。緩和対象の提示に使う。</summary>
         PinBlockAttribution? PinBlocks = null,
         /// <summary>[Iteration 2] このパスが単独では不採用にし、結合にも使わなかった候補（違反起点修復の材料）。</summary>
-        IReadOnlyList<CombinatorialRepair.Candidate>? RejectedCandidates = null);
+        IReadOnlyList<CombinatorialRepair.Candidate>? RejectedCandidates = null,
+        /// <summary>このパスが自身の keep-best ループで既に評価済みの <c>NewSchedule</c> に対応する報告書。
+        /// 未設定(null)のパスは呼出側で再チェックする。</summary>
+        ViolationReport? Report = null);
 }

@@ -91,19 +91,20 @@ internal static class C1JointLnsPolish
         int[][] schedule,
         Config? config = null,
         Func<bool>? shouldStop = null,
-        long seed = 0xC1A11L)
+        long seed = 0xC1A11L,
+        bool quantitativeRangeEval = false)
     {
         var cfg = config ?? new Config();
         var stop = shouldStop ?? (() => false);
-        var p = new Problem(state);
+        var p = new Problem(state, quantitativeRangeEval);
         var rootSchedule = ScheduleUtil.NormalizeSchedule(schedule, p);
-        var rootReport = UnifiedViolationChecker.Check(state, rootSchedule);
+        var rootReport = UnifiedViolationChecker.Check(state, rootSchedule, quantitativeRangeEval: quantitativeRangeEval);
         int rootC1 = rootReport.Breakdown.GetValueOrDefault("c1", 0);
         if (p.Cons1.Count == 0 || rootC1 <= 0 || p.T <= 0 || p.S <= 0)
         {
             return new V6HotfixPasses.CyclicSwapResult(
                 rootSchedule, rootReport.Total, rootReport.Total, 0,
-                new[] { new MirrorLog(tag: "C1JointLNS", message: "期間要件(c1)対象なし=スキップ") });
+                new[] { new MirrorLog(tag: "C1JointLNS", message: "期間要件(c1)対象なし=スキップ") }, Report: rootReport);
         }
 
         // [3.350.0/敵対検証] 「目的関数は採用を認めたのにピンだけが止めた」件数を対象別に記録する。
@@ -117,7 +118,7 @@ internal static class C1JointLnsPolish
         {
             return new V6HotfixPasses.CyclicSwapResult(
                 rootSchedule, rootReport.Total, rootReport.Total, 0,
-                new[] { new MirrorLog(tag: "C1JointLNS", message: "探索上限0=明示的に無効") });
+                new[] { new MirrorLog(tag: "C1JointLNS", message: "探索上限0=明示的に無効") }, Report: rootReport);
         }
         int width = cfg.BeamWidth;
         int depthLimit = cfg.MaxDepth;
@@ -217,7 +218,7 @@ internal static class C1JointLnsPolish
                         var chunk = pending.GetRange(from, Math.Min(ParallelEval.Chunk, pending.Count - from));
                         var reports = deltaPool != null
                             ? deltaPool.Evaluate(parent.Schedule, chunk.Select(pn => pn.Cells!).ToList())
-                            : ParallelEval.MapParallel(chunk, pn => UnifiedViolationChecker.Check(state, pn.Next!));
+                            : ParallelEval.MapParallel(chunk, pn => UnifiedViolationChecker.Check(state, pn.Next!, quantitativeRangeEval: quantitativeRangeEval));
                         generated += chunk.Count; evaluations += chunk.Count;
                         from += chunk.Count;
                         for (var idx = 0; idx < chunk.Count; idx++)
@@ -275,7 +276,7 @@ internal static class C1JointLnsPolish
         }
 
         // Defensive re-check. A shared-array bug or future operator mistake can never escape this gate.
-        var finalReport = UnifiedViolationChecker.Check(state, best.Schedule);
+        var finalReport = UnifiedViolationChecker.Check(state, best.Schedule, quantitativeRangeEval: quantitativeRangeEval);
         int finalC1 = finalReport.Breakdown.GetValueOrDefault("c1", 0);
         bool valid = !ReferenceEquals(best, root) && finalC1 < rootC1 && Better(finalReport, rootReport) &&
             !pinBlocks.BlocksImproving(p, rootSchedule, best.Schedule);
@@ -314,7 +315,7 @@ internal static class C1JointLnsPolish
                 (valid ? "" : " [頭打ち=正式目的を改善するC1減少束なし]"));
         return new V6HotfixPasses.CyclicSwapResult(
             chosen, rootReport.Total, chosenReport.Total, valid ? 1 : 0, new[] { log },
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: chosenReport);
     }
 
     /// <summary>

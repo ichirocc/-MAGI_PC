@@ -67,6 +67,6 @@ internal static class C1RepairOperators
     /// <summary>Joint LNS（c1 + covU/range-low を同一 goal pool で）。</summary>
     public static V6HotfixPasses.CyclicSwapResult JointLns(
         MagiState state, int[][] schedule, C1JointLnsPolish.Config? config = null,
-        Func<bool>? shouldStop = null, long seed = 0xC1A11L) =>
-        C1JointLnsPolish.Apply(state, schedule, config, shouldStop, seed);
+        Func<bool>? shouldStop = null, long seed = 0xC1A11L, bool quantitativeRangeEval = false) =>
+        C1JointLnsPolish.Apply(state, schedule, config, shouldStop, seed, quantitativeRangeEval);
 }

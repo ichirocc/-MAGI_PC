@@ -40,7 +40,7 @@ public static partial class V6HotfixPasses
         if (rules.Count == 0)
         {
             return new CyclicSwapResult(work, before.Total, bestRep.Total, 0,
-                new[] { new MirrorLog(tag: "C3PatternPolish", message: "複数シフトc3/c3mパターンなし=スキップ") });
+                new[] { new MirrorLog(tag: "C3PatternPolish", message: "複数シフトc3/c3mパターンなし=スキップ") }, Report: bestRep);
         }
         var rng = new JavaRandom(seed);
         var rejectCulprits = new RejectCulpritStats();
@@ -147,6 +147,6 @@ public static partial class V6HotfixPasses
         if (stuckNames.Count > 0) msg += $" 残存: {string.Join(", ", stuckNames)}";
         var logs = new[] { new MirrorLog(tag: "C3PatternPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

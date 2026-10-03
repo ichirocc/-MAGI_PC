@@ -121,23 +121,21 @@ public class C1JointLnsDeltaEvalTest
         }
     }
 
-    // C# の C1JointLnsPolish.Apply は quantitativeRangeEval を受けない（未同期）ため G2 は q=false だけ。
-    private static (V6HotfixPasses.CyclicSwapResult Off, V6HotfixPasses.CyclicSwapResult On) RunBoth(MagiState st, int[][] board, int evals)
+    private static (V6HotfixPasses.CyclicSwapResult Off, V6HotfixPasses.CyclicSwapResult On) RunBoth(MagiState st, int[][] board, bool q, int evals)
     {
         V6HotfixPasses.CyclicSwapResult Run(bool delta) => C1JointLnsPolish.Apply(
             st, board.Copy2D(),
-            new C1JointLnsPolish.Config(MaxMillis: 60_000L, PatienceMs: 0L, MaxEvaluations: evals, DeltaChildEval: delta));
+            new C1JointLnsPolish.Config(MaxMillis: 60_000L, PatienceMs: 0L, MaxEvaluations: evals, DeltaChildEval: delta),
+            quantitativeRangeEval: q);
         return (Run(false), Run(true));
     }
 
-    private static void AssertSameResult(string label, MagiState st, V6HotfixPasses.CyclicSwapResult off, V6HotfixPasses.CyclicSwapResult on)
+    private static void AssertSameResult(string label, V6HotfixPasses.CyclicSwapResult off, V6HotfixPasses.CyclicSwapResult on)
     {
         Assert.True(off.NewSchedule.Length == on.NewSchedule.Length && off.NewSchedule.Zip(on.NewSchedule).All(z => z.First.SequenceEqual(z.Second)), $"{label} board");
         Assert.Equal(off.Applied, on.Applied);
-        var ro = UnifiedViolationChecker.Check(st, off.NewSchedule);
-        var rn = UnifiedViolationChecker.Check(st, on.NewSchedule);
-        Assert.Equal(ro.Breakdown, rn.Breakdown);
-        Assert.Equal(ro.WeightedScore, rn.WeightedScore);
+        Assert.Equal(off.Report!.Breakdown, on.Report!.Breakdown);
+        Assert.Equal(off.Report!.WeightedScore, on.Report!.WeightedScore);
         static string Strip(string m) { int at = m.IndexOf(" 停止=", StringComparison.Ordinal); return at < 0 ? m : m[..at]; }
         Assert.Equal(Strip(off.Logs[0].Message), Strip(on.Logs[0].Message));
     }
@@ -149,16 +147,19 @@ public class C1JointLnsDeltaEvalTest
         foreach (var name in Fixtures)
         {
             var st = Load(name);
-            var (off, on) = RunBoth(st, st.Schedule.ToIntArray2D(), 4000);
-            AssertSameResult(name, st, off, on);
+            var (off, on) = RunBoth(st, st.Schedule.ToIntArray2D(), false, 4000);
+            AssertSameResult(name, off, on);
             applied += on.Applied;
         }
         for (long seed = 1; seed <= 4; seed++)
         {
             var st = Synthetic(seed);
-            var (off, on) = RunBoth(st, st.Schedule.ToIntArray2D(), 1500);
-            AssertSameResult($"synthetic{seed}", st, off, on);
-            applied += on.Applied;
+            foreach (var q in new[] { false, true })
+            {
+                var (off, on) = RunBoth(st, st.Schedule.ToIntArray2D(), q, 1500);
+                AssertSameResult($"synthetic{seed} q={q}", off, on);
+                applied += on.Applied;
+            }
         }
         Assert.True(applied >= 4, "採用のある経路を通っている");
     }

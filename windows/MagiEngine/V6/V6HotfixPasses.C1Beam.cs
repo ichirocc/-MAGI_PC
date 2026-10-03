@@ -33,7 +33,7 @@ public static partial class V6HotfixPasses
         if (p.Cons1.Count == 0)
         {
             return new CyclicSwapResult(work0, before.Total, before.Total, 0,
-                new List<MirrorLog> { new MirrorLog(tag: "C1BeamPolish", message: "cons1なし=スキップ") });
+                new List<MirrorLog> { new MirrorLog(tag: "C1BeamPolish", message: "cons1なし=スキップ") }, Report: before);
         }
 
         var rng = new JavaRandom(seed);
@@ -160,7 +160,7 @@ public static partial class V6HotfixPasses
         var logs = new List<MirrorLog> { new MirrorLog(tag: "C1BeamPolish", message: message) };
 
         return new CyclicSwapResult(best.Work, before.Total, best.Rep.Total, best.Applied, logs,
-            PinBlocks: pinBlocks);
+            PinBlocks: pinBlocks, Report: best.Rep);
     }
 
     private sealed record Beam(int[][] Work, ViolationReport Rep, int Applied);

@@ -45,7 +45,7 @@ public static partial class V6HotfixPasses
         var bestRep = before;
         if (p.S < 2 || p.T < 1 || maxPasses <= 0 || maxEvaluations <= 0)
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
-                new[] { new MirrorLog(tag: "AnchoredWindowSwap", message: "違反アンカー窓交換: 職員ペアなし=スキップ") });
+                new[] { new MirrorLog(tag: "AnchoredWindowSwap", message: "違反アンカー窓交換: 職員ペアなし=スキップ") }, Report: before);
         var lMax = Math.Min(Math.Max(maxLen, 1), p.T);
         var lLong = Math.Min(Math.Max(longLen, lMax), p.T);
         var ruleLens = new HashSet<int>();
@@ -315,6 +315,6 @@ public static partial class V6HotfixPasses
             (rejectCulprits.Count == 0 ? "" : " (悪化の主因 " + string.Join(" ", rejectCulprits.OrderByDescending(kv => kv.Value).Take(4).Select(kv => $"{kv.Key}:{kv.Value}")) + ")") +
             (selectedLabels.Count > 0 ? $" 対象: {string.Join(", ", selectedLabels)}" : "");
         var logs = new[] { new MirrorLog(tag: "AnchoredWindowSwap", message: msg) };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

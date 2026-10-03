@@ -335,6 +335,6 @@ internal static class CountChainPolish
                 $"apt {before.Breakdown.GetValueOrDefault("apt")}->{bestRep.Breakdown.GetValueOrDefault("apt")} " +
                 $"評価{evaluations} ノード{nodes}"),
         };
-        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

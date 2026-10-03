@@ -32,7 +32,7 @@ internal static class C3nMarginLnsPolish
         if (p.Cons3n.Count == 0)
         {
             return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, 0,
-                new[] { new MirrorLog(tag: tag, message: "cons3nなし=スキップ") });
+                new[] { new MirrorLog(tag: tag, message: "cons3nなし=スキップ") }, Report: bestRep);
         }
         var rng = new JavaRandom(seed);
         bool Movable(int i, int j) => !p.WishLocked(i, j);
@@ -161,6 +161,6 @@ internal static class C3nMarginLnsPolish
             (stuckNames.Count > 0 ? $" 残存: {string.Join(", ", stuckNames)}" : "");
         var logs = new[] { new MirrorLog(tag: tag, message: msg) };
         return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

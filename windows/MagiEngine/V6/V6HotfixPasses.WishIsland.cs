@@ -470,7 +470,7 @@ public static partial class V6HotfixPasses
             var finalSched = improved ? work : ScheduleUtil.NormalizeSchedule(input, p);
             var finalRep = improved ? bestRep : before;
             var logs = new[] { new MirrorLog(tag: "WishIslandPolish", message: Summary(finalRep)) };
-            return new CyclicSwapResult(finalSched, before.Total, finalRep.Total, applied, logs, ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            return new CyclicSwapResult(finalSched, before.Total, finalRep.Total, applied, logs, ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: finalRep);
         }
 
         private string Summary(ViolationReport finalRep)

@@ -269,6 +269,6 @@ public static partial class V6HotfixPasses
         if (aptCombSummary.Length > 0) msg += $" / {aptCombSummary}";
         var logs = new[] { new MirrorLog(tag: "AptPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut, Report: bestRep);
     }
 }

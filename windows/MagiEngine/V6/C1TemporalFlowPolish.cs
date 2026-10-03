@@ -57,7 +57,7 @@ internal static class C1TemporalFlowPolish
         {
             return new V6HotfixPasses.CyclicSwapResult(
                 work, before.Total, before.Total, 0,
-                new[] { new MirrorLog(tag: "C1TemporalFlow", message: "cons1なし=スキップ") });
+                new[] { new MirrorLog(tag: "C1TemporalFlow", message: "cons1なし=スキップ") }, Report: before);
         }
 
         var rulesByShift = new Dictionary<int, List<C1TemporalDp.Rule>>();
@@ -314,6 +314,6 @@ internal static class C1TemporalFlowPolish
         };
         return new V6HotfixPasses.CyclicSwapResult(
             work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

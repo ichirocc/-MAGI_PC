@@ -76,7 +76,7 @@ public static partial class V6HotfixPasses
         if (p.Cons3mn.Count == 0)
         {
             return new CyclicSwapResult(work, before.Total, bestRep.Total, 0,
-                new[] { new MirrorLog(tag: "C3mnPolish", message: "cons3mnなし=スキップ") });
+                new[] { new MirrorLog(tag: "C3mnPolish", message: "cons3mnなし=スキップ") }, Report: bestRep);
         }
         var rng = new JavaRandom(seed);
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
@@ -184,6 +184,6 @@ public static partial class V6HotfixPasses
         if (c3mnCombSummary.Length > 0) msg += $" / {c3mnCombSummary}";
         var logs = new[] { new MirrorLog(tag: "C3mnPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut, Report: bestRep);
     }
 }

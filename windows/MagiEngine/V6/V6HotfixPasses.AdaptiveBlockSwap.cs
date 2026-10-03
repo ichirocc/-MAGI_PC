@@ -101,7 +101,7 @@ public static partial class V6HotfixPasses
         if (p.S < 2 || lengths.Count == 0 || maxPasses <= 0 || candidatesPerLength <= 0 || maxEvaluations <= 0 || maxFocusStaff <= 0)
         {
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
-                new List<MirrorLog> { new MirrorLog(tag: "AdaptiveBlockSwap", message: "対象長または職員ペアなし=スキップ") });
+                new List<MirrorLog> { new MirrorLog(tag: "AdaptiveBlockSwap", message: "対象長または職員ペアなし=スキップ") }, Report: before);
         }
 
         string Name(int i) => i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
@@ -586,6 +586,6 @@ public static partial class V6HotfixPasses
                         string.Join(" ", rejectCulprits.OrderByDescending(kv => kv.Value).Take(4).Select(kv => $"{kv.Key}:{kv.Value}")) + ")") +
                     (selectedLabels.Count > 0 ? $" 対象: {string.Join(", ", selectedLabels)}" : "")),
         };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

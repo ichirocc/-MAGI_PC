@@ -306,6 +306,6 @@ public static partial class V6HotfixPasses
         if (fairCombSummary.Length > 0) msg += $" / {fairCombSummary}";
         var logs = new[] { new MirrorLog(tag: "FairPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut, Report: bestRep);
     }
 }

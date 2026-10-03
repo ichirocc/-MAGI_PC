@@ -39,7 +39,7 @@ public static partial class V6HotfixPasses
         if (rules.Count == 0)
         {
             return new CyclicSwapResult(work, before.Total, bestRep.Total, 0,
-                new[] { new MirrorLog(tag: "C3RunPolish", message: "対象規則(単一シフト連)なし=スキップ") });
+                new[] { new MirrorLog(tag: "C3RunPolish", message: "対象規則(単一シフト連)なし=スキップ") }, Report: bestRep);
         }
         var rng = new JavaRandom(seed);
         var rejectCulprits = new RejectCulpritStats();
@@ -143,6 +143,6 @@ public static partial class V6HotfixPasses
         if (stuckNames.Count > 0) msg += $" 残存: {string.Join(", ", stuckNames)}";
         var logs = new[] { new MirrorLog(tag: "C3RunPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

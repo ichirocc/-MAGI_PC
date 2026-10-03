@@ -124,7 +124,7 @@ public static partial class V6HotfixPasses
             new MirrorLog(tag: "CyclicSwap",
                 message: $"循環交換(k=2,3)研磨: total {before.Total}->{bestRep.Total} 採用{applied}回"),
         };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 
     /// <summary>
@@ -245,7 +245,7 @@ public static partial class V6HotfixPasses
                     $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
                     $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手)"),
         };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 
     /// <summary>
@@ -392,7 +392,7 @@ public static partial class V6HotfixPasses
                     $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
                     $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手)"),
         };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 
     // [3.317.0] 分散指標ベースの平準化2パス（applyGroupShiftEqualizePolish / applyWeeklyEqualizePolish）は
@@ -526,6 +526,6 @@ public static partial class V6HotfixPasses
             new MirrorLog(tag: "WeeklyRebalance",
                 message: $"曜日平準化(長方形交換): total {before.Total}->{bestRep.Total} 採用{applied}回"),
         };
-        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

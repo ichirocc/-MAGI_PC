@@ -35,7 +35,7 @@ public static partial class V6HotfixPasses
         if (p.Cons1.Count == 0 || before.Breakdown.GetValueOrDefault("c1", 0) == 0)
         {
             return new CyclicSwapResult(work, before.Total, before.Total, 0,
-                new List<MirrorLog> { new MirrorLog(tag: "C1ExactRepair", message: "c1対象なし=スキップ") });
+                new List<MirrorLog> { new MirrorLog(tag: "C1ExactRepair", message: "c1対象なし=スキップ") }, Report: before);
         }
         // [A1] 証明済み「解消不能スパン」のmemo（キー=焦点職員,シフト,スパン内容ハッシュ）。
         var deadSpans = new HashSet<string>();
@@ -133,6 +133,6 @@ public static partial class V6HotfixPasses
                     (applied == 0 && c1b > 0 && rejectCulprits.Rejected == 0 ? " [頭打ち=候補が出ない]" : "")),
         };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

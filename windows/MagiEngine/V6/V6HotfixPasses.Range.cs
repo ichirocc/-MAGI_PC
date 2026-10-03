@@ -785,6 +785,6 @@ public static partial class V6HotfixPasses
         if (rangeCombSummary.Length > 0) msg += $" / {rangeCombSummary}";
         var logs = new[] { new MirrorLog(tag: "RangePolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut, Report: bestRep);
     }
 }

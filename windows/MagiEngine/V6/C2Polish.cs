@@ -95,6 +95,6 @@ internal static class C2Polish
         }
 
         var logs = new List<MirrorLog> { new(tag: "C2Polish", message: $"個人合計(c2)研磨: total {before.Total}->{bestRep.Total} 採用{applied}回") };
-        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

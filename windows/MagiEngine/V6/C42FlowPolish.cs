@@ -159,6 +159,6 @@ internal static class C42FlowPolish
         }
 
         var logs = new List<MirrorLog> { new(tag: "C42FlowPolish", message: $"群ペア禁止(c42/c42s)フロー研磨: total {before.Total}->{bestRep.Total} 採用{applied}回") };
-        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new V6HotfixPasses.CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

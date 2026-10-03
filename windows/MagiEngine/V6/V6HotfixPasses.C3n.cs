@@ -37,7 +37,7 @@ public static partial class V6HotfixPasses
         if (p.Cons3n.Count == 0)
         {
             return new CyclicSwapResult(work, before.Total, bestRep.Total, 0,
-                new[] { new MirrorLog(tag: "C3nPolish", message: "cons3nなし=スキップ") });
+                new[] { new MirrorLog(tag: "C3nPolish", message: "cons3nなし=スキップ") }, Report: bestRep);
         }
         var rng = new JavaRandom(seed);
         bool Movable(int i, int j) => !p.WishLocked(i, j);
@@ -167,6 +167,6 @@ public static partial class V6HotfixPasses
         if (c3nCombSummary.Length > 0) msg += $" / {c3nCombSummary}";
         var logs = new[] { new MirrorLog(tag: "C3nPolish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs,
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, RejectedCandidates: rejectedOut, Report: bestRep);
     }
 }

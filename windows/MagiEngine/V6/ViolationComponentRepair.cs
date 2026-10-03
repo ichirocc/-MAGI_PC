@@ -172,7 +172,7 @@ public static class ViolationComponentRepair
         V6HotfixPasses.CyclicSwapResult Done(string message) => new(
             work, before.Total, bestRep.Total, applied,
             new List<MirrorLog> { new(tag: "ComponentRepair", message: "違反連結成分修復: " + message) },
-            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks);
+            ObservedPinBlockedAttempts: pinBlocks.Attempts, PinBlocks: pinBlocks, Report: bestRep);
         if (pool.Count < 2 && !par.GenerateFromAnchors) return Done($"候補{pool.Count}件=スキップ");
         if (work.Any(row => row.Any(v => v < 0 || v >= p.K))) return Done("未割当セルあり=スキップ");
 
