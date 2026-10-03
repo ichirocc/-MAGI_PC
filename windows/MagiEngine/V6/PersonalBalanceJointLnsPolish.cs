@@ -597,9 +597,7 @@ internal static class PersonalBalanceJointLnsPolish
         List<Node> children, ViolationReport root, int[] focus, int[] lower, int width, JavaRandom rng)
     {
         var official = children
-            .OrderBy(n => n.Report.Hard)
-            .ThenBy(n => n.Report.WeightedScore)
-            .ThenBy(n => n.Report.Total)
+            .OrderBy(n => n.Report, UnifiedViolationChecker.ReportComparer)
             .ThenBy(n => n.FocusTotal)
             .ThenBy(n => n.ChangedCells)
             .Take(Math.Max(1, width / 2))

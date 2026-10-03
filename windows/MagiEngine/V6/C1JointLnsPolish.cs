@@ -806,9 +806,7 @@ internal static class C1JointLnsPolish
         List<Node> children, ViolationReport root, int lowerBound, int width, JavaRandom rng)
     {
         var official = children
-            .OrderBy(n => n.Report.Hard)
-            .ThenBy(n => n.Report.WeightedScore)
-            .ThenBy(n => n.Report.Total)
+            .OrderBy(n => n.Report, UnifiedViolationChecker.ReportComparer)
             .ThenBy(n => n.C1)
             .ThenBy(n => n.ChangedCells)
             .Take(Math.Max(1, width / 2))
