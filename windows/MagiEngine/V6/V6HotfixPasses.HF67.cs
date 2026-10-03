@@ -17,7 +17,9 @@ public static partial class V6HotfixPasses
         int ShortageSwaps,
         int CapacitySwaps,
         int SwapsRollback,
-        IReadOnlyList<MirrorLog> Logs);
+        IReadOnlyList<MirrorLog> Logs,
+        /// <summary>このパスが評価済みの NewSchedule の報告書（Kotlin 同名。null は PostChain が再チェック）。</summary>
+        ViolationReport? Report = null);
 
     /// <summary>2職員間の同日シフト交換1手（<c>fromStaff</c>の<c>fromDay</c>を<c>toStaff</c>の<c>toDay</c>と
     /// 入れ替える）を表す。<see cref="ApplyHF67InterStaffSwap"/>専用の内部候補型。</summary>
@@ -192,6 +194,6 @@ public static partial class V6HotfixPasses
             new MirrorLog(tag: "HF67",
                 message: $"inter-staff swap applied={swaps} rollback={rollback} total {before.Total}->{current.Total}"),
         };
-        return new HF67Result(work, before.Total, current.Total, swaps, shortage, capacity, rollback, logs);
+        return new HF67Result(work, before.Total, current.Total, swaps, shortage, capacity, rollback, logs, Report: current);
     }
 }

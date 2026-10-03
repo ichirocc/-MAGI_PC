@@ -15,7 +15,9 @@ public static partial class V6HotfixPasses
         int AppliedDays,
         IReadOnlyList<MirrorLog> Logs,
         /// <summary>[3.326.0] 回数固定だけが却下した候補試行（対象別）。</summary>
-        PinBlockAttribution? PinBlocks = null);
+        PinBlockAttribution? PinBlocks = null,
+        /// <summary>このパスが評価済みの NewSchedule の報告書（Kotlin 同名。null は PostChain が再チェック）。</summary>
+        ViolationReport? Report = null);
 
     /// <summary>
     /// [ソフト研磨・厳密] 日ごと最小費用割当による研磨。各日の (日,シフト) 人数（=HARD充足）を固定したまま、
@@ -112,7 +114,7 @@ public static partial class V6HotfixPasses
             new MirrorLog(tag: "DayAssign",
                 message: $"日ごと厳密割当: total {before.Total}->{bestRep.Total} 採用{applied}日"),
         };
-        return new DayAssignResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new DayAssignResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 
     /// <summary>
@@ -260,6 +262,6 @@ public static partial class V6HotfixPasses
                 message: $"交互最適化(日ブロック・weekly込み割当): total {before.Total}->{bestRep.Total} " +
                     $"採用{applied}日 ({lastSweep}スイープ)"),
         };
-        return new DayAssignResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks);
+        return new DayAssignResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
 }

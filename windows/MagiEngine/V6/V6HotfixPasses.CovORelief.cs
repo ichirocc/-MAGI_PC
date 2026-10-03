@@ -10,7 +10,9 @@ public static partial class V6HotfixPasses
         int BeforeCovO,
         int AfterCovO,
         int Applied,
-        IReadOnlyList<MirrorLog> Logs);
+        IReadOnlyList<MirrorLog> Logs,
+        /// <summary>このパスが評価済みの NewSchedule の報告書（Kotlin 同名。null は PostChain が再チェック）。</summary>
+        ViolationReport? Report = null);
 
     /// <summary>
     /// [Kotlin原本 <c>CovOReliefPolish.apply</c>] 人員過剰(covO)の退避研磨。過剰セルの在勤者を、受け皿のある担当可シフト
@@ -103,6 +105,6 @@ public static partial class V6HotfixPasses
         if (rejected > 0) sb.Append($" 不採用{rejected}件(主因 " + string.Join(" ", famHits.OrderByDescending(e => e.Value).Take(3).Select(e => $"{e.Key}:{e.Value}")) + ")");
         if (residual.Count > 0) sb.Append(" 残存: " + string.Join(", ", residual.Take(8).Select(e => $"{e.Key}({e.Value})")));
         if (evaluations >= maxEvaluations) sb.Append(" [評価上限で打ち切り]");
-        return new CovOReliefResult(work, beforeCovO, afterCovO, applied, new List<MirrorLog> { new MirrorLog("CovORelief", sb.ToString()) });
+        return new CovOReliefResult(work, beforeCovO, afterCovO, applied, new List<MirrorLog> { new MirrorLog("CovORelief", sb.ToString()) }, Report: bestRep);
     }
 }

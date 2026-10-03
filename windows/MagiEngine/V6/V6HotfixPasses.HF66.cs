@@ -17,7 +17,9 @@ public static partial class V6HotfixPasses
         int ShortageMoves,
         int CapacityMoves,
         int MovesRollback,
-        IReadOnlyList<MirrorLog> Logs);
+        IReadOnlyList<MirrorLog> Logs,
+        /// <summary>このパスが評価済みの NewSchedule の報告書（Kotlin 同名。null は PostChain が再チェック）。</summary>
+        ViolationReport? Report = null);
 
     /// <summary>同一職員<c>Staff</c>の<c>Day</c>のシフトを<c>FromShift</c>から<c>ToShift</c>へ付け替える1手。
     /// <see cref="ApplyHF66IntraStaffRedistribution"/>専用の内部候補型。</summary>
@@ -142,6 +144,6 @@ public static partial class V6HotfixPasses
             new MirrorLog(tag: "HF66",
                 message: $"intra-staff redistribution applied={moves} rollback={rollback} total {before.Total}->{current.Total}"),
         };
-        return new HF66Result(work, before.Total, current.Total, moves, shortageMoves, capacityMoves, rollback, logs);
+        return new HF66Result(work, before.Total, current.Total, moves, shortageMoves, capacityMoves, rollback, logs, Report: current);
     }
 }

@@ -19,7 +19,9 @@ public static partial class V6HotfixPasses
         int Cycles,
         bool Applied,
         string Reason,
-        IReadOnlyList<MirrorLog> Logs);
+        IReadOnlyList<MirrorLog> Logs,
+        /// <summary>このパスが評価済みの NewSchedule の報告書（Kotlin 同名。null は PostChain が再チェック）。</summary>
+        ViolationReport? Report = null);
 
     /// <summary>
     /// [フェーズ6, ピース26/Kotlin 3.451.0] Kotlin原本 <c>localBestImprovement</c> の忠実な移植。
@@ -145,6 +147,6 @@ public static partial class V6HotfixPasses
                 message: $"SO applied={(applied ? "true" : "false")} HARD {before.Hard}->{bestReport.Hard} " +
                     $"score {(long)before.WeightedScore}->{(long)bestReport.WeightedScore} cycles={usedCycles}"),
         };
-        return new HF80Result(best, before.Hard, bestReport.Hard, before.WeightedScore, bestReport.WeightedScore, usedCycles, applied, reason, logs);
+        return new HF80Result(best, before.Hard, bestReport.Hard, before.WeightedScore, bestReport.WeightedScore, usedCycles, applied, reason, logs, Report: bestReport);
     }
 }

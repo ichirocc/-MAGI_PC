@@ -226,15 +226,14 @@ public static partial class V6HotfixPasses
         }
 
         /// <summary>
-        /// 直前に畳み込んだ <see cref="Work"/> をチェーン最良と比べ、悪化していれば最良盤面へ巻き戻して
-        /// <paramref name="passLogs"/> を棄却マーカー付きで返す（ログは落とさない）。Kotlin はパスが評価済みの報告書を
-        /// 再利用するが、C# の結果型は報告書を持たないので常にチェッカーで評価する（同じ盤面の同じ報告書＝出力同値）。
+        /// 直前に畳み込んだ <see cref="Work"/> を、パスが評価済みの <paramref name="report"/>（無ければ再チェック）で
+        /// チェーン最良と比べ、悪化していれば最良盤面へ巻き戻して <paramref name="passLogs"/> を棄却マーカー付きで返す（ログは落とさない）。
         /// </summary>
-        private IReadOnlyList<MirrorLog> RunningKeepBestFold(IReadOnlyList<MirrorLog> passLogs)
+        private IReadOnlyList<MirrorLog> RunningKeepBestFold(ViolationReport? report, IReadOnlyList<MirrorLog> passLogs)
         {
             _lastFoldRolledBack = false;
             if (!_runningKeepBest) return passLogs;
-            var rep = UnifiedViolationChecker.Check(_state!, Work);
+            var rep = report ?? UnifiedViolationChecker.Check(_state!, Work);
             var best = _bestReport;
             if (best == null || UnifiedViolationChecker.BetterReport(rep, best))
             {
@@ -265,7 +264,7 @@ public static partial class V6HotfixPasses
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             if (r.RejectedCandidates != null) RejectedPool.AddRange(r.RejectedCandidates);
             Work = r.NewSchedule.Copy2D();
-            var folded = RunningKeepBestFold(r.Logs);
+            var folded = RunningKeepBestFold(r.Report, r.Logs);
             if (keepLogs) Logs.AddRange(folded);
             if (_rollbackCountsZero && _lastFoldRolledBack) return 0;
             return r.Applied;
@@ -275,13 +274,13 @@ public static partial class V6HotfixPasses
         {
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             Work = r.NewSchedule.Copy2D();
-            Logs.AddRange(RunningKeepBestFold(r.Logs));
+            Logs.AddRange(RunningKeepBestFold(r.Report, r.Logs));
         }
 
-        public void ReplaceBoard(int[][] newSchedule, IReadOnlyList<MirrorLog> passLogs)
+        public void ReplaceBoard(int[][] newSchedule, IReadOnlyList<MirrorLog> passLogs, ViolationReport? report = null)
         {
             Work = newSchedule.Copy2D();
-            Logs.AddRange(RunningKeepBestFold(passLogs));
+            Logs.AddRange(RunningKeepBestFold(report, passLogs));
         }
     }
 
@@ -326,7 +325,7 @@ public static partial class V6HotfixPasses
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
             ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop));
-        chain.ReplaceBoard(r80.NewSchedule, r80.Logs);
+        chain.ReplaceBoard(r80.NewSchedule, r80.Logs, r80.Report);
 
         var t67 = EngineClock.NowMs();
         var r67 = chain.Timed("後処理 HF67 職員間スワップ", "HF67InterStaffSwap", work =>
@@ -334,7 +333,7 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - t67, 0L) / 2, p.Hf67CapMs);
             return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t67 + cap);
         });
-        chain.ReplaceBoard(r67.NewSchedule, r67.Logs);
+        chain.ReplaceBoard(r67.NewSchedule, r67.Logs, r67.Report);
 
         var t66 = EngineClock.NowMs();
         var r66 = chain.Timed("後処理 HF66 職員内再配分", "HF66IntraStaffRedistribution", work =>
@@ -343,7 +342,7 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - t66, 0L) / 2, p.Hf66CapMs);
             return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap);
         });
-        chain.ReplaceBoard(r66.NewSchedule, r66.Logs);
+        chain.ReplaceBoard(r66.NewSchedule, r66.Logs, r66.Report);
         var t66Done = EngineClock.NowMs();
 
         // 巡回研磨クラスタは自身の締切を持たないため、共同 LNS 2 本の取り分を先に確保して ClusterStop に畳む（3.271.0）。
@@ -427,7 +426,7 @@ public static partial class V6HotfixPasses
         {
             bool LnsStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
             var rLns = chain.Timed("後処理 休0日の窓LNS(最終)", "RestZeroLNS", work => ApplyRestZeroWindowLns(state, work, shouldStop: LnsStop));
-            chain.ReplaceBoard(rLns.NewSchedule, rLns.Logs);
+            chain.ReplaceBoard(rLns.NewSchedule, rLns.Logs, rLns.Report);
         }
 
         if (p.CovOReliefEnabled && !stop())
@@ -435,7 +434,7 @@ public static partial class V6HotfixPasses
             // 最後に置く＝後続パスが無いので keep-best の 1 セル手だけが盤面に足され、旧チェーンの結果より悪くならない（Android 同順）。
             bool ReliefStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
             var rRelief = chain.Timed("後処理 人員過剰の退避(最終)", "CovORelief", work => ApplyCovOReliefPolish(state, work, shouldStop: ReliefStop));
-            chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs);
+            chain.ReplaceBoard(rRelief.NewSchedule, rRelief.Logs, rRelief.Report);
         }
 
         var tHf = EngineClock.NowMs();

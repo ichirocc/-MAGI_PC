@@ -5,7 +5,7 @@ namespace MagiEngine.V6;
 public static partial class V6HotfixPasses
 {
     /// <summary>Kotlin <c>RestZeroWindowLns.Result</c> の移植。</summary>
-    public sealed record RestZeroLnsResult(int[][] NewSchedule, int Applied, IReadOnlyList<MirrorLog> Logs);
+    public sealed record RestZeroLnsResult(int[][] NewSchedule, int Applied, IReadOnlyList<MirrorLog> Logs, ViolationReport? Report = null);
 
     /// <summary>Kotlin <c>RestZeroWindowLns.Config</c> の移植。</summary>
     public sealed record RestZeroLnsConfig(
@@ -331,6 +331,6 @@ public static partial class V6HotfixPasses
             + string.Join("/", targets.Select(t => (t + 1).ToString()))
             + (nightLike.Count > 0 ? " 夜勤型=" + string.Join("/", nightLike.Select(k => state.Shifts[k].Kigou)) : "")
             + " " + string.Join(" | ", notes) + (evaluations >= cfg.MaxEvaluations ? " [評価上限]" : "");
-        return new RestZeroLnsResult(work, applied, new[] { Log(msg) });
+        return new RestZeroLnsResult(work, applied, new[] { Log(msg) }, Report: bestRep);
     }
 }
