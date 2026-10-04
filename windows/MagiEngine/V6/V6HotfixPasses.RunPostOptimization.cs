@@ -214,6 +214,7 @@ public static partial class V6HotfixPasses
         private readonly bool _quantitativeRangeEval;
         private readonly bool _runningKeepBest;
         private readonly bool _rollbackCountsZero;
+        private readonly bool _aptFairSoftTolerance;
         private bool _lastFoldRolledBack;
         private int[][] _bestWork;
         private ViolationReport? _bestReport;
@@ -229,8 +230,9 @@ public static partial class V6HotfixPasses
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
         public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool quantitativeRangeEval = false, bool runningKeepBest = false,
-            ViolationReport? initialReport = null, bool rollbackCountsZero = false)
+            ViolationReport? initialReport = null, bool rollbackCountsZero = false, bool aptFairSoftTolerance = false)
         {
+            _aptFairSoftTolerance = aptFairSoftTolerance;
             _onPhase = onPhase;
             Work = schedule.Copy2D();
             _state = state;
@@ -245,13 +247,17 @@ public static partial class V6HotfixPasses
         /// 直前に畳み込んだ <see cref="Work"/> を、パスが評価済みの <paramref name="report"/>（無ければ再チェック）で
         /// チェーン最良と比べ、悪化していれば最良盤面へ巻き戻して <paramref name="passLogs"/> を棄却マーカー付きで返す（ログは落とさない）。
         /// </summary>
-        private IReadOnlyList<MirrorLog> RunningKeepBestFold(ViolationReport? report, IReadOnlyList<MirrorLog> passLogs)
+        private IReadOnlyList<MirrorLog> RunningKeepBestFold(ViolationReport? report, IReadOnlyList<MirrorLog> passLogs, string? toleranceFamily = null)
         {
             _lastFoldRolledBack = false;
             if (!_runningKeepBest) return passLogs;
             var rep = report ?? UnifiedViolationChecker.Check(_state!, Work, _quantitativeRangeEval);
             var best = _bestReport;
-            if (best == null || UnifiedViolationChecker.BetterReport(rep, best))
+            // 許容 ON の apt/fair はパス内と同じ基準で畳む（素の betterReport だとパスが容認した手を必ず巻き戻す）。
+            //   予算の基準はパス開始時点＝この時点のチェーン最良。
+            var tolerated = _aptFairSoftTolerance && toleranceFamily != null && best != null &&
+                ToleratedBetter(rep, best, best, toleranceFamily, enabled: true, count: false);
+            if (best == null || UnifiedViolationChecker.BetterReport(rep, best) || tolerated)
             {
                 _bestReport = rep;
                 _bestWork = Work.Copy2D();
@@ -277,12 +283,12 @@ public static partial class V6HotfixPasses
         }
 
         /// <summary>結果を盤面へ反映し、ピン帰属を合流させ、<paramref name="keepLogs"/> のときだけログを積む。採用数を返す。</summary>
-        public int Adopt(CyclicSwapResult r, bool keepLogs = true)
+        public int Adopt(CyclicSwapResult r, bool keepLogs = true, string? toleranceFamily = null)
         {
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             if (r.RejectedCandidates != null) RejectedPool.AddRange(r.RejectedCandidates);
             Work = r.NewSchedule.Copy2D();
-            var folded = RunningKeepBestFold(r.Report, r.Logs);
+            var folded = RunningKeepBestFold(r.Report, r.Logs, toleranceFamily);
             if (keepLogs) Logs.AddRange(folded);
             Record(r.Applied, r.Report);
             if (_rollbackCountsZero && _lastFoldRolledBack) return 0;
@@ -348,7 +354,7 @@ public static partial class V6HotfixPasses
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule, p.QuantitativeRangeEval);
         var chain = new PostChain(onPhase, schedule, state, p.QuantitativeRangeEval, p.PostChainRunningKeepBest, report0,
-            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero);
+            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero, PolishGate.AptFairSoftTolerance);
         var t0 = EngineClock.NowMs();
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
@@ -524,9 +530,9 @@ public static partial class V6HotfixPasses
             var first = round == 0;
             var tag = $" [巡{round + 1}]";
             var roundApplied = 0;
-            void Take(string key, CyclicSwapResult r)
+            void Take(string key, CyclicSwapResult r, string? toleranceFamily = null)
             {
-                var n = chain.Adopt(r, keepLogs: first);
+                var n = chain.Adopt(r, keepLogs: first, toleranceFamily: toleranceFamily);
                 adopted[key] += n;
                 roundApplied += n;
             }
@@ -584,9 +590,9 @@ public static partial class V6HotfixPasses
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
                     maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
-                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "apt");
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
             if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c2")))
             {
                 Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>
