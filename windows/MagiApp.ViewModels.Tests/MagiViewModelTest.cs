@@ -100,6 +100,28 @@ public class MagiViewModelTest
         }
     }
 
+    [Fact]
+    public void SetC1MoveARepairWiresPolishGate()
+    {
+        var vm = new MagiViewModel();
+        try
+        {
+            Assert.False(vm.Ui.C1MoveARepair);
+            Assert.False(PolishGate.C1MoveARepair);
+            vm.SetC1MoveARepair(true);
+            Assert.True(vm.Ui.C1MoveARepair);
+            Assert.True(PolishGate.C1MoveARepair);
+            SearchStrength.Normal.Apply();
+            Assert.True(PolishGate.C1MoveARepair);
+            vm.SetC1MoveARepair(false);
+            Assert.False(PolishGate.C1MoveARepair);
+        }
+        finally
+        {
+            PolishGate.C1MoveARepair = false;
+        }
+    }
+
     // [Kotlin SearchStrengthTest 1:1]
     [Fact]
     public void ThoroughSetsFourFlagsAndNormalRestoresDefaults()

@@ -21,7 +21,7 @@ namespace MagiApp.WinUI.Views;
 /// <summary>
 /// [フェーズ9→データ入出力] 「設定」タブ。既存の <see cref="MagiViewModel"/> セッター（<c>SetWorkers</c>/
 /// <c>SetBudget</c>/<c>SetV6Algorithm</c>/<c>SetSoftPolish</c>/<c>SetBlockSwapC3nFilter</c>/
-/// <c>SetSearchStrength</c>、いずれもテスト済み）への薄い配線。
+/// <c>SetSearchStrength</c>/<c>SetC1MoveARepair</c>、いずれもテスト済み）への薄い配線。
 ///
 /// [双方向反映のガード] コントロールの初期値を <see cref="Render"/> でプログラム的に設定すると、
 /// その代入自体が各コントロールの <c>ValueChanged</c>/<c>Toggled</c>/<c>SelectionChanged</c> を
@@ -93,6 +93,8 @@ public sealed partial class SettingsView : UserControl
             var strengthTag = ui.SearchStrength.ToString();
             SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
             SearchStrengthCombo.IsEnabled = !ui.Running;
+            C1MoveARepairToggle.IsOn = ui.C1MoveARepair;
+            C1MoveARepairToggle.IsEnabled = !ui.Running;
 
             var tag = ui.V6Algorithm.ToString();
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
@@ -662,6 +664,12 @@ public sealed partial class SettingsView : UserControl
         var tag = (SearchStrengthCombo.SelectedItem as ComboBoxItem)?.Tag as string;
         if (tag is null || !Enum.TryParse<SearchStrength>(tag, out var strength)) return;
         _vm.SetSearchStrength(strength);
+    }
+
+    private void OnC1MoveARepairToggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.SetC1MoveARepair(C1MoveARepairToggle.IsOn);
     }
 
     private void OnAlgorithmChanged(object sender, SelectionChangedEventArgs e)

@@ -33,6 +33,7 @@ public class UiStateTest
         // [Kotlin 3.518.0] filterC3nIncrease は既定ONへ昇格（品質不変・速度のみの既存測定で判断済み）。
         Assert.True(s.BlockSwapC3nFilter);
         Assert.Equal(SearchStrength.Normal, s.SearchStrength);
+        Assert.False(s.C1MoveARepair);
         Assert.True(s.SoftPolish);
         Assert.Equal(V6Algorithm.Auto, s.V6Algorithm);
 
