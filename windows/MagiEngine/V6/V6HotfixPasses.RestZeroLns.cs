@@ -246,10 +246,10 @@ public static partial class V6HotfixPasses
                     if (remainAll[a][k] <= 0) continue;
                     for (var b = 0; b < p.S; b++)
                     {
-                        if (b == a || !p.CanDo(b, k) || free0[b].Count == 0) continue;
+                        if (b == a || !p.MayPlace(b, k) || free0[b].Count == 0) continue;
                         for (var x = 0; x < p.K; x++)
                         {
-                            if (x == k || remainAll[b][x] <= 0 || !p.CanDo(a, x)) continue;
+                            if (x == k || remainAll[b][x] <= 0 || !p.MayPlace(a, x)) continue;
                             var gs = Enumerable.Range(0, p.T).Where(g => (g < wLo || g > wHi) && work[a][g] == x && work[b][g] == k && !p.WishLocked(a, g) && !p.WishLocked(b, g))
                                 .OrderBy(Dist).ToList();
                             var maxN = Math.Min(Math.Min(3, remainAll[a][k]), Math.Min(remainAll[b][x], gs.Count));

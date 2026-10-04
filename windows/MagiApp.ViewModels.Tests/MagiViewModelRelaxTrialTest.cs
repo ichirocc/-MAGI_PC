@@ -149,7 +149,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
         var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
         Assert.Equal(new[] { "職員10 Pｼ 上限 0→1", "職員11 Cｵ 上限 0→1" }, t.Rows.Select(x => x.Split('（')[0]));
-        Assert.Equal("手で置いた勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
+        Assert.Equal("今の勤務表の勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
         Assert.StartsWith("職員10 ", t.Title);
         Assert.EndsWith("禁止の並び", t.Title);
         Assert.True(t.MoveLines.Count > 0 && t.MoveLines.All(l => l.Contains('→')));

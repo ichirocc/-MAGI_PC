@@ -663,7 +663,8 @@ public static partial class V6FinalPort
         var pinSafeStages = stages.Where(c => baseProblem.HoldsManualPins(c.Sched)).ToList();
         var pinLog = stages.Where(c => !pinSafeStages.Contains(c)).Select(c => new MirrorLog(level: "W", tag: "Sentinel",
             message: $"{c.Label}の盤面が手動固定を崩していたため候補から外しました（多重防御）")).ToList();
-        var bestStage = PickBestStage(pinSafeStages);
+        pinLog.AddRange(CapZeroLogs(state, baseProblem, pinSafeStages));
+        var bestStage = PickBestStage(ExcludeCapZeroStages(baseProblem, pinSafeStages));
         var finalSched = bestStage.Sched;
         var finalReport = bestStage.Report;
         // [レビュー修正/3.575.0, Kotlin原本] 全段が同値（無改善）のときも Aggregate は最初の候補（入力）を

@@ -57,7 +57,7 @@ public static class NextActionGuide
     public const int WishTrialGroupLimit = 8;
     public const string RelaxWishLine = "希望: 変更しません";
     public const string RelaxPrereqHead = "前提として上限を上げる設定";
-    public const string RelaxPrereqWhy = "いま手で置いてある勤務に合わせます（もう一度つくったときに手置きの勤務が外れないため）。";
+    public const string RelaxPrereqWhy = "今の勤務表の勤務に合わせます（もう一度つくったときにその勤務が外れないため）。";
     public const string RelaxSetHead = "解消に使う設定";
 
     /// <summary>1手の提案の得失を、利用者が最初に考える順に2行で言う。1行目＝必須の約束が減るか、2行目＝注意（増える要調整。無ければ null）。</summary>
@@ -210,8 +210,8 @@ public static class NextActionGuide
         var inWin = r.Moves.Where(m => m.Day >= r.WindowFirst && m.Day <= r.WindowLast).ToList();
         var outWin = r.Moves.Where(m => m.Day < r.WindowFirst || m.Day > r.WindowLast).ToList();
         var lead = r.Prerequisite.Count == 0 ? $"この組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。"
-            : $"手で置いた勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
-        var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、手で置いた勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
+            : $"今の勤務表の勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
+        var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、上限0の勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         return new RelaxTrialText(
             Title: $"{target.Name} {target.Span}　{target.What}",

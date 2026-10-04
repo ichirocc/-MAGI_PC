@@ -100,6 +100,20 @@ public static class ScheduleUtil
         return true;
     }
 
+    /// <summary>個人上限 0 で最適化器が置かないセル（担当可・MayPlace 外・縛る値でない）か。入口の除去と最終番兵が同じ基準を読む。</summary>
+    public static bool IsCapZeroCell(this Problem p, int i, int j, int k) =>
+        k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k);
+
+    /// <summary>盤面中の IsCapZeroCell のセル (i,j) の一覧（最終番兵）。</summary>
+    public static List<(int I, int J)> CapZeroCells(this Problem p, int[][] s)
+    {
+        var outL = new List<(int, int)>();
+        for (var i = 0; i < Math.Min(p.S, s.Length); i++)
+            for (var j = 0; j < Math.Min(p.T, s[i].Length); j++)
+                if (p.IsCapZeroCell(i, j, s[i][j])) outL.Add((i, j));
+        return outL;
+    }
+
     /// <summary>[#41] 手動固定セルへ固定の値を書いた写し（入口で盤面を固定に合わせる）。固定が無ければ同じ参照を返す。</summary>
     public static int[][] WithManualPins(this Problem p, int[][] s)
     {

@@ -1,3 +1,5 @@
+using MagiEngine.Model;
+using MagiEngine.Tests.TestSupport;
 using MagiEngine.V6;
 
 namespace MagiEngine.Tests.V6;
@@ -64,5 +66,48 @@ public class V6FinalPortTailTest
 
         Assert.Equal(new[] { 0, 0, 0 }, V6FinalPort.SentinelSchedule("HARDが悪化しました", cappedInput, refSched)[0]);
         Assert.Equal(new[] { 1, 1, 1 }, V6FinalPort.SentinelSchedule(null, cappedInput, refSched)[0]);
+    }
+
+    // ---- 最終番兵: 個人上限0（希望でない）のセルを含む段は外す。希望で固定した上限0のセルは外さない ----
+
+    private static MagiState CapZeroState() => MinimalState.Build(
+        startDate: "2026-08-01", endDate: "2026-08-31",
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("B4", "B4", "", ""), new("有", "有", "", "") },
+        groups: new List<Group> { new("G", "G") },
+        staffList: new List<Staff> { new("美幸", 0) },
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "1", "" } },
+        schedule: new List<IReadOnlyList<int>> { new int[31] },
+        wishes: new Dictionary<string, int> { ["0,3"] = 1 },
+        staffRange: new Dictionary<string, MagiEngine.Model.Range> { ["0,1"] = new("", "0") });
+
+    private static int[][] Board(params int[] b4Days)
+    {
+        var r = new int[31];
+        foreach (var d in b4Days) r[d] = 1;
+        return new[] { r };
+    }
+
+    [Fact]
+    public void ExcludeCapZeroStages_DropsNonWishUpperZeroCellAndLogsIt()
+    {
+        var st = CapZeroState(); var p = ScheduleUtil.CachedProblem(st);
+        var input = new V6FinalPort.StageCandidate("入力", Board(3), Rep(0, 0, 0.0));
+        var bad = new V6FinalPort.StageCandidate("後処理", Board(3, 5), Rep(0, 0, 0.0));
+        Assert.Equal(new[] { "入力" }, V6FinalPort.ExcludeCapZeroStages(p, new[] { input, bad }).Select(c => c.Label));
+        var logs = V6FinalPort.CapZeroLogs(st, p, new[] { input, bad });
+        Assert.Single(logs);
+        Assert.Contains("後処理", logs[0].Message);
+        Assert.Contains("美幸/6日目/B4", logs[0].Message);
+    }
+
+    [Fact]
+    public void ExcludeCapZeroStages_KeepsUpperZeroCellLockedByWish()
+    {
+        var st = CapZeroState(); var p = ScheduleUtil.CachedProblem(st);
+        var input = new V6FinalPort.StageCandidate("入力", Board(), Rep(0, 0, 0.0));
+        var ok = new V6FinalPort.StageCandidate("後処理", Board(3), Rep(0, 0, 0.0));
+        Assert.Equal(new[] { "入力", "後処理" }, V6FinalPort.ExcludeCapZeroStages(p, new[] { input, ok }).Select(c => c.Label));
+        Assert.Empty(V6FinalPort.CapZeroLogs(st, p, new[] { input, ok }));
     }
 }

@@ -65,6 +65,31 @@ public static partial class V6FinalPort
     /// cappedInput＝inputReportと同じ基準の盤面を渡すこと）。</summary>
     internal sealed record StageCandidate(string Label, int[][] Sched, ViolationReport Report);
 
+    /// <summary>個人上限 0 のセル（IsCapZeroCell）を含む段を外す。入力（先頭＝入口で外し済み）は必ず残す。</summary>
+    internal static List<StageCandidate> ExcludeCapZeroStages(Problem p, IReadOnlyList<StageCandidate> stages) =>
+        stages.Where((st, idx) => idx == 0 || p.CapZeroCells(st.Sched).Count == 0).ToList();
+
+    /// <summary>ExcludeCapZeroStages で外した段ごとの W ログ（違反セルは先頭 5 件）。</summary>
+    internal static List<MirrorLog> CapZeroLogs(MagiEngine.Model.MagiState state, Problem p, IReadOnlyList<StageCandidate> stages)
+    {
+        var logs = new List<MirrorLog>();
+        foreach (var st in stages.Skip(1))
+        {
+            var cells = p.CapZeroCells(st.Sched);
+            if (cells.Count == 0) continue;
+            var parts = cells.Take(5).Select(c =>
+            {
+                var k = st.Sched[c.I][c.J];
+                var name = c.I < state.StaffList.Count ? state.StaffList[c.I].Name : c.I.ToString();
+                var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
+                return $"{name}/{c.J + 1}日目/{sym}";
+            });
+            logs.Add(new MirrorLog(level: "W", tag: "Sentinel",
+                message: $"{st.Label}の盤面に上限0の勤務が{cells.Count}件あったため候補から外しました（多重防御）: {string.Join("、", parts)}"));
+        }
+        return logs;
+    }
+
     /// <summary>[3.575.0, Kotlin原本] ReportComparer で候補中の最良を選ぶ（同値なら早い段を残す）。</summary>
     internal static StageCandidate PickBestStage(IReadOnlyList<StageCandidate> candidates) =>
         candidates.Aggregate((a, b) => UnifiedViolationChecker.BetterReport(b.Report, a.Report) ? b : a);

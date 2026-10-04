@@ -60,7 +60,7 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
-                if (k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k)) { outSched[i][j] = Refill(p, i, j, fallback, strict); n++; }
+                if (p.IsCapZeroCell(i, j, k)) { outSched[i][j] = Refill(p, i, j, fallback, strict); n++; }
             }
         }
         return (outSched, n);
