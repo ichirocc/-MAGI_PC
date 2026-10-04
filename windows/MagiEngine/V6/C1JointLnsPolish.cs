@@ -373,13 +373,13 @@ internal static class C1JointLnsPolish
     {
         int d = c.Day1;
         // [3.312.0] 旧実装は rangeLo/rangeHi を count の硬い上下限として DP に課していた。
-        //   しかし個人回数は SOFT（low=90 / high=45）で、c1(30) より重いだけであって禁止ではない。
+        //   しかし個人回数は SOFT（low/high）であって禁止ではない。
         //   結果この値は「rangeHi を一度も超えない範囲での c1 最小値」＝真の下限より大きくなり、
         //   `best.c1 <= lowerBound` の早期終了と「構造下限到達」のログを誤って発火させていた。
         //   反例: T=7・「4日窓で X>=1」・high(X)=0 なら、X なし＝c1=4(weighted 60) に対し
         //   中央へ X を1つ置くと c1=0・high=1(weighted 45) で betterReport は X を選ぶのに、
         //   旧下限は 4 を返して探索を止めていた。
-        //   wishLocked は下限に残す：希望を破る代金は pref=9000 で、c1=30 を 300 件消して初めて
+        //   wishLocked は下限に残す：希望を破る代金は pref(HARD) で、c1 を数百件消して初めて
         //   釣り合う＝c1 を下げる目的では実質的に硬い制約。
         int hi = p.T;
 

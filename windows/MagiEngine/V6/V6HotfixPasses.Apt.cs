@@ -5,13 +5,13 @@ namespace MagiEngine.V6;
 public static partial class V6HotfixPasses
 {
     /// <summary>
-    /// [AptPolish・適切回数(apt, 重み1)専用の研磨パス] ユーザー指示「専用の研磨パスAptPolish的なものを
+    /// [AptPolish・適切回数(apt)専用の研磨パス] ユーザー指示「専用の研磨パスAptPolish的なものを
     /// 賢く深く網羅的に作る」（grillingで確定: ①自己振替最優先 ②同一グループ内の相互交換(同日1対1・
     /// 被覆総量保存で安全) ③RangePolish型の玉突きチェーン、の順で試す）。
     ///
     /// 動機（大島愛の実例）: 群目標(groupShiftApt)に対しaptHigh(超過)とaptLow(不足)が同一職員内に同時に
     /// 存在するケース（休=超過・Pｼ=不足）は、本人内で1日分を振替えるだけで両方が同時に改善する「タダの
-    /// 交換」のはずだが、apt(重み1)はRSI探索中のfocus選択で軽視されやすく(3.169.0)、専用研磨が無いまま
+    /// 交換」のはずだが、aptはRSI探索中のfocus選択で軽視されやすく(3.169.0)、専用研磨が無いまま
     /// 残っていた。
     ///
     /// アンカー: <c>countViolations</c>（"i,k"→"vio-aptHigh"/"vio-aptLow"、markCountの重み優先解決済）

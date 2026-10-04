@@ -5,7 +5,7 @@ namespace MagiEngine.V6;
 /// <summary>
 /// Faithful port of Kotlin's <c>C42FlowPolish</c> object.
 ///
-/// [測定中, Kotlin原本] c42/c42s（群ペア禁止, SOFT, 重み9）専用の決定的 min-cost-flow 研磨パス
+/// [測定中, Kotlin原本] c42/c42s（群ペア禁止, SOFT）専用の決定的 min-cost-flow 研磨パス
 /// （backlog #12(b) 残課題）。<see cref="FlexibleDayFlow"/> を群内サブセットへ適用する点は C41 系と
 /// 同じだが、c42 は2つの(群,シフト)ペアが同時に絡む（<see cref="Evaluator.C42PairCount"/>）ため片方の
 /// 群だけを流すと相手側の目的値も変わる。片側固定のヤコビ近似＋対称2試行（sameSet 時は同じ変数なので

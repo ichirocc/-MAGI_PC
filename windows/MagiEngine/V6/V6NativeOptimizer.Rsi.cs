@@ -354,7 +354,7 @@ public static partial class V6NativeOptimizer
                 ApplyC42Free(state, outSched, rng, skill: true, shouldStop: stop, quantitativeRangeEval: quantitativeRangeEval);
                 break;
             // [実機ログ起因=apt未focus, Kotlin原本] destroyRepairStaff の marginal cost(StaffCountPenaltyAt)
-            //   は既に apt(重み1) を織込み済みのため、low/high/c2 と同じ経路へ合流するだけで apt 専用の
+            //   は既に apt を織込み済みのため、low/high/c2 と同じ経路へ合流するだけで apt 専用の
             //   新規オペレータ不要（weekly/fair も同根の理由で同経路）。
             case "low": case "high": case "c2": case "apt": case "weekly": case "fair":
             {

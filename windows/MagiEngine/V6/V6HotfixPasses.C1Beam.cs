@@ -8,7 +8,7 @@ public static partial class V6HotfixPasses
     /// [フェーズ6, ピース20] Kotlin原本 <c>applyC1WindowPolish</c> の次に位置する広域ビーム研磨
     /// <c>applyC1BeamPolish</c>（<c>V6HotfixPasses.kt</c> 3.340.0 由来）の忠実な移植。
     ///
-    /// C1（窓の要件, 重み30）の不足セルを起点に、同日交換 or <see cref="V6SearchOperators.FindCovUChain"/>
+    /// C1（窓の要件, SOFT）の不足セルを起点に、同日交換 or <see cref="V6SearchOperators.FindCovUChain"/>
     /// による玉突き連鎖のいずれかで1手ずつ埋める複数手の探索を、ビーム幅 <paramref name="beamWidth"/> で
     /// 保持しながら <paramref name="maxSteps"/> 回まで展開する（多段の C1 解消を単発の
     /// <c>applyC1WindowPolish</c> より広く探す位置づけ）。

@@ -263,7 +263,7 @@ public static partial class V6SanityPort
                     (hi is not null ? $" 上限{hi}" : ""));
             }
             // 族名が breakdown のキーと一致するもの(low/high/c2)だけ突き合わせる。aptLow/aptHigh は
-            //   breakdown に個別キーが無く実体は apt（重み1.0）＝両方へ同じ値を出すと二重に見えるので
+            //   breakdown に個別キーが無く実体は apt（同じ重み）＝両方へ同じ値を出すと二重に見えるので
             //   専用行で「合計と場所数」を1度だけ示す。
             Emit(byFam, DetailCap, report.Breakdown);
             var aptFires = report.Breakdown.TryGetValue("apt", out var af) ? af : 0;

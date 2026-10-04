@@ -5,7 +5,7 @@ namespace MagiEngine.V6;
 public static partial class V6HotfixPasses
 {
     /// <summary>
-    /// [FairPolish・グループ内公平化(fair, 重み1)専用の研磨パス] ユーザー指示「c42/c42s以外にも
+    /// [FairPolish・グループ内公平化(fair)専用の研磨パス] ユーザー指示「c42/c42s以外にも
     /// 『動かせるか』専用オペレータの欠如が無いか棚卸しする」で発見（棚卸し結果はユーザー承認済み）。
     /// fair は群×担当ONシフトごとにメンバー回数の round(平均)からのL1偏差和で、apt(3.223.0)と
     /// ほぼ同型の違反構造。しかし当時の平準化パス（同日2者スワップ＋<b>分散</b>指標での山登り）はチェーン救済が

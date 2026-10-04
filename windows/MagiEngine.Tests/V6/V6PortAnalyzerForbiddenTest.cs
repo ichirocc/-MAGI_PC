@@ -103,7 +103,7 @@ public class V6PortAnalyzerForbiddenTest
         Assert.Contains("探索未到達", run.Hint);
     }
 
-    // 両セルとも本人希望どおり＝動かすと pref(9000)>c3n(7000) の悪化で isBetter が却下する（設計どおり）。
+    // 両セルとも本人希望どおり＝希望セルは wishLocked で探索が動かさない（設計どおり）。
     // 全セル Pinned → 構造的に崩せないことを正直に案内する（実機 c3n=1 が67エポック不動だった穴の再現）。
     [Fact]
     public void DiagnoseForbiddenRuns_ReportsWishPinnedRunAsStructurallyBlocked()
@@ -124,6 +124,38 @@ public class V6PortAnalyzerForbiddenTest
 
     // 離脱すると covU 穴が空くが、玉突き連鎖（FindCovUChain=探索本体と同一関数）で埋め直せる局面は
     // Chain（実証済みの多段手）として案内される。
+    // c3n −1 / pref +1 は HARD 件数が同じでも重みでは点数が良くなる＝分類は Pinned のまま、文言にだけ一文を添える。
+    [Fact]
+    public void WishPinnedCellShowsScoreHintWhenWeightedScoreImproves()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1 });
+
+        var run = Assert.Single(V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs);
+        Assert.True(run.Cells.All(c => c.Escape == ForbiddenCellEscape.Pinned));
+        Assert.True(run.Cells.All(c => c.Detail.EndsWith(V6PortAnalyzer.WishScoreHint, StringComparison.Ordinal)));
+        Assert.EndsWith(V6PortAnalyzer.WishScoreHint, run.Hint);
+    }
+
+    // 希望を破るとその日の人員不足（covU）が空く局面では点数も良くならない＝一文を添えない。
+    [Fact]
+    public void WishPinnedCellOmitsScoreHintWhenDepartureOpensCovU()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") },
+            staff: new List<Staff> { new("s0", 0) },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1 });
+
+        var run = Assert.Single(V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs);
+        Assert.DoesNotContain(run.Cells, c => c.Detail.Contains(V6PortAnalyzer.WishScoreHint));
+        Assert.DoesNotContain(V6PortAnalyzer.WishScoreHint, run.Hint);
+    }
+
     [Fact]
     public void DiagnoseForbiddenRuns_VerifiesChainEscapeWhenDepartureCreatesCovU()
     {
@@ -272,7 +304,7 @@ public class V6PortAnalyzerForbiddenTest
     ///  - day0 はどの代替も新たな禁止連続を作り、隣接日 day1 は希望固定で動かせない＝Blocked。
     ///  - day1 を「休」にすると「休→X」が新たに発火するが、day2 を「休」へ変えれば並びは崩せる。
     ///    ところが day1 の希望を破るので <b>c3n 1→0 に対し pref 0→1＝正味の HARD は減らない</b>
-    ///    （weighted では 9000−7000＝+2000 の悪化で、BetterReport は決して採用しない）。
+    ///    （HARD 件数は正味 0。希望セルは wishLocked で探索が動かさない）。
     /// 旧実装はこれを Adjacent＝「崩せる」と誤って主張し、①利用者へ「探索が見つけていないだけ」と
     /// 誤った期待を与え ②3.281.0 の停滞打ち切り（全 run 塞がりなら短い閾値）を発火させなくしていた。
     /// </summary>
