@@ -295,11 +295,15 @@ public static partial class V6FinalPort
 
         // [E0] 到達判定は best 世代ごとに一度だけ（床ちょうどのときだけ盤面を検査する）。
         Tuple<int, bool> wishReachedCache = Tuple.Create(-1, false);
+        long wishStaleCheckAtMs = long.MinValue / 2;
         bool BestWishReached()
         {
             var v = Volatile.Read(ref bestVersion);
             if (Volatile.Read(ref wishReachedCache).Item1 != v)
             {
+                var now = NowMs();
+                if (now - Interlocked.Read(ref wishStaleCheckAtMs) < 200L) return false;
+                Interlocked.Exchange(ref wishStaleCheckAtMs, now);
                 var live = V6NativeOptimizer.LiveBest;
                 int[][]? board = null;
                 if (live != null)
@@ -311,7 +315,15 @@ public static partial class V6FinalPort
                         for (var c = 0; c < live[r].Count; c++) board[r][c] = live[r][c];
                     }
                 }
-                Volatile.Write(ref wishReachedCache, Tuple.Create(v, WishReachedOn(board, Volatile.Read(ref bestHard))));
+                var hb = Volatile.Read(ref bestHard);
+                var ok = WishReachedOn(board, hb);
+                // liveBest は best 報告より遅れて届く経路がある。古い盤面での「未到達」は保存せず、次の呼出で検査し直す。
+                bool fresh;
+                try { fresh = ok || hb != wishFloorLogged || (board != null && UnifiedViolationChecker.Check(state, board, quantitativeRangeEval).Hard == hb); }
+                catch (Exception) { fresh = false; }
+                if (!fresh) return ok;
+                Volatile.Write(ref wishReachedCache, Tuple.Create(v, ok));
+                Interlocked.Exchange(ref wishStaleCheckAtMs, long.MinValue / 2);
             }
             return Volatile.Read(ref wishReachedCache).Item2;
         }
@@ -558,7 +570,7 @@ public static partial class V6FinalPort
             var lastImp = lastImpAtSearchEnd;
             var endStallS = Math.Max(tChain1 - lastImp, 0L) / 1000;
             var nonCovU = Volatile.Read(ref bestNonCovUHard);
-            var wishReachedEnd = Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached();
+            var wishReachedEnd = Volatile.Read(ref bestHard) == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, Volatile.Read(ref bestHard)));
             var covUPlateau = Volatile.Read(ref bestHard) <= hardFloor && nonCovU == 0;
             var kind = covUPlateau && wishOn && wishReachedEnd
                 ? $"plateau+希望衝突の床=短{stallHardMs / 1000}s"
