@@ -47,7 +47,15 @@ public static partial class V6HotfixPasses
         /// </summary>
         int ObservedPinBlockedAttempts = 0,
         /// <summary>[3.326.0] どのピン(職員,シフト)が何回止めたか。緩和対象の提示に使う。</summary>
-        PinBlockAttribution? PinBlocks = null);
+        PinBlockAttribution? PinBlocks = null,
+        /// <summary>後処理チェーンの段ごとの記録（採用数・所要・段の後の評価）。集計用で、盤面・採否には関わらない。</summary>
+        IReadOnlyList<PostStageRecord>? StageRecords = null);
+
+    /// <summary>
+    /// 後処理チェーン 1 段の記録。<paramref name="Applied"/> は採用数（パスが数えないときは -1）。Hard/WeightedScore/Total はパス自身が返した評価（無ければ null＝
+    /// 記録のために追加の check はしない）。<paramref name="RolledBack"/> はチェーン内 keep-best で巻き戻された段。
+    /// </summary>
+    public sealed record PostStageRecord(string Key, int Applied, long Ms, int? Hard, double? WeightedScore, int? Total, bool RolledBack);
 
     /// <summary>
     /// 後処理チェーンの探索幅と予算（Kotlin 3.500.0 <c>PostOptimizationParams</c> の移植。既定値は従来の手書き値＝挙動不変）。
@@ -212,6 +220,9 @@ public static partial class V6HotfixPasses
         public int[][] Work { get; private set; }
         public List<MirrorLog> Logs { get; } = new();
         public Dictionary<string, long> PassMs { get; } = new();
+        public List<PostStageRecord> StageRecords { get; } = new();
+        private string _lastKey = "";
+        private long _lastMs;
         public PinBlockAttribution PinBlocksAll { get; } = new();
         /// <summary>[Iteration 2] 巡の中で各パスが残した拒否候補。巡の末尾で違反起点修復へ渡して空にする。</summary>
         public List<CombinatorialRepair.Candidate> RejectedPool { get; } = new();
@@ -259,6 +270,8 @@ public static partial class V6HotfixPasses
             var t = EngineClock.NowMs();
             var r = block(Work);
             var elapsed = EngineClock.NowMs() - t;
+            _lastKey = key;
+            _lastMs = elapsed;
             PassMs[key] = PassMs.TryGetValue(key, out var cur) ? cur + elapsed : elapsed;
             return r;
         }
@@ -271,6 +284,7 @@ public static partial class V6HotfixPasses
             Work = r.NewSchedule.Copy2D();
             var folded = RunningKeepBestFold(r.Report, r.Logs);
             if (keepLogs) Logs.AddRange(folded);
+            Record(r.Applied, r.Report);
             if (_rollbackCountsZero && _lastFoldRolledBack) return 0;
             return r.Applied;
         }
@@ -280,12 +294,21 @@ public static partial class V6HotfixPasses
             if (r.PinBlocks != null) PinBlocksAll.Merge(r.PinBlocks);
             Work = r.NewSchedule.Copy2D();
             Logs.AddRange(RunningKeepBestFold(r.Report, r.Logs));
+            Record(r.AppliedDays, r.Report);
         }
 
-        public void ReplaceBoard(int[][] newSchedule, IReadOnlyList<MirrorLog> passLogs, ViolationReport? report = null)
+        private void Record(int applied, ViolationReport? rep)
+        {
+            StageRecords.Add(new PostStageRecord(_lastKey, applied, _lastMs, rep?.Hard, rep?.WeightedScore, rep?.Total, _lastFoldRolledBack));
+            _lastKey = "";
+            _lastMs = 0L;
+        }
+
+        public void ReplaceBoard(int[][] newSchedule, IReadOnlyList<MirrorLog> passLogs, ViolationReport? report = null, int applied = -1)
         {
             Work = newSchedule.Copy2D();
             Logs.AddRange(RunningKeepBestFold(report, passLogs));
+            Record(applied, report);
         }
     }
 
@@ -338,7 +361,7 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - t67, 0L) / 2, p.Hf67CapMs);
             return ApplyHF67InterStaffSwap(state, work, maxSwaps: p.Hf67MaxSwaps, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t67 + cap, quantitativeRangeEval: p.QuantitativeRangeEval);
         });
-        chain.ReplaceBoard(r67.NewSchedule, r67.Logs, r67.Report);
+        chain.ReplaceBoard(r67.NewSchedule, r67.Logs, r67.Report, r67.SwapsApplied);
 
         var t66 = EngineClock.NowMs();
         var r66 = chain.Timed("後処理 HF66 職員内再配分", "HF66IntraStaffRedistribution", work =>
@@ -347,7 +370,7 @@ public static partial class V6HotfixPasses
             var cap = Math.Min(Math.Max(deadlineMs - t66, 0L) / 2, p.Hf66CapMs);
             return ApplyHF66IntraStaffRedistribution(state, work, maxMoves: p.Hf66MaxMoves, shouldStop: stop, deadlineMs: p.Deterministic ? long.MaxValue : t66 + cap, quantitativeRangeEval: p.QuantitativeRangeEval);
         });
-        chain.ReplaceBoard(r66.NewSchedule, r66.Logs, r66.Report);
+        chain.ReplaceBoard(r66.NewSchedule, r66.Logs, r66.Report, r66.MovesApplied);
         var t66Done = EngineClock.NowMs();
 
         // 巡回研磨クラスタは自身の締切を持たないため、共同 LNS 2 本の取り分を先に確保して ClusterStop に畳む（3.271.0）。
@@ -479,7 +502,7 @@ public static partial class V6HotfixPasses
         allLogs.AddRange(report.Logs);
         return new V6PostOptimizationResult(
             work, report with { Logs = allLogs }, r80, r67, r66, r70, chain.Logs,
-            plateauOut, chain.PinBlocksAll.Attempts, chain.PinBlocksAll);
+            plateauOut, chain.PinBlocksAll.Attempts, chain.PinBlocksAll, chain.StageRecords.ToList());
     }
 
     /// <summary>

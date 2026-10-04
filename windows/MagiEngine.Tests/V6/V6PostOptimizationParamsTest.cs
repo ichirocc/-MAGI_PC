@@ -42,6 +42,19 @@ public class V6PostOptimizationParamsTest
     }
 
     [Fact]
+    public void StageRecordsCoverTheChainAndMatchTheFinalBoard()
+    {
+        var st = PinnedState();
+        var r = V6HotfixPasses.RunPostOptimization(st, st.Schedule.ToIntArray2D(), "t", seed: 7L);
+        var keys = r.StageRecords!.Select(x => x.Key).ToList();
+        Assert.Equal("HF80StrategicOscillation", keys.FirstOrDefault());
+        Assert.Contains("C1共同LNS", keys);
+        Assert.DoesNotContain(keys, k => k.Length == 0);
+        var last = r.StageRecords!.LastOrDefault(x => x.Hard != null && !x.RolledBack);
+        if (last != null) Assert.True(last.Hard!.Value >= r.Report.Hard);
+    }
+
+    [Fact]
     public void DegenerateParamsDoNotCrashAndNeverWorsenTheBoard()
     {
         var st = PinnedState();
