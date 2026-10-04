@@ -239,6 +239,27 @@ public class MagiViewModelOptimizeTest : IDisposable
     }
 
     [Fact]
+    public async Task WorseResult_WithCapZeroHardRise_AppendsReasonToMessage()
+    {
+        var fake = new FakeOptimizationService
+        {
+            Result = (state, _) => new V6FinalPort.ActionResult(
+                Schedule: MinimalState.BuildSchedule(),
+                Report: Report(hard: 0, total: 100),
+                Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"),
+                Logs: Array.Empty<MirrorLog>(),
+                CapZero: new V6FinalPort.CapZeroNotice(3, 0, 2)),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimize();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.EndsWith("前回の結果を維持します。 今の勤務表には個人の上限0のシフトが3件入っています。最適化は上限0の勤務を置かないため、この設定では必須0件まで戻れません（上限を見直すか、そのまま使ってください）", vm.Ui.Message);
+    }
+
+    [Fact]
     public async Task CancelledRun_KeepsInputScheduleAndReportsStopped()
     {
         var fake = new FakeOptimizationService { ThrowInstead = new OperationCanceledException() };

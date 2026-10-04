@@ -88,8 +88,23 @@ public class ZeroCapExclusionTest
         var res = await V6FinalPort.HandleOptimize(s, secondsRaw: 2, workers: 1, requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, onProgress: NoOpProgress);
         Assert.Equal(0, CountA(res.Schedule, 0));
         Assert.Equal(0, res.Report.Hard);
-        Assert.Contains(res.Logs, l => l.Tag == "CapZero" && l.Message.Contains("4 件"));
+        Assert.Contains(res.Logs, l => l.Tag == "CapZero" && l.Message.Contains("4件"));
+        Assert.Equal(new V6FinalPort.CapZeroNotice(4, 0, 4), res.CapZero);
         Assert.DoesNotContain(res.Logs, l => l.Tag == "Sentinel");
+    }
+
+    /// <summary>上限0のセルだけが被覆を担っていた盤面: 入口で外すと必須が増え、ログと結果に前後の件数が出る。</summary>
+    [Fact]
+    public async Task CapZeroNoticeReportsHardRiseWhenCappedCellsCarriedCoverage()
+    {
+        var s = State(extraRange: new Dictionary<string, Range> { ["1,1"] = new("0", "0"), ["2,1"] = new("0", "0") });
+        var res = await V6FinalPort.HandleOptimize(s, secondsRaw: 1, workers: 1, requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, onProgress: NoOpProgress);
+        Assert.Equal(new V6FinalPort.CapZeroNotice(4, 0, 4), res.CapZero);
+        Assert.Contains(res.Logs, l => l.Tag == "CapZero" && l.Message ==
+            "入口: 個人上限0のセル4件を外しました（必須 0→4）。最適化は上限0の勤務を置かないため、この設定では入力の必須0件には戻れません");
+        Assert.Equal("今の勤務表には個人の上限0のシフトが4件入っています。最適化は上限0の勤務を置かないため、この設定では必須0件まで戻れません（上限を見直すか、そのまま使ってください）",
+            res.CapZero?.KeptNote());
+        Assert.Null(new V6FinalPort.CapZeroNotice(4, 0, 0).KeptNote());
     }
 
     /// <summary>[Android 3.512.1/回帰] 本番の呼出元（EngineOptimizationService）は onProgress/cancellationToken を

@@ -125,8 +125,11 @@ public static partial class V6FinalPort
         //   生の入力（上限超過 45 のまま）と比べると、外した代償のぶん結果が「悪化」に見えて入力へ戻ってしまう。
         var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput, quantitativeRangeEval);
         var inputReport = UnifiedViolationChecker.Check(state, cappedInput, quantitativeRangeEval);
-        IReadOnlyList<MirrorLog> cappedLog = cappedCount > 0
-            ? new[] { new MirrorLog(tag: "CapZero", message: $"個人上限 0 のセル {cappedCount} 件を最適化の対象外として置き直しから開始（設定どおり 0 にする。表示・重みは不変）") }
+        var capZero = cappedCount > 0
+            ? new CapZeroNotice(cappedCount, UnifiedViolationChecker.Check(state, normInput, quantitativeRangeEval).Hard, inputReport.Hard)
+            : null;
+        IReadOnlyList<MirrorLog> cappedLog = capZero is not null
+            ? new[] { new MirrorLog(tag: "CapZero", message: capZero.LogLine()) }
             : Array.Empty<MirrorLog>();
 
         var label = GetAlgorithmLabel(seconds);
@@ -881,6 +884,6 @@ public static partial class V6FinalPort
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: chained.Alternatives);
+            Alternatives: chained.Alternatives, CapZero: capZero);
     }
 }

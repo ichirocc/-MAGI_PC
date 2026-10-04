@@ -25,7 +25,7 @@ public static class PreRunCheckText
     public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
     public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、例外として後から「設定を緩めたら」で試せます。";
     public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、例外として上限を緩めてください。";
-    public const string RerunNote = "手で置いた勤務が個人の上限（0回）と食い違っています。つくると外されます。";
+    public const string RerunNote = "今の勤務表に個人の上限（0回）のシフトが入っています。つくると外されます。";
 
     public static PreRunSheetText Of(PreRunCheck.Summary s, UiState ui)
     {

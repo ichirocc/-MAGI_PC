@@ -23,4 +23,11 @@ public class KeptResultTextTest
         Assert.Equal("合計が多いため", Reason(new Score(5, 9.0, 10), new Score(5, 9.0, 9)));
         Assert.Equal("同じ点数のため", Reason(new Score(5, 9.0, 9), new Score(5, 9.0, 9)));
     }
+
+    [Fact]
+    public void noteIsAppendedOnlyWhenPresent()
+    {
+        Assert.Equal("A", KeptResultText.WithNote("A", null));
+        Assert.Equal("A B", KeptResultText.WithNote("A", "B"));
+    }
 }

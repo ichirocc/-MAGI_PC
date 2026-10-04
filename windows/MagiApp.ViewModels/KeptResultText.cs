@@ -25,4 +25,7 @@ public static class KeptResultText
 
     public static string Log(string prefix, Score now, Score prev) =>
         $"{prefix}: 今回 {Parts(now)} は前回 {Parts(prev)} 以下に改善せず（{Reason(now, prev)}）→ 前回を維持";
+
+    /// <summary>維持の文言に理由を1文足す（入口で上限0のセルを外して必須が増えたとき等）。</summary>
+    public static string WithNote(string text, string? note) => note is null ? text : $"{text} {note}";
 }

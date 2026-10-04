@@ -123,7 +123,7 @@ public static partial class V6SanityPort
             }
         if (cells.Count == 0) return null;
         return new SettingIssue(IssueKind.Range, $"上限 0 の勤務（{string.Join("・", cells.Take(3))}{(cells.Count > 3 ? " ほか" : "")}）",
-            $"手で置いた勤務 {cells.Count}件 が上限 0 と食い違っています。もう一度つくると外されます",
+            $"今の勤務表に個人の上限0のシフトが {cells.Count}件 入っています。もう一度つくると外されます",
             "残すなら、その人のそのシフトの個人上限を 1 以上に上げてください");
     }
 
