@@ -378,53 +378,11 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 禁止連続の事前フィルタ → {(on ? "ON" : "OFF")}");
     }
 
-    /// <summary>
-    /// [3.304.0の由来をそのまま記録] 禁止連続を崩しに行く日を j±1 から「違反パターンがまたぐ全日」へ
-    /// 広げる。実データで利得が一貫しなかったため既定 OFF（詳細は <see cref="PolishGate.WideC3nBreakDays"/> 参照）。
-    /// </summary>
-    public void SetWideC3nBreak(bool on)
+    public void SetSearchStrength(SearchStrength strength)
     {
-        PolishGate.WideC3nBreakDays = on;
-        Ui.WideC3nBreak = on;
-        LogOp("I", $"設定変更: 禁止連続の崩し範囲 → {(on ? "パターン全域" : "前後1日")}");
-    }
-
-    /// <summary>[Android 3.514.0同期] 結合探索の停滞打ち切りを2人組(k=2)の全組合せぶん緩める。
-    /// 既定OFFで確定（Android 3.519.0、iter24＝170ペアで必須退行1件・速度-5.6%平均のため不合格）。</summary>
-    public void SetCombineExhaustPairs(bool on)
-    {
-        PolishGate.CombineExhaustPairs = on;
-        Ui.CombineExhaustPairs = on;
-        LogOp("I", $"設定変更: 結合探索を粘り強く → {(on ? "ON" : "OFF")}");
-    }
-
-    /// <summary>[Android 3.540.0同期] 回数連鎖研磨（個人上限/群目標の超過を同日巡回交換の複数日連鎖で解消）。
-    /// 既定OFF・測定中（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格）。</summary>
-    public void SetCountChainPolish(bool on)
-    {
-        PolishGate.CountChainPolish = on;
-        Ui.CountChainPolish = on;
-        LogOp("I", $"設定変更: 回数の超過を数日がかりで減らす → {(on ? "ON" : "OFF")}");
-    }
-
-    public void SetC1DeltaChildEval(bool on)
-    {
-        C1JointLnsPolish.DeltaChildEvalDefault = on;
-        Ui.C1DeltaChildEval = on;
-        LogOp("I", $"設定変更: 期間の制約の一括見直しを差分で評価 → {(on ? "ON" : "OFF")}");
-    }
-
-    public void SetWishFloorMode(WishFloorMode mode)
-    {
-        PolishGate.WishConflictFloorMode = mode;
-        Ui.WishFloorMode = mode;
-        LogOp("I", $"設定変更: 希望どうしの衝突で止める → {V6FinalPort.WishFloorModeName(mode)}");
-    }
-
-    public void SetExtraRefineRequirePostHardDrop(bool on)
-    {
-        Ui.ExtraRefineRequirePostHardDrop = on;
-        LogOp("I", $"設定変更: 計算では消えない違反だけなら追加の見直しを省く → {(on ? "ON" : "OFF")}");
+        strength.Apply();
+        Ui.SearchStrength = strength;
+        LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}");
     }
 
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み

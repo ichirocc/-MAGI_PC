@@ -100,78 +100,27 @@ public class MagiViewModelTest
         }
     }
 
+    // [Kotlin SearchStrengthTest 1:1]
     [Fact]
-    public void SetWideC3nBreakUpdatesUiAndPolishGate()
+    public void ThoroughSetsFourFlagsAndNormalRestoresDefaults()
     {
         var vm = new MagiViewModel();
+        bool[] Flags() => new[] { PolishGate.CombineExhaustPairs, PolishGate.WideC3nBreakDays, PolishGate.CountChainPolish, PolishGate.AptFairSoftTolerance };
         try
         {
-            vm.SetWideC3nBreak(true);
-            Assert.True(vm.Ui.WideC3nBreak);
-            Assert.True(PolishGate.WideC3nBreakDays);
+            Assert.Equal(SearchStrength.Normal, vm.Ui.SearchStrength);
+            vm.SetSearchStrength(SearchStrength.Thorough);
+            Assert.Equal(SearchStrength.Thorough, vm.Ui.SearchStrength);
+            Assert.Equal(new[] { true, true, true, true }, Flags());
+            vm.SetSearchStrength(SearchStrength.Normal);
+            Assert.Equal(new[] { false, false, false, false }, Flags());
+            Assert.True(C1JointLnsPolish.DeltaChildEvalDefault);
+            Assert.Equal(WishFloorMode.Off, PolishGate.WishConflictFloorMode);
         }
         finally
         {
-            PolishGate.WideC3nBreakDays = false;
+            SearchStrength.Normal.Apply();
         }
-    }
-
-    [Fact]
-    public void SetCombineExhaustPairsUpdatesUiAndPolishGate()
-    {
-        var vm = new MagiViewModel();
-        try
-        {
-            vm.SetCombineExhaustPairs(true);
-            Assert.True(vm.Ui.CombineExhaustPairs);
-            Assert.True(PolishGate.CombineExhaustPairs);
-        }
-        finally
-        {
-            PolishGate.CombineExhaustPairs = false;
-        }
-    }
-
-    [Fact]
-    public void SetC1DeltaChildEvalUpdatesUiAndEngineDefault()
-    {
-        var vm = new MagiViewModel();
-        try
-        {
-            Assert.True(vm.Ui.C1DeltaChildEval);
-            vm.SetC1DeltaChildEval(false);
-            Assert.False(vm.Ui.C1DeltaChildEval);
-            Assert.False(C1JointLnsPolish.DeltaChildEvalDefault);
-        }
-        finally
-        {
-            C1JointLnsPolish.DeltaChildEvalDefault = true;
-        }
-    }
-
-    [Fact]
-    public void SetWishFloorModeUpdatesUiAndPolishGate()
-    {
-        var vm = new MagiViewModel();
-        try
-        {
-            vm.SetWishFloorMode(WishFloorMode.E0B);
-            Assert.Equal(WishFloorMode.E0B, vm.Ui.WishFloorMode);
-            Assert.Equal(WishFloorMode.E0B, PolishGate.WishConflictFloorMode);
-        }
-        finally
-        {
-            PolishGate.WishConflictFloorMode = WishFloorMode.Off;
-        }
-    }
-
-    [Fact]
-    public void NewSearchFlagsDefaults()
-    {
-        var vm = new MagiViewModel();
-        Assert.True(vm.Ui.C1DeltaChildEval);
-        Assert.Equal(WishFloorMode.Off, vm.Ui.WishFloorMode);
-        Assert.False(vm.Ui.ExtraRefineRequirePostHardDrop);
     }
 
     [Theory]

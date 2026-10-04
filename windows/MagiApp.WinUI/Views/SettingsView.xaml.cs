@@ -21,7 +21,7 @@ namespace MagiApp.WinUI.Views;
 /// <summary>
 /// [フェーズ9→データ入出力] 「設定」タブ。既存の <see cref="MagiViewModel"/> セッター（<c>SetWorkers</c>/
 /// <c>SetBudget</c>/<c>SetV6Algorithm</c>/<c>SetSoftPolish</c>/<c>SetBlockSwapC3nFilter</c>/
-/// <c>SetWideC3nBreak</c>/<c>SetCombineExhaustPairs</c>、いずれもテスト済み）への薄い配線。
+/// <c>SetSearchStrength</c>、いずれもテスト済み）への薄い配線。
 ///
 /// [双方向反映のガード] コントロールの初期値を <see cref="Render"/> でプログラム的に設定すると、
 /// その代入自体が各コントロールの <c>ValueChanged</c>/<c>Toggled</c>/<c>SelectionChanged</c> を
@@ -90,12 +90,9 @@ public sealed partial class SettingsView : UserControl
         LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
             BlockSwapC3nFilterToggle.IsOn = ui.BlockSwapC3nFilter;
-            WideC3nBreakToggle.IsOn = ui.WideC3nBreak;
-            CombineExhaustPairsToggle.IsOn = ui.CombineExhaustPairs;
-            C1DeltaChildEvalToggle.IsOn = ui.C1DeltaChildEval;
-            ExtraRefineRequirePostHardDropToggle.IsOn = ui.ExtraRefineRequirePostHardDrop;
-            var wishTag = ui.WishFloorMode.ToString();
-            WishFloorModeCombo.SelectedItem = WishFloorModeCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == wishTag);
+            var strengthTag = ui.SearchStrength.ToString();
+            SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
+            SearchStrengthCombo.IsEnabled = !ui.Running;
 
             var tag = ui.V6Algorithm.ToString();
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
@@ -659,36 +656,12 @@ public sealed partial class SettingsView : UserControl
         _vm.SetBlockSwapC3nFilter(BlockSwapC3nFilterToggle.IsOn);
     }
 
-    private void OnWideC3nBreakToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private void OnSearchStrengthChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncingFromModel) return;
-        _vm.SetWideC3nBreak(WideC3nBreakToggle.IsOn);
-    }
-
-    private void OnCombineExhaustPairsToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        _vm.SetCombineExhaustPairs(CombineExhaustPairsToggle.IsOn);
-    }
-
-    private void OnC1DeltaChildEvalToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        _vm.SetC1DeltaChildEval(C1DeltaChildEvalToggle.IsOn);
-    }
-
-    private void OnExtraRefineRequirePostHardDropToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        _vm.SetExtraRefineRequirePostHardDrop(ExtraRefineRequirePostHardDropToggle.IsOn);
-    }
-
-    private void OnWishFloorModeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        var tag = (WishFloorModeCombo.SelectedItem as ComboBoxItem)?.Tag as string;
-        if (tag is null || !Enum.TryParse<WishFloorMode>(tag, out var mode)) return;
-        _vm.SetWishFloorMode(mode);
+        var tag = (SearchStrengthCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+        if (tag is null || !Enum.TryParse<SearchStrength>(tag, out var strength)) return;
+        _vm.SetSearchStrength(strength);
     }
 
     private void OnAlgorithmChanged(object sender, SelectionChangedEventArgs e)

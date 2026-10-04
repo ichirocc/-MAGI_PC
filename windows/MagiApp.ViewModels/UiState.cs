@@ -131,25 +131,8 @@ public sealed partial class UiState : ObservableObject
     /// 既定 <b>true</b>（Kotlin 3.518.0/ユーザー指示でPolishGate側の既定を昇格した際に同時に揃えた）。</summary>
     [ObservableProperty] private bool blockSwapC3nFilter = true;
 
-    /// <summary>禁止連続を崩す日を j±1 から違反パターン全域へ広げるか。既定OFF（実データで利得が一貫しない）。</summary>
-    [ObservableProperty] private bool wideC3nBreak;
-
-    /// <summary>[Android 3.514.0同期] 職員2人の交換探索を打ち切らず粘り強く試すか。既定OFFで確定
-    /// （Android 3.519.0、iter24＝170ペアで必須退行1件のため不合格。<see cref="MagiEngine.V6.PolishGate.CombineExhaustPairs"/> 参照）。</summary>
-    [ObservableProperty] private bool combineExhaustPairs;
-
-    /// <summary>[Android 3.540.0同期] 回数の超過を数日がかりで減らす（回数連鎖研磨）。既定OFF・測定中
-    /// （A/B 138 ペアで新2/同等135/旧1＝ゲート不合格。<see cref="MagiEngine.V6.PolishGate.CountChainPolish"/> 参照）。</summary>
-    [ObservableProperty] private bool countChainPolish;
-
-    /// <summary>[Android 同期] <see cref="MagiEngine.V6.C1JointLnsPolish"/> の DeltaChildEvalDefault の写し。既定ON。</summary>
-    [ObservableProperty] private bool c1DeltaChildEval = true;
-
-    /// <summary>[Android 同期/E0・測定中] <see cref="MagiEngine.V6.PolishGate.WishConflictFloorMode"/> の写し。既定OFF。</summary>
-    [ObservableProperty] private MagiEngine.V6.WishFloorMode wishFloorMode = MagiEngine.V6.WishFloorMode.Off;
-
-    /// <summary>[Android 同期/測定中・backlog#35] 前面の実行だけが HandleOptimize へ渡す。既定OFF。</summary>
-    [ObservableProperty] private bool extraRefineRequirePostHardDrop;
+    /// <summary>[Android 3.615.0同期] 設定画面「探索の強さ」。保存しない。</summary>
+    [ObservableProperty] private SearchStrength searchStrength = SearchStrength.Normal;
 
     // adaptiveEscape / portfolioRoleParallelSa はKotlin原本で単体A/B中立につき機構ごと撤去済み＝移植対象外。
 
@@ -295,3 +278,20 @@ public sealed record PinTargetView(
 
 /// <summary>[S5] 「希望を取り消して、もう一度つくる」の結果（<c>docs/s5_wish_trial.md</c> §9）。<see cref="Line"/> は次にやることカードに出す 1 行。</summary>
 public sealed record WishCancelOutcome(string Name, int Day, string Symbol, int H0, int PCancel, int G, string Line);
+
+/// <summary>[Android 3.615.0同期] Thorough は測定中の4フラグを ON、Normal は既定値へ戻す（出力は従来どおり）。</summary>
+public enum SearchStrength { Normal, Thorough }
+
+public static class SearchStrengthExtensions
+{
+    public static void Apply(this SearchStrength strength)
+    {
+        var on = strength == SearchStrength.Thorough;
+        MagiEngine.V6.PolishGate.CombineExhaustPairs = on;
+        MagiEngine.V6.PolishGate.WideC3nBreakDays = on;
+        MagiEngine.V6.PolishGate.CountChainPolish = on;
+        MagiEngine.V6.PolishGate.AptFairSoftTolerance = on;
+    }
+
+    public static string Label(this SearchStrength strength) => strength == SearchStrength.Thorough ? "じっくり" : "ふつう";
+}

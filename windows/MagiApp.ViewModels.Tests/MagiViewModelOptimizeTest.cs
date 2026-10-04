@@ -183,7 +183,7 @@ public class MagiViewModelOptimizeTest : IDisposable
     }
 
     [Fact]
-    public async Task ForegroundRun_PassesExtraRefineAndWishFloorFlags()
+    public async Task ForegroundRun_PassesExtraRefineOffAndWishFloorOff()
     {
         var fake = new FakeOptimizationService
         {
@@ -197,16 +197,15 @@ public class MagiViewModelOptimizeTest : IDisposable
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         try
         {
-            vm.SetExtraRefineRequirePostHardDrop(true);
-            vm.SetWishFloorMode(WishFloorMode.E0A);
+            vm.SetSearchStrength(SearchStrength.Thorough);
             vm.RunV6FullOptimize();
             await vm.LastRunOptimizeTask!;
-            Assert.True(fake.LastExtraRefineRequirePostHardDrop);
-            Assert.Equal(WishFloorMode.E0A, fake.LastWishFloorMode);
+            Assert.False(fake.LastExtraRefineRequirePostHardDrop);
+            Assert.Equal(WishFloorMode.Off, fake.LastWishFloorMode);
         }
         finally
         {
-            PolishGate.WishConflictFloorMode = WishFloorMode.Off;
+            SearchStrength.Normal.Apply();
         }
     }
 

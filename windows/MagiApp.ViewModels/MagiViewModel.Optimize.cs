@@ -234,7 +234,7 @@ public sealed partial class MagiViewModel
             var res = await _optimizationService.OptimizeWithFlagsAsync(
                 st0, sched0.Copy2D(), Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm,
                 allowImpossible: true,
-                extraRefineRequirePostHardDrop: Ui.ExtraRefineRequirePostHardDrop,
+                extraRefineRequirePostHardDrop: false,
                 wishFloorMode: PolishGate.WishConflictFloorMode,
                 onProgress: OnProgress, cancellationToken: ct);
 

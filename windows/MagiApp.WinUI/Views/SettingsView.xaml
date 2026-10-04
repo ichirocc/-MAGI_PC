@@ -61,31 +61,13 @@
             <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ"
                           OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
 
-            <ToggleSwitch x:Name="WideC3nBreakToggle" Header="禁止の並びの崩し範囲（パターン全域）"
-                          OnContent="ON" OffContent="OFF" Toggled="OnWideC3nBreakToggled" />
-
-            <!-- [Android 3.514.0同期/3.519.0訂正] 個々の手はisBetterゲートを通るが、探索経路が変わるため
-                 最終盤面が別の局所解に着地することがある＝「退化しない」は正確でなかった（Android iter24計測で
-                 170ペア中1件の必須退行を確認）。既定OFFで確定（Android 3.519.0）。 -->
-            <ToggleSwitch x:Name="CombineExhaustPairsToggle" Header="職員どうしの交換探索を粘り強く"
-                          OnContent="ON" OffContent="OFF" Toggled="OnCombineExhaustPairsToggled" />
-
-            <!-- [Android 2026-10-03 同期] 探索フラグ 3 件（文言は Android と同一。一括見直しは 3.614.0 で既定ON）。 -->
-            <ToggleSwitch x:Name="C1DeltaChildEvalToggle" Header="期間の制約の一括見直しを速く試す"
-                          OnContent="ON" OffContent="OFF" Toggled="OnC1DeltaChildEvalToggled" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="「期間の制約」を職員の回数と一緒に見直すとき、候補の良し悪しを速い方法で見積もります。同じ時間で多くの候補を試せるため、平均すると結果がわずかに良くなります（変わらない勤務表もあります）。既定はONです。" />
-            <ToggleSwitch x:Name="ExtraRefineRequirePostHardDropToggle" Header="計算では消えない違反だけ残ったら追加の見直しを省く"
-                          OnContent="ON" OffContent="OFF" Toggled="OnExtraRefineRequirePostHardDropToggled" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="仕上げのあと、残った違反が「計算では消えない」と分かっているときだけ、最後の追加の見直しを省いて早く終えます。効果はまだ確かめられておらず、結果が変わらないこともあります。既定はOFFです。" />
-            <ComboBox x:Name="WishFloorModeCombo" Header="希望どうしの衝突で止める" SelectionChanged="OnWishFloorModeChanged">
-                <ComboBoxItem Content="OFF" Tag="Off" />
-                <ComboBoxItem Content="仕上げは続ける" Tag="E0A" />
-                <ComboBoxItem Content="仕上げも省く" Tag="E0B" />
+            <!-- [Android 3.615.0同期] 探索スイッチ群を 2 択 1 つに統合（ユーザー決定）。 -->
+            <ComboBox x:Name="SearchStrengthCombo" Header="探索の強さ" SelectionChanged="OnSearchStrengthChanged">
+                <ComboBoxItem Content="ふつう" Tag="Normal" />
+                <ComboBoxItem Content="じっくり" Tag="Thorough" />
             </ComboBox>
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="希望どうしがぶつかって消せない違反だけが残ったら、それ以上減らすのをやめます。「仕上げは続ける」は仕上げを通常どおり行い、「仕上げも省く」は仕上げを省いて早く終えます。早く終わる代わりに、細かい違反が少し多く残ることがあります。効果はまだ確かめられていません。既定はOFFです。" />
+                       Text="じっくり: 時間いっぱい粘り、細かい違反をもう一歩減らします。結果が良くなるとは限りません。" />
 
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
             <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />

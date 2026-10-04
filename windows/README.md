@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-04（Android 062a839 同期、3.615.0 探索スイッチ群を「探索の強さ」ふつう／じっくりに統合）: C# 単独の差は 2 つ（出力不変）。①Android の Button/OutlinedButton 2 択は、この移植の既存の選択 UI（旧「希望どうしの衝突で止める」と同じ `ComboBox`）で出す。②`SearchStrength.Apply` は Kotlin の enum メンバー関数に当たる拡張メソッド（C# の enum はメソッドを持てない）。
 - 2026-10-04（Android ded1879 同期、後処理チェーンの段ごとの構造化記録）: C# 単独の差は 1 つ（出力不変）。`V6PostOptimizationResult.StageRecords` は positional record の既定値に定数しか書けないため `IReadOnlyList<PostStageRecord>? = null`（Kotlin は `emptyList()`）。`RunPostOptimization` は常に値を入れる。
 - 2026-10-04（Android 9039f38 同期、正式 checker の出力同一の高速化）: C# 単独の差が 3 つ（出力不変）。①報告マップの初期容量ヒント `mapCapacity` は移植しない（`InsertionOrderDictionary` に当てはまらない）②`CheckerEquivalenceTest` の乱択は `JavaRandom` なので盤面系列は Android と別③`full_coverage_state.json` は C# に fixture が無く照合対象外（Android 6 件・C# 5 件）。1 回の check は golden 67.8→54.0µs・oct2026 74.9→63.6µs。
 - 2026-10-03（Android 05df246 同期、既定 OFF の探索フラグの画面スイッチ）: C# 単独の差分が 2 つ。①`MagiEngine/AssemblyInfo.cs` に `InternalsVisibleTo`（MagiApp.ViewModels・MagiApp.ViewModels.Tests）＝internal の `C1JointLnsPolish.DeltaChildEvalDefault` を画面とテストから切り替えるため（Kotlin は同一モジュールなので不要）。②画面からの実行が `WishConflictFloorMode` を `HandleOptimize` に渡していなかった（Kotlin は渡す＝移植漏れ）ため、`IOptimizationService.OptimizeWithFlagsAsync`（既定実装つき）で 2 引数とも渡す。WinUI の既存スイッチは実行中も無効化しない作りに合わせた。WinUI に「回数の超過を数日がかりで減らす」「公平化/適切回数の研磨をもう一歩広げる」のスイッチが無いのは既存の不足（範囲外）。
