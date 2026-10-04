@@ -124,6 +124,38 @@ public class V6PortAnalyzerForbiddenTest
 
     // 離脱すると covU 穴が空くが、玉突き連鎖（FindCovUChain=探索本体と同一関数）で埋め直せる局面は
     // Chain（実証済みの多段手）として案内される。
+    // c3n −1 / pref +1 は HARD 件数が同じでも重みでは点数が良くなる＝分類は Pinned のまま、文言にだけ一文を添える。
+    [Fact]
+    public void WishPinnedCellShowsScoreHintWhenWeightedScoreImproves()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1 });
+
+        var run = Assert.Single(V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs);
+        Assert.True(run.Cells.All(c => c.Escape == ForbiddenCellEscape.Pinned));
+        Assert.True(run.Cells.All(c => c.Detail.EndsWith(V6PortAnalyzer.WishScoreHint, StringComparison.Ordinal)));
+        Assert.EndsWith(V6PortAnalyzer.WishScoreHint, run.Hint);
+    }
+
+    // 希望を破るとその日の人員不足（covU）が空く局面では点数も良くならない＝一文を添えない。
+    [Fact]
+    public void WishPinnedCellOmitsScoreHintWhenDepartureOpensCovU()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") },
+            staff: new List<Staff> { new("s0", 0) },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1 });
+
+        var run = Assert.Single(V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs);
+        Assert.DoesNotContain(run.Cells, c => c.Detail.Contains(V6PortAnalyzer.WishScoreHint));
+        Assert.DoesNotContain(V6PortAnalyzer.WishScoreHint, run.Hint);
+    }
+
     [Fact]
     public void DiagnoseForbiddenRuns_VerifiesChainEscapeWhenDepartureCreatesCovU()
     {

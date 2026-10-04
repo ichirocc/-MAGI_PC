@@ -266,7 +266,8 @@ public static partial class V6PortAnalyzer
                         hint = "空き番が無く、過剰シフトからの多人数入替（玉突き=ブロック移動）が必要";
                     else if (cascade > 0)
                         hint = $"玉突き候補{cascade}人はいますが、移動先の受け皿もすべて本人の希望/禁止の並びで塞がっており、" +
-                            "現在の希望のままではどう組んでも解消できません。希望を1件調整するか担当を追加してください";
+                            "現在の希望のままではどう組んでも解消できません。希望を1件調整するか担当を追加してください" +
+                            (MirrorKeys.WeightOf("covU") > MirrorKeys.WeightOf("pref") ? $"。{WishScoreHint}" : "");
                     else
                         hint = "候補が本人の希望/禁止の並びで塞がっており、希望を1件調整するか担当を追加すると解消に近づく";
                     reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・本人の希望{pinned}・禁止の並び{forbid}）。{hint}";

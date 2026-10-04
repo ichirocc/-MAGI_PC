@@ -155,7 +155,8 @@ public static partial class V6PortAnalyzer
                     else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned))
                     {
                         hint = $"本人希望どおりの並びが禁止パターンを構成しています（本人の希望: {pinnedDays}）。" +
-                            "希望を変えない限りどう組んでもこの禁止の並びは残ります。どちらか1件の希望を調整してください";
+                            "希望を変えない限りどう組んでもこの禁止の並びは残ります。どちらか1件の希望を調整してください" +
+                            ScoreHintOf(cells);
                     }
                     else
                     {
@@ -163,7 +164,7 @@ public static partial class V6PortAnalyzer
                             (pinnedDays.Length > 0 ? $"（本人の希望: {pinnedDays}）" : "") +
                             "。各セルで試したのは 1 セルの変更・そのセルを起点にした人員の玉突き・隣の日の調整までで、" +
                             "いずれも不成立でした（複数日にまたがる 2 人の入れ替えなどは試していません）。" +
-                            "周辺の希望を1件調整するか、担当を追加してください";
+                            "周辺の希望を1件調整するか、担当を追加してください" + ScoreHintOf(cells);
                     }
                     var staffName = i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
                     runs.Add(new ForbiddenRunDiag(i, staffName, j0, seqLabel, cells, hint));
@@ -214,6 +215,13 @@ public static partial class V6PortAnalyzer
     private static string ShiftSym(MagiState state, int k) =>
         k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
 
+    /// <summary>希望を破ると HARD 件数は同じでも weightedScore が下がるときに添える一文（表示専用）。</summary>
+    public const string WishScoreHint = "この希望を1件調整すると、全体の点数は良くなります";
+
+    private static string ScoreHintOf(List<ForbiddenRunCell> cells) =>
+        cells.Any(c => c.Escape == ForbiddenCellEscape.Pinned && c.Detail.EndsWith(WishScoreHint, StringComparison.Ordinal))
+            ? $"。{WishScoreHint}" : "";
+
     private static ForbiddenRunCell DiagnoseForbiddenCell(
         MagiState state, Problem p, int[][] norm, int[][] cov,
         int i, int j, int cur)
@@ -250,6 +258,8 @@ public static partial class V6PortAnalyzer
         var noReceiver = 0;
         var prefBlocked = 0;   // c3n は減るが、希望を破る代金（pref +1）を払えない代替の数
         var c3wBlocked = 0;    // c3n は減るが、代わりに希望の前日に禁止（c3w）を作る代替の数
+        // HARD 件数は同じでも、重み（MirrorKeys.WeightOf）では希望を破るほうが点数が良くなる代替があるか（表示専用）。
+        var scoreImproves = false;
         var c3wCur = p.C3wBanned(i, j, cur) ? 1 : 0;
         int? chainOk = null;   // Chain が成立した代替シフト
         int? adjOk = null;     // Adjacent が成立した代替シフト
@@ -289,6 +299,9 @@ public static partial class V6PortAnalyzer
             {
                 // c3n 自体は減るが、希望を破る代金を払うと正味では減らない＝希望が本当に効いている。
                 prefBlocked++;
+                var weighted = (after - firesBefore) * MirrorKeys.WeightOf("c3n") +
+                    prefCost * MirrorKeys.WeightOf("pref") + c3wDelta * MirrorKeys.WeightOf("c3w");
+                if (prefCost > 0 && !departureHole && after + prefCost + c3wDelta == firesBefore && weighted < 0) scoreImproves = true;
             }
             else
             {
@@ -348,7 +361,7 @@ public static partial class V6PortAnalyzer
         if (prefBlocked > 0)
         {
             return new ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.Pinned,
-                $"本人希望={curSym}（動かしても正味の必須違反が減らない）");
+                $"本人希望={curSym}（動かしても正味の必須違反が減らない）" + (scoreImproves ? $"。{WishScoreHint}" : ""));
         }
         return new ForbiddenRunCell(j, label, curSym, ForbiddenCellEscape.Blocked,
             $"代替{alts}件全滅: 新たな禁止の並び{c3nBlocked}・人員不足の受け皿なし{noReceiver}" +
