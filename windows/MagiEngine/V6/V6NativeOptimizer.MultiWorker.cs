@@ -152,6 +152,7 @@ public static partial class V6NativeOptimizer
         var best = results.Count == 0
             ? await run(0, options with { Workers = plan[0] }, onProgress ?? ((_, _, _, _) => { })).ConfigureAwait(false)
             : results.Aggregate((a, b) => Better(b.Report, a.Report) ? b : a);
+        if (OwnsStatics(GetRunSlot())) PublishLiveBest(best.Report, best.Schedule);
 
         // 「他の案」: 採用案以外の仮説結果を品質順に保持（重複schedule除外、最大3件）
         var alts = results

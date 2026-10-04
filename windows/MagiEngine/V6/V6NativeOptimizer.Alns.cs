@@ -180,6 +180,7 @@ public static partial class V6NativeOptimizer
         }
 
         var best = results.Aggregate((a, b) => UnifiedViolationChecker.BetterReport(b.Report, a.Report) ? b : a);
+        if (OwnsStatics(GetRunSlot())) PublishLiveBest(best.Report, best.Schedule);
         var totalIters = results.Sum(r => r.Iterations);
         var chain0Iters = results.Count > 0 ? results[0].Iterations : 0L;
         var perChain = string.Join("  ", results

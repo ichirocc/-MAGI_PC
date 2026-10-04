@@ -64,6 +64,24 @@ public class V6NativeOptimizerDispatcherTest
         Assert.Contains(result.PhaseLogs, l => l.Tag == "V6Dispatcher" && l.Message.StartsWith("完了"));
     }
 
+    [Theory]
+    [InlineData(V6Algorithm.Alns)]
+    [InlineData(V6Algorithm.Rsi)]
+    public async Task liveBestMatchesResultAfterMultiWorkerRuns(V6Algorithm algorithm)
+    {
+        // 仮説多並列/多チェーンの採用盤面は onProgress だけでなく LiveBest にも出る（E0/c3n壁の判定が読む）。
+        var state = MinimalState.Build();
+        var initial = new Problem(state).InitialAssignment();
+        V6NativeOptimizer.ResetLiveBestForTest();
+        var result = await V6NativeOptimizer.Optimize(
+            state, initial, new V6OptimizerOptions(Algorithm: algorithm, TotalBudgetSec: 1, Workers: 2, Seed: 1L),
+            onProgressRaw: NoOpProgress);
+        var live = V6NativeOptimizer.LiveBest;
+        Assert.NotNull(live);
+        var liveHard = UnifiedViolationChecker.Check(state, live!.Select(r => r.ToArray()).ToArray()).Hard;
+        Assert.Equal(result.Report.Hard, liveHard);
+    }
+
     [Fact]
     public async Task Optimize_AutoResolvesByBudgetToV5ForAShortBudgetAndCompletes()
     {

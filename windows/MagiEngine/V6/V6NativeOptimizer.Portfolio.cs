@@ -716,6 +716,7 @@ public static partial class V6NativeOptimizer
                         if (startImprovedGlobal)
                         {
                             Interlocked.Increment(ref globalImproves);
+                            if (OwnsStatics(GetRunSlot())) PublishLiveBest(startReport, start);
                             onProgress($"適応portfolio W{i} {AdaptiveHypothesisEpochPolicy.RoleLabel(assignment)} 入口改善",
                                 startReport, iterations, NowMs() - started);
                         }
@@ -807,6 +808,7 @@ public static partial class V6NativeOptimizer
                             if (improvedGlobal)
                             {
                                 Interlocked.Increment(ref globalImproves);
+                                if (OwnsStatics(GetRunSlot())) PublishLiveBest(result.Report, result.Schedule);
                                 onProgress($"適応portfolio グローバル最良更新 W{i} epoch{epoch + 1}",
                                     result.Report, iterations, NowMs() - started);
                             }
