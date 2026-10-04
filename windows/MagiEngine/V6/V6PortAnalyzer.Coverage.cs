@@ -321,7 +321,7 @@ public static partial class V6PortAnalyzer
 
     /// <summary>
     /// [人員過剰(covO)の「なぜ減らないか」診断] covU診断(空き番/玉突き/希望固定/禁止連続)の対。在勤者を他シフトへ動かせば消えるはずの過剰が、
-    /// なぜ最適化で解消されないかを枠ごとに示す。covO は全19族中もっとも軽い(重み1.0)ため、動かした先で他の族が1点でも悪化すると isBetter に負ける
+    /// なぜ最適化で解消されないかを枠ごとに示す。covO は軽い SOFT 族（重みは MirrorKeys.WeightOf）のため、動かした先で他の族が1点でも悪化すると isBetter に負ける
     /// ＝件数自体は「動かせるか」の構造診断であり「動かせるのに動いていない」ことの説明にはならない。[3.406.0] だから同じ目的関数で実際に 1 手試してから言う。
     /// </summary>
     private static (List<CoverageSurplus> List, int Total) DiagnoseSurpluses(MagiState state, Problem p, int[][] norm, int[][] cov, ViolationReport report)
@@ -345,7 +345,7 @@ public static partial class V6PortAnalyzer
                 var sym = k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
                 var pinned = 0; var forbid = 0; var cascade = 0; var free = 0;
                 var pinnedIdx = new List<int>();
-                // [3.406.0] 構造的に動かせる(free)ことと、最適化が採ることは別。covO は最も軽い族(重み1.0)で、
+                // [3.406.0] 構造的に動かせる(free)ことと、最適化が採ることは別。covO は軽い SOFT 族で、
                 //   移動先で他の族が1点でも悪化すると betterReport に負ける——すぐ上のコメント自身が
                 //   「動かせるのに動いていない」ことの説明にはならないと書いているのに、下の hint は
                 //   「最適化が未到達＝『直し方を探す』で解消可」と断言していた（3.401.0 の GuidedFix、

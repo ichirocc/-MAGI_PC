@@ -36,9 +36,9 @@ public sealed class DeltaEvaluator
     // 評価器側だけ3族（c3n/pref/covU）で、同じ盤面に対しチェッカーと評価器の hard が食い違っていた。
     private long _hGrpV;
     private long _hc3w;    // [3.542.0] 希望の前日に禁止(c3w, HARD)。セル単位＝Δもこの1セルだけ
-    private long _sApt;    // [統一apt] 適切回数(双方向目標)の running total（SOFT, 重み1）
-    private long _sFair;   // [統一fair] グループ内公平化の running total（SOFT, 重み1）
-    private long _sWeekly; // [統一weekly] 曜日平準化の running total（SOFT, 重み1）
+    private long _sApt;    // [統一apt] 適切回数(双方向目標)の running total（SOFT）
+    private long _sFair;   // [統一fair] グループ内公平化の running total（SOFT）
+    private long _sWeekly; // [統一weekly] 曜日平準化の running total（SOFT）
     private long _scovO;   // [統一a] 過剰被覆(covO)の running total（SOFT）
     private long _covUTot; // [監査#4b] per-cell covU の総和（セル局所Δで維持）
 
@@ -126,8 +126,8 @@ public sealed class DeltaEvaluator
     /// 各キーと一対一・checker の <c>Breakdown[key]</c> と同一単位）を検証専用に公開する。
     ///
     /// <see cref="Score"/>(soft集約) は各フィールドへ重みを乗じて合算するため、総和が一致しても族ごとの
-    /// 誤差が相殺されて隠れる余地がある（例: c1(重み30)とc3mn(重み30)が同じ重みを持つため、片方+1・
-    /// もう片方-1 の誤りは総和では検出できない。c2/c41/c42/c41s/c42s/apt/fair/weekly も全て重み1で
+    /// 誤差が相殺されて隠れる余地がある（例: c2 と apt、fair と weekly は同じ重みを持つため、片方+1・
+    /// もう片方-1 の誤りは総和では検出できない。重みが異なる族どうしでも整数倍の組合せで
     /// 同じ穴を持つ）。このマップは checker の breakdown と1キーずつ突き合わせる per-family パリティ
     /// 検証のために存在する。low/high だけは <see cref="RangeRaw"/> を参照。
     /// </summary>

@@ -103,7 +103,7 @@ public class V6PortAnalyzerForbiddenTest
         Assert.Contains("探索未到達", run.Hint);
     }
 
-    // 両セルとも本人希望どおり＝動かすと pref(9000)>c3n(7000) の悪化で isBetter が却下する（設計どおり）。
+    // 両セルとも本人希望どおり＝希望セルは wishLocked で探索が動かさない（設計どおり）。
     // 全セル Pinned → 構造的に崩せないことを正直に案内する（実機 c3n=1 が67エポック不動だった穴の再現）。
     [Fact]
     public void DiagnoseForbiddenRuns_ReportsWishPinnedRunAsStructurallyBlocked()
@@ -272,7 +272,7 @@ public class V6PortAnalyzerForbiddenTest
     ///  - day0 はどの代替も新たな禁止連続を作り、隣接日 day1 は希望固定で動かせない＝Blocked。
     ///  - day1 を「休」にすると「休→X」が新たに発火するが、day2 を「休」へ変えれば並びは崩せる。
     ///    ところが day1 の希望を破るので <b>c3n 1→0 に対し pref 0→1＝正味の HARD は減らない</b>
-    ///    （weighted では 9000−7000＝+2000 の悪化で、BetterReport は決して採用しない）。
+    ///    （HARD 件数は正味 0。希望セルは wishLocked で探索が動かさない）。
     /// 旧実装はこれを Adjacent＝「崩せる」と誤って主張し、①利用者へ「探索が見つけていないだけ」と
     /// 誤った期待を与え ②3.281.0 の停滞打ち切り（全 run 塞がりなら短い閾値）を発火させなくしていた。
     /// </summary>

@@ -11,7 +11,7 @@ public enum ForbiddenCellEscape
     Chain,
     /// <summary>代替は全て新たな禁止連続を作るが、隣接日調整（<see cref="V6SearchOperators.TryFixForbiddenRunViaAdjacentDay"/>）で崩せることを実証済み。</summary>
     Adjacent,
-    /// <summary>本人の希望で固定（動かすと正味の HARD 件数が減らない＝isBetter が正しく却下する。分類自体は下記の raw hard 件数比較で決まり重みには依存しない）。</summary>
+    /// <summary>本人の希望で固定（希望セルは wishLocked＝探索が動かさない。動かしても正味の HARD 件数が減らないときだけ名乗る。分類自体は下記の raw hard 件数比較で決まり重みには依存しない）。</summary>
     Pinned,
     /// <summary>全ての代替が塞がっている（新たな禁止連続・covU受け皿なし・代替シフトなし）。</summary>
     Blocked,
