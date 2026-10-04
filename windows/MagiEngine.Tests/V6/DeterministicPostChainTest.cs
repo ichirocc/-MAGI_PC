@@ -175,4 +175,46 @@ public class DeterministicPostChainTest
         Assert.Equal((1, 1), RunChain(false));
         Assert.Equal((1, 0), RunChain(true));
     }
+
+    // apt/fair 研磨の容認（aptFairSoftTolerance）はチェーンの畳み込みでも同じ基準で残す。OFF は従来どおり巻き戻す。
+    private static ViolationReport RepOf(params (string Family, int Count)[] fams)
+    {
+        var bd = fams.ToDictionary(f => f.Family, f => f.Count);
+        var hard = bd.Where(kv => MirrorKeys.Hard.Contains(kv.Key)).Sum(kv => kv.Value);
+        var total = bd.Values.Sum();
+        return new ViolationReport(
+            Violations: new Dictionary<string, string>(), NeedViolations: new Dictionary<string, string>(),
+            CountViolations: new Dictionary<string, string>(), Breakdown: bd,
+            Total: total, Hard: hard, Soft: total - hard, WeightedScore: bd.Sum(kv => kv.Value * MirrorKeys.WeightOf(kv.Key)));
+    }
+
+    private static V6HotfixPasses.PostChain FoldToleratedApt(bool tolerance)
+    {
+        var s = State();
+        var work0 = Work(s);
+        // 基準: c2 が 50 件（apt 以外の SOFT=200、予算 12）。候補: apt -1(-4) と c2 +3(+12) で生スコアは +8 悪化。
+        var baseRep = RepOf(("apt", 5), ("c2", 50));
+        var moved = RepOf(("apt", 4), ("c2", 53));
+        Assert.False(UnifiedViolationChecker.BetterReport(moved, baseRep));
+        var chain = new V6HotfixPasses.PostChain(_ => { }, work0, s, quantitativeRangeEval: false, runningKeepBest: true, initialReport: baseRep,
+            aptFairSoftTolerance: tolerance);
+        chain.Adopt(Result(With(work0, (1, 1, 1)), moved, "AptPolish") with { Report = moved }, toleranceFamily: "apt");
+        return chain;
+    }
+
+    [Fact]
+    public void ToleratedAptMoveSurvivesChainFoldWhenToleranceOn()
+    {
+        var chain = FoldToleratedApt(tolerance: true);
+        Assert.Equal(1, chain.Work[1][1]);
+        Assert.DoesNotContain(chain.Logs, l => l.Message.Contains("チェーン内巻き戻しで不採用"));
+    }
+
+    [Fact]
+    public void ToleratedAptMoveIsRolledBackWhenToleranceOff()
+    {
+        var chain = FoldToleratedApt(tolerance: false);
+        Assert.Equal(0, chain.Work[1][1]);
+        Assert.Contains(chain.Logs, l => l.Message.Contains("チェーン内巻き戻しで不採用"));
+    }
 }
