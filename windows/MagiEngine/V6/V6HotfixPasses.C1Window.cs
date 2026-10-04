@@ -81,6 +81,35 @@ public static partial class V6HotfixPasses
     /// （全cons1横断合計）が最も改善するペアを採用する(best-improvement)。安全性は手R2と同一の被覆ガード
     /// (covUCell)＋makesForbiddenRun事前枝刈り＋isBetter最終ゲート。
     /// </summary>
+    /// <summary>
+    /// 手A の交換直後の盤面で、i2 の a@j・i の x@j が禁止連続(c3n)を作っていれば隣接日の付け替えで崩す手を返す
+    /// （盤面は変えない）。崩す必要がない・崩せないときは null＝呼び出し側は素の交換を判定する。
+    /// c3w は当日セル自身の静的禁止なので隣接日では崩れず、ここでは扱わない。
+    /// </summary>
+    internal static List<int[]>? MoveARepairChain(Problem p, int[][] work, int i, int i2, int j, int x, int a, JavaRandom rng)
+    {
+        var outMoves = new List<int[]>();
+        var saved = new List<int[]>();
+        try
+        {
+            foreach (var (s, sh) in new[] { (i2, a), (i, x) })
+            {
+                if (sh < 0 || sh >= p.K || !p.MakesForbiddenRun(work, s, j, sh)) continue;
+                if (p.C3wBanned(s, j, sh)) return null;
+                var f = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, work, s, j, sh, rng);
+                if (f is null) return null;
+                if (f.Any(m => m[1] == j)) return null;
+                foreach (var mv in f) { saved.Add(new[] { mv[0], mv[1], work[mv[0]][mv[1]] }); work[mv[0]][mv[1]] = mv[2]; }
+                outMoves.AddRange(f);
+            }
+            return outMoves.Count == 0 ? null : outMoves;
+        }
+        finally
+        {
+            for (var idx = saved.Count - 1; idx >= 0; idx--) work[saved[idx][0]][saved[idx][1]] = saved[idx][2];
+        }
+    }
+
     public static CyclicSwapResult ApplyC1WindowPolish(
         MagiState state, int[][] schedule, int maxPasses = 3, Func<bool>? shouldStop = null, long seed = 0x1C1L,
         bool combineExhaustPairs = false, bool quantitativeRangeEval = false)
@@ -94,6 +123,7 @@ public static partial class V6HotfixPasses
         var bestRep = before;
         var applied = 0;
         var aRect = 0; var aSelf = 0;
+        var mvaTried = 0; var mvaAccepted = 0;
         if (p.Cons1.Count == 0)
         {
             return new CyclicSwapResult(work, before.Total, bestRep.Total, 0,
@@ -235,12 +265,23 @@ public static partial class V6HotfixPasses
                         {
                             if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a)) continue;
                             work[i][j] = x; work[i2][j] = a;                 // 同日スワップ（被覆不変）
+                            var fix = PolishGate.C1MoveARepair ? MoveARepairChain(p, work, i, i2, j, x, a, rng) : null;
+                            int[]? fixOld = null;
+                            if (fix is not null)
+                            {
+                                fixOld = new int[fix.Count];
+                                for (var idx = 0; idx < fix.Count; idx++) fixOld[idx] = work[fix[idx][0]][fix[idx][1]];
+                                foreach (var mv in fix) work[mv[0]][mv[1]] = mv[2];
+                                mvaTried++;
+                            }
                             var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                             var pinBadA = V6SearchOperators.ExactPinRegression(p, workBeforeDay, work);
                             if (pinBadA && IsBetter(rep, bestRep)) pinBlocks.Record(p, workBeforeDay, work);
                             if (IsBetter(rep, bestRep) && !pinBadA)
                             {
-                                bestRep = rep; applied++; improved = true; done = true; break;
+                                bestRep = rep; applied++; improved = true; done = true;
+                                if (fix is not null) mvaAccepted++;
+                                break;
                             }
                             // [3.324.0/外部レビュー] 手Aのピン却下も記録する（手Bだけの部分集計だった穴を塞ぐ）。
                             // [3.347.0/敵対検証] 手Aは**ピン却下だけ**を数えており、同じ手が採点で落ちた
@@ -248,6 +289,8 @@ public static partial class V6HotfixPasses
                             //   の集計でピン側だけが厚くなる。どちらも i2 ごと＝同じ粒度なので対称に数える。
                             if (IsBetter(rep, bestRep) && pinBadA) RecordBlock(i, x, ri, C1PlateauDiagnosis.REASON_PIN);
                             else RecordBlock(i, x, ri, C1PlateauDiagnosis.REASON_SCORE, after: rep, before2: bestRep);
+                            if (fix is not null && fixOld is not null)
+                                for (var idx = fix.Count - 1; idx >= 0; idx--) work[fix[idx][0]][fix[idx][1]] = fixOld[idx];
                             work[i][j] = a; work[i2][j] = x;                 // 巻き戻し
                         }
                         if (done) { donorsCache = null; continue; }
@@ -509,6 +552,7 @@ public static partial class V6HotfixPasses
         if (applied == 0 && c1Before > 0) msg += " [頭打ち=改善手なし]";
         if (stuckNames.Count > 0) msg += $" 残存: {string.Join(", ", stuckNames)}";
         if (c1CombSummary.Length > 0) msg += $" / {c1CombSummary}";
+        if (PolishGate.C1MoveARepair) msg += $" 手A禁止連続修復:試行{mvaTried}/採用{mvaAccepted}";
         var logs = new[] { new MirrorLog(tag: "C1Polish", message: msg) };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, plateau, pinBlocks.Attempts, pinBlocks, rejectedOut, Report: bestRep);
     }

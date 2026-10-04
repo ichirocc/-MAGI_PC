@@ -133,6 +133,7 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>[Android 3.615.0同期] 設定画面「探索の強さ」。保存しない。</summary>
     [ObservableProperty] private SearchStrength searchStrength = SearchStrength.Normal;
+    [ObservableProperty] private bool c1MoveARepair;  // PolishGate.C1MoveARepair（試験中・既定OFF）。保存しない
 
     // adaptiveEscape / portfolioRoleParallelSa はKotlin原本で単体A/B中立につき機構ごと撤去済み＝移植対象外。
 

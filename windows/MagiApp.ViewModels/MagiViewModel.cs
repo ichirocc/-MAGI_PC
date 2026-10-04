@@ -385,6 +385,13 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}");
     }
 
+    public void SetC1MoveARepair(bool on)
+    {
+        PolishGate.C1MoveARepair = on;
+        Ui.C1MoveARepair = on;
+        LogOp("I", $"設定変更: 期間の制約の入れ替えで禁止の並びも直す → {(on ? "ON" : "OFF")}");
+    }
+
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み
     //   （単体A/B中立＝機構ごと撤去）＝この移植でも対応不要。
 

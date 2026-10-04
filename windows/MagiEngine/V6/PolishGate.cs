@@ -28,6 +28,13 @@ public static class PolishGate
     public static volatile bool WideC3nBreakDays = false;
 
     /// <summary>
+    /// [測定中] C1 研磨の手A（同日交換）で、交換相手 i2 が受け取るシフト（または i の新シフト）が禁止連続(c3n)を
+    /// 作るとき、<c>TryFixForbiddenRunViaAdjacentDay</c>（手B と同じ隣接日の付け替え＋1段の玉突き）で崩してから
+    /// 結合手を 1 回の checker で判定する。採用基準は不変（IsBetter＋厳密ピン）。既定 OFF（Kotlin <c>PolishGate.c1MoveARepair</c>）。
+    /// </summary>
+    public static volatile bool C1MoveARepair = false;
+
+    /// <summary>
     /// ブロック巡回交換で、禁止連続(c3n)が正味増える候補を<b>候補生成の段階で</b>捨てるか。既定 <b>true</b>
     /// （Kotlin 3.518.0/ユーザー指示「既定OFFの処理をAB評価しメリットあれば既定Onに」で確定。
     /// ON/OFFで採用結果は変わらないため新規A/Bは不要＝既存測定をそのまま適用）。
