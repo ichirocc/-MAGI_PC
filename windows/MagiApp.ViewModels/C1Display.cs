@@ -16,7 +16,7 @@ public sealed record C1Shortage(int Staff, int Shift, int Day1, int Day2, int Fr
 public static class C1Display
 {
     /// <summary>勤務表だけでは届かないときの 1 文（セルシート・職員の内訳で共有）。</summary>
-    public const string StuckText = "希望・手動固定・個人の上限0（入れない指定）の都合で、勤務表だけでは期間の約束を満たせません。";
+    public const string StuckText = "希望・手動固定・個人の上限0（入れない指定）の都合で、勤務表だけでは期間の制約を満たせません。";
 
     /// <summary>セル (i,d) を k に変えられるか。最適化器と同じ基準（希望固定なら希望どおりだけ、それ以外は MayPlace）。</summary>
     public static bool Changeable(Problem p, int i, int d, int k) =>
@@ -80,10 +80,10 @@ public static class C1Display
         var sh = shortages.FirstOrDefault(x => x.Staff == i && j >= x.From && j <= x.To);
         if (sh is null) return null;
         var k = sym(sh.Shift);
-        var head = $"期間の約束: {sh.Day1}日のなかに「{k}」が{sh.Day2}日必要です。";
+        var head = $"期間の制約: {sh.Day1}日のなかに「{k}」が{sh.Day2}日必要です。";
         var body = sh.Marks.Count == 0 ? StuckText
             : sh.Stuck ? $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、印の日を{k}にすると不足は減ります。{StuckText}"
-            : $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、{(sh.MinChanges >= sh.Marks.Count ? $"印の日をすべて{k}に変えると" : $"印の日をうまく選べば、いちばん少なくて{sh.MinChanges}日を{k}にすると")}この約束の日数に届きます（ほかの約束への影響は見ていません）。";
+            : $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、{(sh.MinChanges >= sh.Marks.Count ? $"印の日をすべて{k}に変えると" : $"印の日をうまく選べば、いちばん少なくて{sh.MinChanges}日を{k}にすると")}この制約の日数に届きます（ほかの制約への影響は見ていません）。";
         var held = i < s.Length && j < s[i].Length && s[i][j] == sh.Shift ? $"（この日の{k}はすでに数に入っています）" : "";
         return head + body + held;
     }

@@ -500,7 +500,7 @@ public sealed partial class HomeView : UserControl
             if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
             var confirm = new Button
             {
-                Content = "上限を緩め、手順を当てる（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                Content = "上限を緩め、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
                 Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
             };
             confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); if (from is { } c) _window.OpenCell(c.I, c.J); };

@@ -61,7 +61,7 @@ public class GridDisplayMarksTest
     {
         var p = ScheduleUtil.CachedProblem(St); var s = St.Schedule.ToIntArray2D();
         var text = Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 2, new[] { "c1" }, Label));
-        Assert.Equal("要調整・期間の約束: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日をうまく選べば、いちばん少なくて2日を休にするとこの約束の日数に届きます（ほかの約束への影響は見ていません）。（この日の休はすでに数に入っています）", text);
+        Assert.Equal("要調整・期間の制約: 7日のなかに「休」が2日必要です。いま足りない期間（10/3〜10/12）があり、印の日をうまく選べば、いちばん少なくて2日を休にするとこの制約の日数に届きます（ほかの制約への影響は見ていません）。（この日の休はすでに数に入っています）", text);
         Assert.DoesNotContain("（この日の", Assert.Single(CellSheetLogic.CellDetailLines(St, p, s, 0, 3, new[] { "c1" }, Label)));
         Assert.Contains("vio-c1", CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, "0,2", Marks), true));
     }
