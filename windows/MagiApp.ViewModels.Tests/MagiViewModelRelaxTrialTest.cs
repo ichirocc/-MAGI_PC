@@ -148,8 +148,8 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         };
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
         var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
-        Assert.Equal(new[] { "職員10 Pｼ 上限 0→1", "職員11 Cｵ 上限 0→1" }, t.Rows.Select(x => x.Split('（')[0]));
-        Assert.Equal("今の勤務表の勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
+        Assert.Equal(new[] { "職員10 Pｼ 上限 0回→1回まで", "職員11 Cｵ 上限 0回→1回まで" }, t.Rows.Select(x => x.Split('（')[0]));
+        Assert.Equal("今の勤務表に合わせて上限を上げます。そのうえでこの組を例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
         Assert.StartsWith("職員10 ", t.Title);
         Assert.EndsWith("禁止の並び", t.Title);
         Assert.True(t.MoveLines.Count > 0 && t.MoveLines.All(l => l.Contains('→')));
@@ -157,10 +157,10 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         // 窓の外の手も全件が読める（畳むだけで隠さない）
         Assert.Equal(t.OtherMoves, t.OtherMoveLines.Sum(l => l.Count(c => c == '→')));
         Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var head = l[..l.IndexOf('　')]; var d = int.Parse(head[(head.IndexOf('/') + 1)..]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
-        Assert.Equal("例外として上限を緩める候補 — 職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
+        Assert.Equal("例外として上限を緩める候補：職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
         Assert.Equal("必須違反: 5件 → 4件", t.HardLine);
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
-        Assert.Equal($"変更規模: 設定 5項目・{people}人・{r.Moves.Count}セル", t.ScaleLine);
+        Assert.Equal($"変わるもの: 設定5つ、{people}人の勤務、{r.Moves.Count}か所", t.ScaleLine);
         Assert.Equal(3, t.PrerequisiteRows.Count);
         Assert.True(t.PrerequisiteRows[0].Contains("（10/") && t.MoveLines[0].StartsWith("10/7　"), t.PrerequisiteRows[0]);
         Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);

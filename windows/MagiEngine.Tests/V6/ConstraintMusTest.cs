@@ -169,7 +169,7 @@ public class ConstraintMusTest
         Assert.Equal(2, Assert.Single(ConstraintMus.AnalyzeDayConflicts(new Problem(st))).Core.Count);
         var hit = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Where.Contains("必要人数と固定希望の衝突"));
         Assert.Equal(
-            "固定された希望の組合せでは、この日の必要人数を満たせません。次の2件は同時に成立しません（証明つき）: " +
+            "固定された希望の組合せでは、この日の必要人数を満たせません。次の2件は同時に成立しません: " +
                 "必要人数「Xに1人」 ・ 希望「s0 1/1(木)=休」。個人上限が0のため置けない人: s1（X）",
             hit.Problem);
     }

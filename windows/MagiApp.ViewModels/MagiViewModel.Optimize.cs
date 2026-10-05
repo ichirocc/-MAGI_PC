@@ -65,7 +65,7 @@ public sealed partial class MagiViewModel
     /// <summary>[テスト可視性のための追加] 直近の <see cref="RunV6FullOptimize"/> 呼出しが背後で走らせる Task。</summary>
     internal Task? LastRunOptimizeTask { get; private set; }
 
-    /// <summary>勤務表を最初からつくる（Kotlin <c>runV6FullOptimize()</c>）。計算では消えない／もう一度つくると外れる項目があれば <see cref="UiState.PreRunCheck"/> を出して止まる（つくる前の確認）。</summary>
+    /// <summary>勤務表を最初からつくる（Kotlin <c>runV6FullOptimize()</c>）。何度つくっても残る／もう一度つくると外れる項目があれば <see cref="UiState.PreRunCheck"/> を出して止まる（つくる前の確認）。</summary>
     public void RunV6FullOptimize()
     {
         var st = _state; var sched = _currentSchedule;

@@ -16,7 +16,7 @@ namespace MagiApp.ViewModels;
 /// <see cref="BusyEditMessage"/>）。
 ///
 /// 含まれる編集面: 勤務表セル(setCell/setCells)・希望反映(applyWishes)・他の案の適用
-/// (applyAlternative)・なおすのを手伝って(shortageFixCandidates)・日別必要人数(needDay)・
+/// (applyAlternative)・なおし方を見る(shortageFixCandidates)・日別必要人数(needDay)・
 /// 個人別回数(staffRange)・グループ単位の回数(groupRange)・希望シフト(wishes)・シフト表示色
 /// (colors)・見直し候補メモ(reviewMemo)・制約CRUD(cons1〜cons42s)・年間マスター閲覧(ws1)・
 /// 目標の検算(aptBalances)・壁になっている禁止の並びを緩める(relaxForbiddenRule)・
@@ -34,7 +34,7 @@ namespace MagiApp.ViewModels;
 /// </summary>
 public sealed partial class MagiViewModel
 {
-    // ===== グリッド・希望・「他の案」・なおすのを手伝って =====
+    // ===== グリッド・希望・「他の案」・なおし方を見る =====
 
     public int[] AllowedShiftsFor(int i)
     {
@@ -377,7 +377,7 @@ public sealed partial class MagiViewModel
         RefreshCheck();
     }
 
-    /// <summary>[operator_ux §5] 「なおすのを手伝って」用：ある不足枠(日×シフト)に1タップで入れられる候補職員。</summary>
+    /// <summary>[operator_ux §5] 「なおし方を見る」用：ある不足枠(日×シフト)に1タップで入れられる候補職員。</summary>
     public sealed record FixCandidate(int StaffIndex, string Name, string GroupSymbol, bool FromRest);
 
     public IReadOnlyList<FixCandidate> ShortageFixCandidates(int dayIndex, int shiftIndex)

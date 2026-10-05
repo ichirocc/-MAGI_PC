@@ -2,7 +2,7 @@ using MagiEngine.V6;
 
 namespace MagiApp.ViewModels.Tests;
 
-/// <summary>[外部レビュー第3/4段] 「なおすのを手伝って」の判断と候補の有効/無効を UI から切り離して固定する。</summary>
+/// <summary>[外部レビュー第3/4段] 「なおし方を見る」の判断と候補の有効/無効を UI から切り離して固定する。</summary>
 public class GuidedFixTest
 {
     private static CoverageShortfall Sf(int day, CoverageVerdict v, int miss = 1, bool blockedNow = false) =>

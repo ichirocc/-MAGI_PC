@@ -268,7 +268,7 @@ MagiApp.kt defines the app's root composable (`MagiApp`), which hosts the Scaffo
 - `Affordance.DialogConfirmButton, Affordance.DialogDismissButton — shared AlertDialog button styles used by all four AlertDialogs in this file`
 - `VioBuckets.vioBuckets (List<VioBucket>, each with a `.key`) and MagiScheduleViews.vioBucketLocCounts(ui) — violation-family filter bucket definitions/counts backing `vioMask`/`vioEnabled`/ViolationFilterBar/ViolationHubCard`
 - `ShiftPickerSheet — external ModalBottomSheet composable for picking a shift for a cell (see dialogsAndOverlays)`
-- `GuidedFixDialog — external dialog composable for the 'なおすのを手伝って' guided-fix flow`
+- `GuidedFixDialog — external dialog composable for the 'なおし方を見る' guided-fix flow`
 - `com.magi.app.v6.RosterCsvImport.detect(csvText: String): Boolean — v6-layer object method used to decide whether a freshly-picked CSV looks like a full roster/unit-column template (routes to the rosterCsvChoice dialog) vs a plain schedule overlay`
 
 
@@ -630,7 +630,7 @@ internal fun WishApplyCard(ui: UiState, onApply: () -> Unit)
 
 ### ダイアログ/オーバーレイ
 
-- AlertDialog in GuidedFixDialog (the entire function body): triggered externally by the caller (e.g. Home tab's 'なおすのを手伝って' button, wired via the onFix callback of OperatorNextActionCard — the actual open/close trigger lives outside this file). Title toggles between 'なおすのを手伝います' and '直し終わりました！' (when allDone). Body renders one of 4 branches (target-available / infeasible / blocked / all-clear) as described in the GuidedFixDialog composable entry. confirmButton = DialogConfirmButton('もう一度つくる', onRerun) only when allDone, else DialogDismissButton('閉じる', onDismiss); dismissButton slot shows a second DialogDismissButton('閉じる', onDismiss) only when allDone (comment: '修正中は「閉じる」だけ…完了時のみ第2ボタンを出す').
+- AlertDialog in GuidedFixDialog (the entire function body): triggered externally by the caller (e.g. Home tab's 'なおし方を見る' button, wired via the onFix callback of OperatorNextActionCard — the actual open/close trigger lives outside this file). Title toggles between 'なおすのを手伝います' and '直し終わりました！' (when allDone). Body renders one of 4 branches (target-available / infeasible / blocked / all-clear) as described in the GuidedFixDialog composable entry. confirmButton = DialogConfirmButton('もう一度つくる', onRerun) only when allDone, else DialogDismissButton('閉じる', onDismiss); dismissButton slot shows a second DialogDismissButton('閉じる', onDismiss) only when allDone (comment: '修正中は「閉じる」だけ…完了時のみ第2ボタンを出す').
 - No ModalBottomSheet, DropdownMenu, or Snackbar is actually used anywhere in this file, despite `ModalBottomSheet`/`rememberModalBottomSheetState`/`Scaffold`/`NavigationBar`/`NavigationBarItem` being imported at the top of the file — these are dead imports, not real overlays; do not port a bottom sheet or nav-bar structure for this file.
 - BreakdownBody's `expanded`-family panel (a plain Surface shown conditionally below the BreakdownGroup rows, with a header Row + 'close' TextButton) is an inline in-place expander/accordion, NOT a modal/overlay dialog — it participates in the same scrollable Column as the rest of the card and should be ported as an expander/disclosure element embedded in the page, not a Popup/ContentDialog/Flyout.
 

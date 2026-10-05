@@ -8,7 +8,7 @@
 | # | 画面 | 機能 | Android 原本（正） | WinUI 置き場 | 仕様 | 実装 | CI | メモ |
 |---|---|---|---|---|---|---|---|---|
 | 1 | ホーム | 人員過剰の「希望固定N人」を名指しして、その場で希望を取り消す（3.492.0） | `MagiDashboardCards.kt` `CoverageDiagnosisCard`（`CoverageSurplus.pinnedStaff`, `vm.removeWish`） | `HomeView` | 済 | 済 | 緑 | README「WinUI 側の表示はフェーズ9の残作業」→ `HomeView.RenderCoverage`（run 33995356094） |
-| 2 | ホーム | 処方箋カード＝次の一手を1つ提示・できあがり度・重複ボタン排除（3.480.0） | `MagiDashboardCards.kt` `OperatorNextActionCard`/`SmartActionCard`, `MagiViewModel` の完成度計算 | `HomeView` | 済 | 済 | 緑 | `HomeView.RenderNextAction`/`RenderSmartAction`（run 33995759601）。書き出しは設定タブのピッカーへ委譲、「なおすのを手伝って」は勤務表タブへ（#24 まで） |
+| 2 | ホーム | 処方箋カード＝次の一手を1つ提示・できあがり度・重複ボタン排除（3.480.0） | `MagiDashboardCards.kt` `OperatorNextActionCard`/`SmartActionCard`, `MagiViewModel` の完成度計算 | `HomeView` | 済 | 済 | 緑 | `HomeView.RenderNextAction`/`RenderSmartAction`（run 33995759601）。書き出しは設定タブのピッカーへ委譲、「なおし方を見る」は勤務表タブへ（#24 まで） |
 | 3 | ホーム | 実行中の進捗（改善%・残り時間・回数・HARD残） | `MagiScheduleViews.kt` `progressSummary`/`LiveScheduleCard` | `HomeView` | 済 | 済 | 緑 | run 33996008522。`HomeView.ProgressSummary`（処方箋カード内の進捗行）＋`RenderLive`（途中経過の色タイル） |
 | 4 | ホーム | コパイロット（HARD 族の要約と導線） | `MagiDashboardCards.kt` `CopilotCard` | `HomeView` | 済 | 済 | 緑 | run 33996263185。`HomeView.RenderCopilot`。分析タブの文言だけの表示は既存、操作つきカードをホームへ |
 | 5 | ホーム | データ無し時の導線（空状態・セットアップ案内） | `MagiApp.kt` `EmptyStateCard`, `MagiSetupCards.kt` `SetupGuideCard` | `HomeView` | 済 | 済 | 緑 | run 33996508158。`HomeView` EmptyStateCard（開く→設定タブのピッカー委譲／サンプル→LoadFixtureAsync／新規→InitBlankState+編集タブ）。SetupGuide の件数行は EditView に既存、「次の一手」だけ追加 |
@@ -30,4 +30,4 @@
 | 21 | 設定 | 色ピッカー 36色（6×6・淡いパステル・選択✓, 3.460.0） | `ShiftColorEditor.kt` `ColorPickerDialog` | `SettingsView` | 済 | 済 | 緑 | run 34016797539。`ShiftColorPalette`（ViewModels、テスト 2 件）＋`SettingsView.BuildColorPickerFlyout` を 6×6 タイル＋✓ に差し替え。16進入力は残す |
 | 22 | 設定 | 重み表（族・重み・HARD/SOFT） | `MagiDashboardCards.kt` `WeightTableCard` | `SettingsView` | 済 | 済 | 緑 | run 34017009464。`SettingsView.RenderWeightTable`（最適化設定の直後、MirrorKeys.Weights を重い順・絶対に守る/できれば守る）。分析タブの「重みつきスコア」は別物（合計値の表示）で重複なし |
 | 23 | シェル | トップバーの状態バッジ（実行中/配布可/必須違反N/未計算）＋下部コマンドバー | `MagiApp.kt` `MagiTopBar`/`BottomCommandBar` | `MainWindow` | 済 | 済 | 緑 | run 34017257397。`MainWindow.RenderShell`（Ui の変化ごと）: トップバー＝MAGI チップ＋節名＋状態バッジ、下部＝元に戻す/やり直し（条件付き）＋主ボタン（やめる/勤務表をつくる/もう一度つくる）。VM 変更なし |
-| 24 | ホーム | 「なおすのを手伝って」（不足セルの候補ピッカー） | `MagiDashboardCards.kt` `GuidedFixDialog` | `HomeView` | 済 | 済 | 緑 | run 34018196757。`HomeView.ShowGuidedFixAsync`（ContentDialog: 対象枠→候補大ボタン→SetCell、BlockedNow/Infeasible の分岐、連打ガード、開いている間は再検査に追従）。#3 の暫定（勤務表タブへ）を置換 |
+| 24 | ホーム | 「なおし方を見る」（不足セルの候補ピッカー） | `MagiDashboardCards.kt` `GuidedFixDialog` | `HomeView` | 済 | 済 | 緑 | run 34018196757。`HomeView.ShowGuidedFixAsync`（ContentDialog: 対象枠→候補大ボタン→SetCell、BlockedNow/Infeasible の分岐、連打ガード、開いている間は再検査に追従）。#3 の暫定（勤務表タブへ）を置換 |

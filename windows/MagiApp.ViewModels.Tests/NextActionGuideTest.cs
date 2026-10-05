@@ -14,16 +14,16 @@ public class NextActionGuideTest
     [Fact]
     public void HardLineComesFromDeltaHard()
     {
-        Assert.Equal("必須の約束: 減る（2件）", NextActionGuide.FixImpactLines(S(-2), LabelOf).HardLine);
-        Assert.Equal("必須の約束: 変わらない", NextActionGuide.FixImpactLines(S(0), LabelOf).HardLine);
-        Assert.Equal("必須の約束: 増える（1件）", NextActionGuide.FixImpactLines(S(1), LabelOf).HardLine);
+        Assert.Equal("必須違反: 2件減る", NextActionGuide.FixImpactLines(S(-2), LabelOf).HardLine);
+        Assert.Equal("必須違反: 変わらない", NextActionGuide.FixImpactLines(S(0), LabelOf).HardLine);
+        Assert.Equal("必須違反: 1件増える", NextActionGuide.FixImpactLines(S(1), LabelOf).HardLine);
     }
 
     [Fact]
     public void CautionListsOnlyWorsenedSoftFamilies()
     {
         var (_, caution) = NextActionGuide.FixImpactLines(S(-1, ("covU", -1), ("high", 1), ("c1", -1), ("covO", 2)), LabelOf);
-        Assert.Equal("注意: 上限超過 +1・人員過剰 +2", caution);
+        Assert.Equal("増える要調整: 上限超過 +1・人員過剰 +2", caution);
         Assert.Null(NextActionGuide.FixImpactLines(S(-1, ("covU", -1)), LabelOf).Caution);
     }
 

@@ -896,7 +896,7 @@ public static partial class V6SanityPort
                 var labels = string.Join(" ・ ", sc.Core.Select(ItemLabel));
                 var hints = string.Join(" / ", sc.Core.Take(2).Select(RelaxHint));
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{name}さんの希望と条件の組合せ",
-                    $"次の{sc.Core.Count}件は同時に成立しません（証明つき）: {labels}",
+                    $"次の{sc.Core.Count}件は同時に成立しません: {labels}",
                     $"いずれか1件を緩めてください（例: {hints}）"));
             }
             // 日別の証明（ConstraintMus の CanServe）はコアで希望固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。
@@ -916,7 +916,7 @@ public static partial class V6SanityPort
                 var wishItem = dc.Core.FirstOrDefault(it => it is ConstraintMus.WishPin);
                 var wishHint = wishItem is null ? null : RelaxHint(wishItem);
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{SafeDayLabel(state.StartDate, dc.Day)} の必要人数と固定希望の衝突",
-                    $"固定された希望の組合せでは、この日の必要人数を満たせません。次の{dc.Core.Count}件は同時に成立しません（証明つき）: {labels}" + CapZeroNote(dc),
+                    $"固定された希望の組合せでは、この日の必要人数を満たせません。次の{dc.Core.Count}件は同時に成立しません: {labels}" + CapZeroNote(dc),
                     "この日の希望を1件調整するか、必要人数を下げてください" + (wishHint is null ? "" : $"（例: {wishHint}）")));
             }
         }

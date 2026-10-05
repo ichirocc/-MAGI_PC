@@ -73,7 +73,7 @@ public sealed partial class HomeView : UserControl
 
     /// <summary>
     /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c>（3.480.0/3.483.0）の状態分岐を
-    /// そのまま写す。実行中は見出し・解消度を出さない（進捗行は #3）。飛び先の判断は docs/phase9/blockers.md #2。
+    /// そのまま写す。実行中は見出し・でき具合を出さない（進捗行は #3）。飛び先の判断は docs/phase9/blockers.md #2。
     /// </summary>
     private void RenderNextAction(UiState ui, bool editable)
     {
@@ -155,7 +155,7 @@ public sealed partial class HomeView : UserControl
             if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
             {
                 headline = worstDay is null ? "人員不足の日があります。" : $"{worstDay} が人員不足です。";
-                bigLabel = "なおすのを手伝って"; bigEnabled = true;
+                bigLabel = "なおし方を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
             else if (hardFix && ui.FixFocusName.Length == 0)
@@ -182,7 +182,7 @@ public sealed partial class HomeView : UserControl
             else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
-                headline = ui.RelaxSearching ? remain : $"今の希望とルールの組み合わせでは、必須違反 {ui.BestHard}件 が下限の見込みです。";
+                headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {ui.BestHard}件 からこれ以上は減らせない見込みです。";
                 bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
@@ -236,14 +236,14 @@ public sealed partial class HomeView : UserControl
         var showResolve = !ui.Running;
         ResolveText.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
         ResolveBar.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
-        ResolveText.Text = $"解消度：{ui.Satisfaction}%（{remaining}）";
+        ResolveText.Text = $"でき具合：{ui.Satisfaction}%（{remaining}）";
         ResolveText.Foreground = fgBrush;
         ResolveBar.Value = System.Math.Clamp(ui.Satisfaction, 0, 100);
         ResolveBar.Foreground = fgBrush;
 
         var showDetail = !ui.Running && ui.HasResult;
         DetailToggle.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
-        DetailToggle.Content = _detailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 解消度の意味";
+        DetailToggle.Content = _detailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ でき具合の意味";
         DetailToggle.Foreground = fgBrush;
         DetailText.Visibility = showDetail && _detailOpen ? Visibility.Visible : Visibility.Collapsed;
         DetailText.Foreground = fgBrush;
@@ -500,7 +500,7 @@ public sealed partial class HomeView : UserControl
             if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
             var confirm = new Button
             {
-                Content = "例外として上限を緩め、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                Content = "上限を緩め、手順を当てる（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
                 Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
             };
             confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); if (from is { } c) _window.OpenCell(c.I, c.J); };
@@ -633,7 +633,7 @@ public sealed partial class HomeView : UserControl
     }
 
     /// <summary>
-    /// [phase9 #24] 「なおすのを手伝って」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。判断は <see cref="GuidedFixPlan"/>、
+    /// [phase9 #24] 「なおし方を見る」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。判断は <see cref="GuidedFixPlan"/>、
     /// 候補の有効/無効は <see cref="GuidedFixFlow"/>（どちらも UI 非依存でテスト済み）。押したら押下後の再検査（<see cref="UiState.CheckRev"/>）が
     /// 反映されるまで全候補を無効にし「再検査中…」を出す。Schedule の変更だけでは再有効化しない（古い診断と新しい盤面の混在を防ぐ）。
     /// ボタンは常に「閉じる」だけ（「もう一度つくる」は下部バーに一本化）。

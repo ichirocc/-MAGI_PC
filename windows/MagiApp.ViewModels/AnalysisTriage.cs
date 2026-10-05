@@ -38,8 +38,8 @@ public sealed record AnalysisTriage(
     /// <summary>weekly/fair は件数でなく L1 偏差の合計。単位を分けないと「186件」と読めてしまう。</summary>
     private static string UnitOf(string family) => family is "fair" or "weekly" ? "pt" : "件";
 
-    /// <summary>ホームの解消度に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
-    /// pt だけ残っても解消度は 100% でないので「解消済み」とは言わない。</summary>
+    /// <summary>ホームのでき具合に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
+    /// pt だけ残ってもでき具合は 100% でないので「解消済み」とは言わない。</summary>
     public static string HomeRemainingLabel(long bestHard, int shortDays, IReadOnlyDictionary<string, int> breakdown)
     {
         var softN = MirrorKeys.Soft.Where(f => UnitOf(f) == "件").Sum(f => breakdown.GetValueOrDefault(f, 0));

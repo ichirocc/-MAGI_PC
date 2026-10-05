@@ -5,7 +5,7 @@ using MagiEngine.V6;
 namespace MagiApp.ViewModels;
 
 /// <summary>
-/// 「なおすのを手伝って」の判断部分（Kotlin原本 <c>GuidedFixDialog</c> の分岐、3.401.0）。WinUI から切り離してテストする。
+/// 「なおし方を見る」の判断部分（Kotlin原本 <c>GuidedFixDialog</c> の分岐、3.401.0）。WinUI から切り離してテストする。
 /// Target＝Fixable かつ miss&gt;0 かつ BlockedNow でない最初の枠（BlockedNow は同じ画面の診断が「いまの希望のままでは埋まらない」と
 /// 言っている枠＝ここで「動かせる人がいます」と言うと矛盾する）。Target が無くても Blocked/Infeasible が残るなら AllDone にしない。
 /// </summary>

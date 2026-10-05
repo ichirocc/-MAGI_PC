@@ -104,7 +104,7 @@ public sealed partial class MagiViewModel
     /// <summary>直近の確定の結果 1 行。確定の後のデータから変わったら出さない（§9）。</summary>
     public string? RelaxDoneLine() => _relaxDone is { } d && d.Ctx == RelaxCtxNow() ? d.Line : null;
 
-    /// <summary>確定「例外として上限を緩め、手順を当てる」（§6。ガードはすべて最初の書き換えより前）。Undo 1 段で設定と盤面がまとめて戻る。</summary>
+    /// <summary>確定「上限を緩め、手順を当てる（元に戻せます）」（§6。ガードはすべて最初の書き換えより前）。Undo 1 段で設定と盤面がまとめて戻る。</summary>
     public void RelaxAndApply(RelaxToken token)
     {
         var st = _state;

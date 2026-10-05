@@ -59,7 +59,7 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
    - S5「この希望を取り消したら」（2026-09-24、Kotlin cc17c27 同期）: エンジン `WishTrial.cs`、VM `MagiViewModel.WishTrial.cs`
      （試算・鮮度照合・確定 `CancelWishAndRebuild`＝Undo 1 段）、ホームの入口拡大と `ShowWishConflictsAsync` の試算行。仕様は Android の `docs/s5_wish_trial.md`。
    - S6「設定を緩めたら」（2026-09-26、Kotlin claude/merge-wub4fq 058ee56 同日）: エンジン `RelaxTrial.cs`（R1〜R13）・`V6SanityPort.HandPlacedUpperZeroIssue`、
-     VM `MagiViewModel.RelaxTrial.cs`（1 手探索が候補なしの後に背景で試算・`CancelRelaxTrial`・確定 `RelaxAndApply`＝上限 0→1＋手順を Undo 1 段、
+     VM `MagiViewModel.RelaxTrial.cs`（1 手探索が候補なしの後に背景で試算・`CancelRelaxTrial`・確定 `RelaxAndApply`＝上限 0回→1回まで＋手順を Undo 1 段、
      古い試算・再現しない手順は断る）、`NextActionGuide.RelaxTrialTextOf`、ホームの段（希望の段より先）と `ShowRelaxTrialAsync`。仕様は Android の `docs/s6_relax_trial.md`。
    - UI層＝5タブすべてに実体あり。勤務表タブはセル編集(タップ→担当可能シフト選択)・
      元に戻す/やり直す・違反ハイライト/希望バッジ・**シフト集計(職員別/日別、Kotlin原本TallyCardの
@@ -232,7 +232,7 @@ dotnet run --project MagiEngine.GoldenGen/MagiEngine.GoldenGen.csproj
      Android とのずれ、#23 ホーム大ボタンと下部バーの作成導線の重複）。主な追加: ホーム（被覆・次の一手・スマートアクション・進捗・副操縦・空状態）、
      勤務表（週ナビ・違反フィルタ・検索・祝日色・不足サマリー・集計詳細）、編集（職員×シフト回数マトリクス・必要人数/希望のカレンダー一括・
      月次チェックリスト・実働チェック・制約ヘルプ）、分析（要確認トリアージ `AnalysisTriage`・設定の見直し・C1 頭打ち／回数固定の影響）、
-     設定（36 色ピッカー・重み表）、シェル（状態バッジ・下部コマンドバー）、ホームの「なおすのを手伝って」。
+     設定（36 色ピッカー・重み表）、シェル（状態バッジ・下部コマンドバー）、ホームの「なおし方を見る」。
      VM 追加は各行のテストつき（MagiApp.ViewModels.Tests 416 緑）。
 10. ✅ 背景実行（**完了**。Android の WorkManager に直接対応する Windows デスクトップの機構は
     無いため、`OptimizationRepository` が元々プロセス内 pub/sub として設計されていた点を活かし、
@@ -330,6 +330,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+
+- 2026-10-05（Android 3.619.0 同期）: 画面の日本語の見直し（必須の約束→必須違反、計算では消えない→何度つくっても残る、証明つき・下限の見込みをやめる、目安の回数との差、グループ内の回数のばらつき、でき具合、S6 の文言）。表示のみ。
 
 - 2026-10-04（Android 062a839 同期、3.615.0 探索スイッチ群を「探索の強さ」ふつう／じっくりに統合）: C# 単独の差は 2 つ（出力不変）。①Android の Button/OutlinedButton 2 択は、この移植の既存の選択 UI（旧「希望どうしの衝突で止める」と同じ `ComboBox`）で出す。②`SearchStrength.Apply` は Kotlin の enum メンバー関数に当たる拡張メソッド（C# の enum はメソッドを持てない）。
 - 2026-10-04（Android ded1879 同期、後処理チェーンの段ごとの構造化記録）: C# 単独の差は 1 つ（出力不変）。`V6PostOptimizationResult.StageRecords` は positional record の既定値に定数しか書けないため `IReadOnlyList<PostStageRecord>? = null`（Kotlin は `emptyList()`）。`RunPostOptimization` は常に値を入れる。
@@ -562,7 +564,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
   Kotlin と一致。Kotlin に該当テストが無いため C# 側に `WishCountAboveStaffCapIsReported`・`AptBalances_SkipsShiftWithAnUndefinedDay` を追加
   （外すと両方赤を確認）。診断だけ＝盤面は不変。上流の同日コミットへ rebase 後 `dotnet test MagiEngine.Tests` 931/931・`MagiApp.ViewModels.Tests` 469/469 緑。
 - 2026-09-25（実データ精読の是正・エンジン層を同期、Kotlin d2421af 同日）: B1＝`ConstraintMus.DayProvablyInfeasible.CanServe` が希望固定より先に
-  `MayPlace` を見て、上限 0 のシフトへ希望固定した人を席に数えず「N件は同時に成立しません（証明つき）」を誤って出していた＝希望固定を優先
+  `MayPlace` を見て、上限 0 のシフトへ希望固定した人を席に数えず「N件は同時に成立しません」を誤って出していた＝希望固定を優先
   （`Hf66DataHardening` と同じ）。同型で `StaffProvablyInfeasible` の強制下限(C)が置けないシフトへの希望固定の日を差し引く。N2＝
   `V6SanityPort.WishSelfConflicts`（`WishSelfConflict` 組、c3n の窓がまるごと希望固定／c3w の前日も希望固定）を新設し、設定ミス診断 1b を
   それから読み（文言不変）、1c（禁止の並びに希望どうしで当たる、ワンタップなし）を追加。B4/B5＝HF70 の「希望以外HARD」と残存分析の
@@ -937,7 +939,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 - 2026-09-11 UX改善: UI用語統一・ゲーム要素廃止（ユーザー指示、Android 3.520.0と同時）:
   フェーズ名バッジ「狩猟」→「未完成」、感嘆符/進捗を煽る前置き（「できました！」「もう少しです。」）を
-  平易な文へ、旧語「できあがり度」を正式語「解消度」へ統一、「最適化」vs「計算」の混在を「最適化を実行
+  平易な文へ、旧語「できあがり度」を正式語「でき具合」へ統一、「最適化」vs「計算」の混在を「最適化を実行
   したか」という同一概念に絞って統一（`違反数の再計算`等の別概念は残置）。
   `HomeView.xaml(.cs)`/`EditView.xaml.cs`/`SettingsView.xaml(.cs)`/`AnalysisView.xaml(.cs)`/
   `MagiViewModel.Background.cs`/`MagiViewModel.SmartInitial.cs`/`MagiViewModel.cs`/`AnalysisTriage.cs`を

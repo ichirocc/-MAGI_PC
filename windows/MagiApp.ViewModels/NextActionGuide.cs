@@ -60,14 +60,14 @@ public static class NextActionGuide
     public const string RelaxPrereqWhy = "今の勤務表の勤務に合わせます（もう一度つくったときにその勤務が外れないため）。";
     public const string RelaxSetHead = "解消に使う設定";
 
-    /// <summary>1手の提案の得失を、利用者が最初に考える順に2行で言う。1行目＝必須の約束が減るか、2行目＝注意（増える要調整。無ければ null）。</summary>
+    /// <summary>1手の提案の得失を、利用者が最初に考える順に2行で言う。1行目＝必須違反が減るか、2行目＝注意（増える要調整。無ければ null）。</summary>
     public static (string HardLine, string? Caution) FixImpactLines(FixSuggestion s, Func<string, string> labelOf)
     {
-        var hardLine = s.DeltaHard < 0 ? $"必須の約束: 減る（{-s.DeltaHard}件）"
-            : s.DeltaHard == 0 ? "必須の約束: 変わらない"
-            : $"必須の約束: 増える（{s.DeltaHard}件）";
+        var hardLine = s.DeltaHard < 0 ? $"必須違反: {-s.DeltaHard}件減る"
+            : s.DeltaHard == 0 ? "必須違反: 変わらない"
+            : $"必須違反: {s.DeltaHard}件増える";
         var worse = s.Diff.Where(d => d.Delta > 0 && !MirrorKeys.Hard.Contains(d.Family)).ToList();
-        var caution = worse.Count == 0 ? null : "注意: " + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}"));
+        var caution = worse.Count == 0 ? null : "増える要調整: " + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}"));
         return (hardLine, caution);
     }
 
@@ -198,7 +198,7 @@ public static class NextActionGuide
         {
             var n = x.Staff < after.Length ? after[x.Staff].Count(v => v == x.Shift) : 0;
             var note = n > x.NewHi ? $"（この月は {n}回になります。要調整に数えます）" : "";
-            return $"{Name(x.Staff)} {Sym(x.Shift)} 上限 0→{x.NewHi}{note}";
+            return $"{Name(x.Staff)} {Sym(x.Shift)} 上限 0回→{x.NewHi}回まで{note}";
         }
         var preRows = r.Prerequisite.Select(x =>
         {
@@ -210,14 +210,14 @@ public static class NextActionGuide
         var inWin = r.Moves.Where(m => m.Day >= r.WindowFirst && m.Day <= r.WindowLast).ToList();
         var outWin = r.Moves.Where(m => m.Day < r.WindowFirst || m.Day > r.WindowLast).ToList();
         var lead = r.Prerequisite.Count == 0 ? $"この組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。"
-            : $"今の勤務表の勤務に合わせて上限を上げ、この組も例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
+            : $"今の勤務表に合わせて上限を上げます。そのうえでこの組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
         var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、上限0の勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         return new RelaxTrialText(
             Title: $"{target.Name} {target.Span}　{target.What}",
-            DialogTitle: $"例外として上限を緩める候補 — {target.Name} {target.Span} {target.What}",
+            DialogTitle: $"例外として上限を緩める候補：{target.Name} {target.Span} {target.What}",
             HardLine: $"必須違反: {r.H0}件 → {r.Rr}件",
-            ScaleLine: $"変更規模: 設定 {r.Prerequisite.Count + r.Relaxes.Count}項目・{people}人・{r.Moves.Count}セル",
+            ScaleLine: $"変わるもの: 設定{r.Prerequisite.Count + r.Relaxes.Count}つ、{people}人の勤務、{r.Moves.Count}か所",
             PrerequisiteRows: preRows,
             Lead: lead,
             Rows: r.Relaxes.Select(Row).ToList(),
