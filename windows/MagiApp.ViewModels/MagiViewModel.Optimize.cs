@@ -65,7 +65,7 @@ public sealed partial class MagiViewModel
     /// <summary>[テスト可視性のための追加] 直近の <see cref="RunV6FullOptimize"/> 呼出しが背後で走らせる Task。</summary>
     internal Task? LastRunOptimizeTask { get; private set; }
 
-    /// <summary>勤務表を最初からつくる（Kotlin <c>runV6FullOptimize()</c>）。何度つくっても残る／もう一度つくると外れる項目があれば <see cref="UiState.PreRunCheck"/> を出して止まる（つくる前の確認）。</summary>
+    /// <summary>勤務表を最初からつくる（Kotlin <c>runV6FullOptimize()</c>）。何度つくっても残る／再作成すると外れる項目があれば <see cref="UiState.PreRunCheck"/> を出して止まる（つくる前の確認）。</summary>
     public void RunV6FullOptimize()
     {
         var st = _state; var sched = _currentSchedule;
@@ -105,7 +105,7 @@ public sealed partial class MagiViewModel
     private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
 
     private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0
-        ? $"前回と同じ設定でもう一度つくります。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
+        ? $"前回と同じ設定で再作成します。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
         : null;
 
     /// <summary>本実行。<paramref name="pushUndo"/>＝false は Undo を積まない（S5 の確定がすでに積んでいる）。</summary>
@@ -259,8 +259,8 @@ public sealed partial class MagiViewModel
                 var keptMsg = s5 is null
                     ? KeptResultText.WithNote(KeptResultText.Screen(nowScore, baseScore), capNote)
                     : s5.H0 - baseReport.Hard > 0
-                        ? $"希望（{s5.Label}）を取り消しました。必須違反は {s5.H0} → {baseReport.Hard}（取り消しの分だけ）。もう一度つくっても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
-                        : $"希望（{s5.Label}）を取り消しましたが、もう一度つくっても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
+                        ? $"希望（{s5.Label}）を取り消しました。必須違反は {s5.H0} → {baseReport.Hard}（取り消しの分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
+                        : $"希望（{s5.Label}）を取り消しましたが、再作成しても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
                 await PushReportAsync(_state ?? st0, kept, baseReport, transform: ui =>
                 {
                     ui.MessageIsError = false;
@@ -283,8 +283,8 @@ public sealed partial class MagiViewModel
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
                     ? $"勤務表ができました: 必須違反 {res.Report.Hard}件・違反の合計 {res.Report.Total}件 ({NowMs() - startMs}ms)"
-                    : $"希望（{s5.Label}）を取り消して、もう一度つくりました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
-                      (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。もう一度つくるか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
+                    : $"希望（{s5.Label}）を取り消して、再作成しました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
+                      (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。再作成するか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
                 {
                     ui.MessageIsError = false;
@@ -446,7 +446,7 @@ public sealed partial class MagiViewModel
 
     /// <summary>
     /// [ソフト研磨のみ] 現在の勤務表をHARDガード付きで局所研磨し、SOFT違反だけを削る。Kotlin原本
-    /// <c>runSoftPolish()</c>（1411-1504行）の移植。「もう一度つくる」と違い破壊/多様化を行わないため
+    /// <c>runSoftPolish()</c>（1411-1504行）の移植。「再作成」と違い破壊/多様化を行わないため
     /// 必須が一時的に増えることはなく、keep-best により入力より悪い結果は採用しない（HARD=0 を壊さない）。
     /// </summary>
     public void RunSoftPolish()

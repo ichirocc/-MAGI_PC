@@ -64,7 +64,7 @@
             <ContentControl x:Name="HostContent" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
         </NavigationView>
 
-        <!-- [phase9 #23] 下部コマンドバー（Kotlin原本 BottomCommandBar）: 元に戻す／やり直し（できるときだけ）＋主ボタン（やめる／勤務表をつくる／もう一度つくる）。 -->
+        <!-- [phase9 #23] 下部コマンドバー（Kotlin原本 BottomCommandBar）: 元に戻す／やり直し（できるときだけ）＋主ボタン（やめる／勤務表をつくる／再作成する）。 -->
         <Grid Grid.Row="3" Padding="16,10" ColumnSpacing="10" Background="{StaticResource MagiSurfaceVariantBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />

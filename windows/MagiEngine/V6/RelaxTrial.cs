@@ -32,7 +32,7 @@ public static class RelaxTrial
         public int PKeep => Math.Min(H0, Rk);
         public int PPrereq => Math.Min(H0, RkH);
         public int PRelax => Math.Min(H0, Rr);
-        /// <summary>設定をどれも変えずにもう一度つくる場合と比べて減る見込み。</summary>
+        /// <summary>設定をどれも変えずに再作成する場合と比べて減る見込み。</summary>
         public int Att => PKeep - PRelax;
         /// <summary>そのうち Relaxes（手置きに合わせる分を除く）に帰属する分。</summary>
         public int AttWalls => PPrereq - PRelax;

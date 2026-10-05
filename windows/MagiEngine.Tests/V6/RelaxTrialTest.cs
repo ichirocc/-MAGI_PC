@@ -146,6 +146,6 @@ public class RelaxTrialTest
         var nb = RelaxTrial.ApplyMoves(board, r.Moves, (_, _) => false)!;
         Assert.Equal(r.Rr, UnifiedViolationChecker.Check(ns, nb).Hard);
         var issue = Assert.Single(V6SanityPort.Build(st, board).Guidance, g => g.Problem.Contains("上限0のシフトが"));
-        Assert.Equal("今の勤務表に個人の上限0のシフトが 4件 入っています。もう一度つくると外されます", issue.Problem);
+        Assert.Equal("今の勤務表に個人の上限0のシフトが 4件 入っています。再作成すると外されます", issue.Problem);
     }
 }

@@ -142,7 +142,7 @@ public sealed partial class MagiViewModel
     public string? WishCancelOutcomeLine() =>
         Ui.WishCancelOutcome is { } o && CtxMatches(_cancelOutcomeCtx) ? o.Line : null;
 
-    /// <summary>確定「希望を取り消して、もう一度つくる」（§6 の 1〜10。ガードはすべて最初の書き換えより前＝I5）。</summary>
+    /// <summary>確定「希望を取り消して再作成」（§6 の 1〜10。ガードはすべて最初の書き換えより前＝I5）。</summary>
     public void CancelWishAndRebuild(WishTrialToken token)
     {
         var st = _state;
@@ -172,7 +172,7 @@ public sealed partial class MagiViewModel
         SaveNow();
         var name = token.Staff >= 0 && token.Staff < st.StaffList.Count ? st.StaffList[token.Staff].Name : $"職員{token.Staff + 1}";
         var sym = token.Shift >= 0 && token.Shift < st.Shifts.Count ? st.Shifts[token.Shift].Kigou : "?";
-        LogOp("I", $"希望取消＋もう一度つくる: {name} {token.Day + 1}日（{sym}） {r.H0}/{r.Hx}/{r.Rk}/{r.Rr}/{r.PCancel}");
+        LogOp("I", $"希望取消＋再作成: {name} {token.Day + 1}日（{sym}） {r.H0}/{r.Hx}/{r.Rk}/{r.Rr}/{r.PCancel}");
         StartFullOptimize(pushUndo: false, new S5Ctx(name, token.Day, sym, r.H0, r.Hx, r.Rk, r.Rr, r.PCancel));
     }
 

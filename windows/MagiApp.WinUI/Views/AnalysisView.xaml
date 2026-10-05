@@ -117,7 +117,7 @@
                 <StackPanel x:Name="PinList" Spacing="6" />
                 <TextBlock x:Name="PinMoreText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <TextBlock x:Name="PinHintText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap"
-                           Text="押すと設定が変わります。「元に戻す」で戻せます。効果はもう一度つくると分かります。" />
+                           Text="押すと設定が変わります。「元に戻す」で戻せます。効果は再作成すると分かります。" />
                 <Button x:Name="PinGoEditButton" Content="個人の回数を見直す" HorizontalAlignment="Left" Click="OnGoEditClick" />
             </StackPanel>
 

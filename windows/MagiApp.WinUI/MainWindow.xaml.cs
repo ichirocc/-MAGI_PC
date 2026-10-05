@@ -224,7 +224,7 @@ public sealed partial class MainWindow : Window
     /// [phase9 #23] シェル共通のトップバー（状態バッジ）と下部コマンドバー（Kotlin原本 <c>MagiTopBar</c>／<c>BottomCommandBar</c>）。
     /// バッジ: 実行中（必須N か soft の init→best）／配布可（結果あり・必須0）／必須違反 N／未計算。読込前は出さない。
     /// 主ボタンは文脈で 1 本: 実行中・提案探索中は「やめる」（<see cref="MagiViewModel.Stop"/> が両方を戻す）、それ以外は
-    /// 「勤務表をつくる」／「もう一度つくる」（どちらも本最適化）。元に戻す／やり直しは、できるときだけ出す。
+    /// 「勤務表をつくる」／「再作成」（どちらも本最適化）。元に戻す／やり直しは、できるときだけ出す。
     /// </summary>
     private void RenderShell()
     {
@@ -257,7 +257,7 @@ public sealed partial class MainWindow : Window
         UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         var stopping = ui.Running || ui.FixSearching;
-        MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ もう一度つくる" : "▶ 勤務表をつくる";
+        MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         MainActionButton.Background = (Brush)Application.Current.Resources[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];

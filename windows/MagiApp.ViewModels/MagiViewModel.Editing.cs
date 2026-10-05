@@ -552,7 +552,7 @@ public sealed partial class MagiViewModel
         var newLo = System.Math.Max(lo + loDelta, 0);
         var newHi = System.Math.Max(hi + hiDelta, newLo);
         if (newLo == lo && newHi == hi) return;
-        LogOp("I", $"回数固定を緩和: {OpNm(i)} {OpSy(k)} {lo}〜{hi} → {newLo}〜{newHi}（もう一度つくると効果が分かります）");
+        LogOp("I", $"回数固定を緩和: {OpNm(i)} {OpSy(k)} {lo}〜{hi} → {newLo}〜{newHi}（再作成すると効果が分かります）");
         SetStaffRange(i, k, newLo.ToString(), newHi.ToString());
     }
 

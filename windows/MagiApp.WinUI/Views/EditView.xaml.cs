@@ -202,7 +202,7 @@ public sealed partial class EditView : UserControl
         NextStepText.Text = "次の一手: " + (
             c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
             : c.Wishes == 0 ? "次に『希望シフト』を登録すると でき具合 が上がります。"
-            : $"準備OK。画面下の『{(ui.HasResult ? "もう一度つくる" : "勤務表をつくる")}』で作成できます。");
+            : $"準備OK。画面下の『{(ui.HasResult ? "再作成" : "勤務表をつくる")}』で作成できます。");
         RenderChecklist(ui);
     }
 

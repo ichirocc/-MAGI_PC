@@ -75,7 +75,7 @@ public static class PreRunCheckText
         var overRows = s.WishOverCaps.Select(w => new PreRunRow($"{Name(w.Staff)}「{Sym(w.Shift)}」 本人の希望{w.Wished}件（個人の上限{w.Hi}回）")).ToList();
         return new PreRunSheetText(
             floor.Count == 0 ? null : $"何度つくっても残る（{floor.Count}件）", floor,
-            rerun.Count == 0 ? null : $"もう一度つくると外れる（{rerun.Count}件）", rerun,
+            rerun.Count == 0 ? null : $"再作成すると外れる（{rerun.Count}件）", rerun,
             wall, floor.Any(r => r.Wish), overNote, overRows,
             floor.Any(r => r.Text.EndsWith(ZeroCapTag)) ? ZeroCapNoteText : null);
     }

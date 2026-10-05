@@ -29,7 +29,7 @@ public class PreRunCheckTextTest
         }, t.FloorRows.Select(r => r.Text));
         Assert.True(t.HasWishRows);
         Assert.Equal(PreRunCheckText.ZeroCapNoteText, t.ZeroCapNote);
-        Assert.Equal("もう一度つくると外れる（4件）", t.RerunHeader);
+        Assert.Equal("再作成すると外れる（4件）", t.RerunHeader);
         Assert.Equal(new[] { "職員08 10/9 Cｱ", "職員04 10/10 Aｱ", "職員04 10/11 Cｵ", "職員08 10/29 Cｱ" }, t.RerunRows.Select(r => r.Text));
         Assert.Equal(new (int?, int?)[] { (7, 8), (3, 9), (3, 10), (7, 28) }, t.RerunRows.Select(r => (r.Staff, r.Day)));
         Assert.Equal("職員08「有」など：上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、入れない指定を設定で見直してください。", t.OverCapNote);

@@ -43,7 +43,7 @@ public class AnalysisTriageTest
         ui.RelaxedBoard = true;
         var t = AnalysisTriage.Build(ui, L);
         Assert.False(t.Computed);
-        Assert.Equal("設定を緩めて手順を当てた盤面の概算です（もう一度つくる前）。", t.SearchNote);
+        Assert.Equal("設定を緩めて手順を当てた盤面の概算です（再作成する前）。", t.SearchNote);
         var done = Ui(B(("c3", 2)), hasResult: true);
         done.RelaxedBoard = true;
         Assert.StartsWith("最適化後も残っている", AnalysisTriage.Build(done, L).SearchNote);

@@ -220,7 +220,7 @@ public sealed partial class HomeView : UserControl
         NoteText.Visibility = note is null ? Visibility.Collapsed : Visibility.Visible;
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
-        // [S5 §9] 直近の「希望を取り消して、もう一度つくる」の結果（VM が鮮度を照合済み）。
+        // [S5 §9] 直近の「希望を取り消して再作成」の結果（VM が鮮度を照合済み）。
         var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
@@ -562,7 +562,7 @@ public sealed partial class HomeView : UserControl
                     {
                         var confirm = new Button
                         {
-                            Content = "希望を取り消して、もう一度つくる", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
+                            Content = "希望を取り消して再作成", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
                             Foreground = BrushOf("MagiErrorBrush"), IsEnabled = !ui.Running,
                         };
                         var token = ready.Token;
@@ -588,7 +588,7 @@ public sealed partial class HomeView : UserControl
             if (_vm.WishTrialControlFor() is { } control && NextActionGuide.WishTrialKeepOnlyText(control) is { } keepOnly)
             {
                 panel.Children.Add(new TextBlock { Text = keepOnly, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-                var rebuild = new Button { Content = "もう一度つくる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44, IsEnabled = !ui.Running };
+                var rebuild = new Button { Content = "再作成", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44, IsEnabled = !ui.Running };
                 rebuild.Click += (_, _) => { dialog.Hide(); _vm.RunV6FullOptimize(); };
                 panel.Children.Add(rebuild);
             }
@@ -636,7 +636,7 @@ public sealed partial class HomeView : UserControl
     /// [phase9 #24] 「なおし方を見る」（Kotlin原本 <c>GuidedFixDialog</c>、3.401.0/3.475.0）。判断は <see cref="GuidedFixPlan"/>、
     /// 候補の有効/無効は <see cref="GuidedFixFlow"/>（どちらも UI 非依存でテスト済み）。押したら押下後の再検査（<see cref="UiState.CheckRev"/>）が
     /// 反映されるまで全候補を無効にし「再検査中…」を出す。Schedule の変更だけでは再有効化しない（古い診断と新しい盤面の混在を防ぐ）。
-    /// ボタンは常に「閉じる」だけ（「もう一度つくる」は下部バーに一本化）。
+    /// ボタンは常に「閉じる」だけ（「再作成」は下部バーに一本化）。
     /// </summary>
     private async System.Threading.Tasks.Task ShowGuidedFixAsync()
     {
@@ -703,11 +703,11 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = "いまの希望・担当のままでは埋められない日が残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "もう一度つくっても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "再作成しても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             }
             else
             {
-                panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。仕上げにもう一度つくると全体が整います。", TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。仕上げに再作成すると全体が整います。", TextWrapping = TextWrapping.Wrap });
             }
         }
         void OnChanged(object? s, PropertyChangedEventArgs e)
@@ -810,9 +810,9 @@ public sealed partial class HomeView : UserControl
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。希望を1件調整するか、担当を追加してください。"
                 : diag.BlockedNowSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠はいまの希望のままでは埋められません（残りはもう一度つくると解消し得ます）。"
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠はいまの希望のままでは埋められません（残りは再作成すると解消し得ます）。"
                     : diag.InfeasibleSlots == 0
-                        ? $"不足 {diag.TotalShortfall} 人は枠が足りています。もう一度つくるか設定の見直しで解消し得ます。"
+                        ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再作成するか設定の見直しで解消し得ます。"
                         : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {

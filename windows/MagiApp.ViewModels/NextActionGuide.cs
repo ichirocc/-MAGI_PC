@@ -46,7 +46,7 @@ public static class NextActionGuide
     /// <summary>[#41] 手動固定のセルは試算の候補にしない（LockedWishKeys が外す）＝担当外と混ぜず、固定が理由だと言う。</summary>
     public const string WishTrialPinned = "このセルは手動固定のため、自動では変更しません。固定を外すと試算できます。";
     /// <summary>希望タブの注記（希望が必須違反の並びに掛かっているとき）。希望を変えても盤面のセルはそのまま＝黙って崩さない。</summary>
-    public const string WishTabKeepNote = "希望を変えても勤務表のセルはそのままです（未反映になります）。もう一度つくると希望に合わせます。";
+    public const string WishTabKeepNote = "希望を変えても勤務表のセルはそのままです（未反映になります）。再作成すると希望に合わせます。";
     public static string? WishTabInvolvedLine(string wishSymbol, IReadOnlyList<string> families) =>
         families.Contains("c3n") ? $"{wishSymbol}はこの禁止の並びに関係しています。"
         : families.Contains("c3w") ? $"{wishSymbol}はこの希望の前日の禁止に関係しています。"
@@ -57,7 +57,7 @@ public static class NextActionGuide
     public const int WishTrialGroupLimit = 8;
     public const string RelaxWishLine = "希望: 変更しません";
     public const string RelaxPrereqHead = "前提として上限を上げる設定";
-    public const string RelaxPrereqWhy = "今の勤務表の勤務に合わせます（もう一度つくったときにその勤務が外れないため）。";
+    public const string RelaxPrereqWhy = "今の勤務表の勤務に合わせます（再作成したときにその勤務が外れないため）。";
     public const string RelaxSetHead = "解消に使う設定";
 
     /// <summary>1手の提案の得失を、利用者が最初に考える順に2行で言う。1行目＝必須違反が減るか、2行目＝注意（増える要調整。無ければ null）。</summary>
@@ -151,11 +151,11 @@ public static class NextActionGuide
     public static string? WishTrialText(WishTrial.Outcome o) => o switch
     {
         WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を取り消しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。すべての組み合わせを試したわけではありません。",
-        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減り、もう一度つくるとさらに{r.B}件 減る見込みです。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減り、再作成するとさらに{r.B}件 減る見込みです。",
         WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減ります。",
-        WishTrial.Result r when r.Rk >= r.H0 => $"取り消してもう一度つくると、必須違反が{r.B}件 減る見込みです。",
-        WishTrial.Result r when r.Att > 0 => $"もう一度つくるだけの場合より、さらに{r.Att}件 減る見込みです。",
-        WishTrial.Result => "取り消さなくても、もう一度つくるだけで同じだけ減る見込みです。",
+        WishTrial.Result r when r.Rk >= r.H0 => $"取り消して再作成すると、必須違反が{r.B}件 減る見込みです。",
+        WishTrial.Result r when r.Att > 0 => $"再作成するだけの場合より、さらに{r.Att}件 減る見込みです。",
+        WishTrial.Result => "取り消さなくても、再作成するだけで同じだけ減る見込みです。",
         WishTrial.Unavailable u => $"試算できませんでした（{u.Reason}）。",
         _ => null,
     };
@@ -165,7 +165,7 @@ public static class NextActionGuide
 
     /// <summary>[S5] Rk &lt; H0 の盤面でダイアログの先頭に出す文（§5）。対照だけで減らないなら null。</summary>
     public static string? WishTrialKeepOnlyText(WishTrial.Control control) =>
-        control.Rk < control.H0 ? $"希望を残したまま、もう一度つくるだけで必須違反が{control.H0 - control.Rk}件 減る見込みです。" : null;
+        control.Rk < control.H0 ? $"希望を残したまま、再作成するだけで必須違反が{control.H0 - control.Rk}件 減る見込みです。" : null;
 
     private static IReadOnlyList<string> FamsAt(UiState ui, int i, int j) =>
         ui.ViolationCellFamilies.TryGetValue($"{i},{j}", out var f) ? f : Array.Empty<string>();
@@ -211,7 +211,7 @@ public static class NextActionGuide
         var outWin = r.Moves.Where(m => m.Day < r.WindowFirst || m.Day > r.WindowLast).ToList();
         var lead = r.Prerequisite.Count == 0 ? $"この組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。"
             : $"今の勤務表に合わせて上限を上げます。そのうえでこの組を例外として緩めると、必須違反が {r.Att}件 減る見込みです。";
-        var keep = r.Rk > r.H0 ? $"設定をそのままにもう一度つくると、上限0の勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
+        var keep = r.Rk > r.H0 ? $"設定をそのままに再作成すると、上限0の勤務が外されて必須違反が {r.Rk}件 に増えます（元の勤務表が残ります）。" : null;
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         return new RelaxTrialText(
             Title: $"{target.Name} {target.Span}　{target.What}",

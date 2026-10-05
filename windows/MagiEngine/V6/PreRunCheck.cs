@@ -3,7 +3,7 @@ using MagiEngine.Model;
 namespace MagiEngine.V6;
 
 /// <summary>
-/// [つくる前の確認] 本実行の前に「何度つくっても残る」「もう一度つくると外れる」を数える（Android <c>PreRunCheck.kt</c>、
+/// [つくる前の確認] 本実行の前に「何度つくっても残る」「再作成すると外れる」を数える（Android <c>PreRunCheck.kt</c>、
 /// <c>docs/business-logic.md</c> の診断の節）。表示と誘導だけ＝探索・評価・重みには触れない。希望も上限も自動で変えない（HF77）。
 /// </summary>
 public static class PreRunCheck

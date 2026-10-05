@@ -106,7 +106,7 @@ public static partial class V6SanityPort
 
     /// <summary>
     /// [S6 §14 Q5] 個人の上限 0 のシフトが手で置いてある（希望で固定したセルを除く）。本実行の入口の clear が外すので、
-    /// もう一度つくると消える。盤面に依存するため <see cref="BuildGuidance"/>（設定だけの診断）には入れない。
+    /// 再作成すると消える。盤面に依存するため <see cref="BuildGuidance"/>（設定だけの診断）には入れない。
     /// </summary>
     public static SettingIssue? HandPlacedUpperZeroIssue(MagiState state, Problem p, int[][] s)
     {
@@ -123,7 +123,7 @@ public static partial class V6SanityPort
             }
         if (cells.Count == 0) return null;
         return new SettingIssue(IssueKind.Range, $"上限 0 の勤務（{string.Join("・", cells.Take(3))}{(cells.Count > 3 ? " ほか" : "")}）",
-            $"今の勤務表に個人の上限0のシフトが {cells.Count}件 入っています。もう一度つくると外されます",
+            $"今の勤務表に個人の上限0のシフトが {cells.Count}件 入っています。再作成すると外されます",
             "残すなら、その人のそのシフトの個人上限を 1 以上に上げてください");
     }
 

@@ -137,7 +137,7 @@ public sealed record AnalysisTriage(
         var note = computed
             ? "最適化後も残っている項目です。構造的に残ると判定されたものは上へ移しています。"
             : ui.RelaxedBoard
-                ? "設定を緩めて手順を当てた盤面の概算です（もう一度つくる前）。"
+                ? "設定を緩めて手順を当てた盤面の概算です（再作成する前）。"
                 : "実行前の概算です。期間の制約・禁止の並びなど、設定の組み合わせによっては、つくったあとも残る場合があります。";
         return new AnalysisTriage(computed, blockers, AggregateIssues(ui.SettingIssues), searching, ok, busy, note);
     }

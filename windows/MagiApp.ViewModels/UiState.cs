@@ -179,7 +179,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private int relaxRev;
     /// <summary>[S6] 背景で設定の壁を探している。</summary>
     [ObservableProperty] private bool relaxSearching;
-    /// <summary>[S5] 直近の「希望を取り消して、もう一度つくる」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
+    /// <summary>[S5] 直近の「希望を取り消して再作成」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
     [ObservableProperty] private WishCancelOutcome? wishCancelOutcome;
 
     /// <summary>[つくる前の確認] 非 null の間シートを出す。</summary>
@@ -277,7 +277,7 @@ public sealed record PinTargetView(
     int PinnedCount,
     int Attempts);
 
-/// <summary>[S5] 「希望を取り消して、もう一度つくる」の結果（<c>docs/s5_wish_trial.md</c> §9）。<see cref="Line"/> は次にやることカードに出す 1 行。</summary>
+/// <summary>[S5] 「希望を取り消して再作成」の結果（<c>docs/s5_wish_trial.md</c> §9）。<see cref="Line"/> は次にやることカードに出す 1 行。</summary>
 public sealed record WishCancelOutcome(string Name, int Day, string Symbol, int H0, int PCancel, int G, string Line);
 
 /// <summary>[Android 3.615.0同期] Thorough は測定中の4フラグを ON、Normal は既定値へ戻す（出力は従来どおり）。</summary>

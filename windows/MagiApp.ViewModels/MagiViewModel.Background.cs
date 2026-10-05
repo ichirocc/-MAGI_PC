@@ -247,7 +247,7 @@ public sealed partial class MagiViewModel
             LogOp("W", "バックグラウンド最適化の結果を破棄しました（最適化中に設定またはデータが変わったため）");
             Ui.MessageIsError = false;
             Ui.Running = false;
-            Ui.Message = "最適化中に設定が変わったため、結果は反映しませんでした。もう一度つくってください。";
+            Ui.Message = "最適化中に設定が変わったため、結果は反映しませんでした。再作成してください。";
             return;
         }
         _bgStateKey = 0L;

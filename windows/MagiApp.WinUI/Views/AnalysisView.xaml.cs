@@ -452,7 +452,7 @@ public sealed partial class AnalysisView : UserControl
         {
             C1Title.Text = "期間の制約が残っています（原因未確定）";
             C1UnknownText.Text = $"残り {diag.RemainingC1} 件。今回の整えでは、この残りについて直し方を試した記録が残っていません。" +
-                "原因は特定できていません。もう一度つくると記録が取れる場合があります。";
+                "原因は特定できていません。再作成すると記録が取れる場合があります。";
             C1UnknownText.Visibility = Visibility.Visible;
             C1NoteText.Visibility = C1MoreText.Visibility = C1DetailToggle.Visibility = C1GoEditButton.Visibility = Visibility.Collapsed;
             return;
