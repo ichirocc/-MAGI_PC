@@ -806,7 +806,7 @@ public static partial class V6SanityPort
                     // 上限 0 は意図した「入れない指定」（3.507.0）＝設定ミスと呼ばない。
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{Sym(k)}」",
                         $"個人の上限0（入れない指定）に希望が{wished}件載っています。残るのは要調整です",
-                        "希望を変えるか、例外として上限を緩めてください", Neutral: true));
+                        "希望を変えるか、設定で上限を見直してください", Neutral: true));
                 }
                 else if (wished > hi)
                 {

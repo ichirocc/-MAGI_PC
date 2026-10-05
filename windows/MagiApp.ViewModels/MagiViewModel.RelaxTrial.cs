@@ -26,6 +26,9 @@ public sealed partial class MagiViewModel
     private RelaxCtx? RelaxCtxNow() =>
         _state is { } st && _currentSchedule is { } b ? new RelaxCtx(StateKey(st), BoardKey(b)) : null;
 
+    /// <summary>[S6] 個人の上限0は例外でも緩めない（Android 3.620.0、2026-10-05 ユーザー決定）。false の間は自動でも再試行でも試算を始めない。</summary>
+    internal const bool RelaxTrialEnabled = false;
+
     /// <summary>背景で起点 3 件まで試算する（§8）。同じ ctx で済んでいる・走っているなら何もしない。</summary>
     internal void StartRelaxTrial()
     {
@@ -99,7 +102,7 @@ public sealed partial class MagiViewModel
     public bool RelaxStopped() => _relaxStoppedCtx is { } c && c == RelaxCtxNow() && _relaxResult is null;
 
     /// <summary>止めた試算を利用者の操作でやり直す。</summary>
-    public void RetryRelaxTrial() => StartRelaxTrial();
+    public void RetryRelaxTrial() { if (RelaxTrialEnabled) StartRelaxTrial(); }
 
     /// <summary>直近の確定の結果 1 行。確定の後のデータから変わったら出さない（§9）。</summary>
     public string? RelaxDoneLine() => _relaxDone is { } d && d.Ctx == RelaxCtxNow() ? d.Line : null;

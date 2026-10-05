@@ -111,7 +111,7 @@ public sealed partial class MagiViewModel
             Ui.FixSearched = focusName.Length == 0;
             Ui.FixDoneKey = focusKey;
             // [S6 §8] 全体の 1 手探索が必須を減らす候補なしで終わったら、背景で設定の壁を探す。
-            if (focusName.Length == 0 && !list.Any(x => x.DeltaHard < 0) && Ui.BestHard > 0) StartRelaxTrial();
+            if (focusName.Length == 0 && !list.Any(x => x.DeltaHard < 0) && Ui.BestHard > 0 && RelaxTrialEnabled) StartRelaxTrial();
         }
         catch (OperationCanceledException)
         {

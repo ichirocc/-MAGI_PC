@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-05（Android 3.620.0 同期）: 個人の上限0は緩めない（ユーザー決定）。S6 の試算を自動でも再試行でも始めない（`RelaxTrialEnabled=false`、呼び出し側で止める＝`StartRelaxTrial` 単体のテストは残す）。緩和を誘う文言を「設定で見直す」へ。
+
 - 2026-10-05（C# 単独・出力同一）: CI で `FixSearchFinishingDuringABoardJobWritesNothing` が 1 回だけ「no continuation was posted」で落ちた。背景の探索が `await` に届く前に終わると続きがその場で走り、UI の列に積まれない競合。直し方の探索と違反チェックの `await Task.Run(…)` に `ConfigureAwaitOptions.ForceYielding` を付け、続きを常に UI の列へ積む（実アプリでは元から列で走る経路が大半＝結果は同じ）。
 
 - 2026-10-05（Android 3.619.0 同期）: 画面の日本語の見直し（必須の約束→必須違反、計算では消えない→何度つくっても残る、証明つき・下限の見込みをやめる、目安の回数との差、グループ内の回数のばらつき、でき具合、S6 の文言）。表示のみ。

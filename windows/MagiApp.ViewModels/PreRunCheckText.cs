@@ -20,11 +20,11 @@ public sealed record PreRunSheetText(
 public static class PreRunCheckText
 {
     public const string ZeroCapTag = "（入れないシフトの指定が関係）";
-    public const string ZeroCapNoteText = "「入れないシフトの指定が関係」の行は、個人の上限0（入れない指定）が原因で残ります。希望のせいではありません。例外として緩めると解ける場合があります。つくったあとに「設定を緩めたら」で試せます。";
+    public const string ZeroCapNoteText = "「入れないシフトの指定が関係」の行は、個人の上限0（入れない指定）が原因で残ります。希望のせいではありません。見直すときは、設定で入れない指定を変えてください。";
     public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。";
     public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
-    public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、例外として後から「設定を緩めたら」で試せます。";
-    public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、例外として上限を緩めてください。";
+    public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、入れない指定を設定で見直してください。";
+    public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、設定で上限を見直してください。";
     public const string RerunNote = "今の勤務表に個人の上限（0回）のシフトが入っています。つくると外されます。";
 
     public static PreRunSheetText Of(PreRunCheck.Summary s, UiState ui)
@@ -63,7 +63,7 @@ public static class PreRunCheckText
 
         var rerun = s.RerunClears.Select(c => new PreRunRow($"{Name(c.Staff)} {Day(c.Day)} {Sym(c.Shift)}", c.Staff, c.Day)).ToList();
         var wall = s.Wall is { } h
-            ? $"個人の上限0：{h.Pairs}組（{h.StaffCount}人）。入れないシフトの指定です。つくったあとに、例外として緩める試算もできます。"
+            ? $"個人の上限0：{h.Pairs}組（{h.StaffCount}人）。入れないシフトの指定です。"
             : null;
         string? overNote = null;
         if (s.WishOverCaps.Count > 0)
