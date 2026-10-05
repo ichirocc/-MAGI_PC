@@ -57,7 +57,7 @@
                 </Border>
                 <HyperlinkButton x:Name="TriageSummaryToggle" Padding="0" Click="OnTriageSummaryToggleClick" />
                 <StackPanel x:Name="TriageSummaryList" Spacing="2" Visibility="Collapsed" />
-                <TextBlock x:Name="TriageRunningNote" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="※実行中のため確定前の値です（確定後に最新化）" />
+                <TextBlock x:Name="TriageRunningNote" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="※実行中のため、確定前の値です（確定すると最新の値になります）" />
             </StackPanel>
 
             <!-- ② 違反の内訳 -->

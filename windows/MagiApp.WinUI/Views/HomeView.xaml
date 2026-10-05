@@ -73,7 +73,7 @@
                     <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" />
                     <HyperlinkButton x:Name="DetailToggle" Click="OnDetailToggleClick" Padding="0" />
                     <TextBlock x:Name="DetailText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                               Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映済み・「元に戻す」で取消可・確定は書き出し時です。" />
+                               Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映しました。「元に戻す」で取り消せます。確定は書き出すときです。" />
                     <Grid x:Name="ProgressRow" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

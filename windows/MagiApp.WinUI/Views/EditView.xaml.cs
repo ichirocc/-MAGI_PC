@@ -175,7 +175,7 @@ public sealed partial class EditView : UserControl
         {
             0 => "翌月だけの条件：希望・必要人数・例外（毎月ここから）",
             1 => "入退職・所属・資格スキル・個人の回数（随時変更）",
-            _ => "毎月は変えない土台：シフト・ルール・人数（制度変更時のみ）",
+            _ => "毎月は変えない基本の設定：シフト・ルール・人数（制度変更時のみ）",
         };
         MonthlyPanel.Visibility = _door == 0 ? Visibility.Visible : Visibility.Collapsed;
         StaffPanel.Visibility = _door == 1 ? Visibility.Visible : Visibility.Collapsed;

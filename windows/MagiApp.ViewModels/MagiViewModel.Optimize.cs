@@ -282,7 +282,7 @@ public sealed partial class MagiViewModel
                 _resultSchedule = res.Schedule.Copy2D();
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
-                    ? $"勤務表ができました: 必須={res.Report.Hard} 合計={res.Report.Total} ({NowMs() - startMs}ms)"
+                    ? $"勤務表ができました: 必須違反 {res.Report.Hard}件・違反の合計 {res.Report.Total}件 ({NowMs() - startMs}ms)"
                     : $"希望（{s5.Label}）を取り消して、もう一度つくりました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
                       (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。もう一度つくるか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>

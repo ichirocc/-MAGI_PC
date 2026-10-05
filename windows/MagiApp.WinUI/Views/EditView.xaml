@@ -203,7 +203,7 @@
             <!-- ===== 年間マスター（制度変更時のみ） ===== -->
             <StackPanel x:Name="MasterPanel" Spacing="8">
                 <TextBlock Text="年間マスター" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                <TextBlock Text="土台の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
+                <TextBlock Text="基本の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
                            TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
                 <TextBlock Text="見直し候補メモ" Style="{StaticResource MagiTitleSmallTextStyle}" />
