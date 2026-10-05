@@ -48,12 +48,16 @@ T6（取込失敗を完了と出さない）は CSV 取込の結果表示が担�
 | 表示 | 原因・変更・残る違反の説明 | ViewModel／UI（重み・判定を持たない） |
 | 保存 | state・盤面・Undo・スナップショット | `RunFiles`・`StateParser`・WorkManager |
 
-## 既知の差分（緑でも解消扱いにしない）
+## 「low web=9 native=8」について（差分ではない）
 
-- golden の low が Web 9／Native 8（ホストテストの出力に毎回出る）。parity の比較対象外の経路で、原因は未記録。
+ホストテストの出力に毎回出る `low web=9 native=8 DIFF` は、`V6WebGoldenParityTest` が旧 Web 版（v5.33.19）の書き出しに保存された内訳と、
+いまの Kotlin の checker の値を並べて印字しているだけ。保存側の内訳は同じファイルの盤面・違反表と食い違う古いスナップショット
+（例: 内訳 covU=0 なのに違反表に covU 9 セル）なので、テストは SOFT 族を照合せず HARD=0 と自己整合だけを確かめる（テストのクラス注記）。
+Kotlin／C++／C# の一致は native-parity CI と言語跨ぎ期待値が守っており、この行は parity の差分ではない。
 
 ## 仕様書のうち取り込まなかった点（現行と食い違う）
 
+- §13.2「既知差分 low: Web 9 / Native 8（未解消）」: 上の節のとおり差分ではない（旧 Web 版の古い内訳との並記）。
 - §10 S6 の確定（上限 0→1）: 3.620.0 で画面から外した（INV-02）。
 - §4.4・§15「C2Polish は撤去済み」: `C2Polish` は残っている（既定 OFF・`c2PolishEnabled`）。
 - §7.1・§8・§15・§16 の DreamSearchEngine／ReplayWorld: この repo の main には無い（ユーザー提供の外部コード）。段契約・Replay の仕様は導入するときに取り込む。
