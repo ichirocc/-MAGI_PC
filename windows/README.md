@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-05（C# 単独・出力同一）: CI で `FixSearchFinishingDuringABoardJobWritesNothing` が 1 回だけ「no continuation was posted」で落ちた。背景の探索が `await` に届く前に終わると続きがその場で走り、UI の列に積まれない競合。直し方の探索と違反チェックの `await Task.Run(…)` に `ConfigureAwaitOptions.ForceYielding` を付け、続きを常に UI の列へ積む（実アプリでは元から列で走る経路が大半＝結果は同じ）。
+
 - 2026-10-05（Android 3.619.0 同期）: 画面の日本語の見直し（必須の約束→必須違反、計算では消えない→何度つくっても残る、証明つき・下限の見込みをやめる、目安の回数との差、グループ内の回数のばらつき、でき具合、S6 の文言）。表示のみ。
 
 - 2026-10-04（Android 062a839 同期、3.615.0 探索スイッチ群を「探索の強さ」ふつう／じっくりに統合）: C# 単独の差は 2 つ（出力不変）。①Android の Button/OutlinedButton 2 択は、この移植の既存の選択 UI（旧「希望どうしの衝突で止める」と同じ `ComboBox`）で出す。②`SearchStrength.Apply` は Kotlin の enum メンバー関数に当たる拡張メソッド（C# の enum はメソッドを持てない）。

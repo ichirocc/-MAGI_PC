@@ -91,7 +91,8 @@ public sealed partial class MagiViewModel
                 () => exceptStaff is { } ex && day is { } dd
                     // 「他の人で補う」（Android CellSheetLogic.fixesByOthers）: 全体で探し、本人を含まずその日を含む手だけ。
                     ? CellSheetLogic.FixesByOthers(FixSuggester.Suggest(st, snap, focusStaff: null, focusShift: focusShift, maxResults: 40), dd, ex).Take(8).ToList()
-                    : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct);
+                    : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8), ct)
+                .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // RefreshCheckCoreAsync と同じ理由
             if (seq != _fixSeq) return; // 後続の探索が始まっている＝古い結果で上書きしない
             // 盤面を差し替えるジョブの最中は書き戻さず探し直しもしない（完了後の盤面で探し直す）。
             if (OptimizeInFlight()) { Ui.FixSearching = false; return; }

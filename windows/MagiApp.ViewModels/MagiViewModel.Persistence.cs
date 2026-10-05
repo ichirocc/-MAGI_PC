@@ -635,7 +635,8 @@ public sealed partial class MagiViewModel
             // 同期メソッドのまま（移植時にラップしない設計を選んだ）。呼び出し側であるここが
             // Task.Run で明示的にディスパッチすることで、Kotlin原本と同じ「背景スレッドで走る」
             // 性質を保つ。
-            var res = await Task.Run(() => V6FinalPort.HandleCheck(st, sched), ct);
+            // 背景が await より先に終わっても続きは UI の列へ積む（その場で走らせない＝テストの順序が決まる）。
+            var res = await Task.Run(() => V6FinalPort.HandleCheck(st, sched), ct).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);
             if (seq != _checkSeq) return; // [review #6相当] a newer check started; drop stale result
             var hard = res.Report.Hard;
             var total = res.Report.Total;
