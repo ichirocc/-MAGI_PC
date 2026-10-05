@@ -150,7 +150,7 @@ public static class NextActionGuide
     /// <summary>[S5] 試算結果 1 行の文（§5 の表）。止めた試算は null（数字を出さない）。</summary>
     public static string? WishTrialText(WishTrial.Outcome o) => o switch
     {
-        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を取り消しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。これは全探索で解けない証明ではありません。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を取り消しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。すべての組み合わせを試したわけではありません。",
         WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減り、もう一度つくるとさらに{r.B}件 減る見込みです。",
         WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減ります。",
         WishTrial.Result r when r.Rk >= r.H0 => $"取り消してもう一度つくると、必須違反が{r.B}件 減る見込みです。",
