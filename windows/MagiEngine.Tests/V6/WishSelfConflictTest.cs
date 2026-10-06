@@ -157,4 +157,13 @@ public class WishSelfConflictTest
         var open = at < 0 ? line : line[(at + openMark.Length)..];
         Assert.False(open.Contains("c3n") || open.Contains("pref"), line);
     }
+
+    /// <summary>必須内訳の単一ソース: 族ごとに報告の内訳で頭打ち、合計は必須件数で頭打ち。</summary>
+    [Fact]
+    public void WishConflictHardShareCapsByBreakdownAndHard()
+    {
+        Assert.Equal(3, V6SanityPort.WishConflictHardShare(new Dictionary<string, int> { ["c3n"] = 2, ["pref"] = 4 }, new Dictionary<string, int> { ["c3n"] = 2, ["pref"] = 1 }, 10));
+        Assert.Equal(2, V6SanityPort.WishConflictHardShare(new Dictionary<string, int> { ["c3n"] = 5 }, new Dictionary<string, int> { ["c3n"] = 5 }, 2));
+        Assert.Equal(0, V6SanityPort.WishConflictHardShare(new Dictionary<string, int>(), new Dictionary<string, int> { ["c3n"] = 5 }, 5));
+    }
 }

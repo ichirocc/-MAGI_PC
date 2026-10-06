@@ -40,15 +40,22 @@ public sealed record AnalysisTriage(
 
     /// <summary>ホームのでき具合に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
     /// pt だけ残ってもでき具合は 100% でないので「解消済み」とは言わない。</summary>
-    public static string HomeRemainingLabel(long bestHard, int shortDays, IReadOnlyDictionary<string, int> breakdown)
+    public static string HomeRemainingLabel(long bestHard, int shortDays, IReadOnlyDictionary<string, int> breakdown, int wishHard = 0)
     {
         var softN = MirrorKeys.Soft.Where(f => UnitOf(f) == "件").Sum(f => breakdown.GetValueOrDefault(f, 0));
         var ptN = MirrorKeys.Soft.Where(f => UnitOf(f) == "pt").Sum(f => breakdown.GetValueOrDefault(f, 0));
-        if (bestHard > 0L) return $"必須 残り{bestHard}件";
+        if (bestHard > 0L) return $"必須 残り{bestHard}件" + (wishHard > 0 ? $"（うち希望のまま {Math.Min(wishHard, bestHard)}件）" : "");
         if (shortDays > 0) return $"残り{shortDays}日";
         if (softN > 0) return $"必須は解消・要調整 {softN}件";
         if (ptN > 0) return "必須は解消・残りは偏りのみ";
         return "解消済み";
+    }
+
+    /// <summary>ホームの主ボタンに最初の対象（名前・日）を添える。対象が無ければ元の文言のまま。</summary>
+    public static string HomeTargetLabel(string @base, string? name, string? day)
+    {
+        var t = string.Join(" ", new[] { name, day }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        return t.Length == 0 ? @base : $"{@base}（{t}）";
     }
 
     /// <summary>SettingIssue の種類 → 画面に出す見出し（英字符号を出さない）。</summary>

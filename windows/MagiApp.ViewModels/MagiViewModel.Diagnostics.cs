@@ -284,6 +284,12 @@ public sealed partial class MagiViewModel
     /// [テスト可視性のためinternal化] <see cref="AnalyzeParallelAsync"/> による重い並列解析を経由せず、
     /// このフィールド写像そのものを直接検証できるようにする。
     /// </summary>
+    private static int HardWishConflictOf(Problem p, int[][] schedule, ViolationReport report)
+    {
+        try { return V6SanityPort.WishConflictHardShare(V6SanityPort.WishConflictHard(p, schedule), report.Breakdown, report.Hard); }
+        catch (Exception) { return 0; }
+    }
+
     internal void MakeUi(MagiState st, int[][] schedule, ViolationReport report, Analysis analysis)
     {
         var v6 = analysis.V6;
@@ -326,6 +332,7 @@ public sealed partial class MagiViewModel
         Ui.DistLocations = report.DistLocations;
         Ui.C1Shortages = C1Display.Shortages(ScheduleUtil.CachedProblem(st), schedule);
         Ui.ZeroCapCells = GridDisplayMarks.ZeroCapCells(ScheduleUtil.CachedProblem(st), schedule);
+        Ui.HardWishConflict = report.Hard <= 0 ? 0 : HardWishConflictOf(ScheduleUtil.CachedProblem(st), schedule, report);
         Ui.ZeroAllowCells = GridDisplayMarks.ZeroAllowCells(ScheduleUtil.CachedProblem(st), schedule);
         Ui.Logs = v6Logs.Concat(CompressDiagLogs(mappedDiag)).ToList();
         Ui.StaffNames = st.StaffList.Select(s => s.Name).ToList();

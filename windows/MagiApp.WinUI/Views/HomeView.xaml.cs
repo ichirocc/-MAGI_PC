@@ -90,6 +90,12 @@ public sealed partial class HomeView : UserControl
         var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
         // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR の分岐がこれを見る。
         var cands = NextActionGuide.WishTrialCandidatesOf(ui);
+        // 主ボタンに最初の対象を添える（押した先は変えない）。
+        string StaffName(int i) => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
+        var firstWish = cands.Direct.FirstOrDefault() ?? cands.Shortfall.FirstOrDefault()?.Rows.FirstOrDefault();
+        var wishLabel = AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", firstWish is null ? null : StaffName(firstWish.Staff), firstWish is null ? null : DayText.Short(ui.StartDate, firstWish.Day));
+        var firstMove = ui.FixSuggestions.FirstOrDefault(fs => fs.DeltaHard < 0)?.Ops.FirstOrDefault();
+        var moveLabel = AnalysisTriage.HomeTargetLabel("直す1手を見る", firstMove is null ? null : StaffName(firstMove.Staff), firstMove is null ? null : DayText.Short(ui.StartDate, firstMove.Day));
 
         // [UX改善/Android同期, ユーザー指示「ゲーム要素廃止」] phase「狩猟」はRPG風の演出語のため、
         //   「完成」の対語である平易な「未完成」へ変更。
@@ -131,7 +137,7 @@ public sealed partial class HomeView : UserControl
             var pinnedDay = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0)?.DayLabel;
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             headline = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
-            bigLabel = "ぶつかっている希望を見る"; bigEnabled = true; helperLabel = "データを見直す";
+            bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => _window.SelectTab("edit");
         }
@@ -155,13 +161,13 @@ public sealed partial class HomeView : UserControl
             if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
             {
                 headline = worstDay is null ? "人員不足の日があります。" : $"{worstDay} が人員不足です。";
-                bigLabel = "なおし方を見る"; bigEnabled = true;
+                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", null, worstDay); bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
             else if (hardFix && ui.FixFocusName.Length == 0)
             {
                 headline = remain + "直す手があります。";
-                bigLabel = "直す1手を見る"; bigEnabled = true;
+                bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
             }
             else if (ui.FixSearching)
@@ -183,14 +189,14 @@ public sealed partial class HomeView : UserControl
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
                 headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {ui.BestHard}件 からこれ以上は減らせない見込みです。";
-                bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
+                bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
             }
             else if (!cands.IsEmpty)
             {
                 headline = remain + "希望とルールがぶつかっています。";
-                bigLabel = "ぶつかっている希望を見る"; bigEnabled = true;
+                bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
             }
             else
@@ -232,7 +238,7 @@ public sealed partial class HomeView : UserControl
         RelaxStopButton.Content = relaxStopped ? NextActionGuide.RelaxRetryLabel : "やめる";
         RelaxSearchText.Foreground = fgBrush;
 
-        var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown);
+        var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown, ui.HardWishConflict);
         var showResolve = !ui.Running;
         ResolveText.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
         ResolveBar.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
@@ -532,7 +538,18 @@ public sealed partial class HomeView : UserControl
         }
         void AddRow(WishTrialRow row, UiState ui)
         {
-            var open = new Button { Content = $"{row.Name} ・ {DayText.Short(ui.StartDate, row.Day)}　{row.Reason}", HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+            var label = new TextBlock { Text = $"{row.Name} ・ {DayText.Short(ui.StartDate, row.Day)}　{row.Reason}", TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            var content = new Grid { ColumnSpacing = 8 };
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            content.Children.Add(label);
+            if (row.WishOnly)
+            {
+                var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
+                Grid.SetColumn(chip, 1);
+                content.Children.Add(chip);
+            }
+            var open = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))

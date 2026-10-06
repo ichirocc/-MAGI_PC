@@ -74,12 +74,22 @@ public class WishTrialCandidatesTest
         var ui = SelfUi(new() { ["0,24"] = new[] { "vio-pref" }, ["1,1"] = new[] { "vio-pref" } });
         Assert.Equal(new[]
         {
-            new WishTrialRow(0, 24, "古泉", "希望の勤務になっていません", true),
-            new WishTrialRow(0, 25, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true),
-            new WishTrialRow(0, 26, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true),
-            new WishTrialRow(1, 0, "福澤", "希望どうしが前日の禁止「Dﾃ→休」に当たっています", true),
-            new WishTrialRow(1, 1, "福澤", "希望の勤務になっていません", true),
+            new WishTrialRow(0, 24, "古泉", "希望の勤務になっていません", true, WishOnly: true),
+            new WishTrialRow(0, 25, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true, WishOnly: true),
+            new WishTrialRow(0, 26, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true, WishOnly: true),
+            new WishTrialRow(1, 0, "福澤", "希望どうしが前日の禁止「Dﾃ→休」に当たっています", true, WishOnly: true),
+            new WishTrialRow(1, 1, "福澤", "希望の勤務になっていません", true, WishOnly: true),
         }, NextActionGuide.WishTrialCandidatesOf(ui).Direct);
+    }
+
+    /// <summary>希望どうしの衝突に入る行だけ「希望のまま」の札。</summary>
+    [Fact]
+    public void WishOnlyTagMarksOnlySelfConflictRows()
+    {
+        var ui = SelfUi(new() { ["0,24"] = new[] { "vio-pref" }, ["1,1"] = new[] { "vio-pref" } });
+        ui.WishSelfConflicts = ui.WishSelfConflicts.Take(1).ToList();
+        Assert.Equal(new Dictionary<int, bool> { [24] = true, [25] = true, [26] = true, [1] = false },
+            NextActionGuide.WishTrialCandidatesOf(ui).Direct.ToDictionary(r => r.Day, r => r.WishOnly));
     }
 
     [Fact]

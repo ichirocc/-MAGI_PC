@@ -781,7 +781,7 @@ public static partial class V6FinalPort
             var wallTxt = walls.Count == 0 ? "なし" : string.Join(" / ", walls);
             var openTxt = open.Count == 0 ? "なし＝これ以上は追っても減りません" : string.Join(" / ", open);
             // 採用盤面の必須を「希望どうしのぶつかり（希望を1件取り消すまで消えない）」と「それ以外」に分ける（表示・計測用）。
-            var hardWishFloor = Math.Min(selfConflict.Sum(kv => Math.Min(kv.Value, bd.GetValueOrDefault(kv.Key))), finalReport.Hard);
+            var hardWishFloor = V6SanityPort.WishConflictHardShare(selfConflict, bd, finalReport.Hard);
             return new List<MirrorLog>
             {
                 new(level: "I", tag: "残存分析", message: $"もう直せない: {wallTxt} ／ まだ狙える: {openTxt}"),

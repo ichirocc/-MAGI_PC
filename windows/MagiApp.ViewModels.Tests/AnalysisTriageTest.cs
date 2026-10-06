@@ -151,6 +151,24 @@ public class AnalysisTriageTest
         Assert.Equal("解消済み", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 0))));
     }
 
+    /// <summary>必須のうち希望どうしのぶつかりは M>0 のときだけ添え、必須件数を超えない。</summary>
+    [Fact]
+    public void HomeRemainingLabelShowsWishShare()
+    {
+        Assert.Equal("必須 残り5件（うち希望のまま 2件）", AnalysisTriage.HomeRemainingLabel(5L, 0, B(), 2));
+        Assert.Equal("必須 残り5件", AnalysisTriage.HomeRemainingLabel(5L, 0, B(), 0));
+        Assert.Equal("必須 残り1件（うち希望のまま 1件）", AnalysisTriage.HomeRemainingLabel(1L, 0, B(), 3));
+    }
+
+    /// <summary>主ボタンに最初の対象を添える。対象が無ければ元の文言。</summary>
+    [Fact]
+    public void HomeTargetLabelNamesFirstItem()
+    {
+        Assert.Equal("ぶつかっている希望を見る（アリフ 10/8）", AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", "アリフ", "10/8"));
+        Assert.Equal("なおし方を見る（10/8）", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8"));
+        Assert.Equal("直す1手を見る", AnalysisTriage.HomeTargetLabel("直す1手を見る", null, null));
+    }
+
     /// <summary>[Android schedule-5] 最終週が 7 日に満たない月でも、右端まで送れば最終週になる（左端の日だけだと最後から 2 番目で止まる）。</summary>
     [Fact]
     public void CurrentWeekReachesAPartialLastWeekAtTheRightEdge()

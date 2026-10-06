@@ -19,7 +19,7 @@ public sealed record InvolvedWish(int Staff, int Day, string Name, string Reason
 /// 族名の日本語は UI 層が持つので <c>labelOf</c> で受け取る（<see cref="AnalysisTriage"/> と同じ形）。
 /// </summary>
 /// <summary>[S5] 試算の候補 1 行。Locked=false（担当できない勤務の希望）は試算ボタンを出さず <see cref="NextActionGuide.WishTrialNotLocked"/> を出す。</summary>
-public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false);
+public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false, bool WishOnly = false);
 
 /// <summary>[S5b] 人員不足の枠 1 つ（見出し「12日 日勤 1人不足」）と、その日に別の勤務で希望固定されている人の行（職員順）。</summary>
 public sealed record ShortfallWishGroup(int Day, int Shift, string Header, IReadOnlyList<WishTrialRow> Rows);
@@ -42,6 +42,9 @@ public sealed record RelaxCardText(string Headline, string Body, string? Note);
 
 public static class NextActionGuide
 {
+    /// <summary>行に添える短い札。希望どうしのぶつかり（計算では消せない）だけ「希望のまま」。</summary>
+    public const string WishOnlyTag = "希望のまま";
+
     public const string WishTrialNotLocked = "担当できない勤務の希望なので、取り消しても勤務表は変わりません。";
     /// <summary>[#41] 手動固定のセルは試算の候補にしない（LockedWishKeys が外す）＝担当外と混ぜず、固定が理由だと言う。</summary>
     public const string WishTrialPinned = "このセルは手動固定のため、自動では変更しません。固定を外すと試算できます。";
@@ -126,13 +129,15 @@ public static class NextActionGuide
             .OrderBy(s => s.DayIndex).ThenBy(s => s.ShiftIndex).ToList();
         var pinnedKeys = pinned.SelectMany(s => s.WishPinned.Select(i => (i, s.DayIndex))).ToHashSet();
         string Name(int i) => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
+        var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
         var direct = hits.GroupBy(h => (h.Staff, h.Day)).Select(g =>
         {
             var rep = g.OrderBy(h => h.Prio).First();
             var others = g.Select(h => h.Prio).Distinct().Where(p => p != rep.Prio).OrderBy(p => p).Select(p => shortNames[p]).ToList();
             if (pinnedKeys.Contains(g.Key)) others.Add("人員不足の日");
             var reason = others.Count == 0 ? rep.Reason : $"{rep.Reason}（ほか: {string.Join("・", others)}）";
-            return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), ui.ManualPins.Contains($"{g.Key.Staff},{g.Key.Day}"));
+            return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), ui.ManualPins.Contains($"{g.Key.Staff},{g.Key.Day}"),
+                WishOnly: selfKeys.Contains($"{g.Key.Staff},{g.Key.Day}"));
         }).OrderBy(r => r.Staff).ThenBy(r => r.Day).ToList();
         var directKeys = direct.Select(r => (r.Staff, r.Day)).ToHashSet();
         var shortfall = pinned.Select(s =>
@@ -140,7 +145,8 @@ public static class NextActionGuide
             var rows = s.WishPinned.OrderBy(i => i).Where(i => !directKeys.Contains((i, s.DayIndex))).Select(i =>
             {
                 var sym = ui.Wishes.TryGetValue($"{i},{s.DayIndex}", out var k) && k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "別の勤務";
-                return new WishTrialRow(i, s.DayIndex, Name(i), $"{sym}の希望", ui.LockedWishKeys.Contains($"{i},{s.DayIndex}"), ui.ManualPins.Contains($"{i},{s.DayIndex}"));
+                return new WishTrialRow(i, s.DayIndex, Name(i), $"{sym}の希望", ui.LockedWishKeys.Contains($"{i},{s.DayIndex}"), ui.ManualPins.Contains($"{i},{s.DayIndex}"),
+                    WishOnly: selfKeys.Contains($"{i},{s.DayIndex}"));
             }).ToList();
             return new ShortfallWishGroup(s.DayIndex, s.ShiftIndex, $"{s.DayLabel} {s.ShiftSymbol} {s.Miss}人不足", rows);
         }).Where(g => g.Rows.Count > 0).ToList();

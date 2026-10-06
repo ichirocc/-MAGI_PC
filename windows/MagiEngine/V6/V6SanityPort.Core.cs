@@ -160,6 +160,10 @@ public static partial class V6SanityPort
         return result;
     }
 
+    /// <summary>必須 <paramref name="hard"/> 件のうち希望どうしのぶつかり（<see cref="WishConflictHard"/>）の件数。族ごとに報告の内訳で頭打ちにする（必須内訳ログ・ホームが共有）。</summary>
+    public static int WishConflictHardShare(IReadOnlyDictionary<string, int> selfConflict, IReadOnlyDictionary<string, int> breakdown, int hard) =>
+        Math.Clamp(selfConflict.Sum(kv => Math.Min(kv.Value, breakdown.GetValueOrDefault(kv.Key))), 0, Math.Max(hard, 0));
+
     /// <summary>[E0] 希望衝突の床（report.Hard と同単位、<see cref="StructuralHardFloor"/> とは別に扱う）＝衝突の最小 HARD＋日の証明の日数。</summary>
     public static int WishConflictHardFloor(Problem p)
     {

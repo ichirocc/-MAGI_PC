@@ -419,7 +419,7 @@ public sealed partial class AnalysisView : UserControl
     private void OnIssuesGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
 
     /// <summary>MagiTagChip 相当（枠と文字を同じアクセント色にした小さなラベル）。</summary>
-    private static Border TagChip(string text, string hex)
+    internal static Border TagChip(string text, string hex)
     {
         var color = new SolidColorBrush(ColorHex.Parse(hex, Colors.Gray));
         return new Border
