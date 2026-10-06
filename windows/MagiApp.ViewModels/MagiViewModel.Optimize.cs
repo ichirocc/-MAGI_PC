@@ -243,7 +243,11 @@ public sealed partial class MagiViewModel
             var baseHard = (long)baseReport.Hard; var baseTotal = baseReport.Total;
             // Kotlin原本 betterReport(baseReport, res.report): 真なら入力(baseReport)が結果より
             // 厳密に良い＝結果は「改善しなかった」ので入力を維持する。
-            var inputBeatsResult = UnifiedViolationChecker.ReportComparer.Compare(baseReport, res.Report) < 0;
+            // 比べる基準はエンジンの番兵と同じ「個人上限0のセルを外した入力」（ユーザー決定 2026-10-06）。生の入力と比べると、
+            //   上限0のセルが人員を満たしていた盤面では最適化の結果が毎回「悪化」に見えて前回へ戻っていた（実機 #9）。
+            var (clearedInput, clearedCount) = V6NativeOptimizer.ClearCappedCells(st0, sched0);
+            var cmpReport = clearedCount > 0 ? UnifiedViolationChecker.Check(st0, clearedInput) : baseReport;
+            var inputBeatsResult = UnifiedViolationChecker.ReportComparer.Compare(cmpReport, res.Report) < 0;
             if (inputBeatsResult)
             {
                 var kept = sched0.Copy2D();
