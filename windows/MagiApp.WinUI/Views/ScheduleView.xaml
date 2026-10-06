@@ -41,6 +41,7 @@
             <Button x:Name="UndoButton" Content="元に戻す" Click="OnUndoClick" />
             <Button x:Name="RedoButton" Content="やり直す" Click="OnRedoClick" />
             <Button x:Name="BulkAssignButton" Content="まとめて割当" Click="OnBulkAssignClick" />
+            <Button x:Name="HardListButton" MinHeight="48" Visibility="Collapsed" Click="OnHardListClick" />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Spacing="6">

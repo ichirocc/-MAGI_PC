@@ -22,6 +22,9 @@ public sealed record CellStatus(CellSeverity Severity, string Text, string Cause
 
 /// <summary>巡回の 1 件＝必須違反 1 件（族・職員・関連セルの日・見出し）。1 セルが 2 件に属せば 2 回止まる（<c>report.hard</c> の数え方と同じ）。
 /// セルで辿れる族だけ（c3n＝並びの全日、c3w＝前日＋希望の翌日、pref/groupViol＝1 セル）。人員不足は日ヘッダから＝件数は別に添える。Kotlin <c>TourItem</c>。</summary>
+/// <summary>勤務表タブの「必須 N ▼」一覧の 1 行。TourAt は HardViolationItems の何件目か（行を押すと巡回と同じ移動でそのセルを開く）。</summary>
+public sealed record HardListRow(int TourAt, string Name, string Heading, bool WishOnly);
+
 public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading)
 {
     public (int I, int J) Cell => (Staff, Days[0]);
@@ -407,6 +410,11 @@ public static class CellSheetLogic
         }
         return outMap.Values.OrderBy(t => t.Days[0]).ThenBy(t => t.Staff).ToList();
     }
+
+    /// <summary>必須違反の一覧（巡回の項目を 1 件 1 行）。希望どうしのぶつかり（関連セルがすべて wishSelfKeys）は「希望のまま」を付けて後ろへ。</summary>
+    public static IReadOnlyList<HardListRow> HardViolationRows(IReadOnlyList<TourItem> items, IReadOnlyList<string> staffNames, IReadOnlySet<string> wishSelfKeys) =>
+        items.Select((it, at) => new HardListRow(at, it.Staff >= 0 && it.Staff < staffNames.Count ? staffNames[it.Staff] : $"職員{it.Staff + 1}",
+            it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")))).OrderBy(r => r.WishOnly).ToList();
 
     /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
     public static string? TourHeading(IReadOnlyList<TourItem> items, int at) =>

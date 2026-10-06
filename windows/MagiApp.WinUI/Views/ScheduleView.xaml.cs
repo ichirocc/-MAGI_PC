@@ -657,6 +657,51 @@ public sealed partial class ScheduleView : UserControl
         await dialog.ShowAsync();
     }
 
+    /// <summary>[Android 3.623.0] 必須違反の一覧（Kotlin HardListChip のシート）。行を押すと閉じて、巡回と同じ移動（FocusCell→そのセルのシート）。</summary>
+    private async void OnHardListClick(object sender, RoutedEventArgs e)
+    {
+        var ui = _vm.Ui;
+        var items = _vm.HardViolationItemsFor(LabelOf);
+        var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
+        var panel = new StackPanel { Spacing = 8 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "必須違反の一覧",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
+            CloseButtonText = "閉じる",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        foreach (var r in CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys))
+        {
+            var content = new Grid { ColumnSpacing = 8 };
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = new StackPanel();
+            text.Children.Add(new TextBlock { Text = r.Name, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = r.Heading, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(text);
+            if (r.WishOnly)
+            {
+                var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
+                Grid.SetColumn(chip, 1);
+                content.Children.Add(chip);
+            }
+            var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
+            var cell = items[r.TourAt].Cell;
+            row.Click += (_, _) =>
+            {
+                dialog.Hide();
+                FocusCell(cell.I, cell.J);
+                DispatcherQueue.TryEnqueue(() => ShowCellEditor(_focusCellElement ?? HardListButton, cell.I, cell.J));
+            };
+            panel.Children.Add(row);
+        }
+        if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
+            panel.Children.Add(new TextBlock { Text = covLine, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        await dialog.ShowAsync();
+    }
+
     private void Render()
     {
         var ui = _vm.Ui;
@@ -668,6 +713,9 @@ public sealed partial class ScheduleView : UserControl
         // [まとめて割当] SetCell と同じ二重防御——EditBlockedNow が最終防御、ここは押せるのに拒否されるだけの
         // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
+        // [Android 3.623.0] 「必須 N ▼」（Kotlin HardListChip）＝結果があり実行中でなく必須違反が残るときだけ。
+        HardListButton.Visibility = !ui.Running && ui.HasResult && ui.BestHard > 0 ? Visibility.Visible : Visibility.Collapsed;
+        HardListButton.Content = $"必須 {ui.BestHard} ▼";
         RenderFilterBar(ui);
         RenderShortageBanner(ui);
         RenderSearchLegend(ui);

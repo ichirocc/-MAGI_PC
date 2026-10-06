@@ -257,6 +257,22 @@ public class CellSheetLogicTest
     }
 
     [Fact]
+    public void HardViolationRowsPutsWishOnlyLastAndKeepsTourIndex()
+    {
+        var items = new[]
+        {
+            new TourItem("c3n", 0, new[] { 1, 2 }, "禁止の並び A→B ・ 10/2〜10/3"),
+            new TourItem("pref", 1, new[] { 4 }, "希望の勤務 A ・ 10/5"),
+            new TourItem("c3w", 2, new[] { 5, 6 }, "希望の前日禁止 A→B ・ 10/6〜10/7"),
+        };
+        var rows = CellSheetLogic.HardViolationRows(items, new[] { "佐藤", "鈴木" }, new HashSet<string> { "0,1", "0,2", "2,5" });
+        Assert.Equal(new[] { 1, 2, 0 }, rows.Select(r => r.TourAt));
+        Assert.Equal(new[] { false, false, true }, rows.Select(r => r.WishOnly));
+        Assert.Equal(new[] { "鈴木", "職員3", "佐藤" }, rows.Select(r => r.Name));
+        Assert.Equal("禁止の並び A→B ・ 10/2〜10/3", rows[^1].Heading);
+    }
+
+    [Fact]
     public void CountLineAndDayLabels()
     {
         Assert.Equal("休 11(適切10)▲ Cｵ 9(適切5)▲", CellSheetLogic.StaffCountShort(St, P, S, 0, Rep.CountFamilies!));
