@@ -101,8 +101,8 @@ public class ZeroCapExclusionTest
         var res = await V6FinalPort.HandleOptimize(s, secondsRaw: 1, workers: 1, requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, onProgress: NoOpProgress);
         Assert.Equal(new V6FinalPort.CapZeroNotice(4, 0, 4), res.CapZero);
         Assert.Contains(res.Logs, l => l.Tag == "CapZero" && l.Message ==
-            "入口: 個人上限0のセル4件を外しました（必須 0→4）。最適化は上限0の勤務を置かないため、この設定では入力の必須0件には戻れません");
-        Assert.Equal("今の勤務表には個人の上限0のシフトが4件入っています。最適化は上限0の勤務を置かないため、この設定では必須0件まで戻れません（上限を見直すか、そのまま使ってください）",
+            "入口: 個人上限0のセル4件を外しました（必須 0→4）。最適化は上限0の勤務を置かないため、入力の必須0件に戻らないことがあります");
+        Assert.Equal("今の勤務表には個人の上限0のシフトが4件入っています。最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります（上限を見直すか、そのまま使ってください）",
             res.CapZero?.KeptNote());
         Assert.Null(new V6FinalPort.CapZeroNotice(4, 0, 0).KeptNote());
     }

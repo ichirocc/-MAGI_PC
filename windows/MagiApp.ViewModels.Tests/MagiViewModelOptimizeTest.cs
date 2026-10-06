@@ -256,7 +256,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         vm.RunV6FullOptimize();
         await vm.LastRunOptimizeTask!;
 
-        Assert.EndsWith("前回の結果を維持します。 今の勤務表には個人の上限0のシフトが3件入っています。最適化は上限0の勤務を置かないため、この設定では必須0件まで戻れません（上限を見直すか、そのまま使ってください）", vm.Ui.Message);
+        Assert.EndsWith("前回の結果を維持します。 今の勤務表には個人の上限0のシフトが3件入っています。最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります（上限を見直すか、そのまま使ってください）", vm.Ui.Message);
     }
 
     [Fact]

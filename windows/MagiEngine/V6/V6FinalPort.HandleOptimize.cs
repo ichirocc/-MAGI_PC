@@ -672,6 +672,13 @@ public static partial class V6FinalPort
         //   残す＝label が「後処理」でなくなるが、これは退化ではないので警告しない。実際に refReport
         //   （後処理の最終値）が bestStage より悪いとき（= CheckResultWorse が非null）だけ多重防御ログを出す。
         var regression = bestStage.Label != "後処理" ? CheckResultWorse(bestStage.Report, refReport) : null;
+        // 採用した盤面が後処理の盤面でないのに、後処理より良くて regression が立たない場合（後処理の段が上限0・手動固定で
+        //   候補から外れたとき）も、後処理系の行は採用していない盤面の観測。どの段を採ったかを名指しして目印を付ける。
+        var staleWithoutRegression = regression == null && bestStage.Label != "後処理" && !finalSched.ContentDeepEquals(post.Schedule);
+        IReadOnlyList<MirrorLog> adoptedLog = staleWithoutRegression
+            ? new List<MirrorLog> { new(level: "I", tag: "UnifiedCheck",
+                message: $"採用した勤務表={bestStage.Label}（HARD={finalReport.Hard} 合計={finalReport.Total}）。以降の後処理系の行・違反詳細は採用していない盤面の観測") }
+            : Array.Empty<MirrorLog>();
         IReadOnlyList<MirrorLog> sentinelLog = regression != null
             ? new List<MirrorLog>
             {
@@ -811,7 +818,7 @@ public static partial class V6FinalPort
                 ("統合", integrated.Report),
                 ("後処理", post.Report),
                 ("追加精製", refReport),
-                ("採用", finalReport),
+                (bestStage.Label == "後処理" ? "採用" : $"採用(=" + bestStage.Label + ")", finalReport),
             };
             var sb = new StringBuilder("スコア収支（各段の採用値・必須/合計/重み）: ");
             ViolationReport? prev = null;
@@ -863,6 +870,7 @@ public static partial class V6FinalPort
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
         logs.AddRange(cappedLog);
         logs.AddRange(pinLog);
+        logs.AddRange(adoptedLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);
         logs.AddRange(extraLog);
@@ -874,7 +882,9 @@ public static partial class V6FinalPort
         logs.AddRange(gate.Logs);
         logs.AddRange(first.PhaseLogs);
         if (!ReferenceEquals(chained, first)) logs.AddRange(chained.PhaseLogs);
-        logs.AddRange(post.Report.Logs);
+        logs.AddRange(staleWithoutRegression
+            ? post.Report.Logs.Select(l => l with { Message = "[棄却盤面の観測] " + l.Message })
+            : post.Report.Logs);
 
         // [3.327.0/外部レビュー High1] post の診断（C1頭打ち・回数固定の却下記録）は post.schedule を
         //   観測した結果。finalSched はこのあと ExtraRefine で差し替わる（refSched）か、最終番兵で入力へ

@@ -98,11 +98,11 @@ public static partial class V6FinalPort
         public bool RaisedHard => HardAfter > HardBefore;
 
         public string LogLine() => RaisedHard
-            ? $"入口: 個人上限0のセル{Count}件を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置かないため、この設定では入力の必須{HardBefore}件には戻れません"
+            ? $"入口: 個人上限0のセル{Count}件を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置かないため、入力の必須{HardBefore}件に戻らないことがあります"
             : $"入口: 個人上限0のセル{Count}件を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置きません（表示・重みは不変）";
 
         public string? KeptNote() => !RaisedHard ? null
-            : $"今の勤務表には個人の上限0のシフトが{Count}件入っています。最適化は上限0の勤務を置かないため、この設定では必須{HardBefore}件まで戻れません（上限を見直すか、そのまま使ってください）";
+            : $"今の勤務表には個人の上限0のシフトが{Count}件入っています。最適化は上限0の勤務を置かないため、必須{HardBefore}件まで戻らないことがあります（上限を見直すか、そのまま使ってください）";
     }
 
     private static readonly IReadOnlyDictionary<string, string> EmptyOverrides = new Dictionary<string, string>();

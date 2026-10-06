@@ -49,7 +49,7 @@ public static partial class V6HotfixPasses
 
         bool TryExtend(int i, int extDay, int fromK, int toK)
         {
-            if (!Movable(i, extDay) || p.MakesForbiddenRun(work, i, extDay, toK)) return false;
+            if (!Movable(i, extDay) || !p.MayPlace(i, toK) || p.MakesForbiddenRun(work, i, extDay, toK)) return false;
             var cnt = 0;
             for (var s = 0; s < p.S; s++) if (work[s][extDay] == fromK) cnt++;
             var needsChain = p.CovUCell(fromK, extDay, cnt - 1) > p.CovUCell(fromK, extDay, cnt);

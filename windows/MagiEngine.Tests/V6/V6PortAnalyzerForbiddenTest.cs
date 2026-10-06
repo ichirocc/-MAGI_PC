@@ -288,10 +288,18 @@ public class V6PortAnalyzerForbiddenTest
         var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(st);
         var center = diag.Runs.SelectMany(r => r.Cells).Where(c => c.DayIndex == 1).ToList();
         Assert.True(center.Count > 0, "中央セルが検出される");
-        Assert.True(
-            center.All(c => c.Escape != ForbiddenCellEscape.Pinned),
-            $"希望固定でも正味の必須違反が減るなら壁ではない: {string.Join(",", center.Select(c => c.Escape))}");
-        Assert.False(diag.AllBlocked, "この盤面を構造壁と誤診しない");
+        // 希望固定の徹底（既定 ON）の間、探索は希望どおりのセルを動かさない＝崩せる手でも「希望固定」と名乗る（2026-10-06）。
+        Assert.True(center.All(c => c.Escape == ForbiddenCellEscape.Pinned && c.Detail.Contains("この希望を1件変えれば崩せます")),
+            $"探索が打たない手を探索未到達に見せない: {string.Join(",", center.Select(c => c.Escape))}");
+        Assert.False(diag.AllBlocked, "希望でない両端は崩せる＝この盤面を構造壁と誤診しない");
+        var original = PolishGate.WishPinStrict;
+        try
+        {
+            PolishGate.WishPinStrict = false;
+            var off = V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs.SelectMany(r => r.Cells).Where(c => c.DayIndex == 1).ToList();
+            Assert.True(off.All(c => c.Escape != ForbiddenCellEscape.Pinned), "徹底 OFF では希望を動かせる＝壁ではない");
+        }
+        finally { PolishGate.WishPinStrict = original; }
     }
 
     /// <summary>
