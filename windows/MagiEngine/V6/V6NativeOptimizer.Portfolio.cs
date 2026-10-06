@@ -197,6 +197,9 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 if ((strict && (p.WishLocked(a, j) || p.WishLocked(b, j))) || p.Pinned(a, j) || p.Pinned(b, j)) continue;
+                // 個人上限0は職員ごと＝同じ群でも相手の勤務を置けない日がある（MayPlace、3.507.0）。その日は交換しない。
+                int ka = outSched[a][j], kb = outSched[b][j];
+                if ((kb >= 0 && kb < p.K && !p.MayPlace(a, kb)) || (ka >= 0 && ka < p.K && !p.MayPlace(b, ka))) continue;
                 (outSched[a][j], outSched[b][j]) = (outSched[b][j], outSched[a][j]);
             }
             swapped[a] = true;

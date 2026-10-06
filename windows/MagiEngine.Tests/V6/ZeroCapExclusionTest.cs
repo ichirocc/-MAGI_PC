@@ -167,6 +167,21 @@ public class ZeroCapExclusionTest
         Assert.Equal(0, CountA(added[0].Sched, 0));
         Assert.Empty(p.CapZeroCells(added[0].Sched));
     }
+
+    /// <summary>PERSON_SWAP_ILS の摂動（同じ群の2名の1ヶ月を入れ替える）は、上限0の職員へ相手の勤務を移さない。</summary>
+    [Fact]
+    public void PersonSwapKickDoesNotMoveCappedShiftOntoCappedStaff()
+    {
+        var s = State();
+        var p = ScheduleUtil.CachedProblem(s);
+        for (var seed = 1L; seed <= 5L; seed++)
+        {
+            var b = new[] { new[] { 0, 0, 0, 0 }, new[] { 1, 1, 1, 1 }, new[] { 1, 1, 1, 1 } };
+            V6NativeOptimizer.PersonSwapKick(p, b, new JavaRandom(seed), pairs: 1);
+            Assert.Equal(0, CountA(b, 0));
+            Assert.Empty(p.CapZeroCells(b));
+        }
+    }
 }
 
 [CollectionDefinition(nameof(HandleOptimizeSeedCollection), DisableParallelization = true)]
