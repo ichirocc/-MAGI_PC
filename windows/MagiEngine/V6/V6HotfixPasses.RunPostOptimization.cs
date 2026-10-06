@@ -488,7 +488,7 @@ public static partial class V6HotfixPasses
         chain.Logs.Add(new MirrorLog(level: "I", tag: "POST",
             message: $"後処理タイミング 総{tEnd - t0}ms: HF80={t67 - t0}ms HF67={t66 - t67}ms HF66={t66Done - t66}ms" +
                 $" 巡回研磨(厳密日割当+c1/c3/range/apt/fair+曜日/交互)={tC1Lns - t66Done}ms" +
-                $" C1共同LNS={tPersonalLns - tC1Lns}ms 個人共同LNS={tHf - tPersonalLns}ms" +
+                $" C1共同LNS+玉突き連鎖={tPersonalLns - tC1Lns}ms 個人共同LNS={tHf - tPersonalLns}ms" +
                 $" 最終検査+HF70={tEnd - tHf}ms"));
         // パスごとの内訳（多い順・上位 N）。「時間を食っているのに採用0」のパスが各パス自身の行と突き合わせられる（3.339.0）。
         if (chain.PassMs.Count > 0)
