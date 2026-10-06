@@ -146,6 +146,27 @@ public class ZeroCapExclusionTest
         Assert.Equal(1, r.Schedule[0][1]);
         Assert.Equal(1, CountA(r.Schedule, 0));
     }
+
+    /// <summary>上限0のセルを含む段は捨てずに、そのセルを外した盤面を候補に足す（入力・上限0なしの段は足さない）。</summary>
+    [Fact]
+    public void ClearedCapZeroStagesAddsTheStageWithCappedCellsRemoved()
+    {
+        var s = State();
+        var p = ScheduleUtil.CachedProblem(s);
+        var raw = Work(s);
+        var cleared = V6NativeOptimizer.ClearCappedCells(s, raw).Schedule;
+        ViolationReport Rep(int[][] b) => UnifiedViolationChecker.Check(s, b);
+        var stages = new List<V6FinalPort.StageCandidate>
+        {
+            new("入力", cleared, Rep(cleared)),
+            new("探索", raw, Rep(raw)),
+            new("統合", cleared, Rep(cleared)),
+        };
+        var added = V6FinalPort.ClearedCapZeroStages(s, p, stages, false);
+        Assert.Equal(new[] { "探索（上限0を外す）" }, added.Select(a => a.Label).ToArray());
+        Assert.Equal(0, CountA(added[0].Sched, 0));
+        Assert.Empty(p.CapZeroCells(added[0].Sched));
+    }
 }
 
 [CollectionDefinition(nameof(HandleOptimizeSeedCollection), DisableParallelization = true)]

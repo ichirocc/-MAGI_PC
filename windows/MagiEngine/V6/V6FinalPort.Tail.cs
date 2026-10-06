@@ -69,6 +69,24 @@ public static partial class V6FinalPort
     internal static List<StageCandidate> ExcludeCapZeroStages(Problem p, IReadOnlyList<StageCandidate> stages) =>
         stages.Where((st, idx) => idx == 0 || p.CapZeroCells(st.Sched).Count == 0).ToList();
 
+    /// <summary>上限0のセルを含む段（入力以外）から、入口と同じ手順（ClearCappedCells）でそのセルを外した盤面を作る。
+    /// 探索が上限0のセルを抱えたまま進むと全段が ExcludeCapZeroStages で外れ、入口の盤面へ戻って探索の成果を丸ごと失う。
+    /// これを候補に足すだけなので選ばれる結果は悪化しない。外し切れない盤面・手動固定を崩す盤面は足さない。</summary>
+    internal static List<StageCandidate> ClearedCapZeroStages(MagiEngine.Model.MagiState state, Problem p,
+        IReadOnlyList<StageCandidate> stages, bool quantitativeRangeEval)
+    {
+        var res = new List<StageCandidate>();
+        foreach (var st in stages.Skip(1))
+        {
+            if (p.CapZeroCells(st.Sched).Count == 0) continue;
+            var cleared = V6NativeOptimizer.ClearCappedCells(state, st.Sched, quantitativeRangeEval).Schedule;
+            if (p.CapZeroCells(cleared).Count > 0 || !p.HoldsManualPins(cleared)) continue;
+            res.Add(new StageCandidate($"{st.Label}（上限0を外す）", cleared,
+                UnifiedViolationChecker.Check(state, cleared, quantitativeRangeEval)));
+        }
+        return res;
+    }
+
     /// <summary>ExcludeCapZeroStages で外した段ごとの W ログ（違反セルは先頭 5 件）。</summary>
     internal static List<MirrorLog> CapZeroLogs(MagiEngine.Model.MagiState state, Problem p, IReadOnlyList<StageCandidate> stages)
     {
@@ -85,7 +103,7 @@ public static partial class V6FinalPort
                 return $"{name}/{c.J + 1}日目/{sym}";
             });
             logs.Add(new MirrorLog(level: "W", tag: "Sentinel",
-                message: $"{st.Label}の盤面に上限0の勤務が{cells.Count}件あったため候補から外しました（多重防御）: {string.Join("、", parts)}"));
+                message: $"{st.Label}の盤面に上限0の勤務が{cells.Count}件あったため、外した盤面を候補にしました（多重防御）: {string.Join("、", parts)}"));
         }
         return logs;
     }

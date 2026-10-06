@@ -248,6 +248,9 @@ public sealed partial class MagiViewModel
             {
                 var kept = sched0.Copy2D();
                 SetPolishDiagnostics(null, 0, kept);
+                _rejectedRunDiagLogs = res.Logs.Select(l => $"[{l.Level}] {l.Tag}: {l.Message}").ToList();
+                _rejectedRunDiagSerial = _activeRunSerial;
+                _rejectedRunDiagAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 _currentSchedule = kept;
                 AutoSave();
                 _resultSchedule = kept;
@@ -277,6 +280,7 @@ public sealed partial class MagiViewModel
             else
             {
                 SetPolishDiagnostics(res.Post?.C1Plateau, res.Post?.ObservedPinBlockedAttempts ?? 0, res.Schedule, res.Post?.PinBlocks);
+                _rejectedRunDiagLogs = Array.Empty<string>();
                 _currentSchedule = res.Schedule.Copy2D();
                 AutoSave();
                 _resultSchedule = res.Schedule.Copy2D();

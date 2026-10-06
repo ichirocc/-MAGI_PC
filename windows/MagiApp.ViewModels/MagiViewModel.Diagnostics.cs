@@ -51,6 +51,12 @@ public sealed partial class MagiViewModel
     private string _lastRunDiagLabel = "";
     private long _lastRunDiagAtMs;
 
+    /// <summary>入力を維持した（結果を採用しなかった）エンジン実行の診断。表示中の勤務表の診断とは混ぜず、書き出しで別欄に出す。
+    /// 採用した実行が来たら消す（古い不採用の記録を最新と取り違えないため）。</summary>
+    private IReadOnlyList<string> _rejectedRunDiagLogs = Array.Empty<string>();
+    private int _rejectedRunDiagSerial;
+    private long _rejectedRunDiagAtMs;
+
     /// <summary>
     /// [3.322.0] 直近の最適化で「窓の要件(c1)がなぜ直せなかったか」の構造化診断。
     /// 研磨が候補を作って却下した記録が唯一の根拠＝盤面から再計算できないため保持する

@@ -145,6 +145,15 @@ public sealed partial class MagiViewModel
             sb.Append("※上の診断ログはその後の編集/再チェックで作り直された最新版です。こちらは実行時のもの。\n");
             foreach (var line in run) sb.Append(line).Append('\n');
         }
+        var rejected = _rejectedRunDiagLogs;
+        if (rejected.Count > 0)
+        {
+            var at = DateTimeOffset.FromUnixTimeMilliseconds(_rejectedRunDiagAtMs)
+                .ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+            sb.Append($"\n==== 採用しなかった実行の診断ログ（{RunTag(_rejectedRunDiagSerial)}・{at}・全文 {rejected.Count}件）====\n");
+            sb.Append("※結果が前回より良くならず、勤務表は前回のままです。この診断は表示中の勤務表のものではありません。\n");
+            foreach (var line in rejected) sb.Append(line).Append('\n');
+        }
         return sb.ToString();
     }
 
@@ -200,6 +209,15 @@ public sealed partial class MagiViewModel
             var lastRunArr = new JsonArray();
             foreach (var line in _lastRunDiagLogs) lastRunArr.Add(line);
             o["lastRunDiagLog"] = lastRunArr;
+        }
+
+        if (_rejectedRunDiagLogs.Count > 0)
+        {
+            o["rejectedRunSerial"] = _rejectedRunDiagSerial;
+            o["rejectedRunAt"] = _rejectedRunDiagAtMs;
+            var rejectedArr = new JsonArray();
+            foreach (var line in _rejectedRunDiagLogs) rejectedArr.Add(line);
+            o["rejectedRunDiagLog"] = rejectedArr;
         }
 
         var breakdownObj = new JsonObject();
