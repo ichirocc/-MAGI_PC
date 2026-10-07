@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-07（Android 3.624.0〜3.628.0・aed91be まで確認）: 移植の対象なし。玉突き連鎖（`C1EjectionChainPolish`）・停滞時の後処理差し込み（`StallPolishInjection`）・後処理前の局所降下（`PrePostDescent`、測定中）は C# に未移植＝上限秒数・探す範囲・シートの「玉突き」手（`FixKind.EJECT`）・差し込みの設定とログ修正は前提ごと無い。3.628.0 の非表示 3 項目のうち C# にあるのは「禁止の並びも直す」だけで、main `ea2a383` で `Visibility="Collapsed"`。共有文書（business-logic / data-models / sudo_model）に差分なし。玉突き連鎖は既定 OFF のまま＝既定 ON が決まった時点で移植を判断する。
+
 - 2026-10-05（Android 3.620.0 同期）: 個人の上限0は緩めない（ユーザー決定）。S6 の試算を自動でも再試行でも始めない（`RelaxTrialEnabled=false`、呼び出し側で止める＝`StartRelaxTrial` 単体のテストは残す）。緩和を誘う文言を「設定で見直す」へ。
 
 - 2026-10-05（C# 単独・出力同一）: CI で `FixSearchFinishingDuringABoardJobWritesNothing` が 1 回だけ「no continuation was posted」で落ちた。背景の探索が `await` に届く前に終わると続きがその場で走り、UI の列に積まれない競合。直し方の探索と違反チェックの `await Task.Run(…)` に `ConfigureAwaitOptions.ForceYielding` を付け、続きを常に UI の列へ積む（実アプリでは元から列で走る経路が大半＝結果は同じ）。
