@@ -102,10 +102,16 @@
                         <Button x:Name="ClearWishesForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearWishesForDaysClick" />
                         <Button x:Name="CancelWishSelectionButton" Content="キャンセル" Click="OnCancelWishSelectionClick" />
                     </StackPanel>
+                    <!-- 拡張希望: 選んだ日を、選んだシフト以外にする（禁止シフトを複数）。希望のある日は保存時に外れる。 -->
+                    <TextBlock Text="以外にする（拡張希望）: 選んだ日を、下で選んだシフト以外にする（複数選べます）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    <StackPanel x:Name="ExtWishShiftHost" Spacing="6" />
+                    <Button x:Name="AddExtWishButton" Content="選んだシフト以外にする" Click="OnAddExtWishClick" />
                 </StackPanel>
 
                 <TextBlock Text="登録済みの希望（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
                 <StackPanel x:Name="WishListHost" Spacing="2" />
+                <TextBlock Text="登録済みの拡張希望（この日はこのシフト以外）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
+                <StackPanel x:Name="ExtWishListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="WishDayBox" Width="56" PlaceholderText="日" />
                     <ComboBox x:Name="WishShiftCombo" Width="100" PlaceholderText="シフト" />

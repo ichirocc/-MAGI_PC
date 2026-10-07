@@ -96,6 +96,9 @@ public sealed partial class EditView : UserControl
     /// リセットする——直近に同期した職員 index は <see cref="_wishCalendarStaffIndex"/> に持つ。</summary>
     private readonly HashSet<int> _wishSelectedDays = new();
 
+    /// <summary>拡張希望の入力で選んでいる禁止シフト（index）。</summary>
+    private readonly HashSet<int> _extWishSel = new();
+
     /// <summary>[phase9 #13] 必要人数カレンダーの選択日（1 始まり）と、選択を持ち越すシフト。</summary>
     private readonly HashSet<int> _needSelectedDays = new();
     private int _needCalendarShiftIndex = -1;
@@ -411,6 +414,66 @@ public sealed partial class EditView : UserControl
         {
             WishListHost.Children.Add(new TextBlock { Text = $"ほか {rows.Count - MaxOverrideRows}件", FontSize = 14, Opacity = 0.8 });
         }
+
+        ExtWishListHost.Children.Clear();
+        foreach (var e in _vm.ExtWishViews())
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{e.StaffName} {string.Join(",", e.Days)}日 {string.Join("・", e.Kigou)}以外", FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
+            });
+            var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
+            var index = e.Index;
+            remove.Click += (_, _) => _vm.RemoveExtWish(index);
+            row.Children.Add(remove);
+            ExtWishListHost.Children.Add(row);
+        }
+    }
+
+    /// <summary>拡張希望の入力: 禁止するシフトの選択（複数）。<see cref="_extWishSel"/> に出し入れする。</summary>
+    private void RenderExtWishShiftToggles(UiState ui, bool editable)
+    {
+        ExtWishShiftHost.Children.Clear();
+        for (var start = 0; start < ui.ShiftSymbols.Count; start += 4)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            for (var k = start; k < Math.Min(start + 4, ui.ShiftSymbols.Count); k++)
+            {
+                var sel = _extWishSel.Contains(k);
+                var bg = k < ui.ShiftColorHex.Count ? ColorHex.Parse(ui.ShiftColorHex[k], Colors.LightGray) : Colors.LightGray;
+                var fg = k < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
+                var b = new Button
+                {
+                    Content = new TextBlock { Text = (sel ? "× " : "") + ui.ShiftSymbols[k], Foreground = new SolidColorBrush(fg), FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal },
+                    Background = new SolidColorBrush(bg), MinWidth = 72, MinHeight = 52,
+                    BorderThickness = new Thickness(sel ? 3 : 2),
+                    BorderBrush = sel ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
+                    IsEnabled = editable,
+                };
+                var kk = k;
+                b.Click += (_, _) =>
+                {
+                    if (!_extWishSel.Add(kk)) _extWishSel.Remove(kk);
+                    RenderExtWishShiftToggles(_vm.Ui, editable);
+                };
+                row.Children.Add(b);
+            }
+            ExtWishShiftHost.Children.Add(row);
+        }
+        AddExtWishButton.IsEnabled = editable && _extWishSel.Count > 0;
+    }
+
+    private void OnAddExtWishClick(object sender, RoutedEventArgs e)
+    {
+        var staffIdx = WishStaffCombo.SelectedIndex;
+        if (staffIdx < 0 || _wishSelectedDays.Count == 0 || _extWishSel.Count == 0) return;
+        if (_vm.AddExtWishForDays(staffIdx, _wishSelectedDays.Select(d => d - 1).ToList(), _extWishSel.OrderBy(x => x).ToList()))
+        {
+            _wishSelectedDays.Clear();
+            _extWishSel.Clear();
+        }
+        RenderWishCalendar(_vm.Ui, true);
     }
 
     /// <summary>
@@ -431,6 +494,7 @@ public sealed partial class EditView : UserControl
         {
             _wishCalendarStaffIndex = staffIdx;
             _wishSelectedDays.Clear();
+            _extWishSel.Clear();
         }
 
         WishCalendarHost.Children.Clear();
@@ -481,6 +545,21 @@ public sealed partial class EditView : UserControl
                 if (v.I == staffIdx) marked[v.Day] = v.Kigou;
         }
 
+        // このスタッフの拡張希望: 日(1始まり) -> 禁止シフトの記号（同じ職員の件は和集合）。
+        var extMarked = new Dictionary<int, List<string>>();
+        if (staffIdx >= 0)
+        {
+            foreach (var ew in _vm.ExtWishViews())
+            {
+                if (ew.I != staffIdx) continue;
+                foreach (var dd in ew.Days)
+                {
+                    if (!extMarked.TryGetValue(dd, out var l)) extMarked[dd] = l = new List<string>();
+                    foreach (var kg in ew.Kigou) if (!l.Contains(kg)) l.Add(kg);
+                }
+            }
+        }
+
         for (var d = 1; d <= days; d++)
         {
             var col = (dow0 + d - 1) % 7;
@@ -507,6 +586,11 @@ public sealed partial class EditView : UserControl
                     HorizontalAlignment = HorizontalAlignment.Center,
                     Child = new TextBlock { Text = kigou, FontSize = 14, Foreground = new SolidColorBrush(chipFg) },
                 });
+            }
+
+            if (extMarked.TryGetValue(d, out var ex))
+            {
+                content.Children.Add(new TextBlock { Text = "×" + string.Join("", ex), FontSize = 14, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
             }
 
             var cellButton = new Button
@@ -548,6 +632,7 @@ public sealed partial class EditView : UserControl
             : string.Join("、", sorted.Take(3).Select(DayChipLabel)) + $"、ほか{sorted.Count - 3}日";
         WishApplySummaryText.Text = $"{sorted.Count}日選択中: {labels}";
         RenderWishShiftButtons(ui, staffIdx, editable);
+        RenderExtWishShiftToggles(ui, editable);
     }
 
     /// <summary>[phase9 #14] 適用先シフトの大ボタン（Kotlin原本 <c>ShiftButtonGrid</c>）: 担当可能を主、担当外は「その他」の下に ⚠ つきで。</summary>

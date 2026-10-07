@@ -785,6 +785,37 @@ public sealed partial class MagiViewModel
     // ---- ws3 移植: 希望シフト wishes["i,j"]=シフトindex（採点=pref/hard1。割当やcons3系とは別。UIのみ・モデル/エンジン不変）----
     public sealed record WishView(int I, int J, string StaffName, int Day, string Kigou, int K);
 
+    /// <summary>拡張希望 1 件（Index は State.ExtWishes の位置）。Days は 1 始まりの日、Kigou は禁止シフトの記号。</summary>
+    public sealed record ExtWishView(int Index, int I, string StaffName, IReadOnlyList<int> Days, IReadOnlyList<string> Kigou);
+
+    /// <summary>拡張希望の一覧（日は期間内だけ、1 始まり）。</summary>
+    public IReadOnlyList<ExtWishView> ExtWishViews()
+    {
+        var st = _state;
+        if (st is null || !DateOnly.TryParseExact(st.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var start)) return Array.Empty<ExtWishView>();
+        var list = st.ExtWishes ?? Array.Empty<ExtWish>();
+        return list.Select((e, n) =>
+        {
+            var days = e.Days.Select(d => DateOnly.TryParseExact(d, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var dd) ? dd.DayNumber - start.DayNumber : -1)
+                .Where(j => j >= 0 && j < st.DayCount).Select(j => j + 1).OrderBy(x => x).ToList();
+            var name = e.Staff >= 0 && e.Staff < st.StaffList.Count ? st.StaffList[e.Staff].Name : e.Staff.ToString();
+            return new ExtWishView(n, e.Staff, name, days, e.Shifts);
+        }).ToList();
+    }
+
+    /// <summary>日（0 始まり）とシフト index から拡張希望を 1 件足す（入力画面の入口）。</summary>
+    public bool AddExtWishForDays(int staff, IReadOnlyList<int> days, IReadOnlyList<int> shifts)
+    {
+        var st = _state;
+        if (st is null || !DateOnly.TryParseExact(st.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var start)) return false;
+        return AddExtWish(new ExtWish(staff,
+            days.OrderBy(x => x).Select(j => start.AddDays(j).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)).ToList(),
+            shifts.Where(k => k >= 0 && k < st.Shifts.Count).Select(k => st.Shifts[k].Kigou).ToList()));
+    }
+
     public IReadOnlyList<WishView> WishOverrides()
     {
         var st = _state;
