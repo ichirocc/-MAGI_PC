@@ -172,6 +172,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
     /// <summary>[#41] 手動固定のセル "i,j"。</summary>
     [ObservableProperty] private IReadOnlySet<string> manualPins = new HashSet<string>();
+    /// <summary>拡張希望: セル "i,j" → その日に禁止のシフト index。</summary>
+    [ObservableProperty] private IReadOnlyDictionary<string, IReadOnlySet<int>> extBanned = new Dictionary<string, IReadOnlySet<int>>();
     /// <summary>[S5] 希望どうしの衝突（兄弟の希望を試算の候補に足す）。</summary>
     [ObservableProperty] private IReadOnlyList<WishSelfConflict> wishSelfConflicts = Array.Empty<WishSelfConflict>();
     /// <summary>[S5] 試算が終わるたびに進む（画面は <c>WishTrialFor</c> で読み直す）。</summary>

@@ -146,6 +146,11 @@
                                                 <Rectangle Height="2" VerticalAlignment="Bottom" Opacity="0.45"
                                                            Fill="{ThemeResource MagiOnSurfaceVariantBrush}"
                                                            Visibility="{x:Bind BandVisibility, Mode=OneWay}" IsHitTestVisible="False" />
+                                                <TextBlock Text="×" FontSize="10" FontWeight="Bold"
+                                                           Foreground="{x:Bind ExtBrush, Mode=OneWay}"
+                                                           Visibility="{x:Bind ExtVisibility, Mode=OneWay}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Top"
+                                                           Margin="0,0,0,0" IsHitTestVisible="False" />
                                                 <FontIcon Glyph="&#xE72E;" FontSize="9"
                                                           Visibility="{x:Bind PinVisibility, Mode=OneWay}"
                                                           HorizontalAlignment="Left" VerticalAlignment="Bottom"

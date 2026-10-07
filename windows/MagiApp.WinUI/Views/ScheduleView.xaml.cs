@@ -786,6 +786,7 @@ public sealed partial class ScheduleView : UserControl
             cell.SecondDotVisibility = Visibility.Collapsed;
             cell.BandVisibility = Visibility.Collapsed;
             cell.PinVisibility = Visibility.Collapsed;
+            cell.ExtVisibility = Visibility.Collapsed;
             // 回数の族（下限・上限・適切回数・個人の合計）はセルを持たないので名前の横に小さく ▼/▲（Kotlin と同じ）。
             if (col == 0 && row > 0 && _countBadges.TryGetValue(row - 1, out var badge))
             {
@@ -892,6 +893,12 @@ public sealed partial class ScheduleView : UserControl
             var thickness = new Thickness(0);
             var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Marks);
             cell.PinVisibility = ui.ManualPins.Contains($"{i},{j}") ? Visibility.Visible : Visibility.Collapsed;
+            if (ui.ExtBanned.TryGetValue($"{i},{j}", out var extBans))
+            {
+                cell.ExtVisibility = Visibility.Visible;
+                cell.ExtBrush = extBans.Contains(k) ? (Brush)Application.Current.Resources["MagiErrorBrush"] : (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"];
+            }
+            else cell.ExtVisibility = Visibility.Collapsed;
             cell.BandVisibility = i < c1Band.Length && j < c1Band[i].Length && c1Band[i][j] ? Visibility.Visible : Visibility.Collapsed;
             var vioClass = displayClasses.FirstOrDefault(c => VioBuckets.VioVisible(c, _vioEnabled));
             var second = GridDisplayMarks.SecondVisibleClass(displayClasses, _vioEnabled);

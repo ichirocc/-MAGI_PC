@@ -207,6 +207,7 @@ public sealed partial class MagiViewModel
     {
         Ui.Wishes = st.Wishes;
         Ui.ManualPins = st.PinsOf().Select(m => $"{m.Staff},{m.Day}").ToHashSet();
+        Ui.ExtBanned = ExtWishRules.BannedByCell(st);
         Ui.LockedWishKeys = WishTrial.LockedWishKeys(st);
         Ui.WishSelfConflicts = V6SanityPort.WishSelfConflicts(st);
     }

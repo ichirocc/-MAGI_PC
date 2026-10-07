@@ -91,6 +91,16 @@ public class ExtWishRulesTest
     }
 
     [Fact]
+    public void BannedByCellListsOnlyDesignatedDays()
+    {
+        var st = Base(new[] { First });   // 3 日（希望の日）は読み込みで重なっていても表示しない
+        var m = ExtWishRules.BannedByCell(st);
+        Assert.Equal(new[] { "0,0", "0,1" }, m.Keys.OrderBy(x => x));
+        Assert.True(m["0,0"].SetEquals(new[] { 2, 3 }));
+        Assert.Empty(ExtWishRules.BannedByCell(Base()));
+    }
+
+    [Fact]
     public void JsonRoundTripAndAbsentKeyIsEmpty()
     {
         var st = Base(new[] { ExtWishRules.Sanitize(Base(), First).Saved! });

@@ -57,6 +57,9 @@ public sealed partial class ScheduleCellVm : ObservableObject
     [ObservableProperty] private Visibility bandVisibility = Visibility.Collapsed;
     /// <summary>[#41] 手動固定の錠（左下。希望の丸は右下＝位置と形で区別）。</summary>
     [ObservableProperty] private Visibility pinVisibility = Visibility.Collapsed;
+    /// <summary>拡張希望の「×」（指定日は控えめ、割当が禁止のシフトなら違反色）。</summary>
+    [ObservableProperty] private Visibility extVisibility = Visibility.Collapsed;
+    [ObservableProperty] private Brush? extBrush;
     [ObservableProperty] private string? tooltip;
 }
 

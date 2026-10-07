@@ -130,6 +130,22 @@ public static class ExtWishRules
         return new BanTable(S, T, K, flat, overlaps);
     }
 
+    /// <summary>表示用: セル "i,j" → その日に禁止のシフト index（希望シフト日は入らない）。拡張希望が無ければ空。</summary>
+    public static IReadOnlyDictionary<string, IReadOnlySet<int>> BannedByCell(MagiState state)
+    {
+        var outD = new Dictionary<string, IReadOnlySet<int>>();
+        if ((state.ExtWishes?.Count ?? 0) == 0) return outD;
+        var t = BuildBanTable(state, state.StaffCount, state.DayCount, state.ShiftCount);
+        if (t.Flat is null) return outD;
+        for (var i = 0; i < t.S; i++)
+            for (var j = 0; j < t.T; j++)
+            {
+                var ks = Enumerable.Range(0, t.K).Where(k => t.Flat[(i * t.T + j) * t.K + k]).ToHashSet();
+                if (ks.Count > 0) outD[$"{i},{j}"] = ks;
+            }
+        return outD;
+    }
+
     /// <summary>第 7 節: 違反セル（"i,j"）。未割当は数えない。</summary>
     public static IReadOnlyList<string> Violations(BanTable table, int[][] schedule, int K)
     {

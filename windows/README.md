@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-07（Android 3.633.0 と同期）: 勤務表のセルに拡張希望の印。上端中央の「×」（指定日は控えめな色、割当が禁止のシフトなら MagiErrorBrush）。`ExtWishRules.BannedByCell`→`UiState.ExtBanned`（ApplyWishDisplay で作り直す）、`ScheduleGridModels` に ExtVisibility/ExtBrush。
 - 2026-10-07（Android 3.632.0 と同期）: 拡張希望の入力画面。編集タブの希望シフトで日を選んだときの適用パネルに「以外にする（拡張希望）」（禁止シフトを複数選んで登録＝`AddExtWishForDays`）、カレンダーの日に「×記号」、「登録済みの拡張希望」の一覧と削除。ViewModel に `ExtWishViews`・`AddExtWishForDays`（テスト `ExtWishInputTest`）。
 - 2026-10-07（Android 3.629.0〜3.631.0・b19aac4 を同期）: 拡張希望（基本希望の否定形＝職員×日の集合×禁止シフトの集合）を移植。`MagiState.ExtWishes`・JSON `extWishes`・`ExtWishRules`（保存規則・希望との排他・禁止表・違反件数 `ViolationReport.ExtWishCells`＝採点外）・ViewModel の `AddExtWish`/`RemoveExtWish` と希望設定の拒否、最適化器の候補生成（約 60 ファイル、Kotlin と同じ箇所に「新しい値が禁止の手を捨てる」判定）・最終番兵（禁止を新しく置いた段を外し、戻した盤面を候補に足す）・`PostChain.StageProbe`。テスト `ExtWishRulesTest`・`ExtWishOptimizeTest`（全アルゴリズム・PolishGate 全 ON の敵対テスト、並列実行しないコレクション）。禁止が無いときの出力は不変（エンジン 1075 件・ViewModel 619 件緑）。移植しないもの: 全SOFT玉突き `SoftCascadePolish`・玉突き連鎖・局所降下・停滞時研磨注入とその外部レビュー対応（OPT-01〜04・OBS-01）・`defaultNarrow`＝いずれも既定 OFF で C# に前提が無い（既定 ON が決まった時点で判断）。C++ の ABI 8 は C# に無関係。入力画面は Android にも未実装。
 - 2026-10-07（Android 3.624.0〜3.628.0・aed91be まで確認）: 移植の対象なし。玉突き連鎖（`C1EjectionChainPolish`）・停滞時の後処理差し込み（`StallPolishInjection`）・後処理前の局所降下（`PrePostDescent`、測定中）は C# に未移植＝上限秒数・探す範囲・シートの「玉突き」手（`FixKind.EJECT`）・差し込みの設定とログ修正は前提ごと無い。3.628.0 の非表示 3 項目のうち C# にあるのは「禁止の並びも直す」だけで、main `ea2a383` で `Visibility="Collapsed"`。共有文書（business-logic / data-models / sudo_model）に差分なし。玉突き連鎖は既定 OFF のまま＝既定 ON が決まった時点で移植を判断する。
