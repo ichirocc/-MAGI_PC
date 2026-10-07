@@ -693,7 +693,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 dialog.Hide();
                 FocusCell(cell.I, cell.J);
-                DispatcherQueue.TryEnqueue(() => ShowCellEditor(_focusCellElement ?? HardListButton, cell.I, cell.J));
+                DispatcherQueue.TryEnqueue(() => ShowCellEditor((FrameworkElement?)_focusCellElement ?? HardListButton, cell.I, cell.J));
             };
             panel.Children.Add(row);
         }
