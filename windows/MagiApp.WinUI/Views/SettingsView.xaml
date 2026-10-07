@@ -68,9 +68,9 @@
             </ComboBox>
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                        Text="じっくり: 時間いっぱい粘り、細かい違反をもう一歩減らします。結果が良くなるとは限りません。" />
-            <ToggleSwitch x:Name="C1MoveARepairToggle" Header="期間の制約の入れ替えで、できた禁止の並びも直す"
+            <ToggleSwitch x:Name="C1MoveARepairToggle" Visibility="Collapsed" Header="期間の制約の入れ替えで、できた禁止の並びも直す"
                           OnContent="ON" OffContent="OFF" Toggled="OnC1MoveARepairToggled" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+            <TextBlock Visibility="Collapsed" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                        Text="試験中。測定では効果は確認できていません（既定はOFF）" />
 
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
