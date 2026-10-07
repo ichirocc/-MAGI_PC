@@ -53,6 +53,8 @@ public static partial class V6NativeOptimizer
                     break;
             }
         }
+        // 拡張希望の禁止へ置いた入口は採らない（入口を base に戻し、下の kick で離す）
+        if (!p.KeepsExtBan(baseSched, outSched)) for (var i = 0; i < outSched.Length; i++) Array.Copy(baseSched[i], outSched[i], baseSched[i].Length);
         if (AdaptiveEliteArchive.ScheduleDistance(baseSched, outSched) == 0)
             ForceDiverseKick(p, outSched, rng, Math.Max(1, plan.Intensity));
         return outSched;
@@ -87,7 +89,7 @@ public static partial class V6NativeOptimizer
             var key = (long)i * Math.Max(1, p.T) + j;
             if (!touched.Add(key) || p.WishLocked(i, j)) continue;
             var old = outSched[i][j];
-            var alternatives = p.AllowedShiftsForStaff(i).Where(k => k != old).ToArray();
+            var alternatives = p.AllowedShiftsForStaff(i).Where(k => k != old && !p.ExtBanned(i, j, k)).ToArray();
             if (alternatives.Length == 0) continue;
             outSched[i][j] = alternatives[rng.NextInt(alternatives.Length)];
             changed++;
@@ -127,6 +129,7 @@ public static partial class V6NativeOptimizer
             var tied = 0;
             foreach (var k in allowed)
             {
+                if (p.ExtBanned(i, j, k)) continue; // 拡張希望の禁止へは置かない
                 var freq = peers.Count(peer =>
                 {
                     if (i >= peer.Length) return false;
@@ -200,6 +203,7 @@ public static partial class V6NativeOptimizer
                 // 個人上限0は職員ごと＝同じ群でも相手の勤務を置けない日がある（MayPlace、3.507.0）。その日は交換しない。
                 int ka = outSched[a][j], kb = outSched[b][j];
                 if ((kb >= 0 && kb < p.K && !p.MayPlace(a, kb)) || (ka >= 0 && ka < p.K && !p.MayPlace(b, ka))) continue;
+                if (ka != kb && (p.ExtBanned(a, j, kb) || p.ExtBanned(b, j, ka))) continue; // 拡張希望の禁止へは置かない
                 (outSched[a][j], outSched[b][j]) = (outSched[b][j], outSched[a][j]);
             }
             swapped[a] = true;
@@ -277,6 +281,7 @@ public static partial class V6NativeOptimizer
                 if (shouldStop()) break;
                 // [希望固定の徹底] 希望固定セルへ希望以外の値は写さない（希望どうしの衝突では崩した方が keep-best に勝つ）。
                 if ((strict || p.Pinned(i, j)) && p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
+                if (p.ExtBanned(i, j, alt[i][j])) continue; // 拡張希望の禁止は写さない
                 cur[i][j] = alt[i][j]; // forced march toward alt
                 curRep = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval);
                 if (UnifiedViolationChecker.BetterReport(curRep, bestRep)) { bestSched = cur.Copy2D(); bestRep = curRep; }
@@ -569,6 +574,7 @@ public static partial class V6NativeOptimizer
         var hardZeroWinner = -1;
         var globalImproves = 0;
         var archive = new AdaptiveEliteArchive();
+        var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
 
         var sharedTrajectories = new int[workers][][];
         for (var i = 0; i < workers; i++) sharedTrajectories[i] = HypothesisStartFor(state, entry, i, baseSeed, options.QuantitativeRangeEval);
@@ -691,11 +697,13 @@ public static partial class V6NativeOptimizer
                             seed: roleSeed,
                             shouldStop: shouldStop,
                             quantitativeRangeEval: options.QuantitativeRangeEval);
+                        // 拡張希望の禁止へ置いた入口は採らず、自分の軌道から続ける
+                        if (!p.KeepsExtBan(trajectory, start)) start = trajectory.Copy2D();
                         var startReport = UnifiedViolationChecker.Check(state, start, options.QuantitativeRangeEval);
                         archive.Register(start, startReport, assignment.Role, i, epoch,
                             bridge: startReport.Hard == snapGlobalReport.Hard + 1);
                         trajectory = start;
-                        if (Better(startReport, eliteReport))
+                        if (Better(startReport, eliteReport) && p.KeepsExtBan(elite, start))
                         {
                             elite = start.Copy2D();
                             eliteReport = startReport;
@@ -708,7 +716,7 @@ public static partial class V6NativeOptimizer
                         lock (lockObj)
                         {
                             sharedTrajectories[i] = start.Copy2D();
-                            if (Better(startReport, globalReport))
+                            if (Better(startReport, globalReport) && p.KeepsExtBan(globalBest, start))
                             {
                                 globalBest = start.Copy2D();
                                 globalReport = startReport;
@@ -783,14 +791,15 @@ public static partial class V6NativeOptimizer
                             epochOverrunNotes.Add($"W{i}:{AdaptiveHypothesisEpochPolicy.RoleName(assignment.Role)}(q={quantum}s→実{(NowMs() - roleT0) / 1000}s)");
                         }
 
-                        if (result != null)
+                        // 拡張希望の禁止へ置いたロール結果は採らない
+                        if (result != null && p.KeepsExtBan(start, result.Schedule))
                         {
                             if (result.Report.Hard == 0) Interlocked.CompareExchange(ref hardZeroWinner, i, -1); // 記録のみ
                             iterations += result.Iterations;
                             archive.Register(result.Schedule, result.Report, assignment.Role, i, epoch,
                                 bridge: result.Report.Hard == snapGlobalReport.Hard + 1);
                             trajectory = result.Schedule.Copy2D();
-                            if (Better(result.Report, eliteReport))
+                            if (Better(result.Report, eliteReport) && p.KeepsExtBan(elite, result.Schedule))
                             {
                                 elite = result.Schedule.Copy2D();
                                 eliteReport = result.Report;
@@ -800,7 +809,7 @@ public static partial class V6NativeOptimizer
                             lock (lockObj)
                             {
                                 sharedTrajectories[i] = result.Schedule.Copy2D();
-                                if (Better(result.Report, globalReport))
+                                if (Better(result.Report, globalReport) && p.KeepsExtBan(globalBest, result.Schedule))
                                 {
                                     globalBest = result.Schedule.Copy2D();
                                     globalReport = result.Report;
@@ -897,7 +906,7 @@ public static partial class V6NativeOptimizer
         {
             var o = outcomes[index];
             archive.Register(o.Elite, o.Report, o.LastRole, index, o.Epochs, bridge: o.Report.Hard == globalReport.Hard + 1);
-            if (Better(o.Report, globalReport))
+            if (Better(o.Report, globalReport) && p.KeepsExtBan(globalBest, o.Elite))
             {
                 globalBest = o.Elite.Copy2D();
                 globalReport = o.Report;

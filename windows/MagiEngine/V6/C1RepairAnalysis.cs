@@ -407,6 +407,7 @@ public static class C1RepairAnalysis
                     int sh = multiset[si];
                     if (tried[sh + 1]) continue;
                     if (!p.MayPlace(i, sh)) continue;
+                    if (sh != s[i][d] && p.ExtBanned(i, d, sh)) continue;   // 拡張希望の禁止へは置かない（現状維持は可）
                     if (wl >= 0 && sh != wl) continue;
                     if (mi == 0 && branchCount >= cfg.PerDayBranchCap) { budgetHit = true; break; }
                     tried[sh + 1] = true;

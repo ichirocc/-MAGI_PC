@@ -70,6 +70,8 @@ public static partial class V6HotfixPasses
                 if (res.Exhaustive) { deadSpans.Add(key); provenWalls++; }
                 return;
             }
+            // 拡張希望の禁止へ置く patch は採らない（solver 側でも除外済み＝防御）
+            if (res.Patch.Any(op => op[2] != work[op[0]][op[1]] && p.ExtBanned(op[0], op[1], op[2]))) return;
             var workBefore = work.Copy2D();
             foreach (var op in res.Patch) work[op[0]][op[1]] = op[2];
             var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);

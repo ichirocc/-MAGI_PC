@@ -75,6 +75,7 @@ public static partial class V6HotfixPasses
                         //   塞がないと希望固定セルが動きうる（PinInvariantTest.PostOptimizationHoldsPinsAcrossRandomStates
                         //   random#1 の再現で発見: 職員0 日5 の希望がこのフィルタ経由で動いていた）。
                         if (p.WishLocked(staff, d)) { if (work[staff][d] != shift) screened++; return false; }
+                        if (work[staff][d] != shift && p.ExtBanned(staff, d, shift)) return false;   // 拡張希望の禁止へは置かない
                         var neutral = C1DeltaPrefilter.ScreenCell(p, work, staff, d, shift) == C1DeltaPrefilter.Verdict.Neutral;
                         if (!neutral && work[staff][d] != shift) screened++;
                         return neutral;
@@ -102,7 +103,7 @@ public static partial class V6HotfixPasses
                     if (old >= 0 && old < p.K && p.CovUCell(old, d, cntOldAfter) > 0)
                     {
                         var chain = V6SearchOperators.FindCovUChain(p, trial, old, d, rng, exclude: staff);
-                        if (chain != null)
+                        if (chain != null && !chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2])))
                         {
                             foreach (var mv in chain) trial[mv[0]][mv[1]] = mv[2];
                             var repChain = UnifiedViolationChecker.Check(state, trial, quantitativeRangeEval);

@@ -268,6 +268,8 @@ public static class ViolationComponentRepair
                     if (!beforeCnt.TryGetValue(i * 1000L + k, out var bc)) continue;
                     if (Math.Abs(delta.CountForStaff(i, k) - lo) > Math.Abs(bc - lo)) { prunedPin++; return long.MaxValue; }
                 }
+                // 結合結果で拡張希望の禁止を新しく置く枝は落とす（候補が別パス由来でも）
+                if (p.HasExtBan && undo.Any(r => { var nk = delta.At(r[0], r[1]); return nk != work[r[0]][r[1]] && p.ExtBanned(r[0], r[1], nk); })) return long.MaxValue;
                 return delta.Score();
             }
             finally
@@ -390,14 +392,14 @@ public static class ViolationComponentRepair
             }
             void Single(int i, int j, int k2)
             {
-                if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.MayPlace(i, k2)) return;
+                if (k2 < 0 || k2 >= p.K || k2 == work[i][j] || p.WishLocked(i, j) || !p.MayPlaceAt(i, j, k2)) return;
                 var old = work[i][j];
                 if (!BreaksPin(i, old, k2)) { Add(new List<int[]> { new[] { i, j, k2 } }, $"{StaffName(i)} {j + 1}日→{Kig(k2)}"); return; }
                 var made2 = 0;
                 foreach (var d in DaysNear(j))
                 {
                     if (made2 >= 3) break;
-                    if (work[i][d] != k2 || p.WishLocked(i, d) || !p.MayPlace(i, old)) continue;
+                    if (work[i][d] != k2 || p.WishLocked(i, d) || !p.MayPlaceAt(i, d, old)) continue;
                     Add(new List<int[]> { new[] { i, j, k2 }, new[] { i, d, old } }, $"{StaffName(i)} {j + 1}日⇄{d + 1}日");
                     made2++;
                 }
@@ -406,13 +408,14 @@ public static class ViolationComponentRepair
             {
                 if (x == y) return;
                 var kx = work[x][j]; var ky = work[y][j];
-                if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) return;
+                if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlaceAt(x, j, ky) || !p.MayPlaceAt(y, j, kx)) return;
                 if (!BreaksPin(x, kx, ky) && !BreaksPin(y, ky, kx)) { Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日"); return; }
                 var made2 = 0;
                 foreach (var d in DaysNear(j))
                 {
                     if (made2 >= 2) break;
                     if (work[x][d] != ky || work[y][d] != kx || p.WishLocked(x, d) || p.WishLocked(y, d)) continue;
+                    if (p.ExtBanned(x, d, kx) || p.ExtBanned(y, d, ky)) continue;   // 拡張希望の禁止へは置かない
                     Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kx }, new[] { x, d, kx }, new[] { y, d, ky } }, $"{StaffName(x)}↔{StaffName(y)} {j + 1}日/{d + 1}日");
                     made2++;
                 }
@@ -425,6 +428,7 @@ public static class ViolationComponentRepair
                 {
                     var kx = work[x][d]; var ky = work[y][d];
                     if (p.WishLocked(x, d) || p.WishLocked(y, d) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) return;
+                    if (kx != ky && (p.ExtBanned(x, d, ky) || p.ExtBanned(y, d, kx))) return;   // 拡張希望の禁止へは置かない
                     if (kx != ky) changes = true;
                 }
                 if (!changes) return;
@@ -438,7 +442,7 @@ public static class ViolationComponentRepair
                 var kx = work[x][j]; var ky = work[y][j]; var kz = work[z][j];
                 if (kx == ky || ky == kz || kx == kz) return;
                 if (p.WishLocked(x, j) || p.WishLocked(y, j) || p.WishLocked(z, j)) return;
-                if (!p.MayPlace(x, ky) || !p.MayPlace(y, kz) || !p.MayPlace(z, kx)) return;
+                if (!p.MayPlaceAt(x, j, ky) || !p.MayPlaceAt(y, j, kz) || !p.MayPlaceAt(z, j, kx)) return;
                 Add(new List<int[]> { new[] { x, j, ky }, new[] { y, j, kz }, new[] { z, j, kx } }, $"{StaffName(x)}→{StaffName(y)}→{StaffName(z)} {j + 1}日");
             }
             if (a.Staff >= 0 && a.Day >= 0)

@@ -57,6 +57,7 @@ public static partial class V6HotfixPasses
                         var sa = work[a][j];
                         var sb = work[b][j];
                         if (sa == sb || !p.MayPlace(a, sb) || !p.MayPlace(b, sa)) continue;
+                        if (p.ExtBanned(a, j, sb) || p.ExtBanned(b, j, sa)) continue;   // 拡張希望の禁止へは置かない
                         // [厳密ピン保護] 異なるシフト同士の同日交換はa/bの自身のシフト回数を変えるため、
                         //   staffRange厳密ピン(lo==hi)を新たに崩す候補は不採用にする（keep-best/重み不変）。
                         var workBeforeSwap2 = work.Copy2D();
@@ -95,7 +96,9 @@ public static partial class V6HotfixPasses
                             var sc = work[c][j];
                             if (sa == sb && sb == sc) continue;
                             // a←sb, b←sc, c←sa（feasibleなら適用→評価→不採用なら巻き戻し）
-                            if (p.MayPlace(a, sb) && p.MayPlace(b, sc) && p.MayPlace(c, sa))
+                            // 値が変わるセルだけ拡張希望の禁止を判定する
+                            var banned3 = (sb != sa && p.ExtBanned(a, j, sb)) || (sc != sb && p.ExtBanned(b, j, sc)) || (sa != sc && p.ExtBanned(c, j, sa));
+                            if (p.MayPlace(a, sb) && p.MayPlace(b, sc) && p.MayPlace(c, sa) && !banned3)
                             {
                                 var workBeforeRotate3 = work.Copy2D();
                                 work[a][j] = sb; work[b][j] = sc; work[c][j] = sa;
@@ -149,6 +152,7 @@ public static partial class V6HotfixPasses
         // [監査で発見・3.270.0] p.wish[i][j]<0 は実現不能な希望まで動かせないと誤判定していた
         //   （3.183.0 LightMirrorOptimizer と同型のバグ）。wishLocked は canDo ガード込みで正しい。
         bool Movable(int i, int j) => !p.WishLocked(i, j);
+        bool BannedNew(int i, int j, int k) => k != work[i][j] && p.ExtBanned(i, j, k);  // 拡張希望の禁止へは置かない
         void SwapBlock(int a, int b, int jj, int ww)
         {
             for (var t = 0; t < ww; t++)
@@ -198,6 +202,7 @@ public static partial class V6HotfixPasses
                             for (var t = 0; t < w; t++)
                             {
                                 if (!p.MayPlace(i, work[i2][j + t]) || !p.MayPlace(i2, work[i][j + t])) { feasible = false; break; }
+                                if (BannedNew(i, j + t, work[i2][j + t]) || BannedNew(i2, j + t, work[i][j + t])) { feasible = false; break; }
                                 if (work[i][j + t] != work[i2][j + t]) same = false;
                             }
                             if (!feasible || same) continue;
@@ -281,6 +286,7 @@ public static partial class V6HotfixPasses
         //   同型のバグ）。実現不能な希望はpref計上上も定数=動かして良い＝canDoガード込みの
         //   wishLocked が正しい判定。安全側（isBetter/checkerが最終ゲート）で候補が広がるのみ。
         bool Movable(int i, int j) => !p.WishLocked(i, j);
+        bool BannedNew(int i, int j, int k) => k != work[i][j] && p.ExtBanned(i, j, k);  // 拡張希望の禁止へは置かない
         void Rotate(int a, int b, int c, int jj, int ww, int[] targetA, int[] targetB, int[] targetC)
         {
             for (var t = 0; t < ww; t++)
@@ -339,6 +345,8 @@ public static partial class V6HotfixPasses
                                 for (var t = 0; t < w; t++)
                                 {
                                     if (!p.MayPlace(ai, work[bi][j + t]) || !p.MayPlace(bi, work[ci][j + t]) || !p.MayPlace(ci, work[ai][j + t]))
+                                    { feasible = false; break; }
+                                    if (BannedNew(ai, j + t, work[bi][j + t]) || BannedNew(bi, j + t, work[ci][j + t]) || BannedNew(ci, j + t, work[ai][j + t]))
                                     { feasible = false; break; }
                                 }
                                 if (!feasible) continue;
@@ -500,6 +508,7 @@ public static partial class V6HotfixPasses
                                 var z = work[ip][j1];
                                 if (z == x || z < 0 || z >= p.K) continue;
                                 if (!p.MayPlace(i, z) || !p.MayPlace(ip, y)) continue;
+                                if (p.ExtBanned(i, j1, z) || p.ExtBanned(i, j2, x) || p.ExtBanned(ip, j1, x) || p.ExtBanned(ip, j2, y)) continue;
                                 // 長方形交換を適用（被覆保存）→ フル評価 → 改善時のみ採用、不採用なら完全巻き戻し。
                                 // [監査で発見・3.270.0] isBetter は hard→weightedScore→total の辞書式のため、
                                 //   raw total が改善してもweightedScoreが悪化する組合せ(重い厳密ピン破りを軽い

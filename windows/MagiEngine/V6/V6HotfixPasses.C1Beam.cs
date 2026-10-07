@@ -64,7 +64,7 @@ public static partial class V6HotfixPasses
                     if (!p.MayPlace(i, x)) continue;
                     for (int j = 0; j < p.T; j++)
                     {
-                        if (work[i][j] == x || !Movable(i, j)) continue;
+                        if (work[i][j] == x || !Movable(i, j) || p.ExtBanned(i, j, x)) continue;
                         if (InDeficientC1Window(p, work, i, x, d, n, j)) outList.Add((ci, i, j));
                     }
                 }
@@ -78,14 +78,14 @@ public static partial class V6HotfixPasses
             int a0 = w[i][j];
             for (int i2 = 0; i2 < p.S; i2++)
             {
-                if (i2 == i || w[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a0)) continue;
+                if (i2 == i || w[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a0) || p.ExtBanned(i2, j, a0)) continue;
                 w[i][j] = x; w[i2][j] = a0;
                 return w;
             }
             w[i][j] = x;
             var chain = V6SearchOperators.FindCovUChain(p, w, a0, j, rng, exclude: i,
                 c1Pref: (s2, sh, dy) => C1Deficient(w, s2, sh, dy));
-            if (chain == null) return w;
+            if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) return w;
             foreach (var mv in chain) w[mv[0]][mv[1]] = mv[2];
             return w;
         }

@@ -201,7 +201,9 @@ public static partial class V6HotfixPasses
             int ka = work[a][d], kb = work[b][d];
             if (ka < 0 || ka >= K || kb < 0 || kb >= K) return false;
             if (Locked(a, d) || Locked(b, d)) return false;
-            return p.MayPlace(a, kb) && p.MayPlace(b, ka);
+            if (!p.MayPlace(a, kb) || !p.MayPlace(b, ka)) return false;
+            // 拡張希望の禁止へは置かない（値が変わる日だけ判定）
+            return ka == kb || (!p.ExtBanned(a, d, kb) && !p.ExtBanned(b, d, ka));
         }
 
         /// <summary>窓 s0..s1 を a と b で丸ごと交換できて、かつ何かが変わるとき真。</summary>
@@ -291,6 +293,7 @@ public static partial class V6HotfixPasses
                     if (c == a || c == b || Locked(c, d)) continue;
                     var kc = work[c][d]; if (kc < 0 || kc >= K || !p.MayPlace(b, kc) || !p.MayPlace(c, ka)) continue;
                     if (ka == kb && kb == kc) continue;
+                    if ((kb != ka && p.ExtBanned(a, d, kb)) || (kc != kb && p.ExtBanned(b, d, kc)) || (ka != kc && p.ExtBanned(c, d, ka))) continue;
                     if ((SameGroup(a, b) && SameGroup(b, c)) != sg) continue;
                     yield return new WishMove(WishMoveKind.Rotate3, new[] { a, d, kb, b, d, kc, c, d, ka }, sg);
                 }

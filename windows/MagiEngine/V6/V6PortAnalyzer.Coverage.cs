@@ -362,7 +362,7 @@ public static partial class V6PortAnalyzer
                     // [3.391.0] 実現不能な希望は凍結しない＝「希望固定で動かせない」と案内するのは誤り
                     //   （むしろ動かすと担当外セル=groupViol も同時に消える）。WishLocked へ統一。
                     if (p.WishLocked(i, j) && p.LockTo(i, j) == k) { pinned++; pinnedIdx.Add(i); continue; }   // 実現可能な本人希望＝動かすとpref化
-                    var alts = p.AllowedShiftsForStaff(i).Where(m => m != k).ToArray();
+                    var alts = p.AllowedShiftsForStaff(i).Where(m => m != k && !p.ExtBanned(i, j, m)).ToArray();   // 拡張希望の禁止へは最適化も置かない
                     if (alts.Length == 0) { forbid++; continue; }      // 担当可能な代替シフトが無い
                     var hasRoom = false; var blockedByC3n = true;
                     foreach (var m in alts)

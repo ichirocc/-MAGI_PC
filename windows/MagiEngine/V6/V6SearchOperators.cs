@@ -78,7 +78,7 @@ internal static class V6SearchOperators
         int bestNw = -1, bestDef = int.MinValue;
         for (int k = 0; k < p.K; k++)
         {
-            if (k == overK || !p.MayPlace(i0, k)) continue;
+            if (k == overK || !p.MayPlace(i0, k) || p.ExtBanned(i0, j, k)) continue;   // 拡張希望の禁止へは置かない
             int def = p.CovUCell(k, j, eval.CountOnDay(k, j));
             if (def > bestDef) { bestDef = def; bestNw = k; }
         }
@@ -104,13 +104,13 @@ internal static class V6SearchOperators
             if (eval.CountForStaff(i, c.ShiftIdx) < c.Count) { if (pickI-- == 0) { stf = i; break; } }
         }
         int dayCnt = 0;
-        for (int j = 0; j < p.T; j++) if (eval.At(stf, j) != c.ShiftIdx && !p.WishLocked(stf, j)) dayCnt++;
+        for (int j = 0; j < p.T; j++) if (eval.At(stf, j) != c.ShiftIdx && !p.WishLocked(stf, j) && !p.ExtBanned(stf, j, c.ShiftIdx)) dayCnt++;
         if (dayCnt == 0) return null;
         int pickJ = rng.NextInt(dayCnt);
         int day = 0;
         for (int j = 0; j < p.T; j++)
         {
-            if (eval.At(stf, j) != c.ShiftIdx && !p.WishLocked(stf, j)) { if (pickJ-- == 0) { day = j; break; } }
+            if (eval.At(stf, j) != c.ShiftIdx && !p.WishLocked(stf, j) && !p.ExtBanned(stf, j, c.ShiftIdx)) { if (pickJ-- == 0) { day = j; break; } }
         }
         return new[] { stf, day, c.ShiftIdx };
     }
@@ -144,13 +144,13 @@ internal static class V6SearchOperators
         }
         FoundLowTarget:
         int dayCnt = 0;
-        for (int j = 0; j < p.T; j++) if (eval.At(rlI, j) != rlK && !p.WishLocked(rlI, j)) dayCnt++;
+        for (int j = 0; j < p.T; j++) if (eval.At(rlI, j) != rlK && !p.WishLocked(rlI, j) && !p.ExtBanned(rlI, j, rlK)) dayCnt++;
         if (dayCnt == 0) return null;
         int pickJ = rng.NextInt(dayCnt);
         int day = 0;
         for (int j = 0; j < p.T; j++)
         {
-            if (eval.At(rlI, j) != rlK && !p.WishLocked(rlI, j)) { if (pickJ-- == 0) { day = j; break; } }
+            if (eval.At(rlI, j) != rlK && !p.WishLocked(rlI, j) && !p.ExtBanned(rlI, j, rlK)) { if (pickJ-- == 0) { day = j; break; } }
         }
         return new[] { rlI, day, rlK };
     }
@@ -180,13 +180,13 @@ internal static class V6SearchOperators
             }
             var allowed41 = p.AllowedShiftsForStaff(ci);
             int oCnt = 0;
-            foreach (var ak in allowed41) if (ak != c.ShiftIdx) oCnt++;
+            foreach (var ak in allowed41) if (ak != c.ShiftIdx && !p.ExtBanned(ci, j, ak)) oCnt++;
             if (oCnt == 0) return null;
             int pickK = rng.NextInt(oCnt);
             int nwK = 0;
             foreach (var ak in allowed41)
             {
-                if (ak != c.ShiftIdx) { if (pickK-- == 0) { nwK = ak; break; } }
+                if (ak != c.ShiftIdx && !p.ExtBanned(ci, j, ak)) { if (pickK-- == 0) { nwK = ak; break; } }
             }
             return new[] { ci, j, nwK };
         }
@@ -195,13 +195,13 @@ internal static class V6SearchOperators
         {
             int aCnt = 0;
             for (int i = 0; i < p.S; i++)
-                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx)) aCnt++;
+                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx) && !p.ExtBanned(i, j, c.ShiftIdx)) aCnt++;
             if (aCnt == 0) return null;
             int pickA = rng.NextInt(aCnt);
             int ai = 0;
             for (int i = 0; i < p.S; i++)
             {
-                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx))
+                if (p.Sgrp[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx) && !p.ExtBanned(i, j, c.ShiftIdx))
                 {
                     if (pickA-- == 0) { ai = i; break; }
                 }
@@ -238,13 +238,13 @@ internal static class V6SearchOperators
             }
             var allowed41 = p.AllowedShiftsForStaff(ci);
             int oCnt = 0;
-            foreach (var ak in allowed41) if (ak != c.ShiftIdx) oCnt++;
+            foreach (var ak in allowed41) if (ak != c.ShiftIdx && !p.ExtBanned(ci, j, ak)) oCnt++;
             if (oCnt == 0) return null;
             int pickK = rng.NextInt(oCnt);
             int nwK = 0;
             foreach (var ak in allowed41)
             {
-                if (ak != c.ShiftIdx) { if (pickK-- == 0) { nwK = ak; break; } }
+                if (ak != c.ShiftIdx && !p.ExtBanned(ci, j, ak)) { if (pickK-- == 0) { nwK = ak; break; } }
             }
             return new[] { ci, j, nwK };
         }
@@ -253,13 +253,13 @@ internal static class V6SearchOperators
         {
             int aCnt = 0;
             for (int i = 0; i < p.S; i++)
-                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx)) aCnt++;
+                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx) && !p.ExtBanned(i, j, c.ShiftIdx)) aCnt++;
             if (aCnt == 0) return null;
             int pickA = rng.NextInt(aCnt);
             int ai = 0;
             for (int i = 0; i < p.S; i++)
             {
-                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx))
+                if (p.Ssk[i] == c.GroupIdx && eval.At(i, j) != c.ShiftIdx && !p.WishLocked(i, j) && p.MayPlace(i, c.ShiftIdx) && !p.ExtBanned(i, j, c.ShiftIdx))
                 {
                     if (pickA-- == 0) { ai = i; break; }
                 }
@@ -309,13 +309,13 @@ internal static class V6SearchOperators
         }
         var allowed = p.AllowedShiftsForStaff(rhI);
         int oCnt = 0;
-        foreach (var ak in allowed) if (ak != rhK) oCnt++;
+        foreach (var ak in allowed) if (ak != rhK && !p.ExtBanned(rhI, day, ak)) oCnt++;
         if (oCnt == 0) return null;
         int pickK = rng.NextInt(oCnt);
         int nwK = 0;
         foreach (var ak in allowed)
         {
-            if (ak != rhK) { if (pickK-- == 0) { nwK = ak; break; } }
+            if (ak != rhK && !p.ExtBanned(rhI, day, ak)) { if (pickK-- == 0) { nwK = ak; break; } }
         }
         return new[] { rhI, day, nwK };
     }
@@ -357,7 +357,7 @@ internal static class V6SearchOperators
                     if (miss == 1 && missL >= 0)
                     {
                         int ml = j + missL;
-                        if (!p.WishLocked(i, ml) && p.MayPlace(i, seq[missL])) return new[] { i, ml, seq[missL] };
+                        if (!p.WishLocked(i, ml) && p.MayPlace(i, seq[missL]) && !p.ExtBanned(i, ml, seq[missL])) return new[] { i, ml, seq[missL] };
                     }
                 }
                 j++;
@@ -433,7 +433,7 @@ internal static class V6SearchOperators
             for (int d = 0; d < p.T; d++)
             {
                 int j = (dayStart + d) % p.T;
-                if (!p.WishLocked(i, j) && eval.At(i, j) == kOver) return new[] { i, j, kUnder };
+                if (!p.WishLocked(i, j) && eval.At(i, j) == kOver && !p.ExtBanned(i, j, kUnder)) return new[] { i, j, kUnder };
             }
         }
         return null;
@@ -528,7 +528,7 @@ internal static class V6SearchOperators
             // [3.345.0] 休は通常のシフト種の一つ＝先頭に置く優先をやめた（旧: 休を第一候補にしていた）。
             //   実データ3件の後処理研磨で最終盤面がバイト一致＝この優先は実質不活性だった。
             var altOrder = new List<int>();
-            foreach (var s in p.AllowedShiftsForStaff(i)) if (s != oldJ2) altOrder.Add(s);
+            foreach (var s in p.AllowedShiftsForStaff(i)) if (s != oldJ2 && !p.ExtBanned(i, j2, s)) altOrder.Add(s);   // 拡張希望の禁止へは置かない
             foreach (var alt in altOrder)
             {
                 int cntBefore = 0;
@@ -652,6 +652,7 @@ internal static class V6SearchOperators
                 int m = sched[i][j];
                 if (m < 0 || m >= p.K || m == fillShift) continue;
                 if (!p.MayPlace(i, fillShift) || p.WishLocked(i, j)) continue;
+                if (p.ExtBanned(i, j, fillShift)) continue;   // 拡張希望の禁止へは置かない
                 var q = prev;
                 bool used = false;
                 while (q != null) { if (q.Staff == i) { used = true; break; } q = q.Prev; }

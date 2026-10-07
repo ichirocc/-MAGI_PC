@@ -188,6 +188,7 @@ public static partial class V6HotfixPasses
         {
             if (!Movable(i, j)) { RecordBlock(target, "希望固定", day: j); return false; }
             if (p.MakesForbiddenRun(work, i, j, toK)) { RecordBlock(target, "禁止連続", day: j); return false; }
+            if (p.ExtBanned(i, j, toK)) { RecordBlock(target, "拡張希望の禁止", day: j); return false; }
             var cnt = 0;
             for (var s = 0; s < p.S; s++) if (work[s][j] == fromK) cnt++;
             var needsChain = p.CovUCell(fromK, j, cnt - 1) > p.CovUCell(fromK, j, cnt);
@@ -208,7 +209,7 @@ public static partial class V6HotfixPasses
             }
             var chain = V6SearchOperators.FindCovUChain(p, work, fromK, j, rng, exclude: i,
                 rangeAvoid: (st, fk) => ExceedsOwnRangeHi(p, work, st, fk));
-            if (chain == null) { work[i][j] = fromK; RecordBlock(target, "候補なし"); return false; }
+            if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) { work[i][j] = fromK; RecordBlock(target, "候補なし"); return false; }
             var usedAvoided = chain.Any(mv => ExceedsOwnRangeHi(p, work, mv[0], mv[2]));
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
@@ -238,7 +239,7 @@ public static partial class V6HotfixPasses
                 if (work[hi][j] != k || !Movable(hi, j) || !Movable(lo, j)) continue;
                 var loK = work[lo][j];
                 if (loK == k || loK < 0 || loK >= p.K) continue;
-                if (!p.MayPlace(hi, loK) || !p.MayPlace(lo, k)) continue;
+                if (!p.MayPlaceAt(hi, j, loK) || !p.MayPlaceAt(lo, j, k)) continue;
                 if (p.MakesForbiddenRun(work, hi, j, loK) || p.MakesForbiddenRun(work, lo, j, k)) continue;
                 var workBeforeSwap = work.Copy2D();
                 work[hi][j] = loK; work[lo][j] = k;
@@ -328,7 +329,7 @@ public static partial class V6HotfixPasses
                     r != hi &&
                     work[r][j] != k &&
                     Movable(r, j) &&
-                    p.MayPlace(r, k) &&
+                    p.MayPlaceAt(r, j, k) &&
                     ReceiverRoom(r) > 0).ToList();
                 if (rawReceivers.Count == 0) continue;
                 var maxFlex = rawReceivers.Max(r => flex[r]);
@@ -363,7 +364,7 @@ public static partial class V6HotfixPasses
                                 // [3.417.0] 旧: 記号が「希」のシフトを割当先から外していた（3.278.0）。撤去の根拠は
                                 //   TryFlexibleDayFlow 側の同種箇所に記載（HF77: コメント≠実装／実測で中立／
                                 //   別の職場では黙って効かない、の3点）。
-                                if (!Movable(i, j) || !p.MayPlace(i, newK)) continue;
+                                if (!Movable(i, j) || !p.MayPlaceAt(i, j, newK)) continue;
                                 work[i][j] = newK;
                                 var badRun = p.MakesForbiddenRun(work, i, j, newK);
                                 work[i][j] = oldK;
@@ -519,7 +520,7 @@ public static partial class V6HotfixPasses
                                 //     関数側でも全て負けていた。
                                 //   ③**別の職場では黙って効かない**: 記号が「希望」「W」等なら同じ意図でも
                                 //     一切適用されない。
-                                if (!Movable(i, j) || !p.MayPlace(i, newK)) continue;
+                                if (!Movable(i, j) || !p.MayPlaceAt(i, j, newK)) continue;
                                 work[i][j] = newK;
                                 var badRun = p.MakesForbiddenRun(work, i, j, newK);
                                 work[i][j] = oldK;
@@ -527,8 +528,9 @@ public static partial class V6HotfixPasses
                                 {
                                     if (!adjacentFix.TryGetValue((i, newK), out var fix))
                                     {
-                                        fix = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, work, i, j, newK, rng)
-                                            ?? new List<int[]>();
+                                        // 隣接日の調整手も拡張希望の禁止へは置かない
+                                        var f0 = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, work, i, j, newK, rng);
+                                        fix = f0 != null && !f0.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2])) ? f0 : new List<int[]>();
                                         adjacentFix[(i, newK)] = fix;
                                     }
                                     if (fix.Count == 0) continue;

@@ -66,7 +66,7 @@ public static partial class V6HotfixPasses
                     var tried = false;
                     foreach (var m in p.AllowedShiftsForStaff(i))
                     {
-                        if (m == k || p.MakesForbiddenRun(work, i, j, m)) continue;
+                        if (m == k || p.ExtBanned(i, j, m) || p.MakesForbiddenRun(work, i, j, m)) continue;
                         if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
                         if (p.CovOCell(m, j, cov[j][m] + 1) > p.CovOCell(m, j, cov[j][m])) continue;   // 受け皿なし
                         if (evaluations >= maxEvaluations) break;

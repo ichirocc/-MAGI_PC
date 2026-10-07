@@ -108,7 +108,7 @@ public static partial class V6NativeOptimizer
         var entryReport = UnifiedViolationChecker.Check(state, schedule, options.QuantitativeRangeEval);
         var repaired = Hf67HardRepair(state, schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x67L), options.QuantitativeRangeEval).Schedule;
         var repairedReport = UnifiedViolationChecker.Check(state, repaired, options.QuantitativeRangeEval);
-        var hf67Adopted = Better(repairedReport, entryReport);
+        var hf67Adopted = Better(repairedReport, entryReport) && p.KeepsExtBan(schedule, repaired);
         if (hf67Adopted) schedule = repaired;
         var entryBoard = schedule.Copy2D();   // [N1c, Kotlin原本] 内側番兵用に入力の勤務表を保持
         var entryBoardReport = hf67Adopted ? repairedReport : entryReport;
@@ -164,6 +164,13 @@ public static partial class V6NativeOptimizer
         // [E11/多人数ブロック移動, Kotlin原本] エピローグで残 covU を「勤務→勤務」連鎖で充填（ALNS単独や
         //   covU を focus しなかった経路でも走る保険）。keep-best 照合＝退化不能。
         var resultSched = result.Schedule;
+        // 拡張希望の禁止へ置いた探索結果は採らない（どこかの手が判定を漏らしたときの最後の砦）
+        if (!p.KeepsExtBan(schedule, resultSched))
+        {
+            logs.Add(new MirrorLog(level: "W", tag: "V6Dispatcher",
+                message: $"探索結果が拡張希望の禁止へ置いていたため入口の勤務表を採用（{p.ExtBanNewCells(schedule, resultSched).Count}セル）"));
+            resultSched = schedule;
+        }
         // [3.569.0 同期] この盤面の評価は研磨の入口と出口でも要る＝同じ盤面を 3 回 Check しない（report は盤面と対で持ち回る）。
         var resultRep = UnifiedViolationChecker.Check(state, resultSched, options.QuantitativeRangeEval);
         if (resultRep.Hard > 0 && resultRep.Breakdown.GetValueOrDefault("covU", 0) > 0 && !shouldStop())
@@ -173,7 +180,7 @@ public static partial class V6NativeOptimizer
             if (n > 0)
             {
                 var candRep = UnifiedViolationChecker.Check(state, cand, options.QuantitativeRangeEval);
-                if (Better(candRep, resultRep))
+                if (Better(candRep, resultRep) && p.KeepsExtBan(resultSched, cand))
                 {
                     logs.Add(new MirrorLog(tag: "ChainFill",
                         message: $"多人数ブロック移動で covU 充填: HARD {resultRep.Hard}→{candRep.Hard} / total {resultRep.Total}→{candRep.Total}（連鎖{n}件）"));

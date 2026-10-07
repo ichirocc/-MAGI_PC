@@ -87,6 +87,49 @@ public static partial class V6FinalPort
         return res;
     }
 
+    /// <summary>拡張希望の禁止を入力から新しく置いた段を外す。入力（先頭）は必ず残す。</summary>
+    internal static List<StageCandidate> ExcludeExtBanStages(Problem p, int[][] input, IReadOnlyList<StageCandidate> stages) =>
+        stages.Where((st, idx) => idx == 0 || p.KeepsExtBan(input, st.Sched)).ToList();
+
+    /// <summary>禁止を新しく置いた段（入力以外）から、そのセルを入力の値へ戻した盤面を作る。候補に足すだけなので選ばれる結果は悪化しない。</summary>
+    internal static List<StageCandidate> RevertedExtBanStages(MagiEngine.Model.MagiState state, Problem p, int[][] input,
+        IReadOnlyList<StageCandidate> stages, bool quantitativeRangeEval)
+    {
+        var res = new List<StageCandidate>();
+        foreach (var st in stages.Skip(1))
+        {
+            var cells = p.ExtBanNewCells(input, st.Sched);
+            if (cells.Count == 0) continue;
+            var back = st.Sched.Copy2D();
+            foreach (var (i, j) in cells) back[i][j] = input[i][j];
+            if (!p.KeepsExtBan(input, back) || !p.HoldsManualPins(back) || p.CapZeroCells(back).Count > 0) continue;
+            res.Add(new StageCandidate($"{st.Label}（拡張希望の禁止を戻す）", back,
+                UnifiedViolationChecker.Check(state, back, quantitativeRangeEval)));
+        }
+        return res;
+    }
+
+    /// <summary>ExcludeExtBanStages で外した段ごとの W ログ（候補生成の漏れの目印。セルは先頭 5 件）。</summary>
+    internal static List<MirrorLog> ExtBanLogs(MagiEngine.Model.MagiState state, Problem p, int[][] input, IReadOnlyList<StageCandidate> stages)
+    {
+        var logs = new List<MirrorLog>();
+        foreach (var st in stages.Skip(1))
+        {
+            var cells = p.ExtBanNewCells(input, st.Sched);
+            if (cells.Count == 0) continue;
+            var parts = cells.Take(5).Select(c =>
+            {
+                var k = st.Sched[c.I][c.J];
+                var name = c.I < state.StaffList.Count ? state.StaffList[c.I].Name : c.I.ToString();
+                var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
+                return $"{name}/{c.J + 1}日目/{sym}";
+            });
+            logs.Add(new MirrorLog(level: "W", tag: "Sentinel",
+                message: $"{st.Label}の盤面に拡張希望の禁止が{cells.Count}件新しく置かれていたため、戻した盤面を候補にしました（多重防御）: {string.Join("、", parts)}"));
+        }
+        return logs;
+    }
+
     /// <summary>ExcludeCapZeroStages で外した段ごとの W ログ（違反セルは先頭 5 件）。</summary>
     internal static List<MirrorLog> CapZeroLogs(MagiEngine.Model.MagiState state, Problem p, IReadOnlyList<StageCandidate> stages)
     {

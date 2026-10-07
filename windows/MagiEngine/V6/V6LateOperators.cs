@@ -311,6 +311,7 @@ public static class V6LateOperators
                 if (Array.IndexOf(alw[i1], k2) < 0 || Array.IndexOf(alw[i2], k3) < 0 || Array.IndexOf(alw[i3], k1) < 0) continue;
                 if (p.WishLocked(i1, j) || p.WishLocked(i2, j) || p.WishLocked(i3, j)) continue;
                 if (C3nHit(i1, j, k2) || C3nHit(i2, j, k3) || C3nHit(i3, j, k1)) continue;
+                if (p.ExtBanned(i1, j, k2) || p.ExtBanned(i2, j, k3) || p.ExtBanned(i3, j, k1)) continue;   // 拡張希望の禁止へは置かない
                 sched[i1][j] = k2; sched[i2][j] = k3; sched[i3][j] = k1;
                 if (GateW()) chain3++;
                 else { sched[i1][j] = k1; sched[i2][j] = k2; sched[i3][j] = k3; }
@@ -347,6 +348,7 @@ public static class V6LateOperators
                 if (p.WishLocked(i1, j) || p.WishLocked(i2, j) ||
                     p.WishLocked(i3, j) || p.WishLocked(i4, j)) continue;
                 if (C3nHit(i1, j, k2) || C3nHit(i2, j, k3) || C3nHit(i3, j, k4) || C3nHit(i4, j, k1)) continue;
+                if (p.ExtBanned(i1, j, k2) || p.ExtBanned(i2, j, k3) || p.ExtBanned(i3, j, k4) || p.ExtBanned(i4, j, k1)) continue;   // 拡張希望の禁止へは置かない
                 sched[i1][j] = k2; sched[i2][j] = k3; sched[i3][j] = k4; sched[i4][j] = k1;
                 if (GateW()) chain4++;
                 else { sched[i1][j] = k1; sched[i2][j] = k2; sched[i3][j] = k3; sched[i4][j] = k4; }
@@ -441,6 +443,7 @@ public static class V6LateOperators
                     if (kk1 < 0 || kk2 < 0) { ok = false; break; }
                     if (kk1 != kk2) anyDiff = true;
                     if (Array.IndexOf(b1, kk2) < 0 || Array.IndexOf(b2, kk1) < 0) { ok = false; break; } // 群互換(双方向)
+                    if (kk1 != kk2 && (p.ExtBanned(i1, j, kk2) || p.ExtBanned(i2, j, kk1))) { ok = false; break; } // 拡張希望の禁止へは置かない
                     ks1[x] = kk1; ks2[x] = kk2;
                     x++; j++;
                 }
@@ -507,7 +510,7 @@ public static class V6LateOperators
                         for (var d = 0; d < blen; d++)
                         {
                             var j = s0 + d;
-                            if (p.WishLocked(i1, j) || sched[i1][j] == kd) { okc = false; break; }
+                            if (p.WishLocked(i1, j) || sched[i1][j] == kd || p.ExtBanned(i1, j, kd)) { okc = false; break; }
                         }
                         if (okc) { j1 = s0; break; }
                     }
@@ -526,7 +529,7 @@ public static class V6LateOperators
                         foreach (var u in used)
                         {
                             if (sched[u][j] == kd && !p.WishLocked(u, j) &&
-                                Array.IndexOf(p.AllowedShiftsForStaff(u), k1) >= 0)
+                                Array.IndexOf(p.AllowedShiftsForStaff(u), k1) >= 0 && !p.ExtBanned(u, j, k1))
                             {
                                 pick = u;
                                 break;
@@ -544,6 +547,7 @@ public static class V6LateOperators
                                 if (sched[c2][j] != kd) continue;
                                 if (p.WishLocked(c2, j)) continue;
                                 if (Array.IndexOf(p.AllowedShiftsForStaff(c2), k1) < 0) continue;
+                                if (p.ExtBanned(c2, j, k1)) continue;   // 拡張希望の禁止へは置かない
                                 var cnt2 = 0;
                                 for (var jj = 0; jj < t; jj++)
                                 {

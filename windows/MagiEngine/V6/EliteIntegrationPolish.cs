@@ -226,7 +226,7 @@ internal static class EliteIntegrationPolish
             if (Stopped(shouldStop, deadlineMs)) break;
             var k = target.Schedule[i][j];
             if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
-            if (!p.MayPlace(i, k)) continue;
+            if (!p.MayPlace(i, k) || p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない
             current[i][j] = k;
             var report = UnifiedViolationChecker.Check(state, current);
             if (Better(report, bestReport) && PinsHold(p, rootSchedule, current, wishPinStrict))
@@ -319,6 +319,7 @@ internal static class EliteIntegrationPolish
                 {
                     if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
                     if (!p.MayPlace(i, k)) continue;
+                    if (node.Schedule[i][j] != k && p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない
                     var changed = node.Schedule[i][j] == k ? node.Changed : node.Changed + 1;
                     var schedule = node.Schedule.Copy2D();
                     schedule[i][j] = k;
@@ -353,9 +354,10 @@ internal static class EliteIntegrationPolish
     /// 採用の共通条件（<see cref="Better"/> の後）: 厳密ピンを崩さない＋[希望固定の徹底] root から希望を新たに崩さない
     /// （<see cref="ScheduleUtil.KeepsWishPins"/>）。エリートは別の経路の盤面ごと入るので、relink/fusion のセル単位の
     /// <c>WishLocked</c> 判定だけでは、端点の採用と崩れたエリートを起点にした relink から希望の崩れが持ち込まれる。
+    /// 拡張希望の禁止も同じ理由で root との差分セルを判定する（<see cref="ScheduleUtil.KeepsExtBan"/>）。
     /// </summary>
     private static bool PinsHold(Problem p, int[][] root, int[][] s, bool wishPinStrict) =>
-        !V6SearchOperators.ExactPinRegression(p, root, s) && p.KeepsWishPins(root, s, wishPinStrict);
+        !V6SearchOperators.ExactPinRegression(p, root, s) && p.KeepsWishPins(root, s, wishPinStrict) && p.KeepsExtBan(root, s);
 
     /// <summary>
     /// ビーム中間ノードの許容幅。<paramref name="baseline"/> は**呼出時点の現在最良**（<see cref="FuseGroup"/>の

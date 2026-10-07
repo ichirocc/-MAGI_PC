@@ -279,7 +279,7 @@ public static partial class V6PortAnalyzer
         var alts = 0;
         foreach (var m in p.AllowedShiftsForStaff(i))
         {
-            if (m == cur) continue;
+            if (m == cur || p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは最適化も置かない
             alts++;
             var after = C3nAfter(m);
             // 正味 HARD が減るか（希望を破る手は pref が 1 増える。hard は族横断の件数和なので同じ単位）。

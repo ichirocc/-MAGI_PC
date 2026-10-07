@@ -128,7 +128,7 @@ public static partial class V6NativeOptimizer
                         {
                             var oldK = eval.At(i, j);
                             var nw = allowed[rng.NextInt(allowed.Length)];
-                            if (nw != oldK)
+                            if (nw != oldK && !p.ExtBanned(i, j, nw))
                             {
                                 eval.Apply(i, j, nw);
                                 var ns = eval.Score();
@@ -159,7 +159,7 @@ public static partial class V6NativeOptimizer
                     {
                         var ka = eval.At(i, ja);
                         var kb = eval.At(i, jb);
-                        if (ka != kb)
+                        if (ka != kb && !p.ExtBanned(i, ja, kb) && !p.ExtBanned(i, jb, ka))
                         {
                             eval.Apply(i, ja, kb);
                             eval.Apply(i, jb, ka);
@@ -191,7 +191,7 @@ public static partial class V6NativeOptimizer
                     {
                         var k1 = eval.At(i1, j);
                         var k2 = eval.At(i2, j);
-                        if (k1 != k2 && p.MayPlace(i1, k2) && p.MayPlace(i2, k1))
+                        if (k1 != k2 && p.MayPlace(i1, k2) && p.MayPlace(i2, k1) && !p.ExtBanned(i1, j, k2) && !p.ExtBanned(i2, j, k1))
                         {
                             eval.Apply(i1, j, k2);
                             eval.Apply(i2, j, k1);
@@ -217,7 +217,7 @@ public static partial class V6NativeOptimizer
                 if (fix != null)
                 {
                     var oldK = eval.At(fix[0], fix[1]);
-                    if (fix[2] != oldK)
+                    if (fix[2] != oldK && !p.ExtBanned(fix[0], fix[1], fix[2]))
                     {
                         eval.Apply(fix[0], fix[1], fix[2]);
                         var ns = eval.Score();
@@ -259,14 +259,17 @@ public static partial class V6NativeOptimizer
                     nDiffs = n;
                 }
                 else nDiffs = V6SearchOperators.DiffInto(p.T, cur, repairedCell, diffBuf);
+                // 拡張希望の禁止へ置いた候補は評価せずに捨てる（eval へは何も反映しない）
+                var extBad = p.HasExtBan && ExtBanInDiff(p, repairedCell, diffBuf, nDiffs);
+                var nApply = extBad ? 0 : nDiffs;
 
-                for (var idx = 0; idx < nDiffs; idx++)
+                for (var idx = 0; idx < nApply; idx++)
                 {
                     var flat = diffBuf[idx];
                     eval.Apply(flat / p.T, flat % p.T, repairedCell[flat / p.T][flat % p.T]);
                 }
                 var ns2 = eval.Score();
-                if (ns2 / Evaluator.SCORE_HARD_UNIT <= bestHard &&
+                if (!extBad && ns2 / Evaluator.SCORE_HARD_UNIT <= bestHard &&
                     (V6SearchOperators.BetterScore(ns2, curScore) || V6SearchOperators.AcceptWorseScore(ns2, curScore, 0.15, rng)))
                 {
                     cur = repairedCell;
@@ -276,7 +279,7 @@ public static partial class V6NativeOptimizer
                 }
                 else
                 {
-                    for (var idx = 0; idx < nDiffs; idx++)
+                    for (var idx = 0; idx < nApply; idx++)
                     {
                         var flat = diffBuf[idx];
                         eval.Apply(flat / p.T, flat % p.T, cur[flat / p.T][flat % p.T]);

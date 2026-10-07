@@ -241,7 +241,9 @@ public sealed class SaOptimizer
             if (Locked(i, j)) return;
             var b = _problem.AllowedShiftsForStaff(i);
             if (b.Length == 0) return;
-            ApplyCell(i, j, b[rng.NextInt(b.Length)]);
+            int k = b[rng.NextInt(b.Length)];
+            if (_problem.ExtBanned(i, j, k)) return; // 拡張希望の禁止へは置かない
+            ApplyCell(i, j, k);
         }
         void OpSwapDays()
         {
@@ -253,6 +255,7 @@ public sealed class SaOptimizer
             if (Locked(i, j1) || Locked(i, j2)) return;
             int o1 = de.At(i, j1), o2 = de.At(i, j2);
             if (o1 == o2) return;
+            if (_problem.ExtBanned(i, j1, o2) || _problem.ExtBanned(i, j2, o1)) return;
             ApplyCell(i, j1, o2); ApplyCell(i, j2, o1);
         }
         void OpBlockFill()
@@ -269,9 +272,20 @@ public sealed class SaOptimizer
             // [3.341.0, Kotlin原本コメント] 固定セルを飛ばして「部分的に埋まった窓」を作らない。窓を
             //   埋めるのがこの手の意図で、途中が抜けた窓はその意図を果たさないまま多数のセルを壊すだけ。
             int q = 0;
-            while (q < c.Day1) { if (Locked(i, js + q)) return; q++; }
+            while (q < c.Day1)
+            {
+                if (Locked(i, js + q)) return;
+                if (de.At(i, js + q) != c.ShiftIdx && _problem.ExtBanned(i, js + q, c.ShiftIdx)) return;
+                q++;
+            }
             int l = 0;
             while (l < c.Day1) { ApplyCell(i, js + l, c.ShiftIdx); l++; }
+        }
+        // 拡張希望の禁止に当たったセルは元の値のまま残す
+        void LnsCell(int i, int j)
+        {
+            int k = RandShiftFor(i);
+            if (!_problem.ExtBanned(i, j, k)) ApplyCell(i, j, k);
         }
         void OpLns()
         {
@@ -286,14 +300,14 @@ public sealed class SaOptimizer
                     var js = new int[cnt];
                     for (int idx = 0; idx < cnt; idx++) js[idx] = rng.NextInt(T);
                     if (js.Any(j => Locked(i, j))) return;
-                    foreach (var j in js) ApplyCell(i, j, RandShiftFor(i));
+                    foreach (var j in js) LnsCell(i, j);
                     break;
                 }
                 case 1:
                 {
                     int j = rng.NextInt(T);
                     for (int i = 0; i < S; i++) if (Locked(i, j)) return;
-                    for (int i = 0; i < S; i++) ApplyCell(i, j, RandShiftFor(i));
+                    for (int i = 0; i < S; i++) LnsCell(i, j);
                     break;
                 }
                 default:
@@ -302,7 +316,7 @@ public sealed class SaOptimizer
                     var cells = new (int I, int J)[cnt];
                     for (int idx = 0; idx < cnt; idx++) cells[idx] = (rng.NextInt(S), rng.NextInt(T));
                     if (cells.Any(c => Locked(c.I, c.J))) return;
-                    foreach (var c in cells) ApplyCell(c.I, c.J, RandShiftFor(c.I));
+                    foreach (var c in cells) LnsCell(c.I, c.J);
                     break;
                 }
             }

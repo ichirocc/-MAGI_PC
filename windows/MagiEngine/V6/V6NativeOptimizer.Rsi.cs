@@ -34,8 +34,11 @@ public static partial class V6NativeOptimizer
     {
         List<int[]>? bestOps = null;
         ViolationReport? bestRep = null;
+        var p = candidates.Count == 0 ? null : ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         foreach (var ops in candidates)
         {
+            // 拡張希望: 値が変わるセルに禁止の値を置く候補は捨てる
+            if (p != null && p.HasExtBan && ops.Any(it => it[2] != sched[it[0]][it[1]] && p.ExtBanned(it[0], it[1], it[2]))) continue;
             var saved = new int[ops.Count];
             for (var idx = 0; idx < ops.Count; idx++) saved[idx] = sched[ops[idx][0]][ops[idx][1]];
             foreach (var mv in ops) sched[mv[0]][mv[1]] = mv[2];
@@ -125,6 +128,7 @@ public static partial class V6NativeOptimizer
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != k))
                         {
                             if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
+                            if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                             if (p.MakesForbiddenRun(sched, i, j, m))
                             {
                                 var fix = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, sched, i, j, m, rng);
@@ -190,6 +194,7 @@ public static partial class V6NativeOptimizer
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != c.ShiftIdx))
                         {
                             if (!p.WishMoveAllowed(i, j, c.ShiftIdx, m, strict)) continue;
+                            if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                             if (p.MakesForbiddenRun(sched, i, j, m)) continue;
                             candidates.Add(new List<int[]> { new[] { i, j, m } });
                             // 玉突き連鎖版（離脱先を先に適用してから探索＝本人がまだ在籍中に見える誤判定を防ぐ既定の作法）。
@@ -222,6 +227,7 @@ public static partial class V6NativeOptimizer
                         var old = sched[i][j];
                         if (old < 0 || old >= p.K || (p.WishLocked(i, j) && p.LockTo(i, j) == old)) continue;   // 現シフトが実現可能な本人希望＝対象外
                         if (!p.WishMoveAllowed(i, j, old, c.ShiftIdx, strict)) continue;
+                        if (p.ExtBanned(i, j, c.ShiftIdx)) continue;   // 拡張希望の禁止へは置かない
                         if (p.MakesForbiddenRun(sched, i, j, c.ShiftIdx)) continue;
                         candidates.Add(new List<int[]> { new[] { i, j, c.ShiftIdx } });
                         sched[i][j] = c.ShiftIdx;
@@ -274,6 +280,7 @@ public static partial class V6NativeOptimizer
                 foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != fromShift))
                 {
                     if (!p.WishMoveAllowed(i, j, fromShift, m, strict)) continue;
+                    if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                     if (p.MakesForbiddenRun(sched, i, j, m)) continue;
                     outList.Add(new List<int[]> { new[] { i, j, m } });
                     var oldK = sched[i][j];
@@ -490,7 +497,8 @@ public static partial class V6NativeOptimizer
         var started = NowMs();
         var stop = shouldStop ?? (() => false);
         var rng = new JavaRandom(ActualSeed(options.Seed) ^ 0x451L);
-        var best = ScheduleUtil.NormalizeSchedule(initial, ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval));
+        var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
+        var best = ScheduleUtil.NormalizeSchedule(initial, p);
         var bestReport = UnifiedViolationChecker.Check(state, best, options.QuantitativeRangeEval);
         var iters = 0L;
         var rounds = Math.Max(2, Math.Min(8, budgetSec / 30 + 2));
@@ -573,7 +581,7 @@ public static partial class V6NativeOptimizer
             var candReport = phase.Report;
             {
                 var lr = V6LateOperators.Improve(state, candSched, candReport, rng, started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval);
-                if (lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0)
+                if (lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0 && p.KeepsExtBan(candSched, lr.Schedule))
                 {
                     candSched = lr.Schedule;
                     candReport = lr.Report;
@@ -583,7 +591,8 @@ public static partial class V6NativeOptimizer
                     logs.AddRange(lr.Logs);
                 }
             }
-            if (Better(candReport, bestReport))
+            // 拡張希望の禁止へ置いたラウンド結果は採らない
+            if (Better(candReport, bestReport) && p.KeepsExtBan(best, candSched))
             {
                 best = candSched.Copy2D();
                 bestReport = candReport;

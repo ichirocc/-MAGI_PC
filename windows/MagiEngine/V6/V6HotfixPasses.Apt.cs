@@ -85,6 +85,7 @@ public static partial class V6HotfixPasses
             {
                 if (stop()) return false;
                 if (work[i][j] != fromK || !Movable(i, j)) continue;
+                if (p.ExtBanned(i, j, toK)) continue;  // 拡張希望の禁止へは置かない
                 if (p.MakesForbiddenRun(work, i, j, toK)) continue;
                 var cntFrom = 0; var cntTo = 0;
                 for (var s = 0; s < p.S; s++) { if (work[s][j] == fromK) cntFrom++; if (work[s][j] == toK) cntTo++; }
@@ -104,6 +105,7 @@ public static partial class V6HotfixPasses
                 var a = work[i][j]; var b = work[i2][j];
                 if (a != sharedK || b == sharedK) continue;
                 if (!Movable(i, j) || !Movable(i2, j)) continue;
+                if (p.ExtBanned(i, j, b) || p.ExtBanned(i2, j, a)) continue;  // 拡張希望の禁止へは置かない
                 if (p.MakesForbiddenRun(work, i, j, b) || p.MakesForbiddenRun(work, i2, j, a)) continue;
                 var workBefore = work.Copy2D();
                 work[i][j] = b; work[i2][j] = a;
@@ -120,7 +122,7 @@ public static partial class V6HotfixPasses
         // 手③: RangePolish型の玉突きチェーン。
         bool TryChainRelocate(int i, int j, int fromK, int toK)
         {
-            if (!Movable(i, j) || p.MakesForbiddenRun(work, i, j, toK)) return false;
+            if (!Movable(i, j) || p.ExtBanned(i, j, toK) || p.MakesForbiddenRun(work, i, j, toK)) return false;
             var cnt = 0;
             for (var s = 0; s < p.S; s++) if (work[s][j] == fromK) cnt++;
             var needsChain = p.CovUCell(fromK, j, cnt - 1) > p.CovUCell(fromK, j, cnt);
@@ -140,7 +142,7 @@ public static partial class V6HotfixPasses
             }
             var chain = V6SearchOperators.FindCovUChain(p, work, fromK, j, rng, exclude: i,
                 rangeAvoid: (st, fk) => WorsensOwnApt(st, fk));
-            if (chain == null) { work[i][j] = fromK; return false; }
+            if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) { work[i][j] = fromK; return false; }
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
             var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);

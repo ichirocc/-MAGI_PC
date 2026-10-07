@@ -117,7 +117,7 @@ public static class RelaxTrial
         if (set.Count > maxRelaxes) return NoWall;
         if (Search(Apply(stH, set), schedule, window, stop) is not { } rr) return UnavailableOrStopped(stop);
         if (stop()) return Stopped;
-        var moves = rr.Hard < rep0.Hard ? Diff(schedule, rr.Board) : new List<Move>();
+        var moves = rr.Hard < rep0.Hard && p0.KeepsExtBan(schedule, rr.Board) ? Diff(schedule, rr.Board) : new List<Move>();   // 拡張希望の禁止を置く手順は出さない
         return new Result(staff, day, window.First, window.Last, pre, set, rep0.Hard, control.Hard, controlH.Hard, rr.Hard, moves);
     }
 
@@ -205,7 +205,7 @@ public static class RelaxTrial
                 {
                     if (shouldStop()) return null;
                     int kx = b0[x][j], ky = b0[y][j];
-                    if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlace(x, ky) || !p.MayPlace(y, kx)) continue;
+                    if (kx == ky || p.WishLocked(x, j) || p.WishLocked(y, j) || !p.MayPlaceAt(x, j, ky) || !p.MayPlaceAt(y, j, kx)) continue;
                     var nb = b0.Copy2D(); nb[x][j] = ky; nb[y][j] = kx;
                     if (UnifiedViolationChecker.Check(state, nb.Copy2D()).Hard > baseHard) continue;
                     var r = Vcr(state, nb, shouldStop);

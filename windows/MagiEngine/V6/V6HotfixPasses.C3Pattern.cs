@@ -92,6 +92,7 @@ public static partial class V6HotfixPasses
                 {
                     if (done || stop()) break;
                     if (alt == curK) continue;
+                    if (p.ExtBanned(i, j, alt)) continue;  // 拡張希望の禁止へは置かない
                     if (p.MakesForbiddenRun(work, i, j, alt)) continue;
                     var cnt = 0;
                     for (var s = 0; s < p.S; s++) if (work[s][j] == curK) cnt++;
@@ -111,7 +112,7 @@ public static partial class V6HotfixPasses
                     // [玉突き連鎖] i の離脱で curK の被覆が悪化する → 玉突きで埋め直す（盤面不変・巻き戻し可能）。
                     var chain = V6SearchOperators.FindCovUChain(p, work, curK, j, rng, exclude: i,
                         rangeAvoid: (st, fk) => ExceedsOwnRangeHi(p, work, st, fk));
-                    if (chain == null) { work[i][j] = curK; continue; }
+                    if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) { work[i][j] = curK; continue; }
                     var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
                     foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
                     var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);

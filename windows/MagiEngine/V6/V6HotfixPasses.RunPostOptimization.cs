@@ -303,8 +303,12 @@ public static partial class V6HotfixPasses
             Record(r.AppliedDays, r.Report);
         }
 
+        /// <summary>測定・テスト用: 段を畳むたびに (段のキー, 畳んだ後の盤面) を受け取る。本番では null。</summary>
+        internal static volatile Action<string, int[][]>? StageProbe;
+
         private void Record(int applied, ViolationReport? rep)
         {
+            StageProbe?.Invoke(_lastKey, Work);
             StageRecords.Add(new PostStageRecord(_lastKey, applied, _lastMs, rep?.Hard, rep?.WeightedScore, rep?.Total, _lastFoldRolledBack));
             _lastKey = "";
             _lastMs = 0L;

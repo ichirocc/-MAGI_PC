@@ -75,7 +75,7 @@ public static partial class V6HotfixPasses
                         if (OutOfTime()) goto ScanDone;
                         for (var j = 0; j < p.T; j++)
                         {
-                            if (work[i][j] != give || p.WishLocked(i, j)) continue;
+                            if (work[i][j] != give || p.WishLocked(i, j) || p.ExtBanned(i, j, want)) continue;
                             var cand = work.Copy2D();
                             cand[i][j] = want;
                             var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
@@ -118,7 +118,8 @@ public static partial class V6HotfixPasses
                         {
                             var old = cand[i][j];
                             cand[i][j] = allowed[rng.NextInt(allowed.Length)];
-                            if (cand[i][j] != old)
+                            // 拡張希望の禁止へは置かない（乱数を引いた後で判定＝禁止なしは従来どおり）
+                            if (cand[i][j] != old && !p.ExtBanned(i, j, cand[i][j]))
                             {
                                 var rep = UnifiedViolationChecker.Check(state, cand, quantitativeRangeEval);
                                 if (IsBetter(rep, current) && !V6SearchOperators.ExactPinRegression(p, work, cand))

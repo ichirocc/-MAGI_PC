@@ -234,6 +234,7 @@ internal static class CountChainPolish
                         if (give && !FreeCoverage(p, to, j)) continue;
                         if (!give && !FreeCoverage(p, from, j)) continue;
                         if (!give && to != k) continue;
+                        if (p.ExtBanned(s, j, to)) continue;  // 拡張希望の禁止へは置かない
                         if (p.MakesForbiddenRun(cur, s, j, to)) continue;
                         outList.Add(new Rotation(j, new[] { s }, new[] { from }, new[] { to }));
                         if (!give) break;
@@ -244,15 +245,16 @@ internal static class CountChainPolish
                         int bk = cur[b][j];
                         if (bk == sk) continue;
                         if (!give && bk != k) continue;
-                        if (allowed[s][bk] && allowed[b][sk] && !p.MakesForbiddenRun(cur, s, j, bk) && !p.MakesForbiddenRun(cur, b, j, sk))
+                        if (allowed[s][bk] && allowed[b][sk] && !p.ExtBanned(s, j, bk) && !p.ExtBanned(b, j, sk) &&
+                            !p.MakesForbiddenRun(cur, s, j, bk) && !p.MakesForbiddenRun(cur, b, j, sk))
                             outList.Add(new Rotation(j, new[] { s, b }, new[] { sk, bk }, new[] { bk, sk }));
-                        if (!allowed[s][bk] || p.MakesForbiddenRun(cur, s, j, bk)) continue;
+                        if (!allowed[s][bk] || p.ExtBanned(s, j, bk) || p.MakesForbiddenRun(cur, s, j, bk)) continue;
                         for (int c = 0; c < p.S; c++)
                         {
                             if (c == s || c == b || !Movable(c, j)) continue;
                             int ck = cur[c][j];
                             if (ck == sk || ck == bk) continue;
-                            if (!allowed[b][ck] || !allowed[c][sk]) continue;
+                            if (!allowed[b][ck] || !allowed[c][sk] || p.ExtBanned(b, j, ck) || p.ExtBanned(c, j, sk)) continue;
                             if (p.MakesForbiddenRun(cur, b, j, ck) || p.MakesForbiddenRun(cur, c, j, sk)) continue;
                             outList.Add(new Rotation(j, new[] { s, b, c }, new[] { sk, bk, ck }, new[] { bk, ck, sk }));
                         }

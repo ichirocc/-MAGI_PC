@@ -50,7 +50,8 @@ public static partial class V6NativeOptimizer
             },
             cancellationToken).ConfigureAwait(false);
         var repaired = Hf67HardRepair(state, res.Schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x5L), options.QuantitativeRangeEval);
-        var outSched = repaired.Schedule;
+        // 拡張希望の禁止へ置いた修復は採らない
+        var outSched = p.KeepsExtBan(res.Schedule, repaired.Schedule) ? repaired.Schedule : res.Schedule;
         var report = UnifiedViolationChecker.Check(state, outSched, options.QuantitativeRangeEval);
         // [退化防止番兵 / 実機ログ起因, Kotlin原本コメント] runAlns と同じ入力比keep-best。従来 runV5 だけ
         //   番兵が無く、SA+修復が入力より悪化した結果をそのまま返していた。RSI++ は Phase1 Seed に runV5
@@ -60,7 +61,7 @@ public static partial class V6NativeOptimizer
         //   維持。スコアリング不変(選択のみ・better()=hard→weighted→total)。
         var baseSched = ScheduleUtil.NormalizeSchedule(initial, p);
         var baseReport = UnifiedViolationChecker.Check(state, baseSched, options.QuantitativeRangeEval);
-        var keptInput = UnifiedViolationChecker.BetterReport(baseReport, report);
+        var keptInput = UnifiedViolationChecker.BetterReport(baseReport, report) || !p.KeepsExtBan(baseSched, outSched);
         if (keptInput) { outSched = baseSched; report = baseReport; }
         lastReport = report;
 
@@ -281,6 +282,7 @@ public static partial class V6NativeOptimizer
             //   nsp_bench --real の final 品質で +101% 悪化と実測されたため revert 済み）。
             var cur = r == 0 ? globalBest.Copy2D() : Perturb(state, globalBest, rng, Math.Clamp(0.18 * options.Explore, 0.05, 0.6), options.QuantitativeRangeEval);
             cur = Hf67HardRepair(state, cur, rng, options.QuantitativeRangeEval).Schedule;
+            if (!p.KeepsExtBan(globalBest, cur)) cur = globalBest.Copy2D(); // 拡張希望の禁止へ置いた再起動盤面は採らない
             var deadline = NowMs() + per * 1000L;
 
             var curReport = UnifiedViolationChecker.Check(state, cur, options.QuantitativeRangeEval);
@@ -346,7 +348,7 @@ public static partial class V6NativeOptimizer
                         {
                             var ka = eval.At(i, ja);
                             var kb = eval.At(i, jb);
-                            if (ka != kb)
+                            if (ka != kb && !p.ExtBanned(i, ja, kb) && !p.ExtBanned(i, jb, ka))
                             {
                                 eval.Apply(i, ja, kb);
                                 eval.Apply(i, jb, ka);
@@ -368,7 +370,7 @@ public static partial class V6NativeOptimizer
                             {
                                 var oldK = eval.At(i, j);
                                 var nw = allowed[rng.NextInt(allowed.Length)];
-                                if (nw != oldK)
+                                if (nw != oldK && !p.ExtBanned(i, j, nw))
                                 {
                                     eval.Apply(i, j, nw);
                                     c0i = i; c0j = j; c0old = oldK;
@@ -385,7 +387,7 @@ public static partial class V6NativeOptimizer
                         if (fix != null)
                         {
                             var oldK = eval.At(fix[0], fix[1]);
-                            if (fix[2] != oldK)
+                            if (fix[2] != oldK && !p.ExtBanned(fix[0], fix[1], fix[2]))
                             {
                                 eval.Apply(fix[0], fix[1], fix[2]);
                                 c0i = fix[0]; c0j = fix[1]; c0old = oldK;
@@ -405,7 +407,7 @@ public static partial class V6NativeOptimizer
                         {
                             var k1 = eval.At(i1, j);
                             var k2 = eval.At(i2, j);
-                            if (k1 != k2 && p.MayPlace(i1, k2) && p.MayPlace(i2, k1))
+                            if (k1 != k2 && p.MayPlace(i1, k2) && p.MayPlace(i2, k1) && !p.ExtBanned(i1, j, k2) && !p.ExtBanned(i2, j, k1))
                             {
                                 eval.Apply(i1, j, k2);
                                 eval.Apply(i2, j, k1);
@@ -477,8 +479,11 @@ public static partial class V6NativeOptimizer
                     {
                         nDiffs = V6SearchOperators.DiffInto(p.T, cur, repairedCell, diffBuf);
                     }
+                    // 拡張希望の禁止へ置いた候補は評価せずに捨てる（eval へは何も反映しない）
+                    var extBad = p.HasExtBan && ExtBanInDiff(p, repairedCell, diffBuf, nDiffs);
+                    var nApply = extBad ? 0 : nDiffs;
                     var moveAug = 0.0;
-                    for (var idx = 0; idx < nDiffs; idx++)
+                    for (var idx = 0; idx < nApply; idx++)
                     {
                         var flat = diffBuf[idx];
                         var i = flat / p.T;
@@ -488,8 +493,8 @@ public static partial class V6NativeOptimizer
                     }
                     var ns = eval.Score();
                     var improvedCur = ns < curScore;
-                    var accepted = improvedCur || V6SearchOperators.GlsAccept(ns, curScore, moveAug, curAug, options.Accept, temp, gdLevel, rng);
-                    if (options.Accept == AcceptMode.LamAdaptive) LamUpdate(accepted);
+                    var accepted = !extBad && (improvedCur || V6SearchOperators.GlsAccept(ns, curScore, moveAug, curAug, options.Accept, temp, gdLevel, rng));
+                    if (options.Accept == AcceptMode.LamAdaptive && !extBad) LamUpdate(accepted);
                     if (accepted)
                     {
                         // [零アロケ, Kotlin原本コメント] スクラッチ採用時は cur とスワップ（旧 cur を次のスクラッチへ）。
@@ -507,7 +512,7 @@ public static partial class V6NativeOptimizer
                     }
                     else
                     {
-                        for (var idx = 0; idx < nDiffs; idx++)
+                        for (var idx = 0; idx < nApply; idx++)
                         {
                             var flat = diffBuf[idx];
                             eval.Apply(flat / p.T, flat % p.T, cur[flat / p.T][flat % p.T]);
@@ -569,5 +574,17 @@ public static partial class V6NativeOptimizer
             globalBest,
             globalReport with { Logs = logs.Concat(globalReport.Logs).ToList() },
             V6Algorithm.Alns, logs, itersTotal, NowMs() - started);
+    }
+
+    /// <summary>diffBuf の先頭 n セルのうち、cand の値が拡張希望の禁止に当たるものがあるか。</summary>
+    private static bool ExtBanInDiff(Problem p, int[][] cand, int[] diffBuf, int n)
+    {
+        for (var idx = 0; idx < n; idx++)
+        {
+            var flat = diffBuf[idx];
+            int i = flat / p.T, j = flat % p.T;
+            if (p.ExtBanned(i, j, cand[i][j])) return true;
+        }
+        return false;
     }
 }

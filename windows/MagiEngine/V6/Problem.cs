@@ -113,6 +113,18 @@ public sealed class Problem
     public int[][] Placeable { get; }
     public bool[][] PlaceableHas { get; }
 
+    /// <summary>拡張希望の禁止表（割当を見ずに作る。希望シフト日は空）。採点は見ない。</summary>
+    public ExtWishRules.BanTable ExtBan { get; }
+
+    /// <summary>拡張希望の禁止が 1 セルでもあるか。無ければ候補生成の判定は常に false。</summary>
+    public bool HasExtBan => ExtBan.Flat is not null;
+
+    /// <summary>最適化器がセル (i,j) に k を置く候補を捨てるか（拡張希望の禁止）。旧値は問わない＝禁止から禁止への手も捨てる。</summary>
+    public bool ExtBanned(int i, int j, int k) => ExtBan.Banned(i, j, k);
+
+    /// <summary>置いてよいか（MayPlace に拡張希望の禁止を足したもの）。候補生成が読む。</summary>
+    public bool MayPlaceAt(int i, int j, int k) => this.MayPlace(i, k) && !ExtBan.Banned(i, j, k);
+
     /// <summary>wish[i][j] = desired shift index, or -1.</summary>
     public int[][] Wish { get; }
 
@@ -229,6 +241,7 @@ public sealed class Problem
             GroupMembers[g] = list.ToArray();
         }
 
+        ExtBan = ExtWishRules.BuildBanTable(state, S, T, K);
         Wish = new int[S][];
         for (int i = 0; i < S; i++)
         {

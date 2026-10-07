@@ -129,6 +129,7 @@ public static class CombinatorialRepair
         var labelFn = label ?? (c => c.Hint);
 
         foreach (var c in rejected) stats.OnFeed(c);
+        var banP = p ?? ScheduleUtil.CachedProblem(state);
         var t0 = EngineClock.NowMs();   // [3.375.0] 結合探索に費やした時間（summary で出す）
         var bestRep = bestRepIn;
         var pool = rejected.ToList();
@@ -154,7 +155,8 @@ public static class CombinatorialRepair
                     if (shouldStopFn()) { stats.Truncated = true; goto SearchKDone; }
                     stats.CombosTried++;
                     var ops = combo.SelectMany(idx => pool[idx].Ops).ToList();
-                    if (!HasCellOverlap(ops))
+                    // 結合結果で拡張希望の禁止を新しく置く組合せは採らない（候補が別パス由来でも）
+                    if (!HasCellOverlap(ops) && !PlacesExtBan(banP, work, ops))
                     {
                         var saved = new int[ops.Count];
                         for (var oi = 0; oi < ops.Count; oi++) saved[oi] = work[ops[oi][0]][ops[oi][1]];
@@ -207,6 +209,9 @@ public static class CombinatorialRepair
         leftover?.AddRange(pool);
         return bestRep;
     }
+
+    private static bool PlacesExtBan(Problem p, int[][] work, IReadOnlyList<int[]> ops) =>
+        p.HasExtBan && ops.Any(op => op[2] != work[op[0]][op[1]] && p.ExtBanned(op[0], op[1], op[2]));
 
     private static bool HasCellOverlap(IReadOnlyList<int[]> ops)
     {

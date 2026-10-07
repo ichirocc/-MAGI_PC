@@ -69,7 +69,10 @@ public static partial class V6NativeOptimizer
     /// <summary>外したセルを何で埋めるか。[希望固定の徹底] 規則 A の間は、希望固定セル（未反映）は埋めシフトでなく希望へ戻す
     /// （希望でも今の値でもない値へは動かさない）。</summary>
     private static int Refill(Problem p, int i, int j, int fallback, bool wishPinStrict) =>
-        (wishPinStrict || p.Pinned(i, j)) && p.WishLocked(i, j) ? p.LockTo(i, j) : fallback;
+        (wishPinStrict || p.Pinned(i, j)) && p.WishLocked(i, j) ? p.LockTo(i, j)
+        : !p.ExtBanned(i, j, fallback) ? fallback
+        // 拡張希望でその日に埋めシフトが禁止なら、置けるシフトのうち禁止でない先頭。全部禁止なら埋めシフトのまま。
+        : p.AllowedShiftsForStaff(i).Cast<int?>().FirstOrDefault(k => !p.ExtBanned(i, j, k!.Value)) ?? fallback;
 
     internal sealed record RepairResult(int[][] Schedule, IReadOnlyList<MirrorLog> Logs);
 
@@ -116,6 +119,7 @@ public static partial class V6NativeOptimizer
                         if (i < 0) break;
                         var old = outSched[i][j];
                         if (old == k) break;
+                        if (p.ExtBanned(i, j, k)) break; // 拡張希望の禁止へは置かない
                         outSched[i][j] = k;
                         cov[j][k]++;
                         if (old >= 0 && old < p.K) cov[j][old]--;
@@ -143,7 +147,7 @@ public static partial class V6NativeOptimizer
                         var bestScore = int.MaxValue;
                         for (var jj = 0; jj < p.T; jj++)
                         {
-                            if (p.WishLocked(i, jj) || outSched[i][jj] == k) continue;
+                            if (p.WishLocked(i, jj) || outSched[i][jj] == k || p.ExtBanned(i, jj, k)) continue;
                             var score = CoverageShortageCost(p, outSched, jj, outSched[i][jj]) + rng.NextInt(3);
                             if (score < bestScore) { bestScore = score; bestJ = jj; }
                         }
@@ -172,6 +176,7 @@ public static partial class V6NativeOptimizer
         {
             if (!p.MayPlace(i, k)) continue;
             if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;
+            if (p.ExtBanned(i, j, k)) continue; // 拡張希望の禁止へは置かない
             var old = schedule[i][j];
             if (old == k) continue; // [監査#3] 既就業者はスキップ
             var hi = p.RangeHi[i][k];
@@ -280,6 +285,7 @@ public static partial class V6NativeOptimizer
         for (var i = 0; i < p.S; i++)
         {
             if (p.WishLocked(i, j) || !p.MayPlace(i, rest)) continue;
+            if (p.ExtBanned(i, j, rest)) continue; // 拡張希望で休が禁止のセルは崩さない（休のまま残りうる）
             var old = schedule[i][j];
             if (old != rest && old >= 0 && old < p.K) { schedule[i][j] = rest; cnt[i][old]--; cnt[i][rest]++; }
         }
@@ -337,6 +343,7 @@ public static partial class V6NativeOptimizer
                 for (var i = 0; i < p.S; i++)
                 {
                     if (schedule[i][j] != rest || p.WishLocked(i, j) || !p.MayPlace(i, k)) continue;
+                    if (p.ExtBanned(i, j, k)) continue; // 拡張希望の禁止へは置かない
                     var delta = StaffCountPenaltyAt(p, i, k, cnt[i][k] + 1) - StaffCountPenaltyAt(p, i, k, cnt[i][k]) +
                         C41DayMarg(p.Sgrp[i], k) +
                         WeeklyMarginalAt(wd[i], bucket, rest, k) +
@@ -392,6 +399,7 @@ public static partial class V6NativeOptimizer
         for (var j = 0; j < p.T; j++)
         {
             if (p.WishLocked(i, j)) continue;
+            if (p.ExtBanned(i, j, rest)) continue; // 拡張希望で休が禁止のセルは崩さない
             var old = schedule[i][j];
             if (old != rest && old >= 0 && old < p.K)
             {
@@ -416,6 +424,7 @@ public static partial class V6NativeOptimizer
             for (var k = 0; k < p.K; k++)
             {
                 if (k == rest || !p.MayPlace(i, k)) continue;
+                if (p.ExtBanned(i, j, k)) continue; // 拡張希望の禁止へは置かない
                 if (p.CovUCell(k, j, cov[j][k]) <= 0) continue;
                 var delta = StaffCountPenaltyAt(p, i, k, cntI[k] + 1) - StaffCountPenaltyAt(p, i, k, cntI[k]) +
                     WeeklyMarginalAt(wd, bucket, rest, k) +
@@ -479,6 +488,7 @@ public static partial class V6NativeOptimizer
             foreach (var k in allowed)
             {
                 if (k == old) continue;
+                if (p.ExtBanned(i.Value, j.Value, k)) continue; // 拡張希望の禁止へは置かない
                 var dOld = old >= 0 && old < p.K
                     ? StaffCountPenaltyAt(p, i.Value, old, cntI[old] - 1) - StaffCountPenaltyAt(p, i.Value, old, cntI[old])
                     : 0L;
@@ -506,7 +516,9 @@ public static partial class V6NativeOptimizer
         var j = rng.NextInt(p.T);
         if (p.WishLocked(i, j)) return;
         var allowed = p.AllowedShiftsForStaff(i);
-        if (allowed.Length > 0) schedule[i][j] = allowed[rng.NextInt(allowed.Length)];
+        if (allowed.Length == 0) return;
+        var k = allowed[rng.NextInt(allowed.Length)];
+        if (!p.ExtBanned(i, j, k)) schedule[i][j] = k; // 拡張希望の禁止へは置かない（乱数の消費は変えない）
     }
 
     private static int[][] Perturb(MagiState state, int[][] baseSched, JavaRandom rng, double strength, bool quantitativeRangeEval = false)

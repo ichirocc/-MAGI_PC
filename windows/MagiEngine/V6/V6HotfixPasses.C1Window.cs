@@ -98,7 +98,7 @@ public static partial class V6HotfixPasses
                 if (p.C3wBanned(s, j, sh)) return null;
                 var f = V6SearchOperators.TryFixForbiddenRunViaAdjacentDay(p, work, s, j, sh, rng);
                 if (f is null) return null;
-                if (f.Any(m => m[1] == j)) return null;
+                if (f.Any(m => m[1] == j || p.ExtBanned(m[0], m[1], m[2]))) return null;
                 foreach (var mv in f) { saved.Add(new[] { mv[0], mv[1], work[mv[0]][mv[1]] }); work[mv[0]][mv[1]] = mv[2]; }
                 outMoves.AddRange(f);
             }
@@ -252,6 +252,7 @@ public static partial class V6HotfixPasses
                         if (stop()) break;
                         if (work[i][j] == x || !Movable(i, j)) continue;
                         if (!InDeficientC1Window(p, work, i, x, d, n, j)) continue;
+                        if (p.ExtBanned(i, j, x)) continue;                  // 拡張希望の禁止へは置かない（手A/R1/R2/B 共通）
                         var a = work[i][j];                                  // i の旧シフト
                         // [厳密ピン保護] 手A/手B は i(・i2)の自身のシフト回数を実際に変える(x+1/a-1)唯一の
                         //   手（手R1/R2/R3は同一職員内の日入替のみで回数は代数的に保存される＝対象外）。
@@ -263,7 +264,7 @@ public static partial class V6HotfixPasses
                         // 手A: 同日スワップ。
                         for (var i2 = 0; i2 < p.S; i2++)
                         {
-                            if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a)) continue;
+                            if (i2 == i || work[i2][j] != x || !Movable(i2, j) || !p.MayPlace(i2, a) || p.ExtBanned(i2, j, a)) continue;
                             work[i][j] = x; work[i2][j] = a;                 // 同日スワップ（被覆不変）
                             var fix = PolishGate.C1MoveARepair ? MoveARepairChain(p, work, i, i2, j, x, a, rng) : null;
                             int[]? fixOld = null;
@@ -301,7 +302,7 @@ public static partial class V6HotfixPasses
                         foreach (var j1 in Donors())
                         {
                             if (done || stop()) break;
-                            if (j1 == j) continue;
+                            if (j1 == j || p.ExtBanned(i, j1, a)) continue;
                             work[i][j1] = a; work[i][j] = x;
                             var gain = fires0 - C1RowFires(p, work, i);
                             work[i][j1] = x; work[i][j] = a;                 // 判定用の一時変更は必ず復元
@@ -313,6 +314,7 @@ public static partial class V6HotfixPasses
                                 if (work[i2][j1] != a || work[i2][j] != x) continue;      // 完全鏡像の相手のみ
                                 if (!Movable(i2, j1) || !Movable(i2, j)) continue;
                                 if (!p.MayPlace(i, x) || !p.MayPlace(i2, a)) continue;           // 構造上恒真・規律として明示
+                                if (p.ExtBanned(i2, j1, x) || p.ExtBanned(i2, j, a)) continue;
                                 work[i][j1] = a; work[i][j] = x; work[i2][j1] = x; work[i2][j] = a;
                                 var bad3n = p.MakesForbiddenRun(work, i, j1, a) || p.MakesForbiddenRun(work, i, j, x) ||
                                     p.MakesForbiddenRun(work, i2, j1, x) || p.MakesForbiddenRun(work, i2, j, a);
@@ -342,7 +344,7 @@ public static partial class V6HotfixPasses
                             foreach (var j1 in Donors())
                             {
                                 if (done || stop()) break;
-                                if (j1 == j) continue;
+                                if (j1 == j || p.ExtBanned(i, j1, a)) continue;
                                 work[i][j1] = a; work[i][j] = x;
                                 var gain = fires0 - C1RowFires(p, work, i);
                                 work[i][j1] = x; work[i][j] = a;
@@ -375,6 +377,7 @@ public static partial class V6HotfixPasses
                         //   優先付け（並べ替えのみ・見つからなければ従来どおり）。
                         var chain = V6SearchOperators.FindCovUChain(p, work, a, j, rng, exclude: i,
                             c1Pref: (s2, sh, dy) => C1Deficient(s2, sh, dy));
+                        if (chain != null && chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) chain = null;   // 禁止を含む連鎖は無し扱い
                         var oldVals = chain?.Select(mv => work[mv[0]][mv[1]]).ToArray();
                         if (chain != null) foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
                         var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
@@ -446,6 +449,7 @@ public static partial class V6HotfixPasses
                         for (var s = 0; s < p.S; s++) { if (work[s][jx] == x) cx++; if (work[s][jo] == a) ca++; }
                         if (p.CovUCell(x, jx, cx - 1) > p.CovUCell(x, jx, cx)) continue;
                         if (p.CovUCell(a, jo, ca - 1) > p.CovUCell(a, jo, ca)) continue;
+                        if (p.ExtBanned(i, jx, a) || p.ExtBanned(i, jo, x)) continue;
                         work[i][jx] = a; work[i][jo] = x;
                         var bad3n = p.MakesForbiddenRun(work, i, jx, a) || p.MakesForbiddenRun(work, i, jo, x);
                         if (!bad3n)

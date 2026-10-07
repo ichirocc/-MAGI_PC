@@ -85,6 +85,9 @@ public static partial class V6HotfixPasses
             return false;
         }
 
+        // 今の値から変えて拡張希望の禁止を置くか（禁止へは置かない）。
+        bool BanNew(int i, int j, int k) => k != work[i][j] && p.ExtBanned(i, j, k);
+
         var windows = new List<(int lo, int hi)>();
         foreach (var d in targets)
         {
@@ -138,10 +141,10 @@ public static partial class V6HotfixPasses
                     var prev = idx > 0 ? holder[idx - 1] : -1;
                     for (var i = 0; i < p.S; i++)
                     {
-                        if (!free0[i].Contains(j) || remain[i][k] <= 0 || BackwardForbidden(seqBoard, i, j, k)) continue;
+                        if (!free0[i].Contains(j) || remain[i][k] <= 0 || BanNew(i, j, k) || BackwardForbidden(seqBoard, i, j, k)) continue;
                         // 前日の担当者のブロックがここで終わるなら、その人はこの日に休が要る（持ち分に休が無ければ不成立）。
                         var restFor = prev >= 0 && prev != i && free0[prev].Contains(j) ? prev : -1;
-                        if (restFor >= 0 && (remain[restFor][rest] <= 0 || BackwardForbidden(seqBoard, restFor, j, rest))) continue;
+                        if (restFor >= 0 && (remain[restFor][rest] <= 0 || BanNew(restFor, j, rest) || BackwardForbidden(seqBoard, restFor, j, rest))) continue;
                         var old = seqBoard[i][j];
                         seqBoard[i][j] = k; remain[i][k]--; holder[idx] = i;
                         if (restFor >= 0) { seqBoard[restFor][j] = rest; remain[restFor][rest]--; }
@@ -217,7 +220,7 @@ public static partial class V6HotfixPasses
                             var options = Enumerable.Range(0, p.K).Where(k => node.Remain[pi][k] > 0).OrderBy(_ => rng.Next()).ToList();
                             foreach (var k in options)
                             {
-                                if (BackwardForbidden(board, pi, j, k)) continue;
+                                if (BanNew(pi, j, k) || BackwardForbidden(board, pi, j, k)) continue;
                                 assign[pi] = k; cnt[k]++;
                                 Rec(idx + 1);
                                 cnt[k]--; assign[pi] = -1;
@@ -250,7 +253,7 @@ public static partial class V6HotfixPasses
                         for (var x = 0; x < p.K; x++)
                         {
                             if (x == k || remainAll[b][x] <= 0 || !p.MayPlace(a, x)) continue;
-                            var gs = Enumerable.Range(0, p.T).Where(g => (g < wLo || g > wHi) && work[a][g] == x && work[b][g] == k && !p.WishLocked(a, g) && !p.WishLocked(b, g))
+                            var gs = Enumerable.Range(0, p.T).Where(g => (g < wLo || g > wHi) && work[a][g] == x && work[b][g] == k && !p.WishLocked(a, g) && !p.WishLocked(b, g) && !p.ExtBanned(a, g, k) && !p.ExtBanned(b, g, x))
                                 .OrderBy(Dist).ToList();
                             var maxN = Math.Min(Math.Min(3, remainAll[a][k]), Math.Min(remainAll[b][x], gs.Count));
                             for (var n = 1; n <= maxN; n++) cands.Add(new RestZeroTransfer(a, b, x, gs.Take(n).ToList()));
@@ -300,7 +303,7 @@ public static partial class V6HotfixPasses
                     {
                         if (checkedHere >= cfg.MaxLeafChecks) break;
                         if (leaf.Score < bestEst) bestEst = leaf.Score;
-                        if (leaf.Board.ContentDeepEquals(work)) continue;
+                        if (leaf.Board.ContentDeepEquals(work) || !p.KeepsExtBan(work, leaf.Board)) continue;
                         checkedN++; checkedHere++;
                         var rep = UnifiedViolationChecker.Check(state, leaf.Board, quantitativeRangeEval);
                         if (bestVerified == null || UnifiedViolationChecker.BetterReport(rep, bestVerified))

@@ -93,6 +93,7 @@ internal static class C3nMarginLnsPolish
                         var curAtDay = tentative[day];
                         foreach (var alt in alts)
                         {
+                            if (p.ExtBanned(i, day, alt)) continue;   // 拡張希望の禁止へは置かない（現在値は下の f0 で候補に入る）
                             var f = scan.FiresAfterSet(day, alt);
                             if (f < bestFires) { bestFires = f; bestAlts.Clear(); bestAlts.Add(alt); }
                             else if (f == bestFires) bestAlts.Add(alt);
@@ -129,7 +130,7 @@ internal static class C3nMarginLnsPolish
                         if (chain == null) { chainOk = false; break; }
                         foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
                     }
-                    if (!chainOk)
+                    if (!chainOk || !p.KeepsExtBan(workBefore, work))
                     {
                         for (var s = 0; s < p.S; s++) work[s] = (int[])workBefore[s].Clone();
                         continue;

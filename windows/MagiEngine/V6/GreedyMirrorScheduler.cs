@@ -77,6 +77,11 @@ public static class GreedyMirrorScheduler
                 int need = Math.Max(0, lo - counts[i][k]);
                 while (need > 0 && pos < free.Count)
                 {
+                    // 拡張希望の禁止の日は飛ばす（禁止が無ければ q == pos で従来どおり）
+                    int q = pos;
+                    while (q < free.Count && p.ExtBanned(i, free[q], k)) q++;
+                    if (q >= free.Count) break;
+                    if (q != pos) { int tq = free[q]; free[q] = free[pos]; free[pos] = tq; }
                     int j = free[pos++];
                     schedule[i][j] = k;
                     counts[i][k]++;
@@ -109,7 +114,7 @@ public static class GreedyMirrorScheduler
                     int bestI = -1, bestPenalty = int.MaxValue;
                     for (int i = 0; i < p.S; i++)
                     {
-                        if (schedule[i][j] >= 0 || !p.MayPlace(i, k)) continue;
+                        if (schedule[i][j] >= 0 || !p.MayPlace(i, k) || p.ExtBanned(i, j, k)) continue;
                         int hi = p.RangeHi[i][k];
                         bool over = hi != int.MaxValue && counts[i][k] >= hi;
                         int penalty = (over ? 1000 : 0) + counts[i][k] * 2;
@@ -134,6 +139,7 @@ public static class GreedyMirrorScheduler
                 int bestPenalty = int.MaxValue;
                 foreach (int k in allowed)
                 {
+                    if (p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない（全部禁止なら従来の値）
                     int hi = p.RangeHi[i][k];
                     bool over = hi != int.MaxValue && counts[i][k] >= hi;
                     int covNow = 0;

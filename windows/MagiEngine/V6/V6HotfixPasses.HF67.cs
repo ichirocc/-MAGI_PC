@@ -45,6 +45,7 @@ public static partial class V6HotfixPasses
         {
             foreach (var jt in toDays)
             {
+                if (p.ExtBanned(from, jf, schedule[to][jt]) || p.ExtBanned(to, jt, shift)) continue;   // 拡張希望の禁止へは置かない
                 var cand = schedule.Copy2D();
                 var tmp = cand[from][jf];
                 cand[from][jf] = cand[to][jt];
@@ -80,6 +81,7 @@ public static partial class V6HotfixPasses
                     var a = work[i][j];
                     var b = work[i2][j];
                     if (a == b || !p.MayPlace(i, b) || !p.MayPlace(i2, a)) continue;
+                    if (p.ExtBanned(i, j, b) || p.ExtBanned(i2, j, a)) continue;
                     var cand = work.Copy2D();
                     cand[i][j] = b;
                     cand[i2][j] = a;

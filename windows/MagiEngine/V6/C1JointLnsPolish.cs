@@ -515,7 +515,7 @@ internal static class C1JointLnsPolish
                 //   DP 提案オラクルを過剰ロックしていた（同ファイル他2サイトは 3.264.0 で wishLocked へ統一済みの
                 //   retrofit 漏れ第3サイト）。wishLocked = 実現可能な希望のみ凍結（規約どおり）。
                 var locked = new bool[p.T];
-                for (int day = 0; day < p.T; day++) locked[day] = p.WishLocked(i, day);
+                for (int day = 0; day < p.T; day++) locked[day] = p.WishLocked(i, day) || (schedule[i][day] != x && p.ExtBanned(i, day, x));
                 var proposal = C1TemporalDp.Solve(
                     row: schedule[i], targetShift: x, rules: rules, locked: locked,
                     maxRelocations: 6, seed: rng.NextLong(), maxExactWindow: 20);
@@ -799,7 +799,8 @@ internal static class C1JointLnsPolish
     private static bool Allowed(Problem p, int staff, int day, int shift)
     {
         int wish = p.LockTo(staff, day);
-        return p.WishLocked(staff, day) ? wish == shift : p.MayPlace(staff, shift);
+        // 全 Move の置く値はここを通る＝拡張希望の禁止もここで外す
+        return p.WishLocked(staff, day) ? wish == shift : p.MayPlaceAt(staff, day, shift);
     }
 
     private static List<Node> SelectBeam(

@@ -20,7 +20,7 @@ public static class StateJsonSerializer
         "shifts", "groups", "staff", "groupShift", "groupShiftApt", "schedule", "wishes", "staffRange",
         "needDay1", "needDay2", "cons1", "cons2", "cons3", "cons3n", "cons3m", "cons3mn",
         "cons41", "cons42", "shiftColors", "startDate", "endDate", "use2Patterns",
-        "skillGroups", "cons41s", "cons42s", "cons3w", "manualPins",
+        "skillGroups", "cons41s", "cons42s", "cons3w", "manualPins", "extWishes",
     };
 
     /// <summary>Keys derived from `schedule`/edits that must be dropped before re-emitting the
@@ -122,6 +122,8 @@ public static class StateJsonSerializer
             pinMap[(m.Staff, m.Day)] = m;
         }
         var manualPins = pinOrder.Select(k => pinMap[k]).ToList();
+        var extWishes = MapObjects(OptArray(o, "extWishes"), "extWishes", it =>
+            new ExtWish(OptInt(it, "staff", -1), StrList(OptArray(it, "days")), StrList(OptArray(it, "shifts"))));
 
         // Keep unmodelled top-level keys verbatim for lossless export. Clone() detaches each
         // element from `doc`'s backing buffer so it stays valid after `doc` is disposed.
@@ -146,7 +148,8 @@ public static class StateJsonSerializer
             ShiftColors: shiftColors,
             Extras: extras,
             Cons3w: cons3w,
-            ManualPins: manualPins
+            ManualPins: manualPins,
+            ExtWishes: extWishes
         );
     }
 
@@ -176,6 +179,9 @@ public static class StateJsonSerializer
             : ExportWithSchedule(originalJson, schedule, state?.ManualPins ?? Array.Empty<ManualPin>());
     }
 
+    private static JsonArray ExtWishesNode(IReadOnlyList<ExtWish> ws) =>
+        ConsArr(ws, it => new JsonObject { ["staff"] = it.Staff, ["days"] = new JsonArray(it.Days.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray()), ["shifts"] = new JsonArray(it.Shifts.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray()) });
+
     private static JsonArray ManualPinsNode(IEnumerable<ManualPin> pins) =>
         ConsArr(pins.ToList(), it => new JsonObject { ["staff"] = it.Staff, ["day"] = it.Day, ["shift"] = it.Shift });
 
@@ -204,6 +210,7 @@ public static class StateJsonSerializer
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
         o["manualPins"] = ManualPinsNode(state.ManualPins ?? Array.Empty<ManualPin>());
+        if ((state.ExtWishes?.Count ?? 0) > 0 || o.ContainsKey("extWishes")) o["extWishes"] = ExtWishesNode(state.ExtWishes ?? Array.Empty<ExtWish>());
         return o.ToJsonString(PrettyOptions);
     }
 
@@ -260,6 +267,7 @@ public static class StateJsonSerializer
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
         o["manualPins"] = ConsArr(state.ManualPins ?? Array.Empty<ManualPin>(), it => new JsonObject { ["staff"] = it.Staff, ["day"] = it.Day, ["shift"] = it.Shift });
+        if ((state.ExtWishes?.Count ?? 0) > 0) o["extWishes"] = ExtWishesNode(state.ExtWishes!);
 
         foreach (var (k, v) in state.Extras)
         {

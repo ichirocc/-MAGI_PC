@@ -50,6 +50,9 @@ public sealed record C3wRow(string WishKigou, string PrevKigou);
 /// <summary>[#41] 手動固定 1 件＝職員 Staff の Day 日目を Shift に固定（最適化器は書き換えない。手の編集は可で、値はそれに追従する）。</summary>
 public sealed record ManualPin(int Staff, int Day, int Shift);
 
+/// <summary>拡張希望の 1 件: <c>Days</c>（"yyyy-MM-dd"）の各日、<c>Staff</c> を <c>Shifts</c>（記号）以外にする。基本希望の否定形で、セルは固定しない。</summary>
+public sealed record ExtWish(int Staff, IReadOnlyList<string> Days, IReadOnlyList<string> Shifts);
+
 /// <summary>
 /// Immutable snapshot of the full scheduling problem + current draft schedule.
 ///
@@ -96,7 +99,9 @@ public sealed record MagiState(
     /// （既存の22箇所の <c>new MagiState(...)</c> 呼出元を変えずに済むよう既定値つきの末尾パラメータにする）。</summary>
     IReadOnlyList<C3wRow>? Cons3w = null,
     /// <summary>[#41] 手動固定（1 セル 1 件）。null＝空。採点・希望の意味は変えない。</summary>
-    IReadOnlyList<ManualPin>? ManualPins = null
+    IReadOnlyList<ManualPin>? ManualPins = null,
+    /// <summary>拡張希望（職員×日の集合×禁止シフトの集合）。null＝空。採点の族・重みには入れない（重み未指示）。</summary>
+    IReadOnlyList<ExtWish>? ExtWishes = null
 )
 {
     public int StaffCount => StaffList.Count;

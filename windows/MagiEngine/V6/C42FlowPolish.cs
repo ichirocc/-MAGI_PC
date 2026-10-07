@@ -64,7 +64,7 @@ internal static class C42FlowPolish
                 for (var newK = 0; newK < p.K; newK++)
                 {
                     row[newK] = newK == oldK ? 0L
-                        : !p.MayPlace(i, newK) || p.MakesForbiddenRun(work, i, j, newK) ? FlexibleDayFlow.INF
+                        : !p.MayPlaceAt(i, j, newK) || p.MakesForbiddenRun(work, i, j, newK) ? FlexibleDayFlow.INF  // 拡張希望の禁止も INF
                         : 1L;
                 }
                 staffCost[idx] = row;

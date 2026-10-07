@@ -54,6 +54,8 @@
 
 ---
 
+- `extWishes: List<ExtWish>`（任意・既定 空）: 拡張希望。`ExtWish(staff: Int, days: List<String /* yyyy-MM-dd */>, shifts: List<String /* 記号 */>)`。JSON は `"extWishes": [{"staff":0,"days":["2026-10-01"],"shifts":["夜"]}]`。空なら保存しない。
+
 ## 2. サブ型（フィールドと型）
 
 | 型 | フィールド | 備考 |

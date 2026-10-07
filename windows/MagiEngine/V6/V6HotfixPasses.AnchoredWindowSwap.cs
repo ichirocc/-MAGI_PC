@@ -173,6 +173,7 @@ public static partial class V6HotfixPasses
                         if (ka < 0 || ka >= p.K || kb < 0 || kb >= p.K) { ok = false; break; }
                         if (p.WishLocked(a, d) || p.WishLocked(b, d)) { ok = false; break; }
                         if (!p.MayPlace(a, kb) || !p.MayPlace(b, ka)) { ok = false; break; }
+                        if (ka != kb && (p.ExtBanned(a, d, kb) || p.ExtBanned(b, d, ka))) { ok = false; break; }   // 拡張希望の禁止へは置かない
                         if (ka != kb) { changed++; delta[kb]++; delta[ka]--; }
                     }
                     if (!ok || changed == 0) continue;

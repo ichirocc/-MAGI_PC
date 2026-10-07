@@ -205,6 +205,9 @@ public static class FixSuggester
         private List<int> TargetStaff() => _focus != null ? new List<int> { _focus.Value } : _countHot.ToList();
         private List<int> TargetDays() => _focus != null ? Enumerable.Range(0, _p.T).ToList() : _hotDays.ToList();
 
+        /// <summary>今の値から変えて拡張希望の禁止を置くか（禁止を置く手は提案しない）。</summary>
+        private bool BanNew(int i, int j, int k) => k != _s[i][j] && _p.ExtBanned(i, j, k);
+
         /// <summary>ops を当てた盤面の report（必ず元へ戻す）。</summary>
         private ViolationReport EvalOps(IReadOnlyList<FixCell> ops)
         {
@@ -217,6 +220,7 @@ public static class FixSuggester
         }
         private void Record(FixKind kind, IReadOnlyList<FixCell> ops, string label, ViolationReport rep)
         {
+            if (ops.Any(op => BanNew(op.Staff, op.Day, op.ToShift))) return;
             _found.Add(new Quad(
                 new FixSuggestion(kind, ops, label, rep.Hard - _base.Hard, rep.Total - _base.Total, DiffOf(rep)),
                 rep.Hard - _base.Hard, rep.Total - _base.Total, rep.WeightedScore - _base.WeightedScore));
@@ -226,6 +230,7 @@ public static class FixSuggester
         /// ＝提案の時点で弾く）。回数固定（下限＝上限）を崩す手も同じく弾く。</summary>
         private void TryOps(FixKind kind, IReadOnlyList<FixCell> ops, string label)
         {
+            if (ops.Any(op => BanNew(op.Staff, op.Day, op.ToShift))) return;
             var rep = EvalOps(ops);
             if (!UnifiedViolationChecker.BetterReport(rep, _base) || UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) != null) return;
             var after = _s.Copy2D();
@@ -258,7 +263,7 @@ public static class FixSuggester
                     var a = _s[i][j];
                     foreach (var k in allowed)
                     {
-                        if (k == a || TimeUp()) continue;
+                        if (k == a || _p.ExtBanned(i, j, k) || TimeUp()) continue;
                         TryOps(FixKind.Change, new[] { new FixCell(i, j, k) }, $"{Nm(i)} {Dlab(j)} 「{Sym(a)}」→「{Sym(k)}」");
                     }
                 }
@@ -279,7 +284,7 @@ public static class FixSuggester
                         if (_p.WishLocked(i, j) || _p.WishLocked(i2, j)) continue;
                         var a = _s[i][j];
                         var b = _s[i2][j];
-                        if (a == b || !_p.MayPlace(i, b) || !_p.MayPlace(i2, a)) continue;
+                        if (a == b || !_p.MayPlaceAt(i, j, b) || !_p.MayPlaceAt(i2, j, a)) continue;
                         TryOps(FixKind.Swap, new[] { new FixCell(i, j, b), new FixCell(i2, j, a) },
                             $"{Nm(i)} 「{Sym(a)}」 ↔ {Nm(i2)} 「{Sym(b)}」（{Dlab(j)}）");
                     }
@@ -312,10 +317,10 @@ public static class FixSuggester
                         var s1 = _s[i][j1]; var s2 = _s[i][j2];
                         foreach (var k1 in targets)
                         {
-                            if (k1 == s1) continue;
+                            if (k1 == s1 || _p.ExtBanned(i, j1, k1)) continue;
                             foreach (var k2 in targets)
                             {
-                                if (k2 == s2 || TimeUp()) continue;
+                                if (k2 == s2 || _p.ExtBanned(i, j2, k2) || TimeUp()) continue;
                                 TryOps(FixKind.ChangeMulti, new[] { new FixCell(i, j1, k1), new FixCell(i, j2, k2) },
                                     $"{Nm(i)} {Dlab(j1)}「{Sym(s1)}」→「{Sym(k1)}」＋{Dlab(j2)}「{Sym(s2)}」→「{Sym(k2)}」");
                             }
@@ -350,7 +355,7 @@ public static class FixSuggester
                         {
                             if (_p.WishLocked(i, j)) continue;
                             var a = _s[i][j];
-                            if (a == x) continue;
+                            if (a == x || _p.ExtBanned(i, j, x)) continue;
                             _s[i][j] = x;
                             var rep = UnifiedViolationChecker.Check(_state, _s);
                             var ok = UnifiedViolationChecker.BetterReport(rep, bestRep) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
@@ -387,7 +392,7 @@ public static class FixSuggester
                     : ranked;
                 var n = Math.Min(Limits.WindowStaff, chosen0.Count);
                 var cells0 = chosen0.Take(Limits.WindowStaff).ToList();
-                var opts0 = cells0.Select(c => _p.AllowedShiftsForStaff(c).ToList()).ToList();
+                var opts0 = cells0.Select(c => _p.AllowedShiftsForStaff(c).Where(k => !BanNew(c, j, k)).ToList()).ToList();
                 long Combos(int m)
                 {
                     var c = 1L;
@@ -462,6 +467,7 @@ public static class FixSuggester
                             if (sa == sb && sb == sc) continue;
                             // 巡回: a<-sb, b<-sc, c<-sa
                             if (!_p.MayPlace(a, sb) || !_p.MayPlace(b, sc) || !_p.MayPlace(c, sa)) continue;
+                            if (BanNew(a, j, sb) || BanNew(b, j, sc) || BanNew(c, j, sa)) continue;
                             TryOps(FixKind.SwapMulti,
                                 new[] { new FixCell(a, j, sb), new FixCell(b, j, sc), new FixCell(c, j, sa) },
                                 $"（3人）{Nm(a)}・{Nm(b)}・{Nm(c)} を {Dlab(j)} で入替");
@@ -494,7 +500,7 @@ public static class FixSuggester
                         if (j2 == j1) continue;
                         if (_p.WishLocked(i2, j2) || TimeUp()) continue;
                         var b = _s[i2][j2];
-                        if (a == b || !_p.MayPlace(i1, b) || !_p.MayPlace(i2, a)) continue;
+                        if (a == b || !_p.MayPlaceAt(i1, j1, b) || !_p.MayPlaceAt(i2, j2, a)) continue;
                         var label = i1 == i2
                             ? $"{Nm(i1)} {Dlab(j1)}「{Sym(a)}」 ↔ {Dlab(j2)}「{Sym(b)}」（別日）"
                             : $"{Nm(i1)} {Dlab(j1)}「{Sym(a)}」 ↔ {Nm(i2)} {Dlab(j2)}「{Sym(b)}」（別日）";

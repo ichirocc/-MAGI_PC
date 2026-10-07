@@ -62,7 +62,7 @@ public static partial class V6HotfixPasses
                     {
                         var nw = allowed[rng.NextInt(allowed.Length)];
                         var old = best[i][j];
-                        if (nw != old)
+                        if (nw != old && !p.ExtBanned(i, j, nw))
                         {
                             best[i][j] = nw;
                             var score = ev.FullEval(best);
@@ -120,7 +120,11 @@ public static partial class V6HotfixPasses
                     if (!p.WishLocked(i, j))
                     {
                         var allowed = p.AllowedShiftsForStaff(i);
-                        if (allowed.Length > 0) cand[i][j] = allowed[rng.NextInt(allowed.Length)];
+                        if (allowed.Length > 0)
+                        {
+                            var k = allowed[rng.NextInt(allowed.Length)];
+                            if (!p.ExtBanned(i, j, k)) cand[i][j] = k;   // 拡張希望の禁止へは置かない（乱数は従来どおり消費）
+                        }
                     }
                 }
                 t++;

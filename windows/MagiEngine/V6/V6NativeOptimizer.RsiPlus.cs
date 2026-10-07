@@ -78,7 +78,9 @@ public static partial class V6NativeOptimizer
         var rsi = rsiSkipped
             ? seed
             : await RunRsi(state, seed.Schedule, options, rsiSec, stop, onProgress, sharedHf63, cancellationToken).ConfigureAwait(false);
-        var baseResult = Better(rsi.Report, seed.Report) ? rsi : seed;
+        // 拡張希望の禁止へ置いた段の結果は採らない（前段を維持）
+        var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
+        var baseResult = Better(rsi.Report, seed.Report) && p.KeepsExtBan(seed.Schedule, rsi.Schedule) ? rsi : seed;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase2 Hypothesis{(rsiSkipped ? "(スキップ)" : "")}: {ScoreOf(baseResult.Report)} 実測{NowMs() - rsiT0}ms(予算{rsiSec}000ms)"));
 
         var alnsT0 = NowMs();
@@ -86,7 +88,7 @@ public static partial class V6NativeOptimizer
         var refine = refineSkipped
             ? baseResult
             : await RunAlns(state, baseResult.Schedule, options with { Restarts = Math.Max(1, options.Restarts) }, alnsSec, stop, onProgress, cancellationToken).ConfigureAwait(false);
-        var best = Better(refine.Report, baseResult.Report) ? refine : baseResult;
+        var best = Better(refine.Report, baseResult.Report) && p.KeepsExtBan(baseResult.Schedule, refine.Schedule) ? refine : baseResult;
         var bestSched = best.Schedule;
         logs.Add(new MirrorLog(tag: "RSIPlus", message: $"{who}Phase3 Refine{(refineSkipped ? "(スキップ)" : "")}: {ScoreOf(refine.Report)} 実測{NowMs() - alnsT0}ms(予算{alnsSec}000ms)"));
 
@@ -99,7 +101,7 @@ public static partial class V6NativeOptimizer
             //   採用は runRsi と同じ Better（hard→weighted→total）でゲートする（素通しでHARD悪化を最終出力しない）。
             if (fired)
             {
-                if (Better(lr.Report, best.Report))
+                if (Better(lr.Report, best.Report) && p.KeepsExtBan(bestSched, lr.Schedule))
                 {
                     bestSched = lr.Schedule;
                     logs.Add(new MirrorLog(tag: "EarlyChain",

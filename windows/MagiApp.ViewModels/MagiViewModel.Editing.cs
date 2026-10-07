@@ -807,9 +807,33 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
+        var blocked = ExtWishRules.WishBlockedBy(st, i, j);
+        if (blocked is not null) { LogOp("W", $"希望設定: {OpNm(i)} {j + 1}日 — {blocked}"); return; }
         var m = new Dictionary<string, int>(st.Wishes) { [$"{i},{j}"] = k };
         LogOp("I", $"希望設定: {OpNm(i)} {j + 1}日 → {OpSy(k)}");
         ApplyStructure(st with { Wishes = m });
+    }
+
+    /// <summary>拡張希望を 1 件足す（保存規則は ExtWishRules.Sanitize）。案内は操作ログへ。保存したら true。</summary>
+    public bool AddExtWish(ExtWish e)
+    {
+        var st = _state;
+        if (st is null) return false;
+        var r = ExtWishRules.Sanitize(st, e);
+        foreach (var n in r.Notices) LogOp("W", $"拡張希望: {OpNm(e.Staff)} — {n}");
+        if (r.Saved is null) return false;
+        LogOp("I", $"拡張希望設定: {OpNm(r.Saved.Staff)} {r.Saved.Days.Count}日 → {string.Join("・", r.Saved.Shifts)}以外");
+        ApplyStructure(st with { ExtWishes = (st.ExtWishes ?? Array.Empty<ExtWish>()).Append(r.Saved).ToList() });
+        return true;
+    }
+
+    public void RemoveExtWish(int index)
+    {
+        var st = _state;
+        var list = st?.ExtWishes;
+        if (st is null || list is null || index < 0 || index >= list.Count) return;
+        LogOp("I", $"拡張希望削除: {OpNm(list[index].Staff)} {list[index].Days.Count}日");
+        ApplyStructure(st with { ExtWishes = list.Where((_, n) => n != index).ToList() });
     }
 
     public void RemoveWish(int i, int j)
@@ -832,9 +856,15 @@ public sealed partial class MagiViewModel
             ? new[] { staffIdx.Value }
             : Enumerable.Range(0, st.StaffList.Count).Where(i => ScheduleUtil.CachedProblem(st).CanDo(i, k)).ToArray();
         if (staffRange.Length == 0) return;
+        var blockedN = 0;
         foreach (var i in staffRange)
             foreach (var j in days)
-                if (i >= 0 && i < st.StaffList.Count && j >= 0 && j < st.DayCount) m[$"{i},{j}"] = k;
+                if (i >= 0 && i < st.StaffList.Count && j >= 0 && j < st.DayCount)
+                {
+                    if (ExtWishRules.WishBlockedBy(st, i, j) is not null) { blockedN++; continue; }
+                    m[$"{i},{j}"] = k;
+                }
+        if (blockedN > 0) LogOp("W", $"希望一括: {blockedN}件 — {ExtWishRules.MsgExtDay}");
         var excluded = st.StaffList.Count - staffRange.Length;
         var who = staffIdx is not null ? OpNm(staffIdx.Value) : "全員" + (excluded > 0 ? $"（担当外{excluded}名を除く）" : "");
         LogOp("I", $"希望一括: {who} {OpDays(days)} → {OpSy(k)}");

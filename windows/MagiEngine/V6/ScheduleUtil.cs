@@ -87,6 +87,23 @@ public static class ScheduleUtil
         return true;
     }
 
+    /// <summary>拡張希望: cand で baseSched から値が変わり、新しい値が禁止のセル (i,j)（最終番兵と盤面ごと採る経路の採否）。</summary>
+    public static List<(int I, int J)> ExtBanNewCells(this Problem p, int[][] baseSched, int[][] cand)
+    {
+        var outL = new List<(int, int)>();
+        if (!p.HasExtBan) return outL;
+        for (var i = 0; i < Math.Min(p.S, Math.Min(baseSched.Length, cand.Length)); i++)
+            for (var j = 0; j < Math.Min(p.T, Math.Min(baseSched[i].Length, cand[i].Length)); j++)
+            {
+                var k = cand[i][j];
+                if (k != baseSched[i][j] && p.ExtBanned(i, j, k)) outL.Add((i, j));
+            }
+        return outL;
+    }
+
+    /// <summary>拡張希望: cand が baseSched から禁止のシフトを新しく置いていないか。</summary>
+    public static bool KeepsExtBan(this Problem p, int[][] baseSched, int[][] cand) => !p.HasExtBan || p.ExtBanNewCells(baseSched, cand).Count == 0;
+
     /// <summary>[#41] 盤面の手動固定セルがどれも固定の値か（最終番兵）。</summary>
     public static bool HoldsManualPins(this Problem p, int[][] s)
     {

@@ -66,6 +66,10 @@ public static partial class V6HotfixPasses
                     {
                         row[c] = MinCostAssignment.Inf;
                     }
+                    else if (k != work[i][j] && p.ExtBanned(i, j, k))
+                    {
+                        row[c] = MinCostAssignment.Inf; // 拡張希望の禁止へは置かない
+                    }
                     else if (k < 0 || k >= p.K)
                     {
                         row[c] = 0L;
@@ -197,6 +201,10 @@ public static partial class V6HotfixPasses
                         if ((k < 0 || k >= p.K || !p.MayPlace(i, k)) && !ownSlot)
                         {
                             row[c] = MinCostAssignment.Inf;
+                        }
+                        else if (k != work[i][j] && p.ExtBanned(i, j, k))
+                        {
+                            row[c] = MinCostAssignment.Inf; // 拡張希望の禁止へは置かない
                         }
                         else if (k < 0 || k >= p.K)
                         {

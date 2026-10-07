@@ -55,7 +55,9 @@ public sealed record ViolationReport(
     IReadOnlyList<MirrorLog>? Logs = null,
     // [Kotlin c1Runs 移植元] 期間の制約(c1)の違反窓ラン [職員, 先頭窓の開始日, 窓数, 窓幅]。画面の表示専用の元データ
     //   （Violations はランの先頭 1 セルだけ＝探索の手掛かりは不変）。
-    IReadOnlyList<IReadOnlyList<int>>? C1Runs = null)
+    IReadOnlyList<IReadOnlyList<int>>? C1Runs = null,
+    // 拡張希望の違反セル（"i,j"）。件数＝要素数。採点の族・重みには入れない（Breakdown に無い）。
+    IReadOnlyList<string>? ExtWishCells = null)
 {
     // Kotlin's emptyMap()/emptyList() defaults, realized as non-null accessors (records can't
     // default a reference-typed positional parameter to a *shared* non-null instance without
@@ -71,6 +73,7 @@ public sealed record ViolationReport(
         DistLocations ?? EmptyLocations;
     public IReadOnlyList<MirrorLog> Logs { get; init; } = Logs ?? Array.Empty<MirrorLog>();
     public IReadOnlyList<IReadOnlyList<int>> C1Runs { get; init; } = C1Runs ?? Array.Empty<IReadOnlyList<int>>();
+    public IReadOnlyList<string> ExtWishCells { get; init; } = ExtWishCells ?? Array.Empty<string>();
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> EmptyFamilies =
         new Dictionary<string, IReadOnlyList<string>>();
@@ -490,6 +493,7 @@ public static class UnifiedViolationChecker
             NeedFamilies = needFamilies,
             DistLocations = distLocations,
             C1Runs = c1Runs,
+            ExtWishCells = ExtWishRules.Violations(p.ExtBan, s, p.K),
             Logs = new CheckLog(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), level, bd, total, hard, soft, elapsedMs),
         };
     }

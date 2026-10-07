@@ -49,7 +49,7 @@ public static partial class V6HotfixPasses
 
         bool TryExtend(int i, int extDay, int fromK, int toK)
         {
-            if (!Movable(i, extDay) || !p.MayPlace(i, toK) || p.MakesForbiddenRun(work, i, extDay, toK)) return false;
+            if (!Movable(i, extDay) || !p.MayPlaceAt(i, extDay, toK) || p.MakesForbiddenRun(work, i, extDay, toK)) return false;
             var cnt = 0;
             for (var s = 0; s < p.S; s++) if (work[s][extDay] == fromK) cnt++;
             var needsChain = p.CovUCell(fromK, extDay, cnt - 1) > p.CovUCell(fromK, extDay, cnt);
@@ -69,7 +69,7 @@ public static partial class V6HotfixPasses
             }
             var chain = V6SearchOperators.FindCovUChain(p, work, fromK, extDay, rng, exclude: i,
                 rangeAvoid: (st, fk) => ExceedsOwnRangeHi(p, work, st, fk));
-            if (chain == null) { work[i][extDay] = fromK; return false; }
+            if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) { work[i][extDay] = fromK; return false; }
             var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
             foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
             var rep2 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);

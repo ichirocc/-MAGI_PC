@@ -96,6 +96,7 @@ public static partial class V6HotfixPasses
                     {
                         if (done || stop()) break;
                         if (alt == curK) continue;
+                        if (p.ExtBanned(i, j2, alt)) continue;  // 拡張希望の禁止へは置かない
                         // [C3n枝刈り] この1手で c3n の正味 fire が減らないなら checker を呼ばない。
                         //   減らない手は hard が下がらず、この HARD 族専用パスとしては意味がない。
                         if (c3nScan.FiresAfterSet(j2, alt) >= firesNow) { screened++; continue; }
@@ -124,7 +125,7 @@ public static partial class V6HotfixPasses
                         // [玉突き連鎖] 崩した側の被覆が欠けるなら埋め直す（盤面不変・巻き戻し可能）。
                         var chain = V6SearchOperators.FindCovUChain(p, work, curK, j2, rng, exclude: i,
                             rangeAvoid: (st, fk) => ExceedsOwnRangeHi(p, work, st, fk));
-                        if (chain == null) { work[i][j2] = curK; continue; }
+                        if (chain == null || chain.Any(mv => p.ExtBanned(mv[0], mv[1], mv[2]))) { work[i][j2] = curK; continue; }
                         var oldVals = chain.Select(mv => work[mv[0]][mv[1]]).ToArray();
                         foreach (var mv in chain) work[mv[0]][mv[1]] = mv[2];
                         evaluated++;

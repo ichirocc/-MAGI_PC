@@ -272,6 +272,7 @@ public static partial class V6HotfixPasses
                     var incoming = vals[(t + 1) % n];
                     if (incoming != vals[t]) changes = true;
                     if (!p.MayPlace(cycle[t], incoming)) { ok = false; break; }
+                    if (incoming != vals[t] && p.ExtBanned(cycle[t], j, incoming)) { ok = false; break; }   // 拡張希望の禁止へは置かない（据え置き）
                 }
                 if (!ok || !changes) continue;
                 swapDays.Add(j);
@@ -428,7 +429,7 @@ public static partial class V6HotfixPasses
                                 var a = work[u][j];
                                 var b = work[v][j];
                                 if (a == b || a < 0 || a >= p.K || b < 0 || b >= p.K) continue;
-                                if (!p.MayPlace(u, b)) continue;
+                                if (!p.MayPlaceAt(u, j, b)) continue;   // 拡張希望の禁止を受け取る日も据え置き
                                 delta[a]--; delta[b]++; any = true;
                             }
                             if (!any) continue;

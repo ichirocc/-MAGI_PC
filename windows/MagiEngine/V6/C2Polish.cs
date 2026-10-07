@@ -54,6 +54,7 @@ internal static class C2Polish
                 if (stop()) return false;
                 var fromK = work[i][j];
                 if (fromK == shiftIdx || !Movable(i, j)) continue;
+                if (p.ExtBanned(i, j, shiftIdx)) continue;  // 拡張希望の禁止へは置かない
                 if (p.MakesForbiddenRun(work, i, j, shiftIdx)) continue;
                 int cntFrom = 0, cntTo = 0;
                 for (var s = 0; s < p.S; s++) { if (work[s][j] == fromK) cntFrom++; if (work[s][j] == shiftIdx) cntTo++; }

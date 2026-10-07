@@ -159,7 +159,7 @@ internal static class C1TemporalFlowPolish
                     if (changed)
                     {
                         // [3.417.0] 記号「希」を割当先から外すガードを撤去（詳細は V6HotfixPasses の同種箇所）。
-                        if (p.WishLocked(i, j) || !p.MayPlace(i, newK)) continue;
+                        if (p.WishLocked(i, j) || !p.MayPlace(i, newK) || p.ExtBanned(i, j, newK)) continue;
                         board[i][j] = newK;
                         bool bad = p.MakesForbiddenRun(board, i, j, newK);
                         board[i][j] = oldK;
@@ -256,8 +256,9 @@ internal static class C1TemporalFlowPolish
                     if (!p.CanDo(i, x)) continue;
                     int focusBefore = C1TemporalDp.CountFires(work[i], x, rules);
                     if (focusBefore == 0) continue;
+                    // x が拡張希望で禁止の日は非 x のまま固定（DP が置けない日を提案しない）
                     var locked = new bool[p.T];
-                    for (int j = 0; j < p.T; j++) locked[j] = p.WishLocked(i, j);
+                    for (int j = 0; j < p.T; j++) locked[j] = p.WishLocked(i, j) || (work[i][j] != x && p.ExtBanned(i, j, x));
                     for (int trial = 0; trial < Math.Max(trials, 1); trial++)
                     {
                         if (stop()) break;
