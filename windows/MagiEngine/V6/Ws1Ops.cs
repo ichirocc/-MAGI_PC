@@ -102,6 +102,8 @@ public static class Ws1Ops
                 WishKigou = c.WishKigou == old ? newKigou : c.WishKigou,
                 PrevKigou = c.PrevKigou == old ? newKigou : c.PrevKigou,
             }).ToList(),
+            // 拡張希望も記号で参照する（禁止シフトの集合）。
+            ExtWishes = (s.ExtWishes ?? Array.Empty<ExtWish>()).Select(e => e with { Shifts = e.Shifts.Select(x => x == old ? newKigou : x).Distinct().ToList() }).ToList(),
         };
     }
 
@@ -461,6 +463,7 @@ public static class Ws1Ops
             Wishes = SwapKeys(state.Wishes, 0, i, j),
             StaffRange = SwapKeys(state.StaffRange, 0, i, j),
             ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Select(m => m with { Staff = SwapIdx(m.Staff, i, j) }).ToList(),
+            ExtWishes = (state.ExtWishes ?? Array.Empty<ExtWish>()).Select(e => e with { Staff = SwapIdx(e.Staff, i, j) }).ToList(),
         };
         return new Ws1Result(ns.WithSchedule(arr), arr);
     }
@@ -567,7 +570,15 @@ public static class Ws1Ops
             end = state.EndDate;
         }
 
-        var ns = state with { NeedDay1 = need1, NeedDay2 = need2, Wishes = wishes, EndDate = end, ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Day < t).ToList() };
+        // 拡張希望の日は日付で持つ＝期間の外へ出た日を落とし、日が残らない件は消す。
+        var ext = (state.ExtWishes ?? Array.Empty<ExtWish>()).Select(e => e with
+        {
+            Shifts = e.Shifts,
+            Days = e.Days.Where(d => DateOnly.TryParseExact(d, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dd)
+                && DateOnly.TryParseExact(state.StartDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var s0)
+                && dd.DayNumber - s0.DayNumber >= 0 && dd.DayNumber - s0.DayNumber < t).ToList(),
+        }).Where(e => e.Days.Count > 0).ToList();
+        var ns = state with { NeedDay1 = need1, NeedDay2 = need2, Wishes = wishes, EndDate = end, ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Day < t).ToList(), ExtWishes = ext };
         return new Ws1Result(ns.WithSchedule(newSched), newSched);
     }
 
@@ -648,6 +659,8 @@ public static class Ws1Ops
             Wishes = wishes,
             // [#41] 消したシフトの手動固定は外す（マスは上の埋めシフトへ変わる）。
             ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Shift != k).Select(m => m.Shift > k ? m with { Shift = m.Shift - 1 } : m).ToList(),
+            // 拡張希望: 消したシフトの記号を禁止集合から外し、禁止が残らない件は消す。
+            ExtWishes = (state.ExtWishes ?? Array.Empty<ExtWish>()).Select(e => e with { Shifts = e.Shifts.Where(x => x != state.Shifts[k].Kigou).ToList() }).Where(e => e.Shifts.Count > 0).ToList(),
             // 消したシフトの表示色は残さない（同じ記号で作り直したシフトが黙って引き継がないように）。
             ShiftColors = state.ShiftColors.Where(kv => kv.Key != state.Shifts[k].Kigou).ToDictionary(kv => kv.Key, kv => kv.Value),
             NeedDay1 = ReindexKeys(state.NeedDay1, 0, k),
@@ -673,6 +686,7 @@ public static class Ws1Ops
             Wishes = ReindexKeys(state.Wishes, 0, i),
             StaffRange = ReindexKeys(state.StaffRange, 0, i),
             ManualPins = (state.ManualPins ?? Array.Empty<ManualPin>()).Where(m => m.Staff != i).Select(m => m.Staff > i ? m with { Staff = m.Staff - 1 } : m).ToList(),
+            ExtWishes = (state.ExtWishes ?? Array.Empty<ExtWish>()).Where(e => e.Staff != i).Select(e => e.Staff > i ? e with { Staff = e.Staff - 1 } : e).ToList(),
         };
         return new Ws1Result(ns.WithSchedule(arr), arr);
     }

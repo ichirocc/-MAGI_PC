@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-08（Android 3.634.0 と同期・外部レビュー対応）: 拡張希望が職員の並べ替え・削除・勤務記号の変更・期間変更に追従（`Ws1Ops`）、保存可否は既存の件との和集合で日ごと（`ExtWishRules.Sanitize`）、登録失敗は `LastExtWishError` を画面に出して選択を残す。`StateFingerprint` に項目の識別子・件数・拡張希望。CSV 取込（職員・希望・個人レンジ）は同姓同名を自動で先頭へ割り当てない（`CsvUtil.AmbiguousStaffKeys`、`StaffUpsertResult.AmbiguousNames`）。希望カレンダーの印は記号 3 つ以上で件数。テスト `ReviewExtWishFollowTest`。SoftCascade・玉突き（NEW-01〜03・05・06）は C# に無い。
 - 2026-10-07（Android 3.633.0 と同期）: 勤務表のセルに拡張希望の印。上端中央の「×」（指定日は控えめな色、割当が禁止のシフトなら MagiErrorBrush）。`ExtWishRules.BannedByCell`→`UiState.ExtBanned`（ApplyWishDisplay で作り直す）、`ScheduleGridModels` に ExtVisibility/ExtBrush。
 - 2026-10-07（Android 3.632.0 と同期）: 拡張希望の入力画面。編集タブの希望シフトで日を選んだときの適用パネルに「以外にする（拡張希望）」（禁止シフトを複数選んで登録＝`AddExtWishForDays`）、カレンダーの日に「×記号」、「登録済みの拡張希望」の一覧と削除。ViewModel に `ExtWishViews`・`AddExtWishForDays`（テスト `ExtWishInputTest`）。
 - 2026-10-07（Android 3.629.0〜3.631.0・b19aac4 を同期）: 拡張希望（基本希望の否定形＝職員×日の集合×禁止シフトの集合）を移植。`MagiState.ExtWishes`・JSON `extWishes`・`ExtWishRules`（保存規則・希望との排他・禁止表・違反件数 `ViolationReport.ExtWishCells`＝採点外）・ViewModel の `AddExtWish`/`RemoveExtWish` と希望設定の拒否、最適化器の候補生成（約 60 ファイル、Kotlin と同じ箇所に「新しい値が禁止の手を捨てる」判定）・最終番兵（禁止を新しく置いた段を外し、戻した盤面を候補に足す）・`PostChain.StageProbe`。テスト `ExtWishRulesTest`・`ExtWishOptimizeTest`（全アルゴリズム・PolishGate 全 ON の敵対テスト、並列実行しないコレクション）。禁止が無いときの出力は不変（エンジン 1075 件・ViewModel 619 件緑）。移植しないもの: 全SOFT玉突き `SoftCascadePolish`・玉突き連鎖・局所降下・停滞時研磨注入とその外部レビュー対応（OPT-01〜04・OBS-01）・`defaultNarrow`＝いずれも既定 OFF で C# に前提が無い（既定 ON が決まった時点で判断）。C++ の ABI 8 は C# に無関係。入力画面は Android にも未実装。

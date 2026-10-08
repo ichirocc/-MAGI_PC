@@ -52,6 +52,7 @@ public static class WishesCsvIO
         // [3.314.0] ヘッダ判定を Build() が出す実ヘッダ「氏名」の一致へ。旧:「先頭が既知の職員名か」
         //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
         var body = CsvUtil.CsvBody(rows, "氏名");
+        var ambiguous = CsvUtil.AmbiguousStaffKeys(state);
         var bad = 0;
         var samples = new List<string>();
         foreach (var r in body)
@@ -62,6 +63,13 @@ public static class WishesCsvIO
             var sym = Cell(r, 2);
             // 完全な空行は書式上のもの＝無視してよい。中身があるのに解釈できない行だけを数える。
             if (name.Length == 0 && sym.Length == 0 && dayCell.Length == 0) continue;
+            // 同姓同名は誰の希望か決められない＝読めない行として全置換を止める（先頭の職員へ割り当てない）。
+            if (ambiguous.Contains(CsvUtil.NameMatchKey(name)))
+            {
+                bad++;
+                if (samples.Count < ComponentImport.MaxSamples) samples.Add("同姓同名: " + CsvUtil.RowSample(r));
+                continue;
+            }
             var hasI = nameToI.TryGetValue(CsvUtil.NameMatchKey(name), out var i);
             var hasK = symToK.TryGetValue(sym, out var k);
             if (!hasI || !hasK || day is null || day < 1 || day > state.DayCount)

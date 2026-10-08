@@ -111,3 +111,89 @@ public class ExtWishRulesTest
         Assert.Empty(StateJsonSerializer.Parse(StateJsonSerializer.Serialize(Base(), Base().Schedule.ToIntArray2D())).ExtWishes ?? Array.Empty<ExtWish>());
     }
 }
+
+/// <summary>外部レビュー DATA-01〜03・NEW-04・OLD-01〜03（Kotlin <c>ReviewExtWishFollowTest</c> の移植）。</summary>
+public class ReviewExtWishFollowTest
+{
+    // 0=休 1=A 2=D。職員 A,B,C。B に「D 禁止」（1〜2 日）。
+    private static MagiState State(IReadOnlyList<ExtWish>? ext = null) => MinimalState.Build(
+        startDate: "2026-07-01", endDate: "2026-07-03",
+        shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("A", "A", "1", ""), new("D", "D", "1", "") },
+        staffList: new List<Staff> { new("A", 0), new("B", 0), new("C", 0) },
+        schedule: new List<IReadOnlyList<int>> { new[] { 1, 0, 0 }, new[] { 2, 2, 0 }, new[] { 0, 1, 1 } })
+        with { ExtWishes = ext ?? new[] { new ExtWish(1, new[] { "2026-07-01", "2026-07-02" }, new[] { "D" }) } };
+    private static int[][] Grid(MagiState st) => st.Schedule.ToIntArray2D();
+
+    [Fact]
+    public void MoveStaffKeepsTheExtWishOnTheSamePerson()
+    {
+        var st = State();
+        var r = Ws1Ops.MoveStaff(st, Grid(st), 1, -1);
+        Assert.Equal("B", r.State.StaffList[0].Name);
+        Assert.Equal(new[] { 0 }, r.State.ExtWishes!.Select(e => e.Staff));
+    }
+
+    [Fact]
+    public void RemoveStaffDropsItsExtWishAndShiftsTheRest()
+    {
+        var st = State(new[] { new ExtWish(1, new[] { "2026-07-01" }, new[] { "D" }), new ExtWish(2, new[] { "2026-07-02" }, new[] { "A" }) });
+        var r = Ws1Ops.RemoveStaff(st, Grid(st), 1);
+        Assert.Equal(new[] { 1 }, r.State.ExtWishes!.Select(e => e.Staff));
+        Assert.Equal(new[] { "A" }, r.State.ExtWishes![0].Shifts);
+    }
+
+    [Fact]
+    public void RenamingAShiftFollowsIntoExtWishesAndRemovingDropsIt()
+    {
+        var st = State();
+        var renamed = Ws1Ops.EditShift(st, 2, "D", "NEW", "1", "", false);
+        Assert.Equal(new[] { "NEW" }, renamed.ExtWishes![0].Shifts);
+        Assert.Empty(Ws1Ops.RemoveShift(st, Grid(st), 2).State.ExtWishes!);
+    }
+
+    [Fact]
+    public void ShrinkingThePeriodDropsDaysOutside()
+    {
+        var st = State();
+        Assert.Equal(new[] { "2026-07-01" }, Ws1Ops.ResizeDays(st, Grid(st), 1).State.ExtWishes![0].Days);
+    }
+
+    [Fact]
+    public void UnionWithExistingBansMustLeaveAPlaceableShift()
+    {
+        var st = State(new[] { new ExtWish(1, new[] { "2026-07-01" }, new[] { "休", "A" }) });
+        Assert.Null(ExtWishRules.Sanitize(st, new ExtWish(1, new[] { "2026-07-01" }, new[] { "D" })).Saved);
+        Assert.NotNull(ExtWishRules.Sanitize(st, new ExtWish(1, new[] { "2026-07-02" }, new[] { "D" })).Saved);
+    }
+
+    [Fact]
+    public void FingerprintSeparatesNeedDay1FromNeedDay2AndSeesExtWishes()
+    {
+        var a = State(Array.Empty<ExtWish>()) with { NeedDay1 = new Dictionary<string, string> { ["1,0"] = "1" } };
+        var b = State(Array.Empty<ExtWish>()) with { NeedDay2 = new Dictionary<string, string> { ["1,0"] = "1" } };
+        Assert.NotEqual(StateFingerprint.Of(a), StateFingerprint.Of(b));
+        Assert.NotEqual(StateFingerprint.Of(State(Array.Empty<ExtWish>())), StateFingerprint.Of(State()));
+    }
+
+    [Fact]
+    public void CsvImportsRefuseToGuessBetweenSameNameStaff()
+    {
+        var st = State(Array.Empty<ExtWish>()) with
+        {
+            StaffList = new List<Staff> { new("同名", 0), new("同名", 0), new("C", 0) },
+            Wishes = new Dictionary<string, int> { ["2,0"] = 1 },
+        };
+        var w = WishesCsvIO.Parse("氏名,日,希望シフト\n同名,1,D\n", st)!;
+        Assert.Equal(1, w.Rejected); Assert.Equal(0, w.Accepted);
+        Assert.StartsWith("同姓同名", w.Samples[0]);
+        var groups2 = st with
+        {
+            Groups = new List<Group> { new("G0", "G0"), new("H", "H") },
+            GroupShift = new List<IReadOnlyList<int>> { new[] { 1, 1, 1 }, new[] { 1, 1, 1 } },
+            GroupShiftApt = new List<IReadOnlyList<string>> { new[] { "", "", "" }, new[] { "", "", "" } },
+        };
+        Assert.Null(StaffCsvIO.Parse("氏名,グループ,スキル\n同名,H,\n", groups2));
+        var up = StaffCsvIO.ParseUpsert("氏名,グループ,スキル\n同名,H,\n", groups2, Grid(groups2));
+        Assert.True(up is null || (up.Updated == 0 && up.Added == 0 && up.AmbiguousNames!.SequenceEqual(new[] { "同名" })));
+    }
+}

@@ -63,8 +63,13 @@ public static class ExtWishRules
         if (days.Count == 0 || shifts.Count == 0) return new SaveResult(null, notes.Append("日か禁止シフトが残らないので保存しない").ToList());
         var p = ScheduleUtil.CachedProblem(state);
         var banned = shifts.Select(x => kigou.IndexOf(x)).ToHashSet();
-        if (!Enumerable.Range(0, p.K).Any(k => !banned.Contains(k) && p.MayPlace(i, k)))
-            return new SaveResult(null, notes.Append("置けるシフトが残らないので保存しない").ToList());
+        // 置けるシフトは、同じ職員の既存の件と合わせた禁止（探索が使う和集合）で日ごとに見る。
+        var existingBan = BuildBanTable(state with { ExtWishes = existing }, state.StaffCount, state.DayCount, state.ShiftCount);
+        foreach (var j in days)
+        {
+            if (!Enumerable.Range(0, p.K).Any(k => !banned.Contains(k) && !existingBan.Banned(i, j, k) && p.MayPlace(i, k)))
+                return new SaveResult(null, notes.Append($"{j + 1}日に置けるシフトが残らないので保存しない").ToList());
+        }
         days.Sort();
         var outW = new ExtWish(i, days.Select(j => DateOf(state, j)).ToList(), kigou.Where(shifts.Contains).ToList());
         if (existing.Any(e => e.Staff == i && e.Days.ToHashSet().SetEquals(outW.Days) && e.Shifts.ToHashSet().SetEquals(outW.Shifts)))

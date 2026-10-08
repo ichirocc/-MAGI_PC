@@ -106,6 +106,7 @@
                     <TextBlock Text="以外にする（拡張希望）: 選んだ日を、下で選んだシフト以外にする（複数選べます）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0" />
                     <StackPanel x:Name="ExtWishShiftHost" Spacing="6" />
                     <Button x:Name="AddExtWishButton" Content="選んだシフト以外にする" Click="OnAddExtWishClick" />
+                    <TextBlock x:Name="ExtWishErrorText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
                 </StackPanel>
 
                 <TextBlock Text="登録済みの希望（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />

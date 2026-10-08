@@ -846,12 +846,16 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>拡張希望を 1 件足す（保存規則は ExtWishRules.Sanitize）。案内は操作ログへ。保存したら true。</summary>
+    /// <summary>直前の拡張希望の登録が失敗した理由（成功なら null）。画面が選択を残して理由を出すために読む（UI-01）。</summary>
+    public string? LastExtWishError { get; private set; }
+
     public bool AddExtWish(ExtWish e)
     {
         var st = _state;
         if (st is null) return false;
         var r = ExtWishRules.Sanitize(st, e);
         foreach (var n in r.Notices) LogOp("W", $"拡張希望: {OpNm(e.Staff)} — {n}");
+        LastExtWishError = r.Saved is null ? (r.Notices.LastOrDefault() ?? "保存しなかった") : null;
         if (r.Saved is null) return false;
         LogOp("I", $"拡張希望設定: {OpNm(r.Saved.Staff)} {r.Saved.Days.Count}日 → {string.Join("・", r.Saved.Shifts)}以外");
         ApplyStructure(st with { ExtWishes = (st.ExtWishes ?? Array.Empty<ExtWish>()).Append(r.Saved).ToList() });

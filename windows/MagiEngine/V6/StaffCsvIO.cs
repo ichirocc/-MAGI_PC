@@ -27,7 +27,9 @@ public static class StaffCsvIO
     public sealed record StaffUpsertResult(
         MagiState State, int[][] Schedule, int Updated, int Added,
         IReadOnlyDictionary<string, int>? UnknownGroups = null,
-        IReadOnlyDictionary<string, int>? UnknownSkills = null)
+        IReadOnlyDictionary<string, int>? UnknownSkills = null,
+        /// <summary>同姓同名で誰の行か決められず、更新も追加もしなかった氏名。</summary>
+        IReadOnlyList<string>? AmbiguousNames = null)
     {
         public IReadOnlyDictionary<string, int> UnknownGroups { get; init; } = UnknownGroups ?? EmptyCounts;
         public IReadOnlyDictionary<string, int> UnknownSkills { get; init; } = UnknownSkills ?? EmptyCounts;
@@ -70,10 +72,12 @@ public static class StaffCsvIO
         // [3.314.0] ヘッダ判定を Build() が出す実ヘッダ「氏名」の一致へ。旧:「先頭が既知の職員名か」
         //   という間接的な推測で、**未知の職員名で始まるヘッダ無CSVの先頭行を黙って捨てて**いた。
         var body = CsvUtil.CsvBody(rows, "氏名");
+        var ambiguous = CsvUtil.AmbiguousStaffKeys(state);
         foreach (var r in body)
         {
             var name = Cell(r, 0);
             if (name.Length == 0) continue;
+            if (ambiguous.Contains(CsvUtil.NameMatchKey(name))) continue;   // 同姓同名＝誰の行か決められない（先頭へ割り当てない）
             if (!nameToI.TryGetValue(CsvUtil.NameMatchKey(name), out var i)) continue;
             matched++;
             var gi = gByK.TryGetValue(Cell(r, 1), out var gv) ? gv : newStaff[i].GroupIdx;
@@ -138,6 +142,8 @@ public static class StaffCsvIO
         //   CsvUtil.OrderedCounter を使う（ScheduleCsvBridge.Parse の未知記号集計と同型の穴）。
         var unknownG = new CsvUtil.OrderedCounter();
         var unknownS = new CsvUtil.OrderedCounter();
+        var ambiguous = CsvUtil.AmbiguousStaffKeys(state);
+        var ambiguousNames = new List<string>();
         // [3.314.0] 実ヘッダ「氏名」の一致で判定する。この経路は未知名を**新規追加**するため、旧実装は
         //   「ヘッダ文字列を職員として登録しない」保守のために既知名一致のときだけ先頭行を本体へ入れて
         //   おり、**先頭が新規職員のヘッダ無CSVはその1件を黙って捨てて**いた。厳密なヘッダ判定なら
@@ -148,6 +154,7 @@ public static class StaffCsvIO
             var rawName = Cell(r, 0);
             if (rawName.Length == 0) continue;
             var key = CsvUtil.NameMatchKey(rawName);
+            if (ambiguous.Contains(key)) { if (!ambiguousNames.Contains(rawName)) ambiguousNames.Add(rawName); continue; }   // 同姓同名＝自動で先頭へ割り当てない
             var gRaw = Cell(r, 1);
             var sRaw = Cell(r, 2);
             var hasGi = gByK.TryGetValue(gRaw, out var gi);
@@ -193,6 +200,6 @@ public static class StaffCsvIO
         for (var i = 0; i < sched.Length; i++) newSched[i] = (int[])sched[i].Clone();
         for (var i = 0; i < extraRows.Count; i++) newSched[sched.Length + i] = extraRows[i];
         var ns = (state with { StaffList = newStaff }).WithSchedule(newSched);
-        return new StaffUpsertResult(ns, newSched, updated, added, unknownG, unknownS);
+        return new StaffUpsertResult(ns, newSched, updated, added, unknownG, unknownS, ambiguousNames);
     }
 }

@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Text;
 
+using MagiEngine.Model;
+
 namespace MagiEngine.V6;
 
 /// <summary>
@@ -59,6 +61,10 @@ internal static class CsvUtil
     /// [P1/重複解決の一致] 先勝ちの index マップ。Kotlin の <c>associateBy</c> は後勝ちで、制約評価
     /// （<c>Problem</c> の <c>IndexOfFirst</c>=先勝ち）と食い違うため、CSV照合は必ずこちらを使う。
     /// </summary>
+    /// <summary>同じ照合キーの職員が 2 人以上いる氏名のキー（どの職員の行か決められない＝自動で先頭へ割り当てない）。</summary>
+    internal static HashSet<string> AmbiguousStaffKeys(MagiState state) =>
+        state.StaffList.GroupBy(s => NameMatchKey(s.Name)).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+
     internal static IReadOnlyDictionary<string, int> FirstWinsMap(int n, Func<int, string> key)
     {
         var m = new Dictionary<string, int>();

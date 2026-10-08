@@ -468,10 +468,17 @@ public sealed partial class EditView : UserControl
     {
         var staffIdx = WishStaffCombo.SelectedIndex;
         if (staffIdx < 0 || _wishSelectedDays.Count == 0 || _extWishSel.Count == 0) return;
+        // 成功したときだけ閉じる。失敗したときは選択を残して理由を出す（UI-01）。
         if (_vm.AddExtWishForDays(staffIdx, _wishSelectedDays.Select(d => d - 1).ToList(), _extWishSel.OrderBy(x => x).ToList()))
         {
             _wishSelectedDays.Clear();
             _extWishSel.Clear();
+            ExtWishErrorText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ExtWishErrorText.Text = "登録できませんでした: " + (_vm.LastExtWishError ?? "");
+            ExtWishErrorText.Visibility = Visibility.Visible;
         }
         RenderWishCalendar(_vm.Ui, true);
     }
@@ -590,7 +597,7 @@ public sealed partial class EditView : UserControl
 
             if (extMarked.TryGetValue(d, out var ex))
             {
-                content.Children.Add(new TextBlock { Text = "×" + string.Join("", ex), FontSize = 14, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
+                content.Children.Add(new TextBlock { Text = ex.Count <= 2 ? "×" + string.Join("", ex) : $"×{ex.Count}種", FontSize = 14, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
             }
 
             var cellButton = new Button

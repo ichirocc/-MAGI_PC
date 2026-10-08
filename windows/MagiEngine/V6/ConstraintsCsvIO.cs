@@ -169,6 +169,7 @@ public static class ConstraintsCsvIO
                 case "個人レンジ":
                 {
                     var hasI = nameToI.TryGetValue(CsvUtil.NameMatchKey(Cell(r, 1)), out var i);
+                    if (CsvUtil.AmbiguousStaffKeys(state).Contains(CsvUtil.NameMatchKey(Cell(r, 1)))) hasI = false;   // 同姓同名＝誰の行か決められない
                     var sym = Cell(r, 2);
                     var k = -1;
                     for (var idx = 0; idx < state.Shifts.Count; idx++)

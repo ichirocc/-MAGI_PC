@@ -580,6 +580,7 @@ public sealed partial class MagiViewModel
         //   グループ、既存は現状維持へ黙って落ち、空欄と誤記が見分けられなかった。所属グループは
         //   担当できるシフトを決めるので、誤記が通ると説明のつかない盤面になる。
         var badG = res.UnknownGroups;
+        var ambiguousTail = res.AmbiguousNames is { Count: > 0 } an ? $"。同姓同名で対象を決められない氏名 {string.Join("・", an.Take(3))}（その行は変更しません）" : "";
         var badS = res.UnknownSkills;
         var warn = new List<string>();
         if (badG.Count > 0)
@@ -590,7 +591,7 @@ public sealed partial class MagiViewModel
         var tailWarn = warn.Count == 0
             ? ""
             : $"。⚠ 見つからない{string.Join("／", warn)}（新規は先頭グループ・既存は元のまま。記号をご確認ください）";
-        var msg = "職員一覧を取込: " + string.Join("・", parts) + tailWarn;
+        var msg = "職員一覧を取込: " + string.Join("・", parts) + tailWarn + ambiguousTail;
         LogOp(warn.Count == 0 ? "I" : "W",
             $"職員一覧CSV取込: 追加{res.Added} 更新{res.Updated}" +
             (badG.Count > 0 ? $" 未知グループ{badG.Values.Sum()}件" : "") +

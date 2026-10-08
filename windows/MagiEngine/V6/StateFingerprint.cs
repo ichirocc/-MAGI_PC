@@ -57,10 +57,11 @@ public static class StateFingerprint
         foreach (var row in st.GroupShift) { foreach (var v in row) Mix(v); Mix(Row); }
         foreach (var row in st.GroupShiftApt) { foreach (var v in row) Txt(v); Mix(Row); }
 
-        foreach (var kv in st.Wishes.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Mix(kv.Value); }
-        foreach (var kv in st.StaffRange.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value.Lo); Txt(kv.Value.Hi); }
-        foreach (var kv in st.NeedDay1.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
-        foreach (var kv in st.NeedDay2.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
+        // 項目ごとに識別子と件数を混ぜる。旧: 境界が無く、同じ項目を needDay1→needDay2 へ移しても指紋が一致した（外部レビュー OLD-01）。
+        Mix(7); Mix(st.Wishes.Count); foreach (var kv in st.Wishes.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Mix(kv.Value); }
+        Mix(8); Mix(st.StaffRange.Count); foreach (var kv in st.StaffRange.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value.Lo); Txt(kv.Value.Hi); }
+        Mix(9); Mix(st.NeedDay1.Count); foreach (var kv in st.NeedDay1.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
+        Mix(10); Mix(st.NeedDay2.Count); foreach (var kv in st.NeedDay2.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
 
         foreach (var c in st.Cons1) { Txt(c.Day1); Txt(c.ShiftKigou); Txt(c.Day2); }
         foreach (var c in st.Cons2) { Txt(c.ShiftKigou); Txt(c.Count); }
@@ -91,6 +92,13 @@ public static class StateFingerprint
         {
             Mix(6);
             foreach (var m in pins.OrderBy(m => m.Staff).ThenBy(m => m.Day)) { Mix(m.Staff); Mix(m.Day); Mix(m.Shift); }
+        }
+        // 拡張希望（最適化器の候補を変える）。無いときは混ぜない。
+        var ext = st.ExtWishes ?? Array.Empty<ExtWish>();
+        if (ext.Count > 0)
+        {
+            Mix(11);
+            foreach (var e in ext) { Mix(e.Staff); foreach (var d in e.Days) Txt(d); Mix(Row); foreach (var k in e.Shifts) Txt(k); Mix(Row); }
         }
 
         return h;
