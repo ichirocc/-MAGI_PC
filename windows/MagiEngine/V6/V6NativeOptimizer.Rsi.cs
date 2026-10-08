@@ -407,6 +407,17 @@ public static partial class V6NativeOptimizer
     /// Kotlin の <c>= round</c>（他引数参照の既定値）は C# のコンパイル時定数制約に反するため
     /// nullable+フォールバックで表す（<c>finalRound</c> 判定は <paramref name="round"/> のまま不変）。
     /// </param>
+    /// <summary>[Kotlin原本 <c>RsiFocusSelection.avoidSets</c>] <c>RunRsi</c> の回避集合（Android <c>docs/stall_escape.md</c> §7.2）。
+    /// avoid＝HF63 の動的検知のうち HARD だけ＋静的 covU 床、focusAvoid＝avoid＋1 ラウンド冷却。SOFT は入らない＝常に focus 可能。</summary>
+    internal static (IReadOnlySet<string> Avoid, IReadOnlySet<string> FocusAvoid) AvoidSets(
+        IReadOnlySet<string> dynamicAvoid, int covU, int covUFloor, string? cooldownFocus)
+    {
+        var avoid = new HashSet<string>(dynamicAvoid.Where(it => MirrorKeys.Hard.Contains(it)));
+        if (covUFloor > 0 && covU <= covUFloor) avoid.Add("covU");
+        var focusAvoid = cooldownFocus != null ? new HashSet<string>(avoid) { cooldownFocus } : avoid;
+        return (avoid, focusAvoid);
+    }
+
     internal static string MaxViolatedFamily(ViolationReport report, IReadOnlySet<string>? avoid = null, int round = -1, int roundsTotal = -1, int? rotationRound = null)
     {
         avoid ??= new HashSet<string>();
@@ -545,12 +556,10 @@ public static partial class V6NativeOptimizer
             // [実機ログ起因/SOFT誤deprioritize, Kotlin原本] focus の deprioritize は真に構造的な HARD
             //   （covU 床/c3n/pref/groupViol）のみに限定し、SOFT は常に focusable に保つ。N4 早期終了の
             //   武装判定は従来どおり dynamicAvoid（全族）で行い、pivot 可否は avoid(HARD) で判定する。
-            var avoid = new HashSet<string>(dynamicAvoid.Where(it => MirrorKeys.Hard.Contains(it)));
             // [静的covU床, Kotlin原本] 合法配置では covU >= covUFloor（下限）。担当外配置(groupViol)が
             //   混在すると covU が床を下回り得るが、その間 covU を focus しても無意味なので `<=` で除外。
-            if (covUFloor > 0 && bestReport.Breakdown.GetValueOrDefault("covU", 0) <= covUFloor) avoid.Add("covU");
             // [E9, Kotlin原本] 冷却は focus 選択にのみ合流（HF63 ログ・N4 発火条件には混ぜない＝恒久判定と区別）。
-            var focusAvoid = cooldownFocus != null ? new HashSet<string>(avoid) { cooldownFocus } : avoid;
+            var (avoid, focusAvoid) = AvoidSets(dynamicAvoid, bestReport.Breakdown.GetValueOrDefault("covU", 0), covUFloor, cooldownFocus);
             // [backlog#28] 1ラウンドにつき1回だけ hf63.NextFocusRotationRound() を進め、下段の早期終了
             //   判定(pivot)にも同じ値を使う（そちらで再度進めない）。既定OFF時はroundをそのまま使う。
             var rotationRound = options.RsiFocusRotationPersist ? hf63.NextFocusRotationRound() : round;

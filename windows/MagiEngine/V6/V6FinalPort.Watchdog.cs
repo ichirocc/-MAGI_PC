@@ -138,4 +138,58 @@ public static partial class V6FinalPort
     /// <summary>[Kotlin原本 <c>V6FinalPort.progressImproved</c>] 進捗監視の「改善」判定（§3.2）。採否の <c>BetterReport</c> とは別契約＝weightedScore にだけ 1e-6 の許容差。</summary>
     internal static bool ProgressImproved(int h, double wgt, int t, int bh, double bWeighted, int bTotal) =>
         h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal);
+
+    /// <summary>[Kotlin原本 <c>V6FinalPort.WatchdogBest</c>] 層 A の最良追跡と停滞ラッチ（§5.2）。並列ワーカーから読むため Volatile、
+    /// 更新は呼び出し側の progressLock 内。</summary>
+    internal sealed class WatchdogBest
+    {
+        private int _bestHard = int.MaxValue;
+        private long _lastBestImproveMs, _lastBestImproveIters, _lastBeatInputMs = -1, _stagnationDurationMs = -1, _stagnationIters = -1;
+        private int _bestNonCovUHard = int.MaxValue, _bestVersion;
+        private bool _bestNonCovUAllC3n, _stagnationFired, _stagnationByOverride;
+        internal int BTotal = int.MaxValue;
+        internal double BWeighted = double.MaxValue;
+
+        internal WatchdogBest(long startMs) { _lastBestImproveMs = startMs; }
+
+        internal int BestHard => Volatile.Read(ref _bestHard);
+        internal long LastBestImproveMs => Volatile.Read(ref _lastBestImproveMs);
+        internal long LastBestImproveIters => Volatile.Read(ref _lastBestImproveIters);
+        internal long LastBeatInputMs => Volatile.Read(ref _lastBeatInputMs);
+        internal int BestNonCovUHard => Volatile.Read(ref _bestNonCovUHard);
+        internal bool BestNonCovUAllC3n => Volatile.Read(ref _bestNonCovUAllC3n);
+        internal int BestVersion => Volatile.Read(ref _bestVersion);
+        internal bool StagnationFired => Volatile.Read(ref _stagnationFired);
+        internal long StagnationDurationMs => Volatile.Read(ref _stagnationDurationMs);
+        internal long StagnationIters => Volatile.Read(ref _stagnationIters);
+        internal bool StagnationByOverride => Volatile.Read(ref _stagnationByOverride);
+
+        /// <summary>改善報告。<see cref="ProgressImproved"/> で改善なら最良・時刻・反復数・非 covU 内訳・世代を更新し、停滞ラッチを降ろす（3.346.0）。</summary>
+        internal bool Observe(ViolationReport report, long nowMs, long observedIters, Func<bool> beatsInput, int wishC3wProven)
+        {
+            if (!ProgressImproved(report.Hard, report.WeightedScore, report.Total, BestHard, BWeighted, BTotal)) return false;
+            Volatile.Write(ref _bestHard, report.Hard); BTotal = report.Total; BWeighted = report.WeightedScore;
+            Volatile.Write(ref _lastBestImproveMs, nowMs); Volatile.Write(ref _lastBestImproveIters, observedIters);
+            if (beatsInput()) Volatile.Write(ref _lastBeatInputMs, nowMs);
+            Volatile.Write(ref _stagnationFired, false); Volatile.Write(ref _stagnationDurationMs, -1L);
+            Volatile.Write(ref _stagnationIters, -1L); Volatile.Write(ref _stagnationByOverride, false);
+            var gv = report.Breakdown.GetValueOrDefault("groupViol", 0);
+            var pf = report.Breakdown.GetValueOrDefault("pref", 0);
+            var c3n = report.Breakdown.GetValueOrDefault("c3n", 0);
+            var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
+            Volatile.Write(ref _bestNonCovUHard, gv + pf + c3n + c3w);
+            Volatile.Write(ref _bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w <= wishC3wProven && c3n > 0);
+            Interlocked.Increment(ref _bestVersion);
+            return true;
+        }
+
+        /// <summary>停滞発火。<paramref name="byOverride"/>＝フェーズ猶予の中で閾値の 2 倍に達して発火した（§5.4）。</summary>
+        internal void Fire(long nowMs, long observedIters, bool byOverride)
+        {
+            Volatile.Write(ref _stagnationDurationMs, nowMs - LastBestImproveMs);
+            Volatile.Write(ref _stagnationIters, observedIters);
+            Volatile.Write(ref _stagnationByOverride, byOverride);
+            Volatile.Write(ref _stagnationFired, true);
+        }
+    }
 }

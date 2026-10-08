@@ -221,29 +221,18 @@ public static partial class V6FinalPort
 
         // [レビュー#9/3.230.0] 「最良改善」と「フェーズ遷移」の時計を分離。フェーズ遷移は短い個別猶予
         //   (phaseGraceMs)としてのみ機能させ、「本当に改善が無い時間」は lastBestImproveMs 単独で計測する。
-        long lastBestImproveMs = startMs;
-        long lastBeatInputMs = -1;
+        var wd = new WatchdogBest(startMs);
         long lastPhaseChangeMs = startMs;
-        bool stagnationFired = false;
         // [停滞時間のログ出力] 発火の瞬間に「何ms無改善だったか」を記録する。
-        long stagnationDurationMs = -1L;
         // [3.375.0] 進捗ストリームで観測した反復数を「最終改善の瞬間」と「停滞発火の瞬間」に記録する
         //   （進捗報告ぶんの目安であり真の総量ではない。詳細は Kotlin 原本コメント参照）。
         var itersByPhase = new Dictionary<string, long>();
         long observedIters = 0L;
-        long lastBestImproveIters = 0L;
-        long stagnationIters = -1L;
-        int bestHard = int.MaxValue;   // 並列ワーカーから読むため Volatile
         // [hardFloor 精度] best の「非covU HARD」(groupViol/pref/c3n=解けるHARD)件数。
-        int bestNonCovUHard = int.MaxValue;
         // [3.281.0/停滞レビューA] c3n構造壁の動的床。
-        bool bestNonCovUAllC3n = false;
-        int bestVersion = 0;
         // [3.592.0, Kotlin原本] 世代とresultを別フィールドで持つと、並行診断するワーカー間で新世代の
         //   「checked」に旧世代のresultが結び付く競合があった。(version,result)組を単一参照で置換する。
         Tuple<int, bool> c3nWallCache = Tuple.Create(-1, false);
-        int bTotal = int.MaxValue;
-        double bWeighted = double.MaxValue;
         var lastPhase = "";
         var progressLock = new object();   // [競合解消] 並列ワーカーから呼ばれる best 追跡の read-modify-write を直列化
 
@@ -264,31 +253,7 @@ public static partial class V6FinalPort
                 if (basePhase != lastPhase) { lastPhase = basePhase; Volatile.Write(ref lastPhaseChangeMs, NowMs()); }
                 if (report != null)
                 {
-                    var h = report.Hard; var t = report.Total; var wgt = report.WeightedScore;
-                    var bh = Volatile.Read(ref bestHard);
-                    // [3.287.0 keep-best統一/3.289.0] hard→weighted→total（betterReport と同順）。
-                    //   許容誤差(1e-6)付きは意図的（停滞ウォッチドッグの改善検知専用・採否は betterReport が担う）。
-                    var improved = ProgressImproved(h, wgt, t, bh, bWeighted, bTotal);
-                    if (improved)
-                    {
-                        Volatile.Write(ref bestHard, h); bTotal = t; bWeighted = wgt;
-                        Volatile.Write(ref lastBestImproveMs, NowMs());
-                        Volatile.Write(ref lastBestImproveIters, Volatile.Read(ref observedIters));   // [3.375.0]
-                        if (UnifiedViolationChecker.BetterReport(report, inputReport)) Volatile.Write(ref lastBeatInputMs, Volatile.Read(ref lastBestImproveMs));
-                        // [3.346.0/実機ログ] 停滞ラッチを解除する。shouldStop は単調でない。
-                        Volatile.Write(ref stagnationFired, false);
-                        Volatile.Write(ref stagnationDurationMs, -1L);
-                        Volatile.Write(ref stagnationIters, -1L);
-                        // 非covU HARD(=解けるHARD)件数を best と同時に捕捉。
-                        var gv = report.Breakdown.GetValueOrDefault("groupViol", 0);
-                        var pf = report.Breakdown.GetValueOrDefault("pref", 0);
-                        var c3n = report.Breakdown.GetValueOrDefault("c3n", 0);
-                        var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
-                        Volatile.Write(ref bestNonCovUHard, gv + pf + c3n + c3w);
-                        // [3.281.0/A] 非covU HARD が c3n のみか（c3n構造壁チェックの適用条件）＋best世代を進める。[3.542.0] c3w追加。
-                        Volatile.Write(ref bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w <= wishC3wProven && c3n > 0);
-                        Interlocked.Increment(ref bestVersion);
-                    }
+                    wd.Observe(report, NowMs(), Volatile.Read(ref observedIters), () => UnifiedViolationChecker.BetterReport(report, inputReport), wishC3wProven);
                 }
             }
             progress(phase, report, iters, elapsed);   // ユーザーコールバックはロック外で呼ぶ
@@ -302,7 +267,7 @@ public static partial class V6FinalPort
         long wishStaleCheckAtMs = long.MinValue / 2;
         bool BestWishReached()
         {
-            var v = Volatile.Read(ref bestVersion);
+            var v = wd.BestVersion;
             if (Volatile.Read(ref wishReachedCache).Item1 != v)
             {
                 var now = NowMs();
@@ -319,7 +284,7 @@ public static partial class V6FinalPort
                         for (var c = 0; c < live[r].Count; c++) board[r][c] = live[r][c];
                     }
                 }
-                var hb = Volatile.Read(ref bestHard);
+                var hb = wd.BestHard;
                 var ok = WishReachedOn(board, hb);
                 // liveBest は best 報告より遅れて届く経路がある。古い盤面での「未到達」は保存せず、次の呼出で検査し直す。
                 bool fresh;
@@ -335,7 +300,7 @@ public static partial class V6FinalPort
         // [3.281.0/A] c3n構造壁の遅延証明。best 世代ごとに一度だけ ForbiddenDiag を実行しキャッシュする。
         bool C3nWallProven()
         {
-            var v = Volatile.Read(ref bestVersion);
+            var v = wd.BestVersion;
             if (Volatile.Read(ref c3nWallCache).Item1 != v)
             {
                 var board = V6NativeOptimizer.LiveBest;
@@ -368,21 +333,19 @@ public static partial class V6FinalPort
             //   ただし非covU HARDが残る間は long stall で粘る。
             // [3.281.0/A] 追加: 残る非covU HARD が c3n のみで ForbiddenDiag が全 run の塞がりを証明した場合も
             //   plateau として stallHardMs へ移行。
-            var nonCovU = Volatile.Read(ref bestNonCovUHard);
-            var wall = nonCovU > 0 && Volatile.Read(ref bestNonCovUAllC3n) &&
-                Volatile.Read(ref bestHard) <= hardFloor + nonCovU &&
-                now - Volatile.Read(ref lastBestImproveMs) > stallHardMs && C3nWallProven();
+            var nonCovU = wd.BestNonCovUHard;
+            var wall = nonCovU > 0 && wd.BestNonCovUAllC3n &&
+                wd.BestHard <= hardFloor + nonCovU &&
+                now - wd.LastBestImproveMs > stallHardMs && C3nWallProven();
             var effStall = EffectiveStallMs(
-                Volatile.Read(ref bestHard), hardFloor, nonCovU, Volatile.Read(ref bestNonCovUAllC3n), wall, stallHardMs, stallMs,
-                wishOn && Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached());
+                wd.BestHard, hardFloor, nonCovU, wd.BestNonCovUAllC3n, wall, stallHardMs, stallMs,
+                wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
             if (now >= searchDeadlineMs || cancellationToken.IsCancellationRequested) return true;
             if (WatchdogStagnationFired(now, startMs, minRunMs, Volatile.Read(ref lastPhaseChangeMs), phaseGraceMs,
-                    Volatile.Read(ref lastBestImproveMs), effStall))
+                    wd.LastBestImproveMs, effStall))
             {
-                Volatile.Write(ref stagnationDurationMs, now - Volatile.Read(ref lastBestImproveMs));
-                Volatile.Write(ref stagnationIters, Volatile.Read(ref observedIters));   // [3.375.0]
-                Volatile.Write(ref e0Fired, wishOn && Volatile.Read(ref bestHard) == wishFloorLogged && BestWishReached());
-                Volatile.Write(ref stagnationFired, true);
+                Volatile.Write(ref e0Fired, wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
+                wd.Fire(now, Volatile.Read(ref observedIters), byOverride: now - Volatile.Read(ref lastPhaseChangeMs) <= phaseGraceMs);
                 return true;
             }
             return false;
@@ -393,7 +356,7 @@ public static partial class V6FinalPort
         //   再確認する（一瞬のシグナルで片肺運転にしないため）。
         bool StopIsFinal() => NowMs() >= searchDeadlineMs || cancellationToken.IsCancellationRequested;
         // 後処理(runPostOptimization)用の別締切。stall では止めず予約枠 hardDeadlineMs まで使える。
-        bool E0bSkip() => wishFloorMode == WishFloorMode.E0B && Volatile.Read(ref stagnationFired) && Volatile.Read(ref e0Fired);
+        bool E0bSkip() => wishFloorMode == WishFloorMode.E0B && wd.StagnationFired && Volatile.Read(ref e0Fired);
         bool PostShouldStop() => NowMs() >= hardDeadlineMs || cancellationToken.IsCancellationRequested || E0bSkip();
 
         var tFirst0 = NowMs();
@@ -413,11 +376,11 @@ public static partial class V6FinalPort
         var tChain1 = NowMs();
         // [3.377.0/実機ログ起因] 停滞ウォッチドッグの遠隔測定は探索フェーズの話。探索終了時点でスナップショット
         //   し、ウォッチドッグの数字は全てこの時刻基準で揃える（後処理・追加精製の影響を受けない）。
-        var lastImpAtSearchEnd = Volatile.Read(ref lastBestImproveMs);
-        var lastBeatInputAtSearchEnd = Volatile.Read(ref lastBeatInputMs);
+        var lastImpAtSearchEnd = wd.LastBestImproveMs;
+        var lastBeatInputAtSearchEnd = wd.LastBeatInputMs;
         var lastPhaseAtSearchEnd = Volatile.Read(ref lastPhaseChangeMs);
         var itersAtSearchEnd = Volatile.Read(ref observedIters);
-        var lastImpItersAtSearchEnd = Volatile.Read(ref lastBestImproveIters);
+        var lastImpItersAtSearchEnd = wd.LastBestImproveIters;
 
         // [3.268.0/エリート統合] 旧「エリート再結合(Path Relinking)」を置換。8役の最終1解だけでなく、
         //   非同期適応ポートフォリオが全epochから保存した品質/距離/橋渡しエリート(FusionElites)を統合する。
@@ -471,7 +434,7 @@ public static partial class V6FinalPort
             // [3.378.0] 予算が残っているのに走らせなかったときは理由を残す。判定は1回だけ評価して分岐と
             //   説明で共有する（isActive相当を2度読むと食い違い得るため）。
             var stopRequested = cancellationToken.IsCancellationRequested;
-            var stagnated = Volatile.Read(ref stagnationFired);
+            var stagnated = wd.StagnationFired;
             // [測定中/backlog#35] post.Report の残りHARDが「解けないと証明済み」かどうか。HARD=0（SOFT仕上げの
             //   余地）や、証明できない残りHARD（改善可能かもしれない）は false のまま＝常にExtraRefineを許可する。
             var structuralHardResidual = extraRefineRequirePostHardDrop &&
@@ -576,16 +539,16 @@ public static partial class V6FinalPort
         {
             var lastImp = lastImpAtSearchEnd;
             var endStallS = Math.Max(tChain1 - lastImp, 0L) / 1000;
-            var nonCovU = Volatile.Read(ref bestNonCovUHard);
-            var wishReachedEnd = Volatile.Read(ref bestHard) == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, Volatile.Read(ref bestHard)));
-            var covUPlateau = Volatile.Read(ref bestHard) <= hardFloor && nonCovU == 0;
+            var nonCovU = wd.BestNonCovUHard;
+            var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
+            var covUPlateau = wd.BestHard <= hardFloor && nonCovU == 0;
             var kind = covUPlateau && wishOn && wishReachedEnd
                 ? $"plateau+希望衝突の床=短{stallHardMs / 1000}s"
                 : covUPlateau
                 ? $"plateau=短{stallHardMs / 1000}s"
                 : wishOn && wishReachedEnd
                     ? $"希望衝突の床=短{stallHardMs / 1000}s"
-                : Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
+                : Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n
                     ? $"c3n壁=短{stallHardMs / 1000}s"
                     : $"通常=長{stallMs / 1000}s";
             // [3.375.2/実測で判明] 発火しなかったとき、どの条件が塞いだかを出す。
@@ -593,7 +556,7 @@ public static partial class V6FinalPort
             //   理由として挙げるのは「まだ上書き倍率にも達していない」ときだけ。
             // [3.383.0/ユーザー指示] 実測値(a/bの形)を併記する。
             var blockNote = "";
-            if (!Volatile.Read(ref stagnationFired))
+            if (!wd.StagnationFired)
             {
                 var reasons = new List<string>();
                 if (tChain1 - startMs <= minRunMs)
@@ -609,8 +572,8 @@ public static partial class V6FinalPort
                 if (reasons.Count > 0) blockNote = $"・未発火の理由={string.Join("＋", reasons)}";
             }
             // 探索の後（後処理・追加精製）で改善したなら別項目として出す。探索フェーズの停滞と混ぜない。
-            var afterNote = Volatile.Read(ref lastBestImproveMs) > tChain1
-                ? $"・探索後も改善あり(経過{(Volatile.Read(ref lastBestImproveMs) - startMs) / 1000}s＝後処理/追加精製)"
+            var afterNote = wd.LastBestImproveMs > tChain1
+                ? $"・探索後も改善あり(経過{(wd.LastBestImproveMs - startMs) / 1000}s＝後処理/追加精製)"
                 : "";
             var wallNote = Volatile.Read(ref c3nWallCache).Item1 >= 0
                 ? $"・c3n壁診断={(Volatile.Read(ref c3nWallCache).Item2 ? "構造的な壁と判定" : "壁ではない（崩す手が実在）")}"
@@ -621,8 +584,8 @@ public static partial class V6FinalPort
                     message: $"停滞監視: 最終改善=経過{Math.Max((lastImp - startMs) / 1000, 0)}s・" +
                         $"入力超えの最終改善={(lastBeatInputAtSearchEnd < 0 ? "なし" : $"経過{Math.Max((lastBeatInputAtSearchEnd - startMs) / 1000, 0)}s")}・" +
                         $"探索終了時の停滞{endStallS}s・実効閾値({kind})・" +
-                        $"希望衝突の床{wishFloorLogged}={(wishReachedEnd ? "到達" : "未到達")}(best {Volatile.Read(ref bestHard)})・" +
-                        $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(Volatile.Read(ref stagnationFired) ? "あり" : "なし")}" +
+                        $"希望衝突の床{wishFloorLogged}={(wishReachedEnd ? "到達" : "未到達")}(best {wd.BestHard})・" +
+                        $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(wd.StagnationFired ? "あり" : "なし")}" +
                         $"・反復(進捗報告ぶん・目安)=最終改善時{FmtIter(lastImpItersAtSearchEnd)}→" +
                         $"探索終了時{FmtIter(itersAtSearchEnd)}（無改善のまま約{FmtIter(itersAtSearchEnd - lastImpItersAtSearchEnd)}転・" +
                         $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}"),
@@ -630,24 +593,24 @@ public static partial class V6FinalPort
         }
         var watchdogLog = BuildWatchdogLog();
 
-        IReadOnlyList<MirrorLog> stagnationLog = Volatile.Read(ref stagnationFired)
+        IReadOnlyList<MirrorLog> stagnationLog = wd.StagnationFired
             ? new List<MirrorLog>
             {
                 new(level: "I", tag: "EarlyStop",
                     message: $"停滞検知: 改善が無いため早期終了（予算{seconds}s中 {(tPost1 - startMs) / 1000}sで停止・" +
-                        $"停滞{Volatile.Read(ref stagnationDurationMs) / 1000}s無改善" +
+                        $"停滞{wd.StagnationDurationMs / 1000}s無改善" +
                         // [3.375.0] 何回転ぶん空回りしたか。ここは検索終了時のスナップショットでなく
                         //   ログ構築時点の**最新値**を読む（Kotlin原本 stagnationIters.get() -
                         //   lastBestImproveIters.get() と同じ、後処理/追加精製の改善まで反映する）。
-                        (Volatile.Read(ref stagnationIters) >= 0
-                            ? $"・発火までに無改善のまま約{FmtIter(Volatile.Read(ref stagnationIters) - Volatile.Read(ref lastBestImproveIters))}転(進捗報告ぶん・目安)"
+                        (wd.StagnationIters >= 0
+                            ? $"・発火までに無改善のまま約{FmtIter(wd.StagnationIters - wd.LastBestImproveIters)}転(進捗報告ぶん・目安)"
                             : "") +
-                        "・解は最良を維持）" +
+                        $"・発火種別={(wd.StagnationByOverride ? "猶予上書き" : "通常")}・解は最良を維持）" +
                         (Volatile.Read(ref e0Fired)
                             ? $"（希望衝突の床に到達＝{WishFloorModeName(wishFloorMode)}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
                             : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
-                        (Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n)
+                        (Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n
                             ? "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）"
                             : "")),
             }
@@ -717,7 +680,7 @@ public static partial class V6FinalPort
         {
             var bd = finalReport.Breakdown;
             var infeasLearned = chained.InfeasibleFamilies;
-            var c3nWall = Volatile.Read(ref c3nWallCache).Item2 && Volatile.Read(ref bestNonCovUAllC3n);
+            var c3nWall = Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n;
             var walls = new List<string>();
             var open = new List<string>();
             // [3.375.0/実機ログ起因] 構造床は族ループより先に計算する。open 側から差し引くため。

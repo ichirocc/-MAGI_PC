@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-08（Android 3.640.0 と同期・停滞脱出仕様の残件）: `V6FinalPort.WatchdogBest`（`HandleOptimize` の Volatile ローカル 11 個を 1 クラスへ、`Observe`/`Fire`）・`V6NativeOptimizer.AvoidSets`（RSI の回避集合）を切り出し、`StallEscapeSpecTest` に 3 件（ラッチは改善で降りる・非 covU 内訳・SOFT は avoid に入らない）。`EarlyStop` 行に発火種別。出力不変。
 - 2026-10-08（Android 3.639.0 と同期・停滞脱出仕様の固定）: `V6FinalPort.WatchdogBudgetOf`（5 閾値の導出を 1 つの純関数へ）・`ProgressImproved`（1e-6 の監視判定）を抽出し `HandleOptimize` から呼ぶ（ビット単位で同一）。`StallEscapeSpecTest`（Kotlin 1:1、13 件）が Android `docs/stall_escape.md` の表・境界・HF63 の 13 族・effortIters の式・既定値を固定。C# に無い `StallPolishInjection` の既定値だけ除外。
 - 2026-10-08（Android 3.638.0 と同期・設定トグル）: 設定画面「探索の強さ」の直下に ToggleSwitch「容認 6% で重い違反の増加も許す」（じっくりのときだけ有効・既定 OFF）。`UiState.AptFairToleranceUnguarded`＝`!V6HotfixPasses.HeavySoftGuard`。テスト `AptFairPolishToleranceTest`（②なしの採用）・`MagiViewModelTest`・`UiStateTest`。出力不変。
 - 2026-10-08（Android 3.637.0 と同期・測定スイッチ）: `V6HotfixPasses.HeavySoftGuard`（Kotlin `AptFairPolish.heavySoftGuard`、既定 true）。false で許容 6% の無害化②（重い SOFT の 1 件増を拒む）を外す。切る側の tools/loop は Android のみ＝C# は既定のまま、出力不変。
