@@ -814,7 +814,7 @@ public sealed partial class HomeView : UserControl
     private void GoEditLanding(EditLanding? landing)
     {
         if (landing is null) _window.SelectTab("edit");
-        else _window.OpenEditDoor(landing.Scope, landing.WishStaff);
+        else _window.OpenEditDoor(landing.Scope, landing.WishStaff, landing.Section);
     }
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。

@@ -299,13 +299,14 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。</summary>
-    internal void OpenEditDoor(int door, int? wishStaff = null)
+    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null)
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev)
         {
             ev.OpenDoor(door);
             if (wishStaff is int staff) ev.SelectWishStaff(staff);
+            ev.ScrollToSection(section);
         }
     }
 

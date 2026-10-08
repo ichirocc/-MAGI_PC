@@ -2475,6 +2475,20 @@ public sealed partial class EditView : UserControl
         WishStaffCombo.SelectedIndex = staffIdx;
     }
 
+    /// <summary>年間マスターの節へ寄せる（Android の yr_ws1＝①シフト・グループ、yr_cons＝⑤並び・期間の制約に対応）。
+    /// 扉の表示が終わった後の配置で寄せるため、一拍置いて呼ぶ（<c>ScheduleView.FocusCell</c> と同じ作法）。</summary>
+    internal void ScrollToSection(string? section)
+    {
+        FrameworkElement? target = section switch
+        {
+            "yr_ws1" => ShiftListView,
+            "yr_cons" => ConstraintListHost,
+            _ => null,
+        };
+        if (target is null) return;
+        DispatcherQueue.TryEnqueue(() => target.StartBringIntoView());
+    }
+
     private void OnDoorChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncingFromModel) return;
