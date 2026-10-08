@@ -126,7 +126,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
-            headline = "③ 完成しました。そのまま配れます。" + (ui.RunSummary is { } rs
+            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 完成しました。そのまま配れます。") + (ui.RunSummary is { } rs
                 ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
             bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
@@ -814,7 +814,7 @@ public sealed partial class HomeView : UserControl
     private void GoEditLanding(EditLanding? landing)
     {
         if (landing is null) _window.SelectTab("edit");
-        else _window.OpenEditDoor(landing.Scope);
+        else _window.OpenEditDoor(landing.Scope, landing.WishStaff);
     }
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。

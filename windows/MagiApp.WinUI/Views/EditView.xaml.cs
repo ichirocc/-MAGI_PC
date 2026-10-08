@@ -1010,15 +1010,15 @@ public sealed partial class EditView : UserControl
 
     /// <summary>削除前の確認。Kotlin原本は削除前に確認ダイアログ（影響件数つき）を出す——
     /// この移植ではこれまで押す前の警告文＋Undoで代用していたが、ここで本来の確認ダイアログへ揃える。</summary>
-    private async Task<bool> ConfirmAsync(string title, string message)
+    private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除", string close = "キャンセル")
     {
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = title,
             Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = "削除",
-            CloseButtonText = "キャンセル",
+            PrimaryButtonText = primary,
+            CloseButtonText = close,
             DefaultButton = ContentDialogButton.Close,
         };
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
@@ -1805,9 +1805,23 @@ public sealed partial class EditView : UserControl
         }
     }
 
-    private void OnMasterShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
+    // 別のシフトを選んだとき、未保存の入力は黙って消さない（Android の破棄確認と同じ扱い）。
+    // 「入力を続ける」を選んだら、選択を元のシフトへ戻す。
+    private async void OnMasterShiftSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncingFromModel) return;
+        var k = MasterShiftCombo.SelectedIndex;
+        if (k >= 0 && _syncedMasterShiftIndex >= 0 && k != _syncedMasterShiftIndex && MasterShiftFormDirty())
+        {
+            var discard = await ConfirmAsync("入力を破棄しますか？", "入力中の内容は保存されません。", "破棄", "入力を続ける");
+            if (!discard)
+            {
+                _syncingFromModel = true;
+                try { MasterShiftCombo.SelectedIndex = _syncedMasterShiftIndex; }
+                finally { _syncingFromModel = false; }
+                return;
+            }
+        }
         _syncingFromModel = true;
         try
         {
@@ -1817,6 +1831,19 @@ public sealed partial class EditView : UserControl
         {
             _syncingFromModel = false;
         }
+    }
+
+    /// <summary>フォームの値が、いま表示中のシフトの保存値と違うか（未保存の入力があるか）。</summary>
+    private bool MasterShiftFormDirty()
+    {
+        var shifts = _vm.Ws1()?.Shifts;
+        if (shifts is null || _syncedMasterShiftIndex < 0 || _syncedMasterShiftIndex >= shifts.Count) return false;
+        var s = shifts[_syncedMasterShiftIndex];
+        return MasterShiftNameBox.Text != s.Name
+            || MasterShiftKigouBox.Text != s.Kigou
+            || MasterShiftNeed1Box.Text != s.Need1
+            || MasterShiftNeed2Box.Text != s.Need2
+            || MasterShiftRestToggle.IsOn != (s.Role == MagiEngine.Model.ShiftRole.Rest);
     }
 
     private void OnAddMasterShiftClick(object sender, RoutedEventArgs e)
@@ -2439,6 +2466,13 @@ public sealed partial class EditView : UserControl
     {
         _door = System.Math.Clamp(door, 0, 2);
         Render();
+    }
+
+    /// <summary>希望の画面で職員を先に選ぶ（「希望を見直す」から来た時の着地先。3.642.0）。</summary>
+    internal void SelectWishStaff(int staffIdx)
+    {
+        if (staffIdx < 0 || staffIdx >= WishStaffCombo.Items.Count) return;
+        WishStaffCombo.SelectedIndex = staffIdx;
     }
 
     private void OnDoorChanged(object sender, SelectionChangedEventArgs e)
