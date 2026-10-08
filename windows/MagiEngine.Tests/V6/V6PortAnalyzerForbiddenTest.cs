@@ -175,6 +175,45 @@ public class V6PortAnalyzerForbiddenTest
         Assert.True(run.Hint.Contains("玉突き") || run.Hint.Contains("隣接日"));
     }
 
+    // [3.643.0/根拠の精度] 壁の「証明相当（全セル希望固定）」と「探索手の全滅（経験的）」を値で区別する
+    [Fact]
+    public void ForbiddenRunCertificateIsOnlyTheAllWishPinnedRun()
+    {
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") };
+        var staff = new List<Staff> { new("s0", 0), new("s1", 0) };
+        var exhausted = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
+            wishes: new Dictionary<string, int> { ["1,0"] = 0, ["1,1"] = 0 }, shifts: shifts, staff: staff);
+        var d1 = V6PortAnalyzer.DiagnoseForbiddenRuns(exhausted);
+        Assert.True(d1.AllBlocked);
+        Assert.False(d1.AllBlockedCertified, "受け皿なしの壁は証明相当ではない");
+        var pinned = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1, ["0,1"] = 1 });
+        var d2 = V6PortAnalyzer.DiagnoseForbiddenRuns(pinned);
+        Assert.True(d2.AllBlocked);
+        Assert.True(d2.AllBlockedCertified, "全セル希望固定の壁は証明相当");
+    }
+
+    // [3.643.0/根拠の精度] 1 手探索の反証: 受け皿なしの壁には手が無く、玉突きが実在する盤面では必須を減らす手が見つかる
+    [Fact]
+    public void OneMoveRefutationFindsAMoveOnlyWhereHardCanDrop()
+    {
+        var shifts = new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "1", ""), new("Q", "Q", "", "") };
+        var staff = new List<Staff> { new("s0", 0), new("s1", 0) };
+        var wall = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) },
+            wishes: new Dictionary<string, int> { ["1,0"] = 0, ["1,1"] = 0 }, shifts: shifts, staff: staff);
+        Assert.False(V6PortAnalyzer.C3nWallRefutedByOneMove(wall, wall.Schedule.ToIntArray2D()), "受け皿なしの壁に手は無い");
+        var open = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 0, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "P", "P" }) }, shifts: shifts, staff: staff);
+        Assert.True(V6PortAnalyzer.C3nWallRefutedByOneMove(open, open.Schedule.ToIntArray2D()), "玉突きが実在する盤面では必須を減らす手がある");
+    }
+
     // 同じ局面で唯一の受け皿 s1 が両日とも休へ希望固定されると連鎖が実在しなくなり、
     // 「covU受け皿なし」として全セル Blocked＝構造的な壁を正直に報告する（3.263.0 の教訓の c3n 版）。
     [Fact]

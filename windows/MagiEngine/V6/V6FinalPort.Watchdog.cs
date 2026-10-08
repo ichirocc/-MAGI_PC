@@ -222,14 +222,21 @@ public static partial class V6FinalPort
         private sealed record Entry(IReadOnlyList<IReadOnlyList<int>> Board, bool Value);
 
         private Entry? _entry;
+        private readonly object _lock = new();
 
         internal bool Get(IReadOnlyList<IReadOnlyList<int>> board, Func<IReadOnlyList<IReadOnlyList<int>>, bool> eval)
         {
             var e = Volatile.Read(ref _entry);
             if (e is not null && (ReferenceEquals(e.Board, board) || SameBoard(e.Board, board))) return e.Value;
-            var v = eval(board);
-            Volatile.Write(ref _entry, new Entry(board, v));
-            return v;
+            // 同じ盤面の診断は一度だけ。並行する呼び出しは結果を待つ（診断は約 20 ms、1 手探索の反証を含めても上限 2 s）。
+            lock (_lock)
+            {
+                e = Volatile.Read(ref _entry);
+                if (e is not null && (ReferenceEquals(e.Board, board) || SameBoard(e.Board, board))) return e.Value;
+                var v = eval(board);
+                Volatile.Write(ref _entry, new Entry(board, v));
+                return v;
+            }
         }
 
         private static bool SameBoard(IReadOnlyList<IReadOnlyList<int>> a, IReadOnlyList<IReadOnlyList<int>> b)

@@ -235,6 +235,8 @@ public static partial class V6FinalPort
         // [3.592.0] 診断の鍵は盤面の内容（BoardKeyedFlag）。世代と結果を別々に持つと、並行する診断の間で旧盤面の結果が
         //   新しい盤面に結び付いた。鍵を盤面にして、結果は必ずその盤面のものにする。
         // 壁の証明は C3nWallProof に集約する（生存盤面の対応・持ち越し・測定の基準腕）。
+        var deepRefuted = 0;
+        var deepConfirmed = 0;
         var wallProof = new C3nWallProof(
             bestVersion: () => wd.BestVersion,
             bestReport: () => wd.BestReport,
@@ -250,7 +252,13 @@ public static partial class V6FinalPort
                         for (var c = 0; c < b[r].Count; c++) arr[r][c] = b[r][c];
                     }
                     var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, arr);
-                    return diag.HasRuns && diag.AllBlocked;
+                    if (!(diag.HasRuns && diag.AllBlocked)) return false;
+                    // 根拠の段階化（[PolishGate.C3nWallDeepCheck]）: 希望固定だけの壁は証明相当。探索手の全滅だけの壁は、
+                    //   1 手探索（上限 2 s）でも必須を減らす手が無いときだけ壁とみなす。
+                    if (!PolishGate.C3nWallDeepCheck || diag.AllBlockedCertified) return true;
+                    if (V6PortAnalyzer.C3nWallRefutedByOneMove(state, arr)) { Interlocked.Increment(ref deepRefuted); return false; }
+                    Interlocked.Increment(ref deepConfirmed);
+                    return true;
                 }
                 catch (Exception) { return false; }
             });
@@ -579,9 +587,12 @@ public static partial class V6FinalPort
             var afterNote = wd.LastBestImproveMs > tChain1
                 ? $"・探索後も改善あり(経過{(wd.LastBestImproveMs - startMs) / 1000}s＝後処理/追加精製)"
                 : "";
-            var wallNote = wallProof.Checks > 0
+            var deepR = Volatile.Read(ref deepRefuted);
+            var deepC = Volatile.Read(ref deepConfirmed);
+            var wallNote = (wallProof.Checks > 0
                 ? $"・c3n壁の確認{wallProof.Checks}回（生存盤面の更新のうち最良の報告と対応しないのは{wallProof.Mismatch}回）"
-                : "";
+                : "") +
+                (deepR + deepC > 0 ? $"・1手探索の反証{deepR}回／確認{deepC}回" : "");
             return new List<MirrorLog>
             {
                 new(level: "I", tag: "Watchdog",

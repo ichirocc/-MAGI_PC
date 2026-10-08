@@ -188,6 +188,7 @@ public class StallEscapeSpecTest
         Assert.True(PolishGate.C3nWallShortStall);
         Assert.False(PolishGate.C3nWallLegacy, "基準腕（HEAD の壁判定）は既定で使わない");
         Assert.True(PolishGate.LateOpStopPropagation, "後期演算は停止要求を見る（既定）");
+        Assert.False(PolishGate.C3nWallDeepCheck, "1 手探索の反証は既定で使わない（測定中）");
         Assert.Equal(2, V6FinalPort.StallOverrideFactor);
         Assert.Equal(5000, Hf63Infeasibility.INFEAS_STALL_ITERS);
     }

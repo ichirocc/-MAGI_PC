@@ -143,6 +143,8 @@ public static partial class V6PortAnalyzer
         public const int SurplusProbeBudget = 240;
         public const long AdjacentSeed = 7L;
         public const int MinRelaxCandidates = 2;
+        /// <summary>[3.643.0] 経験的な c3n 壁を 1 手探索で反証する上限。停滞が短閾値（15 s 以上）を超えた後に最良版ごとに一度だけ走る。</summary>
+        public const long C3nWallDeepMs = 2000L;
     }
 
     /// <summary><c>FindCovUChain</c>（探索本体と同一関数）を <see cref="Probe.ChainSeeds"/> 通りの rng 順で試し、1 つでも成立すれば真。</summary>
@@ -187,6 +189,16 @@ public static partial class V6PortAnalyzer
         return new FixSuggestion(FixKind.Chain, ops, label, after.Hard - before.Hard, after.Total - before.Total,
             diff.OrderBy(x => x.Delta).ToList());
     }
+
+    /// <summary>
+    /// [3.643.0/根拠の精度] 経験的な c3n 壁（探索手の全滅）を 1 手探索で反証する。<see cref="FixSuggester"/> の手（1 マス変更・同一職員 2 マス・
+    /// 同日交換・別日交換・3 人巡回・玉突き・1 日総当たり）を <see cref="Probe.C3nWallDeepMs"/> の上限で探し、必須を厳密に減らす手が
+    /// 1 つでもあれば「壁ではない」。見つからないことは不能の証明ではなく、局所手の全滅より強い証拠。
+    /// [C#移植上の注記] Kotlin 原本は <c>ejectionChain = true</c>（多段連鎖）も渡すが、C# の <see cref="FixSuggester"/> にその段は無い
+    /// （<c>C1EjectionChainPolish</c> 未移植）ため上記 7 種の手だけで探す＝反証は Kotlin より弱い側に外れる。
+    /// </summary>
+    public static bool C3nWallRefutedByOneMove(MagiState state, int[][] schedule, long budgetMs = Probe.C3nWallDeepMs) =>
+        FixSuggester.Suggest(state, schedule, maxResults: 4, deadlineMs: budgetMs).Any(s => s.DeltaHard < 0);
 
     /// <summary>
     /// 人員不足(covU)の枠ごとの原因診断。エンジンは変更せず、現在の解だけを読み取り、
