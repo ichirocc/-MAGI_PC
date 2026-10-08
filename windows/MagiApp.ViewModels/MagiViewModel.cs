@@ -387,6 +387,13 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}");
     }
 
+    public void SetAptFairToleranceUnguarded(bool on)
+    {
+        V6HotfixPasses.HeavySoftGuard = !on;
+        Ui.AptFairToleranceUnguarded = on;
+        LogOp("I", $"設定変更: 容認 6% で重い違反の増加も許す → {(on ? "ON" : "OFF")}");
+    }
+
     public void SetC1MoveARepair(bool on)
     {
         PolishGate.C1MoveARepair = on;

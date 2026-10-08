@@ -34,6 +34,8 @@ public class UiStateTest
         Assert.True(s.BlockSwapC3nFilter);
         Assert.Equal(SearchStrength.Normal, s.SearchStrength);
         Assert.False(s.C1MoveARepair);
+        Assert.False(s.AptFairToleranceUnguarded);
+        Assert.True(V6HotfixPasses.HeavySoftGuard);
         Assert.True(s.SoftPolish);
         Assert.Equal(V6Algorithm.Auto, s.V6Algorithm);
 

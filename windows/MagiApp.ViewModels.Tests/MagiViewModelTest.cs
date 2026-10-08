@@ -145,6 +145,27 @@ public class MagiViewModelTest
         }
     }
 
+    // [Android 3.638.0同期] 設定「容認 6% で重い違反の増加も許す」は HeavySoftGuard の反転。
+    [Fact]
+    public void AptFairToleranceUnguardedInvertsHeavySoftGuard()
+    {
+        var vm = new MagiViewModel();
+        try
+        {
+            Assert.False(vm.Ui.AptFairToleranceUnguarded);
+            Assert.True(V6HotfixPasses.HeavySoftGuard);
+            vm.SetAptFairToleranceUnguarded(true);
+            Assert.True(vm.Ui.AptFairToleranceUnguarded);
+            Assert.False(V6HotfixPasses.HeavySoftGuard);
+            vm.SetAptFairToleranceUnguarded(false);
+            Assert.True(V6HotfixPasses.HeavySoftGuard);
+        }
+        finally
+        {
+            V6HotfixPasses.HeavySoftGuard = true;
+        }
+    }
+
     [Theory]
     [InlineData(1, 10)]                                  // 下限未満は10秒へ
     [InlineData(10, 10)]

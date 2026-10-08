@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-08（Android 3.638.0 と同期・設定トグル）: 設定画面「探索の強さ」の直下に ToggleSwitch「容認 6% で重い違反の増加も許す」（じっくりのときだけ有効・既定 OFF）。`UiState.AptFairToleranceUnguarded`＝`!V6HotfixPasses.HeavySoftGuard`。テスト `AptFairPolishToleranceTest`（②なしの採用）・`MagiViewModelTest`・`UiStateTest`。出力不変。
 - 2026-10-08（Android 3.637.0 と同期・測定スイッチ）: `V6HotfixPasses.HeavySoftGuard`（Kotlin `AptFairPolish.heavySoftGuard`、既定 true）。false で許容 6% の無害化②（重い SOFT の 1 件増を拒む）を外す。切る側の tools/loop は Android のみ＝C# は既定のまま、出力不変。
 - 2026-10-08（Android 3.636.0 と同期・実機ログ精査）: 診断ログの設定ミス/案内 12 件打ち切りに「ほか N 件（見出し）」の 1 行、追加精製の進捗段名に「追加精製 」を前置。出力不変。
 - 2026-10-08（Android 3.635.0 と同期・外部レビュー UI-02/UI-03/CFG-01）: `Ws1Ops.SetGroupShift/SetGroupShiftRow/SetGroupShiftColumn` は「どの群も担当できるシフトを 1 つ以上残す」を不変条件にし、違反する OFF は同じ state を返す（行一括は休の役割が無い設定で拒否）。ViewModel は休以外の拒否にも理由を出す。`ApplyAlternative` は `Ui.Schedule` を内部と同時に差し替え、再検査失敗は「未確認」と明示。`BeginBoardJob` で `_checkSeq` を進め走っている違反チェックを失効。テスト `Ws1OpsTest` に 3 件。

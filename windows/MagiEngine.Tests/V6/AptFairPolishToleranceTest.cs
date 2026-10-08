@@ -49,6 +49,24 @@ public class AptFairPolishToleranceTest
     }
 
     [Fact]
+    public void HeavySoftGuardOffAcceptsBlockedFamilyIncreaseWithinBudget()
+    {
+        // baseline: fair 以外 = c3m(1)*6 + apt(30)*4 = 126 → 予算 7.56。候補は fair-1(-2)・c3m-1(-6)・covO+1(+10)＝生 +2 悪化。
+        var before = RepOf(("fair", 10), ("c3m", 1), ("apt", 30));
+        var bestRep = before;
+        var candidate = RepOf(("fair", 9), ("c3m", 0), ("apt", 30), ("covO", 1));
+        var saved = V6HotfixPasses.HeavySoftGuard;
+        try
+        {
+            Assert.False(V6HotfixPasses.ToleratedBetter(candidate, bestRep, before, "fair", enabled: true));
+            V6HotfixPasses.HeavySoftGuard = false;
+            Assert.True(V6HotfixPasses.ToleratedBetter(candidate, bestRep, before, "fair", enabled: true));
+            Assert.False(V6HotfixPasses.ToleratedBetter(candidate, bestRep, before, "fair", enabled: false));
+        }
+        finally { V6HotfixPasses.HeavySoftGuard = saved; }
+    }
+
+    [Fact]
     public void ExceedingBudgetTradeIsStillRejected()
     {
         var before = Rep(fair: 10, apt: 0, low: 1); // baseline non-fair soft = 120, 予算 = 7.2

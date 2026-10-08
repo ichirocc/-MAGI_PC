@@ -93,6 +93,8 @@ public sealed partial class SettingsView : UserControl
             var strengthTag = ui.SearchStrength.ToString();
             SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
             SearchStrengthCombo.IsEnabled = !ui.Running;
+            AptFairUnguardedToggle.IsOn = ui.AptFairToleranceUnguarded;
+            AptFairUnguardedToggle.IsEnabled = !ui.Running && ui.SearchStrength == SearchStrength.Thorough;
             C1MoveARepairToggle.IsOn = ui.C1MoveARepair;
             C1MoveARepairToggle.IsEnabled = !ui.Running;
 
@@ -664,6 +666,12 @@ public sealed partial class SettingsView : UserControl
         var tag = (SearchStrengthCombo.SelectedItem as ComboBoxItem)?.Tag as string;
         if (tag is null || !Enum.TryParse<SearchStrength>(tag, out var strength)) return;
         _vm.SetSearchStrength(strength);
+    }
+
+    private void OnAptFairUnguardedToggled(object sender, RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        _vm.SetAptFairToleranceUnguarded(AptFairUnguardedToggle.IsOn);
     }
 
     private void OnC1MoveARepairToggled(object sender, RoutedEventArgs e)
