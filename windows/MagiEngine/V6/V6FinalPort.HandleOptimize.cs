@@ -513,7 +513,10 @@ public static partial class V6FinalPort
                             TotalBudgetSec = Math.Max((int)(extraMs / 1000L), 5),
                             Workers = Math.Min(optsR.EffectiveWorkers, V6NativeOptimizer.MAX_HYPOTHESES),
                         },
-                        ExtraStop, ProgressWatch, cancellationToken: cancellationToken)
+                        ExtraStop,
+                        // 進捗の段名に「追加精製」を前置する（旧: 後処理の後に「ALNS restart 1/2」と出て探索へ戻ったように読めた）。
+                        (phase, rep, iters, elapsed) => ProgressWatch("追加精製 " + phase, rep, iters, elapsed),
+                        cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
                 // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）。
                 var imp = UnifiedViolationChecker.BetterReport(extra.Report, post.Report);
