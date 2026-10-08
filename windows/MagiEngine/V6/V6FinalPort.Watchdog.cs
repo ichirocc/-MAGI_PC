@@ -115,4 +115,27 @@ public static partial class V6FinalPort
         if (raw < searchWindowMs) return raw;
         return Math.Max((long)(searchWindowMs * f), 20_000L);
     }
+
+    /// <summary>[Kotlin原本 <c>V6FinalPort.WatchdogBudget</c>] 停滞ウォッチドッグの時間の切り方（Android <c>docs/stall_escape.md</c> §5.1 の表）。
+    /// 純関数＝<c>StallEscapeSpecTest</c> が表の値を固定する。</summary>
+    internal sealed record WatchdogBudget(
+        long MinRunMs, long PostReserveMs, long SearchDeadlineMs, long SearchWindowMs,
+        long StallMs, long StallHardMs, long PhaseGraceMs);
+
+    internal static WatchdogBudget WatchdogBudgetOf(long budgetMs, long startMs, long hardDeadlineMs, double? fraction = null)
+    {
+        var minRunMs = Math.Min(Math.Clamp(budgetMs / 6, 8_000L, 45_000L), budgetMs);
+        var postReserveMs = Math.Min(Math.Clamp(budgetMs / 12, 8_000L, 25_000L), budgetMs / 2);
+        var searchDeadlineMs = Math.Max(hardDeadlineMs - postReserveMs, startMs + minRunMs);
+        var searchWindowMs = searchDeadlineMs - startMs;
+        return new WatchdogBudget(
+            MinRunMs: minRunMs, PostReserveMs: postReserveMs, SearchDeadlineMs: searchDeadlineMs, SearchWindowMs: searchWindowMs,
+            StallMs: NormalStallMs(budgetMs, searchWindowMs, fraction),
+            StallHardMs: Math.Max(budgetMs / 8, 15_000L),
+            PhaseGraceMs: Math.Clamp(budgetMs / 40, 2_000L, 15_000L));
+    }
+
+    /// <summary>[Kotlin原本 <c>V6FinalPort.progressImproved</c>] 進捗監視の「改善」判定（§3.2）。採否の <c>BetterReport</c> とは別契約＝weightedScore にだけ 1e-6 の許容差。</summary>
+    internal static bool ProgressImproved(int h, double wgt, int t, int bh, double bWeighted, int bTotal) =>
+        h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal);
 }

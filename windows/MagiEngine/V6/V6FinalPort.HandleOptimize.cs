@@ -186,16 +186,17 @@ public static partial class V6FinalPort
         // ----- 停滞早期脱出ウォッチドッグ -----
         // [3.314.0] 下限 8 秒は「UI 経路は 10 秒下限」を前提にした値。予算そのものでクランプして
         //   searchDeadline <= hardDeadline を構造的に保証する（10 秒以上では minRunMs が支配するため結果は不変）。
-        var minRunMs = Math.Min(Math.Clamp(budgetMs / 6, 8_000L, 45_000L), budgetMs);
+        var wdb = WatchdogBudgetOf(budgetMs, startMs, hardDeadlineMs);
+        var minRunMs = wdb.MinRunMs;
         // [3.422.0/3.424.0] 後処理予約枠。探索は searchDeadlineMs で止め、後処理は hardDeadlineMs まで走らせる。
-        var postReserveMs = Math.Min(Math.Clamp(budgetMs / 12, 8_000L, 25_000L), budgetMs / 2);
-        var searchDeadlineMs = Math.Max(hardDeadlineMs - postReserveMs, startMs + minRunMs);
-        var searchWindowMs = searchDeadlineMs - startMs;
+        var postReserveMs = wdb.PostReserveMs;
+        var searchDeadlineMs = wdb.SearchDeadlineMs;
+        var searchWindowMs = wdb.SearchWindowMs;
         // [5分強化/3.422.0 Part B・3.424.0で基準是正] 固定 9/10 を PolishGate.NormalStallFraction
         //   （既定 0.9＝旧値と同一）へ外出し。NormalStallMs（純関数）へ委譲。
-        var stallMs = NormalStallMs(budgetMs, searchWindowMs);
+        var stallMs = wdb.StallMs;
         // [5分圧縮/3.424.0] budgetMs 基準を復元（この値は budget/8 <= budget/2 <= searchWindow で常に探索区間内）。
-        var stallHardMs = Math.Max(budgetMs / 8, 15_000L);   // 5分予算→37.5s
+        var stallHardMs = wdb.StallHardMs;   // 5分予算→37.5s
         // [賢い早期脱出] 証明可能に解消不能な「データ起因HARD」の下限（構造的covU）。構造(assignability/need)
         //   のみ依存で最適化中に不変＝一度だけ算出する。
         var hardFloor = TryOrZero(() => V6SanityPort.StructuralHardFloor(state));
@@ -267,7 +268,7 @@ public static partial class V6FinalPort
                     var bh = Volatile.Read(ref bestHard);
                     // [3.287.0 keep-best統一/3.289.0] hard→weighted→total（betterReport と同順）。
                     //   許容誤差(1e-6)付きは意図的（停滞ウォッチドッグの改善検知専用・採否は betterReport が担う）。
-                    var improved = h < bh || (h == bh && wgt < bWeighted - 1e-6) || (h == bh && wgt <= bWeighted + 1e-6 && t < bTotal);
+                    var improved = ProgressImproved(h, wgt, t, bh, bWeighted, bTotal);
                     if (improved)
                     {
                         Volatile.Write(ref bestHard, h); bTotal = t; bWeighted = wgt;
@@ -294,7 +295,7 @@ public static partial class V6FinalPort
         }
 
         // [3.230.0] 現フェーズ自身にも与える短い個別猶予。
-        var phaseGraceMs = Math.Clamp(budgetMs / 40, 2_000L, 15_000L);
+        var phaseGraceMs = wdb.PhaseGraceMs;
 
         // [E0] 到達判定は best 世代ごとに一度だけ（床ちょうどのときだけ盤面を検査する）。
         Tuple<int, bool> wishReachedCache = Tuple.Create(-1, false);
