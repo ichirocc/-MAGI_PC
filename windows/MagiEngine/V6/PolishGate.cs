@@ -67,6 +67,9 @@ public static class PolishGate
     /// <summary>[Android N9 同期] PostChain の keep-best で巻き戻したパスの採用数を 0 と数える。既定 <b>false</b>。</summary>
     public static volatile bool PostChainRollbackCountsZero = false;
 
+    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。既定 true。</summary>
+    public static volatile bool C3nWallShortStall = true;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

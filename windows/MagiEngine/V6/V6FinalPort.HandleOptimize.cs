@@ -334,7 +334,7 @@ public static partial class V6FinalPort
             // [3.281.0/A] 追加: 残る非covU HARD が c3n のみで ForbiddenDiag が全 run の塞がりを証明した場合も
             //   plateau として stallHardMs へ移行。
             var nonCovU = wd.BestNonCovUHard;
-            var wall = nonCovU > 0 && wd.BestNonCovUAllC3n &&
+            var wall = PolishGate.C3nWallShortStall && nonCovU > 0 && wd.BestNonCovUAllC3n &&
                 wd.BestHard <= hardFloor + nonCovU &&
                 now - wd.LastBestImproveMs > stallHardMs && C3nWallProven();
             var effStall = EffectiveStallMs(

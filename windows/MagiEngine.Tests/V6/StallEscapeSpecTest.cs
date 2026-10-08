@@ -185,6 +185,7 @@ public class StallEscapeSpecTest
         Assert.Equal(0.9, PolishGate.NormalStallFraction);
         Assert.False(PolishGate.PostChainRollbackCountsZero);
         Assert.Equal(WishFloorMode.Off, PolishGate.WishConflictFloorMode);
+        Assert.True(PolishGate.C3nWallShortStall);
         Assert.Equal(2, V6FinalPort.StallOverrideFactor);
         Assert.Equal(5000, Hf63Infeasibility.INFEAS_STALL_ITERS);
     }
