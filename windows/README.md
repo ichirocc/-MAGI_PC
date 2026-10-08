@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-08（Android 3.637.0 と同期・測定スイッチ）: `V6HotfixPasses.HeavySoftGuard`（Kotlin `AptFairPolish.heavySoftGuard`、既定 true）。false で許容 6% の無害化②（重い SOFT の 1 件増を拒む）を外す。切る側の tools/loop は Android のみ＝C# は既定のまま、出力不変。
 - 2026-10-08（Android 3.636.0 と同期・実機ログ精査）: 診断ログの設定ミス/案内 12 件打ち切りに「ほか N 件（見出し）」の 1 行、追加精製の進捗段名に「追加精製 」を前置。出力不変。
 - 2026-10-08（Android 3.635.0 と同期・外部レビュー UI-02/UI-03/CFG-01）: `Ws1Ops.SetGroupShift/SetGroupShiftRow/SetGroupShiftColumn` は「どの群も担当できるシフトを 1 つ以上残す」を不変条件にし、違反する OFF は同じ state を返す（行一括は休の役割が無い設定で拒否）。ViewModel は休以外の拒否にも理由を出す。`ApplyAlternative` は `Ui.Schedule` を内部と同時に差し替え、再検査失敗は「未確認」と明示。`BeginBoardJob` で `_checkSeq` を進め走っている違反チェックを失効。テスト `Ws1OpsTest` に 3 件。
 - 2026-10-08（Android 3.634.0 と同期・外部レビュー対応）: 拡張希望が職員の並べ替え・削除・勤務記号の変更・期間変更に追従（`Ws1Ops`）、保存可否は既存の件との和集合で日ごと（`ExtWishRules.Sanitize`）、登録失敗は `LastExtWishError` を画面に出して選択を残す。`StateFingerprint` に項目の識別子・件数・拡張希望。CSV 取込（職員・希望・個人レンジ）は同姓同名を自動で先頭へ割り当てない（`CsvUtil.AmbiguousStaffKeys`、`StaffUpsertResult.AmbiguousNames`）。希望カレンダーの印は記号 3 つ以上で件数。テスト `ReviewExtWishFollowTest`。SoftCascade・玉突き（NEW-01〜03・05・06）は C# に無い。

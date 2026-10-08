@@ -31,6 +31,10 @@ public static partial class V6HotfixPasses
     internal static readonly IReadOnlySet<string> ToleranceBlockedFamilies =
         new HashSet<string> { "c1", "low", "high", "covO", "c3mn", "c41", "c42", "c41s", "c42s" };
 
+    /// <summary>[Kotlin原本 <c>AptFairPolish.heavySoftGuard</c>（3.637.0）] 測定用: false＝無害化②を外し、
+    /// 重い SOFT の増加も 6% 予算の内なら採る。本番は true（Android の tools/loop の腕 <c>aptfairtolunguarded</c> だけが切る）。</summary>
+    internal static volatile bool HeavySoftGuard = true;
+
     /// <summary>internal＝<c>AptFairPolishToleranceTest</c> から直接検証するため（Kotlin原本と同じ可視性）。</summary>
     internal static double NonFamilySoftTotal(ViolationReport rep, string excludeFamily) =>
         MirrorKeys.Soft.Where(f => f != excludeFamily).Sum(f => rep.Breakdown.GetValueOrDefault(f, 0) * MirrorKeys.WeightOf(f));
@@ -48,7 +52,7 @@ public static partial class V6HotfixPasses
         if (UnifiedViolationChecker.NewHardFamilyViolation(bestRep, rep) is not null) return false;
         if (rep.Hard != bestRep.Hard) return rep.Hard < bestRep.Hard;
         //   ②必須が減る手は OFF と同じく採る（上の行）。必須が同点のとき、重い SOFT が 1 件でも増える手は採らない。
-        if (ToleranceBlockedFamilies.Any(f => rep.Breakdown.GetValueOrDefault(f, 0) > bestRep.Breakdown.GetValueOrDefault(f, 0))) return false;
+        if (HeavySoftGuard && ToleranceBlockedFamilies.Any(f => rep.Breakdown.GetValueOrDefault(f, 0) > bestRep.Breakdown.GetValueOrDefault(f, 0))) return false;
         var baseline = NonFamilySoftTotal(before, family);
         var budget = baseline * SoftToleranceFraction;
         var usedByBest = Math.Max(NonFamilySoftTotal(bestRep, family) - baseline, 0.0);
