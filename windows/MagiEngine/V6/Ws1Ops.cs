@@ -161,8 +161,13 @@ public static class Ws1Ops
         var grid = state.GroupShift.Select(row => row.ToList()).ToList();
         if (k < 0 || k >= grid[g].Count) return state;
         grid[g][k] = allowed ? 1 : 0;
+        // 担当できるシフトが 1 つも無い群は作らない（休が無い設定でも同じ＝呼出側は ReferenceEquals で拒否を知る、CFG-01）。
+        if (!allowed && grid[g].All(v => v != 1)) return state;
         return state with { GroupShift = grid };
     }
+
+    /// <summary>担当可否の変更で、担当できるシフトが残らない群ができるか（一括 OFF の拒否に使う）。</summary>
+    public static bool LeavesGroupWithoutShift(IReadOnlyList<IReadOnlyList<int>> grid) => grid.Any(row => row.All(v => v != 1));
 
     /// <summary>
     /// [マトリックス一括] 群 g の全シフトを一括で担当ON/OFF（行ヘッダ＝群名のタップ）。
@@ -176,6 +181,8 @@ public static class Ws1Ops
         var rest = ScheduleUtil.RestShiftIndex(state);
         var grid = state.GroupShift.Select(row => row.ToList()).ToList();
         for (int k = 0; k < grid[g].Count; k++) grid[g][k] = (allowed || k == rest) ? 1 : 0;
+        // 休の役割が無い設定では残すものが無く全部 OFF になる＝同じ state を返して拒否（CFG-01）。
+        if (!allowed && grid[g].All(v => v != 1)) return state;
         return state with { GroupShift = grid };
     }
 
@@ -191,6 +198,7 @@ public static class Ws1Ops
         var grid = state.GroupShift.Select(row => row.ToList()).ToList();
         if (k < 0 || grid.Any(row => k >= row.Count)) return state;
         foreach (var row in grid) row[k] = allowed ? 1 : 0;
+        if (!allowed && LeavesGroupWithoutShift(grid)) return state;
         return state with { GroupShift = grid };
     }
 

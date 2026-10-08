@@ -173,6 +173,8 @@ public sealed partial class MagiViewModel
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
         CancelRelaxTrial();  // [S6 §8] 同じ
         CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
+        // 走っている違反チェックは差し替え前の盤面のもの＝失効させる（完了順によって古い表示が戻らないように、UI-03）。
+        ++_checkSeq; _checkCts?.Cancel();
         _boardJobLabel = label;
         if (engineRun)
         {

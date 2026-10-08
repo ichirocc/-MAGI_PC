@@ -240,6 +240,10 @@ public sealed partial class MagiViewModel
         _altBoardKey = BoardKey(sch);
         Ui.Alternatives = keptSummaries;
         Ui.AlternativeApplied = i;
+        // 表示の盤面は内部と同時に差し替える（再検査が失敗しても画面と次の操作の対象が食い違わない、UI-02）。
+        Ui.Schedule = sch.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        Ui.MessageIsError = false;
+        Ui.Message = $"他の案 {i + 1} を適用（違反数を再計算中…）";
         AutoSave();
         // [Android 3.475.0] 再検査は _checkSeq に乗せる＝案1→案2 と続けて押したとき先の案の報告で上書きしない。
         var seq = ++_checkSeq;
@@ -273,7 +277,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"他の案 {i + 1} の適用後の再チェックに失敗: {e.GetType().Name}（盤面は適用済み・違反数は古い可能性）");
             Ui.MessageIsError = true;
-            Ui.Message = $"他の案 {i + 1} を適用（違反数の再計算に失敗）";
+            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{e.GetType().Name}）";
         }
     }
 

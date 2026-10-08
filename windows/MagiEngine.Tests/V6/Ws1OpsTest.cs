@@ -489,6 +489,39 @@ public class Ws1OpsTest
         Assert.Equal(1, restOn.GroupShift[0][0]);
     }
 
+    // ---- 外部レビュー CFG-01（Android GroupShiftNoEmptyRowTest.kt）: 休の役割が無い設定でも空の群を作らない ----
+
+    private static MagiState NoRestState() => MinimalState.Build(
+        shifts: new List<Shift> { new("A", "A", "", ""), new("B", "B", "", "") },
+        groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 0 } });
+
+    [Fact]
+    public void RowOffWithoutRestIsRejected()
+    {
+        var st = NoRestState();
+        Assert.Same(st, Ws1Ops.SetGroupShiftRow(st, 0, false));
+        Assert.Equal(new[] { 1, 1 }, Ws1Ops.SetGroupShiftRow(st, 1, true).GroupShift[1]);
+    }
+
+    [Fact]
+    public void SingleCellOffKeepsAtLeastOneShift()
+    {
+        var st = NoRestState();
+        Assert.Same(st, Ws1Ops.SetGroupShift(st, 1, 0, false));                       // G1 は A だけ
+        Assert.Equal(new[] { 0, 1 }, Ws1Ops.SetGroupShift(st, 0, 0, false).GroupShift[0]);
+    }
+
+    [Fact]
+    public void ColumnOffIsRejectedWhenAnyGroupWouldBeEmpty()
+    {
+        var st = NoRestState();
+        Assert.Same(st, Ws1Ops.SetGroupShiftColumn(st, 0, false));                    // G1 が空になる
+        var off = Ws1Ops.SetGroupShiftColumn(st, 1, false);
+        Assert.Equal(new[] { 1, 0 }, off.GroupShift[0]);
+        Assert.Equal(new[] { 1, 0 }, off.GroupShift[1]);
+    }
+
     [Fact]
     public void SetGroupShiftColumn_AppliesToAllGroups_AndRefusesTurningRestOff()
     {

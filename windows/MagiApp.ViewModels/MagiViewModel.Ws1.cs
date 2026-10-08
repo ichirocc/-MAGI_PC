@@ -127,6 +127,8 @@ public sealed partial class MagiViewModel
             // [レビュー指摘 2026-09-04] 単一セルでも休は外せない（列一括と同じ理由・同じ案内）。
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
                 Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+            else if (!allowed)
+                Notify("このグループの担当できるシフトが無くなるため外せません", "W");
             return;
         }
         LogOp("I", $"担当可否: グループ[{g}] × {OpSy(k)} → {(allowed ? "担当できる" : "担当しない")}");
@@ -139,8 +141,14 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null) return;
         var name = g >= 0 && g < st.Groups.Count ? st.Groups[g].Name : $"[{g}]";
+        var ns = Ws1Ops.SetGroupShiftRow(st, g, allowed);
+        if (ReferenceEquals(ns, st))
+        {
+            if (!allowed) Notify("休みのシフトが無いため、このグループの全シフトを外すことはできません（担当できるシフトが無くなるため）", "W");
+            return;
+        }
         LogOp("I", $"担当可否(一括): グループ {name} の全シフト → {(allowed ? "担当できる" : "担当しない（休は残す）")}");
-        ApplyStructure(Ws1Ops.SetGroupShiftRow(st, g, allowed));
+        ApplyStructure(ns);
     }
 
     /// <summary>[マトリックス一括] シフト k を全群へ一括ON/OFF（列ヘッダのタップ）。休の列は OFF にできない。</summary>
@@ -153,6 +161,8 @@ public sealed partial class MagiViewModel
         {
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
                 Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+            else if (!allowed)
+                Notify("担当できるシフトが無くなるグループがあるため、この列は外せません", "W");
             return;
         }
         LogOp("I", $"担当可否(一括): {OpSy(k)} を全グループ → {(allowed ? "担当できる" : "担当しない")}");
