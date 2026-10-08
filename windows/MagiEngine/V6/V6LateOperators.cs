@@ -75,7 +75,7 @@ public static class V6LateOperators
         var logs = new List<MirrorLog>();
         var cur = report;
 
-        // 停止要求は試行ごとに見る（[PolishGate.LateOpStopPropagation]）。false は HEAD と同じで、締切だけを見る。
+        // 停止要求は試行ごとに見る（[PolishGate.LateOpStopPropagation]）。false は試行ごとの確認だけを切る（入口の確認は残る）。
         Func<bool> stopRequested = shouldStop ?? (() => false);
         Func<bool> stop = PolishGate.LateOpStopPropagation ? stopRequested : () => false;
         bool TimeUp() => EngineClock.NowMs() >= deadlineMs || stop();
