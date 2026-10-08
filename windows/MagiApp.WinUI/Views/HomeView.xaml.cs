@@ -88,6 +88,8 @@ public sealed partial class HomeView : UserControl
         var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
         var shortDays = shortfalls.Select(x => x.DayIndex).Distinct().Count();
         var worstDay = shortfalls.Count > 0 ? shortfalls[0].DayLabel : null;
+        // [UX監査 高2] 「なおし方を見る」の日は開くダイアログと同じ枠から取る（ホームとダイアログの日を一致させる）。
+        var guidedFix = GuidedFixRules.GuidedFixTarget(shortfalls);
         // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR の分岐がこれを見る。
         var cands = NextActionGuide.WishTrialCandidatesOf(ui);
         // 主ボタンに最初の対象を添える（押した先は変えない）。
@@ -135,11 +137,12 @@ public sealed partial class HomeView : UserControl
         {
             // 重複除去の前で決める（S5a の行に吸収された S5b の人も数える）。例の日も希望で固定された人がいる日から。
             var pinnedDay = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0)?.DayLabel;
+            var pinnedLanding = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0) is { } pinned ? GuidedFixRules.LandingFor(pinned) : null;
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             headline = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
-            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => _window.SelectTab("edit");
+            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLanding(pinnedLanding);
         }
         else if (infeasible)
         {
@@ -147,7 +150,8 @@ public sealed partial class HomeView : UserControl
             headline = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
-            _bigAction = () => _window.SelectTab("edit"); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+            var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
+            _bigAction = () => GoEditLanding(infeasibleLanding); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
         }
         else
         {
@@ -158,10 +162,10 @@ public sealed partial class HomeView : UserControl
             helperLabel = null; _helperAction = () => { };
             var hardFix = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
             var remain = $"必須違反が {ui.BestHard}件 残っています。";
-            if (shortfalls.Any(s => s.Verdict == CoverageVerdict.Fixable && s.Miss > 0 && !s.BlockedNow))
+            if (guidedFix is { } gf)
             {
-                headline = worstDay is null ? "人員不足の日があります。" : $"{worstDay} が人員不足です。";
-                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", null, worstDay); bigEnabled = true;
+                headline = $"{gf.DayLabel} が人員不足です。";
+                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", null, gf.DayLabel); bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
             else if (hardFix && ui.FixFocusName.Length == 0)
@@ -664,6 +668,15 @@ public sealed partial class HomeView : UserControl
             CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
         var flow = new GuidedFixFlow();
+        // 9人目以降を出している枠（日, シフト）。別の枠へ移ると閉じる（Kotlin の remember(day, shift) と同じ）。
+        var showAllFor = (-1, -1);
+        // 原因に対応する設定へ行く。押したらダイアログを閉じてから着地する（null＝編集タブの先頭）。
+        Button LandingButton(EditLanding? landing)
+        {
+            var b = new Button { Content = GuidedFixRules.LandingButtonLabel(landing), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+            b.Click += (_, _) => { dialog.Hide(); GoEditLanding(landing); };
+            return b;
+        }
         void Rebuild()
         {
             panel.Children.Clear();
@@ -675,15 +688,14 @@ public sealed partial class HomeView : UserControl
             if (target is not null)
             {
                 panel.Children.Add(new TextBlock { Text = $"{target.DayLabel} の「{target.ShiftSymbol}」が {target.Miss}人 足りません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = $"この日に動かせる人がいます。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
-                if (cands.Count == 0)
+                if (cands.Count > 0)
                 {
-                    panel.Children.Add(new TextBlock { Text = target.Reason, Foreground = BrushOf("MagiErrorBrush"), FontSize = 14, TextWrapping = TextWrapping.Wrap });
-                }
-                else
-                {
-                    foreach (var c in cands.Take(8))
+                    // [UX監査 中5] 件数を出し、既定の8人を超えたら「すべて表示」で9人目以降も選べる。
+                    panel.Children.Add(new TextBlock { Text = $"この日に動かせる人が{cands.Count}人います。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    var showAll = showAllFor == (target.DayIndex, target.ShiftIndex);
+                    var shown = showAll ? cands.ToList() : cands.Take(GuidedFixRules.GuidedFixPreview).ToList();
+                    foreach (var c in shown)
                     {
                         var tail = c.FromRest ? "（休み）" : "";
                         var b = new Button
@@ -701,11 +713,38 @@ public sealed partial class HomeView : UserControl
                         };
                         panel.Children.Add(b);
                     }
+                    if (cands.Count > GuidedFixRules.GuidedFixPreview)
+                    {
+                        var toggle = new Button
+                        {
+                            Content = showAll ? "一部だけ表示" : $"すべて表示（ほか{cands.Count - GuidedFixRules.GuidedFixPreview}人）",
+                            HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                        };
+                        toggle.Click += (_, _) => { showAllFor = showAll ? (-1, -1) : (target.DayIndex, target.ShiftIndex); Rebuild(); };
+                        panel.Children.Add(toggle);
+                    }
                     panel.Children.Add(new TextBlock
                     {
                         Text = flow.Pending ? "再検査中…（結果が反映されるまで候補は押せません）" : "入れたら「元に戻す」でいつでも取り消せます。",
                         FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
                     });
+                }
+                else if (target.ChainVerified)
+                {
+                    // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入替で埋まると分析が確かめた枠。
+                    panel.Children.Add(new TextBlock { Text = "だれか1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    var chain = new Button { Content = "複数人の入れ替えを使う（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+                    chain.Click += (_, _) =>
+                    {
+                        dialog.Hide();
+                        _vm.ApplyShortageChainFix(target.DayIndex, target.ShiftIndex, $"（玉突き）{target.DayLabel} の「{target.ShiftSymbol}」を複数人の入替で埋める");
+                    };
+                    panel.Children.Add(chain);
+                }
+                else
+                {
+                    panel.Children.Add(new TextBlock { Text = target.Reason, Foreground = BrushOf("MagiErrorBrush"), FontSize = 14, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(LandingButton(GuidedFixRules.LandingFor(target)));
                 }
             }
             else if (plan.Infeasible.Count > 0)
@@ -714,6 +753,7 @@ public sealed partial class HomeView : UserControl
                 foreach (var sf in plan.Infeasible.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(LandingButton(GuidedFixRules.LandingFor(plan.Infeasible[0])));
             }
             else if (plan.Blocked.Count > 0)
             {
@@ -721,6 +761,7 @@ public sealed partial class HomeView : UserControl
                 foreach (var sf in plan.Blocked.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "再作成しても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(LandingButton(plan.Blocked.Select(sf => GuidedFixRules.LandingFor(sf)).FirstOrDefault(l => l is not null)));
             }
             else
             {
@@ -768,6 +809,13 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
+
+    /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは編集タブの先頭。</summary>
+    private void GoEditLanding(EditLanding? landing)
+    {
+        if (landing is null) _window.SelectTab("edit");
+        else _window.OpenEditDoor(landing.Scope);
+    }
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
     private void OnEditWishesClick(object sender, RoutedEventArgs e) => _window.OpenEditDoor(0);

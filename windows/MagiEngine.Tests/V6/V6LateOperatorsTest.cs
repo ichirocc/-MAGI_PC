@@ -110,4 +110,35 @@ public class V6LateOperatorsTest
         using var doc = JsonDocument.Parse(json);
         return new Dictionary<string, JsonElement> { ["optFlags"] = doc.RootElement.Clone() };
     }
+
+    // [3.642.0] 停止要求済みなら後期演算は 1 手も試さず、入力をそのまま返す（停止を内部まで伝える）
+    [Fact]
+    public void StopRequestedSkipsAllMovesAndKeepsInput()
+    {
+        var state = St();
+        var sched = state.Schedule.ToIntArray2D();
+        var snapshot = sched.Copy2D();
+        var pre = UnifiedViolationChecker.Check(state, sched);
+        var rng = new JavaRandom(7);
+        var res = V6LateOperators.Improve(
+            state, sched, pre, rng,
+            EngineClock.NowMs() + 60_000L, rectTry: 60, blkTry: 60, shouldStop: () => true);
+        Assert.Equal(0, res.Chain3 + res.Chain4 + res.Rect + res.BlkN);   // 停止要求済みなら 1 手も受理しない
+        for (var i = 0; i < sched.Length; i++) Assert.True(res.Schedule[i].SequenceEqual(snapshot[i]));
+        // 試行に入っていないので乱数を引いていない（同じ種の新しい乱数と先頭が一致する）
+        Assert.Equal(new JavaRandom(7).NextLong(), rng.NextLong());
+    }
+
+    // 制御: 同じ入力で停止要求が無ければ受理が出る（上の検査が空振りでないことの確認）
+    [Fact]
+    public void WithoutAStopRequestTheSameInputDoesMove()
+    {
+        var state = St();
+        var sched = state.Schedule.ToIntArray2D();
+        var pre = UnifiedViolationChecker.Check(state, sched);
+        var res = V6LateOperators.Improve(
+            state, sched, pre, new JavaRandom(7),
+            EngineClock.NowMs() + 60_000L, rectTry: 60, blkTry: 60, shouldStop: () => false);
+        Assert.True(res.Chain3 + res.Chain4 + res.Rect + res.BlkN > 0, "停止要求が無ければ受理が出る");
+    }
 }

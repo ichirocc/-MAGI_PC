@@ -589,7 +589,7 @@ public static partial class V6NativeOptimizer
             var candSched = phase.Schedule;
             var candReport = phase.Report;
             {
-                var lr = V6LateOperators.Improve(state, candSched, candReport, rng, started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval);
+                var lr = V6LateOperators.Improve(state, candSched, candReport, rng, started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval, shouldStop: stop);
                 if (lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0 && p.KeepsExtBan(candSched, lr.Schedule))
                 {
                     candSched = lr.Schedule;
@@ -663,7 +663,7 @@ public static partial class V6NativeOptimizer
         }
         // [3.288.0/ログ強化=状態軸, Kotlin原本] このRSI実行でHF63が「構造的に充足困難」と学習した族を実行
         //   横断で集約（エピローグの残存分析行が読む。ワーカー並行呼出があるため synchronized 集約）。
-        RecordInfeasibleScoped(hf63.InfeasibleFamilies());
+        RecordInfeasibleScoped(hf63.InfeasibleBreakdownKeys());
         return new V6OptimizerResult(best, bestReport with { Logs = logs.Concat(bestReport.Logs).ToList() }, V6Algorithm.Rsi, logs, iters, NowMs() - started);
     }
 }

@@ -103,6 +103,25 @@ public class V6PortAnalyzerCoverageTest
         // Cが休に希望固定
         wishes: cWished ? new Dictionary<string, int> { ["1,0"] = 0 } : null);
 
+    // [3.642.0/UX監査 高1] 玉突きが実在する枠は ChainVerified を値として持ち、複数人の手順を取り出せる
+    [Fact]
+    public void ChainVerifiedShortfallYieldsAMultiPersonChainFix()
+    {
+        var state = CascadeChainState(cWished: false);
+        var sf = V6PortAnalyzer.DiagnoseCoverage(state).Shortfalls.Single(s => s.ShiftIndex == 1);
+        Assert.True(sf.ChainVerified, "玉突きが実在する枠は値として持つ");
+        var sched = state.Schedule.ToIntArray2D();
+        var ops = V6PortAnalyzer.ChainFixOps(ScheduleUtil.CachedProblem(state), sched, sf.ShiftIndex, sf.DayIndex);
+        Assert.NotNull(ops);
+        Assert.True(ops!.Count >= 2, "複数人の入替（2コマ以上）");
+        var work = sched.Copy2D();
+        foreach (var op in ops) work[op.Staff][op.Day] = op.ToShift;
+        var before = UnifiedViolationChecker.Check(state, sched);
+        var after = UnifiedViolationChecker.Check(state, work);
+        Assert.True(after.Breakdown.GetValueOrDefault("covU", 0) < before.Breakdown.GetValueOrDefault("covU", 0),
+            "手順を適用すると人員不足が減る");
+    }
+
     [Fact]
     public void DiagnoseCoverage_ConfirmsCascadeWhenChainActuallyResolves()
     {

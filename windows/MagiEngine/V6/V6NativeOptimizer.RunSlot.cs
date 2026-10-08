@@ -173,12 +173,15 @@ public static partial class V6NativeOptimizer
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<int>>? LiveBest => _liveBestRef.Value?.Board;
 
+    /// <summary>[3.642.0, Kotlin原本 <c>liveBestSnapshot</c>] 報告（評価）と盤面を 1 回の読みで取る。壁判定はこの 1 組で行う（別々に読むと対応がずれる）。</summary>
+    internal static LiveBestSnapshot? CurrentLiveBestSnapshot => _liveBestRef.Value;
+
     /// <summary>
     /// [3.385.0, Kotlin原本] 評価と盤面を1つの不変オブジェクトにして1回の CAS で publish する
     /// （report だけを CAS し盤面を別に代入する2段構成だと、途中でプリエンプトされた劣る書き込みが
     /// あとから勝る書き込みを上書きしうる — 詳細は Kotlin 原本のコメント参照）。
     /// </summary>
-    private sealed class LiveBestSnapshot
+    internal sealed class LiveBestSnapshot
     {
         public ViolationReport Report { get; }
         public IReadOnlyList<IReadOnlyList<int>> Board { get; }

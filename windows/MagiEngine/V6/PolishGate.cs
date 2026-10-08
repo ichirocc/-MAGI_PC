@@ -70,6 +70,12 @@ public static class PolishGate
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。既定 true。</summary>
     public static volatile bool C3nWallShortStall = true;
 
+    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallLegacy</c>（3.642.0）] 測定用の基準腕: true＝HEAD の壁判定（版ごとに固定・生存盤面の診断・一致の検査なし）。既定 false。</summary>
+    public static volatile bool C3nWallLegacy = false;
+
+    /// <summary>[Kotlin原本 <c>PolishGate.lateOpStopPropagation</c>（3.642.0）] 測定用の切り分け: false＝後期演算（EarlyChain）は停止要求を見ない（HEAD と同じ）。既定 true。</summary>
+    public static volatile bool LateOpStopPropagation = true;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

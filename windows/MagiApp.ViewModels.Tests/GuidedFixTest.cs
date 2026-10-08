@@ -57,4 +57,30 @@ public class GuidedFixTest
         f.Press(2); // 閉じた後の押下は無視
         Assert.True(f.Closed);
     }
+
+    [Fact]
+    public void GuidedFixTargetIsTheFirstActionableShortfallTheHomeCardAndDialogBothName()
+    {
+        var shortfalls = new[] { Sf(0, CoverageVerdict.Fixable, blockedNow: true), Sf(1, CoverageVerdict.Infeasible), Sf(2, CoverageVerdict.Fixable), Sf(3, CoverageVerdict.Fixable) };
+        var diag = Diag(shortfalls);
+        var target = GuidedFixRules.GuidedFixTarget(diag.Shortfalls);
+        Assert.Equal(2, target!.DayIndex);
+        Assert.Same(target, GuidedFixPlan.Build(diag).Target);
+        Assert.Null(GuidedFixRules.GuidedFixTarget(new[] { Sf(0, CoverageVerdict.Fixable, blockedNow: true) }));
+    }
+
+    [Fact]
+    public void LandingForPointsAtTheCauseAndNullKeepsTheEditTop()
+    {
+        var pinned = new CoverageShortfall(0, "8/1", 1, "A", 1, 0, 1, 2, CoverageVerdict.Fixable, "理由", WishPinned: new[] { 4 });
+        Assert.Equal(new EditLanding(0, null, 4), GuidedFixRules.LandingFor(pinned));
+        Assert.Equal("希望を見直す", GuidedFixRules.LandingButtonLabel(GuidedFixRules.LandingFor(pinned)));
+
+        var infeasible = Sf(0, CoverageVerdict.Infeasible);
+        Assert.Equal(new EditLanding(2, "yr_ws1"), GuidedFixRules.LandingFor(infeasible));
+        Assert.Equal("担当を見直す", GuidedFixRules.LandingButtonLabel(GuidedFixRules.LandingFor(infeasible)));
+
+        Assert.Null(GuidedFixRules.LandingFor(Sf(0, CoverageVerdict.Fixable)));
+        Assert.Equal("データを見直す", GuidedFixRules.LandingButtonLabel(null));
+    }
 }

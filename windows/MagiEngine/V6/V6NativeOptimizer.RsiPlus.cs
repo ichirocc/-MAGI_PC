@@ -95,7 +95,7 @@ public static partial class V6NativeOptimizer
         // [HF361/528/541移植, Kotlin原本] EarlyChain: Refine 確定後の停滞境界で Chain3/4(常時)+Rect/BlkN(rectSwap)を発火
         {
             var lr = V6LateOperators.Improve(state, bestSched, best.Report,
-                new JavaRandom(ActualSeed(options.Seed) ^ 0x528L), started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval);
+                new JavaRandom(ActualSeed(options.Seed) ^ 0x528L), started + budgetSec * 1000L, rectEnabled: options.RectSwap, quantitativeRangeEval: options.QuantitativeRangeEval, shouldStop: stop);
             var fired = lr.Chain3 + lr.Chain4 + lr.Rect + lr.BlkN > 0;
             // [監査#1, Kotlin原本コメント] Chain3/4の受理(gateW)はweighted単層でHARD増を相殺受理し得るため、
             //   採用は runRsi と同じ Better（hard→weighted→total）でゲートする（素通しでHARD悪化を最終出力しない）。

@@ -425,6 +425,36 @@ public sealed partial class MagiViewModel
         return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
     }
 
+    /// <summary>[3.642.0/UX監査 高1] 不足枠を玉突き（複数人の入替）で埋める。手順は分析と同じ <c>findCovUChain</c> で求め、適用は
+    /// <see cref="ApplyFixSuggestion"/>（指紋照合・FixApplyGate・Undo）を通る。玉突きの実在を確かめた枠（ChainVerified）でだけ呼ぶ。
+    /// Kotlin原本 <c>applyShortageChainFix</c> の移植。</summary>
+    public void ApplyShortageChainFix(int dayIndex, int shiftIndex, string label)
+    {
+        var st = _state;
+        if (st is null) return;
+        var sched = _currentSchedule;
+        if (sched is null) return;
+        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
+        var snap = sched.Copy2D();
+        _fixBoardKey = BoardKey(snap);
+        _fixStateKey = StateKey(st);
+        var p = ScheduleUtil.CachedProblem(st);
+        _ = ApplyShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
+    }
+
+    private async Task ApplyShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label)
+    {
+        var s = await Task.Run(() => V6PortAnalyzer.ChainFixSuggestion(st, p, snap, k, j, label))
+            .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // FindFixSuggestionsCoreAsync と同じ理由
+        if (s is null)
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = "入替の手順が見つかりませんでした。「直し方を探す」で探し直してください";
+            return;
+        }
+        ApplyFixSuggestion(s);
+    }
+
     // ---- constraint editing (ws3-5) -------------------------------------------
 
     /// <summary>A constraint family with its rows rendered for display (key used for add/remove).
