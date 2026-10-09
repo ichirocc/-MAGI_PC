@@ -517,11 +517,28 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.True(vm.Ui.Loaded);
         Assert.False(vm.Ui.MessageIsError);
         Assert.Equal(1, vm.Ui.Staff);
-        Assert.Equal(31, vm.Ui.Days);
+        // [3.646.0 U03] 新しいデータの対象月は来月（旧: 2026 年 1 月固定）。
+        var next = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+        Assert.Equal(next.ToString("yyyy-MM-dd"), vm.Ui.StartDate);
+        Assert.Equal(DateTime.DaysInMonth(next.Year, next.Month), vm.Ui.Days);
         Assert.Equal(1, vm.Ui.Shifts);
         Assert.Equal(1, vm.Ui.Groups);
         Assert.False(vm.Ui.HasResult);
         Assert.Contains("読込完了:", vm.Ui.Message);
+    }
+
+    /// <summary>[3.646.0 T01] 相談は前のデータの対象を指しているので、別のデータを読み込んだら消す（CSV の保存状態と同じ場所）。</summary>
+    [Fact]
+    public async Task LoadingAnotherDatasetClearsTheConsults()
+    {
+        var vm = NewVm();
+        vm.AddConsult(new ConsultItem("x", "y", 0, 1, StaffName: "甲", Date: "2026-01-02"));
+        Assert.Single(vm.Ui.Consults);
+
+        vm.InitBlankState();
+        await vm.LastLoadTask!;
+
+        Assert.Empty(vm.Ui.Consults);
     }
 
     [Fact]

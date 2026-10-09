@@ -2291,6 +2291,8 @@ public sealed partial class EditView : UserControl
 
         panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };
+        // [3.646.0 U01] 保存済みの値（1 タップ解決で保存した値も含む）。入力欄がこれと違う間は「入力中」＝閉じるときに確認する。
+        var savedLo = lo0?.ToString() ?? ""; var savedHi = hi0?.ToString() ?? "";
         var hiBox = new TextBox { Header = "上限", PlaceholderText = "なし", Text = hi0?.ToString() ?? "", Width = 120 };
         var rangeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         rangeRow.Children.Add(loBox); rangeRow.Children.Add(hiBox);
@@ -2306,8 +2308,8 @@ public sealed partial class EditView : UserControl
             quick.Click += (_, _) =>
             {
                 // [Android 3.509.1 同期] 入力欄も同じ値に揃える（旧: モデルだけ変わり、続けて「この上下限を適用」を押すと旧値で上書きされた）。
-                if (vio == "vio-high") { hiBox.Text = count.ToString(); _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString()); }
-                else { loBox.Text = count.ToString(); _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? ""); }
+                if (vio == "vio-high") { hiBox.Text = count.ToString(); savedHi = count.ToString(); _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString()); }
+                else { loBox.Text = count.ToString(); savedLo = count.ToString(); _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? ""); }
             };
         }
 
@@ -2326,6 +2328,27 @@ public sealed partial class EditView : UserControl
         loBox.TextChanged += (_, _) => Validate();
         hiBox.TextChanged += (_, _) => Validate();
         Validate();
+        // [3.646.0 U01] 下限・上限を入力した途中で閉じる（「閉じる」・Esc）ときは確認（Android の全編集ダイアログと同じ）。
+        //   ContentDialog は同時に 1 つなので、確認は同じダイアログの先頭に行で出す。
+        bool Dirty() => loBox.Text.Trim() != savedLo || hiBox.Text.Trim() != savedHi;
+        var discardRow = new StackPanel { Spacing = 6, Visibility = Visibility.Collapsed };
+        discardRow.Children.Add(new TextBlock { Text = "入力を破棄しますか？", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        discardRow.Children.Add(new TextBlock { Text = "入力中の内容は保存されません。", FontSize = 14, Opacity = 0.8 });
+        var discardButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var discard = new Button { Content = "破棄", MinHeight = 44 };
+        var keep = new Button { Content = "入力を続ける", MinHeight = 44 };
+        discardButtons.Children.Add(discard); discardButtons.Children.Add(keep);
+        discardRow.Children.Add(discardButtons);
+        panel.Children.Insert(0, discardRow);
+        var allowClose = false;
+        dialog.Closing += (_, args) =>
+        {
+            if (args.Result != ContentDialogResult.None || allowClose || !Dirty()) return;
+            args.Cancel = true;
+            discardRow.Visibility = Visibility.Visible;
+        };
+        discard.Click += (_, _) => { allowClose = true; dialog.Hide(); };
+        keep.Click += (_, _) => discardRow.Visibility = Visibility.Collapsed;
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary) _vm.SetStaffRange(i, k, loBox.Text.Trim(), hiBox.Text.Trim());
         else if (result == ContentDialogResult.Secondary) _vm.RemoveStaffRange(i, k);
@@ -2506,18 +2529,54 @@ public sealed partial class EditView : UserControl
         Render();
     }
 
-    /// <summary>希望の画面で職員を先に選ぶ（「希望を見直す」から来た時の着地先。3.642.0）。</summary>
-    internal void SelectWishStaff(int staffIdx)
+    /// <summary>希望の画面で職員を先に選ぶ（「希望を見直す」から来た時の着地先。3.642.0）。<paramref name="day"/>＝診断が指した日をカレンダーで選んだ状態にし、
+    /// 希望の欄まで寄せる（3.646.0 L01。選択日は 1 始まりで持つ）。</summary>
+    internal void SelectWishStaff(int staffIdx, int? day = null)
     {
         if (staffIdx < 0 || staffIdx >= WishStaffCombo.Items.Count) return;
         WishStaffCombo.SelectedIndex = staffIdx;
+        _wishCalendarStaffIndex = staffIdx;
+        _wishSelectedDays.Clear();
+        if (day is { } d && d >= 0 && d < _vm.Ui.Days) _wishSelectedDays.Add(d + 1);
+        Render();
+        DispatcherQueue.TryEnqueue(() => WishSectionTitle.StartBringIntoView());
     }
 
-    /// <summary>必要人数カレンダーのシフトを先に選ぶ（「必要人数を見直す」から来た時の着地先。3.644.0）。</summary>
-    internal void SelectNeedShift(int shiftIdx)
+    /// <summary>必要人数カレンダーのシフトを先に選ぶ（「必要人数を見直す」から来た時の着地先。3.644.0）。<paramref name="day"/>＝その日を選んだ状態にし、カレンダーまで寄せる（3.646.0 L01）。</summary>
+    internal void SelectNeedShift(int shiftIdx, int? day = null)
     {
         if (shiftIdx < 0 || shiftIdx >= NeedCalShiftCombo.Items.Count) return;
         NeedCalShiftCombo.SelectedIndex = shiftIdx;
+        _needCalendarShiftIndex = shiftIdx;
+        _needSelectedDays.Clear();
+        if (day is { } d && d >= 0 && d < _vm.Ui.Days) _needSelectedDays.Add(d + 1);
+        Render();
+        DispatcherQueue.TryEnqueue(() => NeedCalShiftCombo.StartBringIntoView());
+    }
+
+    /// <summary>区分を変えずに先頭へ（原因が分からない着地＝月次条件の先頭。3.646.0 L04）。</summary>
+    internal void ScrollToTop() => DispatcherQueue.TryEnqueue(() => RootScroll.ChangeView(null, 0, null, true));
+
+    // ===== 元の確認へ戻る（3.646.0 L03） =====
+
+    private Action? _onReturn;
+
+    /// <summary>着地の呼出元を先頭の 1 行に出す（null＝消す）。利用者が自分でタブを替えたら MainWindow が消す。</summary>
+    internal void SetReturn(EditReturn? r, Action? onReturn)
+    {
+        _onReturn = onReturn;
+        ReturnBanner.Visibility = r is null ? Visibility.Collapsed : Visibility.Visible;
+        ReturnText.Text = r is null ? "" : EditReturn.Line(r);
+        ReturnButton.Content = EditReturn.ButtonText;
+    }
+
+    internal void ClearReturn() => SetReturn(null, null);
+
+    private void OnReturnClick(object sender, RoutedEventArgs e)
+    {
+        var go = _onReturn;
+        ClearReturn();
+        go?.Invoke();
     }
 
     /// <summary>職員管理の対象の職員を先に選ぶ（個人の回数のマスへの着地。3.644.0）。</summary>

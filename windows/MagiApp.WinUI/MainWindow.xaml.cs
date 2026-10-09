@@ -72,6 +72,7 @@ public sealed partial class MainWindow : Window
     private void OnUiChangedForMessageBar(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(UiState.PreRunCheck)) { if (_vm.Ui.PreRunCheck is { } sum) _ = ShowPreRunCheckAsync(sum); }
+        else if (e.PropertyName == nameof(UiState.ChainPreview)) { if (_vm.Ui.ChainPreview is { } p) _ = ShowChainPreviewAsync(p); }
         else if (e.PropertyName == nameof(UiState.CsvPartialPrompt))
         {
             if (_vm.Ui.CsvPartialPrompt is { } prompt) _ = ShowCsvPartialPromptAsync(prompt);
@@ -213,6 +214,8 @@ public sealed partial class MainWindow : Window
     /// <summary>各タブの内容は初回選択時に構築してキャッシュする（クラスKDoc参照）。</summary>
     private void ShowTab(string tag)
     {
+        // [3.646.0 L03] 編集タブを離れたら「元の確認へ戻る」は消える（Kotlin: LaunchedEffect(tab)）。
+        if (tag != "edit" && _tabCache.TryGetValue("edit", out var edit) && edit is EditView ev) ev.ClearReturn();
         _currentTag = tag;
         HostContent.Content = GetOrCreateTab(tag);
         RenderShell();
@@ -279,9 +282,11 @@ public sealed partial class MainWindow : Window
             content = tag switch
             {
                 "home" => new HomeView(_vm, this),
-                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), d => OpenEditDoor(d), ShowRelaxTrial),
+                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), GoEditLandingFrom, ShowRelaxTrial),
                 "edit" => new EditView(_vm),
-                "analysis" => new AnalysisView(_vm, JumpToCell, () => SelectTab("edit")),
+                // 「設定へ」は種類に対応する節（回数→③・決まり→⑤）、必要人数・希望・種類なしは月次条件の先頭（3.646.0 L04）。
+                "analysis" => new AnalysisView(_vm, JumpToCell, kind => GoEditLandingFrom(
+                    VioBuckets.YearSectionForIssueKind(kind) is { } sec ? new EditLanding(2, sec) : null, new EditReturn("問題の一覧", EditReturn.Analysis))),
                 "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };
@@ -300,24 +305,84 @@ public sealed partial class MainWindow : Window
 
     /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。needShift＝必要人数カレンダーで先に選ぶシフト、
     /// countStaff＝個人の回数の対象の職員（3.644.0、つくる前の確認の着地）。</summary>
-    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null, int? needShift = null, int? countStaff = null)
+    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null, int? needShift = null, int? countStaff = null, int? day = null)
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev)
         {
             ev.OpenDoor(door);
-            if (wishStaff is int staff) ev.SelectWishStaff(staff);
-            if (needShift is int k) ev.SelectNeedShift(k);
+            if (wishStaff is int staff) ev.SelectWishStaff(staff, day);
+            if (needShift is int k) ev.SelectNeedShift(k, day);
             if (countStaff is int s) ev.SelectStaff(s);
             ev.ScrollToSection(section);
         }
     }
 
-    /// <summary>原因に対応する設定へ着地する（null＝編集タブの先頭）。入口は <see cref="GuidedFixRules.DoorFor"/>（個人の回数はこちらでは職員管理）。</summary>
+    /// <summary>原因に対応する設定へ着地する。null＝原因が分からない＝月次条件の先頭（旧: 前回の区分・縦位置のまま開くだけ。3.646.0 L04）。
+    /// 入口は <see cref="GuidedFixRules.DoorFor"/>（個人の回数はこちらでは職員管理）。</summary>
     internal void GoEditLanding(EditLanding? l)
     {
-        if (l is null) { SelectTab("edit"); return; }
-        OpenEditDoor(GuidedFixRules.DoorFor(l), l.WishStaff, l.Section, l.NeedShift, l.CountStaff);
+        if (l is null)
+        {
+            OpenEditDoor(0);
+            if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.ScrollToTop();
+            return;
+        }
+        OpenEditDoor(GuidedFixRules.DoorFor(l), l.WishStaff, l.Section, l.NeedShift, l.CountStaff, l.Day);
+    }
+
+    /// <summary>呼出元を覚えて着地する（編集タブの先頭に「元の確認へ戻る」を出す。3.646.0 L03）。</summary>
+    internal void GoEditLandingFrom(EditLanding? l, EditReturn? r)
+    {
+        GoEditLanding(l);
+        if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.SetReturn(r, r is null ? null : () => ReturnTo(r));
+    }
+
+    private void ReturnTo(EditReturn r)
+    {
+        switch (r.Origin)
+        {
+            case EditReturn.PreRun: SelectTab("home"); _vm.ReopenPreRun(); break;
+            case EditReturn.Guided: SelectTab("home"); if (_tabCache.TryGetValue("home", out var h) && h is HomeView hv) _ = hv.ShowGuidedFixAsync(); break;
+            case EditReturn.Analysis: SelectTab("analysis"); break;
+            default: if (r.Cell is { } cell) JumpToCell(cell.I, cell.J); else SelectTab("schedule"); break;
+        }
+    }
+
+    private ChainFixPreview? _chainPreviewShown;
+
+    /// <summary>[3.644.0/UX-03] 複数人の入れ替えを当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
+    /// 「この入れ替えを当てる」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。
+    /// 3.646.0: ホームの描画からここへ＝分析タブ・セルのシートの「この手を使う」（<see cref="MagiViewModel.PreviewOrApplyFix"/>）でも、開いているタブに関係なく出る。</summary>
+    private async Task ShowChainPreviewAsync(ChainFixPreview p)
+    {
+        if (ReferenceEquals(p, _chainPreviewShown)) return;
+        _chainPreviewShown = p;
+        var ui = _vm.Ui;
+        var body = new StackPanel { Spacing = 6 };
+        body.Children.Add(new TextBlock { Text = p.Suggestion.Label, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "変わる人と勤務（前 → 後）", FontSize = 13, Opacity = 0.8 });
+        foreach (var line in p.Changes) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+        var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
+        var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
+        body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
+            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+        };
+        var r = await dialog.ShowAsync();
+        _chainPreviewShown = null;
+        if (!ReferenceEquals(_vm.Ui.ChainPreview, p)) return;
+        switch (r)
+        {
+            case ContentDialogResult.Primary: _vm.ApplyChainPreview(); break;
+            case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
+            default: _vm.DismissChainPreview(); break;
+        }
     }
 
     private ContentDialog? _csvPartialDialog;
@@ -385,7 +450,7 @@ public sealed partial class MainWindow : Window
                     text.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap });
                     text.Children.Add(new TextBlock { Text = "→ " + GuidedFixRules.LandingButtonLabel(l), FontSize = 13, Opacity = 0.8 });
                     var b = new HyperlinkButton { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
-                    b.Click += (_, _) => { after = () => GoEditLanding(l); dialog.Hide(); };
+                    b.Click += (_, _) => { after = () => GoEditLandingFrom(l, PreRunReturn()); dialog.Hide(); };
                     main = b;
                 }
                 else main = new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -394,7 +459,9 @@ public sealed partial class MainWindow : Window
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 grid.Children.Add(main);
-                var item = ConsultList.PreRun(r);
+                var item = ConsultList.PreRun(r,
+                    r.Staff is { } si && si >= 0 && si < ui.StaffNames.Count ? ui.StaffNames[si] : null,
+                    r.Day is { } di ? ConsultList.IsoDate(ui.StartDate, di) : null);
                 FrameworkElement ask;
                 if (ConsultList.IsConsulted(ui.Consults, item)) ask = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
                 else
@@ -430,16 +497,18 @@ public sealed partial class MainWindow : Window
         if (t.WallLine is { } w)
         {
             Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });
-            if (t.WallLanding is { } wl) Link(GuidedFixRules.LandingButtonLabel(wl), () => GoEditLanding(wl));
+            if (t.WallLanding is { } wl) Link(GuidedFixRules.LandingButtonLabel(wl), () => GoEditLandingFrom(wl, PreRunReturn()));
         }
         if (ui.PreRunRepeatHint is { } hint) Note(hint);
 
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary) { _vm.ProceedPreRun(); return; }
         _vm.DismissPreRun();
-        if (result == ContentDialogResult.Secondary) SelectTab("edit");
+        if (result == ContentDialogResult.Secondary) GoEditLandingFrom(null, PreRunReturn());   // 「先にデータを直す」＝月次条件の先頭＋元の確認へ戻る
         after?.Invoke();
     }
+
+    private static EditReturn PreRunReturn() => new("つくる前の確認", EditReturn.PreRun);
 
     private void ShowWishConflicts()
     {

@@ -359,6 +359,23 @@ public class GridDisplayMarksTest
     }
 
     /// <summary>許容0の超過（人員の上限0・グループの上限0・適切回数0）: 入っているセルはどれも超過＝全部に印。</summary>
+    /// <summary>[3.646.0 L01] 日×シフトの印が人員不足・過剰なら、直し方が無いときの行き先はその日のそのシフトの必要人数。群のレンジは違う（Kotlin <c>MagiViewStateTest</c>）。</summary>
+    [Fact]
+    public void CoverageFocusOnlyForCoverageMarks()
+    {
+        var ui = new UiState
+        {
+            Staff = 2, Days = 5, Shifts = 2,
+            NeedViolations = new Dictionary<string, string> { ["1,3"] = "vio-covU", ["0,2"] = "vio-c41" },
+            NeedFamilies = new Dictionary<string, IReadOnlyList<string>> { ["1,3"] = new[] { "vio-covU" }, ["0,2"] = new[] { "vio-c41" } },
+        };
+        Assert.True(FixSearchText.CoverageFocus(ui, new FixFocus(null, 1, 3)));
+        Assert.False(FixSearchText.CoverageFocus(ui, new FixFocus(null, 0, 2)));
+        Assert.False(FixSearchText.CoverageFocus(ui, new FixFocus(0, 1, 3)));
+        Assert.False(FixSearchText.CoverageFocus(ui, new FixFocus(null, 1, null)));
+        Assert.False(FixSearchText.CoverageFocus(ui, new FixFocus(null, 1, 4)));
+    }
+
     [Fact]
     public void ZeroAllowCellsMarkEveryCellOnlyWhenTheAllowanceIsZero()
     {

@@ -10,8 +10,30 @@ public class EditLandingTest
     {
         var core = new ConstraintMus.Item[] { new ConstraintMus.DayNeed(11, 2, 3), new ConstraintMus.RangeCap(0, 2, 4) };
         var l = GuidedFixRules.LandingForProofCore(core, zeroCap: false);
-        Assert.Equal(new EditLanding(0, null, NeedShift: 2), l);
+        Assert.Equal(new EditLanding(0, null, NeedShift: 2, Day: 11), l);   // [3.646.0 L01] 日も運ぶ
         Assert.Equal("必要人数を見直す", GuidedFixRules.LandingButtonLabel(l));
+    }
+
+    /// <summary>[3.646.0 L01/L04] 人員不足の枠は日を運ぶ。原因が分からない枠も編集タブを開くだけにせず、その日のそのシフトの必要人数へ。</summary>
+    [Fact]
+    public void ShortageLandingsCarryTheDayAndNeverFallBackToTheBareTab()
+    {
+        static CoverageShortfall Sf(CoverageVerdict verdict, bool blockedNow = false, int forbid = 0, IReadOnlyList<int>? pinned = null) =>
+            new(9, "10/10", 3, "夜", 1, 0, 1, 4, verdict, "r", BlockedNow: blockedNow, WishPinned: pinned ?? Array.Empty<int>(), ForbidCount: forbid);
+        Assert.Equal(new EditLanding(0, null, WishStaff: 4, Day: 9), GuidedFixRules.LandingFor(Sf(CoverageVerdict.Fixable, pinned: new[] { 4 })));
+        Assert.Equal(new EditLanding(2, "yr_ws1"), GuidedFixRules.LandingFor(Sf(CoverageVerdict.Infeasible)));
+        Assert.Equal(new EditLanding(2, "yr_cons"), GuidedFixRules.LandingFor(Sf(CoverageVerdict.Fixable, blockedNow: true, forbid: 2)));
+        Assert.Equal(new EditLanding(0, null, NeedShift: 3, Day: 9), GuidedFixRules.LandingFor(Sf(CoverageVerdict.Fixable)));
+        Assert.Equal("必要人数を見直す", GuidedFixRules.LandingButtonLabel(GuidedFixRules.LandingFor(Sf(CoverageVerdict.Fixable))));
+    }
+
+    /// <summary>[3.646.0 L03] 編集タブの先頭の「元の確認へ戻る」の 1 行。</summary>
+    [Fact]
+    public void ReturnLineNamesTheOrigin()
+    {
+        Assert.Equal("「つくる前の確認」から来ました。直したら元の確認へ戻れます。", EditReturn.Line(new EditReturn("つくる前の確認", EditReturn.PreRun)));
+        Assert.Equal(EditReturn.CellOrigin, new EditReturn("甲 10/3 のセル", EditReturn.CellOrigin, (0, 2)).Origin);
+        Assert.Equal("元の確認へ戻る", EditReturn.ButtonText);
     }
 
     [Fact]

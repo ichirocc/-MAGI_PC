@@ -461,6 +461,15 @@ public static class CellSheetLogic
     public static IReadOnlyList<string> SheetCellClasses(IReadOnlyList<string> display, bool inC1Shortage) =>
         !inC1Shortage || display.Contains("vio-c1") ? display : display.Append("vio-c1").ToList();
 
+    /// <summary>直し方の探索の締切。セルのシート（手は 1 件でよい）は短く＝押してから 3 秒以内に答えが返る（Nielsen の 1 秒／10 秒の目安、3.646.0 実機報告）。
+    /// ホーム・分析の全体探索は従来どおり 8 秒。</summary>
+    public const long FixSearchMs = 8000L;
+    public const long FixSearchQuickMs = 3000L;
+
+    /// <summary>探索中の 1 行（最長の秒数を添えて待ち時間の見当をつけてもらう）。</summary>
+    public static string FixSearchingText(bool quick) =>
+        quick ? $"この場所の直し方を探しています…（最長 {FixSearchQuickMs / 1000} 秒）" : $"直し方を探しています…（最長 {FixSearchMs / 1000} 秒）";
+
     /// <summary>その場の直し方探しの状態。スピナーは <see cref="FixPanelState.Running"/> だけ。</summary>
     public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key) =>
         fixSearching ? FixPanelState.Running

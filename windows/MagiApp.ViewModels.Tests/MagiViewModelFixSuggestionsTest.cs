@@ -316,4 +316,103 @@ public class MagiViewModelFixSuggestionsTest
             OptimizationRepository.SetRunning(false);
         }
     }
+
+    // ===== 3.646.0: 2 セル以上の手は当てる前に一覧／相談に積んだ入れ替えの見直し／元に戻すで案内の結果の行を結ばない =====
+
+    private static MagiViewModel VmWithNeed()
+    {
+        var vm = new MagiViewModel
+        {
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") }),
+            _currentSchedule = MinimalState.BuildSchedule(),
+        };
+        vm.Ui.StaffNames = vm._state!.StaffList.Select(s => s.Name).ToList();
+        vm.Ui.ShiftSymbols = new[] { "休", "A" };
+        vm.Ui.StartDate = vm._state.StartDate;
+        vm.Ui.Days = vm._state.DayCount;
+        return vm;
+    }
+
+    [Fact]
+    public void PreviewOrApplyFix_TwoOrMoreOpsShowThePreviewCarryingTheSuggestion()
+    {
+        var vm = VmWithNeed();
+        var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 1, 1));
+
+        vm.PreviewOrApplyFix(s);
+
+        var p = vm.Ui.ChainPreview;
+        Assert.NotNull(p);
+        Assert.Same(s, p!.Target!.Suggestion);
+        Assert.Null(p.Target.Date);
+        Assert.Equal(s.Label, p.Target.Label);
+        Assert.All(vm._currentSchedule!, row => Assert.All(row, v => Assert.Equal(0, v)));   // 一覧を出しただけ＝盤面は不変
+    }
+
+    [Fact]
+    public async Task PreviewOrApplyFix_SingleOpAppliesDirectly()
+    {
+        var vm = VmWithNeed();
+
+        vm.PreviewOrApplyFix(MakeSuggestion(new FixCell(0, 0, 1)));
+        await vm.LastRefreshCheckTask!;
+
+        Assert.Null(vm.Ui.ChainPreview);
+        Assert.Equal(1, vm._currentSchedule![0][0]);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("改善手を適用: テスト改善手（必須 7→6"));   // 操作ログにも残す（3.646.0）
+    }
+
+    [Fact]
+    public void ResumeConsultChain_ResolvableTargetSearchesTheChainAgain()
+    {
+        var vm = VmWithNeed();
+        var c = new ConsultItem("lbl", "n", Chain: new ChainTarget("2025-12-02", "A", "lbl"));
+
+        vm.ResumeConsultChain(c);
+
+        Assert.NotNull(vm.LastPrepareChainFixTask);
+        Assert.False(vm.Ui.MessageIsError);
+    }
+
+    [Fact]
+    public void ResumeConsultChain_SuggestionWithoutTargetReopensThePreview()
+    {
+        var vm = VmWithNeed();
+        var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 1, 1));
+
+        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget(null, null, "lbl", Suggestion: s)));
+
+        Assert.Same(s, vm.Ui.ChainPreview!.Suggestion);
+    }
+
+    [Fact]
+    public void ResumeConsultChain_UnresolvableTargetSaysWhy()
+    {
+        var vm = VmWithNeed();
+
+        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget("2026-01-05", "A", "lbl")));
+
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal("いまの期間・シフトにない枠です（1/5 の「A」）", vm.Ui.Message);
+        Assert.Null(vm.Ui.ChainPreview);
+        Assert.Null(vm.LastPrepareChainFixTask);
+    }
+
+    [Fact]
+    public async Task UndoDropsThePendingGuidedOutcome()
+    {
+        var vm = VmWithNeed();
+        vm.NoteGuidedFix(0, 1, "12/1", "A");
+        vm.RefreshCheck();
+        await vm.LastRefreshCheckTask!;
+        Assert.NotNull(vm.Ui.FixOutcome);   // 対照: 再検査が枠の結果を 1 行にする
+
+        vm.Ui.FixOutcome = null;
+        vm.PushUndo();
+        vm.NoteGuidedFix(0, 1, "12/1", "A");
+        vm.Undo();
+        await vm.LastRefreshCheckTask!;
+
+        Assert.Null(vm.Ui.FixOutcome);   // 戻した盤面には結ばない
+    }
 }

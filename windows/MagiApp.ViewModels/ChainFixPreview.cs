@@ -9,7 +9,8 @@ namespace MagiApp.ViewModels;
 /// 必須違反の増減は画面が同じ提案から <see cref="NextActionGuide.FixImpactLines"/> で出す（族名の日本語表は WinUI 側にあるため、Kotlin が
 /// 持つ hardLine/caution はここでは持たない）。
 /// </summary>
-public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes)
+/// <param name="Target">探した枠（日付・シフト記号・見出し）。相談に積んだあと、今の勤務表で案を探し直すために持つ。</param>
+public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null)
 {
     public static ChainFixPreview Of(FixSuggestion s, int[][] snapshot, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate)
     {

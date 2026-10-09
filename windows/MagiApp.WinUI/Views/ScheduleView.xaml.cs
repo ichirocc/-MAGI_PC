@@ -135,17 +135,17 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>[phase9 #11] 内訳ダイアログの「直し方を探す」の飛び先（分析タブ）。</summary>
     private readonly Action? _goAnalysis;
 
-    /// <summary>手が見つからなかったときの次の一歩（編集タブの入口: 0=月次条件の希望／2=年間マスターの設定）。</summary>
-    private readonly Action<int>? _openEditDoor;
+    /// <summary>手が見つからなかったときの次の一歩（編集タブへの着地と、セルから来たときの「元の確認へ戻る」の呼出元。Kotlin <c>FixNav</c>、3.646.0 L01/L03）。</summary>
+    private readonly Action<EditLanding?, EditReturn?>? _goEditLanding;
 
     /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。確定の後は渡したセルへ戻る。</summary>
     private readonly Action<(int I, int J)?>? _showRelax;
 
-    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<int>? openEditDoor = null, Action<(int I, int J)?>? showRelax = null)
+    public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<EditLanding?, EditReturn?>? goEditLanding = null, Action<(int I, int J)?>? showRelax = null)
     {
         _vm = vm;
         _goAnalysis = goAnalysis;
-        _openEditDoor = openEditDoor;
+        _goEditLanding = goEditLanding;
         _showRelax = showRelax;
         InitializeComponent();
         ScheduleItemsView.ItemsSource = _rows;
@@ -1226,12 +1226,15 @@ public sealed partial class ScheduleView : UserControl
 
     /// <param name="settingsLabel">手が無いときの設定への行き先の名（null＝節ごとの名 <see cref="SettingsLabel.For"/>）。</param>
     /// <param name="whenNoFix">手が 0 件のときに理由の下へ足す要素（板挟みの「同じ違反のもう一方のセル」へのボタン）。</param>
+    /// <param name="quick">セルのシート＝締切 3 秒（手は 1 件でよい。Kotlin <c>compact</c>）。日×シフト・職員の集計のダイアログは 8 秒。</param>
+    /// <param name="cell">セルのシートから来たとき、編集タブの「元の確認へ戻る」の戻り先。</param>
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
-        Func<IEnumerable<UIElement>>? whenNoFix = null)
+        Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null)
     {
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
-        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day);
+        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day, quick);
         void Start() { if (!_vm.Ui.Running) Find(); }
+        EditReturn? Return() => cell is { } c ? CellReturn(c.I, c.J) : null;
         void Refresh()
         {
             var ui = _vm.Ui;
@@ -1250,15 +1253,24 @@ public sealed partial class ScheduleView : UserControl
             }
             if (state == FixPanelState.Running)
             {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                row.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
-                row.Children.Add(new TextBlock { Text = "この場所の直し方を探しています…" });
+                var row = new Grid { ColumnSpacing = 8 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });
+                var waiting = new TextBlock { Text = CellSheetLogic.FixSearchingText(quick), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(waiting, 1);
+                row.Children.Add(waiting);
+                var stop = new HyperlinkButton { Content = "やめる", MinHeight = 48 };
+                stop.Click += (_, _) => _vm.CancelFixSearch();
+                Grid.SetColumn(stop, 2);
+                row.Children.Add(stop);
                 host.Children.Add(row);
                 return;
             }
             if (ui.FixSuggestions.Count > 0)
             {
-                foreach (var sug in ui.FixSuggestions.Take(3))
+                foreach (var sug in ui.FixSuggestions.Take(quick ? 1 : 3))
                 {
                     var (hardLine, caution) = NextActionGuide.FixImpactLines(sug, LabelOf);
                     host.Children.Add(new TextBlock { Text = sug.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
@@ -1266,7 +1278,8 @@ public sealed partial class ScheduleView : UserControl
                     if (caution is not null) host.Children.Add(new TextBlock { Text = caution, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
                     var use = new Button { Content = "この手を使う（元に戻せます）", MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right };
                     var chosen = sug;
-                    use.Click += (_, _) => { hide(); _vm.ApplyFixSuggestion(chosen); };
+                    // 2 セル以上の手は当てる前に一覧のダイアログ（MainWindow）が出る＝このダイアログが閉じ切ってから呼ぶ（ContentDialog は同時に 1 つ）。
+                    use.Click += (_, _) => { registerClosed(() => _vm.PreviewOrApplyFix(chosen)); hide(); };
                     host.Children.Add(use);
                 }
                 return;
@@ -1277,12 +1290,22 @@ public sealed partial class ScheduleView : UserControl
             if (why.WishRelated)
             {
                 var w = new Button { Content = "希望を見る", MinHeight = 48 };
-                w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
+                w.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, WishStaff: focus.Staff, Day: focus.Day), Return()); };
                 buttons.Children.Add(w);
             }
-            var st = new Button { Content = settingsLabel ?? SettingsLabel.For(why.SettingsSection), MinHeight = 48 };
-            st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
-            buttons.Children.Add(st);
+            if (FixSearchText.CoverageFocus(ui, focus))
+            {
+                // 人員不足・過剰の印は、その日のそのシフトの必要人数（月次条件）へ。群のレンジは④のまま。
+                var need = new Button { Content = "必要人数を見直す", MinHeight = 48 };
+                need.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: focus.Shift, Day: focus.Day), Return()); };
+                buttons.Children.Add(need);
+            }
+            else
+            {
+                var st = new Button { Content = settingsLabel ?? SettingsLabel.For(why.SettingsSection), MinHeight = 48 };
+                st.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(2, why.SettingsSection), Return()); };
+                buttons.Children.Add(st);
+            }
             host.Children.Add(buttons);
             if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
         }
@@ -1389,16 +1412,25 @@ public sealed partial class ScheduleView : UserControl
 
     private IReadOnlySet<int> _c1Stuck = new HashSet<int>();
 
-    /// <summary>期間の制約を勤務表だけでは満たせないときの次の一歩（希望を見る／並び・期間の制約の設定を開く）。</summary>
-    private StackPanel C1StuckButtons(Action hide)
+    /// <summary>期間の制約を勤務表だけでは満たせないときの次の一歩（希望を見る／並び・期間の制約の設定を開く）。<paramref name="cell"/>＝セルのシートから来たとき（その職員・その日を選んで開き、戻り先にする）。</summary>
+    private StackPanel C1StuckButtons(Action hide, (int I, int J)? cell = null)
     {
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var ret = cell is { } c ? CellReturn(c.I, c.J) : null;
         var w = new Button { Content = "希望を見る", MinHeight = 48 };
-        w.Click += (_, _) => { hide(); _openEditDoor?.Invoke(0); };
+        w.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, WishStaff: cell?.I, Day: cell?.J), ret); };
         var st = new Button { Content = SettingsLabel.For("yr_cons"), MinHeight = 48 };
-        st.Click += (_, _) => { hide(); _openEditDoor?.Invoke(2); };
+        st.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(2, "yr_cons"), ret); };
         buttons.Children.Add(w); buttons.Children.Add(st);
         return buttons;
+    }
+
+    /// <summary>セルのシートから編集タブへ行ったときの戻り先（Kotlin <c>cellReturn</c>、3.646.0 L03）。</summary>
+    private EditReturn CellReturn(int i, int j)
+    {
+        var ui = _vm.Ui;
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+        return new EditReturn($"{name} {DayText.Short(ui.StartDate, j)} のセル", EditReturn.CellOrigin, (i, j));
     }
 
     /// <summary>回数の過不足の色（背景, 文字のブラシ名）。不足＝赤系・超過＝橙系（シフト集計の ▼▲ と同じ色言語）。差し替えはここだけ。</summary>
@@ -1674,7 +1706,7 @@ public sealed partial class ScheduleView : UserControl
         panel.Children.Add(singleNote);
         var riskReason = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
         panel.Children.Add(riskReason);
-        if (_vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide()));
+        if (_vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide(), (i, j)));
 
         // 「詳しく」: このセルに重なった違反すべてとこの職員の回数・偏り。
         var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
@@ -1723,12 +1755,12 @@ public sealed partial class ScheduleView : UserControl
                     yield return b;
                 }
             }
-            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), null, PartnerButtons)); };
+            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), null, PartnerButtons, quick: true, cell: (i, j))); };
             breakWish.Click += (_, _) => Reopen(i, j, 2);
         }
         else if (mode != 1 && status.Severity != CellSeverity.None)
         {
-            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j)));
+            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j)));
         }
         if (mode == 1 && wish is not null)
         {

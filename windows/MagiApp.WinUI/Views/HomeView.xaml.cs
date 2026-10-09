@@ -69,10 +69,11 @@ public sealed partial class HomeView : UserControl
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
         RenderConsults(ui);
-        MaybeShowChainPreview(ui);
     }
 
-    /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、「済」で外す。</summary>
+    /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、
+    /// 入れ替えの相談は「案を見る」で今の勤務表の案（<see cref="MagiViewModel.ResumeConsultChain"/>）、「済」で外す。
+    /// 複数人の入れ替えの一覧（<c>ChainPreview</c>）のダイアログは MainWindow が出す（3.646.0: タブに関係なく出るため）。</summary>
     private void RenderConsults(UiState ui)
     {
         ConsultCard.Visibility = ui.Consults.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -83,6 +84,10 @@ public sealed partial class HomeView : UserControl
         {
             var c = ui.Consults[i];
             var idx = i;
+            // 対象は氏名と実日付で今のデータに引き直す（月を移した・職員を消した・並べ替えたあとに別のセルを開かない。3.646.0 B01/B02）。
+            var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days) : null;
+            var chainOk = c.Chain is { } t && ConsultList.ConsultChainResumable(t, ui.StartDate, ui.ShiftSymbols, ui.Days);
+            var note = ConsultList.ConsultTargetNote(c, ui.StartDate, ui.StaffNames, ui.ShiftSymbols, ui.Days);
             var row = new Grid { ColumnSpacing = 8 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -90,54 +95,27 @@ public sealed partial class HomeView : UserControl
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
             text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            if (note is not null) text.Children.Add(new TextBlock { Text = note, FontSize = 13, Foreground = BrushOf("MagiErrorBrush"), TextWrapping = TextWrapping.Wrap });
             row.Children.Add(text);
-            if (c.Staff is int s && c.Day is int d)
+            if (cell is { } cc)
             {
-                var open = new HyperlinkButton { Content = "開く", MinHeight = 44 };
-                open.Click += (_, _) => _window.OpenCell(s, d);
+                var open = new HyperlinkButton { Content = ConsultList.Open, MinHeight = 44 };
+                open.Click += (_, _) => _window.OpenCell(cc.I, cc.J);
                 Grid.SetColumn(open, 1);
                 row.Children.Add(open);
+            }
+            else if (chainOk)
+            {
+                var resume = new HyperlinkButton { Content = ConsultList.Resume, MinHeight = 44, IsEnabled = !ui.Running };
+                resume.Click += (_, _) => _vm.ResumeConsultChain(c);
+                Grid.SetColumn(resume, 1);
+                row.Children.Add(resume);
             }
             var done = new Button { Content = "済", MinHeight = 44 };
             done.Click += (_, _) => _vm.RemoveConsult(idx);
             Grid.SetColumn(done, 2);
             row.Children.Add(done);
             ConsultListHost.Children.Add(row);
-        }
-    }
-
-    private ChainFixPreview? _chainPreviewShown;
-
-    /// <summary>[3.644.0/UX-03] 複数人の入替を当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
-    /// 「この入替を当てる」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。</summary>
-    private async void MaybeShowChainPreview(UiState ui)
-    {
-        var p = ui.ChainPreview;
-        if (p is null || ReferenceEquals(p, _chainPreviewShown)) return;
-        _chainPreviewShown = p;
-        var body = new StackPanel { Spacing = 6 };
-        body.Children.Add(new TextBlock { Text = p.Suggestion.Label, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = "変わる人と勤務（前 → 後）", FontSize = 13, Opacity = 0.8 });
-        foreach (var line in p.Changes) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
-        var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
-        var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
-        body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
-        };
-        var r = await dialog.ShowAsync();
-        _chainPreviewShown = null;
-        if (!ReferenceEquals(_vm.Ui.ChainPreview, p)) return;
-        switch (r)
-        {
-            case ContentDialogResult.Primary: _vm.ApplyChainPreview(); break;
-            case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
-            default: _vm.DismissChainPreview(); break;
         }
     }
 
@@ -223,7 +201,7 @@ public sealed partial class HomeView : UserControl
             headline = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
-            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLanding(pinnedLanding);
+            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("なおし方", EditReturn.Guided));
         }
         else if (infeasible)
         {
@@ -232,7 +210,7 @@ public sealed partial class HomeView : UserControl
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
-            _bigAction = () => GoEditLanding(infeasibleLanding); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
         }
         else
         {
@@ -263,7 +241,7 @@ public sealed partial class HomeView : UserControl
                     (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "");
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
-                helperLabel = "この手を使う（元に戻せます）"; _helperAction = () => _vm.ApplyFixSuggestion(top);
+                helperLabel = "この手を使う（元に戻せます）"; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
             }
             else if (ui.FixSearching)
             {
@@ -329,10 +307,15 @@ public sealed partial class HomeView : UserControl
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を取り消して再作成」の結果（VM が鮮度を照合済み）。
-        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine() ?? _vm.CsvSavedLine() ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
+        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine() ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
+        // 勤務表 CSV の保存状態は直した結果の行とは別に出す（旧: ?? で繋いで片方しか出なかった。3.646.0 B03）。
+        var savedLine = ui.Running ? null : _vm.CsvSavedLine();
+        SavedText.Visibility = savedLine is null ? Visibility.Collapsed : Visibility.Visible;
+        SavedText.Text = savedLine ?? "";
+        SavedText.Foreground = fgBrush;
         // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
         var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults.Count);
         ConsultText.Visibility = consultLine is null ? Visibility.Collapsed : Visibility.Visible;
@@ -583,7 +566,8 @@ public sealed partial class HomeView : UserControl
             panel.Children.Add(open);
             // [3.645.0/仕様 5.3] 本人や上長に確認してから決める＝対象と検討内容を相談中の一覧へ（取消も勤務の変更もしない）。
             var consultItem = ConsultList.Wish(row.Name, DayText.Short(ui.StartDate, row.Day),
-                ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day);
+                ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day,
+                ConsultList.IsoDate(ui.StartDate, row.Day));
             panel.Children.Add(ConsultButton(ui, consultItem));
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
@@ -688,7 +672,7 @@ public sealed partial class HomeView : UserControl
     /// 反映されるまで全候補を無効にし「再検査中…」を出す。Schedule の変更だけでは再有効化しない（古い診断と新しい盤面の混在を防ぐ）。
     /// ボタンは常に「閉じる」だけ（「再作成」は下部バーに一本化）。
     /// </summary>
-    private async System.Threading.Tasks.Task ShowGuidedFixAsync()
+    internal async System.Threading.Tasks.Task ShowGuidedFixAsync()
     {
         var panel = new StackPanel { Spacing = 8, MinWidth = 360 };
         var dialog = new ContentDialog
@@ -699,11 +683,11 @@ public sealed partial class HomeView : UserControl
         var flow = new GuidedFixFlow();
         // 9人目以降を出している枠（日, シフト）。別の枠へ移ると閉じる（Kotlin の remember(day, shift) と同じ）。
         var showAllFor = (-1, -1);
-        // 原因に対応する設定へ行く。押したらダイアログを閉じてから着地する（null＝編集タブの先頭）。
+        // 原因に対応する設定へ行く。押したらダイアログを閉じてから着地する（null＝月次条件の先頭）。編集タブの先頭に「元の確認へ戻る」を出す（3.646.0 L03）。
         Button LandingButton(EditLanding? landing)
         {
             var b = new Button { Content = GuidedFixRules.LandingButtonLabel(landing), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
-            b.Click += (_, _) => { dialog.Hide(); GoEditLanding(landing); };
+            b.Click += (_, _) => { dialog.Hide(); GoEditLandingFrom(landing, new EditReturn("なおし方（人員不足）", EditReturn.Guided)); };
             return b;
         }
         void Rebuild()
@@ -764,14 +748,14 @@ public sealed partial class HomeView : UserControl
                 }
                 else if (target.ChainVerified)
                 {
-                    // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入替で埋まると分析が確かめた枠。
-                    //   [3.644.0/UX-03] 当てる前に一覧（だれの・どの日の・何→何と必須の増減）を見せる＝MaybeShowChainPreview。
+                    // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入れ替えで埋まると分析が確かめた枠。
+                    //   [3.644.0/UX-03] 当てる前に一覧（だれの・どの日の・何→何と必須の増減）を見せる＝MainWindow.ShowChainPreviewAsync。
                     panel.Children.Add(new TextBlock { Text = "だれか1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     var chain = new Button { Content = "入れ替えの一覧と影響を見る", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
                     chain.Click += (_, _) =>
                     {
                         dialog.Hide();
-                        _vm.PrepareShortageChainFix(target.DayIndex, target.ShiftIndex, $"（玉突き）{target.DayLabel} の「{target.ShiftSymbol}」を複数人の入替で埋める");
+                        _vm.PrepareShortageChainFix(target.DayIndex, target.ShiftIndex, $"（玉突き）{target.DayLabel} の「{target.ShiftSymbol}」を複数人の入れ替えで埋める");
                     };
                     panel.Children.Add(chain);
                 }
@@ -836,10 +820,11 @@ public sealed partial class HomeView : UserControl
         SoftPolishButton.IsEnabled = editable;
     }
 
-    private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
+    private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.GoEditLanding(null);
 
-    /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは編集タブの先頭。</summary>
-    private void GoEditLanding(EditLanding? landing) => _window.GoEditLanding(landing);
+    /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは月次条件の先頭。
+    /// 呼出元 <paramref name="r"/> を渡すと編集タブの先頭に「元の確認へ戻る」が出る（3.646.0 L03）。</summary>
+    private void GoEditLandingFrom(EditLanding? landing, EditReturn? r) => _window.GoEditLandingFrom(landing, r);
 
     /// <summary>「相談してから決める」。積んだあとは「相談中」の札＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する。
     /// 無効ボタンの文字は状態色の基準 3:1 を割るので札にする＝ux_test_checklist A1、3.645.2）。</summary>
