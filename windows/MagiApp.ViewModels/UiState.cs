@@ -189,6 +189,9 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private bool relaxSearching;
     /// <summary>[S5] 直近の「希望を取り消して再作成」の結果（表示は <c>WishCancelOutcomeLine</c>）。</summary>
     [ObservableProperty] private WishCancelOutcome? wishCancelOutcome;
+    [ObservableProperty] private FixOutcome? fixOutcome;        // [3.643.0] 直近に当てた直し方の結果 1 行（表示は FixOutcomeLine＝盤面が変わったら出さない）
+    [ObservableProperty] private string? csvSavedAt;            // [3.643.0] この盤面を勤務表 CSV に保存した時刻 HH:mm（表示は CsvSavedLine）
+    [ObservableProperty] private MonthMovePlan? monthMovePrompt;   // [3.643.0] 対象の月を移す前の確認。null＝閉じている
 
     /// <summary>[つくる前の確認] 非 null の間シートを出す。</summary>
     [ObservableProperty] private MagiEngine.V6.PreRunCheck.Summary? preRunCheck;

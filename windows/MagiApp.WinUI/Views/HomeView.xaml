@@ -20,7 +20,7 @@
 
       [phase9 #2] 処方箋カード（Kotlin原本 OperatorNextActionCard, 3.480.0/3.483.0）＝状態（未作成／完成／
       埋められない／もう少し）で見出し・大ボタン・補助ボタンが変わる 1 枚と、「AIの解決提案」
-      （SmartActionCard＝分析タブと同じ改善提案の先頭候補を 1 ボタンで適用）。「初期解生成」ボタンは
+      （旧 SmartActionCard の「この手を使う」は 3.643.0 で主カードの補助ボタンへ統合）。「初期解生成」ボタンは
       カード内の補助導線（下書きをつくる／下書きから作り直す）と重複するため撤去（Android の重複排除と同じ）。
       実行中の進捗表示（改善%・残り時間）は #3 で別途。
 
@@ -100,32 +100,6 @@
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                             <StackPanel x:Name="LiveGridHost" Spacing="1" />
                         </ScrollViewer>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border x:Name="SmartActionCard" Background="{StaticResource MagiSecondaryContainerBrush}"
-                    CornerRadius="{StaticResource MagiCornerSM}" Padding="16">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="AIの解決提案" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                    <TextBlock x:Name="SmartStatusText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" />
-                    <StackPanel x:Name="SmartTopPanel" Spacing="6">
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border x:Name="SmartKindBadge" CornerRadius="{StaticResource MagiCornerLG}" Padding="10,3" VerticalAlignment="Center">
-                                <TextBlock x:Name="SmartKindText" Style="{StaticResource MagiLabelMediumTextStyle}" FontWeight="Bold" />
-                            </Border>
-                            <TextBlock x:Name="SmartLabelText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
-                                       Style="{StaticResource MagiBodyMediumTextStyle}" />
-                        </Grid>
-                        <TextBlock x:Name="SmartHardLineText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
-                        <TextBlock x:Name="SmartCautionText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" />
-                        <TextBlock x:Name="SmartDiffText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.85" />
-                        <Button x:Name="SmartApplyButton" Content="この手を使う（元に戻せます）" Click="OnSmartApplyClick" HorizontalAlignment="Stretch" MinHeight="52" />
-                        <TextBlock x:Name="SmartMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                     </StackPanel>
                 </StackPanel>
             </Border>

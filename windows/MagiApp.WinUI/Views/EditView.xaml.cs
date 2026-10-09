@@ -158,6 +158,7 @@ public sealed partial class EditView : UserControl
             var editable = ui.Loaded && !ui.Running;
             RenderDoor();
             RenderMonthly(ui, editable);
+            MaybeShowMonthMovePrompt(ui);
             RenderWish(ui, editable);
             RenderNeedDay(ui, editable);
             RenderStaff(ui, editable);
@@ -221,8 +222,15 @@ public sealed partial class EditView : UserControl
         var v = _vm.MonthlyChecklist();
         ChecklistHost.Children.Clear();
         ChecklistHost.Children.Add(ChecklistRow("職員", $"{v.StaffN}名", ok: v.StaffN > 0));
-        ChecklistHost.Children.Add(ChecklistRow("希望・休暇", $"{v.WishStaff}/{v.StaffN}名 入力済み", ok: v.WishStaff > 0,
+        // [3.643.0] 登録の有無だけを数える（✓ で「集め終わった」と読まれないよう判定は出さない）。拡張希望だけの職員も入力あり。
+        ChecklistHost.Children.Add(ChecklistRow("希望・休暇", v.Entry.Text(), ok: null,
             onClick: () => WishSectionTitle.StartBringIntoView()));
+        if (v.Entry.NoInput > 0)
+            ChecklistHost.Children.Add(new TextBlock
+            {
+                Text = $"未入力の {v.Entry.NoInput}名が「希望なし」か「まだ聞いていない」かは、ここでは分かりません。",
+                FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 0, 0, 0),
+            });
         ChecklistHost.Children.Add(ChecklistRow("必要人数",
             (v.NeedStdOk ? "標準あり" : "標準が未設定") + $"・例外{v.NeedExceptions}件", ok: v.NeedStdOk));
         var issues = ui.SettingIssues;
@@ -253,12 +261,13 @@ public sealed partial class EditView : UserControl
     private bool _checklistIssuesAll;
 
     /// <summary>✓/！＋ラベル＋値の 1 行。onClick があるときは行全体がボタン（値の末尾に「›」）。</summary>
-    private static FrameworkElement ChecklistRow(string label, string value, bool ok, Action? onClick = null)
+    private static FrameworkElement ChecklistRow(string label, string value, bool? ok, Action? onClick = null)
     {
+        // ok=null＝判定しない行（数だけ見せる）
         var mark = new TextBlock
         {
-            Text = ok ? "✓" : "！", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 16,
-            Foreground = (Brush)Application.Current.Resources[ok ? "MagiTertiaryBrush" : "MagiErrorBrush"],
+            Text = ok switch { null => "—", true => "✓", false => "！" }, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 16,
+            Foreground = ok is null ? new SolidColorBrush(Colors.Gray) : (Brush)Application.Current.Resources[ok == true ? "MagiTertiaryBrush" : "MagiErrorBrush"],
         };
         var lbl = new TextBlock { Text = label, Style = (Style)Application.Current.Resources["MagiBodyMediumTextStyle"] };
         var val = new TextBlock
@@ -1010,6 +1019,34 @@ public sealed partial class EditView : UserControl
 
     /// <summary>削除前の確認。Kotlin原本は削除前に確認ダイアログ（影響件数つき）を出す——
     /// この移植ではこれまで押す前の警告文＋Undoで代用していたが、ここで本来の確認ダイアログへ揃える。</summary>
+    private MonthMovePlan? _monthPromptShown;
+
+    /// <summary>[3.643.0] 対象の月を移す前の確認（Kotlin <c>MonthMoveConfirmDialog</c>）。VM が <c>MonthMovePrompt</c> を立てたら 1 回だけ出す。</summary>
+    private async void MaybeShowMonthMovePrompt(UiState ui)
+    {
+        var p = ui.MonthMovePrompt;
+        if (p is null || ReferenceEquals(p, _monthPromptShown)) return;
+        _monthPromptShown = p;
+        var body = new StackPanel { Spacing = 8 };
+        foreach (var line in p.Lines()) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "前の月の希望を新しい月に持ち越さないときは「希望を消して移る」を選びます。", TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = $"{p.Year}年 {p.Month}月 に移します", Content = body,
+            PrimaryButtonText = "希望を残して移る", SecondaryButtonText = "希望を消して移る", CloseButtonText = "やめる",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        var r = await dialog.ShowAsync();
+        _monthPromptShown = null;
+        if (!ReferenceEquals(_vm.Ui.MonthMovePrompt, p)) return;
+        switch (r)
+        {
+            case ContentDialogResult.Primary: _vm.ConfirmMonthMove(clearWishes: false); break;
+            case ContentDialogResult.Secondary: _vm.ConfirmMonthMove(clearWishes: true); break;
+            default: _vm.CancelMonthMove(); break;
+        }
+    }
+
     private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除", string close = "キャンセル")
     {
         var dialog = new ContentDialog

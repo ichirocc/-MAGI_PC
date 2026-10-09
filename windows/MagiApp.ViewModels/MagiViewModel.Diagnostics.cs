@@ -357,6 +357,7 @@ public sealed partial class MagiViewModel
         Ui.ImpossibleWishCount = sanity.ImpossibleWishes.Count;
         // 人員不足(covU)の原因診断（充足不可/充足可能の切り分け）。不足が無ければ null。
         Ui.CoverageDiag = coverageDiag;
+        ResolvePendingGuidedFix(st, schedule, report, coverageDiag);
         // [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断。c3n=0 なら null。
         Ui.ForbiddenDiag = analysis.ForbiddenDiag;
         // [3.322.0] c1 頭打ちの構造化診断。再計算できない（研磨中の却下記録が唯一の根拠）ので

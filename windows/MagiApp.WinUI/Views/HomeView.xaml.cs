@@ -65,7 +65,6 @@ public sealed partial class HomeView : UserControl
 
         RenderNextAction(ui, editable);
         RenderLive(ui);
-        RenderSmartAction(ui, editable);
         RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
@@ -83,6 +82,17 @@ public sealed partial class HomeView : UserControl
             return;
         }
         NextActionCard.Visibility = Visibility.Visible;
+        // [3.643.0] 旧 SmartActionCard の自動探索をここへ（必須違反が残り未探索なら 1 回）。副作用は候補リストの計算だけ。
+        if (!ui.Running && ui.HasResult && ui.BestHard > 0)
+        {
+            var boardChanged = !ReferenceEquals(_autoFixBoard, ui.Schedule) || _autoFixHard != ui.BestHard;
+            if (ui.FixFocusName.Length > 0 || (boardChanged && !ui.FixSearching && ui.FixSuggestions.Count == 0 && !ui.FixSearched))
+            {
+                _autoFixBoard = ui.Schedule;
+                _autoFixHard = ui.BestHard;
+                _vm.FindFixSuggestions();
+            }
+        }
         var diag = ui.CoverageDiag;
         var infeasible = diag?.AllInfeasible == true;
         var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
@@ -126,7 +136,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
-            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 完成しました。そのまま配れます。") + (ui.RunSummary is { } rs
+            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須条件を満たしました。中身を確認して配ってください。") + (ui.RunSummary is { } rs
                 ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
             bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
@@ -170,9 +180,19 @@ public sealed partial class HomeView : UserControl
             }
             else if (hardFix && ui.FixFocusName.Length == 0)
             {
+                // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）・「この手を使う」（補助）。
+                var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
+                var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
+                var diffTxt = string.Join("・", top.Diff.Select(d =>
+                    (AnalysisView.BreakdownLabels.TryGetValue(d.Family, out var jp) ? jp : d.Family) + " " + (d.Delta < 0 ? $"−{-d.Delta}" : $"+{d.Delta}")));
+                var totalTxt = top.DeltaTotal <= 0 ? $"−{-top.DeltaTotal}" : $"+{top.DeltaTotal}";
                 headline = remain + "直す手があります。";
+                body = top.Label;
+                note = hardLine + (caution is null ? "" : "\n" + caution) + (diffTxt.Length > 0 ? $"\n違反 {totalTxt}（{diffTxt}）" : "") +
+                    (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "");
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
+                helperLabel = "この手を使う（元に戻せます）"; _helperAction = () => _vm.ApplyFixSuggestion(top);
             }
             else if (ui.FixSearching)
             {
@@ -238,7 +258,7 @@ public sealed partial class HomeView : UserControl
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を取り消して再作成」の結果（VM が鮮度を照合済み）。
-        var outcomeLine = ui.Running ? null : _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
+        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine() ?? _vm.CsvSavedLine() ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
@@ -368,84 +388,6 @@ public sealed partial class HomeView : UserControl
         _livePrev = null;
         Render();
     }
-
-    /// <summary>
-    /// [phase9 #2] 「AIの解決提案」。Kotlin原本 <c>SmartActionCard</c>（3.480.0）＝分析タブと同じ改善提案の
-    /// 先頭候補を 1 ボタンで適用。必須違反が残る間だけ出し、盤面ごとに 1 回だけ自動で探す（盤面は変えない）。
-    /// </summary>
-    private void RenderSmartAction(UiState ui, bool editable)
-    {
-        if (ui.Running || !ui.HasResult || ui.BestHard <= 0L)
-        {
-            SmartActionCard.Visibility = Visibility.Collapsed;
-            return;
-        }
-        // 別の職員に絞った探索の結果（途中でも）はホームでは全体探索へ差し替える＝同じ盤面でもカードを隠したままにしない。
-        //   全体探索を「探して0件」で終えた盤面（FixSearched）では探し直さない。
-        var boardChanged = !ReferenceEquals(_autoFixBoard, ui.Schedule) || _autoFixHard != ui.BestHard;
-        if (ui.FixFocusName.Length > 0 ||
-            (boardChanged && !ui.FixSearching && ui.FixSuggestions.Count == 0 && !ui.FixSearched))
-        {
-            _autoFixBoard = ui.Schedule;
-            _autoFixHard = ui.BestHard;
-            _vm.FindFixSuggestions();
-            return;
-        }
-        if (ui.FixFocusName.Length > 0 && !ui.FixSearching)
-        {
-            SmartActionCard.Visibility = Visibility.Collapsed;
-            return;
-        }
-        SmartActionCard.Visibility = Visibility.Visible;
-        var top = ui.FixSuggestions.Count > 0 ? ui.FixSuggestions[0] : null;
-        if (ui.FixSearching)
-        {
-            SmartStatusText.Text = "いちばん効果のある直し方を探しています…";
-            SmartStatusText.Visibility = Visibility.Visible;
-            SmartTopPanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-        if (top is null)
-        {
-            SmartStatusText.Text = "1手で直せる候補は見つかりませんでした。下の詳細をご確認ください。";
-            SmartStatusText.Visibility = Visibility.Visible;
-            SmartTopPanel.Visibility = Visibility.Collapsed;
-            return;
-        }
-        SmartStatusText.Visibility = Visibility.Collapsed;
-        SmartTopPanel.Visibility = Visibility.Visible;
-        var (tag, tagHex) = FixKindTag(top.Kind);
-        var tagColor = ColorHex.Parse(tagHex, Colors.Gray);
-        SmartKindBadge.Background = new SolidColorBrush(tagColor);
-        SmartKindText.Text = tag;
-        SmartKindText.Foreground = new SolidColorBrush(ReadableOn(tagColor));
-        SmartLabelText.Text = top.Label;
-        var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
-        SmartHardLineText.Text = hardLine;
-        SmartCautionText.Text = caution ?? "";
-        SmartCautionText.Visibility = caution is null ? Visibility.Collapsed : Visibility.Visible;
-        var diffTxt = string.Join("・", top.Diff.Select(d =>
-            (AnalysisView.BreakdownLabels.TryGetValue(d.Family, out var jp) ? jp : d.Family) + " " +
-            (d.Delta < 0 ? $"−{-d.Delta}" : $"+{d.Delta}")));
-        var totalTxt = top.DeltaTotal <= 0 ? $"−{-top.DeltaTotal}" : $"+{top.DeltaTotal}";
-        SmartDiffText.Text = $"違反 {totalTxt}" + (diffTxt.Length > 0 ? $"（{diffTxt}）" : "");
-        SmartApplyButton.IsEnabled = editable;
-        var more = ui.FixSuggestions.Count - 1;
-        SmartMoreText.Visibility = more > 0 ? Visibility.Visible : Visibility.Collapsed;
-        SmartMoreText.Text = more > 0 ? $"ほかに {more} 案あります（分析タブで比較できます）。" : "";
-    }
-
-    /// <summary>Kotlin原本 <c>fixKindTag</c> と同じ手の種別ラベルと色。</summary>
-    private static (string, string) FixKindTag(FixKind k) => k switch
-    {
-        FixKind.Change => ("変更", MagiAccent.Green),
-        FixKind.ChangeMulti => ("複数変更", MagiAccent.Green),
-        FixKind.Swap => ("交換", MagiAccent.Blue),
-        FixKind.SwapXDay => ("別日交換", MagiAccent.Blue),
-        FixKind.SwapMulti => ("3人交換", MagiAccent.Purple),
-        FixKind.Chain => ("連鎖", MagiAccent.Red),
-        _ => ("再最適化", MagiAccent.Orange),
-    };
 
     /// <summary>白文字のコントラストが 4.5:1 に届かない地色では黒文字にする（Kotlin原本 <c>ensureReadable</c>）。</summary>
     private static Windows.UI.Color ReadableOn(Windows.UI.Color bg)
@@ -716,6 +658,7 @@ public sealed partial class HomeView : UserControl
                             if (!flow.CandidatesEnabled || _vm.EditBlockedNow()) return;
                             flow.Press(_vm.Ui.CheckRev);
                             Rebuild();
+                            _vm.NoteGuidedFix(day, shift, target.DayLabel, target.ShiftSymbol);
                             _vm.SetCell(i, day, shift);
                         };
                         panel.Children.Add(b);
@@ -793,12 +736,6 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnHelperClick(object sender, RoutedEventArgs e) => _helperAction();
-
-    private void OnSmartApplyClick(object sender, RoutedEventArgs e)
-    {
-        var ui = _vm.Ui;
-        if (ui.FixSuggestions.Count > 0) _vm.ApplyFixSuggestion(ui.FixSuggestions[0]);
-    }
 
     /// <summary>[phase9 #4] コパイロット（Kotlin原本 <c>CopilotCard</c>）。3 つの助言はどれも「あるときだけ」出す。</summary>
     private void RenderCopilot(UiState ui, bool editable)
