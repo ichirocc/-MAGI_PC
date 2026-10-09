@@ -368,6 +368,118 @@ static bool runSharedHandleConcurrency(const MagiProblem& p, const std::vector<i
     return ok;
 }
 
+// [#41] 手動固定: 盤面へ書く C++ の手（SA チャンク・違反セルの壊して直す・入口修復）が固定セルを書き換えないこと、
+//   入口修復が固定の値へ戻すこと（希望より強い）、採点が固定の有無で変わらないこと（Kotlin ManualPinTest と同じ受け入れ条件）。
+static int runManualPinTest() {
+    int failures = 0, moved = 0;
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        MagiProblem p = buildProblem(10, 21, 4, 2, seed * 4409ULL, seed % 2 == 0);
+        std::mt19937_64 rng(seed * 7727ULL);
+        std::vector<int> board = randomBoard(p, rng);
+        const long long before = fullEvalCombined(p, board.data());
+        std::vector<int> pinned;
+        p.pin.assign((size_t)p.S * p.T, -1);
+        for (int i = 0; i < p.S; i++) for (int j = (i % 3); j < p.T; j += 3) {
+            size_t idx = (size_t)i * p.T + j;
+            p.pin[idx] = board[idx]; pinned.push_back((int)idx);
+        }
+        if (fullEvalCombined(p, board.data()) != before) { printf("PIN-TEST FAIL: 手動固定で採点が変わった\n"); failures++; }
+        auto held = [&](const std::vector<int>& bd) {
+            for (int idx : pinned) if (bd[(size_t)idx] != p.pin[(size_t)idx]) return false;
+            return true;
+        };
+        for (int t = 0; t < 4; t++) {
+            std::vector<int> cur = board, best = board;
+            long long out[6];
+            runSaChunk(p, cur.data(), best.data(), fullEvalCombined(p, best.data()), seed * 100 + t, 1.0, 0.5, 0.5, 1, out);
+            if (out[0] == 0 && (!held(cur) || !held(best))) { printf("PIN-TEST FAIL: SA チャンクが手動固定を書き換えた\n"); failures++; }
+            for (size_t x = 0; x < cur.size(); x++) if (cur[x] != board[x]) moved++;
+        }
+        std::vector<int> cells;
+        for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) cells.push_back(i * p.T + j);
+        for (int t = 0; t < 20; t++) {
+            std::vector<int> bd = board;
+            std::mt19937_64 r3(seed * 31 + t);
+            destroyRepairViolationsN(p, bd.data(), cells, r3);
+            if (!held(bd)) { printf("PIN-TEST FAIL: destroyRepairViolationsN が手動固定を書き換えた\n"); failures++; break; }
+        }
+        // 入口修復: 固定セルを別の値・同じセルに別の希望を置いても、固定の値へ戻す（希望へは戻さない）。
+        std::vector<int> bd = board;
+        int idx0 = pinned[0];
+        int i0 = idx0 / p.T;
+        int other = (p.pin[(size_t)idx0] + 1) % p.K;
+        bd[(size_t)idx0] = other;
+        for (int k : p.bucket[p.sgrp[i0]]) if (k != p.pin[(size_t)idx0]) { p.wish[(size_t)idx0] = k; break; }
+        std::mt19937_64 r4(seed);
+        hf67HardRepairN(p, bd.data(), r4);
+        if (!held(bd)) { printf("PIN-TEST FAIL: 入口修復が手動固定の値へ戻さなかった\n"); failures++; }
+    }
+    if (failures == 0 && moved == 0) { printf("PIN-TEST FAIL: SA が 1 セルも動かさず検証が空振り\n"); failures++; }
+    printf("PIN-TEST: %s (moved=%d)\n", failures == 0 ? "OK" : "FAILED", moved);
+    return failures;
+}
+
+// 拡張希望: 盤面へ書く C++ の手（SA/LAHC/ALNS/研磨チャンク・壊して直す 3 種・入口修復）が禁止の値を新しく置かないこと、
+//   採点が禁止の有無で変わらないこと（Kotlin ExtWishOptimizeTest と同じ受け入れ条件）。禁止は「置きたくなる値」に寄せる。
+static int runExtBanTest() {
+    int failures = 0, moved = 0;
+    for (uint64_t seed = 1; seed <= 4; seed++) {
+        MagiProblem p = buildProblem(10, 21, 4, 2, seed * 5101ULL, seed % 2 == 1);
+        std::mt19937_64 rng(seed * 9973ULL);
+        std::vector<int> board = randomBoard(p, rng);
+        const long long before = fullEvalCombined(p, board.data());
+        p.extBan.assign((size_t)p.S * p.T * p.K, 0);
+        for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) {
+            if (wishLockedN(p, i, j)) continue;
+            for (int k = 0; k < p.K; k++) if ((i * 3 + j * 5 + k) % 3 == 0) p.extBan[((size_t)i * p.T + j) * p.K + k] = 1;
+        }
+        if (fullEvalCombined(p, board.data()) != before) { printf("EXTBAN-TEST FAIL: 禁止で採点が変わった\n"); failures++; }
+        auto clean = [&](const std::vector<int>& bd, const char* who) {
+            for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) {
+                size_t x = (size_t)i * p.T + j;
+                if (bd[x] != board[x] && p.extBanned(i, j, bd[x])) {
+                    printf("EXTBAN-TEST FAIL: %s が禁止を置いた (%d,%d)->%d\n", who, i, j, bd[x]); return false;
+                }
+            }
+            return true;
+        };
+        for (int t = 0; t < 4; t++) {
+            std::vector<int> cur = board, best = board;
+            long long out[6];
+            runSaChunk(p, cur.data(), best.data(), fullEvalCombined(p, best.data()), seed * 100 + t, 1.0, 0.5, 0.5, 1, out);
+            if (out[0] != 0) { printf("EXTBAN-TEST FAIL: SA 自己整合 status=%lld\n", out[0]); failures++; }
+            if (!clean(cur, "SA(cur)") || !clean(best, "SA(best)")) failures++;
+            for (size_t x = 0; x < cur.size(); x++) if (cur[x] != board[x]) moved++;
+            LahcState ls(p, board.data(), seed * 200 + t, 50);
+            long long o5[5];
+            runLahcChunk(ls, 20000, o5);
+            if (!clean(ls.st.a, "LAHC(cur)") || !clean(ls.bestSol, "LAHC(best)")) failures++;
+            AlnsState as(p, board.data(), seed * 300 + t, t % 3, t % 2, 1.0);
+            long long o6[6];
+            runAlnsChunk(as, 3000, 0.5, o6);
+            if (!clean(as.st.a, "ALNS(cur)") || !clean(as.bestSol, "ALNS(best)")) failures++;
+            PolishState ps(p, board.data(), seed * 400 + t);
+            long long op5[5];
+            runPolishChunk(ps, 3000, op5);
+            if (!clean(ps.st.a, "Polish(cur)") || !clean(ps.bestSol, "Polish(best)")) failures++;
+        }
+        std::vector<int> cells;
+        for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) cells.push_back(i * p.T + j);
+        for (int t = 0; t < 20; t++) {
+            std::vector<int> bd = board;
+            std::mt19937_64 r3(seed * 31 + t);
+            destroyRepairViolationsN(p, bd.data(), cells, r3);
+            destroyRepairDayAtN(p, bd.data(), t % p.T, r3);
+            destroyRepairStaffAtN(p, bd.data(), t % p.S, r3);
+            hf67HardRepairN(p, bd.data(), r3);
+            if (!clean(bd, "壊して直す/入口修復")) { failures++; break; }
+        }
+    }
+    if (failures == 0 && moved == 0) { printf("EXTBAN-TEST FAIL: SA が 1 セルも動かさず検証が空振り\n"); failures++; }
+    printf("EXTBAN-TEST: %s (moved=%d)\n", failures == 0 ? "OK" : "FAILED", moved);
+    return failures;
+}
+
 // [3.409.22] ネイティブ修復器が **need2 単独定義の被覆需要** を扱えるかの直接検証。
 //   旧実装は `need1<=0 → continue`（destroyRepairDayAtN）/ `need1<0 → continue`（findCovOFixN）で
 //   need1 未設定のセルを丸ごと素通りしており、**評価器は covU/covO を計上するのに修復器はその枠を
@@ -431,6 +543,8 @@ static int runNeed2OnlyRepairTest() {
 //   復元漏れや添字ずれがあると静かに誤った順位を返す（採否は checker が守るので勤務表は壊れないが、
 //   候補選択が歪む＝パリティ番兵では捕まらない領域）。ここでは同じ盤面変更を実際に適用して
 //   全量から測り直し、marginal がその差分と一致することを確認する。
+//   [3.647.0] 差分は Kotlin `weeklyMarginalAt`/`fairMarginalAt` と同じく**重み付き**（weekly 2・fair 5）＝
+//   全量側も評価器（contribWeekly/contribFair）と同じ重みを掛けて比べる。
 static int runMarginalCostTest() {
     int failures = 0;
     MagiProblem p;
@@ -460,7 +574,7 @@ static int runMarginalCostTest() {
         }
         long long d = 0;
         for (int k = 0; k < p.K; k++) d += weeklyDevOfBucket(&wd[(size_t)k * 7]);
-        return d;
+        return d * 2;
     };
     auto fairOf = [&](const std::vector<int>& bd) {
         std::vector<int> counts((size_t)p.S * p.K, 0);
@@ -477,7 +591,7 @@ static int runMarginalCostTest() {
                 d += fairDevOfBucket(p, g, k, [&](int x) { return counts[(size_t)x * p.K + k]; });
             }
         }
-        return d;
+        return d * 5;
     };
 
     int checked = 0, nonZeroWeekly = 0, nonZeroFair = 0;
@@ -576,6 +690,7 @@ static int runMarginalCostTest() {
     //   個人回数の上下限も apt も設定しないので staffCountPenaltyAtN は常に 0＝候補は
     //   weekly+fair だけで決まる。ここを外すと全候補が同点になり reservoir 抽選＝
     //   最小でない候補も選ばれる（＝ヘルパを持っていても呼んでいなければ落ちる）。
+    //   [3.647.0] 費用は評価器と同じ重み付き（weekly 2・fair 5）＝重みの比で順位が変わる局面を見る。
     int decided = 0;
     {
         MagiProblem q;
@@ -598,7 +713,7 @@ static int runMarginalCostTest() {
                 if (k >= 0 && k < q.K) wd[(size_t)k * 7 + (size_t)((q.dow0 + jj) % 7)]++;
             }
             long long d = 0;
-            for (int k = 0; k < q.K; k++) d += weeklyDevOfBucket(&wd[(size_t)k * 7]);
+            for (int k = 0; k < q.K; k++) d += weeklyDevOfBucket(&wd[(size_t)k * 7]) * 2;
             std::vector<int> counts((size_t)q.S * q.K, 0);
             for (int i = 0; i < q.S; i++)
                 for (int jj = 0; jj < q.T; jj++) {
@@ -608,7 +723,7 @@ static int runMarginalCostTest() {
             for (int k = 0; k < q.K; k++) {
                 int sum = counts[k] + counts[(size_t)q.K + k];
                 long long tgt = jround((double)sum / 2.0);
-                d += std::llabs((long long)counts[k] - tgt) + std::llabs((long long)counts[(size_t)q.K + k] - tgt);
+                d += (std::llabs((long long)counts[k] - tgt) + std::llabs((long long)counts[(size_t)q.K + k] - tgt)) * 5;
             }
             return d;
         };
@@ -636,7 +751,7 @@ static int runMarginalCostTest() {
             std::mt19937_64 r4(555 + trial);
             destroyRepairViolationsN(q, out.data(), std::vector<int>{j0}, r4);
             if (out[j0] != bestK) {
-                printf("MARGINAL-TEST FAIL: 候補選択が weekly+fair の最小と一致しない "
+                printf("MARGINAL-TEST FAIL: 候補選択が重み付き weekly+fair の最小と一致しない "
                        "(選んだ=%d 期待=%d j=%d)\n", out[j0], bestK, j0);
                 failures++;
             }
@@ -857,6 +972,6 @@ int main(int argc, char** argv) {
     double bits   = benchOne(false);
     printf("BENCH deltaApply (10x31 K6): scalar %.2f M moves/s, bit-op %.2f M moves/s, speedup x%.2f\n",
            scalar / 1e6, bits / 1e6, bits / scalar);
-    int repairFail = runNeed2OnlyRepairTest() + runMarginalCostTest() + runConsIndexGuardTest();
+    int repairFail = runNeed2OnlyRepairTest() + runMarginalCostTest() + runConsIndexGuardTest() + runManualPinTest() + runExtBanTest();
     return (mismatches == 0 && repairFail == 0) ? 0 : 1;
 }

@@ -209,13 +209,13 @@ public sealed class Evaluator
         // ---- fair: within-group equalization ---------------------------------------------------
         // [統一fair/3.538.0] グループ内公平化 SOFT。群×担当ONシフトごと、Problem.FairDevOfBucket（達成率
         // モード、全員に基準が無ければ従来の生回数round(平均)方式）からのL1偏差和（UnifiedViolationChecker
-        // の "fair" と一致）。[3.522.0] 重み1→2、[3.541.0] 達成率モード v2 に改定。
+        // の "fair" と一致）。[3.522.0] 重み1→2、[3.541.0] 達成率モード v2 に改定、[3.647.0] 重み2→5。
         for (int g = 0; g < _p.G; g++)
         {
             var mem = _p.GroupMembers[g];
             if (mem.Length < 2) continue;
             foreach (var k in _p.Bucket[g])
-                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k]).Total * 2L;
+                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k]).Total * 5L;
         }
 
         // ---- weekly: 7-day-cycle shift equalization ----------------------------------------------

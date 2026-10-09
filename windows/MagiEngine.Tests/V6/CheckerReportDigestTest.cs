@@ -65,5 +65,6 @@ public class CheckerReportDigestTest
         Assert.Equal(Expected, Convert.ToHexString(md.GetHashAndReset()).ToLowerInvariant());
     }
 
-    private const string Expected = "7936ccc740b91bdf78c49003901e94b30bac709128137f03eb750bc0fe69f86b";
+    // weightedScore を含むので重みを変えると動く（3.647.0 fair 2→5 で更新。旧: 7936ccc7…）。
+    private const string Expected = "1a2feb00faf3e535017574c5409753f1fbbbe0d1cb902a1914d635da0f1826b3";
 }

@@ -20,81 +20,82 @@
 // - c3RunMode=true 固定（Evaluator の既定と同じ。非forbidden 単一シフト連は run-deficit）。
 
 // ===== TOC（自動生成: tools/native/gen_toc.py。コード改修時は再実行して更新） =====
-//  L  102  fn     jround
-//  L  104  struct C1r
-//  L  105  struct C2r
-//  L  106  struct C41r
-//  L  107  struct C42r
-//  L  113  fn     c42PairCount
-//  L  118  fn     c2Amount
-//  L  122  fn     rangeDistance
-//  L  125  struct C3r
-//  L  126  struct C3wr
-//  L  128  struct MagiProblem
-//  L  219  fn     consIndicesValidN
-//  L  252  fn     weeklyDevOfBucket
-//  L  265  fn     fairDevOfBucket
-//  L  307  fn     rowDeficit
-//  L  324  fn     c3check
-//  L  360  fn     fullEvalParts
-//  L  567  const  SCORE_HARD_UNIT
-//  L  570  const  ACCEPT_REJECT_DELTA
-//  L  572  fn     fullEvalCombined
-//  L  583  struct SaChunk
-//  L  876  fn     wishLockedN
-//  L  881  fn     runSaChunk
-//  L 1014  struct LahcState
-//  L 1033  fn     runLahcChunk
-//  L 1158  fn     collectViolationCells
-//  L 1261  struct GlsPenaltyN
-//  L 1306  fn     glsAcceptN
-//  L 1324  fn     rnInt
-//  L 1332  fn     weeklyMarginalN
-//  L 1350  fn     fairMarginalN
-//  L 1365  fn     reservoirTieN
-//  L 1379  fn     staffCountPenaltyAtN
-//  L 1390  fn     randomAllowedCellN
-//  L 1401  fn     destroyRepairDayAtN
-//  L 1476  fn     destroyRepairStaffAtN
-//  L 1535  fn     destroyRepairViolationsN
-//  L 1581  struct Fix
-//  L 1583  fn     findCovOFixN
-//  L 1610  fn     findC2FixN
-//  L 1627  fn     findRangeLowFixN
-//  L 1651  fn     findRangeHighFixN
-//  L 1682  fn     findC41FamFixN
-//  L 1715  fn     findC3WantFixN
-//  L 1745  fn     findAptFixN
-//  L 1777  fn     findTargetedFixN
-//  L 1802  fn     coverageShortageCostN
-//  L 1810  fn     bestStaffForCoverageN
-//  L 1825  fn     hf67HardRepairN
-//  L 1898  fn     rouletteSelectN
-//  L 1906  fn     thompsonSelectN
-//  L 1920  fn     greatDelugeLevelN
-//  L 1929  struct AlnsState
-//  L 1972  fn     runAlnsChunk
-//  L 2169  struct PolishState
-//  L 2192  fn     polishAcceptN
-//  L 2202  fn     runPolishChunk
-//  L 2314  fn     readIntArray
-//  L 2325  JNI    nativeAbiVersion
-//  L 2332  JNI    nativeAlnsCreate
-//  L 2346  JNI    nativeAlnsDestroy
-//  L 2352  JNI    nativeAlnsChunk
-//  L 2366  JNI    nativeAlnsRead
-//  L 2378  JNI    nativePolishCreate
-//  L 2391  JNI    nativePolishDestroy
-//  L 2397  JNI    nativePolishChunk
-//  L 2410  JNI    nativePolishRead
-//  L 2422  JNI    nativeLahcCreate
-//  L 2435  JNI    nativeLahcDestroy
-//  L 2441  JNI    nativeLahcChunk
-//  L 2454  JNI    nativeLahcRead
-//  L 2468  JNI    nativeSaChunk
-//  L 2498  JNI    nativeCreateProblem
-//  L 2651  JNI    nativeDestroyProblem
-//  L 2657  JNI    nativeFullEval
+//  L  103  fn     jround
+//  L  105  struct C1r
+//  L  106  struct C2r
+//  L  107  struct C41r
+//  L  108  struct C42r
+//  L  114  fn     c42PairCount
+//  L  119  fn     c2Amount
+//  L  123  fn     rangeDistance
+//  L  126  struct C3r
+//  L  127  struct C3wr
+//  L  129  struct MagiProblem
+//  L  221  fn     consIndicesValidN
+//  L  254  fn     weeklyDevOfBucket
+//  L  267  fn     fairDevOfBucket
+//  L  309  fn     rowDeficit
+//  L  326  fn     c3check
+//  L  362  fn     fullEvalParts
+//  L  569  const  SCORE_HARD_UNIT
+//  L  572  const  ACCEPT_REJECT_DELTA
+//  L  574  fn     fullEvalCombined
+//  L  585  struct SaChunk
+//  L  879  fn     wishLockedN
+//  L  886  fn     lockToN
+//  L  892  fn     runSaChunk
+//  L 1025  struct LahcState
+//  L 1044  fn     runLahcChunk
+//  L 1169  fn     collectViolationCells
+//  L 1272  struct GlsPenaltyN
+//  L 1317  fn     glsAcceptN
+//  L 1335  fn     rnInt
+//  L 1343  fn     weeklyMarginalN
+//  L 1361  fn     fairMarginalN
+//  L 1376  fn     reservoirTieN
+//  L 1390  fn     staffCountPenaltyAtN
+//  L 1401  fn     randomAllowedCellN
+//  L 1412  fn     destroyRepairDayAtN
+//  L 1487  fn     destroyRepairStaffAtN
+//  L 1546  fn     destroyRepairViolationsN
+//  L 1592  struct Fix
+//  L 1594  fn     findCovOFixN
+//  L 1621  fn     findC2FixN
+//  L 1638  fn     findRangeLowFixN
+//  L 1662  fn     findRangeHighFixN
+//  L 1693  fn     findC41FamFixN
+//  L 1726  fn     findC3WantFixN
+//  L 1756  fn     findAptFixN
+//  L 1788  fn     findTargetedFixN
+//  L 1813  fn     coverageShortageCostN
+//  L 1821  fn     bestStaffForCoverageN
+//  L 1836  fn     hf67HardRepairN
+//  L 1911  fn     rouletteSelectN
+//  L 1919  fn     thompsonSelectN
+//  L 1933  fn     greatDelugeLevelN
+//  L 1942  struct AlnsState
+//  L 1985  fn     runAlnsChunk
+//  L 2182  struct PolishState
+//  L 2205  fn     polishAcceptN
+//  L 2215  fn     runPolishChunk
+//  L 2327  fn     readIntArray
+//  L 2338  JNI    nativeAbiVersion
+//  L 2345  JNI    nativeAlnsCreate
+//  L 2359  JNI    nativeAlnsDestroy
+//  L 2365  JNI    nativeAlnsChunk
+//  L 2379  JNI    nativeAlnsRead
+//  L 2391  JNI    nativePolishCreate
+//  L 2404  JNI    nativePolishDestroy
+//  L 2410  JNI    nativePolishChunk
+//  L 2423  JNI    nativePolishRead
+//  L 2435  JNI    nativeLahcCreate
+//  L 2448  JNI    nativeLahcDestroy
+//  L 2454  JNI    nativeLahcChunk
+//  L 2467  JNI    nativeLahcRead
+//  L 2481  JNI    nativeSaChunk
+//  L 2511  JNI    nativeCreateProblem
+//  L 2672  JNI    nativeDestroyProblem
+//  L 2678  JNI    nativeFullEval
 // ===== TOC end =====
 
 namespace {
@@ -133,6 +134,7 @@ struct MagiProblem {
     std::vector<int> sgrp, ssk;              // S
     std::vector<uint8_t> canDo;              // S*K
     std::vector<int> wish;                   // S*T (-1 = none)
+    std::vector<int> pin;                    // S*T (-1 = none)。空＝手動固定なし（#41。採点は読まない）
     std::vector<int> need1, need2;           // K*T (-1 = none)
     std::vector<int> rangeLo, rangeHi, apt;  // S*K
     std::vector<C1r> cons1;
@@ -142,6 +144,7 @@ struct MagiProblem {
     std::vector<C3r> cons3, cons3n, cons3m, cons3mn;
     std::vector<C3wr> cons3w;
     std::vector<uint8_t> c3wBan;             // S*T*K（cons3w が空なら空＝Kotlin Problem.c3wBan の null）。buildC3wBan で導出
+    std::vector<uint8_t> extBan;             // S*T*K（拡張希望の禁止。空＝無し。採点は読まず、盤面へ書く手の判定だけが読む）
     std::vector<std::vector<int>> bucket;    // G: 群の担当ONシフト
     std::vector<std::vector<int>> members;   // G: 群のメンバー（sgrp から導出）
     std::vector<uint8_t> bucketHas;          // G*K: 群 g がシフト k を担当できるか（fair 用）
@@ -162,6 +165,11 @@ struct MagiProblem {
     inline bool c3wBanned(int i, int j, int k) const {
         if (c3wBan.empty() || i < 0 || i >= S || j < 0 || j >= T || k < 0 || k >= K) return false;
         return c3wBan[((size_t)i * T + j) * K + k] != 0;
+    }
+    // 拡張希望: セル (i,j) に k を置く手を捨てるか（Kotlin Problem.extBanned と同値）。旧値は問わない。
+    inline bool extBanned(int i, int j, int k) const {
+        if (extBan.empty() || i < 0 || i >= S || j < 0 || j >= T || k < 0 || k >= K) return false;
+        return extBan[((size_t)i * T + j) * K + k] != 0;
     }
     // 翌日が希望固定（実現可能な希望＝wishLockedN と同義）の X で、cons3w に (X→k) があれば ban。wish 確定後に呼ぶ。
     void buildC3wBan() {
@@ -508,14 +516,14 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2], long lo
         if (bd) { bd[13] += rawLow; bd[14] += rawHigh; bd[16] += rawApt; }
     }
 
-    // [3.538.0] fair（群×担当ONシフト、`fairDevOfBucket`＝達成率モード or 従来のround(平均)方式）。[3.522.0] 重み1→2。
+    // [3.538.0] fair（群×担当ONシフト、`fairDevOfBucket`＝達成率モード or 従来のround(平均)方式）。[3.522.0] 重み1→2、[3.647.0] 2→5。
     {
         long long raw = 0;
         for (int g = 0; g < p.G; g++) {
             if (p.members[g].size() < 2) continue;
             for (int k : p.bucket[g]) raw += fairDevOfBucket(p, g, k, [&](int x) { return ssn[(size_t)x * K + k]; });
         }
-        soft += raw * 2; if (bd) bd[17] += raw;
+        soft += raw * 5; if (bd) bd[17] += raw;   // [3.647.0] fair 2→5
     }
 
     // weekly（職員×シフト×曜日、round(そのシフトの回数/7) からの L1 偏差）。[3.522.0] 重み1→2。
@@ -751,7 +759,7 @@ struct SaChunk {
         if (g < 0 || g >= p.G || k < 0 || k >= K) return 0;
         if (!p.bucketHas[(size_t)g * K + k]) return 0;
         if (p.members[g].size() < 2) return 0;
-        return fairDevOfBucket(p, g, k, [&](int x) { return ssn[(size_t)x * K + k]; }) * 2;  // [3.522.0] fair 1→2
+        return fairDevOfBucket(p, g, k, [&](int x) { return ssn[(size_t)x * K + k]; }) * 5;  // [3.522.0] fair 1→2、[3.647.0] 2→5
     }
     // [3.345.0] weekly は職員×シフト。deltaApply では old/nw の2バケットだけが動くので
     //   contribRangeApt/contribFair と同じく (i,old)+(i,nw) の形で before/after を取る。
@@ -873,9 +881,18 @@ struct SaChunk {
 // status: 0=OK / 1=cur整合性NG / 2=best整合性NG（いずれもKotlin側で破棄・退化）。
 // [3.334.0] 実現可能な希望が入ったセルか（Kotlin `Problem.wishLocked` と同義）。
 //   SA/LAHC の近傍と修復オペレータの両方から使うので、SA の手前で定義する。
+// [#41] 手動固定も縛る（Kotlin `Problem.wishLocked`＝手動固定または実現可能な希望）。縛る値は lockToN。
 inline bool wishLockedN(const MagiProblem& p, int i, int j) {
-    int w = p.wish[(size_t)i * p.T + j];
+    const size_t idx = (size_t)i * p.T + j;
+    if (!p.pin.empty() && p.pin[idx] >= 0) return true;
+    int w = p.wish[idx];
     return w >= 0 && p.cd(i, w);
+}
+// [#41] 縛るセルの値＝手動固定の値、無ければ希望（Kotlin `Problem.lockTo`）。
+inline int lockToN(const MagiProblem& p, int i, int j) {
+    const size_t idx = (size_t)i * p.T + j;
+    if (!p.pin.empty() && p.pin[idx] >= 0) return p.pin[idx];
+    return p.wish[idx];
 }
 
 void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn,
@@ -891,8 +908,10 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
     const int cap = T + S + 16;
     std::vector<int> bi(cap), bj(cap), bOld(cap);
     int bn = 0;
+    bool banHit = false;   // 拡張希望の禁止を 1 セルでも置こうとした手は丸ごと捨てる
     auto applyCell = [&](int i, int j, int nw) {
         if (bn >= cap) return;
+        if (p.extBanned(i, j, nw)) { banHit = true; return; }
         bi[bn] = i; bj[bn] = j; bOld[bn] = st.a[(size_t)i * T + j]; bn++;
         st.deltaApply(i, j, nw);
     };
@@ -967,8 +986,9 @@ void runSaChunk(const MagiProblem& p, int* cur, int* best, long long bestScoreIn
     const long long maxIters = 200000;
     for (double t = t0; t >= tf && iters < maxIters; t *= alpha) {
         for (int ls = 0; ls < chain && iters < maxIters; ls++) {
-            bn = 0;
+            bn = 0; banHit = false;
             pickOperator();
+            if (banHit) { revert(); tail++; iters++; continue; }
             long long cand = st.score;
             long long dE = cand - curVal;
             if (dE <= 0 || std::exp(-(double)dE / t) > st.nextDouble()) {
@@ -1041,8 +1061,10 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
     const int cap = T + S + 16;
     std::vector<int> bi(cap), bj(cap), bOld(cap);
     int bn = 0;
+    bool banHit = false;   // 拡張希望の禁止を 1 セルでも置こうとした手は丸ごと捨てる
     auto applyCell = [&](int i, int j, int nw) {
         if (bn >= cap) return;
+        if (p.extBanned(i, j, nw)) { banHit = true; return; }
         bi[bn] = i; bj[bn] = j; bOld[bn] = st.a[(size_t)i * T + j]; bn++;
         st.deltaApply(i, j, nw);
     };
@@ -1115,12 +1137,12 @@ void runLahcChunk(LahcState& s, int iters, long long out[5]) {
 
     const long long L = (long long)s.hist.size();
     for (int it = 0; it < iters; it++) {
-        bn = 0;
+        bn = 0; banHit = false;
         pickOperator();
         long long cand = st.score;
         long long candHard = cand / SCORE_HARD_UNIT;
         long long v = s.hist[(size_t)(s.bIt % L)];
-        if (candHard <= s.bestHard && (cand <= v || cand <= curVal)) {
+        if (!banHit && candHard <= s.bestHard && (cand <= v || cand <= curVal)) {
             curVal = cand;
             if (candHard < s.bestHard) s.bestHard = candHard;
             if (cand < s.bestScore) {
@@ -1342,7 +1364,7 @@ inline long long weeklyMarginalN(int* wdI, int K, int bucket, int oldK, int newK
         long long before = weeklyDevOfBucket(b);
         b[bucket]++; acc += weeklyDevOfBucket(b) - before; b[bucket]--;
     }
-    return acc;
+    return acc * 2;   // Kotlin weeklyMarginalAt と同じく重みを掛ける（weekly 2。旧: 重みなし）
 }
 
 // [3.538.0] counts(S*K) は一時的に書き換えて必ず戻す（Kotlin fairMarginalAt と同じ手）。fairDevOfBucket
@@ -1359,7 +1381,7 @@ inline long long fairMarginalN(const MagiProblem& p, int i, int k, int delta, st
     counts[(size_t)i * K + k] += delta;
     long long after = fairDevOfBucket(p, g, k, countAt);
     counts[(size_t)i * K + k] -= delta;
-    return after - before;
+    return (after - before) * 5;   // Kotlin fairMarginalAt と同じく重みを掛ける（[3.647.0] fair 5。旧: 重みなしで候補の順位が Kotlin とずれていた）
 }
 
 inline bool reservoirTieN(int tieCount, std::mt19937_64& rng) {
@@ -1392,7 +1414,9 @@ void randomAllowedCellN(const MagiProblem& p, int* a, std::mt19937_64& rng) {
     int i = rnInt(rng, p.S), j = rnInt(rng, p.T);
     if (wishLockedN(p, i, j)) return;
     const auto& allowed = p.allowed[i];
-    if (!allowed.empty()) a[(size_t)i * p.T + j] = allowed[rnInt(rng, (int)allowed.size())];
+    if (allowed.empty()) return;
+    int nw = allowed[rnInt(rng, (int)allowed.size())];
+    if (!p.extBanned(i, j, nw)) a[(size_t)i * p.T + j] = nw;
 }
 
 // destroyRepairDayAt: 非希望セルを休へ destroy → 被覆不足(covUCell)を marginal soft
@@ -1407,7 +1431,7 @@ void destroyRepairDayAtN(const MagiProblem& p, int* a, int j, std::mt19937_64& r
         if (k >= 0 && k < K) cnt[(size_t)i * K + k]++;
     }
     for (int i = 0; i < S; i++) {
-        if (wishLockedN(p, i, j) || !p.pl(i, rest)) continue;
+        if (wishLockedN(p, i, j) || !p.pl(i, rest) || p.extBanned(i, j, rest)) continue;
         int old = a[(size_t)i * T + j];
         if (old != rest && old >= 0 && old < K) { a[(size_t)i * T + j] = rest; cnt[(size_t)i * K + old]--; cnt[(size_t)i * K + rest]++; }
     }
@@ -1450,7 +1474,7 @@ void destroyRepairDayAtN(const MagiProblem& p, int* a, int j, std::mt19937_64& r
             int bestI = -1, tied = 0;
             long long bestDelta = INT64_MAX;
             for (int i = 0; i < S; i++) {
-                if (a[(size_t)i * T + j] != rest || wishLockedN(p, i, j) || !p.pl(i, k)) continue;
+                if (a[(size_t)i * T + j] != rest || wishLockedN(p, i, j) || !p.pl(i, k) || p.extBanned(i, j, k)) continue;
                 long long delta = staffCountPenaltyAtN(p, i, k, cnt[(size_t)i * K + k] + 1)
                     - staffCountPenaltyAtN(p, i, k, cnt[(size_t)i * K + k]) + c41DayMarg(p.sgrp[i], k)
                     + weeklyMarginalN(&wd[((size_t)i * K) * 7], K, bucket, rest, k)
@@ -1480,7 +1504,7 @@ void destroyRepairStaffAtN(const MagiProblem& p, int* a, int i, std::mt19937_64&
     std::vector<int> cntI(K, 0);
     for (int jj = 0; jj < T; jj++) { int k = a[(size_t)i * T + jj]; if (k >= 0 && k < K) cntI[k]++; }
     for (int j = 0; j < T; j++) {
-        if (wishLockedN(p, i, j)) continue;
+        if (wishLockedN(p, i, j) || p.extBanned(i, j, rest)) continue;
         int old = a[(size_t)i * T + j];
         if (old != rest && old >= 0 && old < K) { a[(size_t)i * T + j] = rest; cntI[old]--; cntI[rest]++; }
     }
@@ -1507,7 +1531,7 @@ void destroyRepairStaffAtN(const MagiProblem& p, int* a, int i, std::mt19937_64&
         int bestK = -1, tied = 0;
         long long bestDelta = INT64_MAX;
         for (int k = 0; k < K; k++) {
-            if (k == rest || !p.pl(i, k)) continue;
+            if (k == rest || !p.pl(i, k) || p.extBanned(i, j, k)) continue;
             // [3.409.22] 同上（Kotlin destroyRepairStaffAt は 3.379.0 で covUCell へ委譲済み）。
             //   旧2条件（need<=0 / 充足済み）は「残る不足が無い」の1条件に畳まれる。
             if (p.covUCell(k, j, cov[(size_t)j * K + k]) <= 0) continue;
@@ -1561,7 +1585,7 @@ void destroyRepairViolationsN(const MagiProblem& p, int* a, const std::vector<in
         long long bestDelta = INT64_MAX;
         int tied = 0;
         for (int k : allowed) {
-            if (k == old) continue;
+            if (k == old || p.extBanned(i, j, k)) continue;
             long long dOld = (old >= 0 && old < K)
                 ? staffCountPenaltyAtN(p, i, old, cntI[old] - 1) - staffCountPenaltyAtN(p, i, old, cntI[old]) : 0;
             long long dK = staffCountPenaltyAtN(p, i, k, cntI[k] + 1) - staffCountPenaltyAtN(p, i, k, cntI[k]);
@@ -1599,7 +1623,7 @@ Fix findCovOFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng) 
     for (int ii = 0; ii < S; ii++) if (st.a[(size_t)ii * T + j] == overK && !wishLockedN(p, ii, j)) { if (pickW-- == 0) { sel = ii; break; } }
     int bestNw = -1, bestDef = INT32_MIN;
     for (int k = 0; k < K; k++) {
-        if (k == overK || !p.pl(sel, k)) continue;
+        if (k == overK || !p.pl(sel, k) || p.extBanned(sel, j, k)) continue;
         // [3.409.22] 移動先の不足推定も同様に covUCell へ（Kotlin findCovOFix と同式）。
         int def = p.covUCell(k, j, st.dsn[(size_t)j * K + k]);
         if (def > bestDef) { bestDef = def; bestNw = k; }
@@ -1617,10 +1641,10 @@ Fix findC2FixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng) {
     int pickI = rnInt(rng, dCnt), stf = 0;
     for (int i = 0; i < S; i++) { if (!p.pl(i, c.si)) continue; if (st.ssn[(size_t)i * K + c.si] < c.c) { if (pickI-- == 0) { stf = i; break; } } }
     int dayCnt = 0;
-    for (int j = 0; j < T; j++) if (st.a[(size_t)stf * T + j] != c.si && !wishLockedN(p, stf, j)) dayCnt++;
+    for (int j = 0; j < T; j++) if (st.a[(size_t)stf * T + j] != c.si && !wishLockedN(p, stf, j) && !p.extBanned(stf, j, c.si)) dayCnt++;
     if (dayCnt == 0) return {};
     int pickJ = rnInt(rng, dayCnt), day = 0;
-    for (int j = 0; j < T; j++) if (st.a[(size_t)stf * T + j] != c.si && !wishLockedN(p, stf, j)) { if (pickJ-- == 0) { day = j; break; } }
+    for (int j = 0; j < T; j++) if (st.a[(size_t)stf * T + j] != c.si && !wishLockedN(p, stf, j) && !p.extBanned(stf, j, c.si)) { if (pickJ-- == 0) { day = j; break; } }
     return Fix{stf, day, c.si};
 }
 
@@ -1641,10 +1665,10 @@ Fix findRangeLowFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& r
         if (st.ssn[(size_t)i * K + k] < lo) { if (pickC-- == 0) { rlI = i; rlK = k; done = true; } }
     }
     int dayCnt = 0;
-    for (int j = 0; j < T; j++) if (st.a[(size_t)rlI * T + j] != rlK && !wishLockedN(p, rlI, j)) dayCnt++;
+    for (int j = 0; j < T; j++) if (st.a[(size_t)rlI * T + j] != rlK && !wishLockedN(p, rlI, j) && !p.extBanned(rlI, j, rlK)) dayCnt++;
     if (dayCnt == 0) return {};
     int pickJ = rnInt(rng, dayCnt), day = 0;
-    for (int j = 0; j < T; j++) if (st.a[(size_t)rlI * T + j] != rlK && !wishLockedN(p, rlI, j)) { if (pickJ-- == 0) { day = j; break; } }
+    for (int j = 0; j < T; j++) if (st.a[(size_t)rlI * T + j] != rlK && !wishLockedN(p, rlI, j) && !p.extBanned(rlI, j, rlK)) { if (pickJ-- == 0) { day = j; break; } }
     return Fix{rlI, day, rlK};
 }
 
@@ -1671,10 +1695,10 @@ Fix findRangeHighFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& 
     for (int j = 0; j < T; j++) if (st.a[(size_t)rhI * T + j] == rhK && !wishLockedN(p, rhI, j)) { if (pickJ-- == 0) { day = j; break; } }
     const auto& allowed = p.allowed[rhI];
     int oCnt = 0;
-    for (int ak : allowed) if (ak != rhK) oCnt++;
+    for (int ak : allowed) if (ak != rhK && !p.extBanned(rhI, day, ak)) oCnt++;
     if (oCnt == 0) return {};
     int pickK = rnInt(rng, oCnt), nwK = 0;
-    for (int ak : allowed) if (ak != rhK) { if (pickK-- == 0) { nwK = ak; break; } }
+    for (int ak : allowed) if (ak != rhK && !p.extBanned(rhI, day, ak)) { if (pickK-- == 0) { nwK = ak; break; } }
     return Fix{rhI, day, nwK};
 }
 
@@ -1695,18 +1719,18 @@ Fix findC41FamFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng
         for (int i = 0; i < S; i++) if (grp[i] == c.g && st.a[(size_t)i * T + j] == c.s && !wishLockedN(p, i, j)) { if (pickW-- == 0) { ci = i; break; } }
         const auto& allowed = p.allowed[ci];
         int oCnt = 0;
-        for (int ak : allowed) if (ak != c.s) oCnt++;
+        for (int ak : allowed) if (ak != c.s && !p.extBanned(ci, j, ak)) oCnt++;
         if (oCnt == 0) return {};
         int pickK = rnInt(rng, oCnt), nwK = 0;
-        for (int ak : allowed) if (ak != c.s) { if (pickK-- == 0) { nwK = ak; break; } }
+        for (int ak : allowed) if (ak != c.s && !p.extBanned(ci, j, ak)) { if (pickK-- == 0) { nwK = ak; break; } }
         return Fix{ci, j, nwK};
     }
     if (cnt < c.l) {
         int aCnt = 0;
-        for (int i = 0; i < S; i++) if (grp[i] == c.g && st.a[(size_t)i * T + j] != c.s && !wishLockedN(p, i, j) && p.pl(i, c.s)) aCnt++;
+        for (int i = 0; i < S; i++) if (grp[i] == c.g && st.a[(size_t)i * T + j] != c.s && !wishLockedN(p, i, j) && p.pl(i, c.s) && !p.extBanned(i, j, c.s)) aCnt++;
         if (aCnt == 0) return {};
         int pickA = rnInt(rng, aCnt), ai = 0;
-        for (int i = 0; i < S; i++) if (grp[i] == c.g && st.a[(size_t)i * T + j] != c.s && !wishLockedN(p, i, j) && p.pl(i, c.s)) { if (pickA-- == 0) { ai = i; break; } }
+        for (int i = 0; i < S; i++) if (grp[i] == c.g && st.a[(size_t)i * T + j] != c.s && !wishLockedN(p, i, j) && p.pl(i, c.s) && !p.extBanned(i, j, c.s)) { if (pickA-- == 0) { ai = i; break; } }
         return Fix{ai, j, c.s};
     }
     return {};
@@ -1734,7 +1758,7 @@ Fix findC3WantFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng
                 }
                 if (miss == 1 && missL >= 0) {
                     int ml = j + missL;
-                    if (!wishLockedN(p, i, ml) && p.pl(i, c.seq[missL])) return Fix{i, ml, c.seq[missL]};
+                    if (!wishLockedN(p, i, ml) && p.pl(i, c.seq[missL]) && !p.extBanned(i, ml, c.seq[missL])) return Fix{i, ml, c.seq[missL]};
                 }
             }
         }
@@ -1767,7 +1791,7 @@ Fix findAptFixN(const MagiProblem& p, const SaChunk& st, std::mt19937_64& rng) {
         int dayStart = rnInt(rng, T);
         for (int d = 0; d < T; d++) {
             int j = (dayStart + d) % T;
-            if (!wishLockedN(p, i, j) && st.a[(size_t)i * T + j] == kOver) return Fix{i, j, kUnder};
+            if (!wishLockedN(p, i, j) && st.a[(size_t)i * T + j] == kOver && !p.extBanned(i, j, kUnder)) return Fix{i, j, kUnder};
         }
     }
     return {};
@@ -1810,8 +1834,8 @@ inline int coverageShortageCostN(const MagiProblem& p, const int* a, int j, int 
 inline int bestStaffForCoverageN(const MagiProblem& p, const int* a, const std::vector<int>& counts, int j, int k) {
     int bestI = -1, bestScore = INT32_MAX;
     for (int i = 0; i < p.S; i++) {
-        if (!p.pl(i, k)) continue;
-        if (wishLockedN(p, i, j) && p.wish[(size_t)i * p.T + j] != k) continue;
+        if (!p.pl(i, k) || p.extBanned(i, j, k)) continue;
+        if (wishLockedN(p, i, j) && lockToN(p, i, j) != k) continue;
         int old = a[(size_t)i * p.T + j];
         if (old == k) continue;
         int hi = p.rangeHi[(size_t)i * p.K + k];
@@ -1830,14 +1854,21 @@ int hf67HardRepairN(const MagiProblem& p, int* a, std::mt19937_64& rng) {
         const auto& allowed = p.allowed[i];
         int fallback = allowed.empty() ? 0 : allowed[0];
         for (int j = 0; j < T; j++) {
+            if (!p.pin.empty() && p.pin[(size_t)i * T + j] >= 0) { a[(size_t)i * T + j] = p.pin[(size_t)i * T + j]; continue; }   // [#41] 手動固定が勝つ
             int k = a[(size_t)i * T + j];
-            if (k < 0 || k >= K || !p.cd(i, k)) a[(size_t)i * T + j] = fallback;
+            if (k < 0 || k >= K || !p.cd(i, k)) {
+                // 拡張希望でその日に先頭が禁止なら、置けるシフトのうち禁止でない先頭（全部禁止なら先頭のまま）。
+                int fb = fallback;
+                if (p.extBanned(i, j, fb)) for (int ak : allowed) if (!p.extBanned(i, j, ak)) { fb = ak; break; }
+                a[(size_t)i * T + j] = fb;
+            }
         }
     }
-    // 実現可能な希望を適用（不可能希望は強制しない=Sanityの領分）。
+    // 実現可能な希望を適用（不可能希望は強制しない=Sanityの領分。手動固定は希望より強い）。
     for (int i = 0; i < S; i++) for (int j = 0; j < T; j++) {
-        int w = p.wish[(size_t)i * T + j];
-        if (w >= 0 && w < K && p.cd(i, w) && a[(size_t)i * T + j] != w) { a[(size_t)i * T + j] = w; changed++; }
+        if (!wishLockedN(p, i, j)) continue;
+        int w = lockToN(p, i, j);
+        if (a[(size_t)i * T + j] != w) { a[(size_t)i * T + j] = w; changed++; }
     }
     // 被覆不足の充填 ×3周（counts は周の頭で再計算・周内は Kotlin と同じく据え置き）。
     for (int rep = 0; rep < 3; rep++) {
@@ -1874,7 +1905,7 @@ int hf67HardRepairN(const MagiProblem& p, int* a, std::mt19937_64& rng) {
         while (need > 0 && guard++ < T) {
             int bestJ = -1, bestScore = INT32_MAX;
             for (int jj = 0; jj < T; jj++) {
-                if (wishLockedN(p, i, jj) || a[(size_t)i * T + jj] == k) continue;
+                if (wishLockedN(p, i, jj) || a[(size_t)i * T + jj] == k || p.extBanned(i, jj, k)) continue;
                 int score = coverageShortageCostN(p, a, jj, a[(size_t)i * T + jj]) + rnInt(rng, 3);
                 if (score < bestScore) { bestScore = score; bestJ = jj; }
             }
@@ -2004,7 +2035,7 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
                 if (ja == jb) jb = (jb + 1) % T;
                 if (!wishLockedN(p, i, ja) && !wishLockedN(p, i, jb)) {
                     int ka = st.a[(size_t)i * T + ja], kb = st.a[(size_t)i * T + jb];
-                    if (ka != kb) {
+                    if (ka != kb && !p.extBanned(i, ja, kb) && !p.extBanned(i, jb, ka)) {
                         st.deltaApply(i, ja, kb); st.deltaApply(i, jb, ka);
                         c0i = i; c0j = ja; c0old = ka; c1i = i; c1j = jb; c1old = kb;
                         moveAug = s.gls.moveAug(i, ja, ka, kb) + s.gls.moveAug(i, jb, kb, ka);
@@ -2018,7 +2049,7 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
                     if (!allowed.empty()) {
                         int oldK = st.a[(size_t)i * T + j];
                         int nw = allowed[rnInt(rng, (int)allowed.size())];
-                        if (nw != oldK) {
+                        if (nw != oldK && !p.extBanned(i, j, nw)) {
                             st.deltaApply(i, j, nw);
                             c0i = i; c0j = j; c0old = oldK;
                             moveAug = s.gls.moveAug(i, j, oldK, nw);
@@ -2030,7 +2061,7 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
                 Fix fix = findTargetedFixN(p, st, rng);
                 if (fix.ok()) {
                     int oldK = st.a[(size_t)fix.i * T + fix.j];
-                    if (fix.k != oldK) {
+                    if (fix.k != oldK && !p.extBanned(fix.i, fix.j, fix.k)) {
                         st.deltaApply(fix.i, fix.j, fix.k);
                         c0i = fix.i; c0j = fix.j; c0old = oldK;
                         moveAug = s.gls.moveAug(fix.i, fix.j, oldK, fix.k);
@@ -2043,7 +2074,7 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
                 if (i2 == i1) i2 = (i2 + 1) % S;
                 if (!wishLockedN(p, i1, j) && !wishLockedN(p, i2, j)) {
                     int k1 = st.a[(size_t)i1 * T + j], k2 = st.a[(size_t)i2 * T + j];
-                    if (k1 != k2 && p.pl(i1, k2) && p.pl(i2, k1)) {
+                    if (k1 != k2 && p.pl(i1, k2) && p.pl(i2, k1) && !p.extBanned(i1, j, k2) && !p.extBanned(i2, j, k1)) {
                         st.deltaApply(i1, j, k2); st.deltaApply(i2, j, k1);
                         c0i = i1; c0j = j; c0old = k1; c1i = i2; c1j = j; c1old = k2;
                         moveAug = s.gls.moveAug(i1, j, k1, k2) + s.gls.moveAug(i2, j, k2, k1);
@@ -2083,14 +2114,17 @@ void runAlnsChunk(AlnsState& s, int iters, double frac, long long out[6]) {
             if (s.itersRestart % 7 == 0 && curHard > 0) hf67HardRepairN(p, s.scratch.data(), rng);
             int nDiffs = 0;
             double moveAug = 0.0;
+            bool banHit = false;   // 修復が拡張希望の禁止を置いた候補は丸ごと捨てる（修復器側でも避けている＝多重防御）
             for (int f = 0; f < S * T; f++) {
                 if (st.a[(size_t)f] != s.scratch[(size_t)f]) {
                     s.diffFlat[nDiffs] = f;
                     s.diffOld[nDiffs] = st.a[(size_t)f];
                     moveAug += s.gls.moveAug(f / T, f % T, st.a[(size_t)f], s.scratch[(size_t)f]);
+                    if (p.extBanned(f / T, f % T, s.scratch[(size_t)f])) banHit = true;
                     nDiffs++;
                 }
             }
+            if (banHit) nDiffs = 0;
             for (int d = 0; d < nDiffs; d++) {
                 int f = s.diffFlat[d];
                 st.deltaApply(f / T, f % T, s.scratch[(size_t)f]);
@@ -2219,11 +2253,11 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
             if (op == 0 && S > 0 && T > 0) {            // random allowed single cell
                 int i = rnInt(rng, S), j = rnInt(rng, T);
                 if (!wishLockedN(p, i, j)) {
-                    const auto& allowed = p.bucket[p.sgrp[i]];
+                    const auto& allowed = p.allowed[i];   // 置けるシフト（個人上限0を除く）＝Kotlin の allowedShiftsForStaff と同じ
                     if (!allowed.empty()) {
                         int oldK = st.a[(size_t)i * T + j];
                         int nw = allowed[rnInt(rng, (int)allowed.size())];
-                        if (nw != oldK) { st.deltaApply(i, j, nw); c0i = i; c0j = j; c0old = oldK; moved = true; }
+                        if (nw != oldK && !p.extBanned(i, j, nw)) { st.deltaApply(i, j, nw); c0i = i; c0j = j; c0old = oldK; moved = true; }
                     }
                 }
             } else if (op == 1 && S > 0 && T >= 2) {    // swap two days within one staff row
@@ -2232,7 +2266,7 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
                 if (ja == jb) jb = (jb + 1) % T;
                 if (!wishLockedN(p, i, ja) && !wishLockedN(p, i, jb)) {
                     int ka = st.a[(size_t)i * T + ja], kb = st.a[(size_t)i * T + jb];
-                    if (ka != kb) {
+                    if (ka != kb && !p.extBanned(i, ja, kb) && !p.extBanned(i, jb, ka)) {
                         st.deltaApply(i, ja, kb); st.deltaApply(i, jb, ka);
                         c0i = i; c0j = ja; c0old = ka; c1i = i; c1j = jb; c1old = kb; moved = true;
                     }
@@ -2243,7 +2277,7 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
                 if (i2 == i1) i2 = (i2 + 1) % S;
                 if (!wishLockedN(p, i1, j) && !wishLockedN(p, i2, j)) {
                     int k1 = st.a[(size_t)i1 * T + j], k2 = st.a[(size_t)i2 * T + j];
-                    if (k1 != k2 && p.pl(i1, k2) && p.pl(i2, k1)) {
+                    if (k1 != k2 && p.pl(i1, k2) && p.pl(i2, k1) && !p.extBanned(i1, j, k2) && !p.extBanned(i2, j, k1)) {
                         st.deltaApply(i1, j, k2); st.deltaApply(i2, j, k1);
                         c0i = i1; c0j = j; c0old = k1; c1i = i2; c1j = j; c1old = k2; moved = true;
                     }
@@ -2252,7 +2286,7 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
                 Fix fix = findTargetedFixN(p, st, rng);
                 if (fix.ok()) {
                     int oldK = st.a[(size_t)fix.i * T + fix.j];
-                    if (fix.k != oldK) { st.deltaApply(fix.i, fix.j, fix.k); c0i = fix.i; c0j = fix.j; c0old = oldK; moved = true; }
+                    if (fix.k != oldK && !p.extBanned(fix.i, fix.j, fix.k)) { st.deltaApply(fix.i, fix.j, fix.k); c0i = fix.i; c0j = fix.j; c0old = oldK; moved = true; }
                 }
             }
             if (moved) {
@@ -2276,11 +2310,14 @@ void runPolishChunk(PolishState& s, int iters, long long out[5]) {
             else if (T > 0) destroyRepairDayAtN(p, s.scratch.data(), rnInt(rng, T), rng);
             if (curHard > 0) hf67HardRepairN(p, s.scratch.data(), rng);
             int nDiffs = 0;
+            bool banHit = false;
             for (int f = 0; f < S * T; f++) {
                 if (st.a[(size_t)f] != s.scratch[(size_t)f]) {
                     s.diffFlat[nDiffs] = f; s.diffOld[nDiffs] = st.a[(size_t)f]; nDiffs++;
+                    if (p.extBanned(f / T, f % T, s.scratch[(size_t)f])) banHit = true;
                 }
             }
+            if (banHit) nDiffs = 0;
             for (int d = 0; d < nDiffs; d++) { int f = s.diffFlat[d]; st.deltaApply(f / T, f % T, s.scratch[(size_t)f]); }
             long long ns = st.score;
             if (ns / SCORE_HARD_UNIT <= bestHard && (ns < curScore || polishAcceptN(ns, curScore, st.nextDouble()))) {
@@ -2324,7 +2361,7 @@ std::vector<int> readIntArray(JNIEnv* env, jintArray arr) {
 #ifndef MAGI_HOST_TEST
 extern "C" JNIEXPORT jint JNICALL
 Java_com_magi_app_v6_NativeBridge_nativeAbiVersion(JNIEnv*, jclass) {
-    return 7;
+    return 8;
 }
 
 // [Stage8] ALNS チャンク状態の生成。problem ハンドル＋初期盤面 cur から AlnsState を作る。
@@ -2550,7 +2587,7 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
     p->apt.assign(ranges.begin() + 2 * (size_t)S * K, ranges.end());
 
     // cons レイアウト: [n1,(d1,si,d2)*] [n2,(si,c)*] [n41,(g,s,l,u)*] [n42,(g1,s1,g2,s2)*]
-    //                  [n41s,(g,s,l,u)*] [n42s,(g1,s1,g2,s2)*] [n3w,(wishK,prevK)*]
+    //                  [n41s,(g,s,l,u)*] [n42s,(g1,s1,g2,s2)*] [n3w,(wishK,prevK)*] [nPin,(i,j,k)*] [nBan,(i,j,k)*]
     // [3.284.0/外部レビュー=JNI hardening] 可変長領域(cons/c3/bucket)を checked cursor で検証する。
     //   旧: count/len 未検証で、負の len が (size_t) 変換で巨大 reserve → C++例外が JNI 境界を越えて
     //   プロセスクラッシュ、巨大 count が 0 埋めの大量 push で異常確保になり得た（正規の Kotlin
@@ -2583,6 +2620,22 @@ Java_com_magi_app_v6_NativeBridge_nativeCreateProblem(
     for (int r = 0; r < n42s; r++) { C42r c{next(), next(), next(), next()}; p->cons42s.push_back(c); }
     int n3w = takeCount(2);
     for (int r = 0; r < n3w; r++) { C3wr c{next(), next()}; p->cons3w.push_back(c); }
+    // [#41] 手動固定 [nPin,(i,j,k)*]。範囲外はハンドル生成ごと拒否（Kotlin へ安全退化）。
+    int nPin = takeCount(3);
+    for (int r = 0; r < nPin && parseOk; r++) {
+        int pi = next(), pj = next(), pk = next();
+        if (pi < 0 || pi >= S || pj < 0 || pj >= T || pk < 0 || pk >= K) { parseOk = false; break; }
+        if (p->pin.empty()) p->pin.assign((size_t)S * T, -1);
+        p->pin[(size_t)pi * T + pj] = pk;
+    }
+    // 拡張希望の禁止 [nBan,(i,j,k)*]（ABI 8）。範囲外はハンドル生成ごと拒否（Kotlin へ安全退化）。
+    int nBan = takeCount(3);
+    for (int r = 0; r < nBan && parseOk; r++) {
+        int bi = next(), bj = next(), bk = next();
+        if (bi < 0 || bi >= S || bj < 0 || bj >= T || bk < 0 || bk >= K) { parseOk = false; break; }
+        if (p->extBan.empty()) p->extBan.assign((size_t)S * T * K, 0);
+        p->extBan[((size_t)bi * T + bj) * K + bk] = 1;
+    }
     if (!parseOk) { delete p; return 0; }
     // [3.409.23/監査G3] 群 index が負・シフト index が範囲外の制約行はハンドル生成ごと拒否する
     //   （0=native 不可→Kotlin へ安全退化＝sgrp/ssk 検証と同じ確立済みの契約）。判定は

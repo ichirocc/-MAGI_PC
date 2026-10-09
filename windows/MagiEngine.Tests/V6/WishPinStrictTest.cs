@@ -197,15 +197,16 @@ public class WishPinStrictTest
 
     private static readonly Shift SRest = new("休", "休", "", "", ShiftRole.Rest);
 
-    /// <summary>X・Y とも 1 日目に A（需要 1 → 1 人過剰）、B は受け皿。X は C（需要 0＝受け皿なし）を希望していて A のまま（未反映）。</summary>
-    private static MagiState CovOState() => MinimalState.Build(
+    /// <summary>X・Y とも 1 日目に A（需要 1 → 1 人過剰）、B は受け皿。X は C（需要 0＝受け皿なし）を希望していて A のまま（未反映）。
+    /// separateGroups: X と Y を別グループに置き fair を外す（2 人群では退避 1 セルが fair を 2 件動かし、covO 1 件(10)と同点＝3.647.0 fair 5）。</summary>
+    private static MagiState CovOState(bool separateGroups = false) => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-01",
         shifts: new List<Shift> { SRest, new("A", "A", "1", ""), new("B", "B", "", ""), new("C", "C", "0", "") },
-        groups: new List<Group> { new("G", "G") },
-        staffList: new List<Staff> { new("X", 0), new("Y", 0) },
+        groups: separateGroups ? new List<Group> { new("G", "G"), new("H", "H") } : new List<Group> { new("G", "G") },
+        staffList: new List<Staff> { new("X", 0), new("Y", separateGroups ? 1 : 0) },
         use2Patterns: false,
-        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },
-        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "", "" } },
+        groupShift: separateGroups ? new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 }, new List<int> { 1, 1, 1, 1 } } : new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },
+        groupShiftApt: separateGroups ? new List<IReadOnlyList<string>> { new List<string> { "", "", "", "" }, new List<string> { "", "", "", "" } } : new List<IReadOnlyList<string>> { new List<string> { "", "", "", "" } },
         schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 1 } },
         wishes: new Dictionary<string, int> { ["0,0"] = 3 },
         staffRange: new Dictionary<string, Range> { ["0,0"] = new("0", "0"), ["1,0"] = new("0", "0") });
@@ -214,7 +215,7 @@ public class WishPinStrictTest
     [Fact]
     public void CovOReliefNeverMovesAnUnreflectedWishCellToAThirdShift()
     {
-        var st = CovOState();
+        var st = CovOState(separateGroups: true);
         var on = V6HotfixPasses.ApplyCovOReliefPolish(st, st.Schedule.ToIntArray2D(), wishPinStrict: true).NewSchedule;
         Assert.Equal(1, on[0][0]); // X は A のまま
         Assert.Equal(2, on[1][0]); // Y が B へ
