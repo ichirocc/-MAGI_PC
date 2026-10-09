@@ -68,7 +68,42 @@ public sealed partial class HomeView : UserControl
         RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
+        RenderConsults(ui);
         MaybeShowChainPreview(ui);
+    }
+
+    /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、「済」で外す。</summary>
+    private void RenderConsults(UiState ui)
+    {
+        ConsultCard.Visibility = ui.Consults.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ConsultListHost.Children.Clear();
+        if (ui.Consults.Count == 0) return;
+        ConsultTitle.Text = $"相談中（{ui.Consults.Count}件）";
+        for (var i = 0; i < ui.Consults.Count; i++)
+        {
+            var c = ui.Consults[i];
+            var idx = i;
+            var row = new Grid { ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var text = new StackPanel();
+            text.Children.Add(new TextBlock { Text = c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            row.Children.Add(text);
+            if (c.Staff is int s && c.Day is int d)
+            {
+                var open = new HyperlinkButton { Content = "開く", MinHeight = 44 };
+                open.Click += (_, _) => _window.OpenCell(s, d);
+                Grid.SetColumn(open, 1);
+                row.Children.Add(open);
+            }
+            var done = new Button { Content = "済", MinHeight = 44 };
+            done.Click += (_, _) => _vm.RemoveConsult(idx);
+            Grid.SetColumn(done, 2);
+            row.Children.Add(done);
+            ConsultListHost.Children.Add(row);
+        }
     }
 
     private ChainFixPreview? _chainPreviewShown;
@@ -91,12 +126,17 @@ public sealed partial class HomeView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = "この入替を当てる", CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+            PrimaryButtonText = "この入替を当てる", SecondaryButtonText = ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
         };
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;
         if (!ReferenceEquals(_vm.Ui.ChainPreview, p)) return;
-        if (r == ContentDialogResult.Primary) _vm.ApplyChainPreview(); else _vm.DismissChainPreview();
+        switch (r)
+        {
+            case ContentDialogResult.Primary: _vm.ApplyChainPreview(); break;
+            case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
+            default: _vm.DismissChainPreview(); break;
+        }
     }
 
     /// <summary>
@@ -291,6 +331,11 @@ public sealed partial class HomeView : UserControl
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
+        // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
+        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults.Count);
+        ConsultText.Visibility = consultLine is null ? Visibility.Collapsed : Visibility.Visible;
+        ConsultText.Text = consultLine ?? "";
+        ConsultText.Foreground = fgBrush;
         var relaxFailed = !ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxFailed();
         var relaxStopped = relaxFailed || (!ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxStopped());
         RelaxSearchRow.Visibility = !ui.Running && (ui.RelaxSearching || relaxStopped) ? Visibility.Visible : Visibility.Collapsed;
@@ -534,6 +579,11 @@ public sealed partial class HomeView : UserControl
             var open = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
+            // [3.645.0/仕様 5.3] 本人や上長に確認してから決める＝対象と検討内容を相談中の一覧へ（取消も勤務の変更もしない）。
+            var consult = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0) };
+            consult.Click += (_, _) => _vm.AddConsult(ConsultList.Wish(row.Name, DayText.Short(ui.StartDate, row.Day),
+                ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day));
+            panel.Children.Add(consult);
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
                 panel.Children.Add(Small(row.Pinned ? NextActionGuide.WishTrialPinned : NextActionGuide.WishTrialNotLocked));
@@ -707,6 +757,10 @@ public sealed partial class HomeView : UserControl
                         Text = flow.Pending ? "再検査中…（結果が反映されるまで候補は押せません）" : "入れたら「元に戻す」でいつでも取り消せます。",
                         FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
                     });
+                    // [3.645.0/仕様 5.3] だれを入れるかを相談してから決める＝対象と候補を相談中の一覧へ。
+                    var consult = new HyperlinkButton { Content = ConsultList.Button, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+                    consult.Click += (_, _) => _vm.AddConsult(ConsultList.Shortage(target.DayLabel, target.ShiftSymbol, cands.Select(c => c.Name).ToList()));
+                    panel.Children.Add(consult);
                 }
                 else if (target.ChainVerified)
                 {

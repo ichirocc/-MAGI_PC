@@ -158,6 +158,7 @@ public sealed partial class UiState : ObservableObject
 
     // [見直し候補] セル修正時に「基本ルールの見直し候補にする」で積むメモ（セッション内のみ・state非保存）。
     [ObservableProperty] private IReadOnlyList<string> reviewMemos = Array.Empty<string>();
+    [ObservableProperty] private IReadOnlyList<ConsultItem> consults = Array.Empty<ConsultItem>();   // [3.645.0] 相談してから決める判断（セッション内のみ・state 非保存。主カードの行は ConsultList.Line）
 
     /// <summary>要調整(ソフト違反)の表示色（空＝既定の橙）。shiftColors["__vioSoft__"] に保存。</summary>
     [ObservableProperty] private string violationSoftColorHex = "";

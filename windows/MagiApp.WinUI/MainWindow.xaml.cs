@@ -366,15 +366,17 @@ public sealed partial class MainWindow : Window
             b.Click += (_, _) => { after = go; dialog.Hide(); };
             panel.Children.Add(b);
         }
-        void Rows(IEnumerable<PreRunRow> rows)
+        // consult＝何度つくっても残る行だけ右端に「相談」（3.645.0/仕様 5.3。再作成で外れる行には出さない）。
+        void Rows(IEnumerable<PreRunRow> rows, bool consult = false)
         {
             foreach (var r in rows)
             {
+                FrameworkElement main;
                 if (r.Staff is int i && r.Day is int j)
                 {
                     var b = new HyperlinkButton { Content = new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap }, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
                     b.Click += (_, _) => { after = () => OpenCell(i, j); dialog.Hide(); };
-                    panel.Children.Add(b);
+                    main = b;
                 }
                 else if (r.Landing is { } l)
                 {
@@ -384,14 +386,25 @@ public sealed partial class MainWindow : Window
                     text.Children.Add(new TextBlock { Text = "→ " + GuidedFixRules.LandingButtonLabel(l), FontSize = 13, Opacity = 0.8 });
                     var b = new HyperlinkButton { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
                     b.Click += (_, _) => { after = () => GoEditLanding(l); dialog.Hide(); };
-                    panel.Children.Add(b);
+                    main = b;
                 }
-                else panel.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0) });
+                else main = new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+                if (!consult) { panel.Children.Add(main); continue; }
+                var grid = new Grid { ColumnSpacing = 8 };
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                grid.Children.Add(main);
+                var row = r;
+                var ask = new HyperlinkButton { Content = "相談", MinHeight = 44 };
+                ask.Click += (_, _) => _vm.AddConsult(ConsultList.PreRun(row));
+                Grid.SetColumn(ask, 1);
+                grid.Children.Add(ask);
+                panel.Children.Add(grid);
             }
         }
         if (t.FloorHeader is { } fh)
         {
-            Head(fh); Note(PreRunCheckText.FloorNote); if (t.ZeroCapNote is { } zn) Note(zn); Rows(t.FloorRows);
+            Head(fh); Note(PreRunCheckText.FloorNote); if (t.ZeroCapNote is { } zn) Note(zn); Rows(t.FloorRows, consult: true);
             if (t.HasWishRows && !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty) Link("ぶつかっている希望を見る", ShowWishConflicts);
         }
         if (t.RerunHeader is { } rh)
@@ -399,7 +412,7 @@ public sealed partial class MainWindow : Window
             Head(rh); Note(PreRunCheckText.RerunNote); Rows(t.RerunRows);
             if (t.RerunRows.FirstOrDefault() is { } r0) Link("該当セルを見る", () => OpenCell(r0.Staff ?? 0, r0.Day ?? 0));
         }
-        if (t.OverCapNote is { } on) { Head(PreRunCheckText.OverCapHead); Note(on); Rows(t.OverCapRows ?? Array.Empty<PreRunRow>()); }
+        if (t.OverCapNote is { } on) { Head(PreRunCheckText.OverCapHead); Note(on); Rows(t.OverCapRows ?? Array.Empty<PreRunRow>(), consult: true); }
         if (t.WallLine is { } w)
         {
             Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });

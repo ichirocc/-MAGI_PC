@@ -66,6 +66,7 @@
                     <TextBlock x:Name="BodyText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="NoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                    <TextBlock x:Name="ConsultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Grid x:Name="RelaxSearchRow" Visibility="Collapsed" ColumnDefinitions="*,Auto">
                         <TextBlock x:Name="RelaxSearchText" Text="希望を変えずに、個人の上限0を例外で緩める方法を調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
                         <HyperlinkButton x:Name="RelaxStopButton" Grid.Column="1" Content="やめる" MinHeight="44" Click="OnStopRelaxClick" />
@@ -88,6 +89,16 @@
                     <Button x:Name="HelperButton" Click="OnHelperClick" HorizontalAlignment="Stretch" MinHeight="48" />
                     <HyperlinkButton x:Name="RedraftLink" Click="OnSmartInitialClick" HorizontalAlignment="Stretch"
                                      Content="下書きから作り直す（今の結果は「元に戻す」で戻せます）" />
+                </StackPanel>
+            </Border>
+
+            <!-- [3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin ConsultCard）。主カードの「未確認事項 N 件」の中身。 -->
+            <Border x:Name="ConsultCard" Background="{StaticResource MagiSurfaceVariantBrush}"
+                    CornerRadius="{StaticResource MagiCornerSM}" Padding="12" Visibility="Collapsed">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="ConsultTitle" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                    <TextBlock Text="関係者に確認してから決める項目です（アプリを閉じると消えます）。書き出しは止めません。" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
+                    <StackPanel x:Name="ConsultListHost" Spacing="4" />
                 </StackPanel>
             </Border>
 

@@ -1107,6 +1107,23 @@ public sealed partial class MagiViewModel
         Ui.ReviewMemos = l.Where((_, j) => j != index).ToList();
     }
 
+    // ---- [3.645.0/仕様 5.3] 相談してから決める判断（セッション内のみ・state 非保存。出力も判定も止めない。Kotlin addConsult/removeConsult） ----
+    public void AddConsult(ConsultItem item)
+    {
+        Ui.MessageIsError = false;
+        var next = ConsultList.Add(Ui.Consults, item);
+        if (next is null) { Ui.Message = ConsultList.Duplicate; return; }
+        Ui.Consults = next;
+        Ui.Message = ConsultList.Added;
+    }
+
+    public void RemoveConsult(int index)
+    {
+        var l = Ui.Consults;
+        if (index < 0 || index >= l.Count) return;
+        Ui.Consults = l.Where((_, j) => j != index).ToList();
+    }
+
     public IReadOnlyList<string> GroupKigouList() => _state?.Groups.Select(g => g.Kigou).ToList() ?? new List<string>();
 
     /// <summary>[冗長除去/データ密度] 1日人数の上下限 [l〜u] を意味で圧縮して短く表す。見出しが「人数(上下限)」の
