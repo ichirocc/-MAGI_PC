@@ -21,6 +21,6 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
             return $"{Name(op.Staff)} {DayText.Short(startDate, op.Day)} {(inRange ? Sym(snapshot[op.Staff][op.Day]) : "?")} → {Sym(op.ToShift)}";
         }).ToList();
         var people = s.Ops.Select(o => o.Staff).Distinct().Count();
-        return new ChainFixPreview(s, $"複数人の入れ替え（{people} 人・{s.Ops.Count} マス）", changes);
+        return new ChainFixPreview(s, $"複数人の入れ替え（{people} 人・{s.Ops.Count} セル）", changes);
     }
 }

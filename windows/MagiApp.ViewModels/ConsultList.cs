@@ -14,6 +14,7 @@ public sealed record ConsultItem(string Subject, string Note, int? Staff = null,
 public static class ConsultList
 {
     public const string Button = "相談してから決める";
+    public const string Done = "相談中";
     public const string Added = "相談中に追加しました";
     public const string Duplicate = "すでに相談中にあります";
 
@@ -38,7 +39,10 @@ public static class ConsultList
     /// <summary>つくる前の確認の行から: 残る項目を希望か設定のどちらで解くか。</summary>
     public static ConsultItem PreRun(PreRunRow row) => new(row.Text, "何度つくっても残る項目。希望か設定のどちらを変えるかを相談", row.Staff, row.Day);
 
+    /// <summary>すでに一覧にあるか（ボタンを「相談中」にして形で返す）。</summary>
+    public static bool IsConsulted(IReadOnlyList<ConsultItem> list, ConsultItem item) => list.Any(c => c.Subject == item.Subject && c.Note == item.Note);
+
     /// <summary>同じ対象・内容は 2 度積まない（null＝重複）。</summary>
     public static IReadOnlyList<ConsultItem>? Add(IReadOnlyList<ConsultItem> list, ConsultItem item) =>
-        list.Any(c => c.Subject == item.Subject && c.Note == item.Note) ? null : list.Append(item).ToList();
+        IsConsulted(list, item) ? null : list.Append(item).ToList();
 }

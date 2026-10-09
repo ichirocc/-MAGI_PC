@@ -394,9 +394,11 @@ public sealed partial class MainWindow : Window
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 grid.Children.Add(main);
-                var row = r;
-                var ask = new HyperlinkButton { Content = "相談", MinHeight = 44 };
-                ask.Click += (_, _) => _vm.AddConsult(ConsultList.PreRun(row));
+                var item = ConsultList.PreRun(r);
+                var done = ConsultList.IsConsulted(ui.Consults, item);
+                var ask = new HyperlinkButton { Content = done ? ConsultList.Done : "相談", MinHeight = 44, IsEnabled = !done };
+                // このダイアログは組み直さないので、押した場でボタンを「相談中」にする。
+                ask.Click += (_, _) => { _vm.AddConsult(item); ask.Content = ConsultList.Done; ask.IsEnabled = false; };
                 Grid.SetColumn(ask, 1);
                 grid.Children.Add(ask);
                 panel.Children.Add(grid);
