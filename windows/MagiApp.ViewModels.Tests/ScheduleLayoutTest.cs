@@ -37,4 +37,22 @@ public class ScheduleLayoutTest
         Assert.Equal(("12/28", "〜1/3"), ScheduleLayout.WeekRangeCaption("2026-12-01", 27, 33));
         Assert.Null(ScheduleLayout.WeekRangeCaption("bad", 0, 6));
     }
+
+    /// <summary>[3.648.0] 左上の範囲は暦の週でなく、いま見えている列（Kotlin <c>visible day range follows…</c>／<c>corner caption names…</c>）。</summary>
+    [Fact]
+    public void VisibleDayRangeFollowsTheScrollAndTheViewport()
+    {
+        Assert.Equal((0, 6), ScheduleLayout.VisibleDayRange(0, 700, 100, 31));
+        Assert.Equal((4, 10), ScheduleLayout.VisibleDayRange(400, 700, 100, 31));
+        Assert.Equal((24, 30), ScheduleLayout.VisibleDayRange(2400, 700, 100, 31));
+        Assert.Equal((0, 6), ScheduleLayout.VisibleDayRange(0, 698, 100, 31));
+        Assert.Equal((3, 9), ScheduleLayout.VisibleDayRange(260, 700, 100, 31));
+        Assert.Equal((0, 3), ScheduleLayout.VisibleDayRange(0, 700, 100, 4));
+        Assert.Null(ScheduleLayout.VisibleDayRange(0, 700, 0, 31));
+        Assert.Null(ScheduleLayout.VisibleDayRange(0, 0, 100, 31));
+        var start = ScheduleLayout.VisibleDayRange(0, 700, 100, 31)!.Value;
+        Assert.Equal(("10/1", "〜7"), ScheduleLayout.WeekRangeCaption("2026-10-01", start.First, start.Last));
+        var end = ScheduleLayout.VisibleDayRange(2400, 700, 100, 31)!.Value;
+        Assert.Equal(("10/25", "〜31"), ScheduleLayout.WeekRangeCaption("2026-10-01", end.First, end.Last));
+    }
 }
