@@ -344,7 +344,8 @@ public static partial class V6FinalPort
                 now - wd.LastBestImproveMs > stallHardMs && C3nWallProven();
             var effStall = EffectiveStallMs(
                 wd.BestHard, hardFloor, nonCovU, wd.BestNonCovUAllC3n, wall, stallHardMs, stallMs,
-                wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
+                wishOn && wd.BestHard == wishFloorLogged && BestWishReached(),
+                adaptiveMs: PolishGate.AdaptiveStall ? AdaptiveStallMs(wd.RecentGaps(), stallHardMs, stallMs) : null);
             if (now >= searchDeadlineMs || cancellationToken.IsCancellationRequested) return true;
             if (WatchdogStagnationFired(now, startMs, minRunMs, Volatile.Read(ref lastPhaseChangeMs), phaseGraceMs,
                     wd.LastBestImproveMs, effStall))
@@ -554,6 +555,8 @@ public static partial class V6FinalPort
             var nonCovU = wd.BestNonCovUHard;
             var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
             var covUPlateau = wd.BestHard <= hardFloor && nonCovU == 0;
+            var gapsEnd = wd.RecentGaps();
+            var adaptiveEnd = PolishGate.AdaptiveStall ? AdaptiveStallMs(gapsEnd, stallHardMs, stallMs) : null;
             var kind = covUPlateau && wishOn && wishReachedEnd
                 ? $"plateau+希望衝突の床=短{stallHardMs / 1000}s"
                 : covUPlateau
@@ -562,7 +565,11 @@ public static partial class V6FinalPort
                     ? $"希望衝突の床=短{stallHardMs / 1000}s"
                 : wd.StagnationWall && wd.BestNonCovUAllC3n
                     ? $"c3n壁=短{stallHardMs / 1000}s"
-                    : $"通常=長{stallMs / 1000}s";
+                    : $"通常=長{stallMs / 1000}s" + (adaptiveEnd is long ad && ad < stallMs ? $"→適応{ad / 1000}s" : "");
+            var adaptNote = PolishGate.AdaptiveStall
+                ? $"・適応閾値={(adaptiveEnd is long ae ? $"{ae / 1000}s" : "なし")}（改善間隔{gapsEnd.Count}個" +
+                    (gapsEnd.Count > 0 ? $"・最大{gapsEnd.Max() / 1000}s×{AdaptiveStallFactor}" : "") + "・通常分岐だけ）"
+                : "";
             // [3.375.2/実測で判明] 発火しなかったとき、どの条件が塞いだかを出す。
             // [3.408.0] フェーズ猶予は遅延に降格した（閾値の StallOverrideFactor 倍で上書き発火）ので、
             //   理由として挙げるのは「まだ上書き倍率にも達していない」ときだけ。
@@ -573,7 +580,7 @@ public static partial class V6FinalPort
                 var reasons = new List<string>();
                 if (tChain1 - startMs <= minRunMs)
                     reasons.Add($"最短実行未達(実測{(tChain1 - startMs) / 1000}s/{minRunMs / 1000}s)");
-                var effStallForLog = kind.StartsWith("通常", StringComparison.Ordinal) ? stallMs : stallHardMs;
+                var effStallForLog = kind.StartsWith("通常", StringComparison.Ordinal) ? (adaptiveEnd is long al ? Math.Min(stallMs, al) : stallMs) : stallHardMs;
                 if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs &&
                     tChain1 - lastImp <= effStallForLog * StallOverrideFactor)
                     reasons.Add($"現フェーズ猶予未達(実測{(tChain1 - lastPhaseAtSearchEnd) / 1000}s/{phaseGraceMs / 1000}s" +
@@ -603,7 +610,7 @@ public static partial class V6FinalPort
                         $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(wd.StagnationFired ? "あり" : "なし")}" +
                         $"・反復(進捗報告ぶん・目安)=最終改善時{FmtIter(lastImpItersAtSearchEnd)}→" +
                         $"探索終了時{FmtIter(itersAtSearchEnd)}（無改善のまま約{FmtIter(itersAtSearchEnd - lastImpItersAtSearchEnd)}転・" +
-                        $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}"),
+                        $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}{adaptNote}"),
             };
         }
         var watchdogLog = BuildWatchdogLog();

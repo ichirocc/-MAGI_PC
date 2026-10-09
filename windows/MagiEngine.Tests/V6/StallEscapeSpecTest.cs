@@ -189,8 +189,46 @@ public class StallEscapeSpecTest
         Assert.False(PolishGate.C3nWallLegacy, "基準腕（HEAD の壁判定）は既定で使わない");
         Assert.True(PolishGate.LateOpStopPropagation, "後期演算は停止要求を見る（既定）");
         Assert.False(PolishGate.C3nWallDeepCheck, "1 手探索の反証は既定で使わない（測定中）");
+        Assert.False(PolishGate.AdaptiveStall, "適応閾値は既定で使わない（測定中）");
         Assert.Equal(2, V6FinalPort.StallOverrideFactor);
+        Assert.Equal((3, 3, 8), (V6FinalPort.AdaptiveStallFactor, V6FinalPort.AdaptiveStallMinGaps, V6FinalPort.AdaptiveStallWindow));
         Assert.Equal(5000, Hf63Infeasibility.INFEAS_STALL_ITERS);
+    }
+
+    // §5.8 C 適応閾値: 間隔 3 個未満は使わない、最大×3 を [短, 通常] に挟む、通常分岐だけを縮める（床・壁の短い閾値はそのまま）
+    [Fact]
+    public void AdaptiveStallNeedsThreeGapsAndClampsBetweenShortAndNormal()
+    {
+        Assert.Null(V6FinalPort.AdaptiveStallMs(new long[] { 5_000L, 6_000L }, 37_500L, 270_000L));
+        Assert.Equal(60_000L, V6FinalPort.AdaptiveStallMs(new long[] { 5_000L, 20_000L, 6_000L }, 37_500L, 270_000L));
+        Assert.Equal(37_500L, V6FinalPort.AdaptiveStallMs(new long[] { 1_000L, 2_000L, 3_000L }, 37_500L, 270_000L));
+        Assert.Equal(270_000L, V6FinalPort.AdaptiveStallMs(new long[] { 100_000L, 100_000L, 100_000L }, 37_500L, 270_000L));
+        Assert.Equal(9_000L, V6FinalPort.AdaptiveStallMs(new long[] { 1_000L, 1_000L, 1_000L }, 10_000L, 9_000L));
+    }
+
+    [Fact]
+    public void AdaptiveOnlyShortensTheNormalBranch()
+    {
+        var normal = V6FinalPort.EffectiveStallMs(3, 0, 3, false, false, 37_500L, 270_000L);
+        Assert.Equal(270_000L, normal);
+        Assert.Equal(60_000L, V6FinalPort.EffectiveStallMs(3, 0, 3, false, false, 37_500L, 270_000L, adaptiveMs: 60_000L));
+        Assert.Equal(37_500L, V6FinalPort.EffectiveStallMs(0, 0, 0, false, false, 37_500L, 270_000L, adaptiveMs: 60_000L));
+        Assert.Equal(normal, V6FinalPort.EffectiveStallMs(3, 0, 3, false, false, 37_500L, 270_000L, adaptiveMs: null));
+    }
+
+    [Fact]
+    public void ObserveRecordsGapsBetweenImprovementsOnlyAndKeepsTheLastEight()
+    {
+        var wd = new V6FinalPort.WatchdogBest(startMs: 0L);
+        wd.Observe(Rep(5, 500.0, 5), 10_000L, 1L, () => true, 0);
+        Assert.Empty(wd.RecentGaps());
+        var w = 500.0;
+        for (var k = 1; k <= 10; k++) { w -= 1.0; wd.Observe(Rep(5, w, 5), 10_000L + k * 1_000L * k, 1L + k, () => true, 0); }
+        var gaps = wd.RecentGaps();
+        Assert.Equal(8, gaps.Count);
+        Assert.Equal(Enumerable.Range(3, 8).Select(k => (k * k - (k - 1) * (k - 1)) * 1_000L).ToArray(), gaps.ToArray());
+        Assert.False(wd.Observe(Rep(5, w + 1, 5), 999_000L, 99L, () => true, 0));
+        Assert.Equal(8, wd.RecentGaps().Count);
     }
 
     // §5.4 判定と発火の間に改善が割り込んだら発火しない（判定後の改善の順序を検査する）

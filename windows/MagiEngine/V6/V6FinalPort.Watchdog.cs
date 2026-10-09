@@ -27,6 +27,14 @@ public static partial class V6FinalPort
     /// </summary>
     internal const int StallOverrideFactor = 2;
 
+    /// <summary>[PROPOSAL C/Android 3.643.0、既定 OFF＝<see cref="PolishGate.AdaptiveStall"/>] 適応閾値（§5.8 C）: 直近 <see cref="AdaptiveStallWindow"/> 個の改善間隔の最大の
+    /// <see cref="AdaptiveStallFactor"/> 倍を [stallHardMs, stallMs] に挟み、通常分岐の閾値をそれ以下へ縮める。間隔が <see cref="AdaptiveStallMinGaps"/> 個未満なら使わない。</summary>
+    internal const int AdaptiveStallFactor = 3;
+    internal const int AdaptiveStallMinGaps = 3;
+    internal const int AdaptiveStallWindow = 8;
+    internal static long? AdaptiveStallMs(IReadOnlyList<long> gaps, long stallHardMs, long stallMs) =>
+        gaps.Count < AdaptiveStallMinGaps ? null : Math.Clamp(gaps.Max() * AdaptiveStallFactor, Math.Min(stallHardMs, stallMs), stallMs);
+
     /// <summary>[backlog#35] 残りHARDが「解けないと証明済み」か＝covU は床以下で、非covU は c3n だけかつ c3n 壁（<paramref name="c3nWall"/>）。</summary>
     /// <remarks>[E0] <paramref name="wishReached"/>（<see cref="WishFloorReached"/>）も解けない残りと数え、c3w は希望どうしの衝突で証明された件数（<paramref name="c3wProven"/>）まで c3n と同列。既定は従来と同一。</remarks>
     internal static bool IsStructuralHardResidual(ViolationReport report, int hardFloor, Func<bool> c3nWall, bool wishReached = false, int c3wProven = 0)
@@ -74,12 +82,13 @@ public static partial class V6FinalPort
 
     internal static long EffectiveStallMs(
         int bestHard, int hardFloor, int nonCovUHard, bool nonCovUAllC3n,
-        bool c3nWallProven, long stallHardMs, long stallMs, bool wishReached = false)
+        bool c3nWallProven, long stallHardMs, long stallMs, bool wishReached = false, long? adaptiveMs = null)
     {
         var basePlateau = (bestHard <= hardFloor && nonCovUHard == 0) || wishReached;
         var c3nWallPlateau = nonCovUHard > 0 && nonCovUAllC3n
             && bestHard <= hardFloor + nonCovUHard && c3nWallProven;
-        return basePlateau || c3nWallPlateau ? stallHardMs : stallMs;
+        var baseMs = basePlateau || c3nWallPlateau ? stallHardMs : stallMs;
+        return adaptiveMs is long a ? Math.Min(baseMs, a) : baseMs;
     }
 
     /// <summary>
@@ -156,6 +165,11 @@ public static partial class V6FinalPort
         private ViolationReport? _bestReport;
         internal int BTotal = int.MaxValue;
         internal double BWeighted = double.MaxValue;
+        private int _improvements;
+        private readonly object _gapLock = new();
+        private readonly Queue<long> _gaps = new();
+        /// <summary>直近 <see cref="AdaptiveStallWindow"/> 個の改善間隔（ms、古い順）。最初の改善までの時間は間隔ではないので含めない（§5.8 C）。</summary>
+        internal IReadOnlyList<long> RecentGaps() { lock (_gapLock) return _gaps.ToArray(); }
 
         internal WatchdogBest(long startMs) { _lastBestImproveMs = startMs; }
 
@@ -179,6 +193,9 @@ public static partial class V6FinalPort
             if (!ProgressImproved(report.Hard, report.WeightedScore, report.Total, BestHard, BWeighted, BTotal)) return false;
             Volatile.Write(ref _bestHard, report.Hard); BTotal = report.Total; BWeighted = report.WeightedScore;
             Volatile.Write(ref _bestReport, report);
+            var prevImproveMs = LastBestImproveMs;
+            if (Interlocked.Increment(ref _improvements) > 1)
+                lock (_gapLock) { _gaps.Enqueue(nowMs - prevImproveMs); while (_gaps.Count > AdaptiveStallWindow) _gaps.Dequeue(); }
             Volatile.Write(ref _lastBestImproveMs, nowMs); Volatile.Write(ref _lastBestImproveIters, observedIters);
             if (beatsInput()) Volatile.Write(ref _lastBeatInputMs, nowMs);
             Volatile.Write(ref _stagnationFired, false); Volatile.Write(ref _stagnationDurationMs, -1L);

@@ -79,6 +79,9 @@ public static class PolishGate
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallDeepCheck</c>（3.643.0）] 根拠の精度（<c>docs/stall_escape.md</c> §5.3）: 経験的な c3n 壁（探索手の全滅）は、1 手探索（<see cref="FixSuggester"/>、上限 2 s）でも必須を減らす手が無いときだけ短縮に使う。希望固定だけの壁（証明相当）は従来どおり。既定 false（測定中＝Android 側ベンチの腕 <c>deep</c>）。</summary>
     public static volatile bool C3nWallDeepCheck = false;
 
+    /// <summary>[Kotlin原本 <c>PolishGate.adaptiveStall</c>（PROPOSAL C、3.643.0、<c>docs/stall_escape.md</c> §5.8）] 適応閾値: 直近の改善間隔の最大×3 を [短, 通常] に挟み、通常分岐の停滞閾値を縮める。既定 false（測定中＝Android 側ベンチの腕 <c>adaptive</c>）。</summary>
+    public static volatile bool AdaptiveStall = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>
