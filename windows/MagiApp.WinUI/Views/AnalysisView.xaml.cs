@@ -243,6 +243,10 @@ public sealed partial class AnalysisView : UserControl
             var apply = new Button { Content = "この手を使う（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.ApplyFixSuggestion(s);
             row.Children.Add(apply);
+            // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
+            var consult = new HyperlinkButton { Content = ConsultList.Button, HorizontalAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+            consult.Click += (_, _) => _vm.AddConsult(ConsultList.Fix(s, hardLine, caution));
+            row.Children.Add(consult);
             FixList.Children.Add(row);
         }
         if (ui.FixSuggestions.Count == 0 && !ui.FixSearching)
