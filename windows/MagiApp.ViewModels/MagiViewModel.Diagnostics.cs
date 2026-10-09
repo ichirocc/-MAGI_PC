@@ -338,7 +338,10 @@ public sealed partial class MagiViewModel
         Ui.HardWishConflict = report.Hard <= 0 ? 0 : HardWishConflictOf(ScheduleUtil.CachedProblem(st), schedule, report);
         Ui.ZeroAllowCells = GridDisplayMarks.ZeroAllowCells(ScheduleUtil.CachedProblem(st), schedule);
         Ui.Logs = v6Logs.Concat(CompressDiagLogs(mappedDiag)).ToList();
-        Ui.StaffNames = st.StaffList.Select(s => s.Name).ToList();
+        var staffNames = st.StaffList.Select(s => s.Name).ToList();
+        // [Kotlin 3.651.0] 改名（名簿の 1 か所だけが変わった）なら相談の氏名を追従させる。元に戻す・やり直すも同じ経路を通る。
+        Ui.Consults = ConsultList.FollowRenameInConsults(Ui.Consults, Ui.StaffNames, staffNames);
+        Ui.StaffNames = staffNames;
         Ui.StaffGroupSymbols = st.StaffList
             .Select(s => KigouFormat.ToHankakuKigou(
                 s.GroupIdx >= 0 && s.GroupIdx < st.Groups.Count ? st.Groups[s.GroupIdx].Kigou : ""))

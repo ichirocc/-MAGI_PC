@@ -105,6 +105,26 @@ public class ConsultListTest
         Assert.NotEqual(0, ConsultList.RosterKeyOf(Array.Empty<string>()));
     }
 
+    /// <summary>[3.651.0/外部レビュー] 改名に相談の対象を追従させる。並び替え・削除は改名とみなさない（氏名で引き直す既存の規則）。</summary>
+    [Fact]
+    public void RenameFollowsTheConsultTarget()
+    {
+        var before = new[] { "甲", "乙", "丙" };
+        var c = ConsultList.Wish("乙", "10/12", "夜", "r", 1, 11, "2026-10-12");
+        var after = new[] { "甲", "乙子", "丙" };
+        var renamed = Assert.Single(ConsultList.FollowRenameInConsults(new[] { c }, before, after));
+        Assert.Equal("乙子", renamed.StaffName);
+        Assert.Equal((1, 11), ConsultList.ConsultCell(renamed, "2026-10-01", after, 31));
+        Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", after, 31));   // 追従しなければ見失う
+        Assert.Equal(new[] { c }, ConsultList.FollowRenameInConsults(new[] { c }, before, new[] { "乙", "甲", "丙" }));
+        Assert.Equal(new[] { c }, ConsultList.FollowRenameInConsults(new[] { c }, before, new[] { "甲", "乙" }));
+        var dup = new[] { "佐藤", "甲", "佐藤" };
+        var d = ConsultList.Wish("佐藤", "10/12", "夜", "r", 2, 11, "2026-10-12") with { RosterKey = ConsultList.RosterKeyOf(dup) };
+        var dupAfter = new[] { "佐藤", "甲子", "佐藤" };
+        // 別の人の改名でも同名の区別を保つ
+        Assert.Equal((2, 11), ConsultList.ConsultCell(Assert.Single(ConsultList.FollowRenameInConsults(new[] { d }, dup, dupAfter)), "2026-10-01", dupAfter, 31));
+    }
+
     /// <summary>[3.650.0/外部レビュー] 積んだ案は出したときの盤面と設定の指紋を持ち、今と違えば当てない（枠を持つ相談は探し直すので関係しない）。</summary>
     [Fact]
     public void ASavedSuggestionIsStaleOnceTheBoardOrSettingsChange()

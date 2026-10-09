@@ -93,6 +93,19 @@ public static class ConsultList
         return null;
     }
 
+    /// <summary>
+    /// [3.651.0/外部レビュー] 職員の改名に相談の対象を追従させる（職員 ID はデータ項目に無いので、名簿が変わった時点で氏名を書き換える）。
+    /// 人数が同じで 1 か所だけ名前が変わった＝改名とみなす（並び替えは 2 か所以上、追加・削除は人数が変わる＝氏名で引き直す既存の規則のまま）。
+    /// 改名前の名簿で引けた相談は、同じ位置の今の名前と今の名簿の指紋に書き換える（改名で位置は動かない＝別の人の改名でも同名の区別を保つ）。
+    /// </summary>
+    public static IReadOnlyList<ConsultItem> FollowRenameInConsults(IReadOnlyList<ConsultItem> items, IReadOnlyList<string> before, IReadOnlyList<string> after)
+    {
+        if (items.Count == 0 || before.Count != after.Count || Enumerable.Range(0, before.Count).Count(i => before[i] != after[i]) != 1) return items;
+        var roster = RosterKeyOf(after);
+        return items.Select(c => c.StaffName is not null && ConsultStaff(c, before) is { } at
+            ? c with { StaffName = after[at], Staff = at, RosterKey = roster } : c).ToList();
+    }
+
     /// <summary>積んだ案が今の勤務表・設定で出したものと違うか（指紋が無い・違う＝当てずに探し直しを促す）。枠を持つ相談は探し直すので関係しない。</summary>
     public static bool ConsultChainStale(ChainTarget t, long boardKey, long stateKey) =>
         t.Suggestion is not null && (t.BoardKey == 0L || t.BoardKey != boardKey || t.StateKey != stateKey);
