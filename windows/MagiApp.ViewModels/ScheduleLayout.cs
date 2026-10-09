@@ -22,7 +22,17 @@ public static class ScheduleLayout
     public static bool ShouldScrollToGridTop(int prevTab, int tab, bool loaded, bool sheetOpen, bool focusPending)
         => tab == 1 && prevTab != 1 && loaded && !sheetOpen && !focusPending;
 
-    /// <summary>グリッド左上に出す週の範囲（2 行）。同じ月なら「10/1」「〜7」、月をまたぐなら「10/29」「〜11/4」。解析できなければ null。</summary>
+    /// <summary>[3.648.0] 横スクロールで実際に見えている日の範囲（0 始まり、Kotlin <c>visibleDayRange</c>）。左端は最も近い列、列数はビューポートに
+    /// 収まる数（端数は四捨五入）、最後の日で止める。測れていなければ null。WinUI の殻は自前の列計測で現在週を出しており、この関数はロジックの写し。</summary>
+    public static (int First, int Last)? VisibleDayRange(int scrollPx, int viewportPx, int cellWpx, int days)
+    {
+        if (cellWpx <= 0 || viewportPx <= 0 || days <= 0) return null;
+        var first = Math.Clamp((int)Math.Round(scrollPx / (double)cellWpx, MidpointRounding.AwayFromZero), 0, days - 1);
+        var cols = Math.Max(1, (viewportPx + cellWpx / 2) / cellWpx);
+        return (first, Math.Min(days - 1, first + cols - 1));
+    }
+
+    /// <summary>グリッド左上に出す日の範囲（2 行）。同じ月なら「10/1」「〜7」、月をまたぐなら「10/29」「〜11/4」。解析できなければ null。</summary>
     public static (string Start, string End)? WeekRangeCaption(string startDate, int firstDay, int lastDay)
     {
         if (!DateTime.TryParseExact(startDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d0)) return null;
