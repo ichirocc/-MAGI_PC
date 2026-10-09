@@ -124,11 +124,11 @@ public sealed partial class HomeView : UserControl
         body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? ConsultList.Done : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
-            IsSecondaryButtonEnabled = !consulted,
+            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
         };
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;
@@ -841,11 +841,12 @@ public sealed partial class HomeView : UserControl
     /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは編集タブの先頭。</summary>
     private void GoEditLanding(EditLanding? landing) => _window.GoEditLanding(landing);
 
-    /// <summary>「相談してから決める」。積んだあとは押せない「相談中」＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する）。</summary>
-    private HyperlinkButton ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
+    /// <summary>「相談してから決める」。積んだあとは「相談中」の札＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する。
+    /// 無効ボタンの文字は状態色の基準 3:1 を割るので札にする＝ux_test_checklist A1、3.645.2）。</summary>
+    private FrameworkElement ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
     {
-        var done = ConsultList.IsConsulted(ui.Consults, item);
-        var b = new HyperlinkButton { Content = done ? ConsultList.Done : ConsultList.Button, MinHeight = 44, IsEnabled = !done, Margin = new Thickness(4, 0, 0, 0) };
+        if (ConsultList.IsConsulted(ui.Consults, item)) return AnalysisView.TagChip(ConsultList.Done, MagiAccent.Orange);
+        var b = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0) };
         if (stretch) b.HorizontalAlignment = HorizontalAlignment.Stretch;
         b.Click += (_, _) => _vm.AddConsult(item);
         return b;

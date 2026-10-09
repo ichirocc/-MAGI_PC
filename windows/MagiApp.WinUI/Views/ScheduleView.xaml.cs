@@ -1776,7 +1776,7 @@ public sealed partial class ScheduleView : UserControl
         {
             var u = _vm.Ui;
             int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
-            return $"希望 {Sym(wNow)}（{CellSheetLogic.WishTabState(wNow, cur)}）" + (u.ManualPins.Contains($"{i},{j}") ? "・手動固定" : "");
+            return CellSheetLogic.WishTabLine(wNow, cur, u.ExtBanned.TryGetValue($"{i},{j}", out var eb) ? eb : null, k => Sym(k), u.ManualPins.Contains($"{i},{j}"));
         }
         var ctxText = new TextBlock { Text = CtxLine(), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
         ctx.Children.Add(ctxText);

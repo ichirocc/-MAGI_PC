@@ -349,6 +349,19 @@ public static class CellSheetLogic
 
     public static string WishTabState(int? wish, int current) => wish is null ? "未登録" : wish == current ? "反映済" : "未反映";
 
+    /// <summary>希望タブの 1 行。拡張希望（この日はこのシフト以外）がある日は、その内容と反映状況も出す（Kotlin <c>wishTabLine</c>、3.645.2。
+    /// 旧: 通常希望が無い日に拡張希望があっても「未登録」と言った）。</summary>
+    public static string WishTabLine(int? wish, int current, IReadOnlySet<int>? extBanned, Func<int, string> sym, bool pinned)
+    {
+        var ext = extBanned is { Count: > 0 } b
+            ? $"{string.Join("・", b.OrderBy(k => k).Select(sym))} 以外（{(b.Contains(current) ? "未反映" : "反映済")}）"
+            : null;
+        var core = wish is null && ext is not null
+            ? $"希望 {ext}"
+            : $"希望 {(wish is null ? "—" : sym(wish.Value))}（{WishTabState(wish, current)}）" + (ext is null ? "" : $"・{ext}");
+        return core + (pinned ? "・手動固定" : "");
+    }
+
     /// <summary>本人の希望どおりのセルに違反がある＝「他の人で補う」を先に出す。</summary>
     public static bool IsWishDilemma(int? wish, int current, CellSeverity severity) =>
         wish is { } w && w >= 0 && w == current && severity != CellSeverity.None;
