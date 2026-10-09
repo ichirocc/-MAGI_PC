@@ -856,6 +856,37 @@ public static partial class V6FinalPort
 
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
+        // 終わり方の要約（画面の説明用）。種別の条件と順序は Watchdog 行の「実効閾値の種別」と同じ（plateau → 希望衝突の床 →
+        //   c3n 壁 → 通常）。壁は最終盤面の診断で証明相当（全セル希望固定）と経験的に分ける。採否・探索には使わない。
+        //   ログにも同じ値を 1 行出す＝画面の説明を後から照合できる。
+        var stopSummary = BuildStopSummary();
+        StopSummary BuildStopSummary()
+        {
+            var nonCovU = wd.BestNonCovUHard;
+            var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
+            var fired = wd.StagnationFired;
+            // 壁で止まったときだけ最終盤面を診断する（約 20 ms）。残存分析の `wallProof.DiagnoseBoard` とは別＝そちらは変えない。
+            bool WallCertified()
+            {
+                try { return V6PortAnalyzer.DiagnoseForbiddenRuns(state, finalSched).AllBlockedCertified; }
+                catch (Exception) { return false; }
+            }
+            var kind = !fired ? StopKind.Deadline
+                : wd.BestHard <= hardFloor && nonCovU == 0 ? StopKind.PlateauFloor
+                : wishOn && wishReachedEnd ? StopKind.WishFloor
+                : wd.StagnationWall && wd.BestNonCovUAllC3n ? (WallCertified() ? StopKind.C3nWallCertified : StopKind.C3nWallEmpirical)
+                : StopKind.NormalStall;
+            return new StopSummary(fired, kind, (int)((NowMs() - startMs) / 1000), seconds,
+                (int)(Math.Max(0L, tChain1 - lastImpAtSearchEnd) / 1000), finalReport.Hard);
+        }
+        var stopLog = new MirrorLog(level: "I", tag: "StopSummary",
+            message: $"終わり方: {KotlinName(stopSummary.Kind)}（停滞で早期終了={(stopSummary.EarlyStop ? "あり" : "なし")}）・使用{stopSummary.UsedSec}s／予算{stopSummary.BudgetSec}s" +
+                $"・探索終了時の無改善{stopSummary.StalledSec}s・必須{stopSummary.RemainingHard}件");
+        static string KotlinName(StopKind k) => k switch
+        {
+            StopKind.Deadline => "DEADLINE", StopKind.PlateauFloor => "PLATEAU_FLOOR", StopKind.WishFloor => "WISH_FLOOR",
+            StopKind.C3nWallCertified => "C3N_WALL_CERTIFIED", StopKind.C3nWallEmpirical => "C3N_WALL_EMPIRICAL", _ => "NORMAL_STALL",
+        };
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
         logs.AddRange(cappedLog);
         logs.AddRange(pinLog);
@@ -868,6 +899,7 @@ public static partial class V6FinalPort
         logs.AddRange(ledgerLog);
         logs.AddRange(residualLog);
         logs.AddRange(stagnationLog);
+        logs.Add(stopLog);
         logs.AddRange(gate.Logs);
         logs.AddRange(first.PhaseLogs);
         if (!ReferenceEquals(chained, first)) logs.AddRange(chained.PhaseLogs);
@@ -885,6 +917,6 @@ public static partial class V6FinalPort
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: chained.Alternatives, CapZero: capZero);
+            Alternatives: chained.Alternatives, CapZero: capZero, Stop: stopSummary);
     }
 }

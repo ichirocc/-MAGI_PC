@@ -129,6 +129,7 @@ public sealed partial class MagiViewModel
         Ui.CopilotHint = hint;
         Ui.WishCancelOutcome = null;
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
@@ -303,6 +304,7 @@ public sealed partial class MagiViewModel
                     ui.Message = adoptedMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, res.Report.Hard, adoptedMsg);
                     ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
+                    ui.StopSummary = res.Stop;
                 }, ct: ct);
                 _lastResultHard = newHard;
             }
@@ -471,6 +473,7 @@ public sealed partial class MagiViewModel
         Ui.Running = true;
         Ui.HasResult = false;
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState();
         Ui.Message = "自動で整えています…";

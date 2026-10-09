@@ -224,6 +224,13 @@ public sealed partial class HomeView : UserControl
         HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
+        // [3.643.0] 探索がどう終わったか（停滞で早く終えた理由・残る必須の性質・次の一手）。内部名は出さない（StopExplanation）。
+        var stopLine = ui.HasResult && !ui.Running && ui.StopSummary is { } stop && StopExplanation.Of(stop) is { } se
+            ? se.Line + (StopExplanation.NextLabel(se.Next) is { } nx ? $" 次は: {nx}" : "")
+            : null;
+        StopText.Visibility = stopLine is null ? Visibility.Collapsed : Visibility.Visible;
+        StopText.Text = stopLine ?? "";
+        StopText.Foreground = fgBrush;
         BodyText.Visibility = body is null ? Visibility.Collapsed : Visibility.Visible;
         BodyText.Text = body ?? "";
         BodyText.Foreground = fgBrush;

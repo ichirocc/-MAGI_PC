@@ -169,6 +169,7 @@ public sealed partial class MagiViewModel
         Ui.Wishes = ns.Wishes;
         Ui.StructureEdited = true;
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
         SaveNow();
         var name = token.Staff >= 0 && token.Staff < st.StaffList.Count ? st.StaffList[token.Staff].Name : $"職員{token.Staff + 1}";
         var sym = token.Shift >= 0 && token.Shift < st.Shifts.Count ? st.Shifts[token.Shift].Kigou : "?";
