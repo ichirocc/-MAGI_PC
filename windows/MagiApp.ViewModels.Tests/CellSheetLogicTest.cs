@@ -284,6 +284,13 @@ public class CellSheetLogicTest
         Assert.Equal("未登録", CellSheetLogic.WishTabState(null, 1));
         Assert.Equal("反映済", CellSheetLogic.WishTabState(1, 1));
         Assert.Equal("未反映", CellSheetLogic.WishTabState(2, 1));
+        // [3.645.2/実機報告] 拡張希望がある日の希望タブは「未登録」と言わない（Kotlin wishTabLineShowsExtendedWishes と 1 対 1）。
+        var syms = new[] { "休", "Pｼ", "Dﾃ", "Cｱ" };
+        string Sym(int k) => syms[k];
+        Assert.Equal("希望 —（未登録）", CellSheetLogic.WishTabLine(null, 3, null, Sym, false));
+        Assert.Equal("希望 休・Pｼ・Dﾃ 以外（反映済）", CellSheetLogic.WishTabLine(null, 3, new HashSet<int> { 2, 0, 1 }, Sym, false));
+        Assert.Equal("希望 休・Pｼ 以外（未反映）・手動固定", CellSheetLogic.WishTabLine(null, 0, new HashSet<int> { 0, 1 }, Sym, true));
+        Assert.Equal("希望 Cｱ（反映済）・休 以外（反映済）", CellSheetLogic.WishTabLine(3, 3, new HashSet<int> { 0 }, Sym, false));
     }
 
     [Fact]

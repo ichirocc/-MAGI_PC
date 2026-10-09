@@ -395,10 +395,22 @@ public sealed partial class MainWindow : Window
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 grid.Children.Add(main);
                 var item = ConsultList.PreRun(r);
-                var done = ConsultList.IsConsulted(ui.Consults, item);
-                var ask = new HyperlinkButton { Content = done ? ConsultList.Done : "相談", MinHeight = 44, IsEnabled = !done };
-                // このダイアログは組み直さないので、押した場でボタンを「相談中」にする。
-                ask.Click += (_, _) => { _vm.AddConsult(item); ask.Content = ConsultList.Done; ask.IsEnabled = false; };
+                FrameworkElement ask;
+                if (ConsultList.IsConsulted(ui.Consults, item)) ask = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
+                else
+                {
+                    var b = new HyperlinkButton { Content = "相談", MinHeight = 44 };
+                    // このダイアログは組み直さないので、押した場でボタンを「相談中」の札に置き換える。
+                    b.Click += (_, _) =>
+                    {
+                        _vm.AddConsult(item);
+                        var chip = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
+                        Grid.SetColumn(chip, 1);
+                        grid.Children.Remove(b);
+                        grid.Children.Add(chip);
+                    };
+                    ask = b;
+                }
                 Grid.SetColumn(ask, 1);
                 grid.Children.Add(ask);
                 panel.Children.Add(grid);
