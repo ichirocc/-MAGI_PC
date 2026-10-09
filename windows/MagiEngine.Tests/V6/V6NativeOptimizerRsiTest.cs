@@ -321,13 +321,14 @@ public class V6NativeOptimizerRsiTest
     // ================================ ApplyCovOFree ================================
 
     // shift 0="休"(no need), shift 1="X"(need2=1 only) — matches V6SearchOperatorsTest's FindCovOFix fixture.
+    //   s0 と s1 は別グループ＝fair を外す（2 人群では退避 1 セルが fair を 2 件動かし、covO 1 件(10)と同点で「悪化しない」の断定が崩れる。3.647.0 fair 5）。
     private static MagiState CovOState(IReadOnlyList<IReadOnlyList<int>> schedule) => MinimalState.Build(
         startDate: "2026-01-01", endDate: "2026-01-01",
         shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "1") },
-        groups: new List<Group> { new("G", "G") },
-        staffList: new List<Staff> { new("s0", 0), new("s1", 0) },
+        groups: new List<Group> { new("G", "G"), new("H", "H") },
+        staffList: new List<Staff> { new("s0", 0), new("s1", 1) },
         use2Patterns: true,
-        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 }, new List<int> { 1, 1 } },
         schedule: schedule);
 
     [Fact]

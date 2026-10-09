@@ -7,14 +7,15 @@ namespace MagiEngine.Tests.V6;
 /// <summary>[3.495.0 移植元] 違反アンカー型・可変長ウィンドウ交換（<see cref="WindowMode.StrictWholeWindow"/>）の検証（Kotlin <c>AnchoredWindowSwapTest</c> の3件）。</summary>
 public class V6HotfixPassesAnchoredWindowSwapTest
 {
+    /// <summary>separateGroups: 甲と乙を別グループに置き fair を外す（窓交換で甲が E だけ・乙が N 中心になると fair +8＝40 が high −25 を上回る。3.647.0 fair 5）。</summary>
     private static MagiState Build(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyDictionary<string, int> wishes,
-        IReadOnlyDictionary<string, MagiEngine.Model.Range> staffRange, IReadOnlyList<C3Row> cons3n) => MinimalState.Build(
+        IReadOnlyDictionary<string, MagiEngine.Model.Range> staffRange, IReadOnlyList<C3Row> cons3n, bool separateGroups = false) => MinimalState.Build(
         startDate: "2026-06-01", endDate: "2026-06-06",
         shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("N", "N", "", ""), new("E", "E", "", "") },
-        groups: new List<Group> { new("A", "A") },
-        staffList: new List<Staff> { new("甲", 0), new("乙", 0) },
-        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
-        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
+        groups: separateGroups ? new List<Group> { new("A", "A"), new("B", "B") } : new List<Group> { new("A", "A") },
+        staffList: new List<Staff> { new("甲", 0), new("乙", separateGroups ? 1 : 0) },
+        groupShift: separateGroups ? new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 1 } } : new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+        groupShiftApt: separateGroups ? new List<IReadOnlyList<string>> { new List<string> { "", "", "" }, new List<string> { "", "", "" } } : new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
         schedule: schedule, wishes: wishes, staffRange: staffRange, cons3n: cons3n);
     private static V6HotfixPasses.CyclicSwapResult Run(MagiState s) =>
         V6HotfixPasses.ApplyAdaptiveBlockSwapPolish(s, s.Schedule.Select(r => r.ToArray()).ToArray(), maxPasses: 3, maxEvaluations: 48, mode: WindowMode.StrictWholeWindow);
@@ -24,7 +25,7 @@ public class V6HotfixPassesAnchoredWindowSwapTest
     {
         var s = Build(new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0, 2, 2, 2 }, new List<int> { 2, 2, 2, 2, 1, 1 } },
             new Dictionary<string, int> { ["0,3"] = 2 }, new Dictionary<string, MagiEngine.Model.Range> { ["0,0"] = new("0", "0") },
-            new List<C3Row> { new(new List<string> { "N", "E", "", "", "" }) });
+            new List<C3Row> { new(new List<string> { "N", "E", "", "", "" }) }, separateGroups: true);
         var before = UnifiedViolationChecker.Check(s, s.Schedule.Select(r => r.ToArray()).ToArray());
         Assert.Equal(1, before.Breakdown["high"]);
         var r = Run(s);

@@ -262,7 +262,7 @@ public static partial class V6NativeOptimizer
         counts[i][k] += delta;
         var after = p.FairDevOfBucket(g, k, x => counts[x][k]).Total;
         counts[i][k] -= delta;
-        return (after - before) * 2L; // [3.522.0] fair 1→2（WeeklyMarginalAtと同型で内部適用）
+        return (after - before) * 5L; // [3.522.0] fair 1→2、[3.647.0] 2→5（WeeklyMarginalAtと同型で内部適用）
     }
 
     /// <summary>

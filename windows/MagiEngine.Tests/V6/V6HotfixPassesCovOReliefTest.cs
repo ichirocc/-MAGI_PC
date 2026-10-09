@@ -5,7 +5,8 @@ using Range = MagiEngine.Model.Range;
 
 namespace MagiEngine.Tests.V6;
 
-/// <summary>Kotlin <c>CovOReliefPolishTest.kt</c> の移植: 過剰セルの在勤者を需要 0 のシフト（B）へ退避し、希望固定と禁止連続は避ける。</summary>
+/// <summary>Kotlin <c>CovOReliefPolishTest.kt</c> の移植: 過剰セルの在勤者を需要 0 のシフト（B）へ退避し、希望固定と禁止連続は避ける。
+/// X と Y は別グループ＝fair を外す（2 人群では退避 1 セルが fair を 2 件動かし、covO 1 件(10)と同点で keep-best に採られない。3.647.0 fair 5）。</summary>
 public class V6HotfixPassesCovOReliefTest
 {
     private static MagiState St(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyDictionary<string, int>? wishes = null,
@@ -15,10 +16,10 @@ public class V6HotfixPassesCovOReliefTest
         return MinimalState.Build(
             startDate: "2026-08-01", endDate: $"2026-08-{t:00}",
             shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", ""), new("B", "B", "", "") },
-            groups: new List<Group> { new("G", "G") },
-            staffList: new List<Staff> { new("X", 0), new("Y", 0) },
-            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
-            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
+            groups: new List<Group> { new("G", "G"), new("H", "H") },
+            staffList: new List<Staff> { new("X", 0), new("Y", 1) },
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" }, new List<string> { "", "", "" } },
             schedule: schedule, wishes: wishes, cons3n: cons3n,
             staffRange: staffRange ?? new Dictionary<string, Range> { ["0,0"] = new("0", "0"), ["1,0"] = new("0", "0") });
     }

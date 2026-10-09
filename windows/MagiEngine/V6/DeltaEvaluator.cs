@@ -201,7 +201,7 @@ public sealed class DeltaEvaluator
         long c1, long c2, long c41, long c42, long c41s, long c42s, long c3, long c3m, long c3mn,
         long ct, long apt, long fair, long weekly, long covO)
         => c1 * 50 + c2 * 4 + c41 * 9 + c42 * 9 + c41s * 10 + c42s * 10 + c3 * 15 + c3m * 6 + c3mn * 90
-           + ct + apt * 4 + fair * 2 + weekly * 2 + covO * 10;
+           + ct + apt * 4 + fair * 5 + weekly * 2 + covO * 10;
 
     /// <summary>Preview the score after moving (i,j) -&gt; nw, stashing deltas for <see cref="Commit"/>. No mutation of totals.</summary>
     internal long PreviewMove(int i, int j, int nw)
