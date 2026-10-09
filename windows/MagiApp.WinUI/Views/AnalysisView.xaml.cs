@@ -42,6 +42,7 @@ public sealed partial class AnalysisView : UserControl
     internal static readonly Dictionary<string, string> BreakdownLabels = new()
     {
         ["groupViol"] = "担当外シフト", ["pref"] = "希望と違う勤務", ["covU"] = "人員不足", ["c3n"] = "禁止の並び", ["c3w"] = "希望の前日の禁止",
+        ["extWish"] = "拡張希望の違反",
         ["low"] = "下限割れ", ["high"] = "上限超過", ["apt"] = "目安の回数との差", ["fair"] = "グループ内の回数のばらつき",
         ["weekly"] = "曜日の偏り",
         ["c1"] = "期間の制約", ["c2"] = "個人の合計", ["c3"] = "守るとよい並び", ["c3m"] = "推奨の並び",

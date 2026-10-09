@@ -1,7 +1,7 @@
 namespace MagiEngine.V6;
 
 /// <summary>
-/// 候補盤面の HARD 正味差分（groupViol/pref/c3w/c3n/covU）を変わったセル・行・日だけから厳密に数える
+/// 候補盤面の HARD 正味差分（groupViol/pref/c3w/extWish/c3n/covU）を変わったセル・行・日だけから厳密に数える
 /// （Kotlin 原本 <c>HardDelta.kt</c> の忠実な移植）。<c>Check(cand).Hard == Check(baseB).Hard + Delta(...)</c> が
 /// <see cref="UnifiedViolationChecker.Check"/> と同じ意味論で成り立つ。呼出側は「このΔなら必ず却下する」候補だけ
 /// checker を省く＝採用集合・盤面は不変の速度専用（<see cref="PolishGate.HardDeltaPrefilter"/>）。
@@ -10,7 +10,7 @@ internal static class HardDelta
 {
     private static int V(Problem p, int x) => x >= 0 && x < p.K ? x : -1;
 
-    /// <summary>1 セル (i,j)=k の、セル単位 HARD 族（groupViol/pref/c3w）の件数。</summary>
+    /// <summary>1 セル (i,j)=k の、セル単位 HARD 族（groupViol/pref/c3w/extWish）の件数。</summary>
     private static int CellHard(Problem p, int i, int j, int k)
     {
         int h = 0;
@@ -18,6 +18,7 @@ internal static class HardDelta
         int w = p.Wish[i][j];
         if (w >= 0 && w < p.K && p.CanDo(i, w) && k != w) h++;
         if (p.C3wBanned(i, j, k)) h++;
+        if (p.ExtBanned(i, j, k)) h++;
         return h;
     }
 
@@ -87,8 +88,8 @@ internal static class HardDelta
 
     /// <summary>
     /// 同日 j 内の置換（職員 staff[t] の旧値 old[t] → 現在の work[staff[t]][j]）の HARD 正味差分。work は適用後。
-    /// 健全性: 置換は日 j の値の多重集合を保つので (j,k) 人数が不変＝covU の差は 0。groupViol/pref/c3w はセル単位
-    /// （c3wBan は静的表）、c3n は変わった行の j を含む窓だけが変わる＝この和は <see cref="Delta"/> と一致する。
+    /// 健全性: 置換は日 j の値の多重集合を保つので (j,k) 人数が不変＝covU の差は 0。groupViol/pref/c3w/extWish はセル単位
+    /// （c3wBan・ExtBan は静的表）、c3n は変わった行の j を含む窓だけが変わる＝この和は <see cref="Delta"/> と一致する。
     /// </summary>
     public static int SameDayPermutationDelta(Problem p, int[][] work, int j, int[] staff, int[] old)
     {

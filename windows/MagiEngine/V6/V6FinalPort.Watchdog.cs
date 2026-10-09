@@ -205,8 +205,9 @@ public static partial class V6FinalPort
             var pf = report.Breakdown.GetValueOrDefault("pref", 0);
             var c3n = report.Breakdown.GetValueOrDefault("c3n", 0);
             var c3w = report.Breakdown.GetValueOrDefault("c3w", 0);
-            Volatile.Write(ref _bestNonCovUHard, gv + pf + c3n + c3w);
-            Volatile.Write(ref _bestNonCovUAllC3n, gv == 0 && pf == 0 && c3w <= wishC3wProven && c3n > 0);
+            var ext = report.Breakdown.GetValueOrDefault("extWish", 0);
+            Volatile.Write(ref _bestNonCovUHard, gv + pf + c3n + c3w + ext);
+            Volatile.Write(ref _bestNonCovUAllC3n, gv == 0 && pf == 0 && ext == 0 && c3w <= wishC3wProven && c3n > 0);
             Interlocked.Increment(ref _bestVersion);
             return true;
         }

@@ -15,7 +15,7 @@ public static class VioBuckets
     public static readonly IReadOnlyList<VioBucket> Buckets = new[]
     {
         new VioBucket("need", "人員", new HashSet<string> { "covU", "covO" }),
-        new VioBucket("pref", "希望", new HashSet<string> { "pref" }),
+        new VioBucket("pref", "希望", new HashSet<string> { "pref", "extWish" }),
         new VioBucket("seq", "並び", new HashSet<string> { "c3", "c3n", "c3m", "c3mn", "c3w" }),
         new VioBucket("count", "回数", new HashSet<string> { "low", "high", "apt", "c2" }),
         new VioBucket("group", "グループルール", new HashSet<string> { "groupViol", "c41", "c42", "c41s", "c42s" }),

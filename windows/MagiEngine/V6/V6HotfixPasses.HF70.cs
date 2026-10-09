@@ -54,9 +54,9 @@ public static partial class V6HotfixPasses
         var rep = report ?? UnifiedViolationChecker.Check(state, schedule, quantitativeRangeEval);
         var invalid = InvalidAssignmentCount(state, schedule, quantitativeRangeEval);
         var impossible = V6SanityPort.DetectImpossibleWishes(state).Count;
-        // 希望どうしの衝突が生む c3n/c3w は希望起因＝「希望以外」に数えない（pref と同じ扱い）。
+        // 希望どうしの衝突が生む c3n/c3w は希望起因＝「希望以外」に数えない（pref・拡張希望の違反と同じ扱い）。
         var selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state, quantitativeRangeEval), schedule);
-        var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0)
+        var hardCore = rep.Hard - rep.Breakdown.GetValueOrDefault("pref", 0) - rep.Breakdown.GetValueOrDefault("extWish", 0)
             - selfConflict.GetValueOrDefault("c3n", 0) - selfConflict.GetValueOrDefault("c3w", 0);
         var issues = new List<string>();
         if (invalid > 0) issues.Add($"担当不可/範囲外配置 {invalid} 件");

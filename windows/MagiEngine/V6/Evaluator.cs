@@ -159,12 +159,19 @@ public sealed class Evaluator
                 for (int j = 0; j < T; j++)
                     if (_p.C3wBanned(i, j, a[i][j])) hard1 += 1;
         }
+        // ---- extWish: 拡張希望の違反（HARD, 3.653.0）。チェッカーと同じ静的な禁止表 Problem.ExtBan を引く。
+        if (_p.HasExtBan)
+        {
+            for (int i = 0; i < S; i++)
+                for (int j = 0; j < T; j++)
+                    if (_p.ExtBanned(i, j, a[i][j])) hard1 += 1;
+        }
 
         // ---- pref / groupViol ----------------------------------------------------------------
         // pref: wished cell not honored -> display HARD（[監査#11②] 実現可能な希望のみ計上。
         //   不可能希望は計数から対称除外）。
         // groupViol: 担当できないシフトに就いているセル。3.318.0 でチェッカーの MirrorKeys.hard
-        //   （groupViol/c3n/covU/pref/c3w の5族）と揃えた。
+        //   （groupViol/c3n/covU/pref/c3w/extWish の6族）と揃えた。
         for (int i = 0; i < S; i++)
         {
             for (int j = 0; j < T; j++)

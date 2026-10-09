@@ -36,6 +36,7 @@ public sealed class DeltaEvaluator
     // 評価器側だけ3族（c3n/pref/covU）で、同じ盤面に対しチェッカーと評価器の hard が食い違っていた。
     private long _hGrpV;
     private long _hc3w;    // [3.542.0] 希望の前日に禁止(c3w, HARD)。セル単位＝Δもこの1セルだけ
+    private long _hExt;    // [3.653.0] 拡張希望の違反(extWish, HARD)。同じくセル単位
     private long _sApt;    // [統一apt] 適切回数(双方向目標)の running total（SOFT）
     private long _sFair;   // [統一fair] グループ内公平化の running total（SOFT）
     private long _sWeekly; // [統一weekly] 曜日平準化の running total（SOFT）
@@ -47,7 +48,7 @@ public sealed class DeltaEvaluator
     private long _dC1, _dC2, _dC41, _dC42;
     private long _dC41s, _dC42s;
     private long _dC3, _dC3n, _dC3m, _dC3mn;
-    private long _dPref, _dGrpV, _dC3w, _dCt, _dApt, _dFair, _dWeekly, _dCovO, _nCovU;
+    private long _dPref, _dGrpV, _dC3w, _dExt, _dCt, _dApt, _dFair, _dWeekly, _dCovO, _nCovU;
 
     public DeltaEvaluator(Problem p)
     {
@@ -136,7 +137,7 @@ public sealed class DeltaEvaluator
         ["c1"] = _sc1, ["c2"] = _sc2, ["c41"] = _sc41, ["c42"] = _sc42, ["c41s"] = _sc41s, ["c42s"] = _sc42s,
         ["c3"] = _sc3, ["c3n"] = _hc3n, ["c3m"] = _sc3m, ["c3mn"] = _sc3mn,
         ["pref"] = _hpref, ["groupViol"] = _hGrpV, ["c3w"] = _hc3w, ["apt"] = _sApt, ["fair"] = _sFair, ["weekly"] = _sWeekly,
-        ["covO"] = _scovO, ["covU"] = _covUTot,
+        ["covO"] = _scovO, ["covU"] = _covUTot, ["extWish"] = _hExt,
     };
 
     /// <summary>
@@ -186,7 +187,7 @@ public sealed class DeltaEvaluator
 
     private long ScoreFrom(long cu)
     {
-        long h1 = _hc3n + cu + _hpref + _hGrpV + _hc3w;
+        long h1 = _hc3n + cu + _hpref + _hGrpV + _hc3w + _hExt;
         // [統一a/b] range(_hct, 重み付き) と covO(_scovO) を SOFT に含める。
         // [統一c] c3/c3m/c3mn に checker 重み(15/10/90)を適用（_sc3等は #fire/run-deficit の生カウント）。
         // [統一c1] c1 にも checker 重み(50)を適用（_sc1 は #fire 生カウント、canDoガード済）。
@@ -215,7 +216,7 @@ public sealed class DeltaEvaluator
         if (nw == old)
         {
             _dC1 = 0; _dC2 = 0; _dC41 = 0; _dC42 = 0; _dC41s = 0; _dC42s = 0; _dC3 = 0; _dC3n = 0; _dC3m = 0; _dC3mn = 0;
-            _dPref = 0; _dGrpV = 0; _dC3w = 0; _dCt = 0; _dApt = 0; _dFair = 0; _dWeekly = 0; _dCovO = 0; _nCovU = _covUTot;
+            _dPref = 0; _dGrpV = 0; _dC3w = 0; _dExt = 0; _dCt = 0; _dApt = 0; _dFair = 0; _dWeekly = 0; _dCovO = 0; _nCovU = _covUTot;
             return Score();
         }
 
@@ -328,6 +329,7 @@ public sealed class DeltaEvaluator
 
         // [3.542.0] 希望の前日に禁止(c3w)もセル単位なので差分もこの1セルだけ。
         _dC3w = (_p.C3wBanned(i, j, nw) ? 1L : 0L) - (_p.C3wBanned(i, j, old) ? 1L : 0L);
+        _dExt = (_p.ExtBanned(i, j, nw) ? 1L : 0L) - (_p.ExtBanned(i, j, old) ? 1L : 0L);
 
         // c41 (group/day range) on day j — only constraints touching this staff's group & shifts
         int gi = _p.Sgrp[i];
@@ -409,7 +411,7 @@ public sealed class DeltaEvaluator
                + (_p.CovOCell(nw, j, cn + 1) - _p.CovOCell(nw, j, cn));
 
         // [統一b] dCt(range) は SOFT へ移動（hard から除外）。
-        long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV + _dC3w;
+        long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV + _dC3w + _dExt;
         long dSoft = WeightedSoft(_dC1, _dC2, _dC41, _dC42, _dC41s, _dC42s, _dC3, _dC3m, _dC3mn, _dCt, _dApt, _dFair, _dWeekly, _dCovO);
         return Score() + dHard * Evaluator.SCORE_HARD_UNIT + dSoft;
     }
@@ -448,7 +450,7 @@ public sealed class DeltaEvaluator
             }
             _sc1 += _dC1; _sc2 += _dC2; _sc41 += _dC41; _sc42 += _dC42; _sc41s += _dC41s; _sc42s += _dC42s;
             _sc3 += _dC3; _hc3n += _dC3n; _sc3m += _dC3m; _sc3mn += _dC3mn;
-            _hpref += _dPref; _hGrpV += _dGrpV; _hc3w += _dC3w; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
+            _hpref += _dPref; _hGrpV += _dGrpV; _hc3w += _dC3w; _hExt += _dExt; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
             _covUTot = _nCovU;
         }
         finally
@@ -478,7 +480,7 @@ public sealed class DeltaEvaluator
         _sc1 = C1All(); _sc2 = C2All(); _sc41 = C41All(); _sc42 = C42All(); _sc41s = C41sAll(); _sc42s = C42sAll();
         _sc3 = C3All(_p.Cons3, false); _hc3n = C3All(_p.Cons3n, true);
         _sc3m = C3All(_p.Cons3m, false); _sc3mn = C3All(_p.Cons3mn, true);
-        _hpref = PrefAll(); _hGrpV = GroupViolAll(); _hc3w = C3wAll(); _hct = CtAll(); _sApt = AptAll(); _sFair = FairAll(); _sWeekly = WeeklyAll(); _scovO = CovOAll();
+        _hpref = PrefAll(); _hGrpV = GroupViolAll(); _hc3w = C3wAll(); _hExt = ExtWishAll(); _hct = CtAll(); _sApt = AptAll(); _sFair = FairAll(); _sWeekly = WeeklyAll(); _scovO = CovOAll();
         _covUTot = CovUAll();
     }
 
@@ -729,6 +731,17 @@ public sealed class DeltaEvaluator
         for (int i = 0; i < S; i++)
             for (int j = 0; j < T; j++)
                 if (_p.C3wBanned(i, j, _a[i][j])) h++;
+        return h;
+    }
+
+    /// <summary>[3.653.0] 拡張希望の禁止（ExtBan, HARD）に当たるセル数。</summary>
+    private long ExtWishAll()
+    {
+        if (!_p.HasExtBan) return 0L;
+        long h = 0L;
+        for (int i = 0; i < S; i++)
+            for (int j = 0; j < T; j++)
+                if (_p.ExtBanned(i, j, _a[i][j])) h++;
         return h;
     }
 

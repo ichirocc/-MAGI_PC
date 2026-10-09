@@ -62,9 +62,12 @@ public class CheckerReportDigestTest
             }
             md.AppendData(Encoding.UTF8.GetBytes(Canon(UnifiedViolationChecker.Check(st, s, quantitativeRangeEval: n % 7 == 0))));
         }
-        Assert.Equal(Expected, Convert.ToHexString(md.GetHashAndReset()).ToLowerInvariant());
+        // 不一致なら全桁を出す（Assert.Equal の文字列差分は途中で切れて、期待値の更新に使えない）。
+        var hex = Convert.ToHexString(md.GetHashAndReset()).ToLowerInvariant();
+        Assert.True(hex == Expected, $"digest={hex}");
     }
 
-    // weightedScore を含むので重みを変えると動く（3.647.0 fair 2→5 で更新。旧: 7936ccc7…）。
-    private const string Expected = "1a2feb00faf3e535017574c5409753f1fbbbe0d1cb902a1914d635da0f1826b3";
+    // weightedScore を含むので重みを変えると動く（3.647.0 fair 2→5 で更新。旧: 7936ccc7…）。Breakdown のキーも含むので族を足すと動く
+    // （3.653.0 extWish 追加＝全報告に extWish=0 が増える。旧: 1a2feb00…）。
+    private const string Expected = "ebf3caea3ebcc10f854b3666bc0df2c23fb6e1f2d4920560e444bbda766ec8bd";
 }

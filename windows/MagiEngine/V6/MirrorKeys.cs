@@ -2,11 +2,11 @@ namespace MagiEngine.V6;
 
 /// <summary>
 /// Faithful port of Kotlin's <c>MirrorKeys</c> (in <c>MirrorCore.kt</c>) — the single source of
-/// truth for the 19 violation families' names, HARD/SOFT classification, and weights.
+/// truth for the violation families' names (21, 3.653.0), HARD/SOFT classification, and weights.
 /// </summary>
 public static class MirrorKeys
 {
-    public static readonly IReadOnlyList<string> Hard = new[] { "groupViol", "c3n", "covU", "pref", "c3w" };
+    public static readonly IReadOnlyList<string> Hard = new[] { "groupViol", "c3n", "covU", "pref", "c3w", "extWish" };
 
     public static readonly IReadOnlyList<string> Soft = new[]
     {
@@ -14,11 +14,11 @@ public static class MirrorKeys
         "low", "high", "apt", "fair", "weekly",
     };
 
-    // [3.542.0] c3w は末尾＝言語跨ぎ期待値ファイル・C++ kBreakdownNames の添字を既存19族から動かさない。
+    // [3.542.0] c3w は末尾＝言語跨ぎ期待値ファイル・C++ kBreakdownNames の添字を既存19族から動かさない。[3.653.0] extWish も同じく末尾。
     public static readonly IReadOnlyList<string> All = new[]
     {
         "c1", "c2", "c3", "c3n", "c3m", "c3mn", "c41", "c42", "c41s", "c42s",
-        "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly", "c3w",
+        "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly", "c3w", "extWish",
     };
 
     /// <summary>
@@ -42,6 +42,8 @@ public static class MirrorKeys
         ("c2", 4.0), ("apt", 4.0), ("fair", 5.0), ("weekly", 2.0),
         // [3.542.0/ユーザー明示指示] 希望の前日に禁止。c3n と同格。
         ("c3w", 9000.0),
+        // [3.653.0/HF77 明示指示「拡張希望の重みは希望シフトと同じにする」] 拡張希望の違反＝必須・希望と同じ重み。
+        ("extWish", 8000.0),
     };
 
     public static IReadOnlyList<(string Key, double Weight)> Weights => WeightsOrdered;
@@ -59,7 +61,7 @@ public static class MirrorKeys
     /// <summary>
     /// [HF77明示指示/表示優先度] aptLow/aptHigh は apt の表示専用サブクラス（<see cref="Weights"/>
     /// 自体には追加しない＝重み表(WeightTableCard相当)には出さない）。markCount/cellFamilies の
-    /// 重み優先比較では実体である apt の重み(1.0)をそのまま使う。
+    /// 重み優先比較では実体である apt の重み（<c>Weights</c> の apt）をそのまま使う。
     /// </summary>
     public static double WeightOf(string family) => family switch
     {

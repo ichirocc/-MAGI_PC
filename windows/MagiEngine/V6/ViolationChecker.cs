@@ -56,7 +56,7 @@ public sealed record ViolationReport(
     // [Kotlin c1Runs 移植元] 期間の制約(c1)の違反窓ラン [職員, 先頭窓の開始日, 窓数, 窓幅]。画面の表示専用の元データ
     //   （Violations はランの先頭 1 セルだけ＝探索の手掛かりは不変）。
     IReadOnlyList<IReadOnlyList<int>>? C1Runs = null,
-    // 拡張希望の違反セル（"i,j"）。件数＝要素数。採点の族・重みには入れない（Breakdown に無い）。
+    // 拡張希望の違反セル（"i,j"）。Breakdown["extWish"]（必須、3.653.0）と同じ集合＝画面の×の違反色が読む。
     IReadOnlyList<string>? ExtWishCells = null)
 {
     // Kotlin's emptyMap()/emptyList() defaults, realized as non-null accessors (records can't
@@ -95,6 +95,7 @@ public static class UnifiedViolationChecker
         ["covU"] = "vio-covU", ["covO"] = "vio-covO", ["pref"] = "vio-pref",
         ["low"] = "vio-low", ["high"] = "vio-high", ["groupViol"] = "vio-groupViol",
         ["aptLow"] = "vio-aptLow", ["aptHigh"] = "vio-aptHigh",
+        ["extWish"] = "vio-extWish",
     };
 
     private static readonly IReadOnlyDictionary<string, double> ClassWeight =
@@ -349,6 +350,13 @@ public static class UnifiedViolationChecker
             for (int i = 0; i < p.S; i++)
                 for (int j = 0; j < p.T; j++)
                     if (p.C3wBanned(i, j, s[i][j])) { Inc("c3w"); Mark(i, j, "c3w"); }
+        }
+        // ---- extWish: 拡張希望の違反（HARD, 3.653.0）。静的な禁止表でセル単位に数える＝ExtWishCells と同じ集合。
+        if (p.HasExtBan)
+        {
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T; j++)
+                    if (p.ExtBanned(i, j, s[i][j])) { Inc("extWish"); Mark(i, j, "extWish"); }
         }
 
         // ---- pref: wished cell not honored ---------------------------------------------------
