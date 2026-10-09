@@ -44,7 +44,7 @@ public static class TuningTelemetry
     /// <summary>[3.535.0] 公平化/適切回数の他ソフト許容(6%)が、素のbetterReportなら却下された手を採用に転じさせた回数。</summary>
     private static int _aptFairToleranceUsed;
 
-    /// <summary>禁止連続の事前フィルタが checker を呼ばずに落とした候補数。</summary>
+    /// <summary>必須が増える候補の事前フィルタ（ブロック巡回交換）が checker を呼ばずに落とした候補数。</summary>
     public static void IncrementC3nFilterSkipped() => Interlocked.Increment(ref _c3nFilterSkipped);
 
     /// <summary>禁止連続の崩し範囲が既定(前後1日)と違う候補日を返した回数（広がる／狭まるの両方）。</summary>
@@ -74,6 +74,9 @@ public static class TuningTelemetry
 
     /// <summary>同・<see cref="IncrementAptFairToleranceUsed"/> の現在値を読む（並行性の回帰テスト用）。</summary>
     public static int AptFairToleranceUsedCount() => Volatile.Read(ref _aptFairToleranceUsed);
+
+    /// <summary>ブロック巡回交換の事前フィルタが落とした候補数（Kotlin <c>c3nFilterSkipped.get()</c> と同じ読み出し）。</summary>
+    public static int C3nFilterSkippedCount() => Volatile.Read(ref _c3nFilterSkipped);
 
     /// <summary>
     /// 実行ごとに 0 へ戻す（<c>Optimize()</c> 入口）。
@@ -124,7 +127,7 @@ public static class TuningTelemetry
         // 本文だけを返す。
         return "ネイティブ加速=" + (nativeOn ? "ON" : "OFF") +
             " / Kotlin照合=" + Eff(parityOn, parityChecks, "回") +
-            " / 禁止連続の事前フィルタ=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の無駄な検査を省略・勤務表は不変") +
+            " / 必須が増える候補の事前フィルタ=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の必ず却下される検査を省略") +
             " / 禁止連続の崩し範囲=" + wide +
             " / 仕上げ最適化=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替") +
             " / 結合探索を粘り強く=" + (combineExhaustPairs ? "ON" : "OFF") +

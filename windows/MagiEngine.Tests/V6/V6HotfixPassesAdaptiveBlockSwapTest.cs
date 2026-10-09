@@ -285,4 +285,58 @@ public class V6HotfixPassesAdaptiveBlockSwapTest
         Assert.Equal(0, res.Applied); // 改善手が無ければ採用0
         Assert.True(res.Logs.Count > 0, "ログが出ること");
     }
+
+    /// <summary>
+    /// [Kotlin 3.649.0/外部レビュー] 事前フィルタは必須の正味差分で判定する。0=休 1=D 2=N 3=W、T=11。A は 4・7 日目（0 始まり 3・6）に W を希望し、
+    /// その前日が N＝希望の前日に禁止（W の前日に N）が 2 件。B の 4 日目は N。0 始まり 2・5 日目を A↔B で入れ替えると A の c3w は 0、
+    /// B に N,N（禁止の並び）が 1 件＝必須 2→1。旧フィルタ（c3n の増加だけを見る）はこの交換を捨てて必須 2 のままだった。
+    /// </summary>
+    private static MagiState WishEveState() => MinimalState.Build(
+        startDate: "2026-06-01", endDate: "2026-06-11",
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "", ""), new("N", "N", "", ""), new("W", "W", "", "") },
+        groups: new List<Group> { new("G", "G") },
+        staffList: new List<Staff> { new("A", 0), new("B", 0) },
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },
+        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "", "" } },
+        schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0, 2, 3, 0, 2, 3, 0, 0, 0, 0 }, new List<int> { 0, 0, 1, 2, 0, 1, 0, 0, 0, 0, 0 } },
+        wishes: new Dictionary<string, int> { ["0,3"] = 3, ["0,6"] = 3 },
+        cons3n: new List<C3Row> { new(new List<string> { "N", "N" }) }) with { Cons3w = new List<C3wRow> { new("W", "N") } };
+
+    [Fact]
+    public void ASwapThatAddsAForbiddenRunIsKeptWhenItLowersTheHardTotal()
+    {
+        var st = WishEveState();
+        var before = UnifiedViolationChecker.Check(st, st.Schedule.Select(r => r.ToArray()).ToArray());
+        Assert.Equal(2, before.Breakdown.GetValueOrDefault("c3w", 0));
+        foreach (var filter in new[] { true, false })
+        {
+            var res = V6HotfixPasses.ApplyAdaptiveBlockSwapPolish(st, st.Schedule.Select(r => r.ToArray()).ToArray(), filterC3nIncrease: filter);
+            var after = UnifiedViolationChecker.Check(st, res.NewSchedule);
+            Assert.Equal(1, after.Hard);
+            Assert.Equal(0, after.Breakdown.GetValueOrDefault("c3w", 0));
+            Assert.Equal(1, after.Breakdown.GetValueOrDefault("c3n", 0));
+        }
+    }
+
+    /// <summary>必須が正味で増える交換は評価前に捨てる＝ON は正式評価に回さず、OFF は評価して却下する。どちらも盤面は変わらない。
+    /// B は 2 日目（0 始まり 1）に N を希望して固定。交換できる日は 0・5 日目だけで、交換すると B が N,N になる＝必須が 1 増えるだけ。</summary>
+    [Fact]
+    public void ASwapThatOnlyAddsAForbiddenRunIsSkippedBeforeTheCheckerWithTheSameResult()
+    {
+        var st = WishEveState() with
+        {
+            Schedule = new List<IReadOnlyList<int>> { new List<int> { 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0 }, new List<int> { 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0 } },
+            Wishes = new Dictionary<string, int> { ["1,1"] = 2 },
+            Cons3w = new List<C3wRow>(),
+        };
+        var before = UnifiedViolationChecker.Check(st, st.Schedule.Select(r => r.ToArray()).ToArray());
+        TuningTelemetry.Reset();
+        var on = V6HotfixPasses.ApplyAdaptiveBlockSwapPolish(st, st.Schedule.Select(r => r.ToArray()).ToArray(), filterC3nIncrease: true);
+        var skipped = TuningTelemetry.C3nFilterSkippedCount();
+        var off = V6HotfixPasses.ApplyAdaptiveBlockSwapPolish(st, st.Schedule.Select(r => r.ToArray()).ToArray(), filterC3nIncrease: false);
+        TuningTelemetry.Reset();
+        Assert.True(skipped > 0);
+        Assert.Equal(before.Hard, UnifiedViolationChecker.Check(st, on.NewSchedule).Hard);
+        Assert.Equal(on.NewSchedule, off.NewSchedule);
+    }
 }

@@ -73,10 +73,9 @@ public static partial class V6HotfixPasses
         int maxCycle = 5,
         int maxCycleVisits = 50_000,
         /// <summary>
-        /// 禁止連続(c3n)が正味増える候補を<b>候補生成の段階で</b>捨てるか。既定は
-        /// <see cref="PolishGate.FilterC3nIncrease"/>（設定タブ→詳細設定のトグル・既定 false＝捨てない）。
-        /// c3n は HARD なので増える候補は最終的に <c>isBetter</c> が必ず却下する＝true/false で<b>採用
-        /// 結果は変わらない</b>。true にすると詰んだ候補へフル checker を呼ばなくなり評価枠を節約できる。
+        /// 必須(HARD)が正味で増える候補を<b>候補生成の段階で</b>捨てるか（名前は c3n 版の名残、Kotlin 3.649.0）。既定は
+        /// <see cref="PolishGate.FilterC3nIncrease"/>（既定 true）。判定は <see cref="HardDelta"/> の厳密な正味差分＝正式採否が必ず却下する
+        /// 候補だけを捨て、その評価枠を残りの候補へ回す。
         /// </summary>
         bool? filterC3nIncrease = null,
         Func<bool>? shouldStop = null,
@@ -283,28 +282,19 @@ public static partial class V6HotfixPasses
             //   （実データは10名中9名の「休」が厳密ピン＝長いブロックを丸ごと交換すると必ず回数が動く）。
             if (!BalancePinnedDays(cycle, swapDays, counts)) return null;
 
-            // [3.295.0 境界c3nの事前フィルタ / 3.296.0 で既定OFF] 3.294.0 でピン破りを消した結果、
-            //   残る不採用は全て必須増＝c3n（禁止連続）になった。この巡回交換では covU/covO は同日置換で
-            //   不変・groupViol は canDo・pref は movable で不変なので、変化しうる HARD は c3n だけ。
-            //   c3n は職員行ローカルなので、参加者の行に交換を当てた fire 数を数えれば近似でなく厳密に
-            //   判定できる。既定 OFF（Kotlin 3.296.0）: フィルタは firesAfter > firesBefore の候補だけを
-            //   落とす＝減る・同数の候補は元から通しているため、外しても採用は増えない（c3n は HARD なので
-            //   増える候補は isBetter が第1キーで必ず却下）。ON にすると構造的に詰んだ候補へ checker を
-            //   呼ばなくなり、評価枠を soft 判定まで進める候補へ回せる。
-            if (filterC3n && p.Cons3n.Count > 0)
+            // [Kotlin 3.649.0] 巡回を当てた盤面の必須(HARD)の正味差分（HardDelta＝groupViol/pref/c3w/c3n/covU を厳密に数える）が正なら、
+            //   正式採否（HARD が先頭）が必ず却下する＝捨てても採否は変わらない。旧（3.295.0〜3.648.0）は c3n の fire 数だけを比べており、
+            //   希望の前日の禁止(c3w)や担当外シフトが減って必須の合計が減る候補まで捨てていた。
+            if (filterC3n)
             {
-                var firesBefore = 0;
-                var firesAfter = 0;
+                var cand = (int[][])work.Clone();
                 for (var t = 0; t < n; t++)
                 {
-                    var self = cycle[t];
-                    var giver = cycle[(t + 1) % n];
-                    var row = (int[])work[self].Clone();
-                    firesBefore += C1DeltaPrefilter.StaffC3nFires(p, row);
-                    foreach (var j in swapDays) row[j] = work[giver][j];
-                    firesAfter += C1DeltaPrefilter.StaffC3nFires(p, row);
+                    var row = (int[])work[cycle[t]].Clone();
+                    foreach (var j in swapDays) row[j] = work[cycle[(t + 1) % n]][j];
+                    cand[cycle[t]] = row;
                 }
-                if (firesAfter > firesBefore) { TuningTelemetry.IncrementC3nFilterSkipped(); return null; }
+                if (HardDelta.Delta(p, work, cand) > 0) { TuningTelemetry.IncrementC3nFilterSkipped(); return null; }
             }
 
             var differences = swapDays.Count;

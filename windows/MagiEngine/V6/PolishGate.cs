@@ -35,14 +35,11 @@ public static class PolishGate
     public static volatile bool C1MoveARepair = false;
 
     /// <summary>
-    /// ブロック巡回交換で、禁止連続(c3n)が正味増える候補を<b>候補生成の段階で</b>捨てるか。既定 <b>true</b>
-    /// （Kotlin 3.518.0/ユーザー指示「既定OFFの処理をAB評価しメリットあれば既定Onに」で確定。
-    /// ON/OFFで採用結果は変わらないため新規A/Bは不要＝既存測定をそのまま適用）。
+    /// ブロック巡回交換で、必須(HARD)が正味で増える候補を<b>候補生成の段階で</b>捨てるか。既定 <b>true</b>（Kotlin 3.518.0）。
     ///
-    /// c3n は HARD なので増える候補は最終的に <c>isBetter</c> が必ず却下する＝ON/OFF で<b>採用結果は
-    /// 変わらない</b>（Kotlin 3.296.0 の A/B 実測で最終盤面・採用数が完全一致することを確認済み）。
-    /// ON にすると構造的に詰んだ候補へフル checker を呼ばなくなり、評価枠を soft 判定まで進める
-    /// 候補へ回せる（実測: 正式評価 48→14〜38 件）。
+    /// [Kotlin 3.649.0] 判定は <see cref="HardDelta"/> の厳密な正味差分＝正式採否（HARD が先頭）が必ず却下する候補だけを捨てる。
+    /// 捨てた候補は評価枠を使わないので、その枠は残りの候補へ回る。旧（3.295.0〜3.648.0）は c3n の増加だけで捨てていたため、
+    /// c3w や担当外シフトが減って必須の合計が減る候補まで落としていた（名前の C3n はその名残）。
     /// </summary>
     public static volatile bool FilterC3nIncrease = true;
 

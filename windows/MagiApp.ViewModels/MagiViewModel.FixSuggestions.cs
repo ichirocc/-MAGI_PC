@@ -163,7 +163,7 @@ public sealed partial class MagiViewModel
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard));
     }
 
-    public void ApplyFixSuggestion(FixSuggestion s)
+    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null)
     {
         var st = _state;
         if (st is null) return;
@@ -175,7 +175,10 @@ public sealed partial class MagiViewModel
         if (s.Ops.Count == 0) return;
         // 提案は計算時の盤面/設定に対する差分。その後のセル編集・元に戻す・別データ読込・職員/シフト削除のあとに
         // 同じ ops を書き込むと staff/day/toShift が別の実体を指す。一致しなければ適用せず再探索を促す（Kotlin 3.475.0）。
-        if (_fixBoardKey != 0L && (_fixBoardKey != BoardKey(sched) || _fixStateKey != StateKey(st)))
+        // [Kotlin 3.650.0] 照合は案を出したときの指紋（相談に積んだ案は自分の指紋を運ぶ＝あとの探索で上書きされた全体の指紋で通さない）。
+        var ob = originBoard ?? _fixBoardKey;
+        var os = originState ?? _fixStateKey;
+        if (ob != 0L && (ob != BoardKey(sched) || os != StateKey(st)))
         {
             Ui.MessageIsError = true;
             ClearFixState();
@@ -213,13 +216,16 @@ public sealed partial class MagiViewModel
 
     /// <summary>2 セル以上を動かす手は当てる前に一覧（だれの・どの日の・何→何）を見せる。1 セルの手はそのまま当てる（3.646.0: ホーム・分析・セルのシートも同じ）。
     /// Kotlin <c>previewOrApplyFix</c>。</summary>
-    public void PreviewOrApplyFix(FixSuggestion s)
+    public void PreviewOrApplyFix(FixSuggestion s, long? originBoard = null, long? originState = null)
     {
-        if (s.Ops.Count < 2) { ApplyFixSuggestion(s); return; }
+        var ob = originBoard ?? _fixBoardKey;
+        var os = originState ?? _fixStateKey;
+        if (s.Ops.Count < 2) { ApplyFixSuggestion(s, ob, os); return; }
         var sched = _currentSchedule;
         if (sched is null) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate) with { Target = new ChainTarget(null, null, s.Label, Suggestion: s) };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate) with
+            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os) };
     }
 
     /// <summary>相談に積んだ入れ替えの枠を今の勤務表で探し直す（日付・記号で枠を引き直す＝月やシフトが変わっていれば断る）。
@@ -230,7 +236,13 @@ public sealed partial class MagiViewModel
         var u = Ui;
         var target = ConsultList.ConsultChainTarget(t, u.StartDate, u.ShiftSymbols, u.Days);
         if (target is { } tg) PrepareShortageChainFix(tg.J, tg.K, t.Label);
-        else if (t.Suggestion is { } s) PreviewOrApplyFix(s);
+        else if (t.Suggestion is { } s && _currentSchedule is { } sched && _state is { } st && !ConsultList.ConsultChainStale(t, BoardKey(sched), StateKey(st)))
+            PreviewOrApplyFix(s, t.BoardKey, t.StateKey);
+        else if (t.Suggestion is not null)
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = ConsultList.Stale;
+        }
         else
         {
             Ui.MessageIsError = true;

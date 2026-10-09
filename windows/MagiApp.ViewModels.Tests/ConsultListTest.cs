@@ -55,9 +55,8 @@ public class ConsultListTest
         Assert.Equal((0, 11), ConsultList.ConsultCell(c, "2026-10-01", new[] { "乙", "甲" }, 31));          // 並び替え: 氏名で引き直す
         Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "甲" }, 31));                            // 削除: 開けない
         Assert.Null(ConsultList.ConsultCell(c, "2026-11-01", new[] { "甲", "乙" }, 30));                      // 月の移動: 日付が期間の外
-        // 同名は位置が一致すればそれ、違えば先頭（Kotlin の実装と同じ。Kotlin のテストは「0 to 11」と書くが実装は位置 1 を返す）。
-        Assert.Equal((1, 11), ConsultList.ConsultCell(c, "2026-10-01", new[] { "乙", "乙" }, 31));
-        Assert.Equal((0, 11), ConsultList.ConsultCell(c, "2026-10-01", new[] { "乙", "甲", "乙" }, 31));
+        Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "乙", "乙" }, 31));                    // [3.650.0] 同名が複数で並びが不明＝開かない
+        Assert.Equal("同じ名前の職員が複数いて、どの人か決められません（乙）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "乙", "甲", "乙" }, Array.Empty<string>(), 31));
         Assert.Equal("いまの職員一覧にいません（乙）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲" }, Array.Empty<string>(), 31));
         Assert.Equal("いまの期間にない日です（10/12）", ConsultList.ConsultTargetNote(c, "2026-11-01", new[] { "甲", "乙" }, Array.Empty<string>(), 30));
         Assert.Null(ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲", "乙" }, Array.Empty<string>(), 31));
@@ -92,6 +91,31 @@ public class ConsultListTest
         Assert.Equal(11, ConsultList.DayIndexOf("2026-10-01", "2026-10-12", 31));
         Assert.Null(ConsultList.DayIndexOf("2026-10-01", "2026-11-12", 31));
         Assert.Null(ConsultList.IsoDate("", 3));
+    }
+
+    /// <summary>[3.650.0/外部レビュー] 同じ名前の職員は、積んだときと並びが同じときだけ位置で開く。</summary>
+    [Fact]
+    public void SameNamedStaffOpenOnlyWhileTheRosterIsUnchanged()
+    {
+        var names = new[] { "佐藤", "甲", "佐藤" };
+        var c = ConsultList.Wish("佐藤", "10/12", "夜", "r", 2, 11, "2026-10-12") with { RosterKey = ConsultList.RosterKeyOf(names) };
+        Assert.Equal((2, 11), ConsultList.ConsultCell(c, "2026-10-01", names, 31));
+        Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "佐藤", "佐藤", "甲" }, 31));
+        Assert.Equal((0, 11), ConsultList.ConsultCell(c, "2026-10-01", new[] { "佐藤", "甲" }, 31));   // 1 人になれば氏名で引ける
+        Assert.NotEqual(0, ConsultList.RosterKeyOf(Array.Empty<string>()));
+    }
+
+    /// <summary>[3.650.0/外部レビュー] 積んだ案は出したときの盤面と設定の指紋を持ち、今と違えば当てない（枠を持つ相談は探し直すので関係しない）。</summary>
+    [Fact]
+    public void ASavedSuggestionIsStaleOnceTheBoardOrSettingsChange()
+    {
+        var sug = new FixSuggestion(FixKind.Chain, new[] { new FixCell(0, 2, 2), new FixCell(1, 2, 0) }, "lbl", -1, 0, Array.Empty<(string, int)>());
+        var t = new ChainTarget(null, null, "lbl", Suggestion: sug, BoardKey: 11L, StateKey: 22L);
+        Assert.False(ConsultList.ConsultChainStale(t, 11L, 22L));
+        Assert.True(ConsultList.ConsultChainStale(t, 12L, 22L));
+        Assert.True(ConsultList.ConsultChainStale(t, 11L, 23L));
+        Assert.True(ConsultList.ConsultChainStale(t with { BoardKey = 0L }, 11L, 22L));   // 指紋の無い案は古いとみなす
+        Assert.False(ConsultList.ConsultChainStale(new ChainTarget("2026-10-03", "夜", "lbl"), 1L, 2L));   // 枠を持つ相談（案なし）は探し直す
     }
 
     [Fact]

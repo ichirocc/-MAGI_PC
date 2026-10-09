@@ -379,10 +379,30 @@ public class MagiViewModelFixSuggestionsTest
     {
         var vm = VmWithNeed();
         var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 1, 1));
+        var bk = MagiViewModel.BoardKey(vm._currentSchedule!);
+        var sk = MagiViewModel.StateKey(vm._state!);
 
-        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget(null, null, "lbl", Suggestion: s)));
+        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget(null, null, "lbl", Suggestion: s, BoardKey: bk, StateKey: sk)));
 
         Assert.Same(s, vm.Ui.ChainPreview!.Suggestion);
+        Assert.Equal(bk, vm.Ui.ChainPreview.Target!.BoardKey);   // [3.650.0] 当てるときも積んだ案の指紋で照合する
+    }
+
+    /// <summary>[3.650.0/外部レビュー] 積んだあとで勤務表が変わった案（または指紋の無い案）は一覧を出さず、探し直しを促す。</summary>
+    [Fact]
+    public void ResumeConsultChain_StaleSuggestionIsNotReopened()
+    {
+        var vm = VmWithNeed();
+        var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 1, 1));
+        var sk = MagiViewModel.StateKey(vm._state!);
+
+        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget(null, null, "lbl", Suggestion: s, BoardKey: 12345L, StateKey: sk)));
+        Assert.Null(vm.Ui.ChainPreview);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal(ConsultList.Stale, vm.Ui.Message);
+
+        vm.ResumeConsultChain(new ConsultItem("lbl", "n", Chain: new ChainTarget(null, null, "lbl", Suggestion: s)));
+        Assert.Null(vm.Ui.ChainPreview);
     }
 
     [Fact]
