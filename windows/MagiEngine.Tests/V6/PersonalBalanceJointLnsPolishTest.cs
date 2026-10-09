@@ -76,4 +76,34 @@ public class PersonalBalanceJointLnsPolishTest
         var outp = PersonalBalanceJointLnsPolish.Apply(st, sched);
         Assert.Equal(0, outp.Applied);
     }
+
+    /// <summary>[3.654.0] 自己日交換・クロス日移送の禁止の並びは交換後の盤面で見る（Kotlin と 1 対 1）。</summary>
+    [Fact]
+    public void selfDaySwapIsJudgedOnTheBoardAfterBothCellsChange()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-03",
+            shifts: new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") },
+            groups: new List<Group> { new("G", "G") }, staffList: new List<Staff> { new("a", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 0, 0 } },   // X, Y, Y
+            wishes: new Dictionary<string, int> { ["0,2"] = 0 },                     // 3 日目は Y の希望
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("2", "") },
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row> { new("2", "X", "1") },
+            cons2: new List<C2Row>(), cons3: new List<C3Row>(),
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var sched = st.Schedule.ToIntArray2D();
+        var before = UnifiedViolationChecker.Check(st, sched);
+        Assert.Equal(1, before.Breakdown["c1"]);
+        Assert.Equal(1, before.Breakdown["low"]);
+        var outp = PersonalBalanceJointLnsPolish.Apply(st, sched);
+        var after = UnifiedViolationChecker.Check(st, outp.NewSchedule);
+        Assert.Equal(new[] { 0, 1, 0 }, outp.NewSchedule[0]);
+        Assert.Equal(0, after.Breakdown["c1"]);
+        Assert.Equal(0, after.Hard);
+    }
 }

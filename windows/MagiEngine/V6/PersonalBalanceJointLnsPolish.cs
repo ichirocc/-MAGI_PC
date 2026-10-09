@@ -524,7 +524,7 @@ internal static class PersonalBalanceJointLnsPolish
             var w = baseSchedule.Copy2D();
             w[i][j] = target;
             w[i][d2] = old;
-            if (p.MakesForbiddenRun(baseSchedule, i, j, target) || p.MakesForbiddenRun(baseSchedule, i, d2, old)) continue;
+            if (p.MakesForbiddenRun(w, i, j, target) || p.MakesForbiddenRun(w, i, d2, old)) continue;   // 交換後の行で見る（3.654.0）
             outCandidates.Add(new Candidate(
                 w, new List<CellOp> { new CellOp(i, j, target), new CellOp(i, d2, old) }, $"{goal.Reason}:自己日交換"));
             if (outCandidates.Count >= limit) break;
@@ -542,7 +542,7 @@ internal static class PersonalBalanceJointLnsPolish
                     var w = baseSchedule.Copy2D();
                     w[i][j] = target;
                     w[d][d2] = old;
-                    if (p.MakesForbiddenRun(baseSchedule, i, j, target) || p.MakesForbiddenRun(baseSchedule, d, d2, old)) continue;
+                    if (p.MakesForbiddenRun(w, i, j, target) || p.MakesForbiddenRun(w, d, d2, old)) continue;
                     outCandidates.Add(new Candidate(
                         w, new List<CellOp> { new CellOp(i, j, target), new CellOp(d, d2, old) }, $"{goal.Reason}:クロス日移送"));
                     if (outCandidates.Count >= limit) goto CrossDayTransferDone;

@@ -240,4 +240,32 @@ public class C1JointLnsPolishTest
                     $"{after.Hard}/{after.WeightedScore}/{after.Total}");
         }
     }
+
+    /// <summary>[3.654.0] 本人の別日を戻す自己日交換は 2 セルを当てた行で判定する（Kotlin と 1 対 1）。</summary>
+    [Fact]
+    public void selfDaySwapSurvivesWhenOnlyTheSingleCellPlacementWouldBeForbidden()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-03",
+            shifts: new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") },
+            groups: new List<Group> { new("G", "G") }, staffList: new List<Staff> { new("a", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 0, 0 } },   // X, Y, Y
+            wishes: new Dictionary<string, int> { ["0,2"] = 0 },                     // 3 日目は Y の希望
+            staffRange: new Dictionary<string, Range>(),
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row> { new("2", "X", "1") },
+            cons2: new List<C2Row>(), cons3: new List<C3Row>(),
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var sched = st.Schedule.ToIntArray2D();
+        Assert.Equal(1, UnifiedViolationChecker.Check(st, sched).Breakdown["c1"]);
+        var outp = C1JointLnsPolish.Apply(st, sched, new C1JointLnsPolish.Config(MaxMillis: 2000L, MaxRestarts: 2, MaxDepth: 3));
+        var after = UnifiedViolationChecker.Check(st, outp.NewSchedule);
+        Assert.Equal(new[] { 0, 1, 0 }, outp.NewSchedule[0]);
+        Assert.Equal(0, after.Breakdown["c1"]);
+        Assert.Equal(0, after.Hard);
+    }
 }
