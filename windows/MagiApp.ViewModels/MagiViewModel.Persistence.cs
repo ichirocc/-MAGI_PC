@@ -236,6 +236,7 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         RestoreAlts(snap.Alts);   // 盤面と一緒に、その盤面で有効だった「他の案」も戻す
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         ClearFixState();
@@ -270,6 +271,7 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         RestoreAlts(snap.Alts);
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         ClearFixState();
@@ -399,7 +401,7 @@ public sealed partial class MagiViewModel
                 // 外側 catch へ落ちる。このメソッドのクラスKDoc参照）。
                 LogOp("W", $"読込失敗: {err.GetType().Name}: {err.Message}");
                 Ui.Running = false;
-                Ui.Message = $"読み込めませんでした（{err.GetType().Name}）。ファイルの中身を確認してください";
+                Ui.Message = $"読み込めませんでした（{FailureWords.Of(err, FailureKind.Load)}）。ファイルの中身を確認してください";
                 Ui.MessageIsError = true;
                 return;
             }
@@ -443,6 +445,7 @@ public sealed partial class MagiViewModel
                 ui.ElapsedMs = 0;
                 // 前のデータの完了要約・ヒント・他の案・直し方は、このデータのものではない。
                 ui.RunSummary = null;
+                ui.StopSummary = null;
                 ui.CopilotHint = null;
                 ui.Alternatives = Array.Empty<string>();
                 ui.FixSuggestions = Array.Empty<FixSuggestion>();
@@ -492,7 +495,7 @@ public sealed partial class MagiViewModel
         {
             rollback?.Invoke();
             Ui.Running = false;
-            Ui.Message = $"読み込めませんでした（{e.GetType().Name}）。ファイルの中身を確認してください";
+            Ui.Message = $"読み込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）。ファイルの中身を確認してください";
             Ui.MessageIsError = true;
         }
         finally
@@ -673,7 +676,7 @@ public sealed partial class MagiViewModel
             if (seq == _checkSeq)
             {
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"違反チェックに失敗しました（{e.GetType().Name}）";
+                Ui.Message = $"違反チェックに失敗しました（{FailureWords.Of(e, FailureKind.Engine)}）";
                 Ui.MessageIsError = true;
             }
         }

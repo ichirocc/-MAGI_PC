@@ -229,10 +229,39 @@ public static partial class V6FinalPort
         var itersByPhase = new Dictionary<string, long>();
         long observedIters = 0L;
         // [hardFloor 精度] best の「非covU HARD」(groupViol/pref/c3n=解けるHARD)件数。
-        // [3.281.0/停滞レビューA] c3n構造壁の動的床。
-        // [3.592.0, Kotlin原本] 世代とresultを別フィールドで持つと、並行診断するワーカー間で新世代の
-        //   「checked」に旧世代のresultが結び付く競合があった。(version,result)組を単一参照で置換する。
-        Tuple<int, bool> c3nWallCache = Tuple.Create(-1, false);
+        // [3.281.0/停滞レビューA] c3n構造壁の動的床（covU の structuralHardFloor と対）。残る非covU HARD が c3n のみで、
+        //   ForbiddenDiag が生存盤面の各 run の塞がりを確かめたら、その c3n を「解けないHARD」として stallHardMs へ移行する。
+        //   診断は停滞が stallHardMs を超えてから遅延実行する（約 20 ms）。
+        // [3.592.0] 診断の鍵は盤面の内容（BoardKeyedFlag）。世代と結果を別々に持つと、並行する診断の間で旧盤面の結果が
+        //   新しい盤面に結び付いた。鍵を盤面にして、結果は必ずその盤面のものにする。
+        // 壁の証明は C3nWallProof に集約する（生存盤面の対応・持ち越し・測定の基準腕）。
+        var deepRefuted = 0;
+        var deepConfirmed = 0;
+        var wallProof = new C3nWallProof(
+            bestVersion: () => wd.BestVersion,
+            bestReport: () => wd.BestReport,
+            liveSnapshot: () => V6NativeOptimizer.CurrentLiveBestSnapshot,
+            diagnose: b =>
+            {
+                try
+                {
+                    var arr = new int[b.Count][];
+                    for (var r = 0; r < b.Count; r++)
+                    {
+                        arr[r] = new int[b[r].Count];
+                        for (var c = 0; c < b[r].Count; c++) arr[r][c] = b[r][c];
+                    }
+                    var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, arr);
+                    if (!(diag.HasRuns && diag.AllBlocked)) return false;
+                    // 根拠の段階化（[PolishGate.C3nWallDeepCheck]）: 希望固定だけの壁は証明相当。探索手の全滅だけの壁は、
+                    //   1 手探索（上限 2 s）でも必須を減らす手が無いときだけ壁とみなす。
+                    if (!PolishGate.C3nWallDeepCheck || diag.AllBlockedCertified) return true;
+                    if (V6PortAnalyzer.C3nWallRefutedByOneMove(state, arr)) { Interlocked.Increment(ref deepRefuted); return false; }
+                    Interlocked.Increment(ref deepConfirmed);
+                    return true;
+                }
+                catch (Exception) { return false; }
+            });
         var lastPhase = "";
         var progressLock = new object();   // [競合解消] 並列ワーカーから呼ばれる best 追跡の read-modify-write を直列化
 
@@ -297,38 +326,14 @@ public static partial class V6FinalPort
             return Volatile.Read(ref wishReachedCache).Item2;
         }
 
-        // [3.281.0/A] c3n構造壁の遅延証明。best 世代ごとに一度だけ ForbiddenDiag を実行しキャッシュする。
-        bool C3nWallProven()
-        {
-            var v = wd.BestVersion;
-            if (Volatile.Read(ref c3nWallCache).Item1 != v)
-            {
-                var board = V6NativeOptimizer.LiveBest;
-                bool proven;
-                if (board == null) proven = false;
-                else
-                {
-                    try
-                    {
-                        var arr = new int[board.Count][];
-                        for (var r = 0; r < board.Count; r++)
-                        {
-                            arr[r] = new int[board[r].Count];
-                            for (var c = 0; c < board[r].Count; c++) arr[r][c] = board[r][c];
-                        }
-                        var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, arr);
-                        proven = diag.HasRuns && diag.AllBlocked;
-                    }
-                    catch (Exception) { proven = false; }
-                }
-                Volatile.Write(ref c3nWallCache, Tuple.Create(v, proven));
-            }
-            return Volatile.Read(ref c3nWallCache).Item2;
-        }
+        // 壁の証拠の選択: 既定は生存盤面の報告が最良の報告と同じ参照のときだけ使う（[C3nWallProof.Bound]）。
+        //   測定の基準腕（[PolishGate.C3nWallLegacy]）は HEAD と同じ判定（[C3nWallProof.Legacy]）。
+        bool C3nWallProven() => PolishGate.C3nWallLegacy ? wallProof.Legacy() : wallProof.Bound();
 
         bool ShouldStop()
         {
             var now = NowMs();
+            var gen = wd.BestVersion;   // 判定の世代。発火はこの世代のままだった場合だけ確定する（§5.4）
             // [賢い早期脱出] bestHard が構造的covU下限以下＝解けるHARDは出し切った状態。
             //   ただし非covU HARDが残る間は long stall で粘る。
             // [3.281.0/A] 追加: 残る非covU HARD が c3n のみで ForbiddenDiag が全 run の塞がりを証明した場合も
@@ -339,14 +344,21 @@ public static partial class V6FinalPort
                 now - wd.LastBestImproveMs > stallHardMs && C3nWallProven();
             var effStall = EffectiveStallMs(
                 wd.BestHard, hardFloor, nonCovU, wd.BestNonCovUAllC3n, wall, stallHardMs, stallMs,
-                wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
+                wishOn && wd.BestHard == wishFloorLogged && BestWishReached(),
+                adaptiveMs: PolishGate.AdaptiveStall ? AdaptiveStallMs(wd.RecentGaps(), stallHardMs, stallMs) : null);
             if (now >= searchDeadlineMs || cancellationToken.IsCancellationRequested) return true;
             if (WatchdogStagnationFired(now, startMs, minRunMs, Volatile.Read(ref lastPhaseChangeMs), phaseGraceMs,
                     wd.LastBestImproveMs, effStall))
             {
-                Volatile.Write(ref e0Fired, wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
-                wd.Fire(now, Volatile.Read(ref observedIters), byOverride: now - Volatile.Read(ref lastPhaseChangeMs) <= phaseGraceMs);
-                return true;
+                // 判定の世代のままなら確定する。判定後に改善が届いていれば発火しない（ProgressWatch の Observe と同じロック）。
+                bool fired;
+                lock (progressLock)
+                {
+                    fired = wd.FireIfGeneration(gen, now, Volatile.Read(ref observedIters),
+                        byOverride: now - Volatile.Read(ref lastPhaseChangeMs) <= phaseGraceMs, wall: wall);
+                }
+                if (fired) Volatile.Write(ref e0Fired, wishOn && wd.BestHard == wishFloorLogged && BestWishReached());
+                return fired;
             }
             return false;
         }
@@ -407,7 +419,8 @@ public static partial class V6FinalPort
             rootSchedule: chained.Schedule,
             elites: fusionElites,
             shouldStop: IntegrationStop,
-            deadlineMs: integrationDeadline);
+            deadlineMs: integrationDeadline,
+            quantitativeRangeEval: quantitativeRangeEval);
         var tIntegration1 = NowMs();
 
         // [E0B] 希望衝突の床で頭打ちしたら後処理の研磨を丸ごと省き、検査・HF70 だけにする（最終番兵は下で通常どおり）。
@@ -542,15 +555,21 @@ public static partial class V6FinalPort
             var nonCovU = wd.BestNonCovUHard;
             var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
             var covUPlateau = wd.BestHard <= hardFloor && nonCovU == 0;
+            var gapsEnd = wd.RecentGaps();
+            var adaptiveEnd = PolishGate.AdaptiveStall ? AdaptiveStallMs(gapsEnd, stallHardMs, stallMs) : null;
             var kind = covUPlateau && wishOn && wishReachedEnd
                 ? $"plateau+希望衝突の床=短{stallHardMs / 1000}s"
                 : covUPlateau
                 ? $"plateau=短{stallHardMs / 1000}s"
                 : wishOn && wishReachedEnd
                     ? $"希望衝突の床=短{stallHardMs / 1000}s"
-                : Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n
+                : wd.StagnationWall && wd.BestNonCovUAllC3n
                     ? $"c3n壁=短{stallHardMs / 1000}s"
-                    : $"通常=長{stallMs / 1000}s";
+                    : $"通常=長{stallMs / 1000}s" + (adaptiveEnd is long ad && ad < stallMs ? $"→適応{ad / 1000}s" : "");
+            var adaptNote = PolishGate.AdaptiveStall
+                ? $"・適応閾値={(adaptiveEnd is long ae ? $"{ae / 1000}s" : "なし")}（改善間隔{gapsEnd.Count}個" +
+                    (gapsEnd.Count > 0 ? $"・最大{gapsEnd.Max() / 1000}s×{AdaptiveStallFactor}" : "") + "・通常分岐だけ）"
+                : "";
             // [3.375.2/実測で判明] 発火しなかったとき、どの条件が塞いだかを出す。
             // [3.408.0] フェーズ猶予は遅延に降格した（閾値の StallOverrideFactor 倍で上書き発火）ので、
             //   理由として挙げるのは「まだ上書き倍率にも達していない」ときだけ。
@@ -561,7 +580,7 @@ public static partial class V6FinalPort
                 var reasons = new List<string>();
                 if (tChain1 - startMs <= minRunMs)
                     reasons.Add($"最短実行未達(実測{(tChain1 - startMs) / 1000}s/{minRunMs / 1000}s)");
-                var effStallForLog = kind.StartsWith("通常", StringComparison.Ordinal) ? stallMs : stallHardMs;
+                var effStallForLog = kind.StartsWith("通常", StringComparison.Ordinal) ? (adaptiveEnd is long al ? Math.Min(stallMs, al) : stallMs) : stallHardMs;
                 if (tChain1 - lastPhaseAtSearchEnd <= phaseGraceMs &&
                     tChain1 - lastImp <= effStallForLog * StallOverrideFactor)
                     reasons.Add($"現フェーズ猶予未達(実測{(tChain1 - lastPhaseAtSearchEnd) / 1000}s/{phaseGraceMs / 1000}s" +
@@ -575,9 +594,12 @@ public static partial class V6FinalPort
             var afterNote = wd.LastBestImproveMs > tChain1
                 ? $"・探索後も改善あり(経過{(wd.LastBestImproveMs - startMs) / 1000}s＝後処理/追加精製)"
                 : "";
-            var wallNote = Volatile.Read(ref c3nWallCache).Item1 >= 0
-                ? $"・c3n壁診断={(Volatile.Read(ref c3nWallCache).Item2 ? "構造的な壁と判定" : "壁ではない（崩す手が実在）")}"
-                : "";
+            var deepR = Volatile.Read(ref deepRefuted);
+            var deepC = Volatile.Read(ref deepConfirmed);
+            var wallNote = (wallProof.Checks > 0
+                ? $"・c3n壁の確認{wallProof.Checks}回（生存盤面の更新のうち最良の報告と対応しないのは{wallProof.Mismatch}回）"
+                : "") +
+                (deepR + deepC > 0 ? $"・1手探索の反証{deepR}回／確認{deepC}回" : "");
             return new List<MirrorLog>
             {
                 new(level: "I", tag: "Watchdog",
@@ -588,7 +610,7 @@ public static partial class V6FinalPort
                         $"covU床{hardFloor}={(covUPlateau ? "到達" : "未到達")}・発火={(wd.StagnationFired ? "あり" : "なし")}" +
                         $"・反復(進捗報告ぶん・目安)=最終改善時{FmtIter(lastImpItersAtSearchEnd)}→" +
                         $"探索終了時{FmtIter(itersAtSearchEnd)}（無改善のまま約{FmtIter(itersAtSearchEnd - lastImpItersAtSearchEnd)}転・" +
-                        $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}"),
+                        $"総量はAdaptivePortfolioの合計iter参照）{blockNote}{afterNote}{wallNote}{adaptNote}"),
             };
         }
         var watchdogLog = BuildWatchdogLog();
@@ -610,7 +632,7 @@ public static partial class V6FinalPort
                             ? $"（希望衝突の床に到達＝{WishFloorModeName(wishFloorMode)}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
                             : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
-                        (Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n
+                        (wd.StagnationWall
                             ? "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）"
                             : "")),
             }
@@ -674,13 +696,13 @@ public static partial class V6FinalPort
                 aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish));
 
         // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
-        //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁・HF63が学習した充足困難族）
+        //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁）
         //   ②まだ狙える（追えば減る見込み）に仕分ける。
         List<MirrorLog> BuildResidualLog()
         {
             var bd = finalReport.Breakdown;
             var infeasLearned = chained.InfeasibleFamilies;
-            var c3nWall = Volatile.Read(ref c3nWallCache).Item2 && wd.BestNonCovUAllC3n;
+            var c3nWall = wd.BestNonCovUAllC3n && wallProof.DiagnoseBoard(finalSched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList());
             var walls = new List<string>();
             var open = new List<string>();
             // [3.375.0/実機ログ起因] 構造床は族ループより先に計算する。open 側から差し引くため。
@@ -715,9 +737,7 @@ public static partial class V6FinalPort
                 var n0 = bd.GetValueOrDefault(key, 0);
                 if (n0 <= 0) continue;
                 if (personalWall > 0 && (key == "apt" || key == "high")) continue;   // 下でまとめて出す
-                string? structural = key == "c3n" && c3nWall ? "証明済みの壁"
-                    : infeasLearned.Contains(key) ? "探索が充足困難と学習"
-                    : null;
+                string? structural = key == "c3n" && c3nWall ? "証明済みの壁" : null;
                 if (structural != null) { walls.Add($"{key} {n0}件({structural})"); continue; }
                 var self = Math.Min(n0, selfConflict.GetValueOrDefault(key, 0));
                 if (self > 0) selfConflictShown.Add((key, self));
@@ -752,9 +772,12 @@ public static partial class V6FinalPort
             var openTxt = open.Count == 0 ? "なし＝これ以上は追っても減りません" : string.Join(" / ", open);
             // 採用盤面の必須を「希望どうしのぶつかり（希望を1件取り消すまで消えない）」と「それ以外」に分ける（表示・計測用）。
             var hardWishFloor = V6SanityPort.WishConflictHardShare(selfConflict, bd, finalReport.Hard);
+            // HF63 の推定は探索中の履歴（解除済みも含む）で、最終盤面がいま直せないことの根拠ではない。
+            var learnedNote = infeasLearned.Count == 0 ? ""
+                : $" ／ 探索中に充足困難と推定した履歴: {string.Join(",", infeasLearned.OrderBy(x => x, StringComparer.Ordinal))}";
             return new List<MirrorLog>
             {
-                new(level: "I", tag: "残存分析", message: $"もう直せない: {wallTxt} ／ まだ狙える: {openTxt}"),
+                new(level: "I", tag: "残存分析", message: $"もう直せない: {wallTxt} ／ まだ狙える: {openTxt}" + learnedNote),
                 new(level: "I", tag: "必須内訳", message: $"必須 {finalReport.Hard}件 = 希望どうしのぶつかり {hardWishFloor}件 + それ以外 {finalReport.Hard - hardWishFloor}件"),
             };
         }
@@ -840,6 +863,37 @@ public static partial class V6FinalPort
 
         // post.report.logs = [HF80/67/66/70 logs + POST timing + UnifiedViolationChecker logs]。
         // post.logs は post.report.logs の部分集合なので両方足すと重複する → post.report.logs のみ使う。
+        // 終わり方の要約（画面の説明用）。種別の条件と順序は Watchdog 行の「実効閾値の種別」と同じ（plateau → 希望衝突の床 →
+        //   c3n 壁 → 通常）。壁は最終盤面の診断で証明相当（全セル希望固定）と経験的に分ける。採否・探索には使わない。
+        //   ログにも同じ値を 1 行出す＝画面の説明を後から照合できる。
+        var stopSummary = BuildStopSummary();
+        StopSummary BuildStopSummary()
+        {
+            var nonCovU = wd.BestNonCovUHard;
+            var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
+            var fired = wd.StagnationFired;
+            // 壁で止まったときだけ最終盤面を診断する（約 20 ms）。残存分析の `wallProof.DiagnoseBoard` とは別＝そちらは変えない。
+            bool WallCertified()
+            {
+                try { return V6PortAnalyzer.DiagnoseForbiddenRuns(state, finalSched).AllBlockedCertified; }
+                catch (Exception) { return false; }
+            }
+            var kind = !fired ? StopKind.Deadline
+                : wd.BestHard <= hardFloor && nonCovU == 0 ? StopKind.PlateauFloor
+                : wishOn && wishReachedEnd ? StopKind.WishFloor
+                : wd.StagnationWall && wd.BestNonCovUAllC3n ? (WallCertified() ? StopKind.C3nWallCertified : StopKind.C3nWallEmpirical)
+                : StopKind.NormalStall;
+            return new StopSummary(fired, kind, (int)((NowMs() - startMs) / 1000), seconds,
+                (int)(Math.Max(0L, tChain1 - lastImpAtSearchEnd) / 1000), finalReport.Hard);
+        }
+        var stopLog = new MirrorLog(level: "I", tag: "StopSummary",
+            message: $"終わり方: {KotlinName(stopSummary.Kind)}（停滞で早期終了={(stopSummary.EarlyStop ? "あり" : "なし")}）・使用{stopSummary.UsedSec}s／予算{stopSummary.BudgetSec}s" +
+                $"・探索終了時の無改善{stopSummary.StalledSec}s・必須{stopSummary.RemainingHard}件");
+        static string KotlinName(StopKind k) => k switch
+        {
+            StopKind.Deadline => "DEADLINE", StopKind.PlateauFloor => "PLATEAU_FLOOR", StopKind.WishFloor => "WISH_FLOOR",
+            StopKind.C3nWallCertified => "C3N_WALL_CERTIFIED", StopKind.C3nWallEmpirical => "C3N_WALL_EMPIRICAL", _ => "NORMAL_STALL",
+        };
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
         logs.AddRange(cappedLog);
         logs.AddRange(pinLog);
@@ -852,6 +906,7 @@ public static partial class V6FinalPort
         logs.AddRange(ledgerLog);
         logs.AddRange(residualLog);
         logs.AddRange(stagnationLog);
+        logs.Add(stopLog);
         logs.AddRange(gate.Logs);
         logs.AddRange(first.PhaseLogs);
         if (!ReferenceEquals(chained, first)) logs.AddRange(chained.PhaseLogs);
@@ -869,6 +924,6 @@ public static partial class V6FinalPort
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: chained.Alternatives, CapZero: capZero);
+            Alternatives: chained.Alternatives, CapZero: capZero, Stop: stopSummary);
     }
 }

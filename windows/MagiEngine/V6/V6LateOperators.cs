@@ -67,14 +67,18 @@ public static class V6LateOperators
         int chainTry4 = 12,
         int rectTry = 12,
         int blkTry = 8,
-        bool quantitativeRangeEval = false)
+        bool quantitativeRangeEval = false,
+        Func<bool>? shouldStop = null)
     {
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var sched = schedule.Copy2D();
         var logs = new List<MirrorLog>();
         var cur = report;
 
-        bool TimeUp() => EngineClock.NowMs() >= deadlineMs;
+        // 停止要求は試行ごとに見る（[PolishGate.LateOpStopPropagation]）。false は試行ごとの確認だけを切る（入口の確認は残る）。
+        Func<bool> stopRequested = shouldStop ?? (() => false);
+        Func<bool> stop = PolishGate.LateOpStopPropagation ? stopRequested : () => false;
+        bool TimeUp() => EngineClock.NowMs() >= deadlineMs || stop();
         int Lim(ViolationReport r) =>
             200 * r.Breakdown.GetValueOrDefault("high", 0) + 120 * r.Breakdown.GetValueOrDefault("low", 0);
         int C1Count(ViolationReport r) => r.Breakdown.GetValueOrDefault("c1", 0);
@@ -116,6 +120,8 @@ public static class V6LateOperators
 
         var chain3 = 0;
         var chain4 = 0;
+        // 停止要求済みなら 1 手も試さず、入力をそのまま返す。
+        if (stopRequested()) return new LateImproveResult(sched, cur, chain3, chain4, rect, blkN, logs);
 
         // ── 共有ヘルパ(ChainSwap3/4) ──
         var sN = p.S;

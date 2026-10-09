@@ -11,7 +11,8 @@ namespace MagiEngine.V6;
 ///
 /// **この学習を何に使うか**（Kotlin原本 3.409.0/3.409.10 のコメント参照）:
 ///  - <see cref="InfeasibleBreakdownKeys"/> が RSI の focus 候補から充足困難と学習した族を外す。
-///  - <see cref="InfeasibleFamilies"/> が残存分析（診断ログ）へ供給する。
+///  - RSI は <see cref="InfeasibleBreakdownKeys"/>（内部キー）を <c>RecordInfeasibleScoped</c> へ渡す（3.642.0 で表示名からの変更）。
+///    残存分析の注記はこの内部キーの履歴を表示するだけで、族の分類には使わない。
 ///  - **目的関数の重みには一切触れない**（HF77 該当・本クラスの対象外）。
 ///
 /// [Kotlin原本 3.409.10 のコメント、この移植でも維持] λ上限(penalty cap)の一式（<c>maxLam</c>/

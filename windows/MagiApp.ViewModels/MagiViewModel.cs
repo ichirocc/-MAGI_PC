@@ -259,6 +259,7 @@ public sealed partial class MagiViewModel
         Ui.Alternatives = System.Array.Empty<string>();
         // 完了カードの前後比較（RunSummary）も直前の実行の盤面の話＝同じ理由で外す。
         Ui.RunSummary = null;
+        Ui.StopSummary = null;
     }
 
     internal void ClearUndo()

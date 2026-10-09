@@ -110,6 +110,7 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>[Android 3.612.0 思考誘導S4] 直近の実行で長く改善せず採用盤面にも残った必須族（盤面を変えたら空）。</summary>
     [ObservableProperty] private IReadOnlyList<string> stalledHardFamilies = Array.Empty<string>();
+    [ObservableProperty] private V6FinalPort.StopSummary? stopSummary;   // [3.643.0] 直近の実行がどう終わったか（ホームの説明行）。結果が無効になる操作で null
 
     /// <summary>絞り込み対象スタッフ名（空=全体）。</summary>
     [ObservableProperty] private string fixFocusName = "";

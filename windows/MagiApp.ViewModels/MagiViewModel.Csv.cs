@@ -495,7 +495,7 @@ public sealed partial class MagiViewModel
         {
             if (pushedUndo) RollbackBoardCommit(st, sched);
             Ui.Running = false;
-            Ui.Message = $"CSVを取り込めませんでした（{e.GetType().Name}）";
+            Ui.Message = $"CSVを取り込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）";
             Ui.MessageIsError = true;
         }
         finally
@@ -697,30 +697,23 @@ public sealed partial class MagiViewModel
     public void NotifySave(IoOutcome result, string what)
     {
         if (result.Success) Notify($"{what}を保存しました");
-        else Notify($"{what}を保存できませんでした（{IoReason(result.Error)}）", "W");
+        else
+        {
+            LogOp("W", $"{what}の保存に失敗: {ErrorLogText(result.Error)}");
+            Notify($"{what}を保存できませんでした（{IoReason(result.Error, saving: true)}）。もう一度お試しください", "W");
+        }
     }
 
     /// <summary>ファイル読み込みの失敗を1行で返す（成功時は呼ばない＝読み込めた事実は中身の表示が示す）。</summary>
     public void NotifyOpenFailure(IoOutcome result, string what)
     {
-        Notify($"{what}を開けませんでした（{IoReason(result.Error)}）", "W");
+        LogOp("W", $"{what}の読込に失敗: {ErrorLogText(result.Error)}");
+        Notify($"{what}を開けませんでした（{IoReason(result.Error, saving: false)}）。ファイルを確認して、もう一度お試しください", "W");
     }
 
-    /// <summary>
-    /// 例外を利用者の言葉へ。生の例外文を画面へ出さない（3.147.0/3.191.0相当の方針）が、詳しい原因は
-    /// Notify が LogOp へ流すので書き出したログには残る。
-    /// [SecurityException→UnauthorizedAccessException] Kotlin原本は Android の
-    /// <c>java.lang.SecurityException</c> を見るが、.NETの実際のファイルI/O APIが権限拒否で投げるのは
-    /// <see cref="UnauthorizedAccessException"/>（CAS由来のSecurityExceptionは現行.NETでは実質使われない）
-    /// のため、こちらへ差し替えている。
-    /// </summary>
-    private static string IoReason(Exception? e) => e switch
-    {
-        null => "内容が空でした",
-        UnauthorizedAccessException => "アクセスが許可されていません",
-        FileNotFoundException => "ファイルが見つからないか、書き込みが許可されていません",
-        _ when e.Message.Contains("space", StringComparison.OrdinalIgnoreCase) => "保存先の空き容量が足りません",
-        IOException io when io.Message.StartsWith("ファイルが大きすぎます", StringComparison.Ordinal) => io.Message,   // [レビュー指摘 2026-09-04] 取込サイズ上限
-        _ => e.GetType().Name,
-    };
+    /// <summary>ログ用の例外の表記（種類と文）。画面へは出さない（画面は <see cref="IoReason"/> の利用者の言葉）。</summary>
+    private static string ErrorLogText(Exception? e) => e is null ? "例外なし" : $"{e.GetType().FullName}: {e.Message}";
+
+    /// <summary>ファイル入出力の失敗を利用者の言葉へ（<see cref="FailureWords"/>。詳しい原因は <see cref="NotifySave"/>/<see cref="NotifyOpenFailure"/> が LogOp へ流す）。</summary>
+    private static string IoReason(Exception? e, bool saving) => FailureWords.Of(e, saving ? FailureKind.Save : FailureKind.Load);
 }

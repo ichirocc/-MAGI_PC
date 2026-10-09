@@ -32,7 +32,11 @@ public sealed record CoverageShortfall(
     /// </summary>
     bool BlockedNow = false,
     /// <summary>[S5b] 担当できる（MayPlace）のに、この日は別の勤務で希望固定されている職員（capacity から外した人。職員順）。</summary>
-    IReadOnlyList<int>? WishPinned = null)
+    IReadOnlyList<int>? WishPinned = null,
+    /// <summary>[3.642.0] 玉突き（多人数の入替）の手順が実在する枠（<c>ChainFixOps</c> で手順を取り出せる）。</summary>
+    bool ChainVerified = false,
+    /// <summary>[3.642.0] 移すと禁止連続(c3n)になるため候補から外れた人数（⑤の並びへの導線の根拠）。</summary>
+    int ForbidCount = 0)
 {
     public IReadOnlyList<int> WishPinned { get; init; } = WishPinned ?? Array.Empty<int>();
 }
@@ -139,11 +143,57 @@ public static partial class V6PortAnalyzer
         public const int SurplusProbeBudget = 240;
         public const long AdjacentSeed = 7L;
         public const int MinRelaxCandidates = 2;
+        /// <summary>[3.643.0] 経験的な c3n 壁を 1 手探索で反証する上限。停滞が短閾値（15 s 以上）を超えた後に最良版ごとに一度だけ走る。</summary>
+        public const long C3nWallDeepMs = 2000L;
     }
 
     /// <summary><c>FindCovUChain</c>（探索本体と同一関数）を <see cref="Probe.ChainSeeds"/> 通りの rng 順で試し、1 つでも成立すれば真。</summary>
     private static bool ChainFills(Problem p, int[][] board, int k, int j, int exclude = -1) =>
         Enumerable.Range(0, Probe.ChainSeeds).Any(seed => V6SearchOperators.FindCovUChain(p, board, k, j, new JavaRandom(seed), exclude: exclude) is not null);
+
+    /// <summary>
+    /// [3.642.0/UX監査 高1] 玉突き（多人数の入替）の手順。<see cref="ChainFills"/> と同じ <c>FindCovUChain</c>・同じ seed 順で、
+    /// 最初に成立した手順を返す。盤面は変えない。<c>ChainVerified</c> の枠では必ず見つかる（同じ関数・同じ順序）。
+    /// </summary>
+    internal static List<FixCell>? ChainFixOps(Problem p, int[][] schedule, int k, int j)
+    {
+        var norm = ScheduleUtil.NormalizeSchedule(schedule, p);
+        for (var seed = 0; seed < Probe.ChainSeeds; seed++)
+        {
+            var moves = V6SearchOperators.FindCovUChain(p, norm, k, j, new JavaRandom(seed));
+            if (moves is null) continue;
+            return moves.Select(it => new FixCell(it[0], it[1], it[2])).ToList();
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// [3.642.0] <see cref="ChainFixOps"/> の手順を改善提案（<see cref="FixSuggestion"/>）の形にする。評価は正式チェッカーの前後差分
+    /// （<c>FixApplyGate</c> と同じ基準）。
+    /// </summary>
+    internal static FixSuggestion? ChainFixSuggestion(MagiState state, Problem p, int[][] schedule, int k, int j, string label)
+    {
+        var ops = ChainFixOps(p, schedule, k, j);
+        if (ops is null) return null;
+        var before = UnifiedViolationChecker.Check(state, schedule);
+        var work = schedule.Copy2D();
+        foreach (var op in ops) work[op.Staff][op.Day] = op.ToShift;
+        var after = UnifiedViolationChecker.Check(state, work);
+        var diff = new List<(string Family, int Delta)>();
+        foreach (var key in before.Breakdown.Keys.Union(after.Breakdown.Keys))
+        {
+            var d = after.Breakdown.GetValueOrDefault(key, 0) - before.Breakdown.GetValueOrDefault(key, 0);
+            if (d != 0) diff.Add((key, d));
+        }
+        // Kotlin の sortBy（安定ソート）と同じ順。List.Sort は不安定なので LINQ の OrderBy を使う。
+        return new FixSuggestion(FixKind.Chain, ops, label, after.Hard - before.Hard, after.Total - before.Total,
+            diff.OrderBy(x => x.Delta).ToList());
+    }
+
+    /// <summary>[3.643.0/根拠の精度] 経験的な c3n 壁を <see cref="FixSuggester"/> の 1 手探索（上限 <see cref="Probe.C3nWallDeepMs"/>）で反証する＝必須を減らす手が 1 つでもあれば壁ではない。
+    /// 見つからないことは不能の証明ではない。Kotlin の <c>ejectionChain = true</c>（多段連鎖）は C# に無い（<c>C1EjectionChainPolish</c> 未移植）＝反証は弱い側に外れる。</summary>
+    public static bool C3nWallRefutedByOneMove(MagiState state, int[][] schedule, long budgetMs = Probe.C3nWallDeepMs) =>
+        FixSuggester.Suggest(state, schedule, maxResults: 4, deadlineMs: budgetMs).Any(s => s.DeltaHard < 0);
 
     /// <summary>
     /// 人員不足(covU)の枠ごとの原因診断。エンジンは変更せず、現在の解だけを読み取り、
@@ -212,6 +262,8 @@ public static partial class V6PortAnalyzer
                 var sym = k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
                 // [3.344.0] reason と同じ根拠で「いまの希望のままでは埋められない」かを値として持つ。
                 var blockedNow = false;
+                var chainOk = false;
+                var forbidN = 0;
                 string reason;
                 if (verdict == CoverageVerdict.Infeasible && wishPinned.Count > 0)
                 {
@@ -259,6 +311,8 @@ public static partial class V6PortAnalyzer
                     // 全て不成立だった局面を確認済み・8 seedは診断呼出コストとのバランス）。
                     var chainVerified = cascade > 0 && ChainFills(p, norm, k, j);
                     blockedNow = free == 0 && !(cascade > 0 && chainVerified);
+                    chainOk = chainVerified;
+                    forbidN = forbid;
                     string hint;
                     if (free > 0)
                         hint = $"空き番{free}人を{sym}へ移せば充足（最適化が未到達＝勤務表でこのセルの『直し方を探す』で解消可）";
@@ -273,7 +327,7 @@ public static partial class V6PortAnalyzer
                     reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・本人の希望{pinned}・禁止の並び{forbid}）。{hint}";
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
-                    verdict, reason, blockedNow, wishPinned));
+                    verdict, reason, blockedNow, wishPinned, chainOk, forbidN));
             }
         }
         // Kotlin の sortWith は安定ソート。C# List<T>.Sort は不安定なので LINQ の OrderBy 系（安定）で揃える。

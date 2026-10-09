@@ -189,7 +189,7 @@ public sealed partial class MagiViewModel
                 Ui.Running = false;
                 Ui.HasResult = cur is not null;
                 Ui.MessageIsError = true;
-                Ui.Message = $"バックグラウンド最適化は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。";
+                Ui.Message = $"バックグラウンド最適化は終わりましたが、最後の処理でエラーが起きました（{FailureWords.Of(e, FailureKind.Engine)}）。表示は今の勤務表です。";
                 if (cur is not null) Ui.Schedule = cur.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
             }
         }
@@ -208,7 +208,7 @@ public sealed partial class MagiViewModel
             // [Kotlin原本との差③] Android通知が無いため、ここで直接 Ui を更新する（クラスKDoc参照）。
             Ui.MessageIsError = true;
             Ui.Running = false;
-            Ui.Message = $"バックグラウンド最適化に失敗しました（{e.GetType().Name}）";
+            Ui.Message = $"バックグラウンド最適化に失敗しました（{FailureWords.Of(e, FailureKind.Engine)}）";
         }
         finally
         {

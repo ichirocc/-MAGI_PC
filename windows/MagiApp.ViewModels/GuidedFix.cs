@@ -20,11 +20,48 @@ public sealed record GuidedFixPlan(
     public static GuidedFixPlan Build(CoverageDiagnosis? diag)
     {
         var shortfalls = diag?.Shortfalls ?? System.Array.Empty<CoverageShortfall>();
-        var target = shortfalls.FirstOrDefault(sf => sf.Verdict == CoverageVerdict.Fixable && sf.Miss > 0 && !sf.BlockedNow);
+        var target = GuidedFixRules.GuidedFixTarget(shortfalls);
         var blocked = shortfalls.Where(sf => sf.Miss > 0 && sf.BlockedNow && sf.Verdict != CoverageVerdict.Infeasible).ToList();
         var infeasible = shortfalls.Where(sf => sf.Verdict == CoverageVerdict.Infeasible).ToList();
         return new GuidedFixPlan(target, blocked, infeasible);
     }
+}
+
+/// <summary>
+/// 原因に対応する設定の着地先（Kotlin原本 <c>EditLanding</c>、3.642.0）。Scope＝編集タブの入口（0=月次条件／1=職員管理／2=年間マスター）、
+/// Section＝節キー（ラベルの出し分けに使う。Windows の編集タブは節へ移動しないため、着地は入口まで）、WishStaff＝希望で固定された本人。
+/// </summary>
+public sealed record EditLanding(int Scope, string? Section, int? WishStaff = null);
+
+/// <summary>
+/// 「なおし方を見る」のホームとダイアログが共有する判断（Kotlin原本 <c>guidedFixTarget</c>/<c>landingFor</c>/<c>landingButtonLabel</c>、3.642.0）。
+/// 対象枠をここ1か所で決め、ホームの文言とダイアログが必ず同じ枠を指すようにする。
+/// </summary>
+public static class GuidedFixRules
+{
+    /// <summary>候補の既定表示件数。超えたら「すべて表示」で9人目以降も選べる（Kotlin原本 <c>GUIDED_FIX_PREVIEW</c>）。</summary>
+    public const int GuidedFixPreview = 8;
+
+    /// <summary>対象枠＝Fixable かつ miss&gt;0 かつ BlockedNow でない最初の枠。</summary>
+    public static CoverageShortfall? GuidedFixTarget(IEnumerable<CoverageShortfall> shortfalls) =>
+        shortfalls.FirstOrDefault(sf => sf.Verdict == CoverageVerdict.Fixable && sf.Miss > 0 && !sf.BlockedNow);
+
+    /// <summary>原因に対応する着地先。null＝原因が分からない＝編集タブの先頭（従来どおり）。</summary>
+    public static EditLanding? LandingFor(CoverageShortfall sf)
+    {
+        if (sf.WishPinned.Count > 0) return new EditLanding(0, null, sf.WishPinned[0]);
+        if (sf.Verdict == CoverageVerdict.Infeasible) return new EditLanding(2, "yr_ws1");
+        if (sf.BlockedNow && sf.ForbidCount > 0) return new EditLanding(2, "yr_cons");
+        return null;
+    }
+
+    public static string LandingButtonLabel(EditLanding? landing) => landing switch
+    {
+        { WishStaff: not null } => "希望を見直す",
+        { Section: "yr_cons" } => "禁止の並びを見直す",
+        { Section: "yr_ws1" } => "担当を見直す",
+        _ => "データを見直す",
+    };
 }
 
 /// <summary>

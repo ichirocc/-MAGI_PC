@@ -40,6 +40,9 @@ public sealed record ForbiddenRunDiag(
     public bool Escapable => Cells.Any(c =>
         c.Escape == ForbiddenCellEscape.Free || c.Escape == ForbiddenCellEscape.Chain ||
         c.Escape == ForbiddenCellEscape.Adjacent);
+
+    /// <summary>全セルが本人の希望で固定＝辞書式意味論（pref &gt; c3n）の下で証明相当の壁。3.284.0 の区別を値で持つ（3.643.0）。</summary>
+    public bool Certified => Cells.Count > 0 && Cells.All(c => c.Escape == ForbiddenCellEscape.Pinned);
 }
 
 /// <summary>
@@ -55,6 +58,9 @@ public sealed record ForbiddenRunDiagnosis(
 
     /// <summary>全 run が構造的に塞がっている（＝このデータ・希望のままでは c3n を 0 にできない）。</summary>
     public bool AllBlocked => HasRuns && Runs.All(r => !r.Escapable);
+
+    /// <summary>全 run が証明相当（全セル希望固定）で塞がっている。それ以外の塞がりは「探索手の全滅」＝経験的な壁（3.643.0）。</summary>
+    public bool AllBlockedCertified => HasRuns && Runs.All(r => r.Certified);
 
     /// <summary>診断ログ（エクスポートされる「MAGI ログ」に載る形式の文字列）。</summary>
     public IReadOnlyList<string> LogLines()

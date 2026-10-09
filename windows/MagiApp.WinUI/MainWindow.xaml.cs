@@ -279,7 +279,7 @@ public sealed partial class MainWindow : Window
             content = tag switch
             {
                 "home" => new HomeView(_vm, this),
-                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), OpenEditDoor, ShowRelaxTrial),
+                "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), d => OpenEditDoor(d), ShowRelaxTrial),
                 "edit" => new EditView(_vm),
                 "analysis" => new AnalysisView(_vm, JumpToCell, () => SelectTab("edit")),
                 "settings" => new SettingsView(_vm, this),
@@ -299,10 +299,15 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。</summary>
-    internal void OpenEditDoor(int door)
+    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null)
     {
         SelectTab("edit");
-        if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.OpenDoor(door);
+        if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev)
+        {
+            ev.OpenDoor(door);
+            if (wishStaff is int staff) ev.SelectWishStaff(staff);
+            ev.ScrollToSection(section);
+        }
     }
 
     private ContentDialog? _csvPartialDialog;

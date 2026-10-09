@@ -277,7 +277,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"他の案 {i + 1} の適用後の再チェックに失敗: {e.GetType().Name}（盤面は適用済み・違反数は古い可能性）");
             Ui.MessageIsError = true;
-            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{e.GetType().Name}）";
+            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{FailureWords.Of(e, FailureKind.Engine)}）";
         }
     }
 
@@ -423,6 +423,36 @@ public sealed partial class MagiViewModel
         }
         // 休みの人（動かしやすい）を先頭に。
         return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
+    }
+
+    /// <summary>[3.642.0/UX監査 高1] 不足枠を玉突き（複数人の入替）で埋める。手順は分析と同じ <c>findCovUChain</c> で求め、適用は
+    /// <see cref="ApplyFixSuggestion"/>（指紋照合・FixApplyGate・Undo）を通る。玉突きの実在を確かめた枠（ChainVerified）でだけ呼ぶ。
+    /// Kotlin原本 <c>applyShortageChainFix</c> の移植。</summary>
+    public void ApplyShortageChainFix(int dayIndex, int shiftIndex, string label)
+    {
+        var st = _state;
+        if (st is null) return;
+        var sched = _currentSchedule;
+        if (sched is null) return;
+        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
+        var snap = sched.Copy2D();
+        _fixBoardKey = BoardKey(snap);
+        _fixStateKey = StateKey(st);
+        var p = ScheduleUtil.CachedProblem(st);
+        _ = ApplyShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
+    }
+
+    private async Task ApplyShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label)
+    {
+        var s = await Task.Run(() => V6PortAnalyzer.ChainFixSuggestion(st, p, snap, k, j, label))
+            .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // FindFixSuggestionsCoreAsync と同じ理由
+        if (s is null)
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = "入替の手順が見つかりませんでした。「直し方を探す」で探し直してください";
+            return;
+        }
+        ApplyFixSuggestion(s);
     }
 
     // ---- constraint editing (ws3-5) -------------------------------------------
@@ -1688,7 +1718,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = true;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"{doneMessage}（チェック失敗: {e.GetType().Name}）";
+                Ui.Message = $"{doneMessage}（チェックに失敗しました: {FailureWords.Of(e, FailureKind.Engine)}）";
             }
         }
     }

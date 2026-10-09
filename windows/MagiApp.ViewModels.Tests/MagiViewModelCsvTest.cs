@@ -890,9 +890,9 @@ public class MagiViewModelCsvTest
     }
 
     [Theory]
-    [InlineData(null, "内容が空でした")]
+    [InlineData(null, "書き出す内容がありませんでした")]
     [InlineData("space-error", "保存先の空き容量が足りません")]
-    [InlineData("fallback", "InvalidOperationException")]
+    [InlineData("fallback", "書き込みに失敗しました")]
     public void IoReasonMapsExceptionsToUserFacingText(string? kind, string expectedSubstring)
     {
         Exception? ex = kind switch
@@ -905,5 +905,6 @@ public class MagiViewModelCsvTest
         var vm = new MagiViewModel();
         vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), "何か");
         Assert.Contains(expectedSubstring, vm.Ui.Message);
+        Assert.DoesNotContain("InvalidOperationException", vm.Ui.Message);   // 例外のクラス名は画面へ出さない（ログには残る）
     }
 }

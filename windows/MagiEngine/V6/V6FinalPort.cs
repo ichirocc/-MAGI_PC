@@ -79,6 +79,12 @@ public static partial class V6FinalPort
     /// <c>HF70Result</c> と同じ「所有クラスへのネスト」方針にC#移植では統一済み）なので、
     /// このファイル（<c>V6HotfixPasses</c> の外）から参照するには完全修飾が要る。
     /// </summary>
+    /// <summary>探索がどう終わったか（画面の説明用、Kotlin <c>StopKind</c>、3.643.0）。採否・探索・早期終了には配線しない。種別は Watchdog 行の「実効閾値の種別」と同じ条件。</summary>
+    public enum StopKind { Deadline, PlateauFloor, WishFloor, C3nWallCertified, C3nWallEmpirical, NormalStall }
+
+    /// <summary>Kotlin <c>V6FinalPort.StopSummary</c>: 早期終了の有無・種別・使用秒・予算秒・探索終了時の無改善秒・残る必須件数。</summary>
+    public sealed record StopSummary(bool EarlyStop, StopKind Kind, int UsedSec, int BudgetSec, int StalledSec, int RemainingHard);
+
     public sealed record ActionResult(
         int[][] Schedule,
         ViolationReport Report,
@@ -87,7 +93,9 @@ public static partial class V6FinalPort
         IReadOnlyList<MirrorLog> Logs,
         V6HotfixPasses.V6PostOptimizationResult? Post = null,
         IReadOnlyList<int[][]>? Alternatives = null,
-        CapZeroNotice? CapZero = null)
+        CapZeroNotice? CapZero = null,
+        /// <summary>探索の終わり方（3.643.0）。背景実行の再開経路では null。</summary>
+        StopSummary? Stop = null)
     {
         public IReadOnlyList<int[][]> Alternatives { get; init; } = Alternatives ?? Array.Empty<int[][]>();
     }

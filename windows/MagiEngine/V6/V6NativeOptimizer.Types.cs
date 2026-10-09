@@ -83,6 +83,7 @@ public sealed record V6OptimizerResult(
     //   採用盤面は元から返り値で流れるので**誤った勤務表にはならない**が、「他の案」「残存分析」
     //   「ライブ表示」が混ざり得た。
     IReadOnlyList<int[][]>? Alternatives = null,
+    // [3.642.0] HF63 が充足困難と学習した族の**内部キー**（c3n 等。表示名 C3n ではない）。残存分析の注記の履歴にだけ使い、族の分類には使わない。
     IReadOnlySet<string>? InfeasibleFamilies = null)
 {
     public IReadOnlyList<int[][]> Alternatives { get; init; } = Alternatives ?? Array.Empty<int[][]>();
