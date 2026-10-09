@@ -401,7 +401,7 @@ public sealed partial class MagiViewModel
                 // 外側 catch へ落ちる。このメソッドのクラスKDoc参照）。
                 LogOp("W", $"読込失敗: {err.GetType().Name}: {err.Message}");
                 Ui.Running = false;
-                Ui.Message = $"読み込めませんでした（{err.GetType().Name}）。ファイルの中身を確認してください";
+                Ui.Message = $"読み込めませんでした（{FailureWords.Of(err, FailureKind.Load)}）。ファイルの中身を確認してください";
                 Ui.MessageIsError = true;
                 return;
             }
@@ -495,7 +495,7 @@ public sealed partial class MagiViewModel
         {
             rollback?.Invoke();
             Ui.Running = false;
-            Ui.Message = $"読み込めませんでした（{e.GetType().Name}）。ファイルの中身を確認してください";
+            Ui.Message = $"読み込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）。ファイルの中身を確認してください";
             Ui.MessageIsError = true;
         }
         finally
@@ -676,7 +676,7 @@ public sealed partial class MagiViewModel
             if (seq == _checkSeq)
             {
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"違反チェックに失敗しました（{e.GetType().Name}）";
+                Ui.Message = $"違反チェックに失敗しました（{FailureWords.Of(e, FailureKind.Engine)}）";
                 Ui.MessageIsError = true;
             }
         }

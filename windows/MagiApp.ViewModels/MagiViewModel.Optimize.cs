@@ -389,7 +389,7 @@ public sealed partial class MagiViewModel
             var late = !ReferenceEquals(_state, st0) ? _state : null;   // 非 null＝この実行が state を差し替えた後の失敗
             LogOp("W", $"最適化 失敗{(late is not null ? "（結果の採用後）" : "")}: {e.GetType().Name}: {e.Message}");
             terminalLogged = true;
-            var failMsg = $"勤務表をつくれませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
+            var failMsg = $"勤務表をつくれませんでした（{FailureWords.Of(e, FailureKind.Engine)}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
             if (late is { } curSt && _currentSchedule is { } curSched)
             {
                 // [S5 §10] 維持・採用の書き込みの後で投げた＝VM と自動保存は今回の結果。捨てずに今の (state, 盤面) で描き直す。
@@ -562,7 +562,7 @@ public sealed partial class MagiViewModel
             Ui.MessageIsError = true;
             Ui.Running = false;
             Ui.HasResult = hadResult;
-            Ui.Message = $"整えられませんでした（{e.GetType().Name}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
+            Ui.Message = $"整えられませんでした（{FailureWords.Of(e, FailureKind.Engine)}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
         }
         finally
         {

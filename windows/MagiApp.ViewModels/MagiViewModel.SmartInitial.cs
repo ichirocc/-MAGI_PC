@@ -114,7 +114,7 @@ public sealed partial class MagiViewModel
             LogOp("W", $"初期解生成 失敗: {e.GetType().Name}: {e.Message}");
             Ui.Running = false;
             Ui.HasResult = hadResult;
-            Ui.Message = $"下書きをつくれませんでした（{e.GetType().Name}）";
+            Ui.Message = $"下書きをつくれませんでした（{FailureWords.Of(e, FailureKind.Engine)}）";
             Ui.MessageIsError = true;
         }
         finally

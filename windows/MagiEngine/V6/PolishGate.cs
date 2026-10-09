@@ -76,10 +76,10 @@ public static class PolishGate
     /// <summary>[Kotlin原本 <c>PolishGate.lateOpStopPropagation</c>（3.642.0）] 測定用の切り分け: false＝後期演算（EarlyChain）は試行ごとの停止確認をしない（入口の停止確認は残るので HEAD とは完全に一致しない。元は HEAD と同じ）。既定 true。</summary>
     public static volatile bool LateOpStopPropagation = true;
 
-    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallDeepCheck</c>（3.643.0）] 根拠の精度（<c>docs/stall_escape.md</c> §5.3）: 経験的な c3n 壁（探索手の全滅）は、1 手探索（<see cref="FixSuggester"/>、上限 2 s）でも必須を減らす手が無いときだけ短縮に使う。希望固定だけの壁（証明相当）は従来どおり。既定 false（測定中＝Android 側ベンチの腕 <c>deep</c>）。</summary>
+    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallDeepCheck</c>（3.643.0）] 根拠の精度（<c>docs/stall_escape.md</c> §5.3）: 経験的な c3n 壁（探索手の全滅）は、1 手探索（<see cref="FixSuggester"/>、上限 2 s）でも必須を減らす手が無いときだけ短縮に使う。希望固定だけの壁（証明相当）は従来どおり。既定 false（計測は経験的な壁のフィクスチャ待ち＝Android 側ベンチの腕 <c>deep</c>、<c>docs/stall_escape.md</c> §11）。</summary>
     public static volatile bool C3nWallDeepCheck = false;
 
-    /// <summary>[Kotlin原本 <c>PolishGate.adaptiveStall</c>（PROPOSAL C、3.643.0、<c>docs/stall_escape.md</c> §5.8）] 適応閾値: 直近の改善間隔の最大×3 を [短, 通常] に挟み、通常分岐の停滞閾値を縮める。既定 false（測定中＝Android 側ベンチの腕 <c>adaptive</c>）。</summary>
+    /// <summary>[Kotlin原本 <c>PolishGate.adaptiveStall</c>（PROPOSAL C、3.643.0、<c>docs/stall_escape.md</c> §5.8）] 適応閾値: 直近の改善間隔の最大×3 を [短, 通常] に挟み、通常分岐の停滞閾値を縮める。既定 false（2026-10-09 の計測で既定が良く否決＝Android <c>docs/stall_escape.md</c> §11。腕 <c>adaptive</c> は再計測用）。</summary>
     public static volatile bool AdaptiveStall = false;
 
     private static double _normalStallFraction = 0.9;

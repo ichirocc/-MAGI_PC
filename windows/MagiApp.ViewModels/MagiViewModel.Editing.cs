@@ -277,7 +277,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"他の案 {i + 1} の適用後の再チェックに失敗: {e.GetType().Name}（盤面は適用済み・違反数は古い可能性）");
             Ui.MessageIsError = true;
-            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{e.GetType().Name}）";
+            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{FailureWords.Of(e, FailureKind.Engine)}）";
         }
     }
 
@@ -1718,7 +1718,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = true;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"{doneMessage}（チェック失敗: {e.GetType().Name}）";
+                Ui.Message = $"{doneMessage}（チェックに失敗しました: {FailureWords.Of(e, FailureKind.Engine)}）";
             }
         }
     }

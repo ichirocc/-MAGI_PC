@@ -495,7 +495,7 @@ public sealed partial class MagiViewModel
         {
             if (pushedUndo) RollbackBoardCommit(st, sched);
             Ui.Running = false;
-            Ui.Message = $"CSVを取り込めませんでした（{e.GetType().Name}）";
+            Ui.Message = $"CSVを取り込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）";
             Ui.MessageIsError = true;
         }
         finally
@@ -714,21 +714,6 @@ public sealed partial class MagiViewModel
     /// <summary>ログ用の例外の表記（種類と文）。画面へは出さない（画面は <see cref="IoReason"/> の利用者の言葉）。</summary>
     private static string ErrorLogText(Exception? e) => e is null ? "例外なし" : $"{e.GetType().FullName}: {e.Message}";
 
-    /// <summary>
-    /// 例外を利用者の言葉へ。生の例外文とクラス名を画面へ出さない（3.147.0/3.191.0相当の方針）が、詳しい原因は
-    /// <see cref="NotifySave"/>/<see cref="NotifyOpenFailure"/> が LogOp へ流すので書き出したログには残る。
-    /// [SecurityException→UnauthorizedAccessException] Kotlin原本は Android の
-    /// <c>java.lang.SecurityException</c> を見るが、.NETの実際のファイルI/O APIが権限拒否で投げるのは
-    /// <see cref="UnauthorizedAccessException"/>（CAS由来のSecurityExceptionは現行.NETでは実質使われない）
-    /// のため、こちらへ差し替えている。
-    /// </summary>
-    private static string IoReason(Exception? e, bool saving) => e switch
-    {
-        null => saving ? "書き出す内容がありませんでした" : "ファイルの中身を読めませんでした",
-        UnauthorizedAccessException => "アクセスが許可されていません",
-        FileNotFoundException => "ファイルが見つからないか、アクセスが許可されていません",
-        _ when e.Message.Contains("space", StringComparison.OrdinalIgnoreCase) => "保存先の空き容量が足りません",
-        IOException io when io.Message.StartsWith("ファイルが大きすぎます", StringComparison.Ordinal) => io.Message,   // [レビュー指摘 2026-09-04] 取込サイズ上限
-        _ => saving ? "書き込みに失敗しました" : "読み込みに失敗しました",
-    };
+    /// <summary>ファイル入出力の失敗を利用者の言葉へ（<see cref="FailureWords"/>。詳しい原因は <see cref="NotifySave"/>/<see cref="NotifyOpenFailure"/> が LogOp へ流す）。</summary>
+    private static string IoReason(Exception? e, bool saving) => FailureWords.Of(e, saving ? FailureKind.Save : FailureKind.Load);
 }
