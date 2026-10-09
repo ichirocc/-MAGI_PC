@@ -62,7 +62,7 @@ public class MagiViewModelEditingTest
     public void MonthlyChecklistIsAllEmptyWithoutLoadedState()
     {
         var view = new MagiViewModel().MonthlyChecklist();
-        Assert.Equal(new MagiViewModel.MonthlyChecklistView(0, 0, false, 0, 0), view);
+        Assert.Equal(new MagiViewModel.MonthlyChecklistView(0, 0, false, 0, 0, new WishEntryCounts(0, 0, 0)), view);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class MagiViewModelEditingTest
             needDay1: new Dictionary<string, string> { ["1,0"] = "2" },
             needDay2: new Dictionary<string, string> { ["1,0"] = "3", ["1,4"] = "1" });
         var vm = new MagiViewModel { _state = st };
-        Assert.Equal(new MagiViewModel.MonthlyChecklistView(2, 2, true, 2, 0), vm.MonthlyChecklist());
+        Assert.Equal(new MagiViewModel.MonthlyChecklistView(2, 2, true, 2, 0, new WishEntryCounts(Entered: 2, ExtOnly: 0, NoInput: 0)), vm.MonthlyChecklist());
 
         var noStd = new MagiViewModel { _state = MinimalState.Build() };
         Assert.False(noStd.MonthlyChecklist().NeedStdOk);

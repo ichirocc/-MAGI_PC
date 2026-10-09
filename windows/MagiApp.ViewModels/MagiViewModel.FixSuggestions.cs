@@ -142,6 +142,24 @@ public sealed partial class MagiViewModel
 
     /// <summary>[改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。
     /// Kotlin原本 <c>applyFixSuggestion(s: FixSuggestion)</c> の移植。</summary>
+    // [3.643.0] 直し方を当てた結果の文脈（S5 の結果行と同じ鮮度の規則＝盤面か設定が変わったら出さない）。
+    private TrialCtx? _fixOutcomeCtx;
+    private (int DayIndex, int ShiftIndex, string DayLabel, string ShiftSymbol)? _pendingGuided;
+
+    /// <summary>「なおし方を見る」で 1 人を入れた直後に枠を覚える。再検査の結果（MakeUi）でその枠がまだ足りないかを見て 1 行にする。</summary>
+    public void NoteGuidedFix(int dayIndex, int shiftIndex, string dayLabel, string shiftSymbol) => _pendingGuided = (dayIndex, shiftIndex, dayLabel, shiftSymbol);
+
+    public string? FixOutcomeLine() => Ui.FixOutcome is { } o && CtxMatches(_fixOutcomeCtx) ? o.Line : null;
+
+    private void ResolvePendingGuidedFix(MagiState st, int[][] schedule, ViolationReport report, CoverageDiagnosis? diag)
+    {
+        if (_pendingGuided is not { } g) return;
+        _pendingGuided = null;
+        var still = diag?.Shortfalls.FirstOrDefault(sf => sf.DayIndex == g.DayIndex && sf.ShiftIndex == g.ShiftIndex && sf.Miss > 0)?.Miss;
+        _fixOutcomeCtx = new TrialCtx(st, BoardKey(schedule));
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard));
+    }
+
     public void ApplyFixSuggestion(FixSuggestion s)
     {
         var st = _state;
@@ -183,6 +201,8 @@ public sealed partial class MagiViewModel
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         Ui.Message = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total));
+        _fixOutcomeCtx = _state is { } stNow ? new TrialCtx(stNow, BoardKey(applied)) : null;
         RefreshCheck();
     }
 }

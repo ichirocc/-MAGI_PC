@@ -260,7 +260,7 @@ public sealed partial class MagiViewModel
     // ===== 対象月のナビゲーション =====
 
     /// <summary>[対象月の選択] 開始日を指定年月の1日にし、その月の日数へ整える（endDate/希望/必要人数も追従）。</summary>
-    public void SetMonth(int year, int month1To12)
+    public void SetMonth(int year, int month1To12, bool? clearWishes = null)
     {
         var st = _state;
         if (st is null) return;
@@ -275,13 +275,23 @@ public sealed partial class MagiViewModel
         {
             return;
         }
-        LogOp("I", $"期間変更: {year}年{month1To12}月");
+        // [3.643.0] 引き継ぐもの（日番号で残る盤面・通常希望・例外・手動固定）と消えるもの（日付で持つ拡張希望の期間外ぶん等）があれば
+        //   先に確認を出す（Kotlin setMonth と同じ）。答え（clearWishes）つきの呼出しだけが実際に移す。
+        var plan = MonthMovePlan.Of(st, year, month1To12);
+        if (clearWishes is null && plan.NeedsConfirm) { Ui.MonthMovePrompt = plan; return; }
+        Ui.MonthMovePrompt = null;
+        var st2 = clearWishes == true ? st with { Wishes = new Dictionary<string, int>(), ExtWishes = System.Array.Empty<ExtWish>() } : st;
+        LogOp("I", $"期間変更: {year}年{month1To12}月" + (clearWishes switch { true => "（希望を消して）", false => "（希望を残して）", _ => "" }));
         var startDate = first.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var days = System.DateTime.DaysInMonth(year, month1To12);
-        ApplyStructure(Ws1Ops.ResizeDays(st with { StartDate = startDate }, sched, days));
+        ApplyStructure(Ws1Ops.ResizeDays(st2 with { StartDate = startDate }, sched, days));
     }
 
-    /// <summary>現在の開始日から相対的に月を移動（-1=前月 / +1=翌月）。開始日が不明なら端末の今月を起点。</summary>
+    /// <summary>[3.643.0] 月を移す確認の答え。確認が閉じていれば何もしない。</summary>
+    public void ConfirmMonthMove(bool clearWishes) { if (Ui.MonthMovePrompt is { } p) SetMonth(p.Year, p.Month, clearWishes); }
+
+    public void CancelMonthMove() => Ui.MonthMovePrompt = null;
+
     public void ShiftMonth(int delta)
     {
         DateOnly firstOfBase;

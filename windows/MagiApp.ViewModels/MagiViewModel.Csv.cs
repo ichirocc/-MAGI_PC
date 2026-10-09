@@ -694,9 +694,21 @@ public sealed partial class MagiViewModel
     /// ファイル書き込みの結果を1行で返す。成功も必ず返すのが肝で、旧実装は成功時も無反応だったため
     /// 「保存できたのか」を画面で確かめる手段が無かった。
     /// </summary>
+    private TrialCtx? _csvSavedCtx;
+    /// <summary>[3.643.0] この盤面を勤務表 CSV に保存した事実の 1 行（内容が変わったら出さない＝配布の判断の材料）。</summary>
+    public string? CsvSavedLine() => Ui.CsvSavedAt is { } t && CtxMatches(_csvSavedCtx) ? $"この内容で勤務表 CSV を保存済みです（{t}）。" : null;
+
     public void NotifySave(IoOutcome result, string what)
     {
-        if (result.Success) Notify($"{what}を保存しました");
+        if (result.Success)
+        {
+            Notify($"{what}を保存しました");
+            if (what == "勤務表CSV" && _state is { } st && _currentSchedule is { } b)
+            {
+                _csvSavedCtx = new TrialCtx(st, BoardKey(b));
+                Ui.CsvSavedAt = DateTime.Now.ToString("HH:mm");
+            }
+        }
         else
         {
             LogOp("W", $"{what}の保存に失敗: {ErrorLogText(result.Error)}");
