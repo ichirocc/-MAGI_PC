@@ -427,10 +427,11 @@ public sealed partial class MagiViewModel
         return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
     }
 
-    /// <summary>[3.642.0/UX監査 高1] 不足枠を玉突き（複数人の入替）で埋める。手順は分析と同じ <c>findCovUChain</c> で求め、適用は
+    /// <summary>[3.642.0/UX監査 高1 → 3.644.0/UX-03] 不足枠を玉突き（複数人の入替）で埋める手順を求め、当てる<b>前</b>に一覧（だれの・どの日の・何→何）を
+    /// <see cref="UiState.ChainPreview"/> として見せる。手順は分析と同じ <c>findCovUChain</c>、当てるのは <see cref="ApplyChainPreview"/>＝
     /// <see cref="ApplyFixSuggestion"/>（指紋照合・FixApplyGate・Undo）を通る。玉突きの実在を確かめた枠（ChainVerified）でだけ呼ぶ。
-    /// Kotlin原本 <c>applyShortageChainFix</c> の移植。</summary>
-    public void ApplyShortageChainFix(int dayIndex, int shiftIndex, string label)
+    /// Kotlin原本 <c>prepareShortageChainFix</c> の移植。</summary>
+    public void PrepareShortageChainFix(int dayIndex, int shiftIndex, string label)
     {
         var st = _state;
         if (st is null) return;
@@ -441,10 +442,15 @@ public sealed partial class MagiViewModel
         _fixBoardKey = BoardKey(snap);
         _fixStateKey = StateKey(st);
         var p = ScheduleUtil.CachedProblem(st);
-        _ = ApplyShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
+        Ui.MessageIsError = false;
+        Ui.Message = "複数人の入替の手順を探しています…";
+        LastPrepareChainFixTask = PrepareShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
     }
 
-    private async Task ApplyShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label)
+    /// <summary>[テスト可視性のための追加] 直近の <see cref="PrepareShortageChainFix"/> が背後で走らせる Task。</summary>
+    internal Task? LastPrepareChainFixTask { get; private set; }
+
+    private async Task PrepareShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label)
     {
         var s = await Task.Run(() => V6PortAnalyzer.ChainFixSuggestion(st, p, snap, k, j, label))
             .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // FindFixSuggestionsCoreAsync と同じ理由
@@ -454,8 +460,19 @@ public sealed partial class MagiViewModel
             Ui.Message = "入替の手順が見つかりませんでした。「直し方を探す」で探し直してください";
             return;
         }
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate);
+    }
+
+    /// <summary>一覧で確認した入替を当てる（盤面か設定が変わっていれば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
+    public void ApplyChainPreview()
+    {
+        var s = Ui.ChainPreview?.Suggestion;
+        if (s is null) return;
+        Ui.ChainPreview = null;
         ApplyFixSuggestion(s);
     }
+
+    public void DismissChainPreview() => Ui.ChainPreview = null;
 
     // ---- constraint editing (ws3-5) -------------------------------------------
 

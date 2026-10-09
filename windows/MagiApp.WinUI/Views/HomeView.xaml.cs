@@ -68,6 +68,35 @@ public sealed partial class HomeView : UserControl
         RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
+        MaybeShowChainPreview(ui);
+    }
+
+    private ChainFixPreview? _chainPreviewShown;
+
+    /// <summary>[3.644.0/UX-03] 複数人の入替を当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
+    /// 「この入替を当てる」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。</summary>
+    private async void MaybeShowChainPreview(UiState ui)
+    {
+        var p = ui.ChainPreview;
+        if (p is null || ReferenceEquals(p, _chainPreviewShown)) return;
+        _chainPreviewShown = p;
+        var body = new StackPanel { Spacing = 6 };
+        body.Children.Add(new TextBlock { Text = p.Suggestion.Label, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "変わる人と勤務（前 → 後）", FontSize = 13, Opacity = 0.8 });
+        foreach (var line in p.Changes) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+        var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
+        body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
+            PrimaryButtonText = "この入替を当てる", CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+        };
+        var r = await dialog.ShowAsync();
+        _chainPreviewShown = null;
+        if (!ReferenceEquals(_vm.Ui.ChainPreview, p)) return;
+        if (r == ContentDialogResult.Primary) _vm.ApplyChainPreview(); else _vm.DismissChainPreview();
     }
 
     /// <summary>
@@ -682,12 +711,13 @@ public sealed partial class HomeView : UserControl
                 else if (target.ChainVerified)
                 {
                     // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入替で埋まると分析が確かめた枠。
+                    //   [3.644.0/UX-03] 当てる前に一覧（だれの・どの日の・何→何と必須の増減）を見せる＝MaybeShowChainPreview。
                     panel.Children.Add(new TextBlock { Text = "だれか1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                    var chain = new Button { Content = "複数人の入れ替えを使う（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+                    var chain = new Button { Content = "入替の一覧と影響を見る", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
                     chain.Click += (_, _) =>
                     {
                         dialog.Hide();
-                        _vm.ApplyShortageChainFix(target.DayIndex, target.ShiftIndex, $"（玉突き）{target.DayLabel} の「{target.ShiftSymbol}」を複数人の入替で埋める");
+                        _vm.PrepareShortageChainFix(target.DayIndex, target.ShiftIndex, $"（玉突き）{target.DayLabel} の「{target.ShiftSymbol}」を複数人の入替で埋める");
                     };
                     panel.Children.Add(chain);
                 }
@@ -755,11 +785,7 @@ public sealed partial class HomeView : UserControl
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("edit");
 
     /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは編集タブの先頭。</summary>
-    private void GoEditLanding(EditLanding? landing)
-    {
-        if (landing is null) _window.SelectTab("edit");
-        else _window.OpenEditDoor(landing.Scope, landing.WishStaff, landing.Section);
-    }
+    private void GoEditLanding(EditLanding? landing) => _window.GoEditLanding(landing);
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
     private void OnEditWishesClick(object sender, RoutedEventArgs e) => _window.OpenEditDoor(0);

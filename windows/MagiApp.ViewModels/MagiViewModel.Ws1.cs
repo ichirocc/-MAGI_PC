@@ -285,6 +285,7 @@ public sealed partial class MagiViewModel
         var startDate = first.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var days = System.DateTime.DaysInMonth(year, month1To12);
         ApplyStructure(Ws1Ops.ResizeDays(st2 with { StartDate = startDate }, sched, days));
+        ClearCsvSaved();   // 前の月の CSV の保存は新しい月の内容と関係がない
     }
 
     /// <summary>[3.643.0] 月を移す確認の答え。確認が閉じていれば何もしない。</summary>

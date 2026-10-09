@@ -425,6 +425,7 @@ public sealed partial class MagiViewModel
             //   結果そのものなので resultSchedule/hasResult を立て、上位バーの「未計算」表示を防ぐ。
             _resultSchedule = markResult ? lp.Schedule.Copy2D() : null;
             AutoSave();
+            ClearCsvSaved();   // 前のデータの CSV 保存はこのデータのものではない
             await PushReportAsync(lp.State, lp.Schedule, lp.Report, transform: ui =>
             {
                 ui.MessageIsError = false;
