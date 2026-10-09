@@ -7,10 +7,12 @@ namespace MagiApp.ViewModels;
 public sealed record MonthMovePlan(
     int Year, int Month, int Days,
     int CarriedWishes, int CarriedNeedExceptions, int CarriedPins,
-    int DroppedExtWishDays, int DroppedExtWishes, int DroppedPins, int DroppedNeedExceptions)
+    int DroppedExtWishDays, int DroppedExtWishes, int DroppedPins, int DroppedNeedExceptions,
+    /// <summary>[3.644.0] 新しい月に無い日番号の通常希望（短い月へ移すと消える）。確認を出す条件に数える。</summary>
+    int DroppedWishes = 0)
 {
     /// <summary>何も引き継がず何も消えないときだけ確認を省く。</summary>
-    public bool NeedsConfirm => CarriedWishes + CarriedNeedExceptions + CarriedPins + DroppedExtWishDays + DroppedPins + DroppedNeedExceptions > 0;
+    public bool NeedsConfirm => CarriedWishes + CarriedNeedExceptions + CarriedPins + DroppedExtWishDays + DroppedPins + DroppedNeedExceptions + DroppedWishes > 0;
 
     public static MonthMovePlan Of(MagiState state, int year, int month)
     {
@@ -34,7 +36,8 @@ public sealed record MonthMovePlan(
             CarriedPins: pins.Count(p => p.Day >= 0 && p.Day < t),
             DroppedExtWishDays: extDaysDropped, DroppedExtWishes: extDropped,
             DroppedPins: pins.Count(p => p.Day < 0 || p.Day >= t),
-            DroppedNeedExceptions: needKeys.Count(k => !(DayOf(k) is >= 0 and var d && d < t)));
+            DroppedNeedExceptions: needKeys.Count(k => !(DayOf(k) is >= 0 and var d && d < t)),
+            DroppedWishes: state.Wishes.Keys.Count(k => !(DayOf(k) is >= 0 and var d && d < t)));
     }
 
     /// <summary>確認ダイアログの本文。引き継ぐ側は「同じ日番号に残る」と明記する（前月 5 日の希望は翌月 5 日に載る）。</summary>
@@ -45,6 +48,7 @@ public sealed record MonthMovePlan(
         if (CarriedNeedExceptions > 0) carry.Add($"必要人数の例外 {CarriedNeedExceptions} 件（同じ日番号）");
         if (CarriedPins > 0) carry.Add($"手動固定 {CarriedPins} 件（同じ日番号）");
         var drop = new List<string>();
+        if (DroppedWishes > 0) drop.Add($"期間の外の通常希望 {DroppedWishes} 件（新しい月に無い日）");
         if (DroppedExtWishDays > 0) drop.Add($"期間の外の拡張希望 {DroppedExtWishDays} 日分（日付で持つため{(DroppedExtWishes > 0 ? $"・{DroppedExtWishes} 件は丸ごと" : "")}）");
         if (DroppedPins > 0) drop.Add($"期間の外の手動固定 {DroppedPins} 件");
         if (DroppedNeedExceptions > 0) drop.Add($"期間の外の必要人数の例外 {DroppedNeedExceptions} 件");
@@ -52,4 +56,7 @@ public sealed record MonthMovePlan(
         if (drop.Count > 0) lines.Add("消える: " + string.Join("・", drop));
         return lines;
     }
+
+    /// <summary>「希望を残して移る」を選んでも残らない希望があるときの明記（仕様 5.1）。無ければ null。</summary>
+    public string? KeepNote() => DroppedWishes > 0 ? $"「希望を残して移る」でも、期間の外の通常希望 {DroppedWishes} 件は残りません。" : null;
 }

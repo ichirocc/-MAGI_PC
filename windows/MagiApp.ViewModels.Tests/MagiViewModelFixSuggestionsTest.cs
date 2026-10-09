@@ -95,6 +95,49 @@ public class MagiViewModelFixSuggestionsTest
         Assert.Contains("違反チェック完了", vm.Ui.Message);
     }
 
+    // ===== 複数人の入替の一覧（3.644.0/UX-03） =====
+
+    [Fact]
+    public async Task PrepareShortageChainFix_ShowsThePreviewWithoutTouchingTheBoard_ThenApplyAppliesIt()
+    {
+        var vm = new MagiViewModel
+        {
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") }),
+            _currentSchedule = MinimalState.BuildSchedule(),
+        };
+        vm.Ui.StaffNames = vm._state!.StaffList.Select(s => s.Name).ToList();
+        vm.Ui.ShiftSymbols = new[] { "休", "A" };
+        vm.Ui.StartDate = vm._state.StartDate;
+
+        vm.PrepareShortageChainFix(dayIndex: 0, shiftIndex: 1, "（玉突き）12/1 の「A」を複数人の入替で埋める");
+        Assert.NotNull(vm.LastPrepareChainFixTask);
+        await vm.LastPrepareChainFixTask!;
+
+        var p = vm.Ui.ChainPreview;
+        Assert.NotNull(p);
+        Assert.All(vm._currentSchedule!, row => Assert.All(row, v => Assert.Equal(0, v)));   // 一覧を出しただけ＝盤面は不変
+        Assert.NotEmpty(p!.Changes);
+        Assert.All(p.Changes, c => Assert.EndsWith("→ A", c));
+
+        vm.ApplyChainPreview();
+        Assert.Null(vm.Ui.ChainPreview);
+        Assert.NotNull(vm.LastRefreshCheckTask);
+        await vm.LastRefreshCheckTask!;
+        Assert.Contains(vm._currentSchedule!, row => row[0] == 1);
+    }
+
+    [Fact]
+    public void DismissChainPreview_ClosesWithoutApplying()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Ui.ChainPreview = ChainFixPreview.Of(MakeSuggestion(new FixCell(0, 0, 1)), MinimalState.BuildSchedule(), Array.Empty<string>(), Array.Empty<string>(), "2025-12-01");
+
+        vm.DismissChainPreview();
+
+        Assert.Null(vm.Ui.ChainPreview);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+    }
+
     [Fact]
     public void ApplyFixSuggestion_BlockedWhileAJobIsInFlight_DoesNotApplyAndShowsError()
     {

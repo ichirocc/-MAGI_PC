@@ -29,9 +29,11 @@ public sealed record GuidedFixPlan(
 
 /// <summary>
 /// 原因に対応する設定の着地先（Kotlin原本 <c>EditLanding</c>、3.642.0）。Scope＝編集タブの入口（0=月次条件／1=職員管理／2=年間マスター）、
-/// Section＝節キー（ラベルの出し分けに使う。Windows の編集タブは節へ移動しないため、着地は入口まで）、WishStaff＝希望で固定された本人。
+/// Section＝節キー（<c>yr_ws1</c>／<c>yr_cons</c>／<c>yr_count</c> は <c>EditView.ScrollToSection</c> が寄せる）、WishStaff＝希望で固定された本人。
+/// 3.644.0: 「つくる前の確認」のセルを持たない行からも使う＝NeedShift（必要人数カレンダーで先に選ぶシフト）、CountStaff/CountShift（回数のマス。
+/// Windows では個人の回数が「職員管理」の入口にあるため <see cref="GuidedFixRules.DoorFor"/> が入口を読み替える）、Label（ボタン文言の上書き）。
 /// </summary>
-public sealed record EditLanding(int Scope, string? Section, int? WishStaff = null);
+public sealed record EditLanding(int Scope, string? Section, int? WishStaff = null, int? NeedShift = null, int? CountStaff = null, int? CountShift = null, string? Label = null);
 
 /// <summary>
 /// 「なおし方を見る」のホームとダイアログが共有する判断（Kotlin原本 <c>guidedFixTarget</c>/<c>landingFor</c>/<c>landingButtonLabel</c>、3.642.0）。
@@ -57,11 +59,35 @@ public static class GuidedFixRules
 
     public static string LandingButtonLabel(EditLanding? landing) => landing switch
     {
+        { Label: { } l } => l,
         { WishStaff: not null } => "希望を見直す",
+        { NeedShift: not null } => "必要人数を見直す",
+        { Section: "yr_count" } => "回数の下限・上限を見直す",
         { Section: "yr_cons" } => "禁止の並びを見直す",
         { Section: "yr_ws1" } => "担当を見直す",
         _ => "データを見直す",
     };
+
+    public const string LandingZeroCap = "入れない指定を見直す";
+    public const string LandingWindow = "期間の制約を見直す";
+
+    /// <summary>Windows の編集タブの入口。個人の回数（Android の ③ <c>yr_count</c>＝年間マスター）はこちらでは「職員管理」(1) にある。</summary>
+    public static int DoorFor(EditLanding l) => l.Section == "yr_count" ? 1 : l.Scope;
+
+    /// <summary>
+    /// 証明つきの矛盾（コア）のうち希望を含まないものの着地先（Kotlin <c>landingForProofCore</c>）。上限0が原因とされた行は上限0のマスへ、
+    /// そうでなければ必要人数（月次条件）→ 回数のマス → 期間の制約の順。どれも無ければ null（行は文だけ）。
+    /// </summary>
+    public static EditLanding? LandingForProofCore(IReadOnlyList<ConstraintMus.Item> core, bool zeroCap)
+    {
+        var zero = core.OfType<ConstraintMus.RangeCap>().FirstOrDefault(c => c.Hi == 0);
+        if (zeroCap && zero is not null) return new EditLanding(2, "yr_count", CountStaff: zero.Staff, CountShift: zero.Shift, Label: LandingZeroCap);
+        if (core.OfType<ConstraintMus.DayNeed>().FirstOrDefault() is { } need) return new EditLanding(0, null, NeedShift: need.Shift);
+        if (core.OfType<ConstraintMus.RangeCap>().FirstOrDefault() is { } cap) return new EditLanding(2, "yr_count", CountStaff: cap.Staff, CountShift: cap.Shift);
+        if (core.OfType<ConstraintMus.RangeFloor>().FirstOrDefault() is { } floor) return new EditLanding(2, "yr_count", CountStaff: floor.Staff, CountShift: floor.Shift);
+        if (core.OfType<ConstraintMus.WindowRule>().Any()) return new EditLanding(2, "yr_cons", Label: LandingWindow);
+        return null;
+    }
 }
 
 /// <summary>

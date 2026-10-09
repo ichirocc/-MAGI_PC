@@ -298,16 +298,26 @@ public sealed partial class MainWindow : Window
         if (item is not null) Nav.SelectedItem = item;
     }
 
-    /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。</summary>
-    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null)
+    /// <summary>編集タブを入口（0=月次条件／1=職員管理／2=年間マスター）を指定して開く。needShift＝必要人数カレンダーで先に選ぶシフト、
+    /// countStaff＝個人の回数の対象の職員（3.644.0、つくる前の確認の着地）。</summary>
+    internal void OpenEditDoor(int door, int? wishStaff = null, string? section = null, int? needShift = null, int? countStaff = null)
     {
         SelectTab("edit");
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev)
         {
             ev.OpenDoor(door);
             if (wishStaff is int staff) ev.SelectWishStaff(staff);
+            if (needShift is int k) ev.SelectNeedShift(k);
+            if (countStaff is int s) ev.SelectStaff(s);
             ev.ScrollToSection(section);
         }
+    }
+
+    /// <summary>原因に対応する設定へ着地する（null＝編集タブの先頭）。入口は <see cref="GuidedFixRules.DoorFor"/>（個人の回数はこちらでは職員管理）。</summary>
+    internal void GoEditLanding(EditLanding? l)
+    {
+        if (l is null) { SelectTab("edit"); return; }
+        OpenEditDoor(GuidedFixRules.DoorFor(l), l.WishStaff, l.Section, l.NeedShift, l.CountStaff);
     }
 
     private ContentDialog? _csvPartialDialog;
@@ -366,6 +376,16 @@ public sealed partial class MainWindow : Window
                     b.Click += (_, _) => { after = () => OpenCell(i, j); dialog.Hide(); };
                     panel.Children.Add(b);
                 }
+                else if (r.Landing is { } l)
+                {
+                    // [3.644.0] セルを持たない行は、その原因の入力箇所へ（押す前に行き先を 1 行で示す）。
+                    var text = new StackPanel();
+                    text.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap });
+                    text.Children.Add(new TextBlock { Text = "→ " + GuidedFixRules.LandingButtonLabel(l), FontSize = 13, Opacity = 0.8 });
+                    var b = new HyperlinkButton { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
+                    b.Click += (_, _) => { after = () => GoEditLanding(l); dialog.Hide(); };
+                    panel.Children.Add(b);
+                }
                 else panel.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0) });
             }
         }
@@ -380,7 +400,11 @@ public sealed partial class MainWindow : Window
             if (t.RerunRows.FirstOrDefault() is { } r0) Link("該当セルを見る", () => OpenCell(r0.Staff ?? 0, r0.Day ?? 0));
         }
         if (t.OverCapNote is { } on) { Head(PreRunCheckText.OverCapHead); Note(on); Rows(t.OverCapRows ?? Array.Empty<PreRunRow>()); }
-        if (t.WallLine is { } w) { Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap }); }
+        if (t.WallLine is { } w)
+        {
+            Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });
+            if (t.WallLanding is { } wl) Link(GuidedFixRules.LandingButtonLabel(wl), () => GoEditLanding(wl));
+        }
         if (ui.PreRunRepeatHint is { } hint) Note(hint);
 
         var result = await dialog.ShowAsync();

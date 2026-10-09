@@ -869,6 +869,37 @@ public class MagiViewModelCsvTest
         Assert.Equal("設定を保存しました", vm.Ui.Message);
     }
 
+    /// <summary>[3.644.0/仕様 5.4] 保存済みの印は書き出した文字列に結ぶ。同じ内容なら「保存済み」。</summary>
+    [Fact]
+    public void CsvSavedLineIsBoundToTheExportedContent()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        Assert.NotNull(vm.ExportCsv());
+        vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "勤務表CSV");
+        Assert.NotNull(vm.Ui.CsvSavedAt);
+        Assert.StartsWith("この内容で勤務表 CSV を保存済みです（", vm.CsvSavedLine());
+    }
+
+    /// <summary>[3.644.0/仕様 §6] CSV 出力後、書込み完了前に勤務表を変更する → 変更後の勤務表を保存済みと表示しない（保存した内容と今の内容を区別する）。</summary>
+    [Fact]
+    public void CsvSavedLineDistinguishesTheSavedContentFromTheCurrentOne()
+    {
+        var vm = new MagiViewModel
+        {
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") }),
+            _currentSchedule = MinimalState.BuildSchedule(),
+        };
+        Assert.NotNull(vm.ExportCsv());
+        vm.SetCell(0, 0, 1);   // 書き出しのあと、書き込みが終わる前の変更
+        vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "勤務表CSV");
+        var line = vm.CsvSavedLine();
+        Assert.NotNull(line);
+        Assert.DoesNotContain("この内容で", line);
+        Assert.Contains("今の内容と違います", line);
+        vm.ClearCsvSaved();
+        Assert.Null(vm.CsvSavedLine());
+    }
+
     [Fact]
     public void NotifySaveReportsFailureWithReason()
     {

@@ -1029,6 +1029,7 @@ public sealed partial class EditView : UserControl
         _monthPromptShown = p;
         var body = new StackPanel { Spacing = 8 };
         foreach (var line in p.Lines()) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+        if (p.KeepNote() is { } keep) body.Children.Add(new TextBlock { Text = keep, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"] });
         body.Children.Add(new TextBlock { Text = "前の月の希望を新しい月に持ち越さないときは「希望を消して移る」を選びます。", TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         var dialog = new ContentDialog
         {
@@ -2512,7 +2513,21 @@ public sealed partial class EditView : UserControl
         WishStaffCombo.SelectedIndex = staffIdx;
     }
 
-    /// <summary>年間マスターの節へ寄せる（Android の yr_ws1＝①シフト・グループ、yr_cons＝⑤並び・期間の制約に対応）。
+    /// <summary>必要人数カレンダーのシフトを先に選ぶ（「必要人数を見直す」から来た時の着地先。3.644.0）。</summary>
+    internal void SelectNeedShift(int shiftIdx)
+    {
+        if (shiftIdx < 0 || shiftIdx >= NeedCalShiftCombo.Items.Count) return;
+        NeedCalShiftCombo.SelectedIndex = shiftIdx;
+    }
+
+    /// <summary>職員管理の対象の職員を先に選ぶ（個人の回数のマスへの着地。3.644.0）。</summary>
+    internal void SelectStaff(int staffIdx)
+    {
+        if (staffIdx < 0 || staffIdx >= StaffCombo.Items.Count) return;
+        StaffCombo.SelectedIndex = staffIdx;
+    }
+
+    /// <summary>節へ寄せる（Android の yr_ws1＝①シフト・グループ、yr_cons＝⑤並び・期間の制約、yr_count＝③回数＝こちらでは職員管理の個人別の回数）。
     /// 扉の表示が終わった後の配置で寄せるため、一拍置いて呼ぶ（<c>ScheduleView.FocusCell</c> と同じ作法）。</summary>
     internal void ScrollToSection(string? section)
     {
@@ -2520,6 +2535,7 @@ public sealed partial class EditView : UserControl
         {
             "yr_ws1" => ShiftListView,
             "yr_cons" => ConstraintListHost,
+            "yr_count" => StaffRangeListHost,
             _ => null,
         };
         if (target is null) return;

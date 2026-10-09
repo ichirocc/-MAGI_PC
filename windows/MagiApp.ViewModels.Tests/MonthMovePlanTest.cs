@@ -24,6 +24,7 @@ public class MonthMovePlanTest
         var p = MonthMovePlan.Of(State(), 2026, 11);   // 11 月＝30 日
         Assert.Equal(30, p.Days);
         Assert.Equal(1, p.CarriedWishes);
+        Assert.Equal(1, p.DroppedWishes);
         Assert.Equal(1, p.CarriedNeedExceptions); Assert.Equal(1, p.DroppedNeedExceptions);
         Assert.Equal(1, p.CarriedPins); Assert.Equal(1, p.DroppedPins);
         Assert.Equal(2, p.DroppedExtWishDays);
@@ -31,7 +32,20 @@ public class MonthMovePlanTest
         Assert.True(p.NeedsConfirm);
         var lines = p.Lines();
         Assert.StartsWith("引き継ぐ: 勤務表の中身（同じ日番号に残ります）・通常希望 1 件", lines[0]);
-        Assert.StartsWith("消える: 期間の外の拡張希望 2 日分", lines[1]);
+        Assert.StartsWith("消える: 期間の外の通常希望 1 件（新しい月に無い日）・期間の外の拡張希望 2 日分", lines[1]);
+        Assert.Equal("「希望を残して移る」でも、期間の外の通常希望 1 件は残りません。", p.KeepNote());
+    }
+
+    /// <summary>仕様 §6: 通常希望が 1 月 31 日の 1 件だけあり 2 月へ変更する → 削除される希望を確定前に表示する（3.643.0 までは確認なしで消えた）。</summary>
+    [Fact]
+    public void AWishOnTheThirtyFirstAloneStillAsksBeforeMoving()
+    {
+        var st = State() with { Wishes = new Dictionary<string, int> { ["0,30"] = 1 }, NeedDay1 = new Dictionary<string, string>(), ManualPins = Array.Empty<ManualPin>(), ExtWishes = Array.Empty<ExtWish>() };
+        var p = MonthMovePlan.Of(st, 2027, 2);   // 28 日
+        Assert.Equal(0, p.CarriedWishes); Assert.Equal(1, p.DroppedWishes);
+        Assert.True(p.NeedsConfirm);
+        Assert.Equal(new[] { "引き継ぐ: 勤務表の中身（同じ日番号に残ります）", "消える: 期間の外の通常希望 1 件（新しい月に無い日）" }, p.Lines());
+        Assert.Equal("「希望を残して移る」でも、期間の外の通常希望 1 件は残りません。", p.KeepNote());
     }
 
     [Fact]
@@ -41,5 +55,6 @@ public class MonthMovePlanTest
         var p = MonthMovePlan.Of(st, 2026, 11);
         Assert.False(p.NeedsConfirm);
         Assert.Equal(new[] { "引き継ぐ: 勤務表の中身（同じ日番号に残ります）" }, p.Lines());
+        Assert.Null(p.KeepNote());
     }
 }

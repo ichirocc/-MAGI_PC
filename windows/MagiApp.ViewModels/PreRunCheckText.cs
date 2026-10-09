@@ -2,8 +2,8 @@ using MagiEngine.V6;
 
 namespace MagiApp.ViewModels;
 
-/// <summary>[つくる前の確認] シートの 1 行。Staff/Day があれば押すとそのセルへ移る（希望の行は希望のシートで開く）。Kotlin <c>PreRunRow</c>。</summary>
-public sealed record PreRunRow(string Text, int? Staff = null, int? Day = null, bool Wish = false);
+/// <summary>[つくる前の確認] シートの 1 行。Staff/Day があれば押すとそのセルへ移る（希望の行は希望のシートで開く）。セルを持たない行は Landing（入力箇所、3.644.0）へ。Kotlin <c>PreRunRow</c>。</summary>
+public sealed record PreRunRow(string Text, int? Staff = null, int? Day = null, bool Wish = false, EditLanding? Landing = null);
 
 public sealed record PreRunSheetText(
     string? FloorHeader,
@@ -14,7 +14,8 @@ public sealed record PreRunSheetText(
     bool HasWishRows,
     string? OverCapNote = null,
     IReadOnlyList<PreRunRow>? OverCapRows = null,
-    string? ZeroCapNote = null);
+    string? ZeroCapNote = null,
+    EditLanding? WallLanding = null);
 
 /// <summary><see cref="PreRunCheck"/> の結果を行にする。Kotlin <c>preRunSheetText</c>（MagiViewState.kt）の移植。WinUI のシートは <c>MainWindow.ShowPreRunCheckAsync</c>。</summary>
 public static class PreRunCheckText
@@ -47,19 +48,27 @@ public static class PreRunCheckText
         {
             var cell = w.StaffIndex >= 0 && w.DayIndex >= 0;
             floor.Add(new PreRunRow($"{w.StaffName} {(w.DayIndex >= 0 ? Day(w.DayIndex) : "?")} 本人の希望「{w.ShiftSymbol}」は反映できません（{w.Reason}）",
-                cell ? w.StaffIndex : null, cell ? w.DayIndex : null, cell));
+                cell ? w.StaffIndex : null, cell ? w.DayIndex : null, cell,
+                Landing: !cell && w.StaffIndex >= 0 ? new EditLanding(0, null, w.StaffIndex) : null));
         }
         foreach (var d in s.DayProofs)
         {
             var w = Pin(d.Core);
-            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と本人の希望の衝突（{d.Core.Count}件は同時に成立しません）{(s.ZeroCapDays.Contains(d.Day) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null));
+            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と本人の希望の衝突（{d.Core.Count}件は同時に成立しません）{(s.ZeroCapDays.Contains(d.Day) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
+                Landing: w is null ? GuidedFixRules.LandingForProofCore(d.Core, s.ZeroCapDays.Contains(d.Day)) : null));
         }
         foreach (var c in s.StaffProofs)
         {
             var w = Pin(c.Core);
-            floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません）{(PreRunCheck.Summary.ZeroCapStaffProof(c) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null));
+            floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません）{(PreRunCheck.Summary.ZeroCapStaffProof(c) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
+                Landing: w is null ? GuidedFixRules.LandingForProofCore(c.Core, PreRunCheck.Summary.ZeroCapStaffProof(c)) : null));
         }
-        foreach (var f in s.ForcedShortfalls) floor.Add(new PreRunRow($"「{f.ShiftSymbol}」 {f.Cells}日で担当できる人より必要人数が多く、人員不足が合計{f.Amount}人残ります{(s.ZeroCapShorts.Contains(f.ShiftIndex) ? ZeroCapTag : "")}"));
+        foreach (var f in s.ForcedShortfalls)
+        {
+            var zero = s.ZeroCapShorts.Contains(f.ShiftIndex);
+            floor.Add(new PreRunRow($"「{f.ShiftSymbol}」 {f.Cells}日で担当できる人より必要人数が多く、人員不足が合計{f.Amount}人残ります{(zero ? ZeroCapTag : "")}",
+                Landing: zero ? new EditLanding(2, "yr_count", Label: GuidedFixRules.LandingZeroCap) : new EditLanding(2, "yr_ws1")));
+        }
 
         var rerun = s.RerunClears.Select(c => new PreRunRow($"{Name(c.Staff)} {Day(c.Day)} {Sym(c.Shift)}", c.Staff, c.Day)).ToList();
         var wall = s.Wall is { } h
@@ -72,11 +81,13 @@ public static class PreRunCheckText
             var who = $"{Name(f.Staff)}「{Sym(f.Shift)}」{(s.WishOverCaps.Count > 1 ? "など" : "")}";
             overNote = $"{who}：{(s.WishOverCaps.All(w => w.Hi == 0) ? OverCapZero : OverCapOther)}";
         }
-        var overRows = s.WishOverCaps.Select(w => new PreRunRow($"{Name(w.Staff)}「{Sym(w.Shift)}」 本人の希望{w.Wished}件（個人の上限{w.Hi}回）")).ToList();
+        var overRows = s.WishOverCaps.Select(w => new PreRunRow($"{Name(w.Staff)}「{Sym(w.Shift)}」 本人の希望{w.Wished}件（個人の上限{w.Hi}回）",
+            Landing: new EditLanding(2, "yr_count", CountStaff: w.Staff, CountShift: w.Shift, Label: w.Hi == 0 ? GuidedFixRules.LandingZeroCap : null))).ToList();
         return new PreRunSheetText(
             floor.Count == 0 ? null : $"何度つくっても残る（{floor.Count}件）", floor,
             rerun.Count == 0 ? null : $"再作成すると外れる（{rerun.Count}件）", rerun,
             wall, floor.Any(r => r.Wish), overNote, overRows,
-            floor.Any(r => r.Text.EndsWith(ZeroCapTag)) ? ZeroCapNoteText : null);
+            floor.Any(r => r.Text.EndsWith(ZeroCapTag)) ? ZeroCapNoteText : null,
+            s.Wall is null ? null : new EditLanding(2, "yr_count", Label: GuidedFixRules.LandingZeroCap));
     }
 }

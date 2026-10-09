@@ -49,4 +49,19 @@ public class PreRunCheckTextTest
         Assert.DoesNotContain(t.FloorRows, r => r.Text.StartsWith("10/10(土)") && r.Text.EndsWith(PreRunCheckText.ZeroCapTag));
         Assert.Equal(PreRunCheckText.ZeroCapNoteText, t.ZeroCapNote);
     }
+
+    /// <summary>[3.644.0/UX-02] セルを持たない行は原因の入力箇所へ着地する（Kotlin <c>rowsWithoutACellLandOnTheirInput</c>）。</summary>
+    [Fact]
+    public void RowsWithoutACellLandOnTheirInput()
+    {
+        var ui = new UiState { StaffNames = St.StaffList.Select(s => s.Name).ToList(), ShiftSymbols = St.Shifts.Select(s => s.Kigou).ToList(), StartDate = St.StartDate };
+        var b = PreRunCheck.Build(St, St.Schedule.ToIntArray2D());
+        var t = PreRunCheckText.Of(b with { ForcedShortfalls = new[] { new ForcedCovU(0, "X", 2, 3), new ForcedCovU(1, "Y", 1, 1) }, ZeroCapShortShifts = new HashSet<int> { 0 } }, ui);
+        Assert.Equal(new EditLanding(2, "yr_count", Label: GuidedFixRules.LandingZeroCap), t.FloorRows.First(r => r.Text.StartsWith("「X」")).Landing);
+        Assert.Equal(new EditLanding(2, "yr_ws1"), t.FloorRows.First(r => r.Text.StartsWith("「Y」")).Landing);
+        var yuu = St.Shifts.ToList().FindIndex(s => s.Kigou == "有");
+        Assert.Equal(new EditLanding(2, "yr_count", CountStaff: 7, CountShift: yuu, Label: GuidedFixRules.LandingZeroCap), t.OverCapRows![0].Landing);
+        Assert.Equal(new EditLanding(2, "yr_count", Label: GuidedFixRules.LandingZeroCap), t.WallLanding);
+        Assert.All(t.FloorRows.Where(r => r.Staff is not null), r => Assert.Null(r.Landing));
+    }
 }
