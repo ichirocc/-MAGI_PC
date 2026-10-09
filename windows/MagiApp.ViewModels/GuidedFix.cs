@@ -52,6 +52,64 @@ public sealed record EditReturn(string Label, int Origin, (int I, int J)? Cell =
 }
 
 /// <summary>
+/// [3.650.0/外部レビュー] 編集タブの入力途中の選択（希望の職員と日／必要人数のシフトと日、Kotlin <c>EditPick</c>）。対象が変わったら持ち越さない。
+/// 職員・シフトは位置 <paramref name="Index"/> と名前（記号）<paramref name="Key"/> で持ち、並び替えのあとは名前で引き直す。
+/// 名前が今の一覧に無い・同じ名前が複数あって名簿 <paramref name="Roster"/> も変わったときは先頭へ戻して日を消す。期間 <paramref name="Period"/> が変われば日を消す。
+/// </summary>
+public sealed record EditPick(int Index, string? Key, IReadOnlySet<int> Days, string Period, int Roster)
+{
+    public static readonly IReadOnlySet<int> NoDays = new HashSet<int>();
+    /// <summary>まだ選んでいない（Kotlin <c>EditPick()</c>）。</summary>
+    public static readonly EditPick None = new(0, null, NoDays, "", 0);
+
+    /// <summary>Kotlin <c>editPeriod</c>。</summary>
+    public static string PeriodOf(string startDate, int days) => $"{startDate}/{days}";
+
+    /// <summary>一覧の指紋＝Kotlin の <c>List&lt;String&gt;.hashCode()</c> と同じ値（31 倍の多項式、文字列も UTF-16 の同じ式。<c>string.GetHashCode</c> はプロセスごとに変わるので使わない）。</summary>
+    public static int RosterOf(IReadOnlyList<string> keys)
+    {
+        var h = 1;
+        foreach (var k in keys)
+        {
+            var sh = 0;
+            foreach (var ch in k) sh = unchecked(31 * sh + ch);
+            h = unchecked(31 * h + sh);
+        }
+        return h;
+    }
+
+    /// <summary>今の一覧 <paramref name="keys"/> と期間で選択を引き直す（Kotlin <c>resolvePick</c>。描画はいつもこの値を使う）。</summary>
+    public static EditPick Resolve(EditPick pick, IReadOnlyList<string> keys, string period)
+    {
+        if (keys.Count == 0) return None with { Period = period };
+        var roster = RosterOf(keys);
+        var key = pick.Key;
+        var atIndex = pick.Index >= 0 && pick.Index < keys.Count ? keys[pick.Index] : null;
+        int idx;
+        if (key is null) idx = System.Math.Clamp(pick.Index, 0, keys.Count - 1);
+        else if (keys.Count(k => k == key) > 1) idx = pick.Roster == roster && atIndex == key ? pick.Index : -1;
+        else if (atIndex == key) idx = pick.Index;
+        else idx = keys.ToList().IndexOf(key);
+        if (idx < 0) return new EditPick(0, keys[0], NoDays, period, roster);
+        return new EditPick(idx, keys[idx], pick.Period == period ? pick.Days : NoDays, period, roster);
+    }
+
+    /// <summary>位置 <paramref name="index"/> を選んだ（Kotlin <c>pickAt</c>。日の選択は呼び出し側が <see cref="PickDays"/> で決める）。</summary>
+    public static EditPick PickAt(EditPick pick, IReadOnlyList<string> keys, string period, int index) =>
+        Resolve(pick, keys, period) with { Index = index, Key = index >= 0 && index < keys.Count ? keys[index] : null };
+
+    /// <summary>Kotlin <c>pickDays</c>。</summary>
+    public static EditPick PickDays(EditPick pick, IReadOnlyList<string> keys, string period, IReadOnlySet<int> days) =>
+        Resolve(pick, keys, period) with { Days = days };
+
+    /// <summary>日の集合は中身で比べる（Kotlin の data class の等価と同じ）。</summary>
+    public bool Equals(EditPick? other) =>
+        other is not null && Index == other.Index && Key == other.Key && Days.SetEquals(other.Days) && Period == other.Period && Roster == other.Roster;
+
+    public override int GetHashCode() => System.HashCode.Combine(Index, Key, Days.Count, Period, Roster);
+}
+
+/// <summary>
 /// 「なおし方を見る」のホームとダイアログが共有する判断（Kotlin原本 <c>guidedFixTarget</c>/<c>landingFor</c>/<c>landingButtonLabel</c>、3.642.0）。
 /// 対象枠をここ1か所で決め、ホームの文言とダイアログが必ず同じ枠を指すようにする。
 /// </summary>

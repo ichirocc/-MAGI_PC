@@ -369,16 +369,14 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>
-    /// [3.298.0の由来をそのまま記録] ブロック巡回交換の c3n 事前フィルタ ON/OFF（既定OFF）。
-    /// c3n は HARD なので増える候補は <c>isBetter</c> が必ず却下する＝採用結果は ON/OFF で変わらない
-    /// （Kotlin原本 3.296.0 の A/B 実測で確認済み）。ON は詰んだ候補へフル評価を呼ばないぶんの
-    /// 節約だけ。
+    /// [3.298.0 配線] ブロック巡回交換の事前フィルタ ON/OFF（既定 ON、Kotlin 3.518.0）。
+    /// [Kotlin 3.649.0] 必須が正味で増える候補（正式採否が必ず却下する）だけを捨て、評価枠を残りの候補へ回す。
     /// </summary>
     public void SetBlockSwapC3nFilter(bool on)
     {
         PolishGate.FilterC3nIncrease = on;
         Ui.BlockSwapC3nFilter = on;
-        LogOp("I", $"設定変更: 禁止連続の事前フィルタ → {(on ? "ON" : "OFF")}");
+        LogOp("I", $"設定変更: 必須が増える候補の事前フィルタ → {(on ? "ON" : "OFF")}");
     }
 
     public void SetSearchStrength(SearchStrength strength)

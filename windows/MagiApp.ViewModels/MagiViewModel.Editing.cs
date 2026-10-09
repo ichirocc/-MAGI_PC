@@ -460,17 +460,19 @@ public sealed partial class MagiViewModel
             Ui.Message = "入れ替えの手順が見つかりませんでした。「直し方を探す」で探し直してください";
             return;
         }
-        var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label);
+        var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
+            BoardKey: BoardKey(snap), StateKey: StateKey(st));
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate) with { Target = target };
     }
 
-    /// <summary>一覧で確認した入替を当てる（盤面か設定が変わっていれば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
+    /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
     public void ApplyChainPreview()
     {
-        var s = Ui.ChainPreview?.Suggestion;
-        if (s is null) return;
+        var p = Ui.ChainPreview;
+        if (p is null) return;
         Ui.ChainPreview = null;
-        ApplyFixSuggestion(s);
+        if (p.Target is { BoardKey: not 0L } t) ApplyFixSuggestion(p.Suggestion, t.BoardKey, t.StateKey);
+        else ApplyFixSuggestion(p.Suggestion);
     }
 
     public void DismissChainPreview() => Ui.ChainPreview = null;
@@ -1112,7 +1114,8 @@ public sealed partial class MagiViewModel
     public void AddConsult(ConsultItem item)
     {
         Ui.MessageIsError = false;
-        var next = ConsultList.Add(Ui.Consults, item);
+        var stamped = item.StaffName is not null && item.RosterKey == 0 ? item with { RosterKey = ConsultList.RosterKeyOf(Ui.StaffNames) } : item;
+        var next = ConsultList.Add(Ui.Consults, stamped);
         if (next is null) { Ui.Message = ConsultList.Duplicate; return; }
         Ui.Consults = next;
         Ui.Message = ConsultList.Added;

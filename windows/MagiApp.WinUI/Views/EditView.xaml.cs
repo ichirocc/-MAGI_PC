@@ -93,7 +93,7 @@ public sealed partial class EditView : UserControl
 
     /// <summary>希望シフトの月間カレンダー（<see cref="RenderWishCalendar"/>）でタップ選択中の日
     /// （1始まり）。<see cref="WishStaffCombo"/> の選択が変わったら（別人の選択を持ち越さないよう）
-    /// リセットする——直近に同期した職員 index は <see cref="_wishCalendarStaffIndex"/> に持つ。</summary>
+    /// リセットする——直近に同期した職員は <see cref="_wishPick"/> に持つ（3.650.0: 位置でなく名前で追う）。</summary>
     private readonly HashSet<int> _wishSelectedDays = new();
 
     /// <summary>拡張希望の入力で選んでいる禁止シフト（index）。</summary>
@@ -101,9 +101,9 @@ public sealed partial class EditView : UserControl
 
     /// <summary>[phase9 #13] 必要人数カレンダーの選択日（1 始まり）と、選択を持ち越すシフト。</summary>
     private readonly HashSet<int> _needSelectedDays = new();
-    private int _needCalendarShiftIndex = -1;
+    private EditPick _needPick = EditPick.None;
     private IReadOnlyList<string> _needCalShiftItems = Array.Empty<string>();
-    private int _wishCalendarStaffIndex = -1;
+    private EditPick _wishPick = EditPick.None;
 
     /// <summary>年間マスターのグループ選択も同じ理由で「選択が変わったときだけ取り込む」。</summary>
     private int _syncedMasterGroupIndex = -1;
@@ -346,6 +346,27 @@ public sealed partial class EditView : UserControl
         combo.SelectedIndex = keep >= 0 && keep < items.Count ? keep : (items.Count > 0 ? 0 : -1);
     }
 
+    /// <summary>[3.650.0/外部レビュー] 希望の職員・必要人数のシフトの選択を位置でなく名前（記号）で追う（<see cref="EditPick.Resolve"/>）。
+    /// 並び替え・削除のあとに別の人・別のシフトへ選択日 <paramref name="days"/> を持ち越さず、期間が変われば選択日を捨てる（<see cref="SyncItems"/> は位置を保つ）。
+    /// 一覧が同じままコンボの位置が動いた＝利用者が選び直した（別の対象の日は持ち越さない）。</summary>
+    private static EditPick SyncPick(ComboBox combo, IReadOnlyList<string> items, ref IReadOnlyList<string> cache, EditPick pick, string period, HashSet<int> days)
+    {
+        if (!cache.SequenceEqual(items))
+        {
+            cache = items;
+            combo.ItemsSource = items.ToList();
+        }
+        else if (combo.SelectedIndex >= 0 && combo.SelectedIndex != pick.Index)
+        {
+            days.Clear();
+            return EditPick.PickAt(pick, items, period, combo.SelectedIndex) with { Days = EditPick.NoDays };
+        }
+        var next = EditPick.Resolve(pick with { Days = days.ToHashSet() }, items, period);
+        if (next.Days.Count == 0) days.Clear();
+        combo.SelectedIndex = items.Count > 0 ? next.Index : -1;
+        return next with { Days = EditPick.NoDays };
+    }
+
     /// <summary>[3.515.6同期] <see cref="_shiftListItems"/>/<see cref="_groupListItems"/>を
     ///  真の状態(<paramref name="items"/>)へ揃える。ドラッグ完了直後の再描画では、WinUIが自前で
     ///  並べ替えた見た目を、ここで<c>Ws1MoveShiftTo</c>/<c>Ws1MoveGroupTo</c>確定後の実際の順序で
@@ -393,7 +414,9 @@ public sealed partial class EditView : UserControl
 
     private void RenderWish(UiState ui, bool editable)
     {
-        SyncItems(WishStaffCombo, ui.StaffNames, ref _wishStaffItems);
+        var wishKey = _wishPick.Key;
+        _wishPick = SyncPick(WishStaffCombo, ui.StaffNames, ref _wishStaffItems, _wishPick, EditPick.PeriodOf(ui.StartDate, ui.Days), _wishSelectedDays);
+        if (_wishPick.Key != wishKey) _extWishSel.Clear();
         SyncItems(WishShiftCombo, ui.ShiftSymbols, ref _wishShiftItems);
         SetWishButton.IsEnabled = editable;
 
@@ -501,14 +524,14 @@ public sealed partial class EditView : UserControl
     /// フォーカスを保つ入力欄が無いセルのみのため差分更新は不要）、タップで
     /// <see cref="_wishSelectedDays"/>（1始まりの日）へ出し入れする。1件以上選ぶと下の適用パネル
     /// （シフト選択＋「適用（N日）」/「選択した日を未設定に戻す」）を表示する。職員選択が変わったら
-    /// （<see cref="_wishCalendarStaffIndex"/> で検知）選択日をリセットする（別人の選択を持ち越さない）。
+    /// （<see cref="_wishPick"/> で検知）選択日をリセットする（別人の選択を持ち越さない）。
     /// </summary>
     private void RenderWishCalendar(UiState ui, bool editable)
     {
         var staffIdx = WishStaffCombo.SelectedIndex;
-        if (staffIdx != _wishCalendarStaffIndex)
+        if (staffIdx != _wishPick.Index)
         {
-            _wishCalendarStaffIndex = staffIdx;
+            _wishPick = EditPick.PickAt(_wishPick, ui.StaffNames, EditPick.PeriodOf(ui.StartDate, ui.Days), staffIdx);
             _wishSelectedDays.Clear();
             _extWishSel.Clear();
         }
@@ -822,13 +845,8 @@ public sealed partial class EditView : UserControl
     /// 各日は「必要人数の範囲」（—＝未設定／n／a–b）を出し、個別設定の日は太字＋●。複数日選択→下の適用パネル。</summary>
     private void RenderNeedCalendar(UiState ui, bool editable)
     {
-        SyncItems(NeedCalShiftCombo, ui.ShiftSymbols, ref _needCalShiftItems);
+        _needPick = SyncPick(NeedCalShiftCombo, ui.ShiftSymbols, ref _needCalShiftItems, _needPick, EditPick.PeriodOf(ui.StartDate, ui.Days), _needSelectedDays);
         var k = NeedCalShiftCombo.SelectedIndex;
-        if (k != _needCalendarShiftIndex)
-        {
-            _needCalendarShiftIndex = k;
-            _needSelectedDays.Clear();
-        }
         NeedCalendarHost.Children.Clear();
         NeedCalendarHost.RowDefinitions.Clear();
         NeedCalendarHost.ColumnDefinitions.Clear();
@@ -2535,7 +2553,7 @@ public sealed partial class EditView : UserControl
     {
         if (staffIdx < 0 || staffIdx >= WishStaffCombo.Items.Count) return;
         WishStaffCombo.SelectedIndex = staffIdx;
-        _wishCalendarStaffIndex = staffIdx;
+        _wishPick = EditPick.PickAt(_wishPick, _vm.Ui.StaffNames, EditPick.PeriodOf(_vm.Ui.StartDate, _vm.Ui.Days), staffIdx);
         _wishSelectedDays.Clear();
         if (day is { } d && d >= 0 && d < _vm.Ui.Days) _wishSelectedDays.Add(d + 1);
         Render();
@@ -2547,7 +2565,7 @@ public sealed partial class EditView : UserControl
     {
         if (shiftIdx < 0 || shiftIdx >= NeedCalShiftCombo.Items.Count) return;
         NeedCalShiftCombo.SelectedIndex = shiftIdx;
-        _needCalendarShiftIndex = shiftIdx;
+        _needPick = EditPick.PickAt(_needPick, _vm.Ui.ShiftSymbols, EditPick.PeriodOf(_vm.Ui.StartDate, _vm.Ui.Days), shiftIdx);
         _needSelectedDays.Clear();
         if (day is { } d && d >= 0 && d < _vm.Ui.Days) _needSelectedDays.Add(d + 1);
         Render();

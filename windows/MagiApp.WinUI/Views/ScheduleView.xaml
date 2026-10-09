@@ -112,7 +112,7 @@
                                                 BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
                                                 CornerRadius="6"
                                                 Margin="1"
-                                                Padding="6,4,6,4"
+                                                Padding="6,0,6,4"
                                                 MinWidth="{x:Bind MinWidth, Mode=OneWay}"
                                                 Opacity="{x:Bind Opacity, Mode=OneWay}"
                                                 ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}"
@@ -123,12 +123,15 @@
                                                 PointerCanceled="OnScheduleCellPointerReleased"
                                                 Loaded="OnScheduleCellLoaded"
                                                 Unloaded="OnScheduleCellUnloaded">
+                                            <!-- [Android 3.651.0/外部レビュー] 上の余白 4px をセルの中へ移し（Padding 上 0＋記号の Margin 上 5）、
+                                                 上端に拡張希望の×だけの帯を作る。旧: × は記号と同じ行の範囲の上端に置かれ、記号の上半分に重なった。 -->
                                             <Grid>
                                                 <TextBlock Text="{x:Bind Text, Mode=OneWay}"
                                                            TextAlignment="{x:Bind TextAlignment, Mode=OneWay}"
                                                            FontWeight="{x:Bind FontWeight, Mode=OneWay}"
                                                            Foreground="{x:Bind Foreground, Mode=OneWay}"
                                                            FontSize="14"
+                                                           Margin="0,5,0,0"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center" />
                                                 <!-- [希望バッジ] 右下の丸。ShowWishDot でなく Visibility を直接持つ理由は
@@ -146,11 +149,11 @@
                                                 <Rectangle Height="2" VerticalAlignment="Bottom" Opacity="0.45"
                                                            Fill="{ThemeResource MagiOnSurfaceVariantBrush}"
                                                            Visibility="{x:Bind BandVisibility, Mode=OneWay}" IsHitTestVisible="False" />
-                                                <TextBlock Text="×" FontSize="10" FontWeight="Bold"
-                                                           Foreground="{x:Bind ExtBrush, Mode=OneWay}"
-                                                           Visibility="{x:Bind ExtVisibility, Mode=OneWay}"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Top"
-                                                           Margin="0,0,0,0" IsHitTestVisible="False" />
+                                                <Path Data="M1,1 L5,5 M5,1 L1,5" Width="6" Height="6"
+                                                      Stroke="{x:Bind ExtBrush, Mode=OneWay}" StrokeThickness="1.6"
+                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                      Visibility="{x:Bind ExtVisibility, Mode=OneWay}"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Top" IsHitTestVisible="False" />
                                                 <FontIcon Glyph="&#xE72E;" FontSize="9"
                                                           Visibility="{x:Bind PinVisibility, Mode=OneWay}"
                                                           HorizontalAlignment="Left" VerticalAlignment="Bottom"

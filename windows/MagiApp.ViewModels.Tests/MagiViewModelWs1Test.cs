@@ -143,6 +143,23 @@ public class MagiViewModelWs1Test
         Assert.Contains("職員編集: 職員A → 山田太郎 / グループ[0]", vm.Ui.OpLog[0]);
     }
 
+    /// <summary>[Kotlin 3.651.0/外部レビュー] 改名のあとも相談の対象を見失わない（画面へ出す共通の経路で名簿の前後を比べる）。</summary>
+    [Fact]
+    public async Task Ws1EditStaffRenameKeepsTheConsultTarget()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.RefreshCheck();
+        await vm.LastRefreshCheckTask!;
+        vm.AddConsult(ConsultList.Wish("職員A", "1/2", null, "r", 0, 1));
+
+        vm.Ws1EditStaff(0, "山田太郎", 0);
+        await vm.LastRefreshCheckTask!;
+
+        var c = Assert.Single(vm.Ui.Consults);
+        Assert.Equal("山田太郎", c.StaffName);
+        Assert.Equal(0, ConsultList.ConsultStaff(c, vm.Ui.StaffNames));
+    }
+
     // ===================================================================
     // Ws1SetGroupShift / Ws1SetGroupApt / Ws1ResetGroupApt / Ws1SetUse2
     // ===================================================================
