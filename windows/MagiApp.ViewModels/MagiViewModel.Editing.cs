@@ -443,7 +443,7 @@ public sealed partial class MagiViewModel
         _fixStateKey = StateKey(st);
         var p = ScheduleUtil.CachedProblem(st);
         Ui.MessageIsError = false;
-        Ui.Message = "複数人の入替の手順を探しています…";
+        Ui.Message = "複数人の入れ替えの手順を探しています…";
         LastPrepareChainFixTask = PrepareShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
     }
 

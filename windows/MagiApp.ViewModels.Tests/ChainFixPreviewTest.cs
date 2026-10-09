@@ -15,7 +15,7 @@ public class ChainFixPreviewTest
     public void ListsEveryChangeWithBeforeAndAfter()
     {
         var p = ChainFixPreview.Of(S(), Snap, new[] { "甲", "乙", "丙" }, new[] { "休", "日", "夜" }, "2026-10-01");
-        Assert.Equal("複数人の入れ替え（3 人・3 マス）", p.Title);
+        Assert.Equal("複数人の入れ替え（3 人・3 セル）", p.Title);
         Assert.Equal(new[] { "甲 10/3 日 → 夜", "丙 10/3 休 → 日", "乙 10/1 日 → 夜" }, p.Changes);
         var (hard, caution) = NextActionGuide.FixImpactLines(p.Suggestion, f => f == "covO" ? "人員過剰" : f);
         Assert.Equal("必須違反: 1件減る", hard);

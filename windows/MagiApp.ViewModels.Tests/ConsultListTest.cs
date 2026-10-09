@@ -32,6 +32,8 @@ public class ConsultListTest
         Assert.Equal(new[] { a }, l);
         Assert.Null(ConsultList.Add(l, new ConsultItem("x", "y")));
         Assert.Equal(2, ConsultList.Add(l, new ConsultItem("x", "z"))!.Count);
+        Assert.True(ConsultList.IsConsulted(l, new ConsultItem("x", "y")));
+        Assert.False(ConsultList.IsConsulted(l, new ConsultItem("x", "z")));
     }
 
     [Fact]

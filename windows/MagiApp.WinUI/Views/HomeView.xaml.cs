@@ -120,13 +120,15 @@ public sealed partial class HomeView : UserControl
         body.Children.Add(new TextBlock { Text = "変わる人と勤務（前 → 後）", FontSize = 13, Opacity = 0.8 });
         foreach (var line in p.Changes) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
         var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
+        var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
         body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = "この入替を当てる", SecondaryButtonText = ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? ConsultList.Done : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+            IsSecondaryButtonEnabled = !consulted,
         };
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;
@@ -580,10 +582,9 @@ public sealed partial class HomeView : UserControl
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
             // [3.645.0/仕様 5.3] 本人や上長に確認してから決める＝対象と検討内容を相談中の一覧へ（取消も勤務の変更もしない）。
-            var consult = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0) };
-            consult.Click += (_, _) => _vm.AddConsult(ConsultList.Wish(row.Name, DayText.Short(ui.StartDate, row.Day),
-                ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day));
-            panel.Children.Add(consult);
+            var consultItem = ConsultList.Wish(row.Name, DayText.Short(ui.StartDate, row.Day),
+                ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day);
+            panel.Children.Add(ConsultButton(ui, consultItem));
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
                 panel.Children.Add(Small(row.Pinned ? NextActionGuide.WishTrialPinned : NextActionGuide.WishTrialNotLocked));
@@ -758,16 +759,15 @@ public sealed partial class HomeView : UserControl
                         FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
                     });
                     // [3.645.0/仕様 5.3] だれを入れるかを相談してから決める＝対象と候補を相談中の一覧へ。
-                    var consult = new HyperlinkButton { Content = ConsultList.Button, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
-                    consult.Click += (_, _) => _vm.AddConsult(ConsultList.Shortage(target.DayLabel, target.ShiftSymbol, cands.Select(c => c.Name).ToList()));
-                    panel.Children.Add(consult);
+                    var consultItem = ConsultList.Shortage(target.DayLabel, target.ShiftSymbol, cands.Select(c => c.Name).ToList());
+                    panel.Children.Add(ConsultButton(ui, consultItem, stretch: true));
                 }
                 else if (target.ChainVerified)
                 {
                     // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入替で埋まると分析が確かめた枠。
                     //   [3.644.0/UX-03] 当てる前に一覧（だれの・どの日の・何→何と必須の増減）を見せる＝MaybeShowChainPreview。
                     panel.Children.Add(new TextBlock { Text = "だれか1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                    var chain = new Button { Content = "入替の一覧と影響を見る", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+                    var chain = new Button { Content = "入れ替えの一覧と影響を見る", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
                     chain.Click += (_, _) =>
                     {
                         dialog.Hide();
@@ -840,6 +840,16 @@ public sealed partial class HomeView : UserControl
 
     /// <summary>[UX監査 中4] 「データを見直す」の着地。原因が分かるときは対応する入口を開き（0=月次条件／2=年間マスター）、分からない（null）ときは編集タブの先頭。</summary>
     private void GoEditLanding(EditLanding? landing) => _window.GoEditLanding(landing);
+
+    /// <summary>「相談してから決める」。積んだあとは押せない「相談中」＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する）。</summary>
+    private HyperlinkButton ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
+    {
+        var done = ConsultList.IsConsulted(ui.Consults, item);
+        var b = new HyperlinkButton { Content = done ? ConsultList.Done : ConsultList.Button, MinHeight = 44, IsEnabled = !done, Margin = new Thickness(4, 0, 0, 0) };
+        if (stretch) b.HorizontalAlignment = HorizontalAlignment.Stretch;
+        b.Click += (_, _) => _vm.AddConsult(item);
+        return b;
+    }
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
     private void OnEditWishesClick(object sender, RoutedEventArgs e) => _window.OpenEditDoor(0);

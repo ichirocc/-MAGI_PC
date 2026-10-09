@@ -244,8 +244,10 @@ public sealed partial class AnalysisView : UserControl
             apply.Click += (_, _) => _vm.ApplyFixSuggestion(s);
             row.Children.Add(apply);
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
-            var consult = new HyperlinkButton { Content = ConsultList.Button, HorizontalAlignment = HorizontalAlignment.Left, MinHeight = 44 };
-            consult.Click += (_, _) => _vm.AddConsult(ConsultList.Fix(s, hardLine, caution));
+            var consultItem = ConsultList.Fix(s, hardLine, caution);
+            var done = ConsultList.IsConsulted(ui.Consults, consultItem);
+            var consult = new HyperlinkButton { Content = done ? ConsultList.Done : ConsultList.Button, HorizontalAlignment = HorizontalAlignment.Left, MinHeight = 44, IsEnabled = !done };
+            consult.Click += (_, _) => _vm.AddConsult(consultItem);
             row.Children.Add(consult);
             FixList.Children.Add(row);
         }
