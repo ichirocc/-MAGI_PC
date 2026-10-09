@@ -327,6 +327,16 @@ public static class FixSearchText
 {
     public const string NoFixScope = "1 セルの変更・2 人の入れ替え・玉突きの範囲では、必須を増やさずに違反を減らす手が見つかりませんでした。";
 
+    /// <summary>日×シフトの印が人員不足・過剰のものか（直し方が無いときの行き先＝その日のそのシフトの必要人数。群のレンジは④のまま）。Kotlin <c>coverageFocus</c>。</summary>
+    public static bool CoverageFocus(UiState ui, FixFocus f)
+    {
+        if (f.Staff is not null || f.Shift is null || f.Day is null) return false;
+        var key = $"{f.Shift},{f.Day}";
+        var classes = ui.NeedFamilies.TryGetValue(key, out var fams) ? fams
+            : ui.NeedViolations.TryGetValue(key, out var one) ? new[] { one } : Array.Empty<string>();
+        return classes.Any(c => VioBuckets.FamilyOfVioClass(c) is "covU" or "covO");
+    }
+
     public static IReadOnlyDictionary<int, ShiftCoverageTotal> ShiftCoverageTotals(IReadOnlyList<IReadOnlyList<CoverageMark>> marks)
     {
         var under = new Dictionary<int, List<int>>(); var over = new Dictionary<int, List<int>>();

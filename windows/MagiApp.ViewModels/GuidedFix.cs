@@ -32,8 +32,24 @@ public sealed record GuidedFixPlan(
 /// Section＝節キー（<c>yr_ws1</c>／<c>yr_cons</c>／<c>yr_count</c> は <c>EditView.ScrollToSection</c> が寄せる）、WishStaff＝希望で固定された本人。
 /// 3.644.0: 「つくる前の確認」のセルを持たない行からも使う＝NeedShift（必要人数カレンダーで先に選ぶシフト）、CountStaff/CountShift（回数のマス。
 /// Windows では個人の回数が「職員管理」の入口にあるため <see cref="GuidedFixRules.DoorFor"/> が入口を読み替える）、Label（ボタン文言の上書き）。
+/// Day＝診断が指した日（希望の職員・必要人数のシフトと一緒に渡し、カレンダーでその日を選んだ状態で着地する。3.646.0 L01）。
 /// </summary>
-public sealed record EditLanding(int Scope, string? Section, int? WishStaff = null, int? NeedShift = null, int? CountStaff = null, int? CountShift = null, string? Label = null);
+public sealed record EditLanding(int Scope, string? Section, int? WishStaff = null, int? NeedShift = null, int? CountStaff = null, int? CountShift = null, string? Label = null, int? Day = null);
+
+/// <summary>
+/// 編集タブへ着地したあと「元の確認へ戻る」ための呼出元（Kotlin <c>EditReturn</c>、3.646.0 L03）。Label＝見出し、Origin＝戻り先、Cell＝セルから来たとき。
+/// 画面の状態＝保存しない。利用者が自分でタブを替えたら消える。
+/// </summary>
+public sealed record EditReturn(string Label, int Origin, (int I, int J)? Cell = null)
+{
+    public const int PreRun = 0;     // つくる前の確認（今のデータで作り直して出す）
+    public const int Guided = 1;     // なおし方（人員不足の案内）
+    public const int Analysis = 2;   // 分析タブの一覧
+    public const int CellOrigin = 3; // 勤務表のセルのシート
+
+    public static string Line(EditReturn r) => $"「{r.Label}」から来ました。直したら元の確認へ戻れます。";
+    public const string ButtonText = "元の確認へ戻る";
+}
 
 /// <summary>
 /// 「なおし方を見る」のホームとダイアログが共有する判断（Kotlin原本 <c>guidedFixTarget</c>/<c>landingFor</c>/<c>landingButtonLabel</c>、3.642.0）。
@@ -48,13 +64,13 @@ public static class GuidedFixRules
     public static CoverageShortfall? GuidedFixTarget(IEnumerable<CoverageShortfall> shortfalls) =>
         shortfalls.FirstOrDefault(sf => sf.Verdict == CoverageVerdict.Fixable && sf.Miss > 0 && !sf.BlockedNow);
 
-    /// <summary>原因に対応する着地先。null＝原因が分からない＝編集タブの先頭（従来どおり）。</summary>
-    public static EditLanding? LandingFor(CoverageShortfall sf)
+    /// <summary>原因に対応する着地先。原因が特定できない不足は、その日のそのシフトの必要人数（旧 null＝編集タブを開くだけ。3.646.0 L01/L04）。</summary>
+    public static EditLanding LandingFor(CoverageShortfall sf)
     {
-        if (sf.WishPinned.Count > 0) return new EditLanding(0, null, sf.WishPinned[0]);
+        if (sf.WishPinned.Count > 0) return new EditLanding(0, null, sf.WishPinned[0], Day: sf.DayIndex);
         if (sf.Verdict == CoverageVerdict.Infeasible) return new EditLanding(2, "yr_ws1");
         if (sf.BlockedNow && sf.ForbidCount > 0) return new EditLanding(2, "yr_cons");
-        return null;
+        return new EditLanding(0, null, NeedShift: sf.ShiftIndex, Day: sf.DayIndex);
     }
 
     public static string LandingButtonLabel(EditLanding? landing) => landing switch
@@ -82,7 +98,7 @@ public static class GuidedFixRules
     {
         var zero = core.OfType<ConstraintMus.RangeCap>().FirstOrDefault(c => c.Hi == 0);
         if (zeroCap && zero is not null) return new EditLanding(2, "yr_count", CountStaff: zero.Staff, CountShift: zero.Shift, Label: LandingZeroCap);
-        if (core.OfType<ConstraintMus.DayNeed>().FirstOrDefault() is { } need) return new EditLanding(0, null, NeedShift: need.Shift);
+        if (core.OfType<ConstraintMus.DayNeed>().FirstOrDefault() is { } need) return new EditLanding(0, null, NeedShift: need.Shift, Day: need.Day);
         if (core.OfType<ConstraintMus.RangeCap>().FirstOrDefault() is { } cap) return new EditLanding(2, "yr_count", CountStaff: cap.Staff, CountShift: cap.Shift);
         if (core.OfType<ConstraintMus.RangeFloor>().FirstOrDefault() is { } floor) return new EditLanding(2, "yr_count", CountStaff: floor.Staff, CountShift: floor.Shift);
         if (core.OfType<ConstraintMus.WindowRule>().Any()) return new EditLanding(2, "yr_cons", Label: LandingWindow);

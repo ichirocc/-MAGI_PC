@@ -103,7 +103,7 @@ public sealed partial class MagiViewModel
         catch (Exception e)
         {
             LogOp("W", $"希望の試算 失敗: {e.GetType().Name}: {e.Message}");
-            if (seq == _wishTrialSeq && ReferenceEquals(_trialCtx, ctx)) _trialResults[$"{i},{j},{k}"] = new WishTrial.Unavailable(e.GetType().Name);
+            if (seq == _wishTrialSeq && ReferenceEquals(_trialCtx, ctx)) _trialResults[$"{i},{j},{k}"] = new WishTrial.Unavailable("計算の途中で止まりました。もう一度お試しください");   // 例外名はログだけ
         }
         finally
         {

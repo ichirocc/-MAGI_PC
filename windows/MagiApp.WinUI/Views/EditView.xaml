@@ -43,9 +43,19 @@
       Render() でコントロールの値をプログラム的に設定するため、SettingsView と同じ _syncingFromModel
       フラグでイベントの逆流を止める。
     -->
-    <ScrollViewer Padding="16">
+    <ScrollViewer x:Name="RootScroll" Padding="16">
         <StackPanel Spacing="20" MaxWidth="560" HorizontalAlignment="Left">
             <TextBlock Text="編集" FontSize="20" FontWeight="SemiBold" />
+
+            <!-- [3.646.0 L03] 着地の呼出元へ戻る 1 行（直したあと、同じ問題を探し直さなくてよい）。MainWindow.GoEditLandingFrom が出し、タブを離れたら消す。 -->
+            <Border x:Name="ReturnBanner" Visibility="Collapsed" Background="{StaticResource MagiSecondaryContainerBrush}"
+                    CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
+                    <TextBlock x:Name="ReturnText" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}"
+                               Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
+                    <Button x:Name="ReturnButton" Grid.Column="1" Content="元の確認へ戻る" MinHeight="48" Click="OnReturnClick" />
+                </Grid>
+            </Border>
 
             <StackPanel Spacing="4">
                 <TextBlock Text="どこを直しますか" />

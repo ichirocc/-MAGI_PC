@@ -61,7 +61,7 @@ public sealed partial class MagiViewModel
             st.Cons41s.Count + st.Cons42s.Count;
         return new SetupCounts(
             st.DayCount, st.StaffCount, st.ShiftCount, st.GroupCount,
-            st.Wishes.Count, st.NeedDay1.Count + st.NeedDay2.Count, cons, st.StaffRange.Count, st.Use2Patterns);
+            st.Wishes.Count + (st.ExtWishes?.Count ?? 0), st.NeedDay1.Count + st.NeedDay2.Count, cons, st.StaffRange.Count, st.Use2Patterns);   // 拡張希望も登録の有無に数える
     }
 
     /// <summary>
@@ -457,10 +457,11 @@ public sealed partial class MagiViewModel
         if (s is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "入替の手順が見つかりませんでした。「直し方を探す」で探し直してください";
+            Ui.Message = "入れ替えの手順が見つかりませんでした。「直し方を探す」で探し直してください";
             return;
         }
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate);
+        var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label);
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate) with { Target = target };
     }
 
     /// <summary>一覧で確認した入替を当てる（盤面か設定が変わっていれば <see cref="ApplyFixSuggestion"/> が断る）。</summary>

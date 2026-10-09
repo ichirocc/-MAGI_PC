@@ -75,6 +75,17 @@ public class VioBucketsTest
     }
 
     /// <summary>[Android dashboard-12] フィルタのチップも族の表示名と同じ語（c1 を「窓」と呼ぶと分析タブの「期間の制約」と結びつかない）。</summary>
+    /// <summary>[3.646.0 L04] 必要人数・希望の見直しは月次条件（null）。旧: 必要人数が④のグループの人数へ行っていた。</summary>
+    [Fact]
+    public void YearSectionForIssueKindSendsDemandAndWishToTheMonthlyDoor()
+    {
+        Assert.Equal("yr_count", VioBuckets.YearSectionForIssueKind(IssueKind.Range));
+        Assert.Equal("yr_cons", VioBuckets.YearSectionForIssueKind(IssueKind.Constraint));
+        Assert.Null(VioBuckets.YearSectionForIssueKind(IssueKind.Demand));
+        Assert.Null(VioBuckets.YearSectionForIssueKind(IssueKind.Wish));
+        Assert.Null(VioBuckets.YearSectionForIssueKind(null));
+    }
+
     [Fact]
     public void WindowBucketUsesTheSameWordAsTheBreakdownLabel()
     {

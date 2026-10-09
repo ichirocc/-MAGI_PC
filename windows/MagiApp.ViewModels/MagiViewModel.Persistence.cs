@@ -225,6 +225,7 @@ public sealed partial class MagiViewModel
         var lastNode = _undoStack.Last;
         if (lastNode is null) return;
         DropCsvPartial();
+        _pendingGuided = null;   // 案内で入れた結果の行は、戻した盤面には結ばない
         _undoStack.RemoveLast();
         var snap = lastNode.Value;
         var cur = SnapNow();
@@ -260,6 +261,7 @@ public sealed partial class MagiViewModel
         var lastNode = _redoStack.Last;
         if (lastNode is null) return;
         DropCsvPartial();
+        _pendingGuided = null;
         _redoStack.RemoveLast();
         var snap = lastNode.Value;
         var cur = SnapNow();
@@ -301,10 +303,12 @@ public sealed partial class MagiViewModel
     /// </summary>
     public void InitBlankState()
     {
-        const int days = 31;
+        // 新しいデータの対象月は来月（月末に来月の勤務表をつくる業務＝SetNextMonth と同じ起点）。旧: 2026 年 1 月固定。
+        var first = new DateOnly(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+        var days = DateTime.DaysInMonth(first.Year, first.Month);
         var sched = string.Join(",", Enumerable.Repeat("0", days));
         var seed =
-            "{\"startDate\":\"2026-01-01\",\"endDate\":\"2026-01-31\"," +
+            $"{{\"startDate\":\"{first:yyyy-MM-dd}\",\"endDate\":\"{first.AddDays(days - 1):yyyy-MM-dd}\"," +
             "\"shifts\":[{\"name\":\"休み\",\"kigou\":\"休\",\"need1\":\"\",\"need2\":\"\"}]," +
             "\"groups\":[{\"name\":\"グループA\",\"kigou\":\"A\"}]," +
             "\"staff\":[{\"name\":\"職員1\",\"groupIdx\":0}]," +
@@ -453,6 +457,7 @@ public sealed partial class MagiViewModel
                 ui.FixSearched = false;
                 ui.FixFocusName = "";
                 ui.StalledHardFamilies = Array.Empty<string>();
+                ui.Consults = Array.Empty<ConsultItem>();   // 相談も前のデータの対象を指している（T01）
                 ui.Message = $"読込完了: {lp.State.StaffCount}名 / {lp.State.DayCount}日 / {lp.State.ShiftCount}シフト{note}";
             }, ct: ct);
             rollback = null;

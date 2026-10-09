@@ -70,17 +70,18 @@ public class GuidedFixTest
     }
 
     [Fact]
-    public void LandingForPointsAtTheCauseAndNullKeepsTheEditTop()
+    public void LandingForPointsAtTheCauseAndUnexplainedShortagesLandOnTheDayNeed()
     {
         var pinned = new CoverageShortfall(0, "8/1", 1, "A", 1, 0, 1, 2, CoverageVerdict.Fixable, "理由", WishPinned: new[] { 4 });
-        Assert.Equal(new EditLanding(0, null, 4), GuidedFixRules.LandingFor(pinned));
+        Assert.Equal(new EditLanding(0, null, 4, Day: 0), GuidedFixRules.LandingFor(pinned));
         Assert.Equal("希望を見直す", GuidedFixRules.LandingButtonLabel(GuidedFixRules.LandingFor(pinned)));
 
         var infeasible = Sf(0, CoverageVerdict.Infeasible);
         Assert.Equal(new EditLanding(2, "yr_ws1"), GuidedFixRules.LandingFor(infeasible));
         Assert.Equal("担当を見直す", GuidedFixRules.LandingButtonLabel(GuidedFixRules.LandingFor(infeasible)));
 
-        Assert.Null(GuidedFixRules.LandingFor(Sf(0, CoverageVerdict.Fixable)));
+        // [3.646.0 L01/L04] 原因が分からない不足は編集タブを開くだけにせず、その日のそのシフトの必要人数へ（旧 null）。
+        Assert.Equal(new EditLanding(0, null, NeedShift: 1, Day: 0), GuidedFixRules.LandingFor(Sf(0, CoverageVerdict.Fixable)));
         Assert.Equal("データを見直す", GuidedFixRules.LandingButtonLabel(null));
     }
 }

@@ -132,12 +132,12 @@ public class MagiViewModelEditingTest
             cons2: new List<C2Row> { new("A", "3") },
             cons41: new List<C41Row> { new("G0", "A", "1", "2") },
             cons42: new List<C42Row> { new("G0", "G0", "休", "A") },
-            use2Patterns: true);
+            use2Patterns: true) with { ExtWishes = new List<ExtWish> { new(1, new[] { "2025-12-03" }, new[] { "A" }) } };
         var vm = new MagiViewModel { _state = st };
 
         var counts = vm.GetSetupCounts();
 
-        Assert.Equal(1, counts.Wishes);
+        Assert.Equal(2, counts.Wishes);   // [3.646.0] 希望 1 件＋拡張希望 1 件（登録の有無に数える）
         Assert.Equal(2, counts.NeedDay); // needDay1 + needDay2, each keyed separately
         Assert.Equal(4, counts.Constraints); // cons1+cons2+cons41+cons42 (cons3 family all empty here)
         Assert.Equal(1, counts.Ranges);

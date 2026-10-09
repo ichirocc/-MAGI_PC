@@ -333,6 +333,16 @@ public class CellSheetLogicTest
         Assert.Equal(FixPanelState.NotStarted, CellSheetLogic.PanelState(false, false, "other", "", "k"));
     }
 
+    /// <summary>[3.646.0] 直し方の探索の締切: セルのシートは 3 秒、全体は 8 秒。探索中の 1 行に最長の秒数を添える。</summary>
+    [Fact]
+    public void FixSearchBudgetsAreNamedInTheWaitingLine()
+    {
+        Assert.Equal(3000L, CellSheetLogic.FixSearchQuickMs);
+        Assert.Equal(8000L, CellSheetLogic.FixSearchMs);
+        Assert.Equal("この場所の直し方を探しています…（最長 3 秒）", CellSheetLogic.FixSearchingText(true));
+        Assert.Equal("直し方を探しています…（最長 8 秒）", CellSheetLogic.FixSearchingText(false));
+    }
+
     [Fact]
     public void NoticeUndoOnlyForItsOwnOperationAndProgressDoesNotReplaceIt()
     {

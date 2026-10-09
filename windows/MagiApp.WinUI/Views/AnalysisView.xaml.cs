@@ -62,7 +62,8 @@ public sealed partial class AnalysisView : UserControl
     /// 該当セルへスクロール＋一時ハイライト（<c>ScheduleView.FocusCell</c> 参照）。</summary>
     private readonly Action<int, int> _jumpToCell;
 
-    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action? goEdit = null)
+    /// <param name="goEdit">「設定へ」。種類（設定の見直しの IssueKind、無ければ null）を渡し、着地先は MainWindow が決める（3.646.0 L04）。</param>
+    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action<IssueKind?>? goEdit = null)
     {
         _vm = vm;
         _jumpToCell = jumpToCell;
@@ -115,7 +116,7 @@ public sealed partial class AnalysisView : UserControl
 
     private void OnFixSearchClick(object sender, RoutedEventArgs e) => _vm.FindFixSuggestions();
 
-    private readonly Action? _goEdit;
+    private readonly Action<IssueKind?>? _goEdit;
     private bool _triageSummaryOpen;
 
     private static Brush BrushOf(string key) => (Brush)Application.Current.Resources[key];
@@ -171,7 +172,7 @@ public sealed partial class AnalysisView : UserControl
             if (_goEdit is not null)
             {
                 var go = new Button { Content = "設定へ", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
-                go.Click += (_, _) => _goEdit();
+                go.Click += (_, _) => _goEdit(row.Kind);
                 Grid.SetColumn(go, 1); grid.Children.Add(go);
             }
             TriageBlockersList.Children.Add(new Border
@@ -241,7 +242,7 @@ public sealed partial class AnalysisView : UserControl
             if (caution is not null) row.Children.Add(BodyText(caution));
             row.Children.Add(BodyText($"必須 {DeltaText(s.DeltaHard)} ・ 合計 {DeltaText(s.DeltaTotal)}", dim: true));
             var apply = new Button { Content = "この手を使う（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Left };
-            apply.Click += (_, _) => _vm.ApplyFixSuggestion(s);
+            apply.Click += (_, _) => _vm.PreviewOrApplyFix(s);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
             var consultItem = ConsultList.Fix(s, hardLine, caution);
@@ -425,7 +426,7 @@ public sealed partial class AnalysisView : UserControl
         Render();
     }
 
-    private void OnIssuesGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
+    private void OnIssuesGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke(_vm.Ui.SettingIssues.FirstOrDefault()?.Kind);
 
     /// <summary>MagiTagChip 相当（枠と文字を同じアクセント色にした小さなラベル）。</summary>
     internal static Border TagChip(string text, string hex)
@@ -566,7 +567,8 @@ public sealed partial class AnalysisView : UserControl
 
     private void OnC1DetailToggleClick(object sender, RoutedEventArgs e) { _c1DetailOpen = !_c1DetailOpen; Render(); }
     private void OnPinDetailToggleClick(object sender, RoutedEventArgs e) { _pinDetailOpen = !_pinDetailOpen; Render(); }
-    private void OnGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke();
+    // 「個人の回数を見直す」（c1 頭打ち・回数固定の影響）＝回数の節へ（Kotlin: deepLinkEditSection = "yr_count"）。
+    private void OnGoEditClick(object sender, RoutedEventArgs e) => _goEdit?.Invoke(IssueKind.Range);
 
     /// <summary>
     /// [2026-09-02, 配線] ④' 禁止の並び(c3n)診断。<see cref="UiState.ForbiddenDiag"/>

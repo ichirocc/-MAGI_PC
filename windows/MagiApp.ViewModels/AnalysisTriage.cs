@@ -9,7 +9,8 @@ namespace MagiApp.ViewModels;
 /// <param name="Family">族キー（<see cref="MirrorKeys.All"/>）。settingIssues 由来の行は null。</param>
 /// <param name="Promoted">診断が「データを直さない限り消えない」と判定して上段へ上げた行か。</param>
 /// <param name="Staff">タップで修復フローへ渡す職員（null=全体探索 or 導線なし）。</param>
-public sealed record TriageRow(string Label, int Count, string Unit, string Detail, string? Family = null, bool Promoted = false, int? Staff = null);
+/// <param name="Kind">settingIssues 由来の行の種類（「設定へ」の着地先＝<see cref="VioBuckets.YearSectionForIssueKind"/>）。族の行は null。</param>
+public sealed record TriageRow(string Label, int Count, string Unit, string Detail, string? Family = null, bool Promoted = false, int? Staff = null, IssueKind? Kind = null);
 
 /// <summary>
 /// [3.471.0/分析タブ再構築] 分析タブの1画面トリアージを組み立てる UI 非依存の純関数（Kotlin原本 <c>AnalysisTriage.kt</c>）。
@@ -76,7 +77,7 @@ public sealed record AnalysisTriage(
                 var list = g.ToList();
                 var heads = string.Join("/", list.Take(2).Select(i => i.Where.Length > 18 ? i.Where[..18] : i.Where));
                 var more = list.Count > 2 ? " ほか" : "";
-                return new TriageRow(IssueKindLabel(g.Key), list.Count, "件", heads + more);
+                return new TriageRow(IssueKindLabel(g.Key), list.Count, "件", heads + more, Kind: g.Key);
             })
             .OrderByDescending(r => r.Count)
             .ToList();

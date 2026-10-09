@@ -37,6 +37,15 @@ public static class VioBuckets
     /// <summary>族キー → バケツキー（対象外＝null）。</summary>
     public static string? BucketOfFamily(string fam) => Buckets.FirstOrDefault(b => b.Families.Contains(fam))?.Key;
 
+    /// <summary>設定の見直しの種類 → 年間マスターの節（Kotlin <c>yearSectionForIssueKind</c>）。必要人数・希望は月次条件なので null（呼出側が月次条件を開く。
+    /// 旧: 必要人数が④のグループの人数へ行っていた＝3.646.0 L04）。</summary>
+    public static string? YearSectionForIssueKind(IssueKind? kind) => kind switch
+    {
+        IssueKind.Range => "yr_count",
+        IssueKind.Constraint => "yr_cons",
+        _ => null,
+    };
+
     /// <summary>この違反クラスが現在のフィルタ(enabled=表示中バケツ集合)で表示されるか。バケツ対象外の族は常に表示。</summary>
     public static bool VioVisible(string? cls, IReadOnlySet<string> enabled)
     {

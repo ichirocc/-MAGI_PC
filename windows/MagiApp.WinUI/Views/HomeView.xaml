@@ -66,6 +66,8 @@
                     <TextBlock x:Name="BodyText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="NoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                    <!-- 勤務表 CSV の保存状態。直した結果の行とは別に出す（両方あれば両方。3.646.0 B03）。 -->
+                    <TextBlock x:Name="SavedText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <TextBlock x:Name="ConsultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Grid x:Name="RelaxSearchRow" Visibility="Collapsed" ColumnDefinitions="*,Auto">
                         <TextBlock x:Name="RelaxSearchText" Text="希望を変えずに、個人の上限0を例外で緩める方法を調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
