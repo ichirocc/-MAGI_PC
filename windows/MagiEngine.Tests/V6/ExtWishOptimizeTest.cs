@@ -79,6 +79,36 @@ public class ExtWishOptimizeTest
         }
     }
 
+    /// <summary>[3.653.0] 拡張希望の違反は必須（重み 8000＝希望と同じ）＝入力に既にある違反を探索が解消する（旧: 採点外で残った）。</summary>
+    [Fact]
+    public async Task ExistingViolationsAreRepairedNowThatTheyAreHard()
+    {
+        var st0 = Load("sept2026_state.json");
+        var input = st0.Schedule.ToIntArray2D();
+        var p0 = new Problem(st0);
+        var start = DateOnly.Parse(st0.StartDate);
+        var st = st0;
+        for (var i = 0; i < p0.S; i++)
+            for (var j = 0; j < p0.T; j++)
+            {
+                if (p0.Wish[i][j] >= 0 || p0.Pinned(i, j) || (i * 7 + j) % 11 != 0 || input[i][j] < 0 || input[i][j] >= p0.K) continue;
+                var r = ExtWishRules.Sanitize(st, new ExtWish(i, new[] { start.AddDays(j).ToString("yyyy-MM-dd") }, new[] { st0.Shifts[input[i][j]].Kigou }));
+                if (r.Saved is not null) st = st with { ExtWishes = (st.ExtWishes ?? Array.Empty<ExtWish>()).Append(r.Saved).ToList() };
+            }
+        var before = UnifiedViolationChecker.Check(st, input);
+        var n0 = before.Breakdown.GetValueOrDefault("extWish", 0);
+        Assert.True(n0 > 10, $"入力の違反が作れていない ({n0})");
+        Assert.Equal(n0, before.ExtWishCells.Count);
+        Assert.Equal(n0, before.Hard);   // sept2026 の入力盤面は必須 0
+        var outSched = (await V6FinalPort.HandleOptimize(st, secondsRaw: 3, schedule: input.Copy2D(), workers: 2,
+            requestedAlgorithm: V6Algorithm.V5, allowImpossible: true, seed: 7L)).Schedule;
+        var after = UnifiedViolationChecker.Check(st, outSched);
+        var n1 = after.Breakdown.GetValueOrDefault("extWish", 0);
+        // 拡張希望の違反は先に解ける（Android 負荷なし 3 秒で 23→0）。玉突きで出る禁止の並びは時間で減る＝時間制なので緩く見る。
+        Assert.True(n1 * 4 <= n0, $"拡張希望の違反が残りすぎ {n1}/{n0} {string.Join(",", after.ExtWishCells)}");
+        Assert.True(after.Hard < before.Hard, $"必須が減っていない {before.Hard}→{after.Hard}");
+    }
+
     /// <summary>既定 OFF の研磨も含めて PolishGate の真偽フラグを全部 ON にした決定的モードの後処理。</summary>
     [Fact]
     public void PostProcessingWithEveryFlagOnNeverPlacesABannedShift()

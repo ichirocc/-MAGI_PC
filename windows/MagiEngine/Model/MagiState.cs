@@ -100,7 +100,7 @@ public sealed record MagiState(
     IReadOnlyList<C3wRow>? Cons3w = null,
     /// <summary>[#41] 手動固定（1 セル 1 件）。null＝空。採点・希望の意味は変えない。</summary>
     IReadOnlyList<ManualPin>? ManualPins = null,
-    /// <summary>拡張希望（職員×日の集合×禁止シフトの集合）。null＝空。採点の族・重みには入れない（重み未指示）。</summary>
+    /// <summary>拡張希望（職員×日の集合×禁止シフトの集合）。null＝空。違反は必須の族 extWish（重み 8000、3.653.0）。</summary>
     IReadOnlyList<ExtWish>? ExtWishes = null
 )
 {

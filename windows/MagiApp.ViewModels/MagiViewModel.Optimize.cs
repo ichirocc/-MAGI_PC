@@ -47,6 +47,7 @@ public sealed partial class MagiViewModel
         "c3n" => "禁止の並び（連勤など）",
         "c3w" => "希望の前日の禁止",
         "pref" => "希望シフト",
+        "extWish" => "拡張希望",
         "groupViol" => "担当外シフト",
         "low" => "個人の回数下限",
         "high" => "個人の回数上限",
@@ -56,7 +57,7 @@ public sealed partial class MagiViewModel
     /// <summary>Kotlin原本 <c>topHardFamilyJp</c>（1097行）の逐語移植。</summary>
     private static string? TopHardFamilyJp(IReadOnlyDictionary<string, int> breakdown)
     {
-        var keys = new[] { "covU", "c3n", "pref", "groupViol", "low", "high" };
+        var keys = new[] { "covU", "c3n", "c3w", "pref", "extWish", "groupViol", "low", "high" };
         var top = keys.MaxBy(k => breakdown.GetValueOrDefault(k, 0));
         if (top is null) return null;
         return breakdown.GetValueOrDefault(top, 0) > 0 ? HardFamilyJp(top) : null;

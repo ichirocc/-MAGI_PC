@@ -1,4 +1,4 @@
-hard=28
+hard=29
 soft=3592
 c1=24
 c2=3
@@ -20,3 +20,4 @@ apt=20
 fair=58
 weekly=10
 c3w=1
+extWish=1

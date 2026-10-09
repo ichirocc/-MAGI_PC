@@ -5,7 +5,7 @@ namespace MagiEngine.V6;
 
 /// <summary>
 /// 拡張希望（基本希望の否定形）の保存規則・禁止表・違反判定（Android <c>ExtWishRules.kt</c>）。正は <c>docs/business-logic.md</c> の「拡張希望」。
-/// 採点の族・重みには入れない（重み未指示）。違反は <c>ViolationReport.ExtWishCells</c> に別件数で出す。
+/// 違反は必須の族 <c>extWish</c>（重み 8000＝希望と同じ、3.653.0。旧: 採点外）。<c>ViolationReport.ExtWishCells</c> は同じ集合。
 /// </summary>
 public static class ExtWishRules
 {

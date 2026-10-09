@@ -144,7 +144,7 @@ struct MagiProblem {
     std::vector<C3r> cons3, cons3n, cons3m, cons3mn;
     std::vector<C3wr> cons3w;
     std::vector<uint8_t> c3wBan;             // S*T*K（cons3w が空なら空＝Kotlin Problem.c3wBan の null）。buildC3wBan で導出
-    std::vector<uint8_t> extBan;             // S*T*K（拡張希望の禁止。空＝無し。採点は読まず、盤面へ書く手の判定だけが読む）
+    std::vector<uint8_t> extBan;             // S*T*K（拡張希望の禁止。空＝無し。採点（extWish, HARD）と盤面へ書く手の判定が読む）
     std::vector<std::vector<int>> bucket;    // G: 群の担当ONシフト
     std::vector<std::vector<int>> members;   // G: 群のメンバー（sgrp から導出）
     std::vector<uint8_t> bucketHas;          // G*K: 群 g がシフト k を担当できるか（fair 用）
@@ -355,12 +355,12 @@ long long c3check(const MagiProblem& p, const int* a, const std::vector<C3r>& li
 }
 
 // [3.524.0/backlog#6] fullEvalParts の breakdown 引数のスロット順。Kotlin MirrorKeys.all と
-//   同じ20族・同じ並びにすること（native-parity host harness がこの並びで名前付き比較する）。
-static const char* const kBreakdownNames[20] = {
+//   同じ21族・同じ並びにすること（native-parity host harness がこの並びで名前付き比較する）。
+static const char* const kBreakdownNames[21] = {
     "c1", "c2", "c3", "c3n", "c3m", "c3mn", "c41", "c42", "c41s", "c42s",
-    "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly", "c3w",
+    "covU", "covO", "pref", "low", "high", "groupViol", "apt", "fair", "weekly", "c3w", "extWish",
 };
-static constexpr int kBreakdownCount = 20;
+static constexpr int kBreakdownCount = 21;
 
 // Evaluator.fullEvalParts の忠実移植。a は S*T の平坦配列。out[0]=hard1, out[1]=soft。
 // [3.524.0/backlog#6] bd!=nullptr なら族別の生の違反量（重み適用前、kBreakdownNames順）も書く。
@@ -486,6 +486,12 @@ void fullEvalParts(const MagiProblem& p, const int* a, long long out[2], long lo
         long long raw = 0;
         for (int i = 0; i < S; i++) { const int* row = a + (size_t)i * T; for (int j = 0; j < T; j++) if (p.c3wBanned(i, j, row[j])) raw++; }
         hard1 += raw; if (bd) bd[19] += raw;
+    }
+    // [3.653.0] extWish（拡張希望の違反, HARD）。Kotlin Evaluator と同じ静的な禁止表 extBan を引く。
+    if (!p.extBan.empty()) {
+        long long raw = 0;
+        for (int i = 0; i < S; i++) { const int* row = a + (size_t)i * T; for (int j = 0; j < T; j++) if (p.extBanned(i, j, row[j])) raw++; }
+        hard1 += raw; if (bd) bd[20] += raw;
     }
 
     // 回数行列 ssn（range/apt/fair が共有）
@@ -739,6 +745,7 @@ struct SaChunk {
         if (w >= 0 && p.cd(i, w) && cur != w) v += (long long)M;
         if (cur >= 0 && cur < K && !p.cd(i, cur)) v += (long long)M;
         if (p.c3wBanned(i, j, cur)) v += (long long)M;   // [3.542.0] c3w もセル単位の HARD
+        if (p.extBanned(i, j, cur)) v += (long long)M;   // [3.653.0] extWish も同じ
         return v;
     }
     long long contribRangeApt(int i, int k) const {
@@ -1275,6 +1282,7 @@ void collectViolationCells(const MagiProblem& p, const int* a, std::vector<int>&
             int k = row[j];
             if (k >= 0 && k < K && !p.cd(i, k)) markCell(i, j);
             if (p.c3wBanned(i, j, k)) markCell(i, j);
+            if (p.extBanned(i, j, k)) markCell(i, j);
         }
     }
 }

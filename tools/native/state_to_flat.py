@@ -324,6 +324,36 @@ def main():
             k = k if k is not None else -1
             board.append(k if 0 <= k < K else -1)
 
+    # [3.653.0] 拡張希望の禁止の三つ組 [i, j, k]*（ExtWishRules.banTable と同じ規則: 期間外の日・記号が引けないシフト・
+    #   その職員の希望シフトの日は落とす）。採点（extWish）と盤面へ書く手の判定が読む。
+    start = date.fromisoformat(st["startDate"])
+    wish_days = {}
+    for key in st.get("wishes", {}):
+        a = key.split(",")
+        try:
+            wish_days.setdefault(int(a[0]), set()).add(int(a[1]))
+        except (ValueError, IndexError):
+            continue
+    ext, ext_seen = [], set()
+    for e in st.get("extWishes", []):
+        i = to_int_or_none(e.get("staff"))
+        if i is None or not 0 <= i < S:
+            continue
+        ks = [k for k in (shift_idx(x) for x in e.get("shifts", [])) if 0 <= k < K]
+        if not ks:
+            continue
+        for d in e.get("days", []):
+            try:
+                j = (date.fromisoformat(str(d).strip()) - start).days
+            except ValueError:
+                continue
+            if not 0 <= j < T or j in wish_days.get(i, ()):
+                continue
+            for k in ks:
+                if (i, j, k) not in ext_seen:
+                    ext_seen.add((i, j, k))
+                    ext.extend((i, j, k))
+
     meta = [S, T, K, G, rest_idx, dow0, use2]
     staff_arr = sgrp + ssk
 
@@ -331,12 +361,12 @@ def main():
         f.write("MAGIFLAT1\n")
         for arr in (meta, staff_arr, can_do, wish, needs,
                     range_lo + range_hi + apt,
-                    cons, c3blob, bucket_blob, board):
+                    cons, c3blob, bucket_blob, board, ext):
             f.write(str(len(arr)) + "\n")
             f.write(" ".join(str(x) for x in arr) + "\n")
     n_neg = sum(1 for x in board if x < 0)
     print(f"wrote {sys.argv[2]}: S={S} T={T} K={K} G={G} rest={rest_idx} dow0={dow0} use2={use2} "
-          f"c1={len(c1)} c2={len(c2)} c41={len(c41)} c42={len(c42)} board(-1)={n_neg}")
+          f"c1={len(c1)} c2={len(c2)} c41={len(c41)} c42={len(c42)} board(-1)={n_neg} extBan={len(ext) // 3}")
 
 
 if __name__ == "__main__":

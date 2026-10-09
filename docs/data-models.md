@@ -127,7 +127,7 @@
 
 | フィールド | 型 | 意味 |
 |---|---|---|
-| `breakdown` | `Map<String,Int>` | 20族の件数（キー = `MirrorKeys.all`） |
+| `breakdown` | `Map<String,Int>` | 21族の件数（キー = `MirrorKeys.all`） |
 | `violationCells` | `"i,j"→"vio-xxx"` | セル系。**最重1クラスのみ** |
 | `countViolations` | `"i,k"→"vio-xxx"` | 回数系。**最重1クラスのみ** |
 | `needViolations` | `"k,j"→"vio-xxx"` | 被覆系。**最重1クラスのみ** |

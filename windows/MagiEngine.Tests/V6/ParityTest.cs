@@ -13,7 +13,7 @@ namespace MagiEngine.Tests.V6;
 /// <see cref="UnifiedViolationChecker"/> (full recompute, the source of truth for correctness),
 /// <see cref="Evaluator"/> (full recompute, packed lexicographic score used by SA/ALNS scoring),
 /// and <see cref="DeltaEvaluator"/> (incremental, used inside the hot search loop) — must agree
-/// on every one of the 20 violation families (19 + c3w, 3.542.0), on every fixture, at every point along a sequence
+/// on every one of the 21 violation families (19 + c3w 3.542.0 + extWish 3.653.0), on every fixture, at every point along a sequence
 /// of moves. A total-score match alone is not enough: several families share the same weight
 /// (c3m and covO both = 10; c41s and c42s both = 6; c2 and apt both = 4; fair and weekly both = 2;
 /// c41 and c42 both = 1 — 3.522.0 weight-table overhaul), so a +1/-1 error split
@@ -48,7 +48,7 @@ public class ParityTest
         double hardWeighted = 0.0;
         foreach (var key in MirrorKeys.Hard)
             hardWeighted += (report.Breakdown.TryGetValue(key, out var v) ? v : 0) * MirrorKeys.WeightOf(key);
-        // report.WeightedScore は全19族（HARDも含む）の重み付き和。Evaluator の soft は SOFT族のみの
+        // report.WeightedScore は全族（HARDも含む）の重み付き和。Evaluator の soft は SOFT族のみの
         // 重み付き和なので、「WeightedScore - HARD族の重み付き寄与」と一致するはず。
         Assert.Equal(report.WeightedScore, hardWeighted + soft, precision: 6);
 
@@ -59,7 +59,7 @@ public class ParityTest
         Assert.Equal(expectedPacked, de.Score());
 
         var familyRaw = de.FamilyRaw();
-        Assert.Equal(18, familyRaw.Count); // 20 families - {low, high} (covered by RangeRaw below)
+        Assert.Equal(19, familyRaw.Count); // 21 families - {low, high} (covered by RangeRaw below)
         foreach (var (key, value) in familyRaw)
         {
             int expected = report.Breakdown.TryGetValue(key, out var bv) ? bv : 0;
@@ -74,8 +74,8 @@ public class ParityTest
         Assert.Equal(lowRaw * 120L + highRaw * 25L, de.RangeWeighted()); // [3.522.0] low 90→120
         Assert.Equal(lowExpected * 120L + highExpected * 25L, de.RangeWeighted());
 
-        // every one of the 20 families is accounted for exactly once across the two checks above
-        Assert.Equal(20, familyRaw.Count + 2);
+        // every one of the 21 families is accounted for exactly once across the two checks above
+        Assert.Equal(MirrorKeys.All.Count, familyRaw.Count + 2);
     }
 
     // ---- real fixtures, as loaded (exercises Rebuild(), not PreviewMove/Commit) --------------
@@ -128,10 +128,10 @@ public class ParityTest
         }
     }
 
-    // ---- synthetic fixture exercising all 19 families at once ---------------------------------
+    // ---- synthetic fixture exercising all families at once -------------------------------------
 
     /// <summary>
-    /// Deliberately constructed so every one of the 19 families can fire: 2 unit groups (G0 can't
+    /// Deliberately constructed so every family can fire: 2 unit groups (G0 can't
     /// do "B", G1 can do everything — exercises groupViol) crossed with 2 SKILL groups that split
     /// the same 4 staff differently (Sk0/Sk1, independent of G0/G1 — exercises c41s/c42s on a
     /// genuinely different partition than c41/c42, not a coincidentally-identical one). One
@@ -206,7 +206,9 @@ public class ParityTest
             ShiftColors: new Dictionary<string, string>(),
             Extras: MinimalState.NoExtras,
             // [3.542.0] staff0 の希望(0,2)="A" の前日(0,1)は初期値 休 のまま → t=0 から c3w が1件立つ。
-            Cons3w: new List<C3wRow> { new("A", "休") }
+            Cons3w: new List<C3wRow> { new("A", "休") },
+            // [3.653.0] staff2 は 12/3（日 2）に休を禁止（拡張希望）→ 初期値 休 のままなので t=0 から extWish が1件立つ。
+            ExtWishes: new List<ExtWish> { new(2, new List<string> { "2025-12-03" }, new List<string> { "休" }) }
         );
     }
 
@@ -228,7 +230,7 @@ public class ParityTest
     }
 
     [Fact]
-    public void SyntheticFixture_AllTwentyFamiliesFireAtLeastOnceAcrossTheRun_AndParityHolds()
+    public void SyntheticFixture_AllFamiliesFireAtLeastOnceAcrossTheRun_AndParityHolds()
     {
         var state = BuildAllFamiliesState();
         var p = new Problem(state);

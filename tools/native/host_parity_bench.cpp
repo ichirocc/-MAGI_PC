@@ -119,6 +119,19 @@ static bool loadFlat(const char* path, MagiProblem& p, std::vector<int>& board) 
     size_t bx = 0;
     p.bucket.assign((size_t)G, {});
     for (int g = 0; g < G; g++) { int len = bucketBlob[bx++]; for (int l = 0; l < len; l++) p.bucket[g].push_back(bucketBlob[bx++]); }
+    // [3.653.0] 任意の末尾: 拡張希望の禁止の三つ組 [i, j, k]*（state_to_flat.py が書く。古いファイルには無い）。
+    std::vector<int> ext;
+    if ((f >> std::ws) && !f.eof()) {
+        if (!readArr(ext) || ext.size() % 3 != 0) { printf("loadFlat: bad extBan section in %s\n", path); return false; }
+    }
+    if (!ext.empty()) {
+        p.extBan.assign((size_t)S * T * K, 0);
+        for (size_t x = 0; x + 2 < ext.size(); x += 3) {
+            const int i = ext[x], j = ext[x + 1], k = ext[x + 2];
+            if (i < 0 || i >= S || j < 0 || j >= T || k < 0 || k >= K) { printf("loadFlat: extBan out of range in %s\n", path); return false; }
+            p.extBan[((size_t)i * T + j) * K + k] = 1;
+        }
+    }
     finalizeProblem(p);
     return true;
 }
@@ -420,7 +433,8 @@ static int runManualPinTest() {
 }
 
 // 拡張希望: 盤面へ書く C++ の手（SA/LAHC/ALNS/研磨チャンク・壊して直す 3 種・入口修復）が禁止の値を新しく置かないこと、
-//   採点が禁止の有無で変わらないこと（Kotlin ExtWishOptimizeTest と同じ受け入れ条件）。禁止は「置きたくなる値」に寄せる。
+//   採点は禁止に当たるセルの数だけ必須（extWish）が増えること（3.653.0、Kotlin ExtWishOptimizeTest と同じ受け入れ条件）。
+//   禁止は「置きたくなる値」に寄せる。
 static int runExtBanTest() {
     int failures = 0, moved = 0;
     for (uint64_t seed = 1; seed <= 4; seed++) {
@@ -433,7 +447,11 @@ static int runExtBanTest() {
             if (wishLockedN(p, i, j)) continue;
             for (int k = 0; k < p.K; k++) if ((i * 3 + j * 5 + k) % 3 == 0) p.extBan[((size_t)i * p.T + j) * p.K + k] = 1;
         }
-        if (fullEvalCombined(p, board.data()) != before) { printf("EXTBAN-TEST FAIL: 禁止で採点が変わった\n"); failures++; }
+        long long hits = 0;
+        for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) if (p.extBanned(i, j, board[(size_t)i * p.T + j])) hits++;
+        if (fullEvalCombined(p, board.data()) != before + hits * SCORE_HARD_UNIT) {
+            printf("EXTBAN-TEST FAIL: 禁止に当たるセルの数（%lld）と採点の必須の増分が合わない\n", hits); failures++;
+        }
         auto clean = [&](const std::vector<int>& bd, const char* who) {
             for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++) {
                 size_t x = (size_t)i * p.T + j;

@@ -50,7 +50,7 @@ public static class RelaxTrial
     public sealed record StoppedOutcome : Outcome;
     public static readonly Outcome Stopped = new StoppedOutcome();
 
-    private static readonly HashSet<string> HardCell = new() { "vio-c3n", "vio-c3w", "vio-pref", "vio-groupViol" };
+    private static readonly HashSet<string> HardCell = new() { "vio-c3n", "vio-c3w", "vio-pref", "vio-groupViol", "vio-extWish" };
 
     /// <summary>緩める候補の母集団: 担当できて、休み以外で、個人の上限が 0 の (職員, シフト)。</summary>
     public static List<(int Staff, int Shift)> UpperZeroWalls(MagiState state)

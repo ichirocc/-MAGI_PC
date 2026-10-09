@@ -1,6 +1,6 @@
 # SUDO モデル（システム関連図 / ユースケース図 / ドメインモデル図 / オブジェクト図）
 
-> **最終更新**：2026-09-25（2026-09-25（3.612.0 時点の main）と再照合＝20族・HARD 5族（c3w）・3.556.0 の重み、O の実測 8990、fair 達成率モード v2・apt の D9、HardDelta 前段・WishTrial・RunMarker）
+> **最終更新**：2026-10-09（3.653.0: 族と重みの節を 21族・HARD 6族（extWish 8000）へ。他の節は下の照合のまま）。2026-09-25（2026-09-25（3.612.0 時点の main）と再照合＝20族・HARD 5族（c3w）・3.556.0 の重み、O の実測 8990、fair 達成率モード v2・apt の D9、HardDelta 前段・WishTrial・RunMarker）
 > **前回**：2026-09-06（3.505.7）
 > **初版**：2026-08-17（3.389.0）
 > **これは何か**：ログラス松岡さん（@little_hand_s）提唱の **SUDO モデリング**（DDD のモデリングを実装へ落とし込む
@@ -342,15 +342,15 @@ classDiagram
 
 ### 不変条件（すべて実装から）
 
-**20族と重み** — `breakdown` は `MirrorKeys.all` の20キーを 0 で初期化してから加算するのでキー数は常に20。
-HARD 5族 = `groupViol` / `c3n` / `covU` / `pref` / `c3w`、SOFT 15族。
+**21族と重み** — `breakdown` は `MirrorKeys.all` の21キーを 0 で初期化してから加算するのでキー数は常に21（3.653.0 で `extWish` を末尾に追加）。
+HARD 6族 = `groupViol` / `c3n` / `covU` / `pref` / `c3w` / `extWish`、SOFT 15族。
 
 ```
-groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 > low 120
+groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 = extWish 8000 > low 120
   > c3mn 90 > c1 50 > high 25 > c3 15 > c41s 10 = c42s 10 = covO 10
-  > c41 9 = c42 9 > c3m 6 > c2 4 = apt 4 > fair 2 = weekly 2
+  > c41 9 = c42 9 > c3m 6 > fair 5 > c2 4 = apt 4 > weekly 2
 ```
-（3.522.0 の全面見直し＋3.556.0 の c41/c42 1→9・c41s/c42s 6→10・c3m 10→6。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実。
+（3.522.0 の全面見直し＋3.556.0 の c41/c42 1→9・c41s/c42s 6→10・c3m 10→6＋3.647.0 の fair 2→5＋3.653.0 の extWish 8000。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実。
 **履歴**（3.505.7 時点の旧値）: groupViol 10000 > pref 9000 > covU 8000 > c3n 7000 > low 90 > high 45 > c3mn 30 = c1 30 > covO 5 > c3 3 > c3m 2 > 残り 1.0）
 
 `weights` を `linkedMapOf` で持つのは**挿入順＝加算順を固定して Double の加算結果を不変に保つ**ため
@@ -358,7 +358,7 @@ groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 > low 120
 （`aptLow`/`aptHigh` を入れず `weightOf` で apt の重みへエイリアスしているのはこのため）。
 
 - `weightedScore = Σ breakdown[key] × weights[key]`（小さいほど良い）
-- `total = Σ breakdown.values`（重み無視の生カウント）／`hard = HARD 5族の合計`／`soft = total − hard`
+- `total = Σ breakdown.values`（重み無視の生カウント）／`hard = HARD 6族の合計`／`soft = total − hard`
 
 **keep-best の比較順序** — `reportComparator` / `betterReport` の **hard → weightedScore → total** の辞書式。
 単一ソースは `reportComparator` 1つで、`betterReport` も並べ替えもここへ委譲する。

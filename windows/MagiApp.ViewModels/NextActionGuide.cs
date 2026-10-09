@@ -181,7 +181,7 @@ public static class NextActionGuide
     {
         var name = r.Staff < ui.StaffNames.Count ? ui.StaffNames[r.Staff] : $"職員{r.Staff + 1}";
         var fams = FamsAt(ui, r.Staff, r.Day);
-        var fam = new[] { "c3n", "c3w", "pref", "groupViol" }.FirstOrDefault(f => fams.Contains("vio-" + f)) ?? "groupViol";
+        var fam = new[] { "c3n", "c3w", "pref", "extWish", "groupViol" }.FirstOrDefault(f => fams.Contains("vio-" + f)) ?? "groupViol";
         var hardDays = Enumerable.Range(r.WindowFirst, r.WindowLast - r.WindowFirst + 1)
             .Where(j => FamsAt(ui, r.Staff, j).Any(v => MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(v)))).ToList();
         var span = hardDays.Count > 1 ? DayText.Range(ui.StartDate, hardDays[0], hardDays[^1]) : DayText.Full(ui.StartDate, r.Day);

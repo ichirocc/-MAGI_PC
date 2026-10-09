@@ -95,7 +95,7 @@ public static class ShiftAppearance
         var k = key.StartsWith("vio-", StringComparison.Ordinal) ? key.Substring(4) : key;
         return k switch
         {
-            "groupViol" or "covU" or "pref" or "c3n" or "c3w" => "CRITICAL", // HARD [3.542.0] c3w追加
+            "groupViol" or "covU" or "pref" or "c3n" or "c3w" or "extWish" => "CRITICAL", // HARD [3.542.0] c3w・[3.653.0] extWish 追加
             "low" or "c3mn" => "HIGH",                              // 重い soft(120/90、3.522.0)
             // high は 45→25（2026-09-10 HF77明示指示）で c1/c3mn を下回りWARN側。[3.522.0]全面見直し後も
             // high(25) は依然 c1(50)/c3mn(90) より軽く分類は不変。

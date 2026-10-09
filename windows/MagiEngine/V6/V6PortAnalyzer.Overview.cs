@@ -98,7 +98,8 @@ public static partial class V6PortAnalyzer
         var hardCore = rep.Breakdown.GetValueOrDefault("c3n", 0)
             + rep.Breakdown.GetValueOrDefault("covU", 0)
             + rep.Breakdown.GetValueOrDefault("pref", 0)
-            + rep.Breakdown.GetValueOrDefault("c3w", 0);
+            + rep.Breakdown.GetValueOrDefault("c3w", 0)
+            + rep.Breakdown.GetValueOrDefault("extWish", 0);
         var softCore = Math.Max(0, rep.Total - hardGuard - hardCore);
         var staffViol = StaffViolationCounts(p, rep);
 
@@ -335,7 +336,7 @@ public static partial class V6PortAnalyzer
         }
         var hard = breakdown.GetValueOrDefault("groupViol", 0) + breakdown.GetValueOrDefault("c3n", 0)
             + breakdown.GetValueOrDefault("covU", 0) + breakdown.GetValueOrDefault("pref", 0)
-            + breakdown.GetValueOrDefault("c3w", 0);
+            + breakdown.GetValueOrDefault("c3w", 0) + breakdown.GetValueOrDefault("extWish", 0);
         var psi = Math.Max(0.2, 1.0 / (1.0 + 10.0 * hard));
         return raw * psi;
     }

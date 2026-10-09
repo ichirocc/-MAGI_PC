@@ -72,7 +72,7 @@ public class StallEscapeSpecTest
     public void WeightsAreIntegersSoToleranceNeverHidesARealDifference()
     {
         Assert.All(MirrorKeys.Weights, kv => Assert.True(kv.Weight == Math.Floor(kv.Weight) && kv.Weight >= 2.0));
-        Assert.Equal(new HashSet<string> { "groupViol", "c3n", "covU", "pref", "c3w" }, MirrorKeys.Hard.ToHashSet());
+        Assert.Equal(new HashSet<string> { "groupViol", "c3n", "covU", "pref", "c3w", "extWish" }, MirrorKeys.Hard.ToHashSet());
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class StallEscapeSpecTest
         Assert.Equal(
             new HashSet<string> { "c1", "c2", "c3", "c3n", "c3m", "c3mn", "c41", "c42", "covU", "covO", "pref", "low", "high" },
             Hf63Infeasibility.KeyToIndex.Keys.ToHashSet());
-        foreach (var k in new[] { "groupViol", "c3w", "c41s", "c42s", "apt", "weekly", "fair" }) Assert.False(Hf63Infeasibility.KeyToIndex.ContainsKey(k), k);
+        foreach (var k in new[] { "groupViol", "c3w", "extWish", "c41s", "c42s", "apt", "weekly", "fair" }) Assert.False(Hf63Infeasibility.KeyToIndex.ContainsKey(k), k);
     }
 
     [Fact]

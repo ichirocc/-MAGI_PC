@@ -31,9 +31,15 @@ public class ExtWishRulesTest
         var board = new[] { new[] { 1, 2, 2, 2, 1 }, new[] { 0, 0, 0, 0, 0 } };
         var rep = UnifiedViolationChecker.Check(st, board);
         Assert.Equal(new[] { "0,1" }, rep.ExtWishCells);
+        // [3.653.0] 採点にも入る: 必須の族 extWish が 1 件、重みは希望と同じ（HF77 明示指示）。評価器も同じ件数。
         var plain = UnifiedViolationChecker.Check(Base(), board);
-        Assert.Equal(plain.WeightedScore, rep.WeightedScore);
-        Assert.Equal(plain.Breakdown, rep.Breakdown);
+        Assert.Equal(1, rep.Breakdown["extWish"]);
+        Assert.Equal(plain.Hard + 1, rep.Hard);
+        Assert.Equal(plain.WeightedScore + MirrorKeys.WeightOf("pref"), rep.WeightedScore);
+        var expected = plain.Breakdown.ToDictionary(kv => kv.Key, kv => kv.Value);
+        expected["extWish"] = 1;
+        Assert.Equal((IReadOnlyDictionary<string, int>)expected, rep.Breakdown);
+        Assert.Equal((long)rep.Hard, new Evaluator(new Problem(st)).FullEvalParts(board)[0]);
     }
 
     [Fact]

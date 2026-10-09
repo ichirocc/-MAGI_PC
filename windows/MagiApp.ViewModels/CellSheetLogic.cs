@@ -21,7 +21,7 @@ public sealed record OpNotice(long Id, string Text, long UndoSerial);
 public sealed record CellStatus(CellSeverity Severity, string Text, string Cause = "");
 
 /// <summary>巡回の 1 件＝必須違反 1 件（族・職員・関連セルの日・見出し）。1 セルが 2 件に属せば 2 回止まる（<c>report.hard</c> の数え方と同じ）。
-/// セルで辿れる族だけ（c3n＝並びの全日、c3w＝前日＋希望の翌日、pref/groupViol＝1 セル）。人員不足は日ヘッダから＝件数は別に添える。Kotlin <c>TourItem</c>。</summary>
+/// セルで辿れる族だけ（c3n＝並びの全日、c3w＝前日＋希望の翌日、pref/groupViol/extWish＝1 セル）。人員不足は日ヘッダから＝件数は別に添える。Kotlin <c>TourItem</c>。</summary>
 /// <summary>勤務表タブの「必須 N ▼」一覧の 1 行。TourAt は HardViolationItems の何件目か（行を押すと巡回と同じ移動でそのセルを開く）。</summary>
 public sealed record HardListRow(int TourAt, string Name, string Heading, bool WishOnly);
 
@@ -103,6 +103,11 @@ public static class CellSheetLogic
         {
             case "c3w":
                 return j + 1 < p.T && p.Wish[i][j + 1] >= 0 ? $"翌日({Sym(p.Wish[i][j + 1])})への前日禁止（{Sym(cur)}）" : null;
+            case "extWish":
+            {
+                var banned = Enumerable.Range(0, p.K).Where(k => p.ExtBanned(i, j, k)).ToList();
+                return banned.Count == 0 ? null : $"拡張希望（{string.Join("・", banned.Select(Sym))}以外）に{Sym(cur)}が入っています";
+            }
             case "c3n":
             case "c3mn":
             {
@@ -416,6 +421,7 @@ public static class CellSheetLogic
                     }
                     case "pref":
                     case "groupViol":
+                    case "extWish":
                         outMap.TryAdd($"{fam},{i},{j}", new TourItem(fam, i, new[] { j }, $"{labelOf(fam)} {Sym(s[i][j])} ・ {DayText.Full(state.StartDate, j)}"));
                         break;
                 }
@@ -533,7 +539,7 @@ public static class CellSheetLogic
 
     public const string PinHardHint = "このセルには必須違反があります。固定すると自動では動かしません。";
     public const string PinNotCanDoHint = "担当外のシフトです。固定すると必須違反が残ったまま自動では動かしません。";
-    private static readonly string[] PinHardCellFamilies = { "c3n", "c3w", "pref", "groupViol" };
+    private static readonly string[] PinHardCellFamilies = { "c3n", "c3w", "pref", "groupViol", "extWish" };
 
     /// <summary>手動固定を付けたセルが担当外／必須違反を抱えているときの一文（付けない＝空）。固定の挙動は変えない＝知らせるだけ（Kotlin <c>pinRegisterHint</c>）。</summary>
     public static string PinRegisterHint(bool canDo, IEnumerable<string> families) =>

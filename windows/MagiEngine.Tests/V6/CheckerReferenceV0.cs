@@ -17,6 +17,7 @@ internal static class CheckerReferenceV0
         ["covU"] = "vio-covU", ["covO"] = "vio-covO", ["pref"] = "vio-pref",
         ["low"] = "vio-low", ["high"] = "vio-high", ["groupViol"] = "vio-groupViol",
         ["aptLow"] = "vio-aptLow", ["aptHigh"] = "vio-aptHigh",
+        ["extWish"] = "vio-extWish",
     };
 
 
@@ -245,6 +246,13 @@ internal static class CheckerReferenceV0
             for (int i = 0; i < p.S; i++)
                 for (int j = 0; j < p.T; j++)
                     if (p.C3wBanned(i, j, s[i][j])) { Inc("c3w"); Mark(i, j, "c3w"); }
+        }
+        // [3.653.0] 族の追加は高速化と別の意味の変更＝新旧の両方へ同じ位置で入れる（比較の対象は高速化だけ）。
+        if (p.HasExtBan)
+        {
+            for (int i = 0; i < p.S; i++)
+                for (int j = 0; j < p.T; j++)
+                    if (p.ExtBanned(i, j, s[i][j])) { Inc("extWish"); Mark(i, j, "extWish"); }
         }
 
         // ---- pref: wished cell not honored ---------------------------------------------------

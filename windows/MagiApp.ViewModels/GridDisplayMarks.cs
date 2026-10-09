@@ -291,7 +291,7 @@ public static class GridDisplayMarks
 
     /// <summary>凡例の「枠の形 → 族」の 1 行。セルに印を持つ族だけを名指す。</summary>
     public static string LegendShapeFamilies(Func<string, string> labelOf) =>
-        "実線: " + string.Join("・", new[] { "c3n", "c3w", "pref", "groupViol" }.Select(labelOf)) +
+        "実線: " + string.Join("・", new[] { "c3n", "c3w", "pref", "extWish", "groupViol" }.Select(labelOf)) +
         "／破線: " + labelOf("c1") + "（この日を○○にすると近づく）・" + labelOf("c3mn");
 }
 

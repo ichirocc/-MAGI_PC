@@ -731,6 +731,16 @@ public static partial class V6FinalPort
             IReadOnlyDictionary<string, int> selfConflict;
             try { selfConflict = V6SanityPort.WishConflictHard(ScheduleUtil.CachedProblem(state), finalSched); }
             catch (Exception) { selfConflict = new Dictionary<string, int>(); }
+            // [3.653.0] 手動固定のセルにある拡張希望の違反は、最適化器が変えない＝もう直せない側（仕様: 自動では外さない）。
+            var extPinned = TryOrZero(() =>
+            {
+                var pe = ScheduleUtil.CachedProblem(state);
+                var c = 0;
+                for (var i = 0; i < pe.S; i++)
+                    for (var j = 0; j < pe.T; j++)
+                        if (pe.Pin[i][j] >= 0 && pe.ExtBanned(i, j, finalSched[i][j])) c++;
+                return c;
+            });
             var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)
             {
@@ -745,6 +755,7 @@ public static partial class V6FinalPort
                 {
                     "weekly" => n0 - weeklyWall,
                     "covU" => n0 - covUWall,
+                    "extWish" => n0 - Math.Min(n0, extPinned),
                     _ => n0,
                 } - self;
                 if (n > 0) open.Add($"{key} {n}件");
@@ -762,6 +773,7 @@ public static partial class V6FinalPort
             // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。
             // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない。
             if (weeklyWall > 0) walls.Add($"weekly のうち{weeklyWall}件(回数が7の倍数でない＝配置では消せない)");
+            if (extPinned > 0) walls.Add($"extWish のうち{extPinned}件(手動固定のセル＝自動では変えない)");
             if (personalWall > 0)
             {
                 walls.Add($"apt+high のうち{personalWall}件(個人の担当構成＝データ側)");

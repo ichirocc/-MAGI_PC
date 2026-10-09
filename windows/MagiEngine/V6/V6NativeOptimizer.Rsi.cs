@@ -424,7 +424,7 @@ public static partial class V6NativeOptimizer
         var effRotation = rotationRound ?? round;
         var order = new[]
         {
-            "groupViol", "covU", "pref", "c3n", "c3w", "low", "high", "c41", "c41s", "c2", "covO",
+            "groupViol", "covU", "pref", "c3n", "c3w", "extWish", "low", "high", "c41", "c41s", "c2", "covO",
             "c42", "c42s", "apt", "weekly", "fair", "c1", "c3", "c3m", "c3mn",
         };
         // [D1/A1, Kotlin原本] 解ける HARD 族は件数に関わらず SOFT より先に focus する。avoid(HF63=構造的に

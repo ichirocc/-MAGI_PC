@@ -30,7 +30,7 @@ Android 版（`ichirocc/magi7ichiro-fork`、Kotlin/Compose）の Windows 11 ネ�
 
 ## 実行前に確認を取る操作／変えない決定
 - **HF77**: パラメータ・重み・データ値は業務担当者の明示数値指示＋1 件ずつ。重みの単一の真実は `MirrorKeys.WeightOf`（Android の
-  `MirrorKeys.weights` と同値、3.647.0 まで反映済み: groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 > low 120 >
+  `MirrorKeys.weights` と同値、3.653.0 まで反映済み: groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 = extWish 8000 > low 120 >
   c3mn 90 > c1 50 > high 25 > c3 15 > c41s 10 = c42s 10 = covO 10 > c41 9 = c42 9 > c3m 6 > fair 5 > c2 4 = apt 4 > weekly 2）。
 - Android の決定記録（D3〜D8・E5、ws8/ws9 等の実装不要）はこちらでも再提案しない。
 - 公開済みバージョンのインストーラーは差し替えない（`windows-installer.yml` が同一タグ別コミットを失敗させる）。タグ `win-v*` の push と
