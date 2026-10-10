@@ -14,8 +14,9 @@ public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
 public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped, Unavailable, Failed }
 
-/// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。</summary>
-public sealed record OpNotice(long Id, string Text, long UndoSerial);
+/// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。
+/// <paramref name="Undoable"/>＝false は「元に戻す」を付けない結果の通知（元に戻す・やり直す自身の結果など）。</summary>
+public sealed record OpNotice(long Id, string Text, long UndoSerial, bool Undoable = true);
 
 /// <summary>Cause は接頭辞（必須/要調整）を除いた原因だけ（希望を守っている板挟みの 2 行目に使う）。</summary>
 public sealed record CellStatus(CellSeverity Severity, string Text, string Cause = "");
@@ -372,6 +373,22 @@ public static class CellSheetLogic
         wish is { } w && w >= 0 && w == current && severity != CellSeverity.None;
 
     public static string WishKeptLine(string wishSymbol) => $"本人の希望（{wishSymbol}）を守っています";
+
+    /// <summary>希望タブの注記の手動固定版（手動固定は希望より強い＝再作成でも希望へ戻さない。<c>docs/business-logic.md</c> の手動固定）。</summary>
+    public const string WishTabPinnedNote = "希望を変えても勤務表のセルはそのままです（未反映になります）。このセルは手動固定のため、再作成しても希望には合わせません（固定を外すと合わせます）。";
+
+    /// <summary>職員 <paramref name="i"/> の <paramref name="j"/> 日（0 始まり）が拡張希望の指定日なら、その日に禁止のシフト記号（シフト一覧の順）。指定日でなければ null。
+    /// 日だけで決める＝希望を保存しない日（<c>ExtWishRules.WishBlockedBy</c>）と同じ。</summary>
+    public static IReadOnlyList<string>? ExtWishDayKigou(IReadOnlyList<MagiViewModel.ExtWishView> extWishes, int i, int j, IReadOnlyList<string> shiftKigou)
+    {
+        var hits = extWishes.Where(e => e.I == i && e.Days.Contains(j + 1)).ToList();
+        if (hits.Count == 0) return null;
+        var ks = hits.SelectMany(e => e.Kigou).Distinct().ToList();
+        return shiftKigou.Where(ks.Contains).Concat(ks.Where(k => !shiftKigou.Contains(k))).ToList();
+    }
+
+    public static string ExtWishDayNote(IReadOnlyList<string> kigou) =>
+        $"この日は拡張希望{(kigou.Count == 0 ? "" : $"（{string.Join("・", kigou)} 以外）")}の指定日なので、希望は入れられません";
 
     /// <summary>違反を順に見る巡回の順（日→職員）。必須のセルを先に、要調整は必須が 0 件か includeSoft のときだけ。</summary>
     public static IReadOnlyList<(int I, int J)> ViolationTour(UiState ui, bool includeSoft = false)

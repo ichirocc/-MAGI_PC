@@ -11,7 +11,7 @@ namespace MagiApp.ViewModels;
 ///
 /// このファイルが担う範囲: 「盤面を直接編集する」「構造(<see cref="MagiState"/>)を直接編集する」
 /// 系の全エディタ・クエリ、およびそれらが共有する構造編集の土台
-/// （<see cref="ApplyStructure(MagiState)"/>/<see cref="ApplyStructureWithMessage"/>/
+/// （<see cref="ApplyStructure(MagiState, string)"/>/<see cref="ApplyStructureWithMessage"/>/
 /// <see cref="MutateConstraints"/>/<see cref="StructuralEditBlocked"/>/<see cref="EditBlockedNow"/>/
 /// <see cref="BusyEditMessage"/>）。
 ///
@@ -147,7 +147,8 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null) return;
         var p = new Problem(st);
-        PushUndo();
+        // [Android 3.592.0] SetCells と同様、実際に変更する1件目でだけ積む（変更0件で空の段と通知を出さない）。
+        var first = true;
         var applied = 0;
         var oos = 0;
         foreach (var (key, k) in st.Wishes)
@@ -161,11 +162,13 @@ public sealed partial class MagiViewModel
             if (p.Pinned(i, j)) continue;   // [#41] 手動固定は希望より強い（一括の反映でも書かない）
             if (i < sched.Length && j < sched[i].Length && sched[i][j] != k)
             {
+                if (first) { PushUndo(); first = false; }
                 sched[i][j] = k;
                 applied++;
                 if (!can) oos++;
             }
         }
+        if (applied == 0) return;
         _currentSchedule = sched;
         _state = st.WithSchedule(sched);
         AutoSave();
@@ -176,7 +179,7 @@ public sealed partial class MagiViewModel
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.Message = $"希望を反映: {applied}件{note}";
+        PostOpNotice($"希望を反映: {applied}件{note}");
         RefreshCheck();
     }
 
@@ -378,7 +381,7 @@ public sealed partial class MagiViewModel
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        Ui.Message = $"{changed}マスを {shiftKigou} に一括変更";
+        PostOpNotice($"{changed}マスを {shiftKigou} に一括変更しました");
         LogOp("I", $"一括編集: {changed}マス → {OpSy(shift)}");
         RefreshCheck();
     }
@@ -586,7 +589,7 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// [3.326.0] 回数固定(lo==hi)の幅を1段だけ広げる。**利用者のタップでのみ動く**（HF77: 数値の変更は
     /// 業務判断）。幅の決め打ちを避けるため下限側・上限側を別々に選ばせ、押した内容は操作ログへ残す。
-    /// <see cref="ApplyStructure(MagiState)"/> 経由なので「元に戻す」で戻せる。
+    /// <see cref="ApplyStructure(MagiState, string)"/> 経由なので「元に戻す」で戻せる。
     /// </summary>
     /// <param name="loDelta">下限へ足す量（負で緩める）。</param>
     /// <param name="hiDelta">上限へ足す量（正で緩める）。</param>
@@ -692,8 +695,9 @@ public sealed partial class MagiViewModel
         var gname = g < st0.Groups.Count ? st0.Groups[g].Name : $"#{g}";
         if (cleared == 0) { Notify($"{gname}「{OpSy(k)}」に解除する個人上下限はありません"); return; }
         var stNew = Ws1Ops.SetGroupApt(st0 with { StaffRange = m }, g, k, "");
-        Notify($"{gname}「{OpSy(k)}」の個人上下限を全員ぶん「なし」にしました（{cleared}名ぶん・「元に戻す」で戻せます）");
-        ApplyStructure(stNew);
+        var done = $"{gname}「{OpSy(k)}」の個人上下限を全員ぶん「なし」にしました（{cleared}名ぶん・「元に戻す」で戻せます）";
+        LogOp("I", done);
+        ApplyStructure(stNew, notice: done);
     }
 
     /// <summary>グループ g のメンバーのうち (i,k) に個人上下限（非空）を持つ人数。「なし」適用の可否と件数表示に使う。</summary>
@@ -728,8 +732,9 @@ public sealed partial class MagiViewModel
         var gname = g < st0.Groups.Count ? st0.Groups[g].Name : $"#{g}";
         // [3.409.11] チップ内の小さな✕1回で**N名ぶん**の個人設定が消えるのに、画面には
         //   チップが1つ消えるだけで、何人ぶん消えたかが出ていなかった。実際の効果を件数つきで返す。
-        Notify($"{gname}「{OpSy(k)}」のグループ上下限を解除しました（{cleared}名ぶん・「元に戻す」で戻せます）");
-        ApplyStructure(stNew);
+        var done = $"{gname}「{OpSy(k)}」のグループ上下限を解除しました（{cleared}名ぶん・「元に戻す」で戻せます）";
+        LogOp("I", done);
+        ApplyStructure(stNew, notice: done);
     }
 
     public sealed record GroupRangeView(int G, int K, string GroupName, string Kigou, string Lo, string Hi, int Members, int Shared);
@@ -895,7 +900,13 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null) return;
         var blocked = ExtWishRules.WishBlockedBy(st, i, j);
-        if (blocked is not null) { LogOp("W", $"希望設定: {OpNm(i)} {j + 1}日 — {blocked}"); return; }
+        if (blocked is not null)
+        {
+            LogOp("W", $"希望設定: {OpNm(i)} {j + 1}日 — {blocked}");
+            Ui.MessageIsError = true;
+            Ui.Message = $"{OpNm(i)} {DayText.Short(st.StartDate, j)} は拡張希望の指定日なので、希望は入れられません";
+            return;
+        }
         var m = new Dictionary<string, int>(st.Wishes) { [$"{i},{j}"] = k };
         LogOp("I", $"希望設定: {OpNm(i)} {j + 1}日 → {OpSy(k)}");
         ApplyStructure(st with { Wishes = m });
@@ -956,10 +967,16 @@ public sealed partial class MagiViewModel
                     m[$"{i},{j}"] = k;
                 }
         if (blockedN > 0) LogOp("W", $"希望一括: {blockedN}件 — {ExtWishRules.MsgExtDay}");
+        if (m.Count == st.Wishes.Count && m.All(kv => st.Wishes.TryGetValue(kv.Key, out var v) && v == kv.Value))
+        {
+            Ui.MessageIsError = blockedN > 0;
+            Ui.Message = blockedN > 0 ? $"拡張希望の指定日なので、希望は入れられません（{blockedN}件・変更なし）" : "同じ希望がすでに入っています（変更なし）";
+            return;
+        }
         var excluded = st.StaffList.Count - staffRange.Length;
         var who = staffIdx is not null ? OpNm(staffIdx.Value) : "全員" + (excluded > 0 ? $"（担当外{excluded}名を除く）" : "");
         LogOp("I", $"希望一括: {who} {OpDays(days)} → {OpSy(k)}");
-        ApplyStructure(st with { Wishes = m });
+        ApplyStructure(st with { Wishes = m }, notice: blockedN > 0 ? $"希望を入れました（拡張希望の指定日の{blockedN}件は入れていません）" : null);
     }
 
     /// <summary>[一括] スタッフ(null=全員)×日群の希望を一括削除。</summary>
@@ -973,9 +990,10 @@ public sealed partial class MagiViewModel
         foreach (var i in staffRange)
             foreach (var j in days)
                 m.Remove($"{i},{j}");
-        if (m.Count == st.Wishes.Count) return;
+        var cleared = st.Wishes.Count - m.Count;
+        if (cleared == 0) { Ui.MessageIsError = false; Ui.Message = "消す希望はありませんでした"; return; }
         LogOp("I", $"希望クリア: {(staffIdx is not null ? OpNm(staffIdx.Value) : "全員")} {OpDays(days)}");
-        ApplyStructure(st with { Wishes = m });
+        ApplyStructure(st with { Wishes = m }, notice: $"希望を{cleared}件消しました");
     }
 
     /// <summary>[一括] すべての希望を削除。</summary>
@@ -1001,7 +1019,8 @@ public sealed partial class MagiViewModel
             .ToHashSet();
         if (keys.Count == 0) return;
         LogOp("I", $"担当外の希望を一括クリア: {keys.Count}件");
-        ApplyStructure(st with { Wishes = st.Wishes.Where(kv => !keys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value) });
+        ApplyStructure(st with { Wishes = st.Wishes.Where(kv => !keys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value) },
+            notice: $"担当外の希望を{keys.Count}件クリアしました");
     }
 
     public void ClearAllWishes()
@@ -1125,7 +1144,10 @@ public sealed partial class MagiViewModel
     {
         var l = Ui.Consults;
         if (index < 0 || index >= l.Count) return;
+        var item = l[index];
         Ui.Consults = l.Where((_, j) => j != index).ToList();
+        LogOp("I", $"相談中を済にしました: {item.Subject}");
+        PostOpNotice($"済にしました（{item.Subject}）", undoable: false);
     }
 
     public IReadOnlyList<string> GroupKigouList() => _state?.Groups.Select(g => g.Kigou).ToList() ?? new List<string>();
@@ -1406,6 +1428,9 @@ public sealed partial class MagiViewModel
         }
         LogOp("I", $"制約削除: {family}[{index}]");
         static List<T> Without<T>(IReadOnlyList<T> l, int i) => l.Where((_, idx) => idx != i).ToList();
+        var view = ConstraintFamilies().Concat(SkillConstraintFamilies()).FirstOrDefault(v => v.Key == family);
+        var row = view is not null && index < view.Rows.Count ? System.Text.RegularExpressions.Regex.Replace(view.Rows[index].Trim(), @"\s{2,}", " ") : null;
+        var notice = $"{view?.Title.Split('（')[0] ?? "制約"}の行を削除しました" + (row is null ? "" : $"（{row}）");
         MagiState? next = family switch
         {
             "cons1" => st with { Cons1 = Without(st.Cons1, index) },
@@ -1420,7 +1445,7 @@ public sealed partial class MagiViewModel
             "cons42s" => st with { Cons42s = Without(st.Cons42s, index) },
             _ => null,
         };
-        MutateConstraints(next);
+        MutateConstraints(next, notice);
     }
 
     /// <summary>[制約編集/実機指摘「登録した制約の変更ができない」] 行の生値（編集ダイアログのプリフィル用）。
@@ -1579,7 +1604,7 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// [設定ミスのワンタップ修正] Kotlin原本 <c>applySettingFix(issue: SettingIssue)</c>
     /// （行1946-2015）の移植。<see cref="SettingIssue.Action"/> ごとに新しい <see cref="MagiState"/> を
-    /// 組み立て、組み立てられた場合のみ操作ログ＋<see cref="ApplyStructure(MagiState)"/>（Undo・自動保存・
+    /// 組み立て、組み立てられた場合のみ操作ログ＋<see cref="ApplyStructure(MagiState, string)"/>（Undo・自動保存・
     /// 再チェック付き）を呼ぶ。各分岐のガード（Kotlinの <c>?: return</c>）は
     /// <see cref="SettingFixLogic.Apply"/> 内の早期 <c>return null</c> として保持する
     /// （どちらも「何もしない」という同一の観測可能な結果になる——Kotlin原本の <c>return</c> は
@@ -1631,13 +1656,14 @@ public sealed partial class MagiViewModel
         return true;
     }
 
-    private void MutateConstraints(MagiState? newState)
+    private void MutateConstraints(MagiState? newState, string? notice = null)
     {
         if (newState is null) return;
         if (StructuralEditBlocked()) return;
-        PushUndo();
+        var undoable = PushUndo();
         _state = newState;
         Ui.ConstraintsEdited = true;
+        if (notice is not null) PostOpNotice(notice, undoable);
         RefreshCheck();
         AutoSave();
     }
@@ -1659,12 +1685,13 @@ public sealed partial class MagiViewModel
         return new Ws1View(st.StartDate, st.EndDate, days, st.Use2Patterns, st.Shifts, st.Groups, st.StaffList, st.GroupShift, st.GroupShiftApt);
     }
 
-    private void ApplyStructure(MagiState ns)
+    private void ApplyStructure(MagiState ns, string? notice = null)
     {
         if (StructuralEditBlocked()) return;
-        PushUndo();
+        var undoable = PushUndo();
         _state = ns;
         Ui.StructureEdited = true;
+        if (notice is not null) PostOpNotice(notice, undoable);
         RefreshCheck();
         AutoSave();
     }
@@ -1722,7 +1749,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.StructureEdited = true;
-        Ui.Message = $"{doneMessage}（違反チェック中…）";
+        Ui.Message = $"{doneMessage}（問題がないか調べています…）";
         var cts = new System.Threading.CancellationTokenSource();
         _checkCts = cts;
         LastApplyStructureWithMessageTask = ApplyStructureWithMessageCoreAsync(ns, sched, doneMessage, seq, cts.Token);
@@ -1739,7 +1766,7 @@ public sealed partial class MagiViewModel
             {
                 ui.MessageIsError = false;
                 ui.Running = OptimizeInFlight();
-                ui.Message = $"{doneMessage}｜必須={r.Report.Hard} 合計={r.Report.Total}";
+                ui.Message = $"{doneMessage}｜必須違反 {r.Report.Hard}件・違反の合計 {r.Report.Total}件";
             }, ct: ct);
         }
         catch (System.OperationCanceledException)
@@ -1748,7 +1775,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = false;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"{doneMessage}（チェックを停止）";
+                Ui.Message = $"{doneMessage}（調べるのを止めました）";
             }
             throw;
         }
@@ -1758,7 +1785,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = true;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"{doneMessage}（チェックに失敗しました: {FailureWords.Of(e, FailureKind.Engine)}）";
+                Ui.Message = $"{doneMessage}（問題がないか調べられませんでした: {FailureWords.Of(e, FailureKind.Engine)}）";
             }
         }
     }

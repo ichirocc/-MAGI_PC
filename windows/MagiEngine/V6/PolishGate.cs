@@ -148,6 +148,12 @@ public static class PolishGate
     /// <summary>[Android 3.656.0 同期] パイプラインの置き場所を最終の違反起点修復の後へ（false＝C1 共同 LNS の直後）。既定 <b>true</b>。</summary>
     public static volatile bool EjectionPipelineAfterRepair = true;
 
+    /// <summary>[Android 同名] パイプラインで採用があった巡のあと、索引を作り直してもう一巡する（最大 4 巡）。既定 <b>true</b>（Android 3.657.0）。</summary>
+    public static volatile bool EjectionPipelineRounds = true;
+
+    /// <summary>[Android 同名] パイプラインの BOTH の先頭に、必須の族の違反を起点にする焦点を足す。既定 false（単独では必須増 2＝Android 3.657.0）。</summary>
+    public static volatile bool EjectionPipelineHardLeg = false;
+
     /// <summary>[Android 同名] 玉突きの候補に入れ替え（同日の 2 人・同じ人の 2 日）を含める。既定 true。</summary>
     public static volatile bool EjectionChainSwapMoves = true;
 

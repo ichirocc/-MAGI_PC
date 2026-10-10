@@ -148,7 +148,7 @@ public sealed partial class MagiViewModel
         Ui.Schedule = nb.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.RunSummary = null;
         Ui.StopSummary = null;
-        Ui.Message = "設定を緩めて手順を当てました（元に戻せます）";
+        PostOpNotice("設定を緩めて手順を当てました（元に戻せます）");
         LogOp("I", "S6 確定: 組 " + string.Join(", ", r.Prerequisite.Concat(r.Relaxes).Select(x => $"{x.Staff + 1}/{x.Shift}")) + $" 必須 {r.H0}→{got}");
         RefreshCheck();
         SaveNow();

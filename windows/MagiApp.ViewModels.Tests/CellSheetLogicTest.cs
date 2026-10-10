@@ -333,6 +333,23 @@ public class CellSheetLogicTest
         Assert.Equal(FixPanelState.NotStarted, CellSheetLogic.PanelState(false, false, "other", "", "k"));
     }
 
+    /// <summary>希望モードで押せない日＝その職員の拡張希望の指定日（日だけで決める＝WishBlockedBy と同じ）。禁止の記号は件の和集合をシフト一覧の順で。</summary>
+    [Fact]
+    public void ExtWishDayListsBannedShiftsInShiftOrder()
+    {
+        var ext = new List<MagiViewModel.ExtWishView>
+        {
+            new(0, 2, "A", new[] { 3, 5 }, new[] { "Pｼ" }),
+            new(1, 2, "A", new[] { 5 }, new[] { "Pｼ", "休" }),
+        };
+        var kigou = new[] { "休", "Aｱ", "Pｼ" };
+        Assert.Equal(new[] { "休", "Pｼ" }, CellSheetLogic.ExtWishDayKigou(ext, 2, 4, kigou));
+        Assert.Equal(new[] { "Pｼ" }, CellSheetLogic.ExtWishDayKigou(ext, 2, 2, kigou));
+        Assert.Null(CellSheetLogic.ExtWishDayKigou(ext, 2, 3, kigou));
+        Assert.Null(CellSheetLogic.ExtWishDayKigou(ext, 1, 4, kigou));
+        Assert.Equal("この日は拡張希望（休・Pｼ 以外）の指定日なので、希望は入れられません", CellSheetLogic.ExtWishDayNote(new[] { "休", "Pｼ" }));
+    }
+
     /// <summary>[3.646.0] 直し方の探索の締切: セルのシートは 3 秒、全体は 8 秒。探索中の 1 行に最長の秒数を添える。</summary>
     [Fact]
     public void FixSearchBudgetsAreNamedInTheWaitingLine()

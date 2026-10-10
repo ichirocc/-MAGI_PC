@@ -66,7 +66,7 @@ public sealed partial class MagiViewModel
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.StructureEdited = true;
-        Ui.Message = $"{doneMessage}（違反チェック中…）";
+        Ui.Message = $"{doneMessage}（問題がないか調べています…）";
         var cts = new System.Threading.CancellationTokenSource();
         _checkCts = cts;
         LastApplyStructureWithMessageTask = ApplyStructureWithMessageCoreAsync(r.State, sched, doneMessage, seq, cts.Token);
@@ -126,7 +126,7 @@ public sealed partial class MagiViewModel
         {
             // [レビュー指摘 2026-09-04] 単一セルでも休は外せない（列一括と同じ理由・同じ案内）。
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
             else if (!allowed)
                 Notify("このグループの担当できるシフトが無くなるため外せません", "W");
             return;
@@ -160,7 +160,7 @@ public sealed partial class MagiViewModel
         if (ReferenceEquals(ns, st))
         {
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify("「休」はどのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
             else if (!allowed)
                 Notify("担当できるシフトが無くなるグループがあるため、この列は外せません", "W");
             return;
@@ -190,7 +190,7 @@ public sealed partial class MagiViewModel
         var cleared = st.GroupShiftApt.Sum(row => row.Count(x => x.Trim().Length > 0));
         LogOp("I", $"apt強制リセット: 適切回数を全空欄に（{cleared} 件クリア）");
         // Ws1Ops.ResetGroupApt は MagiState を返す→Piece8の ApplyStructureWithMessage(MagiState,...) へ解決される。
-        ApplyStructureWithMessage(Ws1Ops.ResetGroupApt(st), $"適切回数(apt)を全リセットしました（{cleared} 件 → 0）");
+        ApplyStructureWithMessage(Ws1Ops.ResetGroupApt(st), $"目標を全リセットしました（{cleared}件を空欄に）");
     }
 
     public void Ws1SetUse2(bool on)

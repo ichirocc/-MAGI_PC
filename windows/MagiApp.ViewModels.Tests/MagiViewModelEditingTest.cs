@@ -155,6 +155,8 @@ public class MagiViewModelEditingTest
         vm.ClearOutOfScopeWishes();
 
         Assert.Equal(new[] { "0,0", "1,0" }, vm._state!.Wishes.Keys.OrderBy(k => k));
+        Assert.Equal("担当外の希望を2件クリアしました", vm.Ui.OpNotice!.Text);
+        Assert.True(vm.Ui.OpNotice.Undoable);
         vm.Undo(); // 1回の Undo で 4 件へ戻る（件数ぶん積んでいない）
         Assert.Equal(4, vm._state!.Wishes.Count);
     }
@@ -214,10 +216,14 @@ public class MagiViewModelEditingTest
         Assert.Equal(0, vm._currentSchedule![0][1]); // untouched — out-of-scope wish was skipped
         Assert.False(vm.Ui.MessageIsError);
         Assert.True(vm.Ui.HasResult);
-        // Ui.Message は末尾の RefreshCheck() が同期的に「違反チェック中…」へ即座に上書きするため、
-        // ここでは（LogOp が RefreshCheck より前に書く）操作ログで「希望を反映」の件数を確認する。
+        // 結果は「元に戻す」付きの通知（再検査の文言では上書きされない）。
+        Assert.Equal("希望を反映: 2件", vm.Ui.OpNotice!.Text);
+        Assert.True(vm.Ui.OpNotice.Undoable);
         // 背景チェックの完了ログが先に先頭へ積まれることがあるので、位置でなく中身で探す。
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("[I]") && l.Contains("希望を勤務表へ反映 2件"));
+        vm.UndoNotice(vm.Ui.OpNotice);   // 通知は反映で積んだ段に結ぶ
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(0, vm._currentSchedule![1][0]);
     }
 
     [Fact]
@@ -352,7 +358,7 @@ public class MagiViewModelEditingTest
         Assert.Equal(1, vm.Ui.Schedule[0][0]);
         // hard=0 だが、7日全休の均一盤面から1セルだけ動かすと fair/weekly のソフト偏差が実際に発火する
         // （エンジンの正しい挙動——0を仮定しない、ScratchDebugBreakdown で実測済み: fair=2 weekly=2）。
-        Assert.Equal("違反チェック完了: 必須=0 合計=4", vm.Ui.Message);
+        Assert.Equal("調べました: 必須違反 0件・違反の合計 4件", vm.Ui.Message);
         Assert.Equal(1, vm.UndoStackCount);
     }
 
@@ -456,8 +462,7 @@ public class MagiViewModelEditingTest
 
         vm.SetCells(new[] { (0, 0), (0, 1) }, 1);
 
-        // Ui.Message は末尾の RefreshCheck() が同期的に「違反チェック中…」へ即座に上書きするため、
-        // ここでは（LogOp が RefreshCheck より前に書く）操作ログで実際に変更したマス数を確認する。
+        Assert.Equal("1マスを A に一括変更しました", vm.Ui.OpNotice!.Text);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
     }
 
@@ -867,6 +872,8 @@ public class MagiViewModelEditingTest
 
         Assert.Equal(new[] { "2,1" }, vm._state!.StaffRange.Keys.OrderBy(x => x)); // 別グループの個人値は残る
         Assert.Equal("", vm._state!.GroupShiftApt[0][1]);
+        Assert.Equal("G0「A」の個人上下限を全員ぶん「なし」にしました（2名ぶん・「元に戻す」で戻せます）", vm.Ui.OpNotice!.Text);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("[I]") && l.Contains("全員ぶん「なし」にしました（2名ぶん"));
     }
 
     [Fact]
@@ -908,6 +915,7 @@ public class MagiViewModelEditingTest
         Assert.False(vm._state!.StaffRange.ContainsKey("0,1"));
         Assert.Equal(new Range("9", "9"), vm._state!.StaffRange["1,1"]);
         Assert.Equal("", vm._state!.GroupShiftApt[0][1]);
+        Assert.Equal("G0「A」のグループ上下限を解除しました（1名ぶん・「元に戻す」で戻せます）", vm.Ui.OpNotice!.Text);
     }
 
     [Fact]
@@ -1155,6 +1163,62 @@ public class MagiViewModelEditingTest
 
         Assert.False(vm._state!.Wishes.ContainsKey("0,0"));
         Assert.True(vm._state!.Wishes.ContainsKey("0,1"));
+        Assert.Equal("希望を1件消しました", vm.Ui.OpNotice!.Text);
+    }
+
+    [Fact]
+    public void ClearWishesForDaysWithNothingToClearSaysSoWithoutAnUndoStep()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(wishes: new Dictionary<string, int> { ["0,1"] = 1 }), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.ClearWishesForDays(null, new[] { 3 });
+
+        Assert.Single(vm._state!.Wishes);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.False(vm.Ui.MessageIsError);
+        Assert.Equal("消す希望はありませんでした", vm.Ui.Message);
+        Assert.Null(vm.Ui.OpNotice);
+    }
+
+    [Fact]
+    public void SetWishesForDaysThatChangeNothingAreANoOp()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(wishes: new Dictionary<string, int> { ["0,0"] = 1 }), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetWishesForDays(0, new[] { 0 }, 1);
+
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.False(vm.Ui.MessageIsError);
+        Assert.Equal("同じ希望がすでに入っています（変更なし）", vm.Ui.Message);
+    }
+
+    private static MagiState WithExtWishDays(MagiState st, params string[] days) =>
+        st with { ExtWishes = new List<ExtWish> { new(0, days, new[] { "A" }) } };
+
+    [Fact]
+    public void SetWishesForDaysOnlyOnExtendedWishDaysAreRefused()
+    {
+        var vm = new MagiViewModel { _state = WithExtWishDays(MinimalState.Build(), "2025-12-01", "2025-12-02"), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetWishesForDays(0, new[] { 0, 1 }, 1);
+
+        Assert.Empty(vm._state!.Wishes);
+        Assert.Equal(0, vm.UndoStackCount);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal("拡張希望の指定日なので、希望は入れられません（2件・変更なし）", vm.Ui.Message);
+    }
+
+    [Fact]
+    public void SetWishesForDaysSkippingExtendedWishDaysSaysSoInAnUndoableNotice()
+    {
+        var vm = new MagiViewModel { _state = WithExtWishDays(MinimalState.Build(), "2025-12-02"), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.SetWishesForDays(0, new[] { 0, 1 }, 1);
+
+        Assert.Equal(new Dictionary<string, int> { ["0,0"] = 1 }, vm._state!.Wishes);
+        Assert.Equal("希望を入れました（拡張希望の指定日の1件は入れていません）", vm.Ui.OpNotice!.Text);
+        vm.UndoNotice(vm.Ui.OpNotice);   // 通知は一括で積んだ段に結ぶ
+        Assert.Empty(vm._state!.Wishes);
     }
 
     [Fact]
@@ -1377,6 +1441,8 @@ public class MagiViewModelEditingTest
 
         var remaining = Assert.Single(vm._state!.Cons1);
         Assert.Equal(new C1Row("6", "A", "2"), remaining);
+        // 消した行を通知で名指しする（見出しの括弧書きは落とし、行の空白は 1 つに詰める）。
+        Assert.Equal("期間の制約の行を削除しました（休 5日で1回以上）", vm.Ui.OpNotice!.Text);
     }
 
     [Fact]
@@ -1732,7 +1798,7 @@ public class MagiViewModelEditingTest
         Assert.Equal(new[] { "休", "A", "B", "", "" }, remaining.Pattern);
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("2件", vm.Ui.Message);
-        Assert.Contains("必須=", vm.Ui.Message); // ApplyStructureWithMessage's async completion suffix ran
+        Assert.Contains("｜必須違反 ", vm.Ui.Message); // ApplyStructureWithMessage's async completion suffix ran
     }
 
     [Fact]
@@ -1996,10 +2062,29 @@ public class MagiViewModelEditingTest
         vm.SetCell(0, 1, vm._currentSchedule![0][1] == 1 ? 2 : 1);
         vm.UndoNotice(first);   // 後に別の操作がある＝戻さない
         Assert.Equal(other, vm._currentSchedule![0][0]);
+        Assert.True(vm.Ui.MessageIsError);   // 戻せなかった＝失敗の色で理由を出す
+        Assert.Contains("通知からは戻せません", vm.Ui.Message);
         var second = vm.Ui.OpNotice!;
         vm.UndoNotice(second);   // 自分の操作は戻る（1 日目の変更は残る）
         Assert.Equal(other, vm._currentSchedule![0][0]);
         Assert.NotEqual(second.Id, first.Id);
+    }
+
+    /// <summary>「元に戻す」の無い結果の通知（相談の済など）は、段を積まない＝先頭は前の操作の段。押されても前の操作を戻さない。</summary>
+    [Fact]
+    public void ANoticeWithoutUndoNeverUndoesAnEarlierOperation()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.SetCell(0, 0, 1);
+        vm.AddConsult(new ConsultItem("x", "y"));
+        vm.RemoveConsult(0);
+        var done = vm.Ui.OpNotice!;
+        Assert.False(done.Undoable);
+
+        vm.UndoNotice(done);
+
+        Assert.Equal(1, vm._currentSchedule![0][0]);
+        Assert.Equal(1, vm.UndoStackCount);
     }
 }
 

@@ -26,13 +26,19 @@ internal static class EjectionChainPipeline
         /// <summary>決定的モードの深い探索の評価回数（焦点の合計）。</summary>
         long DeepEvaluations = 360_000L,
         /// <summary>入れ替えも 1 手に使う。null＝<see cref="PolishGate.EjectionChainSwapMoves"/>。</summary>
-        bool? SwapMoves = null);
+        bool? SwapMoves = null,
+        /// <summary>採用があった巡のあと索引を作り直してもう一巡（最大 <see cref="C1EjectionChainPolish.Config.MaxRounds"/> 巡・族ごとの起点は巡ごとにずらす・
+        /// 深い探索の予算は巡をまたいで共有）。null＝<see cref="PolishGate.EjectionPipelineRounds"/>。</summary>
+        bool? RepeatRounds = null,
+        /// <summary>BOTH のとき、必須の族の違反を起点にする焦点を先頭に足す。null＝<see cref="PolishGate.EjectionPipelineHardLeg"/>。</summary>
+        bool? HardLeg = null);
 
     /// <summary>焦点 1 つぶんの記録。DeepRan が真なら必ず当たり（浅＋中）が 1 件以上ある。</summary>
     public sealed class Telemetry
     {
-        public Telemetry(string focus) { FocusName = focus; }
+        public Telemetry(string focus, int round = 1) { FocusName = focus; Round = round; }
         public string FocusName { get; }
+        public int Round { get; }
         public int Residual;
         public string Skip = "";
         public int Seeds;
@@ -50,7 +56,7 @@ internal static class EjectionChainPipeline
             var b = Before; var a = After ?? Before;
             var mid = MidRan ? $"評価{MidEvaluations}/{MidMs}ms/当たり{MidHits}" : "なし";
             var deep = DeepRan ? $"予算{(DeepBudgetEvaluations > 0 ? $"{DeepBudgetEvaluations}評価" : $"{DeepBudgetMs}ms")}/評価{DeepEvaluations}/{DeepMs}ms/候補{DeepCandidates}" : "なし";
-            return $"玉突きパイプライン[焦点={FocusName} 残差={Residual} 起点={Seeds} 浅=評価{ShallowEvaluations}/{ShallowMs}ms/当たり{ShallowHits} 中={mid} 深={deep} " +
+            return $"玉突きパイプライン[{(Round > 1 ? $"巡{Round} " : "")}焦点={FocusName} 残差={Residual} 起点={Seeds} 浅=評価{ShallowEvaluations}/{ShallowMs}ms/当たり{ShallowHits} 中={mid} 深={deep} " +
                 $"採用={Committed}件 終了={EndReason}]" +
                 (b != null && a != null ? $": HARD {b.Hard}->{a.Hard} 合計 {b.Total}->{a.Total} 重み {(long)b.WeightedScore}->{(long)a.WeightedScore}" : "");
         }
@@ -69,11 +75,13 @@ internal static class EjectionChainPipeline
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var rep0 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
         var rep = rep0;
+        var hardLeg = config.HardLeg ?? PolishGate.EjectionPipelineHardLeg;
         var legs = config.Focus switch
         {
             Focus.C1 => new[] { (C1EjectionChainPolish.Origin.C1, false) },
             Focus.SOFT => new[] { (C1EjectionChainPolish.Origin.SOFT, false) },
-            Focus.BOTH => new[] { (C1EjectionChainPolish.Origin.C1, false), (C1EjectionChainPolish.Origin.SOFT, true) },
+            Focus.BOTH => (hardLeg ? new[] { (C1EjectionChainPolish.Origin.HARD, false) } : Array.Empty<(C1EjectionChainPolish.Origin, bool)>())
+                .Concat(new[] { (C1EjectionChainPolish.Origin.C1, false), (C1EjectionChainPolish.Origin.SOFT, true) }).ToArray(),
             _ => Array.Empty<(C1EjectionChainPolish.Origin, bool)>(),
         };
         var pinBlocks = new PinBlockAttribution();
@@ -81,32 +89,50 @@ internal static class EjectionChainPipeline
         var deepEvaluationsLeft = config.DeepEvaluations;
         var applied = 0;
         var logs = new List<MirrorLog>();
-        for (var n = 0; n < legs.Length; n++)
+        var maxRounds = (config.RepeatRounds ?? PolishGate.EjectionPipelineRounds) ? new C1EjectionChainPolish.Config().MaxRounds : 1;
+        for (var round = 1; round <= maxRounds; round++)
         {
-            var (origin, skipC1) = legs[n];
-            var share = (long)(legs.Length - n);
-            var tel = new Telemetry(origin == C1EjectionChainPolish.Origin.C1 ? "C1" : "SOFT");
-            var outLeg = RunLeg(state, p, work, rep, origin, skipC1, config, previousImproved, deadlineMs, stop,
-                quantitativeRangeEval, pinBlocks, deepMsLeft / share, deepEvaluationsLeft / share, tel);
-            work = outLeg.Work; rep = outLeg.Report; applied += outLeg.CommittedCells;
-            deepMsLeft -= outLeg.DeepMs; deepEvaluationsLeft -= outLeg.DeepEvaluations;
-            telemetry?.Add(tel);
-            logs.Add(new MirrorLog(tag: "EjectionPipeline", message: tel.Line()));
+            var committed = 0;
+            for (var n = 0; n < legs.Length; n++)
+            {
+                var (origin, skipC1) = legs[n];
+                var share = (long)(legs.Length - n);
+                var tel = new Telemetry(FocusNameOf(origin), round);
+                var outLeg = RunLeg(state, p, work, rep, origin, skipC1, config, previousImproved, deadlineMs, stop,
+                    quantitativeRangeEval, pinBlocks, deepMsLeft / share, deepEvaluationsLeft / share, tel, round - 1);
+                work = outLeg.Work; rep = outLeg.Report; applied += outLeg.CommittedCells; committed += tel.Committed;
+                deepMsLeft -= outLeg.DeepMs; deepEvaluationsLeft -= outLeg.DeepEvaluations;
+                telemetry?.Add(tel);
+                logs.Add(new MirrorLog(tag: "EjectionPipeline", message: tel.Line()));
+            }
+            if (committed == 0 || stop()) break;
         }
         return new V6HotfixPasses.CyclicSwapResult(work, rep0.Total, rep.Total, applied, logs, PinBlocks: pinBlocks, Report: rep);
     }
 
+    private static string FocusNameOf(C1EjectionChainPolish.Origin origin) => origin switch
+    {
+        C1EjectionChainPolish.Origin.C1 => "C1",
+        C1EjectionChainPolish.Origin.HARD => "HARD",
+        _ => "SOFT",
+    };
+
     private static int ResidualOf(ViolationReport rep, C1EjectionChainPolish.Origin origin, bool skipC1)
     {
         var c1 = rep.Breakdown.TryGetValue("c1", out var v) ? v : 0;
-        return origin == C1EjectionChainPolish.Origin.C1 ? c1 : rep.Total - rep.Hard - (skipC1 ? c1 : 0);
+        return origin switch
+        {
+            C1EjectionChainPolish.Origin.C1 => c1,
+            C1EjectionChainPolish.Origin.HARD => rep.Hard,
+            _ => rep.Total - rep.Hard - (skipC1 ? c1 : 0),
+        };
     }
 
     private static LegOut RunLeg(
         MagiState state, Problem p, int[][] work0, ViolationReport rep0,
         C1EjectionChainPolish.Origin origin, bool skipC1, Config cfg, bool previousImproved,
         long deadlineMs, Func<bool> shouldStop, bool q, PinBlockAttribution pinBlocks,
-        long deepCapMs, long deepCapEvaluations, Telemetry tel)
+        long deepCapMs, long deepCapEvaluations, Telemetry tel, int roundOffset)
     {
         tel.Before = rep0;
         tel.Residual = ResidualOf(rep0, origin, skipC1);
@@ -118,8 +144,8 @@ internal static class EjectionChainPipeline
         var swap = cfg.SwapMoves ?? PolishGate.EjectionChainSwapMoves;
 
         IReadOnlyList<C1EjectionChainPolish.SeedKey> seeds = Array.Empty<C1EjectionChainPolish.SeedKey>();
-        C1EjectionChainPolish.Apply(state, work0, new C1EjectionChainPolish.Config(Origin: origin, SkipC1Seeds: skipC1, SwapMoves: swap, MaxMillis: long.MaxValue),
-            shouldStop: stop, quantitativeRangeEval: q, indexOnly: s => seeds = s);
+        C1EjectionChainPolish.Apply(state, work0, new C1EjectionChainPolish.Config(Origin: origin, SkipC1Seeds: skipC1, SwapMoves: swap, MaxMillis: long.MaxValue,
+            RoundOffset: roundOffset), shouldStop: stop, quantitativeRangeEval: q, indexOnly: s => seeds = s);
         tel.Seeds = seeds.Count;
         var cands = new List<C1EjectionChainPolish.PathCandidate>();
         C1EjectionChainPolish.Stats Probe(IReadOnlyList<C1EjectionChainPolish.SeedKey> list, int depth, long evaluations, long millis)
