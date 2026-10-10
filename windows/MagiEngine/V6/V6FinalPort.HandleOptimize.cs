@@ -741,6 +741,9 @@ public static partial class V6FinalPort
                         if (pe.Pin[i][j] >= 0 && pe.ExtBanned(i, j, finalSched[i][j])) c++;
                 return c;
             });
+            // 回避の並び（c3mn）が希望だけでできている窓も、希望を取り消すまで残る（要調整）。
+            var avoidSelf = TryOrZero(() => V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(state), finalSched));
+            var avoidShown = 0;
             var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)
             {
@@ -751,11 +754,13 @@ public static partial class V6FinalPort
                 if (structural != null) { walls.Add($"{key} {n0}件({structural})"); continue; }
                 var self = Math.Min(n0, selfConflict.GetValueOrDefault(key, 0));
                 if (self > 0) selfConflictShown.Add((key, self));
+                if (key == "c3mn") avoidShown = Math.Min(n0, avoidSelf);
                 var n = key switch
                 {
                     "weekly" => n0 - weeklyWall,
                     "covU" => n0 - covUWall,
                     "extWish" => n0 - Math.Min(n0, extPinned),
+                    "c3mn" => n0 - avoidShown,
                     _ => n0,
                 } - self;
                 if (n > 0) open.Add($"{key} {n}件");
@@ -763,6 +768,7 @@ public static partial class V6FinalPort
             if (selfConflictShown.Count > 0)
                 walls.Add($"希望と禁止の衝突 {selfConflictShown.Sum(it => it.N)}件(" +
                     string.Join("・", selfConflictShown.Select(it => $"{it.Key} {it.N}")) + "＝希望を1件取り消すまで解消しない)");
+            if (avoidShown > 0) walls.Add($"希望どうしの回避の並び c3mn {avoidShown}件(希望を1件取り消すまで解消しない)");
             if (covUWall > 0)
             {
                 // 床が全部を覆うときだけ従来どおり「構造的下限」（供給不足）と名乗る。それ以外は

@@ -21,7 +21,7 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
             var inRange = op.Staff >= 0 && op.Staff < snapshot.Length && op.Day >= 0 && op.Day < snapshot[op.Staff].Length;
             return $"{Name(op.Staff)} {DayText.Short(startDate, op.Day)} {(inRange ? Sym(snapshot[op.Staff][op.Day]) : "?")} → {Sym(op.ToShift)}";
         }).ToList();
-        var people = s.Ops.Select(o => o.Staff).Distinct().Count();
-        return new ChainFixPreview(s, $"複数人の入れ替え（{people} 人・{s.Ops.Count} セル）", changes);
+        // 人数・マス数は本文 1 行目（提案のラベル）が持つ（Android 3.658.0: 題に入れると途中で折り返した）。
+        return new ChainFixPreview(s, "複数人の入れ替え", changes);
     }
 }

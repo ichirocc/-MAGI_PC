@@ -19,7 +19,8 @@ public class WishSelfConflictTest
         Dictionary<string, int> wishes,
         List<IReadOnlyList<int>>? schedule = null,
         IReadOnlyList<C3Row>? cons3n = null,
-        IReadOnlyList<C3wRow>? cons3w = null) =>
+        IReadOnlyList<C3wRow>? cons3w = null,
+        IReadOnlyList<C3Row>? cons3mn = null) =>
         MinimalState.Build(
             startDate: "2026-10-01", endDate: "2026-10-07",
             shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("Dﾃ", "Dﾃ", "", ""), new("A", "A", "", "") },
@@ -28,13 +29,34 @@ public class WishSelfConflictTest
             schedule: schedule ?? Rows(Enumerable.Repeat(A, 7).ToArray(), Enumerable.Repeat(A, 7).ToArray()),
             wishes: wishes,
             cons3n: cons3n ?? new List<C3Row> { new(new List<string> { "休", "休", "休" }) })
-        with { Cons3w = cons3w ?? Array.Empty<C3wRow>() };
+        with { Cons3w = cons3w ?? Array.Empty<C3wRow>(), Cons3mn = cons3mn ?? Array.Empty<C3Row>() };
 
     private static Dictionary<string, int> RestWindow(params (string Key, int Shift)[] more)
     {
         var w = new Dictionary<string, int> { ["0,2"] = Rest, ["0,3"] = Rest, ["0,4"] = Rest };
         foreach (var (k, v) in more) w[k] = v;
         return w;
+    }
+
+    /// <summary>回避の並び（要調整）の窓がまるごと希望＝必須の衝突には入れず、案内（Neutral）と残存分析の数だけに出す（Android 3.658.0 と 1 対 1）。</summary>
+    [Fact]
+    public void AvoidWindowFullyWishedIsGuidanceNotAHardConflict()
+    {
+        var st = State(RestWindow(), cons3n: Array.Empty<C3Row>(), cons3mn: new List<C3Row> { new(new List<string> { "休", "休", "休" }) });
+        Assert.Empty(V6SanityPort.WishSelfConflicts(st));
+        var runs = V6SanityPort.WishAvoidRuns(ScheduleUtil.CachedProblem(st));
+        var g = Assert.Single(runs);
+        Assert.Equal(new[] { 2, 3, 4 }, g.Days);
+        Assert.Equal("c3mn", g.Family);
+        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Problem.Contains("回避の並び"));
+        Assert.True(issue.Neutral);
+        Assert.Equal("大島 10/3(土)・10/4(日)・10/5(月) 希望「休→休→休」", issue.Where);
+        Assert.Equal("回避の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では外せず、要調整として残ります", issue.Problem);
+        Assert.Equal("いずれか1件の希望を取り消すか、回避の並び「休→休→休」を見直してください", issue.Fix);
+        var held = new[] { new[] { A, A, Rest, Rest, Rest, A, A }, Enumerable.Repeat(A, 7).ToArray() };
+        Assert.Equal(1, V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(st), held));
+        var broken = new[] { new[] { A, A, Rest, A, Rest, A, A }, Enumerable.Repeat(A, 7).ToArray() };
+        Assert.Equal(0, V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(st), broken));
     }
 
     [Fact]

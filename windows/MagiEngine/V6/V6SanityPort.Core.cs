@@ -141,6 +141,31 @@ public static partial class V6SanityPort
         return result;
     }
 
+    /// <summary>回避の並び（c3mn・要調整）の窓がまるごと希望で固定され、その並びそのものになっているもの（盤面に依存しない、Family="c3mn"）。
+    /// 希望を 1 件取り消すか回避の並びを見直すまで残る。必須ではないので <see cref="WishSelfConflicts(Problem)"/>（必須の衝突）とは分ける（Android 3.658.0）。</summary>
+    public static IReadOnlyList<WishSelfConflict> WishAvoidRuns(Problem p)
+    {
+        var result = new List<WishSelfConflict>();
+        for (var i = 0; i < p.S; i++)
+            foreach (var c in p.Cons3mn)
+            {
+                var seq = c.Seq;
+                var d = seq.Length;
+                if (d == 0 || d > p.T) continue;
+                for (var j = 0; j <= p.T - d; j++)
+                {
+                    var all = true;
+                    for (var l = 0; l < d && all; l++) all = p.WishFixed(i, j + l) && p.Wish[i][j + l] == seq[l];
+                    if (all) result.Add(new WishSelfConflict(i, "c3mn", Enumerable.Range(j, d).ToList(), seq.ToList()));
+                }
+            }
+        return result;
+    }
+
+    /// <summary><see cref="WishAvoidRuns"/> のうち盤面で成立している窓の数（報告の c3mn と同じ単位＝窓ごとに 1）。</summary>
+    public static int WishAvoidSoft(Problem p, int[][] schedule) =>
+        WishAvoidRuns(p).Count(g => g.Staff >= 0 && g.Staff < schedule.Length && g.Days.All(j => j < schedule[g.Staff].Length && schedule[g.Staff][j] == p.Wish[g.Staff][j]));
+
     /// <summary>「希望と禁止の衝突」の件数（HF70・残存分析・E0 の到達判定が共有する単一ソース、report.Hard と同じ単位）。
     /// c3n/c3w＝盤面で成立している衝突の窓/セル、pref＝衝突の区間にかかる希望を崩したセル。</summary>
     public static IReadOnlyDictionary<string, int> WishConflictHard(Problem p, int[][] schedule)
