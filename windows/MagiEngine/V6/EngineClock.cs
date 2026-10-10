@@ -11,4 +11,8 @@ namespace MagiEngine.V6;
 public static class EngineClock
 {
     public static long NowMs() => Environment.TickCount64;
+
+    /// <summary>締切までの残り ms（負なら 0）。<c>deadlineMs == long.MaxValue</c>（締切なし）はそのまま返す（Kotlin <c>remainingMs</c>）。</summary>
+    public static long RemainingMs(long deadlineMs, long? nowMs = null) =>
+        deadlineMs == long.MaxValue ? long.MaxValue : Math.Max(0L, deadlineMs - (nowMs ?? NowMs()));
 }
