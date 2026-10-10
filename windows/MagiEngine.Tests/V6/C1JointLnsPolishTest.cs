@@ -268,4 +268,29 @@ public class C1JointLnsPolishTest
         Assert.Equal(0, after.Breakdown["c1"]);
         Assert.Equal(0, after.Hard);
     }
+
+    /// <summary>[3.655.0/外部レビュー No.8] c1 がすべて構造下限なら目標は「対象なし」（Kotlin と 1 対 1）。</summary>
+    [Fact]
+    public void targetIsNotApplicableWhenEveryC1IsStructural()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-02",
+            shifts: new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") },
+            groups: new List<Group> { new("G", "G") }, staffList: new List<Staff> { new("s0", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0 } },
+            wishes: new Dictionary<string, int> { ["0,0"] = 0, ["0,1"] = 0 },   // 2 日とも Y の希望＝2 日窓の X は置けない
+            staffRange: new Dictionary<string, Range>(),
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row> { new("2", "X", "1") },
+            cons2: new List<C2Row>(), cons3: new List<C3Row>(), cons3n: new List<C3Row>(),
+            cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var outp = C1JointLnsPolish.Apply(st, st.Schedule.ToIntArray2D());
+        var msg = Assert.Single(outp.Logs).Message;
+        Assert.Equal(0, outp.Applied);
+        Assert.Contains("目標=対象なし", msg);
+        Assert.Contains("停止=構造下限到達", msg);
+    }
 }

@@ -167,10 +167,12 @@ internal static class C1JointLnsPolish
         var debtCulprits = new Dictionary<string, int>();
         int duplicateRejected = 0;
         int restartsDone = 0;
+        bool lbHit = false;
 
         for (int restart = 0; restart < restartLimit; restart++)
         {
-            if (Stopped() || best.C1 <= lowerBound) break;
+            if (Stopped()) break;
+            if (best.C1 <= lowerBound) { lbHit = true; break; }
             restartsDone++;
             var rng = new JavaRandom(seed ^ ((long)restart * -0x61c8864680b583ebL));
             List<Node> beam = ReferenceEquals(best, root) ? new List<Node> { root } : new List<Node> { root, best };
@@ -275,6 +277,16 @@ internal static class C1JointLnsPolish
             }
         }
 
+        // [3.655.0] 打ち切りの理由はループを抜けた時点で決める（旧: 正式な再検査の後に評価し直し、再検査中の期限・patience 切れを拾った）。
+        string? loopHalt = true switch
+        {
+            _ when stop() => "外部停止",
+            _ when EvalCapped() => $"評価回数上限{cfg.MaxEvaluations}",
+            _ when System.Diagnostics.Stopwatch.GetTimestamp() >= deadline => "期限",
+            _ when Stalled() => $"最良が{cfg.PatienceMs}ms更新されず打ち切り",
+            _ => null,
+        };
+
         // Defensive re-check. A shared-array bug or future operator mistake can never escape this gate.
         var finalReport = UnifiedViolationChecker.Check(state, best.Schedule, quantitativeRangeEval: quantitativeRangeEval);
         int finalC1 = finalReport.Breakdown.GetValueOrDefault("c1", 0);
@@ -290,15 +302,9 @@ internal static class C1JointLnsPolish
         // 良い(だがc1はtargetC1超の)候補へ best を差し替えても「到達」と表示され続けていた。
         bool targetReached = chosenC1 <= targetC1;
 
-        string stopReason = true switch
-        {
-            _ when chosenC1 <= lowerBound => "構造下限到達",
-            _ when stop() => "外部停止",
-            _ when EvalCapped() => $"評価回数上限{cfg.MaxEvaluations}",
-            _ when System.Diagnostics.Stopwatch.GetTimestamp() >= deadline => "期限",
-            _ when Stalled() => $"最良が{cfg.PatienceMs}ms更新されず打ち切り",
-            _ => "探索停滞",
-        };
+        bool atLowerBound = lbHit || chosenC1 <= lowerBound;
+        string stopReason = (loopHalt ?? (atLowerBound ? "構造下限到達" : "探索停滞")) +
+            (loopHalt != null && atLowerBound ? "（c1 は構造下限）" : "");
         string debtCulpritsTxt = debtCulpritOrder.Count == 0 ? "" :
             " 必須の主因 " + string.Join(" ",
                 debtCulpritOrder.OrderByDescending(k => debtCulprits[k]).Take(2)
@@ -306,7 +312,7 @@ internal static class C1JointLnsPolish
         string debtTxt = debtRejected == 0 ? "" : $"(必須{debtHard} 合計{debtTotal} c1 {debtC1}{debtCulpritsTxt})";
         var log = new MirrorLog(
             tag: "C1JointLNS",
-            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, {pct}%目標={(targetReached ? "到達" : "未達")})" +
+            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, {pct}%目標={(improvable <= 0 ? "対象なし" : targetReached ? "到達" : "未達")})" +
                 $" / total {rootReport.Total}->{chosenReport.Total} HARD {rootReport.Hard}->{chosenReport.Hard}" +
                 $" 採用{(valid ? 1 : 0)}束 手数{(valid ? best.Path.Count : 0)}" +
                 $" restart{restartsDone} 展開{expanded} 候補{generated} debt除外{debtRejected}" +

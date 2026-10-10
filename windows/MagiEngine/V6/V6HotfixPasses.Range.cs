@@ -314,10 +314,12 @@ public static partial class V6HotfixPasses
             var trials = 0;
             // 実データ10名×31日では全候補を網羅。大規模データでも後処理予算を食い潰さない上限。
             const int maxTrials = 128;
+            var capped = false;
 
             for (var j = 0; j < p.T; j++)
             {
-                if (stop() || trials >= maxTrials) break;
+                if (stop()) break;
+                if (trials >= maxTrials) { capped = true; break; }
                 if (work[hi][j] != k || !Movable(hi, j)) continue;
                 var tokens = new int[p.S];
                 for (var idx = 0; idx < p.S; idx++) tokens[idx] = work[idx][j];
@@ -343,7 +345,8 @@ public static partial class V6HotfixPasses
 
                 foreach (var receiver in receivers)
                 {
-                    if (stop() || trials++ >= maxTrials) break;
+                    if (stop()) break;
+                    if (trials++ >= maxTrials) { capped = true; break; }
                     var cost = new long[p.S][];
                     for (var idx = 0; idx < p.S; idx++)
                     {
@@ -391,10 +394,11 @@ public static partial class V6HotfixPasses
                         work[i][j] = newDay[i];
                     }
                     var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
-                    var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeDayMatch, work);
+                    // [Kotlin 3.475.0] ピンだけが理由で却下した改善手も PinBlockAttribution に数える（手M/手F だけ素の判定で過少だった）。
+                    var gateM = V6SearchOperators.AdoptionGate(p, workBeforeDayMatch, work, rep, bestRep, pinBlocks);
                     for (var i = 0; i < p.S; i++) work[i][j] = tokens[i];
 
-                    if (!IsBetter(rep, bestRep) || pinBad) continue;
+                    if (!gateM.Better || gateM.PinBad) continue;
                     var oldBest = bestPlan;
                     var betterPlan = oldBest == null ||
                         IsBetter(rep, oldBest.Report) ||
@@ -410,7 +414,8 @@ public static partial class V6HotfixPasses
             var plan = bestPlan;
             if (plan == null)
             {
-                RecordBlock(target, "日割当候補なし");
+                // [3.655.0] 試行上限で打ち切った場合は「候補なし」と区別する（見ていない日が残っている）。
+                RecordBlock(target, capped ? "日割当上限" : "日割当候補なし");
                 return false;
             }
             for (var i = 0; i < p.S; i++) work[i][plan.Day] = plan.Shifts[i];
@@ -583,10 +588,10 @@ public static partial class V6HotfixPasses
                     var extraOld = extras.Select(mv => work[mv[0]][mv[1]]).ToArray();
                     foreach (var mv in extras) work[mv[0]][mv[1]] = mv[2];
                     var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
-                    var pinBad = V6SearchOperators.ExactPinRegression(p, workBeforeFlow, work);
+                    var gateF = V6SearchOperators.AdoptionGate(p, workBeforeFlow, work, rep, bestRep, pinBlocks);
                     for (var idx = 0; idx < extras.Count; idx++) work[extras[idx][0]][extras[idx][1]] = extraOld[idx];
                     for (var i = 0; i < p.S; i++) work[i][j] = oldDay[i];
-                    if (!IsBetter(rep, bestRep) || pinBad) continue;
+                    if (!gateF.Better || gateF.PinBad) continue;
 
                     var oldBest = bestPlan;
                     var betterPlan = oldBest == null ||
@@ -615,6 +620,7 @@ public static partial class V6HotfixPasses
         }
 
         var pass = 0;
+        var lastPassImproved = false;
         while (pass < maxPasses)
         {
             if (stop()) break;
@@ -731,6 +737,7 @@ public static partial class V6HotfixPasses
                 }
             }
             pass++;
+            lastPassImproved = improved;
             if (!improved) break;
         }
         // [汎用玉突き結合フレームワーク, 3.249.0] stuckNames より前に実行し、結合で解消した箇所が
@@ -755,9 +762,10 @@ public static partial class V6HotfixPasses
                 blockStats.TryGetValue((i.Value, k.Value), out var reasons);
                 if (reasons == null || reasons.Count == 0) return Label(i.Value, k.Value);
                 var top = reasons.OrderByDescending(r => r.Value).First();
-                // [不採用の主因, 3.302.0] C1Polish と同型。「不採用」のときだけ主因族を上位2件併記。
+                // [不採用の主因, 3.302.0] C1Polish と同型。[Kotlin 3.491.0] 最多理由の後ろに残りの理由も件数つきで並べ、
+                //   不採用の主因は最多理由に関わらず出す（最多が延べ数の多い「希望固定」でも本当の壁が読める）。
                 var culprits = "";
-                if (top.Key == "不採用" && culpritStats.TryGetValue((i.Value, k.Value), out var cmap))
+                if (culpritStats.TryGetValue((i.Value, k.Value), out var cmap))
                 {
                     var joined = string.Join(" ", cmap.OrderByDescending(c => c.Value).Take(2).Select(c => $"{c.Key}:{c.Value}"));
                     if (joined.Length > 0) culprits = $" 主因 {joined}";
@@ -768,7 +776,10 @@ public static partial class V6HotfixPasses
                 var dayTxt = daysList.Count == 0 ? "" :
                     ": " + string.Join("・", daysList.Take(6).Select(DayLabel)) +
                         (daysList.Count > 6 ? $"ほか{daysList.Count - 6}日" : "");
-                return $"{Label(i.Value, k.Value)}({top.Key}×{top.Value}{dayTxt}{culprits})";
+                var rest = string.Concat(reasons.Where(r => r.Key != top.Key).OrderByDescending(r => r.Value)
+                    .Select(r => $"・{r.Key}×{r.Value}" + (r.Key == "不採用" ? culprits : "")));
+                var topCulprit = top.Key == "不採用" ? culprits : "";
+                return $"{Label(i.Value, k.Value)}({top.Key}×{top.Value}{dayTxt}{topCulprit}{rest})";
             })
             .Where(s => s != null)
             .Select(s => s!)
@@ -780,7 +791,8 @@ public static partial class V6HotfixPasses
         var highAfter = bestRep.Breakdown.GetValueOrDefault("high", 0);
         var msg = $"個人回数(low/high)玉突き研磨: low {lowBefore}->{lowAfter} / high {highBefore}->{highAfter} " +
             $"/ total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回" +
-            $"（日割当:{dayMatchingApplied} / 柔軟日割当:{flexibleDayApplied}）";
+            $"（日割当:{dayMatchingApplied} / 柔軟日割当:{flexibleDayApplied}）" +
+            $" パス{pass}/{maxPasses}" + (pass >= maxPasses && lastPassImproved ? "（最後のパスも改善＝上限で打ち切り）" : "");
         if (applied == 0 && lowBefore + highBefore > 0) msg += " [頭打ち=改善手なし]";
         if (fixedNames.Count > 0) msg += $" 対象: {string.Join(", ", fixedNames)}";
         if (stuckNames.Count > 0) msg += $" 残存: {string.Join(", ", stuckNames)}";

@@ -106,4 +106,28 @@ public class PersonalBalanceJointLnsPolishTest
         Assert.Equal(0, after.Breakdown["c1"]);
         Assert.Equal(0, after.Hard);
     }
+
+    /// <summary>[3.655.0/外部レビュー No.3] 対象の上限で切った人数をログに出す（Kotlin と 1 対 1）。</summary>
+    [Fact]
+    public void logShowsHowManyEligibleStaffWereLeftOutByTheFocusCap()
+    {
+        const int n = 7;
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-03",
+            shifts: new List<Shift> { new("Y", "Y", "", ""), new("X", "X", "", "") },
+            groups: Enumerable.Range(0, n).Select(i => new Group($"G{i}", $"G{i}")).ToList(),
+            staffList: Enumerable.Range(0, n).Select(i => new Staff($"s{i}", i)).ToList(), use2Patterns: false,
+            groupShift: Enumerable.Range(0, n).Select(_ => (IReadOnlyList<int>)new List<int> { 1, 1 }).ToList(),
+            groupShiftApt: Enumerable.Range(0, n).Select(_ => (IReadOnlyList<string>)new List<string> { "", "" }).ToList(),
+            schedule: Enumerable.Range(0, n).Select(_ => (IReadOnlyList<int>)new List<int> { 0, 0, 0 }).ToList(),
+            wishes: new Dictionary<string, int>(),
+            staffRange: Enumerable.Range(0, n).ToDictionary(i => $"{i},1", _ => new Range("1", "")),   // 全員 X の下限 1 に届いていない
+            needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+            cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(),
+            cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(),
+            cons41: new List<C41Row>(), cons42: new List<C42Row>());
+        var outp = PersonalBalanceJointLnsPolish.Apply(st, st.Schedule.ToIntArray2D());
+        var msg = Assert.Single(outp.Logs).Message;
+        Assert.Contains("対象6/7人", msg);
+    }
 }

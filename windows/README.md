@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-10（Android 3.655.0 と同期・停止理由と上限到達のログ、出力不変）: C1・個人回数の共同 LNS は打ち切りの理由をループを抜けた時点で決める（旧: 正式な再検査の後に評価し直した）、c1 がすべて構造下限なら目標「対象なし」、個人回数は「対象 N/M人」と docstring の是正。範囲研磨は手M の試行上限での打ち切りを「日割当上限」、ログに「パスN/3」。あわせて同期漏れ 2 件: 範囲研磨の手M/手F のピン判定を `AdoptionGate` へ（ピンだけが止めた改善手を数える＝Kotlin 3.475.0。`BlocksImproving` は `ExactPinRegression` と同じ真偽を返して記録を足すだけ＝盤面は同じ）、残存理由に最多以外の理由と不採用の主因を併記（Kotlin 3.491.0）。C1 玉突き連鎖は C# に無い。テスト（1 対 1）2 本。本機で MagiEngine.Tests 1,128 件通過。
+
 - 2026-10-10（Android 3.654.0 と同期・共同 LNS の複数セル手の禁止の並び判定）: `C1JointLnsPolish.GenerateMoves` の冒頭で「j に x」が禁止なら goal ごと捨てていたのを、行 i を j だけ変える手に限定し、自己日交換は 2 セルを当てた行で判定（`SelfMoveForbidden`）、本人・同日の移送の重複を除去。`PersonalBalanceJointLnsPolish` の自己日交換・クロス日移送は交換後の盤面 `w` で判定。測定は Android（決定論 LoopBench 46 ケース×2 seed で勝 41／負 4・必須増 0）。テスト（1 対 1）2 本。本機で MagiEngine.Tests 1,126 件通過。
 
 - 2026-10-10（`/code-review` 指摘 1・3、テストだけ・出力不変）: `CheckerReportDigestTest` の盤面を `System.Random`（.NET のバージョン間で数列を保証しない）から `JavaRandom` へ替え、fixture ごとにまとめて回す（交互だと `CachedProblem` の 1 件キャッシュが毎回外れ 2000 回作り直していた。約 11 秒→1 秒）。期待値は取り直し（428718c8…）。指摘 2（Kotlin と同じハッシュで比べる）は乱数と文字列化をそろえる別作業として見送り＝Kotlin との一致は `CrossLanguageFixtureTest`・`ParityTest` が見る。
