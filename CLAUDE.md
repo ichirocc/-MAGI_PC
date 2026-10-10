@@ -11,7 +11,7 @@ Android 版（`ichirocc/magi7ichiro-fork`、Kotlin/Compose）の Windows 11 ネ�
   このサンドボックスではビルド不可で、CI（`.github/workflows/windows-app-build.yml`）だけが検証する。ViewModel 層は `MagiApp.ViewModels`
   （テスト可）に置き、WinUI 側は薄く保つ。
 - .NET SDK はこの環境では `/root/.dotnet`（`export PATH=/root/.dotnet:$PATH DOTNET_CLI_TELEMETRY_OPTOUT=1`）。エンジンテストは
-  `cd windows && dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj -c Release --nologo -v q`（約 2.5 分。背景で回してログへ）。
+  `cd windows && dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj -c Release --nologo -v q`（約 5 分半。背景で回してログへ）。
   `dotnet test ... | head` のようにパイプで切ると失敗を見落とす（赤いテストを push した前科あり）。
 - シェルの cwd は呼び出しごとに Android 側の repo へ戻る＝このリポジトリの操作は**絶対パス**で行う（相対パスで Android 側に
   誤コミットした前科あり）。
