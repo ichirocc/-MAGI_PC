@@ -360,6 +360,14 @@ public static partial class V6HotfixPasses
         var chain = new PostChain(onPhase, schedule, state, p.QuantitativeRangeEval, p.PostChainRunningKeepBest, report0,
             p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero, PolishGate.AptFairSoftTolerance);
         var t0 = EngineClock.NowMs();
+        // [Android 3.656.0 同期] 玉突き連鎖パイプライン（Android は有効なら従来の玉突きをどの置き場所でも走らせない。C# は従来の常時フルを持たない）。
+        var pipelineFocus = PolishGate.EjectionPipelineFocus;
+        var pipelineOn = pipelineFocus != EjectionChainPipeline.Focus.OFF;
+        var pipelineAtEnd = PolishGate.EjectionPipelineAfterRepair;
+        CyclicSwapResult RunPipeline(int[][] work) => EjectionChainPipeline.Apply(state, work,
+            new EjectionChainPipeline.Config(pipelineFocus, Deterministic: p.Deterministic, DeepEvaluations: p.C1LnsMaxEvaluations * 4L),
+            previousImproved: (chain.StageRecords.Count > 0 ? chain.StageRecords[^1].Applied : 0) > 0, deadlineMs: deadlineMs,
+            shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
 
         var r80 = chain.Timed("後処理 HF80 戦略的振動", "HF80StrategicOscillation", work =>
             ApplyHF80StrategicOscillation(state, work, maxCycles: p.Hf80MaxCycles, seed: seedVal ^ SeedTag.Hf80, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval));
@@ -420,6 +428,7 @@ public static partial class V6HotfixPasses
             var r2 = C1RepairOperators.JointLns(state, r1.NewSchedule, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
+        if (pipelineOn && !pipelineAtEnd) chain.Adopt(chain.Timed("後処理 玉突き連鎖(予察つき)", "玉突きパイプライン", RunPipeline));
         var tPersonalLns = EngineClock.NowMs();
         chain.Adopt(chain.Timed("後処理 個人回数/適切回数 共同LNS", "個人回数共同LNS", work =>
         {
@@ -459,6 +468,8 @@ public static partial class V6HotfixPasses
                 ViolationComponentRepair.Repair(state, work, chain.RejectedPool.ToList(), finalParams, shouldStop: finalStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             chain.RejectedPool.Clear();
         }
+
+        if (pipelineOn && pipelineAtEnd && !stop()) chain.Adopt(chain.Timed("後処理 玉突き連鎖(予察つき・修復の後)", "玉突きパイプライン", RunPipeline));
 
         if (p.RestZeroWindowLnsEnabled && !stop())
         {

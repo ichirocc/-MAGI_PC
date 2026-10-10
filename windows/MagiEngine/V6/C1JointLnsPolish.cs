@@ -167,10 +167,12 @@ internal static class C1JointLnsPolish
         var debtCulprits = new Dictionary<string, int>();
         int duplicateRejected = 0;
         int restartsDone = 0;
+        bool lbHit = false;
 
         for (int restart = 0; restart < restartLimit; restart++)
         {
-            if (Stopped() || best.C1 <= lowerBound) break;
+            if (Stopped()) break;
+            if (best.C1 <= lowerBound) { lbHit = true; break; }
             restartsDone++;
             var rng = new JavaRandom(seed ^ ((long)restart * -0x61c8864680b583ebL));
             List<Node> beam = ReferenceEquals(best, root) ? new List<Node> { root } : new List<Node> { root, best };
@@ -275,6 +277,16 @@ internal static class C1JointLnsPolish
             }
         }
 
+        // [3.655.0] 打ち切りの理由はループを抜けた時点で決める（旧: 正式な再検査の後に評価し直し、再検査中の期限・patience 切れを拾った）。
+        string? loopHalt = true switch
+        {
+            _ when stop() => "外部停止",
+            _ when EvalCapped() => $"評価回数上限{cfg.MaxEvaluations}",
+            _ when System.Diagnostics.Stopwatch.GetTimestamp() >= deadline => "期限",
+            _ when Stalled() => $"最良が{cfg.PatienceMs}ms更新されず打ち切り",
+            _ => null,
+        };
+
         // Defensive re-check. A shared-array bug or future operator mistake can never escape this gate.
         var finalReport = UnifiedViolationChecker.Check(state, best.Schedule, quantitativeRangeEval: quantitativeRangeEval);
         int finalC1 = finalReport.Breakdown.GetValueOrDefault("c1", 0);
@@ -290,15 +302,9 @@ internal static class C1JointLnsPolish
         // 良い(だがc1はtargetC1超の)候補へ best を差し替えても「到達」と表示され続けていた。
         bool targetReached = chosenC1 <= targetC1;
 
-        string stopReason = true switch
-        {
-            _ when chosenC1 <= lowerBound => "構造下限到達",
-            _ when stop() => "外部停止",
-            _ when EvalCapped() => $"評価回数上限{cfg.MaxEvaluations}",
-            _ when System.Diagnostics.Stopwatch.GetTimestamp() >= deadline => "期限",
-            _ when Stalled() => $"最良が{cfg.PatienceMs}ms更新されず打ち切り",
-            _ => "探索停滞",
-        };
+        bool atLowerBound = lbHit || chosenC1 <= lowerBound;
+        string stopReason = (loopHalt ?? (atLowerBound ? "構造下限到達" : "探索停滞")) +
+            (loopHalt != null && atLowerBound ? "（c1 は構造下限）" : "");
         string debtCulpritsTxt = debtCulpritOrder.Count == 0 ? "" :
             " 必須の主因 " + string.Join(" ",
                 debtCulpritOrder.OrderByDescending(k => debtCulprits[k]).Take(2)
@@ -306,7 +312,7 @@ internal static class C1JointLnsPolish
         string debtTxt = debtRejected == 0 ? "" : $"(必須{debtHard} 合計{debtTotal} c1 {debtC1}{debtCulpritsTxt})";
         var log = new MirrorLog(
             tag: "C1JointLNS",
-            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, {pct}%目標={(targetReached ? "到達" : "未達")})" +
+            message: $"期間要件(c1)共同LNS: c1 {rootC1}->{chosenC1} (構造下限≥{lowerBound}, 改善可能幅進捗{progress}%, {pct}%目標={(improvable <= 0 ? "対象なし" : targetReached ? "到達" : "未達")})" +
                 $" / total {rootReport.Total}->{chosenReport.Total} HARD {rootReport.Hard}->{chosenReport.Hard}" +
                 $" 採用{(valid ? 1 : 0)}束 手数{(valid ? best.Path.Count : 0)}" +
                 $" restart{restartsDone} 展開{expanded} 候補{generated} debt除外{debtRejected}" +
@@ -583,21 +589,18 @@ internal static class C1JointLnsPolish
         int i = goal.Staff; int j = goal.Day; int x = goal.TargetShift;
         int a = schedule[i][j];
         if (a == x || !Allowed(p, i, j, x)) return new List<Move>();
-        // [賢く再構成] 全Move種の共通効果=「iのday jにxを置く」がこの時点で既に禁止連続(c3n)を
-        // 作るなら、このgoal自体を即座に諦める(手を1つも生成しない)。従来はdebt+最終ゲート
-        // (isFinalCandidate/defensive re-check)だけに頼っており、正しさは常に保たれていたが、
-        // c3n を作るとhard debtを使い切る候補ばかり生成してしまい、maxMovesPerGoalの枠が
-        // 無駄な候補で埋まっていた。事前に弾くのは効率のみの改善＝最終正しさは無関係(不変)。
-        if (p.MakesForbiddenRun(schedule, i, j, x)) return new List<Move>();
+        // [3.654.0] 行 i を j だけ変える手（直接・同日の入れ替え・3 人回し・他人からの移送）は「j に x」だけで禁止の並びかが決まる。
+        //   本人の別日も戻す手（自己日交換）は 2 セルを当てた行で見る（旧: ここで goal ごと捨て、合法な改善手を取りこぼしていた）。
+        bool rowBlocked = p.MakesForbiddenRun(schedule, i, j, x);
         var scored = new List<(int Score, Move Move)>();
 
         // Elastic move. It may temporarily create coverage debt; later goals can repair it.
-        scored.Add((20, new Move.Direct(i, j, x)));
+        if (!rowBlocked) scored.Add((20, new Move.Direct(i, j, x)));
 
         var staffOrder = Enumerable.Range(0, p.S).Shuffled(rng);
         foreach (int donor in staffOrder)
         {
-            if (donor == i || schedule[donor][j] != x || !Allowed(p, donor, j, a)) continue;
+            if (rowBlocked || donor == i || schedule[donor][j] != x || !Allowed(p, donor, j, a)) continue;
             // [賢く再構成] donorがaを受け取る側の禁止連続も同様に事前に弾く。
             if (p.MakesForbiddenRun(schedule, donor, j, a)) continue;
             scored.Add((100, new Move.SameDaySwap(i, donor, j)));
@@ -605,7 +608,7 @@ internal static class C1JointLnsPolish
 
         foreach (int donor in staffOrder)
         {
-            if (donor == i || schedule[donor][j] != x) continue;
+            if (rowBlocked || donor == i || schedule[donor][j] != x) continue;
             foreach (int bridge in staffOrder)
             {
                 if (bridge == i || bridge == donor) continue;
@@ -621,9 +624,7 @@ internal static class C1JointLnsPolish
         foreach (int otherDay in dayOrder)
         {
             if (otherDay == j || schedule[i][otherDay] != x || !Allowed(p, i, otherDay, a)) continue;
-            // [賢く再構成] iがotherDayでaに戻る側も事前チェック(同一職員の別日、元盤面基準の
-            // 保守的近似＝jとotherDayが同一窓に入る稀なケースを見逃しても最終checkerが必ず拾う)。
-            if (p.MakesForbiddenRun(schedule, i, otherDay, a)) continue;
+            if (SelfMoveForbidden(p, schedule, i, j, x, otherDay, a)) continue;
             scored.Add((70, new Move.SelfDaySwap(i, j, otherDay)));
         }
 
@@ -633,10 +634,11 @@ internal static class C1JointLnsPolish
         foreach (int donor in staffOrder)
             foreach (int otherDay in dayOrder)
             {
-                if (donor == i && otherDay == j) continue;
+                // 本人の別日（自己日交換と同じ手）と同じ日（同日の入れ替えと同じ手）は上で作る＝重複させない（3.654.0）。
+                if (donor == i || otherDay == j) continue;
                 if (schedule[donor][otherDay] != x) continue;
                 if (!Allowed(p, donor, otherDay, a)) continue;
-                if (p.MakesForbiddenRun(schedule, donor, otherDay, a)) continue;
+                if (rowBlocked || p.MakesForbiddenRun(schedule, donor, otherDay, a)) continue;
                 scored.Add((60, new Move.CrossDayTransfer(i, j, donor, otherDay)));
             }
 
@@ -646,6 +648,15 @@ internal static class C1JointLnsPolish
             .Distinct()
             .Take(limit)
             .ToList();
+    }
+
+    /// <summary>本人の 2 セル（j に x、d2 に a）を同時に当てた行で、どちらかのセルを含む禁止の並び（c3n・c3w）ができるか。</summary>
+    private static bool SelfMoveForbidden(Problem p, int[][] s, int i, int j, int x, int d2, int a)
+    {
+        var view = (int[][])s.Clone();
+        var row = (int[])s[i].Clone(); row[j] = x; row[d2] = a;
+        view[i] = row;
+        return p.MakesForbiddenRun(view, i, j, x) || p.MakesForbiddenRun(view, i, d2, a);
     }
 
     private static bool ApplyMove(int[][] schedule, Move move)

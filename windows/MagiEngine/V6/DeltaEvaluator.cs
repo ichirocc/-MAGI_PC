@@ -175,6 +175,26 @@ public sealed class DeltaEvaluator
         return (lowAmt, highAmt);
     }
 
+    /// <summary>正式比較（必須件数→重み付き→総数）と同じ辞書式の鍵（Kotlin <c>reportKey</c>）。[0]＝必須件数、[1]＝重み付き（SOFT＋必須の重み）、
+    /// [2]＝総数。玉突き連鎖の最良の保持に使う。</summary>
+    internal long[] ReportKey()
+    {
+        var s = Score();
+        var hard = s / Evaluator.SCORE_HARD_UNIT;
+        var raw = FamilyRaw();
+        double hardW = 0.0;
+        foreach (var f in MirrorKeys.Hard) hardW += (raw.TryGetValue(f, out var v) ? v : 0L) * MirrorKeys.WeightOf(f);
+        var (lo, hi) = RangeRaw();
+        return new[] { hard, (s - hard * Evaluator.SCORE_HARD_UNIT) + (long)hardW, raw.Values.Sum() + lo + hi };
+    }
+
+    /// <summary>[<see cref="ReportKey"/>] の辞書式比較。</summary>
+    internal static int CompareReportKey(long[] a, long[] b)
+    {
+        for (var x = 0; x < 3; x++) { var c = a[x].CompareTo(b[x]); if (c != 0) return c; }
+        return 0;
+    }
+
     /// <summary>Fused previewMove + commit for a single cell. Returns the new total score.</summary>
     public long Apply(int i, int j, int nw)
     {

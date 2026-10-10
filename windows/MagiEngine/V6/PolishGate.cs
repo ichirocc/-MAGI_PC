@@ -140,6 +140,19 @@ public static class PolishGate
     /// <summary>[Kotlin 3.540.0同期] 回数連鎖研磨（<see cref="CountChainPolish"/>）を後処理に入れるか。
     /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
     public static volatile bool CountChainPolish = false;
+
+    /// <summary>[Android 3.656.0 同期] 玉突き連鎖パイプライン（<see cref="EjectionChainPipeline"/>＝予察で当たった起点だけ深く探す）の焦点。
+    /// OFF 以外のとき後処理に入れる（C# は従来の常時フルの玉突きを持たない）。既定 <b>BOTH</b>（Android 3.656.0 で昇格）。</summary>
+    internal static volatile EjectionChainPipeline.Focus EjectionPipelineFocus = EjectionChainPipeline.Focus.BOTH;
+
+    /// <summary>[Android 3.656.0 同期] パイプラインの置き場所を最終の違反起点修復の後へ（false＝C1 共同 LNS の直後）。既定 <b>true</b>。</summary>
+    public static volatile bool EjectionPipelineAfterRepair = true;
+
+    /// <summary>[Android 同名] 玉突きの候補に入れ替え（同日の 2 人・同じ人の 2 日）を含める。既定 true。</summary>
+    public static volatile bool EjectionChainSwapMoves = true;
+
+    /// <summary>[Android 同名] 玉突きの深い探索の上限ミリ秒（残り時間の 1/4 との小さい方）。既定 6,000（Android 3.624.0 の明示指示）。</summary>
+    public static long EjectionChainMaxMillis = 6_000L;
 }
 
 /// <summary>[E0] 希望衝突の床での頭打ちの型（A/B 用、Kotlin <c>WishFloorMode</c>）。</summary>

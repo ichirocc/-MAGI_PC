@@ -10,7 +10,7 @@ namespace MagiEngine.V6;
 public static partial class V6HotfixPasses
 {
     /// <summary>day j を含む有効窓のどれかで、職員 i のシフト X が N 回未満（=c1不足）か。</summary>
-    private static bool InDeficientC1Window(Problem p, int[][] work, int i, int x, int d, int n, int j)
+    internal static bool InDeficientC1Window(Problem p, int[][] work, int i, int x, int d, int n, int j)
     {
         if (d <= 0) return false;
         var w = Math.Max(0, j - d + 1);

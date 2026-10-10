@@ -15,8 +15,9 @@ namespace MagiEngine.V6;
 /// 同日玉突きで補充する。
 ///
 /// 目標値の総和が月日数を超える等、apt違反が構造的に不可避な職員については、希望固定と
-/// range/aptだけを用いた厳密count-DP下限を計算する。下限到達済みの違反を無駄に追わず、
-/// 同じ下限値の別配置が正式目的を改善する場合だけ移し替える。
+/// range/aptだけを用いた厳密count-DP下限を計算する。下限到達済みの職員は、担当者が 1 人だけの
+/// シフトの apt 違反を持つときに限って対象に入れ、同じ下限値の別配置が正式目的を改善する場合だけ移し替える。
+/// 対象は下限からの余地が大きい順に最大 <see cref="Config.MaxFocusStaff"/> 人（ログに「対象 N/M人」）。
 /// </summary>
 internal static class PersonalBalanceJointLnsPolish
 {
@@ -73,7 +74,8 @@ internal static class PersonalBalanceJointLnsPolish
         var rootPersonal = PersonalPenaltyByStaff(p, rootSchedule);
         var lower = new int[p.S];
         for (int i = 0; i < p.S; i++) lower[i] = StaffLowerBound(p, i);
-        var focus = ChooseFocusStaff(p, rootSchedule, rootPersonal, lower, cfg.MaxFocusStaff);
+        var eligible = ChooseFocusStaff(p, rootSchedule, rootPersonal, lower);
+        var focus = eligible.Take(cfg.MaxFocusStaff).ToArray();
         if (focus.Length == 0) return NoOp(rootSchedule, rootReport, "range/apt対象なし");
 
         int rootFocus = focus.Sum(i => rootPersonal[i]);
@@ -176,6 +178,11 @@ internal static class PersonalBalanceJointLnsPolish
             }
         }
 
+        // [3.655.0] 打ち切りの理由はループを抜けた時点で決める（旧: 正式な再検査の後に評価し直した）。
+        string? loopHalt = stop() ? "外部停止"
+            : EvalCapped() ? $"評価回数上限{cfg.MaxEvaluations}"
+            : System.Diagnostics.Stopwatch.GetTimestamp() >= deadline ? "期限"
+            : null;
         var checkedReport = UnifiedViolationChecker.Check(state, best.Schedule, quantitativeRangeEval);
         var checkedPersonal = PersonalPenaltyByStaff(p, best.Schedule);
         // [receiving-code-review] focusTotal は「悪化させない(<=)」まで緩和。以前は狭義減少(<)を
@@ -198,11 +205,9 @@ internal static class PersonalBalanceJointLnsPolish
             string suffix = chosenPersonal[i] <= lower[i] ? "=下限" : "";
             return $"{name} {rootPersonal[i]}->{chosenPersonal[i]}(下限{lower[i]}{suffix})";
         }));
-        string reason = valid && focus.All(i => chosenPersonal[i] <= lower[i]) ? "個人構造下限到達"
-            : stop() ? "外部停止"
-            : EvalCapped() ? $"評価回数上限{cfg.MaxEvaluations}"
-            : System.Diagnostics.Stopwatch.GetTimestamp() >= deadline ? "期限"
-            : "探索停滞";
+        bool atLowerBound = valid && focus.All(i => chosenPersonal[i] <= lower[i]);
+        string reason = (loopHalt ?? (atLowerBound ? "個人構造下限到達" : "探索停滞")) +
+            (loopHalt != null && atLowerBound ? "（対象は個人構造下限）" : "");
         var log = new MirrorLog(
             tag: "PersonalJointLNS",
             message: $"個人回数/apt共同LNS: personal {rootFocus}->{focus.Sum(i => chosenPersonal[i])}" +
@@ -212,7 +217,7 @@ internal static class PersonalBalanceJointLnsPolish
                 $" / total {rootReport.Total}->{chosenReport.Total} HARD {rootReport.Hard}->{chosenReport.Hard}" +
                 $" 採用{(valid ? 1 : 0)}束 手数{(valid ? best.Path.Count : 0)}" +
                 $" restart{restartsDone} 展開{expanded} 候補{generated} debt除外{debtRejected} 重複除外{duplicateRejected}" +
-                $" 停止={reason} 対象: {focusText}" +
+                $" 停止={reason} 対象{focus.Length}/{eligible.Count}人: {focusText}" +
                 (valid ? $" 経路: {string.Join("+", best.Path)}" : " [頭打ち=正式目的を改善する個人違反減少束なし]"));
         return new V6HotfixPasses.CyclicSwapResult(
             chosen, rootReport.Total, chosenReport.Total, valid ? 1 : 0, new[] { log },
@@ -224,8 +229,9 @@ internal static class PersonalBalanceJointLnsPolish
             schedule.Copy2D(), report.Total, report.Total, 0,
             new[] { new MirrorLog(tag: "PersonalJointLNS", message: reason) }, Report: report);
 
-    private static int[] ChooseFocusStaff(
-        Problem p, int[][] schedule, int[] current, int[] lower, int limit)
+    /// <summary>対象の候補（下限からの余地が大きい順）。呼び出し側が上限人数で切る＝切った人数をログに出せる。</summary>
+    private static List<int> ChooseFocusStaff(
+        Problem p, int[][] schedule, int[] current, int[] lower)
     {
         var improving = Enumerable.Range(0, p.S)
             .Where(i => current[i] > lower[i])
@@ -236,7 +242,7 @@ internal static class PersonalBalanceJointLnsPolish
             .Where(i => current[i] > 0 && current[i] <= lower[i] && HasExclusiveAptViolation(p, schedule, i))
             .OrderByDescending(i => current[i])
             .ThenBy(i => i);
-        return improving.Concat(unavoidableExclusive).Distinct().Take(limit).ToArray();
+        return improving.Concat(unavoidableExclusive).Distinct().ToList();
     }
 
     private static bool HasExclusiveAptViolation(Problem p, int[][] schedule, int staff)
@@ -524,7 +530,7 @@ internal static class PersonalBalanceJointLnsPolish
             var w = baseSchedule.Copy2D();
             w[i][j] = target;
             w[i][d2] = old;
-            if (p.MakesForbiddenRun(baseSchedule, i, j, target) || p.MakesForbiddenRun(baseSchedule, i, d2, old)) continue;
+            if (p.MakesForbiddenRun(w, i, j, target) || p.MakesForbiddenRun(w, i, d2, old)) continue;   // 交換後の行で見る（3.654.0）
             outCandidates.Add(new Candidate(
                 w, new List<CellOp> { new CellOp(i, j, target), new CellOp(i, d2, old) }, $"{goal.Reason}:自己日交換"));
             if (outCandidates.Count >= limit) break;
@@ -542,7 +548,7 @@ internal static class PersonalBalanceJointLnsPolish
                     var w = baseSchedule.Copy2D();
                     w[i][j] = target;
                     w[d][d2] = old;
-                    if (p.MakesForbiddenRun(baseSchedule, i, j, target) || p.MakesForbiddenRun(baseSchedule, d, d2, old)) continue;
+                    if (p.MakesForbiddenRun(w, i, j, target) || p.MakesForbiddenRun(w, d, d2, old)) continue;
                     outCandidates.Add(new Candidate(
                         w, new List<CellOp> { new CellOp(i, j, target), new CellOp(d, d2, old) }, $"{goal.Reason}:クロス日移送"));
                     if (outCandidates.Count >= limit) goto CrossDayTransferDone;
