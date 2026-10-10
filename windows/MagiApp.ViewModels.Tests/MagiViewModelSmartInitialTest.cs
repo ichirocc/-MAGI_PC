@@ -51,9 +51,8 @@ public class MagiViewModelSmartInitialTest
     }
 
     /// <summary>
-    /// [3.271.0相当] 実行中ガード。他の <c>RunBlockedByInFlight</c> 系（<see cref="MagiViewModel.RunV6FullOptimize"/>
-    /// 等）と異なり、Kotlin原本はここだけ <c>messageIsError = false</c>（穏やかな案内文言）で
-    /// <c>RunBlockedByInFlight</c> を経由しない——逐語移植のためその非対称もそのまま検証する。
+    /// [3.271.0相当] 実行中ガード。他の実行（<see cref="MagiViewModel.RunV6FullOptimize"/> 等）と同じ
+    /// <c>RunBlockedByInFlight</c> で断る（失敗の色・何が走っているかを名指し・押した痕跡を W で残す）。
     /// </summary>
     [Fact]
     public void BlockedWhileAnotherBoardJobInFlight_DoesNotRunAndLeavesScheduleUntouched()
@@ -64,8 +63,9 @@ public class MagiViewModelSmartInitialTest
         vm.GenerateSmartInitial();
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
-        Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("最適化の実行中は下書きをつくれません", vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal("読み込みの実行中です。終わるか「やめる」を押してからにしてください。", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("[W]") && l.Contains("下書きづくり を取り消しました（読み込みが実行中）"));
         // 盤面は元の全休のまま——生成もPushUndoも一切走っていない。
         Assert.All(vm._currentSchedule!, row => Assert.All(row, cell => Assert.Equal(0, cell)));
     }

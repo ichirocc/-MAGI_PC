@@ -48,15 +48,8 @@ public sealed partial class MagiViewModel
         // [3.271.0, 実機ログ起因の由来をそのまま記録] 実行中ガード。旧: ガード無しのため
         //   「勤務表をつくる」の直後に隣接する本ボタンを連続タップすると、走行中の最適化と
         //   初期解生成が併走し、job 参照の上書き（走行中jobが停止不能のゾンビ化）と
-        //   currentSchedule の同時書き換えが起きていた。runV6FullOptimize/runSoftPolish と
-        //   同じガードに統一するが、Kotlin原本はここだけ messageIsError=false（他とは異なり
-        //   RunBlockedByInFlight を使わない専用の穏やかな文言）——逐語移植のためそのまま踏襲する。
-        if (OptimizeInFlight())
-        {
-            Ui.MessageIsError = false;
-            Ui.Message = "最適化の実行中は下書きをつくれません（完了または「やめる」の後にどうぞ）";
-            return;
-        }
+        //   currentSchedule の同時書き換えが起きていた。runV6FullOptimize/runSoftPolish と同じガード。
+        if (RunBlockedByInFlight("下書きづくり")) return;
         if (!EnsureValidForRun(st, sched)) return;
         PushUndo();
         var hadResult = Ui.HasResult;

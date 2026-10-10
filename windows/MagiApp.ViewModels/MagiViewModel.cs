@@ -229,6 +229,13 @@ public sealed partial class MagiViewModel
         return new UndoSnap(st, sc.Copy2D(), alts, Serial: ++_undoSerialSeq);
     }
 
+    /// <summary>操作の結果を通知で出す（<see cref="SetCell"/> と同じ形。<paramref name="undoable"/> なら直前に積んだ元に戻すの段に結ぶ）。再検査の文言では上書きされない。</summary>
+    private void PostOpNotice(string text, bool undoable = true)
+    {
+        Ui.MessageIsError = false;
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, text, _undoStack.Last?.Value.Serial ?? 0L, undoable);
+    }
+
     /// <summary>undo/redo の復元先に退避してあった「他の案」を戻す（無ければ外す）。</summary>
     private void RestoreAlts(AltSnap? a)
     {
@@ -240,18 +247,19 @@ public sealed partial class MagiViewModel
     }
 
     /// <param name="invalidate">false＝表示だけの変更（<see cref="ApplyDisplayOnly"/>）。他の案・改善提案・完了要約を残す。</param>
-    internal void PushUndo(bool invalidate = true)
+    /// <returns>段を積めたら true（積めないときに通知を前の操作の段へ結ばないため）。</returns>
+    internal bool PushUndo(bool invalidate = true)
     {
         if (invalidate) DropCsvPartial();
         var snap = SnapNow();
-        if (snap is null) return;
+        if (snap is null) return false;
         if (!invalidate) snap = snap with { DisplayEdit = true };
         _undoStack.AddLast(snap);
         while (_undoStack.Count > 30) _undoStack.RemoveFirst();
         _redoStack.Clear(); // 新しい操作は redo 履歴を無効化（標準的な undo/redo 挙動）
         Ui.CanUndo = true;
         Ui.CanRedo = false;
-        if (!invalidate) return;
+        if (!invalidate) return true;
         // [Android 3.475.0/3.529.0 同期] 盤面/設定が変わる操作は必ずここを通る＝別の盤面で計算した改善提案と
         //   「他の案」をその場で無効化する（旧 C#: 消しておらず、セル編集・取込のあとも古い提案が残った）。
         _alternativeScheds = System.Array.Empty<int[][]>();
@@ -260,6 +268,7 @@ public sealed partial class MagiViewModel
         // 完了カードの前後比較（RunSummary）も直前の実行の盤面の話＝同じ理由で外す。
         Ui.RunSummary = null;
         Ui.StopSummary = null;
+        return true;
     }
 
     internal void ClearUndo()

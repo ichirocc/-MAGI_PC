@@ -267,6 +267,7 @@ public class MagiViewModelCsvTest
         Assert.False(vm.Ui.Running);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("勤務表CSVを新規取込") && l.Contains("3名"));
         Assert.Contains("期間は「2026-07-01」から", vm.Ui.Message);
+        Assert.Contains("編集タブの「月次条件」で直せます", vm.Ui.Message);   // WinUI の月次条件は「対象期間」と月の移動ボタン（Android の『対象の月』は無い）
     }
 
     [Fact]
@@ -781,7 +782,7 @@ public class MagiViewModelCsvTest
         vm.ImportWishesCsv("氏名,日,希望シフト\n不明太郎,1,A\n");
 
         Assert.Null(vm.LastApplyStructureWithMessageTask);
-        Assert.False(vm.Ui.MessageIsError);
+        Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("読めない行が1件", vm.Ui.Message);
         Assert.Empty(vm._state!.Wishes); // 全部読めたときだけ置換するので変化なし
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("希望シフトCSV取込 中止"));
@@ -837,8 +838,9 @@ public class MagiViewModelCsvTest
         vm.ImportConstraintsCsv("種別,a,b,c,d,e\n個人レンジ,不明太郎,A,2,4\n");
 
         Assert.Null(vm.LastApplyStructureWithMessageTask);
-        Assert.False(vm.Ui.MessageIsError);
+        Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("読めない行が1件", vm.Ui.Message);
+        Assert.Contains("既存の制約・個人の回数の下限・上限を置き換える", vm.Ui.Message);
         Assert.Empty(vm._state!.StaffRange);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("各制約CSV取込 中止"));
     }

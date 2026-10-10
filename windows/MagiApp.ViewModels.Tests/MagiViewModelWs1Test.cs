@@ -175,6 +175,25 @@ public class MagiViewModelWs1Test
         Assert.Contains("担当可否: グループ[0] × A → 担当しない", vm.Ui.OpLog[0]);
     }
 
+    /// <summary>休みのシフトは単一セルでも列一括でも外せない。案内はそのシフトの記号で名指しする（「休」決め打ちにしない）。</summary>
+    [Fact]
+    public void Ws1SetGroupShiftRefusesTheRestShiftNamingItsSymbol()
+    {
+        var st = MinimalState.Build(shifts: new List<Shift> { new("公休", "公", "", "", ShiftRole.Rest), new("A", "A", "", "") });
+        var vm = new MagiViewModel { _state = st };
+        const string expected = "「公」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）";
+
+        vm.Ws1SetGroupShift(0, 0, false);
+        Assert.Same(st, vm._state);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.Equal(expected, vm.Ui.Message);
+
+        vm.ClearMessage();
+        vm.Ws1SetGroupShiftColumn(0, false);
+        Assert.Same(st, vm._state);
+        Assert.Equal(expected, vm.Ui.Message);
+    }
+
     [Fact]
     public void Ws1SetGroupAptSetsTheTargetString()
     {
@@ -208,7 +227,7 @@ public class MagiViewModelWs1Test
         Assert.NotNull(vm.LastApplyStructureWithMessageTask);
         await vm.LastApplyStructureWithMessageTask!;
         Assert.Equal(new[] { "", "" }, vm._state!.GroupShiftApt[0]);
-        Assert.Contains("適切回数(apt)を全リセットしました（2 件 → 0）｜必須=", vm.Ui.Message);
+        Assert.Contains("目標を全リセットしました（2件を空欄に）｜必須違反 ", vm.Ui.Message);
     }
 
     [Fact]
@@ -966,10 +985,10 @@ public class MagiViewModelWs1Test
         Assert.Same(st, vm._state);
         Assert.Equal(newSched, vm._currentSchedule);
         Assert.True(messages.TryPeek(out var first));
-        Assert.Equal("テスト完了（違反チェック中…）", first);
+        Assert.Equal("テスト完了（問題がないか調べています…）", first);
         Assert.NotNull(vm.LastApplyStructureWithMessageTask);
         await vm.LastApplyStructureWithMessageTask!;
-        Assert.Contains("テスト完了｜必須=", vm.Ui.Message);
+        Assert.Contains("テスト完了｜必須違反 ", vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
     }
 

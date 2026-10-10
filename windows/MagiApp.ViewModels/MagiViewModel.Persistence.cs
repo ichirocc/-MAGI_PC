@@ -248,7 +248,7 @@ public sealed partial class MagiViewModel
         Ui.CanRedo = true;
         Ui.Schedule = _currentSchedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ApplyWishDisplay(snap.State);
-        Ui.Message = "1つ前に戻しました";
+        PostOpNotice("1つ前に戻しました", undoable: false);
         LogOp("I", "元に戻す");
         RefreshCheck();
         AutoSave();
@@ -284,7 +284,7 @@ public sealed partial class MagiViewModel
         Ui.CanRedo = _redoStack.Count > 0;
         Ui.Schedule = _currentSchedule.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ApplyWishDisplay(snap.State);
-        Ui.Message = "やり直しました";
+        PostOpNotice("やり直しました", undoable: false);
         LogOp("I", "やり直し");
         RefreshCheck();
         AutoSave();
@@ -627,9 +627,8 @@ public sealed partial class MagiViewModel
         if (sched is null) return;
         var seq = ++_checkSeq;
         _checkCts?.Cancel();
-        Ui.MessageIsError = false;
+        // 開始の文言は出さない（調べている間は Running が示す）＝直前の操作の結果を同じ一歩で上書きしない。
         Ui.Running = true;
-        Ui.Message = "違反チェック中…";
         var cts = new CancellationTokenSource();
         _checkCts = cts;
         LastRefreshCheckTask = RefreshCheckCoreAsync(st, sched, seq, cts.Token);
@@ -656,7 +655,7 @@ public sealed partial class MagiViewModel
                 // [3.328.0相当] 最適化が動いていれば実行中のまま。旧: 無条件に false で、
                 //   最適化中の設定編集→検査完了で全ガードが素通りになっていた。
                 ui.Running = OptimizeInFlight();
-                ui.Message = $"違反チェック完了: 必須={hard} 合計={total}";
+                ui.Message = $"調べました: 必須違反 {hard}件・違反の合計 {total}件";
             }, ct: ct);
             LogOp("I", $"違反チェック 必須={hard} 合計={total}");
         }
@@ -669,7 +668,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = false;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = "違反チェックを停止しました";
+                Ui.Message = "調べるのを止めました";
             }
             throw;
         }
@@ -682,7 +681,7 @@ public sealed partial class MagiViewModel
             if (seq == _checkSeq)
             {
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"違反チェックに失敗しました（{FailureWords.Of(e, FailureKind.Engine)}）";
+                Ui.Message = $"問題がないか調べられませんでした（{FailureWords.Of(e, FailureKind.Engine)}）";
                 Ui.MessageIsError = true;
             }
         }

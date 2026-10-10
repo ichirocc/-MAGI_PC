@@ -238,4 +238,18 @@ public class C1EjectionChainPolishTest
         C1EjectionChainPolish.Apply(st, Work(st), new C1EjectionChainPolish.Config(Origin: C1EjectionChainPolish.Origin.ALL), indexOnly: s => all = s);
         Assert.Contains(all, s => MirrorKeys.Hard.Contains(s.Family));
     }
+
+    /// <summary>[玉突きパイプラインの必須の焦点] HARD 起点は必須の族の違反だけを起点にする（c1 の不足窓も入れない）。</summary>
+    [Fact]
+    public void HardOriginSeedsOnlyHardFamilies()
+    {
+        var st = State(new List<IReadOnlyList<int>> { new List<int> { 2, 2, 0 }, new List<int> { 1, 1, 0 } });   // 3 日目は誰もいない＝人員不足（必須）と c1
+        IReadOnlyList<C1EjectionChainPolish.SeedKey> seeds = Array.Empty<C1EjectionChainPolish.SeedKey>();
+        C1EjectionChainPolish.Apply(st, Work(st), new C1EjectionChainPolish.Config(Origin: C1EjectionChainPolish.Origin.HARD), indexOnly: s => seeds = s);
+        Assert.NotEmpty(seeds);
+        Assert.All(seeds, s => Assert.Contains(s.Family, MirrorKeys.Hard));
+        IReadOnlyList<C1EjectionChainPolish.SeedKey> soft = Array.Empty<C1EjectionChainPolish.SeedKey>();
+        C1EjectionChainPolish.Apply(st, Work(st), new C1EjectionChainPolish.Config(Origin: C1EjectionChainPolish.Origin.SOFT), indexOnly: s => soft = s);
+        Assert.Contains(soft, s => s.Family == "c1");
+    }
 }

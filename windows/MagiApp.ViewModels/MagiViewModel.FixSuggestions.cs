@@ -77,8 +77,9 @@ public sealed partial class MagiViewModel
     /// <summary>通知の「元に戻す」。その操作がまだ元に戻すの先頭にあるときだけ戻す。</summary>
     public void UndoNotice(OpNotice n)
     {
+        if (!n.Undoable) return;   // 結果だけの通知（UndoSerial は前の操作の段）で別の操作を戻さない
         if (CellSheetLogic.NoticeUndoApplies(_undoStack.Last?.Value.Serial, n.UndoSerial)) Undo();
-        else { Ui.MessageIsError = false; Ui.Message = "このあとに別の操作があるため、通知からは戻せません（「元に戻す」ボタンで順に戻せます）"; }
+        else { Ui.MessageIsError = true; Ui.Message = "このあとに別の操作があるため、通知からは戻せません（「元に戻す」ボタンで順に戻せます）"; }
     }
 
     public void ClearOpNotice(long id) { if (Ui.OpNotice?.Id == id) Ui.OpNotice = null; }
@@ -126,7 +127,7 @@ public sealed partial class MagiViewModel
             LogOp("W", $"直し方の探索に失敗: {e.GetType().Name}: {e.Message}");
             if (seq == _fixSeq)
             {
-                Ui.MessageIsError = false;
+                Ui.MessageIsError = true;
                 Ui.FixSearching = false;
                 Ui.FixFailedKey = focusKey;
                 Ui.Message = "直し方を探せませんでした";
@@ -208,8 +209,8 @@ public sealed partial class MagiViewModel
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
-        Ui.Message = line;
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total));
+        PostOpNotice(line);
         _fixOutcomeCtx = _state is { } stNow ? new TrialCtx(stNow, BoardKey(applied)) : null;
         RefreshCheck();
     }

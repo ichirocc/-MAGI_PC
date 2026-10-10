@@ -334,6 +334,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         await vm.ApplyBgResult(stale);
 
         Assert.Contains("結果は反映しませんでした", vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);   // 捨てた＝失敗の色
         Assert.False(vm.Ui.Running);
         Assert.False(vm.Ui.HasResult);
 

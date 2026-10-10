@@ -149,7 +149,12 @@ public class ConsultListTest
         Assert.Single(vm.Ui.Consults);
         vm.RemoveConsult(5);
         Assert.Single(vm.Ui.Consults);
+        Assert.Null(vm.Ui.OpNotice);
         vm.RemoveConsult(0);
         Assert.Empty(vm.Ui.Consults);
+        // 済＝セッション内の一覧から外すだけ（元に戻すの段は積まない）＝「元に戻す」の無い通知と操作ログ。
+        Assert.Equal("済にしました（x）", vm.Ui.OpNotice!.Text);
+        Assert.False(vm.Ui.OpNotice.Undoable);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("相談中を済にしました: x"));
     }
 }
