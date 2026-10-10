@@ -82,7 +82,7 @@ public sealed partial class MainWindow : Window
         else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
     }
 
-    /// <summary>操作の通知（「元に戻す」付き）を出す。検査の進み具合の文言とは別のイベントで、出ている間は通常の文言で置き換えない。</summary>
+    /// <summary>操作の通知（元に戻せる操作なら「元に戻す」付き）を出す。検査の進み具合の文言とは別のイベントで、出ている間は通常の文言で置き換えない。</summary>
     private void ShowOpNotice()
     {
         var n = _vm.Ui.OpNotice;
@@ -91,9 +91,13 @@ public sealed partial class MainWindow : Window
         _shownMessage = null;
         GlobalMessageBar.Message = n.Text;
         GlobalMessageBar.Severity = InfoBarSeverity.Informational;
-        var undo = new Button { Content = "元に戻す" };
-        undo.Click += (_, _) => { GlobalMessageBar.IsOpen = false; _vm.UndoNotice(n); };
-        GlobalMessageBar.ActionButton = undo;
+        if (n.Undoable)
+        {
+            var undo = new Button { Content = "元に戻す" };
+            undo.Click += (_, _) => { GlobalMessageBar.IsOpen = false; _vm.UndoNotice(n); };
+            GlobalMessageBar.ActionButton = undo;
+        }
+        else GlobalMessageBar.ActionButton = null;   // 元に戻す・やり直す自身の結果など（Android OpNotice.undoable と同じ）
         GlobalMessageBar.IsOpen = true;
         StartMessageTimer(4);
     }

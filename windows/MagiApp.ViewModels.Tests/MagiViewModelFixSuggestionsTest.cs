@@ -83,8 +83,9 @@ public class MagiViewModelFixSuggestionsTest
 
         vm.ApplyFixSuggestion(s);
 
-        // Kotlin原本と同じく末尾で RefreshCheck()（fire-and-forget）を呼ぶため、その完了を待ってから
-        // 完了メッセージを検証する（さもなくば「違反チェック中…」に上書きされた直後を捉えてしまう）。
+        // 結果は「元に戻す」付きの通知。末尾の RefreshCheck()（fire-and-forget）の完了は通常の文言に出る。
+        Assert.StartsWith("改善手を適用: テスト改善手（必須 ", vm.Ui.OpNotice!.Text);
+        Assert.True(vm.Ui.OpNotice.Undoable);
         Assert.NotNull(vm.LastRefreshCheckTask);
         await vm.LastRefreshCheckTask!;
 
@@ -92,7 +93,7 @@ public class MagiViewModelFixSuggestionsTest
         Assert.Empty(vm.Ui.FixSuggestions);
         Assert.True(vm.Ui.HasResult);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("違反チェック完了", vm.Ui.Message);
+        Assert.StartsWith("調べました: 必須違反 ", vm.Ui.Message);
     }
 
     // ===== 複数人の入替の一覧（3.644.0/UX-03） =====

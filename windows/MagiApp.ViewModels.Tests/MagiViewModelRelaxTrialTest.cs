@@ -80,6 +80,8 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal("1", vm._state!.StaffRange["10,6"].Hi);
         Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", vm.RelaxDoneLine());
         Assert.True(vm.Ui.RelaxedBoard);
+        Assert.Equal("設定を緩めて手順を当てました（元に戻せます）", vm.Ui.OpNotice!.Text);
+        Assert.True(vm.Ui.OpNotice.Undoable);
 
         vm.Undo();
         Assert.False(vm.Ui.RelaxedBoard);

@@ -42,7 +42,9 @@ internal static class C1EjectionChainPolish
         /// <summary>SOFT・ALL の起点に c1 不足窓の起点を入れない（パイプラインの BOTH の SOFT 側）。</summary>
         bool SkipC1Seeds = false,
         /// <summary>評価回数の上限があっても時間の上限を併せて効かせる（実時間の予察）。</summary>
-        bool TimeWithEvaluations = false);
+        bool TimeWithEvaluations = false,
+        /// <summary>族ごとの起点を先へずらす巡の数（パイプラインの 2 巡目以降の索引。0＝従来）。</summary>
+        int RoundOffset = 0);
 
     public enum Origin { C1, ALL, HARD, SOFT }
 
@@ -262,12 +264,13 @@ internal static class C1EjectionChainPolish
             }
             foreach (var (f, locs) in rep.DistLocations) foreach (var l in locs) AddUnit(f, Row(l[0]));
             var lists = new List<(string Fam, List<Seed> Seeds)>();
-            var c1 = cfg.SkipC1Seeds ? new List<Seed>() : C1Seeds();
+            // HARD は必須の族だけを起点にする（c1 はソフト）。旧: c1 の起点も混ざり、必須の焦点が期間の制約を先に直していた。
+            var c1 = cfg.SkipC1Seeds || hardOnly ? new List<Seed>() : C1Seeds();
             if (c1.Count > 0) lists.Add(("c1", c1));
             foreach (var (f, us0) in perFamily)
             {
                 var outList = new List<Seed>();
-                var off = ((round - 1) * cfg.UnitsPerFamily) % us0.Count;
+                var off = ((round - 1 + cfg.RoundOffset) * cfg.UnitsPerFamily) % us0.Count;
                 var us = us0.Skip(off).Concat(us0.Take(off)).Take(cfg.UnitsPerFamily).ToList();
                 unitsSkipped += us0.Count - us.Count;
                 foreach (var cells in us)

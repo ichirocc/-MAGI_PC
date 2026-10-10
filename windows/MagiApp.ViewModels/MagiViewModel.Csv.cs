@@ -237,10 +237,10 @@ public sealed partial class MagiViewModel
     /// タイトルに年月が無ければ当年1月、<see cref="FlatRosterCsvImport"/> は曜日行から当年で最初に
     /// 一致する月・曜日行が無ければ当年1月）。期間は勤務表の根幹で、間違っていれば曜日の平準化も
     /// 日付表示もずれるのに、画面には「N名 / M日」しか出ず推定したことすら伝わらなかった。何日から
-    /// 取り込んだかを必ず出す。挙動は不変＝知らせるだけで、違っていれば設定タブで直せる。
+    /// 取り込んだかを必ず出す。挙動は不変＝知らせるだけで、違っていれば編集タブの「月次条件」で直せる。
     /// </summary>
     private static string PeriodNote(string startDate) =>
-        $"｜期間は「{startDate}」から として取り込みました（CSVに年月が無い場合は推定です。設定タブで直せます）";
+        $"｜期間は「{startDate}」から として取り込みました（CSVに年月が無い場合は推定です。編集タブの「月次条件」で直せます）";
 
     /// <summary>
     /// CSV取込の振り分け。病院などの「勤務表テンプレCSV」(ユニット/スタッフ/凡例を含む完全な1ヶ月表) は
@@ -292,7 +292,7 @@ public sealed partial class MagiViewModel
         if (_state is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "このCSVを読み込めませんでした。先に『データを開く』で基本データを読み込むか、勤務表テンプレCSVをご利用ください。";
+            Ui.Message = "このCSVを取り込めませんでした。先に『データを開く』で基本データを読み込むか、病院の勤務表の書式（テンプレート）のCSVをご利用ください。";
             return;
         }
         // [3.282.0相当] 修復済みテキストをそのまま渡す（旧: rawText を渡し ImportCsv 内で二重に repair＝
@@ -537,7 +537,7 @@ public sealed partial class MagiViewModel
     private static string ComponentImportMismatchHint(string repairedText, string what = "希望・制約", string buttons = "『希望シフトCSVを書き出す』『各制約CSVを書き出す』")
     {
         if (RosterCsvImport.Detect(repairedText) || FlatRosterCsvImport.Detect(repairedText))
-            return "これは勤務表全体（テンプレ/ユニット列形式）のCSVのようです。設定タブの『名簿CSVを新規データとして取り込む』で取り込んでください。";
+            return "これは勤務表全体（病院の勤務表の書式）のCSVのようです。設定タブの『名簿CSVを新規データとして取り込む』で取り込んでください。";
         if (LooksLikeScheduleCsv(repairedText))
             return $"これは勤務表（スケジュール）CSVのようで、{what}は含まれていません。専用CSVを、設定タブの『データ（種類別のCSV）』にある{buttons}で出して取り込んでください。";
         return "";
@@ -630,7 +630,7 @@ public sealed partial class MagiViewModel
         //   解釈できなかったら置換しない（旧: 誤記の行を黙って捨て、1行でも有効なら残りの希望を消していた）。
         if (res.Rejected > 0)
         {
-            Ui.MessageIsError = false;
+            Ui.MessageIsError = true;
             Ui.Message = $"希望シフトの取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
             LogOp("W", $"希望シフトCSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
@@ -666,13 +666,13 @@ public sealed partial class MagiViewModel
         // [3.329.0/外部レビューH-02相当] 制約一式と個人レンジを全置換するので、希望と同じ扱いにする。
         if (res.Rejected > 0)
         {
-            Ui.MessageIsError = false;
-            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人レンジを置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
+            Ui.MessageIsError = true;
+            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人の回数の下限・上限を置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
             LogOp("W", $"各制約CSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
         }
         LogOp("I", $"各制約CSV取込: {res.Accepted}件を反映（制約一式を置換）");
-        ApplyStructureWithMessage(res.State, $"各制約を取込: {res.Accepted}件を反映（既存の制約・個人レンジは置換）");
+        ApplyStructureWithMessage(res.State, $"各制約を取込: {res.Accepted}件を反映（既存の制約・個人の回数の下限・上限は置換）");
     }
 
     // ===== ファイル入出力の通知ヘルパー =====

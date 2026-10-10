@@ -436,12 +436,10 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         vm.Undo();
 
-        // Undo() sets Ui.Message = "1つ前に戻しました" and logs "元に戻す" — but it then calls
-        // RefreshCheck() unconditionally in the SAME synchronous call stack, and RefreshCheck()
-        // itself immediately overwrites Ui.Message to "違反チェック中…" before yielding to its
-        // background continuation. So the "1つ前に戻しました" message is never independently
-        // observable from outside — only its LogOp trace (Ui.OpLog, which accumulates rather than
-        // being overwritten) survives. The state/stack mechanics ARE stable and safe to check here.
+        // Undo() reports its result as a notice without 「元に戻す」 (undoing the undo is Redo's job);
+        // the RefreshCheck() it triggers no longer writes a start message, so the notice is not overwritten.
+        Assert.Equal("1つ前に戻しました", vm.Ui.OpNotice!.Text);
+        Assert.False(vm.Ui.OpNotice.Undoable);
         Assert.Same(stateA, vm._state); // back to A
         Assert.Equal(0, vm.UndoStackCount);
         Assert.Equal(1, vm.RedoStackCount); // B was pushed to redo
@@ -453,7 +451,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         // and that its completion is what Ui.Message ends up showing.
         Assert.NotNull(vm.LastRefreshCheckTask);
         await vm.LastRefreshCheckTask!;
-        Assert.Contains("違反チェック完了", vm.Ui.Message);
+        Assert.Contains("調べました: 必須違反 ", vm.Ui.Message);
     }
 
     [Fact]
@@ -487,9 +485,9 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         vm.Redo();
 
-        // Same ordering concern as UndoRestoresThePreviousSnapshotAndPushesTheCurrentStateToRedo:
-        // Redo()'s own "やり直しました" message is immediately overwritten (in the same synchronous
-        // call stack) by the RefreshCheck() it triggers — only Ui.OpLog's accumulated trace survives.
+        // Same as Undo: the result is a notice without 「元に戻す」.
+        Assert.Equal("やり直しました", vm.Ui.OpNotice!.Text);
+        Assert.False(vm.Ui.OpNotice.Undoable);
         Assert.Same(stateB, vm._state); // forward to B again
         Assert.Equal(1, vm.UndoStackCount);
         Assert.Equal(0, vm.RedoStackCount);
@@ -498,7 +496,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("やり直し"));
 
         await vm.LastRefreshCheckTask!;
-        Assert.Contains("違反チェック完了", vm.Ui.Message);
+        Assert.Contains("調べました: 必須違反 ", vm.Ui.Message);
     }
 
     // ===================================================================
@@ -796,9 +794,27 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.NotNull(vm.LastRefreshCheckTask);
         await vm.LastRefreshCheckTask!;
 
-        Assert.Contains("違反チェック完了: 必須=", vm.Ui.Message);
+        Assert.Contains("調べました: 必須違反 ", vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
         Assert.Equal(2, vm.Ui.Schedule.Count);
+    }
+
+    /// <summary>調べ始めに文言を書かない（調べている間は Running が示す）＝直前の操作の結果を同じ一歩で上書きしない。</summary>
+    [Fact]
+    public async Task RefreshCheckWritesNoStartMessage()
+    {
+        var vm = NewVm();
+        vm._state = MinimalState.Build();
+        vm._currentSchedule = MinimalState.BuildSchedule();
+        vm.Ui.Message = "直前の操作の結果";
+        var messages = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+        vm.Ui.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(UiState.Message)) messages.Enqueue(vm.Ui.Message); };
+
+        vm.RefreshCheck();
+        await vm.LastRefreshCheckTask!;
+
+        var only = Assert.Single(messages);   // 完了の 1 回だけ
+        Assert.StartsWith("調べました: 必須違反 ", only);
     }
 
     /// <summary>[3.328.0の由来] 最適化ジョブが動いている間の違反チェックは、完了しても実行中表示を
@@ -815,7 +831,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         await vm.LastRefreshCheckTask!;
 
         Assert.True(vm.Ui.Running);
-        Assert.Contains("違反チェック完了:", vm.Ui.Message);
+        Assert.Contains("調べました:", vm.Ui.Message);
     }
 
     /// <summary>[review #6の由来] 後から始まったチェックが古いチェックの完了を追い越しても、古い方の
@@ -849,7 +865,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.True(firstTask!.IsCompletedSuccessfully); // dropped without publishing
         Assert.True(secondTask!.IsCompletedSuccessfully);
         Assert.Single(vm.Ui.OpLog, l => l.Contains("違反チェック 必須="));
-        Assert.Contains("違反チェック完了", vm.Ui.Message);
+        Assert.Contains("調べました", vm.Ui.Message);
     }
 
     // ===================================================================

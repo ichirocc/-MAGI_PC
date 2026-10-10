@@ -31,11 +31,24 @@ public class EjectionChainPipelineTest
         cons1: new List<C1Row> { new("3", "N", "1") }, cons2: new List<C2Row>(), cons3: new List<C3Row>(),
         cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(), cons41: new List<C41Row>(), cons42: new List<C42Row>());
 
+    /// <summary>2 人×3 日。日勤の必要 1 が 3 日目だけ欠ける（人員不足 1）。3 日目の誰かを日勤にすれば直る。</summary>
+    private static MagiState CoverState() => MinimalState.Build(
+        startDate: "2026-08-01", endDate: "2026-08-03",
+        shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("日勤", "D", "1", ""), new("夜勤", "N", "", "") },
+        groups: new List<Group> { new("G0", "G0") }, staffList: new List<Staff> { new("s0", 0), new("s1", 0) }, use2Patterns: false,
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } }, groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
+        schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 2 }, new List<int> { 2, 2, 0 } },
+        wishes: new Dictionary<string, int>(), staffRange: new Dictionary<string, MagiEngine.Model.Range>(),
+        needDay1: new Dictionary<string, string>(), needDay2: new Dictionary<string, string>(),
+        cons1: new List<C1Row>(), cons2: new List<C2Row>(), cons3: new List<C3Row>(),
+        cons3n: new List<C3Row>(), cons3m: new List<C3Row>(), cons3mn: new List<C3Row>(), cons41: new List<C41Row>(), cons42: new List<C42Row>());
+
     private static int[][] Work(MagiState s) => s.Schedule.Select(r => r.ToArray()).ToArray();
     private static bool Same(int[][] a, int[][] b) => a.Length == b.Length && a.Zip(b).All(t => t.First.SequenceEqual(t.Second));
 
-    private static V6HotfixPasses.CyclicSwapResult Run(MagiState st, EjectionChainPipeline.Focus focus, List<EjectionChainPipeline.Telemetry> tel) =>
-        EjectionChainPipeline.Apply(st, Work(st), new EjectionChainPipeline.Config(focus, Deterministic: true), telemetry: tel);
+    private static V6HotfixPasses.CyclicSwapResult Run(MagiState st, EjectionChainPipeline.Focus focus, List<EjectionChainPipeline.Telemetry> tel,
+        bool repeatRounds = false, bool hardLeg = false) =>
+        EjectionChainPipeline.Apply(st, Work(st), new EjectionChainPipeline.Config(focus, Deterministic: true, RepeatRounds: repeatRounds, HardLeg: hardLeg), telemetry: tel);
 
     [Fact]
     public void ProbeHitIsCommittedAndDeepSearchRunsOnlyWithHits()
@@ -106,6 +119,40 @@ public class EjectionChainPipelineTest
         var b = soft.Before!;
         Assert.Equal(b.Total - b.Hard - (b.Breakdown.TryGetValue("c1", out var c1) ? c1 : 0), soft.Residual);
         foreach (var t in tel) Assert.True(!t.DeepRan || t.ShallowHits + t.MidHits > 0, t.Line());
+    }
+
+    // 探し直し: 採用があった巡のあとだけ次の巡を回し、採用が無い巡で止まる。2 巡目以降の記録行に「巡N」。
+    [Fact]
+    public void RepeatRoundsReindexesOnlyAfterACommit()
+    {
+        var st = SwapState();
+        var one = Run(st, EjectionChainPipeline.Focus.C1, new List<EjectionChainPipeline.Telemetry>());
+        var tel = new List<EjectionChainPipeline.Telemetry>();
+        var r = Run(st, EjectionChainPipeline.Focus.C1, tel, repeatRounds: true);
+        Assert.Equal(new[] { 1, 2 }, tel.Select(t => t.Round));
+        Assert.True(tel[0].Committed > 0, tel[0].Line());
+        Assert.Equal("no_residual", tel[1].EndReason);
+        Assert.Contains("巡2 ", tel[1].Line());
+        Assert.DoesNotContain("巡1", tel[0].Line());
+        Assert.True(Same(r.NewSchedule, one.NewSchedule));
+    }
+
+    // 必須の焦点: BOTH の先頭に走り、人員不足を起点に直す。既定（OFF）では必須の焦点を走らせない。
+    [Fact]
+    public void HardLegRunsFirstAndRepairsARemainingHard()
+    {
+        var st = CoverState();
+        Assert.Equal(1, UnifiedViolationChecker.Check(st, Work(st)).Hard);
+        var offTel = new List<EjectionChainPipeline.Telemetry>();
+        Run(st, EjectionChainPipeline.Focus.BOTH, offTel);
+        Assert.Equal(new[] { "C1", "SOFT" }, offTel.Select(t => t.FocusName));
+        var tel = new List<EjectionChainPipeline.Telemetry>();
+        var r = Run(st, EjectionChainPipeline.Focus.BOTH, tel, hardLeg: true);
+        Assert.Equal(new[] { "HARD", "C1", "SOFT" }, tel.Select(t => t.FocusName));
+        Assert.Equal(1, tel[0].Residual);
+        Assert.True(tel[0].Committed > 0, tel[0].Line());
+        Assert.Equal(0, r.Report!.Hard);
+        Assert.Equal(UnifiedViolationChecker.Check(st, r.NewSchedule).WeightedScore, r.Report!.WeightedScore);
     }
 
     // 有効なとき、後処理に段「玉突きパイプライン」が入る（Kotlin は同じ位置の従来の玉突きを走らせないことも見る＝C# は従来の常時フルを持たない）。
