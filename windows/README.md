@@ -331,6 +331,8 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-10（Android 3.658.0 と同期・希望だけでできた回避の並びの説明と、複数人の入れ替えの題）: `V6SanityPort.WishAvoidRuns/WishAvoidSoft`（回避の並び c3mn の窓がまるごと希望で固定＝必須の衝突 `WishSelfConflicts` とは分ける）。設定の見直しに案内（`Neutral`）1 件、残存分析は「もう直せない: 希望どうしの回避の並び c3mn N件」へ（旧: 案内なし・「まだ狙える」）。`ChainFixPreview` の題を「複数人の入れ替え」に（人数・マス数は本文 1 行目が持つ。題に入れると途中で折り返した）。テスト `WishSelfConflictTest.AvoidWindowFullyWishedIsGuidanceNotAHardConflict`（Kotlin と 1 対 1）・`ChainFixPreviewTest` の期待値。Android 側のセルのシート（板挟みの選択肢の置き場所）とダイアログ（取消の重なり）の直しは Compose の画面だけ＝WinUI は対象外。
+
 - 2026-10-10（Android 3.657.0 と同期・玉突きパイプラインの「採れたら探し直す」を既定 ON・「必須の違反からも始める」（既定 OFF）・全画面の design-review の ViewModel 側）:
   - エンジン: `PolishGate.EjectionPipelineRounds`（既定 true）・`EjectionPipelineHardLeg`（既定 false）、`EjectionChainPipeline.Config.RepeatRounds/HardLeg`（採用があった巡のあと索引を作り直して最大 4 巡、深い探索の予算は巡をまたいで共有）、`C1EjectionChainPolish.Config.RoundOffset`、記録行の「巡N」。`Origin.HARD` は c1 の起点を入れない（Android と同じ是正。旧は c1 の不足窓の起点も混ざり、必須の焦点が期間の制約を先に直していた。既定 OFF の経路だけ＝既定の出力は不変）。テスト `EjectionChainPipelineTest.RepeatRoundsReindexesOnlyAfterACommit`・`HardLegRunsFirstAndRepairsARemainingHard`・`C1EjectionChainPolishTest.HardOriginSeedsOnlyHardFamilies`（Kotlin と 1 対 1）。
   - ViewModel: 結果の文を `OpNotice`（`Undoable`）へ（元に戻す・やり直す・希望を反映・一括変更・改善手・S6 の確定・グループの範囲の解除・担当外の希望の解除・範囲の解除・制約の削除）。`PushUndo` は段を積めたかを返す（積めないときに通知を前の操作の段へ結ばない）。検査の開始の文言を出さず、結果の文言を「調べました: 必須違反 N件…」の形に。失敗・中止・拒否を失敗の色に（CSV の中止・下書きの拒否・直し方の探索の失敗・背景の結果の破棄・通知から戻せない）。拡張希望の日の希望の拒否の理由、一括の無変更と一部対象外の通知、取込の文言、休みのシフトの拒否、目標の全リセットの件数。`CellSheetLogic.WishTabPinnedNote/ExtWishDayKigou/ExtWishDayNote`。`ApplyWishes` は最初の変更でだけ元に戻すの段を積み、変更が無ければ何もしない（Android 3.592.0 の未移植分。旧は空の段と「希望を反映: 0件」が出た）。

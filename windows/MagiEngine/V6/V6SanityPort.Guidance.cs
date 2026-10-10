@@ -157,6 +157,16 @@ public static partial class V6SanityPort
                 $"禁止の並び「{seq}」に{(one ? "希望が" : "希望どうしで")}当たっています。希望は固定なので計算では解消できません",
                 $"{(one ? "この希望" : "いずれか1件の希望")}を取り消すか、禁止の並び「{seq}」を見直してください"));
         }
+        // 1d) 回避の並び(c3mn)の窓がまるごと希望固定。必須ではなく要調整として残る＝案内（Neutral）。
+        foreach (var g in WishAvoidRuns(p))
+        {
+            var seq = string.Join("→", g.Shifts.Select(Sym));
+            var one = g.Days.Count == 1;
+            outList.Add(new SettingIssue(IssueKind.Wish,
+                $"{Nm(g.Staff)} {string.Join("・", g.Days.Select(d => SafeDayLabel(state.StartDate, d)))} 希望「{seq}」",
+                $"回避の並び「{seq}」に{(one ? "希望が" : "希望どうしで")}当たっています。希望は固定なので計算では外せず、要調整として残ります",
+                $"{(one ? "この希望" : "いずれか1件の希望")}を取り消すか、回避の並び「{seq}」を見直してください", Neutral: true));
+        }
 
         // 2) 連続パターン制約の重複（例: c3n:Dﾃ→A4）
         foreach (var d in FindDuplicateSeqConstraints(state))
