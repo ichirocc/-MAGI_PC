@@ -220,4 +220,19 @@ public class ConsultListTest
         Assert.False(vm.Ui.OpNotice.Undoable);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("相談中を済にしました: x"));
     }
+
+    /// <summary>[3.665.0] 回答は 回答待ち→了承→不可。入れ替えの相談は、回答のあとで勤務表か設定が変わると回答待ちに戻す（以前の回答を流用しない）。</summary>
+    [Fact]
+    public void AnswerCyclesAndChainAnswerResetsWhenTheBoardChanges()
+    {
+        Assert.Equal(ConsultAnswer.Agreed, ConsultList.NextAnswer(ConsultAnswer.Pending));
+        Assert.Equal(ConsultAnswer.Pending, ConsultList.NextAnswer(ConsultAnswer.Declined));
+        var wish = new ConsultItem("s", "n", Answer: ConsultAnswer.Agreed);
+        Assert.Equal(ConsultAnswer.Agreed, ConsultList.AnswerOf(wish, 1L, 2L));   // 希望・1 セルの相談は記録どおり
+        var chain = wish with { Chain = new ChainTarget(null, null, "l", BoardKey: 5L, StateKey: 6L) };
+        Assert.Equal(ConsultAnswer.Agreed, ConsultList.AnswerOf(chain, 5L, 6L));
+        Assert.Equal(ConsultAnswer.Pending, ConsultList.AnswerOf(chain, 9L, 6L));
+        Assert.Equal("回答: 回答待ち（回答のあとで勤務表か設定が変わり案の中身が変わるため、以前の「了承」は使いません）", ConsultList.AnswerLine(chain, ConsultAnswer.Pending));
+        Assert.Equal("回答: 了承", ConsultList.AnswerLine(chain, ConsultAnswer.Agreed));
+    }
 }

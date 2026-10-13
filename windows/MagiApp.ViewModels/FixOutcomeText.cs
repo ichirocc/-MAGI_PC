@@ -3,7 +3,8 @@ namespace MagiApp.ViewModels;
 /// <summary>直し方を当てた結果の 1 行（Kotlin <c>FixOutcome</c>）。表示は <c>MagiViewModel.FixOutcomeLine</c>＝盤面か設定が変わったら出さない。</summary>
 /// <param name="Before">当てる前の報告（改善手の適用だけ。内訳 <see cref="FixOutcomeText.Detail"/> に使う）。</param>
 /// <param name="After">当てた後の報告。</param>
-public sealed record FixOutcome(string Line, MagiEngine.V6.ViolationReport? Before = null, MagiEngine.V6.ViolationReport? After = null);
+/// <param name="Tail">内訳のあとに続ける文（月の境目の注記）。</param>
+public sealed record FixOutcome(string Line, MagiEngine.V6.ViolationReport? Before = null, MagiEngine.V6.ViolationReport? After = null, string? Tail = null);
 
 /// <summary>直し方を当てたあと、同じ問題について「どうなったか」を 1 行で返す（Kotlin <c>FixOutcomeText.kt</c>、3.643.0）。</summary>
 public static class FixOutcomeText

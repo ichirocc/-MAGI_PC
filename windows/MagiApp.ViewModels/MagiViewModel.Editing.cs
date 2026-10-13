@@ -1176,6 +1176,21 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>相談中⇄保留（どちらも未解決＝違反は減らさない）。Kotlin <c>toggleConsultHold</c>。</summary>
+    /// <summary>相談の回答を 回答待ち→了承→不可 と切り替える（記録だけ＝勤務表は変えない。Kotlin <c>cycleConsultAnswer</c>）。</summary>
+    public void CycleConsultAnswer(int index)
+    {
+        var l = Ui.Consults;
+        if (index < 0 || index >= l.Count) return;
+        Ui.Consults = l.Select((c, j) => j == index ? c with { Answer = ConsultList.NextAnswer(ConsultAnswerOf(c)) } : c).ToList();
+    }
+
+    /// <summary>いま有効な回答（<see cref="ConsultList.AnswerOf"/>＝入れ替えの相談は案が変わると回答待ち）。</summary>
+    public ConsultAnswer ConsultAnswerOf(ConsultItem c)
+    {
+        var sched = _currentSchedule; var st = _state;
+        return sched is null || st is null ? c.Answer : ConsultList.AnswerOf(c, BoardKey(sched), StateKey(st));
+    }
+
     public void ToggleConsultHold(int index)
     {
         var l = Ui.Consults;

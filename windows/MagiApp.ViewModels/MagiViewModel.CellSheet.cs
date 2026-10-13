@@ -14,12 +14,19 @@ public sealed partial class MagiViewModel
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return new CellStatus(CellSeverity.None, "違反なし");
+        return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, CellProblemFamilies(i, j), labelOf);
+    }
+
+    /// <summary>このセルに重なった問題の族（重い順。状態の 1 行・問題の選択が共有）。</summary>
+    public IReadOnlyList<string> CellProblemFamilies(int i, int j)
+    {
+        var sched = _currentSchedule;
+        if (sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return Array.Empty<string>();
         var cur = sched[i][j];
-        var fams = CellSheetLogic.StatusFamilies(
+        return CellSheetLogic.StatusFamilies(
             CellSheetLogic.SheetCellClasses(GridDisplayMarks.DisplayCellClasses(Ui, $"{i},{j}", GridDisplayMarks.C1DisplayMarks(Ui)), C1ShortageAt(i, j) is not null),
             cur >= 0 ? FamiliesAt(Ui.NeedFamilies, $"{cur},{j}") : Array.Empty<string>(),
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
-        return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, labelOf);
     }
 
     /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先。無ければ空）。</summary>

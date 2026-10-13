@@ -1262,9 +1262,11 @@ public sealed partial class ScheduleView : UserControl
     /// <param name="whenNoFix">手が 0 件のときに理由の下へ足す要素（板挟みの「同じ違反のもう一方のセル」へのボタン）。</param>
     /// <param name="quick">セルのシート＝締切 3 秒（手は 1 件でよい。Kotlin <c>compact</c>）。日×シフト・職員の集計のダイアログは 8 秒。</param>
     /// <param name="cell">セルのシートから来たとき、編集タブの「元の確認へ戻る」の戻り先。</param>
+    /// <param name="problems">セルに重なった問題の族。2 件以上なら、どの問題の直し方を見るかを選ばせ、選んだ族を減らす案だけを出す（Kotlin 3.665.0）。</param>
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
-        Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null)
+        Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null)
     {
+        string? picked = null;
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is null ? null : focus.Day, quick);
         void Start() { if (!_vm.Ui.Running) Find(); }
@@ -1274,6 +1276,17 @@ public sealed partial class ScheduleView : UserControl
             var ui = _vm.Ui;
             host.Children.Clear();
             host.Children.Add(new TextBlock { Text = "直し方", Opacity = 0.8 });
+            if (problems is not null && CellSheetLogic.ProblemChoiceHeading(problems.Count) is { } heading)
+            {
+                host.Children.Add(new TextBlock { Text = heading, TextWrapping = TextWrapping.Wrap });
+                foreach (var f in problems)
+                {
+                    var fam = f;
+                    var b = new ToggleButton { Content = LabelOf(fam), IsChecked = picked == fam, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
+                    b.Click += (_, _) => { picked = picked == fam ? null : fam; Refresh(); };
+                    host.Children.Add(b);
+                }
+            }
             var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key);
             if (state == FixPanelState.WaitCheck) { host.Children.Add(new TextBlock { Text = "計算・チェックが終わると探します。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
@@ -1302,9 +1315,14 @@ public sealed partial class ScheduleView : UserControl
                 host.Children.Add(row);
                 return;
             }
+            if (picked is not null && ui.FixSuggestions.Count > 0 && !ui.FixSuggestions.Any(x => CellSheetLogic.FixAddresses(x, picked)))
+            {
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(LabelOf(picked)), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+                return;
+            }
             if (ui.FixSuggestions.Count > 0)
             {
-                foreach (var sug in ui.FixSuggestions.Take(quick ? 1 : 3))
+                foreach (var sug in ui.FixSuggestions.Where(x => CellSheetLogic.FixAddresses(x, picked)).Take(quick ? 1 : 3))
                 {
                     var (hardLine, caution) = NextActionGuide.FixImpactLines(sug, LabelOf);
                     host.Children.Add(new TextBlock { Text = sug.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
@@ -1794,7 +1812,7 @@ public sealed partial class ScheduleView : UserControl
         }
         else if (mode != 1 && status.Severity != CellSeverity.None)
         {
-            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j)));
+            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j), problems: _vm.CellProblemFamilies(i, j)));
         }
         if (mode == 1 && wish is not null)
         {

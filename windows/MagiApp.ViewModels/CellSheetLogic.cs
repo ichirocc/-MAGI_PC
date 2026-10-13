@@ -571,4 +571,13 @@ public static class CellSheetLogic
         : "";
 
     public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name} {DayText.Short(startDate, day)} を{symbol}に変更しました";
+
+    /// <summary>1 つのセルに重なった問題の見出し（Kotlin <c>problemChoiceHeading</c>、仕様 §3-2・§5、3.665.0）。2 件以上のときだけ。</summary>
+    public static string? ProblemChoiceHeading(int n) => n >= 2 ? $"この勤務に関係する問題が {n} 件あります。どの問題の直し方を確認しますか？" : null;
+
+    /// <summary>選んだ問題（族）を減らす案か。family が null＝選んでいない（すべての案）。</summary>
+    public static bool FixAddresses(FixSuggestion s, string? family) => family is null || s.Diff.Any(d => d.Family == family && d.Delta < 0);
+
+    /// <summary>選んだ問題を減らす案が無いとき（ほかの問題の案はある）。</summary>
+    public static string NoFixForProblemLine(string label) => $"選んだ問題（{label}）を減らす案は見つかりませんでした。ほかの問題を選ぶと、その直し方を確認できます。";
 }
