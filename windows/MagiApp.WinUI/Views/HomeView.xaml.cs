@@ -98,6 +98,10 @@ public sealed partial class HomeView : UserControl
             text.Children.Add(new TextBlock { Text = (c.Held ? $"【{ConsultList.HeldLabel}】" : "") + c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
             text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (note is not null) text.Children.Add(new TextBlock { Text = note, FontSize = 13, Foreground = BrushOf("MagiErrorBrush"), TextWrapping = TextWrapping.Wrap });
+            // 回答は記録だけ（了承でも違反は減らさない）。押すたびに 回答待ち→了承→不可（Kotlin ConsultCard）。
+            var answer = new HyperlinkButton { Content = ConsultList.AnswerLine(c, _vm.ConsultAnswerOf(c)), MinHeight = 44, Padding = new Thickness(0) };
+            answer.Click += (_, _) => _vm.CycleConsultAnswer(idx);
+            text.Children.Add(answer);
             row.Children.Add(text);
             if (cell is { } cc)
             {

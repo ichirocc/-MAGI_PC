@@ -443,4 +443,17 @@ public class CellSheetLogicTest
         Assert.Equal(1, CellSheetLogic.PeekPickCount(40));
         Assert.Equal(4, CellSheetLogic.PeekPickCount(800));
     }
+
+    /// <summary>[3.665.0] 重なった問題が 2 件以上なら選ばせ、選んだ族を減らす案だけを出す（仕様 §3-2・§5）。</summary>
+    [Fact]
+    public void ProblemChoiceFiltersFixesByFamily()
+    {
+        Assert.Null(CellSheetLogic.ProblemChoiceHeading(1));
+        Assert.Equal("この勤務に関係する問題が 2 件あります。どの問題の直し方を確認しますか？", CellSheetLogic.ProblemChoiceHeading(2));
+        var s = new FixSuggestion(FixKind.Change, Array.Empty<FixCell>(), "l", -1, -1, new (string, int)[] { ("c3n", -1), ("c1", 1) });
+        Assert.True(CellSheetLogic.FixAddresses(s, null));
+        Assert.True(CellSheetLogic.FixAddresses(s, "c3n"));
+        Assert.False(CellSheetLogic.FixAddresses(s, "c1"));
+        Assert.Equal("選んだ問題（期間の制約）を減らす案は見つかりませんでした。ほかの問題を選ぶと、その直し方を確認できます。", CellSheetLogic.NoFixForProblemLine("期間の制約"));
+    }
 }

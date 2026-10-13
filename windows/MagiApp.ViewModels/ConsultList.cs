@@ -23,7 +23,11 @@ public sealed record ConsultItem(
     bool Held = false,
     int RosterKey = 0,
     int? StaffId = null,
-    bool StaffGone = false);
+    bool StaffGone = false,
+    ConsultAnswer Answer = ConsultAnswer.Pending);
+
+/// <summary>相談の回答（Kotlin <c>ConsultAnswer</c>、3.665.0 利用者決定「セッション内で回答を記録」）。記録だけ＝了承・不可のどちらでも勤務表は変えない。</summary>
+public enum ConsultAnswer { Pending, Agreed, Declined }
 
 /// <summary>複数人の入れ替えの相談が指す枠。日付とシフト記号で持つ＝月の移動・シフトの並び替えのあとも今の勤務表で案を探し直せる。
 /// 枠を持たない案は、その案を出したときの盤面と設定の指紋 <paramref name="BoardKey"/>/<paramref name="StateKey"/> を持つ（3.650.0）。指紋が今と違えば当てない。
@@ -32,6 +36,27 @@ public sealed record ChainTarget(string? Date, string? ShiftSymbol, string Label
 
 public static class ConsultList
 {
+    /// <summary>回答の表示語。</summary>
+    public static string AnswerLabel(ConsultAnswer a) => a switch { ConsultAnswer.Agreed => "了承", ConsultAnswer.Declined => "不可", _ => "回答待ち" };
+
+    /// <summary>押すたびに 回答待ち→了承→不可→回答待ち。</summary>
+    public static ConsultAnswer NextAnswer(ConsultAnswer a) => (ConsultAnswer)(((int)a + 1) % 3);
+
+    /// <summary>
+    /// いま有効な回答（Kotlin <c>consultAnswerOf</c>）。入れ替えの相談は、回答のあとで勤務表か設定が変わると案の中身が変わる＝以前の回答を流用せず
+    /// 「回答待ち」に戻す（仕様 §7）。希望・1 セルの相談は対象が変わらないので記録どおり。
+    /// </summary>
+    public static ConsultAnswer AnswerOf(ConsultItem c, long boardKey, long stateKey)
+    {
+        var t = c.Chain;
+        if (t is null) return c.Answer;
+        return t.BoardKey == 0L || t.BoardKey != boardKey || t.StateKey != stateKey ? ConsultAnswer.Pending : c.Answer;
+    }
+
+    /// <summary>回答の 1 行。記録と有効な回答が違えば（案が変わった）その理由を添える。</summary>
+    public static string AnswerLine(ConsultItem c, ConsultAnswer effective) =>
+        $"回答: {AnswerLabel(effective)}" + (effective != c.Answer ? $"（回答のあとで勤務表か設定が変わり案の中身が変わるため、以前の「{AnswerLabel(c.Answer)}」は使いません）" : "");
+
     public const string Button = "相談事項に登録";
     public const string Done = "相談中";
     public const string HoldButton = "保留する";

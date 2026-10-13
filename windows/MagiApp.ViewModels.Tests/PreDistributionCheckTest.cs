@@ -40,4 +40,15 @@ public class PreDistributionCheckTest
         Assert.Equal("3件（禁止の並び 1件・人員不足 2件）", rows["必須違反"].Value);
         Assert.True(rows["保存"].Ok);
     }
+
+    /// <summary>[3.665.0] 月の境目は評価していないと明示する（前月・翌月の勤務はデータに無い）。注記は窓が月の外へはみ出しうる日を変えたときだけ。</summary>
+    [Fact]
+    public void MonthEdgeIsShownAsNotEvaluated()
+    {
+        Assert.Equal(PreDistributionCheck.MonthEdgeNote, PreDistributionCheck.Rows(Base(), null, L).ToDictionary(r => r.Label)["月の境目"].Value);
+        Assert.True(PreDistributionCheck.MonthEdgeTouched(new[] { 1 }, 31, 3));
+        Assert.True(PreDistributionCheck.MonthEdgeTouched(new[] { 29 }, 31, 3));
+        Assert.False(PreDistributionCheck.MonthEdgeTouched(new[] { 2, 28 }, 31, 3));
+        Assert.False(PreDistributionCheck.MonthEdgeTouched(new[] { 0 }, 31, 1));
+    }
 }
