@@ -32,11 +32,11 @@ public sealed record ChainTarget(string? Date, string? ShiftSymbol, string Label
 
 public static class ConsultList
 {
-    public const string Button = "相談してから決める";
+    public const string Button = "相談事項に登録";
     public const string Done = "相談中";
     public const string HoldButton = "保留する";
     public const string HeldLabel = "保留中";
-    public const string Added = "ホームの「相談中」に追加しました";
+    public const string Added = "ホームの「相談中」に登録しました（記録だけで、本人への連絡や了承にはなりません）";
     public const string Duplicate = "この内容は、すでにホームの「相談中」に登録されています";
     public const string Open = "開く";
     public const string Resume = "案を見る";

@@ -22,6 +22,15 @@ public class ChainFixPreviewTest
         Assert.Equal("増える要調整: 人員過剰 +1", caution);
     }
 
+    /// <summary>[3.664.0/仕様 §4・§5] 記号に登録された勤務名を併記し、希望があるセルは希望どおりか違うかを添える（了承済みとは言わない）。</summary>
+    [Fact]
+    public void RowsCarryShiftNamesAndWishImpact()
+    {
+        var p = ChainFixPreview.Of(S(), Snap, new[] { "甲", "乙", "丙" }, new[] { "休", "日", "夜" }, "2026-10-01",
+            new[] { "休み", "日勤", "夜" }, new Dictionary<string, int> { ["0,2"] = 2, ["2,2"] = 2 });
+        Assert.Equal(new[] { "甲 10/3 日（日勤） → 夜・希望どおり", "丙 10/3 休（休み） → 日（日勤）・希望（夜）と異なる勤務になります", "乙 10/1 日（日勤） → 夜" }, p.Changes);
+    }
+
     [Fact]
     public void NamesFallBackWhenTheUiHasNone()
     {

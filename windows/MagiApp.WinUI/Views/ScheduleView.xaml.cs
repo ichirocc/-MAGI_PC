@@ -1310,7 +1310,7 @@ public sealed partial class ScheduleView : UserControl
                     host.Children.Add(new TextBlock { Text = sug.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                     host.Children.Add(new TextBlock { Text = hardLine, TextWrapping = TextWrapping.Wrap });
                     if (caution is not null) host.Children.Add(new TextBlock { Text = caution, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-                    var use = new Button { Content = "この手を使う（元に戻せます）", MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right };
+                    var use = new Button { Content = $"{ChainFixPreview.ApplyChangeButton}（元に戻せます）", MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right };
                     var chosen = sug;
                     // 2 セル以上の手は当てる前に一覧のダイアログ（MainWindow）が出る＝このダイアログが閉じ切ってから呼ぶ（ContentDialog は同時に 1 つ）。
                     use.Click += (_, _) => { registerClosed(() => _vm.PreviewOrApplyFix(chosen)); hide(); };

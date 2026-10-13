@@ -238,7 +238,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate) with
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, _state?.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
             { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os) };
     }
 
