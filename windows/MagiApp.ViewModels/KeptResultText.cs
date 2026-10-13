@@ -21,11 +21,19 @@ public static class KeptResultText
         : "同じ点数のため";
 
     public static string Screen(Score now, Score prev) =>
-        $"前回の結果を維持します。今回（{Parts(now)}）は前回（{Parts(prev)}）より改善しませんでした（{Reason(now, prev)}。比べる順＝必須→重み→合計）。";
+        $"改善が確認できなかったため、前回の勤務表を維持しました。今回（{Parts(now)}）は前回（{Parts(prev)}）より改善しませんでした（{Reason(now, prev)}。比べる順＝必須→重み→合計）。";
 
     public static string Log(string prefix, Score now, Score prev) =>
         $"{prefix}: 今回 {Parts(now)} は前回 {Parts(prev)} 以下に改善せず（{Reason(now, prev)}）→ 前回を維持";
 
     /// <summary>維持の文言に理由を1文足す（入口で上限0のセルを外して必須が増えたとき等）。</summary>
     public static string WithNote(string text, string? note) => note is null ? text : $"{text} {note}";
+}
+
+/// <summary>計算が終わったときの通知（Kotlin <c>completedText</c>、判断支援 UX 仕様 §9）。</summary>
+public static class CompletedText
+{
+    public static string Of(int hard, int total, string how) =>
+        hard == 0 ? $"計算が完了しました{how}。登録された必須違反0件・配布前確認へ（違反の合計 {total}件）"
+                  : $"計算が完了しました{how}。必須違反 {hard}件・違反の合計 {total}件";
 }

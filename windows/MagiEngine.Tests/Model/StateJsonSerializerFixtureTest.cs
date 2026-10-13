@@ -36,7 +36,8 @@ public class StateJsonSerializerFixtureTest
         var reJson = StateJsonSerializer.Serialize(state1, ToJagged(state1.Schedule));
         var state2 = StateJsonSerializer.Parse(reJson);
 
-        AssertStatesEqual(state1, state2);
+        // 全体保存も古い評価情報（DerivedKeys）は書き戻さない（Android 3.659.1）。
+        AssertStatesEqual(state1, state2, ignoreExtrasKeys: DerivedKeys);
     }
 
     [Theory]

@@ -493,6 +493,11 @@ public sealed partial class MagiViewModel
         if (sched is null) return;
         // [3.416.0/方針「休は通常のシフト定義」] 旧: 休シフトの削除を入口で拒否（3.106.0）。撤廃＝
         //   休も他シフトと同じ編集規則。削除セルは残りの一覧の「休」（無ければ先頭シフト）へ。
+        if (Ws1Ops.GroupLeftWithoutShift(st, k) is int g)
+        {
+            Notify($"「{OpSy(k)}」は削除できません（{(g < st.Groups.Count ? st.Groups[g].Name : "あるグループ")}が担当できるシフトがこれだけのため）。先にそのグループにほかのシフトを担当させてから削除してください", "W");
+            return;
+        }
         LogOp("I", $"シフト削除: {OpSy(k)}（このシフトのマスは休（無ければ先頭シフト）へ・希望も削除）");
         ApplyStructure(Ws1Ops.RemoveShift(st, sched, k));
     }

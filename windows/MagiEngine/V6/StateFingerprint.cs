@@ -47,9 +47,12 @@ public static class StateFingerprint
         Mix(st.Use2Patterns ? 1 : 0);
 
         // [外部レビュー N2] Role（休みとして扱う）も読む。旧: 休みの付け替え・OFFだけの変更で指紋が変わらなかった。
+        Mix(12); Mix(st.Shifts.Count);
         foreach (var sh in st.Shifts) { Txt(sh.Name); Txt(sh.Kigou); Txt(sh.Need1); Txt(sh.Need2); Mix((long)sh.Role); }
-        foreach (var g in st.Groups) { Txt(g.Name); Txt(g.Kigou); }
-        foreach (var g in st.SkillGroups) { Txt(g.Name); Txt(g.Kigou); }
+        // 一覧ごとに識別子と件数を混ぜる。旧: グループとスキルグループの境界が無く、1 件を一方から他方へ移しても指紋が一致した。
+        Mix(13); Mix(st.Groups.Count); foreach (var g in st.Groups) { Txt(g.Name); Txt(g.Kigou); }
+        Mix(14); Mix(st.SkillGroups.Count); foreach (var g in st.SkillGroups) { Txt(g.Name); Txt(g.Kigou); }
+        Mix(15); Mix(st.StaffList.Count);
         foreach (var p in st.StaffList) { Txt(p.Name); Mix(p.GroupIdx); Mix(p.SkillIdx); }
 
         // [3.333.0/外部レビュー] 行の境界を混ぜる。旧は行を素通しで連結していたので
@@ -63,7 +66,9 @@ public static class StateFingerprint
         Mix(9); Mix(st.NeedDay1.Count); foreach (var kv in st.NeedDay1.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
         Mix(10); Mix(st.NeedDay2.Count); foreach (var kv in st.NeedDay2.OrderBy(e => e.Key, StringComparer.Ordinal)) { Txt(kv.Key); Txt(kv.Value); }
 
+        Mix(16); Mix(st.Cons1.Count);
         foreach (var c in st.Cons1) { Txt(c.Day1); Txt(c.ShiftKigou); Txt(c.Day2); }
+        Mix(17); Mix(st.Cons2.Count);
         foreach (var c in st.Cons2) { Txt(c.ShiftKigou); Txt(c.Count); }
 
         // 連続パターンは行の長さが可変。行の境界を入れないと [["A","B"]] と [["A"],["B"]] が衝突する。

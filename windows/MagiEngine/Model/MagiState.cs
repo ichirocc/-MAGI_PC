@@ -33,8 +33,31 @@ public sealed record Group(string Name, string Kigou);
 /// StaffList[i]: GroupIdx -&gt; ユニットグループ(既存・担当可否/covU)、
 /// SkillIdx -&gt; スキルグループ(新設・新C41s/C42s専用)。
 /// SkillIdx の既定は -1＝未所属（backlog#38。0 は先頭のスキルグループ）。
+/// <paramref name="Id"/> は不変の職員 ID（1 以上。0＝未採番）＝並び替え・改名・同名でも同じ人を指す。採番は <see cref="StaffIds.WithStaffIds"/>。
 /// </summary>
-public sealed record Staff(string Name, int GroupIdx, int SkillIdx = -1);
+public sealed record Staff(string Name, int GroupIdx, int SkillIdx = -1, int Id = 0);
+
+/// <summary>職員 ID の採番（Kotlin <c>withStaffIds</c>/<c>nextStaffId</c> と 1 対 1）。</summary>
+public static class StaffIds
+{
+    /// <summary>無い・重複・0 以下の職員 ID に、並び順で最大値＋1 から振る（先に現れた有効な ID はそのまま）。</summary>
+    public static IReadOnlyList<Staff> WithStaffIds(IReadOnlyList<Staff> staff)
+    {
+        var next = staff.Count == 0 ? 0 : Math.Max(0, staff.Max(s => s.Id));
+        var seen = new HashSet<int>();
+        var changed = false;
+        var outList = new List<Staff>(staff.Count);
+        foreach (var s in staff)
+        {
+            if (s.Id > 0 && seen.Add(s.Id)) { outList.Add(s); continue; }
+            changed = true; next++; seen.Add(next); outList.Add(s with { Id = next });
+        }
+        return changed ? outList : staff;
+    }
+
+    /// <summary>次に足す職員の ID（今の最大値＋1）。</summary>
+    public static int NextStaffId(IReadOnlyList<Staff> staff) => (staff.Count == 0 ? 0 : Math.Max(0, staff.Max(s => s.Id))) + 1;
+}
 
 public sealed record Range(string Lo, string Hi);
 

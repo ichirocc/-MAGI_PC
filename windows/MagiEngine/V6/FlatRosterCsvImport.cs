@@ -200,7 +200,7 @@ public static class FlatRosterCsvImport
             EndDate: end,
             Shifts: shiftsOut,
             Groups: groupsOut,
-            StaffList: staffOut,
+            StaffList: StaffIds.WithStaffIds(staffOut),
             Use2Patterns: false,
             GroupShift: groupsOut.Select(_ => (IReadOnlyList<int>)Enumerable.Repeat(1, k2).ToList()).ToList(),
             GroupShiftApt: groupsOut.Select(_ => (IReadOnlyList<string>)Enumerable.Repeat("", k2).ToList()).ToList(),

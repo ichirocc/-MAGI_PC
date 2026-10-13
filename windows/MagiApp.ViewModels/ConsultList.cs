@@ -11,13 +11,18 @@ namespace MagiApp.ViewModels;
 /// 対象は氏名と実日付でも持つ＝職員の削除・並び替えや月の移動のあとに別の人・別の日を開かない（3.646.0、外部レビュー B01/B02）。
 /// <paramref name="Staff"/>/<paramref name="Day"/> は積んだときの位置（氏名・日付が一致するときの近道）。<paramref name="RosterKey"/> は積んだときの
 /// 職員の並び（<see cref="ConsultList.RosterKeyOf"/>、0＝不明）＝同じ名前の職員が複数いるとき、並びが変わっていなければ位置を信じる（3.650.0）。
+/// <paramref name="StaffId"/> は積んだときの職員 ID（<see cref="MagiEngine.Model.Staff.Id"/>）＝あれば対象はこれだけで引く（並び替え・改名・同名でも元の人。
+/// 見つからなければ開かない）。氏名・<paramref name="RosterKey"/> での引き直しは ID の無い相談だけの後備え。
+/// <paramref name="StaffGone"/> は名簿の変更で ID が一度消えた印＝あとで同じ番号が別の人に振られても結ばない（削除した人が最大の ID だと次の追加で再び使われる）。
 /// Kotlin <c>ui/ConsultList.kt</c> と 1 対 1。
 /// </summary>
 public sealed record ConsultItem(
     string Subject, string Note, int? Staff = null, int? Day = null,
     string? StaffName = null, string? Date = null,
     ChainTarget? Chain = null,
-    int RosterKey = 0);
+    int RosterKey = 0,
+    int? StaffId = null,
+    bool StaffGone = false);
 
 /// <summary>複数人の入れ替えの相談が指す枠。日付とシフト記号で持つ＝月の移動・シフトの並び替えのあとも今の勤務表で案を探し直せる。
 /// 枠を持たない案は、その案を出したときの盤面と設定の指紋 <paramref name="BoardKey"/>/<paramref name="StateKey"/> を持つ（3.650.0）。指紋が今と違えば当てない。
@@ -57,10 +62,17 @@ public static class ConsultList
     /// <c>rosterKeyOf</c>＝<c>List.hashCode()</c> と同じ値（<see cref="EditPick.RosterOf"/>）。</summary>
     public static int RosterKeyOf(IReadOnlyList<string> staffNames) => EditPick.RosterOf(staffNames) is var h && h != 0 ? h : 1;
 
-    /// <summary>相談の職員を今の一覧で探す。氏名があればそれで（積んだときの位置が同じ氏名なら近道）、無ければ位置だけ。
+    /// <summary>相談の職員を今の一覧で探す。職員 ID があればそれだけで（今の一覧に無ければ null＝別の人に結ばない）。
+    /// ID が無ければ氏名で（積んだときの位置が同じ氏名なら近道）、氏名も無ければ位置だけ。
     /// 同じ名前が複数いれば氏名では区別できない＝積んだときと並びが同じときだけ位置を信じ、それ以外は開かない（3.650.0）。</summary>
-    public static int? ConsultStaff(ConsultItem c, IReadOnlyList<string> staffNames)
+    public static int? ConsultStaff(ConsultItem c, IReadOnlyList<string> staffNames, IReadOnlyList<int>? staffIds = null)
     {
+        if (c.StaffGone) return null;
+        if (c.StaffId is { } id && staffIds is { Count: > 0 })
+        {
+            for (var i = 0; i < staffIds.Count; i++) if (staffIds[i] == id) return i;
+            return null;
+        }
         if (c.StaffName is not { } name) return c.Staff is { } s && s >= 0 && s < staffNames.Count ? s : null;
         if (staffNames.Count(x => x == name) > 1)
             return c.Staff is { } a && c.RosterKey != 0 && c.RosterKey == RosterKeyOf(staffNames) && a >= 0 && a < staffNames.Count && staffNames[a] == name ? a : null;
@@ -77,9 +89,9 @@ public static class ConsultList
     }
 
     /// <summary>相談の対象セル（職員, 日）。氏名が今の一覧になければ null、日付が今の期間の外なら null＝「開く」を出さない。</summary>
-    public static (int I, int J)? ConsultCell(ConsultItem c, string startDate, IReadOnlyList<string> staffNames, int days)
+    public static (int I, int J)? ConsultCell(ConsultItem c, string startDate, IReadOnlyList<string> staffNames, int days, IReadOnlyList<int>? staffIds = null)
     {
-        if (ConsultStaff(c, staffNames) is not { } i) return null;
+        if (ConsultStaff(c, staffNames, staffIds) is not { } i) return null;
         if (ConsultDay(c, startDate, days) is not { } j) return null;
         return (i, j);
     }
@@ -93,17 +105,40 @@ public static class ConsultList
         return null;
     }
 
-    /// <summary>
-    /// [3.651.0/外部レビュー] 職員の改名に相談の対象を追従させる（職員 ID はデータ項目に無いので、名簿が変わった時点で氏名を書き換える）。
-    /// 人数が同じで 1 か所だけ名前が変わった＝改名とみなす（並び替えは 2 か所以上、追加・削除は人数が変わる＝氏名で引き直す既存の規則のまま）。
-    /// 改名前の名簿で引けた相談は、同じ位置の今の名前と今の名簿の指紋に書き換える（改名で位置は動かない＝別の人の改名でも同名の区別を保つ）。
-    /// </summary>
-    public static IReadOnlyList<ConsultItem> FollowRenameInConsults(IReadOnlyList<ConsultItem> items, IReadOnlyList<string> before, IReadOnlyList<string> after)
+    /// <summary>積むときに対象の職員 ID を付ける（位置と氏名が今の一覧と合うときだけ。ID の無いデータ＝0 は付けない）。</summary>
+    public static ConsultItem StampStaffId(ConsultItem c, IReadOnlyList<string> staffNames, IReadOnlyList<int> staffIds)
     {
-        if (items.Count == 0 || before.Count != after.Count || Enumerable.Range(0, before.Count).Count(i => before[i] != after[i]) != 1) return items;
+        if (c.Staff is not { } at || c.StaffId is not null || c.Chain is not null) return c;
+        if (c.StaffName is not null && (at < 0 || at >= staffNames.Count || staffNames[at] != c.StaffName)) return c;
+        if (at < 0 || at >= staffIds.Count || staffIds[at] <= 0) return c;
+        return c with { StaffId = staffIds[at] };
+    }
+
+    /// <summary>
+    /// 名簿が変わったら相談の表示用の氏名と位置を今に合わせる。ID を持つ相談は ID で引き、見つかれば今の氏名・位置へ
+    /// （削除で見つからなければ <see cref="ConsultItem.StaffGone"/>＝以後は開かず、元の氏名で案内する）。
+    /// ID の無い相談だけ [3.651.0] の改名の後備え: 人数が同じで 1 か所だけ名前が変わった＝改名とみなし、改名前の名簿で引けた相談を
+    /// 同じ位置の今の名前と今の名簿の指紋に書き換える（並び替えは 2 か所以上、追加・削除は人数が変わる＝氏名で引き直す）。
+    /// </summary>
+    public static IReadOnlyList<ConsultItem> FollowRenameInConsults(IReadOnlyList<ConsultItem> items, IReadOnlyList<string> before, IReadOnlyList<string> after, IReadOnlyList<int>? afterIds = null)
+    {
+        if (items.Count == 0) return items;
+        var renamed = before.Count == after.Count && Enumerable.Range(0, before.Count).Count(i => before[i] != after[i]) == 1;
         var roster = RosterKeyOf(after);
-        return items.Select(c => c.StaffName is not null && ConsultStaff(c, before) is { } at
-            ? c with { StaffName = after[at], Staff = at, RosterKey = roster } : c).ToList();
+        return items.Select(c =>
+        {
+            if (c.StaffGone) return c;
+            if (c.StaffId is { } id && afterIds is { Count: > 0 })
+            {
+                var at = -1;
+                for (var i = 0; i < afterIds.Count; i++) if (afterIds[i] == id) { at = i; break; }
+                if (at < 0) return c with { StaffGone = true };
+                return c.Staff == at && c.StaffName == after[at] ? c : c with { StaffName = after[at], Staff = at };
+            }
+            if (renamed && c.StaffName is not null && ConsultStaff(c, before) is { } bt)
+                return c with { StaffName = after[bt], Staff = bt, RosterKey = roster };
+            return c;
+        }).ToList();
     }
 
     /// <summary>積んだ案が今の勤務表・設定で出したものと違うか（指紋が無い・違う＝当てずに探し直しを促す）。枠を持つ相談は探し直すので関係しない。</summary>
@@ -115,7 +150,7 @@ public static class ConsultList
         ConsultChainTarget(t, startDate, shiftSymbols, days) is not null || t.Suggestion is not null;
 
     /// <summary>「開く」「案を見る」を出せない理由（対象をもともと持たない相談は null＝何も出さない）。</summary>
-    public static string? ConsultTargetNote(ConsultItem c, string startDate, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, int days)
+    public static string? ConsultTargetNote(ConsultItem c, string startDate, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, int days, IReadOnlyList<int>? staffIds = null)
     {
         if (c.Chain is { } t)
         {
@@ -123,10 +158,11 @@ public static class ConsultList
             return $"いまの期間・シフトにない枠なので、案を見られません（{(t.Date is { } d ? ShortDate(d) : "?")} の「{t.ShiftSymbol ?? "?"}」）";
         }
         if (c.Staff is null && c.StaffName is null && c.Day is null && c.Date is null) return null;
-        if (ConsultCell(c, startDate, staffNames, days) is not null) return null;
-        if (ConsultStaff(c, staffNames) is null)
+        if (ConsultCell(c, startDate, staffNames, days, staffIds) is not null) return null;
+        if (ConsultStaff(c, staffNames, staffIds) is null)
         {
-            if (c.StaffName is { } dn && staffNames.Count(x => x == dn) > 1) return $"同じ名前の職員が複数いて、どの人か決められないので開けません（{dn}さん）";
+            var byId = c.StaffGone || (c.StaffId is not null && staffIds is { Count: > 0 });
+            if (!byId && c.StaffName is { } dn && staffNames.Count(x => x == dn) > 1) return $"同じ名前の職員が複数いて、どの人か決められないので開けません（{dn}さん）";
             return "いまの職員一覧にいないので開けません" + (c.StaffName is { } n ? $"（{n}さん）" : "");
         }
         return "いまの期間にない日なので開けません" + (c.Date is { } dd ? $"（{ShortDate(dd)}）" : "");

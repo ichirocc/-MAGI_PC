@@ -125,6 +125,58 @@ public class ConsultListTest
         Assert.Equal((2, 11), ConsultList.ConsultCell(Assert.Single(ConsultList.FollowRenameInConsults(new[] { d }, dup, dupAfter)), "2026-10-01", dupAfter, 31));
     }
 
+    /// <summary>[UX-02] 同名の職員を並び替えても、相談の対象は職員 ID で元の人を指す（2026-10-13 ユーザー決定）。</summary>
+    [Fact]
+    public void SameNamedStaffKeepTheTargetByIdAfterReordering()
+    {
+        var names = new[] { "佐藤", "甲", "佐藤" };
+        var ids = new[] { 4, 7, 9 };
+        var c = ConsultList.StampStaffId(ConsultList.Wish("佐藤", "10/12", "夜", "r", 2, 11, "2026-10-12"), names, ids);
+        Assert.Equal(9, c.StaffId);
+        var reNames = new[] { "佐藤", "佐藤", "甲" };
+        var reIds = new[] { 9, 4, 7 };
+        Assert.Equal((0, 11), ConsultList.ConsultCell(c, "2026-10-01", reNames, 31, reIds));   // 並び替え後も元の人（ID 9）
+        Assert.Null(ConsultList.ConsultTargetNote(c, "2026-10-01", reNames, Array.Empty<string>(), 31, reIds));
+        var followed = Assert.Single(ConsultList.FollowRenameInConsults(new[] { c }, names, reNames, reIds));
+        Assert.Equal(0, followed.Staff);
+        Assert.Equal((0, 11), ConsultList.ConsultCell(followed, "2026-10-01", reNames, 31, reIds));
+    }
+
+    [Fact]
+    public void RenameFollowsByIdEvenWhenTheRosterAlsoMoves()
+    {
+        var c = ConsultList.StampStaffId(ConsultList.Wish("乙", "10/12", "夜", "r", 1, 11, "2026-10-12"), new[] { "甲", "乙", "丙" }, new[] { 1, 2, 3 });
+        var after = new[] { "乙子", "甲", "丙" };
+        var afterIds = new[] { 2, 1, 3 };
+        var f = Assert.Single(ConsultList.FollowRenameInConsults(new[] { c }, new[] { "甲", "乙", "丙" }, after, afterIds));
+        Assert.Equal("乙子", f.StaffName);
+        Assert.Equal((0, 11), ConsultList.ConsultCell(f, "2026-10-01", after, 31, afterIds));
+    }
+
+    /// <summary>対象が削除されたら開かない。あとで同じ ID が別の人に振られても結ばない。</summary>
+    [Fact]
+    public void ARemovedStaffIsNeverReboundToSomeoneElse()
+    {
+        var c = ConsultList.StampStaffId(ConsultList.Wish("乙", "10/12", "夜", "r", 1, 11, "2026-10-12"), new[] { "甲", "乙" }, new[] { 1, 2 });
+        Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "甲", "乙" }, 31, new[] { 1, 5 }));
+        Assert.Equal("いまの職員一覧にいないので開けません（乙さん）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲", "乙" }, Array.Empty<string>(), 31, new[] { 1, 5 }));
+        var gone = Assert.Single(ConsultList.FollowRenameInConsults(new[] { c }, new[] { "甲", "乙" }, new[] { "甲" }, new[] { 1 }));
+        Assert.True(gone.StaffGone);
+        var reused = Assert.Single(ConsultList.FollowRenameInConsults(new[] { gone }, new[] { "甲" }, new[] { "甲", "乙" }, new[] { 1, 2 }));
+        Assert.Null(ConsultList.ConsultCell(reused, "2026-10-01", new[] { "甲", "乙" }, 31, new[] { 1, 2 }));   // 同じ番号・同じ名前の新しい人にも結ばない
+        Assert.Equal("いまの職員一覧にいないので開けません（乙さん）", ConsultList.ConsultTargetNote(reused, "2026-10-01", new[] { "甲", "乙" }, Array.Empty<string>(), 31, new[] { 1, 2 }));
+    }
+
+    [Fact]
+    public void StampingNeedsAMatchingRowAndAPositiveId()
+    {
+        var c = ConsultList.Wish("乙", "10/12", "夜", "r", 1, 11);
+        Assert.Null(ConsultList.StampStaffId(c, new[] { "甲", "丙" }, new[] { 1, 2 }).StaffId);   // 名前が位置と合わない
+        Assert.Null(ConsultList.StampStaffId(c, new[] { "甲", "乙" }, new[] { 0, 0 }).StaffId);   // ID の無い名簿（0）
+        Assert.Null(ConsultList.StampStaffId(ConsultList.Shortage("10/12", "夜", Array.Empty<string>()), new[] { "甲" }, new[] { 1 }).StaffId);   // 対象の職員を持たない相談
+        Assert.Equal((1, 11), ConsultList.ConsultCell(c, "2026-10-01", new[] { "甲", "乙" }, 31, new[] { 0, 0 }));   // ID の無い相談は氏名で引く
+    }
+
     /// <summary>[3.650.0/外部レビュー] 積んだ案は出したときの盤面と設定の指紋を持ち、今と違えば当てない（枠を持つ相談は探し直すので関係しない）。</summary>
     [Fact]
     public void ASavedSuggestionIsStaleOnceTheBoardOrSettingsChange()

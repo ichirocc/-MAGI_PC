@@ -367,7 +367,9 @@ public static class Ws1Ops
         int k = state.Shifts.Count;
         int? rest = ScheduleUtil.RestShiftIndex(state);
         var groups = state.Groups.Append(new Group(name, kigou)).ToList();
-        var newRow = Enumerable.Range(0, k).Select(idx => idx == rest ? 1 : 0).ToList();
+        // 休みの役割が無ければ先頭シフトを担当にする（全 OFF のグループは保存後の読み込みで拒否される）。
+        var allow = rest ?? 0;
+        var newRow = Enumerable.Range(0, k).Select(idx => idx == allow ? 1 : 0).ToList();
         var gs = state.GroupShift.Append((IReadOnlyList<int>)newRow).ToList();
         IReadOnlyList<IReadOnlyList<string>> apt;
         if (state.GroupShiftApt.Count == 0)
@@ -422,7 +424,7 @@ public static class Ws1Ops
     {
         int t = sched.Length > 0 ? sched[0].Length : state.DayCount;
         int gi = Math.Clamp(groupIdx, 0, Math.Max(state.Groups.Count - 1, 0));
-        var staff = state.StaffList.Append(new Staff(name, gi)).ToList();
+        var staff = state.StaffList.Append(new Staff(name, gi, Id: StaffIds.NextStaffId(state.StaffList))).ToList();
         int fill = FillShift(GetOrNull(state.GroupShift, gi), ScheduleUtil.RestShiftIndex(state));
         var copied = sched.Copy2D();
         var newSched = new int[copied.Length + 1][];
@@ -623,9 +625,19 @@ public static class Ws1Ops
     ///  groupShift/apt lose column k; needDay (axis k) and staffRange (axis k) re-indexed. Constraints
     ///  referencing the removed kigou simply stop resolving (kept verbatim). No-op only if it's the
     ///  last remaining shift（[3.416.0/方針「休は通常のシフト定義」] 旧: 休シフト自体の削除も禁止していたが撤廃済み）。</summary>
+    /// <summary>シフト <paramref name="k"/> を消すと担当できるシフトが無くなるグループの index（無ければ null）。</summary>
+    public static int? GroupLeftWithoutShift(MagiState state, int k)
+    {
+        for (var g = 0; g < state.GroupShift.Count; g++)
+            if (!state.GroupShift[g].Where((_, i) => i != k).Any(v => v == 1)) return g;
+        return null;
+    }
+
     public static Ws1Result RemoveShift(MagiState state, int[][] sched, int k)
     {
         if (k < 0 || k >= state.Shifts.Count || state.Shifts.Count <= 1) return new Ws1Result(state, sched);
+        // 唯一の担当シフトを消すと、そのグループの職員は担当ゼロ＝読み込みで拒否される状態になる。
+        if (GroupLeftWithoutShift(state, k) is not null) return new Ws1Result(state, sched);
         var shifts = state.Shifts.Where((_, i) => i != k).ToList();
         // [3.416.0/方針「休は通常のシフト定義」] 旧: 休シフト自体の削除を no-op で禁止（3.106.0）していたが
         //   撤廃＝休も他シフトと同じ編集規則。削除セルの行き先は**削除後の一覧**で解決した既定シフト
@@ -714,7 +726,7 @@ public static class Ws1Ops
         var staff = state.StaffList.Select(s =>
         {
             int ni = s.GroupIdx == g ? 0 : (s.GroupIdx > g ? s.GroupIdx - 1 : s.GroupIdx); // 所属者は先頭グループへ移動
-            return ni == s.GroupIdx ? s : new Staff(s.Name, ni, s.SkillIdx);
+            return ni == s.GroupIdx ? s : s with { GroupIdx = ni };
         }).ToList();
         return state with { Groups = groups, GroupShift = gs, GroupShiftApt = apt, StaffList = staff };
     }

@@ -84,10 +84,10 @@ public sealed partial class HomeView : UserControl
         {
             var c = ui.Consults[i];
             var idx = i;
-            // 対象は氏名と実日付で今のデータに引き直す（月を移した・職員を消した・並べ替えたあとに別のセルを開かない。3.646.0 B01/B02）。
-            var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days) : null;
+            // 対象は職員 ID（無ければ氏名）と実日付で今のデータに引き直す（月を移した・職員を消した・並べ替えたあとに別のセルを開かない。3.646.0 B01/B02）。
+            var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days, ui.StaffIds) : null;
             var chainOk = c.Chain is { } t && ConsultList.ConsultChainResumable(t, ui.StartDate, ui.ShiftSymbols, ui.Days);
-            var note = ConsultList.ConsultTargetNote(c, ui.StartDate, ui.StaffNames, ui.ShiftSymbols, ui.Days);
+            var note = ConsultList.ConsultTargetNote(c, ui.StartDate, ui.StaffNames, ui.ShiftSymbols, ui.Days, ui.StaffIds);
             var row = new Grid { ColumnSpacing = 8 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -188,9 +188,9 @@ public sealed partial class HomeView : UserControl
             headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須条件を満たしました。中身を確認して配ってください。") + (ui.RunSummary is { } rs
                 ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
-            bigLabel = "印刷・書き出し"; bigEnabled = true; helperLabel = "中身を見る";
+            bigLabel = "配布前確認"; bigEnabled = true; helperLabel = "中身を見る";
             phase = "完成"; phaseHex = MagiAccent.Green;
-            _bigAction = () => _ = _window.ExportScheduleCsvAsync(); _helperAction = () => _window.SelectTab("schedule");
+            _bigAction = () => _ = ShowPreDistributionAsync(); _helperAction = () => _window.SelectTab("schedule");
         }
         else if (infeasible && shortfalls.Any(s => s.WishPinned.Count > 0))
         {
@@ -1043,5 +1043,21 @@ public sealed partial class HomeView : UserControl
             row.Children.Add(apply);
             AlternativesListHost.Children.Add(row);
         }
+    }
+
+    /// <summary>配布前確認（仕様 §10、Kotlin <c>PreDistributionDialog</c>）。配るかどうかは利用者が決める。</summary>
+    private async System.Threading.Tasks.Task ShowPreDistributionAsync()
+    {
+        var rows = PreDistributionCheck.Rows(_vm.Ui, _vm.CsvSavedLine(), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k);
+        var panel = new StackPanel { Spacing = 8 };
+        foreach (var r in rows)
+            panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Text = $"{r.Label}：" + (r.Ok == true ? "✓ " : r.Ok == false ? "! " : "") + r.Value });
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Text = PreDistributionCheck.Note });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = "配布前確認", Content = new ScrollViewer { Content = panel },
+            PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Close,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await _window.ExportScheduleCsvAsync();
     }
 }

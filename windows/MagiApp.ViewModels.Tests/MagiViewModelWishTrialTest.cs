@@ -369,7 +369,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         vm.Ui.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(UiState.Message) || vm.Ui.Message is not { } m) return;
-            if (m.StartsWith("勤務表ができました", StringComparison.Ordinal)) throw new InvalidOperationException("adopted");
+            if (m.StartsWith("計算が完了しました", StringComparison.Ordinal)) throw new InvalidOperationException("adopted");
             if (m.StartsWith("勤務表の作成は終わりましたが", StringComparison.Ordinal) && lateSeen++ == 0) throw new InvalidOperationException("redraw");
         };
         vm.RunV6FullOptimize();
