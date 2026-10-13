@@ -79,7 +79,8 @@ public sealed partial class HomeView : UserControl
         ConsultCard.Visibility = ui.Consults.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         ConsultListHost.Children.Clear();
         if (ui.Consults.Count == 0) return;
-        ConsultTitle.Text = $"相談中（{ui.Consults.Count}件）";
+        var heldN = ui.Consults.Count(c => c.Held);
+        ConsultTitle.Text = $"相談中（{ui.Consults.Count - heldN}件）" + (heldN > 0 ? $"・保留（{heldN}件）" : "");
         for (var i = 0; i < ui.Consults.Count; i++)
         {
             var c = ui.Consults[i];
@@ -92,8 +93,9 @@ public sealed partial class HomeView : UserControl
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var text = new StackPanel();
-            text.Children.Add(new TextBlock { Text = c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = (c.Held ? $"【{ConsultList.HeldLabel}】" : "") + c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
             text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (note is not null) text.Children.Add(new TextBlock { Text = note, FontSize = 13, Foreground = BrushOf("MagiErrorBrush"), TextWrapping = TextWrapping.Wrap });
             row.Children.Add(text);
@@ -111,9 +113,13 @@ public sealed partial class HomeView : UserControl
                 Grid.SetColumn(resume, 1);
                 row.Children.Add(resume);
             }
+            var hold = new HyperlinkButton { Content = c.Held ? "相談に戻す" : ConsultList.HoldButton, MinHeight = 44 };
+            hold.Click += (_, _) => _vm.ToggleConsultHold(idx);
+            Grid.SetColumn(hold, 2);
+            row.Children.Add(hold);
             var done = new Button { Content = "済", MinHeight = 44 };
             done.Click += (_, _) => _vm.RemoveConsult(idx);
-            Grid.SetColumn(done, 2);
+            Grid.SetColumn(done, 3);
             row.Children.Add(done);
             ConsultListHost.Children.Add(row);
         }
@@ -317,7 +323,7 @@ public sealed partial class HomeView : UserControl
         SavedText.Text = savedLine ?? "";
         SavedText.Foreground = fgBrush;
         // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
-        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults.Count);
+        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults);
         ConsultText.Visibility = consultLine is null ? Visibility.Collapsed : Visibility.Visible;
         ConsultText.Text = consultLine ?? "";
         ConsultText.Foreground = fgBrush;
@@ -770,7 +776,7 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = $"{plan.Infeasible.Select(sf => sf.DayIndex).Distinct().Count()}日 は、これ以上は自動で埋められません。", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
                 foreach (var sf in plan.Infeasible.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "担当できる職員（担当できるシフト）や希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(LandingButton(GuidedFixRules.LandingFor(plan.Infeasible[0])));
             }
             else if (plan.Blocked.Count > 0)
@@ -827,14 +833,20 @@ public sealed partial class HomeView : UserControl
     private void GoEditLandingFrom(EditLanding? landing, EditReturn? r) => _window.GoEditLandingFrom(landing, r);
 
     /// <summary>「相談してから決める」。積んだあとは「相談中」の札＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する。
-    /// 無効ボタンの文字は状態色の基準 3:1 を割るので札にする＝ux_test_checklist A1、3.645.2）。</summary>
+    /// 無効ボタンの文字は状態色の基準 3:1 を割るので札にする＝ux_test_checklist A1、3.645.2）。
+    /// 隣の［保留する］は相談に回さず未解決のまま積む（札は「保留中」）。</summary>
     private FrameworkElement ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
     {
-        if (ConsultList.IsConsulted(ui.Consults, item)) return AnalysisView.TagChip(ConsultList.Done, MagiAccent.Orange);
-        var b = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0) };
-        if (stretch) b.HorizontalAlignment = HorizontalAlignment.Stretch;
+        if (ConsultList.Match(ui.Consults, item) is { } m) return AnalysisView.TagChip(m.Held ? ConsultList.HeldLabel : ConsultList.Done, MagiAccent.Orange);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
+        if (stretch) row.HorizontalAlignment = HorizontalAlignment.Stretch;
+        var b = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44 };
         b.Click += (_, _) => _vm.AddConsult(item);
-        return b;
+        var h = new HyperlinkButton { Content = ConsultList.HoldButton, MinHeight = 44 };
+        h.Click += (_, _) => _vm.AddConsult(item with { Held = true });
+        row.Children.Add(b);
+        row.Children.Add(h);
+        return row;
     }
 
     // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
@@ -892,7 +904,7 @@ public sealed partial class HomeView : UserControl
         ShortagePanel.Visibility = Visibility.Visible;
         ShortageHeadline.Text = diag.AllInfeasible
             ? $"不足 {diag.TotalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。" +
-                "担当できる人を増やすと直せます（編集タブ＞年間マスター①）。"
+                "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
                     "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
@@ -903,7 +915,7 @@ public sealed partial class HomeView : UserControl
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再作成するか設定の見直しで解消し得ます。"
                         : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。" +
-                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる人を増やすと直せます（編集タブ＞年間マスター①）。";
+                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
             var infeasible = s.Verdict == CoverageVerdict.Infeasible;

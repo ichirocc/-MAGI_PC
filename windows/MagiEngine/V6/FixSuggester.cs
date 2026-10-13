@@ -73,6 +73,11 @@ public sealed record FixSuggestion(
 /// </summary>
 public static class FixSuggester
 {
+    private static volatile bool _lastTimedOut;
+
+    /// <summary>直近の探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。</summary>
+    public static bool LastTimedOut { get => _lastTimedOut; set => _lastTimedOut = value; }
+
     /// <summary>探索の上限（Android 3.507.4 で集約。値は 2.4x 系からの据え置き）。</summary>
     internal static class Limits
     {
@@ -247,6 +252,7 @@ public static class FixSuggester
             Windows();
             Rotations3();
             CrossDaySwaps();
+            _lastTimedOut = TimeUp();
             return Collect(maxResults);
         }
 

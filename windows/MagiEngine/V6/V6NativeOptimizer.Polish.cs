@@ -85,7 +85,7 @@ public static partial class V6NativeOptimizer
         var iters = 0L;
         var deadline = started + seconds * 1000L;
         // [E10/停滞早期終了, Kotlin原本コメント] 重研磨済み盤面ではプラトー後の期待値が低い。best が
-        //   枠の1/5(下限3s)無改善なら早期に返す。keep-best＋末尾の入力比番兵のため品質は不変＝時間/電池
+        //   枠の1/5(下限3s)無改善なら早期に返す。keep-best＋末尾の入力比番兵のためそれまでの最良を保持する＝時間/電池
         //   だけ節約。
         var stallMs = Math.Max(3000L, seconds * 1000L / 5);
         var stalled = false;

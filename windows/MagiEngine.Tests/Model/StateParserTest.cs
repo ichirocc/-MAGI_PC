@@ -111,6 +111,35 @@ public class StateParserTest
         Assert.Empty(StateJsonSerializer.Parse(With("\"cons3n\": [{}]")).Cons3n.Single().Pattern);   // 未指定は空のまま
     }
 
+    /// <summary>表・配列そのものの型違い（個人の上下限・希望・日別必要人数・手動固定・拡張希望）も空として取り込まない。</summary>
+    [Fact]
+    public void MalformedTopLevelTablesThrowWithTheirName()
+    {
+        foreach (var (key, bad) in new[] { ("staffRange", "\"3\""), ("wishes", "[1]"), ("needDay1", "\"2\""), ("needDay2", "[]"),
+                     ("manualPins", "{}"), ("extWishes", "\"x\""), ("schedule", "{}"), ("skillGroups", "\"x\""), ("groupShift", "{}") })
+        {
+            var e = Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(With($"\"{key}\": {bad}")));
+            Assert.Contains(key, e.Message);
+        }
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(With("\"needDay1\": {\"0,0\": [1]}")));
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(With("\"extWishes\": [{\"staff\": 0, \"days\": \"1\"}]")));
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(With("\"wishes\": {\"0,0\": \"A\"}")));
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(With("\"manualPins\": [{\"staff\": 0, \"day\": 0.5, \"shift\": 0}]")));
+    }
+
+    /// <summary>小数・範囲外の勤務番号は丸めずに止める（1.9 を 1 にすると別の勤務として入る）。整数値の小数と null は従来どおり。</summary>
+    [Fact]
+    public void FractionalOrOutOfRangeShiftNumberThrows()
+    {
+        static string WithCells(string cells) => ValidJson.TrimEnd().TrimEnd('}') + ",\n\"schedule\": [[" + cells + "],[0]]\n}";
+        var e = Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(WithCells("1.9")));
+        Assert.Contains("schedule[0][0]", e.Message);
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(WithCells("1")));    // shifts は 1 件＝0 だけが有効
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(WithCells("-2")));
+        Assert.Throws<ArgumentException>(() => StateJsonSerializer.Parse(WithCells("\"A\"")));
+        Assert.Equal(new[] { 0, -1, -1 }, StateJsonSerializer.Parse(WithCells("0.0, null, -1")).Schedule[0].ToArray());
+    }
+
     /// <summary>全体保存（Serialize）も古い評価情報を書き戻さない（Kotlin と 1 対 1）。</summary>
     [Fact]
     public void FullSaveDropsStaleDerivedKeys()

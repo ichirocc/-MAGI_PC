@@ -11,22 +11,24 @@ public sealed record StopExplanation(string Line, StopNext Next)
     public static StopExplanation? Of(V6FinalPort.StopSummary s)
     {
         var hard = s.RemainingHard;
+        // 使った時間は後処理まで含めた全体、無改善の秒数は主探索の終了時点の値（どちらの時点かを文で言う）。
+        var used = $"使った時間 {s.UsedSec} 秒・制限時間 {s.BudgetSec} 秒";
         if (hard == 0)
-            return s.EarlyStop ? new StopExplanation($"改善が止まったので {s.UsedSec} 秒で終えました（制限時間 {s.BudgetSec} 秒）。必須違反はありません。", StopNext.None) : null;
+            return s.EarlyStop ? new StopExplanation($"改善が見られなくなったため、主探索を早めに終了しました（{used}）。必須違反はありません。", StopNext.None) : null;
         return s.Kind switch
         {
             V6FinalPort.StopKind.Deadline =>
-                new StopExplanation($"制限時間（{s.BudgetSec} 秒）いっぱいまで探しました。最後の改善から {s.StalledSec} 秒で、必須違反は {hard} 件残っています。", StopNext.MoreTime),
+                new StopExplanation($"制限時間（{s.BudgetSec} 秒）いっぱいまで探しました。主探索の終了時点で、最後の改善から {s.StalledSec} 秒が経過していました。最終結果の必須違反は {hard} 件です。", StopNext.MoreTime),
             V6FinalPort.StopKind.PlateauFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は、担当できる人数が足りない人員不足で、探索では減りません。", StopNext.ReviewStaffing),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は、担当できる職員が足りないための人員不足です。解消するには、担当条件や配置できる職員の見直しが必要です。", StopNext.ReviewStaffing),
             V6FinalPort.StopKind.WishFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は希望どうしのぶつかりで、いまの希望のままでは減りません。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は、同時には満たせない希望によるものです。解消するには、対象の希望を調整する必要があります。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallCertified =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びで、本人の希望で固定された並びです。希望を変えない限り崩せません。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びで、希望によって勤務が固定されています。解消には希望の調整が必要です。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallEmpirical =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びで、1 マスの変更・玉突き・隣の日の調整では崩せませんでした。", StopNext.FindFix),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びです。1 マスの変更、複数の勤務の入れ替え（玉突き）、隣接日の調整を試しましたが、解消する案は見つかりませんでした。", StopNext.FindFix),
             _ =>
-                new StopExplanation($"改善が {s.StalledSec} 秒止まったので {s.UsedSec} 秒で終えました（制限時間 {s.BudgetSec} 秒）。必須違反 {hard} 件が残っています。", StopNext.FindFix),
+                new StopExplanation($"{s.StalledSec} 秒間、改善が見られなかったため、主探索を早めに終了しました（{used}）。必須違反 {hard} 件が残っています。", StopNext.FindFix),
         };
     }
 
@@ -34,8 +36,8 @@ public sealed record StopExplanation(string Line, StopNext Next)
     public static string? NextLabel(StopNext n) => n switch
     {
         StopNext.None => null,
-        StopNext.MoreTime => "設定タブの「最適化設定」で制限時間を増やして再作成する",
-        StopNext.ReviewStaffing => "編集タブの「年間マスター」①で担当を見直す（人を増やす）",
+        StopNext.MoreTime => "設定タブの「最適化設定」で探す時間を延ばし、再作成する",
+        StopNext.ReviewStaffing => "編集タブの「年間マスター」①で、担当できる職員を確認する",
         StopNext.ReviewWishes => "編集タブの「月次条件」で希望を見直す",
         _ => "分析タブで直し方を探す",
     };

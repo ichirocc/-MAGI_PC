@@ -1175,6 +1175,14 @@ public sealed partial class MagiViewModel
         Ui.Message = ConsultList.Added;
     }
 
+    /// <summary>相談中⇄保留（どちらも未解決＝違反は減らさない）。Kotlin <c>toggleConsultHold</c>。</summary>
+    public void ToggleConsultHold(int index)
+    {
+        var l = Ui.Consults;
+        if (index < 0 || index >= l.Count) return;
+        Ui.Consults = l.Select((c, j) => j == index ? c with { Held = !c.Held } : c).ToList();
+    }
+
     public void RemoveConsult(int index)
     {
         var l = Ui.Consults;

@@ -621,7 +621,7 @@ public static partial class V6FinalPort
             ? new List<MirrorLog>
             {
                 new(level: "I", tag: "EarlyStop",
-                    message: $"停滞検知: 改善が無いため早期終了（予算{seconds}s中 {(tPost1 - startMs) / 1000}sで停止・" +
+                    message: $"停滞検知: 改善が無いため早期終了（予算{seconds}s中 主探索を{(tChain1 - startMs) / 1000}sで停止・後処理の終了{(tPost1 - startMs) / 1000}s・" +
                         $"停滞{wd.StagnationDurationMs / 1000}s無改善" +
                         // [3.375.0] 何回転ぶん空回りしたか。ここは検索終了時のスナップショットでなく
                         //   ログ構築時点の**最新値**を読む（Kotlin原本 stagnationIters.get() -
@@ -635,7 +635,7 @@ public static partial class V6FinalPort
                             : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                         (wd.StagnationWall
-                            ? "（残る必須=禁止連続はForbiddenDiagが構造的な壁と判定済み。希望固定=証明相当/それ以外=探索手の全滅を検証）"
+                            ? "（残る必須=禁止連続はForbiddenDiagが限定した手（1マス・玉突き・隣接日）では崩せないと判定。希望固定=証明相当/それ以外=探索で改善が見つかっていないだけ）"
                             : "")),
             }
             : Array.Empty<MirrorLog>();
