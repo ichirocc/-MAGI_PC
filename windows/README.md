@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-13（Android 3.666.0 と同期・時間モデルの残り）: 前景の計算結果を採ったあと最初の自動保存で「計算結果の保存が完了しました（計算完了から X 秒）」（`_resultAdoptedAtMs`）、玉突きパイプラインの終わりに「玉突きパイプライン全体: Nms・終了時の締切まで残り Mms」。出力不変。60 秒対 300 秒・停滞閾値の割合の測定は Android の `docs/stall_escape.md` §11。
 - 2026-10-13（Android 3.665.0 と同期・違反セルの半自動修正仕様の第 3 段）: セルのフライアウトの問題の選択（`AttachFixSearch(problems:)`・`CellSheetLogic.ProblemChoiceHeading/FixAddresses/NoFixForProblemLine`・VM `CellProblemFamilies`）、相談の回答（`ConsultItem.Answer`・`ConsultList.AnswerOf/AnswerLine/NextAnswer`・VM `CycleConsultAnswer/ConsultAnswerOf`、ホームの一覧に［回答: …］）、月の境目の未評価の明示（`PreDistributionCheck.MonthEdgeNote/MonthEdgeTouched`、改善案の結果の行は `FixOutcome.Tail`）。テストは Kotlin と 1 対 1。
 - 2026-10-13（Android 3.664.0 と同期・違反セルの半自動修正仕様の第 2 段）: `ChainFixPreview.Of` に勤務名（`shiftNames`）と希望（`wishes`）の行の添え書き、`ApplyChangeButton`／`KeepCurrentButton`／`ChangeDutyNote`。複数人の入れ替えのダイアログ・ホーム・分析・セルのシートのボタンを［この変更を適用］［相談事項に登録］［今は変更しない］へ。完了通知（`CompletedText`）と設定画面の「探索時間」を Android と同じ文言へ。テストは Kotlin と 1 対 1（`RowsCarryShiftNamesAndWishImpact`）。
 - 2026-10-13（Android 3.663.0 と同期・違反セルの半自動修正仕様の第 1 段）: 違反の同一性 `ViolationIdentity`/`ViolationKey`（種類＋職員＋日付、被覆は種類＋シフト＋日付）と `IntroducesHardViolation`。`FixSuggester`（3 箇所、`strictNewHard` 既定 true）・`ChainFixSuggestion`・`FixApplyGate` で別の場所に必須違反を新たに生む手を出さない・当てない。c3n 壁の反証だけは族の件数（`strictNewHard: false`）。当てたあとの内訳 `FixOutcomeText.Detail`（族の表示語は WinUI から `labelOf` で渡す＝`FixOutcomeLine(labelOf)`、`FixOutcome` が前後の報告を持つ）。テストは Kotlin と 1 対 1（`ViolationIdentityTest`・`ResultDetailSeparatesResolvedAppearedAndMoved`）。
