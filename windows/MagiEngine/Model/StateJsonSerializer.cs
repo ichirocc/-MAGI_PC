@@ -26,6 +26,22 @@ public static class StateJsonSerializer
     /// <summary>Keys derived from `schedule`/edits that must be dropped before re-emitting the
     /// original JSON with a new schedule/edits — stale caches would otherwise silently disagree
     /// with the new schedule (mirrors the Kotlin `exportWithSchedule`/`exportWithEdits` list).</summary>
+    /// <summary>条件の配列。無ければ null、配列でなければ読み込みを止める（空として取り込むと条件が黙って消える）。</summary>
+    private static JsonElement? ArrayOf(JsonElement o, string key)
+    {
+        if (!o.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null) return null;
+        if (v.ValueKind != JsonValueKind.Array) throw new ArgumentException($"{key} が配列ではありません（データが壊れています）");
+        return v;
+    }
+
+    /// <summary>並びの pattern。無ければ空、配列でなければ読み込みを止める。</summary>
+    private static List<string> PatternOf(JsonElement row, string name)
+    {
+        if (!row.TryGetProperty("pattern", out var v) || v.ValueKind == JsonValueKind.Null) return new List<string>();
+        if (v.ValueKind != JsonValueKind.Array) throw new ArgumentException($"{name} の pattern が配列ではありません（データが壊れています）");
+        return StrList(v).ToList();
+    }
+
     private static readonly string[] DerivedKeysToDrop =
         { "violations", "needViolations", "countViolations", "lastResult", "lastPhase" };
 
@@ -58,8 +74,8 @@ public static class StateJsonSerializer
         }
         var groups = MapObjects(OptArray(o, "groups"), "groups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
-        var staff = MapObjects(OptArray(o, "staff"), "staff", it =>
-            new Staff(OptString(it, "name"), OptInt(it, "groupIdx", 0), OptInt(it, "skillIdx", -1)));
+        var staff = StaffIds.WithStaffIds(MapObjects(OptArray(o, "staff"), "staff", it =>
+            new Staff(OptString(it, "name"), OptInt(it, "groupIdx", 0), OptInt(it, "skillIdx", -1), OptInt(it, "id", 0))));
         var skillGroups = MapObjects(OptArray(o, "skillGroups"), "skillGroups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
         var groupShift = MapArrays(OptArray(o, "groupShift"), "groupShift", row =>
@@ -84,8 +100,10 @@ public static class StateJsonSerializer
         {
             foreach (var prop in staffRangeObj.Value.EnumerateObject())
             {
-                if (prop.Value.ValueKind == JsonValueKind.Object)
-                    staffRange[prop.Name] = new Range(AsStr(Opt(prop.Value, "lo")), AsStr(Opt(prop.Value, "hi")));
+                // 型の違う値を読み飛ばすと個人の上下限が黙って消える＝読み込みを止めてキーを示す。
+                if (prop.Value.ValueKind != JsonValueKind.Object)
+                    throw new ArgumentException($"staffRange[\"{prop.Name}\"] がオブジェクトではありません（データが壊れています）");
+                staffRange[prop.Name] = new Range(AsStr(Opt(prop.Value, "lo")), AsStr(Opt(prop.Value, "hi")));
             }
         }
 
@@ -93,23 +111,23 @@ public static class StateJsonSerializer
         var needDay2 = StrMap(OptObject(o, "needDay2"));
         var shiftColors = StrMap(OptObject(o, "shiftColors"));
 
-        var cons1 = MapObjects(OptArray(o, "cons1"), "cons1", it =>
+        var cons1 = MapObjects(ArrayOf(o, "cons1"), "cons1", it =>
             new C1Row(AsStr(Opt(it, "day1")), OptString(it, "shiftKigou"), AsStr(Opt(it, "day2"))));
-        var cons2 = MapObjects(OptArray(o, "cons2"), "cons2", it =>
+        var cons2 = MapObjects(ArrayOf(o, "cons2"), "cons2", it =>
             new C2Row(OptString(it, "shiftKigou"), AsStr(Opt(it, "count"))));
-        var cons3 = MapObjects(OptArray(o, "cons3"), "cons3", it => new C3Row(StrList(OptArray(it, "pattern"))));
-        var cons3n = MapObjects(OptArray(o, "cons3n"), "cons3n", it => new C3Row(StrList(OptArray(it, "pattern"))));
-        var cons3m = MapObjects(OptArray(o, "cons3m"), "cons3m", it => new C3Row(StrList(OptArray(it, "pattern"))));
-        var cons3mn = MapObjects(OptArray(o, "cons3mn"), "cons3mn", it => new C3Row(StrList(OptArray(it, "pattern"))));
-        var cons41 = MapObjects(OptArray(o, "cons41"), "cons41", it =>
+        var cons3 = MapObjects(ArrayOf(o, "cons3"), "cons3", it => new C3Row(PatternOf(it, "cons3")));
+        var cons3n = MapObjects(ArrayOf(o, "cons3n"), "cons3n", it => new C3Row(PatternOf(it, "cons3n")));
+        var cons3m = MapObjects(ArrayOf(o, "cons3m"), "cons3m", it => new C3Row(PatternOf(it, "cons3m")));
+        var cons3mn = MapObjects(ArrayOf(o, "cons3mn"), "cons3mn", it => new C3Row(PatternOf(it, "cons3mn")));
+        var cons41 = MapObjects(ArrayOf(o, "cons41"), "cons41", it =>
             new C41Row(OptString(it, "groupKigou"), OptString(it, "shiftKigou"), AsStr(Opt(it, "l")), AsStr(Opt(it, "u"))));
-        var cons42 = MapObjects(OptArray(o, "cons42"), "cons42", it =>
+        var cons42 = MapObjects(ArrayOf(o, "cons42"), "cons42", it =>
             new C42Row(OptString(it, "g1Kigou"), OptString(it, "g2Kigou"), OptString(it, "s1Kigou"), OptString(it, "s2Kigou")));
-        var cons41s = MapObjects(OptArray(o, "cons41s"), "cons41s", it =>
+        var cons41s = MapObjects(ArrayOf(o, "cons41s"), "cons41s", it =>
             new C41Row(OptString(it, "groupKigou"), OptString(it, "shiftKigou"), AsStr(Opt(it, "l")), AsStr(Opt(it, "u"))));
-        var cons42s = MapObjects(OptArray(o, "cons42s"), "cons42s", it =>
+        var cons42s = MapObjects(ArrayOf(o, "cons42s"), "cons42s", it =>
             new C42Row(OptString(it, "g1Kigou"), OptString(it, "g2Kigou"), OptString(it, "s1Kigou"), OptString(it, "s2Kigou")));
-        var cons3w = MapObjects(OptArray(o, "cons3w"), "cons3w", it =>
+        var cons3w = MapObjects(ArrayOf(o, "cons3w"), "cons3w", it =>
             new C3wRow(OptString(it, "wishKigou"), OptString(it, "prevKigou")));
         // [#41] 無いキー＝手動固定なし（古いデータはそのまま開く）。同じセルが重なれば後の行を採る。
         var pinMap = new Dictionary<(int, int), ManualPin>();
@@ -158,9 +176,10 @@ public static class StateJsonSerializer
     /// original text (as a mutable node tree) so every field — including ones this app
     /// does not model — is preserved exactly, then overwrites only "schedule".
     /// </summary>
-    public static string ExportWithSchedule(string originalJson, int[][] newSchedule, IReadOnlyList<ManualPin>? manualPins = null)
+    public static string ExportWithSchedule(string originalJson, int[][] newSchedule, IReadOnlyList<ManualPin>? manualPins = null, IReadOnlyList<Staff>? staff = null)
     {
         var o = JsonNode.Parse(originalJson)!.AsObject();
+        if (staff is not null) PutStaffIds(o, staff);
         foreach (var k in DerivedKeysToDrop) o.Remove(k);
         o["schedule"] = IntGridNode(newSchedule);
         // 手動固定は構造・制約の編集フラグを立てずに付け外しできる＝元のファイルの値でなく今の値を書く（元に無く今も無ければキーを足さない）。
@@ -176,7 +195,15 @@ public static class StateJsonSerializer
         if (originalJson is null) return null;
         return constraintsEdited && state is not null
             ? ExportWithEdits(originalJson, state, schedule)
-            : ExportWithSchedule(originalJson, schedule, state?.ManualPins ?? Array.Empty<ManualPin>());
+            : ExportWithSchedule(originalJson, schedule, state?.ManualPins ?? Array.Empty<ManualPin>(), state?.StaffList);
+    }
+
+    /// <summary>元のファイルの職員へ読込時に振った ID を書く（構造を編集していない経路＝並びと人数は元のまま。食い違えば触らない）。</summary>
+    private static void PutStaffIds(JsonObject o, IReadOnlyList<Staff> staff)
+    {
+        if (o["staff"] is not JsonArray arr || arr.Count != staff.Count) return;
+        for (var i = 0; i < staff.Count; i++)
+            if (arr[i] is JsonObject so && staff[i].Id > 0) so["id"] = staff[i].Id;
     }
 
     private static JsonArray ExtWishesNode(IReadOnlyList<ExtWish> ws) =>
@@ -195,6 +222,7 @@ public static class StateJsonSerializer
     {
         var o = JsonNode.Parse(originalJson)!.AsObject();
         foreach (var k in DerivedKeysToDrop) o.Remove(k);
+        PutStaffIds(o, state.StaffList);
         o["schedule"] = IntGridNode(newSchedule);
         o["cons1"] = ConsArr(state.Cons1, it => Obj(("day1", it.Day1), ("shiftKigou", it.ShiftKigou), ("day2", it.Day2)));
         o["cons2"] = ConsArr(state.Cons2, it => Obj(("shiftKigou", it.ShiftKigou), ("count", it.Count)));
@@ -235,7 +263,12 @@ public static class StateJsonSerializer
 
         var staffArr = new JsonArray();
         foreach (var s in state.StaffList)
-            staffArr.Add(new JsonObject { ["name"] = s.Name, ["groupIdx"] = s.GroupIdx, ["skillIdx"] = s.SkillIdx });
+        {
+            var so = new JsonObject();
+            if (s.Id > 0) so["id"] = s.Id;
+            so["name"] = s.Name; so["groupIdx"] = s.GroupIdx; so["skillIdx"] = s.SkillIdx;
+            staffArr.Add(so);
+        }
         o["staff"] = staffArr;
 
         o["skillGroups"] = ConsArr(state.SkillGroups, it => Obj(("name", it.Name), ("kigou", it.Kigou)));
@@ -269,9 +302,10 @@ public static class StateJsonSerializer
         o["manualPins"] = ConsArr(state.ManualPins ?? Array.Empty<ManualPin>(), it => new JsonObject { ["staff"] = it.Staff, ["day"] = it.Day, ["shift"] = it.Shift });
         if ((state.ExtWishes?.Count ?? 0) > 0) o["extWishes"] = ExtWishesNode(state.ExtWishes!);
 
+        // 古い評価情報（違反の印・前回の結果）は勤務表と食い違うので、全体保存でも書き戻さない（他の保存経路と同じ）。
         foreach (var (k, v) in state.Extras)
         {
-            if (!o.ContainsKey(k)) o[k] = JsonNode.Parse(v.GetRawText());
+            if (!o.ContainsKey(k) && Array.IndexOf(DerivedKeysToDrop, k) < 0) o[k] = JsonNode.Parse(v.GetRawText());
         }
 
         return o.ToJsonString(PrettyOptions);

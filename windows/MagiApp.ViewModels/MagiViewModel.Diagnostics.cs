@@ -339,9 +339,11 @@ public sealed partial class MagiViewModel
         Ui.ZeroAllowCells = GridDisplayMarks.ZeroAllowCells(ScheduleUtil.CachedProblem(st), schedule);
         Ui.Logs = v6Logs.Concat(CompressDiagLogs(mappedDiag)).ToList();
         var staffNames = st.StaffList.Select(s => s.Name).ToList();
-        // [Kotlin 3.651.0] 改名（名簿の 1 か所だけが変わった）なら相談の氏名を追従させる。元に戻す・やり直すも同じ経路を通る。
-        Ui.Consults = ConsultList.FollowRenameInConsults(Ui.Consults, Ui.StaffNames, staffNames);
+        var staffIds = st.StaffList.Select(s => s.Id).ToList();
+        // 相談の氏名・位置を名簿に合わせる（ID で引く。ID の無い相談は改名だけ追従＝Kotlin 3.651.0）。元に戻す・やり直すも同じ経路を通る。
+        Ui.Consults = ConsultList.FollowRenameInConsults(Ui.Consults, Ui.StaffNames, staffNames, staffIds);
         Ui.StaffNames = staffNames;
+        Ui.StaffIds = staffIds;
         Ui.StaffGroupSymbols = st.StaffList
             .Select(s => KigouFormat.ToHankakuKigou(
                 s.GroupIdx >= 0 && s.GroupIdx < st.Groups.Count ? st.Groups[s.GroupIdx].Kigou : ""))

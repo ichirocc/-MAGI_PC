@@ -199,7 +199,7 @@ public static class StaffCsvIO
         var newSched = new int[sched.Length + extraRows.Count][];
         for (var i = 0; i < sched.Length; i++) newSched[i] = (int[])sched[i].Clone();
         for (var i = 0; i < extraRows.Count; i++) newSched[sched.Length + i] = extraRows[i];
-        var ns = (state with { StaffList = newStaff }).WithSchedule(newSched);
+        var ns = (state with { StaffList = StaffIds.WithStaffIds(newStaff) }).WithSchedule(newSched);
         return new StaffUpsertResult(ns, newSched, updated, added, unknownG, unknownS, ambiguousNames);
     }
 }

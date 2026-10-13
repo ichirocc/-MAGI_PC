@@ -227,7 +227,7 @@ public class MagiViewModelBackgroundTest : IDisposable
 
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.HasResult);
-        Assert.Contains("前回の結果を維持します", vm.Ui.Message);
+        Assert.Contains("改善が確認できなかったため、前回の勤務表を維持しました", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("前回を維持"));
     }
 
@@ -374,7 +374,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         vm.RunInBackground();   // 入力（違反0）より悪い結果＝入力を維持する
         await vm.LastRunInBackgroundTask!;
 
-        Assert.Contains("前回の結果を維持します", vm.Ui.Message);
+        Assert.Contains("改善が確認できなかったため、前回の勤務表を維持しました", vm.Ui.Message);
         Assert.Equal(0, vm._lastResultHard);
         Assert.Null(vm._lastTopHardFamily);
     }

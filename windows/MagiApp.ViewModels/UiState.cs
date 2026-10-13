@@ -148,6 +148,7 @@ public sealed partial class UiState : ObservableObject
 
     [ObservableProperty] private V6Algorithm v6Algorithm = V6Algorithm.Auto;
     [ObservableProperty] private IReadOnlyList<string> staffNames = Array.Empty<string>();
+    [ObservableProperty] private IReadOnlyList<int> staffIds = Array.Empty<int>();   // StaffNames と同じ並びの職員 ID（相談の対象を ID で引く）
     [ObservableProperty] private IReadOnlyList<string> staffGroupSymbols = Array.Empty<string>();
     [ObservableProperty] private IReadOnlyList<string> shiftSymbols = Array.Empty<string>();
     [ObservableProperty] private IReadOnlyList<string> shiftColorHex = Array.Empty<string>();

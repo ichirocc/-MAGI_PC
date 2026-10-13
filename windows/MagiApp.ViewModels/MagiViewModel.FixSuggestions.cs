@@ -249,7 +249,7 @@ public sealed partial class MagiViewModel
         else
         {
             Ui.MessageIsError = true;
-            Ui.Message = ConsultList.ConsultTargetNote(c, u.StartDate, u.StaffNames, u.ShiftSymbols, u.Days) ?? "この枠はいまのデータにありません";
+            Ui.Message = ConsultList.ConsultTargetNote(c, u.StartDate, u.StaffNames, u.ShiftSymbols, u.Days, u.StaffIds) ?? "この枠はいまのデータにありません";
         }
     }
 }

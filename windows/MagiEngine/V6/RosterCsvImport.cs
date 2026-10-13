@@ -221,7 +221,7 @@ public static class RosterCsvImport
             EndDate: end,
             Shifts: shiftsOut,
             Groups: groupsOut,
-            StaffList: staffOut,
+            StaffList: StaffIds.WithStaffIds(staffOut),
             Use2Patterns: false,
             GroupShift: groupsOut.Select(_ => (IReadOnlyList<int>)Enumerable.Repeat(1, k2).ToList()).ToList(), // 担当可否不明→全可(後から調整)
             GroupShiftApt: groupsOut.Select(_ => (IReadOnlyList<string>)Enumerable.Repeat("", k2).ToList()).ToList(),

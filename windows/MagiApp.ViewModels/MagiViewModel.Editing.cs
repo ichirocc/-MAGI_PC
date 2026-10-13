@@ -1167,7 +1167,8 @@ public sealed partial class MagiViewModel
     public void AddConsult(ConsultItem item)
     {
         Ui.MessageIsError = false;
-        var stamped = item.StaffName is not null && item.RosterKey == 0 ? item with { RosterKey = ConsultList.RosterKeyOf(Ui.StaffNames) } : item;
+        var withId = ConsultList.StampStaffId(item, Ui.StaffNames, Ui.StaffIds);
+        var stamped = withId.StaffName is not null && withId.RosterKey == 0 ? withId with { RosterKey = ConsultList.RosterKeyOf(Ui.StaffNames) } : withId;
         var next = ConsultList.Add(Ui.Consults, stamped);
         if (next is null) { Ui.Message = ConsultList.Duplicate; return; }
         Ui.Consults = next;
