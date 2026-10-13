@@ -9,6 +9,10 @@ public static partial class V6FinalPort
     /// 上限（秒）。高精度を保ったまま5分(300s)以内へ圧縮（停滞早期脱出＋RSI++をこの予算に収める）。
     /// </summary>
     public const int MaxOptimizeSec = 300;
+    /// <summary>後処理（研磨）の取り分（秒）。制限時間＝探索の時間で、後処理はその後ろにこの秒数だけ足す（Kotlin <c>POST_RESERVE_SEC</c>）。</summary>
+    public const int PostReserveSec = 10;
+    /// <summary>玉突き（パイプラインの深い探索）の取り分（秒）。後処理の後ろにさらに足す（Kotlin <c>CHAIN_RESERVE_SEC</c>）。</summary>
+    public const int ChainReserveSec = 10;
 
     /// <summary>Faithful port of Kotlin's <c>AlgorithmLabel</c> data class.</summary>
     public sealed record AlgorithmLabel(string Icon, string Name, string Desc, string Tech);

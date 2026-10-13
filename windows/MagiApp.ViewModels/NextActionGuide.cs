@@ -45,7 +45,7 @@ public static class NextActionGuide
     /// <summary>行に添える短い札。希望どうしのぶつかり（計算では消せない）だけ「希望のまま」。</summary>
     public const string WishOnlyTag = "希望のまま";
 
-    public const string WishTrialNotLocked = "担当できない勤務の希望なので、取り消しても勤務表は変わりません。";
+    public const string WishTrialNotLocked = "担当できない勤務の希望なので、調整して外しても勤務表は変わりません。";
     /// <summary>[#41] 手動固定のセルは試算の候補にしない（LockedWishKeys が外す）＝担当外と混ぜず、固定が理由だと言う。</summary>
     public const string WishTrialPinned = "このセルは手動固定のため、自動では変更しません。固定を外すと試算できます。";
     /// <summary>希望タブの注記（希望が必須違反の並びに掛かっているとき）。希望を変えても盤面のセルはそのまま＝黙って崩さない。</summary>
@@ -54,7 +54,7 @@ public static class NextActionGuide
         families.Contains("c3n") ? $"{wishSymbol}はこの禁止の並びに関係しています。"
         : families.Contains("c3w") ? $"{wishSymbol}はこの希望の前日の禁止に関係しています。"
         : null;
-    public const string WishKeepFooter = "希望は、あなたが選ぶまで取り消しません。";
+    public const string WishKeepFooter = "希望は、あなたが選ぶまで外しません（外したあとも元に戻すで戻せます）。";
     public const string WishToRelaxLabel = "希望を残したまま、設定を緩めて試す";
     /// <summary>[S5b] 1 枠に並べる行の上限（超えたら「ほか N人」）。</summary>
     public const int WishTrialGroupLimit = 8;
@@ -74,6 +74,27 @@ public static class NextActionGuide
         return (hardLine, caution);
     }
 
+    // 関わる希望の理由（S3・S5 で共有）。希望と今の勤務の記号を添え、引けなければ記号なしの文にする。
+    private static string? WishSym(UiState ui, int i, int j) =>
+        ui.Wishes.TryGetValue($"{i},{j}", out var k) && k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : null;
+    private static string? BoardSym(UiState ui, int i, int j) =>
+        i >= 0 && i < ui.Schedule.Count && j >= 0 && j < ui.Schedule[i].Count && ui.Schedule[i][j] is var k && k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : null;
+
+    private static string PrefReason(UiState ui, int i, int j) =>
+        WishSym(ui, i, j) is { } w ? $"希望の「{w}」になっていません" + (BoardSym(ui, i, j) is { } b ? $"（いまは「{b}」）" : "") : "希望の勤務になっていません";
+
+    /// <summary>c3w の翌日の希望の行。<paramref name="j"/> は印の付く前日。</summary>
+    private static string C3wNextReason(UiState ui, int i, int j) =>
+        $"前日（{DayText.Short(ui.StartDate, j)}）に置けない" + (BoardSym(ui, i, j) is { } b ? $"「{b}」" : "勤務") + "が入っています";
+
+    /// <summary>c3w の前日自身が希望の行。<paramref name="j"/> は印の付く前日。</summary>
+    private static string C3wPrevReason(UiState ui, int i, int j) =>
+        $"翌日（{DayText.Short(ui.StartDate, j + 1)}）の希望" + (WishSym(ui, i, j + 1) is { } w1 ? $"「{w1}」" : "の勤務") +
+        "の前日に置けない" + (WishSym(ui, i, j) is { } w0 ? $"「{w0}」" : "勤務") + "の希望です";
+
+    private static string C3nWishReason(UiState ui, int i, int j) =>
+        "希望" + (WishSym(ui, i, j) is { } w ? $"「{w}」" : "") + "が禁止の並びに掛かっています";
+
     /// <summary>
     /// 必須違反に関わる希望を、名前・日付・理由つきで列挙する（職員順→日順）。関わる＝そのセルに希望違反(pref)がある、
     /// 希望の前日の禁止(c3w)の翌日の希望（c3w の印は前日側のセルに付く）、または禁止の並び(c3n)が本人の希望のセルに掛かっている。
@@ -86,9 +107,9 @@ public static class NextActionGuide
             var parts = key.Split(',');
             if (parts.Length < 2 || !int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) continue;
             var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
-            if (fams.Contains("vio-pref")) list.Add(new InvolvedWish(i, j, name, "希望の勤務になっていません"));
-            if (fams.Contains("vio-c3w")) list.Add(new InvolvedWish(i, j + 1, name, $"前日（{DayText.Short(ui.StartDate, j)}）に置けない勤務が入っています"));
-            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) list.Add(new InvolvedWish(i, j, name, "希望が禁止の並びに掛かっています"));
+            if (fams.Contains("vio-pref")) list.Add(new InvolvedWish(i, j, name, PrefReason(ui, i, j)));
+            if (fams.Contains("vio-c3w")) list.Add(new InvolvedWish(i, j + 1, name, C3wNextReason(ui, i, j)));
+            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) list.Add(new InvolvedWish(i, j, name, C3nWishReason(ui, i, j)));
         }
         return list.Distinct().OrderBy(w => w.Staff).ThenBy(w => w.Day).ToList();
     }
@@ -108,13 +129,13 @@ public static class NextActionGuide
         {
             var parts = key.Split(',');
             if (parts.Length < 2 || !int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) continue;
-            if (fams.Contains("vio-pref")) hits.Add((i, j, 0, "希望の勤務になっていません"));
+            if (fams.Contains("vio-pref")) hits.Add((i, j, 0, PrefReason(ui, i, j)));
             if (fams.Contains("vio-c3w"))
             {
-                hits.Add((i, j + 1, 1, $"前日（{DayText.Short(ui.StartDate, j)}）に置けない勤務が入っています"));
-                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, $"翌日（{DayText.Short(ui.StartDate, j + 1)}）の希望の勤務の前日に置けない勤務の希望です"));
+                hits.Add((i, j + 1, 1, C3wNextReason(ui, i, j)));
+                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, C3wPrevReason(ui, i, j)));
             }
-            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, "希望が禁止の並びに掛かっています"));
+            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, C3nWishReason(ui, i, j)));
         }
         var hitKeys = hits.Select(h => (h.Staff, h.Day)).ToHashSet();
         var prefKeys = ui.ViolationCellFamilies.Where(kv => kv.Value.Contains("vio-pref")).Select(kv => kv.Key).ToHashSet();
@@ -156,12 +177,12 @@ public static class NextActionGuide
     /// <summary>[S5] 試算結果 1 行の文（§5 の表）。止めた試算は null（数字を出さない）。</summary>
     public static string? WishTrialText(WishTrial.Outcome o) => o switch
     {
-        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を取り消しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。すべての組み合わせを試したわけではありません。",
-        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減り、再作成するとさらに{r.B}件 減る見込みです。",
-        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 => $"取り消すと必須違反が確実に{r.APrime}件 減ります。",
-        WishTrial.Result r when r.Rk >= r.H0 => $"取り消して再作成すると、必須違反が{r.B}件 減る見込みです。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.Att <= 0 => $"この希望を調整して外しても、必須は減らない見込みです（必須 {r.H0}件 → {r.PCancel}件）。すべての組み合わせを試したわけではありません。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 && r.B > 0 => $"希望を調整して外すと必須違反が確実に{r.APrime}件 減り、再作成するとさらに{r.B}件 減る見込みです。",
+        WishTrial.Result r when r.Rk >= r.H0 && r.APrime > 0 => $"希望を調整して外すと必須違反が確実に{r.APrime}件 減ります。",
+        WishTrial.Result r when r.Rk >= r.H0 => $"希望を調整して外し、再作成すると、必須違反が{r.B}件 減る見込みです。",
         WishTrial.Result r when r.Att > 0 => $"再作成するだけの場合より、さらに{r.Att}件 減る見込みです。",
-        WishTrial.Result => "取り消さなくても、再作成するだけで同じだけ減る見込みです。",
+        WishTrial.Result => "希望を外さなくても、再作成するだけで同じだけ減る見込みです。",
         WishTrial.Unavailable u => $"試算できませんでした（{u.Reason}）。",
         _ => null,
     };

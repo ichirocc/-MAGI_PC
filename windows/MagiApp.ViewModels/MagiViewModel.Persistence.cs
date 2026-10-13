@@ -174,7 +174,7 @@ public sealed partial class MagiViewModel
         if (ok == _autoSaveOk) return;
         _autoSaveOk = ok;
         if (ok) LogOp("I", "自動保存が復旧しました");
-        else Notify("自動保存に失敗しています（端末の空き容量をご確認ください）。「データを保存」で書き出してください", "W");
+        else Notify("自動保存に失敗しています（端末に書き込めませんでした）。空き容量を確かめて、設定タブの「データを保存」で書き出してください", "W");
     }
 
     /// <summary>
@@ -458,7 +458,7 @@ public sealed partial class MagiViewModel
                 ui.FixFocusName = "";
                 ui.StalledHardFamilies = Array.Empty<string>();
                 ui.Consults = Array.Empty<ConsultItem>();   // 相談も前のデータの対象を指している（T01）
-                ui.Message = $"読込完了: {lp.State.StaffCount}名 / {lp.State.DayCount}日 / {lp.State.ShiftCount}シフト{note}";
+                ui.Message = $"読込完了: {lp.State.StaffCount}名 / {DayText.Range(lp.State.StartDate, 0, lp.State.DayCount - 1)}（{lp.State.DayCount}日） / {lp.State.ShiftCount}シフト{note}";
             }, ct: ct);
             rollback = null;
             // 退避は差し替えの確定後に書く（中止で読込前へ戻しても「開く前のデータ」を失わない）。
@@ -523,7 +523,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{BusyWhat()}の実行中は操作できません";
+            Ui.Message = $"{BusyWhat()}の実行中は、開く前のデータに戻せません。終わるか「やめる」を押してからにしてください。";
             return;
         }
         LastRestorePreviousDataTask = RestorePreviousDataCoreAsync();
@@ -545,7 +545,7 @@ public sealed partial class MagiViewModel
         if (string.IsNullOrWhiteSpace(txt))
         {
             Ui.MessageIsError = false;
-            Ui.Message = "開く前のデータの退避がありません";
+            Ui.Message = "開く前のデータに戻せません（退避したデータが見つかりません）。元のファイルは「データを開く」で開き直せます";
             return;
         }
         LogOp("I", "開く前のデータに戻します（もう一度押すと入れ替わります）");
@@ -598,16 +598,18 @@ public sealed partial class MagiViewModel
 
     /// <summary>
     /// [native堅牢化相当] 最適化・生成の実行前に構造を検証する。期間/スタッフ/シフトの不整合や
-    /// 未割当グループ・範囲外シフト等があれば、クラッシュさせず理由を表示して中止する。
+    /// 未割当グループ・範囲外シフト等があれば、クラッシュさせず中止する。
+    /// 検証の文は JSON の項目名（英字）を含むので画面には出さず操作ログへ残す（<paramref name="what"/>＝始められなかった操作）。
     /// [テスト可視性のためinternal化] Kotlin原本は private fun。
     /// </summary>
-    internal bool EnsureValidForRun(MagiState st, int[][] sched)
+    internal bool EnsureValidForRun(MagiState st, int[][] sched, string what)
     {
         var err = Validate(st.WithSchedule(sched));
         if (err is null) return true;
+        LogOp("W", $"{what}を中止（データの検証）: {err}");
         Ui.MessageIsError = true;
         Ui.Running = false;
-        Ui.Message = $"実行できません: {err}。編集内容を確認してください";
+        Ui.Message = $"{what}を始められません（データに矛盾があります）。元に戻すか、データを開き直してください（詳しくは設定＞詳細設定＞ログ）";
         return false;
     }
 
@@ -681,7 +683,7 @@ public sealed partial class MagiViewModel
             if (seq == _checkSeq)
             {
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"問題がないか調べられませんでした（{FailureWords.Of(e, FailureKind.Engine)}）";
+                Ui.Message = $"問題がないか調べられませんでした（{FailureWords.Of(e, FailureKind.Engine)}）。設定タブの「いま診断し直す」でもう一度調べられます";
                 Ui.MessageIsError = true;
             }
         }

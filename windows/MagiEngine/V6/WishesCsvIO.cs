@@ -85,7 +85,7 @@ public static class WishesCsvIO
             var key = $"{i},{day - 1}";
             if (m.TryGetValue(key, out var prev))
             {
-                if (prev != k) { bad++; if (samples.Count < ComponentImport.MaxSamples) samples.Add("重複(値が違う): " + CsvUtil.RowSample(r)); }
+                if (prev != k) { bad++; if (samples.Count < ComponentImport.MaxSamples) samples.Add("同じ職員・同じ日が2行（値が違う）: " + CsvUtil.RowSample(r)); }
                 continue;
             }
             m[key] = k;

@@ -148,7 +148,7 @@ public class WishTrialTest
         var sf = V6PortAnalyzer.DiagnoseCoverage(st).Shortfalls.Single(s => s.ShiftIndex == A);
         Assert.Equal(new[] { 0 }, sf.WishPinned);
         Assert.Equal(CoverageVerdict.Infeasible, sf.Verdict);
-        Assert.Equal("いまの希望のままでは担当できる人が2人で必要数3に届きません（希望で別の勤務に固定: 1人）", sf.Reason);
+        Assert.Equal("いまの希望のままではAを担当できる人が2人で、必要数3人に届きません（s0さんは希望で別の勤務に固定）。本人と相談して希望を調整すると、担当できる人が増えます", sf.Reason);
 
         var noWish = st with
         {

@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 
+- 2026-10-13（Android 3.659.0 と同期・全画面の文言を 5W2H と人への配慮で照合／既定の時間を探索 60 秒＋後処理 10 秒＋玉突き 10 秒へ／残りの不具合）: VM・CellSheetLogic・表示の文言（AnalysisTriage・C1Display・ConsultList・KeptResultText・StopExplanation・NextActionGuide・GridDisplayMarks・PreRunCheckText）・エンジン（V6SanityPort の `Place` 定数と `ForcedShortMark`、V6FinalPort.KeptNote、ChangeSummary.RangeOutStaff、V6PortAnalyzer、CsvPartialImport、ExtWishRules、ScheduleCsvBridge／WishesCsvIO）と WinUI の各画面へ Kotlin と同じ文言を写した（氏名＋さん、希望は「調整する／外す」、直す場所、DayText）。`BudgetSec` 既定 300→60、`PostReserveSec`＝10・`ChainReserveSec`＝10 を締切に足す（`WatchdogBudgetOf(postReserveFixedMs)`）、`EjectionChainMaxMillis` 6→10 秒、深い探索は残り時間の 1/2。残存分析は希望どうしの衝突を証明済みの壁より先に名指し。人員過剰の「本人の希望」行は希望で固定した人数が適正人数を超えるときだけ言い切る、一括割当の対象 0 日の理由、緩める設定の無い族の案内。Kotlin に対応の無い文（起動診断・WorkManager 等）は対象外。WinUI に無い「いま診断し直す」ボタンへの言及が VM の文に 3 か所ある（Android と同文＝据え置き、要判断）。
 - 2026-10-10（Android 3.658.0 と同期・希望だけでできた回避の並びの説明と、複数人の入れ替えの題）: `V6SanityPort.WishAvoidRuns/WishAvoidSoft`（回避の並び c3mn の窓がまるごと希望で固定＝必須の衝突 `WishSelfConflicts` とは分ける）。設定の見直しに案内（`Neutral`）1 件、残存分析は「もう直せない: 希望どうしの回避の並び c3mn N件」へ（旧: 案内なし・「まだ狙える」）。`ChainFixPreview` の題を「複数人の入れ替え」に（人数・マス数は本文 1 行目が持つ。題に入れると途中で折り返した）。テスト `WishSelfConflictTest.AvoidWindowFullyWishedIsGuidanceNotAHardConflict`（Kotlin と 1 対 1）・`ChainFixPreviewTest` の期待値。Android 側のセルのシート（板挟みの選択肢の置き場所）とダイアログ（取消の重なり）の直しは Compose の画面だけ＝WinUI は対象外。
 
 - 2026-10-10（Android 3.657.0 と同期・玉突きパイプラインの「採れたら探し直す」を既定 ON・「必須の違反からも始める」（既定 OFF）・全画面の design-review の ViewModel 側）:

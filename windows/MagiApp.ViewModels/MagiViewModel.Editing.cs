@@ -229,7 +229,7 @@ public sealed partial class MagiViewModel
             _alternativeScheds = System.Array.Empty<int[][]>();
             Ui.Alternatives = System.Array.Empty<string>();
             Ui.MessageIsError = true;
-            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。もう一度最適化してください";
+            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。再作成してください";
             LogOp("W", $"他の案 {i + 1}: 案の計算後に盤面/設定が変わったため適用せず");
             return;
         }
@@ -273,7 +273,7 @@ public sealed partial class MagiViewModel
                 ui.HasResult = true;
                 ui.EngineRan = false;
                 ui.RelaxedBoard = false;
-                ui.Message = $"他の案 {i + 1} を適用";
+                ui.Message = $"他の案 {i + 1} を適用しました: 必須違反 {rep.Hard}件・違反の合計 {rep.Total}件";
             });
             LogOp("I", $"他の案 {i + 1} を適用 必須={rep.Hard} 合計={rep.Total}");
         }
@@ -282,7 +282,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"他の案 {i + 1} の適用後の再チェックに失敗: {e.GetType().Name}（盤面は適用済み・違反数は古い可能性）");
             Ui.MessageIsError = true;
-            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{FailureWords.Of(e, FailureKind.Engine)}）";
+            Ui.Message = $"他の案 {i + 1} を適用しました。違反数の再計算に失敗したため、表示の違反数は未確認です（{FailureWords.Of(e, FailureKind.Engine)}）。設定タブの「いま診断し直す」で数え直せます";
         }
     }
 
@@ -295,7 +295,7 @@ public sealed partial class MagiViewModel
     {
         if (shift >= -1 && shift < st.Shifts.Count) return false;
         Ui.MessageIsError = true;
-        Ui.Message = "選択したシフトは現在の設定に存在しません";
+        Ui.Message = "選んだシフトが今の設定にないため、勤務表は変えていません。もう一度開いて選び直してください";
         return true;
     }
 
@@ -348,7 +348,9 @@ public sealed partial class MagiViewModel
         AutoSave();
         Ui.MessageIsError = false;
         ApplyWishDisplay(ns);
-        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)} {DayText.Short(st.StartDate, j)} を" + (on ? $"手動固定しました（自動では変更しません）{pinHint}" : "手動固定を外しました"), _undoStack.Last?.Value.Serial ?? 0L);
+        Ui.OpNotice = new OpNotice(++_opNoticeSeq, $"{OpNm(i)}さん {DayText.Short(st.StartDate, j)} を" +
+            (!on ? "手動固定を外しました" : pinHint.Length == 0 ? "手動固定しました（自動では変更しません）" : $"手動固定しました。{pinHint}"),
+            _undoStack.Last?.Value.Serial ?? 0L);
         LogOp("I", $"{(on ? "手動固定" : "手動固定を外す")}: {OpNm(i)} {j + 1}日 {OpSy(cur)}");
     }
 
@@ -363,6 +365,7 @@ public sealed partial class MagiViewModel
         if (RejectUnknownShift(st, shift)) return;
         var changed = 0;
         var first = true;
+        var staffSet = new SortedSet<int>(); var daySet = new SortedSet<int>();
         foreach (var (i, j) in cells)
         {
             if (i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) continue;
@@ -370,6 +373,7 @@ public sealed partial class MagiViewModel
             if (first) { PushUndo(); first = false; }
             sched[i][j] = shift;
             changed++;
+            staffSet.Add(i); daySet.Add(j);
         }
         if (changed == 0) return;
         _currentSchedule = sched;
@@ -381,7 +385,12 @@ public sealed partial class MagiViewModel
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
-        PostOpNotice($"{changed}マスを {shiftKigou} に一括変更しました");
+        var who = staffSet.Count == 1 ? $"{(staffSet.Min < st.StaffList.Count ? st.StaffList[staffSet.Min].Name : $"職員{staffSet.Min + 1}")}さん"
+            : staffSet.Count == st.StaffCount ? "全員"
+            : $"{staffSet.Count}人";
+        // 曜日を選んだ一括は飛び飛びの日＝範囲で書くと間の日まで変えたように読めるので日数で言う。
+        var days = daySet.Max - daySet.Min + 1 == daySet.Count ? DayText.Range(st.StartDate, daySet.Min, daySet.Max) : $"{daySet.Count}日分";
+        PostOpNotice($"{who} {days} の {changed}マスを {shiftKigou} に一括変更しました");
         LogOp("I", $"一括編集: {changed}マス → {OpSy(shift)}");
         RefreshCheck();
     }
@@ -446,21 +455,22 @@ public sealed partial class MagiViewModel
         _fixStateKey = StateKey(st);
         var p = ScheduleUtil.CachedProblem(st);
         Ui.MessageIsError = false;
-        Ui.Message = "複数人の入れ替えの手順を探しています…";
-        LastPrepareChainFixTask = PrepareShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label);
+        var slot = $"{DayText.Full(st.StartDate, dayIndex)} の「{KigouFormat.ToHankakuKigou(shiftIndex >= 0 && shiftIndex < st.Shifts.Count ? st.Shifts[shiftIndex].Kigou : "")}」";
+        Ui.Message = $"{slot} を複数人の入れ替えで埋める手順を探しています…";
+        LastPrepareChainFixTask = PrepareShortageChainFixCoreAsync(st, p, snap, shiftIndex, dayIndex, label, slot);
     }
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="PrepareShortageChainFix"/> が背後で走らせる Task。</summary>
     internal Task? LastPrepareChainFixTask { get; private set; }
 
-    private async Task PrepareShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label)
+    private async Task PrepareShortageChainFixCoreAsync(MagiState st, Problem p, int[][] snap, int k, int j, string label, string slot)
     {
         var s = await Task.Run(() => V6PortAnalyzer.ChainFixSuggestion(st, p, snap, k, j, label))
             .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // FindFixSuggestionsCoreAsync と同じ理由
         if (s is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "入れ替えの手順が見つかりませんでした。「直し方を探す」で探し直してください";
+            Ui.Message = $"{slot} を埋める入れ替えの手順が見つかりませんでした。「直し方を探す」で探し直してください";
             return;
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
@@ -598,7 +608,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{BusyWhat()}の実行中は回数を変更できません。終わってから試してください。";
+            Ui.Message = $"{OpNm(i)}さんの「{OpSy(k)}」の回数は変更できません（{BusyWhat()}の実行中）。終わるか「やめる」を押してから試してください。";
             return;
         }
         var st = _state;
@@ -904,7 +914,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"希望設定: {OpNm(i)} {j + 1}日 — {blocked}");
             Ui.MessageIsError = true;
-            Ui.Message = $"{OpNm(i)} {DayText.Short(st.StartDate, j)} は拡張希望の指定日なので、希望は入れられません";
+            Ui.Message = $"{OpNm(i)}さんの {DayText.Full(st.StartDate, j)} は拡張希望の指定日なので、希望は入れられません。{ExtWishRemedy}";
             return;
         }
         var m = new Dictionary<string, int>(st.Wishes) { [$"{i},{j}"] = k };
@@ -958,25 +968,48 @@ public sealed partial class MagiViewModel
             ? new[] { staffIdx.Value }
             : Enumerable.Range(0, st.StaffList.Count).Where(i => ScheduleUtil.CachedProblem(st).CanDo(i, k)).ToArray();
         if (staffRange.Length == 0) return;
-        var blockedN = 0;
+        var blockedN = 0; var placed = 0; var changed = 0;
+        var blockedStaff = new SortedSet<int>(); var blockedDays = new SortedSet<int>();
         foreach (var i in staffRange)
             foreach (var j in days)
                 if (i >= 0 && i < st.StaffList.Count && j >= 0 && j < st.DayCount)
                 {
-                    if (ExtWishRules.WishBlockedBy(st, i, j) is not null) { blockedN++; continue; }
+                    if (ExtWishRules.WishBlockedBy(st, i, j) is not null) { blockedN++; blockedStaff.Add(i); blockedDays.Add(j); continue; }
+                    placed++;
+                    if (!st.Wishes.TryGetValue($"{i},{j}", out var prevK) || prevK != k) changed++;
                     m[$"{i},{j}"] = k;
                 }
         if (blockedN > 0) LogOp("W", $"希望一括: {blockedN}件 — {ExtWishRules.MsgExtDay}");
+        // 画面の「誰」: 担当外を除いた全員は人数で言う（§6.1）。
+        var whoText = staffIdx is not null ? $"{OpNm(staffIdx.Value)}さんの" : staffRange.Length == st.StaffList.Count ? "全員の" : $"{staffRange.Length}名の";
+        var sym = OpSy(k);
         if (m.Count == st.Wishes.Count && m.All(kv => st.Wishes.TryGetValue(kv.Key, out var v) && v == kv.Value))
         {
             Ui.MessageIsError = blockedN > 0;
-            Ui.Message = blockedN > 0 ? $"拡張希望の指定日なので、希望は入れられません（{blockedN}件・変更なし）" : "同じ希望がすでに入っています（変更なし）";
+            if (blockedN > 0)
+            {
+                var whoB = blockedStaff.Count == 1 ? $"{OpNm(blockedStaff.Min)}さんの" : $"{blockedStaff.Count}名の";
+                Ui.Message = $"{whoB} {DaysText(st.StartDate, blockedDays.ToList())} は拡張希望の指定日なので、「{sym}」の希望は入れられません（{blockedN}件・変更なし）。{ExtWishRemedy}";
+            }
+            else Ui.Message = $"{whoText} {DaysText(st.StartDate, days)} には「{sym}」の希望がすでに入っています（{placed}件・変更なし）";
             return;
         }
         var excluded = st.StaffList.Count - staffRange.Length;
         var who = staffIdx is not null ? OpNm(staffIdx.Value) : "全員" + (excluded > 0 ? $"（担当外{excluded}名を除く）" : "");
         LogOp("I", $"希望一括: {who} {OpDays(days)} → {OpSy(k)}");
-        ApplyStructure(st with { Wishes = m }, notice: blockedN > 0 ? $"希望を入れました（拡張希望の指定日の{blockedN}件は入れていません）" : null);
+        ApplyStructure(st with { Wishes = m }, notice: blockedN > 0 ? $"{whoText} {DaysText(st.StartDate, days)} に「{sym}」の希望を{changed}件入れました（拡張希望の指定日の{blockedN}件は入れていません）" : null);
+    }
+
+    /// <summary>拡張希望の指定日に希望を入れようとしたときの次の一手（希望の入力パネルの案内と同じ言い方＋場所）。</summary>
+    private const string ExtWishRemedy = "拡張希望を消すと入れられます（編集タブの「月次条件」の『希望シフト登録』）";
+
+    /// <summary>選んだ日（0 始まり）の書き方。続いていれば「10/9〜10/11」（1 日は「10/12(月)」）、飛び飛びは「10/5・10/12・10/19ほか2日」。</summary>
+    private static string DaysText(string startDate, IReadOnlyList<int> days)
+    {
+        var ds = days.Distinct().OrderBy(x => x).ToList();
+        if (ds.Count == 0) return "";
+        if (ds[^1] - ds[0] + 1 == ds.Count) return DayText.Range(startDate, ds[0], ds[^1]);
+        return string.Join("・", ds.Take(3).Select(d => DayText.Short(startDate, d))) + (ds.Count > 3 ? $"ほか{ds.Count - 3}日" : "");
     }
 
     /// <summary>[一括] スタッフ(null=全員)×日群の希望を一括削除。</summary>
@@ -991,9 +1024,10 @@ public sealed partial class MagiViewModel
             foreach (var j in days)
                 m.Remove($"{i},{j}");
         var cleared = st.Wishes.Count - m.Count;
-        if (cleared == 0) { Ui.MessageIsError = false; Ui.Message = "消す希望はありませんでした"; return; }
+        var whoWhen = (staffIdx is not null ? $"{OpNm(staffIdx.Value)}さんの" : "全員の") + " " + DaysText(st.StartDate, days);
+        if (cleared == 0) { Ui.MessageIsError = false; Ui.Message = $"{whoWhen} に消す希望はありませんでした"; return; }
         LogOp("I", $"希望クリア: {(staffIdx is not null ? OpNm(staffIdx.Value) : "全員")} {OpDays(days)}");
-        ApplyStructure(st with { Wishes = m }, notice: $"希望を{cleared}件消しました");
+        ApplyStructure(st with { Wishes = m }, notice: $"{whoWhen} の希望を{cleared}件消しました");
     }
 
     /// <summary>[一括] すべての希望を削除。</summary>
@@ -1117,9 +1151,9 @@ public sealed partial class MagiViewModel
         if (string.IsNullOrWhiteSpace(text)) return;
         var t = text.Trim();
         Ui.MessageIsError = false;
-        if (Ui.ReviewMemos.Contains(t)) { Ui.Message = "すでに見直し候補にあります"; return; }
+        if (Ui.ReviewMemos.Contains(t)) { Ui.Message = "すでに見直し候補にあります（編集タブ＞年間マスター）"; return; }
         Ui.ReviewMemos = Ui.ReviewMemos.Append(t).ToList();
-        Ui.Message = "見直し候補に追加しました";
+        Ui.Message = $"見直し候補に追加しました（編集タブ＞年間マスター・{Ui.ReviewMemos.Count}件）";
     }
 
     public void RemoveReviewMemo(int index)
@@ -1300,17 +1334,38 @@ public sealed partial class MagiViewModel
         if (!RowDuplicate(st, family, values, excludeIndex)) return false;
         LogOp("W", $"制約の追加/変更を無視({family}): {string.Join(" ", values)} は登録済み");
         Ui.MessageIsError = true;
-        Ui.Message = DuplicateRowHint;
+        Ui.Message = $"「{FamilyTitle(family)}」に同じ条件の行がすでにあるため、" + DuplicateRemedy(excludeIndex is not null);
         return true;
     }
 
+    /// <summary>族の画面名（一覧の見出しの括弧より前）。</summary>
+    private string FamilyTitle(string family)
+    {
+        var title = ConstraintFamilies().Concat(SkillConstraintFamilies()).FirstOrDefault(v => v.Key == family)?.Title;
+        if (title is null) return "制約";
+        var q = title.IndexOf('（');
+        return q >= 0 ? title[..q] : title;
+    }
+
+    /// <summary>同じ行があって止めたときの「何」と「どうする」。追加は今ある行が効く、変更は値を変えるかこの行を消す。</summary>
+    private static string DuplicateRemedy(bool update) =>
+        update ? "変更しませんでした。別の値にするか、この行を削除してください" : "追加しませんでした（今ある行がそのまま使われます）";
+
+    /// <summary>同じ並びが登録済み。別の族にあるなら、そちらを消せば入れられる（族をまたぐ二重掛けを止めているため）。</summary>
+    private static string SeqDuplicateMessage(string family, IReadOnlyList<string> pat, string dupFam, bool update)
+    {
+        var head = $"同じ並び「{string.Join("→", pat)}」が「{dupFam}」にすでにあるため、";
+        var verb = update ? "変更" : "追加";
+        return dupFam == SeqFamilyJp(family) ? head + DuplicateRemedy(update) : head + $"{verb}しませんでした（「{dupFam}」の行を消すと{verb}できます）";
+    }
+
     /// <summary>途中に空欄のある並びは断る（後ろが黙って切れ、1番目だけの禁止になりうる。CSV 取込も同じ形を形式エラーにする）。</summary>
-    private bool SeqGapRejected(string family, IReadOnlyList<string> pattern)
+    private bool SeqGapRejected(string family, IReadOnlyList<string> pattern, bool update)
     {
         if (!SeqHasGap(pattern)) return false;
         LogOp("W", $"制約の追加/変更を無視({family}): 並びの途中に空欄 {string.Join(",", pattern)}");
         Ui.MessageIsError = true;
-        Ui.Message = "並びの途中に空欄があります。上から詰めて入れてください";
+        Ui.Message = $"「{SeqFamilyJp(family)}」の並びの途中に空欄があるため、{(update ? "変更" : "追加")}しませんでした。上から詰めて入れてください";
         return true;
     }
 
@@ -1320,7 +1375,7 @@ public sealed partial class MagiViewModel
         if (SeqDuplicateOf(st, family, pat, excludeIndex) is not { } dupFam) return false;
         LogOp("W", $"制約の追加/変更を無視({family}): {string.Join("→", pat)} は「{dupFam}」に登録済み");
         Ui.MessageIsError = true;
-        Ui.Message = $"同じ並び「{string.Join("→", pat)}」は「{dupFam}」に登録済みです";
+        Ui.Message = SeqDuplicateMessage(family, pat, dupFam, update: excludeIndex is not null);
         return true;
     }
 
@@ -1382,7 +1437,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
-        if (SeqGapRejected(family, pattern)) return;
+        if (SeqGapRejected(family, pattern, update: false)) return;
         // Level Zero loads cons3 by reading day columns until the first blank (truncate at
         // first blank, max 5 days), not by removing all blanks. Match that here.
         var pat = NormalizeSeq(pattern);
@@ -1581,7 +1636,7 @@ public sealed partial class MagiViewModel
                 next = st with { Cons42s = Replaced(st.Cons42s, index, new C42Row(G(0), G(2), G(1), G(3))) };
                 break;
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
-                if (SeqGapRejected(family, v)) return;
+                if (SeqGapRejected(family, v, update: true)) return;
                 var pat = NormalizeSeq(v);
                 if (pat.Count == 0) return;
                 if (SeqAlreadyExists(st, family, pat, index)) return;
@@ -1625,7 +1680,7 @@ public sealed partial class MagiViewModel
         {
             // 診断からタップまでに行が変わっていたときは黙って何も起きないより、戻すものが無いことを伝える。
             Ui.MessageIsError = true;
-            Ui.Message = "削除する重複が見つかりませんでした（すでに変更されています）";
+            Ui.Message = $"{issue.Where} の重複は見つかりませんでした（すでに変更されています）。編集タブ＞年間マスター＞⑤ 並び・期間の制約で確かめてください";
         }
     }
 
@@ -1785,7 +1840,7 @@ public sealed partial class MagiViewModel
             {
                 Ui.MessageIsError = true;
                 Ui.Running = OptimizeInFlight();
-                Ui.Message = $"{doneMessage}（問題がないか調べられませんでした: {FailureWords.Of(e, FailureKind.Engine)}）";
+                Ui.Message = $"{doneMessage}（問題がないか調べられませんでした: {FailureWords.Of(e, FailureKind.Engine)}。設定タブの「いま診断し直す」で調べ直せます）";
             }
         }
     }
@@ -1828,7 +1883,7 @@ public sealed partial class MagiViewModel
         if (removed == 0)
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"禁止の並び「{seqLabel}」は見つかりませんでした";
+            Ui.Message = $"禁止の並び「{seqLabel}」は見つかりませんでした（すでに変更されています）。編集タブ＞年間マスター＞⑤ 並び・期間の制約で確かめてください";
             return;
         }
         LogOp("I", $"禁止の並びを削除: {seqLabel}（{removed}件）");

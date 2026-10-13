@@ -87,7 +87,7 @@ public class V6PortAnalyzerForbiddenTest
     }
 
     // 需要も希望も無い盤面の禁止連続は、どのセルも休へ変えるだけで安全に崩せる＝Free。
-    // Free を含む run は「探索未到達の可能性」として案内される（もし残っていたら本物のシグナル）。
+    // Free を含む run は「『直し方を探す』で直せる」と案内される（もし残っていたら探索未到達の本物のシグナル）。
     [Fact]
     public void DiagnoseForbiddenRuns_MarksFreelyBreakableRunAsEscapable()
     {
@@ -100,7 +100,7 @@ public class V6PortAnalyzerForbiddenTest
         var run = Assert.Single(diag.Runs);
         Assert.True(run.Escapable, "安全な代替がある run は escapable");
         Assert.Contains(run.Cells, c => c.Escape == ForbiddenCellEscape.Free);
-        Assert.Contains("探索未到達", run.Hint);
+        Assert.Contains("『直し方を探す』で直せます", run.Hint);
     }
 
     // 両セルとも本人希望どおり＝希望セルは wishLocked で探索が動かさない（設計どおり）。

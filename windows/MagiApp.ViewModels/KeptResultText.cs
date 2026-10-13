@@ -21,7 +21,7 @@ public static class KeptResultText
         : "同じ点数のため";
 
     public static string Screen(Score now, Score prev) =>
-        $"今回（{Parts(now)}）は前回（{Parts(prev)}）より改善しませんでした（{Reason(now, prev)}。比べる順＝必須→重み→合計）。前回の結果を維持します。";
+        $"前回の結果を維持します。今回（{Parts(now)}）は前回（{Parts(prev)}）より改善しませんでした（{Reason(now, prev)}。比べる順＝必須→重み→合計）。";
 
     public static string Log(string prefix, Score now, Score prev) =>
         $"{prefix}: 今回 {Parts(now)} は前回 {Parts(prev)} 以下に改善せず（{Reason(now, prev)}）→ 前回を維持";

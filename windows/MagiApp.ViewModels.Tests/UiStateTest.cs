@@ -27,7 +27,7 @@ public class UiStateTest
 
         // budgetSec=300 / nativeAccel=true / nativeParity=true / softPolish=true は
         // Kotlin原本の非既定値そのままの明示デフォルト。
-        Assert.Equal(300, s.BudgetSec);
+        Assert.Equal(60, s.BudgetSec);
         Assert.True(s.NativeAccel);
         Assert.True(s.NativeParity);
         // [Kotlin 3.518.0] filterC3nIncrease は既定ONへ昇格（品質不変・速度のみの既存測定で判断済み）。

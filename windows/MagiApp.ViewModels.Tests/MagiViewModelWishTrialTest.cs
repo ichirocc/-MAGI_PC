@@ -158,7 +158,7 @@ public class MagiViewModelWishTrialTest : IDisposable
 
         Assert.False(vm._state!.Wishes.ContainsKey("0,2"));
         Assert.Equal(b0, vm._currentSchedule);
-        Assert.Contains("希望の取り消しはそのままです", vm.Ui.Message);
+        Assert.Contains("希望は外したままです", vm.Ui.Message);
         Assert.False(vm.Ui.Wishes.ContainsKey("0,2"));
         Assert.Equal(ready.Token.Result!.Hx, vm.Ui.BestHard);
     }
@@ -251,7 +251,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         Assert.False(fake.SeenState!.Wishes.ContainsKey("0,2"));
         Assert.False(vm._state!.Wishes.ContainsKey("0,2"));
         Assert.False(vm.Ui.Wishes.ContainsKey("0,2"));
-        Assert.Contains("希望（職員A 3日 A）を取り消", vm.Ui.Message);
+        Assert.Contains("希望（職員Aさん 12/3 A）を調整", vm.Ui.Message);
         Assert.NotNull(vm.WishCancelOutcomeLine());
         Assert.Equal(kept, vm.Ui.RunSummary is null);
     }
@@ -270,7 +270,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         Assert.Equal(ready.Token.Result!.Hx, vm.Ui.BestHard);
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("勤務表をつくれませんでした", vm.Ui.Message);
-        Assert.Contains("希望の取り消しはそのままです", vm.Ui.Message);
+        Assert.Contains("希望は外したままです", vm.Ui.Message);
     }
 
     [Fact]
@@ -356,7 +356,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         Assert.True(vm.Ui.MessageIsError);
         Assert.Contains("勤務表の作成は終わりましたが", vm.Ui.Message);
         Assert.DoesNotContain("つくれませんでした", vm.Ui.Message);
-        Assert.Equal(s5, vm.Ui.Message!.Contains("希望の取り消しはそのままです"));
+        Assert.Equal(s5, vm.Ui.Message!.Contains("希望は外したままです"));
         Assert.Equal(!s5, vm.Ui.Wishes.ContainsKey("0,2"));
     }
 

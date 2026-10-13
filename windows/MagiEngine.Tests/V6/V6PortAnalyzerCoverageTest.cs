@@ -127,7 +127,7 @@ public class V6PortAnalyzerCoverageTest
     {
         var diag = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: false));
         var sf = diag.Shortfalls.Single(s => s.ShiftIndex == 1);
-        Assert.True(sf.Reason.Contains("玉突き=ブロック移動") && sf.Reason.Contains("必要"),
+        Assert.True(sf.Reason.Contains("複数人を順に入れ替える手（玉突き）") && sf.Reason.Contains("必要"),
             "玉突き候補が本当に解消できるときは従来どおりの案内");
         Assert.False(sf.Reason.Contains("どう組んでも"), "「どう組んでも解消できません」は出さない");
     }

@@ -12,7 +12,7 @@ public sealed record StopExplanation(string Line, StopNext Next)
     {
         var hard = s.RemainingHard;
         if (hard == 0)
-            return s.EarlyStop ? new StopExplanation($"改善が止まったので {s.UsedSec} 秒で終えました（予算 {s.BudgetSec} 秒）。必須違反はありません。", StopNext.None) : null;
+            return s.EarlyStop ? new StopExplanation($"改善が止まったので {s.UsedSec} 秒で終えました（制限時間 {s.BudgetSec} 秒）。必須違反はありません。", StopNext.None) : null;
         return s.Kind switch
         {
             V6FinalPort.StopKind.Deadline =>
@@ -26,16 +26,17 @@ public sealed record StopExplanation(string Line, StopNext Next)
             V6FinalPort.StopKind.C3nWallEmpirical =>
                 new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びで、1 マスの変更・玉突き・隣の日の調整では崩せませんでした。", StopNext.FindFix),
             _ =>
-                new StopExplanation($"改善が {s.StalledSec} 秒止まったので {s.UsedSec} 秒で終えました（予算 {s.BudgetSec} 秒）。必須違反 {hard} 件が残っています。", StopNext.FindFix),
+                new StopExplanation($"改善が {s.StalledSec} 秒止まったので {s.UsedSec} 秒で終えました（制限時間 {s.BudgetSec} 秒）。必須違反 {hard} 件が残っています。", StopNext.FindFix),
         };
     }
 
+    /// <summary>次の一手は直す場所（タブと節）から言う＝カードの文はボタンでないので、行き先を文で示す。</summary>
     public static string? NextLabel(StopNext n) => n switch
     {
         StopNext.None => null,
-        StopNext.MoreTime => "時間を増やして再作成する",
-        StopNext.ReviewStaffing => "担当を見直す（人を増やす）",
-        StopNext.ReviewWishes => "希望を見直す",
-        _ => "直し方を探す",
+        StopNext.MoreTime => "設定タブの「最適化設定」で制限時間を増やして再作成する",
+        StopNext.ReviewStaffing => "編集タブの「年間マスター」①で担当を見直す（人を増やす）",
+        StopNext.ReviewWishes => "編集タブの「月次条件」で希望を見直す",
+        _ => "分析タブで直し方を探す",
     };
 }

@@ -43,7 +43,7 @@ public static class ExtWishRules
         existing ??= state.ExtWishes ?? Array.Empty<ExtWish>();
         var notes = new List<string>();
         var i = input.Staff;
-        if (i < 0 || i >= state.StaffCount) return new SaveResult(null, new[] { "存在しない職員の拡張希望は保存しない" });
+        if (i < 0 || i >= state.StaffCount) return new SaveResult(null, new[] { "この職員が職員一覧に見つかりません" });
         var days = new List<int>();
         foreach (var d in input.Days)
         {
@@ -60,7 +60,9 @@ public static class ExtWishRules
         }
         var wd = WishDays(state, i);
         if (days.Any(wd.Contains)) { days.RemoveAll(wd.Contains); notes.Add(MsgWishDay); }
-        if (days.Count == 0 || shifts.Count == 0) return new SaveResult(null, notes.Append("日か禁止シフトが残らないので保存しない").ToList());
+        if (days.Count == 0 || shifts.Count == 0) return new SaveResult(null, notes.Append(days.Count == 0
+            ? "登録できる日が残りません（希望のある日と期間の外の日は入れられません）"
+            : "以外にするシフトが残りません（シフト一覧に無い記号は入れられません）").ToList());
         var p = ScheduleUtil.CachedProblem(state);
         var banned = shifts.Select(x => kigou.IndexOf(x)).ToHashSet();
         // 置けるシフトは、同じ職員の既存の件と合わせた禁止（探索が使う和集合）で日ごとに見る。
@@ -68,12 +70,12 @@ public static class ExtWishRules
         foreach (var j in days)
         {
             if (!Enumerable.Range(0, p.K).Any(k => !banned.Contains(k) && !existingBan.Banned(i, j, k) && p.MayPlace(i, k)))
-                return new SaveResult(null, notes.Append($"{j + 1}日に置けるシフトが残らないので保存しない").ToList());
+                return new SaveResult(null, notes.Append($"{ScheduleUtil.FormatDay(state.StartDate, j)} に入れられるシフトが残りません（ほかのシフトは担当外・上限 0・既にある拡張希望のどれかで入れられません）").ToList());
         }
         days.Sort();
         var outW = new ExtWish(i, days.Select(j => DateOf(state, j)).ToList(), kigou.Where(shifts.Contains).ToList());
         if (existing.Any(e => e.Staff == i && e.Days.ToHashSet().SetEquals(outW.Days) && e.Shifts.ToHashSet().SetEquals(outW.Shifts)))
-            return new SaveResult(null, notes.Append("同じ日と同じ禁止シフトの拡張希望が既にある").ToList());
+            return new SaveResult(null, notes.Append("同じ日・同じシフトの拡張希望が既にあります").ToList());
         return new SaveResult(outW, notes);
     }
 

@@ -6,7 +6,7 @@ namespace MagiEngine.V6;
 /// <summary>
 /// The category of a <see cref="SettingIssue"/> — faithful port of Kotlin's <c>IssueKind</c> enum
 /// (<c>V6SanityPort.kt:22</c>). Also drives <see cref="V6SanityPort.BuildGuidance"/>'s final sort
-/// order (Wish &lt; Demand &lt; Range &lt; Constraint, with a "配布不可" <see cref="SettingIssue.Where"/>
+/// order (Wish &lt; Demand &lt; Range &lt; Constraint, with a "何度つくっても残る人員不足" <see cref="SettingIssue.Where"/>
 /// prefix always sorted first regardless of kind).
 /// </summary>
 public enum IssueKind { Wish, Constraint, Demand, Range }
@@ -97,6 +97,27 @@ public sealed record SettingIssue(
 /// </summary>
 public static partial class V6SanityPort
 {
+    /// <summary>直す場所＝編集タブの区分と節の見出し（Android <c>MagiApp.kt</c> の区分・各カードの題と同じ名前。見出しを変えたらここも）。
+    /// 文の最初の場所だけ <see cref="Edit"/> を前に付け、同じ文の 2 つ目からは区分から書く。</summary>
+    private static class Place
+    {
+        public const string Tab = "編集タブ";
+        public const string Edit = "編集タブの";
+        public const string Wish = "『月次条件』の『希望シフト登録』";
+        public const string Need = "『月次条件』の『必要人数設定』";
+        public const string NeedDays = "『月次条件』の『日別の必要人数（例外）一覧』";
+        public const string Month = "『月次条件』の『対象の月』";
+        public const string Staff = "『職員管理』";
+        public const string Shift = "『年間マスター』の『① シフト・グループ』";
+        public const string Skill = "『年間マスター』の『② スキルグループ』";
+        public const string Count = "『年間マスター』の『③ 回数（1人あたり）』";
+        public const string Head = "『年間マスター』の『④ 人数と組み合わせ』";
+        public const string Rule = "『年間マスター』の『⑤ 並び・期間の制約』";
+    }
+
+    /// <summary>検査7 の場所の印（並べ替えが最優先にする目印）。</summary>
+    private const string ForcedShortMark = "何度つくっても残る人員不足";
+
     /// <summary>
     /// Faithful port of Kotlin's <c>buildGuidance</c> — see this file's class-level doc comment for
     /// scope and dependencies. Every section below carries forward its Kotlin source's own inline
@@ -115,16 +136,21 @@ public static partial class V6SanityPort
 
         string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
         string Nm(int i) => i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+        // 日の並び（先頭 3 件＋「ほか」）。
+        string DaysText(IReadOnlyList<int> days) =>
+            string.Join("・", days.Take(3).Select(d => SafeDayLabel(state.StartDate, d))) + (days.Count > 3 ? " ほか" : "");
+        // 職員 i がシフト k に希望で固定した日（6d・6e の件数と同じ数え方）。
+        List<int> WishedDays(int i, int k) => Enumerable.Range(0, p.T).Where(j => p.WishFixed(i, j) && p.Wish[i][j] == k).ToList();
 
         // 1) 希望シフトの設定ミス（担当外・範囲外など）
         foreach (var w in DetectImpossibleWishes(state, p))
         {
             var where = $"{w.StaffName} {SafeDayLabel(state.StartDate, w.DayIndex)} 希望「{w.ShiftSymbol}」";
             string fix = w.Reason.Contains("担当不可")
-                ? $"この希望を取り消すか、設定で{w.StaffName}さんの担当に「{w.ShiftSymbol}」を追加してください"
+                ? $"本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、{Place.Edit}{Place.Shift}の担当可否で、グループ「{w.GroupSymbol}」が「{w.ShiftSymbol}」を担当できるようにしてください"
                 : w.Reason.Contains("範囲外")
-                    ? "希望のシフト記号・日付が勤務表の範囲内かを確認してください"
-                    : "希望の入力（i,j形式）を確認してください";
+                    ? $"{Place.Edit}{Place.Wish}で、この希望のシフトと日付が今の勤務表の範囲内かを確かめてください"
+                    : $"{Place.Edit}{Place.Wish}で、この希望を入れ直してください";
             var canOneTap = w.Reason.Contains("担当不可");
             outList.Add(new SettingIssue(IssueKind.Wish, where, $"実現できない希望です（{w.Reason}）", fix,
                 Action: canOneTap ? SettingFixAction.RemoveWish : SettingFixAction.None,
@@ -142,7 +168,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Wish,
                 $"{Nm(i)} {SafeDayLabel(state.StartDate, j)} 希望「{y}」→ {SafeDayLabel(state.StartDate, j + 1)} 希望「{x}」",
                 $"「{x} の希望の前日は {y} 禁止」に希望どうしで当たっています。希望は固定なので計算では解消できません",
-                "どちらかの希望を取り消すか、制約「希望の前日に禁止」の行を見直してください",
+                $"{Place.Edit}{Place.Wish}で本人と相談してどちらかの希望を調整する（希望は外れます。元に戻せます）か、{Place.Rule}の「希望の前日に禁止」でこの行を見直してください",
                 Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}"));
         }
         // 1c) 禁止の並び(c3n)の窓がまるごと希望固定（例: 休の希望 3 連日と「休→休→休」禁止）。どれを取り消すかは利用者が選ぶ＝ワンタップなし。
@@ -155,7 +181,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Wish,
                 $"{Nm(g.Staff)} {string.Join("・", g.Days.Select(d => SafeDayLabel(state.StartDate, d)))} 希望「{seq}」",
                 $"禁止の並び「{seq}」に{(one ? "希望が" : "希望どうしで")}当たっています。希望は固定なので計算では解消できません",
-                $"{(one ? "この希望" : "いずれか1件の希望")}を取り消すか、禁止の並び「{seq}」を見直してください"));
+                $"{Place.Edit}{Place.Wish}で本人と相談して{(one ? "この希望" : "いずれか1件の希望")}を調整する（希望は外れます。元に戻せます）か、{Place.Rule}の「禁止の並び」で「{seq}」を見直してください"));
         }
         // 1d) 回避の並び(c3mn)の窓がまるごと希望固定。必須ではなく要調整として残る＝案内（Neutral）。
         foreach (var g in WishAvoidRuns(p))
@@ -165,7 +191,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Wish,
                 $"{Nm(g.Staff)} {string.Join("・", g.Days.Select(d => SafeDayLabel(state.StartDate, d)))} 希望「{seq}」",
                 $"回避の並び「{seq}」に{(one ? "希望が" : "希望どうしで")}当たっています。希望は固定なので計算では外せず、要調整として残ります",
-                $"{(one ? "この希望" : "いずれか1件の希望")}を取り消すか、回避の並び「{seq}」を見直してください", Neutral: true));
+                $"{Place.Edit}{Place.Wish}で本人と相談して{(one ? "この希望" : "いずれか1件の希望")}を調整する（希望は外れます。元に戻せます）か、{Place.Rule}の「回避の並び」で「{seq}」を見直してください", Neutral: true));
         }
 
         // 2) 連続パターン制約の重複（例: c3n:Dﾃ→A4）
@@ -175,8 +201,8 @@ public static partial class V6SanityPort
             var famRaw = parts0[0];
             var fam = C3FamilyJp(famRaw);
             var seq = parts0.Length > 1 ? parts0[1] : "";
-            outList.Add(new SettingIssue(IssueKind.Constraint, $"連続パターン「{seq}」({fam})",
-                "同じパターンが2重に登録されています", $"連続パターン設定で「{seq}」の重複行を1つ削除してください",
+            outList.Add(new SettingIssue(IssueKind.Constraint, $"{fam}「{seq}」",
+                "同じ並びが2重に登録されています", $"{Place.Edit}{Place.Rule}の「{fam}」で「{seq}」の重複を1つ削除してください",
                 Action: SettingFixAction.DeleteDupSeq, ActionLabel: "重複を1つ削除",
                 SeqFamily: famRaw, SeqKey: seq));
         }
@@ -186,7 +212,7 @@ public static partial class V6SanityPort
         string GSym(int g) => g >= 0 && g < state.Groups.Count ? state.Groups[g].Kigou : $"#{g}";
         string SSym(int g) => g >= 0 && g < state.SkillGroups.Count ? state.SkillGroups[g].Kigou : $"#{g}";
         string Bound(int l, int u) => $"{(l > 0 ? l.ToString() : "")}〜{(u == int.MaxValue ? "" : u.ToString())}";
-        void ReportDup<T>(IEnumerable<T> rows, Func<T, string> key, Func<T, string> where, bool counted = true)
+        void ReportDup<T>(IEnumerable<T> rows, Func<T, string> key, Func<T, string> where, string place, bool counted = true)
         {
             foreach (var same in rows.GroupBy(key))
             {
@@ -195,16 +221,16 @@ public static partial class V6SanityPort
                 outList.Add(new SettingIssue(IssueKind.Constraint, where(same.First()),
                     counted ? $"同じ行が{n}本あります。違反を{n}回数えるので、この決まりだけ重みが{n}倍になります"
                             : $"同じ行が{n}本あります（評価は1本分で変わりません）",
-                    "制約設定でこの行の重複を削除してください（自動では消しません）"));
+                    $"{Place.Edit}{place}で、この行の重複を削除してください（自動では消しません）"));
             }
         }
-        ReportDup(p.Cons1, c => $"{c.Day1},{c.ShiftIdx},{c.Day2}", c => $"期間の制約「{Sym(c.ShiftIdx)} {c.Day1}日で{c.Day2}回以上」");
-        ReportDup(p.Cons2, c => $"{c.ShiftIdx},{c.Count}", c => $"個人の合計「{Sym(c.ShiftIdx)} 合計{c.Count}回以上」");
-        ReportDup(p.Cons3w, c => $"{c.WishIdx},{c.PrevIdx}", c => $"希望の前日に禁止「{Sym(c.WishIdx)} の希望の前日は {Sym(c.PrevIdx)}」", counted: false);
-        ReportDup(p.Cons41, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"グループのレンジ「{GSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」");
-        ReportDup(p.Cons42, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"グループペア禁止「{GSym(c.G1)}の{Sym(c.S1)} ✕ {GSym(c.G2)}の{Sym(c.S2)}」");
-        ReportDup(p.Cons41s, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"スキルグループのレンジ「{SSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」");
-        ReportDup(p.Cons42s, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"スキルグループペア禁止「{SSym(c.G1)}の{Sym(c.S1)} ✕ {SSym(c.G2)}の{Sym(c.S2)}」");
+        ReportDup(p.Cons1, c => $"{c.Day1},{c.ShiftIdx},{c.Day2}", c => $"期間の制約「{Sym(c.ShiftIdx)} {c.Day1}日で{c.Day2}回以上」", $"{Place.Rule}の「期間の制約」");
+        ReportDup(p.Cons2, c => $"{c.ShiftIdx},{c.Count}", c => $"個人の合計「{Sym(c.ShiftIdx)} 合計{c.Count}回以上」", $"{Place.Rule}の「個人の合計」");
+        ReportDup(p.Cons3w, c => $"{c.WishIdx},{c.PrevIdx}", c => $"希望の前日に禁止「{Sym(c.WishIdx)} の希望の前日は {Sym(c.PrevIdx)}」", $"{Place.Rule}の「希望の前日に禁止」", counted: false);
+        ReportDup(p.Cons41, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"グループのレンジ「{GSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」", $"{Place.Head}の「グループのレンジ」");
+        ReportDup(p.Cons42, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"グループペア禁止「{GSym(c.G1)}の{Sym(c.S1)} ✕ {GSym(c.G2)}の{Sym(c.S2)}」", $"{Place.Head}の「グループペア禁止」");
+        ReportDup(p.Cons41s, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"スキルグループのレンジ「{SSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」", $"{Place.Head}の「スキルグループのレンジ」");
+        ReportDup(p.Cons42s, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"スキルグループペア禁止「{SSym(c.G1)}の{Sym(c.S1)} ✕ {SSym(c.G2)}の{Sym(c.S2)}」", $"{Place.Head}の「スキルグループペア禁止」");
 
         // 2b) [監査#8 / Web HF557 A4 の native 移植] 連勤・回数窓制約(cons1)の不能設定
         //   d1>期間: 窓が期間を超え、判定が一度も走らず無言で無効。 d2>d1: 物理的に不可能で全員・全窓が発火し続ける。
@@ -219,9 +245,9 @@ public static partial class V6SanityPort
             }
             else if (c.Day2 > c.Day1)
             {
-                outList.Add(new SettingIssue(IssueKind.Constraint, $"連勤/休制約「{sym} {c.Day1}日で{c.Day2}回以上」",
-                    $"{c.Day1}日の窓に{c.Day2}回は物理的に不可能で、全員・全期間が違反になり続けます",
-                    $"制約設定（連勤・回数）で回数を{c.Day1}回以下に直すか、この行を削除してください"));
+                outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{sym} {c.Day1}日で{c.Day2}回以上」",
+                    $"{c.Day1}日間に{c.Day2}回は入りきらないため、「{sym}」を担当する全員が期間中ずっと違反になります",
+                    $"{Place.Edit}{Place.Rule}の「期間の制約」で回数を{c.Day1}回以下に直すか、この行を削除してください"));
             }
         }
 
@@ -258,10 +284,10 @@ public static partial class V6SanityPort
                     var supply = p.S * p.T - workMinDemand;
                     if (supply < demand)
                     {
-                        outList.Add(new SettingIssue(IssueKind.Constraint, $"窓ルール「{sym} を{c.Day1}日で{c.Day2}回以上」",
-                            $"「{sym}」の供給{supply}に対し必要{demand}(=担当{nCanDo}人×{c.Day2}回×{disjoint}窓)で{demand - supply} 不足。" +
-                                "どう組んでもこの窓違反(c1)は構造的に残ります（最適化では消せません）。",
-                            $"作業シフトの最低人数を下げて「{sym}」に回せる余地を増やすか、窓ルールの回数を下げる／日数を延ばす(制約設定)。"));
+                        outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{sym} {c.Day1}日で{c.Day2}回以上」",
+                            $"「{sym}」に回せるのは{supply}回分で、必要な{demand}回分（担当{nCanDo}人×{c.Day2}回×{disjoint}区間）に{demand - supply}回分足りません。" +
+                                "この期間の制約の違反は構造的に残ります（何度つくっても消えません）",
+                            $"{Place.Edit}{Place.Need}で作業シフトの必要人数を下げて「{sym}」に回せる日を増やすか、{Place.Rule}の「期間の制約」で回数を下げるか日数を延ばしてください"));
                     }
                 }
                 else
@@ -285,10 +311,10 @@ public static partial class V6SanityPort
                     if (capKnown && capSum < demand)
                     {
                         var shortfall = demand - capSum;
-                        outList.Add(new SettingIssue(IssueKind.Constraint, $"窓ルール「{sym} を{c.Day1}日で{c.Day2}回以上」",
-                            $"「{sym}」の1日あたり上限の合計({capSum})が窓ルールの必要回数({demand})に{shortfall}回ぶん届かず、" +
-                                "c1 を満たすには一部の日で上限を超える配置(過剰配置)が要ります。構造的に不能ではなく、最適化は過剰配置を少し払って解消できます。",
-                            $"「{sym}」の1日あたり上限を上げるか、{shortfall}回ぶんの過剰配置を許容してください。"));
+                        outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{sym} {c.Day1}日で{c.Day2}回以上」",
+                            $"「{sym}」の1日あたりの上限人数の合計（{capSum}回）が、この期間の制約に要る回数（{demand}回）に{shortfall}回分届きません。" +
+                                "満たすには一部の日で上限を超えて入れる（人員過剰）必要があります。解けない設定ではなく、人員過剰を少し出せば解消できます",
+                            $"{Place.Edit}{Place.Need}で「{sym}」の上限人数を上げるか、{shortfall}回分の人員過剰を許してください"));
                     }
                 }
             }
@@ -325,10 +351,10 @@ public static partial class V6SanityPort
                     var hi = p.RangeHi[i][shiftIdx];
                     if (hi == int.MaxValue || hi >= minDays) continue;
                     var name = Nm(i);
-                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」個人上限と窓ルールの衝突",
-                        $"窓ルール「{sym} を{ruleDesc}」を同時に満たすには最低{minDays}回が必要ですが、" +
-                            $"{name}さんの「{sym}」個人上限は{hi}回です。この人だけではどう配置しても窓ルールを満たせません",
-                        $"{name}さんの「{sym}」個人上限を{minDays}回以上に上げるか、窓ルールの回数を下げてください"));
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」個人上限と期間の制約の衝突",
+                        $"期間の制約「{sym} {ruleDesc}」を同時に満たすには最低{minDays}回が必要ですが、" +
+                            $"{name}さんの「{sym}」個人上限は{hi}回です。この人だけではどう配置しても期間の制約を満たせません",
+                        $"{Place.Edit}{Place.Count}で{name}さんの「{sym}」の個人上限を{minDays}回以上に上げるか、{Place.Rule}の「期間の制約」で回数を下げてください"));
                 }
             }
         }
@@ -341,9 +367,9 @@ public static partial class V6SanityPort
             if (eligible == 0)
             {
                 var sym = Sym(c.ShiftIdx);
-                outList.Add(new SettingIssue(IssueKind.Constraint, $"回数制約「{sym} を{c.Count}回以上」",
+                outList.Add(new SettingIssue(IssueKind.Constraint, $"個人の合計「{sym} 合計{c.Count}回以上」",
                     "このシフトを担当できる職員がいないため、この制約は事実上無効です",
-                    "担当設定（グループ×シフト）で担当者を追加するか、この行を削除してください"));
+                    $"{Place.Edit}{Place.Shift}の担当可否でどれかのグループが「{sym}」を担当できるようにするか、{Place.Rule}の「個人の合計」でこの行を削除してください"));
             }
         }
 
@@ -352,11 +378,11 @@ public static partial class V6SanityPort
         {
             var famJp = C3FamilyJp(fam);
             var negative = fam == "c3n" || fam == "c3mn";
-            outList.Add(new SettingIssue(IssueKind.Constraint, $"連続パターン「{seqStr}」({famJp})",
+            outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{seqStr}」",
                 negative
-                    ? $"パターン長が期間{p.T}日を超えるため期間内に発生し得ず、この制約は無効です"
-                    : $"パターン長が期間{p.T}日を超えるため物理的に充足できず、この制約は無効です",
-                $"連続パターン設定でパターンを{p.T}日以下に短縮するか、この行を削除してください"));
+                    ? $"並びの長さが期間{p.T}日を超えるため期間内に発生し得ず、この制約は無効です"
+                    : $"並びの長さが期間{p.T}日を超えるため物理的に充足できず、この制約は無効です",
+                $"{Place.Edit}{Place.Rule}の「{famJp}」で並びを{p.T}日以下に短くするか、この行を削除してください"));
         }
 
         // 2m) [3.412.0/P-04] 期間より長い窓の要件 — 行は解決できるが `MirrorCore.checkC1Family` が
@@ -364,9 +390,9 @@ public static partial class V6SanityPort
         //   連続パターン(2d)と同じ形で理由を案内する。read-only・評価不変。
         foreach (var row in p.C1OverT)
         {
-            outList.Add(new SettingIssue(IssueKind.Constraint, $"窓の要件「{row}」",
-                $"窓の日数が期間{p.T}日を超えるため、この決まりは評価されません（今の勤務表では常に無視されます）",
-                $"窓の日数を{p.T}日以下にするか、この行を削除してください"));
+            outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{row}」",
+                $"日数が期間{p.T}日を超えるため、この決まりは評価されません（今の勤務表では常に無視されます）",
+                $"{Place.Edit}{Place.Rule}の「期間の制約」で日数を{p.T}日以下にするか、この行を削除してください"));
         }
 
         // 2e) [3.309.0] 存在しないシフト記号を含む連続パターン — パース段階で無言除外されていた。
@@ -374,19 +400,21 @@ public static partial class V6SanityPort
         foreach (var (fam, seqStr) in p.C3UnknownShift)
         {
             var famJp = C3FamilyJp(fam);
-            outList.Add(new SettingIssue(IssueKind.Constraint, $"連続パターン「{seqStr}」({famJp})",
+            outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{seqStr}」",
                 "〈〉で囲んだ記号が今のシフト一覧にないため、この行は評価されていません" +
                     "（シフトを改名・削除するとこうなります）",
-                "連続パターン設定でこの行の記号を今あるシフトに直すか、行を削除してください"));
+                $"{Place.Edit}{Place.Rule}の「{famJp}」でこの行の記号を今あるシフトに直すか、行を削除してください"));
         }
 
         // 2f) [3.320.0] 3.309.0 は連続パターンだけを直したが、同じ無言除外が残り6族にもあった
         foreach (var (famJp, rowStr) in p.UnresolvedRows)
         {
+            // グループ／スキルグループの族は④、期間の制約・個人の合計・希望の前日に禁止は⑤にある。
+            var section = famJp.Contains("グループ") ? Place.Head : Place.Rule;
             outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{rowStr}」",
                 "この行は評価されていません。〈〉で囲んだ記号が今の一覧にないか、日数・回数が空か数値でない" +
                     "ためです（シフトやグループを改名・削除するとこうなります）",
-                "制約設定でこの行を今ある記号・正しい数値に直すか、行を削除してください"));
+                $"{Place.Edit}{section}の「{famJp}」で、この行を今ある記号・正しい数値に直すか、行を削除してください"));
         }
 
         // 2g) [backlog#24] 休(ShiftRole.Rest)がどのシフトにも付与されていない＝最適化/検査の入口
@@ -395,18 +423,18 @@ public static partial class V6SanityPort
         if (!state.Shifts.Any(s => s.Role == ShiftRole.Rest))
         {
             outList.Add(new SettingIssue(IssueKind.Constraint, "「休」のシフトがありません",
-                "休みとして扱うシフトが設定されていないため、最適化・検査を実行できません" +
+                "休みとして扱うシフトが無いため、勤務表をつくることも問題がないか調べることもできません" +
                     "（曜日の偏りや休み関連の診断も休を前提に動きます）",
-                "シフト設定で休みのシフトを「休みとして扱う」に設定してください"));
+                $"{Place.Edit}{Place.Shift}のシフト種別で休みにするシフトを開き、「休みとして扱う」をオンにしてください"));
         }
 
         // 2j) 期間/職員数の上限
         if (state.DayCount > 31)
         {
-            var slow = state.DayCount > 64 ? "。64日を超えるとビット演算の高速経路が使えず探索が遅くなります" : "";
+            var slow = state.DayCount > 64 ? "。64日を超えると計算がかなり遅くなります" : "";
             outList.Add(new SettingIssue(IssueKind.Demand, "対象期間が1か月を超えています",
-                $"対象期間が{state.DayCount}日あります。想定は1か月（31日）以内です{slow}",
-                "基本情報で開始日・終了日を1か月以内にするか、月ごとに分けて作成してください"));
+                $"対象期間が{state.DayCount}日（{SafeDayLabel(state.StartDate, 0)}〜{SafeDayLabel(state.StartDate, state.DayCount - 1)}）あります。想定は1か月（31日）以内です{slow}",
+                $"{Place.Edit}{Place.Month}で月を選び直して1か月以内にするか、月ごとに分けて作成してください"));
         }
         if (state.StaffCount > 30)
         {
@@ -428,17 +456,17 @@ public static partial class V6SanityPort
             var sy = idx.Length > 1 && KotlinInterop.ToIntOrNull(idx[1]) is int k0 && k0 >= 0 && k0 < state.Shifts.Count
                 ? state.Shifts[k0].Kigou : "";
             outList.Add(new SettingIssue(IssueKind.Constraint, $"個人の回数「{nm} {sy}」",
-                $"下限「{r.Lo}」上限「{r.Hi}」に数値でない値または負の値があります。その側は**制限なし**として" +
+                $"下限「{r.Lo}」上限「{r.Hi}」に数値でない値または負の値があります。その側は制限なしとして" +
                     "扱われるため、意図より弱い条件で計算されます",
-                "個人の回数で数値を入れ直すか、制限しないなら空欄にしてください"));
+                $"{Place.Edit}{Place.Count}で{nm}さんの「{sy}」の下限・上限を数値で入れ直すか、制限しないなら空欄にしてください"));
         }
         foreach (var sh in state.Shifts)
         {
             if (!BadNum(sh.Need1) && !BadNum(sh.Need2)) continue;
             outList.Add(new SettingIssue(IssueKind.Constraint, $"必要人数「{sh.Kigou}」",
                 $"最低人数「{sh.Need1}」上限人数「{sh.Need2}」に数値でない値があります。その側は" +
-                    "**未設定（要件なし）**として扱われます",
-                "必要人数で数値を入れ直すか、設定しないなら空欄にしてください"));
+                    "未設定（要件なし）として扱われます",
+                $"{Place.Edit}{Place.Shift}のシフト種別で「{sh.Kigou}」の最低人数・上限人数を数値で入れ直すか、設定しないなら空欄にしてください"));
         }
         void CheckRange(string famJp, string fam, IReadOnlyList<C41Row> rows)
         {
@@ -447,9 +475,9 @@ public static partial class V6SanityPort
                 if (BadNum(c.L) || BadNum(c.U))
                 {
                     outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{c.GroupKigou} {c.ShiftKigou}」",
-                        $"下限「{c.L}」上限「{c.U}」に数値でない値があります。その側は**制限なし**として" +
+                        $"下限「{c.L}」上限「{c.U}」に数値でない値があります。その側は制限なしとして" +
                             "扱われるため、意図より弱い条件で計算されます",
-                        "制約設定で数値を入れ直すか、制限しないなら空欄にしてください"));
+                        $"{Place.Edit}{Place.Head}の「{famJp}」でこの行を数値で入れ直すか、制限しないなら空欄にしてください"));
                     continue;
                 }
                 if (RangeOrderConflict(c.L, c.U) is (int lo, int hi))
@@ -457,7 +485,7 @@ public static partial class V6SanityPort
                     outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{c.GroupKigou} {c.ShiftKigou}」",
                         $"下限{lo} > 上限{hi} で矛盾しています。この組み合わせは期間の全日が違反になり、" +
                             "勤務表をどう組んでも消えません",
-                        "制約設定で下限≤上限に直してください",
+                        $"{Place.Edit}{Place.Head}の「{famJp}」で下限を上限以下に直してください",
                         Action: SettingFixAction.ClampGroupRangeLo,
                         ActionLabel: $"下限を{hi}に下げる",
                         NewLo: hi.ToString(), GroupRangeFamily: fam, GroupRangeRow: c));
@@ -482,8 +510,8 @@ public static partial class V6SanityPort
             }));
             outList.Add(new SettingIssue(IssueKind.Constraint, $"日別の{jp}",
                 $"{bad.Count}件（{where}{(bad.Count > 3 ? " ほか" : "")}）が数値ではありません。" +
-                    "その日は**シフトの既定値**で計算されます（例外を設定したつもりでも効きません）",
-                "日別の必要人数で数値を入れ直すか、例外にしないなら削除してください"));
+                    "その日は標準の必要人数で計算されます（例外を設定したつもりでも効きません）",
+                $"{Place.Edit}{Place.Need}でその日の必要人数を数値で入れ直すか、例外にしないなら{Place.NeedDays}で削除してください"));
         }
         CheckNeedDayNumeric(state.NeedDay1, "最低人数");
         CheckNeedDayNumeric(state.NeedDay2, "上限人数");
@@ -506,8 +534,8 @@ public static partial class V6SanityPort
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, "適切回数（1人あたりの目標）",
                     $"{bad.Count}件（{string.Join("・", bad.Take(3))}{(bad.Count > 3 ? " ほか" : "")}）が" +
-                        "数値ではありません。**目標なし**として扱われます",
-                    "回数設定で数値を入れ直すか、目標にしないなら空欄にしてください"));
+                        "数値ではありません。目標なしとして扱われます",
+                    $"{Place.Edit}{Place.Count}で目標を数値で入れ直すか、目標にしないなら空欄にしてください"));
             }
         }
 
@@ -529,7 +557,7 @@ public static partial class V6SanityPort
                 outList.Add(new SettingIssue(IssueKind.Constraint, "スキルグループの割当",
                     $"{bad.Count}名（{names}{(bad.Count > 4 ? " ほか" : "")}）のスキルグループが今の一覧の範囲外です。" +
                         "この職員はスキルグループのルールから外れて計算されます",
-                    "職員管理でスキルグループを選び直すか、所属させないなら「(なし)」にしてください"));
+                    $"{Place.Edit}{Place.Staff}でスキルグループを選び直すか、所属させないなら「(なし)」にしてください"));
             }
         }
 
@@ -551,7 +579,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Constraint, "グループの割当",
                 $"{bad.Count}名（{names}{(bad.Count > 4 ? " ほか" : "")}）のグループが今の一覧の範囲外です。" +
                     $"計算では「{head}」に所属しているものとして扱っています＝担当できるシフトが意図と違います",
-                "職員管理でグループを選び直してください"));
+                $"{Place.Edit}{Place.Staff}で名前を押し、グループを選び直してください"));
         }
 
         // 2l) 担当シフトゼロの群
@@ -566,7 +594,7 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Constraint, "担当できるシフト",
                 $"グループ「{gname}」（{members}名）は担当できるシフトが1つもありません。この職員は休しか置けず、" +
                     "必要人数のある日はすべて人員不足になります",
-                "年間マスターの「担当できるシフト（グループ × シフト）」で担当するシフトを選んでください"));
+                $"{Place.Edit}{Place.Shift}の担当可否で、グループ「{gname}」が担当するシフトを選んでください"));
         }
 
         // 3) 需要>担当可能人数
@@ -598,7 +626,7 @@ public static partial class V6SanityPort
                 var need = shortDays[0].Need;
                 outList.Add(new SettingIssue(IssueKind.Demand, $"全日 {sym}",
                     $"必要{need}人ですが担当できるのは{capable}人だけです",
-                    $"担当できる職員を増やすか、必要人数を{capable}人以下に下げてください",
+                    $"{Place.Edit}{Place.Need}で「{sym}」の標準の必要人数を{capable}人以下に下げるか、{Place.Shift}の担当可否で担当できる職員を増やしてください",
                     Action: SettingFixAction.CapDemand, ActionLabel: $"必要数を{capable}人に下げる",
                     DemandShiftIdx: k, DemandCap: capable));
                 continue;
@@ -607,7 +635,7 @@ public static partial class V6SanityPort
             {
                 outList.Add(new SettingIssue(IssueKind.Demand, $"{SafeDayLabel(state.StartDate, j)} {sym}",
                     $"必要{need}人ですが担当できるのは{capable}人だけです",
-                    $"担当できる職員を増やすか、必要人数を{capable}人以下に下げてください",
+                    $"{Place.Edit}{Place.Need}で「{sym}」のこの日の必要人数を{capable}人以下に下げるか、{Place.Shift}の担当可否で担当できる職員を増やしてください",
                     Action: SettingFixAction.CapDemand, ActionLabel: $"必要数を{capable}人に下げる",
                     DemandShiftIdx: k, DemandCap: capable, DemandDayIdx: j));
             }
@@ -626,22 +654,24 @@ public static partial class V6SanityPort
                 ? state.Shifts[kn1].Kigou : (k?.ToString() ?? "null");
             if (i is not int iVal || k is not int kVal || iVal < 0 || iVal >= p.S || kVal < 0 || kVal >= p.K)
             {
-                outList.Add(new SettingIssue(IssueKind.Range, $"回数設定 {key}", "対象職員/シフトが範囲外です", "設定で正しい職員・シフトに付け直してください"));
+                outList.Add(new SettingIssue(IssueKind.Range, $"個人の回数「{key}」", "対象職員/シフトが範囲外です", $"{Place.Edit}{Place.Count}で正しい職員・シフトに付け直してください"));
                 continue;
             }
             if (RangeOrderConflict(r.Lo, r.Hi) is (int cLo, int cHi))
             {
-                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"下限{cLo} > 上限{cHi} で矛盾しています", "設定で下限≤上限に直してください",
+                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"下限{cLo} > 上限{cHi} で矛盾しています", $"{Place.Edit}{Place.Count}で{name}さんの「{sym}」の下限を上限以下に直してください",
                     Action: SettingFixAction.ClampRangeLo, ActionLabel: $"下限を{cHi}に下げる", RangeKey: key, NewLo: cHi.ToString()));
             }
             if (lo is int loVal && loVal > 0 && !p.CanDo(iVal, kVal))
             {
-                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"担当できないシフトに下限{loVal}が設定されています", $"下限を0にするか、{name}さんの担当に「{sym}」を追加してください",
+                var gsym = p.Sgrp[iVal] >= 0 && p.Sgrp[iVal] < state.Groups.Count ? state.Groups[p.Sgrp[iVal]].Kigou : "?";
+                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"担当できないシフトに下限{loVal}が設定されています",
+                    $"{Place.Edit}{Place.Count}で下限を0にするか、{Place.Shift}の担当可否でグループ「{gsym}」が「{sym}」を担当できるようにしてください",
                     Action: SettingFixAction.ZeroRangeLo, ActionLabel: "下限を0にする", RangeKey: key, NewLo: "0"));
             }
             if (lo is int loVal2 && loVal2 > p.T)
             {
-                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"下限{loVal2}が期間日数({p.T}日)を超えています", $"下限を{p.T}以下に直してください",
+                outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」回数", $"下限{loVal2}が期間日数({p.T}日)を超えています", $"{Place.Edit}{Place.Count}で{name}さんの「{sym}」の下限を{p.T}以下に直してください",
                     Action: SettingFixAction.ClampRangeLo, ActionLabel: $"下限を{p.T}に下げる", RangeKey: key, NewLo: p.T.ToString()));
             }
         }
@@ -650,17 +680,18 @@ public static partial class V6SanityPort
         for (var i = 0; i < p.S; i++)
         {
             var sumLo = 0;
+            var parts = new List<string>();
             for (var k = 0; k < p.K; k++)
             {
                 var lo = p.RangeLo[i][k];
-                if (lo != int.MinValue && lo > 0) sumLo += lo;
+                if (lo != int.MinValue && lo > 0) { sumLo += lo; parts.Add($"{Sym(k)} {lo}回"); }
             }
             if (sumLo > p.T)
             {
                 var name = Nm(i);
                 outList.Add(new SettingIssue(IssueKind.Range, $"{name} の回数下限の合計",
-                    $"各シフトの下限の合計が{sumLo}で、期間日数({p.T}日)を超えています",
-                    $"どれかのシフトの下限を下げてください（合計を{p.T}以下に）"));
+                    $"各シフトの下限の合計が{sumLo}回（{string.Join("・", parts)}）で、期間日数({p.T}日)を超えています",
+                    $"{Place.Edit}{Place.Count}で{name}さんのどれかのシフトの下限を下げ、合計を{p.T}以下にしてください"));
             }
         }
 
@@ -697,21 +728,21 @@ public static partial class V6SanityPort
             {
                 outList.Add(new SettingIssue(IssueKind.Demand, $"「{sym}」の回数下限の合計",
                     k == p.RestIdx
-                        ? $"担当者の下限の合計が{loSum}回ですが、他シフトの個人下限を差し引いた「{sym}」の" +
+                        ? $"担当{capable}人の下限の合計が{loSum}回ですが、他シフトの個人下限を差し引いた「{sym}」の" +
                             $"最大可能日数の合計は{loCapacity}回しかありません。全員の下限は同時に満たせず、下限割れが必ず出ます"
-                        : $"担当者の下限の合計が{loSum}回ですが、必要数の合計は{loCapacity}回しかありません。" +
-                            "全員の下限は同時に満たせず、過剰配置か下限割れが必ず出ます",
-                    k == p.RestIdx ? $"「{sym}」の個人下限を下げるか、他シフトの個人下限を見直してください"
-                        : $"「{sym}」の個人下限を下げるか、必要人数を増やしてください"));
+                        : $"担当{capable}人の下限の合計が{loSum}回ですが、必要数の合計は{loCapacity}回しかありません。" +
+                            "全員の下限は同時に満たせず、人員過剰か下限割れが必ず出ます",
+                    k == p.RestIdx ? $"{Place.Edit}{Place.Count}で「{sym}」の個人下限を下げるか、他シフトの個人下限を見直してください"
+                        : $"{Place.Edit}{Place.Count}で「{sym}」の個人下限を下げるか、{Place.Need}で「{sym}」の必要人数を増やしてください"));
             }
             if (capable > 0 && allCapped && capSum < seatsLo)
             {
                 var gap = seatsLo - capSum;
                 outList.Add(new SettingIssue(IssueKind.Demand, $"「{sym}」の必要人数",
-                    $"必要数の合計は{seatsLo}回ですが、担当者の上限の合計は{capSum}回しかありません。" +
+                    $"必要数の合計は{seatsLo}回ですが、担当{capable}人の上限の合計は{capSum}回しかありません。" +
                         $"個人上限を守る限り{gap}回ぶんは埋まりません（実際には人員不足と上限超過が" +
                         $"合わせて{gap}回ぶん必ず残ります。どちらに出るかは他の条件との兼ね合いで決まります）",
-                    $"「{sym}」の個人上限を上げる/担当者を増やすか、必要人数を下げてください"));
+                    $"{Place.Edit}{Place.Count}で「{sym}」の個人上限を上げるか、{Place.Shift}の担当可否で担当者を増やすか、{Place.Need}で必要人数を下げてください"));
             }
         }
         foreach (var b in AptBalances(state, p))
@@ -719,12 +750,12 @@ public static partial class V6SanityPort
             if (!b.Overloaded) continue;
             outList.Add(new SettingIssue(IssueKind.Demand, $"「{b.Kigou}」の適切回数の合計",
                 b.IsRest
-                    ? $"適切回数(レパートリー目標)の合計が{b.AptSum}回ですが、他シフトの個人下限を差し引いた「{b.Kigou}」の" +
+                    ? $"担当者の適切回数（1人あたりの目標）の合計が{b.AptSum}回ですが、他シフトの個人下限を差し引いた「{b.Kigou}」の" +
                         $"最大可能日数の合計は{b.Capacity}回しかありません。全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます"
-                    : $"適切回数(レパートリー目標)の合計が{b.AptSum}回ですが、必要数の合計は{b.Capacity}回しかありません。" +
-                        "全員の目標は同時に満たせず、目標割れか過剰配置が必ず出ます",
-                b.IsRest ? $"「{b.Kigou}」の適切回数を下げるか、他シフトの個人下限を見直してください"
-                    : $"「{b.Kigou}」の適切回数を下げるか、必要人数を増やしてください"));
+                    : $"担当者の適切回数（1人あたりの目標）の合計が{b.AptSum}回ですが、必要数の合計は{b.Capacity}回しかありません。" +
+                        "全員の目標は同時に満たせず、目標割れか人員過剰が必ず出ます",
+                b.IsRest ? $"{Place.Edit}{Place.Count}で「{b.Kigou}」の適切回数を下げるか、他シフトの個人下限を見直してください"
+                    : $"{Place.Edit}{Place.Count}で「{b.Kigou}」の適切回数を下げるか、{Place.Need}で「{b.Kigou}」の必要人数を増やしてください"));
         }
 
         // 6b) [幻のapt目標検知] 担当できるシフトの構成上、他の担当シフトの個人上限を守る限り強制される
@@ -746,7 +777,7 @@ public static partial class V6SanityPort
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」適切回数",
                         $"担当できるシフトの構成上、他の担当シフトの個人上限（合計{otherHiSum}回）を守る限り「{sym}」は最低{forcedMin}回になります（{p.T}日を埋めきれないぶんが必ず回ってくる）。" +
                             $"設定の適切回数{t}回には届かないため、計算では{p.Apt[i][k]}回を目標として扱っています（差{forcedMin - t}回は違反には出ません）",
-                        $"「{sym}」の適切回数を{forcedMin}回以上にするか空欄にする、または他シフトの担当・上限を見直してください"));
+                        $"{Place.Edit}{Place.Count}で「{sym}」の適切回数を{forcedMin}回以上にするか空欄にする、または他シフトの担当・上限を見直してください"));
                 }
             }
         }
@@ -760,15 +791,15 @@ public static partial class V6SanityPort
             {
                 var t = p.AptRaw[i][k];   // [Android 3.508.0] 6b と同じく設定した目標で判定
                 if (t < 0 || !p.CanDo(i, k)) continue;
-                var wished = 0;
-                for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
+                var days = WishedDays(i, k);
+                var wished = days.Count;
                 if (wished > t)
                 {
                     var sym = Sym(k);
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name} の「{sym}」適切回数と希望",
-                        $"「{sym}」の希望が{wished}件あり、適切回数の目標{t}回を超えています。希望どおりに配置する限り" +
+                        $"「{sym}」の希望が{wished}件（{DaysText(days)}）あり、適切回数の目標{t}回を超えています。希望どおりに配置する限り" +
                             $"「{sym}」は必ず{wished}回以上になります。計算では{p.Apt[i][k]}回を目標として扱うため差{wished - t}回は違反には出ませんが、設定の目標には届きません",
-                        $"「{sym}」の適切回数を{wished}回以上にするか、{name}さんの「{sym}」の希望を{wished - t}件減らしてください"));
+                        $"{Place.Edit}{Place.Count}で「{sym}」の適切回数を{wished}回以上にするか、{Place.Wish}で{name}さんと相談して「{sym}」の希望を{wished - t}件減らしてください"));
                 }
             }
         }
@@ -795,7 +826,7 @@ public static partial class V6SanityPort
                         : $"代用要員候補: {string.Join("・", substitutes)}";
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」上限と担当構成の衝突",
                         $"担当できるシフトの構成上、「{sym}」は最低{forcedMin}回になります（他の担当シフトの上限合計{otherHiSum}回では{p.T}日を埋めきれません）が、{name}さんの「{sym}」上限は{hi}回です。この人が担当を続ける限り上限超過は必ず出ます。{subText}",
-                        $"{name}さんを「{sym}」の担当から外し代用要員に置き換えるか、上限を{forcedMin}回以上に上げてください"));
+                        $"{Place.Edit}{Place.Staff}で所属グループを変えて{name}さんを「{sym}」の担当から外し代用要員に置き換えるか、{Place.Count}で上限を{forcedMin}回以上に上げてください"));
                 }
             }
         }
@@ -809,22 +840,22 @@ public static partial class V6SanityPort
             {
                 var hi = p.RangeHi[i][k];
                 if (hi == int.MaxValue || !p.CanDo(i, k)) continue;
-                var wished = 0;
-                for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
+                var days = WishedDays(i, k);
+                var wished = days.Count;
                 if (wished > hi && hi == 0)
                 {
                     // 上限 0 は意図した「入れない指定」（3.507.0）＝設定ミスと呼ばない。
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{Sym(k)}」",
-                        $"個人の上限0（入れない指定）に希望が{wished}件載っています。残るのは要調整です",
-                        "希望を変えるか、設定で上限を見直してください", Neutral: true));
+                        $"個人の上限0（入れない指定）に希望が{wished}件（{DaysText(days)}）載っています。残るのは要調整です",
+                        $"{Place.Edit}{Place.Wish}で{name}さんと相談して希望を調整するか、{Place.Count}で上限を見直してください", Neutral: true));
                 }
                 else if (wished > hi)
                 {
                     var sym = Sym(k);
                     outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{sym}」個人上限と希望の衝突",
-                        $"「{sym}」の希望が{wished}件あり、個人上限{hi}回を超えています。希望どおりに配置する限り" +
+                        $"「{sym}」の希望が{wished}件（{DaysText(days)}）あり、個人上限{hi}回を超えています。希望どおりに配置する限り" +
                             $"「{sym}」は必ず{wished}回以上になるため、上限超過は解消できません",
-                        $"{name}さんの「{sym}」個人上限を{wished}回以上に上げるか、「{sym}」の希望を{wished - hi}件減らしてください"));
+                        $"{Place.Edit}{Place.Count}で{name}さんの「{sym}」の個人上限を{wished}回以上に上げるか、{Place.Wish}で{name}さんと相談して「{sym}」の希望を{wished - hi}件減らしてください"));
                 }
             }
         }
@@ -832,10 +863,11 @@ public static partial class V6SanityPort
         // 7) 配布不可・forcedCovU
         foreach (var fc in ForcedCovU(state, p))
         {
-            outList.Add(new SettingIssue(IssueKind.Demand, $"「{fc.ShiftSymbol}」の担当者不足（配布不可の原因）",
-                $"{fc.Cells}日で、担当できる人数より必要人数が多く、人員不足(covU)が必ず出ます（不足の合計{fc.Amount}）。この不足は最適化では解消できません" +
+            var days = Enumerable.Range(0, p.T).Where(j => p.CovUCell(fc.ShiftIndex, j, PlaceableFor(p, fc.ShiftIndex, j)) > 0).ToList();
+            outList.Add(new SettingIssue(IssueKind.Demand, $"「{fc.ShiftSymbol}」の担当者不足（{ForcedShortMark}）",
+                $"{fc.Cells}日（{DaysText(days)}）で、「{fc.ShiftSymbol}」を担当できる人数より必要人数が多く、「{fc.ShiftSymbol}」の人員不足が合計{fc.Amount}人必ず残ります" +
                     (ZeroCapInShortfall(p, fc) ? "。" + ZeroCapShortfallNote : ""),
-                $"「{fc.ShiftSymbol}」を担当できる職員を増やすか、その日の必要人数を下げてください"));
+                $"{Place.Edit}{Place.Shift}の担当可否で「{fc.ShiftSymbol}」を担当できる職員を増やすか、{Place.Need}でその日の「{fc.ShiftSymbol}」の必要人数を下げてください"));
         }
 
         // 8) 重複定義
@@ -856,25 +888,25 @@ public static partial class V6SanityPort
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"職員名の重複「{d}」",
                     "同名（空白を除き一致）の職員が複数います。制約とCSV取込は最初の1人に解決され、2人目以降は区別できません",
-                    "氏名を一意にしてください（例: 姓名の間や末尾に識別子を付ける）"));
+                    $"{Place.Edit}{Place.Staff}で名前を押し、氏名を一意にしてください（例: 姓名の間や末尾に識別子を付ける）"));
             }
             foreach (var d in Dups(state.Shifts.Select(s => s.Kigou.Trim())))
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"シフト記号の重複「{d}」",
                     "同じ記号のシフトが複数あります。制約とCSV取込は最初の1件に解決され、2件目以降は参照されません",
-                    "シフト記号を一意にしてください"));
+                    $"{Place.Edit}{Place.Shift}のシフト種別で記号を一意にしてください"));
             }
             foreach (var d in Dups(state.Groups.Select(g => g.Kigou.Trim())))
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"グループ記号の重複「{d}」",
                     "同じ記号のグループが複数あります。制約とCSV取込は最初の1件に解決されます",
-                    "グループ記号を一意にしてください"));
+                    $"{Place.Edit}{Place.Shift}のグループで記号を一意にしてください"));
             }
             foreach (var d in Dups(state.SkillGroups.Select(g => g.Kigou.Trim())))
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"スキルグループ記号の重複「{d}」",
                     "同じ記号のスキルグループが複数あります。制約とCSV取込は最初の1件に解決されます",
-                    "スキルグループ記号を一意にしてください"));
+                    $"{Place.Edit}{Place.Skill}で記号を一意にしてください"));
             }
         }
 
@@ -885,7 +917,7 @@ public static partial class V6SanityPort
                 ConstraintMus.WishPin wp => $"希望「{Nm(wp.Staff)} {SafeDayLabel(state.StartDate, wp.Day)}={Sym(wp.Shift)}」",
                 ConstraintMus.RangeCap rc => $"個人上限「{Sym(rc.Shift)}を最大{rc.Hi}回」",
                 ConstraintMus.RangeFloor rf => $"個人下限「{Sym(rf.Shift)}を最低{rf.Lo}回」",
-                ConstraintMus.WindowRule wr => $"窓ルール「{Sym(wr.Shift)}を{wr.WindowDays}日で{wr.MinCount}回以上」",
+                ConstraintMus.WindowRule wr => $"期間の制約「{Sym(wr.Shift)} {wr.WindowDays}日で{wr.MinCount}回以上」",
                 ConstraintMus.DayNeed dn => $"必要人数「{Sym(dn.Shift)}に{dn.Need}人」",
                 _ => throw new ArgumentOutOfRangeException(nameof(it), it, "unknown ConstraintMus.Item subtype"),
             };
@@ -894,8 +926,16 @@ public static partial class V6SanityPort
                 ConstraintMus.WishPin wp => $"{Nm(wp.Staff)}さんの{SafeDayLabel(state.StartDate, wp.Day)}の希望を調整する",
                 ConstraintMus.RangeCap rc => $"「{Sym(rc.Shift)}」の個人上限を上げる",
                 ConstraintMus.RangeFloor rf => $"「{Sym(rf.Shift)}」の個人下限を下げる",
-                ConstraintMus.WindowRule wr => $"窓ルール「{Sym(wr.Shift)} {wr.WindowDays}日で{wr.MinCount}回以上」の回数を下げる",
-                ConstraintMus.DayNeed dn => $"{Sym(dn.Shift)}の必要人数を下げる",
+                ConstraintMus.WindowRule wr => $"期間の制約「{Sym(wr.Shift)} {wr.WindowDays}日で{wr.MinCount}回以上」の回数を下げる",
+                ConstraintMus.DayNeed dn => $"「{Sym(dn.Shift)}」の必要人数を下げる",
+                _ => throw new ArgumentOutOfRangeException(nameof(it), it, "unknown ConstraintMus.Item subtype"),
+            };
+            string RelaxPlace(ConstraintMus.Item it) => it switch
+            {
+                ConstraintMus.WishPin => Place.Wish,
+                ConstraintMus.RangeCap or ConstraintMus.RangeFloor => Place.Count,
+                ConstraintMus.WindowRule => Place.Rule,
+                ConstraintMus.DayNeed => Place.Need,
                 _ => throw new ArgumentOutOfRangeException(nameof(it), it, "unknown ConstraintMus.Item subtype"),
             };
             bool HasWish(IReadOnlyList<ConstraintMus.Item> core) => core.Any(it => it is ConstraintMus.WishPin);
@@ -904,10 +944,10 @@ public static partial class V6SanityPort
             {
                 var name = Nm(sc.Staff);
                 var labels = string.Join(" ・ ", sc.Core.Select(ItemLabel));
-                var hints = string.Join(" / ", sc.Core.Take(2).Select(RelaxHint));
+                var hints = string.Join(" / ", sc.Core.Take(2).Select(it => $"{RelaxPlace(it)}で{RelaxHint(it)}"));
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{name}さんの希望と条件の組合せ",
                     $"次の{sc.Core.Count}件は同時に成立しません: {labels}",
-                    $"いずれか1件を緩めてください（例: {hints}）"));
+                    $"{Place.Tab}で、いずれか1件を緩めてください（例: {hints}）"));
             }
             // 日別の証明（ConstraintMus の CanServe）はコアで希望固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。
             string CapZeroNote(ConstraintMus.DayConflict dc)
@@ -927,7 +967,7 @@ public static partial class V6SanityPort
                 var wishHint = wishItem is null ? null : RelaxHint(wishItem);
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{SafeDayLabel(state.StartDate, dc.Day)} の必要人数と固定希望の衝突",
                     $"固定された希望の組合せでは、この日の必要人数を満たせません。次の{dc.Core.Count}件は同時に成立しません: {labels}" + CapZeroNote(dc),
-                    "この日の希望を1件調整するか、必要人数を下げてください" + (wishHint is null ? "" : $"（例: {wishHint}）")));
+                    $"{Place.Edit}{Place.Wish}で本人と相談してこの日の希望を1件調整するか、{Place.Need}でこの日の必要人数を下げてください" + (wishHint is null ? "" : $"（例: {wishHint}）")));
             }
         }
 
@@ -936,14 +976,14 @@ public static partial class V6SanityPort
             var soft = new Evaluator(p).FullEvalParts(ScheduleUtil.NormalizeSchedule(state.Schedule.ToIntArray2D(), p))[1];
             if (soft >= 900_000L)
             {
-                outList.Add(new SettingIssue(IssueKind.Constraint, $"SOFT違反の合計が過大（{soft}）",
-                    "調整項(SOFT)の合計がスコア上限 1,000,000 に接近しており、必須(HARD)違反ゼロを最優先する評価が崩れる恐れがあります",
-                    "解消不能な制約（回数>日数の連勤条件など）や、多数の同時禁止(C42)・広すぎる範囲制約を見直して調整項を減らしてください"));
+                outList.Add(new SettingIssue(IssueKind.Constraint, $"要調整の合計点が大きすぎます（{soft}）",
+                    "要調整の合計点が上限の 1,000,000 に近く、必須違反を0件にすることを最優先する計算が崩れるおそれがあります",
+                    $"{Place.Edit}{Place.Rule}の解けない決まり（日数より回数が多い期間の制約など）や、{Place.Head}の多数のグループペア禁止・広すぎる範囲の決まりを見直して、要調整を減らしてください"));
             }
         }
 
         return outList
-            .OrderBy(iss => iss.Where.Contains("配布不可") ? 0
+            .OrderBy(iss => iss.Where.Contains(ForcedShortMark) ? 0   // covU 確定（最優先）
                 : iss.Kind == IssueKind.Wish ? 1
                 : iss.Kind == IssueKind.Demand ? 2
                 : iss.Kind == IssueKind.Range ? 3

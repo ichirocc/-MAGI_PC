@@ -126,9 +126,9 @@ public sealed partial class MagiViewModel
         {
             // [レビュー指摘 2026-09-04] 単一セルでも休は外せない（列一括と同じ理由・同じ案内）。
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）。外すときは、シフト編集の『休みとして扱う』を別のシフトに移してください", "W");
             else if (!allowed)
-                Notify("このグループの担当できるシフトが無くなるため外せません", "W");
+                Notify($"{(g >= 0 && g < st.Groups.Count ? st.Groups[g].Name : "このグループ")}から「{OpSy(k)}」は外せません（担当できるシフトが無くなるため）。先にほかのシフトを担当にしてから外してください", "W");
             return;
         }
         LogOp("I", $"担当可否: グループ[{g}] × {OpSy(k)} → {(allowed ? "担当できる" : "担当しない")}");
@@ -144,7 +144,7 @@ public sealed partial class MagiViewModel
         var ns = Ws1Ops.SetGroupShiftRow(st, g, allowed);
         if (ReferenceEquals(ns, st))
         {
-            if (!allowed) Notify("休みのシフトが無いため、このグループの全シフトを外すことはできません（担当できるシフトが無くなるため）", "W");
+            if (!allowed) Notify($"{name}の全シフトは外せません（休みのシフトが無く、担当できるシフトが無くなるため）。シフト編集で『休みとして扱う』をどれかのシフトに付けると、休み以外をまとめて外せます", "W");
             return;
         }
         LogOp("I", $"担当可否(一括): グループ {name} の全シフト → {(allowed ? "担当できる" : "担当しない（休は残す）")}");
@@ -160,9 +160,9 @@ public sealed partial class MagiViewModel
         if (ReferenceEquals(ns, st))
         {
             if (!allowed && k == ScheduleUtil.RestShiftIndex(st))
-                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）", "W");
+                Notify($"「{OpSy(k)}」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）。外すときは、シフト編集の『休みとして扱う』を別のシフトに移してください", "W");
             else if (!allowed)
-                Notify("担当できるシフトが無くなるグループがあるため、この列は外せません", "W");
+                Notify($"「{OpSy(k)}」の列は外せません（担当できるシフトがこれだけのグループがあるため）。そのグループに先にほかのシフトを担当させてから外してください", "W");
             return;
         }
         LogOp("I", $"担当可否(一括): {OpSy(k)} を全グループ → {(allowed ? "担当できる" : "担当しない")}");
@@ -190,7 +190,7 @@ public sealed partial class MagiViewModel
         var cleared = st.GroupShiftApt.Sum(row => row.Count(x => x.Trim().Length > 0));
         LogOp("I", $"apt強制リセット: 適切回数を全空欄に（{cleared} 件クリア）");
         // Ws1Ops.ResetGroupApt は MagiState を返す→Piece8の ApplyStructureWithMessage(MagiState,...) へ解決される。
-        ApplyStructureWithMessage(Ws1Ops.ResetGroupApt(st), $"目標を全リセットしました（{cleared}件を空欄に）");
+        ApplyStructureWithMessage(Ws1Ops.ResetGroupApt(st), $"全グループ×全シフトの「目標」を空欄に戻しました（{cleared}件）");
     }
 
     public void Ws1SetUse2(bool on)
@@ -209,7 +209,7 @@ public sealed partial class MagiViewModel
     {
         if (!Ws1Ops.SymbolCollides(existing, kigou, exceptIndex)) return false;
         var k = kigou.Trim();
-        Notify($"記号「{k}」はすでに別の{what}で使われています（制約の参照が混ざるため、別の記号にしてください）", "W");
+        Notify($"記号「{k}」はすでに別の{what}で使われているため、保存しませんでした（制約の参照が混ざるため、別の記号にしてください）", "W");
         return true;
     }
 

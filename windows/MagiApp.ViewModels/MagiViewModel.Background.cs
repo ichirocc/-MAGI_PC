@@ -85,7 +85,7 @@ public sealed partial class MagiViewModel
         var sched0 = _currentSchedule;
         if (st0 is null || sched0 is null) return;
         if (RunBlockedByInFlight("バックグラウンド最適化の開始")) return;
-        if (!EnsureValidForRun(st0, sched0)) return;
+        if (!EnsureValidForRun(st0, sched0, "バックグラウンド最適化")) return;
         CancelWishTrial();   // [S5 §8] 背景実行は BeginBoardJob を通らない
         CancelRelaxTrial();
         CancelFixSearch();
@@ -189,7 +189,7 @@ public sealed partial class MagiViewModel
                 Ui.Running = false;
                 Ui.HasResult = cur is not null;
                 Ui.MessageIsError = true;
-                Ui.Message = $"バックグラウンド最適化は終わりましたが、最後の処理でエラーが起きました（{FailureWords.Of(e, FailureKind.Engine)}）。表示は今の勤務表です。";
+                Ui.Message = $"バックグラウンド最適化は終わりましたが、最後の処理でエラーが起きました（{FailureWords.Of(e, FailureKind.Engine)}）。表示は今の勤務表です。必要なら再作成してください（詳しくは設定＞詳細設定＞ログ）";
                 if (cur is not null) Ui.Schedule = cur.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
             }
         }
@@ -247,7 +247,7 @@ public sealed partial class MagiViewModel
             LogOp("W", "バックグラウンド最適化の結果を破棄しました（最適化中に設定またはデータが変わったため）");
             Ui.MessageIsError = true;
             Ui.Running = false;
-            Ui.Message = "最適化中に設定が変わったため、結果は反映しませんでした。再作成してください。";
+            Ui.Message = "バックグラウンド最適化の結果は反映しませんでした（実行中に設定かデータが変わったため）。今の内容で再作成してください。";
             return;
         }
         _bgStateKey = 0L;

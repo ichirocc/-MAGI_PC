@@ -608,7 +608,7 @@ public class MagiViewModelCsvTest
         vm.ConfirmCsvPartialImport();
 
         Assert.Same(asked, vm.LastImportCsvTask);
-        Assert.Equal("盤面が変わったため取込をやめました。もう一度取り込んでください", vm.Ui.Message);
+        Assert.Equal("勤務表か設定が変わったため、取込をやめました。もう一度取り込んでください", vm.Ui.Message);
         Assert.True(vm.Ui.MessageIsError);
         Assert.Null(vm.Ui.CsvPartialPrompt);
         Assert.Equal(0, vm._currentSchedule[0][0]);
@@ -654,7 +654,7 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.Ui.CsvPartialPrompt);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Equal("CSV取込失敗: 取り込める行がありませんでした（引用符が閉じていません）", vm.Ui.Message);
+        Assert.Equal("CSV取込失敗: 取り込める行がありませんでした（引用符が閉じていません）。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください", vm.Ui.Message);
         Assert.False(vm.Ui.Running);
         Assert.Same(sched, vm._currentSchedule);
         Assert.Equal(0, vm.UndoStackCount);
@@ -688,7 +688,7 @@ public class MagiViewModelCsvTest
         var vm = new MagiViewModel();
         vm.ImportStaffCsv("氏名,グループ,スキル\n職員A,G0,\n");
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("先にデータを開いてください", vm.Ui.Message);
+        Assert.Contains("（開いているデータがありません）", vm.Ui.Message);
     }
 
     [Fact]
@@ -756,7 +756,7 @@ public class MagiViewModelCsvTest
         var vm = new MagiViewModel();
         vm.ImportWishesCsv("氏名,日,希望シフト\n職員A,1,A\n");
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("先にデータを開いてください", vm.Ui.Message);
+        Assert.Contains("（開いているデータがありません）", vm.Ui.Message);
     }
 
     [Fact]
@@ -811,7 +811,7 @@ public class MagiViewModelCsvTest
         var vm = new MagiViewModel();
         vm.ImportConstraintsCsv("種別,a,b,c,d,e\n回数下限,A,3\n");
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("先にデータを開いてください", vm.Ui.Message);
+        Assert.Contains("（開いているデータがありません）", vm.Ui.Message);
     }
 
     [Fact]

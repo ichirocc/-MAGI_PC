@@ -10,7 +10,7 @@ namespace MagiEngine.V6;
 public static class CsvPartialImport
 {
     public const string NothingReadable = "取り込める行がありませんでした（引用符が閉じていません）";
-    public const string Stale = "盤面が変わったため取込をやめました。もう一度取り込んでください";
+    public const string Stale = "勤務表か設定が変わったため、取込をやめました。もう一度取り込んでください";
     public const string Cancelled = "取込をやめました";
     public const string ConfirmLabel = "この部分だけ取り込む";
     public const string CancelLabel = "やめる";

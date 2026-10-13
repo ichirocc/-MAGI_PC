@@ -253,7 +253,7 @@ public static partial class V6SanityPort
         return rest >= 0 && rest <= dayProofs;
     }
 
-    public const string ZeroCapShortfallNote = "個人の上限0（入れない指定）が関係しています。見直すときは設定で変えてください";
+    public const string ZeroCapShortfallNote = "個人の上限0（入れない指定）が関係しています。見直すときは編集タブの『年間マスター』の『③ 回数（1人あたり）』で変えてください";
 
     /// <summary>上限0を数えなければ（CanDo で数えると）不足が減る＝この配布不可に個人の上限0（入れない指定）が絡む。</summary>
     public static bool ZeroCapInShortfall(Problem p, ForcedCovU f)

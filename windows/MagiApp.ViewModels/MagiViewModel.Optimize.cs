@@ -46,21 +46,20 @@ public sealed partial class MagiViewModel
         "covU" => "人員不足（必要人数）",
         "c3n" => "禁止の並び（連勤など）",
         "c3w" => "希望の前日の禁止",
-        "pref" => "希望シフト",
+        "pref" => "希望と違う勤務",
         "extWish" => "拡張希望",
         "groupViol" => "担当外シフト",
-        "low" => "個人の回数下限",
-        "high" => "個人の回数上限",
         _ => key,
     };
 
-    /// <summary>Kotlin原本 <c>topHardFamilyJp</c>（1097行）の逐語移植。</summary>
+    /// <summary>いちばん多い必須違反の族を「『族名』（N件）」で返す。数えるのは必須の族だけ（下限割れ・上限超過は要調整＝「必須違反」と呼ばない）。Kotlin原本 <c>topHardFamilyJp</c>。</summary>
     private static string? TopHardFamilyJp(IReadOnlyDictionary<string, int> breakdown)
     {
-        var keys = new[] { "covU", "c3n", "c3w", "pref", "extWish", "groupViol", "low", "high" };
+        var keys = new[] { "covU", "c3n", "c3w", "pref", "extWish", "groupViol" };
         var top = keys.MaxBy(k => breakdown.GetValueOrDefault(k, 0));
         if (top is null) return null;
-        return breakdown.GetValueOrDefault(top, 0) > 0 ? HardFamilyJp(top) : null;
+        var n = breakdown.GetValueOrDefault(top, 0);
+        return n > 0 ? $"『{HardFamilyJp(top)}』（{n}件）" : null;
     }
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="RunV6FullOptimize"/> 呼出しが背後で走らせる Task。</summary>
@@ -115,7 +114,7 @@ public sealed partial class MagiViewModel
         else
         {
             Ui.MessageIsError = false;
-            Ui.Message = "つくる前の確認: 残る項目はなくなりました";
+            Ui.Message = $"つくる前の確認: 残る項目はなくなりました。画面下の「{(Ui.HasResult ? "再作成" : "勤務表をつくる")}」でつくれます";
         }
     }
 
@@ -124,7 +123,8 @@ public sealed partial class MagiViewModel
     private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
 
     private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0
-        ? $"前回と同じ設定で再作成します。いちばん多い必須違反は『{_lastTopHardFamily ?? "不明"}』。編集タブでこれを1つ緩めると改善の可能性が高いです。"
+        ? $"前回と同じ設定で再作成します。前回の必須違反 {_lastResultHard}件のうち、いちばん多いのは{_lastTopHardFamily ?? "『不明』"}です。" +
+          "同じ設定では同じ違反が残りやすいため、編集タブでこれを1つ緩めると改善の可能性が高いです。"
         : null;
 
     /// <summary>本実行。<paramref name="pushUndo"/>＝false は Undo を積まない（S5 の確定がすでに積んでいる）。</summary>
@@ -134,7 +134,7 @@ public sealed partial class MagiViewModel
         var sched0 = _currentSchedule;
         if (st0 is null || sched0 is null) return;
         if (RunBlockedByInFlight("勤務表の作成")) return;
-        if (!EnsureValidForRun(st0, sched0)) return;
+        if (!EnsureValidForRun(st0, sched0, "勤務表の作成")) return;
         if (pushUndo) PushUndo();
         var sig = RunSig();
         var hint = s5 is null && !hintShown ? RepeatHint() : null;
@@ -177,7 +177,7 @@ public sealed partial class MagiViewModel
     {
         // [3.372.0/実機ログ起因の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
-        var s5Suffix = s5 is not null ? "（希望の取り消しはそのままです。元に戻すで希望も戻ります）" : "";
+        var s5Suffix = s5 is not null ? "（希望は外したままです。元に戻すで希望も戻ります）" : "";
         // ---- 最適化中ログ強化用のスロットル状態（Kotlin原本のコルーチンローカル var 群） ----
         var liveHard = long.MaxValue;
         var livePhase = "";
@@ -286,8 +286,8 @@ public sealed partial class MagiViewModel
                 var keptMsg = s5 is null
                     ? KeptResultText.WithNote(KeptResultText.Screen(nowScore, baseScore), capNote)
                     : s5.H0 - baseReport.Hard > 0
-                        ? $"希望（{s5.Label}）を取り消しました。必須違反は {s5.H0} → {baseReport.Hard}（取り消しの分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
-                        : $"希望（{s5.Label}）を取り消しましたが、再作成しても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
+                        ? $"希望（{s5.Label}）を調整しました（希望は外れています）。必須違反は {s5.H0} → {baseReport.Hard}（外した分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
+                        : $"希望（{s5.Label}）を調整しましたが（希望は外れています）、再作成しても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
                 await PushReportAsync(_state ?? st0, kept, baseReport, transform: ui =>
                 {
                     ui.MessageIsError = false;
@@ -311,7 +311,7 @@ public sealed partial class MagiViewModel
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
                     ? $"勤務表ができました: 必須違反 {res.Report.Hard}件・違反の合計 {res.Report.Total}件 ({NowMs() - startMs}ms)"
-                    : $"希望（{s5.Label}）を取り消して、再作成しました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
+                    : $"希望（{s5.Label}）を調整して（希望は外しました）、再作成しました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
                       (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。再作成するか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
                 {
@@ -412,7 +412,7 @@ public sealed partial class MagiViewModel
             if (late is { } curSt && _currentSchedule is { } curSched)
             {
                 // [S5 §10] 維持・採用の書き込みの後で投げた＝VM と自動保存は今回の結果。捨てずに今の (state, 盤面) で描き直す。
-                var lateMsg = $"勤務表の作成は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。{s5Suffix}";
+                var lateMsg = $"勤務表の作成は終わりましたが、最後の処理でエラーが起きました（{e.GetType().Name}）。表示は今の勤務表です。必要なら再作成してください（詳しくは設定＞詳細設定＞ログ）{s5Suffix}";
                 var curB = curSched.Copy2D();
                 try
                 {
@@ -484,7 +484,7 @@ public sealed partial class MagiViewModel
         var sched0 = _currentSchedule;
         if (st0 is null || sched0 is null) return;
         if (RunBlockedByInFlight("仕上げ最適化の開始")) return;
-        if (!EnsureValidForRun(st0, sched0)) return;
+        if (!EnsureValidForRun(st0, sched0, "仕上げ最適化")) return;
         PushUndo();
         var engineRanBefore = Ui.EngineRan;   // 停止で入力へ戻すとき用（StartFullOptimize と同じ）
         var hadResult = Ui.HasResult;
@@ -532,7 +532,7 @@ public sealed partial class MagiViewModel
                 ui.RelaxedBoard = false;
                 ui.Message = gain > 0
                     ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"
-                    : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは構造的要因の可能性。";
+                    : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは今の設定とルールの組み合わせでは減らせない可能性があります。手修正か、編集タブでの設定の見直しをお試しください。";
                 ui.RunSummary = ChangeSummary.Of(st0, sched0, finalSched, finalReport, baseReport);
             }, ct: ct);
             LogOp("I", $"ソフト研磨 完了 必須={finalReport.Hard} 合計={finalReport.Total}（{(gain > 0 ? $"-{gain}" : "増減なし")}）");

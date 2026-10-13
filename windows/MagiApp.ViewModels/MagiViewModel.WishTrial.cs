@@ -33,9 +33,9 @@ public sealed partial class MagiViewModel
     private sealed record StalledSnap(MagiState St, long BoardKey, IReadOnlyList<string> Families);
 
     /// <summary>[S5] 確定操作の文脈（§6 の 10）。希望はすでに state から消えている。</summary>
-    private sealed record S5Ctx(string Name, int Day, string Symbol, int H0, int Hx, int Rk, int Rr, int PCancel)
+    private sealed record S5Ctx(string Name, int Day, string DayLabel, string Symbol, int H0, int Hx, int Rk, int Rr, int PCancel)
     {
-        public string Label => $"{Name} {Day + 1}日 {Symbol}";
+        public string Label => $"{Name}さん {DayLabel} {Symbol}";
     }
 
     private CancellationTokenSource? _wishTrialCts;
@@ -154,13 +154,14 @@ public sealed partial class MagiViewModel
         if (r is null || !ReferenceEquals(st, token.State) || BoardKey(b) != token.BoardKey
             || !st.Wishes.TryGetValue(key, out var cur) || cur != token.Shift)
         {
+            var who = token.Staff >= 0 && token.Staff < st.StaffList.Count ? st.StaffList[token.Staff].Name : $"職員{token.Staff + 1}";
             Ui.MessageIsError = true;
-            Ui.Message = "勤務表か希望が変わりました。もう一度試算してください。";
+            Ui.Message = $"{who}さん {DayText.Short(st.StartDate, token.Day)} の希望は外していません（試算のあとで勤務表か希望が変わったため）。もう一度試算してください。";
             return;
         }
         CancelWishTrial();
         var ns = st with { Wishes = st.Wishes.Where(kv => kv.Key != key).ToDictionary(kv => kv.Key, kv => kv.Value) };
-        if (!EnsureValidForRun(ns, b)) return;
+        if (!EnsureValidForRun(ns, b, "希望の調整と再作成")) return;
         _stalledBeforeConfirm = new StalledSnap(st, token.BoardKey, Ui.StalledHardFamilies);
         PushUndo();
         _state = ns;
@@ -174,7 +175,7 @@ public sealed partial class MagiViewModel
         var name = token.Staff >= 0 && token.Staff < st.StaffList.Count ? st.StaffList[token.Staff].Name : $"職員{token.Staff + 1}";
         var sym = token.Shift >= 0 && token.Shift < st.Shifts.Count ? st.Shifts[token.Shift].Kigou : "?";
         LogOp("I", $"希望取消＋再作成: {name} {token.Day + 1}日（{sym}） {r.H0}/{r.Hx}/{r.Rk}/{r.Rr}/{r.PCancel}");
-        StartFullOptimize(pushUndo: false, new S5Ctx(name, token.Day, sym, r.H0, r.Hx, r.Rk, r.Rr, r.PCancel));
+        StartFullOptimize(pushUndo: false, new S5Ctx(name, token.Day, DayText.Short(st.StartDate, token.Day), sym, r.H0, r.Hx, r.Rk, r.Rr, r.PCancel));
     }
 
     /// <summary>元に戻す・やり直しで確定前の (state, 盤面) に戻ったときの StalledHardFamilies（§14 D）。</summary>

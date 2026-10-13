@@ -28,12 +28,13 @@ public class WishTrialCandidatesTest
                 0, Array.Empty<CoverageSurplus>()),
         };
         var c = NextActionGuide.WishTrialCandidatesOf(ui);
+        // 盤面が無い＝今の勤務は添えない（希望の記号だけ）。
         Assert.Equal(new[]
         {
-            new WishTrialRow(0, 2, "山田", "希望の勤務になっていません（ほか: 禁止の並び・人員不足の日）", true),
-            new WishTrialRow(1, 3, "佐藤", "翌日（5日）の希望の勤務の前日に置けない勤務の希望です", true),
+            new WishTrialRow(0, 2, "山田", "希望の「日」になっていません（ほか: 禁止の並び・人員不足の日）", true),
+            new WishTrialRow(1, 3, "佐藤", "翌日（5日）の希望「日」の前日に置けない「夜」の希望です", true),
             new WishTrialRow(1, 4, "佐藤", "前日（4日）に置けない勤務が入っています", true),
-            new WishTrialRow(2, 5, "鈴木", "希望が禁止の並びに掛かっています", false),
+            new WishTrialRow(2, 5, "鈴木", "希望「日」が禁止の並びに掛かっています", false),
         }, c.Direct);
         // (0,2) は S5a が代表＝S5b の 3日 の枠は空になって消える。枠は日順、行は職員順。
         var g = Assert.Single(c.Shortfall);
@@ -74,11 +75,11 @@ public class WishTrialCandidatesTest
         var ui = SelfUi(new() { ["0,24"] = new[] { "vio-pref" }, ["1,1"] = new[] { "vio-pref" } });
         Assert.Equal(new[]
         {
-            new WishTrialRow(0, 24, "古泉", "希望の勤務になっていません", true, WishOnly: true),
+            new WishTrialRow(0, 24, "古泉", "希望の「休」になっていません", true, WishOnly: true),
             new WishTrialRow(0, 25, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true, WishOnly: true),
             new WishTrialRow(0, 26, "古泉", "希望どうしが禁止の並び「休→休→休」を作っています", true, WishOnly: true),
             new WishTrialRow(1, 0, "福澤", "希望どうしが前日の禁止「Dﾃ→休」に当たっています", true, WishOnly: true),
-            new WishTrialRow(1, 1, "福澤", "希望の勤務になっていません", true, WishOnly: true),
+            new WishTrialRow(1, 1, "福澤", "希望の「休」になっていません", true, WishOnly: true),
         }, NextActionGuide.WishTrialCandidatesOf(ui).Direct);
     }
 
@@ -99,7 +100,7 @@ public class WishTrialCandidatesTest
         var held = SelfUi(new() { ["0,24"] = new[] { "vio-c3n" }, ["0,25"] = new[] { "vio-c3n" }, ["0,26"] = new[] { "vio-c3n" } });
         var direct = NextActionGuide.WishTrialCandidatesOf(held).Direct;
         Assert.Equal(new[] { 24, 25, 26 }, direct.Select(r => r.Day));
-        Assert.Equal(new[] { "希望が禁止の並びに掛かっています" }, direct.Select(r => r.Reason).Distinct());
+        Assert.Equal(new[] { "希望「休」が禁止の並びに掛かっています" }, direct.Select(r => r.Reason).Distinct());
         Assert.Empty(NextActionGuide.WishTrialCandidatesOf(SelfUi(new())).Direct);
     }
 
@@ -136,12 +137,12 @@ public class WishTrialCandidatesTest
     [Fact]
     public void T10_SevenWordings()
     {
-        Assert.Equal("取り消すと必須違反が確実に1件 減り、再作成するとさらに2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 5, 2)));
-        Assert.Equal("取り消すと必須違反が確実に1件 減ります。", NextActionGuide.WishTrialText(R(5, 4, 5, 4)));
-        Assert.Equal("取り消して再作成すると、必須違反が2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 5, 3)));
-        Assert.Equal("この希望を取り消しても、必須は減らない見込みです（必須 5件 → 5件）。すべての組み合わせを試したわけではありません。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
+        Assert.Equal("希望を調整して外すと必須違反が確実に1件 減り、再作成するとさらに2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 5, 2)));
+        Assert.Equal("希望を調整して外すと必須違反が確実に1件 減ります。", NextActionGuide.WishTrialText(R(5, 4, 5, 4)));
+        Assert.Equal("希望を調整して外し、再作成すると、必須違反が2件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 5, 3)));
+        Assert.Equal("この希望を調整して外しても、必須は減らない見込みです（必須 5件 → 5件）。すべての組み合わせを試したわけではありません。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
         Assert.Equal("再作成するだけの場合より、さらに1件 減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 3, 2)));
-        Assert.Equal("取り消さなくても、再作成するだけで同じだけ減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 3, 3)));
+        Assert.Equal("希望を外さなくても、再作成するだけで同じだけ減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 3, 3)));
         Assert.Equal("試算できませんでした（未割当のセルがあります）。", NextActionGuide.WishTrialText(new WishTrial.Unavailable("未割当のセルがあります")));
         Assert.Null(NextActionGuide.WishTrialText(WishTrial.Stopped));
         Assert.True(NextActionGuide.WishTrialNoGain(R(5, 5, 5, 5)));

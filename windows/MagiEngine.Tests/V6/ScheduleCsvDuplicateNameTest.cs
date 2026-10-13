@@ -30,7 +30,7 @@ public class ScheduleCsvDuplicateNameTest
         for (var i = 0; i < sched.Length; i++) Assert.Equal(sched[i], r.Schedule[i]);
         Assert.Equal(new[] { "山田" }, r.AmbiguousNames);
         Assert.Equal(1, r.Matched);
-        Assert.Equal("同じ名前の職員が複数いるため取り込みませんでした: 山田", ScheduleCsvBridge.AmbiguousText(r.AmbiguousNames));
+        Assert.Equal("同じ名前の職員が複数いるため、山田さんの行は取り込みませんでした", ScheduleCsvBridge.AmbiguousText(r.AmbiguousNames));
     }
 
     [Fact]

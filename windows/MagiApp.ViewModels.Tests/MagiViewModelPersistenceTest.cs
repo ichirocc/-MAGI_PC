@@ -172,7 +172,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         var vm = NewVm();
         var st = MinimalState.Build();
 
-        Assert.True(vm.EnsureValidForRun(st, MinimalState.BuildSchedule()));
+        Assert.True(vm.EnsureValidForRun(st, MinimalState.BuildSchedule(), "勤務表の作成"));
         Assert.Null(vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
     }
@@ -184,13 +184,15 @@ public class MagiViewModelPersistenceTest : IDisposable
         var st = MinimalState.Build();
         var badSchedule = new[] { new[] { 0, 0, 0 }, new[] { 0, 0, 0, 0, 0, 0, 0 } }; // row0 too short
 
-        var ok = vm.EnsureValidForRun(st, badSchedule);
+        var ok = vm.EnsureValidForRun(st, badSchedule, "勤務表の作成");
 
         Assert.False(ok);
         Assert.True(vm.Ui.MessageIsError);
         Assert.False(vm.Ui.Running);
-        Assert.Contains("実行できません:", vm.Ui.Message);
-        Assert.Contains("日数が不揃い", vm.Ui.Message);
+        // 検証の文は JSON の項目名を含むので画面には出さず、操作ログへ残す。
+        Assert.StartsWith("勤務表の作成を始められません（データに矛盾があります）", vm.Ui.Message);
+        Assert.DoesNotContain("日数が不揃い", vm.Ui.Message);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("勤務表の作成を中止（データの検証）") && l.Contains("日数が不揃い"));
     }
 
     // ===================================================================
@@ -717,7 +719,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         Assert.NotNull(vm.LastRestorePreviousDataTask);
         await vm.LastRestorePreviousDataTask!;
 
-        Assert.Equal("開く前のデータの退避がありません", vm.Ui.Message);
+        Assert.Equal("開く前のデータに戻せません（退避したデータが見つかりません）。元のファイルは「データを開く」で開き直せます", vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
     }
 
@@ -766,7 +768,7 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         Assert.Null(vm.LastRestorePreviousDataTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("実行中は操作できません", vm.Ui.Message);
+        Assert.Contains("実行中は、開く前のデータに戻せません", vm.Ui.Message);
     }
 
     // ===================================================================

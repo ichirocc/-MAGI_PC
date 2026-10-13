@@ -46,7 +46,7 @@ public sealed record AnalysisTriage(
         var softN = MirrorKeys.Soft.Where(f => UnitOf(f) == "件").Sum(f => breakdown.GetValueOrDefault(f, 0));
         var ptN = MirrorKeys.Soft.Where(f => UnitOf(f) == "pt").Sum(f => breakdown.GetValueOrDefault(f, 0));
         if (bestHard > 0L) return $"必須 残り{bestHard}件" + (wishHard > 0 ? $"（うち希望のまま {Math.Min(wishHard, bestHard)}件）" : "");
-        if (shortDays > 0) return $"残り{shortDays}日";
+        if (shortDays > 0) return $"人員不足の日 残り{shortDays}日";
         if (softN > 0) return $"必須は解消・要調整 {softN}件";
         if (ptN > 0) return "必須は解消・残りは偏りのみ";
         return "解消済み";
@@ -91,24 +91,33 @@ public sealed record AnalysisTriage(
         if (c1Plateau is not null && c1Plateau.HasEntries)
         {
             var e = c1Plateau.Entries[0];
-            o["c1"] = $"{e.Label}ほか{c1Plateau.Entries.Count}件 — {e.RecommendedAction(labelOf)}";
+            var more = c1Plateau.Entries.Count - 1;
+            o["c1"] = e.Label + (more > 0 ? $"ほか{more}件" : "") + $" — {e.RecommendedAction(labelOf)}";
         }
         var stuckSurplus = coverage?.Surpluses.Where(s => s.BlockedFamily is not null).ToList() ?? new List<CoverageSurplus>();
         if (stuckSurplus.Count > 0)
         {
-            var fam = labelOf(stuckSurplus[0].BlockedFamily!);
-            o["covO"] = $"{stuckSurplus.Count}枠は動かす手が「{fam}」に負けて採用されません。{fam}の設定を緩めると動きます。";
+            var first = stuckSurplus[0];
+            var fam = labelOf(first.BlockedFamily!);
+            var slots = $"{first.DayLabel}の「{first.ShiftSymbol}」" + (stuckSurplus.Count > 1 ? $"など{stuckSurplus.Count}枠" : "");
+            // 曜日の偏り・グループ内のばらつきには緩める設定が無い＝手で動かす案内にする。
+            var remedy = first.BlockedFamily is "weekly" or "fair" ? "勤務表で手で動かすと減らせます。" : $"{fam}の設定を緩めると動きます。";
+            o["covO"] = $"{slots}は、動かす手が「{fam}」に負けて採用されません。{remedy}";
         }
         return o;
     }
 
+    /// <summary>崩せない禁止の並びの直す場所（<c>ForbiddenRunDiagnosis</c> の案内と同じく、希望の調整か担当の追加）。</summary>
+    private const string C3nWallFix = "希望（編集タブ＞月次条件）か担当（編集タブ＞年間マスター①）を見直してください。";
+
     /// <summary>必須違反の行に添える「なぜ残るか」。診断が無い/観測が無いときは空文字＝何も主張しない。</summary>
-    private static string HardDetail(string family, CoverageDiagnosis? coverage, ForbiddenRunDiagnosis? forbidden) => family switch
+    private static string HardDetail(string family, CoverageDiagnosis? coverage, ForbiddenRunDiagnosis? forbidden, string startDate) => family switch
     {
         "c3n" => forbidden is null || !forbidden.HasRuns ? ""
-            : forbidden.AllBlocked ? $"この希望・担当のままでは崩せません（{forbidden.TotalRuns}件すべて）。"
-            : forbidden.Runs.FirstOrDefault(r => !r.Escapable) is { } run ? $"「{run.SeqLabel}」は崩せません（{run.StaffName}）。"
-            : "崩す手が残っています。",
+            : forbidden.AllBlocked ? $"この希望・担当のままでは崩せません（{forbidden.TotalRuns}件すべて）。{C3nWallFix}"
+            : forbidden.Runs.FirstOrDefault(r => !r.Escapable) is { } run
+                ? $"{run.StaffName}さんの {DayText.Range(startDate, run.StartDay, run.StartDay + Math.Max(run.Cells.Count, 1) - 1)} の「{run.SeqLabel}」は、この希望・担当のままでは崩せません。{C3nWallFix}"
+            : "崩す手が残っています。下の行から直し方を探せます。",
         "covU" => coverage is null || !coverage.HasShortage ? ""
             : coverage.AllBlockedNow ? $"いまの希望のままでは、どう組んでも埋まりません（{coverage.TotalShortfall}人）。"
             : coverage.BlockedNowSlots > 0 ? $"{coverage.BlockedNowSlots}枠はいまの希望のままでは埋まりません。"
@@ -137,7 +146,7 @@ public sealed record AnalysisTriage(
             if (n <= 0) { ok.Add(labelOf(fam)); continue; }
             busy.Add(labelOf(fam));
             var row = new TriageRow(labelOf(fam), n, UnitOf(fam), "", fam);
-            if (hard.Contains(fam)) blockers.Add(row with { Detail = HardDetail(fam, ui.CoverageDiag, ui.ForbiddenDiag) });
+            if (hard.Contains(fam)) blockers.Add(row with { Detail = HardDetail(fam, ui.CoverageDiag, ui.ForbiddenDiag, ui.StartDate) });
             else if (promoted.TryGetValue(fam, out var why)) blockers.Add(row with { Detail = why, Promoted = true });
             else searching.Add(row);
         }

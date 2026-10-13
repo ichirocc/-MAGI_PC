@@ -268,11 +268,12 @@ public class GridDisplayMarksTest
         Assert.Contains(why.Lines, l => l.Contains("個人の上限が 0 回"));
         Assert.Contains(why.Lines, l => l.Contains("必要人数ぎりぎり"));
         Assert.Contains(why.Lines, l => l.Contains("下限＝上限で固定") && l.Contains("休 1回"));
+        Assert.Equal(FixSearchText.NoFixHead, why.Lines[0]);
         Assert.Equal(FixSearchText.NoFixScope, why.Lines[^1]);
         Assert.Equal("yr_count", why.SettingsSection);
-        Assert.Equal(new[] { FixSearchText.NoFixScope }, FixSearchText.NoFixReasons(u, new FixFocus(1, 2)).Lines);
+        Assert.Equal(new[] { FixSearchText.NoFixHead, FixSearchText.NoFixScope }, FixSearchText.NoFixReasons(u, new FixFocus(1, 2)).Lines);
         Assert.Equal("yr_headcount", FixSearchText.NoFixReasons(u, new FixFocus(null, 1, 0)).SettingsSection);
-        Assert.Contains("このセル", FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0)).Lines[0]);
+        Assert.Contains("このセル", FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0)).Lines[1]);
         Assert.Equal("必要人数の設定を開く", SettingsLabel.For("yr_headcount"));
         Assert.Equal("並び・期間の制約の設定を開く", SettingsLabel.For("yr_cons"));
         Assert.Equal("回数の設定を開く", SettingsLabel.For("yr_count"));
@@ -285,10 +286,10 @@ public class GridDisplayMarksTest
         };
         var w0 = FixSearchText.NoFixReasons(c3, new FixFocus(0, null, 0));
         Assert.True(w0.WishRelated);
-        Assert.Equal("この並びには本人の希望（10/2 の「A4」）が入っています。", w0.Lines[0]);
+        Assert.Equal("この並びには本人の希望（10/2 の「A4」）が入っています。", w0.Lines[1]);
         var w1 = FixSearchText.NoFixReasons(c3, new FixFocus(null, null, 1, ExceptStaff: 0));
         Assert.True(w1.WishRelated);
-        Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[0]);
+        Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[1]);
     }
 
     [Fact]

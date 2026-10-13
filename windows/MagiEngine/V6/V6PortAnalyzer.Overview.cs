@@ -389,7 +389,7 @@ public static partial class V6PortAnalyzer
                 if (k >= 0 && k < p.K && !p.CanDo(i, k)) badAssign++;
             }
         }
-        if (badAssign > 0) warns.Add($"担当不可の配置が {badAssign} セルあります");
+        if (badAssign > 0) warns.Add($"担当外のシフトに入っているセルが {badAssign} 件あります。勤務表で直すか、編集タブの『年間マスター』の『① シフト・グループ』で担当を追加できます");
 
         var badWish = 0;
         foreach (var (key, k) in state.Wishes)
@@ -405,7 +405,7 @@ public static partial class V6PortAnalyzer
                 badWish++;
             }
         }
-        if (badWish > 0) warns.Add($"範囲外または担当外の希望シフトが {badWish} 件あります");
+        if (badWish > 0) warns.Add($"期間の外か担当外の希望が {badWish} 件あります。編集タブの『月次条件』の『希望シフト登録』で見直せます");
 
         var badRange = 0;
         foreach (var (key, r) in state.StaffRange)
@@ -416,11 +416,12 @@ public static partial class V6PortAnalyzer
             if (i is null || k is null || i.Value < 0 || i.Value >= p.S || k.Value < 0 || k.Value >= p.K) badRange++;
             if (lo is not null && hi is not null && lo.Value > hi.Value) badRange++;
         }
-        if (badRange > 0) warns.Add($"staffRange の範囲外キーまたは lo>hi が {badRange} 件あります");
+        if (badRange > 0) warns.Add($"ひとりの回数の上限・下限に、職員かシフトが見つからない行か、下限が上限より大きい行が {badRange} 件あります。" +
+            "編集タブの『年間マスター』の『③ 回数（1人あたり）』で見直せます");
 
         var dup = DuplicatePatternCount(state);
-        if (dup > 0) warns.Add($"連続パターン制約の重複定義が {dup} 件あります");
-        if (state.Cons41.Count == 0) warns.Add("cons41 が未設定です（グループ別人数範囲を使う場合は確認）");
+        if (dup > 0) warns.Add($"勤務の並びのルールに、同じ並びの重複が {dup} 件あります。編集タブの『年間マスター』の『⑤ 並び・期間の制約』で整理できます");
+        if (state.Cons41.Count == 0) warns.Add("グループのレンジが未設定です。グループごとの1日の人数の範囲を使うなら、編集タブの『年間マスター』の『④ 人数と組み合わせ』で設定できます");
         return warns;
     }
 

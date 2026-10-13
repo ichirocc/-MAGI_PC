@@ -52,7 +52,7 @@ public class WishSelfConflictTest
         Assert.True(issue.Neutral);
         Assert.Equal("大島 10/3(土)・10/4(日)・10/5(月) 希望「休→休→休」", issue.Where);
         Assert.Equal("回避の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では外せず、要調整として残ります", issue.Problem);
-        Assert.Equal("いずれか1件の希望を取り消すか、回避の並び「休→休→休」を見直してください", issue.Fix);
+        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「回避の並び」で「休→休→休」を見直してください", issue.Fix);
         var held = new[] { new[] { A, A, Rest, Rest, Rest, A, A }, Enumerable.Repeat(A, 7).ToArray() };
         Assert.Equal(1, V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(st), held));
         var broken = new[] { new[] { A, A, Rest, A, Rest, A, A }, Enumerable.Repeat(A, 7).ToArray() };
@@ -98,7 +98,7 @@ public class WishSelfConflictTest
         Assert.Equal(IssueKind.Wish, issue.Kind);
         Assert.Equal("大島 10/3(土)・10/4(日)・10/5(月) 希望「休→休→休」", issue.Where);
         Assert.Equal("禁止の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では解消できません", issue.Problem);
-        Assert.Equal("いずれか1件の希望を取り消すか、禁止の並び「休→休→休」を見直してください", issue.Fix);
+        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「休→休→休」を見直してください", issue.Fix);
         Assert.Equal(SettingFixAction.None, issue.Action);
     }
 
@@ -110,7 +110,7 @@ public class WishSelfConflictTest
         var issue = Assert.Single(V6SanityPort.BuildGuidance(st), it => it.Kind == IssueKind.Wish && it.Problem.Contains("禁止の並び「Dﾃ」"));
         Assert.Equal("大島 10/3(土) 希望「Dﾃ」", issue.Where);
         Assert.Equal("禁止の並び「Dﾃ」に希望が当たっています。希望は固定なので計算では解消できません", issue.Problem);
-        Assert.Equal("この希望を取り消すか、禁止の並び「Dﾃ」を見直してください", issue.Fix);
+        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』で本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「Dﾃ」を見直してください", issue.Fix);
         var sched = new[] { new[] { A, A, D, A, A, A, A }, Enumerable.Repeat(A, 7).ToArray() };
         var msg = V6HotfixPasses.DetectHF70Anomalies(st, sched, "t").Message;
         Assert.Contains("希望と禁止の衝突 1 件", msg);

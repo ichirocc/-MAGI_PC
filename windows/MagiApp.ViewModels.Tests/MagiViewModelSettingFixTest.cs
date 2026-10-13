@@ -205,14 +205,14 @@ public class MagiViewModelSettingFixTest
         var st = MinimalState.Build(cons3n: new List<C3Row> { new(new[] { "A", "", "休" }) });
         var vm = new MagiViewModel { _state = st };
         var issue = new SettingIssue(
-            IssueKind.Constraint, "連続パターン「A→休」(c3n)", "重複した制約です", "片方を削除してください",
+            IssueKind.Constraint, "禁止の並び「A→休」", "重複した制約です", "片方を削除してください",
             Action: SettingFixAction.DeleteDupSeq, SeqFamily: "c3n", SeqKey: "A→休");
 
         vm.ApplySettingFix(issue);
 
         Assert.Single(vm._state!.Cons3n);   // 空白を詰めた別の規則とは照合しない
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Equal("削除する重複が見つかりませんでした（すでに変更されています）", vm.Ui.Message);
+        Assert.Equal("禁止の並び「A→休」 の重複は見つかりませんでした（すでに変更されています）。編集タブ＞年間マスター＞⑤ 並び・期間の制約で確かめてください", vm.Ui.Message);
     }
 
     [Fact]

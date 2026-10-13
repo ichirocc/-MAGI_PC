@@ -141,7 +141,7 @@ public static partial class V6FinalPort
         {
             ["subtitle"] = label.Desc,
             ["phaseDesc"] = $"{label.Tech} をNativeエンジンで実行中",
-            ["expectedSec"] = $"約 {seconds} 秒",
+            ["expectedSec"] = $"約 {seconds + PostReserveSec + ChainReserveSec} 秒",
             ["estimatedIter"] = "問題サイズに応じて自動調整",
         });
 
@@ -174,7 +174,9 @@ public static partial class V6FinalPort
 
         // ----- 予算一本化: optimize() + runPostOptimization() を一つの予算で管理する -----
         var budgetMs = (long)seconds * 1000L;
-        var hardDeadlineMs = startMs + budgetMs;
+        // 制限時間は探索の時間。後処理と玉突きの取り分はその後ろに足す（全体＝制限時間＋PostReserveSec＋ChainReserveSec）。
+        var postReserveFixedMs = (PostReserveSec + ChainReserveSec) * 1000L;
+        var hardDeadlineMs = startMs + budgetMs + postReserveFixedMs;
         // [3.372.0/レビュー修正, Kotlin原本] 診断ログ表示専用。実際の dispatch は V6NativeOptimizer.Optimize()
         //   内の同名関数呼出が担うため、ここも同じ V6NativeOptimizer.HypothesisCount から導出し独立再計算による
         //   表示/実挙動の乖離を防ぐ。
@@ -186,7 +188,7 @@ public static partial class V6FinalPort
         // ----- 停滞早期脱出ウォッチドッグ -----
         // [3.314.0] 下限 8 秒は「UI 経路は 10 秒下限」を前提にした値。予算そのものでクランプして
         //   searchDeadline <= hardDeadline を構造的に保証する（10 秒以上では minRunMs が支配するため結果は不変）。
-        var wdb = WatchdogBudgetOf(budgetMs, startMs, hardDeadlineMs);
+        var wdb = WatchdogBudgetOf(budgetMs, startMs, hardDeadlineMs, postReserveFixedMs: postReserveFixedMs);
         var minRunMs = wdb.MinRunMs;
         // [3.422.0/3.424.0] 後処理予約枠。探索は searchDeadlineMs で止め、後処理は hardDeadlineMs まで走らせる。
         var postReserveMs = wdb.PostReserveMs;
@@ -525,11 +527,11 @@ public static partial class V6FinalPort
         }
         var tExtra1 = NowMs();
 
-        var overBudget = tExtra1 - startMs > budgetMs;
+        var overBudget = tExtra1 - startMs > budgetMs + postReserveFixedMs;
         var timingLog = new MirrorLog(
             level: overBudget ? "W" : "I",
             tag: "TIME",
-            message: $"総{SecF(tExtra1 - startMs)}s (予算{seconds}s{(overBudget ? " 超過" : "")}): " +
+            message: $"総{SecF(tExtra1 - startMs)}s (予算{seconds}s＋後処理{PostReserveSec}s＋玉突き{ChainReserveSec}s{(overBudget ? " 超過" : "")}): " +
                 $"探索{SecF(tFirst1 - tFirst0)}s + 連鎖{SecF(tChain1 - tFirst1)}s + 統合{SecF(tIntegration1 - tChain1)}s + " +
                 $"後処理{SecF(tPost1 - tIntegration1)}s + 追加精製{SecF(tExtra1 - tPost1)}s " +
                 $"/ workers設定{effWorkers} " +
@@ -751,9 +753,10 @@ public static partial class V6FinalPort
                 if (n0 <= 0) continue;
                 if (personalWall > 0 && (key == "apt" || key == "high")) continue;   // 下でまとめて出す
                 string? structural = key == "c3n" && c3nWall ? "証明済みの壁" : null;
-                if (structural != null) { walls.Add($"{key} {n0}件({structural})"); continue; }
                 var self = Math.Min(n0, selfConflict.GetValueOrDefault(key, 0));
                 if (self > 0) selfConflictShown.Add((key, self));
+                // 希望どうしの衝突は壁より先に名指しする（直し方＝希望を1件取り消す、が分かる方を優先）。
+                if (structural != null) { if (n0 - self > 0) walls.Add($"{key} {n0 - self}件({structural})"); continue; }
                 if (key == "c3mn") avoidShown = Math.Min(n0, avoidSelf);
                 var n = key switch
                 {

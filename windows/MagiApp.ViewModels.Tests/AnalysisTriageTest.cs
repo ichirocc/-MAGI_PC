@@ -125,6 +125,9 @@ public class AnalysisTriageTest
         var blocked = AnalysisTriage.Build(Ui(B(("covO", 1)), hasResult: true, coverage: Cov("weekly")), L);
         Assert.Equal(new[] { "人員過剰" }, blocked.Blockers.Select(r => r.Label));
         Assert.Contains("曜日の偏り", blocked.Blockers.Single().Detail);
+        Assert.StartsWith("8/1(土)の「休」は、", blocked.Blockers.Single().Detail);   // どの日のどのシフトかを言う
+        Assert.EndsWith("勤務表で手で動かすと減らせます。", blocked.Blockers.Single().Detail);   // 曜日の偏りには緩める設定が無い
+        Assert.EndsWith("の設定を緩めると動きます。", AnalysisTriage.Build(Ui(B(("covO", 1)), hasResult: true, coverage: Cov("c1")), L).Blockers.Single().Detail);
 
         var free = AnalysisTriage.Build(Ui(B(("covO", 1)), hasResult: true, coverage: Cov(null)), L);
         Assert.Empty(free.Blockers);
@@ -145,7 +148,7 @@ public class AnalysisTriageTest
     public void HomeRemainingLabelCountsOnlyCountFamilies()
     {
         Assert.Equal("必須 残り2件", AnalysisTriage.HomeRemainingLabel(2L, 0, B(("covU", 2), ("c1", 5))));
-        Assert.Equal("残り1日", AnalysisTriage.HomeRemainingLabel(0L, 1, B()));
+        Assert.Equal("人員不足の日 残り1日", AnalysisTriage.HomeRemainingLabel(0L, 1, B()));
         Assert.Equal("必須は解消・要調整 5件", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("apt", 5), ("fair", 80), ("weekly", 60))));
         Assert.Equal("必須は解消・残りは偏りのみ", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 3))));   // pt だけなら解消済みとは言わない
         Assert.Equal("解消済み", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 0))));

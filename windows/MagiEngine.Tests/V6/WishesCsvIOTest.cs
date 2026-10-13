@@ -91,7 +91,7 @@ public class WishesCsvIOTest
         Assert.Equal(1, conflict.Accepted);
         Assert.Equal(1, conflict.Rejected);
         Assert.Equal(1, conflict.State.Wishes["0,0"]);   // 先の行が残る
-        Assert.Equal(new[] { "重複(値が違う): 花子,1,休" }, conflict.Samples);
+        Assert.Equal(new[] { "同じ職員・同じ日が2行（値が違う）: 花子,1,休" }, conflict.Samples);
     }
 
     /// <summary>[Android 3.474.0 同期/外部レビュー#76] 読めない行の例は最大 3 件まで集める。</summary>

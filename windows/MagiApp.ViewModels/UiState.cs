@@ -122,7 +122,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlyList<string> logs = Array.Empty<string>();
     [ObservableProperty] private long elapsedMs;
     [ObservableProperty] private int workers = Math.Clamp(Environment.ProcessorCount, 1, 8);
-    [ObservableProperty] private int budgetSec = 300;
+    [ObservableProperty] private int budgetSec = 60;   // 探索の時間。後処理は PostReserveSec を後ろに足す（3.659.0 利用者指示: 既定 300→60）
 
     /// <summary>C++ネイティブ加速(SAチャンク)のユーザートグル。C#移植では常に非該当（magi_native.cpp相当層は
     /// 対象外）だが、UI/設定の往復互換のためフィールド自体は保持する。</summary>

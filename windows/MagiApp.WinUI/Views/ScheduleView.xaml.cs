@@ -641,9 +641,11 @@ public sealed partial class ScheduleView : UserControl
             var days = TargetDays();
             var cellCount = eligible.Count * days.Count;
             var skipNote = skipped > 0 ? $"（担当外のため{skipped}名を自動除外）" : "";
+            var daysText = BulkDaysText(ui.StartDate, days, scopeCombo.SelectedIndex != 1);
             previewText.Text = cellCount > 0
-                ? $"{eligible.Count}名 × {days.Count}日 = {cellCount}マスへ一括設定します{skipNote}。既存の割当は上書きされます。"
-                : $"対象がありません{skipNote}。";
+                ? $"{eligible.Count}名 × {days.Count}日 = {cellCount}マス" + (daysText.Length > 0 ? $"（{daysText}）" : "") + $"へ一括設定します{skipNote}。既存の割当は上書きします。"
+                : days.Count == 0 ? "この期間に対象の日がありません。別の曜日を選んでください。"
+                : $"担当できる職員がいません{skipNote}。別のシフトを選んでください。";
             dialog.IsPrimaryButtonEnabled = cellCount > 0;
         }
 
@@ -672,6 +674,12 @@ public sealed partial class ScheduleView : UserControl
 
         await dialog.ShowAsync();
     }
+
+    /// <summary>一括操作の対象日（期間全体は範囲「10/1〜10/31」、曜日は日付を並べる「10/6・10/13」）。Kotlin <c>bulkDaysText</c>。</summary>
+    private static string BulkDaysText(string startDate, IReadOnlyList<int> days, bool wholePeriod) =>
+        days.Count == 0 ? ""
+        : wholePeriod ? DayText.Range(startDate, days[0], days[^1])
+        : string.Join("・", days.Select(j => DayText.Short(startDate, j)));
 
     /// <summary>[Android 3.623.0] 必須違反の一覧（Kotlin HardListChip のシート）。行を押すと閉じて、巡回と同じ移動（FocusCell→そのセルのシート）。</summary>
     private async void OnHardListClick(object sender, RoutedEventArgs e)
@@ -1150,14 +1158,17 @@ public sealed partial class ScheduleView : UserControl
         var (lo, hi, apt) = _vm.StaffCellLimits(i, k);
         var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : i.ToString();
         var sym = k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-        var lines = new List<string> { $"現在 {count}回" };
-        switch (vio)
+        // 1 行目に要点（基準・差・今の回数）。氏名とシフトは題にある。
+        var line = vio switch
         {
-            case "vio-low" when lo is { } l: lines.Add($"下限 {l}回 → {Math.Max(0, l - count)}回 不足"); break;
-            case "vio-high" when hi is { } h: lines.Add($"上限 {h}回 → {Math.Max(0, count - h)}回 超過"); break;
-            case "vio-aptLow" when apt is { } a: lines.Add($"目標 {a}回 → {Math.Max(0, a - count)}回 不足"); break;
-            case "vio-aptHigh" when apt is { } a: lines.Add($"目標 {a}回 → {Math.Max(0, count - a)}回 超過"); break;
-        }
+            "vio-low" when lo is { } l => $"下限 {l}回に {Math.Max(0, l - count)}回 足りません（現在 {count}回）",
+            "vio-high" when hi is { } h => $"上限 {h}回を {Math.Max(0, count - h)}回 超えています（現在 {count}回）",
+            "vio-aptLow" when apt is { } a => $"目標 {a}回に {Math.Max(0, a - count)}回 足りません（現在 {count}回）",
+            "vio-aptHigh" when apt is { } a => $"目標 {a}回を {Math.Max(0, count - a)}回 超えています（現在 {count}回）",
+            "vio-c2" => $"{AnalysisView.BreakdownLabels["c2"]}の目標に足りません（現在 {count}回）",
+            _ => $"現在 {count}回",
+        };
+        var lines = new List<string> { line };
         _ = ShowTallyDetailAsync($"{name} ・ {sym}", lines, focusStaff: i, shift: k, day: null, pinned: Array.Empty<int>());
     }
 
@@ -1167,8 +1178,13 @@ public sealed partial class ScheduleView : UserControl
     private void ShowDayTallyDetail(UiState ui, int k, int j, int count)
     {
         var sym = k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
-        var lines = new List<string> { $"現在 {count}人" };
-        if (_vm.NeedCellLimits(k, j) is { } lim) lines.Add($"適正 {lim.Hi}人 → {Math.Max(0, count - lim.Hi)}人 過剰");
+        // 1 行目に要点（族・シフト・差・基準）。日は題にある。
+        var lines = new List<string>
+        {
+            _vm.NeedCellLimits(k, j) is { } lim
+                ? $"{AnalysisView.BreakdownLabels["covO"]}：{sym} が適正 {lim.Hi}人を {Math.Max(0, count - lim.Hi)}人 超えています（現在 {count}人）"
+                : $"{sym} 現在 {count}人",
+        };
         // 在勤者＝現在その枠に配置されている全員。希望で固定＝配置済みかつ希望一致（CoverageDiag と同じ判定）。
         var assigned = new List<int>();
         for (var i = 0; i < ui.Schedule.Count; i++)
@@ -1179,15 +1195,17 @@ public sealed partial class ScheduleView : UserControl
             lines.Add("在勤: " + string.Join("・", assigned.Select(i =>
             {
                 var nm = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-                return pinned.Contains(i) ? $"{nm}（本人の希望）" : nm;
+                return pinned.Contains(i) ? $"{nm}さん（本人の希望）" : $"{nm}さん";
             })));
         }
         if (pinned.Count > 0)
         {
-            lines.Add("本人の希望: " + string.Join("・", pinned.Select(i => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")) +
-                "（必須の希望どうしが同じ日に重なり、どちらかの希望を取り消さない限り過剰は残ります）");
+            // 希望で固定した人数が適正人数を超えるときだけ「希望を調整しない限り残る」と言う（以下なら固定していない人を動かせば減る）。
+            var overByWish = _vm.NeedCellLimits(k, j) is { } lim2 && pinned.Count > lim2.Hi;
+            lines.Add("本人の希望: " + string.Join("・", pinned.Select(i => $"{(i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")}さん")) +
+                (overByWish ? "（必須の希望どうしが同じ日に重なっています。本人と相談してどちらかの希望を調整しない限り、過剰は残ります。調整すると希望は外れます。元に戻すで戻せます）" : ""));
         }
-        _ = ShowTallyDetailAsync($"{sym} ・ {j + 1}日", lines, focusStaff: null, shift: k, day: j, pinned: pinned, assigned: assigned);
+        _ = ShowTallyDetailAsync($"{sym} ・ {DayText.Full(ui.StartDate, j)}", lines, focusStaff: null, shift: k, day: j, pinned: pinned, assigned: assigned);
     }
 
     private async Task ShowTallyDetailAsync(string title, IReadOnlyList<string> lines, int? focusStaff, int shift, int? day, IReadOnlyList<int> pinned, IReadOnlyList<int>? assigned = null)
@@ -1209,7 +1227,7 @@ public sealed partial class ScheduleView : UserControl
                 var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
                 var cancel = new Button
                 {
-                    Content = $"{name} の希望を取り消す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                    Content = $"{name}さんの希望を調整する（外す）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                     Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], IsEnabled = !ui.Running,
                 };
                 var staff = i;
@@ -1222,7 +1240,7 @@ public sealed partial class ScheduleView : UserControl
                 var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
                 var fix = new Button
                 {
-                    Content = $"{name} の直し方を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                    Content = $"{name}さんの直し方を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                     IsEnabled = !ui.Running,
                 };
                 var staff = i;
@@ -1261,7 +1279,7 @@ public sealed partial class ScheduleView : UserControl
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.Failed)
             {
-                host.Children.Add(new TextBlock { Text = "直し方を探せませんでした。", TextWrapping = TextWrapping.Wrap });
+                host.Children.Add(new TextBlock { Text = "直し方を探す途中でうまくいきませんでした。もう一度ためせます。", TextWrapping = TextWrapping.Wrap });
                 var again = new Button { Content = "もう一度探す", MinHeight = 48 };
                 again.Click += (_, _) => Find();
                 host.Children.Add(again);
@@ -1411,7 +1429,7 @@ public sealed partial class ScheduleView : UserControl
         if (hv.Row == 0 && hv.Col > 0 && hv.Col - 1 < _covMarks.Count && _covMarks[hv.Col - 1].Count > 0)
         {
             var j = hv.Col - 1;
-            title = $"{j + 1}日の人員";
+            title = $"{DayText.Full(ui.StartDate, j)}の人員";
             lines = GridDisplayMarks.DayCoverageLines(ui, j, _covMarks[j], LabelOf, _vm.NeedCellLimits);
             focus = new FixFocus(null, _covMarks[j][0].Shift, j);
         }
@@ -1911,7 +1929,7 @@ public sealed partial class ScheduleView : UserControl
         if (status.Severity != CellSeverity.None)
         {
             var memo = new HyperlinkButton { Content = "⚑ ルールの見直しへ" };
-            memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {j + 1}日={Sym(cur)}：{status.Cause}"); };
+            memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
             panel.Children.Add(memo);
         }
 

@@ -15,7 +15,7 @@ public class ConsultListTest
     [Fact]
     public void BuildersCarryTheTargetAndTheQuestion()
     {
-        Assert.Equal(new ConsultItem("甲 10/12 の希望「夜」", "取り消すか勤務を変えるか: 禁止の並びに当たる", 0, 11, StaffName: "甲"), ConsultList.Wish("甲", "10/12", "夜", "禁止の並びに当たる", 0, 11));
+        Assert.Equal(new ConsultItem("甲 10/12 の希望「夜」", "希望を調整するか勤務を変えるか: 禁止の並びに当たる", 0, 11, StaffName: "甲"), ConsultList.Wish("甲", "10/12", "夜", "禁止の並びに当たる", 0, 11));
         Assert.Equal("甲 10/12 の希望", ConsultList.Wish("甲", "10/12", null, "r", 0, 11).Subject);
         Assert.Equal("だれかを入れる: 甲・乙・丙・丁・戊 ほか1人", ConsultList.Shortage("10/12", "夜", new[] { "甲", "乙", "丙", "丁", "戊", "己" }).Note);
         Assert.Equal("入れる人を相談", ConsultList.Shortage("10/12", "夜", Array.Empty<string>()).Note);
@@ -56,9 +56,9 @@ public class ConsultListTest
         Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "甲" }, 31));                            // 削除: 開けない
         Assert.Null(ConsultList.ConsultCell(c, "2026-11-01", new[] { "甲", "乙" }, 30));                      // 月の移動: 日付が期間の外
         Assert.Null(ConsultList.ConsultCell(c, "2026-10-01", new[] { "乙", "乙" }, 31));                    // [3.650.0] 同名が複数で並びが不明＝開かない
-        Assert.Equal("同じ名前の職員が複数いて、どの人か決められません（乙）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "乙", "甲", "乙" }, Array.Empty<string>(), 31));
-        Assert.Equal("いまの職員一覧にいません（乙）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲" }, Array.Empty<string>(), 31));
-        Assert.Equal("いまの期間にない日です（10/12）", ConsultList.ConsultTargetNote(c, "2026-11-01", new[] { "甲", "乙" }, Array.Empty<string>(), 30));
+        Assert.Equal("同じ名前の職員が複数いて、どの人か決められないので開けません（乙さん）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "乙", "甲", "乙" }, Array.Empty<string>(), 31));
+        Assert.Equal("いまの職員一覧にいないので開けません（乙さん）", ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲" }, Array.Empty<string>(), 31));
+        Assert.Equal("いまの期間にない日なので開けません（10/12）", ConsultList.ConsultTargetNote(c, "2026-11-01", new[] { "甲", "乙" }, Array.Empty<string>(), 30));
         Assert.Null(ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲", "乙" }, Array.Empty<string>(), 31));
         Assert.Null(ConsultList.ConsultTargetNote(ConsultList.Shortage("10/12", "夜", Array.Empty<string>()), "2026-10-01", new[] { "甲" }, Array.Empty<string>(), 31));   // 対象を持たない相談は何も言わない
     }
@@ -85,7 +85,7 @@ public class ConsultListTest
         Assert.True(ConsultList.ConsultChainResumable(new ChainTarget(null, null, "lbl", Suggestion: s), "2026-10-01", new[] { "休" }, 31));
         Assert.False(ConsultList.ConsultChainResumable(t, "2026-11-01", new[] { "休", "日", "夜" }, 30));
         var c = new ConsultItem("lbl", "n", Chain: t);
-        Assert.Equal("いまの期間・シフトにない枠です（10/3 の「夜」）", ConsultList.ConsultTargetNote(c, "2026-11-01", new[] { "甲" }, new[] { "休", "日", "夜" }, 30));
+        Assert.Equal("いまの期間・シフトにない枠なので、案を見られません（10/3 の「夜」）", ConsultList.ConsultTargetNote(c, "2026-11-01", new[] { "甲" }, new[] { "休", "日", "夜" }, 30));
         Assert.Null(ConsultList.ConsultTargetNote(c, "2026-10-01", new[] { "甲" }, new[] { "休", "日", "夜" }, 31));
         Assert.Equal("2026-10-12", ConsultList.IsoDate("2026-10-01", 11));
         Assert.Equal(11, ConsultList.DayIndexOf("2026-10-01", "2026-10-12", 31));
