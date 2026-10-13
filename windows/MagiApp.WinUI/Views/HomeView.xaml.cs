@@ -247,7 +247,7 @@ public sealed partial class HomeView : UserControl
                     (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "");
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
-                helperLabel = "この手を使う（元に戻せます）"; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
+                helperLabel = $"{ChainFixPreview.ApplyChangeButton}（元に戻せます）"; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
             }
             else if (ui.FixSearching)
             {

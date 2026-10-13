@@ -356,7 +356,7 @@ public sealed partial class MainWindow : Window
     private ChainFixPreview? _chainPreviewShown;
 
     /// <summary>[3.644.0/UX-03] 複数人の入れ替えを当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
-    /// 「この入れ替えを当てる」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。
+    /// 「この変更を適用」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。
     /// 3.646.0: ホームの描画からここへ＝分析タブ・セルのシートの「この手を使う」（<see cref="MagiViewModel.PreviewOrApplyFix"/>）でも、開いているタブに関係なく出る。</summary>
     private async Task ShowChainPreviewAsync(ChainFixPreview p)
     {
@@ -371,12 +371,13 @@ public sealed partial class MainWindow : Window
         var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
         body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = "当てる直前にもう一度検査し、必須が減らない・希望の固定を崩す手順は当てません。当てたあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = "適用の直前にもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = "この入れ替えを当てる", SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+            PrimaryButtonText = ChainFixPreview.ApplyChangeButton, SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
         };
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;

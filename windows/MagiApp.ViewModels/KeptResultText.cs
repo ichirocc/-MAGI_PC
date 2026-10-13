@@ -34,6 +34,6 @@ public static class KeptResultText
 public static class CompletedText
 {
     public static string Of(int hard, int total, string how) =>
-        hard == 0 ? $"計算が完了しました{how}。登録された必須違反0件・配布前確認へ（違反の合計 {total}件）"
+        hard == 0 ? $"計算が完了しました{how}。設定した必須条件を満たしています。配布前の確認に進んでください（違反の合計 {total}件）"
                   : $"計算が完了しました{how}。必須違反 {hard}件・違反の合計 {total}件";
 }
