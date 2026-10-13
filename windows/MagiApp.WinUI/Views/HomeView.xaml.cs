@@ -313,7 +313,7 @@ public sealed partial class HomeView : UserControl
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を外して再作成」の結果（VM が鮮度を照合済み）。
-        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine() ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
+        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k) ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;

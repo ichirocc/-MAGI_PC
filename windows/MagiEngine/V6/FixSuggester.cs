@@ -94,11 +94,12 @@ public static class FixSuggester
         int? focusStaff = null,
         int? focusShift = null,
         int maxResults = 8,
-        long deadlineMs = 8000L)
+        long deadlineMs = 8000L,
+        bool strictNewHard = true)
     {
         var p = new Problem(state);
         if (p.S < 1 || p.T < 1) return new List<FixSuggestion>();
-        return new Session(state, p, ScheduleUtil.NormalizeSchedule(schedule, p), focusStaff, focusShift, deadlineMs).Run(maxResults);
+        return new Session(state, p, ScheduleUtil.NormalizeSchedule(schedule, p), focusStaff, focusShift, deadlineMs, strictNewHard).Run(maxResults);
     }
 
     private sealed class Quad
@@ -136,10 +137,18 @@ public static class FixSuggester
         private readonly List<int> _hotCells = new();                          // staff*Pack+day（セル違反）
         private readonly HashSet<int> _hotDays = new();
 
-        public Session(MagiState state, Problem p, int[][] s, int? focus, int? focusShift, long deadlineMs)
+        private readonly bool _strictNewHard;
+        private readonly HashSet<ViolationKey> _baseHardKeys;
+
+        /// <summary>必須の族の件数が増えるか、_strictNewHard なら別の職員・日・枠に必須違反が新たに生まれる手（<see cref="ViolationIdentity.IntroducesHardViolation"/>）。</summary>
+        private bool Introduces(ViolationReport rep) =>
+            UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) != null || (_strictNewHard && ViolationIdentity.Keys(rep, hardOnly: true).Any(k => !_baseHardKeys.Contains(k)));
+
+        public Session(MagiState state, Problem p, int[][] s, int? focus, int? focusShift, long deadlineMs, bool strictNewHard = true)
         {
-            _state = state; _p = p; _s = s; _focus = focus; _focusShift = focusShift; _deadlineMs = deadlineMs;
+            _state = state; _p = p; _s = s; _focus = focus; _focusShift = focusShift; _deadlineMs = deadlineMs; _strictNewHard = strictNewHard;
             _base = UnifiedViolationChecker.Check(state, s);
+            _baseHardKeys = ViolationIdentity.Keys(_base, hardOnly: true);
             foreach (var (key, cls) in _base.CountViolations)
             {
                 var (i, k) = ParseKey(key);
@@ -230,14 +239,14 @@ public static class FixSuggester
                 new FixSuggestion(kind, ops, label, rep.Hard - _base.Hard, rep.Total - _base.Total, DiffOf(rep)),
                 rep.Hard - _base.Hard, rep.Total - _base.Total, rep.WeightedScore - _base.WeightedScore));
         }
-        /// <summary>ops をその場で適用→評価→復元。base より良く、かつ別の HARD 族を新規に崩さなければ候補に
-        /// 追加（<see cref="UnifiedViolationChecker.NewHardFamilyViolation"/>、3.573.0。FixApplyGate と同じ規則
+        /// <summary>ops をその場で適用→評価→復元。base より良く、かつ必須違反を新たに生まなければ候補に
+        /// 追加（<see cref="Introduces"/>、3.573.0・3.663.0。FixApplyGate と同じ規則
         /// ＝提案の時点で弾く）。回数固定（下限＝上限）を崩す手も同じく弾く。</summary>
         private void TryOps(FixKind kind, IReadOnlyList<FixCell> ops, string label)
         {
             if (ops.Any(op => BanNew(op.Staff, op.Day, op.ToShift))) return;
             var rep = EvalOps(ops);
-            if (!UnifiedViolationChecker.BetterReport(rep, _base) || UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) != null) return;
+            if (!UnifiedViolationChecker.BetterReport(rep, _base) || Introduces(rep)) return;
             var after = _s.Copy2D();
             foreach (var op in ops) after[op.Staff][op.Day] = op.ToShift;
             if (!V6SearchOperators.ExactPinRegression(_p, _s, after)) Record(kind, ops, label, rep);
@@ -364,7 +373,7 @@ public static class FixSuggester
                             if (a == x || _p.ExtBanned(i, j, x)) continue;
                             _s[i][j] = x;
                             var rep = UnifiedViolationChecker.Check(_state, _s);
-                            var ok = UnifiedViolationChecker.BetterReport(rep, bestRep) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
+                            var ok = UnifiedViolationChecker.BetterReport(rep, bestRep) && !Introduces(rep) &&
                                 !V6SearchOperators.ExactPinRegression(_p, s0, _s);
                             _s[i][j] = a;
                             if (ok) { bestRep = rep; bestJ = j; bestSaved = a; }
@@ -423,7 +432,7 @@ public static class FixSuggester
                     for (var c = 0; c < n; c++) _s[cells[c]][j] = cellOpts[c][idx[c]];
                     var rep = UnifiedViolationChecker.Check(_state, _s);
                     // TryOps と同じ規則（回数固定を崩す組み合わせは最良に選ばない）。
-                    if (UnifiedViolationChecker.BetterReport(rep, _base) && UnifiedViolationChecker.NewHardFamilyViolation(_base, rep) == null &&
+                    if (UnifiedViolationChecker.BetterReport(rep, _base) && !Introduces(rep) &&
                         (bestComboRep == null || UnifiedViolationChecker.BetterReport(rep, bestComboRep)) && !V6SearchOperators.ExactPinRegression(_p, s0, _s))
                     {
                         bestComboRep = rep;

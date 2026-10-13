@@ -179,6 +179,8 @@ public static partial class V6PortAnalyzer
         var work = schedule.Copy2D();
         foreach (var op in ops) work[op.Staff][op.Day] = op.ToShift;
         var after = UnifiedViolationChecker.Check(state, work);
+        // 見せる前に当てるときと同じ規則で弾く（別の職員・日・枠に必須違反を新たに生む入れ替えは出さない）。
+        if (ViolationIdentity.IntroducesHardViolation(before, after)) return null;
         var diff = new List<(string Family, int Delta)>();
         foreach (var key in before.Breakdown.Keys.Union(after.Breakdown.Keys))
         {
@@ -193,7 +195,7 @@ public static partial class V6PortAnalyzer
     /// <summary>[3.643.0/根拠の精度] 経験的な c3n 壁を <see cref="FixSuggester"/> の 1 手探索（上限 <see cref="Probe.C3nWallDeepMs"/>）で反証する＝必須を減らす手が 1 つでもあれば壁ではない。
     /// 見つからないことは不能の証明ではない。Kotlin の <c>ejectionChain = true</c>（多段連鎖）は C# に無い（<c>C1EjectionChainPolish</c> 未移植）＝反証は弱い側に外れる。</summary>
     public static bool C3nWallRefutedByOneMove(MagiState state, int[][] schedule, long budgetMs = Probe.C3nWallDeepMs) =>
-        FixSuggester.Suggest(state, schedule, maxResults: 4, deadlineMs: budgetMs).Any(s => s.DeltaHard < 0);
+        FixSuggester.Suggest(state, schedule, maxResults: 4, deadlineMs: budgetMs, strictNewHard: false).Any(s => s.DeltaHard < 0);
 
     /// <summary>
     /// 人員不足(covU)の枠ごとの原因診断。エンジンは変更せず、現在の解だけを読み取り、
