@@ -118,6 +118,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private string fixDoneKey = "";
     /// <summary>直し方の探索が失敗した依頼の鍵。</summary>
     [ObservableProperty] private string fixFailedKey = "";
+    [ObservableProperty] private bool fixTimedOut;   // [仕様 §7] 直近の直し方の探索が締切で打ち切られたか（見つからない理由を「時間不足」と言う）
 
     [ObservableProperty] private IReadOnlyList<string> logs = Array.Empty<string>();
     [ObservableProperty] private long elapsedMs;

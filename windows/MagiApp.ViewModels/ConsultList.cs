@@ -20,6 +20,7 @@ public sealed record ConsultItem(
     string Subject, string Note, int? Staff = null, int? Day = null,
     string? StaffName = null, string? Date = null,
     ChainTarget? Chain = null,
+    bool Held = false,
     int RosterKey = 0,
     int? StaffId = null,
     bool StaffGone = false);
@@ -33,6 +34,8 @@ public static class ConsultList
 {
     public const string Button = "相談してから決める";
     public const string Done = "相談中";
+    public const string HoldButton = "保留する";
+    public const string HeldLabel = "保留中";
     public const string Added = "ホームの「相談中」に追加しました";
     public const string Duplicate = "すでにホームの「相談中」にあるので、追加しませんでした";
     public const string Open = "開く";
@@ -41,6 +44,16 @@ public static class ConsultList
 
     /// <summary>ホームの主カードの 1 行。0 件なら出さない。</summary>
     public static string? Line(int n) => n > 0 ? $"未確認事項 {n} 件（相談中。下の一覧で確認してから配ってください）" : null;
+
+    /// <summary>相談中と保留を分けて言う（どちらも未解決＝違反は減らさない）。</summary>
+    public static string? Line(IReadOnlyList<ConsultItem> items)
+    {
+        if (items.Count == 0) return null;
+        var held = items.Count(c => c.Held);
+        var open = items.Count - held;
+        var parts = string.Join("・", new[] { open > 0 ? $"相談中 {open}" : null, held > 0 ? $"保留 {held}" : null }.Where(x => x is not null));
+        return $"未確認事項 {items.Count} 件（{parts}。下の一覧で確認してから配ってください）";
+    }
 
     private static DateOnly? Parse(string date) =>
         DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? d : null;
@@ -190,6 +203,9 @@ public static class ConsultList
 
     /// <summary>すでに一覧にあるか（ボタンを「相談中」にして形で返す）。</summary>
     public static bool IsConsulted(IReadOnlyList<ConsultItem> list, ConsultItem item) => list.Any(c => c.Subject == item.Subject && c.Note == item.Note);
+
+    /// <summary>積んだ同じ項目（相談中か保留かを札に出す）。</summary>
+    public static ConsultItem? Match(IReadOnlyList<ConsultItem> list, ConsultItem item) => list.FirstOrDefault(c => c.Subject == item.Subject && c.Note == item.Note);
 
     /// <summary>同じ対象・内容は 2 度積まない（null＝重複）。</summary>
     public static IReadOnlyList<ConsultItem>? Add(IReadOnlyList<ConsultItem> list, ConsultItem item) =>

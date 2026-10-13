@@ -268,7 +268,8 @@ public class GridDisplayMarksTest
         Assert.Contains(why.Lines, l => l.Contains("個人の上限が 0 回"));
         Assert.Contains(why.Lines, l => l.Contains("必要人数ぎりぎり"));
         Assert.Contains(why.Lines, l => l.Contains("下限＝上限で固定") && l.Contains("休 1回"));
-        Assert.Equal(FixSearchText.NoFixHead, why.Lines[0]);
+        Assert.Equal(NoFixKind.Fixed, why.Kind);   // 固定条件が理由に挙がった＝「固定条件による制限」（仕様 §7）
+        Assert.Equal(NoFixKind.Fixed.Head(), why.Lines[0]);
         Assert.Equal(FixSearchText.NoFixScope, why.Lines[^1]);
         Assert.Equal("yr_count", why.SettingsSection);
         Assert.Equal(new[] { FixSearchText.NoFixHead, FixSearchText.NoFixScope }, FixSearchText.NoFixReasons(u, new FixFocus(1, 2)).Lines);
@@ -290,6 +291,20 @@ public class GridDisplayMarksTest
         var w1 = FixSearchText.NoFixReasons(c3, new FixFocus(null, null, 1, ExceptStaff: 0));
         Assert.True(w1.WishRelated);
         Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[1]);
+    }
+
+    /// <summary>見つからない理由の区分（仕様 §7）: 矛盾＞時間不足＞固定条件＞調べた範囲。どれも「解決できない」とは言わない。</summary>
+    [Fact]
+    public void NoFixKindSeparatesTimeContradictionAndScope()
+    {
+        UiState U() => new() { Staff = 1, Days = 2, Shifts = 2, ShiftSymbols = new[] { "休", "A" }, Schedule = new IReadOnlyList<int>[] { new[] { 1, 0 } } };
+        Assert.Equal(NoFixKind.Scope, FixSearchText.NoFixReasons(U(), new FixFocus(0, null, 1)).Kind);
+        var timed = U(); timed.FixTimedOut = true;
+        Assert.Equal(NoFixKind.Time, FixSearchText.NoFixReasons(timed, new FixFocus(0, null, 1)).Kind);
+        var clash = U(); clash.FixTimedOut = true;
+        clash.WishSelfConflicts = new[] { new WishSelfConflict(0, "c3n", new[] { 0, 1 }, new[] { 1, 0 }) };
+        Assert.Equal(NoFixKind.Contradiction, FixSearchText.NoFixReasons(clash, new FixFocus(0, null, 1)).Kind);
+        Assert.DoesNotContain(Enum.GetValues<NoFixKind>(), k => k.Head().Contains("解決できない") || k.Head().Contains("解決不可能"));
     }
 
     [Fact]

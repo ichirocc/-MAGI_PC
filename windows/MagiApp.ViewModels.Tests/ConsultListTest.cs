@@ -190,6 +190,17 @@ public class ConsultListTest
         Assert.False(ConsultList.ConsultChainStale(new ChainTarget("2026-10-03", "夜", "lbl"), 1L, 2L));   // 枠を持つ相談（案なし）は探し直す
     }
 
+    /// <summary>保留は相談と分けて数える（どちらも未解決＝違反は減らさない。仕様 §4.2・UX-07）。</summary>
+    [Fact]
+    public void ConsultLineCountsHeldSeparately()
+    {
+        var a = new ConsultItem("s1", "n1"); var b = new ConsultItem("s2", "n2", Held: true);
+        Assert.Equal("未確認事項 2 件（相談中 1・保留 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { a, b }));
+        Assert.Equal("未確認事項 1 件（保留 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { b }));
+        Assert.Null(ConsultList.Line(Array.Empty<ConsultItem>()));
+        Assert.True(ConsultList.Match(new[] { b }, new ConsultItem("s2", "n2"))?.Held);
+    }
+
     [Fact]
     public void ViewModelAddsOnceAndRemovesByIndex()
     {

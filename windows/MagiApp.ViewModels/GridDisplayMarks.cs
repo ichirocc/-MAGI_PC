@@ -318,7 +318,21 @@ public static class SettingsLabel
 }
 
 /// <summary>手が見つからなかったときの説明。Lines は確かめた事実だけ、WishRelated なら「希望を見る」を出す。</summary>
-public sealed record NoFixExplain(IReadOnlyList<string> Lines, bool WishRelated, string SettingsSection);
+public sealed record NoFixExplain(IReadOnlyList<string> Lines, bool WishRelated, string SettingsSection, NoFixKind Kind = NoFixKind.Scope);
+
+/// <summary>改善案が見つからない理由の区分（仕様 §7）。どれも「解決できない」とは言わない。Kotlin <c>NoFixKind</c>。</summary>
+public enum NoFixKind { Contradiction, Time, Fixed, Scope }
+
+public static class NoFixKindText
+{
+    public static string Head(this NoFixKind kind) => kind switch
+    {
+        NoFixKind.Contradiction => "矛盾を確認：両立しない条件（本人の希望どうしのぶつかり）があります。該当する希望か条件を直すと解消します。",
+        NoFixKind.Time => "時間不足：制限時間内に改善案を見つけられませんでした。もう一度探すと続きを探せます。",
+        NoFixKind.Fixed => "固定条件による制限：本人の希望や個人の上限などの固定条件が、候補の変更を妨げています。固定条件を確かめるか、相談に回せます。",
+        _ => FixSearchText.NoFixHead,
+    };
+}
 
 /// <summary>シフト集計「計（期間）」の人員の印（Kotlin <c>ShiftCoverageTotal</c>）。</summary>
 public sealed record ShiftCoverageTotal(IReadOnlyList<int> UnderDays, IReadOnlyList<int> OverDays)
@@ -331,7 +345,7 @@ public sealed record ShiftCoverageTotal(IReadOnlyList<int> UnderDays, IReadOnlyL
 public static class FixSearchText
 {
     /// <summary>1 行目＝見つからなかったこと（上段のシートは 2 行で切れる）、続けて確かめた理由、最後に探した範囲。</summary>
-    public const string NoFixHead = "必須を増やさずに違反を減らす手は見つかりませんでした。";
+    public const string NoFixHead = "探索範囲内で改善なし：必須を増やさずに違反を減らす手は、調べた範囲では見つかりませんでした。別の方法で探すか、条件を見直せます。";
     public const string NoFixScope = "探したのは 1 セルの変更・2 人の入れ替え・玉突きの範囲です。";
 
     /// <summary>日×シフトの印が人員不足・過剰のものか（直し方が無いときの行き先＝その日のそのシフトの必要人数。群のレンジは④のまま）。Kotlin <c>coverageFocus</c>。</summary>
@@ -420,6 +434,11 @@ public static class FixSearchText
             }
         }
         outList.Add(NoFixScope);
-        return new NoFixExplain(outList, wish, f.Staff is null && f.Shift is not null ? "yr_headcount" : "yr_count");
+        // 区分の優先: 矛盾を確かめた＞時間で打ち切った＞固定条件が理由に挙がった＞調べた範囲で無い。
+        var contradiction = f.Staff is { } ki && f.Day is { } kd && ui.WishSelfConflicts.Any(c => c.Staff == ki && c.Days.Contains(kd));
+        var isFixed = wish || outList.Any(l => l.Contains("上限が 0 回") || l.Contains("下限＝上限で固定"));
+        var kind = contradiction ? NoFixKind.Contradiction : ui.FixTimedOut ? NoFixKind.Time : isFixed ? NoFixKind.Fixed : NoFixKind.Scope;
+        outList[0] = kind.Head();
+        return new NoFixExplain(outList, wish, f.Staff is null && f.Shift is not null ? "yr_headcount" : "yr_count", kind);
     }
 }

@@ -23,13 +23,14 @@ public static class PreDistributionCheck
         var softText = soft.Count == 0 ? "なし" : string.Join("・", soft.Take(3).Select(kv => $"{labelOf(kv.Key)} {kv.Value}件")) +
             (soft.Count > 3 ? $" ほか{soft.Count - 3}種類" : "");
         var consults = ui.Consults.Count;
+        var held = ui.Consults.Count(c => c.Held);
         return new List<PreDistRow>
         {
             new("対象", $"{period} の採用した勤務表", null),
             new("評価", evaluated ? "最新の勤務表を評価済み" : "まだ評価していません（問題がないか調べてください）", evaluated),
             new("必須違反", hardText, ui.BestHard == 0),
             new("要調整", softText, null),
-            new("相談", consults == 0 ? "未完了の相談はありません" : $"未完了 {consults}件（ホームの「相談中」）", consults == 0),
+            new("相談", consults == 0 ? "未完了の相談・保留はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
             new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true),
         };
     }
