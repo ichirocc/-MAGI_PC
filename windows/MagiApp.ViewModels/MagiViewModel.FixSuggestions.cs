@@ -130,7 +130,7 @@ public sealed partial class MagiViewModel
                 Ui.MessageIsError = true;
                 Ui.FixSearching = false;
                 Ui.FixFailedKey = focusKey;
-                Ui.Message = "直し方を探せませんでした";
+                Ui.Message = $"{(focusName.Length == 0 ? "" : $"{focusName}さんの")}直し方を探せませんでした（{FailureWords.Of(e, FailureKind.Engine)}）。もう一度お試しください";
             }
         }
     }
@@ -210,7 +210,9 @@ public sealed partial class MagiViewModel
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total));
-        PostOpNotice(line);
+        // 通知は 2 行まで＝必須が動いた手は必須だけ、動かない手は合計だけを添える（両方の数はホームの結果の行とログ）。
+        PostOpNotice($"{s.Label} を当てました（" + (gate.Before.Hard != gate.After.Hard ? $"必須違反 {gate.Before.Hard}→{gate.After.Hard}"
+            : $"違反の合計 {gate.Before.Total}→{gate.After.Total}") + "）");
         _fixOutcomeCtx = _state is { } stNow ? new TrialCtx(stNow, BoardKey(applied)) : null;
         RefreshCheck();
     }

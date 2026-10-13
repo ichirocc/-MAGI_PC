@@ -102,7 +102,9 @@ public class ZeroCapExclusionTest
         Assert.Equal(new V6FinalPort.CapZeroNotice(4, 0, 4), res.CapZero);
         Assert.Contains(res.Logs, l => l.Tag == "CapZero" && l.Message ==
             "入口: 個人上限0のセル4件を外しました（必須 0→4）。最適化は上限0の勤務を置かないため、入力の必須0件に戻らないことがあります");
-        Assert.Equal("今の勤務表には個人の上限0のシフトが4件入っています。最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります（上限を見直すか、そのまま使ってください）",
+        Assert.Equal("今の勤務表には個人の上限0のシフトが4件入っています（だれのどの日かはホームの『設定の見直し』に出ます）。" +
+            "最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります。" +
+            "編集タブの『年間マスター』の『③ 回数（1人あたり）』で上限を見直すか、このまま使えます",
             res.CapZero?.KeptNote());
         Assert.Null(new V6FinalPort.CapZeroNotice(4, 0, 0).KeptNote());
     }

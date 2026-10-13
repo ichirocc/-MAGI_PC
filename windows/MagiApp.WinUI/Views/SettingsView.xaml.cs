@@ -445,7 +445,7 @@ public sealed partial class SettingsView : UserControl
     private async void OnSaveDataClick(object sender, RoutedEventArgs e)
     {
         var json = _vm.ExportJson();
-        if (json is null) return;
+        if (json is null) { _vm.Notify("保存するデータがありません。データを開くか新しくつくると保存できます", "W"); return; }
         try
         {
             var file = await PickSaveFileAsync("MAGI データ (JSON)", ".json", "magi_state");
@@ -484,7 +484,7 @@ public sealed partial class SettingsView : UserControl
     internal async Task ExportCsvAsync()
     {
         var csv = _vm.ExportCsv();
-        if (csv is null) return;
+        if (csv is null) { _vm.Notify("書き出す勤務表がありません。データを開いて勤務表をつくると書き出せます", "W"); return; }
         try
         {
             var file = await PickSaveFileAsync("勤務表CSV", ".csv", "magi_schedule");
@@ -557,7 +557,9 @@ public sealed partial class SettingsView : UserControl
     {
         if (content is null)
         {
-            _vm.Notify($"書き出す{friendlyName}がありません", "W");
+            _vm.Notify(friendlyName.Contains("ログ")
+                ? "書き出すログがありません。勤務表をつくるなどの操作をするとログが残ります"
+                : $"{friendlyName}に書き出す内容がありません。データを開くと書き出せます", "W");
             return;
         }
         try
@@ -631,7 +633,8 @@ public sealed partial class SettingsView : UserControl
     {
         var min = sec / 60;
         var remainder = sec % 60;
-        return remainder == 0 ? $"最適化の制限時間 {sec}秒（{min}分）" : $"最適化の制限時間 {sec}秒";
+        var tail = $"＋仕上げ {MagiEngine.V6.V6FinalPort.PostReserveSec}秒＋玉突き {MagiEngine.V6.V6FinalPort.ChainReserveSec}秒";
+        return remainder == 0 ? $"探す時間 {sec}秒（{min}分）{tail}" : $"探す時間 {sec}秒{tail}";
     }
 
     private void OnWorkersChanged(object sender, RangeBaseValueChangedEventArgs e)

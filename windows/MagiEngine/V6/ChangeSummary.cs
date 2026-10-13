@@ -3,10 +3,12 @@ using MagiEngine.Model;
 namespace MagiEngine.V6;
 
 /// <summary>[Android 3.509.4/3.510.3 移植] 最適化・自動修正の前後比較（完了表示用）: 変更した職員数・セル数、希望固定の充足、個人回数が全員範囲内か、族別の増減。</summary>
-public sealed record ChangeSummary(int ChangedStaff, int ChangedCells, int WishKept, int WishTotal, bool RangeAllOk, IReadOnlyDictionary<string, int> FamilyDeltas)
+/// <param name="RangeOutStaff">回数の下限・上限を外れた職員の人数（0＝数えられなかったか範囲内）。</param>
+public sealed record ChangeSummary(int ChangedStaff, int ChangedCells, int WishKept, int WishTotal, bool RangeAllOk, IReadOnlyDictionary<string, int> FamilyDeltas, int RangeOutStaff = 0)
 {
-    /// <summary>完了カード 1 行目。例: 「変更 4人・7セル／希望 42/42／個人回数 全員範囲内」</summary>
-    public string Line() => $"変更 {ChangedStaff}人・{ChangedCells}セル／希望 {WishKept}/{WishTotal}／個人回数 " + (RangeAllOk ? "全員範囲内" : "範囲外あり");
+    /// <summary>完了カード 1 行目。例: 「変更 4人・7セル／希望どおり 42/42／回数の下限・上限 全員守れています」</summary>
+    public string Line() => $"変更 {ChangedStaff}人・{ChangedCells}セル／希望どおり {WishKept}/{WishTotal}／回数の下限・上限 " +
+        (RangeAllOk ? "全員守れています" : RangeOutStaff > 0 ? $"外れた人 {RangeOutStaff}人" : "外れた人あり");
 
     /// <summary>完了カード 2 行目（族名は <paramref name="label"/> で表示語へ）。例: 「改善 回避の並び -2・期間の制約 -1（重み 90）／悪化 曜日の偏り +3（重み 3）」</summary>
     public string FamilyLine(Func<string, string>? label = null) => FamilyLine(FamilyDeltas, label);
@@ -30,8 +32,10 @@ public sealed record ChangeSummary(int ChangedStaff, int ChangedCells, int WishK
         for (int i = 0; i < p.S; i++) for (int j = 0; j < p.T; j++)
             if (p.WishFixed(i, j)) { wishTotal++; if (i < after.Length && j < after[i].Length && after[i][j] == p.Wish[i][j]) wishKept++; }
         var rangeOk = report.Breakdown.GetValueOrDefault("low") == 0 && report.Breakdown.GetValueOrDefault("high") == 0;
+        var rangeOut = report.CountFamilies.Where(kv => kv.Value.Contains("vio-low") || kv.Value.Contains("vio-high"))
+            .Select(kv => kv.Key.Split(',')[0]).ToHashSet().Count;
         var deltas = DeltasOf(beforeReport ?? UnifiedViolationChecker.Check(state, before), report);
-        return new ChangeSummary(staff, cells, wishKept, wishTotal, rangeOk, deltas);
+        return new ChangeSummary(staff, cells, wishKept, wishTotal, rangeOk, deltas, rangeOut);
     }
 
     /// <summary>族別の件数増減（後 − 前。0 の族は含まない）。</summary>

@@ -181,7 +181,8 @@ internal static class EjectionChainPipeline
             tel.After = rep0;
             return new LegOut(work0, rep0, 0, 0L, 0L);
         }
-        var budgetMs = cfg.Deterministic ? 0L : Math.Min(deepCapMs, TimeLeft() / 4);
+        // 玉突きの取り分（ChainReserveSec）は締切に足してあるので、残り時間の半分まで使う（旧: 1/4）。
+        var budgetMs = cfg.Deterministic ? 0L : Math.Min(deepCapMs, TimeLeft() / 2);
         var budgetEvaluations = cfg.Deterministic ? deepCapEvaluations : 0L;
         if (!ShallowOnly && !stop() && (budgetMs > 0L || budgetEvaluations > 0L))
         {

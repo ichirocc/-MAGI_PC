@@ -18,7 +18,7 @@ public class ExtWishInputTest
         vm.SetWish(0, 0, 1);
         Assert.False(vm._state!.Wishes.ContainsKey("0,0"));
         Assert.True(vm.Ui.MessageIsError);   // 黙って無視しない＝理由を失敗の色で出す
-        Assert.Equal("職員A 12/1 は拡張希望の指定日なので、希望は入れられません", vm.Ui.Message);
+        Assert.Equal("職員Aさんの 12/1(月) は拡張希望の指定日なので、希望は入れられません。拡張希望を消すと入れられます（編集タブの「月次条件」の『希望シフト登録』）", vm.Ui.Message);
         vm.SetWish(1, 0, 1);
         Assert.True(vm._state!.Wishes.ContainsKey("1,0"));
         vm.RemoveExtWish(0);

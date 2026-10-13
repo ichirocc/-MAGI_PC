@@ -268,7 +268,10 @@ public static partial class V6PortAnalyzer
                 if (verdict == CoverageVerdict.Infeasible && wishPinned.Count > 0)
                 {
                     // 希望固定の人を外して数えた結果＝「データ上」は言い過ぎ（希望を取り消せば届きうる）。
-                    reason = $"いまの希望のままでは担当できる人が{capacity}人で必要数{need}に届きません（希望で別の勤務に固定: {wishPinned.Count}人）";
+                    var who = string.Join("・", wishPinned.Take(3).Select(x => $"{(x >= 0 && x < state.StaffList.Count ? state.StaffList[x].Name : $"#{x}")}さん")) +
+                        (wishPinned.Count > 3 ? $" ほか{wishPinned.Count - 3}人" : "");
+                    reason = $"いまの希望のままでは{sym}を担当できる人が{capacity}人で、必要数{need}人に届きません（{who}は希望で別の勤務に固定）。" +
+                        "本人と相談して希望を調整すると、担当できる人が増えます";
                 }
                 else if (verdict == CoverageVerdict.Infeasible)
                 {
@@ -315,16 +318,16 @@ public static partial class V6PortAnalyzer
                     forbidN = forbid;
                     string hint;
                     if (free > 0)
-                        hint = $"空き番{free}人を{sym}へ移せば充足（最適化が未到達＝勤務表でこのセルの『直し方を探す』で解消可）";
+                        hint = $"休みや人数に余裕のある勤務から{free}人を{sym}へ移せば埋まります（勤務表でこのセルの『直し方を探す』から直せます）";
                     else if (cascade > 0 && chainVerified)
-                        hint = "空き番が無く、過剰シフトからの多人数入替（玉突き=ブロック移動）が必要";
+                        hint = "すぐ移せる人がいないため、複数人を順に入れ替える手（玉突き）が必要です";
                     else if (cascade > 0)
-                        hint = $"玉突き候補{cascade}人はいますが、移動先の受け皿もすべて本人の希望/禁止の並びで塞がっており、" +
-                            "現在の希望のままではどう組んでも解消できません。希望を1件調整するか担当を追加してください" +
+                        hint = $"入れ替えの候補は{cascade}人いますが、その人が抜けた穴を埋められる人も本人の希望か禁止の並びで動かせず、" +
+                            "今の希望のままではどう組んでも解消できません。希望を1件調整するか、担当を追加してください" +
                             (MirrorKeys.WeightOf("covU") > MirrorKeys.WeightOf("pref") ? $"。{WishScoreHint}" : "");
                     else
-                        hint = "候補が本人の希望/禁止の並びで塞がっており、希望を1件調整するか担当を追加すると解消に近づく";
-                    reason = $"担当可能{capacity}人（うち在勤中{already}人）・今動かせる空き番{free}人（玉突き{cascade}・本人の希望{pinned}・禁止の並び{forbid}）。{hint}";
+                        hint = "移せる人が本人の希望か禁止の並びで動かせません。希望を1件調整するか、担当を追加すると埋まりやすくなります";
+                    reason = $"{hint}。内訳: {sym}を担当できる{capacity}人（すでに{sym}に{already}人）・すぐ移せる{free}人・入れ替えが要る{cascade}人・本人の希望{pinned}人・禁止の並びになる{forbid}人";
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
                     verdict, reason, blockedNow, wishPinned, chainOk, forbidN));
@@ -368,7 +371,8 @@ public static partial class V6PortAnalyzer
                     .ToList();
                 if (cands.Count > 0)
                 {
-                    relaxations.Add($"「{sym}」は担当可能者が不足（ピーク不足{peakMiss}人）。{sym} を {string.Join("・", cands)}（稼働が少なめ）に担当追加すると解消に近づきます");
+                    relaxations.Add($"「{sym}」を担当できる人が足りません（多い日で{peakMiss}人不足）。" +
+                        $"{string.Join("・", cands.Select(c => $"{c}さん"))}（勤務が少なめ）に「{sym}」の担当を追加すると、埋まりやすくなります");
                 }
             }
         return relaxations;
@@ -461,18 +465,18 @@ public static partial class V6PortAnalyzer
                     hint = "移せる先はありますが、1人動かす手はどれも他の条件を悪化させるため最適化は採用しません" +
                         "（この過剰を減らすには、その条件を緩めるか、過剰を受け入れる必要があります）";
                 else if (free > 0)
-                    hint = "移せる先はありますが、目的関数での確認は打ち切りました（枠が多いため）";
+                    hint = "移せる先はありますが、全体が良くなるかの確認は途中で打ち切りました（過剰の枠が多いため）";
                 else if (cascade > 0)
                     hint = "移動先はどこも定員一杯で、過剰シフトからの多人数入替（玉突き）が必要";
                 else
-                    hint = "在籍者は本人の希望/禁止の並びで動かせず、希望を1件調整するか担当を減らすと解消に近づく";
+                    hint = $"{sym}の人は本人の希望か禁止の並びで動かせません。希望を1件調整するか、担当を減らすと過剰が減りやすくなります";
 
                 var blockedFamily = freeImproving == 0 && probedAny && famHits.Count > 0
                     ? famHits.MaxBy(kv => kv.Value).Key
                     : null;
                 surplusList.Add(new CoverageSurplus(j, DayLabel(state.StartDate, j), k, sym, need, got, excess,
                     blockedFamily,
-                    $"在勤者中 動かせる{free}人・玉突き必要{cascade}人・本人の希望{pinned}人・禁止の並び{forbid}人。{hint}",
+                    $"{hint}。内訳: {sym}の{got}人のうち 動かせる{free}人・玉突き必要{cascade}人・本人の希望{pinned}人・禁止の並び{forbid}人",
                     pinnedIdx));
             }
         }

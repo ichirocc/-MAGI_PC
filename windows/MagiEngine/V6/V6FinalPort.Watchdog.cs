@@ -131,10 +131,10 @@ public static partial class V6FinalPort
         long MinRunMs, long PostReserveMs, long SearchDeadlineMs, long SearchWindowMs,
         long StallMs, long StallHardMs, long PhaseGraceMs);
 
-    internal static WatchdogBudget WatchdogBudgetOf(long budgetMs, long startMs, long hardDeadlineMs, double? fraction = null)
+    internal static WatchdogBudget WatchdogBudgetOf(long budgetMs, long startMs, long hardDeadlineMs, double? fraction = null, long? postReserveFixedMs = null)
     {
         var minRunMs = Math.Min(Math.Clamp(budgetMs / 6, 8_000L, 45_000L), budgetMs);
-        var postReserveMs = Math.Min(Math.Clamp(budgetMs / 12, 8_000L, 25_000L), budgetMs / 2);
+        var postReserveMs = postReserveFixedMs ?? Math.Min(Math.Clamp(budgetMs / 12, 8_000L, 25_000L), budgetMs / 2);
         var searchDeadlineMs = Math.Max(hardDeadlineMs - postReserveMs, startMs + minRunMs);
         var searchWindowMs = searchDeadlineMs - startMs;
         return new WatchdogBudget(

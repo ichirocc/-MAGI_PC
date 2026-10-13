@@ -292,7 +292,7 @@ public sealed partial class MagiViewModel
         if (_state is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "このCSVを取り込めませんでした。先に『データを開く』で基本データを読み込むか、病院の勤務表の書式（テンプレート）のCSVをご利用ください。";
+            Ui.Message = "このCSVを取り込めませんでした（開いているデータがありません。勤務表だけのCSVは、開いているデータに重ねて取り込みます）。先に『データを開く』で基本データを読み込むか、病院の勤務表の書式（テンプレート）のCSVをご利用ください。";
             return;
         }
         // [3.282.0相当] 修復済みテキストをそのまま渡す（旧: rawText を渡し ImportCsv 内で二重に repair＝
@@ -313,7 +313,7 @@ public sealed partial class MagiViewModel
         if (st is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "このCSVを読み込めませんでした。形式をご確認ください。";
+            Ui.Message = $"{(asWishes ? "希望シフト" : "勤務表")}としてCSVを取り込めませんでした（形式を読めません）。病院の勤務表の書式（テンプレート）のCSVか、形式をご確認ください。";
             return;
         }
         if (st.ShiftCount <= 1)
@@ -399,7 +399,7 @@ public sealed partial class MagiViewModel
             case CsvPartialImport.Verdict.NothingReadable:
                 Ui.MessageIsError = true;
                 Ui.Running = false;
-                Ui.Message = $"CSV取込失敗: {CsvPartialImport.NothingReadable}";
+                Ui.Message = $"CSV取込失敗: {CsvPartialImport.NothingReadable}。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください";
                 LogOp("W", "CSV取込 失敗: 引用符が閉じていなくて読めた職員の行がないため取込を中止しました");
                 return null;
         }
@@ -433,7 +433,7 @@ public sealed partial class MagiViewModel
                 Ui.MessageIsError = true;
                 Ui.Running = false;
                 Ui.Message = res.AmbiguousNames.Count > 0
-                    ? $"CSV取込失敗: {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}"
+                    ? $"CSV取込失敗: {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}。編集タブ＞職員管理とCSVの両方で名前を区別してから、もう一度取り込んでください"
                     : "CSV取込失敗: 一致する職員名がありませんでした（0名）。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
                 LogOp("W", "CSV取込 失敗: 職員名が0件一致のため取込を中止しました（氏名/列レイアウトを確認）");
                 return;
@@ -498,7 +498,7 @@ public sealed partial class MagiViewModel
         {
             if (pushedUndo) RollbackBoardCommit(st, sched);
             Ui.Running = false;
-            Ui.Message = $"CSVを取り込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）";
+            Ui.Message = $"CSVを取り込めませんでした（{FailureWords.Of(e, FailureKind.Load)}）。ファイルの中身を確認して、もう一度お試しください";
             Ui.MessageIsError = true;
         }
         finally
@@ -551,7 +551,7 @@ public sealed partial class MagiViewModel
         if (st is null || sched is null)
         {
             Ui.MessageIsError = false;
-            Ui.Message = "先にデータを開いてください（職員一覧は既存データに追加/更新します）";
+            Ui.Message = "職員一覧を取り込めませんでした（開いているデータがありません）。職員一覧は既存データに追加・更新するので、先に『データを開く』でデータを開いてください";
             return;
         }
         var text = MojibakeRepair.Repair(rawText);
@@ -609,7 +609,7 @@ public sealed partial class MagiViewModel
         if (st is null)
         {
             Ui.MessageIsError = false;
-            Ui.Message = "先にデータを開いてください（希望シフトは既存データに重ねます）";
+            Ui.Message = "希望シフトを取り込めませんでした（開いているデータがありません）。希望シフトは既存データに重ねるので、先に『データを開く』でデータを開いてください";
             return;
         }
         var text = MojibakeRepair.Repair(rawText);
@@ -631,7 +631,7 @@ public sealed partial class MagiViewModel
         if (res.Rejected > 0)
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"希望シフトの取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
+            Ui.Message = $"希望シフトの取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の希望を置き換えるため、全部読めたときだけ実行します。読めない行を直して、もう一度取り込んでください。例: {string.Join(" ／ ", res.Samples)}";
             LogOp("W", $"希望シフトCSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
         }
@@ -646,7 +646,7 @@ public sealed partial class MagiViewModel
         if (st is null)
         {
             Ui.MessageIsError = false;
-            Ui.Message = "先にデータを開いてください（各制約は既存データに重ねます）";
+            Ui.Message = "各制約を取り込めませんでした（開いているデータがありません）。各制約は既存データに重ねるので、先に『データを開く』でデータを開いてください";
             return;
         }
         var text = MojibakeRepair.Repair(rawText);
@@ -667,7 +667,7 @@ public sealed partial class MagiViewModel
         if (res.Rejected > 0)
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人の回数の下限・上限を置き換えるため、全部読めたときだけ実行します。例: {string.Join(" ／ ", res.Samples)}";
+            Ui.Message = $"各制約の取込を中止しました（読めない行が{res.Rejected}件）。この取込は既存の制約・個人の回数の下限・上限を置き換えるため、全部読めたときだけ実行します。読めない行を直して、もう一度取り込んでください。例: {string.Join(" ／ ", res.Samples)}";
             LogOp("W", $"各制約CSV取込 中止: 読めない行{res.Rejected}件（取込可{res.Accepted}件）例: {string.Join(" ／ ", res.Samples)}");
             return;
         }

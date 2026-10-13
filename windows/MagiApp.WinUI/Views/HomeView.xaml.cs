@@ -306,7 +306,7 @@ public sealed partial class HomeView : UserControl
         NoteText.Visibility = note is null ? Visibility.Collapsed : Visibility.Visible;
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
-        // [S5 §9] 直近の「希望を取り消して再作成」の結果（VM が鮮度を照合済み）。
+        // [S5 §9] 直近の「希望を外して再作成」の結果（VM が鮮度を照合済み）。
         var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine() ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
         OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
         OutcomeText.Text = outcomeLine ?? "";
@@ -378,7 +378,7 @@ public sealed partial class HomeView : UserControl
         }
         else parts.Add("気になる点 –");
         if (ui.BestHard > 0L && ui.TotalViolations > 0) parts.Add($"気になる点 全{ui.TotalViolations}件");
-        var secLeft = System.Math.Max(0L, ui.BudgetSec * 1000L - ui.ElapsedMs) / 1000L;
+        var secLeft = System.Math.Max(0L, (ui.BudgetSec + MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec) * 1000L - ui.ElapsedMs) / 1000L;
         parts.Add($"残り {secLeft / 60}:{secLeft % 60:00}");
         return string.Join("  ・  ", parts);
     }
@@ -528,7 +528,7 @@ public sealed partial class HomeView : UserControl
         await dialog.ShowAsync();
     }
 
-    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「取り消したら？」で試算・確定（§5）。
+    /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「希望を外したら？」で試算・確定（§5）。
     /// 試算の結果は VM が ctx つきで持ち、ここは組み直すたびに問い合わせる（古ければ隠す＝§8）。</summary>
     internal async Task ShowWishConflictsAsync()
     {
@@ -544,7 +544,7 @@ public sealed partial class HomeView : UserControl
             new() { Text = text, FontSize = 14, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0), Opacity = dim ? 0.8 : 1.0 };
         Button TrialButton(WishTrialRow row, bool enabled)
         {
-            var b = new Button { Content = "取り消したら？", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0), IsEnabled = enabled };
+            var b = new Button { Content = "希望を外したら？", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0), IsEnabled = enabled };
             b.Click += (_, _) => _vm.StartWishTrial(row.Staff, row.Day);
             return b;
         }
@@ -596,7 +596,7 @@ public sealed partial class HomeView : UserControl
                     {
                         var confirm = new Button
                         {
-                            Content = "希望を取り消して再作成", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
+                            Content = "希望を外して再作成（元に戻せます）", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
                             Foreground = BrushOf("MagiErrorBrush"), IsEnabled = !ui.Running,
                         };
                         var token = ready.Token;
@@ -628,7 +628,7 @@ public sealed partial class HomeView : UserControl
             }
             if (cands.Direct.Count > 0)
             {
-                panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、希望を変えるか勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+                panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、本人と相談して希望を調整するか、勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
                 foreach (var row in cands.Direct) AddRow(row, ui);
             }
             if (cands.Shortfall.Count > 0)
@@ -713,7 +713,7 @@ public sealed partial class HomeView : UserControl
                         var tail = c.FromRest ? "（休み）" : "";
                         var b = new Button
                         {
-                            Content = $"{c.Name}{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                            Content = $"{c.Name}さん{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
                             IsEnabled = flow.CandidatesEnabled && !ui.Running,
                         };
                         var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex;
@@ -767,7 +767,7 @@ public sealed partial class HomeView : UserControl
             }
             else if (plan.Infeasible.Count > 0)
             {
-                panel.Children.Add(new TextBlock { Text = "これ以上は自動で埋められません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+                panel.Children.Add(new TextBlock { Text = $"{plan.Infeasible.Select(sf => sf.DayIndex).Distinct().Count()}日 は、これ以上は自動で埋められません。", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
                 foreach (var sf in plan.Infeasible.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
@@ -775,7 +775,7 @@ public sealed partial class HomeView : UserControl
             }
             else if (plan.Blocked.Count > 0)
             {
-                panel.Children.Add(new TextBlock { Text = "いまの希望・担当のままでは埋められない日が残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = $"いまの希望・担当のままでは埋められない日が {plan.Blocked.Select(sf => sf.DayIndex).Distinct().Count()}日 残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "再作成しても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
@@ -891,14 +891,19 @@ public sealed partial class HomeView : UserControl
         }
         ShortagePanel.Visibility = Visibility.Visible;
         ShortageHeadline.Text = diag.AllInfeasible
-            ? $"不足 {diag.TotalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。"
+            ? $"不足 {diag.TotalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。" +
+                "担当できる人を増やすと直せます（編集タブ＞年間マスター①）。"
             : diag.AllBlockedNow
-                ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。希望を1件調整するか、担当を追加してください。"
+                ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
+                    "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
                 : diag.BlockedNowSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠はいまの希望のままでは埋められません（残りは再作成すると解消し得ます）。"
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠は" +
+                        "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
+                        "残りは再作成すると解消し得ます。"
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再作成するか設定の見直しで解消し得ます。"
-                        : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。";
+                        : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。" +
+                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる人を増やすと直せます（編集タブ＞年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
             var infeasible = s.Verdict == CoverageVerdict.Infeasible;
@@ -970,7 +975,7 @@ public sealed partial class HomeView : UserControl
                 var name = i >= 0 && i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
                 var cancel = new Button
                 {
-                    Content = $"{name} の希望（{s.ShiftSymbol}）を取り消す",
+                    Content = $"{name}さんの希望（{s.ShiftSymbol}）を外して調整する",
                     HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                     Foreground = BrushOf("MagiErrorBrush"), IsEnabled = editable,
                 };

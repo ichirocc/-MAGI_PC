@@ -233,8 +233,13 @@ public static class GridDisplayMarks
     {
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
         IReadOnlyList<int> row = i < ui.Schedule.Count ? ui.Schedule[i] : Array.Empty<int>();
-        var c1 = ui.C1Shortages.Where(x => x.Staff == i && x.Stuck).DistinctBy(x => x.Shift)
-            .Select(sh => $"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日）— {C1Display.StuckText}").ToList();
+        var stuck = ui.C1Shortages.Where(x => x.Staff == i && x.Stuck).ToList();
+        var c1 = stuck.DistinctBy(x => x.Shift).Select(sh =>
+        {
+            var spans = string.Join("・", stuck.Where(x => x.Shift == sh.Shift && x.Day1 == sh.Day1 && x.Day2 == sh.Day2)
+                .Select(x => DayText.Range(ui.StartDate, x.From, x.To)));
+            return $"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日・{spans}）— {C1Display.StuckText}";
+        }).ToList();
         var chips = new List<CountChip>();
         foreach (var key in CountKeys(ui).Where(k => First(k) == i).OrderBy(k => Second(k) ?? 0))
         {
@@ -325,7 +330,9 @@ public sealed record ShiftCoverageTotal(IReadOnlyList<int> UnderDays, IReadOnlyL
 /// <summary>その場の直し方探しの純粋な部分（Kotlin <c>MagiViewState.kt</c> の <c>noFixReasons</c>／<c>shiftCoverageTotals</c>）。</summary>
 public static class FixSearchText
 {
-    public const string NoFixScope = "1 セルの変更・2 人の入れ替え・玉突きの範囲では、必須を増やさずに違反を減らす手が見つかりませんでした。";
+    /// <summary>1 行目＝見つからなかったこと（上段のシートは 2 行で切れる）、続けて確かめた理由、最後に探した範囲。</summary>
+    public const string NoFixHead = "必須を増やさずに違反を減らす手は見つかりませんでした。";
+    public const string NoFixScope = "探したのは 1 セルの変更・2 人の入れ替え・玉突きの範囲です。";
 
     /// <summary>日×シフトの印が人員不足・過剰のものか（直し方が無いときの行き先＝その日のそのシフトの必要人数。群のレンジは④のまま）。Kotlin <c>coverageFocus</c>。</summary>
     public static bool CoverageFocus(UiState ui, FixFocus f)
@@ -355,7 +362,7 @@ public static class FixSearchText
     public static NoFixExplain NoFixReasons(UiState ui, FixFocus f,
         Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null, Func<int, int, (int Lo, int Hi)?>? needLimits = null)
     {
-        var outList = new List<string>();
+        var outList = new List<string> { NoFixHead };
         var wish = false;
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
         int? CellAt(int i, int j) => i >= 0 && i < ui.Schedule.Count && j >= 0 && j < ui.Schedule[i].Count ? ui.Schedule[i][j] : null;
@@ -408,7 +415,7 @@ public static class FixSearchText
             var pinned = Enumerable.Range(0, ui.Schedule.Count).Where(s => CellAt(s, dd) == dk && WishIs(s, dd, dk)).ToList();
             if (pinned.Count > 0)
             {
-                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + string.Join("・", pinned.Select(s => s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}")) + " は本人の希望で固定されています。");
+                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + string.Join("・", pinned.Select(s => (s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}") + "さん")) + " は本人の希望で固定されています。");
                 wish = true;
             }
         }

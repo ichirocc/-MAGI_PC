@@ -97,13 +97,15 @@ public static class CellSheetLogic
         string Sym(int k) => k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : "?";
         string Name(int x) => x >= 0 && x < state.StaffList.Count ? state.StaffList[x].Name : $"#{x}";
         string Day(int d) => DayText.Short(state.StartDate, d);
-        string DayFull(int d) => DayText.Full(state.StartDate, d);
+        string Group(int x) => x >= 0 && x < state.StaffList.Count && state.StaffList[x].GroupIdx >= 0 && state.StaffList[x].GroupIdx < state.Groups.Count
+            && !string.IsNullOrWhiteSpace(state.Groups[state.StaffList[x].GroupIdx].Name) ? $"グループ「{state.Groups[state.StaffList[x].GroupIdx].Name}」" : "この職員";
         var cur = i < s.Length && j < s[i].Length ? s[i][j] : -1;
         int Count(int k) => s[i].Count(x => x == k);
+        // 氏名とこの日はシートの見出しにある＝ここでは繰り返さない（見出しと違う日・範囲だけ書く）。
         switch (fam)
         {
             case "c3w":
-                return j + 1 < p.T && p.Wish[i][j + 1] >= 0 ? $"翌日({Sym(p.Wish[i][j + 1])})への前日禁止（{Sym(cur)}）" : null;
+                return j + 1 < p.T && p.Wish[i][j + 1] >= 0 ? $"{labelOf(fam)} {Sym(cur)}→{Sym(p.Wish[i][j + 1])}（{DayText.Range(state.StartDate, j, j + 1)}）" : null;
             case "extWish":
             {
                 var banned = Enumerable.Range(0, p.K).Where(k => p.ExtBanned(i, j, k)).ToList();
@@ -119,7 +121,7 @@ public static class CellSheetLogic
             case "c3m":
             {
                 var c = (fam == "c3" ? p.Cons3 : p.Cons3m).FirstOrDefault(x => x.Seq.Length > 0 && x.Seq[0] == cur);
-                return c is null ? null : $"{labelOf(fam)} {string.Join("→", c.Seq.Select(Sym))} が{DayFull(j)}から続かない";
+                return c is null ? null : $"{labelOf(fam)} {string.Join("→", c.Seq.Select(Sym))} がこの日から続かない";
             }
             case "c42s":
             case "c42":
@@ -146,7 +148,7 @@ public static class CellSheetLogic
                 var lo = p.Need1[cur][j];
                 var hi = p.Use2 && p.Need2[cur][j] >= 0 ? p.Need2[cur][j] : lo;
                 var n = Enumerable.Range(0, p.S).Count(x => s[x][j] == cur);
-                return fam == "covU" ? $"{DayFull(j)}の{Sym(cur)}が人員不足（必要{lo}人に{n}人）" : $"{DayFull(j)}の{Sym(cur)}が人員過剰（適正{hi}人に{n}人）";
+                return fam == "covU" ? $"{Sym(cur)}が人員不足（必要{lo}人に{n}人）" : $"{Sym(cur)}が人員過剰（適正{hi}人に{n}人）";
             }
             case "c41s":
             case "c41":
@@ -163,7 +165,7 @@ public static class CellSheetLogic
                 return C1Display.CellText(C1Display.Shortages(p, s), s, i, j, Sym, Day);
             case "pref":
                 return p.Wish[i][j] >= 0 ? $"希望は{Sym(p.Wish[i][j])}（今は{Sym(cur)}）" : null;
-            case "groupViol": return $"{Sym(cur)}は{Name(i)}の担当外";
+            case "groupViol": return $"{Sym(cur)}は{Group(i)}の担当外";
             case "low": return cur < 0 ? null : $"{Sym(cur)}が{Count(cur)}回（下限{p.RangeLo[i][cur]}）";
             case "high":
                 if (cur < 0) return null;
@@ -439,8 +441,11 @@ public static class CellSheetLogic
                     case "pref":
                     case "groupViol":
                     case "extWish":
-                        outMap.TryAdd($"{fam},{i},{j}", new TourItem(fam, i, new[] { j }, $"{labelOf(fam)} {Sym(s[i][j])} ・ {DayText.Full(state.StartDate, j)}"));
+                    {
+                        var wish = fam == "pref" && p.Wish[i][j] >= 0 ? $"（希望は{Sym(p.Wish[i][j])}）" : "";
+                        outMap.TryAdd($"{fam},{i},{j}", new TourItem(fam, i, new[] { j }, $"{labelOf(fam)} {Sym(s[i][j])}{wish} ・ {DayText.Full(state.StartDate, j)}"));
                         break;
+                    }
                 }
             }
         }
@@ -554,8 +559,9 @@ public static class CellSheetLogic
     /// <summary>操作の通知を出している間、通常の文言では置き換えない（失敗・拒否だけは置き換える）。</summary>
     public static bool MessageMayReplaceNotice(bool noticeShowing, bool isError) => !noticeShowing || isError;
 
-    public const string PinHardHint = "このセルには必須違反があります。固定すると自動では動かしません。";
-    public const string PinNotCanDoHint = "担当外のシフトです。固定すると必須違反が残ったまま自動では動かしません。";
+    // 手動固定の通知「…を手動固定しました（自動では変更しません）」の後ろに付く＝同じことを繰り返さない。
+    public const string PinHardHint = "このセルには必須違反があります。";
+    public const string PinNotCanDoHint = "担当外のシフトなので、必須違反が残ります。";
     private static readonly string[] PinHardCellFamilies = { "c3n", "c3w", "pref", "groupViol", "extWish" };
 
     /// <summary>手動固定を付けたセルが担当外／必須違反を抱えているときの一文（付けない＝空）。固定の挙動は変えない＝知らせるだけ（Kotlin <c>pinRegisterHint</c>）。</summary>

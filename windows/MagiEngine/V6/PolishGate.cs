@@ -158,7 +158,7 @@ public static class PolishGate
     public static volatile bool EjectionChainSwapMoves = true;
 
     /// <summary>[Android 同名] 玉突きの深い探索の上限ミリ秒（残り時間の 1/4 との小さい方）。既定 6,000（Android 3.624.0 の明示指示）。</summary>
-    public static long EjectionChainMaxMillis = 6_000L;
+    public static long EjectionChainMaxMillis = V6FinalPort.ChainReserveSec * 1000L;   // 3.659.0 利用者指示: 6 秒→10 秒
 }
 
 /// <summary>[E0] 希望衝突の床での頭打ちの型（A/B 用、Kotlin <c>WishFloorMode</c>）。</summary>

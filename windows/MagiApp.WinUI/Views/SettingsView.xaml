@@ -27,7 +27,7 @@
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock x:Name="BudgetLabel" Text="最適化の制限時間" />
+                <TextBlock x:Name="BudgetLabel" Text="探す時間" />
                 <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
                         TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
                         ValueChanged="OnBudgetChanged" />

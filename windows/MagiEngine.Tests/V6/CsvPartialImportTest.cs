@@ -233,7 +233,7 @@ public class CsvPartialImportTest
     public void WordingMatchesTheDecidedTexts()
     {
         Assert.Equal("取り込める行がありませんでした（引用符が閉じていません）", CsvPartialImport.NothingReadable);
-        Assert.Equal("盤面が変わったため取込をやめました。もう一度取り込んでください", CsvPartialImport.Stale);
+        Assert.Equal("勤務表か設定が変わったため、取込をやめました。もう一度取り込んでください", CsvPartialImport.Stale);
         Assert.Equal("取込をやめました", CsvPartialImport.Cancelled);
         Assert.Equal("この部分だけ取り込む", CsvPartialImport.ConfirmLabel);
         Assert.Equal("やめる", CsvPartialImport.CancelLabel);

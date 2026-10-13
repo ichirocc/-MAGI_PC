@@ -509,7 +509,7 @@ public sealed partial class EditView : UserControl
         }
         else
         {
-            ExtWishErrorText.Text = "登録できませんでした: " + (_vm.LastExtWishError ?? "");
+            ExtWishErrorText.Text = "登録できませんでした: " + (_vm.LastExtWishError ?? "") + "。日かシフトを選び直して、もう一度試せます。";
             ExtWishErrorText.Visibility = Visibility.Visible;
         }
         RenderWishCalendar(_vm.Ui, true);
@@ -715,7 +715,7 @@ public sealed partial class EditView : UserControl
         WishOtherButtonsHost.Visibility = _wishShowOther && others.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         var outOfScope = !allowed.Contains(_wishSelK);
         WishShiftWarnText.Visibility = outOfScope ? Visibility.Visible : Visibility.Collapsed;
-        if (outOfScope) WishShiftWarnText.Text = $"⚠「{ui.ShiftSymbols[_wishSelK]}」はこの職員の担当外です。希望は登録できますが、配置すると違反になります。";
+        if (outOfScope) WishShiftWarnText.Text = $"⚠「{ui.ShiftSymbols[_wishSelK]}」はこの職員の担当外です。希望は登録できますが、配置すると必須違反になります。";
         ApplyWishesForDaysButton.Content = $"{_wishSelectedDays.Count}日に適用";
         ApplyWishesForDaysButton.IsEnabled = editable;
         ClearWishesForDaysButton.IsEnabled = editable;
@@ -814,7 +814,7 @@ public sealed partial class EditView : UserControl
                 Title = "希望を勤務表へ反映しますか？",
                 Content = new TextBlock
                 {
-                    Text = $"担当外（所属グループで担当できない）希望が{oos}件あります。含めて反映しますか？",
+                    Text = $"担当外（所属グループで担当できない）希望が{oos}件あります。\n含めて反映すると、その {oos} 件は担当外の勤務として入り、必須違反として数えます。「担当外を除いて反映」ならその {oos} 件は入れません。どちらも「元に戻す」で戻せます。",
                     TextWrapping = TextWrapping.Wrap,
                 },
                 PrimaryButtonText = "担当外も含めて反映",
@@ -1002,7 +1002,7 @@ public sealed partial class EditView : UserControl
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
-                Text = $"{v.Kigou} {v.J + 1}日 → 最低{DashIfBlank(v.P1)}/{MagiViewModel.NeedUpperLabel(ui.Use2, shortLabel: true)}{DashIfBlank(v.P2)}",
+                Text = $"{v.Kigou} {DayText.Full(ui.StartDate, v.J)} → 最低{DashIfBlank(v.P1)}/{MagiViewModel.NeedUpperLabel(ui.Use2, shortLabel: true)}{DashIfBlank(v.P2)}",
                 FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
             });
             var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
@@ -1296,6 +1296,12 @@ public sealed partial class EditView : UserControl
         var rows = ui.Loaded ? _vm.StaffingReality() : System.Array.Empty<MagiViewModel.StaffingRealityRow>();
         StaffingRealityPanel.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         StaffingRealityHost.Children.Clear();
+        if (rows.Any(r => r.Q - r.MaxNeed <= 0))
+            StaffingRealityHost.Children.Add(new TextBlock
+            {
+                Text = "⚠・！のシフトは、下の『担当できるシフト（グループ × シフト）』で担当できるグループを増やすか、『シフト』の最低人数・「月次条件」の『日別の必要人数（例外）』で人数を見直すと余裕が出ます。",
+                FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
+            });
         foreach (var r in rows)
         {
             var slack = r.Q - r.MaxNeed;
@@ -1427,8 +1433,9 @@ public sealed partial class EditView : UserControl
         var i = StaffCombo.SelectedIndex;
         if (i < 0) { StaffHintText.Text = "対象の職員を選んでください。"; return; }
         var name = i < _vm.Ui.StaffNames.Count ? _vm.Ui.StaffNames[i] : "";
+        var wishN = _vm.Ui.Wishes.Keys.Count(key => key.StartsWith($"{i},", StringComparison.Ordinal));
         var ok = await ConfirmAsync("職員を削除しますか？",
-            $"「{name}」を削除します。勤務・希望・個人の回数も削除されます（「元に戻す」で戻せます）。");
+            $"{name}さんを職員から削除します。\n{name}さんの勤務の行と希望" + (wishN > 0 ? $" {wishN}件" : "") + "・個人の回数も消えます（「元に戻す」で戻せます）。");
         if (!ok) return;
         _vm.Ws1RemoveStaff(i);
         _syncedStaffIndex = -1;
@@ -1831,13 +1838,14 @@ public sealed partial class EditView : UserControl
         if (_syncingFromModel) return;
         var g = MasterGroupCombo.SelectedIndex;
         if (g < 0) { MasterGroupHintText.Text = "対象のグループを選んでください。"; return; }
-        if (!_vm.Ws1CanRemoveGroup(g)) { MasterGroupHintText.Text = "グループは最低1つ必要なため削除できません。"; return; }
+        if (!_vm.Ws1CanRemoveGroup(g)) { MasterGroupHintText.Text = "グループは最低1つ必要なため削除できません。先に別のグループを追加すると削除できます。"; return; }
         var members = _vm.Ws1GroupMemberCount(g);
         var refs = _vm.Ws1GroupRefCount(g) + _vm.Ws1SkillGroupRefCount(g);
         var name = g < _masterGroupItems.Count ? _masterGroupItems[g] : "";
         var msg = $"「{name}」を削除します。" +
             (members > 0 ? $" 所属{members}名は先頭グループへ移動し、担当できるシフトが変わります。" : "") +
-            (refs > 0 ? $" このグループを参照する制約が{refs}件あります。" : "");
+            (refs > 0 ? $" このグループを参照する制約が{refs}件あります。" : "") +
+            "（元に戻すで取り消せます）";
         var ok = await ConfirmAsync("グループを削除しますか？", msg);
         if (!ok) return;
         _vm.Ws1RemoveGroup(g);
@@ -1946,8 +1954,13 @@ public sealed partial class EditView : UserControl
         }
         // 縮めると後ろの日の希望・日別の必要人数が消える＝確認を挟む（Android と同じ）。
         var cur = _vm.Ui.Days;
-        if (n < cur && !await ConfirmAsync("期間を縮めますか？",
-                $"{cur}日 → {n}日にします。{n + 1}日目以降の勤務表の割り当て・希望・日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
+        if (n < cur)
+        {
+            var cut = DayText.Range(_vm.Ui.StartDate, n, cur - 1);
+            var wishN = _vm.Ui.Wishes.Keys.Count(key => { var c = key.IndexOf(','); return c > 0 && int.TryParse(key[(c + 1)..], out var d) && d >= n; });
+            if (!await ConfirmAsync("期間を縮めますか？",
+                    $"{cur}日 → {n}日にします。\n{cut} の勤務表の割り当て・希望" + (wishN > 0 ? $" {wishN}件" : "") + "・日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
+        }
         _vm.Ws1ResizeDays(n);
     }
 
@@ -2038,7 +2051,8 @@ public sealed partial class EditView : UserControl
         var refs = _vm.Ws1SkillGroupRefCount(g);
         var name = g < _masterSkillGroupItems.Count ? _masterSkillGroupItems[g] : "";
         var msg = $"「{name}」を削除します。" +
-            (members > 0 ? $" 割り当てていた{members}名は「(なし)」に戻ります。" : "") +
+            (members > 0 ? $" 割り当てていた{members}名は「(なし)」に戻ります（スキルグループのルールの対象から外れます）。" : " 所属している職員はいません。") +
+            " 元に戻すで取り消せます。" +
             (refs > 0 ? $" このスキルグループを参照する制約が{refs}件あります。" : "");
         var ok = await ConfirmAsync("スキルグループを削除しますか？", msg);
         if (!ok) return;
@@ -2165,12 +2179,15 @@ public sealed partial class EditView : UserControl
             AptOverloadBanner.Visibility = Visibility.Collapsed;
             return;
         }
-        var worst = _vm.AptBalances().Where(b => b.Overloaded).OrderByDescending(b => b.Shortfall).FirstOrDefault();
+        var overloadedCols = _vm.AptBalances().Where(b => b.Overloaded).ToList();
+        var worst = overloadedCols.OrderByDescending(b => b.Shortfall).FirstOrDefault();
         AptOverloadBanner.Visibility = worst is null ? Visibility.Collapsed : Visibility.Visible;
         if (worst is not null)
         {
-            AptOverloadText.Text = $"⚠ {KigouFormat.ToHankakuKigou(worst.Kigou)}：目標の合計{worst.AptSum}回 ＞ " +
-                (worst.IsRest ? $"休める日数の上限{worst.Capacity}日" : $"必要人数の合計{worst.Capacity}回") + $"（{worst.Shortfall}回ぶんは必ず届きません）";
+            AptOverloadText.Text = $"⚠ {KigouFormat.ToHankakuKigou(worst.Kigou)}：担当できる職員の目標の合計{worst.AptSum}回 ＞ " +
+                (worst.IsRest ? $"休める日数の上限{worst.Capacity}日" : $"必要人数の合計{worst.Capacity}回") + $"（{worst.Shortfall}回ぶんは必ず届きません）" +
+                (overloadedCols.Count > 1 ? $"。ほかに{overloadedCols.Count - 1}列あります" : "") +
+                "\nその列の目標を見直しましょう";
         }
 
         var K = ws1.Shifts.Count;
@@ -2303,9 +2320,9 @@ public sealed partial class EditView : UserControl
         panel.Children.Add(aptRow);
         // [Android 3.509.0/決定 D9] 個人の下限・上限がある組には群目標を適用しない。適用される組は到達範囲へ調整されうる（3.508.0）。
         if ((lo0 is not null || hi0 is not null) && int.TryParse(raw.Trim(), out _))
-            panel.Children.Add(new TextBlock { Text = "この職員・シフトは個人の下限・上限を優先するため、グループの目標は適用されません", FontSize = 14, Opacity = 0.8 });
+            panel.Children.Add(new TextBlock { Text = $"{name}さんの{kigou}は個人の下限・上限を優先するため、グループの目標は適用されません", FontSize = 14, Opacity = 0.8 });
         else if (apt is { } aEff && (!int.TryParse(raw.Trim(), out var rawN) || rawN != aEff))
-            panel.Children.Add(new TextBlock { Text = $"この職員の希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 14, Opacity = 0.8 });
+            panel.Children.Add(new TextBlock { Text = $"{name}さんの希望・置けるシフトから {(string.IsNullOrWhiteSpace(raw) ? "0" : raw.Trim())}→{aEff} に調整されています", FontSize = 14, Opacity = 0.8 });
 
         panel.Children.Add(new TextBlock { Text = "個人の下限・上限（このシフトだけ）", Style = StyleOf("MagiTitleSmallTextStyle") });
         var loBox = new TextBox { Header = "下限", PlaceholderText = "なし", Text = lo0?.ToString() ?? "", Width = 120 };

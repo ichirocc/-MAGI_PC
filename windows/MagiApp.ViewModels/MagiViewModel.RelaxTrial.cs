@@ -132,7 +132,7 @@ public sealed partial class MagiViewModel
             Ui.Message = "試算の手順を当てても同じ結果になりませんでした。勤務表と設定はそのままです。";
             return;
         }
-        if (!EnsureValidForRun(ns0, nb)) return;
+        if (!EnsureValidForRun(ns0, nb, "設定の緩和")) return;
         CancelRelaxTrial();
         PushUndo();
         var ns = ns0.WithSchedule(nb);

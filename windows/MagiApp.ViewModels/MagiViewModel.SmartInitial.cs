@@ -50,7 +50,7 @@ public sealed partial class MagiViewModel
         //   初期解生成が併走し、job 参照の上書き（走行中jobが停止不能のゾンビ化）と
         //   currentSchedule の同時書き換えが起きていた。runV6FullOptimize/runSoftPolish と同じガード。
         if (RunBlockedByInFlight("下書きづくり")) return;
-        if (!EnsureValidForRun(st, sched)) return;
+        if (!EnsureValidForRun(st, sched, "下書きづくり")) return;
         PushUndo();
         var hadResult = Ui.HasResult;
         Ui.MessageIsError = false;
@@ -84,7 +84,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = true;
                 ui.RelaxedBoard = false;
                 ui.ElapsedMs = 0;
-                ui.Message = $"下書きをつくりました: 必須違反={res.Report.Hard} 合計={res.Report.Total}";
+                ui.Message = $"下書きをつくりました: 必須違反 {res.Report.Hard}件・違反の合計 {res.Report.Total}件。画面下の「再作成」で仕上げられます";
             }, ct: ct);
             committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total}");
@@ -107,7 +107,7 @@ public sealed partial class MagiViewModel
             LogOp("W", $"初期解生成 失敗: {e.GetType().Name}: {e.Message}");
             Ui.Running = false;
             Ui.HasResult = hadResult;
-            Ui.Message = $"下書きをつくれませんでした（{FailureWords.Of(e, FailureKind.Engine)}）";
+            Ui.Message = $"下書きをつくれませんでした（{FailureWords.Of(e, FailureKind.Engine)}）。もう一度お試しください（詳しくは設定＞詳細設定＞ログ）";
             Ui.MessageIsError = true;
         }
         finally

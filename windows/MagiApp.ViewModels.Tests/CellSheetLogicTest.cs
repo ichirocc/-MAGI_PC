@@ -114,7 +114,23 @@ public class CellSheetLogicTest
     {
         var line = Status(Staff("職員03"), 0);
         Assert.Equal(CellSeverity.Hard, line.Severity);
-        Assert.Equal("⚠ 必須：翌日(休)への前日禁止（Dﾃ）", line.Text);
+        Assert.StartsWith("⚠ 必須：希望の前日の禁止 Dﾃ→休（10/1〜10/2）", line.Text);
+    }
+
+    /// <summary>希望と違う勤務の一覧の行は希望の勤務も言う。担当外は職員のグループを言う（氏名はシートの見出しにある）。</summary>
+    [Fact]
+    public void PrefHeadingNamesTheWishAndGroupViolNamesTheGroup()
+    {
+        static string L2(string f) => f == "pref" ? "希望と違う勤務" : Label(f);
+        var i = Staff("職員10");
+        var s2 = S.Select(r => r.ToArray()).ToArray();
+        s2[i][8] = St.Shifts.ToList().FindIndex(k => k.Kigou == "Dﾃ");
+        var pref = CellSheetLogic.HardViolationItems(St, P, s2, UnifiedViolationChecker.Check(St, s2).CellFamilies!, L2).Single(x => x.Family == "pref" && x.Staff == i);
+        Assert.Equal("希望と違う勤務 Dﾃ（希望はA4） ・ 10/9(金)", pref.Heading);
+        var g = Staff("職員01");
+        var s3 = S.Select(r => r.ToArray()).ToArray();
+        s3[g][0] = St.Shifts.ToList().FindIndex(k => k.Kigou == "Pｼ");
+        Assert.Equal("⚠ 必須：Pｼはグループ「柳」の担当外", CellSheetLogic.StatusLine(St, P, s3, g, 0, new[] { "groupViol" }, Label).Text);
     }
 
     [Fact]

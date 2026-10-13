@@ -22,7 +22,7 @@ public static class PreRunCheckText
 {
     public const string ZeroCapTag = "（入れないシフトの指定が関係）";
     public const string ZeroCapNoteText = "「入れないシフトの指定が関係」の行は、個人の上限0（入れない指定）が原因で残ります。希望のせいではありません。見直すときは、設定で入れない指定を変えてください。";
-    public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。";
+    public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。行を押すと、そのセルか直す場所を開けます。";
     public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
     public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限です。残るのは要調整です。希望を変えるか、入れない指定を設定で見直してください。";
     public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、設定で上限を見直してください。";

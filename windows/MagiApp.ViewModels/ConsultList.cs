@@ -28,8 +28,8 @@ public static class ConsultList
 {
     public const string Button = "相談してから決める";
     public const string Done = "相談中";
-    public const string Added = "相談中に追加しました";
-    public const string Duplicate = "すでに相談中にあります";
+    public const string Added = "ホームの「相談中」に追加しました";
+    public const string Duplicate = "すでにホームの「相談中」にあるので、追加しませんでした";
     public const string Open = "開く";
     public const string Resume = "案を見る";
     public const string Stale = "相談に積んだあとで勤務表か設定が変わったため、この案はそのままでは使えません。「直し方を探す」で探し直してください";
@@ -120,21 +120,21 @@ public static class ConsultList
         if (c.Chain is { } t)
         {
             if (ConsultChainResumable(t, startDate, shiftSymbols, days)) return null;
-            return $"いまの期間・シフトにない枠です（{(t.Date is { } d ? ShortDate(d) : "?")} の「{t.ShiftSymbol ?? "?"}」）";
+            return $"いまの期間・シフトにない枠なので、案を見られません（{(t.Date is { } d ? ShortDate(d) : "?")} の「{t.ShiftSymbol ?? "?"}」）";
         }
         if (c.Staff is null && c.StaffName is null && c.Day is null && c.Date is null) return null;
         if (ConsultCell(c, startDate, staffNames, days) is not null) return null;
         if (ConsultStaff(c, staffNames) is null)
         {
-            if (c.StaffName is { } dn && staffNames.Count(x => x == dn) > 1) return $"同じ名前の職員が複数いて、どの人か決められません（{dn}）";
-            return "いまの職員一覧にいません" + (c.StaffName is { } n ? $"（{n}）" : "");
+            if (c.StaffName is { } dn && staffNames.Count(x => x == dn) > 1) return $"同じ名前の職員が複数いて、どの人か決められないので開けません（{dn}さん）";
+            return "いまの職員一覧にいないので開けません" + (c.StaffName is { } n ? $"（{n}さん）" : "");
         }
-        return "いまの期間にない日です" + (c.Date is { } dd ? $"（{ShortDate(dd)}）" : "");
+        return "いまの期間にない日なので開けません" + (c.Date is { } dd ? $"（{ShortDate(dd)}）" : "");
     }
 
-    /// <summary>ぶつかっている希望の行から: 希望を取り消すか勤務を変えるかの判断。</summary>
+    /// <summary>ぶつかっている希望の行から: 希望を調整するか勤務を変えるかの判断。</summary>
     public static ConsultItem Wish(string name, string dayLabel, string? symbol, string reason, int staff, int day, string? date = null) =>
-        new($"{name} {dayLabel} の希望" + (symbol is null ? "" : $"「{symbol}」"), $"取り消すか勤務を変えるか: {reason}", staff, day, StaffName: name, Date: date);
+        new($"{name} {dayLabel} の希望" + (symbol is null ? "" : $"「{symbol}」"), $"希望を調整するか勤務を変えるか: {reason}", staff, day, StaffName: name, Date: date);
 
     /// <summary>なおし方（1 人を入れる）の枠から: だれを入れるかの判断。</summary>
     public static ConsultItem Shortage(string dayLabel, string symbol, IReadOnlyList<string> names) => new(

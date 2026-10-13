@@ -81,7 +81,7 @@ public static class C1Display
         if (sh is null) return null;
         var k = sym(sh.Shift);
         var head = $"期間の制約: {sh.Day1}日のなかに「{k}」が{sh.Day2}日必要です。";
-        var body = sh.Marks.Count == 0 ? StuckText
+        var body = sh.Marks.Count == 0 ? $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、{StuckText}"
             : sh.Stuck ? $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、印の日を{k}にすると不足は減ります。{StuckText}"
             : $"いま足りない期間（{day(sh.From)}〜{day(sh.To)}）があり、{(sh.MinChanges >= sh.Marks.Count ? $"印の日をすべて{k}に変えると" : $"印の日をうまく選べば、いちばん少なくて{sh.MinChanges}日を{k}にすると")}この制約の日数に届きます（ほかの制約への影響は見ていません）。";
         var held = i < s.Length && j < s[i].Length && s[i][j] == sh.Shift ? $"（この日の{k}はすでに数に入っています）" : "";

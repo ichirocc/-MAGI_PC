@@ -99,7 +99,7 @@
                     CornerRadius="{StaticResource MagiCornerSM}" Padding="12" Visibility="Collapsed">
                 <StackPanel Spacing="6">
                     <TextBlock x:Name="ConsultTitle" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                    <TextBlock Text="関係者に確認してから決める項目です（アプリを閉じると消えます）。書き出しは止めません。" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
+                    <TextBlock Text="関係者に確認してから決める項目です。確認できたら「済」を押してください（アプリを閉じると消えます。書き出しは止めません）。" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
                     <StackPanel x:Name="ConsultListHost" Spacing="4" />
                 </StackPanel>
             </Border>
@@ -167,7 +167,7 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="解けるようにするには（担当追加の案）" Style="{StaticResource MagiTitleSmallTextStyle}" />
                             <StackPanel x:Name="RelaxationListHost" Spacing="2" />
-                            <TextBlock Text="※ 担当追加の提案です。設定変更は行いません（採否はご判断ください）。"
+                            <TextBlock Text="※ 担当追加の提案です。設定は変えません。採用するときは編集タブ＞年間マスター①で担当を追加してください。"
                                        TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
                         </StackPanel>
                     </Border>

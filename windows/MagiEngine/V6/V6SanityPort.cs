@@ -64,10 +64,11 @@ public static partial class V6SanityPort
             var parts = key.Split(',');
             int? i = parts.Length > 0 ? KotlinInterop.ToIntOrNull(parts[0]) : null;
             int? j = parts.Length > 1 ? KotlinInterop.ToIntOrNull(parts[1]) : null;
-            string? reason = i is null || j is null ? "希望キーが i,j 形式ではありません"
+            // 「担当不可」「範囲外」の語は BuildGuidance が直し方の分岐に読む＝言い換えるときは両方を揃える。
+            string? reason = i is null || j is null ? "希望の職員と日付を読み取れません"
                 : i.Value < 0 || i.Value >= p.S || j.Value < 0 || j.Value >= p.T ? "職員または日付が範囲外です"
                 : k < 0 || k >= p.K ? "希望シフトが範囲外です"
-                : !p.CanDo(i.Value, k) ? "職員のグループでは担当不可です"
+                : !p.CanDo(i.Value, k) ? $"グループ「{(p.Sgrp[i.Value] >= 0 && p.Sgrp[i.Value] < state.Groups.Count ? KigouFormat.ToHankakuKigou(state.Groups[p.Sgrp[i.Value]].Kigou) : "?")}」では担当不可です"
                 : null;
             if (reason is null) continue;
 

@@ -186,8 +186,8 @@ public class V6SanityPortTest
         };
         var issue = Assert.Single(V6SanityPort.BuildGuidance(st), i => i.Where == "s0さんの「X」");
         Assert.True(issue.Neutral);
-        Assert.Equal("個人の上限0（入れない指定）に希望が1件載っています。残るのは要調整です", issue.Problem);
-        Assert.Equal("希望を変えるか、設定で上限を見直してください", issue.Fix);
+        Assert.Equal("個人の上限0（入れない指定）に希望が1件（8/1(土)）載っています。残るのは要調整です", issue.Problem);
+        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』でs0さんと相談して希望を調整するか、『年間マスター』の『③ 回数（1人あたり）』で上限を見直してください", issue.Fix);
         Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), i => i.Where.Contains("衝突"));
     }
 

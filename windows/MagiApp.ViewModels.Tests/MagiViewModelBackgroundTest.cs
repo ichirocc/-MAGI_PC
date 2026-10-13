@@ -355,7 +355,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         await vm.ApplyBgResult(new OptimizationRepository.BgResult(MinimalState.BuildSchedule(), CovUReport(2), "test", 0L));
 
         Assert.Equal(2, vm._lastResultHard);
-        Assert.Equal("人員不足（必要人数）", vm._lastTopHardFamily);
+        Assert.Equal("『人員不足（必要人数）』（2件）", vm._lastTopHardFamily);
     }
 
     /// <summary>維持の分岐も前景と同じ＝次回ヒントは維持した盤面（ここでは必須0）から取る。</summary>

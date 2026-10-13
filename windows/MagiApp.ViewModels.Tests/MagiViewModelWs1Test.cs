@@ -64,7 +64,7 @@ public class MagiViewModelWs1Test
 
         Assert.Equal("A", vm._state!.Shifts[1].Kigou); // unchanged
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("記号「休」はすでに別のシフトで使われています", vm.Ui.Message);
+        Assert.Contains("記号「休」はすでに別のシフトで使われているため、保存しませんでした", vm.Ui.Message);
     }
 
     [Fact]
@@ -181,7 +181,7 @@ public class MagiViewModelWs1Test
     {
         var st = MinimalState.Build(shifts: new List<Shift> { new("公休", "公", "", "", ShiftRole.Rest), new("A", "A", "", "") });
         var vm = new MagiViewModel { _state = st };
-        const string expected = "「公」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）";
+        const string expected = "「公」は休みのシフトなので、どのグループからも外せません（担当できるシフトが無いグループを作らないため）。外すときは、シフト編集の『休みとして扱う』を別のシフトに移してください";
 
         vm.Ws1SetGroupShift(0, 0, false);
         Assert.Same(st, vm._state);
@@ -227,7 +227,7 @@ public class MagiViewModelWs1Test
         Assert.NotNull(vm.LastApplyStructureWithMessageTask);
         await vm.LastApplyStructureWithMessageTask!;
         Assert.Equal(new[] { "", "" }, vm._state!.GroupShiftApt[0]);
-        Assert.Contains("目標を全リセットしました（2件を空欄に）｜必須違反 ", vm.Ui.Message);
+        Assert.Contains("全グループ×全シフトの「目標」を空欄に戻しました（2件）｜必須違反 ", vm.Ui.Message);
     }
 
     [Fact]

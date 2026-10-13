@@ -146,13 +146,11 @@ public static partial class V6PortAnalyzer
                     string hint;
                     if (cells.Any(x => x.Escape == ForbiddenCellEscape.Free))
                     {
-                        hint = "安全に崩せる手が存在します（適用すれば必須違反が減る＝探索未到達の可能性。" +
-                            "勤務表の該当セルから『直し方を探す』で解消を試せます）";
+                        hint = "安全に崩せる手があります。勤務表のこの並びのセルから『直し方を探す』で直せます（当てると必須違反が減ります）";
                     }
                     else if (cells.Any(x => x.Escape == ForbiddenCellEscape.Chain || x.Escape == ForbiddenCellEscape.Adjacent))
                     {
-                        hint = "単独の1手では崩せず、玉突き連鎖/隣接日調整の多段手でのみ崩せます" +
-                            "（探索は候補を持っています＝再実行で解消し得ます）";
+                        hint = "1セルを変えるだけでは崩せませんが、複数人の入れ替え（玉突き）か隣の日の調整で崩せます。もう一度つくると直る場合があります";
                     }
                     // [3.284.0/外部レビュー] 「証明」の強さを分ける: 全セル希望固定は「本人希望どおりの並びが
                     //   禁止パターンを構成」＝raw hard 件数の下で証明相当（分類は重みに依存しない）。それ以外の塞がり
@@ -160,8 +158,8 @@ public static partial class V6PortAnalyzer
                     //   という強い証拠であり、全勤務表空間の数学的な非充足証明ではない＝断定を避けた表現にする。
                     else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned))
                     {
-                        hint = $"本人希望どおりの並びが禁止パターンを構成しています（本人の希望: {pinnedDays}）。" +
-                            "希望を変えない限りどう組んでもこの禁止の並びは残ります。どちらか1件の希望を調整してください" +
+                        hint = $"本人の希望どおりに入れると禁止の並びになります（本人の希望: {pinnedDays}）。" +
+                            "希望を変えない限り、どう組んでもこの禁止の並びは残ります。本人と相談して、どちらか1件の希望を調整してください" +
                             ScoreHintOf(cells);
                     }
                     else

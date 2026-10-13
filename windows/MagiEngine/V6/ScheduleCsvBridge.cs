@@ -153,5 +153,5 @@ public static class ScheduleCsvBridge
 
     /// <summary>同名の職員が複数いて取り込まなかった氏名の案内（画面とログで同じ文言）。</summary>
     public static string AmbiguousText(IEnumerable<string> names) =>
-        $"同じ名前の職員が複数いるため取り込みませんでした: {string.Join("・", names)}";
+        $"同じ名前の職員が複数いるため、{string.Join("・", names.Select(n => $"{n}さん"))}の行は取り込みませんでした";
 }

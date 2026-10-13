@@ -306,7 +306,7 @@ public class MagiViewModelEditingTest
         await vm.LastApplyAlternativeTask!;
 
         Assert.Equal(1, vm._currentSchedule![0][0]);
-        Assert.Equal("他の案 1 を適用", vm.Ui.Message);
+        Assert.Equal("他の案 1 を適用しました: 必須違反 0件・違反の合計 4件", vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
         Assert.True(vm.Ui.HasResult);
     }
@@ -415,7 +415,7 @@ public class MagiViewModelEditingTest
         Assert.Null(vm.LastRefreshCheckTask);
         Assert.Null(vm.LastAutoSaveTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("存在しません", vm.Ui.Message);
+        Assert.Contains("今の設定にないため、勤務表は変えていません", vm.Ui.Message);
     }
 
     [Fact]
@@ -462,7 +462,7 @@ public class MagiViewModelEditingTest
 
         vm.SetCells(new[] { (0, 0), (0, 1) }, 1);
 
-        Assert.Equal("1マスを A に一括変更しました", vm.Ui.OpNotice!.Text);
+        Assert.Equal("職員Aさん 12/2(火) の 1マスを A に一括変更しました", vm.Ui.OpNotice!.Text);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
     }
 
@@ -1163,7 +1163,7 @@ public class MagiViewModelEditingTest
 
         Assert.False(vm._state!.Wishes.ContainsKey("0,0"));
         Assert.True(vm._state!.Wishes.ContainsKey("0,1"));
-        Assert.Equal("希望を1件消しました", vm.Ui.OpNotice!.Text);
+        Assert.Equal("職員Aさんの 12/1(月) の希望を1件消しました", vm.Ui.OpNotice!.Text);
     }
 
     [Fact]
@@ -1176,7 +1176,7 @@ public class MagiViewModelEditingTest
         Assert.Single(vm._state!.Wishes);
         Assert.Equal(0, vm.UndoStackCount);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Equal("消す希望はありませんでした", vm.Ui.Message);
+        Assert.Equal("全員の 12/4(木) に消す希望はありませんでした", vm.Ui.Message);
         Assert.Null(vm.Ui.OpNotice);
     }
 
@@ -1189,7 +1189,7 @@ public class MagiViewModelEditingTest
 
         Assert.Equal(0, vm.UndoStackCount);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Equal("同じ希望がすでに入っています（変更なし）", vm.Ui.Message);
+        Assert.Equal("職員Aさんの 12/1(月) には「A」の希望がすでに入っています（1件・変更なし）", vm.Ui.Message);
     }
 
     private static MagiState WithExtWishDays(MagiState st, params string[] days) =>
@@ -1205,7 +1205,7 @@ public class MagiViewModelEditingTest
         Assert.Empty(vm._state!.Wishes);
         Assert.Equal(0, vm.UndoStackCount);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Equal("拡張希望の指定日なので、希望は入れられません（2件・変更なし）", vm.Ui.Message);
+        Assert.Equal("職員Aさんの 12/1〜12/2 は拡張希望の指定日なので、「A」の希望は入れられません（2件・変更なし）。拡張希望を消すと入れられます（編集タブの「月次条件」の『希望シフト登録』）", vm.Ui.Message);
     }
 
     [Fact]
@@ -1216,7 +1216,7 @@ public class MagiViewModelEditingTest
         vm.SetWishesForDays(0, new[] { 0, 1 }, 1);
 
         Assert.Equal(new Dictionary<string, int> { ["0,0"] = 1 }, vm._state!.Wishes);
-        Assert.Equal("希望を入れました（拡張希望の指定日の1件は入れていません）", vm.Ui.OpNotice!.Text);
+        Assert.Equal("職員Aさんの 12/1〜12/2 に「A」の希望を1件入れました（拡張希望の指定日の1件は入れていません）", vm.Ui.OpNotice!.Text);
         vm.UndoNotice(vm.Ui.OpNotice);   // 通知は一括で積んだ段に結ぶ
         Assert.Empty(vm._state!.Wishes);
     }
@@ -1313,7 +1313,7 @@ public class MagiViewModelEditingTest
         var vm = new MagiViewModel(); // no _state at all
         vm.AddReviewMemo("  基本ルールの見直し候補  ");
         Assert.Equal(new[] { "基本ルールの見直し候補" }, vm.Ui.ReviewMemos);
-        Assert.Equal("見直し候補に追加しました", vm.Ui.Message);
+        Assert.Equal("見直し候補に追加しました（編集タブ＞年間マスター・1件）", vm.Ui.Message);
     }
 
     [Fact]
@@ -1643,7 +1643,7 @@ public class MagiViewModelEditingTest
 
         vm.AddCons1("05", "休", "1");
         Assert.Equal(2, vm._state!.Cons1.Count);
-        Assert.Equal("同じ条件がすでにあります", vm.Ui.Message);
+        Assert.Equal("「期間の制約」に同じ条件の行がすでにあるため、追加しませんでした（今ある行がそのまま使われます）", vm.Ui.Message);
         Assert.Contains("同じ条件", vm.ConstraintInputError("cons1", new[] { "5", "休", "1" })!);
         Assert.Null(vm.ConstraintInputError("cons1", new[] { "5", "休", "1" }, editIndex: 0));   // 変更で自分自身は除く
 
@@ -1981,7 +1981,7 @@ public class MagiViewModelEditingTest
         vm.AddReviewMemo("夜勤明けの休を見直す");
         vm.AddReviewMemo(" 夜勤明けの休を見直す ");
         Assert.Single(vm.Ui.ReviewMemos);
-        Assert.Equal("すでに見直し候補にあります", vm.Ui.Message);
+        Assert.Equal("すでに見直し候補にあります（編集タブ＞年間マスター）", vm.Ui.Message);
     }
 
     /// <summary>[Android editors 取りこぼし] 全員が個人設定済みなら何も書かない（適切回数の書き換えも undo もしない）で知らせる。</summary>
