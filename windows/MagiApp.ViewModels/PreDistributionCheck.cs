@@ -11,7 +11,7 @@ public sealed record PreDistRow(string Label, string Value, bool? Ok);
 /// </summary>
 public static class PreDistributionCheck
 {
-    public const string Note = "必須違反 0 件は、登録した必須条件を満たしたことだけを示します。相談の完了や法令への適合は含みません。配るかどうかはあなたが決めてください。";
+    public const string Note = "必須違反 0 件は、登録した必須条件を満たしたことだけを示します。相談の完了や法令への適合は含みません。相談事項や職場の確認手続きを確かめたうえで、配布をご判断ください。";
 
     public static IReadOnlyList<PreDistRow> Rows(UiState ui, string? csvLine, Func<string, string> labelOf)
     {
@@ -20,17 +20,17 @@ public static class PreDistributionCheck
         var hardFams = MirrorKeys.Hard.Where(k => ui.Breakdown.TryGetValue(k, out var v) && v > 0).Select(k => (k, ui.Breakdown[k])).ToList();
         var hardText = ui.BestHard == 0 ? "0件" : $"{ui.BestHard}件（" + string.Join("・", hardFams.Select(f => $"{labelOf(f.k)} {f.Item2}件")) + "）";
         var soft = ui.Breakdown.Where(kv => kv.Value > 0 && !MirrorKeys.Hard.Contains(kv.Key)).OrderByDescending(kv => kv.Value).ToList();
-        var softText = soft.Count == 0 ? "なし" : string.Join("・", soft.Take(3).Select(kv => $"{labelOf(kv.Key)} {kv.Value}件")) +
+        var softText = soft.Count == 0 ? "なし" : string.Join("・", soft.Take(3).Select(kv => $"{labelOf(kv.Key)} {kv.Value}{AnalysisTriage.UnitOf(kv.Key)}")) +
             (soft.Count > 3 ? $" ほか{soft.Count - 3}種類" : "");
         var consults = ui.Consults.Count;
         var held = ui.Consults.Count(c => c.Held);
         return new List<PreDistRow>
         {
-            new("対象", $"{period} の採用した勤務表", null),
+            new("対象", $"対象期間 {period}・現在採用している勤務表", null),
             new("評価", evaluated ? "最新の勤務表を評価済み" : "まだ評価していません（問題がないか調べてください）", evaluated),
             new("必須違反", hardText, ui.BestHard == 0),
             new("要調整", softText, null),
-            new("相談", consults == 0 ? "未完了の相談・保留はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
+            new("相談", consults == 0 ? "「相談中」に登録されている項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
             new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true),
         };
     }

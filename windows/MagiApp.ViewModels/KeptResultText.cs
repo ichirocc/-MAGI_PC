@@ -3,7 +3,7 @@ using System.Globalization;
 namespace MagiApp.ViewModels;
 
 /// <summary>
-/// Kotlin原本 <c>KeptResultText</c>。keep-best で前回を維持したときの文言。比べる順は betterReport（必須→重み→合計）なので、
+/// Kotlin原本 <c>KeptResultText</c>。keep-best で前回を維持したときの文言。比べる順は betterReport（必須→重み付き評価点→合計）なので、
 /// 決め手になった項目と重みを必ず見せる（合計だけ減って維持されると理由が読めない）。
 /// </summary>
 public static class KeptResultText
@@ -12,16 +12,16 @@ public static class KeptResultText
 
     private static string W(Score s) =>
         ((long)Math.Round(s.Weighted, MidpointRounding.AwayFromZero)).ToString("#,0", CultureInfo.InvariantCulture);
-    private static string Parts(Score s) => $"必須{s.Hard}・重み{W(s)}・合計{s.Total}";
+    private static string Parts(Score s) => $"必須{s.Hard}・評価点{W(s)}・合計{s.Total}";
 
     public static string Reason(Score now, Score prev) =>
-        now.Hard != prev.Hard ? (now.Hard > prev.Hard ? "必須が多いため" : "必須が少ないため")
-        : now.Weighted != prev.Weighted ? (now.Weighted > prev.Weighted ? "重みが大きいため" : "重みが小さいため")
-        : now.Total != prev.Total ? (now.Total > prev.Total ? "合計が多いため" : "合計が少ないため")
+        now.Hard != prev.Hard ? (now.Hard > prev.Hard ? "必須違反が多いため" : "必須違反が少ないため")
+        : now.Weighted != prev.Weighted ? (now.Weighted > prev.Weighted ? "重み付き評価点が高いため" : "重み付き評価点が低いため")
+        : now.Total != prev.Total ? (now.Total > prev.Total ? "違反の合計が多いため" : "違反の合計が少ないため")
         : "同じ点数のため";
 
     public static string Screen(Score now, Score prev) =>
-        $"改善が確認できなかったため、前回の勤務表を維持しました。今回（{Parts(now)}）は前回（{Parts(prev)}）より改善しませんでした（{Reason(now, prev)}。比べる順＝必須→重み→合計）。";
+        $"改善が確認できなかったため、前回の勤務表を維持しました（今回の案は採用していません）。理由：{Reason(now, prev)}（今回 {Parts(now)}／前回 {Parts(prev)}。比べる順＝必須→評価点→合計）。";
 
     public static string Log(string prefix, Score now, Score prev) =>
         $"{prefix}: 今回 {Parts(now)} は前回 {Parts(prev)} 以下に改善せず（{Reason(now, prev)}）→ 前回を維持";

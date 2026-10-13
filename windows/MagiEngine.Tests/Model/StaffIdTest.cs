@@ -40,6 +40,15 @@ public class StaffIdTest
         Assert.Equal(new[] { 7, 8, 9, 10, 11, 2 }, Ids(st));
     }
 
+    /// <summary>最大値が int の上限でも負へ回り込まず、使われていない最小の正の ID を振る。</summary>
+    [Fact]
+    public void IdsNeverWrapNegativeAtIntMax()
+    {
+        var st = StateJsonSerializer.Parse(Json("""{"id":2147483647,"name":"a","groupIdx":0},{"name":"b","groupIdx":0},{"id":1,"name":"c","groupIdx":0},{"name":"d","groupIdx":0}"""));
+        Assert.Equal(new[] { int.MaxValue, 2, 1, 3 }, Ids(st));
+        Assert.Equal(4, StaffIds.NextStaffId(st.StaffList));
+    }
+
     [Fact]
     public void SerializeRoundTripsIds()
     {

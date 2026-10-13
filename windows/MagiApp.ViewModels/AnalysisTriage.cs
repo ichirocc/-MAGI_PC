@@ -37,7 +37,8 @@ public sealed record AnalysisTriage(
     public bool HasAnything => Blockers.Count > 0 || Issues.Count > 0 || Searching.Count > 0;
 
     /// <summary>weekly/fair は件数でなく L1 偏差の合計。単位を分けないと「186件」と読めてしまう。</summary>
-    private static string UnitOf(string family) => family is "fair" or "weekly" ? "pt" : "件";
+    /// <summary>族の数の単位。weekly/fair は L1 偏差なので "pt"、ほかは件（配布前確認も同じ単位を使う）。</summary>
+    public static string UnitOf(string family) => family is "fair" or "weekly" ? "pt" : "件";
 
     /// <summary>ホームのでき具合に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
     /// pt だけ残ってもでき具合は 100% でないので「解消済み」とは言わない。</summary>

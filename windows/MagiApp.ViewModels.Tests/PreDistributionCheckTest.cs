@@ -26,8 +26,8 @@ public class PreDistributionCheckTest
         Assert.False(rows["相談"].Ok);   // 必須 0 でも相談の未完了は別に示す
         Assert.False(rows["保存"].Ok);
         Assert.Equal("まだ勤務表 CSV に保存していません", rows["保存"].Value);
-        Assert.Equal("曜日の偏り 20件・期間の制約 4件", rows["要調整"].Value);
-        Assert.Equal("10/1〜10/31 の採用した勤務表", rows["対象"].Value);
+        Assert.Equal("曜日の偏り 20pt・期間の制約 4件", rows["要調整"].Value);
+        Assert.Equal("対象期間 10/1〜10/31・現在採用している勤務表", rows["対象"].Value);
     }
 
     [Fact]

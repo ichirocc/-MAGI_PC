@@ -27,11 +27,48 @@ public static class StateJsonSerializer
     /// original JSON with a new schedule/edits — stale caches would otherwise silently disagree
     /// with the new schedule (mirrors the Kotlin `exportWithSchedule`/`exportWithEdits` list).</summary>
     /// <summary>条件の配列。無ければ null、配列でなければ読み込みを止める（空として取り込むと条件が黙って消える）。</summary>
-    private static JsonElement? ArrayOf(JsonElement o, string key)
+    private static JsonElement? ArrayOf(JsonElement o, string key, string? name = null)
     {
         if (!o.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null) return null;
-        if (v.ValueKind != JsonValueKind.Array) throw new ArgumentException($"{key} が配列ではありません（データが壊れています）");
+        if (v.ValueKind != JsonValueKind.Array) throw new ArgumentException($"{name ?? key} が配列ではありません（データが壊れています）");
         return v;
+    }
+
+    /// <summary>条件の表（キー→値）。無ければ null、オブジェクトでなければ読み込みを止める（空として取り込むと条件が黙って消える）。</summary>
+    private static JsonElement? ObjOf(JsonElement o, string key)
+    {
+        if (!o.TryGetProperty(key, out var v) || v.ValueKind == JsonValueKind.Null) return null;
+        if (v.ValueKind != JsonValueKind.Object) throw new ArgumentException($"{key} がオブジェクトではありません（データが壊れています）");
+        return v;
+    }
+
+    /// <summary>整数の値。無い・null・空文字は <paramref name="def"/>。整数でない数（1.9）・数字でない文字・範囲外は丸めず読み込みを止める。</summary>
+    private static int IntOf(JsonElement? v, int def, string name)
+    {
+        if (v is null) return def;
+        var e = v.Value;
+        if (e.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return def;
+        if (e.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(e.GetString())) return def;
+        long? n = e.ValueKind switch
+        {
+            JsonValueKind.Number => e.TryGetInt64(out var l) ? l
+                : e.TryGetDouble(out var d) && d == Math.Floor(d) && !double.IsInfinity(d) && Math.Abs(d) < 9.2e18 ? (long)d : null,
+            JsonValueKind.String => long.TryParse(e.GetString()!.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var s) ? s : null,
+            _ => null,
+        };
+        if (n is null || n < int.MinValue || n > int.MaxValue)
+            throw new ArgumentException($"{name} が整数ではありません（値 {e.GetRawText()}、データが壊れています）");
+        return (int)n.Value;
+    }
+
+    /// <summary>needDay・shiftColors の表。値がオブジェクト・配列なら読み込みを止める。</summary>
+    private static Dictionary<string, string> StrMapOf(JsonElement? obj, string name)
+    {
+        if (obj is not null)
+            foreach (var prop in obj.Value.EnumerateObject())
+                if (prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                    throw new ArgumentException($"{name}[\"{prop.Name}\"] が値ではありません（データが壊れています）");
+        return StrMap(obj);
     }
 
     /// <summary>並びの pattern。無ければ空、配列でなければ読み込みを止める。</summary>
@@ -54,7 +91,7 @@ public static class StateJsonSerializer
         var o = doc.RootElement;
 
         var explicitRole = false;
-        var shiftsRaw = MapObjects(OptArray(o, "shifts"), "shifts", it =>
+        var shiftsRaw = MapObjects(ArrayOf(o, "shifts"), "shifts", it =>
         {
             var r = OptString(it, "role");
             if (r == RoleRest || r == RoleNone) explicitRole = true;
@@ -72,30 +109,49 @@ public static class StateJsonSerializer
             if (restPos >= 0)
                 shifts = shiftsRaw.Select((s, idx) => idx == restPos ? s with { Role = ShiftRole.Rest } : s).ToList();
         }
-        var groups = MapObjects(OptArray(o, "groups"), "groups", it =>
+        var groups = MapObjects(ArrayOf(o, "groups"), "groups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
-        var staff = StaffIds.WithStaffIds(MapObjects(OptArray(o, "staff"), "staff", it =>
-            new Staff(OptString(it, "name"), OptInt(it, "groupIdx", 0), OptInt(it, "skillIdx", -1), OptInt(it, "id", 0))));
-        var skillGroups = MapObjects(OptArray(o, "skillGroups"), "skillGroups", it =>
+        var staffI = 0;
+        var staff = StaffIds.WithStaffIds(MapObjects(ArrayOf(o, "staff"), "staff", it =>
+        {
+            var i = staffI++;
+            return new Staff(OptString(it, "name"), IntOf(Opt(it, "groupIdx"), 0, $"staff[{i}].groupIdx"),
+                IntOf(Opt(it, "skillIdx"), -1, $"staff[{i}].skillIdx"), IntOf(Opt(it, "id"), 0, $"staff[{i}].id"));
+        }));
+        var skillGroups = MapObjects(ArrayOf(o, "skillGroups"), "skillGroups", it =>
             new Group(OptString(it, "name"), OptString(it, "kigou")));
-        var groupShift = MapArrays(OptArray(o, "groupShift"), "groupShift", row =>
-            (IReadOnlyList<int>)IntRow(row, 0));
-        var groupShiftApt = MapArrays(OptArray(o, "groupShiftApt"), "groupShiftApt", row =>
+        var gsI = 0;
+        var groupShift = MapArrays(ArrayOf(o, "groupShift"), "groupShift", row =>
+        {
+            var g = gsI++;
+            return (IReadOnlyList<int>)row.EnumerateArray().Select((c, k) => IntOf(c, 0, $"groupShift[{g}][{k}]")).ToList();
+        });
+        var groupShiftApt = MapArrays(ArrayOf(o, "groupShiftApt"), "groupShiftApt", row =>
             (IReadOnlyList<string>)StrRow(row));
-        var schedule = MapArrays(OptArray(o, "schedule"), "schedule", row =>
-            // [監査A9, 移植元] 不正/null セルは 0(先頭シフト) でなく -1(未割当) に倒す（勝手な勤務化を防ぐ）。
-            (IReadOnlyList<int>)IntRow(row, -1));
+        var schI = 0;
+        var schedule = MapArrays(ArrayOf(o, "schedule"), "schedule", row =>
+        {
+            // [監査A9, 移植元] null セルは 0(先頭シフト) でなく -1(未割当) に倒す（勝手な勤務化を防ぐ）。
+            // 小数・文字・範囲外は丸めず読み込みを止める（1.9 を 1 にすると別の勤務として入る）。
+            var i = schI++;
+            return (IReadOnlyList<int>)row.EnumerateArray().Select((c, j) =>
+            {
+                var v = IntOf(c, -1, $"schedule[{i}][{j}]");
+                if (v < -1 || v >= shifts.Count) throw new ArgumentException($"schedule[{i}][{j}] の勤務番号 {v} が範囲外です（データが壊れています）");
+                return v;
+            }).ToList();
+        });
 
         var wishes = new Dictionary<string, int>();
-        var wishesObj = OptObject(o, "wishes");
+        var wishesObj = ObjOf(o, "wishes");
         if (wishesObj is not null)
         {
             foreach (var prop in wishesObj.Value.EnumerateObject())
-                wishes[prop.Name] = OptIntAt(prop.Value, -1);
+                wishes[prop.Name] = IntOf(prop.Value, -1, $"wishes[\"{prop.Name}\"]");
         }
 
         var staffRange = new Dictionary<string, Range>();
-        var staffRangeObj = OptObject(o, "staffRange");
+        var staffRangeObj = ObjOf(o, "staffRange");
         if (staffRangeObj is not null)
         {
             foreach (var prop in staffRangeObj.Value.EnumerateObject())
@@ -107,9 +163,9 @@ public static class StateJsonSerializer
             }
         }
 
-        var needDay1 = StrMap(OptObject(o, "needDay1"));
-        var needDay2 = StrMap(OptObject(o, "needDay2"));
-        var shiftColors = StrMap(OptObject(o, "shiftColors"));
+        var needDay1 = StrMapOf(ObjOf(o, "needDay1"), "needDay1");
+        var needDay2 = StrMapOf(ObjOf(o, "needDay2"), "needDay2");
+        var shiftColors = StrMapOf(ObjOf(o, "shiftColors"), "shiftColors");
 
         var cons1 = MapObjects(ArrayOf(o, "cons1"), "cons1", it =>
             new C1Row(AsStr(Opt(it, "day1")), OptString(it, "shiftKigou"), AsStr(Opt(it, "day2"))));
@@ -132,16 +188,26 @@ public static class StateJsonSerializer
         // [#41] 無いキー＝手動固定なし（古いデータはそのまま開く）。同じセルが重なれば後の行を採る。
         var pinMap = new Dictionary<(int, int), ManualPin>();
         var pinOrder = new List<(int, int)>();
-        foreach (var m in MapObjects(OptArray(o, "manualPins"), "manualPins", it =>
-                     new ManualPin(OptInt(it, "staff", -1), OptInt(it, "day", -1), OptInt(it, "shift", -1))))
+        var pinI = 0;
+        foreach (var m in MapObjects(ArrayOf(o, "manualPins"), "manualPins", it =>
+                 {
+                     var i = pinI++;
+                     return new ManualPin(IntOf(Opt(it, "staff"), -1, $"manualPins[{i}].staff"), IntOf(Opt(it, "day"), -1, $"manualPins[{i}].day"),
+                         IntOf(Opt(it, "shift"), -1, $"manualPins[{i}].shift"));
+                 }))
         {
             if (m.Staff < 0 || m.Day < 0 || m.Shift < 0) continue;
             if (!pinMap.ContainsKey((m.Staff, m.Day))) pinOrder.Add((m.Staff, m.Day));
             pinMap[(m.Staff, m.Day)] = m;
         }
         var manualPins = pinOrder.Select(k => pinMap[k]).ToList();
-        var extWishes = MapObjects(OptArray(o, "extWishes"), "extWishes", it =>
-            new ExtWish(OptInt(it, "staff", -1), StrList(OptArray(it, "days")), StrList(OptArray(it, "shifts"))));
+        var extI = 0;
+        var extWishes = MapObjects(ArrayOf(o, "extWishes"), "extWishes", it =>
+        {
+            var n = extI++;
+            return new ExtWish(IntOf(Opt(it, "staff"), -1, $"extWishes[{n}].staff"),
+                StrList(ArrayOf(it, "days", $"extWishes[{n}].days")), StrList(ArrayOf(it, "shifts", $"extWishes[{n}].shifts")));
+        });
 
         // Keep unmodelled top-level keys verbatim for lossless export. Clone() detaches each
         // element from `doc`'s backing buffer so it stays valid after `doc` is disposed.

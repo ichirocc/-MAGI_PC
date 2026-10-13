@@ -37,10 +37,10 @@ public static class ConsultList
     public const string HoldButton = "保留する";
     public const string HeldLabel = "保留中";
     public const string Added = "ホームの「相談中」に追加しました";
-    public const string Duplicate = "すでにホームの「相談中」にあるので、追加しませんでした";
+    public const string Duplicate = "この内容は、すでにホームの「相談中」に登録されています";
     public const string Open = "開く";
     public const string Resume = "案を見る";
-    public const string Stale = "相談に積んだあとで勤務表か設定が変わったため、この案はそのままでは使えません。「直し方を探す」で探し直してください";
+    public const string Stale = "相談に登録した後で勤務表または設定が変わったため、この案はそのまま当てられません。「直し方を探す」から、もう一度確かめてください";
 
     /// <summary>ホームの主カードの 1 行。0 件なら出さない。</summary>
     public static string? Line(int n) => n > 0 ? $"未確認事項 {n} 件（相談中。下の一覧で確認してから配ってください）" : null;

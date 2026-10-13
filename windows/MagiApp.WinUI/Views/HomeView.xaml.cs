@@ -776,7 +776,7 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = $"{plan.Infeasible.Select(sf => sf.DayIndex).Distinct().Count()}日 は、これ以上は自動で埋められません。", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
                 foreach (var sf in plan.Infeasible.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "人を増やすか、担当できるシフトや希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "担当できる職員（担当できるシフト）や希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(LandingButton(GuidedFixRules.LandingFor(plan.Infeasible[0])));
             }
             else if (plan.Blocked.Count > 0)
@@ -904,7 +904,7 @@ public sealed partial class HomeView : UserControl
         ShortagePanel.Visibility = Visibility.Visible;
         ShortageHeadline.Text = diag.AllInfeasible
             ? $"不足 {diag.TotalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。" +
-                "担当できる人を増やすと直せます（編集タブ＞年間マスター①）。"
+                "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
                     "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
@@ -915,7 +915,7 @@ public sealed partial class HomeView : UserControl
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再作成するか設定の見直しで解消し得ます。"
                         : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。" +
-                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる人を増やすと直せます（編集タブ＞年間マスター①）。";
+                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
             var infeasible = s.Verdict == CoverageVerdict.Infeasible;

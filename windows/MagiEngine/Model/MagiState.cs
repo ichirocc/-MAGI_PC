@@ -44,19 +44,30 @@ public static class StaffIds
     public static IReadOnlyList<Staff> WithStaffIds(IReadOnlyList<Staff> staff)
     {
         var next = staff.Count == 0 ? 0 : Math.Max(0, staff.Max(s => s.Id));
-        var seen = new HashSet<int>();
+        var seen = staff.Select(s => s.Id).ToHashSet();
+        var kept = new HashSet<int>();
         var changed = false;
         var outList = new List<Staff>(staff.Count);
         foreach (var s in staff)
         {
-            if (s.Id > 0 && seen.Add(s.Id)) { outList.Add(s); continue; }
-            changed = true; next++; seen.Add(next); outList.Add(s with { Id = next });
+            if (s.Id > 0 && kept.Add(s.Id)) { outList.Add(s); continue; }
+            changed = true; next = FreshStaffId(next, seen); seen.Add(next); outList.Add(s with { Id = next });
         }
         return changed ? outList : staff;
     }
 
     /// <summary>次に足す職員の ID（今の最大値＋1）。</summary>
-    public static int NextStaffId(IReadOnlyList<Staff> staff) => (staff.Count == 0 ? 0 : Math.Max(0, staff.Max(s => s.Id))) + 1;
+    public static int NextStaffId(IReadOnlyList<Staff> staff) =>
+        FreshStaffId(staff.Count == 0 ? 0 : Math.Max(0, staff.Max(s => s.Id)), staff.Select(s => s.Id).ToHashSet());
+
+    /// <summary><paramref name="last"/>＋1。上限（int.MaxValue）に達していれば使われていない最小の正の ID（＋1 で負へ回り込ませない）。</summary>
+    private static int FreshStaffId(int last, HashSet<int> used)
+    {
+        if (last < int.MaxValue && !used.Contains(last + 1)) return last + 1;
+        var id = 1;
+        while (used.Contains(id)) id++;
+        return id;
+    }
 }
 
 public sealed record Range(string Lo, string Hi);
