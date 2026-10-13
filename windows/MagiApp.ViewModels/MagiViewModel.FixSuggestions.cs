@@ -160,7 +160,11 @@ public sealed partial class MagiViewModel
     /// <summary>「なおし方を見る」で 1 人を入れた直後に枠を覚える。再検査の結果（MakeUi）でその枠がまだ足りないかを見て 1 行にする。</summary>
     public void NoteGuidedFix(int dayIndex, int shiftIndex, string dayLabel, string shiftSymbol) => _pendingGuided = (dayIndex, shiftIndex, dayLabel, shiftSymbol);
 
-    public string? FixOutcomeLine() => Ui.FixOutcome is { } o && CtxMatches(_fixOutcomeCtx) ? o.Line : null;
+    /// <param name="labelOf">族の表示語。渡すと改善手の適用の内訳（<see cref="FixOutcomeText.Detail"/>）を続けて返す。</param>
+    public string? FixOutcomeLine(Func<string, string>? labelOf = null) =>
+        Ui.FixOutcome is { } o && CtxMatches(_fixOutcomeCtx)
+            ? o.Line + (labelOf is not null && o.Before is not null && o.After is not null ? FixOutcomeText.Detail(o.Before, o.After, labelOf) : "")
+            : null;
 
     private void ResolvePendingGuidedFix(MagiState st, int[][] schedule, ViolationReport report, CoverageDiagnosis? diag)
     {
@@ -216,7 +220,7 @@ public sealed partial class MagiViewModel
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
-        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total));
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total), gate.Before, gate.After);
         // 通知は 2 行まで＝必須が動いた手は必須だけ、動かない手は合計だけを添える（両方の数はホームの結果の行とログ）。
         PostOpNotice($"{s.Label} を当てました（" + (gate.Before.Hard != gate.After.Hard ? $"必須違反 {gate.Before.Hard}→{gate.After.Hard}"
             : $"違反の合計 {gate.Before.Total}→{gate.After.Total}") + "）");
