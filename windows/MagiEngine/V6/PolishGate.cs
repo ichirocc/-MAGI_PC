@@ -64,8 +64,9 @@ public static class PolishGate
     /// <summary>[Android N9 同期] PostChain の keep-best で巻き戻したパスの採用数を 0 と数える。既定 <b>false</b>。</summary>
     public static volatile bool PostChainRollbackCountsZero = false;
 
-    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。既定 true。</summary>
-    public static volatile bool C3nWallShortStall = true;
+    /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。
+    /// 既定 <b>false</b>（3.673.0: 60 s の予算では短縮が損＝sample 24 対で +95.7・区間 [+40.6, +153.8]、利用者「60秒の損失を取り返す方法を採用する」）。</summary>
+    public static volatile bool C3nWallShortStall = false;
 
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallLegacy</c>（3.642.0）] 測定用の基準腕: true＝HEAD の壁判定（版ごとに固定・生存盤面の診断・一致の検査なし）。既定 false。</summary>
     public static volatile bool C3nWallLegacy = false;

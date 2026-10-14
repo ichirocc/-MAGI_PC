@@ -38,7 +38,8 @@ public sealed partial class MagiViewModel
 
     /// <param name="quick">セルのシート（締切 <see cref="CellSheetLogic.FixSearchQuickMs"/>＝3 秒。手は 1 件でよい。8 秒待たせると答えが無いときも長い＝3.646.0 実機報告）。
     /// ホーム・分析は <see cref="CellSheetLogic.FixSearchMs"/>＝8 秒。</param>
-    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null, bool quick = false)
+    /// <param name="allDays">同じ勤務の人員不足の日々をまとめて見る（Kotlin 3.673.0）。対象は <see cref="CellSheetLogic.MultiNeedTarget"/>。</param>
+    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false)
     {
         var st = _state;
         if (st is null) return;
@@ -61,7 +62,7 @@ public sealed partial class MagiViewModel
         Ui.FixFailedKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
-        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick);
+        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick, allDays);
     }
 
     /// <summary>1手の候補・「探索済み」・下限判定の材料を消す（盤面が変わった／使えなくなったとき。Kotlin の各リセット箇所と同じ）。</summary>
@@ -86,7 +87,7 @@ public sealed partial class MagiViewModel
 
     private async Task FindFixSuggestionsCoreAsync(
         MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct,
-        int? exceptStaff = null, int? day = null, bool quick = false)
+        int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false)
     {
         try
         {
@@ -94,7 +95,7 @@ public sealed partial class MagiViewModel
             var timedOut = false;
             // 集計・日の印から来た依頼は、見ている問題（回数・その日の人数）を変える案を先に（2026-10-14 利用者レビュー:
             //   11/3 の不足に別の日の案だけが並んだ）。広めに集めて並べ替え、上位 8 件を返す。
-            var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day), StaffCellLimits, NeedCellLimits) : null;
+            var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day, AllDays: allDays), StaffCellLimits, NeedCellLimits) : null;
             var board = snap.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
             var list = await Task.Run(
                 () =>
@@ -118,7 +119,7 @@ public sealed partial class MagiViewModel
             if (curSched is null || curSt is null || BoardKey(curSched) != BoardKey(snap) || StateKey(curSt) != StateKey(st))
             {
                 Ui.FixSearching = false;
-                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey, exceptStaff, day, quick);
+                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey, exceptStaff, day, quick, allDays);
                 return;
             }
             Ui.FixSuggestions = list;

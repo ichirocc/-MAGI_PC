@@ -624,11 +624,33 @@ public static class CellSheetLogic
     }
 
     /// <summary>対象の名（回数＝記号、人員＝「11/3のAア」）。</summary>
-    public static string FixTargetLabel(FixTarget t, string sym, string startDate) => t.Day is { } d ? $"{DayText.Short(startDate, d)}の{sym}" : sym;
+    public static string FixTargetLabel(FixTarget t, string sym, string startDate) =>
+        t.Multi ? $"{sym}（{t.Days.Count}日）" : t.Day is { } d ? $"{DayText.Short(startDate, d)}の{sym}" : sym;
+
+    /// <summary>同じ勤務の人員不足の日々をまとめて見る対象（Kotlin <c>multiNeedTarget</c>、2 日以上のときだけ）。<paramref name="need"/> は (勤務, 日) → (必要, 適正)。</summary>
+    public static FixTarget? MultiNeedTarget(IReadOnlyDictionary<string, IReadOnlyList<string>> needFamilies, int shift, Func<int, int, (int Lo, int Hi)?>? need)
+    {
+        if (need is null) return null;
+        var days = new List<int>();
+        foreach (var (key, fams) in needFamilies)
+        {
+            var comma = key.IndexOf(',');
+            if (comma < 0 || !fams.Contains("vio-covU") || !int.TryParse(key.AsSpan(0, comma), out var k) || k != shift || !int.TryParse(key.AsSpan(comma + 1), out var j)) continue;
+            if (need(shift, j) is not null) days.Add(j);
+        }
+        days.Sort();
+        if (days.Count < 2) return null;
+        return new FixTarget(null, shift, null, 0, true, "必要人数", days, days.Select(j => need(shift, j)!.Value.Lo).ToList());
+    }
+
+    /// <summary>まとめて調整するボタンの名（2 日なら「両日」）。</summary>
+    public static string MultiFixButton(int n) => (n == 2 ? "両日" : $"{n}日") + "の不足をまとめて調整する案を探す";
 
     /// <summary>対象の見出し 2 行: 「下限まで、あと8回です」「現在 7回 ／ 下限 15回」。人員は「必要人数より1人少ない状態です」「配置 0人 ／ 必要 1人」。</summary>
-    public static IReadOnlyList<string> FixTargetHead(FixTarget t, int count)
+    public static IReadOnlyList<string> FixTargetHead(FixTarget t, int count, IReadOnlyList<IReadOnlyList<int>>? schedule = null, string startDate = "")
     {
+        if (t.Multi) return new[] { $"{t.Days.Count}日で合計{t.GapOf(schedule ?? Array.Empty<IReadOnlyList<int>>())}人不足しています（日ごとの不足の合計）",
+            "対象の日：" + string.Join("・", t.Days.Select(d => DayText.Short(startDate, d))) };
         var gap = Math.Max(0, t.Under ? t.Target - count : count - t.Target);
         if (t.Staff is not null)
             return new[] { t.Under ? $"{t.Basis}まで、あと{gap}回です" : $"{t.Basis}を{gap}回超えています", $"現在 {count}回 ／ {t.Basis} {t.Target}回" };
@@ -638,7 +660,8 @@ public static class CellSheetLogic
 
     /// <summary>適用前の確認の「今回の目的」。</summary>
     public static string FixTargetPurpose(FixTarget t, string? staffName, string label) =>
-        t.Staff is not null ? $"{(staffName is null ? "" : $"{staffName}さんの")}{label}{t.GapWord}を減らす" : $"{label}{t.GapWord}を解消する";
+        t.Multi ? $"{label}の{t.GapWord}をまとめて解消する"
+        : t.Staff is not null ? $"{(staffName is null ? "" : $"{staffName}さんの")}{label}{t.GapWord}を減らす" : $"{label}{t.GapWord}を解消する";
 
     /// <summary>対象の問題を変える案を先に（集計・日の印から探した結果の並べ替え。同順位は元の効果順＝安定ソート）。</summary>
     public static IReadOnlyList<FixSuggestion> RankForTarget(IReadOnlyList<FixSuggestion> list, IReadOnlyList<IReadOnlyList<int>> schedule, FixTarget? t) =>
@@ -847,6 +870,7 @@ public static class CellSheetLogic
     public static FixTarget? PanelTarget(UiState ui, FixFocus f, Func<int, int, (int? Lo, int? Hi, int? Apt)>? staffLimits, Func<int, int, (int Lo, int Hi)?>? needLimits)
     {
         if (staffLimits is null || needLimits is null || f.Shift is not { } k) return null;
+        if (f.AllDays && f.Staff is null) return MultiNeedTarget(ui.NeedFamilies, k, needLimits);
         if (f.Staff is { } i && f.Day is null) return CountFixTarget(ui.CountViolations, i, k, staffLimits(i, k));
         // 日があれば、職員に絞った探索（集計の日別の詳細）でもその日のその勤務の問題のまま（日付を落とさない）。
         if (f.Day is { } d && f.ExceptStaff is null) return NeedFixTarget(ui.NeedFamilies, k, d, needLimits(k, d));
@@ -1102,13 +1126,27 @@ public static class CellSheetLogic
 /// 画面で見ている 1 つの問題（Kotlin <c>FixTarget</c>、2026-10-14 利用者レビュー「今回の問題がどう変わるかを最上段に」）。
 /// 回数＝Staff×Shift（Day は null）、人員＝Shift×Day（Staff は null）。Target は下限・目標・上限・必要人数・適正人数、Basis はその名、Under＝足りない側。
 /// </summary>
-public sealed record FixTarget(int? Staff, int Shift, int? Day, int Target, bool Under, string Basis)
+public sealed record FixTarget(int? Staff, int Shift, int? Day, int Target, bool Under, string Basis,
+    IReadOnlyList<int>? Days = null, IReadOnlyList<int>? Needs = null)
 {
+    /// <summary>複数の日をまとめて見る（同じ勤務の不足の日々と、それぞれの必要人数）。空＝1 つの枠。</summary>
+    public IReadOnlyList<int> Days { get; init; } = Days ?? Array.Empty<int>();
+    public IReadOnlyList<int> Needs { get; init; } = Needs ?? Array.Empty<int>();
+
     public string Unit => Staff is not null ? "回" : "人";
+    public bool Multi => Days.Count > 0;
 
     public int CountOf(IReadOnlyList<IReadOnlyList<int>> schedule) =>
         Staff is { } i ? (i >= 0 && i < schedule.Count ? schedule[i].Count(v => v == Shift) : 0)
+        : Multi ? Days.Sum(j => schedule.Count(r => j >= 0 && j < r.Count && r[j] == Shift))
         : schedule.Count(r => Day is { } d && d >= 0 && d < r.Count && r[d] == Shift);
+
+    /// <summary>日ごとの差の合計（まとめて見るとき）。日をまたいで足し引きしない＝ある日の過剰で別の日の不足を相殺しない。</summary>
+    public int GapOf(IReadOnlyList<IReadOnlyList<int>> schedule) => Enumerable.Range(0, Days.Count).Sum(n =>
+    {
+        var c = schedule.Count(r => Days[n] >= 0 && Days[n] < r.Count && r[Days[n]] == Shift);
+        return Math.Max(0, Under ? Needs[n] - c : c - Needs[n]);
+    });
 
     /// <summary>盤面に案のセル代入を当てて数え直す＝評価器と同じ数え方。</summary>
     public CountEffect Effect(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops)
@@ -1116,18 +1154,25 @@ public sealed record FixTarget(int? Staff, int Shift, int? Day, int Target, bool
         var after = schedule.Select(r => r.ToArray()).ToList();
         foreach (var op in ops)
             if (op.Staff >= 0 && op.Staff < after.Count && op.Day >= 0 && op.Day < after[op.Staff].Length) after[op.Staff][op.Day] = op.ToShift;
-        return new CountEffect(CountOf(schedule), CountOf(after.Select(r => (IReadOnlyList<int>)r).ToList()), Target, Under, Unit);
+        var afterBoard = after.Select(r => (IReadOnlyList<int>)r).ToList();
+        return new CountEffect(CountOf(schedule), CountOf(afterBoard), Target, Under, Unit, Multi ? (GapOf(schedule), GapOf(afterBoard)) : null);
     }
 
     public string GapWord => Under ? "不足" : "超過";
+
+    // Kotlin の data class は List を中身で比べる＝C# の record も Days/Needs を要素で比べる（既定はリストの参照比較）。
+    public bool Equals(FixTarget? o) => o is not null && Staff == o.Staff && Shift == o.Shift && Day == o.Day && Target == o.Target && Under == o.Under
+        && Basis == o.Basis && Days.SequenceEqual(o.Days) && Needs.SequenceEqual(o.Needs);
+    public override int GetHashCode() => HashCode.Combine(Staff, Shift, Day, Target, Under, Basis, Days.Count, Needs.Count);
 }
 
 /// <summary>対象の数の変化（Kotlin <c>CountEffect</c>）。GapBefore/GapAfter は基準までの差（0 未満は 0）。</summary>
-public sealed record CountEffect(int Before, int After, int Target, bool Under, string Unit = "回")
+/// <param name="Gaps">まとめて見るときの日ごとの差の合計（前, 後）。null＝1 つの枠。</param>
+public sealed record CountEffect(int Before, int After, int Target, bool Under, string Unit = "回", (int Before, int After)? Gaps = null)
 {
     private int Gap(int c) => Math.Max(0, Under ? Target - c : c - Target);
-    public int GapBefore => Gap(Before);
-    public int GapAfter => Gap(After);
+    public int GapBefore => Gaps?.Before ?? Gap(Before);
+    public int GapAfter => Gaps?.After ?? Gap(After);
     public bool Fixes => GapAfter < GapBefore;
 
     /// <summary>「A4を2回増やす」。対象が変わらない案は「A4は変わりません」。</summary>
@@ -1140,7 +1185,9 @@ public sealed record CountEffect(int Before, int After, int Target, bool Under, 
     public string GapLine() => $"{(Under ? "不足" : "超過")} {GapBefore}{Unit} → {GapAfter}{Unit}";
 
     public string AfterNote(string basis) =>
-        GapAfter == 0 && Under && Unit == "人" ? $"{(basis.EndsWith("人数", StringComparison.Ordinal) ? basis[..^2] : basis)} {Target}人を満たします"
+        Gaps is not null && GapAfter == 0 ? $"対象の日はすべて{basis}を{(Under ? "満たします" : "超えなくなります")}"
+        : Gaps is not null ? $"適用後も、合計 {GapAfter}{Unit}{(Under ? "不足" : "超過")}"
+        : GapAfter == 0 && Under && Unit == "人" ? $"{(basis.EndsWith("人数", StringComparison.Ordinal) ? basis[..^2] : basis)} {Target}人を満たします"
         : GapAfter == 0 && Unit == "人" ? $"{(basis.EndsWith("人数", StringComparison.Ordinal) ? basis[..^2] : basis)} {Target}人以内になります"
         : GapAfter == 0 && Under ? $"適用後は{basis}に届きます"
         : GapAfter == 0 ? $"適用後は{basis}以内になります"

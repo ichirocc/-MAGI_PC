@@ -304,9 +304,10 @@ public static class GridDisplayMarks
 }
 
 /// <summary>探す対象（Kotlin <c>FixFocus</c>）。Staff/Shift は <c>FixSuggester</c> の絞り込み、Day は理由の読み取りだけに使う。</summary>
-public sealed record FixFocus(int? Staff, int? Shift, int? Day = null, int? ExceptStaff = null)
+/// <param name="AllDays">同じ勤務の人員不足の日々をまとめて見る（勤務の人員シートの「まとめて調整する案」、Kotlin 3.673.0）。</param>
+public sealed record FixFocus(int? Staff, int? Shift, int? Day = null, int? ExceptStaff = null, bool AllDays = false)
 {
-    public string Key => $"{Staff?.ToString() ?? "-"},{Shift?.ToString() ?? "-"},{Day?.ToString() ?? "-"}" + (ExceptStaff is { } x ? $",x{x}" : "");
+    public string Key => $"{Staff?.ToString() ?? "-"},{Shift?.ToString() ?? "-"},{Day?.ToString() ?? "-"}" + (ExceptStaff is { } x ? $",x{x}" : "") + (AllDays ? ",all" : "");
 }
 
 /// <summary>設定への行き先の名（節ごと。「設定を見直す」の一語で済ませない＝利用者決定 2026-09-27）。Kotlin <c>settingsLabelFor</c>。</summary>

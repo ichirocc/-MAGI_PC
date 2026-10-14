@@ -1289,7 +1289,7 @@ public sealed partial class ScheduleView : UserControl
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff,
-            focus.ExceptStaff is not null || focus.Staff is null || focus.Shift is not null ? focus.Day : null, quick);
+            focus.ExceptStaff is not null || focus.Staff is null || focus.Shift is not null ? focus.Day : null, quick, focus.AllDays);
         void Start() { if (!_vm.Ui.Running) Find(); }
         EditReturn? Return() => cell is { } c ? CellReturn(c.I, c.J) : null;
         void Refresh()
@@ -1765,9 +1765,15 @@ public sealed partial class ScheduleView : UserControl
         panel.Children.Add(new TextBlock { Text = CellSheetLogic.DayPickHeading(marks), TextWrapping = TextWrapping.Wrap });
         RenderRows();
         panel.Children.Add(rows);
+        var dayButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        // その日の勤務を見る＝勤務表をその日の列へ送る（FocusCell の職員 -1 は日の列だけを送る）。
+        var seeDay = new Button { Content = $"{DayText.Short(ui.StartDate, j)}の勤務を見る", MinHeight = 48 };
+        seeDay.Click += (_, _) => { dialog.Hide(); FocusCell(-1, j); };
+        dayButtons.Children.Add(seeDay);
         var needSetting = new Button { Content = "必要人数の設定を見る", MinHeight = 48 };
         needSetting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: picked ?? marks[0].Shift, Day: j), null); };
-        panel.Children.Add(needSetting);
+        dayButtons.Children.Add(needSetting);
+        panel.Children.Add(dayButtons);
         panel.Children.Add(fixHost);
         _ = dialog.ShowAsync();
     }
@@ -1789,6 +1795,8 @@ public sealed partial class ScheduleView : UserControl
             Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる",
         };
         int? picked = days.Count == 1 ? days[0] : null;
+        var multi = false;   // 不足の日が 2 日以上なら、それらの日の不足の合計で探す（日ごとの案を組み合わせない）
+        var multiSlot = new StackPanel();
         var detach = new List<Action>();
         var rows = new StackPanel { Spacing = 2 };
         var fixHost = new StackPanel();
@@ -1798,7 +1806,8 @@ public sealed partial class ScheduleView : UserControl
         {
             Detach();
             fixHost.Children.Clear();
-            if (picked is { } j) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, kk, j)));
+            if (multi) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, kk, null, AllDays: true)));
+            else if (picked is { } j) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, kk, j)));
         }
         void RenderRows()
         {
@@ -1818,12 +1827,12 @@ public sealed partial class ScheduleView : UserControl
                 if (days.Count >= 2)
                 {
                     FrameworkElement act;
-                    if (picked == j) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
+                    if (picked == j && !multi) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
                     else
                     {
                         var see = new HyperlinkButton { Content = "変更案を見る", MinHeight = 48 };
                         var day = j;
-                        see.Click += (_, _) => { picked = day; RenderRows(); Mount(); };
+                        see.Click += (_, _) => { picked = day; multi = false; RenderRows(); RenderMulti(); Mount(); };
                         act = see;
                     }
                     Grid.SetColumn(act, 1);
@@ -1844,6 +1853,22 @@ public sealed partial class ScheduleView : UserControl
         if (days.Count >= 2) panel.Children.Add(new TextBlock { Text = CellSheetLogic.ShiftDayPickHeading(), TextWrapping = TextWrapping.Wrap });
         RenderRows();
         panel.Children.Add(rows);
+        // 日ごとの差の合計が減る案だけを主にする（ある日の過剰で別の日の不足を相殺しない）。
+        void RenderMulti()
+        {
+            multiSlot.Children.Clear();
+            if (ct.UnderDays.Count < 2) return;
+            var name = CellSheetLogic.MultiFixButton(ct.UnderDays.Count);
+            if (multi) multiSlot.Children.Add(new TextBlock { Text = "選択中：" + (name.EndsWith("案を探す", StringComparison.Ordinal) ? name[..^4] : name), FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], TextWrapping = TextWrapping.Wrap });
+            else
+            {
+                var all = new Button { Content = new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
+                all.Click += (_, _) => { multi = true; picked = null; RenderRows(); RenderMulti(); Mount(); };
+                multiSlot.Children.Add(all);
+            }
+        }
+        RenderMulti();
+        panel.Children.Add(multiSlot);
         panel.Children.Add(fixHost);
         Mount();
         _ = dialog.ShowAsync();
