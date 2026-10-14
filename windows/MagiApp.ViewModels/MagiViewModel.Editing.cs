@@ -1175,13 +1175,14 @@ public sealed partial class MagiViewModel
         Ui.Message = ConsultList.Added;
     }
 
-    /// <summary>相談中⇄保留（どちらも未解決＝違反は減らさない）。Kotlin <c>toggleConsultHold</c>。</summary>
+    // 相談は番号でなく項目そのもので指す（描いたあとに一覧が変わっても別の項目を操作しない＝統合仕様 DISP-5）。見つからなければ何もしない。
     /// <summary>相談の回答を 回答待ち→了承→不可 と切り替える（記録だけ＝勤務表は変えない。Kotlin <c>cycleConsultAnswer</c>）。</summary>
-    public void CycleConsultAnswer(int index)
+    public void CycleConsultAnswer(ConsultItem item)
     {
         var l = Ui.Consults;
-        if (index < 0 || index >= l.Count) return;
-        Ui.Consults = l.Select((c, j) => j == index ? c with { Answer = ConsultList.NextAnswer(ConsultAnswerOf(c)) } : c).ToList();
+        var k = l.ToList().IndexOf(item);
+        if (k < 0) return;
+        Ui.Consults = l.Select((c, j) => j == k ? c with { Answer = ConsultList.NextAnswer(ConsultAnswerOf(c)) } : c).ToList();
     }
 
     /// <summary>いま有効な回答（<see cref="ConsultList.AnswerOf"/>＝入れ替えの相談は案が変わると回答待ち）。</summary>
@@ -1191,19 +1192,21 @@ public sealed partial class MagiViewModel
         return sched is null || st is null ? c.Answer : ConsultList.AnswerOf(c, BoardKey(sched), StateKey(st));
     }
 
-    public void ToggleConsultHold(int index)
+    /// <summary>相談中⇄保留（どちらも未解決＝違反は減らさない）。Kotlin <c>toggleConsultHold</c>。</summary>
+    public void ToggleConsultHold(ConsultItem item)
     {
         var l = Ui.Consults;
-        if (index < 0 || index >= l.Count) return;
-        Ui.Consults = l.Select((c, j) => j == index ? c with { Held = !c.Held } : c).ToList();
+        var k = l.ToList().IndexOf(item);
+        if (k < 0) return;
+        Ui.Consults = l.Select((c, j) => j == k ? c with { Held = !c.Held } : c).ToList();
     }
 
-    public void RemoveConsult(int index)
+    public void RemoveConsult(ConsultItem item)
     {
         var l = Ui.Consults;
-        if (index < 0 || index >= l.Count) return;
-        var item = l[index];
-        Ui.Consults = l.Where((_, j) => j != index).ToList();
+        var k = l.ToList().IndexOf(item);
+        if (k < 0) return;
+        Ui.Consults = l.Where((_, j) => j != k).ToList();
         LogOp("I", $"相談中を済にしました: {item.Subject}");
         PostOpNotice($"済にしました（{item.Subject}）", undoable: false);
     }

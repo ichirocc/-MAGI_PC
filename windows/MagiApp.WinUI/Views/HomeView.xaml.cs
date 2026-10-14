@@ -74,6 +74,12 @@ public sealed partial class HomeView : UserControl
             CreationResultHost.Children.Add(new TextBlock { Text = "次に確認する問題", FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
             CreationResultHost.Children.Add(new TextBlock { Text = next, TextWrapping = TextWrapping.Wrap });
         }
+        if (ui.SaveState == SaveState.Failed)
+        {
+            var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Margin = new Thickness(0, 4, 0, 0) };
+            retry.Click += (_, _) => _vm.SaveNow();
+            CreationResultHost.Children.Add(retry);
+        }
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
         if (next is not null)
         {
@@ -123,10 +129,8 @@ public sealed partial class HomeView : UserControl
         if (ui.Consults.Count == 0) return;
         var heldN = ui.Consults.Count(c => c.Held);
         ConsultTitle.Text = $"相談中（{ui.Consults.Count - heldN}件）" + (heldN > 0 ? $"・保留（{heldN}件）" : "");
-        for (var i = 0; i < ui.Consults.Count; i++)
+        foreach (var c in ui.Consults)
         {
-            var c = ui.Consults[i];
-            var idx = i;
             // 対象は職員 ID（無ければ氏名）と実日付で今のデータに引き直す（月を移した・職員を消した・並べ替えたあとに別のセルを開かない。3.646.0 B01/B02）。
             var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days, ui.StaffIds) : null;
             var chainOk = c.Chain is { } t && ConsultList.ConsultChainResumable(t, ui.StartDate, ui.ShiftSymbols, ui.Days);
@@ -142,7 +146,7 @@ public sealed partial class HomeView : UserControl
             if (note is not null) text.Children.Add(new TextBlock { Text = note, FontSize = 13, Foreground = BrushOf("MagiErrorBrush"), TextWrapping = TextWrapping.Wrap });
             // 回答は記録だけ（了承でも違反は減らさない）。押すたびに 回答待ち→了承→不可（Kotlin ConsultCard）。
             var answer = new HyperlinkButton { Content = ConsultList.AnswerLine(c, _vm.ConsultAnswerOf(c)), MinHeight = 44, Padding = new Thickness(0) };
-            answer.Click += (_, _) => _vm.CycleConsultAnswer(idx);
+            answer.Click += (_, _) => _vm.CycleConsultAnswer(c);
             text.Children.Add(answer);
             row.Children.Add(text);
             if (cell is { } cc)
@@ -160,11 +164,11 @@ public sealed partial class HomeView : UserControl
                 row.Children.Add(resume);
             }
             var hold = new HyperlinkButton { Content = c.Held ? "相談に戻す" : ConsultList.HoldButton, MinHeight = 44 };
-            hold.Click += (_, _) => _vm.ToggleConsultHold(idx);
+            hold.Click += (_, _) => _vm.ToggleConsultHold(c);
             Grid.SetColumn(hold, 2);
             row.Children.Add(hold);
             var done = new Button { Content = "済", MinHeight = 44 };
-            done.Click += (_, _) => _vm.RemoveConsult(idx);
+            done.Click += (_, _) => _vm.RemoveConsult(c);
             Grid.SetColumn(done, 3);
             row.Children.Add(done);
             ConsultListHost.Children.Add(row);

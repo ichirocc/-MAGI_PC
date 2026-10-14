@@ -587,6 +587,8 @@ public static class CellSheetLogic
 
     public const string AddressCheckingText = "案ごとに、このセルの問題が解消するか確認しています…";
 
+    public const string SaveRetryButton = "もう一度保存する";
+
     public const string ReviewCheckingText = "変更後の影響を確認しています…";
 
     public const string PickProblemFirstNote = "問題を選ぶと、その問題がこのセルで解消する変更案を探します。";
@@ -694,9 +696,11 @@ public static class CellSheetLogic
     public static string ThisFixHeading(string label, FixTarget t) => $"{label}を{(t.Under ? "増やす" : "減らす")}案";
 
     /// <summary>対象を減らす案が無いとき（人員の問題）。</summary>
-    public static string NoNeedFixLine(string label, FixTarget t) =>
-        $"{label}の{t.GapWord}を減らす案は、今回の検索では見つかりませんでした。" +
-        (t.Under ? "担当できる職員と、その日の希望・固定勤務をご確認ください。" : "その日に入っている職員の希望・固定勤務をご確認ください。");
+    public static string NoNeedFixLine(string label, FixTarget t, bool timedOut = false) =>
+        // 時間切れは「案が無い」と分けて言う（統合仕様 INV-08＝探索不足と案なしを混同しない）。
+        timedOut ? $"{label}の{t.GapWord}を減らす案は、制限時間内には見つかりませんでした。もう一度探すと続きを探せます。"
+        : $"{label}の{t.GapWord}を減らす案は、今回の検索では見つかりませんでした。" +
+          (t.Under ? "担当できる職員と、その日の希望・固定勤務をご確認ください。" : "その日に入っている職員の希望・固定勤務をご確認ください。");
 
     /// <summary>回数の過不足の要点（集計セルの詳細）。「▼4」だけでは今の回数か不足数か分からない＝現在・基準・差を言葉で。</summary>
     public static string? CountGapLine(string vio, int count, (int? Lo, int? Hi, int? Apt) limits) => vio switch
@@ -827,7 +831,7 @@ public static class CellSheetLogic
     {
         SaveState.Saved => "完了",
         SaveState.Saving => "保存中",
-        SaveState.Failed => "失敗（設定タブの「データ」でご確認ください）",
+        SaveState.Failed => $"失敗（「{SaveRetryButton}」で保存し直してください）",
         _ => "未保存（まもなく保存します）",
     };
 

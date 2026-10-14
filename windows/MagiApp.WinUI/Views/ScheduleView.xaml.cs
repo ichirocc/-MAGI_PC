@@ -1463,6 +1463,13 @@ public sealed partial class ScheduleView : UserControl
                     foreach (var c in ChainFixPreview.Of(asFix, applied.Before.Select(r => r.ToArray()).ToArray(), ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes)
                         banner.Children.Add(new TextBlock { Text = "・" + c, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 }
+                // 保存に失敗している間は、追加の変更より保存のやり直しを先に（統合仕様 §11）。
+                if (ui.SaveState == SaveState.Failed)
+                {
+                    var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48 };
+                    retry.Click += (_, _) => _vm.SaveNow();
+                    banner.Children.Add(retry);
+                }
                 var acts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
                 // 残っている必須違反を順に見る（巡回の先頭のセルへ）。巡回できる必須違反が無ければ分析タブ。
                 var tourBtn = new HyperlinkButton { Content = "残っている問題を見る", MinHeight = 48 };
@@ -1517,7 +1524,7 @@ public sealed partial class ScheduleView : UserControl
         void NoFixBlock(UiState ui, FixTarget? target, string label)
         {
             var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
-            IReadOnlyList<string> lines = target is { Staff: null } ? new[] { CellSheetLogic.NoNeedFixLine(label, target), FixSearchText.NoFixScope } : why.Lines;
+            IReadOnlyList<string> lines = target is { Staff: null } ? new[] { CellSheetLogic.NoNeedFixLine(label, target, ui.FixTimedOut), FixSearchText.NoFixScope } : why.Lines;
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
             if (quick)
             {

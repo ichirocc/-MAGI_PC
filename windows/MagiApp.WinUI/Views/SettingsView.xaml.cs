@@ -108,10 +108,11 @@ public sealed partial class SettingsView : UserControl
             {
                 SaveState.Dirty => "未保存の変更があります（まもなく自動保存します）",
                 SaveState.Saving => "保存中…",
-                SaveState.Failed => "自動保存に失敗しています（PCの空き容量をご確認のうえ「データを保存（JSON）」をお試しください）",
+                SaveState.Failed => $"自動保存に失敗しています（PCの空き容量をご確認のうえ「{CellSheetLogic.SaveRetryButton}」をお試しください）",
                 _ => "",
             };
             SaveStateText.Foreground = (Brush)Application.Current.Resources[ui.SaveState == SaveState.Failed ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
+            RetrySaveButton.Visibility = ui.SaveState == SaveState.Failed ? Visibility.Visible : Visibility.Collapsed;
             OpenDataButton.IsEnabled = !ui.Running;
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;
@@ -511,6 +512,8 @@ public sealed partial class SettingsView : UserControl
     /// 「問題がないか調べる」ボタン相当）。編集を伴わずに違反チェックだけをやり直したい場合
     /// （CSV取込後の確認等）の直接呼び出し口。ファイルI/Oを伴わないのでピッカーは不要。</summary>
     private void OnCheckProblemsClick(object sender, RoutedEventArgs e) => _vm.RefreshCheck();
+
+    private void OnRetrySaveClick(object sender, RoutedEventArgs e) => _vm.SaveNow();
 
     /// <summary>[2026-09-02, 配線] RestorePreviousData（クラスKDoc参照）。ファイルI/Oを伴わない
     /// （ディスク上の退避ファイルを読むだけ）のでピッカーは不要、ボタン1つで完結する。</summary>
