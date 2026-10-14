@@ -277,8 +277,21 @@ public sealed partial class MainWindow : Window
         var stopping = ui.Running || ui.FixSearching;
         MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
-        MainActionButton.Background = (Brush)Application.Current.Resources[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
-        MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
+        // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
+        var secondary = !stopping && _currentTag == "home";
+        var res = Application.Current.Resources;
+        MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
+        MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
+        if (secondary)
+        {
+            MainActionButton.BorderBrush = (Brush)res["MagiOutlineBrush"];
+            MainActionButton.BorderThickness = new Thickness(1);
+        }
+        else
+        {
+            MainActionButton.ClearValue(Control.BorderBrushProperty);
+            MainActionButton.ClearValue(Control.BorderThicknessProperty);
+        }
     }
 
     private (object? Families, object? Schedule, bool Has) _tourCache = (null, null, false);
@@ -462,9 +475,8 @@ public sealed partial class MainWindow : Window
             foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
         }
         body.Children.Add(Caption("判断に必要な情報"));
-        if (p.NewHard is { } newHard)
-            body.Children.Add(Line("・新たな必須違反：" + (newHard.Count == 0 ? "なし"
-                : string.Join("、", newHard.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)))), size: 13));
+        var newHardNames = p.NewHard?.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)).ToList();
+        body.Children.Add(Line("・" + CellSheetLogic.NewHardLine(newHardNames), size: 13));
         var (wishLine, consultLine) = CellSheetLogic.PreviewWishLines(p.Rows);
         body.Children.Add(Line("・" + wishLine, size: 13));
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));

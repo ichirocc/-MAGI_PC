@@ -1315,6 +1315,12 @@ public sealed partial class ScheduleView : UserControl
                     host.Children.Add(b);
                 }
             }
+            // 問題が 2 件以上なら、選ぶまで案を出さない（どの問題を直す案かを先頭の問題で埋めない＝統合仕様 INV-01）。
+            if (problems is { Count: >= 2 } && picked is null)
+            {
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.PickProblemFirstNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                return;
+            }
             var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key);
             if (state == FixPanelState.WaitCheck) { host.Children.Add(new TextBlock { Text = "計算・チェックが終わると探します。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
@@ -1424,12 +1430,16 @@ public sealed partial class ScheduleView : UserControl
                 else col.Children.Add(new TextBlock { Text = NextActionGuide.FixImpactLines(s, LabelOf).HardLine, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 var review = new Button { Content = CellSheetLogic.ReviewChangeButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running };
                 var chosen = s;
-                IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
+                // 「別の問題を改善する案」は見ている問題を直す案として確認・適用しない（目的と対象を渡さない＝統合仕様 INV-01/INV-03）。
+                var fixesTarget = e?.Fixes == true;
+                IReadOnlyList<string> eff = e is not null && target is not null && fixesTarget ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
+                var reviewPurpose = target is null || fixesTarget ? purpose : null;
+                var reviewTarget = fixesTarget ? target : null;
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
                 review.Click += (_, _) =>
                 {
                     _reviewOrigin = new FixPanelOrigin(focus, settingsLabel, quick, cell, problems, resolveAt, picked);
-                    registerClosed(() => _vm.PreviewFix(chosen, purpose, eff, focus.Key, target));
+                    registerClosed(() => _vm.PreviewFix(chosen, reviewPurpose, eff, focus.Key, reviewTarget));
                     hide();
                 };
                 col.Children.Add(review);

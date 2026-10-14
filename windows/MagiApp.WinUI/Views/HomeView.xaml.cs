@@ -64,9 +64,11 @@ public sealed partial class HomeView : UserControl
         CreationResultHost.Children.Add(new TextBlock { Text = CellSheetLogic.CreationDoneTitle, Style = (Style)Application.Current.Resources["MagiTitleMediumTextStyle"], TextWrapping = TextWrapping.Wrap });
         foreach (var l in CellSheetLogic.CreationResultLines(ui.BestHard, ui.Breakdown, ui.SaveState, Label))
             CreationResultHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        var covU = ui.CoverageDiag?.Shortfalls.FirstOrDefault();
+        // 見せる枠＝押して開く枠（なおし方の対象は GuidedFixTarget＝先頭の不足とは限らない。統合仕様 INV-01）。
+        var shortfalls = ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>();
+        var covU = GuidedFixRules.GuidedFixTarget(shortfalls);
         var tour = covU is null ? _vm.HardViolationItemsFor(Label).FirstOrDefault() : null;
-        var next = covU is not null ? $"{covU.DayLabel}の人員不足" : tour?.Heading;
+        var next = covU is not null ? $"{covU.DayLabel}の人員不足" : tour?.Heading ?? (shortfalls.FirstOrDefault() is { } sf0 ? $"{sf0.DayLabel}の人員不足" : null);
         if (next is not null)
         {
             CreationResultHost.Children.Add(new TextBlock { Text = "次に確認する問題", FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
@@ -75,8 +77,9 @@ public sealed partial class HomeView : UserControl
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
         if (next is not null)
         {
-            var go = new Button { Content = "この問題の変更案を見る", MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-            go.Click += (_, _) => { if (covU is not null) _ = ShowGuidedFixAsync(); else if (tour is not null) _window.OpenCell(tour.Cell.I, tour.Cell.J); };
+            // 主操作はすぐ下の思考誘導カードの大ボタン＝ここは外枠だけ（主操作は画面に 1 つ、統合仕様 INV-09）。
+            var go = new Button { Content = "この問題の変更案を見る", MinHeight = 48 };
+            go.Click += (_, _) => { if (covU is null && tour is not null) _window.OpenCell(tour.Cell.I, tour.Cell.J); else _ = ShowGuidedFixAsync(); };
             buttons.Children.Add(go);
         }
         var others = new Button { Content = "ほかの問題を見る", MinHeight = 48 };

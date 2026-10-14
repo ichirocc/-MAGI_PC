@@ -205,6 +205,15 @@ public sealed partial class MagiViewModel
             Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「直し方を探す」をもう一度押してください";
             return;
         }
+        // 見ている問題の数が減らない案は、全体の評価が良くなっても当てない（統合仕様 INV-03。案の一覧の主一覧と同じ判定）。
+        if (!CellSheetLogic.ImprovesTarget(fixTarget, sched, s.Ops))
+        {
+            LogOp("W", $"改善手を見送り: {s.Label}（見ている問題が減らない）");
+            Ui.MessageIsError = true;
+            ClearFixState();
+            Ui.Message = CellSheetLogic.NotImprovingTargetMessage;
+            return;
+        }
         // [Android 3.509.4/自動化方針] 適用直前に仮盤面で完全再評価し、辞書式で改善しない・固定を崩す提案は反映しない。
         var gate = FixApplyGate.Apply(st, sched, s.Ops);
         if (!gate.Applied)

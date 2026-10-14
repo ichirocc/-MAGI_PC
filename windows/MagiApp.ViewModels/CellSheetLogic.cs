@@ -585,6 +585,12 @@ public static class CellSheetLogic
 
     public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name} {DayText.Short(startDate, day)} を{symbol}に変更しました";
 
+    public const string AddressCheckingText = "案ごとに、このセルの問題が解消するか確認しています…";
+
+    public const string ReviewCheckingText = "変更後の影響を確認しています…";
+
+    public const string PickProblemFirstNote = "問題を選ぶと、その問題がこのセルで解消する変更案を探します。";
+
     /// <summary>1 つのセルに重なった問題の見出し（Kotlin <c>problemChoiceHeading</c>、仕様 §3-2・§5、3.665.0）。2 件以上のときだけ。</summary>
     public static string? ProblemChoiceHeading(int n) => n >= 2 ? $"この勤務に関係する問題が {n} 件あります。どの問題の直し方を確認しますか？" : null;
 
@@ -1088,6 +1094,16 @@ public static class CellSheetLogic
         hard == 0L ? "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" : null,
     }.OfType<string>().ToList();
     public const string CreationDoneTitle = "勤務表の作成が終わりました";
+
+    /// <summary>見ている問題の数が厳密に減るか（統合仕様 INV-03＝適用は対象の改善と正式な門の両方）。対象を持たない案は判定しない。</summary>
+    public static bool ImprovesTarget(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops) =>
+        t is null || t.Effect(schedule, ops).Fixes;
+
+    public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「直し方を探す」で探し直してください";
+
+    /// <summary>確認の画面の「新たな必須違反」（null＝評価していない＝なしと言わない、統合仕様 INV-10）。</summary>
+    public static string NewHardLine(IReadOnlyList<string>? names) =>
+        "新たな必須違反：" + (names is null ? "未評価（適用の直前に検査します）" : names.Count == 0 ? "なし" : string.Join("、", names));
 
     /// <summary>適用後の「今回の問題」の状態（解消／減少／残存）。</summary>
     public static string AppliedStatusWord(CountEffect e) => e.GapAfter == 0 ? "解消" : e.GapAfter < e.GapBefore ? "減少" : "残存";
