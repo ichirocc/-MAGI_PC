@@ -241,7 +241,7 @@ public sealed partial class MainWindow : Window
             "home" => "ホーム", "schedule" => "勤務表", "edit" => "編集", "analysis" => "分析", "settings" => "設定", _ => "",
         };
 
-        StatusBadge.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        StatusBadgeButton.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) StatusPrefixText.Text = "";
         if (ui.Loaded)
         {
@@ -258,8 +258,16 @@ public sealed partial class MainWindow : Window
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
             else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
-            StatusBadgeText.Text = label;
             StatusPrefixText.Text = ui.Running ? "" : status.First;
+            // 必須違反が残るときは「順に見る」巡回の入口、必須 0 は配布前の確認へ（要調整が残っても「配布可」と言い切らない）。
+            // 巡回できるセルが無い（必須が人員不足だけ）ときは押せない「必須違反 N」のまま（screen_spec「巡回」）。
+            var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0 && HasTourItems(ui);
+            var preDist = !ui.Running && ui.HasResult && ui.BestHard == 0;
+            var clickable = tourable || preDist;
+            StatusBadgeButton.IsHitTestVisible = clickable;
+            StatusBadgeButton.IsTabStop = clickable;
+            if (tourable) label = $"必須 {ui.BestHard}件を順に見る";
+            StatusBadgeText.Text = label;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
         }
@@ -269,8 +277,54 @@ public sealed partial class MainWindow : Window
         var stopping = ui.Running || ui.FixSearching;
         MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
-        MainActionButton.Background = (Brush)Application.Current.Resources[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
-        MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
+        // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
+        var secondary = !stopping && _currentTag == "home";
+        var res = Application.Current.Resources;
+        MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
+        MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
+        if (secondary)
+        {
+            MainActionButton.BorderBrush = (Brush)res["MagiOutlineBrush"];
+            MainActionButton.BorderThickness = new Thickness(1);
+        }
+        else
+        {
+            MainActionButton.ClearValue(Control.BorderBrushProperty);
+            MainActionButton.ClearValue(Control.BorderThicknessProperty);
+        }
+    }
+
+    private (object? Families, object? Schedule, bool Has) _tourCache = (null, null, false);
+
+    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査結果のセル別の族と盤面が同じ間は数え直さない。
+    /// <c>MakeUi</c> は CheckRev を進めてから族を書き込むので、鍵は CheckRev でなく族の参照）。</summary>
+    private bool HasTourItems(UiState ui)
+    {
+        if (!ReferenceEquals(_tourCache.Families, ui.ViolationCellFamilies) || !ReferenceEquals(_tourCache.Schedule, ui.Schedule))
+            _tourCache = (ui.ViolationCellFamilies, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
+        return _tourCache.Has;
+    }
+
+    private async void OnStatusBadgeClick(object sender, RoutedEventArgs e)
+    {
+        var ui = _vm.Ui;
+        if (ui.Running || !ui.HasResult) return;
+        if (ui.BestHard > 0)
+        {
+            // 巡回の先頭のセルのシートを開く（Kotlin goTourItem(0)。シートの［次の違反 ▶］で順に進む）。
+            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first)
+            {
+                SelectTab("schedule");
+                if (_tabCache["schedule"] is ScheduleView sv) sv.OpenCellSheet(first.Cell.I, first.Cell.J);
+            }
+            return;
+        }
+        SelectTab("home");
+        if (_tabCache.TryGetValue("home", out var home) && home is HomeView hv)
+        {
+            try { await hv.ShowPreDistributionAsync(); }
+            catch (Exception) { _vm.Notify("配布前の確認を開けませんでした。開いている画面を閉じてから、もう一度押してください", "W"); }
+        }
     }
 
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
@@ -421,9 +475,8 @@ public sealed partial class MainWindow : Window
             foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
         }
         body.Children.Add(Caption("判断に必要な情報"));
-        if (p.NewHard is { } newHard)
-            body.Children.Add(Line("・新たな必須違反：" + (newHard.Count == 0 ? "なし"
-                : string.Join("、", newHard.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)))), size: 13));
+        var newHardNames = p.NewHard?.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)).ToList();
+        body.Children.Add(Line("・" + CellSheetLogic.NewHardLine(newHardNames), size: 13));
         var (wishLine, consultLine) = CellSheetLogic.PreviewWishLines(p.Rows);
         body.Children.Add(Line("・" + wishLine, size: 13));
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
@@ -432,21 +485,44 @@ public sealed partial class MainWindow : Window
         foreach (var duty in CellSheetLogic.ChangeDutyLines) body.Children.Add(new TextBlock { Text = duty, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = CellSheetLogic.ConsultNotContactNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
+        var schedule = _tabCache.TryGetValue("schedule", out var sv) ? sv as ScheduleView : null;
+        var backToFixes = false;
+        ContentDialog? shown = null;
+        // ContentDialog のボタンは 3 つまで（適用・相談・今は変更しない）＝［別案を見る］は本文の末尾に置き、閉じてから案のパネルを開き直す。
+        if (p.FromList && schedule?.CanReopenFixPanel(p.FocusKey, afterApply: false) == true)
+        {
+            var back = new HyperlinkButton { Content = CellSheetLogic.BackToFixesButton, MinHeight = 48 };
+            back.Click += (_, _) => { backToFixes = true; shown?.Hide(); };
+            body.Children.Add(back);
+        }
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot, Title = p.Purpose is not null ? "この変更を適用しますか？" : p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
             PrimaryButtonText = CellSheetLogic.ApplyCountButton(p.Suggestion.Ops.Count), SecondaryButtonText = consulted ? null : ConsultList.Button,
-            // 案の一覧のダイアログは確認の前に閉じている（ContentDialog は同時に 1 つ）＝「案の一覧に戻る」とは言わない。
             CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
         };
+        shown = dialog;
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;
         if (!ReferenceEquals(_vm.Ui.ChainPreview, p)) return;
         switch (r)
         {
-            case ContentDialogResult.Primary: _vm.ApplyChainPreview(); break;
+            case ContentDialogResult.Primary:
+                var appliedBefore = _vm.Ui.AppliedFix;
+                _vm.ApplyChainPreview();
+                // Kotlin ではパネルが確認の画面の下に残る＝同じ依頼のパネルを開き直す。適用が通れば反映の欄、見送られたら今の勤務表で探し直した案
+                //   （AppliedFix が新しく記録されたときだけ「適用が通った」＝前回の反映の欄を今回の結果と読ませない）。
+                if (p.FocusKey is { } key)
+                {
+                    var applied = _vm.Ui.AppliedFix is { } a && !ReferenceEquals(a, appliedBefore) && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule);
+                    if (schedule?.CanReopenFixPanel(key, afterApply: applied) == true) schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
+                }
+                break;
             case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
-            default: _vm.DismissChainPreview(); break;
+            default:
+                _vm.DismissChainPreview();
+                if (backToFixes && p.FocusKey is { } k) schedule?.ReopenFixPanel(Nav.XamlRoot, k, p.Purpose, reuse: true);
+                break;
         }
     }
 

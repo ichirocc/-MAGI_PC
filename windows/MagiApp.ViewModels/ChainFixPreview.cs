@@ -12,7 +12,7 @@ namespace MagiApp.ViewModels;
 /// <param name="Target">探した枠（日付・シフト記号・見出し）。相談に積んだあと、今の勤務表で案を探し直すために持つ。</param>
 /// <param name="Purpose">今回の目的（案の一覧から来たとき。例「古泉さんのA4不足を減らす」）。null＝目的の行を出さない。</param>
 /// <param name="Effect">対象の数の変化（例「A4：7回 → 9回」「適用後も、下限まで6回不足」）。</param>
-/// <param name="FromList">案の一覧から開いた＝閉じるボタンは「案の一覧に戻る」。</param>
+/// <param name="FromList">案の一覧から開いた＝［別案を見る］を出す（閉じるボタンは［今は変更しない］のまま。WinUI は本文のリンクで案のパネルを開き直す）。</param>
 /// <param name="Rows">変わるセル（職員ごとに日付・変更前・変更後の表にする）。</param>
 /// <param name="CountNotes">職員ごとの回数の変化（2 か所以上を変える理由の事実）。</param>
 /// <param name="FocusKey">案の一覧のどの依頼から来たか（適用後に同じ依頼の画面へ結果を返す）。</param>

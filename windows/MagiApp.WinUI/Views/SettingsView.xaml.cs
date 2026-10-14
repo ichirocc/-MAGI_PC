@@ -103,6 +103,15 @@ public sealed partial class SettingsView : UserControl
             if (match is not null) AlgorithmCombo.SelectedItem = match;
 
             DataStatusText.Text = ui.Message ?? "";
+            SaveStateText.Visibility = ui.SaveState == SaveState.Saved ? Visibility.Collapsed : Visibility.Visible;
+            SaveStateText.Text = ui.SaveState switch
+            {
+                SaveState.Dirty => "未保存の変更があります（まもなく自動保存します）",
+                SaveState.Saving => "保存中…",
+                SaveState.Failed => "自動保存に失敗しています（PCの空き容量をご確認のうえ「データを保存（JSON）」をお試しください）",
+                _ => "",
+            };
+            SaveStateText.Foreground = (Brush)Application.Current.Resources[ui.SaveState == SaveState.Failed ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
             OpenDataButton.IsEnabled = !ui.Running;
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;

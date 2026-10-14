@@ -276,4 +276,19 @@ public class CountShortageTextTest
         Assert.Equal(t, CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, null, AllDays: true), Staff, Need));
         Assert.Equal("-,1,-,all", new FixFocus(null, 1, null, AllDays: true).Key);
     }
+
+    [Fact]
+    public void ApplyRequiresTargetImprovementAndShowsUnevaluated()
+    {
+        var fams = new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" }, ["1,3"] = new[] { "vio-covU" } };
+        (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (j == 2 ? (2, 2) : (1, 1)) : null;
+        var t = CellSheetLogic.MultiNeedTarget(fams, 1, Need)!;
+        Assert.True(CellSheetLogic.ImprovesTarget(t, Schedule, new[] { new FixCell(0, 2, 1) }));
+        // 相殺するだけの案は全体が良くなっても当てない（統合仕様 INV-03）。対象を持たない案は判定しない。
+        Assert.False(CellSheetLogic.ImprovesTarget(t, Schedule, new[] { new FixCell(1, 2, 0), new FixCell(1, 3, 1) }));
+        Assert.True(CellSheetLogic.ImprovesTarget(null, Schedule, new[] { new FixCell(1, 2, 0) }));
+        Assert.Equal("新たな必須違反：未評価（適用の直前に検査します）", CellSheetLogic.NewHardLine(null));
+        Assert.Equal("新たな必須違反：なし", CellSheetLogic.NewHardLine(Array.Empty<string>()));
+        Assert.Equal("新たな必須違反：禁止の並び", CellSheetLogic.NewHardLine(new[] { "禁止の並び" }));
+    }
 }
