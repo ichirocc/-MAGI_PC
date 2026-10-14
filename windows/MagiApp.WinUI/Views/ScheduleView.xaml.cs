@@ -1056,9 +1056,7 @@ public sealed partial class ScheduleView : UserControl
             var kk = k;
             var brush = VioBorderBrush(ui, ct.UnderDays.Count > 0 ? "vio-covU" : "vio-covO", out var thickness);
             AddTallyCell(StaffTallyGridHost, staffCount + 1, k + 1, $"{total} {ct.Glyph}", header: false, borderBrush: brush, thickness: thickness,
-                onClick: _ => ShowMarkDialog($"「{ui.ShiftSymbols[kk]}」の人員",
-                    ct.Days.SelectMany(j => GridDisplayMarks.DayCoverageLines(ui, j, new[] { new CoverageMark(kk, ct.UnderDays.Contains(j)) }, LabelOf, _vm.NeedCellLimits).Select(l => $"{j + 1}日 {l}")).ToList(),
-                    new FixFocus(null, kk, ct.Days[0])));
+                onClick: _ => ShowShiftTotalDialog(kk, ct));
         }
     }
 
@@ -1327,11 +1325,18 @@ public sealed partial class ScheduleView : UserControl
                 var res = Application.Current.Resources;
                 var fg = (Brush)res["MagiOnSecondaryContainerBrush"];
                 var col = new StackPanel { Spacing = 4 };
+                TextBlock Small(string t) => new() { Text = t, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap };
+                TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8 };
                 // 先頭＝いま見ている問題がどう変わるか。変更する勤務、ほかの問題への影響、操作の順。
-                if (e is not null)
+                var remain = target?.Day is not null
+                    ? CellSheetLogic.RemainingSameShift(ui.NeedFamilies, CellSheetLogic.BoardAfter(ui.Schedule, s.Ops), target, _vm.NeedCellLimits, ui.ShiftSymbols, ui.StartDate)
+                    : Array.Empty<string>();
+                if (e is not null && target is not null)
                 {
                     col.Children.Add(new TextBlock { Text = $"案{n}：{e.Title(label)}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
-                    col.Children.Add(new TextBlock { Text = e.CountLine() + "　" + e.GapLine(), Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                    col.Children.Add(new TextBlock { Text = $"{label}：{e.CountLine()}　{e.GapLine()}", Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                    col.Children.Add(new TextBlock { Text = e.AfterNote(target.Basis), Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                    foreach (var r in remain) col.Children.Add(Small(r));
                 }
                 else
                 {
@@ -1341,10 +1346,28 @@ public sealed partial class ScheduleView : UserControl
                 }
                 if (!quick)
                 {
-                    col.Children.Add(new TextBlock { Text = "変更する勤務", FontSize = 12, Opacity = 0.8 });
-                    foreach (var c in ChainFixPreview.Of(s, snap, ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes)
-                        col.Children.Add(new TextBlock { Text = c, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
-                    col.Children.Add(new TextBlock { Text = "ほかの問題への影響", FontSize = 12, Opacity = 0.8 });
+                    col.Children.Add(Caption("変更する勤務"));
+                    foreach (var c in ChainFixPreview.Of(s, snap, ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes) col.Children.Add(Small(c));
+                    // 見ている日のほかの勤務と、別の日へ移る影響を分ける（必要・適正は設定の値で言う）。
+                    var (sameDay, otherDays) = CellSheetLogic.HeadcountImpact(ui.Schedule, s.Ops, ui.ShiftSymbols, ui.StartDate, _vm.NeedCellLimits,
+                        target?.Day is { } td ? (target.Shift, td) : null);
+                    if (sameDay.Count > 0)
+                    {
+                        col.Children.Add(Caption("同じ日のほかの勤務"));
+                        foreach (var l in sameDay) col.Children.Add(Small("・" + l));
+                    }
+                    if (otherDays.Count > 0)
+                    {
+                        col.Children.Add(Caption(target?.Day is not null ? "別の日への影響" : "日ごとの人数への影響"));
+                        foreach (var l in otherDays) col.Children.Add(Small("・" + l));
+                    }
+                    var notes = CellSheetLogic.StaffCountNotes(ui.Schedule, s.Ops, ui.StaffNames, ui.ShiftSymbols);
+                    if (notes.Count > 0)
+                    {
+                        col.Children.Add(Caption("この組み合わせで変わる回数"));
+                        foreach (var l in notes) col.Children.Add(Small("・" + l));
+                    }
+                    col.Children.Add(Caption("ほかの問題への影響"));
                     var skip = target is not null ? CellSheetLogic.FixTargetFamilies(target) : picked is not null ? new HashSet<string> { picked } : new HashSet<string>();
                     foreach (var l in CellSheetLogic.OtherEffectLines(s, skip, LabelOf))
                         col.Children.Add(new TextBlock { Text = "・" + l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
@@ -1352,13 +1375,26 @@ public sealed partial class ScheduleView : UserControl
                 else col.Children.Add(new TextBlock { Text = NextActionGuide.FixImpactLines(s, LabelOf).HardLine, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 var review = new Button { Content = CellSheetLogic.ReviewChangeButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running };
                 var chosen = s;
-                IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", e.AfterNote(target.Basis) } : Array.Empty<string>();
+                IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
-                review.Click += (_, _) => { registerClosed(() => _vm.PreviewFix(chosen, purpose, eff)); hide(); };
+                review.Click += (_, _) => { registerClosed(() => _vm.PreviewFix(chosen, purpose, eff, focus.Key, target)); hide(); };
                 col.Children.Add(review);
                 return new Border { Background = (Brush)res["MagiSecondaryContainerBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = col };
             }
             var limit = quick ? 1 : 3;
+            // この依頼の画面で当てた手の結果（今の盤面がその手の直後のときだけ）。案は今の勤務表で探し直したもの＝古い案は使わない。
+            if (!quick && ui.AppliedFix is { } applied && applied.FocusKey == focus.Key && applied.IsCurrent(ui.Schedule))
+            {
+                var at = target ?? applied.Target;
+                var atLabel = at is not null ? CellSheetLogic.FixTargetLabel(at, at.Shift >= 0 && at.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[at.Shift] : "", ui.StartDate) : label;
+                var res = Application.Current.Resources;
+                var fg = (Brush)res["MagiOnTertiaryContainerBrush"];
+                var banner = new StackPanel { Spacing = 4 };
+                banner.Children.Add(new TextBlock { Text = "変更を反映しました", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg });
+                foreach (var l in CellSheetLogic.AppliedLines(ui, applied, at, atLabel, _vm.NeedCellLimits))
+                    banner.Children.Add(new TextBlock { Text = l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                host.Children.Add(new Border { Background = (Brush)res["MagiTertiaryContainerBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = banner });
+            }
             if (picked is not null && target is null && ui.FixSuggestions.Count > 0 && shown.Count == 0)
                 host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(LabelOf(picked)), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
             else if (fixing.Count > 0)
@@ -1500,7 +1536,8 @@ public sealed partial class ScheduleView : UserControl
         {
             // 盤面・希望が変わったときと、計算・チェックが終わった時点（Running→false）で探し直す。
             if (e.PropertyName is nameof(UiState.Schedule) or nameof(UiState.Wishes) or nameof(UiState.Running)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
-            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions))
+            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions)
+                     or nameof(UiState.AppliedFix) or nameof(UiState.SaveState))
                 DispatcherQueue.TryEnqueue(Refresh);
         };
         _vm.Ui.PropertyChanged += handler;
@@ -1651,6 +1688,83 @@ public sealed partial class ScheduleView : UserControl
         RenderRows();
         panel.Children.Add(rows);
         panel.Children.Add(fixHost);
+        _ = dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// 集計の「計（期間）」の勤務の人員（Kotlin TallyCard の totalSheet）。過不足のある日が 2 日以上なら、どの日を直すかを選んでから探す
+    /// （2026-10-14 利用者レビュー: 先頭の日だけで探し、どの日の不足を直す案か分からなかった）。休の過剰は先に設定の意味を確かめてもらう。
+    /// </summary>
+    private void ShowShiftTotalDialog(int kk, ShiftCoverageTotal ct)
+    {
+        var ui = _vm.Ui;
+        var days = ct.Days;
+        var sym = kk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[kk] : $"{kk}";
+        var rest = kk == _vm.RestIdx && ct.OverDays.Count > 0;
+        var panel = new StackPanel { Spacing = 4 };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = rest ? "休みの人数を確認" : $"「{sym}」の人員" + (ct.OverDays.Count == 0 ? "不足" : ""),
+            Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる",
+        };
+        int? picked = days.Count == 1 ? days[0] : null;
+        var detach = new List<Action>();
+        var rows = new StackPanel { Spacing = 2 };
+        var fixHost = new StackPanel();
+        void Detach() { foreach (var a in detach.ToList()) a(); detach.Clear(); }
+        dialog.Closed += (_, _) => Detach();
+        void Mount()
+        {
+            Detach();
+            fixHost.Children.Clear();
+            if (picked is { } j) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, kk, j)));
+        }
+        void RenderRows()
+        {
+            rows.Children.Clear();
+            foreach (var j in days)
+            {
+                var under = ct.UnderDays.Contains(j);
+                var text = rest && !under ? CellSheetLogic.RestOverRow(_vm.Ui, kk, j, _vm.NeedCellLimits(kk, j)) : CellSheetLogic.ShiftDayPickRow(_vm.Ui, kk, j, under, _vm.NeedCellLimits(kk, j));
+                var row = new Grid { ColumnSpacing = 8 };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.Children.Add(new TextBlock
+                {
+                    Text = text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
+                    FontWeight = picked == j ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+                });
+                if (days.Count >= 2)
+                {
+                    FrameworkElement act;
+                    if (picked == j) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
+                    else
+                    {
+                        var see = new HyperlinkButton { Content = "変更案を見る", MinHeight = 48 };
+                        var day = j;
+                        see.Click += (_, _) => { picked = day; RenderRows(); Mount(); };
+                        act = see;
+                    }
+                    Grid.SetColumn(act, 1);
+                    row.Children.Add(act);
+                }
+                rows.Children.Add(row);
+            }
+        }
+        if (days.Count == 0) panel.Children.Add(new TextBlock { Text = "人員の過不足はありません。" });
+        if (rest)
+        {
+            foreach (var l in CellSheetLogic.RestOverIntro(ct.OverDays.All(j => _vm.NeedCellLimits(kk, j)?.Hi == 0)))
+                panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+            var setting = new Button { Content = "人数の設定を確認", MinHeight = 48 };
+            setting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: kk, Day: ct.OverDays[0]), null); };
+            panel.Children.Add(setting);
+        }
+        if (days.Count >= 2) panel.Children.Add(new TextBlock { Text = CellSheetLogic.ShiftDayPickHeading(), TextWrapping = TextWrapping.Wrap });
+        RenderRows();
+        panel.Children.Add(rows);
+        panel.Children.Add(fixHost);
+        Mount();
         _ = dialog.ShowAsync();
     }
 

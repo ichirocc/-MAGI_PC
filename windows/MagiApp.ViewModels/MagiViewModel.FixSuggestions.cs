@@ -181,7 +181,8 @@ public sealed partial class MagiViewModel
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard));
     }
 
-    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null)
+    /// <param name="focusKey">案の一覧のどの依頼から来たか。あれば成功時に <see cref="UiState.AppliedFix"/> を残す（Kotlin 3.669.0）。</param>
+    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null, string? focusKey = null, FixTarget? fixTarget = null)
     {
         var st = _state;
         if (st is null) return;
@@ -224,6 +225,8 @@ public sealed partial class MagiViewModel
         Ui.RelaxedBoard = false;
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
+        if (focusKey is not null)
+            Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget);
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
@@ -251,9 +254,12 @@ public sealed partial class MagiViewModel
             { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os) };
     }
 
+    /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
+    public int RestIdx => _state is { } st ? ScheduleUtil.RestShiftIndex(st) ?? -1 : -1;
+
     /// <summary>案の一覧から: 1 セルの案も当てる前に確認の画面（目的・全変更・対象の数の変化）を出す（Kotlin <c>previewFix</c>、
     /// 2026-10-14 利用者レビュー「見ると適用するを分ける」）。</summary>
-    public void PreviewFix(FixSuggestion s, string? purpose, IReadOnlyList<string> effect)
+    public void PreviewFix(FixSuggestion s, string? purpose, IReadOnlyList<string> effect, string? focusKey = null, FixTarget? fixTarget = null)
     {
         var sched = _currentSchedule;
         if (sched is null || _state is not { } st) return;
@@ -261,7 +267,7 @@ public sealed partial class MagiViewModel
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
         {
             Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
-            Purpose = purpose, Effect = effect, FromList = true,
+            Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget,
         };
     }
 

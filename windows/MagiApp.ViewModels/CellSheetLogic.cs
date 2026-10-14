@@ -696,6 +696,124 @@ public static class CellSheetLogic
     public static string? PeriodLine(string startDate, int days) =>
         days <= 0 || string.IsNullOrWhiteSpace(startDate) ? null : "対象期間：" + DayText.Range(startDate, 0, days - 1);
 
+    /// <summary>盤面に案のセル代入を当てた後の盤面。</summary>
+    public static IReadOnlyList<IReadOnlyList<int>> BoardAfter(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops)
+    {
+        var after = schedule.Select(r => r.ToArray()).ToList();
+        foreach (var op in ops)
+            if (op.Staff >= 0 && op.Staff < after.Count && op.Day >= 0 && op.Day < after[op.Staff].Length) after[op.Staff][op.Day] = op.ToShift;
+        return after.Select(r => (IReadOnlyList<int>)r).ToList();
+    }
+
+    private static int? CellAt(IReadOnlyList<IReadOnlyList<int>> b, int i, int j) => i >= 0 && i < b.Count && j >= 0 && j < b[i].Count ? b[i][j] : null;
+    private static int Headcount(IReadOnlyList<IReadOnlyList<int>> b, int k, int j) => b.Count(r => j >= 0 && j < r.Count && r[j] == k);
+
+    /// <summary>
+    /// 案で人数が変わる枠（日×勤務）の行（Kotlin <c>headcountImpact</c>、2026-10-14 利用者レビュー「どの日の不足を直す案か」と「別の日への影響」を分ける）。
+    /// Same＝見ている日のほかの勤務、Other＝別の日。<paramref name="skip"/>＝見ている枠（勤務, 日）は上に出すので除く。
+    /// 必要・適正の判定は設定の値で言い、値が無い枠は人数だけ（「安全に変更できます」とは言わない）。
+    /// </summary>
+    public static (IReadOnlyList<string> Same, IReadOnlyList<string> Other) HeadcountImpact(
+        IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, IReadOnlyList<string> shiftSymbols, string startDate,
+        Func<int, int, (int Lo, int Hi)?>? needLimits, (int Shift, int Day)? skip = null)
+    {
+        var after = BoardAfter(schedule, ops);
+        var same = new List<string>(); var other = new List<string>();
+        foreach (var j in ops.Select(o => o.Day).Distinct().Order())
+        {
+            var shifts = ops.Where(o => o.Day == j).SelectMany(o => new[] { CellAt(schedule, o.Staff, j), o.ToShift }).OfType<int>().Distinct().Order();
+            foreach (var k in shifts)
+            {
+                if (skip is { } sk && sk.Shift == k && sk.Day == j) continue;
+                var b = Headcount(schedule, k, j); var a = Headcount(after, k, j);
+                if (a == b) continue;
+                var note = needLimits?.Invoke(k, j) is not { } lim ? ""
+                    : a < lim.Lo ? $"（必要 {lim.Lo}人を下回ります）"
+                    : a > lim.Hi ? $"（適正 {lim.Hi}人を超えます）"
+                    : $"（必要 {lim.Lo}人を満たしたまま）";
+                var line = $"{DayText.Short(startDate, j)}の{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}")}：{b}人 → {a}人{note}";
+                if (skip is { } s2 && j == s2.Day) same.Add(line); else other.Add(line);
+            }
+        }
+        return (same, other);
+    }
+
+    /// <summary>案で回数が変わる（または変わらない）勤務を職員ごとに言う（Kotlin <c>staffCountNotes</c>）。2 か所以上を変える理由の事実（例「休の回数は変わりません（12回のまま）」）。</summary>
+    public static IReadOnlyList<string> StaffCountNotes(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols)
+    {
+        if (ops.Count < 2) return Array.Empty<string>();
+        var after = BoardAfter(schedule, ops);
+        return ops.Select(o => o.Staff).Distinct().SelectMany(i =>
+        {
+            IReadOnlyList<int> row = i >= 0 && i < schedule.Count ? schedule[i] : Array.Empty<int>();
+            IReadOnlyList<int> rowA = i >= 0 && i < after.Count ? after[i] : Array.Empty<int>();
+            var name = i >= 0 && i < staffNames.Count ? staffNames[i] : $"#{i}";
+            return ops.Where(o => o.Staff == i).SelectMany(o => new[] { o.Day >= 0 && o.Day < row.Count ? row[o.Day] : (int?)null, o.ToShift })
+                .OfType<int>().Distinct().Order().Select(k =>
+                {
+                    var b = row.Count(v => v == k); var a = rowA.Count(v => v == k);
+                    var sym = k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}";
+                    return a == b ? $"{name}さんの「{sym}」の回数は変わりません（{b}回のまま）" : $"{name}さんの「{sym}」：{b}回 → {a}回";
+                });
+        }).ToList();
+    }
+
+    /// <summary>同じ勤務のほかの日で、案のあとも残る人員の過不足（Kotlin <c>remainingSameShift</c>「11/25のDテ不足は残ります」）。<paramref name="board"/> は見る盤面（案の前なら案を当てた後）。</summary>
+    public static IReadOnlyList<string> RemainingSameShift(IReadOnlyDictionary<string, IReadOnlyList<string>> needFamilies, IReadOnlyList<IReadOnlyList<int>> board, FixTarget t,
+        Func<int, int, (int Lo, int Hi)?>? needLimits, IReadOnlyList<string> shiftSymbols, string startDate)
+    {
+        if (t.Day is not { } day) return Array.Empty<string>();
+        var cls = t.Under ? "vio-covU" : "vio-covO";
+        var sym = t.Shift >= 0 && t.Shift < shiftSymbols.Count ? shiftSymbols[t.Shift] : $"{t.Shift}";
+        var days = new List<int>();
+        foreach (var (key, fams) in needFamilies)
+        {
+            var comma = key.IndexOf(',');
+            if (comma < 0 || !fams.Contains(cls) || !int.TryParse(key.AsSpan(0, comma), out var k) || k != t.Shift || !int.TryParse(key.AsSpan(comma + 1), out var j)) continue;
+            if (j != day) days.Add(j);
+        }
+        var outList = new List<string>();
+        foreach (var j in days.Order())
+        {
+            if (needLimits?.Invoke(t.Shift, j) is not { } lim) continue;
+            var n = Headcount(board, t.Shift, j);
+            var gap = t.Under ? lim.Lo - n : n - lim.Hi;
+            if (gap > 0) outList.Add($"{DayText.Short(startDate, j)}の{sym}は、{(t.Under ? $"{gap}人不足" : $"{gap}人多い状態")}のままです");
+        }
+        return outList;
+    }
+
+    /// <summary>自動保存の状態の 1 行（適用後の案内）。</summary>
+    public static string SaveStateLine(SaveState s) => "保存：" + s switch
+    {
+        SaveState.Saved => "完了",
+        SaveState.Saving => "保存中",
+        SaveState.Failed => "失敗（設定タブの「データ」でご確認ください）",
+        _ => "未保存（まもなく保存します）",
+    };
+
+    /// <summary>勤務の人員のシート（集計の「計（期間）」）で、過不足のある日が 2 日以上のときの問い。</summary>
+    public static string ShiftDayPickHeading() => "どの日を調整しますか？";
+
+    /// <summary>選ぶ行（日）: 「11/24(火)　配置 0人／必要 1人　1人不足」。</summary>
+    public static string ShiftDayPickRow(UiState ui, int k, int j, bool under, (int Lo, int Hi)? need)
+    {
+        var row = DayPickRow(ui, j, new CoverageMark(k, under), need);
+        var at = row.IndexOf('　');
+        return DayText.Full(ui.StartDate, j) + "　" + (at >= 0 ? row[(at + 1)..] : row);
+    }
+
+    /// <summary>休みの人数の過剰（休の勤務の人員のシート）: 先に設定の意味を確かめてもらう。<paramref name="allZero"/>＝どの日も適正 0 人。</summary>
+    public static IReadOnlyList<string> RestOverIntro(bool allZero) => new[]
+    {
+        allZero ? "各日の適正人数が0人と表示されています。意図した設定か、確認できます。" : "休みの人数が、設定上の適正人数を超えている日があります。",
+        "休みの人数を減らす前に、個人の休日数・希望・連続勤務への影響もご確認ください。",
+    };
+
+    /// <summary>休みの人数の行: 「11/13(金)　休み 2人／適正 0人」（値が無ければ「未設定」）。</summary>
+    public static string RestOverRow(UiState ui, int k, int j, (int Lo, int Hi)? need) =>
+        $"{DayText.Full(ui.StartDate, j)}　休み {Headcount(ui.Schedule, k, j)}人／適正 " + (need is { } n ? $"{n.Hi}人" : "未設定");
+
     /// <summary>日の人員のシートで、過不足のある勤務が 2 つ以上のときの問い。</summary>
     public static string DayPickHeading(IReadOnlyList<CoverageMark> marks) =>
         marks.All(m => m.Under) ? "どの勤務の不足を確認しますか？"
@@ -722,6 +840,27 @@ public static class CellSheetLogic
         if (f.Staff is { } i && f.Day is null) return CountFixTarget(ui.CountViolations, i, k, staffLimits(i, k));
         if (f.Staff is null && f.Day is { } d && f.ExceptStaff is null) return NeedFixTarget(ui.NeedFamilies, k, d, needLimits(k, d));
         return null;
+    }
+
+    /// <summary>「変更を反映しました」の行（Kotlin <c>appliedLines</c>）: 見ている問題（前 → 今）、ほかに人数が変わった枠（今の値）、保存、残る問題、探し直したこと。</summary>
+    public static IReadOnlyList<string> AppliedLines(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        var outList = new List<string>();
+        if (target is not null)
+        {
+            var e = target.Effect(a.Before, a.Ops);
+            outList.Add($"{label}：{e.CountLine()}（{(e.GapAfter == 0 ? e.AfterNote(target.Basis) : $"{target.GapWord} {e.GapAfter}{target.Unit}")}）");
+        }
+        var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
+        outList.AddRange(same);
+        outList.AddRange(other);
+        outList.Add(SaveStateLine(ui.SaveState));
+        IReadOnlyList<string> next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate)
+            : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { $"{label}は、{target.Basis}まであと{eff.GapAfter}回です" }
+            : Array.Empty<string>();
+        if (next.Count > 0) outList.Add("次に確認すること：" + string.Join("。", next) + "。");
+        outList.Add("勤務表が変わったため、変更案を探し直しました（下の案は今の勤務表のものです）。");
+        return outList;
     }
 }
 
@@ -767,7 +906,9 @@ public sealed record CountEffect(int Before, int After, int Target, bool Under, 
     public string GapLine() => $"{(Under ? "不足" : "超過")} {GapBefore}{Unit} → {GapAfter}{Unit}";
 
     public string AfterNote(string basis) =>
-        GapAfter == 0 && Under ? $"適用後は{basis}に届きます"
+        GapAfter == 0 && Under && Unit == "人" ? $"{(basis.EndsWith("人数", StringComparison.Ordinal) ? basis[..^2] : basis)} {Target}人を満たします"
+        : GapAfter == 0 && Unit == "人" ? $"{(basis.EndsWith("人数", StringComparison.Ordinal) ? basis[..^2] : basis)} {Target}人以内になります"
+        : GapAfter == 0 && Under ? $"適用後は{basis}に届きます"
         : GapAfter == 0 ? $"適用後は{basis}以内になります"
         : Under ? $"適用後も、{basis}まで{GapAfter}{Unit}不足"
         : $"適用後も、{basis}を{GapAfter}{Unit}超えます";

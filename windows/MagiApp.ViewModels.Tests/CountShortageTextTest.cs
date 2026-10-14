@@ -142,4 +142,70 @@ public class CountShortageTextTest
         Assert.DoesNotContain("元に戻せます", ChainFixPreview.ApplyChangeButton);
         Assert.Equal("対象期間：10/1〜10/31", CellSheetLogic.PeriodLine("2026-10-01", 31));
     }
+
+    /// <summary>「どの日の不足を直す案か」と「別の日への影響」を分ける（2026-10-14 利用者レビュー 2 回目）。</summary>
+    [Fact]
+    public void OtherDayImpactIsSeparatedFromTheTargetDay()
+    {
+        // 職員0: 10/1=A 10/2=休 10/3=休 10/4=B、職員1: 10/1=休 10/2=A 10/3=A 10/4=休。
+        var t = CellSheetLogic.NeedFixTarget(new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" } }, 1, 2, (2, 2))!;
+        var ops = new[] { new FixCell(0, 2, 1), new FixCell(0, 3, 0) };   // 10/3 休→A、10/4 B→休
+        (int Lo, int Hi)? Need(int k, int j) => (k, j) switch { (1, 2) => (2, 2), (2, 3) => (1, 1), _ => null };
+        var (same, other) = CellSheetLogic.HeadcountImpact(Schedule, ops, new[] { "休", "A", "B" }, "2026-10-01", Need, (1, 2));
+        Assert.Equal(new[] { "10/3の休：1人 → 0人" }, same);
+        Assert.Equal(new[] { "10/4の休：1人 → 2人", "10/4のB：1人 → 0人（必要 1人を下回ります）" }, other);
+        Assert.Equal("必要 2人を満たします", t.Effect(Schedule, ops).AfterNote(t.Basis));
+        Assert.Equal(new[] { "モニカさんの「休」の回数は変わりません（2回のまま）", "モニカさんの「A」：1回 → 2回", "モニカさんの「B」：1回 → 0回" },
+            CellSheetLogic.StaffCountNotes(Schedule, ops, new[] { "モニカ", "ノア" }, new[] { "休", "A", "B" }));
+        Assert.Empty(CellSheetLogic.StaffCountNotes(Schedule, ops.Take(1).ToList(), new[] { "モニカ" }, new[] { "休", "A" }));
+        // 同じ勤務のほかの日に残る不足（案を当てた後の盤面で数える）。
+        var fams = new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" }, ["1,3"] = new[] { "vio-covU" } };
+        (int Lo, int Hi)? NeedA(int k, int j) => k == 1 ? (2, 2) : null;
+        Assert.Equal(new[] { "10/4のAは、2人不足のままです" },
+            CellSheetLogic.RemainingSameShift(fams, CellSheetLogic.BoardAfter(Schedule, ops), t, NeedA, new[] { "休", "A", "B" }, "2026-10-01"));
+    }
+
+    [Fact]
+    public void ShiftDayPickAndRestRowsSayTheSettingFirst()
+    {
+        var u = new UiState { StartDate = "2026-10-01", ShiftSymbols = new[] { "休", "A", "B" }, Schedule = Schedule };
+        Assert.Equal("どの日を調整しますか？", CellSheetLogic.ShiftDayPickHeading());
+        Assert.Equal("10/4(日)　配置 0人／必要 1人　1人不足", CellSheetLogic.ShiftDayPickRow(u, 1, 3, true, (1, 1)));
+        Assert.Equal("10/2(金)　休み 1人／適正 0人", CellSheetLogic.RestOverRow(u, 0, 1, (0, 0)));
+        Assert.Equal("10/2(金)　休み 1人／適正 未設定", CellSheetLogic.RestOverRow(u, 0, 1, null));
+        Assert.Equal("各日の適正人数が0人と表示されています。意図した設定か、確認できます。", CellSheetLogic.RestOverIntro(true)[0]);
+        Assert.Equal("保存：完了", CellSheetLogic.SaveStateLine(SaveState.Saved));
+    }
+
+    [Fact]
+    public void PreviewRowsCarryTheDayHeadcountAndCountNotes()
+    {
+        var s = new FixSuggestion(FixKind.SwapXDay, new[] { new FixCell(0, 1, 1), new FixCell(0, 0, 0) }, "x", 0, 0, Array.Empty<(string, int)>());
+        var p = ChainFixPreview.Of(s, new[] { new[] { 1, 0, 0, 2 }, new[] { 0, 1, 1, 0 } }, new[] { "福澤" }, new[] { "休", "A", "B" }, "2026-10-01");
+        Assert.Equal("休 1人 → 0人、A 1人 → 2人", p.Rows[0].Impact);   // 10/2 休→A
+        Assert.Equal("A 1人 → 0人、休 1人 → 2人", p.Rows[1].Impact);   // 10/1 A→休
+        Assert.Equal(new[] { "福澤さんの「休」の回数は変わりません（2回のまま）", "福澤さんの「A」の回数は変わりません（1回のまま）" }, p.CountNotes);
+    }
+
+    [Fact]
+    public void AppliedLinesReportTheTargetSaveAndWhatRemains()
+    {
+        var t = CellSheetLogic.NeedFixTarget(new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" } }, 1, 2, (2, 2))!;
+        var ops = new[] { new FixCell(0, 2, 1) };
+        var after = CellSheetLogic.BoardAfter(Schedule, ops);
+        var u = new UiState
+        {
+            StartDate = "2026-10-01", ShiftSymbols = new[] { "休", "A", "B" }, Schedule = after, SaveState = SaveState.Saving,
+            NeedFamilies = new Dictionary<string, IReadOnlyList<string>> { ["1,3"] = new[] { "vio-covU" } },
+        };
+        var a = new AppliedFix("k", "x", ops, Schedule, after, t);
+        (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (2, 2) : null;
+        var lines = CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need);
+        Assert.Equal("10/3のA：1人 → 2人（必要 2人を満たします）", lines[0]);
+        Assert.Equal("10/3の休：1人 → 0人", lines[1]);
+        Assert.Equal("保存：保存中", lines[2]);
+        Assert.Equal("次に確認すること：10/4のAは、2人不足のままです。", lines[3]);
+        Assert.StartsWith("勤務表が変わったため", lines[^1]);
+        Assert.True(a.IsCurrent(after));
+    }
 }

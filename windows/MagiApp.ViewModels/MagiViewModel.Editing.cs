@@ -484,8 +484,8 @@ public sealed partial class MagiViewModel
         var p = Ui.ChainPreview;
         if (p is null) return;
         Ui.ChainPreview = null;
-        if (p.Target is { BoardKey: not 0L } t) ApplyFixSuggestion(p.Suggestion, t.BoardKey, t.StateKey);
-        else ApplyFixSuggestion(p.Suggestion);
+        if (p.Target is { BoardKey: not 0L } t) ApplyFixSuggestion(p.Suggestion, t.BoardKey, t.StateKey, p.FocusKey, p.FixTarget);
+        else ApplyFixSuggestion(p.Suggestion, focusKey: p.FocusKey, fixTarget: p.FixTarget);
     }
 
     public void DismissChainPreview() => Ui.ChainPreview = null;

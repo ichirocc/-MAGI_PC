@@ -387,6 +387,15 @@ public sealed partial class MainWindow : Window
                 table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
                 Cell(Line(row.Date), n, 0); Cell(Line(row.Before), n, 1); Cell(Line(row.After), n, 2);
                 n++;
+                if (row.Impact.Length > 0)
+                {
+                    table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    var impact = Line("　人数：" + row.Impact, size: 13);
+                    impact.Opacity = 0.8;
+                    Grid.SetColumnSpan(impact, 3);
+                    Cell(impact, n, 0);
+                    n++;
+                }
                 if (row.Wish.Length > 0)
                 {
                     table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -403,6 +412,11 @@ public sealed partial class MainWindow : Window
         var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
         var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
         body.Children.Add(Line(hardLine, bold: p.Effect.Count == 0));
+        if (p.CountNotes.Count > 0)
+        {
+            body.Children.Add(Caption("この組み合わせで変わる回数"));
+            foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
+        }
         body.Children.Add(Caption("確認が必要なこと"));
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
         body.Children.Add(Line("・希望・前後の勤務への影響（上の表の注記）", size: 13));
