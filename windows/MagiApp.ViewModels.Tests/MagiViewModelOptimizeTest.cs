@@ -108,7 +108,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var fake = new FakeOptimizationService();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
 
         Assert.Equal(0, fake.OptimizeCallCount);
         Assert.False(vm.Ui.Running);
@@ -122,7 +122,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("読み込み"); // 別ジョブが進行中を模擬（EndBoardJobを呼ばず占有したまま）
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
 
         Assert.Equal(0, fake.OptimizeCallCount);
         Assert.True(vm.Ui.MessageIsError);
@@ -144,7 +144,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var st = MinimalState.Build();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         Assert.NotNull(vm.LastRunOptimizeTask);
         await vm.LastRunOptimizeTask!;
 
@@ -174,7 +174,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var st = MinimalState.Build();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.NotNull(vm.Ui.RunSummary);
@@ -198,7 +198,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         try
         {
             vm.SetSearchStrength(SearchStrength.Thorough);
-            vm.RunV6FullOptimize();
+            vm.RunV6FullOptimizeThroughSheet();
             await vm.LastRunOptimizeTask!;
             Assert.False(fake.LastExtraRefineRequirePostHardDrop);
             Assert.Equal(WishFloorMode.Off, fake.LastWishFloorMode);
@@ -226,7 +226,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var inputSchedule = MinimalState.BuildSchedule();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = inputSchedule };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.False(vm.Ui.Running);
@@ -253,7 +253,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         };
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.StartsWith("改善が確認できなかったため、前回の勤務表を維持しました（今回の案は採用していません）。", vm.Ui.Message);
@@ -267,7 +267,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var st = MinimalState.Build();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         Assert.NotNull(vm.LastRunOptimizeTask);
         // Kotlin原本の runV6FullOptimize は停止処理(keep-best保持・ログ)のあと `throw e` で
         // CancellationException を再送出する（呼出元は viewModelScope の fire-and-forget で誰も
@@ -289,7 +289,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var st = MinimalState.Build();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = st, _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.False(vm.Ui.Running);
@@ -305,7 +305,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("読み込み");
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
 
         Assert.Contains("読み込み", vm.Ui.Message);
     }
@@ -412,7 +412,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var fake = new FakeOptimizationService { HangUntilCancelled = true };
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         Assert.NotNull(vm.LastRunOptimizeTask);
         Assert.True(vm.Ui.Running);
 
@@ -448,7 +448,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.Ui.EngineRan = engineRanBefore;
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
 
         Assert.Equal(engineRanBefore, vm.Ui.EngineRan);
@@ -479,7 +479,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         vm.Ui.HasResult = hadResult;
         vm.Ui.BestHard = 99;   // 進捗が書いた途中の件数を模す
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.Equal(0, vm.Ui.BestHard);   // 入力（制約なし）の件数
@@ -499,7 +499,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.Ui.HasResult = hadResult;
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastRunOptimizeTask!);
 
         Assert.Equal(hadResult, vm.Ui.HasResult);
@@ -531,17 +531,17 @@ public class MagiViewModelOptimizeTest : IDisposable
         };
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
         Assert.NotNull(vm.Ui.RunSummary);
         vm.SetCell(1, 1, 1);
         Assert.Null(vm.Ui.RunSummary);
 
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
         Assert.NotNull(vm.Ui.RunSummary);
         fake.ThrowInstead = new InvalidOperationException("boom");
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         Assert.Null(vm.Ui.RunSummary);   // 開始の時点で消す
         await vm.LastRunOptimizeTask!;
     }
@@ -571,7 +571,20 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.Equal(0, fake.OptimizeCallCount);
     }
 
-    /// <summary>「このままつくる」は 1 タップで始まり、同じ指紋のあいだは再び止めない。閉じただけなら次も出す。</summary>
+    /// <summary>[Android 3.672.0] 直す項目が無い盤面でも、作成の前に「勤務表を作成する」シートを出して止まる（自動で行うこと・保持するもの・時間を見せる）。</summary>
+    [Fact]
+    public void PreRunGate_ShowsTheSheetEvenWithoutIssues()
+    {
+        var fake = new FakeOptimizationService();
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.RunV6FullOptimize();
+        Assert.NotNull(vm.Ui.PreRunCheck);
+        Assert.False(vm.Ui.PreRunCheck!.NeedsSheet);
+        Assert.Null(vm.LastRunOptimizeTask);
+        Assert.Equal(0, fake.OptimizeCallCount);
+    }
+
+    /// <summary>「勤務表を作成」は 1 タップで始まり、同じ指紋のあいだは再び止めない。閉じただけなら次も出す。</summary>
     [Fact]
     public async Task PreRunGate_ProceedStartsAndSameFingerprintIsNotReshown()
     {

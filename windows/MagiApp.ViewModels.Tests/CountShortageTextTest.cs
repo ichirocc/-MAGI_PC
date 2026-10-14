@@ -201,7 +201,7 @@ public class CountShortageTextTest
         var a = new AppliedFix("k", "x", ops, Schedule, after, t, 3, 2, 10, 11);
         (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (2, 2) : null;
         var lines = CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need);
-        Assert.Equal("10/3のA：1人 → 2人（必要 2人を満たします）", lines[0]);
+        Assert.Equal("今回の問題：解消（10/3のA：1人 → 2人、必要 2人を満たします）", lines[0]);
         Assert.Equal("10/3の休：1人 → 0人", lines[1]);
         Assert.Equal("必須違反（勤務表全体）：3件 → 2件", lines[2]);
         Assert.Equal("要調整（勤務表全体）：10件 → 11件", lines[3]);
@@ -222,5 +222,26 @@ public class CountShortageTextTest
         Assert.Equal(new FixTarget(null, 1, 2, 2, true, "必要人数"), CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, 2), Staff, Need));
         Assert.Null(CellSheetLogic.PanelTarget(u, new FixFocus(0, null, 2), Staff, Need));   // セルのシート（勤務なし）は対象なし
         Assert.Null(CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, 2, ExceptStaff: 0), Staff, Need));
+    }
+
+    /// <summary>自動と担当者の分担（2026-10-14 利用者レビュー）: 作成前に自動で行うこと・保持するもの、作成後は「完了＝配布可」と言わない。</summary>
+    [Fact]
+    public void AutoAndOperatorSplitTexts()
+    {
+        Assert.Equal(new[] { "対象期間：10/1〜10/31", "職員：12人", "登録条件：つくる前に直す項目はありません",
+            "今回、自動で行うこと：勤務表の生成、最適化、仕上げ、評価", "保持するもの：登録条件と手動固定（手動固定 3件）", "探索時間：60秒／仕上げ用の追加枠：20秒" },
+            CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, false, 3, 60, 20));
+        Assert.Equal("登録条件：確認が必要な項目があります（下の一覧）", CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, true, 0, 60, 20)[2]);
+        Assert.Equal("保持するもの：登録条件と手動固定", CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, true, 0, 60, 20)[4]);
+        static string L(string f) => f switch { "c1" => "期間の制約", "weekly" => "曜日の偏り", _ => f };
+        Assert.Equal("期間の制約 2件・曜日の偏り 12pt", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["c1"] = 2, ["weekly"] = 12, ["c3n"] = 1 }, L));
+        Assert.Equal("なし", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["covU"] = 1 }, L));
+        Assert.Equal(new[] { "必須違反：0件", "要調整：なし", "保存：完了", "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" },
+            CellSheetLogic.CreationResultLines(0, new Dictionary<string, int>(), SaveState.Saved, L));
+        Assert.Equal(3, CellSheetLogic.CreationResultLines(2, new Dictionary<string, int> { ["c1"] = 1 }, SaveState.Failed, L).Count);
+        Assert.Equal("解消", CellSheetLogic.AppliedStatusWord(new CountEffect(0, 1, 1, true, "人")));
+        Assert.Equal("減少", CellSheetLogic.AppliedStatusWord(new CountEffect(7, 9, 15, true)));
+        Assert.Equal("残存", CellSheetLogic.AppliedStatusWord(new CountEffect(7, 7, 15, true)));
+        Assert.Equal("別案を見る", CellSheetLogic.BackToFixesButton);
     }
 }

@@ -344,7 +344,7 @@ public class MagiViewModelWishTrialTest : IDisposable
         }
         else
         {
-            vm.RunV6FullOptimize();
+            vm.RunV6FullOptimizeThroughSheet();
         }
         await vm.LastRunOptimizeTask!;
 
@@ -372,7 +372,7 @@ public class MagiViewModelWishTrialTest : IDisposable
             if (m.StartsWith("計算が完了しました", StringComparison.Ordinal)) throw new InvalidOperationException("adopted");
             if (m.StartsWith("勤務表の作成は終わりましたが", StringComparison.Ordinal) && lateSeen++ == 0) throw new InvalidOperationException("redraw");
         };
-        vm.RunV6FullOptimize();
+        vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
         Assert.Equal(1, lateSeen);

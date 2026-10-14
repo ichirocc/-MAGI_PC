@@ -139,10 +139,13 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。確定の後は渡したセルへ戻る。</summary>
     private readonly Action<(int I, int J)?>? _showRelax;
 
-    /// <param name="goAnalysis">使わない（3.671.0 で集計の詳細の個人の探索はその場で行う＝分析タブへ行かない）。呼び出し側の互換のため残す。</param>
+    /// <summary>反映の欄の［残っている問題を見る］で、巡回できる必須違反が無いときの行き先（分析タブ）。</summary>
+    private readonly Action? _goAnalysis;
+
     public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<EditLanding?, EditReturn?>? goEditLanding = null, Action<(int I, int J)?>? showRelax = null)
     {
         _vm = vm;
+        _goAnalysis = goAnalysis;
         _goEditLanding = goEditLanding;
         _showRelax = showRelax;
         InitializeComponent();
@@ -1282,7 +1285,7 @@ public sealed partial class ScheduleView : UserControl
         (int I, int J)? resolveAt = null)
     {
         string? picked = null;
-        bool othersOpen = false, scopeOpen = false, candidatesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
+        bool othersOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff,
@@ -1414,7 +1417,7 @@ public sealed partial class ScheduleView : UserControl
                 else col.Children.Add(new TextBlock { Text = NextActionGuide.FixImpactLines(s, LabelOf).HardLine, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 var review = new Button { Content = CellSheetLogic.ReviewChangeButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running };
                 var chosen = s;
-                IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
+                IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
                 review.Click += (_, _) => { registerClosed(() => _vm.PreviewFix(chosen, purpose, eff, focus.Key, target)); hide(); };
                 col.Children.Add(review);
@@ -1432,13 +1435,33 @@ public sealed partial class ScheduleView : UserControl
                 banner.Children.Add(new TextBlock { Text = "変更を反映しました", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg });
                 foreach (var l in CellSheetLogic.AppliedLines(ui, applied, at, atLabel, _vm.NeedCellLimits))
                     banner.Children.Add(new TextBlock { Text = l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                if (appliedChangesOpen)
+                {
+                    var asFix = new FixSuggestion(FixKind.ChangeMulti, applied.Ops, applied.Label, 0, 0, Array.Empty<(string, int)>());
+                    foreach (var c in ChainFixPreview.Of(asFix, applied.Before.Select(r => r.ToArray()).ToArray(), ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes)
+                        banner.Children.Add(new TextBlock { Text = "・" + c, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                }
+                var acts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                // 残っている必須違反を順に見る（巡回の先頭のセルへ）。巡回できる必須違反が無ければ分析タブ。
+                var tourBtn = new HyperlinkButton { Content = "残っている問題を見る", MinHeight = 48 };
+                tourBtn.Click += (_, _) =>
+                {
+                    var first = _vm.HardViolationItemsFor(LabelOf).FirstOrDefault();
+                    registerClosed(() => { if (first is not null) FocusCell(first.Cell.I, first.Cell.J); else _goAnalysis?.Invoke(); });
+                    hide();
+                };
+                acts.Children.Add(tourBtn);
+                var changesBtn = new HyperlinkButton { Content = appliedChangesOpen ? "変更内容を閉じる" : "今回の変更内容を見る", MinHeight = 48 };
+                changesBtn.Click += (_, _) => { appliedChangesOpen = !appliedChangesOpen; Refresh(); };
+                acts.Children.Add(changesBtn);
                 // 当てた直後だけ（今の盤面がその手の直後）に出る＝元に戻すの先頭はこの手。
                 if (ui.CanUndo)
                 {
                     var undo = new HyperlinkButton { Content = "今回の変更を元に戻す", MinHeight = 48 };
                     undo.Click += (_, _) => _vm.Undo();
-                    banner.Children.Add(undo);
+                    acts.Children.Add(undo);
                 }
+                banner.Children.Add(new ScrollViewer { Content = acts, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
                 host.Children.Add(new Border { Background = (Brush)res["MagiTertiaryContainerBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = banner });
             }
             if (pred is not null && target is null && shown.Count > 0 && fixing.Count == 0)

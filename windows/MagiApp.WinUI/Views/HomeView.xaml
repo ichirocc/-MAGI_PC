@@ -56,6 +56,12 @@
                 </StackPanel>
             </Border>
 
+            <!-- [Android 3.672.0] 自動作成の結果と次に確認する問題（作成の完了＝配布できる、とは言わない）。中身は CodeBehind が作る。 -->
+            <Border x:Name="CreationResultCard" Background="{StaticResource MagiSurfaceVariantBrush}"
+                    CornerRadius="{StaticResource MagiCornerSM}" Padding="16" Visibility="Collapsed">
+                <StackPanel x:Name="CreationResultHost" Spacing="4" />
+            </Border>
+
             <Border x:Name="NextActionCard" CornerRadius="{StaticResource MagiCornerSM}" Padding="20">
                 <StackPanel Spacing="14">
                     <Border x:Name="PhaseBadge" CornerRadius="{StaticResource MagiCornerLG}" Padding="10,3" HorizontalAlignment="Left">

@@ -420,7 +420,7 @@ public sealed partial class MainWindow : Window
             body.Children.Add(Caption("この組み合わせで変わる回数"));
             foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
         }
-        body.Children.Add(Caption("評価結果"));
+        body.Children.Add(Caption("判断に必要な情報"));
         if (p.NewHard is { } newHard)
             body.Children.Add(Line("・新たな必須違反：" + (newHard.Count == 0 ? "なし"
                 : string.Join("、", newHard.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)))), size: 13));
@@ -429,7 +429,8 @@ public sealed partial class MainWindow : Window
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
         body.Children.Add(Line("・" + consultLine, size: 13));
         body.Children.Add(new TextBlock { Text = "適用の直前に最新の勤務表でもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        foreach (var duty in CellSheetLogic.ChangeDutyLines) body.Children.Add(new TextBlock { Text = duty, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = CellSheetLogic.ConsultNotContactNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var dialog = new ContentDialog
         {
@@ -479,13 +480,18 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot,
-            Title = "つくる前の確認",
+            Title = CellSheetLogic.PreRunTitle,
             Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
-            PrimaryButtonText = "このままつくる",
-            SecondaryButtonText = "先にデータを直す",
+            PrimaryButtonText = CellSheetLogic.PreRunProceed,
+            SecondaryButtonText = CellSheetLogic.PreRunCheckConditions,
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Primary,
         };
+        // [Android 3.672.0] 自動で行うこと・保持するもの・時間（設定値）を先に。担当者が判断するのは、ここと作成後の問題の対応。
+        foreach (var planLine in CellSheetLogic.PreRunPlanLines(ui.StartDate, ui.Days, ui.Staff, sum.NeedsSheet, ui.ManualPins.Count, ui.BudgetSec,
+                     MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec))
+            panel.Children.Add(new TextBlock { Text = planLine, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunAutoNote, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         Action? after = null;
         void Head(string text) => panel.Children.Add(new TextBlock { Text = "■ " + text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
         void Note(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
