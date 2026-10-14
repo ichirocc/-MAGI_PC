@@ -842,6 +842,124 @@ public static class CellSheetLogic
         return null;
     }
 
+    /// <summary>
+    /// セルを 1 つ変える前の確認（Kotlin <c>cellChangeReview</c>、2026-10-14 利用者レビュー「問題を確認 → 変更方法を選ぶ → 影響を確認して適用」）。
+    /// 前後の報告を正式な検査（<see cref="UnifiedViolationChecker"/>）で比べ、違反の同一性（<see cref="ViolationIdentity"/>）で
+    /// このセルの問題が解消するか、ほかで解消する問題、新しく生じる問題を言う。値はすべて評価した結果（仮の値を書かない）。族名は <paramref name="labelOf"/>。
+    /// </summary>
+    public static CellChangeReview CellChangeReview(MagiState state, int[][] s, int i, int j, int k, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits, bool pinned, Func<string, string> labelOf)
+    {
+        string Sym(int? x) => x is { } v && v >= 0 && v < shiftSymbols.Count ? shiftSymbols[v] : "—";
+        string NameOf(int x) => x >= 0 && x < staffNames.Count ? staffNames[x] : $"#{x}";
+        var name = NameOf(i);
+        var cur = s[i][j];
+        var trial = s.Select(r => r.ToArray()).ToArray();
+        trial[i][j] = k;
+        var before = UnifiedViolationChecker.Check(state, s);
+        var after = UnifiedViolationChecker.Check(state, trial);
+        var diff = ViolationIdentity.Of(before, after);
+        string Place(ViolationKey key) => key.Space switch
+        {
+            ViolationKey.Kind.Cell => $"{NameOf(key.A)}さん {DayText.Short(state.StartDate, key.B)}",
+            ViolationKey.Kind.Need => $"{DayText.Short(state.StartDate, key.B)}の{Sym(key.A)}",
+            _ => $"{NameOf(key.A)}さんの{Sym(key.B)}",
+        };
+        string Label(ViolationKey key) => (key.Hard ? "必須・" : "") + labelOf(key.Family) + $"（{Place(key)}）";
+        var here = ViolationIdentity.Keys(before).Where(key => key.Space == ViolationKey.Kind.Cell && key.A == i && key.B == j).ToList();
+        var thisCell = here.Select(key => $"{labelOf(key.Family)}：" + (diff.Resolved.Contains(key) ? "解消します" : "残ります")).ToList();
+        var nb = string.Join(" → ", new[]
+        {
+            j - 1 >= 0 ? $"{DayText.Short(state.StartDate, j - 1)}：{Sym(s[i][j - 1])}" : null,
+            $"{DayText.Short(state.StartDate, j)}：{Sym(k)}",
+            j + 1 < s[i].Length ? $"{DayText.Short(state.StartDate, j + 1)}：{Sym(s[i][j + 1])}" : null,
+        }.OfType<string>());
+        var board = s.Select(r => (IReadOnlyList<int>)r).ToList();
+        var (_, other) = HeadcountImpact(board, new[] { new FixCell(i, j, k) }, shiftSymbols, state.StartDate, needLimits);
+        var counts = new[] { cur, k }.Where(x => x >= 0).Distinct().Select(x =>
+        {
+            var b = s[i].Count(v => v == x); var a = trial[i].Count(v => v == x);
+            var (lo, hi, apt) = limits?.Invoke(i, x) ?? (null, null, null);
+            var basis = lo is { } l1 && hi is { } h1 && l1 == h1 ? $"／下限＝上限 {l1}回"
+                : lo is { } l2 && hi is { } h2 ? $"／範囲 {l2}〜{h2}回"
+                : lo is { } l3 ? $"／下限 {l3}回"
+                : hi is { } h3 ? $"／上限 {h3}回"
+                : apt is { } t ? $"／目標 {t}回"
+                : "";
+            return $"本人の{Sym(x)}回数：{b}回 → {a}回{basis}";
+        }).ToList();
+        var wishPin = new List<string>();
+        if (state.Wishes.TryGetValue($"{i},{j}", out var w))
+            wishPin.Add(w == k ? $"希望（{Sym(w)}）どおりになります" : w == cur ? $"希望（{Sym(w)}）と異なる勤務になります" : $"希望（{Sym(w)}）とは、変更の前後とも異なります");
+        if (pinned) wishPin.Add("このセルは手動固定されています（自動作成・調整ではこの勤務を変えません）");
+        if (wishPin.Count == 0) wishPin.Add("このセルに希望・手動固定はありません");
+        return new CellChangeReview(
+            Change: $"{name}さん　{DayText.Full(state.StartDate, j)} {Sym(cur)} → {Sym(k)}",
+            Neighbors: nb,
+            ThisCell: thisCell.Count > 0 ? thisCell : new List<string> { "このセルに違反はありません" },
+            OthersResolved: diff.Resolved.Where(key => !here.Contains(key)).Select(Label).ToList(),
+            Appeared: diff.Appeared.Select(Label).ToList(),
+            HardLine: $"必須違反（勤務表全体）：{before.Hard}件 → {after.Hard}件",
+            Headcount: other,
+            Counts: counts,
+            WishPin: wishPin);
+    }
+
+    /// <summary>セルのシートの問題の一文（族ごと）。前日・翌日との並びは並びの族の説明。</summary>
+    public static string CellProblemSentence(string fam, Func<string, string> labelOf) => fam switch
+    {
+        "c3n" => "前後の勤務との組み合わせが禁止条件に該当しています",
+        "c3mn" => "前後の勤務との組み合わせが、避けたい並びに該当しています",
+        "c3w" => "希望の前日に禁止されている勤務です",
+        "pref" => "本人の希望と違う勤務です",
+        "extWish" => "拡張希望で除いた勤務です",
+        "groupViol" => "この職員のグループが担当しない勤務です",
+        "covU" => "この日のこの勤務の人数が必要人数に足りません",
+        "covO" => "この日のこの勤務の人数が適正人数を超えています",
+        _ => $"{labelOf(fam)}に該当しています",
+    };
+
+    /// <summary>並びの違反の日々を「11/28(土) Dテ → 11/29(日) B4」で。<paramref name="days"/> はこのセルと相手の日。</summary>
+    public static string? SequenceLine(string startDate, IReadOnlyList<int> row, IReadOnlyList<int> days, IReadOnlyList<string> shiftSymbols) =>
+        days.Count < 2 ? null : string.Join(" → ", days.Order().Select(d =>
+            $"{DayText.Full(startDate, d)} {(d >= 0 && d < row.Count && row[d] >= 0 && row[d] < shiftSymbols.Count ? shiftSymbols[row[d]] : "—")}"));
+
+    /// <summary>今月の勤務回数（セルのシート）: 今の勤務と、回数に過不足のある勤務。「Cオ：現在4回／目標6回」。</summary>
+    public static IReadOnlyList<string> CellCountLines(UiState ui, int i, int current, Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits)
+    {
+        IReadOnlyList<int> row = i >= 0 && i < ui.Schedule.Count ? ui.Schedule[i] : Array.Empty<int>();
+        var fromViolations = ui.CountViolations.Keys.Select(key =>
+        {
+            var comma = key.IndexOf(',');
+            return comma > 0 && int.TryParse(key.AsSpan(0, comma), out var a) && a == i && int.TryParse(key.AsSpan(comma + 1), out var b) ? b : (int?)null;
+        }).OfType<int>();
+        var ks = new[] { current }.Concat(fromViolations).Where(x => x >= 0).Distinct();
+        return ks.Select(k =>
+        {
+            var (lo, hi, apt) = limits?.Invoke(i, k) ?? (null, null, null);
+            var n = row.Count(v => v == k);
+            var basis = ui.CountViolations.GetValueOrDefault($"{i},{k}") switch
+            {
+                "vio-low" => lo is { } l ? $"／下限{l}回" : null,
+                "vio-high" => hi is { } h ? $"／上限{h}回" : null,
+                _ => apt is { } t ? $"／目標{t}回" : lo is { } l2 ? $"／下限{l2}回" : hi is { } h2 ? $"／上限{h2}回" : null,
+            } ?? "";
+            return $"{(k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : $"{k}")}：現在{n}回{basis}";
+        }).ToList();
+    }
+
+    /// <summary>手動固定の説明（通常の修正操作と分ける）。</summary>
+    public const string PinTitle = "この勤務を自動変更しない";
+    public const string PinNote = "固定すると、自動作成・調整ではこの勤務を変更しません。現在の違反が解消されるわけではありません。";
+
+    /// <summary>担当外の勤務の理由（自分で勤務を選ぶ画面）。</summary>
+    public const string NotCanDoNote = "「外」はこの職員のグループが担当しない勤務です（担当可否の設定）。選ぶと担当外シフトの必須違反になります。";
+
+    /// <summary>上部の札の 2 行目以降: 自動作成の状態と、今の勤務表の評価（2026-10-14 利用者レビュー「未計算」を分ける）。</summary>
+    public static (string First, string Second) BoardStatusLines(bool engineRan, bool hasResult, bool checkedBoard, long hard, long soft) =>
+        (engineRan ? "自動作成：済み" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
+         !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {hard}件" : soft > 0 ? $"評価：要調整 {soft}件" : "評価：違反なし");
+
     /// <summary>「変更を反映しました」の行（Kotlin <c>appliedLines</c>）: 見ている問題（前 → 今）、ほかに人数が変わった枠（今の値）、保存、残る問題、探し直したこと。</summary>
     public static IReadOnlyList<string> AppliedLines(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits)
     {
@@ -913,3 +1031,8 @@ public sealed record CountEffect(int Before, int After, int Target, bool Under, 
         : Under ? $"適用後も、{basis}まで{GapAfter}{Unit}不足"
         : $"適用後も、{basis}を{GapAfter}{Unit}超えます";
 }
+
+/// <summary>セルを 1 つ変える前の確認の中身（Kotlin <c>CellChangeReview</c>）。</summary>
+public sealed record CellChangeReview(
+    string Change, string Neighbors, IReadOnlyList<string> ThisCell, IReadOnlyList<string> OthersResolved,
+    IReadOnlyList<string> Appeared, string HardLine, IReadOnlyList<string> Headcount, IReadOnlyList<string> Counts, IReadOnlyList<string> WishPin);

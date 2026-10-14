@@ -29,6 +29,16 @@ public sealed partial class MagiViewModel
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
     }
 
+    /// <summary>セル (i, j) を k にする前の確認（Kotlin CellEditSheet の <c>cellChangeReview</c>＝正式な検査の前後）。盤面が無ければ null。</summary>
+    public CellChangeReview? CellChangeReviewFor(int i, int j, int k, Func<string, string> labelOf)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return null;
+        return CellSheetLogic.CellChangeReview(st, sched.Copy2D(), i, j, k, Ui.StaffNames, Ui.ShiftSymbols, StaffCellLimits, NeedCellLimits,
+            Ui.ManualPins.Contains($"{i},{j}"), labelOf);
+    }
+
     /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先。無ければ空）。</summary>
     public IReadOnlyList<int> ViolationPartnerDaysFor(int i, int j)
     {

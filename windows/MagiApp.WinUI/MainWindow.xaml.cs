@@ -242,9 +242,11 @@ public sealed partial class MainWindow : Window
         };
 
         StatusBadge.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!ui.Loaded) StatusPrefixText.Text = "";
         if (ui.Loaded)
         {
             string label, bg, fg;
+            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft);
             if (ui.Running)
             {
                 // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
@@ -255,8 +257,9 @@ public sealed partial class MainWindow : Window
             }
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
             else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
-            else (label, bg, fg) = ("未計算", "MagiBackgroundBrush", "MagiOnBackgroundBrush");
+            else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusBadgeText.Text = label;
+            StatusPrefixText.Text = ui.Running ? "" : status.First;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
         }

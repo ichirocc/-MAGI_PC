@@ -1907,11 +1907,12 @@ public sealed partial class ScheduleView : UserControl
     private bool _cellSheetExpanded;
 
     /// <summary>
-    /// セル編集（Android <c>CellEditSheet</c> の移植、2026-09-25）。上から: 見出し・1 行の状態・直し方（読む）→［割当］［希望］＋補足 →
-    /// 前日/翌日 → 固定配置のシフトボタン（誰も担当できないシフトは出さない、担当外は「外」、利き手で左右反転、右上の角に印）→ 閉じる。
-    /// 押したら即反映（通知バーに「元に戻す」）。希望どおりのセルに違反があれば「他の人で補う（推奨）」を先に出す。
+    /// セル編集（Android <c>CellEditSheet</c> の移植、2026-09-25。3.670.0 で 3 段階）: ① 問題を確認（今の勤務・問題の一文・並びの日々・
+    /// どのように調整するか・今月の勤務回数・手動固定・前日/翌日）→ ② 自分で勤務を選ぶ（固定配置のシフトボタン。担当外は「外」、利き手で左右反転、
+    /// 右上の角に印）→ ③ 影響を確認して適用。選んだだけでは反映しない。希望どおりのセルに違反があれば「他の人で補う（推奨）」を先に出す。
     /// </summary>
-    private void ShowCellEditor(FrameworkElement anchor, int i, int j, int mode = 0)
+    /// <param name="step">割当（mode 0）の段: 0＝問題を確認、1＝自分で勤務を選ぶ、2＝影響を確認して適用（<paramref name="pickTo"/> へ変える）。</param>
+    private void ShowCellEditor(FrameworkElement anchor, int i, int j, int mode = 0, int step = 0, int? pickTo = null)
     {
         if (_vm.EditBlockedNow()) return;
         var ui = _vm.Ui;
@@ -1928,7 +1929,7 @@ public sealed partial class ScheduleView : UserControl
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
         var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
         var reopening = false;
-        void Reopen(int ni, int nj, int m) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m); }
+        void Reopen(int ni, int nj, int m, int st = 0, int? to = null) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m, st, to); }
         flyout.Closed += (_, _) => { if (!reopening) _cellSheetExpanded = false; };
 
         // 見出し行の［↶ 元に戻す］（Kotlin CellEditSheet の SheetUndoButton）。有効条件は下部バーと同じ（CanUndo かつ実行中でない）。
@@ -1946,7 +1947,7 @@ public sealed partial class ScheduleView : UserControl
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        head.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        head.Children.Add(new TextBlock { Text = $"{name}さん｜{ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
         // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
         //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
         var tourItems = _vm.HardViolationItemsFor(LabelOf);
@@ -1955,7 +1956,7 @@ public sealed partial class ScheduleView : UserControl
         SetVioNavHidden(tourAt >= 0);
         flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
         var tourNext = tourItems.Count == 0 ? null : tourItems[tourAt < 0 ? 0 : (tourAt + 1) % tourItems.Count];
-        if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0))
+        if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0) && step == 0)
         {
             var tour = new Button { Content = "次の違反 ▶", MinHeight = 48 };
             var nx = tourNext.Cell;
@@ -1965,7 +1966,7 @@ public sealed partial class ScheduleView : UserControl
         }
         head.Children.Add(MakeUndoButton(2));
         panel.Children.Add(head);
-        if (CellSheetLogic.TourHeading(tourItems, tourAt) is { } tourHeading)
+        if (step == 0 && CellSheetLogic.TourHeading(tourItems, tourAt) is { } tourHeading)
         {
             panel.Children.Add(new TextBlock { Text = tourHeading, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
@@ -2057,7 +2058,8 @@ public sealed partial class ScheduleView : UserControl
                 var kk = k;
                 b.Click += (_, _) =>
                 {
-                    if (mode == 0) { if (kk != cur) { _vm.SetCell(i, j, kk); Reopen(i, j, 0); } }
+                    // 割当では選んだだけで反映しない＝全体表示の ③ 影響の確認へ（Kotlin 3.670.0）。
+                    if (mode == 0) { if (kk != cur) { _cellSheetExpanded = true; Reopen(i, j, 0, 2, kk); } }
                     else { _vm.SetWish(i, j, kk); Reopen(i, j, 1); }
                 };
                 acts.Children.Add(b);
@@ -2094,151 +2096,27 @@ public sealed partial class ScheduleView : UserControl
             flyout.ShowAt(anchor);
         }
 
-        var (bg, fg) = status.Severity switch
-        {
-            CellSeverity.Hard => (Color.FromArgb(0xFF, 0xF9, 0xDE, 0xDC), ColorHex.Parse(MagiAccent.Red, Colors.Red)),
-            CellSeverity.Soft => (Color.FromArgb(0xFF, 0xFB, 0xEA, 0xD0), ColorHex.Parse(MagiAccent.Orange, Colors.Orange)),
-            _ => (Color.FromArgb(0xFF, 0xEC, 0xEF, 0xEE), Colors.Gray),
-        };
-        var statusBox = new StackPanel { Background = new SolidColorBrush(bg), Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(12) };
-        if (dilemma) statusBox.Children.Add(new TextBlock { Text = CellSheetLogic.WishKeptLine(Sym(wish)), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        var statusText = new TextBlock { Text = status.Text, Foreground = status.Severity == CellSeverity.None ? null : new SolidColorBrush(fg), TextWrapping = TextWrapping.Wrap, MaxLines = 2 };
-        statusBox.Children.Add(statusText);
-        panel.Children.Add(statusBox);
-        var partners = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
-        if (mode == 0 && _vm.RelatedCellsLineFor(i, j, partners) is { } related)
-            panel.Children.Add(new TextBlock { Text = related, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-        // 全部 ⚠ でおすすめ無しなら、状態の下に 1 行（印は増やさない。印が出た後に FillMarksAsync が埋める）。
-        var singleNote = new TextBlock { Text = CellSheetLogic.SingleCellNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
-        panel.Children.Add(singleNote);
-        var riskReason = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
-        panel.Children.Add(riskReason);
-        if (_vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide(), (i, j)));
-
-        // 「詳しく」: このセルに重なった違反すべてとこの職員の回数・偏り。
-        var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
-        void FillDetails()
-        {
-            details.Children.Clear();
-            details.Children.Add(new TextBlock { Text = "このセルの違反", Opacity = 0.8 });
-            var dl = _vm.CellDetailLinesFor(i, j, LabelOf);
-            if (dl.Count == 0) details.Children.Add(new TextBlock { Text = "違反はありません。" });
-            foreach (var l in dl) details.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-            details.Children.Add(new TextBlock { Text = "この職員の回数・偏り", Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
-            var sl = GridDisplayMarks.StaffCountLines(_vm.Ui, i, LabelOf, _vm.StaffCellLimits);
-            if (sl.Count == 0) details.Children.Add(new TextBlock { Text = "回数・偏りの違反はありません。" });
-            foreach (var l in sl) details.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        }
-        var detailsToggle = new Button { Content = "詳しく ▼", MinHeight = 48 };
-        detailsToggle.Click += (_, _) =>
-        {
-            var open = details.Visibility != Visibility.Visible;
-            if (open) FillDetails();
-            details.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-            detailsToggle.Content = open ? "詳しく ▲" : "詳しく ▼";
-        };
-        panel.Children.Add(detailsToggle);
-        panel.Children.Add(details);
-
-        var showGrid = mode == 1 || !dilemma;
-        if (mode == 0 && dilemma)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            var others = new Button { Content = "他の人で補う（推奨）", MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-            var breakWish = new Button { Content = new TextBlock { Text = "希望は残して別のシフトを割り当てる（希望は未反映になります）", TextWrapping = TextWrapping.Wrap }, MinHeight = 48, MaxWidth = 220 };
-            row.Children.Add(others);
-            row.Children.Add(breakWish);
-            panel.Children.Add(row);
-            var slot = new StackPanel();
-            panel.Children.Add(slot);
-            // 他の人の手が無いとき、同じ違反のもう一方のセルへ（希望は触らない）。
-            IEnumerable<UIElement> PartnerButtons()
-            {
-                foreach (var d in partners)
-                {
-                    var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(_vm.Ui.StartDate, d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
-                    var dd = d;
-                    b.Click += (_, _) => Reopen(i, dd, 0);
-                    yield return b;
-                }
-            }
-            others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), null, PartnerButtons, quick: true, cell: (i, j))); };
-            breakWish.Click += (_, _) => Reopen(i, j, 2);
-        }
-        else if (mode != 1 && status.Severity != CellSeverity.None)
-        {
-            panel.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j), problems: _vm.CellProblemFamilies(i, j)));
-        }
-        if (mode == 1 && wish is not null)
-        {
-            if (_vm.WishTabInvolvedLineFor(i, j) is { } involved) panel.Children.Add(new TextBlock { Text = involved, TextWrapping = TextWrapping.Wrap });
-            if (_vm.ZeroCapShiftsFor(i).Contains(wish.Value)) panel.Children.Add(new TextBlock { Text = CellSheetLogic.WishZeroCapLine(Sym(wish)), TextWrapping = TextWrapping.Wrap });
-            panel.Children.Add(new TextBlock { Text = NextActionGuide.WishTabKeepNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-        }
-        if (mode != 1 && status.Severity == CellSeverity.Hard)
-        {
-            if (handoff == RelaxHandoff.Offer && relax is not null)
-            {
-                panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxHandoffLine(relax.Result, ui, LabelOf), TextWrapping = TextWrapping.Wrap });
-                var showRelax = new Button { Content = "緩める候補を見る", MinHeight = 48 };
-                showRelax.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke((i, j)); };
-                panel.Children.Add(showRelax);
-            }
-            else if (handoff == RelaxHandoff.Searching)
-                panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxSearchingText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-            else if (handoff == RelaxHandoff.NoWall)
-                panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxNoWallText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-            else if (handoff == RelaxHandoff.Unavailable)
-                panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxUnavailableText(_vm.RelaxUnavailable() ?? ""), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
-            else if (handoff is RelaxHandoff.Stopped or RelaxHandoff.Failed)
-            {
-                var row = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } } };
-                row.Children.Add(new TextBlock { Text = handoff == RelaxHandoff.Failed ? NextActionGuide.RelaxFailedText : NextActionGuide.RelaxStoppedText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
-                var retry = new HyperlinkButton { Content = NextActionGuide.RelaxRetryLabel, MinHeight = 48 };
-                retry.Click += (_, _) => { _vm.RetryRelaxTrial(); Reopen(i, j, mode); };
-                Grid.SetColumn(retry, 1);
-                row.Children.Add(retry);
-                panel.Children.Add(row);
-            }
-        }
-        if (mode == 2) { showGrid = true; mode = 0; }
-
-        var ctx = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        foreach (var (label, m) in new[] { ("割当", 0), ("希望", 1) })
-        {
-            var b = new ToggleButton { Content = label, IsChecked = mode == m, MinHeight = 48 };
-            var mm = m;
-            b.Click += (_, _) => Reopen(i, j, mm);
-            ctx.Children.Add(b);
-        }
-        string CtxLine()
-        {
-            var u = _vm.Ui;
-            int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
-            return CellSheetLogic.WishTabLine(wNow, cur, u.ExtBanned.TryGetValue($"{i},{j}", out var eb) ? eb : null, k => Sym(k), u.ManualPins.Contains($"{i},{j}"));
-        }
-        var ctxText = new TextBlock { Text = CtxLine(), Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
-        ctx.Children.Add(ctxText);
-        panel.Children.Add(ctx);
-        // 回数は全幅で 2 行まで（字数の見積もりは CellSheetLogic.CountLineEm）。
-        var countLine = _vm.StaffCountShortFor(i);
-        if (countLine.Length > 0) panel.Children.Add(new TextBlock { Text = "回数 " + countLine, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
-        var zeroCaps = _vm.ZeroCapShiftsFor(i);
-
+        // 3 段階（Kotlin CellEditSheet、2026-10-14 利用者レビュー）: step 0＝問題を確認、1＝自分で勤務を選ぶ、2＝影響を確認して適用。選んだだけでは反映しない。
+        //   段の切替はシートを開き直す（Reopen）＝ほかの切替（割当/希望・前日/翌日）と同じ形。
+        var fams = _vm.CellProblemFamilies(i, j).Select(f => f.StartsWith("vio-", StringComparison.Ordinal) ? f[4..] : f).ToList();
+        var pinned = ui.ManualPins.Contains($"{i},{j}");
         var left = ui.LeftHand;
-        var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
-        var prevL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j - 1);
-        var nextL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j + 1);
-        var prevB = new Button { Content = $"◀ {prevL ?? "前日"}", MinHeight = 48, IsEnabled = prevL is not null };
-        var nextB = new Button { Content = $"{nextL ?? "翌日"} ▶", MinHeight = 48, IsEnabled = nextL is not null };
-        prevB.Click += (_, _) => Reopen(i, j - 1, mode);
-        nextB.Click += (_, _) => Reopen(i, j + 1, mode);
-        days.Children.Add(prevB);
-        days.Children.Add(nextB);
-        panel.Children.Add(days);
-
+        var zeroCaps = _vm.ZeroCapShiftsFor(i);
         var marksByShift = new Dictionary<int, TextBlock>();
-        if (showGrid)
+        var dilemmaChoice = mode == 2 ? 2 : 0;
+        if (mode == 2) mode = 0;
+        TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) };
+        TextBlock Body(string t, bool bold = false, double size = 14) => new()
+            { Text = t, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal };
+        Button Wide(string text, bool accent = false)
+        {
+            var b = new Button { Content = text, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
+            if (accent) b.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            return b;
+        }
+
+        // シフトのボタン（② 自分で勤務を選ぶ・希望の画面）。割当では選ぶと ③ 影響の確認へ（この時点では反映しない）。
+        void AddShiftGrid()
         {
             var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
             for (var c = 0; c < CellSheetLogic.Columns; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2253,23 +2131,23 @@ public sealed partial class ScheduleView : UserControl
                     var sel = mode == 0 ? k == cur : k == wish;
                     var sbg = sl.CanDo && k < ui.ShiftColorHex.Count ? ParseHexColor(ui.ShiftColorHex[k], Colors.LightGray) : Colors.Gainsboro;
                     var sfg = sl.CanDo && k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.DimGray;
-                    var cell = new Grid();
+                    var content = new Grid();
                     var label = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
                     label.Children.Add(new TextBlock { Text = (sel ? "✓ " : "") + Sym(k) + (sl.CanDo ? "" : " 外"), Foreground = new SolidColorBrush(sfg), FontWeight = Microsoft.UI.Text.FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center });
                     if (zeroCaps.Contains(k)) label.Children.Add(new TextBlock { Text = "上限0", FontSize = 11, Foreground = new SolidColorBrush(sfg), HorizontalAlignment = HorizontalAlignment.Center });
-                    cell.Children.Add(label);
+                    content.Children.Add(label);
                     var mark = new TextBlock { FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
-                    cell.Children.Add(mark);
+                    content.Children.Add(mark);
                     marksByShift[k] = mark;
                     var btn = new Button
                     {
-                        Content = cell, MinHeight = 52, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                        Content = content, MinHeight = 52, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
                         Background = new SolidColorBrush(sbg), BorderThickness = new Thickness(sel ? 4 : 1), IsEnabled = mode == 1 || sl.CanDo,
                     };
                     var kk = k;
                     btn.Click += (_, _) =>
                     {
-                        if (mode == 0) { if (kk != cur) { _vm.SetCell(i, j, kk); Reopen(i, j, 0); } }
+                        if (mode == 0) { if (kk != cur) Reopen(i, j, 0, 2, kk); }
                         else { _vm.SetWish(i, j, kk); Reopen(i, j, 1); }
                     };
                     Grid.SetRow(btn, r);
@@ -2280,47 +2158,280 @@ public sealed partial class ScheduleView : UserControl
             panel.Children.Add(grid);
         }
 
-        var bottom = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
-        var close = new Button { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
-        close.Click += (_, _) => flyout.Hide();
-        Button? remove = null;
-        if (mode == 0 && cur >= 0)
+        var countsPanel = new StackPanel { Spacing = 2 };
+        var problemPanel = new StackPanel { Spacing = 4 };
+        var singleNote = new TextBlock { Text = CellSheetLogic.SingleCellNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
+        var riskReason = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
+        var ctxText = new TextBlock { Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 260 };
+        string CtxLine()
         {
-            var pinnedNow = _vm.Ui.ManualPins.Contains($"{i},{j}");
-            remove = new Button { Content = pinnedNow ? "手動固定を外す" : "手動固定する", MinHeight = 48 };
-            remove.Click += (_, _) => { _vm.TogglePin(i, j); Reopen(i, j, 0); };
+            var u = _vm.Ui;
+            int? wNow = u.Wishes.TryGetValue($"{i},{j}", out var wv) ? wv : null;
+            return CellSheetLogic.WishTabLine(wNow, cur, u.ExtBanned.TryGetValue($"{i},{j}", out var eb) ? eb : null, k => Sym(k), u.ManualPins.Contains($"{i},{j}"));
         }
-        else if (mode == 1 && wish is not null)
+        // ① の問題の一文・並びの日々と今月の勤務回数（検査の完了で同じ盤面から作り直す）。
+        void FillProblem()
         {
-            remove = new Button { Content = "希望を取り消す", MinHeight = 48 };
-            remove.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, 1); };
+            problemPanel.Children.Clear();
+            problemPanel.Children.Add(Body($"現在の勤務：{Sym(cur)}", bold: true));
+            if (dilemma) problemPanel.Children.Add(Body(CellSheetLogic.WishKeptLine(Sym(wish)), size: 13));
+            if (fams.Count == 0) problemPanel.Children.Add(Body("このセルに違反はありません。"));
+            else problemPanel.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf)));
+            var partnersNow = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
+            if (CellSheetLogic.SequenceLine(_vm.Ui.StartDate, _vm.Ui.Schedule[i], partnersNow.Append(j).Distinct().ToList(), _vm.Ui.ShiftSymbols) is { } seq)
+                problemPanel.Children.Add(Body(seq));
         }
-        if (!left && remove is not null) bottom.Children.Add(remove);
-        bottom.Children.Add(close);
-        if (left && remove is not null) bottom.Children.Add(remove);
-        panel.Children.Add(bottom);
-        if (status.Severity != CellSeverity.None)
+        void FillCounts()
         {
-            var memo = new HyperlinkButton { Content = "⚑ ルールの見直しへ" };
-            memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
-            panel.Children.Add(memo);
+            countsPanel.Children.Clear();
+            // 回数の目標未満を、勤務を減らす前に見える位置に残す。
+            var counts = CellSheetLogic.CellCountLines(_vm.Ui, i, cur, _vm.StaffCellLimits);
+            if (counts.Count == 0) return;
+            countsPanel.Children.Add(Caption("今月の勤務回数"));
+            foreach (var l in counts) countsPanel.Children.Add(Body(l, size: 13));
+        }
+
+        if (mode == 0 && step == 2 && pickTo is { } to && _vm.CellChangeReviewFor(i, j, to, LabelOf) is { } review)
+        {
+            // ③ 影響を確認して適用（値はすべて正式な検査で評価した結果）。
+            panel.Children.Add(Body("この変更を適用しますか？", bold: true));
+            panel.Children.Add(Body(review.Change, bold: true));
+            void Section(string title, IReadOnlyList<string> lines)
+            {
+                if (lines.Count == 0) return;
+                panel.Children.Add(Caption(title));
+                foreach (var l in lines) panel.Children.Add(Body(l, size: 13));
+            }
+            Section("前後の勤務", new[] { review.Neighbors });
+            Section("今回の問題", review.ThisCell.Concat(review.OthersResolved.Select(x => $"解消: {x}")).ToList());
+            Section("新しく生じる問題", review.Appeared.Count > 0 ? review.Appeared : new[] { "ありません" });
+            panel.Children.Add(Body(review.HardLine));
+            Section("人数と回数への影響", review.Headcount.Concat(review.Counts).ToList());
+            Section("希望・固定への影響", review.WishPin);
+            panel.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            // 適用と戻る（比較の部分はシートごと縦に送る）。
+            var apply = Wide(ChainFixPreview.ApplyChangeButton, accent: true);
+            apply.IsEnabled = !ui.Running;
+            apply.Click += (_, _) => { _vm.SetCell(i, j, to); Reopen(i, j, 0); };
+            panel.Children.Add(apply);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var item = ConsultList.CellChange(review, i, j, name, ConsultList.IsoDate(ui.StartDate, j));
+            if (ConsultList.IsConsulted(ui.Consults, item)) row.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiAccent.Orange));
+            else
+            {
+                var consult = new Button { Content = ConsultList.Button, MinHeight = 48 };
+                consult.Click += (_, _) => { _vm.AddConsult(item); Reopen(i, j, 0, 2, to); };
+                row.Children.Add(consult);
+            }
+            var other = new Button { Content = "別の勤務を選ぶ", MinHeight = 48 };
+            other.Click += (_, _) => Reopen(i, j, 0, 1);
+            row.Children.Add(other);
+            panel.Children.Add(row);
+        }
+        else if (mode == 0 && step >= 1)
+        {
+            // ② 自分で勤務を選ぶ: 選ぶと影響の確認へ（この時点では反映しない）。
+            panel.Children.Add(Body($"{DayText.Full(ui.StartDate, j)}の変更先を選択", bold: true));
+            panel.Children.Add(Body($"対象：{name}さん　現在：{Sym(cur)}"));
+            panel.Children.Add(Body("選ぶと変更後の影響を確認できます。この時点では反映しません。", size: 13));
+            if (_vm.SheetShifts().Any(k => !canDo.Contains(k))) panel.Children.Add(Body(CellSheetLogic.NotCanDoNote, size: 13));
+            AddShiftGrid();
+            var back = Wide("元の画面に戻る");
+            back.Click += (_, _) => Reopen(i, j, 0);
+            panel.Children.Add(back);
+        }
+        else
+        {
+            if (mode == 0)
+            {
+                // ① 問題を確認: 今の勤務・問題の一文・並びの日々、ほかの問題は畳んで全部見られるように。
+                FillProblem();
+                panel.Children.Add(problemPanel);
+            }
+            else
+            {
+                var statusBox = new StackPanel { Padding = new Thickness(10, 8, 10, 8), CornerRadius = new CornerRadius(12), Background = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"] };
+                statusBox.Children.Add(new TextBlock { Text = status.Text, TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
+                panel.Children.Add(statusBox);
+            }
+            var partners = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
+            if (mode == 0 && fams.Count >= 2)
+            {
+                var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
+                foreach (var f in fams.Skip(1)) details.Children.Add(Body("・" + CellSheetLogic.CellProblemSentence(f, LabelOf), size: 13));
+                foreach (var l in _vm.CellDetailLinesFor(i, j, LabelOf)) details.Children.Add(Body(l, size: 13));
+                if (_vm.RelatedCellsLineFor(i, j, partners) is { } related) details.Children.Add(new TextBlock { Text = related, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                var openLabel = $"関連する問題をすべて見る：ほか{fams.Count - 1}件";
+                var toggle = new HyperlinkButton { Content = openLabel, MinHeight = 48 };
+                toggle.Click += (_, _) =>
+                {
+                    var open = details.Visibility != Visibility.Visible;
+                    details.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                    toggle.Content = open ? "関連する問題を閉じる" : openLabel;
+                };
+                panel.Children.Add(toggle);
+                panel.Children.Add(details);
+            }
+            panel.Children.Add(singleNote);
+            panel.Children.Add(riskReason);
+            if (mode == 0 && _vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide(), (i, j)));
+            if (mode == 0 && dilemma && dilemmaChoice == 0)
+            {
+                // 板挟み: 他の人で補う（推奨）／希望は残して別のシフトを割り当てる。
+                var others = Wide("他の人で補う（推奨）", accent: true);
+                var breakWish = new Button { Content = new TextBlock { Text = "希望は残して別のシフトを割り当てる（希望は未反映になります）", TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center }, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
+                panel.Children.Add(others);
+                panel.Children.Add(breakWish);
+                var slot = new StackPanel();
+                panel.Children.Add(slot);
+                // 他の人の手が無いとき、同じ違反のもう一方のセルへ（希望は触らない）。
+                IEnumerable<UIElement> PartnerButtons()
+                {
+                    foreach (var d in partners)
+                    {
+                        var b = new Button { Content = new TextBlock { Text = CellSheetLogic.PartnerCellLabel(_vm.Ui.StartDate, d, partners.Count == 1), TextWrapping = TextWrapping.Wrap }, MinHeight = 48 };
+                        var dd = d;
+                        b.Click += (_, _) => Reopen(i, dd, 0);
+                        yield return b;
+                    }
+                }
+                others.Click += (_, _) => { slot.Children.Clear(); slot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, null, j, i), null, PartnerButtons, quick: true, cell: (i, j))); };
+                breakWish.Click += (_, _) => Reopen(i, j, 2);
+            }
+            else if (mode == 0)
+            {
+                panel.Children.Add(Body("どのように調整しますか？", bold: true));
+                if (status.Severity != CellSeverity.None)
+                {
+                    // 変更案は押してから探す（開いただけでは探さない）。
+                    var searchSlot = new StackPanel();
+                    var search = Wide("変更案を探す", accent: true);
+                    var searchNote = new TextBlock { Text = "この日・前後の日・関連する勤務の変更案を比較します。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
+                    search.Click += (_, _) =>
+                    {
+                        search.Visibility = Visibility.Collapsed;
+                        searchNote.Visibility = Visibility.Collapsed;
+                        searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j), problems: _vm.CellProblemFamilies(i, j)));
+                    };
+                    panel.Children.Add(search);
+                    panel.Children.Add(searchNote);
+                    panel.Children.Add(searchSlot);
+                }
+                var pick = Wide("自分で勤務を選ぶ");
+                pick.Click += (_, _) => Reopen(i, j, 0, 1);
+                panel.Children.Add(pick);
+                var wishBtn = Wide("希望を確認・登録する");
+                wishBtn.Click += (_, _) => Reopen(i, j, 1);
+                panel.Children.Add(wishBtn);
+            }
+            if (mode == 1 && wish is not null)
+            {
+                if (_vm.WishTabInvolvedLineFor(i, j) is { } involved) panel.Children.Add(Body(involved, size: 13));
+                if (zeroCaps.Contains(wish.Value)) panel.Children.Add(Body(CellSheetLogic.WishZeroCapLine(Sym(wish)), size: 13));
+                panel.Children.Add(new TextBlock { Text = pinned ? CellSheetLogic.WishTabPinnedNote : NextActionGuide.WishTabKeepNote, FontSize = 13, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            }
+            if (mode == 0 && status.Severity == CellSeverity.Hard)
+            {
+                if (handoff == RelaxHandoff.Offer && relax is not null)
+                {
+                    panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxHandoffLine(relax.Result, ui, LabelOf), TextWrapping = TextWrapping.Wrap });
+                    var showRelax = new Button { Content = "緩める候補を見る", MinHeight = 48 };
+                    showRelax.Click += (_, _) => { flyout.Hide(); _showRelax?.Invoke((i, j)); };
+                    panel.Children.Add(showRelax);
+                }
+                else if (handoff == RelaxHandoff.Searching)
+                    panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxSearchingText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+                else if (handoff == RelaxHandoff.NoWall)
+                    panel.Children.Add(new TextBlock { Text = NextActionGuide.RelaxNoWallText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+                else if (handoff == RelaxHandoff.Unavailable)
+                    panel.Children.Add(new TextBlock { Text = CellSheetLogic.RelaxUnavailableText(_vm.RelaxUnavailable() ?? ""), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+                else if (handoff is RelaxHandoff.Stopped or RelaxHandoff.Failed)
+                {
+                    var row = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } } };
+                    row.Children.Add(new TextBlock { Text = handoff == RelaxHandoff.Failed ? NextActionGuide.RelaxFailedText : NextActionGuide.RelaxStoppedText, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, VerticalAlignment = VerticalAlignment.Center });
+                    var retry = new HyperlinkButton { Content = NextActionGuide.RelaxRetryLabel, MinHeight = 48 };
+                    retry.Click += (_, _) => { _vm.RetryRelaxTrial(); Reopen(i, j, mode); };
+                    Grid.SetColumn(retry, 1);
+                    row.Children.Add(retry);
+                    panel.Children.Add(row);
+                }
+            }
+            if (mode == 0)
+            {
+                FillCounts();
+                panel.Children.Add(countsPanel);
+                // 手動固定は通常の修正操作と分け、何をするか・しないかを添える。
+                if (cur >= 0)
+                {
+                    panel.Children.Add(Caption(CellSheetLogic.PinTitle));
+                    panel.Children.Add(new TextBlock { Text = CellSheetLogic.PinNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    var pin = new Button { Content = pinned ? "手動固定を外す" : "手動固定する", MinHeight = 48 };
+                    pin.Click += (_, _) => { _vm.TogglePin(i, j); Reopen(i, j, 0); };
+                    panel.Children.Add(pin);
+                }
+            }
+            if (status.Severity != CellSeverity.None)
+            {
+                var memo = new HyperlinkButton { Content = "⚑ ルールの見直しへ" };
+                memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
+                panel.Children.Add(memo);
+            }
+            if (mode == 1)
+            {
+                // 希望の画面: ［割当に戻る］と希望の中身、シフトのボタン、希望を取り消す。
+                var ctx = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                var backToAssign = new Button { Content = "割当に戻る", MinHeight = 48 };
+                backToAssign.Click += (_, _) => Reopen(i, j, 0);
+                ctx.Children.Add(backToAssign);
+                ctxText.Text = CtxLine();
+                ctx.Children.Add(ctxText);
+                panel.Children.Add(ctx);
+                AddShiftGrid();
+                if (wish is not null)
+                {
+                    var remove = Wide("希望を取り消す");
+                    remove.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, 1); };
+                    panel.Children.Add(remove);
+                }
+            }
+            else
+            {
+                // 利き手の側に寄せる（右手＝右寄せ、左手＝左寄せ。前日・翌日の順は変えない）。
+                var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+                var prevL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j - 1);
+                var nextL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j + 1);
+                var prevB = new Button { Content = $"{prevL ?? "前日"}へ", MinHeight = 48, IsEnabled = prevL is not null };
+                var nextB = new Button { Content = $"{nextL ?? "翌日"}へ", MinHeight = 48, IsEnabled = nextL is not null };
+                prevB.Click += (_, _) => Reopen(i, j - 1, 0);
+                nextB.Click += (_, _) => Reopen(i, j + 1, 0);
+                days.Children.Add(prevB);
+                days.Children.Add(nextB);
+                panel.Children.Add(days);
+            }
+            var bottom = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+            var close = new Button { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
+            close.Click += (_, _) => flyout.Hide();
+            bottom.Children.Add(close);
+            panel.Children.Add(bottom);
         }
 
         _marksCts?.Cancel();
         var cts = new CancellationTokenSource();
         _marksCts = cts;
         flyout.Closed += (_, _) => cts.Cancel();
-        if (mode == 0 && showGrid) _ = FillMarksAsync();
-        // 状態の 1 行・回数・印・詳しくは、検査の完了（CheckRev）と希望の変化で同じ盤面から作り直す（元に戻す/やり直すも含む）。
+        var showMarks = mode == 0 && step != 2;
+        if (showMarks) _ = FillMarksAsync();
+        // 問題の一文・回数・印・希望の中身は、検査の完了（CheckRev）と希望の変化で同じ盤面から作り直す（元に戻す/やり直すも含む）。
         var refreshMode = mode;
+        var refreshStep = step;
         void RefreshEvaluated()
         {
             if (cts.IsCancellationRequested) return;
             status = _vm.CellStatusFor(i, j, LabelOf);
-            statusText.Text = status.Text;
-            ctxText.Text = CtxLine();
-            if (details.Visibility == Visibility.Visible) FillDetails();
-            if (refreshMode == 0 && showGrid) _ = FillMarksAsync();
+            fams = _vm.CellProblemFamilies(i, j).Select(f => f.StartsWith("vio-", StringComparison.Ordinal) ? f[4..] : f).ToList();
+            if (refreshMode == 0 && refreshStep == 0) { FillProblem(); FillCounts(); }
+            if (refreshMode == 1) ctxText.Text = CtxLine();
+            if (showMarks) _ = FillMarksAsync();
         }
         PropertyChangedEventHandler evalHandler = (_, e) =>
         {
@@ -2334,7 +2445,7 @@ public sealed partial class ScheduleView : UserControl
             {
                 var m = await _vm.ShiftMarksForAsync(i, j, status.Severity, cts.Token);
                 if (cts.IsCancellationRequested) return;
-                var hopeless = mode == 0 && status.Severity != CellSeverity.None && CellSheetLogic.SingleCellHopeless(m, canDo, cur);
+                var hopeless = mode == 0 && step == 0 && status.Severity != CellSeverity.None && CellSheetLogic.SingleCellHopeless(m, canDo, cur);
                 singleNote.Visibility = hopeless ? Visibility.Visible : Visibility.Collapsed;
                 riskReason.Text = hopeless ? _vm.AllRiskReasonFor(i, j, m) ?? "" : "";
                 riskReason.Visibility = riskReason.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
