@@ -260,7 +260,8 @@ public sealed partial class MainWindow : Window
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusPrefixText.Text = ui.Running ? "" : status.First;
             // 必須違反が残るときは「順に見る」巡回の入口、必須 0 は配布前の確認へ（要調整が残っても「配布可」と言い切らない）。
-            var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0;
+            // 巡回できるセルが無い（必須が人員不足だけ）ときは押せない「必須違反 N」のまま（screen_spec「巡回」）。
+            var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0 && HasTourItems(ui);
             var preDist = !ui.Running && ui.HasResult && ui.BestHard == 0;
             var clickable = tourable || preDist;
             StatusBadge.Visibility = clickable ? Visibility.Collapsed : Visibility.Visible;
@@ -282,14 +283,23 @@ public sealed partial class MainWindow : Window
         MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
     }
 
+    private (long Rev, object? Schedule, bool Has) _tourCache = (-1, null, false);
+
+    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査世代と盤面が同じ間は数え直さない）。</summary>
+    private bool HasTourItems(UiState ui)
+    {
+        if (_tourCache.Rev != ui.CheckRev || !ReferenceEquals(_tourCache.Schedule, ui.Schedule))
+            _tourCache = (ui.CheckRev, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
+        return _tourCache.Has;
+    }
+
     private void OnStatusBadgeClick(object sender, RoutedEventArgs e)
     {
         var ui = _vm.Ui;
         if (ui.Running || !ui.HasResult) return;
         if (ui.BestHard > 0)
         {
-            var first = _vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault();
-            if (first is not null) JumpToCell(first.Cell.I, first.Cell.J); else SelectTab("analysis");
+            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first) JumpToCell(first.Cell.I, first.Cell.J);
             return;
         }
         SelectTab("home");
@@ -482,12 +492,12 @@ public sealed partial class MainWindow : Window
                 // Kotlin ではパネルが確認の画面の下に残り「変更を反映しました」が見える＝同じ依頼のパネルを開き直す（適用が通ったときだけ）。
                 if (p.FocusKey is { } key && _vm.Ui.AppliedFix is { } a && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule)
                     && schedule?.CanReopenFixPanel(key, afterApply: true) == true)
-                    schedule.ReopenFixPanel(Nav.XamlRoot, key, reuse: false);
+                    schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
                 break;
             case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
             default:
                 _vm.DismissChainPreview();
-                if (backToFixes && p.FocusKey is { } k) schedule?.ReopenFixPanel(Nav.XamlRoot, k, reuse: true);
+                if (backToFixes && p.FocusKey is { } k) schedule?.ReopenFixPanel(Nav.XamlRoot, k, p.Purpose, reuse: true);
                 break;
         }
     }

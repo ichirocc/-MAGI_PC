@@ -108,7 +108,7 @@ public sealed partial class SettingsView : UserControl
             {
                 SaveState.Dirty => "未保存の変更があります（まもなく自動保存します）",
                 SaveState.Saving => "保存中…",
-                SaveState.Failed => "自動保存に失敗しています（PC の空き容量をご確認のうえ「データを保存（JSON）」をお試しください）",
+                SaveState.Failed => "自動保存に失敗しています（PCの空き容量をご確認のうえ「データを保存（JSON）」をお試しください）",
                 _ => "",
             };
             SaveStateText.Foreground = (Brush)Application.Current.Resources[ui.SaveState == SaveState.Failed ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];

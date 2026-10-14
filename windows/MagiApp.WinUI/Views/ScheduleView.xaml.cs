@@ -1652,10 +1652,10 @@ public sealed partial class ScheduleView : UserControl
     /// 確認の画面を閉じたあと、同じ依頼の変更案のパネルを開き直す（Kotlin ではパネルが確認の画面の下に残る）。
     /// 適用後は反映の欄（「変更を反映しました」）と今の勤務表で探し直した案、［別案を見る］では閉じる前の案（<paramref name="reuse"/>）。
     /// </summary>
-    internal void ReopenFixPanel(XamlRoot root, string focusKey, bool reuse)
+    internal void ReopenFixPanel(XamlRoot root, string focusKey, string? purpose, bool reuse)
     {
         if (_reviewOrigin is not { } o || o.Focus.Key != focusKey) return;
-        var dialog = new ContentDialog { XamlRoot = root, CloseButtonText = "閉じる" };
+        var dialog = new ContentDialog { XamlRoot = root, Title = purpose ?? "勤務変更案", CloseButtonText = "閉じる" };
         var host = AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), o.Focus, o.SettingsLabel, o.WhenNoFix,
             o.Quick, o.Cell, o.Problems, o.ResolveAt, reuse);
         dialog.Content = new ScrollViewer { Content = host, MaxHeight = 520 };
