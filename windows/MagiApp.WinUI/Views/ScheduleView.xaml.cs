@@ -717,8 +717,7 @@ public sealed partial class ScheduleView : UserControl
             row.Click += (_, _) =>
             {
                 dialog.Hide();
-                FocusCell(cell.I, cell.J);
-                DispatcherQueue.TryEnqueue(() => ShowCellEditor((FrameworkElement?)_focusCellElement ?? HardListButton, cell.I, cell.J));
+                OpenCellSheet(cell.I, cell.J);
             };
             panel.Children.Add(row);
         }
@@ -1656,13 +1655,26 @@ public sealed partial class ScheduleView : UserControl
     internal async void ReopenFixPanel(XamlRoot root, string focusKey, string? purpose, bool reuse)
     {
         if (_reviewOrigin is not { } o || o.Focus.Key != focusKey) return;
+        // セルのシートの探索は、同じセルのシートを開き直す（「他の人で補う」などの手が無いときのボタンはシートに結び付いている）。
+        if (o.Quick && o.Cell is { } c) { OpenCellSheet(c.I, c.J); return; }
         var dialog = new ContentDialog { XamlRoot = root, Title = purpose ?? "勤務変更案", CloseButtonText = "閉じる" };
-        var host = AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), o.Focus, o.SettingsLabel, null,
-            o.Quick, o.Cell, o.Problems, o.ResolveAt, reuse, o.Picked);
-        dialog.Content = new ScrollViewer { Content = host, MaxHeight = 520 };
-        // 別の ContentDialog が先に開いていると ShowAsync は例外になる（同時に 1 つ）＝黙って消えないよう知らせる。
+        // 探索の開始と購読はダイアログが開いてから（開けなかったときに裏で探し続けたり、開いている画面の探索を取り消したりしない）。
+        dialog.Opened += (_, _) => dialog.Content = new ScrollViewer
+        {
+            Content = AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), o.Focus, o.SettingsLabel, null,
+                o.Quick, o.Cell, o.Problems, o.ResolveAt, reuse, o.Picked),
+            MaxHeight = 520,
+        };
+        // 別の ContentDialog が開いていると ShowAsync は例外になる（同時に 1 つ）＝黙って消えないよう知らせる。
         try { await dialog.ShowAsync(); }
-        catch (Exception) { _vm.CancelFixSearch(); _vm.Notify("変更案の画面を開けませんでした。開いている画面を閉じてから、もう一度開いてください", "W"); }
+        catch (Exception) { _vm.Notify("変更案の画面を開けませんでした。開いている画面を閉じてから、もう一度開いてください", "W"); }
+    }
+
+    /// <summary>勤務表のそのセルへ送ってシートを開く（巡回の入口・必須違反の一覧と同じ）。</summary>
+    internal void OpenCellSheet(int i, int j)
+    {
+        FocusCell(i, j);
+        DispatcherQueue.TryEnqueue(() => ShowCellEditor((FrameworkElement?)_focusCellElement ?? HardListButton, i, j));
     }
 
     private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)

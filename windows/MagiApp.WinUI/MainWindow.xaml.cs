@@ -281,28 +281,37 @@ public sealed partial class MainWindow : Window
         MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
     }
 
-    private (object? Families, bool Has) _tourCache = (null, false);
+    private (object? Families, object? Schedule, bool Has) _tourCache = (null, null, false);
 
-    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査結果のセル別の族が同じ間は数え直さない。
-    /// <c>MakeUi</c> は CheckRev を進めてから族を書き込むので、鍵は族の参照）。</summary>
+    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査結果のセル別の族と盤面が同じ間は数え直さない。
+    /// <c>MakeUi</c> は CheckRev を進めてから族を書き込むので、鍵は CheckRev でなく族の参照）。</summary>
     private bool HasTourItems(UiState ui)
     {
-        if (!ReferenceEquals(_tourCache.Families, ui.ViolationCellFamilies))
-            _tourCache = (ui.ViolationCellFamilies, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
+        if (!ReferenceEquals(_tourCache.Families, ui.ViolationCellFamilies) || !ReferenceEquals(_tourCache.Schedule, ui.Schedule))
+            _tourCache = (ui.ViolationCellFamilies, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
         return _tourCache.Has;
     }
 
-    private void OnStatusBadgeClick(object sender, RoutedEventArgs e)
+    private async void OnStatusBadgeClick(object sender, RoutedEventArgs e)
     {
         var ui = _vm.Ui;
         if (ui.Running || !ui.HasResult) return;
         if (ui.BestHard > 0)
         {
-            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first) JumpToCell(first.Cell.I, first.Cell.J);
+            // 巡回の先頭のセルのシートを開く（Kotlin goTourItem(0)。シートの［次の違反 ▶］で順に進む）。
+            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first)
+            {
+                SelectTab("schedule");
+                if (_tabCache["schedule"] is ScheduleView sv) sv.OpenCellSheet(first.Cell.I, first.Cell.J);
+            }
             return;
         }
         SelectTab("home");
-        if (_tabCache.TryGetValue("home", out var home) && home is HomeView hv) _ = hv.ShowPreDistributionAsync();
+        if (_tabCache.TryGetValue("home", out var home) && home is HomeView hv)
+        {
+            try { await hv.ShowPreDistributionAsync(); }
+            catch (Exception) { _vm.Notify("配布前の確認を開けませんでした。開いている画面を閉じてから、もう一度押してください", "W"); }
+        }
     }
 
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
@@ -489,11 +498,13 @@ public sealed partial class MainWindow : Window
             case ContentDialogResult.Primary:
                 var appliedBefore = _vm.Ui.AppliedFix;
                 _vm.ApplyChainPreview();
-                // Kotlin ではパネルが確認の画面の下に残り「変更を反映しました」が見える＝同じ依頼のパネルを開き直す（適用が通ったときだけ）。
-                // 見送られたときは AppliedFix が前回の手のまま＝新しく記録されたときだけ（前回の反映の欄を今回の結果と読ませない）。
-                if (p.FocusKey is { } key && _vm.Ui.AppliedFix is { } a && !ReferenceEquals(a, appliedBefore) && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule)
-                    && schedule?.CanReopenFixPanel(key, afterApply: true) == true)
-                    schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
+                // Kotlin ではパネルが確認の画面の下に残る＝同じ依頼のパネルを開き直す。適用が通れば反映の欄、見送られたら今の勤務表で探し直した案
+                //   （AppliedFix が新しく記録されたときだけ「適用が通った」＝前回の反映の欄を今回の結果と読ませない）。
+                if (p.FocusKey is { } key)
+                {
+                    var applied = _vm.Ui.AppliedFix is { } a && !ReferenceEquals(a, appliedBefore) && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule);
+                    if (schedule?.CanReopenFixPanel(key, afterApply: applied) == true) schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
+                }
                 break;
             case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
             default:
