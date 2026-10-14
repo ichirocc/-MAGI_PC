@@ -351,11 +351,17 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
-    public async Task PreviewOrApplyFix_SingleOpAppliesDirectly()
+    public async Task PreviewOrApplyFix_SingleOpShowsThePreviewThenAppliesOnConfirm()
     {
         var vm = VmWithNeed();
 
+        // 3.671.0: 1 セルの案も当てる前に確認の画面（案の一覧から直接適用しない）。適用は確認の画面の［この変更を適用］。
         vm.PreviewOrApplyFix(MakeSuggestion(new FixCell(0, 0, 1)));
+        Assert.NotNull(vm.Ui.ChainPreview);
+        Assert.NotNull(vm.Ui.ChainPreview!.NewHard);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+
+        vm.ApplyChainPreview();
         await vm.LastRefreshCheckTask!;
 
         Assert.Null(vm.Ui.ChainPreview);

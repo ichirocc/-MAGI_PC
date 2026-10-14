@@ -29,6 +29,30 @@ public sealed partial class MagiViewModel
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
     }
 
+    /// <summary>セル (i, j) を k にする前の確認（Kotlin CellEditSheet の <c>cellChangeReview</c>＝正式な検査の前後）。盤面が無ければ null。</summary>
+    public CellChangeReview? CellChangeReviewFor(int i, int j, int k, Func<string, string> labelOf)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return null;
+        return CellSheetLogic.CellChangeReview(st, sched.Copy2D(), i, j, k, Ui.StaffNames, Ui.ShiftSymbols, StaffCellLimits, NeedCellLimits,
+            Ui.ManualPins.Contains($"{i},{j}"), labelOf);
+    }
+
+    /// <summary>
+    /// 案がセル (i, j) の問題（<paramref name="family"/>＝選んだ族、null＝どれか）を実際に解消するかの判定（Kotlin CellEditSheet の
+    /// <c>resolvesAtCell</c> を案ごとに）。今の盤面の報告は 1 回だけ数え、案ごとの結果は覚えておく。盤面が無ければ常に false。
+    /// </summary>
+    public Func<FixSuggestion, bool> CellResolver(int i, int j, string? family)
+    {
+        var st = _state;
+        var sched = _currentSchedule?.Copy2D();
+        if (st is null || sched is null) return _ => false;
+        var before = UnifiedViolationChecker.Check(st, sched);
+        var memo = new Dictionary<FixSuggestion, bool>(ReferenceEqualityComparer.Instance);
+        return s => memo.TryGetValue(s, out var v) ? v : memo[s] = CellSheetLogic.ResolvesAtCell(st, sched, before, s.Ops, i, j, family);
+    }
+
     /// <summary>同じ違反のもう一方のセルの日（板挟みで他の人の手が無いときの行き先。無ければ空）。</summary>
     public IReadOnlyList<int> ViolationPartnerDaysFor(int i, int j)
     {

@@ -242,9 +242,10 @@ public sealed partial class AnalysisView : UserControl
             row.Children.Add(BodyText(hardLine, semiBold: true));
             if (caution is not null) row.Children.Add(BodyText(caution));
             row.Children.Add(BodyText($"必須 {DeltaText(s.DeltaHard)} ・ 合計 {DeltaText(s.DeltaTotal)}", dim: true));
-            var apply = new Button { Content = $"{ChainFixPreview.ApplyChangeButton}（元に戻せます）", HorizontalAlignment = HorizontalAlignment.Left };
+            var apply = new Button { Content = ChainFixPreview.ApplyChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.PreviewOrApplyFix(s);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
+            row.Children.Add(BodyText(CellSheetLogic.ApplyUndoNote, dim: true));
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
             var consultItem = ConsultList.Fix(s, hardLine, caution);
             if (ConsultList.IsConsulted(ui.Consults, consultItem)) row.Children.Add(TagChip(ConsultList.Done, MagiAccent.Orange));

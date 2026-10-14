@@ -129,6 +129,7 @@ public sealed partial class MagiViewModel
     private void AutoSave()
     {
         if (!_hydrated) return;
+        Ui.SaveState = SaveState.Dirty;   // [Android 3.529.0] 自動保存の状態（適用後の案内「保存：…」が読む）
         _saveCts?.Cancel();
         var cts = new CancellationTokenSource();
         _saveCts = cts;
@@ -143,9 +144,11 @@ public sealed partial class MagiViewModel
             var gen = Interlocked.Increment(ref _saveGen);   // ExportJson の時点の状態順。UI スレッド直列が前提だが、テスト等の別コンテキストでも世代が重ならないよう原子加算にする
             var json = ExportJson();
             if (json is null) return;
+            Ui.SaveState = SaveState.Saving;
             var result = await Task.Run(() => WriteAutosaveIfLatest(gen, json), ct);
-            if (result is null) return;   // より新しい世代が先に書かれた＝この世代は捨てる（通知しない）
+            if (result is null) return;   // より新しい世代が先に書かれた＝この世代は捨てる（通知しない・状態も上書きしない）
             var ok = result.Value;
+            Ui.SaveState = ok ? SaveState.Saved : SaveState.Failed;
             // [3.428.0/#7 相当] 記録は main（このコルーチン継続）へ戻ってから行う——LogOp は
             // 共有可変状態(_opLog)とUIプロパティを変更するため、バックグラウンドスレッドから
             // 直接呼ばない（3.176.0の由来コメント参照）。
@@ -199,8 +202,10 @@ public sealed partial class MagiViewModel
         var gen = Interlocked.Increment(ref _saveGen);
         var json = ExportJson();
         if (json is null) return;
+        Ui.SaveState = SaveState.Saving;
         // 同期呼出しなので世代は常に最新＝null（捨て）にはならないが、走行中の自動保存とはロックで直列化される。
         var ok = WriteAutosaveIfLatest(gen, json) ?? true;
+        Ui.SaveState = ok ? SaveState.Saved : SaveState.Failed;
         // saveNow は同期なので旗を立てたその場で記録して構わない。
         ReportNonAtomicSave();
         ReportAutoSave(ok);

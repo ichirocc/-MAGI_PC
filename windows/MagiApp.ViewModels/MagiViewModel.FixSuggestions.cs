@@ -92,12 +92,18 @@ public sealed partial class MagiViewModel
         {
             var deadline = quick ? CellSheetLogic.FixSearchQuickMs : CellSheetLogic.FixSearchMs;
             var timedOut = false;
+            // 集計・日の印から来た依頼は、見ている問題（回数・その日の人数）を変える案を先に（2026-10-14 利用者レビュー:
+            //   11/3 の不足に別の日の案だけが並んだ）。広めに集めて並べ替え、上位 8 件を返す。
+            var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day), StaffCellLimits, NeedCellLimits) : null;
+            var board = snap.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
             var list = await Task.Run(
                 () =>
                 {
                     var found = exceptStaff is { } ex && day is { } dd
                         // 「他の人で補う」（Android CellSheetLogic.fixesByOthers）: 全体で探し、本人を含まずその日を含む手だけ。
                         ? CellSheetLogic.FixesByOthers(FixSuggester.Suggest(st, snap, focusStaff: null, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), dd, ex).Take(8).ToList()
+                        : target is not null
+                        ? CellSheetLogic.RankForTarget(FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), board, target).Take(8).ToList()
                         : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8, deadlineMs: deadline);
                     timedOut = FixSuggester.LastTimedOut;
                     return found;
@@ -175,7 +181,8 @@ public sealed partial class MagiViewModel
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard));
     }
 
-    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null)
+    /// <param name="focusKey">案の一覧のどの依頼から来たか。あれば成功時に <see cref="UiState.AppliedFix"/> を残す（Kotlin 3.669.0）。</param>
+    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null, string? focusKey = null, FixTarget? fixTarget = null)
     {
         var st = _state;
         if (st is null) return;
@@ -218,6 +225,9 @@ public sealed partial class MagiViewModel
         Ui.RelaxedBoard = false;
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
+        if (focusKey is not null)
+            Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget,
+                gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft);
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
@@ -231,18 +241,35 @@ public sealed partial class MagiViewModel
         RefreshCheck();
     }
 
-    /// <summary>2 セル以上を動かす手は当てる前に一覧（だれの・どの日の・何→何）を見せる。1 セルの手はそのまま当てる（3.646.0: ホーム・分析・セルのシートも同じ）。
-    /// Kotlin <c>previewOrApplyFix</c>。</summary>
+    /// <summary>当てる前に一覧（だれの・どの日の・何→何）と新たな必須違反を見せる（Kotlin <c>previewOrApplyFix</c>）。
+    /// 3.671.0: 1 セルの案も確認の画面を出す（2026-10-14 利用者レビュー「案の一覧から直接適用しない」）。</summary>
     public void PreviewOrApplyFix(FixSuggestion s, long? originBoard = null, long? originState = null)
     {
         var ob = originBoard ?? _fixBoardKey;
         var os = originState ?? _fixStateKey;
-        if (s.Ops.Count < 2) { ApplyFixSuggestion(s, ob, os); return; }
         var sched = _currentSchedule;
-        if (sched is null) return;
+        if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, _state?.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
-            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os) };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
+            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
+    }
+
+    /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
+    public int RestIdx => _state is { } st ? ScheduleUtil.RestShiftIndex(st) ?? -1 : -1;
+
+    /// <summary>案の一覧から: 1 セルの案も当てる前に確認の画面（目的・全変更・対象の数の変化）を出す（Kotlin <c>previewFix</c>、
+    /// 2026-10-14 利用者レビュー「見ると適用するを分ける」）。</summary>
+    public void PreviewFix(FixSuggestion s, string? purpose, IReadOnlyList<string> effect, string? focusKey = null, FixTarget? fixTarget = null)
+    {
+        var sched = _currentSchedule;
+        if (sched is null || _state is not { } st) return;
+        var snap = sched.Copy2D();
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
+        {
+            Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
+            Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget,
+            NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
+        };
     }
 
     /// <summary>相談に積んだ入れ替えの枠を今の勤務表で探し直す（日付・記号で枠を引き直す＝月やシフトが変わっていれば断る）。

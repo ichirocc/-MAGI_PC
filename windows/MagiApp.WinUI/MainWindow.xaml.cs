@@ -242,9 +242,11 @@ public sealed partial class MainWindow : Window
         };
 
         StatusBadge.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        if (!ui.Loaded) StatusPrefixText.Text = "";
         if (ui.Loaded)
         {
             string label, bg, fg;
+            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft);
             if (ui.Running)
             {
                 // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
@@ -253,10 +255,11 @@ public sealed partial class MainWindow : Window
                     : "";
                 (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             }
-            else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = ("配布可", "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
+            else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
             else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
-            else (label, bg, fg) = ("未計算", "MagiBackgroundBrush", "MagiOnBackgroundBrush");
+            else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusBadgeText.Text = label;
+            StatusPrefixText.Text = ui.Running ? "" : status.First;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
         }
@@ -364,20 +367,76 @@ public sealed partial class MainWindow : Window
         _chainPreviewShown = p;
         var ui = _vm.Ui;
         var body = new StackPanel { Spacing = 6 };
-        body.Children.Add(new TextBlock { Text = p.Suggestion.Label, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = "変わる人と勤務（前 → 後）", FontSize = 13, Opacity = 0.8 });
-        foreach (var line in p.Changes) body.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
+        TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8 };
+        TextBlock Line(string t, bool bold = false, double size = 14) => new()
+            { Text = t, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal };
+        // 目的 → 変更する勤務（職員ごとの表）→ 対象の数の変化 → ほかの影響と確認が必要なこと（Kotlin ChainFixPreviewDialog、2026-10-14 利用者レビュー）。
+        if (p.Purpose is { } purpose) { body.Children.Add(Caption("今回の目的")); body.Children.Add(Line(purpose)); }
+        else body.Children.Add(Line(p.Suggestion.Label));
+        body.Children.Add(Caption("変更する勤務"));
+        if (p.Rows.Count == 0) foreach (var line in p.Changes) body.Children.Add(Line(line));
+        foreach (var g in p.Rows.GroupBy(x => x.Staff))
+        {
+            body.Children.Add(Line($"対象：{g.Key}さん", bold: true));
+            var table = new Grid { ColumnSpacing = 8 };
+            for (var c = 0; c < 3; c++) table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            void Cell(FrameworkElement el, int row, int col) { Grid.SetRow(el, row); Grid.SetColumn(el, col); table.Children.Add(el); }
+            table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var heads = new[] { "日付", "変更前", "変更後" };
+            for (var c = 0; c < 3; c++) Cell(Caption(heads[c]), 0, c);
+            var n = 1;
+            foreach (var row in g)
+            {
+                table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                Cell(Line(row.Date), n, 0); Cell(Line(row.Before), n, 1); Cell(Line(row.After), n, 2);
+                n++;
+                if (row.Impact.Length > 0)
+                {
+                    table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    var impact = Line("　人数：" + row.Impact, size: 13);
+                    impact.Opacity = 0.8;
+                    Grid.SetColumnSpan(impact, 3);
+                    Cell(impact, n, 0);
+                    n++;
+                }
+                if (row.Wish.Length > 0)
+                {
+                    table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                    var note = Line("　" + row.Wish, size: 13);
+                    note.Opacity = 0.8;
+                    Grid.SetColumnSpan(note, 3);
+                    Cell(note, n, 0);
+                    n++;
+                }
+            }
+            body.Children.Add(table);
+        }
+        for (var i = 0; i < p.Effect.Count; i++) body.Children.Add(Line(p.Effect[i], bold: i == 0));
         var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
         var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
-        body.Children.Add(new TextBlock { Text = hardLine, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        if (caution is not null) body.Children.Add(new TextBlock { Text = caution, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        body.Children.Add(new TextBlock { Text = "適用の直前にもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(Line(hardLine, bold: p.Effect.Count == 0));
+        if (p.CountNotes.Count > 0)
+        {
+            body.Children.Add(Caption("この組み合わせで変わる回数"));
+            foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
+        }
+        body.Children.Add(Caption("評価結果"));
+        if (p.NewHard is { } newHard)
+            body.Children.Add(Line("・新たな必須違反：" + (newHard.Count == 0 ? "なし"
+                : string.Join("、", newHard.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)))), size: 13));
+        var (wishLine, consultLine) = CellSheetLogic.PreviewWishLines(p.Rows);
+        body.Children.Add(Line("・" + wishLine, size: 13));
+        if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
+        body.Children.Add(Line("・" + consultLine, size: 13));
+        body.Children.Add(new TextBlock { Text = "適用の直前に最新の勤務表でもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var dialog = new ContentDialog
         {
-            XamlRoot = Nav.XamlRoot, Title = p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
-            PrimaryButtonText = ChainFixPreview.ApplyChangeButton, SecondaryButtonText = consulted ? null : ConsultList.Button, CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Nav.XamlRoot, Title = p.Purpose is not null ? "この変更を適用しますか？" : p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
+            PrimaryButtonText = CellSheetLogic.ApplyCountButton(p.Suggestion.Ops.Count), SecondaryButtonText = consulted ? null : ConsultList.Button,
+            // 案の一覧のダイアログは確認の前に閉じている（ContentDialog は同時に 1 つ）＝「案の一覧に戻る」とは言わない。
+            CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
         };
         var r = await dialog.ShowAsync();
         _chainPreviewShown = null;

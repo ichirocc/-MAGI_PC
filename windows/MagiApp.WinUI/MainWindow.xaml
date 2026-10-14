@@ -43,9 +43,13 @@
                 <TextBlock Text="MAGI" FontWeight="Bold" Foreground="{StaticResource MagiOnPrimaryBrush}" />
             </Border>
             <TextBlock x:Name="SectionTitleText" Grid.Column="1" VerticalAlignment="Center" Opacity="0.8" />
-            <Border x:Name="StatusBadge" Grid.Column="2" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" Visibility="Collapsed">
-                <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
-            </Border>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <!-- [3.670.0] 札の前に自動作成の状態（「未計算」では、警告が今の勤務表の評価か分からなかった）。 -->
+                <TextBlock x:Name="StatusPrefixText" FontSize="12" Opacity="0.8" MaxWidth="120" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center" />
+                <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" Visibility="Collapsed">
+                    <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
+                </Border>
+            </StackPanel>
         </Grid>
 
         <InfoBar x:Name="GlobalMessageBar" Grid.Row="1" Margin="8,8,8,0"
