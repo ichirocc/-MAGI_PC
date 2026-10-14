@@ -241,7 +241,7 @@ public sealed partial class MainWindow : Window
             "home" => "ホーム", "schedule" => "勤務表", "edit" => "編集", "analysis" => "分析", "settings" => "設定", _ => "",
         };
 
-        StatusBadge.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
+        StatusBadgeButton.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) StatusPrefixText.Text = "";
         if (ui.Loaded)
         {
@@ -264,15 +264,13 @@ public sealed partial class MainWindow : Window
             var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0 && HasTourItems(ui);
             var preDist = !ui.Running && ui.HasResult && ui.BestHard == 0;
             var clickable = tourable || preDist;
-            StatusBadge.Visibility = clickable ? Visibility.Collapsed : Visibility.Visible;
-            StatusBadgeButton.Visibility = clickable ? Visibility.Visible : Visibility.Collapsed;
+            StatusBadgeButton.IsHitTestVisible = clickable;
+            StatusBadgeButton.IsTabStop = clickable;
             if (tourable) label = $"必須 {ui.BestHard}件を順に見る";
             StatusBadgeText.Text = label;
-            StatusBadgeButtonText.Text = label;
-            StatusBadge.Background = StatusBadgeButton.Background = (Brush)Application.Current.Resources[bg];
-            StatusBadgeText.Foreground = StatusBadgeButtonText.Foreground = (Brush)Application.Current.Resources[fg];
+            StatusBadge.Background = (Brush)Application.Current.Resources[bg];
+            StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
         }
-        else StatusBadgeButton.Visibility = Visibility.Collapsed;
 
         UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
@@ -283,13 +281,14 @@ public sealed partial class MainWindow : Window
         MainActionButton.Foreground = (Brush)Application.Current.Resources[stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
     }
 
-    private (long Rev, object? Schedule, bool Has) _tourCache = (-1, null, false);
+    private (object? Families, bool Has) _tourCache = (null, false);
 
-    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査世代と盤面が同じ間は数え直さない）。</summary>
+    /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査結果のセル別の族が同じ間は数え直さない。
+    /// <c>MakeUi</c> は CheckRev を進めてから族を書き込むので、鍵は族の参照）。</summary>
     private bool HasTourItems(UiState ui)
     {
-        if (_tourCache.Rev != ui.CheckRev || !ReferenceEquals(_tourCache.Schedule, ui.Schedule))
-            _tourCache = (ui.CheckRev, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
+        if (!ReferenceEquals(_tourCache.Families, ui.ViolationCellFamilies))
+            _tourCache = (ui.ViolationCellFamilies, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
         return _tourCache.Has;
     }
 
@@ -488,9 +487,11 @@ public sealed partial class MainWindow : Window
         switch (r)
         {
             case ContentDialogResult.Primary:
+                var appliedBefore = _vm.Ui.AppliedFix;
                 _vm.ApplyChainPreview();
                 // Kotlin ではパネルが確認の画面の下に残り「変更を反映しました」が見える＝同じ依頼のパネルを開き直す（適用が通ったときだけ）。
-                if (p.FocusKey is { } key && _vm.Ui.AppliedFix is { } a && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule)
+                // 見送られたときは AppliedFix が前回の手のまま＝新しく記録されたときだけ（前回の反映の欄を今回の結果と読ませない）。
+                if (p.FocusKey is { } key && _vm.Ui.AppliedFix is { } a && !ReferenceEquals(a, appliedBefore) && a.FocusKey == key && a.IsCurrent(_vm.Ui.Schedule)
                     && schedule?.CanReopenFixPanel(key, afterApply: true) == true)
                     schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
                 break;

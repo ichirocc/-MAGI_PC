@@ -46,13 +46,19 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <!-- [3.670.0] 札の前に自動作成の状態（「未計算」では、警告が今の勤務表の評価か分からなかった）。 -->
                 <TextBlock x:Name="StatusPrefixText" FontSize="12" Opacity="0.8" MaxWidth="120" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center" />
-                <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" Visibility="Collapsed">
-                    <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
-                </Border>
-                <!-- 必須違反が残る＝巡回の入口、必須 0＝配布前の確認（Kotlin MagiTopBar の押せる札）。 -->
-                <Button x:Name="StatusBadgeButton" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" MinHeight="48"
-                        BorderThickness="0" Visibility="Collapsed" Click="OnStatusBadgeClick">
-                    <TextBlock x:Name="StatusBadgeButtonText" FontWeight="SemiBold" />
+                <!-- 必須違反が残る＝巡回の入口、必須 0＝配布前の確認（Kotlin MagiTopBar の押せる札）。押せない状態は当たり判定を切る。
+                     札の色は中の Border が持つ＝ボタンの背景は重ねた時・押した時も透明（状態の色を既定の灰色で上書きしない）。 -->
+                <Button x:Name="StatusBadgeButton" Background="Transparent" BorderThickness="0" Padding="0" MinHeight="48"
+                        Visibility="Collapsed" Click="OnStatusBadgeClick">
+                    <Button.Resources>
+                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
+                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
+                    </Button.Resources>
+                    <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4">
+                        <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
+                    </Border>
                 </Button>
             </StackPanel>
         </Grid>
