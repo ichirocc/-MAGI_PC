@@ -1282,15 +1282,23 @@ public sealed partial class ScheduleView : UserControl
     /// <param name="problems">セルに重なった問題の族。2 件以上なら、どの問題の直し方を見るかを選ばせ、選んだ族を減らす案だけを出す（Kotlin 3.665.0）。</param>
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
         Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null,
-        (int I, int J)? resolveAt = null)
+        (int I, int J)? resolveAt = null, bool reuse = false)
     {
         string? picked = null;
+        var reuseOnce = reuse;
         bool othersOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
         void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff,
             focus.ExceptStaff is not null || focus.Staff is null || focus.Shift is not null ? focus.Day : null, quick, focus.AllDays);
-        void Start() { if (!_vm.Ui.Running) Find(); }
+        void Start()
+        {
+            if (_vm.Ui.Running) return;
+            // 確認の画面から［別案を見る］で戻ったときは、閉じる前に探した案をそのまま出す（盤面は変わっていない）。
+            if (reuseOnce && _vm.Ui.FixDoneKey == focus.Key && !_vm.Ui.FixSearching) { reuseOnce = false; return; }
+            reuseOnce = false;
+            Find();
+        }
         EditReturn? Return() => cell is { } c ? CellReturn(c.I, c.J) : null;
         void Refresh()
         {
@@ -1419,7 +1427,12 @@ public sealed partial class ScheduleView : UserControl
                 var chosen = s;
                 IReadOnlyList<string> eff = e is not null && target is not null ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
-                review.Click += (_, _) => { registerClosed(() => _vm.PreviewFix(chosen, purpose, eff, focus.Key, target)); hide(); };
+                review.Click += (_, _) =>
+                {
+                    _reviewOrigin = new FixPanelOrigin(focus, settingsLabel, whenNoFix, quick, cell, problems, resolveAt);
+                    registerClosed(() => _vm.PreviewFix(chosen, purpose, eff, focus.Key, target));
+                    hide();
+                };
                 col.Children.Add(review);
                 return new Border { Background = (Brush)res["MagiSecondaryContainerBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = col };
             }
@@ -1623,6 +1636,30 @@ public sealed partial class ScheduleView : UserControl
         Start();
         Refresh();
         return host;
+    }
+
+    private sealed record FixPanelOrigin(FixFocus Focus, string? SettingsLabel, Func<IEnumerable<UIElement>>? WhenNoFix, bool Quick,
+        (int I, int J)? Cell, IReadOnlyList<string>? Problems, (int I, int J)? ResolveAt);
+
+    /// <summary>確認の画面を開いた変更案のパネル（ContentDialog は同時に 1 つ＝パネルは確認の前に閉じている）。</summary>
+    private FixPanelOrigin? _reviewOrigin;
+
+    /// <summary>セルのシートの探索（<c>quick</c>）は反映の欄を出さない（Kotlin <c>compact</c>）＝適用後には開き直さない。</summary>
+    internal bool CanReopenFixPanel(string? focusKey, bool afterApply) =>
+        focusKey is not null && _reviewOrigin is { } o && o.Focus.Key == focusKey && !(afterApply && o.Quick);
+
+    /// <summary>
+    /// 確認の画面を閉じたあと、同じ依頼の変更案のパネルを開き直す（Kotlin ではパネルが確認の画面の下に残る）。
+    /// 適用後は反映の欄（「変更を反映しました」）と今の勤務表で探し直した案、［別案を見る］では閉じる前の案（<paramref name="reuse"/>）。
+    /// </summary>
+    internal void ReopenFixPanel(XamlRoot root, string focusKey, bool reuse)
+    {
+        if (_reviewOrigin is not { } o || o.Focus.Key != focusKey) return;
+        var dialog = new ContentDialog { XamlRoot = root, CloseButtonText = "閉じる" };
+        var host = AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), o.Focus, o.SettingsLabel, o.WhenNoFix,
+            o.Quick, o.Cell, o.Problems, o.ResolveAt, reuse);
+        dialog.Content = new ScrollViewer { Content = host, MaxHeight = 520 };
+        _ = dialog.ShowAsync();
     }
 
     private void ShowShortageFixFlyout(FrameworkElement anchor, int day, int shift)

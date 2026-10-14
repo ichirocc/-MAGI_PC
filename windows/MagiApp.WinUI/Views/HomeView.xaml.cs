@@ -1101,7 +1101,7 @@ public sealed partial class HomeView : UserControl
     }
 
     /// <summary>配布前確認（仕様 §10、Kotlin <c>PreDistributionDialog</c>）。配るかどうかは利用者が決める。</summary>
-    private async System.Threading.Tasks.Task ShowPreDistributionAsync()
+    internal async System.Threading.Tasks.Task ShowPreDistributionAsync()
     {
         var rows = PreDistributionCheck.Rows(_vm.Ui, _vm.CsvSavedLine(), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k);
         var panel = new StackPanel { Spacing = 8 };

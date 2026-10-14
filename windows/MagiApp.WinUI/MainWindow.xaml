@@ -49,6 +49,11 @@
                 <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" Visibility="Collapsed">
                     <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
                 </Border>
+                <!-- 必須違反が残る＝巡回の入口、必須 0＝配布前の確認（Kotlin MagiTopBar の押せる札）。 -->
+                <Button x:Name="StatusBadgeButton" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4" MinHeight="48"
+                        BorderThickness="0" Visibility="Collapsed" Click="OnStatusBadgeClick">
+                    <TextBlock x:Name="StatusBadgeButtonText" FontWeight="SemiBold" />
+                </Button>
             </StackPanel>
         </Grid>
 
