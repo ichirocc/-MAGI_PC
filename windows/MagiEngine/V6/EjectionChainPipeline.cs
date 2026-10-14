@@ -71,6 +71,7 @@ internal static class EjectionChainPipeline
         List<Telemetry>? telemetry = null)
     {
         var stop = shouldStop ?? (() => false);
+        var t0 = EngineClock.NowMs();
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var rep0 = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
@@ -107,6 +108,10 @@ internal static class EjectionChainPipeline
             }
             if (committed == 0 || stop()) break;
         }
+        // 開始から終了までの時間と、終えた時点の締切までの残り（仕上げ＋玉突きは 1 本の締切を分け合う＝前後の段の取り分を測る前提）。
+        if (legs.Length > 0)
+            logs.Add(new MirrorLog(tag: "EjectionPipeline", message: $"玉突きパイプライン全体: {EngineClock.NowMs() - t0}ms" +
+                (deadlineMs != long.MaxValue ? $"・終了時の締切まで残り {EngineClock.RemainingMs(deadlineMs)}ms" : "")));
         return new V6HotfixPasses.CyclicSwapResult(work, rep0.Total, rep.Total, applied, logs, PinBlocks: pinBlocks, Report: rep);
     }
 

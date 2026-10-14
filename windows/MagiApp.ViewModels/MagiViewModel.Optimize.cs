@@ -306,6 +306,7 @@ public sealed partial class MagiViewModel
                 SetPolishDiagnostics(res.Post?.C1Plateau, res.Post?.ObservedPinBlockedAttempts ?? 0, res.Schedule, res.Post?.PinBlocks);
                 _rejectedRunDiagLogs = Array.Empty<string>();
                 _currentSchedule = res.Schedule.Copy2D();
+                _resultAdoptedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 AutoSave();
                 _resultSchedule = res.Schedule.Copy2D();
                 _state = st0.WithSchedule(res.Schedule);

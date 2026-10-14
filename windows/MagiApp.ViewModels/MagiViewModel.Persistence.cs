@@ -66,6 +66,9 @@ public sealed partial class MagiViewModel
     /// <summary>直前の自動保存が成功したか。失敗を連続で通知しないための状態。</summary>
     private bool _autoSaveOk = true;
 
+    /// <summary>計算の結果を採った時刻（0＝無し）。次に自動保存が書けた時に「計算完了から何秒で保存できたか」をログへ 1 行（Kotlin <c>resultAdoptedAtMs</c>、backlog #48）。</summary>
+    internal long _resultAdoptedAtMs;
+
     /// <summary>
     /// [3.428.0/#7 相当] 原子置換を諦めた（rename 不能）ことを書込側から受け取る旗。
     /// Kotlin原本は <c>Dispatchers.IO</c> から立つため <c>@Volatile</c>——この移植でも
@@ -148,6 +151,11 @@ public sealed partial class MagiViewModel
             // 直接呼ばない（3.176.0の由来コメント参照）。
             ReportNonAtomicSave();
             ReportAutoSave(ok);
+            if (ok && _resultAdoptedAtMs > 0L)
+            {
+                LogOp("I", $"計算結果の保存が完了しました（計算完了から {((DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _resultAdoptedAtMs) / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)} 秒）");
+                _resultAdoptedAtMs = 0L;
+            }
         }
         catch (OperationCanceledException)
         {
