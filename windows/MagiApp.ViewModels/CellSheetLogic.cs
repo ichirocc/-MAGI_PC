@@ -697,7 +697,7 @@ public static class CellSheetLogic
     public static string ApplyCountButton(int n) => n >= 2 ? $"この{n}件の変更を適用" : ChainFixPreview.ApplyChangeButton;
 
     /// <summary>確認の画面を閉じるボタン（案の一覧から来たときは一覧へ戻る）。</summary>
-    public const string BackToFixesButton = "案の一覧に戻る";
+    public const string BackToFixesButton = "別案を見る";
 
     /// <summary>必須 0 の結果の札。要調整が残るなら「配布可」と言い切らず、配布前の確認へ案内する。</summary>
     public static string ReadyBadgeLabel(long soft) => soft > 0 ? $"要調整 {soft}件・配布前の確認" : "配布可";
@@ -1027,6 +1027,53 @@ public static class CellSheetLogic
         (engineRan ? "自動作成：済み" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
          !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {hard}件" : soft > 0 ? $"評価：要調整 {soft}件" : "評価：違反なし");
 
+    // ===== 自動と担当者の分担（2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」） =====
+
+    /// <summary>勤務表を作成する画面の要点（作成前）。<paramref name="issues"/>＝つくる前に確かめる項目があるか。時間は設定値（探索）と固定の追加枠。</summary>
+    public static IReadOnlyList<string> PreRunPlanLines(string startDate, int days, int staff, bool issues, int pins, int budgetSec, int reserveSec) => new[]
+    {
+        PeriodLine(startDate, days),
+        $"職員：{staff}人",
+        "登録条件：" + (issues ? "確認が必要な項目があります（下の一覧）" : "つくる前に直す項目はありません"),
+        "今回、自動で行うこと：勤務表の生成、最適化、仕上げ、評価",
+        "保持するもの：登録条件と手動固定" + (pins > 0 ? $"（手動固定 {pins}件）" : ""),
+        $"探索時間：{budgetSec}秒／仕上げ用の追加枠：{reserveSec}秒",
+    }.OfType<string>().ToList();
+
+    /// <summary>作成を始めたあとの約束（一手ごとに確認を求めない・条件の変更は別の判断）。</summary>
+    public const string PreRunAutoNote = "開始後は、探索の途中で一手ごとの確認は求めません。希望・必要人数・固定条件の変更は、別の判断として扱います。";
+    public const string PreRunTitle = "勤務表を作成する";
+    public const string PreRunProceed = "勤務表を作成";
+    public const string PreRunCheckConditions = "条件を確認する";
+
+    /// <summary>要調整の内訳（族ごとに件数か pt。重み×件数の多い順に <paramref name="max"/> 種まで）。族名は <paramref name="labelOf"/>。</summary>
+    public static string SoftSummary(IReadOnlyDictionary<string, int> breakdown, Func<string, string> labelOf, int max = 4)
+    {
+        var soft = MirrorKeys.Soft.Where(k => breakdown.TryGetValue(k, out var n) && n > 0).Select(k => (K: k, N: breakdown[k]))
+            .OrderByDescending(x => MirrorKeys.WeightOf(x.K) * x.N).ToList();
+        if (soft.Count == 0) return "なし";
+        return string.Join("・", soft.Take(max).Select(x => $"{labelOf(x.K)} {x.N}{AnalysisTriage.UnitOf(x.K)}")) + (soft.Count > max ? $" ほか{soft.Count - max}種" : "");
+    }
+
+    /// <summary>作成後の結果（作成の完了は配布できることと同じ意味ではない）。</summary>
+    public static IReadOnlyList<string> CreationResultLines(long hard, IReadOnlyDictionary<string, int> breakdown, SaveState save, Func<string, string> labelOf) => new[]
+    {
+        $"必須違反：{hard}件",
+        $"要調整：{SoftSummary(breakdown, labelOf)}",
+        SaveStateLine(save),
+        hard == 0L ? "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" : null,
+    }.OfType<string>().ToList();
+    public const string CreationDoneTitle = "勤務表の作成が終わりました";
+
+    /// <summary>適用後の「今回の問題」の状態（解消／減少／残存）。</summary>
+    public static string AppliedStatusWord(CountEffect e) => e.GapAfter == 0 ? "解消" : e.GapAfter < e.GapBefore ? "減少" : "残存";
+
+    /// <summary>確認の画面の「対応する人」「確認する時期」（担当者名・期限のデータは無い＝未設定と書く）。</summary>
+    public static readonly IReadOnlyList<string> ChangeDutyLines = new[] { "対応する人：勤務表の作成担当者（担当者名は未設定）", "確認する時期：変更を適用する前（期限は未設定）" };
+
+    /// <summary>相談事項に登録しても、連絡や了承の記録にはならない（記録だけ）。</summary>
+    public const string ConsultNotContactNote = "相談事項に登録しても、本人への連絡や了承済みにはなりません。";
+
     /// <summary>「変更を反映しました」の行（Kotlin <c>appliedLines</c>）: 見ている問題（前 → 今）、ほかに人数が変わった枠（今の値）、保存、残る問題、探し直したこと。</summary>
     public static IReadOnlyList<string> AppliedLines(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits)
     {
@@ -1034,7 +1081,7 @@ public static class CellSheetLogic
         if (target is not null)
         {
             var e = target.Effect(a.Before, a.Ops);
-            outList.Add($"{label}：{e.CountLine()}（{(e.GapAfter == 0 ? e.AfterNote(target.Basis) : $"{target.GapWord} {e.GapAfter}{target.Unit}")}）");
+            outList.Add($"今回の問題：{AppliedStatusWord(e)}（{label}：{e.CountLine()}、{(e.GapAfter == 0 ? e.AfterNote(target.Basis) : $"{target.GapWord} {e.GapAfter}{target.Unit}")}）");
         }
         var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
         outList.AddRange(same);

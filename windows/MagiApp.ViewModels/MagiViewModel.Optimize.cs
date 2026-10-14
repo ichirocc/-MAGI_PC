@@ -71,26 +71,25 @@ public sealed partial class MagiViewModel
         var st = _state; var sched = _currentSchedule;
         if (st is not null && sched is not null && !Ui.Running && PreRunCheck.Fingerprint(st, sched) != _preRunAckKey)
         {
+            // [Android 3.672.0] 作成の前に「勤務表を作成する」シート（自動で行うこと・保持するもの・時間と、残る／外れる項目）を出して止まる。
+            //   同じデータ（指紋）で一度「勤務表を作成」を押したら、次からは出さない（直す項目が無いときも出す）。
             var sum = PreRunCheck.Build(st, sched);
-            if (sum.NeedsSheet)
-            {
-                Ui.PreRunRepeatHint = RepeatHint();
-                Ui.PreRunCheck = sum;
-                LogOp("I", $"つくる前の確認 表示 (消えない{sum.FloorCount}件, 外れる{sum.RerunClears.Count}件)");
-                return;
-            }
+            Ui.PreRunRepeatHint = RepeatHint();
+            Ui.PreRunCheck = sum;
+            LogOp("I", $"勤務表を作成する 表示 (消えない{sum.FloorCount}件, 外れる{sum.RerunClears.Count}件)");
+            return;
         }
         StartFullOptimize(pushUndo: true, null);
     }
 
-    /// <summary>「このままつくる」。同じ指紋のあいだは同じ理由で止めない。</summary>
+    /// <summary>「勤務表を作成」。同じ指紋のあいだは同じ理由で止めない。</summary>
     public void ProceedPreRun()
     {
         var st = _state; var sched = _currentSchedule;
         if (st is null || sched is null) return;
         _preRunAckKey = PreRunCheck.Fingerprint(st, sched);
         DismissPreRun();
-        LogOp("I", "つくる前の確認 このままつくる");
+        LogOp("I", "勤務表を作成する 勤務表を作成");
         StartFullOptimize(pushUndo: true, null, hintShown: true);
     }
 

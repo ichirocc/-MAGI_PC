@@ -50,6 +50,44 @@ public sealed partial class HomeView : UserControl
     // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
     private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
+    /// <summary>
+    /// 自動作成の結果（Kotlin <c>CreationResultCard</c>、2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」）。
+    /// 作成が終わったことと配布できることを分け、必須違反・要調整・保存の状態と次に確認する問題（人員不足は日と勤務、ほかは巡回の先頭）を 1 枚に。
+    /// </summary>
+    private void RenderCreationResult(UiState ui)
+    {
+        CreationResultHost.Children.Clear();
+        var show = ui.HasResult && ui.EngineRan && !ui.Running;
+        CreationResultCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show) return;
+        string Label(string k) => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k;
+        CreationResultHost.Children.Add(new TextBlock { Text = CellSheetLogic.CreationDoneTitle, Style = (Style)Application.Current.Resources["MagiTitleMediumTextStyle"], TextWrapping = TextWrapping.Wrap });
+        foreach (var l in CellSheetLogic.CreationResultLines(ui.BestHard, ui.Breakdown, ui.SaveState, Label))
+            CreationResultHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        var covU = ui.CoverageDiag?.Shortfalls.FirstOrDefault();
+        var tour = covU is null ? _vm.HardViolationItemsFor(Label).FirstOrDefault() : null;
+        var next = covU is not null ? $"{covU.DayLabel}の人員不足" : tour?.Heading;
+        if (next is not null)
+        {
+            CreationResultHost.Children.Add(new TextBlock { Text = "次に確認する問題", FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
+            CreationResultHost.Children.Add(new TextBlock { Text = next, TextWrapping = TextWrapping.Wrap });
+        }
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
+        if (next is not null)
+        {
+            var go = new Button { Content = "この問題の変更案を見る", MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            go.Click += (_, _) => { if (covU is not null) _ = ShowGuidedFixAsync(); else if (tour is not null) _window.OpenCell(tour.Cell.I, tour.Cell.J); };
+            buttons.Children.Add(go);
+        }
+        var others = new Button { Content = "ほかの問題を見る", MinHeight = 48 };
+        others.Click += (_, _) => _window.SelectTab("analysis");
+        buttons.Children.Add(others);
+        var preDist = new Button { Content = "配布前の確認", MinHeight = 48 };
+        preDist.Click += (_, _) => _ = ShowPreDistributionAsync();
+        buttons.Children.Add(preDist);
+        CreationResultHost.Children.Add(new ScrollViewer { Content = buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
+    }
+
     private void Render()
     {
         var ui = _vm.Ui;
@@ -57,6 +95,7 @@ public sealed partial class HomeView : UserControl
         SummaryText.Text = ui.Loaded
             ? $"満足度 {ui.Satisfaction} ・ 必須違反 {ui.BestHard} ・ 合計 {ui.BestSoft}"
             : "";
+        RenderCreationResult(ui);
         var editable = ui.Loaded && !ui.Running;
         EmptyStateCard.Visibility = !ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         MakeButton.IsEnabled = editable;
@@ -195,7 +234,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
-            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須条件を満たしました。中身を確認して配ってください。") + (ui.RunSummary is { } rs
+            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須違反はありません。配布前の確認で中身を確かめてから配ってください。") + (ui.RunSummary is { } rs
                 ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
             bigLabel = "配布前確認"; bigEnabled = true; helperLabel = "中身を見る";
