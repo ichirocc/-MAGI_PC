@@ -17,9 +17,11 @@ namespace MagiApp.ViewModels;
 /// <param name="CountNotes">職員ごとの回数の変化（2 か所以上を変える理由の事実）。</param>
 /// <param name="FocusKey">案の一覧のどの依頼から来たか（適用後に同じ依頼の画面へ結果を返す）。</param>
 /// <param name="FixTarget">見ている問題（適用後の結果の行で、解消して印が消えたあとも前後を言う）。</param>
+/// <param name="NewHard">別の場所に新しく生まれる必須違反の鍵（正式な検査の前後。null＝評価していない）。Kotlin は名前の一覧を持つが、族名の表は
+/// WinUI にあるので鍵で持ち、画面が <see cref="CellSheetLogic.ViolationKeyLabel"/> で名を付ける。</param>
 public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null,
     string? Purpose = null, IReadOnlyList<string>? Effect = null, bool FromList = false, IReadOnlyList<ChangeRow>? Rows = null,
-    IReadOnlyList<string>? CountNotes = null, string? FocusKey = null, FixTarget? FixTarget = null)
+    IReadOnlyList<string>? CountNotes = null, string? FocusKey = null, FixTarget? FixTarget = null, IReadOnlyList<ViolationKey>? NewHard = null)
 {
     public IReadOnlyList<string> CountNotes { get; init; } = CountNotes ?? Array.Empty<string>();
     public IReadOnlyList<string> Effect { get; init; } = Effect ?? Array.Empty<string>();

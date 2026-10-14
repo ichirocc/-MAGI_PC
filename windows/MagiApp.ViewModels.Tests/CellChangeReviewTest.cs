@@ -73,4 +73,63 @@ public class CellChangeReviewTest
         (int? Lo, int? Hi, int? Apt) Limits(int i, int k) => k switch { 1 => (null, null, 6), 2 => (null, null, 5), _ => (null, null, null) };
         Assert.Equal(new[] { "B4：現在2回／目標5回", "Cオ：現在2回／目標6回" }, CellSheetLogic.CellCountLines(u, 0, 2, Limits));
     }
+
+    /// <summary>選んだセルの問題が案で実際に消えるか（族の全体の件数ではなく、この場所の違反の同一性で判定する）。</summary>
+    [Fact]
+    public void ResolvesAtCellLooksAtThisPlaceOnly()
+    {
+        var key = Rep.CellFamilies!.First(e => e.Value.Contains("vio-c3n")).Key;
+        var ij = key.Split(',').Select(int.Parse).ToArray();
+        var (i, j) = (ij[0], ij[1]);
+        for (var k = 0; k < St.ShiftCount; k++)
+        {
+            if (k == S[i][j]) continue;
+            var ops = new[] { new FixCell(i, j, k) };
+            var trial = S.Select(r => r.ToArray()).ToArray();
+            trial[i][j] = k;
+            var gone = !(UnifiedViolationChecker.Check(St, trial).CellFamilies!.TryGetValue(key, out var f) && f.Contains("vio-c3n"));
+            Assert.Equal(gone, CellSheetLogic.ResolvesAtCell(St, S, Rep, ops, i, j, "c3n"));
+        }
+        // 別の職員の別の日だけを変える案は、このセルの問題を解消しない。
+        var other = Enumerable.Range(0, St.StaffCount).First(x => x != i);
+        var far = (j + 10) % St.DayCount;
+        var k2 = Enumerable.Range(0, St.ShiftCount).First(x => x != S[other][far]);
+        var farTrial = S.Select(r => r.ToArray()).ToArray();
+        farTrial[other][far] = k2;
+        var stillHere = UnifiedViolationChecker.Check(St, farTrial).CellFamilies!.TryGetValue(key, out var ff) && ff.Contains("vio-c3n");
+        if (stillHere) Assert.False(CellSheetLogic.ResolvesAtCell(St, S, Rep, new[] { new FixCell(other, far, k2) }, i, j, "c3n"));
+        // 問題の無いセルは解消しない（族を選ばなくても）。
+        static bool Empty(IReadOnlyDictionary<string, IReadOnlyList<string>>? m, string k) => m is null || !m.TryGetValue(k, out var v) || v.Count == 0;
+        var clean = Enumerable.Range(0, St.StaffCount).SelectMany(a => Enumerable.Range(0, St.DayCount).Select(b => (a, b))).First(c =>
+            Empty(Rep.CellFamilies, $"{c.a},{c.b}") && Empty(Rep.CountFamilies, $"{c.a},{S[c.a][c.b]}") && Empty(Rep.NeedFamilies, $"{S[c.a][c.b]},{c.b}"));
+        Assert.False(CellSheetLogic.ResolvesAtCell(St, S, Rep, new[] { new FixCell(clean.a, clean.b, S[clean.a][clean.b]) }, clean.a, clean.b, null));
+    }
+
+    [Fact]
+    public void NewHardLabelsAreTheCheckersNewKeys()
+    {
+        var names = St.StaffList.Select(x => x.Name).ToList(); var syms = St.Shifts.Select(x => x.Kigou).ToList();
+        var (i, j) = (0, 0);
+        for (var k = 0; k < St.ShiftCount; k++)
+        {
+            var ops = new[] { new FixCell(i, j, k) };
+            var trial = S.Select(r => r.ToArray()).ToArray();
+            trial[i][j] = k;
+            var expected = ViolationIdentity.NewHard(Rep, UnifiedViolationChecker.Check(St, trial)).Count;
+            var got = CellSheetLogic.NewHardLabels(St, S, ops, names, syms, Label);
+            Assert.Equal(expected, got.Count);
+            Assert.All(got, x => Assert.StartsWith("必須・", x));
+        }
+    }
+
+    [Fact]
+    public void PreviewWishAndConsultLines()
+    {
+        var rows = new[] { new ChangeRow("福澤", "11/3", "休", "Aア", "希望（休）と異なる勤務になります"), new ChangeRow("金沢", "11/5", "A4", "休", "希望どおり") };
+        Assert.Equal(("希望と異なる勤務になる：福澤さん 11/3", "必要な相談：福澤さん（希望と異なる勤務になる日）"), CellSheetLogic.PreviewWishLines(rows));
+        Assert.Equal(("変更する勤務に希望はありません", "必要な相談：なし"), CellSheetLogic.PreviewWishLines(new[] { new ChangeRow("a", "1", "x", "y") }));
+        Assert.Equal("変更箇所：2人・3セル", CellSheetLogic.ChangeSizeLine(new[] { new FixCell(0, 1, 1), new FixCell(0, 2, 1), new FixCell(3, 1, 0) }));
+        var t = new FixTarget(null, 1, 2, 1, true, "必要人数");
+        Assert.Equal(new[] { "11/3のAアの不足を減らす変更案を探しています", "ほかの日や職員の変更が必要な場合は、関連する変更もまとめて確認します。" }, CellSheetLogic.TargetSearchingLines(t, "11/3のAア"));
+    }
 }

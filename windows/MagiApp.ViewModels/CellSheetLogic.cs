@@ -498,6 +498,16 @@ public static class CellSheetLogic
     public static string FixSearchingText(bool quick) =>
         quick ? $"この場所の勤務変更案を探しています…（最長 {FixSearchQuickMs / 1000} 秒）" : $"勤務変更案を探しています…（最長 {FixSearchMs / 1000} 秒）";
 
+    /// <summary>見ている問題がある探索中の 2 行（何を減らす案を探しているか）。</summary>
+    public static IReadOnlyList<string> TargetSearchingLines(FixTarget t, string label) => new[]
+    {
+        $"{label}の{t.GapWord}を減らす変更案を探しています",
+        "ほかの日や職員の変更が必要な場合は、関連する変更もまとめて確認します。",
+    };
+
+    /// <summary>案の変更箇所（「2人・3セル」）。</summary>
+    public static string ChangeSizeLine(IReadOnlyList<FixCell> ops) => $"変更箇所：{ops.Select(o => o.Staff).Distinct().Count()}人・{ops.Count}セル";
+
     /// <summary>変更案の探索を止めるボタン（勤務表の作成の「やめる」と区別する）。</summary>
     public const string CancelFixSearchButton = "変更案の検索を中止";
 
@@ -628,7 +638,7 @@ public static class CellSheetLogic
 
     /// <summary>適用前の確認の「今回の目的」。</summary>
     public static string FixTargetPurpose(FixTarget t, string? staffName, string label) =>
-        t.Staff is not null ? $"{(staffName is null ? "" : $"{staffName}さんの")}{label}{t.GapWord}を減らす" : $"{label}を{t.Basis}に近づける";
+        t.Staff is not null ? $"{(staffName is null ? "" : $"{staffName}さんの")}{label}{t.GapWord}を減らす" : $"{label}{t.GapWord}を解消する";
 
     /// <summary>対象の問題を変える案を先に（集計・日の印から探した結果の並べ替え。同順位は元の効果順＝安定ソート）。</summary>
     public static IReadOnlyList<FixSuggestion> RankForTarget(IReadOnlyList<FixSuggestion> list, IReadOnlyList<IReadOnlyList<int>> schedule, FixTarget? t) =>
@@ -838,7 +848,8 @@ public static class CellSheetLogic
     {
         if (staffLimits is null || needLimits is null || f.Shift is not { } k) return null;
         if (f.Staff is { } i && f.Day is null) return CountFixTarget(ui.CountViolations, i, k, staffLimits(i, k));
-        if (f.Staff is null && f.Day is { } d && f.ExceptStaff is null) return NeedFixTarget(ui.NeedFamilies, k, d, needLimits(k, d));
+        // 日があれば、職員に絞った探索（集計の日別の詳細）でもその日のその勤務の問題のまま（日付を落とさない）。
+        if (f.Day is { } d && f.ExceptStaff is null) return NeedFixTarget(ui.NeedFamilies, k, d, needLimits(k, d));
         return null;
     }
 
@@ -859,13 +870,7 @@ public static class CellSheetLogic
         var before = UnifiedViolationChecker.Check(state, s);
         var after = UnifiedViolationChecker.Check(state, trial);
         var diff = ViolationIdentity.Of(before, after);
-        string Place(ViolationKey key) => key.Space switch
-        {
-            ViolationKey.Kind.Cell => $"{NameOf(key.A)}さん {DayText.Short(state.StartDate, key.B)}",
-            ViolationKey.Kind.Need => $"{DayText.Short(state.StartDate, key.B)}の{Sym(key.A)}",
-            _ => $"{NameOf(key.A)}さんの{Sym(key.B)}",
-        };
-        string Label(ViolationKey key) => (key.Hard ? "必須・" : "") + labelOf(key.Family) + $"（{Place(key)}）";
+        string Label(ViolationKey key) => ViolationKeyLabel(key, staffNames, shiftSymbols, state.StartDate, labelOf);
         var here = ViolationIdentity.Keys(before).Where(key => key.Space == ViolationKey.Kind.Cell && key.A == i && key.B == j).ToList();
         var thisCell = here.Select(key => $"{labelOf(key.Family)}：" + (diff.Resolved.Contains(key) ? "解消します" : "残ります")).ToList();
         var nb = string.Join(" → ", new[]
@@ -903,6 +908,68 @@ public static class CellSheetLogic
             Headcount: other,
             Counts: counts,
             WishPin: wishPin);
+    }
+
+    /// <summary>違反 1 件の名と場所（Kotlin <c>violationKeyLabel</c>「必須・禁止の並び（福澤さん 11/29）」「人員不足（11/3のAア）」「下限割れ（福澤さんのB4）」）。</summary>
+    public static string ViolationKeyLabel(ViolationKey key, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate, Func<string, string> labelOf)
+    {
+        string Sym(int x) => x >= 0 && x < shiftSymbols.Count ? shiftSymbols[x] : $"{x}";
+        string NameOf(int x) => x >= 0 && x < staffNames.Count ? staffNames[x] : $"#{x}";
+        var place = key.Space switch
+        {
+            ViolationKey.Kind.Cell => $"{NameOf(key.A)}さん {DayText.Short(startDate, key.B)}",
+            ViolationKey.Kind.Need => $"{DayText.Short(startDate, key.B)}の{Sym(key.A)}",
+            _ => $"{NameOf(key.A)}さんの{Sym(key.B)}",
+        };
+        return (key.Hard ? "必須・" : "") + labelOf(key.Family) + $"（{place}）";
+    }
+
+    private static int[][] Trial(int[][] s, IReadOnlyList<FixCell> ops)
+    {
+        var trial = s.Select(r => r.ToArray()).ToArray();
+        foreach (var op in ops)
+            if (op.Staff >= 0 && op.Staff < trial.Length && op.Day >= 0 && op.Day < trial[op.Staff].Length) trial[op.Staff][op.Day] = op.ToShift;
+        return trial;
+    }
+
+    /// <summary>案で別の場所に新しく生まれる必須違反の鍵（正式な検査の前後。<see cref="NewHardLabels"/> の元）。VM はこの鍵を確認の画面へ渡し、画面が族名を付ける。</summary>
+    public static IReadOnlyList<ViolationKey> NewHardKeys(MagiState state, int[][] s, IReadOnlyList<FixCell> ops) =>
+        ViolationIdentity.NewHard(UnifiedViolationChecker.Check(state, s), UnifiedViolationChecker.Check(state, Trial(s, ops))).ToList();
+
+    /// <summary>案で別の場所に新しく生まれる必須違反（Kotlin <c>newHardLabels</c>、確認の画面の「新たな必須違反」）。</summary>
+    public static IReadOnlyList<string> NewHardLabels(MagiState state, int[][] s, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, Func<string, string> labelOf) =>
+        NewHardKeys(state, s, ops).Select(k => ViolationKeyLabel(k, staffNames, shiftSymbols, state.StartDate, labelOf)).ToList();
+
+    /// <summary>確認の画面の「希望への影響」と「必要な相談」（行の希望の注記から。希望と異なる勤務になる人がいれば相談の対象）。</summary>
+    public static (string Wish, string Consult) PreviewWishLines(IReadOnlyList<ChangeRow> rows)
+    {
+        var off = rows.Where(r => r.Wish.StartsWith("希望（", StringComparison.Ordinal)).ToList();
+        var on = rows.Count(r => r.Wish == "希望どおり");
+        var wish = off.Count > 0 ? "希望と異なる勤務になる：" + string.Join("、", off.Select(r => $"{r.Staff}さん {r.Date}"))
+            : on > 0 ? $"希望どおりになる勤務が {on}件あります。希望と異なる勤務にはなりません"
+            : "変更する勤務に希望はありません";
+        var consult = off.Count == 0 ? "必要な相談：なし" : "必要な相談：" + string.Join("、", off.Select(r => r.Staff).Distinct().Select(x => $"{x}さん")) + "（希望と異なる勤務になる日）";
+        return (wish, consult);
+    }
+
+    /// <summary>
+    /// 案がこのセルの問題を解消するか（Kotlin <c>resolvesAtCell</c>、2026-10-14 利用者レビュー: 族の全体の件数が減るだけでは、選んだセルが直るとは限らない）。
+    /// この場所の鍵＝このセル・その日のその勤務の人数・本人のその勤務の回数（<paramref name="family"/> を選べばその族だけ）が、案の後の正式な報告から消えるか。
+    /// </summary>
+    public static bool ResolvesAtCell(MagiState state, int[][] s, ViolationReport before, IReadOnlyList<FixCell> ops, int i, int j, string? family)
+    {
+        if (i < 0 || i >= s.Length || j < 0 || j >= s[i].Length) return false;
+        var cur = s[i][j];
+        bool Here(ViolationKey k) => (family is null || k.Family == family) && k.Space switch
+        {
+            ViolationKey.Kind.Cell => k.A == i && k.B == j,
+            ViolationKey.Kind.Need => k.A == cur && k.B == j,
+            _ => k.A == i && k.B == cur,
+        };
+        var b = ViolationIdentity.Keys(before).Where(Here).ToList();
+        if (b.Count == 0) return false;
+        var after = ViolationIdentity.Keys(UnifiedViolationChecker.Check(state, Trial(s, ops)));
+        return b.Any(k => !after.Contains(k));
     }
 
     /// <summary>セルのシートの問題の一文（族ごと）。前日・翌日との並びは並びの族の説明。</summary>
@@ -972,6 +1039,8 @@ public static class CellSheetLogic
         var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
         outList.AddRange(same);
         outList.AddRange(other);
+        if (a.HardBefore >= 0) outList.Add($"必須違反（勤務表全体）：{a.HardBefore}件 → {a.HardAfter}件");
+        if (a.SoftBefore >= 0) outList.Add($"要調整（勤務表全体）：{a.SoftBefore}件 → {a.SoftAfter}件");
         outList.Add(SaveStateLine(ui.SaveState));
         IReadOnlyList<string> next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate)
             : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { $"{label}は、{target.Basis}まであと{eff.GapAfter}回です" }

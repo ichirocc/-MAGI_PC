@@ -420,9 +420,14 @@ public sealed partial class MainWindow : Window
             body.Children.Add(Caption("この組み合わせで変わる回数"));
             foreach (var cn in p.CountNotes) body.Children.Add(Line("・" + cn, size: 13));
         }
-        body.Children.Add(Caption("確認が必要なこと"));
+        body.Children.Add(Caption("評価結果"));
+        if (p.NewHard is { } newHard)
+            body.Children.Add(Line("・新たな必須違反：" + (newHard.Count == 0 ? "なし"
+                : string.Join("、", newHard.Select(k => CellSheetLogic.ViolationKeyLabel(k, ui.StaffNames, ui.ShiftSymbols, ui.StartDate, AnalysisView.LabelOf)))), size: 13));
+        var (wishLine, consultLine) = CellSheetLogic.PreviewWishLines(p.Rows);
+        body.Children.Add(Line("・" + wishLine, size: 13));
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
-        body.Children.Add(Line("・希望・前後の勤務への影響（上の表の注記）", size: 13));
+        body.Children.Add(Line("・" + consultLine, size: 13));
         body.Children.Add(new TextBlock { Text = "適用の直前に最新の勤務表でもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない

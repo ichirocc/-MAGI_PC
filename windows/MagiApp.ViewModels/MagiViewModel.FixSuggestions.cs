@@ -226,7 +226,8 @@ public sealed partial class MagiViewModel
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         if (focusKey is not null)
-            Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget);
+            Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget,
+                gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft);
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
@@ -240,18 +241,17 @@ public sealed partial class MagiViewModel
         RefreshCheck();
     }
 
-    /// <summary>2 セル以上を動かす手は当てる前に一覧（だれの・どの日の・何→何）を見せる。1 セルの手はそのまま当てる（3.646.0: ホーム・分析・セルのシートも同じ）。
-    /// Kotlin <c>previewOrApplyFix</c>。</summary>
+    /// <summary>当てる前に一覧（だれの・どの日の・何→何）と新たな必須違反を見せる（Kotlin <c>previewOrApplyFix</c>）。
+    /// 3.671.0: 1 セルの案も確認の画面を出す（2026-10-14 利用者レビュー「案の一覧から直接適用しない」）。</summary>
     public void PreviewOrApplyFix(FixSuggestion s, long? originBoard = null, long? originState = null)
     {
         var ob = originBoard ?? _fixBoardKey;
         var os = originState ?? _fixStateKey;
-        if (s.Ops.Count < 2) { ApplyFixSuggestion(s, ob, os); return; }
         var sched = _currentSchedule;
-        if (sched is null) return;
+        if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, _state?.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
-            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os) };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
+            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
     }
 
     /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
@@ -268,6 +268,7 @@ public sealed partial class MagiViewModel
         {
             Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
             Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget,
+            NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
         };
     }
 

@@ -132,8 +132,6 @@ public sealed partial class ScheduleView : UserControl
     private bool _searchLegendOpen;
     private string _nameQuery = "";
 
-    /// <summary>[phase9 #11] 内訳ダイアログの「直し方を探す」の飛び先（分析タブ）。</summary>
-    private readonly Action? _goAnalysis;
 
     /// <summary>手が見つからなかったときの次の一歩（編集タブへの着地と、セルから来たときの「元の確認へ戻る」の呼出元。Kotlin <c>FixNav</c>、3.646.0 L01/L03）。</summary>
     private readonly Action<EditLanding?, EditReturn?>? _goEditLanding;
@@ -141,10 +139,10 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>[S6] セルシートの［緩める候補を見る］＝ホームの RelaxTrialDialog を開く（同じ組・同じ確定）。確定の後は渡したセルへ戻る。</summary>
     private readonly Action<(int I, int J)?>? _showRelax;
 
+    /// <param name="goAnalysis">使わない（3.671.0 で集計の詳細の個人の探索はその場で行う＝分析タブへ行かない）。呼び出し側の互換のため残す。</param>
     public ScheduleView(MagiViewModel vm, Action? goAnalysis = null, Action<EditLanding?, EditReturn?>? goEditLanding = null, Action<(int I, int J)?>? showRelax = null)
     {
         _vm = vm;
-        _goAnalysis = goAnalysis;
         _goEditLanding = goEditLanding;
         _showRelax = showRelax;
         InitializeComponent();
@@ -1207,8 +1205,24 @@ public sealed partial class ScheduleView : UserControl
             XamlRoot = XamlRoot, Title = title, Content = panel,
             CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
         };
-        // 開いた時点でこの職員×シフト（日別は日×シフト）の直し方を探し、同じダイアログに並べる（Kotlin FixSearchPanel）。
-        panel.Children.Add(AttachFixSearch(dialog, new FixFocus(focusStaff, shift, day)));
+        // 開いた時点でこの職員×シフト（日別は日×シフト）の変更案を探し、同じダイアログに並べる（Kotlin FixSearchPanel）。
+        //   日別で職員を選んだら、同じ日・同じ勤務の問題のまま、その職員に絞って探す（日付を落とさない。別タブへ行かない）。
+        int? person = null;
+        var detach = new List<Action>();
+        var fixHost = new StackPanel { Spacing = 4 };
+        var people = new StackPanel { Spacing = 4 };
+        void Detach() { foreach (var a in detach.ToList()) a(); detach.Clear(); }
+        dialog.Closed += (_, _) => Detach();
+        void Mount()
+        {
+            Detach();
+            fixHost.Children.Clear();
+            if (person is { } p)
+                fixHost.Children.Add(new TextBlock { Text = $"{(p < _vm.Ui.StaffNames.Count ? _vm.Ui.StaffNames[p] : $"#{p}")}さんに絞って探しています", FontSize = 13, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(person ?? focusStaff, shift, day)));
+        }
+        panel.Children.Add(fixHost);
+        Mount();
         if (day is { } dj)
         {
             foreach (var i in pinned)
@@ -1225,18 +1239,28 @@ public sealed partial class ScheduleView : UserControl
             }
             // [Android 3.515.2 同期] 希望で固定していない在勤者にも1人にしぼった「勤務変更案を探す」への導線を足す。
             //   探している間は個人ごとのボタンを並べない（何を調べているかだけを出す＝2026-10-14 利用者レビュー）。
-            foreach (var i in (ui.FixSearching ? Array.Empty<int>() : assigned ?? Array.Empty<int>()).Where(i => !pinned.Contains(i)))
+            void RenderPeople()
             {
-                var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
-                var fix = new Button
+                people.Children.Clear();
+                foreach (var i in (_vm.Ui.FixSearching ? Array.Empty<int>() : assigned ?? Array.Empty<int>()).Where(i => !pinned.Contains(i)))
                 {
-                    Content = $"{name}さんの勤務変更案を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
-                    IsEnabled = !ui.Running,
-                };
-                var staff = i;
-                fix.Click += (_, _) => { dialog.Hide(); _vm.FindFixSuggestions(staff, shift); _goAnalysis?.Invoke(); };
-                panel.Children.Add(fix);
+                    var name = i < _vm.Ui.StaffNames.Count ? _vm.Ui.StaffNames[i] : $"#{i}";
+                    if (person == i) { people.Children.Add(new TextBlock { Text = $"{name}さん（選択中）", FontSize = 13 }); continue; }
+                    var fix = new Button
+                    {
+                        Content = $"{name}さんの勤務変更案を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                        IsEnabled = !_vm.Ui.Running,
+                    };
+                    var staff = i;
+                    fix.Click += (_, _) => { person = staff; Mount(); RenderPeople(); };
+                    people.Children.Add(fix);
+                }
             }
+            RenderPeople();
+            panel.Children.Add(people);
+            PropertyChangedEventHandler searching = (_, e) => { if (e.PropertyName is nameof(UiState.FixSearching)) DispatcherQueue.TryEnqueue(RenderPeople); };
+            _vm.Ui.PropertyChanged += searching;
+            dialog.Closed += (_, _) => _vm.Ui.PropertyChanged -= searching;
         }
         await dialog.ShowAsync();
     }
@@ -1254,13 +1278,15 @@ public sealed partial class ScheduleView : UserControl
     /// <param name="cell">セルのシートから来たとき、編集タブの「元の確認へ戻る」の戻り先。</param>
     /// <param name="problems">セルに重なった問題の族。2 件以上なら、どの問題の直し方を見るかを選ばせ、選んだ族を減らす案だけを出す（Kotlin 3.665.0）。</param>
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
-        Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null)
+        Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null,
+        (int I, int J)? resolveAt = null)
     {
         string? picked = null;
         bool othersOpen = false, scopeOpen = false, candidatesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
-        // 日は「他の人で補う」と人員の印（職員なし）のときだけ渡す（セルのシートの日は理由の読み取りにだけ使う）。
-        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff, focus.ExceptStaff is not null || focus.Staff is null ? focus.Day : null, quick);
+        // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
+        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff,
+            focus.ExceptStaff is not null || focus.Staff is null || focus.Shift is not null ? focus.Day : null, quick);
         void Start() { if (!_vm.Ui.Running) Find(); }
         EditReturn? Return() => cell is { } c ? CellReturn(c.I, c.J) : null;
         void Refresh()
@@ -1297,7 +1323,12 @@ public sealed partial class ScheduleView : UserControl
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center });
-                var waiting = new TextBlock { Text = CellSheetLogic.FixSearchingText(quick), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+                // 見ている問題があれば、何を減らす案を探しているかを言う（個人ごとの検索ボタンは並べない）。
+                var waiting = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                if (CellSheetLogic.PanelTarget(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits) is { } st)
+                    foreach (var l in CellSheetLogic.TargetSearchingLines(st, CellSheetLogic.FixTargetLabel(st, st.Shift >= 0 && st.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[st.Shift] : "", ui.StartDate)))
+                        waiting.Children.Add(new TextBlock { Text = l, FontSize = 13, TextWrapping = TextWrapping.Wrap });
+                waiting.Children.Add(new TextBlock { Text = CellSheetLogic.FixSearchingText(quick), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
                 Grid.SetColumn(waiting, 1);
                 row.Children.Add(waiting);
                 var stop = new HyperlinkButton { Content = CellSheetLogic.CancelFixSearchButton, MinHeight = 48 };
@@ -1313,9 +1344,14 @@ public sealed partial class ScheduleView : UserControl
             var sym = focus.Shift is { } sk && sk >= 0 && sk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[sk] : "";
             var label = target is not null ? CellSheetLogic.FixTargetLabel(target, sym, ui.StartDate) : sym;
             var snap = ui.Schedule.Select(r => r.ToArray()).ToArray();
-            var shown = ui.FixSuggestions.Where(x => CellSheetLogic.FixAddresses(x, picked)).ToList();
-            var fixing = target is null ? shown : shown.Where(x => target.Effect(ui.Schedule, x.Ops).Fixes).ToList();
-            var others = target is null ? new List<FixSuggestion>() : shown.Where(x => !target.Effect(ui.Schedule, x.Ops).Fixes).ToList();
+            // セルのシートは、選んだ問題（無ければこのセルの問題のどれか）がこのセルで実際に消える案だけを主にする（族の全体の件数では判定しない）。
+            var resolver = resolveAt is { } ra ? _vm.CellResolver(ra.I, ra.J, picked) : null;
+            Func<FixSuggestion, bool>? pred = resolver ?? (picked is not null ? x => CellSheetLogic.FixAddresses(x, picked) : null);
+            var addressLabel = resolveAt is not null ? "このセルの" + (picked is not null ? LabelOf(picked) : "問題") : null;
+            var shown = ui.FixSuggestions.ToList();
+            var fixing = target is not null ? shown.Where(x => target.Effect(ui.Schedule, x.Ops).Fixes).ToList() : pred is not null ? shown.Where(pred).ToList() : shown;
+            var fixingSet = new HashSet<FixSuggestion>(fixing, ReferenceEqualityComparer.Instance);
+            var others = target is not null || pred is not null ? shown.Where(x => !fixingSet.Contains(x)).ToList() : new List<FixSuggestion>();
             var purpose = target is not null
                 ? CellSheetLogic.FixTargetPurpose(target, focus.Staff is { } fi && fi >= 0 && fi < ui.StaffNames.Count ? ui.StaffNames[fi] : null, label)
                 : picked is not null ? $"選んだ問題（{LabelOf(picked)}）を減らす" : null;
@@ -1337,10 +1373,13 @@ public sealed partial class ScheduleView : UserControl
                     col.Children.Add(new TextBlock { Text = $"{label}：{e.CountLine()}　{e.GapLine()}", Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(new TextBlock { Text = e.AfterNote(target.Basis), Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     foreach (var r in remain) col.Children.Add(Small(r));
+                    col.Children.Add(Small(CellSheetLogic.ChangeSizeLine(s.Ops)));
                 }
                 else
                 {
                     col.Children.Add(new TextBlock { Text = $"案{n}：{s.Label}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                    if (addressLabel is not null && resolver?.Invoke(s) == true)
+                        col.Children.Add(new TextBlock { Text = $"{addressLabel}：解消します", Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     if (picked is not null && CellSheetLogic.FamilyEffectLine(s, picked, LabelOf(picked)) is { } fl)
                         col.Children.Add(new TextBlock { Text = fl, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 }
@@ -1393,10 +1432,17 @@ public sealed partial class ScheduleView : UserControl
                 banner.Children.Add(new TextBlock { Text = "変更を反映しました", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg });
                 foreach (var l in CellSheetLogic.AppliedLines(ui, applied, at, atLabel, _vm.NeedCellLimits))
                     banner.Children.Add(new TextBlock { Text = l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                // 当てた直後だけ（今の盤面がその手の直後）に出る＝元に戻すの先頭はこの手。
+                if (ui.CanUndo)
+                {
+                    var undo = new HyperlinkButton { Content = "今回の変更を元に戻す", MinHeight = 48 };
+                    undo.Click += (_, _) => _vm.Undo();
+                    banner.Children.Add(undo);
+                }
                 host.Children.Add(new Border { Background = (Brush)res["MagiTertiaryContainerBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = banner });
             }
-            if (picked is not null && target is null && ui.FixSuggestions.Count > 0 && shown.Count == 0)
-                host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(LabelOf(picked)), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            if (pred is not null && target is null && shown.Count > 0 && fixing.Count == 0)
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(addressLabel ?? (picked is not null ? LabelOf(picked) : "このセルの問題")), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
             else if (fixing.Count > 0)
             {
                 if (target is not null && !quick) host.Children.Add(new TextBlock { Text = CellSheetLogic.ThisFixHeading(label, target), Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
@@ -1404,11 +1450,11 @@ public sealed partial class ScheduleView : UserControl
                 foreach (var s in fixing.Take(limit)) host.Children.Add(Card(++n, s));
             }
             else NoFixBlock(ui, target, label);
-            if (others.Count > 0 && !quick && target is not null)
+            if (others.Count > 0 && !quick && (target is not null || pred is not null))
             {
                 var head = new StackPanel();
                 head.Children.Add(new TextBlock { Text = CellSheetLogic.OtherFixHeading(others.Count), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
-                head.Children.Add(new TextBlock { Text = CellSheetLogic.OtherFixNote(label, target), FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                head.Children.Add(new TextBlock { Text = target is not null ? CellSheetLogic.OtherFixNote(label, target) : $"{addressLabel ?? "選んだ問題"}は解消しません", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 var list = new StackPanel { Spacing = 6 };
                 var n = Math.Min(fixing.Count, limit);
                 foreach (var s in others.Take(limit)) list.Children.Add(Card(++n, s));
@@ -1456,6 +1502,15 @@ public sealed partial class ScheduleView : UserControl
                 var w = new Button { Content = "希望を見る", MinHeight = 48 };
                 w.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, WishStaff: focus.Staff, Day: focus.Day), Return()); };
                 buttons.Children.Add(w);
+            }
+            if (target is { Staff: null, Under: true })
+            {
+                var ws1 = new Button { Content = "担当できる職員を見る", MinHeight = 48 };
+                ws1.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(2, "yr_ws1"), Return()); };
+                buttons.Children.Add(ws1);
+                var dayWish = new Button { Content = "当日の希望・固定勤務を見る", MinHeight = 48 };
+                dayWish.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, Day: focus.Day), Return()); };
+                buttons.Children.Add(dayWish);
             }
             if (FixSearchText.CoverageFocus(ui, focus))
             {
@@ -1667,7 +1722,7 @@ public sealed partial class ScheduleView : UserControl
                 if (picked == m.Shift) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
                 else
                 {
-                    var see = new HyperlinkButton { Content = "変更案を見る", MinHeight = 48 };
+                    var see = new HyperlinkButton { Content = m.Under ? "この不足の変更案を見る" : "この過剰の変更案を見る", MinHeight = 48 };
                     var k = m.Shift;
                     see.Click += (_, _) =>
                     {
@@ -1687,6 +1742,9 @@ public sealed partial class ScheduleView : UserControl
         panel.Children.Add(new TextBlock { Text = CellSheetLogic.DayPickHeading(marks), TextWrapping = TextWrapping.Wrap });
         RenderRows();
         panel.Children.Add(rows);
+        var needSetting = new Button { Content = "必要人数の設定を見る", MinHeight = 48 };
+        needSetting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: picked ?? marks[0].Shift, Day: j), null); };
+        panel.Children.Add(needSetting);
         panel.Children.Add(fixHost);
         _ = dialog.ShowAsync();
     }
@@ -2311,7 +2369,8 @@ public sealed partial class ScheduleView : UserControl
                     {
                         search.Visibility = Visibility.Collapsed;
                         searchNote.Visibility = Visibility.Collapsed;
-                        searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j), problems: _vm.CellProblemFamilies(i, j)));
+                        searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j),
+                            problems: _vm.CellProblemFamilies(i, j), resolveAt: (i, j)));
                     };
                     panel.Children.Add(search);
                     panel.Children.Add(searchNote);

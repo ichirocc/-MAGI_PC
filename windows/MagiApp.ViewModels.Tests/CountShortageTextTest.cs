@@ -59,7 +59,7 @@ public class CountShortageTextTest
         Assert.Equal("10/3のA", CellSheetLogic.FixTargetLabel(t, "A", "2026-10-01"));
         Assert.Equal("10/3のAを1人増やす", t.Effect(Schedule, new[] { new FixCell(0, 2, 1) }).Title("10/3のA"));
         Assert.Equal(new[] { "必要人数より1人少ない状態です", "配置 1人 ／ 必要 2人" }, CellSheetLogic.FixTargetHead(t, 1));
-        Assert.Equal("10/3のAを必要人数に近づける", CellSheetLogic.FixTargetPurpose(t, null, "10/3のA"));
+        Assert.Equal("10/3のA不足を解消する", CellSheetLogic.FixTargetPurpose(t, null, "10/3のA"));
         var o = CellSheetLogic.NeedFixTarget(new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covO" } }, 1, 2, (0, 0))!;
         Assert.Equal(new[] { "適正人数より1人多い状態です", "配置 1人 ／ 適正 0人" }, CellSheetLogic.FixTargetHead(o, 1));
         Assert.Equal("10/3のAの不足を減らす案は、今回の検索では見つかりませんでした。担当できる職員と、その日の希望・固定勤務をご確認ください。", CellSheetLogic.NoNeedFixLine("10/3のA", t));
@@ -198,14 +198,29 @@ public class CountShortageTextTest
             StartDate = "2026-10-01", ShiftSymbols = new[] { "休", "A", "B" }, Schedule = after, SaveState = SaveState.Saving,
             NeedFamilies = new Dictionary<string, IReadOnlyList<string>> { ["1,3"] = new[] { "vio-covU" } },
         };
-        var a = new AppliedFix("k", "x", ops, Schedule, after, t);
+        var a = new AppliedFix("k", "x", ops, Schedule, after, t, 3, 2, 10, 11);
         (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (2, 2) : null;
         var lines = CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need);
         Assert.Equal("10/3のA：1人 → 2人（必要 2人を満たします）", lines[0]);
         Assert.Equal("10/3の休：1人 → 0人", lines[1]);
-        Assert.Equal("保存：保存中", lines[2]);
-        Assert.Equal("次に確認すること：10/4のAは、2人不足のままです。", lines[3]);
+        Assert.Equal("必須違反（勤務表全体）：3件 → 2件", lines[2]);
+        Assert.Equal("要調整（勤務表全体）：10件 → 11件", lines[3]);
+        Assert.Equal("保存：保存中", lines[4]);
+        Assert.Equal("次に確認すること：10/4のAは、2人不足のままです。", lines[5]);
         Assert.StartsWith("勤務表が変わったため", lines[^1]);
         Assert.True(a.IsCurrent(after));
+    }
+
+    /// <summary>日別の詳細で職員に絞っても、その日のその勤務の問題のまま探す（日付を落とさない）。</summary>
+    [Fact]
+    public void PersonFocusOnADayKeepsTheNeedTarget()
+    {
+        var u = new UiState { Schedule = Schedule, NeedFamilies = new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" } } };
+        (int? Lo, int? Hi, int? Apt) Staff(int i, int k) => (null, null, null);
+        (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (2, 2) : null;
+        Assert.Equal(new FixTarget(null, 1, 2, 2, true, "必要人数"), CellSheetLogic.PanelTarget(u, new FixFocus(0, 1, 2), Staff, Need));
+        Assert.Equal(new FixTarget(null, 1, 2, 2, true, "必要人数"), CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, 2), Staff, Need));
+        Assert.Null(CellSheetLogic.PanelTarget(u, new FixFocus(0, null, 2), Staff, Need));   // セルのシート（勤務なし）は対象なし
+        Assert.Null(CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, 2, ExceptStaff: 0), Staff, Need));
     }
 }
