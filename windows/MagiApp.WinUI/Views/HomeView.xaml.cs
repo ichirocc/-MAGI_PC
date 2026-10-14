@@ -288,12 +288,11 @@ public sealed partial class HomeView : UserControl
                 // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）・「この手を使う」（補助）。
                 var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
                 var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
-                var diffTxt = string.Join("・", top.Diff.Select(d =>
-                    (AnalysisView.BreakdownLabels.TryGetValue(d.Family, out var jp) ? jp : d.Family) + " " + (d.Delta < 0 ? $"−{-d.Delta}" : $"+{d.Delta}")));
-                var totalTxt = top.DeltaTotal <= 0 ? $"−{-top.DeltaTotal}" : $"+{top.DeltaTotal}";
+                // 族ごとの増減だけ（件・回・人・pt を 1 つの合計に足さない＝統合仕様 INV-07）。
+                var diffTxt = AnalysisTriage.FamilyDeltaList(top.Diff, AnalysisView.LabelOf);
                 headline = remain + "直す手があります。";
                 body = top.Label;
-                note = hardLine + (caution is null ? "" : "\n" + caution) + (diffTxt.Length > 0 ? $"\n違反 {totalTxt}（{diffTxt}）" : "") +
+                note = hardLine + (caution is null ? "" : "\n" + caution) + (diffTxt.Length > 0 ? $"\n変化：{diffTxt}" : "") +
                     (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "") + "\n" + CellSheetLogic.ApplyUndoNote;
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");

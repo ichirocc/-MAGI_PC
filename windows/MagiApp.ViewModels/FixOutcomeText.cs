@@ -9,10 +9,10 @@ public sealed record FixOutcome(string Line, MagiEngine.V6.ViolationReport? Befo
 /// <summary>直し方を当てたあと、同じ問題について「どうなったか」を 1 行で返す（Kotlin <c>FixOutcomeText.kt</c>、3.643.0）。</summary>
 public static class FixOutcomeText
 {
-    public static string Applied(string label, int hardBefore, int hardAfter, int totalBefore, int totalAfter) =>
-        hardAfter == 0 && hardBefore > 0 ? $"{label} を当てました。必須違反はなくなりました（合計 {totalBefore}→{totalAfter}）。"
+    public static string Applied(string label, int hardBefore, int hardAfter, string softBefore, string softAfter) =>
+        hardAfter == 0 && hardBefore > 0 ? $"{label} を当てました。必須違反はなくなりました（要調整 {softBefore}→{softAfter}）。"
         : hardAfter < hardBefore ? $"{label} を当てました。必須違反 {hardBefore}→{hardAfter}。ほかの必須違反は {hardAfter} 件残っています。"
-        : $"{label} を当てました。必須違反は変わらず {hardAfter} 件（合計 {totalBefore}→{totalAfter}）。";
+        : $"{label} を当てました。必須違反は変わらず {hardAfter} 件（要調整 {softBefore}→{softAfter}）。";
 
     /// <summary>
     /// 当てたあとの内訳（Kotlin <c>fixResultDetail</c>、違反セルの半自動修正仕様 §8、3.663.0）: 解消・減少した違反と、新たに生じた問題を分けて言う。

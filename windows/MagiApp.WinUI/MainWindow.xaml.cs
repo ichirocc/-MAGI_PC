@@ -246,7 +246,7 @@ public sealed partial class MainWindow : Window
         if (ui.Loaded)
         {
             string label, bg, fg;
-            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft);
+            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft, ui.Breakdown);
             if (ui.Running)
             {
                 // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
@@ -255,7 +255,7 @@ public sealed partial class MainWindow : Window
                     : "";
                 (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             }
-            else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
+            else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft, ui.Breakdown), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
             else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusPrefixText.Text = ui.Running ? "" : status.First;

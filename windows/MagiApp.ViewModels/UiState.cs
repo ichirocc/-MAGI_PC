@@ -320,7 +320,8 @@ public enum SaveState { Dirty, Saving, Saved, Failed }
 /// <summary>案の一覧から確認して当てた手（Kotlin <c>AppliedFix</c>）。FocusKey の依頼の画面へ「変更を反映しました」を返す（After と今の盤面が違えば出さない）。</summary>
 public sealed record AppliedFix(string FocusKey, string Label, IReadOnlyList<MagiEngine.V6.FixCell> Ops,
     IReadOnlyList<IReadOnlyList<int>> Before, IReadOnlyList<IReadOnlyList<int>> After, FixTarget? Target = null,
-    int HardBefore = -1, int HardAfter = -1, int SoftBefore = -1, int SoftAfter = -1)
+    int HardBefore = -1, int HardAfter = -1, int SoftBefore = -1, int SoftAfter = -1,
+    IReadOnlyDictionary<string, int>? BreakdownBefore = null, IReadOnlyDictionary<string, int>? BreakdownAfter = null)
 {
     /// <summary>今の盤面がこの手の直後か（Kotlin の <c>after == ui.schedule</c>＝要素ごとの比較）。</summary>
     public bool IsCurrent(IReadOnlyList<IReadOnlyList<int>> schedule) =>

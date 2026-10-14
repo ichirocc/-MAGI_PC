@@ -670,7 +670,7 @@ public sealed partial class MagiViewModel
                 // [3.328.0相当] 最適化が動いていれば実行中のまま。旧: 無条件に false で、
                 //   最適化中の設定編集→検査完了で全ガードが素通りになっていた。
                 ui.Running = OptimizeInFlight();
-                ui.Message = $"調べました: 必須違反 {hard}件・違反の合計 {total}件";
+                ui.Message = $"調べました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}";
             }, ct: ct);
             LogOp("I", $"違反チェック 必須={hard} 合計={total}");
         }

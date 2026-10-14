@@ -147,9 +147,9 @@ public class AnalysisTriageTest
     [Fact]
     public void HomeRemainingLabelCountsOnlyCountFamilies()
     {
-        Assert.Equal("必須 残り2件", AnalysisTriage.HomeRemainingLabel(2L, 0, B(("covU", 2), ("c1", 5))));
+        Assert.Equal("必須 残り2人", AnalysisTriage.HomeRemainingLabel(2L, 0, B(("covU", 2), ("c1", 5))));
         Assert.Equal("人員不足の日 残り1日", AnalysisTriage.HomeRemainingLabel(0L, 1, B()));
-        Assert.Equal("必須は解消・要調整 5件", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("apt", 5), ("fair", 80), ("weekly", 60))));
+        Assert.Equal("必須は解消・要調整 5回", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("apt", 5), ("fair", 80), ("weekly", 60))));
         Assert.Equal("必須は解消・残りは偏りのみ", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 3))));   // pt だけなら解消済みとは言わない
         Assert.Equal("解消済み", AnalysisTriage.HomeRemainingLabel(0L, 0, B(("fair", 0))));
     }

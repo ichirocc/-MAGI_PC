@@ -33,7 +33,7 @@ public static class KeptResultText
 /// <summary>計算が終わったときの通知（Kotlin <c>completedText</c>、判断支援 UX 仕様 §9）。</summary>
 public static class CompletedText
 {
-    public static string Of(int hard, int total, string how) =>
-        hard == 0 ? $"計算が完了しました{how}。設定した必須条件を満たしています。配布前の確認に進んでください（違反の合計 {total}件）"
-                  : $"計算が完了しました{how}。必須違反 {hard}件・違反の合計 {total}件";
+    public static string Of(int hard, IReadOnlyDictionary<string, int> breakdown, string how) =>
+        hard == 0 ? $"計算が完了しました{how}。設定した必須条件を満たしています。配布前の確認に進んでください（要調整 {AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Soft) ?? "なし"}）"
+                  : $"計算が完了しました{how}。{AnalysisTriage.ReportCountsText(breakdown)}";
 }

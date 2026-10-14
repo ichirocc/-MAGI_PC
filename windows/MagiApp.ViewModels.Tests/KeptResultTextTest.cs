@@ -30,4 +30,14 @@ public class KeptResultTextTest
         Assert.Equal("A", KeptResultText.WithNote("A", null));
         Assert.Equal("A B", KeptResultText.WithNote("A", "B"));
     }
+
+    /// <summary>計算完了の通知は「計算が終わった」と「必須違反 0 件＝配布前確認へ」を分ける（仕様 §9）。</summary>
+    [Fact]
+    public void completedTextSeparatesDoneFromZeroHard()
+    {
+        Assert.Equal("計算が完了しました。設定した必須条件を満たしています。配布前の確認に進んでください（要調整 12件）",
+            CompletedText.Of(0, new Dictionary<string, int> { ["c1"] = 12 }, ""));
+        Assert.Equal("計算が完了しました（閉じている間に計算）。必須違反 2件・1人・要調整 34件・6回",
+            CompletedText.Of(3, new Dictionary<string, int> { ["covU"] = 1, ["c3n"] = 2, ["low"] = 6, ["c1"] = 34 }, "（閉じている間に計算）"));
+    }
 }
