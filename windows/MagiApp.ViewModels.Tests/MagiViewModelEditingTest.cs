@@ -2077,7 +2077,7 @@ public class MagiViewModelEditingTest
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.SetCell(0, 0, 1);
         vm.AddConsult(new ConsultItem("x", "y"));
-        vm.RemoveConsult(0);
+        vm.RemoveConsult(vm.Ui.Consults[0]);
         var done = vm.Ui.OpNotice!;
         Assert.False(done.Undoable);
 

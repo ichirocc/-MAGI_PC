@@ -291,4 +291,13 @@ public class CountShortageTextTest
         Assert.Equal("新たな必須違反：なし", CellSheetLogic.NewHardLine(Array.Empty<string>()));
         Assert.Equal("新たな必須違反：禁止の並び", CellSheetLogic.NewHardLine(new[] { "禁止の並び" }));
     }
+
+    [Fact]
+    public void TimeoutAndSaveFailureAreSaidSeparately()
+    {
+        var t = CellSheetLogic.NeedFixTarget(new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" } }, 1, 2, (2, 2))!;
+        // 時間切れは「案が無い」と分ける（統合仕様 INV-08）。
+        Assert.Equal("10/3のAの不足を減らす案は、制限時間内には見つかりませんでした。もう一度探すと続きを探せます。", CellSheetLogic.NoNeedFixLine("10/3のA", t, timedOut: true));
+        Assert.Equal("保存：失敗（「もう一度保存する」で保存し直してください）", CellSheetLogic.SaveStateLine(SaveState.Failed));
+    }
 }

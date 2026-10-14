@@ -105,6 +105,7 @@
             <TextBlock x:Name="DataStatusText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
             <!-- 自動保存の状態（Kotlin DataCard、Android 3.529.0）。保存済みのときは出さない。 -->
             <TextBlock x:Name="SaveStateText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
+            <Button x:Name="RetrySaveButton" Content="もう一度保存する" Click="OnRetrySaveClick" HorizontalAlignment="Stretch" MinHeight="48" Visibility="Collapsed" />
             <StackPanel Spacing="8">
                 <Button x:Name="OpenDataButton" Content="データを開く（JSON）" Click="OnOpenDataClick" HorizontalAlignment="Stretch" />
                 <Button x:Name="SaveDataButton" Content="データを保存（JSON）" Click="OnSaveDataClick" HorizontalAlignment="Stretch" />
