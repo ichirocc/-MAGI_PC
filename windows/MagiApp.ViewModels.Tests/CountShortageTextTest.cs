@@ -244,4 +244,36 @@ public class CountShortageTextTest
         Assert.Equal("残存", CellSheetLogic.AppliedStatusWord(new CountEffect(7, 7, 15, true)));
         Assert.Equal("別案を見る", CellSheetLogic.BackToFixesButton);
     }
+
+    /// <summary>同じ勤務の不足の日々をまとめて見る（日ごとの不足の合計。ある日の過剰で別の日の不足を相殺しない）。</summary>
+    [Fact]
+    public void MultiDayTargetSumsPerDayShortages()
+    {
+        // A の必要: 10/3＝2人（今 1人）、10/4＝1人（今 0人）。
+        var fams = new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" }, ["1,3"] = new[] { "vio-covU" } };
+        (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (j == 2 ? (2, 2) : (1, 1)) : null;
+        var t = CellSheetLogic.MultiNeedTarget(fams, 1, Need)!;
+        Assert.Equal(new[] { 2, 3 }, t.Days); Assert.Equal(new[] { 2, 1 }, t.Needs);
+        Assert.Equal(2, t.GapOf(Schedule));
+        Assert.Null(CellSheetLogic.MultiNeedTarget(new Dictionary<string, IReadOnlyList<string>> { ["1,2"] = new[] { "vio-covU" } }, 1, Need));   // 1 日だけならまとめない
+        // 10/3 だけ埋める案＝合計 2 → 1、両日を埋める案＝2 → 0。
+        var one = t.Effect(Schedule, new[] { new FixCell(0, 2, 1) });
+        Assert.Equal((2, 1), one.Gaps); Assert.True(one.Fixes);
+        Assert.Equal("適用後も、合計 1人不足", one.AfterNote(t.Basis));
+        var both = t.Effect(Schedule, new[] { new FixCell(0, 2, 1), new FixCell(1, 3, 1) });
+        Assert.Equal("対象の日はすべて必要人数を満たします", both.AfterNote(t.Basis));
+        Assert.Equal("不足 2人 → 0人", both.GapLine());
+        // 10/4 の A を足して 10/3 の A を抜く案は、合計が減らない（相殺しない）。
+        var swap = t.Effect(Schedule, new[] { new FixCell(1, 2, 0), new FixCell(1, 3, 1) });
+        Assert.False(swap.Fixes);
+        Assert.Equal("A（2日）", CellSheetLogic.FixTargetLabel(t, "A", "2026-10-01"));
+        Assert.Equal("A（2日）の不足をまとめて解消する", CellSheetLogic.FixTargetPurpose(t, null, "A（2日）"));
+        Assert.Equal(new[] { "2日で合計2人不足しています（日ごとの不足の合計）", "対象の日：10/3・10/4" }, CellSheetLogic.FixTargetHead(t, 0, Schedule, "2026-10-01"));
+        Assert.Equal("両日の不足をまとめて調整する案を探す", CellSheetLogic.MultiFixButton(2));
+        Assert.Equal("3日の不足をまとめて調整する案を探す", CellSheetLogic.MultiFixButton(3));
+        var u = new UiState { Schedule = Schedule, NeedFamilies = fams };
+        (int? Lo, int? Hi, int? Apt) Staff(int i, int k) => (null, null, null);
+        Assert.Equal(t, CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, null, AllDays: true), Staff, Need));
+        Assert.Equal("-,1,-,all", new FixFocus(null, 1, null, AllDays: true).Key);
+    }
 }

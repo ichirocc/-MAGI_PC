@@ -185,7 +185,7 @@ public class StallEscapeSpecTest
         Assert.Equal(0.9, PolishGate.NormalStallFraction);
         Assert.False(PolishGate.PostChainRollbackCountsZero);
         Assert.Equal(WishFloorMode.Off, PolishGate.WishConflictFloorMode);
-        Assert.True(PolishGate.C3nWallShortStall);
+        Assert.False(PolishGate.C3nWallShortStall, "c3n 壁で短縮しない（3.673.0 で既定 OFF）");
         Assert.False(PolishGate.C3nWallLegacy, "基準腕（HEAD の壁判定）は既定で使わない");
         Assert.True(PolishGate.LateOpStopPropagation, "後期演算は停止要求を見る（既定）");
         Assert.False(PolishGate.C3nWallDeepCheck, "1 手探索の反証は既定で使わない（測定中）");
