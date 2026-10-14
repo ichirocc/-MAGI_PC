@@ -10,8 +10,16 @@ namespace MagiApp.ViewModels;
 /// 持つ hardLine/caution はここでは持たない）。
 /// </summary>
 /// <param name="Target">探した枠（日付・シフト記号・見出し）。相談に積んだあと、今の勤務表で案を探し直すために持つ。</param>
-public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null)
+/// <param name="Purpose">今回の目的（案の一覧から来たとき。例「古泉さんのA4不足を減らす」）。null＝目的の行を出さない。</param>
+/// <param name="Effect">対象の数の変化（例「A4：7回 → 9回」「適用後も、下限まで6回不足」）。</param>
+/// <param name="FromList">案の一覧から開いた＝閉じるボタンは「案の一覧に戻る」。</param>
+/// <param name="Rows">変わるセル（職員ごとに日付・変更前・変更後の表にする）。</param>
+public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null,
+    string? Purpose = null, IReadOnlyList<string>? Effect = null, bool FromList = false, IReadOnlyList<ChangeRow>? Rows = null)
 {
+    public IReadOnlyList<string> Effect { get; init; } = Effect ?? Array.Empty<string>();
+    public IReadOnlyList<ChangeRow> Rows { get; init; } = Rows ?? Array.Empty<ChangeRow>();
+
     /// <summary>変更を当てるボタン（違反セルの半自動修正仕様 §5: 押すと検証してから全変更を反映する。Kotlin <c>APPLY_CHANGE_BUTTON</c>）。</summary>
     public const string ApplyChangeButton = "この変更を適用";
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
@@ -31,15 +39,19 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
             var nm = shiftNames is not null && k >= 0 && k < shiftNames.Count ? shiftNames[k] : null;
             return Sym(k) + (!string.IsNullOrWhiteSpace(nm) && nm != Sym(k) ? $"（{nm}）" : "");
         }
-        var changes = s.Ops.Select(op =>
+        var rows = s.Ops.Select(op =>
         {
             var inRange = op.Staff >= 0 && op.Staff < snapshot.Length && op.Day >= 0 && op.Day < snapshot[op.Staff].Length;
             // 「希望との不一致なし」は本人の了承ではない＝希望があるときだけ、希望どおりか違うかを事実として添える（仕様 §4）。
             var wish = wishes is not null && wishes.TryGetValue($"{op.Staff},{op.Day}", out var w) && w >= 0
-                ? (w == op.ToShift ? "・希望どおり" : $"・希望（{Sym(w)}）と異なる勤務になります") : "";
-            return $"{Name(op.Staff)} {DayText.Short(startDate, op.Day)} {(inRange ? Shift(snapshot[op.Staff][op.Day]) : "?")} → {Shift(op.ToShift)}{wish}";
+                ? (w == op.ToShift ? "希望どおり" : $"希望（{Sym(w)}）と異なる勤務になります") : "";
+            return new ChangeRow(Name(op.Staff), DayText.Short(startDate, op.Day), inRange ? Shift(snapshot[op.Staff][op.Day]) : "?", Shift(op.ToShift), wish);
         }).ToList();
+        var changes = rows.Select(r => $"{r.Staff} {r.Date} {r.Before} → {r.After}" + (r.Wish.Length > 0 ? $"・{r.Wish}" : "")).ToList();
         // 人数・マス数は本文 1 行目（提案のラベル）が持つ（Android 3.658.0: 題に入れると途中で折り返した）。
-        return new ChainFixPreview(s, "複数人の入れ替え", changes);
+        return new ChainFixPreview(s, "複数人の入れ替え", changes, Rows: rows);
     }
 }
+
+/// <summary>変わるセル 1 つ（Kotlin <c>ChangeRow</c>）。Wish＝希望があるときの注記（希望どおり／希望と異なる）。</summary>
+public sealed record ChangeRow(string Staff, string Date, string Before, string After, string Wish = "");

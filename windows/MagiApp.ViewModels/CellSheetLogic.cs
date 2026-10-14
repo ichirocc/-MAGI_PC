@@ -496,7 +496,10 @@ public static class CellSheetLogic
 
     /// <summary>探索中の 1 行（最長の秒数を添えて待ち時間の見当をつけてもらう）。</summary>
     public static string FixSearchingText(bool quick) =>
-        quick ? $"この場所の直し方を探しています…（最長 {FixSearchQuickMs / 1000} 秒）" : $"直し方を探しています…（最長 {FixSearchMs / 1000} 秒）";
+        quick ? $"この場所の勤務変更案を探しています…（最長 {FixSearchQuickMs / 1000} 秒）" : $"勤務変更案を探しています…（最長 {FixSearchMs / 1000} 秒）";
+
+    /// <summary>変更案の探索を止めるボタン（勤務表の作成の「やめる」と区別する）。</summary>
+    public const string CancelFixSearchButton = "変更案の検索を中止";
 
     /// <summary>その場の直し方探しの状態。スピナーは <see cref="FixPanelState.Running"/> だけ。</summary>
     public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key) =>
@@ -580,4 +583,192 @@ public static class CellSheetLogic
 
     /// <summary>選んだ問題を減らす案が無いとき（ほかの問題の案はある）。</summary>
     public static string NoFixForProblemLine(string label) => $"選んだ問題（{label}）を減らす案は見つかりませんでした。ほかの問題を選ぶと、その直し方を確認できます。";
+
+    /// <summary>回数の問題の目標（職員×シフト、Kotlin <c>countTargetOf</c>）。null＝回数の過不足ではない、または基準が無い。</summary>
+    public static (int Target, bool Under)? CountTargetOf(string? vio, (int? Lo, int? Hi, int? Apt) limits) => vio switch
+    {
+        "vio-low" when limits.Lo is { } l => (l, true),
+        "vio-aptLow" when limits.Apt is { } a => (a, true),
+        "vio-high" when limits.Hi is { } h => (h, false),
+        "vio-aptHigh" when limits.Apt is { } a => (a, false),
+        _ => null,
+    };
+
+    private static string BasisOfCount(string? vio) => vio switch { "vio-low" => "下限", "vio-high" => "上限", _ => "目標" };
+
+    /// <summary>職員×シフトの回数の問題（集計の職員別セル・職員の勤務状況から）。</summary>
+    public static FixTarget? CountFixTarget(IReadOnlyDictionary<string, string> countViolations, int staff, int shift, (int? Lo, int? Hi, int? Apt) limits)
+    {
+        var vio = countViolations.GetValueOrDefault($"{staff},{shift}");
+        return CountTargetOf(vio, limits) is { } c ? new FixTarget(staff, shift, null, c.Target, c.Under, BasisOfCount(vio)) : null;
+    }
+
+    /// <summary>シフト×日の人員の問題（日ヘッダ・集計の日別セルから）。<paramref name="need"/> は (必要, 適正)。</summary>
+    public static FixTarget? NeedFixTarget(IReadOnlyDictionary<string, IReadOnlyList<string>> needFamilies, int shift, int day, (int Lo, int Hi)? need)
+    {
+        var classes = needFamilies.GetValueOrDefault($"{shift},{day}") ?? Array.Empty<string>();
+        if (need is not { } n) return null;
+        if (classes.Contains("vio-covU")) return new FixTarget(null, shift, day, n.Lo, true, "必要人数");
+        if (classes.Contains("vio-covO")) return new FixTarget(null, shift, day, n.Hi, false, "適正人数");
+        return null;
+    }
+
+    /// <summary>対象の名（回数＝記号、人員＝「11/3のAア」）。</summary>
+    public static string FixTargetLabel(FixTarget t, string sym, string startDate) => t.Day is { } d ? $"{DayText.Short(startDate, d)}の{sym}" : sym;
+
+    /// <summary>対象の見出し 2 行: 「下限まで、あと8回です」「現在 7回 ／ 下限 15回」。人員は「必要人数より1人少ない状態です」「配置 0人 ／ 必要 1人」。</summary>
+    public static IReadOnlyList<string> FixTargetHead(FixTarget t, int count)
+    {
+        var gap = Math.Max(0, t.Under ? t.Target - count : count - t.Target);
+        if (t.Staff is not null)
+            return new[] { t.Under ? $"{t.Basis}まで、あと{gap}回です" : $"{t.Basis}を{gap}回超えています", $"現在 {count}回 ／ {t.Basis} {t.Target}回" };
+        var shortBasis = t.Basis.EndsWith("人数", StringComparison.Ordinal) ? t.Basis[..^2] : t.Basis;
+        return new[] { t.Under ? $"{t.Basis}より{gap}人少ない状態です" : $"{t.Basis}より{gap}人多い状態です", $"配置 {count}人 ／ {shortBasis} {t.Target}人" };
+    }
+
+    /// <summary>適用前の確認の「今回の目的」。</summary>
+    public static string FixTargetPurpose(FixTarget t, string? staffName, string label) =>
+        t.Staff is not null ? $"{(staffName is null ? "" : $"{staffName}さんの")}{label}{t.GapWord}を減らす" : $"{label}を{t.Basis}に近づける";
+
+    /// <summary>対象の問題を変える案を先に（集計・日の印から探した結果の並べ替え。同順位は元の効果順＝安定ソート）。</summary>
+    public static IReadOnlyList<FixSuggestion> RankForTarget(IReadOnlyList<FixSuggestion> list, IReadOnlyList<IReadOnlyList<int>> schedule, FixTarget? t) =>
+        t is null ? list : list.OrderBy(s => t.Effect(schedule, s.Ops).Fixes ? 0 : 1).ToList();
+
+    /// <summary>「ほかの問題への影響」の行（対象の族は上に出すので除く）。必須違反の増減を先頭に。族名は <paramref name="labelOf"/>（WinUI の BreakdownLabels）。</summary>
+    public static IReadOnlyList<string> OtherEffectLines(FixSuggestion s, IReadOnlySet<string> skipFamilies, Func<string, string> labelOf)
+    {
+        var hard = s.DeltaHard < 0 ? $"必須違反：{-s.DeltaHard}件減る" : s.DeltaHard > 0 ? $"必須違反：{s.DeltaHard}件増える" : "必須違反：変わらない";
+        return new[] { hard }.Concat(s.Diff.Where(d => d.Delta != 0 && !skipFamilies.Contains(d.Family))
+            .Select(d => $"{labelOf(d.Family)}：{Math.Abs(d.Delta)}{AnalysisTriage.UnitOf(d.Family)}{(d.Delta < 0 ? "減る" : "増える")}")).ToList();
+    }
+
+    /// <summary>対象の族（「ほかの問題への影響」から除く）。</summary>
+    public static IReadOnlySet<string> FixTargetFamilies(FixTarget t) =>
+        t.Staff is not null ? new HashSet<string> { "low", "high", "apt" } : new HashSet<string> { "covU", "covO" };
+
+    /// <summary>対象の問題を変えない案の見出し（開くまで畳む）。</summary>
+    public static string OtherFixHeading(int n) => $"別の問題を改善する案（{n}件）";
+    public static string OtherFixNote(string label, FixTarget t) =>
+        $"{label}の{(t.Staff is not null ? "回数" : "人数")}は{(t.Under ? "増えません" : "減りません")}";
+
+    /// <summary>対象の問題を変える案の見出し。</summary>
+    public static string ThisFixHeading(string label, FixTarget t) => $"{label}を{(t.Under ? "増やす" : "減らす")}案";
+
+    /// <summary>対象を減らす案が無いとき（人員の問題）。</summary>
+    public static string NoNeedFixLine(string label, FixTarget t) =>
+        $"{label}の{t.GapWord}を減らす案は、今回の検索では見つかりませんでした。" +
+        (t.Under ? "担当できる職員と、その日の希望・固定勤務をご確認ください。" : "その日に入っている職員の希望・固定勤務をご確認ください。");
+
+    /// <summary>回数の過不足の要点（集計セルの詳細）。「▼4」だけでは今の回数か不足数か分からない＝現在・基準・差を言葉で。</summary>
+    public static string? CountGapLine(string vio, int count, (int? Lo, int? Hi, int? Apt) limits) => vio switch
+    {
+        "vio-low" when limits.Lo is { } l => $"現在 {count}回／下限 {l}回 ・ 不足 {Math.Max(0, l - count)}回",
+        "vio-high" when limits.Hi is { } h => $"現在 {count}回／上限 {h}回 ・ 超過 {Math.Max(0, count - h)}回",
+        "vio-aptLow" when limits.Apt is { } a => $"現在 {count}回／目標 {a}回 ・ 不足 {Math.Max(0, a - count)}回",
+        "vio-aptHigh" when limits.Apt is { } a => $"現在 {count}回／目標 {a}回 ・ 超過 {Math.Max(0, count - a)}回",
+        _ => null,
+    };
+
+    /// <summary>選んだ問題（族）が 1 案でどう変わるか。案の先頭に出す。</summary>
+    public static string? FamilyEffectLine(FixSuggestion s, string family, string label)
+    {
+        foreach (var (fam, d) in s.Diff)
+            if (fam == family) return d < 0 ? $"{label}：{-d}件減る" : d > 0 ? $"{label}：{d}件増える" : null;
+        return null;
+    }
+
+    /// <summary>適用ボタンの下に添える注記（ボタンの文言は短く＝折り返さない）。</summary>
+    public const string ApplyUndoNote = "適用したあとでも元に戻せます。";
+
+    /// <summary>案のカードのボタン（見るだけ。適用は確認の画面で）。</summary>
+    public const string ReviewChangeButton = "変更内容を確認";
+
+    /// <summary>確認の画面の適用ボタン（件数を言う）。</summary>
+    public static string ApplyCountButton(int n) => n >= 2 ? $"この{n}件の変更を適用" : ChainFixPreview.ApplyChangeButton;
+
+    /// <summary>確認の画面を閉じるボタン（案の一覧から来たときは一覧へ戻る）。</summary>
+    public const string BackToFixesButton = "案の一覧に戻る";
+
+    /// <summary>必須 0 の結果の札。要調整が残るなら「配布可」と言い切らず、配布前の確認へ案内する。</summary>
+    public static string ReadyBadgeLabel(long soft) => soft > 0 ? $"要調整 {soft}件・配布前の確認" : "配布可";
+
+    /// <summary>集計期間（見出しの 2 行目）。</summary>
+    public static string? PeriodLine(string startDate, int days) =>
+        days <= 0 || string.IsNullOrWhiteSpace(startDate) ? null : "対象期間：" + DayText.Range(startDate, 0, days - 1);
+
+    /// <summary>日の人員のシートで、過不足のある勤務が 2 つ以上のときの問い。</summary>
+    public static string DayPickHeading(IReadOnlyList<CoverageMark> marks) =>
+        marks.All(m => m.Under) ? "どの勤務の不足を確認しますか？"
+        : !marks.Any(m => m.Under) ? "どの勤務の過剰を確認しますか？"
+        : "どの勤務の過不足を確認しますか？";
+
+    /// <summary>選ぶ行: 「Aア　配置 0人／必要 1人　1人不足」。</summary>
+    public static string DayPickRow(UiState ui, int j, CoverageMark m, (int Lo, int Hi)? need)
+    {
+        var sym = m.Shift >= 0 && m.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[m.Shift] : $"{m.Shift}";
+        var now = ui.Schedule.Count(r => j >= 0 && j < r.Count && r[j] == m.Shift);
+        return m.Under
+            ? $"{sym}　配置 {now}人／必要 {(need is { } a ? a.Lo.ToString() : "?")}人" + (need is { } n1 ? $"　{Math.Max(0, n1.Lo - now)}人不足" : "")
+            : $"{sym}　配置 {now}人／適正 {(need is { } b ? b.Hi.ToString() : "?")}人" + (need is { } n2 ? $"　{Math.Max(0, now - n2.Hi)}人多い" : "");
+    }
+
+    /// <summary>
+    /// 見ている問題（集計の職員別・日別セル、日ヘッダの印から。Kotlin <c>panelTarget</c>）。セルのシート（日あり・職員あり）や「他の人で補う」は null。
+    /// C# には ConditionsView が無い＝VM の <c>StaffCellLimits</c>/<c>NeedCellLimits</c> を受ける（null＝条件が読めない）。
+    /// </summary>
+    public static FixTarget? PanelTarget(UiState ui, FixFocus f, Func<int, int, (int? Lo, int? Hi, int? Apt)>? staffLimits, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        if (staffLimits is null || needLimits is null || f.Shift is not { } k) return null;
+        if (f.Staff is { } i && f.Day is null) return CountFixTarget(ui.CountViolations, i, k, staffLimits(i, k));
+        if (f.Staff is null && f.Day is { } d && f.ExceptStaff is null) return NeedFixTarget(ui.NeedFamilies, k, d, needLimits(k, d));
+        return null;
+    }
+}
+
+/// <summary>
+/// 画面で見ている 1 つの問題（Kotlin <c>FixTarget</c>、2026-10-14 利用者レビュー「今回の問題がどう変わるかを最上段に」）。
+/// 回数＝Staff×Shift（Day は null）、人員＝Shift×Day（Staff は null）。Target は下限・目標・上限・必要人数・適正人数、Basis はその名、Under＝足りない側。
+/// </summary>
+public sealed record FixTarget(int? Staff, int Shift, int? Day, int Target, bool Under, string Basis)
+{
+    public string Unit => Staff is not null ? "回" : "人";
+
+    public int CountOf(IReadOnlyList<IReadOnlyList<int>> schedule) =>
+        Staff is { } i ? (i >= 0 && i < schedule.Count ? schedule[i].Count(v => v == Shift) : 0)
+        : schedule.Count(r => Day is { } d && d >= 0 && d < r.Count && r[d] == Shift);
+
+    /// <summary>盤面に案のセル代入を当てて数え直す＝評価器と同じ数え方。</summary>
+    public CountEffect Effect(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops)
+    {
+        var after = schedule.Select(r => r.ToArray()).ToList();
+        foreach (var op in ops)
+            if (op.Staff >= 0 && op.Staff < after.Count && op.Day >= 0 && op.Day < after[op.Staff].Length) after[op.Staff][op.Day] = op.ToShift;
+        return new CountEffect(CountOf(schedule), CountOf(after.Select(r => (IReadOnlyList<int>)r).ToList()), Target, Under, Unit);
+    }
+
+    public string GapWord => Under ? "不足" : "超過";
+}
+
+/// <summary>対象の数の変化（Kotlin <c>CountEffect</c>）。GapBefore/GapAfter は基準までの差（0 未満は 0）。</summary>
+public sealed record CountEffect(int Before, int After, int Target, bool Under, string Unit = "回")
+{
+    private int Gap(int c) => Math.Max(0, Under ? Target - c : c - Target);
+    public int GapBefore => Gap(Before);
+    public int GapAfter => Gap(After);
+    public bool Fixes => GapAfter < GapBefore;
+
+    /// <summary>「A4を2回増やす」。対象が変わらない案は「A4は変わりません」。</summary>
+    public string Title(string label) =>
+        After > Before ? $"{label}を{After - Before}{Unit}増やす"
+        : After < Before ? $"{label}を{Before - After}{Unit}減らす"
+        : $"{label}は変わりません";
+
+    public string CountLine() => $"{Before}{Unit} → {After}{Unit}";
+    public string GapLine() => $"{(Under ? "不足" : "超過")} {GapBefore}{Unit} → {GapAfter}{Unit}";
+
+    public string AfterNote(string basis) =>
+        GapAfter == 0 && Under ? $"適用後は{basis}に届きます"
+        : GapAfter == 0 ? $"適用後は{basis}以内になります"
+        : Under ? $"適用後も、{basis}まで{GapAfter}{Unit}不足"
+        : $"適用後も、{basis}を{GapAfter}{Unit}超えます";
 }

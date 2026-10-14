@@ -219,6 +219,10 @@ public static class ConsultList
     /// 枠を持てば、あとで今の勤務表で案を探し直せる。</summary>
     public static ConsultItem Chain(ChainFixPreview p, string hardLine) => new(p.Suggestion.Label, string.Join("／", p.Changes) + $"（{hardLine}）", Chain: p.Target);
 
+    /// <summary>回数不足の相談事項（増やす案が見つからないとき。Kotlin <c>consultCountShortage</c>）。</summary>
+    public static ConsultItem CountShortage(string name, string sym, string head, int staff) =>
+        new($"{name}さんの「{sym}」の回数", $"{head}。条件を守って増やせる案が見つからない＝追加候補日と変更を妨げる条件を確認", staff, StaffName: name);
+
     /// <summary>直す 1 手から。</summary>
     public static ConsultItem Fix(FixSuggestion s, string hardLine, string? caution) => new(s.Label, hardLine + (caution is null ? "" : $"・{caution}"));
 

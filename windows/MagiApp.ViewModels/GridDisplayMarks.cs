@@ -15,11 +15,14 @@ public sealed record CoverageMark(int Shift, bool Under);
 /// 回数の過不足の 1 枚（例「Dﾃ  +2回 (6/4)」）。Ref は目標（apt）か下限・上限、RefLabel は下限・上限のときだけ付ける。
 /// Under＝不足側の色（下限割れ・適切回数の不足・個人の合計）。
 /// </summary>
-public sealed record CountChip(string Shift, int Count, int? Ref, string RefLabel, bool Under)
+public sealed record CountChip(string Shift, int Count, int? Ref, string RefLabel, bool Under, int ShiftIdx = -1)
 {
     public int? Delta => Ref is { } r ? Count - r : null;
     public string Text => $"{Shift}  " + (Delta is { } d ? (d > 0 ? "+" : "") + $"{d}回 " : "") +
         $"({Count}/" + (Ref is { } r ? RefLabel + r : "—") + ")";
+    /// <summary>勤務状況の表の 1 行: 「Dテ　3回／目標 5回　あと2回」（数を小さな札に詰めず全文で）。</summary>
+    public string RowText => $"{Shift}　{Count}回／" + (Ref is { } r ? $"{(RefLabel.Length == 0 ? "目標" : RefLabel)} {r}回" : "基準なし") +
+        (Delta is { } d ? (d < 0 ? $"　あと{-d}回" : d > 0 ? $"　{d}回多い" : "") : "");
 }
 
 /// <summary>行末の印のシートの中身。Weekly は 1 シフト 1 行、Fair は「差 N回 : シフト, …」を差の大きい順。</summary>
@@ -250,10 +253,10 @@ public static class GridDisplayMarks
             {
                 chips.Add(cls switch
                 {
-                    "vio-low" => new CountChip(Sym(k), count, lo, "下限", true),
-                    "vio-high" => new CountChip(Sym(k), count, hi, "上限", false),
-                    "vio-aptLow" or "vio-aptHigh" => new CountChip(Sym(k), count, apt, "", cls == "vio-aptLow"),
-                    _ => new CountChip(Sym(k), count, null, "", IsUnderCountClass(cls)),
+                    "vio-low" => new CountChip(Sym(k), count, lo, "下限", true, k),
+                    "vio-high" => new CountChip(Sym(k), count, hi, "上限", false, k),
+                    "vio-aptLow" or "vio-aptHigh" => new CountChip(Sym(k), count, apt, "", cls == "vio-aptLow", k),
+                    _ => new CountChip(Sym(k), count, null, "", IsUnderCountClass(cls), k),
                 });
             }
         }
@@ -318,7 +321,20 @@ public static class SettingsLabel
 }
 
 /// <summary>手が見つからなかったときの説明。Lines は確かめた事実だけ、WishRelated なら「希望を見る」を出す。</summary>
-public sealed record NoFixExplain(IReadOnlyList<string> Lines, bool WishRelated, string SettingsSection, NoFixKind Kind = NoFixKind.Scope);
+public sealed record NoFixExplain(IReadOnlyList<string> Lines, bool WishRelated, string SettingsSection, NoFixKind Kind = NoFixKind.Scope,
+    IReadOnlyList<AddCandidate>? Candidates = null)
+{
+    public IReadOnlyList<AddCandidate> Candidates { get; init; } = Candidates ?? Array.Empty<AddCandidate>();
+}
+
+/// <summary>
+/// 回数を増やす候補日 1 つ（［追加候補日を確認］の行。Kotlin <c>AddCandidate</c>）。Current＝その日の今の勤務、Reason＝確かめられた変えられない条件
+/// （null＝この画面では確かめられない）、Check＝解消するために確認すること、Go＝［対象の設定を見る］の行き先。
+/// </summary>
+public sealed record AddCandidate(int Day, int Current, string? Reason, string Check, AddCandidateGo Go);
+
+/// <summary>Kotlin <c>AddCandidate.Go</c>（C# は同じ型の中にプロパティ Go と同名の型を置けないので外に出す）。</summary>
+public enum AddCandidateGo { Wish, Need, Count, None }
 
 /// <summary>改善案が見つからない理由の区分（仕様 §7）。どれも「解決できない」とは言わない。Kotlin <c>NoFixKind</c>。</summary>
 public enum NoFixKind { Contradiction, Time, Fixed, Scope }
@@ -329,7 +345,7 @@ public static class NoFixKindText
     {
         NoFixKind.Contradiction => "矛盾を確認：両立しない条件（本人の希望どうしのぶつかり）があります。該当する希望か条件を直すと解消します。",
         NoFixKind.Time => "時間不足：制限時間内に改善案を見つけられませんでした。もう一度探すと続きを探せます。",
-        NoFixKind.Fixed => "固定条件による制限：本人の希望や個人の上限などの固定条件が、候補の変更を妨げています。固定条件を確かめるか、相談に回せます。",
+        NoFixKind.Fixed => "固定条件による制限：本人の希望や個人の上限などの固定条件があり、現在の条件を守ったまま変更できる案は、今回の探索では見つかりませんでした。必要に応じて対象職員にご相談ください。",
         _ => FixSearchText.NoFixHead,
     };
 }
@@ -345,7 +361,7 @@ public sealed record ShiftCoverageTotal(IReadOnlyList<int> UnderDays, IReadOnlyL
 public static class FixSearchText
 {
     /// <summary>1 行目＝見つからなかったこと（上段のシートは 2 行で切れる）、続けて確かめた理由、最後に探した範囲。</summary>
-    public const string NoFixHead = "探索範囲内で改善なし：必須を増やさずに違反を減らす手は、調べた範囲では見つかりませんでした。別の方法で探すか、条件を見直せます。";
+    public const string NoFixHead = "探索範囲内で改善なし：現在の条件を守ったまま改善できる案は、今回の探索では見つかりませんでした。別の方法で探すか、条件を見直せます。";
     public const string NoFixScope = "探したのは 1 セルの変更・2 人の入れ替え・玉突きの範囲です。";
 
     /// <summary>日×シフトの印が人員不足・過剰のものか（直し方が無いときの行き先＝その日のそのシフトの必要人数。群のレンジは④のまま）。Kotlin <c>coverageFocus</c>。</summary>
@@ -376,6 +392,7 @@ public static class FixSearchText
     public static NoFixExplain NoFixReasons(UiState ui, FixFocus f,
         Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null, Func<int, int, (int Lo, int Hi)?>? needLimits = null)
     {
+        if (CountShortage(ui, f, limits) is { } sh) return ShortageReasons(ui, f, sh, limits, needLimits);
         var outList = new List<string> { NoFixHead };
         var wish = false;
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : k.ToString();
@@ -441,4 +458,78 @@ public static class FixSearchText
         outList[0] = kind.Head();
         return new NoFixExplain(outList, wish, f.Staff is null && f.Shift is not null ? "yr_headcount" : "yr_count", kind);
     }
+
+    /// <summary>回数の不足（職員×シフト、日の指定なし。Kotlin <c>countShortage</c>）。</summary>
+    public static CountShortage? CountShortage(UiState ui, FixFocus f, Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits)
+    {
+        if (f.Staff is not { } i || f.Shift is not { } k || f.Day is not null || limits is null || i < 0 || i >= ui.Schedule.Count) return null;
+        var (lo, _, apt) = limits(i, k);
+        var count = ui.Schedule[i].Count(v => v == k);
+        CountShortage? sh = ui.CountViolations.GetValueOrDefault($"{i},{k}") switch
+        {
+            "vio-low" when lo is { } l => new CountShortage(count, l, "下限"),
+            "vio-aptLow" when apt is { } a => new CountShortage(count, a, "目標"),
+            _ => null,
+        };
+        return sh is { Gap: > 0 } ? sh : null;
+    }
+
+    /// <summary>
+    /// 回数が足りないときの説明（Kotlin <c>shortageReasons</c>、2026-10-14 利用者レビュー: 「その勤務を抜くと人員不足」は向きが逆）。
+    /// 「あと N 回」の見出しは呼び出し側（<see cref="CellSheetLogic.FixTargetHead"/>）。ここは見つからなかったことと次に確認すること、
+    /// 追加候補日（その日の今の勤務と確かめられた変えられない条件）は <see cref="NoFixExplain.Candidates"/> へ、今ある回数の事実は補足へ。
+    /// </summary>
+    private static NoFixExplain ShortageReasons(UiState ui, FixFocus f, CountShortage sh,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        var i = f.Staff!.Value; var k = f.Shift!.Value;
+        string Sym(int x) => x >= 0 && x < ui.ShiftSymbols.Count ? ui.ShiftSymbols[x] : x.ToString();
+        var row = ui.Schedule[i];
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+        var outList = new List<string>
+        {
+            ui.FixTimedOut ? $"制限時間内に、条件を守って {sh.Gap} 回増やせる案は見つかりませんでした。もう一度探すと続きを探せます。"
+                : $"今回の探索では、条件を守って {sh.Gap} 回増やせる案が見つかりませんでした。",
+            $"次に確認すること：「{Sym(k)}」を追加する候補日と、変更を妨げる条件を確認します。",
+        };
+        var wish = false;
+        var candidates = new List<AddCandidate>();
+        for (var j = 0; j < row.Count; j++)
+        {
+            var cur = row[j];
+            if (cur == k) continue;
+            var lim = needLimits?.Invoke(cur, j);
+            var lo = limits?.Invoke(i, cur).Lo;
+            var jj = j;
+            if (ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == cur)
+            {
+                wish = true;
+                candidates.Add(new AddCandidate(j, cur, $"本人の希望（{Sym(cur)}）で固定されています", $"{name}さんに、この日の希望を調整できるかご相談ください", AddCandidateGo.Wish));
+            }
+            else if (lim is { } l && ui.Schedule.Count(r => jj < r.Count && r[jj] == cur) <= l.Lo)
+                candidates.Add(new AddCandidate(j, cur, $"この日の「{Sym(cur)}」が必要人数ぎりぎりです（必要 {l.Lo}人）", $"この日の「{Sym(cur)}」を担当できるほかの職員がいるか、必要人数の設定をご確認ください", AddCandidateGo.Need));
+            else if (lo is { } low && row.Count(v => v == cur) <= low)
+                candidates.Add(new AddCandidate(j, cur, $"{name}さんの「{Sym(cur)}」が個人の下限ちょうどです（下限 {low}回）", $"「{Sym(cur)}」の個人の下限をご確認ください", AddCandidateGo.Count));
+            else candidates.Add(new AddCandidate(j, cur, null, "前後の勤務の並び・期間の制約・この日の人数を勤務表でご確認ください", AddCandidateGo.None));
+        }
+        var pinned = Enumerable.Range(0, row.Count).Count(j => row[j] == k && ui.Wishes.TryGetValue($"{i},{j}", out var pw) && pw == k);
+        if (pinned > 0) { outList.Add($"補足：「{Sym(k)}」の {sh.Count} 回のうち {pinned} 回は本人の希望で固定されています。"); wish = true; }
+        outList.Add(NoFixScope);
+        var blocked = candidates.Count(c => c.Reason is not null);
+        var kind = ui.FixTimedOut ? NoFixKind.Time : blocked > 0 && blocked == candidates.Count ? NoFixKind.Fixed : NoFixKind.Scope;
+        return new NoFixExplain(outList, wish, "yr_count", kind, candidates);
+    }
+
+    /// <summary>［追加候補日を確認］の行の見出し: 「10/3(土)　休 → Dテ」。</summary>
+    public static string AddCandidateHead(AddCandidate c, UiState ui, int shift) =>
+        $"{DayText.Full(ui.StartDate, c.Day)}　{(c.Current >= 0 && c.Current < ui.ShiftSymbols.Count ? ui.ShiftSymbols[c.Current] : "?")} → {(shift >= 0 && shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[shift] : "?")}";
+
+    /// <summary>「探した範囲」を開いたときの中身（<see cref="NoFixScope"/> を利用者の言葉で）。Kotlin <c>SEARCHED_SCOPE_DETAIL</c>。</summary>
+    public const string SearchedScopeDetail = "1マスの変更・2人の入れ替え・複数の勤務を連鎖させる調整（玉突き）";
+}
+
+/// <summary>回数の不足（Kotlin <c>CountShortage</c>）。Target は下限か目標、Basis はその名。</summary>
+public sealed record CountShortage(int Count, int Target, string Basis)
+{
+    public int Gap => Target - Count;
 }

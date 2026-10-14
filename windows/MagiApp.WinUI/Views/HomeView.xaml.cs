@@ -248,10 +248,10 @@ public sealed partial class HomeView : UserControl
                 headline = remain + "直す手があります。";
                 body = top.Label;
                 note = hardLine + (caution is null ? "" : "\n" + caution) + (diffTxt.Length > 0 ? $"\n違反 {totalTxt}（{diffTxt}）" : "") +
-                    (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "");
+                    (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "") + "\n" + CellSheetLogic.ApplyUndoNote;
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
-                helperLabel = $"{ChainFixPreview.ApplyChangeButton}（元に戻せます）"; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
+                helperLabel = ChainFixPreview.ApplyChangeButton; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
             }
             else if (ui.FixSearching)
             {

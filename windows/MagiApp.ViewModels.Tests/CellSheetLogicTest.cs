@@ -372,8 +372,8 @@ public class CellSheetLogicTest
     {
         Assert.Equal(3000L, CellSheetLogic.FixSearchQuickMs);
         Assert.Equal(8000L, CellSheetLogic.FixSearchMs);
-        Assert.Equal("この場所の直し方を探しています…（最長 3 秒）", CellSheetLogic.FixSearchingText(true));
-        Assert.Equal("直し方を探しています…（最長 8 秒）", CellSheetLogic.FixSearchingText(false));
+        Assert.Equal("この場所の勤務変更案を探しています…（最長 3 秒）", CellSheetLogic.FixSearchingText(true));
+        Assert.Equal("勤務変更案を探しています…（最長 8 秒）", CellSheetLogic.FixSearchingText(false));
     }
 
     [Fact]
