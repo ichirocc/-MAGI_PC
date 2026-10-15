@@ -13,7 +13,7 @@ public static class CsvPartialImport
     public const string Stale = "勤務表か設定が変わったため、取込をやめました。もう一度取り込んでください";
     public const string Cancelled = "取込をやめました";
     public const string ConfirmLabel = "この部分だけ取り込む";
-    public const string CancelLabel = "やめる";
+    public const string CancelLabel = "取り込まない";
 
     public const string AppliedWarning = "｜⚠ 引用符（\"）が閉じていません。ここから後ろの行は読めていません";
 

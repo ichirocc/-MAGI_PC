@@ -817,9 +817,9 @@ public sealed partial class EditView : UserControl
                     Text = $"担当外（所属グループで担当できない）希望が{oos}件あります。\n含めて反映すると、その {oos} 件は担当外の勤務として入り、必須違反として数えます。「担当外を除いて反映」ならその {oos} 件は入れません。どちらも「元に戻す」で戻せます。",
                     TextWrapping = TextWrapping.Wrap,
                 },
-                PrimaryButtonText = "担当外も含めて反映",
-                SecondaryButtonText = "担当外を除いて反映",
-                CloseButtonText = "キャンセル",
+                PrimaryButtonText = "担当外も含めて反映する",
+                SecondaryButtonText = "担当外を除いて反映する",
+                CloseButtonText = "反映しない",
                 DefaultButton = ContentDialogButton.Secondary,
             };
             var result = await dialog.ShowAsync();
@@ -1051,8 +1051,8 @@ public sealed partial class EditView : UserControl
         body.Children.Add(new TextBlock { Text = "前の月の希望を新しい月に持ち越さないときは「希望を消して移る」を選びます。", TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = $"{p.Year}年 {p.Month}月 に移します", Content = body,
-            PrimaryButtonText = "希望を残して移る", SecondaryButtonText = "希望を消して移る", CloseButtonText = "やめる",
+            XamlRoot = XamlRoot, Title = $"{p.Year}年 {p.Month}月 に移りますか？", Content = body,
+            PrimaryButtonText = "希望を残して移る", SecondaryButtonText = "希望を消して移る", CloseButtonText = "移らない",
             DefaultButton = ContentDialogButton.Primary,
         };
         var r = await dialog.ShowAsync();
@@ -1066,7 +1066,7 @@ public sealed partial class EditView : UserControl
         }
     }
 
-    private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除", string close = "キャンセル")
+    private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除する", string close = "削除しない")
     {
         var dialog = new ContentDialog
         {
@@ -1877,7 +1877,7 @@ public sealed partial class EditView : UserControl
         var k = MasterShiftCombo.SelectedIndex;
         if (k >= 0 && _syncedMasterShiftIndex >= 0 && k != _syncedMasterShiftIndex && MasterShiftFormDirty())
         {
-            var discard = await ConfirmAsync("入力を破棄しますか？", "入力中の内容は保存されません。", "破棄", "入力を続ける");
+            var discard = await ConfirmAsync("入力を破棄しますか？", "入力中の内容は保存されません。", "破棄する", "入力を続ける");
             if (!discard)
             {
                 _syncingFromModel = true;
@@ -1959,7 +1959,7 @@ public sealed partial class EditView : UserControl
             var cut = DayText.Range(_vm.Ui.StartDate, n, cur - 1);
             var wishN = _vm.Ui.Wishes.Keys.Count(key => { var c = key.IndexOf(','); return c > 0 && int.TryParse(key[(c + 1)..], out var d) && d >= n; });
             if (!await ConfirmAsync("期間を縮めますか？",
-                    $"{cur}日 → {n}日にします。\n{cut} の勤務表の割り当て・希望" + (wishN > 0 ? $" {wishN}件" : "") + "・日別の必要人数は削除されます（元に戻すで取り消せます）。")) return;
+                    $"{cur}日 → {n}日にします。\n{cut} の勤務表の割り当て・希望" + (wishN > 0 ? $" {wishN}件" : "") + "・日別の必要人数は削除されます（元に戻すで取り消せます）。", "期間を縮める", "縮めない")) return;
         }
         _vm.Ws1ResizeDays(n);
     }
@@ -2357,7 +2357,7 @@ public sealed partial class EditView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = $"{name} ・ {kigou}", Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
-            PrimaryButtonText = "変更を適用", SecondaryButtonText = hasRange ? "上下限を解除" : null, CloseButtonText = "閉じる",
+            PrimaryButtonText = "変更を適用", SecondaryButtonText = hasRange ? "上下限を解除する" : null, CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
         };
         void Validate()

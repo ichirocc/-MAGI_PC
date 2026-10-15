@@ -236,7 +236,7 @@ public sealed partial class MagiViewModel
             _alternativeScheds = System.Array.Empty<int[][]>();
             Ui.Alternatives = System.Array.Empty<string>();
             Ui.MessageIsError = true;
-            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。再作成してください";
+            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。案をもう一度作ってください";
             LogOp("W", $"他の案 {i + 1}: 案の計算後に盤面/設定が変わったため適用せず");
             return;
         }
@@ -598,7 +598,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{OpNm(i)}さんの「{OpSy(k)}」の回数は変更できません（{BusyWhat()}の実行中）。終わるか「やめる」を押してから試してください。";
+            Ui.Message = $"{OpNm(i)}さんの「{OpSy(k)}」の回数は変更できません（{BusyWhat()}の実行中）。終わるか「やめる」を押してから、もう一度お試しください。";
             return;
         }
         var st = _state;
@@ -1732,14 +1732,14 @@ public sealed partial class MagiViewModel
         return true;
     }
 
-    private string BusyEditMessage() => $"{BusyWhat()}の実行中は編集できません（完了後にもう一度お試しください）";
+    private string BusyEditMessage() => $"{BusyWhat()}の実行中は編集できません。終わってから、もう一度お試しください";
 
     private bool StructuralEditBlocked()
     {
         if (!OptimizeInFlight()) return false;
         LogOp("W", $"{BusyWhat()}の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）");
         Ui.MessageIsError = true;
-        Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してからにしてください。";
+        Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してから、もう一度お試しください。";
         return true;
     }
 

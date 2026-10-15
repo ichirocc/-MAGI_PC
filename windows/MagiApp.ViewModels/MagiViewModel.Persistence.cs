@@ -543,7 +543,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{BusyWhat()}の実行中は、開く前のデータに戻せません。終わるか「やめる」を押してからにしてください。";
+            Ui.Message = $"{BusyWhat()}の実行中は、開く前のデータに戻せません。終わるか「やめる」を押してから、もう一度お試しください。";
             return;
         }
         LastRestorePreviousDataTask = RestorePreviousDataCoreAsync();
@@ -720,7 +720,7 @@ public sealed partial class MagiViewModel
         if (!OptimizeInFlight()) return false;
         LogOp("W", $"{what} を取り消しました（{BusyWhat()}が実行中）");
         Ui.MessageIsError = true;
-        Ui.Message = $"{BusyWhat()}の実行中です。終わるか「やめる」を押してからにしてください。";
+        Ui.Message = $"{BusyWhat()}の実行中です。終わるか「やめる」を押してから、もう一度お試しください。";
         return true;
     }
 

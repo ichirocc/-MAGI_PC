@@ -193,7 +193,7 @@ public sealed partial class MainWindow : Window
             Title = "計算が実行中です",
             Content = "閉じると、実行中の計算（バックグラウンドを含む）が中断されます。終了しますか？",
             PrimaryButtonText = "終了する",
-            CloseButtonText = "キャンセル",
+            CloseButtonText = "終了しない",
             DefaultButton = ContentDialogButton.Close,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -547,7 +547,7 @@ public sealed partial class MainWindow : Window
             Title = "下書きで置き換えますか？",
             Content = new TextBlock { Text = msg, TextWrapping = TextWrapping.Wrap },
             PrimaryButtonText = "置き換える",
-            CloseButtonText = "キャンセル",
+            CloseButtonText = "置き換えない",
             DefaultButton = ContentDialogButton.Close,
         };
         _draftConfirmDialog = dialog;
@@ -563,7 +563,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot,
-            Title = "引用符が閉じていないCSV",
+            Title = "読める部分だけ取り込みますか？",
             Content = new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap },
             PrimaryButtonText = MagiEngine.V6.CsvPartialImport.ConfirmLabel,
             CloseButtonText = MagiEngine.V6.CsvPartialImport.CancelLabel,

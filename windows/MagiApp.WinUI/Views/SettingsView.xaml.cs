@@ -108,7 +108,7 @@ public sealed partial class SettingsView : UserControl
             {
                 SaveState.Dirty => "未保存の変更があります（まもなく自動保存します）",
                 SaveState.Saving => "保存中…",
-                SaveState.Failed => $"自動保存に失敗しています（PCの空き容量をご確認のうえ「{CellSheetLogic.SaveRetryButton}」をお試しください）",
+                SaveState.Failed => $"自動保存できていません。PCの空き容量を確かめてから「{CellSheetLogic.SaveRetryButton}」を押してください",
                 _ => "",
             };
             SaveStateText.Foreground = (Brush)Application.Current.Resources[ui.SaveState == SaveState.Failed ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
@@ -534,8 +534,8 @@ public sealed partial class SettingsView : UserControl
                        "今の内容は退避されるため、「「データを開く」前の状態に戻す」で戻せます。",
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = "新規作成",
-            CloseButtonText = "キャンセル",
+            PrimaryButtonText = "新規作成する",
+            CloseButtonText = "作成しない",
             DefaultButton = ContentDialogButton.Close,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -619,16 +619,16 @@ public sealed partial class SettingsView : UserControl
             var dialog = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "名簿CSVをどう取り込みますか？",
+                Title = "どちらとして取り込みますか？",
                 Content = new TextBlock
                 {
                     Text = "表の中身を「勤務表（初期割当）」として取り込むか、「希望シフト」として取り込むかを選んでください。" +
                            "この取込は今のデータを新規データへ置き換えます（「「データを開く」前の状態に戻す」で戻せます）。",
                     TextWrapping = TextWrapping.Wrap,
                 },
-                PrimaryButtonText = "勤務表として取込",
-                SecondaryButtonText = "希望として取込",
-                CloseButtonText = "キャンセル",
+                PrimaryButtonText = "勤務表として取り込む",
+                SecondaryButtonText = "希望シフトとして取り込む",
+                CloseButtonText = "取り込まない",
                 DefaultButton = ContentDialogButton.Close,
             };
             var result = await dialog.ShowAsync();

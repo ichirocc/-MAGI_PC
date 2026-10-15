@@ -261,7 +261,7 @@ public sealed partial class MagiViewModel
                 if (st.ShiftCount <= 1)
                 {
                     Ui.MessageIsError = true;
-                    Ui.Message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで開いて保存すると消える場合があります）。元のファイルをそのまま取り込んでください。";
+                    Ui.Message = "CSVを取り込めませんでした。シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧は、Excelで開いて保存すると消えることがあります。元のファイルをそのまま取り込んでください。";
                     LogOp("W", $"勤務表CSV取込 中止: 凡例なし（シフト{st.ShiftCount}種のみ→全公休化を防止）");
                     return;
                 }
@@ -285,7 +285,7 @@ public sealed partial class MagiViewModel
                 return;
             }
             Ui.MessageIsError = true;
-            Ui.Message = "CSV取込失敗: ユニット列形式と判定しましたが解析できませんでした。ヘッダ行（ユニット, No, 役職, 氏名, 1, 2, …）と氏名列をご確認ください。";
+            Ui.Message = "CSVを取り込めませんでした（ユニット列の形式として読めません）。ヘッダ行（ユニット, No, 役職, 氏名, 1, 2, …）と氏名列を確かめてから、もう一度取り込んでください。";
             LogOp("W", "勤務表CSV(ユニット列形式)取込 失敗: 解析不能");
             return;
         }
@@ -319,7 +319,7 @@ public sealed partial class MagiViewModel
         if (st.ShiftCount <= 1)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "CSV取込失敗: シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧が削除されていないかご確認ください（Excelで保存すると消える場合があります）。";
+            Ui.Message = "CSVを取り込めませんでした。シフト記号（凡例）が見つかりません。テンプレCSV末尾の『記号 / 時刻 …』一覧は、Excelで保存すると消えることがあります。元のファイルをそのまま取り込んでください。";
             LogOp("W", $"{(asWishes ? "希望シフト" : "勤務表")}CSV取込 中止: 凡例なし（シフト{st.ShiftCount}種のみ）");
             return;
         }
@@ -399,7 +399,7 @@ public sealed partial class MagiViewModel
             case CsvPartialImport.Verdict.NothingReadable:
                 Ui.MessageIsError = true;
                 Ui.Running = false;
-                Ui.Message = $"CSV取込失敗: {CsvPartialImport.NothingReadable}。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください";
+                Ui.Message = $"CSVを取り込めませんでした。{CsvPartialImport.NothingReadable}。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください";
                 LogOp("W", "CSV取込 失敗: 引用符が閉じていなくて読めた職員の行がないため取込を中止しました");
                 return null;
         }
@@ -433,8 +433,8 @@ public sealed partial class MagiViewModel
                 Ui.MessageIsError = true;
                 Ui.Running = false;
                 Ui.Message = res.AmbiguousNames.Count > 0
-                    ? $"CSV取込失敗: {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}。編集タブ＞職員管理とCSVの両方で名前を区別してから、もう一度取り込んでください"
-                    : "CSV取込失敗: 一致する職員名がありませんでした。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
+                    ? $"CSVを取り込めませんでした。{ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}。編集タブ＞職員管理とCSVの両方で名前を区別してから、もう一度取り込んでください"
+                    : "CSVを取り込めませんでした。一致する職員名がありません。CSVの1列目の氏名と列の並び（氏名, 1日目, 2日目, …）を今のデータに合わせてから、もう一度取り込んでください";
                 LogOp("W", "CSV取込 失敗: 職員名が0件一致のため取込を中止しました（氏名/列レイアウトを確認）");
                 return;
             }
@@ -574,7 +574,7 @@ public sealed partial class MagiViewModel
         if (res is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = "職員一覧の取込失敗（追加0・更新0）。形式『氏名,グループ,スキル』（1行=1名）をご確認ください。";
+            Ui.Message = "職員一覧を取り込めませんでした（追加0・更新0）。形式『氏名,グループ,スキル』（1行=1名）に直してから、もう一度取り込んでください。";
             LogOp("W", "職員一覧CSV取込 失敗: 0件");
             return;
         }
@@ -622,10 +622,10 @@ public sealed partial class MagiViewModel
         {
             var hint = ComponentImportMismatchHint(text);
             var tail = hint.Length == 0
-                ? "形式は『氏名,日,希望シフト』（例: 古泉 健一,5,休）です。氏名・シフト記号が一致しているかご確認ください。"
+                ? "形式は『氏名,日,希望シフト』（例: 古泉 健一,5,休）です。氏名とシフト記号を今のデータに合わせてから、もう一度取り込んでください。"
                 : hint;
             Ui.MessageIsError = true;
-            Ui.Message = $"希望シフトの取込失敗（取り込める行が0件）。{tail}";
+            Ui.Message = $"希望シフトを取り込めませんでした。取り込める行がありません。{tail}";
             LogOp("W", $"希望シフトCSV取込 失敗: 0件{(hint.Length == 0 ? "" : "（別形式CSVの取り違えの可能性）")}");
             return;
         }
@@ -659,10 +659,10 @@ public sealed partial class MagiViewModel
         {
             var hint = ComponentImportMismatchHint(text);
             var tail = hint.Length == 0
-                ? "1列目の種別（連勤/禁止連続/群組合せ禁止/個人レンジ 等）をご確認ください。例: 連勤,5,休,14 ／ 個人レンジ,古泉 健一,A4,6,8"
+                ? "1列目の種別（連勤/禁止連続/群組合せ禁止/個人レンジ 等）を直してから、もう一度取り込んでください。例: 連勤,5,休,14 ／ 個人レンジ,古泉 健一,A4,6,8"
                 : hint;
             Ui.MessageIsError = true;
-            Ui.Message = $"各制約の取込失敗（取り込める行が0件）。{tail}";
+            Ui.Message = $"各制約を取り込めませんでした。取り込める行がありません。{tail}";
             LogOp("W", $"各制約CSV取込 失敗: 0件{(hint.Length == 0 ? "" : "（別形式CSVの取り違えの可能性）")}");
             return;
         }

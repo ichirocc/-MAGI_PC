@@ -1082,8 +1082,8 @@ public sealed partial class HomeView : UserControl
                 var text = (idx < _vm.Ui.Alternatives.Count ? _vm.Ui.Alternatives[idx] : "") + (worse ? "\n" + CellSheetLogic.AlternativesAllWorseText + "（元に戻すで取り消せます）" : "");
                 var dialog = new ContentDialog
                 {
-                    XamlRoot = XamlRoot, Title = $"案{idx + 1}を反映しますか", Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
-                    PrimaryButtonText = "反映する", CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot, Title = $"案{idx + 1}を反映しますか？", Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+                    PrimaryButtonText = "反映する", CloseButtonText = "反映しない", DefaultButton = ContentDialogButton.Close,
                 };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) _vm.ApplyAlternative(idx);
             };
