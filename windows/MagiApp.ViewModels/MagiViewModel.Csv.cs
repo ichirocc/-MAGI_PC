@@ -440,6 +440,7 @@ public sealed partial class MagiViewModel
             }
             PushUndo();
             pushedUndo = true;
+            _boardReplaceRev++;
             _currentSchedule = res.Schedule.Copy2D();
             AutoSave();
             _resultSchedule = res.Schedule.Copy2D();
@@ -471,6 +472,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = false;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
+                ui.KeptPrevious = false;
                 ui.Message = msg;
             }, ct: ct);
             if (res.Matched >= 1 && res.Matched < total)

@@ -32,9 +32,26 @@ public sealed partial class MagiViewModel
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
     }
 
-    /// <summary>手が解消する必須違反を「族：場所」で（ホームの見出しが名指しする。Kotlin OperatorNextActionCard の <c>topResolved</c>）。盤面が無ければ空。</summary>
-    public IReadOnlyList<string> ResolvedHardLabelsFor(FixSuggestion s, Func<string, string> labelOf) =>
-        _state is { } st && _currentSchedule is { } sched ? CellSheetLogic.ResolvedHardLabels(st, sched, s.Ops, Ui.StaffNames, Ui.ShiftSymbols, labelOf) : Array.Empty<string>();
+    /// <summary>
+    /// 先頭の直す手が解消する必須違反を「族：場所」で作り <see cref="UiState.TopFixResolved"/> へ。
+    /// 盤面と手が前回と同じなら作らない。UI スレッドがある文脈では背景で検査し、読む側は <see cref="CellSheetLogic.TopFixResolvedLabels"/> で鮮度を照合する。
+    /// </summary>
+    private void RefreshTopFixResolved()
+    {
+        var ops = Ui.FixSuggestions.FirstOrDefault(f => f.DeltaHard < 0)?.Ops;
+        var sch = Ui.Schedule;
+        var st = _state;
+        if (st is null || ops is null || sch.Count == 0) return;
+        if (Ui.TopFixResolved is { } t && t.Matches(ops, sch)) return;
+        var names = Ui.StaffNames; var syms = Ui.ShiftSymbols; var labelOf = FamilyLabelOf;
+        IReadOnlyList<string> Labels()
+        {
+            try { return CellSheetLogic.ResolvedHardLabels(st, sch.Select(r => r.ToArray()).ToArray(), ops, names, syms, labelOf); }
+            catch (Exception) { return Array.Empty<string>(); }
+        }
+        if (_uiContext is null) { Ui.TopFixResolved = new TopFixResolved(ops, sch, Labels()); return; }
+        _ = Task.Run(Labels).ContinueWith(task => PostToUi(() => Ui.TopFixResolved = new TopFixResolved(ops, sch, task.Result)), TaskScheduler.Default);
+    }
 
     /// <summary>このセルが「足りない側」の族（当日の自分の勤務の人員不足・自分の回数の不足）。セルの問題として赤で出さない。</summary>
     public IReadOnlySet<string> CellShortSideFamilies(int i, int j)

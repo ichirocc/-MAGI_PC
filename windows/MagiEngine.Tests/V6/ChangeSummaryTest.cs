@@ -35,7 +35,7 @@ public class ChangeSummaryTest
         Assert.Equal("変更：2人・4か所／希望どおり 2/2件", s.Line());
         Assert.Equal(-1, s.FamilyDeltas["pref"]); Assert.Equal(1, s.FamilyDeltas["high"]);   // s0 の希望が通り、s2 が上限超過
         Assert.Equal("減った：pref 1件", s.FamilyLine().Split('／')[0]);
-        Assert.StartsWith("増えた：fair 6件・上限超過 1件", s.FamilyLine(k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: fair +6(=30) が先頭、上限超過 +1(=25) が続く（3.647.0 fair 5。旧: 上限超過が先頭）
+        Assert.StartsWith("増えた：fair 6件・上限超過 1件", s.FamilyLine(label: k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: fair +6(=30) が先頭、上限超過 +1(=25) が続く（3.647.0 fair 5。旧: 上限超過が先頭）
     }
 
     [Fact]

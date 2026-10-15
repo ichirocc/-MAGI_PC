@@ -301,6 +301,7 @@ public static partial class V6HotfixPasses
         DeltaEvaluator? de = null;
         if (PolishGate.RotationDeltaPrescreen) { de = new DeltaEvaluator(p); de.Reset(work); if (!DeltaKeyMatches(de, before)) de = null; }
         var prescreened = 0;
+        var prescreenMismatches = 0;
         void DeRotate(DeltaEvaluator d, int a, int b, int c, int jj, int ww, int[] targetA, int[] targetB, int[] targetC)
         {
             for (var t = 0; t < ww; t++) { d.Apply(a, jj + t, targetA[t]); d.Apply(b, jj + t, targetB[t]); d.Apply(c, jj + t, targetC[t]); }
@@ -384,19 +385,30 @@ public static partial class V6HotfixPasses
                                     }
                                 }
                                 var d = de;
+                                ViolationReport? verified = null;
                                 if (d != null)
                                 {
                                     DeRotate(d, ai, bi, ci, j, w, sb, sc, sa);
                                     // AdoptionGate は BetterReport を先に要求する＝キーで負ける手は正式評価でも必ず不採用。
-                                    if (!DeltaKeyBetter(d.ReportKey(), bestRep))
+                                    var key = d.ReportKey();
+                                    if (!DeltaKeyBetter(key, bestRep))
                                     {
-                                        Rotate(ai, bi, ci, j, w, sa, sb, sc);
-                                        DeRotate(d, ai, bi, ci, j, w, sa, sb, sc);
-                                        prescreened++;
-                                        continue;
+                                        // 抜き取り検査: 際どい手と一定数ごとの手は正式評価でキーを照合し、食い違えばこの研磨の残りは差分評価を使わない。
+                                        if (PrescreenNeedsVerify(key, bestRep, prescreened))
+                                        {
+                                            var full = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+                                            if (!DeltaKeyMatches(d, full)) { de = null; d = null; verified = full; prescreenMismatches++; }
+                                        }
+                                        if (d != null)
+                                        {
+                                            Rotate(ai, bi, ci, j, w, sa, sb, sc);
+                                            DeRotate(d, ai, bi, ci, j, w, sa, sb, sc);
+                                            prescreened++;
+                                            continue;
+                                        }
                                     }
                                 }
-                                var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+                                var rep = verified ?? UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRotate, work, rep, bestRep, pinBlocks).Accepted)
                                 {
                                     bestRep = rep; applied++; improved = true;
@@ -421,7 +433,7 @@ public static partial class V6HotfixPasses
                     $" / c3 {before.Breakdown.GetValueOrDefault("c3", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3", 0)}" +
                     $" / c3m {before.Breakdown.GetValueOrDefault("c3m", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3m", 0)}" +
                     $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
-                    $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手・差分評価で省略{prescreened}手)"),
+                    $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手・差分評価で省略{prescreened}手{(prescreenMismatches > 0 ? $"・差分評価の食い違い{prescreenMismatches}回で停止" : "")})"),
         };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
     }
@@ -432,6 +444,12 @@ public static partial class V6HotfixPasses
         var k = de.ReportKey();
         return k[0] == rep.Hard && (double)k[1] == rep.WeightedScore && k[2] == rep.Total;
     }
+
+    /// <summary>差分評価で落とした手を正式評価で照合するか: 際どい手（必須が同じで重みの差が 1 以内）と、落とした手の <see cref="PrescreenVerifyEvery"/> 手ごと。</summary>
+    internal static bool PrescreenNeedsVerify(long[] key, ViolationReport best, int prescreened) =>
+        prescreened % PrescreenVerifyEvery == 0 || (key[0] == best.Hard && Math.Abs((double)key[1] - best.WeightedScore) <= 1.0);
+
+    internal const int PrescreenVerifyEvery = 64;
 
     /// <summary>BetterReport と同じ辞書式で、差分キー <paramref name="key"/> が <paramref name="best"/> より良いか。</summary>
     internal static bool DeltaKeyBetter(long[] key, ViolationReport best)

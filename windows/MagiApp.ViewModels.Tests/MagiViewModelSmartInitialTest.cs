@@ -59,7 +59,7 @@ public class MagiViewModelSmartInitialTest
         vm.GenerateSmartInitial();
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
-        Assert.StartsWith("今の勤務表（必須 ", vm.Ui.DraftConfirm);
+        Assert.Equal("今の勤務表を下書きで置き換えます。元に戻せます", vm.Ui.DraftConfirm);   // 結果が無い（数えていない）ときは件数を言わない（3.686.0）
         vm.DismissDraftConfirm();
         Assert.Null(vm.Ui.DraftConfirm);
     }

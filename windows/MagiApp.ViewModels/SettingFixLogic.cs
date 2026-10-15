@@ -11,10 +11,16 @@ public static class SettingFixLogic
 {
     public const string WishChangedMessage = "診断のあとで希望が変わったため、取り消しませんでした。診断をやり直してください";
 
-    /// <summary>診断のあとで対象の希望が別の勤務に変わった（または消えた）か。</summary>
+    public const string WishAlreadyRemovedMessage = "この希望はすでに外れています";
+
+    /// <summary>診断のあとで対象の希望が別の勤務に変わったか（消えていれば <see cref="WishAlreadyRemoved"/> の側＝取り消し済みと同じ）。</summary>
     public static bool WishChanged(MagiState s, SettingIssue issue) =>
         issue.Action == SettingFixAction.RemoveWish && issue.WishKey is { } k
-        && (s.Wishes.TryGetValue(k, out var v) ? (int?)v : null) != issue.WishShift;
+        && s.Wishes.TryGetValue(k, out var v) && v != issue.WishShift;
+
+    /// <summary>外そうとした希望がもう無い（別の操作で外れた）か。</summary>
+    public static bool WishAlreadyRemoved(MagiState s, SettingIssue issue) =>
+        issue.Action == SettingFixAction.RemoveWish && issue.WishKey is { } k && !s.Wishes.ContainsKey(k);
 
     public static MagiState? Apply(MagiState s, SettingIssue issue)
     {

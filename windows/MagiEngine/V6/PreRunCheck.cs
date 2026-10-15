@@ -101,14 +101,10 @@ public static class PreRunCheck
         return new WallHint(walls.Count, top.Count, top[0].Staff, top[0].N);
     }
 
-    /// <summary>設定・希望・盤面の指紋。「このままつくる」の後は、これが変わるまで同じ理由で止めない。</summary>
-    public static long Fingerprint(MagiState state, int[][] schedule)
+    /// <summary>再作成すると外れる手置きのセル（<see cref="Summary.RerunClears"/> と同じもの）だけを出す。</summary>
+    public static IReadOnlyList<HandPlacedCell> RerunClears(MagiState state, int[][] schedule)
     {
-        var h = StateFingerprint.Of(state);
-        unchecked
-        {
-            foreach (var row in schedule) foreach (var v in row) h = h * 31L + v;
-        }
-        return h;
+        var p = ScheduleUtil.CachedProblem(state);
+        return HandPlacedCells(p, ScheduleUtil.NormalizeSchedule(schedule, p));
     }
 }

@@ -2368,7 +2368,7 @@ public sealed partial class ScheduleView : UserControl
                 };
                 acts.Children.Add(b);
             }
-            var more = new Button { Content = "詳しく ▸", MinHeight = 48 };
+            var more = new Button { Content = "詳しく ▸", MinHeight = 48, MinWidth = 64 };
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "問題の説明と直し方を表示");
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
@@ -2627,12 +2627,16 @@ public sealed partial class ScheduleView : UserControl
             {
                 panel.Children.Add(Body("どのように調整しますか？", bold: true));
                 // 足りない側のセルは、このセルを変えるより当日のその勤務に入れる人を探すのが先。
+                // 直し方の一覧は一度に 1 つだけ開く（片方を開くともう片方は閉じる）。
+                Action closeShort = () => { }, closeCell = () => { };
                 if (shortSide.Contains("covU"))
                 {
                     var shortSlot = new StackPanel();
                     var shortSearch = Wide(CellSheetLogic.ShortSideSearchButton(DayText.Short(ui.StartDate, j), Sym(cur)), accent: true);
+                    closeShort = () => { shortSlot.Children.Clear(); shortSearch.Visibility = Visibility.Visible; };
                     shortSearch.Click += (_, _) =>
                     {
+                        closeCell();
                         shortSearch.Visibility = Visibility.Collapsed;
                         shortSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(null, cur, j), quick: true));
                     };
@@ -2645,8 +2649,10 @@ public sealed partial class ScheduleView : UserControl
                     var searchSlot = new StackPanel();
                     var search = Wide("変更案を探す", accent: true);
                     var searchNote = new TextBlock { Text = "この日・前後の日・関連する勤務の変更案を比較します。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
+                    closeCell = () => { searchSlot.Children.Clear(); search.Visibility = Visibility.Visible; searchNote.Visibility = Visibility.Visible; };
                     search.Click += (_, _) =>
                     {
+                        closeShort();
                         search.Visibility = Visibility.Collapsed;
                         searchNote.Visibility = Visibility.Collapsed;
                         searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j),

@@ -70,7 +70,7 @@ public static class FixExplain
             var op = g[0];
             var where = top switch
             {
-                "low" or "high" or "apt" or "c2" or "weekly" => $"{(op.Staff >= 0 && op.Staff < names.Count ? names[op.Staff] : $"#{op.Staff}")}さんの",
+                "low" or "high" or "apt" or "c2" or "weekly" => $"{(op.Staff >= 0 && op.Staff < names.Count ? names[op.Staff] : CellSheetLogic.UnknownLabel)}さんの",
                 "covU" or "covO" => $"{DayText.Short(state.StartDate, op.Day)}の",
                 _ => "",
             };
@@ -88,8 +88,8 @@ public static class FixExplain
             var what = string.Join("・", x.Ops.Select(op =>
             {
                 var cur = op.Staff >= 0 && op.Staff < schedule.Count && op.Day >= 0 && op.Day < schedule[op.Staff].Count ? schedule[op.Staff][op.Day] : -1;
-                return $"{(op.Staff >= 0 && op.Staff < staffNames.Count ? staffNames[op.Staff] : $"#{op.Staff}")}さん {DayText.Short(startDate, op.Day)} " +
-                    $"{(cur >= 0 && cur < shiftSymbols.Count ? shiftSymbols[cur] : "—")} → {(op.ToShift >= 0 && op.ToShift < shiftSymbols.Count ? shiftSymbols[op.ToShift] : $"{op.ToShift}")}";
+                return $"{(op.Staff >= 0 && op.Staff < staffNames.Count ? staffNames[op.Staff] : CellSheetLogic.UnknownLabel)}さん {DayText.Short(startDate, op.Day)} " +
+                    $"{(cur >= 0 && cur < shiftSymbols.Count ? shiftSymbols[cur] : "—")} → {(op.ToShift >= 0 && op.ToShift < shiftSymbols.Count ? shiftSymbols[op.ToShift] : CellSheetLogic.UnknownLabel)}";
             }));
             return new[] { $"合わせて変える勤務：{what}", $"　理由：{x.Reason ?? "理由を確かめられません"}" };
         }).Concat(e.Incidental.Select(i => $"ついでに直る：{i}")).ToList();
@@ -104,7 +104,8 @@ public static class FixExplain
         return outList;
     }
 
-    /// <summary>下書きで今の勤務表を置き換える前の確認（hard＝今の必須違反、単位つき）。</summary>
-    public static string DraftConfirmText(string hard) => $"今の勤務表（必須 {hard}）を下書きで置き換えます。元に戻せます";
+    /// <summary>下書きの確認の一文。hard＝置き換える前の必須違反（まだ数えていなければ null＝件数を言わない）。</summary>
+    public static string DraftConfirmText(string? hard) =>
+        hard is null ? "今の勤務表を下書きで置き換えます。元に戻せます" : $"今の勤務表（必須 {hard}）を下書きで置き換えます。元に戻せます";
     public const string DraftUndoNote = "元に戻すで前の勤務表に戻せます";
 }

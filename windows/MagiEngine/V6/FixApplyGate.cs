@@ -14,10 +14,12 @@ public static class FixApplyGate
         public bool Applied => Schedule is not null;
     }
 
-    public static Outcome Apply(MagiState state, int[][] schedule, IReadOnlyList<FixCell> ops)
+    public static Outcome Apply(MagiState state, int[][] schedule, IReadOnlyList<FixCell> ops) =>
+        Apply(state, schedule, ops, new Problem(state), UnifiedViolationChecker.Check(state, schedule));
+
+    /// <summary>同じ盤面の候補を続けて評価する呼び手向け＝<paramref name="p"/> と <paramref name="before"/> は state/schedule から作ったものを渡す（結果は上と同じ）。</summary>
+    public static Outcome Apply(MagiState state, int[][] schedule, IReadOnlyList<FixCell> ops, Problem p, ViolationReport before)
     {
-        var p = new Problem(state);
-        var before = UnifiedViolationChecker.Check(state, schedule);
         if (ops.Count == 0) return new Outcome(null, before, null, "変更がありません");
         var work = schedule.Copy2D();
         foreach (var op in ops)

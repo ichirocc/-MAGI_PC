@@ -826,7 +826,7 @@ public static class CellSheetLogic
                     : a < lim.Lo ? $"（必要 {lim.Lo}人を下回ります）"
                     : a > lim.Hi ? $"（適正 {lim.Hi}人を超えます）"
                     : $"（必要 {lim.Lo}人を満たしたまま）";
-                var line = $"{DayText.Short(startDate, j)}の{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}")}：{b}人 → {a}人{note}";
+                var line = $"{DayText.Short(startDate, j)}の{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : UnknownLabel)}：{b}人 → {a}人{note}";
                 if (skip is { } s2 && j == s2.Day) same.Add(line); else other.Add(line);
             }
         }
@@ -843,12 +843,12 @@ public static class CellSheetLogic
         {
             IReadOnlyList<int> row = i >= 0 && i < schedule.Count ? schedule[i] : Array.Empty<int>();
             IReadOnlyList<int> rowA = i >= 0 && i < after.Count ? after[i] : Array.Empty<int>();
-            var name = i >= 0 && i < staffNames.Count ? staffNames[i] : $"#{i}";
+            var name = i >= 0 && i < staffNames.Count ? staffNames[i] : UnknownLabel;
             return ops.Where(o => o.Staff == i).SelectMany(o => new[] { o.Day >= 0 && o.Day < row.Count ? row[o.Day] : (int?)null, o.ToShift })
                 .OfType<int>().Distinct().Order().Select(k =>
                 {
                     var b = row.Count(v => v == k); var a = rowA.Count(v => v == k);
-                    var sym = k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}";
+                    var sym = k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : UnknownLabel;
                     if (a == b) return $"{name}さんの「{sym}」の回数は変わりません（{b}回のまま）";
                     var cross = i != targetStaff && limits?.Invoke(i, k) is { } l ? CountCrossNote(b, a, l.Lo, l.Hi) : "";
                     return $"{name}さんの「{sym}」：{b}回 → {a}回" + cross;
@@ -879,7 +879,7 @@ public static class CellSheetLogic
                     var b = row.Count(v => v == k); var a = rowA.Count(v => v == k);
                     var fam = lo is { } l && a < l && b >= l ? "low" : hi is { } h && a > h && b <= h ? "high" : null;
                     return fam is null ? null
-                        : $"新たに生じる：{labelOf(fam)}（{(i >= 0 && i < staffNames.Count ? staffNames[i] : $"#{i}")}さんの{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}")}）";
+                        : $"新たに生じる：{labelOf(fam)}（{(i >= 0 && i < staffNames.Count ? staffNames[i] : UnknownLabel)}さんの{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : UnknownLabel)}）";
                 }).OfType<string>();
         }).ToList();
     }
@@ -1048,7 +1048,7 @@ public static class CellSheetLogic
     {
         string Sym(int? x) => x is { } v && v >= 0 && v < shiftSymbols.Count ? shiftSymbols[v] : "—";
         string NameOf(int x) => x >= 0 && x < staffNames.Count ? staffNames[x] : $"#{x}";
-        var name = NameOf(i);
+        var name = i >= 0 && i < staffNames.Count ? staffNames[i] : UnknownLabel;
         var cur = s[i][j];
         var trial = s.Select(r => r.ToArray()).ToArray();
         trial[i][j] = k;
@@ -1268,7 +1268,7 @@ public static class CellSheetLogic
                 "vio-high" => hi is { } h ? $"／上限{h}回" : null,
                 _ => apt is { } t ? $"／目標{t}回" : lo is { } l2 ? $"／下限{l2}回" : hi is { } h2 ? $"／上限{h2}回" : null,
             } ?? "";
-            return $"{(k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : $"{k}")}：現在{n}回{basis}";
+            return $"{(k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : UnknownLabel)}：現在{n}回{basis}";
         }).ToList();
     }
 
@@ -1309,8 +1309,16 @@ public static class CellSheetLogic
         "前回と同じ探索時間・方式で再作成します。" + (top is null ? "" : $"前回いちばん多い必須違反は{top}です。") +
         "同じ設定では同じ違反が残りやすいため、編集タブでこれを 1 つ緩めると減る見込みがあります。";
 
-    /// <summary>「勤務表を作成する」を一度見たら出さない基準＝設定と希望（盤面は含めない。再作成のたびに盤面は変わる）。</summary>
-    public static long PreRunAckFingerprint(MagiState st) => StateFingerprint.Of(st);
+    /// <summary>
+    /// 「勤務表を作成する」を一度見たら出さない基準＝設定と希望と、再作成で外れる手置きのセル（<paramref name="clears"/>）。
+    /// 盤面そのものは含めない（再作成のたびに変わる）。上限 0 のセルを手で置き直したときだけシートをもう一度出す。
+    /// </summary>
+    public static long PreRunAckFingerprint(MagiState st, IReadOnlyList<PreRunCheck.HandPlacedCell> clears)
+    {
+        var h = StateFingerprint.Of(st);
+        unchecked { foreach (var c in clears) h = ((h * 31L + c.Staff) * 31L + c.Day) * 31L + c.Shift; }
+        return h;
+    }
 
     public const string PreRunTitle = "勤務表を作成する";
     public const string PreRunProceed = "勤務表を作成";
@@ -1439,7 +1447,7 @@ public static class CellSheetLogic
                 if (p.CovUCell(from, dayIndex, cnt - 1) > p.CovUCell(from, dayIndex, cnt)) continue;
             }
             var g = i < st.StaffList.Count ? st.StaffList[i].GroupIdx : -1;
-            var name = i < st.StaffList.Count ? st.StaffList[i].Name : $"#{i}";
+            var name = i < st.StaffList.Count ? st.StaffList[i].Name : UnknownLabel;
             var groupSym = g >= 0 && g < st.Groups.Count ? st.Groups[g].Kigou : "";
             outList.Add(new FixCandidate(i, name, groupSym, sched[i][dayIndex] == rest));
         }
@@ -1505,14 +1513,18 @@ public static class CellSheetLogic
     /// <summary>Kotlin <c>ALTERNATIVES_ALL_WORSE</c>（C# は同名のメソッドと並べられないため Text を付ける）。</summary>
     public const string AlternativesAllWorseText = "今の勤務表より良くありません";
 
-    /// <summary>他の案の 1 行（必須違反と、計算した時点の勤務表との比べ）。</summary>
-    public static string AlternativeSummary(int n, string hardTxt, int? curHard, int altHard, bool worse)
+    /// <summary>
+    /// 他の案の 1 行（必須違反と、計算した時点の勤務表との比べ）。比べは採用の基準（BetterReport）の結果で語る＝
+    /// <paramref name="better"/>＝案が今より良い、<paramref name="worse"/>＝今のほうが良い、どちらでもなければ今と同じ。
+    /// </summary>
+    public static string AlternativeSummary(int n, string hardTxt, int? curHard, int altHard, bool worse, bool better)
     {
         var cmp = curHard is null ? ""
             : altHard < curHard ? "（今より少ない）"
             : altHard > curHard ? "（今より多い）"
-            : worse ? "（今と同じ・要調整は今のほうが少ない）"
-            : "（今と同じ・要調整は少ない）";
+            : better ? "（今と同じ・全体は今より良い（重みつき））"
+            : worse ? "（今と同じ・全体は今より悪い（重みつき））"
+            : "（今と同じ）";
         return $"案{n}：必須違反 {hardTxt}{cmp}";
     }
 
@@ -1525,6 +1537,43 @@ public static class CellSheetLogic
     public const string ShortageEnoughText = "担当できる人の数は足りています。なおし方を見るで 1 人ずつ入れられます";
 
     public const string SettingsTimeTitle = "勤務表をつくる時間";
+
+    /// <summary>名前・記号が引けないときの共通の表示（番号を見せない）。</summary>
+    public const string UnknownLabel = "—";
+
+    /// <summary>進捗の基準（InitHard/InitSoft）を取り直すかの指紋＝データの指紋＋盤面差し替えの回数。</summary>
+    public static long InitBaseKeyOf(long stateKey, long boardReplaceRev) => unchecked(stateKey * 1_000_003L + boardReplaceRev);
+
+    /// <summary>ホームの見出しが読む解消の行（鮮度が合わなければ空＝件数だけの見出し）。</summary>
+    public static IReadOnlyList<string> TopFixResolvedLabels(UiState ui)
+    {
+        var top = ui.FixSuggestions.FirstOrDefault(f => f.DeltaHard < 0);
+        if (top is null) return Array.Empty<string>();
+        return ui.TopFixResolved is { } t && t.Matches(top.Ops, ui.Schedule) ? t.Labels : Array.Empty<string>();
+    }
+
+    /// <summary>実行中の進捗サマリ文字列: 残りの違反（開始の値つき）・ 残り時間。読取専用。反復数は作り手の指標なので出さない。</summary>
+    public static string ProgressSummary(UiState ui)
+    {
+        var parts = new List<string>(4);
+        if (ui.BestHard > 0L)
+        {
+            // 開始は基準の盤面の内訳から同じ単位で言う（内訳が無い・減っていなければ出さない＝件と人を混ぜない）。
+            var start = ui.InitBreakdown.Count > 0 && ui.InitHard > ui.BestHard ? $"（開始{AnalysisTriage.HardText(ui.InitBreakdown, ui.InitHard)}）" : "";
+            parts.Add($"必須違反 残り{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}{start}");
+        }
+        else if (ui.InitBreakdown.Count > 0 || ui.BestSoft > 0L)
+        {
+            // 要調整も族の単位ごとの合計で言う（生の件数は単位が混ざる）。
+            var now = AnalysisTriage.UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "なし";
+            var start = ui.InitBreakdown.Count > 0 ? AnalysisTriage.UnitTotals(ui.InitBreakdown, MirrorKeys.Soft) : null;
+            parts.Add($"要調整 {now}" + (start is not null && start != now ? $"（開始{start}）" : ""));
+        }
+        else parts.Add("要調整 –");
+        var secLeft = Math.Max(0L, (ui.BudgetSec + V6FinalPort.PostReserveSec + V6FinalPort.ChainReserveSec) * 1000L - ui.ElapsedMs) / 1000L;
+        parts.Add($"残り {secLeft / 60}:{secLeft % 60:00}");
+        return string.Join("  ・  ", parts);
+    }
 }
 
 /// <summary>[operator_ux §5] 不足枠の候補職員 1 人。</summary>
