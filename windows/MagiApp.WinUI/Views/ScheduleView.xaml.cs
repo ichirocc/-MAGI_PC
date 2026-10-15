@@ -1291,7 +1291,7 @@ public sealed partial class ScheduleView : UserControl
         var focus = Resolve() ?? requested;
         var picked = initialPicked;
         var reuseOnce = reuse;
-        bool othersOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
+        bool othersOpen = false, moveOnlyOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
         void Find()
@@ -1338,15 +1338,23 @@ public sealed partial class ScheduleView : UserControl
                 host.Children.Add(new TextBlock { Text = CellSheetLogic.PickProblemFirstNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 return;
             }
-            var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key);
+            var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key, ui.FixCancelledKey);
             if (state == FixPanelState.WaitCheck) { host.Children.Add(new TextBlock { Text = "計算・チェックが終わると探します。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.Failed)
             {
                 host.Children.Add(new TextBlock { Text = "勤務変更案を探す途中でうまくいきませんでした。もう一度ためせます。", TextWrapping = TextWrapping.Wrap });
-                var again = new Button { Content = "もう一度探す", MinHeight = 48 };
+                var again = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
                 again.Click += (_, _) => Find();
                 host.Children.Add(again);
+                return;
+            }
+            if (state == FixPanelState.Cancelled)
+            {
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.FixSearchCancelled, TextWrapping = TextWrapping.Wrap });
+                var retry = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
+                retry.Click += (_, _) => Find();
+                host.Children.Add(retry);
                 return;
             }
             if (state == FixPanelState.Running)
@@ -1392,7 +1400,8 @@ public sealed partial class ScheduleView : UserControl
             var purpose = target is not null
                 ? CellSheetLogic.FixTargetPurpose(target, focus.Staff is { } fi && fi >= 0 && fi < ui.StaffNames.Count ? ui.StaffNames[fi] : null, label)
                 : picked is not null ? $"選んだ問題（{LabelOf(picked)}）を減らす" : null;
-            UIElement Card(int n, FixSuggestion s)
+            var tv = ui.FixTiers is { } tv0 && tv0.Key == focus.Key && target is { Multi: false } ? tv0 : null;
+            UIElement Card(int n, FixSuggestion s, FixExplanation? ex = null, string? purposeOverride = null)
             {
                 var e = target?.Effect(ui.Schedule, s.Ops);
                 var res = Application.Current.Resources;
@@ -1410,6 +1419,7 @@ public sealed partial class ScheduleView : UserControl
                 // 先頭は必須違反の変化（必須を減らす案は、その効き目が判断の第一）。
                 if (CellSheetLogic.HardChangeLine(s.Diff, LabelOf) is { } hl)
                     col.Children.Add(new TextBlock { Text = hl, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                foreach (var l in FixExplain.HardUnchangedLines(s, ui.BestHard > 0)) col.Children.Add(Small(l));
                 if (e is not null && target is not null)
                 {
                     col.Children.Add(new TextBlock { Text = $"案{n}：{e.Title(label)}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
@@ -1456,12 +1466,13 @@ public sealed partial class ScheduleView : UserControl
                         col.Children.Add(new TextBlock { Text = "・" + l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 }
                 else col.Children.Add(new TextBlock { Text = NextActionGuide.FixImpactLines(s, LabelOf).HardLine, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                if (ex is not null) foreach (var l in FixExplain.ExtraReasonLines(ex, ui.Schedule, ui.StaffNames, ui.ShiftSymbols, ui.StartDate)) col.Children.Add(Small(l));
                 var review = new Button { Content = CellSheetLogic.ReviewChangeButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Right, IsEnabled = !ui.Running };
                 var chosen = s;
                 // 「別の問題を改善する案」は見ている問題を直す案として確認・適用しない（目的と対象を渡さない＝統合仕様 INV-01/INV-03）。
                 var fixesTarget = e?.Fixes == true;
                 IReadOnlyList<string> eff = e is not null && target is not null && fixesTarget ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
-                var reviewPurpose = target is null || fixesTarget ? purpose : null;
+                var reviewPurpose = target is null || fixesTarget ? purposeOverride ?? purpose : null;
                 var reviewTarget = fixesTarget ? target : null;
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
                 review.Click += (_, _) =>
@@ -1523,6 +1534,27 @@ public sealed partial class ScheduleView : UserControl
             }
             if (pred is not null && target is null && shown.Count > 0 && fixing.Count == 0)
                 host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(addressLabel ?? (picked is not null ? LabelOf(picked) : "このセルの問題")), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
+            else if (tv is not null && target is not null)
+            {
+                // 段に分けた案: 範囲の中の 1 セル → 適用できない 1 セルの理由（1 行、ボタンなし）→ 崩れた分も整える案。
+                if (!quick && CellSheetLogic.OtherDaysGapLine(ui.NeedFamilies, ui.Schedule, target, _vm.NeedCellLimits, ui.ShiftSymbols, ui.StartDate) is { } od)
+                    host.Children.Add(new TextBlock { Text = od, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                var t1 = tv.Of(FixTier.T1); var t2 = tv.Of(FixTier.T2);
+                var n = 0;
+                if (t1.Count > 0)
+                {
+                    if (!quick) host.Children.Add(new TextBlock { Text = FixTiers.Tier1Heading(target), Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    foreach (var x in t1.Take(limit)) host.Children.Add(Card(++n, x.Sug));
+                }
+                foreach (var b in tv.Blocked.Take(quick ? 1 : 3)) host.Children.Add(new TextBlock { Text = b, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                if (t2.Count > 0 && !(quick && t1.Count > 0))
+                {
+                    if (!quick) host.Children.Add(new TextBlock { Text = FixTiers.Tier2Heading, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    n = Math.Min(t1.Count, limit);
+                    foreach (var x in t2.Take(limit)) host.Children.Add(Card(++n, x.Sug, x.Explain));
+                }
+                if (!tv.HasMain) NoFixBlock(ui, target, label);
+            }
             else if (fixing.Count > 0)
             {
                 // 同じ勤務のほかの日の過不足はここに 1 回だけ（カードごとに繰り返すと判断に要る行が下へ押し出される）。
@@ -1533,7 +1565,31 @@ public sealed partial class ScheduleView : UserControl
                 foreach (var s in fixing.Take(limit)) host.Children.Add(Card(++n, s));
             }
             else NoFixBlock(ui, target, label);
-            if (others.Count > 0 && !quick && (target is not null || pred is not null))
+            void Fold(string title, string note, IReadOnlyList<TieredFix> items, int startN, string? purposeOverride, bool open, Action<bool> setOpen)
+            {
+                var head = new StackPanel();
+                head.Children.Add(new TextBlock { Text = title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
+                head.Children.Add(new TextBlock { Text = note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                var list = new StackPanel { Spacing = 6 };
+                var n = startN;
+                foreach (var x in items.Take(limit)) list.Children.Add(Card(++n, x.Sug, x.Explain, purposeOverride));
+                var exp = new Expander
+                {
+                    Header = head, Content = list, IsExpanded = open, MinHeight = 48,
+                    HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                };
+                exp.Expanding += (_, _) => setOpen(true);
+                exp.Collapsed += (_, _) => setOpen(false);
+                host.Children.Add(exp);
+            }
+            if (tv is not null && target is not null && !quick)
+            {
+                var main = Math.Min(tv.Of(FixTier.T1).Count, limit) + Math.Min(tv.Of(FixTier.T2).Count, limit);
+                var mv = tv.Of(FixTier.MoveOnly); var t3 = tv.Of(FixTier.T3);
+                if (mv.Count > 0) Fold(FixTiers.MoveOnlyHeading(sym, target.Under, mv.Count), FixTiers.MoveOnlyNote, mv, main, FixTiers.MoveOnlyPurpose(label, target), moveOnlyOpen, v => moveOnlyOpen = v);
+                if (t3.Count > 0) Fold(CellSheetLogic.OtherFixHeading(t3.Count), CellSheetLogic.OtherFixNote(label, target), t3, main + Math.Min(mv.Count, limit), null, othersOpen, v => othersOpen = v);
+            }
+            else if (others.Count > 0 && !quick && (target is not null || pred is not null))
             {
                 var head = new StackPanel();
                 head.Children.Add(new TextBlock { Text = CellSheetLogic.OtherFixHeading(others.Count), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
@@ -1552,6 +1608,12 @@ public sealed partial class ScheduleView : UserControl
             }
         }
         // 案が見つからないとき（Kotlin NoFixBlock）: 確かめた理由と次に確認すること、探した範囲（畳む）、行き先と相談。
+        Button RetryButton()
+        {
+            var b = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
+            b.Click += (_, _) => Find();
+            return b;
+        }
         void NoFixBlock(UiState ui, FixTarget? target, string label)
         {
             var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
@@ -1560,10 +1622,12 @@ public sealed partial class ScheduleView : UserControl
             if (quick)
             {
                 host.Children.Add(new TextBlock { Text = string.Join(" ", body), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                if (ui.FixTimedOut) host.Children.Add(RetryButton());
                 if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
                 return;
             }
             foreach (var l in body) host.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+            if (ui.FixTimedOut) host.Children.Add(RetryButton());
             if (why.Candidates.Count > 0 && target is { Staff: { } cs })
                 host.Children.Add(CandidatesExpander(ui, target, cs, why.Candidates));
             if (lines.Contains(FixSearchText.NoFixScope))
@@ -1674,7 +1738,7 @@ public sealed partial class ScheduleView : UserControl
         {
             // 盤面・希望が変わったときと、計算・チェックが終わった時点（Running→false）で探し直す。
             if (e.PropertyName is nameof(UiState.Schedule) or nameof(UiState.Wishes) or nameof(UiState.Running)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
-            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions)
+            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixCancelledKey) or nameof(UiState.FixSuggestions)
                      or nameof(UiState.AppliedFix) or nameof(UiState.SaveState) or nameof(UiState.StaffIds))
                 DispatcherQueue.TryEnqueue(Refresh);
         };
@@ -1740,7 +1804,8 @@ public sealed partial class ScheduleView : UserControl
         {
             var item = new MenuFlyoutItem { Text = c.FromRest ? $"{c.Name}（休み中）" : c.Name };
             var i = c.StaffIndex;
-            item.Click += (_, _) => _vm.SetCell(i, day, shift);
+            var label = $"{c.Name}さんを{DayText.Short(_vm.Ui.StartDate, day)}の「{(shift < _vm.Ui.ShiftSymbols.Count ? _vm.Ui.ShiftSymbols[shift] : "")}」に入れる";
+            item.Click += (_, _) => _vm.PreviewShortageCandidate(i, day, shift, label);   // 確認の画面を経由する
             flyout.Items.Add(item);
         }
         if (flyout.Items.Count == 0)

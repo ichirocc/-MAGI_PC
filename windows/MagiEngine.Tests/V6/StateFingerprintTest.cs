@@ -78,6 +78,7 @@ public class StateFingerprintTest
         yield return ("職員名", b with { StaffList = ReplaceAt(b.StaffList, 0, b.StaffList[0] with { Name = "x" }) });
         yield return ("職員の所属群", b with { StaffList = ReplaceAt(b.StaffList, 0, b.StaffList[0] with { GroupIdx = 1 }) });
         yield return ("職員のスキル群", b with { StaffList = ReplaceAt(b.StaffList, 0, b.StaffList[0] with { SkillIdx = -1 }) });
+        yield return ("職員ID", b with { StaffList = ReplaceAt(b.StaffList, 0, b.StaffList[0] with { Id = 7 }) });
         yield return ("担当可否", b with { GroupShift = new List<IReadOnlyList<int>> { new List<int> { 1, 0 }, new List<int> { 1, 0 } } });
         yield return ("適切回数", b with { GroupShiftApt = new List<IReadOnlyList<string>> { new List<string> { "", "3" }, new List<string> { "", "" } } });
         yield return ("希望", b with { Wishes = new Dictionary<string, int> { ["0,0"] = 0 } });
@@ -172,5 +173,15 @@ public class StateFingerprintTest
     public void SameStateGivesSameFingerprint()
     {
         Assert.Equal(StateFingerprint.Of(Base()), StateFingerprint.Of(Base()));
+    }
+
+    [Fact]
+    public void SwappingStaffIdsChangesTheFingerprint()
+    {
+        // 名前・群が同じでも ID を入れ替えると、ID で引く相談・希望の付け替えが別の人を指す。
+        var b0 = Base();
+        var b = b0 with { StaffList = new List<Staff> { b0.StaffList[0] with { Id = 1 }, b0.StaffList[1] with { Id = 2 } } };
+        var swapped = b with { StaffList = new List<Staff> { b.StaffList[0] with { Id = 2 }, b.StaffList[1] with { Id = 1 } } };
+        Assert.NotEqual(StateFingerprint.Of(b), StateFingerprint.Of(swapped));
     }
 }

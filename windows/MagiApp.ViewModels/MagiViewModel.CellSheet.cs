@@ -35,8 +35,11 @@ public sealed partial class MagiViewModel
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return null;
+        var targets = new[] { sched[i][j], k }.Where(x => x >= 0).Distinct().SelectMany(x =>
+            new[] { CellSheetLogic.NeedFixTarget(Ui.NeedFamilies, x, j, NeedCellLimits(x, j)), CellSheetLogic.CountFixTarget(Ui.CountViolations, i, x, StaffCellLimits(i, x)) })
+            .OfType<FixTarget>().ToList();
         return CellSheetLogic.CellChangeReview(st, sched.Copy2D(), i, j, k, Ui.StaffNames, Ui.ShiftSymbols, StaffCellLimits, NeedCellLimits,
-            Ui.ManualPins.Contains($"{i},{j}"), labelOf);
+            Ui.ManualPins.Contains($"{i},{j}"), labelOf, targets);
     }
 
     /// <summary>

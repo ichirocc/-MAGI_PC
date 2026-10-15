@@ -40,11 +40,19 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// 初期解生成(賢い版)。Kotlin原本 <c>generateSmartInitial()</c>（969-1018行）の移植。
     /// </summary>
-    public void GenerateSmartInitial()
+    /// <param name="confirmed">置き換えの確認（<see cref="UiState.DraftConfirm"/>）で「置き換える」を押した。</param>
+    public void GenerateSmartInitial(bool confirmed = false)
     {
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null) return;
+        // 手直しや結果のある勤務表を黙って置き換えない。確認の文は置き換える前の必須違反を単位つきで言う。
+        if (!confirmed && !Ui.Running && (Ui.HasResult || Ui.EngineRan || Ui.RanBeforeEdit || sched.Any(r => r.Any(v => v >= 0))))
+        {
+            Ui.DraftConfirm = FixExplain.DraftConfirmText(AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard));
+            return;
+        }
+        if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
         // [3.271.0, 実機ログ起因の由来をそのまま記録] 実行中ガード。旧: ガード無しのため
         //   「勤務表をつくる」の直後に隣接する本ボタンを連続タップすると、走行中の最適化と
         //   初期解生成が併走し、job 参照の上書き（走行中jobが停止不能のゾンビ化）と
@@ -62,10 +70,12 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("下書きづくり", engineRun: true);
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token);
+        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed);
     }
 
-    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct)
+    public void DismissDraftConfirm() => Ui.DraftConfirm = null;
+
+    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false)
     {
         var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
@@ -85,7 +95,7 @@ public sealed partial class MagiViewModel
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.ElapsedMs = 0;
-                ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます";
+                ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます" + (confirmed ? $"。{FixExplain.DraftUndoNote}" : "");
             }, ct: ct);
             committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total}");

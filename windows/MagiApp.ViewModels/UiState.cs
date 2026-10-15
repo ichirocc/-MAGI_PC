@@ -104,6 +104,12 @@ public sealed partial class UiState : ObservableObject
     /// <summary>改善提案（違反を減らす1手＝変更/交換）。</summary>
     [ObservableProperty] private IReadOnlyList<FixSuggestion> fixSuggestions = Array.Empty<FixSuggestion>();
 
+    /// <summary>見ている問題の案を段に分けたもの（鍵＝依頼の FixFocus.Key。別の依頼では使わない）。</summary>
+    [ObservableProperty] private FixTierView? fixTiers;
+
+    /// <summary>下書きで今の勤務表を置き換える前の確認の文（null＝出さない）。</summary>
+    [ObservableProperty] private string? draftConfirm;
+
     /// <summary>改善手を探索中。</summary>
     [ObservableProperty] private bool fixSearching;
 
@@ -120,6 +126,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private string fixDoneKey = "";
     /// <summary>直し方の探索が失敗した依頼の鍵。</summary>
     [ObservableProperty] private string fixFailedKey = "";
+    [ObservableProperty] private string fixCancelledKey = "";   // 利用者が止めた探索の対象（止めたことを言い、もう一度探せるようにする）
     [ObservableProperty] private bool fixTimedOut;   // [仕様 §7] 直近の直し方の探索が締切で打ち切られたか（見つからない理由を「時間不足」と言う）
 
     [ObservableProperty] private IReadOnlyList<string> logs = Array.Empty<string>();

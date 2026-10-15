@@ -39,7 +39,7 @@ public class MagiViewModelSettingFixTest
         var vm = new MagiViewModel { _state = st };
         var issue = new SettingIssue(
             IssueKind.Wish, "職員A 2日目", "実現できない希望です", "希望を削除してください",
-            Action: SettingFixAction.RemoveWish, WishKey: "0,1");
+            Action: SettingFixAction.RemoveWish, WishKey: "0,1", WishShift: 1);
 
         vm.ApplySettingFix(issue);
 

@@ -39,7 +39,7 @@ public class MagiViewModelSmartInitialTest
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
-        vm.GenerateSmartInitial();
+        vm.GenerateSmartInitial(confirmed: true);
         Assert.NotNull(vm.LastGenerateSmartInitialTask);
         await vm.LastGenerateSmartInitialTask!;
 
@@ -48,6 +48,20 @@ public class MagiViewModelSmartInitialTest
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("下書きをつくりました", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("初期解生成 完了"));
+    }
+
+    /// <summary>[Android 3.679.0] 盤面のある勤務表は確認してから置き換える（確認の文は今の必須違反を言う）。</summary>
+    [Fact]
+    public void AsksBeforeReplacingAnExistingBoard()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.GenerateSmartInitial();
+
+        Assert.Null(vm.LastGenerateSmartInitialTask);
+        Assert.StartsWith("今の勤務表（必須 ", vm.Ui.DraftConfirm);
+        vm.DismissDraftConfirm();
+        Assert.Null(vm.Ui.DraftConfirm);
     }
 
     /// <summary>
@@ -60,7 +74,7 @@ public class MagiViewModelSmartInitialTest
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         vm.BeginBoardJob("読み込み"); // 別ジョブが進行中を模擬（EndBoardJobを呼ばず占有したまま）
 
-        vm.GenerateSmartInitial();
+        vm.GenerateSmartInitial(confirmed: true);
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
         Assert.True(vm.Ui.MessageIsError);
@@ -87,7 +101,7 @@ public class MagiViewModelSmartInitialTest
             throw new InvalidOperationException("late");
         };
 
-        vm.GenerateSmartInitial();
+        vm.GenerateSmartInitial(confirmed: true);
         if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastGenerateSmartInitialTask!);
         else await vm.LastGenerateSmartInitialTask!;
 

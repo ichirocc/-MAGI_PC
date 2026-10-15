@@ -169,4 +169,15 @@ public class SettingFixLogicTest
         Assert.Equal("A→R", V6SanityPort.C3SeqKey(new[] { "A", "R" }));
         Assert.Equal("", V6SanityPort.C3SeqKey(new[] { "", "R" }));
     }
+
+    [Fact]
+    public void StaleWishIsNotRemovedWhenTheWishChangedAfterDiagnosis()
+    {
+        var issue = new SettingIssue(IssueKind.Wish, "X 8/1", "p", "f", Action: SettingFixAction.RemoveWish, WishKey: "0,0", WishShift: 1);
+        var diagnosed = DemandState(3, wishes: new() { ["0,0"] = 1 });
+        Assert.Empty(SettingFixLogic.Apply(diagnosed, issue)!.Wishes);
+        var changed = diagnosed with { Wishes = new Dictionary<string, int> { ["0,0"] = 0 } };
+        Assert.True(SettingFixLogic.WishChanged(changed, issue));
+        Assert.Null(SettingFixLogic.Apply(changed, issue));   // 診断のあとで別の勤務に変えた希望は取り消さない
+    }
 }

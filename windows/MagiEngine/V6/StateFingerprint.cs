@@ -53,7 +53,7 @@ public static class StateFingerprint
         Mix(13); Mix(st.Groups.Count); foreach (var g in st.Groups) { Txt(g.Name); Txt(g.Kigou); }
         Mix(14); Mix(st.SkillGroups.Count); foreach (var g in st.SkillGroups) { Txt(g.Name); Txt(g.Kigou); }
         Mix(15); Mix(st.StaffList.Count);
-        foreach (var p in st.StaffList) { Txt(p.Name); Mix(p.GroupIdx); Mix(p.SkillIdx); }
+        foreach (var p in st.StaffList) { Txt(p.Name); Mix(p.GroupIdx); Mix(p.SkillIdx); Mix(p.Id); }
 
         // [3.333.0/外部レビュー] 行の境界を混ぜる。旧は行を素通しで連結していたので
         //   [[1,1],[0]] と [[1],[1,0]] が同じ値になり、担当可否の構造が違うのに指紋が一致した。

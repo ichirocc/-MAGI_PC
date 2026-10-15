@@ -40,6 +40,7 @@ public sealed record SettingIssue(
     SettingFixAction Action = SettingFixAction.None,
     string ActionLabel = "",
     string? WishKey = null,
+    int? WishShift = null,   // RemoveWish: 診断したときの希望の勤務（変わっていたら取り消さない）
     string? SeqFamily = null,
     string? SeqKey = null,
     string? RangeKey = null,
@@ -155,7 +156,8 @@ public static partial class V6SanityPort
             outList.Add(new SettingIssue(IssueKind.Wish, where, $"実現できない希望です（{w.Reason}）", fix,
                 Action: canOneTap ? SettingFixAction.RemoveWish : SettingFixAction.None,
                 ActionLabel: canOneTap ? "この希望を取消" : "",
-                WishKey: canOneTap ? $"{w.StaffIndex},{w.DayIndex}" : null));
+                WishKey: canOneTap ? $"{w.StaffIndex},{w.DayIndex}" : null,
+                WishShift: canOneTap && state.Wishes.TryGetValue($"{w.StaffIndex},{w.DayIndex}", out var ws) ? ws : null));
         }
 
         var selfConflicts = WishSelfConflicts(p);
@@ -169,7 +171,7 @@ public static partial class V6SanityPort
                 $"{Nm(i)} {SafeDayLabel(state.StartDate, j)} 希望「{y}」→ {SafeDayLabel(state.StartDate, j + 1)} 希望「{x}」",
                 $"「{x} の希望の前日は {y} 禁止」に希望どうしで当たっています。希望は固定なので計算では解消できません",
                 $"{Place.Edit}{Place.Wish}で本人と相談してどちらかの希望を調整する（希望は外れます。元に戻せます）か、{Place.Rule}の「希望の前日に禁止」でこの行を見直してください",
-                Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}"));
+                Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}", WishShift: g.Shifts[0]));
         }
         // 1c) 禁止の並び(c3n)の窓がまるごと希望固定（例: 休の希望 3 連日と「休→休→休」禁止）。どれを取り消すかは利用者が選ぶ＝ワンタップなし。
         //     窓が 1 セル（単独の禁止シフト）なら関わる希望は 1 件＝単数の文言。

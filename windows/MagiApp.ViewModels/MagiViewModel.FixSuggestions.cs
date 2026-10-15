@@ -24,6 +24,9 @@ public sealed partial class MagiViewModel
 
     private CancellationTokenSource? _fixCts;
 
+    /// <summary>族の表示語（付随の変更の理由に使う）。族名の日本語は UI 層が持つので画面が差し込む。</summary>
+    public Func<string, string> FamilyLabelOf { get; set; } = f => f;
+
     /// <summary>[テスト可視性のための追加] 直近の <see cref="FindFixSuggestions"/> 呼出しが背後で走らせる Task。</summary>
     internal Task? LastFindFixSuggestionsTask { get; private set; }
 
@@ -35,6 +38,7 @@ public sealed partial class MagiViewModel
     /// <summary>[3.475.0/論理監査] 改善提案を計算した盤面/設定の指紋（適用時に照合する。0=未計算）。</summary>
     private long _fixBoardKey;
     private long _fixStateKey;
+    private string _fixSearchKey = "";
 
     /// <param name="quick">セルのシート（締切 <see cref="CellSheetLogic.FixSearchQuickMs"/>＝3 秒。手は 1 件でよい。8 秒待たせると答えが無いときも長い＝3.646.0 実機報告）。
     /// ホーム・分析は <see cref="CellSheetLogic.FixSearchMs"/>＝8 秒。</param>
@@ -56,10 +60,12 @@ public sealed partial class MagiViewModel
         //   消してしまう。
         var seq = ++_fixSeq;
         _fixCts?.Cancel(); // 連続タップ時の前探索を破棄（古い結果で UI を上書きしない）
+        _fixSearchKey = focusKey;
         Ui.FixSearching = true;
         Ui.FixFocusName = focusName;
         Ui.FixDoneKey = "";
         Ui.FixFailedKey = "";
+        Ui.FixCancelledKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
         LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick, allDays);
@@ -69,6 +75,7 @@ public sealed partial class MagiViewModel
     internal void ClearFixState()
     {
         Ui.FixSuggestions = Array.Empty<FixSuggestion>();
+        Ui.FixTiers = null;
         Ui.FixSearched = false;
         Ui.FixDoneKey = "";
         Ui.FixFailedKey = "";
@@ -97,6 +104,8 @@ public sealed partial class MagiViewModel
             //   11/3 の不足に別の日の案だけが並んだ）。広めに集めて並べ替え、上位 8 件を返す。
             var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day, AllDays: allDays), StaffCellLimits, NeedCellLimits) : null;
             var board = snap.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
+            FixTierView? tiers = null;
+            var labelOf = FamilyLabelOf;
             var list = await Task.Run(
                 () =>
                 {
@@ -104,10 +113,19 @@ public sealed partial class MagiViewModel
                         // 「他の人で補う」（Android CellSheetLogic.fixesByOthers）: 全体で探し、本人を含まずその日を含む手だけ。
                         ? CellSheetLogic.FixesByOthers(FixSuggester.Suggest(st, snap, focusStaff: null, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), dd, ex).Take(8).ToList()
                         : target is not null
-                        ? CellSheetLogic.RankForTarget(FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), board, target).Take(8).ToList()
+                        ? TieredFor(target)
                         : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8, deadlineMs: deadline);
                     timedOut = FixSuggester.LastTimedOut;
                     return found;
+
+                    // 入り口の範囲の中の 1 セルの変更を先に評価し、探索の案と合わせて段に分ける。
+                    IReadOnlyList<FixSuggestion> TieredFor(FixTarget t)
+                    {
+                        var entry = FixTiers.EntryMoves(st, snap, t, ScheduleUtil.RestShiftIndex(st));
+                        var ranked = CellSheetLogic.RankForTarget(FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), board, t).Take(8).ToList();
+                        tiers = FixTiers.ClassifyTiers(st, snap, t, entry, ranked, NeedCellLimits, labelOf: labelOf) with { Key = focusKey };
+                        return tiers.Items.Select(x => x.Sug).ToList();
+                    }
                 }, ct)
                 .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);   // RefreshCheckCoreAsync と同じ理由
             if (seq != _fixSeq) return; // 後続の探索が始まっている＝古い結果で上書きしない
@@ -123,6 +141,7 @@ public sealed partial class MagiViewModel
                 return;
             }
             Ui.FixSuggestions = list;
+            Ui.FixTiers = tiers;
             Ui.FixSearching = false;
             Ui.FixTimedOut = timedOut;
             Ui.FixFocusName = focusName;
@@ -155,7 +174,7 @@ public sealed partial class MagiViewModel
         ++_fixSeq;
         _fixCts?.Cancel();
         _fixCts = null;
-        if (Ui.FixSearching) Ui.FixSearching = false;
+        if (Ui.FixSearching) { Ui.FixSearching = false; Ui.FixCancelledKey = _fixSearchKey; }
     }
 
     /// <summary>[改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。

@@ -43,6 +43,14 @@ public static class PolishGate
     /// </summary>
     public static volatile bool FilterC3nIncrease = true;
 
+    /// <summary>[Kotlin 3.680.0] 3者回転研磨で、フル checker の前に <see cref="DeltaEvaluator.ReportKey"/> で正式採否のキーを出し、
+    /// 現最良に勝てない候補を捨てる。採否は不変（基準盤面でキーが正式評価と一致しなければフル評価へ戻る）。</summary>
+    public static volatile bool RotationDeltaPrescreen = true;
+
+    /// <summary>[Kotlin 3.680.0] 巡回研磨クラスタで、乱数種を取らない決定的なパスが前回と同じ盤面で採用 0 だったとき、
+    /// 同じ結果を再生して実行を省く。締切で打ち切られた呼び出しは記録しない。出力は不変。</summary>
+    public static volatile bool RoundPassMemo = true;
+
     /// <summary>
     /// 循環交換研磨（k=2,3）と C1広域ビームで、必ず却下される候補（HARD 正味増）を <see cref="HardDelta"/> の厳密差分で
     /// checker の前に捨てるか。既定 <b>true</b>。速度専用＝ON/OFF で盤面は同一（<c>HardDeltaPrefilterTests</c>）。UI トグルは無し。

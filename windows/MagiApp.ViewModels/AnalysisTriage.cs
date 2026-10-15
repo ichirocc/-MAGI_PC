@@ -162,7 +162,7 @@ public sealed record AnalysisTriage(
                 ? $"{run.StaffName}さんの {DayText.Range(startDate, run.StartDay, run.StartDay + Math.Max(run.Cells.Count, 1) - 1)} の「{run.SeqLabel}」は、この希望・担当のままでは崩せません。{C3nWallFix}"
             : "崩す手が残っています。下の行から直し方を探せます。",
         "covU" => coverage is null || !coverage.HasShortage ? ""
-            : coverage.AllBlockedNow ? $"いまの希望のままでは、どう組んでも埋まりません（{coverage.TotalShortfall}人）。"
+            : coverage.AllBlockedNow ? $"いまの希望のままでは、試した入れ替えの範囲で埋まりませんでした（{coverage.TotalShortfall}人・自動作成で見つかる場合があります）。"
             : coverage.BlockedNowSlots > 0 ? $"{coverage.BlockedNowSlots}枠はいまの希望のままでは埋まりません。"
             : "担当を動かせば埋まる見込みです。",
         _ => "",

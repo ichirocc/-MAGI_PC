@@ -138,7 +138,8 @@ public class V6PortAnalyzerCoverageTest
         // Cが唯一のdepth2候補だが休へ希望固定＝FindCovUChainの候補から除外され連鎖が完成しない。
         var diag = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: true));
         var sf = diag.Shortfalls.Single(s => s.ShiftIndex == 1);
-        Assert.True(sf.Reason.Contains("どう組んでも解消できません"), "連鎖が実在しないことを正直に案内する");
+        Assert.True(sf.Reason.Contains(V6PortAnalyzer.ChainNotFoundInTried) && !sf.Reason.Contains("どう組んでも") && !sf.Reason.Contains("担当を追加"),
+            "試した範囲で見つからなかったと言い、断定しない");
     }
 
     /// <summary>
