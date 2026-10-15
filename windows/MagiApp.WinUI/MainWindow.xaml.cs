@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
     public MainWindow(MagiViewModel vm)
     {
         _vm = vm;
+        _vm.FamilyLabelOf = AnalysisView.LabelOf;
         InitializeComponent();
         Title = "MAGI ShiftOptimizer";
         Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>().First();
@@ -77,6 +78,11 @@ public sealed partial class MainWindow : Window
         {
             if (_vm.Ui.CsvPartialPrompt is { } prompt) _ = ShowCsvPartialPromptAsync(prompt);
             else _csvPartialDialog?.Hide();
+        }
+        else if (e.PropertyName == nameof(UiState.DraftConfirm))
+        {
+            if (_vm.Ui.DraftConfirm is { } msg) _ = ShowDraftConfirmAsync(msg);
+            else _draftConfirmDialog?.Hide();
         }
         else if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
         else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
@@ -526,6 +532,27 @@ public sealed partial class MainWindow : Window
     }
 
     private ContentDialog? _csvPartialDialog;
+    private ContentDialog? _draftConfirmDialog;
+
+    /// <summary>下書きで今の勤務表を置き換える前の確認（Android 3.679.0 の AlertDialog）。</summary>
+    private async Task ShowDraftConfirmAsync(string msg)
+    {
+        if (_draftConfirmDialog is not null) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = "下書きで置き換えますか？",
+            Content = new TextBlock { Text = msg, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = "置き換える",
+            CloseButtonText = "キャンセル",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        _draftConfirmDialog = dialog;
+        var result = await dialog.ShowAsync();
+        _draftConfirmDialog = null;
+        if (result == ContentDialogResult.Primary) _vm.GenerateSmartInitial(confirmed: true);
+        else _vm.DismissDraftConfirm();
+    }
 
     /// <summary>[引用符が閉じていない勤務表CSV] Android の確認ダイアログ。［この部分だけ取り込む］で適用、［やめる］（閉じるも同じ）は何も変えない。</summary>
     private async Task ShowCsvPartialPromptAsync(string prompt)

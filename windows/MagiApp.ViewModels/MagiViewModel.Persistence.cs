@@ -470,6 +470,7 @@ public sealed partial class MagiViewModel
                 ui.CopilotHint = null;
                 ui.Alternatives = Array.Empty<string>();
                 ui.FixSuggestions = Array.Empty<FixSuggestion>();
+                ui.FixTiers = null;
                 ui.FixSearched = false;
                 ui.FixFocusName = "";
                 ui.StalledHardFamilies = Array.Empty<string>();
