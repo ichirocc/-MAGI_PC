@@ -68,6 +68,10 @@ public static class PolishGate
     /// 既定 <b>false</b>（3.673.0: 60 s の予算では短縮が損＝sample 24 対で +95.7・区間 [+40.6, +153.8]、利用者「60秒の損失を取り返す方法を採用する」）。</summary>
     public static volatile bool C3nWallShortStall = false;
 
+    /// <summary>[Kotlin原本 <c>PolishGate.floorShortStall</c>（3.677.0）] 必須違反が構造の下限に届いたら停滞閾値を短縮する（<c>EffectiveStallMs</c> の basePlateau）。false＝下限に届いても通常閾値で粘る。
+    /// 既定 <b>true</b>＝従来どおり（実機ログ 2026-10-15: 300 s 予算で 59 s に終わった件の測定用。採否は測ってから）。</summary>
+    public static volatile bool FloorShortStall = true;
+
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallLegacy</c>（3.642.0）] 測定用の基準腕: true＝HEAD の壁判定（版ごとに固定・生存盤面の診断・一致の検査なし）。既定 false。</summary>
     public static volatile bool C3nWallLegacy = false;
 

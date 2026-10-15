@@ -587,6 +587,26 @@ public static class CellSheetLogic
 
     public const string AddressCheckingText = "案ごとに、このセルの問題が解消するか確認しています…";
 
+    /// <summary>
+    /// 開いた時点の職員 ID（<paramref name="staffId"/>・<paramref name="exceptId"/>、0 以下や null＝ID なし）を今の並びの番号に引き直す（統合仕様 5.1、Kotlin <c>resolveFixFocus</c>）。
+    /// 並べ替えのあとは新しい番号、削除されていれば null（別の人を探さない）。ID が無ければ番号のまま。
+    /// </summary>
+    public static FixFocus? ResolveFixFocus(FixFocus f, int? staffId, int? exceptId, IReadOnlyList<int> staffIds)
+    {
+        int? At(int? index, int? id) => index is null || id is not { } v || v <= 0 ? index : IndexOf(staffIds, v);
+        var s = At(f.Staff, staffId); var x = At(f.ExceptStaff, exceptId);
+        if (s == -1 || x == -1) return null;
+        return s == f.Staff && x == f.ExceptStaff ? f : f with { Staff = s, ExceptStaff = x };
+    }
+
+    private static int IndexOf(IReadOnlyList<int> list, int v)
+    {
+        for (var i = 0; i < list.Count; i++) if (list[i] == v) return i;
+        return -1;
+    }
+
+    public const string FixStaffGoneNote = "この職員は一覧から削除されたため、変更案を探せません。画面を閉じて開き直してください。";
+
     public const string SaveRetryButton = "もう一度保存する";
 
     public const string ReviewCheckingText = "変更後の影響を確認しています…";

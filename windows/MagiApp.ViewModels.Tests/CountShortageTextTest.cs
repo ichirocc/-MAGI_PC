@@ -315,4 +315,15 @@ public class CountShortageTextTest
         Assert.Equal("要調整 4件・2人・9回・30pt・配布前の確認", CellSheetLogic.ReadyBadgeLabel(40, b));
         Assert.Equal("評価：必須違反 2件・1人", CellSheetLogic.BoardStatusLines(true, true, true, 3, 0, b).Second);
     }
+
+    [Fact]
+    public void FixFocusFollowsTheStaffIdAcrossReorderAndDeletion()
+    {
+        var f = new FixFocus(1, 2, 3, ExceptStaff: 0);
+        // 職員 ID 20（番号 1）と 10（番号 0）で開き、並べ替えのあとは新しい番号で探す（統合仕様 5.1）。
+        Assert.Equal(new FixFocus(0, 2, 3, ExceptStaff: 2), CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 20, 30, 10 }));
+        Assert.Equal(f, CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 10, 20, 30 }));
+        Assert.Null(CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 10, 30 }));   // 削除＝別の人を探さない
+        Assert.Equal(f, CellSheetLogic.ResolveFixFocus(f, null, 0, new[] { 5, 6 }));   // ID なし＝番号のまま
+    }
 }

@@ -73,6 +73,16 @@ public class V6FinalBridgePortTest
         Assert.Equal("PORTFOLIO拡張", V6FinalPort.GetAlgorithmLabel(600).Tech);
     }
 
+    /// <summary>Kotlin <c>runLabelFollowsTheChosenAlgorithm</c> の移植。</summary>
+    [Fact]
+    public void RunLabelFollowsTheChosenAlgorithm()
+    {
+        // 手で選んだ方式は予算に関係なくその方式（旧: V5 を選んでも 60 秒なら「RSI→ALNS」）。
+        Assert.Equal("v5", V6FinalPort.RunLabel(V6Algorithm.V5, 60).Tech);
+        Assert.Equal("PORTFOLIO", V6FinalPort.RunLabel(V6Algorithm.Portfolio, 60).Tech);
+        Assert.Equal("RSI→ALNS", V6FinalPort.RunLabel(V6Algorithm.Auto, 60).Tech);
+    }
+
     /// <summary>「おまかせ」の説明は方式チップの語で言う（究極(5分)・学習+研磨・標準は選べる方式に無い名前だった）。
     /// Kotlin <c>algorithmLabelNamesUseChipVocabulary</c> の移植。</summary>
     [Fact]
