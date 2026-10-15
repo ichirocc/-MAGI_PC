@@ -63,8 +63,8 @@ public class Review3683Test
     [Fact]
     public void alternativesCompareWithNow()
     {
-        Assert.Equal("案1：必須違反 2件（今より多い）", CellSheetLogic.AlternativeSummary(1, "2件", 1, 2, true));
-        Assert.Equal("案2：必須違反 なし（今より少ない）", CellSheetLogic.AlternativeSummary(2, "なし", 1, 0, false));
+        Assert.Equal("案1：必須違反 2件（今より多い）", CellSheetLogic.AlternativeSummary(1, "2件", 1, 2, true, false));
+        Assert.Equal("案2：必須違反 なし（今より少ない）", CellSheetLogic.AlternativeSummary(2, "なし", 1, 0, false, true));
         Assert.True(CellSheetLogic.AlternativesAllWorse(new[] { true, true }, 2));
         Assert.False(CellSheetLogic.AlternativesAllWorse(new[] { true }, 2));
     }

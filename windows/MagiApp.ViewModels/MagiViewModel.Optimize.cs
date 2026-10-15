@@ -38,9 +38,10 @@ public sealed partial class MagiViewModel
     //   [テスト可視性のためinternal化] 読込・背景結果での更新／リセットを直接確かめる。
     internal string? _lastSettingsSig;
     internal long _lastResultHard = -1L;
-    internal IReadOnlyDictionary<string, int> _lastResultBreakdown = new Dictionary<string, int>();
     /// <summary>進捗の基準（InitHard/InitSoft）を取った入力の指紋。読込で null に戻す。</summary>
     internal long? _initBaseKey;
+    /// <summary>盤面を丸ごと差し替えた回数（CSV 取込・下書き・他の案）。進捗の基準の指紋に混ぜる＝手の編集では上げない。</summary>
+    internal long _boardReplaceRev;
     internal string? _lastTopHardFamily;
 
     /// <summary>Kotlin原本 <c>hardFamilyJp</c>（1087行）の逐語移植。</summary>
@@ -72,7 +73,7 @@ public sealed partial class MagiViewModel
     public void RunV6FullOptimize()
     {
         var st = _state; var sched = _currentSchedule;
-        if (st is not null && sched is not null && !Ui.Running && CellSheetLogic.PreRunAckFingerprint(st) != _preRunAckKey)
+        if (st is not null && sched is not null && !Ui.Running && CellSheetLogic.PreRunAckFingerprint(st, PreRunCheck.RerunClears(st, sched)) != _preRunAckKey)
         {
             // [Android 3.672.0] 作成の前に「勤務表を作成する」シート（自動で行うこと・保持するもの・時間と、残る／外れる項目）を出して止まる。
             //   同じデータ（指紋）で一度「勤務表を作成」を押したら、次からは出さない（直す項目が無いときも出す）。
@@ -90,7 +91,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state; var sched = _currentSchedule;
         if (st is null || sched is null) return;
-        _preRunAckKey = CellSheetLogic.PreRunAckFingerprint(st);
+        _preRunAckKey = CellSheetLogic.PreRunAckFingerprint(st, PreRunCheck.RerunClears(st, sched));
         DismissPreRun();
         LogOp("I", "勤務表を作成する 勤務表を作成");
         StartFullOptimize(pushUndo: true, null, hintShown: true);
@@ -192,12 +193,13 @@ public sealed partial class MagiViewModel
             // [再実行 keep-best] 実行開始時の入力解(sched0)の違反を評価し、完了時の採用判定の基準にする。
             var baseReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, sched0), ct);
             // 同じデータ（設定・希望の指紋が同じ）の再作成では基準を据え置く＝でき具合の％が再作成のたびに 0 へ戻らない。
-            var baseKey = StateKey(st0);
+            var baseKey = CellSheetLogic.InitBaseKeyOf(StateKey(st0), _boardReplaceRev);
             if (baseKey != _initBaseKey)
             {
                 _initBaseKey = baseKey;
                 Ui.InitHard = baseReport.Hard;
                 Ui.InitSoft = baseReport.Soft;
+                Ui.InitBreakdown = baseReport.Breakdown;
             }
 
             // [2026-09-02, 外部レビュー#43] エンジンの並列ワーカーがTask.Run内部から直接呼ぶため、
@@ -307,7 +309,7 @@ public sealed partial class MagiViewModel
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, baseReport.Hard, keptMsg);
                 }, ct: ct);
                 LogOp("I", KeptResultText.WithNote(KeptResultText.Log("再実行", nowScore, baseScore), capNote));
-                _lastResultHard = baseHard; _lastResultBreakdown = baseReport.Breakdown;
+                _lastResultHard = baseHard;
             }
             else
             {
@@ -331,12 +333,13 @@ public sealed partial class MagiViewModel
                     ui.EngineRan = true;
                     ui.RanBeforeEdit = false;
                     ui.RelaxedBoard = false;
+                    ui.KeptPrevious = false;
                     ui.Message = adoptedMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, res.Report.Hard, adoptedMsg);
                     ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
                     ui.StopSummary = res.Stop;
                 }, ct: ct);
-                _lastResultHard = newHard; _lastResultBreakdown = res.Report.Breakdown;
+                _lastResultHard = newHard;
             }
             foreach (var line in (_lastC1Plateau?.LogLines() ?? Array.Empty<string>()).Take(4))
                 LogOp("W", line.StartsWith("[W] ", StringComparison.Ordinal) ? line["[W] ".Length..] : line);
@@ -543,6 +546,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = true;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
+                ui.KeptPrevious = false;
                 ui.Message = FixOutcomeText.PolishResultText(gain > 0, AnalysisTriage.UnitTotals(baseReport.Breakdown, MirrorKeys.Soft) ?? "なし",
                     AnalysisTriage.UnitTotals(finalReport.Breakdown, MirrorKeys.Soft) ?? "なし", finalReport.Hard, AnalysisTriage.HardText(finalReport.Breakdown, finalReport.Hard));
                 ui.RunSummary = ChangeSummary.Of(st0, sched0, finalSched, finalReport, baseReport);

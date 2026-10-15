@@ -163,7 +163,8 @@ public sealed record AnalysisTriage(
             : "崩す手が残っています。下の行から直し方を探せます。",
         "covU" => coverage is null || !coverage.HasShortage ? ""
             : coverage.AllBlockedNow ? $"いまの希望のままでは、試した入れ替えの範囲で埋まりませんでした（{coverage.TotalShortfall}人・自動作成で見つかる場合があります）。"
-            : coverage.BlockedNowSlots > 0 ? $"{coverage.BlockedNowSlots}枠はいまの希望のままでは埋まりません。"
+            : coverage.ProvenBlockedSlots > 0 ? $"{coverage.ProvenBlockedSlots}枠はいまの希望のままでは埋まりません。"
+            : coverage.SearchMissSlots > 0 ? $"{coverage.SearchMissSlots}枠は試した入れ替えでは埋まりませんでした。"
             : "担当を動かせば埋まる見込みです。",
         _ => "",
     };

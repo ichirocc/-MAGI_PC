@@ -454,6 +454,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = markResult;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
+                ui.KeptPrevious = false;
                 ui.ConstraintsEdited = false;
                 ui.StructureEdited = false;
                 ui.Staff = lp.State.StaffCount;
@@ -463,6 +464,7 @@ public sealed partial class MagiViewModel
                 ui.Use2 = lp.State.Use2Patterns;
                 ui.InitHard = lp.Report.Hard;
                 ui.InitSoft = lp.Report.Soft;
+                ui.InitBreakdown = lp.Report.Breakdown;
                 ui.ElapsedMs = 0;
                 // 前のデータの完了要約・ヒント・他の案・直し方は、このデータのものではない。
                 ui.RunSummary = null;

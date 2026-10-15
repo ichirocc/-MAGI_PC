@@ -9,8 +9,8 @@ public sealed record ChangeSummary(int ChangedStaff, int ChangedCells, int WishK
     /// <summary>完了カード 1 行目。例: 「変更：12人・84か所／希望どおり 42/42件」</summary>
     public string Line() => $"変更：{ChangedStaff}人・{ChangedCells}か所／希望どおり {WishKept}/{WishTotal}件";
 
-    /// <summary>完了カード 2 行目（族名は <paramref name="label"/>、単位は <paramref name="unit"/> で表示語へ）。例: 「減った：回避の並び 2件・期間の制約 1件／増えた：曜日の偏り 3pt」</summary>
-    public string FamilyLine(Func<string, string>? label = null, Func<string, string>? unit = null) => FamilyLine(FamilyDeltas, unit, label);
+    /// <summary>完了カード 2 行目（単位は <paramref name="unit"/>、族名は <paramref name="label"/> で表示語へ）。例: 「減った：回避の並び 2件・期間の制約 1件／増えた：曜日の偏り 3pt」</summary>
+    public string FamilyLine(Func<string, string>? unit = null, Func<string, string>? label = null) => FamilyLine(FamilyDeltas, unit, label);
 
     public static ChangeSummary Of(MagiState state, int[][] before, int[][] after, ViolationReport report, ViolationReport? beforeReport = null)
     {

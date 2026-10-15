@@ -223,7 +223,7 @@ public sealed partial class HomeView : UserControl
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
             headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須違反はありません。配布前の確認で中身を確かめてから配ってください。") + (ui.RunSummary is { } rs
-                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k, k => AnalysisTriage.UnitOf(k))
+                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisTriage.UnitOf(k), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
                 : "");
             bigLabel = "配布前確認"; bigEnabled = true; helperLabel = "中身を見る";
             phase = "完成"; phaseHex = MagiAccent.Green;
@@ -270,7 +270,7 @@ public sealed partial class HomeView : UserControl
                 var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
                 var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
                 // 必須の変化（族ごと）と増える要調整だけ（件・回・人・pt を 1 つの合計に足さない＝統合仕様 INV-07）。
-                headline = CellSheetLogic.HomeFixHeadline(AnalysisTriage.HardText(ui.Breakdown, ui.BestHard), _vm.ResolvedHardLabelsFor(top, AnalysisView.LabelOf));
+                headline = CellSheetLogic.HomeFixHeadline(AnalysisTriage.HardText(ui.Breakdown, ui.BestHard), CellSheetLogic.TopFixResolvedLabels(ui));
                 body = FixOutcomeText.FixDisplayLabel(top.Label);
                 note = (CellSheetLogic.HardChangeLine(top.Diff, AnalysisView.LabelOf) ?? hardLine) + (caution is null ? "" : "\n" + caution);
                 bigLabel = moveLabel; bigEnabled = true;
@@ -381,7 +381,7 @@ public sealed partial class HomeView : UserControl
         ProgressRow.Visibility = ui.Running ? Visibility.Visible : Visibility.Collapsed;
         ProgressSpinner.IsActive = ui.Running;
         ProgressSpinner.Foreground = fgBrush;
-        ProgressText.Text = ui.Running ? ProgressSummary(ui) : "";
+        ProgressText.Text = ui.Running ? CellSheetLogic.ProgressSummary(ui) : "";
         ProgressText.Foreground = fgBrush;
 
         BigButton.Visibility = bigEnabled ? Visibility.Visible : Visibility.Collapsed;
@@ -393,27 +393,6 @@ public sealed partial class HomeView : UserControl
         RedraftLink.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
         RedraftLink.Foreground = fgBrush;
         RedraftLink.IsEnabled = editable;
-    }
-
-    /// <summary>Kotlin原本 <c>progressSummary</c>（3.393.0/3.396.0）。反復数は作り手の指標なので出さない。</summary>
-    private static string ProgressSummary(UiState ui)
-    {
-        var parts = new List<string>(4);
-        if (ui.BestHard > 0L)
-        {
-            parts.Add(ui.InitHard > ui.BestHard
-                ? $"必須違反 残り{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}（開始{ui.InitHard}件）"
-                : $"必須違反 残り{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}");
-        }
-        else if (ui.InitSoft > 0L)
-        {
-            var pct = System.Math.Max(0L, (ui.InitSoft - ui.BestSoft) * 100L / ui.InitSoft);
-            parts.Add($"要調整 {ui.BestSoft}件（開始{ui.InitSoft}件・{pct}%減）");
-        }
-        else parts.Add("要調整 –");
-        var secLeft = System.Math.Max(0L, (ui.BudgetSec + MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec) * 1000L - ui.ElapsedMs) / 1000L;
-        parts.Add($"残り {secLeft / 60}:{secLeft % 60:00}");
-        return string.Join("  ・  ", parts);
     }
 
     /// <summary>
@@ -937,13 +916,19 @@ public sealed partial class HomeView : UserControl
         ShortageHeadline.Text = diag.AllInfeasible
             ? $"不足 {diag.TotalShortfall} 人はすべて、担当できる人が足りません。今のデータでは満たせません。" +
                 "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
-            : diag.AllBlockedNow
+            : diag.AllBlockedNow && diag.SearchMissSlots == 0
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
                     "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
-                : diag.BlockedNowSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠は" +
+            : diag.AllBlockedNow
+                ? $"不足 {diag.TotalShortfall} 人は、試した入れ替えでは埋まりませんでした（埋められないと決まったわけではありません）。" +
+                    "再作成するか、希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると埋まりやすくなります（編集タブ＞年間マスター①）。"
+                : diag.ProvenBlockedSlots > 0
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.ProvenBlockedSlots} 枠は" +
                         "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
                         "残りは再作成すると解消し得ます。"
+                : diag.SearchMissSlots > 0
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.SearchMissSlots} 枠は試した入れ替えでは埋まりませんでした。" +
+                        "再作成すると解消し得ます。"
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageEnoughText}"
                         : $"不足 {diag.TotalShortfall} 人 — {CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠 / {CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
@@ -963,7 +948,7 @@ public sealed partial class HomeView : UserControl
             head.Children.Add(title);
             var chip = new TextBlock
             {
-                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
+                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow && s.SearchMiss ? CellSheetLogic.ShortageLabelSearchMiss : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
                 Style = StyleOf("MagiLabelMediumTextStyle"), VerticalAlignment = VerticalAlignment.Center,
                 Foreground = BrushOf(infeasible ? "MagiErrorBrush" : "MagiPrimaryBrush"),
             };

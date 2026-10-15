@@ -41,6 +41,8 @@ public sealed record SettingIssue(
     string ActionLabel = "",
     string? WishKey = null,
     int? WishShift = null,   // RemoveWish: 診断したときの希望の勤務（変わっていたら取り消さない）
+    int? WishStaffId = null,         // RemoveWish: 職員 ID（並び替えのあとも同じ人を指す）
+    long? WishFingerprint = null,    // RemoveWish: 診断したときの入力の指紋（WishDiagnosis.Fingerprint）
     string? SeqFamily = null,
     string? SeqKey = null,
     string? RangeKey = null,
@@ -53,6 +55,32 @@ public sealed record SettingIssue(
     C41Row? GroupRangeRow = null,
     // 意図した設定に由来する案内（上限 0 × 希望）。ログで「設定ミス」と呼ばない。
     bool Neutral = false);
+
+/// <summary>
+/// [3.687.0/R02] 希望の取消を診断した入力の指紋（職員 ID・グループと担当可否・日・その日と前後の希望・シフトの並び・希望の前日に禁止・期間）。
+/// 当てる直前に照合し、違えば診断が古いので取り消さない。Kotlin の <c>wishDiagnosisFingerprint</c> と同じ入力の並び（値は言語ごと＝保存しない）。
+/// </summary>
+public static class WishDiagnosis
+{
+    public static long Fingerprint(MagiState state, int staffIndex, int day)
+    {
+        if (staffIndex < 0 || staffIndex >= state.StaffList.Count) return 0L;
+        var st = state.StaffList[staffIndex];
+        var g = st.GroupIdx;
+        string W(int d) => state.Wishes.TryGetValue($"{staffIndex},{d}", out var v) ? v.ToString() : "null";
+        var row = g >= 0 && g < state.GroupShift.Count ? "[" + string.Join(",", state.GroupShift[g]) + "]" : "null";
+        var parts = new[]
+        {
+            st.Id.ToString(), g.ToString(), row, day.ToString(), W(day - 1), W(day), W(day + 1),
+            "[" + string.Join("\u001f", state.Shifts.Select(x => x.Kigou)) + "]",
+            "[" + string.Join("\u001f", (state.Cons3w ?? Array.Empty<C3wRow>()).Select(c => c.WishKigou + "\u001e" + c.PrevKigou)) + "]",
+            state.StartDate, state.EndDate,
+        };
+        var h = 14695981039346656037UL;
+        foreach (var ch in string.Join("\u001d", parts)) { h ^= ch; h *= 1099511628211UL; }
+        return unchecked((long)h);
+    }
+}
 
 /// <summary>
 /// [フェーズ7ピース14/15統合] Faithful port of Kotlin's settings-mistake advisor —
@@ -157,7 +185,9 @@ public static partial class V6SanityPort
                 Action: canOneTap ? SettingFixAction.RemoveWish : SettingFixAction.None,
                 ActionLabel: canOneTap ? "この希望を取消" : "",
                 WishKey: canOneTap ? $"{w.StaffIndex},{w.DayIndex}" : null,
-                WishShift: canOneTap && state.Wishes.TryGetValue($"{w.StaffIndex},{w.DayIndex}", out var ws) ? ws : null));
+                WishShift: canOneTap && state.Wishes.TryGetValue($"{w.StaffIndex},{w.DayIndex}", out var ws) ? ws : null,
+                WishStaffId: canOneTap && w.StaffIndex >= 0 && w.StaffIndex < state.StaffList.Count ? state.StaffList[w.StaffIndex].Id : null,
+                WishFingerprint: canOneTap ? WishDiagnosis.Fingerprint(state, w.StaffIndex, w.DayIndex) : null));
         }
 
         var selfConflicts = WishSelfConflicts(p);
@@ -171,7 +201,8 @@ public static partial class V6SanityPort
                 $"{Nm(i)} {SafeDayLabel(state.StartDate, j)} 希望「{y}」→ {SafeDayLabel(state.StartDate, j + 1)} 希望「{x}」",
                 $"「{x} の希望の前日は {y} 禁止」に希望どうしで当たっています。希望は固定なので計算では解消できません",
                 $"{Place.Edit}{Place.Wish}で本人と相談してどちらかの希望を調整する（希望は外れます。元に戻せます）か、{Place.Rule}の「希望の前日に禁止」でこの行を見直してください",
-                Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}", WishShift: g.Shifts[0]));
+                Action: SettingFixAction.RemoveWish, ActionLabel: "前日の希望を取消", WishKey: $"{i},{j}", WishShift: g.Shifts[0],
+                WishStaffId: i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Id : null, WishFingerprint: WishDiagnosis.Fingerprint(state, i, j)));
         }
         // 1c) 禁止の並び(c3n)の窓がまるごと希望固定（例: 休の希望 3 連日と「休→休→休」禁止）。どれを取り消すかは利用者が選ぶ＝ワンタップなし。
         //     窓が 1 セル（単独の禁止シフト）なら関わる希望は 1 件＝単数の文言。
@@ -477,7 +508,7 @@ public static partial class V6SanityPort
                 if (BadNum(c.L) || BadNum(c.U))
                 {
                     outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{c.GroupKigou} {c.ShiftKigou}」",
-                        $"下限「{c.L}」上限「{c.U}」に数値でない値があります。その側は制限なしとして" +
+                        $"下限「{c.L}」上限「{c.U}」に数値でない値または負の値があります。その側は制限なしとして" +
                             "扱われるため、意図より弱い条件で計算されます",
                         $"{Place.Edit}{Place.Head}の「{famJp}」でこの行を数値で入れ直すか、制限しないなら空欄にしてください"));
                     continue;

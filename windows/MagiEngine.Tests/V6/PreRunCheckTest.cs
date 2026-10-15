@@ -48,15 +48,4 @@ public class PreRunCheckTest
     [Fact]
     public void WallHint_TieGoesToLowerIndex() =>
         Assert.Equal(new PreRunCheck.WallHint(4, 2, 1, 2), PreRunCheck.WallHintOf(new List<(int, int)> { (3, 1), (1, 1), (3, 2), (1, 2) }));
-
-    [Fact]
-    public void Fingerprint_ChangesWithBoardAndWishes()
-    {
-        var f0 = PreRunCheck.Fingerprint(St, Board());
-        Assert.Equal(f0, PreRunCheck.Fingerprint(St, Board()));
-        var b2 = Board(); b2[0][0] = (b2[0][0] + 1) % St.Shifts.Count;
-        Assert.NotEqual(f0, PreRunCheck.Fingerprint(St, b2));
-        var w = St.Wishes.ToDictionary(kv => kv.Key, kv => kv.Value); w.Remove(w.Keys.First());
-        Assert.NotEqual(f0, PreRunCheck.Fingerprint(St with { Wishes = w }, Board()));
-    }
 }

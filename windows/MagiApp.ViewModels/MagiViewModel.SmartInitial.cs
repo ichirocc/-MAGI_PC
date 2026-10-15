@@ -49,7 +49,7 @@ public sealed partial class MagiViewModel
         // 手直しや結果のある勤務表を黙って置き換えない。確認の文は置き換える前の必須違反を単位つきで言う。
         if (!confirmed && !Ui.Running && (Ui.HasResult || Ui.EngineRan || Ui.RanBeforeEdit || sched.Any(r => r.Any(v => v >= 0))))
         {
-            Ui.DraftConfirm = FixExplain.DraftConfirmText(AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard));
+            Ui.DraftConfirm = FixExplain.DraftConfirmText(Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null);
             return;
         }
         if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
@@ -81,6 +81,7 @@ public sealed partial class MagiViewModel
         try
         {
             var res = await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true), ct);
+            _boardReplaceRev++;
             _currentSchedule = res.Schedule.Copy2D();
             AutoSave();
             _resultSchedule = res.Schedule.Copy2D();
@@ -94,6 +95,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = true;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
+                ui.KeptPrevious = false;
                 ui.ElapsedMs = 0;
                 ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます" + (confirmed ? $"。{FixExplain.DraftUndoNote}" : "");
             }, ct: ct);

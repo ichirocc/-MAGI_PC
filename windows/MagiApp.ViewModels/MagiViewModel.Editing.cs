@@ -211,7 +211,7 @@ public sealed partial class MagiViewModel
             {
                 var rep = UnifiedViolationChecker.Check(st, sch);
                 var worse = curRep is not null && UnifiedViolationChecker.BetterReport(curRep, rep);
-                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse), Worse: worse);
+                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep)), Worse: worse);
             }).ToList();
         });
         Ui.Alternatives = rows.Select(r => r.Text).ToList();
@@ -245,6 +245,7 @@ public sealed partial class MagiViewModel
         var keptAlts = _alternativeScheds;
         var keptSummaries = Ui.Alternatives;
         PushUndo();
+        _boardReplaceRev++;
         _currentSchedule = sch;
         _resultSchedule = sch;
         _state = st.WithSchedule(sch);
@@ -281,6 +282,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = false;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
+                ui.KeptPrevious = false;
                 ui.Message = $"他の案 {i + 1} を適用しました: {AnalysisTriage.ReportCountsText(rep.Breakdown)}";
             });
             LogOp("I", $"他の案 {i + 1} を適用 必須={rep.Hard} 合計={rep.Total}");
@@ -422,7 +424,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (st is null || sched is null) return;
         var target = NeedCellLimits(shiftIndex, dayIndex) is { } need ? new FixTarget(null, shiftIndex, dayIndex, need.Lo, true, "必要人数") : null;
-        var s = new FixSuggestion(FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label, 0, 0, System.Array.Empty<(string, int)>());
+        var s = V6PortAnalyzer.EvaluatedSuggestion(st, sched, FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label);
         PreviewOrApplyFix(s, BoardKey(sched), StateKey(st));
         if (Ui.ChainPreview is { } cp) Ui.ChainPreview = cp with { FixTarget = target };
     }
@@ -463,7 +465,7 @@ public sealed partial class MagiViewModel
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
             BoardKey: BoardKey(snap), StateKey: StateKey(st));
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with { Target = target };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with { Target = target };
     }
 
     /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
@@ -1691,10 +1693,20 @@ public sealed partial class MagiViewModel
             LogOp("I", $"設定ミスの修正を適用: {issue.Action} @ {issue.Where}");
             ApplyStructure(ns);
         }
+        else if (SettingFixLogic.WishAlreadyRemoved(s, issue))
+        {
+            Ui.MessageIsError = false;
+            Ui.Message = SettingFixLogic.WishAlreadyRemovedMessage;
+        }
         else if (SettingFixLogic.WishChanged(s, issue))
         {
             Ui.MessageIsError = true;
             Ui.Message = SettingFixLogic.WishChangedMessage;
+        }
+        else if (SettingFixLogic.WishDiagnosisStale(s, issue))
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = SettingFixLogic.WishStaleMessage;
         }
         else if (issue.Action == SettingFixAction.DeleteDupSeq)
         {

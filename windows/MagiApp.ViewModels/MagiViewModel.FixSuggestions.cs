@@ -282,7 +282,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
             { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
     }
 
@@ -296,7 +296,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
         {
             Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
             Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget,

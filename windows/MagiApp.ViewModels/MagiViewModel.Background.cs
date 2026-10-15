@@ -287,7 +287,7 @@ public sealed partial class MagiViewModel
                 });
                 LogOp("I", KeptResultText.Log("バックグラウンド", nowScore, prevScore));
                 // 前景の維持分岐と同じ＝次回ヒントの族は維持した盤面から取る。
-                _lastResultHard = prevReport.Hard; _lastResultBreakdown = prevReport.Breakdown;
+                _lastResultHard = prevReport.Hard;
                 _lastTopHardFamily = prevReport.Hard > 0 ? TopHardFamilyJp(prevReport.Breakdown) : null;
                 OptimizationRepository.Request = null;
                 OptimizationRepository.PublishResult(null);
@@ -307,11 +307,12 @@ public sealed partial class MagiViewModel
             ui.EngineRan = true;
             ui.RanBeforeEdit = false;
             ui.RelaxedBoard = false;
+            ui.KeptPrevious = false;
             ui.Message = $"バックグラウンド最適化 完了: 必須={r.Report.Hard} 合計={r.Report.Total}";
             ui.RunSummary = prev is not null ? ChangeSummary.Of(st0, prev, sched, r.Report) : null;
         });
         LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total}");
-        _lastResultHard = r.Report.Hard; _lastResultBreakdown = r.Report.Breakdown;
+        _lastResultHard = r.Report.Hard;
         _lastTopHardFamily = r.Report.Hard > 0 ? TopHardFamilyJp(r.Report.Breakdown) : null;
         // 消費したらクリア（再生成時の二重適用を防ぐ）。
         OptimizationRepository.Request = null;

@@ -43,6 +43,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private bool use2;
     [ObservableProperty] private long initHard;
     [ObservableProperty] private long initSoft;
+    /// <summary>進捗の基準を取った盤面の族ごとの件数（進捗行の「開始」を単位つきで言う）。空＝基準なし。</summary>
+    [ObservableProperty] private IReadOnlyDictionary<string, int> initBreakdown = new Dictionary<string, int>();
 
     /// <summary>実行中の**表示**。可否の判定には使わない（ViewModel の optimizeInFlight が唯一の根拠）。</summary>
     [ObservableProperty] private bool running;
@@ -187,6 +189,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
     /// <summary>印と一文の写し（<see cref="DisplaySnapshot"/>）。検査結果の反映（MakeUi）で作り直す。保存しない。</summary>
     [ObservableProperty] private DisplaySnapshot? display;
+    /// <summary>ホームの先頭の直す手が解消する必須違反の名と場所（VM が作る。<see cref="TopFixResolved.Matches"/> で鮮度を照合）。保存しない。</summary>
+    [ObservableProperty] private TopFixResolved? topFixResolved;
     /// <summary>[S5] 試算できる希望のキー（実現可能で手動固定でない）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
     /// <summary>[#41] 手動固定のセル "i,j"。</summary>
@@ -341,4 +345,11 @@ public sealed record AppliedFix(string FocusKey, string Label, IReadOnlyList<Mag
     /// <summary>今の盤面がこの手の直後か（Kotlin の <c>after == ui.schedule</c>＝要素ごとの比較）。</summary>
     public bool IsCurrent(IReadOnlyList<IReadOnlyList<int>> schedule) =>
         After.Count == schedule.Count && After.Zip(schedule).All(p => p.First.SequenceEqual(p.Second));
+}
+
+/// <summary>先頭の直す手（Ops）を Schedule に当てたとき解消する必須違反の行。盤面と手が今と同じときだけ使う。</summary>
+public sealed record TopFixResolved(IReadOnlyList<FixCell> Ops, IReadOnlyList<IReadOnlyList<int>> Schedule, IReadOnlyList<string> Labels)
+{
+    public bool Matches(IReadOnlyList<FixCell>? ops, IReadOnlyList<IReadOnlyList<int>> schedule) =>
+        ops is not null && ops.SequenceEqual(Ops) && schedule.Count == Schedule.Count && schedule.Zip(Schedule).All(p => p.First.SequenceEqual(p.Second));
 }

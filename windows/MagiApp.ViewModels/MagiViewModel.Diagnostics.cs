@@ -375,8 +375,11 @@ public sealed partial class MagiViewModel
         Ui.PinTargets = diagFresh ? BuildPinTargets(st, _lastPinBlocks) : Array.Empty<PinTargetView>();
         Ui.SettingIssues = sanity.Guidance;
         Ui.StartDate = st.StartDate;
-        try { Ui.Display = DisplaySnapshots.Build(st, Ui, FamilyLabelOf); }
-        catch (Exception) { Ui.Display = null; }
+        // 写しが古ければ付けない（画面は同じ式で数え直す DisplayHardText 等へ戻る）。失敗は操作ログへ。
+        DisplaySnapshot? snap = null;
+        try { snap = DisplaySnapshots.Build(st, Ui, FamilyLabelOf); }
+        catch (Exception e) { LogOp("W", $"表示の写しを作れませんでした: {e.GetType().Name}: {e.Message}"); }
+        Ui.Display = snap is not null && snap.FreshFor(Ui) ? snap : null;
     }
 
     /// <summary>

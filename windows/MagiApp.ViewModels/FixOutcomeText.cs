@@ -36,7 +36,7 @@ public static class FixOutcomeText
         var newHard = MagiEngine.V6.ViolationIdentity.NewHard(before, after).Count;
         return (down.Count == 0 ? "解消・減少した違反: なし。" : $"解消・減少した違反: {string.Join("・", down)}。") +
             (appeared.Count == 0 ? "新たに生じた問題: なし。" : $"新たに生じた問題: {string.Join("・", appeared)}。") +
-            (newHard > 0 ? $"新たな必須違反が {newHard} か所あります。" : after.Hard > 0 ? $"新たな必須違反はありません（全体の必須違反は {AnalysisTriage.HardText(after.Breakdown, after.Hard)}）。" : "");
+            (newHard > 0 ? $"新たな必須違反が {newHard}か所あります。" : after.Hard > 0 ? $"新たな必須違反はありません（全体の必須違反は {AnalysisTriage.HardText(after.Breakdown, after.Hard)}）。" : "");
     }
 
     /// <param name="stillMiss">再検査後にその枠でまだ足りない人数（null＝解消）。</param>

@@ -28,6 +28,7 @@ public static class FixTiers
     /// <summary>
     /// 入り口の範囲の中で 1 セルだけを変える候補を作り、適用の門（<see cref="FixApplyGate"/>）で 1 つずつ評価する。
     /// 日の人員＝その日の 1 人のセル、個人の回数＝その人の 1 セル。過剰は外す側（休を先に試す）、不足は入れる側。
+    /// 置き換え先は最適化器が置いてよいもの（<see cref="Problem.MayPlaceAt"/>＝担当可・上限 0 でない・拡張希望で禁止されていない）だけ＝評価の回数を無駄にしない。
     /// セルごとに最も良い置き換え先を 1 つ残す（通るものがあれば通るものを優先）。まとめて見る対象は作らない。
     /// </summary>
     public static IReadOnlyList<EntryMove> EntryMoves(MagiState state, int[][] s, FixTarget target, int? rest, int maxEvals = EntryMoveEvals)
@@ -40,6 +41,8 @@ public static class FixTiers
                 : Enumerable.Empty<(int, int)>())
             .Where(c => c.Item2 >= 0 && c.Item2 < s[c.Item1].Length && (target.Under ? s[c.Item1][c.Item2] != k : s[c.Item1][c.Item2] == k)).ToList();
         var board = s.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
+        var p = new Problem(state);
+        var before = UnifiedViolationChecker.Check(state, s);
         var evals = 0;
         var outList = new List<EntryMove>();
         foreach (var (i, j) in cells)
@@ -47,13 +50,14 @@ public static class FixTiers
             var tos = target.Under ? new List<int> { k }
                 : (rest is { } r0 && r0 >= 0 && r0 < nK && r0 != k ? new List<int> { r0 } : new List<int>())
                     .Concat(Enumerable.Range(0, nK).Where(x => x != k && x != rest)).ToList();
+            tos = tos.Where(x => p.MayPlaceAt(i, j, x)).ToList();
             (FixApplyGate.Outcome R, FixCell Op)? best = null;
             foreach (var to in tos)
             {
                 if (evals >= maxEvals) break;
                 evals++;
                 var op = new FixCell(i, j, to);
-                var r = FixApplyGate.Apply(state, s, new[] { op });
+                var r = FixApplyGate.Apply(state, s, new[] { op }, p, before);
                 var cur = best;
                 best = cur is null ? (r, op)
                     : r.Applied && !cur.Value.R.Applied ? (r, op)
@@ -66,9 +70,9 @@ public static class FixTiers
             var (res, bop) = best.Value;
             if (!target.Effect(board, new[] { bop }).Fixes) continue;
             var after = res.After;
-            var name = i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
+            var name = i >= 0 && i < state.StaffList.Count ? state.StaffList[i].Name : CellSheetLogic.UnknownLabel;
             var curSym = s[i][j] >= 0 && s[i][j] < nK ? state.Shifts[s[i][j]].Kigou : "—";
-            var toSym = bop.ToShift >= 0 && bop.ToShift < nK ? state.Shifts[bop.ToShift].Kigou : $"{bop.ToShift}";
+            var toSym = bop.ToShift >= 0 && bop.ToShift < nK ? state.Shifts[bop.ToShift].Kigou : CellSheetLogic.UnknownLabel;
             var label = $"{name} {DayText.Short(state.StartDate, j)} {curSym}→{toSym}";
             var diff = after is null ? new List<(string Family, int Delta)>()
                 : res.Before.Breakdown.Keys.Concat(after.Breakdown.Keys).Distinct()

@@ -82,4 +82,42 @@ public class PostWasteRemovalTest
             Assert.Equal(off.StageRecords!.Select(r => (r.Key, r.Applied)), on.StageRecords!.Select(r => (r.Key, r.Applied)));
         }
     }
+
+    /// <summary>[3.686.0] 基準で 0 の回数の族（下限割れ）が回転で現れる盤面でも、差分評価の前判定は正式評価と同じ盤面を返す。</summary>
+    [Fact]
+    public void rotationPrescreenKeepsTheSameBoardWhenARangeFamilyAppears()
+    {
+        var st0 = Load("sept2026_state.json");
+        var s0 = st0.Schedule.ToIntArray2D();
+        // 全員の各シフトの回数をそのまま下限にする＝基準では low 0、回転で 1 つでも減れば現れる。
+        var ranges = new Dictionary<string, MagiEngine.Model.Range>(st0.StaffRange);
+        for (var i = 0; i < s0.Length; i++)
+            for (var k = 0; k < st0.Shifts.Count; k++)
+            {
+                var n = s0[i].Count(v => v == k);
+                if (n > 0 && !ranges.ContainsKey($"{i},{k}")) ranges[$"{i},{k}"] = new MagiEngine.Model.Range($"{n}", "");
+            }
+        var st = st0 with { StaffRange = ranges };
+        foreach (var q in new[] { false, true })
+        {
+            Assert.Equal(0, UnifiedViolationChecker.Check(st, ScheduleUtil.NormalizeSchedule(s0, new Problem(st, q)), quantitativeRangeEval: q).Breakdown.GetValueOrDefault("low", 0));
+            var anchors = new HashSet<string> { "vio-c3", "vio-c3m", "vio-c3mn", "vio-c1" };
+            var off = WithGates(false, true, () => V6HotfixPasses.ApplyBlockRotationPolish(st, s0.Copy2D(), anchors, "t", maxPasses: 1, quantitativeRangeEval: q));
+            var on = WithGates(true, true, () => V6HotfixPasses.ApplyBlockRotationPolish(st, s0.Copy2D(), anchors, "t", maxPasses: 1, quantitativeRangeEval: q));
+            Assert.True(ScheduleUtil.ContentDeepEquals(off.NewSchedule, on.NewSchedule), $"q={q}");
+            Assert.Equal(off.Applied, on.Applied);
+            Assert.True(on.Logs.All(l => !l.Message.Contains("食い違い")), $"q={q} 食い違いで止めていない");
+        }
+    }
+
+    [Fact]
+    public void prescreenVerifiesCloseCallsAndEveryNth()
+    {
+        var st = Load("golden_state.json");
+        var rep = UnifiedViolationChecker.Check(st, st.Schedule.ToIntArray2D());
+        var w = (long)rep.WeightedScore;
+        Assert.True(V6HotfixPasses.PrescreenNeedsVerify(new[] { (long)rep.Hard, w, 0L }, rep, 1));
+        Assert.True(V6HotfixPasses.PrescreenNeedsVerify(new[] { (long)rep.Hard + 1, w + 100, 0L }, rep, 0));
+        Assert.False(V6HotfixPasses.PrescreenNeedsVerify(new[] { (long)rep.Hard + 1, w + 100, 0L }, rep, 1));
+    }
 }
