@@ -2312,9 +2312,14 @@ public sealed partial class EditView : UserControl
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(minus, "GroupAptMinus");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(plus, $"{kigou} の目標を増やす");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(plus, "GroupAptPlus");
-        void SetApt(string value) { _vm.Ws1SetGroupApt(g, k, value); raw = value; aptValue.Text = string.IsNullOrWhiteSpace(value) ? "なし" : value; }
-        minus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : (int?)null; SetApt(c is null ? "0" : c <= 0 ? "" : (c.Value - 1).ToString()); };
-        plus.Click += (_, _) => { var c = int.TryParse(raw.Trim(), out var n) ? n : -1; SetApt(Math.Max(0, c + 1).ToString()); };
+        // 目標も下限・上限と同じく確定で書く（閉じて破棄すれば書かない）。
+        var savedApt = raw.Trim();
+        var aptEdit = savedApt;
+        Action? revalidate = null;   // ダイアログを作ったあとで Validate を入れる
+        void SetApt(string value) { aptEdit = value.Trim(); aptValue.Text = string.IsNullOrWhiteSpace(value) ? "なし" : value; revalidate?.Invoke(); }
+        void CommitApt() { if (aptEdit != savedApt) { _vm.Ws1SetGroupApt(g, k, aptEdit); savedApt = aptEdit; } }
+        minus.Click += (_, _) => { var c = int.TryParse(aptEdit, out var n) ? n : (int?)null; SetApt(c is null ? "0" : c <= 0 ? "" : (c.Value - 1).ToString()); };
+        plus.Click += (_, _) => { var c = int.TryParse(aptEdit, out var n) ? n : -1; SetApt(Math.Max(0, c + 1).ToString()); };
         aptRow.Children.Add(new TextBlock { Text = kigou, MinWidth = 48, VerticalAlignment = VerticalAlignment.Center });
         aptRow.Children.Add(minus); aptRow.Children.Add(aptValue); aptRow.Children.Add(plus);
         panel.Children.Add(aptRow);
@@ -2342,7 +2347,8 @@ public sealed partial class EditView : UserControl
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(quick, "StaffRangeQuickFix");
             quick.Click += (_, _) =>
             {
-                // [Android 3.509.1 同期] 入力欄も同じ値に揃える（旧: モデルだけ変わり、続けて「この上下限を適用」を押すと旧値で上書きされた）。
+                // [Android 3.509.1 同期] 入力欄も同じ値に揃える（旧: モデルだけ変わり、続けて「変更を適用」を押すと旧値で上書きされた）。
+                CommitApt();
                 if (vio == "vio-high") { hiBox.Text = count.ToString(); savedHi = count.ToString(); _vm.SetStaffRange(i, k, lo0?.ToString() ?? "", count.ToString()); }
                 else { loBox.Text = count.ToString(); savedLo = count.ToString(); _vm.SetStaffRange(i, k, count.ToString(), hi0?.ToString() ?? ""); }
             };
@@ -2351,21 +2357,23 @@ public sealed partial class EditView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = $"{name} ・ {kigou}", Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
-            PrimaryButtonText = "この上下限を適用", SecondaryButtonText = hasRange ? "上下限を解除" : null, CloseButtonText = "閉じる",
+            PrimaryButtonText = "変更を適用", SecondaryButtonText = hasRange ? "上下限を解除" : null, CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
         };
         void Validate()
         {
             var bad = V6SanityPort.RangeOrderConflict(loBox.Text, hiBox.Text) is not null;
             conflict.Visibility = bad ? Visibility.Visible : Visibility.Collapsed;
-            dialog.IsPrimaryButtonEnabled = !bad && (loBox.Text.Trim().Length > 0 || hiBox.Text.Trim().Length > 0 || hasRange);
+            dialog.IsPrimaryButtonEnabled = !bad && Dirty();
         }
         loBox.TextChanged += (_, _) => Validate();
         hiBox.TextChanged += (_, _) => Validate();
+        revalidate = Validate;
         Validate();
         // [3.646.0 U01] 下限・上限を入力した途中で閉じる（「閉じる」・Esc）ときは確認（Android の全編集ダイアログと同じ）。
         //   ContentDialog は同時に 1 つなので、確認は同じダイアログの先頭に行で出す。
-        bool Dirty() => loBox.Text.Trim() != savedLo || hiBox.Text.Trim() != savedHi;
+        bool RangeDirty() => loBox.Text.Trim() != savedLo || hiBox.Text.Trim() != savedHi;
+        bool Dirty() => RangeDirty() || aptEdit != savedApt;
         var discardRow = new StackPanel { Spacing = 6, Visibility = Visibility.Collapsed };
         discardRow.Children.Add(new TextBlock { Text = "入力を破棄しますか？", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
         discardRow.Children.Add(new TextBlock { Text = "入力中の内容は保存されません。", FontSize = 14, Opacity = 0.8 });
@@ -2385,8 +2393,8 @@ public sealed partial class EditView : UserControl
         discard.Click += (_, _) => { allowClose = true; dialog.Hide(); };
         keep.Click += (_, _) => discardRow.Visibility = Visibility.Collapsed;
         var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary) _vm.SetStaffRange(i, k, loBox.Text.Trim(), hiBox.Text.Trim());
-        else if (result == ContentDialogResult.Secondary) _vm.RemoveStaffRange(i, k);
+        if (result == ContentDialogResult.Primary) { CommitApt(); if (RangeDirty()) _vm.SetStaffRange(i, k, loBox.Text.Trim(), hiBox.Text.Trim()); }
+        else if (result == ContentDialogResult.Secondary) { CommitApt(); _vm.RemoveStaffRange(i, k); }
     }
 
     private const double MatrixRowH = 44;

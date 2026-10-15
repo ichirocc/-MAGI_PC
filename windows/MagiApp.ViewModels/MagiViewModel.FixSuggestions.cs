@@ -38,6 +38,7 @@ public sealed partial class MagiViewModel
     /// <summary>[3.475.0/論理監査] 改善提案を計算した盤面/設定の指紋（適用時に照合する。0=未計算）。</summary>
     private long _fixBoardKey;
     private long _fixStateKey;
+    private string _fixSearchKey = "";
 
     /// <param name="quick">セルのシート（締切 <see cref="CellSheetLogic.FixSearchQuickMs"/>＝3 秒。手は 1 件でよい。8 秒待たせると答えが無いときも長い＝3.646.0 実機報告）。
     /// ホーム・分析は <see cref="CellSheetLogic.FixSearchMs"/>＝8 秒。</param>
@@ -59,10 +60,12 @@ public sealed partial class MagiViewModel
         //   消してしまう。
         var seq = ++_fixSeq;
         _fixCts?.Cancel(); // 連続タップ時の前探索を破棄（古い結果で UI を上書きしない）
+        _fixSearchKey = focusKey;
         Ui.FixSearching = true;
         Ui.FixFocusName = focusName;
         Ui.FixDoneKey = "";
         Ui.FixFailedKey = "";
+        Ui.FixCancelledKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
         LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick, allDays);
@@ -171,7 +174,7 @@ public sealed partial class MagiViewModel
         ++_fixSeq;
         _fixCts?.Cancel();
         _fixCts = null;
-        if (Ui.FixSearching) Ui.FixSearching = false;
+        if (Ui.FixSearching) { Ui.FixSearching = false; Ui.FixCancelledKey = _fixSearchKey; }
     }
 
     /// <summary>[改善提案] 改善手を1タップで適用（ops のセル代入を一括反映）。Undo 可・自動再診断・自動保存。

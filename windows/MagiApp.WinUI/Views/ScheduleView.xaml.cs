@@ -1338,15 +1338,23 @@ public sealed partial class ScheduleView : UserControl
                 host.Children.Add(new TextBlock { Text = CellSheetLogic.PickProblemFirstNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 return;
             }
-            var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key);
+            var state = CellSheetLogic.PanelState(ui.Running, ui.FixSearching, ui.FixDoneKey, ui.FixFailedKey, focus.Key, ui.FixCancelledKey);
             if (state == FixPanelState.WaitCheck) { host.Children.Add(new TextBlock { Text = "計算・チェックが終わると探します。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.Failed)
             {
                 host.Children.Add(new TextBlock { Text = "勤務変更案を探す途中でうまくいきませんでした。もう一度ためせます。", TextWrapping = TextWrapping.Wrap });
-                var again = new Button { Content = "もう一度探す", MinHeight = 48 };
+                var again = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
                 again.Click += (_, _) => Find();
                 host.Children.Add(again);
+                return;
+            }
+            if (state == FixPanelState.Cancelled)
+            {
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.FixSearchCancelled, TextWrapping = TextWrapping.Wrap });
+                var retry = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
+                retry.Click += (_, _) => Find();
+                host.Children.Add(retry);
                 return;
             }
             if (state == FixPanelState.Running)
@@ -1600,6 +1608,12 @@ public sealed partial class ScheduleView : UserControl
             }
         }
         // 案が見つからないとき（Kotlin NoFixBlock）: 確かめた理由と次に確認すること、探した範囲（畳む）、行き先と相談。
+        Button RetryButton()
+        {
+            var b = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
+            b.Click += (_, _) => Find();
+            return b;
+        }
         void NoFixBlock(UiState ui, FixTarget? target, string label)
         {
             var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
@@ -1608,10 +1622,12 @@ public sealed partial class ScheduleView : UserControl
             if (quick)
             {
                 host.Children.Add(new TextBlock { Text = string.Join(" ", body), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                if (ui.FixTimedOut) host.Children.Add(RetryButton());
                 if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
                 return;
             }
             foreach (var l in body) host.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+            if (ui.FixTimedOut) host.Children.Add(RetryButton());
             if (why.Candidates.Count > 0 && target is { Staff: { } cs })
                 host.Children.Add(CandidatesExpander(ui, target, cs, why.Candidates));
             if (lines.Contains(FixSearchText.NoFixScope))
@@ -1722,7 +1738,7 @@ public sealed partial class ScheduleView : UserControl
         {
             // 盤面・希望が変わったときと、計算・チェックが終わった時点（Running→false）で探し直す。
             if (e.PropertyName is nameof(UiState.Schedule) or nameof(UiState.Wishes) or nameof(UiState.Running)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
-            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions)
+            else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixCancelledKey) or nameof(UiState.FixSuggestions)
                      or nameof(UiState.AppliedFix) or nameof(UiState.SaveState) or nameof(UiState.StaffIds))
                 DispatcherQueue.TryEnqueue(Refresh);
         };
@@ -1788,7 +1804,8 @@ public sealed partial class ScheduleView : UserControl
         {
             var item = new MenuFlyoutItem { Text = c.FromRest ? $"{c.Name}（休み中）" : c.Name };
             var i = c.StaffIndex;
-            item.Click += (_, _) => _vm.SetCell(i, day, shift);
+            var label = $"{c.Name}さんを{DayText.Short(_vm.Ui.StartDate, day)}の「{(shift < _vm.Ui.ShiftSymbols.Count ? _vm.Ui.ShiftSymbols[shift] : "")}」に入れる";
+            item.Click += (_, _) => _vm.PreviewShortageCandidate(i, day, shift, label);   // 確認の画面を経由する
             flyout.Items.Add(item);
         }
         if (flyout.Items.Count == 0)

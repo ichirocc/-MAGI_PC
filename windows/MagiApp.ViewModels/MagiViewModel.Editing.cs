@@ -399,48 +399,26 @@ public sealed partial class MagiViewModel
         RefreshCheck();
     }
 
-    /// <summary>[operator_ux §5] 「なおし方を見る」用：ある不足枠(日×シフト)に1タップで入れられる候補職員。</summary>
-    public sealed record FixCandidate(int StaffIndex, string Name, string GroupSymbol, bool FromRest);
-
+    /// <summary>[operator_ux §5] 「なおし方を見る」用：ある不足枠(日×シフト)に1タップで入れられる候補職員（判定は <see cref="CellSheetLogic.ShortageCandidates"/>）。</summary>
     public IReadOnlyList<FixCandidate> ShortageFixCandidates(int dayIndex, int shiftIndex)
     {
         var st = _state;
         if (st is null) return System.Array.Empty<FixCandidate>();
         var sched = _currentSchedule;
         if (sched is null) return System.Array.Empty<FixCandidate>();
-        var p = new Problem(st);
-        if (shiftIndex < 0 || shiftIndex >= p.K || dayIndex < 0 || dayIndex >= p.T) return System.Array.Empty<FixCandidate>();
-        var rest = ScheduleUtil.RestShiftIndex(st); // [監査A5] 休は記号解決（raw"休"比較は「公」職場で全滅していた）
-        var outList = new List<FixCandidate>();
-        for (var i = 0; i < p.S; i++)
-        {
-            if (i >= sched.Length || dayIndex >= sched[i].Length) continue;
-            // [Android 3.508.2] 担当できない・上限 0 のシフトは出さない（最適化器・FixSuggester・Sanity 代用要員と同じ基準）。
-            if (!p.MayPlace(i, shiftIndex)) continue;
-            if (sched[i][dayIndex] == shiftIndex) continue;   // すでにそのシフト
-            // [監査A5] 実現可能な希望のみ固定扱い（不可能希望のセルはエンジン同様に可動）。
-            if (p.WishLocked(i, dayIndex) && p.LockTo(i, dayIndex) != shiftIndex) continue;
-            // [3.401.0] ここまでは「担当できる・希望で固定されていない」だけの判定で、押しても必須違反が
-            //   減らない候補が混ざっていた。CoverageDiagnosis が「空き番」と数えるのと同じ2条件を足して、
-            //   実際に動かせる人だけを出す。
-            //   ① 移すと禁止連続(c3n)になる人は出さない。
-            if (p.MakesForbiddenRun(sched, i, dayIndex, shiftIndex)) continue;
-            //   ② 抜けると元のシフトに穴が空く人は「動かせる人」ではない（玉突きが要る＝この画面の手には余る）。
-            var from = sched[i][dayIndex];
-            if (from >= 0 && from < p.K)
-            {
-                var cnt = 0;
-                for (var it = 0; it < p.S; it++)
-                    if (it < sched.Length && dayIndex < sched[it].Length && sched[it][dayIndex] == from) cnt++;
-                if (p.CovUCell(from, dayIndex, cnt - 1) > p.CovUCell(from, dayIndex, cnt)) continue;
-            }
-            var g = i < st.StaffList.Count ? st.StaffList[i].GroupIdx : -1;
-            var name = i < st.StaffList.Count ? st.StaffList[i].Name : $"#{i}";
-            var groupSym = g >= 0 && g < st.Groups.Count ? st.Groups[g].Kigou : "";
-            outList.Add(new FixCandidate(i, name, groupSym, sched[i][dayIndex] == rest));
-        }
-        // 休みの人（動かしやすい）を先頭に。
-        return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
+        return CellSheetLogic.ShortageCandidates(st, new Problem(st), sched, dayIndex, shiftIndex, ScheduleUtil.RestShiftIndex(st));   // [監査A5] 休は記号解決
+    }
+
+    /// <summary>不足枠の候補を 1 セルの変更案として確認の画面へ（直接は書かない＝指紋照合・FixApplyGate・INV-03 を通す）。</summary>
+    public void PreviewShortageCandidate(int staff, int dayIndex, int shiftIndex, string label)
+    {
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null) return;
+        var target = NeedCellLimits(shiftIndex, dayIndex) is { } need ? new FixTarget(null, shiftIndex, dayIndex, need.Lo, true, "必要人数") : null;
+        var s = new FixSuggestion(FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label, 0, 0, System.Array.Empty<(string, int)>());
+        PreviewOrApplyFix(s, BoardKey(sched), StateKey(st));
+        if (Ui.ChainPreview is { } cp) Ui.ChainPreview = cp with { FixTarget = target };
     }
 
     /// <summary>[3.642.0/UX監査 高1 → 3.644.0/UX-03] 不足枠を玉突き（複数人の入替）で埋める手順を求め、当てる<b>前</b>に一覧（だれの・どの日の・何→何）を
@@ -492,7 +470,7 @@ public sealed partial class MagiViewModel
         else ApplyFixSuggestion(p.Suggestion, focusKey: p.FocusKey, fixTarget: p.FixTarget);
     }
 
-    public void DismissChainPreview() => Ui.ChainPreview = null;
+    public void DismissChainPreview() { _pendingGuided = null; Ui.ChainPreview = null; }
 
     // ---- constraint editing (ws3-5) -------------------------------------------
 
@@ -1706,6 +1684,11 @@ public sealed partial class MagiViewModel
         {
             LogOp("I", $"設定ミスの修正を適用: {issue.Action} @ {issue.Where}");
             ApplyStructure(ns);
+        }
+        else if (SettingFixLogic.WishChanged(s, issue))
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = SettingFixLogic.WishChangedMessage;
         }
         else if (issue.Action == SettingFixAction.DeleteDupSeq)
         {

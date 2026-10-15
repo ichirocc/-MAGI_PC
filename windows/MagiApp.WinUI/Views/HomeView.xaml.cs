@@ -768,16 +768,16 @@ public sealed partial class HomeView : UserControl
                         var b = new Button
                         {
                             Content = $"{c.Name}さん{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
-                            IsEnabled = flow.CandidatesEnabled && !ui.Running,
+                            IsEnabled = !ui.Running,
                         };
-                        var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex;
+                        var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex; var label = $"{c.Name}さんを{target.DayLabel}の「{target.ShiftSymbol}」に入れる";
+                        // 押すと確認の画面へ（直接は書かない）。当てるときは指紋照合・FixApplyGate・INV-03 を通る。
                         b.Click += (_, _) =>
                         {
-                            if (!flow.CandidatesEnabled || _vm.EditBlockedNow()) return;
-                            flow.Press(_vm.Ui.CheckRev);
-                            Rebuild();
+                            if (_vm.EditBlockedNow()) return;
+                            dialog.Hide();
                             _vm.NoteGuidedFix(day, shift, target.DayLabel, target.ShiftSymbol);
-                            _vm.SetCell(i, day, shift);
+                            _vm.PreviewShortageCandidate(i, day, shift, label);
                         };
                         panel.Children.Add(b);
                     }
@@ -793,7 +793,7 @@ public sealed partial class HomeView : UserControl
                     }
                     panel.Children.Add(new TextBlock
                     {
-                        Text = flow.Pending ? "再検査中…（結果が反映されるまで候補は押せません）" : "入れたら「元に戻す」でいつでも取り消せます。",
+                        Text = "押すと、当てる前に変更と影響を確認できます。入れたあとも「元に戻す」で取り消せます。",
                         FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
                     });
                     // [3.645.0/仕様 5.3] だれを入れるかを相談してから決める＝対象と候補を相談中の一覧へ。

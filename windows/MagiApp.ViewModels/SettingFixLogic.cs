@@ -9,6 +9,13 @@ namespace MagiApp.ViewModels;
 /// <summary>設定の見直しカードのワンタップ修正の純粋部分（状態 → 新しい状態 / 何も変えないなら null）。ViewModel は適用とログだけ持つ。Kotlin <c>SettingFixLogic</c> の移植。</summary>
 public static class SettingFixLogic
 {
+    public const string WishChangedMessage = "診断のあとで希望が変わったため、取り消しませんでした。診断をやり直してください";
+
+    /// <summary>診断のあとで対象の希望が別の勤務に変わった（または消えた）か。</summary>
+    public static bool WishChanged(MagiState s, SettingIssue issue) =>
+        issue.Action == SettingFixAction.RemoveWish && issue.WishKey is { } k
+        && (s.Wishes.TryGetValue(k, out var v) ? (int?)v : null) != issue.WishShift;
+
     public static MagiState? Apply(MagiState s, SettingIssue issue)
     {
         switch (issue.Action)
@@ -17,7 +24,7 @@ public static class SettingFixLogic
             {
                 var key = issue.WishKey;
                 if (key is null) return null;
-                if (!s.Wishes.ContainsKey(key)) return null;
+                if (!s.Wishes.ContainsKey(key) || WishChanged(s, issue)) return null;
                 var d = new Dictionary<string, int>(s.Wishes);
                 d.Remove(key);
                 return s with { Wishes = d };

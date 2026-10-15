@@ -251,7 +251,7 @@ public static partial class V6PortAnalyzer
                 var wishPinned = new List<int>();
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (!p.MayPlace(i, k)) continue;
+                    if (!p.MayPlaceAt(i, j, k)) continue;
                     // [3.391.0] 生の `w != k` は実現不能な希望（担当できないシフトへの希望）まで
                     //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
                     //   （WishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
@@ -291,7 +291,7 @@ public static partial class V6PortAnalyzer
                     var already = 0; var free = 0; var cascade = 0; var forbid = 0;
                     for (var i = 0; i < p.S; i++)
                     {
-                        if (!p.MayPlace(i, k)) continue;
+                        if (!p.MayPlaceAt(i, j, k)) continue;
                         var m = norm[i][j];
                         // [3.391.0] 上の capacity と同じ事前フィルタ＝同じ条件に揃える（WishLocked）。
                         if (p.WishLocked(i, j) && p.LockTo(i, j) != k) continue;   // 実現可能な希望が別シフト=capacity 対象外
@@ -324,9 +324,7 @@ public static partial class V6PortAnalyzer
                     else if (cascade > 0 && chainVerified)
                         hint = "すぐ移せる人がいないため、複数人を順に入れ替える手（玉突き）が必要です";
                     else if (cascade > 0)
-                        hint = $"入れ替えの候補は{cascade}人いますが、その人が抜けた穴を埋められる人も本人の希望か禁止の並びで動かせず、" +
-                            "今の希望のままではどう組んでも解消できません。希望を1件調整するか、担当を追加してください" +
-                            (MirrorKeys.WeightOf("covU") > MirrorKeys.WeightOf("pref") ? $"。{WishScoreHint}" : "");
+                        hint = ChainNotFoundInTried;
                     else
                         hint = "移せる人が本人の希望か禁止の並びで動かせません。希望を1件調整するか、担当を追加すると埋まりやすくなります";
                     reason = $"{hint}。内訳: {sym}を担当できる{capacity}人（すでに{sym}に{already}人）・すぐ移せる{free}人・入れ替えが要る{cascade}人・本人の希望{pinned}人・禁止の並びになる{forbid}人";

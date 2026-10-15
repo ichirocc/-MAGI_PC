@@ -9,7 +9,7 @@ public sealed record ShiftSlot(int Shift, bool CanDo);
 public enum CellSeverity { Hard, Soft, None }
 
 /// <summary>直し方探しの状態（計算・チェック待ち／未開始／探索中／完了／失敗）。</summary>
-public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed }
+public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed, Cancelled }
 
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
 public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped, Unavailable, Failed }
@@ -510,13 +510,16 @@ public static class CellSheetLogic
 
     /// <summary>変更案の探索を止めるボタン（勤務表の作成の「やめる」と区別する）。</summary>
     public const string CancelFixSearchButton = "変更案の検索を中止";
+    public const string FixSearchCancelled = "探索を止めました。";
+    public const string FixSearchRetryButton = "もう一度探す";
 
     /// <summary>その場の直し方探しの状態。スピナーは <see cref="FixPanelState.Running"/> だけ。</summary>
-    public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key) =>
+    public static FixPanelState PanelState(bool running, bool fixSearching, string doneKey, string failedKey, string key, string cancelledKey = "") =>
         fixSearching ? FixPanelState.Running
         : running ? FixPanelState.WaitCheck
         : doneKey == key ? FixPanelState.Done
         : failedKey == key ? FixPanelState.Failed
+        : cancelledKey == key ? FixPanelState.Cancelled
         : FixPanelState.NotStarted;
 
     /// <summary>ちら見に出す上位 <paramref name="n"/> シフト: 今の割当・希望を先に、残りは担当できるものを枠の順で（Kotlin <c>peekShifts</c>）。</summary>
@@ -970,7 +973,8 @@ public static class CellSheetLogic
     /// このセルの問題が解消するか、ほかで解消する問題、新しく生じる問題を言う。値はすべて評価した結果（仮の値を書かない）。族名は <paramref name="labelOf"/>。
     /// </summary>
     public static CellChangeReview CellChangeReview(MagiState state, int[][] s, int i, int j, int k, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols,
-        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits, bool pinned, Func<string, string> labelOf)
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits, bool pinned, Func<string, string> labelOf,
+        IReadOnlyList<FixTarget>? targets = null)
     {
         string Sym(int? x) => x is { } v && v >= 0 && v < shiftSymbols.Count ? shiftSymbols[v] : "—";
         string NameOf(int x) => x >= 0 && x < staffNames.Count ? staffNames[x] : $"#{x}";
@@ -983,7 +987,11 @@ public static class CellSheetLogic
         var diff = ViolationIdentity.Of(before, after);
         string Label(ViolationKey key) => ViolationKeyLabel(key, staffNames, shiftSymbols, state.StartDate, labelOf);
         var here = ViolationIdentity.Keys(before).Where(key => key.Space == ViolationKey.Kind.Cell && key.A == i && key.B == j).ToList();
-        var thisCell = here.Select(key => $"{labelOf(key.Family)}：" + (diff.Resolved.Contains(key) ? "解消します" : "残ります")).ToList();
+        var ops = new[] { new FixCell(i, j, k) };
+        var sl = s.Select(r => (IReadOnlyList<int>)r).ToList();
+        // 日の人数・回数の問題から開いたときは、その数の前後も言う（このセルに違反が無くても見ている問題は変わる）。
+        var thisCell = (targets ?? Array.Empty<FixTarget>()).Select(t => $"{FixTargetReviewName(t, staffNames, shiftSymbols, state.StartDate, labelOf)}：{t.Effect(sl, ops).CountLine()}")
+            .Concat(here.Select(key => $"{labelOf(key.Family)}：" + (diff.Resolved.Contains(key) ? "解消します" : "残ります"))).ToList();
         var nb = string.Join(" → ", new[]
         {
             j - 1 >= 0 ? $"{DayText.Short(state.StartDate, j - 1)}：{Sym(s[i][j - 1])}" : null,
@@ -1012,13 +1020,23 @@ public static class CellSheetLogic
         return new CellChangeReview(
             Change: $"{name}さん　{DayText.Full(state.StartDate, j)} {Sym(cur)} → {Sym(k)}",
             Neighbors: nb,
-            ThisCell: thisCell.Count > 0 ? thisCell : new List<string> { "このセルに違反はありません" },
+            ThisCell: thisCell.Count > 0 ? thisCell : new List<string> { NoCellViolation },
             OthersResolved: diff.Resolved.Where(key => !here.Contains(key)).Select(Label).ToList(),
             Appeared: diff.Appeared.Select(Label).ToList(),
             HardLine: $"必須違反（勤務表全体）：{AnalysisTriage.HardText(before.Breakdown, before.Hard)} → {AnalysisTriage.HardText(after.Breakdown, after.Hard)}",
             Headcount: other,
             Counts: counts,
             WishPin: wishPin);
+    }
+
+    public const string NoCellViolation = "このセル自体の違反はありません";
+
+    /// <summary>確認の画面で見ている問題の名（「人員過剰（12/16のDﾃ）」「上限（福澤さんのB4）」）。</summary>
+    public static string FixTargetReviewName(FixTarget t, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate, Func<string, string> labelOf)
+    {
+        var sym = t.Shift >= 0 && t.Shift < shiftSymbols.Count ? shiftSymbols[t.Shift] : $"{t.Shift}";
+        return t.Staff is { } st ? $"{t.Basis}（{(st >= 0 && st < staffNames.Count ? staffNames[st] : $"#{st}")}さんの{sym}）"
+            : $"{labelOf(t.Under ? "covU" : "covO")}（{FixTargetLabel(t, sym, startDate)}）";
     }
 
     /// <summary>違反 1 件の名と場所（Kotlin <c>violationKeyLabel</c>「必須・禁止の並び（福澤さん 11/29）」「人員不足（11/3のAア）」「下限割れ（福澤さんのB4）」）。</summary>
@@ -1215,13 +1233,57 @@ public static class CellSheetLogic
         if (a.SoftBefore >= 0) outList.Add($"要調整（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Soft, a.SoftBefore)} → {T(a.BreakdownAfter, MirrorKeys.Soft, a.SoftAfter)}");
         outList.Add(SaveStateLine(ui.SaveState));
         IReadOnlyList<string> next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate)
-            : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { $"{label}は、{target.Basis}まであと{eff.GapAfter}回です" }
+            : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { RemainingGapLine(label, target, eff.GapAfter) }
             : Array.Empty<string>();
         if (next.Count > 0) outList.Add("次に確認すること：" + string.Join("。", next) + "。");
         outList.Add("勤務表が変わったため、変更案を探し直しました（下の案は今の勤務表のものです）。");
         return outList;
     }
+
+    /// <summary>当てたあとに残る差（回数＝「A4は、下限まであと2回です」、まとめて見る日々＝「Dテ（2日）は、合計 3人不足です」）。</summary>
+    public static string RemainingGapLine(string label, FixTarget t, int gap) =>
+        t.Multi ? $"{label}は、合計 {gap}{t.Unit}{t.GapWord}です" : $"{label}は、{t.Basis}まであと{gap}{t.Unit}です";
+
+    /// <summary>[operator_ux §5] ある不足枠(日×シフト)に1タップで入れられる候補職員。Kotlin <c>shortageCandidates</c> の移植。</summary>
+    public static IReadOnlyList<FixCandidate> ShortageCandidates(MagiState st, Problem p, int[][] sched, int dayIndex, int shiftIndex, int? rest)
+    {
+        if (shiftIndex < 0 || shiftIndex >= p.K || dayIndex < 0 || dayIndex >= p.T) return System.Array.Empty<FixCandidate>();
+        var outList = new List<FixCandidate>();
+        for (var i = 0; i < p.S; i++)
+        {
+            if (i >= sched.Length || dayIndex >= sched[i].Length) continue;
+            // 担当できない・上限 0・拡張希望で禁止のシフトは出さない（最適化器と同じ MayPlaceAt 基準）。
+            if (!p.MayPlaceAt(i, dayIndex, shiftIndex)) continue;
+            if (p.Pinned(i, dayIndex)) continue;   // 手動固定は自動でも変えない
+            // 上限に届いている人は入れると上限超過になる。
+            if (p.RangeHi[i][shiftIndex] != int.MaxValue && sched[i].Count(x => x == shiftIndex) >= p.RangeHi[i][shiftIndex]) continue;
+            if (sched[i][dayIndex] == shiftIndex) continue;   // すでにそのシフト
+            // [監査A5] 実現可能な希望のみ固定扱い（不可能希望のセルはエンジン同様に可動）。
+            if (p.WishLocked(i, dayIndex) && p.LockTo(i, dayIndex) != shiftIndex) continue;
+            // [3.401.0] CoverageDiagnosis が「空き番」と数えるのと同じ2条件で、実際に動かせる人だけを出す。
+            //   ① 移すと禁止連続(c3n)になる人は出さない。
+            if (p.MakesForbiddenRun(sched, i, dayIndex, shiftIndex)) continue;
+            //   ② 抜けると元のシフトに穴が空く人は「動かせる人」ではない（玉突きが要る＝この画面の手には余る）。
+            var from = sched[i][dayIndex];
+            if (from >= 0 && from < p.K)
+            {
+                var cnt = 0;
+                for (var it = 0; it < p.S; it++)
+                    if (it < sched.Length && dayIndex < sched[it].Length && sched[it][dayIndex] == from) cnt++;
+                if (p.CovUCell(from, dayIndex, cnt - 1) > p.CovUCell(from, dayIndex, cnt)) continue;
+            }
+            var g = i < st.StaffList.Count ? st.StaffList[i].GroupIdx : -1;
+            var name = i < st.StaffList.Count ? st.StaffList[i].Name : $"#{i}";
+            var groupSym = g >= 0 && g < st.Groups.Count ? st.Groups[g].Kigou : "";
+            outList.Add(new FixCandidate(i, name, groupSym, sched[i][dayIndex] == rest));
+        }
+        // 休みの人（動かしやすい）を先頭に。
+        return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
+    }
 }
+
+/// <summary>[operator_ux §5] 不足枠の候補職員 1 人。</summary>
+public sealed record FixCandidate(int StaffIndex, string Name, string GroupSymbol, bool FromRest);
 
 /// <summary>
 /// 画面で見ている 1 つの問題（Kotlin <c>FixTarget</c>、2026-10-14 利用者レビュー「今回の問題がどう変わるかを最上段に」）。

@@ -228,6 +228,9 @@ public static partial class V6PortAnalyzer
     private static string ShiftSym(MagiState state, int k) =>
         k >= 0 && k < state.Shifts.Count ? state.Shifts[k].Kigou : k.ToString();
 
+    /// <summary>1 ホップの入れ替え候補はいるが、確かめた玉突きでは埋まらなかった枠（埋まらないと断定しない）。</summary>
+    public const string ChainNotFoundInTried = "試した入れ替えの範囲では埋まりませんでした（自動作成で見つかる場合があります）";
+
     /// <summary>希望を破ると HARD 件数は同じでも weightedScore が下がるときに添える一文（表示専用）。</summary>
     public const string WishScoreHint = "この希望を1件調整すると、全体の点数は良くなります";
 

@@ -18,9 +18,9 @@ public static class C1Display
     /// <summary>勤務表だけでは届かないときの 1 文（セルシート・職員の内訳で共有）。</summary>
     public const string StuckText = "希望・手動固定・個人の上限0（入れない指定）の都合で、勤務表だけでは期間の制約を満たせません。";
 
-    /// <summary>セル (i,d) を k に変えられるか。最適化器と同じ基準（希望固定なら希望どおりだけ、それ以外は MayPlace）。</summary>
+    /// <summary>セル (i,d) を k に変えられるか。最適化器と同じ基準（希望固定なら希望どおりだけ、それ以外は MayPlaceAt）。</summary>
     public static bool Changeable(Problem p, int i, int d, int k) =>
-        p.WishLocked(i, d) ? p.LockTo(i, d) == k : p.MayPlace(i, k);
+        p.WishLocked(i, d) ? p.LockTo(i, d) == k : p.MayPlaceAt(i, d, k);
 
     /// <summary>盤面 s の期間の制約の不足区間。窓の数え方はチェッカー（担当不可の職員は対象外）と同じ。</summary>
     public static IReadOnlyList<C1Shortage> Shortages(Problem p, int[][] s)
