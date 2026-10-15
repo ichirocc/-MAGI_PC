@@ -214,7 +214,7 @@ public sealed partial class HomeView : UserControl
             headline = "② ボタンひとつで、勤務表を作ります。";
             bigLabel = "勤務表をつくる"; bigEnabled = true;
             helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
-            phase = "探索"; phaseHex = MagiAccent.Blue;
+            phase = "組み立て"; phaseHex = MagiAccent.Blue;
             _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
         }
         else if (ui.BestHard == 0L)
