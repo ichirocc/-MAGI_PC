@@ -247,7 +247,7 @@ public static partial class V6PortAnalyzer
         //   それは希望を変える手＝利用者の操作なので、「探索未到達」に見せず希望固定として返す。
         var wishHeld = PolishGate.WishPinStrict && p.WishLocked(i, j) && p.LockTo(i, j) == cur;
         return wishHeld && cell.Escape is ForbiddenCellEscape.Free or ForbiddenCellEscape.Chain or ForbiddenCellEscape.Adjacent
-            ? cell with { Escape = ForbiddenCellEscape.Pinned, Detail = $"本人希望={cell.ShiftSymbol}（探索は希望を動かしません。この希望を1件変えれば崩せます）" }
+            ? cell with { Escape = ForbiddenCellEscape.Pinned, Detail = $"本人希望={cell.ShiftSymbol}（勤務表づくりは希望を動かしません。この希望を1件変えれば崩せます）" }
             : cell;
     }
 

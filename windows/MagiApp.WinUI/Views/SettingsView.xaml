@@ -27,7 +27,7 @@
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock x:Name="BudgetLabel" Text="探索時間" />
+                <TextBlock x:Name="BudgetLabel" Text="組む時間" />
                 <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
                         TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
                         ValueChanged="OnBudgetChanged" />
@@ -49,7 +49,7 @@
                           OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
 
             <!-- [Android 3.615.0同期] 探索スイッチ群を 2 択 1 つに統合（ユーザー決定）。 -->
-            <ComboBox x:Name="SearchStrengthCombo" Header="探索の強さ" SelectionChanged="OnSearchStrengthChanged">
+            <ComboBox x:Name="SearchStrengthCombo" Header="探す強さ" SelectionChanged="OnSearchStrengthChanged">
                 <ComboBoxItem Content="ふつう" Tag="Normal" />
                 <ComboBoxItem Content="じっくり" Tag="Thorough" />
             </ComboBox>
@@ -58,7 +58,7 @@
             <ToggleSwitch x:Name="AptFairUnguardedToggle" Header="容認 6% で重い違反の増加も許す"
                           OnContent="ON" OffContent="OFF" Toggled="OnAptFairUnguardedToggled" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="試験中・じっくりでだけ効きます。期間の制約や上限などが1件増える手も予算内なら採ります。測定では目的に当たりませんでした（既定はOFF）" />
+                       Text="試験中・じっくりのときだけ働きます。期間の制約や上限などが1件増える手も予算内なら採ります。測定では目的に当たりませんでした（既定はOFF）" />
             <ToggleSwitch x:Name="C1MoveARepairToggle" Visibility="Collapsed" Header="期間の制約の入れ替えで、できた禁止の並びも直す"
                           OnContent="ON" OffContent="OFF" Toggled="OnC1MoveARepairToggled" />
             <TextBlock Visibility="Collapsed" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"

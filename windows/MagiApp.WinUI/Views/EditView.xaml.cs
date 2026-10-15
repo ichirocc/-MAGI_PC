@@ -1482,7 +1482,7 @@ public sealed partial class EditView : UserControl
         {
             var refs = _vm.Ws1ShiftRefCount(MasterShiftCombo.SelectedIndex);
             MasterShiftHintText.Text = refs > 0
-                ? $"削除すると、該当マスは「休」（無ければ先頭シフト）へ置き換わります。このシフトを参照する制約が{refs}件あります。"
+                ? $"削除すると、該当マスは「休」（無ければ先頭シフト）へ置き換わります。このシフトを使うルールが{refs}件あります。"
                 : "削除すると、該当マスは「休」（無ければ先頭シフト）へ置き換わります。";
         }
         else
@@ -1844,7 +1844,7 @@ public sealed partial class EditView : UserControl
         var name = g < _masterGroupItems.Count ? _masterGroupItems[g] : "";
         var msg = $"「{name}」を削除します。" +
             (members > 0 ? $" 所属{members}名は先頭グループへ移動し、担当できるシフトが変わります。" : "") +
-            (refs > 0 ? $" このグループを参照する制約が{refs}件あります。" : "") +
+            (refs > 0 ? $" このグループを使うルールが{refs}件あります。" : "") +
             "（元に戻すで取り消せます）";
         var ok = await ConfirmAsync("グループを削除しますか？", msg);
         if (!ok) return;
@@ -2053,7 +2053,7 @@ public sealed partial class EditView : UserControl
         var msg = $"「{name}」を削除します。" +
             (members > 0 ? $" 割り当てていた{members}名は「(なし)」に戻ります（スキルグループのルールの対象から外れます）。" : " 所属している職員はいません。") +
             " 元に戻すで取り消せます。" +
-            (refs > 0 ? $" このスキルグループを参照する制約が{refs}件あります。" : "");
+            (refs > 0 ? $" このスキルグループを使うルールが{refs}件あります。" : "");
         var ok = await ConfirmAsync("スキルグループを削除しますか？", msg);
         if (!ok) return;
         _vm.RemoveSkillGroup(g);

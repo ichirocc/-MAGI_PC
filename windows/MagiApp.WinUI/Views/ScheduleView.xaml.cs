@@ -1345,7 +1345,7 @@ public sealed partial class ScheduleView : UserControl
             if (state == FixPanelState.NotStarted) { host.Children.Add(new TextBlock { Text = "まだ探していません。", TextWrapping = TextWrapping.Wrap }); return; }
             if (state == FixPanelState.Failed)
             {
-                host.Children.Add(new TextBlock { Text = "勤務変更案を探す途中でうまくいきませんでした。もう一度ためせます。", TextWrapping = TextWrapping.Wrap });
+                host.Children.Add(new TextBlock { Text = "勤務変更案を探す途中でうまくいきませんでした。もう一度試せます。", TextWrapping = TextWrapping.Wrap });
                 var again = new Button { Content = CellSheetLogic.FixSearchRetryButton, MinHeight = 48 };
                 again.Click += (_, _) => Find();
                 host.Children.Add(again);

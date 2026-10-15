@@ -56,7 +56,7 @@ public class Review3683Test
     [Fact]
     public void preRunRepeatHint()
     {
-        Assert.Equal("前回と同じ探索時間・方式で再作成します。前回いちばん多い必須違反は禁止の並び（3件）です。同じ設定では同じ違反が残りやすいため、編集タブでこれを 1 つ緩めると減る見込みがあります。",
+        Assert.Equal("前回と同じ組む時間・方式で再作成します。前回いちばん多い必須違反は禁止の並び（3件）です。同じ設定では同じ違反が残りやすいため、編集タブでこれを 1 つ緩めると減る見込みがあります。",
             CellSheetLogic.PreRunRepeatHintText("禁止の並び（3件）"));
     }
 

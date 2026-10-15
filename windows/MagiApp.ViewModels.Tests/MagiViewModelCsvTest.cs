@@ -266,7 +266,7 @@ public class MagiViewModelCsvTest
         Assert.Equal(2, vm._state.GroupCount);
         Assert.False(vm.Ui.Running);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("勤務表CSVを新規取込") && l.Contains("3名"));
-        Assert.Contains("期間は「2026-07-01」から", vm.Ui.Message);
+        Assert.Contains("期間の開始を「2026-07-01」として", vm.Ui.Message);
         Assert.Contains("編集タブの「月次条件」で直せます", vm.Ui.Message);   // WinUI の月次条件は「対象期間」と月の移動ボタン（Android の『対象の月』は無い）
     }
 

@@ -647,7 +647,7 @@ public sealed partial class SettingsView : UserControl
         var remainder = sec % 60;
         // 仕上げと玉突きは 1 本の締切を分け合う（それぞれに決まった秒数が残る約束ではない＝共通の枠と書く）。
         var tail = $"。このほか、仕上げと勤務の入れ替え調整（玉突き）に共通の枠として合計 {MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec}秒を足します";
-        return remainder == 0 ? $"探索時間 {sec}秒（{min}分）{tail}" : $"探索時間 {sec}秒{tail}";
+        return remainder == 0 ? $"組む時間 {sec}秒（{min}分）{tail}" : $"組む時間 {sec}秒{tail}";
     }
 
     private void OnWorkersChanged(object sender, RangeBaseValueChangedEventArgs e)

@@ -236,7 +236,7 @@
                         BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
                     <StackPanel Spacing="6">
                         <TextBlock Text="この体制で回るか" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                        <TextBlock Text="シフト別に「担当できる人数」で確認。余裕=1人欠けても回るか。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock Text="シフトごとに「担当できる人数」で確かめます。余裕は、1人欠けても回るかどうかを表します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                         <StackPanel x:Name="StaffingRealityHost" Spacing="4" />
                     </StackPanel>
                 </Border>

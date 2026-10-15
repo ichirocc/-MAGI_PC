@@ -76,7 +76,7 @@
             <StackPanel x:Name="FixSection" Spacing="6">
                 <TextBlock Text="直し方を探す" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <Button x:Name="FixSearchButton" Content="直し方を探す" Click="OnFixSearchClick" HorizontalAlignment="Left" />
-                <TextBlock x:Name="FixSearchingText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="探索中…" />
+                <TextBlock x:Name="FixSearchingText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="探しています…" />
                 <StackPanel x:Name="FixList" Spacing="10" />
             </StackPanel>
 

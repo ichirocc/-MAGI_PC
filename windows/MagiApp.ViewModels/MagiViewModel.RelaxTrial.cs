@@ -129,7 +129,7 @@ public sealed partial class MagiViewModel
         {
             LogOp("W", $"S6 確定を見送り: 手順を当てた必須 {got} ≠ 試算 {r.Rr}");
             Ui.MessageIsError = true;
-            Ui.Message = "試算の手順を当てても同じ結果になりませんでした。勤務表と設定はそのままです。";
+            Ui.Message = "試算の手順を適用しても同じ結果になりませんでした。勤務表と設定はそのままです。";
             return;
         }
         if (!EnsureValidForRun(ns0, nb, "設定の緩和")) return;
