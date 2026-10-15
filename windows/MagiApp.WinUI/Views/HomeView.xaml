@@ -27,8 +27,8 @@
       [phase9 #3] 実行中の進捗行（Kotlin原本 progressSummary＝必須残り／要調整／残り時間）を処方箋カード内に、
       「途中経過を見る」（LiveScheduleCard＝色タイルの盤面、赤枠＝今回変化）を LiveCard として移植。
 
-      [phase9 #4] コパイロット（Kotlin原本 CopilotCard）＝実現できない希望の警告／操作の助言／研磨の限界（自動で整える・手修正）。
-      単独の「仕上げ最適化」ボタンは Android と同じくこのカード内の「自動で整える」へ統合。
+      [phase9 #4] コパイロット（Kotlin原本 CopilotCard）＝実現できない希望の警告／操作の助言／研磨の限界（要調整をもう少し減らせるか試す、3.683.0）。
+      単独の「仕上げ最適化」ボタンは Android と同じくこのカード内のリンクへ統合。
 
       [phase9 #5] 空状態（Kotlin原本 EmptyStateCard）＝データ未読込のとき「データを開く／サンプルで試す／新規につくる（空から）」。
       通常は起動時にフィクスチャが自動で入るため、読込に失敗した・空にしたときの導線。
@@ -147,18 +147,10 @@
                 <Border x:Name="PolishPanel" Background="{StaticResource MagiTertiaryContainerBrush}"
                         CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
                     <StackPanel Spacing="8">
-                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
-                                   Foreground="{StaticResource MagiOnTertiaryContainerBrush}"
-                                   Text="✓ 必須は満たしています。残りの調整は自動で減らせます（必須は壊しません）。" />
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="SoftPolishButton" Content="自動で整える" Click="OnSoftPolishClick"
-                                    HorizontalAlignment="Stretch" MinHeight="48" />
-                            <Button Grid.Column="1" Content="手修正" Click="OnManualEditClick" HorizontalAlignment="Stretch" MinHeight="48" />
-                        </Grid>
+                        <HyperlinkButton x:Name="SoftPolishButton" Click="OnSoftPolishClick" MinHeight="48"
+                                         Foreground="{StaticResource MagiOnTertiaryContainerBrush}">
+                            <TextBlock x:Name="SoftPolishLinkText" TextWrapping="Wrap" />
+                        </HyperlinkButton>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -188,8 +180,9 @@
 
             <StackPanel x:Name="AlternativesPanel" Spacing="4">
                 <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
+                <TextBlock x:Name="AlternativesWorseText" TextWrapping="Wrap" FontSize="14" Opacity="0.8" />
                 <TextBlock TextWrapping="Wrap" FontSize="14" Opacity="0.8"
-                           Text="Portfolio(並列複数案)実行で見つかった採用案以外の候補。適用すると今の勤務表を置き換えます（元に戻すで一覧ごと戻せます）。" />
+                           Text="案を押すと、反映する前に確かめます（反映後も「元に戻す」で取り消せます）。" />
                 <StackPanel x:Name="AlternativesListHost" Spacing="4" />
             </StackPanel>
         </StackPanel>

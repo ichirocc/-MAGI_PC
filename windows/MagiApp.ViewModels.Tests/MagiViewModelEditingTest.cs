@@ -279,9 +279,9 @@ public class MagiViewModelEditingTest
 
         await vm.CaptureAlternatives(new[] { altA, altB });
 
-        // altB は1セルだけ休->A へ動かした盤面。hard=0 だが fair/weekly のソフト偏差が発火する
-        // （SetCellChangesTheCellAndTriggersARecheck と同じ理由・同じ実測値）。
-        Assert.Equal(new[] { "案1: 必須=0 合計=0", "案2: 必須=0 合計=4" }, vm.Ui.Alternatives);
+        // 今の盤面が無いときは比べない（今より多い／少ないを添えない）。
+        Assert.Equal(new[] { "案1：必須違反 0件", "案2：必須違反 0件" }, vm.Ui.Alternatives);
+        Assert.Equal(new[] { false, false }, vm.Ui.AlternativesWorse);
     }
 
     [Fact]

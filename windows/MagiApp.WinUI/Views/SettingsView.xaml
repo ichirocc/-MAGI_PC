@@ -18,7 +18,7 @@
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
-            <TextBlock Text="最適化設定" FontSize="20" FontWeight="SemiBold" />
+            <TextBlock Text="勤務表をつくる時間" FontSize="20" FontWeight="SemiBold" />
 
             <StackPanel Spacing="4">
                 <TextBlock x:Name="WorkersLabel" Text="並列数" />

@@ -124,9 +124,15 @@ public sealed partial class AnalysisView : UserControl
 
     /// <summary>
     /// [phase9 #18] 「要確認」（Kotlin原本 <c>AnalysisTriageCard</c>、3.471.0）。分類は <see cref="AnalysisTriage.Build"/>（純関数）。
-    /// 上段=直さないと消えない項目（必須違反＋診断が壁と判定した族＋設定の破綻）、中段=エンジンが挑戦する項目、
+    /// 上段=必須違反と、設定を変えないと消えない項目（診断が壁と判定した族＋設定の破綻）、中段=作成で減らせる見込みの項目、
     /// 下段=0件の族を畳んだサマリー。必須違反の場所は下の「違反の場所」節が担う（Kotlin の ConfirmRow 相当）。
     /// </summary>
+    private TextBlock SettingsHeading() => new()
+    {
+        Text = CellSheetLogic.TriageSettingsHeading, Style = (Style)Application.Current.Resources["MagiTitleSmallTextStyle"],
+        Foreground = BrushOf("MagiErrorBrush"), Margin = new Thickness(0, 4, 0, 0),
+    };
+
     private void RenderTriage(UiState ui)
     {
         TriageSection.Visibility = Visibility.Visible;
@@ -137,12 +143,17 @@ public sealed partial class AnalysisView : UserControl
         TriageBadgeText.Text = t.Computed ? "計算済み" : "未計算";
         TriageAllClearText.Visibility = !t.HasAnything && ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
 
+        // [Android 3.683.0] 必須違反（配る前に直す）と、設定を変えないと消えない項目を分ける。
+        var hardRows = t.Blockers.Where(b => b.Family is not null && MagiEngine.V6.MirrorKeys.Hard.Contains(b.Family)).ToList();
+        var otherBlockers = t.Blockers.Where(b => !hardRows.Contains(b)).ToList();
         var upper = t.Blockers.Count > 0 || t.Issues.Count > 0;
-        TriageBlockersTitle.Visibility = upper ? Visibility.Visible : Visibility.Collapsed;
+        TriageBlockersTitle.Text = CellSheetLogic.TriageHardHeading;
+        TriageBlockersTitle.Visibility = hardRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         TriageBlockersList.Visibility = upper ? Visibility.Visible : Visibility.Collapsed;
         TriageBlockersList.Children.Clear();
-        foreach (var row in t.Blockers)
+        foreach (var row in hardRows.Concat(otherBlockers))
         {
+            if (row == otherBlockers.FirstOrDefault()) TriageBlockersList.Children.Add(SettingsHeading());
             var box = new StackPanel { Spacing = 2 };
             box.Children.Add(new TextBlock
             {
@@ -156,6 +167,7 @@ public sealed partial class AnalysisView : UserControl
                 Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
             });
         }
+        if (otherBlockers.Count == 0 && t.Issues.Count > 0) TriageBlockersList.Children.Add(SettingsHeading());
         foreach (var row in t.Issues)
         {
             var grid = new Grid { ColumnSpacing = 8 };
@@ -185,7 +197,7 @@ public sealed partial class AnalysisView : UserControl
         var mid = t.Searching.Count > 0;
         TriageSearchTitle.Visibility = mid ? Visibility.Visible : Visibility.Collapsed;
         TriageSearchPanel.Visibility = mid ? Visibility.Visible : Visibility.Collapsed;
-        TriageSearchTitle.Text = t.Computed ? "計算後に残っている項目" : "エンジンが挑戦する項目（未計算）";
+        TriageSearchTitle.Text = t.Computed ? "作成後に残っている項目" : "作成で減らせる見込みの項目（まだ作成していません）";
         TriageSearchList.Children.Clear();
         foreach (var row in t.Searching)
         {
@@ -202,14 +214,14 @@ public sealed partial class AnalysisView : UserControl
 
         // 0件の族は畳む（全19族を並べると画面の半分を占める）。
         var all = t.OkFamilies.Count + t.BusyFamilies.Count;
-        TriageSummaryToggle.Content = $"制約充足サマリー（正常 {t.OkFamilies.Count} / 残り {t.BusyFamilies.Count}）　" +
+        TriageSummaryToggle.Content = CellSheetLogic.ConditionStatusTitle(t.OkFamilies.Count, t.BusyFamilies.Count) + "　" +
             (_triageSummaryOpen ? "閉じる ∧" : $"全{all}項目を展開 ∨");
         TriageSummaryList.Visibility = _triageSummaryOpen ? Visibility.Visible : Visibility.Collapsed;
         TriageSummaryList.Children.Clear();
         if (_triageSummaryOpen)
         {
             if (t.OkFamilies.Count > 0)
-                TriageSummaryList.Children.Add(BodyText($"✔ 正常（{t.OkFamilies.Count}項目）: " + string.Join(" / ", t.OkFamilies), dim: true));
+                TriageSummaryList.Children.Add(BodyText($"✔ 守れている（{t.OkFamilies.Count}項目）: " + string.Join(" / ", t.OkFamilies), dim: true));
             if (t.BusyFamilies.Count > 0)
                 TriageSummaryList.Children.Add(BodyText($"⚠ 残っている（{t.BusyFamilies.Count}項目）: " + string.Join(" / ", t.BusyFamilies), dim: true));
         }
@@ -357,7 +369,7 @@ public sealed partial class AnalysisView : UserControl
         // 一括クリアが実際に消す件数（VM の担当可否判定）。行の種別で数えると希望どうしの c3w 衝突まで混ざる。
         var wishClear = _vm.WishOutOfScopeCount();
         ClearOutOfScopeWishesButton.Visibility = wishClear > 1 ? Visibility.Visible : Visibility.Collapsed;
-        ClearOutOfScopeWishesButton.Content = $"担当外の希望を一括クリア（{wishClear}件）";
+        ClearOutOfScopeWishesButton.Content = CellSheetLogic.BulkClearWishesLabel(wishClear);
         ClearOutOfScopeWishesButton.IsEnabled = !ui.Running;
         IssuesToggle.Content = _issuesOpen ? "ⓘ 一覧を閉じる" : $"ⓘ 一覧を見る（{issues.Count}件）";
         IssuesList.Visibility = _issuesOpen ? Visibility.Visible : Visibility.Collapsed;

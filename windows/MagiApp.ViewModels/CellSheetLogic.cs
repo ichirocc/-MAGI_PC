@@ -213,6 +213,11 @@ public static class CellSheetLogic
                     for (var d = run.J0; d < run.J0 + run.Seq.Length; d++) if (d != j) outSet.Add(d);
             }
             else if (fam == "c3w" && j + 1 < p.T) outSet.Add(j + 1);
+            else if (fam == "c3")
+            {
+                var d = p.Cons3.Count == 0 ? 2 : Math.Clamp(p.Cons3.Max(c => c.Seq.Length), 2, 3);
+                for (var x = j - d + 1; x <= j + d - 1; x++) if (x != j) outSet.Add(x);
+            }
         }
         if (j > 0 && cellFamilies.TryGetValue($"{i},{j - 1}", out var prev) && prev.Contains("vio-c3w")) outSet.Add(j - 1);
         return outSet.Where(d => d >= 0 && d < p.T).OrderBy(d => d).ToList();
@@ -1286,19 +1291,27 @@ public static class CellSheetLogic
 
     // ===== 自動と担当者の分担（2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」） =====
 
-    /// <summary>勤務表を作成する画面の要点（作成前）。<paramref name="issues"/>＝つくる前に確かめる項目があるか。時間は設定値（探索）と固定の追加枠。</summary>
-    public static IReadOnlyList<string> PreRunPlanLines(string startDate, int days, int staff, bool issues, int pins, int budgetSec, int reserveSec) => new[]
+    /// <summary>勤務表を作成する画面の要点（作成前）を 1 行に。時間は設定値（探索）と固定の仕上げ枠。</summary>
+    public static string PreRunPlanLine(string startDate, int days, int staff, int budgetSec, int reserveSec)
     {
-        PeriodLine(startDate, days),
-        $"職員：{staff}人",
-        "登録条件：" + (issues ? "確認が必要な項目があります（下の一覧）" : "つくる前に直す項目はありません"),
-        "今回、自動で行うこと：勤務表の生成、最適化、仕上げ、評価",
-        "保持するもの：登録条件と手動固定" + (pins > 0 ? $"（手動固定 {pins}件）" : ""),
-        $"探索時間：{budgetSec}秒／仕上げ用の追加枠：{reserveSec}秒",
-    }.OfType<string>().ToList();
+        var period = days <= 0 || string.IsNullOrWhiteSpace(startDate) ? "" : DayText.Range(startDate, 0, days - 1) + "・";
+        var search = budgetSec % 60 == 0 ? $"{budgetSec / 60}分" : $"{budgetSec}秒";
+        return $"{period}{staff}人・探索 {search}（＋仕上げ {reserveSec}秒）。開始後は一手ごとの確認はしません";
+    }
 
-    /// <summary>作成を始めたあとの約束（一手ごとに確認を求めない・条件の変更は別の判断）。</summary>
-    public const string PreRunAutoNote = "開始後は、探索の途中で一手ごとの確認は求めません。希望・必要人数・固定条件の変更は、別の判断として扱います。";
+    /// <summary>登録条件の 1 行。<paramref name="overCaps"/>＝希望が個人の上限を超える組（作成しても残る）の数も数える。</summary>
+    public static string PreRunConditionLine(bool issues, int overCaps, int pins) =>
+        "登録条件：" + (issues || overCaps > 0 ? "確認が必要な項目があります（下の一覧" + (overCaps > 0 ? $"・希望が上限を超える {overCaps}件" : "") + "）" : "つくる前に直す項目はありません") +
+        (pins > 0 ? $"／手動固定 {pins}件は保持します" : "");
+
+    /// <summary>同じ探索の設定で再作成するときの一言。<paramref name="top"/>＝前回いちばん多い必須違反（「族名（N単位）」）。</summary>
+    public static string PreRunRepeatHintText(string? top) =>
+        "前回と同じ探索時間・方式で再作成します。" + (top is null ? "" : $"前回いちばん多い必須違反は{top}です。") +
+        "同じ設定では同じ違反が残りやすいため、編集タブでこれを 1 つ緩めると減る見込みがあります。";
+
+    /// <summary>「勤務表を作成する」を一度見たら出さない基準＝設定と希望（盤面は含めない。再作成のたびに盤面は変わる）。</summary>
+    public static long PreRunAckFingerprint(MagiState st) => StateFingerprint.Of(st);
+
     public const string PreRunTitle = "勤務表を作成する";
     public const string PreRunProceed = "勤務表を作成";
     public const string PreRunCheckConditions = "条件を確認する";
@@ -1312,14 +1325,6 @@ public static class CellSheetLogic
         return string.Join("・", soft.Take(max).Select(x => $"{labelOf(x.K)} {x.N}{AnalysisTriage.UnitOf(x.K)}")) + (soft.Count > max ? $" ほか{soft.Count - max}種" : "");
     }
 
-    /// <summary>作成後の結果（作成の完了は配布できることと同じ意味ではない）。</summary>
-    public static IReadOnlyList<string> CreationResultLines(long hard, IReadOnlyDictionary<string, int> breakdown, SaveState save, Func<string, string> labelOf) => new[]
-    {
-        $"必須違反：{AnalysisTriage.UnitTotals(breakdown, MirrorKeys.Hard) ?? (hard == 0L ? "なし" : $"{hard}件")}",
-        $"要調整：{SoftSummary(breakdown, labelOf)}",
-        SaveStateLine(save),
-        hard == 0L ? "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" : null,
-    }.OfType<string>().ToList();
     public const string CreationDoneTitle = "勤務表の作成が終わりました";
 
     /// <summary>見ている問題の数が厳密に減るか（統合仕様 INV-03＝適用は対象の改善と正式な門の両方）。対象を持たない案は判定しない。</summary>
@@ -1441,6 +1446,85 @@ public static class CellSheetLogic
         // 休みの人（動かしやすい）を先頭に。
         return outList.OrderBy(c => c.FromRest ? 0 : 1).ToList();
     }
+
+    /// <summary>「{日} の希望を見る」（日が無ければ「希望を見る」）。希望の確認への行き先の名を 1 つにする。</summary>
+    public static string WishDayButton(string? dayShort) => string.IsNullOrWhiteSpace(dayShort) ? "希望を見る" : $"{dayShort} の希望を見る";
+
+    public const string CountSectionTitle = "対象期間の勤務回数";
+    public const string MoreOpsLabel = "ほかの操作 ▸";
+
+    /// <summary>セルのシートの「対象期間の勤務回数」は、その職員に回数の族（下限・上限・適切回数など）があるときだけ出す。</summary>
+    public static bool ShowCountSection(IEnumerable<string> countKeys, int i, IReadOnlyList<string> lines) =>
+        lines.Count > 0 && countKeys.Any(k => int.TryParse(k.Split(',')[0], out var x) && x == i);
+
+    public const string CompactNoFix = "この場所を直す案は見つかりませんでした";
+
+    /// <summary>セルのシートで案が無いときの 1 行。<paramref name="single"/>＝問題が 1 つならその名（前後の日へ案内する）、無ければ先頭の理由を添える。</summary>
+    public static string CompactNoFixLine(IReadOnlyList<string> reasons, string? single, string? prevDay, string? nextDay)
+    {
+        if (single is not null)
+        {
+            var days = new[] { prevDay, nextDay }.OfType<string>().ToList();
+            return $"このセルの{single}を解消する案は見つかりませんでした" + (days.Count == 0 ? "" : $"。前後の日（{string.Join("・", days)}）を開いて確かめられます");
+        }
+        return reasons.Count > 0 ? $"{CompactNoFix}。{reasons[0]}" : CompactNoFix;
+    }
+
+    public const string ViewFixesButton = "変更案を見る";
+
+    public const string StaffOtherFixesLabel = "この職員のほかの変更案 ▸";
+
+    /// <summary>職員の勤務状況で最初から選んでおく行（選べる行＝勤務のある行が 1 つだけのとき）。</summary>
+    public static int? StaffSheetPreselect(IEnumerable<int> shiftIdxs)
+    {
+        var d = shiftIdxs.Where(x => x >= 0).Distinct().ToList();
+        return d.Count == 1 ? d[0] : null;
+    }
+
+    public const string PickMarksLegend = "●＝必須違反が減る　⚠＝必須違反が増える";
+    public const string TallyLegendText = "▼不足・▲超過（職員・日の欄の数字＝今の回数・人数、計（期間）の ▼2＝不足の日が 2日）";
+
+    /// <summary>次に確認する問題の名（職員の問題は「{名}さん {見出し}」）。</summary>
+    public static string CreationNextProblem(string? staffName, string heading) =>
+        string.IsNullOrWhiteSpace(staffName) || heading.StartsWith(staffName, StringComparison.Ordinal) ? heading : $"{staffName}さん {heading}";
+
+    /// <summary>主カード上端の 2 行: 作成の完了と、次に確認する問題。</summary>
+    public static IReadOnlyList<string> CreationTopLines(string? next, bool kept = false) =>
+        new[] { kept ? KeptResultText.KeptTitle : CreationDoneTitle, next is null ? null : $"次に確認する問題：{next}" }.OfType<string>().ToList();
+
+    public const string SoftPolishLink = "要調整をもう少し減らせるか試す（減らない場合もあります）";
+
+    public const string TriageHardHeading = "必須違反（配る前に直す必要があります）";
+    public const string TriageSettingsHeading = "設定を変えないと消えない項目";
+
+    /// <summary>分析の畳んだ一覧の見出し（内部の語を使わない）。</summary>
+    public static string ConditionStatusTitle(int ok, int busy) => $"条件ごとの状況（守れている {ok}／残っている {busy}）";
+
+    public static string BulkClearWishesLabel(int n) => $"担当外の希望 {n}件をまとめて外す（勤務表は変わりません・元に戻せます）";
+
+    /// <summary>Kotlin <c>ALTERNATIVES_ALL_WORSE</c>（C# は同名のメソッドと並べられないため Text を付ける）。</summary>
+    public const string AlternativesAllWorseText = "今の勤務表より良くありません";
+
+    /// <summary>他の案の 1 行（必須違反と、計算した時点の勤務表との比べ）。</summary>
+    public static string AlternativeSummary(int n, string hardTxt, int? curHard, int altHard, bool worse)
+    {
+        var cmp = curHard is null ? ""
+            : altHard < curHard ? "（今より少ない）"
+            : altHard > curHard ? "（今より多い）"
+            : worse ? "（今と同じ・要調整は今のほうが少ない）"
+            : "（今と同じ・要調整は少ない）";
+        return $"案{n}：必須違反 {hardTxt}{cmp}";
+    }
+
+    /// <summary>すべての案が今より悪い（印の数が案の数と合うときだけ）。</summary>
+    public static bool AlternativesAllWorse(IReadOnlyList<bool> worse, int n) => n > 0 && worse.Count == n && worse.All(w => w);
+
+    public const string ShortageLabelInfeasible = "担当できる人が足りない";
+    public const string ShortageLabelBlocked = "今の希望では埋まらない";
+    public const string ShortageLabelFixable = "動かせば埋まる";
+    public const string ShortageEnoughText = "担当できる人の数は足りています。なおし方を見るで 1 人ずつ入れられます";
+
+    public const string SettingsTimeTitle = "勤務表をつくる時間";
 }
 
 /// <summary>[operator_ux §5] 不足枠の候補職員 1 人。</summary>

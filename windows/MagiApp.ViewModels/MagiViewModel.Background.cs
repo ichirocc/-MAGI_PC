@@ -113,6 +113,7 @@ public sealed partial class MagiViewModel
 
         Ui.MessageIsError = false;
         Ui.Running = true;
+        Ui.KeptPrevious = false;
         Ui.HasResult = false;
         Ui.Message = "バックグラウンドで最適化を開始しました（完了時に通知）";
         LogOp("I", $"バックグラウンド最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
@@ -281,7 +282,8 @@ public sealed partial class MagiViewModel
                     ui.EngineRan = true;
                     ui.RanBeforeEdit = false;
                     ui.RelaxedBoard = false;
-                    ui.Message = KeptResultText.Screen(nowScore, prevScore);
+                    ui.Message = KeptResultText.Screen(r.Report.Breakdown, prevReport.Breakdown);
+                    ui.KeptPrevious = true;
                 });
                 LogOp("I", KeptResultText.Log("バックグラウンド", nowScore, prevScore));
                 // 前景の維持分岐と同じ＝次回ヒントの族は維持した盤面から取る。

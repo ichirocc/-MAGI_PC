@@ -51,8 +51,8 @@ public sealed partial class HomeView : UserControl
     private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
     /// <summary>
-    /// 自動作成の結果（Kotlin <c>CreationResultCard</c>、2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」）。
-    /// 作成が終わったことと配布できることを分け、必須違反・要調整・保存の状態と次に確認する問題（人員不足は日と勤務、ほかは巡回の先頭）を 1 枚に。
+    /// 自動作成の直後の 2 行（Kotlin 3.683.0 <c>CreationTop</c>＝作成の完了と次に確認する問題）。対象は主カードと同じ
+    /// （人員不足は GuidedFixTarget、ほかは巡回の先頭）。主操作は思考誘導カードの大ボタン＝ここは外枠だけ（統合仕様 INV-09）。
     /// </summary>
     private void RenderCreationResult(UiState ui)
     {
@@ -61,40 +61,21 @@ public sealed partial class HomeView : UserControl
         CreationResultCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show) return;
         string Label(string k) => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k;
-        CreationResultHost.Children.Add(new TextBlock { Text = CellSheetLogic.CreationDoneTitle, Style = (Style)Application.Current.Resources["MagiTitleMediumTextStyle"], TextWrapping = TextWrapping.Wrap });
-        foreach (var l in CellSheetLogic.CreationResultLines(ui.BestHard, ui.Breakdown, ui.SaveState, Label))
-            CreationResultHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        // 見せる枠＝押して開く枠（なおし方の対象は GuidedFixTarget＝先頭の不足とは限らない。統合仕様 INV-01）。
-        var shortfalls = ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>();
-        var covU = GuidedFixRules.GuidedFixTarget(shortfalls);
+        var covU = GuidedFixRules.GuidedFixTarget(ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>());
         var tour = covU is null ? _vm.HardViolationItemsFor(Label).FirstOrDefault() : null;
-        var next = covU is not null ? $"{covU.DayLabel}の人員不足" : tour?.Heading ?? (shortfalls.FirstOrDefault() is { } sf0 ? $"{sf0.DayLabel}の人員不足" : null);
-        if (next is not null)
-        {
-            CreationResultHost.Children.Add(new TextBlock { Text = "次に確認する問題", FontSize = 12, Opacity = 0.8, Margin = new Thickness(0, 4, 0, 0) });
-            CreationResultHost.Children.Add(new TextBlock { Text = next, TextWrapping = TextWrapping.Wrap });
-        }
+        var next = covU is not null ? $"{covU.DayLabel}の人員不足"
+            : tour is not null ? CellSheetLogic.CreationNextProblem(tour.Cell.I < ui.StaffNames.Count ? ui.StaffNames[tour.Cell.I] : null, tour.Heading) : null;
+        foreach (var l in CellSheetLogic.CreationTopLines(next, ui.KeptPrevious))
+            CreationResultHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
         if (ui.SaveState == SaveState.Failed)
         {
             var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Margin = new Thickness(0, 4, 0, 0) };
             retry.Click += (_, _) => _vm.SaveNow();
             CreationResultHost.Children.Add(retry);
         }
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
-        if (next is not null)
-        {
-            // 主操作はすぐ下の思考誘導カードの大ボタン＝ここは外枠だけ（主操作は画面に 1 つ、統合仕様 INV-09）。
-            var go = new Button { Content = "この問題の変更案を見る", MinHeight = 48 };
-            go.Click += (_, _) => { if (covU is null && tour is not null) _window.OpenCell(tour.Cell.I, tour.Cell.J); else _ = ShowGuidedFixAsync(); };
-            buttons.Children.Add(go);
-        }
-        var others = new Button { Content = "ほかの問題を見る", MinHeight = 48 };
+        var others = new HyperlinkButton { Content = "ほかの問題を見る", MinHeight = 48 };
         others.Click += (_, _) => _window.SelectTab("analysis");
-        buttons.Children.Add(others);
-        var preDist = new Button { Content = "配布前の確認", MinHeight = 48 };
-        preDist.Click += (_, _) => _ = ShowPreDistributionAsync();
-        buttons.Children.Add(preDist);
-        CreationResultHost.Children.Add(new ScrollViewer { Content = buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        CreationResultHost.Children.Add(others);
     }
 
     private void Render()
@@ -242,7 +223,7 @@ public sealed partial class HomeView : UserControl
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
             // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
             headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須違反はありません。配布前の確認で中身を確かめてから配ってください。") + (ui.RunSummary is { } rs
-                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
+                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k, k => AnalysisTriage.UnitOf(k))
                 : "");
             bigLabel = "配布前確認"; bigEnabled = true; helperLabel = "中身を見る";
             phase = "完成"; phaseHex = MagiAccent.Green;
@@ -876,6 +857,7 @@ public sealed partial class HomeView : UserControl
         CopilotHintText.Text = hint ? $"💡 {ui.CopilotHint}" : "";
         PolishPanel.Visibility = polish ? Visibility.Visible : Visibility.Collapsed;
         SoftPolishButton.IsEnabled = editable;
+        SoftPolishLinkText.Text = CellSheetLogic.SoftPolishLink;
     }
 
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.GoEditLanding(null);
@@ -901,10 +883,8 @@ public sealed partial class HomeView : UserControl
         return row;
     }
 
-    // 希望の編集は月次条件、手修正は勤務表タブ＝編集タブの今の入口に任せない。
+    // 希望の編集は月次条件＝編集タブの今の入口に任せない。
     private void OnEditWishesClick(object sender, RoutedEventArgs e) => _window.OpenEditDoor(0);
-
-    private void OnManualEditClick(object sender, RoutedEventArgs e) => _window.SelectTab("schedule");
 
     private async void OnEmptyOpenClick(object sender, RoutedEventArgs e) => await _window.OpenDataAsync();
 
@@ -955,7 +935,7 @@ public sealed partial class HomeView : UserControl
         }
         ShortagePanel.Visibility = Visibility.Visible;
         ShortageHeadline.Text = diag.AllInfeasible
-            ? $"不足 {diag.TotalShortfall} 人は全て充足不可。今のデータでは満たせません（想定内）。" +
+            ? $"不足 {diag.TotalShortfall} 人はすべて、担当できる人が足りません。今のデータでは満たせません。" +
                 "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
@@ -965,9 +945,9 @@ public sealed partial class HomeView : UserControl
                         "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
                         "残りは再作成すると解消し得ます。"
                     : diag.InfeasibleSlots == 0
-                        ? $"不足 {diag.TotalShortfall} 人は枠が足りています。再作成するか設定の見直しで解消し得ます。"
-                        : $"不足 {diag.TotalShortfall} 人 — 充足不可 {diag.InfeasibleSlots} 枠 / 充足可能 {diag.FixableSlots} 枠。" +
-                            "充足可能の枠は再作成すると解消し得ます。充足不可の枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
+                        ? $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageEnoughText}"
+                        : $"不足 {diag.TotalShortfall} 人 — {CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠 / {CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
+                            "動かせば埋まる枠は再作成すると解消し得ます。担当できる人が足りない枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
             var infeasible = s.Verdict == CoverageVerdict.Infeasible;
@@ -983,7 +963,7 @@ public sealed partial class HomeView : UserControl
             head.Children.Add(title);
             var chip = new TextBlock
             {
-                Text = infeasible ? "充足不可" : s.BlockedNow ? "今は不能" : "充足可能",
+                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
                 Style = StyleOf("MagiLabelMediumTextStyle"), VerticalAlignment = VerticalAlignment.Center,
                 Foreground = BrushOf(infeasible ? "MagiErrorBrush" : "MagiPrimaryBrush"),
             };
@@ -1088,6 +1068,9 @@ public sealed partial class HomeView : UserControl
         }
         AlternativesPanel.Visibility = Visibility.Visible;
         AlternativesListHost.Children.Clear();
+        var allWorse = CellSheetLogic.AlternativesAllWorse(ui.AlternativesWorse, ui.Alternatives.Count);
+        AlternativesWorseText.Text = allWorse ? CellSheetLogic.AlternativesAllWorseText : "";
+        AlternativesWorseText.Visibility = allWorse ? Visibility.Visible : Visibility.Collapsed;
         // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
         //   引き上げ済み（一覧行用に10〜13へ据え置いていたのを解消。Button.FontSizeはStyle
         //   (TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず）。
@@ -1103,7 +1086,18 @@ public sealed partial class HomeView : UserControl
             });
             var apply = new Button { Content = applied ? "適用中" : "適用", FontSize = 14, IsEnabled = editable && !applied };
             var idx = i;
-            apply.Click += (_, _) => _vm.ApplyAlternative(idx);
+            apply.Click += async (_, _) =>
+            {
+                // [Android 3.683.0] 案は反映する前に確かめる（今より悪い案はそう添える）。
+                var worse = idx < _vm.Ui.AlternativesWorse.Count && _vm.Ui.AlternativesWorse[idx];
+                var text = (idx < _vm.Ui.Alternatives.Count ? _vm.Ui.Alternatives[idx] : "") + (worse ? "\n" + CellSheetLogic.AlternativesAllWorseText + "（元に戻すで取り消せます）" : "");
+                var dialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot, Title = $"案{idx + 1}を反映しますか", Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+                    PrimaryButtonText = "反映する", CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Close,
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary) _vm.ApplyAlternative(idx);
+            };
             row.Children.Add(apply);
             AlternativesListHost.Children.Add(row);
         }

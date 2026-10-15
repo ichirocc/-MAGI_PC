@@ -32,25 +32,25 @@ public class ChangeSummaryTest
         Assert.Equal(2, s.WishTotal); Assert.Equal(2, s.WishKept);
         Assert.False(s.RangeAllOk);
         Assert.Equal(1, s.RangeOutStaff);   // s2 だけが上限超過
-        Assert.Equal("変更 2人・4セル／希望どおり 2/2／回数の下限・上限 外れた人 1人", s.Line());
+        Assert.Equal("変更：2人・4か所／希望どおり 2/2件", s.Line());
         Assert.Equal(-1, s.FamilyDeltas["pref"]); Assert.Equal(1, s.FamilyDeltas["high"]);   // s0 の希望が通り、s2 が上限超過
-        Assert.Equal("改善 pref -1（重み 8000）", s.FamilyLine().Split('／')[0]);
-        Assert.StartsWith("悪化 fair +6・上限超過 +1", s.FamilyLine(k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: fair +6(=30) が先頭、上限超過 +1(=25) が続く（3.647.0 fair 5。旧: 上限超過が先頭）
+        Assert.Equal("減った：pref 1件", s.FamilyLine().Split('／')[0]);
+        Assert.StartsWith("増えた：fair 6件・上限超過 1件", s.FamilyLine(k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: fair +6(=30) が先頭、上限超過 +1(=25) が続く（3.647.0 fair 5。旧: 上限超過が先頭）
     }
 
     [Fact]
     public void FamilyLineOrdersByWeightedImpactAndReportsEmptySides()
     {
         var line = ChangeSummary.FamilyLine(new Dictionary<string, int> { ["weekly"] = 3, ["c1"] = -1, ["c3mn"] = -2, ["fair"] = 4 });
-        Assert.Equal("改善 c3mn -2・c1 -1（重み 230）／悪化 fair +4・weekly +3（重み 26）", line);
-        Assert.Equal("改善 なし／悪化 なし", ChangeSummary.FamilyLine(new Dictionary<string, int>()));
+        Assert.Equal("減った：c3mn 2件・c1 1件／増えた：fair 4件・weekly 3件", line);
+        Assert.Equal("減った：なし／増えた：なし", ChangeSummary.FamilyLine(new Dictionary<string, int>()));
     }
 
     [Fact]
     public void LineSaysAllWithinRangeOrFallsBackWhenStaffNotCounted()
     {
         var none = new Dictionary<string, int>();
-        Assert.Equal("変更 0人・0セル／希望どおり 0/0／回数の下限・上限 全員守れています", new ChangeSummary(0, 0, 0, 0, true, none).Line());
-        Assert.Equal("変更 0人・0セル／希望どおり 0/0／回数の下限・上限 外れた人あり", new ChangeSummary(0, 0, 0, 0, false, none).Line());
+        Assert.Equal("変更：0人・0か所／希望どおり 0/0件", new ChangeSummary(0, 0, 0, 0, true, none).Line());
+        Assert.Equal("変更：0人・0か所／希望どおり 0/0件", new ChangeSummary(0, 0, 0, 0, false, none).Line());
     }
 }
