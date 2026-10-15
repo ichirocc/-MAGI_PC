@@ -84,7 +84,7 @@ public class MagiViewModelFixSuggestionsTest
         vm.ApplyFixSuggestion(s);
 
         // 結果は「元に戻す」付きの通知。末尾の RefreshCheck()（fire-and-forget）の完了は通常の文言に出る。
-        Assert.StartsWith("テスト改善手 を当てました（", vm.Ui.OpNotice!.Text);
+        Assert.StartsWith("テスト改善手 を適用しました（", vm.Ui.OpNotice!.Text);
         Assert.True(vm.Ui.OpNotice.Undoable);
         Assert.NotNull(vm.LastRefreshCheckTask);
         await vm.LastRefreshCheckTask!;

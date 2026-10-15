@@ -205,12 +205,19 @@ public class CountShortageTextTest
         (int Lo, int Hi)? Need(int k, int j) => k == 1 ? (2, 2) : null;
         var lines = CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need);
         Assert.Equal("今回の問題：解消（10/3のA：1人 → 2人、必要 2人を満たします）", lines[0]);
-        Assert.Equal("10/3の休：1人 → 0人", lines[1]);
+        Assert.Equal("Aの不足（期間全体）：5人 → 4人", lines[1]);
         Assert.Equal("必須違反（勤務表全体）：3件 → 2件", lines[2]);
-        Assert.Equal("要調整（勤務表全体）：10件 → 11件", lines[3]);
+        Assert.Equal("10/3の休：1人 → 0人", lines[3]);
         Assert.Equal("保存：保存中", lines[4]);
         Assert.Equal("次に確認すること：10/4のAは、2人不足のままです。", lines[5]);
         Assert.StartsWith("勤務表が変わったため", lines[^1]);
+        // 保存済みなら保存の行は出さない。続けて同じ勤務の案へ進むボタン。
+        u.SaveState = SaveState.Saved;
+        Assert.DoesNotContain(CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need), l => l.StartsWith("保存：", StringComparison.Ordinal));
+        Assert.Equal("続けて A の案を見る", CellSheetLogic.AppliedNextButton(true, "A", 2, true));
+        Assert.Equal("残っている必須違反を順に見る（2か所）", CellSheetLogic.AppliedNextButton(false, "A", 2, true));
+        Assert.Null(CellSheetLogic.AppliedNextButton(false, "A", 0, true));
+        Assert.Equal("新たに生じた問題：禁止の並び +1件", CellSheetLogic.AppearedFamiliesLine(new Dictionary<string, int> { ["c3n"] = 0 }, new Dictionary<string, int> { ["c3n"] = 1, ["c1"] = 0 }, f => f == "c3n" ? "禁止の並び" : f));
         Assert.True(a.IsCurrent(after));
     }
 

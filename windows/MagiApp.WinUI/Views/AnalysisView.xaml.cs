@@ -236,17 +236,14 @@ public sealed partial class AnalysisView : UserControl
         foreach (var s in ui.FixSuggestions)
         {
             var row = new StackPanel { Spacing = 2 };
-            row.Children.Add(BodyText(s.Label, semiBold: true));
-            // [Android 3.612.0 思考誘導S1] 先頭に「必須は減るか」、次に増える要調整を「注意」として出す。
+            // 先頭は効き目（必須違反の変化、無ければ要調整の変化）、次に手の名、増える要調整を「注意」として出す。
             var (hardLine, caution) = NextActionGuide.FixImpactLines(s, LabelOf);
-            row.Children.Add(BodyText(hardLine, semiBold: true));
+            row.Children.Add(BodyText(FixOutcomeText.FixBenefitLine(s, LabelOf) ?? hardLine, semiBold: true));
+            row.Children.Add(BodyText(FixOutcomeText.FixDisplayLabel(s.Label)));
             if (caution is not null) row.Children.Add(BodyText(caution));
-            var diffTxt = AnalysisTriage.FamilyDeltaList(s.Diff, LabelOf);
-            if (diffTxt.Length > 0) row.Children.Add(BodyText($"変化：{diffTxt}", dim: true));
             var apply = new Button { Content = ChainFixPreview.ApplyChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.PreviewOrApplyFix(s);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
-            row.Children.Add(BodyText(CellSheetLogic.ApplyUndoNote, dim: true));
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
             var consultItem = ConsultList.Fix(s, hardLine, caution);
             if (ConsultList.IsConsulted(ui.Consults, consultItem)) row.Children.Add(TagChip(ConsultList.Done, MagiAccent.Orange));
@@ -260,8 +257,9 @@ public sealed partial class AnalysisView : UserControl
         }
         if (ui.FixSuggestions.Count == 0 && !ui.FixSearching)
         {
-            FixList.Children.Add(BodyText("「直し方を探す」を押すと候補が出ます（見つからないこともあります）。", dim: true));
+            FixList.Children.Add(BodyText(FixOutcomeText.NoFixSuggestionText, dim: true));
         }
+        else if (!ui.FixSearching) FixList.Children.Add(BodyText(CellSheetLogic.ApplyUndoNote, dim: true));
     }
 
     /// <summary>① サマリー。読込済みなら常に出す（0件でも「0件」に意味がある）。</summary>

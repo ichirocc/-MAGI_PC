@@ -78,9 +78,9 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(undo0 + 1, vm.UndoStackCount);
         Assert.Equal(4, UnifiedViolationChecker.Check(vm._state!, vm._currentSchedule!.Copy2D()).Hard);
         Assert.Equal("1", vm._state!.StaffRange["10,6"].Hi);
-        Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", vm.RelaxDoneLine());
+        Assert.Equal("設定を緩めて手順を適用しました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", vm.RelaxDoneLine());
         Assert.True(vm.Ui.RelaxedBoard);
-        Assert.Equal("設定を緩めて手順を当てました（元に戻せます）", vm.Ui.OpNotice!.Text);
+        Assert.Equal("設定を緩めて手順を適用しました（元に戻せます）", vm.Ui.OpNotice!.Text);
         Assert.True(vm.Ui.OpNotice.Undoable);
 
         vm.Undo();
@@ -166,7 +166,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(3, t.PrerequisiteRows.Count);
         Assert.True(t.PrerequisiteRows[0].Contains("（10/") && t.MoveLines[0].StartsWith("10/7　"), t.PrerequisiteRows[0]);
         Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
-        Assert.Equal("設定を緩めて手順を当てました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
+        Assert.Equal("設定を緩めて手順を適用しました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
         var c = NextActionGuide.RelaxCardTextOf(r, ui, Label);
         Assert.Equal("職員10 10/8〜10/9の禁止の並び（必須 5件中 1件）は、個人の上限0を例外で緩めると解消できる見込みです", c.Headline);
         Assert.Equal("希望を残したまま、設定と勤務表を手順で変えられます", c.Body);

@@ -288,12 +288,10 @@ public sealed partial class HomeView : UserControl
                 // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）・「この手を使う」（補助）。
                 var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
                 var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
-                // 族ごとの増減だけ（件・回・人・pt を 1 つの合計に足さない＝統合仕様 INV-07）。
-                var diffTxt = AnalysisTriage.FamilyDeltaList(top.Diff, AnalysisView.LabelOf);
-                headline = remain + "直す手があります。";
-                body = top.Label;
-                note = hardLine + (caution is null ? "" : "\n" + caution) + (diffTxt.Length > 0 ? $"\n変化：{diffTxt}" : "") +
-                    (ui.FixSuggestions.Count > 1 ? $"\nほかに {ui.FixSuggestions.Count - 1} 案あります（分析タブで比較できます）。" : "") + "\n" + CellSheetLogic.ApplyUndoNote;
+                // 必須の変化（族ごと）と増える要調整だけ（件・回・人・pt を 1 つの合計に足さない＝統合仕様 INV-07）。
+                headline = CellSheetLogic.HomeFixHeadline(AnalysisTriage.HardText(ui.Breakdown, ui.BestHard), _vm.ResolvedHardLabelsFor(top, AnalysisView.LabelOf));
+                body = FixOutcomeText.FixDisplayLabel(top.Label);
+                note = (CellSheetLogic.HardChangeLine(top.Diff, AnalysisView.LabelOf) ?? hardLine) + (caution is null ? "" : "\n" + caution);
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
                 helperLabel = ChainFixPreview.ApplyChangeButton; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
@@ -780,6 +778,11 @@ public sealed partial class HomeView : UserControl
                             _vm.PreviewShortageCandidate(i, day, shift, label);
                         };
                         panel.Children.Add(b);
+                        var fromK = c.StaffIndex < ui.Schedule.Count && target.DayIndex < ui.Schedule[c.StaffIndex].Count && ui.Schedule[c.StaffIndex][target.DayIndex] >= 0
+                            ? ui.Schedule[c.StaffIndex][target.DayIndex] : (int?)null;
+                        var impact = FixOutcomeText.GuidedCandidateImpact(fromK is { } gk1 && gk1 < ui.ShiftSymbols.Count ? ui.ShiftSymbols[gk1] : null,
+                            fromK is { } gk2 ? ui.Schedule[c.StaffIndex].Count(v => v == gk2) : 0, fromK is { } gk3 ? _vm.StaffCellLimits(c.StaffIndex, gk3).Lo : null);
+                        if (impact is not null) panel.Children.Add(new TextBlock { Text = impact, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     }
                     if (cands.Count > GuidedFixRules.GuidedFixPreview)
                     {
@@ -837,7 +840,8 @@ public sealed partial class HomeView : UserControl
             }
             else
             {
-                panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。仕上げに再作成すると全体が整います。", TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。", TextWrapping = TextWrapping.Wrap });
+                if (FixOutcomeText.OtherHardAfterShortage(ui.Breakdown) is { } otherHard) panel.Children.Add(new TextBlock { Text = otherHard, TextWrapping = TextWrapping.Wrap });
             }
         }
         void OnChanged(object? s, PropertyChangedEventArgs e)

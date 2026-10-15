@@ -29,6 +29,35 @@ public sealed partial class MagiViewModel
             cur >= 0 ? FamiliesAt(Ui.CountFamilies, $"{i},{cur}") : Array.Empty<string>());
     }
 
+    /// <summary>手が解消する必須違反を「族：場所」で（ホームの見出しが名指しする。Kotlin OperatorNextActionCard の <c>topResolved</c>）。盤面が無ければ空。</summary>
+    public IReadOnlyList<string> ResolvedHardLabelsFor(FixSuggestion s, Func<string, string> labelOf) =>
+        _state is { } st && _currentSchedule is { } sched ? CellSheetLogic.ResolvedHardLabels(st, sched, s.Ops, Ui.StaffNames, Ui.ShiftSymbols, labelOf) : Array.Empty<string>();
+
+    /// <summary>このセルが「足りない側」の族（当日の自分の勤務の人員不足・自分の回数の不足）。セルの問題として赤で出さない。</summary>
+    public IReadOnlySet<string> CellShortSideFamilies(int i, int j)
+    {
+        var sched = _currentSchedule;
+        if (sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length || sched[i][j] < 0) return new HashSet<string>();
+        var cur = sched[i][j];
+        return CellSheetLogic.ShortSideFamilies(FamiliesAt(Ui.NeedFamilies, $"{cur},{j}"), FamiliesAt(Ui.CountFamilies, $"{i},{cur}"));
+    }
+
+    /// <summary>足りない側のセルの注意の 1 行（Kotlin CellEditSheet の <c>shortCaution</c>）。足りない側でなければ null。</summary>
+    public string? ShortSideCautionFor(int i, int j, string name)
+    {
+        var shortSide = CellShortSideFamilies(i, j);
+        if (shortSide.Count == 0) return null;
+        var sched = _currentSchedule!;
+        var cur = sched[i][j];
+        var sym = cur < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[cur] : $"{cur}";
+        var nDay = sched.Count(r => j < r.Length && r[j] == cur);
+        var (lo, _, apt) = StaffCellLimits(i, cur);
+        var useLow = shortSide.Contains("low") && lo is not null;
+        return CellSheetLogic.ShortSideCaution(name, sym, DayText.Short(Ui.StartDate, j),
+            shortSide.Contains("covU") && NeedCellLimits(cur, j) is { } need ? need.Lo - (nDay - 1) : null,
+            sched[i].Count(v => v == cur) - 1, useLow ? "下限" : "目標", useLow ? lo : apt);
+    }
+
     /// <summary>セル (i, j) を k にする前の確認（Kotlin CellEditSheet の <c>cellChangeReview</c>＝正式な検査の前後）。盤面が無ければ null。</summary>
     public CellChangeReview? CellChangeReviewFor(int i, int j, int k, Func<string, string> labelOf)
     {

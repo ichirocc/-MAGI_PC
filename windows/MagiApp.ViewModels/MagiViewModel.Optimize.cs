@@ -543,9 +543,8 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = true;
                 ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
-                ui.Message = gain > 0
-                    ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"
-                    : $"これ以上は整いませんでした（合計={finalReport.Total} 必須={finalReport.Hard}）。残りは今の設定とルールの組み合わせでは減らせない可能性があります。手修正か、編集タブでの設定の見直しをお試しください。";
+                ui.Message = FixOutcomeText.PolishResultText(gain > 0, AnalysisTriage.UnitTotals(baseReport.Breakdown, MirrorKeys.Soft) ?? "なし",
+                    AnalysisTriage.UnitTotals(finalReport.Breakdown, MirrorKeys.Soft) ?? "なし", finalReport.Hard, AnalysisTriage.HardText(finalReport.Breakdown, finalReport.Hard));
                 ui.RunSummary = ChangeSummary.Of(st0, sched0, finalSched, finalReport, baseReport);
             }, ct: ct);
             LogOp("I", $"ソフト研磨 完了 必須={finalReport.Hard} 合計={finalReport.Total}（{(gain > 0 ? $"-{gain}" : "増減なし")}）");
