@@ -273,7 +273,7 @@ public sealed partial class MagiViewModel
                 ui.HasResult = true;
                 ui.EngineRan = false;
                 ui.RelaxedBoard = false;
-                ui.Message = $"他の案 {i + 1} を適用しました: 必須違反 {rep.Hard}件・違反の合計 {rep.Total}件";
+                ui.Message = $"他の案 {i + 1} を適用しました: {AnalysisTriage.ReportCountsText(rep.Breakdown)}";
             });
             LogOp("I", $"他の案 {i + 1} を適用 必須={rep.Hard} 合計={rep.Total}");
         }
@@ -1848,7 +1848,7 @@ public sealed partial class MagiViewModel
             {
                 ui.MessageIsError = false;
                 ui.Running = OptimizeInFlight();
-                ui.Message = $"{doneMessage}｜必須違反 {r.Report.Hard}件・違反の合計 {r.Report.Total}件";
+                ui.Message = $"{doneMessage}｜{AnalysisTriage.ReportCountsText(r.Report.Breakdown)}";
             }, ct: ct);
         }
         catch (System.OperationCanceledException)

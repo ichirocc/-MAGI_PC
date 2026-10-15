@@ -84,7 +84,7 @@ public sealed partial class MagiViewModel
                 ui.EngineRan = true;
                 ui.RelaxedBoard = false;
                 ui.ElapsedMs = 0;
-                ui.Message = $"下書きをつくりました: 必須違反 {res.Report.Hard}件・違反の合計 {res.Report.Total}件。画面下の「再作成」で仕上げられます";
+                ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます";
             }, ct: ct);
             committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total}");

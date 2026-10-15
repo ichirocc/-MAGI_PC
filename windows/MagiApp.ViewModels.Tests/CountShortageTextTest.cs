@@ -236,7 +236,7 @@ public class CountShortageTextTest
         static string L(string f) => f switch { "c1" => "期間の制約", "weekly" => "曜日の偏り", _ => f };
         Assert.Equal("期間の制約 2件・曜日の偏り 12pt", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["c1"] = 2, ["weekly"] = 12, ["c3n"] = 1 }, L));
         Assert.Equal("なし", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["covU"] = 1 }, L));
-        Assert.Equal(new[] { "必須違反：0件", "要調整：なし", "保存：完了", "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" },
+        Assert.Equal(new[] { "必須違反：なし", "要調整：なし", "保存：完了", "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" },
             CellSheetLogic.CreationResultLines(0, new Dictionary<string, int>(), SaveState.Saved, L));
         Assert.Equal(3, CellSheetLogic.CreationResultLines(2, new Dictionary<string, int> { ["c1"] = 1 }, SaveState.Failed, L).Count);
         Assert.Equal("解消", CellSheetLogic.AppliedStatusWord(new CountEffect(0, 1, 1, true, "人")));
@@ -299,5 +299,20 @@ public class CountShortageTextTest
         // 時間切れは「案が無い」と分ける（統合仕様 INV-08）。
         Assert.Equal("10/3のAの不足を減らす案は、制限時間内には見つかりませんでした。もう一度探すと続きを探せます。", CellSheetLogic.NoNeedFixLine("10/3のA", t, timedOut: true));
         Assert.Equal("保存：失敗（「もう一度保存する」で保存し直してください）", CellSheetLogic.SaveStateLine(SaveState.Failed));
+    }
+
+    [Fact]
+    public void UnitsAreNotSummedAcrossKinds()
+    {
+        // 件・人・回・pt は 1 つの数に足さない（統合仕様 INV-07）。
+        var b = new Dictionary<string, int> { ["c3n"] = 2, ["covU"] = 1, ["low"] = 6, ["apt"] = 3, ["c1"] = 4, ["covO"] = 2, ["fair"] = 30 };
+        Assert.Equal("2件・1人", AnalysisTriage.UnitTotals(b, MirrorKeys.Hard));
+        Assert.Equal("4件・2人・9回・30pt", AnalysisTriage.UnitTotals(b, MirrorKeys.Soft));
+        Assert.Equal("4件・2人・9回", AnalysisTriage.UnitTotals(b, MirrorKeys.Soft, includePt: false));
+        Assert.Equal("必須違反 2件・1人・要調整 4件・2人・9回・30pt", AnalysisTriage.ReportCountsText(b));
+        static string L(string f) => f switch { "low" => "下限割れ", "c3n" => "禁止の並び", _ => f };
+        Assert.Equal("下限割れ −6回・禁止の並び +1件", AnalysisTriage.FamilyDeltaList(new[] { ("low", -6), ("c3n", 1) }, L));
+        Assert.Equal("要調整 4件・2人・9回・30pt・配布前の確認", CellSheetLogic.ReadyBadgeLabel(40, b));
+        Assert.Equal("評価：必須違反 2件・1人", CellSheetLogic.BoardStatusLines(true, true, true, 3, 0, b).Second);
     }
 }

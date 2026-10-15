@@ -25,7 +25,8 @@ public static class PreDistributionCheck
         var period = !string.IsNullOrWhiteSpace(ui.StartDate) && ui.Days > 0 ? DayText.Range(ui.StartDate, 0, ui.Days - 1) : "期間未設定";
         var evaluated = ui.HasResult && !ui.Running && ui.V6 is not null;
         var hardFams = MirrorKeys.Hard.Where(k => ui.Breakdown.TryGetValue(k, out var v) && v > 0).Select(k => (k, ui.Breakdown[k])).ToList();
-        var hardText = ui.BestHard == 0 ? "0件" : $"{ui.BestHard}件（" + string.Join("・", hardFams.Select(f => $"{labelOf(f.k)} {f.Item2}件")) + "）";
+        var hardText = ui.BestHard == 0 ? "0件" : $"{AnalysisTriage.UnitTotals(ui.Breakdown, MirrorKeys.Hard) ?? $"{ui.BestHard}件"}（" +
+            string.Join("・", hardFams.Select(f => $"{labelOf(f.k)} {f.Item2}{AnalysisTriage.UnitOf(f.k)}")) + "）";
         var soft = ui.Breakdown.Where(kv => kv.Value > 0 && !MirrorKeys.Hard.Contains(kv.Key)).OrderByDescending(kv => kv.Value).ToList();
         var softText = soft.Count == 0 ? "なし" : string.Join("・", soft.Take(3).Select(kv => $"{labelOf(kv.Key)} {kv.Value}{AnalysisTriage.UnitOf(kv.Key)}")) +
             (soft.Count > 3 ? $" ほか{soft.Count - 3}種類" : "");

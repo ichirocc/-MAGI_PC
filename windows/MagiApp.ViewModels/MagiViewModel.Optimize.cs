@@ -310,7 +310,7 @@ public sealed partial class MagiViewModel
                 _resultSchedule = res.Schedule.Copy2D();
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
-                    ? CompletedText.Of(res.Report.Hard, res.Report.Total, "")
+                    ? CompletedText.Of(res.Report.Hard, res.Report.Breakdown, "")
                     : $"希望（{s5.Label}）を調整して（希望は外しました）、再作成しました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
                       (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。再作成するか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
@@ -382,7 +382,7 @@ public sealed partial class MagiViewModel
                     ui.HasResult = s5 is not null || hadResult;
                     ui.EngineRan = engineRanBefore;
                     ui.RelaxedBoard = false;
-                    ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
+                    ui.Message = $"停止しました。直前の勤務表（{AnalysisTriage.ReportCountsText(keptReport.Breakdown)}）を保持しています。{s5Suffix}";
                 });
             }
             catch (Exception t)
@@ -393,7 +393,7 @@ public sealed partial class MagiViewModel
                 Ui.RelaxedBoard = false;
                 Ui.MessageIsError = false;
                 Ui.Wishes = st0.Wishes;
-                Ui.Message = $"停止しました。直前の勤務表（必須={keptReport.Hard} 合計={keptReport.Total}）を保持しています。{s5Suffix}";
+                Ui.Message = $"停止しました。直前の勤務表（{AnalysisTriage.ReportCountsText(keptReport.Breakdown)}）を保持しています。{s5Suffix}";
                 LogOp("W", $"停止時の診断に失敗: {t.GetType().Name}: {t.Message}");
             }
             LogOp("I", $"停止: 直前の勤務表 必須={keptReport.Hard}/合計={keptReport.Total} を保持");

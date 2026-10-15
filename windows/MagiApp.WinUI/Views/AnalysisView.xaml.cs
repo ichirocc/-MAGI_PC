@@ -241,7 +241,8 @@ public sealed partial class AnalysisView : UserControl
             var (hardLine, caution) = NextActionGuide.FixImpactLines(s, LabelOf);
             row.Children.Add(BodyText(hardLine, semiBold: true));
             if (caution is not null) row.Children.Add(BodyText(caution));
-            row.Children.Add(BodyText($"必須 {DeltaText(s.DeltaHard)} ・ 合計 {DeltaText(s.DeltaTotal)}", dim: true));
+            var diffTxt = AnalysisTriage.FamilyDeltaList(s.Diff, LabelOf);
+            if (diffTxt.Length > 0) row.Children.Add(BodyText($"変化：{diffTxt}", dim: true));
             var apply = new Button { Content = ChainFixPreview.ApplyChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.PreviewOrApplyFix(s);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
@@ -263,14 +264,12 @@ public sealed partial class AnalysisView : UserControl
         }
     }
 
-    private static string DeltaText(int delta) => delta <= 0 ? delta.ToString() : $"+{delta}";
-
     /// <summary>① サマリー。読込済みなら常に出す（0件でも「0件」に意味がある）。</summary>
     private void RenderSummary(UiState ui)
     {
         SummarySection.Visibility = Visibility.Visible;
         SummaryText.Text =
-            $"必須違反 {ui.BestHard}件 ・ 違反の合計 {ui.TotalViolations}件 ・ " +
+            $"{AnalysisTriage.ReportCountsText(ui.Breakdown)} ・ " +
             $"重みつきスコア {ui.WeightedScore:0.#} ・ 満足度 {ui.Satisfaction}";
 
         // 補足（あるときだけ）: 操作の助言・研磨の限界・そもそも叶えられない希望の件数。

@@ -678,7 +678,8 @@ public static class CellSheetLogic
     /// <summary>「ほかの問題への影響」の行（対象の族は上に出すので除く）。必須違反の増減を先頭に。族名は <paramref name="labelOf"/>（WinUI の BreakdownLabels）。</summary>
     public static IReadOnlyList<string> OtherEffectLines(FixSuggestion s, IReadOnlySet<string> skipFamilies, Func<string, string> labelOf)
     {
-        var hard = s.DeltaHard < 0 ? $"必須違反：{-s.DeltaHard}件減る" : s.DeltaHard > 0 ? $"必須違反：{s.DeltaHard}件増える" : "必須違反：変わらない";
+        var hard = "必須違反：" + (AnalysisTriage.UnitDeltaText(s.Diff, MirrorKeys.Hard)
+            ?? (s.DeltaHard == 0 ? "変わらない" : s.DeltaHard < 0 ? $"{-s.DeltaHard}件減る" : $"{s.DeltaHard}件増える"));
         return new[] { hard }.Concat(s.Diff.Where(d => d.Delta != 0 && !skipFamilies.Contains(d.Family))
             .Select(d => $"{labelOf(d.Family)}：{Math.Abs(d.Delta)}{AnalysisTriage.UnitOf(d.Family)}{(d.Delta < 0 ? "減る" : "増える")}")).ToList();
     }
@@ -733,7 +734,8 @@ public static class CellSheetLogic
     public const string BackToFixesButton = "別案を見る";
 
     /// <summary>必須 0 の結果の札。要調整が残るなら「配布可」と言い切らず、配布前の確認へ案内する。</summary>
-    public static string ReadyBadgeLabel(long soft) => soft > 0 ? $"要調整 {soft}件・配布前の確認" : "配布可";
+    public static string ReadyBadgeLabel(long soft, IReadOnlyDictionary<string, int>? breakdown = null) =>
+        soft > 0 ? $"要調整 {(breakdown is null ? null : AnalysisTriage.UnitTotals(breakdown, MirrorKeys.Soft)) ?? $"{soft}件"}・配布前の確認" : "配布可";
 
     /// <summary>集計期間（見出しの 2 行目）。</summary>
     public static string? PeriodLine(string startDate, int days) =>
@@ -1057,9 +1059,14 @@ public static class CellSheetLogic
     public const string NotCanDoNote = "「外」はこの職員のグループが担当しない勤務です（担当可否の設定）。選ぶと担当外シフトの必須違反になります。";
 
     /// <summary>上部の札の 2 行目以降: 自動作成の状態と、今の勤務表の評価（2026-10-14 利用者レビュー「未計算」を分ける）。</summary>
-    public static (string First, string Second) BoardStatusLines(bool engineRan, bool hasResult, bool checkedBoard, long hard, long soft) =>
-        (engineRan ? "自動作成：済み" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
-         !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {hard}件" : soft > 0 ? $"評価：要調整 {soft}件" : "評価：違反なし");
+    public static (string First, string Second) BoardStatusLines(bool engineRan, bool hasResult, bool checkedBoard, long hard, long soft,
+        IReadOnlyDictionary<string, int>? breakdown = null)
+    {
+        var b = breakdown ?? new Dictionary<string, int>();
+        return (engineRan ? "自動作成：済み" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
+            !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {AnalysisTriage.UnitTotals(b, MirrorKeys.Hard) ?? $"{hard}件"}"
+            : soft > 0 ? $"評価：要調整 {AnalysisTriage.UnitTotals(b, MirrorKeys.Soft) ?? $"{soft}件"}" : "評価：違反なし");
+    }
 
     // ===== 自動と担当者の分担（2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」） =====
 
@@ -1092,7 +1099,7 @@ public static class CellSheetLogic
     /// <summary>作成後の結果（作成の完了は配布できることと同じ意味ではない）。</summary>
     public static IReadOnlyList<string> CreationResultLines(long hard, IReadOnlyDictionary<string, int> breakdown, SaveState save, Func<string, string> labelOf) => new[]
     {
-        $"必須違反：{hard}件",
+        $"必須違反：{AnalysisTriage.UnitTotals(breakdown, MirrorKeys.Hard) ?? (hard == 0L ? "なし" : $"{hard}件")}",
         $"要調整：{SoftSummary(breakdown, labelOf)}",
         SaveStateLine(save),
         hard == 0L ? "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" : null,
@@ -1130,8 +1137,10 @@ public static class CellSheetLogic
         var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
         outList.AddRange(same);
         outList.AddRange(other);
-        if (a.HardBefore >= 0) outList.Add($"必須違反（勤務表全体）：{a.HardBefore}件 → {a.HardAfter}件");
-        if (a.SoftBefore >= 0) outList.Add($"要調整（勤務表全体）：{a.SoftBefore}件 → {a.SoftAfter}件");
+        // 内訳があれば単位ごとに（件・人・回・pt を 1 つの数に足さない＝統合仕様 INV-07）。
+        static string T(IReadOnlyDictionary<string, int>? b, IReadOnlyList<string> fams, int n) => b is null ? $"{n}件" : AnalysisTriage.UnitTotals(b, fams) ?? "なし";
+        if (a.HardBefore >= 0) outList.Add($"必須違反（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Hard, a.HardBefore)} → {T(a.BreakdownAfter, MirrorKeys.Hard, a.HardAfter)}");
+        if (a.SoftBefore >= 0) outList.Add($"要調整（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Soft, a.SoftBefore)} → {T(a.BreakdownAfter, MirrorKeys.Soft, a.SoftAfter)}");
         outList.Add(SaveStateLine(ui.SaveState));
         IReadOnlyList<string> next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate)
             : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { $"{label}は、{target.Basis}まであと{eff.GapAfter}回です" }

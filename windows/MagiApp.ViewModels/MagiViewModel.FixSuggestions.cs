@@ -237,16 +237,18 @@ public sealed partial class MagiViewModel
         ClearFixState(); // 適用後は候補をクリア（盤面が変わるため再探索を促す）
         if (focusKey is not null)
             Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget,
-                gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft);
+                gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft, gate.Before.Breakdown, gate.After.Breakdown);
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
             (st.Cons3w?.Count ?? 0) > 0 ? 2 : 0);
         var edge = PreDistributionCheck.MonthEdgeTouched(s.Ops.Select(o => o.Day), applied.FirstOrDefault()?.Length ?? 0, maxLen) ? $"{PreDistributionCheck.MonthEdgeNote}。" : null;
-        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, gate.Before.Total, gate.After.Total), gate.Before, gate.After, edge);
+        var softBefore = AnalysisTriage.UnitTotals(gate.Before.Breakdown, MirrorKeys.Soft) ?? "なし";
+        var softAfter = AnalysisTriage.UnitTotals(gate.After.Breakdown, MirrorKeys.Soft) ?? "なし";
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, softBefore, softAfter), gate.Before, gate.After, edge);
         // 通知は 2 行まで＝必須が動いた手は必須だけ、動かない手は合計だけを添える（両方の数はホームの結果の行とログ）。
         PostOpNotice($"{s.Label} を当てました（" + (gate.Before.Hard != gate.After.Hard ? $"必須違反 {gate.Before.Hard}→{gate.After.Hard}"
-            : $"違反の合計 {gate.Before.Total}→{gate.After.Total}") + "）");
+            : $"要調整 {softBefore}→{softAfter}") + "）");
         _fixOutcomeCtx = _state is { } stNow ? new TrialCtx(stNow, BoardKey(applied)) : null;
         RefreshCheck();
     }

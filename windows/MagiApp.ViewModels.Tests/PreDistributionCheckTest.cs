@@ -37,7 +37,7 @@ public class PreDistributionCheckTest
         ui.BestHard = 3;
         ui.Breakdown = new Dictionary<string, int> { ["covU"] = 2, ["c3n"] = 1 };
         var rows = PreDistributionCheck.Rows(ui, "この内容で勤務表 CSV を保存済みです（10:15）。", L).ToDictionary(r => r.Label);
-        Assert.Equal("3件（禁止の並び 1件・人員不足 2件）", rows["必須違反"].Value);
+        Assert.Equal("1件・2人（禁止の並び 1件・人員不足 2人）", rows["必須違反"].Value);
         Assert.True(rows["保存"].Ok);
     }
 

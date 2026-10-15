@@ -66,11 +66,11 @@ public static class NextActionGuide
     /// <summary>1手の提案の得失を、利用者が最初に考える順に2行で言う。1行目＝必須違反が減るか、2行目＝注意（増える要調整。無ければ null）。</summary>
     public static (string HardLine, string? Caution) FixImpactLines(FixSuggestion s, Func<string, string> labelOf)
     {
-        var hardLine = s.DeltaHard < 0 ? $"必須違反: {-s.DeltaHard}件減る"
-            : s.DeltaHard == 0 ? "必須違反: 変わらない"
-            : $"必須違反: {s.DeltaHard}件増える";
+        // 必須の増減は単位ごと（人員不足の人数と件数を足さない＝統合仕様 INV-07）。内訳が無い案は従来の件数。
+        var hardLine = "必須違反: " + (AnalysisTriage.UnitDeltaText(s.Diff, MirrorKeys.Hard)
+            ?? (s.DeltaHard < 0 ? $"{-s.DeltaHard}件減る" : s.DeltaHard == 0 ? "変わらない" : $"{s.DeltaHard}件増える"));
         var worse = s.Diff.Where(d => d.Delta > 0 && !MirrorKeys.Hard.Contains(d.Family)).ToList();
-        var caution = worse.Count == 0 ? null : "増える要調整: " + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}"));
+        var caution = worse.Count == 0 ? null : "増える要調整: " + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}{AnalysisTriage.UnitOf(d.Family)}"));
         return (hardLine, caution);
     }
 

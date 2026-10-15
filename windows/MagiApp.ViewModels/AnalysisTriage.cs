@@ -38,17 +38,55 @@ public sealed record AnalysisTriage(
 
     /// <summary>weekly/fair は件数でなく L1 偏差の合計。単位を分けないと「186件」と読めてしまう。</summary>
     /// <summary>族の数の単位。weekly/fair は L1 偏差なので "pt"、ほかは件（配布前確認も同じ単位を使う）。</summary>
-    public static string UnitOf(string family) => family is "fair" or "weekly" ? "pt" : "件";
+    /// <summary>族の数え方（報告の内訳の単位）。回数の下限・上限・適切回数は回の差、人員は人の差、公平化・曜日の偏りは pt、ほかは件。</summary>
+    public static string UnitOf(string family) => family switch
+    {
+        "fair" or "weekly" => "pt",
+        "low" or "high" or "apt" => "回",
+        "covU" or "covO" => "人",
+        _ => "件",
+    };
 
-    /// <summary>ホームのでき具合に添える残り。必須0の要調整は件数の族だけ数える（pt の公平化・曜日の偏りを件と足さない）。
+    private static readonly string[] UnitOrder = { "件", "人", "回", "pt" };
+
+    /// <summary>単位ごとの合計（例「3件・2人・6回」）。単位の違う量は 1 つの数に足さない（統合仕様 INV-07）。全部 0 なら null。</summary>
+    public static string? UnitTotals(IReadOnlyDictionary<string, int> breakdown, IEnumerable<string> families, bool includePt = true)
+    {
+        var by = families.GroupBy(UnitOf).ToDictionary(g => g.Key, g => g.Sum(f => breakdown.GetValueOrDefault(f, 0)));
+        var parts = UnitOrder.Where(u => includePt || u != "pt")
+            .Where(u => by.TryGetValue(u, out var n) && n > 0).Select(u => $"{by[u]}{u}").ToList();
+        return parts.Count == 0 ? null : string.Join("・", parts);
+    }
+
+    /// <summary>族ごとの増減を単位ごとに足した言い方（例「1件減る・2人増える」）。同じ単位の中だけで足す。全部 0 なら null。</summary>
+    public static string? UnitDeltaText(IEnumerable<(string Family, int Delta)> diff, IEnumerable<string> families)
+    {
+        var fams = families as IReadOnlyCollection<string> ?? families.ToList();
+        var by = new Dictionary<string, int>();
+        foreach (var (k, d) in diff)
+            if (fams.Contains(k) && d != 0) by[UnitOf(k)] = by.GetValueOrDefault(UnitOf(k), 0) + d;
+        var parts = UnitOrder.Where(u => by.TryGetValue(u, out var d) && d != 0)
+            .Select(u => $"{Math.Abs(by[u])}{u}{(by[u] < 0 ? "減る" : "増える")}").ToList();
+        return parts.Count == 0 ? null : string.Join("・", parts);
+    }
+
+    /// <summary>族ごとの増減（例「下限 −6回・禁止の並び +1件」）。合計の数は出さない。</summary>
+    public static string FamilyDeltaList(IEnumerable<(string Family, int Delta)> diff, Func<string, string> labelOf) =>
+        string.Join("・", diff.Where(x => x.Delta != 0).Select(x => $"{labelOf(x.Family)} {(x.Delta < 0 ? $"−{-x.Delta}" : $"+{x.Delta}")}{UnitOf(x.Family)}"));
+
+    /// <summary>必須違反と要調整を単位ごとに（通知・ログの 1 行）。</summary>
+    public static string ReportCountsText(IReadOnlyDictionary<string, int> breakdown) =>
+        $"必須違反 {UnitTotals(breakdown, MirrorKeys.Hard) ?? "なし"}・要調整 {UnitTotals(breakdown, MirrorKeys.Soft) ?? "なし"}";
+
+    /// <summary>ホームのでき具合に添える残り。要調整は単位ごとに（pt の公平化・曜日の偏りは出さない）。
     /// pt だけ残ってもでき具合は 100% でないので「解消済み」とは言わない。</summary>
     public static string HomeRemainingLabel(long bestHard, int shortDays, IReadOnlyDictionary<string, int> breakdown, int wishHard = 0)
     {
-        var softN = MirrorKeys.Soft.Where(f => UnitOf(f) == "件").Sum(f => breakdown.GetValueOrDefault(f, 0));
+        var softText = UnitTotals(breakdown, MirrorKeys.Soft, includePt: false);
         var ptN = MirrorKeys.Soft.Where(f => UnitOf(f) == "pt").Sum(f => breakdown.GetValueOrDefault(f, 0));
-        if (bestHard > 0L) return $"必須 残り{bestHard}件" + (wishHard > 0 ? $"（うち希望のまま {Math.Min(wishHard, bestHard)}件）" : "");
+        if (bestHard > 0L) return $"必須 残り{UnitTotals(breakdown, MirrorKeys.Hard) ?? $"{bestHard}件"}" + (wishHard > 0 ? $"（うち希望のまま {Math.Min(wishHard, bestHard)}件）" : "");
         if (shortDays > 0) return $"人員不足の日 残り{shortDays}日";
-        if (softN > 0) return $"必須は解消・要調整 {softN}件";
+        if (softText is not null) return $"必須は解消・要調整 {softText}";
         if (ptN > 0) return "必須は解消・残りは偏りのみ";
         return "解消済み";
     }

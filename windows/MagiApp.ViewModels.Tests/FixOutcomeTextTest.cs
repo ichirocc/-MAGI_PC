@@ -6,9 +6,9 @@ public class FixOutcomeTextTest
     [Fact]
     public void AppliedMoveSaysWhatChangedAndWhatRemains()
     {
-        Assert.Equal("山本 10/12「夜」→「休」 を当てました。必須違反 3→2。ほかの必須違反は 2 件残っています。", FixOutcomeText.Applied("山本 10/12「夜」→「休」", 3, 2, 40, 38));
-        Assert.Equal("入替 を当てました。必須違反はなくなりました（合計 40→38）。", FixOutcomeText.Applied("入替", 1, 0, 40, 38));
-        Assert.Equal("入替 を当てました。必須違反は変わらず 2 件（合計 40→39）。", FixOutcomeText.Applied("入替", 2, 2, 40, 39));
+        Assert.Equal("山本 10/12「夜」→「休」 を当てました。必須違反 3→2。ほかの必須違反は 2 件残っています。", FixOutcomeText.Applied("山本 10/12「夜」→「休」", 3, 2, "40件", "38件"));
+        Assert.Equal("入替 を当てました。必須違反はなくなりました（要調整 40件→38件）。", FixOutcomeText.Applied("入替", 1, 0, "40件", "38件"));
+        Assert.Equal("入替 を当てました。必須違反は変わらず 2 件（要調整 40件→39件）。", FixOutcomeText.Applied("入替", 2, 2, "40件", "39件"));
     }
 
     /// <summary>[3.663.0] 当てたあとの内訳: 解消・減少と新たに生じた問題を分け、場所だけ移った違反も言う（仕様 §8）。</summary>

@@ -306,7 +306,7 @@ public class MagiViewModelEditingTest
         await vm.LastApplyAlternativeTask!;
 
         Assert.Equal(1, vm._currentSchedule![0][0]);
-        Assert.Equal("他の案 1 を適用しました: 必須違反 0件・違反の合計 4件", vm.Ui.Message);
+        Assert.Equal("他の案 1 を適用しました: 必須違反 なし・要調整 4pt", vm.Ui.Message);
         Assert.False(vm.Ui.MessageIsError);
         Assert.True(vm.Ui.HasResult);
     }
@@ -358,7 +358,7 @@ public class MagiViewModelEditingTest
         Assert.Equal(1, vm.Ui.Schedule[0][0]);
         // hard=0 だが、7日全休の均一盤面から1セルだけ動かすと fair/weekly のソフト偏差が実際に発火する
         // （エンジンの正しい挙動——0を仮定しない、ScratchDebugBreakdown で実測済み: fair=2 weekly=2）。
-        Assert.Equal("調べました: 必須違反 0件・違反の合計 4件", vm.Ui.Message);
+        Assert.Equal("調べました: 必須違反 なし・要調整 4pt", vm.Ui.Message);
         Assert.Equal(1, vm.UndoStackCount);
     }
 

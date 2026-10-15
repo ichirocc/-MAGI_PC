@@ -42,8 +42,8 @@ public class ConsultListTest
         var s = new FixSuggestion(FixKind.Chain, new[] { new FixCell(0, 2, 2) }, "（玉突き）10/3 の「夜」を複数人の入替で埋める", -1, 0, new (string, int)[] { ("covU", -1) });
         var p = ChainFixPreview.Of(s, new[] { new[] { 0, 0, 1 } }, new[] { "甲" }, new[] { "休", "日", "夜" }, "2026-10-01");
         var (hard, caution) = NextActionGuide.FixImpactLines(s, f => f);
-        Assert.Equal(new ConsultItem(s.Label, "甲 10/3 日 → 夜（必須違反: 1件減る）"), ConsultList.Chain(p, hard));
-        Assert.Equal(new ConsultItem(s.Label, "必須違反: 1件減る"), ConsultList.Fix(s, hard, caution));
+        Assert.Equal(new ConsultItem(s.Label, "甲 10/3 日 → 夜（必須違反: 1人減る）"), ConsultList.Chain(p, hard));
+        Assert.Equal(new ConsultItem(s.Label, "必須違反: 1人減る"), ConsultList.Fix(s, hard, caution));
     }
 
     /// <summary>[3.646.0 B01/B02] 対象は氏名と実日付で引き直す＝職員の並び替え・削除、月の移動のあとに別のセルを開かない。</summary>
