@@ -101,7 +101,7 @@ public class CountShortageTextTest
         (int Lo, int Hi)? Need(int k, int j) => k == 2 ? (1, 1) : k == 1 ? (1, 2) : null;
         Assert.Equal(new CountShortage(1, 3, "下限"), FixSearchText.CountShortage(u, new FixFocus(0, 1), Limits));
         var why = FixSearchText.NoFixReasons(u, new FixFocus(0, 1), Limits, Need);
-        Assert.Equal("今回の探索では、条件を守って 2 回増やせる案が見つかりませんでした。", why.Lines[0]);
+        Assert.Equal("今回探した範囲では、条件を守って 2 回増やせる案が見つかりませんでした。", why.Lines[0]);
         Assert.Equal("次に確認すること：「A」を追加する候補日と、変更を妨げる条件を確認します。", why.Lines[1]);
         Assert.Contains(why.Lines, l => l == "補足：「A」の 1 回のうち 1 回は本人の希望で固定されています。");
         Assert.DoesNotContain(why.Lines, l => l.Contains("抜けると"));
@@ -238,7 +238,7 @@ public class CountShortageTextTest
     [Fact]
     public void AutoAndOperatorSplitTexts()
     {
-        Assert.Equal("10/1〜10/31・12人・探索 1分（＋仕上げ 20秒）。開始後は一手ごとの確認はしません", CellSheetLogic.PreRunPlanLine("2026-10-01", 31, 12, 60, 20));
+        Assert.Equal("10/1〜10/31・12人・組む時間 1分（＋仕上げ 20秒）。開始後は一手ごとの確認はしません", CellSheetLogic.PreRunPlanLine("2026-10-01", 31, 12, 60, 20));
         Assert.Equal("登録条件：つくる前に直す項目はありません／手動固定 3件は保持します", CellSheetLogic.PreRunConditionLine(false, 0, 3));
         Assert.Equal("登録条件：確認が必要な項目があります（下の一覧・希望が上限を超える 2件）", CellSheetLogic.PreRunConditionLine(false, 2, 0));
         static string L(string f) => f switch { "c1" => "期間の制約", "weekly" => "曜日の偏り", _ => f };

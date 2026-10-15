@@ -27,7 +27,7 @@
             </StackPanel>
 
             <StackPanel Spacing="4">
-                <TextBlock x:Name="BudgetLabel" Text="探索時間" />
+                <TextBlock x:Name="BudgetLabel" Text="組む時間" />
                 <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
                         TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
                         ValueChanged="OnBudgetChanged" />
@@ -49,7 +49,7 @@
                           OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
 
             <!-- [Android 3.615.0同期] 探索スイッチ群を 2 択 1 つに統合（ユーザー決定）。 -->
-            <ComboBox x:Name="SearchStrengthCombo" Header="探索の強さ" SelectionChanged="OnSearchStrengthChanged">
+            <ComboBox x:Name="SearchStrengthCombo" Header="探す強さ" SelectionChanged="OnSearchStrengthChanged">
                 <ComboBoxItem Content="ふつう" Tag="Normal" />
                 <ComboBoxItem Content="じっくり" Tag="Thorough" />
             </ComboBox>

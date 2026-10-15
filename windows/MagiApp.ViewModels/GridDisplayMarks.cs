@@ -346,7 +346,7 @@ public static class NoFixKindText
     {
         NoFixKind.Contradiction => "矛盾を確認：両立しない条件（本人の希望どうしのぶつかり）があります。該当する希望か条件を直すと解消します。",
         NoFixKind.Time => "時間不足：制限時間内に改善案を見つけられませんでした。もう一度探すと続きを探せます。",
-        NoFixKind.Fixed => "固定条件による制限：本人の希望や個人の上限などの固定条件があり、現在の条件を守ったまま変更できる案は、今回の探索では見つかりませんでした。必要に応じて対象職員にご相談ください。",
+        NoFixKind.Fixed => "固定条件による制限：本人の希望や個人の上限などの固定条件があり、現在の条件を守ったまま変更できる案は、今回探した範囲では見つかりませんでした。必要に応じて対象職員にご相談ください。",
         _ => FixSearchText.NoFixHead,
     };
 }
@@ -362,7 +362,7 @@ public sealed record ShiftCoverageTotal(IReadOnlyList<int> UnderDays, IReadOnlyL
 public static class FixSearchText
 {
     /// <summary>1 行目＝見つからなかったこと（上段のシートは 2 行で切れる）、続けて確かめた理由、最後に探した範囲。</summary>
-    public const string NoFixHead = "探索範囲内で改善なし：現在の条件を守ったまま改善できる案は、今回の探索では見つかりませんでした。別の方法で探すか、条件を見直せます。";
+    public const string NoFixHead = "探した範囲で改善なし：現在の条件を守ったまま改善できる案は、今回探した範囲では見つかりませんでした。別の方法で探すか、条件を見直せます。";
     public const string NoFixScope = "探したのは 1 セルの変更・2 人の入れ替え・玉突きの範囲です。";
 
     /// <summary>日×シフトの印が人員不足・過剰のものか（直し方が無いときの行き先＝その日のそのシフトの必要人数。群のレンジは④のまま）。Kotlin <c>coverageFocus</c>。</summary>
@@ -490,7 +490,7 @@ public static class FixSearchText
         var outList = new List<string>
         {
             ui.FixTimedOut ? $"制限時間内に、条件を守って {sh.Gap} 回増やせる案は見つかりませんでした。もう一度探すと続きを探せます。"
-                : $"今回の探索では、条件を守って {sh.Gap} 回増やせる案が見つかりませんでした。",
+                : $"今回探した範囲では、条件を守って {sh.Gap} 回増やせる案が見つかりませんでした。",
             $"次に確認すること：「{Sym(k)}」を追加する候補日と、変更を妨げる条件を確認します。",
         };
         var wish = false;

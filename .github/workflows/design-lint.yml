@@ -31,7 +31,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 作業ブランチを main と同じコミットへ戻しただけの push は、main 側の実行が同じコミットを検証済み。
+  # ここで重ねて走らせると次の push で途中キャンセルされ、コミット一覧に ✗ が付く（Android 3.688.0）。
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.cmp.outputs.skip }}
+    steps:
+      - id: cmp
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          skip=false
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            st=$(gh api "repos/${{ github.repository }}/compare/main...${{ github.sha }}" --jq .status || echo unknown)
+            if [ "$st" = "identical" ] || [ "$st" = "behind" ]; then skip=true; fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
   design-lint:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
