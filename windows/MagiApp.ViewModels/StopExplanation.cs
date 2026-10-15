@@ -8,27 +8,29 @@ public enum StopNext { None, MoreTime, ReviewStaffing, ReviewWishes, FindFix }
 /// <summary>停滞で早く終えた理由と次の一手の一文（Kotlin <c>ui/StopExplanation.kt</c>、3.643.0、<c>docs/stall_escape.md</c> §12）。内部名を出さない。純関数＝WinUI から切り離してテストする。</summary>
 public sealed record StopExplanation(string Line, StopNext Next)
 {
-    public static StopExplanation? Of(V6FinalPort.StopSummary s)
+    public static StopExplanation? Of(V6FinalPort.StopSummary s, IReadOnlyDictionary<string, int>? breakdown = null)
     {
-        var hard = s.RemainingHard;
-        // 使った時間は後処理まで含めた全体、無改善の秒数は主探索の終了時点の値（どちらの時点かを文で言う）。
-        var used = $"使った時間 {s.UsedSec} 秒・制限時間 {s.BudgetSec} 秒";
-        if (hard == 0)
-            return s.EarlyStop ? new StopExplanation($"改善が見られなくなったため、主探索を早めに終了しました（{used}）。必須違反はありません。", StopNext.None) : null;
+        var hard = AnalysisTriage.HardText(breakdown, s.RemainingHard);
+        // 使った時間は後処理まで含めた全体、無改善の秒数は探索の終了時点の値（どちらの時点かを文で言う）。
+        var used = $"使った時間 {s.UsedSec} 秒・探索時間 {s.BudgetSec} 秒";
+        // 必須 0 なら早く終えた理由は言わない（結果カードの見出しで足りる）。
+        if (s.RemainingHard == 0) return null;
         return s.Kind switch
         {
             V6FinalPort.StopKind.Deadline =>
-                new StopExplanation($"制限時間（{s.BudgetSec} 秒）いっぱいまで探しました。主探索の終了時点で、最後の改善から {s.StalledSec} 秒が経過していました。最終結果の必須違反は {hard} 件です。", StopNext.MoreTime),
+                new StopExplanation($"探索時間（{s.BudgetSec} 秒）いっぱいまで探しました。探索の終了時点で、最後の改善から {s.StalledSec} 秒が経過していました。最終結果の必須違反は {hard}です。",
+                    // 探索時間がすでに上限なら「延ばす」は勧めない。
+                    s.BudgetSec < V6FinalPort.MaxOptimizeSec ? StopNext.MoreTime : StopNext.FindFix),
             V6FinalPort.StopKind.PlateauFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は、担当できる職員が足りないための人員不足です。解消するには、担当条件や配置できる職員の見直しが必要です。", StopNext.ReviewStaffing),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は、担当できる職員が足りないための人員不足です。解消するには、担当条件や配置できる職員の見直しが必要です。", StopNext.ReviewStaffing),
             V6FinalPort.StopKind.WishFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は、同時には満たせない希望によるものです。解消するには、対象の希望を調整する必要があります。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は、同時には満たせない希望によるものです。解消するには、対象の希望を調整する必要があります。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallCertified =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びで、希望によって勤務が固定されています。解消には希望の調整が必要です。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は禁止の並びで、希望によって勤務が固定されています。解消には希望の調整が必要です。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallEmpirical =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard} 件は禁止の並びです。1 マスの変更、複数の勤務の入れ替え（玉突き）、隣接日の調整を試しましたが、解消する案は見つかりませんでした。", StopNext.FindFix),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は禁止の並びです。1 マスの変更、複数の勤務の入れ替え（玉突き）、隣接日の調整を試しましたが、解消する案は見つかりませんでした。", StopNext.FindFix),
             _ =>
-                new StopExplanation($"{s.StalledSec} 秒間、改善が見られなかったため、主探索を早めに終了しました（{used}）。必須違反 {hard} 件が残っています。", StopNext.FindFix),
+                new StopExplanation($"{s.StalledSec} 秒間、改善が見られなかったため、探索を早めに終了しました（{used}）。必須違反 {hard}が残っています。", StopNext.FindFix),
         };
     }
 

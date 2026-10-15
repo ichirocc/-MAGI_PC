@@ -53,6 +53,8 @@ public sealed partial class UiState : ObservableObject
     /// 「盤面がある」旗なので、分析の「計算済み／未計算」はこちらだけを読む（手操作で false に戻す）。
     /// </summary>
     [ObservableProperty] private bool engineRan;
+    /// <summary>自動作成のあとに手で変えたか（EngineRan が手操作で false に戻った盤面）。上部の「自動作成：済み（そのあと手で変更あり）」だけが読む。保存しない。</summary>
+    [ObservableProperty] private bool ranBeforeEdit;
     /// <summary>いまの盤面が S6（設定を緩めて手順を当てる）の結果か。分析の注記だけが読む。EngineRan を書く箇所で false に戻す。</summary>
     [ObservableProperty] private bool relaxedBoard;
     /// <summary>

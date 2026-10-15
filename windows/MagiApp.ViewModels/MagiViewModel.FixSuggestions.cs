@@ -179,7 +179,7 @@ public sealed partial class MagiViewModel
         _pendingGuided = null;
         var still = diag?.Shortfalls.FirstOrDefault(sf => sf.DayIndex == g.DayIndex && sf.ShiftIndex == g.ShiftIndex && sf.Miss > 0)?.Miss;
         _fixOutcomeCtx = new TrialCtx(st, BoardKey(schedule));
-        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard));
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard, report.Breakdown));
     }
 
     /// <param name="focusKey">案の一覧のどの依頼から来たか。あれば成功時に <see cref="UiState.AppliedFix"/> を残す（Kotlin 3.669.0）。</param>
@@ -202,7 +202,7 @@ public sealed partial class MagiViewModel
         {
             Ui.MessageIsError = true;
             ClearFixState();
-            Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「直し方を探す」をもう一度押してください";
+            Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「変更案を探す」をもう一度押してください";
             return;
         }
         // 見ている問題の数が減らない案は、全体の評価が良くなっても当てない（統合仕様 INV-03。案の一覧の主一覧と同じ判定）。
@@ -221,7 +221,7 @@ public sealed partial class MagiViewModel
             LogOp("W", $"改善手を見送り: {s.Label}（{gate.Reason}）");
             Ui.MessageIsError = true;
             ClearFixState();
-            Ui.Message = $"この提案は見送りました（{gate.Reason}）。「直し方を探す」で探し直してください";
+            Ui.Message = $"この提案は見送りました（{gate.Reason}）。「変更案を探す」で探し直してください";
             return;
         }
         PushUndo();
@@ -231,6 +231,7 @@ public sealed partial class MagiViewModel
         AutoSave();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = applied.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
@@ -245,7 +246,7 @@ public sealed partial class MagiViewModel
         var edge = PreDistributionCheck.MonthEdgeTouched(s.Ops.Select(o => o.Day), applied.FirstOrDefault()?.Length ?? 0, maxLen) ? $"{PreDistributionCheck.MonthEdgeNote}。" : null;
         var softBefore = AnalysisTriage.UnitTotals(gate.Before.Breakdown, MirrorKeys.Soft) ?? "なし";
         var softAfter = AnalysisTriage.UnitTotals(gate.After.Breakdown, MirrorKeys.Soft) ?? "なし";
-        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, softBefore, softAfter), gate.Before, gate.After, edge);
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(s.Label, gate.Before.Hard, gate.After.Hard, softBefore, softAfter, gate.After.Breakdown), gate.Before, gate.After, edge);
         // 通知は 2 行まで＝必須が動いた手は必須だけ、動かない手は合計だけを添える（両方の数はホームの結果の行とログ）。
         PostOpNotice($"{s.Label} を当てました（" + (gate.Before.Hard != gate.After.Hard ? $"必須違反 {gate.Before.Hard}→{gate.After.Hard}"
             : $"要調整 {softBefore}→{softAfter}") + "）");

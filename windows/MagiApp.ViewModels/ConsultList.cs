@@ -65,19 +65,23 @@ public static class ConsultList
     public const string Duplicate = "この内容は、すでにホームの「相談中」に登録されています";
     public const string Open = "開く";
     public const string Resume = "案を見る";
-    public const string Stale = "相談に登録した後で勤務表または設定が変わったため、この案はそのまま当てられません。「直し方を探す」から、もう一度確かめてください";
+    public const string Stale = "相談に登録した後で勤務表または設定が変わったため、この案はそのまま当てられません。「変更案を探す」から、もう一度確かめてください";
 
     /// <summary>ホームの主カードの 1 行。0 件なら出さない。</summary>
     public static string? Line(int n) => n > 0 ? $"未確認事項 {n} 件（相談中。下の一覧で確認してから配ってください）" : null;
 
-    /// <summary>相談中と保留を分けて言う（どちらも未解決＝違反は減らさない）。</summary>
+    /// <summary>未解決の相談＝保留か、回答待ち（了承・不可の回答があれば数えない）。</summary>
+    public static bool Unresolved(ConsultItem c) => c.Held || c.Answer == ConsultAnswer.Pending;
+
+    /// <summary>相談中と保留を分けて言う（未解決だけ数える。どちらも違反は減らさない）。</summary>
     public static string? Line(IReadOnlyList<ConsultItem> items)
     {
-        if (items.Count == 0) return null;
-        var held = items.Count(c => c.Held);
-        var open = items.Count - held;
+        var open0 = items.Where(Unresolved).ToList();
+        if (open0.Count == 0) return null;
+        var held = open0.Count(c => c.Held);
+        var open = open0.Count - held;
         var parts = string.Join("・", new[] { open > 0 ? $"相談中 {open}" : null, held > 0 ? $"保留 {held}" : null }.Where(x => x is not null));
-        return $"未確認事項 {items.Count} 件（{parts}。下の一覧で確認してから配ってください）";
+        return $"未確認事項 {open0.Count} 件（{parts}。下の一覧で確認してから配ってください）";
     }
 
     private static DateOnly? Parse(string date) =>

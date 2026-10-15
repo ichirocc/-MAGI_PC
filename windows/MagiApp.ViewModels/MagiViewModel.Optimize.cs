@@ -38,6 +38,9 @@ public sealed partial class MagiViewModel
     //   [テスト可視性のためinternal化] 読込・背景結果での更新／リセットを直接確かめる。
     internal string? _lastSettingsSig;
     internal long _lastResultHard = -1L;
+    internal IReadOnlyDictionary<string, int> _lastResultBreakdown = new Dictionary<string, int>();
+    /// <summary>進捗の基準（InitHard/InitSoft）を取った入力の指紋。読込で null に戻す。</summary>
+    internal long? _initBaseKey;
     internal string? _lastTopHardFamily;
 
     /// <summary>Kotlin原本 <c>hardFamilyJp</c>（1087行）の逐語移植。</summary>
@@ -122,7 +125,7 @@ public sealed partial class MagiViewModel
     private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
 
     private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0
-        ? $"前回と同じ設定で再作成します。前回の必須違反 {_lastResultHard}件のうち、いちばん多いのは{_lastTopHardFamily ?? "『不明』"}です。" +
+        ? $"前回と同じ設定で再作成します。前回の必須違反 {AnalysisTriage.HardText(_lastResultBreakdown, _lastResultHard)}のうち、いちばん多いのは{_lastTopHardFamily ?? "『不明』"}です。" +
           "同じ設定では同じ違反が残りやすいため、編集タブでこれを1つ緩めると改善の可能性が高いです。"
         : null;
 
@@ -190,8 +193,14 @@ public sealed partial class MagiViewModel
         {
             // [再実行 keep-best] 実行開始時の入力解(sched0)の違反を評価し、完了時の採用判定の基準にする。
             var baseReport = await Task.Run(() => UnifiedViolationChecker.Check(st0, sched0), ct);
-            Ui.InitHard = baseReport.Hard;
-            Ui.InitSoft = baseReport.Soft;
+            // 同じデータ（設定・希望の指紋が同じ）の再作成では基準を据え置く＝でき具合の％が再作成のたびに 0 へ戻らない。
+            var baseKey = StateKey(st0);
+            if (baseKey != _initBaseKey)
+            {
+                _initBaseKey = baseKey;
+                Ui.InitHard = baseReport.Hard;
+                Ui.InitSoft = baseReport.Soft;
+            }
 
             // [2026-09-02, 外部レビュー#43] エンジンの並列ワーカーがTask.Run内部から直接呼ぶため、
             //   UIスレッドとは限らない。Ui.*への書き込み・LogOp呼出しをまとめてPostToUiへ渡す
@@ -285,20 +294,21 @@ public sealed partial class MagiViewModel
                 var keptMsg = s5 is null
                     ? KeptResultText.WithNote(KeptResultText.Screen(nowScore, baseScore), capNote)
                     : s5.H0 - baseReport.Hard > 0
-                        ? $"希望（{s5.Label}）を調整しました（希望は外れています）。必須違反は {s5.H0} → {baseReport.Hard}（外した分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
-                        : $"希望（{s5.Label}）を調整しましたが（希望は外れています）、再作成しても必須違反は減りませんでした（必須 {s5.H0}）。元に戻すで希望と勤務表をまとめて戻せます。";
+                        ? $"希望（{s5.Label}）を調整しました（希望は外れています）。必須違反は {s5.H0}件 → {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}（外した分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
+                        : $"希望（{s5.Label}）を調整しましたが（希望は外れています）、再作成しても必須違反は減りませんでした（必須違反 {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}）。元に戻すで希望と勤務表をまとめて戻せます。";
                 await PushReportAsync(_state ?? st0, kept, baseReport, transform: ui =>
                 {
                     ui.MessageIsError = false;
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
+                    ui.RanBeforeEdit = false;
                     ui.RelaxedBoard = false;
                     ui.Message = keptMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, baseReport.Hard, keptMsg);
                 }, ct: ct);
                 LogOp("I", KeptResultText.WithNote(KeptResultText.Log("再実行", nowScore, baseScore), capNote));
-                _lastResultHard = baseHard;
+                _lastResultHard = baseHard; _lastResultBreakdown = baseReport.Breakdown;
             }
             else
             {
@@ -310,8 +320,9 @@ public sealed partial class MagiViewModel
                 _resultSchedule = res.Schedule.Copy2D();
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
-                    ? CompletedText.Of(res.Report.Hard, res.Report.Breakdown, "")
-                    : $"希望（{s5.Label}）を調整して（希望は外しました）、再作成しました: 必須違反 {s5.H0} → {res.Report.Hard}（試算の見込み {s5.PCancel}）" +
+                    ? CompletedText.Of(res.Report.Hard, res.Report.Breakdown, "") +
+                      (CompletedText.AdoptedDespiteMore(baseReport.Total, res.Report.Total, baseReport.WeightedScore, res.Report.WeightedScore) is { } why ? $"。{why}" : "")
+                    : $"希望（{s5.Label}）を調整して（希望は外しました）、再作成しました: 必須違反 {s5.H0}件 → {AnalysisTriage.HardText(res.Report.Breakdown, res.Report.Hard)}（試算の見込み {s5.PCancel}件）" +
                       (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。再作成するか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
                 {
@@ -319,13 +330,14 @@ public sealed partial class MagiViewModel
                     ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
+                    ui.RanBeforeEdit = false;
                     ui.RelaxedBoard = false;
                     ui.Message = adoptedMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, res.Report.Hard, adoptedMsg);
                     ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
                     ui.StopSummary = res.Stop;
                 }, ct: ct);
-                _lastResultHard = newHard;
+                _lastResultHard = newHard; _lastResultBreakdown = res.Report.Breakdown;
             }
             foreach (var line in (_lastC1Plateau?.LogLines() ?? Array.Empty<string>()).Take(4))
                 LogOp("W", line.StartsWith("[W] ", StringComparison.Ordinal) ? line["[W] ".Length..] : line);
@@ -529,6 +541,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = true;
+                ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.Message = gain > 0
                     ? $"整えました: 合計 {baseReport.Total} → {finalReport.Total}（-{gain}）必須={finalReport.Hard} ({NowMs() - startMs}ms)"

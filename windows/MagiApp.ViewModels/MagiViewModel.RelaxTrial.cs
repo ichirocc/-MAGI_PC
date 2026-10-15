@@ -142,6 +142,7 @@ public sealed partial class MagiViewModel
         _relaxDone = (new RelaxCtx(StateKey(ns), BoardKey(nb)), NextActionGuide.RelaxDoneLine(r.H0, got.Value));
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = true;
         Ui.StructureEdited = true;

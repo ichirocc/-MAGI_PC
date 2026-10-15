@@ -36,4 +36,8 @@ public static class CompletedText
     public static string Of(int hard, IReadOnlyDictionary<string, int> breakdown, string how) =>
         hard == 0 ? $"計算が完了しました{how}。設定した必須条件を満たしています。配布前の確認に進んでください（要調整 {AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Soft) ?? "なし"}）"
                   : $"計算が完了しました{how}。{AnalysisTriage.ReportCountsText(breakdown)}";
+
+    /// <summary>採用した結果の件数が入力より増えたのに重み付き評価点が下がったとき、採用の理由を 1 文で（件数だけ見ると悪化に見えるため）。それ以外は null。</summary>
+    public static string? AdoptedDespiteMore(int prevTotal, int newTotal, double prevWeighted, double newWeighted) =>
+        newTotal > prevTotal && newWeighted < prevWeighted ? $"件数は +{newTotal - prevTotal} ですが、重い違反が減ったため改善として採用しました" : null;
 }

@@ -31,8 +31,8 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
     public const string ApplyChangeButton = "この変更を適用";
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
     public const string KeepCurrentButton = "今は変更しない";
-    /// <summary>誰が・いつ確認するか（仕様 §4）。担当者名や期限のデータは無い＝推測せず「未設定」と書く。</summary>
-    public const string ChangeDutyNote = "対応する人: 勤務表の作成担当者（担当者名は未設定）／対応する時期: 変更を適用する前（期限は未設定）";
+    /// <summary>変更を当てる前の確認の見出し（1 手でも入替でも同じ）。</summary>
+    public const string PreviewTitle = "この変更を適用しますか？";
 
     /// <param name="shiftNames">登録された勤務名（記号と違えば「記号（勤務名）」で併記）。</param>
     /// <param name="wishes">希望 "i,j"→シフト（あれば行ごとに希望どおりか添える）。</param>

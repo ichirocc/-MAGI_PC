@@ -266,7 +266,7 @@ public sealed partial class HomeView : UserControl
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
-            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
         }
         else
         {
@@ -276,7 +276,7 @@ public sealed partial class HomeView : UserControl
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             helperLabel = null; _helperAction = () => { };
             var hardFix = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
-            var remain = $"必須違反が {ui.BestHard}件 残っています。";
+            var remain = $"必須違反が {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} 残っています。";
             if (guidedFix is { } gf)
             {
                 headline = $"{gf.DayLabel} が人員不足です。";
@@ -316,10 +316,10 @@ public sealed partial class HomeView : UserControl
             else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
-                headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {ui.BestHard}件 からこれ以上は減らせない見込みです。";
+                headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} からこれ以上は減らせない見込みです。";
                 bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
-                helperLabel = "このまま書き出す"; _helperAction = () => _ = _window.ExportScheduleCsvAsync();
+                helperLabel = "このまま書き出す"; _helperAction = () => _ = ShowPreDistributionAsync();
             }
             else if (!cands.IsEmpty)
             {
@@ -348,9 +348,9 @@ public sealed partial class HomeView : UserControl
         HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         HeadlineText.Text = headline;
         HeadlineText.Foreground = fgBrush;
-        // [3.643.0] 探索がどう終わったか（停滞で早く終えた理由・残る必須の性質・次の一手）。内部名は出さない（StopExplanation）。
-        var stopLine = ui.HasResult && !ui.Running && ui.StopSummary is { } stop && StopExplanation.Of(stop) is { } se
-            ? se.Line + (StopExplanation.NextLabel(se.Next) is { } nx ? $" 次は: {nx}" : "")
+        // [3.643.0] 探索がどう終わったか（停滞で早く終えた理由・残る必須の性質）。内部名は出さない（StopExplanation）。次の一手は主ボタンが言う。
+        var stopLine = ui.HasResult && !ui.Running && ui.StopSummary is { } stop && StopExplanation.Of(stop, ui.Breakdown) is { } se
+            ? se.Line
             : null;
         StopText.Visibility = stopLine is null ? Visibility.Collapsed : Visibility.Visible;
         StopText.Text = stopLine ?? "";
@@ -423,16 +423,15 @@ public sealed partial class HomeView : UserControl
         if (ui.BestHard > 0L)
         {
             parts.Add(ui.InitHard > ui.BestHard
-                ? $"必須違反 残り{ui.BestHard}件（開始{ui.InitHard}件）"
-                : $"必須違反 残り{ui.BestHard}件");
+                ? $"必須違反 残り{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}（開始{ui.InitHard}件）"
+                : $"必須違反 残り{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}");
         }
         else if (ui.InitSoft > 0L)
         {
             var pct = System.Math.Max(0L, (ui.InitSoft - ui.BestSoft) * 100L / ui.InitSoft);
-            parts.Add($"気になる点 {ui.BestSoft}件（開始{ui.InitSoft}件・{pct}%減）");
+            parts.Add($"要調整 {ui.BestSoft}件（開始{ui.InitSoft}件・{pct}%減）");
         }
-        else parts.Add("気になる点 –");
-        if (ui.BestHard > 0L && ui.TotalViolations > 0) parts.Add($"気になる点 全{ui.TotalViolations}件");
+        else parts.Add("要調整 –");
         var secLeft = System.Math.Max(0L, (ui.BudgetSec + MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec) * 1000L - ui.ElapsedMs) / 1000L;
         parts.Add($"残り {secLeft / 60}:{secLeft % 60:00}");
         return string.Join("  ・  ", parts);
