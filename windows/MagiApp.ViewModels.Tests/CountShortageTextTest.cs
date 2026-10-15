@@ -238,17 +238,12 @@ public class CountShortageTextTest
     [Fact]
     public void AutoAndOperatorSplitTexts()
     {
-        Assert.Equal(new[] { "対象期間：10/1〜10/31", "職員：12人", "登録条件：つくる前に直す項目はありません",
-            "今回、自動で行うこと：勤務表の生成、最適化、仕上げ、評価", "保持するもの：登録条件と手動固定（手動固定 3件）", "探索時間：60秒／仕上げ用の追加枠：20秒" },
-            CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, false, 3, 60, 20));
-        Assert.Equal("登録条件：確認が必要な項目があります（下の一覧）", CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, true, 0, 60, 20)[2]);
-        Assert.Equal("保持するもの：登録条件と手動固定", CellSheetLogic.PreRunPlanLines("2026-10-01", 31, 12, true, 0, 60, 20)[4]);
+        Assert.Equal("10/1〜10/31・12人・探索 1分（＋仕上げ 20秒）。開始後は一手ごとの確認はしません", CellSheetLogic.PreRunPlanLine("2026-10-01", 31, 12, 60, 20));
+        Assert.Equal("登録条件：つくる前に直す項目はありません／手動固定 3件は保持します", CellSheetLogic.PreRunConditionLine(false, 0, 3));
+        Assert.Equal("登録条件：確認が必要な項目があります（下の一覧・希望が上限を超える 2件）", CellSheetLogic.PreRunConditionLine(false, 2, 0));
         static string L(string f) => f switch { "c1" => "期間の制約", "weekly" => "曜日の偏り", _ => f };
         Assert.Equal("期間の制約 2件・曜日の偏り 12pt", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["c1"] = 2, ["weekly"] = 12, ["c3n"] = 1 }, L));
         Assert.Equal("なし", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["covU"] = 1 }, L));
-        Assert.Equal(new[] { "必須違反：なし", "要調整：なし", "保存：完了", "作成が終わったことは、配布できることと同じではありません。配布前の確認で中身を確かめてください。" },
-            CellSheetLogic.CreationResultLines(0, new Dictionary<string, int>(), SaveState.Saved, L));
-        Assert.Equal(3, CellSheetLogic.CreationResultLines(2, new Dictionary<string, int> { ["c1"] = 1 }, SaveState.Failed, L).Count);
         Assert.Equal("解消", CellSheetLogic.AppliedStatusWord(new CountEffect(0, 1, 1, true, "人")));
         Assert.Equal("減少", CellSheetLogic.AppliedStatusWord(new CountEffect(7, 9, 15, true)));
         Assert.Equal("残存", CellSheetLogic.AppliedStatusWord(new CountEffect(7, 7, 15, true)));

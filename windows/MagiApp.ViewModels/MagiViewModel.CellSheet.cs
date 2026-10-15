@@ -14,7 +14,10 @@ public sealed partial class MagiViewModel
         var st = _state;
         var sched = _currentSchedule;
         if (st is null || sched is null || i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return new CellStatus(CellSeverity.None, "違反なし");
-        return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, CellProblemFamilies(i, j), labelOf);
+        var fams = CellProblemFamilies(i, j);
+        if (Ui.Display is { } d && d.FreshFor(Ui) && d.CellMarkAt(i, j) is var m && m.Families.SequenceEqual(fams))
+            return new CellStatus(m.Severity, m.OneLine, m.Cause);
+        return CellSheetLogic.StatusLine(st, ScheduleUtil.CachedProblem(st), sched, i, j, fams, labelOf);
     }
 
     /// <summary>このセルに重なった問題の族（重い順。状態の 1 行・問題の選択が共有）。</summary>
@@ -100,6 +103,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         var sched = _currentSchedule;
+        if (Ui.Display is { } d && d.FreshFor(Ui)) return d.TourItems;
         return st is null || sched is null ? Array.Empty<TourItem>()
             : CellSheetLogic.HardViolationItems(st, ScheduleUtil.CachedProblem(st), sched, Ui.ViolationCellFamilies, labelOf);
     }

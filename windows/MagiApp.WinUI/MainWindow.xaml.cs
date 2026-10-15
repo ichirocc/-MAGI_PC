@@ -262,7 +262,7 @@ public sealed partial class MainWindow : Window
                 (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             }
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft, ui.Breakdown), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
-            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
+            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {DisplaySnapshots.DisplayHardText(ui)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusPrefixText.Text = ui.Running ? "" : status.First;
             // 必須違反が残るときは「順に見る」巡回の入口、必須 0 は配布前の確認へ（要調整が残っても「配布可」と言い切らない）。
@@ -589,11 +589,10 @@ public sealed partial class MainWindow : Window
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Primary,
         };
-        // [Android 3.672.0] 自動で行うこと・保持するもの・時間（設定値）を先に。担当者が判断するのは、ここと作成後の問題の対応。
-        foreach (var planLine in CellSheetLogic.PreRunPlanLines(ui.StartDate, ui.Days, ui.Staff, sum.NeedsSheet, ui.ManualPins.Count, ui.BudgetSec,
-                     MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec))
-            panel.Children.Add(new TextBlock { Text = planLine, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunAutoNote, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
+        // [Android 3.683.0] 期間・人数・時間の 1 行と登録条件の 1 行を先に。担当者が判断するのは、ここと作成後の問題の対応。
+        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunPlanLine(ui.StartDate, ui.Days, ui.Staff, ui.BudgetSec,
+            MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec), TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunConditionLine(sum.NeedsSheet, sum.WishOverCaps.Count, ui.ManualPins.Count), FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         Action? after = null;
         void Head(string text) => panel.Children.Add(new TextBlock { Text = "■ " + text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
         void Note(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });

@@ -47,7 +47,7 @@
                 </StackPanel>
                 <TextBlock x:Name="TriageAllClearText" Style="{StaticResource MagiBodyMediumTextStyle}" Foreground="{StaticResource MagiTertiaryBrush}"
                            Text="確認事項はありません（すべての条件を満たしています）。" />
-                <TextBlock x:Name="TriageBlockersTitle" Text="直さないと消えない項目" Style="{StaticResource MagiTitleSmallTextStyle}"
+                <TextBlock x:Name="TriageBlockersTitle" Style="{StaticResource MagiTitleSmallTextStyle}"
                            Foreground="{StaticResource MagiErrorBrush}" />
                 <StackPanel x:Name="TriageBlockersList" Spacing="6" />
                 <TextBlock x:Name="TriageSearchTitle" Style="{StaticResource MagiTitleSmallTextStyle}" />

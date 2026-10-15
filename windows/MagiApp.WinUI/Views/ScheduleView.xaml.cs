@@ -739,7 +739,7 @@ public sealed partial class ScheduleView : UserControl
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         // [Android 3.623.0] 「必須 N ▼」（Kotlin HardListChip）＝結果があり実行中でなく必須違反が残るときだけ。
         HardListButton.Visibility = !ui.Running && ui.HasResult && ui.BestHard > 0 ? Visibility.Visible : Visibility.Collapsed;
-        HardListButton.Content = $"必須 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} ▼";
+        HardListButton.Content = $"必須 {DisplaySnapshots.DisplayHardText(ui)} ▼";
         RenderFilterBar(ui);
         RenderShortageBanner(ui);
         RenderSearchLegend(ui);
@@ -1015,6 +1015,7 @@ public sealed partial class ScheduleView : UserControl
     /// </summary>
     private void RenderStaffTally(UiState ui)
     {
+        TallyLegend.Text = CellSheetLogic.TallyLegendText;
         StaffTallyGridHost.Children.Clear();
         StaffTallyGridHost.RowDefinitions.Clear();
         StaffTallyGridHost.ColumnDefinitions.Clear();
@@ -1632,7 +1633,23 @@ public sealed partial class ScheduleView : UserControl
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
             if (quick)
             {
-                host.Children.Add(new TextBlock { Text = string.Join(" ", body), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                var nfSingle = problems is { Count: 1 } ? LabelOf(problems[0]) : null;
+                var (nfStaff, nfDay) = (focus.Staff, focus.Day);
+                var nfPrev = nfStaff is not null && nfDay is { } nfD0 && nfSingle is not null ? CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, nfD0 - 1) : null;
+                var nfNext = nfStaff is not null && nfDay is { } nfD1 && nfSingle is not null ? CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, nfD1 + 1) : null;
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.CompactNoFixLine(body, nfSingle, nfPrev, nfNext), TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                if (nfStaff is { } nfI && nfDay is { } nfJ && (nfPrev is not null || nfNext is not null))
+                {
+                    var nfAdj = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                    foreach (var (nfLabel, nfTo) in new[] { (nfPrev, nfJ - 1), (nfNext, nfJ + 1) })
+                    {
+                        if (nfLabel is null) continue;
+                        var nfBtn = new Button { Content = $"{nfLabel}を開く", MinHeight = 48 };
+                        nfBtn.Click += (_, _) => { hide(); OpenCellSheet(nfI, nfTo); };
+                        nfAdj.Children.Add(nfBtn);
+                    }
+                    host.Children.Add(nfAdj);
+                }
                 if (ui.FixTimedOut) host.Children.Add(RetryButton());
                 if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
                 return;
@@ -1655,25 +1672,24 @@ public sealed partial class ScheduleView : UserControl
             }
             host.Children.Add(new TextBlock { Text = "設定を確認する", FontSize = 12, Opacity = 0.8 });
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            if (why.WishRelated)
+            // 希望への行き先は 1 つ（日があればその日を選んだ状態で開く。職員が無くても日は渡す）。
+            var needUnder = target is { Staff: null, Under: true };
+            if (why.WishRelated || needUnder)
             {
-                var w = new Button { Content = "希望を見る", MinHeight = 48 };
+                var w = new Button { Content = CellSheetLogic.WishDayButton(focus.Day is { } fd ? DayText.Short(ui.StartDate, fd) : null), MinHeight = 48 };
                 w.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, WishStaff: focus.Staff, Day: focus.Day), Return()); };
                 buttons.Children.Add(w);
             }
-            if (target is { Staff: null, Under: true })
+            if (needUnder)
             {
                 var ws1 = new Button { Content = "担当できる職員を見る", MinHeight = 48 };
                 ws1.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(2, "yr_ws1"), Return()); };
                 buttons.Children.Add(ws1);
-                var dayWish = new Button { Content = "当日の希望・固定勤務を見る", MinHeight = 48 };
-                dayWish.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, Day: focus.Day), Return()); };
-                buttons.Children.Add(dayWish);
             }
             if (FixSearchText.CoverageFocus(ui, focus))
             {
                 // 人員不足・過剰の印は、その日のそのシフトの必要人数（月次条件）へ。群のレンジは④のまま。
-                var need = new Button { Content = "必要人数を見直す", MinHeight = 48 };
+                var need = new Button { Content = SettingsLabel.For("yr_headcount"), MinHeight = 48 };
                 need.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: focus.Shift, Day: focus.Day), Return()); };
                 buttons.Children.Add(need);
             }
@@ -1921,7 +1937,7 @@ public sealed partial class ScheduleView : UserControl
                 if (picked == m.Shift) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
                 else
                 {
-                    var see = new HyperlinkButton { Content = m.Under ? "この不足の変更案を見る" : "この過剰の変更案を見る", MinHeight = 48 };
+                    var see = new HyperlinkButton { Content = CellSheetLogic.ViewFixesButton, MinHeight = 48 };
                     var k = m.Shift;
                     see.Click += (_, _) =>
                     {
@@ -1946,7 +1962,7 @@ public sealed partial class ScheduleView : UserControl
         var seeDay = new Button { Content = $"{DayText.Short(ui.StartDate, j)}の勤務を見る", MinHeight = 48 };
         seeDay.Click += (_, _) => { dialog.Hide(); FocusCell(-1, j); };
         dayButtons.Children.Add(seeDay);
-        var needSetting = new Button { Content = "必要人数の設定を見る", MinHeight = 48 };
+        var needSetting = new Button { Content = SettingsLabel.For("yr_headcount"), MinHeight = 48 };
         needSetting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: picked ?? marks[0].Shift, Day: j), null); };
         dayButtons.Children.Add(needSetting);
         panel.Children.Add(dayButtons);
@@ -2057,7 +2073,7 @@ public sealed partial class ScheduleView : UserControl
     {
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var ret = cell is { } c ? CellReturn(c.I, c.J) : null;
-        var w = new Button { Content = "希望を見る", MinHeight = 48 };
+        var w = new Button { Content = CellSheetLogic.WishDayButton(cell is { } wc ? DayText.Short(_vm.Ui.StartDate, wc.J) : null), MinHeight = 48 };
         w.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(0, null, WishStaff: cell?.I, Day: cell?.J), ret); };
         var st = new Button { Content = SettingsLabel.For("yr_cons"), MinHeight = 48 };
         st.Click += (_, _) => { hide(); _goEditLanding?.Invoke(new EditLanding(2, "yr_cons"), ret); };
@@ -2088,7 +2104,9 @@ public sealed partial class ScheduleView : UserControl
         foreach (var l in sheet.C1) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
         if (CellSheetLogic.PeriodLine(ui.StartDate, ui.Days) is { } period) panel.Children.Add(new TextBlock { Text = period, FontSize = 13, Opacity = 0.8 });
         // 選んだ勤務の回数の問題を同じダイアログで探す。切り替えたら前の探索の購読を外してから付け直す（閉じたときも外す）。
-        int? pick = null;
+        // 行を選ぶまで案は探さない。選べる行が 1 つだけなら最初から選んでおく（Android 3.683.0）。
+        int? pick = focus.Staff is not null ? CellSheetLogic.StaffSheetPreselect(sheet.Chips.Select(c => c.ShiftIdx)) : null;
+        var general = false;
         var detach = new List<Action>();
         var fixHost = new StackPanel { Spacing = 6 };
         var rows = new StackPanel { Spacing = 4 };
@@ -2109,7 +2127,10 @@ public sealed partial class ScheduleView : UserControl
             else
             {
                 if (c1Stuck) fixHost.Children.Add(C1StuckButtons(() => dialog.Hide()));
-                fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
+                var fold = new HyperlinkButton { Content = general ? "この職員のほかの変更案を閉じる" : CellSheetLogic.StaffOtherFixesLabel, MinHeight = 48 };
+                fold.Click += (_, _) => { general = !general; Mount(); };
+                fixHost.Children.Add(fold);
+                if (general) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
             }
         }
         void RenderRows()
@@ -2444,6 +2465,8 @@ public sealed partial class ScheduleView : UserControl
         }
 
         var countsPanel = new StackPanel { Spacing = 2 };
+
+        var moreOps = new StackPanel { Spacing = 8, Visibility = Visibility.Collapsed };
         var problemPanel = new StackPanel { Spacing = 4 };
         var singleNote = new TextBlock { Text = CellSheetLogic.SingleCellNote, TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
         var riskReason = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Visibility = Visibility.Collapsed };
@@ -2458,12 +2481,19 @@ public sealed partial class ScheduleView : UserControl
         void FillProblem()
         {
             problemPanel.Children.Clear();
-            problemPanel.Children.Add(Body($"現在の勤務：{Sym(cur)}", bold: true));
+            // [Android 3.683.0] 1 行目＝状態（重さの色）、2 行目＝一般の説明、今の勤務。
+            if (status.Severity != CellSeverity.None)
+            {
+                var stLine = Body(status.Text.StartsWith("⚠ ", StringComparison.Ordinal) ? status.Text[2..] : status.Text, bold: true);
+                if (status.Severity == CellSeverity.Hard) stLine.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"];
+                problemPanel.Children.Add(stLine);
+            }
+            if (fams.Count > 0) problemPanel.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf), size: 13));
+            problemPanel.Children.Add(Body($"現在の勤務：{Sym(cur)}"));
             if (dilemma) problemPanel.Children.Add(Body(CellSheetLogic.WishKeptLine(Sym(wish)), size: 13));
             var shortCaution = _vm.ShortSideCautionFor(i, j, name);
             if (shortCaution is not null) problemPanel.Children.Add(Body(shortCaution));
             if (fams.Count == 0 && shortCaution is null) problemPanel.Children.Add(Body("このセルに違反はありません。"));
-            else if (fams.Count > 0) problemPanel.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf)));
             var partnersNow = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
             if (CellSheetLogic.SequenceLine(_vm.Ui.StartDate, _vm.Ui.Schedule[i], partnersNow.Append(j).Distinct().ToList(), _vm.Ui.ShiftSymbols) is { } seq)
                 problemPanel.Children.Add(Body(seq));
@@ -2473,8 +2503,8 @@ public sealed partial class ScheduleView : UserControl
             countsPanel.Children.Clear();
             // 回数の目標未満を、勤務を減らす前に見える位置に残す。
             var counts = CellSheetLogic.CellCountLines(_vm.Ui, i, cur, _vm.StaffCellLimits);
-            if (counts.Count == 0) return;
-            countsPanel.Children.Add(Caption("今月の勤務回数"));
+            if (!CellSheetLogic.ShowCountSection(_vm.Ui.CountFamilies.Keys.Concat(_vm.Ui.CountViolations.Keys), i, counts)) return;
+            countsPanel.Children.Add(Caption(CellSheetLogic.CountSectionTitle));
             foreach (var l in counts) countsPanel.Children.Add(Body(l, size: 13));
         }
 
@@ -2631,7 +2661,7 @@ public sealed partial class ScheduleView : UserControl
                 panel.Children.Add(pick);
                 var wishBtn = Wide("希望を確認・登録する");
                 wishBtn.Click += (_, _) => Reopen(i, j, 1);
-                panel.Children.Add(wishBtn);
+                moreOps.Children.Add(wishBtn);
             }
             if (mode == 1 && wish is not null)
             {
@@ -2672,18 +2702,32 @@ public sealed partial class ScheduleView : UserControl
                 // 手動固定は通常の修正操作と分け、何をするか・しないかを添える。
                 if (cur >= 0)
                 {
-                    panel.Children.Add(Caption(CellSheetLogic.PinTitle));
-                    panel.Children.Add(new TextBlock { Text = CellSheetLogic.PinNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    moreOps.Children.Add(Caption(CellSheetLogic.PinTitle));
+                    moreOps.Children.Add(new TextBlock { Text = CellSheetLogic.PinNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     var pin = new Button { Content = pinned ? "手動固定を外す" : "手動固定する", MinHeight = 48 };
                     pin.Click += (_, _) => { _vm.TogglePin(i, j); Reopen(i, j, 0); };
-                    panel.Children.Add(pin);
+                    moreOps.Children.Add(pin);
                 }
-            }
-            if (status.Severity != CellSeverity.None)
-            {
-                var memo = new HyperlinkButton { Content = "⚑ ルールの見直し候補に入れる" };
-                memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
-                panel.Children.Add(memo);
+                if (status.Severity != CellSeverity.None)
+                {
+                    var memo = new HyperlinkButton { Content = "⚑ ルールの見直し候補に入れる" };
+                    memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
+                    moreOps.Children.Add(memo);
+                }
+                // [Android 3.683.0] 希望・手動固定・ルールの見直しは「ほかの操作」に畳む（主の操作を先に見せる）。
+                if (moreOps.Children.Count > 0)
+                {
+                    var moreToggle = new HyperlinkButton { Content = CellSheetLogic.MoreOpsLabel, MinHeight = 48 };
+                    moreToggle.Click += (_, _) =>
+                    {
+                        var nowOpen = moreOps.Visibility != Visibility.Visible;
+                        moreOps.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
+                        moreToggle.Content = nowOpen ? "ほかの操作を閉じる" : CellSheetLogic.MoreOpsLabel;
+                    };
+                    panel.Children.Add(moreToggle);
+                    panel.Children.Add(moreOps);
+                }
+                panel.Children.Add(new TextBlock { Text = CellSheetLogic.PickMarksLegend, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             }
             if (mode == 1)
             {

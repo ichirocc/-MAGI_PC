@@ -203,13 +203,19 @@ public sealed partial class MagiViewModel
         _altBoardKey = _currentSchedule is { } cur ? BoardKey(cur) : 0L;
         _altStateKey = StateKey(st);
         // [Main負荷回避] 他案（最大3件）の違反チェックは同期CPU → Default で実行してから反映。
-        var summaries = await System.Threading.Tasks.Task.Run(() =>
-            alts.Select((sch, idx) =>
+        var curNow = _currentSchedule?.Copy2D();
+        var rows = await System.Threading.Tasks.Task.Run(() =>
+        {
+            var curRep = curNow is null ? null : UnifiedViolationChecker.Check(st, curNow);
+            return alts.Select((sch, idx) =>
             {
                 var rep = UnifiedViolationChecker.Check(st, sch);
-                return $"案{idx + 1}: 必須={rep.Hard} 合計={rep.Total}";
-            }).ToList());
-        Ui.Alternatives = summaries;
+                var worse = curRep is not null && UnifiedViolationChecker.BetterReport(curRep, rep);
+                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse), Worse: worse);
+            }).ToList();
+        });
+        Ui.Alternatives = rows.Select(r => r.Text).ToList();
+        Ui.AlternativesWorse = rows.Select(r => r.Worse).ToList();
         Ui.AlternativeApplied = -1;
     }
 

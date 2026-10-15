@@ -53,6 +53,8 @@ public sealed partial class UiState : ObservableObject
     /// 「盤面がある」旗なので、分析の「計算済み／未計算」はこちらだけを読む（手操作で false に戻す）。
     /// </summary>
     [ObservableProperty] private bool engineRan;
+    /// <summary>直前の作成で前の勤務表のほうが良く、前のままにした（作成の札とお知らせの言い方を変える）。</summary>
+    [ObservableProperty] private bool keptPrevious;
     /// <summary>自動作成のあとに手で変えたか（EngineRan が手操作で false に戻った盤面）。上部の「自動作成：済み（そのあと手で変更あり）」だけが読む。保存しない。</summary>
     [ObservableProperty] private bool ranBeforeEdit;
     /// <summary>いまの盤面が S6（設定を緩めて手順を当てる）の結果か。分析の注記だけが読む。EngineRan を書く箇所で false に戻す。</summary>
@@ -183,6 +185,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>ws3 希望 "i,j"->shiftIdx（表示融合用）。</summary>
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
+    /// <summary>印と一文の写し（<see cref="DisplaySnapshot"/>）。検査結果の反映（MakeUi）で作り直す。保存しない。</summary>
+    [ObservableProperty] private DisplaySnapshot? display;
     /// <summary>[S5] 試算できる希望のキー（実現可能で手動固定でない）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
     /// <summary>[#41] 手動固定のセル "i,j"。</summary>
@@ -254,6 +258,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>他の案（採用案以外の候補サマリ）。</summary>
     [ObservableProperty] private IReadOnlyList<string> alternatives = Array.Empty<string>();
+    /// <summary>他の案ごとに、計算した時点の勤務表より悪いか。</summary>
+    [ObservableProperty] private IReadOnlyList<bool> alternativesWorse = Array.Empty<bool>();
 
     /// <summary>いま盤面に適用している他の案の添字（-1=どれでもない）。</summary>
     [ObservableProperty] private int alternativeApplied = -1;

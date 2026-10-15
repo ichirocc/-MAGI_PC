@@ -62,7 +62,7 @@ public sealed partial class MagiViewModel
         var top = keys.MaxBy(k => breakdown.GetValueOrDefault(k, 0));
         if (top is null) return null;
         var n = breakdown.GetValueOrDefault(top, 0);
-        return n > 0 ? $"『{HardFamilyJp(top)}』（{n}件）" : null;
+        return n > 0 ? $"{HardFamilyJp(top)}（{n}{AnalysisTriage.UnitOf(top)}）" : null;
     }
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="RunV6FullOptimize"/> 呼出しが背後で走らせる Task。</summary>
@@ -72,7 +72,7 @@ public sealed partial class MagiViewModel
     public void RunV6FullOptimize()
     {
         var st = _state; var sched = _currentSchedule;
-        if (st is not null && sched is not null && !Ui.Running && PreRunCheck.Fingerprint(st, sched) != _preRunAckKey)
+        if (st is not null && sched is not null && !Ui.Running && CellSheetLogic.PreRunAckFingerprint(st) != _preRunAckKey)
         {
             // [Android 3.672.0] 作成の前に「勤務表を作成する」シート（自動で行うこと・保持するもの・時間と、残る／外れる項目）を出して止まる。
             //   同じデータ（指紋）で一度「勤務表を作成」を押したら、次からは出さない（直す項目が無いときも出す）。
@@ -90,7 +90,7 @@ public sealed partial class MagiViewModel
     {
         var st = _state; var sched = _currentSchedule;
         if (st is null || sched is null) return;
-        _preRunAckKey = PreRunCheck.Fingerprint(st, sched);
+        _preRunAckKey = CellSheetLogic.PreRunAckFingerprint(st);
         DismissPreRun();
         LogOp("I", "勤務表を作成する 勤務表を作成");
         StartFullOptimize(pushUndo: true, null, hintShown: true);
@@ -124,10 +124,7 @@ public sealed partial class MagiViewModel
 
     private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
 
-    private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0
-        ? $"前回と同じ設定で再作成します。前回の必須違反 {AnalysisTriage.HardText(_lastResultBreakdown, _lastResultHard)}のうち、いちばん多いのは{_lastTopHardFamily ?? "『不明』"}です。" +
-          "同じ設定では同じ違反が残りやすいため、編集タブでこれを1つ緩めると改善の可能性が高いです。"
-        : null;
+    private string? RepeatHint() => RunSig() == _lastSettingsSig && _lastResultHard > 0 ? CellSheetLogic.PreRunRepeatHintText(_lastTopHardFamily) : null;
 
     /// <summary>本実行。<paramref name="pushUndo"/>＝false は Undo を積まない（S5 の確定がすでに積んでいる）。</summary>
     private void StartFullOptimize(bool pushUndo, S5Ctx? s5, bool hintShown = false)
@@ -146,6 +143,7 @@ public sealed partial class MagiViewModel
         var engineRanBefore = Ui.EngineRan;
         Ui.MessageIsError = false;
         Ui.Running = true;
+        Ui.KeptPrevious = false;
         Ui.HasResult = false;
         Ui.CopilotHint = hint;
         Ui.WishCancelOutcome = null;
@@ -292,7 +290,7 @@ public sealed partial class MagiViewModel
                 var baseScore = new KeptResultText.Score(baseHard, baseReport.WeightedScore, baseTotal);
                 var capNote = res.CapZero?.KeptNote();
                 var keptMsg = s5 is null
-                    ? KeptResultText.WithNote(KeptResultText.Screen(nowScore, baseScore), capNote)
+                    ? KeptResultText.WithNote(KeptResultText.Screen(res.Report.Breakdown, baseReport.Breakdown), capNote)
                     : s5.H0 - baseReport.Hard > 0
                         ? $"希望（{s5.Label}）を調整しました（希望は外れています）。必須違反は {s5.H0}件 → {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}（外した分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
                         : $"希望（{s5.Label}）を調整しましたが（希望は外れています）、再作成しても必須違反は減りませんでした（必須違反 {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}）。元に戻すで希望と勤務表をまとめて戻せます。";
@@ -305,6 +303,7 @@ public sealed partial class MagiViewModel
                     ui.RanBeforeEdit = false;
                     ui.RelaxedBoard = false;
                     ui.Message = keptMsg;
+                    ui.KeptPrevious = s5 is null;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, baseReport.Hard, keptMsg);
                 }, ct: ct);
                 LogOp("I", KeptResultText.WithNote(KeptResultText.Log("再実行", nowScore, baseScore), capNote));
@@ -502,6 +501,7 @@ public sealed partial class MagiViewModel
         var hadResult = Ui.HasResult;
         Ui.MessageIsError = false;
         Ui.Running = true;
+        Ui.KeptPrevious = false;
         Ui.HasResult = false;
         Ui.RunSummary = null;
         Ui.StopSummary = null;

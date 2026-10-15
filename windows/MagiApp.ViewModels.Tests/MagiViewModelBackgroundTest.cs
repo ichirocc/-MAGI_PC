@@ -227,7 +227,8 @@ public class MagiViewModelBackgroundTest : IDisposable
 
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.HasResult);
-        Assert.Contains("改善が確認できなかったため、前回の勤務表を維持しました", vm.Ui.Message);
+        Assert.Contains("再作成した案は前の勤務表より良くなかったため採用していません", vm.Ui.Message);
+        Assert.True(vm.Ui.KeptPrevious);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("前回を維持"));
     }
 
@@ -355,7 +356,7 @@ public class MagiViewModelBackgroundTest : IDisposable
         await vm.ApplyBgResult(new OptimizationRepository.BgResult(MinimalState.BuildSchedule(), CovUReport(2), "test", 0L));
 
         Assert.Equal(2, vm._lastResultHard);
-        Assert.Equal("『人員不足（必要人数）』（2件）", vm._lastTopHardFamily);
+        Assert.Equal("人員不足（必要人数）（2人）", vm._lastTopHardFamily);
     }
 
     /// <summary>維持の分岐も前景と同じ＝次回ヒントは維持した盤面（ここでは必須0）から取る。</summary>
@@ -374,7 +375,8 @@ public class MagiViewModelBackgroundTest : IDisposable
         vm.RunInBackground();   // 入力（違反0）より悪い結果＝入力を維持する
         await vm.LastRunInBackgroundTask!;
 
-        Assert.Contains("改善が確認できなかったため、前回の勤務表を維持しました", vm.Ui.Message);
+        Assert.Contains("再作成した案は前の勤務表より良くなかったため採用していません", vm.Ui.Message);
+        Assert.True(vm.Ui.KeptPrevious);
         Assert.Equal(0, vm._lastResultHard);
         Assert.Null(vm._lastTopHardFamily);
     }

@@ -20,8 +20,11 @@ public static class KeptResultText
         : now.Total != prev.Total ? (now.Total > prev.Total ? "違反の合計が多いため" : "違反の合計が少ないため")
         : "同じ点数のため";
 
-    public static string Screen(Score now, Score prev) =>
-        $"改善が確認できなかったため、前回の勤務表を維持しました（今回の案は採用していません）。理由：{Reason(now, prev)}（今回 {Parts(now)}／前回 {Parts(prev)}。比べる順＝必須→評価点→合計）。";
+    /// <summary>前の勤務表のままにしたときのお知らせ（比べた結果は件数で言う。内部の評価点は出さない）。</summary>
+    public static string Screen(IReadOnlyDictionary<string, int> nowBreakdown, IReadOnlyDictionary<string, int> prevBreakdown) =>
+        $"再作成した案は前の勤務表より良くなかったため採用していません（再作成した案：{AnalysisTriage.ReportCountsText(nowBreakdown)}／前の勤務表：{AnalysisTriage.ReportCountsText(prevBreakdown)}）。勤務表は変わっていません。";
+
+    public const string KeptTitle = "再作成しましたが、前の勤務表のほうが良かったため前のままです";
 
     public static string Log(string prefix, Score now, Score prev) =>
         $"{prefix}: 今回 {Parts(now)} は前回 {Parts(prev)} 以下に改善せず（{Reason(now, prev)}）→ 前回を維持";
@@ -40,4 +43,16 @@ public static class CompletedText
     /// <summary>採用した結果の件数が入力より増えたのに重み付き評価点が下がったとき、採用の理由を 1 文で（件数だけ見ると悪化に見えるため）。それ以外は null。</summary>
     public static string? AdoptedDespiteMore(int prevTotal, int newTotal, double prevWeighted, double newWeighted) =>
         newTotal > prevTotal && newWeighted < prevWeighted ? $"件数は +{newTotal - prevTotal} ですが、重い違反が減ったため改善として採用しました" : null;
+
+    public const string NotifyRunningTitle = "勤務表をつくっています";
+    public const string NotifyDoneTitle = "勤務表ができました";
+
+    /// <summary>完了通知の 2 行。1 行目＝必須違反、2 行目＝要調整（pt の族は数えない）と次の一歩。Kotlin <c>notifyDoneLines</c>。</summary>
+    public static IReadOnlyList<string> NotifyDoneLines(int hard, IReadOnlyDictionary<string, int> breakdown)
+    {
+        var soft = MagiEngine.V6.MirrorKeys.Soft.Where(k => AnalysisTriage.UnitOf(k) != "pt");
+        var softText = AnalysisTriage.UnitTotals(breakdown, soft) ?? "なし";
+        return hard == 0 ? new[] { "必須違反はありません", $"要調整 {softText}。配布前の確認で中身を確かめてください" }
+            : new[] { $"必須違反 {AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Hard) ?? $"{hard}件"}", $"要調整 {softText}。開いて直し方を確かめてください" };
+    }
 }
