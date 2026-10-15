@@ -424,7 +424,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (st is null || sched is null) return;
         var target = NeedCellLimits(shiftIndex, dayIndex) is { } need ? new FixTarget(null, shiftIndex, dayIndex, need.Lo, true, "必要人数") : null;
-        var s = new FixSuggestion(FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label, 0, 0, System.Array.Empty<(string, int)>());
+        var s = V6PortAnalyzer.EvaluatedSuggestion(st, sched, FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label);
         PreviewOrApplyFix(s, BoardKey(sched), StateKey(st));
         if (Ui.ChainPreview is { } cp) Ui.ChainPreview = cp with { FixTarget = target };
     }
@@ -465,7 +465,7 @@ public sealed partial class MagiViewModel
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
             BoardKey: BoardKey(snap), StateKey: StateKey(st));
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes) with { Target = target };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with { Target = target };
     }
 
     /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
@@ -1702,6 +1702,11 @@ public sealed partial class MagiViewModel
         {
             Ui.MessageIsError = true;
             Ui.Message = SettingFixLogic.WishChangedMessage;
+        }
+        else if (SettingFixLogic.WishDiagnosisStale(s, issue))
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = SettingFixLogic.WishStaleMessage;
         }
         else if (issue.Action == SettingFixAction.DeleteDupSeq)
         {

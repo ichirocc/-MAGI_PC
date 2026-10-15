@@ -29,6 +29,8 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
 
     /// <summary>変更を当てるボタン（違反セルの半自動修正仕様 §5: 押すと検証してから全変更を反映する。Kotlin <c>APPLY_CHANGE_BUTTON</c>）。</summary>
     public const string ApplyChangeButton = "この変更を適用";
+    /// <summary>[3.687.0/R09] 確認の画面の門の説明（FixApplyGate と同じ規則: 必須を増やさない・別の場所に必須を生まない・希望の固定を崩さない。要調整だけの改善は通る）。</summary>
+    public const string PreviewGateNote = "適用の直前に最新の勤務表でもう一度検査し、必須違反を増やす・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。";
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
     public const string KeepCurrentButton = "今は変更しない";
     /// <summary>変更を当てる前の確認の見出し（1 手でも入替でも同じ）。</summary>
@@ -37,9 +39,19 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
     /// <param name="shiftNames">登録された勤務名（記号と違えば「記号（勤務名）」で併記）。</param>
     /// <param name="wishes">希望 "i,j"→シフト（あれば行ごとに希望どおりか添える）。</param>
     public static ChainFixPreview Of(FixSuggestion s, int[][] snapshot, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate,
-        IReadOnlyList<string>? shiftNames = null, IReadOnlyDictionary<string, int>? wishes = null)
+        IReadOnlyList<string>? shiftNames = null, IReadOnlyDictionary<string, int>? wishes = null,
+        IReadOnlyList<int>? staffIds = null, IReadOnlyList<string>? staffGroups = null)
     {
-        string Name(int i) => i >= 0 && i < staffNames.Count ? staffNames[i] : $"職員{i + 1}";
+        var dupNames = staffNames.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        string Name(int i)
+        {
+            if (i < 0 || i >= staffNames.Count) return $"職員{i + 1}";
+            var n = staffNames[i];
+            if (!dupNames.Contains(n)) return n;
+            var g = staffGroups is not null && i < staffGroups.Count ? staffGroups[i] : null;
+            return n + (!string.IsNullOrWhiteSpace(g) ? $"（{g}）" : $"（{i + 1}番目）");
+        }
+        int Key(int i) => staffIds is not null && i >= 0 && i < staffIds.Count && staffIds[i] > 0 ? staffIds[i] : i;
         string Sym(int k) => k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}";
         string Shift(int k)
         {
@@ -57,7 +69,7 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
             // その日の人数（変更前の勤務と変更後の勤務）。休みを移す案は両日の休みの人数が並ぶ。
             var impact = string.Join("、", new[] { inRange ? snapshot[op.Staff][op.Day] : (int?)null, op.ToShift }.OfType<int>().Distinct().Select(k =>
                 $"{Sym(k)} {snapshot.Count(r => op.Day >= 0 && op.Day < r.Length && r[op.Day] == k)}人 → {after.Count(r => op.Day >= 0 && op.Day < r.Count && r[op.Day] == k)}人"));
-            return new ChangeRow(Name(op.Staff), DayText.Short(startDate, op.Day), inRange ? Shift(snapshot[op.Staff][op.Day]) : "?", Shift(op.ToShift), wish, impact);
+            return new ChangeRow(Name(op.Staff), DayText.Short(startDate, op.Day), inRange ? Shift(snapshot[op.Staff][op.Day]) : "?", Shift(op.ToShift), wish, impact, Key(op.Staff));
         }).ToList();
         var changes = rows.Select(r => $"{r.Staff} {r.Date} {r.Before} → {r.After}" + (r.Wish.Length > 0 ? $"・{r.Wish}" : "")).ToList();
         // 人数・マス数は本文 1 行目（提案のラベル）が持つ（Android 3.658.0: 題に入れると途中で折り返した）。
@@ -65,5 +77,6 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
     }
 }
 
-/// <summary>変わるセル 1 つ（Kotlin <c>ChangeRow</c>）。Wish＝希望があるときの注記（希望どおり／希望と異なる）、Impact＝その日の人数の変化。</summary>
-public sealed record ChangeRow(string Staff, string Date, string Before, string After, string Wish = "", string Impact = "");
+/// <summary>変わるセル 1 つ（Kotlin <c>ChangeRow</c>）。Wish＝希望があるときの注記（希望どおり／希望と異なる）、Impact＝その日の人数の変化。
+/// StaffKey＝職員 ID（無ければ並び順）＝同名でも別の人として束ねる。Staff は表示名（同名の職員がいればグループ記号を添える）。</summary>
+public sealed record ChangeRow(string Staff, string Date, string Before, string After, string Wish = "", string Impact = "", int StaffKey = -1);

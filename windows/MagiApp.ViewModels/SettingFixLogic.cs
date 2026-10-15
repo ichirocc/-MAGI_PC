@@ -13,14 +13,41 @@ public static class SettingFixLogic
 
     public const string WishAlreadyRemovedMessage = "この希望はすでに外れています";
 
+    public const string WishStaleMessage = "診断のあとで職員・担当できるシフト・希望などの設定が変わったため、取り消しませんでした。診断をやり直してください";
+
+    /// <summary>[3.687.0/R02] 診断した職員を ID で今の並びに引き直した希望のキー（ID を持たない古い診断は元のキー、職員がいなければ null）。</summary>
+    public static string? CurrentWishKey(MagiState s, SettingIssue issue)
+    {
+        var key = issue.WishKey;
+        if (key is null) return null;
+        if (issue.WishStaffId is not int id) return key;
+        var i = -1;
+        for (var n = 0; n < s.StaffList.Count; n++) if (s.StaffList[n].Id == id) { i = n; break; }
+        if (i < 0) return null;
+        var comma = key.IndexOf(',');
+        return $"{i},{(comma < 0 ? key : key[(comma + 1)..])}";
+    }
+
+    /// <summary>診断のときと入力（<see cref="WishDiagnosis.Fingerprint"/>）が違う＝診断が古い。職員がいなくなっていても古いとみなす。</summary>
+    public static bool WishDiagnosisStale(MagiState s, SettingIssue issue)
+    {
+        if (issue.Action != SettingFixAction.RemoveWish || issue.WishFingerprint is not long fp) return false;
+        var key = CurrentWishKey(s, issue);
+        if (key is null) return true;
+        var comma = key.IndexOf(',');
+        var i = int.Parse(comma < 0 ? key : key[..comma]);
+        if (KotlinInterop.ToIntOrNull(comma < 0 ? key : key[(comma + 1)..]) is not int j) return true;
+        return WishDiagnosis.Fingerprint(s, i, j) != fp;
+    }
+
     /// <summary>診断のあとで対象の希望が別の勤務に変わったか（消えていれば <see cref="WishAlreadyRemoved"/> の側＝取り消し済みと同じ）。</summary>
     public static bool WishChanged(MagiState s, SettingIssue issue) =>
-        issue.Action == SettingFixAction.RemoveWish && issue.WishKey is { } k
+        issue.Action == SettingFixAction.RemoveWish && CurrentWishKey(s, issue) is { } k
         && s.Wishes.TryGetValue(k, out var v) && v != issue.WishShift;
 
     /// <summary>外そうとした希望がもう無い（別の操作で外れた）か。</summary>
     public static bool WishAlreadyRemoved(MagiState s, SettingIssue issue) =>
-        issue.Action == SettingFixAction.RemoveWish && issue.WishKey is { } k && !s.Wishes.ContainsKey(k);
+        issue.Action == SettingFixAction.RemoveWish && CurrentWishKey(s, issue) is { } k && !s.Wishes.ContainsKey(k);
 
     public static MagiState? Apply(MagiState s, SettingIssue issue)
     {
@@ -28,9 +55,9 @@ public static class SettingFixLogic
         {
             case SettingFixAction.RemoveWish:
             {
-                var key = issue.WishKey;
+                var key = CurrentWishKey(s, issue);
                 if (key is null) return null;
-                if (!s.Wishes.ContainsKey(key) || WishChanged(s, issue)) return null;
+                if (!s.Wishes.ContainsKey(key) || WishChanged(s, issue) || WishDiagnosisStale(s, issue)) return null;
                 var d = new Dictionary<string, int>(s.Wishes);
                 d.Remove(key);
                 return s with { Wishes = d };

@@ -458,8 +458,8 @@ public sealed class Problem
             int si = ShiftIdxOf(it.ShiftKigou);
             bool hasLo = !string.IsNullOrWhiteSpace(it.L);
             bool hasHi = !string.IsNullOrWhiteSpace(it.U);
-            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L.Trim()) ?? 0) : 0;
-            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U.Trim()) ?? int.MaxValue) : int.MaxValue;
+            int lo = RangeBound(it.L) ?? 0;
+            int hi = RangeBound(it.U) ?? int.MaxValue;
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41List.Add(new C41(gi, si, lo, hi));
             else
             {
@@ -492,8 +492,8 @@ public sealed class Problem
             int si = ShiftIdxOf(it.ShiftKigou);
             bool hasLo = !string.IsNullOrWhiteSpace(it.L);
             bool hasHi = !string.IsNullOrWhiteSpace(it.U);
-            int lo = hasLo ? (KotlinInterop.ToIntOrNull(it.L.Trim()) ?? 0) : 0;
-            int hi = hasHi ? (KotlinInterop.ToIntOrNull(it.U.Trim()) ?? int.MaxValue) : int.MaxValue;
+            int lo = RangeBound(it.L) ?? 0;
+            int hi = RangeBound(it.U) ?? int.MaxValue;
             if (gi >= 0 && si >= 0 && (hasLo || hasHi)) cons41sList.Add(new C41(gi, si, lo, hi));
             else
             {
@@ -519,6 +519,9 @@ public sealed class Problem
         }
         Cons42s = cons42sList;
     }
+
+    /// <summary>[3.687.0/R05] グループ/スキルグループのレンジの片側。空欄・数値でない・負は未設定（null＝制限なし）＝設定の見直しの「制限なし」と同じ読み。</summary>
+    private static int? RangeBound(string v) => KotlinInterop.ToIntOrNull(v.Trim()) is int n && n >= 0 ? n : null;
 
     /// <summary>記号が解決できたかを `〈〉` で示す表示（cons3 系の記録と同じ書式）。</summary>
     private static string Mark(string kigou, bool resolved) => resolved ? kigou : $"〈{kigou}〉";

@@ -435,9 +435,9 @@ public sealed partial class MainWindow : Window
         else body.Children.Add(Line(p.Suggestion.Label));
         body.Children.Add(Caption("変更する勤務"));
         if (p.Rows.Count == 0) foreach (var line in p.Changes) body.Children.Add(Line(line));
-        foreach (var g in p.Rows.GroupBy(x => x.Staff))
+        foreach (var g in p.Rows.GroupBy(x => x.StaffKey))
         {
-            body.Children.Add(Line($"対象：{g.Key}さん", bold: true));
+            body.Children.Add(Line($"対象：{g.First().Staff}さん", bold: true));
             var table = new Grid { ColumnSpacing = 8 };
             for (var c = 0; c < 3; c++) table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             void Cell(FrameworkElement el, int row, int col) { Grid.SetRow(el, row); Grid.SetColumn(el, col); table.Children.Add(el); }
@@ -487,7 +487,7 @@ public sealed partial class MainWindow : Window
         body.Children.Add(Line("・" + wishLine, size: 13));
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
         body.Children.Add(Line("・" + consultLine, size: 13));
-        body.Children.Add(new TextBlock { Text = "適用の直前に最新の勤務表でもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = ChainFixPreview.PreviewGateNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = CellSheetLogic.ConsultNotContactNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var schedule = _tabCache.TryGetValue("schedule", out var sv) ? sv as ScheduleView : null;

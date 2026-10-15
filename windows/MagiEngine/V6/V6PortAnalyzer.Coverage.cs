@@ -36,7 +36,9 @@ public sealed record CoverageShortfall(
     /// <summary>[3.642.0] 玉突き（多人数の入替）の手順が実在する枠（<c>ChainFixOps</c> で手順を取り出せる）。</summary>
     bool ChainVerified = false,
     /// <summary>[3.642.0] 移すと禁止連続(c3n)になるため候補から外れた人数（⑤の並びへの導線の根拠）。</summary>
-    int ForbidCount = 0)
+    int ForbidCount = 0,
+    /// <summary>[3.687.0/R01] <c>BlockedNow</c> のうち、移せる候補はいるのに限定探索（<c>ChainFills</c>）で入れ替えの手順が見つからなかっただけの枠。不能の証明ではない。</summary>
+    bool SearchMiss = false)
 {
     public IReadOnlyList<int> WishPinned { get; init; } = WishPinned ?? Array.Empty<int>();
 }
@@ -89,6 +91,18 @@ public sealed record CoverageDiagnosis(
 
     /// <summary>[3.344.0] 「いまの希望のままでは埋められない」と実証した枠の数（AllInfeasible とは別軸）。</summary>
     public int BlockedNowSlots => Shortfalls.Count(s => s.BlockedNow);
+    /// <summary>[3.687.0/R01] <c>BlockedNow</c> のうち限定探索で見つからなかっただけの枠（「不能」と言わない）。</summary>
+    public int SearchMissSlots => Shortfalls.Count(s => s.BlockedNow && s.SearchMiss);
+    /// <summary><c>BlockedNow</c> のうち候補がいない＝いまの希望・並びのままでは入れる人がいないと示せた枠。</summary>
+    public int ProvenBlockedSlots => BlockedNowSlots - SearchMissSlots;
+
+    private string BlockedNote()
+    {
+        var parts = new List<string>();
+        if (ProvenBlockedSlots > 0) parts.Add($"{ProvenBlockedSlots}枠は いまの希望のままでは不能");
+        if (SearchMissSlots > 0) parts.Add($"{SearchMissSlots}枠は 試した入れ替えでは埋まらなかった");
+        return parts.Count == 0 ? "" : "（うち" + string.Join("、", parts) + "）";
+    }
 
     /// <summary>
     /// [3.344.0] 不足枠が全部「充足不可 or いまの希望のままでは不能」＝この希望・担当のままでは
@@ -106,11 +120,13 @@ public sealed record CoverageDiagnosis(
         if (HasShortage)
         {
             outLines.Add($"[W] CoverageDiag: 人員不足 合計{TotalShortfall} — 充足不可{InfeasibleSlots}枠 / 充足可能{FixableSlots}枠" +
-                (BlockedNowSlots > 0 ? $"（うち{BlockedNowSlots}枠は いまの希望のままでは不能）" : "") +
-                (AllBlockedNow ? " ＝この希望・担当のままでは人員不足は減りません" : ""));
+                BlockedNote() +
+                (AllBlockedNow ? (SearchMissSlots == 0 ? " ＝この希望・担当のままでは人員不足は減りません" : " ＝試した入れ替えの範囲では人員不足は減りませんでした") : ""));
             foreach (var s in Shortfalls.Take(8))
             {
-                var v = s.Verdict == CoverageVerdict.Infeasible ? "充足不可" : "充足可能";
+                var v = s.Verdict == CoverageVerdict.Infeasible ? "充足不可"
+                    : s.BlockedNow && s.SearchMiss ? "試した入れ替えでは埋まらなかった"
+                    : "充足可能";
                 outLines.Add($"[W] CoverageDiag: {s.DayLabel} {s.ShiftSymbol} 必要{s.Need}/現状{s.Got}(不足{s.Miss}) — {v}: {s.Reason}");
             }
             if (Shortfalls.Count > 8) outLines.Add($"[W] CoverageDiag: ほか{Shortfalls.Count - 8}枠");
@@ -181,6 +197,21 @@ public static partial class V6PortAnalyzer
         var after = UnifiedViolationChecker.Check(state, work);
         // 見せる前に当てるときと同じ規則で弾く（別の職員・日・枠に必須違反を新たに生む入れ替えは出さない）。
         if (ViolationIdentity.IntroducesHardViolation(before, after)) return null;
+        return SuggestionOf(FixKind.Chain, ops, label, before, after);
+    }
+
+    /// <summary>[3.687.0/R08] 手を正式チェッカーの前後 1 回ずつで採点した案にする（未評価の 0 を確認の画面に出さない）。</summary>
+    public static FixSuggestion EvaluatedSuggestion(MagiState state, int[][] schedule, FixKind kind, IReadOnlyList<FixCell> ops, string label)
+    {
+        var before = UnifiedViolationChecker.Check(state, schedule);
+        var work = schedule.Copy2D();
+        foreach (var op in ops)
+            if (op.Staff >= 0 && op.Staff < work.Length && op.Day >= 0 && op.Day < work[op.Staff].Length) work[op.Staff][op.Day] = op.ToShift;
+        return SuggestionOf(kind, ops, label, before, UnifiedViolationChecker.Check(state, work));
+    }
+
+    private static FixSuggestion SuggestionOf(FixKind kind, IReadOnlyList<FixCell> ops, string label, ViolationReport before, ViolationReport after)
+    {
         var diff = new List<(string Family, int Delta)>();
         foreach (var key in before.Breakdown.Keys.Union(after.Breakdown.Keys))
         {
@@ -188,7 +219,7 @@ public static partial class V6PortAnalyzer
             if (d != 0) diff.Add((key, d));
         }
         // Kotlin の sortBy（安定ソート）と同じ順。List.Sort は不安定なので LINQ の OrderBy を使う。
-        return new FixSuggestion(FixKind.Chain, ops, label, after.Hard - before.Hard, after.Total - before.Total,
+        return new FixSuggestion(kind, ops, label, after.Hard - before.Hard, after.Total - before.Total,
             diff.OrderBy(x => x.Delta).ToList());
     }
 
@@ -266,6 +297,7 @@ public static partial class V6PortAnalyzer
                 var blockedNow = false;
                 var chainOk = false;
                 var forbidN = 0;
+                var missOnly = false;
                 string reason;
                 if (verdict == CoverageVerdict.Infeasible && wishPinned.Count > 0)
                 {
@@ -317,6 +349,7 @@ public static partial class V6PortAnalyzer
                     var chainVerified = cascade > 0 && ChainFills(p, norm, k, j);
                     blockedNow = free == 0 && !(cascade > 0 && chainVerified);
                     chainOk = chainVerified;
+                    missOnly = blockedNow && cascade > 0;
                     forbidN = forbid;
                     string hint;
                     if (free > 0)
@@ -330,7 +363,7 @@ public static partial class V6PortAnalyzer
                     reason = $"{hint}。内訳: {sym}を担当できる{capacity}人（すでに{sym}に{already}人）・すぐ移せる{free}人・入れ替えが要る{cascade}人・本人の希望{pinned}人・禁止の並びになる{forbid}人";
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
-                    verdict, reason, blockedNow, wishPinned, chainOk, forbidN));
+                    verdict, reason, blockedNow, wishPinned, chainOk, forbidN, missOnly));
             }
         }
         // Kotlin の sortWith は安定ソート。C# List<T>.Sort は不安定なので LINQ の OrderBy 系（安定）で揃える。

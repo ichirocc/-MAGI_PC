@@ -916,13 +916,19 @@ public sealed partial class HomeView : UserControl
         ShortageHeadline.Text = diag.AllInfeasible
             ? $"不足 {diag.TotalShortfall} 人はすべて、担当できる人が足りません。今のデータでは満たせません。" +
                 "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
-            : diag.AllBlockedNow
+            : diag.AllBlockedNow && diag.SearchMissSlots == 0
                 ? $"不足 {diag.TotalShortfall} 人は、いまの希望・担当のままでは埋められません。" +
                     "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
-                : diag.BlockedNowSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.BlockedNowSlots} 枠は" +
+            : diag.AllBlockedNow
+                ? $"不足 {diag.TotalShortfall} 人は、試した入れ替えでは埋まりませんでした（埋められないと決まったわけではありません）。" +
+                    "再作成するか、希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると埋まりやすくなります（編集タブ＞年間マスター①）。"
+                : diag.ProvenBlockedSlots > 0
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.ProvenBlockedSlots} 枠は" +
                         "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
                         "残りは再作成すると解消し得ます。"
+                : diag.SearchMissSlots > 0
+                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.SearchMissSlots} 枠は試した入れ替えでは埋まりませんでした。" +
+                        "再作成すると解消し得ます。"
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageEnoughText}"
                         : $"不足 {diag.TotalShortfall} 人 — {CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠 / {CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
@@ -942,7 +948,7 @@ public sealed partial class HomeView : UserControl
             head.Children.Add(title);
             var chip = new TextBlock
             {
-                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
+                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow && s.SearchMiss ? CellSheetLogic.ShortageLabelSearchMiss : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
                 Style = StyleOf("MagiLabelMediumTextStyle"), VerticalAlignment = VerticalAlignment.Center,
                 Foreground = BrushOf(infeasible ? "MagiErrorBrush" : "MagiPrimaryBrush"),
             };

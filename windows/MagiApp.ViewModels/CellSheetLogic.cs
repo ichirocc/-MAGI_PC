@@ -1533,6 +1533,7 @@ public static class CellSheetLogic
 
     public const string ShortageLabelInfeasible = "担当できる人が足りない";
     public const string ShortageLabelBlocked = "今の希望では埋まらない";
+    public const string ShortageLabelSearchMiss = "試した入れ替えでは埋まらなかった";
     public const string ShortageLabelFixable = "動かせば埋まる";
     public const string ShortageEnoughText = "担当できる人の数は足りています。なおし方を見るで 1 人ずつ入れられます";
 
