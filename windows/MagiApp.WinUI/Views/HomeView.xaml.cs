@@ -234,7 +234,7 @@ public sealed partial class HomeView : UserControl
             bigLabel = "勤務表をつくる"; bigEnabled = true;
             helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
             phase = "探索"; phaseHex = MagiAccent.Blue;
-            _bigAction = _vm.RunV6FullOptimize; _helperAction = _vm.GenerateSmartInitial;
+            _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
         }
         else if (ui.BestHard == 0L)
         {
