@@ -201,14 +201,19 @@ public sealed partial class HomeView : UserControl
         string? helperLabel;
         string? body = null, note = null;   // 見出しの下の本文と注記（S6 の段だけ使う）
         bool bigEnabled;
-        if (ui.Running)
+        var hardFix0 = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
+        var relax0 = !ui.Running && ui.HasResult && ui.BestHard > 0 ? _vm.RelaxTrialFor() : null;
+        var hp = CellSheetLogic.HomePlanOf(ui.Running, ui.HasResult, ui.BestHard == 0L, infeasible, shortfalls.Any(s => s.WishPinned.Count > 0), guidedFix is not null,
+            hardFix0, ui.FixFocusName.Length == 0, ui.FixSearching, ui.FixSearched, relax0 is not null, ui.StalledHardFamilies.Count > 0, !cands.IsEmpty,
+            ui.SaveState == SaveState.Failed, ui.Consults.Count);
+        if (hp.Kind == HomePlanKind.Running)
         {
             bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
             headline = ""; bigLabel = ""; bigEnabled = false; helperLabel = null;
             phase = ""; phaseHex = "";
             _bigAction = () => { }; _helperAction = () => { };
         }
-        else if (!ui.HasResult)
+        else if (hp.Kind == HomePlanKind.Make)
         {
             bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
             headline = "② ボタンひとつで、勤務表を作ります。";
@@ -217,7 +222,7 @@ public sealed partial class HomeView : UserControl
             phase = "組み立て"; phaseHex = MagiAccent.Blue;
             _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
         }
-        else if (ui.BestHard == 0L)
+        else if (hp.Kind == HomePlanKind.PreDist)
         {
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
             // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
@@ -229,7 +234,7 @@ public sealed partial class HomeView : UserControl
             phase = "完成"; phaseHex = MagiAccent.Green;
             _bigAction = () => _ = ShowPreDistributionAsync(); _helperAction = () => _window.SelectTab("schedule");
         }
-        else if (infeasible && shortfalls.Any(s => s.WishPinned.Count > 0))
+        else if (hp.Kind == HomePlanKind.WishInfeasible)
         {
             // 重複除去の前で決める（S5a の行に吸収された S5b の人も数える）。例の日も希望で固定された人がいる日から。
             var pinnedDay = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0)?.DayLabel;
@@ -240,7 +245,7 @@ public sealed partial class HomeView : UserControl
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("なおし方", EditReturn.Guided));
         }
-        else if (infeasible)
+        else if (hp.Kind == HomePlanKind.DataInfeasible)
         {
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             headline = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
@@ -256,15 +261,14 @@ public sealed partial class HomeView : UserControl
             bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
             phase = "未完成"; phaseHex = MagiAccent.Orange;
             helperLabel = null; _helperAction = () => { };
-            var hardFix = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
             var remain = $"必須違反が {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} 残っています。";
-            if (guidedFix is { } gf)
+            if (hp.Kind == HomePlanKind.GuidedFix && guidedFix is { } gf)
             {
                 headline = $"{gf.DayLabel} が人員不足です。";
                 bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", null, gf.DayLabel); bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
-            else if (hardFix && ui.FixFocusName.Length == 0)
+            else if (hp.Kind == HomePlanKind.ApplyMove)
             {
                 // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）・「この手を使う」（補助）。
                 var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
@@ -275,15 +279,15 @@ public sealed partial class HomeView : UserControl
                 note = (CellSheetLogic.HardChangeLine(top.Diff, AnalysisView.LabelOf) ?? hardLine) + (caution is null ? "" : "\n" + caution);
                 bigLabel = moveLabel; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
-                helperLabel = ChainFixPreview.ApplyChangeButton; _helperAction = () => _vm.PreviewOrApplyFix(top);   // 2 セル以上は当てる前に一覧（3.646.0）
+                helperLabel = ChainFixPreview.ApplyChangeButton; _helperAction = () => _vm.PreviewFixSuggestion(top, globalPolish: true);   // 2 セル以上は当てる前に一覧（3.646.0）
             }
-            else if (ui.FixSearching)
+            else if (hp.Kind == HomePlanKind.Searching)
             {
                 headline = remain + "直し方を探しています…";
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
-            else if (ui.FixSearched && !hardFix && _vm.RelaxTrialFor() is { } relax)
+            else if (hp.Kind == HomePlanKind.Relax && relax0 is { } relax)
             {
                 // [S6 §2.1] 必須違反の一部が利用者自身の設定（上限 0）で塞がれているときだけ、希望の段より先に出す。
                 var t = NextActionGuide.RelaxCardTextOf(relax.Result, ui, AnalysisView.LabelOf);
@@ -292,7 +296,7 @@ public sealed partial class HomeView : UserControl
                 _bigAction = () => _ = ShowRelaxTrialAsync();
                 if (!cands.IsEmpty) { helperLabel = "ぶつかっている希望を見る"; _helperAction = () => _ = ShowWishConflictsAsync(); }
             }
-            else if (ui.FixSearched && !hardFix && ui.StalledHardFamilies.Count > 0 && !cands.IsEmpty)
+            else if (hp.Kind == HomePlanKind.WishFloor)
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
                 headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} からこれ以上は減らせない見込みです。";
@@ -300,7 +304,7 @@ public sealed partial class HomeView : UserControl
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = ShowPreDistributionAsync();
             }
-            else if (!cands.IsEmpty)
+            else if (hp.Kind == HomePlanKind.Wishes)
             {
                 headline = remain + "希望とルールがぶつかっています。";
                 bigLabel = wishLabel; bigEnabled = true;
@@ -1078,8 +1082,8 @@ public sealed partial class HomeView : UserControl
                 var text = (idx < _vm.Ui.Alternatives.Count ? _vm.Ui.Alternatives[idx] : "") + (worse ? "\n" + CellSheetLogic.AlternativesAllWorseText + "（元に戻すで取り消せます）" : "");
                 var dialog = new ContentDialog
                 {
-                    XamlRoot = XamlRoot, Title = $"案{idx + 1}を反映しますか", Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
-                    PrimaryButtonText = "反映する", CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot, Title = $"案{idx + 1}を反映しますか？", Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+                    PrimaryButtonText = "反映する", CloseButtonText = "反映しない", DefaultButton = ContentDialogButton.Close,
                 };
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary) _vm.ApplyAlternative(idx);
             };

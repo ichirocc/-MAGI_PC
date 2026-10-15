@@ -236,7 +236,7 @@ public sealed partial class MagiViewModel
             _alternativeScheds = System.Array.Empty<int[][]>();
             Ui.Alternatives = System.Array.Empty<string>();
             Ui.MessageIsError = true;
-            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。再作成してください";
+            Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。案をもう一度作ってください";
             LogOp("W", $"他の案 {i + 1}: 案の計算後に盤面/設定が変わったため適用せず");
             return;
         }
@@ -425,8 +425,7 @@ public sealed partial class MagiViewModel
         if (st is null || sched is null) return;
         var target = NeedCellLimits(shiftIndex, dayIndex) is { } need ? new FixTarget(null, shiftIndex, dayIndex, need.Lo, true, "必要人数") : null;
         var s = V6PortAnalyzer.EvaluatedSuggestion(st, sched, FixKind.Change, new[] { new FixCell(staff, dayIndex, shiftIndex) }, label);
-        PreviewOrApplyFix(s, BoardKey(sched), StateKey(st));
-        if (Ui.ChainPreview is { } cp) Ui.ChainPreview = cp with { FixTarget = target };
+        PreviewFixSuggestion(s, BoardKey(sched), StateKey(st), target);
     }
 
     /// <summary>[3.642.0/UX監査 高1 → 3.644.0/UX-03] 不足枠を玉突き（複数人の入替）で埋める手順を求め、当てる<b>前</b>に一覧（だれの・どの日の・何→何）を
@@ -465,7 +464,8 @@ public sealed partial class MagiViewModel
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
             BoardKey: BoardKey(snap), StateKey: StateKey(st));
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with { Target = target };
+        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
+            { Target = target, FixTarget = NeedCellLimits(k, j) is { } need ? new FixTarget(null, k, j, need.Lo, true, "必要人数") : null };
     }
 
     /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
@@ -473,9 +473,9 @@ public sealed partial class MagiViewModel
     {
         var p = Ui.ChainPreview;
         if (p is null) return;
-        Ui.ChainPreview = null;
-        if (p.Target is { BoardKey: not 0L } t) ApplyFixSuggestion(p.Suggestion, t.BoardKey, t.StateKey, p.FocusKey, p.FixTarget);
-        else ApplyFixSuggestion(p.Suggestion, focusKey: p.FocusKey, fixTarget: p.FixTarget);
+        // 指紋の無い案は全体の指紋へ落とさず断る（fromPreview）。断られたら確認の画面は残し、理由を先頭に出す（Kotlin 3.690.0）。
+        if (ApplyFixSuggestion(p.Suggestion, p.Target?.BoardKey ?? 0L, p.Target?.StateKey ?? 0L, p.FocusKey, p.FixTarget, fromPreview: true, globalPolish: p.GlobalPolish)) Ui.ChainPreview = null;
+        else Ui.ChainPreview = p with { ApplyError = Ui.Message };
     }
 
     public void DismissChainPreview() { _pendingGuided = null; Ui.ChainPreview = null; }
@@ -598,7 +598,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{OpNm(i)}さんの「{OpSy(k)}」の回数は変更できません（{BusyWhat()}の実行中）。終わるか「やめる」を押してから試してください。";
+            Ui.Message = $"{OpNm(i)}さんの「{OpSy(k)}」の回数は変更できません（{BusyWhat()}の実行中）。終わるか「やめる」を押してから、もう一度お試しください。";
             return;
         }
         var st = _state;
@@ -1732,14 +1732,14 @@ public sealed partial class MagiViewModel
         return true;
     }
 
-    private string BusyEditMessage() => $"{BusyWhat()}の実行中は編集できません（完了後にもう一度お試しください）";
+    private string BusyEditMessage() => $"{BusyWhat()}の実行中は編集できません。終わってから、もう一度お試しください";
 
     private bool StructuralEditBlocked()
     {
         if (!OptimizeInFlight()) return false;
         LogOp("W", $"{BusyWhat()}の実行中のため設定変更を取り消しました（終わってから、または「やめる」の後にどうぞ）");
         Ui.MessageIsError = true;
-        Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してからにしてください。";
+        Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません。終わるか「やめる」を押してから、もう一度お試しください。";
         return true;
     }
 

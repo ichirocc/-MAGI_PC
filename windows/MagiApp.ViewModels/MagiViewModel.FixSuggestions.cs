@@ -201,28 +201,35 @@ public sealed partial class MagiViewModel
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard, report.Breakdown));
     }
 
+    /// <summary>改善手を適用する。適用したら true（断ったら false、理由は <see cref="UiState.Message"/>）。
+    /// <paramref name="fixTarget"/> の持ち回り: 枠や問題を見て出した案（案の一覧・不足枠の 1 手・相談に積んだ案）は対象を運び、その数が減らない手は断る。
+    /// ホームと分析タブの「この手を使う」は全体の研磨の案＝<paramref name="globalPolish"/>（全体の評価と <see cref="FixApplyGate"/> だけで判定）。
+    /// 対象が null で <paramref name="globalPolish"/> も無い案は断る（呼び手がどちらかを明示する）。
+    /// <paramref name="fromPreview"/> の案は案を出したときの指紋が必須＝0 なら断る（全体の指紋で代わりに通さない）。</summary>
     /// <param name="focusKey">案の一覧のどの依頼から来たか。あれば成功時に <see cref="UiState.AppliedFix"/> を残す（Kotlin 3.669.0）。</param>
-    public void ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null, string? focusKey = null, FixTarget? fixTarget = null)
+    public bool ApplyFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null, string? focusKey = null, FixTarget? fixTarget = null,
+        bool fromPreview = false, bool globalPolish = false)
     {
         var st = _state;
-        if (st is null) return;
+        if (st is null) return false;
         // [外部レビューH2/applyWishes等と同根] running中は currentSchedule が最適化ジョブの sched0 と
         //   同一参照のため良化採用時に上書き消失しうる。編集は必ず4入口を通るガード対象。
-        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
+        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return false; }
         var sched = _currentSchedule;
-        if (sched is null) return;
-        if (s.Ops.Count == 0) return;
+        if (sched is null) return false;
+        if (s.Ops.Count == 0) return false;
         // 提案は計算時の盤面/設定に対する差分。その後のセル編集・元に戻す・別データ読込・職員/シフト削除のあとに
         // 同じ ops を書き込むと staff/day/toShift が別の実体を指す。一致しなければ適用せず再探索を促す（Kotlin 3.475.0）。
         // [Kotlin 3.650.0] 照合は案を出したときの指紋（相談に積んだ案は自分の指紋を運ぶ＝あとの探索で上書きされた全体の指紋で通さない）。
         var ob = originBoard ?? _fixBoardKey;
         var os = originState ?? _fixStateKey;
+        if ((CellSheetLogic.FixOriginRefusal(ob, fromPreview) ?? CellSheetLogic.FixTargetRefusal(fixTarget, globalPolish)) is { } refusal) { Ui.MessageIsError = true; Ui.Message = refusal; return false; }
         if (ob != 0L && (ob != BoardKey(sched) || os != StateKey(st)))
         {
             Ui.MessageIsError = true;
             ClearFixState();
             Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「変更案を探す」をもう一度押してください";
-            return;
+            return false;
         }
         // 見ている問題の数が減らない案は、全体の評価が良くなっても当てない（統合仕様 INV-03。案の一覧の主一覧と同じ判定）。
         if (!CellSheetLogic.ImprovesTarget(fixTarget, sched, s.Ops))
@@ -231,7 +238,7 @@ public sealed partial class MagiViewModel
             Ui.MessageIsError = true;
             ClearFixState();
             Ui.Message = CellSheetLogic.NotImprovingTargetMessage;
-            return;
+            return false;
         }
         // [Android 3.509.4/自動化方針] 適用直前に仮盤面で完全再評価し、辞書式で改善しない・固定を崩す提案は反映しない。
         var gate = FixApplyGate.Apply(st, sched, s.Ops);
@@ -241,7 +248,7 @@ public sealed partial class MagiViewModel
             Ui.MessageIsError = true;
             ClearFixState();
             Ui.Message = $"この提案は見送りました（{gate.Reason}）。「変更案を探す」で探し直してください";
-            return;
+            return false;
         }
         PushUndo();
         var applied = gate.Schedule!;
@@ -271,11 +278,12 @@ public sealed partial class MagiViewModel
             : $"要調整 {softBefore}→{softAfter}") + "）");
         _fixOutcomeCtx = _state is { } stNow ? new TrialCtx(stNow, BoardKey(applied)) : null;
         RefreshCheck();
+        return true;
     }
 
-    /// <summary>当てる前に一覧（だれの・どの日の・何→何）と新たな必須違反を見せる（Kotlin <c>previewOrApplyFix</c>）。
-    /// 3.671.0: 1 セルの案も確認の画面を出す（2026-10-14 利用者レビュー「案の一覧から直接適用しない」）。</summary>
-    public void PreviewOrApplyFix(FixSuggestion s, long? originBoard = null, long? originState = null)
+    /// <summary>当てる前に一覧（だれの・どの日の・何→何）と新たな必須違反を見せる（Kotlin <c>previewFixSuggestion</c>）。
+    /// <paramref name="fixTarget"/> は見ている問題（あれば適用時にその数が減るかを確かめる）。</summary>
+    public void PreviewFixSuggestion(FixSuggestion s, long? originBoard = null, long? originState = null, FixTarget? fixTarget = null, bool globalPolish = false)
     {
         var ob = originBoard ?? _fixBoardKey;
         var os = originState ?? _fixStateKey;
@@ -283,7 +291,7 @@ public sealed partial class MagiViewModel
         if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
-            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
+            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), FixTarget = fixTarget, GlobalPolish = globalPolish, NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
     }
 
     /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
@@ -299,7 +307,7 @@ public sealed partial class MagiViewModel
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
         {
             Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
-            Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget,
+            Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget, GlobalPolish = fixTarget is null,
             NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
         };
     }
@@ -313,7 +321,7 @@ public sealed partial class MagiViewModel
         var target = ConsultList.ConsultChainTarget(t, u.StartDate, u.ShiftSymbols, u.Days);
         if (target is { } tg) PrepareShortageChainFix(tg.J, tg.K, t.Label);
         else if (t.Suggestion is { } s && _currentSchedule is { } sched && _state is { } st && !ConsultList.ConsultChainStale(t, BoardKey(sched), StateKey(st)))
-            PreviewOrApplyFix(s, t.BoardKey, t.StateKey);
+            PreviewFixSuggestion(s, t.BoardKey, t.StateKey, t.FixTarget, t.GlobalPolish);
         else if (t.Suggestion is not null)
         {
             Ui.MessageIsError = true;

@@ -193,7 +193,7 @@ public sealed partial class MainWindow : Window
             Title = "計算が実行中です",
             Content = "閉じると、実行中の計算（バックグラウンドを含む）が中断されます。終了しますか？",
             PrimaryButtonText = "終了する",
-            CloseButtonText = "キャンセル",
+            CloseButtonText = "終了しない",
             DefaultButton = ContentDialogButton.Close,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
@@ -420,7 +420,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>[3.644.0/UX-03] 複数人の入れ替えを当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
     /// 「この変更を適用」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。
-    /// 3.646.0: ホームの描画からここへ＝分析タブ・セルのシートの「この手を使う」（<see cref="MagiViewModel.PreviewOrApplyFix"/>）でも、開いているタブに関係なく出る。</summary>
+    /// 3.646.0: ホームの描画からここへ＝分析タブ・セルのシートの「この手を使う」（<see cref="MagiViewModel.PreviewFixSuggestion"/>）でも、開いているタブに関係なく出る。</summary>
     private async Task ShowChainPreviewAsync(ChainFixPreview p)
     {
         if (ReferenceEquals(p, _chainPreviewShown)) return;
@@ -430,6 +430,8 @@ public sealed partial class MainWindow : Window
         TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8 };
         TextBlock Line(string t, bool bold = false, double size = 14) => new()
             { Text = t, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal };
+        if (p.ApplyError is { } err)
+            body.Children.Add(new TextBlock { Text = err, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"] });
         // 目的 → 変更する勤務（職員ごとの表）→ 対象の数の変化 → ほかの影響と確認が必要なこと（Kotlin ChainFixPreviewDialog、2026-10-14 利用者レビュー）。
         if (p.Purpose is { } purpose) { body.Children.Add(Caption("今回の目的")); body.Children.Add(Line(purpose)); }
         else body.Children.Add(Line(p.Suggestion.Label));
@@ -515,6 +517,7 @@ public sealed partial class MainWindow : Window
             case ContentDialogResult.Primary:
                 var appliedBefore = _vm.Ui.AppliedFix;
                 _vm.ApplyChainPreview();
+                if (_vm.Ui.ChainPreview is not null) break;   // 断られた＝理由つきの確認の画面を出し直す（PropertyChanged 経由）
                 // Kotlin ではパネルが確認の画面の下に残る＝同じ依頼のパネルを開き直す。適用が通れば反映の欄、見送られたら今の勤務表で探し直した案
                 //   （AppliedFix が新しく記録されたときだけ「適用が通った」＝前回の反映の欄を今回の結果と読ませない）。
                 if (p.FocusKey is { } key)
@@ -544,7 +547,7 @@ public sealed partial class MainWindow : Window
             Title = "下書きで置き換えますか？",
             Content = new TextBlock { Text = msg, TextWrapping = TextWrapping.Wrap },
             PrimaryButtonText = "置き換える",
-            CloseButtonText = "キャンセル",
+            CloseButtonText = "置き換えない",
             DefaultButton = ContentDialogButton.Close,
         };
         _draftConfirmDialog = dialog;
@@ -560,7 +563,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot,
-            Title = "引用符が閉じていないCSV",
+            Title = "読める部分だけ取り込みますか？",
             Content = new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap },
             PrimaryButtonText = MagiEngine.V6.CsvPartialImport.ConfirmLabel,
             CloseButtonText = MagiEngine.V6.CsvPartialImport.CancelLabel,

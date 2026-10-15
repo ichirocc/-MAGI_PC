@@ -312,7 +312,7 @@ public class MagiViewModelCsvTest
         Assert.Null(vm._state);
         Assert.Null(vm.LastLoadTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("ユニット列形式と判定しましたが解析できませんでした", vm.Ui.Message);
+        Assert.Contains("ユニット列の形式として読めません", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("解析不能"));
     }
 
@@ -508,7 +508,7 @@ public class MagiViewModelCsvTest
 
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("一致する職員名がありませんでした", vm.Ui.Message);
+        Assert.Contains("一致する職員名がありません", vm.Ui.Message);
         Assert.Same(sched, vm._currentSchedule); // 適用されず元のまま
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("職員名が0件一致"));
     }
@@ -654,7 +654,7 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.Ui.CsvPartialPrompt);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Equal("CSV取込失敗: 取り込める行がありませんでした（引用符が閉じていません）。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください", vm.Ui.Message);
+        Assert.Equal("CSVを取り込めませんでした。取り込める行がありませんでした（引用符が閉じていません）。引用符（\"）の閉じ忘れを直してから、もう一度取り込んでください", vm.Ui.Message);
         Assert.False(vm.Ui.Running);
         Assert.Same(sched, vm._currentSchedule);
         Assert.Equal(0, vm.UndoStackCount);
@@ -797,7 +797,7 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.LastApplyStructureWithMessageTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("取り込める行が0件", vm.Ui.Message);
+        Assert.Contains("取り込める行がありません", vm.Ui.Message);
         Assert.Contains("名簿CSVを新規データとして取り込む", vm.Ui.Message);
     }
 
@@ -854,7 +854,7 @@ public class MagiViewModelCsvTest
 
         Assert.Null(vm.LastApplyStructureWithMessageTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Contains("取り込める行が0件", vm.Ui.Message);
+        Assert.Contains("取り込める行がありません", vm.Ui.Message);
         Assert.Contains("名簿CSVを新規データとして取り込む", vm.Ui.Message);
     }
 

@@ -9,6 +9,14 @@ public sealed record ShiftSlot(int Shift, bool CanDo);
 public enum CellSeverity { Hard, Soft, None }
 
 /// <summary>直し方探しの状態（計算・チェック待ち／未開始／探索中／完了／失敗）。</summary>
+/// <summary>ホームの主カードの段（主ボタンの行き先）。文言と色は HomeView が段ごとに決める（Kotlin <c>HomePlanKind</c>）。</summary>
+public enum HomePlanKind { Running, Make, PreDist, WishInfeasible, DataInfeasible, GuidedFix, ApplyMove, Searching, Relax, WishFloor, Wishes, List }
+
+/// <summary>主ボタン（1 つだけ）と補助ボタンの行き先。</summary>
+public enum HomeAction { None, Make, SmartInitial, PreDist, Schedule, ShowWishes, Landing, Fix, Setup, ShowMove, ApplyMove, ShowRelax, ShowList }
+
+public sealed record HomePlan(HomePlanKind Kind, HomeAction Primary, bool PrimaryEnabled, HomeAction? Helper);
+
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed, Cancelled }
 
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
@@ -1340,6 +1348,39 @@ public static class CellSheetLogic
         t is null || t.Effect(schedule, ops).Fixes;
 
     public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「変更案を探す」で探し直してください";
+
+    public const string FixOriginUnknownMessage = "案を作ったときの勤務表が分からないため適用しませんでした。もう一度探してください";
+
+    public const string FixTargetUnknownMessage = "見ている問題が分からないため適用しませんでした。もう一度探してください";
+
+    /// <summary>対象も全体の研磨の明示も無い案は断る。null＝断らない（Kotlin <c>fixTargetRefusal</c>）。</summary>
+    public static string? FixTargetRefusal(FixTarget? fixTarget, bool globalPolish) => fixTarget is null && !globalPolish ? FixTargetUnknownMessage : null;
+
+    /// <summary>確認の画面から当てる案は、案を作ったときの盤面の指紋が要る（0＝不明なら断る。今の全体の指紋で代わりに通さない）。null＝断らない（Kotlin <c>fixOriginRefusal</c>）。</summary>
+    public static string? FixOriginRefusal(long originBoard, bool fromPreview) => fromPreview && originBoard == 0L ? FixOriginUnknownMessage : null;
+
+    /// <summary>ホームの「次にやること」の段を決める（Kotlin <c>homePlan</c>、純関数）。主ボタンは常に 1 つ＝組立中と探索中だけ押せない。
+    /// 保存の失敗と相談中は段を変えない＝完成の見出しと書き出しを止めない（D10）。</summary>
+    public static HomePlan HomePlanOf(bool running, bool hasResult, bool hard0,
+        bool infeasible = false, bool hasPinned = false, bool guided = false,
+        bool hasMove = false, bool focusBlank = true, bool fixSearching = false, bool fixSearched = false,
+        bool relax = false, bool stalled = false, bool wishes = false,
+        bool saveFailed = false, int consults = 0)
+    {
+        _ = saveFailed; _ = consults;
+        if (running) return new(HomePlanKind.Running, HomeAction.None, false, null);
+        if (!hasResult) return new(HomePlanKind.Make, HomeAction.Make, true, HomeAction.SmartInitial);
+        if (hard0) return new(HomePlanKind.PreDist, HomeAction.PreDist, true, HomeAction.Schedule);
+        if (infeasible && hasPinned) return new(HomePlanKind.WishInfeasible, HomeAction.ShowWishes, true, HomeAction.Landing);
+        if (infeasible) return new(HomePlanKind.DataInfeasible, HomeAction.Landing, true, HomeAction.PreDist);
+        if (guided) return new(HomePlanKind.GuidedFix, HomeAction.Fix, true, null);
+        if (hasMove && focusBlank) return new(HomePlanKind.ApplyMove, HomeAction.ShowMove, true, HomeAction.ApplyMove);
+        if (fixSearching) return new(HomePlanKind.Searching, HomeAction.None, false, null);
+        if (fixSearched && !hasMove && relax) return new(HomePlanKind.Relax, HomeAction.ShowRelax, true, wishes ? HomeAction.ShowWishes : null);
+        if (fixSearched && !hasMove && stalled && wishes) return new(HomePlanKind.WishFloor, HomeAction.ShowWishes, true, HomeAction.PreDist);
+        if (wishes) return new(HomePlanKind.Wishes, HomeAction.ShowWishes, true, null);
+        return new(HomePlanKind.List, HomeAction.ShowList, true, null);
+    }
 
     /// <summary>確認の画面の「新たな必須違反」（null＝評価していない＝なしと言わない、統合仕様 INV-10）。</summary>
     public static string NewHardLine(IReadOnlyList<string>? names) =>

@@ -314,7 +314,7 @@ public sealed partial class ScheduleView : UserControl
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = new SolidColorBrush(Colors.SeaGreen) }, "緑ドット＝希望が反映済み"));
             ViolationLegendHost.Children.Add(LegendItem(new FontIcon { Glyph = "\uE72E", FontSize = 9 }, "左下の錠＝手動固定（自動では変更しません。周囲のセルを変えて解消できる場合はあります）"));
             // [Android 3.651.0/凡例の抜け] 拡張希望の×はセルにだけあり、凡例に無かった。
-            ViolationLegendHost.Children.Add(LegendItem(ExtCrossSwatch(), "上端の×＝拡張希望（この日はこのシフト以外）。禁止のシフトが入ると違反の色"));
+            ViolationLegendHost.Children.Add(LegendItem(ExtCrossSwatch(), "上端の×＝拡張希望（この日はこのシフト以外）。禁止のシフトが入ると違反の色になります。"));
         }
 
         ShiftLegendHost.Children.Clear();
@@ -591,7 +591,7 @@ public sealed partial class ScheduleView : UserControl
             XamlRoot = XamlRoot,
             Title = "まとめて割当",
             Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
-            PrimaryButtonText = "確定",
+            PrimaryButtonText = "確定する",
             CloseButtonText = "キャンセル",
             DefaultButton = ContentDialogButton.Close,
             IsPrimaryButtonEnabled = false,

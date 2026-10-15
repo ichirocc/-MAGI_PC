@@ -78,7 +78,7 @@ public class MagiViewModelSmartInitialTest
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
         Assert.True(vm.Ui.MessageIsError);
-        Assert.Equal("読み込みの実行中です。終わるか「やめる」を押してからにしてください。", vm.Ui.Message);
+        Assert.Equal("読み込みの実行中です。終わるか「やめる」を押してから、もう一度お試しください。", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("[W]") && l.Contains("下書きづくり を取り消しました（読み込みが実行中）"));
         // 盤面は元の全休のまま——生成もPushUndoも一切走っていない。
         Assert.All(vm._currentSchedule!, row => Assert.All(row, cell => Assert.Equal(0, cell)));

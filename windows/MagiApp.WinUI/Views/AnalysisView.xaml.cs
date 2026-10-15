@@ -254,7 +254,7 @@ public sealed partial class AnalysisView : UserControl
             row.Children.Add(BodyText(FixOutcomeText.FixDisplayLabel(s.Label)));
             if (caution is not null) row.Children.Add(BodyText(caution));
             var apply = new Button { Content = ChainFixPreview.ApplyChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
-            apply.Click += (_, _) => _vm.PreviewOrApplyFix(s);   // 2 セル以上は当てる前に一覧（3.646.0）
+            apply.Click += (_, _) => _vm.PreviewFixSuggestion(s, globalPolish: true);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
             var consultItem = ConsultList.Fix(s, hardLine, caution);
