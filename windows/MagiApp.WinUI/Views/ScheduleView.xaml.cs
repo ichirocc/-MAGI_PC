@@ -1279,17 +1279,28 @@ public sealed partial class ScheduleView : UserControl
     /// <param name="quick">セルのシート＝締切 3 秒（手は 1 件でよい。Kotlin <c>compact</c>）。日×シフト・職員の集計のダイアログは 8 秒。</param>
     /// <param name="cell">セルのシートから来たとき、編集タブの「元の確認へ戻る」の戻り先。</param>
     /// <param name="problems">セルに重なった問題の族。2 件以上なら、どの問題の直し方を見るかを選ばせ、選んだ族を減らす案だけを出す（Kotlin 3.665.0）。</param>
-    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus focus, string? settingsLabel = null,
+    private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus requested, string? settingsLabel = null,
         Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null,
         (int I, int J)? resolveAt = null, bool reuse = false, string? initialPicked = null)
     {
+        // 開いた時点の職員を ID で覚え、並べ替え・削除のあとも同じ人を探す（統合仕様 5.1）。消えていれば探さない。
+        var ids0 = _vm.Ui.StaffIds;
+        int? IdAt(int? i) => i is { } v && v >= 0 && v < ids0.Count ? ids0[v] : null;
+        var (pinnedStaff, pinnedExcept) = (IdAt(requested.Staff), IdAt(requested.ExceptStaff));
+        FixFocus? Resolve() => CellSheetLogic.ResolveFixFocus(requested, pinnedStaff, pinnedExcept, _vm.Ui.StaffIds);
+        var focus = Resolve() ?? requested;
         var picked = initialPicked;
         var reuseOnce = reuse;
         bool othersOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
-        void Find() => _vm.FindFixSuggestions(focus.Staff, focus.Shift, focus.Key, focus.ExceptStaff,
-            focus.ExceptStaff is not null || focus.Staff is null || focus.Shift is not null ? focus.Day : null, quick, focus.AllDays);
+        void Find()
+        {
+            if (Resolve() is not { } f) return;
+            focus = f;
+            _vm.FindFixSuggestions(f.Staff, f.Shift, f.Key, f.ExceptStaff,
+                f.ExceptStaff is not null || f.Staff is null || f.Shift is not null ? f.Day : null, quick, f.AllDays);
+        }
         void Start()
         {
             if (_vm.Ui.Running) return;
@@ -1303,6 +1314,12 @@ public sealed partial class ScheduleView : UserControl
         {
             var ui = _vm.Ui;
             host.Children.Clear();
+            if (Resolve() is not { } resolved)
+            {
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.FixStaffGoneNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                return;
+            }
+            focus = resolved;
             host.Children.Add(new TextBlock { Text = "勤務変更案", Opacity = 0.8 });
             if (problems is not null && CellSheetLogic.ProblemChoiceHeading(problems.Count) is { } heading)
             {
@@ -1365,7 +1382,11 @@ public sealed partial class ScheduleView : UserControl
             Func<FixSuggestion, bool>? pred = resolver ?? (picked is not null ? x => CellSheetLogic.FixAddresses(x, picked) : null);
             var addressLabel = resolveAt is not null ? "このセルの" + (picked is not null ? LabelOf(picked) : "問題") : null;
             var shown = ui.FixSuggestions.ToList();
-            var fixing = target is not null ? shown.Where(x => target.Effect(ui.Schedule, x.Ops).Fixes).ToList() : pred is not null ? shown.Where(pred).ToList() : shown;
+            var fixing0 = target is not null ? shown.Where(x => target.Effect(ui.Schedule, x.Ops).Fixes).ToList() : pred is not null ? shown.Where(pred).ToList() : shown;
+            // 日の人員の対象は、同じ勤務の期間全体の過不足が減る案を先に（見ている日だけ直って別の日へ移る案は後ろ。隠さない）。
+            var fixing = fixing0;
+            if (target is { Day: not null, Multi: false } && CellSheetLogic.ShiftPeriodGap(ui.Schedule, target.Shift, target.Under, _vm.NeedCellLimits) is { } g0)
+                fixing = fixing0.OrderBy(x => (CellSheetLogic.ShiftPeriodGap(CellSheetLogic.BoardAfter(ui.Schedule, x.Ops), target.Shift, target.Under, _vm.NeedCellLimits) ?? g0) < g0 ? 0 : 1).ToList();
             var fixingSet = new HashSet<FixSuggestion>(fixing, ReferenceEqualityComparer.Instance);
             var others = target is not null || pred is not null ? shown.Where(x => !fixingSet.Contains(x)).ToList() : new List<FixSuggestion>();
             var purpose = target is not null
@@ -1380,15 +1401,21 @@ public sealed partial class ScheduleView : UserControl
                 TextBlock Small(string t) => new() { Text = t, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap };
                 TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8 };
                 // 先頭＝いま見ている問題がどう変わるか。変更する勤務、ほかの問題への影響、操作の順。
-                var remain = target?.Day is not null
-                    ? CellSheetLogic.RemainingSameShift(ui.NeedFamilies, CellSheetLogic.BoardAfter(ui.Schedule, s.Ops), target, _vm.NeedCellLimits, ui.ShiftSymbols, ui.StartDate)
-                    : Array.Empty<string>();
+                // 日の人員の対象は、同じ勤務の期間全体の過不足も前後で言う（見ている日だけ直って別の日へ移る案を、解消と読ませない）。
+                IReadOnlyList<string> remain = Array.Empty<string>();
+                if (target is { Day: not null, Multi: false }
+                    && CellSheetLogic.ShiftPeriodGap(ui.Schedule, target.Shift, target.Under, _vm.NeedCellLimits) is { } b0
+                    && CellSheetLogic.ShiftPeriodGap(CellSheetLogic.BoardAfter(ui.Schedule, s.Ops), target.Shift, target.Under, _vm.NeedCellLimits) is { } b1)
+                    remain = new[] { CellSheetLogic.PeriodGapLine(target.Shift >= 0 && target.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[target.Shift] : "", target.Under, b0, b1) };
+                // 先頭は必須違反の変化（必須を減らす案は、その効き目が判断の第一）。
+                if (CellSheetLogic.HardChangeLine(s.Diff, LabelOf) is { } hl)
+                    col.Children.Add(new TextBlock { Text = hl, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 if (e is not null && target is not null)
                 {
                     col.Children.Add(new TextBlock { Text = $"案{n}：{e.Title(label)}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(new TextBlock { Text = $"{label}：{e.CountLine()}　{e.GapLine()}", Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(new TextBlock { Text = e.AfterNote(target.Basis), Foreground = fg, TextWrapping = TextWrapping.Wrap });
-                    foreach (var r in remain) col.Children.Add(Small(r));
+                    foreach (var r in remain) col.Children.Add(new TextBlock { Text = r, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(Small(CellSheetLogic.ChangeSizeLine(s.Ops)));
                 }
                 else
@@ -1497,6 +1524,9 @@ public sealed partial class ScheduleView : UserControl
                 host.Children.Add(new TextBlock { Text = CellSheetLogic.NoFixForProblemLine(addressLabel ?? (picked is not null ? LabelOf(picked) : "このセルの問題")), TextWrapping = TextWrapping.Wrap, Opacity = 0.8 });
             else if (fixing.Count > 0)
             {
+                // 同じ勤務のほかの日の過不足はここに 1 回だけ（カードごとに繰り返すと判断に要る行が下へ押し出される）。
+                if (target is not null && !quick && CellSheetLogic.OtherDaysGapLine(ui.NeedFamilies, ui.Schedule, target, _vm.NeedCellLimits, ui.ShiftSymbols, ui.StartDate) is { } od)
+                    host.Children.Add(new TextBlock { Text = od, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 if (target is not null && !quick) host.Children.Add(new TextBlock { Text = CellSheetLogic.ThisFixHeading(label, target), Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 var n = 0;
                 foreach (var s in fixing.Take(limit)) host.Children.Add(Card(++n, s));
@@ -1644,7 +1674,7 @@ public sealed partial class ScheduleView : UserControl
             // 盤面・希望が変わったときと、計算・チェックが終わった時点（Running→false）で探し直す。
             if (e.PropertyName is nameof(UiState.Schedule) or nameof(UiState.Wishes) or nameof(UiState.Running)) DispatcherQueue.TryEnqueue(() => { Start(); Refresh(); });
             else if (e.PropertyName is nameof(UiState.FixSearching) or nameof(UiState.FixDoneKey) or nameof(UiState.FixFailedKey) or nameof(UiState.FixSuggestions)
-                     or nameof(UiState.AppliedFix) or nameof(UiState.SaveState))
+                     or nameof(UiState.AppliedFix) or nameof(UiState.SaveState) or nameof(UiState.StaffIds))
                 DispatcherQueue.TryEnqueue(Refresh);
         };
         _vm.Ui.PropertyChanged += handler;

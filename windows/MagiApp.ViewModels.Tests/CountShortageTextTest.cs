@@ -315,4 +315,35 @@ public class CountShortageTextTest
         Assert.Equal("要調整 4件・2人・9回・30pt・配布前の確認", CellSheetLogic.ReadyBadgeLabel(40, b));
         Assert.Equal("評価：必須違反 2件・1人", CellSheetLogic.BoardStatusLines(true, true, true, 3, 0, b).Second);
     }
+
+    [Fact]
+    public void FixFocusFollowsTheStaffIdAcrossReorderAndDeletion()
+    {
+        var f = new FixFocus(1, 2, 3, ExceptStaff: 0);
+        // 職員 ID 20（番号 1）と 10（番号 0）で開き、並べ替えのあとは新しい番号で探す（統合仕様 5.1）。
+        Assert.Equal(new FixFocus(0, 2, 3, ExceptStaff: 2), CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 20, 30, 10 }));
+        Assert.Equal(f, CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 10, 20, 30 }));
+        Assert.Null(CellSheetLogic.ResolveFixFocus(f, 20, 10, new[] { 10, 30 }));   // 削除＝別の人を探さない
+        Assert.Equal(f, CellSheetLogic.ResolveFixFocus(f, null, 0, new[] { 5, 6 }));   // ID なし＝番号のまま
+    }
+
+    [Fact]
+    public void movingTheExcessToAnotherDayIsSaidAsAMove()
+    {
+        // 2 人 × 3 日。勤務 1 の適正は毎日 1 人。10/1 に 2 人＝期間全体の過剰 1。
+        IReadOnlyList<IReadOnlyList<int>> board = new IReadOnlyList<int>[] { new[] { 1, 0, 0 }, new[] { 1, 1, 0 } };
+        Func<int, int, (int Lo, int Hi)?> lim = (k, _) => k == 1 ? (1, 1) : null;
+        Assert.Equal(1, CellSheetLogic.ShiftPeriodGap(board, 1, false, lim));
+        // 10/1 の 2 人目を休にし、代わりに 10/2 へ 1 人足す＝10/1 は直るが 10/2 が過剰＝移るだけ（2026-10-15 利用者「思考誘導が混乱する」）。
+        var moved = CellSheetLogic.BoardAfter(board, new[] { new FixCell(1, 0, 0), new FixCell(0, 1, 1) });
+        Assert.Equal(1, CellSheetLogic.ShiftPeriodGap(moved, 1, false, lim));
+        Assert.Equal("Dﾃの過剰（期間全体）：1人 → 1人＝別の日へ移るだけです", CellSheetLogic.PeriodGapLine("Dﾃ", false, 1, 1));
+        Assert.Equal("Dﾃの過剰（期間全体）：1人 → 0人", CellSheetLogic.PeriodGapLine("Dﾃ", false, 1, 0));
+        static string L(string f) => f switch { "c3n" => "禁止の並び", _ => f };
+        Assert.Equal("必須違反の変化：禁止の並び −1件", CellSheetLogic.HardChangeLine(new[] { ("c3n", -1), ("covO", 0), ("weekly", 2) }, L));
+        Assert.Null(CellSheetLogic.HardChangeLine(new[] { ("weekly", 2) }, L));
+        var fams = new Dictionary<string, IReadOnlyList<string>> { ["1,0"] = new[] { "vio-covO" }, ["1,1"] = new[] { "vio-covO" } };
+        var t = CellSheetLogic.NeedFixTarget(fams, 1, 0, (1, 1))!;
+        Assert.Equal("ほかにDﾃが多い日：10/2（1人）", CellSheetLogic.OtherDaysGapLine(fams, moved, t, lim, new[] { "休", "Dﾃ" }, "2026-10-01"));
+    }
 }

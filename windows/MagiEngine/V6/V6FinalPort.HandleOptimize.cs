@@ -132,7 +132,7 @@ public static partial class V6FinalPort
             ? new[] { new MirrorLog(tag: "CapZero", message: capZero.LogLine()) }
             : Array.Empty<MirrorLog>();
 
-        var label = GetAlgorithmLabel(seconds);
+        var label = RunLabel(requestedAlgorithm, seconds);
         var plan = GetOptimizationPlan(seconds);
         // [Kotlin原本] overrides のキーは BuildBusyDetail が読む固定キー（"subtitle"/"phaseDesc"/
         //   "expectedSec"/"estimatedIter"）。"をNativeエンジンで実行中" は HF77 により逐語のまま保持
@@ -347,7 +347,8 @@ public static partial class V6FinalPort
             var effStall = EffectiveStallMs(
                 wd.BestHard, hardFloor, nonCovU, wd.BestNonCovUAllC3n, wall, stallHardMs, stallMs,
                 wishOn && wd.BestHard == wishFloorLogged && BestWishReached(),
-                adaptiveMs: PolishGate.AdaptiveStall ? AdaptiveStallMs(wd.RecentGaps(), stallHardMs, stallMs) : null);
+                adaptiveMs: PolishGate.AdaptiveStall ? AdaptiveStallMs(wd.RecentGaps(), stallHardMs, stallMs) : null,
+                floorShort: PolishGate.FloorShortStall);
             if (now >= searchDeadlineMs || cancellationToken.IsCancellationRequested) return true;
             if (WatchdogStagnationFired(now, startMs, minRunMs, Volatile.Read(ref lastPhaseChangeMs), phaseGraceMs,
                     wd.LastBestImproveMs, effStall))

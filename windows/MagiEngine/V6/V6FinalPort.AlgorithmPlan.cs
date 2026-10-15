@@ -95,4 +95,17 @@ public static partial class V6FinalPort
         if (seconds <= 300) return new AlgorithmLabel("🌈", "方式ミックス", "複数の方式を同時に走らせて最良を採用", "PORTFOLIO");
         return new AlgorithmLabel("🌈", "方式ミックス", $"最大限の品質 ({seconds / 60}分)", "PORTFOLIO拡張");
     }
+
+    /// <summary>Kotlin <c>runLabel</c> と 1 対 1: 実際に動かす方式の名前（手で方式を選んだら選んだ方式。おまかせは予算で決まる <see cref="GetAlgorithmLabel"/>）。
+    /// 旧: 完了の行（<c>optimize:…</c>）と作成中の表示が予算だけで決まり、V5 を選んでも「RSI→ALNS」と出ていた（実機ログ 2026-10-11）。</summary>
+    public static AlgorithmLabel RunLabel(V6Algorithm requested, int seconds) => requested switch
+    {
+        V6Algorithm.Auto => GetAlgorithmLabel(seconds),
+        V6Algorithm.V5 => new AlgorithmLabel("⚡", "高速", "短時間でサッと作成", "v5"),
+        V6Algorithm.Alns => new AlgorithmLabel("🧬", "組み替え", "組み替えで仕上げ", "ALNS"),
+        V6Algorithm.Rsi => new AlgorithmLabel("🧬", "違反集中", "違反の多い所から直す", "RSI"),
+        V6Algorithm.RsiPlus => new AlgorithmLabel("🧬", "違反集中＋", "違反の多い所から直して仕上げる", "RSI_PLUS"),
+        V6Algorithm.Portfolio => new AlgorithmLabel("🌈", "方式ミックス", "複数の方式を同時に走らせて最良を採用", "PORTFOLIO"),
+        _ => GetAlgorithmLabel(seconds),
+    };
 }

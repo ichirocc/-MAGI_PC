@@ -587,6 +587,26 @@ public static class CellSheetLogic
 
     public const string AddressCheckingText = "案ごとに、このセルの問題が解消するか確認しています…";
 
+    /// <summary>
+    /// 開いた時点の職員 ID（<paramref name="staffId"/>・<paramref name="exceptId"/>、0 以下や null＝ID なし）を今の並びの番号に引き直す（統合仕様 5.1、Kotlin <c>resolveFixFocus</c>）。
+    /// 並べ替えのあとは新しい番号、削除されていれば null（別の人を探さない）。ID が無ければ番号のまま。
+    /// </summary>
+    public static FixFocus? ResolveFixFocus(FixFocus f, int? staffId, int? exceptId, IReadOnlyList<int> staffIds)
+    {
+        int? At(int? index, int? id) => index is null || id is not { } v || v <= 0 ? index : IndexOf(staffIds, v);
+        var s = At(f.Staff, staffId); var x = At(f.ExceptStaff, exceptId);
+        if (s == -1 || x == -1) return null;
+        return s == f.Staff && x == f.ExceptStaff ? f : f with { Staff = s, ExceptStaff = x };
+    }
+
+    private static int IndexOf(IReadOnlyList<int> list, int v)
+    {
+        for (var i = 0; i < list.Count; i++) if (list[i] == v) return i;
+        return -1;
+    }
+
+    public const string FixStaffGoneNote = "この職員は一覧から削除されたため、変更案を探せません。画面を閉じて開き直してください。";
+
     public const string SaveRetryButton = "もう一度保存する";
 
     public const string ReviewCheckingText = "変更後の影響を確認しています…";
@@ -826,6 +846,59 @@ public static class CellSheetLogic
             if (gap > 0) outList.Add($"{DayText.Short(startDate, j)}の{sym}は、{(t.Under ? $"{gap}人不足" : $"{gap}人多い状態")}のままです");
         }
         return outList;
+    }
+
+    /// <summary>同じ勤務の期間全体の過不足（Kotlin <c>shiftPeriodGap</c>。日ごとに基準までの差を 0 で打ち切って足す。設定の値が無い日は数えない）。値が無ければ null。</summary>
+    public static int? ShiftPeriodGap(IReadOnlyList<IReadOnlyList<int>> board, int shift, bool under, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        if (needLimits is null) return null;
+        var g = 0;
+        var days = board.Count > 0 ? board[0].Count : 0;
+        for (var j = 0; j < days; j++)
+        {
+            if (needLimits(shift, j) is not { } lim) continue;
+            var n = Headcount(board, shift, j);
+            g += under ? Math.Max(0, lim.Lo - n) : Math.Max(0, n - lim.Hi);
+        }
+        return g;
+    }
+
+    /// <summary>案のカードの「期間全体」の行（Kotlin <c>periodGapLine</c>、日の人員の対象）。見ている日が直っても期間全体で減らなければ、移るだけと言う（2026-10-15 利用者「思考誘導が混乱する」）。</summary>
+    public static string PeriodGapLine(string sym, bool under, int before, int after) =>
+        $"{sym}の{(under ? "不足" : "過剰")}（期間全体）：{before}人 → {after}人" + (after > before ? "＝期間全体では増えます" : after == before ? "＝別の日へ移るだけです" : "");
+
+    /// <summary>案のカードの先頭: 必須違反の変化（族ごと、Kotlin <c>hardChangeLine</c>）。変わらなければ null。</summary>
+    public static string? HardChangeLine(IEnumerable<(string Family, int Delta)> diff, Func<string, string> labelOf)
+    {
+        var hard = new HashSet<string>(MirrorKeys.Hard);
+        var txt = AnalysisTriage.FamilyDeltaList(diff.Where(x => hard.Contains(x.Family)), labelOf);
+        return txt.Length > 0 ? $"必須違反の変化：{txt}" : null;
+    }
+
+    /// <summary>パネルの上に 1 回だけ出す、同じ勤務のほかの日の過不足（Kotlin <c>otherDaysGapLine</c>、カードごとに繰り返さない）。無ければ null。</summary>
+    public static string? OtherDaysGapLine(IReadOnlyDictionary<string, IReadOnlyList<string>> needFamilies, IReadOnlyList<IReadOnlyList<int>> board, FixTarget t,
+        Func<int, int, (int Lo, int Hi)?>? needLimits, IReadOnlyList<string> shiftSymbols, string startDate)
+    {
+        if (t.Day is not { } day || needLimits is null) return null;
+        var cls = t.Under ? "vio-covU" : "vio-covO";
+        var days = new List<int>();
+        foreach (var (key, fams) in needFamilies)
+        {
+            var comma = key.IndexOf(',');
+            if (comma < 0 || !fams.Contains(cls) || !int.TryParse(key.AsSpan(0, comma), out var k) || k != t.Shift || !int.TryParse(key.AsSpan(comma + 1), out var j)) continue;
+            if (j != day) days.Add(j);
+        }
+        var parts = new List<string>();
+        foreach (var j in days.Order())
+        {
+            if (needLimits(t.Shift, j) is not { } lim) continue;
+            var n = Headcount(board, t.Shift, j);
+            var gap = t.Under ? lim.Lo - n : n - lim.Hi;
+            if (gap > 0) parts.Add($"{DayText.Short(startDate, j)}（{gap}人）");
+        }
+        if (parts.Count == 0) return null;
+        var sym = t.Shift >= 0 && t.Shift < shiftSymbols.Count ? shiftSymbols[t.Shift] : $"{t.Shift}";
+        return $"ほかに{sym}が{(t.Under ? "足りない" : "多い")}日：{string.Join("・", parts)}";
     }
 
     /// <summary>自動保存の状態の 1 行（適用後の案内）。</summary>

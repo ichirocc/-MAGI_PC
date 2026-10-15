@@ -82,9 +82,10 @@ public static partial class V6FinalPort
 
     internal static long EffectiveStallMs(
         int bestHard, int hardFloor, int nonCovUHard, bool nonCovUAllC3n,
-        bool c3nWallProven, long stallHardMs, long stallMs, bool wishReached = false, long? adaptiveMs = null)
+        bool c3nWallProven, long stallHardMs, long stallMs, bool wishReached = false, long? adaptiveMs = null,
+        bool floorShort = true)
     {
-        var basePlateau = (bestHard <= hardFloor && nonCovUHard == 0) || wishReached;
+        var basePlateau = (floorShort && bestHard <= hardFloor && nonCovUHard == 0) || wishReached;
         var c3nWallPlateau = nonCovUHard > 0 && nonCovUAllC3n
             && bestHard <= hardFloor + nonCovUHard && c3nWallProven;
         var baseMs = basePlateau || c3nWallPlateau ? stallHardMs : stallMs;

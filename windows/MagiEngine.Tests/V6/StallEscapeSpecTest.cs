@@ -383,6 +383,15 @@ public class StallEscapeSpecTest
         Assert.Equal(1, proof.Mismatch);   // 対応しなかった更新も一度だけ数える
     }
 
+    [Fact]
+    public void FloorShortStallCanBeTurnedOff()
+    {
+        // 下限到達の短縮を切ると、必須違反 0 でも通常閾値で粘る（測定用、既定は短縮あり）。
+        Assert.Equal(37_500L, V6FinalPort.EffectiveStallMs(0, 0, 0, false, false, 37_500L, 270_000L));
+        Assert.Equal(270_000L, V6FinalPort.EffectiveStallMs(0, 0, 0, false, false, 37_500L, 270_000L, floorShort: false));
+        Assert.True(PolishGate.FloorShortStall);
+    }
+
     private static IReadOnlyList<IReadOnlyList<int>> BoardOf(params int[][] rows) =>
         rows.Select(r => (IReadOnlyList<int>)r).ToList();
 
