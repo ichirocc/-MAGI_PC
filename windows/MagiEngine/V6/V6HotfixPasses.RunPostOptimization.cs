@@ -269,6 +269,15 @@ public static partial class V6HotfixPasses
             return passLogs.Select(l => l with { Message = RollbackMarker + l.Message }).ToList();
         }
 
+        /// <summary>[<see cref="PolishGate.RoundPassMemo"/>] 実行を省いた段を、<see cref="Timed"/> と同じキー・0ms で記録する。</summary>
+        public void MemoHit(string phase, string key)
+        {
+            _onPhase?.Invoke(phase);
+            _lastKey = key;
+            _lastMs = 0L;
+            PassMs[key] = PassMs.TryGetValue(key, out var cur) ? cur : 0L;
+        }
+
         /// <summary>フェーズ名を UI へ通知し、所要 ms を <paramref name="key"/> に累算しながら <paramref name="block"/> を実行する。</summary>
         public R Timed<R>(string phase, string key, Func<int[][], R> block)
         {
@@ -539,6 +548,23 @@ public static partial class V6HotfixPasses
         var c3Anchor = new HashSet<string> { "vio-c3", "vio-c3m", "vio-c3mn" };
         var pC1 = new Problem(state, p.QuantitativeRangeEval);   // state の純関数＝巡回間で不変（C1DeltaPrefilter のゲート用）
         C1PlateauDiagnosis? c1Plateau = null;
+        var memo = new Dictionary<string, (int[][] Board, CyclicSwapResult Result)>();
+        CyclicSwapResult MemoTimed(string phase, string key, Func<int[][], Func<bool>, CyclicSwapResult> block, string? memoKey = null)
+        {
+            if (!PolishGate.RoundPassMemo) return chain.Timed(phase, key, work => block(work, clusterStop));
+            var mk = memoKey ?? key;
+            if (memo.TryGetValue(mk, out var hit) && hit.Board.ContentDeepEquals(chain.Work) && !clusterStop())
+            {
+                chain.MemoHit(phase, key);
+                return hit.Result;
+            }
+            var input = chain.Work.Copy2D();
+            var stopped = false;
+            var r = chain.Timed(phase, key, work => block(work, () => { var s = clusterStop(); if (s) stopped = true; return s; }));
+            if (!stopped && r.Applied == 0 && r.NewSchedule.ContentDeepEquals(input)) memo[mk] = (input, r with { NewSchedule = input.Copy2D() });
+            else memo.Remove(mk);
+            return r;
+        }
         var round = 0;
         while (round < p.MaxRounds && !clusterStop())
         {
@@ -574,17 +600,17 @@ public static partial class V6HotfixPasses
                 C1RepairOperators.WideBeam(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Beam, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             var c1ComponentActive = p.C1ComponentRepair ||
                 (p.C1ComponentRepairReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c1"));
-            Take("c1", chain.Timed($"後処理 期間要件(c1)厳密窓修復{tag}", "C1厳密窓", work =>
-                C1RepairOperators.ExactWindow(state, work, shouldStop: clusterStop, useComponents: c1ComponentActive, quantitativeRangeEval: p.QuantitativeRangeEval)));
+            Take("c1", MemoTimed($"後処理 期間要件(c1)厳密窓修復{tag}", "C1厳密窓", (work, stop) =>
+                C1RepairOperators.ExactWindow(state, work, shouldStop: stop, useComponents: c1ComponentActive, quantitativeRangeEval: p.QuantitativeRangeEval), $"C1厳密窓/{c1ComponentActive}"));
 
-            var rC3 = chain.Timed($"後処理 連続規則(c3系)研磨{tag}", "C3SequencePolish", work =>
-                ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval));
+            var rC3 = MemoTimed($"後処理 連続規則(c3系)研磨{tag}", "C3SequencePolish", (work, stop) =>
+                ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval));
             Take("c3", rC3);
             // 3 者回転は O(候補^3) で通常時の寄与ゼロ（3.300.0 ablation）＝主手が詰まった巡と最終巡だけの脱出手。
             if (rC3.Applied == 0 || round == p.MaxRounds - 1)
             {
-                Take("c3回転", chain.Timed($"後処理 連続規則(c3系)3者回転研磨{tag}", "BlockRotationPolish", work =>
-                    ApplyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses: p.C3RotatePasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                Take("c3回転", MemoTimed($"後処理 連続規則(c3系)3者回転研磨{tag}", "BlockRotationPolish", (work, stop) =>
+                    ApplyBlockRotationPolish(state, work, c3Anchor, "C3Rotate", maxPasses: p.C3RotatePasses, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             Take("c3mn玉突き", chain.Timed($"後処理 回避パターン(c3mn)玉突き研磨{tag}", "C3mnPolish", work =>
                 ApplyC3mnPolish(state, work, maxPasses: p.C3mnPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3mn, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, quantitativeRangeEval: p.QuantitativeRangeEval)));
@@ -596,22 +622,22 @@ public static partial class V6HotfixPasses
                 ApplyC3RunPolish(state, work, maxPasses: p.C3RunPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Run, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c3pattern玉突き", chain.Timed($"後処理 連続規則(c3/c3m複数シフトパターン)玉突き研磨{tag}", "C3PatternPolish", work =>
                 ApplyC3PatternPolish(state, work, maxPasses: p.C3PatternPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C3Pattern, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
-            Take("アンカー窓交換", chain.Timed($"後処理 違反アンカー窓交換{tag}", "AnchoredWindowSwap", work =>
+            Take("アンカー窓交換", MemoTimed($"後処理 違反アンカー窓交換{tag}", "AnchoredWindowSwap", (work, stop) =>
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.AnchorWindowPasses, maxEvaluations: p.AnchorWindowEvaluations,
-                    shouldStop: clusterStop, mode: WindowMode.StrictWholeWindow, quantitativeRangeEval: p.QuantitativeRangeEval)));
-            Take("希望島", chain.Timed($"後処理 希望島研磨{tag}", "WishIslandPolish", work =>
-                ApplyWishIslandPolish(state, work, maxPasses: p.WishIslandPasses, maxEvaluations: p.WishIslandEvaluations, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
-            Take("ブロック交換", chain.Timed($"後処理 長期ブロック丸ごと交換(11/13/17/19/23/28日){tag}", "AdaptiveBlockSwapPolish", work =>
+                    shouldStop: stop, mode: WindowMode.StrictWholeWindow, quantitativeRangeEval: p.QuantitativeRangeEval)));
+            Take("希望島", MemoTimed($"後処理 希望島研磨{tag}", "WishIslandPolish", (work, stop) =>
+                ApplyWishIslandPolish(state, work, maxPasses: p.WishIslandPasses, maxEvaluations: p.WishIslandEvaluations, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+            Take("ブロック交換", MemoTimed($"後処理 長期ブロック丸ごと交換(11/13/17/19/23/28日){tag}", "AdaptiveBlockSwapPolish", (work, stop) =>
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
-                    maxEvaluations: p.BlockSwapEvaluations, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                    maxEvaluations: p.BlockSwapEvaluations, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
                 ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "apt");
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
                 ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
             if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c2")))
             {
-                Take("c2玉突き", chain.Timed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", work =>
-                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                Take("c2玉突き", MemoTimed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", (work, stop) =>
+                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)はQuantitativeRangeEval 以外は既定の
             //   PostOptimizationParams を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
@@ -634,8 +660,8 @@ public static partial class V6HotfixPasses
             if (p.C42FlowPolishEnabled ||
                 (p.C42FlowPolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c42", "c42s")))
             {
-                Take("c42フロー", chain.Timed($"後処理 群ペア禁止(c42/c42s)フロー研磨{tag}", "C42FlowPolish", work =>
-                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: clusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+                Take("c42フロー", MemoTimed($"後処理 群ペア禁止(c42/c42s)フロー研磨{tag}", "C42FlowPolish", (work, stop) =>
+                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();

@@ -297,6 +297,14 @@ public static partial class V6HotfixPasses
             }
         }
         var windows = new[] { 2, 3 };
+        // 差分評価の前判定。基準盤面で正式評価とキーが一致したときだけ使い、一致しなければフル評価へ戻す。
+        DeltaEvaluator? de = null;
+        if (PolishGate.RotationDeltaPrescreen) { de = new DeltaEvaluator(p); de.Reset(work); if (!DeltaKeyMatches(de, before)) de = null; }
+        var prescreened = 0;
+        void DeRotate(DeltaEvaluator d, int a, int b, int c, int jj, int ww, int[] targetA, int[] targetB, int[] targetC)
+        {
+            for (var t = 0; t < ww; t++) { d.Apply(a, jj + t, targetA[t]); d.Apply(b, jj + t, targetB[t]); d.Apply(c, jj + t, targetC[t]); }
+        }
         var pass = 0;
         while (pass < maxPasses)
         {
@@ -307,6 +315,7 @@ public static partial class V6HotfixPasses
             //   になる。cellFamilies（1セルの全クラス保持）に切替え、上書きされても検出できるようにする。
             //   起点が広がるだけの後方互換な修正（C1Rotate/C3Rotate 両呼出に共通して適用される）。
             var rep0 = pass == 0 ? before : UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+            if (de != null && !DeltaKeyMatches(de, rep0)) de = null;
             var anchorStaff = new HashSet<int>();
             foreach (var (key, fams) in rep0.CellFamilies)
             {
@@ -374,6 +383,19 @@ public static partial class V6HotfixPasses
                                         continue;
                                     }
                                 }
+                                var d = de;
+                                if (d != null)
+                                {
+                                    DeRotate(d, ai, bi, ci, j, w, sb, sc, sa);
+                                    // AdoptionGate は BetterReport を先に要求する＝キーで負ける手は正式評価でも必ず不採用。
+                                    if (!DeltaKeyBetter(d.ReportKey(), bestRep))
+                                    {
+                                        Rotate(ai, bi, ci, j, w, sa, sb, sc);
+                                        DeRotate(d, ai, bi, ci, j, w, sa, sb, sc);
+                                        prescreened++;
+                                        continue;
+                                    }
+                                }
                                 var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRotate, work, rep, bestRep, pinBlocks).Accepted)
                                 {
@@ -382,6 +404,7 @@ public static partial class V6HotfixPasses
                                 else
                                 {
                                     Rotate(ai, bi, ci, j, w, sa, sb, sc); // 巻き戻し
+                                    if (d != null) DeRotate(d, ai, bi, ci, j, w, sa, sb, sc);
                                 }
                             }
                         }
@@ -398,9 +421,24 @@ public static partial class V6HotfixPasses
                     $" / c3 {before.Breakdown.GetValueOrDefault("c3", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3", 0)}" +
                     $" / c3m {before.Breakdown.GetValueOrDefault("c3m", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3m", 0)}" +
                     $" / c3mn {before.Breakdown.GetValueOrDefault("c3mn", 0)}->{bestRep.Breakdown.GetValueOrDefault("c3mn", 0)}" +
-                    $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手)"),
+                    $" / total {before.Total}->{bestRep.Total} HARD {before.Hard}->{bestRep.Hard} 採用{applied}回 (差分前フィルタで省略{skipped}手・差分評価で省略{prescreened}手)"),
         };
         return new CyclicSwapResult(work, before.Total, bestRep.Total, applied, logs, PinBlocks: pinBlocks, Report: bestRep);
+    }
+
+    /// <summary><see cref="DeltaEvaluator.ReportKey"/> が正式評価 <paramref name="rep"/> の (hard, weightedScore, total) と一致するか。</summary>
+    internal static bool DeltaKeyMatches(DeltaEvaluator de, ViolationReport rep)
+    {
+        var k = de.ReportKey();
+        return k[0] == rep.Hard && (double)k[1] == rep.WeightedScore && k[2] == rep.Total;
+    }
+
+    /// <summary>BetterReport と同じ辞書式で、差分キー <paramref name="key"/> が <paramref name="best"/> より良いか。</summary>
+    internal static bool DeltaKeyBetter(long[] key, ViolationReport best)
+    {
+        if (key[0] != best.Hard) return key[0] < best.Hard;
+        if ((double)key[1] != best.WeightedScore) return key[1] < best.WeightedScore;
+        return key[2] < best.Total;
     }
 
     // [3.317.0] 分散指標ベースの平準化2パス（applyGroupShiftEqualizePolish / applyWeeklyEqualizePolish）は
