@@ -76,6 +76,9 @@ public class CountShortageTextTest
         var s = new FixSuggestion(FixKind.Change, new[] { new FixCell(0, 1, 1) }, "x", -1, 2, new[] { ("low", -1), ("c1", 1), ("weekly", 2) });
         Assert.Equal(new[] { "必須違反：1件減る", "期間の制約：1件増える", "曜日の偏り：2pt増える" },
             CellSheetLogic.OtherEffectLines(s, new HashSet<string> { "low", "high", "apt" }, Label));
+        // [3.678.0] カードの先頭に必須の変化を出したら繰り返さない。
+        Assert.Equal(new[] { "期間の制約：1件増える", "曜日の偏り：2pt増える" },
+            CellSheetLogic.OtherEffectLines(s, new HashSet<string> { "low", "high", "apt" }, Label, hardShown: true));
         Assert.Equal("この2件の変更を適用", CellSheetLogic.ApplyCountButton(2));
         Assert.Equal(ChainFixPreview.ApplyChangeButton, CellSheetLogic.ApplyCountButton(1));
     }
@@ -137,7 +140,7 @@ public class CountShortageTextTest
     [Fact]
     public void ReadyBadgeDoesNotSayReadyWhileAdjustmentsRemain()
     {
-        Assert.Equal("配布可", CellSheetLogic.ReadyBadgeLabel(0));
+        Assert.Equal("必須違反 0・配布前の確認", CellSheetLogic.ReadyBadgeLabel(0));
         Assert.Equal("要調整 3件・配布前の確認", CellSheetLogic.ReadyBadgeLabel(3));
         Assert.DoesNotContain("元に戻せます", ChainFixPreview.ApplyChangeButton);
         Assert.Equal("対象期間：10/1〜10/31", CellSheetLogic.PeriodLine("2026-10-01", 31));

@@ -246,7 +246,7 @@ public sealed partial class MainWindow : Window
         if (ui.Loaded)
         {
             string label, bg, fg;
-            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft, ui.Breakdown);
+            var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft, ui.Breakdown, ui.RanBeforeEdit);
             if (ui.Running)
             {
                 // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
@@ -256,17 +256,17 @@ public sealed partial class MainWindow : Window
                 (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             }
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft, ui.Breakdown), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
-            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {ui.BestHard}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
+            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusPrefixText.Text = ui.Running ? "" : status.First;
             // 必須違反が残るときは「順に見る」巡回の入口、必須 0 は配布前の確認へ（要調整が残っても「配布可」と言い切らない）。
             // 巡回できるセルが無い（必須が人員不足だけ）ときは押せない「必須違反 N」のまま（screen_spec「巡回」）。
-            var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0 && HasTourItems(ui);
+            var tourable = !ui.Running && ui.HasResult && ui.BestHard > 0 && TourItemCount(ui) > 0;
             var preDist = !ui.Running && ui.HasResult && ui.BestHard == 0;
             var clickable = tourable || preDist;
             StatusBadgeButton.IsHitTestVisible = clickable;
             StatusBadgeButton.IsTabStop = clickable;
-            if (tourable) label = $"必須 {ui.BestHard}件を順に見る";
+            if (tourable) label = $"必須違反を順に見る（{TourItemCount(ui)}か所）";
             StatusBadgeText.Text = label;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
@@ -294,15 +294,15 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private (object? Families, object? Schedule, bool Has) _tourCache = (null, null, false);
+    private (object? Families, object? Schedule, int Count) _tourCache = (null, null, 0);
 
     /// <summary>巡回の先頭があるか（シェルは UiState の変更ごとに描くので、検査結果のセル別の族と盤面が同じ間は数え直さない。
     /// <c>MakeUi</c> は CheckRev を進めてから族を書き込むので、鍵は CheckRev でなく族の参照）。</summary>
-    private bool HasTourItems(UiState ui)
+    private int TourItemCount(UiState ui)
     {
         if (!ReferenceEquals(_tourCache.Families, ui.ViolationCellFamilies) || !ReferenceEquals(_tourCache.Schedule, ui.Schedule))
-            _tourCache = (ui.ViolationCellFamilies, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count > 0);
-        return _tourCache.Has;
+            _tourCache = (ui.ViolationCellFamilies, ui.Schedule, _vm.HardViolationItemsFor(AnalysisView.LabelOf).Count);
+        return _tourCache.Count;
     }
 
     private async void OnStatusBadgeClick(object sender, RoutedEventArgs e)
@@ -482,7 +482,6 @@ public sealed partial class MainWindow : Window
         if (caution is not null) body.Children.Add(Line("・" + caution, size: 13));
         body.Children.Add(Line("・" + consultLine, size: 13));
         body.Children.Add(new TextBlock { Text = "適用の直前に最新の勤務表でもう一度検査し、必須違反が減らない・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        foreach (var duty in CellSheetLogic.ChangeDutyLines) body.Children.Add(new TextBlock { Text = duty, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = CellSheetLogic.ConsultNotContactNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var schedule = _tabCache.TryGetValue("schedule", out var sv) ? sv as ScheduleView : null;
@@ -497,7 +496,7 @@ public sealed partial class MainWindow : Window
         }
         var dialog = new ContentDialog
         {
-            XamlRoot = Nav.XamlRoot, Title = p.Purpose is not null ? "この変更を適用しますか？" : p.Title, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
+            XamlRoot = Nav.XamlRoot, Title = ChainFixPreview.PreviewTitle, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
             PrimaryButtonText = CellSheetLogic.ApplyCountButton(p.Suggestion.Ops.Count), SecondaryButtonText = consulted ? null : ConsultList.Button,
             CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
         };

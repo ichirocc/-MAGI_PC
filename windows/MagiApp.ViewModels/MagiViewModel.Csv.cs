@@ -469,6 +469,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
+                ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.Message = msg;
             }, ct: ct);

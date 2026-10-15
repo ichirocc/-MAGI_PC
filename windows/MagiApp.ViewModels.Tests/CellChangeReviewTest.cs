@@ -26,7 +26,7 @@ public class CellChangeReviewTest
         var trial = S.Select(row => row.ToArray()).ToArray();
         trial[i][j] = k;
         var after = UnifiedViolationChecker.Check(St, trial);
-        Assert.Equal($"必須違反（勤務表全体）：{Rep.Hard}件 → {after.Hard}件", r.HardLine);
+        Assert.Equal($"必須違反（勤務表全体）：{AnalysisTriage.HardText(Rep.Breakdown, Rep.Hard)} → {AnalysisTriage.HardText(after.Breakdown, after.Hard)}", r.HardLine);
         Assert.Equal($"{names[i]}さん　{DayText.Full(St.StartDate, j)} {syms[S[i][j]]} → {syms[k]}", r.Change);
         Assert.Contains($"{DayText.Short(St.StartDate, j)}：{syms[k]}", r.Neighbors);
         // このセルの禁止の並びは、変えた後の報告に同じ場所の鍵が残るかどうかで「解消／残る」を言う。
@@ -60,6 +60,9 @@ public class CellChangeReviewTest
         Assert.Equal(("自動作成：未実行（手で編集）", "評価：必須違反 3件"), CellSheetLogic.BoardStatusLines(false, true, true, 3, 5));
         Assert.Equal(("自動作成：済み", "評価：要調整 5件"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 5));
         Assert.Equal(("自動作成：済み", "評価：違反なし"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 0));
+        // [3.678.0] 自動作成のあと手で変えた盤面は「未実行」と言わない。
+        Assert.Equal("自動作成：済み（そのあと手で変更あり）", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: true).First);
+        Assert.Equal("自動作成：未実行（手で編集）", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: false).First);
     }
 
     [Fact]

@@ -739,7 +739,7 @@ public sealed partial class ScheduleView : UserControl
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         // [Android 3.623.0] 「必須 N ▼」（Kotlin HardListChip）＝結果があり実行中でなく必須違反が残るときだけ。
         HardListButton.Visibility = !ui.Running && ui.HasResult && ui.BestHard > 0 ? Visibility.Visible : Visibility.Collapsed;
-        HardListButton.Content = $"必須 {ui.BestHard} ▼";
+        HardListButton.Content = $"必須 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} ▼";
         RenderFilterBar(ui);
         RenderShortageBanner(ui);
         RenderSearchLegend(ui);
@@ -1449,9 +1449,10 @@ public sealed partial class ScheduleView : UserControl
                         col.Children.Add(Caption("この組み合わせで変わる回数"));
                         foreach (var l in notes) col.Children.Add(Small("・" + l));
                     }
-                    col.Children.Add(Caption("ほかの問題への影響"));
                     var skip = target is not null ? CellSheetLogic.FixTargetFamilies(target) : picked is not null ? new HashSet<string> { picked } : new HashSet<string>();
-                    foreach (var l in CellSheetLogic.OtherEffectLines(s, skip, LabelOf))
+                    var others = CellSheetLogic.OtherEffectLines(s, skip, LabelOf, hardShown: CellSheetLogic.HardChangeLine(s.Diff, LabelOf) is not null);
+                    if (others.Count > 0) col.Children.Add(Caption("ほかの問題への影響"));
+                    foreach (var l in others)
                         col.Children.Add(new TextBlock { Text = "・" + l, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                 }
                 else col.Children.Add(new TextBlock { Text = NextActionGuide.FixImpactLines(s, LabelOf).HardLine, FontSize = 13, Foreground = fg, TextWrapping = TextWrapping.Wrap });
@@ -1940,7 +1941,7 @@ public sealed partial class ScheduleView : UserControl
                 rows.Children.Add(row);
             }
         }
-        if (days.Count == 0) panel.Children.Add(new TextBlock { Text = "人員の過不足はありません。" });
+        if (days.Count == 0 && !rest) panel.Children.Add(new TextBlock { Text = "人員の過不足はありません。" });
         if (rest)
         {
             foreach (var l in CellSheetLogic.RestOverIntro(ct.OverDays.All(j => _vm.NeedCellLimits(kk, j)?.Hi == 0)))
@@ -2183,11 +2184,11 @@ public sealed partial class ScheduleView : UserControl
             ShowPeek();
             return;
         }
-        var collapse = new Button { Content = "すべてのシフト ▴", MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        var collapse = new Button { Content = "小さく表示 ▾", MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
         collapse.Click += (_, _) => { _cellSheetExpanded = false; Reopen(i, j, mode); };
         panel.Children.Insert(0, collapse);
 
-        // ちら見（Kotlin PeekBody）: ①違反の 1 行＋✕ ②対象＋前/次 ③希望を取り消す・S6 の既存の推奨・上位 4 シフト・他 ▸。
+        // ちら見（Kotlin PeekBody）: ①違反の 1 行＋✕ ②対象＋前/次 ③希望を取り消す・S6 の既存の推奨・上位 4 シフト・詳しく ▸。
         void ShowPeek()
         {
             var peek = new StackPanel { Spacing = 4, MaxWidth = 400 };
@@ -2269,8 +2270,8 @@ public sealed partial class ScheduleView : UserControl
                 };
                 acts.Children.Add(b);
             }
-            var more = new Button { Content = "他 ▸", MinHeight = 48 };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "すべてのシフトを表示");
+            var more = new Button { Content = "詳しく ▸", MinHeight = 48 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "問題の説明と直し方を表示");
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
             if (extra.Children.Count > 0) peek.Children.Add(extra);
@@ -2399,7 +2400,7 @@ public sealed partial class ScheduleView : UserControl
         if (mode == 0 && step == 2 && pickTo is { } to && _vm.CellChangeReviewFor(i, j, to, LabelOf) is { } review)
         {
             // ③ 影響を確認して適用（値はすべて正式な検査で評価した結果）。
-            panel.Children.Add(Body("この変更を適用しますか？", bold: true));
+            panel.Children.Add(Body(ChainFixPreview.PreviewTitle, bold: true));
             panel.Children.Add(Body(review.Change, bold: true));
             void Section(string title, IReadOnlyList<string> lines)
             {
@@ -2413,7 +2414,6 @@ public sealed partial class ScheduleView : UserControl
             panel.Children.Add(Body(review.HardLine));
             Section("人数と回数への影響", review.Headcount.Concat(review.Counts).ToList());
             Section("希望・固定への影響", review.WishPin);
-            panel.Children.Add(new TextBlock { Text = ChainFixPreview.ChangeDutyNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             // 適用と戻る（比較の部分はシートごと縦に送る）。
             var apply = Wide(ChainFixPreview.ApplyChangeButton, accent: true);
             apply.IsEnabled = !ui.Running;
@@ -2578,7 +2578,7 @@ public sealed partial class ScheduleView : UserControl
             }
             if (status.Severity != CellSeverity.None)
             {
-                var memo = new HyperlinkButton { Content = "⚑ ルールの見直しへ" };
+                var memo = new HyperlinkButton { Content = "⚑ ルールの見直し候補に入れる" };
                 memo.Click += (_, _) => { flyout.Hide(); _vm.AddReviewMemo($"{name} {DayText.Full(ui.StartDate, j)} {Sym(cur)}：{status.Cause}"); };
                 panel.Children.Add(memo);
             }

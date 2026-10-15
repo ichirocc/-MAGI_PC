@@ -26,7 +26,7 @@ public class PreDistributionCheckTest
         Assert.False(rows["相談"].Ok);   // 必須 0 でも相談の未完了は別に示す
         Assert.False(rows["保存"].Ok);
         Assert.Equal("まだ勤務表 CSV に保存していません", rows["保存"].Value);
-        Assert.Equal("曜日の偏り 20pt・期間の制約 4件", rows["要調整"].Value);
+        Assert.Equal("期間の制約 4件・曜日の偏り 20pt", rows["要調整"].Value);   // 重み×数の順（作成の結果カードと同じ）
         Assert.Equal("対象期間 10/1〜10/31・現在採用している勤務表", rows["対象"].Value);
     }
 
@@ -39,6 +39,19 @@ public class PreDistributionCheckTest
         var rows = PreDistributionCheck.Rows(ui, "この内容で勤務表 CSV を保存済みです（10:15）。", L).ToDictionary(r => r.Label);
         Assert.Equal("1件・2人（禁止の並び 1件・人員不足 2人）", rows["必須違反"].Value);
         Assert.True(rows["保存"].Ok);
+    }
+
+    /// <summary>[3.678.0] 相談の未完了は回答待ちと保留だけ（了承・不可の回答があれば数えない）。</summary>
+    [Fact]
+    public void ConsultRowCountsOnlyPendingAndHeld()
+    {
+        var ui = Base();
+        ui.Consults = new List<ConsultItem> { new("a", "n"), new("b", "n", Answer: ConsultAnswer.Agreed),
+            new("c", "n", Held: true, Answer: ConsultAnswer.Agreed), new("d", "n", Answer: ConsultAnswer.Declined) };
+        Assert.Equal("未完了 2件（うち保留 1件）（ホームの「相談中」）", PreDistributionCheck.Rows(ui, null, L).ToDictionary(r => r.Label)["相談"].Value);
+        var agreed = Base();
+        agreed.Consults = new List<ConsultItem> { new("b", "n", Answer: ConsultAnswer.Agreed) };
+        Assert.True(PreDistributionCheck.Rows(agreed, null, L).ToDictionary(r => r.Label)["相談"].Ok);
     }
 
     /// <summary>[3.665.0] 月の境目は評価していないと明示する（前月・翌月の勤務はデータに無い）。注記は窓が月の外へはみ出しうる日を変えたときだけ。</summary>

@@ -268,7 +268,7 @@ public class CellSheetLogicTest
         Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9", CellSheetLogic.TourHeading(items, at));
         Assert.Null(CellSheetLogic.TourHeading(items, 9));
         Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4", CellSheetLogic.PeekHeading(CellSheetLogic.TourHeading(items, at)!));
-        Assert.Equal("ほかに人員不足 2件（日ヘッダから）", CellSheetLogic.TourCovULine(2));
+        Assert.Equal("ほかに人員不足 2人（日の印から開けます）", CellSheetLogic.TourCovULine(2));
         Assert.Null(CellSheetLogic.TourCovULine(0));
     }
 
@@ -296,7 +296,7 @@ public class CellSheetLogicTest
         Assert.Equal("10/7(水)", CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 6));
         Assert.Null(CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, 31));
         Assert.Null(CellSheetLogic.AdjacentDayLabel("2026-10-01", 31, -1));
-        Assert.Equal("職員01 10/3 をA4に変更しました", CellSheetLogic.CellChangedMessage("職員01", "2026-10-01", 2, "A4"));
+        Assert.Equal("職員01さんの 10/3(土) を A4 に変更しました", CellSheetLogic.CellChangedMessage("職員01", "2026-10-01", 2, "A4"));
         Assert.Equal("未登録", CellSheetLogic.WishTabState(null, 1));
         Assert.Equal("反映済", CellSheetLogic.WishTabState(1, 1));
         Assert.Equal("未反映", CellSheetLogic.WishTabState(2, 1));
@@ -438,8 +438,8 @@ public class CellSheetLogicTest
     {
         Assert.Equal(4, CellSheetLogic.PeekPickCount(360 - 32));
         Assert.Equal(4, CellSheetLogic.PeekPickCount(390 - 32));
-        Assert.Equal(4, CellSheetLogic.PeekPickCount(282));
-        Assert.Equal(3, CellSheetLogic.PeekPickCount(281));
+        Assert.Equal(4, CellSheetLogic.PeekPickCount(290));
+        Assert.Equal(3, CellSheetLogic.PeekPickCount(289));
         Assert.Equal(1, CellSheetLogic.PeekPickCount(40));
         Assert.Equal(4, CellSheetLogic.PeekPickCount(800));
     }
@@ -455,5 +455,24 @@ public class CellSheetLogicTest
         Assert.True(CellSheetLogic.FixAddresses(s, "c3n"));
         Assert.False(CellSheetLogic.FixAddresses(s, "c1"));
         Assert.Equal("選んだ問題（期間の制約）を減らす案は見つかりませんでした。ほかの問題を選ぶと、その直し方を確認できます。", CellSheetLogic.NoFixForProblemLine("期間の制約"));
+    }
+
+    /// <summary>[3.678.0] 必須違反の数は単位ごと（人員不足は人）。内訳が無いときだけ件。</summary>
+    [Fact]
+    public void HardTextSplitsUnits()
+    {
+        Assert.Equal("1件・2人", AnalysisTriage.HardText(new Dictionary<string, int> { ["c3n"] = 1, ["covU"] = 2, ["c1"] = 5 }, 3));
+        Assert.Equal("2人", AnalysisTriage.HardText(new Dictionary<string, int> { ["covU"] = 2 }, 2));
+        Assert.Equal("4件", AnalysisTriage.HardText(new Dictionary<string, int>(), 4));
+    }
+
+    /// <summary>[3.678.0] 確認の見出しは 1 手でも入替でも同じ。件数が増えても重い違反が減った採用は理由を言う。</summary>
+    [Fact]
+    public void PreviewTitleAndAdoptedDespiteMore()
+    {
+        Assert.Equal("この変更を適用しますか？", ChainFixPreview.PreviewTitle);
+        Assert.Equal("件数は +3 ですが、重い違反が減ったため改善として採用しました", CompletedText.AdoptedDespiteMore(10, 13, 900.0, 500.0));
+        Assert.Null(CompletedText.AdoptedDespiteMore(10, 9, 900.0, 500.0));
+        Assert.Null(CompletedText.AdoptedDespiteMore(10, 13, 500.0, 500.0));
     }
 }

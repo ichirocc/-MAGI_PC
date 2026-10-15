@@ -176,6 +176,7 @@ public sealed partial class MagiViewModel
         LogOp(oos > 0 ? "W" : "I", $"希望を勤務表へ反映 {applied}件{note}");
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
@@ -272,6 +273,7 @@ public sealed partial class MagiViewModel
                 ui.MessageIsError = false;
                 ui.HasResult = true;
                 ui.EngineRan = false;
+                ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.Message = $"他の案 {i + 1} を適用しました: {AnalysisTriage.ReportCountsText(rep.Breakdown)}";
             });
@@ -321,6 +323,7 @@ public sealed partial class MagiViewModel
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
@@ -382,6 +385,7 @@ public sealed partial class MagiViewModel
         var shiftKigou = shift >= 0 && shift < st.Shifts.Count ? st.Shifts[shift].Kigou : shift.ToString();
         Ui.MessageIsError = false;
         Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
@@ -470,7 +474,7 @@ public sealed partial class MagiViewModel
         if (s is null)
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{slot} を埋める入れ替えの手順が見つかりませんでした。「直し方を探す」で探し直してください";
+            Ui.Message = $"{slot} を埋める入れ替えの手順が見つかりませんでした。「変更案を探す」で探し直してください";
             return;
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,

@@ -58,6 +58,10 @@ public sealed record AnalysisTriage(
         return parts.Count == 0 ? null : string.Join("・", parts);
     }
 
+    /// <summary>必須違反の数を単位ごとに（例「3件・2人」）。内訳が無いときだけ件で言う。</summary>
+    public static string HardText(IReadOnlyDictionary<string, int>? breakdown, long n) =>
+        (breakdown is null ? null : UnitTotals(breakdown, MirrorKeys.Hard)) ?? $"{n}件";
+
     /// <summary>族ごとの増減を単位ごとに足した言い方（例「1件減る・2人増える」）。同じ単位の中だけで足す。全部 0 なら null。</summary>
     public static string? UnitDeltaText(IEnumerable<(string Family, int Delta)> diff, IEnumerable<string> families)
     {

@@ -199,6 +199,8 @@ public class ConsultListTest
         Assert.Equal("未確認事項 1 件（保留 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { b }));
         Assert.Null(ConsultList.Line(Array.Empty<ConsultItem>()));
         Assert.True(ConsultList.Match(new[] { b }, new ConsultItem("s2", "n2"))?.Held);
+        Assert.Null(ConsultList.Line(new[] { a with { Answer = ConsultAnswer.Agreed } }));   // 了承済みは数えない
+        Assert.Equal("未確認事項 1 件（相談中 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { a, a with { Subject = "s3", Answer = ConsultAnswer.Agreed } }));
     }
 
     [Fact]

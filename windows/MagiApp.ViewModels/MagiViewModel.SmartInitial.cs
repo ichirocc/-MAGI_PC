@@ -82,6 +82,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = true;
                 ui.EngineRan = true;
+                ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.ElapsedMs = 0;
                 ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます";

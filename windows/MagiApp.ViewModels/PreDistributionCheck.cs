@@ -25,13 +25,13 @@ public static class PreDistributionCheck
         var period = !string.IsNullOrWhiteSpace(ui.StartDate) && ui.Days > 0 ? DayText.Range(ui.StartDate, 0, ui.Days - 1) : "期間未設定";
         var evaluated = ui.HasResult && !ui.Running && ui.V6 is not null;
         var hardFams = MirrorKeys.Hard.Where(k => ui.Breakdown.TryGetValue(k, out var v) && v > 0).Select(k => (k, ui.Breakdown[k])).ToList();
-        var hardText = ui.BestHard == 0 ? "0件" : $"{AnalysisTriage.UnitTotals(ui.Breakdown, MirrorKeys.Hard) ?? $"{ui.BestHard}件"}（" +
+        var hardText = ui.BestHard == 0 ? "0件" : $"{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}（" +
             string.Join("・", hardFams.Select(f => $"{labelOf(f.k)} {f.Item2}{AnalysisTriage.UnitOf(f.k)}")) + "）";
-        var soft = ui.Breakdown.Where(kv => kv.Value > 0 && !MirrorKeys.Hard.Contains(kv.Key)).OrderByDescending(kv => kv.Value).ToList();
-        var softText = soft.Count == 0 ? "なし" : string.Join("・", soft.Take(3).Select(kv => $"{labelOf(kv.Key)} {kv.Value}{AnalysisTriage.UnitOf(kv.Key)}")) +
-            (soft.Count > 3 ? $" ほか{soft.Count - 3}種類" : "");
-        var consults = ui.Consults.Count;
-        var held = ui.Consults.Count(c => c.Held);
+        // 作成の結果カードと同じ並び（重み×数の大きい順）。
+        var softText = CellSheetLogic.SoftSummary(ui.Breakdown, labelOf);
+        var open = ui.Consults.Where(ConsultList.Unresolved).ToList();
+        var consults = open.Count;
+        var held = open.Count(c => c.Held);
         return new List<PreDistRow>
         {
             new("対象", $"対象期間 {period}・現在採用している勤務表", null),
@@ -39,7 +39,7 @@ public static class PreDistributionCheck
             new("必須違反", hardText, ui.BestHard == 0),
             new("要調整", softText, null),
             new("月の境目", MonthEdgeNote, null),
-            new("相談", consults == 0 ? "「相談中」に登録されている項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
+            new("相談", consults == 0 ? "「相談中」に未解決の項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
             new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true),
         };
     }

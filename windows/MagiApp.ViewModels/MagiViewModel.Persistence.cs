@@ -251,6 +251,7 @@ public sealed partial class MagiViewModel
         RestoreAlts(snap.Alts);   // 盤面と一緒に、その盤面で有効だった「他の案」も戻す
         Ui.RunSummary = null;
         Ui.StopSummary = null;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         ClearFixState();
@@ -287,6 +288,7 @@ public sealed partial class MagiViewModel
         RestoreAlts(snap.Alts);
         Ui.RunSummary = null;
         Ui.StopSummary = null;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
         Ui.RelaxedBoard = false;
         ClearFixState();
@@ -450,6 +452,7 @@ public sealed partial class MagiViewModel
                 ui.Running = false;
                 ui.HasResult = markResult;
                 ui.EngineRan = markResult;
+                ui.RanBeforeEdit = false;
                 ui.RelaxedBoard = false;
                 ui.ConstraintsEdited = false;
                 ui.StructureEdited = false;
@@ -500,6 +503,7 @@ public sealed partial class MagiViewModel
             _lastSettingsSig = null;
             _lastResultHard = -1L;
             _lastTopHardFamily = null;
+            _initBaseKey = null;
             LogOp("I", $"読込 {lp.State.StaffCount}名/{lp.State.DayCount}日/{lp.State.ShiftCount}シフト");
         }
         catch (OperationCanceledException)

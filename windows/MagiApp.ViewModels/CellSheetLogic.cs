@@ -462,7 +462,7 @@ public static class CellSheetLogic
         at >= 0 && at < items.Count ? $"必須違反 {at + 1} / {items.Count} ・ {items[at].Heading}" : null;
 
     /// <summary>巡回に入らない人員不足の件数の 1 行（0 なら null）。</summary>
-    public static string? TourCovULine(int covU) => covU > 0 ? $"ほかに人員不足 {covU}件（日ヘッダから）" : null;
+    public static string? TourCovULine(int covU) => covU > 0 ? $"ほかに人員不足 {covU}人（日の印から開けます）" : null;
 
     /// <summary>巡回の次のセル（今が巡回に無ければ先頭、末尾なら先頭へ）。空なら null。</summary>
     public static (int I, int J)? NextTourCell(IReadOnlyList<(int I, int J)> tour, (int I, int J)? current)
@@ -528,8 +528,8 @@ public static class CellSheetLogic
         return head.Concat(shown.Where(canDo.Contains)).Where(shown.Contains).Distinct().Take(n).ToList();
     }
 
-    /// <summary>ちら見の操作行に並べるシフトの数: 「他 ▸」(56dp) と同じ行に 52dp＋間 6dp で入るだけ（1〜4。Kotlin <c>peekPickCount</c>）。</summary>
-    public static int PeekPickCount(int contentWidthDp) => Math.Clamp((contentWidthDp - 56 + 6) / 58, 1, 4);
+    /// <summary>ちら見の操作行に並べるシフトの数: 「詳しく ▸」(64dp) と同じ行に 52dp＋間 6dp で入るだけ（1〜4。Kotlin <c>peekPickCount</c>）。</summary>
+    public static int PeekPickCount(int contentWidthDp) => Math.Clamp((contentWidthDp - 64 + 6) / 58, 1, 4);
 
     /// <summary>ちら見の見出し: 巡回の見出しから日付の範囲を落とす（Kotlin <c>peekHeading</c>）。</summary>
     public static string PeekHeading(string tourHeading)
@@ -583,7 +583,7 @@ public static class CellSheetLogic
         : families.Any(f => PinHardCellFamilies.Contains(VioBuckets.FamilyOfVioClass(f))) ? PinHardHint
         : "";
 
-    public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name} {DayText.Short(startDate, day)} を{symbol}に変更しました";
+    public static string CellChangedMessage(string name, string startDate, int day, string symbol) => $"{name}さんの {DayText.Full(startDate, day)} を {symbol} に変更しました";
 
     public const string AddressCheckingText = "案ごとに、このセルの問題が解消するか確認しています…";
 
@@ -695,12 +695,14 @@ public static class CellSheetLogic
     public static IReadOnlyList<FixSuggestion> RankForTarget(IReadOnlyList<FixSuggestion> list, IReadOnlyList<IReadOnlyList<int>> schedule, FixTarget? t) =>
         t is null ? list : list.OrderBy(s => t.Effect(schedule, s.Ops).Fixes ? 0 : 1).ToList();
 
-    /// <summary>「ほかの問題への影響」の行（対象の族は上に出すので除く）。必須違反の増減を先頭に。族名は <paramref name="labelOf"/>（WinUI の BreakdownLabels）。</summary>
-    public static IReadOnlyList<string> OtherEffectLines(FixSuggestion s, IReadOnlySet<string> skipFamilies, Func<string, string> labelOf)
+    /// <summary>「ほかの問題への影響」の行（対象の族は上に出すので除く）。必須違反の増減を先頭に。族名は <paramref name="labelOf"/>（WinUI の BreakdownLabels）。
+    /// カードの先頭に <see cref="HardChangeLine"/> があれば必須は繰り返さない（<paramref name="hardShown"/>）。</summary>
+    public static IReadOnlyList<string> OtherEffectLines(FixSuggestion s, IReadOnlySet<string> skipFamilies, Func<string, string> labelOf, bool hardShown = false)
     {
         var hard = "必須違反：" + (AnalysisTriage.UnitDeltaText(s.Diff, MirrorKeys.Hard)
             ?? (s.DeltaHard == 0 ? "変わらない" : s.DeltaHard < 0 ? $"{-s.DeltaHard}件減る" : $"{s.DeltaHard}件増える"));
-        return new[] { hard }.Concat(s.Diff.Where(d => d.Delta != 0 && !skipFamilies.Contains(d.Family))
+        return (hardShown ? Array.Empty<string>() : new[] { hard }).Concat(s.Diff.Where(d => d.Delta != 0 && !skipFamilies.Contains(d.Family)
+                && !(hardShown && MirrorKeys.Hard.Contains(d.Family)))
             .Select(d => $"{labelOf(d.Family)}：{Math.Abs(d.Delta)}{AnalysisTriage.UnitOf(d.Family)}{(d.Delta < 0 ? "減る" : "増える")}")).ToList();
     }
 
@@ -753,9 +755,9 @@ public static class CellSheetLogic
     /// <summary>確認の画面を閉じるボタン（案の一覧から来たときは一覧へ戻る）。</summary>
     public const string BackToFixesButton = "別案を見る";
 
-    /// <summary>必須 0 の結果の札。要調整が残るなら「配布可」と言い切らず、配布前の確認へ案内する。</summary>
+    /// <summary>必須 0 の結果の札。「配布可」とは言い切らず、配布前の確認へ案内する。</summary>
     public static string ReadyBadgeLabel(long soft, IReadOnlyDictionary<string, int>? breakdown = null) =>
-        soft > 0 ? $"要調整 {(breakdown is null ? null : AnalysisTriage.UnitTotals(breakdown, MirrorKeys.Soft)) ?? $"{soft}件"}・配布前の確認" : "配布可";
+        soft > 0 ? $"要調整 {(breakdown is null ? null : AnalysisTriage.UnitTotals(breakdown, MirrorKeys.Soft)) ?? $"{soft}件"}・配布前の確認" : "必須違反 0・配布前の確認";
 
     /// <summary>集計期間（見出しの 2 行目）。</summary>
     public static string? PeriodLine(string startDate, int days) =>
@@ -1013,7 +1015,7 @@ public static class CellSheetLogic
             ThisCell: thisCell.Count > 0 ? thisCell : new List<string> { "このセルに違反はありません" },
             OthersResolved: diff.Resolved.Where(key => !here.Contains(key)).Select(Label).ToList(),
             Appeared: diff.Appeared.Select(Label).ToList(),
-            HardLine: $"必須違反（勤務表全体）：{before.Hard}件 → {after.Hard}件",
+            HardLine: $"必須違反（勤務表全体）：{AnalysisTriage.HardText(before.Breakdown, before.Hard)} → {AnalysisTriage.HardText(after.Breakdown, after.Hard)}",
             Headcount: other,
             Counts: counts,
             WishPin: wishPin);
@@ -1133,11 +1135,11 @@ public static class CellSheetLogic
 
     /// <summary>上部の札の 2 行目以降: 自動作成の状態と、今の勤務表の評価（2026-10-14 利用者レビュー「未計算」を分ける）。</summary>
     public static (string First, string Second) BoardStatusLines(bool engineRan, bool hasResult, bool checkedBoard, long hard, long soft,
-        IReadOnlyDictionary<string, int>? breakdown = null)
+        IReadOnlyDictionary<string, int>? breakdown = null, bool ranBeforeEdit = false)
     {
         var b = breakdown ?? new Dictionary<string, int>();
-        return (engineRan ? "自動作成：済み" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
-            !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {AnalysisTriage.UnitTotals(b, MirrorKeys.Hard) ?? $"{hard}件"}"
+        return (engineRan ? "自動作成：済み" : ranBeforeEdit && hasResult ? "自動作成：済み（そのあと手で変更あり）" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
+            !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {AnalysisTriage.HardText(b, hard)}"
             : soft > 0 ? $"評価：要調整 {AnalysisTriage.UnitTotals(b, MirrorKeys.Soft) ?? $"{soft}件"}" : "評価：違反なし");
     }
 
@@ -1183,7 +1185,7 @@ public static class CellSheetLogic
     public static bool ImprovesTarget(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops) =>
         t is null || t.Effect(schedule, ops).Fixes;
 
-    public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「直し方を探す」で探し直してください";
+    public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「変更案を探す」で探し直してください";
 
     /// <summary>確認の画面の「新たな必須違反」（null＝評価していない＝なしと言わない、統合仕様 INV-10）。</summary>
     public static string NewHardLine(IReadOnlyList<string>? names) =>
@@ -1191,9 +1193,6 @@ public static class CellSheetLogic
 
     /// <summary>適用後の「今回の問題」の状態（解消／減少／残存）。</summary>
     public static string AppliedStatusWord(CountEffect e) => e.GapAfter == 0 ? "解消" : e.GapAfter < e.GapBefore ? "減少" : "残存";
-
-    /// <summary>確認の画面の「対応する人」「確認する時期」（担当者名・期限のデータは無い＝未設定と書く）。</summary>
-    public static readonly IReadOnlyList<string> ChangeDutyLines = new[] { "対応する人：勤務表の作成担当者（担当者名は未設定）", "確認する時期：変更を適用する前（期限は未設定）" };
 
     /// <summary>相談事項に登録しても、連絡や了承の記録にはならない（記録だけ）。</summary>
     public const string ConsultNotContactNote = "相談事項に登録しても、本人への連絡や了承済みにはなりません。";
