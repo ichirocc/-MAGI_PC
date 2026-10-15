@@ -58,7 +58,7 @@
             <ToggleSwitch x:Name="AptFairUnguardedToggle" Header="容認 6% で重い違反の増加も許す"
                           OnContent="ON" OffContent="OFF" Toggled="OnAptFairUnguardedToggled" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="試験中・じっくりでだけ効きます。期間の制約や上限などが1件増える手も予算内なら採ります。測定では目的に当たりませんでした（既定はOFF）" />
+                       Text="試験中・じっくりのときだけ働きます。期間の制約や上限などが1件増える手も予算内なら採ります。測定では目的に当たりませんでした（既定はOFF）" />
             <ToggleSwitch x:Name="C1MoveARepairToggle" Visibility="Collapsed" Header="期間の制約の入れ替えで、できた禁止の並びも直す"
                           OnContent="ON" OffContent="OFF" Toggled="OnC1MoveARepairToggled" />
             <TextBlock Visibility="Collapsed" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"

@@ -152,5 +152,5 @@ public static class FixExplain
     /// <summary>下書きの確認の一文。hard＝置き換える前の必須違反（まだ数えていなければ null＝件数を言わない）。</summary>
     public static string DraftConfirmText(string? hard) =>
         hard is null ? "今の勤務表を下書きで置き換えます。元に戻せます" : $"今の勤務表（必須 {hard}）を下書きで置き換えます。元に戻せます";
-    public const string DraftUndoNote = "元に戻すで前の勤務表に戻せます";
+    public const string DraftUndoNote = "「元に戻す」で前の勤務表に戻せます";
 }

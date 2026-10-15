@@ -225,7 +225,7 @@ public static class ConsultList
 
     /// <summary>回数不足の相談事項（増やす案が見つからないとき。Kotlin <c>consultCountShortage</c>）。</summary>
     public static ConsultItem CountShortage(string name, string sym, string head, int staff) =>
-        new($"{name}さんの「{sym}」の回数", $"{head}。条件を守って増やせる案が見つからない＝追加候補日と変更を妨げる条件を確認", staff, StaffName: name);
+        new($"{name}さんの「{sym}」の回数", $"{head}。条件を守って増やせる案が見つからないため、追加候補日と変更を妨げる条件を確認", staff, StaffName: name);
 
     /// <summary>セルの変更の確認の画面から（当てずに相談してから決める。Kotlin <c>consultCellChange</c>）。</summary>
     public static ConsultItem CellChange(CellChangeReview r, int staff, int day, string staffName, string? date) =>

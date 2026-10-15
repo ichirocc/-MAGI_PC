@@ -209,7 +209,7 @@ public sealed partial class MagiViewModel
     {
         if (!Ws1Ops.SymbolCollides(existing, kigou, exceptIndex)) return false;
         var k = kigou.Trim();
-        Notify($"記号「{k}」はすでに別の{what}で使われているため、保存しませんでした（制約の参照が混ざるため、別の記号にしてください）", "W");
+        Notify($"記号「{k}」はすでに別の{what}で使われているため、保存しませんでした。制約の参照が混ざるため、別の記号にしてください", "W");
         return true;
     }
 

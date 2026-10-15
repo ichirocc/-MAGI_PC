@@ -145,7 +145,7 @@ public sealed record AnalysisTriage(
             var slots = $"{first.DayLabel}の「{first.ShiftSymbol}」" + (stuckSurplus.Count > 1 ? $"など{stuckSurplus.Count}枠" : "");
             // 曜日の偏り・グループ内のばらつきには緩める設定が無い＝手で動かす案内にする。
             var remedy = first.BlockedFamily is "weekly" or "fair" ? "勤務表で手で動かすと減らせます。" : $"{fam}の設定を緩めると動きます。";
-            o["covO"] = $"{slots}は、動かす手が「{fam}」に負けて採用されません。{remedy}";
+            o["covO"] = $"{slots}は、動かす手は「{fam}」が優先されるため採用されません。{remedy}";
         }
         return o;
     }

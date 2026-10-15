@@ -1905,7 +1905,7 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight())
         {
             Ui.MessageIsError = true;
-            Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません（完了後にもう一度お試しください）";
+            Ui.Message = $"{BusyWhat()}の実行中は設定を変更できません。終わってからもう一度お試しください";
             return;
         }
         var s = _state;

@@ -240,7 +240,7 @@ public sealed partial class MagiViewModel
     /// 取り込んだかを必ず出す。挙動は不変＝知らせるだけで、違っていれば編集タブの「月次条件」で直せる。
     /// </summary>
     private static string PeriodNote(string startDate) =>
-        $"｜期間は「{startDate}」から として取り込みました（CSVに年月が無い場合は推定です。編集タブの「月次条件」で直せます）";
+        $"｜期間の開始を「{startDate}」として取り込みました（CSVに年月が無い場合は推定です。編集タブの「月次条件」で直せます）";
 
     /// <summary>
     /// CSV取込の振り分け。病院などの「勤務表テンプレCSV」(ユニット/スタッフ/凡例を含む完全な1ヶ月表) は
@@ -434,7 +434,7 @@ public sealed partial class MagiViewModel
                 Ui.Running = false;
                 Ui.Message = res.AmbiguousNames.Count > 0
                     ? $"CSV取込失敗: {ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}。編集タブ＞職員管理とCSVの両方で名前を区別してから、もう一度取り込んでください"
-                    : "CSV取込失敗: 一致する職員名がありませんでした（0名）。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
+                    : "CSV取込失敗: 一致する職員名がありませんでした。CSVの1列目の氏名が現在のデータと一致しているか、列レイアウト（氏名, 1日目, 2日目, …）をご確認ください。";
                 LogOp("W", "CSV取込 失敗: 職員名が0件一致のため取込を中止しました（氏名/列レイアウトを確認）");
                 return;
             }
