@@ -15,7 +15,7 @@ public sealed record GuidedFixPlan(
     IReadOnlyList<CoverageShortfall> Infeasible)
 {
     public bool AllDone => Target is null && Blocked.Count == 0 && Infeasible.Count == 0;
-    public string Title => AllDone ? "直し終わりました！" : "なおすのを手伝います";
+    public string Title => AllDone ? FixOutcomeText.ShortageDoneTitle : "なおすのを手伝います";
 
     public static GuidedFixPlan Build(CoverageDiagnosis? diag)
     {

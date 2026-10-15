@@ -12,9 +12,9 @@ public static class FixOutcomeText
     public static string Applied(string label, int hardBefore, int hardAfter, string softBefore, string softAfter, IReadOnlyDictionary<string, int>? afterBreakdown = null)
     {
         var left = AnalysisTriage.HardText(afterBreakdown, hardAfter);
-        return hardAfter == 0 && hardBefore > 0 ? $"{label} を当てました。必須違反はなくなりました（要調整 {softBefore}→{softAfter}）。"
-            : hardAfter < hardBefore ? $"{label} を当てました。必須違反 {hardBefore}→{hardAfter}。ほかの必須違反は {left} 残っています。"
-            : $"{label} を当てました。必須違反は変わらず {left}（要調整 {softBefore}→{softAfter}）。";
+        return hardAfter == 0 && hardBefore > 0 ? $"{label} を適用しました。必須違反はなくなりました（要調整 {softBefore}→{softAfter}）。"
+            : hardAfter < hardBefore ? $"{label} を適用しました。必須違反 {hardBefore}→{hardAfter}。ほかの必須違反は {left} 残っています。"
+            : $"{label} を適用しました。必須違反は変わらず {left}（要調整 {softBefore}→{softAfter}）。";
     }
 
     /// <summary>
@@ -44,4 +44,43 @@ public static class FixOutcomeText
         stillMiss is null
             ? $"{dayLabel} の「{shiftSymbol}」の人員不足を解消しました。" + (hardAfter > 0 ? $"ほかの必須違反は {AnalysisTriage.HardText(breakdown, hardAfter)} 残っています。" : "必須違反はなくなりました。")
             : $"{dayLabel} の「{shiftSymbol}」はまだ {stillMiss}人 足りません。必須違反は {AnalysisTriage.HardText(breakdown, hardAfter)}です。";
+
+    private static readonly System.Text.RegularExpressions.Regex ChainShiftRe = new("^（玉突き連鎖）(\\d+)人・(\\d+)マスを順に入れ替え$");
+    private static readonly System.Text.RegularExpressions.Regex ReoptRe = new("^（再最適化）(.+) の(\\d+)名を最適割当$");
+    private static readonly System.Text.RegularExpressions.Regex ChainFillRe = new("^（連鎖）(.+) の「(.+)」不足を(\\d+)コマ補充$");
+
+    /// <summary>改善の 1 手の名を画面の言葉へ（Kotlin <c>fixDisplayLabel</c>。エンジンの名は照合の鍵にも使う＝表示のときだけ言い換える）。合わなければそのまま。</summary>
+    public static string FixDisplayLabel(string label)
+    {
+        if (ChainShiftRe.Match(label) is { Success: true } m1) return $"{m1.Groups[1].Value}人の勤務を順に入れ替える（{m1.Groups[2].Value}か所）";
+        if (ReoptRe.Match(label) is { Success: true } m2) return $"{m2.Groups[1].Value} の {m2.Groups[2].Value}人の勤務を組み直す";
+        if (ChainFillRe.Match(label) is { Success: true } m3) return $"{m3.Groups[1].Value}さんの {m3.Groups[2].Value} を {m3.Groups[3].Value}回増やす";
+        return label;
+    }
+
+    /// <summary>改善の案の 1 行目＝効き目（必須違反の変化、無ければ要調整の変化）。どちらも動かなければ null。族名は <paramref name="labelOf"/>。</summary>
+    public static string? FixBenefitLine(MagiEngine.V6.FixSuggestion s, Func<string, string> labelOf)
+    {
+        if (CellSheetLogic.HardChangeLine(s.Diff, labelOf) is { } h) return h;
+        var hard = new HashSet<string>(MagiEngine.V6.MirrorKeys.Hard);
+        var soft = AnalysisTriage.FamilyDeltaList(s.Diff.Where(x => !hard.Contains(x.Family)), labelOf);
+        return soft.Length > 0 ? $"要調整の変化：{soft}" : null;
+    }
+
+    public const string NoFixSuggestionText = "今の勤務表で、1手で減らせる案は見つかりませんでした。上の職員を押すと、その人に絞って探します";
+
+    /// <summary>自動で整えた結果の通知（採用したか＝<paramref name="adopted"/>）。要調整は単位ごと、必須違反は残りの有無だけ言う。</summary>
+    public static string PolishResultText(bool adopted, string softBefore, string softAfter, int hardAfter, string hardAfterText) =>
+        adopted ? $"自動で整えました。要調整 {softBefore} → {softAfter}" + (hardAfter == 0 ? "（必須違反はなしのまま）" : $"（必須違反 {hardAfterText}）")
+        : "自動で整えましたが、要調整は減りませんでした（勤務表は変えていません）";
+
+    /// <summary>人員不足の候補 1 人の影響（「休 8回 → 7回（下限 8回を割ります）」）。今の勤務が無ければ null。</summary>
+    public static string? GuidedCandidateImpact(string? fromSym, int before, int? lo) =>
+        fromSym is null ? null : $"{fromSym} {before}回 → {before - 1}回" + (lo is { } l && before - 1 < l ? $"（下限 {l}回を割ります）" : "");
+
+    /// <summary>人員不足を直し終えたときの、ほかの必須違反（人員不足を除く）。無ければ null。</summary>
+    public static string? OtherHardAfterShortage(IReadOnlyDictionary<string, int> breakdown) =>
+        AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Hard.Where(f => f != "covU")) is { } t ? $"ほかの必須違反（{t}）は分析タブで" : null;
+
+    public const string ShortageDoneTitle = "人員不足は直し終わりました";
 }

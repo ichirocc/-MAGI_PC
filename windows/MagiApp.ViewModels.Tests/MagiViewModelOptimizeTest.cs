@@ -315,7 +315,7 @@ public class MagiViewModelOptimizeTest : IDisposable
     [Fact]
     public async Task SoftPolish_NoGain_ReportsNoFurtherImprovement()
     {
-        // MinimalState.Build() は制約皆無＝どの盤面も違反0。gain=0 の「これ以上は整いませんでした」分岐を検証。
+        // MinimalState.Build() は制約皆無＝どの盤面も違反0。gain=0 の「要調整は減りませんでした」分岐を検証。
         var fake = new FakeOptimizationService();
         var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
@@ -327,7 +327,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.HasResult);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("これ以上は整いませんでした", vm.Ui.Message);
+        Assert.Contains("要調整は減りませんでした", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("ソフト研磨 完了"));
     }
 

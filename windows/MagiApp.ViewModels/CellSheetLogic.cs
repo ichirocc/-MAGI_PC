@@ -223,6 +223,26 @@ public static class CellSheetLogic
 
     public const string SingleCellNote = "1 マスでは直りません。前後の日の組み合わせが必要です。";
 
+    /// <summary>このセルが「足りない側」の族（Kotlin <c>shortSideFamilies</c>＝当日の自分の勤務の人員不足・自分の回数の下限割れ／目標未満）。セルの問題として赤で出さない。</summary>
+    public static IReadOnlySet<string> ShortSideFamilies(IReadOnlyList<string> needClasses, IReadOnlyList<string> countClasses)
+    {
+        var s = new HashSet<string>();
+        if (needClasses.Contains("vio-covU")) s.Add("covU");
+        if (countClasses.Contains("vio-low")) s.Add("low");
+        if (countClasses.Contains("vio-aptLow")) s.Add("apt");
+        return s;
+    }
+
+    /// <summary>足りない側のセルの注意の 1 行。<paramref name="covGapAfter"/>＝変えたあとの当日の不足人数（人員不足の族が無ければ null）。</summary>
+    public static string ShortSideCaution(string name, string sym, string dayShort, int? covGapAfter, int countAfter, string basis, int? target) =>
+        $"{name}さんの{sym}は必要な勤務です（" + (
+            covGapAfter is { } g ? $"変えると {dayShort} の {sym} の不足が {g}人に増えます"
+            : target is { } t ? $"変えると {sym} が {countAfter}回になり、{basis} {t}回をさらに下回ります"
+            : $"変えると {sym} の回数がさらに足りなくなります") + "）";
+
+    /// <summary>足りない側のセルの主ボタン（当日のその勤務に入れる人を探す）。</summary>
+    public static string ShortSideSearchButton(string dayShort, string sym) => $"{dayShort} の {sym} に入れる人を探す";
+
     /// <summary>おすすめが無く、置ける候補（今の値を除く）がすべて必須を増やす印なら、この 1 マスだけでは直らない。印の計算前（空）は false。</summary>
     public static bool SingleCellHopeless(ShiftMarks marks, IEnumerable<int> candidates, int current)
     {
@@ -809,7 +829,8 @@ public static class CellSheetLogic
     }
 
     /// <summary>案で回数が変わる（または変わらない）勤務を職員ごとに言う（Kotlin <c>staffCountNotes</c>）。2 か所以上を変える理由の事実（例「休の回数は変わりません（12回のまま）」）。</summary>
-    public static IReadOnlyList<string> StaffCountNotes(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols)
+    public static IReadOnlyList<string> StaffCountNotes(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null, int? targetStaff = null)
     {
         if (ops.Count < 2) return Array.Empty<string>();
         var after = BoardAfter(schedule, ops);
@@ -823,10 +844,53 @@ public static class CellSheetLogic
                 {
                     var b = row.Count(v => v == k); var a = rowA.Count(v => v == k);
                     var sym = k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}";
-                    return a == b ? $"{name}さんの「{sym}」の回数は変わりません（{b}回のまま）" : $"{name}さんの「{sym}」：{b}回 → {a}回";
+                    if (a == b) return $"{name}さんの「{sym}」の回数は変わりません（{b}回のまま）";
+                    var cross = i != targetStaff && limits?.Invoke(i, k) is { } l ? CountCrossNote(b, a, l.Lo, l.Hi) : "";
+                    return $"{name}さんの「{sym}」：{b}回 → {a}回" + cross;
                 });
         }).ToList();
     }
+
+    /// <summary>回数が基準をまたぐときの根拠（「（下限 8回を下回ります）」「（上限 4回を超えます）」）。またがなければ空。</summary>
+    public static string CountCrossNote(int before, int after, int? lo, int? hi) =>
+        lo is { } l && after < before && after < l ? $"（下限 {l}回を下回ります）"
+        : hi is { } h && after > before && after > h ? $"（上限 {h}回を超えます）"
+        : "";
+
+    /// <summary>回数の対象の案で、見ている職員以外に新しく生まれる下限割れ・上限超えの族（対象の族でも、別の職員なら言う）。族名は <paramref name="labelOf"/>。</summary>
+    public static IReadOnlyList<string> NewCountBreakLines(IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, int? targetStaff,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, Func<string, string> labelOf)
+    {
+        if (limits is null) return Array.Empty<string>();
+        var after = BoardAfter(schedule, ops);
+        return ops.Select(o => o.Staff).Distinct().Where(i => i != targetStaff).SelectMany(i =>
+        {
+            IReadOnlyList<int> row = i >= 0 && i < schedule.Count ? schedule[i] : Array.Empty<int>();
+            IReadOnlyList<int> rowA = i >= 0 && i < after.Count ? after[i] : Array.Empty<int>();
+            return ops.Where(o => o.Staff == i).SelectMany(o => new[] { o.Day >= 0 && o.Day < row.Count ? row[o.Day] : (int?)null, o.ToShift })
+                .OfType<int>().Distinct().Order().Select(k =>
+                {
+                    var (lo, hi, _) = limits(i, k);
+                    var b = row.Count(v => v == k); var a = rowA.Count(v => v == k);
+                    var fam = lo is { } l && a < l && b >= l ? "low" : hi is { } h && a > h && b <= h ? "high" : null;
+                    return fam is null ? null
+                        : $"新たに生じる：{labelOf(fam)}（{(i >= 0 && i < staffNames.Count ? staffNames[i] : $"#{i}")}さんの{(k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : $"{k}")}）";
+                }).OfType<string>();
+        }).ToList();
+    }
+
+    /// <summary>回数の対象の族（下限→low、上限→high、目標→apt）。日の対象は null。</summary>
+    public static string? CountTargetFamily(FixTarget t) => t.Staff is null ? null : t.Basis switch { "下限" => "low", "上限" => "high", _ => "apt" };
+
+    /// <summary>回数の対象で、その族の勤務表全体の量が減らない案（見ている職員の不足が別の職員へ移るだけ）。</summary>
+    public static bool CountMovesOnly(FixSuggestion s, FixTarget? t)
+    {
+        if (t is null || CountTargetFamily(t) is not { } fam) return false;
+        foreach (var (f, d) in s.Diff) if (f == fam) return d >= 0;
+        return true;
+    }
+
+    public const string MovesToOtherStaffNote = "＝別の職員へ移るだけです";
 
     /// <summary>同じ勤務のほかの日で、案のあとも残る人員の過不足（Kotlin <c>remainingSameShift</c>「11/25のDテ不足は残ります」）。<paramref name="board"/> は見る盤面（案の前なら案を当てた後）。</summary>
     public static IReadOnlyList<string> RemainingSameShift(IReadOnlyDictionary<string, IReadOnlyList<string>> needFamilies, IReadOnlyList<IReadOnlyList<int>> board, FixTarget t,
@@ -970,7 +1034,8 @@ public static class CellSheetLogic
     /// <summary>
     /// セルを 1 つ変える前の確認（Kotlin <c>cellChangeReview</c>、2026-10-14 利用者レビュー「問題を確認 → 変更方法を選ぶ → 影響を確認して適用」）。
     /// 前後の報告を正式な検査（<see cref="UnifiedViolationChecker"/>）で比べ、違反の同一性（<see cref="ViolationIdentity"/>）で
-    /// このセルの問題が解消するか、ほかで解消する問題、新しく生じる問題を言う。値はすべて評価した結果（仮の値を書かない）。族名は <paramref name="labelOf"/>。
+    /// このセルの問題が解消するか、ほかで解消する問題、新しく生じる・悪くなる問題を言う。値はすべて評価した結果（仮の値を書かない）。族名は <paramref name="labelOf"/>。
+    /// Verdict は変更の行の直後の一文（必須違反が増える＝VerdictBad、またはこのセルの問題が解消する）。言えることが無ければ null。
     /// </summary>
     public static CellChangeReview CellChangeReview(MagiState state, int[][] s, int i, int j, int k, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols,
         Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits, bool pinned, Func<string, string> labelOf,
@@ -986,6 +1051,11 @@ public static class CellSheetLogic
         var after = UnifiedViolationChecker.Check(state, trial);
         var diff = ViolationIdentity.Of(before, after);
         string Label(ViolationKey key) => ViolationKeyLabel(key, staffNames, shiftSymbols, state.StartDate, labelOf);
+        // 前後とも残る違反のうち、量が増えるもの（「必須・人員不足（10/8のA4）：不足 1人 → 2人」）。
+        var beforeKeys = ViolationIdentity.Keys(before);
+        var worsened = ViolationIdentity.Keys(after).Where(beforeKeys.Contains).Select(key =>
+            ViolationKeyGap(key, s, limits, needLimits) is { } g0 && ViolationKeyGap(key, trial, limits, needLimits) is { } g1 && g1.Amount > g0.Amount
+                ? $"{Label(key)}：{g0.Word} {g0.Amount}{g0.Unit} → {g1.Amount}{g1.Unit}" : null).OfType<string>().ToList();
         var here = ViolationIdentity.Keys(before).Where(key => key.Space == ViolationKey.Kind.Cell && key.A == i && key.B == j).ToList();
         var ops = new[] { new FixCell(i, j, k) };
         var sl = s.Select(r => (IReadOnlyList<int>)r).ToList();
@@ -1016,17 +1086,53 @@ public static class CellSheetLogic
         if (state.Wishes.TryGetValue($"{i},{j}", out var w))
             wishPin.Add(w == k ? $"希望（{Sym(w)}）どおりになります" : w == cur ? $"希望（{Sym(w)}）と異なる勤務になります" : $"希望（{Sym(w)}）とは、変更の前後とも異なります");
         if (pinned) wishPin.Add("このセルは手動固定されています（自動作成・調整ではこの勤務を変えません）");
-        if (wishPin.Count == 0) wishPin.Add("このセルに希望・手動固定はありません");
+        var hereResolved = here.Where(diff.Resolved.Contains).Select(key => labelOf(key.Family)).Distinct().ToList();
+        var (verdict, bad) = after.Hard > before.Hard
+            ? ($"この変更で必須違反が増えます（{AnalysisTriage.HardText(before.Breakdown, before.Hard)} → {AnalysisTriage.HardText(after.Breakdown, after.Hard)}）", true)
+            : hereResolved.Count > 0 ? ($"このセルの{string.Join("・", hereResolved)}は解消します", false)
+            : ((string?)null, false);
         return new CellChangeReview(
             Change: $"{name}さん　{DayText.Full(state.StartDate, j)} {Sym(cur)} → {Sym(k)}",
             Neighbors: nb,
             ThisCell: thisCell.Count > 0 ? thisCell : new List<string> { NoCellViolation },
             OthersResolved: diff.Resolved.Where(key => !here.Contains(key)).Select(Label).ToList(),
-            Appeared: diff.Appeared.Select(Label).ToList(),
+            Appeared: diff.Appeared.Select(Label).Concat(worsened).ToList(),
             HardLine: $"必須違反（勤務表全体）：{AnalysisTriage.HardText(before.Breakdown, before.Hard)} → {AnalysisTriage.HardText(after.Breakdown, after.Hard)}",
             Headcount: other,
             Counts: counts,
-            WishPin: wishPin);
+            WishPin: wishPin,
+            Verdict: verdict, VerdictBad: bad);
+    }
+
+    public const string KeepUnchangedButton = "今は変更しない";
+
+    public const string RemoveWishButton = "希望を外す（元に戻せます）";
+
+    public const string ReviewAppearedHeading = "新しく生じる・悪くなる問題";
+
+    /// <summary>違反 1 件の量（Kotlin <c>violationKeyGap</c>＝人員は基準までの人数、回数は基準までの回数）。言葉・単位・量。量を言えない族は null。</summary>
+    public static (string Word, string Unit, int Amount)? ViolationKeyGap(ViolationKey key, int[][] board,
+        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        switch (key.Space)
+        {
+            case ViolationKey.Kind.Need:
+                if (needLimits?.Invoke(key.A, key.B) is not { } nl) return null;
+                var n = board.Count(r => key.B >= 0 && key.B < r.Length && r[key.B] == key.A);
+                return key.Family switch { "covU" => ("不足", "人", Math.Max(0, nl.Lo - n)), "covO" => ("過剰", "人", Math.Max(0, n - nl.Hi)), _ => null };
+            case ViolationKey.Kind.Count:
+                if (limits?.Invoke(key.A, key.B) is not { } sl || key.A < 0 || key.A >= board.Length) return null;
+                var c = board[key.A].Count(v => v == key.B);
+                return key.Family switch
+                {
+                    "low" => sl.Lo is { } lo ? ("不足", "回", Math.Max(0, lo - c)) : null,
+                    "high" => sl.Hi is { } hi ? ("超過", "回", Math.Max(0, c - hi)) : null,
+                    "apt" => sl.Apt is { } apt ? ("目標との差", "回", Math.Abs(c - apt)) : null,
+                    _ => null,
+                };
+            default:
+                return null;
+        }
     }
 
     public const string NoCellViolation = "このセル自体の違反はありません";
@@ -1041,16 +1147,33 @@ public static class CellSheetLogic
 
     /// <summary>違反 1 件の名と場所（Kotlin <c>violationKeyLabel</c>「必須・禁止の並び（福澤さん 11/29）」「人員不足（11/3のAア）」「下限割れ（福澤さんのB4）」）。</summary>
     public static string ViolationKeyLabel(ViolationKey key, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate, Func<string, string> labelOf)
+        => (key.Hard ? "必須・" : "") + labelOf(key.Family) + $"（{ViolationKeyPlace(key, staffNames, shiftSymbols, startDate)}）";
+
+    /// <summary>違反 1 件の場所（「福澤さん 11/29」「11/3のAア」「福澤さんのB4」）。</summary>
+    public static string ViolationKeyPlace(ViolationKey key, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols, string startDate)
     {
         string Sym(int x) => x >= 0 && x < shiftSymbols.Count ? shiftSymbols[x] : $"{x}";
         string NameOf(int x) => x >= 0 && x < staffNames.Count ? staffNames[x] : $"#{x}";
-        var place = key.Space switch
+        return key.Space switch
         {
             ViolationKey.Kind.Cell => $"{NameOf(key.A)}さん {DayText.Short(startDate, key.B)}",
             ViolationKey.Kind.Need => $"{DayText.Short(startDate, key.B)}の{Sym(key.A)}",
             _ => $"{NameOf(key.A)}さんの{Sym(key.B)}",
         };
-        return (key.Hard ? "必須・" : "") + labelOf(key.Family) + $"（{place}）";
+    }
+
+    /// <summary>案で解消する必須違反を「族：場所」で（正式な検査の前後の違反の同一性で決める）。</summary>
+    public static IReadOnlyList<string> ResolvedHardLabels(MagiState state, int[][] s, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols,
+        Func<string, string> labelOf) =>
+        ViolationIdentity.Of(UnifiedViolationChecker.Check(state, s), UnifiedViolationChecker.Check(state, Trial(s, ops)))
+            .Resolved.Where(k => k.Hard).Select(k => $"{labelOf(k.Family)}：{ViolationKeyPlace(k, staffNames, shiftSymbols, state.StartDate)}").ToList();
+
+    /// <summary>ホームの「直す手」の見出し。解消する必須違反の名と場所が分かれば 2 件まで名指しする（3 件目からは件数）。</summary>
+    public static string HomeFixHeadline(string hard, IReadOnlyList<string> resolved)
+    {
+        if (resolved.Count == 0) return $"必須違反 {hard} を減らす手があります";
+        var names = string.Join("、", resolved.Take(2)) + (resolved.Count > 2 ? " ほか" : "");
+        return $"必須違反 {hard} のうち {resolved.Count}件（{names}）を減らす手があります";
     }
 
     private static int[][] Trial(int[][] s, IReadOnlyList<FixCell> ops)
@@ -1215,30 +1338,68 @@ public static class CellSheetLogic
     /// <summary>相談事項に登録しても、連絡や了承の記録にはならない（記録だけ）。</summary>
     public const string ConsultNotContactNote = "相談事項に登録しても、本人への連絡や了承済みにはなりません。";
 
-    /// <summary>「変更を反映しました」の行（Kotlin <c>appliedLines</c>）: 見ている問題（前 → 今）、ほかに人数が変わった枠（今の値）、保存、残る問題、探し直したこと。</summary>
-    public static IReadOnlyList<string> AppliedLines(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    /// <summary>「変更を反映しました」の行（Kotlin <c>appliedLines</c>）: 見ている問題（前 → 今）、期間全体の過不足（日の対象）、勤務表全体の必須、新たに生じた問題、
+    /// ほかに人数が変わった枠、保存（保存中・失敗のときだけ）、残る問題、探し直したこと。族名は <paramref name="labelOf"/>（省略時は族キーのまま）。</summary>
+    public static IReadOnlyList<string> AppliedLines(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits,
+        Func<string, string>? labelOf = null)
     {
         var outList = new List<string>();
         if (target is not null)
         {
             var e = target.Effect(a.Before, a.Ops);
             outList.Add($"今回の問題：{AppliedStatusWord(e)}（{label}：{e.CountLine()}、{(e.GapAfter == 0 ? e.AfterNote(target.Basis) : $"{target.GapWord} {e.GapAfter}{target.Unit}")}）");
+            if (target.Day is not null && !target.Multi)
+            {
+                var g0 = ShiftPeriodGap(a.Before, target.Shift, target.Under, needLimits);
+                var g1 = ShiftPeriodGap(a.After, target.Shift, target.Under, needLimits);
+                if (g0 is { } b0 && g1 is { } b1)
+                    outList.Add(PeriodGapLine(target.Shift >= 0 && target.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[target.Shift] : $"{target.Shift}", target.Under, b0, b1));
+            }
         }
-        var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
-        outList.AddRange(same);
-        outList.AddRange(other);
         // 内訳があれば単位ごとに（件・人・回・pt を 1 つの数に足さない＝統合仕様 INV-07）。
         static string T(IReadOnlyDictionary<string, int>? b, IReadOnlyList<string> fams, int n) => b is null ? $"{n}件" : AnalysisTriage.UnitTotals(b, fams) ?? "なし";
         if (a.HardBefore >= 0) outList.Add($"必須違反（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Hard, a.HardBefore)} → {T(a.BreakdownAfter, MirrorKeys.Hard, a.HardAfter)}");
-        if (a.SoftBefore >= 0) outList.Add($"要調整（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Soft, a.SoftBefore)} → {T(a.BreakdownAfter, MirrorKeys.Soft, a.SoftAfter)}");
-        outList.Add(SaveStateLine(ui.SaveState));
-        IReadOnlyList<string> next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate)
-            : target is not null && target.Effect(a.Before, a.Ops) is { GapAfter: > 0 } eff ? new[] { RemainingGapLine(label, target, eff.GapAfter) }
-            : Array.Empty<string>();
+        if (AppearedFamiliesLine(a.BreakdownBefore, a.BreakdownAfter, labelOf ?? (f => f)) is { } ap) outList.Add(ap);
+        var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
+        outList.AddRange(same);
+        outList.AddRange(other);
+        if (ui.SaveState is SaveState.Failed or SaveState.Saving) outList.Add(SaveStateLine(ui.SaveState));
+        var next = AppliedRemaining(ui, a, target, label, needLimits);
         if (next.Count > 0) outList.Add("次に確認すること：" + string.Join("。", next) + "。");
         outList.Add("勤務表が変わったため、変更案を探し直しました（下の案は今の勤務表のものです）。");
         return outList;
     }
+
+    /// <summary>当てたあとも残る、見ている問題と同じ勤務の過不足（日の対象＝ほかの日、回数＝基準までの差）。</summary>
+    public static IReadOnlyList<string> AppliedRemaining(UiState ui, AppliedFix a, FixTarget? target, string label, Func<int, int, (int Lo, int Hi)?>? needLimits)
+    {
+        if (target is null) return Array.Empty<string>();
+        var eff = target.Effect(a.Before, a.Ops);
+        if (target.Day is not null)
+        {
+            var l = new List<string>();
+            if (eff.GapAfter > 0) l.Add($"{label}は、まだ{target.GapWord} {eff.GapAfter}{target.Unit}です");
+            l.AddRange(RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate));
+            return l;
+        }
+        return eff.GapAfter > 0 ? new[] { RemainingGapLine(label, target, eff.GapAfter) } : Array.Empty<string>();
+    }
+
+    /// <summary>当てたあとに増えた族（「新たに生じた問題：禁止の並び +1件」）。内訳が無いか増えた族が無ければ null。</summary>
+    public static string? AppearedFamiliesLine(IReadOnlyDictionary<string, int>? before, IReadOnlyDictionary<string, int>? after, Func<string, string> labelOf)
+    {
+        if (before is null || after is null) return null;
+        var up = before.Keys.Concat(after.Keys).Distinct().Where(k => after.GetValueOrDefault(k, 0) > before.GetValueOrDefault(k, 0))
+            .OrderByDescending(MirrorKeys.WeightOf).ToList();
+        if (up.Count == 0) return null;
+        return "新たに生じた問題：" + string.Join("・", up.Select(k => $"{labelOf(k)} +{after.GetValueOrDefault(k, 0) - before.GetValueOrDefault(k, 0)}{AnalysisTriage.UnitOf(k)}"));
+    }
+
+    /// <summary>反映の帯の次の一歩のボタン。同じ問題が残れば続けてその勤務の案を、無ければ残りの必須違反の巡回を、どちらも無ければ null。</summary>
+    public static string? AppliedNextButton(bool sameRemains, string? sym, int hardLeft, bool canTour) =>
+        sameRemains && sym is not null ? $"続けて {sym} の案を見る"
+        : hardLeft > 0 && canTour ? $"残っている必須違反を順に見る（{hardLeft}か所）"
+        : null;
 
     /// <summary>当てたあとに残る差（回数＝「A4は、下限まであと2回です」、まとめて見る日々＝「Dテ（2日）は、合計 3人不足です」）。</summary>
     public static string RemainingGapLine(string label, FixTarget t, int gap) =>
@@ -1361,4 +1522,5 @@ public sealed record CountEffect(int Before, int After, int Target, bool Under, 
 /// <summary>セルを 1 つ変える前の確認の中身（Kotlin <c>CellChangeReview</c>）。</summary>
 public sealed record CellChangeReview(
     string Change, string Neighbors, IReadOnlyList<string> ThisCell, IReadOnlyList<string> OthersResolved,
-    IReadOnlyList<string> Appeared, string HardLine, IReadOnlyList<string> Headcount, IReadOnlyList<string> Counts, IReadOnlyList<string> WishPin);
+    IReadOnlyList<string> Appeared, string HardLine, IReadOnlyList<string> Headcount, IReadOnlyList<string> Counts, IReadOnlyList<string> WishPin,
+    string? Verdict = null, bool VerdictBad = false);

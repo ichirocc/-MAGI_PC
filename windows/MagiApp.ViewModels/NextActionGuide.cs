@@ -274,5 +274,5 @@ public static class NextActionGuide
 
     /// <summary>[S6 §9] 確定の後、次にやることカードに出す 1 行。</summary>
     public static string RelaxDoneLine(int h0, int after) =>
-        $"設定を緩めて手順を当てました: 必須違反 {h0} → {after}。元に戻すで設定と勤務表をまとめて戻せます。";
+        $"設定を緩めて手順を適用しました: 必須違反 {h0} → {after}。元に戻すで設定と勤務表をまとめて戻せます。";
 }
