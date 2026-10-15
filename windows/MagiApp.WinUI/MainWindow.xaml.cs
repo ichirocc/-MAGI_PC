@@ -262,7 +262,7 @@ public sealed partial class MainWindow : Window
                 (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             }
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft, ui.Breakdown), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
-            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
+            else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {DisplaySnapshots.DisplayHardText(ui)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");
             StatusPrefixText.Text = ui.Running ? "" : status.First;
             // 必須違反が残るときは「順に見る」巡回の入口、必須 0 は配布前の確認へ（要調整が残っても「配布可」と言い切らない）。

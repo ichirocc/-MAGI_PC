@@ -185,6 +185,8 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>ws3 希望 "i,j"->shiftIdx（表示融合用）。</summary>
     [ObservableProperty] private IReadOnlyDictionary<string, int> wishes = new Dictionary<string, int>();
+    /// <summary>印と一文の写し（<see cref="DisplaySnapshot"/>）。検査結果の反映（MakeUi）で作り直す。保存しない。</summary>
+    [ObservableProperty] private DisplaySnapshot? display;
     /// <summary>[S5] 試算できる希望のキー（実現可能で手動固定でない）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
     /// <summary>[#41] 手動固定のセル "i,j"。</summary>

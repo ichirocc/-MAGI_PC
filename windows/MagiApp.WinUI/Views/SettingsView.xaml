@@ -33,19 +33,6 @@
                         ValueChanged="OnBudgetChanged" />
             </StackPanel>
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="最適化方式" />
-                <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"
-                          SelectionChanged="OnAlgorithmChanged">
-                    <ComboBoxItem Content="おまかせ（予算から自動選択）" Tag="Auto" />
-                    <ComboBoxItem Content="高速（並列SA・短時間向け）" Tag="V5" />
-                    <ComboBoxItem Content="ALNS（破壊・修復マルチリスタート）" Tag="Alns" />
-                    <ComboBoxItem Content="RSI（最大違反族に集中）" Tag="Rsi" />
-                    <ComboBoxItem Content="RSI++（シード→仮説→精製→研磨）" Tag="RsiPlus" />
-                    <ComboBoxItem Content="Portfolio（異種適応アンサンブル）" Tag="Portfolio" />
-                </ComboBox>
-            </StackPanel>
-
             <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
                           Toggled="OnLeftHandToggled" />
 
@@ -76,6 +63,26 @@
                           OnContent="ON" OffContent="OFF" Toggled="OnC1MoveARepairToggled" />
             <TextBlock Visibility="Collapsed" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                        Text="試験中。測定では効果は確認できていません（既定はOFF）" />
+
+            <!-- [Android 3.683.0] 最適化方式は詳細設定（上級者向け）の中。一般の運用では触らない。 -->
+            <Expander Header="詳細設定（上級者向け）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="8">
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                               Text="最適化方式の調整。一般の運用では触りません。" />
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="最適化方式" />
+                        <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"
+                                  SelectionChanged="OnAlgorithmChanged">
+                            <ComboBoxItem Content="おまかせ（予算から自動選択）" Tag="Auto" />
+                            <ComboBoxItem Content="高速（並列SA・短時間向け）" Tag="V5" />
+                            <ComboBoxItem Content="ALNS（破壊・修復マルチリスタート）" Tag="Alns" />
+                            <ComboBoxItem Content="RSI（最大違反族に集中）" Tag="Rsi" />
+                            <ComboBoxItem Content="RSI++（シード→仮説→精製→研磨）" Tag="RsiPlus" />
+                            <ComboBoxItem Content="Portfolio（異種適応アンサンブル）" Tag="Portfolio" />
+                        </ComboBox>
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
 
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
             <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />

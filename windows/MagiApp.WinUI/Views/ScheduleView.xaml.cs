@@ -739,7 +739,7 @@ public sealed partial class ScheduleView : UserControl
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
         // [Android 3.623.0] 「必須 N ▼」（Kotlin HardListChip）＝結果があり実行中でなく必須違反が残るときだけ。
         HardListButton.Visibility = !ui.Running && ui.HasResult && ui.BestHard > 0 ? Visibility.Visible : Visibility.Collapsed;
-        HardListButton.Content = $"必須 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} ▼";
+        HardListButton.Content = $"必須 {DisplaySnapshots.DisplayHardText(ui)} ▼";
         RenderFilterBar(ui);
         RenderShortageBanner(ui);
         RenderSearchLegend(ui);
@@ -1015,6 +1015,7 @@ public sealed partial class ScheduleView : UserControl
     /// </summary>
     private void RenderStaffTally(UiState ui)
     {
+        TallyLegend.Text = CellSheetLogic.TallyLegendText;
         StaffTallyGridHost.Children.Clear();
         StaffTallyGridHost.RowDefinitions.Clear();
         StaffTallyGridHost.ColumnDefinitions.Clear();
@@ -1632,7 +1633,23 @@ public sealed partial class ScheduleView : UserControl
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
             if (quick)
             {
-                host.Children.Add(new TextBlock { Text = string.Join(" ", body), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                var nfSingle = problems is { Count: 1 } ? LabelOf(problems[0]) : null;
+                var (nfStaff, nfDay) = (focus.Staff, focus.Day);
+                var nfPrev = nfStaff is not null && nfDay is { } nfD0 && nfSingle is not null ? CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, nfD0 - 1) : null;
+                var nfNext = nfStaff is not null && nfDay is { } nfD1 && nfSingle is not null ? CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, nfD1 + 1) : null;
+                host.Children.Add(new TextBlock { Text = CellSheetLogic.CompactNoFixLine(body, nfSingle, nfPrev, nfNext), TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 13 });
+                if (nfStaff is { } nfI && nfDay is { } nfJ && (nfPrev is not null || nfNext is not null))
+                {
+                    var nfAdj = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                    foreach (var (nfLabel, nfTo) in new[] { (nfPrev, nfJ - 1), (nfNext, nfJ + 1) })
+                    {
+                        if (nfLabel is null) continue;
+                        var nfBtn = new Button { Content = $"{nfLabel}を開く", MinHeight = 48 };
+                        nfBtn.Click += (_, _) => { hide(); OpenCellSheet(nfI, nfTo); };
+                        nfAdj.Children.Add(nfBtn);
+                    }
+                    host.Children.Add(nfAdj);
+                }
                 if (ui.FixTimedOut) host.Children.Add(RetryButton());
                 if (whenNoFix is not null) foreach (var el in whenNoFix()) host.Children.Add(el);
                 return;
@@ -2087,7 +2104,9 @@ public sealed partial class ScheduleView : UserControl
         foreach (var l in sheet.C1) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
         if (CellSheetLogic.PeriodLine(ui.StartDate, ui.Days) is { } period) panel.Children.Add(new TextBlock { Text = period, FontSize = 13, Opacity = 0.8 });
         // 選んだ勤務の回数の問題を同じダイアログで探す。切り替えたら前の探索の購読を外してから付け直す（閉じたときも外す）。
-        int? pick = null;
+        // 行を選ぶまで案は探さない。選べる行が 1 つだけなら最初から選んでおく（Android 3.683.0）。
+        int? pick = focus.Staff is not null ? CellSheetLogic.StaffSheetPreselect(sheet.Chips.Select(c => c.ShiftIdx)) : null;
+        var general = false;
         var detach = new List<Action>();
         var fixHost = new StackPanel { Spacing = 6 };
         var rows = new StackPanel { Spacing = 4 };
@@ -2108,7 +2127,10 @@ public sealed partial class ScheduleView : UserControl
             else
             {
                 if (c1Stuck) fixHost.Children.Add(C1StuckButtons(() => dialog.Hide()));
-                fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
+                var fold = new HyperlinkButton { Content = general ? "この職員のほかの変更案を閉じる" : CellSheetLogic.StaffOtherFixesLabel, MinHeight = 48 };
+                fold.Click += (_, _) => { general = !general; Mount(); };
+                fixHost.Children.Add(fold);
+                if (general) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
             }
         }
         void RenderRows()

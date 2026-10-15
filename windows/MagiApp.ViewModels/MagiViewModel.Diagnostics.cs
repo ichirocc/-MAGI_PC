@@ -375,6 +375,8 @@ public sealed partial class MagiViewModel
         Ui.PinTargets = diagFresh ? BuildPinTargets(st, _lastPinBlocks) : Array.Empty<PinTargetView>();
         Ui.SettingIssues = sanity.Guidance;
         Ui.StartDate = st.StartDate;
+        try { Ui.Display = DisplaySnapshots.Build(st, Ui, FamilyLabelOf); }
+        catch (Exception) { Ui.Display = null; }
     }
 
     /// <summary>
