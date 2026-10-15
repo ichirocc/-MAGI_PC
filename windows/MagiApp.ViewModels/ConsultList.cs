@@ -32,7 +32,9 @@ public enum ConsultAnswer { Pending, Agreed, Declined }
 /// <summary>複数人の入れ替えの相談が指す枠。日付とシフト記号で持つ＝月の移動・シフトの並び替えのあとも今の勤務表で案を探し直せる。
 /// 枠を持たない案は、その案を出したときの盤面と設定の指紋 <paramref name="BoardKey"/>/<paramref name="StateKey"/> を持つ（3.650.0）。指紋が今と違えば当てない。
 /// 枠を持たない案（ホーム・分析の「この手を使う」から）は <paramref name="Suggestion"/> を持ち、一覧をもう一度出す（当てるときの照合は適用の門が行う）。</summary>
-public sealed record ChainTarget(string? Date, string? ShiftSymbol, string Label, FixSuggestion? Suggestion = null, long BoardKey = 0L, long StateKey = 0L);
+/// <param name="FixTarget">案を出したときに見ていた問題（適用時にその数が減るかを確かめる）。null＝全体の研磨の案。</param>
+public sealed record ChainTarget(string? Date, string? ShiftSymbol, string Label, FixSuggestion? Suggestion = null, long BoardKey = 0L, long StateKey = 0L,
+    FixTarget? FixTarget = null, bool GlobalPolish = false);
 
 public static class ConsultList
 {
@@ -221,7 +223,7 @@ public static class ConsultList
 
     /// <summary>複数人の入れ替えの一覧から: 変わる人と勤務（必須の増減は画面と同じ <see cref="NextActionGuide.FixImpactLines"/> の 1 行目）。
     /// 枠を持てば、あとで今の勤務表で案を探し直せる。</summary>
-    public static ConsultItem Chain(ChainFixPreview p, string hardLine) => new(p.Suggestion.Label, string.Join("／", p.Changes) + $"（{hardLine}）", Chain: p.Target);
+    public static ConsultItem Chain(ChainFixPreview p, string hardLine) => new(p.Suggestion.Label, string.Join("／", p.Changes) + $"（{hardLine}）", Chain: p.Target is { } t ? t with { FixTarget = p.FixTarget, GlobalPolish = p.GlobalPolish } : null);
 
     /// <summary>回数不足の相談事項（増やす案が見つからないとき。Kotlin <c>consultCountShortage</c>）。</summary>
     public static ConsultItem CountShortage(string name, string sym, string head, int staff) =>

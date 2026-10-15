@@ -81,7 +81,7 @@ public class MagiViewModelFixSuggestionsTest
         vm.Ui.FixSuggestions = new List<FixSuggestion> { MakeSuggestion(new FixCell(0, 0, 1)) };
         var s = MakeSuggestion(new FixCell(0, 0, 1));
 
-        vm.ApplyFixSuggestion(s);
+        vm.ApplyFixSuggestion(s, globalPolish: true);
 
         // 結果は「元に戻す」付きの通知。末尾の RefreshCheck()（fire-and-forget）の完了は通常の文言に出る。
         Assert.StartsWith("テスト改善手 を適用しました（", vm.Ui.OpNotice!.Text);
@@ -150,10 +150,19 @@ public class MagiViewModelFixSuggestionsTest
         vm.BeginBoardJob("勤務表をつくる");
         var s = MakeSuggestion(new FixCell(0, 0, 1));
 
-        vm.ApplyFixSuggestion(s);
+        vm.ApplyFixSuggestion(s, globalPolish: true);
 
         Assert.Equal(0, vm._currentSchedule![0][0]); // unchanged
         Assert.True(vm.Ui.MessageIsError);
+    }
+
+    [Fact]
+    public void ApplyFixSuggestion_NullTargetWithoutGlobalPolishIsRefused()
+    {
+        var vm = VmWithNeed();
+        Assert.False(vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1))));
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(CellSheetLogic.FixTargetUnknownMessage, vm.Ui.Message);
     }
 
     [Fact]
@@ -167,7 +176,7 @@ public class MagiViewModelFixSuggestionsTest
         // 2職員×7日の盤面に対し、1つ目は妥当・2つ目が範囲外(day=99) → 全体が no-op のはず。
         var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 99, 1));
 
-        vm.ApplyFixSuggestion(s);
+        vm.ApplyFixSuggestion(s, globalPolish: true);
 
         Assert.Equal(0, vm._currentSchedule![0][0]); // 1つ目も適用されていない
         Assert.True(vm.Ui.MessageIsError);            // [Android 3.509.4] 見送りを告げる
@@ -178,7 +187,7 @@ public class MagiViewModelFixSuggestionsTest
     public void ApplyFixSuggestion_ToShiftEqualToShiftCount_ReturnsWithoutUndoAutoSaveOrRecheck()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
-        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 2))); // == Shifts.Count
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 2)), globalPolish: true); // == Shifts.Count
         Assert.Equal(0, vm._currentSchedule![0][0]);
         Assert.Equal(0, vm.UndoStackCount);
         Assert.Null(vm.LastRefreshCheckTask);
@@ -190,7 +199,7 @@ public class MagiViewModelFixSuggestionsTest
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
         // 既定フィクスチャはシフト 2 種（休/A）。toShift=99 は探索中にシフトが削除された等の古い提案。
-        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 0, 99)));
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 0, 99)), globalPolish: true);
         Assert.Equal(0, vm._currentSchedule![0][0]);
     }
 
@@ -203,7 +212,7 @@ public class MagiViewModelFixSuggestionsTest
         await vm.LastFindFixSuggestionsTask!;
         vm._currentSchedule![1][3] = 1; // 探索後の手編集
 
-        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)));
+        vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)), globalPolish: true);
 
         Assert.Equal(0, vm._currentSchedule![0][0]);
         Assert.True(vm.Ui.MessageIsError);
@@ -251,7 +260,7 @@ public class MagiViewModelFixSuggestionsTest
         var vm = new MagiViewModel();
         var s = MakeSuggestion(new FixCell(0, 0, 1));
 
-        vm.ApplyFixSuggestion(s); // must not throw
+        vm.ApplyFixSuggestion(s, globalPolish: true); // must not throw
 
         Assert.Null(vm.Ui.Message);
     }
@@ -266,7 +275,7 @@ public class MagiViewModelFixSuggestionsTest
         };
         var s = MakeSuggestion(); // Ops は空
 
-        vm.ApplyFixSuggestion(s);
+        vm.ApplyFixSuggestion(s, globalPolish: true);
 
         Assert.Null(vm.Ui.Message);
     }
@@ -320,6 +329,20 @@ public class MagiViewModelFixSuggestionsTest
 
     // ===== 3.646.0: 2 セル以上の手は当てる前に一覧／相談に積んだ入れ替えの見直し／元に戻すで案内の結果の行を結ばない =====
 
+    [Fact]
+    public void ApplyChainPreview_WithoutOriginKeyIsRefusedAndKeepsThePreview()
+    {
+        var vm = VmWithNeed();
+        vm.PreviewFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)), globalPolish: true);   // 探索をしていない＝全体の指紋も 0
+
+        vm.ApplyChainPreview();
+
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.NotNull(vm.Ui.ChainPreview);
+        Assert.Equal(CellSheetLogic.FixOriginUnknownMessage, vm.Ui.ChainPreview!.ApplyError);
+        Assert.True(vm.Ui.MessageIsError);
+    }
+
     private static MagiViewModel VmWithNeed()
     {
         var vm = new MagiViewModel
@@ -335,12 +358,12 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
-    public void PreviewOrApplyFix_TwoOrMoreOpsShowThePreviewCarryingTheSuggestion()
+    public void PreviewFixSuggestion_TwoOrMoreOpsShowThePreviewCarryingTheSuggestion()
     {
         var vm = VmWithNeed();
         var s = MakeSuggestion(new FixCell(0, 0, 1), new FixCell(1, 1, 1));
 
-        vm.PreviewOrApplyFix(s);
+        vm.PreviewFixSuggestion(s);
 
         var p = vm.Ui.ChainPreview;
         Assert.NotNull(p);
@@ -351,12 +374,12 @@ public class MagiViewModelFixSuggestionsTest
     }
 
     [Fact]
-    public async Task PreviewOrApplyFix_SingleOpShowsThePreviewThenAppliesOnConfirm()
+    public async Task PreviewFixSuggestion_SingleOpShowsThePreviewThenAppliesOnConfirm()
     {
         var vm = VmWithNeed();
 
         // 3.671.0: 1 セルの案も当てる前に確認の画面（案の一覧から直接適用しない）。適用は確認の画面の［この変更を適用］。
-        vm.PreviewOrApplyFix(MakeSuggestion(new FixCell(0, 0, 1)));
+        vm.PreviewFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)), MagiViewModel.BoardKey(vm._currentSchedule!), MagiViewModel.StateKey(vm._state!), globalPolish: true);
         Assert.NotNull(vm.Ui.ChainPreview);
         Assert.NotNull(vm.Ui.ChainPreview!.NewHard);
         Assert.Equal(0, vm._currentSchedule![0][0]);

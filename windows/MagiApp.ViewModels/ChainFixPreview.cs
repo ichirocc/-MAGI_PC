@@ -21,7 +21,8 @@ namespace MagiApp.ViewModels;
 /// WinUI にあるので鍵で持ち、画面が <see cref="CellSheetLogic.ViolationKeyLabel"/> で名を付ける。</param>
 public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null,
     string? Purpose = null, IReadOnlyList<string>? Effect = null, bool FromList = false, IReadOnlyList<ChangeRow>? Rows = null,
-    IReadOnlyList<string>? CountNotes = null, string? FocusKey = null, FixTarget? FixTarget = null, IReadOnlyList<ViolationKey>? NewHard = null)
+    IReadOnlyList<string>? CountNotes = null, string? FocusKey = null, FixTarget? FixTarget = null, IReadOnlyList<ViolationKey>? NewHard = null,
+    string? ApplyError = null, bool GlobalPolish = false)
 {
     public IReadOnlyList<string> CountNotes { get; init; } = CountNotes ?? Array.Empty<string>();
     public IReadOnlyList<string> Effect { get; init; } = Effect ?? Array.Empty<string>();
