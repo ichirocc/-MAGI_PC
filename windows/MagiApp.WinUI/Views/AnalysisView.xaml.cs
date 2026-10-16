@@ -87,7 +87,9 @@ public sealed partial class AnalysisView : UserControl
     private void Render()
     {
         var ui = _vm.Ui;
-        EmptyText.Visibility = ui.Loaded ? Visibility.Collapsed : Visibility.Visible;
+        EmptyCard.Visibility = ui.Loaded ? Visibility.Collapsed : Visibility.Visible;
+        EmptyTitleText.Text = CellSheetLogic.EmptyStateTitle;
+        EmptySubtitleText.Text = CellSheetLogic.EmptyStateSubtitle(ui.Running && !ui.Loaded);
         if (!ui.Loaded)
         {
             TriageSection.Visibility = Visibility.Collapsed;
@@ -251,7 +253,8 @@ public sealed partial class AnalysisView : UserControl
             row.Children.Add(BodyText(FixOutcomeText.FixBenefitLine(s, LabelOf) ?? hardLine, semiBold: true));
             row.Children.Add(BodyText(FixOutcomeText.FixDisplayLabel(s.Label)));
             if (caution is not null) row.Children.Add(BodyText(caution));
-            var apply = new Button { Content = ChainFixPreview.ApplyChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
+            // 押しても確認の画面が開くだけ＝見るだけの外枠ボタン（塗りの主は画面に 1 つ、INV-09）。
+            var apply = new Button { Content = CellSheetLogic.ReviewChangeButton, HorizontalAlignment = HorizontalAlignment.Left };
             apply.Click += (_, _) => _vm.PreviewFixSuggestion(s, globalPolish: true);   // 2 セル以上は当てる前に一覧（3.646.0）
             row.Children.Add(apply);
             // [3.645.0/仕様 5.3] 当てずに相談してから決める＝手と効果を相談中の一覧へ。
