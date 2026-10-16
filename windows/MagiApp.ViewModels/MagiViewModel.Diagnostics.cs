@@ -275,6 +275,7 @@ public sealed partial class MagiViewModel
             _lastRunDiagSerial = _activeRunSerial;
         }
         transform?.Invoke(Ui);
+        if (runLabel is not null) Ui.DraftStage = runLabel == "下書きづくり";
         MakeUi(st, schedule, report, analysis);
     }
 

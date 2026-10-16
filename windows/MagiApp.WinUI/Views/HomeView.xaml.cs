@@ -172,7 +172,7 @@ public sealed partial class HomeView : UserControl
         var relax0 = !ui.Running && ui.HasResult && ui.BestHard > 0 ? _vm.RelaxTrialFor() : null;
         var hp = CellSheetLogic.HomePlanOf(ui.Running, ui.HasResult, ui.BestHard == 0L, infeasible, shortfalls.Any(s => s.WishPinned.Count > 0), guidedFix is not null,
             hardFix0, ui.FixFocusName.Length == 0, ui.FixSearching, ui.FixSearched, relax0 is not null, ui.StalledHardFamilies.Count > 0, !cands.IsEmpty,
-            ui.SaveState == SaveState.Failed, ui.Consults.Count);
+            ui.SaveState == SaveState.Failed, ui.Consults.Count, draft: ui.DraftStage && ui.EngineRan);
         var kind = hp.Kind;
         var shortage = guidedFix is null ? null : CellSheetLogic.ShortageHeadlineOf(guidedFix);
         var nextTarget = CellSheetLogic.CreationNextTarget(kind,
@@ -196,6 +196,13 @@ public sealed partial class HomeView : UserControl
             bigLabel = "勤務表をつくる"; bigEnabled = true;
             helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
             _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
+        }
+        else if (kind == HomePlanKind.Draft)
+        {
+            bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
+            sentence = CellSheetLogic.HomeDraftStatus(hardNow, ui.BestHard);
+            bigLabel = "勤務表をつくる"; bigEnabled = true; helperLabel = CellSheetLogic.HomeScheduleHelper;
+            _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _window.SelectTab("schedule");
         }
         else if (kind == HomePlanKind.PreDist)
         {

@@ -49,7 +49,9 @@ public sealed partial class MagiViewModel
         // 手直しや結果のある勤務表を黙って置き換えない。確認の文は置き換える前の必須違反を単位つきで言う。
         if (!confirmed && !Ui.Running && (Ui.HasResult || Ui.EngineRan || Ui.RanBeforeEdit || sched.Any(r => r.Any(v => v >= 0))))
         {
-            Ui.DraftConfirm = FixExplain.DraftConfirmText(Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null);
+            // 下書きは決まった種で作る（同じ入力なら同じ盤面）＝先に 1 回だけ作り、確認に後の必須を出し、置き換えるときはその結果を使う。
+            var before = Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null;
+            LastDraftPreviewTask = PrepareDraftConfirmAsync(st, sched.Copy2D(), before);
             return;
         }
         // [3.692.0] 確認（3.679.0）を通ったかをログで読めるようにする。[3.697.0] 行は完了の後＝置き換える前と後の必須を並べる。
@@ -78,8 +80,25 @@ public sealed partial class MagiViewModel
         LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed, replacing ? hardBefore : null);
     }
 
+    /// <summary>[テスト可視性のための追加] 確認の前に下書きを作る Task。</summary>
+    internal Task? LastDraftPreviewTask { get; private set; }
+
+    /// <summary>確認のために先に作った下書き（作ったときの設定と盤面の指紋つき。違えば使わず作り直す）。</summary>
+    private ((long, long) Keys, V6FinalPort.ActionResult Result)? _pendingDraft;
+
+    private async Task PrepareDraftConfirmAsync(MagiState st, int[][] sched, string? before)
+    {
+        var keys = (StateKey(st), BoardKey(sched));
+        V6FinalPort.ActionResult? res = null;
+        try { res = await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true)); }
+        catch (Exception) { res = null; }
+        _pendingDraft = res is null ? null : (keys, res);
+        Ui.DraftConfirm = FixExplain.DraftConfirmText(before, res is null ? null : AnalysisTriage.HardText(res.Report.Breakdown, res.Report.Hard));
+    }
+
     public void DismissDraftConfirm()
     {
+        _pendingDraft = null;
         if (Ui.DraftConfirm is not null) LogOp("I", "下書きで置き換えない（確認で取りやめ）");
         Ui.DraftConfirm = null;
     }
@@ -89,7 +108,10 @@ public sealed partial class MagiViewModel
         var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
         {
-            var res = await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true), ct);
+            var keys = (StateKey(st), BoardKey(sched));
+            var res = _pendingDraft is { } pd && pd.Keys == keys ? pd.Result
+                : await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true), ct);
+            _pendingDraft = null;
             _boardReplaceRev++;
             _currentSchedule = res.Schedule.Copy2D();
             AutoSave();

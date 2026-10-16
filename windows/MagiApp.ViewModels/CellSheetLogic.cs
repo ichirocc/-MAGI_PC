@@ -10,7 +10,7 @@ public enum CellSeverity { Hard, Soft, None }
 
 /// <summary>直し方探しの状態（計算・チェック待ち／未開始／探索中／完了／失敗）。</summary>
 /// <summary>ホームの主カードの段（主ボタンの行き先）。文言と色は HomeView が段ごとに決める（Kotlin <c>HomePlanKind</c>）。</summary>
-public enum HomePlanKind { Running, Make, PreDist, WishInfeasible, DataInfeasible, GuidedFix, ApplyMove, Searching, Relax, WishFloor, Wishes, List }
+public enum HomePlanKind { Running, Make, Draft, PreDist, WishInfeasible, DataInfeasible, GuidedFix, ApplyMove, Searching, Relax, WishFloor, Wishes, List }
 
 /// <summary>主ボタン（1 つだけ）と補助ボタンの行き先。</summary>
 public enum HomeAction { None, Make, SmartInitial, PreDist, Schedule, ShowWishes, Landing, Fix, Setup, ShowMove, ApplyMove, ShowRelax, ShowList }
@@ -1350,6 +1350,33 @@ public static class CellSheetLogic
     public static bool ImprovesTarget(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops) =>
         t is null || t.Effect(schedule, ops).Fixes;
 
+    /// <summary>勤務変更案の一覧に出してよいか（INV-01/INV-03）: 適用の門と同じ <see cref="ImprovesTarget"/> を通り、日から開いた一覧（day）ならその日のセルに触れる案だけ。</summary>
+    public static bool ListableFix(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, int? day) =>
+        (day is null || ops.Any(o => o.Day == day)) && ImprovesTarget(t, schedule, ops);
+
+    /// <summary>一覧を日で絞る依頼の日（日・列から開いた依頼。職員を見る依頼とまとめて見る依頼は絞らない）。</summary>
+    public static int? FixListDay(FixFocus f) => f.Staff is null && !f.AllDays ? f.Day : null;
+
+    /// <summary>過剰の対象で、その勤務の 1 人を別の勤務へ移す案の題。それ以外は null（CountEffect.Title を使う）。</summary>
+    public static string? SurplusMoveTitle(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops, IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols)
+    {
+        if (t is null || t.Under || t.Staff is not null) return null;
+        if (ops.Count != 1) return null;
+        var op = ops[0];
+        if (op.Staff < 0 || op.Staff >= schedule.Count || op.Day < 0 || op.Day >= schedule[op.Staff].Count) return null;
+        var from = schedule[op.Staff][op.Day];
+        if (from != t.Shift || op.ToShift == from) return null;
+        if (op.Staff >= staffNames.Count) return null;
+        string Sym(int k) => k >= 0 && k < shiftSymbols.Count ? shiftSymbols[k] : UnknownLabel;
+        return $"{staffNames[op.Staff]}さんを {Sym(from)} から {Sym(op.ToShift)} へ移して過剰を減らす";
+    }
+
+    public const string PeekSearchButton = "変更案を探す";
+
+    /// <summary>ちら見の次の一手: 置ける候補がすべて ⚠ で緩める候補も無いときだけ「変更案を探す」（主は 1 つ＝INV-09）。null＝出さない。</summary>
+    public static string? PeekHopelessAction(int mode, CellSeverity severity, ShiftMarks marks, IEnumerable<int> candidates, int current, int? recommend) =>
+        mode == 0 && severity != CellSeverity.None && recommend is null && SingleCellHopeless(marks, candidates, current) ? PeekSearchButton : null;
+
     public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「変更案を探す」で探し直してください";
 
     public const string FixOriginUnknownMessage = "案を作ったときの勤務表が分からないため適用しませんでした。もう一度探してください";
@@ -1368,11 +1395,13 @@ public static class CellSheetLogic
         bool infeasible = false, bool hasPinned = false, bool guided = false,
         bool hasMove = false, bool focusBlank = true, bool fixSearching = false, bool fixSearched = false,
         bool relax = false, bool stalled = false, bool wishes = false,
-        bool saveFailed = false, int consults = 0)
+        bool saveFailed = false, int consults = 0, bool draft = false)
     {
         _ = saveFailed; _ = consults;
         if (running) return new(HomePlanKind.Running, HomeAction.None, false, null);
         if (!hasResult) return new(HomePlanKind.Make, HomeAction.Make, true, HomeAction.SmartInitial);
+        // 下書きのまま（手を入れていない）＝次は仕上げの作成。直す一覧へは進めない。
+        if (draft && !infeasible) return new(HomePlanKind.Draft, HomeAction.Make, true, HomeAction.Schedule);
         if (hard0) return new(HomePlanKind.PreDist, HomeAction.PreDist, true, HomeAction.Schedule);
         if (infeasible && hasPinned) return new(HomePlanKind.WishInfeasible, HomeAction.ShowWishes, true, HomeAction.Landing);
         if (infeasible) return new(HomePlanKind.DataInfeasible, HomeAction.Landing, true, HomeAction.PreDist);
@@ -1408,6 +1437,10 @@ public static class CellSheetLogic
         if (ui.HasResult) { list.Add(HomeSection.Satisfaction); list.Add(HomeSection.Info); list.Add(HomeSection.DraftLink); }
         return list;
     }
+
+    /// <summary>下書きの段の状態の 1 文（次は仕上げの作成）。</summary>
+    public static string HomeDraftStatus(string hard, long bestHard) =>
+        "下書きができました" + (bestHard > 0L ? $"（必須 {hard}）" : "") + "。「勤務表をつくる」で仕上げます";
 
     public const string HomeMakeHeadline = "ボタンひとつで、勤務表をつくります";
     public const string HomeHard0Headline = "必須違反はありません";
