@@ -79,7 +79,7 @@ public class CountShortageTextTest
         // [3.678.0] カードの先頭に必須の変化を出したら繰り返さない。
         Assert.Equal(new[] { "期間の制約：1件増える", "曜日の偏り：2pt増える" },
             CellSheetLogic.OtherEffectLines(s, new HashSet<string> { "low", "high", "apt" }, Label, hardShown: true));
-        Assert.Equal("この2件の変更を適用", CellSheetLogic.ApplyCountButton(2));
+        Assert.Equal("この2か所の変更を適用する", CellSheetLogic.ApplyCountButton(2));
         Assert.Equal(ChainFixPreview.ApplyChangeButton, CellSheetLogic.ApplyCountButton(1));
     }
 

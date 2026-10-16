@@ -111,7 +111,7 @@ public class Review3682Test
         Assert.Equal("休 8回 → 7回（下限 8回を割ります）", FixOutcomeText.GuidedCandidateImpact("休", 8, 8));
         Assert.Equal("休 9回 → 8回", FixOutcomeText.GuidedCandidateImpact("休", 9, 8));
         Assert.Null(FixOutcomeText.GuidedCandidateImpact(null, 0, null));
-        Assert.Equal("ほかの必須違反（1件）は分析タブで", FixOutcomeText.OtherHardAfterShortage(new Dictionary<string, int> { ["covU"] = 2, ["c3n"] = 1 }));
+        Assert.Equal("ほかの必須違反（1件）が残っています", FixOutcomeText.OtherHardAfterShortage(new Dictionary<string, int> { ["covU"] = 2, ["c3n"] = 1 }));
         Assert.Null(FixOutcomeText.OtherHardAfterShortage(new Dictionary<string, int> { ["covU"] = 2 }));
     }
 }

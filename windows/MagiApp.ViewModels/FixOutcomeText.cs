@@ -82,7 +82,37 @@ public static class FixOutcomeText
 
     /// <summary>人員不足を直し終えたときの、ほかの必須違反（人員不足を除く）。無ければ null。</summary>
     public static string? OtherHardAfterShortage(IReadOnlyDictionary<string, int> breakdown) =>
-        AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Hard.Where(f => f != "covU")) is { } t ? $"ほかの必須違反（{t}）は分析タブで" : null;
+        AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Hard.Where(f => f != "covU")) is { } t ? $"ほかの必須違反（{t}）が残っています" : null;
+
+    /// <summary>人員不足の手伝いの終わりの主ボタン（巡回の先頭を開く、Kotlin <c>guidedTourButton</c>）。</summary>
+    public static string GuidedTourButton(int n) => $"残っている必須違反を順に見る（{n}か所）";
+
+    /// <summary>人員不足の手伝いの題（H-1、Kotlin <c>guidedFixTitle</c>）。枠が無い埋められない段は「残りの人員不足は埋められません」。</summary>
+    public static string GuidedFixTitle(GuidedStage stage, string? dayLabel, string? shiftSymbol)
+    {
+        var slot = dayLabel is not null && shiftSymbol is not null ? $"{dayLabel}の「{shiftSymbol}」" : null;
+        if (stage == GuidedStage.Done) return ShortageDoneTitle;
+        if (slot is null) return "残りの人員不足は埋められません";
+        return stage switch
+        {
+            GuidedStage.Candidates => $"{slot}に入る人",
+            GuidedStage.Chain => $"{slot}を入れ替えで埋める",
+            _ => $"{slot}は埋められません",
+        };
+    }
+
+    public static string GuidedFixTitle(GuidedStage stage, MagiEngine.V6.CoverageShortfall? target) => GuidedFixTitle(stage, target?.DayLabel, target?.ShiftSymbol);
+
+    /// <summary>状態の 2 点（H-2、Kotlin <c>guidedStatusPoints</c>）: 「いまN人／必要M人」と、候補がいれば「動かせる人がN人います」。</summary>
+    public static IReadOnlyList<string> GuidedStatusPoints(int need, int got, int movable) =>
+        new[] { CellSheetLogic.ShortageHeadlineOf("", "", need, got, need - got).Status, movable > 0 ? $"動かせる人が{movable}人います" : null }.OfType<string>().ToList();
+
+    /// <summary>候補 1 人の行（H-3、Kotlin <c>guidedCandidateLabel</c>）「山田さんを「A4」に入れる（休から）」。今の勤務が無ければ括弧ごと省く。</summary>
+    public static string GuidedCandidateLabel(string name, string shiftSymbol, string? fromSymbol) =>
+        $"{name}さんを「{shiftSymbol}」に入れる" + (string.IsNullOrWhiteSpace(fromSymbol) ? "" : $"（{fromSymbol}から）");
 
     public const string ShortageDoneTitle = "人員不足は直し終わりました";
 }
+
+/// <summary>人員不足の手伝いの段（候補の人がいる／入れ替えで埋める／埋められない／終わり。Kotlin <c>GuidedStage</c>）。</summary>
+public enum GuidedStage { Candidates, Chain, Blocked, Done }

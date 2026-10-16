@@ -733,7 +733,9 @@ public sealed partial class HomeView : UserControl
         // 原因に対応する設定へ行く。押したらダイアログを閉じてから着地する（null＝月次条件の先頭）。編集タブの先頭に「元の確認へ戻る」を出す（3.646.0 L03）。
         Button LandingButton(EditLanding? landing)
         {
-            var b = new Button { Content = GuidedFixRules.LandingButtonLabel(landing), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+            // 設定へ行くのがこの段の主操作＝塗り（H-5）。
+            var b = new Button { Content = GuidedFixRules.LandingButtonLabel(landing), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
             b.Click += (_, _) => { wentOn = true; dialog.Hide(); GoEditLandingFrom(landing, new EditReturn("なおし方（人員不足）", EditReturn.Guided)); };
             return b;
         }
@@ -742,26 +744,29 @@ public sealed partial class HomeView : UserControl
             panel.Children.Clear();
             var ui = _vm.Ui;
             var plan = GuidedFixPlan.Build(ui.CoverageDiag);
-            dialog.Title = plan.Title;
             var target = plan.Target;
+            IReadOnlyList<FixCandidate> cands = target is null ? Array.Empty<FixCandidate>() : _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
+            dialog.Title = plan.TitleFor(cands.Count);
 
             if (target is not null)
             {
-                panel.Children.Add(new TextBlock { Text = CellSheetLogic.ShortageHeadlineOf(target).Headline + "。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-                var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
+                foreach (var point in FixOutcomeText.GuidedStatusPoints(target.Need, target.Got, cands.Count))
+                    panel.Children.Add(new TextBlock { Text = "・" + point, FontSize = 14, TextWrapping = TextWrapping.Wrap });
                 if (loggedFor != (target.DayIndex, target.ShiftIndex)) { loggedFor = (target.DayIndex, target.ShiftIndex); _vm.LogUi(new OpLogText.UiOp.GuidedOpen(target.DayLabel, target.ShiftSymbol, cands.Count)); }
                 if (cands.Count > 0)
                 {
                     // [UX監査 中5] 件数を出し、既定の8人を超えたら「すべて表示」で9人目以降も選べる。
-                    panel.Children.Add(new TextBlock { Text = $"この日に動かせる人が{cands.Count}人います。だれかを「{target.ShiftSymbol}」に入れますか？", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     var showAll = showAllFor == (target.DayIndex, target.ShiftIndex);
                     var shown = showAll ? cands.ToList() : cands.Take(GuidedFixRules.GuidedFixPreview).ToList();
                     foreach (var c in shown)
                     {
-                        var tail = c.FromRest ? "（休み）" : "";
+                        var fromK = c.StaffIndex < ui.Schedule.Count && target.DayIndex < ui.Schedule[c.StaffIndex].Count && ui.Schedule[c.StaffIndex][target.DayIndex] >= 0
+                            ? ui.Schedule[c.StaffIndex][target.DayIndex] : (int?)null;
+                        var fromSym = fromK is { } fk && fk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[fk] : null;
                         var b = new Button
                         {
-                            Content = $"{c.Name}さん{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                            Content = new TextBlock { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, target.ShiftSymbol, fromSym), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextAlignment = TextAlignment.Center },
+                            HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                             IsEnabled = !ui.Running,
                         };
                         var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex; var label = $"{c.Name}さんを{target.DayLabel}の「{target.ShiftSymbol}」に入れる";
@@ -775,9 +780,7 @@ public sealed partial class HomeView : UserControl
                             _vm.PreviewShortageCandidate(i, day, shift, label);
                         };
                         panel.Children.Add(b);
-                        var fromK = c.StaffIndex < ui.Schedule.Count && target.DayIndex < ui.Schedule[c.StaffIndex].Count && ui.Schedule[c.StaffIndex][target.DayIndex] >= 0
-                            ? ui.Schedule[c.StaffIndex][target.DayIndex] : (int?)null;
-                        var impact = FixOutcomeText.GuidedCandidateImpact(fromK is { } gk1 && gk1 < ui.ShiftSymbols.Count ? ui.ShiftSymbols[gk1] : null,
+                        var impact = FixOutcomeText.GuidedCandidateImpact(fromSym,
                             fromK is { } gk2 ? ui.Schedule[c.StaffIndex].Count(v => v == gk2) : 0, fromK is { } gk3 ? _vm.StaffCellLimits(c.StaffIndex, gk3).Lo : null);
                         if (impact is not null) panel.Children.Add(new TextBlock { Text = impact, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     }
@@ -804,7 +807,7 @@ public sealed partial class HomeView : UserControl
                 {
                     // [UX監査 高1] 1人を動かすだけでは埋まらないが、複数人の入れ替えで埋まると分析が確かめた枠。
                     //   [3.644.0/UX-03] 当てる前に一覧（だれの・どの日の・何→何と必須の増減）を見せる＝MainWindow.ShowChainPreviewAsync。
-                    panel.Children.Add(new TextBlock { Text = "だれか1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = "1人を動かすだけでは埋まりません。複数人の入れ替えで埋められます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                     var chain = new Button { Content = "入れ替えの一覧と影響を見る", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
                     chain.Click += (_, _) =>
                     {
@@ -838,7 +841,23 @@ public sealed partial class HomeView : UserControl
             else
             {
                 panel.Children.Add(new TextBlock { Text = "人員不足の日はなくなりました。", TextWrapping = TextWrapping.Wrap });
-                if (FixOutcomeText.OtherHardAfterShortage(ui.Breakdown) is { } otherHard) panel.Children.Add(new TextBlock { Text = otherHard, TextWrapping = TextWrapping.Wrap });
+                if (FixOutcomeText.OtherHardAfterShortage(ui.Breakdown) is { } otherHard)
+                {
+                    panel.Children.Add(new TextBlock { Text = otherHard, TextWrapping = TextWrapping.Wrap });
+                    // ほかの必須が残るなら巡回の先頭を開く（H-5、Kotlin onTour＝goTourItem(0)）。
+                    var tour = _vm.HardViolationItemsFor(AnalysisView.LabelOf);
+                    if (tour.Count > 0)
+                    {
+                        var tourButton = new Button
+                        {
+                            Content = FixOutcomeText.GuidedTourButton(tour.Count), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                        };
+                        var first = tour[0].Cell;
+                        tourButton.Click += (_, _) => { wentOn = true; dialog.Hide(); _window.OpenCellSheet(first.I, first.J); };
+                        panel.Children.Add(tourButton);
+                    }
+                }
             }
         }
         void OnChanged(object? s, PropertyChangedEventArgs e)
