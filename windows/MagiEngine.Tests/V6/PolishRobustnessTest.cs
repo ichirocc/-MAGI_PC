@@ -67,6 +67,9 @@ public class PolishRobustnessTest
         Assert.Equal("ほか 2 件（先頭 5 件のみ）", lines[5]);
         Assert.Equal("1/1: fair 件数 2→1 ・ 合計 9→9 ・ 必須 1→1 ・ 容認 0.5 ・ 素の差 +0.0 ・ 実効差 -0.5",
             Assert.Single(TuningTelemetry.ToleratedLines(new[] { new TuningTelemetry.ToleratedNote("fair", 2, 1, 9, 9, 1, 1, 0.0, 0.5, -0.5) }, total: 1)));
+        // 実効差 0.0（合計の減で採用）は符号なし＝Kotlin `toleratedLine` と同じ文字列。
+        Assert.Equal("2/3: fair 件数 4→3 ・ 合計 120→118 ・ 必須 0→0 ・ 容認 1.8 ・ 素の差 +1.8 ・ 実効差 0.0",
+            TuningTelemetry.ToleratedLines(new[] { note, new TuningTelemetry.ToleratedNote("fair", 4, 3, 120, 118, 0, 0, 1.8, 1.8, 0.0) }, total: 3)[1]);
         Assert.Empty(TuningTelemetry.ToleratedLines(Array.Empty<TuningTelemetry.ToleratedNote>(), total: 0));
     }
 

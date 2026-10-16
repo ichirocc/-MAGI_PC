@@ -21,10 +21,10 @@ public class StateFingerprintTest
     [Fact]
     public void OfBoardMatchesTheKotlinGoldenAndTheViewModelKey()
     {
-        var board = new[] { new[] { 0, 1, 0 }, new[] { 1, 0, 1 } };
-        Assert.Equal(-1367968410775463064L, StateFingerprint.OfBoard(board));
-        Assert.Equal("ed03fffa6bc5db68", StateFingerprint.OfBoard(board).ToString("x16"));
-        Assert.NotEqual(StateFingerprint.OfBoard(board), StateFingerprint.OfBoard(new[] { new[] { 0, 1, 0 }, new[] { 1, 0, 0 } }));
+        var board = new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 2 } };
+        Assert.Equal(-1367968410775403481L, StateFingerprint.OfBoard(board));
+        Assert.Equal("ed03fffa6bc6c427", StateFingerprint.OfBoard(board).ToString("x16"));
+        Assert.NotEqual(StateFingerprint.OfBoard(board), StateFingerprint.OfBoard(new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 3 } }));
     }
 
     private static MagiState Base() => new MagiState(

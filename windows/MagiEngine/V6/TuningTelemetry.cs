@@ -101,7 +101,7 @@ public static class TuningTelemetry
         {
             var n = notes[i];
             lines.Add($"{i + 1}/{total}: {n.Family} 件数 {n.FamilyBefore}→{n.FamilyAfter} ・ 合計 {n.TotalBefore}→{n.TotalAfter} ・ 必須 {n.HardBefore}→{n.HardAfter}" +
-                $" ・ 容認 {n.Forgiven.ToString("0.0", CultureInfo.InvariantCulture)} ・ 素の差 {Signed(n.RawDelta)} ・ 実効差 {Signed(n.EffectiveDelta)}");
+                $" ・ 容認 {n.Forgiven.ToString("0.0", CultureInfo.InvariantCulture)} ・ 素の差 {Signed(n.RawDelta)} ・ 実効差 {n.EffectiveDelta.ToString("0.0", CultureInfo.InvariantCulture)}");
         }
         if (total > notes.Count) lines.Add($"ほか {total - notes.Count} 件（先頭 {ToleratedNoteCap} 件のみ）");
         return lines;

@@ -115,7 +115,7 @@ public sealed partial class MagiViewModel
     /// <summary>操作ログ・診断ログの平文ファイル書き出し（Web版の「ログ出力」に相当）。</summary>
     public string? ExportLogs()
     {
-        // [3.694.0] 件数・実行番号・捨て件数は同じロックの中で読む（書き出し中の LogOp で 1 件ずれない）。出力は不変。
+        // [3.694.0] 実行番号・捨て件数は同じロックの中で読む（Ui.OpLog の写しは lock 外の代入なので 1 件遅れうる）。出力は不変。
         IReadOnlyList<string> ops; List<int> runsInLog; int dropped; long startedAtMs;
         lock (_opLogLock)
         {
@@ -173,8 +173,9 @@ public sealed partial class MagiViewModel
 
     /// <summary>[3.694.0] 状態行の直後の 1 行: 期間と指紋（書き出し時点）。勤務表がなければ「期間=なし」。</summary>
     private string PeriodLine() =>
-        _state is { } st && _currentSchedule is { } sched
-            ? $"期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ {OpLogText.Keys(StateKey(st), BoardKey(sched))}"
+        _state is { } st
+            ? $"期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 状態指紋={OpLogText.Hex16(StateKey(st))}"
+              + (_currentSchedule is { } sched ? $" ・ 盤面指紋={OpLogText.Hex16(BoardKey(sched))}" : "")
             : "期間=なし";
 
     private static readonly JsonSerializerOptions LogJsonOptions = new()
@@ -203,13 +204,13 @@ public sealed partial class MagiViewModel
             ["satisfactionMeaning"] = "0-100の進捗スコア（必須・合計違反の減少度）。希望充足率ではありません",
         };
         // [3.694.0] テキスト版の期間行・注記と同じ値（キーの追加のみ）。
-        if (_state is { } st && _currentSchedule is { } sched)
+        if (_state is { } st)
         {
             o["startDate"] = st.StartDate;
             o["endDate"] = st.EndDate;
             o["stateFingerprint"] = OpLogText.Hex16(StateKey(st));
-            o["boardFingerprint"] = OpLogText.Hex16(BoardKey(sched));
         }
+        if (_currentSchedule is { } sched) o["boardFingerprint"] = OpLogText.Hex16(BoardKey(sched));
 
         IReadOnlyList<string> ops; List<int> runsInLog;
         lock (_opLogLock)

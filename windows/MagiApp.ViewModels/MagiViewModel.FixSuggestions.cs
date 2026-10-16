@@ -229,10 +229,10 @@ public sealed partial class MagiViewModel
             LogOp("W", $"改善手を見送り: {s.Label}（案の出どころが違う: {refusal}）");
             Ui.MessageIsError = true; Ui.Message = refusal; return false;
         }
+        var nowBoard = BoardKey(sched);
+        var nowState = StateKey(st);
         if (ob != 0L)
         {
-            var nowBoard = BoardKey(sched);
-            var nowState = StateKey(st);
             if (ob != nowBoard || os != nowState)
             {
                 LogOp("W", $"改善手を見送り: {s.Label}（案を出したときと違う: 盤面指紋 案={OpLogText.Hex16(ob)} 今={OpLogText.Hex16(nowBoard)} ・ 状態指紋 案={OpLogText.Hex16(os)} 今={OpLogText.Hex16(nowState)}）");
@@ -278,7 +278,7 @@ public sealed partial class MagiViewModel
                 gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft, gate.Before.Breakdown, gate.After.Breakdown);
         // [3.694.0] 適用前の盤面は照合に使った sched（originBoard は 0 のことがある）。状態指紋は盤面を含まず前後で同じなので 1 つ。
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）" +
-            $" ・ 期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 盤面指紋={OpLogText.Hex16(BoardKey(sched))}→{OpLogText.Hex16(BoardKey(applied))} ・ 状態指紋={OpLogText.Hex16(StateKey(st))}";
+            $" ・ 期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 盤面指紋={OpLogText.Hex16(nowBoard)}→{OpLogText.Hex16(BoardKey(applied))} ・ 状態指紋={OpLogText.Hex16(nowState)}";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
             (st.Cons3w?.Count ?? 0) > 0 ? 2 : 0);
