@@ -45,13 +45,10 @@ public class Review3699Test
     [Fact]
     public void AllBlockedPeekOffersOneSearch()
     {
-        var marks = new ShiftMarks(new HashSet<int>(), new HashSet<int> { 1, 2 });
-        var cands = new HashSet<int> { 0, 1, 2 };
-        Assert.Equal(CellSheetLogic.PeekSearchButton, CellSheetLogic.PeekHopelessAction(0, CellSeverity.Hard, marks, cands, 0, null));
-        Assert.Null(CellSheetLogic.PeekHopelessAction(0, CellSeverity.Hard, marks, cands, 0, 1));         // 緩める候補が主
-        Assert.Null(CellSheetLogic.PeekHopelessAction(1, CellSeverity.Hard, marks, cands, 0, null));      // 希望の登録中
-        Assert.Null(CellSheetLogic.PeekHopelessAction(0, CellSeverity.None, marks, cands, 0, null));
-        Assert.Null(CellSheetLogic.PeekHopelessAction(0, CellSeverity.Hard, new ShiftMarks(new HashSet<int>(), new HashSet<int> { 1 }), cands, 0, null));
+        // 3.702.0 S-3: ちら見の「変更案を探す」は問題のあるセルで常に出す（候補が全部 ⚠ のときだけ、をやめた）。
+        Assert.Equal(CellSheetLogic.PeekSearchButton, CellSheetLogic.PeekSearchAction(0, CellSeverity.Hard));
+        Assert.Null(CellSheetLogic.PeekSearchAction(1, CellSeverity.Hard));      // 希望の登録中
+        Assert.Null(CellSheetLogic.PeekSearchAction(0, CellSeverity.None));
     }
 
     [Fact]

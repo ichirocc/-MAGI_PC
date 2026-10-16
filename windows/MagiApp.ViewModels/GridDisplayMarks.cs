@@ -59,6 +59,15 @@ public static class GridDisplayMarks
     /// <summary>勤務表だけでは期間の制約を満たせない職員（行末の内訳を開けるようにする）。</summary>
     public static IReadOnlySet<int> C1Stuck(UiState ui) => ui.C1Shortages.Where(x => x.Stuck).Select(x => x.Staff).ToHashSet();
 
+    /// <summary>違反クラスが必須(HARD)か（Kotlin <c>isHardCellViolation</c>）。族名の完全一致で決める＝唯一の判定規則。</summary>
+    public static bool IsHardCellViolation(string? v) => v is not null && MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(v));
+
+    /// <summary>破線枠にする「重いソフト族」（Kotlin <c>heavySoftFamilies</c>）。重み階層（low=120 / c1=50 / c3mn=90 が high=25 を上回る）と表示強度を揃える。</summary>
+    public static readonly IReadOnlySet<string> HeavySoftFamilies = new HashSet<string> { "low", "c1", "c3mn" };
+
+    public static bool IsHeavySoftCellViolation(string? v) =>
+        v is not null && (HeavySoftFamilies.Contains(VioBuckets.FamilyOfVioClass(v)) || v == ZeroCapClass);
+
     /// <summary>上限0のセルの表示クラス。族は high（回数チップに従う）、枠は破線（どのセルが超過か一意なので）。</summary>
     public const string ZeroCapClass = "vio-high0";
 
