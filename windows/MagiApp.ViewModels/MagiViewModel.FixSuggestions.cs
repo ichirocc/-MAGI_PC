@@ -310,9 +310,7 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
-            { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), FixTarget = fixTarget, GlobalPolish = globalPolish, NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
-        NotePreviewOpened(s.Label);
+        OpenPreview(s, snap, st, new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), fixTarget: fixTarget, globalPolish: globalPolish);
     }
 
     /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
@@ -325,13 +323,8 @@ public sealed partial class MagiViewModel
         var sched = _currentSchedule;
         if (sched is null || _state is not { } st) return;
         var snap = sched.Copy2D();
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
-        {
-            Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey),
-            Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget, GlobalPolish = fixTarget is null,
-            NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
-        };
-        NotePreviewOpened(s.Label);
+        OpenPreview(s, snap, st, new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: _fixBoardKey, StateKey: _fixStateKey), purpose, effect,
+            fromList: true, focusKey: focusKey, fixTarget: fixTarget, globalPolish: fixTarget is null);
     }
 
     /// <summary>相談に積んだ入れ替えの枠を今の勤務表で探し直す（日付・記号で枠を引き直す＝月やシフトが変わっていれば断る）。

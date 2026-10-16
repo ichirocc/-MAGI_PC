@@ -15,7 +15,11 @@ public sealed record GuidedFixPlan(
     IReadOnlyList<CoverageShortfall> Infeasible)
 {
     public bool AllDone => Target is null && Blocked.Count == 0 && Infeasible.Count == 0;
-    public string Title => AllDone ? FixOutcomeText.ShortageDoneTitle : "なおすのを手伝います";
+    /// <summary>段（Kotlin <c>GuidedFixDialog</c> の stage）。<paramref name="candidates"/>＝対象の枠に入れる候補の人数。</summary>
+    public GuidedStage StageFor(int candidates) =>
+        AllDone ? GuidedStage.Done : Target is not null && candidates > 0 ? GuidedStage.Candidates : Target?.ChainVerified == true ? GuidedStage.Chain : GuidedStage.Blocked;
+
+    public string TitleFor(int candidates) => FixOutcomeText.GuidedFixTitle(StageFor(candidates), Target);
 
     public static GuidedFixPlan Build(CoverageDiagnosis? diag)
     {

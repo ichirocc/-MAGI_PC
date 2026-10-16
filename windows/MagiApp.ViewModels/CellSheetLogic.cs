@@ -821,7 +821,7 @@ public static class CellSheetLogic
     public const string ReviewChangeButton = "変更内容を確認する";
 
     /// <summary>確認の画面の適用ボタン（件数を言う）。</summary>
-    public static string ApplyCountButton(int n) => n >= 2 ? $"この{n}件の変更を適用" : ChainFixPreview.ApplyChangeButton;
+    public static string ApplyCountButton(int n) => n >= 2 ? $"この{n}か所の変更を適用する" : ChainFixPreview.ApplyChangeButton;
 
     /// <summary>確認の画面を閉じるボタン（案の一覧から来たときは一覧へ戻る）。</summary>
     public const string BackToFixesButton = "別案を見る";

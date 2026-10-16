@@ -19,17 +19,18 @@ namespace MagiApp.ViewModels;
 /// <param name="FixTarget">見ている問題（適用後の結果の行で、解消して印が消えたあとも前後を言う）。</param>
 /// <param name="NewHard">別の場所に新しく生まれる必須違反の鍵（正式な検査の前後。null＝評価していない）。Kotlin は名前の一覧を持つが、族名の表は
 /// WinUI にあるので鍵で持ち、画面が <see cref="CellSheetLogic.ViolationKeyLabel"/> で名を付ける。</param>
-public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IReadOnlyList<string> Changes, ChainTarget? Target = null,
+/// <param name="Summary">前後の 1 行（<see cref="PreviewSummaryLine"/>、ApplyError の次に太字）。null＝まだ組み立てていない。</param>
+public sealed record ChainFixPreview(FixSuggestion Suggestion, IReadOnlyList<string> Changes, ChainTarget? Target = null,
     string? Purpose = null, IReadOnlyList<string>? Effect = null, bool FromList = false, IReadOnlyList<ChangeRow>? Rows = null,
     IReadOnlyList<string>? CountNotes = null, string? FocusKey = null, FixTarget? FixTarget = null, IReadOnlyList<ViolationKey>? NewHard = null,
-    string? ApplyError = null, bool GlobalPolish = false)
+    string? ApplyError = null, bool GlobalPolish = false, string? Summary = null)
 {
     public IReadOnlyList<string> CountNotes { get; init; } = CountNotes ?? Array.Empty<string>();
     public IReadOnlyList<string> Effect { get; init; } = Effect ?? Array.Empty<string>();
     public IReadOnlyList<ChangeRow> Rows { get; init; } = Rows ?? Array.Empty<ChangeRow>();
 
     /// <summary>変更を当てるボタン（違反セルの半自動修正仕様 §5: 押すと検証してから全変更を反映する。Kotlin <c>APPLY_CHANGE_BUTTON</c>）。</summary>
-    public const string ApplyChangeButton = "この変更を適用";
+    public const string ApplyChangeButton = "この変更を適用する";
     /// <summary>[3.687.0/R09] 確認の画面の門の説明（FixApplyGate と同じ規則: 必須を増やさない・別の場所に必須を生まない・希望の固定を崩さない。要調整だけの改善は通る）。</summary>
     public const string PreviewGateNote = "適用の直前に最新の勤務表でもう一度検査し、必須違反を増やす・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。";
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
@@ -73,8 +74,45 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, string Title, IRe
             return new ChangeRow(Name(op.Staff), DayText.Short(startDate, op.Day), inRange ? Shift(snapshot[op.Staff][op.Day]) : "?", Shift(op.ToShift), wish, impact, Key(op.Staff));
         }).ToList();
         var changes = rows.Select(r => $"{r.Staff} {r.Date} {r.Before} → {r.After}" + (r.Wish.Length > 0 ? $"・{r.Wish}" : "")).ToList();
-        // 人数・マス数は本文 1 行目（提案のラベル）が持つ（Android 3.658.0: 題に入れると途中で折り返した）。
-        return new ChainFixPreview(s, "複数人の入れ替え", changes, Rows: rows, CountNotes: CellSheetLogic.StaffCountNotes(board, s.Ops, staffNames, shiftSymbols));
+        return new ChainFixPreview(s, changes, Rows: rows, CountNotes: CellSheetLogic.StaffCountNotes(board, s.Ops, staffNames, shiftSymbols));
+    }
+
+    /// <summary>対象の数の変化の 3 行（案の一覧・争点カード・確認の画面で共有。Kotlin <c>previewEffectLines</c>）。</summary>
+    public static IReadOnlyList<string> PreviewEffectLines(string label, CountEffect e, string basis) =>
+        new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(basis) };
+
+    /// <summary>
+    /// 確認の画面の前後の 1 行（D-2、Kotlin <c>previewSummaryLine</c>）「今回の不足 1人 → 0人（解消）・2か所を変更・新たな必須違反なし」。区切りごとに単位は 1 つ（INV-07）。
+    /// <paramref name="effect"/>＝見ている問題の変化（null＝対象なし＝必須違反の増減の向きだけ言う）、<paramref name="newHard"/> null＝未評価（INV-10）。
+    /// </summary>
+    public static string PreviewSummaryLine(CountEffect? effect, int cells, int hardDelta, int? newHard) => string.Join("・", new[]
+    {
+        effect is not null ? $"今回の{effect.GapLine()}（{CellSheetLogic.AppliedStatusWord(effect)}）"
+            : hardDelta < 0 ? "必須違反は減ります" : hardDelta > 0 ? "必須違反は増えます" : null,
+        $"{cells}か所を変更",
+        newHard is null ? "新たな必須違反は未評価（適用の直前に検査）" : newHard == 0 ? "新たな必須違反なし" : $"新たな必須違反 {newHard}件",
+    }.OfType<string>());
+
+    /// <summary>見ている問題の目的の 1 文（一覧から来ない経路で使う。Kotlin <c>previewPurpose</c>）「11/3のA4の不足を減らす」。</summary>
+    public static string PreviewPurpose(FixTarget t, string label, string? staffName) =>
+        (staffName is null ? "" : $"{staffName}さんの") + $"{label}の{t.GapWord}を減らす";
+
+    /// <summary>
+    /// 3 つの組み立て口（候補・玉突き・案の一覧）で共通の仕上げ（Kotlin <c>fillPreview</c>）: <see cref="FixTarget"/> があれば目的と対象の数の変化を埋め
+    /// （呼び手が渡していればそのまま）、前後の 1 行を作る。
+    /// </summary>
+    public static ChainFixPreview FillPreview(ChainFixPreview p, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<string> shiftSymbols, string startDate, IReadOnlyList<string> staffNames)
+    {
+        var t = p.FixTarget;
+        var e = t?.Effect(schedule, p.Suggestion.Ops);
+        var label = t is null ? null : CellSheetLogic.FixTargetLabel(t, t.Shift >= 0 && t.Shift < shiftSymbols.Count ? shiftSymbols[t.Shift] : "", startDate);
+        var hardDelta = p.Suggestion.Diff.Where(d => MirrorKeys.Hard.Contains(d.Family)).Sum(d => d.Delta);
+        return p with
+        {
+            Purpose = p.Purpose ?? (t is not null && label is not null ? PreviewPurpose(t, label, t.Staff is { } si && si >= 0 && si < staffNames.Count ? staffNames[si] : null) : null),
+            Effect = p.Effect.Count > 0 ? p.Effect : t is not null && e is not null && label is not null ? PreviewEffectLines(label, e, t.Basis) : Array.Empty<string>(),
+            Summary = PreviewSummaryLine(e, p.Suggestion.Ops.Count, hardDelta, p.NewHard?.Count),
+        };
     }
 }
 

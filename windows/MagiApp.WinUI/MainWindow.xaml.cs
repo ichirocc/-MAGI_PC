@@ -427,7 +427,7 @@ public sealed partial class MainWindow : Window
     private ChainFixPreview? _chainPreviewShown;
 
     /// <summary>[3.644.0/UX-03] 複数人の入れ替えを当てる前の一覧（Kotlin <c>ChainFixPreviewDialog</c>）。変わる人・日・勤務（前 → 後）と必須の増減を見せ、
-    /// 「この変更を適用」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「やめる」で閉じる。
+    /// 「この変更を適用する」で <see cref="MagiViewModel.ApplyChainPreview"/>（指紋照合・FixApplyGate・Undo を通る）、「今は変更しない」で閉じる。
     /// 3.646.0: ホームの描画からここへ＝分析タブ・セルのシートの「この手を使う」（<see cref="MagiViewModel.PreviewFixSuggestion"/>）でも、開いているタブに関係なく出る。</summary>
     private async Task ShowChainPreviewAsync(ChainFixPreview p)
     {
@@ -440,6 +440,7 @@ public sealed partial class MainWindow : Window
             { Text = t, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal };
         if (p.ApplyError is { } err)
             body.Children.Add(new TextBlock { Text = err, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"] });
+        if (p.Summary is { } summary) body.Children.Add(Line(summary, bold: true));
         // 目的 → 変更する勤務（職員ごとの表）→ 対象の数の変化 → ほかの影響と確認が必要なこと（Kotlin ChainFixPreviewDialog、2026-10-14 利用者レビュー）。
         if (p.Purpose is { } purpose) { body.Children.Add(Caption("今回の目的")); body.Children.Add(Line(purpose)); }
         else body.Children.Add(Line(p.Suggestion.Label));
@@ -481,10 +482,10 @@ public sealed partial class MainWindow : Window
             }
             body.Children.Add(table);
         }
-        for (var i = 0; i < p.Effect.Count; i++) body.Children.Add(Line(p.Effect[i], bold: i == 0));
+        foreach (var effectLine in p.Effect) body.Children.Add(Line(effectLine));
         var (hardLine, caution) = NextActionGuide.FixImpactLines(p.Suggestion, AnalysisView.LabelOf);
         var consulted = ConsultList.IsConsulted(ui.Consults, ConsultList.Chain(p, hardLine));
-        body.Children.Add(Line(hardLine, bold: p.Effect.Count == 0));
+        body.Children.Add(Line(hardLine));
         if (p.CountNotes.Count > 0)
         {
             body.Children.Add(Caption("この組み合わせで変わる回数"));
@@ -760,6 +761,13 @@ public sealed partial class MainWindow : Window
     /// <summary>[Android 3.612.0 思考誘導S3] ホームの「ぶつかっている希望」から対象セルへ移る。Android はそのセルのシートを開くが、
     /// この移植のセル編集はタップ位置を起点に出すため、ここでは勤務表のそのセルへスクロール＋ハイライトまで。</summary>
     internal void OpenCell(int i, int j) => JumpToCell(i, j);
+
+    /// <summary>巡回の先頭のように、勤務表のそのセルのシートを開く（Kotlin goTourItem(0)。ステータスの札と人員不足の手伝いの終わりの段が使う）。</summary>
+    internal void OpenCellSheet(int i, int j)
+    {
+        SelectTab("schedule");
+        if (_tabCache["schedule"] is ScheduleView sv) sv.OpenCellSheet(i, j);
+    }
 
     /// <summary>
     /// [フェーズ9] 未知のタグに対する防御（5タグはすべて実装済みのため通常は到達しない）。

@@ -26,7 +26,7 @@ public class GuidedFixTest
         Assert.False(onlyBlocked.AllDone); // 旧実装はここで「直し終わりました」と言っていた
 
         Assert.True(GuidedFixPlan.Build(null).AllDone);
-        Assert.Equal("人員不足は直し終わりました", GuidedFixPlan.Build(Diag()).Title);
+        Assert.Equal("人員不足は直し終わりました", GuidedFixPlan.Build(Diag()).TitleFor(0));
     }
 
     [Fact]

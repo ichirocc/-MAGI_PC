@@ -465,9 +465,21 @@ public sealed partial class MagiViewModel
         }
         var target = new ChainTarget(ConsultList.IsoDate(Ui.StartDate, j) ?? "", k >= 0 && k < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[k] : "", label,
             BoardKey: BoardKey(snap), StateKey: StateKey(st));
-        Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
-            { Target = target, FixTarget = NeedCellLimits(k, j) is { } need ? new FixTarget(null, k, j, need.Lo, true, "必要人数") : null };
-        NotePreviewOpened(label);
+        OpenPreview(s, snap, st, target, fixTarget: NeedCellLimits(k, j) is { } need ? new FixTarget(null, k, j, need.Lo, true, "必要人数") : null);
+    }
+
+    /// <summary>確認の画面を組み立てる 1 か所（候補・玉突き・案の一覧の 3 経路、Kotlin <c>openPreview</c>）。目的・対象の数の変化・前後の 1 行は
+    /// <see cref="ChainFixPreview.FillPreview"/> が埋める。</summary>
+    private void OpenPreview(FixSuggestion s, int[][] snap, MagiState st, ChainTarget target, string? purpose = null, IReadOnlyList<string>? effect = null,
+        bool fromList = false, string? focusKey = null, FixTarget? fixTarget = null, bool globalPolish = false)
+    {
+        var basePreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
+        {
+            Target = target, Purpose = purpose, Effect = effect ?? Array.Empty<string>(), FromList = fromList, FocusKey = focusKey, FixTarget = fixTarget,
+            GlobalPolish = globalPolish, NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
+        };
+        Ui.ChainPreview = ChainFixPreview.FillPreview(basePreview, snap.Select(r => (IReadOnlyList<int>)r).ToList(), Ui.ShiftSymbols, Ui.StartDate, Ui.StaffNames);
+        NotePreviewOpened(s.Label);
     }
 
     /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>

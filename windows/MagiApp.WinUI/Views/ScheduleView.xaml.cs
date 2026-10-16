@@ -304,7 +304,10 @@ public sealed partial class ScheduleView : UserControl
             var hard = ResolveVioBrush(ui, "vio-covU");
             var soft = ResolveVioBrush(ui, "vio-covO");
             ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = hard, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(4) }, "実線の枠＝必須"));
-            ViolationLegendHost.Children.Add(LegendItem(new Border { Width = 22, Height = 16, BorderBrush = soft, BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(4) }, "破線の枠＝要調整（重）"));
+            ViolationLegendHost.Children.Add(LegendItem(new Rectangle { Width = 22, Height = 16, Stroke = soft, StrokeThickness = 1.5, StrokeDashArray = new DoubleCollection { 3, 2 }, RadiusX = 4, RadiusY = 4 }, "破線の枠＝要調整（重）"));
+            var cornerSample = new Grid { Width = 22, Height = 16 };
+            cornerSample.Children.Add(new Polygon { Points = new PointCollection { new Windows.Foundation.Point(0, 0), new Windows.Foundation.Point(8, 0), new Windows.Foundation.Point(8, 8) }, Fill = soft, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top });
+            ViolationLegendHost.Children.Add(LegendItem(cornerSample, "右上の角＝要調整（軽）"));
             ViolationLegendHost.Children.Add(LegendItem(new Ellipse { Width = 8, Height = 8, Fill = soft }, "左上の点＝ほかの種類も重なっている"));
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "名前の横の ▼▲＝回数の不足・超過／日付の下の「休▲」＝そのシフトの人員不足▼・過剰▲（タップで内訳）", TextWrapping = TextWrapping.Wrap });
             ViolationLegendHost.Children.Add(new TextBlock { MaxWidth = 360, Text = "個人の上限0のシフトが入った日は破線の枠（要調整）／人員・グループの上限0や適切回数0のシフトが入った日は右上の角", TextWrapping = TextWrapping.Wrap });
@@ -861,6 +864,8 @@ public sealed partial class ScheduleView : UserControl
             // 「表計算ソフトの格子線」的な見た目のズレ＝張りぼて感・バラツキの主因だった。
             cell.BorderBrush = new SolidColorBrush(Colors.Transparent);
             cell.BorderThickness = new Thickness(0);
+            cell.DashVisibility = Visibility.Collapsed;
+            cell.CornerVisibility = Visibility.Collapsed;
             cell.Background = tint is { } tintColor
                 ? new SolidColorBrush(Color.FromArgb(36, tintColor.R, tintColor.G, tintColor.B))
                 : new SolidColorBrush(Colors.Transparent);
@@ -913,7 +918,7 @@ public sealed partial class ScheduleView : UserControl
             }
 
             // [2026-09-11/Kotlin原本FlatCell準拠] 違反の無いセルは既定で無枠（plainBorder既定false）。
-            // 枠は必須違反(赤・実線2dp)/要調整(橙・実線2dp)/フォーカス(主色・3dp)のときだけ出す。
+            // 枠は必須違反(実線3dp)/フォーカス(主色・3dp)のときだけ出す。要調整は破線の枠か右上の角（G2-8）。
             Brush borderBrush = new SolidColorBrush(Colors.Transparent);
             var thickness = new Thickness(0);
             var displayClasses = GridDisplayMarks.DisplayCellClasses(ui, $"{i},{j}", c1Marks);
@@ -929,12 +934,17 @@ public sealed partial class ScheduleView : UserControl
             var second = GridDisplayMarks.SecondVisibleClass(displayClasses, _vioEnabled);
             cell.SecondDotVisibility = second is null ? Visibility.Collapsed : Visibility.Visible;
             if (second is not null) cell.SecondDotColor = ResolveVioBrush(ui, second);
-            if (vioClass is not null)
+            var vioBrush = vioClass is null ? null : ResolveVioBrush(ui, vioClass);
+            var heavySoft = vioClass is not null && !GridDisplayMarks.IsHardCellViolation(vioClass) && GridDisplayMarks.IsHeavySoftCellViolation(vioClass);
+            var lightSoft = vioClass is not null && !GridDisplayMarks.IsHardCellViolation(vioClass) && !heavySoft;
+            if (vioBrush is not null && GridDisplayMarks.IsHardCellViolation(vioClass))
             {
-                borderBrush = ResolveVioBrush(ui, vioClass);
-                // 必須は太く、要調整は細く（Android MagiMarks: 3dp / 2dp）＝必須が先に目に入る。
-                thickness = new Thickness(MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(vioClass)) ? 3 : 1.5);
+                borderBrush = vioBrush;
+                thickness = new Thickness(3);
             }
+            cell.DashVisibility = heavySoft ? Visibility.Visible : Visibility.Collapsed;
+            cell.CornerVisibility = lightSoft ? Visibility.Visible : Visibility.Collapsed;
+            if (vioBrush is not null) { cell.DashBrush = vioBrush; cell.CornerBrush = vioBrush; }
             // [集中モード] 違反・未反映希望・注目セル以外を淡色に沈める（非表示にはしない＝被覆の文脈は残す）。
             var unreflectedWish = ui.Wishes.TryGetValue($"{i},{j}", out var wk0) && wk0 != k;
             var cellFocused = _focusCell is { } fc0 && fc0.I == i && fc0.J == j;
@@ -1479,7 +1489,7 @@ public sealed partial class ScheduleView : UserControl
                 var chosen = s;
                 // 「別の問題を改善する案」は見ている問題を直す案として確認・適用しない（目的と対象を渡さない＝統合仕様 INV-01/INV-03）。
                 var fixesTarget = e?.Fixes == true;
-                IReadOnlyList<string> eff = e is not null && target is not null && fixesTarget ? new[] { $"{label}：{e.CountLine()}", $"今回の{e.GapLine()}", e.AfterNote(target.Basis) }.Concat(remain).ToList() : Array.Empty<string>();
+                IReadOnlyList<string> eff = e is not null && target is not null && fixesTarget ? ChainFixPreview.PreviewEffectLines(label, e, target.Basis).Concat(remain).ToList() : Array.Empty<string>();
                 var reviewPurpose = target is null || fixesTarget ? purposeOverride ?? purpose : null;
                 var reviewTarget = fixesTarget ? target : null;
                 // 確認の画面（MainWindow）はこのダイアログが閉じ切ってから出す（ContentDialog は同時に 1 つ）。
@@ -1564,7 +1574,7 @@ public sealed partial class ScheduleView : UserControl
                     void Pick(FixSuggestion s)
                     {
                         var ce = ct.Effect(ui.Schedule, s.Ops);
-                        IReadOnlyList<string> ceff = new[] { $"{label}：{ce.CountLine()}", $"今回の{ce.GapLine()}", ce.AfterNote(ct.Basis) };
+                        IReadOnlyList<string> ceff = ChainFixPreview.PreviewEffectLines(label, ce, ct.Basis);
                         _reviewOrigin = new FixPanelOrigin(focus, settingsLabel, quick, cell, problems, resolveAt, picked);
                         registerClosed(() => _vm.PreviewFix(s, purpose, ceff, focus.Key, ct));
                         hide();
@@ -1862,17 +1872,43 @@ public sealed partial class ScheduleView : UserControl
         //   だった。ShowAt(placementTarget) は理論上 placementTarget の XamlRoot を自動継承するはずだが、
         //   実機でメニューが出ない報告と符合するため、他の popup と同じ明示設定へ揃える（安全な追加のみ）。
         var flyout = new MenuFlyout { XamlRoot = anchor.XamlRoot };
-        foreach (var c in candidates)
+        var ui = _vm.Ui;
+        var sym = shift >= 0 && shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[shift] : "";
+        var dayLabel = DayText.Short(ui.StartDate, day);
+        // 題・状態・候補の行はホームの人員不足の手伝いと同じ文言（H-6、Kotlin ShortageSlotHeader／guidedCandidateLabel）。
+        if (_vm.NeedCellLimits(shift, day) is { } need)
         {
-            var item = new MenuFlyoutItem { Text = c.FromRest ? $"{c.Name}（休み中）" : c.Name };
-            var i = c.StaffIndex;
-            var label = $"{c.Name}さんを{DayText.Short(_vm.Ui.StartDate, day)}の「{(shift < _vm.Ui.ShiftSymbols.Count ? _vm.Ui.ShiftSymbols[shift] : "")}」に入れる";
-            item.Click += (_, _) => _vm.PreviewShortageCandidate(i, day, shift, label);   // 確認の画面を経由する
-            flyout.Items.Add(item);
+            var got = ui.Schedule.Count(r => day < r.Count && r[day] == shift);
+            if (got < need.Lo)
+            {
+                flyout.Items.Add(new MenuFlyoutItem { Text = FixOutcomeText.GuidedFixTitle(GuidedStage.Candidates, dayLabel, sym), IsEnabled = false });
+                foreach (var point in FixOutcomeText.GuidedStatusPoints(need.Lo, got, candidates.Count))
+                    flyout.Items.Add(new MenuFlyoutItem { Text = "・" + point, IsEnabled = false });
+                flyout.Items.Add(new MenuFlyoutSeparator());
+            }
         }
-        if (flyout.Items.Count == 0)
+        MenuFlyoutItem CandidateItem(FixCandidate c)
         {
-            flyout.Items.Add(new MenuFlyoutItem { Text = "動かせる候補がいません（担当可能・希望が固定でない・玉突きなしの人がいない）", IsEnabled = false });
+            var from = c.StaffIndex < ui.Schedule.Count && day < ui.Schedule[c.StaffIndex].Count ? ui.Schedule[c.StaffIndex][day] : -1;
+            var item = new MenuFlyoutItem { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, sym, from >= 0 && from < ui.ShiftSymbols.Count ? ui.ShiftSymbols[from] : null) };
+            var i = c.StaffIndex;
+            var label = $"{c.Name}さんを{dayLabel}の「{sym}」に入れる";
+            item.Click += (_, _) => _vm.PreviewShortageCandidate(i, day, shift, label);   // 確認の画面を経由する
+            return item;
+        }
+        foreach (var c in candidates.Take(GuidedFixRules.GuidedFixPreview)) flyout.Items.Add(CandidateItem(c));
+        if (candidates.Count > GuidedFixRules.GuidedFixPreview)
+        {
+            var more = new MenuFlyoutSubItem { Text = $"すべて表示（ほか{candidates.Count - GuidedFixRules.GuidedFixPreview}人）" };
+            foreach (var c in candidates.Skip(GuidedFixRules.GuidedFixPreview)) more.Items.Add(CandidateItem(c));
+            flyout.Items.Add(more);
+        }
+        if (candidates.Count == 0)
+            flyout.Items.Add(new MenuFlyoutItem { Text = "動かせる候補がいません（担当できて、希望で固定されていない人がいません）", IsEnabled = false });
+        else
+        {
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(new MenuFlyoutItem { Text = "押すと、当てる前に変更と影響を確認できます", IsEnabled = false });
         }
         flyout.ShowAt(anchor);
     }
