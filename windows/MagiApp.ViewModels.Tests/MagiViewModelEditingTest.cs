@@ -463,7 +463,7 @@ public class MagiViewModelEditingTest
         vm.SetCells(new[] { (0, 0), (0, 1) }, 1);
 
         Assert.Equal("職員Aさん 12/2(火) の 1マスを A に一括変更しました", vm.Ui.OpNotice!.Text);
-        Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("手で変更: 1セル → A（一括）"));
     }
 
     [Fact]
@@ -485,7 +485,7 @@ public class MagiViewModelEditingTest
         vm.SetCells(new[] { (0, 0), (-1, 0), (0, 999) }, 1);
 
         // 範囲外の2マスは無視され、有効な1マスだけが変更される。
-        Assert.Contains(vm.Ui.OpLog, l => l.Contains("一括編集: 1マス → A"));
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("手で変更: 1セル → A（一括）"));
     }
 
     [Fact]

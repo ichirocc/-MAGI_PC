@@ -112,6 +112,14 @@ public sealed partial class MagiViewModel
     public string? ExportWishesCsv() => _state is null ? null : WishesCsvIO.Build(_state);
     public string? ExportConstraintsCsv() => _state is null ? null : ConstraintsCsvIO.Build(_state);
 
+    /// <summary>[3.697.0] 操作ログの行（Message）と時刻を LogOp と同じロックの中で写し、純関数で数える。</summary>
+    private OpLogText.Hesitation Hesitation()
+    {
+        List<OpLogEntry> entries;
+        lock (_opLogLock) entries = _opLog.ToList();
+        return OpLogText.HesitationOf(entries.Select(e => e.Message).ToList(), entries.Select(e => e.TimeMs).ToList());
+    }
+
     /// <summary>操作ログ・診断ログの平文ファイル書き出し（Web版の「ログ出力」に相当）。</summary>
     public string? ExportLogs()
     {
@@ -124,6 +132,7 @@ public sealed partial class MagiViewModel
             dropped = _opLogDropped;
             startedAtMs = _opLogStartedAtMs;
         }
+        var hesitation = Hesitation().Lines();
         var runSpan = runsInLog.Count == 0 ? "" : $"・実行#{runsInLog[0]}〜#{runsInLog[^1]}";
         // 出力は全文（非圧縮）。画面表示は圧縮版だが、監査用にはロスレスの _rawDiagLogs を使う。
         var logs = _rawDiagLogs.Count > 0 ? _rawDiagLogs : Ui.Logs;
@@ -136,6 +145,8 @@ public sealed partial class MagiViewModel
         sb.Append(EnvironmentLine()).Append('\n');
         sb.Append($"状態: {Ui.Staff}名/{Ui.Days}日 ・ 必須={Ui.BestHard} 合計={Ui.TotalViolations}\n");
         sb.Append(PeriodLine()).Append('\n');
+        sb.Append($"\n{OpLogText.HesitationHead}\n");   // [3.697.0] 迷いの指標（手で変更・案・下書き・空白・案を見てから）
+        foreach (var line in hesitation) sb.Append(line).Append('\n');
         sb.Append($"\n==== 操作ログ（新しい順 {ops.Count}件{runSpan}）====\n");
         sb.Append(OpLogText.Note(startedAt, dropped)).Append('\n');
         foreach (var line in ops) sb.Append(line).Append('\n');
@@ -220,6 +231,20 @@ public sealed partial class MagiViewModel
             o["opLogStartedAt"] = _opLogStartedAtMs;
             o["opLogDropped"] = _opLogDropped;
         }
+        // [3.697.0] テキスト版の「操作の要約（迷いの指標）」と同じ数。
+        var h = Hesitation();
+        var hj = new JsonObject
+        {
+            ["manualChanges"] = h.ManualChanges, ["undo"] = h.Undo, ["redo"] = h.Redo,
+            ["searches"] = h.Searches, ["searchesWithResult"] = h.SearchesWithResult, ["searchesEmpty"] = h.SearchesEmpty,
+            ["applied"] = h.Applied, ["notNow"] = h.NotNow, ["consulted"] = h.Consulted,
+            ["autoRuns"] = h.AutoRuns, ["drafts"] = h.Drafts, ["draftsRightAfterResult"] = h.DraftsRightAfterResult,
+            ["closedWithoutApply"] = h.ClosedWithoutApply,
+            ["longestGapMs"] = h.LongestGapMs is { } g ? JsonValue.Create(g) : null,
+        };
+        if (h.LongestGapMs is not null) { hj["longestGapFrom"] = h.LongestGapFromMs; hj["longestGapTo"] = h.LongestGapToMs; }
+        hj["medianSeenSec"] = h.MedianSeenSec is { } ms ? JsonValue.Create(ms) : null;
+        o["hesitation"] = hj;
         var opArr = new JsonArray();
         foreach (var line in ops) opArr.Add(line);
         o["opLog"] = opArr;

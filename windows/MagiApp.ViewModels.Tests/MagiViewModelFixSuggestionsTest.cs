@@ -419,9 +419,10 @@ public class MagiViewModelFixSuggestionsTest
         Assert.Null(vm.Ui.ChainPreview);
         Assert.Equal(1, vm._currentSchedule![0][0]);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("改善手を適用: テスト改善手（必須 7→6"));   // 操作ログにも残す（3.646.0）
-        // [3.694.0] 期間・盤面指紋（前→後）・状態指紋。前後の盤面は違うので指紋も違う。
+        // [3.694.0] 期間・盤面指紋（前→後）・状態指紋。前後の盤面は違うので指紋も違う。[3.697.0] 確認を開いてから当てたので末尾に「案を見てから N秒」。
         var applied = Assert.Single(vm.Ui.OpLog, l => l.Contains("改善手を適用: "));
-        var m = System.Text.RegularExpressions.Regex.Match(applied, "（必須 7→6・合計 [0-9]+→[0-9]+） ・ 期間=2025-12-01〜2025-12-07（7日） ・ 盤面指紋=([0-9a-f]{16})→([0-9a-f]{16}) ・ 状態指紋=[0-9a-f]{16}$");
+        var m = System.Text.RegularExpressions.Regex.Match(applied, "（必須 7→6・合計 [0-9]+→[0-9]+） ・ 期間=2025-12-01〜2025-12-07（7日） ・ 盤面指紋=([0-9a-f]{16})→([0-9a-f]{16}) ・ 状態指紋=[0-9a-f]{16} ・ 案を見てから [0-9]+秒$");
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("変更の確認: 開く テスト改善手"));
         Assert.True(m.Success, applied);
         Assert.NotEqual(m.Groups[1].Value, m.Groups[2].Value);
     }

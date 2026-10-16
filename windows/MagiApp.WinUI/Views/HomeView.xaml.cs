@@ -687,11 +687,13 @@ public sealed partial class HomeView : UserControl
         var flow = new GuidedFixFlow();
         // 9人目以降を出している枠（日, シフト）。別の枠へ移ると閉じる（Kotlin の remember(day, shift) と同じ）。
         var showAllFor = (-1, -1);
+        var loggedFor = (-1, -1);   // [3.697.0] 「開く」の行を出した枠（Kotlin LaunchedEffect(day, shift)）
+        var wentOn = false;   // 候補か着地を押して閉じた＝「閉じる（適用なし）」ではない
         // 原因に対応する設定へ行く。押したらダイアログを閉じてから着地する（null＝月次条件の先頭）。編集タブの先頭に「元の確認へ戻る」を出す（3.646.0 L03）。
         Button LandingButton(EditLanding? landing)
         {
             var b = new Button { Content = GuidedFixRules.LandingButtonLabel(landing), HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
-            b.Click += (_, _) => { dialog.Hide(); GoEditLandingFrom(landing, new EditReturn("なおし方（人員不足）", EditReturn.Guided)); };
+            b.Click += (_, _) => { wentOn = true; dialog.Hide(); GoEditLandingFrom(landing, new EditReturn("なおし方（人員不足）", EditReturn.Guided)); };
             return b;
         }
         void Rebuild()
@@ -706,6 +708,7 @@ public sealed partial class HomeView : UserControl
             {
                 panel.Children.Add(new TextBlock { Text = $"{target.DayLabel} の「{target.ShiftSymbol}」が {target.Miss}人 足りません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
+                if (loggedFor != (target.DayIndex, target.ShiftIndex)) { loggedFor = (target.DayIndex, target.ShiftIndex); _vm.LogUi(new OpLogText.UiOp.GuidedOpen(target.DayLabel, target.ShiftSymbol, cands.Count)); }
                 if (cands.Count > 0)
                 {
                     // [UX監査 中5] 件数を出し、既定の8人を超えたら「すべて表示」で9人目以降も選べる。
@@ -725,6 +728,7 @@ public sealed partial class HomeView : UserControl
                         b.Click += (_, _) =>
                         {
                             if (_vm.EditBlockedNow()) return;
+                            wentOn = true;
                             dialog.Hide();
                             _vm.NoteGuidedFix(day, shift, target.DayLabel, target.ShiftSymbol);
                             _vm.PreviewShortageCandidate(i, day, shift, label);
@@ -810,7 +814,7 @@ public sealed partial class HomeView : UserControl
         Rebuild();
         _vm.Ui.PropertyChanged += OnChanged;
         try { await dialog.ShowAsync(); }
-        finally { flow.Close(); _vm.Ui.PropertyChanged -= OnChanged; }
+        finally { flow.Close(); _vm.Ui.PropertyChanged -= OnChanged; if (!wentOn) _vm.LogUi(new OpLogText.UiOp.GuidedClose()); }
     }
 
     private void OnHelperClick(object sender, RoutedEventArgs e) => _helperAction();
@@ -1106,6 +1110,8 @@ public sealed partial class HomeView : UserControl
             XamlRoot = XamlRoot, Title = "配布前確認", Content = new ScrollViewer { Content = panel },
             PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Primary,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary) await _window.ExportScheduleCsvAsync();
+        _vm.LogUi(new OpLogText.UiOp.PreDistOpen());
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary) { _vm.LogUi(new OpLogText.UiOp.PreDistExport()); await _window.ExportScheduleCsvAsync(); }
+        else _vm.LogUi(new OpLogText.UiOp.PreDistBack());
     }
 }

@@ -227,9 +227,13 @@ public sealed partial class MainWindow : Window
         // [3.646.0 L03] 編集タブを離れたら「元の確認へ戻る」は消える（Kotlin: LaunchedEffect(tab)）。
         if (tag != "edit" && _tabCache.TryGetValue("edit", out var edit) && edit is EditView ev) ev.ClearReturn();
         _currentTag = tag;
+        _vm.LogUi(new OpLogText.UiOp.Tab(Array.IndexOf(TabTags, tag)));   // [3.697.0] 画面の遷移を操作ログへ（同じタブの連続は VM が捨てる）
         HostContent.Content = GetOrCreateTab(tag);
         RenderShell();
     }
+
+    /// <summary>タブの Tag を Kotlin の tab 番号（<see cref="OpLogText.TabNames"/> の添字）へ。</summary>
+    private static readonly string[] TabTags = { "home", "schedule", "edit", "analysis", "settings" };
 
     private string _currentTag = "home";
 
@@ -519,7 +523,7 @@ public sealed partial class MainWindow : Window
                     if (schedule?.CanReopenFixPanel(key, afterApply: applied) == true) schedule.ReopenFixPanel(Nav.XamlRoot, key, p.Purpose, reuse: false);
                 }
                 break;
-            case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(); break;   // [3.645.0] 相談してから決める
+            case ContentDialogResult.Secondary: _vm.AddConsult(ConsultList.Chain(p, hardLine)); _vm.DismissChainPreview(afterConsult: true); break;   // [3.645.0] 相談してから決める
             default:
                 _vm.DismissChainPreview();
                 if (backToFixes && p.FocusKey is { } k) schedule?.ReopenFixPanel(Nav.XamlRoot, k, p.Purpose, reuse: true);
@@ -590,12 +594,13 @@ public sealed partial class MainWindow : Window
             MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec), TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunConditionLine(sum.NeedsSheet, sum.WishOverCaps.Count, ui.ManualPins.Count), FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         Action? after = null;
+        var toConditions = false;   // 設定へ着地する閉じ方＝「条件を確認する」として記録する（Kotlin onOpenLanding/onFixData）
         void Head(string text) => panel.Children.Add(new TextBlock { Text = "■ " + text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
         void Note(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         void Link(string label, Action go)
         {
             var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
-            b.Click += (_, _) => { after = go; dialog.Hide(); };
+            b.Click += (_, _) => { after = go; toConditions = true; dialog.Hide(); };
             panel.Children.Add(b);
         }
         // consult＝何度つくっても残る行だけ右端に「相談」（3.645.0/仕様 5.3。再作成で外れる行には出さない）。
@@ -617,7 +622,7 @@ public sealed partial class MainWindow : Window
                     text.Children.Add(new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap });
                     text.Children.Add(new TextBlock { Text = "→ " + GuidedFixRules.LandingButtonLabel(l), FontSize = 13, Opacity = 0.8 });
                     var b = new HyperlinkButton { Content = text, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 44 };
-                    b.Click += (_, _) => { after = () => GoEditLandingFrom(l, PreRunReturn()); dialog.Hide(); };
+                    b.Click += (_, _) => { after = () => GoEditLandingFrom(l, PreRunReturn()); toConditions = true; dialog.Hide(); };
                     main = b;
                 }
                 else main = new TextBlock { Text = r.Text, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -675,7 +680,7 @@ public sealed partial class MainWindow : Window
 
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary) { _vm.ProceedPreRun(); return; }
-        _vm.DismissPreRun();
+        _vm.DismissPreRun(result == ContentDialogResult.Secondary || toConditions ? new OpLogText.UiOp.PreRunCheckConditions() : null);
         if (result == ContentDialogResult.Secondary) GoEditLandingFrom(null, PreRunReturn());   // 「先にデータを直す」＝月次条件の先頭＋元の確認へ戻る
         after?.Invoke();
     }

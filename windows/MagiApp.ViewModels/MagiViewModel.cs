@@ -335,6 +335,23 @@ public sealed partial class MagiViewModel
         Ui.OpLog = formatted;
     }
 
+    // [3.697.0] 画面の操作の唯一の入口（文字列は OpLogText）。同じタブへの連続・開始の無い巡回の終了・案を当てたあとの「閉じる（適用なし）」は出さない。
+    private int _loggedTab;
+    private int? _tourTotal;
+    private bool _guidedApplied;
+    public void LogUi(OpLogText.UiOp op)
+    {
+        switch (op)
+        {
+            case OpLogText.UiOp.Tab t: if (t.Index == _loggedTab) return; _loggedTab = t.Index; break;
+            case OpLogText.UiOp.TourStart t: _tourTotal = t.Total; break;
+            case OpLogText.UiOp.TourEnd: { if (_tourTotal is not { } n) return; _tourTotal = null; LogOp("I", OpLogText.UiLine(op, n)); return; }
+            case OpLogText.UiOp.GuidedOpen: _guidedApplied = false; break;
+            case OpLogText.UiOp.GuidedClose: if (_guidedApplied) return; break;
+        }
+        LogOp("I", OpLogText.UiLine(op));
+    }
+
     /// <summary>[3.408.0の由来] 実行中の行だけ「#N」を付ける（実行外＝0 は従来どおり無印）。</summary>
     private static string FormatOpLine(OpLogEntry e)
     {
