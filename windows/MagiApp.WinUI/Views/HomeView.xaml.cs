@@ -73,6 +73,57 @@ public sealed partial class HomeView : UserControl
         RenderConsults(ui);
     }
 
+    /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、
+    /// 入れ替えの相談は「案を見る」で今の勤務表の案（<see cref="MagiViewModel.ResumeConsultChain"/>）、「済」で外す。
+    /// 複数人の入れ替えの一覧（<c>ChainPreview</c>）のダイアログは MainWindow が出す（3.646.0: タブに関係なく出るため）。</summary>
+    private void RenderConsults(UiState ui)
+    {
+        ConsultCard.Visibility = ui.Consults.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ConsultListHost.Children.Clear();
+        if (ui.Consults.Count == 0) return;
+        var heldN = ui.Consults.Count(c => c.Held);
+        ConsultTitle.Text = $"相談中（{ui.Consults.Count - heldN}件）" + (heldN > 0 ? $"・保留（{heldN}件）" : "");
+        foreach (var c in ui.Consults)
+        {
+            // 対象は職員 ID（無ければ氏名）と実日付で今のデータに引き直す（月を移した・職員を消した・並べ替えたあとに別のセルを開かない。3.646.0 B01/B02）。
+            var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days, ui.StaffIds) : null;
+            var chainOk = c.Chain is { } t && ConsultList.ConsultChainResumable(t, ui.StartDate, ui.ShiftSymbols, ui.Days);
+            var note = ConsultList.ConsultTargetNote(c, ui.StartDate, ui.StaffNames, ui.ShiftSymbols, ui.Days, ui.StaffIds);
+            // [3.696.0] 操作は文の下の 1 行に（右に 3 つ並べると文が潰れて縦に伸びた＝Android 端末報告「縦に長すぎる」）。
+            var row = new StackPanel();
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+            var text = new StackPanel();
+            text.Children.Add(new TextBlock { Text = (c.Held ? $"【{ConsultList.HeldLabel}】" : "") + c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            if (note is not null) text.Children.Add(new TextBlock { Text = note, FontSize = 13, Foreground = BrushOf("MagiErrorBrush"), TextWrapping = TextWrapping.Wrap });
+            // 回答は記録だけ（了承でも違反は減らさない）。押すたびに 回答待ち→了承→不可（Kotlin ConsultCard）。
+            var answer = new HyperlinkButton { Content = ConsultList.AnswerLine(c, _vm.ConsultAnswerOf(c)), MinHeight = 44, Padding = new Thickness(0) };
+            answer.Click += (_, _) => _vm.CycleConsultAnswer(c);
+            text.Children.Add(answer);
+            row.Children.Add(text);
+            if (cell is { } cc)
+            {
+                var open = new HyperlinkButton { Content = ConsultList.Open, MinHeight = 44 };
+                open.Click += (_, _) => _window.OpenCell(cc.I, cc.J);
+                actions.Children.Add(open);
+            }
+            else if (chainOk)
+            {
+                var resume = new HyperlinkButton { Content = ConsultList.Resume, MinHeight = 44, IsEnabled = !ui.Running };
+                resume.Click += (_, _) => _vm.ResumeConsultChain(c);
+                actions.Children.Add(resume);
+            }
+            var hold = new HyperlinkButton { Content = c.Held ? "相談に戻す" : ConsultList.HoldButton, MinHeight = 44 };
+            hold.Click += (_, _) => _vm.ToggleConsultHold(c);
+            actions.Children.Add(hold);
+            var done = new Button { Content = "済", MinHeight = 44 };
+            done.Click += (_, _) => _vm.RemoveConsult(c);
+            actions.Children.Add(done);
+            row.Children.Add(actions);
+            ConsultListHost.Children.Add(row);
+        }
+    }
+
     /// <summary>
     /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c> の状態分岐をそのまま写す。
     /// [Android 3.698.0] 並びは純関数 <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決める＝XAML はその正順で区画を置き、ここは区画ごとの表示と中身だけを決める。
