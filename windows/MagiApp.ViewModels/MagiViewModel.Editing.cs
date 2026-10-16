@@ -1201,6 +1201,17 @@ public sealed partial class MagiViewModel
         PostOpNotice($"済にしました（{item.Subject}）", undoable: false);
     }
 
+    /// <summary>[3.696.0] 「相談中」の札から取り消す（済と違い確認した記録にしない。Kotlin <c>cancelConsult</c>）。</summary>
+    public void CancelConsult(ConsultItem item)
+    {
+        var l = Ui.Consults;
+        var k = l.ToList().IndexOf(item);
+        if (k < 0) return;
+        Ui.Consults = l.Where((_, j) => j != k).ToList();
+        LogOp("I", $"相談を取り消しました: {item.Subject}");
+        PostOpNotice($"相談を取り消しました（{item.Subject}）", undoable: false);
+    }
+
     public IReadOnlyList<string> GroupKigouList() => _state?.Groups.Select(g => g.Kigou).ToList() ?? new List<string>();
 
     /// <summary>[冗長除去/データ密度] 1日人数の上下限 [l〜u] を意味で圧縮して短く表す。見出しが「人数(上下限)」の

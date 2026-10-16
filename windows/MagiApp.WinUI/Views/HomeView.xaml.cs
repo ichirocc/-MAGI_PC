@@ -94,6 +94,8 @@ public sealed partial class HomeView : UserControl
         RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
+        // [3.696.0] 診断の束は実行中は出さない＝置き換えている前の盤面の説明が途中経過の下に長く並ぶ（Android 端末報告「縦に長すぎる」）。
+        if (ui.Running) { CopilotCard.Visibility = Visibility.Collapsed; CoveragePanel.Visibility = Visibility.Collapsed; AlternativesPanel.Visibility = Visibility.Collapsed; }
         RenderConsults(ui);
     }
 
@@ -113,11 +115,9 @@ public sealed partial class HomeView : UserControl
             var cell = c.Chain is null ? ConsultList.ConsultCell(c, ui.StartDate, ui.StaffNames, ui.Days, ui.StaffIds) : null;
             var chainOk = c.Chain is { } t && ConsultList.ConsultChainResumable(t, ui.StartDate, ui.ShiftSymbols, ui.Days);
             var note = ConsultList.ConsultTargetNote(c, ui.StartDate, ui.StaffNames, ui.ShiftSymbols, ui.Days, ui.StaffIds);
-            var row = new Grid { ColumnSpacing = 8 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // [3.696.0] 操作は文の下の 1 行に（右に 3 つ並べると文が潰れて縦に伸びた＝Android 端末報告「縦に長すぎる」）。
+            var row = new StackPanel();
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = (c.Held ? $"【{ConsultList.HeldLabel}】" : "") + c.Subject, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
             text.Children.Add(new TextBlock { Text = c.Note, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
@@ -131,24 +131,21 @@ public sealed partial class HomeView : UserControl
             {
                 var open = new HyperlinkButton { Content = ConsultList.Open, MinHeight = 44 };
                 open.Click += (_, _) => _window.OpenCell(cc.I, cc.J);
-                Grid.SetColumn(open, 1);
-                row.Children.Add(open);
+                actions.Children.Add(open);
             }
             else if (chainOk)
             {
                 var resume = new HyperlinkButton { Content = ConsultList.Resume, MinHeight = 44, IsEnabled = !ui.Running };
                 resume.Click += (_, _) => _vm.ResumeConsultChain(c);
-                Grid.SetColumn(resume, 1);
-                row.Children.Add(resume);
+                actions.Children.Add(resume);
             }
             var hold = new HyperlinkButton { Content = c.Held ? "相談に戻す" : ConsultList.HoldButton, MinHeight = 44 };
             hold.Click += (_, _) => _vm.ToggleConsultHold(c);
-            Grid.SetColumn(hold, 2);
-            row.Children.Add(hold);
+            actions.Children.Add(hold);
             var done = new Button { Content = "済", MinHeight = 44 };
             done.Click += (_, _) => _vm.RemoveConsult(c);
-            Grid.SetColumn(done, 3);
-            row.Children.Add(done);
+            actions.Children.Add(done);
+            row.Children.Add(actions);
             ConsultListHost.Children.Add(row);
         }
     }
@@ -564,16 +561,10 @@ public sealed partial class HomeView : UserControl
         void AddRow(WishTrialRow row, UiState ui)
         {
             var label = new TextBlock { Text = $"{row.Name} ・ {DayText.Short(ui.StartDate, row.Day)}　{row.Reason}", TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-            var content = new Grid { ColumnSpacing = 8 };
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // [3.696.0] 札を右に並べると名前の先頭が欠けた（Android 端末報告）＝文は全幅、札はその下。
+            var content = new StackPanel { Spacing = 4 };
             content.Children.Add(label);
-            if (row.WishOnly)
-            {
-                var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
-                Grid.SetColumn(chip, 1);
-                content.Children.Add(chip);
-            }
+            if (row.WishOnly) content.Children.Add(AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange));
             var open = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
@@ -851,7 +842,7 @@ public sealed partial class HomeView : UserControl
     /// 隣の［保留する］は相談に回さず未解決のまま積む（札は「保留中」）。</summary>
     private FrameworkElement ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
     {
-        if (ConsultList.Match(ui.Consults, item) is { } m) return AnalysisView.TagChip(m.Held ? ConsultList.HeldLabel : ConsultList.Done, MagiAccent.Orange);
+        if (ConsultList.Match(ui.Consults, item) is { } m) return ConsultedChip(m);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
         if (stretch) row.HorizontalAlignment = HorizontalAlignment.Stretch;
         var b = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44 };
@@ -860,6 +851,19 @@ public sealed partial class HomeView : UserControl
         h.Click += (_, _) => _vm.AddConsult(item with { Held = true });
         row.Children.Add(b);
         row.Children.Add(h);
+        return row;
+    }
+
+    /// <summary>[3.696.0] 「相談中／保留中」の札と、その隣の「取り消す」（積んだ直後の押し間違いを戻せる。Kotlin <c>ConsultButton(onUndo)</c>）。</summary>
+    internal FrameworkElement ConsultedChip(ConsultItem m)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        var chip = AnalysisView.TagChip(m.Held ? ConsultList.HeldLabel : ConsultList.Done, MagiAccent.Orange);
+        chip.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(chip);
+        var undo = new HyperlinkButton { Content = ConsultList.UndoButton, MinHeight = 44 };
+        undo.Click += (_, _) => _vm.CancelConsult(m);
+        row.Children.Add(undo);
         return row;
     }
 

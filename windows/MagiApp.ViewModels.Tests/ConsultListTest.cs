@@ -223,6 +223,21 @@ public class ConsultListTest
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("相談中を済にしました: x"));
     }
 
+    [Fact]
+    public void ViewModelCancelsByItemWithoutMarkingDone()
+    {
+        var vm = new MagiViewModel();
+        vm.AddConsult(new ConsultItem("x", "y"));
+        vm.CancelConsult(new ConsultItem("x", "z"));   // 一覧に無い項目は何もしない
+        Assert.Single(vm.Ui.Consults);
+        vm.CancelConsult(vm.Ui.Consults[0]);
+        Assert.Empty(vm.Ui.Consults);
+        Assert.Equal("相談を取り消しました（x）", vm.Ui.OpNotice!.Text);
+        Assert.False(vm.Ui.OpNotice.Undoable);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("相談を取り消しました: x"));
+        Assert.DoesNotContain(vm.Ui.OpLog, l => l.Contains("済にしました"));
+    }
+
     /// <summary>[3.665.0] 回答は 回答待ち→了承→不可。入れ替えの相談は、回答のあとで勤務表か設定が変わると回答待ちに戻す（以前の回答を流用しない）。</summary>
     [Fact]
     public void AnswerCyclesAndChainAnswerResetsWhenTheBoardChanges()
