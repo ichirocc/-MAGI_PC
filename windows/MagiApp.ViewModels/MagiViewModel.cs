@@ -311,8 +311,15 @@ public sealed partial class MagiViewModel
     /// </summary>
     private readonly object _opLogLock = new();
 
+    /// <summary>[3.694.0] 上限を超えて捨てた古い行の数と記録の開始時刻。書き出しの注記が読む（欠けた範囲を見えるようにする）。</summary>
+    private int _opLogDropped;
+    private readonly long _opLogStartedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>[テスト可視性のためinternal化] <see cref="_opLogDropped"/> の現在値。</summary>
+    internal int OpLogDropped { get { lock (_opLogLock) return _opLogDropped; } }
+
     /// <summary>
-    /// 操作ログに1件追記し、UIへ反映（新しい順、リングの上限1000件）。
+    /// 操作ログに1件追記し、UIへ反映（新しい順、リングの上限 <see cref="OpLogText.OpLogCap"/>＝1000件）。
     /// [3.378.0/HF77=コメント≠実装の由来] Kotlin原本の旧KDocは「最大300件」と書いていたが実装は
     /// 1000だった、という教訓をそのまま実装値へ反映する。
     /// </summary>
@@ -322,7 +329,7 @@ public sealed partial class MagiViewModel
         lock (_opLogLock)
         {
             _opLog.AddFirst(new OpLogEntry(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), level, message, _activeRunSerial));
-            while (_opLog.Count > 1000) _opLog.RemoveLast();
+            while (_opLog.Count > OpLogText.OpLogCap) { _opLog.RemoveLast(); _opLogDropped++; }
             formatted = _opLog.Select(FormatOpLine).ToList();
         }
         Ui.OpLog = formatted;
@@ -397,7 +404,7 @@ public sealed partial class MagiViewModel
     {
         strength.Apply();
         Ui.SearchStrength = strength;
-        LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}");
+        LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}（{strength.FlagWords()}）");
     }
 
     public void SetAptFairToleranceUnguarded(bool on)

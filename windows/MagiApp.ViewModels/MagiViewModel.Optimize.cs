@@ -154,16 +154,29 @@ public sealed partial class MagiViewModel
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
         Ui.Message = "勤務表をつくり始めました";
-        LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
         var startMs = NowMs();
         var hf63 = new Hf63Infeasibility();
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
+        // [3.694.0] 開始行は BeginBoardJob の後（#N が付く）。期間・人数・指紋は実行前の入力、設定は開始点で 1 回読む（停止・失敗の実行にも残る）。
+        LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm}) ・ {RunInputWords(st0, sched0)}");
+        LogOp("I", "設定の開始時: " + SettingsAtStart());
         var cts = new CancellationTokenSource();
         _job = cts;
         LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token);
     }
 
     private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>[3.694.0] 開始行の共通部「期間=… ・ 職員=N名 ・ 状態指紋=… ・ 盤面指紋=…」（前景・背景・下書きが同じ並び）。</summary>
+    private static string RunInputWords(MagiState st, int[][] sched) =>
+        $"期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 職員={st.StaffCount}名 ・ {OpLogText.Keys(StateKey(st), BoardKey(sched))}";
+
+    /// <summary>[3.694.0] 「設定の開始時」の本文。「（設定）」は利用者の選択＝ネイティブ層の無いこの移植では「設定の効き」が常に OFF を示す。
+    /// LnsAdaptive は UI トグルが無く <c>PostOptimizationParams</c> の既定 true（「設定の効き」と同じ）。</summary>
+    private string SettingsAtStart() => TuningTelemetry.StartLine(
+        nativeOn: Ui.NativeAccel, parityOn: Ui.NativeParity, filterC3nIncrease: PolishGate.FilterC3nIncrease,
+        wideC3nBreakDays: PolishGate.WideC3nBreakDays, softPolishOn: Ui.SoftPolish, combineExhaustPairs: PolishGate.CombineExhaustPairs,
+        lnsAdaptive: true, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish);
 
     /// <summary>Kotlin <c>String.substringAfter(delimiter)</c>: デリミタが無ければ全体を返す。</summary>
     private static string SubstringAfter(string s, string delimiter)
@@ -346,7 +359,8 @@ public sealed partial class MagiViewModel
             // [Android 3.475.0 同期] 採用した盤面の族を覚える（旧 C#: 入力維持の分岐でも捨てた盤面 res.Report から取っていた）。
             var adoptedReport = inputBeatsResult ? baseReport : res.Report;
             _lastTopHardFamily = adoptedReport.Hard > 0 ? TopHardFamilyJp(adoptedReport.Breakdown) : null;
-            LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase})");
+            // [3.694.0] 盤面指紋は採用後の盤面（維持なら入力・採用なら結果＝adoptedReport と同じ盤面）。開始行の指紋と並べて入力の同一性を読む。
+            LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase}) ・ 盤面指紋={OpLogText.Hex16(BoardKey(_currentSchedule ?? sched0))}");
             if (s5 is not null)
             {
                 _cancelOutcomeCtx = _state is { } cst && _currentSchedule is { } csch ? new TrialCtx(cst, BoardKey(csch)) : null;

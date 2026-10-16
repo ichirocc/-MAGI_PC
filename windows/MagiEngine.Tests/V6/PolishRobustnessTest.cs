@@ -39,6 +39,52 @@ namespace MagiEngine.Tests.V6;
 /// </summary>
 public class PolishRobustnessTest
 {
+    // ==== [3.694.0] 設定の開始時・容認採用の行（整形）と、並列呼出しでも保持が 5 件を超えないこと ====
+
+    [Fact]
+    public void StartLineListsTheNineTogglesWithoutCounters()
+    {
+        Assert.Equal(
+            "ネイティブ加速（設定）=ON / Kotlin照合（設定）=ON / 必須が増える候補の事前フィルタ=OFF / 禁止連続の崩し範囲=OFF / 仕上げ最適化=ON" +
+            " / 結合探索を粘り強く=OFF / 一括見直しの自動調整=ON / 公平化/適切回数の他ソフト許容(6%)=OFF / 回数連鎖研磨=ON",
+            TuningTelemetry.StartLine(nativeOn: true, parityOn: true, filterC3nIncrease: false, wideC3nBreakDays: false, softPolishOn: true,
+                combineExhaustPairs: false, lnsAdaptive: true, aptFairSoftTolerance: false, countChainPolish: true));
+        Assert.Equal(9, TuningTelemetry.ToggleWords.Count);
+        // 「設定の効き」の語は従来のまま（ToggleWords から組む）。
+        var summary = TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: false, combineExhaustPairs: false, lnsAdaptive: true, aptFairSoftTolerance: false, countChainPolish: false);
+        Assert.StartsWith("ネイティブ加速=OFF / Kotlin照合=OFF / 必須が増える候補の事前フィルタ=", summary);
+        Assert.Contains(" / 一括見直しの自動調整=ON / 公平化/適切回数の他ソフト許容(6%)=OFF / 回数連鎖研磨=OFF", summary);
+    }
+
+    [Fact]
+    public void ToleratedLinesFormatIsFixedAndTheOverflowIsOneLine()
+    {
+        var note = new TuningTelemetry.ToleratedNote("apt", 4, 3, 120, 118, 0, 0, RawDelta: 5.0, Forgiven: 1.8, EffectiveDelta: -1.8);
+        var lines = TuningTelemetry.ToleratedLines(new[] { note, note, note, note, note }, total: 7);
+        Assert.Equal(6, lines.Count);
+        Assert.Equal("1/7: apt 件数 4→3 ・ 合計 120→118 ・ 必須 0→0 ・ 容認 1.8 ・ 素の差 +5.0 ・ 実効差 -1.8", lines[0]);
+        Assert.Equal("5/7: apt 件数 4→3 ・ 合計 120→118 ・ 必須 0→0 ・ 容認 1.8 ・ 素の差 +5.0 ・ 実効差 -1.8", lines[4]);
+        Assert.Equal("ほか 2 件（先頭 5 件のみ）", lines[5]);
+        Assert.Equal("1/1: fair 件数 2→1 ・ 合計 9→9 ・ 必須 1→1 ・ 容認 0.5 ・ 素の差 +0.0 ・ 実効差 -0.5",
+            Assert.Single(TuningTelemetry.ToleratedLines(new[] { new TuningTelemetry.ToleratedNote("fair", 2, 1, 9, 9, 1, 1, 0.0, 0.5, -0.5) }, total: 1)));
+        Assert.Empty(TuningTelemetry.ToleratedLines(Array.Empty<TuningTelemetry.ToleratedNote>(), total: 0));
+    }
+
+    [Fact]
+    public void ParallelToleratedNotesNeverExceedTheCap()
+    {
+        TuningTelemetry.Reset();
+        try
+        {
+            Parallel.For(0, 64, _ => TuningTelemetry.NoteTolerated("apt", 4, 3, 120, 118, 0, 0, 5.0, 1.8, -1.8));
+            var notes = TuningTelemetry.ToleratedNotes();
+            Assert.Equal(TuningTelemetry.ToleratedNoteCap, notes.Count);
+            Assert.All(notes, n => Assert.Equal("apt", n.Family));
+            Assert.Equal("ほか 59 件（先頭 5 件のみ）", TuningTelemetry.ToleratedLines(notes, total: 64)[5]);
+        }
+        finally { TuningTelemetry.Reset(); }
+    }
+
     /// <summary>G1 = 担当可否が1つもチェックされていない群（正規のエディタ操作で作れるデータ）。</summary>
     private static MagiState EmptyBucketState()
     {

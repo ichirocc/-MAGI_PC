@@ -70,6 +70,8 @@ public sealed partial class MagiViewModel
         // [3.404.0の由来をそのまま記録] 完了時に currentSchedule/state を丸ごと差し替えるので、
         //   その間の編集を止める旗を立てる。
         var boardToken = BeginBoardJob("下書きづくり", engineRun: true);
+        // [3.694.0] 開始行（#N 付き）に入力の期間・人数・指紋。下書きは読込を経由しないので、ここが盤面の出どころの記録になる。
+        LogOp("I", $"初期解生成 開始 ・ {RunInputWords(st, sched)}");
         var cts = new CancellationTokenSource();
         _job = cts;
         LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed);
@@ -106,7 +108,7 @@ public sealed partial class MagiViewModel
                 ui.Message = $"下書きをつくりました: {AnalysisTriage.ReportCountsText(res.Report.Breakdown)}。画面下の「再作成」で仕上げられます" + (confirmed ? $"。{FixExplain.DraftUndoNote}" : "");
             }, ct: ct);
             committed = false;
-            LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total}");
+            LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total} ・ 盤面指紋={OpLogText.Hex16(BoardKey(res.Schedule))}");
         }
         catch (OperationCanceledException)
         {

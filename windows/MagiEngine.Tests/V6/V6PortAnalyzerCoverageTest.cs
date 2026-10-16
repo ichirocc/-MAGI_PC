@@ -394,6 +394,79 @@ public class V6PortAnalyzerCoverageTest
         schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 0 } },
         staffRange: new Dictionary<string, Range> { ["1,1"] = new("", "0"), ["1,2"] = new("", "0") });
 
+    // ==== [3.694.0] 枠行の末尾の根拠（値から決める。既存の語「充足不可:」「試した入れ替えでは埋まらなかった:」は不変） ====
+
+    [Fact]
+    public void shortfallLineNamesTheDayProofAsItsBasis()
+    {
+        var diag = V6PortAnalyzer.DiagnoseCoverage(DayProofState());
+        var sf = Assert.Single(diag.Shortfalls);
+        Assert.Equal("日の証明", CoverageDiagnosis.ShortfallBasis(sf));
+        var line = diag.LogLines()[1];
+        Assert.Contains("— 充足不可: この希望と上限のままでは埋まりません", line);
+        Assert.EndsWith("（根拠: 日の証明）", line);
+    }
+
+    [Fact]
+    public void shortfallLineNamesWishPinnedCapacityAsItsBasis()
+    {
+        // 2 席の A に対し、置ける 2 人のうち 1 人が休へ希望固定＝担当できる人数 1 < 必要 2（希望固定を含む）。
+        var st = St(
+            startDate: "2025-12-01", endDate: "2025-12-01",
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "2", "") },
+            groups: new List<Group> { new("G", "G") },
+            staff: new List<Staff> { new("s0", 0), new("s1", 0) },
+            use2: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 0 } },
+            wishes: new Dictionary<string, int> { ["1,0"] = 0 });
+        var diag = V6PortAnalyzer.DiagnoseCoverage(st);
+        var sf = Assert.Single(diag.Shortfalls);
+        Assert.Equal(CoverageVerdict.Infeasible, sf.Verdict);
+        Assert.NotEmpty(sf.WishPinned);
+        Assert.Equal(sf.DayProof ? "日の証明" : "希望固定を含む人数の不足", CoverageDiagnosis.ShortfallBasis(sf));
+        Assert.Equal("希望固定を含む人数の不足", CoverageDiagnosis.ShortfallBasis(sf with { DayProof = false }));
+        Assert.EndsWith($"（根拠: {CoverageDiagnosis.ShortfallBasis(sf)}）", diag.LogLines()[1]);
+    }
+
+    [Fact]
+    public void shortfallLineNamesPlainCapacityAsItsBasis()
+    {
+        // 担当できる人が 1 人しかいない 2 席（希望なし）＝担当できる人数の不足。
+        var st = St(
+            startDate: "2025-12-01", endDate: "2025-12-01",
+            shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "2", "") },
+            groups: new List<Group> { new("G", "G") },
+            staff: new List<Staff> { new("s0", 0) },
+            use2: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1 } });
+        var diag = V6PortAnalyzer.DiagnoseCoverage(st);
+        var sf = Assert.Single(diag.Shortfalls);
+        Assert.Equal(CoverageVerdict.Infeasible, sf.Verdict);
+        Assert.Empty(sf.WishPinned);
+        var basis = CoverageDiagnosis.ShortfallBasis(sf with { DayProof = false });
+        Assert.Equal("担当できる人数の不足", basis);
+        Assert.Contains("— 充足不可: ", diag.LogLines()[1]);
+        Assert.EndsWith($"（根拠: {CoverageDiagnosis.ShortfallBasis(sf)}）", diag.LogLines()[1]);
+    }
+
+    [Fact]
+    public void shortfallLineMarksASearchMissAsNotAProofAndLeavesFixableSlotsBare()
+    {
+        var baseDiag = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: false));
+        var fixable = baseDiag.Shortfalls.Single(s => s.ShiftIndex == 1);
+        Assert.Null(CoverageDiagnosis.ShortfallBasis(fixable));
+        Assert.DoesNotContain("（根拠: ", baseDiag.LogLines()[1]);
+
+        var miss = fixable with { Verdict = CoverageVerdict.Fixable, BlockedNow = true, SearchMiss = true, DayProof = false, Reason = V6PortAnalyzer.ChainNotFoundInTried };
+        Assert.Equal("試した入れ替えの範囲、証明ではない", CoverageDiagnosis.ShortfallBasis(miss));
+        var d = baseDiag with { Shortfalls = new List<CoverageShortfall> { miss } };
+        var line = d.LogLines()[1];
+        Assert.Contains("— 試した入れ替えでは埋まらなかった: ", line);
+        Assert.EndsWith("（根拠: 試した入れ替えの範囲、証明ではない）", line);
+    }
+
     [Fact]
     public void dayProofMakesSlotInfeasibleEvenWhenSlotCapacitySuffices()
     {

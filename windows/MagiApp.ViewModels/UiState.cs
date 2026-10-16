@@ -321,16 +321,31 @@ public enum SearchStrength { Normal, Thorough }
 
 public static class SearchStrengthExtensions
 {
-    public static void Apply(this SearchStrength strength)
+    /// <summary>[3.694.0] 4 つのトグルの値（Kotlin <c>SearchStrength.flags</c>）。<see cref="Apply"/> と設定変更の行の表示が同じ源を読む。</summary>
+    public static (bool CombineExhaustPairs, bool WideC3nBreakDays, bool CountChainPolish, bool AptFairSoftTolerance) Flags(this SearchStrength strength)
     {
         var on = strength == SearchStrength.Thorough;
-        MagiEngine.V6.PolishGate.CombineExhaustPairs = on;
-        MagiEngine.V6.PolishGate.WideC3nBreakDays = on;
-        MagiEngine.V6.PolishGate.CountChainPolish = on;
-        MagiEngine.V6.PolishGate.AptFairSoftTolerance = on;
+        return (on, on, on, on);
+    }
+
+    public static void Apply(this SearchStrength strength)
+    {
+        var f = strength.Flags();
+        MagiEngine.V6.PolishGate.CombineExhaustPairs = f.CombineExhaustPairs;
+        MagiEngine.V6.PolishGate.WideC3nBreakDays = f.WideC3nBreakDays;
+        MagiEngine.V6.PolishGate.CountChainPolish = f.CountChainPolish;
+        MagiEngine.V6.PolishGate.AptFairSoftTolerance = f.AptFairSoftTolerance;
     }
 
     public static string Label(this SearchStrength strength) => strength == SearchStrength.Thorough ? "じっくり" : "ふつう";
+
+    /// <summary>設定変更の行の括弧の中（語は「設定の効き」と同じ）。</summary>
+    public static string FlagWords(this SearchStrength strength)
+    {
+        var f = strength.Flags();
+        static string W(bool b) => b ? "ON" : "OFF";
+        return $"結合探索を粘り強く={W(f.CombineExhaustPairs)}・禁止連続の崩し範囲={W(f.WideC3nBreakDays)}・回数連鎖研磨={W(f.CountChainPolish)}・公平化/適切回数の他ソフト許容(6%)={W(f.AptFairSoftTolerance)}";
+    }
 }
 
 /// <summary>[Android 3.529.0] 自動保存の状態（Kotlin <c>SaveState</c>）。</summary>

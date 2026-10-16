@@ -116,7 +116,9 @@ public sealed partial class MagiViewModel
         Ui.KeptPrevious = false;
         Ui.HasResult = false;
         Ui.Message = "バックグラウンドで最適化を開始しました（完了時に通知）";
-        LogOp("I", $"バックグラウンド最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm})");
+        // [3.694.0] 前景の開始行と同じ期間・人数・指紋と「設定の開始時」（背景も同じ PolishGate を読む）。
+        LogOp("I", $"バックグラウンド最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm}) ・ {RunInputWords(st0, sched0)}");
+        LogOp("I", "設定の開始時: " + SettingsAtStart());
 
         var cts = new CancellationTokenSource();
         _bgCts = cts;

@@ -377,11 +377,11 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("読み込み");
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastLoadTask = LoadAsyncCoreAsync(json, repaired, markResult, note, boardToken, cts.Token);
+        LastLoadTask = LoadAsyncCoreAsync(json, repaired, markResult, note, fromRestore, boardToken, cts.Token);
     }
 
     private async Task LoadAsyncCoreAsync(
-        string json, bool repaired, bool markResult, string note, int boardToken, CancellationToken ct)
+        string json, bool repaired, bool markResult, string note, bool fromRestore, int boardToken, CancellationToken ct)
     {
         Action? rollback = null;
         try
@@ -507,7 +507,10 @@ public sealed partial class MagiViewModel
             _lastResultHard = -1L;
             _lastTopHardFamily = null;
             _initBaseKey = null;
-            LogOp("I", $"読込 {lp.State.StaffCount}名/{lp.State.DayCount}日/{lp.State.ShiftCount}シフト");
+            // [3.694.0] 期間・指紋・取得元（起動時の復元か利用者の読込か。ファイル名は記録しない方針のまま）。
+            LogOp("I", $"読込 {lp.State.StaffCount}名/{lp.State.DayCount}日/{lp.State.ShiftCount}シフト" +
+                $" ・ 期間={OpLogText.Period(lp.State.StartDate, lp.State.EndDate, lp.State.DayCount)} ・ {OpLogText.Keys(StateKey(lp.State), BoardKey(lp.Schedule))}" +
+                $" ・ 取得元={(fromRestore ? "起動時の復元" : "利用者の読込")}");
         }
         catch (OperationCanceledException)
         {

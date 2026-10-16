@@ -62,7 +62,9 @@ public static partial class V6HotfixPasses
         var rawDelta = rep.WeightedScore - bestRep.WeightedScore;
         var effectiveDelta = rawDelta - forgiven;
         //   ③容認を使うなら、研磨対象の族（apt/fair）の件数が best より減っていること。
-        var targetImproved = rep.Breakdown.GetValueOrDefault(family, 0) < bestRep.Breakdown.GetValueOrDefault(family, 0);
+        var familyBest = bestRep.Breakdown.GetValueOrDefault(family, 0);
+        var familyRep = rep.Breakdown.GetValueOrDefault(family, 0);
+        var targetImproved = familyRep < familyBest;
         var accepted = (effectiveDelta < 0.0 || (effectiveDelta == 0.0 && rep.Total < bestRep.Total)) && (forgiven <= 0.0 || targetImproved);
         // [3.535.0/実機ログで発覚, Kotlin原本] 素のbetterReport（＝rawDeltaだけで同じ判定）なら却下されるはずの
         //   手を、容認で採用に転じさせた回数だけを数える。
@@ -70,7 +72,12 @@ public static partial class V6HotfixPasses
         if (count && accepted && forgiven > 0.0)
         {
             var rawAccepted = rawDelta < 0.0 || (rawDelta == 0.0 && rep.Total < bestRep.Total);
-            if (!rawAccepted) TuningTelemetry.IncrementAptFairToleranceUsed();
+            if (!rawAccepted)
+            {
+                TuningTelemetry.IncrementAptFairToleranceUsed();
+                // [3.694.0] 何が容認されたかの記録（計算済みの値を渡すだけ。先頭 5 件）。判定と戻り値は不変。
+                TuningTelemetry.NoteTolerated(family, familyBest, familyRep, bestRep.Total, rep.Total, bestRep.Hard, rep.Hard, rawDelta, forgiven, effectiveDelta);
+            }
         }
         return accepted;
     }

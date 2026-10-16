@@ -213,6 +213,66 @@ public class MagiViewModelCsvTest
         Assert.Contains("※操作ログは複数回の実行を含みます", text);
     }
 
+    // ===== [3.694.0] 期間・指紋の行、見出し直後の注記、捨て件数 =====
+
+    [Fact]
+    public void ExportLogsAddsThePeriodLineAndTheNoteWithoutTouchingTheHeading()
+    {
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Notify("ひとつめの操作");
+
+        var text = vm.ExportLogs()!;
+        var lines = text.Split('\n');
+
+        var stateIdx = Array.FindIndex(lines, l => l.StartsWith("状態: ", StringComparison.Ordinal));
+        Assert.True(stateIdx >= 0);
+        Assert.Matches("^期間=2025-12-01〜2025-12-07（7日） ・ 状態指紋=[0-9a-f]{16} ・ 盤面指紋=[0-9a-f]{16}$", lines[stateIdx + 1]);
+        Assert.All(st.StaffList, s => Assert.DoesNotContain(s.Name, lines[stateIdx + 1]));
+        var headIdx = Array.FindIndex(lines, l => l == "==== 操作ログ（新しい順 1件）====");
+        Assert.True(headIdx >= 0);
+        Assert.StartsWith("※この記録は ", lines[headIdx + 1]);
+        Assert.EndsWith(" からの分です。上限1000件を超えて捨てた古い操作は 0 件です。", lines[headIdx + 1]);
+        Assert.DoesNotContain("実行#", text);
+    }
+
+    [Fact]
+    public void ExportLogsSaysNoPeriodWhenNothingIsLoaded()
+    {
+        var vm = new MagiViewModel();
+        vm.Notify("ひとつめの操作");
+        var lines = vm.ExportLogs()!.Split('\n');
+        var stateIdx = Array.FindIndex(lines, l => l.StartsWith("状態: ", StringComparison.Ordinal));
+        Assert.Equal("期間=なし", lines[stateIdx + 1]);
+    }
+
+    [Fact]
+    public void OpLogRingCountsWhatItDropsAndTheExportNoteShowsIt()
+    {
+        var vm = new MagiViewModel();
+        for (var i = 0; i < OpLogText.OpLogCap + 1; i++) vm.Notify($"操作 {i}");
+
+        Assert.Equal(OpLogText.OpLogCap, vm.Ui.OpLog.Count);
+        Assert.Equal(1, vm.OpLogDropped);
+        Assert.Contains("上限1000件を超えて捨てた古い操作は 1 件です。", vm.ExportLogs()!);
+        var root = JsonDocument.Parse(vm.ExportLogsJson()!).RootElement;
+        Assert.Equal(1, root.GetProperty("opLogDropped").GetInt32());
+        Assert.True(root.GetProperty("opLogStartedAt").GetInt64() > 0);
+    }
+
+    [Fact]
+    public void ExportLogsJsonCarriesThePeriodAndFingerprints()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+        vm.Notify("JSON の期間");
+        var root = JsonDocument.Parse(vm.ExportLogsJson()!).RootElement;
+        Assert.Equal("2025-12-01", root.GetProperty("startDate").GetString());
+        Assert.Equal("2025-12-07", root.GetProperty("endDate").GetString());
+        Assert.Matches("^[0-9a-f]{16}$", root.GetProperty("stateFingerprint").GetString());
+        Assert.Matches("^[0-9a-f]{16}$", root.GetProperty("boardFingerprint").GetString());
+        Assert.Equal(0, root.GetProperty("opLogDropped").GetInt32());
+    }
+
     [Fact]
     public void ExportLogsJsonReturnsNullWhenNothingToExport()
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Threading;
 
 namespace MagiEngine.V6;
@@ -65,6 +66,50 @@ public static class TuningTelemetry
     /// <summary>[3.535.0] <see cref="V6HotfixPasses.ToleratedBetter"/> が容認で採用に転じさせるたびに呼ぶ。</summary>
     public static void IncrementAptFairToleranceUsed() => Interlocked.Increment(ref _aptFairToleranceUsed);
 
+    /// <summary>[3.694.0] 容認採用 1 件の記録（族・族の件数・合計・必須の前後、素の差・容認量・実効差）。値は <see cref="V6HotfixPasses.ToleratedBetter"/> が判定に使ったもの。</summary>
+    public sealed record ToleratedNote(string Family, int FamilyBefore, int FamilyAfter, int TotalBefore, int TotalAfter, int HardBefore, int HardAfter,
+        double RawDelta, double Forgiven, double EffectiveDelta);
+
+    /// <summary>保持する容認採用の件数（先頭だけ。総数は <see cref="AptFairToleranceUsedCount"/>）。</summary>
+    public const int ToleratedNoteCap = 5;
+    private static readonly ToleratedNote?[] _toleratedNotes = new ToleratedNote?[ToleratedNoteCap];
+    private static int _toleratedNoteClaims;
+
+    /// <summary>[3.694.0] 容認採用の分岐（既存の加算の隣）から 1 回。スロットは先頭 5 件だけ埋め、満杯なら何もしない。</summary>
+    public static void NoteTolerated(string family, int familyBefore, int familyAfter, int totalBefore, int totalAfter, int hardBefore, int hardAfter,
+        double rawDelta, double forgiven, double effectiveDelta)
+    {
+        var idx = Interlocked.Increment(ref _toleratedNoteClaims) - 1;
+        if (idx < ToleratedNoteCap)
+            Volatile.Write(ref _toleratedNotes[idx], new ToleratedNote(family, familyBefore, familyAfter, totalBefore, totalAfter, hardBefore, hardAfter, rawDelta, forgiven, effectiveDelta));
+    }
+
+    /// <summary>保持している容認採用（記録順・最大 5 件）。</summary>
+    public static IReadOnlyList<ToleratedNote> ToleratedNotes()
+    {
+        var outNotes = new List<ToleratedNote>(ToleratedNoteCap);
+        for (var i = 0; i < ToleratedNoteCap; i++) { var n = Volatile.Read(ref _toleratedNotes[i]); if (n is not null) outNotes.Add(n); }
+        return outNotes;
+    }
+
+    /// <summary>[3.694.0] 「容認採用」の行（タグを除く本文）。先頭 5 件は 1 行ずつ、6 件目以降は 1 行の省略語。小数は InvariantCulture。</summary>
+    public static IReadOnlyList<string> ToleratedLines(IReadOnlyList<ToleratedNote> notes, int total)
+    {
+        static string Signed(double v) => (v >= 0 ? "+" : "") + v.ToString("0.0", CultureInfo.InvariantCulture);
+        var lines = new List<string>(notes.Count + 1);
+        for (var i = 0; i < notes.Count; i++)
+        {
+            var n = notes[i];
+            lines.Add($"{i + 1}/{total}: {n.Family} 件数 {n.FamilyBefore}→{n.FamilyAfter} ・ 合計 {n.TotalBefore}→{n.TotalAfter} ・ 必須 {n.HardBefore}→{n.HardAfter}" +
+                $" ・ 容認 {n.Forgiven.ToString("0.0", CultureInfo.InvariantCulture)} ・ 素の差 {Signed(n.RawDelta)} ・ 実効差 {Signed(n.EffectiveDelta)}");
+        }
+        if (total > notes.Count) lines.Add($"ほか {total - notes.Count} 件（先頭 {ToleratedNoteCap} 件のみ）");
+        return lines;
+    }
+
+    /// <summary>同・この実行の保持分と総数から。</summary>
+    public static IReadOnlyList<string> ToleratedLines() => ToleratedLines(ToleratedNotes(), Volatile.Read(ref _aptFairToleranceUsed));
+
     /// <summary>
     /// <see cref="IncrementParityChecks"/> の現在値を読む。Kotlin原本は5カウンタ全てを公開フィールドと
     /// して直接読めるが、このC#移植では読み取りアクセサは実際に必要な箇所（並行性の回帰テスト）にのみ
@@ -98,6 +143,25 @@ public static class TuningTelemetry
         Volatile.Write(ref _parityChecks, 0);
         Volatile.Write(ref _countChainApplied, 0);
         Volatile.Write(ref _aptFairToleranceUsed, 0);
+        Volatile.Write(ref _toleratedNoteClaims, 0);
+        for (var i = 0; i < ToleratedNoteCap; i++) Volatile.Write(ref _toleratedNotes[i], null);
+    }
+
+    /// <summary>[3.694.0] 設定の表示語（「設定の効き」と「設定の開始時」が同じ語を使う。順は固定）。</summary>
+    public static readonly IReadOnlyList<string> ToggleWords = new[]
+    {
+        "ネイティブ加速", "Kotlin照合", "必須が増える候補の事前フィルタ", "禁止連続の崩し範囲", "仕上げ最適化",
+        "結合探索を粘り強く", "一括見直しの自動調整", "公平化/適切回数の他ソフト許容(6%)", "回数連鎖研磨",
+    };
+
+    /// <summary>[3.694.0] 「設定の開始時」の本文（タグを除く）。計数を含まない ON/OFF だけ。先頭 2 つの「（設定）」は利用者の選択を指す。</summary>
+    public static string StartLine(bool nativeOn, bool parityOn, bool filterC3nIncrease, bool wideC3nBreakDays, bool softPolishOn,
+        bool combineExhaustPairs, bool lnsAdaptive, bool aptFairSoftTolerance, bool countChainPolish)
+    {
+        static string W(bool b) => b ? "ON" : "OFF";
+        var w = ToggleWords;
+        return $"{w[0]}（設定）={W(nativeOn)} / {w[1]}（設定）={W(parityOn)} / {w[2]}={W(filterC3nIncrease)} / {w[3]}={W(wideC3nBreakDays)} / {w[4]}={W(softPolishOn)}" +
+            $" / {w[5]}={W(combineExhaustPairs)} / {w[6]}={W(lnsAdaptive)} / {w[7]}={W(aptFairSoftTolerance)} / {w[8]}={W(countChainPolish)}";
     }
 
     /// <summary>各トグルの ON/OFF と、その実行で観測できた効果を1行にまとめる。
@@ -125,14 +189,15 @@ public static class TuningTelemetry
         // タグ（MirrorLog tag="設定の効き"）が同じ語を出すため、ここに前置きを付けると
         // 実機ログで「設定の効き: 設定の効き: …」と二重になる（Kotlin 3.409.16 で実機ログにより発覚）。
         // 本文だけを返す。
-        return "ネイティブ加速=" + (nativeOn ? "ON" : "OFF") +
-            " / Kotlin照合=" + Eff(parityOn, parityChecks, "回") +
-            " / 必須が増える候補の事前フィルタ=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の必ず却下される検査を省略") +
-            " / 禁止連続の崩し範囲=" + wide +
-            " / 仕上げ最適化=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替") +
-            " / 結合探索を粘り強く=" + (combineExhaustPairs ? "ON" : "OFF") +
-            " / 一括見直しの自動調整=" + (lnsAdaptive ? "ON" : "OFF") +
-            " / 公平化/適切回数の他ソフト許容(6%)=" + Eff(aptFairSoftTolerance, Volatile.Read(ref _aptFairToleranceUsed), "回、却下されるはずの手を採用") +
-            " / 回数連鎖研磨=" + Eff(countChainPolish, Volatile.Read(ref _countChainApplied), "連鎖を採用");
+        var w = ToggleWords;
+        return w[0] + "=" + (nativeOn ? "ON" : "OFF") +
+            " / " + w[1] + "=" + Eff(parityOn, parityChecks, "回") +
+            " / " + w[2] + "=" + Eff(PolishGate.FilterC3nIncrease, c3nFilterSkipped, "件の必ず却下される検査を省略") +
+            " / " + w[3] + "=" + wide +
+            " / " + w[4] + "=" + Eff(softPolishOn, lahcEntered, "回LAHCへ切替") +
+            " / " + w[5] + "=" + (combineExhaustPairs ? "ON" : "OFF") +
+            " / " + w[6] + "=" + (lnsAdaptive ? "ON" : "OFF") +
+            " / " + w[7] + "=" + Eff(aptFairSoftTolerance, Volatile.Read(ref _aptFairToleranceUsed), "回、却下されるはずの手を採用") +
+            " / " + w[8] + "=" + Eff(countChainPolish, Volatile.Read(ref _countChainApplied), "連鎖を採用");
     }
 }

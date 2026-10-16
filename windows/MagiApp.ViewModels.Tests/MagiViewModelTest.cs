@@ -134,8 +134,13 @@ public class MagiViewModelTest
             vm.SetSearchStrength(SearchStrength.Thorough);
             Assert.Equal(SearchStrength.Thorough, vm.Ui.SearchStrength);
             Assert.Equal(new[] { true, true, true, true }, Flags());
+            // [3.694.0] 行の 4 語は Flags() から組む＝apply と同じ源。
+            Assert.EndsWith("設定変更: 探索の強さ → じっくり（結合探索を粘り強く=ON・禁止連続の崩し範囲=ON・回数連鎖研磨=ON・公平化/適切回数の他ソフト許容(6%)=ON）", vm.Ui.OpLog[0]);
+            var f = SearchStrength.Thorough.Flags();
+            Assert.Equal(new[] { f.CombineExhaustPairs, f.WideC3nBreakDays, f.CountChainPolish, f.AptFairSoftTolerance }, Flags());
             vm.SetSearchStrength(SearchStrength.Normal);
             Assert.Equal(new[] { false, false, false, false }, Flags());
+            Assert.EndsWith("設定変更: 探索の強さ → ふつう（結合探索を粘り強く=OFF・禁止連続の崩し範囲=OFF・回数連鎖研磨=OFF・公平化/適切回数の他ソフト許容(6%)=OFF）", vm.Ui.OpLog[0]);
             Assert.True(C1JointLnsPolish.DeltaChildEvalDefault);
             Assert.Equal(WishFloorMode.Off, PolishGate.WishConflictFloorMode);
         }
