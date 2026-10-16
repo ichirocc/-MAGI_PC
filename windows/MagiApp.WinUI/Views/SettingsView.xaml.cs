@@ -93,6 +93,7 @@ public sealed partial class SettingsView : UserControl
             var strengthTag = ui.SearchStrength.ToString();
             SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
             SearchStrengthCombo.IsEnabled = !ui.Running;
+            BackgroundRunButton.IsEnabled = ui.Loaded && !ui.Running;
             AptFairUnguardedToggle.IsOn = ui.AptFairToleranceUnguarded;
             AptFairUnguardedToggle.IsEnabled = !ui.Running && ui.SearchStrength == SearchStrength.Thorough;
             C1MoveARepairToggle.IsOn = ui.C1MoveARepair;
@@ -661,6 +662,8 @@ public sealed partial class SettingsView : UserControl
         if (_syncingFromModel) return;
         _vm.SetBudget((int)e.NewValue);
     }
+
+    private void OnBackgroundRunClick(object sender, RoutedEventArgs e) => _vm.RunInBackground();
 
     private void OnLeftHandToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.Ui.LeftHand = LeftHandToggle.IsOn;
 

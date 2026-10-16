@@ -26,9 +26,15 @@
         <StackPanel Spacing="20" MaxWidth="640" HorizontalAlignment="Left">
             <TextBlock Text="分析" FontSize="20" FontWeight="SemiBold" />
 
-            <!-- 未読込のときだけ出す案内（下の各節はすべて非表示になる）。 -->
-            <TextBlock x:Name="EmptyText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.7"
-                       Text="データを読み込むと、ここに診断が出ます。" />
+            <!-- 未読込のときだけ出す空状態（下の各節はすべて非表示になる）。見出しと補足はホームの空状態と同じ語（3.698.0 A16）。開く操作はホームへ。 -->
+            <Border x:Name="EmptyCard" Background="{StaticResource MagiSurfaceVariantBrush}" CornerRadius="{StaticResource MagiCornerLG}" Padding="24">
+                <StackPanel Spacing="8">
+                    <FontIcon Glyph="&#xE787;" FontSize="44" Foreground="{StaticResource MagiPrimaryBrush}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptyTitleText" Style="{StaticResource MagiTitleLargeTextStyle}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptySubtitleText" TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
+                    <TextBlock Text="ホームで開くと、ここに診断が出ます。" TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
+                </StackPanel>
+            </Border>
 
             <!-- ① サマリー -->
             <StackPanel x:Name="SummarySection" Spacing="6">

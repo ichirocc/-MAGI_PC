@@ -50,44 +50,18 @@ public sealed partial class HomeView : UserControl
     // [2026-09-10, カクつき/フリーズ対策] CoalescedRender のKDoc参照。
     private void OnUiChanged(object? sender, PropertyChangedEventArgs e) => _renderCoalescer.Request();
 
-    /// <summary>
-    /// 自動作成の直後の 2 行（Kotlin 3.683.0 <c>CreationTop</c>＝作成の完了と次に確認する問題）。対象は主カードと同じ
-    /// （人員不足は GuidedFixTarget、ほかは巡回の先頭）。主操作は思考誘導カードの大ボタン＝ここは外枠だけ（統合仕様 INV-09）。
-    /// </summary>
-    private void RenderCreationResult(UiState ui)
-    {
-        CreationResultHost.Children.Clear();
-        var show = ui.HasResult && ui.EngineRan && !ui.Running;
-        CreationResultCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        if (!show) return;
-        string Label(string k) => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k;
-        var covU = GuidedFixRules.GuidedFixTarget(ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>());
-        var tour = covU is null ? _vm.HardViolationItemsFor(Label).FirstOrDefault() : null;
-        var next = covU is not null ? $"{covU.DayLabel}の人員不足"
-            : tour is not null ? CellSheetLogic.CreationNextProblem(tour.Cell.I < ui.StaffNames.Count ? ui.StaffNames[tour.Cell.I] : null, tour.Heading) : null;
-        foreach (var l in CellSheetLogic.CreationTopLines(next, ui.KeptPrevious))
-            CreationResultHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        if (ui.SaveState == SaveState.Failed)
-        {
-            var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Margin = new Thickness(0, 4, 0, 0) };
-            retry.Click += (_, _) => _vm.SaveNow();
-            CreationResultHost.Children.Add(retry);
-        }
-        var others = new HyperlinkButton { Content = "ほかの問題を見る", MinHeight = 48 };
-        others.Click += (_, _) => _window.SelectTab("analysis");
-        CreationResultHost.Children.Add(others);
-    }
-
     private void Render()
     {
         var ui = _vm.Ui;
-        MessageText.Text = ui.Message ?? (ui.Loaded ? "" : "データを読み込んでいます…");
-        RenderCreationResult(ui);
+        // 未読込は空状態のカードだけ。読込中は補足を 1 文にして 3 つを押せなくする（二重に開かない。Kotlin EmptyStateCard(loading)）。
+        var loading = ui.Running && !ui.Loaded;
+        EmptyStateCard.Visibility = ui.Loaded ? Visibility.Collapsed : Visibility.Visible;
+        EmptyTitleText.Text = CellSheetLogic.EmptyStateTitle;
+        EmptySubtitleText.Text = CellSheetLogic.EmptyStateSubtitle(loading);
+        EmptyOpenButton.IsEnabled = !loading;
+        EmptySampleButton.IsEnabled = !loading;
+        EmptyNewButton.IsEnabled = !loading;
         var editable = ui.Loaded && !ui.Running;
-        EmptyStateCard.Visibility = !ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
-        MakeButton.IsEnabled = editable;
-        BackgroundButton.IsEnabled = editable;
-        StopButton.IsEnabled = ui.Running;
 
         RenderNextAction(ui, editable);
         RenderLive(ui);
@@ -151,8 +125,9 @@ public sealed partial class HomeView : UserControl
     }
 
     /// <summary>
-    /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c>（3.480.0/3.483.0）の状態分岐を
-    /// そのまま写す。実行中は見出し・でき具合を出さない（進捗行は #3）。飛び先の判断は docs/phase9/blockers.md #2。
+    /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c> の状態分岐をそのまま写す。
+    /// [Android 3.698.0] 並びは純関数 <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決める＝XAML はその正順で区画を置き、ここは区画ごとの表示と中身だけを決める。
+    /// 段の対象は <see cref="CellSheetLogic.CreationNextTarget"/> の 1 か所で決め、主ボタンの括弧と「次に確認する問題」の両方に使う（INV-01）。
     /// </summary>
     private void RenderNextAction(UiState ui, bool editable)
     {
@@ -182,213 +157,262 @@ public sealed partial class HomeView : UserControl
         var guidedFix = GuidedFixRules.GuidedFixTarget(shortfalls);
         // [S5 §2.1] 関わる希望（S5a の行か S5b の行）があるか。WISH・FLOOR の分岐がこれを見る。
         var cands = NextActionGuide.WishTrialCandidatesOf(ui);
-        // 主ボタンに最初の対象を添える（押した先は変えない）。
         string StaffName(int i) => i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
         var firstWish = cands.Direct.FirstOrDefault() ?? cands.Shortfall.FirstOrDefault()?.Rows.FirstOrDefault();
-        var wishLabel = AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", firstWish is null ? null : StaffName(firstWish.Staff), firstWish is null ? null : DayText.Short(ui.StartDate, firstWish.Day));
         var firstMove = ui.FixSuggestions.FirstOrDefault(fs => fs.DeltaHard < 0)?.Ops.FirstOrDefault();
-        var moveLabel = AnalysisTriage.HomeTargetLabel("直す1手を見る", firstMove is null ? null : StaffName(firstMove.Staff), firstMove is null ? null : DayText.Short(ui.StartDate, firstMove.Day));
+        // 必須違反の巡回の先頭（残りの一覧・探索中の段の対象）。
+        var tour = !ui.Running && ui.HasResult && ui.BestHard > 0 ? _vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() : null;
+        var tourNext = tour is null ? null : CellSheetLogic.CreationNextProblem(tour.Cell.I < ui.StaffNames.Count ? ui.StaffNames[tour.Cell.I] : null, tour.Heading);
 
-        // [UX改善/Android同期, ユーザー指示「ゲーム要素廃止」] phase「狩猟」はRPG風の演出語のため、
-        //   「完成」の対語である平易な「未完成」へ変更。
-        string bg, fg, headline, bigLabel, phase, phaseHex;
+        string bg, fg, sentence, bigLabel;
         string? helperLabel;
-        string? body = null, note = null;   // 見出しの下の本文と注記（S6 の段だけ使う）
+        string? body = null, note = null;   // 主ボタンの下の本文と注記
         bool bigEnabled;
         var hardFix0 = ui.FixSuggestions.Any(s => s.DeltaHard < 0);
         var relax0 = !ui.Running && ui.HasResult && ui.BestHard > 0 ? _vm.RelaxTrialFor() : null;
         var hp = CellSheetLogic.HomePlanOf(ui.Running, ui.HasResult, ui.BestHard == 0L, infeasible, shortfalls.Any(s => s.WishPinned.Count > 0), guidedFix is not null,
             hardFix0, ui.FixFocusName.Length == 0, ui.FixSearching, ui.FixSearched, relax0 is not null, ui.StalledHardFamilies.Count > 0, !cands.IsEmpty,
             ui.SaveState == SaveState.Failed, ui.Consults.Count);
-        if (hp.Kind == HomePlanKind.Running)
+        var kind = hp.Kind;
+        var shortage = guidedFix is null ? null : CellSheetLogic.ShortageHeadlineOf(guidedFix);
+        var nextTarget = CellSheetLogic.CreationNextTarget(kind,
+            shortage: guidedFix is null ? null : $"{guidedFix.DayLabel} {guidedFix.ShiftSymbol}",
+            move: firstMove is null ? null : $"{StaffName(firstMove.Staff)} {DayText.Short(ui.StartDate, firstMove.Day)}",
+            wish: firstWish is null ? null : $"{StaffName(firstWish.Staff)} {DayText.Short(ui.StartDate, firstWish.Day)}",
+            relax: relax0 is null ? null : NextActionGuide.RelaxTargetOf(relax0.Result, ui, AnalysisView.LabelOf) is { } rt ? $"{rt.Name} {rt.Span}" : null,
+            tour: tourNext);
+        var wishLabel = AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", nextTarget, null);
+        var hardNow = AnalysisTriage.HardText(ui.Breakdown, ui.BestHard);
+        if (kind == HomePlanKind.Running)
         {
             bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
-            headline = ""; bigLabel = ""; bigEnabled = false; helperLabel = null;
-            phase = ""; phaseHex = "";
+            sentence = ""; bigLabel = ""; bigEnabled = false; helperLabel = null;
             _bigAction = () => { }; _helperAction = () => { };
         }
-        else if (hp.Kind == HomePlanKind.Make)
+        else if (kind == HomePlanKind.Make)
         {
             bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
-            headline = "② ボタンひとつで、勤務表を作ります。";
+            sentence = "";
             bigLabel = "勤務表をつくる"; bigEnabled = true;
             helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
-            phase = "組み立て"; phaseHex = MagiAccent.Blue;
             _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
         }
-        else if (hp.Kind == HomePlanKind.PreDist)
+        else if (kind == HomePlanKind.PreDist)
         {
             bg = "MagiTertiaryContainerBrush"; fg = "MagiOnTertiaryContainerBrush";
-            // [Android 3.509.4/3.510.3 同期] 完了カードに前後比較（変更人数・セル数・希望充足・
-            // 個人回数・族別の増減）を1行足す。族名の日本語化は AnalysisView.BreakdownLabels（既存）。
-            headline = (ui.ImpossibleWishCount > 0 ? $"③ 必須違反はありません。担当できない希望が {ui.ImpossibleWishCount} 件あります。" : "③ 必須違反はありません。配布前の確認で中身を確かめてから配ってください。") + (ui.RunSummary is { } rs
-                ? "\n" + rs.Line() + "\n" + rs.FamilyLine(k => AnalysisTriage.UnitOf(k), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k)
-                : "");
-            bigLabel = "配布前確認"; bigEnabled = true; helperLabel = "中身を見る";
-            phase = "完成"; phaseHex = MagiAccent.Green;
+            sentence = "";
+            // [Android 3.509.4/3.510.3 同期] 前後比較（変更人数・セル数・希望充足・個人回数・族別の増減）の行は主ボタンの下。
+            body = ui.RunSummary is { } rs ? rs.Line() + "\n" + rs.FamilyLine(k => AnalysisTriage.UnitOf(k), AnalysisView.LabelOf) : null;
+            note = ui.ImpossibleWishCount > 0 ? $"担当外の希望が {ui.ImpossibleWishCount} 件あります。" : null;
+            bigLabel = CellSheetLogic.HomePreDistButton; bigEnabled = true; helperLabel = CellSheetLogic.HomeScheduleHelper;
             _bigAction = () => _ = ShowPreDistributionAsync(); _helperAction = () => _window.SelectTab("schedule");
         }
-        else if (hp.Kind == HomePlanKind.WishInfeasible)
+        else if (kind == HomePlanKind.WishInfeasible)
         {
             // 重複除去の前で決める（S5a の行に吸収された S5b の人も数える）。例の日も希望で固定された人がいる日から。
             var pinnedDay = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0)?.DayLabel;
             var pinnedLanding = shortfalls.FirstOrDefault(s => s.WishPinned.Count > 0) is { } pinned ? GuidedFixRules.LandingFor(pinned) : null;
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
-            headline = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
+            sentence = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
-            phase = "未完成"; phaseHex = MagiAccent.Orange;
             _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("なおし方", EditReturn.Guided));
         }
-        else if (hp.Kind == HomePlanKind.DataInfeasible)
+        else if (kind == HomePlanKind.DataInfeasible)
         {
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
-            headline = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
+            sentence = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
-            phase = "未完成"; phaseHex = MagiAccent.Orange;
             var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
             _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
         }
         else
         {
-            // [Android 3.612.0 思考誘導S0/S4] 未完成は「足りる？→必須を減らす1手ある？→下限の見込み？→希望が関わる？」の順に
-            //   主ボタンを1つだけ出す（旧: 不足が無いと大ボタンが消え、並び・希望の必須に行き先が無かった）。
+            // [Android 3.612.0 思考誘導S0/S4] 未完成は「足りる？→必須を減らす1手ある？→下限の見込み？→希望が関わる？」の順に主ボタンを1つだけ出す。
             bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
-            phase = "未完成"; phaseHex = MagiAccent.Orange;
             helperLabel = null; _helperAction = () => { };
-            var remain = $"必須違反が {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} 残っています。";
-            if (hp.Kind == HomePlanKind.GuidedFix && guidedFix is { } gf)
+            var remain = $"必須違反が {hardNow} 残っています。";
+            if (kind == HomePlanKind.GuidedFix && shortage is not null)
             {
-                headline = $"{gf.DayLabel} が人員不足です。";
-                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", null, gf.DayLabel); bigEnabled = true;
+                sentence = shortage.Headline;
+                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", nextTarget, null); bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
-            else if (hp.Kind == HomePlanKind.ApplyMove)
+            else if (kind == HomePlanKind.ApplyMove)
             {
-                // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）・「この手を使う」（補助）。
+                // [3.643.0] 旧「AIの解決提案」をここへ統合: 手の内容（本文）・効果（注記）。補助は確認の画面を開くだけ。
                 var top = ui.FixSuggestions.First(fs => fs.DeltaHard < 0);
                 var (hardLine, caution) = NextActionGuide.FixImpactLines(top, AnalysisView.LabelOf);
                 // 必須の変化（族ごと）と増える要調整だけ（件・回・人・pt を 1 つの合計に足さない＝統合仕様 INV-07）。
-                headline = CellSheetLogic.HomeFixHeadline(AnalysisTriage.HardText(ui.Breakdown, ui.BestHard), CellSheetLogic.TopFixResolvedLabels(ui));
+                sentence = CellSheetLogic.HomeFixHeadline(hardNow, CellSheetLogic.TopFixResolvedLabels(ui));
                 body = FixOutcomeText.FixDisplayLabel(top.Label);
                 note = (CellSheetLogic.HardChangeLine(top.Diff, AnalysisView.LabelOf) ?? hardLine) + (caution is null ? "" : "\n" + caution);
-                bigLabel = moveLabel; bigEnabled = true;
+                bigLabel = AnalysisTriage.HomeTargetLabel("直す1手を見る", nextTarget, null); bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
-                helperLabel = ChainFixPreview.ApplyChangeButton; _helperAction = () => _vm.PreviewFixSuggestion(top, globalPolish: true);   // 2 セル以上は当てる前に一覧（3.646.0）
+                helperLabel = CellSheetLogic.ReviewChangeButton; _helperAction = () => _vm.PreviewFixSuggestion(top, globalPolish: true);   // 2 セル以上は当てる前に一覧（3.646.0）
             }
-            else if (hp.Kind == HomePlanKind.Searching)
+            else if (kind == HomePlanKind.Searching)
             {
-                headline = remain + "直し方を探しています…";
+                sentence = remain + "直し方を探しています…";
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
-            else if (hp.Kind == HomePlanKind.Relax && relax0 is { } relax)
+            else if (kind == HomePlanKind.Relax && relax0 is { } relax)
             {
                 // [S6 §2.1] 必須違反の一部が利用者自身の設定（上限 0）で塞がれているときだけ、希望の段より先に出す。
                 var t = NextActionGuide.RelaxCardTextOf(relax.Result, ui, AnalysisView.LabelOf);
-                headline = t.Headline; body = t.Body; note = t.Note;
+                sentence = t.Headline; body = t.Body; note = t.Note;
                 bigLabel = "緩める候補を見る"; bigEnabled = true;
                 _bigAction = () => _ = ShowRelaxTrialAsync();
                 if (!cands.IsEmpty) { helperLabel = "ぶつかっている希望を見る"; _helperAction = () => _ = ShowWishConflictsAsync(); }
             }
-            else if (hp.Kind == HomePlanKind.WishFloor)
+            else if (kind == HomePlanKind.WishFloor)
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
-                headline = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)} からこれ以上は減らせない見込みです。";
+                sentence = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {hardNow} からこれ以上は減らせない見込みです。";
                 bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = ShowPreDistributionAsync();
             }
-            else if (hp.Kind == HomePlanKind.Wishes)
+            else if (kind == HomePlanKind.Wishes)
             {
-                headline = remain + "希望とルールがぶつかっています。";
+                sentence = remain + "希望とルールがぶつかっています。";
                 bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
             }
             else
             {
-                headline = remain;
-                bigLabel = "問題を見る"; bigEnabled = true;
+                sentence = remain;
+                bigLabel = AnalysisTriage.HomeTargetLabel(CellSheetLogic.HomeListButton, nextTarget, null); bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
             }
         }
 
         NextActionCard.Background = BrushOf(bg);
         var fgBrush = BrushOf(fg);
-        PhaseBadge.Visibility = phase.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (phase.Length > 0)
+        var sections = CellSheetLogic.HomeCardSectionsOf(hp, ui);
+        bool Has(HomeSection sec) => sections.Contains(sec);
+        static Visibility Vis(bool v) => v ? Visibility.Visible : Visibility.Collapsed;
+        var savedLine = ui.Running ? null : _vm.CsvSavedLine();
+        // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
+        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults);
+        var statusLines = CellSheetLogic.HomeStatusLines(kind, sentence, consultLine, savedLine);
+
+        // CREATION: 作成の完了（見出しと同じ対象なら完了の 1 行だけ）。保存に失敗していれば「もう一度保存する」（外枠、INV-09）。
+        CreationHost.Children.Clear();
+        CreationHost.Visibility = Vis(Has(HomeSection.Creation));
+        if (Has(HomeSection.Creation))
         {
-            var phaseColor = ColorHex.Parse(phaseHex, Colors.Gray);
-            PhaseBadge.Background = new SolidColorBrush(phaseColor);
-            PhaseText.Text = phase;
-            PhaseText.Foreground = new SolidColorBrush(ReadableOn(phaseColor));
+            foreach (var l in CellSheetLogic.CreationTopLines(nextTarget, ui.KeptPrevious, headlineTarget: nextTarget))
+                CreationHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf("MagiBodyMediumTextStyle") });
+            if (ui.SaveState == SaveState.Failed)
+            {
+                var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Margin = new Thickness(0, 4, 0, 0) };
+                retry.Click += (_, _) => _vm.SaveNow();
+                CreationHost.Children.Add(retry);
+            }
         }
-        HeadlineText.Visibility = headline.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        HeadlineText.Text = headline;
+
+        HeadlineText.Visibility = Vis(Has(HomeSection.Headline));
+        HeadlineText.Text = CellSheetLogic.HomeHeadline(kind, ui.StartDate);
         HeadlineText.Foreground = fgBrush;
-        // [3.643.0] 探索がどう終わったか（停滞で早く終えた理由・残る必須の性質）。内部名は出さない（StopExplanation）。次の一手は主ボタンが言う。
-        var stopLine = ui.HasResult && !ui.Running && ui.StopSummary is { } stop && StopExplanation.Of(stop, ui.Breakdown) is { } se
-            ? se.Line
-            : null;
-        StopText.Visibility = stopLine is null ? Visibility.Collapsed : Visibility.Visible;
-        StopText.Text = stopLine ?? "";
-        StopText.Foreground = fgBrush;
-        BodyText.Visibility = body is null ? Visibility.Collapsed : Visibility.Visible;
+
+        // BADGES: 札は見出しと同じ語で検査の結果だけを言う（「完成」とは言わない＝人の確認と分ける）。件と人は足さない（INV-07）。
+        BadgeHost.Children.Clear();
+        BadgeHost.Visibility = Vis(Has(HomeSection.Badges));
+        if (Has(HomeSection.Badges))
+        {
+            var badgeColor = ColorHex.Parse(MagiAccent.Orange, Colors.Gray);
+            foreach (var b in CellSheetLogic.HomeBadges(hardNow, shortfalls.FirstOrDefault(s => s.Miss > 0)))
+            {
+                BadgeHost.Children.Add(new Border
+                {
+                    Background = new SolidColorBrush(badgeColor), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerLG"], Padding = new Thickness(10, 3, 10, 3),
+                    Child = new TextBlock { Text = b, Style = StyleOf("MagiLabelMediumTextStyle"), FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = new SolidColorBrush(ReadableOn(badgeColor)) },
+                });
+            }
+        }
+
+        // STATUS: 2 行まで。先頭は必須ありの段だけ大きく。作成直後の自動探索はカードの中の文字ボタンで止める（下部バーは外枠のまま。3.402.0 の止められる性質は保つ）。
+        StatusHost.Children.Clear();
+        StatusHost.Visibility = Vis(Has(HomeSection.Status) && (statusLines.Count > 0 || kind == HomePlanKind.Searching));
+        if (Has(HomeSection.Status))
+        {
+            for (var i = 0; i < statusLines.Count; i++)
+                StatusHost.Children.Add(new TextBlock { Text = statusLines[i], TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf(i == 0 && kind != HomePlanKind.PreDist ? "MagiTitleMediumTextStyle" : "MagiBodyMediumTextStyle") });
+            if (kind == HomePlanKind.Searching)
+            {
+                var stop = new HyperlinkButton { Content = "やめる", MinHeight = 48, Foreground = fgBrush };
+                stop.Click += (_, _) => _vm.Stop();
+                StatusHost.Children.Add(stop);
+            }
+        }
+
+        // PROGRESS: 何をしているかの語を先頭に。ProgressSummary（改善率/残り時間/探索数）はそのまま。
+        ProgressRow.Visibility = Vis(Has(HomeSection.Progress));
+        ProgressSpinner.IsActive = ui.Running;
+        ProgressSpinner.Foreground = fgBrush;
+        ProgressText.Text = ui.Running ? $"勤務表を組んでいます ・ {CellSheetLogic.ProgressSummary(ui)}" : "";
+        ProgressText.Foreground = fgBrush;
+
+        BigButton.Visibility = Vis(Has(HomeSection.Primary) && bigEnabled);
+        BigButton.Content = bigLabel;
+        BigButton.IsEnabled = editable;
+        // HELPER: 段に補助が無ければ「表で全体を見る」。
+        HelperButton.Visibility = Vis(Has(HomeSection.Helper));
+        HelperButton.Content = helperLabel ?? CellSheetLogic.HomeScheduleHelper;
+        if (helperLabel is null) _helperAction = () => _window.SelectTab("schedule");
+        HelperButton.IsEnabled = editable;
+        OthersButton.Visibility = Vis(Has(HomeSection.Others));
+        OthersButton.Content = CellSheetLogic.HomeOthersButton;
+        OthersButton.Foreground = fgBrush;
+
+        BodyText.Visibility = Vis(body is not null);
         BodyText.Text = body ?? "";
         BodyText.Foreground = fgBrush;
-        NoteText.Visibility = note is null ? Visibility.Collapsed : Visibility.Visible;
+        NoteText.Visibility = Vis(note is not null);
         NoteText.Text = note ?? "";
         NoteText.Foreground = fgBrush;
         // [S5 §9] 直近の「希望を外して再作成」の結果（VM が鮮度を照合済み）。
-        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine(k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k) ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
-        OutcomeText.Visibility = outcomeLine is null ? Visibility.Collapsed : Visibility.Visible;
+        var outcomeLine = ui.Running ? null : _vm.FixOutcomeLine(AnalysisView.LabelOf) ?? _vm.WishCancelOutcomeLine() ?? _vm.RelaxDoneLine();
+        OutcomeText.Visibility = Vis(outcomeLine is not null);
         OutcomeText.Text = outcomeLine ?? "";
         OutcomeText.Foreground = fgBrush;
-        // 勤務表 CSV の保存状態は直した結果の行とは別に出す（旧: ?? で繋いで片方しか出なかった。3.646.0 B03）。
-        var savedLine = ui.Running ? null : _vm.CsvSavedLine();
-        SavedText.Visibility = savedLine is null ? Visibility.Collapsed : Visibility.Visible;
+        // 勤務表 CSV の保存状態は直した結果の行とは別に出す（3.646.0 B03）。状態の行に出したときは繰り返さない。
+        var showSaved = savedLine is not null && !statusLines.Contains(savedLine);
+        SavedText.Visibility = Vis(showSaved);
         SavedText.Text = savedLine ?? "";
         SavedText.Foreground = fgBrush;
-        // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
-        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults);
-        ConsultText.Visibility = consultLine is null ? Visibility.Collapsed : Visibility.Visible;
-        ConsultText.Text = consultLine ?? "";
-        ConsultText.Foreground = fgBrush;
+        // [3.643.0] 探索がどう終わったか（停滞で早く終えた理由・残る必須の性質）。内部名は出さない（StopExplanation）。次の一手は主ボタンが言う。
+        var stopLine = ui.HasResult && !ui.Running && ui.StopSummary is { } stopSum && StopExplanation.Of(stopSum, ui.Breakdown) is { } se ? se.Line : null;
+        StopText.Visibility = Vis(stopLine is not null);
+        StopText.Text = stopLine ?? "";
+        StopText.Foreground = fgBrush;
         var relaxFailed = !ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxFailed();
         var relaxStopped = relaxFailed || (!ui.RelaxSearching && ui.BestHard > 0 && _vm.RelaxStopped());
-        RelaxSearchRow.Visibility = !ui.Running && (ui.RelaxSearching || relaxStopped) ? Visibility.Visible : Visibility.Collapsed;
+        RelaxSearchRow.Visibility = Vis(!ui.Running && (ui.RelaxSearching || relaxStopped));
         RelaxSearchText.Text = relaxFailed ? NextActionGuide.RelaxFailedText : relaxStopped ? NextActionGuide.RelaxStoppedText : NextActionGuide.RelaxSearchingText;
         RelaxStopButton.Content = relaxStopped ? NextActionGuide.RelaxRetryLabel : "やめる";
         RelaxSearchText.Foreground = fgBrush;
+        DetailHost.Visibility = Vis(Has(HomeSection.Detail) && (body is not null || note is not null || outcomeLine is not null || showSaved || stopLine is not null || RelaxSearchRow.Visibility == Visibility.Visible));
 
-        var remaining = AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown, ui.HardWishConflict);
-        var showResolve = !ui.Running;
-        ResolveText.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
-        ResolveBar.Visibility = showResolve ? Visibility.Visible : Visibility.Collapsed;
-        ResolveText.Text = $"でき具合：{ui.Satisfaction}%（{remaining}）";
+        // SATISFACTION: [3.480.0] 文言（正直さ）は変えず「でき具合：N%（残りM件）」＋バー。[3.483.0 H-2] 必須0のときは残りの単位を調整件数へ。
+        SatisfactionHost.Visibility = Vis(Has(HomeSection.Satisfaction));
+        ResolveText.Text = $"でき具合：{ui.Satisfaction}%（{AnalysisTriage.HomeRemainingLabel(ui.BestHard, shortDays, ui.Breakdown, ui.HardWishConflict)}）";
         ResolveText.Foreground = fgBrush;
         ResolveBar.Value = System.Math.Clamp(ui.Satisfaction, 0, 100);
         ResolveBar.Foreground = fgBrush;
+        SoftNoteText.Visibility = Vis(ui.BestHard > 0L);
+        SoftNoteText.Text = CellSheetLogic.HomeSoftNote;
+        SoftNoteText.Foreground = fgBrush;
 
-        var showDetail = !ui.Running && ui.HasResult;
-        DetailToggle.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
+        // INFO: 数字の根拠と結果採用の意味を 1 文字も変えず折りたたみへ。
+        InfoHost.Visibility = Vis(Has(HomeSection.Info));
         DetailToggle.Content = _detailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ でき具合の意味";
         DetailToggle.Foreground = fgBrush;
-        DetailText.Visibility = showDetail && _detailOpen ? Visibility.Visible : Visibility.Collapsed;
+        DetailText.Visibility = Vis(_detailOpen);
         DetailText.Foreground = fgBrush;
 
-        ProgressRow.Visibility = ui.Running ? Visibility.Visible : Visibility.Collapsed;
-        ProgressSpinner.IsActive = ui.Running;
-        ProgressSpinner.Foreground = fgBrush;
-        ProgressText.Text = ui.Running ? CellSheetLogic.ProgressSummary(ui) : "";
-        ProgressText.Foreground = fgBrush;
-
-        BigButton.Visibility = bigEnabled ? Visibility.Visible : Visibility.Collapsed;
-        BigButton.Content = bigLabel;
-        BigButton.IsEnabled = editable;
-        HelperButton.Visibility = helperLabel is null ? Visibility.Collapsed : Visibility.Visible;
-        HelperButton.Content = helperLabel ?? "";
-        HelperButton.IsEnabled = editable;
-        RedraftLink.Visibility = showDetail ? Visibility.Visible : Visibility.Collapsed;
+        RedraftLink.Visibility = Vis(Has(HomeSection.DraftLink));
         RedraftLink.Foreground = fgBrush;
         RedraftLink.IsEnabled = editable;
     }
@@ -473,6 +497,8 @@ public sealed partial class HomeView : UserControl
     }
 
     private void OnBigClick(object sender, RoutedEventArgs e) => _bigAction();
+
+    private void OnOthersClick(object sender, RoutedEventArgs e) => _window.SelectTab("analysis");
 
     private void OnStopRelaxClick(object sender, RoutedEventArgs e)
     {
@@ -706,7 +732,7 @@ public sealed partial class HomeView : UserControl
 
             if (target is not null)
             {
-                panel.Children.Add(new TextBlock { Text = $"{target.DayLabel} の「{target.ShiftSymbol}」が {target.Miss}人 足りません。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = CellSheetLogic.ShortageHeadlineOf(target).Headline + "。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 var cands = _vm.ShortageFixCandidates(target.DayIndex, target.ShiftIndex);
                 if (loggedFor != (target.DayIndex, target.ShiftIndex)) { loggedFor = (target.DayIndex, target.ShiftIndex); _vm.LogUi(new OpLogText.UiOp.GuidedOpen(target.DayLabel, target.ShiftSymbol, cands.Count)); }
                 if (cands.Count > 0)
@@ -1040,12 +1066,6 @@ public sealed partial class HomeView : UserControl
 
     private static Brush BrushOf(string key) => (Brush)Application.Current.Resources[key];
 
-    private void OnMakeClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.RunV6FullOptimize();
-
-    private void OnBackgroundClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.RunInBackground();
-
-    private void OnStopClick(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.Stop();
-
     private void OnSmartInitialClick(object sender, RoutedEventArgs e) => _vm.GenerateSmartInitial();
 
     private void OnSoftPolishClick(object sender, RoutedEventArgs e) => _vm.RunSoftPolish();
@@ -1097,7 +1117,7 @@ public sealed partial class HomeView : UserControl
         }
     }
 
-    /// <summary>配布前確認（仕様 §10、Kotlin <c>PreDistributionDialog</c>）。配るかどうかは利用者が決める。</summary>
+    /// <summary>配布前の確認（仕様 §10、Kotlin <c>PreDistributionDialog</c>）。配るかどうかは利用者が決める。</summary>
     internal async System.Threading.Tasks.Task ShowPreDistributionAsync()
     {
         var rows = PreDistributionCheck.Rows(_vm.Ui, _vm.CsvSavedLine(), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k);
@@ -1107,7 +1127,7 @@ public sealed partial class HomeView : UserControl
         panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Text = PreDistributionCheck.Note });
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = "配布前確認", Content = new ScrollViewer { Content = panel },
+            XamlRoot = XamlRoot, Title = CellSheetLogic.PreDistTitle, Content = new ScrollViewer { Content = panel },
             PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Primary,
         };
         _vm.LogUi(new OpLogText.UiOp.PreDistOpen());

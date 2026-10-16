@@ -17,6 +17,9 @@ public enum HomeAction { None, Make, SmartInitial, PreDist, Schedule, ShowWishes
 
 public sealed record HomePlan(HomePlanKind Kind, HomeAction Primary, bool PrimaryEnabled, HomeAction? Helper);
 
+/// <summary>ホームの主カードの区画。並びの順は <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決め、HomeView はその順に描くだけ（Kotlin <c>HomeSection</c> と 1 対 1）。</summary>
+public enum HomeSection { Creation, Headline, Badges, Status, Progress, Primary, Helper, Others, Detail, Satisfaction, Info, DraftLink }
+
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed, Cancelled }
 
 /// <summary>[S6] セルシートから設定の緩和へ渡す状態。Kotlin <c>RelaxHandoff</c>。</summary>
@@ -783,7 +786,7 @@ public static class CellSheetLogic
     public const string ApplyUndoNote = "適用したあとでも元に戻せます。";
 
     /// <summary>案のカードのボタン（見るだけ。適用は確認の画面で）。</summary>
-    public const string ReviewChangeButton = "変更内容を確認";
+    public const string ReviewChangeButton = "変更内容を確認する";
 
     /// <summary>確認の画面の適用ボタン（件数を言う）。</summary>
     public static string ApplyCountButton(int n) => n >= 2 ? $"この{n}件の変更を適用" : ChainFixPreview.ApplyChangeButton;
@@ -1382,6 +1385,89 @@ public static class CellSheetLogic
         return new(HomePlanKind.List, HomeAction.ShowList, true, null);
     }
 
+    /// <summary>主ボタンが分析タブへ行く段（「ほかの問題を見る」と行き先が同じ）。</summary>
+    private static readonly HashSet<HomeAction> HomeActionsToAnalysis = new() { HomeAction.ShowMove, HomeAction.ShowList };
+
+    /// <summary>
+    /// ホームの主カードの並び（Kotlin <c>homeCardSections</c>、純関数）: 作成の 2 行 → 見出し → 札 → 状態（2 行まで）→ 主ボタン 1 つ → 補助 →「ほかの問題を見る」→
+    /// 詳細 → でき具合 → ⓘ → 下書きのリンク。実行中は進捗の行だけ。でき具合は結果があるときだけ（作っていないのに出さない）。
+    /// </summary>
+    public static IReadOnlyList<HomeSection> HomeCardSectionsOf(HomePlan plan, UiState ui)
+    {
+        var list = new List<HomeSection>();
+        if (ui.Running) { list.Add(HomeSection.Progress); return list; }
+        var creation = ui.HasResult && ui.EngineRan;
+        if (creation) list.Add(HomeSection.Creation);
+        list.Add(HomeSection.Headline);
+        if (ui.HasResult && ui.BestHard > 0L) list.Add(HomeSection.Badges);
+        list.Add(HomeSection.Status);
+        if (plan.PrimaryEnabled) list.Add(HomeSection.Primary);
+        if (plan.Helper is not null || ui.HasResult) list.Add(HomeSection.Helper);
+        if (creation && !HomeActionsToAnalysis.Contains(plan.Primary)) list.Add(HomeSection.Others);
+        list.Add(HomeSection.Detail);
+        if (ui.HasResult) { list.Add(HomeSection.Satisfaction); list.Add(HomeSection.Info); list.Add(HomeSection.DraftLink); }
+        return list;
+    }
+
+    public const string HomeMakeHeadline = "ボタンひとつで、勤務表をつくります";
+    public const string HomeHard0Headline = "必須違反はありません";
+    public const string HomeScheduleHelper = "表で全体を見る";
+    public const string HomeListButton = "残っている問題を見る";
+    public const string HomePreDistButton = "配布前の確認をする";
+    public const string PreDistTitle = "配布前の確認";
+    public const string HomeSoftNote = "要調整は分析で確認";
+    public const string HomeOthersButton = "ほかの問題を見る";
+    public const string InterruptedTitle = "前回の勤務表づくりは途中で止まりました";
+    public const string EmptyStateTitle = "勤務表を開く";
+
+    /// <summary>未読込の補足。読込中は 1 文だけ。</summary>
+    public static string EmptyStateSubtitle(bool loading) => loading ? "読み込んでいます…" : "保存データ・サンプル・新規から選べます";
+
+    /// <summary>対象の月の見出し「2026年10月の判断」（開始日が読めなければ「いまの判断」）。</summary>
+    public static string HomeMonthHeadline(string startDate)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(startDate, @"^(\d{4})-(\d{2})-\d{2}");
+        if (!m.Success) return "いまの判断";
+        return $"{int.Parse(m.Groups[1].Value)}年{int.Parse(m.Groups[2].Value)}月の判断";
+    }
+
+    /// <summary>段ごとの見出し: 未作成・必須 0 は 1 文、必須ありは対象の月。</summary>
+    public static string HomeHeadline(HomePlanKind kind, string startDate) => kind switch
+    {
+        HomePlanKind.Make => HomeMakeHeadline,
+        HomePlanKind.PreDist => HomeHard0Headline,
+        _ => HomeMonthHeadline(startDate),
+    };
+
+    public static ShortageHeadline ShortageHeadlineOf(string dayLabel, string shiftSymbol, int need, int got, int miss) =>
+        new($"{dayLabel} の {shiftSymbol} が {miss}人 足りません", $"いま{got}人／必要{need}人", $"{shiftSymbol} 必要{need} 不足{miss}");
+
+    public static ShortageHeadline ShortageHeadlineOf(CoverageShortfall s) => ShortageHeadlineOf(s.DayLabel, s.ShiftSymbol, s.Need, s.Got, s.Miss);
+
+    /// <summary>札 2 つ: 必須は単位ごと（INV-07）、2 つ目は最優先の不足（無ければ 1 つ）。</summary>
+    public static IReadOnlyList<string> HomeBadges(string hardLabel, CoverageShortfall? shortage) =>
+        new[] { $"必須 {hardLabel}", shortage is null ? null : ShortageHeadlineOf(shortage).Badge }.OfType<string>().ToList();
+
+    /// <summary>状態の行（2 行まで）。必須あり＝問題の 1 文と相談中の行（D10）。必須 0＝相談中の行と、CSV が今の内容と違う行（保存済みの行は主ボタンの下）。</summary>
+    public static IReadOnlyList<string> HomeStatusLines(HomePlanKind kind, string? sentence, string? consultLine, string? savedLine) =>
+        kind == HomePlanKind.PreDist
+            ? new[] { consultLine, savedLine is not null && savedLine.Contains("今の内容と違います", StringComparison.Ordinal) ? savedLine : null }.OfType<string>().ToList()
+            : new[] { string.IsNullOrWhiteSpace(sentence) ? null : sentence, consultLine }.OfType<string>().ToList();
+
+    /// <summary>
+    /// 段の対象（「次に確認する問題」と主ボタンの括弧の中の両方に使う＝INV-01）。null＝対象なし。
+    /// 今すぐ直せる不足＝不足の枠、1手あり＝手の先頭のセル、希望の段＝関わる希望の先頭、緩める＝その組、残りの一覧と探索中＝巡回の先頭。
+    /// </summary>
+    public static string? CreationNextTarget(HomePlanKind kind, string? shortage, string? move, string? wish, string? relax, string? tour) => kind switch
+    {
+        HomePlanKind.GuidedFix => shortage,
+        HomePlanKind.ApplyMove => move,
+        HomePlanKind.WishInfeasible or HomePlanKind.WishFloor or HomePlanKind.Wishes => wish,
+        HomePlanKind.Relax => relax,
+        HomePlanKind.List or HomePlanKind.Searching => tour,
+        _ => null,
+    };
+
     /// <summary>確認の画面の「新たな必須違反」（null＝評価していない＝なしと言わない、統合仕様 INV-10）。</summary>
     public static string NewHardLine(IReadOnlyList<string>? names) =>
         "新たな必須違反：" + (names is null ? "未評価（適用の直前に検査します）" : names.Count == 0 ? "なし" : string.Join("、", names));
@@ -1538,9 +1624,9 @@ public static class CellSheetLogic
     public static string CreationNextProblem(string? staffName, string heading) =>
         string.IsNullOrWhiteSpace(staffName) || heading.StartsWith(staffName, StringComparison.Ordinal) ? heading : $"{staffName}さん {heading}";
 
-    /// <summary>主カード上端の 2 行: 作成の完了と、次に確認する問題。</summary>
-    public static IReadOnlyList<string> CreationTopLines(string? next, bool kept = false) =>
-        new[] { kept ? KeptResultText.KeptTitle : CreationDoneTitle, next is null ? null : $"次に確認する問題：{next}" }.OfType<string>().ToList();
+    /// <summary>主カード上端の 2 行: 作成の完了と、次に確認する問題（見出しと同じ対象なら完了の 1 行だけ）。</summary>
+    public static IReadOnlyList<string> CreationTopLines(string? next, bool kept = false, string? headlineTarget = null) =>
+        new[] { kept ? KeptResultText.KeptTitle : CreationDoneTitle, next is null || next == headlineTarget ? null : $"次に確認する問題：{next}" }.OfType<string>().ToList();
 
     public const string SoftPolishLink = "要調整をもう少し減らせるか試す（減らない場合もあります）";
 
@@ -1694,6 +1780,9 @@ public sealed record CountEffect(int Before, int After, int Target, bool Under, 
         : Under ? $"適用後も、{basis}まで{GapAfter}{Unit}不足"
         : $"適用後も、{basis}を{GapAfter}{Unit}超えます";
 }
+
+/// <summary>人員不足の 1 文（ホームの「いま決めること」と人員不足の手伝いの題）と、札・状態の行（Kotlin <c>ShortageHeadline</c>）。</summary>
+public sealed record ShortageHeadline(string Headline, string Status, string Badge);
 
 /// <summary>セルを 1 つ変える前の確認の中身（Kotlin <c>CellChangeReview</c>）。</summary>
 public sealed record CellChangeReview(

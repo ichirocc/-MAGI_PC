@@ -33,6 +33,13 @@
                         ValueChanged="OnBudgetChanged" />
             </StackPanel>
 
+            <!-- [Android 3.698.0 / C# だけ] ホームの 3 ボタン（つくる・バックグラウンド・やめる）は主ボタンと下部バーに重複するので外し、背景実行だけここへ。 -->
+            <StackPanel Spacing="4">
+                <Button x:Name="BackgroundRunButton" Content="バックグラウンドで勤務表をつくる" Click="OnBackgroundRunClick" HorizontalAlignment="Stretch" MinHeight="48" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                           Text="ほかのタブで編集しながら組めます。結果は今の勤務表より良いときだけ置き換えます。ウィンドウを閉じると止まります。" />
+            </StackPanel>
+
             <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
                           Toggled="OnLeftHandToggled" />
 

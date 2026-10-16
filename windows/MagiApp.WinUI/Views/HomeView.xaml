@@ -8,7 +8,7 @@
       MagiDashboardCards.kt）の本格移植ではなく、現在の状態（読込済みか・満足度・直近メッセージ・
       必須/合計違反）を読取専用で示す最小版。「勤務表をつくる」導線は既存の RunV6FullOptimize
       （フェーズ9ピース9で移植済み・テスト済み）へ直接委譲する。
-      「バックグラウンドで計算」は Phase 10 で実装した RunInBackground（HomeView.xaml.cs 参照）。
+      「バックグラウンドで計算」（Phase 10 の RunInBackground）は 3.698.0 で SettingsView へ移した。
 
       [2026-09-02, 配線] 「初期解生成（賢い版）」(GenerateSmartInitial)・「仕上げ最適化」
       (RunSoftPolish)・「他の案」の適用(ApplyAlternative)は、いずれもフェーズ9で移植・テスト済みの
@@ -31,7 +31,12 @@
       単独の「仕上げ最適化」ボタンは Android と同じくこのカード内のリンクへ統合。
 
       [phase9 #5] 空状態（Kotlin原本 EmptyStateCard）＝データ未読込のとき「データを開く／サンプルで試す／新規につくる（空から）」。
-      通常は起動時にフィクスチャが自動で入るため、読込に失敗した・空にしたときの導線。
+      通常は起動時にフィクスチャが自動で入るため、読込に失敗した・空にしたときの導線。読込中は補足を 1 文にして 3 つを押せなくする（3.698.0）。
+
+      [Android 3.698.0] 主カードの区画は CellSheetLogic.HomeCardSectionsOf の並び（作成 → 見出し → 札 → 状態 2 行 → 主ボタン 1 つ → 補助 →
+      ほかの問題 → 詳細 → でき具合 → ⓘ → 下書き。実行中は進捗だけ）。XAML はその正順で区画を置き、CodeBehind は区画ごとの表示と中身だけを決める。
+      ページ見出し「ホーム」はシェルの上部バーが持つ。「勤務表をつくる／バックグラウンド／やめる」の 3 ボタンは主ボタンと下部バーに重複するので外し、
+      背景実行は設定タブへ移した（主操作は画面に 1 つ、統合仕様 INV-09）。
 
       [phase9 #1] 「人員不足の原因」「人員過剰がなぜ減らないか」（Kotlin原本 CoverageDiagnosisCard）を
       同じ文言で移植。過剰枠の「希望固定N人」は CoverageSurplus.PinnedStaff を名指しし、ボタンで
@@ -39,50 +44,28 @@
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="16" MaxWidth="480" HorizontalAlignment="Left">
-            <TextBlock Text="ホーム" FontSize="20" FontWeight="SemiBold" />
-            <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="14" />
-
             <Border x:Name="EmptyStateCard" Background="{StaticResource MagiSurfaceVariantBrush}"
                     CornerRadius="{StaticResource MagiCornerLG}" Padding="24">
                 <StackPanel Spacing="16" HorizontalAlignment="Stretch">
                     <FontIcon Glyph="&#xE787;" FontSize="44" Foreground="{StaticResource MagiPrimaryBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="勤務表データを開きましょう" Style="{StaticResource MagiTitleLargeTextStyle}" HorizontalAlignment="Center" />
-                    <TextBlock Text="保存済みのデータを開く、サンプルから始める、または空から新しく作れます。"
-                               TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
-                    <Button x:Name="EmptyOpenButton" Content="データを開く" Click="OnEmptyOpenClick" HorizontalAlignment="Stretch" MinHeight="56" />
+                    <TextBlock x:Name="EmptyTitleText" Style="{StaticResource MagiTitleLargeTextStyle}" HorizontalAlignment="Center" />
+                    <TextBlock x:Name="EmptySubtitleText" TextWrapping="Wrap" TextAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
+                    <Button x:Name="EmptyOpenButton" Content="データを開く" Click="OnEmptyOpenClick" HorizontalAlignment="Stretch" MinHeight="56"
+                            Style="{StaticResource AccentButtonStyle}" />
                     <Button x:Name="EmptySampleButton" Content="サンプルで試す" Click="OnEmptySampleClick" HorizontalAlignment="Stretch" MinHeight="56" />
                     <Button x:Name="EmptyNewButton" Content="新規につくる（空から）" Click="OnEmptyNewClick" HorizontalAlignment="Stretch" MinHeight="56" />
                 </StackPanel>
             </Border>
 
-            <!-- [Android 3.672.0] 自動作成の結果と次に確認する問題（作成の完了＝配布できる、とは言わない）。中身は CodeBehind が作る。 -->
-            <Border x:Name="CreationResultCard" Background="{StaticResource MagiSurfaceVariantBrush}"
-                    CornerRadius="{StaticResource MagiCornerSM}" Padding="16" Visibility="Collapsed">
-                <StackPanel x:Name="CreationResultHost" Spacing="4" />
-            </Border>
-
             <Border x:Name="NextActionCard" CornerRadius="{StaticResource MagiCornerSM}" Padding="20">
                 <StackPanel Spacing="14">
-                    <Border x:Name="PhaseBadge" CornerRadius="{StaticResource MagiCornerLG}" Padding="10,3" HorizontalAlignment="Left">
-                        <TextBlock x:Name="PhaseText" Style="{StaticResource MagiLabelMediumTextStyle}" FontWeight="Bold" />
-                    </Border>
+                    <!-- CREATION: 自動作成の結果（作成の完了＝配布できる、とは言わない）と、保存に失敗したときの「もう一度保存する」。 -->
+                    <StackPanel x:Name="CreationHost" Spacing="2" />
                     <TextBlock x:Name="HeadlineText" TextWrapping="Wrap" Style="{StaticResource MagiTitleLargeTextStyle}" FontWeight="Bold" />
-                    <TextBlock x:Name="StopText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
-                    <TextBlock x:Name="BodyText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
-                    <TextBlock x:Name="NoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
-                    <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
-                    <!-- 勤務表 CSV の保存状態。直した結果の行とは別に出す（両方あれば両方。3.646.0 B03）。 -->
-                    <TextBlock x:Name="SavedText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
-                    <TextBlock x:Name="ConsultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
-                    <Grid x:Name="RelaxSearchRow" Visibility="Collapsed" ColumnDefinitions="*,Auto">
-                        <TextBlock x:Name="RelaxSearchText" Text="希望を変えずに、個人の上限0を例外で緩める方法を調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
-                        <HyperlinkButton x:Name="RelaxStopButton" Grid.Column="1" Content="やめる" MinHeight="44" Click="OnStopRelaxClick" />
-                    </Grid>
-                    <TextBlock x:Name="ResolveText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
-                    <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" />
-                    <HyperlinkButton x:Name="DetailToggle" Click="OnDetailToggleClick" Padding="0" />
-                    <TextBlock x:Name="DetailText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                               Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映しました。「元に戻す」で取り消せます。確定は書き出すときです。" />
+                    <!-- BADGES: 必須は単位ごと、2 つ目は最優先の不足（INV-07）。 -->
+                    <StackPanel x:Name="BadgeHost" Orientation="Horizontal" Spacing="8" />
+                    <!-- STATUS: 2 行まで。探索中はカードの中の「やめる」。 -->
+                    <StackPanel x:Name="StatusHost" Spacing="4" />
                     <Grid x:Name="ProgressRow" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -92,8 +75,33 @@
                         <TextBlock x:Name="ProgressText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Style="{StaticResource MagiBodyMediumTextStyle}" />
                     </Grid>
-                    <Button x:Name="BigButton" Click="OnBigClick" HorizontalAlignment="Stretch" MinHeight="56" />
+                    <!-- PRIMARY: 塗りの主ボタンは画面に 1 つ。 -->
+                    <Button x:Name="BigButton" Click="OnBigClick" HorizontalAlignment="Stretch" MinHeight="56" Style="{StaticResource AccentButtonStyle}" />
+                    <!-- HELPER: 段に補助が無ければ「表で全体を見る」。 -->
                     <Button x:Name="HelperButton" Click="OnHelperClick" HorizontalAlignment="Stretch" MinHeight="48" />
+                    <HyperlinkButton x:Name="OthersButton" Click="OnOthersClick" MinHeight="48" />
+                    <!-- DETAIL: 本文・注記・直した結果・CSV の保存状態・終わり方・緩める方法の探索。 -->
+                    <StackPanel x:Name="DetailHost" Spacing="6">
+                        <TextBlock x:Name="BodyText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                        <TextBlock x:Name="NoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
+                        <TextBlock x:Name="OutcomeText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                        <TextBlock x:Name="SavedText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
+                        <TextBlock x:Name="StopText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
+                        <Grid x:Name="RelaxSearchRow" Visibility="Collapsed" ColumnDefinitions="*,Auto">
+                            <TextBlock x:Name="RelaxSearchText" Text="希望を変えずに、個人の上限0を例外で緩める方法を調べています…" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodySmallTextStyle}" />
+                            <HyperlinkButton x:Name="RelaxStopButton" Grid.Column="1" Content="やめる" MinHeight="44" Click="OnStopRelaxClick" />
+                        </Grid>
+                    </StackPanel>
+                    <StackPanel x:Name="SatisfactionHost" Spacing="6">
+                        <TextBlock x:Name="ResolveText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
+                        <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" />
+                        <TextBlock x:Name="SoftNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
+                    </StackPanel>
+                    <StackPanel x:Name="InfoHost" Spacing="6">
+                        <HyperlinkButton x:Name="DetailToggle" Click="OnDetailToggleClick" Padding="0" />
+                        <TextBlock x:Name="DetailText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映しました。「元に戻す」で取り消せます。確定は書き出すときです。" />
+                    </StackPanel>
                     <HyperlinkButton x:Name="RedraftLink" Click="OnSmartInitialClick" HorizontalAlignment="Stretch"
                                      Content="下書きから作り直す（今の結果は「元に戻す」で戻せます）" />
                 </StackPanel>
@@ -121,10 +129,6 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
-
-            <Button x:Name="MakeButton" Content="勤務表をつくる" Click="OnMakeClick" HorizontalAlignment="Stretch" />
-            <Button x:Name="BackgroundButton" Content="バックグラウンドで最適化（ウィンドウを閉じると中断）" Click="OnBackgroundClick" HorizontalAlignment="Stretch" />
-            <Button x:Name="StopButton" Content="やめる" Click="OnStopClick" HorizontalAlignment="Stretch" />
 
             <StackPanel x:Name="CopilotCard" Spacing="10">
                 <Border x:Name="ImpossibleWishPanel" Background="{StaticResource MagiErrorContainerBrush}"

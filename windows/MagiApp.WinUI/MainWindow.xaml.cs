@@ -275,13 +275,16 @@ public sealed partial class MainWindow : Window
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
         }
 
+        // 未読込は空状態のカードが主操作＝下部バーごと出さない（3.698.0 S0-5）。
+        BottomBar.Visibility = ui.Loaded || ui.Running ? Visibility.Visible : Visibility.Collapsed;
         UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         var stopping = ui.Running || ui.FixSearching;
         MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
-        var secondary = !stopping && _currentTag == "home";
+        // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
+        var secondary = !ui.Running && _currentTag == "home";
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
