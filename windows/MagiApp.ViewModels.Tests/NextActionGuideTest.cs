@@ -14,19 +14,19 @@ public class NextActionGuideTest
     [Fact]
     public void HardLineComesFromDeltaHard()
     {
-        Assert.Equal("必須違反: 2件減る", NextActionGuide.FixImpactLines(S(-2), LabelOf).HardLine);
-        Assert.Equal("必須違反: 変わらない", NextActionGuide.FixImpactLines(S(0), LabelOf).HardLine);
-        Assert.Equal("必須違反: 1件増える", NextActionGuide.FixImpactLines(S(1), LabelOf).HardLine);
+        Assert.Equal("必須違反：2件減る", NextActionGuide.FixImpactLines(S(-2), LabelOf).HardLine);
+        Assert.Equal("必須違反：変わらない", NextActionGuide.FixImpactLines(S(0), LabelOf).HardLine);
+        Assert.Equal("必須違反：1件増える", NextActionGuide.FixImpactLines(S(1), LabelOf).HardLine);
     }
 
     [Fact]
     public void CautionListsOnlyWorsenedSoftFamilies()
     {
         var (_, caution) = NextActionGuide.FixImpactLines(S(-1, ("covU", -1), ("high", 1), ("c1", -1), ("covO", 2)), LabelOf);
-        Assert.Equal("増える要調整: 上限超過 +1回・人員過剰 +2人", caution);
+        Assert.Equal("増える要調整：上限超過 +1回・人員過剰 +2人", caution);
         Assert.Null(NextActionGuide.FixImpactLines(S(-1, ("covU", -1)), LabelOf).Caution);
         // 必須の増減は単位ごと（人員不足の人数と件数を足さない）。
-        Assert.Equal("必須違反: 1件減る・2人減る", NextActionGuide.FixImpactLines(S(-3, ("c3n", -1), ("covU", -2)), LabelOf).HardLine);
+        Assert.Equal("必須違反：1件減る・2人減る", NextActionGuide.FixImpactLines(S(-3, ("c3n", -1), ("covU", -2)), LabelOf).HardLine);
     }
 
     [Fact]

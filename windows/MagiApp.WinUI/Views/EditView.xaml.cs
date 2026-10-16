@@ -718,6 +718,7 @@ public sealed partial class EditView : UserControl
         if (outOfScope) WishShiftWarnText.Text = $"⚠「{ui.ShiftSymbols[_wishSelK]}」はこの職員の担当外です。希望は登録できますが、配置すると必須違反になります。";
         ApplyWishesForDaysButton.Content = $"{_wishSelectedDays.Count}日に適用";
         ApplyWishesForDaysButton.IsEnabled = editable;
+        ClearWishesForDaysButton.Content = $"選択した日の希望を消す（{_wishSelectedDays.Count}件）";
         ClearWishesForDaysButton.IsEnabled = editable;
     }
 
@@ -767,13 +768,26 @@ public sealed partial class EditView : UserControl
         WishHintText.Text = "";
     }
 
-    private void OnClearWishesForDaysClick(object sender, RoutedEventArgs e)
+    private async void OnClearWishesForDaysClick(object sender, RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
+        var ui = _vm.Ui;
         var i = WishStaffCombo.SelectedIndex;
         if (i < 0) { WishHintText.Text = "対象の職員を選んでください。"; return; }
         if (_wishSelectedDays.Count == 0) { WishHintText.Text = "日を選んでください。"; return; }
-        var days = _wishSelectedDays.Select(d => d - 1).ToList();
+        var sorted = _wishSelectedDays.OrderBy(x => x).ToList();
+        var days = sorted.Select(d => d - 1).ToList();
+        // 消える希望が 1 件でもあれば確認してから（Kotlin の希望の一括操作と同じ問い）。無ければ VM が「消す希望はありませんでした」と言う。
+        var clearCount = days.Count(j => ui.Wishes.ContainsKey($"{i},{j}"));
+        if (clearCount > 0)
+        {
+            var who = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+            var daysText = string.Join("・", days.Select(j => DayText.Short(ui.StartDate, j)));
+            if (!await ConfirmAsync($"{clearCount}件の希望を消しますか？",
+                    $"{who}・{days.Count}日（{daysText}）の希望を消します。割当には影響しません。元に戻すで復元できます。", "希望を消す", "消さない"))
+                return;
+            if (_syncingFromModel || WishStaffCombo.SelectedIndex != i) return;
+        }
         _vm.ClearWishesForDays(i, days);
         _wishSelectedDays.Clear();
         WishHintText.Text = "";
@@ -1141,7 +1155,7 @@ public sealed partial class EditView : UserControl
         RemoveStaffButton.IsEnabled = editable && hasStaff;
         StaffHintText.Text = editable
             ? "削除すると、その人の勤務・希望・個人の回数も消えます（「元に戻す」で戻せます）。"
-            : (ui.Loaded ? "最適化の実行中は職員を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "勤務表づくりの実行中は職員を変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "");
 
         RenderStaffRange(editable);
         RenderStaffShiftMatrix(ui, editable);
@@ -1460,7 +1474,7 @@ public sealed partial class EditView : UserControl
         EditMasterDaysButton.IsEnabled = editable;
         MasterDaysHintText.Text = editable
             ? ""
-            : (ui.Loaded ? "最適化の実行中は期間を変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "勤務表づくりの実行中は期間を変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "");
 
         SyncReorderList(_shiftListItems, ui.ShiftSymbols);
 
@@ -1487,7 +1501,7 @@ public sealed partial class EditView : UserControl
         }
         else
         {
-            MasterShiftHintText.Text = editable ? "" : (ui.Loaded ? "最適化の実行中はシフトを変更できません。終わってからにしてください。" : "");
+            MasterShiftHintText.Text = editable ? "" : (ui.Loaded ? "勤務表づくりの実行中はシフトを変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "");
         }
 
         var groups = _vm.GroupLabels();
@@ -1505,7 +1519,7 @@ public sealed partial class EditView : UserControl
         MasterGroupHintText.Text = editable
             ? "削除すると、所属者は先頭グループへ移動します（担当できるシフトが変わります）。" +
               $" 使用中の記号: {string.Join("・", _vm.GroupKigouList())}"
-            : (ui.Loaded ? "最適化の実行中はグループを変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "勤務表づくりの実行中はグループを変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "");
 
         RenderGroupRange(editable);
 
@@ -1513,6 +1527,7 @@ public sealed partial class EditView : UserControl
         // 表示は ConstraintFamilies/SkillConstraintFamilies の実 Rows 数を正とする）。
         ConstraintListHost.Children.Clear();
         var families = _vm.ConstraintFamilies().Concat(_vm.SkillConstraintFamilies()).ToList();
+        SyncConstraintFamilyItems(families);
         RenderConstraintHelp(families);
         var total = 0;
         foreach (var f in families)
@@ -1539,7 +1554,7 @@ public sealed partial class EditView : UserControl
         UpdateConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
         RemoveConstraintButton.IsEnabled = editable && hasConstraintFamily && hasConstraintRow;
         if (!editable)
-            ConstraintHintText.Text = ui.Loaded ? "最適化の実行中はルールを変更できません。終わってからにしてください。" : "";
+            ConstraintHintText.Text = ui.Loaded ? "勤務表づくりの実行中はルールを変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "";
     }
 
     /// <summary>
@@ -1574,6 +1589,20 @@ public sealed partial class EditView : UserControl
     };
 
     private string? ConstraintFamilyKey() => (ConstraintFamilyCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+
+    private IReadOnlyList<string> _constraintFamilyKeys = System.Array.Empty<string>();
+
+    /// <summary>種類の選択肢は VM の見出し（Title）から作る＝一覧・違反チップと同じ語で、英字符号を出さない（3.693.0）。Tag は Key。選択は Key で保つ。</summary>
+    private void SyncConstraintFamilyItems(IReadOnlyList<MagiViewModel.ConstraintFamilyView> families)
+    {
+        var keys = families.Select(f => f.Key).ToList();
+        if (_constraintFamilyKeys.SequenceEqual(keys)) return;
+        var keep = ConstraintFamilyKey();
+        _constraintFamilyKeys = keys;
+        ConstraintFamilyCombo.Items.Clear();
+        foreach (var f in families) ConstraintFamilyCombo.Items.Add(new ComboBoxItem { Content = f.Title, Tag = f.Key });
+        ConstraintFamilyCombo.SelectedIndex = keep is null ? -1 : keys.IndexOf(keep);
+    }
 
     private IReadOnlyList<string> RowLabelsFor(string key)
     {
@@ -1988,7 +2017,7 @@ public sealed partial class EditView : UserControl
         MasterSkillGroupHintText.Text = editable
             ? "削除すると、割り当てていた職員は「(なし)」に戻ります（cons41s/cons42sの対象から外れます）。" +
               (_vm.SkillGroupKigouList().Count > 0 ? $" 使用中の記号: {string.Join("・", _vm.SkillGroupKigouList())}" : "")
-            : (ui.Loaded ? "最適化の実行中はスキルグループを変更できません。終わってからにしてください。" : "");
+            : (ui.Loaded ? "勤務表づくりの実行中はスキルグループを変更できません。終わるか「やめる」を押してから、もう一度お試しください。" : "");
     }
 
     /// <summary>選択中のスキル区分の名前・記号を入力欄へ取り込む（選択が変わったときだけ）。</summary>

@@ -109,7 +109,7 @@
                     <TextBlock x:Name="WishShiftWarnText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button x:Name="ApplyWishesForDaysButton" Content="適用" Click="OnApplyWishesForDaysClick" />
-                        <Button x:Name="ClearWishesForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearWishesForDaysClick" />
+                        <Button x:Name="ClearWishesForDaysButton" Content="選択した日の希望を消す（0件）" Foreground="{StaticResource MagiErrorBrush}" Click="OnClearWishesForDaysClick" />
                         <Button x:Name="CancelWishSelectionButton" Content="キャンセル" Click="OnCancelWishSelectionClick" />
                     </StackPanel>
                     <!-- 拡張希望: 選んだ日を、選んだシフト以外にする（禁止シフトを複数）。希望のある日は保存時に外れる。 -->
@@ -183,7 +183,7 @@
                 <TextBlock Text="所属グループ" />
                 <ComboBox x:Name="GroupCombo" HorizontalAlignment="Stretch" />
 
-                <TextBlock Text="スキルグループ（cons41s/cons42sの対象。追加・改名・変更は「年間マスター」）" />
+                <TextBlock Text="スキルグループ（追加・改名・変更は「年間マスター」）" />
                 <ComboBox x:Name="StaffSkillCombo" HorizontalAlignment="Stretch" />
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -251,7 +251,7 @@
                 <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
                 <TextBlock Text="シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
-                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期。片手一本指の既定からの例外はAndroidと同じくこの2箇所限定）。"
+                <TextBlock Text="行を長押しして上下に動かすと並びを変えられます。"
                            Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
                 <ListView x:Name="ShiftListView" SelectionMode="Single" IsItemClickEnabled="False"
                           CanDragItems="True" CanReorderItems="True" AllowDrop="True"
@@ -280,7 +280,7 @@
                 <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
                 <TextBlock Text="グループ" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
-                <TextBlock Text="ドラッグで並び替え（Android 3.515.6 同期）。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
+                <TextBlock Text="行を長押しして上下に動かすと並びを変えられます。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
                 <ListView x:Name="GroupListView" SelectionMode="Single" IsItemClickEnabled="False"
                           CanDragItems="True" CanReorderItems="True" AllowDrop="True"
                           DragItemsStarting="OnGroupListDragItemsStarting" DragItemsCompleted="OnGroupListDragItemsCompleted" />
@@ -371,19 +371,9 @@
 
                 <TextBlock Text="ルールの追加・変更・削除" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock Text="種類" />
+                <!-- 選択肢は VM の見出し（ConstraintFamilies/SkillConstraintFamilies の Title）からコードで作る（SyncConstraintFamilyItems）。 -->
                 <ComboBox x:Name="ConstraintFamilyCombo" HorizontalAlignment="Stretch"
-                          SelectionChanged="OnConstraintFamilyChanged">
-                    <ComboBoxItem Content="窓の要件（cons1）" Tag="cons1" />
-                    <ComboBoxItem Content="個人の合計（cons2）" Tag="cons2" />
-                    <ComboBoxItem Content="守るとよい並び（cons3）" Tag="cons3" />
-                    <ComboBoxItem Content="禁止の並び（cons3n）" Tag="cons3n" />
-                    <ComboBoxItem Content="推奨の並び（cons3m）" Tag="cons3m" />
-                    <ComboBoxItem Content="回避の並び（cons3mn）" Tag="cons3mn" />
-                    <ComboBoxItem Content="グループのレンジ（cons41）" Tag="cons41" />
-                    <ComboBoxItem Content="グループペア禁止（cons42）" Tag="cons42" />
-                    <ComboBoxItem Content="スキルグループのレンジ（cons41s）" Tag="cons41s" />
-                    <ComboBoxItem Content="スキルグループペア禁止（cons42s）" Tag="cons42s" />
-                </ComboBox>
+                          SelectionChanged="OnConstraintFamilyChanged" />
                 <TextBlock Text="変更・削除する行（新規追加なら未選択のまま）" />
                 <ComboBox x:Name="ConstraintRowCombo" HorizontalAlignment="Stretch"
                           SelectionChanged="OnConstraintRowSelectionChanged" />

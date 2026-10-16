@@ -190,8 +190,8 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Nav.XamlRoot,
-            Title = "計算が実行中です",
-            Content = "閉じると、実行中の計算（バックグラウンドを含む）が中断されます。終了しますか？",
+            Title = "計算を中断して終了しますか？",
+            Content = "閉じると、実行中の計算（バックグラウンドを含む）が止まります。",
             PrimaryButtonText = "終了する",
             CloseButtonText = "終了しない",
             DefaultButton = ContentDialogButton.Close,
@@ -253,14 +253,7 @@ public sealed partial class MainWindow : Window
         {
             string label, bg, fg;
             var status = CellSheetLogic.BoardStatusLines(ui.EngineRan, ui.HasResult, ui.CheckRev > 0, ui.BestHard, ui.BestSoft, ui.Breakdown, ui.RanBeforeEdit);
-            if (ui.Running)
-            {
-                // バッジは幅が限られるので語は短く「必須N」＝凡例・ホーム見出しと同じ言葉。
-                var prog = ui.BestHard > 0 ? $" 必須{ui.BestHard}"
-                    : ui.InitSoft > 0 && ui.BestSoft >= 0 && ui.BestSoft < ui.InitSoft ? $" {ui.InitSoft}→{ui.BestSoft}"
-                    : "";
-                (label, bg, fg) = ("実行中" + prog, "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
-            }
+            if (ui.Running) (label, bg, fg) = (AnalysisTriage.RunningBadgeLabel(ui.Breakdown, ui.BestHard), "MagiPrimaryContainerBrush", "MagiOnPrimaryContainerBrush");
             else if (ui.HasResult && ui.BestHard == 0) (label, bg, fg) = (CellSheetLogic.ReadyBadgeLabel(ui.BestSoft, ui.Breakdown), "MagiTertiaryContainerBrush", "MagiOnTertiaryContainerBrush");
             else if (ui.HasResult) (label, bg, fg) = ($"必須違反 {DisplaySnapshots.DisplayHardText(ui)}", "MagiErrorContainerBrush", "MagiOnErrorContainerBrush");
             else (label, bg, fg) = (status.Second, "MagiBackgroundBrush", "MagiOnBackgroundBrush");

@@ -6,7 +6,7 @@ public class FixOutcomeTextTest
     [Fact]
     public void AppliedMoveSaysWhatChangedAndWhatRemains()
     {
-        Assert.Equal("山本 10/12「夜」→「休」 を適用しました。必須違反 3→2。ほかの必須違反は 2件 残っています。", FixOutcomeText.Applied("山本 10/12「夜」→「休」", 3, 2, "40件", "38件"));
+        Assert.Equal("山本 10/12「夜」→「休」 を適用しました。必須違反 3件→2件。ほかの必須違反は 2件 残っています。", FixOutcomeText.Applied("山本 10/12「夜」→「休」", 3, 2, "40件", "38件"));
         Assert.Equal("入替 を適用しました。必須違反はなくなりました（要調整 40件→38件）。", FixOutcomeText.Applied("入替", 1, 0, "40件", "38件"));
         Assert.Equal("入替 を適用しました。必須違反は変わらず 2件（要調整 40件→39件）。", FixOutcomeText.Applied("入替", 2, 2, "40件", "39件"));
         // [3.678.0] 内訳があれば単位ごとに（人員不足は人）。

@@ -1449,10 +1449,11 @@ public static class CellSheetLogic
         return "新たに生じた問題：" + string.Join("・", up.Select(k => $"{labelOf(k)} +{after.GetValueOrDefault(k, 0) - before.GetValueOrDefault(k, 0)}{AnalysisTriage.UnitOf(k)}"));
     }
 
-    /// <summary>反映の帯の次の一歩のボタン。同じ問題が残れば続けてその勤務の案を、無ければ残りの必須違反の巡回を、どちらも無ければ null。</summary>
-    public static string? AppliedNextButton(bool sameRemains, string? sym, int hardLeft, bool canTour) =>
+    /// <summary>反映の帯の次の一歩のボタン。同じ問題が残れば続けてその勤務の案を、無ければ残りの必須違反の巡回を、どちらも無ければ null。
+    /// か所の数は巡回できる項目の数（上部の札と同じ値。報告の必須合計は件と人が混ざる＝INV-07、3.693.0）。</summary>
+    public static string? AppliedNextButton(bool sameRemains, string? sym, int hardLeft, int tourCount) =>
         sameRemains && sym is not null ? $"続けて {sym} の案を見る"
-        : hardLeft > 0 && canTour ? $"残っている必須違反を順に見る（{hardLeft}か所）"
+        : hardLeft > 0 && tourCount > 0 ? $"残っている必須違反を順に見る（{tourCount}か所）"
         : null;
 
     /// <summary>当てたあとに残る差（回数＝「A4は、下限まであと2回です」、まとめて見る日々＝「Dテ（2日）は、合計 3人不足です」）。</summary>
