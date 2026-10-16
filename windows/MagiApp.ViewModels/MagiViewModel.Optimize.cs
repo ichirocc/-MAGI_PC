@@ -81,6 +81,7 @@ public sealed partial class MagiViewModel
             Ui.PreRunRepeatHint = RepeatHint();
             Ui.PreRunCheck = sum;
             LogOp("I", $"勤務表を作成する 表示 (消えない{sum.FloorCount}件, 外れる{sum.RerunClears.Count}件)");
+            LogUi(new OpLogText.UiOp.PreRunOpen());
             return;
         }
         StartFullOptimize(pushUndo: true, null);
@@ -97,8 +98,10 @@ public sealed partial class MagiViewModel
         StartFullOptimize(pushUndo: true, null, hintShown: true);
     }
 
-    public void DismissPreRun()
+    /// <summary><paramref name="how"/> は閉じ方（閉じる／条件を確認する）。開いていなければ何も書かない。</summary>
+    public void DismissPreRun(OpLogText.UiOp? how = null)
     {
+        if (Ui.PreRunCheck is not null) LogUi(how ?? new OpLogText.UiOp.PreRunClose());
         Ui.PreRunCheck = null;
         Ui.PreRunRepeatHint = null;
     }
@@ -113,6 +116,7 @@ public sealed partial class MagiViewModel
         {
             Ui.PreRunRepeatHint = RepeatHint();
             Ui.PreRunCheck = sum;
+            LogUi(new OpLogText.UiOp.PreRunOpen());
         }
         else
         {

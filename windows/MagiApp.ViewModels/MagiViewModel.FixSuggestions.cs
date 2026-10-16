@@ -103,6 +103,9 @@ public sealed partial class MagiViewModel
             // 集計・日の印から来た依頼は、見ている問題（回数・その日の人数）を変える案を先に（2026-10-14 利用者レビュー:
             //   11/3 の不足に別の日の案だけが並んだ）。広めに集めて並べ替え、上位 8 件を返す。
             var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day, AllDays: allDays), StaffCellLimits, NeedCellLimits) : null;
+            // [3.697.0] 起点は画面の見出しと同じ語（対象＝FixTargetLabel、職員＝氏名、どちらも無ければ全体）。
+            var searchStartMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            LogOp("I", OpLogText.FixSearchStartLine(target is { } tg ? CellSheetLogic.FixTargetLabel(tg, OpSy(tg.Shift), st.StartDate) : focusName.Length == 0 ? OpLogText.FixOriginAll : focusName));
             var board = snap.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
             FixTierView? tiers = null;
             var labelOf = FamilyLabelOf;
@@ -147,6 +150,7 @@ public sealed partial class MagiViewModel
             Ui.FixFocusName = focusName;
             Ui.FixSearched = focusName.Length == 0;
             Ui.FixDoneKey = focusKey;
+            LogOp("I", OpLogText.FixSearchEndLine(list.Count, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - searchStartMs));
             // [S6 §8] 全体の 1 手探索が必須を減らす候補なしで終わったら、背景で設定の壁を探す。
             if (focusName.Length == 0 && !list.Any(x => x.DeltaHard < 0) && Ui.BestHard > 0 && RelaxTrialEnabled) StartRelaxTrial();
         }
@@ -196,6 +200,7 @@ public sealed partial class MagiViewModel
     {
         if (_pendingGuided is not { } g) return;
         _pendingGuided = null;
+        _guidedApplied = true;
         var still = diag?.Shortfalls.FirstOrDefault(sf => sf.DayIndex == g.DayIndex && sf.ShiftIndex == g.ShiftIndex && sf.Miss > 0)?.Miss;
         _fixOutcomeCtx = new TrialCtx(st, BoardKey(schedule));
         Ui.FixOutcome = new FixOutcome(FixOutcomeText.Guided(g.DayLabel, g.ShiftSymbol, still, report.Hard, report.Breakdown));
@@ -277,9 +282,11 @@ public sealed partial class MagiViewModel
             Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget,
                 gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft, gate.Before.Breakdown, gate.After.Breakdown);
         // [3.694.0] 適用前の盤面は照合に使った sched（originBoard は 0 のことがある）。状態指紋は盤面を含まず前後で同じなので 1 つ。
+        var seenMs = fromPreview && _chainPreviewOpenedAtMs > 0L ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - _chainPreviewOpenedAtMs : (long?)null;
+        _chainPreviewOpenedAtMs = 0L;
         var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）" +
             $" ・ 期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 盤面指紋={OpLogText.Hex16(nowBoard)}→{OpLogText.Hex16(BoardKey(applied))} ・ 状態指紋={OpLogText.Hex16(nowState)}";
-        LogOp("I", line);
+        LogOp("I", seenMs is { } seen ? OpLogText.WithSeenSeconds(line, seen) : line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
             (st.Cons3w?.Count ?? 0) > 0 ? 2 : 0);
         var edge = PreDistributionCheck.MonthEdgeTouched(s.Ops.Select(o => o.Day), applied.FirstOrDefault()?.Length ?? 0, maxLen) ? $"{PreDistributionCheck.MonthEdgeNote}。" : null;
@@ -305,6 +312,7 @@ public sealed partial class MagiViewModel
         var snap = sched.Copy2D();
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
             { Target = new ChainTarget(null, null, s.Label, Suggestion: s, BoardKey: ob, StateKey: os), FixTarget = fixTarget, GlobalPolish = globalPolish, NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops) };
+        NotePreviewOpened(s.Label);
     }
 
     /// <summary>休のシフトの番号（Kotlin <c>ConditionsView.restIdx</c>。休が無い設定は -1＝どのシフトにも一致しない番兵）。</summary>
@@ -323,6 +331,7 @@ public sealed partial class MagiViewModel
             Purpose = purpose, Effect = effect, FromList = true, FocusKey = focusKey, FixTarget = fixTarget, GlobalPolish = fixTarget is null,
             NewHard = CellSheetLogic.NewHardKeys(st, snap, s.Ops),
         };
+        NotePreviewOpened(s.Label);
     }
 
     /// <summary>相談に積んだ入れ替えの枠を今の勤務表で探し直す（日付・記号で枠を引き直す＝月やシフトが変わっていれば断る）。

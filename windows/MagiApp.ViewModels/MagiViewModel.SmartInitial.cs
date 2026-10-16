@@ -52,8 +52,9 @@ public sealed partial class MagiViewModel
             Ui.DraftConfirm = FixExplain.DraftConfirmText(Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null);
             return;
         }
-        // [3.692.0] 確認（3.679.0）を通ったかをログで読めるようにする。
-        if (confirmed && Ui.DraftConfirm is not null) LogOp("I", "下書きで置き換え（確認済み）");
+        // [3.692.0] 確認（3.679.0）を通ったかをログで読めるようにする。[3.697.0] 行は完了の後＝置き換える前と後の必須を並べる。
+        var replacing = confirmed && Ui.DraftConfirm is not null;
+        var hardBefore = Ui.BestHard;
         if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
         // [3.271.0, 実機ログ起因の由来をそのまま記録] 実行中ガード。旧: ガード無しのため
         //   「勤務表をつくる」の直後に隣接する本ボタンを連続タップすると、走行中の最適化と
@@ -74,7 +75,7 @@ public sealed partial class MagiViewModel
         LogOp("I", $"初期解生成 開始 ・ {RunInputWords(st, sched)}");
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed);
+        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed, replacing ? hardBefore : null);
     }
 
     public void DismissDraftConfirm()
@@ -83,7 +84,7 @@ public sealed partial class MagiViewModel
         Ui.DraftConfirm = null;
     }
 
-    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false)
+    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false, long? replacingHard = null)
     {
         var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
@@ -109,6 +110,7 @@ public sealed partial class MagiViewModel
             }, ct: ct);
             committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total} ・ 盤面指紋={OpLogText.Hex16(BoardKey(res.Schedule))}");
+            if (replacingHard is { } hb) LogOp("I", OpLogText.DraftReplaceLine(hb, res.Report.Hard));
         }
         catch (OperationCanceledException)
         {

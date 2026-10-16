@@ -322,6 +322,7 @@ public sealed partial class MagiViewModel
         if (i < 0 || i >= sched.Length || j < 0 || j >= sched[i].Length) return;
         if (RejectUnknownShift(st, shift)) return;
         if (sched[i][j] == shift) return;
+        var before = sched[i][j];
         PushUndo();
         sched[i][j] = shift;
         _currentSchedule = sched;
@@ -336,7 +337,7 @@ public sealed partial class MagiViewModel
         Ui.RelaxedBoard = false;
         Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.OpNotice = new OpNotice(++_opNoticeSeq, CellSheetLogic.CellChangedMessage(staffName, st.StartDate, j, shiftKigou), _undoStack.Last?.Value.Serial ?? 0L);
-        LogOp("I", $"編集: {OpNm(i)} {j + 1}日 → {OpSy(shift)}");
+        LogOp("I", OpLogText.CellChangeLine(OpNm(i), DayText.Short(st.StartDate, j), before < 0 ? OpLogText.EmptyCell : OpSy(before), OpSy(shift)));
         RefreshCheck();
     }
 
@@ -403,7 +404,7 @@ public sealed partial class MagiViewModel
         // 曜日を選んだ一括は飛び飛びの日＝範囲で書くと間の日まで変えたように読めるので日数で言う。
         var days = daySet.Max - daySet.Min + 1 == daySet.Count ? DayText.Range(st.StartDate, daySet.Min, daySet.Max) : $"{daySet.Count}日分";
         PostOpNotice($"{who} {days} の {changed}マスを {shiftKigou} に一括変更しました");
-        LogOp("I", $"一括編集: {changed}マス → {OpSy(shift)}");
+        LogOp("I", OpLogText.CellsChangeLine(changed, OpSy(shift)));
         RefreshCheck();
     }
 
@@ -466,6 +467,7 @@ public sealed partial class MagiViewModel
             BoardKey: BoardKey(snap), StateKey: StateKey(st));
         Ui.ChainPreview = ChainFixPreview.Of(s, snap, Ui.StaffNames, Ui.ShiftSymbols, Ui.StartDate, st.Shifts.Select(sh => sh.Name).ToList(), Ui.Wishes, Ui.StaffIds, Ui.StaffGroupSymbols) with
             { Target = target, FixTarget = NeedCellLimits(k, j) is { } need ? new FixTarget(null, k, j, need.Lo, true, "必要人数") : null };
+        NotePreviewOpened(label);
     }
 
     /// <summary>一覧で確認した入替を当てる（案を出したときの盤面か設定が今と違えば <see cref="ApplyFixSuggestion"/> が断る）。</summary>
@@ -478,7 +480,18 @@ public sealed partial class MagiViewModel
         else Ui.ChainPreview = p with { ApplyError = Ui.Message };
     }
 
-    public void DismissChainPreview() { _pendingGuided = null; Ui.ChainPreview = null; }
+    /// <summary><paramref name="afterConsult"/>＝相談に残してから閉じた（「今は変更しない」とは数えない）。</summary>
+    public void DismissChainPreview(bool afterConsult = false)
+    {
+        _pendingGuided = null;
+        if (Ui.ChainPreview is { } p && !afterConsult) LogOp("I", OpLogText.PreviewDismissLine(p.Target?.Label ?? p.Suggestion.Label));
+        _chainPreviewOpenedAtMs = 0L;
+        Ui.ChainPreview = null;
+    }
+
+    /// <summary>[3.697.0] 変更の確認を開いた時刻（0＝開いていない）。「改善手を適用」の末尾の「案を見てから N秒」に使う。</summary>
+    private long _chainPreviewOpenedAtMs;
+    private void NotePreviewOpened(string label) { _chainPreviewOpenedAtMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); LogOp("I", OpLogText.PreviewOpenLine(label)); }
 
     // ---- constraint editing (ws3-5) -------------------------------------------
 
@@ -1156,6 +1169,7 @@ public sealed partial class MagiViewModel
     // ---- [3.645.0/仕様 5.3] 相談してから決める判断（セッション内のみ・state 非保存。出力も判定も止めない。Kotlin addConsult/removeConsult） ----
     public void AddConsult(ConsultItem item)
     {
+        LogOp("I", OpLogText.ConsultKeepLine(item.Chain?.Label ?? item.Subject));
         Ui.MessageIsError = false;
         var withId = ConsultList.StampStaffId(item, Ui.StaffNames, Ui.StaffIds);
         var stamped = withId.StaffName is not null && withId.RosterKey == 0 ? withId with { RosterKey = ConsultList.RosterKeyOf(Ui.StaffNames) } : withId;
