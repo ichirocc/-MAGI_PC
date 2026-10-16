@@ -67,10 +67,10 @@ public static class NextActionGuide
     public static (string HardLine, string? Caution) FixImpactLines(FixSuggestion s, Func<string, string> labelOf)
     {
         // 必須の増減は単位ごと（人員不足の人数と件数を足さない＝統合仕様 INV-07）。内訳が無い案は従来の件数。
-        var hardLine = "必須違反: " + (AnalysisTriage.UnitDeltaText(s.Diff, MirrorKeys.Hard)
+        var hardLine = "必須違反：" + (AnalysisTriage.UnitDeltaText(s.Diff, MirrorKeys.Hard)
             ?? (s.DeltaHard < 0 ? $"{-s.DeltaHard}件減る" : s.DeltaHard == 0 ? "変わらない" : $"{s.DeltaHard}件増える"));
         var worse = s.Diff.Where(d => d.Delta > 0 && !MirrorKeys.Hard.Contains(d.Family)).ToList();
-        var caution = worse.Count == 0 ? null : "増える要調整: " + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}{AnalysisTriage.UnitOf(d.Family)}"));
+        var caution = worse.Count == 0 ? null : "増える要調整：" + string.Join("・", worse.Select(d => $"{labelOf(d.Family)} +{d.Delta}{AnalysisTriage.UnitOf(d.Family)}"));
         return (hardLine, caution);
     }
 
@@ -243,7 +243,7 @@ public static class NextActionGuide
         return new RelaxTrialText(
             Title: $"{target.Name} {target.Span}　{target.What}",
             DialogTitle: $"例外として上限を緩める候補：{target.Name} {target.Span} {target.What}",
-            HardLine: $"必須違反: {r.H0}件 → {r.Rr}件",
+            HardLine: $"必須違反：{r.H0}件 → {r.Rr}件",
             ScaleLine: $"変わるもの: 設定{r.Prerequisite.Count + r.Relaxes.Count}つ、{people}人の勤務、{r.Moves.Count}か所",
             PrerequisiteRows: preRows,
             Lead: lead,

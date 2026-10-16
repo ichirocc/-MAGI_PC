@@ -82,9 +82,6 @@ public sealed partial class HomeView : UserControl
     {
         var ui = _vm.Ui;
         MessageText.Text = ui.Message ?? (ui.Loaded ? "" : "データを読み込んでいます…");
-        SummaryText.Text = ui.Loaded
-            ? $"満足度 {ui.Satisfaction} ・ 必須違反 {ui.BestHard} ・ 合計 {ui.BestSoft}"
-            : "";
         RenderCreationResult(ui);
         var editable = ui.Loaded && !ui.Running;
         EmptyStateCard.Visibility = !ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
@@ -729,7 +726,7 @@ public sealed partial class HomeView : UserControl
                         var tail = c.FromRest ? "（休み）" : "";
                         var b = new Button
                         {
-                            Content = $"{c.Name}さん{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
+                            Content = $"{c.Name}さん{tail} を「{target.ShiftSymbol}」に入れる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                             IsEnabled = !ui.Running,
                         };
                         var i = c.StaffIndex; var day = target.DayIndex; var shift = target.ShiftIndex; var label = $"{c.Name}さんを{target.DayLabel}の「{target.ShiftSymbol}」に入れる";
@@ -1103,7 +1100,7 @@ public sealed partial class HomeView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot, Title = "配布前確認", Content = new ScrollViewer { Content = panel },
-            PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Close,
+            PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Primary,
         };
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) await _window.ExportScheduleCsvAsync();
     }

@@ -1519,7 +1519,9 @@ public sealed partial class ScheduleView : UserControl
                 // 次の一歩: 同じ問題が残れば帯をたたんで下の探し直した案へ、無ければ残っている必須違反を順に見る（巡回できなければ分析タブ）。
                 var nextSym = at is not null && at.Shift >= 0 && at.Shift < ui.ShiftSymbols.Count ? ui.ShiftSymbols[at.Shift] : null;
                 var sameRemains = nextSym is not null && CellSheetLogic.AppliedRemaining(ui, applied, at, atLabel, _vm.NeedCellLimits).Count > 0;
-                if (CellSheetLogic.AppliedNextButton(sameRemains, nextSym, applied.HardAfter, canTour: true) is { } nextLabel)
+                // か所の数は上部の札と同じ巡回の項目数（写しが今の検査に追いついていればそれを、でなければ同じ式で数える）。
+                var tourCount = ui.Display is { } disp && disp.FreshFor(ui) ? disp.TourItems.Count : _vm.HardViolationItemsFor(LabelOf).Count;
+                if (CellSheetLogic.AppliedNextButton(sameRemains, nextSym, applied.HardAfter, tourCount) is { } nextLabel)
                 {
                     var tourBtn = new HyperlinkButton { Content = nextLabel, MinHeight = 48 };
                     tourBtn.Click += (_, _) =>

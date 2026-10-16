@@ -214,9 +214,9 @@ public class CountShortageTextTest
         // 保存済みなら保存の行は出さない。続けて同じ勤務の案へ進むボタン。
         u.SaveState = SaveState.Saved;
         Assert.DoesNotContain(CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need), l => l.StartsWith("保存：", StringComparison.Ordinal));
-        Assert.Equal("続けて A の案を見る", CellSheetLogic.AppliedNextButton(true, "A", 2, true));
-        Assert.Equal("残っている必須違反を順に見る（2か所）", CellSheetLogic.AppliedNextButton(false, "A", 2, true));
-        Assert.Null(CellSheetLogic.AppliedNextButton(false, "A", 0, true));
+        Assert.Equal("続けて A の案を見る", CellSheetLogic.AppliedNextButton(true, "A", 2, 2));
+        Assert.Equal("残っている必須違反を順に見る（2か所）", CellSheetLogic.AppliedNextButton(false, "A", 2, 2));
+        Assert.Null(CellSheetLogic.AppliedNextButton(false, "A", 0, 2));
         Assert.Equal("新たに生じた問題：禁止の並び +1件", CellSheetLogic.AppearedFamiliesLine(new Dictionary<string, int> { ["c3n"] = 0 }, new Dictionary<string, int> { ["c3n"] = 1, ["c1"] = 0 }, f => f == "c3n" ? "禁止の並び" : f));
         Assert.True(a.IsCurrent(after));
     }

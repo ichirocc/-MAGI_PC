@@ -272,7 +272,7 @@ public sealed partial class MagiViewModel
         var edge = PreDistributionCheck.MonthEdgeTouched(s.Ops.Select(o => o.Day), applied.FirstOrDefault()?.Length ?? 0, maxLen) ? $"{PreDistributionCheck.MonthEdgeNote}。" : null;
         var softBefore = AnalysisTriage.UnitTotals(gate.Before.Breakdown, MirrorKeys.Soft) ?? "なし";
         var softAfter = AnalysisTriage.UnitTotals(gate.After.Breakdown, MirrorKeys.Soft) ?? "なし";
-        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(FixOutcomeText.FixDisplayLabel(s.Label), gate.Before.Hard, gate.After.Hard, softBefore, softAfter, gate.After.Breakdown), gate.Before, gate.After, edge);
+        Ui.FixOutcome = new FixOutcome(FixOutcomeText.Applied(FixOutcomeText.FixDisplayLabel(s.Label), gate.Before.Hard, gate.After.Hard, softBefore, softAfter, gate.After.Breakdown, gate.Before.Breakdown), gate.Before, gate.After, edge);
         // 通知は 2 行まで＝必須が動いた手は必須だけ、動かない手は合計だけを添える（両方の数はホームの結果の行とログ）。
         PostOpNotice($"{FixOutcomeText.FixDisplayLabel(s.Label)} を適用しました（" + (gate.Before.Hard != gate.After.Hard ? $"必須違反 {gate.Before.Hard}→{gate.After.Hard}"
             : $"要調整 {softBefore}→{softAfter}") + "）");

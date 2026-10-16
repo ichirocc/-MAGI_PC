@@ -18,8 +18,8 @@ public class ChainFixPreviewTest
         Assert.Equal("複数人の入れ替え", p.Title);
         Assert.Equal(new[] { "甲 10/3 日 → 夜", "丙 10/3 休 → 日", "乙 10/1 日 → 夜" }, p.Changes);
         var (hard, caution) = NextActionGuide.FixImpactLines(p.Suggestion, f => f == "covO" ? "人員過剰" : f);
-        Assert.Equal("必須違反: 1人減る", hard);
-        Assert.Equal("増える要調整: 人員過剰 +1人", caution);
+        Assert.Equal("必須違反：1人減る", hard);
+        Assert.Equal("増える要調整：人員過剰 +1人", caution);
     }
 
     /// <summary>[3.664.0/仕様 §4・§5] 記号に登録された勤務名を併記し、希望があるセルは希望どおりか違うかを添える（了承済みとは言わない）。</summary>

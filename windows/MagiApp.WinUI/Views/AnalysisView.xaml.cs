@@ -92,7 +92,6 @@ public sealed partial class AnalysisView : UserControl
         {
             TriageSection.Visibility = Visibility.Collapsed;
             SummarySection.Visibility = Visibility.Collapsed;
-            BreakdownSection.Visibility = Visibility.Collapsed;
             LocationsSection.Visibility = Visibility.Collapsed;
             FixSection.Visibility = Visibility.Collapsed;
             IssuesSection.Visibility = Visibility.Collapsed;
@@ -105,7 +104,6 @@ public sealed partial class AnalysisView : UserControl
 
         RenderTriage(ui);
         RenderSummary(ui);
-        RenderBreakdown(ui);
         RenderLocations(ui);
         RenderFix(ui);
         RenderIssues(ui);
@@ -291,25 +289,6 @@ public sealed partial class AnalysisView : UserControl
         HintText.Visibility = hints.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>② 違反の内訳。0件の族は出さない（19族すべてを並べると読めなくなる）。</summary>
-    private void RenderBreakdown(UiState ui)
-    {
-        BreakdownList.Children.Clear();
-        // 多い順。同数のときはキー順で固定する（表示が実行ごとに入れ替わらないように）。
-        var rows = ui.Breakdown
-            .Where(kv => kv.Value > 0)
-            .OrderByDescending(kv => kv.Value)
-            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
-            .ToList();
-        BreakdownSection.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (rows.Count == 0) return;
-
-        foreach (var kv in rows)
-        {
-            BreakdownList.Children.Add(BodyText($"{LabelOf(kv.Key)} {kv.Value}件"));
-        }
-    }
-
     /// <summary>
     /// [違反箇所へのジャンプ] <see cref="UiState.ViolationCells"/>（"i,j"→"vio-族"、セル単位の
     /// 違反のみ載る＝クラスKDoc参照）を1行1セルで列挙し、タップで <see cref="_jumpToCell"/> を呼ぶ。
@@ -341,7 +320,7 @@ public sealed partial class AnalysisView : UserControl
         }
         if (locations.Count > MaxLocationRows)
         {
-            LocationsList.Children.Add(BodyText($"ほか {locations.Count - MaxLocationRows}件", dim: true));
+            LocationsList.Children.Add(BodyText($"ほか {locations.Count - MaxLocationRows}か所", dim: true));
         }
     }
 
@@ -368,7 +347,8 @@ public sealed partial class AnalysisView : UserControl
         IssuesTitle.Text = $"設定の見直し（{issues.Count}件）";
         // 一括クリアが実際に消す件数（VM の担当可否判定）。行の種別で数えると希望どうしの c3w 衝突まで混ざる。
         var wishClear = _vm.WishOutOfScopeCount();
-        ClearOutOfScopeWishesButton.Visibility = wishClear > 1 ? Visibility.Visible : Visibility.Collapsed;
+        // 一括クリアは一覧を開いて中身を見ているときだけ（見ずに消させない、3.693.0）。
+        ClearOutOfScopeWishesButton.Visibility = _issuesOpen && wishClear > 1 ? Visibility.Visible : Visibility.Collapsed;
         ClearOutOfScopeWishesButton.Content = CellSheetLogic.BulkClearWishesLabel(wishClear);
         ClearOutOfScopeWishesButton.IsEnabled = !ui.Running;
         IssuesToggle.Content = _issuesOpen ? "ⓘ 一覧を閉じる" : $"ⓘ 一覧を見る（{issues.Count}件）";
@@ -429,7 +409,14 @@ public sealed partial class AnalysisView : UserControl
         return b;
     }
 
-    private void OnClearOutOfScopeWishesClick(object sender, RoutedEventArgs e) => _vm.ClearOutOfScopeWishes();
+    private async void OnClearOutOfScopeWishesClick(object sender, RoutedEventArgs e)
+    {
+        var n = _vm.WishOutOfScopeCount();
+        if (n == 0) return;
+        if (await ConfirmAsync("担当外の希望をまとめて消しますか？",
+                $"担当外の希望 {n}件 をまとめて削除します。勤務表の割当は変わりません。元に戻すで取り消せます。", "まとめて消す", "消さない"))
+            _vm.ClearOutOfScopeWishes();
+    }
 
     private void OnIssuesToggleClick(object sender, RoutedEventArgs e)
     {
@@ -599,14 +586,36 @@ public sealed partial class AnalysisView : UserControl
         foreach (var run in blocked)
         {
             var row = new StackPanel { Spacing = 2 };
-            row.Children.Add(BodyText($"{run.StaffName} の {run.SeqLabel}（{run.StartDay + 1}日目〜）", semiBold: true));
+            var span = DayText.Range(ui.StartDate, run.StartDay, run.StartDay + Math.Max(run.Cells.Count, 1) - 1);
+            row.Children.Add(BodyText($"{run.StaffName} の {run.SeqLabel}（{span}）", semiBold: true));
             row.Children.Add(BodyText(run.Hint, dim: true));
-            var relax = new Button { Content = "この禁止の並びを緩める（削除）", FontSize = 14, HorizontalAlignment = HorizontalAlignment.Left };
+            var relax = new Button { Content = "この並びの禁止を解除", FontSize = 14, HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = !ui.Running };
             var seqLabel = run.SeqLabel;
-            relax.Click += (_, _) => _vm.RelaxForbiddenRule(seqLabel);
+            var staffName = run.StaffName;
+            relax.Click += async (_, _) =>
+            {
+                if (await ConfirmAsync("禁止の並びを解除しますか？",
+                        $"{staffName} の「{seqLabel}」の禁止を、全員について外します。外すとその場で再チェックします。元に戻すで取り消せます。",
+                        "解除する", "解除しない"))
+                    _vm.RelaxForbiddenRule(seqLabel);
+            };
             row.Children.Add(relax);
             ForbiddenList.Children.Add(row);
         }
+    }
+
+    private async System.Threading.Tasks.Task<bool> ConfirmAsync(string title, string message, string primary, string close)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = primary,
+            CloseButtonText = close,
+            DefaultButton = ContentDialogButton.Close,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     /// <summary>⑤ 診断ログ。等幅・選択可（そのままコピーして共有できるように）。</summary>

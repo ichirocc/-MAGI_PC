@@ -60,12 +60,6 @@
                 <TextBlock x:Name="TriageRunningNote" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="※実行中のため、確定前の値です（確定すると最新の値になります）" />
             </StackPanel>
 
-            <!-- ② 違反の内訳 -->
-            <StackPanel x:Name="BreakdownSection" Spacing="6">
-                <TextBlock Text="違反の内訳" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                <StackPanel x:Name="BreakdownList" Spacing="2" />
-            </StackPanel>
-
             <!-- 違反の場所（タップで勤務表タブへジャンプ） -->
             <StackPanel x:Name="LocationsSection" Spacing="6">
                 <TextBlock Text="違反の場所" Style="{StaticResource MagiTitleMediumTextStyle}" />
@@ -125,7 +119,7 @@
             <StackPanel x:Name="ForbiddenSection" Spacing="6">
                 <TextBlock Text="禁止の並びで止まっている箇所" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                           Text="このデータ・希望のままでは崩せないと判定された禁止の並び(c3n)です。緩める＝その制約行を削除します（元に戻す可）。" />
+                           Text="このデータ・希望のままでは崩せないと判定された禁止の並びです。解除する＝その制約行を削除します（元に戻す可）。" />
                 <StackPanel x:Name="ForbiddenList" Spacing="4" />
             </StackPanel>
 

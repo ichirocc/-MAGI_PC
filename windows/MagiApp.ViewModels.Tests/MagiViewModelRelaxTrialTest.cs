@@ -160,7 +160,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(t.OtherMoves, t.OtherMoveLines.Sum(l => l.Count(c => c == '→')));
         Assert.True(t.OtherMoves > 0 && t.OtherMoveLines.All(l => { var head = l[..l.IndexOf('　')]; var d = int.Parse(head[(head.IndexOf('/') + 1)..]) - 1; return d < r.WindowFirst || d > r.WindowLast; }));
         Assert.Equal("例外として上限を緩める候補：職員10 10/8〜10/9 禁止の並び", t.DialogTitle);
-        Assert.Equal("必須違反: 5件 → 4件", t.HardLine);
+        Assert.Equal("必須違反：5件 → 4件", t.HardLine);
         var people = r.Prerequisite.Concat(r.Relaxes).Select(x => x.Staff).Concat(r.Moves.Select(m => m.Staff)).Distinct().Count();
         Assert.Equal($"変わるもの: 設定5つ、{people}人の勤務、{r.Moves.Count}か所", t.ScaleLine);
         Assert.Equal(3, t.PrerequisiteRows.Count);

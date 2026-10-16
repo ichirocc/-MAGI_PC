@@ -9,11 +9,13 @@ public sealed record FixOutcome(string Line, MagiEngine.V6.ViolationReport? Befo
 /// <summary>直し方を当てたあと、同じ問題について「どうなったか」を 1 行で返す（Kotlin <c>FixOutcomeText.kt</c>、3.643.0）。</summary>
 public static class FixOutcomeText
 {
-    public static string Applied(string label, int hardBefore, int hardAfter, string softBefore, string softAfter, IReadOnlyDictionary<string, int>? afterBreakdown = null)
+    /// <param name="beforeBreakdown">当てる前の内訳。前後とも単位ごとに言う（件と人を足さない＝INV-07、3.693.0）。無ければ件で言う。</param>
+    public static string Applied(string label, int hardBefore, int hardAfter, string softBefore, string softAfter,
+        IReadOnlyDictionary<string, int>? afterBreakdown = null, IReadOnlyDictionary<string, int>? beforeBreakdown = null)
     {
         var left = AnalysisTriage.HardText(afterBreakdown, hardAfter);
         return hardAfter == 0 && hardBefore > 0 ? $"{label} を適用しました。必須違反はなくなりました（要調整 {softBefore}→{softAfter}）。"
-            : hardAfter < hardBefore ? $"{label} を適用しました。必須違反 {hardBefore}→{hardAfter}。ほかの必須違反は {left} 残っています。"
+            : hardAfter < hardBefore ? $"{label} を適用しました。必須違反 {AnalysisTriage.HardText(beforeBreakdown, hardBefore)}→{left}。ほかの必須違反は {left} 残っています。"
             : $"{label} を適用しました。必須違反は変わらず {left}（要調整 {softBefore}→{softAfter}）。";
     }
 

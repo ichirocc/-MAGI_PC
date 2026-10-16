@@ -62,6 +62,10 @@ public sealed record AnalysisTriage(
     public static string HardText(IReadOnlyDictionary<string, int>? breakdown, long n) =>
         (breakdown is null ? null : UnitTotals(breakdown, MirrorKeys.Hard)) ?? $"{n}件";
 
+    /// <summary>実行中の上部の札。必須違反は単位ごとに（件と人を足さない＝INV-07、3.693.0）。必須 0 のときは数を出さない。</summary>
+    public static string RunningBadgeLabel(IReadOnlyDictionary<string, int>? breakdown, long bestHard) =>
+        bestHard > 0L ? $"組んでいます 必須{HardText(breakdown, bestHard)}" : "組んでいます";
+
     /// <summary>族ごとの増減を単位ごとに足した言い方（例「1件減る・2人増える」）。同じ単位の中だけで足す。全部 0 なら null。</summary>
     public static string? UnitDeltaText(IEnumerable<(string Family, int Delta)> diff, IEnumerable<string> families)
     {
