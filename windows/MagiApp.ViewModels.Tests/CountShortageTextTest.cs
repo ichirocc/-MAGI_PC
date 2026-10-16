@@ -239,8 +239,8 @@ public class CountShortageTextTest
     public void AutoAndOperatorSplitTexts()
     {
         Assert.Equal("10/1〜10/31・12人・組む時間 1分（＋仕上げ 20秒）。開始後は一手ごとの確認はしません", CellSheetLogic.PreRunPlanLine("2026-10-01", 31, 12, 60, 20));
-        Assert.Equal("登録条件：つくる前に直す項目はありません／手動固定 3件は保持します", CellSheetLogic.PreRunConditionLine(false, 0, 3));
-        Assert.Equal("登録条件：確認が必要な項目があります（下の一覧・希望が上限を超える 2件）", CellSheetLogic.PreRunConditionLine(false, 2, 0));
+        Assert.Equal("登録条件：つくる前に直す項目はありません／手動固定 3件は保持", CellSheetLogic.PreRunConditionLine(0, 0, 0, 3));
+        Assert.Equal("登録条件：希望が上限を超える 2件", CellSheetLogic.PreRunConditionLine(0, 0, 2, 0));
         static string L(string f) => f switch { "c1" => "期間の制約", "weekly" => "曜日の偏り", _ => f };
         Assert.Equal("期間の制約 2件・曜日の偏り 12pt", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["c1"] = 2, ["weekly"] = 12, ["c3n"] = 1 }, L));
         Assert.Equal("なし", CellSheetLogic.SoftSummary(new Dictionary<string, int> { ["covU"] = 1 }, L));

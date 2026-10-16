@@ -1080,19 +1080,8 @@ public sealed partial class EditView : UserControl
         }
     }
 
-    private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除する", string close = "削除しない")
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = primary,
-            CloseButtonText = close,
-            DefaultButton = ContentDialogButton.Close,
-        };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
-    }
+    private Task<bool> ConfirmAsync(string title, string message, string primary = "削除する", string close = "削除しない")
+        => ConfirmDialog.ShowAsync(XamlRoot, title, new[] { message }, primary, close);
 
     // ===== 職員管理 =====
 

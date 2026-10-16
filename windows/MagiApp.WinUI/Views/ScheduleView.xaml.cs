@@ -590,7 +590,7 @@ public sealed partial class ScheduleView : UserControl
             Title = "まとめて割当",
             Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
             PrimaryButtonText = "確定する",
-            CloseButtonText = "キャンセル",
+            CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
             IsPrimaryButtonEnabled = false,
         };

@@ -3,7 +3,7 @@ using MagiEngine.V6;
 namespace MagiApp.ViewModels;
 
 /// <summary>配布前確認の 1 行（Kotlin <c>PreDistRow</c>）。Ok: true＝満たす、false＝注意、null＝情報。</summary>
-public sealed record PreDistRow(string Label, string Value, bool? Ok);
+public sealed record PreDistRow(string Label, string Value, bool? Ok, bool Primary = false);
 
 /// <summary>
 /// 配布前確認（判断支援 UX 仕様 §10、Kotlin <c>preDistributionRows</c> の移植）。計算完了・必須違反 0 件・相談の完了・保存は
@@ -20,9 +20,18 @@ public static class PreDistributionCheck
     public static bool MonthEdgeTouched(IEnumerable<int> days, int totalDays, int maxLen) =>
         maxLen >= 2 && days.Any(d => d < maxLen - 1 || d > totalDays - maxLen);
 
+    /// <summary>脚注（3.665.0 の月の境目を 1 行で）。Kotlin <c>PRE_DIST_EDGE_FOOT</c>。</summary>
+    public const string EdgeFoot = "前月・翌月をまたぐ並びは未評価";
+
+    /// <summary>題の下の 1 行（3.704.0 P-1: 対象期間は行から外して題の下へ）。Kotlin <c>preDistributionPeriodLine</c>。</summary>
+    public static string PeriodLine(UiState ui) =>
+        "対象期間 " + (!string.IsNullOrWhiteSpace(ui.StartDate) && ui.Days > 0 ? DayText.Range(ui.StartDate, 0, ui.Days - 1) : "期間未設定") + "・現在採用している勤務表";
+
+    public static IReadOnlyList<PreDistRow> Top(IReadOnlyList<PreDistRow> rows) => rows.Where(r => r.Primary).ToList();
+    public static IReadOnlyList<PreDistRow> Details(IReadOnlyList<PreDistRow> rows) => rows.Where(r => !r.Primary).ToList();
+
     public static IReadOnlyList<PreDistRow> Rows(UiState ui, string? csvLine, Func<string, string> labelOf)
     {
-        var period = !string.IsNullOrWhiteSpace(ui.StartDate) && ui.Days > 0 ? DayText.Range(ui.StartDate, 0, ui.Days - 1) : "期間未設定";
         var evaluated = ui.HasResult && !ui.Running && ui.V6 is not null;
         var hardFams = MirrorKeys.Hard.Where(k => ui.Breakdown.TryGetValue(k, out var v) && v > 0).Select(k => (k, ui.Breakdown[k])).ToList();
         var hardText = ui.BestHard == 0 ? "0件" : $"{AnalysisTriage.HardText(ui.Breakdown, ui.BestHard)}（" +
@@ -32,15 +41,14 @@ public static class PreDistributionCheck
         var open = ui.Consults.Where(ConsultList.Unresolved).ToList();
         var consults = open.Count;
         var held = open.Count(c => c.Held);
+        // 上は必須違反・相談・保存の 3 点と、評価が済んでいないときの評価の行。残りは「詳しく」へ（Top）。
         return new List<PreDistRow>
         {
-            new("対象", $"対象期間 {period}・現在採用している勤務表", null),
-            new("評価", evaluated ? "最新の勤務表を評価済み" : "まだ評価していません（問題がないか調べてください）", evaluated),
-            new("必須違反", hardText, ui.BestHard == 0),
+            new("評価", evaluated ? "最新の勤務表を評価済み" : "まだ評価していません（問題がないか調べてください）", evaluated, Primary: !evaluated),
+            new("必須違反", hardText, ui.BestHard == 0, Primary: true),
             new("要調整", softText, null),
-            new("月の境目", MonthEdgeNote, null),
-            new("相談", consults == 0 ? "「相談中」に未解決の項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0),
-            new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true),
+            new("相談", consults == 0 ? "「相談中」に未解決の項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0, Primary: true),
+            new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true, Primary: true),
         };
     }
 }

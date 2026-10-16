@@ -567,16 +567,17 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(others);
             }
             if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
-            var confirm = new Button
-            {
-                Content = "上限を緩め、手順を当てる", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44,
-                Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = !_vm.Ui.Running,
-            };
-            confirm.Click += (_, _) => { dialog.Hide(); _vm.RelaxAndApply(token); if (from is { } c) _window.OpenCell(c.I, c.J); };
-            panel.Children.Add(confirm);
+            // [Android 3.704.0 G-3] 主ボタンはスクロールの外（PrimaryButtonText）に置き、塗りはそれ 1 つ。
+            dialog.PrimaryButtonText = "上限を緩め、手順を当てる";
+            dialog.IsPrimaryButtonEnabled = !_vm.Ui.Running;
+            dialog.DefaultButton = ContentDialogButton.Primary;
             panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
         }
-        await dialog.ShowAsync();
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && token is not null)
+        {
+            _vm.RelaxAndApply(token);
+            if (from is { } c) _window.OpenCell(c.I, c.J);
+        }
     }
 
     /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「希望を外したら？」で試算・確定（§5）。
@@ -1156,12 +1157,26 @@ public sealed partial class HomeView : UserControl
     {
         var rows = PreDistributionCheck.Rows(_vm.Ui, _vm.CsvSavedLine(), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k);
         var panel = new StackPanel { Spacing = 8 };
-        foreach (var r in rows)
-            panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Text = $"{r.Label}：" + (r.Ok == true ? "✓ " : r.Ok == false ? "! " : "") + r.Value });
-        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Text = PreDistributionCheck.Note });
+        TextBlock RowView(PreDistRow r)
+        {
+            var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = $"{r.Label}：" + (r.Ok == true ? "✓ " : r.Ok == false ? "! " : "") + r.Value };
+            if (r.Ok == false) tb.Foreground = BrushOf("MagiErrorBrush");
+            return tb;
+        }
+        // [Android 3.704.0 P-1] 上は必須違反・相談・保存（未評価なら評価も）、要調整と注記は「詳しく」に畳む。
+        foreach (var r in PreDistributionCheck.Top(rows)) panel.Children.Add(RowView(r));
+        panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.EdgeFoot });
+        var details = new StackPanel { Spacing = 8 };
+        foreach (var r in PreDistributionCheck.Details(rows)) details.Children.Add(RowView(r));
+        details.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.MonthEdgeNote });
+        details.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.Note });
+        panel.Children.Add(new Expander { Header = "詳しく", Content = details, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });
+        var title = new StackPanel();
+        title.Children.Add(new TextBlock { Text = CellSheetLogic.PreDistTitle });
+        title.Children.Add(new TextBlock { Text = PreDistributionCheck.PeriodLine(_vm.Ui), FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         var dialog = new ContentDialog
         {
-            XamlRoot = XamlRoot, Title = CellSheetLogic.PreDistTitle, Content = new ScrollViewer { Content = panel },
+            XamlRoot = XamlRoot, Title = title, Content = new ScrollViewer { Content = panel },
             PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Primary,
         };
         _vm.LogUi(new OpLogText.UiOp.PreDistOpen());

@@ -27,7 +27,7 @@ public class PreDistributionCheckTest
         Assert.False(rows["保存"].Ok);
         Assert.Equal("まだ勤務表 CSV に保存していません", rows["保存"].Value);
         Assert.Equal("期間の制約 4件・曜日の偏り 20pt", rows["要調整"].Value);   // 重み×数の順（作成の結果カードと同じ）
-        Assert.Equal("対象期間 10/1〜10/31・現在採用している勤務表", rows["対象"].Value);
+        Assert.Equal("対象期間 10/1〜10/31・現在採用している勤務表", PreDistributionCheck.PeriodLine(ui));
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class PreDistributionCheckTest
     [Fact]
     public void MonthEdgeIsShownAsNotEvaluated()
     {
-        Assert.Equal(PreDistributionCheck.MonthEdgeNote, PreDistributionCheck.Rows(Base(), null, L).ToDictionary(r => r.Label)["月の境目"].Value);
+        Assert.DoesNotContain(PreDistributionCheck.Rows(Base(), null, L), r => r.Label == "月の境目");   // [3.704.0] 行ではなく脚注 EdgeFoot
         Assert.True(PreDistributionCheck.MonthEdgeTouched(new[] { 1 }, 31, 3));
         Assert.True(PreDistributionCheck.MonthEdgeTouched(new[] { 29 }, 31, 3));
         Assert.False(PreDistributionCheck.MonthEdgeTouched(new[] { 2, 28 }, 31, 3));

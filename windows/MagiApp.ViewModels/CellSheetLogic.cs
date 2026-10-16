@@ -1342,10 +1342,29 @@ public static class CellSheetLogic
         return $"{period}{staff}人・組む時間 {search}（＋仕上げ {reserveSec}秒）。開始後は一手ごとの確認はしません";
     }
 
-    /// <summary>登録条件の 1 行。<paramref name="overCaps"/>＝希望が個人の上限を超える組（作成しても残る）の数も数える。</summary>
-    public static string PreRunConditionLine(bool issues, int overCaps, int pins) =>
-        "登録条件：" + (issues || overCaps > 0 ? "確認が必要な項目があります（下の一覧" + (overCaps > 0 ? $"・希望が上限を超える {overCaps}件" : "") + "）" : "つくる前に直す項目はありません") +
-        (pins > 0 ? $"／手動固定 {pins}件は保持します" : "");
+    /// <summary>登録条件の 1 行（3.704.0 R-4: 節ごとの件数を並べる）。<paramref name="overCaps"/>＝希望が個人の上限を超える組（作成しても残る）。</summary>
+    public static string PreRunConditionLine(int floor, int rerun, int overCaps, int pins)
+    {
+        var parts = new List<string>();
+        if (floor > 0) parts.Add($"何度つくっても残る {floor}件");
+        if (rerun > 0) parts.Add($"再作成で外れる {rerun}件");
+        if (overCaps > 0) parts.Add($"希望が上限を超える {overCaps}件");
+        return "登録条件：" + (parts.Count == 0 ? "つくる前に直す項目はありません" : string.Join("・", parts)) +
+            (pins > 0 ? $"／手動固定 {pins}件は保持" : "");
+    }
+
+    /// <summary>単純な確認の点（3.704.0 G-4）: 空行を除いて <see cref="ConfirmMaxPoints"/> 個まで。超えたら確認ではなく読む画面にする。</summary>
+    public static IReadOnlyList<string> ConfirmDialogPoints(IEnumerable<string> points)
+    {
+        var p = points.Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+        if (p.Count > ConfirmMaxPoints) throw new ArgumentException($"確認の点は {ConfirmMaxPoints} つまで（{p.Count}）");
+        return p;
+    }
+
+    public const int ConfirmMaxPoints = 3;
+
+    /// <summary>作成前のシートの主ボタン＝開いたボタンと同じ語（3.704.0、利用者決定 Q3）。</summary>
+    public static string PreRunProceedLabel(bool hasResult) => hasResult ? "再作成" : "勤務表をつくる";
 
     /// <summary>同じ探索の設定で再作成するときの一言。<paramref name="top"/>＝前回いちばん多い必須違反（「族名（N単位）」）。</summary>
     public static string PreRunRepeatHintText(string? top) =>
@@ -1364,7 +1383,6 @@ public static class CellSheetLogic
     }
 
     public const string PreRunTitle = "勤務表を作成する";
-    public const string PreRunProceed = "勤務表を作成";
     public const string PreRunCheckConditions = "条件を確認する";
 
     /// <summary>要調整の内訳（族ごとに件数か pt。重み×件数の多い順に <paramref name="max"/> 種まで）。族名は <paramref name="labelOf"/>。</summary>
