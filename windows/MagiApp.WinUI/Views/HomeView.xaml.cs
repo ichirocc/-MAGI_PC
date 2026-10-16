@@ -302,21 +302,16 @@ public sealed partial class HomeView : UserControl
         var savedLine = ui.Running ? null : _vm.CsvSavedLine();
         // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
         var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults);
-        var statusLines = CellSheetLogic.HomeStatusLines(kind, sentence, consultLine, savedLine);
+        var saveFailed = ui.SaveState == SaveState.Failed;
+        var statusLines = CellSheetLogic.HomeStatusLines(kind, sentence, consultLine, savedLine, saveFailed);
 
-        // CREATION: 作成の完了（見出しと同じ対象なら完了の 1 行だけ）。保存に失敗していれば「もう一度保存する」（外枠、INV-09）。
+        // CREATION: 作成の完了（見出しと同じ対象なら完了の 1 行だけ）。保存の失敗は状態の行へ（SF-1）。
         CreationHost.Children.Clear();
         CreationHost.Visibility = Vis(Has(HomeSection.Creation));
         if (Has(HomeSection.Creation))
         {
             foreach (var l in CellSheetLogic.CreationTopLines(nextTarget, ui.KeptPrevious, headlineTarget: nextTarget))
                 CreationHost.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf("MagiBodyMediumTextStyle") });
-            if (ui.SaveState == SaveState.Failed)
-            {
-                var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Margin = new Thickness(0, 4, 0, 0) };
-                retry.Click += (_, _) => _vm.SaveNow();
-                CreationHost.Children.Add(retry);
-            }
         }
 
         HeadlineText.Visibility = Vis(Has(HomeSection.Headline));
@@ -344,8 +339,21 @@ public sealed partial class HomeView : UserControl
         StatusHost.Visibility = Vis(Has(HomeSection.Status) && (statusLines.Count > 0 || kind == HomePlanKind.Searching));
         if (Has(HomeSection.Status))
         {
+            // 段の 1 文は大きく、保存の失敗の行（段に関係なく先頭）は本文の太字。
+            var lead = -1;
+            for (var i = 0; i < statusLines.Count; i++) if (statusLines[i] != CellSheetLogic.HomeSaveFailedLine) { lead = i; break; }
             for (var i = 0; i < statusLines.Count; i++)
-                StatusHost.Children.Add(new TextBlock { Text = statusLines[i], TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf(i == 0 && kind != HomePlanKind.PreDist ? "MagiTitleMediumTextStyle" : "MagiBodyMediumTextStyle") });
+            {
+                var line = new TextBlock { Text = statusLines[i], TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf(i == lead && kind != HomePlanKind.PreDist ? "MagiTitleMediumTextStyle" : "MagiBodyMediumTextStyle") };
+                if (statusLines[i] == CellSheetLogic.HomeSaveFailedLine) line.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                StatusHost.Children.Add(line);
+            }
+            if (saveFailed)
+            {
+                var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Foreground = fgBrush, BorderBrush = fgBrush, BorderThickness = new Thickness(1), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+                retry.Click += (_, _) => _vm.RetrySave();
+                StatusHost.Children.Add(retry);
+            }
             if (kind == HomePlanKind.Searching)
             {
                 var stop = new HyperlinkButton { Content = "やめる", MinHeight = 48, Foreground = fgBrush };
@@ -1138,7 +1146,11 @@ public sealed partial class HomeView : UserControl
             PrimaryButtonText = "配ると決めて書き出す", CloseButtonText = "戻る", DefaultButton = ContentDialogButton.Primary,
         };
         _vm.LogUi(new OpLogText.UiOp.PreDistOpen());
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary) { _vm.LogUi(new OpLogText.UiOp.PreDistExport()); await _window.ExportScheduleCsvAsync(); }
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            _vm.LogUi(new OpLogText.UiOp.PreDistExport());
+            if (await _window.ExportScheduleCsvAsync() is { } ok && CellSheetLogic.CsvExportReopensPreDist(ok)) await ShowPreDistributionAsync();
+        }
         else _vm.LogUi(new OpLogText.UiOp.PreDistBack());
     }
 }

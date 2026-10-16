@@ -374,7 +374,7 @@ public class MagiViewModelPersistenceTest : IDisposable
         vm.SaveNow(); // first failure -> transition true->false -> logs a warning
         Assert.Single(vm.Ui.OpLog);
         Assert.Contains("[W]", vm.Ui.OpLog[0]);
-        Assert.Contains("自動保存に失敗", vm.Ui.Message);
+        Assert.Contains("自動保存できませんでした", vm.Ui.Message);
         Assert.True(vm.Ui.MessageIsError);
 
         vm.SaveNow(); // still failing -> ok stays false -> no additional log line (steady state)
@@ -390,6 +390,40 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         vm.SaveNow(); // steady state again (ok stays true) -> no additional log line
         Assert.Equal(2, vm.Ui.OpLog.Count);
+    }
+
+    /// <summary>[3.701.0 F-2] 保存が成功から失敗に変わった瞬間にダイアログを 1 回、失敗が続く自動保存では出し直さず、
+    /// 利用者のやり直しも失敗したら Again。書込の失敗は上と同じく親ディレクトリを通常ファイルで塞いで起こす。</summary>
+    [Fact]
+    public void SaveFailDialogOpensOnceOnFailureAndAgainOnFailedRetry()
+    {
+        var vm = NewVm();
+        vm._hydrated = true;
+        vm._state = MinimalState.Build();
+        vm._currentSchedule = MinimalState.BuildSchedule();
+        vm.Ui.StructureEdited = true;
+        var good = vm.DataDir;
+        var blockerFile = Path.Combine(vm.DataDir, "blocker.txt");
+        File.WriteAllText(blockerFile, "not a directory");
+        vm.DataDir = blockerFile;
+
+        vm.SaveNow();
+        Assert.Equal(SaveFailDialog.First, vm.Ui.SaveFailDialog);
+        vm.DismissSaveFailDialog();
+        vm.SaveNow();
+        Assert.Null(vm.Ui.SaveFailDialog);
+        vm.ShowSaveFailDialog();
+        Assert.Equal(SaveFailDialog.First, vm.Ui.SaveFailDialog);
+        vm.DismissSaveFailDialog();
+        vm.RetrySave();
+        Assert.Equal(SaveFailDialog.Again, vm.Ui.SaveFailDialog);
+
+        vm.DataDir = good;
+        vm.RetrySave();
+        Assert.Null(vm.Ui.SaveFailDialog);
+        Assert.Equal(SaveState.Saved, vm.Ui.SaveState);
+        vm.ShowSaveFailDialog();
+        Assert.Null(vm.Ui.SaveFailDialog);
     }
 
     // ===================================================================

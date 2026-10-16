@@ -491,21 +491,23 @@ public sealed partial class SettingsView : UserControl
     /// <summary>[2026-09-02] OnSaveDataClick と同じ理由。</summary>
     private async void OnExportCsvClick(object sender, RoutedEventArgs e) => await ExportCsvAsync();
 
-    /// <summary>勤務表CSVの書き出し。ホームの処方箋カード「印刷・書き出し」からも呼ばれる（phase9 #2）。</summary>
-    internal async Task ExportCsvAsync()
+    /// <summary>勤務表CSVの書き出し。ホームの処方箋カード「印刷・書き出し」からも呼ばれる（phase9 #2）。null＝書き出さなかった（無し・取消）。</summary>
+    internal async Task<bool?> ExportCsvAsync()
     {
         var csv = _vm.ExportCsv();
-        if (csv is null) { _vm.Notify("書き出す勤務表がありません。データを開いて勤務表をつくると書き出せます", "W"); return; }
+        if (csv is null) { _vm.Notify("書き出す勤務表がありません。データを開いて勤務表をつくると書き出せます", "W"); return null; }
         try
         {
             var file = await PickSaveFileAsync("勤務表CSV", ".csv", "magi_schedule");
-            if (file is null) return;
+            if (file is null) return null;
             await FileIO.WriteTextAsync(file, csv);
             _vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "勤務表CSV");
+            return true;
         }
         catch (Exception ex)
         {
             _vm.NotifySave(MagiViewModel.IoOutcome.Fail(ex), "勤務表CSV");
+            return false;
         }
     }
 
@@ -514,7 +516,7 @@ public sealed partial class SettingsView : UserControl
     /// （CSV取込後の確認等）の直接呼び出し口。ファイルI/Oを伴わないのでピッカーは不要。</summary>
     private void OnCheckProblemsClick(object sender, RoutedEventArgs e) => _vm.RefreshCheck();
 
-    private void OnRetrySaveClick(object sender, RoutedEventArgs e) => _vm.SaveNow();
+    private void OnRetrySaveClick(object sender, RoutedEventArgs e) => _vm.RetrySave();
 
     /// <summary>[2026-09-02, 配線] RestorePreviousData（クラスKDoc参照）。ファイルI/Oを伴わない
     /// （ディスク上の退避ファイルを読むだけ）のでピッカーは不要、ボタン1つで完結する。</summary>
