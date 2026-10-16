@@ -276,7 +276,26 @@ public static class ConstraintMus
         return false;
     }
 
-    private static bool DayProvablyInfeasible(Problem p, List<Item> items, bool zeroCapExcluded = true)
+    /// <summary>[3.692.0] 日の証明（<see cref="AnalyzeDayConflicts"/> と同じ判定＝上限 0 と希望固定を置けない側に数える）で、その日に最低いくつ席が空くか
+    /// （最大マッチングの不足）とコアの必要人数のシフト。人員不足の診断（<c>V6PortAnalyzer.DiagnoseCoverage</c>）が設定ミス診断と同じ根拠で「充足不可」を言うため。</summary>
+    public sealed record DayShortProof(int Day, IReadOnlySet<int> Shifts, int Deficit);
+
+    public static List<DayShortProof> DayShortProofs(Problem p) => AnalyzeDayConflicts(p).Select(dc =>
+    {
+        var universe = new List<Item>();
+        for (var k = 0; k < p.K; k++)
+        {
+            var eff = EffectiveLowerBound(p, k, dc.Day);
+            if (eff > 0) universe.Add(new DayNeed(dc.Day, k, eff));
+        }
+        for (var i = 0; i < p.S; i++) if (p.WishFixed(i, dc.Day)) universe.Add(new WishPin(i, dc.Day, p.Wish[i][dc.Day]));
+        return new DayShortProof(dc.Day, dc.Core.OfType<DayNeed>().Select(d => d.Shift).ToHashSet(), Math.Max(1, DayDeficit(p, universe)));
+    }).ToList();
+
+    private static bool DayProvablyInfeasible(Problem p, List<Item> items, bool zeroCapExcluded = true) =>
+        DayDeficit(p, items, zeroCapExcluded) > 0;
+
+    private static int DayDeficit(Problem p, List<Item> items, bool zeroCapExcluded = true)
     {
         var pinned = new Dictionary<int, int>();
         var slots = new List<int>();
@@ -293,8 +312,8 @@ public static class ConstraintMus
                     break;
             }
         }
-        if (slots.Count == 0) return false;
-        if (slots.Count > p.S) return true;   // seat count exceeds staff count: unfillable regardless of fixed wishes (sound)
+        if (slots.Count == 0) return 0;
+        if (slots.Count > p.S) return slots.Count - p.S;   // seat count exceeds staff count: unfillable regardless of fixed wishes (sound)
         var staffMatch = new int[p.S];        // staff -> slot
         Array.Fill(staffMatch, -1);
         var slotMatch = new int[slots.Count]; // slot -> staff
@@ -326,6 +345,6 @@ public static class ConstraintMus
 
         var matched = 0;
         for (var s = 0; s < slots.Count; s++) if (TryAugment(s, new bool[p.S])) matched++;
-        return matched < slots.Count;
+        return slots.Count - matched;
     }
 }

@@ -62,7 +62,14 @@ public static partial class V6HotfixPasses
         if (invalid > 0) issues.Add($"担当不可/範囲外配置 {invalid} 件");
         if (impossible > 0) issues.Add($"不可能希望 {impossible} 件");
         if (selfConflict.Count > 0) issues.Add($"希望と禁止の衝突 {selfConflict.Values.Sum()} 件");
-        if (hardCore > 0) issues.Add($"希望以外HARD {hardCore} 件");
+        if (hardCore > 0)
+        {
+            // [3.692.0] 人員不足のうち日の証明で避けられない分は、人員不足の診断（CoverageDiag の「充足不可」）・設定ミス診断と同じ根拠で言い分ける。
+            int dayProof;
+            try { dayProof = V6PortAnalyzer.DayProofCovU(ScheduleUtil.CachedProblem(state, quantitativeRangeEval), schedule); } catch (Exception) { dayProof = 0; }
+            var proven = Math.Min(hardCore, Math.Min(rep.Breakdown.GetValueOrDefault("covU", 0), dayProof));
+            issues.Add($"希望以外HARD {hardCore} 件" + (proven > 0 ? $"（うち人員不足 {proven} 件はこの希望と上限のままでは埋まらない）" : ""));
+        }
         var msg = issues.Count == 0 ? $"HF70: {algoName} 異常なし" : $"HF70: {string.Join(" / ", issues)}";
         var advice = issues.Count == 0 ? "" : "設定(担当範囲), 希望, 必要人数, 連勤禁止条件を確認してください";
         var level = issues.Count == 0 ? "I" : "W";

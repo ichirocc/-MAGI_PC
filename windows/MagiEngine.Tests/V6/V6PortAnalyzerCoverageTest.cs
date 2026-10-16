@@ -136,10 +136,11 @@ public class V6PortAnalyzerCoverageTest
     public void DiagnoseCoverage_WarnsWhenCascadeIsBlockedByDownstreamWish()
     {
         // Cが唯一のdepth2候補だが休へ希望固定＝FindCovUChainの候補から除外され連鎖が完成しない。
+        // [3.692.0] この日は X と Y の 2 席に置ける人が A だけ＝日の証明が立つので、「試した範囲」でなく証明つきの充足不可と言う。
         var diag = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: true));
         var sf = diag.Shortfalls.Single(s => s.ShiftIndex == 1);
-        Assert.True(sf.Reason.Contains(V6PortAnalyzer.ChainNotFoundInTried) && !sf.Reason.Contains("どう組んでも") && !sf.Reason.Contains("担当を追加"),
-            "試した範囲で見つからなかったと言い、断定しない");
+        Assert.True(sf.DayProof && !sf.SearchMiss);
+        Assert.True(sf.Reason.StartsWith(V6PortAnalyzer.DayProofReason) && !sf.Reason.Contains("担当を追加"));
     }
 
     /// <summary>
@@ -155,9 +156,10 @@ public class V6PortAnalyzerCoverageTest
     {
         var blocked = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: true));
         var sfB = blocked.Shortfalls.Single(s => s.ShiftIndex == 1);
-        Assert.Equal(CoverageVerdict.Fixable, sfB.Verdict); // 枠は足りているので verdict は Fixable のまま
-        Assert.True(sfB.BlockedNow, "だが『いまの希望では埋められない』ことを値として持つ");
-        Assert.Equal(1, blocked.BlockedNowSlots); // サマリと説明が一致する
+        // [3.692.0] 枠単独では足りるが日の証明が立つ＝Infeasible（DayProof）。BlockedNow とは二重に数えない。
+        Assert.Equal(CoverageVerdict.Infeasible, sfB.Verdict);
+        Assert.True(sfB.DayProof && !sfB.BlockedNow);
+        Assert.Equal(1, blocked.InfeasibleSlots); // サマリと説明が一致する
         Assert.True(blocked.AllBlockedNow, "この盤面は探索を続けても covU が減らない");
 
         var fixable = V6PortAnalyzer.DiagnoseCoverage(CascadeChainState(cWished: false));
@@ -380,4 +382,60 @@ public class V6PortAnalyzerCoverageTest
     {
         Assert.Equal("6日", V6PortAnalyzer.DayLabel("garbage", 5));
     }
+
+    // ==== [3.692.0] CoverageDayProof3692Test（Kotlin）の写し。1 日・A と C に各 1 人、s1 は A も C も個人上限 0。
+    private static MagiState DayProofState() => St(
+        startDate: "2025-12-01", endDate: "2025-12-01",
+        shifts: new List<Shift> { new("休み", "休", "", "", ShiftRole.Rest), new("早番", "A", "1", "1"), new("遅番", "C", "1", "1") },
+        groups: new List<Group> { new("G", "G") },
+        staff: new List<Staff> { new("s0", 0), new("s1", 0) },
+        use2: true,
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 } },
+        schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 0 } },
+        staffRange: new Dictionary<string, Range> { ["1,1"] = new("", "0"), ["1,2"] = new("", "0") });
+
+    [Fact]
+    public void dayProofMakesSlotInfeasibleEvenWhenSlotCapacitySuffices()
+    {
+        var diag = V6PortAnalyzer.DiagnoseCoverage(DayProofState());
+        var sf = Assert.Single(diag.Shortfalls);
+        Assert.Equal(2, sf.ShiftIndex);
+        Assert.Equal(1, sf.Capacity);
+        Assert.Equal(CoverageVerdict.Infeasible, sf.Verdict);
+        Assert.True(sf.DayProof);
+        Assert.False(sf.SearchMiss);
+        Assert.Equal(1, diag.InfeasibleSlots);
+        Assert.Equal(0, diag.FixableSlots);
+        Assert.StartsWith(V6PortAnalyzer.DayProofReason, sf.Reason);
+        var lines = diag.LogLines();
+        Assert.Contains("充足不可1枠 / 充足可能0枠", lines[0]);
+        Assert.Contains("— 充足不可: この希望と上限のままでは埋まりません", lines[1]);
+        Assert.Equal(1, V6FinalPort.CovUBlockedAmount(diag));
+    }
+
+    [Fact]
+    public void dayProofCovUCountsBoardShortfallUpToDeficit()
+    {
+        var st = DayProofState();
+        Assert.Equal(1, V6PortAnalyzer.DayProofCovU(ScheduleUtil.CachedProblem(st), st.Schedule.ToIntArray2D()));
+    }
+
+    [Fact]
+    public void hf70NamesShortfallThatTheDayProofCovers()
+    {
+        var st = DayProofState();
+        var r = V6HotfixPasses.DetectHF70Anomalies(st, st.Schedule.ToIntArray2D(), "t");
+        Assert.Contains("（うち人員不足 1 件はこの希望と上限のままでは埋まらない）", r.Message);
+    }
+
+    [Fact]
+    public void wallWhySaysProvenOnlyForProvenSlots()
+    {
+        Assert.Equal("いまの希望・担当・上限のままでは埋められないと実証済み", V6FinalPort.CovUWallWhy(3, 0));
+        Assert.Equal("試した入れ替えでは埋まらなかった", V6FinalPort.CovUWallWhy(3, 3));
+        Assert.Equal("実証済み1件・試した入れ替えでは埋まらなかった2件", V6FinalPort.CovUWallWhy(3, 2));
+    }
+
+    [Fact]
+    public void floorCountsUpperZeroIsOff() => Assert.False(PolishGate.FloorCountsUpperZero);
 }

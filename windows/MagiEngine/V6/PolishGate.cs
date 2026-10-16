@@ -92,6 +92,10 @@ public static class PolishGate
     /// <summary>[Kotlin原本 <c>PolishGate.adaptiveStall</c>（PROPOSAL C、3.643.0、<c>docs/stall_escape.md</c> §5.8）] 適応閾値: 直近の改善間隔の最大×3 を [短, 通常] に挟み、通常分岐の停滞閾値を縮める。既定 false（2026-10-09 の計測で既定が良く否決＝Android <c>docs/stall_escape.md</c> §11。腕 <c>adaptive</c> は再計測用）。</summary>
     public static volatile bool AdaptiveStall = false;
 
+    /// <summary>[Kotlin原本 <c>PolishGate.floorCountsUpperZero</c>（3.692.0、測定待ち）] 早期終了の希望衝突の床を上限0込み（<c>WishConflictFloorParts(zeroCapBinding: true)</c>、ログの「上限0を拘束とみなすと N」）にし、
+    /// 到達で短い閾値へ移る（<see cref="WishConflictFloorMode"/> が Off でも E0A 相当）。既定 false＝Android 側ベンチの腕 <c>floorup0</c> で測ってから決める。</summary>
+    public static volatile bool FloorCountsUpperZero = false;
+
     private static double _normalStallFraction = 0.9;
 
     /// <summary>

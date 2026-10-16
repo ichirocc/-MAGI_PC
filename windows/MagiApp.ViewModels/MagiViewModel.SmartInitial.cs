@@ -52,6 +52,8 @@ public sealed partial class MagiViewModel
             Ui.DraftConfirm = FixExplain.DraftConfirmText(Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null);
             return;
         }
+        // [3.692.0] 確認（3.679.0）を通ったかをログで読めるようにする。
+        if (confirmed && Ui.DraftConfirm is not null) LogOp("I", "下書きで置き換え（確認済み）");
         if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
         // [3.271.0, 実機ログ起因の由来をそのまま記録] 実行中ガード。旧: ガード無しのため
         //   「勤務表をつくる」の直後に隣接する本ボタンを連続タップすると、走行中の最適化と
@@ -73,7 +75,11 @@ public sealed partial class MagiViewModel
         LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed);
     }
 
-    public void DismissDraftConfirm() => Ui.DraftConfirm = null;
+    public void DismissDraftConfirm()
+    {
+        if (Ui.DraftConfirm is not null) LogOp("I", "下書きで置き換えない（確認で取りやめ）");
+        Ui.DraftConfirm = null;
+    }
 
     private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false)
     {

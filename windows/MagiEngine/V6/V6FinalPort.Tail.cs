@@ -26,6 +26,16 @@ public static partial class V6FinalPort
             .Where(s => s.Verdict == CoverageVerdict.Infeasible || s.BlockedNow)
             .Sum(s => s.Miss);
 
+    /// <summary>[3.692.0] 残存分析の covU 壁の理由。「実証済み」は証明つきの枠（充足不可・候補なし）だけ＝限定探索の不発（SearchMiss）は「試した入れ替えでは埋まらなかった」。</summary>
+    internal static string CovUWallWhy(int wall, int searchMissAmount)
+    {
+        var miss = Math.Min(wall, Math.Max(0, searchMissAmount));
+        var proven = wall - miss;
+        if (miss == 0) return "いまの希望・担当・上限のままでは埋められないと実証済み";
+        if (proven == 0) return "試した入れ替えでは埋まらなかった";
+        return $"実証済み{proven}件・試した入れ替えでは埋まらなかった{miss}件";
+    }
+
     /// <summary>
     /// [3.377.0] 残存 covU のうち「もう直せない」ぶん。
     ///

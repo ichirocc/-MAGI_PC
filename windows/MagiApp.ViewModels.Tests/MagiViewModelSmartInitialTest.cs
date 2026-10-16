@@ -62,6 +62,7 @@ public class MagiViewModelSmartInitialTest
         Assert.Equal("今の勤務表を下書きで置き換えます。元に戻せます", vm.Ui.DraftConfirm);   // 結果が無い（数えていない）ときは件数を言わない（3.686.0）
         vm.DismissDraftConfirm();
         Assert.Null(vm.Ui.DraftConfirm);
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("下書きで置き換えない（確認で取りやめ）"));   // 3.692.0
     }
 
     /// <summary>

@@ -38,7 +38,10 @@ public sealed record CoverageShortfall(
     /// <summary>[3.642.0] 移すと禁止連続(c3n)になるため候補から外れた人数（⑤の並びへの導線の根拠）。</summary>
     int ForbidCount = 0,
     /// <summary>[3.687.0/R01] <c>BlockedNow</c> のうち、移せる候補はいるのに限定探索（<c>ChainFills</c>）で入れ替えの手順が見つからなかっただけの枠。不能の証明ではない。</summary>
-    bool SearchMiss = false)
+    bool SearchMiss = false,
+    /// <summary>[3.692.0] 枠単独では担当できる人数が足りるが、その日の日の証明（<c>ConstraintMus.DayShortProofs</c>＝設定ミス診断「必要人数と固定希望の衝突」と同じ根拠。
+    /// 希望固定と個人上限0の人を置けない側に数える）で不足が避けられないと示せたので Infeasible にした枠。</summary>
+    bool DayProof = false)
 {
     public IReadOnlyList<int> WishPinned { get; init; } = WishPinned ?? Array.Empty<int>();
 }
@@ -236,6 +239,19 @@ public static partial class V6PortAnalyzer
     ///    並び/回数などの制約に阻まれ最適化が未到達）
     /// [Android 3.503.0] 不足（<see cref="DiagnoseShortfalls"/>）・緩和案（<see cref="BuildRelaxations"/>）・過剰（<see cref="DiagnoseSurpluses"/>）に分割。出力は不変。
     /// </summary>
+    /// <summary>[3.692.0] 日の証明で充足不可にした枠の説明（設定ミス診断「必要人数と固定希望の衝突」と同じ根拠）。</summary>
+    public const string DayProofReason = "この希望と上限のままでは埋まりません。固定された希望と個人上限0の人を除くと、この日の必要人数を同時に満たせません";
+
+    /// <summary>[3.692.0] 盤面の人員不足のうち日の証明（<c>ConstraintMus.DayShortProofs</c>）で避けられないと示せる件数（日ごとに不足の下限で頭打ち）。HF70 の言い分け用。</summary>
+    public static int DayProofCovU(Problem p, int[][] schedule)
+    {
+        var norm = ScheduleUtil.NormalizeSchedule(schedule, p);
+        var cov = ScheduleUtil.Coverage(p, norm);
+        List<ConstraintMus.DayShortProof> proofs;
+        try { proofs = ConstraintMus.DayShortProofs(p); } catch (Exception) { return 0; }
+        return proofs.Sum(dp => Math.Min(dp.Deficit, dp.Shifts.Sum(k => Math.Max(0, p.CovUCell(k, dp.Day, cov[dp.Day][k])))));
+    }
+
     public static CoverageDiagnosis DiagnoseCoverage(
         MagiState state,
         int[][]? schedule = null,
@@ -364,6 +380,28 @@ public static partial class V6PortAnalyzer
                 }
                 list.Add(new CoverageShortfall(j, DayLabel(state.StartDate, j), k, sym, need, got, miss, capacity,
                     verdict, reason, blockedNow, wishPinned, chainOk, forbidN, missOnly));
+            }
+        }
+        // [3.692.0] 日の証明で不足が避けられない枠を Infeasible へ（その日の不足の下限ぶんだけ、不足の大きい枠から）。
+        //   これが無いと設定ミス診断は「同時に成立しません」と言うのに、ここは「充足可能」と言い食い違っていた。
+        List<ConstraintMus.DayShortProof> proofs;
+        try { proofs = ConstraintMus.DayShortProofs(p); } catch (Exception) { proofs = new(); }
+        foreach (var dp in proofs)
+        {
+            var left = dp.Deficit;
+            var idx = Enumerable.Range(0, list.Count)
+                .Where(x => list[x].DayIndex == dp.Day && dp.Shifts.Contains(list[x].ShiftIndex) && list[x].Verdict == CoverageVerdict.Fixable)
+                .OrderByDescending(x => list[x].Miss).ToList();
+            foreach (var x in idx)
+            {
+                if (left <= 0) break;
+                left -= list[x].Miss;
+                infeasible++; fixable--;
+                list[x] = list[x] with
+                {
+                    Verdict = CoverageVerdict.Infeasible, BlockedNow = false, SearchMiss = false, DayProof = true,
+                    Reason = $"{DayProofReason}（{list[x].ShiftSymbol}を担当できる{list[x].Capacity}人のうち、この日はほかの勤務の必要人数と取り合いになります）",
+                };
             }
         }
         // Kotlin の sortWith は安定ソート。C# List<T>.Sort は不安定なので LINQ の OrderBy 系（安定）で揃える。
