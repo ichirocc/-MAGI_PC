@@ -27,6 +27,22 @@ public enum RelaxHandoff { None, Searching, Offer, NoWall, Stopped, Unavailable,
 
 /// <summary>操作の通知。<paramref name="UndoSerial"/>＝その操作が積んだ元に戻すの段。
 /// <paramref name="Undoable"/>＝false は「元に戻す」を付けない結果の通知（元に戻す・やり直す自身の結果など）。</summary>
+/// <summary>
+/// 保存の結果からダイアログを決める（Kotlin <c>SaveFailNotifier</c> と 1 対 1）。成功から失敗に変わった瞬間に First を 1 回、
+/// 失敗中に利用者がやり直して失敗したら Again。失敗が続くだけの自動保存では出さない（1.2 秒ごとに走るため）。
+/// </summary>
+public sealed class SaveFailNotifier
+{
+    public bool LastOk { get; private set; } = true;
+
+    public SaveFailDialog? OnResult(bool ok, bool retried)
+    {
+        var prev = LastOk;
+        LastOk = ok;
+        return ok ? null : prev ? SaveFailDialog.First : retried ? SaveFailDialog.Again : null;
+    }
+}
+
 public sealed record OpNotice(long Id, string Text, long UndoSerial, bool Undoable = true);
 
 /// <summary>Cause は接頭辞（必須/要調整）を除いた原因だけ（希望を守っている板挟みの 2 行目に使う）。</summary>
@@ -647,6 +663,22 @@ public static class CellSheetLogic
     public const string FixStaffGoneNote = "この職員は一覧から削除されたため、変更案を探せません。画面を閉じて開き直してください。";
 
     public const string SaveRetryButton = "もう一度保存する";
+    public const string SaveFailedNotice = "自動保存できませんでした。PCに書き込めません（空き容量が足りない可能性があります）。「" + SaveRetryButton + "」を押してください";
+    public const string HomeSaveFailedLine = "自動保存できていません。PCの空き容量を確かめてください";
+    public const string TopBarSaveFailed = "自動保存できていません";
+    /// <summary>上部の札の幅の境界（Kotlin <c>TOP_BAR_NARROW_DP</c>）。この移植は窓の幅を変えられるので文言だけ揃える。</summary>
+    public const int TopBarNarrowDp = 396;
+
+    /// <summary>上部の札の左に出す保存の語。失敗のときだけ（押すと保存の失敗のダイアログ）。</summary>
+    public static string? TopBarSaveWord(SaveState s) => s == SaveState.Failed ? TopBarSaveFailed : null;
+
+    public static bool TopBarStatusWrapped(int widthDp) => widthDp < TopBarNarrowDp;
+
+    public static string SaveFailDialogTitle(SaveFailDialog d) => d == SaveFailDialog.Again ? "まだ保存できていません" : "自動保存できませんでした";
+    public const string SaveFailDialogBody = "PCに書き込めません（空き容量が足りない可能性があります）。";
+
+    /// <summary>勤務表 CSV の書き出しに失敗したら、配布前の確認を開き直す。</summary>
+    public static bool CsvExportReopensPreDist(bool ok) => !ok;
 
     public const string ReviewCheckingText = "変更後の影響を確認しています…";
 
@@ -1481,11 +1513,11 @@ public static class CellSheetLogic
     public static IReadOnlyList<string> HomeBadges(string hardLabel, CoverageShortfall? shortage) =>
         new[] { $"必須 {hardLabel}", shortage is null ? null : ShortageHeadlineOf(shortage).Badge }.OfType<string>().ToList();
 
-    /// <summary>状態の行（2 行まで）。必須あり＝問題の 1 文と相談中の行（D10）。必須 0＝相談中の行と、CSV が今の内容と違う行（保存済みの行は主ボタンの下）。</summary>
-    public static IReadOnlyList<string> HomeStatusLines(HomePlanKind kind, string? sentence, string? consultLine, string? savedLine) =>
-        kind == HomePlanKind.PreDist
-            ? new[] { consultLine, savedLine is not null && savedLine.Contains("今の内容と違います", StringComparison.Ordinal) ? savedLine : null }.OfType<string>().ToList()
-            : new[] { string.IsNullOrWhiteSpace(sentence) ? null : sentence, consultLine }.OfType<string>().ToList();
+    /// <summary>状態の行（2 行まで）。保存の失敗は段に関係なく先頭（SF-1）。必須あり＝問題の 1 文と相談中の行（D10）。必須 0＝相談中の行と、CSV が今の内容と違う行（保存済みの行は主ボタンの下）。</summary>
+    public static IReadOnlyList<string> HomeStatusLines(HomePlanKind kind, string? sentence, string? consultLine, string? savedLine, bool saveFailed = false) =>
+        new[] { saveFailed ? HomeSaveFailedLine : null }.Concat(kind == HomePlanKind.PreDist
+            ? new[] { consultLine, savedLine is not null && savedLine.Contains("今の内容と違います", StringComparison.Ordinal) ? savedLine : null }
+            : new[] { string.IsNullOrWhiteSpace(sentence) ? null : sentence, consultLine }).OfType<string>().Take(2).ToList();
 
     /// <summary>
     /// 段の対象（「次に確認する問題」と主ボタンの括弧の中の両方に使う＝INV-01）。null＝対象なし。

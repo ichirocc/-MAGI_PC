@@ -215,6 +215,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private MonthMovePlan? monthMovePrompt;   // [3.643.0] 対象の月を移す前の確認。null＝閉じている
     [ObservableProperty] private AppliedFix? appliedFix;           // [3.669.0] 案の一覧から当てた手の結果（同じ依頼の画面で残る問題へ案内）
     [ObservableProperty] private SaveState saveState = SaveState.Saved;   // [Android 3.529.0] 自動保存の状態（適用後の案内「保存：…」が読む）
+    [ObservableProperty] private SaveFailDialog? saveFailDialog;   // 保存の失敗を知らせるダイアログ（null＝閉じている）
     [ObservableProperty] private ChainFixPreview? chainPreview;    // [3.644.0] 複数人の入替を当てる前の一覧（だれの・どの日の・何→何）。null＝閉じている
 
     /// <summary>[つくる前の確認] 非 null の間シートを出す。</summary>
@@ -351,6 +352,9 @@ public static class SearchStrengthExtensions
 
 /// <summary>[Android 3.529.0] 自動保存の状態（Kotlin <c>SaveState</c>）。</summary>
 public enum SaveState { Dirty, Saving, Saved, Failed }
+
+/// <summary>保存の失敗を知らせるダイアログ（First＝成功から失敗に変わった、Again＝失敗中のやり直しも失敗した）。</summary>
+public enum SaveFailDialog { First, Again }
 
 /// <summary>案の一覧から確認して当てた手（Kotlin <c>AppliedFix</c>）。FocusKey の依頼の画面へ「変更を反映しました」を返す（After と今の盤面が違えば出さない）。</summary>
 public sealed record AppliedFix(string FocusKey, string Label, IReadOnlyList<MagiEngine.V6.FixCell> Ops,

@@ -63,8 +63,10 @@ public sealed partial class MagiViewModel
 
     // ===== 自動保存/即時保存 =====
 
-    /// <summary>直前の自動保存が成功したか。失敗を連続で通知しないための状態。</summary>
-    private bool _autoSaveOk = true;
+    /// <summary>直前の保存が成功したか（失敗を連続で通知しない）と、保存の失敗のダイアログを出す瞬間。</summary>
+    private readonly SaveFailNotifier _saveFail = new();
+    /// <summary>利用者が「もう一度保存する」を押した保存の最中か（失敗したら「まだ保存できていません」）。</summary>
+    private bool _saveRetrying;
 
     /// <summary>計算の結果を採った時刻（0＝無し）。次に自動保存が書けた時に「計算完了から何秒で保存できたか」をログへ 1 行（Kotlin <c>resultAdoptedAtMs</c>、backlog #48）。</summary>
     internal long _resultAdoptedAtMs;
@@ -182,11 +184,28 @@ public sealed partial class MagiViewModel
 
     internal void ReportAutoSave(bool ok)
     {
-        if (ok == _autoSaveOk) return;
-        _autoSaveOk = ok;
+        var wasOk = _saveFail.LastOk;
+        var dialog = _saveFail.OnResult(ok, _saveRetrying);
+        if (dialog is not null || ok) Ui.SaveFailDialog = dialog;
+        if (ok == wasOk) return;
         if (ok) LogOp("I", "自動保存が復旧しました");
-        else Notify("自動保存に失敗しています（端末に書き込めませんでした）。空き容量を確かめて、設定タブの「データを保存」で書き出してください", "W");
+        else Notify(CellSheetLogic.SaveFailedNotice, "W");
     }
+
+    /// <summary>「もう一度保存する」（ホーム・設定・上部の語・ダイアログ）。失敗したらダイアログを「まだ保存できていません」で出し直す。</summary>
+    public void RetrySave()
+    {
+        _saveRetrying = true;
+        try { SaveNow(); } finally { _saveRetrying = false; }
+    }
+
+    /// <summary>上部の「自動保存できていません」から、保存の失敗のダイアログを開き直す。</summary>
+    public void ShowSaveFailDialog()
+    {
+        if (Ui.SaveState == SaveState.Failed) Ui.SaveFailDialog ??= SaveFailDialog.First;
+    }
+
+    public void DismissSaveFailDialog() => Ui.SaveFailDialog = null;
 
     /// <summary>
     /// 即時保存（デバウンスなし・同期書込）。バックグラウンド遷移から呼び、保留中の編集を確実に

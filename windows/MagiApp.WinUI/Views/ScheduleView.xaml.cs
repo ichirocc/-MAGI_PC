@@ -1512,8 +1512,9 @@ public sealed partial class ScheduleView : UserControl
                 // 保存に失敗している間は、追加の変更より保存のやり直しを先に（統合仕様 §11）。
                 if (ui.SaveState == SaveState.Failed)
                 {
-                    var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48 };
-                    retry.Click += (_, _) => _vm.SaveNow();
+                    // 失敗している間だけ塗り（帯の中の主はこれ 1 つ）。
+                    var retry = new Button { Content = CellSheetLogic.SaveRetryButton, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                    retry.Click += (_, _) => _vm.RetrySave();
                     banner.Children.Add(retry);
                 }
                 var acts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };

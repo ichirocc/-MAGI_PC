@@ -84,6 +84,11 @@ public sealed partial class MainWindow : Window
             if (_vm.Ui.DraftConfirm is { } msg) _ = ShowDraftConfirmAsync(msg);
             else _draftConfirmDialog?.Hide();
         }
+        else if (e.PropertyName == nameof(UiState.SaveFailDialog))
+        {
+            if (_vm.Ui.SaveFailDialog is { } d) _ = ShowSaveFailDialogAsync(d);
+            else _saveFailDialog?.Hide();
+        }
         else if (e.PropertyName == nameof(UiState.OpNotice)) ShowOpNotice();
         else if (e.PropertyName is null or nameof(UiState.Message) or nameof(UiState.MessageIsError)) UpdateMessageBar();
     }
@@ -253,6 +258,9 @@ public sealed partial class MainWindow : Window
 
         StatusBadgeButton.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) StatusPrefixText.Text = "";
+        var saveWord = ui.Loaded ? CellSheetLogic.TopBarSaveWord(ui.SaveState) : null;
+        SaveWordButton.Visibility = saveWord is null ? Visibility.Collapsed : Visibility.Visible;
+        SaveWordText.Text = saveWord ?? "";
         if (ui.Loaded)
         {
             string label, bg, fg;
@@ -534,6 +542,31 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private ContentDialog? _saveFailDialog;
+
+    private void OnSaveWordClick(object sender, RoutedEventArgs e) => _vm.ShowSaveFailDialog();
+
+    /// <summary>保存が失敗に変わった瞬間に 1 回だけ（Android 3.701.0 F-2）。主はやり直し、副は閉じる。</summary>
+    private async Task ShowSaveFailDialogAsync(SaveFailDialog d)
+    {
+        if (_saveFailDialog is not null) return;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = CellSheetLogic.SaveFailDialogTitle(d),
+            Content = new TextBlock { Text = CellSheetLogic.SaveFailDialogBody, TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = CellSheetLogic.SaveRetryButton,
+            CloseButtonText = "閉じる",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        _saveFailDialog = dialog;
+        var result = await dialog.ShowAsync();
+        _saveFailDialog = null;
+        // やり直しも失敗したとき「まだ保存できていません」が同じ値でも出し直せるよう、先に閉じた状態へ戻す。
+        _vm.DismissSaveFailDialog();
+        if (result == ContentDialogResult.Primary) _vm.RetrySave();
+    }
+
     private ContentDialog? _csvPartialDialog;
     private ContentDialog? _draftConfirmDialog;
 
@@ -708,8 +741,8 @@ public sealed partial class MainWindow : Window
     internal Task OpenDataAsync() =>
         GetOrCreateTab("settings") is SettingsView sv ? sv.OpenDataAsync() : Task.CompletedTask;
 
-    internal Task ExportScheduleCsvAsync() =>
-        GetOrCreateTab("settings") is SettingsView sv ? sv.ExportCsvAsync() : Task.CompletedTask;
+    internal Task<bool?> ExportScheduleCsvAsync() =>
+        GetOrCreateTab("settings") is SettingsView sv ? sv.ExportCsvAsync() : Task.FromResult<bool?>(null);
 
     /// <summary>
     /// [違反箇所へのジャンプ] <c>AnalysisView</c>「違反の場所」から呼ばれる。勤務表タブへ切替え

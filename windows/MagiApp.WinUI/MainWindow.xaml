@@ -45,6 +45,10 @@
             <TextBlock x:Name="SectionTitleText" Grid.Column="1" VerticalAlignment="Center" Opacity="0.8" />
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <!-- [3.670.0] 札の前に自動作成の状態（「未計算」では、警告が今の勤務表の評価か分からなかった）。 -->
+                <!-- [3.701.0] 自動保存に失敗しているときだけ error 色の語（押すと保存の失敗のダイアログ）。 -->
+                <HyperlinkButton x:Name="SaveWordButton" MinHeight="48" Padding="6,0" Visibility="Collapsed" Click="OnSaveWordClick">
+                    <TextBlock x:Name="SaveWordText" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" MaxLines="2" />
+                </HyperlinkButton>
                 <TextBlock x:Name="StatusPrefixText" FontSize="12" Opacity="0.8" MaxWidth="120" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center" />
                 <!-- 必須違反が残る＝巡回の入口、必須 0＝配布前の確認（Kotlin MagiTopBar の押せる札）。押せない状態は当たり判定を切る。
                      札の色は中の Border が持つ＝ボタンの背景は重ねた時・押した時も透明（状態の色を既定の灰色で上書きしない）。 -->
