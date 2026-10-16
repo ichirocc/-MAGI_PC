@@ -1405,9 +1405,52 @@ public static class CellSheetLogic
 
     public const string PeekSearchButton = "変更案を探す";
 
-    /// <summary>ちら見の次の一手: 置ける候補がすべて ⚠ で緩める候補も無いときだけ「変更案を探す」（主は 1 つ＝INV-09）。null＝出さない。</summary>
-    public static string? PeekHopelessAction(int mode, CellSeverity severity, ShiftMarks marks, IEnumerable<int> candidates, int current, int? recommend) =>
-        mode == 0 && severity != CellSeverity.None && recommend is null && SingleCellHopeless(marks, candidates, current) ? PeekSearchButton : null;
+    /// <summary>ちら見の主ボタン（S-3）: 問題のあるセルの割当では常に「変更案を探す」。緩める候補は外枠に下げる（主は 1 つ＝INV-09）。null＝出さない。</summary>
+    public static string? PeekSearchAction(int mode, CellSeverity severity) =>
+        mode == 0 && severity != CellSeverity.None ? PeekSearchButton : null;
+
+    /// <summary>勤務表タブの状態の 1 行の上限（D4 の幅で 1 行に収まる字数）。超えたら末尾を「…」にする。</summary>
+    public const int ScheduleStateMax = 23;
+
+    /// <summary>
+    /// 状態の 1 行（G2-1）。未作成・組んでいます・必須あり（巡回の先頭を添える）・必須は人員不足だけ・必須 0 の 5 通り。
+    /// <paramref name="next"/> は巡回の先頭の「M/D 名」（無ければ人員不足だけ）。必須の数は単位ごと（INV-07）の <paramref name="hardText"/> をそのまま使う。
+    /// </summary>
+    public static ScheduleStateLine ScheduleStateLineOf(bool hasResult, bool running, long bestHard, string hardText, string softText, string? next)
+    {
+        var (text, hard, tour) =
+            running ? ("組んでいます", false, false)
+            : !hasResult ? ("まだ作っていません", false, false)
+            : bestHard > 0L && next != null ? ($"必須違反 {hardText}（次：{next}さん）", true, true)
+            : bestHard > 0L ? ($"必須違反 {hardText}（日の印から開けます）", true, false)
+            : ($"必須違反はありません · 要調整 {softText}", false, false);
+        return new ScheduleStateLine(CapStateLine(text), hard, tour);
+    }
+
+    public static string CapStateLine(string text, int max = ScheduleStateMax) =>
+        text.Length <= max ? text : text[..(max - 1)] + "…";
+
+    /// <summary>必須違反の一覧の見出し（単位ごとの件数を添える）と、先頭の主ボタンの語（G2-3）。</summary>
+    public static string HardListTitle(string hardText) => $"必須違反の一覧（{hardText}）";
+    public const string HardListStartButton = "上から順に見る";
+
+    /// <summary>セルの確認シートの題（S-1）。</summary>
+    public const string CellSheetTitle = "このマスの確認";
+
+    /// <summary>対象の行「{名}さん · {M/D(曜)} · {記号}」（S-2）。今の勤務はここで言う（空のセルは記号を省く）。</summary>
+    public static string CellSheetTarget(string name, string dayLabel, string? symbol) =>
+        $"{name}さん · {dayLabel}" + (string.IsNullOrWhiteSpace(symbol) ? "" : $" · {symbol}");
+
+    /// <summary>ちら見の 2 行目の札。必須は巡回中なら「必須 2/5」。問題が無ければ null（札を出さない）。</summary>
+    public static string? CellSheetBadge(CellSeverity severity, int? tourAt = null, int tourTotal = 0) => severity switch
+    {
+        CellSeverity.Hard => tourAt is { } at && tourTotal > 0 ? $"必須 {at + 1}/{tourTotal}" : "必須",
+        CellSeverity.Soft => "要調整",
+        _ => null,
+    };
+
+    /// <summary>足りない側の人探しのボタンを塗りにするか（S-4）。セルに人員不足以外の問題もあれば外枠（主は「変更案を探す」＝INV-09）。</summary>
+    public static bool ShortSideFilled(IEnumerable<string> families) => families.All(f => f == "covU");
 
     public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「変更案を探す」で探し直してください";
 
@@ -1880,3 +1923,6 @@ public sealed record ContestOption(string Label, string? Reason, FixSuggestion S
 
 /// <summary>争点カード（D03、Kotlin <c>ContestCard</c>）: 見ている必須違反の題と、既存の主一覧の上位 2 件（推奨A／案B）。</summary>
 public sealed record ContestCard(string Title, ContestOption A, ContestOption? B);
+
+/// <summary>勤務表タブの状態の 1 行（Kotlin <c>ScheduleStateLine</c>）。TourFirst＝押すと巡回の先頭を開く（必須違反があり、セルで辿れるときだけ）。</summary>
+public sealed record ScheduleStateLine(string Text, bool Hard, bool TourFirst);

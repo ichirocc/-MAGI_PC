@@ -46,9 +46,7 @@ namespace MagiApp.WinUI.Views;
 /// セル枠の色=<see cref="MirrorKeys.Hard"/>（必須違反=濃い赤）/それ以外（要調整=橙）。
 /// 右下の丸=希望シフトの有無（反映済み=緑・未反映=桃、Kotlin原本の「反映済みリング/未反映バッジ」相当）。
 ///
-/// [元に戻す/やり直す] <see cref="MagiViewModel.Undo"/>/<see cref="MagiViewModel.Redo"/> へ配線。
-/// <see cref="UiState.CanUndo"/>/<see cref="UiState.CanRedo"/> でボタンの有効/無効を反映する
-/// （<c>Undo</c>/<c>Redo</c> 自身も実行中は無言で no-op なので、ここでも二重の防御）。
+/// [元に戻す/やり直す] シェル（MainWindow）のボタンに一本化（3.702.0 G2-9）。シートの［↶］は残す。
 ///
 /// [違反箇所へのジャンプ] <see cref="FocusCell"/>（<c>MainWindow.JumpToCell</c> 経由で
 /// <c>AnalysisView</c>「違反の場所」から呼ばれる）。指定セルへ <c>StartBringIntoView</c> で
@@ -100,33 +98,34 @@ public sealed partial class ScheduleView : UserControl
     private readonly HashSet<string> _vioEnabled = new(VioBuckets.AllKeys);
     private bool _focusMode;
 
-    /// <summary>[phase9 #10] シフト別の人員不足サマリー（covU のある日数をシフト別に多い順）。「人員」バケツ OFF なら他の covU 表示と同様に隠す。</summary>
-    private void RenderShortageBanner(UiState ui)
+    /// <summary>勤務表タブの状態の 1 行（Kotlin <c>ScheduleStateRow</c>、G2-1）。必須違反は赤、巡回の先頭へ行けるときだけ押せる。</summary>
+    private void RenderStateLine(UiState ui)
     {
-        if (!ui.Loaded || !_vioEnabled.Contains("need"))
+        if (!ui.Loaded)
         {
-            ShortageBanner.Visibility = Visibility.Collapsed;
+            StateLineButton.Visibility = Visibility.Collapsed;
             return;
         }
-        var byShift = new Dictionary<int, HashSet<int>>();
-        foreach (var (key, fams) in NeedClassesAll(ui))
-        {
-            if (!fams.Contains("vio-covU")) continue;
-            var parts = key.Split(',');
-            if (parts.Length != 2 || !int.TryParse(parts[0], out var k) || !int.TryParse(parts[1], out var j)) continue;
-            if (!byShift.TryGetValue(k, out var days)) byShift[k] = days = new HashSet<int>();
-            days.Add(j);
-        }
-        if (byShift.Count == 0)
-        {
-            ShortageBanner.Visibility = Visibility.Collapsed;
-            return;
-        }
-        ShortageBanner.Visibility = Visibility.Visible;
-        var body = string.Join(" ・ ", byShift.OrderByDescending(kv => kv.Value.Count)
-            .Select(kv => $"{(kv.Key < ui.ShiftSymbols.Count ? ui.ShiftSymbols[kv.Key] : kv.Key.ToString())} {kv.Value.Count}日"));
-        ShortageBannerText.Text = $"人員不足（全{Math.Max(1, ui.Days)}日中）: {body}";
+        var first = _vm.HardViolationItemsFor(LabelOf).FirstOrDefault();
+        var soft = ui.Display is { } d && d.FreshFor(ui) ? d.SoftText : AnalysisTriage.UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "なし";
+        var next = first is null ? null
+            : $"{DayMD(ui.StartDate, first.Days[0])} {(first.Staff < ui.StaffNames.Count ? ui.StaffNames[first.Staff] : $"職員{first.Staff + 1}")}";
+        var line = CellSheetLogic.ScheduleStateLineOf(ui.HasResult, ui.Running, ui.BestHard, DisplaySnapshots.DisplayHardText(ui), soft, next);
+        StateLineButton.Visibility = Visibility.Visible;
+        StateLineButton.IsHitTestVisible = line.TourFirst;
+        StateLineText.Text = line.Text;
+        StateLineText.Foreground = (Brush)Application.Current.Resources[line.Hard ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
     }
+
+    private void OnStateLineClick(object sender, RoutedEventArgs e)
+    {
+        if (_vm.HardViolationItemsFor(LabelOf).FirstOrDefault() is { } t) OpenCellSheet(t.Cell.I, t.Cell.J);
+    }
+
+    /// <summary>期間開始日 + j → "M/D"（Kotlin <c>dayMD</c>）。解析失敗時は "(j+1)日"。</summary>
+    private static string DayMD(string startDate, int j) =>
+        DateTime.TryParse(startDate, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d)
+            ? $"{d.AddDays(j).Month}/{d.AddDays(j).Day}" : $"{j + 1}日";
 
     /// <summary>[phase9 #8] 検索・凡例の開閉（既定は閉）と職員名の検索語。</summary>
     private bool _searchLegendOpen;
@@ -264,7 +263,7 @@ public sealed partial class ScheduleView : UserControl
         FilterBar.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
         if (!any) return;
         var loc = ui.ViolationCells.Count + ui.NeedViolations.Count + ui.CountViolations.Count;
-        FilterTitle.Text = $"違反フィルタ（種別）・要確認 {loc}か所";
+        FilterTitle.Text = $"要確認 {loc}か所";
         ShowAllButton.Visibility = _vioEnabled.SetEquals(VioBuckets.AllKeys) ? Visibility.Collapsed : Visibility.Visible;
         FocusToggle.IsChecked = _focusMode;
         BucketChips.Children.Clear();
@@ -472,9 +471,7 @@ public sealed partial class ScheduleView : UserControl
                 ? $"{d0.AddDays(_weeks[cur][0]).Month}月 第{cur + 1}/{_weeks.Count}週"
                 : $"第{cur + 1}/{_weeks.Count}週";
         }
-        var vioLabel = _vioDays.Count == 0 ? ""
-            : _navIdx < 0 ? $"違反 {_vioDays.Count}/{ui.Days}日"
-            : $"違反日 {_navIdx + 1}/{_vioDays.Count}";
+        var vioLabel = _vioDays.Count == 0 ? "" : $"違反 {(_navIdx < 0 ? "–" : (_navIdx + 1).ToString())}/{_vioDays.Count}";
         NavLabel.Text = string.Join(" ・ ", new[] { weekLabel, vioLabel }.Where(t => t.Length > 0));
         PrevWeekButton.IsEnabled = cur > 0;
         NextWeekButton.IsEnabled = cur < _weeks.Count - 1 && CanScrollForward();
@@ -505,8 +502,6 @@ public sealed partial class ScheduleView : UserControl
 
     private void OnNextVioClick(object sender, RoutedEventArgs e) => JumpToVio(_navIdx < 0 ? 0 : (_navIdx + 1) % _vioDays.Count);
 
-    private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
-    private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
 
     /// <summary>ListView（複数選択）の表示用ラッパー。氏名の重複があっても index で確実に職員を特定するため
     /// 文字列そのものではなくこれを ItemsSource に流す（<see cref="ListView.SelectedItems"/> から拾い戻す）。</summary>
@@ -692,12 +687,20 @@ public sealed partial class ScheduleView : UserControl
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "必須違反の一覧",
+            Title = CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui)),
             Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
         };
-        foreach (var r in CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys))
+        var rows = CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys);
+        if (rows.Count > 0)
+        {
+            var start = new Button { Content = CellSheetLogic.HardListStartButton, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            var firstCell = items[rows[0].TourAt].Cell;
+            start.Click += (_, _) => { dialog.Hide(); OpenCellSheet(firstCell.I, firstCell.J); };
+            panel.Children.Add(start);
+        }
+        foreach (var r in rows)
         {
             var content = new Grid { ColumnSpacing = 8 };
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -732,8 +735,6 @@ public sealed partial class ScheduleView : UserControl
         StatusText.Text = ui.Loaded
             ? $"{ui.Message}（必須={ui.BestHard} 合計={ui.BestSoft}・{ui.Staff}名×{ui.Days}日×{ui.Shifts}シフト）"
             : ui.Message ?? "読込中…";
-        UndoButton.IsEnabled = ui.CanUndo && !ui.Running;
-        RedoButton.IsEnabled = ui.CanRedo && !ui.Running;
         // [まとめて割当] SetCell と同じ二重防御——EditBlockedNow が最終防御、ここは押せるのに拒否されるだけの
         // ボタンを見せないための表示上の抑止（EditView/HomeView と同じ方針）。
         BulkAssignButton.IsEnabled = ui.Loaded && ui.Schedule.Count > 0 && !ui.Running;
@@ -741,7 +742,7 @@ public sealed partial class ScheduleView : UserControl
         HardListButton.Visibility = !ui.Running && ui.HasResult && ui.BestHard > 0 ? Visibility.Visible : Visibility.Collapsed;
         HardListButton.Content = $"必須 {DisplaySnapshots.DisplayHardText(ui)} ▼";
         RenderFilterBar(ui);
-        RenderShortageBanner(ui);
+        RenderStateLine(ui);
         RenderSearchLegend(ui);
         RenderSchedule(ui);
         RenderStaffTally(ui);
@@ -2286,11 +2287,15 @@ public sealed partial class ScheduleView : UserControl
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        head.Children.Add(new TextBlock { Text = $"{name}さん｜{ScheduleUtil.FormatDay(ui.StartDate, j)}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+        head.Children.Add(new TextBlock { Text = CellSheetLogic.CellSheetTitle, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
         // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
         //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
         var tourItems = _vm.HardViolationItemsFor(LabelOf);
         var tourAt = tourItems.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        // 対象の行と札（S-2）: 今の勤務はここで言う。巡回中の必須は「必須 2/5」。
+        var target = CellSheetLogic.CellSheetTarget(name, ScheduleUtil.FormatDay(ui.StartDate, j), cur >= 0 ? Sym(cur) : null);
+        var badge = CellSheetLogic.CellSheetBadge(status.Severity, tourAt >= 0 ? tourAt : null, tourItems.Count);
+        FrameworkElement? BadgeChip() => badge is null ? null : AnalysisView.TagChip(badge, status.Severity == CellSeverity.Hard ? MagiAccent.Red : MagiAccent.Orange);
         // 巡回中にシートを開いている間は、下部バーの違反ナビを隠す（シートの［◀ 前］［次 ▶］と重複）。
         SetVioNavHidden(tourAt >= 0);
         flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
@@ -2305,9 +2310,12 @@ public sealed partial class ScheduleView : UserControl
         }
         head.Children.Add(MakeUndoButton(2));
         panel.Children.Add(head);
-        if (step == 0 && CellSheetLogic.TourHeading(tourItems, tourAt) is { } tourHeading)
+        var targetRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        if (BadgeChip() is { } headChip) targetRow.Children.Add(headChip);
+        targetRow.Children.Add(new TextBlock { Text = target, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+        panel.Children.Add(targetRow);
+        if (step == 0 && CellSheetLogic.TourHeading(tourItems, tourAt) is not null)
         {
-            panel.Children.Add(new TextBlock { Text = tourHeading, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
                 panel.Children.Add(new TextBlock { Text = covLine, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         }
@@ -2332,9 +2340,8 @@ public sealed partial class ScheduleView : UserControl
             r1.Children.Add(MakeUndoButton(1));
             r1.Children.Add(new TextBlock
             {
-                Text = (CellSheetLogic.TourHeading(tourItems, tourAt) is { } th ? CellSheetLogic.PeekHeading(th) : null) ?? status.Text.Replace("⚠ ", ""), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Text = target, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
-                Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
             });
             var x = new Button { Content = "✕", MinHeight = 48, MinWidth = 48 };
             ToolTipService.SetToolTip(x, "閉じる");
@@ -2345,7 +2352,15 @@ public sealed partial class ScheduleView : UserControl
             var r2 = new Grid();
             r2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             r2.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            r2.Children.Add(new TextBlock { Text = $"{name} ・ {ScheduleUtil.FormatDay(ui.StartDate, j)}", TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
+            // 2 行目＝札＋原因（S-2）。
+            var causeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            if (BadgeChip() is { } peekChip) { peekChip.VerticalAlignment = VerticalAlignment.Center; causeRow.Children.Add(peekChip); }
+            causeRow.Children.Add(new TextBlock
+            {
+                Text = badge is null ? "このセルに違反はありません" : status.Cause, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
+                Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
+            });
+            r2.Children.Add(causeRow);
             if (tourAt >= 0 && tourItems.Count > 1)
             {
                 var nav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -2412,6 +2427,13 @@ public sealed partial class ScheduleView : UserControl
             acts.Children.Add(more);
             peek.Children.Add(extra);
             peek.Children.Add(acts);
+            // 主ボタンはシフト行の下に全幅で 1 つ（S-3・INV-09）。押すとこのセルの変更案の一覧を開いた状態で広げる（INV-01）。
+            if (CellSheetLogic.PeekSearchAction(mode, status.Severity) is { } searchLabel)
+            {
+                var sb = new Button { Content = searchLabel, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                sb.Click += (_, _) => { _cellSheetExpanded = true; _searchOnOpen = true; Reopen(i, j, 0); };
+                peek.Children.Add(sb);
+            }
             var riskNote = new TextBlock { Text = CellSheetLogic.PeekHardRiskNote, FontSize = 12, Opacity = 0.8, Visibility = Visibility.Collapsed };
             peek.Children.Add(riskNote);
             flyout.Content = peek;
@@ -2432,12 +2454,6 @@ public sealed partial class ScheduleView : UserControl
                         else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
                     }
                     if (marks.Keys.Any(m.HardRisk.Contains)) riskNote.Visibility = Visibility.Visible;
-                    if (CellSheetLogic.PeekHopelessAction(mode, status.Severity, m, canDo, cur, peekRecommend) is { } searchLabel)
-                    {
-                        var sb = new Button { Content = searchLabel, MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
-                        sb.Click += (_, _) => { _cellSheetExpanded = true; _searchOnOpen = true; Reopen(i, j, 0); };
-                        extra.Children.Insert(0, sb);
-                    }
                 }
                 catch (OperationCanceledException) { }
             }
@@ -2533,7 +2549,6 @@ public sealed partial class ScheduleView : UserControl
                 problemPanel.Children.Add(stLine);
             }
             if (fams.Count > 0) problemPanel.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf), size: 13));
-            problemPanel.Children.Add(Body($"現在の勤務：{Sym(cur)}"));
             if (dilemma) problemPanel.Children.Add(Body(CellSheetLogic.WishKeptLine(Sym(wish)), size: 13));
             var shortCaution = _vm.ShortSideCautionFor(i, j, name);
             if (shortCaution is not null) problemPanel.Children.Add(Body(shortCaution));
@@ -2676,7 +2691,7 @@ public sealed partial class ScheduleView : UserControl
                 if (shortSide.Contains("covU"))
                 {
                     var shortSlot = new StackPanel();
-                    var shortSearch = Wide(CellSheetLogic.ShortSideSearchButton(DayText.Short(ui.StartDate, j), Sym(cur)), accent: true);
+                    var shortSearch = Wide(CellSheetLogic.ShortSideSearchButton(DayText.Short(ui.StartDate, j), Sym(cur)), accent: CellSheetLogic.ShortSideFilled(fams));
                     closeShort = () => { shortSlot.Children.Clear(); shortSearch.Visibility = Visibility.Visible; };
                     shortSearch.Click += (_, _) =>
                     {
@@ -2691,7 +2706,8 @@ public sealed partial class ScheduleView : UserControl
                 {
                     // 変更案は押してから探す（開いただけでは探さない）。
                     var searchSlot = new StackPanel();
-                    var search = Wide("変更案を探す", accent: true);
+                    // 主は 1 つ（INV-09）: 人員不足だけのセルは足りない側の人探しが主。
+                    var search = Wide(CellSheetLogic.PeekSearchButton, accent: !(shortSide.Contains("covU") && CellSheetLogic.ShortSideFilled(fams)));
                     var searchNote = new TextBlock { Text = "この日・前後の日・関連する勤務の変更案を比較します。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
                     closeCell = () => { searchSlot.Children.Clear(); search.Visibility = Visibility.Visible; searchNote.Visibility = Visibility.Visible; };
                     void OpenCellSearch()
@@ -2708,7 +2724,7 @@ public sealed partial class ScheduleView : UserControl
                     panel.Children.Add(searchSlot);
                     if (_searchOnOpen) { _searchOnOpen = false; OpenCellSearch(); }
                 }
-                var pick = Wide("自分で勤務を選ぶ");
+                var pick = new HyperlinkButton { Content = "自分で勤務を選ぶ", MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
                 pick.Click += (_, _) => Reopen(i, j, 0, 1);
                 panel.Children.Add(pick);
                 var wishBtn = Wide("希望を確認・登録する");
@@ -2805,8 +2821,8 @@ public sealed partial class ScheduleView : UserControl
                 var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
                 var prevL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j - 1);
                 var nextL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j + 1);
-                var prevB = new Button { Content = $"{prevL ?? "前日"}へ", MinHeight = 48, IsEnabled = prevL is not null };
-                var nextB = new Button { Content = $"{nextL ?? "翌日"}へ", MinHeight = 48, IsEnabled = nextL is not null };
+                var prevB = new HyperlinkButton { Content = $"{prevL ?? "前日"}へ", MinHeight = 48, IsEnabled = prevL is not null };
+                var nextB = new HyperlinkButton { Content = $"{nextL ?? "翌日"}へ", MinHeight = 48, IsEnabled = nextL is not null };
                 prevB.Click += (_, _) => Reopen(i, j - 1, 0);
                 nextB.Click += (_, _) => Reopen(i, j + 1, 0);
                 days.Children.Add(prevB);
@@ -2814,7 +2830,7 @@ public sealed partial class ScheduleView : UserControl
                 panel.Children.Add(days);
             }
             var bottom = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
-            var close = new Button { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
+            var close = new HyperlinkButton { Content = "閉じる", MinHeight = 48, MinWidth = 160 };
             close.Click += (_, _) => flyout.Hide();
             bottom.Children.Add(close);
             panel.Children.Add(bottom);

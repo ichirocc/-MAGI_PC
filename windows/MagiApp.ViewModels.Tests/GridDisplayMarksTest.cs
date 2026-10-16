@@ -418,4 +418,22 @@ public class GridDisplayMarksTest
         var ui2 = new UiState { Schedule = Ui.Schedule, ShiftSymbols = Ui.ShiftSymbols, ViolationCells = Ui.ViolationCells, ViolationCellFamilies = Ui.ViolationCellFamilies, ZeroAllowCells = z2 };
         Assert.Contains("vio-c410", GridDisplayMarks.DisplayCellClasses(ui2, "0,0", new HashSet<string>()));
     }
+
+    /// <summary>Kotlin <c>MagiViewStateTest.exactFamilyMatchAgreesWithLegacySubstringRule</c> の写し（3.702.0 G2-8）。</summary>
+    [Fact]
+    public void ExactFamilyMatchAgreesWithLegacySubstringRule()
+    {
+        var classes = MirrorKeys.All.Select(f => $"vio-{f}").Concat(new[] { "vio-aptLow", "vio-aptHigh" });
+        foreach (var cls in classes)
+        {
+            var legacy = MirrorKeys.Hard.Any(h => cls.Contains(h));
+            Assert.True(legacy == GridDisplayMarks.IsHardCellViolation(cls), $"{cls} の必須判定は旧規則と一致");
+        }
+        Assert.True(GridDisplayMarks.IsHardCellViolation("vio-covU"), "必須族は必須");
+        Assert.False(GridDisplayMarks.IsHardCellViolation("vio-c3mn"), "紛らわしい c3mn を c3n と読み違えない");
+        Assert.False(GridDisplayMarks.IsHardCellViolation("vio-covO"), "過剰は必須ではない");
+        Assert.True(GridDisplayMarks.IsHeavySoftCellViolation(GridDisplayMarks.ZeroCapClass));
+        Assert.True(GridDisplayMarks.IsHeavySoftCellViolation("vio-c3mn"));
+        Assert.False(GridDisplayMarks.IsHeavySoftCellViolation("vio-covO"));
+    }
 }
