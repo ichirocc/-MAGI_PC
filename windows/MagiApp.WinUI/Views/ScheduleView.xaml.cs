@@ -1555,6 +1555,35 @@ public sealed partial class ScheduleView : UserControl
                 if (!quick && CellSheetLogic.OtherDaysGapLine(ui.NeedFamilies, ui.Schedule, target, _vm.NeedCellLimits, ui.ShiftSymbols, ui.StartDate) is { } od)
                     host.Children.Add(new TextBlock { Text = od, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 var t1 = tv.Of(FixTier.T1); var t2 = tv.Of(FixTier.T2);
+                // 争点カード（D03）: 主一覧の上位 2 件を推奨A／案B として先に。選ぶと各案と同じ変更の確認へ（一覧は下にそのまま）。
+                if (!quick && CellSheetLogic.ContestCardOf(target, label, t1.Concat(t2).Select(x => x.Sug).ToList(), ui.Schedule, ui.StaffNames, ui.ShiftSymbols) is { } cc)
+                {
+                    var ct = target;
+                    void Pick(FixSuggestion s)
+                    {
+                        var ce = ct.Effect(ui.Schedule, s.Ops);
+                        IReadOnlyList<string> ceff = new[] { $"{label}：{ce.CountLine()}", $"今回の{ce.GapLine()}", ce.AfterNote(ct.Basis) };
+                        _reviewOrigin = new FixPanelOrigin(focus, settingsLabel, quick, cell, problems, resolveAt, picked);
+                        registerClosed(() => _vm.PreviewFix(s, purpose, ceff, focus.Key, ct));
+                        hide();
+                    }
+                    var ccol = new StackPanel { Spacing = 4 };
+                    ccol.Children.Add(new TextBlock { Text = cc.Title, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextWrapping = TextWrapping.Wrap });
+                    ccol.Children.Add(new TextBlock { Text = cc.A.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                    if (cc.A.Reason is { } rs) ccol.Children.Add(new TextBlock { Text = rs, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    if (cc.B is { } cb) ccol.Children.Add(new TextBlock { Text = cb.Label, TextWrapping = TextWrapping.Wrap });
+                    var aBtn = new Button { Content = CellSheetLogic.ContestAButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !ui.Running,
+                        Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                    aBtn.Click += (_, _) => Pick(cc.A.Suggestion);
+                    ccol.Children.Add(aBtn);
+                    if (cc.B is { } cb2)
+                    {
+                        var bBtn = new Button { Content = CellSheetLogic.ContestBButton, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !ui.Running };
+                        bBtn.Click += (_, _) => Pick(cb2.Suggestion);
+                        ccol.Children.Add(bBtn);
+                    }
+                    host.Children.Add(new Border { Background = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"], CornerRadius = new CornerRadius(12), Padding = new Thickness(10), Child = ccol });
+                }
                 var n = 0;
                 if (t1.Count > 0)
                 {

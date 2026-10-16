@@ -1501,6 +1501,26 @@ public static class CellSheetLogic
         _ => null,
     };
 
+    public const string ContestAButton = "推奨Aで進む";
+    public const string ContestBButton = "案Bにする";
+
+    /// <summary>
+    /// 争点カードを組む（Kotlin <c>contestCard</c>、D03）。<paramref name="main"/> は画面の主一覧と同じ順の案（新しく探さない・並べ替えない）。
+    /// 対象が必須違反（日の人員の不足）でない、または案が無いときは null。A と B は同じ <paramref name="target"/> を直す案だけ＝INV-01。
+    /// </summary>
+    public static ContestCard? ContestCardOf(FixTarget target, string label, IReadOnlyList<FixSuggestion> main, IReadOnlyList<IReadOnlyList<int>> schedule,
+        IReadOnlyList<string> staffNames, IReadOnlyList<string> shiftSymbols)
+    {
+        if (target.Day is null || target.Multi || !target.Under) return null;
+        var picks = main.Where(s => target.Effect(schedule, s.Ops).Fixes).Take(2).ToList();
+        if (picks.Count == 0) return null;
+        string Name(FixSuggestion s) => SurplusMoveTitle(target, schedule, s.Ops, staffNames, shiftSymbols) ?? FixOutcomeText.FixDisplayLabel(s.Label);
+        var e = target.Effect(schedule, picks[0].Ops);
+        var a = new ContestOption($"推奨A: {Name(picks[0])}", $"理由: {e.AfterNote(target.Basis)}（{e.GapLine()}）", picks[0]);
+        var b = picks.Count > 1 ? new ContestOption($"案B: {Name(picks[1])}", null, picks[1]) : null;
+        return new ContestCard($"{label}の{target.GapWord}", a, b);
+    }
+
     /// <summary>確認の画面の「新たな必須違反」（null＝評価していない＝なしと言わない、統合仕様 INV-10）。</summary>
     public static string NewHardLine(IReadOnlyList<string>? names) =>
         "新たな必須違反：" + (names is null ? "未評価（適用の直前に検査します）" : names.Count == 0 ? "なし" : string.Join("、", names));
@@ -1822,3 +1842,9 @@ public sealed record CellChangeReview(
     string Change, string Neighbors, IReadOnlyList<string> ThisCell, IReadOnlyList<string> OthersResolved,
     IReadOnlyList<string> Appeared, string HardLine, IReadOnlyList<string> Headcount, IReadOnlyList<string> Counts, IReadOnlyList<string> WishPin,
     string? Verdict = null, bool VerdictBad = false);
+
+/// <summary>争点カード（D03）の 1 案（Kotlin <c>ContestOption</c>）: 案の名、理由（推奨A だけ）、選んだときに確認へ渡す案。</summary>
+public sealed record ContestOption(string Label, string? Reason, FixSuggestion Suggestion);
+
+/// <summary>争点カード（D03、Kotlin <c>ContestCard</c>）: 見ている必須違反の題と、既存の主一覧の上位 2 件（推奨A／案B）。</summary>
+public sealed record ContestCard(string Title, ContestOption A, ContestOption? B);
