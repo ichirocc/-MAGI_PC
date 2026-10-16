@@ -110,7 +110,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button x:Name="ApplyWishesForDaysButton" Content="適用" Click="OnApplyWishesForDaysClick" />
                         <Button x:Name="ClearWishesForDaysButton" Content="選択した日の希望を消す（0件）" Foreground="{StaticResource MagiErrorBrush}" Click="OnClearWishesForDaysClick" />
-                        <Button x:Name="CancelWishSelectionButton" Content="キャンセル" Click="OnCancelWishSelectionClick" />
+                        <Button x:Name="CancelWishSelectionButton" Content="閉じる" Click="OnCancelWishSelectionClick" />
                     </StackPanel>
                     <!-- 拡張希望: 選んだ日を、選んだシフト以外にする（禁止シフトを複数）。希望のある日は保存時に外れる。 -->
                     <TextBlock Text="以外にする（拡張希望）: 選んだ日を、下で選んだシフト以外にする（複数選べます）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0" />
@@ -152,7 +152,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button x:Name="ApplyNeedForDaysButton" Content="適用" Click="OnApplyNeedForDaysClick" />
                         <Button x:Name="ClearNeedForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearNeedForDaysClick" />
-                        <Button x:Name="CancelNeedSelectionButton" Content="キャンセル" Click="OnCancelNeedSelectionClick" />
+                        <Button x:Name="CancelNeedSelectionButton" Content="閉じる" Click="OnCancelNeedSelectionClick" />
                     </StackPanel>
                 </StackPanel>
                 <TextBlock Text="登録済みの例外（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />

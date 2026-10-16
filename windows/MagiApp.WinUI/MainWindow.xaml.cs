@@ -610,7 +610,7 @@ public sealed partial class MainWindow : Window
         else _vm.CancelCsvPartialImport();
     }
 
-    /// <summary>[つくる前の確認] Android <c>PreRunCheckSheet</c>。行を押すとセルへ、「このままつくる」は 1 タップで始める。</summary>
+    /// <summary>[勤務表を作成する] Android <c>PreRunCheckSheet</c>。行を押すとセルへ、開いたボタンと同じ語の主ボタン（3.704.0 Q3）で始める。</summary>
     private async Task ShowPreRunCheckAsync(MagiEngine.V6.PreRunCheck.Summary sum)
     {
         var ui = _vm.Ui;
@@ -621,7 +621,7 @@ public sealed partial class MainWindow : Window
             XamlRoot = Nav.XamlRoot,
             Title = CellSheetLogic.PreRunTitle,
             Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
-            PrimaryButtonText = CellSheetLogic.PreRunProceed,
+            PrimaryButtonText = CellSheetLogic.PreRunProceedLabel(ui.HasResult),
             SecondaryButtonText = CellSheetLogic.PreRunCheckConditions,
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Primary,
@@ -629,14 +629,15 @@ public sealed partial class MainWindow : Window
         // [Android 3.683.0] 期間・人数・時間の 1 行と登録条件の 1 行を先に。担当者が判断するのは、ここと作成後の問題の対応。
         panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunPlanLine(ui.StartDate, ui.Days, ui.Staff, ui.BudgetSec,
             MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec), TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunConditionLine(sum.NeedsSheet, sum.WishOverCaps.Count, ui.ManualPins.Count), FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(new TextBlock { Text = CellSheetLogic.PreRunConditionLine(t.FloorRows.Count, t.RerunRows.Count, sum.WishOverCaps.Count, ui.ManualPins.Count), FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
+        if (ui.PreRunRepeatHint is { } hint) panel.Children.Add(new TextBlock { Text = hint, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         Action? after = null;
         var toConditions = false;   // 設定へ着地する閉じ方＝「条件を確認する」として記録する（Kotlin onOpenLanding/onFixData）
         void Head(string text) => panel.Children.Add(new TextBlock { Text = "■ " + text, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) });
         void Note(string text) => panel.Children.Add(new TextBlock { Text = text, FontSize = 13, Opacity = 0.75, TextWrapping = TextWrapping.Wrap });
         void Link(string label, Action go)
         {
-            var b = new Button { Content = label, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
+            var b = new HyperlinkButton { Content = label, MinHeight = 44 };
             b.Click += (_, _) => { after = go; toConditions = true; dialog.Hide(); };
             panel.Children.Add(b);
         }
@@ -713,7 +714,6 @@ public sealed partial class MainWindow : Window
             Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });
             if (t.WallLanding is { } wl) Link(GuidedFixRules.LandingButtonLabel(wl), () => GoEditLandingFrom(wl, PreRunReturn()));
         }
-        if (ui.PreRunRepeatHint is { } hint) Note(hint);
 
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary) { _vm.ProceedPreRun(); return; }
@@ -722,7 +722,7 @@ public sealed partial class MainWindow : Window
         after?.Invoke();
     }
 
-    private static EditReturn PreRunReturn() => new("つくる前の確認", EditReturn.PreRun);
+    private static EditReturn PreRunReturn() => new(CellSheetLogic.PreRunTitle, EditReturn.PreRun);
 
     private void ShowWishConflicts()
     {

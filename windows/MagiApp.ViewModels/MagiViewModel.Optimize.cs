@@ -106,23 +106,15 @@ public sealed partial class MagiViewModel
         Ui.PreRunRepeatHint = null;
     }
 
-    /// <summary>編集タブの「元の確認へ戻る」: つくる前の確認を今のデータで作り直して出す（実行はしない）。残る項目が無ければそう言う。Kotlin <c>reopenPreRun</c>。</summary>
+    /// <summary>編集タブの「元の確認へ戻る」: 勤務表を作成するシートを今のデータで作り直して出す（実行はしない）。残る項目が無くても出す（3.704.0）。Kotlin <c>reopenPreRun</c>。</summary>
     public void ReopenPreRun()
     {
         var st = _state; var sched = _currentSchedule;
         if (st is null || sched is null) return;
         var sum = PreRunCheck.Build(st, sched);
-        if (sum.NeedsSheet)
-        {
-            Ui.PreRunRepeatHint = RepeatHint();
-            Ui.PreRunCheck = sum;
-            LogUi(new OpLogText.UiOp.PreRunOpen());
-        }
-        else
-        {
-            Ui.MessageIsError = false;
-            Ui.Message = $"つくる前の確認: 残る項目はなくなりました。画面下の「{(Ui.HasResult ? "再作成" : "勤務表をつくる")}」でつくれます";
-        }
+        Ui.PreRunRepeatHint = RepeatHint();
+        Ui.PreRunCheck = sum;
+        LogUi(new OpLogText.UiOp.PreRunOpen());
     }
 
     private long? _preRunAckKey;

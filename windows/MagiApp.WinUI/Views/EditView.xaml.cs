@@ -825,14 +825,14 @@ public sealed partial class EditView : UserControl
             var dialog = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "希望を勤務表へ反映しますか？",
+                Title = "担当外の希望を含めますか？",
                 Content = new TextBlock
                 {
-                    Text = $"担当外（所属グループで担当できない）希望が{oos}件あります。\n含めて反映すると、その {oos} 件は担当外の勤務として入り、必須違反として数えます。「担当外を除いて反映」ならその {oos} 件は入れません。どちらも「元に戻す」で戻せます。",
+                    Text = $"担当できないグループの希望が {oos} 件あります。\n含めて反映すると、その {oos} 件は担当外の勤務として入り、必須違反として数えます。「担当内だけ反映する」ならその {oos} 件は入れません。どちらも「元に戻す」で戻せます。",
                     TextWrapping = TextWrapping.Wrap,
                 },
-                PrimaryButtonText = "担当外も含めて反映する",
-                SecondaryButtonText = "担当外を除いて反映する",
+                PrimaryButtonText = "含めて反映する",
+                SecondaryButtonText = "担当内だけ反映する",
                 CloseButtonText = "反映しない",
                 DefaultButton = ContentDialogButton.Secondary,
             };
@@ -1080,19 +1080,8 @@ public sealed partial class EditView : UserControl
         }
     }
 
-    private async Task<bool> ConfirmAsync(string title, string message, string primary = "削除する", string close = "削除しない")
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = primary,
-            CloseButtonText = close,
-            DefaultButton = ContentDialogButton.Close,
-        };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
-    }
+    private Task<bool> ConfirmAsync(string title, string message, string primary = "削除する", string close = "削除しない")
+        => ConfirmDialog.ShowAsync(XamlRoot, title, new[] { message }, primary, close);
 
     // ===== 職員管理 =====
 

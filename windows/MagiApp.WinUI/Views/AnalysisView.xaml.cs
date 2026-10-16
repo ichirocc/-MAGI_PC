@@ -607,19 +607,8 @@ public sealed partial class AnalysisView : UserControl
         }
     }
 
-    private async System.Threading.Tasks.Task<bool> ConfirmAsync(string title, string message, string primary, string close)
-    {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-            PrimaryButtonText = primary,
-            CloseButtonText = close,
-            DefaultButton = ContentDialogButton.Close,
-        };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
-    }
+    private System.Threading.Tasks.Task<bool> ConfirmAsync(string title, string message, string primary, string close)
+        => ConfirmDialog.ShowAsync(XamlRoot, title, new[] { message }, primary, close);
 
     /// <summary>⑤ 診断ログ。等幅・選択可（そのままコピーして共有できるように）。</summary>
     private void RenderLogs(UiState ui)
