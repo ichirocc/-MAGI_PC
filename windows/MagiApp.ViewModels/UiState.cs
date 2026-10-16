@@ -112,6 +112,7 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private FixTierView? fixTiers;
 
     /// <summary>下書きで今の勤務表を置き換える前の確認の文（null＝出さない）。</summary>
+    [ObservableProperty] private bool draftStage;   // 最後のエンジン実行が下書きづくり（手を入れたかは EngineRan で見る）
     [ObservableProperty] private string? draftConfirm;
 
     /// <summary>改善手を探索中。</summary>

@@ -1391,7 +1391,8 @@ public sealed partial class ScheduleView : UserControl
             var resolver = resolveAt is { } ra ? _vm.CellResolver(ra.I, ra.J, picked) : null;
             Func<FixSuggestion, bool>? pred = resolver ?? (picked is not null ? x => CellSheetLogic.FixAddresses(x, picked) : null);
             var addressLabel = resolveAt is not null ? "このセルの" + (picked is not null ? LabelOf(picked) : "問題") : null;
-            var shown = ui.FixSuggestions.ToList();
+            // 日から開いた一覧はその日のセルに触れる案だけ（INV-01）。
+            var shown = CellSheetLogic.FixListDay(focus) is { } listDay ? ui.FixSuggestions.Where(x => CellSheetLogic.ListableFix(null, ui.Schedule, x.Ops, listDay)).ToList() : ui.FixSuggestions.ToList();
             var fixing0 = target is not null ? shown.Where(x => target.Effect(ui.Schedule, x.Ops).Fixes).ToList() : pred is not null ? shown.Where(pred).ToList() : shown;
             // 日の人員の対象は、同じ勤務の期間全体の過不足が減る案を先に（見ている日だけ直って別の日へ移る案は後ろ。隠さない）。
             var fixing = fixing0;
@@ -1426,7 +1427,7 @@ public sealed partial class ScheduleView : UserControl
                 foreach (var l in FixExplain.HardUnchangedLines(s, ui.BestHard > 0)) col.Children.Add(Small(l));
                 if (e is not null && target is not null)
                 {
-                    col.Children.Add(new TextBlock { Text = $"案{n}：{e.Title(label)}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
+                    col.Children.Add(new TextBlock { Text = $"案{n}：{CellSheetLogic.SurplusMoveTitle(target, ui.Schedule, s.Ops, ui.StaffNames, ui.ShiftSymbols) ?? e.Title(label)}", FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(new TextBlock { Text = $"{label}：{e.CountLine()}　{e.GapLine()}" + (CellSheetLogic.CountMovesOnly(s, target) ? CellSheetLogic.MovesToOtherStaffNote : ""), Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     col.Children.Add(new TextBlock { Text = e.AfterNote(target.Basis), Foreground = fg, TextWrapping = TextWrapping.Wrap });
                     foreach (var r in remain) col.Children.Add(new TextBlock { Text = r, Foreground = fg, TextWrapping = TextWrapping.Wrap });
@@ -1599,11 +1600,12 @@ public sealed partial class ScheduleView : UserControl
             if (tv is not null && target is not null && !quick)
             {
                 var main = Math.Min(tv.Of(FixTier.T1).Count, limit) + Math.Min(tv.Of(FixTier.T2).Count, limit);
-                var mv = tv.Of(FixTier.MoveOnly); var t3 = tv.Of(FixTier.T3);
+                // 見ている問題を減らさない案は一覧に出さない（適用の門 ImprovesTarget と同じ判定＝INV-03）。
+                var mv = tv.Of(FixTier.MoveOnly); var t3 = tv.Of(FixTier.T3).Where(x => CellSheetLogic.ListableFix(target, ui.Schedule, x.Sug.Ops, CellSheetLogic.FixListDay(focus))).ToList();
                 if (mv.Count > 0) Fold(FixTiers.MoveOnlyHeading(sym, target.Under, mv.Count), FixTiers.MoveOnlyNote, mv, main, FixTiers.MoveOnlyPurpose(label, target), moveOnlyOpen, v => moveOnlyOpen = v);
                 if (t3.Count > 0) Fold(CellSheetLogic.OtherFixHeading(t3.Count), CellSheetLogic.OtherFixNote(label, target), t3, main + Math.Min(mv.Count, limit), null, othersOpen, v => othersOpen = v);
             }
-            else if (others.Count > 0 && !quick && (target is not null || pred is not null))
+            else if (others.Count > 0 && !quick && target is null && pred is not null)
             {
                 var head = new StackPanel();
                 head.Children.Add(new TextBlock { Text = CellSheetLogic.OtherFixHeading(others.Count), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] });
@@ -2210,6 +2212,8 @@ public sealed partial class ScheduleView : UserControl
     private CancellationTokenSource? _marksCts;
     /// <summary>セル編集の全体表示（既定＝ちら見。閉じると戻す）。</summary>
     private bool _cellSheetExpanded;
+    // ちら見の「変更案を探す」は大きく開いて、このセルの変更案の一覧を開いた状態から始める。
+    private bool _searchOnOpen;
 
     /// <summary>
     /// セル編集（Android <c>CellEditSheet</c> の移植、2026-09-25。3.670.0 で 3 段階）: ① 問題を確認（今の勤務・問題の一文・並びの日々・
@@ -2337,7 +2341,9 @@ public sealed partial class ScheduleView : UserControl
                 rw.Click += (_, _) => { _vm.RemoveWish(i, j); Reopen(i, j, mode); };
                 extra.Children.Add(rw);
             }
-            if (mode == 0 && CellSheetLogic.PeekRecommendation(relax?.Result, i, j) is { } rec && rec != cur && canDo.Contains(rec))
+            _searchOnOpen = false;
+            int? peekRecommend = mode == 0 && CellSheetLogic.PeekRecommendation(relax?.Result, i, j) is { } pr && pr != cur && canDo.Contains(pr) ? pr : null;
+            if (peekRecommend is { } rec)
             {
                 // このセルだけを変えず、上限の緩和と手順をまとめて確定するダイアログを開く。
                 var rb = new Button { Content = NextActionGuide.RelaxPeekLabel(Sym(rec)), MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
@@ -2374,7 +2380,7 @@ public sealed partial class ScheduleView : UserControl
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "問題の説明と直し方を表示");
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
-            if (extra.Children.Count > 0) peek.Children.Add(extra);
+            peek.Children.Add(extra);
             peek.Children.Add(acts);
             var riskNote = new TextBlock { Text = CellSheetLogic.PeekHardRiskNote, FontSize = 12, Opacity = 0.8, Visibility = Visibility.Collapsed };
             peek.Children.Add(riskNote);
@@ -2396,6 +2402,12 @@ public sealed partial class ScheduleView : UserControl
                         else if (m.Recommended.Contains(k)) { tb.Text = "●"; tb.Foreground = new SolidColorBrush(ColorHex.Parse(MagiAccent.Green, Colors.Green)); }
                     }
                     if (marks.Keys.Any(m.HardRisk.Contains)) riskNote.Visibility = Visibility.Visible;
+                    if (CellSheetLogic.PeekHopelessAction(mode, status.Severity, m, canDo, cur, peekRecommend) is { } searchLabel)
+                    {
+                        var sb = new Button { Content = searchLabel, MinHeight = 48, Margin = new Thickness(0, 0, 6, 0) };
+                        sb.Click += (_, _) => { _cellSheetExpanded = true; _searchOnOpen = true; Reopen(i, j, 0); };
+                        extra.Children.Insert(0, sb);
+                    }
                 }
                 catch (OperationCanceledException) { }
             }
@@ -2652,17 +2664,19 @@ public sealed partial class ScheduleView : UserControl
                     var search = Wide("変更案を探す", accent: true);
                     var searchNote = new TextBlock { Text = "この日・前後の日・関連する勤務の変更案を比較します。", FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap };
                     closeCell = () => { searchSlot.Children.Clear(); search.Visibility = Visibility.Visible; searchNote.Visibility = Visibility.Visible; };
-                    search.Click += (_, _) =>
+                    void OpenCellSearch()
                     {
                         closeShort();
                         search.Visibility = Visibility.Collapsed;
                         searchNote.Visibility = Visibility.Collapsed;
                         searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j),
                             problems: _vm.CellProblemFamilies(i, j), resolveAt: (i, j)));
-                    };
+                    }
+                    search.Click += (_, _) => OpenCellSearch();
                     panel.Children.Add(search);
                     panel.Children.Add(searchNote);
                     panel.Children.Add(searchSlot);
+                    if (_searchOnOpen) { _searchOnOpen = false; OpenCellSearch(); }
                 }
                 var pick = Wide("自分で勤務を選ぶ");
                 pick.Click += (_, _) => Reopen(i, j, 0, 1);

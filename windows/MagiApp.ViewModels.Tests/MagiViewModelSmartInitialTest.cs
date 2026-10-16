@@ -56,11 +56,12 @@ public class MagiViewModelSmartInitialTest
 
     /// <summary>[Android 3.679.0] 盤面のある勤務表は確認してから置き換える（確認の文は今の必須違反を言う）。</summary>
     [Fact]
-    public void AsksBeforeReplacingAnExistingBoard()
+    public async Task AsksBeforeReplacingAnExistingBoard()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
 
         vm.GenerateSmartInitial();
+        await vm.LastDraftPreviewTask!;   // [3.699.0] 確認の前に下書きを 1 回作る
 
         Assert.Null(vm.LastGenerateSmartInitialTask);
         Assert.Equal("今の勤務表を下書きで置き換えます。元に戻せます", vm.Ui.DraftConfirm);   // 結果が無い（数えていない）ときは件数を言わない（3.686.0）
