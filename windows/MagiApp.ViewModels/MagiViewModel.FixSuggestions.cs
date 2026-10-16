@@ -348,4 +348,34 @@ public sealed partial class MagiViewModel
             Ui.Message = ConsultList.ConsultTargetNote(c, u.StartDate, u.StaffNames, u.ShiftSymbols, u.Days, u.StaffIds) ?? "この枠はいまのデータにありません";
         }
     }
+
+    /// <summary>
+    /// 分析タブの「変更案で直せる必須違反」。必須違反を減らすすべての案の解消の鍵を合わせて <see cref="UiState.FixResolvedUnion"/> へ
+    /// （既にある案を読むだけ、探索しない）。UI スレッドがある文脈では背景で検査し、届いた時点で盤面か案が変わっていれば捨てる。
+    /// </summary>
+    private void RefreshFixResolvedUnion()
+    {
+        var opsList = Ui.FixSuggestions.Where(f => f.DeltaHard < 0).Select(f => f.Ops).ToList();
+        var sch = Ui.Schedule;
+        var st = _state;
+        if (st is null || opsList.Count == 0 || sch.Count == 0) return;
+        if (Ui.FixResolvedUnion is { } u && u.Matches(opsList, sch)) return;
+        IReadOnlySet<ViolationKey>? Keys()
+        {
+            try
+            {
+                var s = sch.Select(r => r.ToArray()).ToArray();
+                var before = UnifiedViolationChecker.Check(st, s);
+                return CellSheetLogic.FixResolvedUnionOf(opsList, ops => CellSheetLogic.ResolvedHardKeys(st, s, before, ops));
+            }
+            catch (Exception) { return null; }
+        }
+        if (_uiContext is null) { if (Keys() is { } k) Ui.FixResolvedUnion = new FixResolvedUnion(opsList, sch, k); return; }
+        _ = Task.Run(Keys).ContinueWith(task => PostToUi(() =>
+        {
+            if (task.Result is not { } k) return;
+            var r = new FixResolvedUnion(opsList, sch, k);
+            if (r.Matches(Ui.FixSuggestions.Where(f => f.DeltaHard < 0).Select(f => f.Ops).ToList(), Ui.Schedule)) Ui.FixResolvedUnion = r;
+        }), TaskScheduler.Default);
+    }
 }

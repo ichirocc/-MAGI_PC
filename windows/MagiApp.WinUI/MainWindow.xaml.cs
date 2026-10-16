@@ -292,7 +292,9 @@ public sealed partial class MainWindow : Window
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
         // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
-        var secondary = !ui.Running && _currentTag == "home";
+        // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。
+        var secondary = !ui.Running && (_currentTag == "home"
+            || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None));
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
@@ -341,6 +343,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>分析タブの主ボタン（Kotlin <c>onPrimary</c>）。巡回は札と同じ先頭のシート、なおし方はホームの人員不足の手伝い。</summary>
+    private void OnAnalysisPrimary(AnalysisPrimary p)
+    {
+        if (p == AnalysisPrimary.Tour)
+        {
+            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first) OpenCellSheet(first.Cell.I, first.Cell.J);
+        }
+        else if (p == AnalysisPrimary.Guided)
+        {
+            SelectTab("home");
+            if (_tabCache.TryGetValue("home", out var h) && h is HomeView hv) _ = hv.ShowGuidedFixAsync();
+        }
+    }
+
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();
     private void OnRedoClick(object sender, RoutedEventArgs e) => _vm.Redo();
 
@@ -360,8 +376,10 @@ public sealed partial class MainWindow : Window
                 "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), GoEditLandingFrom, ShowRelaxTrial),
                 "edit" => new EditView(_vm),
                 // 「設定へ」は種類に対応する節（回数→③・決まり→⑤）、必要人数・希望・種類なしは月次条件の先頭（3.646.0 L04）。
-                "analysis" => new AnalysisView(_vm, JumpToCell, kind => GoEditLandingFrom(
-                    VioBuckets.YearSectionForIssueKind(kind) is { } sec ? new EditLanding(2, sec) : null, new EditReturn("問題の一覧", EditReturn.Analysis))),
+                // セルの行は巡回と同じくそのセルのシートを開く（Android 3.705.0）。
+                "analysis" => new AnalysisView(_vm, OpenCellSheet, kind => GoEditLandingFrom(
+                    VioBuckets.YearSectionForIssueKind(kind) is { } sec ? new EditLanding(2, sec) : null, new EditReturn("問題の一覧", EditReturn.Analysis)),
+                    TourItemCount, OnAnalysisPrimary),
                 "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };

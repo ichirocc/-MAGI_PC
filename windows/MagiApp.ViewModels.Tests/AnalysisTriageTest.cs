@@ -46,7 +46,7 @@ public class AnalysisTriageTest
         Assert.Equal("設定を緩めて手順を当てた盤面の概算です（再作成する前）。", t.SearchNote);
         var done = Ui(B(("c3", 2)), hasResult: true);
         done.RelaxedBoard = true;
-        Assert.StartsWith("最適化後も残っている", AnalysisTriage.Build(done, L).SearchNote);
+        Assert.StartsWith("作成後も残っている", AnalysisTriage.Build(done, L).SearchNote);
     }
 
     private static Dictionary<string, int> B(params (string, int)[] kv) => kv.ToDictionary(x => x.Item1, x => x.Item2);

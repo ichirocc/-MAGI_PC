@@ -64,11 +64,16 @@ public sealed partial class AnalysisView : UserControl
     private readonly Action<int, int> _jumpToCell;
 
     /// <param name="goEdit">「設定へ」。種類（設定の見直しの IssueKind、無ければ null）を渡し、着地先は MainWindow が決める（3.646.0 L04）。</param>
-    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action<IssueKind?>? goEdit = null)
+    /// <param name="tourCount">巡回できる必須違反の数（シェルの札と同じ数え方）。</param>
+    /// <param name="onPrimary">状態の段の主ボタン（巡回の先頭のシート／人員不足のなおし方）。</param>
+    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action<IssueKind?>? goEdit = null,
+        Func<UiState, int>? tourCount = null, Action<AnalysisPrimary>? onPrimary = null)
     {
         _vm = vm;
         _jumpToCell = jumpToCell;
         _goEdit = goEdit;
+        _tourCount = tourCount;
+        _onPrimary = onPrimary;
         InitializeComponent();
         _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
@@ -118,6 +123,14 @@ public sealed partial class AnalysisView : UserControl
     private void OnFixSearchClick(object sender, RoutedEventArgs e) => _vm.FindFixSuggestions();
 
     private readonly Action<IssueKind?>? _goEdit;
+    private readonly Func<UiState, int>? _tourCount;
+    private readonly Action<AnalysisPrimary>? _onPrimary;
+    private AnalysisPrimary _summaryPrimary = AnalysisPrimary.None;
+
+    private void OnSummaryPrimaryClick(object sender, RoutedEventArgs e)
+    {
+        if (_summaryPrimary != AnalysisPrimary.None) _onPrimary?.Invoke(_summaryPrimary);
+    }
     private bool _triageSummaryOpen;
 
     private static Brush BrushOf(string key) => (Brush)Application.Current.Resources[key];
@@ -138,9 +151,6 @@ public sealed partial class AnalysisView : UserControl
         TriageSection.Visibility = Visibility.Visible;
         var t = AnalysisTriage.Build(ui, LabelOf);
 
-        TriageBadge.Background = BrushOf(t.Computed ? "MagiTertiaryContainerBrush" : "MagiSurfaceVariantBrush");
-        TriageBadgeText.Foreground = t.Computed ? BrushOf("MagiOnTertiaryContainerBrush") : new SolidColorBrush(Microsoft.UI.Colors.DimGray);
-        TriageBadgeText.Text = t.Computed ? "計算済み" : "未計算";
         TriageAllClearText.Visibility = !t.HasAnything && ui.Loaded && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
 
         // [Android 3.683.0] 必須違反（配る前に直す）と、設定を変えないと消えない項目を分ける。
@@ -157,7 +167,7 @@ public sealed partial class AnalysisView : UserControl
             var box = new StackPanel { Spacing = 2 };
             box.Children.Add(new TextBlock
             {
-                Text = $"{row.Label} {row.Count}{row.Unit}" + (row.Promoted ? "（構造的に残ると判定）" : ""),
+                Text = $"{row.Label} {row.Count}{row.Unit}",
                 FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap,
             });
             if (row.Detail.Length > 0)
@@ -170,9 +180,6 @@ public sealed partial class AnalysisView : UserControl
         if (otherBlockers.Count == 0 && t.Issues.Count > 0) TriageBlockersList.Children.Add(SettingsHeading());
         foreach (var row in t.Issues)
         {
-            var grid = new Grid { ColumnSpacing = 8 };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var box = new StackPanel { Spacing = 2 };
             box.Children.Add(new TextBlock
             {
@@ -181,16 +188,16 @@ public sealed partial class AnalysisView : UserControl
             });
             if (row.Detail.Length > 0)
                 box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 14, Foreground = BrushOf("MagiOnWarnContainerBrush"), TextWrapping = TextWrapping.Wrap, MaxLines = 2 });
-            Grid.SetColumn(box, 0); grid.Children.Add(box);
+            // 設定の節の名を本文の下に全幅で（Android 3.705.0）。
             if (_goEdit is not null)
             {
-                var go = new Button { Content = "設定へ", FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+                var go = new Button { Content = AnalysisTriage.IssueSettingsLabel(row.Kind), FontSize = 14, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
                 go.Click += (_, _) => _goEdit(row.Kind);
-                Grid.SetColumn(go, 1); grid.Children.Add(go);
+                box.Children.Add(go);
             }
             TriageBlockersList.Children.Add(new Border
             {
-                Background = BrushOf("MagiWarnContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = grid,
+                Background = BrushOf("MagiWarnContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
             });
         }
 
@@ -225,7 +232,6 @@ public sealed partial class AnalysisView : UserControl
             if (t.BusyFamilies.Count > 0)
                 TriageSummaryList.Children.Add(BodyText($"⚠ 残っている（{t.BusyFamilies.Count}項目）: " + string.Join(" / ", t.BusyFamilies), dim: true));
         }
-        TriageRunningNote.Visibility = ui.Running ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnTriageSummaryToggleClick(object sender, RoutedEventArgs e)
@@ -279,9 +285,13 @@ public sealed partial class AnalysisView : UserControl
     private void RenderSummary(UiState ui)
     {
         SummarySection.Visibility = Visibility.Visible;
-        SummaryText.Text =
-            $"{AnalysisTriage.ReportCountsText(ui.Breakdown)} ・ " +
-            $"重みつきスコア {ui.WeightedScore:0.#} ・ 満足度 {ui.Satisfaction}";
+        var summary = AnalysisTriage.AnalysisSummaryOf(ui, _tourCount?.Invoke(ui) ?? 0, CellSheetLogic.AnalysisFixResolved(ui));
+        SummaryText.Text = summary.Sentence;
+        SummaryPoints.Children.Clear();
+        foreach (var p in summary.Points) SummaryPoints.Children.Add(BodyText("・" + p));
+        _summaryPrimary = _onPrimary is null ? AnalysisPrimary.None : summary.Primary;
+        SummaryPrimaryButton.Content = summary.PrimaryLabel ?? "";
+        SummaryPrimaryButton.Visibility = _summaryPrimary != AnalysisPrimary.None && summary.PrimaryLabel is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // 補足（あるときだけ）: 操作の助言・研磨の限界・そもそも叶えられない希望の件数。
         var hints = new List<string>();
@@ -315,7 +325,7 @@ public sealed partial class AnalysisView : UserControl
             var name = loc.I < ui.StaffNames.Count ? ui.StaffNames[loc.I] : $"#{loc.I}";
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
             row.Children.Add(BodyText($"{name}　{loc.J + 1}日　{LabelOf(loc.Family)}"));
-            var jump = new Button { Content = "勤務表へ", FontSize = 14 };
+            var jump = new Button { Content = "勤務を開く", FontSize = 14 };
             var i = loc.I; var j = loc.J;
             jump.Click += (_, _) => _jumpToCell(i, j);
             row.Children.Add(jump);

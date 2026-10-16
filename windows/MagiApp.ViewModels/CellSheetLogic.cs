@@ -1216,6 +1216,23 @@ public static class CellSheetLogic
         ViolationIdentity.Of(UnifiedViolationChecker.Check(state, s), UnifiedViolationChecker.Check(state, Trial(s, ops)))
             .Resolved.Where(k => k.Hard).Select(k => $"{labelOf(k.Family)}：{ViolationKeyPlace(k, staffNames, shiftSymbols, state.StartDate)}").ToList();
 
+    /// <summary>手 ops で解消する必須違反の鍵（before＝今の盤面の正式な報告。案ごとに検査し直さない）。</summary>
+    public static IReadOnlySet<ViolationKey> ResolvedHardKeys(MagiState state, int[][] s, ViolationReport before, IReadOnlyList<FixCell> ops) =>
+        ViolationIdentity.Of(before, UnifiedViolationChecker.Check(state, Trial(s, ops))).Resolved.Where(k => k.Hard).ToHashSet();
+
+    /// <summary>案ごとの解消の鍵を合わせる（同じ場所を直す案が重なっても 1 か所）。</summary>
+    public static IReadOnlySet<ViolationKey> FixResolvedUnionOf(IReadOnlyList<IReadOnlyList<FixCell>> opsList, Func<IReadOnlyList<FixCell>, IReadOnlySet<ViolationKey>> resolve) =>
+        opsList.SelectMany(resolve).ToHashSet();
+
+    /// <summary>分析タブの「変更案で直せる必須違反 Nか所」の N。未探索・盤面か案が変わった後は null（出さない）。</summary>
+    public static int? AnalysisFixResolved(UiState ui)
+    {
+        if (!ui.FixSearched) return null;
+        var opsList = ui.FixSuggestions.Where(f => f.DeltaHard < 0).Select(f => f.Ops).ToList();
+        if (opsList.Count == 0) return 0;
+        return ui.FixResolvedUnion is { } u && u.Matches(opsList, ui.Schedule) ? u.Keys.Count : null;
+    }
+
     /// <summary>ホームの「直す手」の見出し。解消する必須違反の名と場所が分かれば 2 件まで名指しする（3 件目からは件数）。</summary>
     public static string HomeFixHeadline(string hard, IReadOnlyList<string> resolved)
     {
