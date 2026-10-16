@@ -164,6 +164,10 @@ public class MagiViewModelBackgroundTest : IDisposable
         Assert.Contains("バックグラウンド最適化 完了", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("バックグラウンド最適化 完了"));
         Assert.False(OptimizationRepository.Running);
+        // [3.694.0] 背景の開始行にも期間・人数・指紋、直後に設定の開始時。
+        Assert.Matches("バックグラウンド最適化 開始 \\(予算[0-9]+s, 並列[0-9]+, 方式[A-Za-z0-9]+\\) ・ 期間=2025-12-01〜2025-12-07（7日） ・ 職員=2名 ・ 状態指紋=[0-9a-f]{16} ・ 盤面指紋=[0-9a-f]{16}$",
+            Assert.Single(vm.Ui.OpLog, l => l.Contains("バックグラウンド最適化 開始")));
+        Assert.Single(vm.Ui.OpLog, l => l.Contains("設定の開始時: ネイティブ加速（設定）="));
     }
 
     /// <summary>[外部レビュー N6] 背景実行も前景と同じく画面の方式・仕上げ最適化で計算する。</summary>

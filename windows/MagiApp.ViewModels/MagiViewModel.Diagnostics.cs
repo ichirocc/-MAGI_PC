@@ -85,13 +85,8 @@ public sealed partial class MagiViewModel
     /// <summary>[3.327.0→3.328.0] 診断を取ったときの入力の指紋。設定が編集されたら診断は失効する。</summary>
     private long _lastDiagStateKey;
 
-    /// <summary>[テスト可視性のためinternal化] 盤面の内容から決まる指紋。S×T が小さい（30×31）ので毎回の計算コストは無視できる。</summary>
-    internal static long BoardKey(int[][] schedule)
-    {
-        var h = 1125899906842597L;
-        foreach (var row in schedule) foreach (var v in row) h = h * 31L + v;
-        return h;
-    }
+    /// <summary>[テスト可視性のためinternal化] 盤面の内容から決まる指紋。実体は <see cref="StateFingerprint.OfBoard"/>（3.694.0、操作ログの盤面指紋と同じ式）。</summary>
+    internal static long BoardKey(int[][] schedule) => StateFingerprint.OfBoard(schedule);
 
     /// <summary>
     /// [3.328.0/外部レビュー → 3.330.0 で v6 へ移動] 勤務表の意味を決める入力すべての指紋。

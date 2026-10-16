@@ -964,6 +964,21 @@ public class MagiViewModelPersistenceTest : IDisposable
 
         Assert.True(vm.Ui.Loaded);
         Assert.Equal(2, vm.Ui.Staff);
+        // [3.694.0] 読込行に期間・指紋・取得元（起動時の復元）。
+        Assert.Matches("読込 2名/7日/2シフト ・ 期間=2025-12-01〜2025-12-07（7日） ・ 状態指紋=[0-9a-f]{16} ・ 盤面指紋=[0-9a-f]{16} ・ 取得元=起動時の復元$",
+            Assert.Single(vm.Ui.OpLog, l => l.Contains("読込 ")));
+    }
+
+    [Fact]
+    public async Task LoadByTheUserSaysSoInTheLoadLine()
+    {
+        var vm = NewVm();
+        var json = StateJsonSerializer.Serialize(MinimalState.Build(), MinimalState.BuildSchedule());
+
+        vm.LoadAsync(json);
+        await vm.LastLoadTask!;
+
+        Assert.EndsWith(" ・ 取得元=利用者の読込", Assert.Single(vm.Ui.OpLog, l => l.Contains("読込 2名/7日/2シフト ・ 期間=")));
     }
 
     [Fact]

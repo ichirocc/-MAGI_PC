@@ -115,18 +115,29 @@ public sealed partial class MagiViewModel
     /// <summary>操作ログ・診断ログの平文ファイル書き出し（Web版の「ログ出力」に相当）。</summary>
     public string? ExportLogs()
     {
-        var ops = Ui.OpLog;
-        var runsInLog = _opLog.Select(e => e.Run).Where(r => r > 0).Distinct().OrderBy(r => r).ToList();
+        // [3.694.0] 実行番号・捨て件数は同じロックの中で読む（Ui.OpLog の写しは lock 外の代入なので 1 件遅れうる）。出力は不変。
+        IReadOnlyList<string> ops; List<int> runsInLog; int dropped; long startedAtMs;
+        lock (_opLogLock)
+        {
+            ops = Ui.OpLog;
+            runsInLog = _opLog.Select(e => e.Run).Where(r => r > 0).Distinct().OrderBy(r => r).ToList();
+            dropped = _opLogDropped;
+            startedAtMs = _opLogStartedAtMs;
+        }
         var runSpan = runsInLog.Count == 0 ? "" : $"・実行#{runsInLog[0]}〜#{runsInLog[^1]}";
         // 出力は全文（非圧縮）。画面表示は圧縮版だが、監査用にはロスレスの _rawDiagLogs を使う。
         var logs = _rawDiagLogs.Count > 0 ? _rawDiagLogs : Ui.Logs;
         if (ops.Count == 0 && logs.Count == 0) return null;
-        var ts = DateTime.Now.ToString("yyyy\\/MM\\/dd HH:mm:ss", CultureInfo.InvariantCulture);
+        const string stampFormat = "yyyy\\/MM\\/dd HH:mm:ss";
+        var ts = DateTime.Now.ToString(stampFormat, CultureInfo.InvariantCulture);
+        var startedAt = DateTimeOffset.FromUnixTimeMilliseconds(startedAtMs).ToLocalTime().ToString(stampFormat, CultureInfo.InvariantCulture);
         var sb = new StringBuilder();
         sb.Append("MAGI ログ (Native)  出力: ").Append(ts).Append('\n');
         sb.Append(EnvironmentLine()).Append('\n');
         sb.Append($"状態: {Ui.Staff}名/{Ui.Days}日 ・ 必須={Ui.BestHard} 合計={Ui.TotalViolations}\n");
+        sb.Append(PeriodLine()).Append('\n');
         sb.Append($"\n==== 操作ログ（新しい順 {ops.Count}件{runSpan}）====\n");
+        sb.Append(OpLogText.Note(startedAt, dropped)).Append('\n');
         foreach (var line in ops) sb.Append(line).Append('\n');
         sb.Append($"\n==== 診断ログ（{RunTag(_lastDiagSerial)}の全文 {logs.Count}件）====\n");
         // [3.408.0相当] 操作ログは履歴・診断ログは直近1回ぶん。実行が2回以上あるとき、両者を続けて
@@ -160,6 +171,13 @@ public sealed partial class MagiViewModel
         return sb.ToString();
     }
 
+    /// <summary>[3.694.0] 状態行の直後の 1 行: 期間と指紋（書き出し時点）。勤務表がなければ「期間=なし」。</summary>
+    private string PeriodLine() =>
+        _state is { } st
+            ? $"期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 状態指紋={OpLogText.Hex16(StateKey(st))}"
+              + (_currentSchedule is { } sched ? $" ・ 盤面指紋={OpLogText.Hex16(BoardKey(sched))}" : "")
+            : "期間=なし";
+
     private static readonly JsonSerializerOptions LogJsonOptions = new()
     {
         WriteIndented = true,
@@ -185,9 +203,25 @@ public sealed partial class MagiViewModel
             //   外部AI/人間の誤読が実際に発生したため意味を同梱する。
             ["satisfactionMeaning"] = "0-100の進捗スコア（必須・合計違反の減少度）。希望充足率ではありません",
         };
+        // [3.694.0] テキスト版の期間行・注記と同じ値（キーの追加のみ）。
+        if (_state is { } st)
+        {
+            o["startDate"] = st.StartDate;
+            o["endDate"] = st.EndDate;
+            o["stateFingerprint"] = OpLogText.Hex16(StateKey(st));
+        }
+        if (_currentSchedule is { } sched) o["boardFingerprint"] = OpLogText.Hex16(BoardKey(sched));
 
+        IReadOnlyList<string> ops; List<int> runsInLog;
+        lock (_opLogLock)
+        {
+            ops = Ui.OpLog;
+            runsInLog = _opLog.Select(e => e.Run).Where(r => r > 0).Distinct().OrderBy(r => r).ToList();
+            o["opLogStartedAt"] = _opLogStartedAtMs;
+            o["opLogDropped"] = _opLogDropped;
+        }
         var opArr = new JsonArray();
-        foreach (var line in Ui.OpLog) opArr.Add(line);
+        foreach (var line in ops) opArr.Add(line);
         o["opLog"] = opArr;
 
         var logs = _rawDiagLogs.Count > 0 ? _rawDiagLogs : Ui.Logs;
@@ -200,7 +234,7 @@ public sealed partial class MagiViewModel
         o["diagRun"] = _lastDiagSerial;
 
         var runsArr = new JsonArray();
-        foreach (var r in _opLog.Select(e => e.Run).Where(r => r > 0).Distinct().OrderBy(r => r)) runsArr.Add(r);
+        foreach (var r in runsInLog) runsArr.Add(r);
         o["runsInOpLog"] = runsArr;
 
         // [3.379.0相当] テキスト版と同じ理由＝最適化後の編集で diagLog は作り直されるため実行時のぶんも残す。

@@ -48,6 +48,10 @@ public class MagiViewModelSmartInitialTest
         Assert.False(vm.Ui.MessageIsError);
         Assert.Contains("下書きをつくりました", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("初期解生成 完了"));
+        // [3.694.0] 開始行は 1 本・#N 付きで入力の期間・人数・指紋、完了行には生成した下書きの盤面指紋。
+        var start = Assert.Single(vm.Ui.OpLog, l => l.Contains("初期解生成 開始"));
+        Assert.Matches("#1 初期解生成 開始 ・ 期間=2025-12-01〜2025-12-07（7日） ・ 職員=2名 ・ 状態指紋=[0-9a-f]{16} ・ 盤面指紋=[0-9a-f]{16}$", start);
+        Assert.Matches("#1 初期解生成 完了 必須=[0-9]+ 合計=[0-9]+ ・ 盤面指紋=[0-9a-f]{16}$", Assert.Single(vm.Ui.OpLog, l => l.Contains("初期解生成 完了")));
     }
 
     /// <summary>[Android 3.679.0] 盤面のある勤務表は確認してから置き換える（確認の文は今の必須違反を言う）。</summary>

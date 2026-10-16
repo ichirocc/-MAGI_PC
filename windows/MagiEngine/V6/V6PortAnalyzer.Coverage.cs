@@ -116,6 +116,15 @@ public sealed record CoverageDiagnosis(
 
     public bool HasSurplus => TotalSurplus > 0;
 
+    /// <summary>[3.694.0] 枠行の末尾に添える根拠の種類。値（DayProof・Verdict・WishPinned・BlockedNow・SearchMiss）だけから決め、
+    /// 理由の文字列では判定しない。該当しない枠（充足可能）は null。</summary>
+    public static string? ShortfallBasis(CoverageShortfall s) =>
+        s.DayProof ? "日の証明"
+        : s.Verdict == CoverageVerdict.Infeasible && s.WishPinned.Count > 0 ? "希望固定を含む人数の不足"
+        : s.Verdict == CoverageVerdict.Infeasible ? "担当できる人数の不足"
+        : s.Verdict == CoverageVerdict.Fixable && s.BlockedNow && s.SearchMiss ? "試した入れ替えの範囲、証明ではない"
+        : null;
+
     /// <summary>診断ログ（エクスポートされる「MAGI ログ」に載る形式の文字列）。</summary>
     public IReadOnlyList<string> LogLines()
     {
@@ -130,7 +139,8 @@ public sealed record CoverageDiagnosis(
                 var v = s.Verdict == CoverageVerdict.Infeasible ? "充足不可"
                     : s.BlockedNow && s.SearchMiss ? "試した入れ替えでは埋まらなかった"
                     : "充足可能";
-                outLines.Add($"[W] CoverageDiag: {s.DayLabel} {s.ShiftSymbol} 必要{s.Need}/現状{s.Got}(不足{s.Miss}) — {v}: {s.Reason}");
+                var basis = ShortfallBasis(s);
+                outLines.Add($"[W] CoverageDiag: {s.DayLabel} {s.ShiftSymbol} 必要{s.Need}/現状{s.Got}(不足{s.Miss}) — {v}: {s.Reason}" + (basis is null ? "" : $"（根拠: {basis}）"));
             }
             if (Shortfalls.Count > 8) outLines.Add($"[W] CoverageDiag: ほか{Shortfalls.Count - 8}枠");
             foreach (var r in Relaxations.Take(4)) outLines.Add($"[W] CoverageDiag 緩和案: {r}");

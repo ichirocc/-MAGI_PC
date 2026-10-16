@@ -343,6 +343,35 @@ public class MagiViewModelFixSuggestionsTest
         Assert.True(vm.Ui.MessageIsError);
     }
 
+    // ===== [3.694.0] 見送りの W 行（指紋の案と今・出どころ）、適用行の期間と盤面指紋 =====
+
+    [Fact]
+    public void ApplyFixSuggestion_RefusedByStaleFingerprintsLeavesAWarningLineWithBothKeys()
+    {
+        var vm = VmWithNeed();
+        var before = vm.Ui.OpLog.Count;
+
+        Assert.False(vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)), originBoard: 0x3039L, originState: 0x2A6L, globalPolish: true));
+
+        Assert.Equal(before + 1, vm.Ui.OpLog.Count);
+        Assert.Matches("\\[W\\] 改善手を見送り: テスト改善手（案を出したときと違う: 盤面指紋 案=0000000000003039 今=[0-9a-f]{16} ・ 状態指紋 案=00000000000002a6 今=[0-9a-f]{16}）$", vm.Ui.OpLog[0]);
+        Assert.Equal("勤務表か設定が変わったため、この提案は適用できません。「変更案を探す」をもう一度押してください", vm.Ui.Message);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.All(vm._currentSchedule!, row => Assert.All(row, v => Assert.Equal(0, v)));
+    }
+
+    [Fact]
+    public void ApplyFixSuggestion_RefusedByOriginLeavesAWarningLineWithTheScreenReason()
+    {
+        var vm = VmWithNeed();
+
+        Assert.False(vm.ApplyFixSuggestion(MakeSuggestion(new FixCell(0, 0, 1)), fromPreview: true, globalPolish: true));   // 探索をしていない＝案の指紋が 0
+
+        Assert.Equal(CellSheetLogic.FixOriginUnknownMessage, vm.Ui.Message);
+        Assert.Equal($"改善手を見送り: テスト改善手（案の出どころが違う: {CellSheetLogic.FixOriginUnknownMessage}）", vm.Ui.OpLog[0][vm.Ui.OpLog[0].IndexOf("改善手", StringComparison.Ordinal)..]);
+        Assert.Contains("[W] ", vm.Ui.OpLog[0]);
+    }
+
     private static MagiViewModel VmWithNeed()
     {
         var vm = new MagiViewModel
@@ -390,6 +419,11 @@ public class MagiViewModelFixSuggestionsTest
         Assert.Null(vm.Ui.ChainPreview);
         Assert.Equal(1, vm._currentSchedule![0][0]);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("改善手を適用: テスト改善手（必須 7→6"));   // 操作ログにも残す（3.646.0）
+        // [3.694.0] 期間・盤面指紋（前→後）・状態指紋。前後の盤面は違うので指紋も違う。
+        var applied = Assert.Single(vm.Ui.OpLog, l => l.Contains("改善手を適用: "));
+        var m = System.Text.RegularExpressions.Regex.Match(applied, "（必須 7→6・合計 [0-9]+→[0-9]+） ・ 期間=2025-12-01〜2025-12-07（7日） ・ 盤面指紋=([0-9a-f]{16})→([0-9a-f]{16}) ・ 状態指紋=[0-9a-f]{16}$");
+        Assert.True(m.Success, applied);
+        Assert.NotEqual(m.Groups[1].Value, m.Groups[2].Value);
     }
 
     [Fact]

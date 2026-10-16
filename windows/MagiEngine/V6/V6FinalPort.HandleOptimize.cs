@@ -924,6 +924,8 @@ public static partial class V6FinalPort
             StopKind.C3nWallCertified => "C3N_WALL_CERTIFIED", StopKind.C3nWallEmpirical => "C3N_WALL_EMPIRICAL", _ => "NORMAL_STALL",
         };
         var logs = new List<MirrorLog> { timingLog, budgetPlanLog, tuningLog };
+        // [3.694.0] 容認採用の内訳（族・前後・差）。「設定の効き」の件数と同じ源（TuningTelemetry）を読む。終端を通った実行だけに出る。
+        logs.AddRange(TuningTelemetry.ToleratedLines().Select(m => new MirrorLog(level: "I", tag: "容認採用", message: m)));
         logs.AddRange(cappedLog);
         logs.AddRange(pinLog);
         logs.AddRange(adoptedLog);

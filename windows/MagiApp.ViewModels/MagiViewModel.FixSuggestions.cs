@@ -223,13 +223,24 @@ public sealed partial class MagiViewModel
         // [Kotlin 3.650.0] 照合は案を出したときの指紋（相談に積んだ案は自分の指紋を運ぶ＝あとの探索で上書きされた全体の指紋で通さない）。
         var ob = originBoard ?? _fixBoardKey;
         var os = originState ?? _fixStateKey;
-        if ((CellSheetLogic.FixOriginRefusal(ob, fromPreview) ?? CellSheetLogic.FixTargetRefusal(fixTarget, globalPolish)) is { } refusal) { Ui.MessageIsError = true; Ui.Message = refusal; return false; }
-        if (ob != 0L && (ob != BoardKey(sched) || os != StateKey(st)))
+        if ((CellSheetLogic.FixOriginRefusal(ob, fromPreview) ?? CellSheetLogic.FixTargetRefusal(fixTarget, globalPolish)) is { } refusal)
         {
-            Ui.MessageIsError = true;
-            ClearFixState();
-            Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「変更案を探す」をもう一度押してください";
-            return false;
+            // [3.694.0] 断った理由を操作ログにも残す（画面の message は不変）。
+            LogOp("W", $"改善手を見送り: {s.Label}（案の出どころが違う: {refusal}）");
+            Ui.MessageIsError = true; Ui.Message = refusal; return false;
+        }
+        var nowBoard = BoardKey(sched);
+        var nowState = StateKey(st);
+        if (ob != 0L)
+        {
+            if (ob != nowBoard || os != nowState)
+            {
+                LogOp("W", $"改善手を見送り: {s.Label}（案を出したときと違う: 盤面指紋 案={OpLogText.Hex16(ob)} 今={OpLogText.Hex16(nowBoard)} ・ 状態指紋 案={OpLogText.Hex16(os)} 今={OpLogText.Hex16(nowState)}）");
+                Ui.MessageIsError = true;
+                ClearFixState();
+                Ui.Message = "勤務表か設定が変わったため、この提案は適用できません。「変更案を探す」をもう一度押してください";
+                return false;
+            }
         }
         // 見ている問題の数が減らない案は、全体の評価が良くなっても当てない（統合仕様 INV-03。案の一覧の主一覧と同じ判定）。
         if (!CellSheetLogic.ImprovesTarget(fixTarget, sched, s.Ops))
@@ -265,7 +276,9 @@ public sealed partial class MagiViewModel
         if (focusKey is not null)
             Ui.AppliedFix = new AppliedFix(focusKey, s.Label, s.Ops, sched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList(), Ui.Schedule, fixTarget,
                 gate.Before.Hard, gate.After.Hard, gate.Before.Soft, gate.After.Soft, gate.Before.Breakdown, gate.After.Breakdown);
-        var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）";
+        // [3.694.0] 適用前の盤面は照合に使った sched（originBoard は 0 のことがある）。状態指紋は盤面を含まず前後で同じなので 1 つ。
+        var line = $"改善手を適用: {s.Label}（必須 {gate.Before.Hard}→{gate.After!.Hard}・合計 {gate.Before.Total}→{gate.After.Total}）" +
+            $" ・ 期間={OpLogText.Period(st.StartDate, st.EndDate, st.DayCount)} ・ 盤面指紋={OpLogText.Hex16(nowBoard)}→{OpLogText.Hex16(BoardKey(applied))} ・ 状態指紋={OpLogText.Hex16(nowState)}";
         LogOp("I", line);
         var maxLen = Math.Max(new[] { st.Cons3, st.Cons3n, st.Cons3m, st.Cons3mn }.SelectMany(x => x).Select(r => r.Pattern.Count).DefaultIfEmpty(0).Max(),
             (st.Cons3w?.Count ?? 0) > 0 ? 2 : 0);

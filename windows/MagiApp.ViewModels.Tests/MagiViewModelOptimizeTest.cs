@@ -209,6 +209,50 @@ public class MagiViewModelOptimizeTest : IDisposable
         }
     }
 
+    // ===== [3.694.0] 開始行（#N・期間・職員・指紋）、設定の開始時、完了行の盤面指紋 =====
+
+    [Fact]
+    public async Task StartLineCarriesTheRunNumberPeriodStaffAndFingerprintsAndTheSettingsSnapshotFollows()
+    {
+        var fake = new FakeOptimizationService
+        {
+            Result = (state, schedule) => new V6FinalPort.ActionResult(
+                Schedule: schedule, Report: Report(hard: 0, total: 0), Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"), Logs: Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimizeThroughSheet();
+        await vm.LastRunOptimizeTask!;
+
+        var start = Assert.Single(vm.Ui.OpLog, l => l.Contains("最適化 開始 (予算"));
+        Assert.Contains("#1 最適化 開始 (予算", start);
+        Assert.Matches(" ・ 期間=2025-12-01〜2025-12-07（7日） ・ 職員=2名 ・ 状態指紋=[0-9a-f]{16} ・ 盤面指紋=[0-9a-f]{16}$", start);
+        var settings = Assert.Single(vm.Ui.OpLog, l => l.Contains("設定の開始時: "));
+        Assert.Contains("#1 設定の開始時: ネイティブ加速（設定）=", settings);
+        Assert.Contains(" / Kotlin照合（設定）=", settings);
+        Assert.Contains(" / 一括見直しの自動調整=ON / 公平化/適切回数の他ソフト許容(6%)=", settings);
+        Assert.EndsWith(" / 回数連鎖研磨=" + (PolishGate.CountChainPolish ? "ON" : "OFF"), settings);
+        // 設定の行は開始行の直後（新しい順なので index が 1 小さい）。
+        var list = vm.Ui.OpLog.ToList();
+        Assert.Equal(list.IndexOf(start) - 1, list.IndexOf(settings));
+        var done = Assert.Single(vm.Ui.OpLog, l => l.Contains("最適化 完了 必須=0 合計=0 (test:Fake)"));
+        Assert.Matches(" ・ 盤面指紋=[0-9a-f]{16}$", done);
+    }
+
+    [Fact]
+    public async Task SettingsSnapshotRemainsWhenTheRunFails()
+    {
+        var fake = new FakeOptimizationService { ThrowInstead = new InvalidOperationException("boom") };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimizeThroughSheet();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.Single(vm.Ui.OpLog, l => l.Contains("#1 設定の開始時: "));
+        Assert.Contains(vm.Ui.OpLog, l => l.Contains("最適化 失敗"));
+    }
+
     [Fact]
     public async Task WorseResult_KeepsInputScheduleAndSaysSoInMessage()
     {

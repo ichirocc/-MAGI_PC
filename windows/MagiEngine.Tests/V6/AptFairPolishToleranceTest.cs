@@ -103,6 +103,68 @@ public class AptFairPolishToleranceTest
         Assert.Equal(1, TuningTelemetry.AptFairToleranceUsedCount());
     }
 
+    // ==== [3.694.0] 容認採用の記録（族・前後・差）: 件数と同じ分岐で 1 件、保持は先頭 5 件、reset で空 ====
+
+    [Fact]
+    public void ToleratedAcceptanceRecordsTheNumbersItWasJudgedWith()
+    {
+        var before = Rep(fair: 10, apt: 0, low: 1);   // 合計 11、fair 以外 120 → 予算 7.2
+        var bestRep = before;
+        var candidate = Rep(fair: 9, apt: 2, low: 1); // 合計 12、素の差 +3、増分 8 のうち 7.2 を容認 → 実効差 -4.2
+        TuningTelemetry.Reset();
+        try
+        {
+            Assert.True(V6HotfixPasses.ToleratedBetter(candidate, bestRep, before, "fair", enabled: true));
+            var n = Assert.Single(TuningTelemetry.ToleratedNotes());
+            Assert.Equal(("fair", 10, 9, 11, 12, 0, 0), (n.Family, n.FamilyBefore, n.FamilyAfter, n.TotalBefore, n.TotalAfter, n.HardBefore, n.HardAfter));
+            Assert.Equal(3.0, n.RawDelta, 9);
+            Assert.Equal(7.2, n.Forgiven, 9);
+            Assert.Equal(-4.2, n.EffectiveDelta, 9);
+            Assert.Equal("1/1: fair 件数 10→9 ・ 合計 11→12 ・ 必須 0→0 ・ 容認 7.2 ・ 素の差 +3.0 ・ 実効差 -4.2", Assert.Single(TuningTelemetry.ToleratedLines()));
+        }
+        finally { TuningTelemetry.Reset(); }
+    }
+
+    [Fact]
+    public void MovesAcceptedWithoutTheToleranceAreNotRecorded()
+    {
+        // fair が 3 減り（-15）apt が 1 増える（+4）: 容認量 4 は正だが素の差でも採れる手＝件数も記録も増えない。
+        var before = Rep(fair: 10, apt: 0, low: 1);
+        var candidate = Rep(fair: 7, apt: 1, low: 1);
+        TuningTelemetry.Reset();
+        try
+        {
+            Assert.True(V6HotfixPasses.ToleratedBetter(candidate, before, before, "fair", enabled: true));
+            Assert.Equal(0, TuningTelemetry.AptFairToleranceUsedCount());
+            Assert.Empty(TuningTelemetry.ToleratedNotes());
+            Assert.Empty(TuningTelemetry.ToleratedLines());
+        }
+        finally { TuningTelemetry.Reset(); }
+    }
+
+    [Fact]
+    public void OnlyTheFirstFiveAreKeptWhileTheCounterKeepsCountingAndResetClearsBoth()
+    {
+        var before = Rep(fair: 10, apt: 0, low: 1);
+        var candidate = Rep(fair: 9, apt: 2, low: 1);
+        TuningTelemetry.Reset();
+        try
+        {
+            for (var i = 0; i < 7; i++) Assert.True(V6HotfixPasses.ToleratedBetter(candidate, before, before, "fair", enabled: true));
+            Assert.Equal(7, TuningTelemetry.AptFairToleranceUsedCount());
+            Assert.Equal(TuningTelemetry.ToleratedNoteCap, TuningTelemetry.ToleratedNotes().Count);
+            var lines = TuningTelemetry.ToleratedLines();
+            Assert.Equal(6, lines.Count);
+            Assert.StartsWith("1/7: fair ", lines[0]);
+            Assert.StartsWith("5/7: fair ", lines[4]);
+            Assert.Equal("ほか 2 件（先頭 5 件のみ）", lines[5]);
+            TuningTelemetry.Reset();
+            Assert.Empty(TuningTelemetry.ToleratedNotes());
+            Assert.Equal(0, TuningTelemetry.AptFairToleranceUsedCount());
+        }
+        finally { TuningTelemetry.Reset(); }
+    }
+
     // ==== [無害化, Kotlin原本 2026-09-24] 許容 ON でも重い SOFT の増加・必須どうしの付け替え・対象族の改善なしの容認は採らない ====
 
     [Fact]

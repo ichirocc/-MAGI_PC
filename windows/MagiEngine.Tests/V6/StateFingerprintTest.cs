@@ -17,6 +17,16 @@ namespace MagiEngine.Tests.V6;
 /// </summary>
 public class StateFingerprintTest
 {
+    /// <summary>[3.694.0] 盤面指紋の golden（Kotlin <c>StateFingerprintTest</c> の ofBoard と同じ 2x3 盤面・同じ値）。VM の BoardKey と同じ式。</summary>
+    [Fact]
+    public void OfBoardMatchesTheKotlinGoldenAndTheViewModelKey()
+    {
+        var board = new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 2 } };
+        Assert.Equal(-1367968410775403481L, StateFingerprint.OfBoard(board));
+        Assert.Equal("ed03fffa6bc6c427", StateFingerprint.OfBoard(board).ToString("x16"));
+        Assert.NotEqual(StateFingerprint.OfBoard(board), StateFingerprint.OfBoard(new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 3 } }));
+    }
+
     private static MagiState Base() => new MagiState(
         StartDate: "2026-08-01", EndDate: "2026-08-03",
         Shifts: new List<Shift> { new("休", "休", "0", "1", ShiftRole.Rest), new("A", "A", "1", "2") },

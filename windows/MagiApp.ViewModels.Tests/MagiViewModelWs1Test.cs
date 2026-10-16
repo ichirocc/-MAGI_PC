@@ -346,6 +346,7 @@ public class MagiViewModelWs1Test
         // here, so ApplyStructure(Ws1Result) -> RefreshCheck() actually dispatches); search the
         // whole list instead of assuming index 0 (see the note at the Ws1RemoveShift test below).
         Assert.Contains(vm.Ui.OpLog, line => line.Contains("期間変更: 7日 → 10日"));
+        Assert.Contains(vm.Ui.OpLog, line => line.Contains("期間変更: 7日 → 10日 ・ 要求期間=2025-12-01〜2025-12-10（10日）"));   // [3.694.0]
     }
 
     [Fact]
@@ -372,6 +373,7 @@ public class MagiViewModelWs1Test
 
         Assert.Equal("2026-02-01", vm._state!.StartDate);
         Assert.Equal(28, vm._currentSchedule![0].Length);
+        Assert.Contains(vm.Ui.OpLog, line => line.Contains("期間変更: 2026年2月 ・ 要求期間=2026-02-01〜2026-02-28（28日）"));   // [3.694.0]
     }
 
     [Fact]

@@ -253,8 +253,10 @@ public sealed partial class MagiViewModel
         if (sched is null) return;
         var t = Math.Clamp(newT, 1, 31);
         if (t == st.DayCount && sched.All(row => row.Length == t)) return;   // 同じ日数で「変更」＝何もしない
-        LogOp("I", $"期間変更: {st.DayCount}日 → {newT}日");
-        ApplyStructure(Ws1Ops.ResizeDays(st, sched, newT));
+        // [3.694.0] 要求期間（適用しようとする期間）を行に添える。ResizeDays は純関数なので先に取っても適用は同じ。拒否なら直後に W の拒否行が出る。
+        var r = Ws1Ops.ResizeDays(st, sched, newT);
+        LogOp("I", $"期間変更: {st.DayCount}日 → {newT}日 ・ 要求期間={OpLogText.Period(r.State.StartDate, r.State.EndDate, r.State.DayCount)}");
+        ApplyStructure(r);
     }
 
     // ===== 対象月のナビゲーション =====
@@ -281,10 +283,12 @@ public sealed partial class MagiViewModel
         if (clearWishes is null && plan.NeedsConfirm) { Ui.MonthMovePrompt = plan; return; }
         Ui.MonthMovePrompt = null;
         var st2 = clearWishes == true ? st with { Wishes = new Dictionary<string, int>(), ExtWishes = System.Array.Empty<ExtWish>() } : st;
-        LogOp("I", $"期間変更: {year}年{month1To12}月" + (clearWishes switch { true => "（希望を消して）", false => "（希望を残して）", _ => "" }));
         var startDate = first.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var days = System.DateTime.DaysInMonth(year, month1To12);
-        ApplyStructure(Ws1Ops.ResizeDays(st2 with { StartDate = startDate }, sched, days));
+        var r = Ws1Ops.ResizeDays(st2 with { StartDate = startDate }, sched, days);
+        LogOp("I", $"期間変更: {year}年{month1To12}月" + (clearWishes switch { true => "（希望を消して）", false => "（希望を残して）", _ => "" }) +
+            $" ・ 要求期間={OpLogText.Period(r.State.StartDate, r.State.EndDate, r.State.DayCount)}");
+        ApplyStructure(r);
         ClearCsvSaved();   // 前の月の CSV の保存は新しい月の内容と関係がない
     }
 
