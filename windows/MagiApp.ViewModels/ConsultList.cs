@@ -61,6 +61,8 @@ public static class ConsultList
 
     public const string Button = "相談事項に登録";
     public const string Done = "相談中";
+    /// <summary>「相談中」の札の隣。積んだ相談を取り消す（済にはしない＝記録に残さない。Kotlin <c>CONSULT_UNDO_BUTTON</c>、3.696.0）。</summary>
+    public const string UndoButton = "取り消す";
     public const string HoldButton = "保留する";
     public const string HeldLabel = "保留中";
     public const string Added = "ホームの「相談中」に登録しました（記録だけで、本人への連絡や了承にはなりません）";

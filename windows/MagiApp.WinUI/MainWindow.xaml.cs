@@ -629,22 +629,27 @@ public sealed partial class MainWindow : Window
                 var item = ConsultList.PreRun(r,
                     r.Staff is { } si && si >= 0 && si < ui.StaffNames.Count ? ui.StaffNames[si] : null,
                     r.Day is { } di ? ConsultList.IsoDate(ui.StartDate, di) : null);
-                FrameworkElement ask;
-                if (ConsultList.IsConsulted(ui.Consults, item)) ask = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
-                else
+                // このダイアログは組み直さないので、押した場で「相談」⇄「相談中＋取り消す」を置き換える（3.696.0 取り消し）。
+                FrameworkElement ask = null!;
+                void Swap(FrameworkElement next) { grid.Children.Remove(ask); ask = next; Grid.SetColumn(ask, 1); grid.Children.Add(ask); }
+                FrameworkElement AskButton()
                 {
                     var b = new HyperlinkButton { Content = "相談", MinHeight = 44 };
-                    // このダイアログは組み直さないので、押した場でボタンを「相談中」の札に置き換える。
-                    b.Click += (_, _) =>
-                    {
-                        _vm.AddConsult(item);
-                        var chip = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
-                        Grid.SetColumn(chip, 1);
-                        grid.Children.Remove(b);
-                        grid.Children.Add(chip);
-                    };
-                    ask = b;
+                    b.Click += (_, _) => { _vm.AddConsult(item); if (ConsultList.Match(_vm.Ui.Consults, item) is { } m) Swap(Consulted(m)); };
+                    return b;
                 }
+                FrameworkElement Consulted(ConsultItem m)
+                {
+                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                    var chip = Views.AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange);
+                    chip.VerticalAlignment = VerticalAlignment.Center;
+                    row.Children.Add(chip);
+                    var undo = new HyperlinkButton { Content = ConsultList.UndoButton, MinHeight = 44 };
+                    undo.Click += (_, _) => { _vm.CancelConsult(m); Swap(AskButton()); };
+                    row.Children.Add(undo);
+                    return row;
+                }
+                ask = ConsultList.Match(ui.Consults, item) is { } m0 ? Consulted(m0) : AskButton();
                 Grid.SetColumn(ask, 1);
                 grid.Children.Add(ask);
                 panel.Children.Add(grid);
