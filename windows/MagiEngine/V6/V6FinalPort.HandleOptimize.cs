@@ -204,11 +204,16 @@ public static partial class V6FinalPort
         var hardFloor = TryOrZero(() => V6SanityPort.StructuralHardFloor(state));
         // [E0] 希望衝突の床。ログには常に出し、探索への配線は wishFloorMode≠Off のときだけ（Off なら挙動不変）。
         var wishP = ScheduleUtil.CachedProblem(state);
+        (int Conflict, int Days) wishPartsMp;
+        try { wishPartsMp = V6SanityPort.WishConflictFloorParts(wishP, zeroCapBinding: true); } catch (Exception) { wishPartsMp = (0, 0); }
+        var wishFloorMp = wishPartsMp.Conflict + wishPartsMp.Days;
+        // [3.692.0] FloorCountsUpperZero＝頭打ちの床を上限0込みにする（最適化器は上限0へ置かない＝MayPlace を守る盤面では健全）。
+        var floorUp0 = PolishGate.FloorCountsUpperZero;
         (int Conflict, int Days) wishParts;
-        try { wishParts = V6SanityPort.WishConflictFloorParts(wishP); } catch (Exception) { wishParts = (0, 0); }
+        if (floorUp0) wishParts = wishPartsMp;
+        else try { wishParts = V6SanityPort.WishConflictFloorParts(wishP); } catch (Exception) { wishParts = (0, 0); }
         var wishFloorLogged = wishParts.Conflict + wishParts.Days;
-        var wishFloorMp = TryOrZero(() => { var (c, d) = V6SanityPort.WishConflictFloorParts(wishP, zeroCapBinding: true); return c + d; });
-        var wishOn = wishFloorMode != WishFloorMode.Off;
+        var wishOn = wishFloorMode != WishFloorMode.Off || floorUp0;
         var wishC3wProven = wishOn ? V6SanityPort.WishConflictC3wCount(wishP) : 0;
         var e0Fired = false;
         bool WishReachedOn(int[][]? board, int hard) => board != null && WishFloorReached(hard, wishFloorLogged, () =>
@@ -549,7 +554,7 @@ public static partial class V6FinalPort
                 $" / 早期終了の条件: 最短実行{minRunMs / 1000}s経過かつ現フェーズ{phaseGraceMs / 1000}s経過かつ無改善が" +
                 $"{stallMs / 1000}s(通常)〜{stallHardMs / 1000}s(頭打ち=HARD下限到達 or c3n構造壁)続いたとき" +
                 $" / 構造的HARD下限={hardFloor} / 希望衝突の床={wishFloorLogged}(衝突{wishParts.Conflict}+日の証明{wishParts.Days}・" +
-                (wishOn ? $"到達で頭打ち={WishFloorModeName(wishFloorMode)}" : "記録のみ") + $"・上限0を拘束とみなすと{wishFloorMp}・covU の床とは別)");
+                (wishOn ? $"到達で頭打ち={(floorUp0 ? "上限0込み" : WishFloorModeName(wishFloorMode))}" : "記録のみ") + $"・上限0を拘束とみなすと{wishFloorMp}・covU の床とは別)");
 
         List<MirrorLog> BuildWatchdogLog()
         {
@@ -632,7 +637,7 @@ public static partial class V6FinalPort
                             : "") +
                         $"・発火種別={(wd.StagnationByOverride ? "猶予上書き" : "通常")}・解は最良を維持）" +
                         (Volatile.Read(ref e0Fired)
-                            ? $"（希望衝突の床に到達＝{WishFloorModeName(wishFloorMode)}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
+                            ? $"（希望衝突の床に到達＝{(floorUp0 && wishFloorMode == WishFloorMode.Off ? "上限0込み" : WishFloorModeName(wishFloorMode))}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
                             : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                         (wd.StagnationWall
@@ -727,8 +732,10 @@ public static partial class V6FinalPort
             var personalWall = personalFloor > 0 && aptHighNow > 0 ? Math.Min(personalFloor, aptHighNow) : 0;
             var covUNow = bd.GetValueOrDefault("covU", 0);
             var covUFloor = hardFloor > 0 && covUNow >= 1 && covUNow <= hardFloor ? covUNow : 0;
-            var covUBlocked = covUNow <= 0 ? 0 : TryOrZero(() =>
-                CovUBlockedAmount(V6PortAnalyzer.DiagnoseCoverage(state, finalSched, finalReport)));
+            CoverageDiagnosis? covUDiag = null;
+            if (covUNow > 0) { try { covUDiag = V6PortAnalyzer.DiagnoseCoverage(state, finalSched, finalReport); } catch (Exception) { } }
+            var covUBlocked = covUDiag == null ? 0 : CovUBlockedAmount(covUDiag);
+            var covUSearchMiss = covUDiag?.Shortfalls.Where(s => s.Verdict == CoverageVerdict.Fixable && s.BlockedNow && s.SearchMiss).Sum(s => s.Miss) ?? 0;
             var covUWall = CovUStructuralWall(covUNow, hardFloor, covUBlocked);
             // 希望どうしの衝突（希望を1件取り消すまで c3n/c3w か pref が必ず残る）。族別に open から差し引く。
             IReadOnlyDictionary<string, int> selfConflict;
@@ -777,7 +784,7 @@ public static partial class V6FinalPort
             {
                 // 床が全部を覆うときだけ従来どおり「構造的下限」（供給不足）と名乗る。それ以外は
                 //   「担当者は居るが いまの希望では動かせない」＝データ側で希望を1件調整すれば動きうる、を明示。
-                var why = covUFloor >= covUNow ? "構造的下限" : "いまの希望・担当のままでは埋められないと実証済み";
+                var why = covUFloor >= covUNow ? "構造的下限" : CovUWallWhy(covUWall, covUSearchMiss);
                 walls.Add($"covU {covUWall}件({why})");
             }
             // [3.354.0/実機ログ起因] apt と high は「個人の担当構成」から下限が立つ。

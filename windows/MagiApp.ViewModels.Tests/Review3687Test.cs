@@ -74,9 +74,13 @@ public class Review3687Test
     [Fact]
     public void searchMissIsNotCalledInfeasible()
     {
-        var d = V6PortAnalyzer.DiagnoseCoverage(Cascade(cWished: true));
-        var sf = d.Shortfalls.Single(it => it.ShiftIndex == 1);
-        Assert.True(sf.BlockedNow && sf.SearchMiss);
+        // [3.692.0] Cascade(cWished: true) は日の証明が立つ（充足不可）ようになったので、不発の枠は値で組む。
+        var baseDiag = V6PortAnalyzer.DiagnoseCoverage(Cascade(cWished: true));
+        var sf = baseDiag.Shortfalls.Single(it => it.ShiftIndex == 1) with
+        {
+            Verdict = CoverageVerdict.Fixable, BlockedNow = true, SearchMiss = true, DayProof = false, Reason = V6PortAnalyzer.ChainNotFoundInTried,
+        };
+        var d = baseDiag with { InfeasibleSlots = 0, FixableSlots = 1, Shortfalls = new List<CoverageShortfall> { sf } };
         Assert.Equal(1, d.SearchMissSlots); Assert.Equal(0, d.ProvenBlockedSlots);
         var log = d.LogLines();
         var all = string.Join("\n", log);
