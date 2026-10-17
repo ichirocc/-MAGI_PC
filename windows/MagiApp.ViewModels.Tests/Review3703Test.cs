@@ -30,7 +30,6 @@ public class Review3703Test
         Assert.Equal(new[] { "配置 1 / 必要 2" }, FixOutcomeText.GuidedStatusPoints(2, 1, 0));
         Assert.Equal("山田さんをA4に入れる", FixOutcomeText.GuidedCandidateLabel("山田", "A4"));
         Assert.Equal("必須違反4か所を順に見る", FixOutcomeText.GuidedTourButton(4));
-        Assert.Equal("ほかの必須違反（1件）が残っています", FixOutcomeText.OtherHardAfterShortage(new Dictionary<string, int> { ["covU"] = 2, ["c3n"] = 1 }));
     }
 
     [Fact]

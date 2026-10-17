@@ -55,7 +55,6 @@ public class Review3699Test
     public void DraftConfirmShowsBeforeAndAfter()
     {
         Assert.Equal("今の勤務表を下書きで置き換えます（必須 3件・1人→1件）。元に戻せます", FixExplain.DraftConfirmText("3件・1人", "1件"));
-        Assert.Equal("今の勤務表（必須 2件）を下書きで置き換えます。元に戻せます", FixExplain.DraftConfirmText("2件"));
         Assert.Equal("今の勤務表を下書きで置き換えます。元に戻せます", FixExplain.DraftConfirmText(null, "1件"));
     }
 

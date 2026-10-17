@@ -283,16 +283,6 @@ public static class GridDisplayMarks
         return new StaffCountSheet(chips, weekly, fair, c1);
     }
 
-    /// <summary>セルの「この職員の回数・偏り」用の平文（シートと同じ中身を 1 行ずつ）。</summary>
-    public static IReadOnlyList<string> StaffCountLines(UiState ui, int i, Func<string, string> labelOf,
-        Func<int, int, (int? Lo, int? Hi, int? Apt)>? limits = null)
-    {
-        var sh = StaffCountSheetOf(ui, i, labelOf, limits);
-        return sh.C1.Concat(sh.Chips.Select(c => (c.Under ? "▼ " : "▲ ") + c.Text))
-            .Concat(sh.Weekly.Select(w => $"{labelOf("weekly")} {w}"))
-            .Concat(sh.Fair.Select(f => $"{labelOf("fair")} {f}")).ToList();
-    }
-
     /// <summary>日 j の人員の一覧（日ヘッダの印のシート）。</summary>
     public static IReadOnlyList<string> DayCoverageLines(UiState ui, int j, IReadOnlyList<CoverageMark> marks, Func<string, string> labelOf,
         Func<int, int, (int Lo, int Hi)?>? limits = null) =>

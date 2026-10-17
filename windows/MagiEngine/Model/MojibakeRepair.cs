@@ -51,9 +51,6 @@ public static class MojibakeRepair
         }
     }
 
-    /// <summary>修復が必要(=変化する)かの判定。ログ表示用。</summary>
-    public static bool LooksMojibake(string s) => Repair(s) != s;
-
     /// <summary>
     /// [3.282.0] 「本当に二重エンコードを復号したか」の判定。Repair() は BOM 除去だけでも
     /// 新しい文字列を返すため、呼出側の参照比較では「健全な BOM付きUTF-8 ファイル」でも毎回

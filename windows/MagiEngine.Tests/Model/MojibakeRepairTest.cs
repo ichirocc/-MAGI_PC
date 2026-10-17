@@ -19,7 +19,6 @@ public class MojibakeRepairTest
     public void EmptyStringPassesThroughUnchanged()
     {
         Assert.Equal("", MojibakeRepair.Repair(""));
-        Assert.False(MojibakeRepair.LooksMojibake(""));
     }
 
     [Fact]
@@ -27,7 +26,6 @@ public class MojibakeRepairTest
     {
         const string s = "{\"startDate\":\"2026-01-01\",\"days\":31}";
         Assert.Equal(s, MojibakeRepair.Repair(s));
-        Assert.False(MojibakeRepair.LooksMojibake(s));
     }
 
     [Fact]
@@ -37,7 +35,6 @@ public class MojibakeRepairTest
         // this is the primary safety net against corrupting real (non-mojibake) data.
         const string s = "職員A・休み・グループ1";
         Assert.Equal(s, MojibakeRepair.Repair(s));
-        Assert.False(MojibakeRepair.LooksMojibake(s));
     }
 
     [Fact]
@@ -47,10 +44,6 @@ public class MojibakeRepairTest
         var withBom = Bom + body;
 
         Assert.Equal(body, MojibakeRepair.Repair(withBom));
-        // LooksMojibake compares Repair()'s output against the ORIGINAL (BOM-included) string,
-        // so a BOM-only difference still reports as "looks mojibake" (it changed something) —
-        // WasDecoded is the one that distinguishes "just a BOM" from "a real double-encoding".
-        Assert.True(MojibakeRepair.LooksMojibake(withBom));
         Assert.False(MojibakeRepair.WasDecoded(withBom, MojibakeRepair.Repair(withBom)));
     }
 
@@ -65,7 +58,6 @@ public class MojibakeRepairTest
         var mojibake = Encoding.Latin1.GetString(utf8Bytes); // the corrupted string as it would arrive
 
         Assert.NotEqual(original, mojibake); // sanity: the corruption actually changed the text
-        Assert.True(MojibakeRepair.LooksMojibake(mojibake));
         Assert.Equal(original, MojibakeRepair.Repair(mojibake));
         Assert.True(MojibakeRepair.WasDecoded(mojibake, MojibakeRepair.Repair(mojibake)));
     }
@@ -82,7 +74,6 @@ public class MojibakeRepairTest
         // characters and Repair() must refuse to touch it.
         const string s = "héllo wörld";
         Assert.Equal(s, MojibakeRepair.Repair(s));
-        Assert.False(MojibakeRepair.LooksMojibake(s));
     }
 
     [Fact]

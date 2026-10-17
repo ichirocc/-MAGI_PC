@@ -546,14 +546,6 @@ public static class CellSheetLogic
     /// <summary>巡回に入らない人員不足の件数の 1 行（0 なら null）。</summary>
     public static string? TourCovULine(int covU) => covU > 0 ? $"ほかに人員不足 {covU}人（日の印から開けます）" : null;
 
-    /// <summary>巡回の次のセル（今が巡回に無ければ先頭、末尾なら先頭へ）。空なら null。</summary>
-    public static (int I, int J)? NextTourCell(IReadOnlyList<(int I, int J)> tour, (int I, int J)? current)
-    {
-        if (tour.Count == 0) return null;
-        var at = current is null ? -1 : tour.ToList().IndexOf(current.Value);
-        return tour[at < 0 ? 0 : (at + 1) % tour.Count];
-    }
-
     /// <summary>「他の人で補う」: 本人を動かさず、その日のセルを含む手だけ。</summary>
     public static IReadOnlyList<FixSuggestion> FixesByOthers(IEnumerable<FixSuggestion> list, int day, int except) =>
         list.Where(s => s.Ops.All(o => o.Staff != except) && s.Ops.Any(o => o.Day == day)).ToList();
@@ -615,13 +607,6 @@ public static class CellSheetLogic
 
     /// <summary>ちら見の操作行に並べるシフトの数: 「詳しく ▸」(64dp) と同じ行に 52dp＋間 6dp で入るだけ（1〜4。Kotlin <c>peekPickCount</c>）。</summary>
     public static int PeekPickCount(int contentWidthDp) => Math.Clamp((contentWidthDp - 64 + 6) / 58, 1, 4);
-
-    /// <summary>ちら見の見出し: 巡回の見出しから日付の範囲を落とす（Kotlin <c>peekHeading</c>）。</summary>
-    public static string PeekHeading(string tourHeading)
-    {
-        var at = tourHeading.LastIndexOf(" ・ ", StringComparison.Ordinal);
-        return at < 0 ? tourHeading : tourHeading[..at];
-    }
 
     public const string PeekHardRiskNote = "⚠＝変えると必須違反";
 
@@ -828,16 +813,6 @@ public static class CellSheetLogic
         timedOut ? $"{label}の{t.GapWord}を減らす案は、制限時間内には見つかりませんでした。もう一度探すと続きを探せます。"
         : $"{label}の{t.GapWord}を減らす案は、今回の検索では見つかりませんでした。" +
           (t.Under ? "担当できる職員と、その日の希望・固定勤務をご確認ください。" : "その日に入っている職員の希望・固定勤務をご確認ください。");
-
-    /// <summary>回数の過不足の要点（集計セルの詳細）。「▼4」だけでは今の回数か不足数か分からない＝現在・基準・差を言葉で。</summary>
-    public static string? CountGapLine(string vio, int count, (int? Lo, int? Hi, int? Apt) limits) => vio switch
-    {
-        "vio-low" when limits.Lo is { } l => $"現在 {count}回／下限 {l}回 ・ 不足 {Math.Max(0, l - count)}回",
-        "vio-high" when limits.Hi is { } h => $"現在 {count}回／上限 {h}回 ・ 超過 {Math.Max(0, count - h)}回",
-        "vio-aptLow" when limits.Apt is { } a => $"現在 {count}回／目標 {a}回 ・ 不足 {Math.Max(0, a - count)}回",
-        "vio-aptHigh" when limits.Apt is { } a => $"現在 {count}回／目標 {a}回 ・ 超過 {Math.Max(0, count - a)}回",
-        _ => null,
-    };
 
     /// <summary>選んだ問題（族）が 1 案でどう変わるか。案の先頭に出す。</summary>
     public static string? FamilyEffectLine(FixSuggestion s, string family, string label)
@@ -1705,14 +1680,6 @@ public static class CellSheetLogic
     /// <summary>未読込の補足。読込中は 1 文だけ。</summary>
     public static string EmptyStateSubtitle(bool loading) => loading ? "読み込んでいます…" : "保存データ・サンプル・新規から選べます";
 
-    /// <summary>対象の月の見出し「2026年10月の判断」（開始日が読めなければ「いまの判断」）。</summary>
-    public static string HomeMonthHeadlineOf(string startDate)
-    {
-        var m = System.Text.RegularExpressions.Regex.Match(startDate, @"^(\d{4})-(\d{2})-\d{2}");
-        if (!m.Success) return "いまの判断";
-        return $"{int.Parse(m.Groups[1].Value)}年{int.Parse(m.Groups[2].Value)}月の判断";
-    }
-
     /// <summary>段ごとの見出し: 未作成は 1 文、結果があれば「今月の判断」（必須の有無は札が言う。3.713.0 デザイン例）。</summary>
     public static string HomeHeadline(HomePlanKind kind, string startDate) => kind == HomePlanKind.Make ? HomeMakeHeadline : HomeMonthHeadline;
 
@@ -1725,8 +1692,6 @@ public static class CellSheetLogic
 
     /// <summary>必須の札は 1 つ＝残りの件数だけ（単位ごと＝INV-07）。必須 0 は「満たしています」。</summary>
     public static string HomeHardPill(long bestHard, string hardLabel) => bestHard > 0L ? $"必須 残り{hardLabel}" : HomeHard0Headline;
-
-    public static IReadOnlyList<string> HomeBadges(string hardLabel, CoverageShortfall? shortage) => new[] { HomeHardPill(1L, hardLabel) };
 
     /// <summary>状態の行（2 行まで）。保存の失敗は段に関係なく先頭（SF-1）。必須あり＝問題の 1 文と相談中の行（D10）。必須 0＝相談中の行と、CSV が今の内容と違う行（保存済みの行は主ボタンの下）。</summary>
     public static IReadOnlyList<string> HomeStatusLines(HomePlanKind kind, string? sentence, string? consultLine, string? savedLine, bool saveFailed = false) =>

@@ -244,11 +244,6 @@ public class CellSheetLogicTest
         Assert.Equal(new[] { (2, 1), (1, 5), (3, 5), (0, 2) }, CellSheetLogic.ViolationTour(ui, includeSoft: true));
         var soft = new UiState { ViolationCellFamilies = new Dictionary<string, IReadOnlyList<string>> { ["0,2"] = new[] { "vio-c42s" } } };
         Assert.Equal(new[] { (0, 2) }, CellSheetLogic.ViolationTour(soft));
-        var tour = CellSheetLogic.ViolationTour(ui);
-        Assert.Equal((1, 5), CellSheetLogic.NextTourCell(tour, (2, 1)));
-        Assert.Equal((2, 1), CellSheetLogic.NextTourCell(tour, (3, 5)));
-        Assert.Equal((2, 1), CellSheetLogic.NextTourCell(tour, (9, 9)));
-        Assert.Null(CellSheetLogic.NextTourCell(Array.Empty<(int, int)>(), (0, 0)));
     }
 
     /// <summary>巡回は違反単位: 実データの必須 5 件（c3n 4＋c3w 1）が 5 件、日→職員の順、職員10 は 10/8〜10/9 の 1 件、人員不足は別の 1 行。</summary>
@@ -267,7 +262,6 @@ public class CellSheetLogicTest
         var at = items.ToList().IndexOf(a);
         Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9", CellSheetLogic.TourHeading(items, at));
         Assert.Null(CellSheetLogic.TourHeading(items, 9));
-        Assert.Equal($"必須違反 {at + 1} / 5 ・ 禁止の並び Dﾃ→A4", CellSheetLogic.PeekHeading(CellSheetLogic.TourHeading(items, at)!));
         Assert.Equal("ほかに人員不足 2人（日の印から開けます）", CellSheetLogic.TourCovULine(2));
         Assert.Null(CellSheetLogic.TourCovULine(0));
     }
