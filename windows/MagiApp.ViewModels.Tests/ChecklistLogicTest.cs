@@ -8,8 +8,8 @@ public class ChecklistLogicTest
     {
         var c = WishEntryCounts.Of(5, new[] { "0,3", "0,4", "2,1" }, new[] { "2,5", "3,0" });
         Assert.Equal(new WishEntryCounts(Entered: 3, ExtOnly: 1, NoInput: 2), c);
-        Assert.Equal("入力あり 3名（拡張希望のみ 1名）・未入力 2名", c.Text());
-        Assert.Equal("入力あり 0名・未入力 4名", WishEntryCounts.Of(4, Array.Empty<string>(), Array.Empty<string>()).Text());
+        Assert.Equal("入力あり 3人（拡張希望のみ 1人）・未入力 2人", c.Text());
+        Assert.Equal("入力あり 0人・未入力 4人", WishEntryCounts.Of(4, Array.Empty<string>(), Array.Empty<string>()).Text());
     }
 
     [Fact]

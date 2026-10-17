@@ -242,13 +242,16 @@ public sealed partial class MainWindow : Window
 
     private string _currentTag = "home";
 
+    /// <summary>[3.707.0 3a-3] 結果のあとに編集タブで月次条件を変えたか（セッションの中だけ。作成を始めたら戻す）。EditView が立てる。</summary>
+    internal bool CondEdited { get; set; }
+
     /// <summary>
     /// [phase9 #23] シェル共通のトップバー（状態バッジ）と下部コマンドバー（Kotlin原本 <c>MagiTopBar</c>／<c>BottomCommandBar</c>）。
     /// バッジ: 実行中（必須N か soft の init→best）／配布可（結果あり・必須0）／必須違反 N／未計算。読込前は出さない。
     /// 主ボタンは文脈で 1 本: 実行中・提案探索中は「やめる」（<see cref="MagiViewModel.Stop"/> が両方を戻す）、それ以外は
     /// 「勤務表をつくる」／「再作成」（どちらも本最適化）。元に戻す／やり直しは、できるときだけ出す。
     /// </summary>
-    private void RenderShell()
+    internal void RenderShell()
     {
         var ui = _vm.Ui;
         SectionTitleText.Text = _currentTag switch
@@ -288,13 +291,16 @@ public sealed partial class MainWindow : Window
         UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         var stopping = ui.Running || ui.FixSearching;
+        if (ui.Running) CondEdited = false;
         MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
         // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
         // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。設定タブも外枠（Android 3.706.0）。
         var secondary = !ui.Running && (_currentTag == "home" || _currentTag == "settings"
-            || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None));
+            || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None)
+            // 編集タブの月次条件は見出しの主が Rerun のときだけ塗り（Android 3.707.0 Q10）。
+            || (_currentTag == "edit" && _tabCache.TryGetValue("edit", out var ec) && ec is EditView ev && ev.Door == 0 && CellSheetLogic.EditBarSecondary(ev.HeaderPlanNow())));
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
@@ -374,7 +380,7 @@ public sealed partial class MainWindow : Window
             {
                 "home" => new HomeView(_vm, this),
                 "schedule" => new ScheduleView(_vm, () => SelectTab("analysis"), GoEditLandingFrom, ShowRelaxTrial),
-                "edit" => new EditView(_vm),
+                "edit" => new EditView(_vm, this),
                 // 「設定へ」は種類に対応する節（回数→③・決まり→⑤）、必要人数・希望・種類なしは月次条件の先頭（3.646.0 L04）。
                 // セルの行は巡回と同じくそのセルのシートを開く（Android 3.705.0）。
                 "analysis" => new AnalysisView(_vm, OpenCellSheet, kind => GoEditLandingFrom(
@@ -428,6 +434,8 @@ public sealed partial class MainWindow : Window
     internal void GoEditLandingFrom(EditLanding? l, EditReturn? r)
     {
         GoEditLanding(l);
+        // [3.707.0 3a-6] 着地先が必要人数の日なら、その日の人員不足の 1 文を帯の 1 行目に。
+        r = r is null ? null : r with { Problem = r.Problem ?? CellSheetLogic.EditReturnProblem(_vm.Ui.CoverageDiag?.Shortfalls ?? Array.Empty<MagiEngine.V6.CoverageShortfall>(), l?.NeedShift, l?.Day) };
         if (_tabCache.TryGetValue("edit", out var c) && c is EditView ev) ev.SetReturn(r, r is null ? null : () => ReturnTo(r));
     }
 
@@ -742,7 +750,7 @@ public sealed partial class MainWindow : Window
 
     private static EditReturn PreRunReturn() => new(CellSheetLogic.PreRunTitle, EditReturn.PreRun);
 
-    private void ShowWishConflicts()
+    internal void ShowWishConflicts()
     {
         SelectTab("home");
         if (_tabCache.TryGetValue("home", out var c) && c is HomeView hv) _ = hv.ShowWishConflictsAsync();

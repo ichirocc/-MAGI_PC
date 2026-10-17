@@ -14,5 +14,5 @@ public sealed record WishEntryCounts(int Entered, int ExtOnly, int NoInput)
         return new WishEntryCounts(entered, ext.Except(regular).Count(), Math.Max(0, staffN - entered));
     }
 
-    public string Text() => $"入力あり {Entered}名" + (ExtOnly > 0 ? $"（拡張希望のみ {ExtOnly}名）" : "") + $"・未入力 {NoInput}名";
+    public string Text() => $"入力あり {Entered}人" + (ExtOnly > 0 ? $"（拡張希望のみ {ExtOnly}人）" : "") + $"・未入力 {NoInput}人";
 }

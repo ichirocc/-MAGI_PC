@@ -125,9 +125,12 @@ public sealed partial class EditView : UserControl
     /// （AnalysisView.MaxIssueRows と同じ理由——最大30名×31日で930件になりうる）。</summary>
     private const int MaxOverrideRows = 60;
 
-    public EditView(MagiViewModel vm)
+    private readonly MainWindow? _window;
+
+    public EditView(MagiViewModel vm, MainWindow? window = null)
     {
         _vm = vm;
+        _window = window;
         InitializeComponent();
         // [3.515.6同期] ItemsSource はここで一度だけ束ねる（ObservableCollectionの変更はListViewへ自動反映
         //   されるため、以後は_shiftListItems/_groupListItemsの中身だけ更新する。RenderMasterのたびに
@@ -170,6 +173,8 @@ public sealed partial class EditView : UserControl
         {
             _syncingFromModel = false;
         }
+        // [3.707.0 Q10] 選択を外した・適用したあとの塗りを下部バーへ（パネルが閉じたら見出しか再作成が主に戻る）。
+        _window?.RenderShell();
     }
 
     private void RenderDoor()
@@ -181,6 +186,8 @@ public sealed partial class EditView : UserControl
             1 => "入退職・所属・資格スキル・個人の回数（随時変更）",
             _ => "毎月は変えない基本の設定：シフト・ルール・人数（制度変更時のみ）",
         };
+        // [3.707.0] 月次条件では区分の 1 行は見出しカードの副題。
+        DoorHintText.Visibility = _door == 0 ? Visibility.Collapsed : Visibility.Visible;
         MonthlyPanel.Visibility = _door == 0 ? Visibility.Visible : Visibility.Collapsed;
         StaffPanel.Visibility = _door == 1 ? Visibility.Visible : Visibility.Collapsed;
         MasterPanel.Visibility = _door == 2 ? Visibility.Visible : Visibility.Collapsed;
@@ -197,16 +204,6 @@ public sealed partial class EditView : UserControl
         NextStepMonthButton.IsEnabled = editable;
         NextMonthButton.IsEnabled = editable;
 
-        // 件数は GetSetupCounts（入力ガイド用の集計・1回の呼出しで揃う）から取る。
-        var c = _vm.GetSetupCounts();
-        MonthlyCountsText.Text =
-            $"登録済み: 希望 {c.Wishes}件 ・ 日別の必要人数（例外） {c.NeedDay}件 ・ 職員 {c.Staff}名";
-        // [phase9 #5] Kotlin原本 SetupGuideCard の「次の一手」（3.482.0 の文言）。件数の行は既にあるので差分だけ足す。
-        NextStepPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
-        NextStepText.Text = "次の一手: " + (
-            c.Staff == 0 || c.Shifts == 0 ? "基本情報（職員／シフト）を整えましょう。"
-            : c.Wishes == 0 ? "次に『希望シフト』を登録すると でき具合 が上がります。"
-            : $"準備OK。画面下の『{(ui.HasResult ? "再作成" : "勤務表をつくる")}』で作成できます。");
         RenderChecklist(ui);
     }
 
@@ -220,22 +217,30 @@ public sealed partial class EditView : UserControl
         ChecklistPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) return;
         var v = _vm.MonthlyChecklist();
+        var plan = HeaderPlanNow();
+        EditHeaderTitle.Text = plan.Title;
+        EditHeaderSubtitle.Text = plan.Subtitle;
+        RenderHeaderButtons(plan);
+        static (string Label, string Value) Split(string point) => (point[..point.IndexOf(' ')], point[(point.IndexOf(' ') + 1)..]);
+        var (wishLabel, wishValue) = Split(plan.Points[0]);
+        var (needLabel, needValue) = Split(plan.Points[1]);
+        var (issueLabel, issueValue) = Split(plan.Points[2]);
         ChecklistHost.Children.Clear();
-        ChecklistHost.Children.Add(ChecklistRow("職員", $"{v.StaffN}名", ok: v.StaffN > 0));
         // [3.643.0] 登録の有無だけを数える（✓ で「集め終わった」と読まれないよう判定は出さない）。拡張希望だけの職員も入力あり。
-        ChecklistHost.Children.Add(ChecklistRow("希望・休暇", v.Entry.Text(), ok: null,
+        // [3.707.0 3a-4] 希望・必要人数の行は同じ画面のカードへ寄せるだけ（選んだ日は消さない）。
+        ChecklistHost.Children.Add(ChecklistRow(wishLabel, wishValue, ok: null,
             onClick: () => WishSectionTitle.StartBringIntoView()));
         if (v.Entry.NoInput > 0)
             ChecklistHost.Children.Add(new TextBlock
             {
-                Text = $"未入力の {v.Entry.NoInput}名が「希望なし」か「まだ聞いていない」かは、ここでは分かりません。",
+                Text = $"未入力の {v.Entry.NoInput}人が「希望なし」か「まだ聞いていない」かは、ここでは分かりません。",
                 FontSize = 12, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(24, 0, 0, 0),
             });
-        ChecklistHost.Children.Add(ChecklistRow("必要人数",
-            (v.NeedStdOk ? "標準あり" : "標準が未設定") + $"・例外{v.NeedExceptions}件", ok: v.NeedStdOk));
+        ChecklistHost.Children.Add(ChecklistRow(needLabel, needValue, ok: v.NeedStdOk,
+            onClick: () => NeedSectionTitle.StartBringIntoView()));
         var issues = ui.SettingIssues;
-        var issueText = issues.Count == 0 ? "問題なし" : $"見直し {issues.Count}件" + (_checklistIssuesOpen ? " ▾" : " ▸");
-        ChecklistHost.Children.Add(ChecklistRow("入力診断", issueText, ok: issues.Count == 0,
+        var issueText = issueValue + (issues.Count == 0 ? "" : _checklistIssuesOpen ? " ▾" : " ▸");
+        ChecklistHost.Children.Add(ChecklistRow(issueLabel, issueText, ok: issues.Count == 0,
             onClick: issues.Count > 0 ? () => { _checklistIssuesOpen = !_checklistIssuesOpen; Render(); } : null));
 
         ChecklistIssuesHost.Children.Clear();
@@ -257,6 +262,50 @@ public sealed partial class EditView : UserControl
     }
 
     private const int ChecklistIssueRows = 6;
+
+    internal int Door => _door;
+
+    /// <summary>[3.707.0 E-2] 見出しカードの中身（Kotlin <c>editHeaderPlan</c> の呼出側）。下部バーの塗り（Q10）も MainWindow がここから引く。</summary>
+    internal EditHeaderPlan HeaderPlanNow()
+    {
+        var ui = _vm.Ui;
+        var v = _vm.MonthlyChecklist();
+        var month = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var start) ? $"{start.Year}年{start.Month}月" : "";
+        var counts = new EditHeaderCounts(month, ui.StaffNames.Count, ui.ShiftSymbols.Count, v.Entry, v.NeedStdOk, v.NeedExceptions,
+            ui.SettingIssues.Count, !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty);
+        var panelOpen = (WishStaffCombo.SelectedIndex >= 0 && _wishSelectedDays.Count > 0) || (NeedCalShiftCombo.SelectedIndex >= 0 && _needSelectedDays.Count > 0);
+        return CellSheetLogic.EditHeaderPlanOf(_door, counts, panelOpen, ui.HasResult && (ui.RanBeforeEdit || (_window?.CondEdited ?? false)), ui.Running);
+    }
+
+    /// <summary>Q10: 塗りは EditNeed のときだけ。Rerun（下部の再作成）・Panel（入力パネル）の間は外枠＝画面の塗りは 1 つ（INV-09）。</summary>
+    private void RenderHeaderButtons(EditHeaderPlan plan)
+    {
+        EditHeaderNeedButton.Content = CellSheetLogic.EditNeedButton;
+        EditHeaderNeedButton.Visibility = plan.Primary is null ? Visibility.Collapsed : Visibility.Visible;
+        if (plan.Primary == EditHeaderPrimary.EditNeed) EditHeaderNeedButton.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+        else EditHeaderNeedButton.ClearValue(StyleProperty);
+        EditHeaderConflictsLink.Content = CellSheetLogic.WishConflictsButton;
+        EditHeaderConflictsLink.Visibility = plan.Secondary == EditHeaderSecondary.WishConflicts ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>選択の出し入れ（カレンダーのタップ）のあと、見出しの塗りと下部バーを合わせる。</summary>
+    private void RefreshHeaderAndBar()
+    {
+        if (_vm.Ui.Loaded) RenderHeaderButtons(HeaderPlanNow());
+        _window?.RenderShell();
+    }
+
+    private void OnEditHeaderNeedClick(object sender, RoutedEventArgs e) => NeedSectionTitle.StartBringIntoView();
+
+    private void OnEditHeaderConflictsClick(object sender, RoutedEventArgs e) => _window?.ShowWishConflicts();
+
+    /// <summary>[3.707.0 3a-3] 結果のあとに月次条件を変えた印（作成を始めたら MainWindow が戻す）。VM を呼ぶ前に立てる＝その変更通知で下部バーが塗りになる。</summary>
+    private void MarkConditionEdited()
+    {
+        if (_window is not null) _window.CondEdited = true;
+    }
+
     private bool _checklistIssuesOpen;
     private bool _checklistIssuesAll;
 
@@ -424,6 +473,7 @@ public sealed partial class EditView : UserControl
 
         WishListHost.Children.Clear();
         var rows = _vm.WishOverrides();
+        RenderWishStaffSummary(ui, rows);
         ApplyWishesButton.IsEnabled = editable && rows.Count > 0;
         ClearAllWishesButton.IsEnabled = editable && rows.Count > 0;
         // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
@@ -438,7 +488,7 @@ public sealed partial class EditView : UserControl
             });
             var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var i = v.I; var j = v.J;
-            remove.Click += (_, _) => _vm.RemoveWish(i, j);
+            remove.Click += (_, _) => { MarkConditionEdited(); _vm.RemoveWish(i, j); };
             row.Children.Add(remove);
             WishListHost.Children.Add(row);
         }
@@ -457,10 +507,27 @@ public sealed partial class EditView : UserControl
             });
             var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var index = e.Index;
-            remove.Click += (_, _) => _vm.RemoveExtWish(index);
+            remove.Click += (_, _) => { MarkConditionEdited(); _vm.RemoveExtWish(index); };
             row.Children.Add(remove);
             ExtWishListHost.Children.Add(row);
         }
+    }
+
+    /// <summary>[3.707.0 3b-1・3b-2] 選んだ職員の件数の行と、その職員のぶつかっている希望への文字ボタン（先頭の 1 件の日、件数は出さない）。</summary>
+    private void RenderWishStaffSummary(UiState ui, IReadOnlyList<MagiViewModel.WishView> rows)
+    {
+        var i = WishStaffCombo.SelectedIndex;
+        var has = ui.Loaded && i >= 0 && i < ui.StaffNames.Count;
+        WishStaffSummaryText.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+        WishConflictLink.Visibility = Visibility.Collapsed;
+        if (!has) return;
+        var name = ui.StaffNames[i];
+        WishStaffSummaryText.Text = CellSheetLogic.WishStaffSummary(name, rows.Count(v => v.I == i), _vm.ExtWishViews().Count(e => e.I == i));
+        var c = NextActionGuide.WishTrialCandidatesOf(ui);
+        var conflict = c.Direct.FirstOrDefault(r => r.Staff == i) ?? c.Shortfall.SelectMany(g => g.Rows).FirstOrDefault(r => r.Staff == i);
+        if (conflict is null || _window is null) return;
+        WishConflictLink.Content = CellSheetLogic.WishConflictLinkText(name, DayText.Short(ui.StartDate, conflict.Day));
+        WishConflictLink.Visibility = Visibility.Visible;
     }
 
     /// <summary>拡張希望の入力: 禁止するシフトの選択（複数）。<see cref="_extWishSel"/> に出し入れする。</summary>
@@ -493,6 +560,7 @@ public sealed partial class EditView : UserControl
             }
             ExtWishShiftHost.Children.Add(row);
         }
+        AddExtWishButton.Content = CellSheetLogic.ExtWishApplyButton(_wishSelectedDays.Count);
         AddExtWishButton.IsEnabled = editable && _extWishSel.Count > 0;
     }
 
@@ -501,6 +569,7 @@ public sealed partial class EditView : UserControl
         var staffIdx = WishStaffCombo.SelectedIndex;
         if (staffIdx < 0 || _wishSelectedDays.Count == 0 || _extWishSel.Count == 0) return;
         // 成功したときだけ閉じる。失敗したときは選択を残して理由を出す（UI-01）。
+        MarkConditionEdited();
         if (_vm.AddExtWishForDays(staffIdx, _wishSelectedDays.Select(d => d - 1).ToList(), _extWishSel.OrderBy(x => x).ToList()))
         {
             _wishSelectedDays.Clear();
@@ -509,7 +578,7 @@ public sealed partial class EditView : UserControl
         }
         else
         {
-            ExtWishErrorText.Text = "登録できませんでした: " + (_vm.LastExtWishError ?? "") + "。日かシフトを選び直して、もう一度試せます。";
+            ExtWishErrorText.Text = CellSheetLogic.ExtWishFailedText(_vm.LastExtWishError ?? "");
             ExtWishErrorText.Visibility = Visibility.Visible;
         }
         RenderWishCalendar(_vm.Ui, true);
@@ -657,6 +726,7 @@ public sealed partial class EditView : UserControl
                 {
                     _syncingFromModel = false;
                 }
+                RefreshHeaderAndBar();
             };
             Grid.SetRow(cellButton, row);
             Grid.SetColumn(cellButton, col);
@@ -715,8 +785,8 @@ public sealed partial class EditView : UserControl
         WishOtherButtonsHost.Visibility = _wishShowOther && others.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         var outOfScope = !allowed.Contains(_wishSelK);
         WishShiftWarnText.Visibility = outOfScope ? Visibility.Visible : Visibility.Collapsed;
-        if (outOfScope) WishShiftWarnText.Text = $"⚠「{ui.ShiftSymbols[_wishSelK]}」はこの職員の担当外です。希望は登録できますが、配置すると必須違反になります。";
-        ApplyWishesForDaysButton.Content = $"{_wishSelectedDays.Count}日に適用";
+        if (outOfScope) WishShiftWarnText.Text = CellSheetLogic.WishOutOfScopeNote(ui.ShiftSymbols[_wishSelK], staffIdx < ui.StaffNames.Count ? ui.StaffNames[staffIdx] : "");
+        ApplyWishesForDaysButton.Content = CellSheetLogic.WishApplyButton(_wishSelectedDays.Count, _wishSelK < ui.ShiftSymbols.Count ? ui.ShiftSymbols[_wishSelK] : "");
         ApplyWishesForDaysButton.IsEnabled = editable;
         ClearWishesForDaysButton.Content = $"選択した日の希望を消す（{_wishSelectedDays.Count}件）";
         ClearWishesForDaysButton.IsEnabled = editable;
@@ -763,6 +833,7 @@ public sealed partial class EditView : UserControl
         if (k < 0 || k >= _vm.Ui.ShiftSymbols.Count) { WishHintText.Text = "シフトを選んでください。"; return; }
         if (_wishSelectedDays.Count == 0) { WishHintText.Text = "日を選んでください。"; return; }
         var days = _wishSelectedDays.Select(d => d - 1).ToList();
+        MarkConditionEdited();
         _vm.SetWishesForDays(i, days, k);
         _wishSelectedDays.Clear();
         WishHintText.Text = "";
@@ -788,6 +859,7 @@ public sealed partial class EditView : UserControl
                 return;
             if (_syncingFromModel || WishStaffCombo.SelectedIndex != i) return;
         }
+        MarkConditionEdited();
         _vm.ClearWishesForDays(i, days);
         _wishSelectedDays.Clear();
         WishHintText.Text = "";
@@ -805,6 +877,7 @@ public sealed partial class EditView : UserControl
             WishHintText.Text = $"日は 1〜{_vm.Ui.Days} で入れてください。";
             return;
         }
+        MarkConditionEdited();
         _vm.SetWish(i, day1 - 1, k);
         WishHintText.Text = "";
     }
@@ -850,6 +923,7 @@ public sealed partial class EditView : UserControl
         var ok = await ConfirmAsync("希望シフトをすべて削除しますか？",
             "登録済みの希望シフトがすべて削除されます（勤務表自体は変わりません。「元に戻す」で戻せます）。");
         if (!ok) return;
+        MarkConditionEdited();
         _vm.ClearAllWishes();
     }
 
@@ -928,10 +1002,13 @@ public sealed partial class EditView : UserControl
                 _syncingFromModel = true;
                 try { RenderNeedCalendar(_vm.Ui, editable); }
                 finally { _syncingFromModel = false; }
+                RefreshHeaderAndBar();
             };
             Grid.SetRow(cellButton, row); Grid.SetColumn(cellButton, col);
             NeedCalendarHost.Children.Add(cellButton);
         }
+        // [3.707.0 3a-7] このシフトの例外の件数。
+        NeedCalStatusText.Text = $"例外 {_vm.NeedDayOverrides().Count(o => o.K == k)}件";
         var hasSelection = k >= 0 && _needSelectedDays.Count > 0;
         NeedApplyPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         if (!hasSelection) return;
@@ -959,7 +1036,7 @@ public sealed partial class EditView : UserControl
         var invalid = V6SanityPort.RangeOrderConflict(p1, p2) is not null;
         NeedApplyHintText.Text = "上限人数は最低人数以上にしてください。";
         NeedApplyHintText.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
-        ApplyNeedForDaysButton.Content = $"{_needSelectedDays.Count}日に適用";
+        ApplyNeedForDaysButton.Content = CellSheetLogic.NeedApplyButton(_needSelectedDays.Count);
         // 2パターン目を使わない月は上限人数が効かない＝上限だけでは適用しない。
         var use2 = _vm.Ui.Use2;
         NeedApplyP2Box.Header = MagiViewModel.NeedUpperLabel(use2);
@@ -982,6 +1059,7 @@ public sealed partial class EditView : UserControl
     {
         var k = NeedCalShiftCombo.SelectedIndex;
         if (k < 0 || _needSelectedDays.Count == 0) return;
+        MarkConditionEdited();
         _vm.SetNeedDaysForDays(k, _needSelectedDays.Select(d => d - 1).OrderBy(x => x).ToList(), NeedApplyP1Box.Text.Trim(), NeedApplyP2Box.Text.Trim());
         _needSelectedDays.Clear();
         Render();
@@ -991,6 +1069,7 @@ public sealed partial class EditView : UserControl
     {
         var k = NeedCalShiftCombo.SelectedIndex;
         if (k < 0 || _needSelectedDays.Count == 0) return;
+        MarkConditionEdited();
         _vm.ClearNeedDaysForDays(k, _needSelectedDays.Select(d => d - 1).OrderBy(x => x).ToList());
         _needSelectedDays.Clear();
         Render();
@@ -1011,6 +1090,8 @@ public sealed partial class EditView : UserControl
 
         NeedDayListHost.Children.Clear();
         var rows = _vm.NeedDayOverrides();
+        // [3.707.0 3a-8] 例外が無ければ一覧の見出しを出さない（件数は見出しカードと必要人数の欄にある）。
+        NeedDayListTitle.Visibility = rows.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         foreach (var v in rows.Take(MaxOverrideRows))
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -1021,7 +1102,7 @@ public sealed partial class EditView : UserControl
             });
             var remove = new Button { Content = "削除", FontSize = 14, IsEnabled = editable };
             var k = v.K; var j = v.J;
-            remove.Click += (_, _) => _vm.RemoveNeedDay(k, j);
+            remove.Click += (_, _) => { MarkConditionEdited(); _vm.RemoveNeedDay(k, j); };
             row.Children.Add(remove);
             NeedDayListHost.Children.Add(row);
         }
@@ -1043,6 +1124,7 @@ public sealed partial class EditView : UserControl
             NeedDayHintText.Text = $"日は 1〜{_vm.Ui.Days} で入れてください。";
             return;
         }
+        MarkConditionEdited();
         _vm.SetNeedDay(k, day1 - 1, NeedDayP1Box.Text.Trim(), NeedDayP2Box.Text.Trim());
         NeedDayHintText.Text = "";
     }
@@ -2627,7 +2709,7 @@ public sealed partial class EditView : UserControl
     {
         _onReturn = onReturn;
         ReturnBanner.Visibility = r is null ? Visibility.Collapsed : Visibility.Visible;
-        ReturnText.Text = r is null ? "" : EditReturn.Line(r);
+        ReturnText.Text = r is null ? "" : string.Join("\n", CellSheetLogic.EditReturnLines(r).Take(2));
         ReturnButton.Content = EditReturn.ButtonText;
     }
 

@@ -1496,6 +1496,98 @@ public static class CellSheetLogic
     /// <summary>足りない側の人探しのボタンを塗りにするか（S-4）。セルに人員不足以外の問題もあれば外枠（主は「変更案を探す」＝INV-09）。</summary>
     public static bool ShortSideFilled(IEnumerable<string> families) => families.All(f => f == "covU");
 
+    public const string EditScopeMonthlyNote = "翌月だけの条件：希望・必要人数・例外（毎月ここから）";
+    public const string EditScopeStaffNote = "入退職・所属・資格スキル（随時変更）。職員の一覧はここだけ";
+    public const string EditScopeMasterNote = "毎月は変えない基本の設定：シフト・ルール・人数（制度変更時のみ）";
+    public const string EditNeedButton = "必要人数を編集する";
+    public const string WishConflictsButton = "ぶつかっている希望を見る";
+
+    /// <summary>
+    /// [3.707.0 E-2] 編集タブ（scope 0=月次条件／1=職員管理／2=年間マスター）の見出し（Kotlin <c>editHeaderPlan</c>）。点は 3 つまで、1 点に単位は 1 つ（INV-07）。
+    /// 主ボタン（Q10）: 実行中は無し、入力パネルを開いている間は Panel、結果のあとに条件を変えたなら Rerun、
+    /// 職員かシフトが無ければ OpenMaster（シフトはあって職員だけ無ければ AddStaff）、それ以外は区分ごとの主（月次＝EditNeed）。
+    /// </summary>
+    public static EditHeaderPlan EditHeaderPlanOf(int scope, EditHeaderCounts counts, bool panelOpen, bool ranBeforeEdit, bool running)
+    {
+        var title = scope switch
+        {
+            0 => string.IsNullOrWhiteSpace(counts.Month) ? "月次条件" : $"月次条件（{counts.Month}）",
+            1 => "職員管理",
+            _ => "年間マスター",
+        };
+        var subtitle = scope switch { 0 => EditScopeMonthlyNote, 1 => EditScopeStaffNote, _ => EditScopeMasterNote };
+        IReadOnlyList<string> points = scope switch
+        {
+            0 => new[]
+            {
+                $"希望・休暇 {counts.Wish.Text()}",
+                "必要人数 " + (counts.NeedStdOk ? "標準あり" : "標準が未設定") + $"・例外 {counts.NeedExceptions}件",
+                "入力診断 " + (counts.Issues == 0 ? "問題なし" : $"見直し {counts.Issues}件"),
+            },
+            1 => new[] { $"職員 {counts.Staff}人" },
+            _ => new[] { $"シフト {counts.Shifts}種類" },
+        };
+        EditHeaderPrimary? primary =
+            running ? null
+            : panelOpen ? EditHeaderPrimary.Panel
+            : ranBeforeEdit ? EditHeaderPrimary.Rerun
+            : counts.Shifts == 0 ? EditHeaderPrimary.OpenMaster
+            : counts.Staff == 0 ? EditHeaderPrimary.AddStaff
+            : scope == 0 ? EditHeaderPrimary.EditNeed
+            : scope == 1 ? EditHeaderPrimary.AddStaff
+            : EditHeaderPrimary.OpenMaster;
+        EditHeaderSecondary? secondary = scope == 0 && counts.WishConflicts ? EditHeaderSecondary.WishConflicts : null;
+        return new EditHeaderPlan(title, subtitle, points, primary, secondary);
+    }
+
+    /// <summary>[3.707.0 3a-3] 下部バーの作成ボタンを外枠にするか（編集タブでは見出しの主が Rerun のときだけ塗り）。</summary>
+    public static bool EditBarSecondary(EditHeaderPlan plan) => plan.Primary is { } p && p != EditHeaderPrimary.Rerun;
+
+    /// <summary>[3.707.0 3b-1] 希望カードの職員の行。</summary>
+    public static string WishStaffSummary(string name, int wishes, int extWishes) => $"{name}さん：希望 {wishes}件・拡張希望 {extWishes}件";
+
+    /// <summary>[3.707.0 3b-2] その職員のぶつかっている希望への文字ボタン（件数は出さない）。</summary>
+    public static string WishConflictLinkText(string name, string dayLabel) => $"{WishConflictsButton}（{name}さん {dayLabel}）";
+
+    /// <summary>[3.707.0 3b-4] 希望の入力パネルのボタン。</summary>
+    public static string WishApplyButton(int days, string symbol) => $"{days}日を{symbol}の希望にする";
+    public static string ExtWishApplyButton(int days) => $"{days}日を選んだシフト以外にする";
+    public const string ClearSelectionButton = "選択を外す";
+    public static string NeedApplyButton(int days) => $"{days}日に適用する";
+
+    /// <summary>[3.707.0 3b-5] 担当外のシフトを選んだときの注記。</summary>
+    public static string WishOutOfScopeNote(string symbol, string name) =>
+        $"⚠「{symbol}」は{name}さんの担当外です。希望は登録できますが、配置すると必須違反になります。";
+
+    /// <summary>[3.707.0 3b-5] 拡張希望の登録に失敗したときの文（できなかったこと・原因・次の行動）。</summary>
+    public static string ExtWishFailedText(string reason) =>
+        $"拡張希望を登録できませんでした。{reason.TrimEnd('。')}。日かシフトを選び直して、もう一度登録してください。";
+
+    /// <summary>[3.707.0 W-1] ぶつかっている希望のダイアログの題の直下（0 の点は出さない、3 つまで）。</summary>
+    public static IReadOnlyList<string> WishConflictSummary(WishTrialCandidates c)
+    {
+        var direct = c.Direct.Count;
+        var people = c.Shortfall.SelectMany(g => g.Rows.Select(r => r.Staff)).Distinct().Count();
+        var wishOnly = c.Direct.Count(r => r.WishOnly);
+        return new[]
+        {
+            direct > 0 ? $"必須違反に関わる希望 {direct}件" : null,
+            people > 0 ? $"人員不足の日に別の勤務の希望 {people}人" : null,
+            wishOnly > 0 ? $"うち計算では消せない {wishOnly}件" : null,
+        }.OfType<string>().ToList();
+    }
+
+    /// <summary>[3.707.0 3a-6] 固定の帯の行（2 行まで）。理由があれば先に言い、2 行目は戻り先だけ（Kotlin <c>editReturnLines</c>）。</summary>
+    public static IReadOnlyList<string> EditReturnLines(EditReturn r) =>
+        r.Problem is { } p ? new[] { p, $"直したら「{r.Label}」へ戻れます。" } : new[] { EditReturn.Line(r) };
+
+    /// <summary>[3.707.0 3a-6] 着地先が必要人数の日なら、その日の人員不足の 1 文（3.698.0 の ShortageHeadline）。無ければ null。</summary>
+    public static string? EditReturnProblem(IEnumerable<CoverageShortfall> shortfalls, int? shift, int? day)
+    {
+        if (shift is null || day is null) return null;
+        return shortfalls.FirstOrDefault(s => s.ShiftIndex == shift && s.DayIndex == day) is { } sf ? ShortageHeadlineOf(sf).Headline : null;
+    }
+
     public const string NotImprovingTargetMessage = "見ている問題が減らないため、この提案は適用しませんでした。「変更案を探す」で探し直してください";
 
     public const string FixOriginUnknownMessage = "案を作ったときの勤務表が分からないため適用しませんでした。もう一度探してください";
@@ -1970,3 +2062,17 @@ public sealed record ContestCard(string Title, ContestOption A, ContestOption? B
 
 /// <summary>勤務表タブの状態の 1 行（Kotlin <c>ScheduleStateLine</c>）。TourFirst＝押すと巡回の先頭を開く（必須違反があり、セルで辿れるときだけ）。</summary>
 public sealed record ScheduleStateLine(string Text, bool Hard, bool TourFirst);
+
+/// <summary>[3.707.0 E-2] 編集タブの見出しカードの主ボタン（塗りは 1 つ＝INV-09）。Rerun は下部バーの「再作成」、Panel は開いている入力パネルの適用ボタン。</summary>
+public enum EditHeaderPrimary { EditNeed, OpenMaster, AddStaff, Rerun, Panel }
+public enum EditHeaderSecondary { WishConflicts }
+
+/// <summary>見出しカードに要る数（画面の状態から集める）。Month は「2026年11月」、無ければ空。</summary>
+public sealed record EditHeaderCounts(
+    string Month = "", int Staff = 0, int Shifts = 0, WishEntryCounts? Wish = null, bool NeedStdOk = false, int NeedExceptions = 0,
+    int Issues = 0, bool WishConflicts = false)
+{
+    public WishEntryCounts Wish { get; init; } = Wish ?? new WishEntryCounts(0, 0, 0);
+}
+
+public sealed record EditHeaderPlan(string Title, string Subtitle, IReadOnlyList<string> Points, EditHeaderPrimary? Primary, EditHeaderSecondary? Secondary);

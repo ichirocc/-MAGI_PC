@@ -42,9 +42,9 @@ public sealed record EditLanding(int Scope, string? Section, int? WishStaff = nu
 
 /// <summary>
 /// 編集タブへ着地したあと「元の確認へ戻る」ための呼出元（Kotlin <c>EditReturn</c>、3.646.0 L03）。Label＝見出し、Origin＝戻り先、Cell＝セルから来たとき。
-/// 画面の状態＝保存しない。利用者が自分でタブを替えたら消える。
+/// Problem は着地の理由の 1 文（3.707.0、帯の 1 行目）。画面の状態＝保存しない。利用者が自分でタブを替えたら消える。
 /// </summary>
-public sealed record EditReturn(string Label, int Origin, (int I, int J)? Cell = null)
+public sealed record EditReturn(string Label, int Origin, (int I, int J)? Cell = null, string? Problem = null)
 {
     public const int PreRun = 0;     // つくる前の確認（今のデータで作り直して出す）
     public const int Guided = 1;     // なおし方（人員不足の案内）
