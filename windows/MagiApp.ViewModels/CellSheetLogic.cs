@@ -1563,7 +1563,7 @@ public static class CellSheetLogic
     public static string ExtWishFailedText(string reason) =>
         $"拡張希望を登録できませんでした。{reason.TrimEnd('。')}。日かシフトを選び直して、もう一度登録してください。";
 
-    /// <summary>[3.707.0 W-1] ぶつかっている希望のダイアログの題の直下（0 の点は出さない、3 つまで）。</summary>
+    /// <summary>[3.707.0 W-1] ぶつかっている希望のダイアログの題の直下（0 の点は出さない、2 つまで）。</summary>
     public static IReadOnlyList<string> WishConflictSummary(WishTrialCandidates c)
     {
         var direct = c.Direct.Count;
@@ -1571,9 +1571,9 @@ public static class CellSheetLogic
         var wishOnly = c.Direct.Count(r => r.WishOnly);
         return new[]
         {
-            direct > 0 ? $"必須違反に関わる希望 {direct}件" : null,
+            // 「うち」は直前の行の内訳に読まれるので、人数の行の後ろでなく件数の行の括弧に入れる。
+            direct > 0 ? $"必須違反に関わる希望 {direct}件" + (wishOnly > 0 ? $"（うち計算では消せない {wishOnly}件）" : "") : null,
             people > 0 ? $"人員不足の日に別の勤務の希望 {people}人" : null,
-            wishOnly > 0 ? $"うち計算では消せない {wishOnly}件" : null,
         }.OfType<string>().ToList();
     }
 
