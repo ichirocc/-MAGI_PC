@@ -200,10 +200,59 @@ public sealed record AnalysisTriage(
         }
 
         var note = computed
-            ? "最適化後も残っている項目です。構造的に残ると判定されたものは上へ移しています。"
+            ? "作成後も残っている項目です。設定を変えないと消えないものは上に分けています。"
             : ui.RelaxedBoard
                 ? "設定を緩めて手順を当てた盤面の概算です（再作成する前）。"
                 : "実行前の概算です。期間の制約・禁止の並びなど、設定の組み合わせによっては、つくったあとも残る場合があります。";
         return new AnalysisTriage(computed, blockers, AggregateIssues(ui.SettingIssues), searching, ok, busy, note);
     }
+
+    /// <summary>設定の見直しの行の全幅ボタン（節の名を言う）。Kotlin <c>issueSettingsLabel</c>。</summary>
+    public static string IssueSettingsLabel(IssueKind? kind) => kind switch
+    {
+        IssueKind.Wish => "希望の設定を開く",
+        IssueKind.Demand => "必要人数の設定を開く",
+        null => "設定を開く",
+        _ => SettingsLabel.For(VioBuckets.YearSectionForIssueKind(kind) ?? ""),
+    };
+
+    /// <summary>
+    /// 分析タブの状態の段（Kotlin <c>analysisSummary</c>）。一文は上部の札（<see cref="CellSheetLogic.BoardStatusLines"/>）と同じ区別で決める。
+    /// tourCount＝巡回できる必須違反の数、fixResolved＝変更案で直せる必須違反の数（null＝未探索・古い＝出さない）。
+    /// </summary>
+    public static AnalysisSummary AnalysisSummaryOf(UiState ui, int tourCount, int? fixResolved)
+    {
+        var hard = ui.BestHard;
+        var evaluated = ui.CheckRev > 0 && !ui.Running;
+        var sentence =
+            ui.Running ? "勤務表をつくっています。表示は途中の値です。"
+            : !ui.HasResult ? "まだ作っていません。"
+            : !ui.EngineRan && !ui.RanBeforeEdit ? "手で編集した勤務表です（自動作成はまだ）。"
+            : hard > 0 ? "配る前に直す必須違反が残っています。"
+            : ui.BestSoft > 0 ? "必須違反はありません。要調整が残っています。"
+            : "必須違反も要調整もありません。";
+        var points = new List<string>();
+        if (ui.HasResult || ui.Running)
+        {
+            points.Add(hard > 0 ? $"必須違反 {HardText(ui.Breakdown, hard)}" : "必須違反 なし");
+            points.Add("要調整 " + (UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "なし"));
+            if (evaluated && hard > 0 && fixResolved is { } n) points.Add($"変更案で直せる必須違反 {n}か所");
+        }
+        var shortDays = ui.CoverageDiag?.Shortfalls.Where(x => x.Miss > 0).Select(x => x.DayIndex).Distinct().Count() ?? 0;
+        var active = hard > 0 && !ui.Running && ui.HasResult;
+        var primary = active && tourCount > 0 ? AnalysisPrimary.Tour : active && shortDays > 0 ? AnalysisPrimary.Guided : AnalysisPrimary.None;
+        var label = primary switch
+        {
+            AnalysisPrimary.Tour => $"必須違反を順に見る（{tourCount}か所）",
+            AnalysisPrimary.Guided => $"なおし方を見る（{shortDays}日）",
+            _ => null,
+        };
+        return new AnalysisSummary(sentence, points, primary, label);
+    }
 }
+
+/// <summary>分析タブの主ボタン（1 つだけ）。巡回できるなら巡回、人員不足だけならなおし方、それ以外は出さない。</summary>
+public enum AnalysisPrimary { Tour, Guided, None }
+
+/// <summary>分析タブの状態の段: 一文・3 点まで・主ボタン（<see cref="AnalysisTriage.AnalysisSummaryOf"/>）。</summary>
+public sealed record AnalysisSummary(string Sentence, IReadOnlyList<string> Points, AnalysisPrimary Primary, string? PrimaryLabel);

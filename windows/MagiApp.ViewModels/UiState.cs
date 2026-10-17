@@ -192,6 +192,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private DisplaySnapshot? display;
     /// <summary>ホームの先頭の直す手が解消する必須違反の名と場所（VM が作る。<see cref="TopFixResolved.Matches"/> で鮮度を照合）。保存しない。</summary>
     [ObservableProperty] private TopFixResolved? topFixResolved;
+    /// <summary>必須違反を減らすすべての案の解消の鍵の和集合（分析タブの 3 点目。VM が背景で作る）。保存しない。</summary>
+    [ObservableProperty] private FixResolvedUnion? fixResolvedUnion;
     /// <summary>[S5] 試算できる希望のキー（実現可能で手動固定でない）。</summary>
     [ObservableProperty] private IReadOnlySet<string> lockedWishKeys = new HashSet<string>();
     /// <summary>[#41] 手動固定のセル "i,j"。</summary>
@@ -372,4 +374,12 @@ public sealed record TopFixResolved(IReadOnlyList<FixCell> Ops, IReadOnlyList<IR
 {
     public bool Matches(IReadOnlyList<FixCell>? ops, IReadOnlyList<IReadOnlyList<int>> schedule) =>
         ops is not null && ops.SequenceEqual(Ops) && schedule.Count == Schedule.Count && schedule.Zip(Schedule).All(p => p.First.SequenceEqual(p.Second));
+}
+
+/// <summary>必須違反を減らす案の手（OpsList）を Schedule に当てたとき解消する必須違反の鍵の和集合。</summary>
+public sealed record FixResolvedUnion(IReadOnlyList<IReadOnlyList<FixCell>> OpsList, IReadOnlyList<IReadOnlyList<int>> Schedule, IReadOnlySet<ViolationKey> Keys)
+{
+    public bool Matches(IReadOnlyList<IReadOnlyList<FixCell>> opsList, IReadOnlyList<IReadOnlyList<int>> schedule) =>
+        opsList.Count == OpsList.Count && opsList.Zip(OpsList).All(p => p.First.SequenceEqual(p.Second))
+        && schedule.Count == Schedule.Count && schedule.Zip(Schedule).All(p => p.First.SequenceEqual(p.Second));
 }

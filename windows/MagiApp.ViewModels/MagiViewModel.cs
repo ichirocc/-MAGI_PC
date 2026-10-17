@@ -98,7 +98,7 @@ public sealed partial class MagiViewModel
         // ホームの見出しの「解消する必須違反」の名と場所。盤面と先頭の手が変わるたびに作り直す（UI スレッドで検査しない）。
         Ui.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(UiState.FixSuggestions) or nameof(UiState.Schedule)) RefreshTopFixResolved();
+            if (e.PropertyName is nameof(UiState.FixSuggestions) or nameof(UiState.Schedule)) { RefreshTopFixResolved(); RefreshFixResolvedUnion(); }
         };
     }
 

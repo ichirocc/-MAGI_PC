@@ -38,19 +38,16 @@
 
             <!-- ① サマリー -->
             <StackPanel x:Name="SummarySection" Spacing="6">
-                <TextBlock Text="サマリー" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                <TextBlock x:Name="SummaryText" Style="{StaticResource MagiBodyMediumTextStyle}" TextWrapping="Wrap" />
+                <!-- 状態の段: 一文・3 点まで・主ボタン 1 つ（AnalysisTriage.AnalysisSummaryOf、Android 3.705.0）。 -->
+                <TextBlock x:Name="SummaryText" Style="{StaticResource MagiBodyLargeTextStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <StackPanel x:Name="SummaryPoints" Spacing="2" />
+                <Button x:Name="SummaryPrimaryButton" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" MinHeight="56" Click="OnSummaryPrimaryClick" />
                 <TextBlock x:Name="HintText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8" />
             </StackPanel>
 
             <!-- [phase9 #18] 要確認（Kotlin原本 AnalysisTriageCard, 3.471.0）: 分類の軸は「族」でなく「診断」。 -->
             <StackPanel x:Name="TriageSection" Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                    <TextBlock Text="要確認" Style="{StaticResource MagiTitleMediumTextStyle}" VerticalAlignment="Center" />
-                    <Border x:Name="TriageBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="8,2" VerticalAlignment="Center">
-                        <TextBlock x:Name="TriageBadgeText" Style="{StaticResource MagiLabelSmallTextStyle}" />
-                    </Border>
-                </StackPanel>
+                <TextBlock Text="要確認" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock x:Name="TriageAllClearText" Style="{StaticResource MagiBodyMediumTextStyle}" Foreground="{StaticResource MagiTertiaryBrush}"
                            Text="確認事項はありません（すべての条件を満たしています）。" />
                 <TextBlock x:Name="TriageBlockersTitle" Style="{StaticResource MagiTitleSmallTextStyle}"
@@ -63,7 +60,6 @@
                 </Border>
                 <HyperlinkButton x:Name="TriageSummaryToggle" Padding="0" Click="OnTriageSummaryToggleClick" />
                 <StackPanel x:Name="TriageSummaryList" Spacing="2" Visibility="Collapsed" />
-                <TextBlock x:Name="TriageRunningNote" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Text="※実行中のため、確定前の値です（確定すると最新の値になります）" />
             </StackPanel>
 
             <!-- 違反の場所（タップで勤務表タブへジャンプ） -->
