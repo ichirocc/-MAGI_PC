@@ -428,6 +428,7 @@ public sealed partial class HomeView : UserControl
         DetailText.Foreground = fgBrush;
 
         RedraftLink.Visibility = Vis(Has(HomeSection.DraftLink));
+        RedraftNote.Visibility = RedraftLink.Visibility;
         RedraftLink.Foreground = fgBrush;
         RedraftLink.IsEnabled = editable;
     }
@@ -642,7 +643,7 @@ public sealed partial class HomeView : UserControl
                     {
                         var confirm = new Button
                         {
-                            Content = "希望を外して再作成（元に戻せます）", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
+                            Content = "希望を外して再作成する", MinHeight = 44, Margin = new Thickness(4, 0, 0, 0),
                             Foreground = BrushOf("MagiErrorBrush"), IsEnabled = !ui.Running,
                         };
                         var token = ready.Token;
@@ -769,7 +770,7 @@ public sealed partial class HomeView : UserControl
                         var fromSym = fromK is { } fk && fk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[fk] : null;
                         var b = new Button
                         {
-                            Content = new TextBlock { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, target.ShiftSymbol, fromSym), TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextAlignment = TextAlignment.Center },
+                            Content = new TextBlock { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, target.ShiftSymbol), TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1, TextAlignment = TextAlignment.Center },
                             HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                             IsEnabled = !ui.Running,
                         };
@@ -897,6 +898,7 @@ public sealed partial class HomeView : UserControl
         PolishPanel.Visibility = polish ? Visibility.Visible : Visibility.Collapsed;
         SoftPolishButton.IsEnabled = editable;
         SoftPolishLinkText.Text = CellSheetLogic.SoftPolishLink;
+        SoftPolishNoteText.Text = CellSheetLogic.SoftPolishNote;
     }
 
     private void OnGoEditClick(object sender, RoutedEventArgs e) => _window.GoEditLanding(null);
@@ -1077,7 +1079,7 @@ public sealed partial class HomeView : UserControl
                 var name = i >= 0 && i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
                 var cancel = new Button
                 {
-                    Content = $"{name}さんの希望（{s.ShiftSymbol}）を外して調整する",
+                    Content = new TextBlock { Text = $"{name}さんの希望（{s.ShiftSymbol}）を外す", MaxLines = 1, TextTrimming = TextTrimming.CharacterEllipsis },
                     HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                     Foreground = BrushOf("MagiErrorBrush"), IsEnabled = editable,
                 };

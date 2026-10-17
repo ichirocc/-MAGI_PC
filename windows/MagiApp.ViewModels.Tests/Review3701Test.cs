@@ -8,7 +8,7 @@ public class Review3701Test
     [Fact]
     public void TopBarSaveWordOnlyWhenFailed()
     {
-        Assert.Equal("自動保存できていません", CellSheetLogic.TopBarSaveWord(SaveState.Failed));
+        Assert.Equal("保存できていません", CellSheetLogic.TopBarSaveWord(SaveState.Failed));
         Assert.Null(CellSheetLogic.TopBarSaveWord(SaveState.Saved));
         Assert.Null(CellSheetLogic.TopBarSaveWord(SaveState.Saving));
         Assert.Null(CellSheetLogic.TopBarSaveWord(SaveState.Dirty));

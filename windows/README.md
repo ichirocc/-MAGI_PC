@@ -330,6 +330,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+- 2026-10-17（Android 3.710.0 と同期・ボタンの文言を 1 行に、文言のみ・出力不変）: 同じ文字列を写した（`CellSheetLogic` の状態の語・`AppliedNextButton`・`SoftPolishLink`＋新設 `SoftPolishNote`・`BulkClear`・`MultiFix`・`WishConflictLinkText`・`TopBarSaveFailed`・新設 `TopBarTourLabel`、`FixOutcomeText`・`AnalysisTriage`・`NextActionGuide`）。WinUI は氏名入りのボタンを `TextBlock`（MaxLines=1・省略記号）に、`RedraftNote`・`SoftPolishNoteText` を追加。Android の半幅・FlowRow・行ボタンの角丸は WinUI に同じ形が無いので対象外。Review3683/3693/3701/3703/3705/3707・CountShortageText・CellChangeReview の期待値を更新、ViewModels 871 件通過。
 - 2026-10-17（古い Kotlin の写しを削除、ユーザー指示）: `app/src/main/java`・`app/src/test/java`（移植時点 3.464 前後の Android の写し 150 ファイル余り、どのビルドにも使っていない）を削除。外部レビューがこれを正の Kotlin と取り違えた（ABI 7・旧い重み・`Shift.role`/`Staff.id` なし等）。CI が使う `app/src/main/cpp`・`app/src/test/resources` は残し、`app/README.md` に用途を書いた。
 - 2026-10-17（Android 3.709.0 と同期・早期終了の床を上限0込みに）: `PolishGate.FloorCountsUpperZero` を既定 true（Kotlin と同値。Android の実機データの計測で必須/合計/重み同一・300 秒→78 秒）。`V6PortAnalyzerCoverageTest` の既定の検査を更新。
 - 2026-10-17（Android 3.708.1 と同期・ぶつかっている希望の要約、文言のみ・出力不変）: `CellSheetLogic.WishConflictSummary` の「うち計算では消せない N件」が人数の行の後ろにあり 7 人の内訳に読めたので、件数の行の括弧へ移して 2 点までにした（Review3707Test 更新）。Android の名字の欠け（Compose の行ボタンの丸い端）は WinUI に同じ形が無いので対象外。

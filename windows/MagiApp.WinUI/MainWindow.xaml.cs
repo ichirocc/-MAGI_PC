@@ -280,7 +280,7 @@ public sealed partial class MainWindow : Window
             var clickable = tourable || preDist;
             StatusBadgeButton.IsHitTestVisible = clickable;
             StatusBadgeButton.IsTabStop = clickable;
-            if (tourable) label = $"必須違反を順に見る（{TourItemCount(ui)}か所）";
+            if (tourable) label = CellSheetLogic.TopBarTourLabel(TourItemCount(ui));
             StatusBadgeText.Text = label;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];

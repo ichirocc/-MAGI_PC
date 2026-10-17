@@ -55,7 +55,7 @@ public static class NextActionGuide
         : families.Contains("c3w") ? $"{wishSymbol}はこの希望の前日の禁止に関係しています。"
         : null;
     public const string WishKeepFooter = "希望は、あなたが選ぶまで外しません（外したあとも元に戻すで戻せます）。";
-    public const string WishToRelaxLabel = "希望を残したまま、設定を緩めて試す";
+    public const string WishToRelaxLabel = "希望を残し設定を緩めて試す";
     /// <summary>[S5b] 1 枠に並べる行の上限（超えたら「ほか N人」）。</summary>
     public const int WishTrialGroupLimit = 8;
     public const string RelaxWishLine = "希望: 変更しません";
@@ -187,7 +187,7 @@ public static class NextActionGuide
         _ => null,
     };
 
-    /// <summary>[S5] 取り消しても必須が減らない見込みの行（S6 の組があれば「希望を残したまま、設定を緩めて試す」を添える）。</summary>
+    /// <summary>[S5] 取り消しても必須が減らない見込みの行（S6 の組があれば「希望を残し設定を緩めて試す」を添える）。</summary>
     public static bool WishTrialNoGain(WishTrial.Outcome o) => o is WishTrial.Result r && r.Rk >= r.H0 && r.Att <= 0;
 
     /// <summary>[S5] Rk &lt; H0 の盤面でダイアログの先頭に出す文（§5）。対照だけで減らないなら null。</summary>

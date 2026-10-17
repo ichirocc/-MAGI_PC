@@ -56,13 +56,13 @@ public class CellChangeReviewTest
     [Fact]
     public void BoardStatusSeparatesAutoCreateFromEvaluation()
     {
-        Assert.Equal(("自動作成：未実行", "評価：未評価"), CellSheetLogic.BoardStatusLines(false, false, false, 0, 0));
-        Assert.Equal(("自動作成：未実行（手で編集）", "評価：必須違反 3件"), CellSheetLogic.BoardStatusLines(false, true, true, 3, 5));
-        Assert.Equal(("自動作成：済み", "評価：要調整 5件"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 5));
-        Assert.Equal(("自動作成：済み", "評価：違反なし"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 0));
+        Assert.Equal(("自動作成前", "評価：未評価"), CellSheetLogic.BoardStatusLines(false, false, false, 0, 0));
+        Assert.Equal(("手で編集", "評価：必須違反 3件"), CellSheetLogic.BoardStatusLines(false, true, true, 3, 5));
+        Assert.Equal(("自動作成済み", "評価：要調整 5件"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 5));
+        Assert.Equal(("自動作成済み", "評価：違反なし"), CellSheetLogic.BoardStatusLines(true, true, true, 0, 0));
         // [3.678.0] 自動作成のあと手で変えた盤面は「未実行」と言わない。
-        Assert.Equal("自動作成：済み（そのあと手で変更あり）", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: true).First);
-        Assert.Equal("自動作成：未実行（手で編集）", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: false).First);
+        Assert.Equal("手で変更あり", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: true).First);
+        Assert.Equal("手で編集", CellSheetLogic.BoardStatusLines(false, true, true, 0, 0, ranBeforeEdit: false).First);
     }
 
     [Fact]

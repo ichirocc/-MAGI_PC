@@ -14,7 +14,7 @@ public class Review3693Test
     [Fact]
     public void AppliedNextButtonCountsTourItemsNotHardTotal()
     {
-        Assert.Equal("残っている必須違反を順に見る（2か所）", CellSheetLogic.AppliedNextButton(false, "A", 3, 2));
+        Assert.Equal("必須違反2か所を順に見る", CellSheetLogic.AppliedNextButton(false, "A", 3, 2));
         Assert.Null(CellSheetLogic.AppliedNextButton(false, "A", 3, 0));
     }
 

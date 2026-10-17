@@ -85,7 +85,7 @@ public static class FixOutcomeText
         AnalysisTriage.UnitTotals(breakdown, MagiEngine.V6.MirrorKeys.Hard.Where(f => f != "covU")) is { } t ? $"ほかの必須違反（{t}）が残っています" : null;
 
     /// <summary>人員不足の手伝いの終わりの主ボタン（巡回の先頭を開く、Kotlin <c>guidedTourButton</c>）。</summary>
-    public static string GuidedTourButton(int n) => $"残っている必須違反を順に見る（{n}か所）";
+    public static string GuidedTourButton(int n) => $"必須違反{n}か所を順に見る";
 
     /// <summary>人員不足の手伝いの題（H-1、Kotlin <c>guidedFixTitle</c>）。枠が無い埋められない段は「残りの人員不足は埋められません」。</summary>
     public static string GuidedFixTitle(GuidedStage stage, string? dayLabel, string? shiftSymbol)
@@ -107,9 +107,8 @@ public static class FixOutcomeText
     public static IReadOnlyList<string> GuidedStatusPoints(int need, int got, int movable) =>
         new[] { CellSheetLogic.ShortageHeadlineOf("", "", need, got, need - got).Status, movable > 0 ? $"動かせる人が{movable}人います" : null }.OfType<string>().ToList();
 
-    /// <summary>候補 1 人の行（H-3、Kotlin <c>guidedCandidateLabel</c>）「山田さんを「A4」に入れる（休から）」。今の勤務が無ければ括弧ごと省く。</summary>
-    public static string GuidedCandidateLabel(string name, string shiftSymbol, string? fromSymbol) =>
-        $"{name}さんを「{shiftSymbol}」に入れる" + (string.IsNullOrWhiteSpace(fromSymbol) ? "" : $"（{fromSymbol}から）");
+    /// <summary>候補 1 人の行（H-3、Kotlin <c>guidedCandidateLabel</c>）「山田さんをA4に入れる」。今の勤務は下の回数の行が示す。</summary>
+    public static string GuidedCandidateLabel(string name, string shiftSymbol) => $"{name}さんを{shiftSymbol}に入れる";
 
     public const string ShortageDoneTitle = "人員不足は直し終わりました";
 }

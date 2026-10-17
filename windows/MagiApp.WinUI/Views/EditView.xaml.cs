@@ -526,7 +526,7 @@ public sealed partial class EditView : UserControl
         var c = NextActionGuide.WishTrialCandidatesOf(ui);
         var conflict = c.Direct.FirstOrDefault(r => r.Staff == i) ?? c.Shortfall.SelectMany(g => g.Rows).FirstOrDefault(r => r.Staff == i);
         if (conflict is null || _window is null) return;
-        WishConflictLink.Content = CellSheetLogic.WishConflictLinkText(name, DayText.Short(ui.StartDate, conflict.Day));
+        WishConflictLink.Content = CellSheetLogic.WishConflictLinkText(DayText.Short(ui.StartDate, conflict.Day));
         WishConflictLink.Visibility = Visibility.Visible;
     }
 
