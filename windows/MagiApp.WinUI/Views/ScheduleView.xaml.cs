@@ -1687,9 +1687,11 @@ public sealed partial class ScheduleView : UserControl
             var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
             IReadOnlyList<string> lines = target is { Staff: null } ? new[] { CellSheetLogic.NoNeedFixLine(label, target, ui.FixTimedOut), FixSearchText.NoFixScope } : why.Lines;
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
+            // [3.713.0] 見出し「案はありません」と説明の 1 行（続けて空なら 3.711.0 の行）。
+            host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixTitle, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixLineOf(ui.FixEmptyRepeatKey == focus.Key), TextWrapping = TextWrapping.Wrap });
             if (ui.FixEmptyRepeatKey == focus.Key)
             {
-                host.Children.Add(new TextBlock { Text = AnalysisTriage.RepeatedEmptyLine, TextWrapping = TextWrapping.Wrap });
                 // 全面の一覧は下に希望・設定への行き先を並べる＝ボタンはそれが無いセルのシートだけ。
                 if (quick && AnalysisTriage.RepeatedEmptyActionOf(why.WishRelated, ui.SettingIssues.Count > 0) is { } rea)
                 {

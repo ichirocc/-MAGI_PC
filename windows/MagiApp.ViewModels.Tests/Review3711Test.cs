@@ -56,6 +56,6 @@ public class Review3711Test
         Assert.Equal(RepeatedEmptyAction.Wishes, AnalysisTriage.RepeatedEmptyActionOf(true, true));
         Assert.Equal(RepeatedEmptyAction.Settings, AnalysisTriage.RepeatedEmptyActionOf(false, true));
         Assert.Null(AnalysisTriage.RepeatedEmptyActionOf(false, false));
-        Assert.Equal("この対象には、いまの条件で直せる変更案がありません。", AnalysisTriage.RepeatedEmptyLine);
+        Assert.Equal("続けて案がありませんでした", AnalysisTriage.RepeatedEmptyLine);
     }
 }

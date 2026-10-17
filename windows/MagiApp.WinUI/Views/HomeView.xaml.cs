@@ -238,7 +238,6 @@ public sealed partial class HomeView : UserControl
             // [Android 3.612.0 思考誘導S0/S4] 未完成は「足りる？→必須を減らす1手ある？→下限の見込み？→希望が関わる？」の順に主ボタンを1つだけ出す。
             bg = "MagiWarnContainerBrush"; fg = "MagiOnWarnContainerBrush";
             helperLabel = null; _helperAction = () => { };
-            var remain = $"必須違反が {hardNow} 残っています。";
             if (kind == HomePlanKind.GuidedFix && shortage is not null)
             {
                 sentence = shortage.Headline;
@@ -260,7 +259,7 @@ public sealed partial class HomeView : UserControl
             }
             else if (kind == HomePlanKind.Searching)
             {
-                sentence = remain + "直し方を探しています…";
+                sentence = "直し方を探しています…";
                 bigLabel = ""; bigEnabled = false;
                 _bigAction = () => { };
             }
@@ -276,21 +275,21 @@ public sealed partial class HomeView : UserControl
             else if (kind == HomePlanKind.WishFloor)
             {
                 // S6 の判定が済むまでは「下限」と言わない（設定を緩めれば減るかもしれない）。
-                sentence = ui.RelaxSearching ? remain : $"今の希望とルールでは、必須違反 {hardNow} からこれ以上は減らせない見込みです。";
+                sentence = ui.RelaxSearching ? "" : "これ以上は減らせない見込みです";
                 bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
                 helperLabel = "このまま書き出す"; _helperAction = () => _ = ShowPreDistributionAsync();
             }
             else if (kind == HomePlanKind.Wishes)
             {
-                sentence = remain + "希望とルールがぶつかっています。";
+                sentence = "希望とルールがぶつかっています";
                 bigLabel = wishLabel; bigEnabled = true;
                 _bigAction = () => _ = ShowWishConflictsAsync();
             }
             else
             {
-                sentence = remain;
-                bigLabel = AnalysisTriage.HomeTargetLabel(CellSheetLogic.HomeListButton, nextTarget, null); bigEnabled = true;
+                sentence = nextTarget ?? "";
+                bigLabel = CellSheetLogic.HomeListButton; bigEnabled = true;
                 _bigAction = () => _window.SelectTab("analysis");
             }
         }
@@ -326,7 +325,7 @@ public sealed partial class HomeView : UserControl
         if (Has(HomeSection.Badges))
         {
             var badgeColor = ColorHex.Parse(MagiAccent.Orange, Colors.Gray);
-            foreach (var b in CellSheetLogic.HomeBadges(hardNow, shortfalls.FirstOrDefault(s => s.Miss > 0)))
+            foreach (var b in new[] { CellSheetLogic.HomeHardPill(ui.BestHard, hardNow) })
             {
                 BadgeHost.Children.Add(new Border
                 {

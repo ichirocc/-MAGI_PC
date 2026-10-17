@@ -21,13 +21,13 @@ public class Review3705Test
         Assert.Equal("まだ作っていません。", AnalysisTriage.AnalysisSummaryOf(Fresh(), 0, null).Sentence);
         Assert.Equal("勤務表をつくっています。表示は途中の値です。", AnalysisTriage.AnalysisSummaryOf(Made(u => u.Running = true), 2, null).Sentence);
         Assert.Equal("手で編集した勤務表です（自動作成はまだ）。", AnalysisTriage.AnalysisSummaryOf(Made(u => u.EngineRan = false), 2, null).Sentence);
-        Assert.Equal("配る前に直す必須違反が残っています。", AnalysisTriage.AnalysisSummaryOf(Made(), 2, null).Sentence);
-        Assert.Equal("必須違反はありません。要調整が残っています。",
+        Assert.Equal("必須2件 · 要調整5件", AnalysisTriage.AnalysisSummaryOf(Made(), 2, null).Sentence);
+        Assert.Equal("必須0 · 要調整5件",
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.Breakdown = new Dictionary<string, int> { ["c1"] = 5 }; }), 0, null).Sentence);
         Assert.Equal("必須違反も要調整もありません。",
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.BestSoft = 0L; u.Breakdown = new Dictionary<string, int>(); }), 0, null).Sentence);
         // 自動作成のあと手で変えた盤面は、上部の札と同じく「自動作成済み」の側。
-        Assert.Equal("配る前に直す必須違反が残っています。", AnalysisTriage.AnalysisSummaryOf(Made(u => { u.EngineRan = false; u.RanBeforeEdit = true; }), 2, null).Sentence);
+        Assert.Equal("必須2件 · 要調整5件", AnalysisTriage.AnalysisSummaryOf(Made(u => { u.EngineRan = false; u.RanBeforeEdit = true; }), 2, null).Sentence);
     }
 
     [Fact]
@@ -49,10 +49,10 @@ public class Review3705Test
     [Fact]
     public void ThirdPointOnlyWhenEvaluatedAndSearched()
     {
-        Assert.Equal(2, AnalysisTriage.AnalysisSummaryOf(Made(), 2, null).Points.Count);
-        Assert.Equal("変更案で直せる必須違反 1か所", AnalysisTriage.AnalysisSummaryOf(Made(), 2, 1).Points[2]);
-        Assert.Equal(2, AnalysisTriage.AnalysisSummaryOf(Made(u => u.CheckRev = 0), 2, 1).Points.Count);
-        Assert.Equal(2, AnalysisTriage.AnalysisSummaryOf(Made(u => u.Running = true), 2, 1).Points.Count);
+        Assert.Empty(AnalysisTriage.AnalysisSummaryOf(Made(), 2, null).Points);
+        Assert.Equal("変更案で直せる必須違反 1か所", AnalysisTriage.AnalysisSummaryOf(Made(), 2, 1).Points[0]);
+        Assert.Empty(AnalysisTriage.AnalysisSummaryOf(Made(u => u.CheckRev = 0), 2, 1).Points);
+        Assert.Empty(AnalysisTriage.AnalysisSummaryOf(Made(u => u.Running = true), 2, 1).Points);
         Assert.Empty(AnalysisTriage.AnalysisSummaryOf(Fresh(), 0, 1).Points);
     }
 

@@ -1423,7 +1423,7 @@ public static class CellSheetLogic
         return string.Join("・", soft.Take(max).Select(x => $"{labelOf(x.K)} {x.N}{AnalysisTriage.UnitOf(x.K)}")) + (soft.Count > max ? $" ほか{soft.Count - max}種" : "");
     }
 
-    public const string CreationDoneTitle = "勤務表の作成が終わりました";
+    public const string CreationDoneTitle = "作成が終わりました";
 
     /// <summary>見ている問題の数が厳密に減るか（統合仕様 INV-03＝適用は対象の改善と正式な門の両方）。対象を持たない案は判定しない。</summary>
     public static bool ImprovesTarget(FixTarget? t, IReadOnlyList<IReadOnlyList<int>> schedule, IReadOnlyList<FixCell> ops) =>
@@ -1631,7 +1631,7 @@ public static class CellSheetLogic
         var creation = ui.HasResult && ui.EngineRan;
         if (creation) list.Add(HomeSection.Creation);
         list.Add(HomeSection.Headline);
-        if (ui.HasResult && ui.BestHard > 0L) list.Add(HomeSection.Badges);
+        if (ui.HasResult) list.Add(HomeSection.Badges);
         list.Add(HomeSection.Status);
         if (plan.PrimaryEnabled) list.Add(HomeSection.Primary);
         if (plan.Helper is not null || ui.HasResult) list.Add(HomeSection.Helper);
@@ -1646,10 +1646,11 @@ public static class CellSheetLogic
         "下書きができました" + (bestHard > 0L ? $"（必須 {hard}）" : "") + "。「勤務表をつくる」で仕上げます";
 
     public const string HomeMakeHeadline = "ボタンひとつで、勤務表をつくります";
-    public const string HomeHard0Headline = "必須違反はありません";
+    public const string HomeHard0Headline = "必須は満たしています";
+    public const string HomeMonthHeadline = "今月の判断";
     public const string HomeScheduleHelper = "表で全体を見る";
-    public const string HomeListButton = "残っている問題を見る";
-    public const string HomePreDistButton = "配布前の確認をする";
+    public const string HomeListButton = "必須を見る";
+    public const string HomePreDistButton = "配布前の確認";
     public const string PreDistTitle = "配布前の確認";
     public const string HomeSoftNote = "要調整は分析で確認";
     public const string HomeOthersButton = "ほかの問題を見る";
@@ -1660,29 +1661,27 @@ public static class CellSheetLogic
     public static string EmptyStateSubtitle(bool loading) => loading ? "読み込んでいます…" : "保存データ・サンプル・新規から選べます";
 
     /// <summary>対象の月の見出し「2026年10月の判断」（開始日が読めなければ「いまの判断」）。</summary>
-    public static string HomeMonthHeadline(string startDate)
+    public static string HomeMonthHeadlineOf(string startDate)
     {
         var m = System.Text.RegularExpressions.Regex.Match(startDate, @"^(\d{4})-(\d{2})-\d{2}");
         if (!m.Success) return "いまの判断";
         return $"{int.Parse(m.Groups[1].Value)}年{int.Parse(m.Groups[2].Value)}月の判断";
     }
 
-    /// <summary>段ごとの見出し: 未作成・必須 0 は 1 文、必須ありは対象の月。</summary>
-    public static string HomeHeadline(HomePlanKind kind, string startDate) => kind switch
-    {
-        HomePlanKind.Make => HomeMakeHeadline,
-        HomePlanKind.PreDist => HomeHard0Headline,
-        _ => HomeMonthHeadline(startDate),
-    };
+    /// <summary>段ごとの見出し: 未作成は 1 文、結果があれば「今月の判断」（必須の有無は札が言う。3.713.0 デザイン例）。</summary>
+    public static string HomeHeadline(HomePlanKind kind, string startDate) => kind == HomePlanKind.Make ? HomeMakeHeadline : HomeMonthHeadline;
 
     public static ShortageHeadline ShortageHeadlineOf(string dayLabel, string shiftSymbol, int need, int got, int miss) =>
-        new($"{dayLabel} の {shiftSymbol} が {miss}人 足りません", $"いま{got}人／必要{need}人", $"{shiftSymbol} 必要{need} 不足{miss}");
+        new($"{(dayLabel.IndexOf('(') is var p and >= 0 ? dayLabel[..p] : dayLabel)}の{shiftSymbol}が{miss}人不足", $"配置 {got} / 必要 {need}", ShortageTag);
+
+    public const string ShortageTag = "担当・希望の確認";
 
     public static ShortageHeadline ShortageHeadlineOf(CoverageShortfall s) => ShortageHeadlineOf(s.DayLabel, s.ShiftSymbol, s.Need, s.Got, s.Miss);
 
-    /// <summary>札 2 つ: 必須は単位ごと（INV-07）、2 つ目は最優先の不足（無ければ 1 つ）。</summary>
-    public static IReadOnlyList<string> HomeBadges(string hardLabel, CoverageShortfall? shortage) =>
-        new[] { $"必須 {hardLabel}", shortage is null ? null : ShortageHeadlineOf(shortage).Badge }.OfType<string>().ToList();
+    /// <summary>必須の札は 1 つ＝残りの件数だけ（単位ごと＝INV-07）。必須 0 は「満たしています」。</summary>
+    public static string HomeHardPill(long bestHard, string hardLabel) => bestHard > 0L ? $"必須 残り{hardLabel}" : HomeHard0Headline;
+
+    public static IReadOnlyList<string> HomeBadges(string hardLabel, CoverageShortfall? shortage) => new[] { HomeHardPill(1L, hardLabel) };
 
     /// <summary>状態の行（2 行まで）。保存の失敗は段に関係なく先頭（SF-1）。必須あり＝問題の 1 文と相談中の行（D10）。必須 0＝相談中の行と、CSV が今の内容と違う行（保存済みの行は主ボタンの下）。</summary>
     public static IReadOnlyList<string> HomeStatusLines(HomePlanKind kind, string? sentence, string? consultLine, string? savedLine, bool saveFailed = false) =>

@@ -470,7 +470,7 @@ public class CellSheetLogicTest
     [Fact]
     public void PreviewTitleAndAdoptedDespiteMore()
     {
-        Assert.Equal("この変更を適用しますか？", ChainFixPreview.PreviewTitle);
+        Assert.Equal("変更の確認", ChainFixPreview.PreviewTitle);
         Assert.Equal("件数は +3 ですが、重い違反が減ったため改善として採用しました", CompletedText.AdoptedDespiteMore(10, 13, 900.0, 500.0));
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 9, 900.0, 500.0));
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 13, 500.0, 500.0));
