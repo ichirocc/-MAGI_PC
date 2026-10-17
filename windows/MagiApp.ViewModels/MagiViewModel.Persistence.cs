@@ -179,7 +179,7 @@ public sealed partial class MagiViewModel
         if (_nonAtomicSaveLogged || !_nonAtomicSaveSeen) return;
         _nonAtomicSaveLogged = true;
         LogOp("W", "自動保存で原子置換（一時ファイルの差し替え）が使えず直接書き込みました" +
-            "（書き込み中にアプリが強制終了すると自動保存が壊れる可能性があります）");
+            "（書き込み中にアプリが強制終了すると自動保存が使えなくなる可能性があります）");
     }
 
     internal void ReportAutoSave(bool ok)

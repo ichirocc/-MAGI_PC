@@ -996,15 +996,15 @@ public sealed partial class HomeView : UserControl
                 ? $"不足 {diag.TotalShortfall} 人は、試した入れ替えでは埋まりませんでした（埋められないと決まったわけではありません）。" +
                     "再作成するか、希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると埋まりやすくなります（編集タブ＞年間マスター①）。"
                 : diag.ProvenBlockedSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.ProvenBlockedSlots} 枠は" +
+                    ? $"不足 {diag.TotalShortfall} 人。うち {diag.ProvenBlockedSlots} 枠は" +
                         "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
                         "残りは再作成すると解消する場合があります。"
                 : diag.SearchMissSlots > 0
-                    ? $"不足 {diag.TotalShortfall} 人 — うち {diag.SearchMissSlots} 枠は試した入れ替えでは埋まりませんでした。" +
+                    ? $"不足 {diag.TotalShortfall} 人。うち {diag.SearchMissSlots} 枠は試した入れ替えでは埋まりませんでした。" +
                         "再作成すると解消する場合があります。"
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageEnoughText}"
-                        : $"不足 {diag.TotalShortfall} 人 — {CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠 / {CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
+                        : $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠、{CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
                             "動かせば埋まる枠は再作成すると解消する場合があります。担当できる人が足りない枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
@@ -1056,7 +1056,7 @@ public sealed partial class HomeView : UserControl
             return;
         }
         SurplusPanel.Visibility = Visibility.Visible;
-        SurplusHeadline.Text = $"過剰 {diag.TotalSurplus} 人 — 勤務している人を他のシフトへ動かせば消えるはずの過剰について、動かない理由を枠ごとに示します。";
+        SurplusHeadline.Text = $"過剰 {diag.TotalSurplus} 人。勤務している人を他のシフトへ動かせば消えるはずの過剰について、動かない理由を枠ごとに示します。";
         foreach (var s in diag.Surpluses.Take(MaxCoverageSlots))
         {
             var body = new StackPanel { Spacing = 4 };

@@ -139,7 +139,7 @@ public sealed record AnalysisTriage(
         {
             var e = c1Plateau.Entries[0];
             var more = c1Plateau.Entries.Count - 1;
-            o["c1"] = e.Label + (more > 0 ? $"ほか{more}件" : "") + $" — {e.RecommendedAction(labelOf)}";
+            o["c1"] = e.Label + (more > 0 ? $"ほか{more}件" : "") + $"。{e.RecommendedAction(labelOf)}";
         }
         var stuckSurplus = coverage?.Surpluses.Where(s => s.BlockedFamily is not null).ToList() ?? new List<CoverageSurplus>();
         if (stuckSurplus.Count > 0)

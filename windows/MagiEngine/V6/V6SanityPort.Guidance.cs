@@ -413,8 +413,8 @@ public static partial class V6SanityPort
             var negative = fam == "c3n" || fam == "c3mn";
             outList.Add(new SettingIssue(IssueKind.Constraint, $"{famJp}「{seqStr}」",
                 negative
-                    ? $"並びの長さが期間{p.T}日を超えるため期間内に発生し得ず、この制約は無効です"
-                    : $"並びの長さが期間{p.T}日を超えるため物理的に充足できず、この制約は無効です",
+                    ? $"並びの長さが期間{p.T}日を超えるため期間内に現れることがなく、この制約は無効です"
+                    : $"並びの長さが期間{p.T}日を超えるため期間内では満たせず、この制約は無効です",
                 $"{Place.Edit}{Place.Rule}の「{famJp}」で並びを{p.T}日以下に短くするか、この行を削除してください"));
         }
 
@@ -543,7 +543,7 @@ public static partial class V6SanityPort
             }));
             outList.Add(new SettingIssue(IssueKind.Constraint, $"日別の{jp}",
                 $"{bad.Count}件（{where}{(bad.Count > 3 ? " ほか" : "")}）が数値ではありません。" +
-                    "その日は標準の必要人数で計算されます（例外を設定したつもりでも効きません）",
+                    "その日は標準の必要人数で計算されます（例外を設定したつもりでも反映されません）",
                 $"{Place.Edit}{Place.Need}でその日の必要人数を数値で入れ直すか、例外にしないなら{Place.NeedDays}で削除してください"));
         }
         CheckNeedDayNumeric(state.NeedDay1, "最低人数");
@@ -611,7 +611,7 @@ public static partial class V6SanityPort
             var head = string.IsNullOrWhiteSpace(headKigou) ? "先頭のグループ" : headKigou;
             outList.Add(new SettingIssue(IssueKind.Constraint, "グループの割当",
                 $"{bad.Count}名（{names}{(bad.Count > 4 ? " ほか" : "")}）のグループが今の一覧の範囲外です。" +
-                    $"計算では「{head}」に所属しているものとして扱っています＝担当できるシフトが意図と違います",
+                    $"計算では「{head}」に所属しているものとして扱っています。そのため担当できるシフトが意図と違います",
                 $"{Place.Edit}{Place.Staff}で名前を押し、グループを選び直してください"));
         }
 

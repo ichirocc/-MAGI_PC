@@ -59,7 +59,7 @@ public class Review3701Test
             var ui = new UiState { Loaded = true, HasResult = true, BestHard = 0L, EngineRan = engineRan, SaveState = SaveState.Failed };
             Assert.Contains(HomeSection.Status, CellSheetLogic.HomeCardSectionsOf(CellSheetLogic.HomePlanOf(false, true, true), ui));
         }
-        var pre = CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, null, "未確認事項 1 件", "勤務表 CSV は今の内容と違います", saveFailed: true);
+        var pre = CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, null, "未確認事項 1 件", "勤務表CSVは今の内容と違います", saveFailed: true);
         Assert.Equal(new[] { CellSheetLogic.HomeSaveFailedLine, "未確認事項 1 件" }, pre);
         var list = CellSheetLogic.HomeStatusLines(HomePlanKind.List, "必須違反が 2件 残っています。", "未確認事項 1 件", null, saveFailed: true);
         Assert.Equal(2, list.Count);
