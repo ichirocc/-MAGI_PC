@@ -69,17 +69,6 @@ public class Review3707Test
     }
 
     [Fact]
-    public void WishConflictSummaryShowsOnlyNonZeroPoints()
-    {
-        static WishTrialRow R(int s, int d, bool only) => new(s, d, $"n{s}", "理由", Locked: true, WishOnly: only);
-        var c = new WishTrialCandidates(new[] { R(0, 1, true), R(1, 2, false) },
-            new[] { new ShortfallWishGroup(3, 0, "4日 日勤 1人不足", new[] { R(2, 3, false), R(2, 3, false), R(4, 3, false) }) });
-        Assert.Equal(new[] { "必須違反に関わる希望 2件（うち計算では消せない 1件）", "人員不足の日に別の勤務の希望 2人" }, CellSheetLogic.WishConflictSummary(c));
-        Assert.Equal(new[] { "必須違反に関わる希望 1件" }, CellSheetLogic.WishConflictSummary(new WishTrialCandidates(new[] { R(1, 2, false) }, Array.Empty<ShortfallWishGroup>())));
-        Assert.Empty(CellSheetLogic.WishConflictSummary(new WishTrialCandidates(Array.Empty<WishTrialRow>(), Array.Empty<ShortfallWishGroup>())));
-    }
-
-    [Fact]
     public void EditReturnBandPutsProblemFirstInTwoLines()
     {
         var r = new EditReturn("なおし方", EditReturn.Guided, Problem: "11/24(火) の A4 が 1人 足りません");

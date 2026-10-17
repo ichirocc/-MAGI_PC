@@ -1456,24 +1456,35 @@ public sealed partial class ScheduleView : UserControl
                 {
                     col.Children.Add(Caption("変更する勤務"));
                     foreach (var c in ChainFixPreview.Of(s, snap, ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes) col.Children.Add(Small(c));
+                    // [3.712.0] 日ごとの人数と回数の影響は確認の画面が言う＝案のカードでは「詳しく」の中だけ（Android と同じ）。
+                    var impactMore = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
+                    var impactToggle = new HyperlinkButton { Content = CellSheetLogic.DiagDetailsLabel, MinHeight = 44 };
+                    impactToggle.Click += (_, _) =>
+                    {
+                        var opened = impactMore.Visibility != Visibility.Visible;
+                        impactMore.Visibility = opened ? Visibility.Visible : Visibility.Collapsed;
+                        impactToggle.Content = opened ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+                    };
+                    col.Children.Add(impactToggle);
+                    col.Children.Add(impactMore);
                     // 見ている日のほかの勤務と、別の日へ移る影響を分ける（必要・適正は設定の値で言う）。
                     var (sameDay, otherDays) = CellSheetLogic.HeadcountImpact(ui.Schedule, s.Ops, ui.ShiftSymbols, ui.StartDate, _vm.NeedCellLimits,
                         target?.Day is { } td ? (target.Shift, td) : null);
                     if (sameDay.Count > 0)
                     {
-                        col.Children.Add(Caption("同じ日のほかの勤務"));
-                        foreach (var l in sameDay) col.Children.Add(Small("・" + l));
+                        impactMore.Children.Add(Caption("同じ日のほかの勤務"));
+                        foreach (var l in sameDay) impactMore.Children.Add(Small("・" + l));
                     }
                     if (otherDays.Count > 0)
                     {
-                        col.Children.Add(Caption(target?.Day is not null ? "別の日への影響" : "日ごとの人数への影響"));
-                        foreach (var l in otherDays) col.Children.Add(Small("・" + l));
+                        impactMore.Children.Add(Caption(target?.Day is not null ? "別の日への影響" : "日ごとの人数への影響"));
+                        foreach (var l in otherDays) impactMore.Children.Add(Small("・" + l));
                     }
                     var notes = CellSheetLogic.StaffCountNotes(ui.Schedule, s.Ops, ui.StaffNames, ui.ShiftSymbols, _vm.StaffCellLimits, target?.Staff);
                     if (notes.Count > 0)
                     {
-                        col.Children.Add(Caption("この組み合わせで変わる回数"));
-                        foreach (var l in notes) col.Children.Add(Small("・" + l));
+                        impactMore.Children.Add(Caption("この組み合わせで変わる回数"));
+                        foreach (var l in notes) impactMore.Children.Add(Small("・" + l));
                     }
                     var skip = target is not null ? CellSheetLogic.FixTargetFamilies(target) : picked is not null ? new HashSet<string> { picked } : new HashSet<string>();
                     var others = CellSheetLogic.OtherEffectLines(s, skip, LabelOf, hardShown: CellSheetLogic.HardChangeLine(s.Diff, LabelOf) is not null).ToList();

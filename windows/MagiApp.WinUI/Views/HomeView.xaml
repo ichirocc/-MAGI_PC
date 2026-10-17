@@ -164,7 +164,8 @@
 
             <StackPanel x:Name="CoveragePanel" Spacing="10">
                 <StackPanel x:Name="ShortagePanel" Spacing="8">
-                    <TextBlock Text="人員不足の原因" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                    <TextBlock Text="人員不足" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                    <TextBlock x:Name="ShortageLine" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
                     <TextBlock x:Name="ShortageHeadline" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" />
                     <StackPanel x:Name="ShortageListHost" Spacing="8" />
                     <TextBlock x:Name="ShortageMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
@@ -183,6 +184,7 @@
                     <StackPanel x:Name="SurplusListHost" Spacing="8" />
                     <TextBlock x:Name="SurplusMoreText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 </StackPanel>
+                <HyperlinkButton x:Name="CoverageDetailsToggle" Click="OnCoverageDetailsClick" MinHeight="48" />
             </StackPanel>
 
             <StackPanel x:Name="AlternativesPanel" Spacing="4">

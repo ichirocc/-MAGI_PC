@@ -78,9 +78,10 @@ public sealed partial class HomeView : UserControl
     /// 複数人の入れ替えの一覧（<c>ChainPreview</c>）のダイアログは MainWindow が出す（3.646.0: タブに関係なく出るため）。</summary>
     private void RenderConsults(UiState ui)
     {
-        ConsultCard.Visibility = ui.Consults.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        // [3.712.0] 実行中は主カードの相談の 1 行だけ（一覧は終わってから）。
+        ConsultCard.Visibility = ui.Consults.Count == 0 || ui.Running ? Visibility.Collapsed : Visibility.Visible;
         ConsultListHost.Children.Clear();
-        if (ui.Consults.Count == 0) return;
+        if (ui.Consults.Count == 0 || ui.Running) return;
         var heldN = ui.Consults.Count(c => c.Held);
         ConsultTitle.Text = $"相談中（{ui.Consults.Count - heldN}件）" + (heldN > 0 ? $"・保留（{heldN}件）" : "");
         foreach (var c in ui.Consults)
@@ -301,7 +302,8 @@ public sealed partial class HomeView : UserControl
         static Visibility Vis(bool v) => v ? Visibility.Visible : Visibility.Collapsed;
         var savedLine = ui.Running ? null : _vm.CsvSavedLine();
         // [3.645.0/仕様 5.3] 相談中の件数（未確認事項）。完成の見出しは変えず、書き出しも止めない。
-        var consultLine = ui.Running ? null : ConsultList.Line(ui.Consults);
+        // [3.712.0] 実行中も相談の 1 行は出す（一覧のカードは終わってから。Android と同じ）。
+        var consultLine = ConsultList.Line(ui.Consults);
         var saveFailed = ui.SaveState == SaveState.Failed;
         var statusLines = CellSheetLogic.HomeStatusLines(kind, sentence, consultLine, savedLine, saveFailed);
 
@@ -606,10 +608,12 @@ public sealed partial class HomeView : UserControl
         }
         void AddRow(WishTrialRow row, UiState ui)
         {
-            var label = new TextBlock { Text = $"{row.Name} ・ {DayText.Short(ui.StartDate, row.Day)}　{row.Reason}", TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            // [3.712.0] 1 行目は名前と日、2 行目に短い理由（Android と同じ）。
+            var label = new TextBlock { Text = CellSheetLogic.WishRowHead(row.Name, DayText.Short(ui.StartDate, row.Day)), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
             // [3.696.0] 札を右に並べると名前の先頭が欠けた（Android 端末報告）＝文は全幅、札はその下。
             var content = new StackPanel { Spacing = 4 };
             content.Children.Add(label);
+            content.Children.Add(new TextBlock { Text = row.Reason, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
             if (row.WishOnly) content.Children.Add(AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange));
             var open = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
@@ -669,9 +673,6 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = "いま必須違反に関わる希望はありません。", TextWrapping = TextWrapping.Wrap });
                 return;
             }
-            // [3.707.0 W-1] 題の直下に 0 でない点だけ（3 つまで）。
-            foreach (var line in CellSheetLogic.WishConflictSummary(cands))
-                panel.Children.Add(new TextBlock { Text = $"・{line}", TextWrapping = TextWrapping.Wrap });
             if (_vm.WishTrialControlFor() is { } control && NextActionGuide.WishTrialKeepOnlyText(control) is { } keepOnly)
             {
                 panel.Children.Add(new TextBlock { Text = keepOnly, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
@@ -681,7 +682,6 @@ public sealed partial class HomeView : UserControl
             }
             if (cands.Direct.Count > 0)
             {
-                panel.Children.Add(new TextBlock { Text = "この希望とルールがぶつかっています。1件ずつ開いて、本人と相談して希望を調整するか、勤務を決めてください。", TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
                 foreach (var row in cands.Direct) AddRow(row, ui);
             }
             if (cands.Shortfall.Count > 0)
@@ -834,7 +834,7 @@ public sealed partial class HomeView : UserControl
             {
                 panel.Children.Add(new TextBlock { Text = $"{plan.Infeasible.Select(sf => sf.DayIndex).Distinct().Count()}日 は、これ以上は自動で埋められません。", TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
                 foreach (var sf in plan.Infeasible.Take(4))
-                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = $"・{CellSheetLogic.ShortageRowLine(sf.DayLabel, sf.ShiftSymbol, sf.Miss)}　{CellSheetLogic.ShortageRowTag(sf.Verdict == CoverageVerdict.Infeasible, sf.BlockedNow)}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "担当できる職員（担当できるシフト）や希望を見直すと直せます。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(LandingButton(GuidedFixRules.LandingFor(plan.Infeasible[0])));
             }
@@ -842,7 +842,7 @@ public sealed partial class HomeView : UserControl
             {
                 panel.Children.Add(new TextBlock { Text = $"いまの希望・担当のままでは埋められない日が {plan.Blocked.Select(sf => sf.DayIndex).Distinct().Count()}日 残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
-                    panel.Children.Add(new TextBlock { Text = $"・{sf.DayLabel}「{sf.ShiftSymbol}」：{sf.Reason}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                    panel.Children.Add(new TextBlock { Text = $"・{CellSheetLogic.ShortageRowLine(sf.DayLabel, sf.ShiftSymbol, sf.Miss)}　{CellSheetLogic.ShortageRowTag(sf.Verdict == CoverageVerdict.Infeasible, sf.BlockedNow)}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(new TextBlock { Text = "再作成しても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(LandingButton(plan.Blocked.Select(sf => GuidedFixRules.LandingFor(sf)).FirstOrDefault(l => l is not null)));
             }
@@ -979,6 +979,16 @@ public sealed partial class HomeView : UserControl
         CoveragePanel.Visibility = Visibility.Visible;
         RenderShortage(diag);
         RenderSurplus(ui, diag, editable);
+        CoverageDetailsToggle.Content = _coverageDetails ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+    }
+
+    /// <summary>[3.712.0] 行は事実と札だけ。見出しの長い説明と行ごとの理由・内訳は「詳しく」の中（Kotlin <c>CoverageDiagnosisCard</c>）。</summary>
+    private bool _coverageDetails;
+
+    private void OnCoverageDetailsClick(object sender, RoutedEventArgs e)
+    {
+        _coverageDetails = !_coverageDetails;
+        Render();
     }
 
     private void RenderShortage(CoverageDiagnosis diag)
@@ -991,6 +1001,9 @@ public sealed partial class HomeView : UserControl
             return;
         }
         ShortagePanel.Visibility = Visibility.Visible;
+        ShortageLine.Text = CellSheetLogic.ShortageCardLine(diag.Shortfalls.Select(x => x.DayIndex).Distinct().Count(),
+            diag.Shortfalls.Any(x => x.Verdict != CoverageVerdict.Infeasible && !x.BlockedNow));
+        ShortageHeadline.Visibility = _coverageDetails ? Visibility.Visible : Visibility.Collapsed;
         ShortageHeadline.Text = diag.AllInfeasible
             ? $"不足 {diag.TotalShortfall} 人はすべて、担当できる人が足りません。今のデータでは満たせません。" +
                 "担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。"
@@ -1020,23 +1033,26 @@ public sealed partial class HomeView : UserControl
             head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var title = new TextBlock
             {
-                Text = $"{s.DayLabel}  {s.ShiftSymbol}  必要{s.Need}/現状{s.Got}（不足{s.Miss}）",
+                Text = CellSheetLogic.ShortageRowLine(s.DayLabel, s.ShiftSymbol, s.Miss),
                 Style = StyleOf("MagiTitleSmallTextStyle"), TextWrapping = TextWrapping.Wrap,
             };
             head.Children.Add(title);
             var chip = new TextBlock
             {
-                Text = infeasible ? CellSheetLogic.ShortageLabelInfeasible : s.BlockedNow && s.SearchMiss ? CellSheetLogic.ShortageLabelSearchMiss : s.BlockedNow ? CellSheetLogic.ShortageLabelBlocked : CellSheetLogic.ShortageLabelFixable,
+                Text = CellSheetLogic.ShortageRowTag(infeasible, s.BlockedNow),
                 Style = StyleOf("MagiLabelMediumTextStyle"), VerticalAlignment = VerticalAlignment.Center,
                 Foreground = BrushOf(infeasible ? "MagiErrorBrush" : "MagiPrimaryBrush"),
             };
             Grid.SetColumn(chip, 1);
             head.Children.Add(chip);
             body.Children.Add(head);
-            body.Children.Add(new TextBlock
-            {
-                Text = s.Reason, Style = StyleOf("MagiBodySmallTextStyle"), TextWrapping = TextWrapping.Wrap,
-            });
+            if (CellSheetLogic.ShortageRowNote(infeasible, s.BlockedNow) is { } rowNote)
+                body.Children.Add(new TextBlock { Text = rowNote, Style = StyleOf("MagiBodySmallTextStyle"), TextWrapping = TextWrapping.Wrap });
+            if (_coverageDetails)
+                body.Children.Add(new TextBlock
+                {
+                    Text = s.Reason, Style = StyleOf("MagiBodySmallTextStyle"), TextWrapping = TextWrapping.Wrap,
+                });
             ShortageListHost.Children.Add(SlotCard(body, infeasible ? "MagiErrorContainerBrush" : "MagiSecondaryContainerBrush"));
         }
         var moreShort = diag.Shortfalls.Count - MaxCoverageSlots;
@@ -1061,7 +1077,7 @@ public sealed partial class HomeView : UserControl
             return;
         }
         SurplusPanel.Visibility = Visibility.Visible;
-        SurplusHeadline.Text = $"過剰 {diag.TotalSurplus} 人。勤務している人を他のシフトへ動かせば消えるはずの過剰について、動かない理由を枠ごとに示します。";
+        SurplusHeadline.Text = $"過剰 {diag.TotalSurplus} 人";
         foreach (var s in diag.Surpluses.Take(MaxCoverageSlots))
         {
             var body = new StackPanel { Spacing = 4 };
@@ -1074,7 +1090,7 @@ public sealed partial class HomeView : UserControl
                 : AnalysisView.BreakdownLabels.TryGetValue(s.BlockedFamily, out var jp) ? jp : s.BlockedFamily;
             body.Children.Add(new TextBlock
             {
-                Text = s.Reason + (famJp is null ? "" : $"（主因: {famJp}）"),
+                Text = (_coverageDetails ? s.Reason : CellSheetLogic.SurplusShortReason(s.Reason)) + (famJp is null ? "" : $"（主因: {famJp}）"),
                 Style = StyleOf("MagiBodySmallTextStyle"), TextWrapping = TextWrapping.Wrap,
             });
             foreach (var i in s.PinnedStaff ?? System.Array.Empty<int>())
