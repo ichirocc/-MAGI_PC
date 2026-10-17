@@ -83,9 +83,12 @@ public sealed partial class SettingsView : UserControl
         {
             var ui = _vm.Ui;
             WorkersSlider.Value = ui.Workers;
-            WorkersLabel.Text = $"並列数 {ui.Workers}";
-            BudgetSlider.Value = ui.BudgetSec;
-            BudgetLabel.Text = FormatBudget(ui.BudgetSec);
+            WorkersLabel.Text = $"同時に計算する数 {ui.Workers}";
+            BudgetLabel.Text = CellSheetLogic.BudgetStatusLine(ui.BudgetSec, MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec);
+            var saveFailed = ui.SaveState == SaveState.Failed;
+            SaveFailedBanner.Visibility = saveFailed ? Visibility.Visible : Visibility.Collapsed;
+            SaveFailedBannerText.Text = CellSheetLogic.HomeSaveFailedLine;
+            ChangeBudgetButton.Style = saveFailed ? null : (Style)Application.Current.Resources["AccentButtonStyle"];
             SoftPolishToggle.IsOn = ui.SoftPolish;
         LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
@@ -103,8 +106,7 @@ public sealed partial class SettingsView : UserControl
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
             if (match is not null) AlgorithmCombo.SelectedItem = match;
 
-            DataStatusText.Text = ui.Message ?? "";
-            SaveStateText.Visibility = ui.SaveState == SaveState.Saved ? Visibility.Collapsed : Visibility.Visible;
+            SaveStateText.Visibility = ui.SaveState is SaveState.Dirty or SaveState.Saving ? Visibility.Visible : Visibility.Collapsed;
             SaveStateText.Text = ui.SaveState switch
             {
                 SaveState.Dirty => "未保存の変更があります（まもなく自動保存します）",
@@ -113,7 +115,7 @@ public sealed partial class SettingsView : UserControl
                 _ => "",
             };
             SaveStateText.Foreground = (Brush)Application.Current.Resources[ui.SaveState == SaveState.Failed ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
-            RetrySaveButton.Visibility = ui.SaveState == SaveState.Failed ? Visibility.Visible : Visibility.Collapsed;
+            RetrySaveButton.Visibility = Visibility.Collapsed;
             OpenDataButton.IsEnabled = !ui.Running;
             ImportCsvButton.IsEnabled = !ui.Running;
             SaveDataButton.IsEnabled = ui.Loaded && !ui.Running;
@@ -644,25 +646,32 @@ public sealed partial class SettingsView : UserControl
         }
     }
 
-    private static string FormatBudget(int sec)
-    {
-        var min = sec / 60;
-        var remainder = sec % 60;
-        // 仕上げと玉突きは 1 本の締切を分け合う（それぞれに決まった秒数が残る約束ではない＝共通の枠と書く）。
-        var tail = $"。このほか、仕上げと勤務の入れ替え調整（玉突き）に共通の枠として合計 {MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec}秒を足します";
-        return remainder == 0 ? $"組む時間 {sec}秒（{min}分）{tail}" : $"組む時間 {sec}秒{tail}";
-    }
-
     private void OnWorkersChanged(object sender, RangeBaseValueChangedEventArgs e)
     {
         if (_syncingFromModel) return;
         _vm.SetWorkers((int)e.NewValue);
     }
 
-    private void OnBudgetChanged(object sender, RangeBaseValueChangedEventArgs e)
+    /// <summary>「組む時間を選ぶ」（Android 3.706.0 <c>BudgetPickerSheet</c>）。候補は <see cref="CellSheetLogic.BudgetPresets"/>。</summary>
+    private async void OnChangeBudgetClick(object sender, RoutedEventArgs e)
     {
-        if (_syncingFromModel) return;
-        _vm.SetBudget((int)e.NewValue);
+        var current = _vm.Ui.BudgetSec;
+        var tiles = new HashSet<int> { 10, 60, 120, 180, 240, MagiViewModel.MaxBudgetSec };
+        var radios = new RadioButtons();
+        foreach (var sec in CellSheetLogic.BudgetPresets(current))
+            radios.Items.Add(new RadioButton { Content = sec == current && !tiles.Contains(sec) ? $"いまの値 {sec}秒" : CellSheetLogic.BudgetText(sec), Tag = sec, MinHeight = 48 });
+        radios.SelectedItem = radios.Items.OfType<RadioButton>().FirstOrDefault(r => (int)r.Tag == current);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "組む時間を選ぶ",
+            Content = radios,
+            PrimaryButtonText = "この時間にする",
+            CloseButtonText = "閉じる",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (radios.SelectedItem is RadioButton { Tag: int chosen }) _vm.SetBudget(chosen);
     }
 
     private void OnBackgroundRunClick(object sender, RoutedEventArgs e) => _vm.RunInBackground();

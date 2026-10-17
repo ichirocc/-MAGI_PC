@@ -292,8 +292,8 @@ public sealed partial class MainWindow : Window
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
         // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
-        // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。
-        var secondary = !ui.Running && (_currentTag == "home"
+        // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。設定タブも外枠（Android 3.706.0）。
+        var secondary = !ui.Running && (_currentTag == "home" || _currentTag == "settings"
             || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None));
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
