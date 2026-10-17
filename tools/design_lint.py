@@ -249,7 +249,8 @@ RE_DS_INLINE_OK = re.compile(r"`([A-Z][A-Za-z0-9]*)`\s*✅")
 def find_p8():
     """✅ と書かれた節の kotlin ブロックの関数が実装に存在するか。"""
     out = []
-    if not os.path.exists(DS_DOC):
+    # Kotlin のソースはこの repo に無い（Android の正は magi7ichiro-fork）＝照合する実装が無い。
+    if not os.path.exists(DS_DOC) or not os.path.isdir(os.path.join(ROOT, "app/src/main/java")):
         return out
     with open(DS_DOC, encoding="utf-8") as fh:
         lines = fh.read().split("\n")
@@ -430,7 +431,7 @@ def find_p9():
 #   このルールが見ないもの（既知の残債・記号依存だが比較の形をしていない）:
 #     - `ScheduleCsvBridge` の `const val REST = "休"`（凡例に無ければ休シフトを補完する）
 #     - `restShiftIndex` 経由で `restIdx` を読む側（Problem/Ws1Ops/V6SanityPort/探索オペレータ）
-P10_BASELINE = 2
+P10_BASELINE = 0
 RE_P10_FWD = re.compile(
     r'(?:kigou|shiftSymbols\w*)[^"\n]{0,40}?(?:==|!=|\.contains\(|\.startsWith\(|\.endsWith\()\s*"([^"]+)"')
 RE_P10_REV = re.compile(r'"([^"]+)"\s*(?:==|!=)[^"\n]{0,40}?(?:kigou|shiftSymbols\w*)\b')
