@@ -43,19 +43,19 @@
       Render() でコントロールの値をプログラム的に設定するため、SettingsView と同じ _syncingFromModel
       フラグでイベントの逆流を止める。
     -->
-    <ScrollViewer x:Name="RootScroll" Padding="16">
+    <Grid RowDefinitions="Auto,*">
+    <!-- [3.707.0 3a-6] 着地の呼出元へ戻る帯はスクロールの外に固定（2 行まで）。理由の 1 文を先に言う。MainWindow.GoEditLandingFrom が出し、タブを離れたら消す。 -->
+    <Border x:Name="ReturnBanner" Visibility="Collapsed" Background="{StaticResource MagiSecondaryContainerBrush}"
+            CornerRadius="{StaticResource MagiCornerSM}" Padding="12,8" Margin="16,4">
+        <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="ReturnText" MaxLines="2" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}"
+                       Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
+            <Button x:Name="ReturnButton" Grid.Column="1" Content="元の確認へ戻る" MinHeight="48" Click="OnReturnClick" />
+        </Grid>
+    </Border>
+    <ScrollViewer x:Name="RootScroll" Grid.Row="1" Padding="16">
         <StackPanel Spacing="20" MaxWidth="560" HorizontalAlignment="Left">
             <TextBlock Text="編集" FontSize="20" FontWeight="SemiBold" />
-
-            <!-- [3.646.0 L03] 着地の呼出元へ戻る 1 行（直したあと、同じ問題を探し直さなくてよい）。MainWindow.GoEditLandingFrom が出し、タブを離れたら消す。 -->
-            <Border x:Name="ReturnBanner" Visibility="Collapsed" Background="{StaticResource MagiSecondaryContainerBrush}"
-                    CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
-                <Grid ColumnSpacing="8" ColumnDefinitions="*,Auto">
-                    <TextBlock x:Name="ReturnText" TextWrapping="Wrap" VerticalAlignment="Center" Style="{StaticResource MagiBodyMediumTextStyle}"
-                               Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
-                    <Button x:Name="ReturnButton" Grid.Column="1" Content="元の確認へ戻る" MinHeight="48" Click="OnReturnClick" />
-                </Grid>
-            </Border>
 
             <StackPanel Spacing="4">
                 <TextBlock Text="どこを直しますか" />
@@ -70,33 +70,33 @@
 
             <!-- ===== 月次条件（毎月） ===== -->
             <StackPanel x:Name="MonthlyPanel" Spacing="8">
-                <TextBlock Text="月次条件" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                <!-- [3.707.0 E-2] 月次条件の見出しカード（旧「今月の作成条件」＋区分の 1 行）。中身は CellSheetLogic.EditHeaderPlanOf。 -->
+                <Border x:Name="ChecklistPanel" Visibility="Collapsed" BorderThickness="1"
+                        BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <StackPanel Spacing="6">
+                        <TextBlock x:Name="EditHeaderTitle" Text="月次条件" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                        <TextBlock x:Name="EditHeaderSubtitle" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
+                        <StackPanel x:Name="ChecklistHost" Spacing="4" />
+                        <StackPanel x:Name="ChecklistIssuesHost" Spacing="2" Margin="12,0,0,0" Visibility="Collapsed" />
+                        <Button x:Name="EditHeaderNeedButton" Content="必要人数を編集する" HorizontalAlignment="Stretch" MinHeight="48" Click="OnEditHeaderNeedClick" />
+                        <HyperlinkButton x:Name="EditHeaderConflictsLink" Content="ぶつかっている希望を見る" HorizontalAlignment="Stretch" MinHeight="48" Visibility="Collapsed" Click="OnEditHeaderConflictsClick" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="対象の月" Style="{StaticResource MagiTitleSmallTextStyle}" />
                 <TextBlock x:Name="PeriodText" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="PrevMonthButton" Content="前の月" Click="OnPrevMonthClick" />
                     <Button x:Name="NextStepMonthButton" Content="次の月" Click="OnNextStepMonthClick" />
                     <Button x:Name="NextMonthButton" Content="来月にする" Click="OnNextMonthClick" />
                 </StackPanel>
-                <TextBlock x:Name="MonthlyCountsText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
-                <Border x:Name="NextStepPanel" Background="{StaticResource MagiSecondaryContainerBrush}"
-                        CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
-                    <TextBlock x:Name="NextStepText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}"
-                               Foreground="{StaticResource MagiOnSecondaryContainerBrush}" />
-                </Border>
-                <Border x:Name="ChecklistPanel" Visibility="Collapsed" BorderThickness="1"
-                        BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="今月の作成条件" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                        <StackPanel x:Name="ChecklistHost" Spacing="4" />
-                        <StackPanel x:Name="ChecklistIssuesHost" Spacing="2" Margin="12,0,0,0" Visibility="Collapsed" />
-                    </StackPanel>
-                </Border>
 
                 <TextBlock x:Name="WishSectionTitle" Text="希望シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
 
                 <TextBlock Text="職員を選んでカレンダーから複数日をまとめて選択できます" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <ComboBox x:Name="WishStaffCombo" HorizontalAlignment="Stretch" PlaceholderText="職員"
                           SelectionChanged="OnWishStaffSelectionChanged" />
+                <TextBlock x:Name="WishStaffSummaryText" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" TextWrapping="Wrap" Visibility="Collapsed" />
+                <HyperlinkButton x:Name="WishConflictLink" MinHeight="48" Visibility="Collapsed" Click="OnEditHeaderConflictsClick" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="WishCalendarHost" />
                 </ScrollViewer>
@@ -108,9 +108,9 @@
                     <StackPanel x:Name="WishOtherButtonsHost" Spacing="6" Visibility="Collapsed" />
                     <TextBlock x:Name="WishShiftWarnText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="ApplyWishesForDaysButton" Content="適用" Click="OnApplyWishesForDaysClick" />
+                        <Button x:Name="ApplyWishesForDaysButton" Content="適用" Style="{StaticResource AccentButtonStyle}" Click="OnApplyWishesForDaysClick" />
                         <Button x:Name="ClearWishesForDaysButton" Content="選択した日の希望を消す（0件）" Foreground="{StaticResource MagiErrorBrush}" Click="OnClearWishesForDaysClick" />
-                        <Button x:Name="CancelWishSelectionButton" Content="閉じる" Click="OnCancelWishSelectionClick" />
+                        <Button x:Name="CancelWishSelectionButton" Content="選択を外す" Click="OnCancelWishSelectionClick" />
                     </StackPanel>
                     <!-- 拡張希望: 選んだ日を、選んだシフト以外にする（禁止シフトを複数）。希望のある日は保存時に外れる。 -->
                     <TextBlock Text="以外にする（拡張希望）: 選んだ日を、下で選んだシフト以外にする（複数選べます）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0" />
@@ -134,28 +134,29 @@
                 </StackPanel>
                 <TextBlock x:Name="WishHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="日別の必要人数（例外）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock x:Name="NeedSectionTitle" Text="日別の必要人数（例外）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <!-- [phase9 #13] 必要人数カレンダー（Kotlin原本 NeedDayEditor.kt NeedMonthGrid/NeedApplyPanel）: シフトを選び複数日をまとめて設定。 -->
                 <TextBlock Text="シフトを選んでカレンダーから複数日をまとめて選択できます（各日の表示＝その日の必要人数、太字＝個別設定）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <ComboBox x:Name="NeedCalShiftCombo" HorizontalAlignment="Stretch" PlaceholderText="シフト"
                           SelectionChanged="OnNeedCalShiftSelectionChanged" />
+                <TextBlock x:Name="NeedCalStatusText" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <Grid x:Name="NeedCalendarHost" />
                 </ScrollViewer>
                 <StackPanel x:Name="NeedApplyPanel" Spacing="4" Visibility="Collapsed">
                     <TextBlock x:Name="NeedApplySummaryText" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBox x:Name="NeedApplyP1Box" Width="80" Header="最低人数" PlaceholderText="既定" TextChanged="OnNeedApplyTextChanged" />
-                        <TextBox x:Name="NeedApplyP2Box" Width="80" Header="上限人数" PlaceholderText="既定" TextChanged="OnNeedApplyTextChanged" />
+                        <TextBox x:Name="NeedApplyP1Box" Width="80" Header="最低人数" PlaceholderText="標準" TextChanged="OnNeedApplyTextChanged" />
+                        <TextBox x:Name="NeedApplyP2Box" Width="80" Header="上限人数" PlaceholderText="標準" TextChanged="OnNeedApplyTextChanged" />
                     </StackPanel>
                     <TextBlock x:Name="NeedApplyHintText" Style="{StaticResource MagiBodySmallTextStyle}" Foreground="{StaticResource MagiErrorBrush}" Visibility="Collapsed" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button x:Name="ApplyNeedForDaysButton" Content="適用" Click="OnApplyNeedForDaysClick" />
+                        <Button x:Name="ApplyNeedForDaysButton" Content="適用" Style="{StaticResource AccentButtonStyle}" Click="OnApplyNeedForDaysClick" />
                         <Button x:Name="ClearNeedForDaysButton" Content="選択した日を未設定に戻す" Click="OnClearNeedForDaysClick" />
-                        <Button x:Name="CancelNeedSelectionButton" Content="閉じる" Click="OnCancelNeedSelectionClick" />
+                        <Button x:Name="CancelNeedSelectionButton" Content="選択を外す" Click="OnCancelNeedSelectionClick" />
                     </StackPanel>
                 </StackPanel>
-                <TextBlock Text="登録済みの例外（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
+                <TextBlock x:Name="NeedDayListTitle" Text="登録済みの例外（1件ずつ確認・削除）" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
                 <StackPanel x:Name="NeedDayListHost" Spacing="2" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ComboBox x:Name="NeedDayShiftCombo" Width="100" PlaceholderText="シフト" />
@@ -412,4 +413,5 @@
             </StackPanel>
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </UserControl>

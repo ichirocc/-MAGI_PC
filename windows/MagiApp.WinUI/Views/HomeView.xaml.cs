@@ -665,6 +665,9 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = "いま必須違反に関わる希望はありません。", TextWrapping = TextWrapping.Wrap });
                 return;
             }
+            // [3.707.0 W-1] 題の直下に 0 でない点だけ（3 つまで）。
+            foreach (var line in CellSheetLogic.WishConflictSummary(cands))
+                panel.Children.Add(new TextBlock { Text = $"・{line}", TextWrapping = TextWrapping.Wrap });
             if (_vm.WishTrialControlFor() is { } control && NextActionGuide.WishTrialKeepOnlyText(control) is { } keepOnly)
             {
                 panel.Children.Add(new TextBlock { Text = keepOnly, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
