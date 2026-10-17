@@ -1566,19 +1566,8 @@ public static class CellSheetLogic
     public static string ExtWishFailedText(string reason) =>
         $"拡張希望を登録できませんでした。{reason.TrimEnd('。')}。日かシフトを選び直して、もう一度登録してください。";
 
-    /// <summary>[3.707.0 W-1] ぶつかっている希望のダイアログの題の直下（0 の点は出さない、2 つまで）。</summary>
-    public static IReadOnlyList<string> WishConflictSummary(WishTrialCandidates c)
-    {
-        var direct = c.Direct.Count;
-        var people = c.Shortfall.SelectMany(g => g.Rows.Select(r => r.Staff)).Distinct().Count();
-        var wishOnly = c.Direct.Count(r => r.WishOnly);
-        return new[]
-        {
-            // 「うち」は直前の行の内訳に読まれるので、人数の行の後ろでなく件数の行の括弧に入れる。
-            direct > 0 ? $"必須違反に関わる希望 {direct}件" + (wishOnly > 0 ? $"（うち計算では消せない {wishOnly}件）" : "") : null,
-            people > 0 ? $"人員不足の日に別の勤務の希望 {people}人" : null,
-        }.OfType<string>().ToList();
-    }
+    /// <summary>[3.712.0] ぶつかっている希望の行の 1 行目: 「福澤俊陽 · 10/1」（理由は次の行。題の下の件数の要約は 3.712.0 で撤去）。</summary>
+    public static string WishRowHead(string name, string day) => $"{name} · {day}";
 
     /// <summary>[3.707.0 3a-6] 固定の帯の行（2 行まで）。理由があれば先に言い、2 行目は戻り先だけ（Kotlin <c>editReturnLines</c>）。</summary>
     public static IReadOnlyList<string> EditReturnLines(EditReturn r) =>
@@ -1765,14 +1754,15 @@ public static class CellSheetLogic
         }
         // 内訳があれば単位ごとに（件・人・回・pt を 1 つの数に足さない＝統合仕様 INV-07）。
         static string T(IReadOnlyDictionary<string, int>? b, IReadOnlyList<string> fams, int n) => b is null ? $"{n}件" : AnalysisTriage.UnitTotals(b, fams) ?? "なし";
-        if (a.HardBefore >= 0) outList.Add($"必須違反（勤務表全体）：{T(a.BreakdownBefore, MirrorKeys.Hard, a.HardBefore)} → {T(a.BreakdownAfter, MirrorKeys.Hard, a.HardAfter)}");
+        if (a.HardBefore >= 0) outList.Add($"必須 {T(a.BreakdownBefore, MirrorKeys.Hard, a.HardBefore)}→{T(a.BreakdownAfter, MirrorKeys.Hard, a.HardAfter)}");
         if (AppearedFamiliesLine(a.BreakdownBefore, a.BreakdownAfter, labelOf ?? (f => f)) is { } ap) outList.Add(ap);
         var (same, other) = HeadcountImpact(a.Before, a.Ops, ui.ShiftSymbols, ui.StartDate, needLimits, target?.Day is { } td ? (target.Shift, td) : null);
         outList.AddRange(same);
         outList.AddRange(other);
         if (ui.SaveState is SaveState.Failed or SaveState.Saving) outList.Add(SaveStateLine(ui.SaveState));
-        var next = AppliedRemaining(ui, a, target, label, needLimits);
-        if (next.Count > 0) outList.Add("次に確認すること：" + string.Join("。", next) + "。");
+        // [3.712.0] 見ている問題の残りは 1 行目が言う＝「次」はほかの日の同じ勤務だけ（同じ文を 2 回出さない）。
+        var next = target?.Day is not null ? RemainingSameShift(ui.NeedFamilies, ui.Schedule, target, needLimits, ui.ShiftSymbols, ui.StartDate) : Array.Empty<string>();
+        if (next.Count > 0) outList.Add("次：" + string.Join("。", next));
         outList.Add("勤務表が変わったため、変更案を探し直しました（下の案は今の勤務表のものです）。");
         return outList;
     }
@@ -1932,6 +1922,39 @@ public static class CellSheetLogic
     public const string ShortageLabelSearchMiss = "試した入れ替えでは埋まらなかった";
     public const string ShortageLabelFixable = "動かせば埋まる";
     public const string ShortageEnoughText = "担当できる人の数は足りています。「なおし方を見る」で 1 人ずつ入れられます";
+
+    /// <summary>[3.712.0] 診断カードの行は 1 行の事実と札だけ。理由・内訳はカードの末尾の「詳しく」に 1 回だけ（Kotlin と同じ文言）。</summary>
+    public const string DiagDetailsLabel = "詳しく";
+    public const string DiagDetailsClose = "詳しくを閉じる";
+    public const string ShortageTagInfeasible = "担当が足りない";
+    public const string ShortageMovableLine = "休みや余裕のある勤務から移せます";
+    public const string ForbiddenRetryNote = "玉突きか隣の日の調整で崩せます。もう一度つくると直る場合があります";
+
+    /// <summary>人員不足の行の札（Kotlin <c>shortageRowTag</c>）。</summary>
+    public static string ShortageRowTag(bool infeasible, bool blockedNow) =>
+        infeasible ? ShortageTagInfeasible : blockedNow ? ShortageLabelBlocked : ShortageLabelFixable;
+
+    /// <summary>人員不足の行: 「10/10(土) Cｵ 不足1」。</summary>
+    public static string ShortageRowLine(string dayLabel, string shiftSymbol, int miss) => $"{dayLabel} {shiftSymbol} 不足{miss}";
+
+    /// <summary>人員不足の行の下の 1 行（動かせば埋まる枠だけ）。</summary>
+    public static string? ShortageRowNote(bool infeasible, bool blockedNow) => !infeasible && !blockedNow ? ShortageMovableLine : null;
+
+    /// <summary>人員不足カードの見出しの下の 1 行: 「足りない日3 · 動かせる枠あり」。</summary>
+    public static string ShortageCardLine(int days, bool movable) => $"足りない日{days} · " + (movable ? "動かせる枠あり" : "動かせる枠なし");
+
+    /// <summary>人員過剰の行の理由（「。内訳: …」から先は「詳しく」へ）。</summary>
+    public static string SurplusShortReason(string reason)
+    {
+        var i = reason.IndexOf("。内訳: ", StringComparison.Ordinal);
+        return i < 0 ? reason : reason[..i];
+    }
+
+    /// <summary>禁止の並びの行の札。</summary>
+    public static string ForbiddenRunTag(bool escapable) => escapable ? "崩せる" : "崩せない";
+
+    /// <summary>禁止の並びの行の下の 1 行: 「10/9 Dﾃ · 10/10 Aｱ」。</summary>
+    public static string ForbiddenRunCellsLine(IEnumerable<(string Day, string Symbol)> cells) => string.Join(" · ", cells.Select(c => $"{c.Day} {c.Symbol}"));
 
     public const string SettingsTimeTitle = "勤務表をつくる時間";
 

@@ -206,10 +206,10 @@ public class CountShortageTextTest
         var lines = CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need);
         Assert.Equal("今回の問題：解消（10/3のA：1人 → 2人、必要 2人を満たします）", lines[0]);
         Assert.Equal("Aの不足（期間全体）：5人 → 4人", lines[1]);
-        Assert.Equal("必須違反（勤務表全体）：3件 → 2件", lines[2]);
+        Assert.Equal("必須 3件→2件", lines[2]);
         Assert.Equal("10/3の休：1人 → 0人", lines[3]);
         Assert.Equal("保存：保存中", lines[4]);
-        Assert.Equal("次に確認すること：10/4のAは、2人不足のままです。", lines[5]);
+        Assert.Equal("次：10/4のAは、2人不足のままです", lines[5]);
         Assert.StartsWith("勤務表が変わったため", lines[^1]);
         // 保存済みなら保存の行は出さない。続けて同じ勤務の案へ進むボタン。
         u.SaveState = SaveState.Saved;

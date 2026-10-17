@@ -93,6 +93,9 @@ public sealed record ForbiddenRunDiagnosis(
 
 public static partial class V6PortAnalyzer
 {
+    /// <summary>[3.712.0] 禁止の並びを玉突きか隣の日の調整で崩せるときの説明（画面は行に出さず「詳しく」に 1 回）。</summary>
+    public const string ForbiddenChainHint = "1セルを変えるだけでは崩せませんが、複数人の入れ替え（玉突き）か隣の日の調整で崩せます。もう一度つくると直る場合があります";
+
     /// <summary>
     /// [3.280.0] 禁止連続(c3n)の「なぜ崩せないか」診断。<see cref="DiagnoseCoverage"/> と同じ設計思想:
     /// エンジンは変更せず現在の解だけを読み取り、違反 run の各セルについて「単一セル変更で崩せるか」を
@@ -150,7 +153,7 @@ public static partial class V6PortAnalyzer
                     }
                     else if (cells.Any(x => x.Escape == ForbiddenCellEscape.Chain || x.Escape == ForbiddenCellEscape.Adjacent))
                     {
-                        hint = "1セルを変えるだけでは崩せませんが、複数人の入れ替え（玉突き）か隣の日の調整で崩せます。もう一度つくると直る場合があります";
+                        hint = ForbiddenChainHint;
                     }
                     // [3.284.0/外部レビュー] 「証明」の強さを分ける: 全セル希望固定は「本人希望どおりの並びが
                     //   禁止パターンを構成」＝raw hard 件数の下で証明相当（分類は重みに依存しない）。それ以外の塞がり
