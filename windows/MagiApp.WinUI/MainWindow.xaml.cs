@@ -460,12 +460,20 @@ public sealed partial class MainWindow : Window
         if (ReferenceEquals(p, _chainPreviewShown)) return;
         _chainPreviewShown = p;
         var ui = _vm.Ui;
-        var body = new StackPanel { Spacing = 6 };
+        // [3.713.0] 最初は「Nか所変わります」と変わるセルの行だけ（top）。目的・回数・判断材料・注記は「詳しく」の中（body）。
+        var top = new StackPanel { Spacing = 6 };
+        var body = new StackPanel { Spacing = 6, Visibility = Visibility.Collapsed };
         TextBlock Caption(string t) => new() { Text = t, FontSize = 12, Opacity = 0.8 };
         TextBlock Line(string t, bool bold = false, double size = 14) => new()
             { Text = t, FontSize = size, TextWrapping = TextWrapping.Wrap, FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal };
         if (p.ApplyError is { } err)
-            body.Children.Add(new TextBlock { Text = err, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"] });
+            top.Children.Add(new TextBlock { Text = err, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"] });
+        top.Children.Add(Line(ChainFixPreview.PreviewCountLine(p.Suggestion.Ops.Count), bold: true));
+        foreach (var row in p.Rows) top.Children.Add(Line(ChainFixPreview.PreviewRowLine(row.Staff, row.Date, row.Before, row.After)));
+        var more = new HyperlinkButton { Content = "詳しく", MinHeight = 48 };
+        more.Click += (_, _) => body.Visibility = body.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        top.Children.Add(more);
+        top.Children.Add(body);
         if (p.Summary is { } summary) body.Children.Add(Line(summary, bold: true));
         // 目的 → 変更する勤務（職員ごとの表）→ 対象の数の変化 → ほかの影響と確認が必要なこと（Kotlin ChainFixPreviewDialog、2026-10-14 利用者レビュー）。
         if (p.Purpose is { } purpose) { body.Children.Add(Caption("今回の目的")); body.Children.Add(Line(purpose)); }
@@ -526,7 +534,7 @@ public sealed partial class MainWindow : Window
         body.Children.Add(Line("・" + consultLine, size: 13));
         body.Children.Add(new TextBlock { Text = ChainFixPreview.PreviewGateNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         body.Children.Add(new TextBlock { Text = CellSheetLogic.ConsultNotContactNote, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        if (consulted) body.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
+        if (consulted) top.Children.Add(AnalysisView.TagChip(ConsultList.Done, MagiEngine.V6.MagiAccent.Orange));   // 相談済み＝札で返し、第 2 ボタンは出さない
         var schedule = _tabCache.TryGetValue("schedule", out var sv) ? sv as ScheduleView : null;
         var backToFixes = false;
         ContentDialog? shown = null;
@@ -535,11 +543,11 @@ public sealed partial class MainWindow : Window
         {
             var back = new HyperlinkButton { Content = CellSheetLogic.BackToFixesButton, MinHeight = 48 };
             back.Click += (_, _) => { backToFixes = true; shown?.Hide(); };
-            body.Children.Add(back);
+            top.Children.Add(back);
         }
         var dialog = new ContentDialog
         {
-            XamlRoot = Nav.XamlRoot, Title = ChainFixPreview.PreviewTitle, Content = new ScrollViewer { Content = body, MaxHeight = 420 },
+            XamlRoot = Nav.XamlRoot, Title = ChainFixPreview.PreviewTitle, Content = new ScrollViewer { Content = top, MaxHeight = 420 },
             PrimaryButtonText = CellSheetLogic.ApplyCountButton(p.Suggestion.Ops.Count), SecondaryButtonText = consulted ? null : ConsultList.Button,
             CloseButtonText = ChainFixPreview.KeepCurrentButton, DefaultButton = ContentDialogButton.Primary,
         };

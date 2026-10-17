@@ -79,7 +79,7 @@
                     <TextBlock x:Name="SameResultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Button x:Name="BigButton" Click="OnBigClick" HorizontalAlignment="Stretch" MinHeight="56" Style="{StaticResource AccentButtonStyle}" />
                     <!-- HELPER: 段に補助が無ければ「表で全体を見る」。 -->
-                    <Button x:Name="HelperButton" Click="OnHelperClick" HorizontalAlignment="Stretch" MinHeight="48" />
+                    <HyperlinkButton x:Name="HelperButton" Click="OnHelperClick" HorizontalAlignment="Stretch" MinHeight="48" />
                     <HyperlinkButton x:Name="OthersButton" Click="OnOthersClick" MinHeight="48" />
                     <!-- DETAIL: 本文・注記・直した結果・CSV の保存状態・終わり方・緩める方法の探索。 -->
                     <StackPanel x:Name="DetailHost" Spacing="6">

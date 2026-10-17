@@ -9,7 +9,7 @@ public class ConsultListTest
     public void LineOnlyWhenSomethingIsPending()
     {
         Assert.Null(ConsultList.Line(0));
-        Assert.Equal("未確認事項 2 件（相談中。下の一覧で確認してから配ってください）", ConsultList.Line(2));
+        Assert.Equal("相談中 2件", ConsultList.Line(2));
     }
 
     [Fact]
@@ -195,12 +195,12 @@ public class ConsultListTest
     public void ConsultLineCountsHeldSeparately()
     {
         var a = new ConsultItem("s1", "n1"); var b = new ConsultItem("s2", "n2", Held: true);
-        Assert.Equal("未確認事項 2 件（相談中 1・保留 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { a, b }));
-        Assert.Equal("未確認事項 1 件（保留 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { b }));
+        Assert.Equal("相談中 2件（保留 1）", ConsultList.Line(new[] { a, b }));
+        Assert.Equal("相談中 1件（保留 1）", ConsultList.Line(new[] { b }));
         Assert.Null(ConsultList.Line(Array.Empty<ConsultItem>()));
         Assert.True(ConsultList.Match(new[] { b }, new ConsultItem("s2", "n2"))?.Held);
         Assert.Null(ConsultList.Line(new[] { a with { Answer = ConsultAnswer.Agreed } }));   // 了承済みは数えない
-        Assert.Equal("未確認事項 1 件（相談中 1。下の一覧で確認してから配ってください）", ConsultList.Line(new[] { a, a with { Subject = "s3", Answer = ConsultAnswer.Agreed } }));
+        Assert.Equal("相談中 1件", ConsultList.Line(new[] { a, a with { Subject = "s3", Answer = ConsultAnswer.Agreed } }));
     }
 
     [Fact]

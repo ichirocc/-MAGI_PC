@@ -36,7 +36,11 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, IReadOnlyList<str
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
     public const string KeepCurrentButton = "今は変更しない";
     /// <summary>変更を当てる前の確認の見出し（1 手でも入替でも同じ）。</summary>
-    public const string PreviewTitle = "この変更を適用しますか？";
+    public const string PreviewTitle = "変更の確認";
+
+    /// <summary>変更の確認の 1 行と、変わるセルの 1 行（「山本  10/15  休 → 遅番」）。</summary>
+    public static string PreviewCountLine(int n) => $"{n}か所変わります";
+    public static string PreviewRowLine(string staff, string date, string before, string after) => $"{staff}  {date}  {before} → {after}";
 
     /// <param name="shiftNames">登録された勤務名（記号と違えば「記号（勤務名）」で併記）。</param>
     /// <param name="wishes">希望 "i,j"→シフト（あれば行ごとに希望どおりか添える）。</param>

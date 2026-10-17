@@ -28,7 +28,7 @@ public class Review3698Test
             Assert.True(s.IndexOf(HomeSection.Helper) < s.IndexOf(HomeSection.Detail), @case);
             Assert.True(hasResult == s.Contains(HomeSection.Satisfaction), @case);
             Assert.True(hasResult == s.Contains(HomeSection.Creation), @case);
-            Assert.True((hasResult && !hard0) == s.Contains(HomeSection.Badges), @case);
+            Assert.True(hasResult == s.Contains(HomeSection.Badges), @case);
             if (hasResult) Assert.True(s.IndexOf(HomeSection.Detail) < s.IndexOf(HomeSection.Satisfaction) && s.IndexOf(HomeSection.Satisfaction) < s.IndexOf(HomeSection.Info), @case);
         }
         // 結果はあるが自動作成を経ていない（手で編集）＝作成の行は出ない。
@@ -61,11 +61,12 @@ public class Review3698Test
     [Fact]
     public void HeadlinePerStage()
     {
-        Assert.Equal("2026年10月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List, "2026-10-01"));
-        Assert.Equal("2026年10月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.GuidedFix, "2026-10-01"));
-        Assert.Equal("いまの判断", CellSheetLogic.HomeHeadline(HomePlanKind.Wishes, ""));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List, "2026-10-01"));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.GuidedFix, "2026-10-01"));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.Wishes, ""));
+        Assert.Equal("2026年10月の判断", CellSheetLogic.HomeMonthHeadlineOf("2026-10-01"));
         Assert.Equal(CellSheetLogic.HomeMakeHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.Make, "2026-10-01"));
-        Assert.Equal(CellSheetLogic.HomeHard0Headline, CellSheetLogic.HomeHeadline(HomePlanKind.PreDist, "2026-10-01"));
+        Assert.Equal(CellSheetLogic.HomeMonthHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.PreDist, "2026-10-01"));
         Assert.DoesNotContain("②", CellSheetLogic.HomeMakeHeadline);
         Assert.DoesNotContain("③", CellSheetLogic.HomeHard0Headline);
     }
@@ -76,12 +77,12 @@ public class Review3698Test
     public void ShortageHeadlineNamesShiftAndCount()
     {
         var h = CellSheetLogic.ShortageHeadlineOf(Shortfall);
-        Assert.Equal("10/15(水) の Cｵ が 1人 足りません", h.Headline);
-        Assert.Equal("いま1人／必要2人", h.Status);
-        Assert.Equal("Cｵ 必要2 不足1", h.Badge);
+        Assert.Equal("10/15のCｵが1人不足", h.Headline);
+        Assert.Equal("配置 1 / 必要 2", h.Status);
+        Assert.Equal("担当・希望の確認", h.Badge);
         // 札は単位ごと＝件と人を足さない（INV-07）。
-        Assert.Equal(new[] { "必須 3件・2人", "Cｵ 必要2 不足1" }, CellSheetLogic.HomeBadges("3件・2人", Shortfall));
-        Assert.Equal(new[] { "必須 1件" }, CellSheetLogic.HomeBadges("1件", null));
+        Assert.Equal(new[] { "必須 残り3件・2人" }, CellSheetLogic.HomeBadges("3件・2人", Shortfall));
+        Assert.Equal(new[] { "必須 残り1件" }, CellSheetLogic.HomeBadges("1件", null));
     }
 
     /// <summary>「次に確認する問題」は主ボタンの対象と同じ（INV-01）。見出しと同じ対象なら完了の 1 行だけ。</summary>
@@ -107,6 +108,6 @@ public class Review3698Test
         Assert.Equal("読み込んでいます…", CellSheetLogic.EmptyStateSubtitle(true));
         Assert.Equal("保存データ・サンプル・新規から選べます", CellSheetLogic.EmptyStateSubtitle(false));
         Assert.Equal("変更内容を確認する", CellSheetLogic.ReviewChangeButton);
-        Assert.Equal("残っている問題を見る", CellSheetLogic.HomeListButton);
+        Assert.Equal("必須を見る", CellSheetLogic.HomeListButton);
     }
 }

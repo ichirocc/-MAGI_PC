@@ -72,7 +72,7 @@ public static class ConsultList
     public const string Stale = "相談に登録した後で勤務表または設定が変わったため、この案はそのまま当てられません。「変更案を探す」から、もう一度確かめてください";
 
     /// <summary>ホームの主カードの 1 行。0 件なら出さない。</summary>
-    public static string? Line(int n) => n > 0 ? $"未確認事項 {n} 件（相談中。下の一覧で確認してから配ってください）" : null;
+    public static string? Line(int n) => n > 0 ? $"相談中 {n}件" : null;
 
     /// <summary>未解決の相談＝保留か、回答待ち（了承・不可の回答があれば数えない）。</summary>
     public static bool Unresolved(ConsultItem c) => c.Held || c.Answer == ConsultAnswer.Pending;
@@ -83,9 +83,7 @@ public static class ConsultList
         var open0 = items.Where(Unresolved).ToList();
         if (open0.Count == 0) return null;
         var held = open0.Count(c => c.Held);
-        var open = open0.Count - held;
-        var parts = string.Join("・", new[] { open > 0 ? $"相談中 {open}" : null, held > 0 ? $"保留 {held}" : null }.Where(x => x is not null));
-        return $"未確認事項 {open0.Count} 件（{parts}。下の一覧で確認してから配ってください）";
+        return $"相談中 {open0.Count}件" + (held > 0 ? $"（保留 {held}）" : "");
     }
 
     private static DateOnly? Parse(string date) =>

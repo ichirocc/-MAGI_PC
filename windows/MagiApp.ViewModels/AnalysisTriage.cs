@@ -133,7 +133,12 @@ public sealed record AnalysisTriage(
         return new EmptySearchStreak(origin, board, state, 1);
     }
 
-    public const string RepeatedEmptyLine = "この対象には、いまの条件で直せる変更案がありません。";
+    public const string RepeatedEmptyLine = "続けて案がありませんでした";
+    public const string NoFixTitle = "案はありません";
+    public const string NoFixLine = "設定か希望の確認が必要です";
+
+    /// <summary>案なしの説明の 1 行: 続けて空なら続けて空の行、そうでなければ定型の 1 行（3.711.0 の行を残す）。</summary>
+    public static string NoFixLineOf(bool repeated) => repeated ? RepeatedEmptyLine : NoFixLine;
 
     /// <summary>続けて 0 件の対象の行き先。希望がぶつかるセルなら希望、設定ミスの診断が出ていれば設定、どちらも無ければボタンなし。</summary>
     public static RepeatedEmptyAction? RepeatedEmptyActionOf(bool wishOnTarget, bool settingIssueKnown) =>
@@ -251,6 +256,9 @@ public sealed record AnalysisTriage(
         _ => SettingsLabel.For(VioBuckets.YearSectionForIssueKind(kind) ?? ""),
     };
 
+    /// <summary>分析タブの一文（「必須3件 · 要調整12件」、Kotlin <c>analysisCountLine</c>）。</summary>
+    public static string AnalysisCountLine(string hardLabel, string softLabel) => $"必須{hardLabel} · 要調整{softLabel}";
+
     /// <summary>
     /// 分析タブの状態の段（Kotlin <c>analysisSummary</c>）。一文は上部の札（<see cref="CellSheetLogic.BoardStatusLines"/>）と同じ区別で決める。
     /// tourCount＝巡回できる必須違反の数、fixResolved＝変更案で直せる必須違反の数（null＝未探索・古い＝出さない）。
@@ -263,14 +271,12 @@ public sealed record AnalysisTriage(
             ui.Running ? "勤務表をつくっています。表示は途中の値です。"
             : !ui.HasResult ? "まだ作っていません。"
             : !ui.EngineRan && !ui.RanBeforeEdit ? "手で編集した勤務表です（自動作成はまだ）。"
-            : hard > 0 ? "配る前に直す必須違反が残っています。"
-            : ui.BestSoft > 0 ? "必須違反はありません。要調整が残っています。"
+            : hard > 0 || ui.BestSoft > 0 ? AnalysisCountLine(hard > 0 ? HardText(ui.Breakdown, hard) : "0", UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "0")
             : "必須違反も要調整もありません。";
         var points = new List<string>();
         if (ui.HasResult || ui.Running)
         {
-            points.Add(hard > 0 ? $"必須違反 {HardText(ui.Breakdown, hard)}" : "必須違反 なし");
-            points.Add("要調整 " + (UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "なし"));
+            // [3.713.0] 件数は一文（「必須3件 · 要調整12件」）が言う＝点は変更案で直せる数だけ。
             if (evaluated && hard > 0 && fixResolved is { } n) points.Add($"変更案で直せる必須違反 {n}か所");
         }
         var shortDays = ui.CoverageDiag?.Shortfalls.Where(x => x.Miss > 0).Select(x => x.DayIndex).Distinct().Count() ?? 0;
