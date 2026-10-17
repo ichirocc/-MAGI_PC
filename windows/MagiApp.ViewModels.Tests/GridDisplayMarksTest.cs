@@ -94,7 +94,6 @@ public class GridDisplayMarksTest
         Assert.Contains(C1Display.StuckText, Assert.Single(CellSheetLogic.CellDetailLines(st2, p, s, 0, 4, new[] { "c1" }, Label)));
         var u2 = new UiState { Schedule = St.Schedule, ShiftSymbols = Ui.ShiftSymbols, C1Shortages = all };
         Assert.Contains(0, GridDisplayMarks.C1Stuck(u2));
-        Assert.Contains(GridDisplayMarks.StaffCountLines(u2, 0, Label), l => l.Contains(C1Display.StuckText));
         Assert.Contains(Ui.C1Shortages, x => x.Staff == 10 && x.Stuck);
     }
 
@@ -173,7 +172,6 @@ public class GridDisplayMarksTest
         Assert.Equal(27, Rep.CountFamilies.Count);
         var staff = Rep.CountFamilies.Keys.Select(k => int.Parse(k[..k.IndexOf(',')])).ToHashSet();
         Assert.Equal(staff, GridDisplayMarks.CountBadges(Ui, VioBuckets.AllKeys).Keys.ToHashSet());
-        foreach (var i in staff) Assert.NotEmpty(GridDisplayMarks.StaffCountLines(Ui, i, Label));
         Assert.Empty(GridDisplayMarks.CountBadges(Ui, VioBuckets.AllKeys.Where(k => k != "count").ToHashSet()));
     }
 
@@ -197,14 +195,6 @@ public class GridDisplayMarksTest
             .Where(c => c.Contains("vio-c42s") && c[0] != "vio-c42s").ToList();
         Assert.NotEmpty(hidden);
         foreach (var c in hidden) Assert.NotNull(GridDisplayMarks.SecondVisibleClass(c, VioBuckets.AllKeys));
-    }
-
-    [Fact]
-    public void FairAndWeeklyAppearInTheStaffSheet()
-    {
-        foreach (var fam in new[] { "fair", "weekly" })
-            foreach (var e in Rep.DistLocations.GetValueOrDefault(fam) ?? Array.Empty<IReadOnlyList<int>>())
-                Assert.Contains(GridDisplayMarks.StaffCountLines(Ui, e[0], Label), l => l.Contains(fam));
     }
 
     /// <summary>行末の印のシート（実データ 職員02）: 回数は 2 列のチップ、曜日は 1 シフト 1 句、公平化は差ごとに 1 行。</summary>

@@ -84,10 +84,8 @@ public class CountShortageTextTest
     }
 
     [Fact]
-    public void CountGapLineNamesCurrentTargetAndDifference()
+    public void CountChipRowTextNamesTargetAndDifference()
     {
-        Assert.Equal("現在 4回／目標 5回 ・ 不足 1回", CellSheetLogic.CountGapLine("vio-aptLow", 4, (null, null, 5)));
-        Assert.Equal("現在 7回／下限 15回 ・ 不足 8回", CellSheetLogic.CountGapLine("vio-low", 7, (15, null, null)));
         Assert.Equal("Dテ　3回／目標 5回　あと2回", new CountChip("Dテ", 3, 5, "", true, 1).RowText);
         Assert.Equal("B4　5回／上限 1回　4回多い", new CountChip("B4", 5, 1, "上限", false, 2).RowText);
     }

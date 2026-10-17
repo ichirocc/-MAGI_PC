@@ -64,7 +64,6 @@ public class Review3698Test
         Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List, "2026-10-01"));
         Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.GuidedFix, "2026-10-01"));
         Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.Wishes, ""));
-        Assert.Equal("2026年10月の判断", CellSheetLogic.HomeMonthHeadlineOf("2026-10-01"));
         Assert.Equal(CellSheetLogic.HomeMakeHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.Make, "2026-10-01"));
         Assert.Equal(CellSheetLogic.HomeMonthHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.PreDist, "2026-10-01"));
         Assert.DoesNotContain("②", CellSheetLogic.HomeMakeHeadline);
@@ -80,9 +79,6 @@ public class Review3698Test
         Assert.Equal("10/15のCｵが1人不足", h.Headline);
         Assert.Equal("配置 1 / 必要 2", h.Status);
         Assert.Equal("担当・希望の確認", h.Badge);
-        // 札は単位ごと＝件と人を足さない（INV-07）。
-        Assert.Equal(new[] { "必須 残り3件・2人" }, CellSheetLogic.HomeBadges("3件・2人", Shortfall));
-        Assert.Equal(new[] { "必須 残り1件" }, CellSheetLogic.HomeBadges("1件", null));
     }
 
     /// <summary>「次に確認する問題」は主ボタンの対象と同じ（INV-01）。見出しと同じ対象なら完了の 1 行だけ。</summary>

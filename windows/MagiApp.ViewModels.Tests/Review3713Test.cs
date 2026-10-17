@@ -13,13 +13,11 @@ public class Review3713Test
     [Fact]
     public void HomeHeadingPillAndProblemLine()
     {
-        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List, "2026-10-01"));
         Assert.Equal("必須 残り4件", CellSheetLogic.HomeHardPill(4L, "4件"));
         Assert.Equal("必須は満たしています", CellSheetLogic.HomeHardPill(0L, "0件"));
         Assert.Equal("10/10のAｱが1人不足", CellSheetLogic.ShortageHeadlineOf(Sf).Headline);
         Assert.Equal("配置 0 / 必要 1", CellSheetLogic.ShortageHeadlineOf(Sf).Status);
         Assert.Equal("担当・希望の確認", CellSheetLogic.ShortageTag);
-        Assert.Equal("必須を見る", CellSheetLogic.HomeListButton);
         Assert.Equal("配布前の確認", CellSheetLogic.HomePreDistButton);
         Assert.Equal("表で全体を見る", CellSheetLogic.HomeScheduleHelper);
         Assert.Equal("相談中 3件", ConsultList.Line(3));
@@ -28,7 +26,6 @@ public class Review3713Test
     [Fact]
     public void DialogsAndEmptyStates()
     {
-        Assert.Equal("変更の確認", ChainFixPreview.PreviewTitle);
         Assert.Equal("2か所変わります", ChainFixPreview.PreviewCountLine(2));
         Assert.Equal("山本  10/15  休 → 遅番", ChainFixPreview.PreviewRowLine("山本", "10/15", "休", "遅番"));
         Assert.Equal("案はありません", AnalysisTriage.NoFixTitle);

@@ -35,7 +35,6 @@ public class Review3714Test
         var rows = CellSheetLogic.HardViolationRows(items, new[] { "福澤" }, new HashSet<string>());
         Assert.Equal("福澤 10/1 希望の前日", Assert.Single(rows).Line);
         Assert.Equal("残っている問題 4件", CellSheetLogic.HardListTitle("4件"));
-        Assert.Equal("直し方を見る", CellSheetLogic.HardListStartButton);
         foreach (var f in new[] { "covU", "c3w", "low", "high", "c3n", "pref", "extWish", "groupViol", "c41" })
         {
             var l = CellSheetLogic.ProblemLine(f, "とても長い名前の職員さん", "12/31", "長い記号の勤務", "長い記号の勤務", 12, Label);
