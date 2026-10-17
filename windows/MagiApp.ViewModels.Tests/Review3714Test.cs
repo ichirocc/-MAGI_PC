@@ -69,7 +69,7 @@ public class Review3714Test
         Assert.Equal("組む時間を変える", CellSheetLogic.BudgetChangeButton);
         Assert.Equal("条件", CellSheetLogic.EditTabHeading);
         Assert.Equal("希望・人数・基本", CellSheetLogic.EditTabLine);
-        Assert.Equal("まだ作っていません", CellSheetLogic.HomeHeadline(HomePlanKind.Make, "2026-10-01"));
+        Assert.Equal("まだ作っていません", CellSheetLogic.HomeHeadline(HomePlanKind.Make));
         Assert.Equal("データを開く", CellSheetLogic.EmptyStateTitle);
         Assert.Equal("開く", ConsultList.Open);
     }

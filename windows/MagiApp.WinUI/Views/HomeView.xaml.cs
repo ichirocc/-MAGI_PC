@@ -81,7 +81,8 @@ public sealed partial class HomeView : UserControl
 
     private void RenderConsults(UiState ui)
     {
-        // [3.712.0] 実行中は主カードの相談の 1 行だけ（一覧は終わってから）。
+        // [3.712.0] 実行中は主カードの相談の 1 行だけ（一覧は終わってから）。作成が終わったら畳む（次の作成中はまた 1 行から）。
+        if (!ui.Running) _consultOpen = false;
         var hidden = ui.Consults.Count == 0 || (ui.Running && !_consultOpen);
         ConsultCard.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
         ConsultListHost.Children.Clear();
@@ -320,7 +321,7 @@ public sealed partial class HomeView : UserControl
         }
 
         HeadlineText.Visibility = Vis(Has(HomeSection.Headline));
-        HeadlineText.Text = CellSheetLogic.HomeHeadline(kind, ui.StartDate);
+        HeadlineText.Text = CellSheetLogic.HomeHeadline(kind);
         HeadlineText.Foreground = fgBrush;
 
         // BADGES: 札は見出しと同じ語で検査の結果だけを言う（「完成」とは言わない＝人の確認と分ける）。件と人は足さない（INV-07）。

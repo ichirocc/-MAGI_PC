@@ -1681,7 +1681,7 @@ public static class CellSheetLogic
     public static string EmptyStateSubtitle(bool loading) => loading ? "読み込んでいます…" : "保存データ・サンプル・新規から選べます";
 
     /// <summary>段ごとの見出し: 未作成は 1 文、結果があれば「今月の判断」（必須の有無は札が言う。3.713.0 デザイン例）。</summary>
-    public static string HomeHeadline(HomePlanKind kind, string startDate) => kind == HomePlanKind.Make ? HomeMakeHeadline : HomeMonthHeadline;
+    public static string HomeHeadline(HomePlanKind kind) => kind == HomePlanKind.Make ? HomeMakeHeadline : HomeMonthHeadline;
 
     public static ShortageHeadline ShortageHeadlineOf(string dayLabel, string shiftSymbol, int need, int got, int miss) =>
         new($"{(dayLabel.IndexOf('(') is var p and >= 0 ? dayLabel[..p] : dayLabel)}の{shiftSymbol}が{miss}人不足", $"配置 {got} / 必要 {need}", ShortageTag);
