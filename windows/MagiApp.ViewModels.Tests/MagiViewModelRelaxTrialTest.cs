@@ -151,7 +151,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(Oct, board);
         var t = NextActionGuide.RelaxTrialTextOf(r, ui, Label);
         Assert.Equal(new[] { "職員10 Pｼ 上限 0回→1回まで", "職員11 Cｵ 上限 0回→1回まで" }, t.Rows.Select(x => x.Split('（')[0]));
-        Assert.Equal("今の勤務表に合わせて上限を上げます。そのうえでこの組を例外として緩めると、必須違反が 1件 減る見込みです。", t.Lead);
+        Assert.Equal("今の勤務表に合わせて上限を上げます。そのうえでこの組を例外として緩めると、必須違反が 1件減る見込みです。", t.Lead);
         Assert.StartsWith("職員10 ", t.Title);
         Assert.EndsWith("禁止の並び", t.Title);
         Assert.True(t.MoveLines.Count > 0 && t.MoveLines.All(l => l.Contains('→')));
@@ -165,7 +165,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal($"変わるもの: 設定5つ、{people}人の勤務、{r.Moves.Count}か所", t.ScaleLine);
         Assert.Equal(3, t.PrerequisiteRows.Count);
         Assert.True(t.PrerequisiteRows[0].Contains("（10/") && t.MoveLines[0].StartsWith("10/7　"), t.PrerequisiteRows[0]);
-        Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件 は残ります。", t.SolveNote);
+        Assert.Equal("この禁止の並びを解消できます。他の必須違反 4件は残ります。", t.SolveNote);
         Assert.Equal("設定を緩めて手順を適用しました: 必須違反 5 → 4。元に戻すで設定と勤務表をまとめて戻せます。", NextActionGuide.RelaxDoneLine(r.H0, r.Rr));
         var c = NextActionGuide.RelaxCardTextOf(r, ui, Label);
         Assert.Equal("職員10 10/8〜10/9の禁止の並び（必須 5件中 1件）は、個人の上限0を例外で緩めると解消できる見込みです", c.Headline);

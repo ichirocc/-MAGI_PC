@@ -794,8 +794,8 @@ public sealed partial class MagiViewModel
     {
         if (Ui.CsvSavedAt is not { } at || _csvSavedCtx is not { } c) return null;
         return CsvSavedMatches(c)
-            ? $"この内容で勤務表 CSV を保存済みです（{at}）。"
-            : $"{at} に保存した勤務表 CSV は、今の内容と違います（配るなら保存し直してください）。";
+            ? $"この内容で勤務表CSVを保存済みです（{at}）。"
+            : $"{at} に保存した勤務表CSVは、今の内容と違います（配るなら保存し直してください）。";
     }
 
     public void NotifySave(IoOutcome result, string what)

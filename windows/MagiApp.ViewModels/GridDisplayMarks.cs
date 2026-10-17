@@ -250,7 +250,7 @@ public static class GridDisplayMarks
         {
             var spans = string.Join("・", stuck.Where(x => x.Shift == sh.Shift && x.Day1 == sh.Day1 && x.Day2 == sh.Day2)
                 .Select(x => DayText.Range(ui.StartDate, x.From, x.To)));
-            return $"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日・{spans}）— {C1Display.StuckText}";
+            return $"・{Sym(sh.Shift)}: {labelOf("c1")}（{sh.Day1}日に{sh.Day2}日・{spans}）。{C1Display.StuckText}";
         }).ToList();
         var chips = new List<CountChip>();
         foreach (var key in CountKeys(ui).Where(k => First(k) == i).OrderBy(k => Second(k) ?? 0))

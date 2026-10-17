@@ -25,7 +25,7 @@ public class PreDistributionCheckTest
         Assert.Equal("0件", rows["必須違反"].Value);
         Assert.False(rows["相談"].Ok);   // 必須 0 でも相談の未完了は別に示す
         Assert.False(rows["保存"].Ok);
-        Assert.Equal("まだ勤務表 CSV に保存していません", rows["保存"].Value);
+        Assert.Equal("まだ勤務表CSVに保存していません", rows["保存"].Value);
         Assert.Equal("期間の制約 4件・曜日の偏り 20pt", rows["要調整"].Value);   // 重み×数の順（作成の結果カードと同じ）
         Assert.Equal("対象期間 10/1〜10/31・現在採用している勤務表", PreDistributionCheck.PeriodLine(ui));
     }
@@ -36,7 +36,7 @@ public class PreDistributionCheckTest
         var ui = Base();
         ui.BestHard = 3;
         ui.Breakdown = new Dictionary<string, int> { ["covU"] = 2, ["c3n"] = 1 };
-        var rows = PreDistributionCheck.Rows(ui, "この内容で勤務表 CSV を保存済みです（10:15）。", L).ToDictionary(r => r.Label);
+        var rows = PreDistributionCheck.Rows(ui, "この内容で勤務表CSVを保存済みです（10:15）。", L).ToDictionary(r => r.Label);
         Assert.Equal("1件・2人（禁止の並び 1件・人員不足 2人）", rows["必須違反"].Value);
         Assert.True(rows["保存"].Ok);
     }

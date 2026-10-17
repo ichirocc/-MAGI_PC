@@ -50,10 +50,10 @@ public class Review3698Test
     public void StatusLinesAreAtMostTwo()
     {
         Assert.Equal(new[] { "10/15(水) の Cｵ が 1人 足りません", "未確認事項 2 件" },
-            CellSheetLogic.HomeStatusLines(HomePlanKind.GuidedFix, "10/15(水) の Cｵ が 1人 足りません", "未確認事項 2 件", "この内容で勤務表 CSV を保存済みです（10:00）。"));
-        Assert.Equal(new[] { "未確認事項 2 件", "09:00 に保存した勤務表 CSV は、今の内容と違います（配るなら保存し直してください）。" },
-            CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, "", "未確認事項 2 件", "09:00 に保存した勤務表 CSV は、今の内容と違います（配るなら保存し直してください）。"));
-        Assert.Empty(CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, "", null, "この内容で勤務表 CSV を保存済みです（10:00）。"));
+            CellSheetLogic.HomeStatusLines(HomePlanKind.GuidedFix, "10/15(水) の Cｵ が 1人 足りません", "未確認事項 2 件", "この内容で勤務表CSVを保存済みです（10:00）。"));
+        Assert.Equal(new[] { "未確認事項 2 件", "09:00 に保存した勤務表CSVは、今の内容と違います（配るなら保存し直してください）。" },
+            CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, "", "未確認事項 2 件", "09:00 に保存した勤務表CSVは、今の内容と違います（配るなら保存し直してください）。"));
+        Assert.Empty(CellSheetLogic.HomeStatusLines(HomePlanKind.PreDist, "", null, "この内容で勤務表CSVを保存済みです（10:00）。"));
         Assert.Empty(CellSheetLogic.HomeStatusLines(HomePlanKind.Make, "", null, null));
         foreach (var k in Enum.GetValues<HomePlanKind>()) Assert.True(CellSheetLogic.HomeStatusLines(k, "文", "相談", "違います").Count <= 2);
     }

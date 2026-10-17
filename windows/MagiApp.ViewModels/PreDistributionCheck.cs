@@ -14,7 +14,7 @@ public static class PreDistributionCheck
     public const string Note = "必須違反 0 件は、登録した必須条件を満たしたことだけを示します。相談の完了や法令への適合は含みません。相談事項や職場の確認手続きを確かめたうえで、配布をご判断ください。";
 
     /// <summary>評価できていない範囲（仕様 §7・§8、3.665.0 利用者決定「未評価と明示するだけ」。Kotlin <c>MONTH_EDGE_NOTE</c>）。前月・翌月の勤務はデータに無い。</summary>
-    public const string MonthEdgeNote = "前月末・翌月初をまたぐ並び（前月・翌月の勤務）は評価していません（今月の中だけで判定）";
+    public const string MonthEdgeNote = "前月末・翌月初をまたぐ並びは評価していません。今月の中だけで判定します";
 
     /// <summary>変更した日が月の初め・終わりの maxLen−1 日以内か（並びの長さ maxLen の窓が月の外へはみ出しうる）。</summary>
     public static bool MonthEdgeTouched(IEnumerable<int> days, int totalDays, int maxLen) =>
@@ -48,7 +48,7 @@ public static class PreDistributionCheck
             new("必須違反", hardText, ui.BestHard == 0, Primary: true),
             new("要調整", softText, null),
             new("相談", consults == 0 ? "「相談中」に未解決の項目はありません" : $"未完了 {consults}件" + (held > 0 ? $"（うち保留 {held}件）" : "") + "（ホームの「相談中」）", consults == 0, Primary: true),
-            new("保存", csvLine ?? "まだ勤務表 CSV に保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true, Primary: true),
+            new("保存", csvLine ?? "まだ勤務表CSVに保存していません", csvLine?.StartsWith("この内容で", StringComparison.Ordinal) == true, Primary: true),
         };
     }
 }

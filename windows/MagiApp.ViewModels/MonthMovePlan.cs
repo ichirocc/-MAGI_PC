@@ -44,7 +44,7 @@ public sealed record MonthMovePlan(
     public IReadOnlyList<string> Lines()
     {
         var carry = new List<string> { "勤務表の中身（同じ日番号に残ります）" };
-        if (CarriedWishes > 0) carry.Add($"通常希望 {CarriedWishes} 件（同じ日番号に残ります＝前の月の希望です）");
+        if (CarriedWishes > 0) carry.Add($"通常希望 {CarriedWishes} 件（同じ日番号に残ります。前の月の希望です）");
         if (CarriedNeedExceptions > 0) carry.Add($"必要人数の例外 {CarriedNeedExceptions} 件（同じ日番号）");
         if (CarriedPins > 0) carry.Add($"手動固定 {CarriedPins} 件（同じ日番号）");
         var drop = new List<string>();
