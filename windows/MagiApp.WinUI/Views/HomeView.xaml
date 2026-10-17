@@ -103,7 +103,8 @@
                                    Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映しました。「元に戻す」で取り消せます。確定は書き出すときです。" />
                     </StackPanel>
                     <HyperlinkButton x:Name="RedraftLink" Click="OnSmartInitialClick" HorizontalAlignment="Stretch"
-                                     Content="下書きから作り直す（今の結果は「元に戻す」で戻せます）" />
+                                     Content="下書きから作り直す" />
+                    <TextBlock x:Name="RedraftNote" Text="今の結果は「元に戻す」で戻せます。" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 </StackPanel>
             </Border>
 
@@ -154,6 +155,8 @@
                                          Foreground="{StaticResource MagiOnTertiaryContainerBrush}">
                             <TextBlock x:Name="SoftPolishLinkText" TextWrapping="Wrap" />
                         </HyperlinkButton>
+                        <TextBlock x:Name="SoftPolishNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}"
+                                   Foreground="{StaticResource MagiOnTertiaryContainerBrush}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

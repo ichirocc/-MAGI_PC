@@ -26,7 +26,7 @@ public class Review3705Test
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.Breakdown = new Dictionary<string, int> { ["c1"] = 5 }; }), 0, null).Sentence);
         Assert.Equal("必須違反も要調整もありません。",
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.BestSoft = 0L; u.Breakdown = new Dictionary<string, int>(); }), 0, null).Sentence);
-        // 自動作成のあと手で変えた盤面は、上部の札と同じく「自動作成：済み」の側。
+        // 自動作成のあと手で変えた盤面は、上部の札と同じく「自動作成済み」の側。
         Assert.Equal("配る前に直す必須違反が残っています。", AnalysisTriage.AnalysisSummaryOf(Made(u => { u.EngineRan = false; u.RanBeforeEdit = true; }), 2, null).Sentence);
     }
 
@@ -35,7 +35,7 @@ public class Review3705Test
     {
         var tour = AnalysisTriage.AnalysisSummaryOf(Made(), 3, null);
         Assert.Equal(AnalysisPrimary.Tour, tour.Primary);
-        Assert.Equal("必須違反を順に見る（3か所）", tour.PrimaryLabel);
+        Assert.Equal("必須違反3か所を順に見る", tour.PrimaryLabel);
         var shortDiag = new CoverageDiagnosis(3, 0, 3, new[] { Shortfall(4), Shortfall(4, 1), Shortfall(9) }, Array.Empty<string>(), 0, Array.Empty<CoverageSurplus>());
         var guided = AnalysisTriage.AnalysisSummaryOf(Made(u => { u.Breakdown = new Dictionary<string, int> { ["covU"] = 3 }; u.CoverageDiag = shortDiag; }), 0, null);
         Assert.Equal(AnalysisPrimary.Guided, guided.Primary);

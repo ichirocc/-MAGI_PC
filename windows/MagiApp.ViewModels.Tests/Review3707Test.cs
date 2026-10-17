@@ -60,7 +60,7 @@ public class Review3707Test
     public void WishCardTexts()
     {
         Assert.Equal("佐藤さん：希望 3件・拡張希望 1件", CellSheetLogic.WishStaffSummary("佐藤", 3, 1));
-        Assert.Equal("ぶつかっている希望を見る（佐藤さん 11/24(火)）", CellSheetLogic.WishConflictLinkText("佐藤", "11/24(火)"));
+        Assert.Equal("11/24(火)のぶつかる希望を見る", CellSheetLogic.WishConflictLinkText("11/24(火)"));
         Assert.Equal("3日を夜の希望にする", CellSheetLogic.WishApplyButton(3, "夜"));
         Assert.Equal("2日を選んだシフト以外にする", CellSheetLogic.ExtWishApplyButton(2));
         Assert.Equal("4日に適用する", CellSheetLogic.NeedApplyButton(4));

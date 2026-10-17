@@ -243,7 +243,7 @@ public sealed record AnalysisTriage(
         var primary = active && tourCount > 0 ? AnalysisPrimary.Tour : active && shortDays > 0 ? AnalysisPrimary.Guided : AnalysisPrimary.None;
         var label = primary switch
         {
-            AnalysisPrimary.Tour => $"必須違反を順に見る（{tourCount}か所）",
+            AnalysisPrimary.Tour => FixOutcomeText.GuidedTourButton(tourCount),
             AnalysisPrimary.Guided => $"なおし方を見る（{shortDays}日）",
             _ => null,
         };

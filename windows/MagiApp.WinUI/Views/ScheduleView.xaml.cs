@@ -1244,7 +1244,7 @@ public sealed partial class ScheduleView : UserControl
                 var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
                 var cancel = new Button
                 {
-                    Content = $"{name}さんの希望を調整する（外す）", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                    Content = new TextBlock { Text = $"{name}さんの希望を外す", MaxLines = 1, TextTrimming = TextTrimming.CharacterEllipsis }, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                     Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"], IsEnabled = !ui.Running,
                 };
                 var staff = i;
@@ -1262,7 +1262,7 @@ public sealed partial class ScheduleView : UserControl
                     if (person == i) { people.Children.Add(new TextBlock { Text = $"{name}さん（選択中）", FontSize = 13 }); continue; }
                     var fix = new Button
                     {
-                        Content = $"{name}さんの勤務変更案を探す", HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
+                        Content = new TextBlock { Text = $"{name}さんの変更案を探す", MaxLines = 1, TextTrimming = TextTrimming.CharacterEllipsis }, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48,
                         IsEnabled = !_vm.Ui.Running,
                     };
                     var staff = i;
@@ -1890,7 +1890,7 @@ public sealed partial class ScheduleView : UserControl
         MenuFlyoutItem CandidateItem(FixCandidate c)
         {
             var from = c.StaffIndex < ui.Schedule.Count && day < ui.Schedule[c.StaffIndex].Count ? ui.Schedule[c.StaffIndex][day] : -1;
-            var item = new MenuFlyoutItem { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, sym, from >= 0 && from < ui.ShiftSymbols.Count ? ui.ShiftSymbols[from] : null) };
+            var item = new MenuFlyoutItem { Text = FixOutcomeText.GuidedCandidateLabel(c.Name, sym) };
             var i = c.StaffIndex;
             var label = $"{c.Name}さんを{dayLabel}の「{sym}」に入れる";
             item.Click += (_, _) => _vm.PreviewShortageCandidate(i, day, shift, label);   // 確認の画面を経由する
@@ -2697,9 +2697,9 @@ public sealed partial class ScheduleView : UserControl
             if (mode == 0 && _vm.C1ShortageAt(i, j) is { Stuck: true }) panel.Children.Add(C1StuckButtons(() => flyout.Hide(), (i, j)));
             if (mode == 0 && dilemma && dilemmaChoice == 0)
             {
-                // 板挟み: 他の人で補う（推奨）／希望は残して別のシフトを割り当てる。
+                // 板挟み: 他の人で補う（推奨）／希望は残して別のシフトにする。
                 var others = Wide("他の人で補う（推奨）", accent: true);
-                var breakWish = new Button { Content = new TextBlock { Text = "希望は残して別のシフトを割り当てる（希望は未反映になります）", TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center }, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
+                var breakWish = new Button { Content = new TextBlock { Text = "希望は残して別のシフトにする", TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center }, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch };
                 panel.Children.Add(others);
                 panel.Children.Add(breakWish);
                 var slot = new StackPanel();

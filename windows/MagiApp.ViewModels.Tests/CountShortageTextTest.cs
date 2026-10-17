@@ -215,7 +215,7 @@ public class CountShortageTextTest
         u.SaveState = SaveState.Saved;
         Assert.DoesNotContain(CellSheetLogic.AppliedLines(u, a, t, "10/3のA", Need), l => l.StartsWith("保存：", StringComparison.Ordinal));
         Assert.Equal("続けて A の案を見る", CellSheetLogic.AppliedNextButton(true, "A", 2, 2));
-        Assert.Equal("残っている必須違反を順に見る（2か所）", CellSheetLogic.AppliedNextButton(false, "A", 2, 2));
+        Assert.Equal("必須違反2か所を順に見る", CellSheetLogic.AppliedNextButton(false, "A", 2, 2));
         Assert.Null(CellSheetLogic.AppliedNextButton(false, "A", 0, 2));
         Assert.Equal("新たに生じた問題：禁止の並び +1件", CellSheetLogic.AppearedFamiliesLine(new Dictionary<string, int> { ["c3n"] = 0 }, new Dictionary<string, int> { ["c3n"] = 1, ["c1"] = 0 }, f => f == "c3n" ? "禁止の並び" : f));
         Assert.True(a.IsCurrent(after));
@@ -274,8 +274,8 @@ public class CountShortageTextTest
         Assert.Equal("A（2日）", CellSheetLogic.FixTargetLabel(t, "A", "2026-10-01"));
         Assert.Equal("A（2日）の不足をまとめて解消する", CellSheetLogic.FixTargetPurpose(t, null, "A（2日）"));
         Assert.Equal(new[] { "2日で合計2人不足しています（日ごとの不足の合計）", "対象の日：10/3・10/4" }, CellSheetLogic.FixTargetHead(t, 0, Schedule, "2026-10-01"));
-        Assert.Equal("両日の不足をまとめて調整する案を探す", CellSheetLogic.MultiFixButton(2));
-        Assert.Equal("3日の不足をまとめて調整する案を探す", CellSheetLogic.MultiFixButton(3));
+        Assert.Equal("両日の不足をまとめて直す案を探す", CellSheetLogic.MultiFixButton(2));
+        Assert.Equal("3日の不足をまとめて直す案を探す", CellSheetLogic.MultiFixButton(3));
         var u = new UiState { Schedule = Schedule, NeedFamilies = fams };
         (int? Lo, int? Hi, int? Apt) Staff(int i, int k) => (null, null, null);
         Assert.Equal(t, CellSheetLogic.PanelTarget(u, new FixFocus(null, 1, null, AllDays: true), Staff, Need));

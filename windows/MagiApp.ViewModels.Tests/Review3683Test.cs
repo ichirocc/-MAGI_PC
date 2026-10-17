@@ -80,7 +80,7 @@ public class Review3683Test
     public void wordingConstants()
     {
         Assert.Equal("条件ごとの状況（守れている 10／残っている 3）", CellSheetLogic.ConditionStatusTitle(10, 3));
-        Assert.Equal("担当外の希望 4件をまとめて外す（勤務表は変わりません・元に戻せます）", CellSheetLogic.BulkClearWishesLabel(4));
+        Assert.Equal("担当外の希望 4件を外す", CellSheetLogic.BulkClearWishesLabel(4));
         Assert.Equal("変更案を見る", CellSheetLogic.ViewFixesButton);
     }
 }

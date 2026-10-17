@@ -665,7 +665,10 @@ public static class CellSheetLogic
     public const string SaveRetryButton = "もう一度保存する";
     public const string SaveFailedNotice = "自動保存できませんでした。PCに書き込めません（空き容量が足りない可能性があります）。「" + SaveRetryButton + "」を押してください";
     public const string HomeSaveFailedLine = "自動保存できていません。PCの空き容量を確かめてください";
-    public const string TopBarSaveFailed = "自動保存できていません";
+    public const string TopBarSaveFailed = "保存できていません";
+
+    /// <summary>上部の巡回の入口（Kotlin <c>topBarTourLabel</c>）。省略されても数が残るよう、数を前に置く。</summary>
+    public static string TopBarTourLabel(int n) => $"必須違反{n}か所を見る";
     /// <summary>上部の札の幅の境界（Kotlin <c>TOP_BAR_NARROW_DP</c>）。この移植は窓の幅を変えられるので文言だけ揃える。</summary>
     public const int TopBarNarrowDp = 396;
 
@@ -743,7 +746,7 @@ public static class CellSheetLogic
     }
 
     /// <summary>まとめて調整するボタンの名（2 日なら「両日」）。</summary>
-    public static string MultiFixButton(int n) => (n == 2 ? "両日" : $"{n}日") + "の不足をまとめて調整する案を探す";
+    public static string MultiFixButton(int n) => (n == 2 ? "両日" : $"{n}日") + "の不足をまとめて直す案を探す";
 
     /// <summary>対象の見出し 2 行: 「下限まで、あと8回です」「現在 7回 ／ 下限 15回」。人員は「必要人数より1人少ない状態です」「配置 0人 ／ 必要 1人」。</summary>
     public static IReadOnlyList<string> FixTargetHead(FixTarget t, int count, IReadOnlyList<IReadOnlyList<int>>? schedule = null, string startDate = "")
@@ -1344,7 +1347,7 @@ public static class CellSheetLogic
         IReadOnlyDictionary<string, int>? breakdown = null, bool ranBeforeEdit = false)
     {
         var b = breakdown ?? new Dictionary<string, int>();
-        return (engineRan ? "自動作成：済み" : ranBeforeEdit && hasResult ? "自動作成：済み（そのあと手で変更あり）" : hasResult ? "自動作成：未実行（手で編集）" : "自動作成：未実行",
+        return (engineRan ? "自動作成済み" : ranBeforeEdit && hasResult ? "手で変更あり" : hasResult ? "手で編集" : "自動作成前",
             !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {AnalysisTriage.HardText(b, hard)}"
             : soft > 0 ? $"評価：要調整 {AnalysisTriage.UnitTotals(b, MirrorKeys.Soft) ?? $"{soft}件"}" : "評価：違反なし");
     }
@@ -1547,7 +1550,7 @@ public static class CellSheetLogic
     public static string WishStaffSummary(string name, int wishes, int extWishes) => $"{name}さん：希望 {wishes}件・拡張希望 {extWishes}件";
 
     /// <summary>[3.707.0 3b-2] その職員のぶつかっている希望への文字ボタン（件数は出さない）。</summary>
-    public static string WishConflictLinkText(string name, string dayLabel) => $"{WishConflictsButton}（{name}さん {dayLabel}）";
+    public static string WishConflictLinkText(string dayLabel) => $"{dayLabel}のぶつかる希望を見る";
 
     /// <summary>[3.707.0 3b-4] 希望の入力パネルのボタン。</summary>
     public static string WishApplyButton(int days, string symbol) => $"{days}日を{symbol}の希望にする";
@@ -1803,7 +1806,7 @@ public static class CellSheetLogic
     /// か所の数は巡回できる項目の数（上部の札と同じ値。報告の必須合計は件と人が混ざる＝INV-07、3.693.0）。</summary>
     public static string? AppliedNextButton(bool sameRemains, string? sym, int hardLeft, int tourCount) =>
         sameRemains && sym is not null ? $"続けて {sym} の案を見る"
-        : hardLeft > 0 && tourCount > 0 ? $"残っている必須違反を順に見る（{tourCount}か所）"
+        : hardLeft > 0 && tourCount > 0 ? FixOutcomeText.GuidedTourButton(tourCount)
         : null;
 
     /// <summary>当てたあとに残る差（回数＝「A4は、下限まであと2回です」、まとめて見る日々＝「Dテ（2日）は、合計 3人不足です」）。</summary>
@@ -1892,7 +1895,8 @@ public static class CellSheetLogic
     public static IReadOnlyList<string> CreationTopLines(string? next, bool kept = false, string? headlineTarget = null) =>
         new[] { kept ? KeptResultText.KeptTitle : CreationDoneTitle, next is null || next == headlineTarget ? null : $"次に確認する問題：{next}" }.OfType<string>().ToList();
 
-    public const string SoftPolishLink = "要調整をもう少し減らせるか試す（減らない場合もあります）";
+    public const string SoftPolishLink = "要調整を減らせるか試す";
+    public const string SoftPolishNote = "減らない場合もあります。";
 
     public const string TriageHardHeading = "必須違反（配る前に直す必要があります）";
     public const string TriageSettingsHeading = "設定を変えないと消えない項目";
@@ -1900,7 +1904,7 @@ public static class CellSheetLogic
     /// <summary>分析の畳んだ一覧の見出し（内部の語を使わない）。</summary>
     public static string ConditionStatusTitle(int ok, int busy) => $"条件ごとの状況（守れている {ok}／残っている {busy}）";
 
-    public static string BulkClearWishesLabel(int n) => $"担当外の希望 {n}件をまとめて外す（勤務表は変わりません・元に戻せます）";
+    public static string BulkClearWishesLabel(int n) => $"担当外の希望 {n}件を外す";
 
     /// <summary>Kotlin <c>ALTERNATIVES_ALL_WORSE</c>（C# は同名のメソッドと並べられないため Text を付ける）。</summary>
     public const string AlternativesAllWorseText = "今の勤務表より良くありません";
