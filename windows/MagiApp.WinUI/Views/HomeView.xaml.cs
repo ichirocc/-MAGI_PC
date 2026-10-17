@@ -20,6 +20,7 @@ public sealed partial class HomeView : UserControl
     private readonly CoalescedRender _renderCoalescer;
 
     private bool _detailOpen;
+    private bool _consultOpen;   // [3.714.0] 作成中に相談の行の「開く」で相談の一覧を出す
     private Action _bigAction = () => { };
     private Action _helperAction = () => { };
 
@@ -76,12 +77,15 @@ public sealed partial class HomeView : UserControl
     /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、
     /// 入れ替えの相談は「案を見る」で今の勤務表の案（<see cref="MagiViewModel.ResumeConsultChain"/>）、「済」で外す。
     /// 複数人の入れ替えの一覧（<c>ChainPreview</c>）のダイアログは MainWindow が出す（3.646.0: タブに関係なく出るため）。</summary>
+    private void OnRunningConsultOpenClick(object sender, RoutedEventArgs e) { _consultOpen = true; RenderConsults(_vm.Ui); }
+
     private void RenderConsults(UiState ui)
     {
         // [3.712.0] 実行中は主カードの相談の 1 行だけ（一覧は終わってから）。
-        ConsultCard.Visibility = ui.Consults.Count == 0 || ui.Running ? Visibility.Collapsed : Visibility.Visible;
+        var hidden = ui.Consults.Count == 0 || (ui.Running && !_consultOpen);
+        ConsultCard.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
         ConsultListHost.Children.Clear();
-        if (ui.Consults.Count == 0 || ui.Running) return;
+        if (hidden) return;
         var heldN = ui.Consults.Count(c => c.Held);
         ConsultTitle.Text = $"相談中（{ui.Consults.Count - heldN}件）" + (heldN > 0 ? $"・保留（{heldN}件）" : "");
         foreach (var c in ui.Consults)
@@ -369,6 +373,10 @@ public sealed partial class HomeView : UserControl
         ProgressSpinner.Foreground = fgBrush;
         ProgressText.Text = ui.Running ? $"勤務表を組んでいます ・ {CellSheetLogic.ProgressSummary(ui)}" : "";
         ProgressText.Foreground = fgBrush;
+        RunningConsultRow.Visibility = Vis(Has(HomeSection.Progress) && consultLine is not null);
+        RunningConsultText.Text = consultLine ?? "";
+        RunningConsultText.Foreground = fgBrush;
+        RunningConsultOpen.Content = ConsultList.Open;
 
         BigButton.Visibility = Vis(Has(HomeSection.Primary) && bigEnabled);
         BigButton.Content = new TextBlock { Text = bigLabel, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 };
@@ -605,23 +613,31 @@ public sealed partial class HomeView : UserControl
             b.Click += (_, _) => _vm.StartWishTrial(row.Staff, row.Day);
             return b;
         }
-        void AddRow(WishTrialRow row, UiState ui)
+        void AddRow(WishTrialRow row, UiState ui, bool keepPrimary = false)
         {
+            var c3w = row.C3wLine is not null;
             // [3.712.0] 1 行目は名前と日、2 行目に短い理由（Android と同じ）。
             var label = new TextBlock { Text = CellSheetLogic.WishRowHead(row.Name, DayText.Short(ui.StartDate, row.Day)), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
             // [3.696.0] 札を右に並べると名前の先頭が欠けた（Android 端末報告）＝文は全幅、札はその下。
             var content = new StackPanel { Spacing = 4 };
             content.Children.Add(label);
-            content.Children.Add(new TextBlock { Text = row.Reason, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-            if (row.WishOnly) content.Children.Add(AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange));
+            content.Children.Add(new TextBlock { Text = row.C3wLine ?? row.Reason, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            if (row.WishOnly && !keepPrimary) content.Children.Add(AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange));
             var open = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 44 };
             open.Click += (_, _) => { dialog.Hide(); _window.OpenCell(row.Staff, row.Day); };
             panel.Children.Add(open);
+            // [3.714.0] 希望の前日の最初の行だけ主「希望のまま」（閉じる＝何も変えない、塗りは 1 つ）。
+            if (keepPrimary)
+            {
+                var keep = new Button { Content = NextActionGuide.WishKeepButton, MinHeight = 44, Margin = new Thickness(4, 0, 0, 0), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                keep.Click += (_, _) => dialog.Hide();
+                panel.Children.Add(keep);
+            }
             // [3.645.0/仕様 5.3] 本人や上長に確認してから決める＝対象と検討内容を相談中の一覧へ（取消も勤務の変更もしない）。
             var consultItem = ConsultList.Wish(row.Name, DayText.Short(ui.StartDate, row.Day),
                 ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var wk) && wk >= 0 && wk < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk] : null, row.Reason, row.Staff, row.Day,
                 ConsultList.IsoDate(ui.StartDate, row.Day));
-            panel.Children.Add(ConsultButton(ui, consultItem));
+            panel.Children.Add(c3w ? ConsultButton(ui, consultItem, label: NextActionGuide.WishConsultShort, holdLabel: NextActionGuide.WishHoldShort) : ConsultButton(ui, consultItem));
             if (!row.Locked || !ui.Wishes.TryGetValue($"{row.Staff},{row.Day}", out var k))
             {
                 panel.Children.Add(Small(row.Pinned ? NextActionGuide.WishTrialPinned : NextActionGuide.WishTrialNotLocked));
@@ -681,7 +697,8 @@ public sealed partial class HomeView : UserControl
             }
             if (cands.Direct.Count > 0)
             {
-                foreach (var row in cands.Direct) AddRow(row, ui);
+                var firstC3w = cands.Direct.FirstOrDefault(r => r.C3wLine is not null);
+                foreach (var row in cands.Direct) AddRow(row, ui, keepPrimary: ReferenceEquals(row, firstC3w));
             }
             if (cands.Shortfall.Count > 0)
             {
@@ -759,6 +776,15 @@ public sealed partial class HomeView : UserControl
             {
                 foreach (var point in FixOutcomeText.GuidedStatusPoints(target.Need, target.Got, cands.Count))
                     panel.Children.Add(new TextBlock { Text = "・" + point, FontSize = 14, TextWrapping = TextWrapping.Wrap });
+                // [3.714.0] 副操作は文字ボタン（その日の希望・担当の設定へ）。
+                var subRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                foreach (var (subLabel, subLanding) in new[] { (GuidedFixRules.ShortageWishButton, GuidedFixRules.ShortageWishLanding(target)), (GuidedFixRules.ShortageSkillButton, GuidedFixRules.ShortageSkillLanding()) })
+                {
+                    var sb = new HyperlinkButton { Content = subLabel, MinHeight = 44 };
+                    sb.Click += (_, _) => { wentOn = true; dialog.Hide(); GoEditLandingFrom(subLanding, new EditReturn("なおし方（人員不足）", EditReturn.Guided)); };
+                    subRow.Children.Add(sb);
+                }
+                panel.Children.Add(subRow);
                 if (loggedFor != (target.DayIndex, target.ShiftIndex)) { loggedFor = (target.DayIndex, target.ShiftIndex); _vm.LogUi(new OpLogText.UiOp.GuidedOpen(target.DayLabel, target.ShiftSymbol, cands.Count)); }
                 if (cands.Count > 0)
                 {
@@ -912,14 +938,14 @@ public sealed partial class HomeView : UserControl
     /// <summary>「相談してから決める」。積んだあとは「相談中」の札＝結果を形で返す（Kotlin <c>ConsultButton</c>。ダイアログは Ui の変化で組み直るので状態が追従する。
     /// 無効ボタンの文字は状態色の基準 3:1 を割るので札にする＝ux_test_checklist A1、3.645.2）。
     /// 隣の［保留する］は相談に回さず未解決のまま積む（札は「保留中」）。</summary>
-    private FrameworkElement ConsultButton(UiState ui, ConsultItem item, bool stretch = false)
+    private FrameworkElement ConsultButton(UiState ui, ConsultItem item, bool stretch = false, string? label = null, string? holdLabel = null)
     {
         if (ConsultList.Match(ui.Consults, item) is { } m) return ConsultedChip(m);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
         if (stretch) row.HorizontalAlignment = HorizontalAlignment.Stretch;
-        var b = new HyperlinkButton { Content = ConsultList.Button, MinHeight = 44 };
+        var b = new HyperlinkButton { Content = label ?? ConsultList.Button, MinHeight = 44 };
         b.Click += (_, _) => _vm.AddConsult(item);
-        var h = new HyperlinkButton { Content = ConsultList.HoldButton, MinHeight = 44 };
+        var h = new HyperlinkButton { Content = holdLabel ?? ConsultList.HoldButton, MinHeight = 44 };
         h.Click += (_, _) => _vm.AddConsult(item with { Held = true });
         row.Children.Add(b);
         row.Children.Add(h);

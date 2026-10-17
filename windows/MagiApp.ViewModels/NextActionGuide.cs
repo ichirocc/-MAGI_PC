@@ -19,7 +19,7 @@ public sealed record InvolvedWish(int Staff, int Day, string Name, string Reason
 /// 族名の日本語は UI 層が持つので <c>labelOf</c> で受け取る（<see cref="AnalysisTriage"/> と同じ形）。
 /// </summary>
 /// <summary>[S5] 試算の候補 1 行。Locked=false（担当できない勤務の希望）は試算ボタンを出さず <see cref="NextActionGuide.WishTrialNotLocked"/> を出す。</summary>
-public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false, bool WishOnly = false);
+public sealed record WishTrialRow(int Staff, int Day, string Name, string Reason, bool Locked, bool Pinned = false, bool WishOnly = false, string? C3wLine = null);
 
 /// <summary>[S5b] 人員不足の枠 1 つ（見出し「12日 日勤 1人不足」）と、その日に別の勤務で希望固定されている人の行（職員順）。</summary>
 public sealed record ShortfallWishGroup(int Day, int Shift, string Header, IReadOnlyList<WishTrialRow> Rows);
@@ -92,6 +92,15 @@ public static class NextActionGuide
         $"翌日（{DayText.Short(ui.StartDate, j + 1)}）の希望" + (WishSym(ui, i, j + 1) is { } w1 ? $"「{w1}」" : "の勤務") +
         "の前日に置けない" + (WishSym(ui, i, j) is { } w0 ? $"「{w0}」" : "勤務") + "の希望です";
 
+    /// <summary>[3.714.0] 希望の前日（c3w）の行の短い 1 行（22 字まで）。prev＝印の付く前日自身の希望の行。Kotlin <c>c3wShortLine</c>。</summary>
+    public static string C3wShortLine(bool prev, string? sym) =>
+        prev ? $"翌日の{sym ?? "希望"}の前に置けない勤務" : $"前日の{sym ?? "勤務"}と並べられない希望";
+
+    /// <summary>[3.714.0] 希望の前日の行の操作（デザイン例 6）。主は「希望のまま」、副は文字ボタン。</summary>
+    public const string WishKeepButton = "希望のまま";
+    public const string WishConsultShort = "相談";
+    public const string WishHoldShort = "保留";
+
     private static string C3nWishReason(UiState ui, int i, int j) =>
         "希望" + (WishSym(ui, i, j) is { } w ? $"「{w}」" : "") + "が禁止の並びに掛かっています";
 
@@ -124,18 +133,18 @@ public static class NextActionGuide
     {
         // 優先度（小さいほど代表）と「ほか」に出す短い名前。
         string[] shortNames = { "希望の勤務になっていない", "前日の禁止", "禁止の並び", "希望どうし" };
-        var hits = new List<(int Staff, int Day, int Prio, string Reason)>();
+        var hits = new List<(int Staff, int Day, int Prio, string Reason, string? Line)>();
         foreach (var (key, fams) in ui.ViolationCellFamilies)
         {
             var parts = key.Split(',');
             if (parts.Length < 2 || !int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) continue;
-            if (fams.Contains("vio-pref")) hits.Add((i, j, 0, PrefReason(ui, i, j)));
+            if (fams.Contains("vio-pref")) hits.Add((i, j, 0, PrefReason(ui, i, j), null));
             if (fams.Contains("vio-c3w"))
             {
-                hits.Add((i, j + 1, 1, C3wNextReason(ui, i, j)));
-                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, C3wPrevReason(ui, i, j)));
+                hits.Add((i, j + 1, 1, C3wNextReason(ui, i, j), C3wShortLine(false, BoardSym(ui, i, j))));
+                if (ui.LockedWishKeys.Contains(key)) hits.Add((i, j, 1, C3wPrevReason(ui, i, j), C3wShortLine(true, WishSym(ui, i, j + 1))));
             }
-            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, C3nWishReason(ui, i, j)));
+            if (fams.Contains("vio-c3n") && ui.Wishes.ContainsKey(key)) hits.Add((i, j, 2, C3nWishReason(ui, i, j), null));
         }
         var hitKeys = hits.Select(h => (h.Staff, h.Day)).ToHashSet();
         var prefKeys = ui.ViolationCellFamilies.Where(kv => kv.Value.Contains("vio-pref")).Select(kv => kv.Key).ToHashSet();
@@ -143,7 +152,7 @@ public static class NextActionGuide
         {
             var pat = string.Join("→", g.Shifts.Select(k => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "?"));
             var reason = g.Family == "c3w" ? $"希望どうしが前日の禁止「{pat}」に当たっています" : $"希望どうしが禁止の並び「{pat}」を作っています";
-            return g.Days.Where(d => !hitKeys.Contains((g.Staff, d))).Select(d => (Staff: g.Staff, Day: d, Prio: 3, Reason: reason));
+            return g.Days.Where(d => !hitKeys.Contains((g.Staff, d))).Select(d => (Staff: g.Staff, Day: d, Prio: 3, Reason: reason, Line: (string?)null));
         }).DistinctBy(h => (h.Staff, h.Day)).ToList();
         hits.AddRange(siblings);
         var pinned = (ui.CoverageDiag?.Shortfalls ?? Array.Empty<CoverageShortfall>()).Where(s => s.WishPinned.Count > 0)
@@ -158,7 +167,7 @@ public static class NextActionGuide
             if (pinnedKeys.Contains(g.Key)) others.Add("人員不足の日");
             var reason = others.Count == 0 ? rep.Reason : $"{rep.Reason}（ほか: {string.Join("・", others)}）";
             return new WishTrialRow(g.Key.Staff, g.Key.Day, Name(g.Key.Staff), reason, ui.LockedWishKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), ui.ManualPins.Contains($"{g.Key.Staff},{g.Key.Day}"),
-                WishOnly: selfKeys.Contains($"{g.Key.Staff},{g.Key.Day}"));
+                WishOnly: selfKeys.Contains($"{g.Key.Staff},{g.Key.Day}"), C3wLine: rep.Line);
         }).OrderBy(r => r.Staff).ThenBy(r => r.Day).ToList();
         var directKeys = direct.Select(r => (r.Staff, r.Day)).ToHashSet();
         var shortfall = pinned.Select(s =>

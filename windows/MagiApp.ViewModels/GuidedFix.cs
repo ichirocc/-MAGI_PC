@@ -135,6 +135,12 @@ public static class GuidedFixRules
         return new EditLanding(0, null, NeedShift: sf.ShiftIndex, Day: sf.DayIndex);
     }
 
+    /// <summary>[3.714.0] 人員不足の詳しい画面の文字ボタン: その日の希望（希望で固定した人がいればその人）と、担当（年間マスター①）。</summary>
+    public const string ShortageWishButton = "希望を見る";
+    public const string ShortageSkillButton = "担当を編集";
+    public static EditLanding ShortageWishLanding(CoverageShortfall sf) => new(0, null, sf.WishPinned.Count > 0 ? (int?)sf.WishPinned[0] : null, Day: sf.DayIndex);
+    public static EditLanding ShortageSkillLanding() => new(2, "yr_ws1");
+
     public static string LandingButtonLabel(EditLanding? landing) => landing switch
     {
         { Label: { } l } => l,

@@ -75,6 +75,15 @@
                         <TextBlock x:Name="ProgressText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Style="{StaticResource MagiBodyMediumTextStyle}" />
                     </Grid>
+                    <!-- [Android 3.714.0] 作成中の相談の 1 行と「開く」（相談の一覧を出す）。 -->
+                    <Grid x:Name="RunningConsultRow" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="RunningConsultText" VerticalAlignment="Center" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" />
+                        <HyperlinkButton x:Name="RunningConsultOpen" Grid.Column="1" MinHeight="48" Click="OnRunningConsultOpenClick" />
+                    </Grid>
                     <!-- PRIMARY: 塗りの主ボタンは画面に 1 つ。 -->
                     <TextBlock x:Name="SameResultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Button x:Name="BigButton" Click="OnBigClick" HorizontalAlignment="Stretch" MinHeight="56" Style="{StaticResource AccentButtonStyle}" />

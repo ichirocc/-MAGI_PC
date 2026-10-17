@@ -32,8 +32,8 @@ public class WishTrialCandidatesTest
         Assert.Equal(new[]
         {
             new WishTrialRow(0, 2, "山田", "希望の「日」になっていません（ほか: 禁止の並び・人員不足の日）", true),
-            new WishTrialRow(1, 3, "佐藤", "翌日（5日）の希望「日」の前日に置けない「夜」の希望です", true),
-            new WishTrialRow(1, 4, "佐藤", "前日（4日）に置けない勤務が入っています", true),
+            new WishTrialRow(1, 3, "佐藤", "翌日（5日）の希望「日」の前日に置けない「夜」の希望です", true, C3wLine: "翌日の日の前に置けない勤務"),
+            new WishTrialRow(1, 4, "佐藤", "前日（4日）に置けない勤務が入っています", true, C3wLine: "前日の勤務と並べられない希望"),
             new WishTrialRow(2, 5, "鈴木", "希望「日」が禁止の並びに掛かっています", false),
         }, c.Direct);
         // (0,2) は S5a が代表＝S5b の 3日 の枠は空になって消える。枠は日順、行は職員順。

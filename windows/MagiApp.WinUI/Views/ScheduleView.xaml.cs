@@ -708,10 +708,8 @@ public sealed partial class ScheduleView : UserControl
             var content = new Grid { ColumnSpacing = 8 };
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var text = new StackPanel();
-            text.Children.Add(new TextBlock { Text = r.Name, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextWrapping = TextWrapping.Wrap });
-            text.Children.Add(new TextBlock { Text = r.Heading, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-            content.Children.Add(text);
+            // [3.714.0] 1 件 1 行（族ごとの型、18 字まで）。
+            content.Children.Add(new TextBlock { Text = r.Line ?? r.Heading, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 });
             if (r.WishOnly)
             {
                 var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
@@ -1690,6 +1688,21 @@ public sealed partial class ScheduleView : UserControl
             // [3.713.0] 見出し「案はありません」と説明の 1 行（続けて空なら 3.711.0 の行）。
             host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixTitle, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
             host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixLineOf(ui.FixEmptyRepeatKey == focus.Key), TextWrapping = TextWrapping.Wrap });
+            // [3.714.0] 主は「問題一覧」（巡回の先頭のセルへ）、閉じるは文字。セルのシートは自分の閉じるがあるので出さない。
+            var nfTour = _vm.HardViolationItemsFor(LabelOf);
+            if (nfTour.Count > 0)
+            {
+                var nfList = new Button { Content = AnalysisTriage.NoFixListButton, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                var nfFirst = nfTour[0].Cell;
+                nfList.Click += (_, _) => { hide(); OpenCellSheet(nfFirst.I, nfFirst.J); };
+                host.Children.Add(nfList);
+            }
+            if (!quick)
+            {
+                var nfClose = new HyperlinkButton { Content = AnalysisTriage.NoFixCloseButton, MinHeight = 48 };
+                nfClose.Click += (_, _) => hide();
+                host.Children.Add(nfClose);
+            }
             if (ui.FixEmptyRepeatKey == focus.Key)
             {
                 // 全面の一覧は下に希望・設定への行き先を並べる＝ボタンはそれが無いセルのシートだけ。
@@ -2612,7 +2625,7 @@ public sealed partial class ScheduleView : UserControl
                 if (status.Severity == CellSeverity.Hard) stLine.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"];
                 problemPanel.Children.Add(stLine);
             }
-            if (fams.Count > 0) problemPanel.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf), size: 13));
+            if (fams.Count > 0) problemPanel.Children.Add(Body(CellSheetLogic.CellRuleLine(fams[0], LabelOf), size: 13));
             if (dilemma) problemPanel.Children.Add(Body(CellSheetLogic.WishKeptLine(Sym(wish)), size: 13));
             var shortCaution = _vm.ShortSideCautionFor(i, j, name);
             if (shortCaution is not null) problemPanel.Children.Add(Body(shortCaution));
@@ -2703,19 +2716,22 @@ public sealed partial class ScheduleView : UserControl
                 panel.Children.Add(statusBox);
             }
             var partners = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
-            if (mode == 0 && fams.Count >= 2)
+            // [3.714.0] 問題が 1 つでも説明の文は「詳しく見る」の中（主は「変更案を探す」＝これは文字ボタン）。
+            if (mode == 0 && fams.Count >= 1)
             {
                 var details = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
+                details.Children.Add(Body(CellSheetLogic.CellProblemSentence(fams[0], LabelOf), size: 13));
                 foreach (var f in fams.Skip(1)) details.Children.Add(Body("・" + CellSheetLogic.CellProblemSentence(f, LabelOf), size: 13));
                 foreach (var l in _vm.CellDetailLinesFor(i, j, LabelOf)) details.Children.Add(Body(l, size: 13));
                 if (_vm.RelatedCellsLineFor(i, j, partners) is { } related) details.Children.Add(new TextBlock { Text = related, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                var openLabel = $"関連する問題をすべて見る：ほか{fams.Count - 1}件";
+                var openLabel = fams.Count >= 2 ? $"関連する問題をすべて見る：ほか{fams.Count - 1}件" : CellSheetLogic.CellDetailButton;
+                var closeLabel = fams.Count >= 2 ? "関連する問題を閉じる" : "閉じる";
                 var toggle = new HyperlinkButton { Content = openLabel, MinHeight = 48 };
                 toggle.Click += (_, _) =>
                 {
                     var open = details.Visibility != Visibility.Visible;
                     details.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-                    toggle.Content = open ? "関連する問題を閉じる" : openLabel;
+                    toggle.Content = open ? closeLabel : openLabel;
                 };
                 panel.Children.Add(toggle);
                 panel.Children.Add(details);

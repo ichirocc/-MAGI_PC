@@ -32,8 +32,8 @@ public class Review3702Test
     [Fact]
     public void HardListShape()
     {
-        Assert.Equal("必須違反の一覧（3件・2人）", CellSheetLogic.HardListTitle("3件・2人"));
-        Assert.Equal("上から順に見る", CellSheetLogic.HardListStartButton);
+        Assert.Equal("残っている問題 3件・2人", CellSheetLogic.HardListTitle("3件・2人"));
+        Assert.Equal("直し方を見る", CellSheetLogic.HardListStartButton);
     }
 
     [Fact]

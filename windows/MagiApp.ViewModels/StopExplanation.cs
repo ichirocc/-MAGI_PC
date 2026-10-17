@@ -38,7 +38,7 @@ public sealed record StopExplanation(string Line, StopNext Next)
     public static string? NextLabel(StopNext n) => n switch
     {
         StopNext.None => null,
-        StopNext.MoreTime => "設定タブの「勤務表をつくる時間」で組む時間を延ばし、再作成する",
+        StopNext.MoreTime => "設定タブの「組む時間を変える」で組む時間を延ばし、再作成する",
         StopNext.ReviewStaffing => "編集タブの「年間マスター」①で、担当できる職員を確認する",
         StopNext.ReviewWishes => "編集タブの「月次条件」で希望を見直す",
         _ => "分析タブで直し方を探す",

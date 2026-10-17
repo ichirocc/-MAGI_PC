@@ -18,7 +18,8 @@
     -->
     <ScrollViewer Padding="16">
         <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
-            <TextBlock Text="勤務表をつくる時間" FontSize="20" FontWeight="SemiBold" />
+            <!-- [Android 3.714.0] 見出し「設定」＋組む時間の 1 行＋主ボタン（仕上げの秒数はツールチップ）。 -->
+            <TextBlock Text="設定" FontSize="20" FontWeight="SemiBold" />
 
             <!-- [Android 3.706.0] 保存に失敗している間だけ、時間のカードの上で直す（データ欄の同じ文は隠す）。 -->
             <StackPanel x:Name="SaveFailedBanner" Spacing="8" Visibility="Collapsed">
