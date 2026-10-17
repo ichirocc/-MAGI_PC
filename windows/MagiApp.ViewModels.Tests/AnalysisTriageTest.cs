@@ -163,12 +163,16 @@ public class AnalysisTriageTest
         Assert.Equal("必須 残り1件（うち希望のまま 1件）", AnalysisTriage.HomeRemainingLabel(1L, 0, B(), 3));
     }
 
-    /// <summary>主ボタンに最初の対象を添える。対象が無ければ元の文言。</summary>
+    /// <summary>主ボタンに最初の対象を前置きする。対象が無いか 1 行に収まらなければ元の文言。</summary>
     [Fact]
     public void HomeTargetLabelNamesFirstItem()
     {
-        Assert.Equal("ぶつかっている希望を見る（アリフ 10/8）", AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", "アリフ", "10/8"));
-        Assert.Equal("なおし方を見る（10/8）", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8"));
+        Assert.Equal("アリフ 10/8の希望を見る", AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, "アリフ", "10/8"));
+        Assert.Equal("10/8のなおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8"));
+        Assert.Equal("なおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", "10/15(水) Cｵ", null));
+        Assert.Equal(CellSheetLogic.HomeListButton, AnalysisTriage.HomeTargetLabel(CellSheetLogic.HomeListButton, "福澤さん 禁止の並び", null));
+        foreach (var b in new[] { AnalysisTriage.HomeWishButton, "なおし方を見る", "直す1手を見る", CellSheetLogic.HomeListButton })
+            Assert.True(AnalysisTriage.HomeTargetLabel(b, "アイウエオ", "10/18").Length <= AnalysisTriage.HomeButtonMaxChars);
         Assert.Equal("直す1手を見る", AnalysisTriage.HomeTargetLabel("直す1手を見る", null, null));
     }
 

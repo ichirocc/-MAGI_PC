@@ -99,12 +99,47 @@ public sealed record AnalysisTriage(
         return "解消済み";
     }
 
-    /// <summary>ホームの主ボタンに最初の対象（名前・日）を添える。対象が無ければ元の文言のまま。</summary>
+    /// <summary>ホームの主ボタンの 1 行に収める字数（全幅のボタンで折り返さない上限）。</summary>
+    public const int HomeButtonMaxChars = 18;
+    public const string HomeWishButton = "ぶつかっている希望を見る";
+
+    /// <summary>
+    /// ホームの主ボタンに最初の対象（名前・日）を前置きする（「アリフ 10/8の希望を見る」）。対象が無いとき、または
+    /// 前置きで <see cref="HomeButtonMaxChars"/> を超えるときは元の文言のまま（対象は「次に確認する問題」の行が名指しする）。
+    /// </summary>
     public static string HomeTargetLabel(string @base, string? name, string? day)
     {
         var t = string.Join(" ", new[] { name, day }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        return t.Length == 0 ? @base : $"{@base}（{t}）";
+        if (t.Length == 0) return @base;
+        var label = @base == HomeWishButton ? $"{t}の希望を見る" : $"{t}の{@base}";
+        return label.Length <= HomeButtonMaxChars ? label : @base;
     }
+
+    /// <summary>前回の作成と同じ設定（状態指紋）から同じ盤面（盤面指紋）が出たか。初回は false。</summary>
+    public static bool IsSameRunResult((long State, long Board)? prev, (long State, long Board) now) => prev is { } p && p == now;
+
+    /// <summary>盤面か設定が変わったら出さない（C# は editRev を持たないので設定は状態指紋で照合）。</summary>
+    public static bool SameResultVisible(SameResultNote? note, long stateKey, IReadOnlyList<IReadOnlyList<int>> schedule) =>
+        note is not null && note.StateKey == stateKey && note.Schedule.Count == schedule.Count && note.Schedule.Zip(schedule).All(p => p.First.SequenceEqual(p.Second));
+
+    public static string SameResultNotice(int hard) =>
+        hard > 0 ? $"前回と同じ結果です。条件を変えない限り、この必須違反{hard}件は消えません。" : "前回と同じ結果です。";
+
+    /// <summary>案があれば途切れる（null）。起点・盤面・設定のどれかが違えば 1 から数え直す。</summary>
+    public static EmptySearchStreak? NextEmptySearchStreak(EmptySearchStreak? prev, string origin, long board, long state, int found)
+    {
+        if (found > 0) return null;
+        if (prev is not null && prev.Origin == origin && prev.Board == board && prev.State == state) return prev with { Count = prev.Count + 1 };
+        return new EmptySearchStreak(origin, board, state, 1);
+    }
+
+    public const string RepeatedEmptyLine = "この対象には、いまの条件で直せる変更案がありません。";
+
+    /// <summary>続けて 0 件の対象の行き先。希望がぶつかるセルなら希望、設定ミスの診断が出ていれば設定、どちらも無ければボタンなし。</summary>
+    public static RepeatedEmptyAction? RepeatedEmptyActionOf(bool wishOnTarget, bool settingIssueKnown) =>
+        wishOnTarget ? RepeatedEmptyAction.Wishes : settingIssueKnown ? RepeatedEmptyAction.Settings : null;
+
+    public static string RepeatedEmptyActionLabel(RepeatedEmptyAction a) => a == RepeatedEmptyAction.Wishes ? "希望を見る" : "設定の確認を見る";
 
     /// <summary>SettingIssue の種類 → 画面に出す見出し（英字符号を出さない）。</summary>
     private static string IssueKindLabel(IssueKind kind) => kind switch
@@ -256,3 +291,11 @@ public enum AnalysisPrimary { Tour, Guided, None }
 
 /// <summary>分析タブの状態の段: 一文・3 点まで・主ボタン（<see cref="AnalysisTriage.AnalysisSummaryOf"/>）。</summary>
 public sealed record AnalysisSummary(string Sentence, IReadOnlyList<string> Points, AnalysisPrimary Primary, string? PrimaryLabel);
+
+/// <summary>同じ依頼（起点）・同じ盤面と設定で続いた案 0 件の回数。</summary>
+public sealed record EmptySearchStreak(string Origin, long Board, long State, int Count);
+
+public enum RepeatedEmptyAction { Wishes, Settings }
+
+/// <summary>前回と同じ結果の印。出したときの盤面と状態指紋を持ち、どちらかが変われば出さない。</summary>
+public sealed record SameResultNote(int Hard, long StateKey, IReadOnlyList<IReadOnlyList<int>> Schedule);

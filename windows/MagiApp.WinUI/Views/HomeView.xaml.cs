@@ -145,7 +145,7 @@ public sealed partial class HomeView : UserControl
             {
                 _autoFixBoard = ui.Schedule;
                 _autoFixHard = ui.BestHard;
-                _vm.FindFixSuggestions();
+                _vm.FindFixSuggestions(auto: true);
             }
         }
         var diag = ui.CoverageDiag;
@@ -181,7 +181,7 @@ public sealed partial class HomeView : UserControl
             wish: firstWish is null ? null : $"{StaffName(firstWish.Staff)} {DayText.Short(ui.StartDate, firstWish.Day)}",
             relax: relax0 is null ? null : NextActionGuide.RelaxTargetOf(relax0.Result, ui, AnalysisView.LabelOf) is { } rt ? $"{rt.Name} {rt.Span}" : null,
             tour: tourNext);
-        var wishLabel = AnalysisTriage.HomeTargetLabel("ぶつかっている希望を見る", nextTarget, null);
+        var wishLabel = AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, nextTarget, null);
         var hardNow = AnalysisTriage.HardText(ui.Breakdown, ui.BestHard);
         if (kind == HomePlanKind.Running)
         {
@@ -194,7 +194,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiPrimaryContainerBrush"; fg = "MagiOnPrimaryContainerBrush";
             sentence = "";
             bigLabel = "勤務表をつくる"; bigEnabled = true;
-            helperLabel = "下書きをつくる（希望と期間の制約を先に埋める）";
+            helperLabel = "希望と期間の制約で下書きをつくる";
             _bigAction = _vm.RunV6FullOptimize; _helperAction = () => _vm.GenerateSmartInitial();
         }
         else if (kind == HomePlanKind.Draft)
@@ -370,7 +370,10 @@ public sealed partial class HomeView : UserControl
         ProgressText.Foreground = fgBrush;
 
         BigButton.Visibility = Vis(Has(HomeSection.Primary) && bigEnabled);
-        BigButton.Content = bigLabel;
+        BigButton.Content = new TextBlock { Text = bigLabel, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 };
+        var sameNotice = Has(HomeSection.Primary) ? _vm.SameResultNoticeNow() : null;
+        SameResultText.Text = sameNotice ?? "";
+        SameResultText.Visibility = Vis(sameNotice is not null);
         BigButton.IsEnabled = editable;
         // HELPER: 段に補助が無ければ「表で全体を見る」。
         HelperButton.Visibility = Vis(Has(HomeSection.Helper));

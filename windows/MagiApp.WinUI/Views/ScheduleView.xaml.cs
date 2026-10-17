@@ -1676,6 +1676,21 @@ public sealed partial class ScheduleView : UserControl
             var why = FixSearchText.NoFixReasons(ui, focus, _vm.StaffCellLimits, _vm.NeedCellLimits);
             IReadOnlyList<string> lines = target is { Staff: null } ? new[] { CellSheetLogic.NoNeedFixLine(label, target, ui.FixTimedOut), FixSearchText.NoFixScope } : why.Lines;
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
+            if (ui.FixEmptyRepeatKey == focus.Key)
+            {
+                host.Children.Add(new TextBlock { Text = AnalysisTriage.RepeatedEmptyLine, TextWrapping = TextWrapping.Wrap });
+                // 全面の一覧は下に希望・設定への行き先を並べる＝ボタンはそれが無いセルのシートだけ。
+                if (quick && AnalysisTriage.RepeatedEmptyActionOf(why.WishRelated, ui.SettingIssues.Count > 0) is { } rea)
+                {
+                    var reb = new Button { Content = AnalysisTriage.RepeatedEmptyActionLabel(rea), MinHeight = 48 };
+                    reb.Click += (_, _) =>
+                    {
+                        hide();
+                        _goEditLanding?.Invoke(rea == RepeatedEmptyAction.Wishes ? new EditLanding(0, null, WishStaff: focus.Staff, Day: focus.Day) : new EditLanding(2, why.SettingsSection), Return());
+                    };
+                    host.Children.Add(reb);
+                }
+            }
             if (quick)
             {
                 var nfSingle = problems is { Count: 1 } ? LabelOf(problems[0]) : null;
