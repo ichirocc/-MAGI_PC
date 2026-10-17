@@ -135,6 +135,9 @@ public sealed record AnalysisTriage(
 
     public const string RepeatedEmptyLine = "続けて案がありませんでした";
     public const string NoFixTitle = "案はありません";
+    /// <summary>[3.714.0] 案なしの主ボタン（残っている問題の巡回の先頭へ）と閉じる。</summary>
+    public const string NoFixListButton = "問題一覧";
+    public const string NoFixCloseButton = "閉じる";
     public const string NoFixLine = "設定か希望の確認が必要です";
 
     /// <summary>案なしの説明の 1 行: 続けて空なら続けて空の行、そうでなければ定型の 1 行（3.711.0 の行を残す）。</summary>

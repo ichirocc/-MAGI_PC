@@ -84,7 +84,8 @@ public sealed partial class SettingsView : UserControl
             var ui = _vm.Ui;
             WorkersSlider.Value = ui.Workers;
             WorkersLabel.Text = $"同時に計算する数 {ui.Workers}";
-            BudgetLabel.Text = CellSheetLogic.BudgetStatusLine(ui.BudgetSec, MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec);
+            BudgetLabel.Text = CellSheetLogic.BudgetShortLine(ui.BudgetSec);
+            ToolTipService.SetToolTip(BudgetLabel, CellSheetLogic.BudgetStatusLine(ui.BudgetSec, MagiEngine.V6.V6FinalPort.PostReserveSec + MagiEngine.V6.V6FinalPort.ChainReserveSec));
             var saveFailed = ui.SaveState == SaveState.Failed;
             SaveFailedBanner.Visibility = saveFailed ? Visibility.Visible : Visibility.Collapsed;
             SaveFailedBannerText.Text = CellSheetLogic.HomeSaveFailedLine;

@@ -51,9 +51,9 @@ public sealed record CellStatus(CellSeverity Severity, string Text, string Cause
 /// <summary>巡回の 1 件＝必須違反 1 件（族・職員・関連セルの日・見出し）。1 セルが 2 件に属せば 2 回止まる（<c>report.hard</c> の数え方と同じ）。
 /// セルで辿れる族だけ（c3n＝並びの全日、c3w＝前日＋希望の翌日、pref/groupViol/extWish＝1 セル）。人員不足は日ヘッダから＝件数は別に添える。Kotlin <c>TourItem</c>。</summary>
 /// <summary>勤務表タブの「必須 N ▼」一覧の 1 行。TourAt は HardViolationItems の何件目か（行を押すと巡回と同じ移動でそのセルを開く）。</summary>
-public sealed record HardListRow(int TourAt, string Name, string Heading, bool WishOnly);
+public sealed record HardListRow(int TourAt, string Name, string Heading, bool WishOnly, string? Line = null);
 
-public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading)
+public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading, IReadOnlyList<string>? Syms = null, string DayMd = "")
 {
     public (int I, int J) Cell => (Staff, Days[0]);
 }
@@ -501,13 +501,43 @@ public static class CellSheetLogic
                 }
             }
         }
-        return outMap.Values.OrderBy(t => t.Days[0]).ThenBy(t => t.Staff).ToList();
+        return outMap.Values.Select(t => t with { Syms = t.Days.Select(d => Sym(s[t.Staff][d])).ToList(), DayMd = DayText.Short(state.StartDate, t.Days[0]) })
+            .OrderBy(t => t.Days[0]).ThenBy(t => t.Staff).ToList();
     }
+
+    /// <summary>[3.714.0] 問題一覧の 1 行の上限（デザイン例「10/10のAｱが1人不足」「福澤 10/1 希望の前日」）。</summary>
+    public const int ProblemLineMax = 18;
+
+    /// <summary>[3.714.0] 問題 1 件を 18 字までの 1 行に（族ごとの型）。名前と日を前に付けて収まらなければ型だけ、それでも長ければ末尾を「…」。Kotlin <c>problemLine</c>。</summary>
+    public static string ProblemLine(string family, string name, string day, string sym, string? nextSym = null, int n = 1, Func<string, string>? labelOf = null)
+    {
+        string Fit(string prefix, string body) { var full = $"{prefix} {body}"; return !string.IsNullOrWhiteSpace(prefix) && full.Length <= ProblemLineMax ? full : body; }
+        var line = family switch
+        {
+            "covU" => $"{day}の{sym}が{n}人不足",
+            "c3w" => Fit(name, $"{day} 希望の前日"),
+            "low" => Fit(name, $"{sym}があと{n}回不足"),
+            "high" => Fit(name, $"{sym}が{n}回多い"),
+            "c3n" => Fit(name, $"{sym}の翌日が{nextSym ?? "?"}です"),
+            "pref" => Fit($"{name} {day}", "希望が重なっています"),
+            "extWish" => Fit($"{name} {day}", "拡張希望と違う勤務"),
+            "groupViol" => Fit($"{name} {day}", "担当外の勤務"),
+            _ => Fit($"{name} {day}", labelOf?.Invoke(family) ?? "必須違反"),
+        };
+        return line.Length <= ProblemLineMax ? line : line[..(ProblemLineMax - 1)] + "…";
+    }
+
+    /// <summary>巡回の項目の 1 行（ProblemLine、並びは先頭の 2 日の勤務）。</summary>
+    public static string TourProblemLine(TourItem it, string name) =>
+        ProblemLine(it.Family, name, it.DayMd, it.Syms is { Count: > 0 } ss ? ss[0] : "?", it.Syms is { Count: > 1 } s2 ? s2[1] : null);
 
     /// <summary>必須違反の一覧（巡回の項目を 1 件 1 行）。希望どうしのぶつかり（関連セルがすべて wishSelfKeys）は「希望のまま」を付けて後ろへ。</summary>
     public static IReadOnlyList<HardListRow> HardViolationRows(IReadOnlyList<TourItem> items, IReadOnlyList<string> staffNames, IReadOnlySet<string> wishSelfKeys) =>
-        items.Select((it, at) => new HardListRow(at, it.Staff >= 0 && it.Staff < staffNames.Count ? staffNames[it.Staff] : $"職員{it.Staff + 1}",
-            it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")))).OrderBy(r => r.WishOnly).ToList();
+        items.Select((it, at) =>
+        {
+            var name = it.Staff >= 0 && it.Staff < staffNames.Count ? staffNames[it.Staff] : $"職員{it.Staff + 1}";
+            return new HardListRow(at, name, it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")), TourProblemLine(it, name));
+        }).OrderBy(r => r.WishOnly).ToList();
 
     /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
     public static string? TourHeading(IReadOnlyList<TourItem> items, int at) =>
@@ -1293,6 +1323,21 @@ public static class CellSheetLogic
     }
 
     /// <summary>セルのシートの問題の一文（族ごと）。前日・翌日との並びは並びの族の説明。</summary>
+    /// <summary>[3.714.0] セルのシートのルールの 1 行（22 字まで）。説明の文 CellProblemSentence は「詳しく見る」の中。Kotlin <c>cellRuleLine</c>。</summary>
+    public static string CellRuleLine(string fam, Func<string, string> labelOf) => fam switch
+    {
+        "c3n" => "禁止の並びに当たります",
+        "c3mn" => "回避の並びに当たります",
+        "c3w" => "希望の前日ルールに当たります",
+        "pref" => "本人の希望と違う勤務です",
+        "extWish" => "拡張希望で除いた勤務です",
+        "groupViol" => "グループが担当しない勤務です",
+        "covU" => "この日の人数が足りません",
+        "covO" => "この日の人数が多すぎます",
+        _ => $"{labelOf(fam)}に当たります",
+    };
+    public const string CellDetailButton = "詳しく見る";
+
     public static string CellProblemSentence(string fam, Func<string, string> labelOf) => fam switch
     {
         "c3n" => "前後の勤務との組み合わせが禁止条件に該当しています",
@@ -1478,8 +1523,8 @@ public static class CellSheetLogic
         text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>必須違反の一覧の見出し（単位ごとの件数を添える）と、先頭の主ボタンの語（G2-3）。</summary>
-    public static string HardListTitle(string hardText) => $"必須違反の一覧（{hardText}）";
-    public const string HardListStartButton = "上から順に見る";
+    public static string HardListTitle(string hardText) => $"残っている問題 {hardText}";
+    public const string HardListStartButton = "直し方を見る";
 
     /// <summary>セルの確認シートの題（S-1）。</summary>
     public const string CellSheetTitle = "このマスの確認";
@@ -1645,7 +1690,7 @@ public static class CellSheetLogic
     public static string HomeDraftStatus(string hard, long bestHard) =>
         "下書きができました" + (bestHard > 0L ? $"（必須 {hard}）" : "") + "。「勤務表をつくる」で仕上げます";
 
-    public const string HomeMakeHeadline = "ボタンひとつで、勤務表をつくります";
+    public const string HomeMakeHeadline = "まだ作っていません";
     public const string HomeHard0Headline = "必須は満たしています";
     public const string HomeMonthHeadline = "今月の判断";
     public const string HomeScheduleHelper = "表で全体を見る";
@@ -1655,7 +1700,7 @@ public static class CellSheetLogic
     public const string HomeSoftNote = "要調整は分析で確認";
     public const string HomeOthersButton = "ほかの問題を見る";
     public const string InterruptedTitle = "前回の勤務表づくりは途中で止まりました";
-    public const string EmptyStateTitle = "勤務表を開く";
+    public const string EmptyStateTitle = "データを開く";
 
     /// <summary>未読込の補足。読込中は 1 文だけ。</summary>
     public static string EmptyStateSubtitle(bool loading) => loading ? "読み込んでいます…" : "保存データ・サンプル・新規から選べます";
@@ -1955,7 +2000,13 @@ public static class CellSheetLogic
     /// <summary>禁止の並びの行の下の 1 行: 「10/9 Dﾃ · 10/10 Aｱ」。</summary>
     public static string ForbiddenRunCellsLine(IEnumerable<(string Day, string Symbol)> cells) => string.Join(" · ", cells.Select(c => $"{c.Day} {c.Symbol}"));
 
-    public const string SettingsTimeTitle = "勤務表をつくる時間";
+    /// <summary>[3.714.0] 設定タブの見出しと組む時間の 1 行（仕上げの秒数と注記は「詳しく」の中）。</summary>
+    public const string SettingsHeading = "設定";
+    public const string BudgetChangeButton = "組む時間を変える";
+    public static string BudgetShortLine(int sec) => $"組む時間 {BudgetText(sec)}";
+    /// <summary>[3.714.0] 編集タブの見出しと 1 行。</summary>
+    public const string EditTabHeading = "条件";
+    public const string EditTabLine = "希望・人数・基本";
 
     /// <summary>名前・記号が引けないときの共通の表示（番号を見せない）。</summary>
     public const string UnknownLabel = "—";
