@@ -61,11 +61,11 @@ public class Review3698Test
     [Fact]
     public void HeadlinePerStage()
     {
-        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List, "2026-10-01"));
-        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.GuidedFix, "2026-10-01"));
-        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.Wishes, ""));
-        Assert.Equal(CellSheetLogic.HomeMakeHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.Make, "2026-10-01"));
-        Assert.Equal(CellSheetLogic.HomeMonthHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.PreDist, "2026-10-01"));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.List));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.GuidedFix));
+        Assert.Equal("今月の判断", CellSheetLogic.HomeHeadline(HomePlanKind.Wishes));
+        Assert.Equal(CellSheetLogic.HomeMakeHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.Make));
+        Assert.Equal(CellSheetLogic.HomeMonthHeadline, CellSheetLogic.HomeHeadline(HomePlanKind.PreDist));
         Assert.DoesNotContain("②", CellSheetLogic.HomeMakeHeadline);
         Assert.DoesNotContain("③", CellSheetLogic.HomeHard0Headline);
     }
