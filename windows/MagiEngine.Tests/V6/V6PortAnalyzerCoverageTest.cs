@@ -510,5 +510,5 @@ public class V6PortAnalyzerCoverageTest
     }
 
     [Fact]
-    public void floorCountsUpperZeroIsOff() => Assert.False(PolishGate.FloorCountsUpperZero);
+    public void floorCountsUpperZeroIsOn() => Assert.True(PolishGate.FloorCountsUpperZero);
 }
