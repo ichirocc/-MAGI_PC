@@ -20,17 +20,18 @@
         <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
             <TextBlock Text="勤務表をつくる時間" FontSize="20" FontWeight="SemiBold" />
 
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="WorkersLabel" Text="並列数" />
-                <Slider x:Name="WorkersSlider" Minimum="1" Maximum="16" StepFrequency="1"
-                        ValueChanged="OnWorkersChanged" />
+            <!-- [Android 3.706.0] 保存に失敗している間だけ、時間のカードの上で直す（データ欄の同じ文は隠す）。 -->
+            <StackPanel x:Name="SaveFailedBanner" Spacing="8" Visibility="Collapsed">
+                <TextBlock x:Name="SaveFailedBannerText" TextWrapping="Wrap" FontWeight="Bold" Foreground="{StaticResource MagiErrorBrush}" />
+                <Button x:Name="SaveFailedRetryButton" Content="もう一度保存する" Click="OnRetrySaveClick" HorizontalAlignment="Stretch" MinHeight="48"
+                        Style="{StaticResource AccentButtonStyle}" />
             </StackPanel>
 
-            <StackPanel Spacing="4">
-                <TextBlock x:Name="BudgetLabel" Text="組む時間" />
-                <Slider x:Name="BudgetSlider" Minimum="10" Maximum="300" StepFrequency="10"
-                        TickFrequency="30" TickPlacement="BottomRight" IsThumbToolTipEnabled="True"
-                        ValueChanged="OnBudgetChanged" />
+            <!-- [Android 3.706.0] 状態の 1 行と「組む時間を変える」（候補はダイアログ。既定 60 秒・範囲 10〜300 秒は不変）。 -->
+            <StackPanel Spacing="8">
+                <TextBlock x:Name="BudgetLabel" Text="組む時間" TextWrapping="Wrap" />
+                <Button x:Name="ChangeBudgetButton" Content="組む時間を変える" Click="OnChangeBudgetClick" HorizontalAlignment="Stretch" MinHeight="48"
+                        Style="{StaticResource AccentButtonStyle}" />
             </StackPanel>
 
             <!-- [Android 3.698.0 / C# だけ] ホームの 3 ボタン（つくる・バックグラウンド・やめる）は主ボタンと下部バーに重複するので外し、背景実行だけここへ。 -->
@@ -39,21 +40,6 @@
                 <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                            Text="ほかのタブで編集しながら組めます。結果は今の勤務表より良いときだけ置き換えます。ウィンドウを閉じると止まります。" />
             </StackPanel>
-
-            <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
-                          Toggled="OnLeftHandToggled" />
-
-            <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ最適化" OnContent="ON" OffContent="OFF"
-                          Toggled="OnSoftPolishToggled" />
-
-            <!-- ネイティブ加速/パリティ照合はKotlin原本と異なりこの移植では常に対象外
-                 （magi_native.cpp相当のC++加速層が無く、計算は最初からマネージドC#のみ）。
-                 設定データの往復互換のためトグル自体は保持し、表示専用として無効化する。 -->
-            <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
-                          OnContent="ON" OffContent="OFF" IsEnabled="False" />
-
-            <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ"
-                          OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
 
             <!-- [Android 3.615.0同期] 探索スイッチ群を 2 択 1 つに統合（ユーザー決定）。 -->
             <ComboBox x:Name="SearchStrengthCombo" Header="探す強さ" SelectionChanged="OnSearchStrengthChanged">
@@ -75,7 +61,20 @@
             <Expander Header="詳細設定（上級者向け）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <StackPanel Spacing="8">
                     <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                               Text="最適化方式の調整。一般の運用では触りません。" />
+                               Text="計算方式・同時に計算する数・仕上げの調整。一般の運用では触りません。" />
+                    <StackPanel Spacing="4">
+                        <TextBlock x:Name="WorkersLabel" Text="同時に計算する数" />
+                        <Slider x:Name="WorkersSlider" Minimum="1" Maximum="16" StepFrequency="1"
+                                ValueChanged="OnWorkersChanged" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ" OnContent="ON" OffContent="OFF"
+                                  Toggled="OnSoftPolishToggled" />
+                    <!-- ネイティブ加速はこの移植では常に対象外（C++加速層が無い）。設定データの往復互換のため表示専用で保持。 -->
+                    <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
+                                  OnContent="ON" OffContent="OFF" IsEnabled="False" />
+                    <!-- [Android 3.706.0 S8 / C# だけ] 禁止連続の事前フィルタは出さない（設定値と配線は保持）。 -->
+                    <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ" Visibility="Collapsed"
+                                  OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
                     <StackPanel Spacing="4">
                         <TextBlock Text="最適化方式" />
                         <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"
@@ -100,6 +99,9 @@
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                        Text="シフトの記号色・違反枠の色を変更できます。「既定に戻す」で手動設定を消して既定色へ戻ります。" />
 
+            <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
+                          Toggled="OnLeftHandToggled" />
+
             <StackPanel Spacing="4">
                 <TextBlock Text="シフトの表示色" Style="{StaticResource MagiTitleSmallTextStyle}" />
                 <StackPanel x:Name="ShiftColorList" Spacing="4" />
@@ -116,7 +118,6 @@
             </StackPanel>
 
             <TextBlock Text="データ" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <TextBlock x:Name="DataStatusText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
             <!-- 自動保存の状態（Kotlin DataCard、Android 3.529.0）。保存済みのときは出さない。 -->
             <TextBlock x:Name="SaveStateText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
             <Button x:Name="RetrySaveButton" Content="もう一度保存する" Click="OnRetrySaveClick" HorizontalAlignment="Stretch" MinHeight="48" Visibility="Collapsed" />

@@ -1351,12 +1351,21 @@ public static class CellSheetLogic
 
     // ===== 自動と担当者の分担（2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」） =====
 
+    /// <summary>組む時間の表記（3.706.0 S2: 作成前の要点と設定タブで共有）。60 の倍数は「N分」、それ以外は「N秒」。</summary>
+    public static string BudgetText(int sec) => sec % 60 == 0 ? $"{sec / 60}分" : $"{sec}秒";
+
+    /// <summary>設定タブの組む時間の状態行（3.706.0 S2）。</summary>
+    public static string BudgetStatusLine(int sec, int reserveSec) => $"組む時間 {BudgetText(sec)}（＋仕上げと玉突き {reserveSec}秒）";
+
+    /// <summary>「組む時間を選ぶ」の候補（3.706.0 S1）。10秒・1〜5分に、範囲内へ丸めた今の値を必ず含めて昇順。既定・範囲は変えない（HF77）。</summary>
+    public static IReadOnlyList<int> BudgetPresets(int currentSec) =>
+        new[] { 10, 60, 120, 180, 240, V6FinalPort.MaxOptimizeSec, Math.Clamp(currentSec, 10, V6FinalPort.MaxOptimizeSec) }.Distinct().OrderBy(x => x).ToList();
+
     /// <summary>勤務表を作成する画面の要点（作成前）を 1 行に。時間は設定値（探索）と固定の仕上げ枠。</summary>
     public static string PreRunPlanLine(string startDate, int days, int staff, int budgetSec, int reserveSec)
     {
         var period = days <= 0 || string.IsNullOrWhiteSpace(startDate) ? "" : DayText.Range(startDate, 0, days - 1) + "・";
-        var search = budgetSec % 60 == 0 ? $"{budgetSec / 60}分" : $"{budgetSec}秒";
-        return $"{period}{staff}人・組む時間 {search}（＋仕上げ {reserveSec}秒）。開始後は一手ごとの確認はしません";
+        return $"{period}{staff}人・組む時間 {BudgetText(budgetSec)}（＋仕上げ {reserveSec}秒）。開始後は一手ごとの確認はしません";
     }
 
     /// <summary>登録条件の 1 行（3.704.0 R-4: 節ごとの件数を並べる）。<paramref name="overCaps"/>＝希望が個人の上限を超える組（作成しても残る）。</summary>
