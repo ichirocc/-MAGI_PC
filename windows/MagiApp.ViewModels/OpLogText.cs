@@ -76,8 +76,15 @@ public static class OpLogText
 
     /// <summary>起点が対象も職員も持たないとき（ホームの「変更案を探す」）。</summary>
     public const string FixOriginAll = "全体";
-    public static string FixSearchStartLine(string origin) => $"案を探す: {origin}";
-    public static string FixSearchEndLine(int count, long elapsedMs) => count > 0 ? $"案: {count}件（{Sec(elapsedMs)}秒）" : $"案: なし（{Sec(elapsedMs)}秒）";
+    /// <summary><paramref name="auto"/>＝作成の完了で自動に走った探索。利用者の操作と分け、迷いの指標（<see cref="Hesitation"/>）に数えない。</summary>
+    public static string FixSearchStartLine(string origin, bool auto = false) => auto ? $"案を探す（自動）: {origin}" : $"案を探す: {origin}";
+    public static string FixSearchEndLine(int count, long elapsedMs, bool auto = false)
+    {
+        var head = auto ? "案（自動）: " : "案: ";
+        return count > 0 ? $"{head}{count}件（{Sec(elapsedMs)}秒）" : $"{head}なし（{Sec(elapsedMs)}秒）";
+    }
+    /// <summary>前回の作成と同じ設定から同じ盤面が出たとき。</summary>
+    public static string SameResultLine(long boardKey) => $"同じ結果（盤面指紋 {Hex16(boardKey)}）";
 
     public static string PreviewOpenLine(string label) => $"変更の確認: 開く {label}";
     public static string PreviewDismissLine(string label) => $"変更の確認: 今は変更しない {label}";

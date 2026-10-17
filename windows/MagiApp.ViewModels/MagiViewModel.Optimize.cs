@@ -357,6 +357,7 @@ public sealed partial class MagiViewModel
             _lastTopHardFamily = adoptedReport.Hard > 0 ? TopHardFamilyJp(adoptedReport.Breakdown) : null;
             // [3.694.0] 盤面指紋は採用後の盤面（維持なら入力・採用なら結果＝adoptedReport と同じ盤面）。開始行の指紋と並べて入力の同一性を読む。
             LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase}) ・ 盤面指紋={(_currentSchedule is { } cs ? OpLogText.Hex16(BoardKey(cs)) : OpLogText.Hex16(0L))}");
+            NoteRunResult(adoptedReport.Hard);
             if (s5 is not null)
             {
                 _cancelOutcomeCtx = _state is { } cst && _currentSchedule is { } csch ? new TrialCtx(cst, BoardKey(csch)) : null;

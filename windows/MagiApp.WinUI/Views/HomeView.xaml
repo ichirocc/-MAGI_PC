@@ -76,6 +76,7 @@
                                    Style="{StaticResource MagiBodyMediumTextStyle}" />
                     </Grid>
                     <!-- PRIMARY: 塗りの主ボタンは画面に 1 つ。 -->
+                    <TextBlock x:Name="SameResultText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Visibility="Collapsed" />
                     <Button x:Name="BigButton" Click="OnBigClick" HorizontalAlignment="Stretch" MinHeight="56" Style="{StaticResource AccentButtonStyle}" />
                     <!-- HELPER: 段に補助が無ければ「表で全体を見る」。 -->
                     <Button x:Name="HelperButton" Click="OnHelperClick" HorizontalAlignment="Stretch" MinHeight="48" />

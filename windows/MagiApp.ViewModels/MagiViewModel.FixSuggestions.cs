@@ -39,11 +39,28 @@ public sealed partial class MagiViewModel
     private long _fixBoardKey;
     private long _fixStateKey;
     private string _fixSearchKey = "";
+    private EmptySearchStreak? _emptyStreak;
+    /// <summary>直前に完了した作成の（状態指紋, 結果の盤面指紋）。同じ組が続けば「前回と同じ結果」を出す。</summary>
+    private (long State, long Board)? _lastRunKeys;
+
+    private void NoteRunResult(int hard)
+    {
+        if (_state is not { } st || _currentSchedule is not { } sc) return;
+        var keys = (StateKey(st), BoardKey(sc));
+        var same = AnalysisTriage.IsSameRunResult(_lastRunKeys, keys);
+        _lastRunKeys = keys;
+        if (same) LogOp("I", OpLogText.SameResultLine(keys.Item2));
+        Ui.SameResult = same ? new SameResultNote(hard, keys.Item1, Ui.Schedule) : null;
+    }
+
+    /// <summary>ホームに出す「前回と同じ結果」の 1 行（今の盤面と設定が印と同じときだけ。null＝出さない）。</summary>
+    public string? SameResultNoticeNow() =>
+        _state is { } st && AnalysisTriage.SameResultVisible(Ui.SameResult, StateKey(st), Ui.Schedule) ? AnalysisTriage.SameResultNotice(Ui.SameResult!.Hard) : null;
 
     /// <param name="quick">セルのシート（締切 <see cref="CellSheetLogic.FixSearchQuickMs"/>＝3 秒。手は 1 件でよい。8 秒待たせると答えが無いときも長い＝3.646.0 実機報告）。
     /// ホーム・分析は <see cref="CellSheetLogic.FixSearchMs"/>＝8 秒。</param>
     /// <param name="allDays">同じ勤務の人員不足の日々をまとめて見る（Kotlin 3.673.0）。対象は <see cref="CellSheetLogic.MultiNeedTarget"/>。</param>
-    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false)
+    public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false, bool auto = false)
     {
         var st = _state;
         if (st is null) return;
@@ -68,7 +85,7 @@ public sealed partial class MagiViewModel
         Ui.FixCancelledKey = "";
         var cts = new CancellationTokenSource();
         _fixCts = cts;
-        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick, allDays);
+        LastFindFixSuggestionsTask = FindFixSuggestionsCoreAsync(st, snap, focusStaff, focusShift, focusName, focusKey, seq, cts.Token, exceptStaff, day, quick, allDays, auto);
     }
 
     /// <summary>1手の候補・「探索済み」・下限判定の材料を消す（盤面が変わった／使えなくなったとき。Kotlin の各リセット箇所と同じ）。</summary>
@@ -94,7 +111,7 @@ public sealed partial class MagiViewModel
 
     private async Task FindFixSuggestionsCoreAsync(
         MagiState st, int[][] snap, int? focusStaff, int? focusShift, string focusName, string focusKey, long seq, CancellationToken ct,
-        int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false)
+        int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false, bool auto = false)
     {
         try
         {
@@ -105,7 +122,8 @@ public sealed partial class MagiViewModel
             var target = exceptStaff is null ? CellSheetLogic.PanelTarget(Ui, new FixFocus(focusStaff, focusShift, day, AllDays: allDays), StaffCellLimits, NeedCellLimits) : null;
             // [3.697.0] 起点は画面の見出しと同じ語（対象＝FixTargetLabel、職員＝氏名、どちらも無ければ全体）。
             var searchStartMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            LogOp("I", OpLogText.FixSearchStartLine(target is { } tg ? CellSheetLogic.FixTargetLabel(tg, OpSy(tg.Shift), st.StartDate) : focusName.Length == 0 ? OpLogText.FixOriginAll : focusName));
+            var origin = target is { } tg ? CellSheetLogic.FixTargetLabel(tg, OpSy(tg.Shift), st.StartDate) : focusName.Length == 0 ? OpLogText.FixOriginAll : focusName;
+            LogOp("I", OpLogText.FixSearchStartLine(origin, auto));
             var board = snap.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
             FixTierView? tiers = null;
             var labelOf = FamilyLabelOf;
@@ -140,7 +158,7 @@ public sealed partial class MagiViewModel
             if (curSched is null || curSt is null || BoardKey(curSched) != BoardKey(snap) || StateKey(curSt) != StateKey(st))
             {
                 Ui.FixSearching = false;
-                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey, exceptStaff, day, quick, allDays);
+                if (curSched is not null && curSt is not null) FindFixSuggestions(focusStaff, focusShift, focusKey, exceptStaff, day, quick, allDays, auto);
                 return;
             }
             Ui.FixSuggestions = list;
@@ -150,7 +168,9 @@ public sealed partial class MagiViewModel
             Ui.FixFocusName = focusName;
             Ui.FixSearched = focusName.Length == 0;
             Ui.FixDoneKey = focusKey;
-            LogOp("I", OpLogText.FixSearchEndLine(list.Count, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - searchStartMs));
+            _emptyStreak = AnalysisTriage.NextEmptySearchStreak(_emptyStreak, $"{focusKey}|{origin}", BoardKey(snap), StateKey(st), list.Count);
+            Ui.FixEmptyRepeatKey = (_emptyStreak?.Count ?? 0) >= 2 ? focusKey : null;
+            LogOp("I", OpLogText.FixSearchEndLine(list.Count, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - searchStartMs, auto));
             // [S6 §8] 全体の 1 手探索が必須を減らす候補なしで終わったら、背景で設定の壁を探す。
             if (focusName.Length == 0 && !list.Any(x => x.DeltaHard < 0) && Ui.BestHard > 0 && RelaxTrialEnabled) StartRelaxTrial();
         }

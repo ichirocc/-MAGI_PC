@@ -120,6 +120,10 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>[Android 3.612.0 思考誘導S0] 盤面全体の1手探索を今の盤面で終えたか（未探索と「探して0件」を分ける）。</summary>
     [ObservableProperty] private bool fixSearched;
+    /// <summary>同じ依頼が続けて案 0 件で終わったときの依頼の鍵（<c>FixFocus.Key</c>、null＝続いていない）。</summary>
+    [ObservableProperty] private string? fixEmptyRepeatKey;
+    /// <summary>前回の作成と同じ設定から同じ盤面が出た（<see cref="AnalysisTriage.SameResultVisible"/> で照合）。</summary>
+    [ObservableProperty] private SameResultNote? sameResult;
 
     /// <summary>[Android 3.612.0 思考誘導S4] 直近の実行で長く改善せず採用盤面にも残った必須族（盤面を変えたら空）。</summary>
     [ObservableProperty] private IReadOnlyList<string> stalledHardFamilies = Array.Empty<string>();
