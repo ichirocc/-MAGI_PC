@@ -52,7 +52,18 @@ public sealed partial class MagiViewModel
         var same = AnalysisTriage.IsSameRunResult(_lastRunKeys, keys);
         _lastRunKeys = keys;
         if (same) LogOp("I", OpLogText.SameResultLine(keys.Item2));
-        Ui.SameResult = same ? new SameResultNote(hard, keys.Item1, Ui.Schedule) : null;
+        var floor = 0;
+        if (same && hard > 0) { try { floor = PreRunCheck.Build(st, sc).FloorCount; } catch (Exception) { floor = 0; } }
+        Ui.SameResult = same ? new SameResultNote(hard, keys.Item1, Ui.Schedule, floor) : null;
+    }
+
+    /// <summary>下部の作成ボタンの出し方（Android <c>PrimaryCommandButton</c> と同じ判定）。</summary>
+    public RerunFooter RerunFooterNow(bool primaryElsewhere)
+    {
+        var note = Ui.SameResult;
+        var demoted = Ui.HasResult && note is not null && _state is { } st
+            && AnalysisTriage.RerunDemoted(note.Hard, note.Floor, AnalysisTriage.SameResultVisible(note, StateKey(st), Ui.Schedule));
+        return AnalysisTriage.RerunFooterOf(demoted, primaryElsewhere, Ui.FixSearched && !Ui.FixSuggestions.Any(f => f.DeltaHard < 0));
     }
 
     /// <summary>ホームに出す「前回と同じ結果」の 1 行（今の盤面と設定が印と同じときだけ。null＝出さない）。</summary>

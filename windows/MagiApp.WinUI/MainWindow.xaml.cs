@@ -301,6 +301,12 @@ public sealed partial class MainWindow : Window
             || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None)
             // 編集タブの月次条件は見出しの主が Rerun のときだけ塗り（Android 3.707.0 Q10）。
             || (_currentTag == "edit" && _tabCache.TryGetValue("edit", out var ec) && ec is EditView ev && CellSheetLogic.EditBarSecondary(ev.HeaderPlanNow())));
+        // [3.721.0] 再作成しても同じ結果になる間は、塗りの主を変更案（案が無ければ問題一覧）へ譲る。
+        var footer = stopping ? (secondary ? RerunFooter.Outlined : RerunFooter.Filled) : _vm.RerunFooterNow(secondary);
+        secondary = footer != RerunFooter.Filled;
+        FixPrimaryButton.Visibility = footer is RerunFooter.FixSearch or RerunFooter.ProblemList ? Visibility.Visible : Visibility.Collapsed;
+        FixPrimaryButton.Content = footer == RerunFooter.FixSearch ? CellSheetLogic.PeekSearchButton : AnalysisTriage.NoFixListButton;
+        _footer = footer;
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];
@@ -361,6 +367,14 @@ public sealed partial class MainWindow : Window
             SelectTab("home");
             if (_tabCache.TryGetValue("home", out var h) && h is HomeView hv) _ = hv.ShowGuidedFixAsync();
         }
+    }
+
+    private RerunFooter _footer = RerunFooter.Filled;
+
+    private void OnFixPrimaryClick(object sender, RoutedEventArgs e)
+    {
+        if (_footer == RerunFooter.FixSearch) _vm.FindFixSuggestions();
+        else SelectTab("analysis");
     }
 
     private void OnUndoClick(object sender, RoutedEventArgs e) => _vm.Undo();

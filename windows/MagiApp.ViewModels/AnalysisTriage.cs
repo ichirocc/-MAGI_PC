@@ -126,6 +126,13 @@ public sealed record AnalysisTriage(
     public static string SameResultNotice(int hard) =>
         hard > 0 ? $"前回と同じ結果です。条件を変えない限り、この必須違反{hard}件は消えません。" : "前回と同じ結果です。";
 
+    /// <summary>残る必須違反がすべて「何度つくっても残る」もので、前回から何も変わっていない（<paramref name="fresh"/>＝<see cref="SameResultVisible"/>）。再作成しても同じ結果になる。</summary>
+    public static bool RerunDemoted(int hard, int floor, bool fresh) => fresh && hard > 0 && hard <= floor;
+
+    /// <summary><paramref name="primaryElsewhere"/>＝画面に別の塗りの主がある。<paramref name="noFixFound"/>＝変更案を探し終えて案が無い（問題一覧へ）。</summary>
+    public static RerunFooter RerunFooterOf(bool demoted, bool primaryElsewhere, bool noFixFound) =>
+        primaryElsewhere ? RerunFooter.Outlined : !demoted ? RerunFooter.Filled : noFixFound ? RerunFooter.ProblemList : RerunFooter.FixSearch;
+
     /// <summary>案があれば途切れる（null）。起点・盤面・設定のどれかが違えば 1 から数え直す。[3.716.0] 自動の探索（<paramref name="auto"/>）は数えも途切れさせもしない（人の操作の回数だけ）。</summary>
     public static EmptySearchStreak? NextEmptySearchStreak(EmptySearchStreak? prev, string origin, long board, long state, int found, bool auto = false)
     {
@@ -311,4 +318,7 @@ public sealed record EmptySearchStreak(string Origin, long Board, long State, in
 public enum RepeatedEmptyAction { Wishes, Settings }
 
 /// <summary>前回と同じ結果の印。出したときの盤面と状態指紋を持ち、どちらかが変われば出さない。</summary>
-public sealed record SameResultNote(int Hard, long StateKey, IReadOnlyList<IReadOnlyList<int>> Schedule);
+public sealed record SameResultNote(int Hard, long StateKey, IReadOnlyList<IReadOnlyList<int>> Schedule, int Floor = 0);
+
+/// <summary>下部の作成ボタンの出し方。FixSearch・ProblemList は「再作成」を外枠にし、隣の塗りを主にする（塗りは 1 つ＝INV-09）。</summary>
+public enum RerunFooter { Filled, Outlined, FixSearch, ProblemList }

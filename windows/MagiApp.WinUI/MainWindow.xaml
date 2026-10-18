@@ -89,10 +89,13 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Button x:Name="UndoButton" Grid.Column="0" Content="元に戻す" MinHeight="48" Visibility="Collapsed" Click="OnUndoClick" />
             <Button x:Name="RedoButton" Grid.Column="1" Content="やり直し" MinHeight="48" Visibility="Collapsed" Click="OnRedoClick" />
             <Button x:Name="MainActionButton" Grid.Column="2" MinHeight="48" HorizontalAlignment="Stretch" FontSize="16" FontWeight="SemiBold" Click="OnMainActionClick" />
+            <Button x:Name="FixPrimaryButton" Grid.Column="3" MinHeight="48" MinWidth="160" FontSize="16" FontWeight="SemiBold" Visibility="Collapsed"
+                    Background="{StaticResource MagiPrimaryBrush}" Foreground="{StaticResource MagiOnPrimaryBrush}" Click="OnFixPrimaryClick" />
         </Grid>
     </Grid>
 </Window>
