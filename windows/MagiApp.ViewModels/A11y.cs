@@ -56,7 +56,7 @@ public static class A11y
             if (extViolated) sb.Append("・拡張希望の違反");
             else sb.Append("・拡張希望（").Append(string.Join("・", extBanSyms)).Append("以外）");
         }
-        return sb.Append("、タップで変更").ToString();
+        return sb.Append("、Enterで変更").ToString();
     }
 
     /// <summary>矢印キーでの注目セルの移動（表の端で止まる）。<paramref name="di"/>/<paramref name="dj"/> は -1/0/1。注目が無ければ (0,0) から始める。</summary>

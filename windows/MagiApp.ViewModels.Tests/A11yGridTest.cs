@@ -6,16 +6,16 @@ public class A11yGridTest
     [Fact]
     public void CellDescription_plainCell()
     {
-        Assert.Equal("山田 10/1(水) 日、タップで変更", A11y.CellDescription("山田", "10/1(水)", "日", 0, false, 0, "", false, null, false));
-        Assert.Equal("山田 10/1(水) なし、タップで変更", A11y.CellDescription("山田", "10/1(水)", " ", 0, false, 0, "", false, null, false));
+        Assert.Equal("山田 10/1(水) 日、Enterで変更", A11y.CellDescription("山田", "10/1(水)", "日", 0, false, 0, "", false, null, false));
+        Assert.Equal("山田 10/1(水) なし、Enterで変更", A11y.CellDescription("山田", "10/1(水)", " ", 0, false, 0, "", false, null, false));
     }
 
     [Fact]
     public void CellDescription_allMarksInKotlinOrder()
     {
-        Assert.Equal("佐藤 10/2(木) 夜・必須・期間の制約の窓・希望未反映（希望=休）・手動固定・拡張希望の違反、タップで変更",
+        Assert.Equal("佐藤 10/2(木) 夜・必須・期間の制約の窓・希望未反映（希望=休）・手動固定・拡張希望の違反、Enterで変更",
             A11y.CellDescription("佐藤", "10/2(木)", "夜", 1, true, 2, "休", true, new[] { "夜" }, true));
-        Assert.Equal("佐藤 10/2(木) 日・要調整・希望・拡張希望（夜・準以外）、タップで変更",
+        Assert.Equal("佐藤 10/2(木) 日・要調整・希望・拡張希望（夜・準以外）、Enterで変更",
             A11y.CellDescription("佐藤", "10/2(木)", "日", 3, false, 1, "", false, new[] { "夜", "準" }, false));
         Assert.Contains("希望未反映（希望=?）", A11y.CellDescription("a", "d", "日", 0, false, 2, "", false, null, false));
     }
