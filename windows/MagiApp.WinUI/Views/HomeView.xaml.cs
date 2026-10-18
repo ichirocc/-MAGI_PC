@@ -353,6 +353,8 @@ public sealed partial class HomeView : UserControl
             {
                 var line = new TextBlock { Text = statusLines[i], TextWrapping = TextWrapping.Wrap, Foreground = fgBrush, Style = StyleOf(i == lead && kind != HomePlanKind.PreDist ? "MagiTitleMediumTextStyle" : "MagiBodyMediumTextStyle") };
                 if (statusLines[i] == CellSheetLogic.HomeSaveFailedLine) line.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                // 探索中の状態の行は読み上げる（Android 3.719.0）。
+                if (ui.Running) Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(line, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
                 StatusHost.Children.Add(line);
             }
             if (saveFailed)

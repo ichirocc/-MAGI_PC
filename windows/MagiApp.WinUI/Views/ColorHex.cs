@@ -14,9 +14,9 @@ internal static class ColorHex
     public const string DefaultHardVioHex = "#8C0009";
 
     /// <summary>要調整(ソフト違反)の既定色。[色覚アクセシビリティ, Android同期] 深紅(必須)との明度差を
-    /// 最大化したアンバーへ変更（ユーザー指示：P型/D型色覚での誤認対策）。<c>MagiAccent.Orange</c>
-    /// （シフト記号パレットのアンカー色、別の用途）とはもう同値ではない＝意図的な分離。</summary>
-    public const string DefaultSoftVioHex = "#F59E0B";
+    /// 最大化したアンバー（ユーザー指示：P型/D型色覚での誤認対策）。[Android 3.719.0] 白地で 3:1 を満たす
+    /// <c>MagiAccent.Orange</c>（#B86E00）と同値へ（旧 #F59E0B は 2.15:1）。Kotlin <c>SOFT_VIO_DEFAULT_HEX</c>。</summary>
+    public const string DefaultSoftVioHex = MagiEngine.V6.MagiAccent.Orange;
 
     public static Color Parse(string? hex, Color fallback)
     {

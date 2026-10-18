@@ -60,7 +60,8 @@
             <Border x:Name="NextActionCard" CornerRadius="{StaticResource MagiCornerSM}" Padding="20">
                 <StackPanel Spacing="14">
                     <!-- CREATION: 自動作成の結果（作成の完了＝配布できる、とは言わない）と、保存に失敗したときの「もう一度保存する」。 -->
-                    <StackPanel x:Name="CreationHost" Spacing="2" />
+                    <!-- [Android 3.719.0 読み上げ] 作成の終わり・探索中の状態・進捗は LiveSetting＝画面を触らなくてもナレーターが読む。 -->
+                    <StackPanel x:Name="CreationHost" Spacing="2" AutomationProperties.LiveSetting="Polite" />
                     <TextBlock x:Name="HeadlineText" TextWrapping="Wrap" Style="{StaticResource MagiTitleLargeTextStyle}" FontWeight="Bold" />
                     <!-- BADGES: 必須は単位ごと、2 つ目は最優先の不足（INV-07）。 -->
                     <StackPanel x:Name="BadgeHost" Orientation="Horizontal" Spacing="8" />
@@ -71,9 +72,9 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ProgressRing x:Name="ProgressSpinner" Width="22" Height="22" IsActive="True" />
+                        <ProgressRing x:Name="ProgressSpinner" Width="22" Height="22" IsActive="True" AutomationProperties.Name="勤務表を組んでいます" />
                         <TextBlock x:Name="ProgressText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
-                                   Style="{StaticResource MagiBodyMediumTextStyle}" />
+                                   Style="{StaticResource MagiBodyMediumTextStyle}" AutomationProperties.LiveSetting="Polite" />
                     </Grid>
                     <!-- [Android 3.714.0] 作成中の相談の 1 行と「開く」（相談の一覧を出す）。 -->
                     <Grid x:Name="RunningConsultRow" Visibility="Collapsed">
@@ -104,7 +105,7 @@
                     </StackPanel>
                     <StackPanel x:Name="SatisfactionHost" Spacing="6">
                         <TextBlock x:Name="ResolveText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" FontWeight="Bold" />
-                        <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" />
+                        <ProgressBar x:Name="ResolveBar" Minimum="0" Maximum="100" MinHeight="8" AutomationProperties.Name="でき具合" />
                         <TextBlock x:Name="SoftNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
                     </StackPanel>
                     <StackPanel x:Name="InfoHost" Spacing="6">

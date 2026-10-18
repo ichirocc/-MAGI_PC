@@ -107,12 +107,13 @@ public sealed record AnalysisTriage(
     /// ホームの主ボタンに最初の対象（名前・日）を前置きする（「アリフ 10/8の希望を見る」）。対象が無いとき、または
     /// 前置きで <see cref="HomeButtonMaxChars"/> を超えるときは元の文言のまま（対象は「次に確認する問題」の行が名指しする）。
     /// </summary>
-    public static string HomeTargetLabel(string @base, string? name, string? day)
+    public static string HomeTargetLabel(string @base, string? name, string? day, double fontScale = 1.0)
     {
         var t = string.Join(" ", new[] { name, day }.Where(s => !string.IsNullOrWhiteSpace(s)));
         if (t.Length == 0) return @base;
         var label = @base == HomeWishButton ? $"{t}の希望を見る" : $"{t}の{@base}";
-        return label.Length <= HomeButtonMaxChars ? label : @base;
+        // 文字拡大では 1 行に入る字数も縮む（18 字 ÷ 倍率、Android 3.719.0）。
+        return label.Length <= (int)(HomeButtonMaxChars / fontScale) ? label : @base;
     }
 
     /// <summary>前回の作成と同じ設定（状態指紋）から同じ盤面（盤面指紋）が出たか。初回は false。</summary>
