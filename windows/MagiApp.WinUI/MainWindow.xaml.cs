@@ -300,7 +300,7 @@ public sealed partial class MainWindow : Window
         var secondary = !ui.Running && (_currentTag == "home" || _currentTag == "settings"
             || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None)
             // 編集タブの月次条件は見出しの主が Rerun のときだけ塗り（Android 3.707.0 Q10）。
-            || (_currentTag == "edit" && _tabCache.TryGetValue("edit", out var ec) && ec is EditView ev && ev.Door == 0 && CellSheetLogic.EditBarSecondary(ev.HeaderPlanNow())));
+            || (_currentTag == "edit" && _tabCache.TryGetValue("edit", out var ec) && ec is EditView ev && CellSheetLogic.EditBarSecondary(ev.HeaderPlanNow())));
         var res = Application.Current.Resources;
         MainActionButton.Background = secondary ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : (Brush)res[stopping ? "MagiErrorContainerBrush" : "MagiPrimaryBrush"];
         MainActionButton.Foreground = (Brush)res[secondary ? "MagiPrimaryBrush" : stopping ? "MagiOnErrorContainerBrush" : "MagiOnPrimaryBrush"];

@@ -1280,6 +1280,9 @@ public sealed partial class MagiViewModel
             new("cons3n", "禁止の並び", st.Cons3n.Select(c => SeqRow("cons3n", c.Pattern)).ToList()),
             new("cons3m", "推奨の並び", st.Cons3m.Select(c => SeqRow("cons3m", c.Pattern)).ToList()),
             new("cons3mn", "回避の並び", st.Cons3mn.Select(c => SeqRow("cons3mn", c.Pattern)).ToList()),
+            // [3.720.0 C-2] Kotlin ConstraintsView と同じ見出し・行の文（3.542.0）。
+            new("cons3w", "希望の前日に禁止（必ず守る）",
+                (st.Cons3w ?? System.Array.Empty<C3wRow>()).Select(c => $"{c.WishKigou} の希望の前日は {c.PrevKigou} 禁止").ToList()),
             new("cons41", "グループのレンジ（1日の人数の下限〜上限）",
                 st.Cons41.Select(c => $"{c.GroupKigou}・{c.ShiftKigou}   {BoundLabel(c.L, c.U)}").ToList()),
             // [3.409.18] 「禁止/不可」はラベルとして実態（最軽量のソフト条件）と逆の約束をするため
@@ -1350,6 +1353,7 @@ public sealed partial class MagiViewModel
         "cons3n" => st.Cons3n.Select(c => c.Pattern).ToList(),
         "cons3m" => st.Cons3m.Select(c => c.Pattern).ToList(),
         "cons3mn" => st.Cons3mn.Select(c => c.Pattern).ToList(),
+        "cons3w" => (st.Cons3w ?? System.Array.Empty<C3wRow>()).Select(c => (IReadOnlyList<string>)new[] { c.WishKigou, c.PrevKigou }).ToList(),
         "cons41" => st.Cons41.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
         "cons41s" => st.Cons41s.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
         "cons42" => st.Cons42.Select(c => (IReadOnlyList<string>)new[] { c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou }).ToList(),
@@ -1451,6 +1455,22 @@ public sealed partial class MagiViewModel
         MutateConstraints(st with { Cons42s = st.Cons42s.Append(new C42Row(g1, g2, s1, s2)).ToList() });
     }
 
+    /// <summary>[3.720.0 C-2] 希望の前日に禁止（Kotlin <c>addCons3w</c>）。同じ組があれば知らせて足さない。</summary>
+    public void AddCons3w(string wishKigou, string prevKigou)
+    {
+        var st = _state;
+        if (st is null) return;
+        var rows = st.Cons3w ?? System.Array.Empty<C3wRow>();
+        if (rows.Any(r => r.WishKigou == wishKigou && r.PrevKigou == prevKigou))
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = $"「{wishKigou} の希望の前日は {prevKigou} 禁止」はすでにあるため、" + DuplicateRemedy(false);
+            return;
+        }
+        LogOp("I", $"制約追加(希望前日禁止): {wishKigou} の希望の前日は {prevKigou} 禁止");
+        MutateConstraints(st with { Cons3w = rows.Append(new C3wRow(wishKigou, prevKigou)).ToList() });
+    }
+
     public void AddCons1(string day1, string shiftKigou, string day2)
     {
         var st = _state;
@@ -1523,6 +1543,7 @@ public sealed partial class MagiViewModel
             "cons3n" => st.Cons3n.Count,
             "cons3m" => st.Cons3m.Count,
             "cons3mn" => st.Cons3mn.Count,
+            "cons3w" => st.Cons3w?.Count ?? 0,
             "cons41" => st.Cons41.Count,
             "cons42" => st.Cons42.Count,
             "cons41s" => st.Cons41s.Count,
@@ -1548,6 +1569,7 @@ public sealed partial class MagiViewModel
             "cons3n" => st with { Cons3n = Without(st.Cons3n, index) },
             "cons3m" => st with { Cons3m = Without(st.Cons3m, index) },
             "cons3mn" => st with { Cons3mn = Without(st.Cons3mn, index) },
+            "cons3w" => st with { Cons3w = Without(st.Cons3w ?? System.Array.Empty<C3wRow>(), index) },
             "cons41" => st with { Cons41 = Without(st.Cons41, index) },
             "cons42" => st with { Cons42 = Without(st.Cons42, index) },
             "cons41s" => st with { Cons41s = Without(st.Cons41s, index) },
@@ -1573,6 +1595,7 @@ public sealed partial class MagiViewModel
             "cons3n" => index < st.Cons3n.Count ? st.Cons3n[index].Pattern.ToList() : null,
             "cons3m" => index < st.Cons3m.Count ? st.Cons3m[index].Pattern.ToList() : null,
             "cons3mn" => index < st.Cons3mn.Count ? st.Cons3mn[index].Pattern.ToList() : null,
+            "cons3w" => st.Cons3w is { } w && index < w.Count ? new List<string> { w[index].WishKigou, w[index].PrevKigou } : null,
             "cons41" => index < st.Cons41.Count ? new List<string> { st.Cons41[index].GroupKigou, st.Cons41[index].ShiftKigou, st.Cons41[index].L, st.Cons41[index].U } : null,
             "cons41s" => index < st.Cons41s.Count ? new List<string> { st.Cons41s[index].GroupKigou, st.Cons41s[index].ShiftKigou, st.Cons41s[index].L, st.Cons41s[index].U } : null,
             "cons42" => index < st.Cons42.Count ? new List<string> { st.Cons42[index].G1Kigou, st.Cons42[index].S1Kigou, st.Cons42[index].G2Kigou, st.Cons42[index].S2Kigou } : null,
@@ -1639,6 +1662,9 @@ public sealed partial class MagiViewModel
                 if (V6SanityPort.RangeOrderConflict(G(2), G(3)) is not null) return "下限は上限以下にしてください。";
                 return Group(G(0), skill) ?? Shift(G(1));
             }
+            case "cons3w":
+                if (G(0).Length == 0 || G(1).Length == 0) return "希望のシフトと前日に禁止するシフトを入れてください。";
+                return Shift(G(0)) ?? Shift(G(1));
             case "cons42": case "cons42s":
             {
                 var skill = family == "cons42s";
@@ -1660,7 +1686,7 @@ public sealed partial class MagiViewModel
         string G(int i) => i < v.Count ? v[i] : "";
         static List<T> Replaced<T>(IReadOnlyList<T> l, int i, T x) => l.Select((e, idx) => idx == i ? x : e).ToList();
         // 変更でも値の重複を止める（並び4族は下の SeqAlreadyExists）。
-        if ((family is "cons1" or "cons2" or "cons41" or "cons41s" or "cons42" or "cons42s") && RowAlreadyExists(st, family, v, index)) return;
+        if ((family is "cons1" or "cons2" or "cons41" or "cons41s" or "cons42" or "cons42s" or "cons3w") && RowAlreadyExists(st, family, v, index)) return;
 
         MagiState? next;
         switch (family)
@@ -1688,6 +1714,10 @@ public sealed partial class MagiViewModel
             case "cons42s":
                 if (index < 0 || index >= st.Cons42s.Count) return;
                 next = st with { Cons42s = Replaced(st.Cons42s, index, new C42Row(G(0), G(2), G(1), G(3))) };
+                break;
+            case "cons3w":
+                if (st.Cons3w is not { } w || index < 0 || index >= w.Count) return;
+                next = st with { Cons3w = Replaced(w, index, new C3wRow(G(0), G(1))) };
                 break;
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
                 if (SeqGapRejected(family, v, update: true)) return;

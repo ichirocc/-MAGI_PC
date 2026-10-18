@@ -3,18 +3,18 @@ using MagiApp.ViewModels.Tests.TestSupport;
 namespace MagiApp.ViewModels.Tests;
 
 /// <summary>
-/// [phase9 #17] <see cref="ConstraintHelp"/> の表が制約10族のキーと過不足なく一致することを固定する
+/// [phase9 #17] <see cref="ConstraintHelp"/> の表が制約11族のキーと過不足なく一致することを固定する
 /// （Kotlin原本 <c>ConstraintHelpTest</c> と同じ狙い＝族を足して説明を書き忘れる／消した族の説明が残る、を機械的に止める）。
 /// </summary>
 public class ConstraintHelpTest
 {
     [Fact]
-    public void BodiesCoverExactlyTheTenConstraintFamilies()
+    public void BodiesCoverExactlyTheElevenConstraintFamilies()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build() };
         var keys = vm.ConstraintFamilies().Concat(vm.SkillConstraintFamilies()).Select(f => f.Key).ToList();
 
-        Assert.Equal(10, keys.Count);
+        Assert.Equal(11, keys.Count);
         Assert.Equal(keys.OrderBy(k => k), ConstraintHelp.Bodies.Keys.OrderBy(k => k));
     }
 

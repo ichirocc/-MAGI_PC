@@ -174,8 +174,14 @@
 
             <!-- ===== 職員管理（随時） ===== -->
             <StackPanel x:Name="StaffPanel" Spacing="8">
-                <TextBlock Text="職員管理" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                <TextBlock x:Name="StaffSummaryText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                <!-- [3.720.0 S-1] 見出しカード（題・状態の点）。主「職員を追加する」は下の追加ボタン（塗り）。 -->
+                <Border BorderThickness="1" BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="職員管理" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                        <TextBlock x:Name="StaffHeaderSubtitle" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:Name="StaffSummaryText" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
                 <StackPanel x:Name="StaffListHost" Spacing="2" />
 
                 <TextBlock Text="対象の職員（改名・所属変更・削除）" />
@@ -192,8 +198,8 @@
                 <ComboBox x:Name="StaffSkillCombo" HorizontalAlignment="Stretch" />
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddStaffButton" Content="追加" Click="OnAddStaffClick" />
-                    <Button x:Name="EditStaffButton" Content="改名・所属変更" Click="OnEditStaffClick" />
+                    <Button x:Name="AddStaffButton" Content="職員を追加する" Click="OnAddStaffClick" />
+                    <Button x:Name="EditStaffButton" Content="変更する" Click="OnEditStaffClick" />
                     <Button x:Name="RemoveStaffButton" Content="削除" Click="OnRemoveStaffClick" />
                 </StackPanel>
 
@@ -224,24 +230,35 @@
 
             <!-- ===== 年間マスター（制度変更時のみ） ===== -->
             <StackPanel x:Name="MasterPanel" Spacing="8">
-                <TextBlock Text="年間マスター" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                <TextBlock Text="基本の設定（制度変更時のみ）。毎月の調整は「月次条件」、人の入替は「職員管理」へ。"
-                           TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                <!-- [3.720.0 3c-1] 見出しカード（題・副題・状態の点・主「基本設定を開く」）。中身は CellSheetLogic.EditHeaderPlanOf(2)。 -->
+                <Border BorderThickness="1" BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="年間マスター" Style="{StaticResource MagiTitleMediumTextStyle}" />
+                        <TextBlock x:Name="MasterHeaderSubtitle" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
+                        <StackPanel x:Name="MasterHeaderPoints" Spacing="2" />
+                        <TextBlock x:Name="MasterHeaderNotice" Foreground="{StaticResource MagiErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+                        <Button x:Name="MasterHeaderOpenButton" Content="基本設定を開く" HorizontalAlignment="Stretch" MinHeight="48" Click="OnMasterHeaderOpenClick" />
+                    </StackPanel>
+                </Border>
 
-                <TextBlock Text="見直し候補メモ" Style="{StaticResource MagiTitleSmallTextStyle}" />
-                <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                           Text="勤務表タブでセルの違反枠をタップ→「見直し候補にする」で積めます（このセッション内のみ・保存されません）。" />
-                <StackPanel x:Name="ReviewMemoListHost" Spacing="2" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBox x:Name="ReviewMemoBox" Width="240" PlaceholderText="メモを直接追加" />
-                    <Button x:Name="AddReviewMemoButton" Content="追加" Click="OnAddReviewMemoClick" />
+                <!-- [3.720.0 C-4] 見直し候補メモ: 0 件なら「メモを足す」だけ（押すと入力欄を開く）。 -->
+                <StackPanel x:Name="ReviewMemoSection" Spacing="4">
+                    <TextBlock x:Name="ReviewMemoTitle" Text="見直し候補メモ" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                    <TextBlock x:Name="ReviewMemoNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                               Text="勤務表のセルから積んだメモです（保存されません）。" />
+                    <StackPanel x:Name="ReviewMemoListHost" Spacing="2" />
+                    <StackPanel x:Name="ReviewMemoInputRow" Orientation="Horizontal" Spacing="8">
+                        <TextBox x:Name="ReviewMemoBox" Width="240" PlaceholderText="メモを直接追加" />
+                        <Button x:Name="AddReviewMemoButton" Content="追加する" Click="OnAddReviewMemoClick" />
+                    </StackPanel>
+                    <Button x:Name="ShowReviewMemoInputButton" Content="メモを足す" Click="OnShowReviewMemoInputClick" Visibility="Collapsed" />
                 </StackPanel>
 
                 <Border x:Name="StaffingRealityPanel" Visibility="Collapsed" BorderThickness="1" Margin="0,8,0,0"
                         BorderBrush="{StaticResource MagiOutlineBrush}" CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
                     <StackPanel Spacing="6">
                         <TextBlock Text="この体制で回るか" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                        <TextBlock Text="シフトごとに「担当できる人数」で確かめます。余裕は、1人欠けても回るかどうかを表します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock Text="足りないシフトは担当を増やすか、必要人数を見直します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                         <StackPanel x:Name="StaffingRealityHost" Spacing="4" />
                     </StackPanel>
                 </Border>
@@ -251,11 +268,11 @@
                            TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBox x:Name="MasterDaysBox" Width="80" PlaceholderText="日数(1-31)" />
-                    <Button x:Name="EditMasterDaysButton" Content="変更" Click="OnEditMasterDaysClick" />
+                    <Button x:Name="EditMasterDaysButton" Content="日数を変える" Click="OnEditMasterDaysClick" />
                 </StackPanel>
                 <TextBlock x:Name="MasterDaysHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
-                <TextBlock Text="シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
+                <TextBlock x:Name="MasterShiftSectionTitle" Text="シフト" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <TextBlock Text="行を長押しして上下に動かすと並びを変えられます。"
                            Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.7" />
                 <ListView x:Name="ShiftListView" SelectionMode="Single" IsItemClickEnabled="False"
@@ -278,8 +295,8 @@
                      改名・変更時に他の全シフトのRestは自動でOFF（Ws1Ops.ApplyRestRole）。 -->
                 <ToggleSwitch x:Name="MasterShiftRestToggle" Header="休みとして扱う" OnContent="ON" OffContent="OFF" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddMasterShiftButton" Content="追加" Click="OnAddMasterShiftClick" />
-                    <Button x:Name="EditMasterShiftButton" Content="改名・変更" Click="OnEditMasterShiftClick" />
+                    <Button x:Name="AddMasterShiftButton" Content="シフトを追加する" Click="OnAddMasterShiftClick" />
+                    <Button x:Name="EditMasterShiftButton" Content="変更する" Click="OnEditMasterShiftClick" />
                     <Button x:Name="RemoveMasterShiftButton" Content="削除" Click="OnRemoveMasterShiftClick" />
                 </StackPanel>
                 <TextBlock x:Name="MasterShiftHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
@@ -298,8 +315,8 @@
                 <TextBlock Text="記号" />
                 <TextBox x:Name="MasterGroupKigouBox" HorizontalAlignment="Stretch" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddMasterGroupButton" Content="追加" Click="OnAddMasterGroupClick" />
-                    <Button x:Name="EditMasterGroupButton" Content="改名" Click="OnEditMasterGroupClick" />
+                    <Button x:Name="AddMasterGroupButton" Content="グループを追加する" Click="OnAddMasterGroupClick" />
+                    <Button x:Name="EditMasterGroupButton" Content="変更する" Click="OnEditMasterGroupClick" />
                     <Button x:Name="RemoveMasterGroupButton" Content="削除" Click="OnRemoveMasterGroupClick" />
                 </StackPanel>
                 <TextBlock x:Name="MasterGroupHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
@@ -313,7 +330,7 @@
                     <ComboBox x:Name="GroupRangeShiftCombo" Width="100" PlaceholderText="シフト" />
                     <TextBox x:Name="GroupRangeLoBox" Width="56" PlaceholderText="下限" />
                     <TextBox x:Name="GroupRangeHiBox" Width="56" PlaceholderText="上限" />
-                    <Button x:Name="SetGroupRangeButton" Content="一括設定" Click="OnSetGroupRangeClick" />
+                    <Button x:Name="SetGroupRangeButton" Content="まとめて設定する" Click="OnSetGroupRangeClick" />
                 </StackPanel>
                 <TextBlock x:Name="GroupRangeHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
@@ -328,8 +345,8 @@
                 <TextBlock Text="記号" />
                 <TextBox x:Name="MasterSkillGroupKigouBox" HorizontalAlignment="Stretch" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddMasterSkillGroupButton" Content="追加" Click="OnAddMasterSkillGroupClick" />
-                    <Button x:Name="EditMasterSkillGroupButton" Content="改名" Click="OnEditMasterSkillGroupClick" />
+                    <Button x:Name="AddMasterSkillGroupButton" Content="スキルグループを追加する" Click="OnAddMasterSkillGroupClick" />
+                    <Button x:Name="EditMasterSkillGroupButton" Content="変更する" Click="OnEditMasterSkillGroupClick" />
                     <Button x:Name="RemoveMasterSkillGroupButton" Content="削除" Click="OnRemoveMasterSkillGroupClick" />
                 </StackPanel>
                 <TextBlock x:Name="MasterSkillGroupHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
@@ -365,7 +382,7 @@
                         <StackPanel x:Name="AptOverloadList" Spacing="2" />
                     </StackPanel>
                 </Border>
-                <Button x:Name="ResetAptButton" Content="適切回数を全リセット" Click="OnResetAptClick"
+                <Button x:Name="ResetAptButton" Content="目標をすべて空欄に戻す" Click="OnResetAptClick"
                         HorizontalAlignment="Left" Margin="0,4,0,0" />
 
                 <TextBlock Text="登録済みのルール" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
@@ -409,8 +426,8 @@
                           PlaceholderText="シフト" Visibility="Collapsed" />
 
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="AddConstraintButton" Content="追加" Click="OnAddConstraintClick" />
-                    <Button x:Name="UpdateConstraintButton" Content="変更" Click="OnUpdateConstraintClick" />
+                    <Button x:Name="AddConstraintButton" Content="追加する" Click="OnAddConstraintClick" />
+                    <Button x:Name="UpdateConstraintButton" Content="変更する" Click="OnUpdateConstraintClick" />
                     <Button x:Name="RemoveConstraintButton" Content="削除" Click="OnRemoveConstraintClick" />
                 </StackPanel>
                 <TextBlock x:Name="ConstraintHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />

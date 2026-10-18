@@ -1588,7 +1588,10 @@ public static class CellSheetLogic
 
     public const string EditScopeMonthlyNote = "翌月だけの条件：希望・必要人数・例外（毎月ここから）";
     public const string EditScopeStaffNote = "入退職・所属・資格スキル（随時変更）。職員の一覧はここだけ";
-    public const string EditScopeMasterNote = "毎月は変えない基本の設定：シフト・ルール・人数（制度変更時のみ）";
+    public const string EditScopeMasterNote = "制度が変わったときだけ";
+    public const string EditMasterEmptyNote = "まず①でシフトを追加しましょう";
+    public const string OpenMasterButton = "基本設定を開く";
+    public const string AddStaffButton = "職員を追加する";
     public const string EditNeedButton = "必要人数を編集する";
     public const string WishConflictsButton = "ぶつかっている希望を見る";
 
@@ -1615,7 +1618,7 @@ public static class CellSheetLogic
                 "入力診断 " + (counts.Issues == 0 ? "問題なし" : $"見直し {counts.Issues}件"),
             },
             1 => new[] { $"職員 {counts.Staff}人" },
-            _ => new[] { $"シフト {counts.Shifts}種類" },
+            _ => new[] { $"ルール {counts.Rules}件", $"ひとりの回数の上限・下限 {counts.Ranges}件", $"担当が足りないシフト {counts.ShortShifts}種類" },
         };
         EditHeaderPrimary? primary =
             running ? null
@@ -1627,8 +1630,29 @@ public static class CellSheetLogic
             : scope == 1 ? EditHeaderPrimary.AddStaff
             : EditHeaderPrimary.OpenMaster;
         EditHeaderSecondary? secondary = scope == 0 && counts.WishConflicts ? EditHeaderSecondary.WishConflicts : null;
-        return new EditHeaderPlan(title, subtitle, points, primary, secondary);
+        var notice = scope == 2 && (counts.Staff == 0 || counts.Shifts == 0) ? EditMasterEmptyNote : null;
+        return new EditHeaderPlan(title, subtitle, points, primary, secondary, notice);
     }
+
+    /// <summary>[3.720.0 3c-2] 体制の 1 行（人の単位だけ＝INV-07、Kotlin <c>staffingRowText</c>）。</summary>
+    public static string StaffingRowText(int canDo, int maxNeed)
+    {
+        var slack = canDo - maxNeed;
+        return $"担当{canDo}人・1日最大{maxNeed}人・" + (slack < 0 ? $"{-slack}人足りない" : slack == 0 ? "欠勤の余裕なし" : $"余裕{slack}人");
+    }
+
+    /// <summary>[3.720.0] 問題一覧で選んだ行（同じマスに行が複数あっても押した行だけ＝INV-01、Kotlin <c>problemPickedIndex</c>）。</summary>
+    public static int? ProblemPickedIndex(IReadOnlyList<ProblemRow> rows, int? pickedIdx, (int I, int J)? cell)
+    {
+        if (cell is not { } c) return null;
+        if (pickedIdx is { } p && p >= 0 && p < rows.Count && rows[p].Cell == c) return p;
+        for (var k = 0; k < rows.Count; k++) if (rows[k].Cell == c) return k;
+        return null;
+    }
+
+    /// <summary>[3.720.0 3c-6] 回数のシートで違反を 1 タップで解く外枠ボタン（「回」を付ける）。</summary>
+    public static string RaiseCapButton(int n) => $"上限を{n}回に上げて適用";
+    public static string LowerFloorButton(int n) => $"下限を{n}回に下げて適用";
 
     /// <summary>[3.707.0 3a-3] 下部バーの作成ボタンを外枠にするか（編集タブでは見出しの主が Rerun のときだけ塗り）。</summary>
     public static bool EditBarSecondary(EditHeaderPlan plan) => plan.Primary is { } p && p != EditHeaderPrimary.Rerun;
@@ -2179,9 +2203,9 @@ public enum EditHeaderSecondary { WishConflicts }
 /// <summary>見出しカードに要る数（画面の状態から集める）。Month は「2026年11月」、無ければ空。</summary>
 public sealed record EditHeaderCounts(
     string Month = "", int Staff = 0, int Shifts = 0, WishEntryCounts? Wish = null, bool NeedStdOk = false, int NeedExceptions = 0,
-    int Issues = 0, bool WishConflicts = false)
+    int Issues = 0, bool WishConflicts = false, int Rules = 0, int Ranges = 0, int ShortShifts = 0)
 {
     public WishEntryCounts Wish { get; init; } = Wish ?? new WishEntryCounts(0, 0, 0);
 }
 
-public sealed record EditHeaderPlan(string Title, string Subtitle, IReadOnlyList<string> Points, EditHeaderPrimary? Primary, EditHeaderSecondary? Secondary);
+public sealed record EditHeaderPlan(string Title, string Subtitle, IReadOnlyList<string> Points, EditHeaderPrimary? Primary, EditHeaderSecondary? Secondary, string? Notice = null);
