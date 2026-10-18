@@ -508,18 +508,28 @@ public static class CellSheetLogic
     /// <summary>[3.714.0] 問題一覧の 1 行の上限（デザイン例「10/10のAｱが1人不足」「福澤 10/1 希望の前日」）。</summary>
     public const int ProblemLineMax = 18;
 
-    /// <summary>[3.714.0] 問題 1 件を 18 字までの 1 行に（族ごとの型）。名前と日を前に付けて収まらなければ型だけ、それでも長ければ末尾を「…」。Kotlin <c>problemLine</c>。</summary>
-    public static string ProblemLine(string family, string name, string day, string sym, string? nextSym = null, int n = 1, Func<string, string>? labelOf = null)
+    /// <summary>
+    /// [3.714.0] 問題 1 件を 18 字までの 1 行に（族ごとの型）。<paramref name="syms"/>＝並びの全日の勤務（禁止の並びは「夜→夜→夜の並び」と全部つなぐ。null なら sym→nextSym）。
+    /// [3.716.0] 名前と日の前置きは残し、収まらないときは型の側を「…」で切る（前置きを落とすと行の区別がつかない＝INV-01）。前置きだけで 17 字を超えれば前置きを切る。Kotlin <c>problemLine</c>。
+    /// </summary>
+    public static string ProblemLine(string family, string name, string day, string sym, string? nextSym = null, int n = 1, Func<string, string>? labelOf = null, IReadOnlyList<string>? syms = null)
     {
-        string Fit(string prefix, string body) { var full = $"{prefix} {body}"; return !string.IsNullOrWhiteSpace(prefix) && full.Length <= ProblemLineMax ? full : body; }
+        static string Fit(string prefix, string body)
+        {
+            if (string.IsNullOrWhiteSpace(prefix)) return body;
+            if (prefix.Length > ProblemLineMax - 1) return prefix[..(ProblemLineMax - 1)] + "…";
+            var room = ProblemLineMax - prefix.Length - 1;
+            return body.Length <= room ? $"{prefix} {body}" : room >= 2 ? $"{prefix} {body[..(room - 1)]}…" : $"{prefix}…";
+        }
+        var run = syms is { Count: >= 2 } ? syms : nextSym is null ? new[] { sym } : new[] { sym, nextSym };
         var line = family switch
         {
             "covU" => $"{day}の{sym}が{n}人不足",
             "c3w" => Fit(name, $"{day} 希望の前日"),
             "low" => Fit(name, $"{sym}があと{n}回不足"),
             "high" => Fit(name, $"{sym}が{n}回多い"),
-            "c3n" => Fit(name, $"{sym}の翌日が{nextSym ?? "?"}です"),
-            "pref" => Fit($"{name} {day}", "希望が重なっています"),
+            "c3n" => Fit(name, run.Count >= 2 ? $"{string.Join("→", run)}の並び" : "禁止の並びです"),
+            "pref" => Fit($"{name} {day}", "希望と違う勤務です"),
             "extWish" => Fit($"{name} {day}", "拡張希望と違う勤務"),
             "groupViol" => Fit($"{name} {day}", "担当外の勤務"),
             _ => Fit($"{name} {day}", labelOf?.Invoke(family) ?? "必須違反"),
@@ -527,16 +537,16 @@ public static class CellSheetLogic
         return line.Length <= ProblemLineMax ? line : line[..(ProblemLineMax - 1)] + "…";
     }
 
-    /// <summary>巡回の項目の 1 行（ProblemLine、並びは先頭の 2 日の勤務）。</summary>
-    public static string TourProblemLine(TourItem it, string name) =>
-        ProblemLine(it.Family, name, it.DayMd, it.Syms is { Count: > 0 } ss ? ss[0] : "?", it.Syms is { Count: > 1 } s2 ? s2[1] : null);
+    /// <summary>巡回の項目の 1 行（ProblemLine、並びは全日の勤務をつなぐ）。[3.716.0] <paramref name="labelOf"/>＝型の無い族の名（Kotlin の <c>breakdownLabels</c> と同じ）。</summary>
+    public static string TourProblemLine(TourItem it, string name, Func<string, string>? labelOf = null) =>
+        ProblemLine(it.Family, name, it.DayMd, it.Syms is { Count: > 0 } ss ? ss[0] : "?", it.Syms is { Count: > 1 } s2 ? s2[1] : null, labelOf: labelOf, syms: it.Syms);
 
     /// <summary>必須違反の一覧（巡回の項目を 1 件 1 行）。希望どうしのぶつかり（関連セルがすべて wishSelfKeys）は「希望のまま」を付けて後ろへ。</summary>
-    public static IReadOnlyList<HardListRow> HardViolationRows(IReadOnlyList<TourItem> items, IReadOnlyList<string> staffNames, IReadOnlySet<string> wishSelfKeys) =>
+    public static IReadOnlyList<HardListRow> HardViolationRows(IReadOnlyList<TourItem> items, IReadOnlyList<string> staffNames, IReadOnlySet<string> wishSelfKeys, Func<string, string>? labelOf = null) =>
         items.Select((it, at) =>
         {
             var name = it.Staff >= 0 && it.Staff < staffNames.Count ? staffNames[it.Staff] : $"職員{it.Staff + 1}";
-            return new HardListRow(at, name, it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")), TourProblemLine(it, name));
+            return new HardListRow(at, name, it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")), TourProblemLine(it, name, labelOf));
         }).OrderBy(r => r.WishOnly).ToList();
 
     /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
@@ -1651,7 +1661,7 @@ public static class CellSheetLogic
         var creation = ui.HasResult && ui.EngineRan;
         if (creation) list.Add(HomeSection.Creation);
         list.Add(HomeSection.Headline);
-        if (ui.HasResult) list.Add(HomeSection.Badges);
+        if (ui.HasResult && ui.CheckRev > 0) list.Add(HomeSection.Badges);   // [3.716.0] 札は検査済みのときだけ（検査前に「満たしています」と言わない）
         list.Add(HomeSection.Status);
         if (plan.PrimaryEnabled) list.Add(HomeSection.Primary);
         if (plan.Helper is not null || ui.HasResult) list.Add(HomeSection.Helper);

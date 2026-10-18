@@ -6,7 +6,7 @@ namespace MagiApp.ViewModels.Tests;
 public class Review3698Test
 {
     private static UiState Ui(bool running, bool hasResult, bool hard0, bool? engineRan = null) =>
-        new() { Loaded = true, Running = running, HasResult = hasResult, BestHard = hard0 ? 0L : 3L, EngineRan = engineRan ?? hasResult };
+        new() { Loaded = true, Running = running, HasResult = hasResult, BestHard = hard0 ? 0L : 3L, EngineRan = engineRan ?? hasResult, CheckRev = hasResult ? 1 : 0 };
 
     /// <summary>Review3690Test の表を使い回す: 段ごとに 見出し → 状態 → 主ボタン の順で、塗りの主は 1 つ、でき具合は結果があるときだけ。</summary>
     [Fact]

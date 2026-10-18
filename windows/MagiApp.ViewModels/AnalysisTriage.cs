@@ -125,9 +125,10 @@ public sealed record AnalysisTriage(
     public static string SameResultNotice(int hard) =>
         hard > 0 ? $"前回と同じ結果です。条件を変えない限り、この必須違反{hard}件は消えません。" : "前回と同じ結果です。";
 
-    /// <summary>案があれば途切れる（null）。起点・盤面・設定のどれかが違えば 1 から数え直す。</summary>
-    public static EmptySearchStreak? NextEmptySearchStreak(EmptySearchStreak? prev, string origin, long board, long state, int found)
+    /// <summary>案があれば途切れる（null）。起点・盤面・設定のどれかが違えば 1 から数え直す。[3.716.0] 自動の探索（<paramref name="auto"/>）は数えも途切れさせもしない（人の操作の回数だけ）。</summary>
+    public static EmptySearchStreak? NextEmptySearchStreak(EmptySearchStreak? prev, string origin, long board, long state, int found, bool auto = false)
     {
+        if (auto) return prev;
         if (found > 0) return null;
         if (prev is not null && prev.Origin == origin && prev.Board == board && prev.State == state) return prev with { Count = prev.Count + 1 };
         return new EmptySearchStreak(origin, board, state, 1);
@@ -139,9 +140,11 @@ public sealed record AnalysisTriage(
     public const string NoFixListButton = "問題一覧";
     public const string NoFixCloseButton = "閉じる";
     public const string NoFixLine = "設定か希望の確認が必要です";
+    /// <summary>[3.716.0] 締切で打ち切られた探索の 1 行（設定の確認を求めない。理由の TIME の行は本文に残る）。</summary>
+    public const string NoFixTimeoutLine = "時間内に見つかりませんでした";
 
-    /// <summary>案なしの説明の 1 行: 続けて空なら続けて空の行、そうでなければ定型の 1 行（3.711.0 の行を残す）。</summary>
-    public static string NoFixLineOf(bool repeated) => repeated ? RepeatedEmptyLine : NoFixLine;
+    /// <summary>案なしの説明の 1 行: 締切で打ち切られたら時間の行、続けて空なら続けて空の行、そうでなければ定型の 1 行（3.711.0 の行を残す）。</summary>
+    public static string NoFixLineOf(bool repeated, bool timedOut = false) => timedOut ? NoFixTimeoutLine : repeated ? RepeatedEmptyLine : NoFixLine;
 
     /// <summary>続けて 0 件の対象の行き先。希望がぶつかるセルなら希望、設定ミスの診断が出ていれば設定、どちらも無ければボタンなし。</summary>
     public static RepeatedEmptyAction? RepeatedEmptyActionOf(bool wishOnTarget, bool settingIssueKnown) =>
@@ -274,7 +277,7 @@ public sealed record AnalysisTriage(
             ui.Running ? "勤務表をつくっています。表示は途中の値です。"
             : !ui.HasResult ? "まだ作っていません。"
             : !ui.EngineRan && !ui.RanBeforeEdit ? "手で編集した勤務表です（自動作成はまだ）。"
-            : hard > 0 || ui.BestSoft > 0 ? AnalysisCountLine(hard > 0 ? HardText(ui.Breakdown, hard) : "0", UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "0")
+            : hard > 0 || ui.BestSoft > 0 ? AnalysisCountLine(hard > 0 ? HardText(ui.Breakdown, hard) : "0件", UnitTotals(ui.Breakdown, MirrorKeys.Soft) ?? "0件")
             : "必須違反も要調整もありません。";
         var points = new List<string>();
         if (ui.HasResult || ui.Running)
