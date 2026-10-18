@@ -61,6 +61,8 @@ public sealed partial class ScheduleCellVm : ObservableObject
     [ObservableProperty] private Visibility extVisibility = Visibility.Collapsed;
     [ObservableProperty] private Brush? extBrush;
     [ObservableProperty] private string? tooltip;
+    /// <summary>読み上げ名（<see cref="MagiApp.ViewModels.A11y.CellDescription"/>）。</summary>
+    [ObservableProperty] private string? automationName;
     /// <summary>重い要調整の破線の枠／軽い要調整の右上の角（Android 3.702.0 G2-8。必須は Border の実線のまま）。</summary>
     [ObservableProperty] private Visibility dashVisibility = Visibility.Collapsed;
     [ObservableProperty] private Brush dashBrush = new SolidColorBrush(Colors.Transparent);
