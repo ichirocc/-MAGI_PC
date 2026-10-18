@@ -95,6 +95,7 @@ public sealed partial class ScheduleView : UserControl
     private bool _panelList;
     private (int I, int J)? _panelCell;
     private (int I, int J)? _panelPick;
+    private int? _panelPickRow;   // [3.720.0] 問題一覧で押した行（同じマスの別の行と分ける）
     private List<List<int>> _weeks = new();
     private List<int> _vioDays = new();
     private int _navIdx = -1;
@@ -746,7 +747,8 @@ public sealed partial class ScheduleView : UserControl
             var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
             var rows = CellSheetLogic.ProblemRows(CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf), items, ui.ViolationCellFamilies,
                 ui.StaffNames, ui.ShiftSymbols, ui.Schedule, ui.StartDate, LabelOf);
-            var picked = _panelPick is { } pc ? rows.FirstOrDefault(r => r.Cell == pc) : null;
+            var pickedIdx = CellSheetLogic.ProblemPickedIndex(rows, _panelPickRow, _panelPick);
+            var picked = pickedIdx is { } pi ? rows[pi] : null;
             ProblemPanelTitle.Text = picked?.Line ?? CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui));
             ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources[picked is { Hard: true } ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
             ProblemPanelListButton.Visibility = Visibility.Collapsed;
@@ -774,9 +776,10 @@ public sealed partial class ScheduleView : UserControl
                     content.Children.Add(chip);
                 }
                 var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
-                if (r.Cell == _panelPick) row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                if (idx == pickedIdx) row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
                 var cell = r.Cell;
-                row.Click += (_, _) => { _panelPick = cell; FocusCell(cell.I, cell.J); };
+                var rowIdx = idx;
+                row.Click += (_, _) => { _panelPickRow = rowIdx; _panelPick = cell; FocusCell(cell.I, cell.J); };
                 body.Children.Add(row);
             }
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)

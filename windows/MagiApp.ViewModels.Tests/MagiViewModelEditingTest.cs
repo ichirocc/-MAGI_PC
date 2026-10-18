@@ -1395,6 +1395,42 @@ public class MagiViewModelEditingTest
         Assert.Equal(new[] { "SkillAのX ✕ SkillBのY" }, families["cons42s"].Rows);
     }
 
+    /// <summary>[3.720.0 C-2] 希望の前日に禁止（Kotlin addCons3w／updateConstraint／removeConstraint／ConstraintsView の cons3w と同値）。</summary>
+    [Fact]
+    public void Cons3wListsAddsUpdatesAndRemovesRows()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.AddCons3w("A", "休");
+        Assert.Equal(new[] { new C3wRow("A", "休") }, vm._state!.Cons3w);
+        Assert.Equal(new[] { "A の希望の前日は 休 禁止" }, vm.ConstraintFamilies().Single(f => f.Key == "cons3w").Rows);
+        Assert.Equal(new[] { "A", "休" }, vm.ConstraintRowValues("cons3w", 0));
+
+        vm.UpdateConstraint("cons3w", 0, new[] { "休", "A" });
+        Assert.Equal(new[] { new C3wRow("休", "A") }, vm._state!.Cons3w);
+
+        vm.RemoveConstraint("cons3w", 0);
+        Assert.Empty(vm._state!.Cons3w!);
+    }
+
+    [Fact]
+    public void Cons3wRejectsDuplicatesAndUnknownSymbols()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.AddCons3w("A", "休");
+        var undo = vm.UndoStackCount;
+        vm.AddCons3w("A", "休");
+        Assert.Single(vm._state!.Cons3w!);
+        Assert.Equal(undo, vm.UndoStackCount);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.NotNull(vm.ConstraintInputError("cons3w", new[] { "A", "休" }));
+        Assert.Contains("ありません", vm.ConstraintInputError("cons3w", new[] { "X", "休" })!);
+        Assert.NotNull(vm.ConstraintInputError("cons3w", new[] { "A", "" }));
+        Assert.Null(vm.ConstraintInputError("cons3w", new[] { "休", "A" }));
+        vm.RemoveConstraint("cons3w", 5);
+        Assert.Single(vm._state!.Cons3w!);
+        Assert.Null(vm.ConstraintRowValues("cons3w", -1));
+    }
+
     [Fact]
     public void AddCons3TruncatesAtTheFirstBlankAndCapsAtFiveTokens()
     {

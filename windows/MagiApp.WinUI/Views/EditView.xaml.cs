@@ -186,8 +186,8 @@ public sealed partial class EditView : UserControl
             1 => "入退職・所属・資格スキル・個人の回数（随時変更）",
             _ => "毎月は変えない基本の設定：シフト・ルール・人数（制度変更時のみ）",
         };
-        // [3.707.0] 月次条件では区分の 1 行は見出しカードの副題。
-        DoorHintText.Visibility = _door == 0 ? Visibility.Collapsed : Visibility.Visible;
+        // [3.720.0] 区分の 1 行はどの区分でも見出しカードの副題（3.707.0 は月次条件だけ）。
+        DoorHintText.Visibility = Visibility.Collapsed;
         MonthlyPanel.Visibility = _door == 0 ? Visibility.Visible : Visibility.Collapsed;
         StaffPanel.Visibility = _door == 1 ? Visibility.Visible : Visibility.Collapsed;
         MasterPanel.Visibility = _door == 2 ? Visibility.Visible : Visibility.Collapsed;
@@ -217,7 +217,7 @@ public sealed partial class EditView : UserControl
         ChecklistPanel.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) return;
         var v = _vm.MonthlyChecklist();
-        var plan = HeaderPlanNow();
+        var plan = HeaderPlanNow(0);
         EditHeaderTitle.Text = plan.Title;
         EditHeaderSubtitle.Text = plan.Subtitle;
         RenderHeaderButtons(plan);
@@ -266,16 +266,25 @@ public sealed partial class EditView : UserControl
     internal int Door => _door;
 
     /// <summary>[3.707.0 E-2] 見出しカードの中身（Kotlin <c>editHeaderPlan</c> の呼出側）。下部バーの塗り（Q10）も MainWindow がここから引く。</summary>
-    internal EditHeaderPlan HeaderPlanNow()
+    internal EditHeaderPlan HeaderPlanNow(int? scope = null)
+    {
+        var ui = _vm.Ui;
+        var counts = HeaderCountsNow();
+        var panelOpen = (WishStaffCombo.SelectedIndex >= 0 && _wishSelectedDays.Count > 0) || (NeedCalShiftCombo.SelectedIndex >= 0 && _needSelectedDays.Count > 0);
+        return CellSheetLogic.EditHeaderPlanOf(scope ?? _door, counts, panelOpen, ui.HasResult && (ui.RanBeforeEdit || (_window?.CondEdited ?? false)), ui.Running);
+    }
+
+    /// <summary>見出しカードに要る数（3 区分で共通）。</summary>
+    private EditHeaderCounts HeaderCountsNow()
     {
         var ui = _vm.Ui;
         var v = _vm.MonthlyChecklist();
         var month = DateOnly.TryParseExact(ui.StartDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None, out var start) ? $"{start.Year}年{start.Month}月" : "";
-        var counts = new EditHeaderCounts(month, ui.StaffNames.Count, ui.ShiftSymbols.Count, v.Entry, v.NeedStdOk, v.NeedExceptions,
-            ui.SettingIssues.Count, !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty);
-        var panelOpen = (WishStaffCombo.SelectedIndex >= 0 && _wishSelectedDays.Count > 0) || (NeedCalShiftCombo.SelectedIndex >= 0 && _needSelectedDays.Count > 0);
-        return CellSheetLogic.EditHeaderPlanOf(_door, counts, panelOpen, ui.HasResult && (ui.RanBeforeEdit || (_window?.CondEdited ?? false)), ui.Running);
+        var sc = _vm.GetSetupCounts();
+        var shortShifts = ui.Loaded ? _vm.StaffingReality().Count(r => r.Q < r.MaxNeed) : 0;
+        return new EditHeaderCounts(month, ui.StaffNames.Count, ui.ShiftSymbols.Count, v.Entry, v.NeedStdOk, v.NeedExceptions,
+            ui.SettingIssues.Count, !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty, sc.Constraints, sc.Ranges, shortShifts);
     }
 
     /// <summary>Q10: 塗りは EditNeed のときだけ。Rerun（下部の再作成）・Panel（入力パネル）の間は外枠＝画面の塗りは 1 つ（INV-09）。</summary>
@@ -292,7 +301,7 @@ public sealed partial class EditView : UserControl
     /// <summary>選択の出し入れ（カレンダーのタップ）のあと、見出しの塗りと下部バーを合わせる。</summary>
     private void RefreshHeaderAndBar()
     {
-        if (_vm.Ui.Loaded) RenderHeaderButtons(HeaderPlanNow());
+        if (_vm.Ui.Loaded) RenderHeaderButtons(HeaderPlanNow(0));
         _window?.RenderShell();
     }
 
@@ -1172,7 +1181,12 @@ public sealed partial class EditView : UserControl
         var names = ui.StaffNames;
         var symbols = ui.StaffGroupSymbols;
 
-        StaffSummaryText.Text = ui.Loaded ? $"職員 {names.Count}名" : "（データ読込中）";
+        var staffPlan = ui.Loaded ? CellSheetLogic.EditHeaderPlanOf(1, HeaderCountsNow(), false, ui.HasResult && (ui.RanBeforeEdit || (_window?.CondEdited ?? false)), ui.Running) : null;
+        StaffHeaderSubtitle.Text = CellSheetLogic.EditScopeStaffNote;
+        StaffSummaryText.Text = staffPlan?.Points[0] ?? "（データ読込中）";
+        // [3.720.0 S-1] 主「職員を追加する」は塗り。下部の再作成が主の間は外枠（INV-09）。
+        if (staffPlan?.Primary == EditHeaderPrimary.AddStaff) AddStaffButton.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+        else AddStaffButton.ClearValue(StyleProperty);
 
         // 一覧（読取専用）。ScheduleView と同じくコードビハインドで子要素を積む。
         StaffListHost.Children.Clear();
@@ -1381,22 +1395,12 @@ public sealed partial class EditView : UserControl
         var rows = ui.Loaded ? _vm.StaffingReality() : System.Array.Empty<MagiViewModel.StaffingRealityRow>();
         StaffingRealityPanel.Visibility = rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         StaffingRealityHost.Children.Clear();
-        if (rows.Any(r => r.Q - r.MaxNeed <= 0))
-            StaffingRealityHost.Children.Add(new TextBlock
-            {
-                Text = "⚠・！のシフトは、下の『担当できるシフト（グループ × シフト）』で担当できるグループを増やすか、『シフト』の最低人数・「月次条件」の『日別の必要人数（例外）』で人数を見直すと余裕が出ます。",
-                FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
-            });
         foreach (var r in rows)
         {
             var slack = r.Q - r.MaxNeed;
-            var tenths = r.Q > 0 ? (r.D * 10 + r.Q / 2) / r.Q : 0;
             var (mark, brushKey) = slack < 0 ? ("⚠", "MagiErrorBrush")
                 : slack == 0 ? ("！", "MagiOnWarnContainerBrush")
                 : ("✓", "MagiTertiaryBrush");
-            var detail = slack < 0 ? $"日最大{r.MaxNeed}人 → 担当不足"
-                : slack == 0 ? $"日最大{r.MaxNeed}人 → 欠勤余裕なし"
-                : $"欠勤余裕{slack}人";
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             row.Children.Add(new TextBlock
             {
@@ -1406,17 +1410,48 @@ public sealed partial class EditView : UserControl
             row.Children.Add(new TextBlock { Text = r.Kigou, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Width = 44 });
             row.Children.Add(new TextBlock
             {
-                Text = $"担当{r.Q}人・月{r.D}人日（1人あたり{tenths / 10}.{tenths % 10}回）・{detail}",
+                Text = CellSheetLogic.StaffingRowText(r.Q, r.MaxNeed),
                 FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap,
             });
             StaffingRealityHost.Children.Add(row);
         }
     }
 
+    /// <summary>[3.720.0 3c-1・3c-2] 年間マスターの見出しカード（Kotlin <c>ScopeHeaderCard</c>）。塗りは主が OpenMaster のときだけ。</summary>
+    private void RenderMasterHeader(UiState ui)
+    {
+        MasterHeaderSubtitle.Text = CellSheetLogic.EditScopeMasterNote;
+        MasterHeaderPoints.Children.Clear();
+        if (!ui.Loaded) { MasterHeaderOpenButton.Visibility = Visibility.Collapsed; MasterHeaderNotice.Visibility = Visibility.Collapsed; return; }
+        var plan = CellSheetLogic.EditHeaderPlanOf(2, HeaderCountsNow(), false, ui.HasResult && (ui.RanBeforeEdit || (_window?.CondEdited ?? false)), ui.Running);
+        foreach (var p in plan.Points) MasterHeaderPoints.Children.Add(new TextBlock { Text = "・" + p, TextWrapping = TextWrapping.Wrap });
+        MasterHeaderNotice.Text = plan.Notice ?? "";
+        MasterHeaderNotice.Visibility = plan.Notice is null ? Visibility.Collapsed : Visibility.Visible;
+        MasterHeaderOpenButton.Content = CellSheetLogic.OpenMasterButton;
+        MasterHeaderOpenButton.Visibility = plan.Primary is null ? Visibility.Collapsed : Visibility.Visible;
+        if (plan.Primary == EditHeaderPrimary.OpenMaster) MasterHeaderOpenButton.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+        else MasterHeaderOpenButton.ClearValue(StyleProperty);
+    }
+
+    private void OnMasterHeaderOpenClick(object sender, RoutedEventArgs e) => MasterShiftSectionTitle.StartBringIntoView();
+
+    private bool _reviewMemoInputOpen;
+
+    private void OnShowReviewMemoInputClick(object sender, RoutedEventArgs e)
+    {
+        _reviewMemoInputOpen = true;
+        RenderReviewMemos(_vm.Ui);
+    }
+
     private void RenderReviewMemos(UiState ui)
     {
         ReviewMemoListHost.Children.Clear();
         var memos = ui.ReviewMemos;
+        var expanded = memos.Count > 0 || _reviewMemoInputOpen;
+        ReviewMemoTitle.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        ReviewMemoNote.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        ReviewMemoInputRow.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        ShowReviewMemoInputButton.Visibility = expanded ? Visibility.Collapsed : Visibility.Visible;
         for (var idx = 0; idx < memos.Count; idx++)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -1425,7 +1460,7 @@ public sealed partial class EditView : UserControl
                 Text = memos[idx], FontSize = 14, TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center, MaxWidth = 380,
             });
-            var remove = new Button { Content = "削除", FontSize = 14 };
+            var remove = new Button { Content = "済みにする", FontSize = 14 };
             var i = idx;
             remove.Click += (_, _) => _vm.RemoveReviewMemo(i);
             row.Children.Add(remove);
@@ -1530,6 +1565,7 @@ public sealed partial class EditView : UserControl
 
     private void RenderMaster(UiState ui, bool editable)
     {
+        RenderMasterHeader(ui);
         RenderReviewMemos(ui);
         RenderStaffingReality(ui);
 
@@ -1653,6 +1689,7 @@ public sealed partial class EditView : UserControl
         new("cons3n", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3m", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3mn", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
+        new("cons3w", new[] { "希望のシフト", "前日に禁止するシフト" }, new[] { 0, 1 }),
         new("cons41", new[] { "グループ記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
         new("cons42", new[] { "グループ1記号", "シフト1記号", "グループ2記号", "シフト2記号" }, new[] { 1, 3 }),
         new("cons41s", new[] { "スキルグループ記号", "シフト記号", "下限", "上限" }, new[] { 1 }),
@@ -1820,6 +1857,9 @@ public sealed partial class EditView : UserControl
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
                 if (v.All(x => x.Length == 0)) { error = "少なくとも1日目を入れてください。"; return false; }
                 _vm.AddCons3(key, v);
+                return true;
+            case "cons3w":
+                _vm.AddCons3w(G(0), G(1));
                 return true;
             case "cons41":
                 if (G(0).Length == 0 || G(1).Length == 0) { error = "グループ記号とシフト記号を入れてください。"; return false; }
@@ -2441,7 +2481,8 @@ public sealed partial class EditView : UserControl
         panel.Children.Add(conflict);
         if (vio == "vio-high" || vio == "vio-low")
         {
-            var quick = new Button { Content = vio == "vio-high" ? $"上限を{count}に引き上げて解決" : $"下限を{count}に下げて解決", HorizontalAlignment = HorizontalAlignment.Stretch };
+            // [3.720.0 3c-6] 外枠のまま 1 タップ（塗りは「変更を適用」だけ＝INV-09）。
+            var quick = new Button { Content = vio == "vio-high" ? CellSheetLogic.RaiseCapButton(count) : CellSheetLogic.LowerFloorButton(count), HorizontalAlignment = HorizontalAlignment.Stretch };
             panel.Children.Add(quick);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(quick, (string)quick.Content);
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(quick, "StaffRangeQuickFix");
@@ -2458,8 +2499,12 @@ public sealed partial class EditView : UserControl
         {
             XamlRoot = XamlRoot, Title = $"{name} ・ {kigou}", Content = new ScrollViewer { Content = panel, MaxHeight = 520 },
             PrimaryButtonText = "変更を適用", SecondaryButtonText = hasRange ? "上下限を解除する" : null, CloseButtonText = "閉じる",
-            DefaultButton = ContentDialogButton.Close,
+            DefaultButton = ContentDialogButton.Primary,
         };
+        // 解除は赤字の外枠（破壊的だが塗りにしない）。
+        var dangerStyle = new Style(typeof(Button));
+        dangerStyle.Setters.Add(new Setter(Control.ForegroundProperty, Application.Current.Resources["MagiErrorBrush"]));
+        dialog.SecondaryButtonStyle = dangerStyle;
         void Validate()
         {
             var bad = V6SanityPort.RangeOrderConflict(loBox.Text, hiBox.Text) is not null;
