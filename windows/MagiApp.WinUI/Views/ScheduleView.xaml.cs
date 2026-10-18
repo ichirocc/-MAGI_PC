@@ -90,6 +90,11 @@ public sealed partial class ScheduleView : UserControl
 
     private (int I, int J)? _tapped;
     private DispatcherTimer? _tappedTimer;
+
+    /// <summary>[Android 3.718.0] 下のパネルの状態（問題一覧／セルの編集）と、編集中のセル・一覧で選んだセル（Kotlin <c>problemList</c>/<c>editingCell</c>/<c>listFocus</c>）。</summary>
+    private bool _panelList;
+    private (int I, int J)? _panelCell;
+    private (int I, int J)? _panelPick;
     private List<List<int>> _weeks = new();
     private List<int> _vioDays = new();
     private int _navIdx = -1;
@@ -157,8 +162,13 @@ public sealed partial class ScheduleView : UserControl
         _uiSub.Attach();
         Loaded += (_, _) => { if (_uiSub.Attach()) Render(); };
         Unloaded += (_, _) => _uiSub.Detach();
+        // [Android 3.718.0] 勤務表の前に出す画面は画面の 1/3 まで（この View の高さ＝勤務表タブの表示域）。
+        SizeChanged += (_, _) => ProblemPanel.MaxHeight = CellSheetLogic.PanelMaxHeight(ActualHeight, 480);
         Render();
     }
+
+    /// <summary>勤務表の前に出す画面の高さの上限（ダイアログ・フライアウトも同じ 1/3。測れていなければ従来の値）。</summary>
+    private double DialogMaxHeight(double fallback) => CellSheetLogic.PanelMaxHeight(ActualHeight, fallback);
 
     // [2026-09-10, カクつき/フリーズ対策] 進捗バーストで Render() が連打されないよう CoalescedRender で間引く
     //   （CoalescedRender のKDoc参照）。
@@ -588,7 +598,7 @@ public sealed partial class ScheduleView : UserControl
         {
             XamlRoot = XamlRoot,
             Title = "まとめて割当",
-            Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
+            Content = new ScrollViewer { Content = panel, MaxHeight = DialogMaxHeight(480) },
             PrimaryButtonText = "確定する",
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
@@ -680,54 +690,130 @@ public sealed partial class ScheduleView : UserControl
         : wholePeriod ? DayText.Range(startDate, days[0], days[^1])
         : string.Join("・", days.Select(j => DayText.Short(startDate, j)));
 
-    /// <summary>[Android 3.623.0] 必須違反の一覧（Kotlin HardListChip のシート）。行を押すと閉じて、巡回と同じ移動（FocusCell→そのセルのシート）。</summary>
-    private async void OnHardListClick(object sender, RoutedEventArgs e)
+    /// <summary>[Android 3.718.0] 「必須 N ▼」＝下のパネルを問題一覧で開く（旧 3.623.0: ContentDialog の一覧。行を押すと閉じていた）。</summary>
+    private void OnHardListClick(object sender, RoutedEventArgs e) => OpenProblemList();
+
+    /// <summary>問題一覧を開く（上部の札・「必須 N ▼」）。セルの編集は離し、パネルは一覧に（Kotlin <c>openProblemList</c>）。</summary>
+    internal void OpenProblemList()
     {
-        var ui = _vm.Ui;
+        _panelList = true;
+        _panelCell = null;
+        Render();
+    }
+
+    private void OnProblemPanelCloseClick(object sender, RoutedEventArgs e) => ClosePanel();
+
+    private void OnProblemPanelListClick(object sender, RoutedEventArgs e)
+    {
+        _panelPick = _panelCell;
+        _panelCell = null;
+        _panelList = true;
+        Render();
+    }
+
+    /// <summary>Esc で閉じる（Android の戻ると同じ）。</summary>
+    private void OnProblemPanelKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Escape) { ClosePanel(); e.Handled = true; }
+    }
+
+    private void ClosePanel()
+    {
+        _panelList = false;
+        _panelCell = null;
+        _panelPick = null;
+        Render();
+    }
+
+    /// <summary>下のパネル（Kotlin <c>ProblemListPanel</c>／セルの編集）。一覧の行を押すとパネルは閉じずに表をそのセルへ送って強調し、選んだ行の 1 行を先頭に出す。
+    /// セルの編集は 1 行目＝名前・日・今の勤務、2 行目＝問題の 1 行、担当できるシフトの札（選ぶと既存の「影響を確認して適用」へ＝選んだだけでは反映しない）、
+    /// 「詳しく見る」（既存のシート）、「一覧へ」。主は「直し方を見る」1 つ（INV-09）。</summary>
+    private void RenderProblemPanel(UiState ui)
+    {
+        var mode = CellSheetLogic.PanelModeOf(_panelList, _panelCell is not null);
+        if (mode == CellSheetLogic.PanelMode.Closed || !ui.Loaded)
+        {
+            ProblemPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+        ProblemPanel.Visibility = Visibility.Visible;
+        ProblemPanel.MaxHeight = DialogMaxHeight(480);
+        var body = ProblemPanelBody;
+        body.Children.Clear();
         var items = _vm.HardViolationItemsFor(LabelOf);
-        var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
-        var panel = new StackPanel { Spacing = 8 };
-        var dialog = new ContentDialog
+        if (mode == CellSheetLogic.PanelMode.List)
         {
-            XamlRoot = XamlRoot,
-            Title = CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui)),
-            Content = new ScrollViewer { Content = panel, MaxHeight = 480 },
-            CloseButtonText = "閉じる",
-            DefaultButton = ContentDialogButton.Close,
-        };
-        var rows = CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf);
-        if (rows.Count > 0)
-        {
-            var start = new Button { Content = CellSheetLogic.HardListStartButton, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-            var firstCell = items[rows[0].TourAt].Cell;
-            start.Click += (_, _) => { dialog.Hide(); OpenCellSheet(firstCell.I, firstCell.J); };
-            panel.Children.Add(start);
-        }
-        foreach (var r in rows)
-        {
-            var content = new Grid { ColumnSpacing = 8 };
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            // [3.714.0] 1 件 1 行（族ごとの型、18 字まで）。
-            content.Children.Add(new TextBlock { Text = r.Line ?? r.Heading, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 });
-            if (r.WishOnly)
+            var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
+            var rows = CellSheetLogic.ProblemRows(CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf), items, ui.ViolationCellFamilies,
+                ui.StaffNames, ui.ShiftSymbols, ui.Schedule, ui.StartDate, LabelOf);
+            var picked = _panelPick is { } pc ? rows.FirstOrDefault(r => r.Cell == pc) : null;
+            ProblemPanelTitle.Text = picked?.Line ?? CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui));
+            ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources[picked is { Hard: true } ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
+            ProblemPanelListButton.Visibility = Visibility.Collapsed;
+            if (rows.Any(r => r.Hard))
             {
-                var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
-                Grid.SetColumn(chip, 1);
-                content.Children.Add(chip);
+                var start = new Button { Content = CellSheetLogic.HardListStartButton, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                var first = rows.First(r => r.Hard).Cell;
+                start.Click += (_, _) => OpenCellSheet(first.I, first.J);
+                body.Children.Add(start);
             }
-            var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
-            var cell = items[r.TourAt].Cell;
-            row.Click += (_, _) =>
+            var softCount = rows.Count(r => !r.Hard);
+            for (var idx = 0; idx < rows.Count; idx++)
             {
-                dialog.Hide();
-                OpenCellSheet(cell.I, cell.J);
-            };
-            panel.Children.Add(row);
+                var r = rows[idx];
+                if (!r.Hard && (idx == 0 || rows[idx - 1].Hard) && CellSheetLogic.SoftRowsHeading(softCount) is { } sh)
+                    body.Children.Add(new TextBlock { Text = sh, FontSize = 13, Opacity = 0.8 });
+                var content = new Grid { ColumnSpacing = 8 };
+                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                content.Children.Add(new TextBlock { Text = r.Line, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 });
+                if (r.WishOnly)
+                {
+                    var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
+                    Grid.SetColumn(chip, 1);
+                    content.Children.Add(chip);
+                }
+                var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
+                if (r.Cell == _panelPick) row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                var cell = r.Cell;
+                row.Click += (_, _) => { _panelPick = cell; FocusCell(cell.I, cell.J); };
+                body.Children.Add(row);
+            }
+            if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
+                body.Children.Add(new TextBlock { Text = covLine, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            return;
         }
-        if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
-            panel.Children.Add(new TextBlock { Text = covLine, FontSize = 12, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-        await dialog.ShowAsync();
+        var (i, j) = _panelCell!.Value;
+        if (i < 0 || i >= ui.Schedule.Count || j < 0 || j >= ui.Days) { ClosePanel(); return; }
+        var cur = ui.Schedule[i][j];
+        string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : "—";
+        var name = i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}";
+        // 1 行目＝名前・日・今の勤務（指の下の内容を指の外で読める）。
+        ProblemPanelTitle.Text = CellSheetLogic.CellSheetTarget(name, ScheduleUtil.FormatDay(ui.StartDate, j), cur >= 0 ? Sym(cur) : null);
+        ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"];
+        ProblemPanelListButton.Content = CellSheetLogic.PanelListButton;
+        ProblemPanelListButton.Visibility = ui.HasResult && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
+        var status = _vm.CellStatusFor(i, j, LabelOf);
+        var tourAt = items.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        var causeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        if (CellSheetLogic.CellSheetBadge(status.Severity, tourAt >= 0 ? tourAt : null, items.Count) is { } badge)
+            causeRow.Children.Add(AnalysisView.TagChip(badge, status.Severity == CellSeverity.Hard ? MagiAccent.Red : MagiAccent.Orange));
+        causeRow.Children.Add(new TextBlock { Text = status.Severity == CellSeverity.None ? "このセルに違反はありません" : status.Cause, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 });
+        body.Children.Add(causeRow);
+        var canDo = CellSheetLogic.SheetCanDo(_vm.AllowedByStaff(), i, ui.ShiftSymbols.Count);
+        var picks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        foreach (var k in Enumerable.Range(0, ui.ShiftSymbols.Count).Where(canDo.Contains))
+        {
+            var kk = k;
+            var b = new Button { Content = (kk == cur ? "✓ " : "") + Sym(kk), MinHeight = 48, MinWidth = 56, IsEnabled = !ui.Running };
+            // 選んだだけでは反映しない＝既存の「影響を確認して適用」（ShowCellEditor の段 2）へ。
+            b.Click += (_, _) => { if (kk != cur) { _cellSheetExpanded = true; ShowCellEditor(ProblemPanel, i, j, 0, 2, kk); } };
+            picks.Children.Add(b);
+        }
+        body.Children.Add(new ScrollViewer { Content = picks, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        var detail = new HyperlinkButton { Content = CellSheetLogic.CellDetailButton, MinHeight = 48 };
+        detail.Click += (_, _) => ShowCellEditor(ProblemPanel, i, j);
+        body.Children.Add(detail);
     }
 
     private void Render()
@@ -749,6 +835,7 @@ public sealed partial class ScheduleView : UserControl
         RenderStaffTally(ui);
         RenderDayTally(ui);
         RenderNavBar(ui);
+        RenderProblemPanel(ui);
     }
 
     /// <summary>[2026-09-11, ItemsView化] コレクション(<paramref name="coll"/>)の要素数を<paramref name="count"/>に
@@ -1013,6 +1100,13 @@ public sealed partial class ScheduleView : UserControl
         if (sender is not Border { DataContext: ScheduleCellVm { IsDataCell: true } vm } border) return;
         if (_vm.Ui.Running) return;
         MarkTapped(vm.I, vm.J);
+        // [Android 3.718.0] 下のパネルを開いている間は、セルのタップで同じパネルがそのセルの編集に切り替わる（閉じない）。
+        if (CellSheetLogic.PanelModeOf(_panelList, _panelCell is not null) != CellSheetLogic.PanelMode.Closed)
+        {
+            _panelCell = (vm.I, vm.J);
+            Render();
+            return;
+        }
         ShowCellEditor(border, vm.I, vm.J);
     }
 
@@ -1845,7 +1939,7 @@ public sealed partial class ScheduleView : UserControl
             }
             var exp = new Expander
             {
-                Header = "追加候補日を確認", Content = new ScrollViewer { Content = col, MaxHeight = 420 }, IsExpanded = candidatesOpen, MinHeight = 48,
+                Header = "追加候補日を確認", Content = new ScrollViewer { Content = col, MaxHeight = DialogMaxHeight(420) }, IsExpanded = candidatesOpen, MinHeight = 48,
                 HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
             exp.Expanding += (_, _) => candidatesOpen = true;
@@ -1893,7 +1987,7 @@ public sealed partial class ScheduleView : UserControl
         {
             Content = AttachFixSearch(dialog.Hide, onClosed => dialog.Closed += (_, _) => onClosed(), o.Focus, o.SettingsLabel, null,
                 o.Quick, o.Cell, o.Problems, o.ResolveAt, reuse, o.Picked),
-            MaxHeight = 520,
+            MaxHeight = DialogMaxHeight(520),
         };
         // 別の ContentDialog が開いていると ShowAsync は例外になる（同時に 1 つ）＝黙って消えないよう知らせる。
         try { await dialog.ShowAsync(); }
@@ -2349,7 +2443,7 @@ public sealed partial class ScheduleView : UserControl
         var relax = _vm.RelaxTrialFor();
         var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j, _vm.RelaxStopped(), _vm.RelaxUnavailable(), _vm.RelaxFailed());
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
-        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 620 } };
+        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = DialogMaxHeight(620) } };
         var reopening = false;
         void Reopen(int ni, int nj, int m, int st = 0, int? to = null) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m, st, to); }
         flyout.Closed += (_, _) => { if (!reopening) _cellSheetExpanded = false; };

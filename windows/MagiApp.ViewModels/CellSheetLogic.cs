@@ -53,6 +53,12 @@ public sealed record CellStatus(CellSeverity Severity, string Text, string Cause
 /// <summary>勤務表タブの「必須 N ▼」一覧の 1 行。TourAt は HardViolationItems の何件目か（行を押すと巡回と同じ移動でそのセルを開く）。</summary>
 public sealed record HardListRow(int TourAt, string Name, string Heading, bool WishOnly, string? Line = null);
 
+/// <summary>[3.718.0] 問題一覧の 1 行（Kotlin <c>ProblemRow</c>）。必須は巡回の何件目か（TourAt）を持ち、要調整は null。押すと Cell へ表を送る。</summary>
+public sealed record ProblemRow(string Family, int Staff, IReadOnlyList<int> Days, string Line, bool Hard, int? TourAt = null, bool WishOnly = false)
+{
+    public (int I, int J) Cell => (Staff, Days[0]);
+}
+
 public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading, IReadOnlyList<string>? Syms = null, string DayMd = "")
 {
     public (int I, int J) Cell => (Staff, Days[0]);
@@ -548,6 +554,57 @@ public static class CellSheetLogic
             var name = it.Staff >= 0 && it.Staff < staffNames.Count ? staffNames[it.Staff] : $"職員{it.Staff + 1}";
             return new HardListRow(at, name, it.Heading, it.Days.All(d => wishSelfKeys.Contains($"{it.Staff},{d}")), TourProblemLine(it, name, labelOf));
         }).OrderBy(r => r.WishOnly).ToList();
+
+    /// <summary>[3.718.0] 勤務表タブの下のパネルの状態（Kotlin <c>PanelMode</c>）。閉じる／セルの編集／問題一覧。</summary>
+    public enum PanelMode { Closed, Cell, List }
+
+    /// <summary>パネルへの操作（Kotlin <c>PanelAction</c>）。一覧を開く／セルをタップ／一覧の行をタップ／「一覧へ」／閉じる。</summary>
+    public enum PanelAction { OpenList, CellTap, RowTap, ToList, Close }
+
+    /// <summary>パネルの次の状態。セルのタップは閉じずに編集へ、行のタップは一覧のまま（表をそのセルへ送るだけ）、「一覧へ」は一覧へ戻る。</summary>
+    public static PanelMode NextPanelMode(PanelMode mode, PanelAction action) => action switch
+    {
+        PanelAction.OpenList or PanelAction.ToList => PanelMode.List,
+        PanelAction.CellTap => PanelMode.Cell,
+        PanelAction.RowTap => mode == PanelMode.Closed ? PanelMode.Closed : mode,
+        _ => PanelMode.Closed,
+    };
+
+    /// <summary>画面の状態からパネルの状態を出す（セルを開いていれば編集が優先）。</summary>
+    public static PanelMode PanelModeOf(bool listOpen, bool cellOpen) => cellOpen ? PanelMode.Cell : listOpen ? PanelMode.List : PanelMode.Closed;
+
+    /// <summary>勤務表の前に出す画面の高さの上限＝画面の 1/3（2026-10-18 ユーザー決定「1/3固定」）。測れていない（0 以下）ときは <paramref name="fallback"/>。</summary>
+    public static double PanelMaxHeight(double windowHeight, double fallback) => windowHeight > 0 ? windowHeight / 3 : fallback;
+
+    public const string PanelListButton = "一覧へ";
+
+    /// <summary>要調整の見出し「要調整 N件」（0 なら null）。</summary>
+    public static string? SoftRowsHeading(int n) => n > 0 ? $"要調整 {n}件" : null;
+
+    /// <summary>残っている問題の一覧＝必須（<see cref="HardViolationRows"/> の順）に続けて要調整のセル（セル×族ごとに 1 行、日→職員→族）。
+    /// 人員・回数の族はセルを持たないので入らない。</summary>
+    public static IReadOnlyList<ProblemRow> ProblemRows(IReadOnlyList<HardListRow> hardRows, IReadOnlyList<TourItem> items, IReadOnlyDictionary<string, IReadOnlyList<string>> cellFamilies,
+        IReadOnlyList<string> staffNames, IReadOnlyList<string> symbols, IReadOnlyList<IReadOnlyList<int>> schedule, string startDate, Func<string, string>? labelOf = null)
+    {
+        string Name(int i) => i >= 0 && i < staffNames.Count ? staffNames[i] : $"職員{i + 1}";
+        var hard = hardRows.Where(r => r.TourAt >= 0 && r.TourAt < items.Count)
+            .Select(r => { var it = items[r.TourAt]; return new ProblemRow(it.Family, it.Staff, it.Days, r.Line ?? r.Heading, true, r.TourAt, r.WishOnly); }).ToList();
+        var soft = new List<ProblemRow>();
+        foreach (var (key, fams) in cellFamilies)
+        {
+            var parts = key.Split(',');
+            if (parts.Length != 2 || !int.TryParse(parts[0], out var i) || !int.TryParse(parts[1], out var j)) continue;
+            if (i < 0 || i >= schedule.Count || j < 0 || j >= schedule[i].Count) continue;
+            var k = schedule[i][j];
+            var sym = k >= 0 && k < symbols.Count ? symbols[k] : "?";
+            foreach (var fam in fams.Select(VioBuckets.FamilyOfVioClass).Distinct())
+            {
+                if (MirrorKeys.Hard.Contains(fam)) continue;
+                soft.Add(new ProblemRow(fam, i, new[] { j }, ProblemLine(fam, Name(i), DayText.Short(startDate, j), sym, labelOf: labelOf), false));
+            }
+        }
+        return hard.Concat(soft.OrderBy(r => r.Days[0]).ThenBy(r => r.Staff).ThenBy(r => r.Family, StringComparer.Ordinal)).ToList();
+    }
 
     /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
     public static string? TourHeading(IReadOnlyList<TourItem> items, int at) =>
