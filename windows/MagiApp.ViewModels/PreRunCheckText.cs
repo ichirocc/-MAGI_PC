@@ -33,7 +33,8 @@ public static class PreRunCheckText
         string Name(int i) => i >= 0 && i < ui.StaffNames.Count ? ui.StaffNames[i] : $"職員{i + 1}";
         string Sym(int k) => k >= 0 && k < ui.ShiftSymbols.Count ? ui.ShiftSymbols[k] : $"{k}";
         string Day(int j) => DayText.Short(ui.StartDate, j);
-        ConstraintMus.WishPin? Pin(IReadOnlyList<ConstraintMus.Item> core) => core.OfType<ConstraintMus.WishPin>().FirstOrDefault();
+        // 行を押して開くのは希望のセル（手動固定は勤務表で外すものなので飛ばさない）。
+        ConstraintMus.WishPin? Pin(IReadOnlyList<ConstraintMus.Item> core) => core.OfType<ConstraintMus.WishPin>().FirstOrDefault(w => !w.Manual);
 
         var floor = new List<PreRunRow>();
         foreach (var g in s.WishConflicts)

@@ -142,6 +142,7 @@ public static partial class V6SanityPort
         public const string Count = "『年間マスター』の『③ 回数（1人あたり）』";
         public const string Head = "『年間マスター』の『④ 人数と組み合わせ』";
         public const string Rule = "『年間マスター』の『⑤ 並び・期間の制約』";
+        public const string Pin = "勤務表タブ";
     }
 
     /// <summary>検査7 の場所の印（並べ替えが最優先にする目印）。</summary>
@@ -947,7 +948,7 @@ public static partial class V6SanityPort
         {
             string ItemLabel(ConstraintMus.Item it) => it switch
             {
-                ConstraintMus.WishPin wp => $"希望「{Nm(wp.Staff)} {SafeDayLabel(state.StartDate, wp.Day)}={Sym(wp.Shift)}」",
+                ConstraintMus.WishPin wp => $"{(wp.Manual ? "手動固定" : "希望")}「{Nm(wp.Staff)} {SafeDayLabel(state.StartDate, wp.Day)}={Sym(wp.Shift)}」",
                 ConstraintMus.RangeCap rc => $"個人上限「{Sym(rc.Shift)}を最大{rc.Hi}回」",
                 ConstraintMus.RangeFloor rf => $"個人下限「{Sym(rf.Shift)}を最低{rf.Lo}回」",
                 ConstraintMus.WindowRule wr => $"期間の制約「{Sym(wr.Shift)} {wr.WindowDays}日で{wr.MinCount}回以上」",
@@ -956,7 +957,7 @@ public static partial class V6SanityPort
             };
             string RelaxHint(ConstraintMus.Item it) => it switch
             {
-                ConstraintMus.WishPin wp => $"{Nm(wp.Staff)}さんの{SafeDayLabel(state.StartDate, wp.Day)}の希望を調整する",
+                ConstraintMus.WishPin wp => $"{Nm(wp.Staff)}さんの{SafeDayLabel(state.StartDate, wp.Day)}の{(wp.Manual ? "固定を外す" : "希望を調整する")}",
                 ConstraintMus.RangeCap rc => $"「{Sym(rc.Shift)}」の個人上限を上げる",
                 ConstraintMus.RangeFloor rf => $"「{Sym(rf.Shift)}」の個人下限を下げる",
                 ConstraintMus.WindowRule wr => $"期間の制約「{Sym(wr.Shift)} {wr.WindowDays}日で{wr.MinCount}回以上」の回数を下げる",
@@ -965,7 +966,7 @@ public static partial class V6SanityPort
             };
             string RelaxPlace(ConstraintMus.Item it) => it switch
             {
-                ConstraintMus.WishPin => Place.Wish,
+                ConstraintMus.WishPin wp => wp.Manual ? Place.Pin : Place.Wish,
                 ConstraintMus.RangeCap or ConstraintMus.RangeFloor => Place.Count,
                 ConstraintMus.WindowRule => Place.Rule,
                 ConstraintMus.DayNeed => Place.Need,
@@ -982,7 +983,7 @@ public static partial class V6SanityPort
                     $"次の{sc.Core.Count}件は同時に成立しません: {labels}",
                     $"{Place.Tab}で、いずれか1件を緩めてください（例: {hints}）"));
             }
-            // 日別の証明（ConstraintMus の CanServe）はコアで希望固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。
+            // 日別の証明（ConstraintMus の CanServe）はコアで固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。
             string CapZeroNote(ConstraintMus.DayConflict dc)
             {
                 var pinned = dc.Core.OfType<ConstraintMus.WishPin>().Select(it => it.Staff).ToHashSet();

@@ -308,7 +308,8 @@ public static partial class V6PortAnalyzer
                 var wishPinned = new List<int>();
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (!p.MayPlaceAt(i, j, k)) continue;
+                    // この枠に固定（希望・手動）された人は上限 0 でも席を埋める（PlaceableFor と同じ数え方）。
+                    if (!p.MayPlaceAt(i, j, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k)) continue;
                     // [3.391.0] 生の `w != k` は実現不能な希望（担当できないシフトへの希望）まで
                     //   「別シフトへ固定」として capacity から外していた。実現不能な希望は凍結しない
                     //   （WishLocked の規約）ので、その職員はこの枠へ回せる。過小な capacity は
