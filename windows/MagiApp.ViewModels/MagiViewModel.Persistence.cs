@@ -496,6 +496,7 @@ public sealed partial class MagiViewModel
                 ui.FixFocusName = "";
                 ui.StalledHardFamilies = Array.Empty<string>();
                 ui.Consults = Array.Empty<ConsultItem>();   // 相談も前のデータの対象を指している（T01）
+                ui.SameResult = null;   // [3.716.0] 「前回と同じ結果」も前のデータの実行の印
                 ui.Message = $"読込完了: {lp.State.StaffCount}名 / {DayText.Range(lp.State.StartDate, 0, lp.State.DayCount - 1)}（{lp.State.DayCount}日） / {lp.State.ShiftCount}シフト{note}";
             }, ct: ct);
             rollback = null;

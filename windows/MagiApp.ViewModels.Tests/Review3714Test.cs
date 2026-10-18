@@ -22,9 +22,9 @@ public class Review3714Test
         Assert.Equal("夜勤があと1回不足", CellSheetLogic.ProblemLine("low", "", "10/1", "夜勤"));
         Assert.Equal("福澤 夜勤があと2回不足", CellSheetLogic.ProblemLine("low", "福澤", "10/1", "夜勤", n: 2));
         Assert.Equal("福澤 夜勤が1回多い", CellSheetLogic.ProblemLine("high", "福澤", "10/1", "夜勤"));
-        Assert.Equal("夜勤の翌日が早番です", CellSheetLogic.ProblemLine("c3n", "", "10/1", "夜勤", "早番"));
-        Assert.Equal("福澤 夜勤の翌日が早番です", CellSheetLogic.ProblemLine("c3n", "福澤", "10/1", "夜勤", "早番"));
-        Assert.Equal("希望が重なっています", CellSheetLogic.ProblemLine("pref", "福澤俊陽", "10/1", "A"));
+        Assert.Equal("夜勤→早番の並び", CellSheetLogic.ProblemLine("c3n", "", "10/1", "夜勤", "早番"));
+        Assert.Equal("福澤 夜勤→早番の並び", CellSheetLogic.ProblemLine("c3n", "福澤", "10/1", "夜勤", "早番"));
+        Assert.Equal("福澤 10/1 希望と違う勤務です", CellSheetLogic.ProblemLine("pref", "福澤", "10/1", "A"));
         Assert.Equal("福澤 10/1 担当外の勤務", CellSheetLogic.ProblemLine("groupViol", "福澤", "10/1", "A"));
     }
 

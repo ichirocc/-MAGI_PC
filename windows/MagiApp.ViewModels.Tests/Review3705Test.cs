@@ -22,7 +22,7 @@ public class Review3705Test
         Assert.Equal("勤務表をつくっています。表示は途中の値です。", AnalysisTriage.AnalysisSummaryOf(Made(u => u.Running = true), 2, null).Sentence);
         Assert.Equal("手で編集した勤務表です（自動作成はまだ）。", AnalysisTriage.AnalysisSummaryOf(Made(u => u.EngineRan = false), 2, null).Sentence);
         Assert.Equal("必須2件 · 要調整5件", AnalysisTriage.AnalysisSummaryOf(Made(), 2, null).Sentence);
-        Assert.Equal("必須0 · 要調整5件",
+        Assert.Equal("必須0件 · 要調整5件",
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.Breakdown = new Dictionary<string, int> { ["c1"] = 5 }; }), 0, null).Sentence);
         Assert.Equal("必須違反も要調整もありません。",
             AnalysisTriage.AnalysisSummaryOf(Made(u => { u.BestHard = 0L; u.BestSoft = 0L; u.Breakdown = new Dictionary<string, int>(); }), 0, null).Sentence);

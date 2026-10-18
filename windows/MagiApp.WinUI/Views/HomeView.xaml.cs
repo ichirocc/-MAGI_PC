@@ -133,6 +133,7 @@ public sealed partial class HomeView : UserControl
     /// <summary>
     /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c> の状態分岐をそのまま写す。
     /// [Android 3.698.0] 並びは純関数 <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決める＝XAML はその正順で区画を置き、ここは区画ごとの表示と中身だけを決める。
+    /// 自動の案探し（<c>FindFixSuggestions(auto: true)</c>）は手の編集・元に戻すのあとも走る（auto＝ためらいの回数に入れない）。
     /// 段の対象は <see cref="CellSheetLogic.CreationNextTarget"/> の 1 か所で決め、主ボタンの括弧と「次に確認する問題」の両方に使う（INV-01）。
     /// </summary>
     private void RenderNextAction(UiState ui, bool editable)
@@ -1067,7 +1068,8 @@ public sealed partial class HomeView : UserControl
             {
                 Text = CellSheetLogic.ShortageRowTag(infeasible, s.BlockedNow),
                 Style = StyleOf("MagiLabelMediumTextStyle"), VerticalAlignment = VerticalAlignment.Center,
-                Foreground = BrushOf(infeasible ? "MagiErrorBrush" : "MagiPrimaryBrush"),
+                // [3.716.0] Android と同じ 3 色: 担当が足りない＝赤、今の希望では埋まらない＝橙、動かせば埋まる＝青。
+                Foreground = infeasible ? BrushOf("MagiErrorBrush") : s.BlockedNow ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Orange, Colors.Gray)) : BrushOf("MagiPrimaryBrush"),
             };
             Grid.SetColumn(chip, 1);
             head.Children.Add(chip);

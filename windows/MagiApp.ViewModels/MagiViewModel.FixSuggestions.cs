@@ -43,8 +43,10 @@ public sealed partial class MagiViewModel
     /// <summary>直前に完了した作成の（状態指紋, 結果の盤面指紋）。同じ組が続けば「前回と同じ結果」を出す。</summary>
     private (long State, long Board)? _lastRunKeys;
 
-    private void NoteRunResult(int hard)
+    /// <summary>[3.716.0] <paramref name="kept"/>＝前の勤務表のままにした実行。結果の盤面は捨てたので同じ結果とは言わず、前の印も消す。</summary>
+    private void NoteRunResult(int hard, bool kept)
     {
+        if (kept) { Ui.SameResult = null; return; }
         if (_state is not { } st || _currentSchedule is not { } sc) return;
         var keys = (StateKey(st), BoardKey(sc));
         var same = AnalysisTriage.IsSameRunResult(_lastRunKeys, keys);
@@ -168,7 +170,8 @@ public sealed partial class MagiViewModel
             Ui.FixFocusName = focusName;
             Ui.FixSearched = focusName.Length == 0;
             Ui.FixDoneKey = focusKey;
-            _emptyStreak = AnalysisTriage.NextEmptySearchStreak(_emptyStreak, $"{focusKey}|{origin}", BoardKey(snap), StateKey(st), list.Count);
+            // [3.716.0] 鍵に quick（セルのシートか全面か）を含め、自動の探索は数えない（開いただけで「続けて」にしない）。
+            _emptyStreak = AnalysisTriage.NextEmptySearchStreak(_emptyStreak, $"{focusKey}|{origin}|{(quick ? "True" : "False")}", BoardKey(snap), StateKey(st), list.Count, auto);
             Ui.FixEmptyRepeatKey = (_emptyStreak?.Count ?? 0) >= 2 ? focusKey : null;
             LogOp("I", OpLogText.FixSearchEndLine(list.Count, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - searchStartMs, auto));
             // [S6 §8] 全体の 1 手探索が必須を減らす候補なしで終わったら、背景で設定の壁を探す。

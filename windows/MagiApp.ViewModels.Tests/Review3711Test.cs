@@ -35,6 +35,7 @@ public class Review3711Test
         Assert.False(AnalysisTriage.IsSameRunResult((1L, 2L), (1L, 3L)));
         Assert.False(AnalysisTriage.IsSameRunResult((1L, 2L), (9L, 2L)));
         IReadOnlyList<IReadOnlyList<int>> b = new[] { new[] { 0, 1 } };
+        // [3.716.0] Android も同じ鍵（状態指紋）に揃えた。
         var n = new SameResultNote(3, 4L, b);
         Assert.True(AnalysisTriage.SameResultVisible(n, 4L, new[] { new[] { 0, 1 } }));
         Assert.False(AnalysisTriage.SameResultVisible(n, 5L, b));

@@ -695,7 +695,7 @@ public sealed partial class ScheduleView : UserControl
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Close,
         };
-        var rows = CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys);
+        var rows = CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf);
         if (rows.Count > 0)
         {
             var start = new Button { Content = CellSheetLogic.HardListStartButton, HorizontalAlignment = HorizontalAlignment.Stretch, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
@@ -1288,10 +1288,11 @@ public sealed partial class ScheduleView : UserControl
     /// <param name="whenNoFix">手が 0 件のときに理由の下へ足す要素（板挟みの「同じ違反のもう一方のセル」へのボタン）。</param>
     /// <param name="quick">セルのシート＝締切 3 秒（手は 1 件でよい。Kotlin <c>compact</c>）。日×シフト・職員の集計のダイアログは 8 秒。</param>
     /// <param name="cell">セルのシートから来たとき、編集タブの「元の確認へ戻る」の戻り先。</param>
+    /// <param name="primaryElsewhere">[3.716.0] 同じシートに塗りの主ボタンがある（案なしの「問題一覧」を文字ボタンにする＝INV-09 塗りは 1 つ）。</param>
     /// <param name="problems">セルに重なった問題の族。2 件以上なら、どの問題の直し方を見るかを選ばせ、選んだ族を減らす案だけを出す（Kotlin 3.665.0）。</param>
     private StackPanel AttachFixSearch(Action hide, Action<Action> registerClosed, FixFocus requested, string? settingsLabel = null,
         Func<IEnumerable<UIElement>>? whenNoFix = null, bool quick = false, (int I, int J)? cell = null, IReadOnlyList<string>? problems = null,
-        (int I, int J)? resolveAt = null, bool reuse = false, string? initialPicked = null)
+        (int I, int J)? resolveAt = null, bool reuse = false, string? initialPicked = null, bool primaryElsewhere = false)
     {
         // 開いた時点の職員を ID で覚え、並べ替え・削除のあとも同じ人を探す（統合仕様 5.1）。消えていれば探さない。
         var ids0 = _vm.Ui.StaffIds;
@@ -1305,12 +1306,13 @@ public sealed partial class ScheduleView : UserControl
         bool othersOpen = false, moveOnlyOpen = false, scopeOpen = false, candidatesOpen = false, appliedChangesOpen = false;   // 畳んだ欄の開閉（Refresh で作り直しても保つ）
         var host = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
         // 日は「他の人で補う」・人員の印・日別の職員に絞った探索で渡す（セルのシートは勤務が無い＝日は理由の読み取りにだけ使う）。
-        void Find()
+        // [3.716.0] 開いたとき・盤面が変わったときの探索は自動（auto＝記録は「案を探す（自動）」、ためらいの回数と続けて 0 件に入れない）。もう一度探すは手の操作。
+        void Find(bool auto = false)
         {
             if (Resolve() is not { } f) return;
             focus = f;
             _vm.FindFixSuggestions(f.Staff, f.Shift, f.Key, f.ExceptStaff,
-                f.ExceptStaff is not null || f.Staff is null || f.Shift is not null ? f.Day : null, quick, f.AllDays);
+                f.ExceptStaff is not null || f.Staff is null || f.Shift is not null ? f.Day : null, quick, f.AllDays, auto: auto);
         }
         void Start()
         {
@@ -1318,7 +1320,7 @@ public sealed partial class ScheduleView : UserControl
             // 確認の画面から［別案を見る］で戻ったときは、閉じる前に探した案をそのまま出す（盤面は変わっていない）。
             if (reuseOnce && _vm.Ui.FixDoneKey == focus.Key && !_vm.Ui.FixSearching) { reuseOnce = false; return; }
             reuseOnce = false;
-            Find();
+            Find(auto: true);
         }
         EditReturn? Return() => cell is { } c ? CellReturn(c.I, c.J) : null;
         void Refresh()
@@ -1687,12 +1689,15 @@ public sealed partial class ScheduleView : UserControl
             var body = lines.Where(l => l != FixSearchText.NoFixScope).ToList();
             // [3.713.0] 見出し「案はありません」と説明の 1 行（続けて空なら 3.711.0 の行）。
             host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixTitle, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-            host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixLineOf(ui.FixEmptyRepeatKey == focus.Key), TextWrapping = TextWrapping.Wrap });
+            host.Children.Add(new TextBlock { Text = AnalysisTriage.NoFixLineOf(ui.FixEmptyRepeatKey == focus.Key, ui.FixTimedOut), TextWrapping = TextWrapping.Wrap });
             // [3.714.0] 主は「問題一覧」（巡回の先頭のセルへ）、閉じるは文字。セルのシートは自分の閉じるがあるので出さない。
+            // [3.716.0] シートに塗りの主（足りない側の人探し）が別にあれば文字ボタン（塗りは 1 つ＝INV-09）。
             var nfTour = _vm.HardViolationItemsFor(LabelOf);
             if (nfTour.Count > 0)
             {
-                var nfList = new Button { Content = AnalysisTriage.NoFixListButton, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+                ButtonBase nfList = primaryElsewhere
+                    ? new HyperlinkButton { Content = AnalysisTriage.NoFixListButton, MinHeight = 48 }
+                    : new Button { Content = AnalysisTriage.NoFixListButton, MinHeight = 48, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
                 var nfFirst = nfTour[0].Cell;
                 nfList.Click += (_, _) => { hide(); OpenCellSheet(nfFirst.I, nfFirst.J); };
                 host.Children.Add(nfList);
@@ -2796,7 +2801,8 @@ public sealed partial class ScheduleView : UserControl
                         search.Visibility = Visibility.Collapsed;
                         searchNote.Visibility = Visibility.Collapsed;
                         searchSlot.Children.Add(AttachFixSearch(flyout.Hide, onClosed => flyout.Closed += (_, _) => onClosed(), new FixFocus(i, null, j), quick: true, cell: (i, j),
-                            problems: _vm.CellProblemFamilies(i, j), resolveAt: (i, j)));
+                            problems: _vm.CellProblemFamilies(i, j), resolveAt: (i, j),
+                            primaryElsewhere: shortSide.Contains("covU") && CellSheetLogic.ShortSideFilled(fams)));   // 足りない側の塗りのボタンが上に出ている
                     }
                     search.Click += (_, _) => OpenCellSearch();
                     panel.Children.Add(search);
