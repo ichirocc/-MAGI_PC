@@ -35,6 +35,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
@@ -189,7 +190,32 @@
             </StackPanel>
         </ScrollViewer>
 
-        <Border x:Name="NavBar" Grid.Row="3" Background="{StaticResource MagiSurfaceVariantBrush}"
+        <!-- [Android 3.718.0] 勤務表の下のパネル（問題一覧／セルの編集）。高さは画面の 1/3 まで（コードビハインドが ActualHeight/3 を入れる）、
+             中は縦にだけスクロール、背面の表はそのまま押せる（モードレス。旧: 必須違反の一覧は ContentDialog）。✕・Esc で閉じる。 -->
+        <Border x:Name="ProblemPanel" Grid.Row="3" Visibility="Collapsed" Background="{StaticResource MagiSurfaceVariantBrush}"
+                CornerRadius="{StaticResource MagiCornerSM}" Padding="16,8" KeyDown="OnProblemPanelKeyDown">
+            <Grid RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="ProblemPanelTitle" VerticalAlignment="Center" Style="{StaticResource MagiTitleSmallTextStyle}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                    <HyperlinkButton x:Name="ProblemPanelListButton" Grid.Column="1" MinHeight="48" Visibility="Collapsed" Click="OnProblemPanelListClick" />
+                    <Button x:Name="ProblemPanelClose" Grid.Column="2" Content="✕" MinHeight="48" MinWidth="48" Click="OnProblemPanelCloseClick" />
+                </Grid>
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="ProblemPanelBody" Spacing="6" />
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <Border x:Name="NavBar" Grid.Row="4" Background="{StaticResource MagiSurfaceVariantBrush}"
                 CornerRadius="{StaticResource MagiCornerSM}" Padding="12,6">
             <Grid ColumnSpacing="6">
                 <Grid.ColumnDefinitions>
