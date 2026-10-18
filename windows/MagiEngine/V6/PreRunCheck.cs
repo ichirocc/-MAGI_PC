@@ -87,7 +87,7 @@ public static class PreRunCheck
                 if (j >= s[i].Length) continue;
                 var k = s[i][j];
                 if (k < 0 || k >= p.K || k == p.RestIdx || !p.CanDo(i, k) || p.RangeHi[i][k] != 0) continue;
-                if (p.WishFixed(i, j) && p.Wish[i][j] == k) continue;
+                if (p.WishLocked(i, j) && p.LockTo(i, j) == k) continue;
                 o.Add(new HandPlacedCell(i, j, k));
             }
         return o;

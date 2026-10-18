@@ -105,7 +105,7 @@ public static partial class V6SanityPort
     }
 
     /// <summary>
-    /// [S6 §14 Q5] 個人の上限 0 のシフトが手で置いてある（希望で固定したセルを除く）。本実行の入口の clear が外すので、
+    /// [S6 §14 Q5] 個人の上限 0 のシフトが手で置いてある（希望・手動で固定したセルを除く）。本実行の入口の clear が外すので、
     /// 再作成すると消える。盤面に依存するため <see cref="BuildGuidance"/>（設定だけの診断）には入れない。
     /// </summary>
     public static SettingIssue? HandPlacedUpperZeroIssue(MagiState state, Problem p, int[][] s)
@@ -116,7 +116,7 @@ public static partial class V6SanityPort
             {
                 var k = s[i][j];
                 if (k < 0 || k >= p.K || k == p.RestIdx || !p.CanDo(i, k) || p.RangeHi[i][k] != 0) continue;
-                if (p.WishFixed(i, j) && p.Wish[i][j] == k) continue;
+                if (p.WishLocked(i, j) && p.LockTo(i, j) == k) continue;
                 var name = i < state.StaffList.Count ? state.StaffList[i].Name : $"#{i}";
                 var sym = k < state.Shifts.Count ? state.Shifts[k].Kigou : $"{k}";
                 cells.Add($"{name} {SafeDayLabel(state.StartDate, j)}「{sym}」");

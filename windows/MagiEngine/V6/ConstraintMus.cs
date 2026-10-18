@@ -42,8 +42,13 @@ public static class ConstraintMus
     /// <summary>IR: a constraint the user can actually relax one at a time. Carries no evaluator (design principle).</summary>
     public abstract record Item;
 
-    /// <summary>A fixed assignment from a realizable wish (per <c>Problem.WishLocked</c> — unrealizable wishes are never included).</summary>
-    public sealed record WishPin(int Staff, int Day, int Shift) : Item;
+    /// <summary>A fixed cell (per <c>Problem.WishLocked</c>: a realizable wish, or a manual pin when <paramref name="Manual"/> — unrealizable wishes are never included).
+    /// A manual pin keeps its value on the final board too, so the day proofs treat it like a wish pin (it serves its seat even on a cap-0 shift, and no other seat).</summary>
+    public sealed record WishPin(int Staff, int Day, int Shift, bool Manual = false) : Item;
+
+    /// <summary>The fixed cell of day j as a <see cref="WishPin"/> (a manual pin wins over the wish, as <c>Problem.LockTo</c> does).</summary>
+    private static WishPin? LockedPin(Problem p, int i, int j) =>
+        p.WishLocked(i, j) ? new WishPin(i, j, p.LockTo(i, j), p.Pinned(i, j)) : null;
 
     /// <summary>A personal upper bound (staffRange hi, defined entries only).</summary>
     public sealed record RangeCap(int Staff, int Shift, int Hi) : Item;
@@ -153,7 +158,7 @@ public static class ConstraintMus
                 if (eff > 0) universe.Add(new DayNeed(j, k, eff));
             }
             if (!universe.Any(it => it is DayNeed)) continue;
-            for (var i = 0; i < p.S; i++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            for (var i = 0; i < p.S; i++) if (LockedPin(p, i, j) is { } lp) universe.Add(lp);
             if (!DayProvablyInfeasible(p, universe)) continue;
             var core = Shrink(universe, items => DayProvablyInfeasible(p, items));
             if (core.Count > 0) outList.Add(new DayConflict(j, core));
@@ -175,7 +180,7 @@ public static class ConstraintMus
                 if (eff > 0) universe.Add(new DayNeed(j, k, eff));
             }
             if (universe.Count == 0) continue;
-            for (var i = 0; i < p.S; i++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            for (var i = 0; i < p.S; i++) if (LockedPin(p, i, j) is { } lp) universe.Add(lp);
             if (DayProvablyInfeasible(p, universe, zeroCapExcluded: false)) outList.Add(j);
         }
         return outList;
@@ -288,7 +293,7 @@ public static class ConstraintMus
             var eff = EffectiveLowerBound(p, k, dc.Day);
             if (eff > 0) universe.Add(new DayNeed(dc.Day, k, eff));
         }
-        for (var i = 0; i < p.S; i++) if (p.WishFixed(i, dc.Day)) universe.Add(new WishPin(i, dc.Day, p.Wish[i][dc.Day]));
+        for (var i = 0; i < p.S; i++) if (LockedPin(p, i, dc.Day) is { } lp) universe.Add(lp);
         return new DayShortProof(dc.Day, dc.Core.OfType<DayNeed>().Select(d => d.Shift).ToHashSet(), Math.Max(1, DayDeficit(p, universe)));
     }).ToList();
 
@@ -319,7 +324,7 @@ public static class ConstraintMus
         var slotMatch = new int[slots.Count]; // slot -> staff
         Array.Fill(slotMatch, -1);
 
-        // A wish pin takes precedence over MayPlace (same as V6NativeOptimizer.Hf66DataHardening) = a pin on a cap-0 shift still serves that seat.
+        // A fixed cell (wish or manual pin) takes precedence over MayPlace (same as Hf66DataHardening) = a pin on a cap-0 shift still serves that seat.
         bool CanServe(int i, int shift)
         {
             if (!pinned.TryGetValue(i, out var pin)) return zeroCapExcluded ? p.MayPlace(i, shift) : p.CanDo(i, shift);
