@@ -20,7 +20,7 @@ public static class MagiAccent
     //   アルファを剥がした <c>#rrggbb</c>（6桁RGB）表現。
     public const string Blue = "#3B6FD4";    // 実行中 / 早番（スティールブルー）
     public const string Green = "#2E9E62";   // 成功 / 日勤（リーフ、ティール主色と弁別）
-    public const string Orange = "#E08A1E";  // 警告 / 夜勤（アンバー）
+    public const string Orange = "#B86E00";  // 警告 / 夜勤（アンバー）。白地 3.99:1（Android 3.719.0、旧 #E08A1E は 2.68:1）
     public const string Purple = "#8A5CD1";  // 遅番 / 個人属性（ミュートバイオレット）
     public const string Pink = "#D24D89";    // 希望 / 個人属性（ローズ）
     public const string Red = "#D23B34";     // 重大違反 / NG制約（明快なアラート赤）

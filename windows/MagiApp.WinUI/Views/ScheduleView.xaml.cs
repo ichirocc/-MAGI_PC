@@ -337,7 +337,7 @@ public sealed partial class ScheduleView : UserControl
             var fg = k < ui.ShiftTextHex.Count ? ParseHexColor(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
             ShiftLegendHost.Children.Add(new Border
             {
-                Height = 32, MinWidth = 48, Padding = new Thickness(10, 0, 10, 0), CornerRadius = new CornerRadius(6),
+                MinHeight = 32, MinWidth = 48, Padding = new Thickness(10, 0, 10, 0), CornerRadius = new CornerRadius(6),   // 文字拡大で記号が欠けないよう最小高（Android 3.719.0）
                 Background = new SolidColorBrush(bg),
                 Child = new TextBlock
                 {
@@ -1041,6 +1041,13 @@ public sealed partial class ScheduleView : UserControl
             {
                 borderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
                 thickness = new Thickness(3);
+            }
+            // [Android 3.719.0] セル地が surface と見分けにくい（1.5:1 未満）ときは 1px の輪郭を引く（白地に白いシフト色など）。
+            //   違反・注目の枠があればそちらが優先。Kotlin FlatCell の `plainBorder || lowContrastOutline`。
+            if (thickness.Left == 0 && A11y.LowContrastOutline(RelLum(bg), RelLum(((SolidColorBrush)Application.Current.Resources["MagiBackgroundBrush"]).Color)))
+            {
+                borderBrush = (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"];
+                thickness = new Thickness(1);
             }
             cell.BorderBrush = borderBrush;
             cell.BorderThickness = thickness;
@@ -2084,6 +2091,10 @@ public sealed partial class ScheduleView : UserControl
 
     private static readonly Color DefaultHardVioColor = ColorHex.Parse(ColorHex.DefaultHardVioHex, Colors.Crimson);
     private static readonly Color DefaultSoftVioColor = ColorHex.Parse(ColorHex.DefaultSoftVioHex, Colors.DarkOrange);
+
+
+    /// <summary>WCAG 相対輝度（<see cref="A11y.WcagLuminance"/> と同じ式を <see cref="Color"/> で）。</summary>
+    private static double RelLum(Color c) => A11y.WcagLuminance($"#{c.R:X2}{c.G:X2}{c.B:X2}");
 
     private static Color ParseHexColor(string? hex, Color fallback) => ColorHex.Parse(hex, fallback);
 
