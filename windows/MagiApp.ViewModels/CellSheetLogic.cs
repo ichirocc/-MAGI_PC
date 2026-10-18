@@ -1641,11 +1641,16 @@ public static class CellSheetLogic
         return $"担当{canDo}人・1日最大{maxNeed}人・" + (slack < 0 ? $"{-slack}人足りない" : slack == 0 ? "欠勤の余裕なし" : $"余裕{slack}人");
     }
 
-    /// <summary>[3.720.0] 問題一覧で選んだ行（同じマスに行が複数あっても押した行だけ＝INV-01、Kotlin <c>problemPickedIndex</c>）。</summary>
-    public static int? ProblemPickedIndex(IReadOnlyList<ProblemRow> rows, int? pickedIdx, (int I, int J)? cell)
+    /// <summary>
+    /// [3.720.0] 問題一覧で選んだ行（同じマスに行が複数あっても押した行だけ＝INV-01、Kotlin <c>problemPickedIndex</c>）。
+    /// [3.721.1] 一覧が作り直されて行番号がずれても同じ族の行に留まる: 行番号のマス・族が一致 → 同じマス・族の先頭 → そのマスの先頭。
+    /// </summary>
+    public static int? ProblemPickedIndex(IReadOnlyList<ProblemRow> rows, int? pickedIdx, (int I, int J)? cell, string? pickedFamily = null)
     {
         if (cell is not { } c) return null;
-        if (pickedIdx is { } p && p >= 0 && p < rows.Count && rows[p].Cell == c) return p;
+        bool Same(ProblemRow r) => r.Cell == c && (pickedFamily == null || r.Family == pickedFamily);
+        if (pickedIdx is { } p && p >= 0 && p < rows.Count && Same(rows[p])) return p;
+        for (var k = 0; k < rows.Count; k++) if (Same(rows[k])) return k;
         for (var k = 0; k < rows.Count; k++) if (rows[k].Cell == c) return k;
         return null;
     }

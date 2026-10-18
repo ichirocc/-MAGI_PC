@@ -96,6 +96,7 @@ public sealed partial class ScheduleView : UserControl
     private (int I, int J)? _panelCell;
     private (int I, int J)? _panelPick;
     private int? _panelPickRow;   // [3.720.0] 問題一覧で押した行（同じマスの別の行と分ける）
+    private string? _panelPickFamily;   // [3.721.1] その行の族（作り直し後の行番号ずれを補う）
     private List<List<int>> _weeks = new();
     private List<int> _vioDays = new();
     private int _navIdx = -1;
@@ -747,7 +748,7 @@ public sealed partial class ScheduleView : UserControl
             var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
             var rows = CellSheetLogic.ProblemRows(CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf), items, ui.ViolationCellFamilies,
                 ui.StaffNames, ui.ShiftSymbols, ui.Schedule, ui.StartDate, LabelOf);
-            var pickedIdx = CellSheetLogic.ProblemPickedIndex(rows, _panelPickRow, _panelPick);
+            var pickedIdx = CellSheetLogic.ProblemPickedIndex(rows, _panelPickRow, _panelPick, _panelPickFamily);
             var picked = pickedIdx is { } pi ? rows[pi] : null;
             ProblemPanelTitle.Text = picked?.Line ?? CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui));
             ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources[picked is { Hard: true } ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
@@ -779,7 +780,8 @@ public sealed partial class ScheduleView : UserControl
                 if (idx == pickedIdx) row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
                 var cell = r.Cell;
                 var rowIdx = idx;
-                row.Click += (_, _) => { _panelPickRow = rowIdx; _panelPick = cell; FocusCell(cell.I, cell.J); };
+                var fam = r.Family;
+                row.Click += (_, _) => { _panelPickRow = rowIdx; _panelPickFamily = fam; _panelPick = cell; FocusCell(cell.I, cell.J); };
                 body.Children.Add(row);
             }
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
