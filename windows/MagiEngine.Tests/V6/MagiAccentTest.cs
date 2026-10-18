@@ -13,7 +13,7 @@ public class MagiAccentTest
         // Kotlin: Color(0xFF3B6FD4) 等 — 上位バイトは不透明を表すアルファ(FF)、残り6桁がRGB。
         Assert.Equal("#3B6FD4", MagiAccent.Blue);
         Assert.Equal("#2E9E62", MagiAccent.Green);
-        Assert.Equal("#E08A1E", MagiAccent.Orange);
+        Assert.Equal("#B86E00", MagiAccent.Orange);
         Assert.Equal("#8A5CD1", MagiAccent.Purple);
         Assert.Equal("#D24D89", MagiAccent.Pink);
         Assert.Equal("#D23B34", MagiAccent.Red);
