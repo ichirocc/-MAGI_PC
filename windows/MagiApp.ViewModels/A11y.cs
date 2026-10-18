@@ -35,4 +35,47 @@ public static class A11y
     public const double OutlineContrastMin = 1.5;
 
     public static bool LowContrastOutline(double lumBg, double lumSurface) => ContrastRatio(lumBg, lumSurface) < OutlineContrastMin;
+
+    /// <summary>
+    /// [視覚弱点者対応 第2便・C# 側のみ] 勤務表セルの読み上げ文（Kotlin <c>MagiScheduleViews.kt</c> の FlatCell に渡す <c>cd</c> と同じ語順・語彙）。
+    /// <paramref name="vk"/>: 0=無し・1=必須・2/3=要調整。<paramref name="wish"/>: 0=無し・1=希望（反映）・2=希望未反映。
+    /// <paramref name="extBanSyms"/>: 拡張希望の指定日なら禁止シフトの記号（null=指定なし）、<paramref name="extViolated"/> は割当が禁止のシフト。
+    /// </summary>
+    public static string CellDescription(string staffName, string dayFull, string sym, int vk, bool inBand, int wish, string wishSym,
+        bool pinned, IReadOnlyList<string>? extBanSyms, bool extViolated)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(staffName).Append(' ').Append(dayFull).Append(' ').Append(string.IsNullOrWhiteSpace(sym) ? "なし" : sym);
+        if (vk == 1) sb.Append("・必須"); else if (vk >= 2) sb.Append("・要調整");
+        if (inBand) sb.Append("・期間の制約の窓");
+        if (wish == 2) sb.Append("・希望未反映（希望=").Append(string.IsNullOrWhiteSpace(wishSym) ? "?" : wishSym).Append('）');
+        else if (wish != 0) sb.Append("・希望");
+        if (pinned) sb.Append("・手動固定");
+        if (extBanSyms is not null)
+        {
+            if (extViolated) sb.Append("・拡張希望の違反");
+            else sb.Append("・拡張希望（").Append(string.Join("・", extBanSyms)).Append("以外）");
+        }
+        return sb.Append("、タップで変更").ToString();
+    }
+
+    /// <summary>矢印キーでの注目セルの移動（表の端で止まる）。<paramref name="di"/>/<paramref name="dj"/> は -1/0/1。注目が無ければ (0,0) から始める。</summary>
+    public static (int I, int J) MoveCell((int I, int J)? cur, int di, int dj, int staffCount, int dayCount)
+    {
+        if (staffCount <= 0 || dayCount <= 0) return (0, 0);
+        if (cur is not { } c) return (0, 0);
+        return (Math.Clamp(c.I + di, 0, staffCount - 1), Math.Clamp(c.J + dj, 0, dayCount - 1));
+    }
+
+    public enum CellBorder { None, Violation, Focus, Outline }
+
+    /// <summary>
+    /// セルの枠の選び方（注目＞必須違反＞輪郭）。Windows のハイコントラストでは無違反セルにも必ず輪郭を引く
+    /// （シフト色の地が HC の配色と無関係なため、隣のセルとの境目が消える）。
+    /// </summary>
+    public static CellBorder CellBorderOf(bool focused, bool hardViolation, bool lowContrast, bool highContrast) =>
+        focused ? CellBorder.Focus
+        : hardViolation ? CellBorder.Violation
+        : lowContrast || highContrast ? CellBorder.Outline
+        : CellBorder.None;
 }

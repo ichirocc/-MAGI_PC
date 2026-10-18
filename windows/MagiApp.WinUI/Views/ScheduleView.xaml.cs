@@ -65,6 +65,8 @@ public sealed partial class ScheduleView : UserControl
 
     /// <summary>[違反箇所へのジャンプ] 分析タブから飛んできた注目セル。<see cref="FocusCell"/> 参照。</summary>
     private (int I, int J)? _focusCell;
+    /// <summary>矢印キーで動かす注目セル（<see cref="_focusCell"/> と違い時間で消えない）。</summary>
+    private (int I, int J)? _kbCell;
 
     /// <summary>注目セルの実体化済み要素（無ければ null）。<see cref="OnScheduleCellLoaded"/>が
     /// 実体化のたびに更新する。<see cref="FocusCell"/> が <c>StartBringIntoView</c> を呼ぶために使う。</summary>
@@ -719,6 +721,68 @@ public sealed partial class ScheduleView : UserControl
         if (e.Key == Windows.System.VirtualKey.Escape) { ClosePanel(); e.Handled = true; }
     }
 
+    private static readonly Windows.UI.ViewManagement.AccessibilitySettings _a11ySettings = new();
+
+    private static Brush SystemBrush(string colorKey) =>
+        Application.Current.Resources.TryGetValue(colorKey, out var c) && c is Color col ? new SolidColorBrush(col) : new SolidColorBrush(Colors.Black);
+
+    /// <summary>Esc で下のパネルを閉じる（パネルの外にフォーカスがあっても）。フライアウト・ダイアログは自分で Esc を処理する。</summary>
+    private void OnViewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key != Windows.System.VirtualKey.Escape || e.Handled) return;
+        if (CellSheetLogic.PanelModeOf(_panelList, _panelCell is not null) != CellSheetLogic.PanelMode.Closed) { ClosePanel(); e.Handled = true; }
+        else if (_kbCell is not null) { _kbCell = null; Render(); e.Handled = true; }
+    }
+
+    /// <summary>勤務表のキーボード操作: 矢印キーで注目セルを動かし（主色の太枠＋読み上げ）、Enter/Space でそのセルを開く（タップと同じ）。</summary>
+    private void OnGridPreviewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        var ui = _vm.Ui;
+        if (!ui.Loaded || ui.Schedule.Count == 0) return;
+        var (di, dj) = e.Key switch
+        {
+            Windows.System.VirtualKey.Up => (-1, 0),
+            Windows.System.VirtualKey.Down => (1, 0),
+            Windows.System.VirtualKey.Left => (0, -1),
+            Windows.System.VirtualKey.Right => (0, 1),
+            _ => (0, 0),
+        };
+        if (di != 0 || dj != 0)
+        {
+            var next = A11y.MoveCell(_kbCell, di, dj, ui.Schedule.Count, ui.Schedule[0].Count);
+            _kbCell = next;
+            Render();
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (_cellElements.TryGetValue((next.I + 1, next.J + 1), out var el))
+                {
+                    el.StartBringIntoView();
+                    if (el.DataContext is ScheduleCellVm { AutomationName: { } name }) Announce(name);
+                }
+            });
+            e.Handled = true;
+            return;
+        }
+        if (e.Key is Windows.System.VirtualKey.Enter or Windows.System.VirtualKey.Space && _kbCell is { } kc && !ui.Running)
+        {
+            MarkTapped(kc.I, kc.J);
+            if (CellSheetLogic.PanelModeOf(_panelList, _panelCell is not null) != CellSheetLogic.PanelMode.Closed)
+            {
+                _panelCell = kc;
+                Render();
+            }
+            else if (_cellElements.TryGetValue((kc.I + 1, kc.J + 1), out var anchor)) ShowCellEditor(anchor, kc.I, kc.J);
+            e.Handled = true;
+        }
+    }
+
+    private void Announce(string text)
+    {
+        GridAnnounce.Text = text;
+        if (Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.FromElement(GridAnnounce) is { } peer)
+            peer.RaiseAutomationEvent(Microsoft.UI.Xaml.Automation.Peers.AutomationEvents.LiveRegionChanged);
+    }
+
     private void ClosePanel()
     {
         _panelList = false;
@@ -878,6 +942,7 @@ public sealed partial class ScheduleView : UserControl
         _countBadges = GridDisplayMarks.CountBadges(ui, _vioEnabled);
         var c1Marks = GridDisplayMarks.C1DisplayMarks(ui);
         var c1Band = GridDisplayMarks.C1Band(ui, _vioEnabled, staffCount, dayCount);
+        var highContrast = _a11ySettings.HighContrast;
         _c1Stuck = GridDisplayMarks.C1Stuck(ui);
 
         // +1 行/列 = 日番号ヘッダー行(row 0)・職員名ヘッダー列(col 0)。
@@ -895,6 +960,7 @@ public sealed partial class ScheduleView : UserControl
             cell.I = -1;
             cell.J = -1;
             cell.Text = text;
+            cell.AutomationName = text;
             cell.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
             cell.MinWidth = col == 0 ? 96 : 32;
             cell.TextAlignment = TextAlignment.Center;
@@ -1041,22 +1107,33 @@ public sealed partial class ScheduleView : UserControl
             var dimmed = _focusMode && vioClass is null && !unreflectedWish && !cellFocused;
             // [違反箇所へのジャンプ] 注目セルは一時的に主色の太枠へ差し替える（FocusCell 参照。
             // Kotlin原本は cs.primary、旧実装のDodgerBlueは原本に無い独自色だったため差し替え）。
-            var isFocused = _focusCell is { } fc && fc.I == i && fc.J == j;
-            if (isFocused)
-            {
-                borderBrush = (Brush)Application.Current.Resources["MagiPrimaryBrush"];
-                thickness = new Thickness(3);
-            }
+            var isFocused = (_focusCell is { } fc && fc.I == i && fc.J == j) || (_kbCell is { } kc && kc.I == i && kc.J == j);
             // [Android 3.719.0] セル地が surface と見分けにくい（1.5:1 未満）ときは 1px の輪郭を引く（白地に白いシフト色など）。
             //   違反・注目の枠があればそちらが優先。Kotlin FlatCell の `plainBorder || lowContrastOutline`。
-            if (thickness.Left == 0 && A11y.LowContrastOutline(RelLum(bg), RelLum(((SolidColorBrush)Application.Current.Resources["MagiBackgroundBrush"]).Color)))
+            var lowContrast = A11y.LowContrastOutline(RelLum(bg), RelLum(((SolidColorBrush)Application.Current.Resources["MagiBackgroundBrush"]).Color));
+            switch (A11y.CellBorderOf(isFocused, thickness.Left > 0, lowContrast, highContrast))
             {
-                borderBrush = (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"];
-                thickness = new Thickness(1);
+                case A11y.CellBorder.Focus:
+                    borderBrush = highContrast ? SystemBrush("SystemColorHighlightColor") : (Brush)Application.Current.Resources["MagiPrimaryBrush"];
+                    thickness = new Thickness(3);
+                    break;
+                case A11y.CellBorder.Outline:
+                    borderBrush = highContrast ? SystemBrush("SystemColorWindowTextColor") : (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"];
+                    thickness = new Thickness(1);
+                    break;
             }
             cell.BorderBrush = borderBrush;
             cell.BorderThickness = thickness;
             cell.Opacity = dimmed ? 0.35 : (ui.Running ? 0.5 : 1.0);
+            var wishKind = ui.Wishes.TryGetValue($"{i},{j}", out var wk1) && CanDo(i, wk1) ? (wk1 == k ? 1 : 2) : 0;
+            var vk = vioClass is null ? 0 : GridDisplayMarks.IsHardCellViolation(vioClass) ? 1 : heavySoft ? 2 : 3;
+            cell.AutomationName = A11y.CellDescription(
+                i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}", DayText.Full(ui.StartDate, j), sym, vk,
+                cell.BandVisibility == Visibility.Visible, wishKind,
+                wishKind == 2 && wk1 >= 0 && wk1 < ui.ShiftSymbols.Count ? ui.ShiftSymbols[wk1] : "",
+                cell.PinVisibility == Visibility.Visible,
+                extBans?.OrderBy(b => b).Select(b => b >= 0 && b < ui.ShiftSymbols.Count ? ui.ShiftSymbols[b] : "?").ToList(),
+                extBans is not null && extBans.Contains(k));
         }
 
         UpdateHeaderCell(0, 0, "");
