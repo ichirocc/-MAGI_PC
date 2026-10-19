@@ -73,7 +73,7 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         Assert.Equal(2, token.Result.Relaxes.Count);
         var undo0 = vm.UndoStackCount;
 
-        vm.RelaxAndApply(token);
+        Assert.IsType<RelaxApproval.Verdict.Applied>(vm.RelaxAndApply(token));
 
         Assert.Equal(undo0 + 1, vm.UndoStackCount);
         Assert.Equal(4, UnifiedViolationChecker.Check(vm._state!, vm._currentSchedule!.Copy2D()).Hard);
@@ -103,10 +103,9 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         vm._currentSchedule = b;
         var undo0 = vm.UndoStackCount;
         Assert.Null(vm.RelaxTrialFor());
-        vm.RelaxAndApply(token);
+        Assert.Same(RelaxApproval.Verdict.Stale, vm.RelaxAndApply(token));
         Assert.Equal(undo0, vm.UndoStackCount);
         Assert.Same(Oct, vm._state);
-        Assert.Contains("もう一度試算", vm.Ui.Message);
     }
 
     [Fact]
@@ -118,12 +117,49 @@ public class MagiViewModelRelaxTrialTest : IDisposable
         var b0 = vm._currentSchedule!.Copy2D();
         var undo0 = vm.UndoStackCount;
 
-        vm.RelaxAndApply(bad);
+        Assert.Same(RelaxApproval.Verdict.NotReproduced, vm.RelaxAndApply(bad));
 
         Assert.Equal(undo0, vm.UndoStackCount);
         Assert.Same(Oct, vm._state);
         Assert.Equal(b0, vm._currentSchedule);
-        Assert.Contains("同じ結果になりませんでした", vm.Ui.Message);
+    }
+
+    [Fact]
+    public async Task ApprovalFlowNeedsAReasonAndAppliesOnce()
+    {
+        var vm = NewVm();
+        await Found(vm);
+        vm.OpenRelaxFlow();
+        Assert.Equal(RelaxApproval.Step.R1, vm.Ui.RelaxFlow!.Step);
+        vm.RelaxFlowNext();
+        vm.RelaxFlowNext();
+        Assert.Equal(RelaxApproval.Step.R3, vm.Ui.RelaxFlow!.Step);
+        var undo0 = vm.UndoStackCount;
+        vm.ApproveRelax("  ");
+        Assert.Equal(RelaxApproval.Step.R3, vm.Ui.RelaxFlow!.Step);
+        Assert.Equal(undo0, vm.UndoStackCount);
+        vm.ApproveRelax("師長と確認済み");
+        Assert.Equal(RelaxApproval.Step.R5, vm.Ui.RelaxFlow!.Step);
+        Assert.Equal(4, vm.Ui.RelaxFlow.PostHard);
+        Assert.NotNull(vm.Ui.RelaxFlow.DecisionId);
+        Assert.Equal(undo0 + 1, vm.UndoStackCount);
+        vm.ApproveRelax("師長と確認済み");
+        Assert.Equal(undo0 + 1, vm.UndoStackCount);
+    }
+
+    [Fact]
+    public async Task ApprovalFlowOnStaleDataEndsWithoutChange()
+    {
+        var vm = NewVm();
+        await Found(vm);
+        vm.OpenRelaxFlow();
+        var b = vm._currentSchedule!.Copy2D();
+        b[0][0] = b[0][0] == 0 ? 1 : 0;
+        vm._currentSchedule = b;
+        vm.RelaxFlowNext();
+        Assert.Equal(RelaxApproval.Step.R4, vm.Ui.RelaxFlow!.Step);
+        Assert.Equal(RelaxApproval.EndReason.Stale, vm.Ui.RelaxFlow.End);
+        Assert.Same(Oct, vm._state);
     }
 
     [Fact]
