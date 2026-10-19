@@ -14,7 +14,7 @@ public class ScheduleWriteSitesTest
         "RunV6FullOptimizeCoreAsync", "RunSoftPolishCoreAsync", "RunInBackgroundCoreAsync", "ApplyBgResult",   // 最適化の採用
         "GenerateSmartInitialCoreAsync", "ApplyAlternative", "ApplyWishes",   // 下書き・別案・希望の反映
         "ApplyStructure", "ApplyStructureWithMessage",                   // 編集タブ
-        "RelaxAndApply",                                                 // 設定の緩和
+        "RelaxAndApply", "RestoreBeforeRelax",                           // 設定の緩和と、その事後確認・保存失敗の復旧
         "ApplyFixSuggestion",                                            // 改善手（FixApplyGate を通る）
     };
     private static readonly Regex Write = new(@"(\b_currentSchedule\s*=[^=>]|\bUi\.Schedule\s*=[^=>]|\bSchedule\s*=\s*[a-zA-Z])");

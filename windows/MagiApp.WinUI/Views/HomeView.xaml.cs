@@ -538,63 +538,136 @@ public sealed partial class HomeView : UserControl
         else _vm.RetryRelaxTrial();
     }
 
-    /// <summary>[S6] 設定を緩める候補（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5）。盤面は見せず手順を言葉で出し、押したときだけ当てる。
+    /// <summary>[S6] 設定を緩める候補の承認フロー R1〜R5（Kotlin <c>RelaxTrialDialog</c>、<c>docs/s6_relax_trial.md</c> §5・§15）。盤面は見せず手順を言葉で出し、承認して押したときだけ当てる。
     /// 確定の前に全部の変更（設定・手順の全セル）を読める＝窓の外の手も畳むだけで隠さない。</summary>
     internal async Task ShowRelaxTrialAsync((int I, int J)? from = null)
     {
+        _vm.OpenRelaxFlow();
         var panel = new StackPanel { Spacing = 4, MinWidth = 360 };
-        var token = _vm.RelaxTrialFor();
-        var t = token is null ? null : NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui, AnalysisView.LabelOf);
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, Title = t?.DialogTitle ?? "例外として上限を緩める候補",
-            Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
-            CloseButtonText = "閉じる", DefaultButton = ContentDialogButton.Close,
-        };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = 420 } };
+        var reasonBox = new TextBox { Header = "承認の理由（必須）", AcceptsReturn = true, TextWrapping = TextWrapping.Wrap };
         TextBlock Line(string text, double size = 14, bool dim = false, bool bold = false) => new()
         {
             Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Opacity = dim ? 0.8 : 1.0,
             FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         };
-        if (token is null || t is null) panel.Children.Add(Line("勤務表か設定が変わりました。もう一度試算してください。"));
-        else
+        void Fold(string label, IEnumerable<UIElement> items)
         {
-            panel.Children.Add(Line(NextActionGuide.RelaxWishLine, bold: true));
-            panel.Children.Add(Line(t.HardLine, bold: true));
-            panel.Children.Add(Line(t.ScaleLine, dim: true));
-            if (t.PrerequisiteRows.Count > 0)
-            {
-                panel.Children.Add(Line(NextActionGuide.RelaxPrereqHead, bold: true));
-                panel.Children.Add(Line(NextActionGuide.RelaxPrereqWhy, dim: true));
-                foreach (var r in t.PrerequisiteRows) panel.Children.Add(Line("・" + r));
-            }
-            panel.Children.Add(Line(NextActionGuide.RelaxSetHead, bold: true));
-            panel.Children.Add(Line(t.Lead, 16));
-            foreach (var r in t.Rows) panel.Children.Add(Line("・" + r));
-            panel.Children.Add(Line(t.SolveNote, dim: true));
-            panel.Children.Add(Line("手順", bold: true));
-            foreach (var m in t.MoveLines) panel.Children.Add(Line(m));
-            if (t.OtherMoves > 0)
-            {
-                var others = new StackPanel { Spacing = 4, Visibility = Visibility.Collapsed };
-                foreach (var m in t.OtherMoveLines) others.Children.Add(Line(m));
-                var showAll = new HyperlinkButton { Content = $"ほか {t.OtherMoves}セル（タップですべて表示）", MinHeight = 44, Padding = new Thickness(0) };
-                showAll.Click += (_, _) => { showAll.Visibility = Visibility.Collapsed; others.Visibility = Visibility.Visible; };
-                panel.Children.Add(showAll);
-                panel.Children.Add(others);
-            }
-            if (t.KeepNote is { } keep) panel.Children.Add(Line(keep, dim: true));
-            // [Android 3.704.0 G-3] 主ボタンはスクロールの外（PrimaryButtonText）に置き、塗りはそれ 1 つ。
-            dialog.PrimaryButtonText = "上限を緩め、手順を当てる";
-            dialog.IsPrimaryButtonEnabled = !_vm.Ui.Running;
-            dialog.DefaultButton = ContentDialogButton.Primary;
-            panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
+            var body = new StackPanel { Spacing = 4, Visibility = Visibility.Collapsed };
+            foreach (var x in items) body.Children.Add(x);
+            var b = new HyperlinkButton { Content = label, MinHeight = 44, Padding = new Thickness(0) };
+            b.Click += (_, _) => body.Visibility = body.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            panel.Children.Add(b);
+            panel.Children.Add(body);
         }
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary && token is not null)
+        void Render()
         {
-            _vm.RelaxAndApply(token);
-            if (from is { } c) _window.OpenCell(c.I, c.J);
+            panel.Children.Clear();
+            var f = _vm.Ui.RelaxFlow;
+            var token = _vm.RelaxTrialFor();
+            var t = token is null ? null : NextActionGuide.RelaxTrialTextOf(token.Result, _vm.Ui, AnalysisView.LabelOf);
+            var step = f is null ? RelaxApproval.Step.R4 : f.Step;
+            if (t is null && step is RelaxApproval.Step.R1 or RelaxApproval.Step.R2 or RelaxApproval.Step.R3) step = RelaxApproval.Step.R4;
+            IEnumerable<UIElement> Values() => t is null ? Array.Empty<UIElement>() : t.PrerequisiteRows.Concat(t.Rows).Select(r => (UIElement)Line("・" + r));
+            IEnumerable<UIElement> Moves() => t is null ? Array.Empty<UIElement>() : t.MoveLines.Concat(t.OtherMoveLines).Select(m => (UIElement)Line(m));
+            dialog.Title = step switch
+            {
+                RelaxApproval.Step.R1 => t?.DialogTitle ?? "試算結果の確認",
+                RelaxApproval.Step.R2 => "変更内容の確認",
+                RelaxApproval.Step.R3 => "承認",
+                RelaxApproval.Step.R4 => "終了",
+                _ => "反映しました",
+            };
+            // [Android 3.704.0 G-3] 主ボタンはスクロールの外（PrimaryButtonText）に置き、塗りは状態ごとに 1 つ（INV-09）。
+            dialog.PrimaryButtonText = "";
+            dialog.CloseButtonText = RelaxApproval.Close;
+            dialog.DefaultButton = ContentDialogButton.Close;
+            switch (step)
+            {
+                case RelaxApproval.Step.R1:
+                    panel.Children.Add(Line(RelaxApproval.ReadOnlyHead, bold: true));
+                    panel.Children.Add(Line(t!.HardLine, bold: true));
+                    panel.Children.Add(Line(NextActionGuide.RelaxSetHead, bold: true));
+                    foreach (var x in Values()) panel.Children.Add(x);
+                    panel.Children.Add(Line($"試算 {f!.TrialId}・データ {f.Fingerprint}", dim: true));
+                    var cond = new List<UIElement> { Line(NextActionGuide.RelaxWishLine), Line(t.ScaleLine, dim: true) };
+                    if (t.PrerequisiteRows.Count > 0) cond.Add(Line(NextActionGuide.RelaxPrereqWhy, dim: true));
+                    cond.Add(Line(t.Lead));
+                    cond.Add(Line(t.SolveNote, dim: true));
+                    if (t.KeepNote is { } keep) cond.Add(Line(keep, dim: true));
+                    Fold("試算の条件", cond);
+                    Fold("手順（勤務表への当て方）", Moves());
+                    panel.Children.Add(Line(RelaxApproval.NotApprovalNote, dim: true));
+                    dialog.PrimaryButtonText = RelaxApproval.ToReview;
+                    break;
+                case RelaxApproval.Step.R2:
+                    panel.Children.Add(Line(NextActionGuide.RelaxSetHead + "（変更前→変更後）", bold: true));
+                    foreach (var x in Values()) panel.Children.Add(x);
+                    panel.Children.Add(Line("勤務表に当てる手順", bold: true));
+                    foreach (var x in Moves()) panel.Children.Add(x);
+                    panel.Children.Add(Line(t!.HardLine, bold: true));
+                    panel.Children.Add(Line(t.SolveNote));
+                    if (t.KeepNote is { } keep2) panel.Children.Add(Line(keep2, dim: true));
+                    panel.Children.Add(Line("値はここでは変えられません。変えるときはもう一度試算してください。", dim: true));
+                    panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
+                    dialog.PrimaryButtonText = RelaxApproval.ToApproval;
+                    dialog.CloseButtonText = RelaxApproval.Decline;
+                    break;
+                case RelaxApproval.Step.R3:
+                    panel.Children.Add(reasonBox);
+                    panel.Children.Add(Line(RelaxApproval.ApproverLine, dim: true));
+                    panel.Children.Add(Line("理由と変更は操作ログに残ります。", dim: true));
+                    dialog.PrimaryButtonText = RelaxApproval.Approve;
+                    dialog.CloseButtonText = RelaxApproval.Decline;
+                    break;
+                case RelaxApproval.Step.R4:
+                    panel.Children.Add(Line(RelaxApproval.TextOf(f?.End ?? RelaxApproval.EndReason.Stale), bold: true));
+                    if (f?.Detail is { } d) panel.Children.Add(Line(d));
+                    panel.Children.Add(Line(RelaxApproval.UnchangedLine, dim: true));
+                    break;
+                default:
+                    foreach (var a in f!.Applied ?? Array.Empty<string>()) panel.Children.Add(Line("・" + a));
+                    panel.Children.Add(Line($"反映後の確認: 必須違反 {f.PostHard}件", bold: true));
+                    panel.Children.Add(Line($"決定 {f.DecisionId ?? "-"}・{RelaxApproval.ApproverLine}", dim: true));
+                    panel.Children.Add(Line(RelaxApproval.RebuildNote, dim: true));
+                    panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));
+                    break;
+            }
+            if (dialog.PrimaryButtonText.Length > 0) dialog.DefaultButton = ContentDialogButton.Primary;
+            dialog.IsPrimaryButtonEnabled = !_vm.Ui.Running && (step != RelaxApproval.Step.R3
+                || (f!.PressedId is null && RelaxApproval.CanApprove(reasonBox.Text, token?.Result, token is not null)));
         }
+        reasonBox.TextChanged += (_, _) =>
+        {
+            var token = _vm.RelaxTrialFor();
+            dialog.IsPrimaryButtonEnabled = !_vm.Ui.Running && _vm.Ui.RelaxFlow is { Step: RelaxApproval.Step.R3, PressedId: null }
+                && RelaxApproval.CanApprove(reasonBox.Text, token?.Result, token is not null);
+        };
+        dialog.PrimaryButtonClick += (_, a) =>
+        {
+            a.Cancel = true;
+            if (_vm.Ui.RelaxFlow?.Step == RelaxApproval.Step.R3)
+            {
+                dialog.IsPrimaryButtonEnabled = false;
+                _vm.ApproveRelax(reasonBox.Text);
+            }
+            else _vm.RelaxFlowNext();
+            Render();
+        };
+        dialog.CloseButtonClick += (_, a) =>
+        {
+            if (_vm.Ui.RelaxFlow?.Step is RelaxApproval.Step.R2 or RelaxApproval.Step.R3)
+            {
+                a.Cancel = true;
+                _vm.RelaxFlowDecline();
+                Render();
+            }
+        };
+        Render();
+        await dialog.ShowAsync();
+        var applied = _vm.Ui.RelaxFlow?.Step == RelaxApproval.Step.R5;
+        _vm.CloseRelaxFlow();
+        if (applied && from is { } c) _window.OpenCell(c.I, c.J);
     }
 
     /// <summary>[思考誘導S3→S5] 必須違反に関わる希望と、人員不足の日に別の勤務の希望がある人を並べる（Kotlin <c>WishConflictDialog</c>）。行を押すとセル、「希望を外したら？」で試算・確定（§5）。

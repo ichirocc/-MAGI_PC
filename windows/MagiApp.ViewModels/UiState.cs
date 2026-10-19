@@ -210,6 +210,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private int wishTrialRev;
     /// <summary>[S5] 試算中の行 "i,j"（null＝なし）。</summary>
     [ObservableProperty] private string? wishTrialBusy;
+    /// <summary>[S6] 承認フロー R1〜R5（null＝閉じている）。</summary>
+    [ObservableProperty] private RelaxApproval.Flow? relaxFlow;
     /// <summary>[S6] 試算が終わるたびに進む（画面は <c>RelaxTrialFor</c> で読み直す）。</summary>
     [ObservableProperty] private int relaxRev;
     /// <summary>[S6] 背景で設定の壁を探している。</summary>

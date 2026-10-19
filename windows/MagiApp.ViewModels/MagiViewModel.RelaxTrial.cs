@@ -107,18 +107,75 @@ public sealed partial class MagiViewModel
     /// <summary>直近の確定の結果 1 行。確定の後のデータから変わったら出さない（§9）。</summary>
     public string? RelaxDoneLine() => _relaxDone is { } d && d.Ctx == RelaxCtxNow() ? d.Line : null;
 
+    /// <summary>承認フローを開く（§15）。いまのデータの試算だけを R1 に出し、それ以外は理由つきの R4。</summary>
+    public void OpenRelaxFlow()
+    {
+        var c = _relaxCtx;
+        var now = RelaxCtxNow();
+        var fresh = c is not null && c == now;
+        var outcome = _relaxResult ?? (_relaxStoppedCtx is not null && _relaxStoppedCtx == now ? RelaxTrial.Stopped : null);
+        var k = c ?? now ?? new RelaxCtx(0L, 0L);
+        Ui.RelaxFlow = RelaxApproval.Start(outcome, fresh, RelaxApproval.TrialId(k.StateKey, k.BoardKey), RelaxApproval.Fingerprint(k.StateKey, k.BoardKey));
+    }
+
+    public void RelaxFlowNext()
+    {
+        if (Ui.RelaxFlow is { } f) Ui.RelaxFlow = RelaxApproval.Next(f, RelaxTrialFor() is not null);
+    }
+
+    public void RelaxFlowDecline()
+    {
+        if (Ui.RelaxFlow is { } f) Ui.RelaxFlow = RelaxApproval.DeclineFlow(f);
+    }
+
+    public void CloseRelaxFlow() => Ui.RelaxFlow = null;
+
+    /// <summary>R3「承認して反映する」。理由が空・古い・押し済みなら何もしない。承認を記録してから反映し、結果で R5 か R4。</summary>
+    public void ApproveRelax(string reason)
+    {
+        if (Ui.RelaxFlow is not { } f) return;
+        var token = RelaxTrialFor();
+        if (!RelaxApproval.CanApprove(reason, token?.Result, token is not null))
+        {
+            if (f.Step == RelaxApproval.Step.R3 && token is null) Ui.RelaxFlow = RelaxApproval.Finish(f, RelaxApproval.Verdict.Stale);
+            return;
+        }
+        var r = token!.Result;
+        var changes = r.Prerequisite.Concat(r.Relaxes)
+            .Select(x => $"{(x.Staff < Ui.StaffNames.Count ? Ui.StaffNames[x.Staff] : $"職員{x.Staff + 1}")} {(x.Shift < Ui.ShiftSymbols.Count ? Ui.ShiftSymbols[x.Shift] : "?")} 上限0→{x.NewHi}")
+            .Append($"手順{r.Moves.Count}セル").ToList();
+        if (RelaxApproval.Press(f, RelaxApproval.DecisionId(f.TrialId, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())) is not { } pressed) return;
+        pressed = pressed with { Applied = changes };
+        Ui.RelaxFlow = pressed;
+        LogOp("I", RelaxApproval.ApprovalLog(pressed.DecisionId!, pressed.TrialId, reason, changes));
+        var v = RelaxAndApply(token);
+        Ui.RelaxFlow = RelaxApproval.Finish(pressed, v);
+    }
+
+    /// <summary>反映の前の (state, 盤面) へ戻し、積んだ Undo 段を外す（事後確認の不一致・保存失敗）。</summary>
+    private void RestoreBeforeRelax(MagiState st, int[][] b)
+    {
+        if (_undoStack.Count > 0) _undoStack.RemoveLast();
+        _state = st;
+        _currentSchedule = b.Copy2D();
+        _relaxDone = null;
+        Ui.CanUndo = _undoStack.Count > 0;
+        Ui.RelaxedBoard = false;
+        Ui.Schedule = b.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        RefreshCheck();
+    }
+
     /// <summary>確定「上限を緩め、手順を当てる」（§6。ガードはすべて最初の書き換えより前）。Undo 1 段で設定と盤面がまとめて戻る。</summary>
-    public void RelaxAndApply(RelaxToken token)
+    public RelaxApproval.Verdict RelaxAndApply(RelaxToken token)
     {
         var st = _state;
         var b = _currentSchedule;
-        if (st is null || b is null) return;
-        if (RunBlockedByInFlight("設定の緩和")) return;
+        if (st is null || b is null) return RelaxApproval.Verdict.Stale;
+        if (RunBlockedByInFlight("設定の緩和")) return RelaxApproval.Verdict.Blocked;
         if (StateKey(st) != token.StateKey || BoardKey(b) != token.BoardKey)
         {
-            Ui.MessageIsError = true;
-            Ui.Message = "勤務表か設定が変わりました。もう一度試算してください。";
-            return;
+            LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=データが変わった");
+            return RelaxApproval.Verdict.Stale;
         }
         var r = token.Result;
         var ns0 = RelaxTrial.Apply(st, r.Prerequisite.Concat(r.Relaxes).ToList());
@@ -127,19 +184,25 @@ public sealed partial class MagiViewModel
         var got = nb is null ? (int?)null : UnifiedViolationChecker.Check(ns0, nb.Copy2D()).Hard;
         if (nb is null || got != r.Rr)
         {
-            LogOp("W", $"S6 確定を見送り: 手順を当てた必須 {got} ≠ 試算 {r.Rr}");
-            Ui.MessageIsError = true;
-            Ui.Message = "試算の手順を適用しても同じ結果になりませんでした。勤務表と設定はそのままです。";
-            return;
+            LogOp("W", RelaxApproval.ApplyLog("失敗", got ?? -1) + $" 理由=手順を当てた必須 {got} ≠ 試算 {r.Rr}");
+            return RelaxApproval.Verdict.NotReproduced;
         }
-        if (!EnsureValidForRun(ns0, nb, "設定の緩和")) return;
+        if (!EnsureValidForRun(ns0, nb, "設定の緩和")) return RelaxApproval.Verdict.Blocked;
         CancelRelaxTrial();
-        PushUndo();
+        var before = b.Copy2D();
+        if (!PushUndo()) return RelaxApproval.Verdict.Blocked;
         var ns = ns0.WithSchedule(nb);
         _state = ns;
         _currentSchedule = nb;
         _resultSchedule = null;
-        _relaxDone = (new RelaxCtx(StateKey(ns), BoardKey(nb)), NextActionGuide.RelaxDoneLine(r.H0, got.Value));
+        var post = UnifiedViolationChecker.Check(ns, nb.Copy2D()).Hard;
+        if (!RelaxApproval.PostCheckOk(r.Rr, post))
+        {
+            RestoreBeforeRelax(st, before);
+            LogOp("W", RelaxApproval.ApplyLog("復旧", post) + $" 理由=反映後の必須 {post} ≠ 試算 {r.Rr}");
+            return new RelaxApproval.Verdict.Applied(post);
+        }
+        _relaxDone = (new RelaxCtx(StateKey(ns), BoardKey(nb)), NextActionGuide.RelaxDoneLine(r.H0, post));
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
@@ -149,9 +212,17 @@ public sealed partial class MagiViewModel
         Ui.Schedule = nb.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.RunSummary = null;
         Ui.StopSummary = null;
-        PostOpNotice("設定を緩めて手順を適用しました（元に戻せます）");
-        LogOp("I", "S6 確定: 組 " + string.Join(", ", r.Prerequisite.Concat(r.Relaxes).Select(x => $"{x.Staff + 1}/{x.Shift}")) + $" 必須 {r.H0}→{got}");
         RefreshCheck();
         SaveNow();
+        if (_hydrated && Ui.SaveState == SaveState.Failed)
+        {
+            RestoreBeforeRelax(st, before);
+            LogOp("W", RelaxApproval.ApplyLog("復旧", post) + " 理由=保存に失敗");
+            AutoSave();
+            return RelaxApproval.Verdict.SaveFailed;
+        }
+        PostOpNotice("設定を緩めて手順を適用しました（元に戻せます）");
+        LogOp("I", RelaxApproval.ApplyLog("成功", post) + " 組 " + string.Join(", ", r.Prerequisite.Concat(r.Relaxes).Select(x => $"{x.Staff + 1}/{x.Shift}")) + $" 必須 {r.H0}→{post}");
+        return new RelaxApproval.Verdict.Applied(post);
     }
 }
