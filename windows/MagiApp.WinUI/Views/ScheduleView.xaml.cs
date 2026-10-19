@@ -757,6 +757,7 @@ public sealed partial class ScheduleView : UserControl
                 if (_cellElements.TryGetValue((next.I + 1, next.J + 1), out var el))
                 {
                     el.StartBringIntoView();
+                    if (el.Parent is ScheduleCellHost host && host.Focus(FocusState.Keyboard)) return;
                     if (el.DataContext is ScheduleCellVm { AutomationName: { } name }) Announce(name);
                 }
             });
@@ -774,6 +775,16 @@ public sealed partial class ScheduleView : UserControl
             else if (_cellElements.TryGetValue((kc.I + 1, kc.J + 1), out var anchor)) ShowCellEditor(anchor, kc.I, kc.J);
             e.Handled = true;
         }
+    }
+
+    /// <summary>Tab で表に入った・ナレーターがセルへ移したときに、注目セル（<see cref="_kbCell"/>）をフォーカスへ合わせる。
+    /// ポインターのフォーカスでは描き直さない（タップは <see cref="OnScheduleCellTapped"/> の担当）。</summary>
+    private void OnScheduleCellGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ScheduleCellHost { FocusState: FocusState.Keyboard or FocusState.Programmatic, DataContext: ScheduleCellVm { IsDataCell: true } vm }) return;
+        if (_kbCell is { } kc && kc.I == vm.I && kc.J == vm.J) return;
+        _kbCell = (vm.I, vm.J);
+        Render();
     }
 
     private void Announce(string text)
