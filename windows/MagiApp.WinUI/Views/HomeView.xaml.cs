@@ -551,12 +551,23 @@ public sealed partial class HomeView : UserControl
             Text = text, FontSize = size, TextWrapping = TextWrapping.Wrap, Opacity = dim ? 0.8 : 1.0,
             FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
         };
+        TextBlock Live(TextBlock x)
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(x, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+            return x;
+        }
         void Fold(string label, IEnumerable<UIElement> items)
         {
             var body = new StackPanel { Spacing = 4, Visibility = Visibility.Collapsed };
             foreach (var x in items) body.Children.Add(x);
             var b = new HyperlinkButton { Content = label, MinHeight = 44, Padding = new Thickness(0) };
-            b.Click += (_, _) => body.Visibility = body.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(b, "閉じています");
+            b.Click += (_, _) =>
+            {
+                var open = body.Visibility != Visibility.Visible;
+                body.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(b, open ? "開いています" : "閉じています");
+            };
             panel.Children.Add(b);
             panel.Children.Add(body);
         }
@@ -603,7 +614,8 @@ public sealed partial class HomeView : UserControl
                 case RelaxApproval.Step.R2:
                     panel.Children.Add(Line(NextActionGuide.RelaxSetHead + "（変更前→変更後）", bold: true));
                     foreach (var x in Values()) panel.Children.Add(x);
-                    panel.Children.Add(Line("勤務表に当てる手順", bold: true));
+                    var scale = t!.ScaleLine;
+                    panel.Children.Add(Line($"勤務表に当てる手順（{(scale.Contains('、') ? scale[(scale.IndexOf('、') + 1)..] : scale)}）", bold: true));
                     foreach (var x in Moves()) panel.Children.Add(x);
                     panel.Children.Add(Line(t!.HardLine, bold: true));
                     panel.Children.Add(Line(t.SolveNote));
@@ -621,13 +633,13 @@ public sealed partial class HomeView : UserControl
                     dialog.CloseButtonText = RelaxApproval.Decline;
                     break;
                 case RelaxApproval.Step.R4:
-                    panel.Children.Add(Line(RelaxApproval.TextOf(f?.End ?? RelaxApproval.EndReason.Stale), bold: true));
+                    panel.Children.Add(Live(Line(RelaxApproval.TextOf(f?.End ?? RelaxApproval.EndReason.Stale), bold: true)));
                     if (f?.Detail is { } d) panel.Children.Add(Line(d));
                     panel.Children.Add(Line(RelaxApproval.UnchangedLine, dim: true));
                     break;
                 default:
                     foreach (var a in f!.Applied ?? Array.Empty<string>()) panel.Children.Add(Line("・" + a));
-                    panel.Children.Add(Line($"反映後の確認: 必須違反 {f.PostHard}件", bold: true));
+                    panel.Children.Add(Live(Line($"反映後の確認: 必須違反 {f.PostHard}件", bold: true)));
                     panel.Children.Add(Line($"決定 {f.DecisionId ?? "-"}・{RelaxApproval.ApproverLine}", dim: true));
                     panel.Children.Add(Line(RelaxApproval.RebuildNote, dim: true));
                     panel.Children.Add(Line("元に戻すで設定と勤務表をまとめて戻せます。", dim: true));

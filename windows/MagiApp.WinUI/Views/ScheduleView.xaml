@@ -97,6 +97,7 @@
             <StackPanel Spacing="20">
                 <ItemsView x:Name="ScheduleItemsView" SelectionMode="None" IsItemInvokedEnabled="False"
                            PreviewKeyDown="OnGridPreviewKeyDown"
+                           TabFocusNavigation="Once"
                            AutomationProperties.Name="勤務表。矢印キーでセルを移動、Enter で変更"
                            HorizontalAlignment="Left" VerticalAlignment="Top">
                     <ItemsView.Layout>
@@ -110,6 +111,10 @@
                                 </ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="local:ScheduleCellVm">
+                                        <local:ScheduleCellHost IsTabStop="{x:Bind IsDataCell, Mode=OneWay}"
+                                                                UseSystemFocusVisuals="False"
+                                                                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
+                                                                GotFocus="OnScheduleCellGotFocus">
                                         <Border Background="{x:Bind Background, Mode=OneWay}"
                                                 BorderBrush="{x:Bind BorderBrush, Mode=OneWay}"
                                                 BorderThickness="{x:Bind BorderThickness, Mode=OneWay}"
@@ -119,7 +124,6 @@
                                                 MinWidth="{x:Bind MinWidth, Mode=OneWay}"
                                                 Opacity="{x:Bind Opacity, Mode=OneWay}"
                                                 ToolTipService.ToolTip="{x:Bind Tooltip, Mode=OneWay}"
-                                                AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}"
                                                 Tapped="OnScheduleCellTapped"
                                                 PointerPressed="OnScheduleCellPointerPressed"
                                                 PointerReleased="OnScheduleCellPointerReleased"
@@ -176,6 +180,7 @@
                                                            RadiusX="6" RadiusY="6" />
                                             </Grid>
                                         </Border>
+                                        </local:ScheduleCellHost>
                                     </DataTemplate>
                                 </ItemsRepeater.ItemTemplate>
                             </ItemsRepeater>
