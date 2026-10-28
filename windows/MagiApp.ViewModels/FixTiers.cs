@@ -66,7 +66,8 @@ public static class FixTiers
                 // 休で通れば十分（過剰を外す 1 セルは休がいちばん他を崩しにくい）。
                 if (r.Applied && to == rest) break;
             }
-            if (best is null) break;
+            // 置けるシフトが無いセル（担当外・上限0）は飛ばすだけ。評価の上限に達したときだけ打ち切る。
+            if (best is null) { if (evals >= maxEvals) break; continue; }
             var (res, bop) = best.Value;
             if (!target.Effect(board, new[] { bop }).Fixes) continue;
             var after = res.After;

@@ -637,6 +637,13 @@ public sealed partial class MagiViewModel
             LogOp("W", "職員一覧CSV取込 失敗: 0件");
             return;
         }
+        if (res.Updated == 0 && res.Added == 0)
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = $"職員一覧を取り込めませんでした。同姓同名で対象を決められない氏名 {string.Join("・", (res.AmbiguousNames ?? Array.Empty<string>()).Take(3))}（その行は変更しません）";
+            LogOp("W", $"職員一覧CSV取込 失敗: 同姓同名{res.AmbiguousNames?.Count ?? 0}件のみ");
+            return;
+        }
         var parts = new List<string>();
         if (res.Added > 0) parts.Add($"{res.Added}名を新規追加");
         if (res.Updated > 0) parts.Add($"{res.Updated}名を更新");
