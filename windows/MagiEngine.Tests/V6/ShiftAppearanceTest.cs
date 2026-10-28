@@ -14,8 +14,9 @@ public class ShiftAppearanceTest
         // [2026-09-10] high は 45→25(HF77) で c1/c3mn(30) を下回り HIGH→WARN へ降格。
         foreach (var k in new[] { "groupViol", "covU", "pref", "c3n" })
             Assert.Equal("CRITICAL", ShiftAppearance.SeverityFromVioKey(k));
-        foreach (var k in new[] { "low", "c3mn" })
-            Assert.Equal("HIGH", ShiftAppearance.SeverityFromVioKey(k));
+        Assert.Equal("HIGH", ShiftAppearance.SeverityFromVioKey("low"));
+        // [2026-10-26] c3mn は 90→50 で c1(90) を下回る＝c1 と同じ WARN。
+        Assert.Equal("WARN", ShiftAppearance.SeverityFromVioKey("c3mn"));
         foreach (var k in new[] { "fair", "weekly" })
             Assert.Equal("INFO", ShiftAppearance.SeverityFromVioKey(k));
         Assert.Equal("WARN", ShiftAppearance.SeverityFromVioKey("c1"));
