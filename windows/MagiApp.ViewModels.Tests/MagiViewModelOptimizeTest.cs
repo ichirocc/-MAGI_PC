@@ -236,7 +236,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         // 設定の行は開始行の直後（新しい順なので index が 1 小さい）。
         var list = vm.Ui.OpLog.ToList();
         Assert.Equal(list.IndexOf(start) - 1, list.IndexOf(settings));
-        var done = Assert.Single(vm.Ui.OpLog, l => l.Contains("最適化 完了 必須=0 合計=0 (test:Fake)"));
+        var done = Assert.Single(vm.Ui.OpLog, l => l.Contains("最適化 完了 必須=0 合計=0 重み=0 (test:Fake)"));
         Assert.Matches(" ・ 盤面指紋=[0-9a-f]{16}$", done);
     }
 

@@ -230,6 +230,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private MagiEngine.V6.PreRunCheck.Summary? preRunCheck;
     [ObservableProperty] private string? preRunRepeatHint;
 
+    /// <summary>[Android 3.727.1] 勤務表CSV（重ね合わせ）を反映する前の確認の行（<see cref="CsvImportPreview.CsvImportPreviewLines"/>）。非 null＝確認待ち。</summary>
+    [ObservableProperty] private IReadOnlyList<string>? csvImportPrompt;
     /// <summary>引用符が閉じていない勤務表CSVの「読めた部分だけ取り込むか」確認。非 null の間ダイアログを出す（保存しない）。</summary>
     [ObservableProperty] private string? csvPartialPrompt;
 
@@ -266,6 +268,10 @@ public sealed partial class UiState : ObservableObject
     /// 生の <see cref="MagiEngine.V6.ChangeSummary"/> を保持し整形は <c>HomeView.xaml.cs</c> 側で行う。
     /// 盤面が変わる操作（PushUndo）・元に戻す・読込で消す＝別の盤面の比較を完了カードに残さない。</summary>
     [ObservableProperty] private ChangeSummary? runSummary;
+    /// <summary>[Android 3.727.1・iOS のヘルスケア「ハイライト」] この作成で必須違反・要調整がいくつからいくつになったか（変化なしは null）。RunSummary と同じ寿命。</summary>
+    [ObservableProperty] private string? runDelta;
+    /// <summary>[Android 3.727.3] 下書きに置き換える前の勤務表のほうが良い（作成の結果がそれに負けたとき）。盤面が動けば消す。</summary>
+    [ObservableProperty] private string? preDraftNotice;
 
     [ObservableProperty] private int impossibleWishCount;
     [ObservableProperty] private IReadOnlyList<string> opLog = Array.Empty<string>();

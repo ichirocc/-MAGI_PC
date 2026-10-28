@@ -175,6 +175,7 @@ public sealed partial class MagiViewModel
     internal int BeginBoardJob(string label, bool engineRun = false)
     {
         DropCsvPartial();    // 確認待ちの部分取込は、盤面を動かすジョブが始まった時点で古い
+        if (label is "読み込み" or "CSV取込") _preDraft = null;   // [Android 3.727.3] 別のデータ＝置き換え前の盤面は比べられない
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
         CancelRelaxTrial();  // [S6 §8] 同じ
         CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
@@ -197,6 +198,9 @@ public sealed partial class MagiViewModel
             _activeRunSerial = 0;
         }
     }
+
+    /// <summary>[Android 3.727.2] 作成中（下書き・作成・仕上げ＝Kotlin の <c>running &amp;&amp; keepScreenOn</c>）。分析タブは作成前の診断を並べない。</summary>
+    public bool BuildingNow() => Ui.Running && _boardJobLabel is "勤務表づくり" or "下書きづくり" or "仕上げ最適化";
 
     /// <summary>画面のメッセージで「何の実行中か」を言うための名前。背景実行には名前が無いので既定を返す。</summary>
     internal string BusyWhat() => _boardJobLabel ?? "バックグラウンド最適化";
@@ -272,7 +276,9 @@ public sealed partial class MagiViewModel
         Ui.Alternatives = System.Array.Empty<string>();
         // 完了カードの前後比較（RunSummary）も直前の実行の盤面の話＝同じ理由で外す。
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
         Ui.StopSummary = null;
+        Ui.PreDraftNotice = null;
         return true;
     }
 

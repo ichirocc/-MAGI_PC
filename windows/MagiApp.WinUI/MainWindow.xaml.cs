@@ -79,6 +79,11 @@ public sealed partial class MainWindow : Window
             if (_vm.Ui.CsvPartialPrompt is { } prompt) _ = ShowCsvPartialPromptAsync(prompt);
             else _csvPartialDialog?.Hide();
         }
+        else if (e.PropertyName == nameof(UiState.CsvImportPrompt))
+        {
+            if (_vm.Ui.CsvImportPrompt is { } lines) _ = ShowCsvImportPromptAsync(lines);
+            else _csvImportDialog?.Hide();
+        }
         else if (e.PropertyName == nameof(UiState.DraftConfirm))
         {
             if (_vm.Ui.DraftConfirm is { } msg) _ = ShowDraftConfirmAsync(msg);
@@ -280,7 +285,7 @@ public sealed partial class MainWindow : Window
             var clickable = tourable || preDist;
             StatusBadgeButton.IsHitTestVisible = clickable;
             StatusBadgeButton.IsTabStop = clickable;
-            if (tourable) label = CellSheetLogic.TopBarTourLabel(TourItemCount(ui));
+            if (tourable) label = CellSheetLogic.TopBarTourLabel(TourItemCount(ui), ui.Breakdown.GetValueOrDefault("covU"));
             StatusBadgeText.Text = label;
             StatusBadge.Background = (Brush)Application.Current.Resources[bg];
             StatusBadgeText.Foreground = (Brush)Application.Current.Resources[fg];
@@ -292,7 +297,7 @@ public sealed partial class MainWindow : Window
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         var stopping = ui.Running || ui.FixSearching;
         if (ui.Running) CondEdited = false;
-        MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
+        MainActionButton.Content = stopping ? "■ " + CellSheetLogic.StopButtonLabel(ui.Running, ui.FixSearching, agentRunning: false) : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
         // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
@@ -656,6 +661,29 @@ public sealed partial class MainWindow : Window
         _csvPartialDialog = null;
         if (result == ContentDialogResult.Primary) _vm.ConfirmCsvPartialImport();
         else _vm.CancelCsvPartialImport();
+    }
+
+    private ContentDialog? _csvImportDialog;
+
+    /// <summary>[Android 3.727.1] 勤務表 CSV を反映する前の確認（取り込む人数と変わるセル・必須の前後・注意の 3 点まで）。閉じるは取り込まない。</summary>
+    private async Task ShowCsvImportPromptAsync(IReadOnlyList<string> lines)
+    {
+        var body = new StackPanel { Spacing = 6 };
+        foreach (var l in lines) body.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Nav.XamlRoot,
+            Title = CsvImportPreview.CsvPreviewTitle,
+            Content = body,
+            PrimaryButtonText = CsvImportPreview.CsvPreviewConfirm,
+            CloseButtonText = CsvImportPreview.CsvPreviewCancel,
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        _csvImportDialog = dialog;
+        var result = await dialog.ShowAsync();
+        _csvImportDialog = null;
+        if (result == ContentDialogResult.Primary) _vm.ConfirmCsvImport();
+        else _vm.CancelCsvImport();
     }
 
     /// <summary>[勤務表を作成する] Android <c>PreRunCheckSheet</c>。行を押すとセルへ、開いたボタンと同じ語の主ボタン（3.704.0 Q3）で始める。</summary>

@@ -64,6 +64,12 @@ public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days,
     public (int I, int J) Cell => (Staff, Days[0]);
 }
 
+/// <summary>[Android 3.727.1] ホームの日ごとの印（Kotlin <c>DayStripMark</c>）。</summary>
+public sealed record DayStripMark(int Day, string Dom, string Dow, bool Short, int HardCells)
+{
+    public bool Ok => !Short && HardCells == 0;
+}
+
 /// <summary>巡回の位置（Kotlin <c>TourCursor</c>）。At は今の項目の添字（一覧から消えていれば null）、Next/Prev は「次」「前」の行き先（無ければ null）。</summary>
 public sealed record TourCursor(int? At, int? Next, int? Prev);
 
@@ -773,8 +779,72 @@ public static class CellSheetLogic
     public const string HomeSaveFailedLine = "自動保存できていません。PCの空き容量を確かめてください";
     public const string TopBarSaveFailed = "保存できていません";
 
-    /// <summary>上部の巡回の入口（Kotlin <c>topBarTourLabel</c>）。省略されても数が残るよう、数を前に置く。</summary>
-    public static string TopBarTourLabel(int n) => $"必須違反{n}か所を見る";
+    /// <summary>上部の巡回の入口（Kotlin <c>topBarTourLabel</c>）。省略されても数が残るよう、数を前に置く。
+    /// [Android 3.727.1] 人員不足は巡回に入らないが必須の件数には入るので人数を並べる（か所と人は足さない）。</summary>
+    public static string TopBarTourLabel(int n, int covU = 0) => covU > 0 ? $"必須{n}か所・不足{covU}人を見る" : $"必須違反{n}か所を見る";
+
+    /// <summary>[Android 3.727.1] 下の主ボタンの停止の語（Kotlin <c>stopButtonLabel</c>）。作成が終わったあとに動いているのが代行・案探しだけなら、何を止めるかを言う。</summary>
+    public static string StopButtonLabel(bool running, bool fixSearching, bool agentRunning) =>
+        running ? "やめる" : agentRunning ? "代行をやめる" : fixSearching ? CancelFixSearchButton : "やめる";
+
+    /// <summary>[Android 3.727.1・iOS の時計] 作成の進み具合 0..1（Kotlin <c>runProgressFraction</c>）。全体の枠は予算＋後処理・玉突きの予約＝「残り」と同じ枠。</summary>
+    public static float RunProgressFraction(int budgetSec, long elapsedMs)
+    {
+        var total = (budgetSec + V6FinalPort.PostReserveSec + V6FinalPort.ChainReserveSec) * 1000L;
+        return total <= 0L ? 0f : Math.Clamp(elapsedMs / (float)total, 0f, 1f);
+    }
+
+    /// <summary>[Android 3.727.1・iOS の天気] ホームの日ごとの印（Kotlin <c>dayStripMarks</c>）。Short＝人員不足の枠がある日、HardCells＝必須違反のセルの数。</summary>
+    public static IReadOnlyList<DayStripMark> DayStripMarks(UiState ui)
+    {
+        var n = ui.Days;
+        if (n <= 0) return Array.Empty<DayStripMark>();
+        static int? DayOfKey(string k) { var p = k.Split(','); return p.Length == 2 && int.TryParse(p[1], out var d) ? d : null; }
+        var shortDay = new bool[n];
+        var hard = new int[n];
+        foreach (var (k, v) in ui.NeedViolations)
+        {
+            if (DayOfKey(k) is not { } j || j < 0 || j >= n) continue;
+            var fams = ui.NeedFamilies.TryGetValue(k, out var f) ? f : new[] { v };
+            if (fams.Any(x => VioBuckets.FamilyOfVioClass(x) == "covU")) shortDay[j] = true;
+        }
+        foreach (var (k, fams) in ui.ViolationCellFamilies)
+        {
+            if (DayOfKey(k) is not { } j || j < 0 || j >= n) continue;
+            if (fams.Any(x => MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(x)))) hard[j]++;
+        }
+        return Enumerable.Range(0, n).Select(j =>
+        {
+            var f = ScheduleUtil.FormatDay(ui.StartDate, j);
+            var p = f.IndexOf('(');
+            var head = p < 0 ? f : f[..p];
+            var dom = head[(head.LastIndexOf('/') + 1)..];
+            var dow = p < 0 ? "" : f[(p + 1)..].Split(')')[0];
+            return new DayStripMark(j, dom, dow, shortDay[j], hard[j]);
+        }).ToList();
+    }
+
+    public const string DayStripTitle = "日ごとのようす";
+    public const string DayStripLegend = "● 人員不足 ・ 数字 必須違反のか所";
+
+    /// <summary>日ごとの印の 1 行（問題の無い日は並べずに数で言う）。</summary>
+    public static string DayStripSummary(IReadOnlyList<DayStripMark> marks)
+    {
+        var bad = marks.Count(m => !m.Ok);
+        return bad == 0 ? $"{marks.Count}日すべて 問題なし" : $"問題なし {marks.Count - bad}日 ・ 見ておく日 {bad}日（押すとその日へ）\n{DayStripLegend}";
+    }
+
+    /// <summary>読み上げの 1 文（印の色だけに頼らない）。</summary>
+    public static string DayMarkSpoken(DayStripMark m) =>
+        $"{m.Dom}日 {m.Dow}曜 " + (m.Short && m.HardCells > 0 ? $"人員不足と必須違反{m.HardCells}か所"
+            : m.Short ? "人員不足" : m.HardCells > 0 ? $"必須違反{m.HardCells}か所" : "問題なし");
+
+    /// <summary>[Android 3.727.1・iOS のリマインダー] 配布前の確認の並び＝要対応を上、未評価を中、済みを下（同じ組の中は元の順）。</summary>
+    public static IReadOnlyList<PreDistRow> PreDistributionOrder(IReadOnlyList<PreDistRow> rows) =>
+        rows.OrderBy(r => r.Ok switch { false => 0, null => 1, true => 2 }).ToList();
+
+    /// <summary>[Android 3.727.2] セルのシートの上段が入りきらないときの送り（押すと 3/4 画面ぶん下へ）。</summary>
+    public const string CellSheetMoreBelow = "続きを読む ▼";
     /// <summary>上部の札の幅の境界（Kotlin <c>TOP_BAR_NARROW_DP</c>）。この移植は窓の幅を変えられるので文言だけ揃える。</summary>
     public const int TopBarNarrowDp = 396;
 

@@ -51,18 +51,21 @@ public sealed partial class MagiViewModel
         {
             // 下書きは決まった種で作る（同じ入力なら同じ盤面）＝先に 1 回だけ作り、確認に後の必須を出し、置き換えるときはその結果を使う。
             var before = Ui.HasResult ? AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard) : null;
-            LastDraftPreviewTask = PrepareDraftConfirmAsync(st, sched.Copy2D(), before);
+            LastDraftPreviewTask = PrepareDraftConfirmAsync(st, sched.Copy2D(), before, ++_draftConfirmSeq);
             return;
         }
         // [3.692.0] 確認（3.679.0）を通ったかをログで読めるようにする。[3.697.0] 行は完了の後＝置き換える前と後の必須を並べる。
         var replacing = confirmed && Ui.DraftConfirm is not null;
         var hardBefore = Ui.BestHard;
-        if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
+        // [Android 3.727.3] 置き換える前の勤務表の値（あとの作成がこれに負けたら知らせて戻せるように）。検査済みのときだけ。
+        var preDraft = replacing && Ui.CheckRev > 0 ? new PreDraftBoard(sched.Copy2D(), StateKey(st), Ui.BestHard, Ui.WeightedScore, Ui.TotalViolations, AnalysisTriage.HardText(Ui.Breakdown, Ui.BestHard)) : null;
         // [3.271.0, 実機ログ起因の由来をそのまま記録] 実行中ガード。旧: ガード無しのため
         //   「勤務表をつくる」の直後に隣接する本ボタンを連続タップすると、走行中の最適化と
         //   初期解生成が併走し、job 参照の上書き（走行中jobが停止不能のゾンビ化）と
         //   currentSchedule の同時書き換えが起きていた。runV6FullOptimize/runSoftPolish と同じガード。
+        //   [Android 3.727.1] 確認のあとに別の実行が始まっていたら断るだけで確認は閉じない（確認を消してから断ると選び直せない）。
         if (RunBlockedByInFlight("下書きづくり")) return;
+        if (Ui.DraftConfirm is not null) Ui.DraftConfirm = null;
         if (!EnsureValidForRun(st, sched, "下書きづくり")) return;
         PushUndo();
         var hadResult = Ui.HasResult;
@@ -77,7 +80,7 @@ public sealed partial class MagiViewModel
         LogOp("I", $"初期解生成 開始 ・ {RunInputWords(st, sched)}");
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed, replacing ? hardBefore : null);
+        LastGenerateSmartInitialTask = GenerateSmartInitialCoreAsync(st, sched.Copy2D(), _resultSchedule, hadResult, boardToken, cts.Token, confirmed, replacing ? hardBefore : null, preDraft);
     }
 
     /// <summary>[テスト可視性のための追加] 確認の前に下書きを作る Task。</summary>
@@ -86,14 +89,56 @@ public sealed partial class MagiViewModel
     /// <summary>確認のために先に作った下書き（作ったときの設定と盤面の指紋つき。違えば使わず作り直す）。</summary>
     private ((long, long) Keys, V6FinalPort.ActionResult Result)? _pendingDraft;
 
-    private async Task PrepareDraftConfirmAsync(MagiState st, int[][] sched, string? before)
+    private int _draftConfirmSeq;
+
+    private async Task PrepareDraftConfirmAsync(MagiState st, int[][] sched, string? before, int seq)
     {
         var keys = (StateKey(st), BoardKey(sched));
         V6FinalPort.ActionResult? res = null;
         try { res = await Task.Run(() => V6FinalPort.HandleSmartInitial(st.WithSchedule(sched), allowImpossible: true)); }
         catch (Exception) { res = null; }
+        // [Android 3.727.1] 作っている間に盤面・設定が変わった／別の実行が始まった／もう一度押された＝この確認は古い。出さない。
+        if (seq != _draftConfirmSeq || _state is not { } nowSt || _currentSchedule is not { } nowSc ||
+            keys != (StateKey(nowSt), BoardKey(nowSc)) || OptimizeInFlight()) return;
         _pendingDraft = res is null ? null : (keys, res);
         Ui.DraftConfirm = FixExplain.DraftConfirmText(before, res is null ? null : AnalysisTriage.HardText(res.Report.Breakdown, res.Report.Hard));
+    }
+
+    /// <summary>[Android 3.727.3] 下書きで置き換える前の勤務表（<see cref="AnalysisTriage.PreDraftBetter"/> で作成の結果と比べる）。設定が変われば使わない。</summary>
+    private PreDraftBoard? _preDraft;
+
+    /// <summary>[Android 3.727.3] 置き換え前の勤務表へ戻す（元に戻すで取り消せる。Kotlin <c>restorePreDraft</c>）。</summary>
+    public void RestorePreDraft()
+    {
+        if (_preDraft is not { } p) return;
+        if (_state is not { } st) return;
+        if (RunBlockedByInFlight("置き換え前に戻す")) return;
+        if (p.StateKey != StateKey(st)) { _preDraft = null; Ui.PreDraftNotice = null; return; }
+        PushUndo();
+        var board = p.Board.Copy2D();
+        _currentSchedule = board;
+        _state = st.WithSchedule(board);
+        _resultSchedule = null;
+        _preDraft = null;
+        Ui.Schedule = board.Select(r => (IReadOnlyList<int>)r.ToList()).ToList();
+        Ui.PreDraftNotice = null;
+        PostOpNotice("置き換え前の勤務表に戻しました");
+        LogOp("I", $"置き換え前の勤務表に戻す 必須={p.Hard} 重み={(long)p.Weighted} ・ 盤面指紋={OpLogText.Hex16(BoardKey(board))}");
+        AutoSave();
+        RefreshCheck();
+    }
+
+    /// <summary>[Android 3.727.3] 作成の結果を置き換え前の勤務表と比べる。結果が勝てば忘れ、負ければ知らせる（設定が変わっていれば捨てる）。</summary>
+    internal void NotePreDraftAfterRun(ViolationReport adopted)
+    {
+        if (_preDraft is not { } p) return;
+        var curKey = _state is { } st ? StateKey(st) : (long?)null;
+        if (p.StateKey != curKey || AnalysisTriage.PreDraftBetter(p.Hard, p.Weighted, p.Total, adopted.Hard, adopted.WeightedScore, adopted.Total)) _preDraft = null;
+        else if (AnalysisTriage.PreDraftBetter(adopted.Hard, adopted.WeightedScore, adopted.Total, p.Hard, p.Weighted, p.Total))
+        {
+            Ui.PreDraftNotice = AnalysisTriage.PreDraftNoticeText(p.HardWord, p.Weighted);
+            LogOp("I", $"置き換え前の勤務表のほうが良い: 必須 {p.Hard}・重み {(long)p.Weighted}（今の結果 必須 {adopted.Hard}・重み {(long)adopted.WeightedScore}）");
+        }
     }
 
     public void DismissDraftConfirm()
@@ -103,7 +148,7 @@ public sealed partial class MagiViewModel
         Ui.DraftConfirm = null;
     }
 
-    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false, long? replacingHard = null)
+    private async Task GenerateSmartInitialCoreAsync(MagiState st, int[][] sched, int[][]? result0, bool hadResult, int boardToken, CancellationToken ct, bool confirmed = false, long? replacingHard = null, PreDraftBoard? before = null)
     {
         var committed = false;   // 差し替え後・表示前。ここで中止・失敗したら下書き前へ戻す（ImportCsv と同じ）
         try
@@ -133,6 +178,12 @@ public sealed partial class MagiViewModel
             committed = false;
             LogOp("I", $"初期解生成 完了 必須={res.Report.Hard} 合計={res.Report.Total} ・ 盤面指紋={OpLogText.Hex16(BoardKey(res.Schedule))}");
             if (replacingHard is { } hb) LogOp("I", OpLogText.DraftReplaceLine(hb, res.Report.Hard));
+            // 置き換えた勤務表を覚える。覚えている方が良ければそのまま。
+            if (before is not null)
+            {
+                var prev = _preDraft is { } pd0 && pd0.StateKey == before.StateKey ? pd0 : null;
+                if (prev is null || AnalysisTriage.PreDraftBetter(prev.Hard, prev.Weighted, prev.Total, before.Hard, before.Weighted, before.Total)) _preDraft = before;
+            }
         }
         catch (OperationCanceledException)
         {

@@ -46,6 +46,8 @@
             </StackPanel>
 
             <!-- [phase9 #18] 要確認（Kotlin原本 AnalysisTriageCard, 3.471.0）: 分類の軸は「族」でなく「診断」。 -->
+            <!-- [Android 3.727.2] 作成中は作成前の診断を並べず 1 行だけ（今の数と食い違う）。 -->
+            <TextBlock x:Name="BuildingNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodyMediumTextStyle}" Opacity="0.8" Visibility="Collapsed" />
             <StackPanel x:Name="TriageSection" Spacing="8">
                 <TextBlock Text="要確認" Style="{StaticResource MagiTitleMediumTextStyle}" />
                 <TextBlock x:Name="TriageAllClearText" Style="{StaticResource MagiBodyMediumTextStyle}" Foreground="{StaticResource MagiTertiaryBrush}"
