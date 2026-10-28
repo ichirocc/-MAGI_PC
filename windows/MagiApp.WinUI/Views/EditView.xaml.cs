@@ -238,7 +238,7 @@ public sealed partial class EditView : UserControl
             });
         ChecklistHost.Children.Add(ChecklistRow(needLabel, needValue, ok: v.NeedStdOk,
             onClick: () => NeedSectionTitle.StartBringIntoView()));
-        var issues = ui.SettingIssues;
+        var issues = SettingIssues.FixItems(ui.SettingIssues);
         var issueText = issueValue + (issues.Count == 0 ? "" : _checklistIssuesOpen ? " ▾" : " ▸");
         ChecklistHost.Children.Add(ChecklistRow(issueLabel, issueText, ok: issues.Count == 0,
             onClick: issues.Count > 0 ? () => { _checklistIssuesOpen = !_checklistIssuesOpen; Render(); } : null));
@@ -284,7 +284,7 @@ public sealed partial class EditView : UserControl
         var sc = _vm.GetSetupCounts();
         var shortShifts = ui.Loaded ? _vm.StaffingReality().Count(r => r.Q < r.MaxNeed) : 0;
         return new EditHeaderCounts(month, ui.StaffNames.Count, ui.ShiftSymbols.Count, v.Entry, v.NeedStdOk, v.NeedExceptions,
-            ui.SettingIssues.Count, !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty, sc.Constraints, sc.Ranges, shortShifts);
+            SettingIssues.FixItems(ui.SettingIssues).Count, !NextActionGuide.WishTrialCandidatesOf(ui).IsEmpty, sc.Constraints, sc.Ranges, shortShifts);
     }
 
     /// <summary>Q10: 塗りは EditNeed のときだけ。Rerun（下部の再作成）・Panel（入力パネル）の間は外枠＝画面の塗りは 1 つ（INV-09）。</summary>

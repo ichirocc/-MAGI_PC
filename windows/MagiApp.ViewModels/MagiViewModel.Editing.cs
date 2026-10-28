@@ -74,7 +74,7 @@ public sealed partial class MagiViewModel
     public MonthlyChecklistView MonthlyChecklist()
     {
         var st = _state;
-        if (st is null) return new MonthlyChecklistView(0, 0, false, 0, Ui.SettingIssues.Count, WishEntryCounts.Of(0, System.Array.Empty<string>(), System.Array.Empty<string>()));
+        if (st is null) return new MonthlyChecklistView(0, 0, false, 0, SettingIssues.FixItems(Ui.SettingIssues).Count, WishEntryCounts.Of(0, System.Array.Empty<string>(), System.Array.Empty<string>()));
         var wishStaff = st.Wishes.Keys
             .Select(key => int.TryParse(key.Split(',')[0], out var i) ? i : -1)
             .Where(i => i >= 0)
@@ -82,7 +82,7 @@ public sealed partial class MagiViewModel
             .Count();
         var needStdOk = st.Shifts.Any(sh => !string.IsNullOrWhiteSpace(sh.Need1));
         // [3.643.0] 希望の行は登録の有無だけ（拡張希望だけの職員も入力あり）。✓/！の判定はしない。
-        return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, Ui.SettingIssues.Count,
+        return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, SettingIssues.FixItems(Ui.SettingIssues).Count,
             WishEntryCounts.Of(st.StaffCount, st.Wishes.Keys, Ui.ExtBanned.Keys));
     }
 
@@ -1644,6 +1644,7 @@ public sealed partial class MagiViewModel
             case "cons2":
                 if (G(0).Length == 0 || G(1).Length == 0) return "すべての項目を入れてください。";
                 if (!NonNeg(G(1), out var c2) || c2 < 1) return "合計回数は 1 以上の整数で入れてください。";
+                if (MagiConstraintsView.Cons2InputError(G(1), st.DayCount) is { } c2Err) return c2Err + "。";
                 return Shift(G(0));
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
             {

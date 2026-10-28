@@ -32,9 +32,9 @@ public class PreRunCheckTextTest
         Assert.Equal("再作成すると外れる（4件）", t.RerunHeader);
         Assert.Equal(new[] { "職員08 10/9 Cｱ", "職員04 10/10 Aｱ", "職員04 10/11 Cｵ", "職員08 10/29 Cｱ" }, t.RerunRows.Select(r => r.Text));
         Assert.Equal(new (int?, int?)[] { (7, 8), (3, 9), (3, 10), (7, 28) }, t.RerunRows.Select(r => (r.Staff, r.Day)));
-        Assert.Equal("職員08「有」など：上限0のシフトに希望が載っています。上限0は意図した制限なので、残るのは要調整です。希望を変えるか、入れない指定を設定で見直してください。", t.OverCapNote);
+        Assert.Equal("職員08「有」など：対象外（上限0）のシフトに希望があります。意図した指定なら、残るのは要調整だけです。", t.OverCapNote);
         Assert.Equal(new[] { "職員08「有」 本人の希望1件（個人の上限0回）", "職員11「Cｵ」 本人の希望12件（個人の上限0回）" }, t.OverCapRows!.Select(r => r.Text));
-        Assert.Equal("個人の上限0：22組（8人）。入れないシフトの指定です。", t.WallLine);
+        Assert.Equal("対象外（上限0）：22組（8人）。パート等の意図した指定です。", t.WallLine);
     }
 
     [Fact]
@@ -63,5 +63,21 @@ public class PreRunCheckTextTest
         Assert.Equal(new EditLanding(2, "yr_count", CountStaff: 7, CountShift: yuu, Label: GuidedFixRules.LandingZeroCap), t.OverCapRows![0].Landing);
         Assert.Equal(new EditLanding(2, "yr_count", Label: GuidedFixRules.LandingZeroCap), t.WallLanding);
         Assert.All(t.FloorRows.Where(r => r.Staff is not null), r => Assert.Null(r.Landing));
+    }
+
+    /// <summary>手動固定だけ／希望だけ／両方で、衝突の行の呼び名を分ける。</summary>
+    [Fact]
+    public void PinSourceWord_DistinguishesWishAndManualPin()
+    {
+        var w = new ConstraintMus.WishPin(0, 1, 2);
+        var m = new ConstraintMus.WishPin(1, 1, 2, Manual: true);
+        Assert.Equal("本人の希望", PreRunCheckText.PinSourceWord(new ConstraintMus.Item[] { w }));
+        Assert.Equal("手で固定したマス", PreRunCheckText.PinSourceWord(new ConstraintMus.Item[] { m }));
+        Assert.Equal("希望と手で固定したマス", PreRunCheckText.PinSourceWord(new ConstraintMus.Item[] { w, m }));
+        var ui = new UiState { StaffNames = St.StaffList.Select(s => s.Name).ToList(), ShiftSymbols = St.Shifts.Select(s => s.Kigou).ToList(), StartDate = St.StartDate };
+        var b = PreRunCheck.Build(St, St.Schedule.ToIntArray2D());
+        var d = b.DayProofs[0];
+        var t = PreRunCheckText.Of(b with { DayProofs = new[] { d with { Core = new ConstraintMus.Item[] { m } } }, StaffProofs = Array.Empty<ConstraintMus.StaffConflict>() }, ui);
+        Assert.Contains(t.FloorRows, r => r.Text.Contains("必要人数と手で固定したマスの衝突（1件"));
     }
 }

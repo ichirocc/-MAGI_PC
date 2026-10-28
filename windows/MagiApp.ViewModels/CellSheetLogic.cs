@@ -109,8 +109,8 @@ public static class CellSheetLogic
     /// <summary>[#41] 手動固定のセルに違反が残るときの状態の 1 行の言い方（「直せない」と言わない＝周囲のセルを変えて解消できる場合はある）。</summary>
     public const string PinBlockedNote = "このセルは手動固定のため、自動では変更しません";
 
-    public const string ZeroCapText = "個人の上限0（入れない指定）のシフトです。残るのは要調整です";
-    public const string ZeroCapWishText = "本人の希望が個人の上限0（入れない指定）のシフトに載っています。残るのは要調整です";
+    public const string ZeroCapText = "対象外（上限0）のシフトです。残るのは要調整です";
+    public const string ZeroCapWishText = "本人の希望が対象外（上限0）のシフトに載っています。残るのは要調整です";
 
     public static CellStatus StatusLine(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, Func<string, string> labelOf)
     {
@@ -353,7 +353,7 @@ public static class CellSheetLogic
     }
 
     /// <summary>回数の行（例「Aｱ 7(適切8)▼ Dﾃ 4(下限5)▼」）。この職員の回数の族があるシフトだけ、目安（下限/上限/適切/合計）と ▼▲。
-    /// 個人の上限0（休を除く）は「Cｱ 2回（上限0＝入れない指定）▲」（2 つ目からは「（上限0）」）。
+    /// 個人の上限0（休を除く）は「Cｱ 2回（対象外（上限0））▲」（2 つ目からは「（上限0）」）。
     /// 行頭の「回数 」込みで 360dp の 2 行（<see cref="CountLineEm"/>）に収まらなければ目安を 1 字（下/上/適/計）に縮める。</summary>
     public static string StaffCountShort(MagiState state, Problem p, int[][] s, int i, IReadOnlyDictionary<string, IReadOnlyList<string>> countClasses)
     {
@@ -386,7 +386,7 @@ public static class CellSheetLogic
         return FitsTwoLines("回数 " + full, CountLineEm) ? full : Build(false);
     }
 
-    public const string ZeroCapNote = "上限0＝入れない指定";
+    public const string ZeroCapNote = MagiEngine.V6.SettingIssues.ZeroCapLabel;
 
     /// <summary>セルシートの回数の行の 1 行の字数（360dp−左右 16dp＝328dp を 12sp で割った数）。</summary>
     public const double CountLineEm = 27.0;
@@ -396,7 +396,7 @@ public static class CellSheetLogic
         i < 0 || i >= p.S ? new HashSet<int>() : Enumerable.Range(0, p.K).Where(k => k != p.RestIdx && p.RangeHi[i][k] == 0 && p.CanDo(i, k)).ToHashSet();
 
     /// <summary>希望タブ: 希望が個人の上限0のシフトのときの 1 行（希望は優先して入る。残るのは要調整）。</summary>
-    public static string WishZeroCapLine(string wishSymbol) => $"{wishSymbol}は個人の上限0（入れない指定）のシフトです。希望どおり入れると要調整に数えます";
+    public static string WishZeroCapLine(string wishSymbol) => $"{wishSymbol}は対象外（上限0）のシフトです。希望どおり入れると要調整に数えます";
 
     /// <summary>回数の行が 2 行に収まるか（全角 1・半角 0.5 の字幅で、<paramref name="emPerLine"/> 字ぶん × 2 行）。</summary>
     public static bool FitsTwoLines(string text, double emPerLine)

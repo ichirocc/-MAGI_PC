@@ -421,7 +421,7 @@ public static class FixSearchText
             if (days.Count > 0 && pinned.Count == days.Count) { outList.Add($"「{Sym(k)}」の {days.Count} 回はどれも本人の希望で固定されています。"); wish = true; }
             else if (pinned.Count > 0) { outList.Add($"「{Sym(k)}」の {days.Count} 回のうち {pinned.Count} 回は本人の希望で固定されています。"); wish = true; }
             var hi = limits?.Invoke(i, k).Hi;
-            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は個人の上限が 0 回（入れない指定）です。");
+            if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は{SettingIssues.ZeroCapLabel} です。");
             var tight = days.Where(j => needLimits?.Invoke(k, j) is { } lim && Headcount(k, j) <= lim.Lo).ToList();
             if (tight.Count > 0) outList.Add(string.Join("・", tight.Select(j => DayText.Short(ui.StartDate, j))) + $" は「{Sym(k)}」がその日の必要人数ぎりぎりで、抜けると人員不足になります。");
             if (limits is not null)
@@ -453,7 +453,7 @@ public static class FixSearchText
         outList.Add(NoFixScope);
         // 区分の優先: 矛盾を確かめた＞時間で打ち切った＞固定条件が理由に挙がった＞調べた範囲で無い。
         var contradiction = f.Staff is { } ki && f.Day is { } kd && ui.WishSelfConflicts.Any(c => c.Staff == ki && c.Days.Contains(kd));
-        var isFixed = wish || outList.Any(l => l.Contains("上限が 0 回") || l.Contains("下限＝上限で固定"));
+        var isFixed = wish || outList.Any(l => l.Contains(SettingIssues.ZeroCapLabel) || l.Contains("下限＝上限で固定"));
         var kind = contradiction ? NoFixKind.Contradiction : ui.FixTimedOut ? NoFixKind.Time : isFixed ? NoFixKind.Fixed : NoFixKind.Scope;
         outList[0] = kind.Head();
         return new NoFixExplain(outList, wish, f.Staff is null && f.Shift is not null ? "yr_headcount" : "yr_count", kind);

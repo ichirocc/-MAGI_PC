@@ -21,12 +21,21 @@ public sealed record PreRunSheetText(
 public static class PreRunCheckText
 {
     public const string ZeroCapTag = "（入れないシフトの指定が関係）";
-    public const string ZeroCapNoteText = "「入れないシフトの指定が関係」の行は、個人の上限0（入れない指定）が原因で残ります。希望のせいではありません。見直すときは、設定で入れない指定を変えてください。";
-    public const string FloorNote = "本人の希望は固定・必要人数は設定どおりなので、何度つくっても必須違反として残ります。行を押すと、そのセルか直す場所を開けます。";
+    public const string ZeroCapNoteText = "「入れないシフトの指定が関係」の行は、対象外（上限0）の人を数えないため残ります。意図した指定ならこのままで構いません。";
+    public const string FloorNote = "希望と必要人数は固定なので、何度つくっても残ります。行を押すと直す場所を開けます。";
     public const string OverCapHead = "設定上入れないシフトと希望（要調整）";
-    public const string OverCapZero = "上限0のシフトに希望が載っています。上限0は意図した制限なので、残るのは要調整です。希望を変えるか、入れない指定を設定で見直してください。";
-    public const string OverCapOther = "個人の上限より多い希望が載っています。残るのは要調整です。希望を変えるか、設定で上限を見直してください。";
+    public const string OverCapZero = "対象外（上限0）のシフトに希望があります。意図した指定なら、残るのは要調整だけです。";
+    public const string OverCapOther = "個人の上限より多い希望があります（残るのは要調整）。希望か上限を見直してください。";
     public const string RerunNote = "今の勤務表に個人の上限（0回）のシフトが入っています。つくると外されます。";
+
+    /// <summary>証明の核に入っている固定の出どころの呼び名（希望だけ／手動固定だけ／両方）。</summary>
+    public static string PinSourceWord(IReadOnlyList<ConstraintMus.Item> core)
+    {
+        var pins = core.OfType<ConstraintMus.WishPin>().ToList();
+        var manual = pins.Any(it => it.Manual);
+        var wish = pins.Any(it => !it.Manual);
+        return manual && wish ? "希望と手で固定したマス" : manual ? "手で固定したマス" : "本人の希望";
+    }
 
     public static PreRunSheetText Of(PreRunCheck.Summary s, UiState ui)
     {
@@ -55,13 +64,13 @@ public static class PreRunCheckText
         foreach (var d in s.DayProofs)
         {
             var w = Pin(d.Core);
-            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と本人の希望の衝突（{d.Core.Count}件は同時に成立しません）{(s.ZeroCapDays.Contains(d.Day) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
+            floor.Add(new PreRunRow($"{DayText.Full(ui.StartDate, d.Day)} 必要人数と{PinSourceWord(d.Core)}の衝突（{d.Core.Count}件は同時に成立しません）{(s.ZeroCapDays.Contains(d.Day) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
                 Landing: w is null ? GuidedFixRules.LandingForProofCore(d.Core, s.ZeroCapDays.Contains(d.Day)) : null));
         }
         foreach (var c in s.StaffProofs)
         {
             var w = Pin(c.Core);
-            floor.Add(new PreRunRow($"{Name(c.Staff)} 本人の希望と条件の組合せ（{c.Core.Count}件は同時に成立しません）{(PreRunCheck.Summary.ZeroCapStaffProof(c) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
+            floor.Add(new PreRunRow($"{Name(c.Staff)} {PinSourceWord(c.Core)}と条件の組合せ（{c.Core.Count}件は同時に成立しません）{(PreRunCheck.Summary.ZeroCapStaffProof(c) ? ZeroCapTag : "")}", w?.Staff, w?.Day, w is not null,
                 Landing: w is null ? GuidedFixRules.LandingForProofCore(c.Core, PreRunCheck.Summary.ZeroCapStaffProof(c)) : null));
         }
         foreach (var f in s.ForcedShortfalls)
@@ -73,7 +82,7 @@ public static class PreRunCheckText
 
         var rerun = s.RerunClears.Select(c => new PreRunRow($"{Name(c.Staff)} {Day(c.Day)} {Sym(c.Shift)}", c.Staff, c.Day)).ToList();
         var wall = s.Wall is { } h
-            ? $"個人の上限0：{h.Pairs}組（{h.StaffCount}人）。入れないシフトの指定です。"
+            ? $"{SettingIssues.ZeroCapLabel}：{h.Pairs}組（{h.StaffCount}人）。パート等の意図した指定です。"
             : null;
         string? overNote = null;
         if (s.WishOverCaps.Count > 0)

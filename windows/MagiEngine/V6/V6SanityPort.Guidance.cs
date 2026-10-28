@@ -54,7 +54,18 @@ public sealed record SettingIssue(
     string? GroupRangeFamily = null,
     C41Row? GroupRangeRow = null,
     // 意図した設定に由来する案内（上限 0 × 希望）。ログで「設定ミス」と呼ばない。
-    bool Neutral = false);
+    bool Neutral = false,
+    // [backlog #11] 個人の上限0（パート等の意図した指定）の案内。直す項目として数えない（SettingIssues.FixItems）。
+    bool ZeroCap = false);
+
+public static class SettingIssues
+{
+    /// <summary>個人の上限0（休を除く）の表示名。設定ミスでなく意図した対象外として見せる（backlog #11、2026-10-22 ユーザー決定）。</summary>
+    public const string ZeroCapLabel = "対象外（上限0）";
+
+    /// <summary>直す項目として数える診断（個人の上限0の案内を除く）。</summary>
+    public static List<SettingIssue> FixItems(IEnumerable<SettingIssue> issues) => issues.Where(it => !it.ZeroCap).ToList();
+}
 
 /// <summary>
 /// [3.687.0/R02] 希望の取消を診断した入力の指紋（職員 ID・グループと担当可否・日・その日と前後の希望・シフトの並び・希望の前日に禁止・期間）。

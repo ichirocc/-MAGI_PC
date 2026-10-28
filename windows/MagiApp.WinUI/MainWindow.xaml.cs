@@ -759,7 +759,7 @@ public sealed partial class MainWindow : Window
         if (t.OverCapNote is { } on) { Head(PreRunCheckText.OverCapHead); Note(on); Rows(t.OverCapRows ?? Array.Empty<PreRunRow>(), consult: true); }
         if (t.WallLine is { } w)
         {
-            Head("入れないシフト（個人の上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });
+            Head("対象外のシフト（上限0）"); panel.Children.Add(new TextBlock { Text = w, TextWrapping = TextWrapping.Wrap });
             if (t.WallLanding is { } wl) Link(GuidedFixRules.LandingButtonLabel(wl), () => GoEditLandingFrom(wl, PreRunReturn()));
         }
 

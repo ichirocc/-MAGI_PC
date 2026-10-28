@@ -734,7 +734,7 @@ public sealed partial class MagiViewModel
             return;
         }
         LogOp("I", $"各制約CSV取込: {res.Accepted}件を反映（制約一式を置換）");
-        ApplyStructureWithMessage(res.State, $"各制約を取込: {res.Accepted}件を反映（既存の制約・個人の回数の下限・上限は置換）");
+        ApplyStructureWithMessage(res.State, $"各制約を取込: {res.Accepted}件を反映（既存の制約・個人の回数の下限・上限は置換）" + MagiConstraintsView.PeriodOverflowNote(res.State));
     }
 
     // ===== ファイル入出力の通知ヘルパー =====

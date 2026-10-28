@@ -255,7 +255,7 @@ public class GridDisplayMarksTest
         var why = FixSearchText.NoFixReasons(u, new FixFocus(0, 1), Limits, Need);
         Assert.True(why.WishRelated);
         Assert.Contains(why.Lines, l => l.Contains("どれも本人の希望で固定"));
-        Assert.Contains(why.Lines, l => l.Contains("個人の上限が 0 回"));
+        Assert.Contains(why.Lines, l => l.Contains("対象外（上限0）"));
         Assert.Contains(why.Lines, l => l.Contains("必要人数ぎりぎり"));
         Assert.Contains(why.Lines, l => l.Contains("下限＝上限で固定") && l.Contains("休 1回"));
         Assert.Equal(NoFixKind.Fixed, why.Kind);   // 固定条件が理由に挙がった＝「固定条件による制限」（仕様 §7）

@@ -258,7 +258,7 @@ public sealed record AnalysisTriage(
             : ui.RelaxedBoard
                 ? "設定を緩めて手順を当てた盤面の概算です（再作成する前）。"
                 : "実行前の概算です。期間の制約・禁止の並びなど、設定の組み合わせによっては、つくったあとも残る場合があります。";
-        return new AnalysisTriage(computed, blockers, AggregateIssues(ui.SettingIssues), searching, ok, busy, note);
+        return new AnalysisTriage(computed, blockers, AggregateIssues(MagiEngine.V6.SettingIssues.FixItems(ui.SettingIssues)), searching, ok, busy, note);
     }
 
     /// <summary>設定の見直しの行の全幅ボタン（節の名を言う）。Kotlin <c>issueSettingsLabel</c>。</summary>
