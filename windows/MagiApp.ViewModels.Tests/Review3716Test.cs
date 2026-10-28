@@ -67,7 +67,7 @@ public class Review3716Test
         Assert.DoesNotContain(HomeSection.Badges, CellSheetLogic.HomeCardSectionsOf(plan, new UiState { Loaded = true, HasResult = true, EngineRan = true, CheckRev = 0 }));
         Assert.Contains(HomeSection.Badges, CellSheetLogic.HomeCardSectionsOf(plan, new UiState { Loaded = true, HasResult = true, EngineRan = true, CheckRev = 1 }));
         var made = new UiState { Loaded = true, HasResult = true, EngineRan = true, CheckRev = 1, BestHard = 0L, BestSoft = 5L, Breakdown = new Dictionary<string, int> { ["c1"] = 5 } };
-        Assert.Equal("必須0件 · 要調整5件", AnalysisTriage.AnalysisSummaryOf(made, 0, null).Sentence);
+        Assert.Equal("必須0件 · 要調整5件", AnalysisTriage.AnalysisSummaryOf(made, null).Sentence);
     }
 
     [Fact]

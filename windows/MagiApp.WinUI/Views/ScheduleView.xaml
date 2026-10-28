@@ -233,15 +233,11 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <Button x:Name="PrevWeekButton" Grid.Column="0" Content="◀週" Click="OnPrevWeekClick" MinHeight="48" />
                 <Button x:Name="NextWeekButton" Grid.Column="1" Content="週▶" Click="OnNextWeekClick" MinHeight="48" />
                 <TextBlock x:Name="NavLabel" Grid.Column="2" TextAlignment="Center" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" Style="{StaticResource MagiLabelLargeTextStyle}" Opacity="0.8" />
-                <Button x:Name="PrevVioButton" Grid.Column="3" Content="◀違反" Click="OnPrevVioClick" MinHeight="48" />
-                <Button x:Name="NextVioButton" Grid.Column="4" Content="違反▶" Click="OnNextVioClick" MinHeight="48" />
             </Grid>
         </Border>
     </Grid>

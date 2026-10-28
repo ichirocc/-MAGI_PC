@@ -64,16 +64,11 @@ public sealed partial class AnalysisView : UserControl
     private readonly Action<int, int> _jumpToCell;
 
     /// <param name="goEdit">「設定へ」。種類（設定の見直しの IssueKind、無ければ null）を渡し、着地先は MainWindow が決める（3.646.0 L04）。</param>
-    /// <param name="tourCount">巡回できる必須違反の数（シェルの札と同じ数え方）。</param>
-    /// <param name="onPrimary">状態の段の主ボタン（巡回の先頭のシート／人員不足のなおし方）。</param>
-    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action<IssueKind?>? goEdit = null,
-        Func<UiState, int>? tourCount = null, Action<AnalysisPrimary>? onPrimary = null)
+    public AnalysisView(MagiViewModel vm, Action<int, int> jumpToCell, Action<IssueKind?>? goEdit = null)
     {
         _vm = vm;
         _jumpToCell = jumpToCell;
         _goEdit = goEdit;
-        _tourCount = tourCount;
-        _onPrimary = onPrimary;
         InitializeComponent();
         _renderCoalescer = new CoalescedRender(DispatcherQueue, Render);
         // [レビュー指摘 2026-09-04] タブはキャッシュされ再利用されるので、Unloaded で外した購読を Loaded で戻す
@@ -135,14 +130,6 @@ public sealed partial class AnalysisView : UserControl
     private void OnFixSearchClick(object sender, RoutedEventArgs e) => _vm.FindFixSuggestions();
 
     private readonly Action<IssueKind?>? _goEdit;
-    private readonly Func<UiState, int>? _tourCount;
-    private readonly Action<AnalysisPrimary>? _onPrimary;
-    private AnalysisPrimary _summaryPrimary = AnalysisPrimary.None;
-
-    private void OnSummaryPrimaryClick(object sender, RoutedEventArgs e)
-    {
-        if (_summaryPrimary != AnalysisPrimary.None) _onPrimary?.Invoke(_summaryPrimary);
-    }
     private bool _triageSummaryOpen;
 
     private static Brush BrushOf(string key) => (Brush)Application.Current.Resources[key];
@@ -297,13 +284,10 @@ public sealed partial class AnalysisView : UserControl
     private void RenderSummary(UiState ui)
     {
         SummarySection.Visibility = Visibility.Visible;
-        var summary = AnalysisTriage.AnalysisSummaryOf(ui, _tourCount?.Invoke(ui) ?? 0, CellSheetLogic.AnalysisFixResolved(ui));
+        var summary = AnalysisTriage.AnalysisSummaryOf(ui, CellSheetLogic.AnalysisFixResolved(ui));
         SummaryText.Text = summary.Sentence;
         SummaryPoints.Children.Clear();
         foreach (var p in summary.Points) SummaryPoints.Children.Add(BodyText("・" + p));
-        _summaryPrimary = _onPrimary is null ? AnalysisPrimary.None : summary.Primary;
-        SummaryPrimaryButton.Content = summary.PrimaryLabel ?? "";
-        SummaryPrimaryButton.Visibility = _summaryPrimary != AnalysisPrimary.None && summary.PrimaryLabel is not null ? Visibility.Visible : Visibility.Collapsed;
 
         // 補足（あるときだけ）: 操作の助言・研磨の限界・そもそも叶えられない希望の件数。
         var hints = new List<string>();

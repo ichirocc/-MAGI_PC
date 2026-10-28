@@ -100,11 +100,10 @@ public sealed partial class ScheduleView : UserControl
     private int? _panelPickRow;   // [3.720.0] 問題一覧で押した行（同じマスの別の行と分ける）
     private string? _panelPickFamily;   // [3.721.1] その行の族（作り直し後の行番号ずれを補う）
     private List<List<int>> _weeks = new();
-    private List<int> _vioDays = new();
-    private int _navIdx = -1;
 
     /// <summary>[phase9 #7 E7] 表示中のバケツ（初期は全 ON）と集中モード。表示のみ・スコアリング不変。</summary>
     private readonly HashSet<string> _vioEnabled = new(VioBuckets.AllKeys);
+    private bool _bucketsMoreOpen;
     private bool _focusMode;
 
     /// <summary>勤務表タブの状態の 1 行（Kotlin <c>ScheduleStateRow</c>、G2-1）。必須違反は赤、巡回の先頭へ行けるときだけ押せる。</summary>
@@ -243,30 +242,10 @@ public sealed partial class ScheduleView : UserControl
         return weeks;
     }
 
-    /// <summary>被覆キーごとの重なった全クラス（<c>NeedViolations</c> は最重 1 クラスだけ＝同じ重みの族に隠れた covO を取りこぼす）。</summary>
-    private static IEnumerable<(string Key, IReadOnlyList<string> Classes)> NeedClassesAll(UiState ui) =>
-        ui.NeedFamilies.Count > 0
-            ? ui.NeedFamilies.Select(kv => (kv.Key, kv.Value))
-            : ui.NeedViolations.Select(kv => (kv.Key, (IReadOnlyList<string>)new[] { kv.Value }));
-
     private static string? FirstVisible(IReadOnlyDictionary<string, IReadOnlyList<string>> fams, IReadOnlyDictionary<string, string> heaviest, string key, IReadOnlySet<string> enabled)
     {
         IReadOnlyList<string> classes = fams.TryGetValue(key, out var f) ? f : heaviest.TryGetValue(key, out var one) ? new[] { one } : Array.Empty<string>();
         return classes.FirstOrDefault(c => VioBuckets.VioVisible(c, enabled));
-    }
-
-    private List<int> VioDays(UiState ui)
-    {
-        var days = new SortedSet<int>();
-        foreach (var key in ui.ViolationCells.Keys)
-        {
-            if (VioBuckets.VisibleCellVio(ui, key, _vioEnabled) is not null && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
-        }
-        foreach (var (key, fams) in NeedClassesAll(ui))
-        {
-            if (fams.Any(c => VioBuckets.VioVisible(c, _vioEnabled)) && int.TryParse(key[(key.IndexOf(',') + 1)..], out var j)) days.Add(j);
-        }
-        return days.ToList();
     }
 
     /// <summary>[phase9 #7] 種別フィルタのバー（Kotlin原本 <c>ViolationBucketChips</c>）。違反ゼロなら隠す。</summary>
@@ -281,7 +260,7 @@ public sealed partial class ScheduleView : UserControl
         ShowAllButton.Visibility = _vioEnabled.SetEquals(VioBuckets.AllKeys) ? Visibility.Collapsed : Visibility.Visible;
         FocusToggle.IsChecked = _focusMode;
         BucketChips.Children.Clear();
-        foreach (var b in VioBuckets.Buckets)
+        foreach (var b in VioBuckets.VisibleBuckets(_bucketsMoreOpen, _vioEnabled))
         {
             var n = counts.GetValueOrDefault(b.Key);
             var chip = new ToggleButton
@@ -297,6 +276,10 @@ public sealed partial class ScheduleView : UserControl
             };
             BucketChips.Children.Add(chip);
         }
+        var more = new HyperlinkButton { MinHeight = 40 };
+        Disclosure.Set(more, VioBuckets.MoreLabel, _bucketsMoreOpen);
+        more.Click += (_, _) => { _bucketsMoreOpen = !_bucketsMoreOpen; _renderCoalescer.Request(); };
+        BucketChips.Children.Add(more);
     }
 
     /// <summary>[phase9 #8] 検索・凡例（Kotlin原本 <c>SearchLegendBar</c>／<c>ViolationLegend</c>／<c>ShiftColorLegend</c>）。</summary>
@@ -447,34 +430,16 @@ public sealed partial class ScheduleView : UserControl
         GridScroll.ChangeView(Math.Max(0, x), null, null);
     }
 
-    /// <summary>[phase9 #6] ナビバー（Kotlin原本 <c>ScheduleNavBar</c>）。週も違反日も無いときは隠す。</summary>
+    /// <summary>[phase9 #6] ナビバー（Kotlin原本 <c>ScheduleNavBar</c>）。週が 1 つなら隠す（違反の前後は撤去＝Android 3.727.7 UI-S4）。</summary>
     private void RenderNavBar(UiState ui)
     {
         _weeks = ui.Loaded ? MondayWeeks(ui.StartDate, Math.Max(1, ui.Days)) : new List<List<int>>();
-        var vio = ui.Loaded ? VioDays(ui) : new List<int>();
-        if (!vio.SequenceEqual(_vioDays)) { _vioDays = vio; _navIdx = -1; }
-        var show = _weeks.Count > 1 || _vioDays.Count > 0;
+        var show = _weeks.Count > 1;
         NavBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show) return;
-        var hasWeeks = _weeks.Count > 1;
-        PrevWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
-        NextWeekButton.Visibility = hasWeeks ? Visibility.Visible : Visibility.Collapsed;
-        var hasVio = _vioDays.Count > 0 && !_hideVioNav;
-        PrevVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
-        NextVioButton.Visibility = hasVio ? Visibility.Visible : Visibility.Collapsed;
         UpdateNavLabel(ui);
         // グリッドは作り直した直後で幅が未確定なので、レイアウト後にもう一度ラベルを出す。
         DispatcherQueue.TryEnqueue(() => UpdateNavLabel(_vm.Ui));
-    }
-
-    private bool _hideVioNav;
-
-    private void SetVioNavHidden(bool hide)
-    {
-        _hideVioNav = hide;
-        var v = _vioDays.Count > 0 && !hide ? Visibility.Visible : Visibility.Collapsed;
-        PrevVioButton.Visibility = v;
-        NextVioButton.Visibility = v;
     }
 
     private void UpdateNavLabel(UiState ui)
@@ -488,8 +453,7 @@ public sealed partial class ScheduleView : UserControl
                 ? $"{d0.AddDays(_weeks[cur][0]).Month}月 第{cur + 1}/{_weeks.Count}週"
                 : $"第{cur + 1}/{_weeks.Count}週";
         }
-        var vioLabel = _vioDays.Count == 0 ? "" : $"違反 {(_navIdx < 0 ? "–" : (_navIdx + 1).ToString())}/{_vioDays.Count}";
-        NavLabel.Text = string.Join(" ・ ", new[] { weekLabel, vioLabel }.Where(t => t.Length > 0));
+        NavLabel.Text = weekLabel;
         PrevWeekButton.IsEnabled = cur > 0;
         NextWeekButton.IsEnabled = cur < _weeks.Count - 1 && CanScrollForward();
     }
@@ -507,17 +471,6 @@ public sealed partial class ScheduleView : UserControl
         var cur = CurrentWeek();
         if (cur < _weeks.Count - 1) ScrollToDay(_weeks[cur + 1][0]);
     }
-
-    private void JumpToVio(int n)
-    {
-        if (n < 0 || n >= _vioDays.Count) return;
-        _navIdx = n;
-        FocusCell(-1, _vioDays[n]);
-    }
-
-    private void OnPrevVioClick(object sender, RoutedEventArgs e) => JumpToVio(_navIdx <= 0 ? _vioDays.Count - 1 : _navIdx - 1);
-
-    private void OnNextVioClick(object sender, RoutedEventArgs e) => JumpToVio(_navIdx < 0 ? 0 : (_navIdx + 1) % _vioDays.Count);
 
 
     /// <summary>ListView（複数選択）の表示用ラッパー。氏名の重複があっても index で確実に職員を特定するため
@@ -2634,9 +2587,6 @@ public sealed partial class ScheduleView : UserControl
         var target = CellSheetLogic.CellSheetTarget(name, ScheduleUtil.FormatDay(ui.StartDate, j), cur >= 0 ? Sym(cur) : null);
         var badge = CellSheetLogic.CellSheetBadge(status.Severity, tourAt >= 0 ? tourAt : null, tourItems.Count);
         FrameworkElement? BadgeChip() => badge is null ? null : AnalysisView.TagChip(badge, status.Severity == CellSeverity.Hard ? MagiAccent.Red : MagiAccent.Orange);
-        // 巡回中にシートを開いている間は、下部バーの違反ナビを隠す（シートの［◀ 前］［次 ▶］と重複）。
-        SetVioNavHidden(tourAt >= 0);
-        flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
         int? tourNext = tour.Next ?? (tourAt < 0 && tour.Prev is null && tourItems.Count > 0 ? 0 : null);
         if (tourNext is { } nextAt && step == 0)
         {

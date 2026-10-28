@@ -330,6 +330,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+- 2026-10-28（Android 3.727.7 と同期・UI 整理 A2/A4/A6）: 勤務表の絞り込み札を常用 3 つ（人員・希望・回数）＋「その他」に（`VioBuckets.CommonKeys`/`VisibleBuckets`、外している札は閉じていても見せる）。下部バーの「◀違反／違反▶」と違反日の状態を撤去（巡回はセルのシートが持つ）。分析タブの主ボタン（`AnalysisPrimary`）を撤去＝「次の問題へ」はホームの主と重ねない。`VioBucketsVisibleTest` を追加、`Review3705Test` を Kotlin と同じ形へ。エンジン不変。
 - 2026-10-28（Android 3.727.6 と同期・外部レビュー No.1/No.8）: `StateFingerprint.OfBoard` を行数・各行の長さ・各値を 1 つずつ強く混ぜる式へ（旧 `h*31+v` は `[1,0]`/`[0,31]` 等が作りの上で衝突し、「計算中に盤面が変わったか」の照合が誤って同じと見得た）。golden を Kotlin と同じ値へ、`OfBoardSeparatesTheOldStructuralCollisions`・`EveryStateFieldIsCoveredOrDeliberatelyExcluded`（`MagiState` の欄が増えたら落ちる）を追加、`MagiViewModelDiagnosticsTest` の旧式の検算を新しい固定値へ。Worker の入力退避（No.5）は Android の背景実行だけの経路＝C# に該当なし。
 - 2026-10-28（Android 3.727.5 と同期・直したあと問題一覧の同じ位置へ、画面のみ・出力不変）: `CellSheetLogic.ListResumeIndex`（見ていた行が残ればそれ、直して消えていれば同じ位置に繰り上がった次の問題）。`ScheduleView` の問題パネルは戻ったときにその行を選んで `StartBringIntoView`、繰り上がった行を選んだときは表もそのセルへ送る。`ListResumeTest` 3 件（Kotlin と 1 対 1）。WinUI は CI でのみコンパイル。
 - 2026-10-28（Android 3.727.4 の残件と同日同期）: ①`V6HotfixPasses.ComputeStaffObjective`（ブロック交換・3 者回転の前フィルタ）が HARD を c3n だけ数えていた→c3w・extWish をセル単位の静的表（`C3wBanned`・`ExtBanned`）で数えて HARD と重みに足す（Kotlin `C3RotationPolish.staffObjective` と同じ、盤面ハッシュ・チェッカーのスナップショット不変）②`BuildingNow` は閉じている間の作成（`_bgRunId != 0`）も作成中と見なす（Kotlin `engineBuilding`）。Engine 1249・ViewModels 980 合格。

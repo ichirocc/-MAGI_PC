@@ -38,10 +38,9 @@
 
             <!-- ① サマリー -->
             <StackPanel x:Name="SummarySection" Spacing="6">
-                <!-- 状態の段: 一文・3 点まで・主ボタン 1 つ（AnalysisTriage.AnalysisSummaryOf、Android 3.705.0）。 -->
+                <!-- 状態の段: 一文・点（AnalysisTriage.AnalysisSummaryOf）。主ボタンは持たない（Android 3.727.7）。 -->
                 <TextBlock x:Name="SummaryText" Style="{StaticResource MagiBodyLargeTextStyle}" FontWeight="SemiBold" TextWrapping="Wrap" />
                 <StackPanel x:Name="SummaryPoints" Spacing="2" />
-                <Button x:Name="SummaryPrimaryButton" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" MinHeight="56" Click="OnSummaryPrimaryClick" />
                 <TextBlock x:Name="HintText" Style="{StaticResource MagiBodySmallTextStyle}" TextWrapping="Wrap" Opacity="0.8" />
             </StackPanel>
 

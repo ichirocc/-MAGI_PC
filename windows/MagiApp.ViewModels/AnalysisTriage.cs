@@ -304,9 +304,9 @@ public sealed record AnalysisTriage(
 
     /// <summary>
     /// 分析タブの状態の段（Kotlin <c>analysisSummary</c>）。一文は上部の札（<see cref="CellSheetLogic.BoardStatusLines"/>）と同じ区別で決める。
-    /// tourCount＝巡回できる必須違反の数、fixResolved＝変更案で直せる必須違反の数（null＝未探索・古い＝出さない）。
+    /// fixResolved＝変更案で直せる必須違反の数（null＝未探索・古い＝出さない）。
     /// </summary>
-    public static AnalysisSummary AnalysisSummaryOf(UiState ui, int tourCount, int? fixResolved)
+    public static AnalysisSummary AnalysisSummaryOf(UiState ui, int? fixResolved)
     {
         var hard = ui.BestHard;
         var evaluated = ui.CheckRev > 0 && !ui.Running;
@@ -322,24 +322,13 @@ public sealed record AnalysisTriage(
             // [3.713.0] 件数は一文（「必須3件 · 要調整12件」）が言う＝点は変更案で直せる数だけ。
             if (evaluated && hard > 0 && fixResolved is { } n) points.Add($"変更案で直せる必須違反 {n}か所");
         }
-        var shortDays = ui.CoverageDiag?.Shortfalls.Where(x => x.Miss > 0).Select(x => x.DayIndex).Distinct().Count() ?? 0;
-        var active = hard > 0 && !ui.Running && ui.HasResult;
-        var primary = active && tourCount > 0 ? AnalysisPrimary.Tour : active && shortDays > 0 ? AnalysisPrimary.Guided : AnalysisPrimary.None;
-        var label = primary switch
-        {
-            AnalysisPrimary.Tour => FixOutcomeText.GuidedTourButton(tourCount),
-            AnalysisPrimary.Guided => $"直し方を見る（{shortDays}日）",
-            _ => null,
-        };
-        return new AnalysisSummary(sentence, points, primary, label);
+        return new AnalysisSummary(sentence, points);
     }
 }
 
-/// <summary>分析タブの主ボタン（1 つだけ）。巡回できるなら巡回、人員不足だけならなおし方、それ以外は出さない。</summary>
-public enum AnalysisPrimary { Tour, Guided, None }
-
-/// <summary>分析タブの状態の段: 一文・3 点まで・主ボタン（<see cref="AnalysisTriage.AnalysisSummaryOf"/>）。</summary>
-public sealed record AnalysisSummary(string Sentence, IReadOnlyList<string> Points, AnalysisPrimary Primary, string? PrimaryLabel);
+/// <summary>分析タブの状態の段: 一文・点（<see cref="AnalysisTriage.AnalysisSummaryOf"/>）。主ボタンは持たない（Android 3.727.7 UI-S6）＝
+/// 「次の問題へ」はホームの主、分析の主は変更案のカード。</summary>
+public sealed record AnalysisSummary(string Sentence, IReadOnlyList<string> Points);
 
 /// <summary>同じ依頼（起点）・同じ盤面と設定で続いた案 0 件の回数。</summary>
 public sealed record EmptySearchStreak(string Origin, long Board, long State, int Count);

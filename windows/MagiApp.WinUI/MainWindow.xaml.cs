@@ -309,9 +309,8 @@ public sealed partial class MainWindow : Window
             ui.DraftStage && ui.EngineRan, ui.CoverageDiag?.AllInfeasible == true) ? Visibility.Collapsed : Visibility.Visible;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
         // 作成直後の自動探索（FixSearching）を止めるのはここだけ（ホームのカードに同じボタンを置かない）。塗りは主カードに譲る（INV-09）。
-        // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。設定タブも外枠（Android 3.706.0）。
+        // 設定タブも外枠（Android 3.706.0）。分析タブは主ボタンを持たない（Android 3.727.7 UI-S6）。
         var secondary = !ui.Running && (_currentTag == "home" || _currentTag == "settings"
-            || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None)
             // 編集タブの月次条件は見出しの主が Rerun のときだけ塗り（Android 3.707.0 Q10）。
             || (_currentTag == "edit" && _tabCache.TryGetValue("edit", out var ec) && ec is EditView ev && CellSheetLogic.EditBarSecondary(ev.HeaderPlanNow())));
         // [3.721.0] 再作成しても同じ結果になる間は、塗りの主を変更案（案が無ければ問題一覧）へ譲る。
@@ -368,20 +367,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>分析タブの主ボタン（Kotlin <c>onPrimary</c>）。巡回は札と同じ先頭のシート、なおし方はホームの人員不足の手伝い。</summary>
-    private void OnAnalysisPrimary(AnalysisPrimary p)
-    {
-        if (p == AnalysisPrimary.Tour)
-        {
-            if (_vm.HardViolationItemsFor(AnalysisView.LabelOf).FirstOrDefault() is { } first) OpenCellSheet(first.Cell.I, first.Cell.J);
-        }
-        else if (p == AnalysisPrimary.Guided)
-        {
-            SelectTab("home");
-            if (_tabCache.TryGetValue("home", out var h) && h is HomeView hv) _ = hv.ShowGuidedFixAsync();
-        }
-    }
-
     private RerunFooter _footer = RerunFooter.Filled;
 
     private void OnFixPrimaryClick(object sender, RoutedEventArgs e)
@@ -411,8 +396,7 @@ public sealed partial class MainWindow : Window
                 // 「設定へ」は種類に対応する節（回数→③・決まり→⑤）、必要人数・希望・種類なしは月次条件の先頭（3.646.0 L04）。
                 // セルの行は巡回と同じくそのセルのシートを開く（Android 3.705.0）。
                 "analysis" => new AnalysisView(_vm, OpenCellSheet, kind => GoEditLandingFrom(
-                    VioBuckets.YearSectionForIssueKind(kind) is { } sec ? new EditLanding(2, sec) : null, new EditReturn("問題の一覧", EditReturn.Analysis)),
-                    TourItemCount, OnAnalysisPrimary),
+                    VioBuckets.YearSectionForIssueKind(kind) is { } sec ? new EditLanding(2, sec) : null, new EditReturn("問題の一覧", EditReturn.Analysis))),
                 "settings" => new SettingsView(_vm, this),
                 _ => PlaceholderTab(tag),
             };

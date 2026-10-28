@@ -27,6 +27,15 @@ public static class VioBuckets
 
     public static readonly IReadOnlySet<string> AllKeys = Buckets.Select(b => b.Key).ToHashSet();
 
+    /// <summary>[UI-S2] 絞り込み札の常時表示（人員・希望・回数）。残りは「その他」を開くと出す。</summary>
+    public static readonly IReadOnlySet<string> CommonKeys = new HashSet<string> { "need", "pref", "count" };
+
+    /// <summary>外している札は閉じていても見せる（絞り込みの状態を隠さない）。</summary>
+    public static IEnumerable<VioBucket> VisibleBuckets(bool moreOpen, IReadOnlySet<string> enabled) =>
+        Buckets.Where(b => moreOpen || CommonKeys.Contains(b.Key) || !enabled.Contains(b.Key));
+
+    public const string MoreLabel = "その他";
+
     /// <summary>vio-class（"vio-covU"/"vio-aptLow" 等）→ 族キー。aptLow/aptHigh は apt に畳む。</summary>
     public static string FamilyOfVioClass(string cls)
     {
