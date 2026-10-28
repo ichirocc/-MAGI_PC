@@ -31,14 +31,18 @@ public static class StateFingerprint
     /// <summary>行の区切り。可変長の行を素通しで連結すると、構造が違うのに同じ値になる。</summary>
     private const long Row = 0x5F3759DFL;
 
-    /// <summary>盤面の内容から決まる指紋（Kotlin <c>StateFingerprint.ofBoard</c>、3.694.0）。VM の <c>BoardKey</c> の式をそのまま置き、
-    /// 操作ログの「盤面指紋」と案の照合が同じ値を使う。S×T が小さい（30×31）ので毎回の計算コストは無視できる。</summary>
+    /// <summary>盤面の内容から決まる指紋（Kotlin <c>StateFingerprint.ofBoard</c>）。操作ログの「盤面指紋」と「計算中に盤面が変わったか」の照合が同じ値を使う。
+    /// 行数・各行の長さ・各値を 1 つずつ強く混ぜる（Android 3.727.6、外部レビュー No.1: 旧 <c>h*31+v</c> は <c>[1,0]</c> と <c>[0,31]</c> のように作りの上で衝突した）。</summary>
     public static long OfBoard(int[][] schedule)
     {
         var h = 1125899906842597L;
-        foreach (var row in schedule) foreach (var v in row) h = h * 31L + v;
+        void Step(long v) { h = (h ^ (v * -7046029254386353131L)) * -4658895280553007687L; h ^= (long)((ulong)h >> 31); }
+        Step(schedule.Length);
+        foreach (var row in schedule) { Step(BoardRow + row.Length); foreach (var v in row) Step(v); }
         return h;
     }
+
+    private const long BoardRow = 1L << 40;
 
     public static long Of(MagiState st)
     {

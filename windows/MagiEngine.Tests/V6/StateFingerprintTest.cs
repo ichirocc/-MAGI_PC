@@ -17,14 +17,24 @@ namespace MagiEngine.Tests.V6;
 /// </summary>
 public class StateFingerprintTest
 {
-    /// <summary>[3.694.0] 盤面指紋の golden（Kotlin <c>StateFingerprintTest</c> の ofBoard と同じ 2x3 盤面・同じ値）。VM の BoardKey と同じ式。</summary>
+    /// <summary>盤面指紋の golden（Kotlin <c>StateFingerprintTest.ofBoardGolden</c> と同じ 2x3 盤面・同じ値）。</summary>
     [Fact]
     public void OfBoardMatchesTheKotlinGoldenAndTheViewModelKey()
     {
         var board = new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 2 } };
-        Assert.Equal(-1367968410775403481L, StateFingerprint.OfBoard(board));
-        Assert.Equal("ed03fffa6bc6c427", StateFingerprint.OfBoard(board).ToString("x16"));
+        Assert.Equal(-5169525488255970811L, StateFingerprint.OfBoard(board));
+        Assert.Equal(7535779455838661510L, StateFingerprint.OfBoard(Array.Empty<int[]>()));
         Assert.NotEqual(StateFingerprint.OfBoard(board), StateFingerprint.OfBoard(new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 3 } }));
+    }
+
+    /// <summary>旧式 <c>h*31+v</c> が作りの上で衝突した組（Kotlin <c>ofBoardSeparatesTheOldStructuralCollisions</c>）。</summary>
+    [Fact]
+    public void OfBoardSeparatesTheOldStructuralCollisions()
+    {
+        Assert.NotEqual(StateFingerprint.OfBoard(new[] { new[] { 1, 0 } }), StateFingerprint.OfBoard(new[] { new[] { 0, 31 } }));
+        Assert.NotEqual(StateFingerprint.OfBoard(new[] { new[] { 1 }, new[] { 0 } }), StateFingerprint.OfBoard(new[] { new[] { 1, 0 } }));
+        Assert.NotEqual(StateFingerprint.OfBoard(new[] { new[] { 0, 0 } }), StateFingerprint.OfBoard(new[] { new[] { 0 }, new[] { 0 } }));
+        Assert.NotEqual(StateFingerprint.OfBoard(new[] { new[] { -1, 0 } }), StateFingerprint.OfBoard(new[] { new[] { 0, -31 } }));
     }
 
     private static MagiState Base() => new MagiState(
@@ -108,6 +118,22 @@ public class StateFingerprintTest
         yield return ("スキル群ペア禁止", b with { Cons42s = new List<C42Row> { new("S", "S", "休", "A") } });
         yield return ("希望の前日に禁止", b with { Cons3w = new List<C3wRow> { new("休", "A") } });
         yield return ("手動固定", b with { ManualPins = new List<ManualPin> { new(0, 0, 0) } });
+    }
+
+    /// <summary>勤務表の設定（<see cref="MagiState"/>）の欄が増えたら落ちる（Kotlin <c>everyStateFieldIsCoveredOrDeliberatelyExcluded</c>、外部レビュー No.8）。
+    /// 増えた欄が計算に効くなら <c>StateFingerprint.Of</c> と variants に足し、効かないなら除外の集合に理由つきで足す。</summary>
+    [Fact]
+    public void EveryStateFieldIsCoveredOrDeliberatelyExcluded()
+    {
+        var notInFingerprint = new HashSet<string> { "Schedule", "ShiftColors", "Extras" };   // 盤面は OfBoard／表示の色／未対応の欄の写し
+        var covered = new HashSet<string> { "StartDate", "EndDate", "Shifts", "Groups", "StaffList", "Use2Patterns", "GroupShift", "GroupShiftApt", "Wishes",
+            "StaffRange", "NeedDay1", "NeedDay2", "Cons1", "Cons2", "Cons3", "Cons3n", "Cons3m", "Cons3mn", "Cons41", "Cons42", "SkillGroups",
+            "Cons41s", "Cons42s", "Cons3w", "ManualPins", "ExtWishes" };
+        var ctor = typeof(MagiState).GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+        var fields = ctor.GetParameters().Select(p => p.Name!).ToHashSet();
+        fields.ExceptWith(covered);
+        fields.ExceptWith(notInFingerprint);
+        Assert.Empty(fields);
     }
 
     [Fact]

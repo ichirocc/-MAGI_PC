@@ -38,20 +38,13 @@ public class MagiViewModelDiagnosticsTest
         Assert.NotEqual(MagiViewModel.BoardKey(a), MagiViewModel.BoardKey(b));
     }
 
-    /// <summary>
-    /// [Kotlin原本の式を独立に検算] <c>h = 1125899906842597L; for row for v: h = h * 31L + v</c>。
-    /// この定数式は分割代入や「改善」で静かにドリフトしうるため、実際の formula を再現し数値で固定する。
-    /// </summary>
+    /// <summary>盤面の指紋の固定値（Kotlin <c>StateFingerprintTest.ofBoardGolden</c> と同じ盤面・同じ値）＝式が静かにずれたら落ちる。</summary>
     [Fact]
-    public void BoardKeyMatchesTheDocumentedPolynomialHashFormula()
+    public void BoardKeyIsTheEngineBoardFingerprint()
     {
-        var schedule = new[] { new[] { 1, 2 }, new[] { 3 } };
-        var expected = 1125899906842597L;
-        expected = expected * 31L + 1;
-        expected = expected * 31L + 2;
-        expected = expected * 31L + 3;
-
-        Assert.Equal(expected, MagiViewModel.BoardKey(schedule));
+        var schedule = new[] { new[] { 0, 1, 2 }, new[] { 1, 0, 2 } };
+        Assert.Equal(-5169525488255970811L, MagiViewModel.BoardKey(schedule));
+        Assert.Equal(MagiEngine.V6.StateFingerprint.OfBoard(schedule), MagiViewModel.BoardKey(schedule));
     }
 
     // ===== CompressDiagLogs =====
