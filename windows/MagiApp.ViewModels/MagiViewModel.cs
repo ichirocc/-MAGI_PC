@@ -179,6 +179,8 @@ public sealed partial class MagiViewModel
         CancelWishTrial();   // [S5 §8] 盤面を差し替えるジョブの前に試算の CPU を返す
         CancelRelaxTrial();  // [S6 §8] 同じ
         CancelFixSearch();   // 直し方の探索も同じ（走らせたままだと差し替え前の盤面の提案が完了後に残る）
+        _agentCts?.Cancel();  // 代行も同じ（結果は盤面が変わって捨てるだけ）
+        Ui.AgentRecord = null;   // [Android 3.727.1] 当てた手の記録は差し替え前の盤面のもの（「代行の分を元に戻す」も意味を失う）
         // 走っている違反チェックは差し替え前の盤面のもの＝失効させる（完了順によって古い表示が戻らないように、UI-03）。
         ++_checkSeq; _checkCts?.Cancel();
         _boardJobLabel = label;
@@ -412,17 +414,6 @@ public sealed partial class MagiViewModel
         LogOp(on ? "I" : "W", $"設定変更: Kotlinパリティ照合 → {(on ? "ON" : "OFF（純ネイティブ・誤結果の可能性）")}");
     }
 
-    /// <summary>
-    /// [3.298.0 配線] ブロック巡回交換の事前フィルタ ON/OFF（既定 ON、Kotlin 3.518.0）。
-    /// [Kotlin 3.649.0] 必須が正味で増える候補（正式採否が必ず却下する）だけを捨て、評価枠を残りの候補へ回す。
-    /// </summary>
-    public void SetBlockSwapC3nFilter(bool on)
-    {
-        PolishGate.FilterC3nIncrease = on;
-        Ui.BlockSwapC3nFilter = on;
-        LogOp("I", $"設定変更: 必須が増える候補の事前フィルタ → {(on ? "ON" : "OFF")}");
-    }
-
     public void SetSearchStrength(SearchStrength strength)
     {
         strength.Apply();
@@ -435,13 +426,6 @@ public sealed partial class MagiViewModel
         V6HotfixPasses.HeavySoftGuard = !on;
         Ui.AptFairToleranceUnguarded = on;
         LogOp("I", $"設定変更: 容認 6% で重い違反の増加も許す → {(on ? "ON" : "OFF")}");
-    }
-
-    public void SetC1MoveARepair(bool on)
-    {
-        PolishGate.C1MoveARepair = on;
-        Ui.C1MoveARepair = on;
-        LogOp("I", $"設定変更: 期間の制約の入れ替えで禁止の並びも直す → {(on ? "ON" : "OFF")}");
     }
 
     // [3.409.21の由来] setAdaptiveEscape / setPortfolioRoleParallelSa は Kotlin原本で削除済み

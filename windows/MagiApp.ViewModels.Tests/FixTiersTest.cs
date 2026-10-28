@@ -25,6 +25,21 @@ public class FixTiersTest
     internal static readonly FixTarget Over = new(null, D, 1, 1, false, "適正人数");
     internal static readonly Func<int, int, (int Lo, int Hi)?> Limits = (k, _) => k == D ? (1, 1) : null;
 
+    /// <summary>D を担当できない職員が先に並んでいても、後ろの職員の 1 セルの案は出る（旧: 置けるシフトの無いセルで走査ごと止まった）。</summary>
+    [Fact]
+    public void AStaffWhoCannotTakeTheShiftDoesNotStopTheScan()
+    {
+        var st = Board12x16() with
+        {
+            GroupShift = new List<IReadOnlyList<int>> { new[] { 1, 0 }, new[] { 1, 1 }, new[] { 1, 1 } },
+            Schedule = new List<IReadOnlyList<int>> { new[] { REST, REST, REST, REST }, new[] { REST, D, REST, D }, new[] { REST, REST, D, REST } },
+        };
+        var under = new FixTarget(null, D, 0, 1, true, "必要人数");
+        var moves = FixTiers.EntryMoves(st, Sched(st), under, REST);
+        Assert.Contains(moves, m => m.Sug.Ops.SequenceEqual(new[] { new FixCell(1, 0, D) }));
+        Assert.DoesNotContain(moves, m => m.Sug.Ops.Single().Staff == 0);
+    }
+
     [Fact]
     public void EntryMoveOfAnotherStaffIsTier1AndPinnedStaffIsBlockedWithReason()
     {

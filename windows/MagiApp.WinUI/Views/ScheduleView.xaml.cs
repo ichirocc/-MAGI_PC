@@ -1396,7 +1396,7 @@ public sealed partial class ScheduleView : UserControl
             // 希望で固定した人数が適正人数を超えるときだけ「希望を調整しない限り残る」と言う（以下なら固定していない人を動かせば減る）。
             var overByWish = _vm.NeedCellLimits(k, j) is { } lim2 && pinned.Count > lim2.Hi;
             lines.Add("本人の希望: " + string.Join("・", pinned.Select(i => $"{(i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")}さん")) +
-                (overByWish ? "（必須の希望どうしが同じ日に重なっています。本人と相談してどちらかの希望を調整しない限り、過剰は残ります。調整すると希望は外れます。元に戻すで戻せます）" : ""));
+                (overByWish ? "（必須の希望どうしが同じ日に重なっています。どちらかの希望を本人と調整しない限り、過剰は残ります）" : ""));
         }
         _ = ShowTallyDetailAsync($"{DayText.Full(ui.StartDate, j)}・{sym}", lines, focusStaff: null, shift: k, day: j, pinned: pinned, assigned: assigned);
     }
@@ -1752,7 +1752,7 @@ public sealed partial class ScheduleView : UserControl
                     };
                     acts.Children.Add(tourBtn);
                 }
-                var changesBtn = new HyperlinkButton { Content = appliedChangesOpen ? "変更内容を閉じる" : "今回の変更内容を見る", MinHeight = 48 };
+                var changesBtn = new HyperlinkButton { Content = appliedChangesOpen ? "今回の変更内容 ▾" : "今回の変更内容 ▸", MinHeight = 48 };
                 changesBtn.Click += (_, _) => { appliedChangesOpen = !appliedChangesOpen; Refresh(); };
                 acts.Children.Add(changesBtn);
                 // 当てた直後だけ（今の盤面がその手の直後）に出る＝元に戻すの先頭はこの手。
@@ -2020,7 +2020,7 @@ public sealed partial class ScheduleView : UserControl
                 row.Children.Add(see);
                 if (c.Go != AddCandidateGo.None)
                 {
-                    var go = new HyperlinkButton { Content = "対象の設定を見る", MinHeight = 48 };
+                    var go = new HyperlinkButton { Content = "対象の設定を開く", MinHeight = 48 };
                     var cc = c;
                     go.Click += (_, _) =>
                     {
@@ -2972,8 +2972,8 @@ public sealed partial class ScheduleView : UserControl
                 foreach (var f in fams.Skip(1)) details.Children.Add(Body("・" + CellSheetLogic.CellProblemSentence(f, LabelOf), size: 13));
                 foreach (var l in _vm.CellDetailLinesFor(i, j, LabelOf)) details.Children.Add(Body(l, size: 13));
                 if (_vm.RelatedCellsLineFor(i, j, partners) is { } related) details.Children.Add(new TextBlock { Text = related, FontSize = 13, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                var openLabel = fams.Count >= 2 ? $"関連する問題をすべて見る：ほか{fams.Count - 1}件" : CellSheetLogic.CellDetailButton;
-                var closeLabel = fams.Count >= 2 ? "関連する問題を閉じる" : "閉じる";
+                var openLabel = fams.Count >= 2 ? $"関連する問題（ほか{fams.Count - 1}件） ▸" : CellSheetLogic.CellDetailButton;
+                var closeLabel = fams.Count >= 2 ? "関連する問題 ▾" : CellSheetLogic.CellDetailClose;
                 var toggle = new HyperlinkButton { Content = openLabel, MinHeight = 48 };
                 toggle.Click += (_, _) =>
                 {
@@ -3151,8 +3151,9 @@ public sealed partial class ScheduleView : UserControl
                 var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = left ? HorizontalAlignment.Left : HorizontalAlignment.Right };
                 var prevL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j - 1);
                 var nextL = CellSheetLogic.AdjacentDayLabel(ui.StartDate, ui.Days, j + 1);
-                var prevB = new HyperlinkButton { Content = $"{prevL ?? "前日"}へ", MinHeight = 48, IsEnabled = prevL is not null };
-                var nextB = new HyperlinkButton { Content = $"{nextL ?? "翌日"}へ", MinHeight = 48, IsEnabled = nextL is not null };
+                // 前後の日は外枠（文字だけではボタンに見えなかった、Android 3.724.0）。
+                var prevB = new Button { Content = $"◀ {prevL ?? "前日"}", MinHeight = 48, IsEnabled = prevL is not null };
+                var nextB = new Button { Content = $"{nextL ?? "翌日"} ▶", MinHeight = 48, IsEnabled = nextL is not null };
                 prevB.Click += (_, _) => Reopen(i, j - 1, 0);
                 nextB.Click += (_, _) => Reopen(i, j + 1, 0);
                 days.Children.Add(prevB);

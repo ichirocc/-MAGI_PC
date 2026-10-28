@@ -67,9 +67,11 @@ public static class ConsultList
     public const string HeldLabel = "保留中";
     public const string Added = "ホームの「相談中」に登録しました（記録だけで、本人への連絡や了承にはなりません）";
     public const string Duplicate = "この内容は、すでにホームの「相談中」に登録されています";
-    public const string Open = "開く";
+    public const string Open = "勤務を見る";
+    /// <summary>ホームの主カードの相談の 1 行から相談の一覧を出す（行の［勤務を見る］と行き先が違うので名前を分ける）。</summary>
+    public const string ListOpen = "相談の一覧を見る";
     public const string Resume = "案を見る";
-    public const string Stale = "相談に登録した後で勤務表または設定が変わったため、この案はそのまま当てられません。「変更案を探す」から、もう一度確かめてください";
+    public const string Stale = "登録後に勤務表か設定が変わったため、この案は当てられません。「変更案を探す」で確かめ直してください";
 
     /// <summary>ホームの主カードの 1 行。0 件なら出さない。</summary>
     public static string? Line(int n) => n > 0 ? $"相談中 {n}件" : null;

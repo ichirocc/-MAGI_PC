@@ -150,13 +150,8 @@ public sealed partial class UiState : ObservableObject
     /// <summary>Kotlinパリティ照合トグル。同上の理由で保持。</summary>
     [ObservableProperty] private bool nativeParity = true;
 
-    /// <summary>ブロック巡回交換で c3n が増える候補を候補生成段階で捨てるか。採用結果は不変・評価枠の節約のみ。
-    /// 既定 <b>true</b>（Kotlin 3.518.0/ユーザー指示でPolishGate側の既定を昇格した際に同時に揃えた）。</summary>
-    [ObservableProperty] private bool blockSwapC3nFilter = true;
-
     /// <summary>[Android 3.615.0同期] 設定画面「探索の強さ」。保存しない。</summary>
     [ObservableProperty] private SearchStrength searchStrength = SearchStrength.Normal;
-    [ObservableProperty] private bool c1MoveARepair;  // PolishGate.C1MoveARepair（試験中・既定OFF）。保存しない
     /// <summary>[Android 3.638.0同期] <c>!V6HotfixPasses.HeavySoftGuard</c>（測定用・既定OFF）。じっくりの容認 6% でだけ効く。保存しない。</summary>
     [ObservableProperty] private bool aptFairToleranceUnguarded;
 
@@ -164,6 +159,9 @@ public sealed partial class UiState : ObservableObject
 
     /// <summary>仕上げ最適化（品質研磨）。既定ON。keep-best で悪化しない。</summary>
     [ObservableProperty] private bool softPolish = true;
+    [ObservableProperty] private bool agentAuto = true;   // 作成のあと代行で仕上げる（AX）。保存しない
+    [ObservableProperty] private bool agentRunning;
+    [ObservableProperty] private AgentRecord? agentRecord;
 
     [ObservableProperty] private V6Algorithm v6Algorithm = V6Algorithm.Auto;
     [ObservableProperty] private IReadOnlyList<string> staffNames = Array.Empty<string>();

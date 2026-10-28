@@ -29,7 +29,7 @@ public class StopExplanationTest
     public void RemainingHardUsesUnits()
     {
         var e = StopExplanation.Of(S(V6FinalPort.StopKind.Deadline, 3, early: false), new Dictionary<string, int> { ["c3n"] = 1, ["covU"] = 2 })!;
-        Assert.Contains("最終結果の必須違反は 1件・2人です", e.Line);
+        Assert.Contains("残る必須違反は 1件・2人です", e.Line);
         Assert.False(e.Line.Contains("主探索") || e.Line.Contains("制限時間"));
     }
 

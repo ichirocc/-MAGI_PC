@@ -255,7 +255,7 @@ public class GridDisplayMarksTest
         var why = FixSearchText.NoFixReasons(u, new FixFocus(0, 1), Limits, Need);
         Assert.True(why.WishRelated);
         Assert.Contains(why.Lines, l => l.Contains("どれも本人の希望で固定"));
-        Assert.Contains(why.Lines, l => l.Contains("個人の上限が 0 回"));
+        Assert.Contains(why.Lines, l => l.Contains("対象外（上限0）"));
         Assert.Contains(why.Lines, l => l.Contains("必要人数ぎりぎり"));
         Assert.Contains(why.Lines, l => l.Contains("下限＝上限で固定") && l.Contains("休 1回"));
         Assert.Equal(NoFixKind.Fixed, why.Kind);   // 固定条件が理由に挙がった＝「固定条件による制限」（仕様 §7）
@@ -281,6 +281,22 @@ public class GridDisplayMarksTest
         var w1 = FixSearchText.NoFixReasons(c3, new FixFocus(null, null, 1, ExceptStaff: 0));
         Assert.True(w1.WishRelated);
         Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[1]);
+    }
+
+    /// <summary>手で固定したマスも理由に挙げ、「固定条件による制限」に分ける（希望とは言わない）。旧: 手動固定だけが原因でも「調べた範囲で無い」。</summary>
+    [Fact]
+    public void NoFixReasonsNameManualPinsApartFromWishes()
+    {
+        var u = new UiState
+        {
+            StartDate = "2026-10-01", Staff = 2, Days = 2, Shifts = 2, ShiftSymbols = new[] { "休", "A" },
+            Schedule = new IReadOnlyList<int>[] { new[] { 1, 0 }, new[] { 1, 1 } }, ManualPins = new HashSet<string> { "0,0", "1,0" },
+        };
+        var cell = FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0));
+        Assert.Equal("このセル（10/1 の「A」）は手で固定したマスです。", cell.Lines[1]);
+        Assert.Equal(NoFixKind.Fixed, cell.Kind); Assert.False(cell.WishRelated);
+        Assert.Contains(FixSearchText.NoFixReasons(u, new FixFocus(0, 1)).Lines, l => l.Contains("1 回のうち 1 回は手で固定したマス"));
+        Assert.Contains(FixSearchText.NoFixReasons(u, new FixFocus(null, 1, 0)).Lines, l => l.EndsWith("のうち #0さん・#1さん は手で固定したマスです。"));
     }
 
     /// <summary>見つからない理由の区分（仕様 §7）: 矛盾＞時間不足＞固定条件＞調べた範囲。どれも「解決できない」とは言わない。</summary>

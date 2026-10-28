@@ -399,11 +399,11 @@ public class CellSheetLogicTest
     {
         var i = Staff("職員08");
         var line = "回数 " + CellSheetLogic.StaffCountShort(St, P, S, i, Rep.CountFamilies!);
-        Assert.Equal("回数 Pｼ 18(下限19)▼ Cｱ 2回（上限0＝入れない指定）▲ 有 1回（上限0）▲", line);
+        Assert.Equal("回数 Pｼ 18(下限19)▼ Cｱ 2回（対象外（上限0））▲ 有 1回（上限0）▲", line);
         Assert.True(CellSheetLogic.FitsTwoLines(line, CellSheetLogic.CountLineEm));
         var caps = CellSheetLogic.ZeroCapShifts(P, i).Select(k => St.Shifts[k].Kigou).ToList();
         Assert.Contains("Cｱ", caps); Assert.Contains("有", caps); Assert.DoesNotContain("休", caps); Assert.DoesNotContain("B1", caps);
-        Assert.Equal("Cｱは個人の上限0（入れない指定）のシフトです。希望どおり入れると要調整に数えます", CellSheetLogic.WishZeroCapLine("Cｱ"));
+        Assert.Equal("Cｱは対象外（上限0）のシフトです。希望どおり入れると要調整に数えます", CellSheetLogic.WishZeroCapLine("Cｱ"));
         for (var x = 0; x < St.StaffCount; x++)
             Assert.True(CellSheetLogic.FitsTwoLines("回数 " + CellSheetLogic.StaffCountShort(St, P, S, x, Rep.CountFamilies!), CellSheetLogic.CountLineEm), $"職員{x + 1}");
         Assert.False(CellSheetLogic.FitsTwoLines(new string('あ', 55), CellSheetLogic.CountLineEm));
@@ -468,5 +468,23 @@ public class CellSheetLogicTest
         Assert.Equal("件数は +3 ですが、重い違反が減ったため改善として採用しました", CompletedText.AdoptedDespiteMore(10, 13, 900.0, 500.0));
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 9, 900.0, 500.0));
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 13, 500.0, 500.0));
+    }
+
+    [Fact]
+    public void HomeCardMakeHidesTheSameBottomButton()
+    {
+        Assert.True(CellSheetLogic.HomeCardShowsMake(running: false, fixSearching: false, hasResult: false, draft: false, infeasible: false));
+        Assert.True(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: true, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: true, infeasible: true));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: false, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(running: true, fixSearching: false, hasResult: false, draft: false, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, fixSearching: true, hasResult: false, draft: false, infeasible: false));
+    }
+
+    [Fact]
+    public void HomeDiagnosisCountsOnlyCardsWithContent()
+    {
+        Assert.Equal(0, CellSheetLogic.HomeDiagnosisCount(new UiState()));
+        Assert.Equal(1, CellSheetLogic.HomeDiagnosisCount(new UiState { ObservedPinBlockedAttempts = 3 }));
     }
 }

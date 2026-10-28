@@ -11,7 +11,7 @@ namespace MagiEngine.Tests.V6;
 /// </summary>
 public class DiagnosisSnapshotTest
 {
-    [Fact(Skip = "Android 3.723.1〜3.723.3 の診断（SettingIssue.ZeroCap・対象外（上限0）の文言・DEMAND の下限合計）の移植待ち")]
+    [Fact]
     public void DiagnosisMatchesTheBaselineSnapshotForEveryFixture()
     {
         foreach (var name in CheckerSnapshotTest.Fixtures)

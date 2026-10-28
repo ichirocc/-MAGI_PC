@@ -18,17 +18,17 @@ public sealed record StopExplanation(string Line, StopNext Next)
         return s.Kind switch
         {
             V6FinalPort.StopKind.Deadline =>
-                new StopExplanation($"組む時間（{s.BudgetSec} 秒）いっぱいまで探しました。終了時点で、最後の改善から {s.StalledSec} 秒が経過していました。最終結果の必須違反は {hard}です。",
+                new StopExplanation($"組む時間（{s.BudgetSec} 秒）いっぱい探しました（最後の改善から {s.StalledSec} 秒）。残る必須違反は {hard}です。",
                     // 探索時間がすでに上限なら「延ばす」は勧めない。
                     s.BudgetSec < V6FinalPort.MaxOptimizeSec ? StopNext.MoreTime : StopNext.FindFix),
             V6FinalPort.StopKind.PlateauFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は、担当できる職員が足りないための人員不足です。解消するには、担当条件や配置できる職員の見直しが必要です。", StopNext.ReviewStaffing),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は担当できる職員が足りない人員不足です。担当条件か職員を見直してください。", StopNext.ReviewStaffing),
             V6FinalPort.StopKind.WishFloor =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は、同時には満たせない希望によるものです。解消するには、対象の希望を調整する必要があります。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は同時に満たせない希望によるものです。希望の調整が必要です。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallCertified =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は禁止の並びで、希望によって勤務が固定されています。解消には希望の調整が必要です。", StopNext.ReviewWishes),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は希望で固定された禁止の並びです。希望の調整が必要です。", StopNext.ReviewWishes),
             V6FinalPort.StopKind.C3nWallEmpirical =>
-                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は禁止の並びです。1 マスの変更、複数の勤務の入れ替え（玉突き）、隣接日の調整を試しましたが、解消する案は見つかりませんでした。", StopNext.FindFix),
+                new StopExplanation($"{s.UsedSec} 秒で終えました。残る必須違反 {hard}は禁止の並びです。1 マスの変更・玉突き・隣接日の調整では解消できませんでした。", StopNext.FindFix),
             _ =>
                 new StopExplanation($"{s.StalledSec} 秒間、改善が見られなかったため、組むのを早めに終えました（{used}）。必須違反 {hard}が残っています。", StopNext.FindFix),
         };

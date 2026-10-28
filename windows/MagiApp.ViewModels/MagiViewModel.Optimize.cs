@@ -657,6 +657,7 @@ public sealed partial class MagiViewModel
         _job?.Cancel();
         _checkCts?.Cancel();
         _fixCts?.Cancel();
+        _agentCts?.Cancel();
         _bgCts?.Cancel();
 
         if (Ui.Running || Ui.FixSearching)

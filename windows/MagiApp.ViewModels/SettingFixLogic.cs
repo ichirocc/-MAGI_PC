@@ -13,7 +13,7 @@ public static class SettingFixLogic
 
     public const string WishAlreadyRemovedMessage = "この希望はすでに外れています";
 
-    public const string WishStaleMessage = "診断のあとで職員・担当できるシフト・希望などの設定が変わったため、取り消しませんでした。診断をやり直してください";
+    public const string WishStaleMessage = "診断のあとで設定が変わったため、取り消しませんでした。診断をやり直してください";
 
     /// <summary>[3.687.0/R02] 診断した職員を ID で今の並びに引き直した希望のキー（ID を持たない古い診断は元のキー、職員がいなければ null）。</summary>
     public static string? CurrentWishKey(MagiState s, SettingIssue issue)
@@ -103,18 +103,19 @@ public static class SettingFixLogic
                 var row = issue.GroupRangeRow;
                 var lo = issue.NewLo;
                 if (row is null || lo is null) return null;
-                static List<C41Row> ClampOne(IReadOnlyList<C41Row> rows, C41Row row, string lo)
+                // 行が見つからない（診断の後に変わった）なら null＝変えない（空の Undo 段を積まない）。
+                static List<C41Row>? ClampOne(IReadOnlyList<C41Row> rows, C41Row row, string lo)
                 {
                     var list = rows.ToList();
                     var i = list.IndexOf(row);
-                    if (i < 0) return list;
+                    if (i < 0) return null;
                     list[i] = row with { L = lo };
                     return list;
                 }
                 return issue.GroupRangeFamily switch
                 {
-                    "c41" => s with { Cons41 = ClampOne(s.Cons41, row, lo) },
-                    "c41s" => s with { Cons41s = ClampOne(s.Cons41s, row, lo) },
+                    "c41" => ClampOne(s.Cons41, row, lo) is { } c41 ? s with { Cons41 = c41 } : null,
+                    "c41s" => ClampOne(s.Cons41s, row, lo) is { } c41s ? s with { Cons41s = c41s } : null,
                     _ => null,
                 };
             }

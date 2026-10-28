@@ -182,14 +182,13 @@ public sealed partial class MagiViewModel
             "（書き込み中にアプリが強制終了すると自動保存が使えなくなる可能性があります）");
     }
 
-    internal void ReportAutoSave(bool ok)
+    internal SaveOutcome ReportAutoSave(bool ok)
     {
-        var wasOk = _saveFail.LastOk;
-        var dialog = _saveFail.OnResult(ok, _saveRetrying);
-        if (dialog is not null || ok) Ui.SaveFailDialog = dialog;
-        if (ok == wasOk) return;
-        if (ok) LogOp("I", "自動保存が復旧しました");
-        else Notify(CellSheetLogic.SaveFailedNotice, "W");
+        var r = _saveFail.Report(ok, _saveRetrying);
+        if (r.SetDialog) Ui.SaveFailDialog = r.Dialog;
+        if (r.Notice == SaveNotice.Recovered) LogOp("I", "自動保存が復旧しました");
+        else if (r.Notice == SaveNotice.Failed) Notify(CellSheetLogic.SaveFailedNotice, "W");
+        return r;
     }
 
     /// <summary>「もう一度保存する」（ホーム・設定・上部の語・ダイアログ）。失敗したらダイアログを「まだ保存できていません」で出し直す。</summary>
@@ -502,18 +501,19 @@ public sealed partial class MagiViewModel
                 ui.StalledHardFamilies = Array.Empty<string>();
                 ui.Consults = Array.Empty<ConsultItem>();   // 相談も前のデータの対象を指している（T01）
                 ui.SameResult = null;   // [3.716.0] 「前回と同じ結果」も前のデータの実行の印
-                ui.Message = $"読込完了: {lp.State.StaffCount}名 / {DayText.Range(lp.State.StartDate, 0, lp.State.DayCount - 1)}（{lp.State.DayCount}日） / {lp.State.ShiftCount}シフト{note}";
+                ui.Message = $"読込完了: {lp.State.StaffCount}名 / {DayText.Range(lp.State.StartDate, 0, lp.State.DayCount - 1)}（{lp.State.DayCount}日） / {lp.State.ShiftCount}シフト{note}{MagiConstraintsView.PeriodOverflowNote(lp.State)}";
             }, ct: ct);
             rollback = null;
             // 退避は差し替えの確定後に書く（中止で読込前へ戻しても「開く前のデータ」を失わない）。
             var prevSaved = false;
+            var prevNonAtomic = false;
             if (prevJson is not null)
             {
                 prevSaved = await Task.Run(() =>
                 {
                     try
                     {
-                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson);
+                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson, onNonAtomic: () => prevNonAtomic = true);
                     }
                     catch
                     {
@@ -521,6 +521,7 @@ public sealed partial class MagiViewModel
                     }
                 }, CancellationToken.None);
             }
+            if (prevNonAtomic) LogOp("W", "前のデータの退避で原子置換が使えず直接書き込みました（書き込み中に強制終了すると退避が壊れる可能性があります）");
 
             // [3.289.0相当] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
             if (prevSaved) Ui.PrevBackupAvailable = true;

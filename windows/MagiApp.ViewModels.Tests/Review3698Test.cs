@@ -93,7 +93,7 @@ public class Review3698Test
         Assert.Equal("福澤さん 禁止の並び", T(HomePlanKind.List));
         Assert.Equal("福澤さん 禁止の並び", T(HomePlanKind.Searching));
         foreach (var k in new[] { HomePlanKind.Make, HomePlanKind.PreDist, HomePlanKind.Running, HomePlanKind.DataInfeasible }) Assert.Null(T(k));
-        Assert.Equal("なおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", T(HomePlanKind.GuidedFix), null));
+        Assert.Equal("10/15(水) Cｵの直し方を見る", AnalysisTriage.HomeTargetLabel("直し方を見る", T(HomePlanKind.GuidedFix), null));
         Assert.Equal(new[] { CellSheetLogic.CreationDoneTitle }, CellSheetLogic.CreationTopLines("10/15(水) Cｵ", headlineTarget: "10/15(水) Cｵ"));
         Assert.Equal(new[] { CellSheetLogic.CreationDoneTitle, "次に確認する問題：X" }, CellSheetLogic.CreationTopLines("X", headlineTarget: "Y"));
     }

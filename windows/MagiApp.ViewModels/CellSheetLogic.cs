@@ -41,7 +41,21 @@ public sealed class SaveFailNotifier
         LastOk = ok;
         return ok ? null : prev ? SaveFailDialog.First : retried ? SaveFailDialog.Again : null;
     }
+
+    /// <summary>保存結果の反映内容を決める唯一の場所（VM の ReportAutoSave はそのまま適用するだけ）。</summary>
+    public SaveOutcome Report(bool ok, bool retried)
+    {
+        var wasOk = LastOk;
+        var dialog = OnResult(ok, retried);
+        SaveNotice? notice = ok == wasOk ? null : ok ? SaveNotice.Recovered : SaveNotice.Failed;
+        return new SaveOutcome(dialog, SetDialog: dialog is not null || ok, Notice: notice, RetryLater: !ok);
+    }
 }
+
+public enum SaveNotice { Recovered, Failed }
+
+/// <summary><paramref name="RetryLater"/>＝失敗したので次のデバウンス保存を仕掛け直す（次の編集まで未保存にしない）。</summary>
+public sealed record SaveOutcome(SaveFailDialog? Dialog, bool SetDialog, SaveNotice? Notice, bool RetryLater);
 
 public sealed record OpNotice(long Id, string Text, long UndoSerial, bool Undoable = true);
 
@@ -118,8 +132,8 @@ public static class CellSheetLogic
     /// <summary>[#41] 手動固定のセルに違反が残るときの状態の 1 行の言い方（「直せない」と言わない＝周囲のセルを変えて解消できる場合はある）。</summary>
     public const string PinBlockedNote = "このセルは手動固定のため、自動では変更しません";
 
-    public const string ZeroCapText = "個人の上限0（入れない指定）のシフトです。残るのは要調整です";
-    public const string ZeroCapWishText = "本人の希望が個人の上限0（入れない指定）のシフトに載っています。残るのは要調整です";
+    public const string ZeroCapText = "対象外（上限0）のシフトです。残るのは要調整です";
+    public const string ZeroCapWishText = "本人の希望が対象外（上限0）のシフトに載っています。残るのは要調整です";
 
     public static CellStatus StatusLine(MagiState state, Problem p, int[][] s, int i, int j, IReadOnlyList<string> families, Func<string, string> labelOf)
     {
@@ -362,7 +376,7 @@ public static class CellSheetLogic
     }
 
     /// <summary>回数の行（例「Aｱ 7(適切8)▼ Dﾃ 4(下限5)▼」）。この職員の回数の族があるシフトだけ、目安（下限/上限/適切/合計）と ▼▲。
-    /// 個人の上限0（休を除く）は「Cｱ 2回（上限0＝入れない指定）▲」（2 つ目からは「（上限0）」）。
+    /// 個人の上限0（休を除く）は「Cｱ 2回（対象外（上限0））▲」（2 つ目からは「（上限0）」）。
     /// 行頭の「回数 」込みで 360dp の 2 行（<see cref="CountLineEm"/>）に収まらなければ目安を 1 字（下/上/適/計）に縮める。</summary>
     public static string StaffCountShort(MagiState state, Problem p, int[][] s, int i, IReadOnlyDictionary<string, IReadOnlyList<string>> countClasses)
     {
@@ -395,7 +409,7 @@ public static class CellSheetLogic
         return FitsTwoLines("回数 " + full, CountLineEm) ? full : Build(false);
     }
 
-    public const string ZeroCapNote = "上限0＝入れない指定";
+    public const string ZeroCapNote = MagiEngine.V6.SettingIssues.ZeroCapLabel;
 
     /// <summary>セルシートの回数の行の 1 行の字数（360dp−左右 16dp＝328dp を 12sp で割った数）。</summary>
     public const double CountLineEm = 27.0;
@@ -405,7 +419,7 @@ public static class CellSheetLogic
         i < 0 || i >= p.S ? new HashSet<int>() : Enumerable.Range(0, p.K).Where(k => k != p.RestIdx && p.RangeHi[i][k] == 0 && p.CanDo(i, k)).ToHashSet();
 
     /// <summary>希望タブ: 希望が個人の上限0のシフトのときの 1 行（希望は優先して入る。残るのは要調整）。</summary>
-    public static string WishZeroCapLine(string wishSymbol) => $"{wishSymbol}は個人の上限0（入れない指定）のシフトです。希望どおり入れると要調整に数えます";
+    public static string WishZeroCapLine(string wishSymbol) => $"{wishSymbol}は対象外（上限0）のシフトです。希望どおり入れると要調整に数えます";
 
     /// <summary>回数の行が 2 行に収まるか（全角 1・半角 0.5 の字幅で、<paramref name="emPerLine"/> 字ぶん × 2 行）。</summary>
     public static bool FitsTwoLines(string text, double emPerLine)
@@ -444,7 +458,7 @@ public static class CellSheetLogic
     public static string WishKeptLine(string wishSymbol) => $"本人の希望（{wishSymbol}）を守っています";
 
     /// <summary>希望タブの注記の手動固定版（手動固定は希望より強い＝再作成でも希望へ戻さない。<c>docs/business-logic.md</c> の手動固定）。</summary>
-    public const string WishTabPinnedNote = "希望を変えても勤務表のセルはそのままです（未反映になります）。このセルは手動固定のため、再作成しても希望には合わせません（固定を外すと合わせます）。";
+    public const string WishTabPinnedNote = "希望を変えてもセルはそのままです（未反映）。手動固定のセルなので、再作成しても希望に合わせません。";
 
     /// <summary>職員 <paramref name="i"/> の <paramref name="j"/> 日（0 始まり）が拡張希望の指定日なら、その日に禁止のシフト記号（シフト一覧の順）。指定日でなければ null。
     /// 日だけで決める＝希望を保存しない日（<c>ExtWishRules.WishBlockedBy</c>）と同じ。</summary>
@@ -680,7 +694,7 @@ public static class CellSheetLogic
     public static string ChangeSizeLine(IReadOnlyList<FixCell> ops) => $"変更箇所：{ops.Select(o => o.Staff).Distinct().Count()}人・{ops.Count}セル";
 
     /// <summary>変更案の探索を止めるボタン（勤務表の作成の「やめる」と区別する）。</summary>
-    public const string CancelFixSearchButton = "変更案の検索を中止";
+    public const string CancelFixSearchButton = "探すのをやめる";
     public const string FixSearchCancelled = "探すのを止めました。";
     public const string FixSearchRetryButton = "もう一度探す";
 
@@ -775,7 +789,7 @@ public static class CellSheetLogic
     public const string FixStaffGoneNote = "この職員は一覧から削除されたため、変更案を探せません。画面を閉じて開き直してください。";
 
     public const string SaveRetryButton = "もう一度保存する";
-    public const string SaveFailedNotice = "自動保存できませんでした。PCに書き込めません（空き容量が足りない可能性があります）。「" + SaveRetryButton + "」を押してください";
+    public const string SaveFailedNotice = "自動保存できませんでした（空き容量不足の可能性）。「" + SaveRetryButton + "」を押してください";
     public const string HomeSaveFailedLine = "自動保存できていません。PCの空き容量を確かめてください";
     public const string TopBarSaveFailed = "保存できていません";
 
@@ -1472,7 +1486,8 @@ public static class CellSheetLogic
         "covO" => "この日の人数が多すぎます",
         _ => $"{labelOf(fam)}に当たります",
     };
-    public const string CellDetailButton = "詳しく見る";
+    public const string CellDetailButton = "詳しく ▸";
+    public const string CellDetailClose = "詳しく ▾";
 
     public static string CellProblemSentence(string fam, Func<string, string> labelOf) => fam switch
     {
@@ -1518,10 +1533,10 @@ public static class CellSheetLogic
 
     /// <summary>手動固定の説明（通常の修正操作と分ける）。</summary>
     public const string PinTitle = "この勤務を自動変更しない";
-    public const string PinNote = "固定すると、自動作成・調整ではこの勤務を変更しません。現在の違反が解消されるわけではありません。";
+    public const string PinNote = "自動作成・調整でこの勤務を変えなくなります。違反は消えません。";
 
     /// <summary>担当外の勤務の理由（自分で勤務を選ぶ画面）。</summary>
-    public const string NotCanDoNote = "「外」はこの職員のグループが担当しない勤務です（担当可否の設定）。選ぶと担当外シフトの必須違反になります。";
+    public const string NotCanDoNote = "「外」はこの職員のグループが担当しない勤務です。選ぶと必須違反になります。";
 
     /// <summary>上部の札の 2 行目以降: 自動作成の状態と、今の勤務表の評価（2026-10-14 利用者レビュー「未計算」を分ける）。</summary>
     public static (string First, string Second) BoardStatusLines(bool engineRan, bool hasResult, bool checkedBoard, long hard, long soft,
@@ -1529,8 +1544,8 @@ public static class CellSheetLogic
     {
         var b = breakdown ?? new Dictionary<string, int>();
         return (engineRan ? "自動作成済み" : ranBeforeEdit && hasResult ? "手で変更あり" : hasResult ? "手で編集" : "自動作成前",
-            !checkedBoard ? "評価：未評価" : hard > 0 ? $"評価：必須違反 {AnalysisTriage.HardText(b, hard)}"
-            : soft > 0 ? $"評価：要調整 {AnalysisTriage.UnitTotals(b, MirrorKeys.Soft) ?? $"{soft}件"}" : "評価：違反なし");
+            !checkedBoard ? "未評価" : hard > 0 ? $"必須違反 {AnalysisTriage.HardText(b, hard)}"
+            : soft > 0 ? $"要調整 {AnalysisTriage.UnitTotals(b, MirrorKeys.Soft) ?? $"{soft}件"}" : "違反なし");
     }
 
     // ===== 自動と担当者の分担（2026-10-14 利用者レビュー「どこまで自動で進み、どこで担当者が判断するか」） =====
@@ -1752,6 +1767,20 @@ public static class CellSheetLogic
     /// <summary>[3.720.0 3c-6] 回数のシートで違反を 1 タップで解く外枠ボタン（「回」を付ける）。</summary>
     public static string RaiseCapButton(int n) => $"上限を{n}回に上げて適用";
     public static string LowerFloorButton(int n) => $"下限を{n}回に下げて適用";
+
+    /// <summary>ホームの主カードが［勤務表をつくる］を出す段（<see cref="HomePlanOf"/> の Make・Draft と同じ条件）。このとき下部バーの同じボタンは隠す。</summary>
+    public static bool HomeCardShowsMake(bool running, bool fixSearching, bool hasResult, bool draft, bool infeasible) =>
+        !running && !fixSearching && (!hasResult || (draft && !infeasible));
+
+    /// <summary>ホームの「原因の診断」に畳むカードのうち、いま中身があるものの数（各カードの表示条件と同じ）。</summary>
+    public static int HomeDiagnosisCount(UiState ui) => new[]
+    {
+        ui.CopilotHint is not null || (ui.PolishExhausted && !ui.Running),
+        ui.CoverageDiag is { } c && (c.HasShortage || c.HasSurplus),
+        ui.ForbiddenDiag?.HasRuns == true,
+        ui.C1Plateau is { } p && (p.CauseUnknown || p.HasEntries),
+        ui.ObservedPinBlockedAttempts > 0,
+    }.Count(b => b);
 
     /// <summary>[3.707.0 3a-3] 下部バーの作成ボタンを外枠にするか（編集タブでは見出しの主が Rerun のときだけ塗り）。</summary>
     public static bool EditBarSecondary(EditHeaderPlan plan) => plan.Primary is { } p && p != EditHeaderPrimary.Rerun;
@@ -2049,7 +2078,7 @@ public static class CellSheetLogic
     public static bool ShowCountSection(IEnumerable<string> countKeys, int i, IReadOnlyList<string> lines) =>
         lines.Count > 0 && countKeys.Any(k => int.TryParse(k.Split(',')[0], out var x) && x == i);
 
-    public const string CompactNoFix = "この場所を直す案は見つかりませんでした";
+    public const string CompactNoFix = "この場所を直す案はありません";
 
     /// <summary>セルのシートで案が無いときの 1 行。<paramref name="single"/>＝問題が 1 つならその名（前後の日へ案内する）、無ければ先頭の理由を添える。</summary>
     public static string CompactNoFixLine(IReadOnlyList<string> reasons, string? single, string? prevDay, string? nextDay)
@@ -2057,7 +2086,7 @@ public static class CellSheetLogic
         if (single is not null)
         {
             var days = new[] { prevDay, nextDay }.OfType<string>().ToList();
-            return $"このセルの{single}を解消する案は見つかりませんでした" + (days.Count == 0 ? "" : $"。前後の日（{string.Join("・", days)}）を開いて確かめられます");
+            return $"このセルの{single}を直す案はありません" + (days.Count == 0 ? "" : $"。前後の日（{string.Join("・", days)}）も確かめてください");
         }
         return reasons.Count > 0 ? $"{CompactNoFix}。{reasons[0]}" : CompactNoFix;
     }
@@ -2120,7 +2149,7 @@ public static class CellSheetLogic
     public const string ShortageLabelBlocked = "今の希望では埋まらない";
     public const string ShortageLabelSearchMiss = "試した入れ替えでは埋まらなかった";
     public const string ShortageLabelFixable = "動かせば埋まる";
-    public const string ShortageEnoughText = "担当できる人の数は足りています。「なおし方を見る」で 1 人ずつ入れられます";
+    public const string ShortageEnoughText = "担当できる人の数は足りています。「直し方を見る」で 1 人ずつ入れられます";
 
     /// <summary>[3.712.0] 診断カードの行は 1 行の事実と札だけ。理由・内訳はカードの末尾の「詳しく」に 1 回だけ（Kotlin と同じ文言）。</summary>
     public const string DiagDetailsLabel = "詳しく";

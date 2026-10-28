@@ -316,7 +316,7 @@ public class CountShortageTextTest
         static string L(string f) => f switch { "low" => "下限割れ", "c3n" => "禁止の並び", _ => f };
         Assert.Equal("下限割れ −6回・禁止の並び +1件", AnalysisTriage.FamilyDeltaList(new[] { ("low", -6), ("c3n", 1) }, L));
         Assert.Equal("要調整 4件・2人・9回・30pt・配布前の確認", CellSheetLogic.ReadyBadgeLabel(40, b));
-        Assert.Equal("評価：必須違反 2件・1人", CellSheetLogic.BoardStatusLines(true, true, true, 3, 0, b).Second);
+        Assert.Equal("必須違反 2件・1人", CellSheetLogic.BoardStatusLines(true, true, true, 3, 0, b).Second);
     }
 
     [Fact]

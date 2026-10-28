@@ -23,8 +23,8 @@ public class Review3719Test
         Assert.Equal("アリフ 10/8の希望を見る", AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, "アリフ", "10/8"));
         Assert.Equal("アリ 10/8の希望を見る", AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, "アリ", "10/8", 1.3));
         Assert.Equal(AnalysisTriage.HomeWishButton, AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, "アリフ", "10/8", 1.3));
-        Assert.Equal("10/8のなおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8", 1.0));
-        Assert.Equal("なおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8", 2.0));   // 9 字まで
+        Assert.Equal("10/8の直し方を見る", AnalysisTriage.HomeTargetLabel("直し方を見る", null, "10/8", 1.0));
+        Assert.Equal("直し方を見る", AnalysisTriage.HomeTargetLabel("直し方を見る", null, "10/8", 2.0));   // 9 字まで
     }
 
     [Fact]

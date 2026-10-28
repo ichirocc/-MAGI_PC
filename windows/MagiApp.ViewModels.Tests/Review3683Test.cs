@@ -23,9 +23,9 @@ public class Review3683Test
     [Fact]
     public void compactNoFixLines()
     {
-        Assert.Equal("この場所を直す案は見つかりませんでした。理由A", CellSheetLogic.CompactNoFixLine(new[] { "理由A", "理由B" }, null, null, null));
-        Assert.Equal("この場所を直す案は見つかりませんでした", CellSheetLogic.CompactNoFixLine(Array.Empty<string>(), null, null, null));
-        Assert.Equal("このセルの禁止の並びを解消する案は見つかりませんでした。前後の日（11/2・11/4）を開いて確かめられます",
+        Assert.Equal("この場所を直す案はありません。理由A", CellSheetLogic.CompactNoFixLine(new[] { "理由A", "理由B" }, null, null, null));
+        Assert.Equal("この場所を直す案はありません", CellSheetLogic.CompactNoFixLine(Array.Empty<string>(), null, null, null));
+        Assert.Equal("このセルの禁止の並びを直す案はありません。前後の日（11/2・11/4）も確かめてください",
             CellSheetLogic.CompactNoFixLine(new[] { "理由A" }, "禁止の並び", "11/2", "11/4"));
     }
 

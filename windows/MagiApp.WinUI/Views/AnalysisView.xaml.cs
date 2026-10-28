@@ -337,7 +337,7 @@ public sealed partial class AnalysisView : UserControl
             var name = loc.I < ui.StaffNames.Count ? ui.StaffNames[loc.I] : $"#{loc.I}";
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
             row.Children.Add(BodyText($"{name}　{loc.J + 1}日　{LabelOf(loc.Family)}"));
-            var jump = new Button { Content = "勤務を開く", FontSize = 14 };
+            var jump = new Button { Content = "勤務を見る", FontSize = 14 };
             var i = loc.I; var j = loc.J;
             jump.Click += (_, _) => _jumpToCell(i, j);
             row.Children.Add(jump);
@@ -620,7 +620,7 @@ public sealed partial class AnalysisView : UserControl
             relax.Click += async (_, _) =>
             {
                 if (await ConfirmAsync("禁止の並びを解除しますか？",
-                        $"{staffName} の「{seqLabel}」の禁止を、全員について外します。外すとその場で再チェックします。元に戻すで取り消せます。",
+                        $"{staffName} の「{seqLabel}」の禁止を全員について外します。元に戻せます。",
                         "解除する", "解除しない"))
                     _vm.RelaxForbiddenRule(seqLabel);
             };

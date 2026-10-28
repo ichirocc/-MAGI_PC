@@ -52,11 +52,7 @@
             <ToggleSwitch x:Name="AptFairUnguardedToggle" Header="容認 6% で重い違反の増加も許す"
                           OnContent="ON" OffContent="OFF" Toggled="OnAptFairUnguardedToggled" />
             <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="試験中・じっくりのときだけ働きます。期間の制約や上限などが1件増える手も予算内なら採ります。測定では目的に当たりませんでした（既定はOFF）" />
-            <ToggleSwitch x:Name="C1MoveARepairToggle" Visibility="Collapsed" Header="期間の制約の入れ替えで、できた禁止の並びも直す"
-                          OnContent="ON" OffContent="OFF" Toggled="OnC1MoveARepairToggled" />
-            <TextBlock Visibility="Collapsed" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="試験中。測定では効果は確認できていません（既定はOFF）" />
+                       Text="試験中。じっくりのときだけ、期間の制約などが1件増える手も採ります（測定では効果なし・既定OFF）" />
 
             <!-- [Android 3.683.0] 最適化方式は詳細設定（上級者向け）の中。一般の運用では触らない。 -->
             <Expander Header="詳細設定（上級者向け）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
@@ -70,12 +66,13 @@
                     </StackPanel>
                     <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ" OnContent="ON" OffContent="OFF"
                                   Toggled="OnSoftPolishToggled" />
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="AgentAutoToggle" OnContent="ON" OffContent="OFF" Toggled="OnAgentAutoToggled" />
+                        <TextBlock x:Name="AgentAutoNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                    </StackPanel>
                     <!-- ネイティブ加速はこの移植では常に対象外（C++加速層が無い）。設定データの往復互換のため表示専用で保持。 -->
                     <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
                                   OnContent="ON" OffContent="OFF" IsEnabled="False" />
-                    <!-- [Android 3.706.0 S8 / C# だけ] 禁止連続の事前フィルタは出さない（設定値と配線は保持）。 -->
-                    <ToggleSwitch x:Name="BlockSwapC3nFilterToggle" Header="禁止連続の事前フィルタ" Visibility="Collapsed"
-                                  OnContent="ON" OffContent="OFF" Toggled="OnBlockSwapC3nFilterToggled" />
                     <StackPanel Spacing="4">
                         <TextBlock Text="最適化方式" />
                         <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"

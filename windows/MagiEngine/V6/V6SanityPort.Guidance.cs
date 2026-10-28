@@ -804,9 +804,10 @@ public static partial class V6SanityPort
             var seatsLo = 0;
             var seatsHi = 0;
             var hasDemand = false;
+            var capKnown = true;
             for (var j = 0; j < p.T; j++)
             {
-                if (!NeedDefined(p, k, j)) continue;
+                if (!NeedDefined(p, k, j)) { capKnown = false; continue; }   // need 未設定の日は対象外
                 hasDemand = true;
                 seatsLo += Math.Max(EffectiveDemand(p, k, j), 0);
                 seatsHi += Math.Max(EffectiveCap(p, k, j), 0);
@@ -827,7 +828,8 @@ public static partial class V6SanityPort
                 if (hi != int.MaxValue) capSum += hi; else allCapped = false;
             }
             var loCapacity = k == p.RestIdx ? RestCapacity(p) : seatsHi;
-            if (loSum > loCapacity)
+            // [Android 3.723.x] 必要人数が未設定の日がある＝その日は席の上限が無い＝下限の合計は受け止められる（休は restCapacity で別に判定）。
+            if ((k == p.RestIdx || capKnown) && loSum > loCapacity)
             {
                 outList.Add(new SettingIssue(IssueKind.Demand, $"「{sym}」の回数下限の合計",
                     k == p.RestIdx

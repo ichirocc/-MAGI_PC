@@ -32,7 +32,7 @@ public sealed record ChainFixPreview(FixSuggestion Suggestion, IReadOnlyList<str
     /// <summary>変更を当てるボタン（違反セルの半自動修正仕様 §5: 押すと検証してから全変更を反映する。Kotlin <c>APPLY_CHANGE_BUTTON</c>）。</summary>
     public const string ApplyChangeButton = "この変更を適用する";
     /// <summary>[3.687.0/R09] 確認の画面の門の説明（FixApplyGate と同じ規則: 必須を増やさない・別の場所に必須を生まない・希望の固定を崩さない。要調整だけの改善は通る）。</summary>
-    public const string PreviewGateNote = "適用の直前に最新の勤務表でもう一度検査し、必須違反を増やす・別の職員や日に必須違反を生む・希望の固定を崩す変更は適用しません。適用したあとは「元に戻す」で取り消せます。";
+    public const string PreviewGateNote = "適用の直前に検査し直し、必須違反を増やす・生む変更や希望の固定を崩す変更は当てません。「元に戻す」で取り消せます。";
     /// <summary>当てずに閉じるボタン（今の勤務表のまま）。</summary>
     public const string KeepCurrentButton = "今は変更しない";
     /// <summary>変更を当てる前の確認の見出し（1 手でも入替でも同じ）。</summary>

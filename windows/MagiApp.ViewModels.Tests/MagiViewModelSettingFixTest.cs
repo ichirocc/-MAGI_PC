@@ -271,4 +271,16 @@ public class MagiViewModelSettingFixTest
         Assert.Equal("1", vm._state!.Cons41[0].L); // 内容一致しないので変わらない
         Assert.Equal("2", vm._state!.Cons41[0].U);
     }
+
+    /// <summary>診断の後に行が変わっていたら直さない（旧: 変更なしの state を返し、空の Undo 段と「修正を適用」の記録が残った）。Kotlin <c>V6SanityPortTest</c> の 3.723.3 の 1 行。</summary>
+    [Fact]
+    public void ClampGroupRangeLoReturnsNullWhenTheRowIsGone()
+    {
+        var target = new C41Row("G0", "A", "10", "8");
+        var st = MinimalState.Build(cons41: new List<C41Row> { new("G0", "B", "1", "2") });
+        var issue = new SettingIssue(IssueKind.Constraint, "G0 / A", "下限が上限を超えています", "下限を下げてください",
+            Action: SettingFixAction.ClampGroupRangeLo, GroupRangeFamily: "c41", GroupRangeRow: target, NewLo: "8");
+        Assert.Null(SettingFixLogic.Apply(st, issue));
+        Assert.Equal("8", SettingFixLogic.Apply(MinimalState.Build(cons41: new List<C41Row> { target }), issue)!.Cons41.Single().L);
+    }
 }

@@ -276,7 +276,7 @@ public class MagiViewModelOptimizeTest : IDisposable
         Assert.False(vm.Ui.Running);
         Assert.True(vm.Ui.HasResult);
         Assert.False(vm.Ui.MessageIsError);
-        Assert.Contains("再作成した案は前の勤務表より良くなかったため採用していません", vm.Ui.Message);
+        Assert.Contains("再作成の案は前より良くなかったので採用していません", vm.Ui.Message);
         Assert.True(vm.Ui.KeptPrevious);
         // 採用された盤面は入力(全休)のまま——結果側の盤面ではない。
         Assert.All(vm.Ui.Schedule, row => Assert.All(row, cell => Assert.Equal(0, cell)));
@@ -300,8 +300,8 @@ public class MagiViewModelOptimizeTest : IDisposable
         vm.RunV6FullOptimizeThroughSheet();
         await vm.LastRunOptimizeTask!;
 
-        Assert.StartsWith("再作成した案は前の勤務表より良くなかったため採用していません（", vm.Ui.Message);
-        Assert.EndsWith("勤務表は変わっていません。 今の勤務表には個人の上限0のシフトが3件入っています（だれのどの日かはホームの『設定の見直し』に出ます）。最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります。編集タブの『年間マスター』の『③ 回数（1人あたり）』で上限を見直すか、このまま使えます", vm.Ui.Message);
+        Assert.StartsWith("再作成の案は前より良くなかったので採用していません（", vm.Ui.Message);
+        Assert.EndsWith("勤務表はそのままです。 今の勤務表には個人の上限0のシフトが3件入っています（だれのどの日かはホームの『設定の見直し』に出ます）。最適化は上限0の勤務を置かないため、必須0件まで戻らないことがあります。編集タブの『年間マスター』の『③ 回数（1人あたり）』で上限を見直すか、このまま使えます", vm.Ui.Message);
     }
 
     [Fact]

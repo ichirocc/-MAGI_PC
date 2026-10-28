@@ -14,10 +14,11 @@ public class ScheduleWriteSitesTest
         "RunV6FullOptimizeCoreAsync", "RunSoftPolishCoreAsync", "RunInBackgroundCoreAsync", "ApplyBgResult",   // 最適化の採用
         "GenerateSmartInitialCoreAsync", "ApplyAlternative", "ApplyWishes",   // 下書き・別案・希望の反映
         "ApplyStructure", "ApplyStructureWithMessage",                   // 編集タブ
-        "RelaxAndApply", "RestoreBeforeRelax",                           // 設定の緩和と、その事後確認・保存失敗の復旧
+        "RelaxAndApply", "RestoreBeforeRelax", "Restore",                // 設定の緩和と、その事後確認・保存失敗の復旧（Restore＝RelaxRollback の控え）
         "ApplyFixSuggestion",                                            // 改善手（FixApplyGate を通る）
         "RestorePreDraft",                                               // 下書きに置き換える前の勤務表へ戻す（元に戻すと同じく保存済みの盤面を戻すだけ）
         "DiffersOnlyInPinsOrColors",                                     // 比較のための写し（盤面は書かない）
+        "RunAgentCoreAsync",                                             // 代行役（AgentLoop の各手が FixApplyGate を通る）
     };
     private static readonly Regex Write = new(@"(\b_currentSchedule\s*=[^=>]|\bUi\.Schedule\s*=[^=>]|\bSchedule\s*=\s*[a-zA-Z])");
     private static readonly Regex Fn = new(@"^\s*(?:public|private|internal|protected)[^=;(]*?\b([A-Za-z0-9_]+)\s*(?:<[^>]*>)?\s*\(");

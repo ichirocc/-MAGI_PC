@@ -74,7 +74,7 @@ public sealed partial class MagiViewModel
     public MonthlyChecklistView MonthlyChecklist()
     {
         var st = _state;
-        if (st is null) return new MonthlyChecklistView(0, 0, false, 0, Ui.SettingIssues.Count, WishEntryCounts.Of(0, System.Array.Empty<string>(), System.Array.Empty<string>()));
+        if (st is null) return new MonthlyChecklistView(0, 0, false, 0, SettingIssues.FixItems(Ui.SettingIssues).Count, WishEntryCounts.Of(0, System.Array.Empty<string>(), System.Array.Empty<string>()));
         var wishStaff = st.Wishes.Keys
             .Select(key => int.TryParse(key.Split(',')[0], out var i) ? i : -1)
             .Where(i => i >= 0)
@@ -82,7 +82,7 @@ public sealed partial class MagiViewModel
             .Count();
         var needStdOk = st.Shifts.Any(sh => !string.IsNullOrWhiteSpace(sh.Need1));
         // [3.643.0] 希望の行は登録の有無だけ（拡張希望だけの職員も入力あり）。✓/！の判定はしない。
-        return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, Ui.SettingIssues.Count,
+        return new MonthlyChecklistView(st.StaffCount, wishStaff, needStdOk, NeedDayOverrides().Count, SettingIssues.FixItems(Ui.SettingIssues).Count,
             WishEntryCounts.Of(st.StaffCount, st.Wishes.Keys, Ui.ExtBanned.Keys));
     }
 
@@ -637,6 +637,7 @@ public sealed partial class MagiViewModel
         var newHi = System.Math.Max(hi + hiDelta, newLo);
         if (newLo == lo && newHi == hi) return;
         LogOp("I", $"回数固定を緩和: {OpNm(i)} {OpSy(k)} {lo}〜{hi} → {newLo}〜{newHi}（再作成すると効果が分かります）");
+        AgentDecisionApproved();
         SetStaffRange(i, k, newLo.ToString(), newHi.ToString());
     }
 
@@ -1068,6 +1069,7 @@ public sealed partial class MagiViewModel
             .ToHashSet();
         if (keys.Count == 0) return;
         LogOp("I", $"担当外の希望を一括クリア: {keys.Count}件");
+        AgentDecisionApproved();
         ApplyStructure(st with { Wishes = st.Wishes.Where(kv => !keys.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value) },
             notice: $"担当外の希望を{keys.Count}件クリアしました");
     }
@@ -1644,6 +1646,7 @@ public sealed partial class MagiViewModel
             case "cons2":
                 if (G(0).Length == 0 || G(1).Length == 0) return "すべての項目を入れてください。";
                 if (!NonNeg(G(1), out var c2) || c2 < 1) return "合計回数は 1 以上の整数で入れてください。";
+                if (MagiConstraintsView.Cons2InputError(G(1), st.DayCount) is { } c2Err) return c2Err + "。";
                 return Shift(G(0));
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
             {
@@ -1758,6 +1761,7 @@ public sealed partial class MagiViewModel
         if (ns is not null)
         {
             LogOp("I", $"設定ミスの修正を適用: {issue.Action} @ {issue.Where}");
+            AgentDecisionApproved();
             ApplyStructure(ns);
         }
         else if (SettingFixLogic.WishAlreadyRemoved(s, issue))
@@ -1986,6 +1990,7 @@ public sealed partial class MagiViewModel
             return;
         }
         LogOp("I", $"禁止の並びを削除: {seqLabel}（{removed}件）");
+        AgentDecisionApproved();
         ApplyStructureWithMessage(s with { Cons3n = remain }, $"禁止の並び「{seqLabel}」を削除しました（{removed}件・元に戻せます）");
     }
 
