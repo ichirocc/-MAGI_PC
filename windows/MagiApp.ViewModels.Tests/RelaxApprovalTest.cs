@@ -95,4 +95,16 @@ public class RelaxApprovalTest
         Assert.StartsWith("S6承認 decisionId=d1 trial=t1 理由=確認済み 前→後 A 夜 上限0→1", l);
         Assert.Equal("S6反映 結果=復旧 check=2", RelaxApproval.ApplyLog("復旧", 2));
     }
+
+    [Fact]
+    public void SearchingAndFailedTrialsGetTheirOwnReasonsNotStale()
+    {
+        var a = RelaxApproval.Start(null, true, "t", "f", searching: true);
+        var b = RelaxApproval.Start(null, true, "t", "f", failed: true);
+        Assert.Equal(RelaxApproval.EndReason.Searching, a.End);
+        Assert.Equal(RelaxApproval.EndReason.Failed, b.End);
+        Assert.All(new[] { a, b }, f => Assert.Equal(RelaxApproval.Step.R4, f.Step));
+        Assert.Equal(RelaxApproval.EndReason.Stale, RelaxApproval.Start(null, false, "t", "f", searching: true, failed: true).End);
+        Assert.Equal(RelaxApproval.Step.R1, RelaxApproval.Start(Result(), true, "t", "f", searching: true).Step);
+    }
 }

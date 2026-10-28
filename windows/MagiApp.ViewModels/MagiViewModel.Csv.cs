@@ -755,58 +755,26 @@ public sealed partial class MagiViewModel
         public static IoOutcome Fail(Exception? error) => new(false, error);
     }
 
+    /// <summary>[3.644.0/仕様 5.4] 勤務表 CSV の保存済みの印（純粋な部分は <see cref="CsvSavedMark"/>）。</summary>
+    private readonly CsvSavedMark _csvMark = new();
+    private void NoteCsvExport(MagiState st, int[][] sched, string csv) => _csvMark.NoteExport(st, sched, csv);
+    /// <summary>別のデータや別の月に移ったら、前の CSV の保存は今の内容と関係がない＝印を消す。</summary>
+    internal void ClearCsvSaved() { _csvMark.Clear(); Ui.CsvSavedAt = null; }
+    /// <summary>[3.643.0→3.644.0] 保存した内容と今の内容を区別する（仕様 5.4）: 同じなら「この内容で保存済み」、違えば「保存した CSV は今の内容と違う」。</summary>
+    public string? CsvSavedLine() => _csvMark.Line(Ui.CsvSavedAt, _state, _currentSchedule);
+
     /// <summary>
     /// ファイル書き込みの結果を1行で返す。成功も必ず返すのが肝で、旧実装は成功時も無反応だったため
     /// 「保存できたのか」を画面で確かめる手段が無かった。
     /// </summary>
-    /// <summary>[3.644.0/UX-05・仕様 5.4] 勤務表 CSV の文脈。書き出した文字列（のハッシュ）とその時の state・盤面を持つ。保存の成功は書き出し時の文脈に
-    /// 結ぶ＝書き出しのあと（ピッカーや書き込みの間）に盤面が変わっても、変わった盤面を「保存済み」と言わない。Kotlin <c>CsvCtx</c>。</summary>
-    private sealed class CsvCtx(MagiState st, long boardKey, int textHash)
-    {
-        public MagiState St { get; } = st;
-        public long BoardKey { get; } = boardKey;
-        public int TextHash { get; } = textHash;
-    }
-    private CsvCtx? _csvExportCtx;
-    private CsvCtx? _csvSavedCtx;
-    private (MagiState St, long BoardKey)? _csvCheckKey;
-    private int _csvCheckHash;
-    private void NoteCsvExport(MagiState st, int[][] sched, string csv) => _csvExportCtx = new CsvCtx(st, BoardKey(sched), csv.GetHashCode());
-    /// <summary>今の内容が保存した CSV と同じか。state と盤面が同じなら作らずに同じ、違えば CSV をもう一度作って比べる（設定だけの変更は CSV を変えない）。</summary>
-    private bool CsvSavedMatches(CsvCtx c)
-    {
-        var st = _state;
-        var b = _currentSchedule;
-        if (st is null || b is null) return false;
-        var bk = BoardKey(b);
-        if (ReferenceEquals(c.St, st) && c.BoardKey == bk) return true;
-        if (_csvCheckKey is not { } k || !ReferenceEquals(k.St, st) || k.BoardKey != bk)
-        {
-            _csvCheckKey = (st, bk);
-            _csvCheckHash = ScheduleCsvBridge.Build(st, b).GetHashCode();
-        }
-        return _csvCheckHash == c.TextHash;
-    }
-    /// <summary>別のデータや別の月に移ったら、前の CSV の保存は今の内容と関係がない＝印を消す。</summary>
-    internal void ClearCsvSaved() { _csvExportCtx = null; _csvSavedCtx = null; Ui.CsvSavedAt = null; }
-    /// <summary>[3.643.0→3.644.0] 保存した内容と今の内容を区別する（仕様 5.4）: 同じなら「この内容で保存済み」、違えば「保存した CSV は今の内容と違う」。</summary>
-    public string? CsvSavedLine()
-    {
-        if (Ui.CsvSavedAt is not { } at || _csvSavedCtx is not { } c) return null;
-        return CsvSavedMatches(c)
-            ? $"この内容で勤務表CSVを保存済みです（{at}）。"
-            : $"{at} に保存した勤務表CSVは、今の内容と違います（配るなら保存し直してください）。";
-    }
-
     public void NotifySave(IoOutcome result, string what)
     {
         if (result.Success)
         {
             Notify($"{what}を保存しました");
-            if (what == "勤務表CSV" && _state is { } st && _currentSchedule is { } b)
+            if (what == "勤務表CSV")
             {
-                // 書き出した文字列の文脈に結ぶ（ExportCsv が記録）。無ければ今の内容（旧経路の互換）。
-                _csvSavedCtx = _csvExportCtx ?? new CsvCtx(st, BoardKey(b), ScheduleCsvBridge.Build(st, b).GetHashCode());
+                _csvMark.NoteSaved(_state, _currentSchedule);
                 Ui.CsvSavedAt = DateTime.Now.ToString("HH:mm");
             }
         }

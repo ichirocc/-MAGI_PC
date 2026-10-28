@@ -11,14 +11,16 @@ public static class RelaxApproval
     public enum Step { R1, R2, R3, R4, R5 }
 
     /// <summary>R4 の理由。NoWall・Stopped を「解消できない」「0 件の証拠」と言わない（J7）。</summary>
-    public enum EndReason { NoWall, Stopped, Unavailable, NoGain, Stale, NotReproduced, Blocked, Declined, RolledBack, SaveFailed }
+    public enum EndReason { NoWall, Stopped, Unavailable, NoGain, Searching, Failed, Stale, NotReproduced, Blocked, Declined, RolledBack, SaveFailed }
 
     public static string TextOf(EndReason e) => e switch
     {
-        EndReason.NoWall => "上限0を外しても、この違反を解く手順は見つかりませんでした。解消できないという意味ではありません。",
+        EndReason.NoWall => "上限0を外しても、この違反を解く手順は見つかりませんでした（解けないとは限りません）。",
         EndReason.Stopped => "試算を途中で止めたので、結果はありません。",
         EndReason.Unavailable => "この勤務表では試算できません。",
         EndReason.NoGain => "試算しても必須違反は減りませんでした。",
+        EndReason.Searching => "試算がまだ終わっていません。",
+        EndReason.Failed => "試算に失敗しました。もう一度試算してください。",
         EndReason.Stale => "勤務表か設定が変わりました。もう一度試算してください。",
         EndReason.NotReproduced => "試算の手順を当てても同じ結果になりませんでした。もう一度試算してください。",
         EndReason.Blocked => "いまは反映できません（実行中か、データに問題があります）。",
@@ -76,10 +78,13 @@ public static class RelaxApproval
 
     public static bool Improves(RelaxTrial.Outcome? outcome) => outcome is RelaxTrial.Result r && r.Rr < r.H0;
 
-    /// <summary>開いたときの状態。改善のある Result だけが R1、他は理由の分かれた R4。</summary>
-    public static Flow Start(RelaxTrial.Outcome? outcome, bool fresh, string trialId, string fingerprint)
+    /// <summary>開いたときの状態。改善のある Result だけが R1、他は理由の分かれた R4。結果の無い今のデータの試算は
+    /// <paramref name="searching"/>（走っている）・<paramref name="failed"/>（失敗）を Stale と分ける。</summary>
+    public static Flow Start(RelaxTrial.Outcome? outcome, bool fresh, string trialId, string fingerprint, bool searching = false, bool failed = false)
     {
         var b = new Flow(Step.R1, trialId, fingerprint, ExpectedHard: (outcome as RelaxTrial.Result)?.Rr ?? -1);
+        if (fresh && outcome is null && searching) return b with { Step = Step.R4, End = EndReason.Searching };
+        if (fresh && outcome is null && failed) return b with { Step = Step.R4, End = EndReason.Failed };
         if (!fresh || outcome is null) return b with { Step = Step.R4, End = EndReason.Stale };
         return outcome switch
         {

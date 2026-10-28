@@ -114,8 +114,10 @@ public sealed partial class MagiViewModel
         var now = RelaxCtxNow();
         var fresh = c is not null && c == now;
         var outcome = _relaxResult ?? (_relaxStoppedCtx is not null && _relaxStoppedCtx == now ? RelaxTrial.Stopped : null);
+        var searching = fresh && _relaxResult is null && LastRelaxTrialTask is { IsCompleted: false };
+        var failed = RelaxFailed();
         var k = c ?? now ?? new RelaxCtx(0L, 0L);
-        Ui.RelaxFlow = RelaxApproval.Start(outcome, fresh, RelaxApproval.TrialId(k.StateKey, k.BoardKey), RelaxApproval.Fingerprint(k.StateKey, k.BoardKey));
+        Ui.RelaxFlow = RelaxApproval.Start(outcome, fresh, RelaxApproval.TrialId(k.StateKey, k.BoardKey), RelaxApproval.Fingerprint(k.StateKey, k.BoardKey), searching, failed);
     }
 
     public void RelaxFlowNext()
@@ -152,16 +154,18 @@ public sealed partial class MagiViewModel
         Ui.RelaxFlow = RelaxApproval.Finish(pressed, v);
     }
 
-    /// <summary>反映の前の (state, 盤面) へ戻し、積んだ Undo 段を外す（事後確認の不一致・保存失敗）。</summary>
-    private void RestoreBeforeRelax(MagiState st, int[][] b)
+    private sealed record AltsBackup(IReadOnlyList<int[][]> Scheds, long BoardKey, long StateKey);
+
+    /// <summary>反映の前の (state, 盤面) と、反映が書き換えた画面の欄・段・結果盤面・他の案・確定の 1 行へ戻す（事後確認の不一致・保存失敗）。</summary>
+    private void RestoreBeforeRelax(MagiState st, int[][] b, RelaxRollback<UndoSnap, int[][], AltsBackup> rb, (RelaxCtx Ctx, string Line)? done)
     {
-        if (_undoStack.Count > 0) _undoStack.RemoveLast();
+        rb.RestoreStacks(_undoStack, _redoStack);
         _state = st;
         _currentSchedule = b.Copy2D();
-        _relaxDone = null;
-        Ui.CanUndo = _undoStack.Count > 0;
-        Ui.RelaxedBoard = false;
-        Ui.Schedule = b.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        _resultSchedule = rb.ResultSchedule;
+        _alternativeScheds = rb.Alts.Scheds; _altBoardKey = rb.Alts.BoardKey; _altStateKey = rb.Alts.StateKey;
+        _relaxDone = done;
+        rb.Restore(Ui);
         RefreshCheck();
     }
 
@@ -170,8 +174,16 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         var b = _currentSchedule;
-        if (st is null || b is null) return RelaxApproval.Verdict.Stale;
-        if (RunBlockedByInFlight("設定の緩和")) return RelaxApproval.Verdict.Blocked;
+        if (st is null || b is null)
+        {
+            LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=データがない");
+            return RelaxApproval.Verdict.Stale;
+        }
+        if (RunBlockedByInFlight("設定の緩和"))
+        {
+            LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=実行中");
+            return RelaxApproval.Verdict.Blocked;
+        }
         if (StateKey(st) != token.StateKey || BoardKey(b) != token.BoardKey)
         {
             LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=データが変わった");
@@ -187,10 +199,21 @@ public sealed partial class MagiViewModel
             LogOp("W", RelaxApproval.ApplyLog("失敗", got ?? -1) + $" 理由=手順を当てた必須 {got} ≠ 試算 {r.Rr}");
             return RelaxApproval.Verdict.NotReproduced;
         }
-        if (!EnsureValidForRun(ns0, nb, "設定の緩和")) return RelaxApproval.Verdict.Blocked;
+        if (!EnsureValidForRun(ns0, nb, "設定の緩和"))
+        {
+            LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=データに問題");
+            return RelaxApproval.Verdict.Blocked;
+        }
         CancelRelaxTrial();
         var before = b.Copy2D();
-        if (!PushUndo()) return RelaxApproval.Verdict.Blocked;
+        var rb = new RelaxRollback<UndoSnap, int[][], AltsBackup>(Ui, _undoStack.ToList(), _redoStack.ToList(), _resultSchedule,
+            new AltsBackup(_alternativeScheds, _altBoardKey, _altStateKey));
+        var doneBefore = _relaxDone;
+        if (!PushUndo())
+        {
+            LogOp("W", RelaxApproval.ApplyLog("失敗", -1) + " 理由=元に戻す段を積めない");
+            return RelaxApproval.Verdict.Blocked;
+        }
         var ns = ns0.WithSchedule(nb);
         _state = ns;
         _currentSchedule = nb;
@@ -198,7 +221,7 @@ public sealed partial class MagiViewModel
         var post = UnifiedViolationChecker.Check(ns, nb.Copy2D()).Hard;
         if (!RelaxApproval.PostCheckOk(r.Rr, post))
         {
-            RestoreBeforeRelax(st, before);
+            RestoreBeforeRelax(st, before, rb, doneBefore);
             LogOp("W", RelaxApproval.ApplyLog("復旧", post) + $" 理由=反映後の必須 {post} ≠ 試算 {r.Rr}");
             return new RelaxApproval.Verdict.Applied(post);
         }
@@ -216,7 +239,7 @@ public sealed partial class MagiViewModel
         SaveNow();
         if (_hydrated && Ui.SaveState == SaveState.Failed)
         {
-            RestoreBeforeRelax(st, before);
+            RestoreBeforeRelax(st, before, rb, doneBefore);
             LogOp("W", RelaxApproval.ApplyLog("復旧", post) + " 理由=保存に失敗");
             AutoSave();
             return RelaxApproval.Verdict.SaveFailed;

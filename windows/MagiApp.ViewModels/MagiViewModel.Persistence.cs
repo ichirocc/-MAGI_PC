@@ -502,13 +502,14 @@ public sealed partial class MagiViewModel
             rollback = null;
             // 退避は差し替えの確定後に書く（中止で読込前へ戻しても「開く前のデータ」を失わない）。
             var prevSaved = false;
+            var prevNonAtomic = false;
             if (prevJson is not null)
             {
                 prevSaved = await Task.Run(() =>
                 {
                     try
                     {
-                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson);
+                        return AtomicFileWrite.WriteFileAtomically(PrevBackupFile, prevJson, onNonAtomic: () => prevNonAtomic = true);
                     }
                     catch
                     {
@@ -516,6 +517,7 @@ public sealed partial class MagiViewModel
                     }
                 }, CancellationToken.None);
             }
+            if (prevNonAtomic) LogOp("W", "前のデータの退避で原子置換が使えず直接書き込みました（書き込み中に強制終了すると退避が壊れる可能性があります）");
 
             // [3.289.0相当] 書込が実際に成功したときだけ立てる（既存の退避があれば維持）。
             if (prevSaved) Ui.PrevBackupAvailable = true;
