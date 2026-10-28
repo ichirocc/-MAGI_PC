@@ -73,15 +73,8 @@ public sealed record FixSuggestion(
 /// </summary>
 public static class FixSuggester
 {
-    private static volatile bool _lastTimedOut;
-
-    /// <summary>直近の探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。</summary>
-    public static bool LastTimedOut { get => _lastTimedOut; set => _lastTimedOut = value; }
-
-    private static volatile bool _restoreWishLocked = true;
-
-    /// <summary>単一変更に限り、希望固定セルが固定値から外れていれば「固定値へ戻す」1 手を候補にする（既定 ON）。</summary>
-    public static bool RestoreWishLocked { get => _restoreWishLocked; set => _restoreWishLocked = value; }
+    /// <summary>提案と、その探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。呼出ごとに持つ＝並行する探索の値と混ざらない。</summary>
+    public sealed record Result(List<FixSuggestion> Suggestions, bool TimedOut);
 
     /// <summary>探索の上限（Android 3.507.4 で集約。値は 2.4x 系からの据え置き）。</summary>
     internal static class Limits
@@ -100,10 +93,21 @@ public static class FixSuggester
         int? focusShift = null,
         int maxResults = 8,
         long deadlineMs = 8000L,
+        bool strictNewHard = true) =>
+        SuggestResult(state, schedule, focusStaff, focusShift, maxResults, deadlineMs, strictNewHard).Suggestions;
+
+    /// <summary><see cref="Suggest"/> に打ち切りの有無を添えたもの。</summary>
+    public static Result SuggestResult(
+        MagiState state,
+        int[][] schedule,
+        int? focusStaff = null,
+        int? focusShift = null,
+        int maxResults = 8,
+        long deadlineMs = 8000L,
         bool strictNewHard = true)
     {
         var p = new Problem(state);
-        if (p.S < 1 || p.T < 1) return new List<FixSuggestion>();
+        if (p.S < 1 || p.T < 1) return new Result(new List<FixSuggestion>(), false);
         return new Session(state, p, ScheduleUtil.NormalizeSchedule(schedule, p), focusStaff, focusShift, deadlineMs, strictNewHard).Run(maxResults);
     }
 
@@ -257,7 +261,7 @@ public static class FixSuggester
             if (!V6SearchOperators.ExactPinRegression(_p, _s, after)) Record(kind, ops, label, rep);
         }
 
-        public List<FixSuggestion> Run(int maxResults)
+        public Result Run(int maxResults)
         {
             SingleChanges();
             SameDaySwaps();
@@ -266,8 +270,8 @@ public static class FixSuggester
             Windows();
             Rotations3();
             CrossDaySwaps();
-            _lastTimedOut = TimeUp();
-            return Collect(maxResults);
+            var timedOut = TimeUp();
+            return new Result(Collect(maxResults), timedOut);
         }
 
         /// <summary>Phase 1: 単一マス変更（広く）。</summary>
@@ -283,7 +287,7 @@ public static class FixSuggester
                     if (_p.WishLocked(i, j))
                     {
                         var lk = _p.LockTo(i, j);
-                        if (RestoreWishLocked && lk >= 0 && lk != a && !TimeUp())
+                        if (lk >= 0 && lk != a && !TimeUp())
                             TryOps(FixKind.Change, new[] { new FixCell(i, j, lk) }, $"{Nm(i)} {Dlab(j)} 「{Sym(a)}」→「{Sym(lk)}」");
                         continue;
                     }

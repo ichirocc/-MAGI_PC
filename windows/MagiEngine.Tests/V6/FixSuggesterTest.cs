@@ -142,9 +142,9 @@ public class FixSuggesterTest
             string.Join(" / ", chains.Select(c => string.Join(",", c.Ops.Select(op => $"{op.Staff}.{op.Day}.{op.ToShift}")))));
     }
 
-    /// <summary>手で崩した希望セル（pref 違反）を希望へ戻す単一変更は、<c>RestoreWishLocked</c> が ON のときだけ出る。</summary>
+    /// <summary>手で崩した希望セル（pref 違反）を希望へ戻す単一変更を候補に出す。</summary>
     [Fact]
-    public void restoreWishLockedProposesWishValueOnlyWhenOn()
+    public void RestoreWishLockedProposesWishValue()
     {
         var st = MinimalState.Build(
             startDate: "2026-08-03", endDate: "2026-08-05",
@@ -156,15 +156,25 @@ public class FixSuggesterTest
         var sched = st.Schedule.Select(r => r.ToArray()).ToArray();
         Assert.True(UnifiedViolationChecker.Check(st, sched).Breakdown.GetValueOrDefault("pref", 0) > 0);
         var restore = new FixCell(0, 0, 0);
-        var saved = FixSuggester.RestoreWishLocked;
-        try
-        {
-            FixSuggester.RestoreWishLocked = false;
-            Assert.DoesNotContain(FixSuggester.Suggest(st, sched, maxResults: 50), r => r.Ops.Contains(restore));
-            FixSuggester.RestoreWishLocked = true;
-            var on = FixSuggester.Suggest(st, sched, maxResults: 50);
-            Assert.True(on.Any(r => r.Kind == FixKind.Change && r.Ops.SequenceEqual(new[] { restore }) && r.DeltaHard < 0), string.Join(" / ", on.Select(r => r.Label)));
-        }
-        finally { FixSuggester.RestoreWishLocked = saved; }
+        var on = FixSuggester.Suggest(st, sched, maxResults: 50);
+        Assert.True(on.Any(r => r.Kind == FixKind.Change && r.Ops.SequenceEqual(new[] { restore }) && r.DeltaHard < 0), string.Join(" / ", on.Select(r => r.Label)));
+    }
+
+    /// <summary>打ち切りの有無は呼出ごとの戻り値に載る（V61-04: 旧は静的変数で、後の探索が前の探索の値を上書きした）。</summary>
+    [Fact]
+    public void TimedOutBelongsToEachCall()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-02",
+            shifts: Shifts(), groups: new List<Group> { new("G0", "G0") }, staffList: new List<Staff> { new("s0", 0), new("s1", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0 }, new List<int> { 1, 0 } },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new(Lo: "1", Hi: ""), ["1,1"] = new(Lo: "", Hi: "0") });
+        var sched = st.Schedule.ToIntArray2D();
+        var cut = FixSuggester.SuggestResult(st, sched, deadlineMs: -1L);
+        var full = FixSuggester.SuggestResult(st, sched, deadlineMs: 60_000L);
+        Assert.True(cut.TimedOut, "締切 -1 は打ち切り");
+        Assert.True(cut.TimedOut && !full.TimedOut, "後の探索が前の結果を書き換えない");
     }
 }

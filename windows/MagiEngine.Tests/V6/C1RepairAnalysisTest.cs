@@ -270,4 +270,23 @@ public class C1RepairAnalysisTest
             new Config(MaxInvolvedStaff: 1));
         Assert.False(capped.Exhaustive, "候補を cap で切り捨てたら証明を名乗らない");
     }
+
+    /// <summary>
+    /// 関与職員に未反映の希望（その日の多重集合に希望の値が無い）があると、配置が1つも作れない。
+    /// 葉を1つも見ていないのに「証明済み壁」を名乗ってはならない。
+    /// </summary>
+    [Fact]
+    public void UnrealizedWishOutsideTheMultisetMustNotClaimAWall()
+    {
+        // PinFixture と同じ盤面に、a の 0 日目の希望「休」（その日は誰も休でない）を足す。
+        //   a は 0 日目を今のまま X に保ち、1 日目の X を i0 へ渡せば i0 の 2 窓は両方満たせる＝壁ではない。
+        var s = PinFixture() with { Wishes = new Dictionary<string, int> { ["1,0"] = 0 } };
+        var p = new Problem(s);
+        var sched = s.Schedule.ToIntArray2D();
+        Assert.True(p.WishLocked(1, 0), "前提: a の 0 日目は希望で縛られる");
+        var v = C1RepairAnalysis.Analyze(p, sched).First(w => w.Staff == 0);
+        var r = C1RepairAnalysis.SolveWindow(p, sched, v);
+        Assert.False(r.Exhaustive, "葉の無い探索は証明を名乗らない");
+        Assert.True(C1RepairAnalysis.ProvenWalls(p, sched).Count == 0, "偽の壁を返さない");
+    }
 }

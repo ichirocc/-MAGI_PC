@@ -184,6 +184,25 @@ public class ZeroCapExclusionTest
             Assert.Empty(p.CapZeroCells(b));
         }
     }
+
+    /// <summary>入口修復の埋めシフト（休が先頭でない・休を担当しないグループ・上限 0・希望固定）。C++ の
+    /// <c>tools/native/host_parity_bench.cpp</c> runHf66FillTest が同じフィクスチャ・同じ期待盤面で hf67HardRepairN を固定する。</summary>
+    [Fact]
+    public void EntryHardeningMatchesNativeFixture()
+    {
+        var s = MinimalState.Build(
+            startDate: "2026-08-01", endDate: "2026-08-04",
+            shifts: new List<Shift> { new("D", "D", "", ""), new("N", "N", "", ""), new("休", "休", "", "", ShiftRole.Rest) },
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            staffList: new List<Staff> { new("a", 0), new("b", 0), new("c", 1) },
+            use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1 }, new List<int> { 1, 1, 0 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" }, new List<string> { "", "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 99, 0, 1, 2 }, new List<int> { 1, 1, 0, 2 }, new List<int> { 2, 1, 99, 0 } },
+            wishes: new Dictionary<string, int> { ["1,1"] = 1 }, staffRange: new Dictionary<string, Range> { ["1,1"] = new("0", "0") });
+        var out_ = V6NativeOptimizer.Hf67HardRepair(s, s.Schedule.ToIntArray2D(), new JavaRandom(1)).Schedule;
+        Assert.Equal(new[] { new[] { 2, 0, 1, 2 }, new[] { 2, 1, 0, 2 }, new[] { 0, 1, 0, 0 } }, out_);
+    }
 }
 
 [CollectionDefinition(nameof(HandleOptimizeSeedCollection), DisableParallelization = true)]

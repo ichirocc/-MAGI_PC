@@ -239,7 +239,7 @@ public sealed partial class MagiViewModel
                         Ui.Breakdown = bd;
                     }
                     Ui.ElapsedMs = NowMs() - startMs;
-                    Ui.LiveSchedule = V6NativeOptimizer.LiveBest ?? Ui.LiveSchedule;
+                    Ui.LiveSchedule = V6NativeOptimizer.LiveBestShaped(sched0) ?? Ui.LiveSchedule;
                 }
                 // ---- 最適化中ログ強化（スロットル付き）----
                 var important = baseName.Contains("最良更新") || baseName.Contains("改善");

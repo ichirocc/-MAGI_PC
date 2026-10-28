@@ -338,10 +338,13 @@ public static class UnifiedViolationChecker
         // Kotlin の `{ key, amt -> inc(key, amt) }` と同様に、Inc の既定引数(amount=1)は delegate
         // 変換では引き継がれない（C# の仕様上）ため、両引数を明示するラッパを渡す。Mark は既定引数を
         // 持たないので直接 delegate へ変換できる（Kotlin の `::mark` と同じ理由）。
-        CheckC3Family(p, s, p.Cons3, "c3", forbidden: false, (key, amt) => Inc(key, amt), Mark);
-        CheckC3Family(p, s, p.Cons3n, "c3n", forbidden: true, (key, amt) => Inc(key, amt), Mark);
-        CheckC3Family(p, s, p.Cons3m, "c3m", forbidden: false, (key, amt) => Inc(key, amt), Mark);
-        CheckC3Family(p, s, p.Cons3mn, "c3mn", forbidden: true, (key, amt) => Inc(key, amt), Mark);
+        // 並びの窓の照合に使う職員×シフトの勤務日ビット（4 族で共有、T≤64 で盤面が揃っているときだけ）。
+        var c3Masks = !ForceScalarC3 && (p.Cons3n.Count > 0 || p.Cons3mn.Count > 0 || p.Cons3.Count > 0 || p.Cons3m.Count > 0)
+            && C3nBitScan.Usable(p) && s.Length >= p.S && Enumerable.Range(0, p.S).All(r => s[r].Length >= p.T) ? C3RowMasks(p, s) : null;
+        CheckC3Family(p, s, c3Masks, p.Cons3, "c3", forbidden: false, (key, amt) => Inc(key, amt), Mark);
+        CheckC3Family(p, s, c3Masks, p.Cons3n, "c3n", forbidden: true, (key, amt) => Inc(key, amt), Mark);
+        CheckC3Family(p, s, c3Masks, p.Cons3m, "c3m", forbidden: false, (key, amt) => Inc(key, amt), Mark);
+        CheckC3Family(p, s, c3Masks, p.Cons3mn, "c3mn", forbidden: true, (key, amt) => Inc(key, amt), Mark);
 
         // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
         // 前日側のセル（動かせる側）を違反箇所にする。静的表 Problem.C3wBan を引くだけ。
@@ -663,8 +666,23 @@ public static class UnifiedViolationChecker
     internal static string PairKey(int a, int b) =>
         a >= 0 && a < PairKeyN && b >= 0 && b < PairKeyN ? PairKeys[a * PairKeyN + b] : $"{a},{b}";
 
+    /// <summary>職員 i・シフト k の勤務日ビットを [i * K + k] に並べた 1 本の配列（範囲外のセルはどこにも立てない）。</summary>
+    private static long[] C3RowMasks(Problem p, int[][] s)
+    {
+        var outMasks = new long[p.S * p.K];
+        for (int i = 0; i < p.S; i++)
+        {
+            var row = s[i]; int bas = i * p.K;
+            for (int j = 0; j < p.T; j++) { int k = row[j]; if (k >= 0 && k < p.K) outMasks[bas + k] |= 1L << j; }
+        }
+        return outMasks;
+    }
+
+    /// <summary>テスト専用: 並びの窓の照合をスカラーの走査に固定する（ビット経路との一致の検査に使う）。</summary>
+    internal static volatile bool ForceScalarC3;
+
     private static void CheckC3Family(
-        Problem p, int[][] schedule, IReadOnlyList<C3> list, string key, bool forbidden,
+        Problem p, int[][] schedule, long[]? masks, IReadOnlyList<C3> list, string key, bool forbidden,
         Action<string, int> inc, Action<int, int, string> mark)
     {
         foreach (var c in list)
@@ -702,6 +720,31 @@ public static class UnifiedViolationChecker
                             r = 0; runStart = -1;
                         }
                         j++;
+                    }
+                }
+                continue;
+            }
+            // 窓の照合は職員×シフトの勤務日ビットの AND と popcount で（T≤64・シフトが範囲内のとき）。窓の開始日の昇順に
+            //   inc/mark を呼ぶので、数も印の順もスカラーの走査と同じ。`C3FamilyBitTest` が両者の一致を固定する。
+            if (masks is not null && seq.All(x => x >= 0 && x < p.K))
+            {
+                int kk = p.K;
+                int n = p.T - d + 1;
+                long starts = n >= 64 ? -1L : (1L << n) - 1;
+                for (int i = 0; i < p.S; i++)
+                {
+                    int bas = i * kk;
+                    long rest = -1L;
+                    for (int l = 1; l < d; l++) rest &= masks[bas + seq[l]] >>> l;
+                    long first = masks[bas + seq[0]] & starts;
+                    long fires = forbidden ? first & rest : first & ~rest;
+                    while (fires != 0L)
+                    {
+                        int j = System.Numerics.BitOperations.TrailingZeroCount(fires);
+                        fires &= fires - 1;
+                        inc(key, 1);
+                        if (forbidden) { for (int l = 0; l < d; l++) mark(i, j + l, key); }
+                        else mark(i, j, key);
                     }
                 }
                 continue;

@@ -1,0 +1,13 @@
+ok=false
+warn 担当不可または範囲外の配置が 14 セルあります
+warn 実現不能な希望シフトが 1 件あります
+note groupShiftApt 適切回数: 2 件
+note shifts=4 groups=2 staff=6 days=14
+note 2世代需要(セル毎OR/AND: #4b)が有効
+bits LoadDataBit: staffN=6 termT=14 shiftK=4 assigned=84/84 allowBits=7 wishes=3 ranges=2
+bit Group G0: members=3 allowed=[休 A B C]
+bit Group G1: members=3 allowed=[休 A B]
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=B, count=9, lo=0, hi=2, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員02, shiftSymbol=休, count=1, lo=6, hi=8, status=LOW)
+impossible ImpossibleWish(staffIndex=4, dayIndex=0, staffName=職員05, groupSymbol=G1, shiftSymbol=C, reason=グループ「G1」では担当不可です)
+guide SettingIssue(kind=WISH, where=職員05 10/1(木) 希望「C」, problem=実現できない希望です（グループ「G1」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「G1」が「C」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=4,0, wishShift=3, wishStaffId=5, wishFingerprint=-7543228600809653236, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)

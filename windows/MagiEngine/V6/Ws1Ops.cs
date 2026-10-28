@@ -256,6 +256,24 @@ public static class Ws1Ops
             ? null
             : $"startDate が日付として読めません（YYYY-MM-DD 形式で指定してください: \"{state.StartDate}\"）";
 
+    /// <summary>回数の設定（個人の下限・上限、個人の合計の目標）の上限。これを超える値は期間（最長 31 日）に対して意味がなく、
+    /// 30 名×12 シフトが全部この値で下限割れしても SOFT は約 4.3 億＝辞書式パックの桁（<see cref="Evaluator.SCORE_HARD_UNIT"/>）に届かない。</summary>
+    public const int COUNT_SETTING_MAX = 10_000;
+
+    /// <summary>
+    /// 回数の設定が <see cref="COUNT_SETTING_MAX"/> を超えていれば理由を返す（実行前の検証用）。超えると SOFT が HARD の桁へ繰り上がり、
+    /// 差分評価が必須違反の数を取り違える（2026-10-24 の外部レビューの指摘を下限 1 億で再現）。
+    /// </summary>
+    public static string? CountSettingError(MagiState state)
+    {
+        static bool Big(string v) => long.TryParse(v.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var n) && n > COUNT_SETTING_MAX;
+        foreach (var (k, r) in state.StaffRange)
+            if (Big(r.Lo) || Big(r.Hi)) return $"staffRange[{k}] の回数（{r.Lo}〜{r.Hi}）が大きすぎます（{COUNT_SETTING_MAX} 以下にしてください）";
+        foreach (var c in state.Cons2)
+            if (Big(c.Count)) return $"cons2（{c.ShiftKigou}）の回数 {c.Count} が大きすぎます（{COUNT_SETTING_MAX} 以下にしてください）";
+        return null;
+    }
+
     /// <summary>
     /// [apt強制リセット] グループ別シフトの適切回数(groupShiftApt)を全て空欄(=目標なし)に戻す。
     /// G×K に正規化したうえで全セルを "" にする。apt 由来のソフト違反は消えるが、

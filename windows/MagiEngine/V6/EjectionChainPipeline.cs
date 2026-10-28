@@ -219,7 +219,8 @@ internal static class EjectionChainPipeline
             cur = next; curRep = r2; cells += c.Path.Count; tel.Committed++;
         }
         tel.After = curRep;
-        tel.EndReason = tel.Committed > 0 ? "committed" : stop() ? "stopped" : "deep_done";
+        // probe_only＝深い探索の予算が尽きた（前の巡・前の焦点で使い切った）か予察のみの測定
+        tel.EndReason = tel.Committed > 0 ? "committed" : stop() ? "stopped" : !tel.DeepRan ? "probe_only" : "deep_done";
         return new LegOut(cur, curRep, cells, deepMs, cfg.Deterministic ? deepEvaluations : 0L);
     }
 }

@@ -653,15 +653,16 @@ public sealed class Problem
             if (d == 0 || d > T) continue;
             int sLo = Math.Max(j - d + 1, 0);
             int sHi = Math.Min(j, T - d);
+            // 窓が日 j を含むので、seq[j - s] が newK の窓だけが完全一致しうる。残りの日は最初の不一致で打ち切る（判定は不変）。
             for (int s = sLo; s <= sHi; s++)
             {
-                int z = 0;
+                if (seq[j - s] != newK) continue;
+                bool all = true;
                 for (int l = 0; l < d; l++)
                 {
-                    int v = (s + l == j) ? newK : schedule[i][s + l];
-                    if (v == seq[l]) z++;
+                    if (s + l != j && schedule[i][s + l] != seq[l]) { all = false; break; }
                 }
-                if (z == d) return true;
+                if (all) return true;
             }
         }
         return false;

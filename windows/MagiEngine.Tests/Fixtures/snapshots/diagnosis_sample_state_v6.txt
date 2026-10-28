@@ -1,0 +1,89 @@
+ok=false
+warn 実現不能な希望シフトが 9 件あります
+warn 連続パターン制約の重複が 1 件あります
+note groupShiftApt 適切回数: 21 件
+note shifts=10 groups=10 staff=10 days=31
+note 2世代需要(セル毎OR/AND: #4b)が有効
+bits LoadDataBit: staffN=10 termT=31 shiftK=10 assigned=310/310 allowBits=52 wishes=93 ranges=51
+bit Group V: members=3 allowed=[休 Dﾃ A4 Cｵ B4 有]
+bit Group 桐: members=1 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group S: members=1 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group SN: members=1 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group NE: members=0 allowed=[休 A4 Aｱ Cｵ Cｱ B4 有]
+bit Group Pｼ: members=1 allowed=[休 Pｼ 有]
+bit Group Pﾅ: members=0 allowed=[休 Pﾅ 有]
+bit Group B: members=1 allowed=[休 B4 有]
+bit Group 吉: members=1 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group 古: members=1 allowed=[休 Dﾃ A4 Cｵ B4 有]
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=古泉 健一, shiftSymbol=Dﾃ, count=2, lo=3, hi=5, status=LOW)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=Dﾃ, count=3, lo=4, hi=5, status=LOW)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=古泉 健一, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=古泉 健一, shiftSymbol=A4, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=古泉 健一, shiftSymbol=Cｵ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=古泉 健一, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=Dﾃ, count=5, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=A4, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=Cｵ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=山本昌幸, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=A4, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=Cｵ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=福澤俊陽, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=桒澤美幸, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=桒澤美幸, shiftSymbol=B4, count=20, lo=1, hi=23, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=桒澤美幸, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=Dﾃ, count=3, lo=3, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=A4, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=Cｵ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=佐藤直美, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=Aｱ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=Cｱ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=吉江雄貴, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=Aｱ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=金沢勇輝, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=大島愛, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=Aｱ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=モニカ, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=Aｱ, count=8, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=B4, count=1, lo=1, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=アリフ, shiftSymbol=有, count=1, lo=1, hi=1, status=OK)
+impossible ImpossibleWish(staffIndex=0, dayIndex=11, staffName=古泉 健一, groupSymbol=古, shiftSymbol=Aｱ, reason=グループ「古」では担当不可です)
+impossible ImpossibleWish(staffIndex=0, dayIndex=21, staffName=古泉 健一, groupSymbol=古, shiftSymbol=Aｱ, reason=グループ「古」では担当不可です)
+impossible ImpossibleWish(staffIndex=1, dayIndex=3, staffName=山本昌幸, groupSymbol=V, shiftSymbol=Aｱ, reason=グループ「V」では担当不可です)
+impossible ImpossibleWish(staffIndex=4, dayIndex=21, staffName=佐藤直美, groupSymbol=V, shiftSymbol=Cｱ, reason=グループ「V」では担当不可です)
+impossible ImpossibleWish(staffIndex=5, dayIndex=4, staffName=吉江雄貴, groupSymbol=吉, shiftSymbol=A4, reason=グループ「吉」では担当不可です)
+impossible ImpossibleWish(staffIndex=8, dayIndex=17, staffName=モニカ, groupSymbol=SN, shiftSymbol=Cｵ, reason=グループ「SN」では担当不可です)
+impossible ImpossibleWish(staffIndex=8, dayIndex=23, staffName=モニカ, groupSymbol=SN, shiftSymbol=A4, reason=グループ「SN」では担当不可です)
+impossible ImpossibleWish(staffIndex=9, dayIndex=17, staffName=アリフ, groupSymbol=S, shiftSymbol=A4, reason=グループ「S」では担当不可です)
+impossible ImpossibleWish(staffIndex=9, dayIndex=30, staffName=アリフ, groupSymbol=S, shiftSymbol=A4, reason=グループ「S」では担当不可です)
+dupSeq c3n:Dﾃ→A4
+guide SettingIssue(kind=WISH, where=古泉 健一 12/12(金) 希望「Aｱ」, problem=実現できない希望です（グループ「古」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「古」が「Aｱ」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=0,11, wishShift=4, wishStaffId=1, wishFingerprint=-127419390037920327, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=古泉 健一 12/22(月) 希望「Aｱ」, problem=実現できない希望です（グループ「古」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「古」が「Aｱ」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=0,21, wishShift=4, wishStaffId=1, wishFingerprint=-127419114911779217, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=山本昌幸 12/4(木) 希望「Aｱ」, problem=実現できない希望です（グループ「V」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「V」が「Aｱ」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=1,3, wishShift=4, wishStaffId=2, wishFingerprint=-126837938451298453, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=佐藤直美 12/22(月) 希望「Cｱ」, problem=実現できない希望です（グループ「V」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「V」が「Cｱ」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=4,21, wishShift=7, wishStaffId=5, wishFingerprint=-124378558277414599, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=吉江雄貴 12/5(金) 希望「A4」, problem=実現できない希望です（グループ「吉」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「吉」が「A4」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=5,4, wishShift=3, wishStaffId=6, wishFingerprint=5195437295579257959, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=モニカ 12/18(木) 希望「Cｵ」, problem=実現できない希望です（グループ「SN」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「SN」が「Cｵ」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=8,17, wishShift=6, wishStaffId=9, wishFingerprint=5197764340082961987, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=モニカ 12/24(水) 希望「A4」, problem=実現できない希望です（グループ「SN」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「SN」が「A4」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=8,23, wishShift=3, wishStaffId=9, wishFingerprint=5197764505069065116, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=アリフ 12/18(木) 希望「A4」, problem=実現できない希望です（グループ「S」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「S」が「A4」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=9,17, wishShift=3, wishStaffId=10, wishFingerprint=5198557528664665227, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=アリフ 12/31(水) 希望「A4」, problem=実現できない希望です（グループ「S」では担当不可です）, fix=本人と相談してこの希望を調整する（希望は外れます。元に戻せます）か、編集タブの『年間マスター』の『① シフト・グループ』の担当可否で、グループ「S」が「A4」を担当できるようにしてください, action=REMOVE_WISH, actionLabel=この希望を取消, wishKey=9,30, wishShift=3, wishStaffId=10, wishFingerprint=5198557886322184023, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=アリフ 12/19(金)・12/20(土) 希望「Cｱ→Aｱ」, problem=禁止の並び「Cｱ→Aｱ」に希望どうしで当たっています。希望は固定なので計算では解消できません, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「Cｱ→Aｱ」を見直してください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=CONSTRAINT, where=禁止の並び「Dﾃ→A4」, problem=同じ並びが2重に登録されています, fix=編集タブの『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「Dﾃ→A4」の重複を1つ削除してください, action=DELETE_DUP_SEQ, actionLabel=重複を1つ削除, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=c3n, seqKey=Dﾃ→A4, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
