@@ -106,11 +106,15 @@ public static class UnifiedViolationChecker
     /// hard → weightedScore → total。比較を足すときは写さずこれを使う。
     /// </summary>
     public static readonly IComparer<ViolationReport> ReportComparer = Comparer<ViolationReport>.Create((a, b) =>
+        CompareReportKeys(a.Hard, a.WeightedScore, a.Total, b.Hard, b.WeightedScore, b.Total));
+
+    /// <summary>[ReportComparer] の中身（必須→重み→合計）。報告を持たず数だけを覚えている側（置き換え前の勤務表）も同じ順で比べる。</summary>
+    public static int CompareReportKeys(long aHard, double aWeighted, int aTotal, long bHard, double bWeighted, int bTotal)
     {
-        if (a.Hard != b.Hard) return a.Hard.CompareTo(b.Hard);
-        if (a.WeightedScore != b.WeightedScore) return a.WeightedScore.CompareTo(b.WeightedScore);
-        return a.Total.CompareTo(b.Total);
-    });
+        if (aHard != bHard) return aHard.CompareTo(bHard);
+        if (aWeighted != bWeighted) return aWeighted.CompareTo(bWeighted);
+        return aTotal.CompareTo(bTotal);
+    }
 
     public static bool BetterReport(ViolationReport a, ViolationReport b) => ReportComparer.Compare(a, b) < 0;
 

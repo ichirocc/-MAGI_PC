@@ -148,9 +148,7 @@ public sealed record AnalysisTriage(
 
     /// <summary>[Android 3.727.3] <paramref name="b"/> 側が <paramref name="a"/> 側より良いか（必須→重み→合計の辞書式＝<c>ReportComparer</c> と同じ順。Kotlin <c>preDraftBetter</c>）。</summary>
     public static bool PreDraftBetter(long aHard, double aWeighted, int aTotal, long bHard, double bWeighted, int bTotal) =>
-        bHard != aHard ? bHard < aHard
-        : Math.Abs(bWeighted - aWeighted) > 1e-9 ? bWeighted < aWeighted
-        : bTotal < aTotal;
+        UnifiedViolationChecker.CompareReportKeys(bHard, bWeighted, bTotal, aHard, aWeighted, aTotal) < 0;
 
     public static string PreDraftNoticeText(string hardWord, double weighted) =>
         $"下書きに置き換える前の勤務表のほうが良い結果です（必須 {hardWord}・重み {(long)weighted}）。";
