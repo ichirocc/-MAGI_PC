@@ -229,7 +229,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             sentence = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
-            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("なおし方", EditReturn.Guided));
+            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("直し方", EditReturn.Guided));
         }
         else if (kind == HomePlanKind.DataInfeasible)
         {
@@ -237,7 +237,7 @@ public sealed partial class HomeView : UserControl
             sentence = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
             var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
-            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
+            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("直し方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
         }
         else
         {
@@ -1093,7 +1093,7 @@ public sealed partial class HomeView : UserControl
         CoveragePanel.Visibility = Visibility.Visible;
         RenderShortage(diag);
         RenderSurplus(ui, diag, editable);
-        CoverageDetailsToggle.Content = _coverageDetails ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+        Disclosure.Set(CoverageDetailsToggle, CellSheetLogic.DiagDetailsLabel, _coverageDetails);
     }
 
     /// <summary>[3.712.0] 行は事実と札だけ。見出しの長い説明と行ごとの理由・内訳は「詳しく」の中（Kotlin <c>CoverageDiagnosisCard</c>）。</summary>

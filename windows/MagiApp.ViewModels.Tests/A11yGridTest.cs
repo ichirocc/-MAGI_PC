@@ -38,4 +38,16 @@ public class A11yGridTest
         Assert.Equal(A11y.CellBorder.Outline, A11y.CellBorderOf(false, false, true, false));
         Assert.Equal(A11y.CellBorder.None, A11y.CellBorderOf(false, false, false, false));
     }
+
+    [Fact]
+    public void Disclosure_markIsVisualOnlyAndStateIsSpoken()
+    {
+        // Android 3.725.0: 見た目は「名前 ▸／▾」、読み上げは名前と状態（三角は読ませない）。行き先（null）は ▸ で状態なし。
+        Assert.Equal("ほかの操作 ▸", A11y.DisclosureText(CellSheetLogic.MoreOpsLabel, false));
+        Assert.Equal("ほかの操作 ▾", A11y.DisclosureText(CellSheetLogic.MoreOpsLabel, true));
+        Assert.Equal("凡例 ▸", A11y.DisclosureText("凡例", null));
+        Assert.Equal("開いています", A11y.DisclosureState(true));
+        Assert.Equal("閉じています", A11y.DisclosureState(false));
+        Assert.Equal("この職員のほかの変更案", CellSheetLogic.StaffOtherFixesLabel);
+    }
 }

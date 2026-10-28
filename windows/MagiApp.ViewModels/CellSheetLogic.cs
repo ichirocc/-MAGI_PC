@@ -64,6 +64,9 @@ public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days,
     public (int I, int J) Cell => (Staff, Days[0]);
 }
 
+/// <summary>巡回の位置（Kotlin <c>TourCursor</c>）。At は今の項目の添字（一覧から消えていれば null）、Next/Prev は「次」「前」の行き先（無ければ null）。</summary>
+public sealed record TourCursor(int? At, int? Next, int? Prev);
+
 /// <summary>シフトボタンの印。Recommended＝緑の点、HardRisk＝置くと必須の族が増える（警告の印）。</summary>
 public sealed record ShiftMarks(IReadOnlySet<int> Recommended, IReadOnlySet<int> HardRisk)
 {
@@ -609,6 +612,27 @@ public static class CellSheetLogic
     /// <summary>巡回の見出し「必須違反 2 / 5 ・ 禁止の並び Dﾃ→A4 ・ 10/8〜10/9」。</summary>
     public static string? TourHeading(IReadOnlyList<TourItem> items, int at) =>
         at >= 0 && at < items.Count ? $"必須違反 {at + 1} / {items.Count} ・ {items[at].Heading}" : null;
+
+    /// <summary>
+    /// [Android 3.726.0] 巡回の位置を一覧の作り直し（違反の解消・発生）に追従させる（Kotlin <c>tourCursor</c>）。<paramref name="baseList"/> は位置を決めたときの一覧、
+    /// <paramref name="baseAt"/> はその添字。今の項目（族・職員・日で照合）が <paramref name="items"/> に残っていればその位置。消えていれば、消えた項目が
+    /// 入っていた所の次を Next・前を Prev にする（添字のまま据え置くと、直した直後の「次」が 1 件飛び、前が消えると前・次とも今のセルを指す）。
+    /// </summary>
+    public static TourCursor TourCursorOf(IReadOnlyList<TourItem> baseList, int baseAt, IReadOnlyList<TourItem> items)
+    {
+        var n = items.Count;
+        if (n == 0) return new TourCursor(null, null, null);
+        static string Key(TourItem t) => $"{t.Family}|{t.Staff}|{string.Join(",", t.Days)}";
+        var index = new Dictionary<string, int>();
+        for (var i = 0; i < n; i++) index.TryAdd(Key(items[i]), i);
+        int? Find(int b) => b >= 0 && b < baseList.Count && index.TryGetValue(Key(baseList[b]), out var x) ? x : null;
+        if (Find(baseAt) is { } at) return n > 1 ? new TourCursor(at, (at + 1) % n, (at - 1 + n) % n) : new TourCursor(at, null, null);
+        int? slot = null;
+        for (var b = baseAt - 1; b >= 0 && slot is null; b--) if (Find(b) is { } f) slot = f + 1;
+        for (var b = baseAt + 1; b < baseList.Count && slot is null; b++) slot = Find(b);
+        var s = slot ?? 0;
+        return new TourCursor(null, s % n, (s - 1 + n) % n);
+    }
 
     /// <summary>巡回に入らない人員不足の件数の 1 行（0 なら null）。</summary>
     public static string? TourCovULine(int covU) => covU > 0 ? $"ほかに人員不足 {covU}人（日の印から開けます）" : null;
@@ -1949,7 +1973,7 @@ public static class CellSheetLogic
     public static string WishDayButton(string? dayShort) => string.IsNullOrWhiteSpace(dayShort) ? "希望を見る" : $"{dayShort} の希望を見る";
 
     public const string CountSectionTitle = "対象期間の勤務回数";
-    public const string MoreOpsLabel = "ほかの操作 ▸";
+    public const string MoreOpsLabel = "ほかの操作";
 
     /// <summary>セルのシートの「対象期間の勤務回数」は、その職員に回数の族（下限・上限・適切回数など）があるときだけ出す。</summary>
     public static bool ShowCountSection(IEnumerable<string> countKeys, int i, IReadOnlyList<string> lines) =>
@@ -1970,7 +1994,7 @@ public static class CellSheetLogic
 
     public const string ViewFixesButton = "変更案を見る";
 
-    public const string StaffOtherFixesLabel = "この職員のほかの変更案 ▸";
+    public const string StaffOtherFixesLabel = "この職員のほかの変更案";
 
     /// <summary>職員の勤務状況で最初から選んでおく行（選べる行＝勤務のある行が 1 つだけのとき）。</summary>
     public static int? StaffSheetPreselect(IEnumerable<int> shiftIdxs)
@@ -2030,7 +2054,6 @@ public static class CellSheetLogic
 
     /// <summary>[3.712.0] 診断カードの行は 1 行の事実と札だけ。理由・内訳はカードの末尾の「詳しく」に 1 回だけ（Kotlin と同じ文言）。</summary>
     public const string DiagDetailsLabel = "詳しく";
-    public const string DiagDetailsClose = "詳しくを閉じる";
     public const string ShortageTagInfeasible = "担当が足りない";
     public const string ShortageMovableLine = "休みや余裕のある勤務から移せます";
     public const string ForbiddenRetryNote = "玉突きか隣の日の調整で崩せます。もう一度つくると直る場合があります";

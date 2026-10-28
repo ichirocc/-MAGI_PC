@@ -305,7 +305,7 @@ public sealed partial class ScheduleView : UserControl
         SearchLegendBar.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) return;
         var title = "検索・凡例" + (!_searchLegendOpen && _nameQuery.Length > 0 ? $"（検索中: {_nameQuery}）" : "");
-        SearchLegendToggle.Content = $"{title}  {(_searchLegendOpen ? "閉じる ▾" : "開く ▸")}";
+        Disclosure.Set(SearchLegendToggle, title, _searchLegendOpen);
         SearchLegendPanel.Visibility = _searchLegendOpen ? Visibility.Visible : Visibility.Collapsed;
         if (!_searchLegendOpen) return;
         if (SearchBox.Text != _nameQuery) SearchBox.Text = _nameQuery;
@@ -1652,12 +1652,13 @@ public sealed partial class ScheduleView : UserControl
                     foreach (var c in ChainFixPreview.Of(s, snap, ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes) col.Children.Add(Small(c));
                     // [3.712.0] 日ごとの人数と回数の影響は確認の画面が言う＝案のカードでは「詳しく」の中だけ（Android と同じ）。
                     var impactMore = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
-                    var impactToggle = new HyperlinkButton { Content = CellSheetLogic.DiagDetailsLabel, MinHeight = 44 };
+                    var impactToggle = new HyperlinkButton { MinHeight = 44 };
+                    Disclosure.Set(impactToggle, CellSheetLogic.DiagDetailsLabel, false);
                     impactToggle.Click += (_, _) =>
                     {
                         var opened = impactMore.Visibility != Visibility.Visible;
                         impactMore.Visibility = opened ? Visibility.Visible : Visibility.Collapsed;
-                        impactToggle.Content = opened ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+                        Disclosure.Set(impactToggle, CellSheetLogic.DiagDetailsLabel, opened);
                     };
                     col.Children.Add(impactToggle);
                     col.Children.Add(impactMore);
@@ -2442,7 +2443,8 @@ public sealed partial class ScheduleView : UserControl
             else
             {
                 if (c1Stuck) fixHost.Children.Add(C1StuckButtons(() => dialog.Hide()));
-                var fold = new HyperlinkButton { Content = general ? "この職員のほかの変更案を閉じる" : CellSheetLogic.StaffOtherFixesLabel, MinHeight = 48 };
+                var fold = new HyperlinkButton { MinHeight = 48 };
+                Disclosure.Set(fold, CellSheetLogic.StaffOtherFixesLabel, general);
                 fold.Click += (_, _) => { general = !general; Mount(); };
                 fixHost.Children.Add(fold);
                 if (general) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
@@ -2521,6 +2523,25 @@ public sealed partial class ScheduleView : UserControl
     /// <summary>違反のあるセル: 違反の一覧・この職員の回数・偏り・開いた時点で始める直し方探し（Kotlin セルシート）と、
     /// その下にいつでも使える手動の割当ボタン。閉じると探索を取り消す。</summary>
     private CancellationTokenSource? _marksCts;
+    // 巡回の位置を決めたときの一覧とその添字（Kotlin tourBase/tourAt）。作り直された一覧へは TourCursorOf で追従する。
+    private IReadOnlyList<TourItem> _tourBase = Array.Empty<TourItem>();
+    private int _tourAt;
+
+    /// <summary>このセルを開いたときの巡回の位置。覚えている項目がこのセルなら（直して消えた項目も）そこから、無ければこのセルの最初の項目から始める。</summary>
+    private TourCursor ResolveTour(int i, int j, IReadOnlyList<TourItem> tourItems)
+    {
+        static bool Has(TourItem t, int i, int j) => t.Staff == i && t.Days.Contains(j);
+        if (_tourAt >= 0 && _tourAt < _tourBase.Count && Has(_tourBase[_tourAt], i, j))
+        {
+            var c = CellSheetLogic.TourCursorOf(_tourBase, _tourAt, tourItems);
+            if (c.At is null || Has(tourItems[c.At.Value], i, j)) return c;
+        }
+        var at = tourItems.ToList().FindIndex(t => Has(t, i, j));
+        if (at < 0) return new TourCursor(null, null, null);
+        _tourBase = tourItems; _tourAt = at;
+        return CellSheetLogic.TourCursorOf(_tourBase, _tourAt, tourItems);
+    }
+
     /// <summary>セル編集の全体表示（既定＝ちら見。閉じると戻す）。</summary>
     private bool _cellSheetExpanded;
     // ちら見の「変更案を探す」は大きく開いて、このセルの変更案の一覧を開いた状態から始める。
@@ -2571,7 +2592,10 @@ public sealed partial class ScheduleView : UserControl
         // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
         //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
         var tourItems = _vm.HardViolationItemsFor(LabelOf);
-        var tourAt = tourItems.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        // [Android 3.726.0] 前・次は項目の位置で動く（同じセルが 2 件の違反に属しても進める）。直して消えた項目は、入っていた所の次・前へ。
+        var tour = ResolveTour(i, j, tourItems);
+        var tourAt = tour.At ?? -1;
+        void GoTour(int to) { var c = tourItems[to].Cell; _tourBase = tourItems; _tourAt = to; FocusCell(c.I, c.J); Reopen(c.I, c.J, 0); }
         // 対象の行と札（S-2）: 今の勤務はここで言う。巡回中の必須は「必須 2/5」。
         var target = CellSheetLogic.CellSheetTarget(name, ScheduleUtil.FormatDay(ui.StartDate, j), cur >= 0 ? Sym(cur) : null);
         var badge = CellSheetLogic.CellSheetBadge(status.Severity, tourAt >= 0 ? tourAt : null, tourItems.Count);
@@ -2579,14 +2603,13 @@ public sealed partial class ScheduleView : UserControl
         // 巡回中にシートを開いている間は、下部バーの違反ナビを隠す（シートの［◀ 前］［次 ▶］と重複）。
         SetVioNavHidden(tourAt >= 0);
         flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
-        var tourNext = tourItems.Count == 0 ? null : tourItems[tourAt < 0 ? 0 : (tourAt + 1) % tourItems.Count];
-        if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0) && step == 0)
+        int? tourNext = tour.Next ?? (tourAt < 0 && tour.Prev is null && tourItems.Count > 0 ? 0 : null);
+        if (tourNext is { } nextAt && step == 0)
         {
-            var tour = new Button { Content = "次の違反 ▶", MinHeight = 48 };
-            var nx = tourNext.Cell;
-            tour.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
-            Grid.SetColumn(tour, 1);
-            head.Children.Add(tour);
+            var tourButton = new Button { Content = "次の違反 ▶", MinHeight = 48 };
+            tourButton.Click += (_, _) => GoTour(nextAt);
+            Grid.SetColumn(tourButton, 1);
+            head.Children.Add(tourButton);
         }
         head.Children.Add(MakeUndoButton(2));
         panel.Children.Add(head);
@@ -2605,7 +2628,8 @@ public sealed partial class ScheduleView : UserControl
             ShowPeek();
             return;
         }
-        var collapse = new Button { Content = "小さく表示 ▾", MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        var collapse = new Button { MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        Disclosure.Set(collapse, "小さく表示", true);
         collapse.Click += (_, _) => { _cellSheetExpanded = false; Reopen(i, j, mode); };
         panel.Children.Insert(0, collapse);
 
@@ -2641,15 +2665,13 @@ public sealed partial class ScheduleView : UserControl
                 Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
             });
             r2.Children.Add(causeRow);
-            if (tourAt >= 0 && tourItems.Count > 1)
+            if (tour.Prev is { } pv && tour.Next is { } nx)
             {
                 var nav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-                var pv = tourItems[(tourAt - 1 + tourItems.Count) % tourItems.Count].Cell;
-                var nx = tourItems[(tourAt + 1) % tourItems.Count].Cell;
                 var pb = new Button { Content = "◀ 前", MinHeight = 48 };
                 var nb = new Button { Content = "次 ▶", MinHeight = 48 };
-                pb.Click += (_, _) => { FocusCell(pv.I, pv.J); Reopen(pv.I, pv.J, 0); };
-                nb.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
+                pb.Click += (_, _) => GoTour(pv);
+                nb.Click += (_, _) => GoTour(nx);
                 nav.Children.Add(pb);
                 nav.Children.Add(nb);
                 Grid.SetColumn(nav, 1);
@@ -2701,8 +2723,8 @@ public sealed partial class ScheduleView : UserControl
                 };
                 acts.Children.Add(b);
             }
-            var more = new Button { Content = "詳しく ▸", MinHeight = 48, MinWidth = 64 };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "問題の説明と直し方を表示");
+            var more = new Button { MinHeight = 48, MinWidth = 64 };
+            Disclosure.Set(more, "詳しく", false);
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
             peek.Children.Add(extra);
@@ -3069,12 +3091,13 @@ public sealed partial class ScheduleView : UserControl
                 // [Android 3.683.0] 希望・手動固定・ルールの見直しは「ほかの操作」に畳む（主の操作を先に見せる）。
                 if (moreOps.Children.Count > 0)
                 {
-                    var moreToggle = new HyperlinkButton { Content = CellSheetLogic.MoreOpsLabel, MinHeight = 48 };
+                    var moreToggle = new HyperlinkButton { MinHeight = 48 };
+                    Disclosure.Set(moreToggle, CellSheetLogic.MoreOpsLabel, false);
                     moreToggle.Click += (_, _) =>
                     {
                         var nowOpen = moreOps.Visibility != Visibility.Visible;
                         moreOps.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
-                        moreToggle.Content = nowOpen ? "ほかの操作を閉じる" : CellSheetLogic.MoreOpsLabel;
+                        Disclosure.Set(moreToggle, CellSheetLogic.MoreOpsLabel, nowOpen);
                     };
                     panel.Children.Add(moreToggle);
                     panel.Children.Add(moreOps);
