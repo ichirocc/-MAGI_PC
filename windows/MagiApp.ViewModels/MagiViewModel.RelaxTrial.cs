@@ -150,6 +150,7 @@ public sealed partial class MagiViewModel
         pressed = pressed with { Applied = changes };
         Ui.RelaxFlow = pressed;
         LogOp("I", RelaxApproval.ApprovalLog(pressed.DecisionId!, pressed.TrialId, reason, changes));
+        AgentDecisionApproved();
         var v = RelaxAndApply(token);
         Ui.RelaxFlow = RelaxApproval.Finish(pressed, v);
     }

@@ -140,7 +140,7 @@ public class WishTrialCandidatesTest
         Assert.Equal("希望を調整して外すと必須違反が確実に1件減り、再作成するとさらに2件減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 5, 2)));
         Assert.Equal("希望を調整して外すと必須違反が確実に1件減ります。", NextActionGuide.WishTrialText(R(5, 4, 5, 4)));
         Assert.Equal("希望を調整して外し、再作成すると、必須違反が2件減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 5, 3)));
-        Assert.Equal("この希望を調整して外しても、必須は減らない見込みです（必須 5件 → 5件）。すべての組み合わせを試したわけではありません。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
+        Assert.Equal("この希望を外しても、必須は減らない見込みです（5件 → 5件、全通りは試していません）。", NextActionGuide.WishTrialText(R(5, 5, 5, 5)));
         Assert.Equal("再作成するだけの場合より、さらに1件減る見込みです。", NextActionGuide.WishTrialText(R(5, 5, 3, 2)));
         Assert.Equal("希望を外さなくても、再作成するだけで同じだけ減る見込みです。", NextActionGuide.WishTrialText(R(5, 4, 3, 3)));
         Assert.Equal("試算できませんでした（未割当のセルがあります）。", NextActionGuide.WishTrialText(new WishTrial.Unavailable("未割当のセルがあります")));

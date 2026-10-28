@@ -62,7 +62,7 @@ public class Review3714Test
         Assert.Equal("問題一覧", AnalysisTriage.NoFixListButton);
         Assert.Equal("閉じる", AnalysisTriage.NoFixCloseButton);
         Assert.Equal("希望の前日ルールに当たります", CellSheetLogic.CellRuleLine("c3w", Label));
-        Assert.Equal("詳しく見る", CellSheetLogic.CellDetailButton);
+        Assert.Equal("詳しく ▸", CellSheetLogic.CellDetailButton);
         Assert.Equal("設定", CellSheetLogic.SettingsHeading);
         Assert.Equal("組む時間 1分", CellSheetLogic.BudgetShortLine(60));
         Assert.Equal("組む時間 10秒", CellSheetLogic.BudgetShortLine(10));
@@ -71,7 +71,7 @@ public class Review3714Test
         Assert.Equal("希望・人数・基本", CellSheetLogic.EditTabLine);
         Assert.Equal("まだ作っていません", CellSheetLogic.HomeHeadline(HomePlanKind.Make));
         Assert.Equal("データを開く", CellSheetLogic.EmptyStateTitle);
-        Assert.Equal("開く", ConsultList.Open);
+        Assert.Equal("勤務を見る", ConsultList.Open);
     }
 
     [Fact]

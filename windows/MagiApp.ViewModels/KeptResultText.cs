@@ -22,7 +22,7 @@ public static class KeptResultText
 
     /// <summary>前の勤務表のままにしたときのお知らせ（比べた結果は件数で言う。内部の評価点は出さない）。</summary>
     public static string Screen(IReadOnlyDictionary<string, int> nowBreakdown, IReadOnlyDictionary<string, int> prevBreakdown) =>
-        $"再作成した案は前の勤務表より良くなかったため採用していません（再作成した案：{AnalysisTriage.ReportCountsText(nowBreakdown)}／前の勤務表：{AnalysisTriage.ReportCountsText(prevBreakdown)}）。勤務表は変わっていません。";
+        $"再作成の案は前より良くなかったので採用していません（再作成：{AnalysisTriage.ReportCountsText(nowBreakdown)}／前：{AnalysisTriage.ReportCountsText(prevBreakdown)}）。勤務表はそのままです。";
 
     public const string KeptTitle = "再作成しましたが、前の勤務表のほうが良かったため前のままです";
 

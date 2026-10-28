@@ -182,14 +182,13 @@ public sealed partial class MagiViewModel
             "（書き込み中にアプリが強制終了すると自動保存が使えなくなる可能性があります）");
     }
 
-    internal void ReportAutoSave(bool ok)
+    internal SaveOutcome ReportAutoSave(bool ok)
     {
-        var wasOk = _saveFail.LastOk;
-        var dialog = _saveFail.OnResult(ok, _saveRetrying);
-        if (dialog is not null || ok) Ui.SaveFailDialog = dialog;
-        if (ok == wasOk) return;
-        if (ok) LogOp("I", "自動保存が復旧しました");
-        else Notify(CellSheetLogic.SaveFailedNotice, "W");
+        var r = _saveFail.Report(ok, _saveRetrying);
+        if (r.SetDialog) Ui.SaveFailDialog = r.Dialog;
+        if (r.Notice == SaveNotice.Recovered) LogOp("I", "自動保存が復旧しました");
+        else if (r.Notice == SaveNotice.Failed) Notify(CellSheetLogic.SaveFailedNotice, "W");
+        return r;
     }
 
     /// <summary>「もう一度保存する」（ホーム・設定・上部の語・ダイアログ）。失敗したらダイアログを「まだ保存できていません」で出し直す。</summary>

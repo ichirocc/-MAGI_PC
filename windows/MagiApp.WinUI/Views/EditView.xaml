@@ -387,7 +387,7 @@
 
                 <TextBlock Text="登録済みのルール" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />
                 <HyperlinkButton x:Name="ConstraintHelpToggle" Padding="0" Click="OnConstraintHelpToggleClick"
-                                 Content="ⓘ 詳しい説明（それぞれの条件の意味）" />
+                                 Content="ⓘ 詳しい説明（それぞれの条件の意味） ▸" />
                 <StackPanel x:Name="ConstraintHelpHost" Spacing="8" Visibility="Collapsed" />
                 <StackPanel x:Name="ConstraintListHost" Spacing="2" />
 

@@ -39,7 +39,7 @@ public class Review3705Test
         var shortDiag = new CoverageDiagnosis(3, 0, 3, new[] { Shortfall(4), Shortfall(4, 1), Shortfall(9) }, Array.Empty<string>(), 0, Array.Empty<CoverageSurplus>());
         var guided = AnalysisTriage.AnalysisSummaryOf(Made(u => { u.Breakdown = new Dictionary<string, int> { ["covU"] = 3 }; u.CoverageDiag = shortDiag; }), 0, null);
         Assert.Equal(AnalysisPrimary.Guided, guided.Primary);
-        Assert.Equal("なおし方を見る（2日）", guided.PrimaryLabel);
+        Assert.Equal("直し方を見る（2日）", guided.PrimaryLabel);
         Assert.Equal(AnalysisPrimary.None, AnalysisTriage.AnalysisSummaryOf(Made(u => u.BestHard = 0L), 3, null).Primary);
         Assert.Equal(AnalysisPrimary.None, AnalysisTriage.AnalysisSummaryOf(Made(u => u.Running = true), 3, null).Primary);
         Assert.Equal(AnalysisPrimary.None, AnalysisTriage.AnalysisSummaryOf(Fresh(), 0, null).Primary);

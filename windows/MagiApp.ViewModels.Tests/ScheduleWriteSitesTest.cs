@@ -16,6 +16,7 @@ public class ScheduleWriteSitesTest
         "ApplyStructure", "ApplyStructureWithMessage",                   // 編集タブ
         "RelaxAndApply", "RestoreBeforeRelax", "Restore",                // 設定の緩和と、その事後確認・保存失敗の復旧（Restore＝RelaxRollback の控え）
         "ApplyFixSuggestion",                                            // 改善手（FixApplyGate を通る）
+        "RunAgentCoreAsync",                                             // 代行役（AgentLoop の各手が FixApplyGate を通る）
     };
     private static readonly Regex Write = new(@"(\b_currentSchedule\s*=[^=>]|\bUi\.Schedule\s*=[^=>]|\bSchedule\s*=\s*[a-zA-Z])");
     private static readonly Regex Fn = new(@"^\s*(?:public|private|internal|protected)[^=;(]*?\b([A-Za-z0-9_]+)\s*(?:<[^>]*>)?\s*\(");

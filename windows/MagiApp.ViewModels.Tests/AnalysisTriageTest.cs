@@ -168,10 +168,10 @@ public class AnalysisTriageTest
     public void HomeTargetLabelNamesFirstItem()
     {
         Assert.Equal("アリフ 10/8の希望を見る", AnalysisTriage.HomeTargetLabel(AnalysisTriage.HomeWishButton, "アリフ", "10/8"));
-        Assert.Equal("10/8のなおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", null, "10/8"));
-        Assert.Equal("なおし方を見る", AnalysisTriage.HomeTargetLabel("なおし方を見る", "10/15(水) Cｵ", null));
+        Assert.Equal("10/8の直し方を見る", AnalysisTriage.HomeTargetLabel("直し方を見る", null, "10/8"));
+        Assert.Equal("10/15(水) Cｵの直し方を見る", AnalysisTriage.HomeTargetLabel("直し方を見る", "10/15(水) Cｵ", null));   // 漢字にして 18 字に収まった
         Assert.Equal("残っている問題を見る", AnalysisTriage.HomeTargetLabel("残っている問題を見る", "福澤さん 禁止の並び", null));
-        foreach (var b in new[] { AnalysisTriage.HomeWishButton, "なおし方を見る", "直す1手を見る", CellSheetLogic.HomeListButton })
+        foreach (var b in new[] { AnalysisTriage.HomeWishButton, "直し方を見る", "直す1手を見る", CellSheetLogic.HomeListButton })
             Assert.True(AnalysisTriage.HomeTargetLabel(b, "アイウエオ", "10/18").Length <= AnalysisTriage.HomeButtonMaxChars);
         Assert.Equal("直す1手を見る", AnalysisTriage.HomeTargetLabel("直す1手を見る", null, null));
     }

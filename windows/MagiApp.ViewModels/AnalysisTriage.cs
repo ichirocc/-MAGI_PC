@@ -158,7 +158,7 @@ public sealed record AnalysisTriage(
     public static RepeatedEmptyAction? RepeatedEmptyActionOf(bool wishOnTarget, bool settingIssueKnown) =>
         wishOnTarget ? RepeatedEmptyAction.Wishes : settingIssueKnown ? RepeatedEmptyAction.Settings : null;
 
-    public static string RepeatedEmptyActionLabel(RepeatedEmptyAction a) => a == RepeatedEmptyAction.Wishes ? "希望を見る" : "設定の確認を見る";
+    public static string RepeatedEmptyActionLabel(RepeatedEmptyAction a) => a == RepeatedEmptyAction.Wishes ? "希望を見る" : "設定を開く";
 
     /// <summary>SettingIssue の種類 → 画面に出す見出し（英字符号を出さない）。</summary>
     private static string IssueKindLabel(IssueKind kind) => kind switch
@@ -220,7 +220,7 @@ public sealed record AnalysisTriage(
                 ? $"{run.StaffName}さんの {DayText.Range(startDate, run.StartDay, run.StartDay + Math.Max(run.Cells.Count, 1) - 1)} の「{run.SeqLabel}」は、この希望・担当のままでは崩せません。{C3nWallFix}"
             : "崩す手が残っています。下の行から直し方を探せます。",
         "covU" => coverage is null || !coverage.HasShortage ? ""
-            : coverage.AllBlockedNow ? $"いまの希望のままでは、試した入れ替えの範囲で埋まりませんでした（{coverage.TotalShortfall}人・自動作成で見つかる場合があります）。"
+            : coverage.AllBlockedNow ? $"試した入れ替えでは埋まりませんでした（{coverage.TotalShortfall}人）。自動作成なら埋まる場合があります。"
             : coverage.ProvenBlockedSlots > 0 ? $"{coverage.ProvenBlockedSlots}枠はいまの希望のままでは埋まりません。"
             : coverage.SearchMissSlots > 0 ? $"{coverage.SearchMissSlots}枠は試した入れ替えでは埋まりませんでした。"
             : "担当を動かせば埋まる見込みです。",
@@ -257,7 +257,7 @@ public sealed record AnalysisTriage(
             ? "作成後も残っている項目です。設定を変えないと消えないものは上に分けています。"
             : ui.RelaxedBoard
                 ? "設定を緩めて手順を当てた盤面の概算です（再作成する前）。"
-                : "実行前の概算です。期間の制約・禁止の並びなど、設定の組み合わせによっては、つくったあとも残る場合があります。";
+                : "実行前の概算です。設定の組み合わせによっては、つくったあとも残る場合があります。";
         return new AnalysisTriage(computed, blockers, AggregateIssues(MagiEngine.V6.SettingIssues.FixItems(ui.SettingIssues)), searching, ok, busy, note);
     }
 
@@ -299,7 +299,7 @@ public sealed record AnalysisTriage(
         var label = primary switch
         {
             AnalysisPrimary.Tour => FixOutcomeText.GuidedTourButton(tourCount),
-            AnalysisPrimary.Guided => $"なおし方を見る（{shortDays}日）",
+            AnalysisPrimary.Guided => $"直し方を見る（{shortDays}日）",
             _ => null,
         };
         return new AnalysisSummary(sentence, points, primary, label);

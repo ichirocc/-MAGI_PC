@@ -20,8 +20,8 @@ namespace MagiApp.WinUI.Views;
 
 /// <summary>
 /// [フェーズ9→データ入出力] 「設定」タブ。既存の <see cref="MagiViewModel"/> セッター（<c>SetWorkers</c>/
-/// <c>SetBudget</c>/<c>SetV6Algorithm</c>/<c>SetSoftPolish</c>/<c>SetBlockSwapC3nFilter</c>/
-/// <c>SetSearchStrength</c>/<c>SetC1MoveARepair</c>、いずれもテスト済み）への薄い配線。
+/// <c>SetBudget</c>/<c>SetV6Algorithm</c>/<c>SetSoftPolish</c>/<c>SetAgentAuto</c>/
+/// <c>SetSearchStrength</c>、いずれもテスト済み）への薄い配線。
 ///
 /// [双方向反映のガード] コントロールの初期値を <see cref="Render"/> でプログラム的に設定すると、
 /// その代入自体が各コントロールの <c>ValueChanged</c>/<c>Toggled</c>/<c>SelectionChanged</c> を
@@ -91,17 +91,17 @@ public sealed partial class SettingsView : UserControl
             SaveFailedBannerText.Text = CellSheetLogic.HomeSaveFailedLine;
             ChangeBudgetButton.Style = saveFailed ? null : (Style)Application.Current.Resources["AccentButtonStyle"];
             SoftPolishToggle.IsOn = ui.SoftPolish;
+            AgentAutoToggle.IsOn = ui.AgentAuto;
+            AgentAutoToggle.Header = AgentText.ToggleLabel;
+            AgentAutoNote.Text = AgentText.ToggleNote;
         LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
-            BlockSwapC3nFilterToggle.IsOn = ui.BlockSwapC3nFilter;
             var strengthTag = ui.SearchStrength.ToString();
             SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
             SearchStrengthCombo.IsEnabled = !ui.Running;
             BackgroundRunButton.IsEnabled = ui.Loaded && !ui.Running;
             AptFairUnguardedToggle.IsOn = ui.AptFairToleranceUnguarded;
             AptFairUnguardedToggle.IsEnabled = !ui.Running && ui.SearchStrength == SearchStrength.Thorough;
-            C1MoveARepairToggle.IsOn = ui.C1MoveARepair;
-            C1MoveARepairToggle.IsEnabled = !ui.Running;
 
             var tag = ui.V6Algorithm.ToString();
             var match = AlgorithmCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == tag);
@@ -685,10 +685,10 @@ public sealed partial class SettingsView : UserControl
         _vm.SetSoftPolish(SoftPolishToggle.IsOn);
     }
 
-    private void OnBlockSwapC3nFilterToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private void OnAgentAutoToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
-        _vm.SetBlockSwapC3nFilter(BlockSwapC3nFilterToggle.IsOn);
+        _vm.SetAgentAuto(AgentAutoToggle.IsOn);
     }
 
     private void OnSearchStrengthChanged(object sender, SelectionChangedEventArgs e)
@@ -703,12 +703,6 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         _vm.SetAptFairToleranceUnguarded(AptFairUnguardedToggle.IsOn);
-    }
-
-    private void OnC1MoveARepairToggled(object sender, RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        _vm.SetC1MoveARepair(C1MoveARepairToggle.IsOn);
     }
 
     private void OnAlgorithmChanged(object sender, SelectionChangedEventArgs e)

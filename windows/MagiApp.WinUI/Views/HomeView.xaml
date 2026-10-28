@@ -59,6 +59,8 @@
 
             <Border x:Name="NextActionCard" CornerRadius="{StaticResource MagiCornerSM}" Padding="20">
                 <StackPanel Spacing="14">
+                    <!-- [Android 3.724.0] 代行役（AX）の記録は主カードの先頭（別のカードにしない）。 -->
+                    <StackPanel x:Name="AgentHost" Spacing="8" Visibility="Collapsed" />
                     <!-- CREATION: 自動作成の結果（作成の完了＝配布できる、とは言わない）と、保存に失敗したときの「もう一度保存する」。 -->
                     <!-- [Android 3.719.0 読み上げ] 作成の終わり・探索中の状態・進捗は LiveSetting＝画面を触らなくてもナレーターが読む。 -->
                     <StackPanel x:Name="CreationHost" Spacing="2" AutomationProperties.LiveSetting="Polite" />
@@ -124,7 +126,7 @@
                     CornerRadius="{StaticResource MagiCornerSM}" Padding="12" Visibility="Collapsed">
                 <StackPanel Spacing="6">
                     <TextBlock x:Name="ConsultTitle" Style="{StaticResource MagiTitleMediumTextStyle}" />
-                    <TextBlock Text="関係者に確認してから決める項目です。確認できたら「済」を押してください（アプリを閉じると消えます。書き出しは止めません）。" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
+                    <TextBlock Text="関係者に確かめてから決める項目です。確認できたら「済」を押してください（アプリを閉じると消えます）。" TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
                     <StackPanel x:Name="ConsultListHost" Spacing="4" />
                 </StackPanel>
             </Border>
@@ -142,6 +144,8 @@
                 </StackPanel>
             </Border>
 
+            <!-- [Android 3.724.0] 原因の診断は 1 つに畳む（縦に長すぎた）。 -->
+            <HyperlinkButton x:Name="DiagFoldButton" Click="OnDiagFoldClick" MinHeight="48" HorizontalAlignment="Stretch" Visibility="Collapsed" />
             <StackPanel x:Name="CopilotCard" Spacing="10">
                 <Border x:Name="ImpossibleWishPanel" Background="{StaticResource MagiErrorContainerBrush}"
                         CornerRadius="{StaticResource MagiCornerSM}" Padding="12">
@@ -183,7 +187,7 @@
                         <StackPanel Spacing="4">
                             <TextBlock Text="解けるようにするには（担当追加の案）" Style="{StaticResource MagiTitleSmallTextStyle}" />
                             <StackPanel x:Name="RelaxationListHost" Spacing="2" />
-                            <TextBlock Text="※ 担当追加の提案です。設定は変えません。採用するときは編集タブ＞年間マスター①で担当を追加してください。"
+                            <TextBlock Text="※ 担当追加の提案です（設定は変えません）。採用するなら年間マスター①で追加してください。"
                                        TextWrapping="Wrap" Style="{StaticResource MagiLabelMediumTextStyle}" Opacity="0.8" />
                         </StackPanel>
                     </Border>
@@ -201,7 +205,7 @@
                 <TextBlock Text="他の案" FontSize="16" FontWeight="SemiBold" />
                 <TextBlock x:Name="AlternativesWorseText" TextWrapping="Wrap" FontSize="14" Opacity="0.8" />
                 <TextBlock TextWrapping="Wrap" FontSize="14" Opacity="0.8"
-                           Text="案を押すと、反映する前に確かめます（反映後も「元に戻す」で取り消せます）。" />
+                           Text="案を押すと、反映する前に確かめます。" />
                 <StackPanel x:Name="AlternativesListHost" Spacing="4" />
             </StackPanel>
         </StackPanel>

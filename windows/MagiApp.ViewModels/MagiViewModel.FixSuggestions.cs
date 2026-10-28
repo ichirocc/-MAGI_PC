@@ -75,6 +75,7 @@ public sealed partial class MagiViewModel
     /// <param name="allDays">同じ勤務の人員不足の日々をまとめて見る（Kotlin 3.673.0）。対象は <see cref="CellSheetLogic.MultiNeedTarget"/>。</param>
     public void FindFixSuggestions(int? focusStaff = null, int? focusShift = null, string focusKey = "", int? exceptStaff = null, int? day = null, bool quick = false, bool allDays = false, bool auto = false)
     {
+        if (auto && Ui.AgentRunning) return;   // 代行が当て終えた盤面で、ホームの自動の探索がもう一度走る
         var st = _state;
         if (st is null) return;
         var sched = _currentSchedule;

@@ -83,45 +83,6 @@ public class MagiViewModelTest
         Assert.Contains("[W]", vm.Ui.OpLog[0]);
     }
 
-    [Fact]
-    public void SetBlockSwapC3nFilterUpdatesUiAndPolishGate()
-    {
-        var original = PolishGate.FilterC3nIncrease; // [3.518.0] 既定がtrueへ変わったため元の値を保存して戻す
-        var vm = new MagiViewModel();
-        try
-        {
-            vm.SetBlockSwapC3nFilter(false);
-            Assert.False(vm.Ui.BlockSwapC3nFilter);
-            Assert.False(PolishGate.FilterC3nIncrease);
-        }
-        finally
-        {
-            PolishGate.FilterC3nIncrease = original; // 他テストへ漏らさない
-        }
-    }
-
-    [Fact]
-    public void SetC1MoveARepairWiresPolishGate()
-    {
-        var vm = new MagiViewModel();
-        try
-        {
-            Assert.False(vm.Ui.C1MoveARepair);
-            Assert.False(PolishGate.C1MoveARepair);
-            vm.SetC1MoveARepair(true);
-            Assert.True(vm.Ui.C1MoveARepair);
-            Assert.True(PolishGate.C1MoveARepair);
-            SearchStrength.Normal.Apply();
-            Assert.True(PolishGate.C1MoveARepair);
-            vm.SetC1MoveARepair(false);
-            Assert.False(PolishGate.C1MoveARepair);
-        }
-        finally
-        {
-            PolishGate.C1MoveARepair = false;
-        }
-    }
-
     // [Kotlin SearchStrengthTest 1:1]
     [Fact]
     public void ThoroughSetsFourFlagsAndNormalRestoresDefaults()

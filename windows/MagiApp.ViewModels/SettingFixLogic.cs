@@ -13,7 +13,7 @@ public static class SettingFixLogic
 
     public const string WishAlreadyRemovedMessage = "この希望はすでに外れています";
 
-    public const string WishStaleMessage = "診断のあとで職員・担当できるシフト・希望などの設定が変わったため、取り消しませんでした。診断をやり直してください";
+    public const string WishStaleMessage = "診断のあとで設定が変わったため、取り消しませんでした。診断をやり直してください";
 
     /// <summary>[3.687.0/R02] 診断した職員を ID で今の並びに引き直した希望のキー（ID を持たない古い診断は元のキー、職員がいなければ null）。</summary>
     public static string? CurrentWishKey(MagiState s, SettingIssue issue)

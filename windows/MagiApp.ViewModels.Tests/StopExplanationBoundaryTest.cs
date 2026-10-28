@@ -20,7 +20,7 @@ public class StopExplanationBoundaryTest
     public void FinalBreakdownUnitsWinOverTheCount()
     {
         var e = StopExplanation.Of(S(V6FinalPort.StopKind.Deadline, 3, early: false), new Dictionary<string, int> { ["covU"] = 1, ["c3n"] = 2 })!;
-        Assert.Contains("最終結果の必須違反は 2件・1人です", e.Line);
+        Assert.Contains("残る必須違反は 2件・1人です", e.Line);
     }
 
     [Fact]

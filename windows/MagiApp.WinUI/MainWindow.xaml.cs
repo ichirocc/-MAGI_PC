@@ -59,6 +59,11 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += OnAppWindowClosing;
         _vm.Ui.PropertyChanged += OnUiChangedForMessageBar;
         _vm.Ui.PropertyChanged += (_, _) => RenderShell();
+        // 代行役（AX）: 作成の直後に必須違反が残っていれば、勤務の変更だけを自動で当てる（条件と未見の盤面かは VM が判定）。
+        _vm.Ui.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(UiState.Running) or nameof(UiState.EngineRan) or nameof(UiState.BestHard) or nameof(UiState.CheckRev)) _vm.MaybeRunAgent();
+        };
         ShowTab("home");
         UpdateMessageBar();
         RenderShell();
@@ -290,12 +295,15 @@ public sealed partial class MainWindow : Window
         BottomBar.Visibility = ui.Loaded || ui.Running ? Visibility.Visible : Visibility.Collapsed;
         UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
         RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
-        var stopping = ui.Running || ui.FixSearching;
+        var stopping = ui.Running || ui.FixSearching || ui.AgentRunning;
         if (ui.Running) CondEdited = false;
         MainActionButton.Content = stopping ? "■ やめる" : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";
         MainActionButton.IsEnabled = stopping || ui.Loaded;
+        // ホームの主カードが［勤務表をつくる］を出す段は、下部バーの同じボタンを隠す（1 画面に同じボタンを 2 つ置かない）。
+        MainActionButton.Visibility = _currentTag == "home" && CellSheetLogic.HomeCardShowsMake(ui.Running, ui.FixSearching, ui.HasResult,
+            ui.DraftStage && ui.EngineRan, ui.CoverageDiag?.AllInfeasible == true) ? Visibility.Collapsed : Visibility.Visible;
         // ホームでは思考誘導カードの大ボタンが主操作＝下部バーは外枠に落とす（主操作は画面に 1 つ、統合仕様 INV-09）。
-        // 作成直後の自動探索（FixSearching）はホームのカードの中の「やめる」で止める＝下部バーは外枠のまま（3.698.0）。
+        // 作成直後の自動探索（FixSearching）を止めるのはここだけ（ホームのカードに同じボタンを置かない）。塗りは主カードに譲る（INV-09）。
         // 分析タブも状態の段に主ボタンがある間は外枠（Android 3.705.0）。設定タブも外枠（Android 3.706.0）。
         var secondary = !ui.Running && (_currentTag == "home" || _currentTag == "settings"
             || (_currentTag == "analysis" && AnalysisTriage.AnalysisSummaryOf(ui, TourItemCount(ui), CellSheetLogic.AnalysisFixResolved(ui)).Primary != AnalysisPrimary.None)
@@ -382,7 +390,7 @@ public sealed partial class MainWindow : Window
 
     private void OnMainActionClick(object sender, RoutedEventArgs e)
     {
-        if (_vm.Ui.Running || _vm.Ui.FixSearching) _vm.Stop();
+        if (_vm.Ui.Running || _vm.Ui.FixSearching || _vm.Ui.AgentRunning) _vm.Stop();
         else _vm.RunV6FullOptimize();
     }
 
@@ -484,8 +492,12 @@ public sealed partial class MainWindow : Window
             top.Children.Add(new TextBlock { Text = err, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["MagiErrorBrush"] });
         top.Children.Add(Line(ChainFixPreview.PreviewCountLine(p.Suggestion.Ops.Count), bold: true));
         foreach (var row in p.Rows) top.Children.Add(Line(ChainFixPreview.PreviewRowLine(row.Staff, row.Date, row.Before, row.After)));
-        var more = new HyperlinkButton { Content = "詳しく", MinHeight = 48 };
-        more.Click += (_, _) => body.Visibility = body.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        var more = new HyperlinkButton { Content = CellSheetLogic.DiagDetailsLabel, MinHeight = 48 };
+        more.Click += (_, _) =>
+        {
+            body.Visibility = body.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            more.Content = body.Visibility == Visibility.Visible ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+        };
         top.Children.Add(more);
         top.Children.Add(body);
         if (p.Summary is { } summary) body.Children.Add(Line(summary, bold: true));

@@ -20,6 +20,9 @@ public sealed partial class HomeView : UserControl
     private readonly CoalescedRender _renderCoalescer;
 
     private bool _detailOpen;
+    private bool _diagOpen;
+    private bool _agentStepsOpen;
+    private AgentRecord? _agentRecShown;
     private bool _consultOpen;   // [3.714.0] 作成中に相談の行の「開く」で相談の一覧を出す
     private Action _bigAction = () => { };
     private Action _helperAction = () => { };
@@ -65,13 +68,66 @@ public sealed partial class HomeView : UserControl
         var editable = ui.Loaded && !ui.Running;
 
         RenderNextAction(ui, editable);
+        RenderAgent(ui);
         RenderLive(ui);
         RenderCopilot(ui, editable);
         RenderCoverage(ui, editable);
         RenderAlternatives(ui, editable);
         // [3.696.0] 診断の束は実行中は出さない＝置き換えている前の盤面の説明が途中経過の下に長く並ぶ（Android 端末報告「縦に長すぎる」）。
         if (ui.Running) { CopilotCard.Visibility = Visibility.Collapsed; CoveragePanel.Visibility = Visibility.Collapsed; AlternativesPanel.Visibility = Visibility.Collapsed; }
+        RenderDiagFold(ui);
         RenderConsults(ui);
+    }
+
+    /// <summary>原因の診断は 1 つに畳む（Android 3.724.0「縦に長すぎた」）。C# のホームにある診断はコパイロットと人員の 2 枚
+    /// （期間の制約・禁止の並び・回数固定の診断は分析タブ）なので、数はいま中身のある 2 枚から数える。</summary>
+    private void RenderDiagFold(UiState ui)
+    {
+        var count = (CopilotCard.Visibility == Visibility.Visible ? 1 : 0) + (CoveragePanel.Visibility == Visibility.Visible ? 1 : 0);
+        DiagFoldButton.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        DiagFoldButton.Content = _diagOpen ? "原因の診断 ▾" : $"原因の診断（{count}件） ▸";
+        if (!_diagOpen) { CopilotCard.Visibility = Visibility.Collapsed; CoveragePanel.Visibility = Visibility.Collapsed; }
+    }
+
+    private void OnDiagFoldClick(object sender, RoutedEventArgs e) { _diagOpen = !_diagOpen; Render(); }
+
+    /// <summary>代行役（AX）の記録（Kotlin <c>AgentCard</c>、主カードの先頭）。実行中の 1 行、終われば当てた手の数と前後・判断待ち・手の一覧（畳む）・元に戻す。
+    /// 1 手も当てなかった輪は出さない（次の判断は主カードが言う）。</summary>
+    private void RenderAgent(UiState ui)
+    {
+        AgentHost.Children.Clear();
+        var rec = ui.AgentRecord;
+        var head = rec is null ? null : AgentText.Headline(rec);
+        if (!ReferenceEquals(rec, _agentRecShown)) { _agentStepsOpen = false; _agentRecShown = rec; }
+        AgentHost.Visibility = ui.AgentRunning || head is not null ? Visibility.Visible : Visibility.Collapsed;
+        if (ui.AgentRunning)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            row.Children.Add(new ProgressRing { Width = 22, Height = 22, IsActive = true });
+            var line = new TextBlock { Text = AgentText.RunningLine, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(line, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+            row.Children.Add(line);
+            AgentHost.Children.Add(row);
+            return;
+        }
+        if (rec is null || head is null) return;
+        AgentHost.Children.Add(new TextBlock { Text = head, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["MagiTitleMediumTextStyle"] });
+        // 判断待ちは数だけ（承認のボタンはそれぞれのカードに 1 つ＝同じボタンを 2 か所に置かない）。
+        if (AgentText.PendingLineFor(ui, _vm.RelaxTrialFor() is not null) is { } pending)
+        {
+            AgentHost.Children.Add(new TextBlock { Text = pending, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            AgentHost.Children.Add(new TextBlock { Text = AgentText.ResumeNote, TextWrapping = TextWrapping.Wrap, FontSize = 12, Opacity = 0.8 });
+        }
+        if (_agentStepsOpen)
+            for (var k = 0; k < rec.Steps.Count; k++) AgentHost.Children.Add(new TextBlock { Text = $"{k + 1}. {rec.Steps[k]}", TextWrapping = TextWrapping.Wrap, FontSize = 12 });
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var steps = new HyperlinkButton { Content = _agentStepsOpen ? "当てた手 ▾" : "当てた手 ▸", MinHeight = 48 };
+        steps.Click += (_, _) => { _agentStepsOpen = !_agentStepsOpen; Render(); };
+        actions.Children.Add(steps);
+        var undo = new HyperlinkButton { Content = "代行の分を元に戻す", MinHeight = 48, IsEnabled = !ui.Running };
+        undo.Click += (_, _) => _vm.UndoAgent();
+        actions.Children.Add(undo);
+        AgentHost.Children.Add(actions);
     }
 
     /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、
@@ -145,7 +201,7 @@ public sealed partial class HomeView : UserControl
         }
         NextActionCard.Visibility = Visibility.Visible;
         // [3.643.0] 旧 SmartActionCard の自動探索をここへ（必須違反が残り未探索なら 1 回）。副作用は候補リストの計算だけ。
-        if (!ui.Running && ui.HasResult && ui.BestHard > 0)
+        if (!ui.Running && !ui.AgentRunning && ui.HasResult && ui.BestHard > 0)
         {
             var boardChanged = !ReferenceEquals(_autoFixBoard, ui.Schedule) || _autoFixHard != ui.BestHard;
             if (ui.FixFocusName.Length > 0 || (boardChanged && !ui.FixSearching && ui.FixSuggestions.Count == 0 && !ui.FixSearched))
@@ -247,7 +303,7 @@ public sealed partial class HomeView : UserControl
             if (kind == HomePlanKind.GuidedFix && shortage is not null)
             {
                 sentence = shortage.Headline;
-                bigLabel = AnalysisTriage.HomeTargetLabel("なおし方を見る", nextTarget, null); bigEnabled = true;
+                bigLabel = AnalysisTriage.HomeTargetLabel("直し方を見る", nextTarget, null); bigEnabled = true;
                 _bigAction = () => _ = ShowGuidedFixAsync();
             }
             else if (kind == HomePlanKind.ApplyMove)
@@ -363,12 +419,7 @@ public sealed partial class HomeView : UserControl
                 retry.Click += (_, _) => _vm.RetrySave();
                 StatusHost.Children.Add(retry);
             }
-            if (kind == HomePlanKind.Searching)
-            {
-                var stop = new HyperlinkButton { Content = "やめる", MinHeight = 48, Foreground = fgBrush };
-                stop.Click += (_, _) => _vm.Stop();
-                StatusHost.Children.Add(stop);
-            }
+            // 探索を止めるのは下部バーの［やめる］だけ（カードに同じボタンを重ねない）。
         }
 
         // PROGRESS: 何をしているかの語を先頭に。ProgressSummary（改善率/残り時間/探索数）はそのまま。
@@ -380,7 +431,7 @@ public sealed partial class HomeView : UserControl
         RunningConsultRow.Visibility = Vis(Has(HomeSection.Progress) && consultLine is not null);
         RunningConsultText.Text = consultLine ?? "";
         RunningConsultText.Foreground = fgBrush;
-        RunningConsultOpen.Content = ConsultList.Open;
+        RunningConsultOpen.Content = ConsultList.ListOpen;
 
         BigButton.Visibility = Vis(Has(HomeSection.Primary) && bigEnabled);
         BigButton.Content = new TextBlock { Text = bigLabel, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 };
@@ -438,7 +489,7 @@ public sealed partial class HomeView : UserControl
 
         // INFO: 数字の根拠と結果採用の意味を 1 文字も変えず折りたたみへ。
         InfoHost.Visibility = Vis(Has(HomeSection.Info));
-        DetailToggle.Content = _detailOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ でき具合の意味";
+        DetailToggle.Content = _detailOpen ? "ⓘ でき具合の意味 ▾" : "ⓘ でき具合の意味 ▸";
         DetailToggle.Foreground = fgBrush;
         DetailText.Visibility = Vis(_detailOpen);
         DetailText.Foreground = fgBrush;
@@ -957,7 +1008,7 @@ public sealed partial class HomeView : UserControl
                 panel.Children.Add(new TextBlock { Text = $"いまの希望・担当のままでは埋められない日が {plan.Blocked.Select(sf => sf.DayIndex).Distinct().Count()}日 残っています。", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                 foreach (var sf in plan.Blocked.Take(4))
                     panel.Children.Add(new TextBlock { Text = $"・{CellSheetLogic.ShortageRowLine(sf.DayLabel, sf.ShiftSymbol, sf.Miss)}　{CellSheetLogic.ShortageRowTag(sf.Verdict == CoverageVerdict.Infeasible, sf.BlockedNow)}", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
-                panel.Children.Add(new TextBlock { Text = "再作成しても、この日は同じ結果になります。希望を1件調整する（編集タブ＞月次条件）か、担当できるシフトを増やしてください（編集タブ＞年間マスター）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                panel.Children.Add(new TextBlock { Text = "再作成しても同じ結果です。希望を1件調整するか（月次条件）、担当を増やしてください（年間マスター①）。", FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
                 panel.Children.Add(LandingButton(plan.Blocked.Select(sf => GuidedFixRules.LandingFor(sf)).FirstOrDefault(l => l is not null)));
             }
             else
@@ -1126,10 +1177,10 @@ public sealed partial class HomeView : UserControl
                     "希望を1件調整する（編集タブ＞月次条件）か、担当を追加してください（編集タブ＞年間マスター①）。"
             : diag.AllBlockedNow
                 ? $"不足 {diag.TotalShortfall} 人は、試した入れ替えでは埋まりませんでした（埋められないと決まったわけではありません）。" +
-                    "再作成するか、希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると埋まりやすくなります（編集タブ＞年間マスター①）。"
+                    "再作成するか、希望を1件調整するか（月次条件）、担当を増やすと埋まりやすくなります（年間マスター①）。"
                 : diag.ProvenBlockedSlots > 0
                     ? $"不足 {diag.TotalShortfall} 人。うち {diag.ProvenBlockedSlots} 枠は" +
-                        "いまの希望のままでは埋められません。その枠は希望を1件調整する（編集タブ＞月次条件）か、担当を追加すると直せます（編集タブ＞年間マスター①）。" +
+                        "いまの希望のままでは埋まりません。希望を1件調整するか（月次条件）、担当を増やしてください（年間マスター①）。" +
                         "残りは再作成すると解消する場合があります。"
                 : diag.SearchMissSlots > 0
                     ? $"不足 {diag.TotalShortfall} 人。うち {diag.SearchMissSlots} 枠は試した入れ替えでは埋まりませんでした。" +
@@ -1137,7 +1188,7 @@ public sealed partial class HomeView : UserControl
                     : diag.InfeasibleSlots == 0
                         ? $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageEnoughText}"
                         : $"不足 {diag.TotalShortfall} 人。{CellSheetLogic.ShortageLabelInfeasible} {diag.InfeasibleSlots} 枠、{CellSheetLogic.ShortageLabelFixable} {diag.FixableSlots} 枠。" +
-                            "動かせば埋まる枠は再作成すると解消する場合があります。担当できる人が足りない枠は担当できる職員を確認すると直せます（編集タブ＞年間マスター①）。";
+                            "動かせば埋まる枠は再作成で解消する場合があります。担当できる人が足りない枠は、担当を見直してください（年間マスター①）。";
         foreach (var s in diag.Shortfalls.Take(MaxCoverageSlots))
         {
             var infeasible = s.Verdict == CoverageVerdict.Infeasible;

@@ -910,7 +910,7 @@ public sealed partial class EditView : UserControl
                 Title = "担当外の希望を含めますか？",
                 Content = new TextBlock
                 {
-                    Text = $"担当できないグループの希望が {oos} 件あります。\n含めて反映すると、その {oos} 件は担当外の勤務として入り、必須違反として数えます。「担当内だけ反映する」ならその {oos} 件は入れません。どちらも「元に戻す」で戻せます。",
+                    Text = $"担当外の希望が {oos} 件あります。\n含めると担当外の勤務として入り、必須違反になります。「担当内だけ反映する」なら入れません。どちらも元に戻せます。",
                     TextWrapping = TextWrapping.Wrap,
                 },
                 PrimaryButtonText = "含めて反映する",
@@ -1364,7 +1364,7 @@ public sealed partial class EditView : UserControl
     /// </summary>
     private void RenderConstraintHelp(IReadOnlyList<MagiViewModel.ConstraintFamilyView> families)
     {
-        ConstraintHelpToggle.Content = _constraintHelpOpen ? "ⓘ 詳しい説明を閉じる" : "ⓘ 詳しい説明（それぞれの条件の意味）";
+        ConstraintHelpToggle.Content = _constraintHelpOpen ? "ⓘ 詳しい説明 ▾" : "ⓘ 詳しい説明（それぞれの条件の意味） ▸";
         ConstraintHelpHost.Visibility = _constraintHelpOpen ? Visibility.Visible : Visibility.Collapsed;
         ConstraintHelpHost.Children.Clear();
         if (!_constraintHelpOpen) return;

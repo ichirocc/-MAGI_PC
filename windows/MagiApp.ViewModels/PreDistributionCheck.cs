@@ -11,7 +11,7 @@ public sealed record PreDistRow(string Label, string Value, bool? Ok, bool Prima
 /// </summary>
 public static class PreDistributionCheck
 {
-    public const string Note = "必須違反 0 件は、登録した必須条件を満たしたことだけを示します。相談の完了や法令への適合は含みません。相談事項や職場の確認手続きを確かめたうえで、配布をご判断ください。";
+    public const string Note = "必須違反 0 件は、登録した必須条件を満たしたという意味です。相談の完了や法令への適合は含みません。確認してから配布してください。";
 
     /// <summary>評価できていない範囲（仕様 §7・§8、3.665.0 利用者決定「未評価と明示するだけ」。Kotlin <c>MONTH_EDGE_NOTE</c>）。前月・翌月の勤務はデータに無い。</summary>
     public const string MonthEdgeNote = "前月末・翌月初をまたぐ並びは評価していません。今月の中だけで判定します";

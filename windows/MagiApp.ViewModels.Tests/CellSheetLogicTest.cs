@@ -469,4 +469,22 @@ public class CellSheetLogicTest
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 9, 900.0, 500.0));
         Assert.Null(CompletedText.AdoptedDespiteMore(10, 13, 500.0, 500.0));
     }
+
+    [Fact]
+    public void HomeCardMakeHidesTheSameBottomButton()
+    {
+        Assert.True(CellSheetLogic.HomeCardShowsMake(running: false, fixSearching: false, hasResult: false, draft: false, infeasible: false));
+        Assert.True(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: true, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: true, infeasible: true));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, false, true, draft: false, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(running: true, fixSearching: false, hasResult: false, draft: false, infeasible: false));
+        Assert.False(CellSheetLogic.HomeCardShowsMake(false, fixSearching: true, hasResult: false, draft: false, infeasible: false));
+    }
+
+    [Fact]
+    public void HomeDiagnosisCountsOnlyCardsWithContent()
+    {
+        Assert.Equal(0, CellSheetLogic.HomeDiagnosisCount(new UiState()));
+        Assert.Equal(1, CellSheetLogic.HomeDiagnosisCount(new UiState { ObservedPinBlockedAttempts = 3 }));
+    }
 }
