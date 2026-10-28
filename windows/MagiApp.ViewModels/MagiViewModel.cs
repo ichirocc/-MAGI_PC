@@ -201,8 +201,8 @@ public sealed partial class MagiViewModel
         }
     }
 
-    /// <summary>[Android 3.727.2] 作成中（下書き・作成・仕上げ＝Kotlin の <c>running &amp;&amp; keepScreenOn</c>）。分析タブは作成前の診断を並べない。</summary>
-    public bool BuildingNow() => Ui.Running && _boardJobLabel is "勤務表づくり" or "下書きづくり" or "仕上げ最適化";
+    /// <summary>[Android 3.727.2/3.727.4] 作成中（下書き・作成・仕上げ・閉じている間の作成＝Kotlin の <c>engineBuilding</c>）。分析タブは作成前の診断を並べない。</summary>
+    public bool BuildingNow() => Ui.Running && (_boardJobLabel is "勤務表づくり" or "下書きづくり" or "仕上げ最適化" || _bgRunId != 0L);
 
     /// <summary>画面のメッセージで「何の実行中か」を言うための名前。背景実行には名前が無いので既定を返す。</summary>
     internal string BusyWhat() => _boardJobLabel ?? "バックグラウンド最適化";

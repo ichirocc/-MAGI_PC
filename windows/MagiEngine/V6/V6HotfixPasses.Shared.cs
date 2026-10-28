@@ -178,12 +178,20 @@ public static partial class V6HotfixPasses
         var c3C = C3FamCount(p, sched, i, p.Cons3, forbidden: false);
         var c3mC = C3FamCount(p, sched, i, p.Cons3m, forbidden: false);
         var c3mnC = C3FamCount(p, sched, i, p.Cons3mn, forbidden: true);
-        total += c3nC + c3C + c3mC + c3mnC;
-        weighted += c3nC * MirrorKeys.WeightOf("c3n") +
+        long c3wC = 0, extC = 0;                                   // c3w・extWish（HARD、セル単位の静的表＝チェッカーと同じ）
+        if (p.C3wBan is not null || p.HasExtBan)
+            for (var j = 0; j < p.T; j++)
+            {
+                if (p.C3wBanned(i, j, sched[i][j])) c3wC++;
+                if (p.HasExtBan && p.ExtBanned(i, j, sched[i][j])) extC++;
+            }
+        total += c3nC + c3C + c3mC + c3mnC + c3wC + extC;
+        weighted += c3wC * MirrorKeys.WeightOf("c3w") + extC * MirrorKeys.WeightOf("extWish") +
+            c3nC * MirrorKeys.WeightOf("c3n") +
             c3C * MirrorKeys.WeightOf("c3") +
             c3mC * MirrorKeys.WeightOf("c3m") +
             c3mnC * MirrorKeys.WeightOf("c3mn");
-        return new StaffObjective(c3nC, weighted, total);
+        return new StaffObjective(c3nC + c3wC + extC, weighted, total);
     }
 
     private static long C3FamCount(Problem p, int[][] sched, int i, IReadOnlyList<C3> list, bool forbidden)
