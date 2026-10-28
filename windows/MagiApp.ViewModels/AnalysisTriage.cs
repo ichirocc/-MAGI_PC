@@ -124,7 +124,38 @@ public sealed record AnalysisTriage(
         note is not null && note.StateKey == stateKey && note.Schedule.Count == schedule.Count && note.Schedule.Zip(schedule).All(p => p.First.SequenceEqual(p.Second));
 
     public static string SameResultNotice(int hard) =>
-        hard > 0 ? $"前回と同じ結果です。条件を変えない限り、この必須違反{hard}件は消えません。" : "前回と同じ結果です。";
+        (hard > 0 ? $"前回と同じ結果です。条件を変えない限り、この必須違反{hard}件は消えません。" : "前回と同じ結果です。") + SameResultNextDraft;
+
+    /// <summary>[Android 3.727.1] 同じ結果のあとの次の作成は下書きから作り直す（今の盤面からでは同じ谷の底に戻る）。採るのは今より良いときだけ。</summary>
+    public const string SameResultNextDraft = "次の作成は下書きから作り直し、今より良くなったときだけ置き換えます。";
+    public const string RerunFromDraftLog = "前回と同じ結果のため、下書きから作り直します（今より良いときだけ採る）";
+    public const string RerunFromDraftKept = "下書きから作り直しましたが、今の勤務表の方が良かったので、そのまま残しました。";
+    public const string RerunFromDraftAdopted = "下書きから作り直して、今より良い勤務表になりました";
+
+    /// <summary>[Android 3.727.1・iOS のヘルスケア「ハイライト」] この作成の前後（必須違反・要調整を単位ごと）。両方とも変わらなければ null（「同じ結果」の注記が受け持つ）。</summary>
+    public static string? RunDeltaText(IReadOnlyDictionary<string, int> before, IReadOnlyDictionary<string, int> after)
+    {
+        var hb = UnitTotals(before, MirrorKeys.Hard) ?? "0件"; var ha = UnitTotals(after, MirrorKeys.Hard) ?? "0件";
+        var sb = UnitTotals(before, MirrorKeys.Soft) ?? "0件"; var sa = UnitTotals(after, MirrorKeys.Soft) ?? "0件";
+        if (hb == ha && sb == sa) return null;
+        return $"必須違反 {hb} → {ha} ・ 要調整 {sb} → {sa}";
+    }
+
+    public const string RunDeltaTitle = "ハイライト";
+
+    /// <summary>[Android 3.727.2] 分析タブは作成中（下書き・作成・仕上げ）に作成前の診断の行・場所を並べず、この 1 行だけ（今の数と食い違っていた）。</summary>
+    public const string AnalysisBuildingNote = "作成が終わると、問題の一覧を今の勤務表で調べ直します。";
+
+    /// <summary>[Android 3.727.3] <paramref name="b"/> 側が <paramref name="a"/> 側より良いか（必須→重み→合計の辞書式＝<c>ReportComparer</c> と同じ順。Kotlin <c>preDraftBetter</c>）。</summary>
+    public static bool PreDraftBetter(long aHard, double aWeighted, int aTotal, long bHard, double bWeighted, int bTotal) =>
+        bHard != aHard ? bHard < aHard
+        : Math.Abs(bWeighted - aWeighted) > 1e-9 ? bWeighted < aWeighted
+        : bTotal < aTotal;
+
+    public static string PreDraftNoticeText(string hardWord, double weighted) =>
+        $"下書きに置き換える前の勤務表のほうが良い結果です（必須 {hardWord}・重み {(long)weighted}）。";
+
+    public const string PreDraftRestoreButton = "置き換え前の勤務表に戻す";
 
     /// <summary>残る必須違反がすべて「何度つくっても残る」もので、前回から何も変わっていない（<paramref name="fresh"/>＝<see cref="SameResultVisible"/>）。再作成しても同じ結果になる。</summary>
     public static bool RerunDemoted(int hard, int floor, bool fresh) => fresh && hard > 0 && hard <= floor;
@@ -318,6 +349,9 @@ public sealed record EmptySearchStreak(string Origin, long Board, long State, in
 public enum RepeatedEmptyAction { Wishes, Settings }
 
 /// <summary>前回と同じ結果の印。出したときの盤面と状態指紋を持ち、どちらかが変われば出さない。</summary>
+/// <summary>[Android 3.727.3] 下書きに置き換える前の勤務表（同じ設定の指紋のときだけ比べる。Kotlin <c>PreDraftBoard</c>）。</summary>
+public sealed record PreDraftBoard(int[][] Board, long StateKey, long Hard, double Weighted, int Total, string HardWord);
+
 public sealed record SameResultNote(int Hard, long StateKey, IReadOnlyList<IReadOnlyList<int>> Schedule, int Floor = 0);
 
 /// <summary>下部の作成ボタンの出し方。FixSearch・ProblemList は「再作成」を外枠にし、隣の塗りを主にする（塗りは 1 つ＝INV-09）。</summary>

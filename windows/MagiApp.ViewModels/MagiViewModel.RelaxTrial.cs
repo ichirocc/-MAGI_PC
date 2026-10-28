@@ -211,6 +211,7 @@ public sealed partial class MagiViewModel
         Ui.StructureEdited = true;
         Ui.Schedule = nb.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
         Ui.StopSummary = null;
         RefreshCheck();
         SaveNow();

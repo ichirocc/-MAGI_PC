@@ -293,7 +293,13 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>[3.643.0] 月を移す確認の答え。確認が閉じていれば何もしない。</summary>
-    public void ConfirmMonthMove(bool clearWishes) { if (Ui.MonthMovePrompt is { } p) SetMonth(p.Year, p.Month, clearWishes); }
+    public void ConfirmMonthMove(bool clearWishes)
+    {
+        if (Ui.MonthMovePrompt is not { } p) return;
+        // [Android 3.727.1] 確認を出したあとにデータが変わっていたら（件数がずれる）、移さずに今の内容で確認し直す。
+        if (_state is { } st && MonthMovePlan.Of(st, p.Year, p.Month) is var now && now != p) { Ui.MonthMovePrompt = now; Notify(MonthMovePlan.MonthMoveStale, "W"); return; }
+        SetMonth(p.Year, p.Month, clearWishes);
+    }
 
     public void CancelMonthMove() => Ui.MonthMovePrompt = null;
 

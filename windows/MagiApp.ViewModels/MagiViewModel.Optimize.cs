@@ -138,6 +138,9 @@ public sealed partial class MagiViewModel
         // 停止・失敗で入力の盤面へ戻すときは、実行前の旗へ戻す（一度も計算していない盤面を「計算済み」にしない）。
         var hadResult = Ui.HasResult;
         var engineRanBefore = Ui.EngineRan;
+        // [Android 3.727.1] 前回と同じ結果（今の盤面から作り直しても同じ谷の底に戻る）のあとの 1 回だけ、下書きから作り直して別の谷を探す。
+        //   採るのは今の勤務表より良いときだけ（下の keep-best の比較は今の盤面 sched0 のまま）。
+        var fromDraft = s5 is null && AnalysisTriage.SameResultVisible(Ui.SameResult, StateKey(st0), Ui.Schedule);
         Ui.MessageIsError = false;
         Ui.Running = true;
         Ui.KeptPrevious = false;
@@ -145,6 +148,7 @@ public sealed partial class MagiViewModel
         Ui.CopilotHint = hint;
         Ui.WishCancelOutcome = null;
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
         Ui.StopSummary = null;
         Ui.Alternatives = Array.Empty<string>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
@@ -158,7 +162,7 @@ public sealed partial class MagiViewModel
         LogOp("I", "設定の開始時: " + SettingsAtStart());
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token);
+        LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token, fromDraft);
     }
 
     private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -183,7 +187,7 @@ public sealed partial class MagiViewModel
 
     private async Task RunV6FullOptimizeCoreAsync(
         MagiState st0, int[][] sched0, long startMs, Hf63Infeasibility hf63, int boardToken, S5Ctx? s5,
-        bool hadResult, bool engineRanBefore, CancellationToken ct)
+        bool hadResult, bool engineRanBefore, CancellationToken ct, bool fromDraft = false)
     {
         // [3.372.0/実機ログ起因の由来をそのまま記録] 終端ログ（完了/停止/失敗）を必ず1行残す保証。
         var terminalLogged = false;
@@ -268,8 +272,16 @@ public sealed partial class MagiViewModel
                 }
             });
 
+            var start = sched0;
+            if (fromDraft)
+            {
+                try { start = (await Task.Run(() => V6FinalPort.HandleSmartInitial(st0.WithSchedule(sched0), allowImpossible: true), ct)).Schedule; }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception) { start = sched0; }
+                if (!ReferenceEquals(start, sched0)) LogOp("I", $"{AnalysisTriage.RerunFromDraftLog} ・ 盤面指紋={OpLogText.Hex16(BoardKey(start))}");
+            }
             var res = await _optimizationService.OptimizeWithFlagsAsync(
-                st0, sched0.Copy2D(), Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm,
+                st0, start.Copy2D(), Ui.BudgetSec, Ui.Workers, Ui.SoftPolish, Ui.V6Algorithm,
                 allowImpossible: true,
                 extraRefineRequirePostHardDrop: false,
                 wishFloorMode: PolishGate.WishConflictFloorMode,
@@ -300,15 +312,16 @@ public sealed partial class MagiViewModel
                 var nowScore = new KeptResultText.Score(newHard, res.Report.WeightedScore, newTotal);
                 var baseScore = new KeptResultText.Score(baseHard, baseReport.WeightedScore, baseTotal);
                 var capNote = res.CapZero?.KeptNote();
-                var keptMsg = s5 is null
+                var keptMsg = s5 is null && !ReferenceEquals(start, sched0) ? AnalysisTriage.RerunFromDraftKept
+                    : s5 is null
                     ? KeptResultText.WithNote(KeptResultText.Screen(res.Report.Breakdown, baseReport.Breakdown), capNote)
                     : s5.H0 - baseReport.Hard > 0
                         ? $"希望（{s5.Label}）を調整しました（希望は外れています）。必須違反は {s5.H0}件 → {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}（外した分だけ）。再作成しても、それ以上は減りませんでした。元に戻すで希望と勤務表をまとめて戻せます。"
                         : $"希望（{s5.Label}）を調整しましたが（希望は外れています）、再作成しても必須違反は減りませんでした（必須違反 {AnalysisTriage.HardText(baseReport.Breakdown, baseReport.Hard)}）。元に戻すで希望と勤務表をまとめて戻せます。";
+                // [Android 3.727.1] Running は finally で EndBoardJob の後に下ろす（ここで下ろすと、他の案の検査を待つ間だけ画面は操作できるのに裁定は実行中で断る）。
                 await PushReportAsync(_state ?? st0, kept, baseReport, transform: ui =>
                 {
                     ui.MessageIsError = false;
-                    ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
                     ui.RanBeforeEdit = false;
@@ -331,13 +344,13 @@ public sealed partial class MagiViewModel
                 _state = st0.WithSchedule(res.Schedule);
                 var adoptedMsg = s5 is null
                     ? CompletedText.Of(res.Report.Hard, res.Report.Breakdown, "") +
-                      (CompletedText.AdoptedDespiteMore(baseReport.Total, res.Report.Total, baseReport.WeightedScore, res.Report.WeightedScore) is { } why ? $"。{why}" : "")
+                      (CompletedText.AdoptedDespiteMore(baseReport.Total, res.Report.Total, baseReport.WeightedScore, res.Report.WeightedScore) is { } why ? $"。{why}" : "") +
+                      (!ReferenceEquals(start, sched0) ? $"。{AnalysisTriage.RerunFromDraftAdopted}" : "")
                     : $"希望（{s5.Label}）を調整して（希望は外しました）、再作成しました: 必須違反 {s5.H0}件 → {AnalysisTriage.HardText(res.Report.Breakdown, res.Report.Hard)}（試算の見込み {s5.PCancel}件）" +
                       (res.Report.Hard > s5.PCancel ? "。見込みまでは減りませんでした。再作成するか、元に戻す（希望と勤務表をまとめて戻す）を選べます。" : "");
                 await PushReportAsync(_state ?? st0, res.Schedule, res.Report, runLabel: "最適化", transform: ui =>
                 {
                     ui.MessageIsError = false;
-                    ui.Running = false;
                     ui.HasResult = true;
                     ui.EngineRan = true;
                     ui.RanBeforeEdit = false;
@@ -346,6 +359,7 @@ public sealed partial class MagiViewModel
                     ui.Message = adoptedMsg;
                     ui.WishCancelOutcome = s5 is null ? null : new WishCancelOutcome(s5.Name, s5.Day, s5.Symbol, s5.H0, s5.PCancel, res.Report.Hard, adoptedMsg);
                     ui.RunSummary = ChangeSummary.Of(st0, sched0, res.Schedule, res.Report, baseReport);
+                    ui.RunDelta = AnalysisTriage.RunDeltaText(baseReport.Breakdown, res.Report.Breakdown);
                     ui.StopSummary = res.Stop;
                 }, ct: ct);
                 _lastResultHard = newHard;
@@ -356,8 +370,9 @@ public sealed partial class MagiViewModel
             var adoptedReport = inputBeatsResult ? baseReport : res.Report;
             _lastTopHardFamily = adoptedReport.Hard > 0 ? TopHardFamilyJp(adoptedReport.Breakdown) : null;
             // [3.694.0] 盤面指紋は採用後の盤面（維持なら入力・採用なら結果＝adoptedReport と同じ盤面）。開始行の指紋と並べて入力の同一性を読む。
-            LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} ({res.Phase}) ・ 盤面指紋={(_currentSchedule is { } cs ? OpLogText.Hex16(BoardKey(cs)) : OpLogText.Hex16(0L))}");
+            LogOp(res.Report.Hard == 0 ? "I" : "W", $"最適化 完了 必須={res.Report.Hard} 合計={res.Report.Total} 重み={(long)res.Report.WeightedScore} ({res.Phase}) ・ 盤面指紋={(_currentSchedule is { } cs ? OpLogText.Hex16(BoardKey(cs)) : OpLogText.Hex16(0L))}");
             NoteRunResult(adoptedReport.Hard, kept: inputBeatsResult);
+            NotePreDraftAfterRun(adoptedReport);
             if (s5 is not null)
             {
                 _cancelOutcomeCtx = _state is { } cst && _currentSchedule is { } csch ? new TrialCtx(cst, BoardKey(csch)) : null;
@@ -518,6 +533,7 @@ public sealed partial class MagiViewModel
         Ui.KeptPrevious = false;
         Ui.HasResult = false;
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
         Ui.StopSummary = null;
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState();
@@ -561,6 +577,7 @@ public sealed partial class MagiViewModel
                 ui.Message = FixOutcomeText.PolishResultText(gain > 0, AnalysisTriage.UnitTotals(baseReport.Breakdown, MirrorKeys.Soft) ?? "なし",
                     AnalysisTriage.UnitTotals(finalReport.Breakdown, MirrorKeys.Soft) ?? "なし", finalReport.Hard, AnalysisTriage.HardText(finalReport.Breakdown, finalReport.Hard));
                 ui.RunSummary = ChangeSummary.Of(st0, sched0, finalSched, finalReport, baseReport);
+                ui.RunDelta = AnalysisTriage.RunDeltaText(baseReport.Breakdown, finalReport.Breakdown);
             }, ct: ct);
             LogOp("I", $"ソフト研磨 完了 必須={finalReport.Hard} 合計={finalReport.Total}（{(gain > 0 ? $"-{gain}" : "増減なし")}）");
             terminalLogged = true;

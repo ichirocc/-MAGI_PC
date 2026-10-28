@@ -436,6 +436,36 @@ public sealed partial class MagiViewModel
         if (Ui.CsvPartialPrompt is not null) Ui.CsvPartialPrompt = null;
     }
 
+    /// <summary>[Android 3.727.1] 反映前の確認待ちの取込（結果と、作った時点の設定・盤面の指紋）。<see cref="UiState.CsvImportPrompt"/> と同時に立て外す。保存しない。</summary>
+    private sealed record CsvImportPending(ScheduleRunResult Result, long StateKey, long BoardKey);
+    private CsvImportPending? _csvImportPending;
+
+    private void DropCsvImport()
+    {
+        _csvImportPending = null;
+        if (Ui.CsvImportPrompt is not null) Ui.CsvImportPrompt = null;
+    }
+
+    /// <summary>確認の「取り込む」。指紋が作成時と同じときだけ、確認済みとして同じ結果を当てる（Kotlin <c>confirmCsvImport</c>）。</summary>
+    public void ConfirmCsvImport()
+    {
+        var pending = _csvImportPending;
+        DropCsvImport();
+        if (pending is null) return;
+        if (RunBlockedByInFlight("CSV取込")) return;
+        var st = _state;
+        var sched = _currentSchedule;
+        if (st is null || sched is null || StateKey(st) != pending.StateKey || BoardKey(sched) != pending.BoardKey) { Notify(CsvPartialImport.Stale, "W"); return; }
+        RunCsvImport(st, sched, partial: false, _ => Task.FromResult<ScheduleRunResult?>(pending.Result), confirmed: true);
+    }
+
+    public void CancelCsvImport()
+    {
+        var had = _csvImportPending is not null;
+        DropCsvImport();
+        if (had) Notify(CsvPartialImport.Cancelled);
+    }
+
     /// <summary>適用してよい結果を返す。引用符が閉じていないときは確認待ち／断りを画面に出して null。</summary>
     private async Task<ScheduleRunResult?> ParseCsvOrAskAsync(MagiState st, int[][] sched, string rawText, CancellationToken ct)
     {
@@ -466,7 +496,7 @@ public sealed partial class MagiViewModel
     }
 
     /// <summary>取込の適用本体。<paramref name="produce"/> が null なら適用しない。<paramref name="partial"/>＝確認済みの部分取込（結果メッセージに注意を残す）。</summary>
-    private void RunCsvImport(MagiState st, int[][] sched, bool partial, Func<CancellationToken, Task<ScheduleRunResult?>> produce)
+    private void RunCsvImport(MagiState st, int[][] sched, bool partial, Func<CancellationToken, Task<ScheduleRunResult?>> produce, bool confirmed = false)
     {
         Ui.MessageIsError = false;
         Ui.Running = true;
@@ -474,12 +504,12 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("CSV取込");
         var cts = new CancellationTokenSource();
         _job = cts;
-        LastImportCsvTask = ImportCsvCoreAsync(st, sched, partial, produce, boardToken, cts.Token);
+        LastImportCsvTask = ImportCsvCoreAsync(st, sched, partial, produce, boardToken, cts.Token, confirmed);
     }
 
     private async Task ImportCsvCoreAsync(
         MagiState st, int[][] sched, bool partial, Func<CancellationToken, Task<ScheduleRunResult?>> produce,
-        int boardToken, CancellationToken ct)
+        int boardToken, CancellationToken ct, bool confirmed = false)
     {
         var pushedUndo = false;
         try
@@ -495,6 +525,18 @@ public sealed partial class MagiViewModel
                     ? $"CSVを取り込めませんでした。{ScheduleCsvBridge.AmbiguousText(res.AmbiguousNames)}。編集タブ＞職員管理とCSVの両方で名前を区別してから、もう一度取り込んでください"
                     : "CSVを取り込めませんでした。一致する職員名がありません。CSVの1列目の氏名と列の並び（氏名, 1日目, 2日目, …）を今のデータに合わせてから、もう一度取り込んでください";
                 LogOp("W", "CSV取込 失敗: 職員名が0件一致のため取込を中止しました（氏名/列レイアウトを確認）");
+                return;
+            }
+            // [Android 3.727.1] 反映の前に件数と注意を見せる（部分取込は引用符の確認で既に 1 度聞いた＝重ねて聞かない）。
+            if (!partial && !confirmed)
+            {
+                var hardNow = await Task.Run(() => UnifiedViolationChecker.Check(st, sched.Copy2D()).Hard, ct);
+                _csvImportPending = new CsvImportPending(res, StateKey(st), BoardKey(sched));
+                Ui.Running = false;
+                Ui.MessageIsError = false;
+                Ui.Message = null;
+                Ui.CsvImportPrompt = CsvImportPreview.CsvImportPreviewLines(res, st.StaffCount, sched, hardNow);
+                LogOp("I", $"CSV取込 確認待ち: {res.Matched}/{st.StaffCount}名一致 必須={res.Report.Hard}");
                 return;
             }
             PushUndo();
@@ -759,33 +801,34 @@ public sealed partial class MagiViewModel
     /// ファイル書き込みの結果を1行で返す。成功も必ず返すのが肝で、旧実装は成功時も無反応だったため
     /// 「保存できたのか」を画面で確かめる手段が無かった。
     /// </summary>
-    /// <summary>[3.644.0/UX-05・仕様 5.4] 勤務表 CSV の文脈。書き出した文字列（のハッシュ）とその時の state・盤面を持つ。保存の成功は書き出し時の文脈に
-    /// 結ぶ＝書き出しのあと（ピッカーや書き込みの間）に盤面が変わっても、変わった盤面を「保存済み」と言わない。Kotlin <c>CsvCtx</c>。</summary>
-    private sealed class CsvCtx(MagiState st, long boardKey, int textHash)
+    /// <summary>[3.644.0/UX-05・仕様 5.4] 勤務表 CSV の文脈。書き出した文字列そのものとその時の state・盤面の写しを持つ。保存の成功は書き出し時の文脈に
+    /// 結ぶ＝書き出しのあと（ピッカーや書き込みの間）に盤面が変わっても、変わった盤面を「保存済み」と言わない。Kotlin <c>CsvSavedMark</c> の Ctx。
+    /// [Android 3.727.1] 文字列のハッシュ・盤面の 64 ビットの指紋だけで「同じ」と言わない（衝突すると違う内容を保存済みと言い得た）。</summary>
+    private sealed class CsvCtx(MagiState st, int[][] board, string text)
     {
         public MagiState St { get; } = st;
-        public long BoardKey { get; } = boardKey;
-        public int TextHash { get; } = textHash;
+        public int[][] Board { get; } = board;
+        public string Text { get; } = text;
     }
     private CsvCtx? _csvExportCtx;
     private CsvCtx? _csvSavedCtx;
-    private (MagiState St, long BoardKey)? _csvCheckKey;
-    private int _csvCheckHash;
-    private void NoteCsvExport(MagiState st, int[][] sched, string csv) => _csvExportCtx = new CsvCtx(st, BoardKey(sched), csv.GetHashCode());
+    private (MagiState St, int[][] Board)? _csvCheckKey;
+    private string? _csvCheckText;
+    private void NoteCsvExport(MagiState st, int[][] sched, string csv) => _csvExportCtx = new CsvCtx(st, sched.Copy2D(), csv);
+    private static bool SameBoard(int[][] a, int[][] b) => a.Length == b.Length && a.Zip(b).All(r => r.First.AsSpan().SequenceEqual(r.Second));
     /// <summary>今の内容が保存した CSV と同じか。state と盤面が同じなら作らずに同じ、違えば CSV をもう一度作って比べる（設定だけの変更は CSV を変えない）。</summary>
     private bool CsvSavedMatches(CsvCtx c)
     {
         var st = _state;
         var b = _currentSchedule;
         if (st is null || b is null) return false;
-        var bk = BoardKey(b);
-        if (ReferenceEquals(c.St, st) && c.BoardKey == bk) return true;
-        if (_csvCheckKey is not { } k || !ReferenceEquals(k.St, st) || k.BoardKey != bk)
+        if (ReferenceEquals(c.St, st) && SameBoard(c.Board, b)) return true;
+        if (_csvCheckKey is not { } k || !ReferenceEquals(k.St, st) || !SameBoard(k.Board, b))
         {
-            _csvCheckKey = (st, bk);
-            _csvCheckHash = ScheduleCsvBridge.Build(st, b).GetHashCode();
+            _csvCheckKey = (st, b.Copy2D());
+            _csvCheckText = ScheduleCsvBridge.Build(st, b);
         }
-        return _csvCheckHash == c.TextHash;
+        return _csvCheckText == c.Text;
     }
     /// <summary>別のデータや別の月に移ったら、前の CSV の保存は今の内容と関係がない＝印を消す。</summary>
     internal void ClearCsvSaved() { _csvExportCtx = null; _csvSavedCtx = null; Ui.CsvSavedAt = null; }
@@ -806,7 +849,7 @@ public sealed partial class MagiViewModel
             if (what == "勤務表CSV" && _state is { } st && _currentSchedule is { } b)
             {
                 // 書き出した文字列の文脈に結ぶ（ExportCsv が記録）。無ければ今の内容（旧経路の互換）。
-                _csvSavedCtx = _csvExportCtx ?? new CsvCtx(st, BoardKey(b), ScheduleCsvBridge.Build(st, b).GetHashCode());
+                _csvSavedCtx = _csvExportCtx ?? new CsvCtx(st, b.Copy2D(), ScheduleCsvBridge.Build(st, b));
                 Ui.CsvSavedAt = DateTime.Now.ToString("HH:mm");
             }
         }

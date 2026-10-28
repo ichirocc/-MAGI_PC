@@ -71,7 +71,73 @@ public sealed partial class HomeView : UserControl
         RenderAlternatives(ui, editable);
         // [3.696.0] 診断の束は実行中は出さない＝置き換えている前の盤面の説明が途中経過の下に長く並ぶ（Android 端末報告「縦に長すぎる」）。
         if (ui.Running) { CopilotCard.Visibility = Visibility.Collapsed; CoveragePanel.Visibility = Visibility.Collapsed; AlternativesPanel.Visibility = Visibility.Collapsed; }
+        RenderAfterRun(ui);
         RenderConsults(ui);
+    }
+
+    private Border AfterRunCard(UIElement content) => new()
+    {
+        Background = (Brush)Application.Current.Resources["MagiSurfaceVariantBrush"],
+        CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerSM"],
+        Padding = new Thickness(12),
+        Child = content,
+    };
+
+    private static TextBlock Heading(string text)
+    {
+        var t = new TextBlock { Text = text, Style = (Style)Application.Current.Resources["MagiTitleSmallTextStyle"] };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(t, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+        return t;
+    }
+
+    /// <summary>
+    /// [Android 3.727.1/3.727.3] 作成のあとのカード（Kotlin <c>PreDraftNoticeCard</c>・<c>RunDeltaHighlight</c>・<c>HomeDayStrip</c>）。
+    /// 日ごとのようすは問題のある日だけを折り返して並べ（横スクロールを必須にしない）、問題の無い日は数で言う。押すとその日の勤務表へ。
+    /// </summary>
+    private void RenderAfterRun(UiState ui)
+    {
+        AfterRunHost.Children.Clear();
+        if (ui.Running || !ui.Loaded) return;
+        if (ui.PreDraftNotice is { } pre)
+        {
+            var col = new StackPanel { Spacing = 4 };
+            col.Children.Add(new TextBlock { Text = pre, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["MagiBodyMediumTextStyle"] });
+            var restore = new HyperlinkButton { Content = AnalysisTriage.PreDraftRestoreButton, MinHeight = 48 };
+            restore.Click += (_, _) => _vm.RestorePreDraft();
+            col.Children.Add(restore);
+            AfterRunHost.Children.Add(AfterRunCard(col));
+        }
+        if (!ui.HasResult) return;
+        if (ui.RunDelta is { } delta)
+        {
+            var col = new StackPanel { Spacing = 2 };
+            col.Children.Add(Heading(AnalysisTriage.RunDeltaTitle));
+            col.Children.Add(new TextBlock { Text = delta, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["MagiBodyMediumTextStyle"] });
+            AfterRunHost.Children.Add(AfterRunCard(col));
+        }
+        var marks = CellSheetLogic.DayStripMarks(ui);
+        if (marks.Count == 0) return;
+        var strip = new StackPanel { Spacing = 2 };
+        strip.Children.Add(Heading(CellSheetLogic.DayStripTitle));
+        strip.Children.Add(new TextBlock { Text = CellSheetLogic.DayStripSummary(marks), TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["MagiBodySmallTextStyle"], Opacity = 0.8 });
+        var flow = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 48, ItemHeight = 64, Margin = new Thickness(0, 8, 0, 0) };
+        var error = (Brush)Application.Current.Resources["MagiErrorBrush"];
+        foreach (var m in marks.Where(m => !m.Ok))
+        {
+            var cell = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
+            cell.Children.Add(new TextBlock { Text = m.Dow, FontSize = 11, Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center });
+            cell.Children.Add(new TextBlock { Text = m.Dom, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center });
+            cell.Children.Add(m.Short
+                ? new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 14, Height = 14, Fill = error, Margin = new Thickness(0, 4, 0, 0) }
+                : new TextBlock { Text = $"{m.HardCells}", Foreground = error, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) });
+            var b = new Button { Content = cell, Padding = new Thickness(2), MinWidth = 44, MinHeight = 48, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0) };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, CellSheetLogic.DayMarkSpoken(m));
+            var day = m.Day;
+            b.Click += (_, _) => _window.OpenCell(0, day);
+            flow.Children.Add(b);
+        }
+        strip.Children.Add(flow);
+        AfterRunHost.Children.Add(AfterRunCard(strip));
     }
 
     /// <summary>[3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin <c>ConsultCard</c>）。対象と検討内容を後から再確認できる。「開く」でセル、
@@ -229,7 +295,7 @@ public sealed partial class HomeView : UserControl
             bg = "MagiErrorContainerBrush"; fg = "MagiOnErrorContainerBrush";
             sentence = "いまの希望のままでは、ここは埋められません。" + (pinnedDay is null ? "" : $"（例：{pinnedDay}）");
             bigLabel = wishLabel; bigEnabled = true; helperLabel = "データを見直す";
-            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("なおし方", EditReturn.Guided));
+            _bigAction = () => _ = ShowWishConflictsAsync(); _helperAction = () => GoEditLandingFrom(pinnedLanding, new EditReturn("直し方", EditReturn.Guided));
         }
         else if (kind == HomePlanKind.DataInfeasible)
         {
@@ -237,7 +303,7 @@ public sealed partial class HomeView : UserControl
             sentence = "このデータでは、ここは埋められません。" + (worstDay is null ? "" : $"（例：{worstDay}）");
             bigLabel = "データを見直す"; bigEnabled = true; helperLabel = "未充足のまま書き出す";
             var infeasibleLanding = shortfalls.FirstOrDefault(s => s.Verdict == CoverageVerdict.Infeasible) is { } inf ? GuidedFixRules.LandingFor(inf) : null;
-            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("なおし方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
+            _bigAction = () => GoEditLandingFrom(infeasibleLanding, new EditReturn("直し方", EditReturn.Guided)); _helperAction = () => _ = ShowPreDistributionAsync();
         }
         else
         {
@@ -374,6 +440,9 @@ public sealed partial class HomeView : UserControl
         // PROGRESS: 何をしているかの語を先頭に。ProgressSummary（改善率/残り時間/探索数）はそのまま。
         ProgressRow.Visibility = Vis(Has(HomeSection.Progress));
         ProgressSpinner.IsActive = ui.Running;
+        // [Android 3.727.1・iOS の時計] 回り続ける印でなく、予算＋後処理の枠に対する経過の輪（「残り M:SS」と同じ枠）。
+        ProgressSpinner.IsIndeterminate = false;
+        ProgressSpinner.Value = 100.0 * CellSheetLogic.RunProgressFraction(ui.BudgetSec, ui.ElapsedMs);
         ProgressSpinner.Foreground = fgBrush;
         ProgressText.Text = ui.Running ? $"勤務表を組んでいます ・ {CellSheetLogic.ProgressSummary(ui)}" : "";
         ProgressText.Foreground = fgBrush;
@@ -1093,7 +1162,7 @@ public sealed partial class HomeView : UserControl
         CoveragePanel.Visibility = Visibility.Visible;
         RenderShortage(diag);
         RenderSurplus(ui, diag, editable);
-        CoverageDetailsToggle.Content = _coverageDetails ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+        Disclosure.Set(CoverageDetailsToggle, CellSheetLogic.DiagDetailsLabel, _coverageDetails);
     }
 
     /// <summary>[3.712.0] 行は事実と札だけ。見出しの長い説明と行ごとの理由・内訳は「詳しく」の中（Kotlin <c>CoverageDiagnosisCard</c>）。</summary>
@@ -1296,17 +1365,32 @@ public sealed partial class HomeView : UserControl
     {
         var rows = PreDistributionCheck.Rows(_vm.Ui, _vm.CsvSavedLine(), k => AnalysisView.BreakdownLabels.TryGetValue(k, out var jp) ? jp : k);
         var panel = new StackPanel { Spacing = 8 };
-        TextBlock RowView(PreDistRow r)
+        // [Android 3.727.1・iOS のリマインダーの丸い印] 済み＝塗った丸に ✓、要対応＝赤い輪、未評価＝灰の輪（色だけに頼らず読み上げの語を付ける）。
+        FrameworkElement RowView(PreDistRow r)
         {
-            var tb = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = $"{r.Label}：" + (r.Ok == true ? "✓ " : r.Ok == false ? "! " : "") + r.Value };
-            if (r.Ok == false) tb.Foreground = BrushOf("MagiErrorBrush");
-            return tb;
+            var row = new Grid { ColumnSpacing = 10 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var tint = r.Ok == true ? BrushOf("MagiPrimaryBrush") : r.Ok == false ? BrushOf("MagiErrorBrush") : BrushOf("MagiOnSurfaceVariantBrush");
+            var mark = new Grid { Width = 22, Height = 22, VerticalAlignment = VerticalAlignment.Top };
+            mark.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 20, Height = 20, Stroke = tint, StrokeThickness = 2, Fill = r.Ok == true ? tint : null });
+            if (r.Ok == true) mark.Children.Add(new TextBlock { Text = "✓", FontSize = 12, Foreground = new SolidColorBrush(Colors.White), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(mark, r.Ok == true ? "済み" : r.Ok == false ? "要対応" : "未確認");
+            row.Children.Add(mark);
+            var col = new StackPanel();
+            col.Children.Add(new TextBlock { Text = r.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+            var value = new TextBlock { Text = r.Value, TextWrapping = TextWrapping.Wrap, Opacity = r.Ok == false ? 1.0 : 0.8 };
+            if (r.Ok == false) value.Foreground = BrushOf("MagiErrorBrush");
+            col.Children.Add(value);
+            Grid.SetColumn(col, 1);
+            row.Children.Add(col);
+            return row;
         }
-        // [Android 3.704.0 P-1] 上は必須違反・相談・保存（未評価なら評価も）、要調整と注記は「詳しく」に畳む。
-        foreach (var r in PreDistributionCheck.Top(rows)) panel.Children.Add(RowView(r));
+        // [Android 3.704.0 P-1] 上は必須違反・相談・保存（未評価なら評価も）、要調整と注記は「詳しく」に畳む。要対応を上・済みを下（3.727.1）。
+        foreach (var r in CellSheetLogic.PreDistributionOrder(PreDistributionCheck.Top(rows))) panel.Children.Add(RowView(r));
         panel.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.EdgeFoot });
         var details = new StackPanel { Spacing = 8 };
-        foreach (var r in PreDistributionCheck.Details(rows)) details.Children.Add(RowView(r));
+        foreach (var r in CellSheetLogic.PreDistributionOrder(PreDistributionCheck.Details(rows))) details.Children.Add(RowView(r));
         details.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.MonthEdgeNote });
         details.Children.Add(new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 13, Opacity = 0.75, Text = PreDistributionCheck.Note });
         panel.Children.Add(new Expander { Header = "詳しく", Content = details, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch });

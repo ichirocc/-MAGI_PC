@@ -277,6 +277,18 @@ public sealed partial class MagiViewModel
         transform?.Invoke(Ui);
         if (runLabel is not null) Ui.DraftStage = runLabel == "下書きづくり";
         MakeUi(st, schedule, report, analysis);
+        KeepDisplayOf(st, _state);
+    }
+
+    /// <summary>
+    /// [Android 3.726.0] 検査の結果を反映するとき、検査の間に変わった手動固定・表示色は今の設定 <paramref name="now"/> のものを残す（Kotlin <c>keepDisplayOf</c>）。
+    /// この 2 つは採点に効かないので検査を回し直さない（<see cref="TogglePin"/>・<see cref="ApplyDisplayOnly"/>）＝古い検査が画面から巻き戻さないように。
+    /// </summary>
+    internal void KeepDisplayOf(MagiState checkedSt, MagiState? now)
+    {
+        if (now is null || ReferenceEquals(now, checkedSt) || !DisplayOnlyUndo.DiffersOnlyInPinsOrColors(checkedSt, now)) return;
+        ApplyShiftColorsToUi(now);
+        ApplyWishDisplay(now);
     }
 
     /// <summary>

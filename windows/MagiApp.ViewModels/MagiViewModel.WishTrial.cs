@@ -170,6 +170,7 @@ public sealed partial class MagiViewModel
         Ui.Wishes = ns.Wishes;
         Ui.StructureEdited = true;
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
         Ui.StopSummary = null;
         SaveNow();
         var name = token.Staff >= 0 && token.Staff < st.StaffList.Count ? st.StaffList[token.Staff].Name : $"職員{token.Staff + 1}";

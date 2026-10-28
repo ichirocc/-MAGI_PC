@@ -72,7 +72,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <ProgressRing x:Name="ProgressSpinner" Width="22" Height="22" IsActive="True" AutomationProperties.Name="勤務表を組んでいます" />
+                        <ProgressRing x:Name="ProgressSpinner" Width="40" Height="40" IsActive="True" IsIndeterminate="False" Minimum="0" Maximum="100" AutomationProperties.Name="勤務表を組んでいます" />
                         <TextBlock x:Name="ProgressText" Grid.Column="1" TextWrapping="Wrap" VerticalAlignment="Center"
                                    Style="{StaticResource MagiBodyMediumTextStyle}" AutomationProperties.LiveSetting="Polite" />
                     </Grid>
@@ -118,6 +118,9 @@
                     <TextBlock x:Name="RedraftNote" Text="今の結果は「元に戻す」で戻せます。" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 </StackPanel>
             </Border>
+
+            <!-- [Android 3.727.1/3.727.3] 作成のあと: 置き換え前の勤務表のほうが良い知らせ・ハイライト（前後）・日ごとのようす（Kotlin HomeDayStrip.kt）。 -->
+            <StackPanel x:Name="AfterRunHost" Spacing="12" />
 
             <!-- [3.645.0/仕様 5.3] 相談してから決める判断の一覧（Kotlin ConsultCard）。主カードの「未確認事項 N 件」の中身。 -->
             <Border x:Name="ConsultCard" Background="{StaticResource MagiSurfaceVariantBrush}"

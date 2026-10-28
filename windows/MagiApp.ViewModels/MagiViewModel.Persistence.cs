@@ -269,6 +269,8 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         RestoreAlts(snap.Alts);   // 盤面と一緒に、その盤面で有効だった「他の案」も戻す
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
+        Ui.PreDraftNotice = null;
         Ui.StopSummary = null;
         Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
@@ -306,6 +308,8 @@ public sealed partial class MagiViewModel
         _resultSchedule = null;
         RestoreAlts(snap.Alts);
         Ui.RunSummary = null;
+        Ui.RunDelta = null;
+        Ui.PreDraftNotice = null;
         Ui.StopSummary = null;
         Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
         Ui.EngineRan = false;
@@ -487,6 +491,7 @@ public sealed partial class MagiViewModel
                 ui.ElapsedMs = 0;
                 // 前のデータの完了要約・ヒント・他の案・直し方は、このデータのものではない。
                 ui.RunSummary = null;
+                ui.RunDelta = null;
                 ui.StopSummary = null;
                 ui.CopilotHint = null;
                 ui.Alternatives = Array.Empty<string>();

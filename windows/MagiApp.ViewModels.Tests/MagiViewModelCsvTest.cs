@@ -400,6 +400,9 @@ public class MagiViewModelCsvTest
 
         Assert.NotNull(vm.LastImportCsvTask);
         await vm.LastImportCsvTask!;
+        Assert.NotNull(vm.Ui.CsvImportPrompt);   // [Android 3.727.1] 反映の前に確認
+        vm.ConfirmCsvImport();
+        await vm.LastImportCsvTask!;
         Assert.Contains("CSV取込完了", vm.Ui.Message);
     }
 
@@ -513,6 +516,8 @@ public class MagiViewModelCsvTest
         var csvText = ScheduleCsvBridge.Build(st, sched);
 
         vm.ImportCsv(csvText);
+        await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();   // [Android 3.727.1] 反映の前の確認で「取り込む」
         Assert.NotNull(vm.LastImportCsvTask);
         await vm.LastImportCsvTask!;
 
@@ -522,6 +527,31 @@ public class MagiViewModelCsvTest
         Assert.Contains("CSV取込完了", vm.Ui.Message);
         Assert.Contains("2名を更新", vm.Ui.Message);
         Assert.Contains(vm.Ui.OpLog, l => l.Contains("CSV取込 完了 2名一致"));
+    }
+
+    /// <summary>[Android 3.727.1] 勤務表 CSV は反映の前に件数と注意を確認する。取り込まない／確認のあとに盤面が変わったら当てない。</summary>
+    [Fact]
+    public async Task ImportCsvAsksBeforeApplyingAndStaleConfirmDoesNothing()
+    {
+        var st = MinimalState.Build();
+        var sched = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = sched };
+        var edited = MinimalState.BuildSchedule();
+        edited[0][0] = 1;
+        vm.ImportCsv(ScheduleCsvBridge.Build(st, edited));
+        await vm.LastImportCsvTask!;
+        Assert.Equal(new[] { "2/2名の勤務を取り込みます（変わるセル 1）", "必須違反：0 → 0" }, vm.Ui.CsvImportPrompt);
+        Assert.Same(sched, vm._currentSchedule);
+        Assert.False(vm.Ui.Running);
+        vm.CancelCsvImport();
+        Assert.Null(vm.Ui.CsvImportPrompt);
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        vm.ImportCsv(ScheduleCsvBridge.Build(st, edited));
+        await vm.LastImportCsvTask!;
+        vm.SetCell(1, 1, 1);   // 確認のあとの編集
+        vm.ConfirmCsvImport();
+        Assert.Equal(0, vm._currentSchedule![0][0]);
+        Assert.Equal(CsvPartialImport.Stale, vm.Ui.Message);
     }
 
     /// <summary>[Android 3.592.0 の C# 移植漏れ] 取り込んで差し替えた後の診断が中止・失敗したら取込前へ戻し、PushUndo の段も外す。</summary>
@@ -543,6 +573,8 @@ public class MagiViewModelCsvTest
         };
 
         vm.ImportCsv(ScheduleCsvBridge.Build(st, edited));
+        await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();   // [Android 3.727.1] 反映の前の確認で「取り込む」
         if (cancel) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => vm.LastImportCsvTask!);
         else await vm.LastImportCsvTask!;
 
@@ -563,6 +595,8 @@ public class MagiViewModelCsvTest
         var csvText = "スタッフ \\ 日付,1日目\n誰でもない人,A\n";
 
         vm.ImportCsv(csvText);
+        await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();   // [Android 3.727.1] 反映の前の確認で「取り込む」
         Assert.NotNull(vm.LastImportCsvTask);
         await vm.LastImportCsvTask!;
 
@@ -697,6 +731,8 @@ public class MagiViewModelCsvTest
         Assert.NotNull(vm.Ui.CsvPartialPrompt);
 
         vm.ImportCsv("スタッフ \\ 日付,1\n職員A,A\n");
+        await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();   // [Android 3.727.1] 反映の前の確認で「取り込む」
         await vm.LastImportCsvTask!;
 
         Assert.Null(vm.Ui.CsvPartialPrompt);
@@ -960,6 +996,25 @@ public class MagiViewModelCsvTest
         Assert.Contains("今の内容と違います", line);
         vm.ClearCsvSaved();
         Assert.Null(vm.CsvSavedLine());
+    }
+
+    /// <summary>[Android 3.727.1 CsvSavedMarkTest.editingTheBoardInPlaceAfterExportDoesNotChangeWhatWasSaved] 書き出しの文脈は盤面の写しを持つ＝
+    /// 書き出しのあとに同じ配列をその場で書き換えても、保存した内容は書き出した時のもの。</summary>
+    [Fact]
+    public void EditingTheBoardInPlaceAfterExportDoesNotChangeWhatWasSaved()
+    {
+        var b = MinimalState.BuildSchedule();
+        var vm = new MagiViewModel
+        {
+            _state = MinimalState.Build(shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "1", "") }),
+            _currentSchedule = b,
+        };
+        Assert.NotNull(vm.ExportCsv());
+        b[0][0] = 1;   // 書き込みが終わる前に、同じ配列へ編集
+        vm.NotifySave(MagiViewModel.IoOutcome.Ok(), "勤務表CSV");
+        Assert.Contains("今の内容と違います", vm.CsvSavedLine());
+        b[0][0] = 0;
+        Assert.StartsWith("この内容で勤務表CSVを保存済みです（", vm.CsvSavedLine());
     }
 
     [Fact]

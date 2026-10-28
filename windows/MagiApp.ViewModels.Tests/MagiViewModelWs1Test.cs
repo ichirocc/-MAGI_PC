@@ -377,6 +377,23 @@ public class MagiViewModelWs1Test
     }
 
     [Fact]
+    public void ConfirmMonthMoveRecountsWhenTheDataChangedAfterThePrompt()
+    {
+        // [Android 3.727.1] 確認のあとに希望が増えた＝件数がずれた。移さずに今の内容で確認し直す。
+        var st = MinimalState.Build() with { Wishes = new Dictionary<string, int> { ["0,1"] = 1 } };
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        vm.SetMonth(2026, 2);
+        var shown = vm.Ui.MonthMovePrompt!;
+        vm._state = st with { Wishes = new Dictionary<string, int> { ["0,1"] = 1, ["1,2"] = 1 } };
+        vm.ConfirmMonthMove(clearWishes: false);
+        Assert.Equal("2025-12-01", vm._state!.StartDate);
+        Assert.Equal(shown.CarriedWishes + 1, vm.Ui.MonthMovePrompt!.CarriedWishes);
+        Assert.Equal(MonthMovePlan.MonthMoveStale, vm.Ui.Message);
+        vm.ConfirmMonthMove(clearWishes: false);
+        Assert.Equal("2026-02-01", vm._state!.StartDate);
+    }
+
+    [Fact]
     public void SetMonthHandlesLeapFebruary()
     {
         var vm = new MagiViewModel { _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };

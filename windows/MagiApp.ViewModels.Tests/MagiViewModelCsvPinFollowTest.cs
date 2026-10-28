@@ -48,6 +48,8 @@ public class MagiViewModelCsvPinFollowTest
         edited[0][1] = 1;
         vm.ImportCsv(ScheduleCsvBridge.Build(st, edited));
         await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();
+        await vm.LastImportCsvTask!;
 
         Assert.Equal(1, vm._state!.PinAt(0, 1)!.Shift);
         Assert.Equal(0, vm._state!.PinAt(1, 3)!.Shift);
@@ -65,6 +67,8 @@ public class MagiViewModelCsvPinFollowTest
         var sched = MinimalState.BuildSchedule();
         var vm = new MagiViewModel { _state = st, _currentSchedule = sched };
         vm.ImportCsv(ScheduleCsvBridge.Build(st, sched));
+        await vm.LastImportCsvTask!;
+        vm.ConfirmCsvImport();
         await vm.LastImportCsvTask!;
         Assert.DoesNotContain("手動固定", vm.Ui.Message);
         Assert.Equal(0, vm._state!.PinAt(0, 1)!.Shift);

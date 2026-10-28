@@ -312,8 +312,9 @@ public sealed partial class MagiViewModel
             ui.KeptPrevious = false;
             ui.Message = $"バックグラウンド最適化 完了: 必須={r.Report.Hard} 合計={r.Report.Total}";
             ui.RunSummary = prev is not null ? ChangeSummary.Of(st0, prev, sched, r.Report) : null;
+            ui.RunDelta = null;
         });
-        LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total}");
+        LogOp("I", $"バックグラウンド最適化 完了 必須={r.Report.Hard} 合計={r.Report.Total} 重み={(long)r.Report.WeightedScore}");
         _lastResultHard = r.Report.Hard;
         _lastTopHardFamily = r.Report.Hard > 0 ? TopHardFamilyJp(r.Report.Breakdown) : null;
         // 消費したらクリア（再生成時の二重適用を防ぐ）。

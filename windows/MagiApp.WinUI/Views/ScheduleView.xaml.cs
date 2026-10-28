@@ -305,7 +305,7 @@ public sealed partial class ScheduleView : UserControl
         SearchLegendBar.Visibility = ui.Loaded ? Visibility.Visible : Visibility.Collapsed;
         if (!ui.Loaded) return;
         var title = "検索・凡例" + (!_searchLegendOpen && _nameQuery.Length > 0 ? $"（検索中: {_nameQuery}）" : "");
-        SearchLegendToggle.Content = $"{title}  {(_searchLegendOpen ? "閉じる ▾" : "開く ▸")}";
+        Disclosure.Set(SearchLegendToggle, title, _searchLegendOpen);
         SearchLegendPanel.Visibility = _searchLegendOpen ? Visibility.Visible : Visibility.Collapsed;
         if (!_searchLegendOpen) return;
         if (SearchBox.Text != _nameQuery) SearchBox.Text = _nameQuery;
@@ -1652,12 +1652,13 @@ public sealed partial class ScheduleView : UserControl
                     foreach (var c in ChainFixPreview.Of(s, snap, ui.StaffNames, ui.ShiftSymbols, ui.StartDate).Changes) col.Children.Add(Small(c));
                     // [3.712.0] 日ごとの人数と回数の影響は確認の画面が言う＝案のカードでは「詳しく」の中だけ（Android と同じ）。
                     var impactMore = new StackPanel { Spacing = 2, Visibility = Visibility.Collapsed };
-                    var impactToggle = new HyperlinkButton { Content = CellSheetLogic.DiagDetailsLabel, MinHeight = 44 };
+                    var impactToggle = new HyperlinkButton { MinHeight = 44 };
+                    Disclosure.Set(impactToggle, CellSheetLogic.DiagDetailsLabel, false);
                     impactToggle.Click += (_, _) =>
                     {
                         var opened = impactMore.Visibility != Visibility.Visible;
                         impactMore.Visibility = opened ? Visibility.Visible : Visibility.Collapsed;
-                        impactToggle.Content = opened ? CellSheetLogic.DiagDetailsClose : CellSheetLogic.DiagDetailsLabel;
+                        Disclosure.Set(impactToggle, CellSheetLogic.DiagDetailsLabel, opened);
                     };
                     col.Children.Add(impactToggle);
                     col.Children.Add(impactMore);
@@ -2200,88 +2201,110 @@ public sealed partial class ScheduleView : UserControl
     private void ShowHeaderMarkDialog(ScheduleCellVm hv)
     {
         var ui = _vm.Ui;
-        string title; IReadOnlyList<string> lines; FixFocus focus;
-        if (hv.Row == 0 && hv.Col > 0 && hv.Col - 1 < _covMarks.Count && _covMarks[hv.Col - 1].Count > 0)
-        {
-            var j = hv.Col - 1;
-            if (_covMarks[j].Count >= 2) { ShowDayPickDialog(j, _covMarks[j]); return; }
-            title = $"{DayText.Full(ui.StartDate, j)}の人員";
-            lines = GridDisplayMarks.DayCoverageLines(ui, j, _covMarks[j], LabelOf, _vm.NeedCellLimits);
-            focus = new FixFocus(null, _covMarks[j][0].Shift, j);
-        }
-        else if (hv.Col == 0 && hv.Row > 0 && (_countBadges.ContainsKey(hv.Row - 1) || _c1Stuck.Contains(hv.Row - 1)))
+        // [Android 3.727.1] 日ヘッダはどの日でも開く＝シフトごとの人数と職員を縦に並べる（日の配置のシート）。
+        if (hv.Row == 0 && hv.Col > 0 && hv.Col - 1 < ui.Days) { ShowDaySheet(hv.Col - 1); return; }
+        if (hv.Col == 0 && hv.Row > 0 && (_countBadges.ContainsKey(hv.Row - 1) || _c1Stuck.Contains(hv.Row - 1)))
         {
             var i = hv.Row - 1;
-            title = $"{(i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")}さんの勤務状況";
+            var title = $"{(i < ui.StaffNames.Count ? ui.StaffNames[i] : $"#{i}")}さんの勤務状況";
             ShowStaffCountDialog(title, GridDisplayMarks.StaffCountSheetOf(ui, i, LabelOf, _vm.StaffCellLimits), new FixFocus(i, null), _c1Stuck.Contains(i));
-            return;
         }
-        else return;
-        ShowMarkDialog(title, lines, focus);
     }
 
     /// <summary>
-    /// 日ヘッダの人員の印で、2 つ以上の勤務に過不足があるとき（Kotlin MagiFlatGrid の daySheet）: どれを直すかを選んでから案を探す
-    /// （2026-10-14 利用者レビュー: 先頭の勤務だけで探し、どの不足を直す案か分からなかった）。
+    /// [Android 3.727.1] 日の配置のシート（Kotlin MagiFlatGrid の daySheet）: 前後の日へ送る、シフトごとの「入っている人数／必要」と職員（押すとそのセルへ）。
+    /// 過不足が 1 つだけならそのまま案を探す。2 つ以上なら行の「変更案を見る」で選ぶ（2026-10-14 利用者レビュー: どの不足を直す案か分からなかった）。
     /// </summary>
-    private void ShowDayPickDialog(int j, IReadOnlyList<CoverageMark> marks)
+    private void ShowDaySheet(int j)
     {
         var ui = _vm.Ui;
         var panel = new StackPanel { Spacing = 4 };
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = $"{DayText.Full(ui.StartDate, j)}の人員", Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる" };
-        int? picked = null;
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = DayText.Full(ui.StartDate, j), Content = new ScrollViewer { Content = panel, MaxHeight = DialogMaxHeight(480) }, CloseButtonText = "閉じる" };
+        var marks = j < _covMarks.Count ? _covMarks[j] : Array.Empty<CoverageMark>();
+        int? picked = marks.Count == 1 ? marks[0].Shift : null;
         var detach = new List<Action>();
         var rows = new StackPanel { Spacing = 2 };
         var fixHost = new StackPanel();
         void Detach() { foreach (var a in detach.ToList()) a(); detach.Clear(); }
         dialog.Closed += (_, _) => Detach();
+        void Go(int to) { dialog.Hide(); ShowDaySheet(to); }
+        var nav = new Grid();
+        nav.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        nav.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        if (DayDetail.DayStep(j, -1, ui.Days) is { } prev)
+        {
+            var pb = new HyperlinkButton { Content = $"‹ {DayText.Short(ui.StartDate, prev)}", MinHeight = 48 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(pb, $"前の日 {DayText.Full(ui.StartDate, prev)}");
+            pb.Click += (_, _) => Go(prev);
+            nav.Children.Add(pb);
+        }
+        if (DayDetail.DayStep(j, 1, ui.Days) is { } next)
+        {
+            var nb = new HyperlinkButton { Content = $"{DayText.Short(ui.StartDate, next)} ›", MinHeight = 48 };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(nb, $"次の日 {DayText.Full(ui.StartDate, next)}");
+            nb.Click += (_, _) => Go(next);
+            Grid.SetColumn(nb, 1);
+            nav.Children.Add(nb);
+        }
+        panel.Children.Add(nav);
+        void ShowFix()
+        {
+            Detach();
+            fixHost.Children.Clear();
+            if (picked is { } k) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, k, j)));
+        }
         void RenderRows()
         {
             rows.Children.Clear();
-            foreach (var m in marks)
+            foreach (var r in DayDetail.DaySlotRows(_vm.Ui.Schedule, _vm.Ui.ShiftSymbols, j, (k, d) => _vm.NeedCellLimits(k, d)))
             {
                 var row = new Grid { ColumnSpacing = 8 };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(new TextBlock
+                var bad = r.State is DaySlotState.Under or DaySlotState.Over;
+                var line = new TextBlock { Text = r.Line, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, FontWeight = bad ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal };
+                if (r.State == DaySlotState.Under) line.Foreground = (Brush)Application.Current.Resources["MagiErrorBrush"];
+                else if (r.State == DaySlotState.Over) line.Foreground = new SolidColorBrush(DefaultSoftVioColor);
+                row.Children.Add(line);
+                if (marks.Count >= 2 && marks.Any(m => m.Shift == r.Shift))
                 {
-                    Text = CellSheetLogic.DayPickRow(_vm.Ui, j, m, _vm.NeedCellLimits(m.Shift, j)), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
-                    FontWeight = picked == m.Shift ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
-                });
-                FrameworkElement act;
-                if (picked == m.Shift) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
-                else
-                {
-                    var see = new HyperlinkButton { Content = CellSheetLogic.ViewFixesButton, MinHeight = 48 };
-                    var k = m.Shift;
-                    see.Click += (_, _) =>
+                    FrameworkElement act;
+                    if (picked == r.Shift) act = new TextBlock { Text = "選択中", FontSize = 13, Foreground = (Brush)Application.Current.Resources["MagiPrimaryBrush"], VerticalAlignment = VerticalAlignment.Center };
+                    else
                     {
-                        picked = k;
-                        RenderRows();
-                        Detach();
-                        fixHost.Children.Clear();
-                        fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), new FixFocus(null, k, j)));
-                    };
-                    act = see;
+                        var see = new HyperlinkButton { Content = CellSheetLogic.ViewFixesButton, MinHeight = 48 };
+                        var k = r.Shift;
+                        see.Click += (_, _) => { picked = k; RenderRows(); ShowFix(); };
+                        act = see;
+                    }
+                    Grid.SetColumn(act, 1);
+                    row.Children.Add(act);
                 }
-                Grid.SetColumn(act, 1);
-                row.Children.Add(act);
                 rows.Children.Add(row);
+                if (r.Staff.Count == 0) continue;
+                var who = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal };
+                foreach (var i in r.Staff)
+                {
+                    var name = i < _vm.Ui.StaffNames.Count ? _vm.Ui.StaffNames[i] : $"職員{i + 1}";
+                    var b = new HyperlinkButton { Content = name, MinHeight = 48 };
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, $"{name} {r.Symbol}、セルを開く");
+                    var ii = i;
+                    b.Click += (_, _) => { dialog.Hide(); FocusCell(ii, j); };
+                    who.Children.Add(b);
+                }
+                rows.Children.Add(who);
             }
         }
-        panel.Children.Add(new TextBlock { Text = CellSheetLogic.DayPickHeading(marks), TextWrapping = TextWrapping.Wrap });
         RenderRows();
         panel.Children.Add(rows);
-        var dayButtons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        // その日の勤務を見る＝勤務表をその日の列へ送る（FocusCell の職員 -1 は日の列だけを送る）。
-        var seeDay = new Button { Content = $"{DayText.Short(ui.StartDate, j)}の勤務を見る", MinHeight = 48 };
-        seeDay.Click += (_, _) => { dialog.Hide(); FocusCell(-1, j); };
-        dayButtons.Children.Add(seeDay);
-        var needSetting = new Button { Content = SettingsLabel.For("yr_headcount"), MinHeight = 48 };
-        needSetting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: picked ?? marks[0].Shift, Day: j), null); };
-        dayButtons.Children.Add(needSetting);
-        panel.Children.Add(dayButtons);
+        if (marks.Count > 0)
+        {
+            var needSetting = new Button { Content = SettingsLabel.For("yr_headcount"), MinHeight = 48 };
+            needSetting.Click += (_, _) => { dialog.Hide(); _goEditLanding?.Invoke(new EditLanding(0, null, NeedShift: picked ?? marks[0].Shift, Day: j), null); };
+            panel.Children.Add(needSetting);
+        }
         panel.Children.Add(fixHost);
+        ShowFix();
         _ = dialog.ShowAsync();
     }
 
@@ -2442,7 +2465,8 @@ public sealed partial class ScheduleView : UserControl
             else
             {
                 if (c1Stuck) fixHost.Children.Add(C1StuckButtons(() => dialog.Hide()));
-                var fold = new HyperlinkButton { Content = general ? "この職員のほかの変更案を閉じる" : CellSheetLogic.StaffOtherFixesLabel, MinHeight = 48 };
+                var fold = new HyperlinkButton { MinHeight = 48 };
+                Disclosure.Set(fold, CellSheetLogic.StaffOtherFixesLabel, general);
                 fold.Click += (_, _) => { general = !general; Mount(); };
                 fixHost.Children.Add(fold);
                 if (general) fixHost.Children.Add(AttachFixSearch(dialog.Hide, a => detach.Add(a), focus));
@@ -2508,19 +2532,28 @@ public sealed partial class ScheduleView : UserControl
         _ = dialog.ShowAsync();
     }
 
-    private void ShowMarkDialog(string title, IReadOnlyList<string> lines, FixFocus? focus, bool c1Stuck = false)
-    {
-        var panel = new StackPanel { Spacing = 4 };
-        foreach (var l in lines) panel.Children.Add(new TextBlock { Text = l, TextWrapping = TextWrapping.Wrap });
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = new ScrollViewer { Content = panel }, CloseButtonText = "閉じる" };
-        if (c1Stuck) panel.Children.Add(C1StuckButtons(() => dialog.Hide()));
-        if (focus is not null) panel.Children.Add(AttachFixSearch(dialog, focus));
-        _ = dialog.ShowAsync();
-    }
-
     /// <summary>違反のあるセル: 違反の一覧・この職員の回数・偏り・開いた時点で始める直し方探し（Kotlin セルシート）と、
     /// その下にいつでも使える手動の割当ボタン。閉じると探索を取り消す。</summary>
     private CancellationTokenSource? _marksCts;
+    // 巡回の位置を決めたときの一覧とその添字（Kotlin tourBase/tourAt）。作り直された一覧へは TourCursorOf で追従する。
+    private IReadOnlyList<TourItem> _tourBase = Array.Empty<TourItem>();
+    private int _tourAt;
+
+    /// <summary>このセルを開いたときの巡回の位置。覚えている項目がこのセルなら（直して消えた項目も）そこから、無ければこのセルの最初の項目から始める。</summary>
+    private TourCursor ResolveTour(int i, int j, IReadOnlyList<TourItem> tourItems)
+    {
+        static bool Has(TourItem t, int i, int j) => t.Staff == i && t.Days.Contains(j);
+        if (_tourAt >= 0 && _tourAt < _tourBase.Count && Has(_tourBase[_tourAt], i, j))
+        {
+            var c = CellSheetLogic.TourCursorOf(_tourBase, _tourAt, tourItems);
+            if (c.At is null || Has(tourItems[c.At.Value], i, j)) return c;
+        }
+        var at = tourItems.ToList().FindIndex(t => Has(t, i, j));
+        if (at < 0) return new TourCursor(null, null, null);
+        _tourBase = tourItems; _tourAt = at;
+        return CellSheetLogic.TourCursorOf(_tourBase, _tourAt, tourItems);
+    }
+
     /// <summary>セル編集の全体表示（既定＝ちら見。閉じると戻す）。</summary>
     private bool _cellSheetExpanded;
     // ちら見の「変更案を探す」は大きく開いて、このセルの変更案の一覧を開いた状態から始める。
@@ -2547,7 +2580,18 @@ public sealed partial class ScheduleView : UserControl
         var relax = _vm.RelaxTrialFor();
         var handoff = CellSheetLogic.RelaxHandoffOf(relax?.Result, ui.RelaxSearching, _vm.RelaxNoWall(), i, j, _vm.RelaxStopped(), _vm.RelaxUnavailable(), _vm.RelaxFailed());
         var panel = new StackPanel { Spacing = 6, MaxWidth = 400 };
-        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = new ScrollViewer { Content = panel, MaxHeight = DialogMaxHeight(620) } };
+        // [Android 3.727.2] 読むところが入りきらないとき、下に「続きを読む ▼」＝押すと 3/4 画面ぶん送る（行の途中で切れて下が空き、送れると分からなかった）。
+        var sheetScroll = new ScrollViewer { Content = panel, MaxHeight = DialogMaxHeight(620) };
+        var moreBelow = new HyperlinkButton { Content = CellSheetLogic.CellSheetMoreBelow, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Center, Visibility = Visibility.Collapsed };
+        void UpdateMoreBelow() => moreBelow.Visibility = sheetScroll.ScrollableHeight - sheetScroll.VerticalOffset > 1 ? Visibility.Visible : Visibility.Collapsed;
+        sheetScroll.ViewChanged += (_, _) => UpdateMoreBelow();
+        sheetScroll.SizeChanged += (_, _) => UpdateMoreBelow();
+        panel.SizeChanged += (_, _) => UpdateMoreBelow();
+        moreBelow.Click += (_, _) => sheetScroll.ChangeView(null, Math.Min(sheetScroll.ScrollableHeight, sheetScroll.VerticalOffset + sheetScroll.ViewportHeight * 3 / 4), null);
+        var sheetBody = new StackPanel();
+        sheetBody.Children.Add(sheetScroll);
+        sheetBody.Children.Add(moreBelow);
+        var flyout = new Flyout { XamlRoot = anchor.XamlRoot, Content = sheetBody };
         var reopening = false;
         void Reopen(int ni, int nj, int m, int st = 0, int? to = null) { reopening = true; flyout.Hide(); ShowCellEditor(anchor, ni, nj, m, st, to); }
         flyout.Closed += (_, _) => { if (!reopening) _cellSheetExpanded = false; };
@@ -2571,7 +2615,10 @@ public sealed partial class ScheduleView : UserControl
         // 巡回は違反単位（Kotlin hardViolationItems）: このセルが属する件を「必須違反 k / N ・ 見出し」で示し、「次の違反 ▶」は次の件の起点セルへ。
         //   このセルがどの件にも属さなければ先頭の件へ（別の起点ボタンは無い＝旧 ViolationTour（セル単位）は据え置き）。
         var tourItems = _vm.HardViolationItemsFor(LabelOf);
-        var tourAt = tourItems.ToList().FindIndex(t => t.Staff == i && t.Days.Contains(j));
+        // [Android 3.726.0] 前・次は項目の位置で動く（同じセルが 2 件の違反に属しても進める）。直して消えた項目は、入っていた所の次・前へ。
+        var tour = ResolveTour(i, j, tourItems);
+        var tourAt = tour.At ?? -1;
+        void GoTour(int to) { var c = tourItems[to].Cell; _tourBase = tourItems; _tourAt = to; FocusCell(c.I, c.J); Reopen(c.I, c.J, 0); }
         // 対象の行と札（S-2）: 今の勤務はここで言う。巡回中の必須は「必須 2/5」。
         var target = CellSheetLogic.CellSheetTarget(name, ScheduleUtil.FormatDay(ui.StartDate, j), cur >= 0 ? Sym(cur) : null);
         var badge = CellSheetLogic.CellSheetBadge(status.Severity, tourAt >= 0 ? tourAt : null, tourItems.Count);
@@ -2579,14 +2626,13 @@ public sealed partial class ScheduleView : UserControl
         // 巡回中にシートを開いている間は、下部バーの違反ナビを隠す（シートの［◀ 前］［次 ▶］と重複）。
         SetVioNavHidden(tourAt >= 0);
         flyout.Closed += (_, _) => { if (!reopening) SetVioNavHidden(false); };
-        var tourNext = tourItems.Count == 0 ? null : tourItems[tourAt < 0 ? 0 : (tourAt + 1) % tourItems.Count];
-        if (tourNext is not null && (tourItems.Count > 1 || tourAt < 0) && step == 0)
+        int? tourNext = tour.Next ?? (tourAt < 0 && tour.Prev is null && tourItems.Count > 0 ? 0 : null);
+        if (tourNext is { } nextAt && step == 0)
         {
-            var tour = new Button { Content = "次の違反 ▶", MinHeight = 48 };
-            var nx = tourNext.Cell;
-            tour.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
-            Grid.SetColumn(tour, 1);
-            head.Children.Add(tour);
+            var tourButton = new Button { Content = "次の違反 ▶", MinHeight = 48 };
+            tourButton.Click += (_, _) => GoTour(nextAt);
+            Grid.SetColumn(tourButton, 1);
+            head.Children.Add(tourButton);
         }
         head.Children.Add(MakeUndoButton(2));
         panel.Children.Add(head);
@@ -2605,7 +2651,8 @@ public sealed partial class ScheduleView : UserControl
             ShowPeek();
             return;
         }
-        var collapse = new Button { Content = "小さく表示 ▾", MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        var collapse = new Button { MinHeight = 48, HorizontalAlignment = ui.LeftHand ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+        Disclosure.Set(collapse, "小さく表示", true);
         collapse.Click += (_, _) => { _cellSheetExpanded = false; Reopen(i, j, mode); };
         panel.Children.Insert(0, collapse);
 
@@ -2641,15 +2688,13 @@ public sealed partial class ScheduleView : UserControl
                 Foreground = status.Severity == CellSeverity.Hard ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Red, Colors.Red)) : null,
             });
             r2.Children.Add(causeRow);
-            if (tourAt >= 0 && tourItems.Count > 1)
+            if (tour.Prev is { } pv && tour.Next is { } nx)
             {
                 var nav = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-                var pv = tourItems[(tourAt - 1 + tourItems.Count) % tourItems.Count].Cell;
-                var nx = tourItems[(tourAt + 1) % tourItems.Count].Cell;
                 var pb = new Button { Content = "◀ 前", MinHeight = 48 };
                 var nb = new Button { Content = "次 ▶", MinHeight = 48 };
-                pb.Click += (_, _) => { FocusCell(pv.I, pv.J); Reopen(pv.I, pv.J, 0); };
-                nb.Click += (_, _) => { FocusCell(nx.I, nx.J); Reopen(nx.I, nx.J, 0); };
+                pb.Click += (_, _) => GoTour(pv);
+                nb.Click += (_, _) => GoTour(nx);
                 nav.Children.Add(pb);
                 nav.Children.Add(nb);
                 Grid.SetColumn(nav, 1);
@@ -2701,8 +2746,8 @@ public sealed partial class ScheduleView : UserControl
                 };
                 acts.Children.Add(b);
             }
-            var more = new Button { Content = "詳しく ▸", MinHeight = 48, MinWidth = 64 };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, "問題の説明と直し方を表示");
+            var more = new Button { MinHeight = 48, MinWidth = 64 };
+            Disclosure.Set(more, "詳しく", false);
             more.Click += (_, _) => { _cellSheetExpanded = true; Reopen(i, j, mode); };
             acts.Children.Add(more);
             peek.Children.Add(extra);
@@ -3069,12 +3114,13 @@ public sealed partial class ScheduleView : UserControl
                 // [Android 3.683.0] 希望・手動固定・ルールの見直しは「ほかの操作」に畳む（主の操作を先に見せる）。
                 if (moreOps.Children.Count > 0)
                 {
-                    var moreToggle = new HyperlinkButton { Content = CellSheetLogic.MoreOpsLabel, MinHeight = 48 };
+                    var moreToggle = new HyperlinkButton { MinHeight = 48 };
+                    Disclosure.Set(moreToggle, CellSheetLogic.MoreOpsLabel, false);
                     moreToggle.Click += (_, _) =>
                     {
                         var nowOpen = moreOps.Visibility != Visibility.Visible;
                         moreOps.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
-                        moreToggle.Content = nowOpen ? "ほかの操作を閉じる" : CellSheetLogic.MoreOpsLabel;
+                        Disclosure.Set(moreToggle, CellSheetLogic.MoreOpsLabel, nowOpen);
                     };
                     panel.Children.Add(moreToggle);
                     panel.Children.Add(moreOps);

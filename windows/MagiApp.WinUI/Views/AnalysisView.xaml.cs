@@ -97,6 +97,7 @@ public sealed partial class AnalysisView : UserControl
         EmptySubtitleText.Text = CellSheetLogic.EmptyStateSubtitle(ui.Running && !ui.Loaded);
         if (!ui.Loaded)
         {
+            BuildingNoteText.Visibility = Visibility.Collapsed;
             TriageSection.Visibility = Visibility.Collapsed;
             SummarySection.Visibility = Visibility.Collapsed;
             LocationsSection.Visibility = Visibility.Collapsed;
@@ -109,6 +110,17 @@ public sealed partial class AnalysisView : UserControl
             return;
         }
 
+        // [Android 3.727.2] 作成中（下書き・作成・仕上げ）の診断・場所は作成前の盤面のもの＝並べると今の数と食い違う。終われば調べ直す。
+        var building = _vm.BuildingNow();
+        BuildingNoteText.Text = AnalysisTriage.AnalysisBuildingNote;
+        BuildingNoteText.Visibility = building ? Visibility.Visible : Visibility.Collapsed;
+        if (building)
+        {
+            foreach (var sec in new UIElement[] { TriageSection, SummarySection, LocationsSection, FixSection, IssuesSection, C1PlateauSection, PinSection, ForbiddenSection })
+                sec.Visibility = Visibility.Collapsed;
+            RenderLogs(ui);
+            return;
+        }
         RenderTriage(ui);
         RenderSummary(ui);
         RenderLocations(ui);

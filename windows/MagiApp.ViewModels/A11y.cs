@@ -78,4 +78,14 @@ public static class A11y
         : hardViolation ? CellBorder.Violation
         : lowContrast || highContrast ? CellBorder.Outline
         : CellBorder.None;
+
+    /// <summary>開閉の状態の読み上げ（▸／▾ の印は読み上げに渡さない。Kotlin <c>disclosureState</c>）。</summary>
+    public static string DisclosureState(bool open) => open ? "開いています" : "閉じています";
+
+    /// <summary>
+    /// [Android 3.725.0] 開閉や行き先の印つきの見た目の文字「{label} ▸／▾」（Kotlin <c>DisclosureText</c> の見た目）。
+    /// 読み上げは <paramref name="label"/> と <see cref="DisclosureState"/> だけにする（記号は「右向きの三角」と読まれる）。
+    /// <paramref name="open"/> が null なら行き先の印 ▸ で状態は読まない。
+    /// </summary>
+    public static string DisclosureText(string label, bool? open) => label + (open == true ? " ▾" : " ▸");
 }

@@ -1,4 +1,4 @@
-hard=15 soft=315 total=330 weighted=146539.0
+hard=15 soft=315 total=330 weighted=146819.0
 bd.c1=7
 bd.c2=0
 bd.c3=89

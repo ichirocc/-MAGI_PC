@@ -11,6 +11,9 @@ public sealed record MonthMovePlan(
     /// <summary>[3.644.0] 新しい月に無い日番号の通常希望（短い月へ移すと消える）。確認を出す条件に数える。</summary>
     int DroppedWishes = 0)
 {
+    /// <summary>[Android 3.727.1] 確認を出したあとにデータが変わり、引き継ぐ・消える件数がずれたときの一言（移さずに確認し直す）。</summary>
+    public const string MonthMoveStale = "確認のあとでデータが変わったため、件数を数え直しました。もう一度確かめてください";
+
     /// <summary>何も引き継がず何も消えないときだけ確認を省く。</summary>
     public bool NeedsConfirm => CarriedWishes + CarriedNeedExceptions + CarriedPins + DroppedExtWishDays + DroppedPins + DroppedNeedExceptions + DroppedWishes > 0;
 

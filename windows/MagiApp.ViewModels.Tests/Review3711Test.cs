@@ -28,8 +28,8 @@ public class Review3711Test
     [Fact]
     public void SameResultNoticeAndVisibility()
     {
-        Assert.Equal("前回と同じ結果です。条件を変えない限り、この必須違反3件は消えません。", AnalysisTriage.SameResultNotice(3));
-        Assert.Equal("前回と同じ結果です。", AnalysisTriage.SameResultNotice(0));
+        Assert.Equal("前回と同じ結果です。条件を変えない限り、この必須違反3件は消えません。" + AnalysisTriage.SameResultNextDraft, AnalysisTriage.SameResultNotice(3));
+        Assert.Equal("前回と同じ結果です。" + AnalysisTriage.SameResultNextDraft, AnalysisTriage.SameResultNotice(0));
         Assert.False(AnalysisTriage.IsSameRunResult(null, (1L, 2L)));
         Assert.True(AnalysisTriage.IsSameRunResult((1L, 2L), (1L, 2L)));
         Assert.False(AnalysisTriage.IsSameRunResult((1L, 2L), (1L, 3L)));
