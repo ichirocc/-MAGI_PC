@@ -54,7 +54,18 @@ public sealed record SettingIssue(
     string? GroupRangeFamily = null,
     C41Row? GroupRangeRow = null,
     // 意図した設定に由来する案内（上限 0 × 希望）。ログで「設定ミス」と呼ばない。
-    bool Neutral = false);
+    bool Neutral = false,
+    // [backlog #11] 個人の上限0（パート等の意図した指定）の案内。直す項目として数えない（SettingIssues.FixItems）。
+    bool ZeroCap = false);
+
+public static class SettingIssues
+{
+    /// <summary>個人の上限0（休を除く）の表示名。設定ミスでなく意図した対象外として見せる（backlog #11、2026-10-22 ユーザー決定）。</summary>
+    public const string ZeroCapLabel = "対象外（上限0）";
+
+    /// <summary>直す項目として数える診断（個人の上限0の案内を除く）。</summary>
+    public static List<SettingIssue> FixItems(IEnumerable<SettingIssue> issues) => issues.Where(it => !it.ZeroCap).ToList();
+}
 
 /// <summary>
 /// [3.687.0/R02] 希望の取消を診断した入力の指紋（職員 ID・グループと担当可否・日・その日と前後の希望・シフトの並び・希望の前日に禁止・期間）。
@@ -265,6 +276,64 @@ public static partial class V6SanityPort
         ReportDup(p.Cons42, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"グループペア禁止「{GSym(c.G1)}の{Sym(c.S1)} ✕ {GSym(c.G2)}の{Sym(c.S2)}」", $"{Place.Head}の「グループペア禁止」");
         ReportDup(p.Cons41s, c => $"{c.GroupIdx},{c.ShiftIdx},{c.L},{c.U}", c => $"スキルグループのレンジ「{SSym(c.GroupIdx)}・{Sym(c.ShiftIdx)} {Bound(c.L, c.U)}」", $"{Place.Head}の「スキルグループのレンジ」");
         ReportDup(p.Cons42s, c => $"{c.G1},{c.S1},{c.G2},{c.S2}", c => $"スキルグループペア禁止「{SSym(c.G1)}の{Sym(c.S1)} ✕ {SSym(c.G2)}の{Sym(c.S2)}」", $"{Place.Head}の「スキルグループペア禁止」");
+
+        // 2'') [3.534.0/経緯は Android docs/history/3.4xx.md] 必須(c3)/推奨(c3m)はrun-deficit（L以上連続で満たす）、
+        //   禁止(c3n,HARD)は窓マッチ（N連続の窓が1つでもあれば発火）。同じシフトでL>=Nなら必須を満たす
+        //   連続は必ずN連続を含み常に未達＝探索の失敗でなく設定の衝突。c3mn(回避,SOFT)は対象外。
+        MustForbiddenSeqIssues();
+        void MustForbiddenSeqIssues()
+        {
+            static (string Sym, int N)? SingleShiftRun(C3Row row)
+            {
+                var parts = C3SeqBody(row.Pattern);
+                if (parts.Count < 2 || parts.Any(x => x != parts[0])) return null;
+                return (parts[0], parts.Count);
+            }
+            // 複数シフトの並びは「先頭を置いたら残りが続く」を求める（Evaluator.C3Check）＝中に禁止の並びがあれば先頭を置くたびに
+            //   どちらかが違反になる。単一シフト連どうしは下の連続数の比較が受け持つ。
+            string SeqText(int[] seq) => string.Join("→", seq.Select(Sym));
+            static bool ContainsRun(int[] hay, int[] needle) =>
+                needle.Length > 0 && Enumerable.Range(0, Math.Max(0, hay.Length - needle.Length + 1))
+                    .Any(o => Enumerable.Range(0, needle.Length).All(t => hay[o + t] == needle[t]));
+            foreach (var (famRaw, list) in new[] { ("c3", p.Cons3), ("c3m", p.Cons3m) })
+                foreach (var c in list)
+                {
+                    if (C3Run.IsSingleShiftSeq(c.Seq)) continue;
+                    var n = p.Cons3n.FirstOrDefault(x => ContainsRun(c.Seq, x.Seq));
+                    if (n == null) continue;
+                    var famJp = C3FamilyJp(famRaw);
+                    outList.Add(new SettingIssue(IssueKind.Constraint,
+                        $"「{SeqText(c.Seq)}」の並び（{famJp} / 禁止の並び「{SeqText(n.Seq)}」）",
+                        $"{famJp}「{SeqText(c.Seq)}」の中に禁止の並び「{SeqText(n.Seq)}」が入っているため両立できません" +
+                            $"（「{Sym(c.Seq[0])}」を置くと、続けて並べれば禁止の並び、並べなければこの{famJp} の違反になります）",
+                        $"{Place.Edit}{Place.Rule}の「{famJp}」か「禁止の並び」を見直すか、どちらかの行を削除してください"));
+                }
+            var forbidLen = new Dictionary<string, int>();
+            foreach (var row in state.Cons3n)
+            {
+                if (SingleShiftRun(row) is not { } r) continue;
+                forbidLen[r.Sym] = Math.Min(forbidLen.TryGetValue(r.Sym, out var v) ? v : int.MaxValue, r.N);
+            }
+            if (forbidLen.Count == 0) return;
+            void Check(string famRaw, IReadOnlyList<C3Row> rows)
+            {
+                var famJp = C3FamilyJp(famRaw);
+                foreach (var row in rows)
+                {
+                    if (SingleShiftRun(row) is not { } r) continue;
+                    var (sym, l) = r;
+                    if (!forbidLen.TryGetValue(sym, out var n)) continue;
+                    if (l < n) continue;
+                    outList.Add(new SettingIssue(IssueKind.Constraint,
+                        $"「{sym}」の並び（{famJp} {l}連続 / 禁止の並び {n}連続）",
+                        $"「{sym}」を{l}連続以上にする{famJp} が、「{sym}」の{n}連続禁止と両立できません" +
+                            $"（{l}連続以上には必ず{n}連続が含まれるため、この{famJp} は常に未達になります）",
+                        $"{Place.Edit}{Place.Rule}の「{famJp}」か「禁止の並び」で、「{sym}」の連続数を見直すか、どちらかの行を削除してください"));
+                }
+            }
+            Check("c3", state.Cons3);
+            Check("c3m", state.Cons3m);
+        }
 
         // 2b) [監査#8 / Web HF557 A4 の native 移植] 連勤・回数窓制約(cons1)の不能設定
         //   d1>期間: 窓が期間を超え、判定が一度も走らず無言で無効。 d2>d1: 物理的に不可能で全員・全窓が発火し続ける。
@@ -879,9 +948,9 @@ public static partial class V6SanityPort
                 if (wished > hi && hi == 0)
                 {
                     // 上限 0 は意図した「入れない指定」（3.507.0）＝設定ミスと呼ばない。
-                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{Sym(k)}」",
-                        $"個人の上限0（入れない指定）に希望が{wished}件（{DaysText(days)}）載っています。残るのは要調整です",
-                        $"{Place.Edit}{Place.Wish}で{name}さんと相談して希望を調整するか、{Place.Count}で上限を見直してください", Neutral: true));
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{name}さんの「{Sym(k)}」{SettingIssues.ZeroCapLabel}",
+                        $"{SettingIssues.ZeroCapLabel} のシフトに希望が{wished}件（{DaysText(days)}）載っています。希望どおり入るので要調整に数えます",
+                        $"{Place.Edit}{Place.Wish}で{name}さんと希望を確かめてください", Neutral: true, ZeroCap: true));
                 }
                 else if (wished > hi)
                 {
@@ -1005,13 +1074,14 @@ public static partial class V6SanityPort
             }
         }
 
-        // SOFT違反の合計が過大
+        // [監査#7] SOFT 桁溢れ（辞書式崩壊）: soft 合計が HARD 1 件の桁（SCORE_HARD_UNIT）に接近/超過すると、
+        //   HARD と soft が桁で干渉し「必須違反ゼロ最優先」が崩れる。初期解の soft で概算警告。
         {
             var soft = new Evaluator(p).FullEvalParts(ScheduleUtil.NormalizeSchedule(state.Schedule.ToIntArray2D(), p))[1];
-            if (soft >= 900_000L)
+            if (soft >= Evaluator.SCORE_HARD_UNIT / 10 * 9)
             {
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"要調整の合計点が大きすぎます（{soft}）",
-                    "要調整の合計点が上限の 1,000,000 に近く、必須違反を0件にすることを最優先する計算が崩れるおそれがあります",
+                    $"要調整の合計点が上限の {Evaluator.SCORE_HARD_UNIT.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} に近く、必須違反を0件にすることを最優先する計算が崩れるおそれがあります",
                     $"{Place.Edit}{Place.Rule}の解けない決まり（日数より回数が多い期間の制約など）や、{Place.Head}の多数のグループペア禁止・広すぎる範囲の決まりを見直して、要調整を減らしてください"));
             }
         }

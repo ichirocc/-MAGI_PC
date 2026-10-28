@@ -200,6 +200,9 @@ public class ReviewExtWishFollowTest
         };
         Assert.Null(StaffCsvIO.Parse("氏名,グループ,スキル\n同名,H,\n", groups2));
         var up = StaffCsvIO.ParseUpsert("氏名,グループ,スキル\n同名,H,\n", groups2, Grid(groups2));
-        Assert.True(up is null || (up.Updated == 0 && up.Added == 0 && up.AmbiguousNames!.SequenceEqual(new[] { "同名" })));
+        Assert.Equal(new[] { "同名" }, up!.AmbiguousNames); Assert.Equal(0, up.Updated + up.Added);
+        // 他の行が通っても、同姓同名で飛ばした氏名は結果に載る（旧: 結果へ渡さず、画面の警告が出なかった）。
+        var mixed = StaffCsvIO.ParseUpsert("氏名,グループ,スキル\n同名,H,\nC,H,\n", groups2, Grid(groups2))!;
+        Assert.Equal(1, mixed.Updated); Assert.Equal(new[] { "同名" }, mixed.AmbiguousNames);
     }
 }

@@ -67,6 +67,37 @@ public class ConstraintMusTest
         Assert.Equal(2, core.OfType<ConstraintMus.WishPin>().Count());
     }
 
+    /// <summary>職員1人の証明も手動固定を数える（最適化器が必ず守る＝希望固定と同じ需要）。上限1に 2 日固定なら同時に成立しない。</summary>
+    [Fact]
+    public void StaffMusCountsManualPinsLikeWishes()
+    {
+        var st = State(
+            days: 5,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("", "1") })
+            with { ManualPins = new List<ManualPin> { new(0, 0, 1), new(0, 2, 1) } };
+        var res = ConstraintMus.AnalyzeStaffConflicts(new Problem(st));
+        Assert.Single(res);
+        var pins = res[0].Core.OfType<ConstraintMus.WishPin>().ToList();
+        Assert.Equal(2, pins.Count);
+        Assert.True(pins.All(it => it.Manual), "コアの固定は手動固定として名指しする（案内は「固定を外す」）");
+        Assert.Single(res[0].Core.OfType<ConstraintMus.RangeCap>());
+    }
+
+    /// <summary>希望と手動固定が混ざっても同じ数え方（どちらも 1 日分の需要）。</summary>
+    [Fact]
+    public void StaffMusMixesWishAndManualPin()
+    {
+        var st = State(
+            days: 5,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1 },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new Range("", "1") })
+            with { ManualPins = new List<ManualPin> { new(0, 3, 1) } };
+        var pins = ConstraintMus.AnalyzeStaffConflicts(new Problem(st)).Single().Core.OfType<ConstraintMus.WishPin>();
+        Assert.Equal(new[] { false, true }, pins.OrderBy(it => it.Day).Select(it => it.Manual).ToArray());
+    }
+
     [Fact]
     public void StaffMusFloorPlusWishesPigeonhole()
     {

@@ -164,11 +164,9 @@ public static class KotlinInterop
     }
 
     /// <summary>
-    /// Mirrors Java's <c>Math.round(double a): long</c> — "round half up" (an exact .5 midpoint
-    /// always rounds toward positive infinity, regardless of sign), per the JDK's documented
-    /// contract: the result equals <c>(long) Math.floor(a + 0.5d)</c> for every finite value,
-    /// with NaN -&gt; 0 and out-of-<see cref="long"/>-range values clamped to
-    /// <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>.
+    /// Mirrors Java's <c>Math.round(double a): long</c> — the closest integer, with an exact .5
+    /// midpoint rounding toward positive infinity regardless of sign (Java 7+ contract), NaN -&gt; 0
+    /// and out-of-<see cref="long"/>-range values clamped to <see cref="long.MinValue"/>/<see cref="long.MaxValue"/>.
     ///
     /// This differs from C#'s <see cref="Math.Round(double)"/> default (banker's
     /// rounding/round-half-to-even at exact midpoints), which is why a bespoke helper is needed
@@ -182,19 +180,17 @@ public static class KotlinInterop
     /// implemented once, faithfully, and used everywhere this pattern appears so correctness
     /// never depends on which divisor a particular call site happens to use.
     ///
-    /// The real OpenJDK implementation is a bit-twiddling optimization of the same contract; the
-    /// straightforward <c>floor(a + 0.5d)</c> formula below is bit-for-bit equivalent to it for
-    /// every value this codebase's data can actually produce (small counts of scheduled shifts
-    /// over at most ~31 days, divided by small integers) — the two implementations can only
-    /// diverge near <see cref="double"/>'s precision limit close to <see cref="long.MaxValue"/>,
-    /// far outside this domain.
+    /// [Android 3.723.4] <c>floor(a + 0.5d)</c> is NOT equivalent: the addition itself rounds, so
+    /// 0.49999999999999994 became 1 (Java gives 0). The fraction <c>a - floor(a)</c> is exact for a
+    /// double, so comparing it with 0.5 matches Java (same fix as the C++ <c>jround</c>).
     /// </summary>
     public static long MathRound(double a)
     {
         if (double.IsNaN(a)) return 0L;
         if (a <= long.MinValue) return long.MinValue;
         if (a >= long.MaxValue) return long.MaxValue;
-        return (long)Math.Floor(a + 0.5d);
+        var f = Math.Floor(a);
+        return (long)(a - f >= 0.5d ? f + 1d : f);
     }
 
     /// <summary>

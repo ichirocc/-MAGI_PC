@@ -122,6 +122,21 @@ public class V6PortAnalyzerForbiddenTest
             "希望固定の明示と対処の案内");
     }
 
+    // 手で固定したセルは「本人希望」と言わない（直す場所は勤務表の固定）。旧: 手動固定も「本人と相談して希望を調整」と案内した。
+    [Fact]
+    public void ManuallyPinnedForbiddenRunIsNotCalledAWish()
+    {
+        var st = ForbiddenState(
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0 } },
+            cons3n: new List<C3Row> { new(new List<string> { "X", "X" }) },
+            wishes: new Dictionary<string, int> { ["0,0"] = 1 }) with { ManualPins = new List<ManualPin> { new(0, 1, 1) } };
+        var run = Assert.Single(V6PortAnalyzer.DiagnoseForbiddenRuns(st).Runs);
+        Assert.True(run.Cells.All(c => c.Escape == ForbiddenCellEscape.Pinned));
+        Assert.True(run.Cells[1].Detail.StartsWith("手で固定=X", StringComparison.Ordinal), run.Cells[1].Detail);
+        Assert.True(run.Cells[0].Detail.StartsWith("本人希望=X", StringComparison.Ordinal), run.Cells[0].Detail);
+        Assert.True(run.Hint.Contains("手で固定したマス: ") && run.Hint.Contains("本人の希望: ") && run.Hint.Contains("固定を外す"), run.Hint);
+    }
+
     // 離脱すると covU 穴が空くが、玉突き連鎖（FindCovUChain=探索本体と同一関数）で埋め直せる局面は
     // Chain（実証済みの多段手）として案内される。
     // c3n −1 / pref +1 は HARD 件数が同じでも重みでは点数が良くなる＝分類は Pinned のまま、文言にだけ一文を添える。

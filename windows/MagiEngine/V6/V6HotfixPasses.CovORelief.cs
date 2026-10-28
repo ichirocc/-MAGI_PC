@@ -16,7 +16,8 @@ public static partial class V6HotfixPasses
 
     /// <summary>
     /// [Kotlin原本 <c>CovOReliefPolish.apply</c>] 人員過剰(covO)の退避研磨。過剰セルの在勤者を、受け皿のある担当可シフト
-    /// （B4 のような需要 0 のシフトを含む）へ 1 セルずつ動かし、正式チェッカーの keep-best（hard→weighted→total）で採る。
+    /// （B4 のような需要 0 のシフトを含む）へ 1 セルずつ動かし、正式チェッカーの keep-best（hard→weighted→total）で採る
+    /// （回数固定 lo==hi は他の研磨パスと同じ <c>AdoptionGate</c> で崩さない）。
     /// 診断（<c>V6PortAnalyzer</c> の過剰診断）が「移すだけで良くなる」と見つける手と同じ探索を修復として行う。
     /// </summary>
     public static CovOReliefResult ApplyCovOReliefPolish(
@@ -58,7 +59,7 @@ public static partial class V6HotfixPasses
                 if (stop() || applied >= maxMoves) break;
                 if (p.CovOCell(k, j, cov[j][k]) <= 0) continue;
                 int bestI = -1, bestM = -1; ViolationReport? bestAfter = null;
-                int pinned = 0, noRoom = 0, worse = 0;
+                int pinned = 0, noRoom = 0, worse = 0, pinBlocked = 0;
                 for (var i = 0; i < p.S; i++)
                 {
                     if (work[i][j] != k) continue;
@@ -71,10 +72,13 @@ public static partial class V6HotfixPasses
                         if (p.CovOCell(m, j, cov[j][m] + 1) > p.CovOCell(m, j, cov[j][m])) continue;   // 受け皿なし
                         if (evaluations >= maxEvaluations) break;
                         tried = true; evaluations++;
+                        var baseBoard = work.Copy2D();
                         work[i][j] = m;
                         var after = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
+                        var gate = V6SearchOperators.AdoptionGate(p, baseBoard, work, after, bestAfter ?? bestRep);
                         work[i][j] = k;
-                        if (UnifiedViolationChecker.BetterReport(after, bestAfter ?? bestRep)) { bestI = i; bestM = m; bestAfter = after; }
+                        if (gate.Accepted) { bestI = i; bestM = m; bestAfter = after; }
+                        else if (gate.PinBad) pinBlocked++;
                         else
                         {
                             var fam = V6SearchOperators.WorstWorsenedFamily(after, bestRep);
@@ -92,7 +96,9 @@ public static partial class V6HotfixPasses
                 else
                 {
                     rejected += worse;
-                    var why = pinned > 0 && worse == 0 && noRoom == 0 ? "希望固定" : worse > 0 ? "重み悪化" : "受け皿なし";
+                    var why = pinned > 0 && worse == 0 && noRoom == 0 ? "希望固定"
+                        : pinBlocked > 0 && worse <= pinBlocked ? "回数固定"
+                        : worse > 0 ? "重み悪化" : "受け皿なし";
                     residual.Add(new KeyValuePair<string, string>($"{Sym(k)}@{j + 1}", why));
                 }
             }

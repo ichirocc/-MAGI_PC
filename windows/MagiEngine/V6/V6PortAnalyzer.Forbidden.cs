@@ -144,8 +144,11 @@ public static partial class V6PortAnalyzer
                         var cur = norm[i][j];
                         cells.Add(DiagnoseForbiddenCell(state, p, norm, cov, i, j, cur));
                     }
-                    var pinnedDays = string.Join("・",
-                        cells.Where(x => x.Escape == ForbiddenCellEscape.Pinned).Select(x => x.DayLabel));
+                    // 手で固定したマスは希望と別に言う（直すのは本人との相談でなく、勤務表で固定を外すこと）。
+                    var pinnedCells = cells.Where(x => x.Escape == ForbiddenCellEscape.Pinned).ToList();
+                    var byHand = pinnedCells.Where(x => p.Pinned(i, x.DayIndex)).ToList();
+                    var pinnedDays = string.Join("・", pinnedCells.Except(byHand).Select(x => x.DayLabel));
+                    var handDays = string.Join("・", byHand.Select(x => x.DayLabel));
                     string hint;
                     if (cells.Any(x => x.Escape == ForbiddenCellEscape.Free))
                     {
@@ -159,6 +162,13 @@ public static partial class V6PortAnalyzer
                     //   禁止パターンを構成」＝raw hard 件数の下で証明相当（分類は重みに依存しない）。それ以外の塞がり
                     //   (受け皿なし等)は「現在の探索手(単独変更・玉突き連鎖・隣接日調整)を検証して全て不成立」
                     //   という強い証拠であり、全勤務表空間の数学的な非充足証明ではない＝断定を避けた表現にする。
+                    else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned) && byHand.Count > 0)
+                    {
+                        hint = "固定どおりに入れると禁止の並びになります（" +
+                            string.Join(" / ", new[] { pinnedDays.Length > 0 ? $"本人の希望: {pinnedDays}" : null, $"手で固定したマス: {handDays}" }.Where(x => x != null)) + "）。" +
+                            "固定を変えない限り、どう組んでもこの禁止の並びは残ります。勤務表で手の固定を外す" +
+                            (pinnedDays.Length > 0 ? "か、本人と相談して希望を1件調整" : "") + "してください" + ScoreHintOf(cells);
+                    }
                     else if (cells.All(x => x.Escape == ForbiddenCellEscape.Pinned))
                     {
                         hint = $"本人の希望どおりに入れると禁止の並びになります（本人の希望: {pinnedDays}）。" +
@@ -169,6 +179,7 @@ public static partial class V6PortAnalyzer
                     {
                         hint = "全セルが塞がっています" +
                             (pinnedDays.Length > 0 ? $"（本人の希望: {pinnedDays}）" : "") +
+                            (handDays.Length > 0 ? $"（手で固定したマス: {handDays}）" : "") +
                             "。各セルで試したのは 1 セルの変更・そのセルを起点にした人員の玉突き・隣の日の調整までで、" +
                             "いずれも不成立でした（複数日にまたがる 2 人の入れ替えなどは試していません）。" +
                             "周辺の希望を1件調整するか、担当を追加してください" + ScoreHintOf(cells);
@@ -250,7 +261,12 @@ public static partial class V6PortAnalyzer
         //   それは希望を変える手＝利用者の操作なので、「探索未到達」に見せず希望固定として返す。
         var wishHeld = PolishGate.WishPinStrict && p.WishLocked(i, j) && p.LockTo(i, j) == cur;
         return wishHeld && cell.Escape is ForbiddenCellEscape.Free or ForbiddenCellEscape.Chain or ForbiddenCellEscape.Adjacent
-            ? cell with { Escape = ForbiddenCellEscape.Pinned, Detail = $"本人希望={cell.ShiftSymbol}（勤務表づくりは希望を動かしません。この希望を1件変えれば崩せます）" }
+            ? cell with
+            {
+                Escape = ForbiddenCellEscape.Pinned,
+                Detail = p.Pinned(i, j) ? $"手で固定={cell.ShiftSymbol}（勤務表づくりは固定を動かしません。勤務表で固定を外せば崩せます）"
+                    : $"本人希望={cell.ShiftSymbol}（勤務表づくりは希望を動かしません。この希望を1件変えれば崩せます）",
+            }
             : cell;
     }
 
