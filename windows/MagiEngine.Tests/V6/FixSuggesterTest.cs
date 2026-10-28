@@ -167,4 +167,22 @@ public class FixSuggesterTest
         }
         finally { FixSuggester.RestoreWishLocked = saved; }
     }
+
+    /// <summary>打ち切りの有無は呼出ごとの戻り値に載る（V61-04: 旧は静的変数で、後の探索が前の探索の値を上書きした）。</summary>
+    [Fact]
+    public void TimedOutBelongsToEachCall()
+    {
+        var st = MinimalState.Build(
+            startDate: "2026-01-01", endDate: "2026-01-02",
+            shifts: Shifts(), groups: new List<Group> { new("G0", "G0") }, staffList: new List<Staff> { new("s0", 0), new("s1", 0) }, use2Patterns: false,
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+            groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+            schedule: new List<IReadOnlyList<int>> { new List<int> { 0, 0 }, new List<int> { 1, 0 } },
+            staffRange: new Dictionary<string, Range> { ["0,1"] = new(Lo: "1", Hi: ""), ["1,1"] = new(Lo: "", Hi: "0") });
+        var sched = st.Schedule.ToIntArray2D();
+        var cut = FixSuggester.SuggestResult(st, sched, deadlineMs: -1L);
+        var full = FixSuggester.SuggestResult(st, sched, deadlineMs: 60_000L);
+        Assert.True(cut.TimedOut, "締切 -1 は打ち切り");
+        Assert.True(cut.TimedOut && !full.TimedOut, "後の探索が前の結果を書き換えない");
+    }
 }

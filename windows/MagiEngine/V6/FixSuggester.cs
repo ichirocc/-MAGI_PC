@@ -73,10 +73,8 @@ public sealed record FixSuggestion(
 /// </summary>
 public static class FixSuggester
 {
-    private static volatile bool _lastTimedOut;
-
-    /// <summary>直近の探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。</summary>
-    public static bool LastTimedOut { get => _lastTimedOut; set => _lastTimedOut = value; }
+    /// <summary>提案と、その探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。呼出ごとに持つ＝並行する探索の値と混ざらない。</summary>
+    public sealed record Result(List<FixSuggestion> Suggestions, bool TimedOut);
 
     private static volatile bool _restoreWishLocked = true;
 
@@ -100,10 +98,21 @@ public static class FixSuggester
         int? focusShift = null,
         int maxResults = 8,
         long deadlineMs = 8000L,
+        bool strictNewHard = true) =>
+        SuggestResult(state, schedule, focusStaff, focusShift, maxResults, deadlineMs, strictNewHard).Suggestions;
+
+    /// <summary><see cref="Suggest"/> に打ち切りの有無を添えたもの。</summary>
+    public static Result SuggestResult(
+        MagiState state,
+        int[][] schedule,
+        int? focusStaff = null,
+        int? focusShift = null,
+        int maxResults = 8,
+        long deadlineMs = 8000L,
         bool strictNewHard = true)
     {
         var p = new Problem(state);
-        if (p.S < 1 || p.T < 1) return new List<FixSuggestion>();
+        if (p.S < 1 || p.T < 1) return new Result(new List<FixSuggestion>(), false);
         return new Session(state, p, ScheduleUtil.NormalizeSchedule(schedule, p), focusStaff, focusShift, deadlineMs, strictNewHard).Run(maxResults);
     }
 
@@ -257,7 +266,7 @@ public static class FixSuggester
             if (!V6SearchOperators.ExactPinRegression(_p, _s, after)) Record(kind, ops, label, rep);
         }
 
-        public List<FixSuggestion> Run(int maxResults)
+        public Result Run(int maxResults)
         {
             SingleChanges();
             SameDaySwaps();
@@ -266,8 +275,8 @@ public static class FixSuggester
             Windows();
             Rotations3();
             CrossDaySwaps();
-            _lastTimedOut = TimeUp();
-            return Collect(maxResults);
+            var timedOut = TimeUp();
+            return new Result(Collect(maxResults), timedOut);
         }
 
         /// <summary>Phase 1: 単一マス変更（広く）。</summary>

@@ -145,18 +145,24 @@ public sealed partial class MagiViewModel
                 {
                     var found = exceptStaff is { } ex && day is { } dd
                         // 「他の人で補う」（Android CellSheetLogic.fixesByOthers）: 全体で探し、本人を含まずその日を含む手だけ。
-                        ? CellSheetLogic.FixesByOthers(FixSuggester.Suggest(st, snap, focusStaff: null, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), dd, ex).Take(8).ToList()
+                        ? CellSheetLogic.FixesByOthers(Search(null, 40), dd, ex).Take(8).ToList()
                         : target is not null
                         ? TieredFor(target)
-                        : FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 8, deadlineMs: deadline);
-                    timedOut = FixSuggester.LastTimedOut;
+                        : Search(focusStaff, 8);
                     return found;
+
+                    List<FixSuggestion> Search(int? staff, int max)
+                    {
+                        var r = FixSuggester.SuggestResult(st, snap, focusStaff: staff, focusShift: focusShift, maxResults: max, deadlineMs: deadline);
+                        timedOut = r.TimedOut;
+                        return r.Suggestions;
+                    }
 
                     // 入り口の範囲の中の 1 セルの変更を先に評価し、探索の案と合わせて段に分ける。
                     IReadOnlyList<FixSuggestion> TieredFor(FixTarget t)
                     {
                         var entry = FixTiers.EntryMoves(st, snap, t, ScheduleUtil.RestShiftIndex(st));
-                        var ranked = CellSheetLogic.RankForTarget(FixSuggester.Suggest(st, snap, focusStaff: focusStaff, focusShift: focusShift, maxResults: 40, deadlineMs: deadline), board, t).Take(8).ToList();
+                        var ranked = CellSheetLogic.RankForTarget(Search(focusStaff, 40), board, t).Take(8).ToList();
                         tiers = FixTiers.ClassifyTiers(st, snap, t, entry, ranked, NeedCellLimits, labelOf: labelOf) with { Key = focusKey };
                         return tiers.Items.Select(x => x.Sug).ToList();
                     }
