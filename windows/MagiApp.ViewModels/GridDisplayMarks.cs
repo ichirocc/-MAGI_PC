@@ -399,9 +399,13 @@ public static class FixSearchText
         int? CellAt(int i, int j) => i >= 0 && i < ui.Schedule.Count && j >= 0 && j < ui.Schedule[i].Count ? ui.Schedule[i][j] : null;
         int Headcount(int k, int j) => ui.Schedule.Count(r => j < r.Count && r[j] == k);
         bool WishIs(int i, int j, int k) => ui.Wishes.TryGetValue($"{i},{j}", out var w) && w == k;
-        if (f.Staff is { } si && f.Day is { } sd && CellAt(si, sd) is { } cur && WishIs(si, sd, cur))
+        // 手動固定も最適化器と直し方が動かさない（希望と別に言う＝直す場所が勤務表の固定）。
+        bool Manual(int i2, int j) => ui.ManualPins.Contains($"{i2},{j}");
+        var pinnedByHand = false;
+        if (f.Staff is { } si && f.Day is { } sd && CellAt(si, sd) is { } cur)
         {
-            outList.Add($"このセル（{DayText.Short(ui.StartDate, sd)} の「{Sym(cur)}」）は本人の希望で固定されています。"); wish = true;
+            if (WishIs(si, sd, cur)) { outList.Add($"このセル（{DayText.Short(ui.StartDate, sd)} の「{Sym(cur)}」）は本人の希望で固定されています。"); wish = true; }
+            else if (Manual(si, sd)) { outList.Add($"このセル（{DayText.Short(ui.StartDate, sd)} の「{Sym(cur)}」）は手で固定したマスです。"); pinnedByHand = true; }
         }
         IReadOnlyList<string> FamsAt(int i, int j) => ui.ViolationCellFamilies.TryGetValue($"{i},{j}", out var fs) ? fs : Array.Empty<string>();
         // 禁止の並びの相手が本人の希望のセル＝このセルを動かしても並びは希望側に残る。
@@ -420,6 +424,8 @@ public static class FixSearchText
             var pinned = days.Where(j => WishIs(i, j, k)).ToList();
             if (days.Count > 0 && pinned.Count == days.Count) { outList.Add($"「{Sym(k)}」の {days.Count} 回はどれも本人の希望で固定されています。"); wish = true; }
             else if (pinned.Count > 0) { outList.Add($"「{Sym(k)}」の {days.Count} 回のうち {pinned.Count} 回は本人の希望で固定されています。"); wish = true; }
+            var byHand = days.Where(j => !pinned.Contains(j) && Manual(i, j)).ToList();
+            if (byHand.Count > 0) { outList.Add($"「{Sym(k)}」の {days.Count} 回のうち {byHand.Count} 回は手で固定したマスです。"); pinnedByHand = true; }
             var hi = limits?.Invoke(i, k).Hi;
             if (hi == 0 && days.Count > 0) outList.Add($"「{Sym(k)}」は{SettingIssues.ZeroCapLabel} です。");
             var tight = days.Where(j => needLimits?.Invoke(k, j) is { } lim && Headcount(k, j) <= lim.Lo).ToList();
@@ -443,17 +449,25 @@ public static class FixSearchText
         }
         if (f.Staff is null && f.Shift is { } dk && f.Day is { } dd)
         {
-            var pinned = Enumerable.Range(0, ui.Schedule.Count).Where(s => CellAt(s, dd) == dk && WishIs(s, dd, dk)).ToList();
+            var here = Enumerable.Range(0, ui.Schedule.Count).Where(s => CellAt(s, dd) == dk).ToList();
+            var pinned = here.Where(s => WishIs(s, dd, dk)).ToList();
+            string Names(List<int> xs) => string.Join("・", xs.Select(s => (s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}") + "さん"));
             if (pinned.Count > 0)
             {
-                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + string.Join("・", pinned.Select(s => (s < ui.StaffNames.Count ? ui.StaffNames[s] : $"#{s}") + "さん")) + " は本人の希望で固定されています。");
+                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + Names(pinned) + " は本人の希望で固定されています。");
                 wish = true;
+            }
+            var byHand = here.Where(s => !pinned.Contains(s) && Manual(s, dd)).ToList();
+            if (byHand.Count > 0)
+            {
+                outList.Add($"{DayText.Short(ui.StartDate, dd)} の「{Sym(dk)}」のうち " + Names(byHand) + " は手で固定したマスです。");
+                pinnedByHand = true;
             }
         }
         outList.Add(NoFixScope);
         // 区分の優先: 矛盾を確かめた＞時間で打ち切った＞固定条件が理由に挙がった＞調べた範囲で無い。
         var contradiction = f.Staff is { } ki && f.Day is { } kd && ui.WishSelfConflicts.Any(c => c.Staff == ki && c.Days.Contains(kd));
-        var isFixed = wish || outList.Any(l => l.Contains(SettingIssues.ZeroCapLabel) || l.Contains("下限＝上限で固定"));
+        var isFixed = wish || pinnedByHand || outList.Any(l => l.Contains(SettingIssues.ZeroCapLabel) || l.Contains("下限＝上限で固定"));
         var kind = contradiction ? NoFixKind.Contradiction : ui.FixTimedOut ? NoFixKind.Time : isFixed ? NoFixKind.Fixed : NoFixKind.Scope;
         outList[0] = kind.Head();
         return new NoFixExplain(outList, wish, f.Staff is null && f.Shift is not null ? "yr_headcount" : "yr_count", kind);

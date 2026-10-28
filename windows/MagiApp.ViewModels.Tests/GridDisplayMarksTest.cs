@@ -283,6 +283,22 @@ public class GridDisplayMarksTest
         Assert.Equal("本人の希望（10/2 の「A4」）は守ったままです。", w1.Lines[1]);
     }
 
+    /// <summary>手で固定したマスも理由に挙げ、「固定条件による制限」に分ける（希望とは言わない）。旧: 手動固定だけが原因でも「調べた範囲で無い」。</summary>
+    [Fact]
+    public void NoFixReasonsNameManualPinsApartFromWishes()
+    {
+        var u = new UiState
+        {
+            StartDate = "2026-10-01", Staff = 2, Days = 2, Shifts = 2, ShiftSymbols = new[] { "休", "A" },
+            Schedule = new IReadOnlyList<int>[] { new[] { 1, 0 }, new[] { 1, 1 } }, ManualPins = new HashSet<string> { "0,0", "1,0" },
+        };
+        var cell = FixSearchText.NoFixReasons(u, new FixFocus(0, null, 0));
+        Assert.Equal("このセル（10/1 の「A」）は手で固定したマスです。", cell.Lines[1]);
+        Assert.Equal(NoFixKind.Fixed, cell.Kind); Assert.False(cell.WishRelated);
+        Assert.Contains(FixSearchText.NoFixReasons(u, new FixFocus(0, 1)).Lines, l => l.Contains("1 回のうち 1 回は手で固定したマス"));
+        Assert.Contains(FixSearchText.NoFixReasons(u, new FixFocus(null, 1, 0)).Lines, l => l.EndsWith("のうち #0さん・#1さん は手で固定したマスです。"));
+    }
+
     /// <summary>見つからない理由の区分（仕様 §7）: 矛盾＞時間不足＞固定条件＞調べた範囲。どれも「解決できない」とは言わない。</summary>
     [Fact]
     public void NoFixKindSeparatesTimeContradictionAndScope()
