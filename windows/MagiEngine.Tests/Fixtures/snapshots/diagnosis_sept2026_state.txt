@@ -1,0 +1,53 @@
+ok=true
+note groupShiftApt 適切回数: 20 件
+note shifts=10 groups=10 staff=10 days=30
+note 2世代需要(セル毎OR/AND: #4b)が有効
+bits LoadDataBit: staffN=10 termT=30 shiftK=10 assigned=300/300 allowBits=57 wishes=86 ranges=36
+bit Group G0: members=3 allowed=[休 Dﾃ A4 Aｱ Cｵ Cｱ B4 有]
+bit Group G1: members=3 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group G2: members=0 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group G3: members=0 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group G4: members=0 allowed=[休 A4 Aｱ Cｵ Cｱ B4 有]
+bit Group G5: members=1 allowed=[休 Pｼ Aｱ]
+bit Group G6: members=0 allowed=[休 有]
+bit Group G7: members=1 allowed=[休 A4 有 B1]
+bit Group G8: members=1 allowed=[休 Dﾃ A4 Aｱ Cｵ Cｱ B4 有]
+bit Group G9: members=1 allowed=[休 Dﾃ A4 Aｱ Cｵ B4 有]
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員A, shiftSymbol=Dﾃ, count=4, lo=0, hi=3, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員D, shiftSymbol=A4, count=6, lo=2, hi=2, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員H, shiftSymbol=Aｱ, count=5, lo=0, hi=2, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員A, shiftSymbol=休, count=10, lo=10, hi=12, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員A, shiftSymbol=A4, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員A, shiftSymbol=Cｵ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員B, shiftSymbol=休, count=7, lo=7, hi=9, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員B, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員B, shiftSymbol=A4, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員B, shiftSymbol=Cｵ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員C, shiftSymbol=休, count=8, lo=7, hi=9, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員C, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員C, shiftSymbol=A4, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員C, shiftSymbol=Cｵ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員D, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員D, shiftSymbol=B1, count=13, lo=1, hi=23, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員E, shiftSymbol=休, count=8, lo=3, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員E, shiftSymbol=Dﾃ, count=3, lo=3, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員E, shiftSymbol=A4, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員E, shiftSymbol=Cｵ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員F, shiftSymbol=休, count=9, lo=9, hi=9, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員F, shiftSymbol=Dﾃ, count=2, lo=2, hi=2, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員F, shiftSymbol=Aｱ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員F, shiftSymbol=Cｱ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員G, shiftSymbol=休, count=8, lo=8, hi=9, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員G, shiftSymbol=Dﾃ, count=5, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員G, shiftSymbol=Aｱ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員G, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員I, shiftSymbol=休, count=5, lo=5, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員I, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員I, shiftSymbol=Aｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員I, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員J, shiftSymbol=休, count=9, lo=9, hi=9, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員J, shiftSymbol=Dﾃ, count=4, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員J, shiftSymbol=Aｱ, count=6, lo=6, hi=8, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員J, shiftSymbol=Cｱ, count=7, lo=6, hi=8, status=OK)
+guide SettingIssue(kind=RANGE, where=職員Iさんの「休」個人上限と期間の制約の衝突, problem=期間の制約「休 4日で1回以上 かつ 14日で4回以上」を同時に満たすには最低8回が必要ですが、職員Iさんの「休」個人上限は5回です。この人だけではどう配置しても期間の制約を満たせません, fix=編集タブの『年間マスター』の『③ 回数（1人あたり）』で職員Iさんの「休」の個人上限を8回以上に上げるか、『年間マスター』の『⑤ 並び・期間の制約』の「期間の制約」で回数を下げてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=RANGE, where=職員H の「休」適切回数と希望, problem=「休」の希望が15件（9/3(木)・9/5(土)・9/6(日) ほか）あり、適切回数の目標10回を超えています。希望どおりに配置する限り「休」は必ず15回以上になります。計算では15回を目標として扱うため差5回は違反には出ませんが、設定の目標には届きません, fix=編集タブの『年間マスター』の『③ 回数（1人あたり）』で「休」の適切回数を15回以上にするか、『月次条件』の『希望シフト登録』で職員Hさんと相談して「休」の希望を5件減らしてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)

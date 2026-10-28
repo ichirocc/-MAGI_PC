@@ -1,0 +1,78 @@
+ok=true
+note groupShiftApt 適切回数: 25 件
+note shifts=10 groups=9 staff=11 days=31
+note 2世代需要(セル毎OR/AND: #4b)が有効
+bits LoadDataBit: staffN=11 termT=31 shiftK=10 assigned=341/341 allowBits=51 wishes=102 ranges=50
+bit Group 柳: members=6 allowed=[休 Dﾃ A4 Aｱ Cｱ Cｵ B4 有 B1]
+bit Group 桐: members=5 allowed=[休 Pｼ Dﾃ A4 Aｱ Cｱ Cｵ B4 有]
+bit Group S: members=0 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group Pﾅ: members=0 allowed=[休 有]
+bit Group SN: members=0 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+bit Group NE: members=0 allowed=[休 A4 Aｱ Cｱ Cｵ B4 有]
+bit Group B: members=0 allowed=[休 B4 有]
+bit Group Pｼ: members=0 allowed=[休 Pｼ 有]
+bit Group 吉: members=0 allowed=[休 Dﾃ Aｱ Cｱ B4 有]
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=Aｱ, count=1, lo=0, hi=0, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=Cｵ, count=1, lo=0, hi=0, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=B1, count=17, lo=20, hi=21, status=LOW)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員05, shiftSymbol=Cｱ, count=3, lo=0, hi=1, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=Pｼ, count=18, lo=19, hi=21, status=LOW)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=Cｱ, count=2, lo=0, hi=0, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=有, count=1, lo=0, hi=0, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=10, staffName=職員11, shiftSymbol=Aｱ, count=2, lo=0, hi=1, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=10, staffName=職員11, shiftSymbol=Cｵ, count=12, lo=0, hi=0, status=HIGH)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=Dﾃ, count=3, lo=1, hi=4, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=A4, count=2, lo=0, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=Aｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=Cｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=0, staffName=職員01, shiftSymbol=有, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員02, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員02, shiftSymbol=Aｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=1, staffName=職員02, shiftSymbol=Cｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員03, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員03, shiftSymbol=Dﾃ, count=5, lo=4, hi=5, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員03, shiftSymbol=Aｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=2, staffName=職員03, shiftSymbol=Cｱ, count=0, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=Dﾃ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=A4, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=Cｱ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=3, staffName=職員04, shiftSymbol=B4, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員05, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員05, shiftSymbol=Dﾃ, count=3, lo=3, hi=4, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=4, staffName=職員05, shiftSymbol=Aｱ, count=1, lo=0, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員06, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員06, shiftSymbol=Pｼ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員06, shiftSymbol=Dﾃ, count=2, lo=1, hi=2, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=5, staffName=職員06, shiftSymbol=Cｵ, count=1, lo=null, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員07, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員07, shiftSymbol=Pｼ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=6, staffName=職員07, shiftSymbol=Cｵ, count=1, lo=null, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=Dﾃ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=A4, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=Aｱ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=Cｵ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=7, staffName=職員08, shiftSymbol=B4, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員09, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員09, shiftSymbol=Pｼ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=8, staffName=職員09, shiftSymbol=Cｵ, count=1, lo=null, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員10, shiftSymbol=休, count=10, lo=10, hi=10, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員10, shiftSymbol=Pｼ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=9, staffName=職員10, shiftSymbol=Cｵ, count=1, lo=null, hi=1, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=10, staffName=職員11, shiftSymbol=Dﾃ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=10, staffName=職員11, shiftSymbol=Cｱ, count=0, lo=0, hi=0, status=OK)
+shiftCount ShiftCountDiagnostic(staffIndex=10, staffName=職員11, shiftSymbol=有, count=0, lo=0, hi=0, status=OK)
+guide SettingIssue(kind=WISH, where=職員03 10/1(木) 希望「Dﾃ」→ 10/2(金) 希望「休」, problem=「休 の希望の前日は Dﾃ 禁止」に希望どうしで当たっています。希望は固定なので計算では解消できません, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談してどちらかの希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「希望の前日に禁止」でこの行を見直してください, action=REMOVE_WISH, actionLabel=前日の希望を取消, wishKey=2,0, wishShift=2, wishStaffId=3, wishFingerprint=6633252805324020206, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=職員01 10/25(日)・10/26(月)・10/27(火) 希望「休→休→休」, problem=禁止の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では解消できません, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「休→休→休」を見直してください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=職員05 10/23(金)・10/24(土)・10/25(日) 希望「休→休→休」, problem=禁止の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では解消できません, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「休→休→休」を見直してください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=職員08 10/10(土)・10/11(日)・10/12(月) 希望「休→休→休」, problem=禁止の並び「休→休→休」に希望どうしで当たっています。希望は固定なので計算では解消できません, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談していずれか1件の希望を調整する（希望は外れます。元に戻せます）か、『年間マスター』の『⑤ 並び・期間の制約』の「禁止の並び」で「休→休→休」を見直してください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=職員04さんの希望と条件の組合せ, problem=次の4件は同時に成立しません: 個人下限「休を最低10回」 ・ 個人下限「B1を最低20回」 ・ 希望「職員04 10/5(月)=有」 ・ 希望「職員04 10/6(火)=有」, fix=編集タブで、いずれか1件を緩めてください（例: 『年間マスター』の『③ 回数（1人あたり）』で「休」の個人下限を下げる / 『年間マスター』の『③ 回数（1人あたり）』で「B1」の個人下限を下げる）, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=10/29(木) の必要人数と固定希望の衝突, problem=固定された希望の組合せでは、この日の必要人数を満たせません。次の7件は同時に成立しません: 必要人数「Cｱに1人」 ・ 必要人数「Cｵに2人」 ・ 必要人数「B4に3人」 ・ 希望「職員03 10/29(木)=A4」 ・ 希望「職員07 10/29(木)=Dﾃ」 ・ 希望「職員09 10/29(木)=休」 ・ 希望「職員10 10/29(木)=Aｱ」。個人上限が0のため置けない人: 職員04・職員08・職員11（Cｱ）、職員04・職員08・職員11（Cｵ）、職員04・職員08（B4）, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談してこの日の希望を1件調整するか、『月次条件』の『必要人数設定』でこの日の必要人数を下げてください（例: 職員03さんの10/29(木)の希望を調整する）, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=10/9(金) の必要人数と固定希望の衝突, problem=固定された希望の組合せでは、この日の必要人数を満たせません。次の8件は同時に成立しません: 必要人数「Dﾃに1人」 ・ 必要人数「Cｱに1人」 ・ 必要人数「Cｵに2人」 ・ 希望「職員03 10/9(金)=A4」 ・ 希望「職員06 10/9(金)=休」 ・ 希望「職員07 10/9(金)=有」 ・ 希望「職員09 10/9(金)=Aｱ」 ・ 希望「職員10 10/9(金)=A4」。個人上限が0のため置けない人: 職員04・職員08・職員11（Dﾃ）、職員04・職員08・職員11（Cｱ）、職員04・職員08・職員11（Cｵ）, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談してこの日の希望を1件調整するか、『月次条件』の『必要人数設定』でこの日の必要人数を下げてください（例: 職員03さんの10/9(金)の希望を調整する）, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=WISH, where=10/10(土) の必要人数と固定希望の衝突, problem=固定された希望の組合せでは、この日の必要人数を満たせません。次の9件は同時に成立しません: 必要人数「Dﾃに1人」 ・ 必要人数「A4に1人」 ・ 必要人数「Aｱに1人」 ・ 必要人数「Cｱに1人」 ・ 必要人数「Cｵに2人」 ・ 希望「職員02 10/10(土)=休」 ・ 希望「職員03 10/10(土)=有」 ・ 希望「職員07 10/10(土)=有」 ・ 希望「職員10 10/10(土)=有」。個人上限が0のため置けない人: 職員04・職員08・職員11（Dﾃ）、職員04・職員08（A4）、職員04・職員08（Aｱ）、職員04・職員08・職員11（Cｱ）、職員04・職員08・職員11（Cｵ）, fix=編集タブの『月次条件』の『希望シフト登録』で本人と相談してこの日の希望を1件調整するか、『月次条件』の『必要人数設定』でこの日の必要人数を下げてください（例: 職員02さんの10/10(土)の希望を調整する）, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=DEMAND, where=「Aｱ」の適切回数の合計, problem=担当者の適切回数（1人あたりの目標）の合計が32回ですが、必要数の合計は31回しかありません。全員の目標は同時に満たせず、目標割れか人員過剰が必ず出ます, fix=編集タブの『年間マスター』の『③ 回数（1人あたり）』で「Aｱ」の適切回数を下げるか、『月次条件』の『必要人数設定』で「Aｱ」の必要人数を増やしてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=RANGE, where=職員03 の「有」適切回数と希望, problem=「有」の希望が2件（10/10(土)・10/11(日)）あり、適切回数の目標1回を超えています。希望どおりに配置する限り「有」は必ず2回以上になります。計算では2回を目標として扱うため差1回は違反には出ませんが、設定の目標には届きません, fix=編集タブの『年間マスター』の『③ 回数（1人あたり）』で「有」の適切回数を2回以上にするか、『月次条件』の『希望シフト登録』で職員03さんと相談して「有」の希望を1件減らしてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=RANGE, where=職員04 の「有」適切回数と希望, problem=「有」の希望が2件（10/5(月)・10/6(火)）あり、適切回数の目標1回を超えています。希望どおりに配置する限り「有」は必ず2回以上になります。計算では1回を目標として扱うため差1回は違反には出ませんが、設定の目標には届きません, fix=編集タブの『年間マスター』の『③ 回数（1人あたり）』で「有」の適切回数を2回以上にするか、『月次条件』の『希望シフト登録』で職員04さんと相談して「有」の希望を1件減らしてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=false, zeroCap=false)
+guide SettingIssue(kind=RANGE, where=職員08さんの「有」対象外（上限0）, problem=対象外（上限0） のシフトに希望が1件（10/23(金)）載っています。希望どおり入るので要調整に数えます, fix=編集タブの『月次条件』の『希望シフト登録』で職員08さんと希望を確かめてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=true, zeroCap=true)
+guide SettingIssue(kind=RANGE, where=職員11さんの「Cｵ」対象外（上限0）, problem=対象外（上限0） のシフトに希望が12件（10/6(火)・10/7(水)・10/10(土) ほか）載っています。希望どおり入るので要調整に数えます, fix=編集タブの『月次条件』の『希望シフト登録』で職員11さんと希望を確かめてください, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=true, zeroCap=true)
+guide SettingIssue(kind=RANGE, where=対象外（上限0） の勤務（職員04 10/10(土)「Aｱ」・職員04 10/11(日)「Cｵ」・職員08 10/9(金)「Cｱ」 ほか）, problem=今の勤務表に個人の上限0のシフトが 4件入っています。再作成すると外されます, fix=パート等で入れない指定なら、このままで構いません, action=NONE, actionLabel=, wishKey=null, wishShift=null, wishStaffId=null, wishFingerprint=null, seqFamily=null, seqKey=null, rangeKey=null, newLo=null, demandShiftIdx=null, demandCap=null, demandDayIdx=null, groupRangeFamily=null, groupRangeRow=null, neutral=true, zeroCap=true)
