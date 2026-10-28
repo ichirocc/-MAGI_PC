@@ -30,13 +30,13 @@ public static class MirrorKeys
     /// [3.522.0/HF77明示数値指示・全面見直し] Android tools/loop 34ケース×10seedのbaseline対比
     /// ベンチマークで決定（経緯は Android docs/history/3.4xx.md）。旧: groupViol(10000)>pref(9000)>
     /// covU(8000)>c3n(7000)>low(90)>c3mn(30)=c1(30)>high(25)>covO(5)>c3(3)>c3m(2)>他(1)。
-    /// covOは0.5→1.0→5.0→10、c1は4→5→15→30→50、c3mnは12→15→30→90、highは45→25で不変＝
+    /// covOは0.5→1.0→5.0→10、c1は4→5→15→30→50→90、c3mnは12→15→30→90→50（2026-10-26）、highは45→25で不変＝
     /// いずれもHF77明示指示。
     /// </summary>
     private static readonly (string Key, double Weight)[] WeightsOrdered =
     {
         ("groupViol", 11000.0), ("covU", 10000.0), ("c3n", 9000.0), ("pref", 8000.0),
-        ("low", 120.0), ("c3mn", 90.0), ("c1", 50.0), ("high", 25.0), ("covO", 10.0),
+        ("low", 120.0), ("c1", 90.0), ("c3mn", 50.0), ("high", 25.0), ("covO", 10.0),
         ("c3", 15.0), ("c3m", 6.0),
         ("c41", 9.0), ("c42", 9.0), ("c41s", 10.0), ("c42s", 10.0),
         ("c2", 4.0), ("apt", 4.0), ("fair", 5.0), ("weekly", 2.0),

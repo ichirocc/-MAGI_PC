@@ -347,7 +347,7 @@ HARD 6族 = `groupViol` / `c3n` / `covU` / `pref` / `c3w` / `extWish`、SOFT 15�
 
 ```
 groupViol 11000 > covU 10000 > c3n 9000 = c3w 9000 > pref 8000 = extWish 8000 > low 120
-  > c3mn 90 > c1 50 > high 25 > c3 15 > c41s 10 = c42s 10 = covO 10
+  > c1 90 > c3mn 50 > high 25 > c3 15 > c41s 10 = c42s 10 = covO 10
   > c41 9 = c42 9 > c3m 6 > fair 5 > c2 4 = apt 4 > weekly 2
 ```
 （3.522.0 の全面見直し＋3.556.0 の c41/c42 1→9・c41s/c42s 6→10・c3m 10→6＋3.647.0 の fair 2→5＋3.653.0 の extWish 8000。いずれも HF77 の明示数値指示。`MirrorKeys.weights` が単一の真実。

@@ -202,7 +202,7 @@ public static partial class V6FinalPort
         // [賢い早期脱出] 証明可能に解消不能な「データ起因HARD」の下限（構造的covU）。構造(assignability/need)
         //   のみ依存で最適化中に不変＝一度だけ算出する。
         var hardFloor = TryOrZero(() => V6SanityPort.StructuralHardFloor(state));
-        // [E0] 希望衝突の床。ログには常に出し、探索への配線は wishFloorMode≠Off のときだけ（Off なら挙動不変）。
+        // [E0] 希望衝突の床。ログには常に出し、探索への配線は wishFloorMode≠Off または FloorCountsUpperZero のとき（wishOn）。
         var wishP = ScheduleUtil.CachedProblem(state);
         (int Conflict, int Days) wishPartsMp;
         try { wishPartsMp = V6SanityPort.WishConflictFloorParts(wishP, zeroCapBinding: true); } catch (Exception) { wishPartsMp = (0, 0); }
@@ -550,9 +550,10 @@ public static partial class V6FinalPort
         // [3.288.0/ログ強化=時間軸] 「いつ探索全体を切り上げるか」を決める予算配分を1行で開示。
         var budgetPlanLog = new MirrorLog(
             level: "I", tag: "TimeBudget",
-            message: $"予算配分: 総{seconds}s = 探索{(searchDeadlineMs - startMs) / 1000}s + 後処理予約{postReserveMs / 1000}s" +
-                $" / 早期終了の条件: 最短実行{minRunMs / 1000}s経過かつ現フェーズ{phaseGraceMs / 1000}s経過かつ無改善が" +
+            message: $"予算配分: 総{(hardDeadlineMs - startMs) / 1000}s = 探索{(searchDeadlineMs - startMs) / 1000}s + 後処理予約{postReserveMs / 1000}s" +
+                $" / 早期終了の条件: 最短実行{minRunMs / 1000}s経過かつ無改善が" +
                 $"{stallMs / 1000}s(通常)〜{stallHardMs / 1000}s(頭打ち=HARD下限到達 or c3n構造壁)続いたとき" +
+                $"（現フェーズの開始から{phaseGraceMs / 1000}sは待つ。無改善が閾値の{StallOverrideFactor}倍を超えたら待たない）" +
                 $" / 構造的HARD下限={hardFloor} / 希望衝突の床={wishFloorLogged}(衝突{wishParts.Conflict}+日の証明{wishParts.Days}・" +
                 (wishOn ? $"到達で頭打ち={(floorUp0 ? "上限0込み" : WishFloorModeName(wishFloorMode))}" : "記録のみ") + $"・上限0を拘束とみなすと{wishFloorMp}・covU の床とは別)");
 

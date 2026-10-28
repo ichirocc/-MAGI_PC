@@ -112,7 +112,7 @@ public static class StaffCsvIO
     /// <see cref="StaffUpsertResult.UnknownSkills"/> に記録する（空欄＝指定なしと、誤記＝解決できなかった、を
     /// 呼出側が区別できるようにするため）。
     /// </summary>
-    /// <returns><see cref="StaffUpsertResult"/>、または null（解析不能/更新0かつ追加0）。</returns>
+    /// <returns><see cref="StaffUpsertResult"/>、または null（解析不能/更新0かつ追加0かつ同姓同名なし）。</returns>
     public static StaffUpsertResult? ParseUpsert(string text, MagiState state, int[][] sched)
     {
         // [3.413.0/I-08] 引用符が閉じないCSVは残りの行が丸ごと消える＝**全置換の取込では
@@ -195,7 +195,7 @@ public static class StaffCsvIO
                 added++;
             }
         }
-        if (updated == 0 && added == 0) return null;
+        if (updated == 0 && added == 0 && ambiguousNames.Count == 0) return null;
         var newSched = new int[sched.Length + extraRows.Count][];
         for (var i = 0; i < sched.Length; i++) newSched[i] = (int[])sched[i].Clone();
         for (var i = 0; i < extraRows.Count; i++) newSched[sched.Length + i] = extraRows[i];

@@ -105,6 +105,7 @@ public static partial class V6HotfixPasses
                 var a = work[i][j]; var b = work[i2][j];
                 if (a != sharedK || b == sharedK) continue;
                 if (!Movable(i, j) || !Movable(i2, j)) continue;
+                if (!p.MayPlace(i, b) || !p.MayPlace(i2, a)) continue;
                 if (p.ExtBanned(i, j, b) || p.ExtBanned(i2, j, a)) continue;  // 拡張希望の禁止へは置かない
                 if (p.MakesForbiddenRun(work, i, j, b) || p.MakesForbiddenRun(work, i2, j, a)) continue;
                 var workBefore = work.Copy2D();

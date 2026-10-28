@@ -122,9 +122,9 @@ public static partial class V6SanityPort
                 cells.Add($"{name} {SafeDayLabel(state.StartDate, j)}「{sym}」");
             }
         if (cells.Count == 0) return null;
-        return new SettingIssue(IssueKind.Range, $"上限 0 の勤務（{string.Join("・", cells.Take(3))}{(cells.Count > 3 ? " ほか" : "")}）",
+        return new SettingIssue(IssueKind.Range, $"{SettingIssues.ZeroCapLabel} の勤務（{string.Join("・", cells.Take(3))}{(cells.Count > 3 ? " ほか" : "")}）",
             $"今の勤務表に個人の上限0のシフトが {cells.Count}件入っています。再作成すると外されます",
-            $"残すなら、{Place.Edit}{Place.Count}でその人のそのシフトの個人上限を 1 以上に上げてください");
+            "パート等で入れない指定なら、このままで構いません", Neutral: true, ZeroCap: true);
     }
 
     private static string BuildLoadDataBitSummary(MagiState state, Problem p, int[][] schedule)

@@ -72,7 +72,23 @@ public class CheckerReportDigestTest
         Assert.True(hex == Expected, $"digest={hex}");
     }
 
+    /// <summary>backlog#42(h)⑤: 1 件のクラス列も読み取り専用（蓄積用の List を外へ出さない）。</summary>
+    [Fact]
+    public void SingleClassFamilyListsAreReadOnly()
+    {
+        var st = Load("oct2026_grid_state.json");
+        var r = UnifiedViolationChecker.Check(st, st.Schedule.ToIntArray2D());
+        var singles = r.CellFamilies.Values.Concat(r.CountFamilies.Values).Concat(r.NeedFamilies.Values).Where(l => l.Count == 1).ToList();
+        Assert.NotEmpty(singles);
+        foreach (var l in singles)
+        {
+            Assert.False(l is List<string>);
+            Assert.Throws<NotSupportedException>(() => ((IList<string>)l).Add("x"));
+        }
+    }
+
     // weightedScore を含むので重みを変えると動く（3.647.0 fair 2→5 で更新。旧: 7936ccc7…）。Breakdown のキーも含むので族を足すと動く
     // （3.653.0 extWish 追加＝全報告に extWish=0 が増える。旧: 1a2feb00…）。乱数を JavaRandom・fixture ごとの順へ変えて取り直し（旧: ebf3caea…）。
-    private const string Expected = "428718c82ad1d0313887c17fc72f01fdc2055a40609b693ddfc89d27ed151001";
+    // [2026-10-26] c1 50→90・c3mn 90→50（旧: 428718c8…）。
+    private const string Expected = "2f106efcf21a67e64250644f5e6b9683c42c34531949ca55cf092786ff1a6d15";
 }

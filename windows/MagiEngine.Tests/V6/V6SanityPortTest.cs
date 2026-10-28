@@ -117,6 +117,64 @@ public class V6SanityPortTest
         ShiftColors: new Dictionary<string, string>(),
         Extras: new Dictionary<string, System.Text.Json.JsonElement>());
 
+    // ---- mustForbiddenSeqIssues --------------------------------------------------------------
+
+    private static MagiState SeqState(List<C3Row> cons3, List<C3Row> cons3n) => new(
+        StartDate: "2026-06-01", EndDate: "2026-06-06",
+        Shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("A", "A", "", "") },
+        Groups: new List<Group> { new("G", "G") },
+        StaffList: new List<Staff> { new("s0", 0) },
+        Use2Patterns: false,
+        GroupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1 } },
+        GroupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "" } },
+        Schedule: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 0, 1, 1, 0 } },
+        Wishes: new Dictionary<string, int>(),
+        StaffRange: new Dictionary<string, Range>(),
+        NeedDay1: new Dictionary<string, string>(), NeedDay2: new Dictionary<string, string>(),
+        Cons1: new List<C1Row>(), Cons2: new List<C2Row>(),
+        Cons3: cons3, Cons3n: cons3n, Cons3m: new List<C3Row>(), Cons3mn: new List<C3Row>(),
+        Cons41: new List<C41Row>(), Cons42: new List<C42Row>(),
+        SkillGroups: new List<Group>(), Cons41s: new List<C41Row>(), Cons42s: new List<C42Row>(),
+        ShiftColors: new Dictionary<string, string>(),
+        Extras: new Dictionary<string, System.Text.Json.JsonElement>());
+
+    private static bool IsSeqConflict(SettingIssue it) => it.Kind == IssueKind.Constraint && it.Problem.Contains("両立できません");
+
+    [Fact]
+    public void MustForbiddenSameShiftContradictionIsReported()
+    {
+        // 「A」を3連続以上にする必須と、「A」の3連続禁止は両立できない（3連続以上には必ず3連続の窓を含む）。
+        var st = SeqState(new List<C3Row> { new(new[] { "A", "A", "A" }) }, new List<C3Row> { new(new[] { "A", "A", "A" }) });
+        Assert.Contains(V6SanityPort.BuildGuidance(st), IsSeqConflict);
+    }
+
+    [Fact]
+    public void MustShorterThanForbiddenIsNotFalselyReported()
+    {
+        // 「A」を3連続以上にする必須と、「A」の4連続禁止は両立できる（3連続の直後に別シフトを挟めば両方満たせる）。
+        var st = SeqState(new List<C3Row> { new(new[] { "A", "A", "A" }) }, new List<C3Row> { new(new[] { "A", "A", "A", "A" }) });
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), IsSeqConflict);
+    }
+
+    [Fact]
+    public void MustSeqContainingForbiddenSeqIsReported()
+    {
+        // 複数シフトの並び「A→休→A」の中に禁止の並び「休→A」が入っている＝「A」を置くたびにどちらかの違反になる。
+        //   単一シフト連どうしの比較（上の 2 件）では見えない組合せ。
+        var st = SeqState(new List<C3Row> { new(new[] { "A", "休", "A" }) }, new List<C3Row> { new(new[] { "休", "A" }) });
+        var issues = V6SanityPort.BuildGuidance(st).Where(IsSeqConflict).ToList();
+        Assert.Single(issues);
+        Assert.Contains("「休→A」", issues[0].Problem);
+    }
+
+    [Fact]
+    public void MustSeqNotContainingForbiddenSeqIsNotReported()
+    {
+        // 「A→休→A」は「A→A」を含まない（間に休がある）＝両立できる。
+        var st = SeqState(new List<C3Row> { new(new[] { "A", "休", "A" }) }, new List<C3Row> { new(new[] { "A", "A" }) });
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), IsSeqConflict);
+    }
+
     [Fact]
     public void AptBalances_MatchesTheSettingIssueAndReportsShortfall()
     {
@@ -184,11 +242,15 @@ public class V6SanityPortTest
             Wishes = new Dictionary<string, int> { ["0,0"] = 1 },
             StaffRange = new Dictionary<string, Range> { ["0,1"] = new Range("", "0") },
         };
-        var issue = Assert.Single(V6SanityPort.BuildGuidance(st), i => i.Where == "s0さんの「X」");
-        Assert.True(issue.Neutral);
-        Assert.Equal("個人の上限0（入れない指定）に希望が1件（8/1(土)）載っています。残るのは要調整です", issue.Problem);
-        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』でs0さんと相談して希望を調整するか、『年間マスター』の『③ 回数（1人あたり）』で上限を見直してください", issue.Fix);
-        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st), i => i.Where.Contains("衝突"));
+        var issues = V6SanityPort.BuildGuidance(st);
+        var issue = Assert.Single(issues, i => i.Where == "s0さんの「X」対象外（上限0）");
+        Assert.True(issue.Neutral && issue.ZeroCap);
+        Assert.Equal("対象外（上限0） のシフトに希望が1件（8/1(土)）載っています。希望どおり入るので要調整に数えます", issue.Problem);
+        Assert.Equal("編集タブの『月次条件』の『希望シフト登録』でs0さんと希望を確かめてください", issue.Fix);
+        Assert.DoesNotContain("上限", issue.Fix);
+        Assert.DoesNotContain(issues, i => i.Where.Contains("衝突"));
+        // [backlog #11] 直す項目には数えない
+        Assert.DoesNotContain(issue, SettingIssues.FixItems(issues));
     }
 
     [Fact]

@@ -96,11 +96,11 @@ public static class ShiftAppearance
         return k switch
         {
             "groupViol" or "covU" or "pref" or "c3n" or "c3w" or "extWish" => "CRITICAL", // HARD [3.542.0] c3w・[3.653.0] extWish 追加
-            "low" or "c3mn" => "HIGH",                              // 重い soft(120/90、3.522.0)
-            // high は 45→25（2026-09-10 HF77明示指示）で c1/c3mn を下回りWARN側。[3.522.0]全面見直し後も
-            // high(25) は依然 c1(50)/c3mn(90) より軽く分類は不変。
-            "c1" or "high" or "c3" or "c3m" or "c2" or "c41" or "c42" or "c41s" or "c42s" or "apt" or "covO" => "WARN",
-            // c1=50 は最多件数で飽和回避(3.367.0)・他は1〜15/過剰配置。下流(V6RemainingScreens)はHIGH/WARNを同一表示に畳む
+            "low" => "HIGH",                                        // 最も重い soft(120)
+            // [2026-10-26] c1 50→90・c3mn 90→50(HF77)。c1 は件数最多で飽和回避のため WARN のまま＝c3mn を c1 より強く塗らないよう WARN へ。
+            // high は 45→25（2026-09-10 HF77明示指示）で c1/c3mn を下回りWARN側。
+            "c1" or "c3mn" or "high" or "c3" or "c3m" or "c2" or "c41" or "c42" or "c41s" or "c42s" or "apt" or "covO" => "WARN",
+            // c1 は最多件数で飽和回避(3.367.0)・他は1〜15/過剰配置。下流(V6RemainingScreens)はHIGH/WARNを同一表示に畳む
             "fair" or "weekly" => "INFO", // 整え(常時非ゼロ)
             _ => "INFO",
         };

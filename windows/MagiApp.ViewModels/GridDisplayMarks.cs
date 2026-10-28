@@ -62,7 +62,7 @@ public static class GridDisplayMarks
     /// <summary>違反クラスが必須(HARD)か（Kotlin <c>isHardCellViolation</c>）。族名の完全一致で決める＝唯一の判定規則。</summary>
     public static bool IsHardCellViolation(string? v) => v is not null && MirrorKeys.Hard.Contains(VioBuckets.FamilyOfVioClass(v));
 
-    /// <summary>破線枠にする「重いソフト族」（Kotlin <c>heavySoftFamilies</c>）。重み階層（low=120 / c1=50 / c3mn=90 が high=25 を上回る）と表示強度を揃える。</summary>
+    /// <summary>破線枠にする「重いソフト族」（Kotlin <c>heavySoftFamilies</c>）。重み階層（low=120 / c1=90 / c3mn=50 が high=25 を上回る）と表示強度を揃える。</summary>
     public static readonly IReadOnlySet<string> HeavySoftFamilies = new HashSet<string> { "low", "c1", "c3mn" };
 
     public static bool IsHeavySoftCellViolation(string? v) =>

@@ -220,4 +220,23 @@ public class KotlinInteropTest
     {
         Assert.Null(KotlinInterop.ToDoubleOrNull(input));
     }
+
+    // Java Math.round の値（JDK 7+）。0.49999999999999994 は floor(x+0.5) だと 1 になる境界（Android 3.723.4 の C++ jround と同じ是正）。
+    [Theory]
+    [InlineData(0.49999999999999994, 0L)]
+    [InlineData(-0.49999999999999994, 0L)]
+    [InlineData(0.5, 1L)]
+    [InlineData(-0.5, 0L)]
+    [InlineData(1.5, 2L)]
+    [InlineData(2.5, 3L)]
+    [InlineData(-1.5, -1L)]
+    [InlineData(-2.5, -2L)]
+    [InlineData(2.4999999999999996, 2L)]
+    [InlineData(4503599627370495.5, 4503599627370496L)]
+    [InlineData(double.NaN, 0L)]
+    [InlineData(1e300, long.MaxValue)]
+    public void MathRound_MatchesJavaAtTheBoundaries(double a, long expected)
+    {
+        Assert.Equal(expected, KotlinInterop.MathRound(a));
+    }
 }

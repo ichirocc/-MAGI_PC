@@ -106,7 +106,7 @@ public static class ConstraintMus
     /// staff member, shrinking each to a minimal core. Proof rules (using only the active items —
     /// this is what guarantees the MUS semantics):
     ///  A) Shift x's demand lower bound demand_x = max(floor, exact minimum window days, count of
-    ///     fixed wishes for x) exceeds its cap cap_x.
+    ///     fixed cells (wish or manual pin) for x) exceeds its cap cap_x.
     ///  B) Pigeonhole: sum_x demand_x exceeds T (each day is exactly one shift — only T days exist).
     ///  C) Forced floor: if every other assignable shift has a cap, count_x >= T − sum(other caps) exceeds cap_x.
     /// </summary>
@@ -131,7 +131,7 @@ public static class ConstraintMus
                 var hi = p.RangeHi[i][k];
                 if (hi != int.MaxValue) universe.Add(new RangeCap(i, k, hi));
             }
-            for (var j = 0; j < p.T; j++) if (p.WishFixed(i, j)) universe.Add(new WishPin(i, j, p.Wish[i][j]));
+            for (var j = 0; j < p.T; j++) if (LockedPin(p, i, j) is { } lp) universe.Add(lp);
             if (universe.Count == 0) continue;
             if (!StaffProvablyInfeasible(p, allowed, universe)) continue;
             var core = Shrink(universe, items => StaffProvablyInfeasible(p, allowed, items));

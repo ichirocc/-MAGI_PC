@@ -106,6 +106,7 @@ public static partial class V6NativeOptimizer
         for (var pass = 0; pass < 3; pass++)
         {
             var cov = ScheduleUtil.Coverage(p, outSched);
+            // 回数表は巡の頭で 1 回だけ作り、巡内の割当では更新しない（意図的・3 巡で追い直す。C++ も同じ。backlog#32）。
             var counts = ScheduleUtil.CountMatrix(p, outSched);
             for (var j = 0; j < p.T; j++)
             {

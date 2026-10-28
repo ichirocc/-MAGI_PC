@@ -267,8 +267,8 @@ public class MirrorEngineTest
     }
 
     /// <summary>
-    /// [3.355.0 移植元] 回数を7曜日へどう配っても消せない weekly 偏差の下限。目標は round(回数/7) なので、
-    /// 合計との差（余り）は必ず残る。実データ3件で checker の weekly と突き合わせて 73/126/106 を再現した式。
+    /// 回数を7曜日へどう配っても消せない weekly 偏差の下限。偏差は 3.526.0 の Σ|7×w_d − 回数| ÷ 7（切り捨て）で、
+    /// round(回数/7) を中心に配った配置がこの下限に一致する（テスト名は 3.355.0 の round 目標の式の名残）。
     /// </summary>
     [Fact]
     public void WeeklyFloorIsTheRemainderAgainstSevenTimesTheRoundedTarget()

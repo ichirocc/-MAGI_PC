@@ -62,7 +62,7 @@ public sealed class Evaluator
 
         // ---- c1: every window of length day1 must contain >= day2 of shiftIdx --------------
         // [統一] (1)担当不可スタッフは対象外(canDoガード=チェッカーと一致、解消不能な幻の違反を除去)、
-        // (2)#fire 計上(soft += 50×重み)。[3.522.0/HF77] 窓の要件(c1)の重みは 4→5→15→30→50 と変遷。
+        // (2)#fire 計上(soft += 90×重み)。[3.522.0/HF77] 窓の要件(c1)の重みは 4→5→15→30→50→90 と変遷。
         foreach (var c in _p.Cons1)
         {
             int d1 = c.Day1, si = c.ShiftIdx, d2 = c.Day2;
@@ -74,7 +74,7 @@ public sealed class Evaluator
                 {
                     int z = 0;
                     for (int l = 0; l < d1; l++) if (a[i][j + l] == si) z++;
-                    if (z < d2) soft += 50L;
+                    if (z < d2) soft += 90L;
                     j++;
                 }
             }
@@ -144,13 +144,13 @@ public sealed class Evaluator
             }
         }
 
-        // ---- c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=15/c3m=10/c3mn=90)を soft に適用。
+        // ---- c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=15/c3m=6/c3mn=50)を soft に適用。
         // c3n は forbidden=HARD として hard1 のまま。窓マッチは #fire 計上(後述の sub += 1)。
-        // [3.522.0/HF77] c3=3→15・c3m=2→10・c3mn=12→15→30→90 と変遷。
+        // [3.522.0/HF77] c3=3→15・c3m=2→10・c3mn=12→15→30→90→50 と変遷。
         soft += C3Check(a, _p.Cons3, forbidden: false) * 15L;
         hard1 += C3Check(a, _p.Cons3n, forbidden: true);
         soft += C3Check(a, _p.Cons3m, forbidden: false) * 6L;
-        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 90L;
+        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 50L;
 
         // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
         if (_p.C3wBan != null)

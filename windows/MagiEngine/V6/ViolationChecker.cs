@@ -561,7 +561,8 @@ public static class UnifiedViolationChecker
         foreach (var ck in fams.Keys)
         {
             var cv = fams[ck];
-            var sorted = cv.Count <= 1 ? cv : cv.OrderByDescending(x => ClassWeight.TryGetValue(x, out var w) ? w : 0.0).ToList();
+            //   1 件の列も読み取り専用で包み直す＝蓄積用の可変 List を外へ出さない（型の契約、出力は同じ）。
+            var sorted = cv.Count <= 1 ? (IReadOnlyList<string>)Array.AsReadOnly(new[] { cv[0] }) : cv.OrderByDescending(x => ClassWeight.TryGetValue(x, out var w) ? w : 0.0).ToList();
             fams[ck] = sorted;
             single[ck] = sorted[0];
         }
