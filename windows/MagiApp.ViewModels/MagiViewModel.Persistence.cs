@@ -604,6 +604,7 @@ public sealed partial class MagiViewModel
         if (st.StaffCount == 0) return "staff が空です";
         // [レビュー指摘 2026-09-04] 読めない startDate を受理すると Problem.Dow0 が黙って日曜へ落ちる。
         if (Ws1Ops.StartDateError(st) is { } sdErr) return sdErr;
+        if (Ws1Ops.CountSettingError(st) is { } countErr) return countErr;
         if (st.DayCount == 0) return "schedule が空です";
         if (st.ShiftCount == 0) return "shifts が空です";
         if (st.GroupCount == 0) return "groups が空です";

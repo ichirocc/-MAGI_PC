@@ -258,9 +258,9 @@ public static partial class V6NativeOptimizer
         if (delta == 0 || k < 0 || k >= p.K) return 0L;
         var g = p.Sgrp[i];
         if (p.GroupMembers[g].Length < 2 || !p.Bucket[g].Contains(k)) return 0L;
-        var before = p.FairDevOfBucket(g, k, x => counts[x][k]).Total;
+        var before = p.FairDevOfBucket(g, k, x => counts[x][k], members: false).Total;
         counts[i][k] += delta;
-        var after = p.FairDevOfBucket(g, k, x => counts[x][k]).Total;
+        var after = p.FairDevOfBucket(g, k, x => counts[x][k], members: false).Total;
         counts[i][k] -= delta;
         return (after - before) * 5L; // [3.522.0] fair 1→2、[3.647.0] 2→5（WeeklyMarginalAtと同型で内部適用）
     }

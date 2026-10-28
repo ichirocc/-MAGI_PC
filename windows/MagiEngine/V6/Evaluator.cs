@@ -222,7 +222,7 @@ public sealed class Evaluator
             var mem = _p.GroupMembers[g];
             if (mem.Length < 2) continue;
             foreach (var k in _p.Bucket[g])
-                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k]).Total * 5L;
+                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k], members: false).Total * 5L;
         }
 
         // ---- weekly: 7-day-cycle shift equalization ----------------------------------------------

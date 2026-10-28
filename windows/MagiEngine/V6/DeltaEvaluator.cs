@@ -214,6 +214,9 @@ public sealed class DeltaEvaluator
         // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める。
         // [3.522.0/HF77明示数値指示・全面見直し] 重み表全面改定（経緯は Android docs/history/3.4xx.md）。
         long soft = WeightedSoft(_sc1, _sc2, _sc41, _sc42, _sc41s, _sc42s, _sc3, _sc3m, _sc3mn, _hct, _sApt, _sFair, _sWeekly, _scovO);
+        // `Evaluator.FullEval` と同じ契約: soft が桁を超えると HARD へ繰り上がり、必須の数を取り違える（黙って誤った値を返さない）。
+        if (soft < 0 || soft >= Evaluator.SCORE_HARD_UNIT)
+            throw new InvalidOperationException($"soft={soft} が辞書式パックの桁({Evaluator.SCORE_HARD_UNIT})を超えました。回数の設定か重みを見直してください");
         return h1 * Evaluator.SCORE_HARD_UNIT + soft;
     }
 
@@ -793,7 +796,7 @@ public sealed class DeltaEvaluator
     /// UnifiedViolationChecker の "fair" と一致.
     /// </summary>
     private long FairDevAt(int g, int k, int special, int delta) =>
-        _p.FairDevOfBucket(g, k, x => _cntSS[x][k] + (x == special ? delta : 0)).Total;
+        _p.FairDevOfBucket(g, k, x => _cntSS[x][k] + (x == special ? delta : 0), members: false).Total;
 
     private long FairAll()
     {

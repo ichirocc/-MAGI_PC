@@ -116,9 +116,9 @@ public static class C1DeltaPrefilter
             {
                 if (row[j] == seq[0])
                 {
-                    int z = 0;
-                    for (int l = 1; l < d; l++) if (row[j + l] == seq[l]) z++;
-                    if (z == d - 1) fires++;
+                    int l = 1;
+                    while (l < d && row[j + l] == seq[l]) l++; // 最初の不一致で打ち切る（完全一致だけを数える＝数は不変）
+                    if (l == d) fires++;
                 }
                 j++;
             }

@@ -142,9 +142,9 @@ public class FixSuggesterTest
             string.Join(" / ", chains.Select(c => string.Join(",", c.Ops.Select(op => $"{op.Staff}.{op.Day}.{op.ToShift}")))));
     }
 
-    /// <summary>手で崩した希望セル（pref 違反）を希望へ戻す単一変更は、<c>RestoreWishLocked</c> が ON のときだけ出る。</summary>
+    /// <summary>手で崩した希望セル（pref 違反）を希望へ戻す単一変更を候補に出す。</summary>
     [Fact]
-    public void restoreWishLockedProposesWishValueOnlyWhenOn()
+    public void RestoreWishLockedProposesWishValue()
     {
         var st = MinimalState.Build(
             startDate: "2026-08-03", endDate: "2026-08-05",
@@ -156,16 +156,8 @@ public class FixSuggesterTest
         var sched = st.Schedule.Select(r => r.ToArray()).ToArray();
         Assert.True(UnifiedViolationChecker.Check(st, sched).Breakdown.GetValueOrDefault("pref", 0) > 0);
         var restore = new FixCell(0, 0, 0);
-        var saved = FixSuggester.RestoreWishLocked;
-        try
-        {
-            FixSuggester.RestoreWishLocked = false;
-            Assert.DoesNotContain(FixSuggester.Suggest(st, sched, maxResults: 50), r => r.Ops.Contains(restore));
-            FixSuggester.RestoreWishLocked = true;
-            var on = FixSuggester.Suggest(st, sched, maxResults: 50);
-            Assert.True(on.Any(r => r.Kind == FixKind.Change && r.Ops.SequenceEqual(new[] { restore }) && r.DeltaHard < 0), string.Join(" / ", on.Select(r => r.Label)));
-        }
-        finally { FixSuggester.RestoreWishLocked = saved; }
+        var on = FixSuggester.Suggest(st, sched, maxResults: 50);
+        Assert.True(on.Any(r => r.Kind == FixKind.Change && r.Ops.SequenceEqual(new[] { restore }) && r.DeltaHard < 0), string.Join(" / ", on.Select(r => r.Label)));
     }
 
     /// <summary>打ち切りの有無は呼出ごとの戻り値に載る（V61-04: 旧は静的変数で、後の探索が前の探索の値を上書きした）。</summary>

@@ -35,6 +35,15 @@ namespace MagiEngine.V6;
 /// </summary>
 public static partial class V6NativeOptimizer
 {
+    /// <summary>RSI++ の 4 フェーズ（Seed/Hypothesis/Refine/Polish）の秒。下限 10/10/10/5 のため 40 秒以下では合計が予算を超えることがある（M-04）。</summary>
+    internal static int[] RsiPlusPhaseSecs(int budgetSec)
+    {
+        var seedSec = Math.Max(10, (int)(budgetSec * 0.20));
+        var rsiSec = Math.Max(10, (int)(budgetSec * 0.35));
+        var alnsSec = Math.Max(10, (int)(budgetSec * 0.30));
+        return new[] { seedSec, rsiSec, alnsSec, Math.Max(5, budgetSec - seedSec - rsiSec - alnsSec) };
+    }
+
     /// <summary>Faithful port of Kotlin's <c>runRsiPlus</c>.</summary>
     internal static async Task<V6OptimizerResult> RunRsiPlus(
         MagiState state,
@@ -62,10 +71,17 @@ public static partial class V6NativeOptimizer
             return new V6OptimizerResult(initial, rep0, V6Algorithm.RsiPlus, logs, 0L, 0L);
         }
 
-        var seedSec = Math.Max(10, (int)(budgetSec * 0.20));
-        var rsiSec = Math.Max(10, (int)(budgetSec * 0.35));
-        var alnsSec = Math.Max(10, (int)(budgetSec * 0.30));
-        var polishSec = Math.Max(5, budgetSec - seedSec - rsiSec - alnsSec);
+        var phases = RsiPlusPhaseSecs(budgetSec);
+        int seedSec = phases[0], rsiSec = phases[1], alnsSec = phases[2], polishSec = phases[3];
+        // [M-04] フェーズ下限の合計が予算を超える（40 秒以下の一部）ときだけ、予算の締切でも止める。按分と手の選び方は変えない。
+        //   41 秒以上は按分の合計＝予算で従来と同じ経路。ポートフォリオのロールは stopRole（締切＝ロール開始＋quantum、
+        //   RunRsiPlus の開始より前）が先に真になるので、ここでの締切は判定を変えない。
+        if (seedSec + rsiSec + alnsSec + polishSec > budgetSec)
+        {
+            var end = started + budgetSec * 1000L;
+            var outer = stop;
+            stop = () => outer() || NowMs() >= end;
+        }
 
         // [2026-09-22, Kotlin原本] 各フェーズの実測msを予算msと並べてログへ出す（backlog#34、
         //   実機で観測された量子比最大約181倍がどのフェーズで生じたか従来ログでは特定できなかったため）。

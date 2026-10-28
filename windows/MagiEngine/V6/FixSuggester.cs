@@ -76,11 +76,6 @@ public static class FixSuggester
     /// <summary>提案と、その探索が締切で打ち切られたか（改善案が見つからない理由の「時間不足」を言い分ける。仕様 §7）。呼出ごとに持つ＝並行する探索の値と混ざらない。</summary>
     public sealed record Result(List<FixSuggestion> Suggestions, bool TimedOut);
 
-    private static volatile bool _restoreWishLocked = true;
-
-    /// <summary>単一変更に限り、希望固定セルが固定値から外れていれば「固定値へ戻す」1 手を候補にする（既定 ON）。</summary>
-    public static bool RestoreWishLocked { get => _restoreWishLocked; set => _restoreWishLocked = value; }
-
     /// <summary>探索の上限（Android 3.507.4 で集約。値は 2.4x 系からの据え置き）。</summary>
     internal static class Limits
     {
@@ -292,7 +287,7 @@ public static class FixSuggester
                     if (_p.WishLocked(i, j))
                     {
                         var lk = _p.LockTo(i, j);
-                        if (RestoreWishLocked && lk >= 0 && lk != a && !TimeUp())
+                        if (lk >= 0 && lk != a && !TimeUp())
                             TryOps(FixKind.Change, new[] { new FixCell(i, j, lk) }, $"{Nm(i)} {Dlab(j)} 「{Sym(a)}」→「{Sym(lk)}」");
                         continue;
                     }

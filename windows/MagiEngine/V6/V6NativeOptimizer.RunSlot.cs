@@ -173,6 +173,19 @@ public static partial class V6NativeOptimizer
     /// </summary>
     public static IReadOnlyList<IReadOnlyList<int>>? LiveBest => _liveBestRef.Value?.Board;
 
+    /// <summary>
+    /// <paramref name="like"/> と同じ形（職員×日）のときだけ途中最良を返す。<c>LiveBest</c> は実行をまたぐ 1 つの置き場で、置き換え（REPLACE）で
+    /// 打ち切られた旧実行が止まるまでの間に publish すると、新しい実行の途中最良として別データの盤面が見える
+    /// （kill 復旧用の退避に新しい状態と組で書かれ、職員数が違えば復元できない）。
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<int>>? LiveBestShaped(int[][] like)
+    {
+        var b = LiveBest;
+        if (b is null || b.Count != like.Length) return null;
+        for (var r = 0; r < b.Count; r++) if (b[r].Count != like[r].Length) return null;
+        return b;
+    }
+
     /// <summary>[3.642.0, Kotlin原本 <c>liveBestSnapshot</c>] 報告（評価）と盤面を 1 回の読みで取る。壁判定はこの 1 組で行う（別々に読むと対応がずれる）。</summary>
     internal static LiveBestSnapshot? CurrentLiveBestSnapshot => _liveBestRef.Value;
 
