@@ -823,8 +823,15 @@ public sealed partial class ScheduleView : UserControl
             var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
             var rows = CellSheetLogic.ProblemRows(CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, LabelOf), items, ui.ViolationCellFamilies,
                 ui.StaffNames, ui.ShiftSymbols, ui.Schedule, ui.StartDate, LabelOf);
-            var pickedIdx = CellSheetLogic.ProblemPickedIndex(rows, _panelPickRow, _panelPick, _panelPickFamily);
+            var pickedIdx = CellSheetLogic.ListResumeIndex(rows, _panelPickRow, _panelPick, _panelPickFamily);
             var picked = pickedIdx is { } pi ? rows[pi] : null;
+            // 見ていた問題を直して戻ったら、繰り上がった次の問題を選び、表もそのセルへ送る。
+            if (picked is not null && (picked.Cell != _panelPick || picked.Family != _panelPickFamily))
+            {
+                _panelPickRow = pickedIdx; _panelPickFamily = picked.Family; _panelPick = picked.Cell;
+                var pc = picked.Cell;
+                DispatcherQueue.TryEnqueue(() => FocusCell(pc.I, pc.J));
+            }
             ProblemPanelTitle.Text = picked?.Line ?? CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui));
             ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources[picked is { Hard: true } ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
             ProblemPanelListButton.Visibility = Visibility.Collapsed;
@@ -852,7 +859,11 @@ public sealed partial class ScheduleView : UserControl
                     content.Children.Add(chip);
                 }
                 var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
-                if (idx == pickedIdx) row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                if (idx == pickedIdx)
+                {
+                    row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                    row.Loaded += (_, _) => row.StartBringIntoView();   // 戻ったら見ていた行（または次の問題）まで送る
+                }
                 var cell = r.Cell;
                 var rowIdx = idx;
                 var fam = r.Family;

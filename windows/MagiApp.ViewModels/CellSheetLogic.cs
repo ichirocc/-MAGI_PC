@@ -1764,6 +1764,12 @@ public static class CellSheetLogic
         return null;
     }
 
+    /// <summary>[Android 3.727.5] 問題一覧へ戻ったときに選ぶ行。見ていた行（<see cref="ProblemPickedIndex"/>）が残っていればそれ、直して消えていれば
+    /// 同じ位置に繰り上がった行＝次の問題（末尾を越えたら最後の行）。何も見ていなければ null（Kotlin <c>listResumeIndex</c>）。</summary>
+    public static int? ListResumeIndex(IReadOnlyList<ProblemRow> rows, int? pickedIdx, (int I, int J)? cell, string? pickedFamily = null) =>
+        ProblemPickedIndex(rows, pickedIdx, cell, pickedFamily)
+        ?? (pickedIdx is { } p && cell is not null && rows.Count > 0 ? Math.Clamp(p, 0, rows.Count - 1) : null);
+
     /// <summary>[3.720.0 3c-6] 回数のシートで違反を 1 タップで解く外枠ボタン（「回」を付ける）。</summary>
     public static string RaiseCapButton(int n) => $"上限を{n}回に上げて適用";
     public static string LowerFloorButton(int n) => $"下限を{n}回に下げて適用";
