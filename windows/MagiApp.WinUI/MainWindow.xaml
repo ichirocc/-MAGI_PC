@@ -67,7 +67,7 @@
             </StackPanel>
         </Grid>
 
-        <InfoBar x:Name="GlobalMessageBar" Grid.Row="1" Margin="8,8,8,0" AutomationProperties.LiveSetting="Polite"
+        <InfoBar x:Name="GlobalMessageBar" Grid.Row="1" Margin="16,8,16,0" CornerRadius="{StaticResource MagiCornerSM}" AutomationProperties.LiveSetting="Polite"
                  IsOpen="False" IsClosable="True" Closed="OnMessageBarClosed" />
 
         <NavigationView x:Name="Nav" Grid.Row="2" PaneDisplayMode="Top"
