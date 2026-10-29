@@ -234,8 +234,15 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="PrevWeekButton" Grid.Column="0" Content="◀週" Click="OnPrevWeekClick" MinHeight="48" />
-                <Button x:Name="NextWeekButton" Grid.Column="1" Content="週▶" Click="OnNextWeekClick" MinHeight="48" />
+                <!-- 週送りは 1 本のカプセルに束ねる（Android 3.727.8）。 -->
+                <Border Grid.Column="0" Grid.ColumnSpan="2" CornerRadius="{StaticResource MagiCornerCapsule}" BorderThickness="1"
+                        BorderBrush="{StaticResource MagiOutlineBrush}" Background="{StaticResource MagiBackgroundBrush}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="PrevWeekButton" Content="◀週" Click="OnPrevWeekClick" MinHeight="48" Background="Transparent" BorderThickness="0" />
+                        <Rectangle Width="1" Height="24" Fill="{StaticResource MagiOutlineBrush}" />
+                        <Button x:Name="NextWeekButton" Content="週▶" Click="OnNextWeekClick" MinHeight="48" Background="Transparent" BorderThickness="0" />
+                    </StackPanel>
+                </Border>
                 <TextBlock x:Name="NavLabel" Grid.Column="2" TextAlignment="Center" VerticalAlignment="Center"
                            TextTrimming="CharacterEllipsis" Style="{StaticResource MagiLabelLargeTextStyle}" Opacity="0.8" />
             </Grid>

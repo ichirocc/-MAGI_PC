@@ -94,12 +94,13 @@
     <x:Double x:Key="MagiSpacingSection">20</x:Double>
     <x:Double x:Key="MagiSpacingScreenH">16</x:Double>
 
-    <!-- ===== 角丸段階（Kotlin原本 MainActivity.kt の MagiTheme 内 Shapes() を移植。
-         extraSmall=チップ/入力欄・small=カード・medium=タイル/シート・large=大サーフェス） ===== -->
+    <!-- ===== 角丸段階（Kotlin原本 MagiCorners、同心の角＝内側の角は外側の角−余白 16）。
+         XS=カードの中の面/入力欄(10)・SM=カード(26=10+16)・MD=タイル・LG=シート(28)・Capsule=1 行の札（高さの半分に丸まる） ===== -->
     <CornerRadius x:Key="MagiCornerXS">10</CornerRadius>
-    <CornerRadius x:Key="MagiCornerSM">14</CornerRadius>
+    <CornerRadius x:Key="MagiCornerSM">26</CornerRadius>
     <CornerRadius x:Key="MagiCornerMD">18</CornerRadius>
-    <CornerRadius x:Key="MagiCornerLG">24</CornerRadius>
+    <CornerRadius x:Key="MagiCornerLG">28</CornerRadius>
+    <CornerRadius x:Key="MagiCornerCapsule">999</CornerRadius>
 
     <!-- ===== タイポグラフィスケール（Kotlin原本 MainActivity.kt の Typography(t) を移植。
          sp→pt を同値のまま使用。LineHeight は各サイズの Kotlin lineHeight 値） ===== -->

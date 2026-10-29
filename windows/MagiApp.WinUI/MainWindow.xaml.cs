@@ -298,8 +298,12 @@ public sealed partial class MainWindow : Window
 
         // 未読込は空状態のカードが主操作＝下部バーごと出さない（3.698.0 S0-5）。
         BottomBar.Visibility = ui.Loaded || ui.Running ? Visibility.Visible : Visibility.Collapsed;
-        UndoButton.Visibility = ui.CanUndo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
-        RedoButton.Visibility = ui.CanRedo && !ui.Running ? Visibility.Visible : Visibility.Collapsed;
+        var canUndo = ui.CanUndo && !ui.Running;
+        var canRedo = ui.CanRedo && !ui.Running;
+        UndoButton.Visibility = canUndo ? Visibility.Visible : Visibility.Collapsed;
+        RedoButton.Visibility = canRedo ? Visibility.Visible : Visibility.Collapsed;
+        UndoRedoSeparator.Visibility = canUndo && canRedo ? Visibility.Visible : Visibility.Collapsed;
+        UndoRedoGroup.Visibility = canUndo || canRedo ? Visibility.Visible : Visibility.Collapsed;
         var stopping = ui.Running || ui.FixSearching || ui.AgentRunning;
         if (ui.Running) CondEdited = false;
         MainActionButton.Content = stopping ? "■ " + CellSheetLogic.StopButtonLabel(ui.Running, ui.FixSearching, ui.AgentRunning) : ui.HasResult ? "▶ 再作成する" : "▶ 勤務表をつくる";

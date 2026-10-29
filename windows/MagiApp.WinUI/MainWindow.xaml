@@ -39,7 +39,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Border Grid.Column="0" Background="{StaticResource MagiPrimaryBrush}" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4">
+            <Border Grid.Column="0" Background="{StaticResource MagiPrimaryBrush}" CornerRadius="{StaticResource MagiCornerCapsule}" Padding="12,4">
                 <TextBlock Text="MAGI" FontWeight="Bold" Foreground="{StaticResource MagiOnPrimaryBrush}" />
             </Border>
             <TextBlock x:Name="SectionTitleText" Grid.Column="1" VerticalAlignment="Center" Opacity="0.8" />
@@ -60,7 +60,7 @@
                         <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
                         <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
                     </Button.Resources>
-                    <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerXS}" Padding="12,4">
+                    <Border x:Name="StatusBadge" CornerRadius="{StaticResource MagiCornerCapsule}" Padding="12,4">
                         <TextBlock x:Name="StatusBadgeText" FontWeight="SemiBold" />
                     </Border>
                 </Button>
@@ -91,8 +91,15 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Button x:Name="UndoButton" Grid.Column="0" Content="元に戻す" MinHeight="48" Visibility="Collapsed" Click="OnUndoClick" />
-            <Button x:Name="RedoButton" Grid.Column="1" Content="やり直し" MinHeight="48" Visibility="Collapsed" Click="OnRedoClick" />
+            <!-- 元に戻す・やり直しは 1 本のカプセルに束ね、主ボタンと分ける（Android 3.727.8、iOS 26 のツールバー）。 -->
+            <Border x:Name="UndoRedoGroup" Grid.Column="0" Grid.ColumnSpan="2" Visibility="Collapsed" CornerRadius="{StaticResource MagiCornerCapsule}"
+                    BorderThickness="1" BorderBrush="{StaticResource MagiOutlineBrush}" Background="{StaticResource MagiBackgroundBrush}">
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="UndoButton" Content="元に戻す" MinHeight="48" Visibility="Collapsed" Click="OnUndoClick" Background="Transparent" BorderThickness="0" />
+                    <Rectangle x:Name="UndoRedoSeparator" Width="1" Height="24" Fill="{StaticResource MagiOutlineBrush}" Visibility="Collapsed" />
+                    <Button x:Name="RedoButton" Content="やり直し" MinHeight="48" Visibility="Collapsed" Click="OnRedoClick" Background="Transparent" BorderThickness="0" />
+                </StackPanel>
+            </Border>
             <Button x:Name="MainActionButton" Grid.Column="2" MinHeight="48" HorizontalAlignment="Stretch" FontSize="16" FontWeight="SemiBold" Click="OnMainActionClick" />
             <Button x:Name="FixPrimaryButton" Grid.Column="3" MinHeight="48" MinWidth="160" FontSize="16" FontWeight="SemiBold" Visibility="Collapsed"
                     Background="{StaticResource MagiPrimaryBrush}" Foreground="{StaticResource MagiOnPrimaryBrush}" Click="OnFixPrimaryClick" />

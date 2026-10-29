@@ -173,7 +173,7 @@ public sealed partial class AnalysisView : UserControl
                 box.Children.Add(new TextBlock { Text = row.Detail, FontSize = 14, Foreground = BrushOf("MagiOnErrorContainerBrush"), TextWrapping = TextWrapping.Wrap });
             TriageBlockersList.Children.Add(new Border
             {
-                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
+                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(10), Child = box,
             });
         }
         if (otherBlockers.Count == 0 && t.Issues.Count > 0) TriageBlockersList.Children.Add(SettingsHeading());
@@ -196,7 +196,7 @@ public sealed partial class AnalysisView : UserControl
             }
             TriageBlockersList.Children.Add(new Border
             {
-                Background = BrushOf("MagiWarnContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10), Child = box,
+                Background = BrushOf("MagiWarnContainerBrush"), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(10), Child = box,
             });
         }
 
@@ -401,7 +401,7 @@ public sealed partial class AnalysisView : UserControl
             }
             IssuesList.Children.Add(new Border
             {
-                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+                Background = BrushOf("MagiErrorContainerBrush"), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(12), Child = box,
             });
         }
         if (shown < issues.Count)
@@ -509,7 +509,7 @@ public sealed partial class AnalysisView : UserControl
             C1List.Children.Add(new Border
             {
                 Background = BrushOf(pin ? "MagiErrorContainerBrush" : "MagiSecondaryContainerBrush"),
-                CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+                CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(12), Child = box,
             });
         }
         C1MoreText.Visibility = diag.Entries.Count > MaxC1Rows ? Visibility.Visible : Visibility.Collapsed;
@@ -563,7 +563,7 @@ public sealed partial class AnalysisView : UserControl
             box.Children.Add(buttons);
             PinList.Children.Add(new Border
             {
-                Background = BrushOf("MagiSecondaryContainerBrush"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12), Child = box,
+                Background = BrushOf("MagiSecondaryContainerBrush"), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(12), Child = box,
             });
         }
         PinMoreText.Visibility = targets.Count > MaxPinRows ? Visibility.Visible : Visibility.Collapsed;
