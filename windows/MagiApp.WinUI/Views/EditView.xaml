@@ -86,6 +86,10 @@
                         <HyperlinkButton x:Name="EditHeaderConflictsLink" Content="ぶつかっている希望を見る" HorizontalAlignment="Stretch" MinHeight="48" Visibility="Collapsed" Click="OnEditHeaderConflictsClick" />
                     </StackPanel>
                 </Border>
+                <!-- [UI-S5] よく使う 3 つ目の「回数の目標」は入口だけ（中身は年間マスター③＝制度の設定。Android 3.727.12）。 -->
+                <Button x:Name="EditCountRow" Content="回数の目標 ›" MinHeight="52" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        AutomationProperties.Name="回数の目標" Click="OnEditCountRowClick" />
+                <TextBlock Text="年間マスターの③で設定します（制度の設定。毎月は変えません）。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" TextWrapping="Wrap" />
                 <TextBlock Text="対象の月" Style="{StaticResource MagiTitleSmallTextStyle}" />
                 <TextBlock x:Name="PeriodText" TextWrapping="Wrap" />
                 <StackPanel Orientation="Horizontal" Spacing="8">

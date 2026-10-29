@@ -307,6 +307,8 @@ public sealed partial class EditView : UserControl
 
     private void OnEditHeaderNeedClick(object sender, RoutedEventArgs e) => NeedSectionTitle.StartBringIntoView();
 
+    private void OnEditCountRowClick(object sender, RoutedEventArgs e) => _window?.GoEditLanding(new EditLanding(2, "yr_count"));
+
     private void OnEditHeaderConflictsClick(object sender, RoutedEventArgs e) => _window?.ShowWishConflicts();
 
     /// <summary>[3.707.0 3a-3] 結果のあとに月次条件を変えた印（作成を始めたら MainWindow が戻す）。VM を呼ぶ前に立てる＝その変更通知で下部バーが塗りになる。</summary>
