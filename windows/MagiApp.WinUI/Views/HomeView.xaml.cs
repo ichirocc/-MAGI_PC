@@ -485,8 +485,18 @@ public sealed partial class HomeView : UserControl
             else
             {
                 sentence = nextTarget ?? "";
-                bigLabel = CellSheetLogic.HomeListButton; bigEnabled = true;
-                _bigAction = () => _window.SelectTab("analysis");
+                bigEnabled = true;
+                // [UI-S1] 次にやることの先頭があれば主は「1を開く（名前の種類）」＝そのセルのシート（Android 3.727.10）。
+                if (NextItemsOf(ui).FirstOrDefault() is { } first)
+                {
+                    bigLabel = CellSheetLogic.HomeOpenFirstLabel(first, labelOf: AnalysisView.LabelOf);
+                    _bigAction = () => _window.OpenCellSheet(first.Cell.I, first.Cell.J);
+                }
+                else
+                {
+                    bigLabel = CellSheetLogic.HomeListButton;
+                    _bigAction = () => _window.SelectTab("analysis");
+                }
             }
         }
 
@@ -630,17 +640,12 @@ public sealed partial class HomeView : UserControl
         SoftNoteText.Text = CellSheetLogic.HomeSoftNote;
         SoftNoteText.Foreground = fgBrush;
 
-        // INFO: 数字の根拠と結果採用の意味を 1 文字も変えず折りたたみへ。
+        // INFO: [UI-S1] まれな操作（でき具合の意味・下書きから作り直す）は「…」の中。説明の文は 1 文字も変えない。
         InfoHost.Visibility = Vis(Has(HomeSection.Info));
-        DetailToggle.Content = _detailOpen ? "ⓘ でき具合の意味 ▾" : "ⓘ でき具合の意味 ▸";
-        DetailToggle.Foreground = fgBrush;
+        MoreButton.Foreground = fgBrush;
+        RedraftItem.IsEnabled = editable;
         DetailText.Visibility = Vis(_detailOpen);
         DetailText.Foreground = fgBrush;
-
-        RedraftLink.Visibility = Vis(Has(HomeSection.DraftLink));
-        RedraftNote.Visibility = RedraftLink.Visibility;
-        RedraftLink.Foreground = fgBrush;
-        RedraftLink.IsEnabled = editable;
     }
 
     /// <summary>

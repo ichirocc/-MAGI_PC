@@ -112,13 +112,18 @@
                         <TextBlock x:Name="SoftNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Visibility="Collapsed" />
                     </StackPanel>
                     <StackPanel x:Name="InfoHost" Spacing="6">
-                        <HyperlinkButton x:Name="DetailToggle" Click="OnDetailToggleClick" Padding="0" />
+                        <Button x:Name="MoreButton" Content="…" MinWidth="48" MinHeight="48" HorizontalAlignment="Right" AutomationProperties.Name="その他の操作"
+                                Background="Transparent" BorderThickness="0">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuFlyoutItem Text="でき具合の意味" Click="OnDetailToggleClick" MinHeight="48" />
+                                    <MenuFlyoutItem x:Name="RedraftItem" Text="下書きから作り直す（元に戻せます）" Click="OnSmartInitialClick" MinHeight="48" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
                         <TextBlock x:Name="DetailText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="※でき具合＝最初からの違反の減り具合（必須違反が残る間は最大55%）。結果は下書きに反映しました。「元に戻す」で取り消せます。確定は書き出すときです。" />
                     </StackPanel>
-                    <HyperlinkButton x:Name="RedraftLink" Click="OnSmartInitialClick" HorizontalAlignment="Stretch"
-                                     Content="下書きから作り直す" />
-                    <TextBlock x:Name="RedraftNote" Text="今の結果は「元に戻す」で戻せます。" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                 </StackPanel>
             </Border>
 

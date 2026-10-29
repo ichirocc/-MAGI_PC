@@ -28,6 +28,17 @@ public class NextItemsTest
     }
 
     [Fact]
+    public void PrimaryOpensTheFirstItemByName()
+    {
+        var next = CellSheetLogic.HomeNextItems(Rows, Items, null);
+        Assert.Equal("c3n", next[0].Family);
+        Assert.Equal("1を開く（アリフの並び）", CellSheetLogic.HomeOpenFirstLabel(next[0]));
+        Assert.Equal("2を開く（福澤の希望）", CellSheetLogic.HomeOpenFirstLabel(next[1]));
+        Assert.Equal("1を開く", CellSheetLogic.HomeOpenFirstLabel(next[0] with { Name = "とても長い名前の職員さん" }, 1.0));
+        Assert.Equal("1を開く", CellSheetLogic.HomeOpenFirstLabel(next[0], 2.0));   // 文字拡大では入る字数が縮む
+    }
+
+    [Fact]
     public void NoTagAboutFixesBeforeSearching()
     {
         var next = CellSheetLogic.HomeNextItems(Rows, Items, null, max: 4);
@@ -53,5 +64,6 @@ public class NextItemsTest
         Assert.True(s.IndexOf(HomeSection.NextItems) < s.IndexOf(HomeSection.Primary));
         Assert.DoesNotContain(HomeSection.NextItems, CellSheetLogic.HomeCardSectionsOf(CellSheetLogic.HomePlanOf(false, true, true), new UiState { Loaded = true, HasResult = true, BestHard = 0L, CheckRev = 1 }));
         Assert.DoesNotContain(HomeSection.NextItems, CellSheetLogic.HomeCardSectionsOf(plan, new UiState { Loaded = true, HasResult = true, BestHard = 3L, CheckRev = 0 }));
+        Assert.Equal(HomeSection.Info, s[^1]);   // まれな操作は最後の「…」の中（UI-S1）
     }
 }

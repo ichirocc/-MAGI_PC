@@ -18,7 +18,7 @@ public enum HomeAction { None, Make, SmartInitial, PreDist, Schedule, ShowWishes
 public sealed record HomePlan(HomePlanKind Kind, HomeAction Primary, bool PrimaryEnabled, HomeAction? Helper);
 
 /// <summary>ホームの主カードの区画。並びの順は <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決め、HomeView はその順に描くだけ（Kotlin <c>HomeSection</c> と 1 対 1）。</summary>
-public enum HomeSection { Creation, Headline, Badges, Status, NextItems, Progress, Primary, Helper, Others, Detail, Satisfaction, Info, DraftLink }
+public enum HomeSection { Creation, Headline, Badges, Status, NextItems, Progress, Primary, Helper, Others, Detail, Satisfaction, Info }
 
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed, Cancelled }
 
@@ -74,7 +74,7 @@ public sealed record ProblemRow(string Family, int Staff, IReadOnlyList<int> Day
 }
 
 /// <summary>ホームの「次にやること」の 1 行（Kotlin <c>HomeNextItem</c>）。TourAt＝巡回の何件目（押すとそのセルのシートを開く）。</summary>
-public sealed record HomeNextItem(int Rank, string Name, string Reason, string? Tag, int TourAt, (int I, int J) Cell);
+public sealed record HomeNextItem(int Rank, string Name, string Reason, string? Tag, int TourAt, (int I, int J) Cell, string Family = "");
 
 public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading, IReadOnlyList<string>? Syms = null, string DayMd = "")
 {
@@ -644,10 +644,26 @@ public static class CellSheetLogic
             var it = items[r.TourAt];
             bool? fix = fixable?.Any(k => k.Family == it.Family && k.Space == ViolationKey.Kind.Cell && k.A == it.Staff && it.Days.Contains(k.B));
             var tag = r.WishOnly ? NextActionGuide.WishOnlyTag : fix == true ? NextTagFixable : fix == false ? NextTagCheck : null;
-            list.Add(new HomeNextItem(list.Count + 1, r.Name, ProblemRowParts(r.Line ?? r.Heading, r.Name).Reason, tag, r.TourAt, it.Cell));
+            list.Add(new HomeNextItem(list.Count + 1, r.Name, ProblemRowParts(r.Line ?? r.Heading, r.Name).Reason, tag, r.TourAt, it.Cell, it.Family));
         }
         return list;
     }
+
+    /// <summary>主ボタン「1を開く（アリフの並び）」（UI-S1、Kotlin <c>homeOpenFirstLabel</c>）。名前と種類の短い語が入らなければ「1を開く」。</summary>
+    public static string HomeOpenFirstLabel(HomeNextItem item, double fontScale = 1.0, Func<string, string>? labelOf = null)
+    {
+        var kind = item.Family switch
+        {
+            "c3n" => "並び", "c3w" => "希望の前日", "pref" => "希望", "extWish" => "拡張希望", "groupViol" => "担当外",
+            _ => labelOf?.Invoke(item.Family) ?? "問題",
+        };
+        var full = $"{item.Rank}を開く（{item.Name}の{kind}）";
+        return full.Length <= (int)(AnalysisTriage.HomeButtonMaxChars / fontScale) ? full : $"{item.Rank}を開く";
+    }
+
+    public const string HomeMoreMenu = "その他の操作";
+    public const string HomeScoreMeaning = "でき具合の意味";
+    public const string HomeRedraftItem = "下書きから作り直す（元に戻せます）";
 
     /// <summary>変更案で直せる必須違反の鍵（<see cref="AnalysisFixResolved"/> と同じ鮮度）。未探索・古いときは null、案が無ければ空。</summary>
     public static IReadOnlySet<ViolationKey>? FixableHardKeys(UiState ui)
@@ -1932,7 +1948,7 @@ public static class CellSheetLogic
 
     /// <summary>
     /// ホームの主カードの並び（Kotlin <c>homeCardSections</c>、純関数）: 作成の 2 行 → 見出し → 札 → 状態（2 行まで）→ 次にやること → 主ボタン 1 つ → 補助 →「ほかの問題を見る」→
-    /// 詳細 → でき具合 → ⓘ → 下書きのリンク。実行中は進捗の行だけ。でき具合は結果があるときだけ（作っていないのに出さない）。
+    /// 詳細 → でき具合 → 「…」（でき具合の意味・下書きから作り直す。UI-S1 のまれな操作）。実行中は進捗の行だけ。でき具合は結果があるときだけ（作っていないのに出さない）。
     /// </summary>
     public static IReadOnlyList<HomeSection> HomeCardSectionsOf(HomePlan plan, UiState ui)
     {
@@ -1948,7 +1964,7 @@ public static class CellSheetLogic
         if (plan.Helper is not null || ui.HasResult) list.Add(HomeSection.Helper);
         if (creation && !HomeActionsToAnalysis.Contains(plan.Primary)) list.Add(HomeSection.Others);
         list.Add(HomeSection.Detail);
-        if (ui.HasResult) { list.Add(HomeSection.Satisfaction); list.Add(HomeSection.Info); list.Add(HomeSection.DraftLink); }
+        if (ui.HasResult) { list.Add(HomeSection.Satisfaction); list.Add(HomeSection.Info); }
         return list;
     }
 
