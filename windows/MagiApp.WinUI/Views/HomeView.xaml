@@ -69,6 +69,7 @@
                     <StackPanel x:Name="BadgeHost" Orientation="Horizontal" Spacing="8" />
                     <!-- STATUS: 2 行まで。探索中はカードの中の「やめる」。 -->
                     <StackPanel x:Name="StatusHost" Spacing="4" />
+                    <StackPanel x:Name="NextItemsHost" Spacing="8" Visibility="Collapsed" />
                     <Grid x:Name="ProgressRow" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

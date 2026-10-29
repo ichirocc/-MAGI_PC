@@ -330,6 +330,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+- 2026-10-29（Android 3.727.9 と同期・画面案の取り込み）: ホームの「次にやること」＝必須違反の上位 3 件（`HomeSection.NextItems`・`HomeNextItems`・札は `FixableHardKeys` で直せる見込み／確認が必要、希望のまま）、押すとそのセルのシート、「問題をすべて見る」は勤務表の問題一覧（`MainWindow.OpenProblemList`）。勤務表の問題パネルは題「問題 必須 N件」、行は印・名前・理由の 2 段（`ProblemRowParts`、`HomeView.ProblemItemRow`）＋［開く］、要調整は「要調整 (N)」で畳む。セルのパネルに関係する日の札・「直す手」（`ShiftMarks.Best`＋［この手を使う（元に戻せます）］＝SetCell）・希望／手動固定の行。`NextItemsTest` を追加、`CellSheetLogicTest` に Best の検算。
 - 2026-10-29（Android 3.727.8 と同期・iOS 26 の同心の角とカプセル）: 角丸の段を同心に（XS 10＝カードの中の面・SM 14→26＝カード・LG 24→28＝シート、`MagiCornerCapsule` を追加）。上部の MAGI と状態の札をカプセルに、分析タブのカードの中の面（8）を XS へ。下部の元に戻す・やり直しと勤務表の週送りを、それぞれ細い線で区切った 1 本のカプセルに束ねる。表示のみ。
 - 2026-10-28（Android 3.727.7 と同期・UI 整理 A2/A4/A6）: 勤務表の絞り込み札を常用 3 つ（人員・希望・回数）＋「その他」に（`VioBuckets.CommonKeys`/`VisibleBuckets`、外している札は閉じていても見せる）。下部バーの「◀違反／違反▶」と違反日の状態を撤去（巡回はセルのシートが持つ）。分析タブの主ボタン（`AnalysisPrimary`）を撤去＝「次の問題へ」はホームの主と重ねない。`VioBucketsVisibleTest` を追加、`Review3705Test` を Kotlin と同じ形へ。エンジン不変。
 - 2026-10-28（Android 3.727.6 と同期・外部レビュー No.1/No.8）: `StateFingerprint.OfBoard` を行数・各行の長さ・各値を 1 つずつ強く混ぜる式へ（旧 `h*31+v` は `[1,0]`/`[0,31]` 等が作りの上で衝突し、「計算中に盤面が変わったか」の照合が誤って同じと見得た）。golden を Kotlin と同じ値へ、`OfBoardSeparatesTheOldStructuralCollisions`・`EveryStateFieldIsCoveredOrDeliberatelyExcluded`（`MagiState` の欄が増えたら落ちる）を追加、`MagiViewModelDiagnosticsTest` の旧式の検算を新しい固定値へ。Worker の入力退避（No.5）は Android の背景実行だけの経路＝C# に該当なし。

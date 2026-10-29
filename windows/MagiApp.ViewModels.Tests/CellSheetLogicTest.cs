@@ -180,6 +180,10 @@ public class CellSheetLogicTest
         var stopped = CellSheetLogic.EvaluateShiftMarks(St, S, i, 0, CellSeverity.Hard, cands, () => false);
         Assert.Empty(stopped.Recommended);
         Assert.Empty(stopped.HardRisk);
+        // 直す手＝おすすめのうち必須→重み付きの合計が最も小さい 1 つ。
+        ViolationReport Trial(int k) { var t = S.Select(r => (int[])r.Clone()).ToArray(); t[i][0] = k; return UnifiedViolationChecker.Check(St, t); }
+        int? best = m.Recommended.Count == 0 ? null : m.Recommended.OrderBy(k => Trial(k).Hard).ThenBy(k => Trial(k).WeightedScore).First();
+        Assert.Equal(best, m.Best);
     }
 
     /// <summary>職員10 10/8・10/9: おすすめ 0・置ける候補が全部警告＝1 マスでは直らない注記。印の計算前や、おすすめがあるセルには出ない。</summary>

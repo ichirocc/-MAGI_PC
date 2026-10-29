@@ -785,7 +785,8 @@ public sealed partial class ScheduleView : UserControl
                 var pc = picked.Cell;
                 DispatcherQueue.TryEnqueue(() => FocusCell(pc.I, pc.J));
             }
-            ProblemPanelTitle.Text = picked?.Line ?? CellSheetLogic.HardListTitle(DisplaySnapshots.DisplayHardText(ui));
+            // [Android 3.727.9 画面案] 題は「問題 必須 N件」、行は印・名前・理由の 2 段＋［開く］、要調整は畳む。
+            ProblemPanelTitle.Text = picked?.Line ?? $"{CellSheetLogic.ProblemListTitle}  {CellSheetLogic.ProblemListCount(DisplaySnapshots.DisplayHardText(ui))}";
             ProblemPanelTitle.Foreground = (Brush)Application.Current.Resources[picked is { Hard: true } ? "MagiErrorBrush" : "MagiOnSurfaceVariantBrush"];
             ProblemPanelListButton.Visibility = Visibility.Collapsed;
             if (rows.Any(r => r.Hard))
@@ -795,32 +796,40 @@ public sealed partial class ScheduleView : UserControl
                 start.Click += (_, _) => OpenCellSheet(first.I, first.J);
                 body.Children.Add(start);
             }
-            var softCount = rows.Count(r => !r.Hard);
+            var hardCount = rows.Count(r => r.Hard);
+            var softCount = rows.Count - hardCount;
+            if (pickedIdx is { } pk && pk >= hardCount) _softOpen = true;
             for (var idx = 0; idx < rows.Count; idx++)
             {
                 var r = rows[idx];
-                if (!r.Hard && (idx == 0 || rows[idx - 1].Hard) && CellSheetLogic.SoftRowsHeading(softCount) is { } sh)
-                    body.Children.Add(new TextBlock { Text = sh, FontSize = 13, Opacity = 0.8 });
-                var content = new Grid { ColumnSpacing = 8 };
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                content.Children.Add(new TextBlock { Text = r.Line, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 });
-                if (r.WishOnly)
+                if (!r.Hard && idx == hardCount)
                 {
-                    var chip = AnalysisView.TagChip(NextActionGuide.WishOnlyTag, MagiAccent.Orange);
-                    Grid.SetColumn(chip, 1);
-                    content.Children.Add(chip);
+                    var fold = new Button { Content = CellSheetLogic.SoftFoldLabel(softCount) + (_softOpen ? " ▾" : " ▸"), MinHeight = 52, HorizontalAlignment = HorizontalAlignment.Stretch,
+                        HorizontalContentAlignment = HorizontalAlignment.Left, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0) };
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fold, CellSheetLogic.SoftFoldLabel(softCount));
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(fold, A11y.DisclosureState(_softOpen));
+                    fold.Click += (_, _) => { _softOpen = !_softOpen; _renderCoalescer.Request(); };
+                    body.Children.Add(fold);
                 }
-                var row = new Button { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, MinHeight = 48 };
-                if (idx == pickedIdx)
-                {
-                    row.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-                    row.Loaded += (_, _) => row.StartBringIntoView();   // 戻ったら見ていた行（または次の問題）まで送る
-                }
+                if (!r.Hard && !_softOpen) break;
+                var parts = CellSheetLogic.ProblemRowParts(r.Line, r.Family == "covU" || r.Staff < 0 || r.Staff >= ui.StaffNames.Count ? null : ui.StaffNames[r.Staff]);
+                var mark = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(12),
+                    Background = r.Hard ? (Brush)Application.Current.Resources["MagiErrorBrush"] : new SolidColorBrush(ColorHex.Parse(MagiAccent.Orange, Microsoft.UI.Colors.Gray)),
+                    Child = new TextBlock { Text = "!", Foreground = new SolidColorBrush(Microsoft.UI.Colors.White), FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+                var open = new Button { Content = CellSheetLogic.ProblemOpenButton, MinHeight = 48, CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerCapsule"] };
                 var cell = r.Cell;
                 var rowIdx = idx;
                 var fam = r.Family;
-                row.Click += (_, _) => { _panelPickRow = rowIdx; _panelPickFamily = fam; _panelPick = cell; FocusCell(cell.I, cell.J); };
+                open.Click += (_, _) => OpenCellSheet(cell.I, cell.J);
+                var row = HomeView.ProblemItemRow(mark, parts.Name, parts.Reason, r.WishOnly ? NextActionGuide.WishOnlyTag : null,
+                    new SolidColorBrush(ColorHex.Parse(MagiAccent.Orange, Microsoft.UI.Colors.Gray)),
+                    () => { _panelPickRow = rowIdx; _panelPickFamily = fam; _panelPick = cell; FocusCell(cell.I, cell.J); }, open);
+                if (idx == pickedIdx)
+                {
+                    row.Background = (Brush)Application.Current.Resources["MagiPrimaryContainerBrush"];
+                    row.Loaded += (_, _) => row.StartBringIntoView();   // 戻ったら見ていた行（または次の問題）まで送る
+                }
                 body.Children.Add(row);
             }
             if (CellSheetLogic.TourCovULine(ui.Breakdown.GetValueOrDefault("covU")) is { } covLine)
@@ -854,10 +863,58 @@ public sealed partial class ScheduleView : UserControl
             b.Click += (_, _) => { if (kk != cur) { _cellSheetExpanded = true; ShowCellEditor(ProblemPanel, i, j, 0, 2, kk); } };
             picks.Children.Add(b);
         }
+        // [Android 3.727.9 画面案] 関係する日の札と「直す手」（このセルだけを変えて必須が減る最善の 1 手、押すとすぐ当てる＝元に戻せる）。
+        var partners = status.Severity == CellSeverity.Hard ? _vm.ViolationPartnerDaysFor(i, j) : Array.Empty<int>();
+        var related = partners.Append(j).Distinct().OrderBy(d => d).ToList();
+        if (related.Count >= 2)
+        {
+            var days = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            foreach (var d in related)
+            {
+                var dd = d;
+                var chip = new ToggleButton { Content = DayText.Short(ui.StartDate, dd), IsChecked = dd == j, MinHeight = 48, CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerCapsule"] };
+                chip.Click += (_, _) => { if (dd != j) OpenCellSheet(i, dd); else chip.IsChecked = true; };
+                days.Children.Add(chip);
+            }
+            body.Children.Add(days);
+        }
+        var fixHost = new StackPanel { Spacing = 8 };
+        body.Children.Add(fixHost);
+        if (status.Severity != CellSeverity.None && !ui.Running) _ = FillFixMoveAsync(fixHost, i, j, status.Severity, cur, Sym, DayText.Short(ui.StartDate, j));
         body.Children.Add(new ScrollViewer { Content = picks, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         var detail = new HyperlinkButton { Content = CellSheetLogic.CellDetailButton, MinHeight = 48 };
         detail.Click += (_, _) => ShowCellEditor(ProblemPanel, i, j);
         body.Children.Add(detail);
+        // 希望・手動固定は一覧の行（iOS の一覧の形）。
+        var pinned = ui.ManualPins.Contains($"{i},{j}");
+        var wishRow = HomeView.ProblemItemRow(new Border(), CellSheetLogic.PeekWishRow, "", null, (Brush)Application.Current.Resources["MagiOutlineBrush"],
+            () => ShowCellEditor(ProblemPanel, i, j, 1));
+        var pinRow = HomeView.ProblemItemRow(new Border(), pinned ? CellSheetLogic.PeekUnpinRow : CellSheetLogic.PeekPinRow, "", null, (Brush)Application.Current.Resources["MagiOutlineBrush"],
+            () => _vm.TogglePin(i, j));
+        wishRow.IsEnabled = pinRow.IsEnabled = !ui.Running;
+        body.Children.Add(wishRow);
+        body.Children.Add(pinRow);
+    }
+
+    private bool _softOpen;
+    private CancellationTokenSource? _fixMoveCts;
+
+    /// <summary>セルのパネルの「直す手」を背景で評価して埋める（Kotlin <c>ShiftMarks.best</c>、Android 3.727.9）。セルが変われば取り消す。</summary>
+    private async Task FillFixMoveAsync(StackPanel host, int i, int j, CellSeverity severity, int cur, Func<int, string> sym, string dayShort)
+    {
+        _fixMoveCts?.Cancel();
+        var cts = _fixMoveCts = new CancellationTokenSource();
+        ShiftMarks m;
+        try { m = await _vm.ShiftMarksForAsync(i, j, severity, cts.Token); } catch (OperationCanceledException) { return; }
+        if (cts.IsCancellationRequested || m.Best is not { } best || best == cur || _panelCell is not { } pc || pc.I != i || pc.J != j) return;
+        var title = new TextBlock { Text = CellSheetLogic.FixMoveHeading, Style = (Style)Application.Current.Resources["MagiTitleSmallTextStyle"] };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level3);
+        host.Children.Add(title);
+        host.Children.Add(new Border { Background = (Brush)Application.Current.Resources["MagiTertiaryContainerBrush"], CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Padding = new Thickness(12),
+            Child = new TextBlock { Text = "✓ " + CellSheetLogic.FixMoveLine(dayShort, sym(best)), Foreground = (Brush)Application.Current.Resources["MagiOnTertiaryContainerBrush"] } });
+        var apply = new Button { Content = CellSheetLogic.FixMoveApply, MinHeight = 48, HorizontalAlignment = HorizontalAlignment.Stretch, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        apply.Click += (_, _) => _vm.SetCell(i, j, best);
+        host.Children.Add(apply);
     }
 
     private void Render()

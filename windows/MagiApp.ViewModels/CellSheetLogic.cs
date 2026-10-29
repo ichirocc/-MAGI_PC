@@ -18,7 +18,7 @@ public enum HomeAction { None, Make, SmartInitial, PreDist, Schedule, ShowWishes
 public sealed record HomePlan(HomePlanKind Kind, HomeAction Primary, bool PrimaryEnabled, HomeAction? Helper);
 
 /// <summary>ホームの主カードの区画。並びの順は <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決め、HomeView はその順に描くだけ（Kotlin <c>HomeSection</c> と 1 対 1）。</summary>
-public enum HomeSection { Creation, Headline, Badges, Status, Progress, Primary, Helper, Others, Detail, Satisfaction, Info, DraftLink }
+public enum HomeSection { Creation, Headline, Badges, Status, NextItems, Progress, Primary, Helper, Others, Detail, Satisfaction, Info, DraftLink }
 
 public enum FixPanelState { WaitCheck, NotStarted, Running, Done, Failed, Cancelled }
 
@@ -73,6 +73,9 @@ public sealed record ProblemRow(string Family, int Staff, IReadOnlyList<int> Day
     public (int I, int J) Cell => (Staff, Days[0]);
 }
 
+/// <summary>ホームの「次にやること」の 1 行（Kotlin <c>HomeNextItem</c>）。TourAt＝巡回の何件目（押すとそのセルのシートを開く）。</summary>
+public sealed record HomeNextItem(int Rank, string Name, string Reason, string? Tag, int TourAt, (int I, int J) Cell);
+
 public sealed record TourItem(string Family, int Staff, IReadOnlyList<int> Days, string Heading, IReadOnlyList<string>? Syms = null, string DayMd = "")
 {
     public (int I, int J) Cell => (Staff, Days[0]);
@@ -87,8 +90,9 @@ public sealed record DayStripMark(int Day, string Dom, string Dow, bool Short, i
 /// <summary>巡回の位置（Kotlin <c>TourCursor</c>）。At は今の項目の添字（一覧から消えていれば null）、Next/Prev は「次」「前」の行き先（無ければ null）。</summary>
 public sealed record TourCursor(int? At, int? Next, int? Prev);
 
-/// <summary>シフトボタンの印。Recommended＝緑の点、HardRisk＝置くと必須の族が増える（警告の印）。</summary>
-public sealed record ShiftMarks(IReadOnlySet<int> Recommended, IReadOnlySet<int> HardRisk)
+/// <summary>シフトボタンの印。Recommended＝緑の点、HardRisk＝置くと必須の族が増える（警告の印）。
+/// Best＝おすすめのうち必須→重み付きの合計が最も小さくなる 1 つ（セルのシートの「直す手」、Kotlin <c>ShiftMarks.best</c>）。</summary>
+public sealed record ShiftMarks(IReadOnlySet<int> Recommended, IReadOnlySet<int> HardRisk, int? Best = null)
 {
     public static readonly ShiftMarks Empty = new(new HashSet<int>(), new HashSet<int>());
 }
@@ -355,6 +359,9 @@ public static class CellSheetLogic
         var bas = UnifiedViolationChecker.Check(state, s);
         var rec = new HashSet<int>();
         var risk = new HashSet<int>();
+        int? best = null;
+        var bestHard = int.MaxValue;
+        var bestWeighted = double.MaxValue;
         var trial = s.Select(r => (int[])r.Clone()).ToArray();
         foreach (var k in candidates)
         {
@@ -370,9 +377,13 @@ public static class CellSheetLogic
                 CellSeverity.Soft => r.WeightedScore < bas.WeightedScore,
                 _ => false,
             };
-            if (better) rec.Add(k);
+            if (better)
+            {
+                rec.Add(k);
+                if (r.Hard < bestHard || r.Hard == bestHard && r.WeightedScore < bestWeighted) { best = k; bestHard = r.Hard; bestWeighted = r.WeightedScore; }
+            }
         }
-        return new ShiftMarks(rec, risk);
+        return new ShiftMarks(rec, risk, best);
     }
 
     /// <summary>回数の行（例「Aｱ 7(適切8)▼ Dﾃ 4(下限5)▼」）。この職員の回数の族があるシフトだけ、目安（下限/上限/適切/合計）と ▼▲。
@@ -600,6 +611,60 @@ public static class CellSheetLogic
     public static double PanelMaxHeight(double windowHeight, double fallback) => windowHeight > 0 ? windowHeight / 3 : fallback;
 
     public const string PanelListButton = "一覧へ";
+
+    /// <summary>問題一覧の行の 2 段（2026-10-29 画面案、Kotlin <c>problemRowParts</c>）: 名前（無ければ null）と理由（名前を除いた残り）。</summary>
+    public static (string? Name, string Reason) ProblemRowParts(string line, string? name)
+    {
+        if (string.IsNullOrEmpty(name) || !line.StartsWith(name, StringComparison.Ordinal)) return (null, line);
+        return (name, line[name.Length..].Trim().TrimStart('…').Trim());
+    }
+
+    public const string ProblemListTitle = "問題";
+    public const string ProblemOpenButton = "開く";
+
+    /// <summary>問題一覧の大きな題「問題」の横の件数「必須 3件」。</summary>
+    public static string ProblemListCount(string hardText) => $"必須 {hardText}";
+
+    /// <summary>要調整を畳んだ行「要調整 (N)」。</summary>
+    public static string SoftFoldLabel(int n) => $"要調整 ({n})";
+
+    public const string NextTagFixable = "直せる見込み";
+    public const string NextTagCheck = "確認が必要";
+    public const string HomeNextHeading = "次にやること";
+    public const string HomeNextAll = "問題をすべて見る";
+
+    /// <summary>必須違反の上位 max 件（Kotlin <c>homeNextItems</c>）。札は 希望のまま／直せる見込み（fixable に入る）／確認が必要（探して入らなかった）。
+    /// fixable が null（未探索・古い）なら直せるかは言わない。</summary>
+    public static IReadOnlyList<HomeNextItem> HomeNextItems(IReadOnlyList<HardListRow> rows, IReadOnlyList<TourItem> items, IReadOnlySet<ViolationKey>? fixable, int max = 3)
+    {
+        var list = new List<HomeNextItem>();
+        foreach (var r in rows.Take(max))
+        {
+            if (r.TourAt < 0 || r.TourAt >= items.Count) continue;
+            var it = items[r.TourAt];
+            bool? fix = fixable?.Any(k => k.Family == it.Family && k.Space == ViolationKey.Kind.Cell && k.A == it.Staff && it.Days.Contains(k.B));
+            var tag = r.WishOnly ? NextActionGuide.WishOnlyTag : fix == true ? NextTagFixable : fix == false ? NextTagCheck : null;
+            list.Add(new HomeNextItem(list.Count + 1, r.Name, ProblemRowParts(r.Line ?? r.Heading, r.Name).Reason, tag, r.TourAt, it.Cell));
+        }
+        return list;
+    }
+
+    /// <summary>変更案で直せる必須違反の鍵（<see cref="AnalysisFixResolved"/> と同じ鮮度）。未探索・古いときは null、案が無ければ空。</summary>
+    public static IReadOnlySet<ViolationKey>? FixableHardKeys(UiState ui)
+    {
+        if (!ui.FixSearched) return null;
+        var opsList = ui.FixSuggestions.Where(f => f.DeltaHard < 0).Select(f => f.Ops).ToList();
+        if (opsList.Count == 0) return new HashSet<ViolationKey>();
+        return ui.FixResolvedUnion is { } u && u.Matches(opsList, ui.Schedule) ? u.Keys : null;
+    }
+
+    /// <summary>セルのシートの「直す手」（Kotlin <c>FIX_MOVE_*</c>）。</summary>
+    public const string FixMoveHeading = "直す手";
+    public const string FixMoveApply = "この手を使う（元に戻せます）";
+    public static string FixMoveLine(string dayShort, string sym) => $"{dayShort} → {sym}";
+    public const string PeekWishRow = "希望を登録する";
+    public const string PeekPinRow = "手動固定する";
+    public const string PeekUnpinRow = "手動固定を外す";
 
     /// <summary>要調整の見出し「要調整 N件」（0 なら null）。</summary>
     public static string? SoftRowsHeading(int n) => n > 0 ? $"要調整 {n}件" : null;
@@ -1866,7 +1931,7 @@ public static class CellSheetLogic
     private static readonly HashSet<HomeAction> HomeActionsToAnalysis = new() { HomeAction.ShowMove, HomeAction.ShowList };
 
     /// <summary>
-    /// ホームの主カードの並び（Kotlin <c>homeCardSections</c>、純関数）: 作成の 2 行 → 見出し → 札 → 状態（2 行まで）→ 主ボタン 1 つ → 補助 →「ほかの問題を見る」→
+    /// ホームの主カードの並び（Kotlin <c>homeCardSections</c>、純関数）: 作成の 2 行 → 見出し → 札 → 状態（2 行まで）→ 次にやること → 主ボタン 1 つ → 補助 →「ほかの問題を見る」→
     /// 詳細 → でき具合 → ⓘ → 下書きのリンク。実行中は進捗の行だけ。でき具合は結果があるときだけ（作っていないのに出さない）。
     /// </summary>
     public static IReadOnlyList<HomeSection> HomeCardSectionsOf(HomePlan plan, UiState ui)
@@ -1878,6 +1943,7 @@ public static class CellSheetLogic
         list.Add(HomeSection.Headline);
         if (ui.HasResult && ui.CheckRev > 0) list.Add(HomeSection.Badges);   // [3.716.0] 札は検査済みのときだけ（検査前に「満たしています」と言わない）
         list.Add(HomeSection.Status);
+        if (ui.HasResult && ui.CheckRev > 0 && ui.BestHard > 0L && plan.Kind != HomePlanKind.Draft) list.Add(HomeSection.NextItems);
         if (plan.PrimaryEnabled) list.Add(HomeSection.Primary);
         if (plan.Helper is not null || ui.HasResult) list.Add(HomeSection.Helper);
         if (creation && !HomeActionsToAnalysis.Contains(plan.Primary)) list.Add(HomeSection.Others);

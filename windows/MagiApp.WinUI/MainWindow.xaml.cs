@@ -846,6 +846,13 @@ public sealed partial class MainWindow : Window
         if (_tabCache["schedule"] is ScheduleView sv) sv.OpenCellSheet(i, j);
     }
 
+    /// <summary>勤務表タブの問題一覧を開く（ホームの「問題をすべて見る」、Android 3.727.9）。</summary>
+    internal void OpenProblemList()
+    {
+        SelectTab("schedule");
+        if (_tabCache["schedule"] is ScheduleView sv) sv.OpenProblemList();
+    }
+
     /// <summary>
     /// [フェーズ9] 未知のタグに対する防御（5タグはすべて実装済みのため通常は到達しない）。
     /// switch 式の網羅性を静的に証明できない以上、黙って空を出すよりは理由を画面に出す。

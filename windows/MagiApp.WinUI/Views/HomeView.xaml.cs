@@ -258,6 +258,70 @@ public sealed partial class HomeView : UserControl
 
     /// <summary>
     /// [phase9 #2] 処方箋カード。Kotlin原本 <c>OperatorNextActionCard</c> の状態分岐をそのまま写す。
+    private IReadOnlyList<HomeNextItem> NextItemsOf(UiState ui)
+    {
+        var items = _vm.HardViolationItemsFor(AnalysisView.LabelOf);
+        var selfKeys = ui.WishSelfConflicts.SelectMany(g => g.WishKeys).ToHashSet();
+        return CellSheetLogic.HomeNextItems(CellSheetLogic.HardViolationRows(items, ui.StaffNames, selfKeys, AnalysisView.LabelOf), items, CellSheetLogic.FixableHardKeys(ui));
+    }
+
+    private void RenderNextItems(IReadOnlyList<HomeNextItem> items, Brush fg)
+    {
+        var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var title = new TextBlock { Text = CellSheetLogic.HomeNextHeading, Style = StyleOf("MagiTitleMediumTextStyle"), FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = fg };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+        head.Children.Add(title);
+        head.Children.Add(new TextBlock { Text = $"{items.Count}件", Style = StyleOf("MagiBodyMediumTextStyle"), Foreground = fg, VerticalAlignment = VerticalAlignment.Bottom });
+        NextItemsHost.Children.Add(head);
+        var list = new StackPanel();
+        foreach (var it in items)
+        {
+            var tagColor = it.Tag == CellSheetLogic.NextTagFixable ? BrushOf("MagiPrimaryBrush") : it.Tag == NextActionGuide.WishOnlyTag
+                ? new SolidColorBrush(ColorHex.Parse(MagiAccent.Orange, Colors.Gray)) : BrushOf("MagiOnSurfaceVariantBrush");
+            var rank = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(16), Background = BrushOf("MagiPrimaryContainerBrush"),
+                Child = new TextBlock { Text = $"{it.Rank}", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                    FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = BrushOf("MagiOnPrimaryContainerBrush") } };
+            list.Children.Add(ProblemItemRow(rank, it.Name, it.Reason, it.Tag, tagColor, () => _window.OpenCellSheet(it.Cell.I, it.Cell.J)));
+        }
+        var all = new Button { Content = CellSheetLogic.HomeNextAll + " ›", MinHeight = 52, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left,
+            Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0), Foreground = BrushOf("MagiPrimaryBrush") };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(all, CellSheetLogic.HomeNextAll);
+        all.Click += (_, _) => _window.OpenProblemList();
+        list.Children.Add(all);
+        NextItemsHost.Children.Add(new Border { Background = BrushOf("MagiBackgroundBrush"), CornerRadius = (CornerRadius)Application.Current.Resources["MagiCornerXS"], Child = list });
+    }
+
+    /// <summary>問題の 1 行（Kotlin <c>ProblemItemRow</c>）: 先頭の印・太字の名前・理由・札・›。行全体を押せる。</summary>
+    internal static Button ProblemItemRow(UIElement lead, string? title, string sub, string? tag, Brush tagColor, Action onClick, UIElement? trailing = null)
+    {
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        lead.SetValue(Grid.ColumnProperty, 0);
+        grid.Children.Add(lead);
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        if (title is not null) text.Children.Add(new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextTrimming = TextTrimming.CharacterEllipsis });
+        if (!string.IsNullOrWhiteSpace(sub)) text.Children.Add(new TextBlock { Text = sub, TextWrapping = TextWrapping.Wrap, Opacity = title is null ? 1 : 0.8 });
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+        if (tag is not null)
+        {
+            var t = new TextBlock { Text = tag, Foreground = tagColor, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(t, 2);
+            grid.Children.Add(t);
+        }
+        var end = trailing ?? new TextBlock { Text = "›", Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center };
+        end.SetValue(Grid.ColumnProperty, 3);
+        grid.Children.Add(end);
+        var b = new Button { Content = grid, MinHeight = 56, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0, 0, 0, 1), BorderBrush = (Brush)Application.Current.Resources["MagiOutlineBrush"] };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, string.Join("、", new[] { title, sub, tag }.Where(x => !string.IsNullOrWhiteSpace(x))));
+        b.Click += (_, _) => onClick();
+        return b;
+    }
+
     /// [Android 3.698.0] 並びは純関数 <see cref="CellSheetLogic.HomeCardSectionsOf"/> が決める＝XAML はその正順で区画を置き、ここは区画ごとの表示と中身だけを決める。
     /// 自動の案探し（<c>FindFixSuggestions(auto: true)</c>）は手の編集・元に戻すのあとも走る（auto＝ためらいの回数に入れない）。
     /// 段の対象は <see cref="CellSheetLogic.CreationNextTarget"/> の 1 か所で決め、主ボタンの括弧と「次に確認する問題」の両方に使う（INV-01）。
@@ -491,6 +555,12 @@ public sealed partial class HomeView : UserControl
             }
             // 探索を止めるのは下部バーの［やめる］だけ（カードに同じボタンを重ねない）。
         }
+
+        // NEXT_ITEMS: 必須違反の上位 3 件（Android 3.727.9、画面案）。押すとそのセルのシート、最後の行は問題一覧。
+        NextItemsHost.Children.Clear();
+        var nextItems = Has(HomeSection.NextItems) ? NextItemsOf(ui) : Array.Empty<HomeNextItem>();
+        NextItemsHost.Visibility = Vis(nextItems.Count > 0);
+        if (nextItems.Count > 0) RenderNextItems(nextItems, fgBrush);
 
         // PROGRESS: 何をしているかの語を先頭に。ProgressSummary（改善率/残り時間/探索数）はそのまま。
         ProgressRow.Visibility = Vis(Has(HomeSection.Progress));
