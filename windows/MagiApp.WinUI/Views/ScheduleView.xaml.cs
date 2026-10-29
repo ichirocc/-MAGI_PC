@@ -898,15 +898,25 @@ public sealed partial class ScheduleView : UserControl
 
     private bool _softOpen;
     private CancellationTokenSource? _fixMoveCts;
+    private (int I, int J, long Rev, int? Best)? _fixMoveCache;   // 描き直しのたびに全候補を検査し直さない（同じセル・同じ検査世代なら前の結果）
 
     /// <summary>セルのパネルの「直す手」を背景で評価して埋める（Kotlin <c>ShiftMarks.best</c>、Android 3.727.9）。セルが変われば取り消す。</summary>
     private async Task FillFixMoveAsync(StackPanel host, int i, int j, CellSeverity severity, int cur, Func<int, string> sym, string dayShort)
     {
-        _fixMoveCts?.Cancel();
-        var cts = _fixMoveCts = new CancellationTokenSource();
-        ShiftMarks m;
-        try { m = await _vm.ShiftMarksForAsync(i, j, severity, cts.Token); } catch (OperationCanceledException) { return; }
-        if (cts.IsCancellationRequested || m.Best is not { } best || best == cur || _panelCell is not { } pc || pc.I != i || pc.J != j) return;
+        var rev = _vm.Ui.CheckRev;
+        int? found;
+        if (_fixMoveCache is { } c && c.I == i && c.J == j && c.Rev == rev) found = c.Best;
+        else
+        {
+            _fixMoveCts?.Cancel();
+            var cts = _fixMoveCts = new CancellationTokenSource();
+            ShiftMarks m;
+            try { m = await _vm.ShiftMarksForAsync(i, j, severity, cts.Token); } catch (OperationCanceledException) { return; }
+            if (cts.IsCancellationRequested) return;
+            found = m.Best;
+            _fixMoveCache = (i, j, rev, found);
+        }
+        if (found is not { } best || best == cur || _panelCell is not { } pc || pc.I != i || pc.J != j) return;
         var title = new TextBlock { Text = CellSheetLogic.FixMoveHeading, Style = (Style)Application.Current.Resources["MagiTitleSmallTextStyle"] };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level3);
         host.Children.Add(title);
