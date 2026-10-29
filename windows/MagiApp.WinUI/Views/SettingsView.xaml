@@ -19,7 +19,8 @@
     <ScrollViewer Padding="16">
         <StackPanel Spacing="20" MaxWidth="480" HorizontalAlignment="Left">
             <!-- [Android 3.714.0] 見出し「設定」＋組む時間の 1 行＋主ボタン（仕上げの秒数はツールチップ）。 -->
-            <TextBlock Text="設定" FontSize="20" FontWeight="SemiBold" />
+            <!-- [UI-S7] 区分は 計算・表示（色は畳む）・データ・詳細設定（畳む）。Android 3.727.11。 -->
+            <TextBlock Text="計算" FontSize="20" FontWeight="SemiBold" />
 
             <!-- [Android 3.706.0] 保存に失敗している間だけ、時間のカードの上で直す（データ欄の同じ文は隠す）。 -->
             <StackPanel x:Name="SaveFailedBanner" Spacing="8" Visibility="Collapsed">
@@ -89,31 +90,35 @@
             </Expander>
 
             <!-- [phase9 #22] 重み表（Kotlin原本 WeightTableCard）。最適化の優先順位の根拠＝実行条件の隣が定位置。値は MirrorKeys.Weights そのもの。 -->
-            <TextBlock Text="直す優先順位" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <TextBlock Text="上にあるものから先に直します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
-            <StackPanel x:Name="WeightTableHost" Spacing="2" MaxWidth="420" HorizontalAlignment="Left" />
-
-            <TextBlock Text="表示色" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
-            <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                       Text="シフトの記号色・違反枠の色を変更できます。「既定に戻す」で手動設定を消して既定色へ戻ります。" />
-
+            <TextBlock Text="表示" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <ToggleSwitch x:Name="LeftHandToggle" Header="セル編集の利き手" OnContent="左手" OffContent="右手"
                           Toggled="OnLeftHandToggled" />
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="シフトの表示色" Style="{StaticResource MagiTitleSmallTextStyle}" />
-                <StackPanel x:Name="ShiftColorList" Spacing="4" />
-            </StackPanel>
+            <Expander Header="色" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12">
+                    <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                               Text="シフトの記号色・違反枠の色を変更できます。「既定に戻す」で手動設定を消して既定色へ戻ります。" />
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="シフトの表示色" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                        <StackPanel x:Name="ShiftColorList" Spacing="4" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="違反の基準色" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                        <StackPanel x:Name="ViolationBaseColorList" Spacing="4" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="違反種別ごとの色（族別・未設定は基準色を使用）" Style="{StaticResource MagiTitleSmallTextStyle}" />
+                        <StackPanel x:Name="ViolationFamilyColorList" Spacing="4" />
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="違反の基準色" Style="{StaticResource MagiTitleSmallTextStyle}" />
-                <StackPanel x:Name="ViolationBaseColorList" Spacing="4" />
-            </StackPanel>
-
-            <StackPanel Spacing="4">
-                <TextBlock Text="違反種別ごとの色（族別・未設定は基準色を使用）" Style="{StaticResource MagiTitleSmallTextStyle}" />
-                <StackPanel x:Name="ViolationFamilyColorList" Spacing="4" />
-            </StackPanel>
+            <Expander Header="直す優先順位" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="上にあるものから先に直します。" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                    <StackPanel x:Name="WeightTableHost" Spacing="2" MaxWidth="420" HorizontalAlignment="Left" />
+                </StackPanel>
+            </Expander>
 
             <TextBlock Text="データ" FontSize="20" FontWeight="SemiBold" Margin="0,12,0,0" />
             <!-- 自動保存の状態（Kotlin DataCard、Android 3.529.0）。保存済みのときは出さない。 -->
