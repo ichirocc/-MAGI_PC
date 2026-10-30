@@ -439,7 +439,8 @@ public class GridDisplayMarksTest
         Assert.False(GridDisplayMarks.IsHardCellViolation("vio-c3mn"), "紛らわしい c3mn を c3n と読み違えない");
         Assert.False(GridDisplayMarks.IsHardCellViolation("vio-covO"), "過剰は必須ではない");
         Assert.True(GridDisplayMarks.IsHeavySoftCellViolation(GridDisplayMarks.ZeroCapClass));
-        Assert.True(GridDisplayMarks.IsHeavySoftCellViolation("vio-c3mn"));
+        Assert.True(GridDisplayMarks.IsHeavySoftCellViolation("vio-c1"));
+        Assert.False(GridDisplayMarks.IsHeavySoftCellViolation("vio-c3mn"), "c3mn(25) は high(50) を下回り重い族から外れた（2026-10-30）");
         Assert.False(GridDisplayMarks.IsHeavySoftCellViolation("vio-covO"));
     }
 }
