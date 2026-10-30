@@ -83,7 +83,7 @@ public static partial class V6HotfixPasses
                         // [ソフト研磨・候補生成の重み整合] proxy を真の目的関数(low=120/high=25/apt=4)へ整合。
                         //   [3.522.0] low 90→120, apt 1→4。採否は従来どおり keep-best(IsBetter)が担うため退化なし。
                         long RangePen(int x) =>
-                            (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 25L * Math.Max(0, x - hi);
+                            (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 50L * Math.Max(0, x - hi);
                         var cost = RangePen(x1) - RangePen(x0); // range の限界費用
                         var t = AptTarget(i, k);
                         if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * 4L; // apt の限界費用
@@ -218,7 +218,7 @@ public static partial class V6HotfixPasses
                             var hi = EffectiveHi(p, i, k);
                             // range/apt/weekly は ApplyDayAssignmentPolish と同一の目的関数整合 proxy。[3.522.0] low/apt/weekly 90/1/1→120/4/2。
                             long RangePen(int x) =>
-                                (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 25L * Math.Max(0, x - hi);
+                                (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 50L * Math.Max(0, x - hi);
                             var cost = RangePen(x1) - RangePen(x0);
                             var t = AptTarget(i, k);
                             if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * 4L;

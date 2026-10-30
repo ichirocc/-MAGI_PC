@@ -278,7 +278,7 @@ public static partial class V6HotfixPasses
                 var lo = p.RangeLo[i][kk];
                 var hiLim = p.RangeHi[i][kk];
                 if (lo != int.MinValue && count < lo) outv += (long)(lo - count) * 120L; // [3.522.0] low 90→120
-                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * 25L;
+                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * 50L;
                 return outv;
             }
 
@@ -470,7 +470,7 @@ public static partial class V6HotfixPasses
                     var lo = p.RangeLo[i][kk];
                     var hi = p.RangeHi[i][kk];
                     if (lo != int.MinValue && c < lo) outv += (long)(lo - c) * 120L; // [3.522.0] low 90→120
-                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * 25L;
+                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * 50L;
                     var a = p.Apt[i][kk];
                     if (a >= 0) outv += Math.Abs(c - a) * 4L; // [3.522.0] apt 1→4
                 }

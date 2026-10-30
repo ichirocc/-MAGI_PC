@@ -214,7 +214,7 @@ public static partial class V6NativeOptimizer
         var hi = p.RangeHi[i][k];
         // [3.319.0] low は担当できるシフトだけ。[3.522.0] low 90→120。
         if (lo != int.MinValue && lo != 0 && n < lo && p.CanDo(i, k)) pen += (lo - n) * 120L;
-        if (hi != int.MaxValue && n > hi) pen += (n - hi) * 25L;
+        if (hi != int.MaxValue && n > hi) pen += (n - hi) * 50L;
         var t = p.Apt[i][k];
         if (t >= 0) pen += Math.Abs(n - t) * 4L; // [3.522.0] apt 1→4
         return pen;

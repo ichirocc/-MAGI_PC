@@ -36,7 +36,7 @@ public static class MirrorKeys
     private static readonly (string Key, double Weight)[] WeightsOrdered =
     {
         ("groupViol", 11000.0), ("covU", 10000.0), ("c3n", 9000.0), ("pref", 8000.0),
-        ("low", 120.0), ("c1", 90.0), ("c3mn", 50.0), ("high", 25.0), ("covO", 10.0),
+        ("low", 120.0), ("c1", 90.0), ("high", 50.0), ("c3mn", 25.0), ("covO", 10.0),
         ("c3", 15.0), ("c3m", 6.0),
         ("c41", 9.0), ("c42", 9.0), ("c41s", 10.0), ("c42s", 10.0),
         ("c2", 4.0), ("apt", 4.0), ("fair", 5.0), ("weekly", 2.0),

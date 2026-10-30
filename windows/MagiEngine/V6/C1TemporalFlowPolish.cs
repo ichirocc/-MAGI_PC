@@ -131,7 +131,7 @@ internal static class C1TemporalFlowPolish
                     }
                     int lo = p.RangeLo[i][kk]; int hi = p.RangeHi[i][kk];
                     if (lo != int.MinValue && c < lo) outCost += (long)(lo - c) * 120L; // [3.522.0] low 90→120
-                    if (hi != int.MaxValue && c > hi) outCost += (long)(c - hi) * 25L;
+                    if (hi != int.MaxValue && c > hi) outCost += (long)(c - hi) * 50L;
                     int a = p.Apt[i][kk];
                     if (a >= 0) outCost += (long)Math.Abs(c - a) * 4L; // [3.522.0] apt 1→4
                 }

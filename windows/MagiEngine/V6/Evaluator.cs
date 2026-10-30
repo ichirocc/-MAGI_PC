@@ -150,7 +150,7 @@ public sealed class Evaluator
         soft += C3Check(a, _p.Cons3, forbidden: false) * 15L;
         hard1 += C3Check(a, _p.Cons3n, forbidden: true);
         soft += C3Check(a, _p.Cons3m, forbidden: false) * 6L;
-        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 50L;
+        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 25L;
 
         // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
         if (_p.C3wBan != null)
@@ -206,7 +206,7 @@ public sealed class Evaluator
                 int hi = _p.RangeHi[i][k];
                 int n = ssn[i][k];
                 if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * 120L;
-                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 25L;
+                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 50L;
                 // [統一apt] 適切回数(双方向目標) SOFT・L1偏差|n-t|。UnifiedViolationChecker の "apt" と一致。[3.522.0] 重み1→4。
                 int t = _p.Apt[i][k];
                 if (t >= 0) soft += Math.Abs(n - t) * 4L;

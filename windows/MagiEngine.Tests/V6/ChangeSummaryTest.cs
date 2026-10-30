@@ -35,14 +35,14 @@ public class ChangeSummaryTest
         Assert.Equal("変更：2人・4か所／希望どおり 2/2件", s.Line());
         Assert.Equal(-1, s.FamilyDeltas["pref"]); Assert.Equal(1, s.FamilyDeltas["high"]);   // s0 の希望が通り、s2 が上限超過
         Assert.Equal("減った：pref 1件", s.FamilyLine().Split('／')[0]);
-        Assert.StartsWith("増えた：fair 6件・上限超過 1件", s.FamilyLine(label: k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: fair +6(=30) が先頭、上限超過 +1(=25) が続く（3.647.0 fair 5。旧: 上限超過が先頭）
+        Assert.StartsWith("増えた：上限超過 1件・fair 6件", s.FamilyLine(label: k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: 上限超過 +1(=50) が先頭、fair +6(=30) が続く（2026-10-30 high 50。3.647.0〜は fair が先頭）
     }
 
     [Fact]
     public void FamilyLineOrdersByWeightedImpactAndReportsEmptySides()
     {
         var line = ChangeSummary.FamilyLine(new Dictionary<string, int> { ["weekly"] = 3, ["c1"] = -1, ["c3mn"] = -2, ["fair"] = 4 });
-        Assert.Equal("減った：c3mn 2件・c1 1件／増えた：fair 4件・weekly 3件", line);
+        Assert.Equal("減った：c1 1件・c3mn 2件／増えた：fair 4件・weekly 3件", line);
         Assert.Equal("減った：なし／増えた：なし", ChangeSummary.FamilyLine(new Dictionary<string, int>()));
     }
 
