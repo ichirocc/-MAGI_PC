@@ -50,4 +50,12 @@ public class AgentTextTest
         var u = new UiState { CopilotHint = "x", ObservedPinBlockedAttempts = 1 };
         Assert.Equal(2, CellSheetLogic.HomeDiagnosisCount(u));
     }
+
+    [Fact]
+    public void AgentRunsOnlyWhenTheSettingsAreUnchangedSinceTheLastRun()
+    {
+        Assert.True(AgentText.AfterRun(42L, 42L));
+        Assert.False(AgentText.AfterRun(42L, 43L));    // 作成のあとに制約を変えた
+        Assert.False(AgentText.AfterRun(null, 42L));   // この画面でまだ作成していない
+    }
 }

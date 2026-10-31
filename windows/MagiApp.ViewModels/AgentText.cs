@@ -81,4 +81,7 @@ public static class AgentText
         AgentLoop.Stop.TimeLimit => "時間の上限",
         _ => "中断",
     };
+
+    /// <summary>代行は「作成のあと」だけ動く: 作成が終わった時点の設定の指紋 <paramref name="runKey"/> と今の指紋が同じとき。作成の後に制約を変えたら動かない。</summary>
+    public static bool AfterRun(long? runKey, long nowKey) => runKey is { } k && k == nowKey;
 }

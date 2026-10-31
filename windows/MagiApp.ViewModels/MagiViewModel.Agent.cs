@@ -9,6 +9,8 @@ public sealed partial class MagiViewModel
     private CancellationTokenSource? _agentCts;
     private readonly HashSet<long> _agentSeen = new();   // 代行が一度見た盤面×設定（元に戻した盤面・同じ結果で輪を回し直さない）
     private bool _agentResume;                            // 判断待ちを承認した＝次の検査のあと、作成を待たずに代行が続きを回す
+    private bool _agentWasRunning;                        // 直前に見た作成の実行中フラグ（作成が終わった瞬間を捉える）
+    private long? _agentRunStateKey;                      // 作成が終わった時点の設定の指紋。これと違えば（作成のあとに制約を変えた）代行は動かない
 
     /// <summary>[テスト可視性のための追加] 直近の <see cref="MaybeRunAgent"/> が背後で走らせる Task。</summary>
     internal Task? LastAgentTask { get; private set; }
@@ -46,12 +48,15 @@ public sealed partial class MagiViewModel
     public void MaybeRunAgent()
     {
         var u = Ui;
+        if (_agentWasRunning && !u.Running) _agentRunStateKey = _state is { } s0 ? StateKey(s0) : null;
+        _agentWasRunning = u.Running;
         if (u.Running || u.AgentRunning || OptimizeInFlight()) return;
         var resume = _agentResume; _agentResume = false;
         if (!u.AgentAuto || !(u.EngineRan || resume) || !u.HasResult || u.BestHard <= 0L) return;
         if (_state is not { } st || _currentSchedule is not { } sched) return;
         var key0 = BoardKey(sched);
         var stKey = StateKey(st);
+        if (!resume && !AgentText.AfterRun(_agentRunStateKey, stKey)) return;
         if (!_agentSeen.Add(key0 * 31 + stKey)) return;
         CancelFixSearch();
         Ui.AgentRunning = true;

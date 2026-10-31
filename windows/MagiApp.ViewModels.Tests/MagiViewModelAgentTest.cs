@@ -54,7 +54,18 @@ public class MagiViewModelAgentTest : IDisposable
         vm.Ui.HasResult = true;
         vm.Ui.EngineRan = true;
         vm.Ui.BestHard = 1;
+        vm.Ui.Running = true; vm.MaybeRunAgent();   // 作成が終わった瞬間を通す（画面は Running の変化で呼ぶ）
+        vm.Ui.Running = false; vm.Ui.AgentAuto = false; vm.MaybeRunAgent(); vm.Ui.AgentAuto = true;
         return vm;
+    }
+
+    [Fact]
+    public void DoesNotRunAfterTheSettingsChangedSinceCreation()
+    {
+        var vm = NewVm();
+        vm._state = vm._state! with { Use2Patterns = false };
+        vm.MaybeRunAgent();
+        Assert.Null(vm.LastAgentTask);
     }
 
     [Fact]
