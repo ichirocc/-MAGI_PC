@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 - 2026-10-29（C# 単独・出力不変）: 勤務表のセルのパネルの「直す手」は描き直しのたびに全候補を検査していた（WinUI はパネルを毎回作り直す）。同じセル・同じ検査世代（`CheckRev`）なら前の結果を使う（`_fixMoveCache`）。Android は `LaunchedEffect(cell, rev)` で同じ扱い。
+- 2026-10-31（Android 3.727.16 と同期）: 希望衝突の床の到達判定で盤面を必須・重み・合計で照合（取り違え防止）、ログ表示 4 件（後処理の最終段の時間・締切までの残り・止まり方の表示に FloorShortStall・入口修復の見送り理由）。
 - 2026-10-31（Android 3.727.15 と同期・出力不変）: `SmartInitialScheduler.SolveConstructionDp` の相殺していた同点割り `Tie(day)` と `Generate` の seed 引数を撤去。
 - 2026-10-30（Android 3.727.14 と同期・重みの入れ替え、HF77 ユーザー明示指示）: high 25→50・c3mn 50→25。`MirrorKeys`・`Evaluator`・`DeltaEvaluator`、C# には `PenaltyWeights` が無いので研磨・修復の重複リテラル 6 か所（`V6NativeOptimizer.Repair`・`V6HotfixPasses.DayAssign` 2・`V6HotfixPasses.Range` 2・`C1TemporalFlowPolish`）、期待値 3 ファイル、`ParityTest`・`ChangeSummaryTest`。破線枠の重い族 `GridDisplayMarks.HeavySoftFamilies` から c3mn を外す。
 - 2026-10-29（Android 3.727.13 と同期・通知の札と触覚）: 共通の通知バー（`GlobalMessageBar`）を左右 16 の余白で浮かせ、角をカードと同じ `MagiCornerSM`（26）に。触覚の手応え（`MagiHaptic` 確定／拒否）は Windows のデスクトップに振動が無いのでスコープ外（規則 `HapticRules` も写さない）。

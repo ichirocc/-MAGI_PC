@@ -322,11 +322,21 @@ public static partial class V6FinalPort
                 }
                 var hb = wd.BestHard;
                 var ok = WishReachedOn(board, hb);
-                // liveBest は best 報告より遅れて届く経路がある。古い盤面での「未到達」は保存せず、次の呼出で検査し直す。
+                // liveBest は best 報告より遅れて届く経路がある。盤面が最良の報告と同じ（必須・重み・合計が一致）と
+                //   確かめられたときだけ世代に保存する。必須の件数だけの一致では別の盤面を取り違え、「到達」も「未到達」も誤って保存し得た。
                 bool fresh;
-                try { fresh = ok || hb != wishFloorLogged || (board != null && UnifiedViolationChecker.Check(state, board, quantitativeRangeEval).Hard == hb); }
+                try
+                {
+                    if (hb != wishFloorLogged) fresh = true;
+                    else if (board == null) fresh = false;
+                    else
+                    {
+                        var r = UnifiedViolationChecker.Check(state, board, quantitativeRangeEval); var b = wd.BestReport;
+                        fresh = r.Hard == hb && b != null && r.WeightedScore == b.WeightedScore && r.Total == b.Total;
+                    }
+                }
                 catch (Exception) { fresh = false; }
-                if (!fresh) return ok;
+                if (!fresh) return false;   // 確かめられない盤面では「未到達」＝遅く止まる側
                 Volatile.Write(ref wishReachedCache, Tuple.Create(v, ok));
                 Interlocked.Exchange(ref wishStaleCheckAtMs, long.MinValue / 2);
             }
@@ -478,7 +488,7 @@ public static partial class V6FinalPort
                 extraLog = new List<MirrorLog>
                 {
                     new(level: "I", tag: "ExtraRefine",
-                        message: $"予算残{leftMs / 1000}s（追加精製に使える上限は予約枠の{extraMs / 1000}s）だが実行せず: {why}"),
+                        message: $"締切まで残り{leftMs / 1000}s（うち探索予算{seconds}sの残り{Math.Max(0L, startMs + budgetMs - tPost1) / 1000}s・残りは後置の予約枠。追加精製に使える上限は予約枠の{extraMs / 1000}s）だが実行せず: {why}"),
                 };
             }
             if (extraMs >= 5_000 && canExtra)
@@ -563,7 +573,7 @@ public static partial class V6FinalPort
             var endStallS = Math.Max(tChain1 - lastImp, 0L) / 1000;
             var nonCovU = wd.BestNonCovUHard;
             var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
-            var covUPlateau = wd.BestHard <= hardFloor && nonCovU == 0;
+            var covUPlateau = PolishGate.FloorShortStall && wd.BestHard <= hardFloor && nonCovU == 0;
             var gapsEnd = wd.RecentGaps();
             var adaptiveEnd = PolishGate.AdaptiveStall ? AdaptiveStallMs(gapsEnd, stallHardMs, stallMs) : null;
             var kind = covUPlateau && wishOn && wishReachedEnd
@@ -909,7 +919,7 @@ public static partial class V6FinalPort
                 catch (Exception) { return false; }
             }
             var kind = !fired ? StopKind.Deadline
-                : wd.BestHard <= hardFloor && nonCovU == 0 ? StopKind.PlateauFloor
+                : PolishGate.FloorShortStall && wd.BestHard <= hardFloor && nonCovU == 0 ? StopKind.PlateauFloor
                 : wishOn && wishReachedEnd ? StopKind.WishFloor
                 : wd.StagnationWall && wd.BestNonCovUAllC3n ? (WallCertified() ? StopKind.C3nWallCertified : StopKind.C3nWallEmpirical)
                 : StopKind.NormalStall;

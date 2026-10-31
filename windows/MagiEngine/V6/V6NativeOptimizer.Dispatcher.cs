@@ -132,6 +132,8 @@ public static partial class V6NativeOptimizer
             new MirrorLog(tag: "V6Dispatcher", message: $"algorithm={chosen} budget={options.TotalBudgetSec}s {workersNote}"),
             new MirrorLog(tag: "HF67", message: hf67Adopted
                 ? $"入口修復を採用 HARD {entryReport.Hard}->{repairedReport.Hard} / total {entryReport.Total}->{repairedReport.Total}"
+                : Better(repairedReport, entryReport)
+                ? $"入口修復を見送り（修復後の方が良いが拡張希望の禁止に触れる: HARD {entryReport.Hard}->{repairedReport.Hard} / total {entryReport.Total}->{repairedReport.Total}）"
                 : $"入口修復を見送り（入力の方が良好: HARD {entryReport.Hard}/total {entryReport.Total} ≦ 修復後 HARD {repairedReport.Hard}/total {repairedReport.Total}）"),
         };
 
