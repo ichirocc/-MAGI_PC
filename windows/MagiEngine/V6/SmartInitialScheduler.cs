@@ -21,7 +21,7 @@ public static class SmartInitialScheduler
     private readonly record struct C1Rule(int Days, int Minimum);
 
     /// <summary>[3.596.0, Kotlin原本] SolveConstructionDpの状態数上限（ユーザー指示の数値。実測の根拠は
-    /// docs/history）。時間でなく状態数で切るのは、同じ入力・同じseedなら必ず同じ初期解になる決定性を保つため。</summary>
+    /// docs/history）。時間でなく状態数で切るのは、同じ入力なら必ず同じ初期解になる決定性を保つため。</summary>
     private const int MaxDpStates = 200_000;
 
     /// <summary>DP内部状態のレコード（Kotlinの<c>solveConstructionDp</c>ローカル<c>data class Rec</c>
@@ -29,7 +29,7 @@ public static class SmartInitialScheduler
     /// スコープの違いのみで意味は同一、この型を使うのは <see cref="SolveConstructionDp"/> だけ）。</summary>
     private readonly record struct Rec(long Cost, long Bits);
 
-    public static ScheduleRunResult Generate(MagiState state, long seed = 0x517A2L, bool quantitativeRangeEval = false)
+    public static ScheduleRunResult Generate(MagiState state, bool quantitativeRangeEval = false)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var p = new Problem(state, quantitativeRangeEval);
@@ -68,7 +68,6 @@ public static class SmartInitialScheduler
             list.Add(new C1Rule(c.Day1, c.Day2));
         }
         int c1Filled = 0;
-        var rng = new JavaRandom(seed);
         foreach (int x in rulesByShift.Keys.OrderBy(k => k))
         {
             var rules = rulesByShift[x];
@@ -80,7 +79,7 @@ public static class SmartInitialScheduler
                 for (int j = 0; j < p.T; j++)
                     forced[j] = schedule[i][j] == -1 ? (p.ExtBanned(i, j, x) ? 0 : -1) : schedule[i][j] == x ? 1 : 0;
                 int cap = p.RangeHi[i][x];
-                var targetDays = SolveConstructionDp(p.T, rules, forced, rng.NextLong(), cap);
+                var targetDays = SolveConstructionDp(p.T, rules, forced, cap);
                 if (targetDays is null) continue;
                 for (int j = 0; j < p.T; j++)
                 {
@@ -244,9 +243,9 @@ public static class SmartInitialScheduler
     /// forced済み(希望由来)の対象日もこの上限に含める＝希望だけで既に上限超過なら
     /// (=既存の別問題)これ以上は増やさず null で安全側に諦める。</param>
     /// <returns>目的= まず違反窓数を最小化、次に対象日数を最小化（他制約(③④⑤)への自由度を残す）、
-    /// 最後にseed由来の決定的tie-breakで一意に選ぶ。</returns>
+    /// 同点は対象日のビット列の小さい方で一意に選ぶ（決定的）。</returns>
     private static bool[]? SolveConstructionDp(
-        int t, IReadOnlyList<C1Rule> rules, int[] forced, long seed, int maxCount = int.MaxValue)
+        int t, IReadOnlyList<C1Rule> rules, int[] forced, int maxCount = int.MaxValue)
     {
         if (t <= 0 || t > 62 || forced.Length != t) return null;
         var validRules = rules.Where(r => r.Days >= 1 && r.Days <= t && r.Minimum > 0).ToList();
@@ -257,13 +256,6 @@ public static class SmartInitialScheduler
         long keepMask = keepBits == 0 ? 0L : (1L << keepBits) - 1L;
         // t以上のcapは実質無制限（対象日はt日を超えられない）＝既存の無制限挙動と完全に同値。
         int capBound = maxCount >= t ? t : Math.Max(maxCount, 0);
-
-        long Tie(int day)
-        {
-            long z = seed ^ ((long)day * -0x61c8864680b583ebL);
-            z ^= z >>> 33; z *= -0x00ae502812aa7333L; z ^= z >>> 29;
-            return z & 511L;
-        }
 
         // 状態キー=(直近maxWindow-1日分のビット列, 累積対象日数)。累積数がcapBoundを超える遷移は
         // 生成しない＝個人上限を構造的に超過できない。
@@ -291,7 +283,7 @@ public static class SmartInitialScheduler
                         long rm = (1L << rule.Days) - 1L;
                         if (BitOperations.PopCount((ulong)(full & rm)) < rule.Minimum) fireInc++;
                     }
-                    long cost = rec.Cost + (long)fireInc * 1_000_000L + (long)bit * 1_000L + Tie(day);
+                    long cost = rec.Cost + (long)fireInc * 1_000_000L + (long)bit * 1_000L;
                     long newMask = full & keepMask;
                     long bits = bit == 1 ? rec.Bits | (1L << day) : rec.Bits;
                     var nk = (newMask, newCnt);
