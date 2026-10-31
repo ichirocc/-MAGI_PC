@@ -192,7 +192,8 @@ public static partial class V6FinalPort
     /// 初期解を組み立てる <see cref="SmartInitialScheduler"/> のポート。本最適化(SA/ALNS)へは続けず、
     /// 生成した下書きをそのまま返す（続けての本最適化は phase 5 移植後の別入口が担当）。
     /// </summary>
-    public static ActionResult HandleSmartInitial(MagiState state, bool allowImpossible = false)
+    /// <param name="variant">0＝いつもの下書き（ボタン）。1 以上＝自動の作り直し用に下書きを少し変える（<see cref="RerunDraft"/>）。</param>
+    public static ActionResult HandleSmartInitial(MagiState state, bool allowImpossible = false, int variant = 0)
     {
         if (state.DayCount <= 0)
             throw new ArgumentException("対象期間が無効です。終了日を開始日より後の日付にしてください");
@@ -213,13 +214,22 @@ public static partial class V6FinalPort
         });
 
         var res = SmartInitialScheduler.Generate(state);
+        var sched = variant > 0 ? RerunDraft(state, res.Schedule, variant) : res.Schedule;
+        var report = variant > 0 ? UnifiedViolationChecker.Check(state, sched) with { Logs = res.Report.Logs } : res.Report;
         var logs = gate.Logs
-            .Concat(res.Report.Logs)
+            .Concat(report.Logs)
             .Append(new MirrorLog(tag: "MAGI_GenerateInitial",
-                message: $"初期解生成 完了 HARD={res.Report.Hard} total={res.Report.Total}"))
+                message: $"初期解生成 完了 HARD={report.Hard} total={report.Total}{(variant > 0 ? $"（作り直し用の変化 {variant}）" : "")}"))
             .ToList();
-        return new ActionResult(res.Schedule, res.Report with { Logs = logs }, "smart_initial", busy, logs);
+        return new ActionResult(sched, report with { Logs = logs }, "smart_initial", busy, logs);
     }
+
+    /// <summary>[Kotlin rerunDraft] 自動の作り直しの下書きを回ごとに少し変える（探索の入口の多様化と同じ手。希望・手動固定・拡張希望の禁止は崩さない）。</summary>
+    internal static int[][] RerunDraft(MagiState state, int[][] draft, int variant) =>
+        V6NativeOptimizer.HypothesisStartFor(state, draft, 1 + (variant - 1) % RerunDraftKinds, variant);
+
+    /// <summary><see cref="RerunDraft"/> が回す入口の種類の数（HypothesisDiversityPolicy の 1〜6）。</summary>
+    internal const int RerunDraftKinds = 6;
 
     /// <summary>
     /// Faithful port of Kotlin's <c>handleCheck</c>: evaluate <paramref name="schedule"/> (or the

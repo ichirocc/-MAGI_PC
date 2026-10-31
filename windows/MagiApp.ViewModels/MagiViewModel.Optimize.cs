@@ -118,6 +118,8 @@ public sealed partial class MagiViewModel
     }
 
     private long? _preRunAckKey;
+    /// <summary>自動の作り直しの回数。下書きを回ごとに変える（V6FinalPort.RerunDraft）。</summary>
+    private int _rerunDraftVariant;
 
     private string RunSig() => $"{Ui.BudgetSec}|{Ui.Workers}|{Ui.V6Algorithm}|{Ui.SoftPolish}";
 
@@ -275,7 +277,7 @@ public sealed partial class MagiViewModel
             var start = sched0;
             if (fromDraft)
             {
-                try { start = (await Task.Run(() => V6FinalPort.HandleSmartInitial(st0.WithSchedule(sched0), allowImpossible: true), ct)).Schedule; }
+                try { start = (await Task.Run(() => V6FinalPort.HandleSmartInitial(st0.WithSchedule(sched0), allowImpossible: true, variant: ++_rerunDraftVariant), ct)).Schedule; }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception) { start = sched0; }
                 if (!ReferenceEquals(start, sched0)) LogOp("I", $"{AnalysisTriage.RerunFromDraftLog} ・ 盤面指紋={OpLogText.Hex16(BoardKey(start))}");
