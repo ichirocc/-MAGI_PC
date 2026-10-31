@@ -13,6 +13,8 @@ Android 版（`ichirocc/magi7ichiro-fork`、Kotlin/Compose）の Windows 11 ネ�
 - .NET SDK はこの環境では `/root/.dotnet`（`export PATH=/root/.dotnet:$PATH DOTNET_CLI_TELEMETRY_OPTOUT=1`）。エンジンテストは
   `cd windows && dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj -c Release --nologo -v q`（約 5 分半。背景で回してログへ）。
   `dotnet test ... | head` のようにパイプで切ると失敗を見落とす（赤いテストを push した前科あり）。
+  ViewModel 層の `MagiApp.ViewModels.Tests` も CI（windows-engine-check）で走る＝表示の分類（`GridDisplayMarks` など）を触ったら
+  こちらも回す（エンジンだけ回して赤を push した前科あり、2026-10-30）。
 - シェルの cwd は呼び出しごとに Android 側の repo へ戻る＝このリポジトリの操作は**絶対パス**で行う（相対パスで Android 側に
   誤コミットした前科あり）。
 - コミットは `main` に直接（作業ブランチ運用は Android 側だけ）。push 前に `tools/comment_ratio.py --staged` で追加コメントを 1 行ずつ判定する。
