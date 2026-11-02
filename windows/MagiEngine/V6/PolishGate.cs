@@ -158,8 +158,8 @@ public static class PolishGate
     /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
     public static volatile bool CountChainPolish = false;
 
-    /// <summary>[Android 3.727.19 同期] 膜の細胞 LNS（<see cref="MembraneCellLns"/>）を後処理の最終段に入れるか。既定 false。</summary>
-    public static volatile bool MembraneCellLns = false;
+    /// <summary>[Android 3.727.19 同期] 膜の細胞 LNS（<see cref="MembraneCellLns"/>）を後処理の最終段に入れるか。既定 true（Android 3.727.20）。</summary>
+    public static volatile bool MembraneCellLns = true;
 
     /// <summary>[Android 3.656.0 同期] 玉突き連鎖パイプライン（<see cref="EjectionChainPipeline"/>＝予察で当たった起点だけ深く探す）の焦点。
     /// OFF 以外のとき後処理に入れる（C# は従来の常時フルの玉突きを持たない）。既定 <b>BOTH</b>（Android 3.656.0 で昇格）。</summary>

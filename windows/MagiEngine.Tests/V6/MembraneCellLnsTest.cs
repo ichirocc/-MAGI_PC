@@ -51,9 +51,9 @@ public class MembraneCellLnsTest
     }
 
     [Fact]
-    public void OffByDefault()
+    public void OnByDefault()
     {
-        Assert.False(PolishGate.MembraneCellLns);
-        Assert.False(new V6HotfixPasses.PostOptimizationParams().MembraneCellEnabled);
+        Assert.True(PolishGate.MembraneCellLns);
+        Assert.True(new V6HotfixPasses.PostOptimizationParams().MembraneCellEnabled);
     }
 }
