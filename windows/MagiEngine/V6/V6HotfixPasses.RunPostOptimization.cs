@@ -483,7 +483,7 @@ public static partial class V6HotfixPasses
 
         if (pipelineOn && pipelineAtEnd && !stop()) chain.Adopt(chain.Timed("後処理 玉突き連鎖(予察つき・修復の後)", "玉突きパイプライン", RunPipeline));
 
-        if (p.MembraneCellEnabled && PolishGate.MembraneCellLns && !stop())
+        if (p.MembraneCellEnabled && PolishGate.MembraneCellLns && !stop() && (p.Deterministic || deadlineMs - EngineClock.NowMs() > 0L))
         {
             // 残りの半分まで＝最後の人員過剰の退避に時間を残す（Android BudgetShare.half と同じ）。
             var cap = p.Deterministic ? 8_000L : Math.Min(Math.Max(deadlineMs - EngineClock.NowMs(), 0L) / 2, 8_000L);

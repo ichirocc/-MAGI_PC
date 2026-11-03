@@ -125,7 +125,13 @@ public static class MembraneCellLns
                 var s = de.Apply(i, j, k);
                 if (Accept(s - cur, temp, unit, rng)) { work[i][j] = k; cur = s; } else cur = de.Apply(i, j, old);
             }
-            if (cur < bestScore) { bestScore = cur; bestBoard = work.Copy2D(); }
+            if (cur < bestScore)
+            {
+                bestScore = cur;
+                // 細胞の外の行は盤面のまま＝2 回目からは細胞の行だけ写す（改善のたびに盤面全体を作らない）。
+                bestBoard ??= work.Copy2D();
+                foreach (var i in cell) Array.Copy(work[i], bestBoard[i], T);
+            }
         }
         return bestBoard;
     }
