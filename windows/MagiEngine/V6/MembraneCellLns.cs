@@ -58,7 +58,7 @@ public static class MembraneCellLns
         var logs = new List<MirrorLog>
         {
             new(tag: "MembraneCellLns", message:
-                $"膜の細胞 LNS: 必須 {startRep.Hard}->{bestRep.Hard} 合計 {startRep.Total}->{bestRep.Total} 重み {startRep.WeightedScore:0.0}->{bestRep.WeightedScore:0.0} 採用{applied} 細胞{tried} {EngineClock.NowMs() - t0}ms"),
+                $"膜の細胞 LNS: 必須 {startRep.Hard}->{bestRep.Hard} 合計 {startRep.Total}->{bestRep.Total} 重み {(long)startRep.WeightedScore}->{(long)bestRep.WeightedScore} 採用{applied} 細胞{tried} {EngineClock.NowMs() - t0}ms"),
         };
         return new Result(best, applied, tried, logs);
     }
