@@ -123,7 +123,7 @@ public static partial class V6HotfixPasses
         /// <summary>[Android 3.540.0同期/測定中] 回数連鎖研磨（<see cref="CountChainPolish"/>）を入れるか。
         /// 既定 <b>false</b>（A/B 138 ペアで新2/同等135/旧1＝ゲート不合格、Android docs/algorithm_portfolio.md）。</summary>
         bool CountChainEnabled = false,
-        /// <summary>[Android 3.727.19 同期] 膜の細胞 LNS を最終段に入れる（<see cref="PolishGate.MembraneCellLns"/> でも ON）。既定 true（Android 3.727.20）。</summary>
+        /// <summary>[Android 3.727.19 同期] 膜の細胞 LNS を最終段に入れる（<see cref="PolishGate.MembraneCellLns"/> と両方 ON のときだけ＝Kotlin と同じくゲートで切れる）。既定 true（Android 3.727.20）。</summary>
         bool MembraneCellEnabled = true,
         /// <summary>[測定中/backlog#30] 日ごと厳密割当で「自分の現シフトを保つ」対角を常に有限にする。
         /// 恒等割当が常に実行可能になり、置けない職員/スロットがある日も残りを研磨できる。既定 OFF。</summary>
@@ -483,9 +483,10 @@ public static partial class V6HotfixPasses
 
         if (pipelineOn && pipelineAtEnd && !stop()) chain.Adopt(chain.Timed("後処理 玉突き連鎖(予察つき・修復の後)", "玉突きパイプライン", RunPipeline));
 
-        if ((p.MembraneCellEnabled || PolishGate.MembraneCellLns) && !stop())
+        if (p.MembraneCellEnabled && PolishGate.MembraneCellLns && !stop())
         {
-            var cap = p.Deterministic ? 8_000L : Math.Min(8_000L, Math.Max(deadlineMs - EngineClock.NowMs(), 0L));
+            // 残りの半分まで＝最後の人員過剰の退避に時間を残す（Android BudgetShare.half と同じ）。
+            var cap = p.Deterministic ? 8_000L : Math.Min(Math.Max(deadlineMs - EngineClock.NowMs(), 0L) / 2, 8_000L);
             var rMem = chain.Timed("後処理 膜の細胞LNS(最終)", "MembraneCellLns", work => MembraneCellLns.Apply(state, work,
                 new MembraneCellLns.Params(MaxMillis: cap, Deterministic: p.Deterministic, MaxCells: p.Deterministic ? 40 : 64), stop));
             chain.ReplaceBoard(rMem.NewSchedule, rMem.Logs, null, rMem.Applied);

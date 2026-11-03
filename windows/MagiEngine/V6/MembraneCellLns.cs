@@ -39,6 +39,7 @@ public static class MembraneCellLns
         while (tried < p0.MaxCells && !Out())
         {
             var order = StaffOrder(p, bestRep);
+            if (order.Count == 0) break;   // 職員 0 人では tried が進まない
             foreach (var seedStaff in order)
             {
                 if (tried >= p0.MaxCells || Out()) break;
