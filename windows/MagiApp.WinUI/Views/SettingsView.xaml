@@ -71,6 +71,12 @@
                         <ToggleSwitch x:Name="AgentAutoToggle" OnContent="ON" OffContent="OFF" Toggled="OnAgentAutoToggled" />
                         <TextBlock x:Name="AgentAutoNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                     </StackPanel>
+                    <!-- [Android 3.727.24] 膜の細胞 LNS（PolishGate.MembraneCellLns、既定 ON）。保存しない・実行中は操作不可。 -->
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="MembraneToggle" Header="最後に職員をまとめて組み直す" OnContent="ON" OffContent="OFF" Toggled="OnMembraneToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="違反の多い職員と同じグループの 5 名を全期間まとめて組み直し、良くなったときだけ採ります（膜の細胞 LNS、既定 ON・最長 8 秒）" />
+                    </StackPanel>
                     <!-- ネイティブ加速はこの移植では常に対象外（C++加速層が無い）。設定データの往復互換のため表示専用で保持。 -->
                     <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
                                   OnContent="ON" OffContent="OFF" IsEnabled="False" />

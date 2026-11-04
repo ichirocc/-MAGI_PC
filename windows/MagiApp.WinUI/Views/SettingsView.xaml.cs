@@ -94,6 +94,8 @@ public sealed partial class SettingsView : UserControl
             AgentAutoToggle.IsOn = ui.AgentAuto;
             AgentAutoToggle.Header = AgentText.ToggleLabel;
             AgentAutoNote.Text = AgentText.ToggleNote;
+            MembraneToggle.IsOn = MagiEngine.V6.PolishGate.MembraneCellLns;
+            MembraneToggle.IsEnabled = !ui.Running;
         LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
             var strengthTag = ui.SearchStrength.ToString();
@@ -683,6 +685,12 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         _vm.SetSoftPolish(SoftPolishToggle.IsOn);
+    }
+
+    private void OnMembraneToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.MembraneCellLns = MembraneToggle.IsOn;
     }
 
     private void OnAgentAutoToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
