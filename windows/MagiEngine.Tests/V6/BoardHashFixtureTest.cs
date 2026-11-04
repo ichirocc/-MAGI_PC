@@ -6,7 +6,7 @@ namespace MagiEngine.Tests.V6;
 
 /// <summary>
 /// 全面改修 P0 の安全網（Android <c>docs/overhaul_design.md</c> §6.1 の 1）。6 fixture で、決定的モードの後処理を通した
-/// 最終盤面を <c>StateFingerprint</c> でハッシュし、Android が生成した基準版の写しと照合する。
+/// 最終盤面を <c>StateFingerprint.OfBoard</c> でハッシュし、Android が生成した基準版の写しと照合する。
 /// 探索本体は決定的でないため対象外。seed は決定的モードでは盤面に効かない（1〜3 で同一ハッシュ）ため 1 つだけ。
 /// </summary>
 public class BoardHashFixtureTest
@@ -25,7 +25,8 @@ public class BoardHashFixtureTest
                     deadlineMs: EngineClock.NowMs() + 3_600_000L,
                     parameters: new V6HotfixPasses.PostOptimizationParams(Deterministic: true,
                         C1LnsMaxEvaluations: 5_000, PersonalLnsMaxEvaluations: 5_000)).Schedule;
-                var hash = StateFingerprint.Of(st with { Schedule = outSched.Select(r => (IReadOnlyList<int>)r.ToList()).ToList() });
+                // 盤面の指紋（OfBoard）。StateFingerprint.Of は Schedule を意図的に読まないので、盤面が変わっても検知できなかった。
+                var hash = StateFingerprint.OfBoard(outSched);
                 sb.Append($"{name} seed={seed} hash={hash}\n");
             }
         }

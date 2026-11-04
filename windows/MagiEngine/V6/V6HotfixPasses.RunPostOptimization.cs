@@ -488,7 +488,7 @@ public static partial class V6HotfixPasses
             // 残り時間まで（上限 8 秒）。残りの半分にする案は測って採らない（Android 3.727.22）。
             var cap = p.Deterministic ? 8_000L : Math.Min(8_000L, Math.Max(deadlineMs - EngineClock.NowMs(), 0L));
             var rMem = chain.Timed("後処理 膜の細胞LNS(最終)", "MembraneCellLns", work => MembraneCellLns.Apply(state, work,
-                new MembraneCellLns.Params(MaxMillis: cap, Deterministic: p.Deterministic, MaxCells: p.Deterministic ? 40 : 64), stop));
+                new MembraneCellLns.Params(MaxMillis: cap, Deterministic: p.Deterministic, MaxCells: p.Deterministic ? 12 : 64, ItersPerCell: p.Deterministic ? 20_000 : 60_000), stop));
             chain.ReplaceBoard(rMem.NewSchedule, rMem.Logs, null, rMem.Applied);
         }
 
