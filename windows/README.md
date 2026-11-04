@@ -331,7 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 - 2026-10-29（C# 単独・出力不変）: 勤務表のセルのパネルの「直す手」は描き直しのたびに全候補を検査していた（WinUI はパネルを毎回作り直す）。同じセル・同じ検査世代（`CheckRev`）なら前の結果を使う（`_fixMoveCache`）。Android は `LaunchedEffect(cell, rev)` で同じ扱い。
-- 2026-11-04（Android 3.727.25 と同期）: 決定的モードの膜の細胞 LNS を 12 細胞×2 万回に。`BoardHashFixtureTest` を `StateFingerprint.OfBoard` で照合（`Of` は盤面を読まず常に一致していた）し、Android と同じ基準版の写しに。それで見えた食い違い＝膜の `StaffOrder` が `Concat` で同じ文字列の鍵を 2 回数えていたのを、Kotlin と同じ集合の和（`Union`）に。6 fixture すべてで盤面のハッシュが Kotlin と一致。
+- 2026-11-04（Android 3.727.26 と同期）: 決定的モードの膜の細胞 LNS を 12 細胞×2 万回に。`BoardHashFixtureTest` を `StateFingerprint.OfBoard` で照合（`Of` は盤面を読まず常に一致していた）し、Android と同じ基準版の写しに。それで見えた食い違い＝膜の `StaffOrder` が `Concat` で同じ文字列の鍵を 2 回数えていたのを、Kotlin と同じ集合の和（`Union`）に。6 fixture すべてで盤面のハッシュが Kotlin と一致。
 - 2026-11-04（Android 3.727.24 と同期）: 膜の細胞 LNS（`PolishGate.MembraneCellLns`、既定 ON）を詳細設定のスイッチ「最後に職員をまとめて組み直す」に出す（保存しない・実行中は操作不可）。
 - 2026-11-04（Android 3.727.23 と同期。同期時は 3.727.22 と記したが、Android 側で版数が重なったため 3.727.23 に繰り下げ）: 膜の細胞 LNS の上限を残り時間まで（上限 8 秒）に戻す（残りの半分は Android の 36 対の比較で効果なし）。
 - 2026-11-03（Android 3.727.21 と同期・膜の細胞 LNS のレビュー是正）: 有効条件を `MembraneCellEnabled || PolishGate.MembraneCellLns` から `&&` へ（既定 true の引数と OR だったためゲートを false にしても切れず、Kotlin と食い違った）。上限を残り時間の半分（上限 8 秒）にして最後の人員過剰の退避に時間を残す。職員 0 人で外側のループが進まないのを空なら抜ける形に。
