@@ -45,4 +45,15 @@ public class AltTradeTest
         Assert.Equal("案1：必須違反 1件（今と同じ）。期間の制約が 2件減り、上限超過が 1回増えます",
             CellSheetLogic.AlternativeSummary(1, "1件", 1, 1, worse: false, better: false, trade: "期間の制約が 2件減り、上限超過が 1回増えます"));
     }
+
+    [Fact]
+    public void cardLineHasTagDownAndUp()
+    {
+        Assert.Equal(new CellSheetLogic.AltLine("一長一短", "減る：期間の制約 2件", "増える：上限超過 1回"), CellSheetLogic.AltLineOf(0, Cur, 0, With(("c1", 3), ("high", 3)), L));
+        Assert.Equal(new CellSheetLogic.AltLine("今より良い", "減る：曜日の偏り 2pt", null), CellSheetLogic.AltLineOf(0, Cur, 0, With(("weekly", 8)), L));
+        Assert.Equal(new CellSheetLogic.AltLine("今より悪い", null, "増える：上限超過 2回"), CellSheetLogic.AltLineOf(0, Cur, 0, With(("high", 4)), L));
+        Assert.Equal(new CellSheetLogic.AltLine("今と同じ", null, null), CellSheetLogic.AltLineOf(0, Cur, 0, Cur, L));
+        Assert.Equal("必須が少ない", CellSheetLogic.AltLineOf(2, Cur, 1, Cur, L).Tag);
+        Assert.Equal("必須が多い", CellSheetLogic.AltLineOf(1, Cur, 2, Cur, L).Tag);
+    }
 }

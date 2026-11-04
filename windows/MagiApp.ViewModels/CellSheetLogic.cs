@@ -2265,6 +2265,27 @@ public static class CellSheetLogic
         };
     }
 
+    /// <summary>カードの 1 案の行（札・減る・増える）。Kotlin <c>AltLine</c>。</summary>
+    public sealed record AltLine(string Tag, string? Down, string? Up);
+
+    /// <summary>札は必須の多少、同じなら族の件数の比べ方。減る・増えるは件数の大きい 2 項目まで（docs/screen_spec.md §01「他の案」）。</summary>
+    public static AltLine AltLineOf(int curHard, IReadOnlyDictionary<string, int> cur, int altHard, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
+    {
+        var tag = altHard < curHard ? "必須が少ない" : altHard > curHard ? "必須が多い" : AltTradeOf(cur, alt) switch
+        {
+            AltTrade.DOMINATES => "今より良い", AltTrade.TRADE => "一長一短", AltTrade.DOMINATED => "今より悪い", _ => "今と同じ",
+        };
+        var d = MirrorKeys.All.Select(f => (F: f, V: alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f))).Where(x => x.V != 0).ToList();
+        string? Part(List<(string F, int V)> xs, string head)
+        {
+            if (xs.Count == 0) return null;
+            return head + string.Join("・", xs.Take(2).Select(x => $"{labelOf(x.F)} {Math.Abs(x.V)}{AnalysisTriage.UnitOf(x.F)}")) +
+                (xs.Count > 2 ? $"（ほか {xs.Count - 2} 項目）" : "");
+        }
+        return new AltLine(tag, Part(d.Where(x => x.V < 0).OrderBy(x => x.V).ToList(), "減る："),
+            Part(d.Where(x => x.V > 0).OrderByDescending(x => x.V).ToList(), "増える："));
+    }
+
     /// <summary>すべての案が今より悪い（印の数が案の数と合うときだけ）。</summary>
     public static bool AlternativesAllWorse(IReadOnlyList<bool> worse, int n) => n > 0 && worse.Count == n && worse.All(w => w);
 
