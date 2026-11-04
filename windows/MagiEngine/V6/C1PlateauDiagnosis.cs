@@ -71,7 +71,9 @@ public sealed record C1PlateauEntry(
     /// <summary>候補そのものが作れなかった回数。</summary>
     int NoCandidate,
     /// <summary>目的関数で却下された候補が最も悪化させた族（重み付き・多い順）。</summary>
-    IReadOnlyList<(string Family, int Count)> TopScoreCulprits)
+    IReadOnlyList<(string Family, int Count)> TopScoreCulprits,
+    /// <summary>最終盤面でこの決まりに残っている不足窓の数（c1 の件数と同じ数え方）。<see cref="C1PlateauDiagnosis.RefreshedWithCounts"/> だけが入れる。</summary>
+    int Remaining = 0)
 {
     /// <summary>却下の総数（原因の判定に使った母数）。</summary>
     public int Observations => RejectedByPin + RejectedByScore + NoCandidate;
@@ -203,6 +205,17 @@ public sealed record C1PlateauDiagnosis(int RemainingC1, IReadOnlyList<C1Plateau
                 .OrderByDescending(e => e.Observations)
                 .ToList());
 
+    /// <summary>
+    /// <see cref="RefreshedAgainst"/> の件数版。残った不足窓の数を各行に入れ、残りの多い順（同数は観測数の多い順）に並べる。
+    /// </summary>
+    public C1PlateauDiagnosis RefreshedWithCounts(int remainingC1, Func<int, int, int, int> remainingOf) =>
+        new C1PlateauDiagnosis(
+            remainingC1,
+            Entries.Select(e => e with { Remaining = remainingOf(e.Staff, e.Shift, e.RuleIndex) })
+                .Where(e => e.Remaining > 0)
+                .OrderByDescending(e => e.Remaining).ThenByDescending(e => e.Observations)
+                .ToList());
+
     public IReadOnlyList<string> LogLines()
     {
         if (CauseUnknown) return new List<string>
@@ -225,7 +238,7 @@ public sealed record C1PlateauDiagnosis(int RemainingC1, IReadOnlyList<C1Plateau
             };
             var culprits = string.Join(" ", e.TopScoreCulprits.Take(2).Select(c => $"{c.Family}:{c.Count}"));
             outLines.Add(
-                $"[W] C1Plateau: {e.Label} — {causeTxt}" +
+                $"[W] C1Plateau: {e.Label}" + (e.Remaining > 0 ? $" 残{e.Remaining}件" : "") + $" — {causeTxt}" +
                 $"(ピン破り:{e.RejectedByPin} スコア却下:{e.RejectedByScore} 候補なし:{e.NoCandidate}" +
                 (culprits.Length == 0 ? "" : $" 主因 {culprits}") + ")");
         }

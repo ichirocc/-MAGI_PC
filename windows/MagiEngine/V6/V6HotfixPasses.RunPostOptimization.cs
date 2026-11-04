@@ -525,7 +525,7 @@ public static partial class V6HotfixPasses
             message: $"後処理タイミング 総{tEnd - t0}ms: HF80={t67 - t0}ms HF67={t66 - t67}ms HF66={t66Done - t66}ms" +
                 $" 巡回研磨(厳密日割当+c1/c3/range/apt/fair+曜日/交互)={tC1Lns - t66Done}ms" +
                 $" C1共同LNS(+従来の玉突き)={tPersonalLns - tC1Lns}ms 個人共同LNS={tFinal - tPersonalLns}ms" +
-                $" 最終段(違反起点修復+玉突きパイプライン+人員過剰の退避)={tHf - tFinal}ms" +
+                $" 最終段(違反起点修復+玉突きパイプライン+膜の細胞LNS+人員過剰の退避)={tHf - tFinal}ms" +
                 $" 最終検査+HF70={tEnd - tHf}ms"));
         // パスごとの内訳（多い順・上位 N）。「時間を食っているのに採用0」のパスが各パス自身の行と突き合わせられる（3.339.0）。
         if (chain.PassMs.Count > 0)
@@ -727,15 +727,20 @@ public static partial class V6HotfixPasses
         if (plateau != null)
         {
             var pFin = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
-            bool StillDeficient(int i, int x, int ri)
+            int RemainingOf(int i, int x, int ri)
             {
                 var c = ri >= 0 && ri < pFin.Cons1.Count ? pFin.Cons1[ri] : null;
-                if (c == null || c.ShiftIdx != x || c.Day1 <= 0) return false;
-                for (var j = 0; j <= pFin.T - c.Day1; j++)
-                    if (InDeficientC1Window(pFin, work, i, x, c.Day1, c.Day2, j)) return true;
-                return false;
+                if (c == null || c.ShiftIdx != x || c.Day1 <= 0 || c.Day1 > pFin.T) return 0;
+                var n = 0;
+                for (var w = 0; w <= pFin.T - c.Day1; w++)
+                {
+                    var z = 0;
+                    for (var l = 0; l < c.Day1; l++) if (work[i][w + l] == x) z++;
+                    if (z < c.Day2) n++;
+                }
+                return n;
             }
-            refreshed = plateau.RefreshedAgainst(c1Left, StillDeficient);
+            refreshed = plateau.RefreshedWithCounts(c1Left, RemainingOf);
         }
         return refreshed != null && (refreshed.HasEntries || refreshed.CauseUnknown)
             ? refreshed

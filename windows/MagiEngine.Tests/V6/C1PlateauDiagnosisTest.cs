@@ -137,6 +137,23 @@ public class C1PlateauDiagnosisTest
     }
 
     [Fact]
+    public void FinalCountsOrderEntriesByRemainingThenObservations()
+    {
+        var stats = new Dictionary<(int, int, int), IReadOnlyDictionary<string, int>>
+        {
+            [(0, 1, 0)] = new Dictionary<string, int> { [C1PlateauDiagnosis.REASON_SCORE] = 50 },
+            [(1, 1, 0)] = new Dictionary<string, int> { [C1PlateauDiagnosis.REASON_NO_CANDIDATE] = 2 },
+            [(2, 1, 0)] = new Dictionary<string, int> { [C1PlateauDiagnosis.REASON_SCORE] = 9 },
+            [(3, 1, 0)] = new Dictionary<string, int> { [C1PlateauDiagnosis.REASON_SCORE] = 90 },
+        };
+        var left = new Dictionary<int, int> { [0] = 1, [1] = 8, [2] = 1, [3] = 0 };
+        var d = Build(stats).RefreshedWithCounts(10, (i, _, _) => left[i]);
+        Assert.Equal(new[] { 1, 0, 2 }, d.Entries.Select(e => e.Staff));
+        Assert.Equal(new[] { 8, 1, 1 }, d.Entries.Select(e => e.Remaining));
+        Assert.Contains("残8件", d.LogLines()[1]);
+    }
+
+    [Fact]
     public void AlreadyResolvedTargetsAreNeverListed()
     {
         // 対象が全部解消されたなら c1 も 0（残っていないので語ることが無い）。

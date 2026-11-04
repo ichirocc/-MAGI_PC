@@ -162,6 +162,33 @@ public static partial class V6SanityPort
         return result;
     }
 
+    /// <summary>
+    /// 期間の制約（c1）の窓のうち、固定のセル（希望・手動固定）を変えない限り足りない窓の数（報告の c1 と同じ単位＝窓ごとに 1）。
+    /// 窓の中で「x に固定されたセル」＋「固定されていず x を置けるセル」が下限に届かなければ、ほかの条件と関係なく満たせない。
+    /// </summary>
+    public static int WishC1Floor(Problem p, int[][] schedule)
+    {
+        var n = 0;
+        foreach (var c in p.Cons1)
+        {
+            if (c.Day1 <= 0 || c.Day1 > p.T) continue;
+            var x = c.ShiftIdx;
+            for (var i = 0; i < p.S; i++)
+            {
+                if (!p.CanDo(i, x) || i >= schedule.Length) continue;
+                var row = schedule[i];
+                for (var w = 0; w <= p.T - c.Day1; w++)
+                {
+                    var reach = 0;
+                    for (var j = w; j < w + c.Day1; j++)
+                        if (p.WishLocked(i, j) ? row[j] == x : p.MayPlaceAt(i, j, x)) reach++;
+                    if (reach < c.Day2) n++;
+                }
+            }
+        }
+        return n;
+    }
+
     /// <summary><see cref="WishAvoidRuns"/> のうち盤面で成立している窓の数（報告の c3mn と同じ単位＝窓ごとに 1）。</summary>
     public static int WishAvoidSoft(Problem p, int[][] schedule) =>
         WishAvoidRuns(p).Count(g => g.Staff >= 0 && g.Staff < schedule.Length && g.Days.All(j => j < schedule[g.Staff].Length && schedule[g.Staff][j] == p.Wish[g.Staff][j]));

@@ -775,6 +775,8 @@ public static partial class V6FinalPort
             });
             // 回避の並び（c3mn）が希望だけでできている窓も、希望を取り消すまで残る（要調整）。
             var avoidSelf = TryOrZero(() => V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(state), finalSched));
+            // 期間の制約（c1）のうち、固定のセルを変えない限り足りない窓（希望を調整するまで残る）。
+            var c1Wall = Math.Min(bd.GetValueOrDefault("c1", 0), TryOrZero(() => V6SanityPort.WishC1Floor(ScheduleUtil.CachedProblem(state), finalSched)));
             var avoidShown = 0;
             var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)
@@ -794,6 +796,7 @@ public static partial class V6FinalPort
                     "covU" => n0 - covUWall,
                     "extWish" => n0 - Math.Min(n0, extPinned),
                     "c3mn" => n0 - avoidShown,
+                    "c1" => n0 - c1Wall,
                     _ => n0,
                 } - self;
                 if (n > 0) open.Add($"{key} {n}件");
@@ -813,6 +816,7 @@ public static partial class V6FinalPort
             // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない。
             if (weeklyWall > 0) walls.Add($"weekly のうち{weeklyWall}件(回数が7の倍数でない＝配置では消せない)");
             if (extPinned > 0) walls.Add($"extWish のうち{extPinned}件(手動固定のセル＝自動では変えない)");
+            if (c1Wall > 0) walls.Add($"c1 のうち{c1Wall}件(窓の中が希望・固定で埋まり足りない＝希望を調整するまで解消しない)");
             if (personalWall > 0)
             {
                 walls.Add($"apt+high のうち{personalWall}件(個人の担当構成＝データ側)");

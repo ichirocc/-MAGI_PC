@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 - 2026-10-29（C# 単独・出力不変）: 勤務表のセルのパネルの「直す手」は描き直しのたびに全候補を検査していた（WinUI はパネルを毎回作り直す）。同じセル・同じ検査世代（`CheckRev`）なら前の結果を使う（`_fixMoveCache`）。Android は `LaunchedEffect(cell, rev)` で同じ扱い。
+- 2026-11-04（Android 3.727.28 と同期）: 実機ログの言い方 3 件（計算は不変）。後処理タイミングの「最終段(…)」に膜の細胞 LNS を足す。期間の制約の頭打ちを最終盤面の残りの不足窓の多い順に並べ「残N件」を付ける（`RefreshedWithCounts`）。残存分析の c1 から窓の中が希望・固定で埋まり足りない窓を「もう直せない」へ（`V6SanityPort.WishC1Floor`）。
 - 2026-11-04（Android 3.727.27 と同期）: 「他の案」のカードの 1 案の行（札・減る・増える）を `CellSheetLogic.AltLineOf`（Kotlin `altLine`）として ViewModel 層に移植し、テスト `cardLineHasTagDownAndUp` を 1 対 1 で写した。WinUI のカードはまだ従来の 1 文のまま（この環境では WinUI をビルドできないため）。
 - 2026-11-04（Android 3.727.26 と同期）: 決定的モードの膜の細胞 LNS を 12 細胞×2 万回に。`BoardHashFixtureTest` を `StateFingerprint.OfBoard` で照合（`Of` は盤面を読まず常に一致していた）し、Android と同じ基準版の写しに。それで見えた食い違い＝膜の `StaffOrder` が `Concat` で同じ文字列の鍵を 2 回数えていたのを、Kotlin と同じ集合の和（`Union`）に。6 fixture すべてで盤面のハッシュが Kotlin と一致。
 - 2026-11-04（Android 3.727.24 と同期）: 膜の細胞 LNS（`PolishGate.MembraneCellLns`、既定 ON）を詳細設定のスイッチ「最後に職員をまとめて組み直す」に出す（保存しない・実行中は操作不可）。

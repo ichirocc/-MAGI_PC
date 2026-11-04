@@ -188,4 +188,17 @@ public class WishSelfConflictTest
         Assert.Equal(2, V6SanityPort.WishConflictHardShare(new Dictionary<string, int> { ["c3n"] = 5 }, new Dictionary<string, int> { ["c3n"] = 5 }, 2));
         Assert.Equal(0, V6SanityPort.WishConflictHardShare(new Dictionary<string, int>(), new Dictionary<string, int> { ["c3n"] = 5 }, 5));
     }
+
+    [Fact]
+    public void C1WindowFilledByWishesIsCountedAsFloor()
+    {
+        // 大島: 7 日窓（休 2 回以上）の 6 日が A の希望＝休は 1 日しか置けない。福澤は希望なし＝床にしない。
+        var c1 = new List<C1Row> { new("7", "休", "2") };
+        var wishes = Enumerable.Range(0, 6).ToDictionary(j => $"0,{j}", _ => A);
+        var sched = Enumerable.Range(0, 2).Select(_ => Enumerable.Repeat(A, 7).ToArray()).ToArray();
+        var st = State(wishes, cons3n: Array.Empty<C3Row>()) with { Cons1 = c1 };
+        Assert.Equal(1, V6SanityPort.WishC1Floor(ScheduleUtil.CachedProblem(st), sched));
+        var none = State(new Dictionary<string, int>(), cons3n: Array.Empty<C3Row>()) with { Cons1 = c1 };
+        Assert.Equal(0, V6SanityPort.WishC1Floor(ScheduleUtil.CachedProblem(none), sched));
+    }
 }
