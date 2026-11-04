@@ -28,6 +28,7 @@ public class Review3698Test
             Assert.True(s.IndexOf(HomeSection.Helper) < s.IndexOf(HomeSection.Detail), @case);
             Assert.True(hasResult == s.Contains(HomeSection.Satisfaction), @case);
             Assert.True(hasResult == s.Contains(HomeSection.Creation), @case);
+            Assert.True(hasResult != s.Contains(HomeSection.Headline), @case);
             Assert.True(hasResult == s.Contains(HomeSection.Badges), @case);
             if (hasResult) Assert.True(s.IndexOf(HomeSection.Detail) < s.IndexOf(HomeSection.Satisfaction) && s.IndexOf(HomeSection.Satisfaction) < s.IndexOf(HomeSection.Info), @case);
         }

@@ -1955,8 +1955,7 @@ public static class CellSheetLogic
         var list = new List<HomeSection>();
         if (ui.Running) { list.Add(HomeSection.Progress); return list; }
         var creation = ui.HasResult && ui.EngineRan;
-        if (creation) list.Add(HomeSection.Creation);
-        list.Add(HomeSection.Headline);
+        if (creation) list.Add(HomeSection.Creation); else list.Add(HomeSection.Headline);   // 作成の行が見出しを兼ねる（2 段続けない）
         if (ui.HasResult && ui.CheckRev > 0) list.Add(HomeSection.Badges);   // [3.716.0] 札は検査済みのときだけ（検査前に「満たしています」と言わない）
         list.Add(HomeSection.Status);
         if (ui.HasResult && ui.CheckRev > 0 && ui.BestHard > 0L && plan.Kind != HomePlanKind.Draft) list.Add(HomeSection.NextItems);
@@ -2332,7 +2331,6 @@ public static class CellSheetLogic
     public const string BudgetChangeButton = "組む時間を変える";
     public static string BudgetShortLine(int sec) => $"組む時間 {BudgetText(sec)}";
     /// <summary>[3.714.0] 編集タブの見出しと 1 行。</summary>
-    public const string EditTabHeading = "条件";
     public const string EditTabLine = "希望・人数・基本";
 
     /// <summary>名前・記号が引けないときの共通の表示（番号を見せない）。</summary>

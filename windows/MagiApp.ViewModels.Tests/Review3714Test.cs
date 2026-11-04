@@ -67,7 +67,6 @@ public class Review3714Test
         Assert.Equal("組む時間 1分", CellSheetLogic.BudgetShortLine(60));
         Assert.Equal("組む時間 10秒", CellSheetLogic.BudgetShortLine(10));
         Assert.Equal("組む時間を変える", CellSheetLogic.BudgetChangeButton);
-        Assert.Equal("条件", CellSheetLogic.EditTabHeading);
         Assert.Equal("希望・人数・基本", CellSheetLogic.EditTabLine);
         Assert.Equal("まだ作っていません", CellSheetLogic.HomeHeadline(HomePlanKind.Make));
         Assert.Equal("データを開く", CellSheetLogic.EmptyStateTitle);
@@ -77,7 +76,7 @@ public class Review3714Test
     [Fact]
     public void LengthLimits()
     {
-        foreach (var h in new[] { CellSheetLogic.SettingsHeading, CellSheetLogic.EditTabHeading, CellSheetLogic.HomeMakeHeadline, CellSheetLogic.EmptyStateTitle, CellSheetLogic.HardListTitle("12件") })
+        foreach (var h in new[] { CellSheetLogic.SettingsHeading, CellSheetLogic.HomeMakeHeadline, CellSheetLogic.EmptyStateTitle, CellSheetLogic.HardListTitle("12件") })
             Assert.True(h.Length <= 12, h);
         var fams = new[] { "c3n", "c3mn", "c3w", "pref", "extWish", "groupViol", "covU", "covO", "low", "high", "c1", "c41s", "c42s" };
         var labels = new Dictionary<string, string> { ["low"] = "下限割れ", ["high"] = "上限超過", ["c1"] = "期間の制約", ["c41s"] = "スキルグループのレンジ", ["c42s"] = "スキルグループペア" };
