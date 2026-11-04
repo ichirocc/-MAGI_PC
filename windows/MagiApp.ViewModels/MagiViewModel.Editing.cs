@@ -198,22 +198,31 @@ public sealed partial class MagiViewModel
     {
         var st = _state;
         if (st is null) return;
-        var alts = source.Select(a => a.Copy2D()).ToList();
-        _alternativeScheds = alts;
+        var source2 = source.Select(a => a.Copy2D()).ToList();
         _altBoardKey = _currentSchedule is { } cur ? BoardKey(cur) : 0L;
         _altStateKey = StateKey(st);
         // [Main負荷回避] 他案（最大3件）の違反チェックは同期CPU → Default で実行してから反映。
         var curNow = _currentSchedule?.Copy2D();
-        var rows = await System.Threading.Tasks.Task.Run(() =>
+        var labelOf = FamilyLabelOf;
+        var (alts, rows) = await System.Threading.Tasks.Task.Run(() =>
         {
             var curRep = curNow is null ? null : UnifiedViolationChecker.Check(st, curNow);
-            return alts.Select((sch, idx) =>
+            // [Android 同名、docs/seesaw.md §6.4] 必須の件数が今と同じ案は「どの項目も同じか少ない」→「交換になる」→ ほかの順に並べ、交換の説明を添える。
+            var reps = source2.Select(s => UnifiedViolationChecker.Check(st, s)).ToList();
+            var order = Enumerable.Range(0, source2.Count).OrderBy(k =>
+                curRep is null || reps[k].Hard != curRep.Hard ? 2
+                : CellSheetLogic.AltTradeOf(curRep.Breakdown, reps[k].Breakdown) switch { CellSheetLogic.AltTrade.DOMINATES => 0, CellSheetLogic.AltTrade.TRADE => 1, _ => 2 }).ToList();
+            var sorted = order.Select(k => source2[k]).ToList();
+            var rs = order.Select((k, idx) =>
             {
-                var rep = UnifiedViolationChecker.Check(st, sch);
+                var rep = reps[k];
                 var worse = curRep is not null && UnifiedViolationChecker.BetterReport(curRep, rep);
-                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep)), Worse: worse);
+                var trade = curRep is not null && rep.Hard == curRep.Hard ? CellSheetLogic.AltTradeLine(curRep.Breakdown, rep.Breakdown, labelOf) : null;
+                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep), trade), Worse: worse);
             }).ToList();
+            return (sorted, rs);
         });
+        _alternativeScheds = alts;
         Ui.Alternatives = rows.Select(r => r.Text).ToList();
         Ui.AlternativesWorse = rows.Select(r => r.Worse).ToList();
         Ui.AlternativeApplied = -1;

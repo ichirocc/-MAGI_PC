@@ -459,6 +459,17 @@ public static partial class V6FinalPort
         var refSched = post.Schedule;
         var refReport = post.Report;
         IReadOnlyList<MirrorLog> extraLog = Array.Empty<MirrorLog>();
+        // [Android 同名、docs/seesaw.md §6.3] 後処理の結果から「他の案」へ歩く Path Relinking（既定 OFF）。良ければ本命を差し替え、
+        //   本命に優越されない交換の盤面を「他の案」にする（S4）。上限 3 秒・全体の締切まで。
+        IReadOnlyList<int[][]> seesawTradeoffs = Array.Empty<int[][]>();
+        IReadOnlyList<MirrorLog> seesawLog = Array.Empty<MirrorLog>();
+        if (PolishGate.SeesawRelink && chained.Alternatives.Count > 0 && !cancellationToken.IsCancellationRequested)
+        {
+            var cap = Math.Min(3_000L, Math.Max(0L, hardDeadlineMs - EngineClock.NowMs()));
+            var sr = SeesawRelink.Apply(state, refSched, chained.Alternatives, cap, () => cancellationToken.IsCancellationRequested);
+            if (UnifiedViolationChecker.BetterReport(sr.Report, refReport) && !V6SearchOperators.ExactPinRegression(ScheduleUtil.CachedProblem(state), refSched, sr.Schedule)) { refSched = sr.Schedule; refReport = sr.Report; }
+            seesawTradeoffs = sr.Tradeoffs; seesawLog = sr.Logs;
+        }
         {
             // [監査(3e)] 上限は後処理予約枠(postReserveMs, 8〜25s)＝「未使用の予約を再利用する」設計意図に固定。
             var extraMs = Math.Min(hardDeadlineMs - tPost1, postReserveMs);
@@ -942,6 +953,7 @@ public static partial class V6FinalPort
         logs.AddRange(adoptedLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);
+        logs.AddRange(seesawLog);
         logs.AddRange(extraLog);
         logs.AddRange(watchdogLog);
         logs.AddRange(contentionLog);
@@ -966,6 +978,6 @@ public static partial class V6FinalPort
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: chained.Alternatives, CapZero: capZero, Stop: stopSummary);
+            Alternatives: seesawTradeoffs.Count > 0 ? seesawTradeoffs : chained.Alternatives, CapZero: capZero, Stop: stopSummary);
     }
 }

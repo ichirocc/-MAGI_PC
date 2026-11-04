@@ -2219,7 +2219,7 @@ public static class CellSheetLogic
     /// 他の案の 1 行（必須違反と、計算した時点の勤務表との比べ）。比べは採用の基準（BetterReport）の結果で語る＝
     /// <paramref name="better"/>＝案が今より良い、<paramref name="worse"/>＝今のほうが良い、どちらでもなければ今と同じ。
     /// </summary>
-    public static string AlternativeSummary(int n, string hardTxt, int? curHard, int altHard, bool worse, bool better)
+    public static string AlternativeSummary(int n, string hardTxt, int? curHard, int altHard, bool worse, bool better, string? trade = null)
     {
         var cmp = curHard is null ? ""
             : altHard < curHard ? "（今より少ない）"
@@ -2227,7 +2227,42 @@ public static class CellSheetLogic
             : better ? "（今と同じ・全体は今より良い（重みつき））"
             : worse ? "（今と同じ・全体は今より悪い（重みつき））"
             : "（今と同じ）";
-        return $"案{n}：必須違反 {hardTxt}{cmp}";
+        return $"案{n}：必須違反 {hardTxt}{cmp}" + (trade is null ? "" : $"。{trade}");
+    }
+
+    /// <summary>[Android 同名、docs/seesaw.md §6.4 の S4] 他の案を今の勤務表と族の件数で比べた種類（重みを使わない）。</summary>
+    public enum AltTrade { DOMINATES, TRADE, DOMINATED, SAME }
+
+    public static AltTrade AltTradeOf(IReadOnlyDictionary<string, int> cur, IReadOnlyDictionary<string, int> alt)
+    {
+        bool less = false, more = false;
+        foreach (var f in MirrorKeys.All)
+        {
+            var d = alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f);
+            if (d < 0) less = true; else if (d > 0) more = true;
+        }
+        return less && more ? AltTrade.TRADE : less ? AltTrade.DOMINATES : more ? AltTrade.DOMINATED : AltTrade.SAME;
+    }
+
+    /// <summary>交換の説明（良くなる族を先に、譲る族を後に、件数で）。必須の件数が同じ案だけに付ける。族名は <paramref name="labelOf"/>。</summary>
+    public static string? AltTradeLine(IReadOnlyDictionary<string, int> cur, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
+    {
+        var d = MirrorKeys.All.Select(f => (F: f, V: alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f))).Where(x => x.V != 0).ToList();
+        var down = d.Where(x => x.V < 0).OrderBy(x => x.V).ToList();
+        var up = d.Where(x => x.V > 0).OrderByDescending(x => x.V).ToList();
+        string? Part(List<(string F, int V)> xs, string verb)
+        {
+            if (xs.Count == 0) return null;
+            var head = string.Join("・", xs.Take(2).Select(x => $"{labelOf(x.F)}が {Math.Abs(x.V)}{AnalysisTriage.UnitOf(x.F)}"));
+            return head + (xs.Count > 2 ? $"（ほか {xs.Count - 2} 項目）" : "") + verb;
+        }
+        return AltTradeOf(cur, alt) switch
+        {
+            AltTrade.TRADE => $"{Part(down, "減り")}、{Part(up, "増えます")}",
+            AltTrade.DOMINATES => $"どの項目も今と同じか少なく、{Part(down, "減ります")}",
+            AltTrade.DOMINATED => "どの項目も今と同じか多い案です",
+            _ => null,
+        };
     }
 
     /// <summary>すべての案が今より悪い（印の数が案の数と合うときだけ）。</summary>
