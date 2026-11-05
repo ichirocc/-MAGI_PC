@@ -834,7 +834,13 @@ public static partial class V6FinalPort
             {
                 new(level: "I", tag: "残存分析", message: $"もう直せない: {wallTxt} ／ まだ狙える: {openTxt}" + learnedNote),
                 new(level: "I", tag: "必須内訳", message: $"必須 {finalReport.Hard}件 = 希望どうしのぶつかり {hardWishFloor}件 + それ以外 {finalReport.Hard - hardWishFloor}件"),
-            };
+            }.Concat(TierKeyLog()).ToList();
+        }
+        // [Android 3.727.36、#50 P1] 重みを使わない比べ方の鍵を並べて出すだけ（採否には使わない）。
+        IEnumerable<MirrorLog> TierKeyLog()
+        {
+            try { return new[] { new MirrorLog(level: "I", tag: "段の鍵", message: TierObjective.LogLine(TierObjective.Key(ScheduleUtil.CachedProblem(state), finalSched, finalReport))) }; }
+            catch (Exception) { return Array.Empty<MirrorLog>(); }
         }
         var residualLog = BuildResidualLog();
 
