@@ -1462,15 +1462,29 @@ public sealed partial class HomeView : UserControl
         //   引き上げ済み（一覧行用に10〜13へ据え置いていたのを解消。Button.FontSizeはStyle
         //   (TargetType=TextBlock)を型的に受け付けられずトークン化の対象外なのは変わらず）。
         // 適用中の案は太字＋「適用中」（VM が持つ＝元に戻すで一覧ごと戻る）。残りの案へはそのまま切り替えられる。
+        // [Android 3.727.27/3.727.34] 行のデータが揃えば「案N　札」→「減る：…」→「増える：…」。揃わないときは従来の 1 文。
+        var lines = ui.AlternativeLines.Count == ui.Alternatives.Count ? ui.AlternativeLines : null;
+        var anyApplied = ui.AlternativeApplied >= 0;
+        if (lines is not null && anyApplied)
+            AlternativesListHost.Children.Add(new TextBlock { Text = CellSheetLogic.AltBaselineNote, FontSize = 14, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
         for (var i = 0; i < ui.Alternatives.Count; i++)
         {
             var applied = i == ui.AlternativeApplied;
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            row.Children.Add(new TextBlock
+            var weight = applied ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+            if (lines is null)
             {
-                Text = ui.Alternatives[i], FontSize = 14, VerticalAlignment = VerticalAlignment.Center,
-                FontWeight = applied ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
-            });
+                row.Children.Add(new TextBlock { Text = ui.Alternatives[i], FontSize = 14, VerticalAlignment = VerticalAlignment.Center, FontWeight = weight });
+            }
+            else
+            {
+                var l = lines[i];
+                var col = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+                col.Children.Add(new TextBlock { Text = $"案{i + 1}　" + (applied ? CellSheetLogic.AltAppliedTag : CellSheetLogic.AltTagAfterApply(l.Tag, anyApplied)), FontSize = 14, FontWeight = weight });
+                if (l.Down is not null) col.Children.Add(new TextBlock { Text = l.Down, FontSize = 14, Opacity = applied ? 1.0 : 0.8, TextWrapping = TextWrapping.Wrap });
+                if (l.Up is not null) col.Children.Add(new TextBlock { Text = l.Up, FontSize = 14, Opacity = applied ? 1.0 : 0.8, TextWrapping = TextWrapping.Wrap });
+                row.Children.Add(col);
+            }
             var apply = new Button { Content = applied ? "適用中" : "適用", FontSize = 14, IsEnabled = editable && !applied };
             var idx = i;
             apply.Click += async (_, _) =>

@@ -223,7 +223,8 @@ public sealed partial class MagiViewModel
     private long _undoSerialSeq;
     private long _opNoticeSeq;
 
-    internal sealed record AltSnap(IReadOnlyList<int[][]> Scheds, IReadOnlyList<string> Summaries, int Applied, long BoardKey, long StateKey);
+    internal sealed record AltSnap(IReadOnlyList<int[][]> Scheds, IReadOnlyList<string> Summaries, int Applied, long BoardKey, long StateKey,
+        IReadOnlyList<CellSheetLogic.AltLine>? Lines = null, IReadOnlyList<bool>? Worse = null);
 
     private readonly LinkedList<UndoSnap> _undoStack = new();
     private readonly LinkedList<UndoSnap> _redoStack = new();
@@ -235,7 +236,7 @@ public sealed partial class MagiViewModel
         var sc = _currentSchedule;
         if (st is null || sc is null) return null;
         var alts = _alternativeScheds.Count > 0 && _altBoardKey == BoardKey(sc) && _altStateKey == StateKey(st)
-            ? new AltSnap(_alternativeScheds, Ui.Alternatives, Ui.AlternativeApplied, _altBoardKey, _altStateKey)
+            ? new AltSnap(_alternativeScheds, Ui.Alternatives, Ui.AlternativeApplied, _altBoardKey, _altStateKey, Ui.AlternativeLines, Ui.AlternativesWorse)
             : null;
         return new UndoSnap(st, sc.Copy2D(), alts, Serial: ++_undoSerialSeq);
     }
@@ -254,6 +255,8 @@ public sealed partial class MagiViewModel
         _altBoardKey = a?.BoardKey ?? 0L;
         _altStateKey = a?.StateKey ?? 0L;
         Ui.Alternatives = a?.Summaries ?? System.Array.Empty<string>();
+        Ui.AlternativeLines = a?.Lines ?? System.Array.Empty<CellSheetLogic.AltLine>();
+        Ui.AlternativesWorse = a?.Worse ?? System.Array.Empty<bool>();
         Ui.AlternativeApplied = a?.Applied ?? -1;
     }
 
@@ -276,6 +279,7 @@ public sealed partial class MagiViewModel
         _alternativeScheds = System.Array.Empty<int[][]>();
         ClearFixState();
         Ui.Alternatives = System.Array.Empty<string>();
+        Ui.AlternativeLines = System.Array.Empty<CellSheetLogic.AltLine>();
         // 完了カードの前後比較（RunSummary）も直前の実行の盤面の話＝同じ理由で外す。
         Ui.RunSummary = null;
         Ui.RunDelta = null;

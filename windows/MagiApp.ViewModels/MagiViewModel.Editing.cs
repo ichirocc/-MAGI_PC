@@ -218,13 +218,15 @@ public sealed partial class MagiViewModel
                 var rep = reps[k];
                 var worse = curRep is not null && UnifiedViolationChecker.BetterReport(curRep, rep);
                 var trade = curRep is not null && rep.Hard == curRep.Hard ? CellSheetLogic.AltTradeLine(curRep.Breakdown, rep.Breakdown, labelOf) : null;
-                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep), trade), Worse: worse);
+                return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep), trade), Worse: worse,
+                    Line: curRep is null ? null : CellSheetLogic.AltLineOf(curRep.Hard, curRep.Breakdown, rep.Hard, rep.Breakdown, labelOf));
             }).ToList();
             return (sorted, rs);
         });
         _alternativeScheds = alts;
         Ui.Alternatives = rows.Select(r => r.Text).ToList();
         Ui.AlternativesWorse = rows.Select(r => r.Worse).ToList();
+        Ui.AlternativeLines = rows.All(r => r.Line is not null) ? rows.Select(r => r.Line!).ToList() : System.Array.Empty<CellSheetLogic.AltLine>();
         Ui.AlternativeApplied = -1;
     }
 
@@ -244,6 +246,7 @@ public sealed partial class MagiViewModel
         {
             _alternativeScheds = System.Array.Empty<int[][]>();
             Ui.Alternatives = System.Array.Empty<string>();
+            Ui.AlternativeLines = System.Array.Empty<CellSheetLogic.AltLine>();
             Ui.MessageIsError = true;
             Ui.Message = "その後に勤務表か設定が変わったため、この案は適用できません。案をもう一度作ってください";
             LogOp("W", $"他の案 {i + 1}: 案の計算後に盤面/設定が変わったため適用せず");
@@ -253,6 +256,7 @@ public sealed partial class MagiViewModel
         //   指紋を適用後の盤面へ付け替える（この後に手編集が入れば PushUndo でまた外れる）。
         var keptAlts = _alternativeScheds;
         var keptSummaries = Ui.Alternatives;
+        var keptLines = Ui.AlternativeLines;
         PushUndo();
         _boardReplaceRev++;
         _currentSchedule = sch;
@@ -261,6 +265,7 @@ public sealed partial class MagiViewModel
         _alternativeScheds = keptAlts;
         _altBoardKey = BoardKey(sch);
         Ui.Alternatives = keptSummaries;
+        Ui.AlternativeLines = keptLines;
         Ui.AlternativeApplied = i;
         // 表示の盤面は内部と同時に差し替える（再検査が失敗しても画面と次の操作の対象が食い違わない、UI-02）。
         Ui.Schedule = sch.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();

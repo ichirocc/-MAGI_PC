@@ -278,6 +278,8 @@ public sealed partial class UiState : ObservableObject
     [ObservableProperty] private IReadOnlyList<string> alternatives = Array.Empty<string>();
     /// <summary>他の案ごとに、計算した時点の勤務表より悪いか。</summary>
     [ObservableProperty] private IReadOnlyList<bool> alternativesWorse = Array.Empty<bool>();
+    /// <summary>他の案ごとのカードの表示（札・減る・増える、Android <c>alternativeLines</c>）。<see cref="Alternatives"/> と同じ順。</summary>
+    [ObservableProperty] private IReadOnlyList<CellSheetLogic.AltLine> alternativeLines = Array.Empty<CellSheetLogic.AltLine>();
 
     /// <summary>いま盤面に適用している他の案の添字（-1=どれでもない）。</summary>
     [ObservableProperty] private int alternativeApplied = -1;

@@ -18,6 +18,8 @@ public sealed class RelaxRollback<S, R, A>
     private readonly string _fixDoneKey, _fixFailedKey;
     private readonly IReadOnlyList<string> _stalledHardFamilies, _alternatives;
     private readonly int _alternativeApplied;
+    private readonly IReadOnlyList<CellSheetLogic.AltLine> _alternativeLines;
+    private readonly IReadOnlyList<bool> _alternativesWorse;
 
     public IReadOnlyList<S> Undo { get; }
     public IReadOnlyList<S> Redo { get; }
@@ -31,7 +33,7 @@ public sealed class RelaxRollback<S, R, A>
         _canUndo = ui.CanUndo; _canRedo = ui.CanRedo; _messageIsError = ui.MessageIsError;
         _fixSuggestions = ui.FixSuggestions; _fixTiers = ui.FixTiers; _fixSearched = ui.FixSearched; _fixDoneKey = ui.FixDoneKey;
         _fixFailedKey = ui.FixFailedKey; _stalledHardFamilies = ui.StalledHardFamilies; _alternatives = ui.Alternatives;
-        _alternativeApplied = ui.AlternativeApplied;
+        _alternativeApplied = ui.AlternativeApplied; _alternativeLines = ui.AlternativeLines; _alternativesWorse = ui.AlternativesWorse;
         Undo = undo.ToList(); Redo = redo.ToList(); ResultSchedule = resultSchedule; Alts = alts;
     }
 
@@ -43,7 +45,7 @@ public sealed class RelaxRollback<S, R, A>
         cur.CanUndo = _canUndo; cur.CanRedo = _canRedo; cur.MessageIsError = _messageIsError;
         cur.FixSuggestions = _fixSuggestions; cur.FixTiers = _fixTiers; cur.FixSearched = _fixSearched; cur.FixDoneKey = _fixDoneKey;
         cur.FixFailedKey = _fixFailedKey; cur.StalledHardFamilies = _stalledHardFamilies; cur.Alternatives = _alternatives;
-        cur.AlternativeApplied = _alternativeApplied;
+        cur.AlternativeApplied = _alternativeApplied; cur.AlternativeLines = _alternativeLines; cur.AlternativesWorse = _alternativesWorse;
     }
 
     /// <summary>段の控えを <paramref name="undoStack"/>・<paramref name="redoStack"/> へ書き戻す（30 段を超えて落とした最古の段も戻る）。</summary>

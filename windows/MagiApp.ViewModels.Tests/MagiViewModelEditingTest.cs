@@ -311,6 +311,30 @@ public class MagiViewModelEditingTest
         Assert.True(vm.Ui.HasResult);
     }
 
+    /// <summary>[Android 3.727.34] 案の行（札・減る・増える）は反映しても残り、元に戻すで印と一緒に戻る。</summary>
+    [Fact]
+    public async Task AlternativeLinesSurviveApplyAndUndo()
+    {
+        var st = MinimalState.Build();
+        var vm = new MagiViewModel { _state = st, _currentSchedule = MinimalState.BuildSchedule() };
+        var alt = MinimalState.BuildSchedule();
+        alt[0][0] = 1;
+        await vm.CaptureAlternatives(new[] { alt });
+        Assert.Single(vm.Ui.AlternativeLines);
+        var lines = vm.Ui.AlternativeLines;
+        var worse = vm.Ui.AlternativesWorse;
+
+        vm.ApplyAlternative(0);
+        await vm.LastApplyAlternativeTask!;
+        Assert.Equal(lines, vm.Ui.AlternativeLines);
+        Assert.Equal(0, vm.Ui.AlternativeApplied);
+
+        vm.Undo();
+        Assert.Equal(lines, vm.Ui.AlternativeLines);
+        Assert.Equal(worse, vm.Ui.AlternativesWorse);
+        Assert.Equal(-1, vm.Ui.AlternativeApplied);
+    }
+
     [Fact]
     public void ApplyAlternativeIgnoresOutOfRangeIndex()
     {

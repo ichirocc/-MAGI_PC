@@ -153,6 +153,7 @@ public sealed partial class MagiViewModel
         Ui.RunDelta = null;
         Ui.StopSummary = null;
         Ui.Alternatives = Array.Empty<string>();
+        Ui.AlternativeLines = Array.Empty<CellSheetLogic.AltLine>();
         Ui.LiveSchedule = Array.Empty<IReadOnlyList<int>>();
         ClearFixState(); // [Android 3.612.0] 前の盤面の1手の候補を残さない
         Ui.Message = "勤務表をつくり始めました";
