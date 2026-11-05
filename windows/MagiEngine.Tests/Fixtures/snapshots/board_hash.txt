@@ -3,4 +3,4 @@ sample_state_v6 seed=1 hash=-80248866103160423
 blocked_covu_state seed=1 hash=-2139902337264998511
 sept2026_state seed=1 hash=-491515408930591207
 oct2026_grid_state seed=1 hash=-8787569059049416345
-full_coverage_state seed=1 hash=-6994869067152531302
+full_coverage_state seed=1 hash=6670665127854712129

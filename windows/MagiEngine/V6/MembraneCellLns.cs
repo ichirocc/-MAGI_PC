@@ -63,12 +63,11 @@ public static class MembraneCellLns
         return new Result(best, applied, tried, logs);
     }
 
-    /// <summary>OWA の順: 個人の違反（盤面の印の数）が多い職員から。同数は添字順。</summary>
+    /// <summary>OWA の順: 個人の違反（盤面の印と回数の印の数）が多い職員から。同数は添字順。2 種の印は別々に数える（同じ文字列の鍵でも別の印）。</summary>
     private static List<int> StaffOrder(Problem p, ViolationReport rep)
     {
         var load = new int[p.S];
-        // Kotlin の `violations.keys + countViolations.keys`（集合の和＝同じ文字列の鍵は 1 回）と同じ数え方。
-        foreach (var key in rep.Violations.Keys.Union(rep.CountViolations.Keys))
+        foreach (var key in rep.Violations.Keys.Concat(rep.CountViolations.Keys))
         {
             var c = key.IndexOf(',');
             if (int.TryParse(c < 0 ? key : key[..c], out var i) && i >= 0 && i < p.S) load[i]++;
