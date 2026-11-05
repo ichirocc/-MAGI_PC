@@ -2246,15 +2246,8 @@ public static class CellSheetLogic
     /// <summary>交換の説明（良くなる族を先に、譲る族を後に、件数で）。必須の件数が同じ案だけに付ける。族名は <paramref name="labelOf"/>。</summary>
     public static string? AltTradeLine(IReadOnlyDictionary<string, int> cur, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
     {
-        var d = MirrorKeys.All.Select(f => (F: f, V: alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f))).Where(x => x.V != 0).ToList();
-        var down = d.Where(x => x.V < 0).OrderBy(x => x.V).ToList();
-        var up = d.Where(x => x.V > 0).OrderByDescending(x => x.V).ToList();
-        string? Part(List<(string F, int V)> xs, string verb)
-        {
-            if (xs.Count == 0) return null;
-            var head = string.Join("・", xs.Take(2).Select(x => $"{labelOf(x.F)}が {Math.Abs(x.V)}{AnalysisTriage.UnitOf(x.F)}"));
-            return head + (xs.Count > 2 ? $"（ほか {xs.Count - 2} 項目）" : "") + verb;
-        }
+        var (down, up) = AltDeltas(cur, alt);
+        string? Part(List<(string F, int V)> xs, string verb) => xs.Count == 0 ? null : AltDeltaPart(xs, "が ", labelOf) + verb;
         return AltTradeOf(cur, alt) switch
         {
             AltTrade.TRADE => $"{Part(down, "減り")}、{Part(up, "増えます")}",
@@ -2270,20 +2263,34 @@ public static class CellSheetLogic
     /// <summary>札は必須の多少、同じなら族の件数の比べ方。減る・増えるは件数の大きい 2 項目まで（docs/screen_spec.md §01「他の案」）。</summary>
     public static AltLine AltLineOf(int curHard, IReadOnlyDictionary<string, int> cur, int altHard, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
     {
-        var tag = altHard < curHard ? "必須が少ない" : altHard > curHard ? "必須が多い" : AltTradeOf(cur, alt) switch
+        var tag = altHard < curHard ? $"必須が少ない（必須 {altHard}件）" : altHard > curHard ? $"必須が多い（必須 {altHard}件）" : AltTradeOf(cur, alt) switch
         {
             AltTrade.DOMINATES => "今より良い", AltTrade.TRADE => "一長一短", AltTrade.DOMINATED => "今より悪い", _ => "今と同じ",
         };
-        var d = MirrorKeys.All.Select(f => (F: f, V: alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f))).Where(x => x.V != 0).ToList();
-        string? Part(List<(string F, int V)> xs, string head)
-        {
-            if (xs.Count == 0) return null;
-            return head + string.Join("・", xs.Take(2).Select(x => $"{labelOf(x.F)} {Math.Abs(x.V)}{AnalysisTriage.UnitOf(x.F)}")) +
-                (xs.Count > 2 ? $"（ほか {xs.Count - 2} 項目）" : "");
-        }
-        return new AltLine(tag, Part(d.Where(x => x.V < 0).OrderBy(x => x.V).ToList(), "減る："),
-            Part(d.Where(x => x.V > 0).OrderByDescending(x => x.V).ToList(), "増える："));
+        var (down, up) = AltDeltas(cur, alt);
+        string? Part(List<(string F, int V)> xs, string head) => xs.Count == 0 ? null : head + AltDeltaPart(xs, " ", labelOf);
+        return new AltLine(tag, Part(down, "減る："), Part(up, "増える："));
     }
+
+    /// <summary>案と今の族ごとの差を減る族と増える族に分ける（Kotlin <c>altDeltas</c>）。必須の族を先に、そのあと差の大きい順。</summary>
+    public static (List<(string F, int V)> Down, List<(string F, int V)> Up) AltDeltas(IReadOnlyDictionary<string, int> cur, IReadOnlyDictionary<string, int> alt)
+    {
+        var hard = MirrorKeys.Hard.ToHashSet();
+        var d = MirrorKeys.All.Select(f => (F: f, V: alt.GetValueOrDefault(f) - cur.GetValueOrDefault(f))).Where(x => x.V != 0).ToList();
+        List<(string F, int V)> Sorted(IEnumerable<(string F, int V)> xs) => xs.OrderBy(x => hard.Contains(x.F) ? 0 : 1).ThenByDescending(x => Math.Abs(x.V)).ToList();
+        return (Sorted(d.Where(x => x.V < 0)), Sorted(d.Where(x => x.V > 0)));
+    }
+
+    /// <summary>族の差の上位 2 つと「ほか N 項目」（Kotlin <c>altDeltaPart</c>）。</summary>
+    public static string AltDeltaPart(List<(string F, int V)> xs, string sep, Func<string, string> labelOf) =>
+        string.Join("・", xs.Take(2).Select(x => $"{labelOf(x.F)}{sep}{Math.Abs(x.V)}{AnalysisTriage.UnitOf(x.F)}")) +
+        (xs.Count > 2 ? $"（ほか {xs.Count - 2} 項目）" : "");
+
+    public const string AltAppliedTag = "反映中";
+    public const string AltBaselineNote = "札は案を作ったときの勤務表（元）との比べです。";
+
+    /// <summary>案を反映したあとは札の「今」を「元」と読み替える（Kotlin <c>altTagAfterApply</c>）。</summary>
+    public static string AltTagAfterApply(string tag, bool applied) => applied ? tag.Replace("今", "元") : tag;
 
     /// <summary>すべての案が今より悪い（印の数が案の数と合うときだけ）。</summary>
     public static bool AlternativesAllWorse(IReadOnlyList<bool> worse, int n) => n > 0 && worse.Count == n && worse.All(w => w);
