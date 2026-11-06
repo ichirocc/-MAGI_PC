@@ -686,8 +686,13 @@ public static partial class V6FinalPort
         var capSafeStages = ExcludeCapZeroStages(baseProblem, pinSafeStages)
             .Concat(ClearedCapZeroStages(state, baseProblem, pinSafeStages, quantitativeRangeEval)).ToList();
         pinLog.AddRange(ExtBanLogs(state, baseProblem, cappedInput, capSafeStages));
-        var bestStage = PickBestStage(ExcludeExtBanStages(baseProblem, cappedInput, capSafeStages)
-            .Concat(RevertedExtBanStages(state, baseProblem, cappedInput, capSafeStages, quantitativeRangeEval)).ToList());
+        var extSafeStages = ExcludeExtBanStages(baseProblem, cappedInput, capSafeStages)
+            .Concat(RevertedExtBanStages(state, baseProblem, cappedInput, capSafeStages, quantitativeRangeEval)).ToList();
+        // 規則 A（希望固定は「希望どおり」か「入力のまま」）を盤面で確かめる。各経路は手ごとに守る＝ここは多重防御（入力は必ず残る）。
+        var safeStages = extSafeStages.Where(c => baseProblem.KeepsWishPins(cappedInput, c.Sched)).ToList();
+        pinLog.AddRange(extSafeStages.Where(c => !safeStages.Contains(c)).Select(c => new MirrorLog(level: "W", tag: "Sentinel",
+            message: $"{c.Label}の盤面が希望固定のセルを希望でない値へ変えていたため候補から外しました（多重防御）")));
+        var bestStage = PickBestStage(safeStages);
         var finalSched = bestStage.Sched;
         var finalReport = bestStage.Report;
         // [レビュー修正/3.575.0, Kotlin原本] 全段が同値（無改善）のときも Aggregate は最初の候補（入力）を
