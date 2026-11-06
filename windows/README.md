@@ -331,6 +331,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 
 ## レビュー対応の記録
 - 2026-10-29（C# 単独・出力不変）: 勤務表のセルのパネルの「直す手」は描き直しのたびに全候補を検査していた（WinUI はパネルを毎回作り直す）。同じセル・同じ検査世代（`CheckRev`）なら前の結果を使う（`_fixMoveCache`）。Android は `LaunchedEffect(cell, rev)` で同じ扱い。
+- 2026-11-06（テストの時間）: `tools/engine_test_sharded.sh` を追加。エンジンのテストをコア数の `dotnet test` プロセスへ、実測の所要（`tools/engine_test_times.tsv`）の重い順に振り分けて並列に流す（同じプロセスの中は `AssemblyInfo.cs` の理由で並列にできないが、プロセスが別なら static も別）。最後の 1 本は表に無いクラスも含む残り全部＝新しいクラスを取りこぼさない。4 コアで 17 分 42 秒→5 分 15 秒（ビルド込み、1266 件・件数は 1 本のときと一致）。
 - 2026-11-05（Android 3.727.36 と同期）: 重みを使わない目的関数の P1＝`TierObjective`（段の鍵・T1 の職員ごとの不満・fair の leximin）を新規に写し、`HandleOptimize` の残存分析のログに「段の鍵」を足す（採否には使わない＝出力不変）。`TierObjectiveTest` 2 件。
 - 2026-11-05（Android 3.727.35 と同期）: 膜の細胞 LNS の `StaffOrder` を `Union`→`Concat`（盤面の印と回数の印を別々に数える、Android の 2 腕比較で合格）。盤面ハッシュの基準版を Android の写しに更新（言語間で一致）。
 - 2026-11-05（Android 3.727.34 と同期）: 他の案の 1 案ぶん（`AltLineOf`・`AltTradeLine`）の差の計算を `AltDeltas`／`AltDeltaPart` に 1 本化し、必須の族を先に並べる。必須の件数が違う札に件数を添える。反映後の札の読み替え `AltTagAfterApply`。WinUI のカードも配線済み（`UiState.AlternativeLines`・`AltSnap.Lines/Worse`・`RelaxRollback`・ホームの「他の案」で 札→減る→増える、反映後は「反映中」と「元」の読み替え）。

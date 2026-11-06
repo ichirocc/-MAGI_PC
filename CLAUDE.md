@@ -11,7 +11,7 @@ Android 版（`ichirocc/magi7ichiro-fork`、Kotlin/Compose）の Windows 11 ネ�
   このサンドボックスではビルド不可で、CI（`.github/workflows/windows-app-build.yml`）だけが検証する。ViewModel 層は `MagiApp.ViewModels`
   （テスト可）に置き、WinUI 側は薄く保つ。
 - .NET SDK はこの環境では `/root/.dotnet`（`export PATH=/root/.dotnet:$PATH DOTNET_CLI_TELEMETRY_OPTOUT=1`）。エンジンテストは
-  `cd windows && dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj -c Release --nologo -v q`（約 5 分半。背景で回してログへ）。
+  `bash tools/engine_test_sharded.sh`（コア数のプロセスへ振り分けて並列、4 コアで約 5 分＝ビルド込み。1 本だと `cd windows && dotnet test MagiEngine.Tests/MagiEngine.Tests.csproj -c Release --nologo -v q` で約 18 分。背景で回してログへ）。
   `dotnet test ... | head` のようにパイプで切ると失敗を見落とす（赤いテストを push した前科あり）。
   ViewModel 層の `MagiApp.ViewModels.Tests` も CI（windows-engine-check）で走る＝表示の分類（`GridDisplayMarks` など）を触ったら
   こちらも回す（エンジンだけ回して赤を push した前科あり、2026-10-30）。
