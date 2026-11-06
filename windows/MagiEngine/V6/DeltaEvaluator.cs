@@ -18,6 +18,7 @@ namespace MagiEngine.V6;
 public sealed class DeltaEvaluator
 {
     private readonly Problem _p;
+    private readonly ObjectiveWeights.SoftSet _w = ObjectiveWeights.Soft();
     private readonly int S, T, K;
     private readonly int[][] _a;
 
@@ -183,7 +184,7 @@ public sealed class DeltaEvaluator
         var hard = s / Evaluator.SCORE_HARD_UNIT;
         var raw = FamilyRaw();
         double hardW = 0.0;
-        foreach (var f in MirrorKeys.Hard) hardW += (raw.TryGetValue(f, out var v) ? v : 0L) * MirrorKeys.WeightOf(f);
+        foreach (var f in MirrorKeys.Hard) hardW += (raw.TryGetValue(f, out var v) ? v : 0L) * ObjectiveWeights.Of(f);
         var (lo, hi) = RangeRaw();
         return new[] { hard, (s - hard * Evaluator.SCORE_HARD_UNIT) + (long)hardW, raw.Values.Sum() + lo + hi };
     }
@@ -221,11 +222,11 @@ public sealed class DeltaEvaluator
     }
 
     /// <summary>SOFT の重み付き和。線形なので合計にも差分にも同じ式を使う（ScoreFrom と PreviewMove の単一ソース）。</summary>
-    private static long WeightedSoft(
+    private long WeightedSoft(
         long c1, long c2, long c41, long c42, long c41s, long c42s, long c3, long c3m, long c3mn,
         long ct, long apt, long fair, long weekly, long covO)
-        => c1 * 90 + c2 * 4 + c41 * 9 + c42 * 9 + c41s * 10 + c42s * 10 + c3 * 15 + c3m * 6 + c3mn * 25
-           + ct + apt * 4 + fair * 5 + weekly * 2 + covO * 10;
+        => c1 * _w.C1 + c2 * _w.C2 + c41 * _w.C41 + c42 * _w.C42 + c41s * _w.C41s + c42s * _w.C42s + c3 * _w.C3 + c3m * _w.C3m + c3mn * _w.C3mn
+           + ct + apt * _w.Apt + fair * _w.Fair + weekly * _w.Weekly + covO * _w.CovO;
 
     /// <summary>Preview the score after moving (i,j) -&gt; nw, stashing deltas for <see cref="Commit"/>. No mutation of totals.</summary>
     internal long PreviewMove(int i, int j, int nw)
@@ -516,8 +517,8 @@ public sealed class DeltaEvaluator
         // [統一b] UnifiedViolationChecker と同分類(SOFT)・同重み: low(lo!=0, canDo必須)=amount×120 / high=amount×25。[3.522.0] low 90→120。
         int lo = _p.RangeLo[i][k], hi = _p.RangeHi[i][k];
         long v = 0L;
-        if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) v += (long)(lo - n) * 120L;
-        if (hi != int.MaxValue && n > hi) v += (long)(n - hi) * 50L;
+        if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) v += (long)(lo - n) * _w.Low;
+        if (hi != int.MaxValue && n > hi) v += (long)(n - hi) * _w.High;
         return v;
     }
 

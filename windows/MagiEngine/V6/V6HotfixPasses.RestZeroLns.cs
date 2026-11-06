@@ -47,7 +47,7 @@ public static partial class V6HotfixPasses
         {
             var bd = UnifiedViolationChecker.Check(state, board, quantitativeRangeEval).Breakdown;
             long sum = 0;
-            foreach (var f in estFams) sum += (long)(bd.GetValueOrDefault(f) * MirrorKeys.WeightOf(f));
+            foreach (var f in estFams) sum += (long)(bd.GetValueOrDefault(f) * ObjectiveWeights.Of(f));
             return sum;
         }
         var evaluations = 0; var applied = 0;

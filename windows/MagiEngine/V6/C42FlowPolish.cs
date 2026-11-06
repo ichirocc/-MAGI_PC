@@ -38,7 +38,7 @@ internal static class C42FlowPolish
 
         bool Movable(int i, int j) => !p.WishLocked(i, j);
         // [3.522.0, Kotlin原本]
-        long DayPenalty(int k, int j, int q) => (long)p.CovUCell(k, j, q) * 10000L + (long)p.CovOCell(k, j, q) * 10L;
+        long DayPenalty(int k, int j, int q) => (long)p.CovUCell(k, j, q) * ObjectiveWeights.Soft().CovU + (long)p.CovOCell(k, j, q) * ObjectiveWeights.Soft().CovO;
 
         // [groupOf] は c42=Sgrp／c42s=Ssk を渡す（判定式は同型、群の出所だけが違う）。
         // members側をtargetシフトへ寄せる誘導を1本作る。otherCountは固定側の人数(スナップショット)、

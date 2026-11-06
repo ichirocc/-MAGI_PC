@@ -37,7 +37,7 @@ public static partial class V6HotfixPasses
 
     /// <summary>internal＝<c>AptFairPolishToleranceTest</c> から直接検証するため（Kotlin原本と同じ可視性）。</summary>
     internal static double NonFamilySoftTotal(ViolationReport rep, string excludeFamily) =>
-        MirrorKeys.Soft.Where(f => f != excludeFamily).Sum(f => rep.Breakdown.GetValueOrDefault(f, 0) * MirrorKeys.WeightOf(f));
+        MirrorKeys.Soft.Where(f => f != excludeFamily).Sum(f => rep.Breakdown.GetValueOrDefault(f, 0) * ObjectiveWeights.Of(f));
 
     /// <summary>
     /// [3.535.0, Kotlin原本 <c>AptFairPolish.toleratedBetter</c>] OFF時はbetterReport(keep-best)のまま。
@@ -150,13 +150,13 @@ public static partial class V6HotfixPasses
             {
                 var z = 0;
                 for (var l = 0; l < c.Day1; l++) if (sched[i][j + l] == c.ShiftIdx) z++;
-                if (z < c.Day2) { total++; weighted += MirrorKeys.WeightOf("c1"); }
+                if (z < c.Day2) { total++; weighted += ObjectiveWeights.Of("c1"); }
                 j++;
             }
         }
         foreach (var c in p.Cons2) // c2
         {
-            if (p.CanDo(i, c.ShiftIdx) && cnt[c.ShiftIdx] < c.Count) { total++; weighted += MirrorKeys.WeightOf("c2"); }
+            if (p.CanDo(i, c.ShiftIdx) && cnt[c.ShiftIdx] < c.Count) { total++; weighted += ObjectiveWeights.Of("c2"); }
         }
         for (var k = 0; k < p.K; k++) // low/high: 回数レンジ(不足/超過「量」を加算)
         {
@@ -166,12 +166,12 @@ public static partial class V6HotfixPasses
             if (lo != int.MinValue && lo != 0 && p.CanDo(i, k) && n < lo)
             {
                 var d = (long)(lo - n);
-                total += d; weighted += d * MirrorKeys.WeightOf("low");
+                total += d; weighted += d * ObjectiveWeights.Of("low");
             }
             if (hi != int.MaxValue && n > hi)
             {
                 var d = (long)(n - hi);
-                total += d; weighted += d * MirrorKeys.WeightOf("high");
+                total += d; weighted += d * ObjectiveWeights.Of("high");
             }
         }
         var c3nC = C3FamCount(p, sched, i, p.Cons3n, forbidden: true); // c3n は HARD
@@ -186,11 +186,11 @@ public static partial class V6HotfixPasses
                 if (p.HasExtBan && p.ExtBanned(i, j, sched[i][j])) extC++;
             }
         total += c3nC + c3C + c3mC + c3mnC + c3wC + extC;
-        weighted += c3wC * MirrorKeys.WeightOf("c3w") + extC * MirrorKeys.WeightOf("extWish") +
-            c3nC * MirrorKeys.WeightOf("c3n") +
-            c3C * MirrorKeys.WeightOf("c3") +
-            c3mC * MirrorKeys.WeightOf("c3m") +
-            c3mnC * MirrorKeys.WeightOf("c3mn");
+        weighted += c3wC * ObjectiveWeights.Of("c3w") + extC * ObjectiveWeights.Of("extWish") +
+            c3nC * ObjectiveWeights.Of("c3n") +
+            c3C * ObjectiveWeights.Of("c3") +
+            c3mC * ObjectiveWeights.Of("c3m") +
+            c3mnC * ObjectiveWeights.Of("c3mn");
         return new StaffObjective(c3nC + c3wC + extC, weighted, total);
     }
 

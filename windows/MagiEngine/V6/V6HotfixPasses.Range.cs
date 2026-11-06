@@ -277,8 +277,8 @@ public static partial class V6HotfixPasses
                 var outv = 0L;
                 var lo = p.RangeLo[i][kk];
                 var hiLim = p.RangeHi[i][kk];
-                if (lo != int.MinValue && count < lo) outv += (long)(lo - count) * 120L; // [3.522.0] low 90→120
-                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * 50L;
+                if (lo != int.MinValue && count < lo) outv += (long)(lo - count) * ObjectiveWeights.Soft().Low; // [3.522.0] low 90→120
+                if (hiLim != int.MaxValue && count > hiLim) outv += (long)(count - hiLim) * ObjectiveWeights.Soft().High;
                 return outv;
             }
 
@@ -295,7 +295,7 @@ public static partial class V6HotfixPasses
                     }
                     outv += RangePenalty(i, kk, c);
                     var apt = p.Apt[i][kk];
-                    if (apt >= 0) outv += (c >= apt ? c - apt : apt - c) * 4L; // [3.522.0] apt 1→4
+                    if (apt >= 0) outv += (c >= apt ? c - apt : apt - c) * ObjectiveWeights.Soft().Apt; // [3.522.0] apt 1→4
                 }
                 // 同品質なら短い循環を優先し、不要な大規模入替えを避ける。
                 if (newK != oldK) outv += 2L;
@@ -469,10 +469,10 @@ public static partial class V6HotfixPasses
                     }
                     var lo = p.RangeLo[i][kk];
                     var hi = p.RangeHi[i][kk];
-                    if (lo != int.MinValue && c < lo) outv += (long)(lo - c) * 120L; // [3.522.0] low 90→120
-                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * 50L;
+                    if (lo != int.MinValue && c < lo) outv += (long)(lo - c) * ObjectiveWeights.Soft().Low; // [3.522.0] low 90→120
+                    if (hi != int.MaxValue && c > hi) outv += (long)(c - hi) * ObjectiveWeights.Soft().High;
                     var a = p.Apt[i][kk];
-                    if (a >= 0) outv += Math.Abs(c - a) * 4L; // [3.522.0] apt 1→4
+                    if (a >= 0) outv += Math.Abs(c - a) * ObjectiveWeights.Soft().Apt; // [3.522.0] apt 1→4
                 }
                 if (newK != oldK) outv += 2L;
                 return outv;
@@ -480,7 +480,7 @@ public static partial class V6HotfixPasses
 
             // [3.522.0] covU 8000→10000・covO 5→10。MirrorKeys の重み階層と整合させた限界費用のため同時に変更。
             long DayPenalty(int k, int j, int q) =>
-                p.CovUCell(k, j, q) * 10000L + p.CovOCell(k, j, q) * 10L;
+                p.CovUCell(k, j, q) * ObjectiveWeights.Soft().CovU + p.CovOCell(k, j, q) * ObjectiveWeights.Soft().CovO;
 
             FlowPlan? bestPlan = null;
             var days = candidateDays.Where(d => d >= 0 && d < p.T).Distinct().ToList();

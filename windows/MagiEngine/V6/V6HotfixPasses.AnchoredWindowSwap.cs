@@ -18,8 +18,8 @@ public static partial class V6HotfixPasses
     {
         long o = 0;
         var lo = p.RangeLo[staff][shift]; var hi = p.RangeHi[staff][shift];
-        if (lo != int.MinValue && count < lo) o += (lo - count) * (long)MirrorKeys.WeightOf("low");
-        if (hi != int.MaxValue && count > hi) o += (count - hi) * (long)MirrorKeys.WeightOf("high");
+        if (lo != int.MinValue && count < lo) o += (lo - count) * (long)ObjectiveWeights.Of("low");
+        if (hi != int.MaxValue && count > hi) o += (count - hi) * (long)ObjectiveWeights.Of("high");
         var apt = p.Apt[staff][shift];
         if (apt >= 0) o += Math.Abs(count - apt);
         return o;
@@ -80,13 +80,13 @@ public static partial class V6HotfixPasses
                 var comma = key.IndexOf(',');
                 if (comma < 0 || !int.TryParse(key.AsSpan(0, comma), out var i) || i < 0 || i >= p.S) return;
                 var fam = cls.StartsWith("vio-") ? cls.Substring(4) : cls;
-                pressure[i] += Math.Max((long)MirrorKeys.WeightOf(fam), 1L);
+                pressure[i] += Math.Max((long)ObjectiveWeights.Of(fam), 1L);
             }
             foreach (var (k, c) in rep.Violations) AddPressure(k, c);
             foreach (var (k, c) in rep.CountViolations) AddPressure(k, c);
             foreach (var (fam, rows) in rep.DistLocations)
             {
-                var w = Math.Max((long)MirrorKeys.WeightOf(fam), 1L);
+                var w = Math.Max((long)ObjectiveWeights.Of(fam), 1L);
                 foreach (var r in rows) if (r.Count > 0 && r[0] >= 0 && r[0] < p.S) pressure[r[0]] += w;
             }
 

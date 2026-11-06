@@ -130,10 +130,10 @@ internal static class C1TemporalFlowPolish
                         if (kk == newK) c++;
                     }
                     int lo = p.RangeLo[i][kk]; int hi = p.RangeHi[i][kk];
-                    if (lo != int.MinValue && c < lo) outCost += (long)(lo - c) * 120L; // [3.522.0] low 90→120
-                    if (hi != int.MaxValue && c > hi) outCost += (long)(c - hi) * 50L;
+                    if (lo != int.MinValue && c < lo) outCost += (long)(lo - c) * ObjectiveWeights.Soft().Low; // [3.522.0] low 90→120
+                    if (hi != int.MaxValue && c > hi) outCost += (long)(c - hi) * ObjectiveWeights.Soft().High;
                     int a = p.Apt[i][kk];
-                    if (a >= 0) outCost += (long)Math.Abs(c - a) * 4L; // [3.522.0] apt 1→4
+                    if (a >= 0) outCost += (long)Math.Abs(c - a) * ObjectiveWeights.Soft().Apt; // [3.522.0] apt 1→4
                 }
                 if (newK != oldK) outCost += 2L;
                 return outCost;
@@ -141,7 +141,7 @@ internal static class C1TemporalFlowPolish
 
             long DayPenalty(int k, int q) =>
                 // [3.522.0] covU 8000→10000・covO 5→10（V6HotfixPasses の同種箇所と同時に変更）。
-                (long)p.CovUCell(k, j, q) * 10000L + (long)p.CovOCell(k, j, q) * 10L;
+                (long)p.CovUCell(k, j, q) * ObjectiveWeights.Soft().CovU + (long)p.CovOCell(k, j, q) * ObjectiveWeights.Soft().CovO;
 
             var staffCost = new long[p.S][];
             for (int i = 0; i < p.S; i++)

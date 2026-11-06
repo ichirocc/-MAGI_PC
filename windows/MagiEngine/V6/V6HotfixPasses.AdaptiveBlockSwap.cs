@@ -131,8 +131,8 @@ public static partial class V6HotfixPasses
             var outVal = 0L;
             var lo = p.RangeLo[staff][shift];
             var hi = p.RangeHi[staff][shift];
-            if (lo != int.MinValue && count < lo) outVal += (long)(lo - count) * (long)MirrorKeys.WeightOf("low");
-            if (hi != int.MaxValue && count > hi) outVal += (long)(count - hi) * (long)MirrorKeys.WeightOf("high");
+            if (lo != int.MinValue && count < lo) outVal += (long)(lo - count) * (long)ObjectiveWeights.Of("low");
+            if (hi != int.MaxValue && count > hi) outVal += (long)(count - hi) * (long)ObjectiveWeights.Of("high");
             var apt = p.Apt[staff][shift];
             if (apt >= 0) outVal += Math.Abs(count - apt);
             return outVal;
@@ -146,13 +146,13 @@ public static partial class V6HotfixPasses
                 var i = KotlinInterop.ToIntOrNull(key.Split(',')[0]);
                 if (i is null || i.Value < 0 || i.Value >= p.S) return;
                 var family = cls.StartsWith("vio-") ? cls[4..] : cls;
-                outArr[i.Value] += Math.Max((long)MirrorKeys.WeightOf(family), 1L);
+                outArr[i.Value] += Math.Max((long)ObjectiveWeights.Of(family), 1L);
             }
             foreach (var (key, cls) in report.Violations) Add(key, cls);
             foreach (var (key, cls) in report.CountViolations) Add(key, cls);
             foreach (var (family, rows) in report.DistLocations)
             {
-                var weight = Math.Max((long)MirrorKeys.WeightOf(family), 1L);
+                var weight = Math.Max((long)ObjectiveWeights.Of(family), 1L);
                 foreach (var row in rows)
                 {
                     if (row.Count == 0) continue;

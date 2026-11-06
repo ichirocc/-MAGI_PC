@@ -158,7 +158,7 @@ public static partial class V6HotfixPasses
             return s;
         }
 
-        private static long WeightOfClass(string cls) => Math.Max((long)MirrorKeys.WeightOf(cls.StartsWith("vio-", StringComparison.Ordinal) ? cls.Substring(4) : cls), 1L);
+        private static long WeightOfClass(string cls) => Math.Max((long)ObjectiveWeights.Of(cls.StartsWith("vio-", StringComparison.Ordinal) ? cls.Substring(4) : cls), 1L);
 
         // ---- 手の適用・巻き戻し・事前枝刈り ----
         private int[] Apply(WishMove m)

@@ -213,10 +213,10 @@ public static partial class V6NativeOptimizer
         var lo = p.RangeLo[i][k];
         var hi = p.RangeHi[i][k];
         // [3.319.0] low は担当できるシフトだけ。[3.522.0] low 90→120。
-        if (lo != int.MinValue && lo != 0 && n < lo && p.CanDo(i, k)) pen += (lo - n) * 120L;
-        if (hi != int.MaxValue && n > hi) pen += (n - hi) * 50L;
+        if (lo != int.MinValue && lo != 0 && n < lo && p.CanDo(i, k)) pen += (lo - n) * ObjectiveWeights.Soft().Low;
+        if (hi != int.MaxValue && n > hi) pen += (n - hi) * ObjectiveWeights.Soft().High;
         var t = p.Apt[i][k];
-        if (t >= 0) pen += Math.Abs(n - t) * 4L; // [3.522.0] apt 1→4
+        if (t >= 0) pen += Math.Abs(n - t) * ObjectiveWeights.Soft().Apt; // [3.522.0] apt 1→4
         return pen;
     }
 
@@ -245,7 +245,7 @@ public static partial class V6NativeOptimizer
             acc += ScheduleUtil.WeeklyDevOfBucket(b) - before;
             b[bucket]--;
         }
-        return acc * 2L; // [3.522.0] weekly 1→2
+        return acc * ObjectiveWeights.Soft().Weekly; // [3.522.0] weekly 1→2
     }
 
     /// <summary>
@@ -263,7 +263,7 @@ public static partial class V6NativeOptimizer
         counts[i][k] += delta;
         var after = p.FairDevOfBucket(g, k, x => counts[x][k], members: false).Total;
         counts[i][k] -= delta;
-        return (after - before) * 5L; // [3.522.0] fair 1→2、[3.647.0] 2→5（WeeklyMarginalAtと同型で内部適用）
+        return (after - before) * ObjectiveWeights.Soft().Fair; // [3.522.0] fair 1→2、[3.647.0] 2→5（WeeklyMarginalAtと同型で内部適用）
     }
 
     /// <summary>

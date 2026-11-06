@@ -350,8 +350,8 @@ public static partial class V6PortAnalyzer
             {
                 // c3n 自体は減るが、希望を破る代金を払うと正味では減らない＝希望が本当に効いている。
                 prefBlocked++;
-                var weighted = (after - firesBefore) * MirrorKeys.WeightOf("c3n") +
-                    prefCost * MirrorKeys.WeightOf("pref") + c3wDelta * MirrorKeys.WeightOf("c3w") - extGain * MirrorKeys.WeightOf("extWish");
+                var weighted = (after - firesBefore) * ObjectiveWeights.Of("c3n") +
+                    prefCost * ObjectiveWeights.Of("pref") + c3wDelta * ObjectiveWeights.Of("c3w") - extGain * ObjectiveWeights.Of("extWish");
                 if (prefCost > 0 && !departureHole && after + prefCost + otherHard == firesBefore && weighted < 0) scoreImproves = true;
             }
             else

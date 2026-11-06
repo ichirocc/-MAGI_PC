@@ -442,6 +442,18 @@ public sealed partial class MagiViewModel
         LogOp("I", $"設定変更: 予算 → {v}秒");
     }
 
+    /// <summary>Kotlin <c>setObjectiveMethod</c> の移植: 採点の方式（直す順番、試験）を切り替え、今の勤務表を採点し直す。保存しない。</summary>
+    public void SetObjectiveMethod(ObjectiveMethod m)
+    {
+        ObjectiveWeights.Method = m;
+        LogOp("I", $"設定変更: 直す順番 → {ObjectiveMethodLabel(m)}");
+        RefreshCheck();
+    }
+
+    public static string ObjectiveMethodLabel(ObjectiveMethod m) => m == ObjectiveMethod.Priority ? "優先順位（試験）" : "重み（今）";
+
+    public const string ObjectiveMethodNote = "優先順位: 個人の回数・期間の制約を先に、連続の希望・グループの人数を次に、適切回数や偏りは最後に直します。必ず守るものは同じです";
+
     public void SetSoftPolish(bool b)
     {
         Ui.SoftPolish = b;

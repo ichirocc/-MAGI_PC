@@ -32,7 +32,7 @@ public static class ViolationComponentRepair
             double hardW = 0, softW = 0;
             foreach (var (k, v) in report.Breakdown)
             {
-                var c = v * MirrorKeys.WeightOf(k);
+                var c = v * ObjectiveWeights.Of(k);
                 if (MirrorKeys.Hard.Contains(k)) hardW += c; else softW += c;
             }
             return new QualityVector(report.Hard, hardW, softW, report.Breakdown.GetValueOrDefault("pref"), changedCells);

@@ -832,7 +832,7 @@ internal static class V6SearchOperators
         {
             int afterVal = after.Breakdown.TryGetValue(fam, out var av) ? av : 0;
             int beforeVal = before.Breakdown.TryGetValue(fam, out var bv) ? bv : 0;
-            double d = (afterVal - beforeVal) * MirrorKeys.WeightOf(fam);
+            double d = (afterVal - beforeVal) * ObjectiveWeights.Of(fam);
             if (d > worstDelta) { worstDelta = d; worstFam = fam; }
         }
         return worstFam;

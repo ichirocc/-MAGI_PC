@@ -795,7 +795,8 @@ public static class UnifiedViolationChecker
         // [N2/⛏11 移植元] 重みは MirrorKeys.Weights を単一の真実として参照。列挙順を保持しているため
         // 加算順は Kotlin と同一＝Double 結果は不変。
         double outVal = 0.0;
-        foreach (var (key, weight) in MirrorKeys.Weights)
+        // 採点の重みは方式で切り替わる（ObjectiveWeights）。表示の優先は MirrorKeys.Weights のまま。
+        foreach (var (key, weight) in ObjectiveWeights.Table())
             outVal += (b.TryGetValue(key, out var v) ? v : 0) * weight;
         return outVal;
     }

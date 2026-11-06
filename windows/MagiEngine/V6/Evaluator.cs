@@ -29,6 +29,7 @@ public sealed class Evaluator
         (z < l ? (long)(l - z) : 0L) + (z > u ? (long)(z - u) : 0L);
 
     private readonly Problem _p;
+    private readonly ObjectiveWeights.SoftSet _w = ObjectiveWeights.Soft();
 
     public Evaluator(Problem p)
     {
@@ -74,7 +75,7 @@ public sealed class Evaluator
                 {
                     int z = 0;
                     for (int l = 0; l < d1; l++) if (a[i][j + l] == si) z++;
-                    if (z < d2) soft += 90L;
+                    if (z < d2) soft += _w.C1;
                     j++;
                 }
             }
@@ -89,7 +90,7 @@ public sealed class Evaluator
                 if (!_p.CanDo(i, c.ShiftIdx)) continue; // [監査#5] 担当不可の職員は対象外（チェッカーと同一条件）
                 int z = 0;
                 for (int j = 0; j < T; j++) if (a[i][j] == c.ShiftIdx) z++;
-                soft += (_p.QuantitativeRangeEval ? C2Amount(z, c.Count) : (z < c.Count ? 1L : 0L)) * 4L;
+                soft += (_p.QuantitativeRangeEval ? C2Amount(z, c.Count) : (z < c.Count ? 1L : 0L)) * _w.C2;
             }
         }
 
@@ -100,7 +101,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Sgrp[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 9L;
+                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * _w.C41;
             }
         }
 
@@ -115,7 +116,7 @@ public sealed class Evaluator
                     if (_p.Sgrp[i] == c.G1 && a[i][j] == c.S1) n1++;
                     if (_p.Sgrp[i] == c.G2 && a[i][j] == c.S2) n2++;
                 }
-                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 9L;
+                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * _w.C42;
             }
         }
 
@@ -127,7 +128,7 @@ public sealed class Evaluator
             {
                 int z = 0;
                 for (int i = 0; i < S; i++) if (_p.Ssk[i] == c.GroupIdx && a[i][j] == c.ShiftIdx) z++;
-                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * 10L;
+                soft += (_p.QuantitativeRangeEval ? RangeDistance(z, c.L, c.U) : (z < c.L || c.U < z ? 1L : 0L)) * _w.C41s;
             }
         }
         foreach (var c in _p.Cons42s)
@@ -140,17 +141,17 @@ public sealed class Evaluator
                     if (_p.Ssk[i] == c.G1 && a[i][j] == c.S1) n1++;
                     if (_p.Ssk[i] == c.G2 && a[i][j] == c.S2) n2++;
                 }
-                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * 10L;
+                soft += C42PairCount(c.G1 == c.G2 && c.S1 == c.S2, n1, n2) * _w.C42s;
             }
         }
 
         // ---- c3 family — [統一] UnifiedViolationChecker と同じ重み(c3=15/c3m=6/c3mn=50)を soft に適用。
         // c3n は forbidden=HARD として hard1 のまま。窓マッチは #fire 計上(後述の sub += 1)。
         // [3.522.0/HF77] c3=3→15・c3m=2→10・c3mn=12→15→30→90→50 と変遷。
-        soft += C3Check(a, _p.Cons3, forbidden: false) * 15L;
+        soft += C3Check(a, _p.Cons3, forbidden: false) * _w.C3;
         hard1 += C3Check(a, _p.Cons3n, forbidden: true);
-        soft += C3Check(a, _p.Cons3m, forbidden: false) * 6L;
-        soft += C3Check(a, _p.Cons3mn, forbidden: true) * 25L;
+        soft += C3Check(a, _p.Cons3m, forbidden: false) * _w.C3m;
+        soft += C3Check(a, _p.Cons3mn, forbidden: true) * _w.C3mn;
 
         // ---- c3w: 希望の前日に禁止（HARD, 3.542.0） ------------------------------------------
         if (_p.C3wBan != null)
@@ -205,11 +206,11 @@ public sealed class Evaluator
                 int lo = _p.RangeLo[i][k];
                 int hi = _p.RangeHi[i][k];
                 int n = ssn[i][k];
-                if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * 120L;
-                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * 50L;
+                if (lo != int.MinValue && lo != 0 && n < lo && _p.CanDo(i, k)) soft += (long)(lo - n) * _w.Low;
+                if (hi != int.MaxValue && n > hi) soft += (long)(n - hi) * _w.High;
                 // [統一apt] 適切回数(双方向目標) SOFT・L1偏差|n-t|。UnifiedViolationChecker の "apt" と一致。[3.522.0] 重み1→4。
                 int t = _p.Apt[i][k];
-                if (t >= 0) soft += Math.Abs(n - t) * 4L;
+                if (t >= 0) soft += Math.Abs(n - t) * _w.Apt;
             }
         }
 
@@ -222,7 +223,7 @@ public sealed class Evaluator
             var mem = _p.GroupMembers[g];
             if (mem.Length < 2) continue;
             foreach (var k in _p.Bucket[g])
-                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k], members: false).Total * 5L;
+                soft += _p.FairDevOfBucket(g, k, x => ssn[x][k], members: false).Total * _w.Fair;
         }
 
         // ---- weekly: 7-day-cycle shift equalization ----------------------------------------------
@@ -238,7 +239,7 @@ public sealed class Evaluator
                 int k = a[i][j];
                 if (k >= 0 && k < K) wd[k][(_p.Dow0 + j) % 7]++;
             }
-            for (int k = 0; k < K; k++) soft += ScheduleUtil.WeeklyDevOfBucket(wd[k]) * 2L;
+            for (int k = 0; k < K; k++) soft += ScheduleUtil.WeeklyDevOfBucket(wd[k]) * _w.Weekly;
         }
 
         // ---- covU / covO ------------------------------------------------------------------------
@@ -252,7 +253,7 @@ public sealed class Evaluator
                 for (int i = 0; i < S; i++) if (a[i][j] == k) dsn++;
                 covU += _p.CovUCell(k, j, dsn);
                 // [3.522.0] covO 重み5→10。MirrorKeys.Weights["covO"] と同時に変更。
-                soft += (long)_p.CovOCell(k, j, dsn) * 10L;
+                soft += (long)_p.CovOCell(k, j, dsn) * _w.CovO;
             }
         }
         hard1 += covU;

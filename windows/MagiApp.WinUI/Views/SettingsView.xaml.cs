@@ -96,6 +96,9 @@ public sealed partial class SettingsView : UserControl
             AgentAutoNote.Text = AgentText.ToggleNote;
             MembraneToggle.IsOn = MagiEngine.V6.PolishGate.MembraneCellLns;
             MembraneToggle.IsEnabled = !ui.Running;
+            ObjectiveMethodCombo.SelectedIndex = MagiEngine.V6.ObjectiveWeights.Method == MagiEngine.V6.ObjectiveMethod.Priority ? 1 : 0;
+            ObjectiveMethodCombo.IsEnabled = !ui.Running;
+            ObjectiveMethodNote.Text = MagiViewModel.ObjectiveMethodNote;
         LeftHandToggle.IsOn = ui.LeftHand;
             NativeAccelToggle.IsOn = ui.NativeAccel;
             var strengthTag = ui.SearchStrength.ToString();
@@ -162,15 +165,15 @@ public sealed partial class SettingsView : UserControl
 
     /// <summary>シフト記号の表示色。行=シフト1件、既定パレット色との差＝<c>Custom</c> が「既定に戻す」の有効/無効。</summary>
     /// <summary>
-    /// [phase9 #22] 重み表（Kotlin原本 <c>WeightTableCard</c>、3.396.0 の文言）。<see cref="MirrorKeys.Weights"/> をそのまま重い順に描く＝
+    /// [phase9 #22] 重み表（Kotlin原本 <c>WeightTableCard</c>、3.396.0 の文言）。<see cref="ObjectiveWeights.Table()"/>（選んだ方式の表）を重い順に描く＝
     /// 表示と最適化器が常に一致（複製しない）。1000 以上を「絶対に守る」、未満を「できれば守る」。英字符号（HARD/SOFT）は出さない。
-    /// 定数なので起動時に 1 回だけ組む。
+    /// 起動時と方式を切り替えたときに組む。
     /// </summary>
     private void RenderWeightTable()
     {
         static string Fmt(double w) => w == System.Math.Floor(w) ? ((long)w).ToString() : w.ToString(System.Globalization.CultureInfo.InvariantCulture);
         WeightTableHost.Children.Clear();
-        var sorted = MirrorKeys.Weights.OrderByDescending(kv => kv.Weight).ToList();
+        var sorted = ObjectiveWeights.Table().OrderByDescending(kv => kv.Weight).ToList();
         void Section(string title, IEnumerable<(string Key, double Weight)> rows, bool hard)
         {
             WeightTableHost.Children.Add(new TextBlock { Text = title, FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 0) });
@@ -691,6 +694,15 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         MagiEngine.V6.PolishGate.MembraneCellLns = MembraneToggle.IsOn;
+    }
+
+    private void OnObjectiveMethodChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || ObjectiveMethodCombo.SelectedIndex < 0) return;
+        var m = ObjectiveMethodCombo.SelectedIndex == 1 ? MagiEngine.V6.ObjectiveMethod.Priority : MagiEngine.V6.ObjectiveMethod.Weights;
+        if (m == MagiEngine.V6.ObjectiveWeights.Method) return;
+        _vm.SetObjectiveMethod(m);
+        RenderWeightTable();
     }
 
     private void OnAgentAutoToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

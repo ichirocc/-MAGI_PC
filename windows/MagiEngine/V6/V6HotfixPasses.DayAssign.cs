@@ -83,10 +83,10 @@ public static partial class V6HotfixPasses
                         // [ソフト研磨・候補生成の重み整合] proxy を真の目的関数(low=120/high=25/apt=4)へ整合。
                         //   [3.522.0] low 90→120, apt 1→4。採否は従来どおり keep-best(IsBetter)が担うため退化なし。
                         long RangePen(int x) =>
-                            (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 50L * Math.Max(0, x - hi);
+                            (lo != int.MinValue ? ObjectiveWeights.Soft().Low * Math.Max(0, lo - x) : 0L) + ObjectiveWeights.Soft().High * Math.Max(0, x - hi);
                         var cost = RangePen(x1) - RangePen(x0); // range の限界費用
                         var t = AptTarget(i, k);
-                        if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * 4L; // apt の限界費用
+                        if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * ObjectiveWeights.Soft().Apt; // apt の限界費用
                         row[c] = cost;
                     }
                 }
@@ -218,10 +218,10 @@ public static partial class V6HotfixPasses
                             var hi = EffectiveHi(p, i, k);
                             // range/apt/weekly は ApplyDayAssignmentPolish と同一の目的関数整合 proxy。[3.522.0] low/apt/weekly 90/1/1→120/4/2。
                             long RangePen(int x) =>
-                                (lo != int.MinValue ? 120L * Math.Max(0, lo - x) : 0L) + 50L * Math.Max(0, x - hi);
+                                (lo != int.MinValue ? ObjectiveWeights.Soft().Low * Math.Max(0, lo - x) : 0L) + ObjectiveWeights.Soft().High * Math.Max(0, x - hi);
                             var cost = RangePen(x1) - RangePen(x0);
                             var t = AptTarget(i, k);
-                            if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * 4L;
+                            if (t != null) cost += (Math.Abs(x1 - t.Value) - Math.Abs(x0 - t.Value)) * ObjectiveWeights.Soft().Apt;
                             // [3.345.0] weekly 限界費用: 当日を k にしたときの、職員 i の「シフト k」の曜日
                             //   バケットの L1 偏差変化。当日の元シフトを失う項は行(i)ごとの定数＝
                             //   割当の argmin を変えないため省く（列ごとに効く項だけを費用に入れる）。
@@ -232,7 +232,7 @@ public static partial class V6HotfixPasses
                             b[wdj] += 1;
                             var devAfter = ScheduleUtil.WeeklyDevOfBucket(b);
                             b[wdj] += had - 1; // 復元
-                            cost += (devAfter - devBefore) * 2L;
+                            cost += (devAfter - devBefore) * ObjectiveWeights.Soft().Weekly;
                             row[c] = cost;
                         }
                     }

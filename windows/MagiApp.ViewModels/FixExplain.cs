@@ -37,7 +37,7 @@ public static class FixExplain
     /// <summary>族の重みつきの差（後 − 前）。正＝後のほうが重い。</summary>
     private static Dictionary<string, double> WeightedDelta(ViolationReport before, ViolationReport after) =>
         before.Breakdown.Keys.Concat(after.Breakdown.Keys).Distinct().ToDictionary(k => k,
-            k => (after.Breakdown.GetValueOrDefault(k, 0) - before.Breakdown.GetValueOrDefault(k, 0)) * MirrorKeys.WeightOf(k));
+            k => (after.Breakdown.GetValueOrDefault(k, 0) - before.Breakdown.GetValueOrDefault(k, 0)) * ObjectiveWeights.Of(k));
 
     /// <summary>違反の鍵が入り口の範囲の中か（個人の回数＝その職員、日の人員＝その日／まとめて見る日々）。</summary>
     public static bool KeyInFrame(FixTarget t, ViolationKey k)
@@ -78,7 +78,7 @@ public static class FixExplain
         var groups = extras.Count <= 3 ? extras.Select(x => (IReadOnlyList<FixCell>)new[] { x }).ToList()
             : extras.Take(2).Select(x => (IReadOnlyList<FixCell>)new[] { x }).Append(extras.Skip(2).ToList()).ToList();
         var incidentalNotes = new List<string>();
-        double W(ViolationKey k) => MirrorKeys.WeightOf(k.Family);
+        double W(ViolationKey k) => ObjectiveWeights.Of(k.Family);
         var reasons = groups.Select(g =>
         {
             var without = UnifiedViolationChecker.Check(state, Apply(sug.Ops.Where(o => !g.Contains(o))));
@@ -143,7 +143,7 @@ public static class FixExplain
     public static IReadOnlyList<string> HardUnchangedLines(FixSuggestion s, bool hardRemains)
     {
         if (!hardRemains || s.DeltaHard != 0) return Array.Empty<string>();
-        var weighted = s.Diff.Sum(d => d.Delta * MirrorKeys.WeightOf(d.Family));
+        var weighted = s.Diff.Sum(d => d.Delta * ObjectiveWeights.Of(d.Family));
         var outList = new List<string> { "必須違反は変わりません（要調整だけが変わります）" };
         if (s.DeltaTotal == 0 && weighted < 0) outList.Add("件数は同じで、重い要調整が減ります");
         return outList;

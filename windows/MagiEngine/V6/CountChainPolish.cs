@@ -85,11 +85,11 @@ internal static class CountChainPolish
                     int c = counts[i][k];
                     int hi = p.RangeHi[i][k];
                     int apt = p.Apt[i][k];
-                    if (hi != int.MaxValue && c > hi) outList.Add(new Target(i, k, c - hi, MirrorKeys.WeightOf("high") * (c - hi)));
-                    else if (apt >= 0 && c > apt) outList.Add(new Target(i, k, c - apt, MirrorKeys.WeightOf("apt") * (c - apt)));
+                    if (hi != int.MaxValue && c > hi) outList.Add(new Target(i, k, c - hi, ObjectiveWeights.Of("high") * (c - hi)));
+                    else if (apt >= 0 && c > apt) outList.Add(new Target(i, k, c - apt, ObjectiveWeights.Of("apt") * (c - apt)));
                 }
             // 人員過剰(covO)セル: 過剰の日にそのシフトを持つ人（非希望）ごとに起点を立てる。
-            double wCovO = MirrorKeys.WeightOf("covO");
+            double wCovO = ObjectiveWeights.Of("covO");
             for (int j = 0; j < p.T; j++)
                 for (int k = 0; k < p.K; k++)
                 {
@@ -102,7 +102,7 @@ internal static class CountChainPolish
             return outList.OrderByDescending(t => t.Weight).Take(cfg.MaxTargets).ToList();
         }
 
-        double wLow = MirrorKeys.WeightOf("low"), wHigh = MirrorKeys.WeightOf("high"), wApt = MirrorKeys.WeightOf("apt");
+        double wLow = ObjectiveWeights.Of("low"), wHigh = ObjectiveWeights.Of("high"), wApt = ObjectiveWeights.Of("apt");
         /// (s,k) の回数が c のときの回数族(low/high/apt)の重み付き罰則。連鎖の途中経過を採点する「回数の負債」の単位。
         double Pen(int s, int k, int c)
         {
@@ -113,7 +113,7 @@ internal static class CountChainPolish
             return v;
         }
 
-        double wC1 = MirrorKeys.WeightOf("c1"), wC3 = MirrorKeys.WeightOf("c3"), wC3m = MirrorKeys.WeightOf("c3m"), wC3mn = MirrorKeys.WeightOf("c3mn");
+        double wC1 = ObjectiveWeights.Of("c1"), wC3 = ObjectiveWeights.Of("c3"), wC3m = ObjectiveWeights.Of("c3m"), wC3mn = ObjectiveWeights.Of("c3mn");
         /// 職員 s の行だけで決まる連続系(c1/c3/c3m/c3mn)の重み付き罰則。ViolationChecker と同じ数え方（窓・run-deficit）。
         double SeqPenRow(int s, int[] row)
         {
@@ -185,7 +185,7 @@ internal static class CountChainPolish
                 double d = 0.0;
                 foreach (var (kk, v) in delta) if (v != 0) d += EntryDebt(kk / p.K, kk % p.K, v);
                 for (int s = 0; s < p.S; s++) d += seqCur[s] - seqBase[s];
-                if (target.Day >= 0 && cur[target.Staff][target.Day] != target.Shift) d -= MirrorKeys.WeightOf("covO");
+                if (target.Day >= 0 && cur[target.Staff][target.Day] != target.Shift) d -= ObjectiveWeights.Of("covO");
                 return d;
             }
             /// 次に直す (s,k)＝負債が最大の項。起点がまだ動いていなければ起点。

@@ -77,6 +77,14 @@
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="違反の多い職員と同じグループの 5 名を全期間まとめて組み直し、良くなったときだけ採ります（膜の細胞 LNS、既定 ON・最長 8 秒）" />
                     </StackPanel>
+                    <!-- [Android 3.727.37] 直す順番（ObjectiveWeights.Method、既定＝重み）。保存しない・実行中は操作不可。 -->
+                    <StackPanel Spacing="2">
+                        <ComboBox x:Name="ObjectiveMethodCombo" Header="直す順番" SelectionChanged="OnObjectiveMethodChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="重み（今）" />
+                            <ComboBoxItem Content="優先順位（試験）" />
+                        </ComboBox>
+                        <TextBlock x:Name="ObjectiveMethodNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
+                    </StackPanel>
                     <!-- ネイティブ加速はこの移植では常に対象外（C++加速層が無い）。設定データの往復互換のため表示専用で保持。 -->
                     <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
                                   OnContent="ON" OffContent="OFF" IsEnabled="False" />

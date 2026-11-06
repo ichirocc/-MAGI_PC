@@ -118,10 +118,10 @@ internal static class C1EjectionChainPolish
         var raw = de.FamilyRaw();
         var outArr = new long[Families.Length + 2];
         for (var idx = 0; idx < Families.Length; idx++)
-            outArr[idx] = (long)((raw.TryGetValue(Families[idx], out var v) ? v : 0L) * MirrorKeys.WeightOf(Families[idx]));
+            outArr[idx] = (long)((raw.TryGetValue(Families[idx], out var v) ? v : 0L) * ObjectiveWeights.Of(Families[idx]));
         var (lo, hi) = de.RangeRaw();
-        outArr[Families.Length] = (long)(lo * MirrorKeys.WeightOf("low"));
-        outArr[Families.Length + 1] = (long)(hi * MirrorKeys.WeightOf("high"));
+        outArr[Families.Length] = (long)(lo * ObjectiveWeights.Of("low"));
+        outArr[Families.Length + 1] = (long)(hi * ObjectiveWeights.Of("high"));
         return outArr;
     }
 
@@ -297,7 +297,7 @@ internal static class C1EjectionChainPolish
             }
             var orderedLists = lists
                 .OrderBy(l => MirrorKeys.Hard.Contains(l.Fam) ? 0 : 1)
-                .ThenBy(l => -MirrorKeys.WeightOf(l.Fam))
+                .ThenBy(l => -ObjectiveWeights.Of(l.Fam))
                 .ThenBy(l => l.Fam, StringComparer.Ordinal)
                 .ToList();
             var merged = new List<Seed>();
