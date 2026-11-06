@@ -32,6 +32,25 @@ public class MagiViewModelEditingTest
     // AllowedShiftsFor / GetSetupCounts / WishOutOfScopeCount
     // ===================================================================
 
+    /// <summary>Kotlin <c>setObjectiveMethod</c> の実行中ガード: 背景の最適化が走っている間は方式を変えない（採否が 2 つの重みで混ざる）。</summary>
+    [Fact]
+    public void SetObjectiveMethodIsRejectedWhileOptimizing()
+    {
+        var vm = new MagiViewModel();
+        OptimizationRepository.SetRunning(true);
+        try
+        {
+            vm.SetObjectiveMethod(ObjectiveMethod.Priority);
+            Assert.Equal(ObjectiveMethod.Weights, ObjectiveWeights.Method);
+            Assert.True(vm.Ui.MessageIsError);
+        }
+        finally
+        {
+            OptimizationRepository.SetRunning(false);
+            ObjectiveWeights.Method = ObjectiveMethod.Weights;
+        }
+    }
+
     [Fact]
     public void RestShiftIndexResolvesTheRestShiftAndDefaultsToSentinelWhenUnloaded()
     {

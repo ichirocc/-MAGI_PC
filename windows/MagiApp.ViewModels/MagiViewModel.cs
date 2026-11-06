@@ -445,7 +445,19 @@ public sealed partial class MagiViewModel
     /// <summary>Kotlin <c>setObjectiveMethod</c> の移植: 採点の方式（直す順番、試験）を切り替え、今の勤務表を採点し直す。保存しない。</summary>
     public void SetObjectiveMethod(ObjectiveMethod m)
     {
+        if (m == ObjectiveWeights.Method) return;
+        // 設定は実行中も受けるが、方式はチェッカーが毎回読む＝走っている最適化の採否が 2 つの重みで混ざる。
+        if (OptimizeInFlight())
+        {
+            Ui.MessageIsError = true;
+            Ui.Message = "実行中は直す順番を変えられません。終わってから、もう一度お試しください";
+            return;
+        }
         ObjectiveWeights.Method = m;
+        // 改善案は前の方式の点数で並べた差分、他の案の「悪くなる」も前の方式の比べ＝方式と一緒に外す・比べ直す。
+        _fixCts?.Cancel();
+        ClearFixState();
+        RecheckAlternativesForMethod();
         LogOp("I", $"設定変更: 直す順番 → {ObjectiveMethodLabel(m)}");
         RefreshCheck();
     }

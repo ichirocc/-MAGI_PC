@@ -185,6 +185,14 @@ public sealed partial class MagiViewModel
     }
 
     private IReadOnlyList<int[][]> _alternativeScheds = System.Array.Empty<int[][]>();
+
+    /// <summary>Kotlin <c>setObjectiveMethod</c> の移植: 今の盤面・設定で作った案だけ、新しい方式で比べ直す。</summary>
+    private void RecheckAlternativesForMethod()
+    {
+        if (_state is not { } st || _currentSchedule is not { } sc || _alternativeScheds.Count == 0) return;
+        if (_altBoardKey != BoardKey(sc) || _altStateKey != StateKey(st)) return;
+        _ = CaptureAlternatives(_alternativeScheds);
+    }
     /// <summary>[Android 3.529.0] 案を計算した（適用後は適用した）盤面/設定の指紋。0=未計算。</summary>
     private long _altBoardKey;
     private long _altStateKey;
