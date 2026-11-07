@@ -25,6 +25,8 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // 直す順番のアプリの既定は優先順位（Android 3.727.40）。エンジン単体の既定（重み）とテストの基準は変えない。
+        MagiEngine.V6.ObjectiveWeights.Method = MagiEngine.V6.ObjectiveMethod.Priority;
         // XAML ループ内の未処理例外もログへ残す（無言で落とさない）。
         UnhandledException += (_, e) =>
         {

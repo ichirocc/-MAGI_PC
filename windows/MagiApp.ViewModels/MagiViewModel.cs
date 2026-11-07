@@ -462,9 +462,9 @@ public sealed partial class MagiViewModel
         RefreshCheck();
     }
 
-    public static string ObjectiveMethodLabel(ObjectiveMethod m) => m == ObjectiveMethod.Priority ? "優先順位（試験）" : "重み（今）";
+    public static string ObjectiveMethodLabel(ObjectiveMethod m) => m == ObjectiveMethod.Priority ? "優先順位" : "重み（従来）";
 
-    public const string ObjectiveMethodNote = "優先順位: 個人の回数・期間の制約を先に、連続の希望・グループの人数を次に、適切回数や偏りは最後に直します。必ず守るものは同じです";
+    public const string ObjectiveMethodNote = "優先順位（既定）: 個人の回数・期間の制約を先に、連続の希望・グループの人数を次に、適切回数や偏りは最後に直します。必ず守るものは同じです。重み（従来）は前の版と同じ直し方です";
 
     public void SetSoftPolish(bool b)
     {
