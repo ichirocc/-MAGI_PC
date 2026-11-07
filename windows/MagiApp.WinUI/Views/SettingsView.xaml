@@ -77,6 +77,32 @@
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="違反の多い職員と同じグループの 5 名を全期間まとめて組み直し、良くなったときだけ採ります（膜の細胞 LNS、既定 ON・最長 8 秒）" />
                     </StackPanel>
+                    <!-- [Android 3.656.0〜3.659.0・3.727.22 同期] 玉突きで直す（C# はパイプラインだけ）・他の案を手がかりに仕上げる。保存しない・実行中は操作不可。 -->
+                    <StackPanel Spacing="2">
+                        <ComboBox x:Name="EjectionChainCombo" Header="玉突きで直す（月全体）" SelectionChanged="OnEjectionChainChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="しない" />
+                            <ComboBoxItem Content="見込みのある所だけ（既定）" />
+                        </ComboBox>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="浅く試して直せた所だけを深く探します" />
+                        <ToggleSwitch x:Name="EjectionHardLegToggle" Header="必須の違反からも始める" OnContent="ON" OffContent="OFF" Toggled="OnEjectionHardLegToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="人員不足など必須の違反からも玉突きを試します" />
+                        <ComboBox x:Name="EjectionScopeCombo" Header="2手目以降を探す範囲" SelectionChanged="OnEjectionScopeChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="月全体" />
+                            <ComboBoxItem Content="必須は月全体・他は前後7日（既定）" />
+                        </ComboBox>
+                        <ComboBox x:Name="EjectionSecondsCombo" Header="1回あたりの上限時間（残り時間の半分を超えません）" SelectionChanged="OnEjectionSecondsChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="3秒" />
+                            <ComboBoxItem Content="6秒" />
+                            <ComboBoxItem Content="10秒（既定）" />
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="SeesawRelinkToggle" Header="他の案を手がかりに仕上げる" OnContent="ON" OffContent="OFF" Toggled="OnSeesawRelinkToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="仕上げのあと、他の案へ向けて少しずつ入れ替え、良くなれば採ります。どこかの項目が今より少ない勤務表は「他の案」に残します（最大 3 秒）" />
+                    </StackPanel>
                     <!-- [Android 3.727.41] 画面の無かった探索の切り替え（PolishGate、既定値は不変）。保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="FloorShortStallToggle" Header="必須が下限に届いたら早めに終える" OnContent="ON" OffContent="OFF" Toggled="OnFloorShortStallToggled" />

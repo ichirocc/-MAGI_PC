@@ -96,6 +96,17 @@ public sealed partial class SettingsView : UserControl
             AgentAutoNote.Text = AgentText.ToggleNote;
             MembraneToggle.IsOn = MagiEngine.V6.PolishGate.MembraneCellLns;
             MembraneToggle.IsEnabled = !ui.Running;
+            var chainOn = MagiViewModel.EjectionChainOn;
+            EjectionChainCombo.SelectedIndex = chainOn ? 1 : 0;
+            EjectionChainCombo.IsEnabled = !ui.Running;
+            EjectionHardLegToggle.IsOn = MagiEngine.V6.PolishGate.EjectionPipelineHardLeg;
+            EjectionHardLegToggle.IsEnabled = !ui.Running && chainOn;
+            EjectionScopeCombo.SelectedIndex = MagiViewModel.EjectionScopeByKind ? 1 : 0;
+            EjectionScopeCombo.IsEnabled = !ui.Running && chainOn;
+            EjectionSecondsCombo.SelectedIndex = System.Array.IndexOf(EjectionSeconds, (int)(MagiEngine.V6.PolishGate.EjectionChainMaxMillis / 1000L));
+            EjectionSecondsCombo.IsEnabled = !ui.Running && chainOn;
+            SeesawRelinkToggle.IsOn = MagiEngine.V6.PolishGate.SeesawRelink;
+            SeesawRelinkToggle.IsEnabled = !ui.Running;
             FloorShortStallToggle.IsOn = MagiEngine.V6.PolishGate.FloorShortStall;
             FloorShortStallToggle.IsEnabled = !ui.Running;
             C3nWallDeepCheckToggle.IsOn = MagiEngine.V6.PolishGate.C3nWallDeepCheck;
@@ -705,6 +716,41 @@ public sealed partial class SettingsView : UserControl
     }
 
     private static readonly double[] NormalStallFractions = { 0.5, 0.7, 0.9 };
+    private static readonly int[] EjectionSeconds = { 3, 6, 10 };
+
+    private void OnEjectionChainChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || EjectionChainCombo.SelectedIndex < 0) return;
+        var on = EjectionChainCombo.SelectedIndex == 1;
+        if (on == MagiViewModel.EjectionChainOn) return;
+        _vm.SetEjectionChain(on);
+        EjectionHardLegToggle.IsEnabled = on; EjectionScopeCombo.IsEnabled = on; EjectionSecondsCombo.IsEnabled = on;
+    }
+
+    private void OnEjectionHardLegToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.EjectionPipelineHardLeg = EjectionHardLegToggle.IsOn;
+    }
+
+    private void OnEjectionScopeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || EjectionScopeCombo.SelectedIndex < 0) return;
+        var byKind = EjectionScopeCombo.SelectedIndex == 1;
+        if (byKind != MagiViewModel.EjectionScopeByKind) _vm.SetEjectionScope(byKind);
+    }
+
+    private void OnEjectionSecondsChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || EjectionSecondsCombo.SelectedIndex < 0) return;
+        MagiEngine.V6.PolishGate.EjectionChainMaxMillis = EjectionSeconds[EjectionSecondsCombo.SelectedIndex] * 1000L;
+    }
+
+    private void OnSeesawRelinkToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.SeesawRelink = SeesawRelinkToggle.IsOn;
+    }
 
     private void OnFloorShortStallToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {

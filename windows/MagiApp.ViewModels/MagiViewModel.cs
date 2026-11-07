@@ -466,6 +466,25 @@ public sealed partial class MagiViewModel
 
     public const string ObjectiveMethodNote = "優先順位（既定）: 個人の回数・期間の制約を先に、連続の希望・グループの人数を次に、適切回数や偏りは最後に直します。必ず守るものは同じです。重み（従来）は前の版と同じ直し方です";
 
+    /// <summary>Kotlin <c>setEjectionChain</c> の移植（C# の玉突きはパイプラインだけ＝「しない」「見込みのある所だけ」の 2 択）。保存しない。</summary>
+    public static bool EjectionChainOn => PolishGate.EjectionPipelineFocus != EjectionChainPipeline.Focus.OFF;
+
+    public void SetEjectionChain(bool on)
+    {
+        PolishGate.EjectionPipelineFocus = on ? EjectionChainPipeline.Focus.BOTH : EjectionChainPipeline.Focus.OFF;
+        LogOp("I", $"設定変更: 玉突きで直す → {(on ? "見込みのある所だけ" : "しない")}");
+    }
+
+    /// <summary>Kotlin <c>EjectionChainScope</c>: true＝必須は月全体・他は前後 7 日（既定）、false＝月全体。</summary>
+    public static bool EjectionScopeByKind => C1EjectionChainPolish.DefaultHoleFocus && C1EjectionChainPolish.DefaultHoleSoftOnly;
+
+    public void SetEjectionScope(bool byKind)
+    {
+        C1EjectionChainPolish.DefaultHoleFocus = byKind;
+        C1EjectionChainPolish.DefaultHoleSoftOnly = byKind;
+        LogOp("I", $"設定変更: 玉突きで探す範囲 → {(byKind ? "必須は月全体・他は前後7日" : "月全体")}");
+    }
+
     public void SetSoftPolish(bool b)
     {
         Ui.SoftPolish = b;
