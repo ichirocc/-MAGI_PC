@@ -257,9 +257,9 @@ public static partial class V6PortAnalyzer
         int i, int j, int cur)
     {
         var cell = DiagnoseForbiddenCellMoves(state, p, norm, cov, i, j, cur);
-        // 希望固定の徹底（WishPinStrict）の間、探索・研磨は希望どおりのセルを動かさない。崩せる手が見つかっても
+        // 希望固定の徹底（規則 A）により、探索・研磨は希望どおりのセルを動かさない。崩せる手が見つかっても
         //   それは希望を変える手＝利用者の操作なので、「探索未到達」に見せず希望固定として返す。
-        var wishHeld = PolishGate.WishPinStrict && p.WishLocked(i, j) && p.LockTo(i, j) == cur;
+        var wishHeld = p.WishLocked(i, j) && p.LockTo(i, j) == cur;
         return wishHeld && cell.Escape is ForbiddenCellEscape.Free or ForbiddenCellEscape.Chain or ForbiddenCellEscape.Adjacent
             ? cell with
             {

@@ -68,22 +68,21 @@ public static class ScheduleUtil
 
     /// <summary>[希望固定の徹底] 規則 A: 最適化器がセル (i,j) を <paramref name="cur"/> から <paramref name="next"/> へ変えてよいか。希望固定セルは「希望へ」か「今のまま」だけ
     /// ＝希望どおりのセルは動かさず、未反映のセル（希望と違う値）は希望へ戻すのだけ可で、希望でも今の値でもない値へは動かさない。
-    /// <paramref name="strict"/> 省略時は <see cref="PolishGate.WishPinStrict"/>、false は旧挙動＝希望は常に可。[#41] 手動固定はフラグによらず「固定の値へ」か「今のまま」だけ。</summary>
-    public static bool WishMoveAllowed(this Problem p, int i, int j, int cur, int next, bool? strict = null)
+    /// [#41] 手動固定は「固定の値へ」か「今のまま」だけ。</summary>
+    public static bool WishMoveAllowed(this Problem p, int i, int j, int cur, int next)
     {
         int pv = p.Pin[i][j];
         if (pv >= 0) return next == pv || next == cur;
-        return !(strict ?? PolishGate.WishPinStrict) || !p.WishFixed(i, j) || next == p.Wish[i][j] || next == cur;
+        return !p.WishFixed(i, j) || next == p.Wish[i][j] || next == cur;
     }
 
-    /// <summary>[希望固定の徹底] 盤面単位の規則 A: <paramref name="cand"/> の希望固定セルはどれも「希望どおり」か「<paramref name="baseSched"/> と同じ値」。[#41] 手動固定は常に同じ判定
-    /// （strict=false でも見る）。盤面ごと採る経路の採否に使う（WishPinStrict か手動固定があるときだけ呼ぶ）。</summary>
-    public static bool KeepsWishPins(this Problem p, int[][] baseSched, int[][] cand, bool strict = true)
+    /// <summary>[希望固定の徹底] 盤面単位の規則 A: <paramref name="cand"/> の希望固定セルはどれも「希望どおり」か「<paramref name="baseSched"/> と同じ値」。[#41] 手動固定も同じ判定。
+    /// 盤面ごと採る経路の採否に使う。</summary>
+    public static bool KeepsWishPins(this Problem p, int[][] baseSched, int[][] cand)
     {
-        if (!strict && !p.HasPins) return true;
         for (var i = 0; i < p.S; i++)
             for (var j = 0; j < p.T; j++)
-                if (!p.WishMoveAllowed(i, j, baseSched[i][j], cand[i][j], strict)) return false;
+                if (!p.WishMoveAllowed(i, j, baseSched[i][j], cand[i][j])) return false;
         return true;
     }
 

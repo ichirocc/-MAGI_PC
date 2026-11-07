@@ -11,7 +11,7 @@ namespace MagiEngine.V6;
 ///
 /// Bridge schedules are never returned directly. Every adopted schedule is re-evaluated by the
 /// official checker, must improve HARD -&gt; weightedScore -&gt; total, must not regress exact pins, and
-/// must not break a wish the root keeps (<see cref="PolishGate.WishPinStrict"/>).
+/// must not break a wish the root keeps (rule A, <see cref="ScheduleUtil.KeepsWishPins"/>).
 /// </summary>
 internal static class EliteIntegrationPolish
 {
@@ -53,11 +53,9 @@ internal static class EliteIntegrationPolish
         Func<bool> shouldStop,
         long deadlineMs,
         Config? config = null,
-        bool? wishPinStrict = null,
         bool quantitativeRangeEval = false)
     {
         config ??= new Config();
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var root = rootSchedule.Copy2D();
         var rootReport = UnifiedViolationChecker.Check(state, root, quantitativeRangeEval);
@@ -100,7 +98,7 @@ internal static class EliteIntegrationPolish
         {
             if (candidate.Bridge || Stopped(shouldStop, deadlineMs)) continue;
             var checkedReport = UnifiedViolationChecker.Check(state, candidate.Schedule, quantitativeRangeEval);
-            if (Better(checkedReport, bestReport) && PinsHold(p, root, candidate.Schedule, strict))
+            if (Better(checkedReport, bestReport) && PinsHold(p, root, candidate.Schedule))
             {
                 bestSchedule = candidate.Schedule.Copy2D();
                 bestReport = checkedReport;
@@ -123,7 +121,7 @@ internal static class EliteIntegrationPolish
                     if (Stopped(shouldStop, deadlineMs)) break;
                     relinkPaths++;
                     var improved = RelinkOnePath(
-                        state, p, root, source, target, variant, shouldStop, deadlineMs, bestReport, strict, quantitativeRangeEval);
+                        state, p, root, source, target, variant, shouldStop, deadlineMs, bestReport, quantitativeRangeEval);
                     if (improved != null && Better(improved.Value.Report, bestReport))
                     {
                         bestSchedule = improved.Value.Schedule;
@@ -150,7 +148,7 @@ internal static class EliteIntegrationPolish
                 state, p, root, bestSchedule, bestReport,
                 quantitativeRangeEval: quantitativeRangeEval,
                 group: group.Select(idx => fusionCandidates[idx]).ToList(),
-                shouldStop: shouldStop, deadlineMs: deadlineMs, config: config, wishPinStrict: strict);
+                shouldStop: shouldStop, deadlineMs: deadlineMs, config: config);
             if (improved != null && Better(improved.Value.Report, bestReport))
             {
                 bestSchedule = improved.Value.Schedule;
@@ -160,7 +158,7 @@ internal static class EliteIntegrationPolish
         }
 
         var finalChecked = UnifiedViolationChecker.Check(state, bestSchedule, quantitativeRangeEval);
-        var valid = Better(finalChecked, rootReport) && PinsHold(p, root, bestSchedule, strict);
+        var valid = Better(finalChecked, rootReport) && PinsHold(p, root, bestSchedule);
         var chosen = valid ? bestSchedule.Copy2D() : root.Copy2D();
         var chosenReport = valid ? finalChecked : rootReport;
         var log = new MirrorLog(
@@ -189,7 +187,6 @@ internal static class EliteIntegrationPolish
         Func<bool> shouldStop,
         long deadlineMs,
         ViolationReport incumbentReport,
-        bool wishPinStrict,
         bool quantitativeRangeEval)
     {
         var current = source.Schedule.Copy2D();
@@ -232,7 +229,7 @@ internal static class EliteIntegrationPolish
             if (!p.MayPlace(i, k) || p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない
             current[i][j] = k;
             var report = UnifiedViolationChecker.Check(state, current, quantitativeRangeEval);
-            if (Better(report, bestReport) && PinsHold(p, rootSchedule, current, wishPinStrict))
+            if (Better(report, bestReport) && PinsHold(p, rootSchedule, current))
             {
                 bestSchedule = current.Copy2D();
                 bestReport = report;
@@ -251,8 +248,7 @@ internal static class EliteIntegrationPolish
         List<Candidate> group,
         Func<bool> shouldStop,
         long deadlineMs,
-        Config config,
-        bool wishPinStrict)
+        Config config)
     {
         if (group.Count < 2) return null;
 
@@ -339,7 +335,7 @@ internal static class EliteIntegrationPolish
                     if (!WithinDebt(report, currentBestReport, config)) continue;
                     var child = new BeamNode(schedule, report, changed);
                     next.Add(child);
-                    if (Better(report, bestReport) && PinsHold(p, rootSchedule, schedule, wishPinStrict))
+                    if (Better(report, bestReport) && PinsHold(p, rootSchedule, schedule))
                     {
                         bestSchedule = schedule.Copy2D();
                         bestReport = report;
@@ -360,8 +356,8 @@ internal static class EliteIntegrationPolish
     /// <c>WishLocked</c> 判定だけでは、端点の採用と崩れたエリートを起点にした relink から希望の崩れが持ち込まれる。
     /// 拡張希望の禁止も同じ理由で root との差分セルを判定する（<see cref="ScheduleUtil.KeepsExtBan"/>）。
     /// </summary>
-    private static bool PinsHold(Problem p, int[][] root, int[][] s, bool wishPinStrict) =>
-        !V6SearchOperators.ExactPinRegression(p, root, s) && p.KeepsWishPins(root, s, wishPinStrict) && p.KeepsExtBan(root, s);
+    private static bool PinsHold(Problem p, int[][] root, int[][] s) =>
+        !V6SearchOperators.ExactPinRegression(p, root, s) && p.KeepsWishPins(root, s) && p.KeepsExtBan(root, s);
 
     /// <summary>
     /// ビーム中間ノードの許容幅。<paramref name="baseline"/> は**呼出時点の現在最良**（<see cref="FuseGroup"/>の

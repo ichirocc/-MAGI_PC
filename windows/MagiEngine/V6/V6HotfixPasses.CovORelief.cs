@@ -22,10 +22,9 @@ public static partial class V6HotfixPasses
     /// </summary>
     public static CovOReliefResult ApplyCovOReliefPolish(
         MagiState state, int[][] schedule, int maxMoves = 64, int maxEvaluations = 3_000, Func<bool>? shouldStop = null,
-        bool? wishPinStrict = null, bool quantitativeRangeEval = false)
+        bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = new Problem(state, quantitativeRangeEval);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var before = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
@@ -68,7 +67,7 @@ public static partial class V6HotfixPasses
                     foreach (var m in p.AllowedShiftsForStaff(i))
                     {
                         if (m == k || p.ExtBanned(i, j, m) || p.MakesForbiddenRun(work, i, j, m)) continue;
-                        if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
+                        if (!p.WishMoveAllowed(i, j, k, m)) continue;   // 未反映の希望固定セルは希望へだけ
                         if (p.CovOCell(m, j, cov[j][m] + 1) > p.CovOCell(m, j, cov[j][m])) continue;   // 受け皿なし
                         if (evaluations >= maxEvaluations) break;
                         tried = true; evaluations++;

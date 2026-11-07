@@ -229,7 +229,7 @@ public sealed class SaOptimizer
         //   却下するが、手の35〜36%がその手に費やされていた（実測）。
         //   例外: 希望どうしの衝突（V6SanityPort.WishSelfConflicts）のセルでは c3n→pref が HARD 件数
         //   不変＝soft の差だけで決まり、却下されるとは限らない。近傍はそれでも触らない（方針: 最適化器は
-        //   希望を崩さない。どれを取り消すかは利用者が S5 で選ぶ＝PolishGate.WishPinStrict）。
+        //   希望を崩さない。どれを取り消すかは利用者が S5 で選ぶ＝規則 A）。
         //   入口の hf67HardRepair が実現可能な希望を先に盤面へ入れるので、触らなければ正しいまま残る。
         bool Locked(int i, int j) => _problem.WishLocked(i, j);
         void OpSingle()

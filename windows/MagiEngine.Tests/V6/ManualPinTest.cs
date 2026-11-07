@@ -38,23 +38,16 @@ public class ManualPinTest
     }
 
     [Fact]
-    public async Task OptimizeKeepsPinnedValuesAcrossFlagsAndAlgorithms()
+    public async Task OptimizeKeepsPinnedValuesAcrossAlgorithms()
     {
         var f = Build();
-        var original = PolishGate.WishPinStrict;
-        try
+        foreach (var algo in new[] { V6Algorithm.V5, V6Algorithm.Alns })
         {
-            foreach (var strict in new[] { true, false })
-                foreach (var algo in new[] { V6Algorithm.V5, V6Algorithm.Alns })
-                {
-                    PolishGate.WishPinStrict = strict;
-                    var res = await V6FinalPort.HandleOptimize(f.St, secondsRaw: 2, schedule: f.Board.Copy2D(), workers: 1,
-                        requestedAlgorithm: algo, allowImpossible: true, seed: 11L);
-                    AssertPinsHeld(f.St, res.Schedule);
-                    Assert.NotEqual(new Problem(f.St).Wish[f.Conflict.I][f.Conflict.J], res.Schedule[f.Conflict.I][f.Conflict.J]);
-                }
+            var res = await V6FinalPort.HandleOptimize(f.St, secondsRaw: 2, schedule: f.Board.Copy2D(), workers: 1,
+                requestedAlgorithm: algo, allowImpossible: true, seed: 11L);
+            AssertPinsHeld(f.St, res.Schedule);
+            Assert.NotEqual(new Problem(f.St).Wish[f.Conflict.I][f.Conflict.J], res.Schedule[f.Conflict.I][f.Conflict.J]); // 手動固定は希望へ戻さない
         }
-        finally { PolishGate.WishPinStrict = original; }
     }
 
     [Fact]
@@ -93,24 +86,23 @@ public class ManualPinTest
         var cur = f.Board[ci][cj];
         Assert.True(p.WishLocked(ci, cj));
         Assert.Equal(cur, p.LockTo(ci, cj));
-        Assert.False(p.WishMoveAllowed(ci, cj, cur, p.Wish[ci][cj], strict: true));
-        Assert.False(p.WishMoveAllowed(ci, cj, cur, p.Wish[ci][cj], strict: false));
-        Assert.True(p.WishMoveAllowed(ci, cj, cur, cur, strict: false));
+        Assert.False(p.WishMoveAllowed(ci, cj, cur, p.Wish[ci][cj])); // 未反映の希望セルでも手動固定なら希望へ戻さない
+        Assert.True(p.WishMoveAllowed(ci, cj, cur, cur));
         var cand = f.Board.Copy2D();
         cand[ci][cj] = p.Wish[ci][cj];
-        Assert.False(p.KeepsWishPins(f.Board, cand, strict: false));
-        Assert.True(p.KeepsWishPins(f.Board, f.Board, strict: false));
+        Assert.False(p.KeepsWishPins(f.Board, cand));
+        Assert.True(p.KeepsWishPins(f.Board, f.Board));
     }
 
     [Fact]
-    public void PersonSwapKickSkipsPinnedDaysEvenWithTheWishGateOff()
+    public void PersonSwapKickSkipsPinnedDays()
     {
         var f = Build();
         var p = new Problem(f.St);
         for (var seed = 1L; seed <= 4L; seed++)
         {
             var b = f.Board.Copy2D();
-            V6NativeOptimizer.PersonSwapKick(p, b, new JavaRandom(seed), pairs: 3, wishPinStrict: false);
+            V6NativeOptimizer.PersonSwapKick(p, b, new JavaRandom(seed), pairs: 3);
             AssertPinsHeld(f.St, b);
         }
     }

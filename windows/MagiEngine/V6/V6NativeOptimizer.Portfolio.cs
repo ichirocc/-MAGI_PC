@@ -151,15 +151,14 @@ public static partial class V6NativeOptimizer
     /// [Kotlin 3.517.0] PERSON_SWAP_ILS: 同群2名の1ヶ月分割当を丸ごと交換するILS摂動。交換相手は全ペア
     /// 総当たりでなく「fair 負担が大きい職員」優先（経緯・実証データは Android <c>docs/history/3.4xx.md</c>
     /// 3.517.0/3.519.0参照）。
-    /// [希望固定の徹底] <paramref name="wishPinStrict"/>（既定 <see cref="PolishGate.WishPinStrict"/>）の間は、
+    /// [希望固定の徹底] 規則 A により、
     /// どちらかのセルが希望固定の日は交換しない（その日だけ行が残る）。
     ///
     /// [C#移植上の判断・可視性] <see cref="ForceDiverseKick"/> と同じ理由で <c>internal</c> へ格上げ
     /// （fair負担の集計式・同群ペア選定という非自明な振る舞いを直接検証するため）。
     /// </summary>
-    internal static void PersonSwapKick(Problem p, int[][] outSched, JavaRandom rng, int pairs, bool? wishPinStrict = null)
+    internal static void PersonSwapKick(Problem p, int[][] outSched, JavaRandom rng, int pairs)
     {
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         if (p.S < 2 || p.T == 0) return;
         var counts = new int[p.S][];
         for (var i = 0; i < p.S; i++) counts[i] = new int[p.K];
@@ -199,7 +198,7 @@ public static partial class V6NativeOptimizer
             var b = candidates.OrderByDescending(x => burden[x]).First();
             for (var j = 0; j < p.T; j++)
             {
-                if ((strict && (p.WishLocked(a, j) || p.WishLocked(b, j))) || p.Pinned(a, j) || p.Pinned(b, j)) continue;
+                if (p.WishLocked(a, j) || p.WishLocked(b, j) || p.Pinned(a, j) || p.Pinned(b, j)) continue;
                 // 個人上限0は職員ごと＝同じ群でも相手の勤務を置けない日がある（MayPlace、3.507.0）。その日は交換しない。
                 int ka = outSched[a][j], kb = outSched[b][j];
                 if ((kb >= 0 && kb < p.K && !p.MayPlace(a, kb)) || (ka >= 0 && ka < p.K && !p.MayPlace(b, ka))) continue;
@@ -235,17 +234,14 @@ public static partial class V6NativeOptimizer
     /// along any of the marches. Always evaluates from the current-best origin for each alternative
     /// (never chains one march's endpoint into the next), so this can never regress below
     /// <paramref name="best"/>'s own report.
-    /// <paramref name="wishPinStrict"/> defaults to <see cref="PolishGate.WishPinStrict"/> (read at call time).
     /// </summary>
     public static (int[][] Schedule, ViolationReport Report) ElitePathRelink(
         MagiState state,
         int[][] best,
         IReadOnlyList<int[][]> alternatives,
         Func<bool> shouldStop,
-        bool quantitativeRangeEval = false,
-        bool? wishPinStrict = null)
+        bool quantitativeRangeEval = false)
     {
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var bestSched = best.Copy2D();
         var bestRep = UnifiedViolationChecker.Check(state, bestSched, quantitativeRangeEval);
@@ -280,7 +276,7 @@ public static partial class V6NativeOptimizer
             {
                 if (shouldStop()) break;
                 // [希望固定の徹底] 希望固定セルへ希望以外の値は写さない（希望どうしの衝突では崩した方が keep-best に勝つ）。
-                if ((strict || p.Pinned(i, j)) && p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
+                if (p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
                 if (p.ExtBanned(i, j, alt[i][j])) continue; // 拡張希望の禁止は写さない
                 cur[i][j] = alt[i][j]; // forced march toward alt
                 curRep = UnifiedViolationChecker.Check(state, cur, quantitativeRangeEval);

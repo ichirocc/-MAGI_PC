@@ -101,10 +101,9 @@ public static partial class V6NativeOptimizer
     /// 担当外セル＝groupViol(11000) が消える＝必須違反が厳密に減る手を丸ごと捨てていた。規約の
     /// <see cref="ScheduleUtil.WishLocked"/> へ統一（3.351.0 と同型）。
     /// </summary>
-    internal static int ApplyCovOFree(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
+    internal static int ApplyCovOFree(MagiState state, int[][] sched, JavaRandom rng, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var applied = 0;
@@ -127,7 +126,7 @@ public static partial class V6NativeOptimizer
                         if (p.WishLocked(i, j) && p.LockTo(i, j) == k) continue;   // 実現可能な本人希望＝動かすとpref未充足化
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != k))
                         {
-                            if (!p.WishMoveAllowed(i, j, k, m, strict)) continue;   // 未反映の希望固定セルは希望へだけ
+                            if (!p.WishMoveAllowed(i, j, k, m)) continue;   // 未反映の希望固定セルは希望へだけ
                             if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                             if (p.MakesForbiddenRun(sched, i, j, m))
                             {
@@ -158,10 +157,9 @@ public static partial class V6NativeOptimizer
     /// 候補のみ動かす。sched を in-place 変更し適用手数を返す。最終採否は呼び出し側の keep-best が
     /// 担保＝退化不能。
     /// </summary>
-    internal static int ApplyC41Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
+    internal static int ApplyC41Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var rules = skill ? p.Cons41s : p.Cons41;
@@ -193,7 +191,7 @@ public static partial class V6NativeOptimizer
                         if (p.WishLocked(i, j) && p.LockTo(i, j) == c.ShiftIdx) continue;   // 実現可能な本人希望＝対象外
                         foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != c.ShiftIdx))
                         {
-                            if (!p.WishMoveAllowed(i, j, c.ShiftIdx, m, strict)) continue;
+                            if (!p.WishMoveAllowed(i, j, c.ShiftIdx, m)) continue;
                             if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                             if (p.MakesForbiddenRun(sched, i, j, m)) continue;
                             candidates.Add(new List<int[]> { new[] { i, j, m } });
@@ -226,7 +224,7 @@ public static partial class V6NativeOptimizer
                     {
                         var old = sched[i][j];
                         if (old < 0 || old >= p.K || (p.WishLocked(i, j) && p.LockTo(i, j) == old)) continue;   // 現シフトが実現可能な本人希望＝対象外
-                        if (!p.WishMoveAllowed(i, j, old, c.ShiftIdx, strict)) continue;
+                        if (!p.WishMoveAllowed(i, j, old, c.ShiftIdx)) continue;
                         if (p.ExtBanned(i, j, c.ShiftIdx)) continue;   // 拡張希望の禁止へは置かない
                         if (p.MakesForbiddenRun(sched, i, j, c.ShiftIdx)) continue;
                         candidates.Add(new List<int[]> { new[] { i, j, c.ShiftIdx } });
@@ -258,10 +256,9 @@ public static partial class V6NativeOptimizer
     /// skill=true は cons42s(ssk) を対象にする（DRY化）。sched を in-place 変更し適用手数を返す。
     /// 最終採否は呼び出し側のkeep-best（ラウンド <see cref="Better"/>）が担保＝退化不能。
     /// </summary>
-    internal static int ApplyC42Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false, bool? wishPinStrict = null)
+    internal static int ApplyC42Free(MagiState state, int[][] sched, JavaRandom rng, bool skill, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
-        var strict = wishPinStrict ?? PolishGate.WishPinStrict;
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         if (p.S == 0 || p.T == 0) return 0;
         var rules = skill ? p.Cons42s : p.Cons42;
@@ -279,7 +276,7 @@ public static partial class V6NativeOptimizer
                 if (p.WishLocked(i, j) && p.LockTo(i, j) == fromShift) continue;   // 実現可能な本人希望＝対象外
                 foreach (var m in p.AllowedShiftsForStaff(i).Where(it => it != fromShift))
                 {
-                    if (!p.WishMoveAllowed(i, j, fromShift, m, strict)) continue;
+                    if (!p.WishMoveAllowed(i, j, fromShift, m)) continue;
                     if (p.ExtBanned(i, j, m)) continue;   // 拡張希望の禁止へは置かない
                     if (p.MakesForbiddenRun(sched, i, j, m)) continue;
                     outList.Add(new List<int[]> { new[] { i, j, m } });
