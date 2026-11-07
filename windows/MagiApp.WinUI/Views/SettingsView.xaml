@@ -77,6 +77,35 @@
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="違反の多い職員と同じグループの 5 名を全期間まとめて組み直し、良くなったときだけ採ります（膜の細胞 LNS、既定 ON・最長 8 秒）" />
                     </StackPanel>
+                    <!-- [Android 3.727.41] 画面の無かった探索の切り替え（PolishGate、既定値は不変）。保存しない・実行中は操作不可。 -->
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="FloorShortStallToggle" Header="必須が下限に届いたら早めに終える" OnContent="ON" OffContent="OFF" Toggled="OnFloorShortStallToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="必須の違反がこれ以上減らせない下限に届いたら、改善が止まった時点で早めに終えます（既定 ON）。OFF は時間いっぱい粘ります" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="C3nWallDeepCheckToggle" Header="禁止の並びの壁を 1 手探索で確かめる" OnContent="ON" OffContent="OFF" Toggled="OnC3nWallDeepCheckToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="禁止の並びが崩せないと判断する前に、直し方の探索（最長 2 秒）でも減らせないかを確かめます（測定中・既定 OFF）" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <ComboBox x:Name="NormalStallCombo" Header="停滞とみなすまでの長さ" SelectionChanged="OnNormalStallChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="50%" />
+                            <ComboBoxItem Content="70%" />
+                            <ComboBoxItem Content="90%（既定）" />
+                        </ComboBox>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="必須が残っているとき、改善がこの長さ（組む時間に対する割合）止まったら終えます。短いほど早く終わり、粘りは減ります" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <ComboBox x:Name="WishFloorCombo" Header="希望どうしの衝突で必須が止まったら" SelectionChanged="OnWishFloorChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="打ち切らない（既定）" />
+                            <ComboBoxItem Content="打ち切る" />
+                            <ComboBoxItem Content="打ち切って仕上げも省く" />
+                        </ComboBox>
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="希望どうしがぶつかって必須がこれ以上減らないとき、そこで打ち切るか（測定中・既定は打ち切らない）" />
+                    </StackPanel>
                     <!-- [Android 3.727.37/3.727.40] 直す順番（ObjectiveWeights.Method、アプリの既定＝優先順位）。保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
                         <ComboBox x:Name="ObjectiveMethodCombo" Header="直す順番" SelectionChanged="OnObjectiveMethodChanged" HorizontalAlignment="Stretch">

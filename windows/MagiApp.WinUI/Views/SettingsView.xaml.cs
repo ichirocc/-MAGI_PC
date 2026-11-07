@@ -96,6 +96,14 @@ public sealed partial class SettingsView : UserControl
             AgentAutoNote.Text = AgentText.ToggleNote;
             MembraneToggle.IsOn = MagiEngine.V6.PolishGate.MembraneCellLns;
             MembraneToggle.IsEnabled = !ui.Running;
+            FloorShortStallToggle.IsOn = MagiEngine.V6.PolishGate.FloorShortStall;
+            FloorShortStallToggle.IsEnabled = !ui.Running;
+            C3nWallDeepCheckToggle.IsOn = MagiEngine.V6.PolishGate.C3nWallDeepCheck;
+            C3nWallDeepCheckToggle.IsEnabled = !ui.Running;
+            NormalStallCombo.SelectedIndex = System.Array.IndexOf(NormalStallFractions, MagiEngine.V6.PolishGate.NormalStallFraction);
+            NormalStallCombo.IsEnabled = !ui.Running;
+            WishFloorCombo.SelectedIndex = (int)MagiEngine.V6.PolishGate.WishConflictFloorMode;
+            WishFloorCombo.IsEnabled = !ui.Running;
             ObjectiveMethodCombo.SelectedIndex = MagiEngine.V6.ObjectiveWeights.Method == MagiEngine.V6.ObjectiveMethod.Priority ? 1 : 0;
             ObjectiveMethodCombo.IsEnabled = !ui.Running;
             ObjectiveMethodNote.Text = MagiViewModel.ObjectiveMethodNote;
@@ -694,6 +702,32 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         MagiEngine.V6.PolishGate.MembraneCellLns = MembraneToggle.IsOn;
+    }
+
+    private static readonly double[] NormalStallFractions = { 0.5, 0.7, 0.9 };
+
+    private void OnFloorShortStallToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.FloorShortStall = FloorShortStallToggle.IsOn;
+    }
+
+    private void OnC3nWallDeepCheckToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.C3nWallDeepCheck = C3nWallDeepCheckToggle.IsOn;
+    }
+
+    private void OnNormalStallChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || NormalStallCombo.SelectedIndex < 0) return;
+        MagiEngine.V6.PolishGate.NormalStallFraction = NormalStallFractions[NormalStallCombo.SelectedIndex];
+    }
+
+    private void OnWishFloorChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingFromModel || WishFloorCombo.SelectedIndex < 0) return;
+        MagiEngine.V6.PolishGate.WishConflictFloorMode = (MagiEngine.V6.WishFloorMode)WishFloorCombo.SelectedIndex;
     }
 
     private void OnObjectiveMethodChanged(object sender, SelectionChangedEventArgs e)
