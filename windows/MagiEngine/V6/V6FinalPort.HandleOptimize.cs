@@ -463,11 +463,14 @@ public static partial class V6FinalPort
         //   本命に優越されない交換の盤面を「他の案」にする（S4）。上限 3 秒・全体の締切まで。
         IReadOnlyList<int[][]> seesawTradeoffs = Array.Empty<int[][]>();
         IReadOnlyList<MirrorLog> seesawLog = Array.Empty<MirrorLog>();
-        // 停滞で早く終えたときは走らせない（「無改善なら早く返す」方針。追加精製と同じ）。
-        if (PolishGate.SeesawRelink && chained.Alternatives.Count > 0 && !cancellationToken.IsCancellationRequested && !wd.StagnationFired)
+        // 歩く先＝探索の「他の案」（211 秒以上の並列方式だけが作る）＋どの予算でもある探索・統合の段の盤面（Android 3.727.43）。
+        //   シーソーの価値は本命の改善より交換の候補（選べる別案）なので、停滞で早く終えたときも走らせる（上限 3 秒）。
+        var seesawGuides = chained.Alternatives.Concat(new[] { chained.Schedule, integrated.Schedule })
+            .Where(g => !g.ContentDeepEquals(refSched)).DistinctBy(g => new BoardKey(g)).ToList();
+        if (PolishGate.SeesawRelink && seesawGuides.Count > 0 && !cancellationToken.IsCancellationRequested)
         {
             var cap = Math.Min(3_000L, Math.Max(0L, hardDeadlineMs - EngineClock.NowMs()));
-            var sr = SeesawRelink.Apply(state, refSched, chained.Alternatives, cap, () => cancellationToken.IsCancellationRequested);
+            var sr = SeesawRelink.Apply(state, refSched, seesawGuides, cap, () => cancellationToken.IsCancellationRequested);
             if (UnifiedViolationChecker.BetterReport(sr.Report, refReport) && !V6SearchOperators.ExactPinRegression(ScheduleUtil.CachedProblem(state), refSched, sr.Schedule)) { refSched = sr.Schedule; refReport = sr.Report; }
             seesawTradeoffs = sr.Tradeoffs; seesawLog = sr.Logs;
         }
@@ -847,7 +850,11 @@ public static partial class V6FinalPort
         IEnumerable<MirrorLog> TierKeyLog()
         {
             try { return new[] { new MirrorLog(level: "I", tag: "段の鍵", message: TierObjective.LogLine(TierObjective.Key(ScheduleUtil.CachedProblem(state), finalSched, finalReport))) }; }
-            catch (Exception) { return Array.Empty<MirrorLog>(); }
+            catch (Exception e)
+            {
+                var msg = e.Message.Length > 120 ? e.Message[..120] : e.Message;
+                return new[] { new MirrorLog(level: "W", tag: "段の鍵", message: $"段の鍵を出せませんでした（{e.GetType().Name}: {msg}）。採否には影響しません") };
+            }
         }
         var residualLog = BuildResidualLog();
 
@@ -1001,6 +1008,9 @@ public static partial class V6FinalPort
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: finalTradeoffs.Count > 0 ? finalTradeoffs : chained.Alternatives, CapZero: capZero, Stop: stopSummary);
+            // 交換の候補を先に、空いた枠（最大 3）を探索の他の案で埋める（Android 3.727.43）。
+            Alternatives: finalTradeoffs.Count == 0 ? chained.Alternatives
+                : finalTradeoffs.Concat(chained.Alternatives).Where(a => !a.ContentDeepEquals(finalSched)).DistinctBy(a => new BoardKey(a)).Take(SeesawRelink.MaxTradeoffs).ToList(),
+            CapZero: capZero, Stop: stopSummary);
     }
 }

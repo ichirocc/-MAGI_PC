@@ -67,7 +67,9 @@ public static class SeesawRelink
             var diffs = new List<(int I, int J)>();
             for (int i = 0; i < cur.Length; i++) for (int j = 0; j < cur[i].Length; j++) if (cur[i][j] != alt[i][j]) diffs.Add((i, j));
             diffs = diffs.OrderBy(d => vcells.Contains((long)d.I * p.T + d.J) ? 0 : 1).ToList();
-            bool Movable(int i, int j) => !(p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) && !p.ExtBanned(i, j, alt[i][j]);
+            // 上限 0 のシフトは置かない（MayPlaceAt＝最適化器の規則、Android 3.727.43。旧: 拡張希望の禁止だけ見ていた）。
+            bool Movable(int i, int j) => !(p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) &&
+                (p.MayPlaceAt(i, j, alt[i][j]) || (p.WishLocked(i, j) && alt[i][j] == p.LockTo(i, j)));
             foreach (var (i, j) in diffs)
             {
                 if (Out()) break;

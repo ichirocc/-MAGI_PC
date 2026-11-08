@@ -112,7 +112,7 @@
                     <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="C3nWallDeepCheckToggle" Header="禁止の並びの壁を 1 手探索で確かめる" OnContent="ON" OffContent="OFF" Toggled="OnC3nWallDeepCheckToggled" />
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="禁止の並びが崩せないと判断する前に、直し方の探索（最長 2 秒）でも減らせないかを確かめます（測定中・既定 OFF）" />
+                                   Text="残った禁止の並びを「崩せない壁」と判定する前に、直し方の探索（最長 2 秒）でも減らせないかを確かめます。判定と表示だけに効き、探索の時間は変わりません（測定中・既定 OFF）" />
                     </StackPanel>
                     <StackPanel Spacing="2">
                         <ComboBox x:Name="NormalStallCombo" Header="停滞とみなすまでの長さ" SelectionChanged="OnNormalStallChanged" HorizontalAlignment="Stretch">
@@ -130,7 +130,7 @@
                             <ComboBoxItem Content="打ち切って仕上げも省く" />
                         </ComboBox>
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="希望どうしがぶつかって必須がこれ以上減らないとき、そこで打ち切るか（測定中・既定は打ち切らない）" />
+                                   Text="希望どうしがぶつかって必須がこれ以上減らないとき、そこで打ち切るか。画面を開いて作るときだけ効き、閉じている間の作成には効きません（測定中・既定は打ち切らない）" />
                     </StackPanel>
                     <!-- [Android 3.727.37/3.727.40] 直す順番（ObjectiveWeights.Method、アプリの既定＝優先順位）。保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
