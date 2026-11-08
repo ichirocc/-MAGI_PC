@@ -26,12 +26,21 @@ public static class SeesawRelink
         return strict;
     }
 
-    static bool SameBreakdown(ViolationReport a, ViolationReport b) =>
+    internal static bool SameBreakdown(ViolationReport a, ViolationReport b) =>
         MirrorKeys.All.All(f => a.Breakdown.GetValueOrDefault(f) == b.Breakdown.GetValueOrDefault(f));
 
-    public static Result Apply(MagiState state, int[][] best0, IReadOnlyList<int[][]> alternatives, long maxMillis = 3_000L, Func<bool>? shouldStop = null)
+    /// <summary>
+    /// 案ごとの歩き方（Android 3.727.42）。どれも数ミリ秒なので全部走らせ、良いほうを採る。
+    /// Plain＝1 マスずつ写し戻さない（3.727.22 からの歩き）、Paired＝同じ日に値を交換し合う 2 人は対で写す、
+    /// PairedKeepHard＝対で写し、必須が増える手は戻す。
+    /// </summary>
+    public enum Walk { Plain, Paired, PairedKeepHard }
+
+    public static Result Apply(MagiState state, int[][] best0, IReadOnlyList<int[][]> alternatives, long maxMillis = 3_000L, Func<bool>? shouldStop = null,
+        IReadOnlyList<Walk>? walks = null)
     {
         var stop = shouldStop ?? (() => false);
+        var walkList = walks ?? new[] { Walk.Plain, Walk.Paired, Walk.PairedKeepHard };
         var p = ScheduleUtil.CachedProblem(state);
         var t0 = EngineClock.NowMs();
         bool Out() => stop() || EngineClock.NowMs() - t0 >= maxMillis;
@@ -40,11 +49,15 @@ public static class SeesawRelink
         int applied = 0;
         var pool = new List<(int[][] Board, ViolationReport Rep)>();
         foreach (var alt in alternatives)
+        foreach (var walk in walkList)
         {
             if (Out()) break;
             if (alt.Length != best.Length || alt.Any(r => r.Length != p.T)) continue;
+            var pairMoves = walk != Walk.Plain;
+            var undoHardIncrease = walk == Walk.PairedKeepHard;
             var start = best.Copy2D();
             var cur = best.Copy2D();
+            var curRep = bestRep;
             var vcells = new HashSet<long>();
             foreach (var k in bestRep.Violations.Keys)
             {
@@ -54,14 +67,24 @@ public static class SeesawRelink
             var diffs = new List<(int I, int J)>();
             for (int i = 0; i < cur.Length; i++) for (int j = 0; j < cur[i].Length; j++) if (cur[i][j] != alt[i][j]) diffs.Add((i, j));
             diffs = diffs.OrderBy(d => vcells.Contains((long)d.I * p.T + d.J) ? 0 : 1).ToList();
+            bool Movable(int i, int j) => !(p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) && !p.ExtBanned(i, j, alt[i][j]);
             foreach (var (i, j) in diffs)
             {
                 if (Out()) break;
-                if (p.WishLocked(i, j) && alt[i][j] != p.LockTo(i, j)) continue;
-                if (p.ExtBanned(i, j, alt[i][j])) continue;
-                cur[i][j] = alt[i][j];
+                if (cur[i][j] == alt[i][j] || !Movable(i, j)) continue;
+                int? partner = null;
+                if (pairMoves)
+                    for (int b = 0; b < p.S; b++)
+                        if (b != i && cur[b][j] != alt[b][j] && cur[b][j] == alt[i][j] && alt[b][j] == cur[i][j] && Movable(b, j)) { partner = b; break; }
+                var cells = partner is int pb ? new[] { i, pb } : new[] { i };
+                var saved = cells.Select(a => cur[a][j]).ToArray();
+                foreach (var a in cells) cur[a][j] = alt[a][j];
+                void Undo() { for (int x = 0; x < cells.Length; x++) cur[cells[x]][j] = saved[x]; }
+                // Plain は 3.727.22 の歩きのまま（回数固定を崩した盤面は採らずに先へ進む＝道筋は戻さない）。
+                if (V6SearchOperators.ExactPinRegression(p, start, cur)) { if (pairMoves) Undo(); continue; }
                 var rep = UnifiedViolationChecker.Check(state, cur);
-                if (V6SearchOperators.ExactPinRegression(p, start, cur)) continue;
+                if (undoHardIncrease && rep.Hard > curRep.Hard) { Undo(); continue; }
+                curRep = rep;
                 if (UnifiedViolationChecker.BetterReport(rep, bestRep)) { best = cur.Copy2D(); bestRep = rep; applied++; }
                 else if (rep.Hard == bestRep.Hard && !Dominates(bestRep, rep) && !SameBreakdown(rep, bestRep)) pool.Add((cur.Copy2D(), rep));
             }

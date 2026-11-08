@@ -463,7 +463,8 @@ public static partial class V6FinalPort
         //   本命に優越されない交換の盤面を「他の案」にする（S4）。上限 3 秒・全体の締切まで。
         IReadOnlyList<int[][]> seesawTradeoffs = Array.Empty<int[][]>();
         IReadOnlyList<MirrorLog> seesawLog = Array.Empty<MirrorLog>();
-        if (PolishGate.SeesawRelink && chained.Alternatives.Count > 0 && !cancellationToken.IsCancellationRequested)
+        // 停滞で早く終えたときは走らせない（「無改善なら早く返す」方針。追加精製と同じ）。
+        if (PolishGate.SeesawRelink && chained.Alternatives.Count > 0 && !cancellationToken.IsCancellationRequested && !wd.StagnationFired)
         {
             var cap = Math.Min(3_000L, Math.Max(0L, hardDeadlineMs - EngineClock.NowMs()));
             var sr = SeesawRelink.Apply(state, refSched, chained.Alternatives, cap, () => cancellationToken.IsCancellationRequested);
@@ -485,7 +486,7 @@ public static partial class V6FinalPort
                     var diag = V6PortAnalyzer.DiagnoseForbiddenRuns(state, post.Schedule);
                     return diag.HasRuns && diag.AllBlocked;
                 }), wishOn && WishReachedOn(post.Schedule, post.Report.Hard), wishC3wProven);
-            var canExtra = !stopRequested && !stagnated && post.Report.Total > 0 && !structuralHardResidual;
+            var canExtra = !stopRequested && !stagnated && refReport.Total > 0 && !structuralHardResidual;
             if (extraMs >= 5_000 && !canExtra)
             {
                 var why = stopRequested ? "停止要求"
@@ -511,8 +512,9 @@ public static partial class V6FinalPort
                 // [敵対的レビュー3.212.0、仮説数上限撤廃後も維持] 微小予算(5〜25s)の追加精製は本走行と異なり
                 //   仮説数を workers まで増やすと悪化しうる（チェーン毎の固定費が小予算を侵食する）→
                 //   ここだけ意図的に MAX_HYPOTHESES(5) までにキャップ＝旧来の5×1構成を維持。
+                // 今の本命（シーソーが差し替えたならその盤面）から始めて、今の本命と比べる（Android 3.727.42）。シーソー OFF なら refSched＝post で不変。
                 var extra = await V6NativeOptimizer.Optimize(
-                        state, post.Schedule,
+                        state, refSched,
                         optsR with
                         {
                             Algorithm = V6Algorithm.Alns,
@@ -525,7 +527,7 @@ public static partial class V6FinalPort
                         cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
                 // [3.287.0 keep-best統一] hard→weighted→total（betterReport と同順）。
-                var imp = UnifiedViolationChecker.BetterReport(extra.Report, post.Report);
+                var imp = UnifiedViolationChecker.BetterReport(extra.Report, refReport);
                 if (!imp)
                 {
                     // [3.378.0/実機ログ起因] 旧: 改善したときだけログしていたため、実行時間を使った
@@ -534,7 +536,7 @@ public static partial class V6FinalPort
                     {
                         new(level: "I", tag: "ExtraRefine",
                             message: $"予算残{extraMs / 1000}sで追加精製: 改善なし" +
-                                $"（HARD {post.Report.Hard} / total {post.Report.Total} のまま後処理の結果を採用）"),
+                                $"（HARD {refReport.Hard} / total {refReport.Total} のまま後処理の結果を採用）"),
                     };
                 }
                 if (imp)
@@ -543,7 +545,7 @@ public static partial class V6FinalPort
                     extraLog = new List<MirrorLog>
                     {
                         new(level: "I", tag: "ExtraRefine",
-                            message: $"予算残{extraMs / 1000}sで追加精製: HARD {post.Report.Hard}→{extra.Report.Hard} / total {post.Report.Total}→{extra.Report.Total}"),
+                            message: $"予算残{extraMs / 1000}sで追加精製: HARD {refReport.Hard}→{extra.Report.Hard} / total {refReport.Total}→{extra.Report.Total}"),
                         // [監査(3c)/N3と同型] ログ末尾の UnifiedCheck/違反詳細は「精製前の盤面」の診断のまま
                         //   残るため、採用した勤務表の集計を明示して件数の取り違えを防ぐ。
                         new(level: "I", tag: "UnifiedCheck",
@@ -987,12 +989,18 @@ public static partial class V6FinalPort
         //   観測した結果。finalSched はこのあと ExtraRefine で差し替わる（refSched）か、最終番兵で入力へ
         //   戻る（cappedInput）ことがある。盤面が一致するときだけ診断を通す。
         var postForResult = finalSched.ContentDeepEquals(post.Schedule) ? post : null;
+        // 交換の候補はシーソーの時点の本命と比べて選んだ＝最終の本命（追加精製・最終番兵の後）と比べ直し、必須が違うか優越されるものは外す。
+        var finalTradeoffs = seesawTradeoffs.Where(t =>
+        {
+            var r = UnifiedViolationChecker.Check(state, t);
+            return r.Hard == finalReport.Hard && !SeesawRelink.Dominates(finalReport, r) && !SeesawRelink.SameBreakdown(r, finalReport);
+        }).ToList();
         // [レビュー第7弾 2026-09-04] 停止は**必ず例外で**返す。各段は IsCancellationRequested を締切と同列の
         //   「止まる条件」にしているため、停止要求のあとも keep-best の盤面を持って正常終了まで来られる。
         //   ViewModel は OperationCanceledException で「直前の勤務表を保持」へ分岐する設計なので、ここで正常に
         //   返すと停止したのに「完了」として途中盤面が採用される。終端で必ず確認する（Android と同時）。
         cancellationToken.ThrowIfCancellationRequested();
         return new ActionResult(finalSched, finalReport with { Logs = logs }, $"optimize:{label.Tech}", busy, logs, postForResult,
-            Alternatives: seesawTradeoffs.Count > 0 ? seesawTradeoffs : chained.Alternatives, CapZero: capZero, Stop: stopSummary);
+            Alternatives: finalTradeoffs.Count > 0 ? finalTradeoffs : chained.Alternatives, CapZero: capZero, Stop: stopSummary);
     }
 }

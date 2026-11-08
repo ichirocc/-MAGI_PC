@@ -68,3 +68,33 @@ public class SeesawRelinkTest
     private const int ExpectedTradeoffs = 0;
     private const int ExpectedHash = -2074942663;
 }
+
+/// <summary>Android <c>SeesawRelinkTest.pairedWalksKeepTheMainAndAddTradeoffs</c> の写し（3.727.42）。採点の方式を切り替えるので並列にしない。</summary>
+[Collection("PolishGateGlobal")]
+public class SeesawRelinkWalkTest
+{
+    [Fact]
+    public void PairedWalksKeepTheMainAndAddTradeoffs()
+    {
+        ObjectiveWeights.Method = ObjectiveMethod.Priority;
+        try
+        {
+            var st = StateJsonSerializer.Parse(FixtureLoader.ReadRaw("full_coverage_state.json"));
+            var b0 = st.Schedule.Select(r => r.ToArray()).ToArray();
+            int[][] Pol(long seed) => MembraneCellLns.Apply(st, b0, new MembraneCellLns.Params(Deterministic: true, MaxCells: 30, ItersPerCell: 60_000, Seed: seed)).NewSchedule;
+            var b = Pol(1L);
+            var alts = new List<int[][]> { Pol(5L), Pol(9L), Pol(13L) };
+            var plain = SeesawRelink.Apply(st, b, alts, maxMillis: 600_000L, walks: new[] { SeesawRelink.Walk.Plain });
+            var all = SeesawRelink.Apply(st, b, alts, maxMillis: 600_000L);
+            Assert.False(UnifiedViolationChecker.BetterReport(plain.Report, all.Report));
+            Assert.True(all.Tradeoffs.Count > plain.Tradeoffs.Count, $"交換の候補 {all.Tradeoffs.Count} > {plain.Tradeoffs.Count}");
+            foreach (var t in all.Tradeoffs)
+            {
+                var rt = UnifiedViolationChecker.Check(st, t);
+                Assert.Equal(all.Report.Hard, rt.Hard);
+                Assert.False(SeesawRelink.Dominates(all.Report, rt));
+            }
+        }
+        finally { ObjectiveWeights.Method = ObjectiveMethod.Weights; }
+    }
+}
