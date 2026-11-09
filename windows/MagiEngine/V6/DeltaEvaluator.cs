@@ -67,9 +67,48 @@ public sealed class DeltaEvaluator
             for (int k = 0; k < K; k++) _wdCnt[i][k] = new int[7];
         }
 
+        _c3Lists = new[] { p.Cons3, p.Cons3n, p.Cons3m, p.Cons3mn };
+        _c3Index = new ShiftIndex[4]; _c3Single = new bool[4][];
+        for (int f = 0; f < 4; f++)
+        {
+            var l = _c3Lists[f];
+            _c3Index[f] = BuildShiftIndex(l.Count, e => l[e].Seq);
+            _c3Single[f] = new bool[l.Count];
+            for (int e = 0; e < l.Count; e++) _c3Single[f][e] = C3Run.IsSingleShiftSeq(l[e].Seq);
+        }
+        _c1Index = BuildShiftIndex(p.Cons1.Count, e => new[] { p.Cons1[e].ShiftIdx });
+        _fairCur = new long[p.G * K];
+
         _a = p.InitialAssignment();
         Rebuild();
     }
+
+    /// <summary>シフト k を参照する規則の添字（ByK）と、規則 e が k を参照するか（Has、e*K+k）。盤面非依存。</summary>
+    private sealed class ShiftIndex(int[][] byK, bool[] has)
+    {
+        public readonly int[][] ByK = byK;
+        public readonly bool[] Has = has;
+    }
+    private ShiftIndex BuildShiftIndex(int n, Func<int, int[]> refs)
+    {
+        var has = new bool[n * K];
+        var lists = new List<int>[K];
+        for (int k = 0; k < K; k++) lists[k] = new List<int>();
+        for (int e = 0; e < n; e++)
+            foreach (int k in refs(e))
+                if (k >= 0 && k < K && !has[e * K + k]) { has[e * K + k] = true; lists[k].Add(e); }
+        var byK = new int[K][];
+        for (int k = 0; k < K; k++) byK[k] = lists[k].ToArray();
+        return new ShiftIndex(byK, has);
+    }
+    // PreviewMove は旧/新シフトを参照する規則だけを測る。参照しない規則は (i,j) の old→nw 書換えで値が変わらない＝差分 0。
+    private readonly IReadOnlyList<C3>[] _c3Lists;
+    private readonly ShiftIndex[] _c3Index;
+    private readonly bool[][] _c3Single;
+    private readonly ShiftIndex _c1Index;
+    // _fairCur[g*K+k]＝群 g・シフト k の公平化偏差の現在値（Rebuild が全件、Commit が動いた 2 件を更新）。
+    private readonly long[] _fairCur;
+    private long _fairOldAfter, _fairNwAfter;
 
     /// <summary>
     /// Reset to a fresh assignment and recompute all aggregates / totals.
@@ -245,11 +284,11 @@ public sealed class DeltaEvaluator
         }
 
         // windowed families (c1, c3 family): before/after via temporary swap
-        long bC1 = C1Local(i, j);
-        long bC3 = C3Local(i, j, _p.Cons3, false);
-        long bC3n = C3Local(i, j, _p.Cons3n, true);
-        long bC3m = C3Local(i, j, _p.Cons3m, false);
-        long bC3mn = C3Local(i, j, _p.Cons3mn, true);
+        long bC1 = C1Local(i, j, old, nw);
+        long bC3 = C3Local(i, j, 0, old, nw);
+        long bC3n = C3Local(i, j, 1, old, nw);
+        long bC3m = C3Local(i, j, 2, old, nw);
+        long bC3mn = C3Local(i, j, 3, old, nw);
         // [外部レビュー検証/例外安全性] a[i][j] を一時的に nw へ書き換えて after 側を測るこの窓は、
         // C1Local/C3Local が現行の不変条件下では例外を投げない（境界は min/max で常にクランプ済み）ため
         // 実害は未確認だが、将来の変更で throw する経路が増えても「復元されないまま盤面が壊れる」という
@@ -259,11 +298,11 @@ public sealed class DeltaEvaluator
         long aC1 = 0, aC3 = 0, aC3n = 0, aC3m = 0, aC3mn = 0;
         try
         {
-            aC1 = C1Local(i, j);
-            aC3 = C3Local(i, j, _p.Cons3, false);
-            aC3n = C3Local(i, j, _p.Cons3n, true);
-            aC3m = C3Local(i, j, _p.Cons3m, false);
-            aC3mn = C3Local(i, j, _p.Cons3mn, true);
+            aC1 = C1Local(i, j, old, nw);
+            aC3 = C3Local(i, j, 0, old, nw);
+            aC3n = C3Local(i, j, 1, old, nw);
+            aC3m = C3Local(i, j, 2, old, nw);
+            aC3mn = C3Local(i, j, 3, old, nw);
         }
         finally
         {
@@ -306,8 +345,9 @@ public sealed class DeltaEvaluator
         // [統一fair] グループ内公平化 — staff i の群 gI の old/nw 列のみ偏差が動く（本人 ±1 で平均も動くので群内再計算）。
         int gI = _p.Sgrp[i];
         _dFair = 0L;
-        if (_p.CanDo(i, old)) _dFair += FairDevAt(gI, old, i, -1) - FairDevAt(gI, old, -1, 0);
-        if (_p.CanDo(i, nw)) _dFair += FairDevAt(gI, nw, i, +1) - FairDevAt(gI, nw, -1, 0);
+        _fairOldAfter = _fairCur[gI * K + old]; _fairNwAfter = _fairCur[gI * K + nw];
+        if (_p.CanDo(i, old)) { _fairOldAfter = FairDevAt(gI, old, i, -1); _dFair += _fairOldAfter - _fairCur[gI * K + old]; }
+        if (_p.CanDo(i, nw)) { _fairNwAfter = FairDevAt(gI, nw, i, +1); _dFair += _fairNwAfter - _fairCur[gI * K + nw]; }
 
         // [統一weekly/3.345.0] 曜日平準化 — シフト別なので old と nw の2バケットだけが動く（old==nw は不変）。
         // 範囲外セントネル(-1等)はそのバケットを持たないので、範囲ガードで片側だけ動かす。
@@ -472,6 +512,7 @@ public sealed class DeltaEvaluator
                 if (old >= 0 && old < K) _wdCnt[i][old][wIdx]--;
                 if (nw >= 0 && nw < K) _wdCnt[i][nw][wIdx]++;
             }
+            _fairCur[_p.Sgrp[i] * K + old] = _fairOldAfter; _fairCur[_p.Sgrp[i] * K + nw] = _fairNwAfter;
             _sc1 += _dC1; _sc2 += _dC2; _sc41 += _dC41; _sc42 += _dC42; _sc41s += _dC41s; _sc42s += _dC42s;
             _sc3 += _dC3; _hc3n += _dC3n; _sc3m += _dC3m; _sc3mn += _dC3mn;
             _hpref += _dPref; _hGrpV += _dGrpV; _hc3w += _dC3w; _hExt += _dExt; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
@@ -530,54 +571,64 @@ public sealed class DeltaEvaluator
         return s;
     }
 
-    private long C1Local(int i, int j)
+    private long C1Local(int i, int j, int old, int nw)
     {
         long tot = 0L;
-        foreach (var c in _p.Cons1)
+        var ix = _c1Index;
+        foreach (int e in ix.ByK[old]) tot += C1At(i, j, _p.Cons1[e]);
+        foreach (int e in ix.ByK[nw]) if (!ix.Has[e * K + old]) tot += C1At(i, j, _p.Cons1[e]);
+        return tot;
+    }
+
+    private long C1At(int i, int j, C1 c)
+    {
+        if (!_p.CanDo(i, c.ShiftIdx)) return 0L; // [統一] 担当不可は対象外(チェッカーと一致)
+        long tot = 0L;
+        int js0 = Math.Max(0, j - c.Day1 + 1), js1 = Math.Min(T - c.Day1, j);
+        int js = js0;
+        while (js <= js1)
         {
-            if (!_p.CanDo(i, c.ShiftIdx)) continue; // [統一] 担当不可は対象外(チェッカーと一致)
-            int js0 = Math.Max(0, j - c.Day1 + 1), js1 = Math.Min(T - c.Day1, j);
-            int js = js0;
-            while (js <= js1)
-            {
-                int z = 0;
-                for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
-                if (z < c.Day2) tot += 1; // [統一] #fire 計上。重みは soft 集約で×30
-                js++;
-            }
+            int z = 0;
+            for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
+            if (z < c.Day2) tot += 1; // [統一] #fire 計上。重みは soft 集約で×30
+            js++;
         }
         return tot;
     }
 
-    private long C3Local(int i, int j, IReadOnlyList<C3> list, bool fbd)
+    /// <summary>c3 族 <paramref name="f"/>（0=c3, 1=c3n, 2=c3m, 3=c3mn）のうち old か nw を参照する規則の、セル (i,j) を含む窓の寄与。</summary>
+    private long C3Local(int i, int j, int f, int old, int nw)
     {
+        var ix = _c3Index[f];
         long sub = 0L;
-        foreach (var c in list)
+        foreach (int e in ix.ByK[old]) sub += C3At(i, j, f, e);
+        foreach (int e in ix.ByK[nw]) if (!ix.Has[e * K + old]) sub += C3At(i, j, f, e);
+        return sub;
+    }
+
+    private long C3At(int i, int j, int f, int e)
+    {
+        bool fbd = f == 1 || f == 3;
+        var seq = _c3Lists[f][e].Seq;
+        int d = seq.Length;
+        if (d == 0) return 0L;
+        // [HF507] single-shift run: deficit is per-staff whole-row, not windowed.
+        // A move at (i,j) only affects staff i's row, so recompute row i's run deficit
+        // (before/after via the caller's swap captures the delta correctly).
+        if (!fbd && _c3Single[f][e]) return C3Run.RowDeficit(_a, i, seq[0], d);
+        long sub = 0L;
+        int js0 = Math.Max(0, j - d + 1), js1 = Math.Min(T - d, j);
+        int js = js0;
+        while (js <= js1)
         {
-            var seq = c.Seq;
-            int d = seq.Length;
-            if (d == 0) continue;
-            // [HF507] single-shift run: deficit is per-staff whole-row, not windowed.
-            // A move at (i,j) only affects staff i's row, so recompute row i's run deficit
-            // (before/after via the caller's swap captures the delta correctly).
-            if (!fbd && C3Run.IsSingleShiftSeq(seq))
+            if (_a[i][js] == seq[0])
             {
-                sub += C3Run.RowDeficit(_a, i, seq[0], d);
-                continue;
+                int z = 0;
+                for (int l = 1; l < d; l++) if (_a[i][js + l] == seq[l]) z++;
+                bool fire = fbd ? (z == d - 1) : (z < d - 1);
+                if (fire) sub += 1; // [統一] #fire 計上。重みは soft 集約で適用
             }
-            int js0 = Math.Max(0, j - d + 1), js1 = Math.Min(T - d, j);
-            int js = js0;
-            while (js <= js1)
-            {
-                if (_a[i][js] == seq[0])
-                {
-                    int z = 0;
-                    for (int l = 1; l < d; l++) if (_a[i][js + l] == seq[l]) z++;
-                    bool fire = fbd ? (z == d - 1) : (z < d - 1);
-                    if (fire) sub += 1; // [統一] #fire 計上。重みは soft 集約で適用
-                }
-                js++;
-            }
+            js++;
         }
         return sub;
     }
@@ -802,8 +853,9 @@ public sealed class DeltaEvaluator
     private long FairAll()
     {
         long h = 0L;
+        Array.Clear(_fairCur);
         for (int g = 0; g < _p.G; g++)
-            foreach (var k in _p.Bucket[g]) h += FairDevAt(g, k, -1, 0);
+            foreach (var k in _p.Bucket[g]) { long v = FairDevAt(g, k, -1, 0); _fairCur[g * K + k] = v; h += v; }
         return h;
     }
 

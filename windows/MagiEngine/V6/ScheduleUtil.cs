@@ -44,6 +44,7 @@ public static class ScheduleUtil
     public static bool CanDo(this Problem p, int staffI, int shiftK)
     {
         if (staffI < 0 || staffI >= p.S || shiftK < 0 || shiftK >= p.K) return false;
+        if (p.CanDoHas is { } has) return has[staffI][shiftK];
         int g = p.Sgrp[staffI];
         if (g < 0 || g >= p.Bucket.Length) return false;
         return Array.IndexOf(p.Bucket[g], shiftK) >= 0;
