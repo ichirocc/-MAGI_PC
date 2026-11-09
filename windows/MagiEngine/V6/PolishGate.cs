@@ -28,13 +28,6 @@ public static class PolishGate
     public static volatile bool WideC3nBreakDays = false;
 
     /// <summary>
-    /// [測定中] C1 研磨の手A（同日交換）で、交換相手 i2 が受け取るシフト（または i の新シフト）が禁止連続(c3n)を
-    /// 作るとき、<c>TryFixForbiddenRunViaAdjacentDay</c>（手B と同じ隣接日の付け替え＋1段の玉突き）で崩してから
-    /// 結合手を 1 回の checker で判定する。採用基準は不変（IsBetter＋厳密ピン）。既定 OFF（Kotlin <c>PolishGate.c1MoveARepair</c>）。
-    /// </summary>
-    public static volatile bool C1MoveARepair = false;
-
-    /// <summary>
     /// ブロック巡回交換で、必須(HARD)が正味で増える候補を<b>候補生成の段階で</b>捨てるか。既定 <b>true</b>（Kotlin 3.518.0）。
     ///
     /// [Kotlin 3.649.0] 判定は <see cref="HardDelta"/> の厳密な正味差分＝正式採否（HARD が先頭）が必ず却下する候補だけを捨てる。
@@ -69,9 +62,6 @@ public static class PolishGate
     /// 研磨開始時点比+6%まで容認するか（<see cref="V6HotfixPasses.ToleratedBetter"/>）。既定OFF。</summary>
     public static volatile bool AptFairSoftTolerance = false;
 
-    /// <summary>[Android N9 同期] PostChain の keep-best で巻き戻したパスの採用数を 0 と数える。既定 <b>false</b>。</summary>
-    public static volatile bool PostChainRollbackCountsZero = false;
-
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。
     /// 既定 <b>false</b>（3.673.0: 60 s の予算では短縮が損＝sample 24 対で +95.7・区間 [+40.6, +153.8]、利用者「60秒の損失を取り返す方法を採用する」）。</summary>
     public static volatile bool C3nWallShortStall = false;
@@ -89,8 +79,6 @@ public static class PolishGate
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallDeepCheck</c>（3.643.0）] 根拠の精度（<c>docs/stall_escape.md</c> §5.3）: 経験的な c3n 壁（探索手の全滅）は、1 手探索（<see cref="FixSuggester"/>、上限 2 s）でも必須を減らす手が無いときだけ短縮に使う。希望固定だけの壁（証明相当）は従来どおり。既定 false（計測は経験的な壁のフィクスチャ待ち＝Android 側ベンチの腕 <c>deep</c>、<c>docs/stall_escape.md</c> §11）。</summary>
     public static volatile bool C3nWallDeepCheck = false;
 
-    /// <summary>[Kotlin原本 <c>PolishGate.adaptiveStall</c>（PROPOSAL C、3.643.0、<c>docs/stall_escape.md</c> §5.8）] 適応閾値: 直近の改善間隔の最大×3 を [短, 通常] に挟み、通常分岐の停滞閾値を縮める。既定 false（2026-10-09 の計測で既定が良く否決＝Android <c>docs/stall_escape.md</c> §11。腕 <c>adaptive</c> は再計測用）。</summary>
-    public static volatile bool AdaptiveStall = false;
 
     /// <summary>[Kotlin原本 <c>PolishGate.floorCountsUpperZero</c>（3.692.0、3.709.0 で既定 true）] 早期終了の希望衝突の床を上限0込み（<c>WishConflictFloorParts(zeroCapBinding: true)</c>、ログの「上限0を拘束とみなすと N」）にし、
     /// 到達で短い閾値へ移る（<see cref="WishConflictFloorMode"/> が Off でも E0A 相当）。既定 true（Android 3.709.0、実機データの腕 <c>floorup0</c> で結果同一・時間 −74%）。</summary>

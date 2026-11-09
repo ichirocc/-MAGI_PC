@@ -557,9 +557,7 @@ public static partial class V6NativeOptimizer
             //   混在すると covU が床を下回り得るが、その間 covU を focus しても無意味なので `<=` で除外。
             // [E9, Kotlin原本] 冷却は focus 選択にのみ合流（HF63 ログ・N4 発火条件には混ぜない＝恒久判定と区別）。
             var (avoid, focusAvoid) = AvoidSets(dynamicAvoid, bestReport.Breakdown.GetValueOrDefault("covU", 0), covUFloor, cooldownFocus);
-            // [backlog#28] 1ラウンドにつき1回だけ hf63.NextFocusRotationRound() を進め、下段の早期終了
-            //   判定(pivot)にも同じ値を使う（そちらで再度進めない）。既定OFF時はroundをそのまま使う。
-            var rotationRound = options.RsiFocusRotationPersist ? hf63.NextFocusRotationRound() : round;
+            var rotationRound = round;
             var focus = MaxViolatedFamily(bestReport, focusAvoid, round, rounds, rotationRound);
             if (avoid.Count > 0 && (lastLoggedAvoid == null || !avoid.SetEquals(lastLoggedAvoid)))
             {

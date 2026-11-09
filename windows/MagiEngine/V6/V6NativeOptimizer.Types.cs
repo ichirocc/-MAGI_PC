@@ -59,13 +59,7 @@ public sealed record V6OptimizerOptions(
     /// </summary>
     bool Tabu = false,
     /// <summary>[backlog #12(a)・実験段階] c2/c41/c41sを二値でなく不足量/距離量で評価する（既定false=挙動不変）。</summary>
-    bool QuantitativeRangeEval = false,
-    /// <summary>
-    /// [backlog#28] <see cref="V6NativeOptimizer.MaxViolatedFamily"/> の apt/covO 周期枠(<c>round%3</c>)を
-    /// <c>RunRsi</c> 呼出し単位でなく、共有 <see cref="Hf63Infeasibility"/> が持続するカウンタで計る。
-    /// 既定 OFF（経緯は windows/README.md レビュー対応の記録）。
-    /// </summary>
-    bool RsiFocusRotationPersist = false)
+    bool QuantitativeRangeEval = false)
 {
     public int EffectiveWorkers => Workers ?? Math.Clamp(Environment.ProcessorCount, 1, 8);
 }

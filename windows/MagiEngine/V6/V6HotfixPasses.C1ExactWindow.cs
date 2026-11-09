@@ -19,7 +19,7 @@ public static partial class V6HotfixPasses
         MagiState state, int[][] schedule, Config? cfg = null, Func<bool>? shouldStop = null,
         // [C1 重複窓の連結成分化/測定中, Kotlin原本] 既定 false = 旧経路そのまま（1件の違反を起点にパディング）。
         //   true にすると Analyze() の代わりに Components() で近接・重複窓を束ね、SolveComponent へ渡す。
-        bool useComponents = false, bool quantitativeRangeEval = false)
+        bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         cfg ??= new Config();
@@ -43,14 +43,6 @@ public static partial class V6HotfixPasses
         string SpanKey(int staff, int shift, List<int> days)
         {
             var sb = new StringBuilder().Append(staff).Append('|').Append(shift).Append('|');
-            foreach (var d in days) for (var i = 0; i < p.S; i++) sb.Append(work[i][d]).Append(',');
-            return sb.ToString();
-        }
-        // [C1 重複窓の連結成分化/測定中, Kotlin原本] Components() 経路用（単一 shift を持たないため
-        //   comp.Start/End で束ねる）。
-        string CompSpanKey(int staff, int start, int end, List<int> days)
-        {
-            var sb = new StringBuilder().Append(staff).Append('|').Append(start).Append('|').Append(end).Append('|');
             foreach (var d in days) for (var i = 0; i < p.S; i++) sb.Append(work[i][d]).Append(',');
             return sb.ToString();
         }
@@ -90,37 +82,16 @@ public static partial class V6HotfixPasses
                 for (var mi = 0; mi < work.Length; mi++) work[mi] = workBefore[mi];
             }
         }
-        if (useComponents)
+        foreach (var v in C1RepairAnalysis.Analyze(p, work))
         {
-            // [C1 重複窓の連結成分化/測定中, Kotlin原本] 重複除去キーは comp.Staff/Start/End
-            //   （Analyze 経路の staff/shift/startD の代わり）。Components() は同一 staff 内で重ならない
-            //   区間しか作らないため本来は不要な保険だが、他パスと同じ「起点ごとに1回」の形を揃えておく。
-            var seenComp = new HashSet<string>();
-            foreach (var comp in C1RepairAnalysis.Components(p, work, cfg))
-            {
-                if (stop()) break;
-                if (!seenComp.Add($"{comp.Staff}|{comp.Start}|{comp.End}")) continue;
-                var span = Math.Min(cfg.MaxWindowDays, p.T);
-                var startD = Math.Max(Math.Min(comp.Start, p.T - span), 0);
-                var days = Enumerable.Range(startD, span).ToList();
-                var key = CompSpanKey(comp.Staff, comp.Start, comp.End, days);
-                if (deadSpans.Contains(key)) continue;
-                ApplyResult(C1RepairAnalysis.SolveComponent(p, work, comp, cfg), key);
-            }
-        }
-        else
-        {
-            foreach (var v in C1RepairAnalysis.Analyze(p, work))
-            {
-                if (stop()) break;
-                var span = Math.Min(cfg.MaxWindowDays, p.T);
-                var startD = Math.Max(Math.Min(v.Start, p.T - span), 0);
-                if (!seenFocus.Add($"{v.Staff}|{v.Shift}|{startD}")) continue;
-                var days = Enumerable.Range(startD, span).ToList();
-                var key = SpanKey(v.Staff, v.Shift, days);
-                if (deadSpans.Contains(key)) continue;
-                ApplyResult(C1RepairAnalysis.SolveWindow(p, work, v, cfg), key);
-            }
+            if (stop()) break;
+            var span = Math.Min(cfg.MaxWindowDays, p.T);
+            var startD = Math.Max(Math.Min(v.Start, p.T - span), 0);
+            if (!seenFocus.Add($"{v.Staff}|{v.Shift}|{startD}")) continue;
+            var days = Enumerable.Range(startD, span).ToList();
+            var key = SpanKey(v.Staff, v.Shift, days);
+            if (deadSpans.Contains(key)) continue;
+            ApplyResult(C1RepairAnalysis.SolveWindow(p, work, v, cfg), key);
         }
         var c1b = before.Breakdown.GetValueOrDefault("c1", 0);
         var c1a = bestRep.Breakdown.GetValueOrDefault("c1", 0);

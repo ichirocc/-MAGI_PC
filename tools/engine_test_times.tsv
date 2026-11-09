@@ -42,12 +42,10 @@
 227	MagiEngine.Tests.V6.RerunDraftTest
 218	MagiEngine.Tests.V6.ReviewExtWishFollowTest
 189	MagiEngine.Tests.V6.CheckerSnapshotTest
-188	MagiEngine.Tests.V6.C42FlowPolishTest
 159	MagiEngine.Tests.V6.V6HotfixPassesC1BeamTest
 158	MagiEngine.Tests.Model.StateJsonSerializerFixtureTest
 121	MagiEngine.Tests.V6.DiagnosisSnapshotTest
 71	MagiEngine.Tests.V6.C3FamilyBitTest
-43	MagiEngine.Tests.V6.C2PolishTest
 37	MagiEngine.Tests.V6.PersonalBalanceJointLnsPolishTest
 33	MagiEngine.Tests.V6.C3wConstraintTest
 31	MagiEngine.Tests.V6.ProblemTest
@@ -55,7 +53,6 @@
 25	MagiEngine.Tests.V6.CsvPartialImportTest
 20	MagiEngine.Tests.V6.Ws1OpsShiftColorTest
 20	MagiEngine.Tests.V6.PreRunCheckTest
-16	MagiEngine.Tests.V6.V6HotfixPassesRestZeroLnsTest
 16	MagiEngine.Tests.V6.V6PortAnalyzerForbiddenTest
 15	MagiEngine.Tests.V6.C3nBitScanTest
 15	MagiEngine.Tests.V6.TierObjectiveTest
@@ -78,7 +75,6 @@
 8	MagiEngine.Tests.V6.SmartInitialSchedulerTest
 8	MagiEngine.Tests.V6.WishTrialTest
 8	MagiEngine.Tests.V6.ConstraintMusTest
-7	MagiEngine.Tests.V6.C3nMarginLnsPolishTest
 7	MagiEngine.Tests.V6.Ws1OpsSkillGroupTest
 7	MagiEngine.Tests.V6.StateFingerprintTest
 7	MagiEngine.Tests.V6.AdaptiveHypothesisEpochPolicyTest
@@ -103,7 +99,6 @@
 3	MagiEngine.Tests.V6.V6HotfixPassesCyclicSwapTest
 3	MagiEngine.Tests.V6.V6HotfixPassesHF80Test
 3	MagiEngine.Tests.V6.EliteIntegrationPolishTest
-3	MagiEngine.Tests.V6.FairAchievementDirectionTest
 3	MagiEngine.Tests.KotlinInteropTest
 3	MagiEngine.Tests.V6.C1DeltaPrefilterTest
 3	MagiEngine.Tests.V6.CombinatorialRepairTest
@@ -119,7 +114,6 @@
 2	MagiEngine.Tests.V6.SoftOverflowGuardTest
 2	MagiEngine.Tests.V6.V6HotfixPassesCovOReliefTest
 2	MagiEngine.Tests.V6.V6FinalPortTailTest
-1	MagiEngine.Tests.V6.ArmReactivationTest
 1	MagiEngine.Tests.V6.RoundSeedTest
 1	MagiEngine.Tests.V6.V6HotfixPassesAnchoredWindowSwapTest
 1	MagiEngine.Tests.V6.ScheduleUtilTest
@@ -143,7 +137,6 @@
 0	MagiEngine.Tests.V6.StructuralHardResidualTest
 0	MagiEngine.Tests.V6.RsiPlusPhasePlanTest
 0	MagiEngine.Tests.V6.MinCostAssignmentTest
-0	MagiEngine.Tests.V6.C1MoveARepairTest
 0	MagiEngine.Tests.V6.EliteIntegrationQuantitativeTest
 0	MagiEngine.Tests.V6.V6HotfixPassesHF67Test
 0	MagiEngine.Tests.V6.V6HotfixPassesC3mnTest

@@ -27,7 +27,7 @@ public static partial class V6HotfixPasses
     /// （<see cref="UnifiedViolationChecker"/>）で担保する。
     /// </summary>
     public static DayAssignResult ApplyDayAssignmentPolish(
-        MagiState state, int[][] schedule, Func<bool>? shouldStop = null, bool identityFallback = false, bool quantitativeRangeEval = false)
+        MagiState state, int[][] schedule, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var pinBlocks = new PinBlockAttribution();
@@ -58,11 +58,7 @@ public static partial class V6HotfixPasses
                 for (var c = 0; c < n; c++)
                 {
                     var k = slots[c];
-                    // [3.597.0/backlog#30, Kotlin原本] 対角(c==r)は「自分の現シフトを保つ」＝盤面を変えない
-                    //   ので常に選べる。有限にすると恒等割当が必ず実行可能になり、置けないスロットがある
-                    //   日も残りを研磨できる。
-                    var ownSlot = identityFallback && c == r;
-                    if ((k < 0 || k >= p.K || !p.MayPlace(i, k)) && !ownSlot)
+                    if (k < 0 || k >= p.K || !p.MayPlace(i, k))
                     {
                         row[c] = MinCostAssignment.Inf;
                     }
@@ -138,7 +134,7 @@ public static partial class V6HotfixPasses
     /// が担保する（費用に無い族も採用判定で悪化しないことを保証）。
     /// </summary>
     public static DayAssignResult ApplyAlternatingSoftPolish(
-        MagiState state, int[][] schedule, int maxSweeps = 4, Func<bool>? shouldStop = null, bool identityFallback = false, bool quantitativeRangeEval = false)
+        MagiState state, int[][] schedule, int maxSweeps = 4, Func<bool>? shouldStop = null, bool quantitativeRangeEval = false)
     {
         var stop = shouldStop ?? (() => false);
         var pinBlocks = new PinBlockAttribution();
@@ -197,8 +193,7 @@ public static partial class V6HotfixPasses
                     for (var c = 0; c < n; c++)
                     {
                         var k = slots[c];
-                        var ownSlot = identityFallback && c == r; // [3.597.0, Kotlin原本] 上と同じ＝現状維持は常に選べる
-                        if ((k < 0 || k >= p.K || !p.MayPlace(i, k)) && !ownSlot)
+                        if (k < 0 || k >= p.K || !p.MayPlace(i, k))
                         {
                             row[c] = MinCostAssignment.Inf;
                         }

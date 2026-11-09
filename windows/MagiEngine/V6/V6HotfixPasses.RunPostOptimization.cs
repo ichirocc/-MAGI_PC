@@ -105,9 +105,6 @@ public static partial class V6HotfixPasses
         bool ComponentRepairFinal = true,
         /// <summary>[測定中] 人員過剰(covO)の退避研磨（ApplyCovOReliefPolish）を HF66 直後と共同 LNS の後に置く（Android 同名フラグ）。</summary>
         bool CovOReliefEnabled = true,
-        /// <summary>休の必要人数を明示した日に休が余るとき、前後の窓を夜勤列の列挙＋人間移動＋ビームで組み直す（ApplyRestZeroWindowLns）。
-        /// 最終段・退避の前。既定 OFF＝ユーザー決定（Android 3.555.0）。</summary>
-        bool RestZeroWindowLnsEnabled = false,
         /// <summary>[Iteration 7] 決定的モード＝時間（ms キャップ・締切・残り時間の判定）でなく回数で止める。同じ入力・seed なら同じ盤面。
         /// ベンチと再現性の検証用（実機は既定 false＝予算を使い切る）。外部の shouldStop は常に尊重する。</summary>
         bool Deterministic = false,
@@ -125,42 +122,6 @@ public static partial class V6HotfixPasses
         bool CountChainEnabled = false,
         /// <summary>[Android 3.727.19 同期] 膜の細胞 LNS を最終段に入れる（<see cref="PolishGate.MembraneCellLns"/> と両方 ON のときだけ＝Kotlin と同じくゲートで切れる）。既定 true（Android 3.727.20）。</summary>
         bool MembraneCellEnabled = true,
-        /// <summary>[測定中/backlog#30] 日ごと厳密割当で「自分の現シフトを保つ」対角を常に有限にする。
-        /// 恒等割当が常に実行可能になり、置けない職員/スロットがある日も残りを研磨できる。既定 OFF。</summary>
-        bool DayAssignIdentityFallback = false,
-        /// <summary>[3.511.3/測定中] 個人合計(c2)専用研磨（<see cref="C2Polish"/>、backlog #12(b)）。既定 OFF。</summary>
-        bool C2PolishEnabled = false,
-        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C2PolishEnabled"/> がOFFでも、c2違反が残っている
-        /// 局面でだけ試す。Android tools/loop ベンチ（3.582.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
-        bool C2PolishReactivate = false,
-        int C2Passes = 3,
-        /// <summary>[測定中] 群ペア禁止(c42/c42s)専用の min-cost-flow 研磨（<see cref="C42FlowPolish"/>、backlog #12(b)）。既定 OFF。</summary>
-        bool C42FlowPolishEnabled = false,
-        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C42FlowPolishEnabled"/> がOFFでも、c42/c42s違反が
-        /// 残っている局面でだけ試す。Android tools/loop ベンチ（3.583.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
-        bool C42FlowPolishReactivate = false,
-        int C42FlowPasses = 3,
-        /// <summary>[測定中] 最終段の「c3n(禁止連続) 前後余白込みLNS」（<see cref="C3nMarginLnsPolish"/>）。
-        /// 採否は tools/loop のペア比較で決める＝既定 OFF。</summary>
-        bool C3nMarginLnsEnabled = false,
-        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C3nMarginLnsEnabled"/> がOFFでも、c3n違反が
-        /// 残っている局面でだけ試す。Android側は専用合成ケースが作れず未計測のまま既定OFF。既定 OFF。</summary>
-        bool C3nMarginLnsReactivate = false,
-        int C3nMarginLnsMarginDays = 2,
-        int C3nMarginLnsEvaluations = 3_000,
-        /// <summary>[C1 重複窓の連結成分化/測定中] 厳密窓修復(<see cref="C1RepairOperators.ExactWindow"/>)の起点を、
-        /// 1件の違反でなく近接・重複窓を束ねた連結成分にする（backlog「C1 重複窓の連結成分化」）。既定 OFF＝挙動不変。</summary>
-        bool C1ComponentRepair = false,
-        /// <summary>[3.580.0/測定中/backlog#26] <see cref="C1ComponentRepair"/> がOFFでも、c1違反が残っている
-        /// 局面でだけ試す。Android側は専用合成ケースが作れず未計測のまま既定OFF。既定 OFF。</summary>
-        bool C1ComponentRepairReactivate = false,
-        /// <summary>[3.580.0/測定中/backlog#26] <see cref="CountChainEnabled"/> がOFFでも、high/apt超過が
-        /// 残っている局面でだけ試す。Android tools/loop ベンチ（3.584.0）はゲート不合格＝既定OFF維持が確定。既定 OFF。</summary>
-        bool CountChainReactivate = false,
-        /// <summary>[3.590.0/測定中/backlog#27①] fairの候補分類をFairTargetの生回数平均でなく
-        /// FairDevOfBucketの黒箱観測へ揃える。Android tools/loop ベンチ（3.591.0）はゲート不合格＝
-        /// 既定OFF維持が確定。既定 OFF。</summary>
-        bool FairAchievementDirection = false,
         /// <summary>[backlog #12(a)・実験段階] c2/c41/c41sを二値でなく不足量/距離量で評価する（既定false=挙動不変）。
         /// 全Polishパス・checker呼出へ明示伝播（Kotlin Stage2）。</summary>
         bool QuantitativeRangeEval = false,
@@ -168,9 +129,7 @@ public static partial class V6HotfixPasses
         /// 畳み込むたびにチェーン内の最良盤面と比べ、悪化していれば次パスの前に巻き戻す。構造的 covU 床
         /// （<see cref="V6SanityPort.StructuralHardFloor"/>）> 0 の盤面では働かない。既定 <b>true</b>（Android tools/loop 許容ON 同士
         /// 230 ペアで勝108/負54・必須退行0・必須増0）。許容 OFF ではチェーンが単調＝巻き戻しが起きず出力不変。</summary>
-        bool PostChainRunningKeepBest = true,
-        /// <summary>[既定 OFF, Android同名 N9] 巻き戻したパスの採用数を 0 と数える（巡の打ち切り判定・停滞検知へ流れる値）。</summary>
-        bool? PostChainRollbackCountsZero = null);
+        bool PostChainRunningKeepBest = true);
 
     /// <summary>巡ごとの乱数列を分けるためのパス別タグ（<see cref="RoundSeed"/>）。値は従来の手書き値と同じ＝乱数列不変。</summary>
     private static class SeedTag
@@ -187,7 +146,6 @@ public static partial class V6HotfixPasses
         public const long C3Pattern = 0xC3B4L;
         public const long Apt = 0xA97L;
         public const long Fair = 0xFA12L;
-        public const long C3nMargin = 0xC3E9L;
     }
 
     /// <summary>SoftPolishVerify の「採用内訳」の並び（ログ文言の順序を固定する）。</summary>
@@ -215,7 +173,6 @@ public static partial class V6HotfixPasses
         private readonly MagiState? _state;
         private readonly bool _quantitativeRangeEval;
         private readonly bool _runningKeepBest;
-        private readonly bool _rollbackCountsZero;
         private readonly bool _aptFairSoftTolerance;
         private bool _lastFoldRolledBack;
         private int[][] _bestWork;
@@ -232,7 +189,7 @@ public static partial class V6HotfixPasses
 
         /// <param name="runningKeepBest">false のときは走行 keep-best の状態を一切触らない＝挙動完全不変。</param>
         public PostChain(Action<string>? onPhase, int[][] schedule, MagiState? state = null, bool quantitativeRangeEval = false, bool runningKeepBest = false,
-            ViolationReport? initialReport = null, bool rollbackCountsZero = false, bool aptFairSoftTolerance = false)
+            ViolationReport? initialReport = null, bool aptFairSoftTolerance = false)
         {
             _aptFairSoftTolerance = aptFairSoftTolerance;
             _onPhase = onPhase;
@@ -240,7 +197,6 @@ public static partial class V6HotfixPasses
             _state = state;
             _quantitativeRangeEval = quantitativeRangeEval;
             _runningKeepBest = runningKeepBest && state != null && V6SanityPort.StructuralHardFloor(state, ScheduleUtil.CachedProblem(state, quantitativeRangeEval)) == 0;
-            _rollbackCountsZero = rollbackCountsZero;
             _bestWork = Work.Copy2D();
             _bestReport = initialReport;
         }
@@ -302,7 +258,6 @@ public static partial class V6HotfixPasses
             var folded = RunningKeepBestFold(r.Report, r.Logs, toleranceFamily);
             if (keepLogs) Logs.AddRange(folded);
             Record(r.Applied, r.Report);
-            if (_rollbackCountsZero && _lastFoldRolledBack) return 0;
             return r.Applied;
         }
 
@@ -369,7 +324,7 @@ public static partial class V6HotfixPasses
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule, p.QuantitativeRangeEval);
         var chain = new PostChain(onPhase, schedule, state, p.QuantitativeRangeEval, p.PostChainRunningKeepBest, report0,
-            p.PostChainRollbackCountsZero ?? PolishGate.PostChainRollbackCountsZero, PolishGate.AptFairSoftTolerance);
+            PolishGate.AptFairSoftTolerance);
         var t0 = EngineClock.NowMs();
         // [Android 3.656.0 同期] 玉突き連鎖パイプライン（Android は有効なら従来の玉突きをどの置き場所でも走らせない。C# は従来の常時フルを持たない）。
         var pipelineFocus = PolishGate.EjectionPipelineFocus;
@@ -409,7 +364,7 @@ public static partial class V6HotfixPasses
         bool ClusterStop() => stop() || EngineClock.NowMs() >= clusterDeadline;
 
         chain.Adopt(chain.Timed("後処理 厳密日割当", "DayAssignmentPolish", work =>
-            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval, identityFallback: p.DayAssignIdentityFallback)));
+            ApplyDayAssignmentPolish(state, work, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
 
         var preSoftRep = UnifiedViolationChecker.Check(state, chain.Work, p.QuantitativeRangeEval);
         var c1Plateau = RunPolishCluster(state, chain, p, seedVal, ClusterStop, preSoftRep);
@@ -419,7 +374,7 @@ public static partial class V6HotfixPasses
             ApplyWeeklyRebalancePolish(state, work, maxPasses: p.WeeklyRebalancePasses, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
         // 長方形交換（クロス日）が届かない同日内の割当先を Hungarian で再配置＝相補的なので両方走らせる。
         chain.Adopt(chain.Timed("後処理 交互最適化(日ブロック割当)", "AlternatingSoftPolish", work =>
-            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval, identityFallback: p.DayAssignIdentityFallback)));
+            ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
 
         // 最終 LNS 2 本（高コストなので巡回ループでなく最終 1 回）。残予算は既定比 8:6 で按分（3.255.0）。
         var tC1Lns = EngineClock.NowMs();
@@ -453,19 +408,6 @@ public static partial class V6HotfixPasses
             var r2 = PersonalBalanceJointLnsPolish.Apply(state, r1.NewSchedule, config: cfg, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval);
             return r2 with { BeforeTotal = r1.BeforeTotal, Applied = r1.Applied + r2.Applied, Logs = r1.Logs.Concat(r2.Logs).ToList() };
         }));
-        var c3nMarginActive = p.C3nMarginLnsEnabled ||
-            (p.C3nMarginLnsReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c3n"));
-        if (c3nMarginActive && !stop())
-        {
-            // [測定中, Kotlin原本] 共同 LNS の後・成分修復の前。c3n(禁止連続)のパターン日+前後余白を複数セル
-            //   同時destroy-rebuildして、1セル付け替え(C3nPolish)が構造的に届かない局面を拾う。
-            bool MarginStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
-            var rMargin = chain.Timed("後処理 禁止連続(c3n)前後余白込みLNS", "C3nMarginLNS", work =>
-                C3nMarginLnsPolish.Apply(state, work, marginDays: p.C3nMarginLnsMarginDays,
-                    maxEvaluations: p.C3nMarginLnsEvaluations, shouldStop: MarginStop, seed: seedVal ^ SeedTag.C3nMargin, quantitativeRangeEval: p.QuantitativeRangeEval));
-            chain.Adopt(rMargin);
-        }
-
         var tFinal = EngineClock.NowMs();
         if (p.ComponentRepairEnabled && p.ComponentRepairFinal && !stop())
         {
@@ -490,13 +432,6 @@ public static partial class V6HotfixPasses
             var rMem = chain.Timed("後処理 膜の細胞LNS(最終)", "MembraneCellLns", work => MembraneCellLns.Apply(state, work,
                 new MembraneCellLns.Params(MaxMillis: cap, Deterministic: p.Deterministic, MaxCells: p.Deterministic ? 12 : 64, ItersPerCell: p.Deterministic ? 20_000 : 60_000), stop));
             chain.ReplaceBoard(rMem.NewSchedule, rMem.Logs, null, rMem.Applied);
-        }
-
-        if (p.RestZeroWindowLnsEnabled && !stop())
-        {
-            bool LnsStop() => p.Deterministic ? stop() : stop() || deadlineMs - EngineClock.NowMs() <= 0L;
-            var rLns = chain.Timed("後処理 休0日の窓LNS(最終)", "RestZeroLNS", work => ApplyRestZeroWindowLns(state, work, shouldStop: LnsStop, quantitativeRangeEval: p.QuantitativeRangeEval));
-            chain.ReplaceBoard(rLns.NewSchedule, rLns.Logs, rLns.Report);
         }
 
         if (p.CovOReliefEnabled && !stop())
@@ -611,10 +546,8 @@ public static partial class V6HotfixPasses
                     shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Flow, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("c1", chain.Timed($"後処理 期間要件(c1)広域ビーム研磨{tag}", "C1広域ビーム", work =>
                 C1RepairOperators.WideBeam(state, work, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.C1Beam, round), quantitativeRangeEval: p.QuantitativeRangeEval)));
-            var c1ComponentActive = p.C1ComponentRepair ||
-                (p.C1ComponentRepairReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c1"));
             Take("c1", MemoTimed($"後処理 期間要件(c1)厳密窓修復{tag}", "C1厳密窓", (work, stop) =>
-                C1RepairOperators.ExactWindow(state, work, shouldStop: stop, useComponents: c1ComponentActive, quantitativeRangeEval: p.QuantitativeRangeEval), $"C1厳密窓/{c1ComponentActive}"));
+                C1RepairOperators.ExactWindow(state, work, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval), "C1厳密窓"));
 
             var rC3 = MemoTimed($"後処理 連続規則(c3系)研磨{tag}", "C3SequencePolish", (work, stop) =>
                 ApplyC3SequencePolish(state, work, maxPasses: p.C3SequencePasses, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval));
@@ -646,19 +579,13 @@ public static partial class V6HotfixPasses
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
                 ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "apt");
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, fairAchievementDirection: p.FairAchievementDirection, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
-            if (p.C2PolishEnabled || (p.C2PolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c2")))
-            {
-                Take("c2玉突き", MemoTimed($"後処理 個人合計(c2)研磨{tag}", "C2Polish", (work, stop) =>
-                    C2Polish.ApplyC2Polish(state, work, maxPasses: p.C2Passes, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
-            }
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
             // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)はQuantitativeRangeEval 以外は既定の
             //   PostOptimizationParams を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
             //   等と同じく PolishGate を直接読み、UI トグルが実際に効くようにする（Android は V6FinalPort.kt で
             //   PostOptimizationParams 構築時に countChainEnabled=PolishGate.countChainPolish を都度渡す設計だが、
             //   この C# 版は呼出元を変えずに済む軽量な配線を選ぶ）。
-            if (PolishGate.CountChainPolish ||
-                (p.CountChainReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "high", "apt")))
+            if (PolishGate.CountChainPolish)
             {
                 Take("回数連鎖", chain.Timed($"後処理 回数連鎖研磨{tag}", "CountChainPolish", work =>
                 {
@@ -669,12 +596,6 @@ public static partial class V6HotfixPasses
                     TuningTelemetry.AddCountChainApplied(r.Applied);
                     return r;
                 }));
-            }
-            if (p.C42FlowPolishEnabled ||
-                (p.C42FlowPolishReactivate && TargetFamiliesRemain(state, chain.Work, p.QuantitativeRangeEval, "c42", "c42s")))
-            {
-                Take("c42フロー", MemoTimed($"後処理 群ペア禁止(c42/c42s)フロー研磨{tag}", "C42FlowPolish", (work, stop) =>
-                    C42FlowPolish.ApplyC42FlowPolish(state, work, maxPasses: p.C42FlowPasses, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             }
             // [Iteration 2] 巡の中で各パスが単独では不採用にした候補を、違反起点のトランザクションに束ねる。
             var pool = chain.RejectedPool.ToList(); chain.RejectedPool.Clear();
