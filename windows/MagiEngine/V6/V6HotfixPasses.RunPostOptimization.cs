@@ -324,7 +324,7 @@ public static partial class V6HotfixPasses
         var stop = shouldStop ?? (() => false);
         var report0 = UnifiedViolationChecker.Check(state, schedule, p.QuantitativeRangeEval);
         var chain = new PostChain(onPhase, schedule, state, p.QuantitativeRangeEval, p.PostChainRunningKeepBest, report0,
-            PolishGate.AptFairSoftTolerance);
+            PolishGate.EffectiveAptFairSoftTolerance);
         var t0 = EngineClock.NowMs();
         // [Android 3.656.0 同期] 玉突き連鎖パイプライン（Android は有効なら従来の玉突きをどの置き場所でも走らせない。C# は従来の常時フルを持たない）。
         var pipelineFocus = PolishGate.EjectionPipelineFocus;
@@ -577,9 +577,9 @@ public static partial class V6HotfixPasses
                 ApplyAdaptiveBlockSwapPolish(state, work, maxPasses: p.BlockSwapPasses, candidatesPerLength: p.BlockSwapCandidatesPerLength,
                     maxEvaluations: p.BlockSwapEvaluations, shouldStop: stop, quantitativeRangeEval: p.QuantitativeRangeEval)));
             Take("apt玉突き", chain.Timed($"後処理 適切回数(apt)研磨{tag}", "AptPolish", work =>
-                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "apt");
+                ApplyAptPolish(state, work, maxPasses: p.AptPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Apt, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.EffectiveAptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "apt");
             Take("fair玉突き", chain.Timed($"後処理 グループ内公平化(fair)玉突き研磨{tag}", "FairPolish", work =>
-                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
+                ApplyFairPolish(state, work, maxPasses: p.FairPasses, shouldStop: clusterStop, seed: RoundSeed(seedVal, SeedTag.Fair, round), combineExhaustPairs: PolishGate.CombineExhaustPairs, aptFairSoftTolerance: PolishGate.EffectiveAptFairSoftTolerance, quantitativeRangeEval: p.QuantitativeRangeEval)), "fair");
             // [配線注意] このチェーン呼出元(V6FinalPort.HandleOptimize.cs)はQuantitativeRangeEval 以外は既定の
             //   PostOptimizationParams を渡すため、p.CountChainEnabled は静的既定値のまま変わらない。CombineExhaustPairs
             //   等と同じく PolishGate を直接読み、UI トグルが実際に効くようにする（Android は V6FinalPort.kt で

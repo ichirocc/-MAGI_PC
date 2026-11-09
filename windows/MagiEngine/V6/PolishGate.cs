@@ -61,6 +61,8 @@ public static class PolishGate
     /// <summary>[3.535.0/HF77明示数値指示] 公平化(fair)/適切回数(apt)研磨で、対象家族以外のSOFT悪化を
     /// 研磨開始時点比+6%まで容認するか（<see cref="V6HotfixPasses.ToleratedBetter"/>）。既定OFF。</summary>
     public static volatile bool AptFairSoftTolerance = false;
+    /// <summary>実行に使う 6% 許容（Kotlin <c>EngineConfig.snapshot</c> と同じ）: 優先順位では使わない。</summary>
+    public static bool EffectiveAptFairSoftTolerance => AptFairSoftTolerance && ObjectiveWeights.AllowsAptFairTolerance();
 
     /// <summary>[Kotlin原本 <c>PolishGate.c3nWallShortStall</c>（3.641.0）] 測定用: c3n 壁で停滞閾値を短縮するか。false＝c3n だけが残っても通常閾値で粘る。
     /// 既定 <b>false</b>（3.673.0: 60 s の予算では短縮が損＝sample 24 対で +95.7・区間 [+40.6, +153.8]、利用者「60秒の損失を取り返す方法を採用する」）。</summary>

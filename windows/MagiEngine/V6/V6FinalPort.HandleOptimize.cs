@@ -455,8 +455,11 @@ public static partial class V6FinalPort
         //   大半が未使用のまま返っていた。残り5s以上かつ違反が残る場合、最終盤面を起点に keep-best の
         //   追加精製(ALNS)へ回す。runAlns は入力比番兵つき＝結果は post 以上を保証。
         //   停滞検知(stagnationFired)による早期終了時はスキップ＝「無改善なら早く返す」方針を壊さない。
-        var refSched = post.Schedule;
-        var refReport = post.Report;
+        // 後処理が統合より悪い盤面を返したとき（apt/fair の 6% 許容が後処理の中で重みを悪化させた場合）は統合の盤面から続ける（Android 3.727.48）。
+        var postRegressed = UnifiedViolationChecker.BetterReport(integrated.Report, post.Report)
+            && !V6SearchOperators.ExactPinRegression(ScheduleUtil.CachedProblem(state), post.Schedule, integrated.Schedule);
+        var refSched = postRegressed ? integrated.Schedule : post.Schedule;
+        var refReport = postRegressed ? integrated.Report : post.Report;
         IReadOnlyList<MirrorLog> extraLog = Array.Empty<MirrorLog>();
         // [Android 同名、docs/seesaw.md §6.3] 後処理の結果から「他の案」へ歩く Path Relinking（既定 OFF）。良ければ本命を差し替え、
         //   本命に優越されない交換の盤面を「他の案」にする（S4）。上限 3 秒・全体の締切まで。
@@ -726,7 +729,7 @@ public static partial class V6FinalPort
         var tuningLog = new MirrorLog(level: "I", tag: "設定の効き",
             message: TuningTelemetry.Summary(nativeOn: false, parityOn: false, softPolishOn: softPolish,
                 combineExhaustPairs: PolishGate.CombineExhaustPairs, lnsAdaptive: true,
-                aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish));
+                aptFairSoftTolerance: PolishGate.EffectiveAptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish));
 
         // [3.288.0/ログ強化=状態軸] 「本当に改善可能な制約が残るか」を最終盤面で1行に集約。
         //   残った族を ①構造的な壁（もう直せない: 構造的covU下限・証明済みc3n壁）

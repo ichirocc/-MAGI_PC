@@ -9,7 +9,18 @@ namespace MagiEngine.Tests.V6;
 [Collection("PolishGateGlobal")]
 public class ObjectiveWeightsTest : IDisposable
 {
-    public void Dispose() => ObjectiveWeights.Method = ObjectiveMethod.Weights;
+    public void Dispose() { ObjectiveWeights.Method = ObjectiveMethod.Weights; PolishGate.AptFairSoftTolerance = false; }
+
+    /// <summary>優先順位では apt/fair の 6% 許容を入れても実行には使わない（重み（従来）では従来どおり使う）。</summary>
+    [Fact]
+    public void AptFairToleranceIsOffUnderPriority()
+    {
+        PolishGate.AptFairSoftTolerance = true;
+        ObjectiveWeights.Method = ObjectiveMethod.Priority;
+        Assert.False(PolishGate.EffectiveAptFairSoftTolerance);
+        ObjectiveWeights.Method = ObjectiveMethod.Weights;
+        Assert.True(PolishGate.EffectiveAptFairSoftTolerance);
+    }
 
     [Fact]
     public void DefaultMethodIsTheCurrentWeights()

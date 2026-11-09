@@ -458,6 +458,12 @@ public sealed partial class MagiViewModel
         _fixCts?.Cancel();
         ClearFixState();
         RecheckAlternativesForMethod();
+        // 置き換え前の勤務表の重みは前の方式の点数＝新しい方式で付け直す（Android 3.727.48。必須・合計は方式に依らない）。
+        if (_preDraft is { } p)
+            _preDraft = _state is { } st && p.StateKey == StateKey(st)
+                ? p with { Weighted = UnifiedViolationChecker.Check(st, p.Board).WeightedScore }
+                : null;
+        Ui.PreDraftNotice = null;
         LogOp("I", $"設定変更: 直す順番 → {ObjectiveMethodLabel(m)}");
         RefreshCheck();
     }

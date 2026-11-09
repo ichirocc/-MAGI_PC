@@ -23,6 +23,11 @@ public static class ObjectiveWeights
     public static IReadOnlyList<(string Key, double Weight)> Table(ObjectiveMethod m) => m == ObjectiveMethod.Priority ? PriorityOrdered : MirrorKeys.Weights;
     public static IReadOnlyList<(string Key, double Weight)> Table() => Table(Method);
 
+    /// <summary>公平化／適切回数の 6% 許容を使える方式か（Kotlin <c>ObjectiveWeights.allowsAptFairTolerance</c>）。
+    /// 優先順位は T3 の apt/fair のために上の段を悪くする手を採らない＝許容と両立しないので使わない。</summary>
+    public static bool AllowsAptFairTolerance(ObjectiveMethod m) => m != ObjectiveMethod.Priority;
+    public static bool AllowsAptFairTolerance() => AllowsAptFairTolerance(Method);
+
     /// <summary>族 1 つの採点の重み（<see cref="MirrorKeys.WeightOf"/> の採点版。aptLow/aptHigh は apt）。</summary>
     public static double Of(string family)
     {

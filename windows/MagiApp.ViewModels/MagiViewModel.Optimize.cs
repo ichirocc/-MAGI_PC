@@ -179,7 +179,7 @@ public sealed partial class MagiViewModel
     private string SettingsAtStart() => TuningTelemetry.StartLine(
         nativeOn: Ui.NativeAccel, parityOn: Ui.NativeParity, filterC3nIncrease: PolishGate.FilterC3nIncrease,
         wideC3nBreakDays: PolishGate.WideC3nBreakDays, softPolishOn: Ui.SoftPolish, combineExhaustPairs: PolishGate.CombineExhaustPairs,
-        lnsAdaptive: true, aptFairSoftTolerance: PolishGate.AptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish);
+        lnsAdaptive: true, aptFairSoftTolerance: PolishGate.EffectiveAptFairSoftTolerance, countChainPolish: PolishGate.CountChainPolish);
 
     /// <summary>Kotlin <c>String.substringAfter(delimiter)</c>: デリミタが無ければ全体を返す。</summary>
     private static string SubstringAfter(string s, string delimiter)
