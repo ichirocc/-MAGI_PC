@@ -162,6 +162,26 @@ public static partial class V6FinalPort
     }
 
     /// <summary>[3.575.0, Kotlin原本] ReportComparer で候補中の最良を選ぶ（同値なら早い段を残す）。</summary>
+    /// <summary>Kotlin <c>identitySwapLog</c>: 入力に無かった必須違反（族・場所）と解消した必須違反の 1 行。新しく生まれたものが無ければ空。</summary>
+    internal static List<MirrorLog> IdentitySwapLog(MagiEngine.Model.MagiState state, ViolationReport input, ViolationReport final)
+    {
+        var born = ViolationIdentity.NewHard(input, final);
+        if (born.Count == 0) return new List<MirrorLog>();
+        var gone = ViolationIdentity.Keys(input, hardOnly: true);
+        gone.ExceptWith(ViolationIdentity.Keys(final, hardOnly: true));
+        static string Fam(IEnumerable<ViolationKey> ks) => string.Join("・", ks.GroupBy(k => k.Family).Select(g => $"{FixApplyGate.FamLabel(g.Key)}{g.Count()}"));
+        string Where(ViolationKey k) => k.Space switch
+        {
+            ViolationKey.Kind.Cell => $"{(k.A < state.StaffList.Count ? state.StaffList[k.A].Name : k.A.ToString())}/{k.B + 1}日目",
+            ViolationKey.Kind.Need => $"{(k.A < state.Shifts.Count ? state.Shifts[k.A].Kigou : k.A.ToString())}/{k.B + 1}日目",
+            _ => $"{(k.A < state.StaffList.Count ? state.StaffList[k.A].Name : k.A.ToString())}/{(k.B < state.Shifts.Count ? state.Shifts[k.B].Kigou : k.B.ToString())}",
+        };
+        var msg = $"入力に無かった必須違反 {born.Count}件（{Fam(born)}）・入力の必須で解消 {gone.Count}件" +
+            (gone.Count == 0 ? "" : $"（{Fam(gone)}）") + $"。必須の件数は {input.Hard}→{final.Hard}（採否は件数で比べる）。" +
+            "例: " + string.Join("、", born.Take(3).Select(k => $"{FixApplyGate.FamLabel(k.Family)} {Where(k)}"));
+        return new List<MirrorLog> { new(level: "W", tag: "必須の入れ替わり", message: msg) };
+    }
+
     internal static StageCandidate PickBestStage(IReadOnlyList<StageCandidate> candidates) =>
         candidates.Aggregate((a, b) => UnifiedViolationChecker.BetterReport(b.Report, a.Report) ? b : a);
 

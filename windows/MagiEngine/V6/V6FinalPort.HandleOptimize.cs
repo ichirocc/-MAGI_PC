@@ -974,6 +974,8 @@ public static partial class V6FinalPort
         logs.AddRange(TuningTelemetry.ToleratedLines().Select(m => new MirrorLog(level: "I", tag: "容認採用", message: m)));
         logs.AddRange(cappedLog);
         logs.AddRange(pinLog);
+        // [MAGI-021/022, Android 3.727.46] 採否は必須の件数で比べる＝入れ替わり（例: 人員不足 1 を解いて禁止連続 1）は件数で見えない。採否は変えずログに出す。
+        logs.AddRange(IdentitySwapLog(state, inputReport, finalReport));
         logs.AddRange(adoptedLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);
