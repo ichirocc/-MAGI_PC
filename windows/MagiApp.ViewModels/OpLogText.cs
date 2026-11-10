@@ -103,7 +103,7 @@ public static class OpLogText
     /// <summary>操作ログの行から数えた迷いの指標。<see cref="HesitationOf"/> が組む（Kotlin <c>hesitation()</c>。C# は型と同名の関数を置けない）。</summary>
     public sealed record Hesitation(
         int ManualChanges, int Undo, int Redo,
-        int Searches, int SearchesWithResult, int SearchesEmpty, int Applied, int NotNow, int Consulted,
+        int Searches, int SearchesWithResult, int SearchesEmpty, int AutoSearches, int Applied, int NotNow, int Consulted,
         int AutoRuns, int Drafts, int DraftsRightAfterResult,
         int ClosedWithoutApply,
         long? LongestGapMs, long LongestGapFromMs, long LongestGapToMs,
@@ -115,7 +115,7 @@ public static class OpLogText
             return new[]
             {
                 $"手で変更 {ManualChanges}回{Sep}元に戻す {Undo}回{Sep}やり直し {Redo}回",
-                $"案を探した {Searches}回（案あり {SearchesWithResult}・なし {SearchesEmpty}）{Sep}適用 {Applied}回{Sep}今は変更しない {NotNow}回{Sep}相談に残す {Consulted}回",
+                $"案を探した {Searches}回（案あり {SearchesWithResult}・なし {SearchesEmpty}・ほかに自動 {AutoSearches}回）{Sep}適用 {Applied}回{Sep}今は変更しない {NotNow}回{Sep}相談に残す {Consulted}回",
                 $"自動作成 {AutoRuns}回{Sep}下書き {Drafts}回（結果の直後 {DraftsRightAfterResult}回）",
                 $"確認の画面を閉じた（適用なし）{ClosedWithoutApply}回",
                 LongestGapMs is null ? $"最長の空白 {None}" : $"最長の空白 {LongestGapMs.Value / 60_000}分（{Hm(LongestGapFromMs)}〜{Hm(LongestGapToMs)}）",
@@ -150,7 +150,7 @@ public static class OpLogText
         int N(string prefix) => msgs.Count(m => m.StartsWith(prefix, StringComparison.Ordinal));
         return new Hesitation(
             ManualChanges: N("手で変更:"), Undo: N("元に戻す"), Redo: N("やり直し"),
-            Searches: N("案を探す:"), SearchesWithResult: N("案: ") - N("案: なし"), SearchesEmpty: N("案: なし"),
+            Searches: N("案を探す:"), SearchesWithResult: N("案: ") - N("案: なし"), SearchesEmpty: N("案: なし"), AutoSearches: N("案を探す（自動）:"),
             Applied: N("改善手を適用:"), NotNow: N("変更の確認: 今は変更しない"), Consulted: N("相談に残す:"),
             AutoRuns: N("最適化 開始"), Drafts: N("下書きで置き換え（確認済み）"), DraftsRightAfterResult: rightAfter,
             ClosedWithoutApply: N("人員不足の手伝い: 閉じる") + N("作成前の確認: 閉じる") + N("配布前の確認: 戻る"),

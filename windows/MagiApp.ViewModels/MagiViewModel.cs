@@ -464,6 +464,9 @@ public sealed partial class MagiViewModel
                 ? p with { Weighted = UnifiedViolationChecker.Check(st, p.Board).WeightedScore }
                 : null;
         Ui.PreDraftNotice = null;
+        // 「前回と同じ結果」は前の方式での話＝採点が変われば今の盤面からでも同じ谷へ戻るとは限らない（Android 3.727.50）。
+        _lastRunKeys = null;
+        Ui.SameResult = null;
         LogOp("I", $"設定変更: 直す順番 → {ObjectiveMethodLabel(m)}");
         RefreshCheck();
     }

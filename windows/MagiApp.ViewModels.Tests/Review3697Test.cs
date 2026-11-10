@@ -93,7 +93,7 @@ public class Review3697Test
         var lines = HesitationSummary(rev.Select(x => x.Line).ToList(), rev.Select(x => Base + x.T).ToList());
         Assert.Equal(6, lines.Count);
         Assert.Equal("手で変更 1回 ・ 元に戻す 1回 ・ やり直し 1回", lines[0]);
-        Assert.Equal("案を探した 2回（案あり 1・なし 1） ・ 適用 3回 ・ 今は変更しない 1回 ・ 相談に残す 1回", lines[1]);
+        Assert.Equal("案を探した 2回（案あり 1・なし 1・ほかに自動 0回） ・ 適用 3回 ・ 今は変更しない 1回 ・ 相談に残す 1回", lines[1]);
         Assert.Equal("自動作成 2回 ・ 下書き 2回（結果の直後 1回）", lines[2]);
         Assert.Equal("確認の画面を閉じた（適用なし）3回", lines[3]);
         Assert.Equal($"最長の空白 30分（{Hm(Base + 310_000L)}〜{Hm(Base + 2_110_000L)}）", lines[4]);
@@ -101,12 +101,21 @@ public class Review3697Test
         Assert.Equal(lines, HesitationSummary(log.Select(x => x.Line).ToList(), log.Select(x => Base + x.T).ToList()));
     }
 
+    /// <summary>自動で探した回数は手で探した回数と分けて数える（Kotlin 同名テストの移植）。</summary>
+    [Fact]
+    public void HesitationSummaryCountsAutoSearchesSeparately()
+    {
+        var msgs = new List<string> { "案を探す（自動）: 全体", "案（自動）: 8件（8秒）", "案を探す（自動）: 全体", "案を探す: 全体", "案: なし（8秒）" };
+        var lines = HesitationSummary(msgs, msgs.Select((_, i) => i * 1000L).ToList());
+        Assert.Equal("案を探した 1回（案あり 0・なし 1・ほかに自動 2回） ・ 適用 0回 ・ 今は変更しない 0回 ・ 相談に残す 0回", lines[1]);
+    }
+
     [Fact]
     public void HesitationSummaryWithoutDataSaysDash()
     {
         var lines = HesitationSummary(Array.Empty<string>(), Array.Empty<long>());
         Assert.Equal("手で変更 0回 ・ 元に戻す 0回 ・ やり直し 0回", lines[0]);
-        Assert.Equal("案を探した 0回（案あり 0・なし 0） ・ 適用 0回 ・ 今は変更しない 0回 ・ 相談に残す 0回", lines[1]);
+        Assert.Equal("案を探した 0回（案あり 0・なし 0・ほかに自動 0回） ・ 適用 0回 ・ 今は変更しない 0回 ・ 相談に残す 0回", lines[1]);
         Assert.Equal("自動作成 0回 ・ 下書き 0回（結果の直後 0回）", lines[2]);
         Assert.Equal("確認の画面を閉じた（適用なし）0回", lines[3]);
         Assert.Equal("最長の空白 —", lines[4]);

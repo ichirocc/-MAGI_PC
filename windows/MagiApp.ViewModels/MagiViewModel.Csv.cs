@@ -236,7 +236,7 @@ public sealed partial class MagiViewModel
         var hj = new JsonObject
         {
             ["manualChanges"] = h.ManualChanges, ["undo"] = h.Undo, ["redo"] = h.Redo,
-            ["searches"] = h.Searches, ["searchesWithResult"] = h.SearchesWithResult, ["searchesEmpty"] = h.SearchesEmpty,
+            ["searches"] = h.Searches, ["searchesWithResult"] = h.SearchesWithResult, ["searchesEmpty"] = h.SearchesEmpty, ["autoSearches"] = h.AutoSearches,
             ["applied"] = h.Applied, ["notNow"] = h.NotNow, ["consulted"] = h.Consulted,
             ["autoRuns"] = h.AutoRuns, ["drafts"] = h.Drafts, ["draftsRightAfterResult"] = h.DraftsRightAfterResult,
             ["closedWithoutApply"] = h.ClosedWithoutApply,

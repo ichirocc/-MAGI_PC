@@ -231,13 +231,31 @@ public static class ScheduleUtil
     {
         var all = p.GroupMembers[g];
         // 回数は 1 人 1 回だけ数える（count は呼び出し側の表引き）。members＝偏差>0 の内訳を作るか（合計だけの呼び出しは作らない）。
-        var mem = new int[all.Length];
-        var cnt = new int[all.Length];
+        var sc = new FairScratch(all.Length);
+        for (int pos = 0; pos < all.Length; pos++) sc.Counts[pos] = count(all[pos]);
+        return FairDevCore(p, g, k, members, sc);
+    }
+
+    /// <summary><see cref="FairDevOfBucket"/> の作業領域（群の人数ぶん）。差分評価は 1 つを使い回して呼ぶたびの確保を省く（Kotlin <c>FairScratch</c>）。</summary>
+    internal sealed class FairScratch(int n)
+    {
+        public readonly int[] Counts = new int[n], Mem = new int[n], Cnt = new int[n], Order = new int[n];
+        public readonly double[] Ach = new double[n], Scale = new double[n];
+    }
+
+    /// <summary><see cref="FairDevOfBucket"/> の合計だけを、<paramref name="sc"/> の Counts（GroupMembers[g] の並びの回数、呼び出し側が書く）から出す。</summary>
+    internal static int FairDevTotal(this Problem p, int g, int k, FairScratch sc) => FairDevCore(p, g, k, false, sc).Total;
+
+    private static readonly FairDevResult FairZero = new(0, Array.Empty<(int, int)>());
+
+    private static FairDevResult FairDevCore(Problem p, int g, int k, bool members, FairScratch sc)
+    {
+        var all = p.GroupMembers[g];
+        var mem = sc.Mem; var cnt = sc.Cnt;
         int n = 0;
-        foreach (var x in all) { int c = count(x); if (p.MayPlace(x, k) || c > 0) { mem[n] = x; cnt[n] = c; n++; } }
-        if (n < 2) return new FairDevResult(0, Array.Empty<(int, int)>());
-        var ach = new double[n];
-        var scale = new double[n];
+        for (int pos = 0; pos < all.Length; pos++) { int x = all[pos], c = sc.Counts[pos]; if (p.MayPlace(x, k) || c > 0) { mem[n] = x; cnt[n] = c; n++; } }
+        if (n < 2) return FairZero;
+        var ach = sc.Ach; var scale = sc.Scale;
         for (int idx = 0; idx < n; idx++)
         {
             int x = mem[idx];
@@ -263,9 +281,9 @@ public static class ScheduleUtil
         }
         double w = 0.0;
         for (int idx = 0; idx < n; idx++) w += scale[idx];
-        if (w <= 0.0) return new FairDevResult(0, Array.Empty<(int, int)>());
+        if (w <= 0.0) return FairZero;
         // 達成率の昇順・同値は添字順（安定）。n は群の人数なので挿入整列で足りる。
-        var order = new int[n];
+        var order = sc.Order;
         for (int x = 0; x < n; x++) order[x] = x;
         for (int x = 1; x < n; x++)
         {
@@ -275,8 +293,9 @@ public static class ScheduleUtil
         }
         double acc = 0.0;
         double tgt = ach[order[n - 1]];
-        foreach (var idx in order)
+        for (int oi = 0; oi < n; oi++)
         {
+            int idx = order[oi];
             acc += scale[idx];
             if (acc * 2 >= w) { tgt = ach[idx]; break; }
         }
@@ -288,7 +307,7 @@ public static class ScheduleUtil
             total += dx;
             if (dx > 0) perMember?.Add((mem[idx], dx));
         }
-        return new FairDevResult(total, perMember ?? (IReadOnlyList<(int, int)>)Array.Empty<(int, int)>());
+        return perMember == null ? new FairDevResult(total, Array.Empty<(int, int)>()) : new FairDevResult(total, perMember);
     }
 
     /// <summary><see cref="FairDevOfBucket"/> のフォールバック先＝生回数の round(平均) からの L1 偏差（母集団 mem[0..n)）。</summary>

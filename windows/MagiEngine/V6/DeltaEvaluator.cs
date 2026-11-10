@@ -78,6 +78,8 @@ public sealed class DeltaEvaluator
         }
         _c1Index = BuildShiftIndex(p.Cons1.Count, e => new[] { p.Cons1[e].ShiftIdx });
         _fairCur = new long[p.G * K];
+        _fairScratch = new ScheduleUtil.FairScratch[p.G];
+        for (int g = 0; g < p.G; g++) _fairScratch[g] = new ScheduleUtil.FairScratch(p.GroupMembers[g].Length);
 
         _a = p.InitialAssignment();
         Rebuild();
@@ -108,6 +110,7 @@ public sealed class DeltaEvaluator
     private readonly ShiftIndex _c1Index;
     // _fairCur[g*K+k]＝群 g・シフト k の公平化偏差の現在値（Rebuild が全件、Commit が動いた 2 件を更新）。
     private readonly long[] _fairCur;
+    private readonly ScheduleUtil.FairScratch[] _fairScratch;
     private long _fairOldAfter, _fairNwAfter;
 
     /// <summary>
@@ -847,8 +850,14 @@ public sealed class DeltaEvaluator
     /// モード、全員に基準が無ければ従来の生回数round(平均)方式）をそのまま呼ぶだけ。
     /// UnifiedViolationChecker の "fair" と一致.
     /// </summary>
-    private long FairDevAt(int g, int k, int special, int delta) =>
-        _p.FairDevOfBucket(g, k, x => _cntSS[x][k] + (x == special ? delta : 0), members: false).Total;
+    private long FairDevAt(int g, int k, int special, int delta)
+    {
+        var all = _p.GroupMembers[g];
+        if (all.Length < 2) return 0L;
+        var sc = _fairScratch[g];
+        for (int pos = 0; pos < all.Length; pos++) { int x = all[pos]; sc.Counts[pos] = _cntSS[x][k] + (x == special ? delta : 0); }
+        return _p.FairDevTotal(g, k, sc);
+    }
 
     private long FairAll()
     {

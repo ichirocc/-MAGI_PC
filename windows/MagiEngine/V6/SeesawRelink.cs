@@ -93,7 +93,7 @@ public static class SeesawRelink
         }
         var tradeoffs = PickTradeoffs(bestRep, pool);
         var logs = new List<MirrorLog> { new(tag: "SeesawRelink",
-            message: $"シーソーの Path Relinking: 案 {alternatives.Count}・採用 {applied}・交換の候補 {tradeoffs.Count}（集めた {pool.Count}）・重み {(long)bestRep.WeightedScore}") };
+            message: $"シーソーの Path Relinking: 案 {alternatives.Count}・最良の更新 {applied}回・交換の候補 {tradeoffs.Count}（集めた {pool.Count}）・重み {(long)bestRep.WeightedScore}") };
         return new Result(best, bestRep, applied, tradeoffs.Select(t => t.Board).ToList(), logs);
     }
 
