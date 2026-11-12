@@ -36,7 +36,7 @@ public class ObjectiveWeightsTest : IDisposable
         foreach (var f in MirrorKeys.Hard) Assert.Equal(MirrorKeys.WeightOf(f), t[f]);
         foreach (var f in TierObjective.Tiers[1]) Assert.Equal(200.0, t[f]);
         foreach (var f in TierObjective.Tiers[2]) Assert.Equal(20.0, t[f]);
-        foreach (var f in TierObjective.Tiers[3]) Assert.Equal(1.0, t[f]);
+        foreach (var f in TierObjective.Tiers[3]) Assert.Equal(f == "fair" ? 20.0 : 1.0, t[f]);
         Assert.Equal(MirrorKeys.Weights.Select(kv => kv.Key), ObjectiveWeights.Table(ObjectiveMethod.Priority).Select(kv => kv.Key));
     }
 

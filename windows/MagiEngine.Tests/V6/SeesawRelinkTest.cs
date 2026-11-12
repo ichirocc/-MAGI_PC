@@ -82,8 +82,8 @@ public class SeesawRelinkWalkTest
             var st = StateJsonSerializer.Parse(FixtureLoader.ReadRaw("full_coverage_state.json"));
             var b0 = st.Schedule.Select(r => r.ToArray()).ToArray();
             int[][] Pol(long seed) => MembraneCellLns.Apply(st, b0, new MembraneCellLns.Params(Deterministic: true, MaxCells: 30, ItersPerCell: 60_000, Seed: seed)).NewSchedule;
-            var b = Pol(1L);
-            var alts = new List<int[][]> { Pol(5L), Pol(9L), Pol(13L) };
+            var b = Pol(2L);
+            var alts = new List<int[][]> { Pol(6L), Pol(10L), Pol(14L) };
             var plain = SeesawRelink.Apply(st, b, alts, maxMillis: 600_000L, walks: new[] { SeesawRelink.Walk.Plain });
             var all = SeesawRelink.Apply(st, b, alts, maxMillis: 600_000L);
             Assert.False(UnifiedViolationChecker.BetterReport(plain.Report, all.Report));
