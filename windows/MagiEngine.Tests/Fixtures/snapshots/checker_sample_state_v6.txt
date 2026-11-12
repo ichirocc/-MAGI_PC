@@ -1,4 +1,4 @@
-hard=15 soft=315 total=330 weighted=146819.0
+hard=15 soft=317 total=332 weighted=146829.0
 bd.c1=7
 bd.c2=0
 bd.c3=89
@@ -16,7 +16,7 @@ bd.low=2
 bd.high=0
 bd.groupViol=0
 bd.apt=0
-bd.fair=3
+bd.fair=5
 bd.weekly=180
 bd.c3w=0
 bd.extWish=0

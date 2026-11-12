@@ -188,7 +188,7 @@ public class V6HotfixPassesFairTest
         var st = MultiUnitSelfSwapState();
         var sched = st.Schedule.ToIntArray2D();
         var before = UnifiedViolationChecker.Check(st, sched);
-        Assert.Equal(8, before.Breakdown.GetValueOrDefault("fair", -1)); // 初期fair偏差=8
+        Assert.Equal(13, before.Breakdown.GetValueOrDefault("fair", -1)); // 初期fair偏差=13（和 8＋最大 5、Android 3.727.77）
 
         // maxPasses=1に固定し、1パス内での自己振替の反復可否そのものを検証する。
         var result = V6HotfixPasses.ApplyFairPolish(st, sched, maxPasses: 1);

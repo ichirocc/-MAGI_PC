@@ -35,7 +35,7 @@ public class ChangeSummaryTest
         Assert.Equal("変更：2人・4か所／希望どおり 2/2件", s.Line());
         Assert.Equal(-1, s.FamilyDeltas["pref"]); Assert.Equal(1, s.FamilyDeltas["high"]);   // s0 の希望が通り、s2 が上限超過
         Assert.Equal("減った：pref 1件", s.FamilyLine().Split('／')[0]);
-        Assert.StartsWith("増えた：上限超過 1件・fair 6件", s.FamilyLine(label: k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: 上限超過 +1(=50) が先頭、fair +6(=30) が続く（2026-10-30 high 50。3.647.0〜は fair が先頭）
+        Assert.StartsWith("増えた：上限超過 1件・fair 8件", s.FamilyLine(label: k => k == "high" ? "上限超過" : k).Split('／')[1]);   // 加重順: 上限超過 +1(=50) が先頭、fair +8(=40) が続く（Android 3.727.77〜 fair は偏差の和＋最大＝6+2）
     }
 
     [Fact]

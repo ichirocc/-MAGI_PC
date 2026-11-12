@@ -299,15 +299,17 @@ public static class ScheduleUtil
             acc += scale[idx];
             if (acc * 2 >= w) { tgt = ach[idx]; break; }
         }
-        int total = 0;
+        int total = 0, worst = 0;
         var perMember = members ? new List<(int, int)>() : null;
         for (int idx = 0; idx < n; idx++)
         {
             int dx = (int)KotlinInterop.MathRound(Math.Abs(ach[idx] - tgt) * scale[idx]);
             total += dx;
+            if (dx > worst) worst = dx;
             if (dx > 0) perMember?.Add((mem[idx], dx));
         }
-        return perMember == null ? new FairDevResult(total, Array.Empty<(int, int)>()) : new FairDevResult(total, perMember);
+        // Android 3.727.77: 偏差の和（MinDev）に最大の偏差（MinMax）を足す（Martin ら 2013 の組み合わせ）。
+        return perMember == null ? new FairDevResult(total + worst, Array.Empty<(int, int)>()) : new FairDevResult(total + worst, perMember);
     }
 
     /// <summary><see cref="FairDevOfBucket"/> のフォールバック先＝生回数の round(平均) からの L1 偏差（母集団 mem[0..n)）。</summary>
@@ -316,15 +318,16 @@ public static class ScheduleUtil
         int sum = 0;
         for (int idx = 0; idx < n; idx++) sum += cnt[idx];
         int tgt = (int)KotlinInterop.MathRound(sum / (double)n);
-        int total = 0;
+        int total = 0, worst = 0;
         var perMember = members ? new List<(int, int)>() : null;
         for (int idx = 0; idx < n; idx++)
         {
             int dx = Math.Abs(cnt[idx] - tgt);
             total += dx;
+            if (dx > worst) worst = dx;
             if (dx > 0) perMember?.Add((mem[idx], dx));
         }
-        return new FairDevResult(total, perMember ?? (IReadOnlyList<(int, int)>)Array.Empty<(int, int)>());
+        return new FairDevResult(total + worst, perMember ?? (IReadOnlyList<(int, int)>)Array.Empty<(int, int)>());
     }
 
     public static int[][] CountMatrix(Problem p, int[][] schedule)

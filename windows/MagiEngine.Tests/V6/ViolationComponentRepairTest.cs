@@ -21,10 +21,11 @@ public class ViolationComponentRepairTest
     private static MagiState CombineTwoRejectedState() => MinimalState.Build(
         startDate: "2026-08-01", endDate: "2026-08-01",
         shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("P", "P", "", ""), new("Qres", "Qres", "", ""), new("D", "D", "", "") },
-        groups: new List<Group> { new("G0", "G0") },
-        staffList: new List<Staff> { new("X", 0), new("Y", 0), new("W1", 0), new("W2", 0) }, use2Patterns: false,
-        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },
-        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "0", "", "1" } },
+        // Android 3.727.77: W1/W2 は別グループ G1（同じグループに 4 人だと fair＝偏差の和＋最大で X+Y の結合も改善にならなかった）。
+        groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+        staffList: new List<Staff> { new("X", 0), new("Y", 0), new("W1", 1), new("W2", 1) }, use2Patterns: false,
+        groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 }, new List<int> { 1, 1, 1, 1 } },
+        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "0", "", "1" }, new List<string> { "", "0", "", "1" } },
         schedule: new List<IReadOnlyList<int>> { new List<int> { 1 }, new List<int> { 2 }, new List<int> { 0 }, new List<int> { 0 } },
         wishes: new Dictionary<string, int>(),
         // [3.541.0] W2 の D は上限 0 でなく 0〜1。fair v2 は担当不可(上限0)で 0 回の職員を母集団から外すため、上限 0 のままだと

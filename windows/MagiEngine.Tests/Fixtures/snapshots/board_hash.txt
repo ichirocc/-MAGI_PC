@@ -1,6 +1,6 @@
 golden_state seed=1 hash=-4559917173829686180
-sample_state_v6 seed=1 hash=-80248866103160423
-blocked_covu_state seed=1 hash=-2139902337264998511
-sept2026_state seed=1 hash=-491515408930591207
-oct2026_grid_state seed=1 hash=-8787569059049416345
-full_coverage_state seed=1 hash=6670665127854712129
+sample_state_v6 seed=1 hash=-5889577460295094474
+blocked_covu_state seed=1 hash=-5020260127292804268
+sept2026_state seed=1 hash=-140447497535500440
+oct2026_grid_state seed=1 hash=-2005154101909192949
+full_coverage_state seed=1 hash=8095850698349831634

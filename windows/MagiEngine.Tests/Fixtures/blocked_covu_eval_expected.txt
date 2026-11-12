@@ -1,5 +1,5 @@
 hard=4
-soft=6978
+soft=7023
 c1=64
 c2=0
 c3=0
@@ -17,7 +17,7 @@ low=3
 high=2
 groupViol=0
 apt=0
-fair=11
+fair=20
 weekly=214
 c3w=0
 extWish=0

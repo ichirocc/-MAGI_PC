@@ -31,7 +31,17 @@ public class TierObjectiveTest
                 var board = boards[b];
                 var rep = UnifiedViolationChecker.Check(st, board);
                 foreach (var (fam, arr) in TierObjective.T1PerStaff(p, board)) Assert.True(rep.Breakdown.GetValueOrDefault(fam, 0) == arr.Sum(), $"{name} #{b} {fam}");
-                Assert.True(rep.Breakdown.GetValueOrDefault("fair", 0) == TierObjective.FairDeviations(p, board).Sum(), $"{name} #{b} fair");
+                // fair＝職員ごとの偏差の和＋グループ×シフトごとの最大の偏差（Android 3.727.77）。
+                var counts = ScheduleUtil.CountMatrix(p, board);
+                var worst = 0;
+                for (var g = 0; g < p.G; g++)
+                    if (p.GroupMembers[g].Length >= 2)
+                        foreach (var sk in p.Bucket[g])
+                        {
+                            var pm = p.FairDevOfBucket(g, sk, x => counts[x][sk]).PerMember;
+                            worst += pm.Count == 0 ? 0 : pm.Max(t => t.Dev);
+                        }
+                Assert.True(rep.Breakdown.GetValueOrDefault("fair", 0) == TierObjective.FairDeviations(p, board).Sum() + worst, $"{name} #{b} fair");
                 var k = TierObjective.Key(p, board, rep);
                 Assert.Equal(rep.Total, k.Excess.Sum());
                 Assert.Equal(rep.Hard, k.Excess[0]);
