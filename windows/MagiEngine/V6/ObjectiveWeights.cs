@@ -6,7 +6,7 @@ public enum ObjectiveMethod { Weights, Priority }
 /// <summary>
 /// Kotlin <c>ObjectiveWeights</c> の移植: 採点に使う重み（評価器・差分評価・チェッカーの WeightedScore・修復と研磨の見積り）。方式で切り替わる。
 /// 違反の色・重なりの優先（表示）は方式に関わらず <see cref="MirrorKeys.Weights"/> のまま。
-/// Priority の重み（HF77）: 必須（T0）は今のまま、T1＝200、T2＝20、T3＝1、fair＝20（Android 3.727.75、2026-11-12 ユーザー指示「20」）。
+/// Priority の重み（HF77）: 必須（T0）は今のまま、T1＝200、T2＝20、T3＝1、fair＝50（Android 3.727.80、2026-11-13 ユーザー指示「50」。旧 20）。
 /// </summary>
 public static class ObjectiveWeights
 {
@@ -15,7 +15,7 @@ public static class ObjectiveWeights
 
     // 宣言順＝加算順（WeightedScore の double 合計を Kotlin とビット単位で一致させる）。
     private static readonly (string Key, double Weight)[] PriorityOrdered = MirrorKeys.Weights
-        .Select(kv => (kv.Key, kv.Key == "fair" ? 20.0 : TierObjective.Tiers[1].Contains(kv.Key) ? 200.0
+        .Select(kv => (kv.Key, kv.Key == "fair" ? 50.0 : TierObjective.Tiers[1].Contains(kv.Key) ? 200.0
             : TierObjective.Tiers[2].Contains(kv.Key) ? 20.0
             : TierObjective.Tiers[3].Contains(kv.Key) ? 1.0 : kv.Weight)).ToArray();
     private static readonly IReadOnlyDictionary<string, double> PriorityByKey = PriorityOrdered.ToDictionary(kv => kv.Key, kv => kv.Weight);
