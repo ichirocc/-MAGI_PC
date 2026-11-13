@@ -208,7 +208,7 @@ public static class UnifiedViolationChecker
                     bool viol = z < c.Day2;
                     if (viol)
                     {
-                        Inc("c1");
+                        Inc("c1", c.Day2 - z);
                         if (!prevViol) { Mark(i, j, "c1"); runStart = j; }
                     }
                     else if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });

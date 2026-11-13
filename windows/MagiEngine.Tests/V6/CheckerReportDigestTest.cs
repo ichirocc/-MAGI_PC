@@ -91,5 +91,5 @@ public class CheckerReportDigestTest
     // （3.653.0 extWish 追加＝全報告に extWish=0 が増える。旧: 1a2feb00…）。乱数を JavaRandom・fixture ごとの順へ変えて取り直し（旧: ebf3caea…）。
     // [2026-10-26] c1 50→90・c3mn 90→50（旧: 428718c8…）。[2026-10-30] high 25→50・c3mn 50→25（旧: 2f106efc…）。
     // Android 3.727.77 fair＝偏差の和＋最大（旧: c6cec8e5…）。
-    private const string Expected = "b06e2cca859b0d23f70a3547d587182b8985a308e4b9d82fbf80a0c8a8779e97";
+    private const string Expected = "2451c9ae2b58bc462ca7569447b494a057b91fa6c7eeea114d04e12218cb5c6b";
 }

@@ -352,7 +352,7 @@ public static partial class V6SanityPort
                         {
                             if (!perStaffRule.TryGetValue(i, out var rules))
                                 perStaffRule[i] = rules = new InsertionOrderDictionary<string, int>();
-                            rules[ruleLabel] = rules.GetValueOrDefault(ruleLabel, 0) + 1;
+                            rules[ruleLabel] = rules.GetValueOrDefault(ruleLabel, 0) + (c.Day2 - z);
                         }
                         j++;
                     }

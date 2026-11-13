@@ -77,13 +77,13 @@ public class C1RepairIndexTest
     public void ExpectedGainSeparatesTargetShifts()
     {
         // [3.279.0/C1-07 移植元] 同一職員・同一日に別シフトの不足窓が併存しても gain が混合されない。
-        //   盤面 [休,休]・ルール「X 2日窓≥1」(1手で解消=gain1) と「Y 2日窓≥2」(1手では解消しない=gain0)。
+        //   盤面 [休,Y]・ルール「X 2日窓≥1」(1手で不足が減る=gain1) と「Y 2日窓≥1」(すでに充足=gain0)。
         //   旧 API(staff,day) は max 混合で両問い合わせとも 1 になり判別不能だった。
         var s = St(
-            2, 1, new List<IReadOnlyList<int>> { new List<int> { 0, 0 } },
-            new List<C1Row> { new("2", "X", "1"), new("2", "Y", "2") });
+            2, 1, new List<IReadOnlyList<int>> { new List<int> { 0, 2 } },
+            new List<C1Row> { new("2", "X", "1"), new("2", "Y", "1") });
         var idx = C1RepairIndex.Build(new Problem(s), s.Schedule.ToIntArray2D());
         Assert.Equal(1, idx.ExpectedGain(0, 0, 1)); // Xへの1手は窓を解消=gain1
-        Assert.Equal(0, idx.ExpectedGain(0, 0, 2)); // Yは必要2で1手では解消しない=gain0
+        Assert.Equal(0, idx.ExpectedGain(0, 0, 2)); // Yは充足済み=gain0
     }
 }

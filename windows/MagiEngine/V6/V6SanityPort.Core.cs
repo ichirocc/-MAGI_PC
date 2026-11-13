@@ -182,7 +182,7 @@ public static partial class V6SanityPort
                     var reach = 0;
                     for (var j = w; j < w + c.Day1; j++)
                         if (p.WishLocked(i, j) ? row[j] == x : p.MayPlaceAt(i, j, x)) reach++;
-                    if (reach < c.Day2) n++;
+                    if (reach < c.Day2) n += c.Day2 - reach;
                 }
             }
         }

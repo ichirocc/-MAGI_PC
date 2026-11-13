@@ -54,7 +54,7 @@ public static class TierObjective
                 {
                     var z = 0;
                     for (var l = 0; l < c.Day1; l++) if (row[w + l] == c.ShiftIdx) z++;
-                    if (z < c.Day2) c1[i]++;
+                    if (z < c.Day2) c1[i] += c.Day2 - z;
                 }
             }
         }

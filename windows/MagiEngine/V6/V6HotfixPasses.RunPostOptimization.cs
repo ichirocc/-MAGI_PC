@@ -657,7 +657,7 @@ public static partial class V6HotfixPasses
                 {
                     var z = 0;
                     for (var l = 0; l < c.Day1; l++) if (work[i][w + l] == x) z++;
-                    if (z < c.Day2) n++;
+                    if (z < c.Day2) n += c.Day2 - z;
                 }
                 return n;
             }

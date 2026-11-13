@@ -38,7 +38,7 @@ public static partial class V6HotfixPasses
             {
                 var z = 0;
                 for (var l = 0; l < d; l++) if (work[i][w + l] == x) z++;
-                if (z < n) fires++;
+                if (z < n) fires += n - z;
                 w++;
             }
         }

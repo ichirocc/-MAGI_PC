@@ -46,8 +46,8 @@ public class MembraneCellLnsTest
         var text = string.Join(";", r.NewSchedule.Select(row => string.Join(",", row)));
         var h = 0;
         unchecked { foreach (var c in text) h = 31 * h + c; }
-        Assert.Equal(1, r.Applied);   // Android 3.727.77: fair＝偏差の和＋最大で 8→1
-        Assert.Equal(-1124469770, h);
+        Assert.Equal(6, r.Applied);   // Android 3.727.79: c1＝窓の不足量で 1→6
+        Assert.Equal(1395822771, h);
     }
 
     [Fact]

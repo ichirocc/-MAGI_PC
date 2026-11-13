@@ -281,7 +281,7 @@ public static class SmartInitialScheduler
                     {
                         if (day + 1 < rule.Days) continue;
                         long rm = (1L << rule.Days) - 1L;
-                        if (BitOperations.PopCount((ulong)(full & rm)) < rule.Minimum) fireInc++;
+                        fireInc += Math.Max(0, rule.Minimum - BitOperations.PopCount((ulong)(full & rm)));
                     }
                     long cost = rec.Cost + (long)fireInc * 1_000_000L + (long)bit * 1_000L;
                     long newMask = full & keepMask;

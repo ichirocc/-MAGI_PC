@@ -523,9 +523,11 @@ public static partial class V6HotfixPasses
             {
                 if (stop()) break;
                 var wdAll = WdBucket(i);
+                // wdAll が古くなるのは採用した職員 i だけ＝抜けるのはその職員の x ループだけ（Android 3.475.0）。
+                var staffImproved = false;
                 for (var x = 0; x < p.K; x++)
                 {
-                    if (improved || stop()) break;
+                    if (staffImproved || stop()) break;
                     var wd = wdAll[x];
                     if (ScheduleUtil.WeeklyDevOfBucket(wd) == 0) continue;
                     var sum = 0; foreach (var w in wd) sum += w;
@@ -575,7 +577,7 @@ public static partial class V6HotfixPasses
                                 var rep = UnifiedViolationChecker.Check(state, work, quantitativeRangeEval);
                                 if (V6SearchOperators.AdoptionGate(p, workBeforeRect, work, rep, bestRep, pinBlocks).Accepted)
                                 {
-                                    bestRep = rep; applied++; improved = true; done = true; break;
+                                    bestRep = rep; applied++; improved = true; staffImproved = true; done = true; break;
                                 }
                                 work[i][j1] = x; work[i][j2] = y; work[ip][j1] = z; work[ip][j2] = x;
                             }

@@ -593,7 +593,7 @@ public sealed class DeltaEvaluator
         {
             int z = 0;
             for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
-            if (z < c.Day2) tot += 1; // [統一] #fire 計上。重みは soft 集約で×30
+            if (z < c.Day2) tot += c.Day2 - z;
             js++;
         }
         return tot;
@@ -649,7 +649,7 @@ public sealed class DeltaEvaluator
                 {
                     int z = 0;
                     for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
-                    if (z < c.Day2) tot += 1; // [統一] #fire 計上。重みは soft 集約で×30
+                    if (z < c.Day2) tot += c.Day2 - z;
                     js++;
                 }
             }

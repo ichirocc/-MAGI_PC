@@ -64,10 +64,10 @@ public class SeesawRelinkTest
     [Fact]
     public void OffByDefault() => Assert.False(PolishGate.SeesawRelink);
 
-    // Android 3.727.77: fair＝偏差の和＋最大で 2/0/-2074942663 → 0/3/-1124469770（Kotlin の同名テストと同じ値）。
+    // Android 3.727.79: c1＝窓の不足量で 0/3/-1124469770 → 0/0/1395822771（Kotlin の同名テストと同じ値）。
     private const int ExpectedApplied = 0;
-    private const int ExpectedTradeoffs = 3;
-    private const int ExpectedHash = -1124469770;
+    private const int ExpectedTradeoffs = 0;
+    private const int ExpectedHash = 1395822771;
 }
 
 /// <summary>Android <c>SeesawRelinkTest.pairedWalksKeepTheMainAndAddTradeoffs</c> の写し（3.727.42）。採点の方式を切り替えるので並列にしない。</summary>

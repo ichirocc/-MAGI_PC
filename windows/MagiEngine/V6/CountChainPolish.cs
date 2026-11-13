@@ -127,7 +127,7 @@ internal static class CountChainPolish
                 while (j <= p.T - c.Day1)
                 {
                     if (j > 0) { if (row[j - 1] == c.ShiftIdx) z--; if (row[j + c.Day1 - 1] == c.ShiftIdx) z++; }
-                    if (z < c.Day2) v += wC1;
+                    if (z < c.Day2) v += (c.Day2 - z) * wC1;
                     j++;
                 }
             }

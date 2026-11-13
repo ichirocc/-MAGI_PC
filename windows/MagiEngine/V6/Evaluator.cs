@@ -63,7 +63,7 @@ public sealed class Evaluator
 
         // ---- c1: every window of length day1 must contain >= day2 of shiftIdx --------------
         // [統一] (1)担当不可スタッフは対象外(canDoガード=チェッカーと一致、解消不能な幻の違反を除去)、
-        // (2)#fire 計上(soft += 90×重み)。[3.522.0/HF77] 窓の要件(c1)の重みは 4→5→15→30→50→90 と変遷。
+        // (2)窓ごとの不足量 d2−z を計上（重み 90）。[3.522.0/HF77] 窓の要件(c1)の重みは 4→5→15→30→50→90 と変遷。
         foreach (var c in _p.Cons1)
         {
             int d1 = c.Day1, si = c.ShiftIdx, d2 = c.Day2;
@@ -75,7 +75,7 @@ public sealed class Evaluator
                 {
                     int z = 0;
                     for (int l = 0; l < d1; l++) if (a[i][j + l] == si) z++;
-                    if (z < d2) soft += _w.C1;
+                    if (z < d2) soft += (d2 - z) * _w.C1;
                     j++;
                 }
             }

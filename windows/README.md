@@ -330,6 +330,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+- 2026-11-13（Android 3.727.79 と同期）: 期間の制約（c1）の件数を「不足の窓 1 つ＝1 件」から「窓ごとの不足量 `Day2 − 回数` の和」に（利用者決定、重みは不変）。`Evaluator`・`DeltaEvaluator`・`ViolationChecker`・`TierObjective` と、研磨側の計数（`C1TemporalDp`・`SmartInitialScheduler`・`C1JointLnsPolish` の下界・`C1RepairAnalysis`・`C1DeltaPrefilter`・`C1TemporalFlowPolish`・`CountChainPolish`・`V6HotfixPasses` の Shared／C1Window／RunPostOptimization・`V6SanityPort`）を同じ式に。期待値・基準・指紋は Android の写し。同期で表に出た C# の古い差 2 つを直した（Kotlin の出力に合わせる）: ①C1 共同 LNS の目標セルを Kotlin の `HashMap<Triple>` の走査順（ハッシュ `(i*31+j)*31+x`、表は 16 から 0.75 を超えるたびに倍、同じ桶の中は挿入順）で取り出す＝旧は挿入順で、どちらも採用 0 束の間は盤面に出なかった ②曜日平準化は採用した職員の x ループだけ抜ける（Android 3.475.0 の未移植分。旧: パス全体の旗で抜けて 1 パス 1 手まで）。盤面指紋は 6 fixture とも Android と一致、エンジン 1,245 件・ViewModel 1,002 件。Android 3.727.78（必須違反の原因の札）は CP-SAT が要るので同期なし。
 - 2026-10-29（C# 単独・出力不変）: 勤務表のセルのパネルの「直す手」は描き直しのたびに全候補を検査していた（WinUI はパネルを毎回作り直す）。同じセル・同じ検査世代（`CheckRev`）なら前の結果を使う（`_fixMoveCache`）。Android は `LaunchedEffect(cell, rev)` で同じ扱い。
 - 2026-11-06（テストの時間）: `tools/engine_test_sharded.sh` を追加。エンジンのテストをコア数の `dotnet test` プロセスへ、実測の所要（`tools/engine_test_times.tsv`）の重い順に振り分けて並列に流す（同じプロセスの中は `AssemblyInfo.cs` の理由で並列にできないが、プロセスが別なら static も別）。最後の 1 本は表に無いクラスも含む残り全部＝新しいクラスを取りこぼさない。4 コアで 17 分 42 秒→5 分 15 秒（ビルド込み、1266 件・件数は 1 本のときと一致）。
 - 2026-11-05（Android 3.727.36 と同期）: 重みを使わない目的関数の P1＝`TierObjective`（段の鍵・T1 の職員ごとの不満・fair の leximin）を新規に写し、`HandleOptimize` の残存分析のログに「段の鍵」を足す（採否には使わない＝出力不変）。`TierObjectiveTest` 2 件。

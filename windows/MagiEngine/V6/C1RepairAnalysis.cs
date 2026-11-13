@@ -162,8 +162,7 @@ public static class C1RepairAnalysis
             // gain = この日を shift にすると実際に解消する（この職員の）不足窓数。
             //   [3.278.0/監査修正] ①窓開始の下界 lo は**ルールごとの窓幅 c.Day1** から取る（旧: v.WindowDays
             //   固定＝同一シフトのより長い別ルール窓（休の5日窓＋15日窓型）が d を含んでいても切り捨てられ過小）。
-            //   ②+1 で充足に変わるのは z == c.Day2 - 1 の窓のみ（旧: z < c.Day2＝1手では解消しない深い不足窓も
-            //   計上する過大）。checker は不足窓ごとに 1 fire 計上するため「解消数」＝ちょうど閾値未満1の窓数。
+            //   ②不足の窓はどれも +1 で不足量が 1 減る（checker は窓ごとの不足量を計上）。
             int gain = 0;
             foreach (var c in p.Cons1)
             {
@@ -175,7 +174,7 @@ public static class C1RepairAnalysis
                     if (d < ws || d >= ws + c.Day1) continue;
                     int z = 0;
                     for (int l = 0; l < c.Day1; l++) if (s[v.Staff][ws + l] == v.Shift) z++;
-                    if (z == c.Day2 - 1) gain++;
+                    if (z < c.Day2) gain++;
                 }
             }
             int old = s[v.Staff][d];
@@ -271,7 +270,7 @@ public static class C1RepairAnalysis
                     {
                         int z = 0;
                         for (int l = 0; l < c.Day1; l++) if (rows[mi][jj + l] == c.ShiftIdx) z++;
-                        if (z < c.Day2) total++;
+                        if (z < c.Day2) total += c.Day2 - z;
                         jj++;
                     }
                 }

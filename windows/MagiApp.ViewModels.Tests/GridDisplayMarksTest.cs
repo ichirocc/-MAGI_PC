@@ -45,7 +45,7 @@ public class GridDisplayMarksTest
     [Fact]
     public void EveryViolatedC1WindowWithAChangeableDayHasAMark()
     {
-        Assert.Equal(Rep.Breakdown.GetValueOrDefault("c1"), Ui.C1Shortages.Sum(x => x.Windows));
+        Assert.Equal(C1RepairAnalysis.Analyze(ScheduleUtil.CachedProblem(St), St.Schedule.ToIntArray2D()).Count, Ui.C1Shortages.Sum(x => x.Windows));
         var p = ScheduleUtil.CachedProblem(St);
         foreach (var sh in Ui.C1Shortages)
             for (var w = sh.From; w <= sh.To - sh.Day1 + 1; w++)

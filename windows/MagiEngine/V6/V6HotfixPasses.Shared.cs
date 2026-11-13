@@ -138,7 +138,7 @@ public static partial class V6HotfixPasses
             {
                 var z = 0;
                 for (var l = 0; l < c.Day1; l++) if (sched[i][j + l] == c.ShiftIdx) z++;
-                if (z < c.Day2) { total++; weighted += ObjectiveWeights.Of("c1"); }
+                if (z < c.Day2) { total += c.Day2 - z; weighted += (c.Day2 - z) * ObjectiveWeights.Of("c1"); }
                 j++;
             }
         }

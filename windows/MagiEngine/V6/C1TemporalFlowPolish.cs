@@ -86,13 +86,13 @@ internal static class C1TemporalFlowPolish
                 if (x < 0 || x >= p.K || d <= 0 || d > p.T || !p.CanDo(i, x)) continue;
                 int count = 0;
                 for (int j = 0; j < d; j++) if (s[i][j] == x) count++;
-                if (count < c.Day2) outCount++;
+                if (count < c.Day2) outCount += c.Day2 - count;
                 int start = 1;
                 while (start <= p.T - d)
                 {
                     if (s[i][start - 1] == x) count--;
                     if (s[i][start + d - 1] == x) count++;
-                    if (count < c.Day2) outCount++;
+                    if (count < c.Day2) outCount += c.Day2 - count;
                     start++;
                 }
             }

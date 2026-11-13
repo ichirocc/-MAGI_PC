@@ -422,7 +422,7 @@ internal static class C1JointLnsPolish
                     if (day + 1 >= d)
                     {
                         int ones = System.Numerics.BitOperations.PopCount((uint)mask) + bit;
-                        windowPenalty = ones < c.Day2 ? 1 : 0;
+                        windowPenalty = Math.Max(0, c.Day2 - ones);
                     }
                     int nm = suffixBits == 0 ? 0 : ((mask << 1) | bit) & maskKeep;
                     int v = baseVal + windowPenalty;
@@ -455,7 +455,7 @@ internal static class C1JointLnsPolish
             int possible = 0;
             for (int day = start; day < start + d; day++)
                 if (!p.WishLocked(staff, day) || p.LockTo(staff, day) == c.ShiftIdx) possible++;
-            if (possible < c.Day2) unavoidable++;
+            if (possible < c.Day2) unavoidable += c.Day2 - possible;
         }
         return unavoidable;
     }
@@ -500,14 +500,21 @@ internal static class C1JointLnsPolish
                 }
             }
         }
-        foreach (var (k, w) in c1Weight) Add(k.Staff, k.Day, k.Shift, 100 + w, GoalKind.C1);
+        // Kotlin は HashMap<Triple> の走査順で取り出す。同じ順にする（鍵のハッシュは (i*31+j)*31+x、表の大きさは 16 から 0.75 を超えるたびに倍）。
+        int cap = 16;
+        while (c1Weight.Count > cap * 3 / 4) cap *= 2;
+        var c1Ordered = c1Weight
+            .Select((kv, n) => (kv.Key, kv.Value, Bucket: JavaSpread((kv.Key.Staff * 31 + kv.Key.Day) * 31 + kv.Key.Shift) & (cap - 1), N: n))
+            .OrderBy(e => e.Bucket).ThenBy(e => e.N)
+            .Select(e => new KeyValuePair<(int Staff, int Day, int Shift), int>(e.Key, e.Value)).ToList();
+        foreach (var (k, w) in c1Ordered) Add(k.Staff, k.Day, k.Shift, 100 + w, GoalKind.C1);
 
         // Reuse the existing exact temporal DP as a proposal oracle, but only at root-like
         // nodes. The DP does not commit a schedule; its desired incoming target days become
         // goals inside this joint beam, where coverage/range/c3 side effects can be repaired.
         if (includeTemporal)
         {
-            var rankedPairs = c1Weight
+            var rankedPairs = c1Ordered
                 .GroupBy(kv => (Staff: kv.Key.Staff, Shift: kv.Key.Shift))
                 .Select(g => (Pair: g.Key, Weight: g.Sum(kv => kv.Value)))
                 .OrderByDescending(t => t.Weight)
@@ -806,6 +813,8 @@ internal static class C1JointLnsPolish
             return UnifiedViolationChecker.SummaryReport(bd);
         }
     }
+
+    private static int JavaSpread(int h) => h ^ (int)((uint)h >> 16);
 
     private static bool Allowed(Problem p, int staff, int day, int shift)
     {

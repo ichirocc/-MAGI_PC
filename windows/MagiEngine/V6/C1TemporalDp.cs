@@ -131,7 +131,7 @@ internal static class C1TemporalDp
                     {
                         if (day + 1 < rule.Days) continue;
                         long rm = (1L << rule.Days) - 1L;
-                        if (BitOperations.PopCount((ulong)(full & rm)) < rule.Minimum) fireInc++;
+                        fireInc += Math.Max(0, rule.Minimum - BitOperations.PopCount((ulong)(full & rm)));
                     }
                     bool changed = (bit == 1) != oldBit;
                     int changedCount = rec.Changed + (changed ? 1 : 0);
@@ -185,13 +185,13 @@ internal static class C1TemporalDp
             if (d < 1 || d > row.Length || rule.Minimum <= 0) continue;
             int count = 0;
             for (int j = 0; j < d; j++) if (row[j] == targetShift) count++;
-            if (count < rule.Minimum) fires++;
+            if (count < rule.Minimum) fires += rule.Minimum - count;
             int start = 1;
             while (start <= row.Length - d)
             {
                 if (row[start - 1] == targetShift) count--;
                 if (row[start + d - 1] == targetShift) count++;
-                if (count < rule.Minimum) fires++;
+                if (count < rule.Minimum) fires += rule.Minimum - count;
                 start++;
             }
         }

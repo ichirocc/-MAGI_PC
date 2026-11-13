@@ -159,7 +159,7 @@ public static class C1DeltaPrefilter
             {
                 int z = 0;
                 for (int l = 0; l < c.Day1; l++) if (row[j + l] == x) z++;
-                if (z < c.Day2) fires++;
+                if (z < c.Day2) fires += c.Day2 - z;
                 j++;
             }
         }
