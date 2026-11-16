@@ -5,18 +5,19 @@ namespace MagiApp.ViewModels.Tests;
 /// <summary>Kotlin <c>Review3706Test</c> の 1 対 1 移植。3.706.0: 設定タブの組む時間の候補と表記。</summary>
 public class Review3706Test
 {
+    /// <summary>3.727.88: タイルは 3・5・7分、ユーザー指定は 2〜10分を 1 分ずつ。既定は 5分。</summary>
     [Fact]
-    public void PresetsAlwaysIncludeCurrentWithinRangeAscending()
+    public void presetsAndCustomRange()
     {
-        foreach (var cur in new[] { 10, 45, 60, 90, 300, 5, 999 })
-        {
-            var p = CellSheetLogic.BudgetPresets(cur);
-            Assert.Contains(Math.Clamp(cur, 10, V6FinalPort.MaxOptimizeSec), p);
-            Assert.All(p, x => Assert.InRange(x, 10, V6FinalPort.MaxOptimizeSec));
-            Assert.Equal(p.OrderBy(x => x).Distinct().ToList(), p);
-        }
-        Assert.Equal(new[] { 10, 60, 120, 180, 240, 300 }, CellSheetLogic.BudgetPresets(60));
-        Assert.Equal(new[] { 10, 60, 90, 120, 180, 240, 300 }, CellSheetLogic.BudgetPresets(90));
+        Assert.Equal(new[] { 180, 300, 420 }, CellSheetLogic.BudgetPresetSecs);
+        Assert.All(CellSheetLogic.BudgetPresetSecs, x => Assert.InRange(x, MagiViewModel.MinBudgetSec, MagiViewModel.MaxBudgetSec));
+        Assert.Equal((120, 600), (MagiViewModel.MinBudgetSec, MagiViewModel.MaxBudgetSec));
+        Assert.Equal(240, CellSheetLogic.BudgetCustomStep(180, 1));
+        Assert.Equal(120, CellSheetLogic.BudgetCustomStep(180, -5));
+        Assert.Equal(600, CellSheetLogic.BudgetCustomStep(540, 3));
+        Assert.Equal(120, CellSheetLogic.BudgetCustomStep(60, 0));
+        Assert.Equal(180, CellSheetLogic.BudgetCustomStep(150, 0));
+        Assert.Equal(300, new UiState().BudgetSec);
     }
 
     [Fact]

@@ -110,6 +110,9 @@ public sealed partial class MagiViewModel
     /// </summary>
     public const int MaxBudgetSec = V6FinalPort.MaxOptimizeSec;
 
+    /// <summary>画面で選べる組む時間の下限（ユーザー指定の 2分、Android 3.727.88 <c>MIN_BUDGET_SEC</c>）。エンジンは 1 秒から受ける。</summary>
+    public const int MinBudgetSec = 120;
+
     /// <summary>
     /// [saveNow メインスレッドI/O の由来をそのまま記録] onStop/onPause は「プロセスがこの直後に
     /// 破棄されうる」区間なので、saveNow() の同期書込は意図的（非同期へ逃がすと、ディスパッチされた
@@ -437,7 +440,7 @@ public sealed partial class MagiViewModel
 
     public void SetBudget(int sec)
     {
-        var v = Math.Clamp(sec, 10, MaxBudgetSec);
+        var v = Math.Clamp(sec, MinBudgetSec, MaxBudgetSec);
         Ui.BudgetSec = v;
         LogOp("I", $"設定変更: 予算 → {v}秒");
     }

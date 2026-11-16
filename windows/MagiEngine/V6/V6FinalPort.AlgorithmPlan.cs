@@ -6,9 +6,9 @@ public static partial class V6FinalPort
     /// Faithful port of Kotlin's file-top-level <c>const val MAX_OPTIMIZE_SEC</c> (declared outside
     /// <c>object V6FinalPort</c> in the Kotlin source, but referenced only from within it — the
     /// natural home in C# is as a member of the class it actually gates). 勤務表最適化のタイムアウト
-    /// 上限（秒）。高精度を保ったまま5分(300s)以内へ圧縮（停滞早期脱出＋RSI++をこの予算に収める）。
+    /// 上限（秒）。10分（Android 3.727.88、利用者指示「ユーザー指定は 2分から10分」）。
     /// </summary>
-    public const int MaxOptimizeSec = 300;
+    public const int MaxOptimizeSec = 600;
     /// <summary>後処理（研磨）の取り分（秒）。制限時間＝探索の時間で、後処理はその後ろにこの秒数だけ足す（Kotlin <c>POST_RESERVE_SEC</c>）。</summary>
     public const int PostReserveSec = 10;
     /// <summary>玉突き（パイプラインの深い探索）の取り分（秒）。後処理の後ろにさらに足す（Kotlin <c>CHAIN_RESERVE_SEC</c>）。</summary>

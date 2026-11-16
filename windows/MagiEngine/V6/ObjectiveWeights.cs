@@ -24,7 +24,7 @@ public static class ObjectiveWeights
     public static IReadOnlyList<(string Key, double Weight)> Table() => Table(Method);
 
     /// <summary>公平化／適切回数の 6% 許容を使える方式か（Kotlin <c>ObjectiveWeights.allowsAptFairTolerance</c>）。
-    /// 優先順位は T3 の apt/fair のために上の段を悪くする手を採らない＝許容と両立しないので使わない。</summary>
+    /// 優先順位では apt/fair の重さを採点表の値（fair 50・apt 20）で決めるので、採否に別の許容を重ねない。</summary>
     public static bool AllowsAptFairTolerance(ObjectiveMethod m) => m != ObjectiveMethod.Priority;
     public static bool AllowsAptFairTolerance() => AllowsAptFairTolerance(Method);
 

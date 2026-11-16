@@ -1637,9 +1637,12 @@ public static class CellSheetLogic
     /// <summary>設定タブの組む時間の状態行（3.706.0 S2）。</summary>
     public static string BudgetStatusLine(int sec, int reserveSec) => $"組む時間 {BudgetText(sec)}（＋仕上げと玉突き {reserveSec}秒）";
 
-    /// <summary>「組む時間を選ぶ」の候補（3.706.0 S1）。10秒・1〜5分に、範囲内へ丸めた今の値を必ず含めて昇順。既定・範囲は変えない（HF77）。</summary>
-    public static IReadOnlyList<int> BudgetPresets(int currentSec) =>
-        new[] { 10, 60, 120, 180, 240, V6FinalPort.MaxOptimizeSec, Math.Clamp(currentSec, 10, V6FinalPort.MaxOptimizeSec) }.Distinct().OrderBy(x => x).ToList();
+    /// <summary>「組む時間を選ぶ」の候補（Android 3.727.88 <c>BUDGET_PRESET_SECS</c>、利用者指示「3分・5分・7分とユーザー指定」）。ほかの値はユーザー指定（<see cref="BudgetCustomStep"/>）。</summary>
+    public static readonly IReadOnlyList<int> BudgetPresetSecs = new[] { 180, 300, 420 };
+
+    /// <summary>ユーザー指定の組む時間を 1 分ずつ増減する（2〜10分、分単位に丸める）。</summary>
+    public static int BudgetCustomStep(int sec, int deltaMin) =>
+        Math.Clamp(((sec + 30) / 60 + deltaMin) * 60, MagiViewModel.MinBudgetSec, MagiViewModel.MaxBudgetSec);
 
     /// <summary>勤務表を作成する画面の要点（作成前）を 1 行に。時間は設定値（探索）と固定の仕上げ枠。</summary>
     public static string PreRunPlanLine(string startDate, int days, int staff, int budgetSec, int reserveSec)

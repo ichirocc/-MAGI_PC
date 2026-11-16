@@ -330,6 +330,7 @@ SAC を切るしかない: Windows セキュリティ →「アプリとブラ�
 入っておらず、この症状で無言終了していた。同日以降に生成した setup.exe（run 33899674768 以降）を入れ直すこと。
 
 ## レビュー対応の記録
+- 2026-11-16（Android 3.727.88 と同期）: 組む時間の選択肢を 3分・5分・7分・ユーザー指定（2〜10分を 1 分ずつ）に（`CellSheetLogic.BudgetPresetSecs`・`BudgetCustomStep`、WinUI の「組む時間を選ぶ」）。既定 60→300 秒、`MaxOptimizeSec` 300→600、画面の下限 `MinBudgetSec` 120。`ObjectiveWeights` の apt/fair 許容の説明を今の重みに合わせ、`docs/business-logic.md` を Android の写しに揃えた（3.727.80・3.727.87 の記録が抜けていた）。
 - 2026-11-15（Android 3.727.87 と同期）: 優先順位方式の c2（個人の合計）と apt（目安の回数との差）の重みを 1→20（利用者の明示数値指示、HF77。`ObjectiveWeights`）。重み（従来）の c2 4・apt 4 は不変。
 - 2026-11-13（Android 3.727.80 と同期）: 優先順位方式の fair の重みを 20→50（利用者の明示数値指示、HF77。`ObjectiveWeights`）。重み（従来）の fair 5 は不変。
 - 2026-11-13（Android 3.727.79 と同期）: 期間の制約（c1）の件数を「不足の窓 1 つ＝1 件」から「窓ごとの不足量 `Day2 − 回数` の和」に（利用者決定、重みは不変）。`Evaluator`・`DeltaEvaluator`・`ViolationChecker`・`TierObjective` と、研磨側の計数（`C1TemporalDp`・`SmartInitialScheduler`・`C1JointLnsPolish` の下界・`C1RepairAnalysis`・`C1DeltaPrefilter`・`C1TemporalFlowPolish`・`CountChainPolish`・`V6HotfixPasses` の Shared／C1Window／RunPostOptimization・`V6SanityPort`）を同じ式に。期待値・基準・指紋は Android の写し。同期で表に出た C# の古い差 2 つを直した（Kotlin の出力に合わせる）: ①C1 共同 LNS の目標セルを Kotlin の `HashMap<Triple>` の走査順（ハッシュ `(i*31+j)*31+x`、表は 16 から 0.75 を超えるたびに倍、同じ桶の中は挿入順）で取り出す＝旧は挿入順で、どちらも採用 0 束の間は盤面に出なかった ②曜日平準化は採用した職員の x ループだけ抜ける（Android 3.475.0 の未移植分。旧: パス全体の旗で抜けて 1 パス 1 手まで）。盤面指紋は 6 fixture とも Android と一致、エンジン 1,245 件・ViewModel 1,002 件。Android 3.727.78（必須違反の原因の札）は CP-SAT が要るので同期なし。

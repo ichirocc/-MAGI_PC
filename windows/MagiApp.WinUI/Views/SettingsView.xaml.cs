@@ -677,26 +677,48 @@ public sealed partial class SettingsView : UserControl
         _vm.SetWorkers((int)e.NewValue);
     }
 
-    /// <summary>「組む時間を選ぶ」（Android 3.706.0 <c>BudgetPickerSheet</c>）。候補は <see cref="CellSheetLogic.BudgetPresets"/>。</summary>
+    /// <summary>「組む時間を選ぶ」（Android 3.727.88 <c>BudgetPickerSheet</c>）。タイルは <see cref="CellSheetLogic.BudgetPresetSecs"/> とユーザー指定（2〜10分を 1 分ずつ）。</summary>
     private async void OnChangeBudgetClick(object sender, RoutedEventArgs e)
     {
-        var current = _vm.Ui.BudgetSec;
-        var tiles = new HashSet<int> { 10, 60, 120, 180, 240, MagiViewModel.MaxBudgetSec };
+        var chosen = _vm.Ui.BudgetSec;
         var radios = new RadioButtons();
-        foreach (var sec in CellSheetLogic.BudgetPresets(current))
-            radios.Items.Add(new RadioButton { Content = sec == current && !tiles.Contains(sec) ? $"いまの値 {sec}秒" : CellSheetLogic.BudgetText(sec), Tag = sec, MinHeight = 48 });
-        radios.SelectedItem = radios.Items.OfType<RadioButton>().FirstOrDefault(r => (int)r.Tag == current);
+        foreach (var sec in CellSheetLogic.BudgetPresetSecs)
+            radios.Items.Add(new RadioButton { Content = CellSheetLogic.BudgetText(sec), Tag = sec, MinHeight = 48 });
+        var customRadio = new RadioButton { Content = "ユーザー指定", Tag = -1, MinHeight = 48 };
+        radios.Items.Add(customRadio);
+        var minus = new Button { Content = "− 1分", MinHeight = 48 };
+        var plus = new Button { Content = "＋ 1分", MinHeight = 48 };
+        var value = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0) };
+        var stepper = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { minus, value, plus } };
+        void Refresh()
+        {
+            var custom = ReferenceEquals(radios.SelectedItem, customRadio);
+            stepper.Visibility = custom ? Visibility.Visible : Visibility.Collapsed;
+            value.Text = CellSheetLogic.BudgetText(chosen);
+            minus.IsEnabled = chosen > MagiViewModel.MinBudgetSec;
+            plus.IsEnabled = chosen < MagiViewModel.MaxBudgetSec;
+        }
+        minus.Click += (_, _) => { chosen = CellSheetLogic.BudgetCustomStep(chosen, -1); Refresh(); };
+        plus.Click += (_, _) => { chosen = CellSheetLogic.BudgetCustomStep(chosen, 1); Refresh(); };
+        radios.SelectedItem = radios.Items.OfType<RadioButton>().FirstOrDefault(r => (int)r.Tag == chosen) ?? customRadio;
+        radios.SelectionChanged += (_, _) =>
+        {
+            if (radios.SelectedItem is RadioButton { Tag: int t } && t > 0) chosen = t;
+            else chosen = CellSheetLogic.BudgetCustomStep(chosen, 0);
+            Refresh();
+        };
+        Refresh();
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
             Title = "組む時間を選ぶ",
-            Content = radios,
+            Content = new StackPanel { Spacing = 12, Children = { radios, stepper } },
             PrimaryButtonText = "この時間にする",
             CloseButtonText = "閉じる",
             DefaultButton = ContentDialogButton.Primary,
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-        if (radios.SelectedItem is RadioButton { Tag: int chosen }) _vm.SetBudget(chosen);
+        _vm.SetBudget(chosen);
     }
 
     private void OnBackgroundRunClick(object sender, RoutedEventArgs e) => _vm.RunInBackground();
