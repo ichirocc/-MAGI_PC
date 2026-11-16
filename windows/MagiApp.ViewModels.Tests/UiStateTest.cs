@@ -27,7 +27,7 @@ public class UiStateTest
 
         // budgetSec=300 / nativeAccel=true / nativeParity=true / softPolish=true は
         // Kotlin原本の非既定値そのままの明示デフォルト。
-        Assert.Equal(60, s.BudgetSec);
+        Assert.Equal(300, s.BudgetSec);
         Assert.True(s.NativeAccel);
         Assert.True(s.NativeParity);
         Assert.Equal(SearchStrength.Normal, s.SearchStrength);

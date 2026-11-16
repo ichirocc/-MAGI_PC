@@ -133,11 +133,12 @@ public class MagiViewModelTest
     }
 
     [Theory]
-    [InlineData(1, 10)]                                  // 下限未満は10秒へ
-    [InlineData(10, 10)]
+    [InlineData(1, MagiViewModel.MinBudgetSec)]           // 下限未満は MinBudgetSec（2分）へ
+    [InlineData(10, MagiViewModel.MinBudgetSec)]
     [InlineData(120, 120)]
+    [InlineData(420, 420)]
     [InlineData(99999, MagiViewModel.MaxBudgetSec)]       // 上限超はMaxBudgetSecへ
-    public void SetBudgetClampsToTenToMaxBudgetSec(int input, int expected)
+    public void SetBudgetClampsToMinToMaxBudgetSec(int input, int expected)
     {
         var vm = new MagiViewModel();
         vm.SetBudget(input);
