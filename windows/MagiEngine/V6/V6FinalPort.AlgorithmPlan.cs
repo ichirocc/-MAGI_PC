@@ -11,6 +11,8 @@ public static partial class V6FinalPort
     public const int MaxOptimizeSec = 600;
     /// <summary>[Android 3.727.95] 上限 0 の日に置いて必須違反を減らす最終段（DayCapHardRelief）の持ち時間。</summary>
     public const long DayCapReliefMs = 3_000L;
+    /// <summary>操作ログの所要時間の行に添える後処理パスの数（Kotlin <c>TIME_POST_TOP_N</c>）。</summary>
+    public const int TimePostTopN = 3;
     /// <summary>後処理（研磨）の取り分（秒）。制限時間＝探索の時間で、後処理はその後ろにこの秒数だけ足す（Kotlin <c>POST_RESERVE_SEC</c>）。</summary>
     public const int PostReserveSec = 10;
     /// <summary>玉突き（パイプラインの深い探索）の取り分（秒）。後処理の後ろにさらに足す（Kotlin <c>CHAIN_RESERVE_SEC</c>）。</summary>

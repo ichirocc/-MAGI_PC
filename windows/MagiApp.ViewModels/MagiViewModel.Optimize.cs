@@ -383,6 +383,7 @@ public sealed partial class MagiViewModel
             }
             // [3.409.17/実機ログ起因の由来をそのまま記録] 予算超過の実行は内訳が診断ログ（次の実行で消える）
             //   にしか残らず特定不能だった。超過時は TIME/エポック超過/後処理パス別 を操作ログへ写す。
+            if (res.Time is { } time) LogOp(time.OverBudget ? "W" : "I", time.OpLine());
             if (res.Logs.Any(l => l.Tag == "TIME" && l.Level == "W"))
             {
                 var timeLog = res.Logs.FirstOrDefault(l => l.Tag == "TIME");

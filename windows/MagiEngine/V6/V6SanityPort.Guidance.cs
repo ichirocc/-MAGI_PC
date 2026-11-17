@@ -396,6 +396,19 @@ public static partial class V6SanityPort
             }
         }
 
+        // 2b-5) [Android 3.727.98] 希望の人数だけで日の上限人数を超える（希望が優先されるので人員過剰が必ず残る）。
+        foreach (var kv in WishCovOExcess(p))
+        {
+            var (j, k) = kv.Key; var (wished, over) = kv.Value;
+            var staff = Enumerable.Range(0, p.S).Where(i => p.WishFixed(i, j) && p.Wish[i][j] == k).ToList();
+            var names = string.Join("・", staff.Take(4).Select(Nm)) + (staff.Count > 4 ? $" ほか{staff.Count - 4}名" : "");
+            var sym = Sym(k);
+            var cap = wished - over;
+            outList.Add(new SettingIssue(IssueKind.Demand, $"{SafeDayLabel(state.StartDate, j)} 「{sym}」の上限{cap}人と希望",
+                $"上限{cap}人{(cap == 0 ? "（誰も入れない日）" : "")}なのに、本人の希望で{wished}人（{names}）が「{sym}」です。希望が優先されるので人員過剰が必ず{over}人残ります",
+                $"{Place.Edit}{Place.Wish}で希望を見直すか、{Place.NeedDays}でこの日の「{sym}」の上限を{wished}人以上にしてください"));
+        }
+
         // 2b-4) [Android 3.727.95] 期間の制約の窓ごとの延べ人数。置ける延べ人数は、上限 0 の日は希望の人数だけ、ほかの日は職員数から
         //   他のシフトの最低人数を引いた人数＝上限。足りない分は c1 の件数の下限になる。最も足りない窓だけを出す。
         {

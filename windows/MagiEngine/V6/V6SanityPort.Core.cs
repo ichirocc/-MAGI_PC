@@ -162,6 +162,41 @@ public static partial class V6SanityPort
         return result;
     }
 
+    /// <summary>[Android 3.727.86] 個人の上限（high）のうち、希望で固定したセルだけで上限を超えている回数（報告の high と同じ単位）。</summary>
+    public static int WishHighFloor(Problem p, int[][] schedule)
+    {
+        var n = 0;
+        for (var i = 0; i < p.S && i < schedule.Length; i++)
+        {
+            var row = schedule[i];
+            for (var k = 0; k < p.K; k++)
+            {
+                var hi = p.RangeHi[i][k];
+                if (hi == int.MaxValue) continue;
+                var fixedN = 0;
+                for (var j = 0; j < p.T && j < row.Length; j++) if (p.WishLocked(i, j) && row[j] == k) fixedN++;
+                if (fixedN > hi) n += fixedN - hi;
+            }
+        }
+        return n;
+    }
+
+    /// <summary>[Android 3.727.98] 日×シフトごとに、希望で固定した人数だけで上限人数を超える分（報告の covO と同じ単位）。値は (希望の人数, 超える分)。</summary>
+    public static Dictionary<(int J, int K), (int Wished, int Over)> WishCovOExcess(Problem p)
+    {
+        var outMap = new Dictionary<(int J, int K), (int Wished, int Over)>();
+        for (var j = 0; j < p.T; j++)
+            for (var k = 0; k < p.K; k++)
+            {
+                var wished = 0;
+                for (var i = 0; i < p.S; i++) if (p.WishFixed(i, j) && p.Wish[i][j] == k) wished++;
+                if (wished == 0) continue;
+                var over = p.CovOCell(k, j, wished);
+                if (over > 0) outMap[(j, k)] = (wished, over);
+            }
+        return outMap;
+    }
+
     /// <summary>
     /// 期間の制約（c1）の窓のうち、固定のセル（希望・手動固定）を変えない限り足りない窓の数（報告の c1 と同じ単位＝窓ごとに 1）。
     /// 窓の中で「x に固定されたセル」＋「固定されていず x を置けるセル」が下限に届かなければ、ほかの条件と関係なく満たせない。

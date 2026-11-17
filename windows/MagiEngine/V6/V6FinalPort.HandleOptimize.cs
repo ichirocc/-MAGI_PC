@@ -572,6 +572,12 @@ public static partial class V6FinalPort
                 (opts.Algorithm == V6Algorithm.V5
                     ? $"SAチェーン{effWorkers}本"
                     : $"実効仮説{effHypotheses}{(effHypotheses < plannedHypotheses ? $"（設定{plannedHypotheses}をコア数まで縮小）" : "")}"));
+        var timeSummary = new TimeSummary(tExtra1 - startMs,
+            new[] { ("探索", tFirst1 - tFirst0), ("連鎖", tChain1 - tFirst1), ("統合", tIntegration1 - tChain1),
+                ("後処理", tPost1 - tIntegration1), ("追加精製", tExtra1 - tPost1) },
+            (post.PassMs ?? new Dictionary<string, long>()).OrderByDescending(kv => kv.Value).Take(TimePostTopN)
+                .Where(kv => kv.Value >= 1000L).Select(kv => (kv.Key, kv.Value)).ToList(),
+            overBudget);
         var integrationLog = integrated.Logs;
 
         // [3.283.0/ログ強化] ウォッチドッグの内部状態を非発火時も1行で可視化。
@@ -789,6 +795,10 @@ public static partial class V6FinalPort
             var avoidSelf = TryOrZero(() => V6SanityPort.WishAvoidSoft(ScheduleUtil.CachedProblem(state), finalSched));
             // 期間の制約（c1）のうち、固定のセルを変えない限り足りない窓（希望を調整するまで残る）。
             var c1Wall = Math.Min(bd.GetValueOrDefault("c1", 0), TryOrZero(() => V6SanityPort.WishC1Floor(ScheduleUtil.CachedProblem(state), finalSched)));
+            // [Android 3.727.98] 人員過剰（covO）のうち、希望の人数だけで日の上限人数を超える分（希望を調整するまで残る）。
+            var covOWall = Math.Min(bd.GetValueOrDefault("covO", 0), TryOrZero(() => V6SanityPort.WishCovOExcess(ScheduleUtil.CachedProblem(state)).Values.Sum(v => v.Over)));
+            // [Android 3.727.86] 個人の上限（high）のうち、希望の固定だけで上限を超える回数。
+            var highWall = Math.Min(bd.GetValueOrDefault("high", 0), TryOrZero(() => V6SanityPort.WishHighFloor(ScheduleUtil.CachedProblem(state), finalSched)));
             var avoidShown = 0;
             var selfConflictShown = new List<(string Key, int N)>();
             foreach (var key in MirrorKeys.All)
@@ -809,6 +819,8 @@ public static partial class V6FinalPort
                     "extWish" => n0 - Math.Min(n0, extPinned),
                     "c3mn" => n0 - avoidShown,
                     "c1" => n0 - c1Wall,
+                    "high" => n0 - highWall,
+                    "covO" => n0 - covOWall,
                     _ => n0,
                 } - self;
                 if (n > 0) open.Add($"{key} {n}件");
@@ -828,6 +840,8 @@ public static partial class V6FinalPort
             // [3.355.0] weekly も同型: 回数が7の倍数でないぶんは配置では消せない。
             if (weeklyWall > 0) walls.Add($"weekly のうち{weeklyWall}件(回数が7の倍数でない＝配置では消せない)");
             if (extPinned > 0) walls.Add($"extWish のうち{extPinned}件(手動固定のセル＝自動では変えない)");
+            if (covOWall > 0) walls.Add($"covO のうち{covOWall}件(希望の人数だけで日の上限人数を超える＝希望か上限を調整するまで解消しない)");
+            if (highWall > 0 && personalWall <= 0) walls.Add($"high のうち{highWall}件(希望の固定だけで個人の上限を超える＝希望か上限を調整するまで解消しない)");
             if (c1Wall > 0) walls.Add($"c1 のうち{c1Wall}件(窓の中が希望・固定で埋まり足りない＝希望を調整するまで解消しない)");
             if (personalWall > 0)
             {
@@ -1016,6 +1030,6 @@ public static partial class V6FinalPort
             // 交換の候補を先に、空いた枠（最大 3）を探索の他の案で埋める（Android 3.727.43）。
             Alternatives: finalTradeoffs.Count == 0 ? chained.Alternatives
                 : finalTradeoffs.Concat(chained.Alternatives).Where(a => !a.ContentDeepEquals(finalSched)).DistinctBy(a => new BoardKey(a)).Take(SeesawRelink.MaxTradeoffs).ToList(),
-            CapZero: capZero, Stop: stopSummary);
+            CapZero: capZero, Stop: stopSummary, Time: timeSummary);
     }
 }

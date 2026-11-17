@@ -64,4 +64,21 @@ public class C1RangeBalanceTest
         Assert.Contains("少なくとも", hit[0].Problem);
         Assert.DoesNotContain(V6SanityPort.BuildGuidance(st0 with { Cons1 = rule }), i => i.Problem.Contains("延べ人数") && i.Problem.Contains("上限 0 の日"));
     }
+
+    /// <summary>希望の人数だけで日の上限人数を超えると知らせ、その分を数える（Kotlin と同じ）。</summary>
+    [Fact]
+    public void GuidanceFlagsWishesOverTheDayCap()
+    {
+        var st0 = Load("sample_state_v6.json");
+        var p0 = new Problem(st0);
+        var rest = p0.RestIdx!.Value;
+        var j = Enumerable.Range(0, p0.T).First(d => Enumerable.Range(0, p0.S).Any(i => p0.WishFixed(i, d) && p0.Wish[i][d] == rest));
+        var wished = Enumerable.Range(0, p0.S).Count(i => p0.WishFixed(i, j) && p0.Wish[i][j] == rest);
+        var d1 = st0.NeedDay1.ToDictionary(kv => kv.Key, kv => kv.Value); d1[$"{rest},{j}"] = "0";
+        var d2 = st0.NeedDay2.ToDictionary(kv => kv.Key, kv => kv.Value); d2[$"{rest},{j}"] = "0";
+        var st = st0 with { NeedDay1 = d1, NeedDay2 = d2 };
+        Assert.Equal((wished, wished), V6SanityPort.WishCovOExcess(new Problem(st))[(j, rest)]);
+        var hit = V6SanityPort.BuildGuidance(st).Where(i => i.Where.Contains("上限0人") && i.Where.Contains("希望")).ToList();
+        Assert.Contains(hit, i => i.Problem.Contains("誰も入れない日") && i.Problem.Contains($"{wished}人"));
+    }
 }

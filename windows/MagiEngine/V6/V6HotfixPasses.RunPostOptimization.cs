@@ -49,7 +49,9 @@ public static partial class V6HotfixPasses
         /// <summary>[3.326.0] どのピン(職員,シフト)が何回止めたか。緩和対象の提示に使う。</summary>
         PinBlockAttribution? PinBlocks = null,
         /// <summary>後処理チェーンの段ごとの記録（採用数・所要・段の後の評価）。集計用で、盤面・採否には関わらない。</summary>
-        IReadOnlyList<PostStageRecord>? StageRecords = null);
+        IReadOnlyList<PostStageRecord>? StageRecords = null,
+        /// <summary>パスごとの所要時間（ms）。操作ログの「時間の内訳」に上位を出す（Kotlin <c>passMs</c>）。</summary>
+        IReadOnlyDictionary<string, long>? PassMs = null);
 
     /// <summary>
     /// 後処理チェーン 1 段の記録。<paramref name="Applied"/> は採用数（パスが数えないときは -1）。Hard/WeightedScore/Total はパス自身が返した評価（無ければ null＝
@@ -480,7 +482,7 @@ public static partial class V6HotfixPasses
         allLogs.AddRange(report.Logs);
         return new V6PostOptimizationResult(
             work, report with { Logs = allLogs }, r80, r67, r66, r70, chain.Logs,
-            plateauOut, chain.PinBlocksAll.Attempts, chain.PinBlocksAll, chain.StageRecords.ToList());
+            plateauOut, chain.PinBlocksAll.Attempts, chain.PinBlocksAll, chain.StageRecords.ToList(), new Dictionary<string, long>(chain.PassMs));
     }
 
     /// <summary>

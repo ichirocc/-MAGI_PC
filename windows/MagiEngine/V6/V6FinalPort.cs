@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using MagiEngine.Model;
 
@@ -95,9 +96,30 @@ public static partial class V6FinalPort
         IReadOnlyList<int[][]>? Alternatives = null,
         CapZeroNotice? CapZero = null,
         /// <summary>探索の終わり方（3.643.0）。背景実行の再開経路では null。</summary>
-        StopSummary? Stop = null)
+        StopSummary? Stop = null,
+        /// <summary>この実行の所要時間の内訳。最適化以外の操作では null。</summary>
+        TimeSummary? Time = null)
     {
         public IReadOnlyList<int[][]> Alternatives { get; init; } = Alternatives ?? Array.Empty<int[][]>();
+    }
+
+    /// <summary>Kotlin <c>V6FinalPort.TimeSummary</c>: 所要時間の内訳（ms）。<c>Phases</c> は実行順、<c>PostTop</c> は後処理で時間のかかったパスの上位。</summary>
+    public sealed record TimeSummary(long TotalMs, IReadOnlyList<(string Name, long Ms)> Phases, IReadOnlyList<(string Name, long Ms)> PostTop, bool OverBudget)
+    {
+        /// <summary>操作ログの 1 行。1 秒未満の段は省き、長い順に並べる。後処理は上位パスを括弧で添える。</summary>
+        public string OpLine()
+        {
+            static string Sec(long ms) => ms >= 10_000L ? ((ms + 500L) / 1000L).ToString(CultureInfo.InvariantCulture) : (ms / 1000.0).ToString("0.0", CultureInfo.InvariantCulture);
+            var parts = Phases.Where(p => p.Ms >= 1000L).OrderByDescending(p => p.Ms).Select(p =>
+            {
+                var pct = p.Ms * 100L / Math.Max(TotalMs, 1L);
+                var detail = p.Name == "後処理" && PostTop.Count > 0
+                    ? "（" + string.Join("・", PostTop.Select(t => $"{t.Name} {Sec(t.Ms)}秒")) + "）" : "";
+                return $"{p.Name} {Sec(p.Ms)}秒（{pct}%）{detail}";
+            }).ToList();
+            if (parts.Count == 0) parts.Add("内訳はどれも1秒未満");
+            return $"所要 {Sec(TotalMs)}秒{(OverBudget ? "（予算超過）" : "")}: " + string.Join(" ・ ", parts);
+        }
     }
 
     /// <summary>入口で個人上限 0 のセルを外した件数と、外す前後の必須件数（生の入力→外した入力）。</summary>

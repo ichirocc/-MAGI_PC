@@ -70,6 +70,7 @@ public sealed partial class MagiViewModel
 
     private async Task RunAgentCoreAsync(MagiState st, int[][] snap, long key0, long stKey, CancellationToken ct)
     {
+        var agentT0 = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         try
         {
             var r = await Task.Run(() => AgentLoop.Run(st, snap, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + AgentText.BudgetMs,
@@ -87,7 +88,7 @@ public sealed partial class MagiViewModel
                 SoftText(r.Before.Breakdown), SoftText(r.After.Breakdown), AgentText.StopWord(r.StopReason));
             foreach (var s in r.Steps)
                 LogOp("I", $"代行: {FixOutcomeText.FixDisplayLabel(s.Label)}（必須 {s.HardBefore}→{s.HardAfter}・合計 {s.TotalBefore}→{s.TotalAfter}）");
-            LogOp("I", $"代行: 終了 {r.Steps.Count}手（{rec.Stop}）必須 {r.Before.Hard}→{r.After.Hard}");
+            LogOp("I", $"代行: 終了 {r.Steps.Count}手（{rec.Stop}）必須 {r.Before.Hard}→{r.After.Hard} 所要 {(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - agentT0 + 500L) / 1000L}秒");
             if (r.Steps.Count == 0) { Ui.AgentRecord = rec; return; }
             PushUndo();
             var recU = rec with { UndoSerial = _undoStack.Last?.Value.Serial ?? 0L };
