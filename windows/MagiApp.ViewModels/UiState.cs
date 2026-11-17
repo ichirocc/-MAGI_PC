@@ -356,11 +356,13 @@ public static class SearchStrengthExtensions
     public static string Label(this SearchStrength strength) => strength == SearchStrength.Thorough ? "じっくり" : "ふつう";
 
     /// <summary>設定変更の行の括弧の中（語は「設定の効き」と同じ）。</summary>
-    public static string FlagWords(this SearchStrength strength)
+    /// <param name="toleranceUnused">[Android 3.727.94] 直す順番が優先順位で 6% 許容が使われない（スイッチは ON でも実行時は OFF）。</param>
+    public static string FlagWords(this SearchStrength strength, bool toleranceUnused = false)
     {
         var f = strength.Flags();
         static string W(bool b) => b ? "ON" : "OFF";
-        return $"結合探索を粘り強く={W(f.CombineExhaustPairs)}・禁止連続の崩し範囲={W(f.WideC3nBreakDays)}・回数連鎖研磨={W(f.CountChainPolish)}・公平化/適切回数の他ソフト許容(6%)={W(f.AptFairSoftTolerance)}";
+        return $"結合探索を粘り強く={W(f.CombineExhaustPairs)}・禁止連続の崩し範囲={W(f.WideC3nBreakDays)}・回数連鎖研磨={W(f.CountChainPolish)}・公平化/適切回数の他ソフト許容(6%)={W(f.AptFairSoftTolerance)}" +
+            (toleranceUnused && f.AptFairSoftTolerance ? "（直す順番が優先順位のあいだは使わない）" : "");
     }
 }
 

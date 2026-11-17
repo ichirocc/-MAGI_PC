@@ -425,7 +425,7 @@ public sealed partial class MagiViewModel
     {
         strength.Apply();
         Ui.SearchStrength = strength;
-        LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}（{strength.FlagWords()}）");
+        LogOp("I", $"設定変更: 探索の強さ → {strength.Label()}（{strength.FlagWords(!ObjectiveWeights.AllowsAptFairTolerance())}）");
     }
 
     public void SetAptFairToleranceUnguarded(bool on)

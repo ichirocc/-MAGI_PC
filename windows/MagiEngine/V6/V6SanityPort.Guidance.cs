@@ -170,6 +170,21 @@ public static partial class V6SanityPort
     /// verbatim — it reflects the Kotlin source's own commit history (2m was inserted later) and
     /// reordering it would only obscure that history for no benefit.
     /// </summary>
+    /// <summary>[Android 3.727.94] t 日のどの w 日の窓にも r 回以上入れるのに要る最少回数（窓ごとに足りない分を窓の後ろから置く貪欲＝最適）。</summary>
+    internal static int C1MinCount(int t, int w, int r)
+    {
+        if (w <= 0 || w > t || r <= 0) return 0;
+        var m = new bool[t];
+        var n = 0;
+        for (var s = 0; s <= t - w; s++)
+        {
+            var c = 0;
+            for (var j = s; j < s + w; j++) if (m[j]) c++;
+            for (var j = s + w - 1; c < r && j >= s; j--) if (!m[j]) { m[j] = true; c++; n++; }
+        }
+        return n;
+    }
+
     public static List<SettingIssue> BuildGuidance(MagiState state, Problem? p = null)
     {
         p ??= new Problem(state);
@@ -351,6 +366,33 @@ public static partial class V6SanityPort
                 outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{sym} {c.Day1}日で{c.Day2}回以上」",
                     $"{c.Day1}日間に{c.Day2}回は入りきらないため、「{sym}」を担当する全員が期間中ずっと違反になります",
                     $"{Place.Edit}{Place.Rule}の「期間の制約」で回数を{c.Day1}回以下に直すか、この行を削除してください"));
+            }
+        }
+
+        // 2b-3) [Android 3.727.94] 期間の制約と個人の上限の釣り合い。上限が最少回数を下回れば必ず不足、ちょうどなら余地なし。上限 0 の人は除く。
+        foreach (var c in p.Cons1)
+        {
+            if (c.Day1 <= 0 || c.Day1 > p.T || c.Day2 <= 0 || c.Day2 > c.Day1) continue;
+            var need = C1MinCount(p.T, c.Day1, c.Day2);
+            var sym = Sym(c.ShiftIdx);
+            var byHi = Enumerable.Range(0, p.S)
+                .Where(i => p.CanDo(i, c.ShiftIdx) && p.RangeHi[i][c.ShiftIdx] >= 1 && p.RangeHi[i][c.ShiftIdx] <= need)
+                .GroupBy(i => p.RangeHi[i][c.ShiftIdx]).OrderBy(g => g.Key);
+            foreach (var g in byHi)
+            {
+                var staff = g.ToList();
+                var names = string.Join("・", staff.Take(4).Select(Nm)) + (staff.Count > 4 ? $" ほか{staff.Count - 4}名" : "");
+                var hi = g.Key;
+                var rule = $"「{sym} {c.Day1}日で{c.Day2}回以上」";
+                if (hi < need)
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{names} の「{sym}」上限{hi}回と期間の制約{rule}",
+                        $"{p.T}日で{rule} を満たすには「{sym}」が最少{need}回要ります。上限{hi}回では期間の制約が必ず足りません",
+                        $"{Place.Edit}{Place.Count}で「{sym}」の上限を{need}回以上にするか、{Place.Rule}の「期間の制約」を見直してください"));
+                else
+                    outList.Add(new SettingIssue(IssueKind.Range, $"{names} の「{sym}」上限{hi}回と期間の制約{rule}",
+                        $"{p.T}日で{rule} を満たす最少の回数と同じです。「{sym}」をきっちり等間隔に置くしかなく、希望や禁止の並びと重なると期間の制約が残りやすくなります",
+                        $"期間の制約を守りたいときは、{Place.Edit}{Place.Count}で「{sym}」の上限を{need + 1}回以上にするか、{Place.Rule}の「期間の制約」を見直してください",
+                        Neutral: true));
             }
         }
 
