@@ -45,4 +45,23 @@ public class C1RangeBalanceTest
         Assert.Contains(issues, i => !i.Neutral && i.Problem.Contains("必ず足りません") && i.Where.Contains(st0.StaffList[staff[0]].Name));
         Assert.Contains(issues, i => i.Neutral && i.Problem.Contains("等間隔") && i.Where.Contains(st0.StaffList[staff[1]].Name));
     }
+
+    /// <summary>休の上限 0 の日を月末に集めると、窓の延べ人数が足りないと知らせる（Kotlin と同じ）。</summary>
+    [Fact]
+    public void GuidanceFlagsWindowsWithoutEnoughRoom()
+    {
+        var st0 = Load("sample_state_v6.json");
+        var p0 = new Problem(st0);
+        var rest = p0.RestIdx!.Value;
+        var rule = new[] { new C1Row("14", st0.Shifts[rest].Kigou, "5") };
+        var d1 = st0.NeedDay1.ToDictionary(kv => kv.Key, kv => kv.Value);
+        var d2 = st0.NeedDay2.ToDictionary(kv => kv.Key, kv => kv.Value);
+        for (var j = p0.T - 8; j < p0.T; j++) { d1[$"{rest},{j}"] = "0"; d2[$"{rest},{j}"] = "0"; }
+        var st = st0 with { Cons1 = rule, NeedDay1 = d1, NeedDay2 = d2 };
+        var hit = V6SanityPort.BuildGuidance(st).Where(i => i.Problem.Contains("延べ人数")).ToList();
+        Assert.NotEmpty(hit);
+        Assert.Contains("上限 0 の日", hit[0].Problem);
+        Assert.Contains("少なくとも", hit[0].Problem);
+        Assert.DoesNotContain(V6SanityPort.BuildGuidance(st0 with { Cons1 = rule }), i => i.Problem.Contains("延べ人数") && i.Problem.Contains("上限 0 の日"));
+    }
 }

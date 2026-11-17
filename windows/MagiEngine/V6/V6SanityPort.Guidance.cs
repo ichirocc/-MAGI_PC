@@ -396,6 +396,54 @@ public static partial class V6SanityPort
             }
         }
 
+        // 2b-4) [Android 3.727.95] 期間の制約の窓ごとの延べ人数。置ける延べ人数は、上限 0 の日は希望の人数だけ、ほかの日は職員数から
+        //   他のシフトの最低人数を引いた人数＝上限。足りない分は c1 の件数の下限になる。最も足りない窓だけを出す。
+        {
+            var capZero = p.DayCapZero;
+            int LowNeed(int k, int j)
+            {
+                int a = p.Need1[k][j], b = p.Use2 ? p.Need2[k][j] : -1;
+                return Math.Max(0, a >= 0 && b >= 0 ? Math.Min(a, b) : Math.Max(a, b));
+            }
+            foreach (var c in p.Cons1)
+            {
+                if (c.Day1 <= 0 || c.Day1 > p.T || c.Day2 <= 0 || c.Day2 > c.Day1) continue;
+                var x = c.ShiftIdx;
+                var members = Enumerable.Range(0, p.S).Count(i => p.CanDo(i, x));
+                if (members == 0) continue;
+                var cap = new int[p.T];
+                for (var j = 0; j < p.T; j++)
+                {
+                    var wished = Enumerable.Range(0, p.S).Count(i => p.WishFixed(i, j) && p.Wish[i][j] == x);
+                    if (capZero is not null && capZero[j * p.K + x]) cap[j] = wished;
+                    else
+                    {
+                        var others = 0;
+                        for (var k = 0; k < p.K; k++) if (k != x) others += LowNeed(k, j);
+                        cap[j] = Math.Clamp(p.S - others, 0, members);
+                    }
+                }
+                int worst = 0, at = -1;
+                for (var s = 0; s <= p.T - c.Day1; s++)
+                {
+                    var sum = 0;
+                    for (var j = s; j < s + c.Day1; j++) sum += cap[j];
+                    var shortBy = members * c.Day2 - sum;
+                    if (shortBy > worst) { worst = shortBy; at = s; }
+                }
+                if (at < 0) continue;
+                var sym = Sym(x);
+                var zeroDays = 0; var room = 0;
+                for (var j = at; j < at + c.Day1; j++) { room += cap[j]; if (capZero is not null && capZero[j * p.K + x]) zeroDays++; }
+                var span = $"{SafeDayLabel(state.StartDate, at)}〜{SafeDayLabel(state.StartDate, at + c.Day1 - 1)}";
+                outList.Add(new SettingIssue(IssueKind.Constraint, $"期間の制約「{sym} {c.Day1}日で{c.Day2}回以上」と {span}",
+                    $"{span}の{c.Day1}日で「{sym}」を置ける延べ人数は多くて{room}人日です" +
+                        (zeroDays > 0 ? $"（上限 0 の日が{zeroDays}日・" : "（") + "ほかの日は職員から他のシフトの最低人数を引いた人数まで）。" +
+                        $"{members}人が{c.Day2}回ずつ入るには{members * c.Day2}人日要るので、期間の制約が少なくとも{worst}件足りません",
+                    $"{Place.Edit}{Place.NeedDays}で「{sym}」の上限 0 の日を減らすか、{Place.Rule}の「期間の制約」か{Place.Need}を見直してください"));
+            }
+        }
+
         // 2b-2) [壁/covO-tension 分類] c1 窓制約の充足可否。需要 = 各 canDo 職員 × day2 × floor(T/day1)（disjoint窓の下界）。
         //   [3.364.0 訂正・実データ計測起因] 非休シフトの供給に per-day 上限(need2/need1)の総和を使うのは誤り。
         //   need2/need1 は covO の SOFT 目標(1日あたりの過剰配置しきい値)であって物理上限ではなく、最適化は covO を
