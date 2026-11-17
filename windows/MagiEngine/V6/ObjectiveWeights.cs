@@ -15,7 +15,7 @@ public static class ObjectiveWeights
 
     // 宣言順＝加算順（WeightedScore の double 合計を Kotlin とビット単位で一致させる）。
     private static readonly (string Key, double Weight)[] PriorityOrdered = MirrorKeys.Weights
-        .Select(kv => (kv.Key, kv.Key == "fair" ? 50.0 : kv.Key is "c2" or "apt" ? 20.0 : TierObjective.Tiers[1].Contains(kv.Key) ? 200.0
+        .Select(kv => (kv.Key, kv.Key is "fair" or "covO" ? 50.0 : kv.Key is "c2" or "apt" ? 20.0 : TierObjective.Tiers[1].Contains(kv.Key) ? 200.0
             : TierObjective.Tiers[2].Contains(kv.Key) ? 20.0
             : TierObjective.Tiers[3].Contains(kv.Key) ? 1.0 : kv.Weight)).ToArray();
     private static readonly IReadOnlyDictionary<string, double> PriorityByKey = PriorityOrdered.ToDictionary(kv => kv.Key, kv => kv.Weight);
