@@ -162,7 +162,7 @@ public sealed partial class MagiViewModel
         var boardToken = BeginBoardJob("勤務表づくり", engineRun: true);
         // [3.694.0] 開始行は BeginBoardJob の後（#N が付く）。期間・人数・指紋は実行前の入力、設定は開始点で 1 回読む（停止・失敗の実行にも残る）。
         LogOp("I", $"最適化 開始 (予算{Ui.BudgetSec}s, 並列{Ui.Workers}, 方式{Ui.V6Algorithm}) ・ {RunInputWords(st0, sched0)}");
-        LogOp("I", "設定の開始時: " + SettingsAtStart());
+        LogOpIfChanged("I", "設定の開始時: " + SettingsAtStart());
         var cts = new CancellationTokenSource();
         _job = cts;
         LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token, fromDraft);

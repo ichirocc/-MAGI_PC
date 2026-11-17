@@ -241,6 +241,26 @@ public class MagiViewModelOptimizeTest : IDisposable
     }
 
     [Fact]
+    public async Task SettingsSnapshotIsLoggedOnceWhileUnchanged()
+    {
+        var fake = new FakeOptimizationService
+        {
+            Result = (state, schedule) => new V6FinalPort.ActionResult(
+                Schedule: schedule, Report: Report(hard: 0, total: 0), Phase: "test:Fake",
+                BusyDetail: new V6FinalPort.BusyDetail("Fake", "2名 x 7日", "HARD 0件"), Logs: Array.Empty<MirrorLog>()),
+        };
+        var vm = new MagiViewModel(fake) { DataDir = FreshTempDir(), _state = MinimalState.Build(), _currentSchedule = MinimalState.BuildSchedule() };
+
+        vm.RunV6FullOptimizeThroughSheet();
+        await vm.LastRunOptimizeTask!;
+        vm.RunV6FullOptimizeThroughSheet();
+        await vm.LastRunOptimizeTask!;
+
+        Assert.Equal(2, vm.Ui.OpLog.Count(l => l.Contains("最適化 開始 (予算")));
+        Assert.Contains("#1 設定の開始時: ", Assert.Single(vm.Ui.OpLog, l => l.Contains("設定の開始時: ")));
+    }
+
+    [Fact]
     public async Task SettingsSnapshotRemainsWhenTheRunFails()
     {
         var fake = new FakeOptimizationService { ThrowInstead = new InvalidOperationException("boom") };

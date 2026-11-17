@@ -61,7 +61,6 @@ public sealed partial class MagiViewModel
         CancelFixSearch();
         Ui.AgentRunning = true;
         Ui.AgentRecord = null;
-        LogOp("I", $"代行: 開始（必須 {u.BestHard}）");
         _agentCts?.Cancel();
         var cts = new CancellationTokenSource();
         _agentCts = cts;

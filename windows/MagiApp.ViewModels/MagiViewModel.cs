@@ -338,6 +338,18 @@ public sealed partial class MagiViewModel
     /// [3.378.0/HF77=コメント≠実装の由来] Kotlin原本の旧KDocは「最大300件」と書いていたが実装は
     /// 1000だった、という教訓をそのまま実装値へ反映する。
     /// </summary>
+    /// <summary>同じ見出しの直近の行と本文が同じなら出さない（その行がリングに残っている間だけ）。Kotlin <c>logOpIfChanged</c>。</summary>
+    private void LogOpIfChanged(string level, string message)
+    {
+        var cut = message.IndexOf(": ", StringComparison.Ordinal);
+        var head = (cut < 0 ? message : message[..cut]) + ": ";
+        lock (_opLogLock)
+        {
+            if (_opLog.FirstOrDefault(e => e.Message.StartsWith(head, StringComparison.Ordinal)) is { } last && last.Message == message) return;
+        }
+        LogOp(level, message);
+    }
+
     private void LogOp(string level, string message)
     {
         List<string> formatted;
