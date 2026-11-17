@@ -13,6 +13,11 @@ namespace MagiEngine.Tests.V6;
 [Collection("PolishGateGlobal")]
 public class ExtWishOptimizeTest
 {
+    /// <summary>拡張希望の禁止だけで数える新しい配置。上限 0 のセル（IsCapZeroCell）は除く＝入口の除去で基準からは外れるが、探索は生の入力から始まって
+    /// 持ち越し、最終番兵が外す（日の上限 0 は DayCapZeroTest が見る）。</summary>
+    private static List<(int I, int J)> ExtWishNew(Problem p, int[][] baseSched, int[][] cand) =>
+        p.ExtBanNewCells(baseSched, cand).Where(c => p.ExtWishBanned(c.I, c.J, cand[c.I][c.J]) && !p.IsCapZeroCell(c.I, c.J, cand[c.I][c.J])).ToList();
+
     private static MagiState Load(string name) => StateJsonSerializer.Parse(FixtureLoader.ReadRaw(name));
 
     private static MagiState Adversarial(MagiState st, int[][] input, int[][] out0)
@@ -44,7 +49,7 @@ public class ExtWishOptimizeTest
         int[][]? prev = null;
         V6HotfixPasses.PostChain.StageProbe = (key, work) =>
         {
-            var c = p.ExtBanNewCells(prev ?? baseSched, work).Count;
+            var c = ExtWishNew(p, prev ?? baseSched, work).Count;
             if (c > 0) offenders[key] = offenders.GetValueOrDefault(key) + c;
             prev = work.Copy2D();
         };
@@ -70,7 +75,7 @@ public class ExtWishOptimizeTest
                 var offenders = WithProbe(baseSched, p, () =>
                     res = V6FinalPort.HandleOptimize(st, secondsRaw: 2, schedule: input.Copy2D(), workers: 2,
                         requestedAlgorithm: algo, allowImpossible: true, seed: 5L).GetAwaiter().GetResult());
-                var fresh = p.ExtBanNewCells(baseSched, res!.Schedule);
+                var fresh = ExtWishNew(p, baseSched, res!.Schedule);
                 var sentinel = res.Logs.Where(l => l.Message.Contains("拡張希望の禁止が")).Select(l => l.Message).ToList();
                 Assert.True(fresh.Count == 0, $"{file} {algo}: 最終盤面に禁止の新規配置 {fresh.Count}");
                 Assert.True(sentinel.Count == 0, $"{file} {algo}: 最終番兵が段を戻した＝候補生成の漏れ {string.Join(" / ", sentinel)} 後処理の段={string.Join(",", offenders.Select(kv => $"{kv.Key}={kv.Value}"))}");
@@ -131,7 +136,7 @@ public class ExtWishOptimizeTest
                 var offenders = WithProbe(baseSched, p, () =>
                     outB = V6HotfixPasses.RunPostOptimization(st, input.Copy2D(), "t", seed: 1L, deadlineMs: EngineClock.NowMs() + 3_600_000L, parameters: prm).Schedule);
                 Assert.True(offenders.Count == 0, $"{file}: 後処理の段が禁止を新しく置いた {string.Join(",", offenders.Select(kv => $"{kv.Key}={kv.Value}"))}");
-                Assert.Empty(p.ExtBanNewCells(baseSched, outB!));
+                Assert.Empty(ExtWishNew(p, baseSched, outB!));
             }
         }
         finally { foreach (var (f, v) in saved) f.SetValue(null, v); }

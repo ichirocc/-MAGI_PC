@@ -776,7 +776,7 @@ public static partial class V6FinalPort
                 var c = 0;
                 for (var i = 0; i < pe.S; i++)
                     for (var j = 0; j < pe.T; j++)
-                        if (pe.Pin[i][j] >= 0 && pe.ExtBanned(i, j, finalSched[i][j])) c++;
+                        if (pe.Pin[i][j] >= 0 && pe.ExtWishBanned(i, j, finalSched[i][j])) c++;
                 return c;
             });
             // 回避の並び（c3mn）が希望だけでできている窓も、希望を取り消すまで残る（要調整）。

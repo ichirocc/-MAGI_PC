@@ -31,8 +31,10 @@ public static class FixApplyGate
                 return new Outcome(null, before, null, "手動固定のセルを変える提案です");
             if (p.WishLocked(op.Staff, op.Day) && p.LockTo(op.Staff, op.Day) != op.ToShift)
                 return new Outcome(null, before, null, "希望で固定されたセルを変える提案です");
-            if (op.ToShift != schedule[op.Staff][op.Day] && p.ExtBanned(op.Staff, op.Day, op.ToShift))
+            if (op.ToShift != schedule[op.Staff][op.Day] && p.ExtWishBanned(op.Staff, op.Day, op.ToShift))
                 return new Outcome(null, before, null, "拡張希望で禁止された勤務を置く提案です");
+            if (op.ToShift != schedule[op.Staff][op.Day] && p.DayCapBanned(op.Staff, op.Day, op.ToShift))
+                return new Outcome(null, before, null, "必要人数の上限が 0 の日に置く提案です");
             work[op.Staff][op.Day] = op.ToShift;
         }
         var after = UnifiedViolationChecker.Check(state, work);

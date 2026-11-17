@@ -165,7 +165,7 @@ public sealed class Evaluator
         {
             for (int i = 0; i < S; i++)
                 for (int j = 0; j < T; j++)
-                    if (_p.ExtBanned(i, j, a[i][j])) hard1 += 1;
+                    if (_p.ExtWishBanned(i, j, a[i][j])) hard1 += 1;
         }
 
         // ---- pref / groupViol ----------------------------------------------------------------

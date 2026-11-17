@@ -168,7 +168,7 @@ public static class CellSheetLogic
                 return j + 1 < p.T && p.Wish[i][j + 1] >= 0 ? $"{labelOf(fam)} {Sym(cur)}→{Sym(p.Wish[i][j + 1])}（{DayText.Range(state.StartDate, j, j + 1)}）" : null;
             case "extWish":
             {
-                var banned = Enumerable.Range(0, p.K).Where(k => p.ExtBanned(i, j, k)).ToList();
+                var banned = Enumerable.Range(0, p.K).Where(k => p.ExtWishBanned(i, j, k)).ToList();
                 return banned.Count == 0 ? null : $"拡張希望（{string.Join("・", banned.Select(Sym))}以外）に{Sym(cur)}が入っています";
             }
             case "c3n":

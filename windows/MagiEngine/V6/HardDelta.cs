@@ -18,7 +18,7 @@ internal static class HardDelta
         int w = p.Wish[i][j];
         if (w >= 0 && w < p.K && p.CanDo(i, w) && k != w) h++;
         if (p.C3wBanned(i, j, k)) h++;
-        if (p.ExtBanned(i, j, k)) h++;
+        if (p.ExtWishBanned(i, j, k)) h++;
         return h;
     }
 

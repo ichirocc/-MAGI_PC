@@ -119,7 +119,7 @@ public static class ScheduleUtil
 
     /// <summary>個人上限 0 で最適化器が置かないセル（担当可・MayPlace 外・縛る値でない）か。入口の除去と最終番兵が同じ基準を読む。</summary>
     public static bool IsCapZeroCell(this Problem p, int i, int j, int k) =>
-        k >= 0 && k < p.K && p.CanDo(i, k) && !p.MayPlace(i, k) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k);
+        k >= 0 && k < p.K && p.CanDo(i, k) && (!p.MayPlace(i, k) || p.DayCapBanned(i, j, k)) && !(p.WishLocked(i, j) && p.LockTo(i, j) == k);
 
     /// <summary>盤面中の IsCapZeroCell のセル (i,j) の一覧（最終番兵）。</summary>
     public static List<(int I, int J)> CapZeroCells(this Problem p, int[][] s)

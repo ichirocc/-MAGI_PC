@@ -252,7 +252,7 @@ internal static class CheckerReferenceV0
         {
             for (int i = 0; i < p.S; i++)
                 for (int j = 0; j < p.T; j++)
-                    if (p.ExtBanned(i, j, s[i][j])) { Inc("extWish"); Mark(i, j, "extWish"); }
+                    if (p.ExtWishBanned(i, j, s[i][j])) { Inc("extWish"); Mark(i, j, "extWish"); }
         }
 
         // ---- pref: wished cell not honored ---------------------------------------------------

@@ -171,7 +171,7 @@ public static partial class V6HotfixPasses
             for (var j = 0; j < p.T; j++)
             {
                 if (p.C3wBanned(i, j, sched[i][j])) c3wC++;
-                if (p.HasExtBan && p.ExtBanned(i, j, sched[i][j])) extC++;
+                if (p.HasExtBan && p.ExtWishBanned(i, j, sched[i][j])) extC++;
             }
         total += c3nC + c3C + c3mC + c3mnC + c3wC + extC;
         weighted += c3wC * ObjectiveWeights.Of("c3w") + extC * ObjectiveWeights.Of("extWish") +

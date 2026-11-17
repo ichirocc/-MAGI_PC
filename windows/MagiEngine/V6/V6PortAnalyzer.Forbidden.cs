@@ -225,7 +225,7 @@ public static partial class V6PortAnalyzer
     {
         var n = 0;
         for (var d = 0; d < p.T; d++)
-            if (p.ExtBanned(i, d, board[i][d])) n++;
+            if (p.ExtWishBanned(i, d, board[i][d])) n++;
         return n;
     }
 
@@ -310,7 +310,7 @@ public static partial class V6PortAnalyzer
         var scoreImproves = false;
         var c3wCur = p.C3wBanned(i, j, cur) ? 1 : 0;
         // 今のセルが拡張希望の違反なら、代替（禁止へは置かない）へ動かすだけで必須が 1 減る（3.653.0）。
-        var extGain = p.ExtBanned(i, j, cur) ? 1 : 0;
+        var extGain = p.ExtWishBanned(i, j, cur) ? 1 : 0;
         int? chainOk = null;   // Chain が成立した代替シフト
         int? adjOk = null;     // Adjacent が成立した代替シフト
         var alts = 0;

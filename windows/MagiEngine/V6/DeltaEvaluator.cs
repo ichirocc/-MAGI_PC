@@ -396,7 +396,7 @@ public sealed class DeltaEvaluator
 
         // [3.542.0] 希望の前日に禁止(c3w)もセル単位なので差分もこの1セルだけ。
         _dC3w = (_p.C3wBanned(i, j, nw) ? 1L : 0L) - (_p.C3wBanned(i, j, old) ? 1L : 0L);
-        _dExt = (_p.ExtBanned(i, j, nw) ? 1L : 0L) - (_p.ExtBanned(i, j, old) ? 1L : 0L);
+        _dExt = (_p.ExtWishBanned(i, j, nw) ? 1L : 0L) - (_p.ExtWishBanned(i, j, old) ? 1L : 0L);
 
         // c41 (group/day range) on day j — only constraints touching this staff's group & shifts
         int gi = _p.Sgrp[i];
@@ -819,7 +819,7 @@ public sealed class DeltaEvaluator
         long h = 0L;
         for (int i = 0; i < S; i++)
             for (int j = 0; j < T; j++)
-                if (_p.ExtBanned(i, j, _a[i][j])) h++;
+                if (_p.ExtWishBanned(i, j, _a[i][j])) h++;
         return h;
     }
 

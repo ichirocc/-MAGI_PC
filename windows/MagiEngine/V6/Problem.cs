@@ -108,7 +108,7 @@ public sealed class Problem
     /// <summary>Staff indices the optimizer may give a shift to (used by block-fill moves). [3.507.0] 置ける職員＝Placeable。</summary>
     public int[][] StaffForShift { get; }
 
-    /// <summary>[3.507.0 同期] 最適化器が置いてよいシフト（職員別）＝担当可（Bucket）から個人上限 0（休を除く）を外したもの。評価・表示は CanDo のまま
+    /// <summary>[3.507.0 同期] 最適化器が置いてよいシフト（職員別）＝担当可（Bucket）から個人上限 0・実効の目安 0（どちらも休を除く、目安は Android 3.727.92）を外したもの。評価・表示は CanDo のまま
     /// （候補生成・入口 Hf66・最終番兵の基準だけが見る。希望固定は WishLocked が優先。経緯は README「レビュー対応の記録」2026-09-06）。</summary>
     public int[][] Placeable { get; }
     public bool[][] PlaceableHas { get; }
@@ -116,14 +116,31 @@ public sealed class Problem
     /// <summary>拡張希望の禁止表（割当を見ずに作る。希望シフト日は空）。採点は見ない。</summary>
     public ExtWishRules.BanTable ExtBan { get; }
 
-    /// <summary>拡張希望の禁止が 1 セルでもあるか。無ければ候補生成の判定は常に false。</summary>
-    public bool HasExtBan => ExtBan.Flat is not null;
+    /// <summary>[Android 3.727.92] 日の上限人数が 0 の (日, シフト)（1 人でも人員過剰＝CovOCell(k, j, 1) &gt; 0）。T×K、無ければ null。
+    /// 最適化器はここへ置かない（個人の上限 0 と同じ扱い。採点・表示は covO のまま）。</summary>
+    public bool[]? DayCapZero => _dayCapZero.Value;
+    private readonly Lazy<bool[]?> _dayCapZero;
+    private readonly Lazy<bool[]> _dayCapEscape;
 
-    /// <summary>最適化器がセル (i,j) に k を置く候補を捨てるか（拡張希望の禁止）。旧値は問わない＝禁止から禁止への手も捨てる。</summary>
-    public bool ExtBanned(int i, int j, int k) => ExtBan.Banned(i, j, k);
+    /// <summary>最適化器が置かない表が 1 セルでもあるか（拡張希望の禁止か日の上限 0）。無ければ候補生成の判定は常に false。</summary>
+    public bool HasExtBan => ExtBan.Flat is not null || DayCapZero is not null;
 
-    /// <summary>置いてよいか（MayPlace に拡張希望の禁止を足したもの）。候補生成が読む。</summary>
-    public bool MayPlaceAt(int i, int j, int k) => this.MayPlace(i, k) && !ExtBan.Banned(i, j, k);
+    /// <summary>拡張希望の禁止だけ（採点の extWish が読む）。</summary>
+    public bool ExtWishBanned(int i, int j, int k) => ExtBan.Banned(i, j, k);
+
+    /// <summary>日の上限 0 で置かないセルか。希望・手動固定でそのシフトになるセルと、置けるシフトがどれも上限 0 の日（逃げ先が無い）は対象外。</summary>
+    public bool DayCapBanned(int i, int j, int k)
+    {
+        var f = DayCapZero;
+        if (f is null || i < 0 || i >= S || j < 0 || j >= T || k < 0 || k >= K || !f[j * K + k]) return false;
+        return Wish[i][j] != k && Pin[i][j] != k && _dayCapEscape.Value[i * T + j];
+    }
+
+    /// <summary>最適化器がセル (i,j) に k を置く候補を捨てるか（拡張希望の禁止・日の上限 0）。旧値は問わない＝禁止から禁止への手も捨てる。</summary>
+    public bool ExtBanned(int i, int j, int k) => ExtBan.Banned(i, j, k) || DayCapBanned(i, j, k);
+
+    /// <summary>置いてよいか（MayPlace に ExtBanned を足したもの）。候補生成が読む。</summary>
+    public bool MayPlaceAt(int i, int j, int k) => this.MayPlace(i, k) && !ExtBanned(i, j, k);
 
     /// <summary>wish[i][j] = desired shift index, or -1.</summary>
     public int[][] Wish { get; }
@@ -380,6 +397,38 @@ public sealed class Problem
                 Apt[i][k] = t;
             }
         }
+        // [Android 3.727.92] 実効の目安が 0 のシフト（休を除く）も置かない（個人上限 0 と同じ扱い）。クランプは上の表で済んでいる。
+        for (int i = 0; i < S; i++)
+        {
+            var list = new List<int>();
+            for (int k = 0; k < K; k++)
+            {
+                if (Apt[i][k] == 0 && k != RestIdx) PlaceableHas[i][k] = false;
+                if (PlaceableHas[i][k]) list.Add(k);
+            }
+            Placeable[i] = list.ToArray();
+        }
+        for (int k = 0; k < K; k++)
+        {
+            var list = new List<int>();
+            for (int i = 0; i < S; i++) if (PlaceableHas[i][k]) list.Add(i);
+            StaffForShift[k] = list.ToArray();
+        }
+        _dayCapZero = new Lazy<bool[]?>(() =>
+        {
+            bool[]? f = null;
+            for (int j = 0; j < T; j++) for (int k = 0; k < K; k++)
+                if (CovOCell(k, j, 1) > 0) (f ??= new bool[T * K])[j * K + k] = true;
+            return f;
+        });
+        _dayCapEscape = new Lazy<bool[]>(() =>
+        {
+            var f = DayCapZero;
+            var e = new bool[S * T];
+            for (int i = 0; i < S; i++) for (int j = 0; j < T; j++)
+                e[i * T + j] = f is null || Placeable[i].Any(k => !f[j * K + k] && !ExtBan.Banned(i, j, k));
+            return e;
+        });
 
         var cons1List = new List<C1>();
         foreach (var it in state.Cons1)
