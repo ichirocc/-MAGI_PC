@@ -694,8 +694,14 @@ public static partial class V6FinalPort
         pinLog.AddRange(extSafeStages.Where(c => !safeStages.Contains(c)).Select(c => new MirrorLog(level: "W", tag: "Sentinel",
             message: $"{c.Label}の盤面が希望固定のセルを希望でない値へ変えていたため候補から外しました（多重防御）")));
         var bestStage = PickBestStage(safeStages);
-        var finalSched = bestStage.Sched;
-        var finalReport = bestStage.Report;
+        // [Android 3.727.95] 上限 0 の日を守るせいで残る必須違反は、その日に置いて減らす（必須が減るときだけ）。
+        var relief = DayCapHardRelief.Apply(state, bestStage.Sched, bestStage.Report, NowMs() + DayCapReliefMs);
+        var finalSched = relief.Schedule;
+        var finalReport = relief.Report;
+        var reliefLog = relief.Placed.Count == 0 ? new List<MirrorLog>() : new List<MirrorLog> { new MirrorLog(level: "W", tag: "上限0の日",
+            message: "必須違反を避けるため、上限 0 の日に置いた: " + string.Join("、", relief.Placed.Select(c =>
+                $"{(c.I < state.StaffList.Count ? state.StaffList[c.I].Name : c.I.ToString())} {V6PortAnalyzer.DayLabel(state.StartDate, c.J)}={(c.K < state.Shifts.Count ? state.Shifts[c.K].Kigou : c.K.ToString())}"))
+                + $"（必須 {bestStage.Report.Hard}→{finalReport.Hard}。上限 0 の日の人員過剰として数える）") };
         // [レビュー修正/3.575.0, Kotlin原本] 全段が同値（無改善）のときも Aggregate は最初の候補（入力）を
         //   残す＝label が「後処理」でなくなるが、これは退化ではないので警告しない。実際に refReport
         //   （後処理の最終値）が bestStage より悪いとき（= CheckResultWorse が非null）だけ多重防御ログを出す。
@@ -972,6 +978,7 @@ public static partial class V6FinalPort
         logs.AddRange(pinLog);
         // [MAGI-021/022, Android 3.727.46] 採否は必須の件数で比べる＝入れ替わり（例: 人員不足 1 を解いて禁止連続 1）は件数で見えない。採否は変えずログに出す。
         logs.AddRange(IdentitySwapLog(state, inputReport, finalReport));
+        logs.AddRange(reliefLog);
         logs.AddRange(adoptedLog);
         logs.AddRange(sentinelLog);
         logs.AddRange(integrationLog);

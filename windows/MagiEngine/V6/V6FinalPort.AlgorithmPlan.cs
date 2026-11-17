@@ -9,6 +9,8 @@ public static partial class V6FinalPort
     /// 上限（秒）。10分（Android 3.727.88、利用者指示「ユーザー指定は 2分から10分」）。
     /// </summary>
     public const int MaxOptimizeSec = 600;
+    /// <summary>[Android 3.727.95] 上限 0 の日に置いて必須違反を減らす最終段（DayCapHardRelief）の持ち時間。</summary>
+    public const long DayCapReliefMs = 3_000L;
     /// <summary>後処理（研磨）の取り分（秒）。制限時間＝探索の時間で、後処理はその後ろにこの秒数だけ足す（Kotlin <c>POST_RESERVE_SEC</c>）。</summary>
     public const int PostReserveSec = 10;
     /// <summary>玉突き（パイプラインの深い探索）の取り分（秒）。後処理の後ろにさらに足す（Kotlin <c>CHAIN_RESERVE_SEC</c>）。</summary>
