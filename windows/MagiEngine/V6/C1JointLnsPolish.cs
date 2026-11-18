@@ -357,7 +357,7 @@ internal static class C1JointLnsPolish
             if (c.Day1 <= 0 || c.Day1 > p.T || c.ShiftIdx < 0 || c.ShiftIdx >= p.K) continue;
             for (int i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, c.ShiftIdx)) continue;
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
                 var sb = new System.Text.StringBuilder();
                 sb.Append(c.Day1).Append(',').Append(c.Day2).Append(',').Append(c.ShiftIdx).Append(':');
                 for (int day = 0; day < p.T; day++)
@@ -485,7 +485,7 @@ internal static class C1JointLnsPolish
             if (d <= 0 || d > p.T || x < 0 || x >= p.K) continue;
             for (int i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, x)) continue;
+                if (!p.C1Applies(i, x)) continue;
                 for (int start = 0; start <= p.T - d; start++)
                 {
                     int count = 0;

@@ -41,6 +41,11 @@ public static class ScheduleUtil
     /// Whether staff <paramref name="staffI"/> can be assigned shift <paramref name="shiftK"/>
     /// (i.e. their group's <see cref="Problem.Bucket"/> allows it).
     /// </summary>
+    /// <summary>C1（期間の制約）を職員 <paramref name="staffI"/> のシフト <paramref name="shiftK"/> に掛けるか: 担当でき、個人の上限が 0 回でない（休は上限 0 でも掛ける）。
+    /// Kotlin <c>Problem.c1Applies</c>（Android 3.727.105）。</summary>
+    public static bool C1Applies(this Problem p, int staffI, int shiftK) =>
+        p.CanDo(staffI, shiftK) && !(p.RangeHi[staffI][shiftK] == 0 && shiftK != p.RestIdx);
+
     public static bool CanDo(this Problem p, int staffI, int shiftK)
     {
         if (staffI < 0 || staffI >= p.S || shiftK < 0 || shiftK >= p.K) return false;

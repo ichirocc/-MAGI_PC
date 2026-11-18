@@ -115,7 +115,7 @@ public static class C1RepairIndex
                 foreach (var c in p.Cons1)
                 {
                     if (c.ShiftIdx != x || c.Day1 < 1 || c.Day1 > p.T || c.Day2 < 1) continue;
-                    if (!p.CanDo(i, x)) continue;
+                    if (!p.C1Applies(i, x)) continue;
                     int lo = Math.Max(d - c.Day1 + 1, 0);
                     int hi = Math.Min(d, p.T - c.Day1);
                     for (int ws = lo; ws <= hi; ws++)

@@ -121,7 +121,7 @@ public static class ConstraintMus
             foreach (var c in p.Cons1)
             {
                 if (c.ShiftIdx < 0 || c.ShiftIdx >= p.K || c.Day1 < 1 || c.Day1 > p.T || c.Day2 < 1 || c.Day2 > c.Day1) continue;
-                if (!p.CanDo(i, c.ShiftIdx)) continue;
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
                 universe.Add(new WindowRule(c.ShiftIdx, c.Day1, c.Day2));
             }
             foreach (var k in allowed)

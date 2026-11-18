@@ -210,7 +210,7 @@ public static partial class V6SanityPort
             var x = c.ShiftIdx;
             for (var i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, x) || i >= schedule.Length) continue;
+                if (!p.C1Applies(i, x) || i >= schedule.Length) continue;
                 var row = schedule[i];
                 for (var w = 0; w <= p.T - c.Day1; w++)
                 {

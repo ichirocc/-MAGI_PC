@@ -83,7 +83,7 @@ internal static class C1TemporalFlowPolish
             foreach (var c in p.Cons1)
             {
                 int x = c.ShiftIdx; int d = c.Day1;
-                if (x < 0 || x >= p.K || d <= 0 || d > p.T || !p.CanDo(i, x)) continue;
+                if (x < 0 || x >= p.K || d <= 0 || d > p.T || !p.C1Applies(i, x)) continue;
                 int count = 0;
                 for (int j = 0; j < d; j++) if (s[i][j] == x) count++;
                 if (count < c.Day2) outCount += c.Day2 - count;
@@ -253,7 +253,7 @@ internal static class C1TemporalFlowPolish
                 {
                     if (stop()) break;
                     var rules = rulesByShift[x];
-                    if (!p.CanDo(i, x)) continue;
+                    if (!p.C1Applies(i, x)) continue;
                     int focusBefore = C1TemporalDp.CountFires(work[i], x, rules);
                     if (focusBefore == 0) continue;
                     // x が拡張希望で禁止の日は非 x のまま固定（DP が置けない日を提案しない）

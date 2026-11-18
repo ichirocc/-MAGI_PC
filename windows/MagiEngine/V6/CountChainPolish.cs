@@ -120,7 +120,7 @@ internal static class CountChainPolish
             double v = 0.0;
             foreach (var c in p.Cons1)
             {
-                if (!p.CanDo(s, c.ShiftIdx) || c.Day1 > p.T) continue;
+                if (!p.C1Applies(s, c.ShiftIdx) || c.Day1 > p.T) continue;
                 int z = 0;
                 for (int l = 0; l < c.Day1; l++) if (row[l] == c.ShiftIdx) z++;
                 int j = 0;

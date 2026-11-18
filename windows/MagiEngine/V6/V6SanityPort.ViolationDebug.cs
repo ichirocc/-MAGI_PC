@@ -342,7 +342,7 @@ public static partial class V6SanityPort
                 var ruleLabel = $"{Sym(c.ShiftIdx)}({c.Day1}日窓≥{c.Day2})";
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (!p.CanDo(i, c.ShiftIdx)) continue;
+                    if (!p.C1Applies(i, c.ShiftIdx)) continue;
                     var j = 0;
                     while (j <= p.T - c.Day1)
                     {

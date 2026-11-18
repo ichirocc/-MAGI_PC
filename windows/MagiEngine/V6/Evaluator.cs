@@ -69,7 +69,7 @@ public sealed class Evaluator
             int d1 = c.Day1, si = c.ShiftIdx, d2 = c.Day2;
             for (int i = 0; i < S; i++)
             {
-                if (!_p.CanDo(i, si)) continue;
+                if (!_p.C1Applies(i, si)) continue;
                 int j = 0;
                 while (j <= T - d1)
                 {

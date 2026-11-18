@@ -186,7 +186,7 @@ public static class UnifiedViolationChecker
         {
             for (int i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, c.ShiftIdx)) continue;
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
                 int j = 0;
                 bool prevViol = false;
                 int runStart = 0;

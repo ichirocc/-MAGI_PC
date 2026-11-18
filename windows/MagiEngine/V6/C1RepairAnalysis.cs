@@ -264,7 +264,7 @@ public static class C1RepairAnalysis
                 int i = m[mi];
                 foreach (var c in rules)
                 {
-                    if (!p.CanDo(i, c.ShiftIdx)) continue;
+                    if (!p.C1Applies(i, c.ShiftIdx)) continue;
                     int jj = 0;
                     while (jj <= p.T - c.Day1)
                     {

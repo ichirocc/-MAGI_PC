@@ -553,7 +553,7 @@ public static partial class V6SanityPort
                 var ruleDesc = string.Join(" かつ ", rules.Select(r => $"{r.Day1}日で{r.Day2}回以上"));
                 for (var i = 0; i < p.S; i++)
                 {
-                    if (!p.CanDo(i, shiftIdx)) continue;
+                    if (!p.C1Applies(i, shiftIdx)) continue;
                     var hi = p.RangeHi[i][shiftIdx];
                     if (hi == int.MaxValue || hi >= minDays) continue;
                     var name = Nm(i);

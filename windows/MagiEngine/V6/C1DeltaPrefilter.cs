@@ -153,7 +153,7 @@ public static class C1DeltaPrefilter
         {
             int x = c.ShiftIdx;
             if (x < 0 || x >= p.K || c.Day1 < 1 || c.Day1 > p.T || c.Day2 < 1) continue;
-            if (!p.CanDo(staff, x)) continue;
+            if (!p.C1Applies(staff, x)) continue;
             int j = 0;
             while (j <= p.T - c.Day1)
             {

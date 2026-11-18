@@ -48,7 +48,7 @@ public static class TierObjective
             if (c.Day1 <= 0 || c.Day1 > p.T) continue;
             for (var i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, c.ShiftIdx)) continue;
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
                 var row = schedule[i];
                 for (var w = 0; w <= p.T - c.Day1; w++)
                 {

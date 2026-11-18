@@ -32,7 +32,7 @@ public static partial class V6HotfixPasses
         foreach (var c in p.Cons1)
         {
             var x = c.ShiftIdx; var d = c.Day1; var n = c.Day2;
-            if (x < 0 || x >= p.K || d <= 0 || !p.CanDo(i, x)) continue;
+            if (x < 0 || x >= p.K || d <= 0 || !p.C1Applies(i, x)) continue;
             var w = 0;
             while (w <= p.T - d)
             {
@@ -388,7 +388,7 @@ public static partial class V6HotfixPasses
                 if (stop()) break;
                 var c = p.Cons1[ri];
                 var x = c.ShiftIdx; var d = c.Day1; var n = c.Day2;
-                if (x < 0 || x >= p.K || d <= 0 || !p.CanDo(i, x)) continue;
+                if (x < 0 || x >= p.K || d <= 0 || !p.C1Applies(i, x)) continue;
                 var stillDeficient0 = Enumerable.Range(0, Math.Max(0, p.T - d + 1))
                     .Any(j => InDeficientC1Window(p, work, i, x, d, n, j));
                 if (!stillDeficient0) continue;

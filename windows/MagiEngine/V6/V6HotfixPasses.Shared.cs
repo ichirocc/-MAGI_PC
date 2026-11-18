@@ -132,7 +132,7 @@ public static partial class V6HotfixPasses
         for (var j = 0; j < p.T; j++) { var k = sched[i][j]; if (k >= 0 && k < p.K) cnt[k]++; }
         foreach (var c in p.Cons1) // c1: d日窓で shiftIdx が day2 回未満
         {
-            if (!p.CanDo(i, c.ShiftIdx)) continue;
+            if (!p.C1Applies(i, c.ShiftIdx)) continue;
             var j = 0;
             while (j <= p.T - c.Day1)
             {

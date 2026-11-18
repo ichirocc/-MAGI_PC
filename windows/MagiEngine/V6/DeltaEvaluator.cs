@@ -585,7 +585,7 @@ public sealed class DeltaEvaluator
 
     private long C1At(int i, int j, C1 c)
     {
-        if (!_p.CanDo(i, c.ShiftIdx)) return 0L; // [統一] 担当不可は対象外(チェッカーと一致)
+        if (!_p.C1Applies(i, c.ShiftIdx)) return 0L; // [統一] 担当不可は対象外(チェッカーと一致)
         long tot = 0L;
         int js0 = Math.Max(0, j - c.Day1 + 1), js1 = Math.Min(T - c.Day1, j);
         int js = js0;
@@ -644,7 +644,7 @@ public sealed class DeltaEvaluator
         {
             for (int i = 0; i < S; i++)
             {
-                if (!_p.CanDo(i, c.ShiftIdx)) continue; // [統一] 担当不可は対象外(チェッカーと一致)
+                if (!_p.C1Applies(i, c.ShiftIdx)) continue; // [統一] 担当不可は対象外(チェッカーと一致)
                 int js = 0;
                 while (js <= T - c.Day1)
                 {

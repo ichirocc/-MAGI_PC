@@ -38,7 +38,8 @@ public class C1UpperZeroGuardTest
     {
         var st = State();
         Assert.False(new Problem(st).MayPlace(0, 1));
-        Assert.Equal(1, UnifiedViolationChecker.Check(st, Board(st)).Breakdown.GetValueOrDefault("c1", 0));
+        // Android 3.727.105: 上限 0 のシフトには C1 を掛けない（直せない違反を数えない）。
+        Assert.Equal(0, UnifiedViolationChecker.Check(st, Board(st)).Breakdown.GetValueOrDefault("c1", 0));
     }
 
     [Fact]
