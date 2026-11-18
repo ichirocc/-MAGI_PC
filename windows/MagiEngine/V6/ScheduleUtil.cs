@@ -246,6 +246,9 @@ public static class ScheduleUtil
     {
         public readonly int[] Counts = new int[n], Mem = new int[n], Cnt = new int[n], Order = new int[n];
         public readonly double[] Ach = new double[n], Scale = new double[n];
+        /// <summary>達成率を分数 Num/Den で（偏差の丸めを浮動小数の誤差なしに、Kotlin <c>FairScratch</c>）。Half＝幅が Den/2（帯）か Den（目安）か。</summary>
+        public readonly long[] Num = new long[n], Den = new long[n];
+        public readonly bool[] Half = new bool[n];
     }
 
     /// <summary><see cref="FairDevOfBucket"/> の合計だけを、<paramref name="sc"/> の Counts（GroupMembers[g] の並びの回数、呼び出し側が書く）から出す。</summary>
@@ -260,7 +263,7 @@ public static class ScheduleUtil
         int n = 0;
         for (int pos = 0; pos < all.Length; pos++) { int x = all[pos], c = sc.Counts[pos]; if (p.MayPlace(x, k) || c > 0) { mem[n] = x; cnt[n] = c; n++; } }
         if (n < 2) return FairZero;
-        var ach = sc.Ach; var scale = sc.Scale;
+        var ach = sc.Ach; var scale = sc.Scale; var num = sc.Num; var den = sc.Den; var half = sc.Half;
         for (int idx = 0; idx < n; idx++)
         {
             int x = mem[idx];
@@ -272,12 +275,16 @@ public static class ScheduleUtil
                 double s = hi > lo ? (hi - lo) / 2.0 : 0.0;
                 scale[idx] = s;
                 ach[idx] = s > 0.0 ? (e - (lo + hi) / 2.0) / s : 0.0;
+                if (hi > lo) { num[idx] = 2L * e - lo - hi; den[idx] = (long)hi - lo; } else { num[idx] = 0; den[idx] = 1; }
+                half[idx] = true;
             }
             else if (p.Apt[x][k] >= 0)
             {
                 int t = p.Apt[x][k];
                 scale[idx] = t;
                 ach[idx] = t > 0 ? (c - t) / (double)t : 0.0;
+                if (t > 0) { num[idx] = (long)c - t; den[idx] = t; } else { num[idx] = 0; den[idx] = 1; }
+                half[idx] = false;
             }
             else
             {
@@ -297,18 +304,25 @@ public static class ScheduleUtil
             order[y + 1] = v;
         }
         double acc = 0.0;
-        double tgt = ach[order[n - 1]];
+        int tg = order[n - 1];
         for (int oi = 0; oi < n; oi++)
         {
             int idx = order[oi];
             acc += scale[idx];
-            if (acc * 2 >= w) { tgt = ach[idx]; break; }
+            if (acc * 2 >= w) { tg = idx; break; }
         }
         int total = 0, worst = 0;
         var perMember = members ? new List<(int, int)>() : null;
         for (int idx = 0; idx < n; idx++)
         {
-            int dx = (int)KotlinInterop.MathRound(Math.Abs(ach[idx] - tgt) * scale[idx]);
+            // round(|達成率−基準|×幅) を分数で（Kotlin fairDevCore と同式、Android 3.727.107）。
+            int dx = 0;
+            if (scale[idx] > 0.0)
+            {
+                long a = Math.Abs(num[idx] * den[tg] - num[tg] * den[idx]);
+                long b = half[idx] ? 2L * den[tg] : den[tg];
+                dx = (int)((2L * a + b) / (2L * b));
+            }
             total += dx;
             if (dx > worst) worst = dx;
             if (dx > 0) perMember?.Add((mem[idx], dx));
