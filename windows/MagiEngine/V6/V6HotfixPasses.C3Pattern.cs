@@ -66,7 +66,7 @@ public static partial class V6HotfixPasses
                         {
                             var z = 0;
                             for (var l = 1; l < d; l++) if (work[i][j + l] == seq[l]) z++;
-                            if (z < d - 1) outp.Add((i, j, seq[0]));
+                            if (C3Run.WantFires(work[i], j, seq)) outp.Add((i, j, seq[0]));
                         }
                         j++;
                     }

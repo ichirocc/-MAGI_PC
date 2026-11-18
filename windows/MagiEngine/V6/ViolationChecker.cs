@@ -741,7 +741,8 @@ public static class UnifiedViolationChecker
                     long rest = -1L;
                     for (int l = 1; l < d; l++) rest &= masks[bas + seq[l]] >>> l;
                     long first = masks[bas + seq[0]] & starts;
-                    long fires = forbidden ? first & rest : first & ~rest;
+                    long full = first & rest;
+                    long fires = forbidden ? full : C3Run.WantFireMask(first, full, d) & starts;
                     while (fires != 0L)
                     {
                         int j = System.Numerics.BitOperations.TrailingZeroCount(fires);
@@ -762,7 +763,7 @@ public static class UnifiedViolationChecker
                     {
                         int z = 0;
                         for (int l = 1; l < d; l++) if (schedule[i][j + l] == seq[l]) z++;
-                        bool fire = forbidden ? (z == d - 1) : (z < d - 1);
+                        bool fire = forbidden ? (z == d - 1) : C3Run.WantFires(schedule[i], j, seq);
                         if (fire)
                         {
                             inc(key, 1);

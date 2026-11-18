@@ -46,4 +46,30 @@ public static class C3Run
         }
         return sub;
     }
+
+    /// <summary>職員の行 <paramref name="row"/> で、日 <paramref name="js"/> から <paramref name="seq"/> がそのまま並んでいるか（Kotlin <c>C3Run.matchAt</c>）。</summary>
+    public static bool MatchAt(int[] row, int js, int[] seq)
+    {
+        for (int l = 0; l < seq.Length; l++) if (row[js + l] != seq[l]) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// 複数シフトの推奨の並び（c3・c3m）で、日 <paramref name="js"/> の窓を 1 件と数えるか: 先頭が一致して並び全体は一致しない窓。
+    /// ただし前の日に始まって並び全体が一致した窓の中（2 つ目以降のセル）は数えない（Kotlin <c>C3Run.wantFires</c>、Android 3.727.102）。
+    /// </summary>
+    public static bool WantFires(int[] row, int js, int[] seq)
+    {
+        if (row[js] != seq[0] || MatchAt(row, js, seq)) return false;
+        for (int l = 1; l < seq.Length; l++) if (js - l >= 0 && MatchAt(row, js - l, seq)) return false;
+        return true;
+    }
+
+    /// <summary><see cref="WantFires"/> のビット版。<paramref name="first"/>＝先頭が一致する開始日、<paramref name="full"/>＝並び全体が一致する開始日。</summary>
+    public static long WantFireMask(long first, long full, int d)
+    {
+        long covered = 0L;
+        for (int l = 1; l < d; l++) covered |= full << l;
+        return first & ~full & ~covered;
+    }
 }

@@ -620,7 +620,8 @@ public sealed class DeltaEvaluator
         // (before/after via the caller's swap captures the delta correctly).
         if (!fbd && _c3Single[f][e]) return C3Run.RowDeficit(_a, i, seq[0], d);
         long sub = 0L;
-        int js0 = Math.Max(0, j - d + 1), js1 = Math.Min(T - d, j);
+        // 推奨の並びは前に始まって一致した窓の中を数えない（C3Run.WantFires）＝セル j は j+d−1 に始まる窓まで影響する。
+        int js0 = Math.Max(0, j - d + 1), js1 = Math.Min(T - d, fbd ? j : j + d - 1);
         int js = js0;
         while (js <= js1)
         {
@@ -628,7 +629,7 @@ public sealed class DeltaEvaluator
             {
                 int z = 0;
                 for (int l = 1; l < d; l++) if (_a[i][js + l] == seq[l]) z++;
-                bool fire = fbd ? (z == d - 1) : (z < d - 1);
+                bool fire = fbd ? (z == d - 1) : C3Run.WantFires(_a[i], js, seq);
                 if (fire) sub += 1; // [統一] #fire 計上。重みは soft 集約で適用
             }
             js++;
@@ -762,7 +763,7 @@ public sealed class DeltaEvaluator
                     {
                         int z = 0;
                         for (int l = 1; l < d; l++) if (_a[i][j + l] == seq[l]) z++;
-                        bool fire = fbd ? (z == d - 1) : (z < d - 1);
+                        bool fire = fbd ? (z == d - 1) : C3Run.WantFires(_a[i], j, seq);
                         if (fire) sub += 1; // [統一] #fire 計上。重みは soft 集約で適用
                     }
                     j++;

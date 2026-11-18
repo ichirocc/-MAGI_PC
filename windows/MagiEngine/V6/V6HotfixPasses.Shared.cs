@@ -197,7 +197,7 @@ public static partial class V6HotfixPasses
                 {
                     var z = 0;
                     for (var l = 1; l < d; l++) if (sched[i][j + l] == seq[l]) z++;
-                    var fire = forbidden ? z == d - 1 : z < d - 1;
+                    var fire = forbidden ? z == d - 1 : C3Run.WantFires(sched[i], j, seq);
                     if (fire) c++;
                 }
                 j++;

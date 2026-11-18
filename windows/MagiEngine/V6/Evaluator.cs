@@ -289,7 +289,7 @@ public sealed class Evaluator
                     {
                         int z = 0;
                         for (int l = 1; l < d; l++) if (a[i][j + l] == seq[l]) z++;
-                        bool fire = forbidden ? (z == d - 1) : (z < d - 1);
+                        bool fire = forbidden ? (z == d - 1) : C3Run.WantFires(a[i], j, seq);
                         if (fire) sub += 1; // [統一] #fire 計上(チェッカー inc(key,1) と一致)。重みは呼び出し側で適用
                     }
                     j++;

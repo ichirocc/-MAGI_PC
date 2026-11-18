@@ -156,7 +156,7 @@ internal static class CountChainPolish
                         {
                             int z = 0;
                             for (int l = 1; l < d; l++) if (row[j + l] == seq[l]) z++;
-                            if (forbidden ? z == d - 1 : z < d - 1) v += w;
+                            if (forbidden ? z == d - 1 : C3Run.WantFires(row, j, seq)) v += w;
                         }
                         j++;
                     }

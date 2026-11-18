@@ -561,7 +561,7 @@ internal static class CheckerReferenceV0
                     {
                         int z = 0;
                         for (int l = 1; l < d; l++) if (schedule[i][j + l] == seq[l]) z++;
-                        bool fire = forbidden ? (z == d - 1) : (z < d - 1);
+                        bool fire = forbidden ? (z == d - 1) : C3Run.WantFires(schedule[i], j, seq);
                         if (fire)
                         {
                             inc(key, 1);
