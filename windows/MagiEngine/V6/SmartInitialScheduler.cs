@@ -68,6 +68,7 @@ public static class SmartInitialScheduler
             list.Add(new C1Rule(c.Day1, c.Day2));
         }
         int c1Filled = 0;
+        int c1Skipped = 0;
         foreach (int x in rulesByShift.Keys.OrderBy(k => k))
         {
             var rules = rulesByShift[x];
@@ -80,7 +81,7 @@ public static class SmartInitialScheduler
                     forced[j] = schedule[i][j] == -1 ? (p.ExtBanned(i, j, x) ? 0 : -1) : schedule[i][j] == x ? 1 : 0;
                 int cap = p.RangeHi[i][x];
                 var targetDays = SolveConstructionDp(p.T, rules, forced, cap);
-                if (targetDays is null) continue;
+                if (targetDays is null) { c1Skipped++; continue; }
                 for (int j = 0; j < p.T; j++)
                 {
                     if (targetDays[j] && schedule[i][j] < 0) { schedule[i][j] = x; c1Filled++; }
@@ -187,7 +188,8 @@ public static class SmartInitialScheduler
         var log = new MirrorLog(
             tag: "SmartInitial",
             message: $"初期解生成: HARD={report.Hard} total={report.Total} " +
-                $"希望seed={wishIn}件/担当外={wishOut}件 C1充足セル={c1Filled}件 ({elapsedMs}ms)");
+                $"希望seed={wishIn}件/担当外={wishOut}件 C1充足セル={c1Filled}件" +
+                (c1Skipped > 0 ? $" C1配置を省いた職員×シフト={c1Skipped}件（状態数上限・希望で上限超過など）" : "") + $" ({elapsedMs}ms)");
         var logs = new List<MirrorLog> { log };
         logs.AddRange(report.Logs);
         return new ScheduleRunResult(schedule, report with { Logs = logs });
@@ -242,7 +244,7 @@ public static class SmartInitialScheduler
     /// 後段の isBetter/keep-best が担うため、この保守的な方針自体は変更しない）。
     /// forced済み(希望由来)の対象日もこの上限に含める＝希望だけで既に上限超過なら
     /// (=既存の別問題)これ以上は増やさず null で安全側に諦める。</param>
-    /// <returns>目的= まず違反窓数を最小化、次に対象日数を最小化（他制約(③④⑤)への自由度を残す）、
+    /// <returns>目的= まず窓ごとの不足量の和（c1 の件数と同じ）を最小化、次に対象日数を最小化（他制約(③④⑤)への自由度を残す）、
     /// 同点は対象日のビット列の小さい方で一意に選ぶ（決定的）。</returns>
     private static bool[]? SolveConstructionDp(
         int t, IReadOnlyList<C1Rule> rules, int[] forced, int maxCount = int.MaxValue)
