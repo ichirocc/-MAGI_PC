@@ -166,7 +166,23 @@ public sealed partial class MagiViewModel
         var cts = new CancellationTokenSource();
         _job = cts;
         LastRunOptimizeTask = RunV6FullOptimizeCoreAsync(st0, sched0.Copy2D(), startMs, hf63, boardToken, s5, hadResult, engineRanBefore, cts.Token, fromDraft);
+        StartRunClock(LastRunOptimizeTask, startMs);
     }
+
+    private const int RunClockTickMs = 1000;
+
+    /// <summary>
+    /// 実行中の経過時間を 1 秒ごとに進める（Kotlin <c>startRunClock</c>、Android 3.727.104）。エンジンの進捗の報告だけで進めていたため、
+    /// 報告の無い区間（統合・後処理・追加精製）で画面の時計が止まって見えた。実行のタスクが終わると止まる。
+    /// </summary>
+    private void StartRunClock(Task runTask, long startMs) => _ = Task.Run(async () =>
+    {
+        while (!runTask.IsCompleted)
+        {
+            await Task.Delay(RunClockTickMs).ConfigureAwait(false);
+            if (!runTask.IsCompleted) PostToUi(() => { if (Ui.Running && !runTask.IsCompleted) Ui.ElapsedMs = NowMs() - startMs; });
+        }
+    });
 
     private static long NowMs() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -548,6 +564,7 @@ public sealed partial class MagiViewModel
         var cts = new CancellationTokenSource();
         _job = cts;
         LastRunSoftPolishTask = RunSoftPolishCoreAsync(st0, sched0.Copy2D(), startMs, boardToken, engineRanBefore, hadResult, cts.Token);
+        StartRunClock(LastRunSoftPolishTask, startMs);
     }
 
     private async Task RunSoftPolishCoreAsync(MagiState st0, int[][] sched0, long startMs, int boardToken, bool engineRanBefore, bool hadResult, CancellationToken ct)
