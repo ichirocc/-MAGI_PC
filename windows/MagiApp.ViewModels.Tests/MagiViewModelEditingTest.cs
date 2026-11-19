@@ -1455,6 +1455,47 @@ public class MagiViewModelEditingTest
         Assert.Empty(vm._state!.Cons3w!);
     }
 
+    /// <summary>シフトの間隔（Kotlin addConsGap／updateConstraint／removeConstraint／ConstraintsView の consGap と同値、Android 3.727.109）。</summary>
+    [Fact]
+    public void ConsGapListsAddsUpdatesAndRemovesRows()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.AddConsGap("A", " 5 ");
+        Assert.Equal(new[] { new GapRow("A", "5") }, vm._state!.ConsGap);
+        Assert.Equal(new[] { "A   次まで5日以上空ける" }, vm.ConstraintFamilies().Single(f => f.Key == "consGap").Rows);
+        Assert.Equal(new[] { "A", "5" }, vm.ConstraintRowValues("consGap", 0));
+        Assert.Equal(1, vm.GetSetupCounts().Constraints);
+
+        vm.UpdateConstraint("consGap", 0, new[] { "休", "3" });
+        Assert.Equal(new[] { new GapRow("休", "3") }, vm._state!.ConsGap);
+
+        vm.RemoveConstraint("consGap", 0);
+        Assert.Empty(vm._state!.ConsGap!);
+    }
+
+    [Fact]
+    public void ConsGapRejectsDuplicatesShortGapsAndUnknownSymbols()
+    {
+        var vm = new MagiViewModel { _state = MinimalState.Build() };
+        vm.AddConsGap("A", "5");
+        var undo = vm.UndoStackCount;
+        vm.AddConsGap("A", "05");
+        Assert.Single(vm._state!.ConsGap!);
+        Assert.Equal(undo, vm.UndoStackCount);
+        Assert.True(vm.Ui.MessageIsError);
+        Assert.NotNull(vm.ConstraintInputError("consGap", new[] { "A", "5" }));
+        Assert.Null(vm.ConstraintInputError("consGap", new[] { "A", "5" }, editIndex: 0));
+        Assert.Contains("ありません", vm.ConstraintInputError("consGap", new[] { "X", "4" })!);
+        Assert.Contains("3 以上", vm.ConstraintInputError("consGap", new[] { "A", "2" })!);
+        Assert.Contains("3〜7", vm.ConstraintInputError("consGap", new[] { "A", "8" })!);
+        Assert.NotNull(vm.ConstraintInputError("consGap", new[] { "A", "x" }));
+        Assert.NotNull(vm.ConstraintInputError("consGap", new[] { "A", "" }));
+        Assert.Null(vm.ConstraintInputError("consGap", new[] { "A", "7" }));
+        vm.RemoveConstraint("consGap", 5);
+        Assert.Single(vm._state!.ConsGap!);
+        Assert.Null(vm.ConstraintRowValues("consGap", -1));
+    }
+
     [Fact]
     public void Cons3wRejectsDuplicatesAndUnknownSymbols()
     {

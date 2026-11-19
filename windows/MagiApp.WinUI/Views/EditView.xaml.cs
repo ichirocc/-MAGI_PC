@@ -1686,6 +1686,7 @@ public sealed partial class EditView : UserControl
     private static readonly ConstraintFamilyMeta[] ConstraintFamilyMetas =
     {
         new("cons1", new[] { "窓の日数", "シフト記号", "最低回数" }, new[] { 1 }),
+        new("consGap", new[] { "シフト記号", "次まで何日以上空ける" }, new[] { 0 }),
         new("cons2", new[] { "シフト記号", "合計回数" }, new[] { 0 }),
         new("cons3", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
         new("cons3n", new[] { "1日目", "2日目", "3日目", "4日目", "5日目" }),
@@ -1859,6 +1860,9 @@ public sealed partial class EditView : UserControl
             case "cons3": case "cons3n": case "cons3m": case "cons3mn":
                 if (v.All(x => x.Length == 0)) { error = "少なくとも1日目を入れてください。"; return false; }
                 _vm.AddCons3(key, v);
+                return true;
+            case "consGap":
+                _vm.AddConsGap(G(0), G(1));
                 return true;
             case "cons3w":
                 _vm.AddCons3w(G(0), G(1));

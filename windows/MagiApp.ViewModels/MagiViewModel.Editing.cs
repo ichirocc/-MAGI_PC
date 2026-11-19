@@ -57,7 +57,7 @@ public sealed partial class MagiViewModel
         var st = _state;
         if (st is null) return new SetupCounts(0, 0, 0, 0, 0, 0, 0, 0, false);
         var cons = st.Cons1.Count + st.Cons2.Count + st.Cons3.Count + st.Cons3n.Count +
-            st.Cons3m.Count + st.Cons3mn.Count + st.Cons41.Count + st.Cons42.Count + (st.Cons3w?.Count ?? 0) +
+            st.Cons3m.Count + st.Cons3mn.Count + st.Cons41.Count + st.Cons42.Count + (st.Cons3w?.Count ?? 0) + (st.ConsGap?.Count ?? 0) +
             st.Cons41s.Count + st.Cons42s.Count;
         return new SetupCounts(
             st.DayCount, st.StaffCount, st.ShiftCount, st.GroupCount,
@@ -1298,6 +1298,8 @@ public sealed partial class MagiViewModel
             // [用語統一/下流→上流] 節タイトルは違反チップ(breakdownLabels)の語彙を正として一致させる。
             new("cons1", "期間の制約（○日間で○回など）",
                 st.Cons1.Select(c => $"{c.ShiftKigou}   {c.Day1}日で{c.Day2}回以上").ToList()),
+            new("consGap", "シフトの間隔（次まで○日以上空ける）",
+                (st.ConsGap ?? System.Array.Empty<GapRow>()).Select(c => $"{c.ShiftKigou}   次まで{c.Days}日以上空ける").ToList()),
             new("cons2", "個人の合計（回数）",
                 st.Cons2.Select(c => $"{c.ShiftKigou}   合計{c.Count}回以上").ToList()),
             new("cons3", "守るとよい並び", st.Cons3.Select(c => SeqRow("cons3", c.Pattern)).ToList()),
@@ -1378,6 +1380,7 @@ public sealed partial class MagiViewModel
         "cons3m" => st.Cons3m.Select(c => c.Pattern).ToList(),
         "cons3mn" => st.Cons3mn.Select(c => c.Pattern).ToList(),
         "cons3w" => (st.Cons3w ?? System.Array.Empty<C3wRow>()).Select(c => (IReadOnlyList<string>)new[] { c.WishKigou, c.PrevKigou }).ToList(),
+        "consGap" => (st.ConsGap ?? System.Array.Empty<GapRow>()).Select(c => (IReadOnlyList<string>)new[] { c.ShiftKigou, c.Days }).ToList(),
         "cons41" => st.Cons41.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
         "cons41s" => st.Cons41s.Select(c => (IReadOnlyList<string>)new[] { c.GroupKigou, c.ShiftKigou, c.L, c.U }).ToList(),
         "cons42" => st.Cons42.Select(c => (IReadOnlyList<string>)new[] { c.G1Kigou, c.S1Kigou, c.G2Kigou, c.S2Kigou }).ToList(),
@@ -1495,6 +1498,16 @@ public sealed partial class MagiViewModel
         MutateConstraints(st with { Cons3w = rows.Append(new C3wRow(wishKigou, prevKigou)).ToList() });
     }
 
+    /// <summary>シフトの間隔（Kotlin <c>addConsGap</c>、Android 3.727.109）。同じ行があれば知らせて足さない。</summary>
+    public void AddConsGap(string shiftKigou, string days)
+    {
+        var st = _state;
+        if (st is null) return;
+        if (RowAlreadyExists(st, "consGap", new[] { shiftKigou, days })) return;
+        LogOp("I", $"制約追加(シフトの間隔): {shiftKigou} は次まで{days.Trim()}日以上空ける");
+        MutateConstraints(st with { ConsGap = (st.ConsGap ?? System.Array.Empty<GapRow>()).Append(new GapRow(shiftKigou, days.Trim())).ToList() });
+    }
+
     public void AddCons1(string day1, string shiftKigou, string day2)
     {
         var st = _state;
@@ -1568,6 +1581,7 @@ public sealed partial class MagiViewModel
             "cons3m" => st.Cons3m.Count,
             "cons3mn" => st.Cons3mn.Count,
             "cons3w" => st.Cons3w?.Count ?? 0,
+            "consGap" => st.ConsGap?.Count ?? 0,
             "cons41" => st.Cons41.Count,
             "cons42" => st.Cons42.Count,
             "cons41s" => st.Cons41s.Count,
@@ -1594,6 +1608,7 @@ public sealed partial class MagiViewModel
             "cons3m" => st with { Cons3m = Without(st.Cons3m, index) },
             "cons3mn" => st with { Cons3mn = Without(st.Cons3mn, index) },
             "cons3w" => st with { Cons3w = Without(st.Cons3w ?? System.Array.Empty<C3wRow>(), index) },
+            "consGap" => st with { ConsGap = Without(st.ConsGap ?? System.Array.Empty<GapRow>(), index) },
             "cons41" => st with { Cons41 = Without(st.Cons41, index) },
             "cons42" => st with { Cons42 = Without(st.Cons42, index) },
             "cons41s" => st with { Cons41s = Without(st.Cons41s, index) },
@@ -1620,6 +1635,7 @@ public sealed partial class MagiViewModel
             "cons3m" => index < st.Cons3m.Count ? st.Cons3m[index].Pattern.ToList() : null,
             "cons3mn" => index < st.Cons3mn.Count ? st.Cons3mn[index].Pattern.ToList() : null,
             "cons3w" => st.Cons3w is { } w && index < w.Count ? new List<string> { w[index].WishKigou, w[index].PrevKigou } : null,
+            "consGap" => st.ConsGap is { } g && index < g.Count ? new List<string> { g[index].ShiftKigou, g[index].Days } : null,
             "cons41" => index < st.Cons41.Count ? new List<string> { st.Cons41[index].GroupKigou, st.Cons41[index].ShiftKigou, st.Cons41[index].L, st.Cons41[index].U } : null,
             "cons41s" => index < st.Cons41s.Count ? new List<string> { st.Cons41s[index].GroupKigou, st.Cons41s[index].ShiftKigou, st.Cons41s[index].L, st.Cons41s[index].U } : null,
             "cons42" => index < st.Cons42.Count ? new List<string> { st.Cons42[index].G1Kigou, st.Cons42[index].S1Kigou, st.Cons42[index].G2Kigou, st.Cons42[index].S2Kigou } : null,
@@ -1687,6 +1703,11 @@ public sealed partial class MagiViewModel
                 if (V6SanityPort.RangeOrderConflict(G(2), G(3)) is not null) return "下限は上限以下にしてください。";
                 return Group(G(0), skill) ?? Shift(G(1));
             }
+            case "consGap":
+                if (G(0).Length == 0 || G(1).Length == 0) return "シフト記号と日数を入れてください。";
+                if (!int.TryParse(G(1), out _)) return "日数は整数で入れてください。";
+                if (MagiConstraintsView.ConsGapInputError(G(1), st.DayCount) is { } gapErr) return gapErr + "。";
+                return Shift(G(0));
             case "cons3w":
                 if (G(0).Length == 0 || G(1).Length == 0) return "希望のシフトと前日に禁止するシフトを入れてください。";
                 return Shift(G(0)) ?? Shift(G(1));
@@ -1711,7 +1732,7 @@ public sealed partial class MagiViewModel
         string G(int i) => i < v.Count ? v[i] : "";
         static List<T> Replaced<T>(IReadOnlyList<T> l, int i, T x) => l.Select((e, idx) => idx == i ? x : e).ToList();
         // 変更でも値の重複を止める（並び4族は下の SeqAlreadyExists）。
-        if ((family is "cons1" or "cons2" or "cons41" or "cons41s" or "cons42" or "cons42s" or "cons3w") && RowAlreadyExists(st, family, v, index)) return;
+        if ((family is "cons1" or "cons2" or "cons41" or "cons41s" or "cons42" or "cons42s" or "cons3w" or "consGap") && RowAlreadyExists(st, family, v, index)) return;
 
         MagiState? next;
         switch (family)
@@ -1739,6 +1760,10 @@ public sealed partial class MagiViewModel
             case "cons42s":
                 if (index < 0 || index >= st.Cons42s.Count) return;
                 next = st with { Cons42s = Replaced(st.Cons42s, index, new C42Row(G(0), G(2), G(1), G(3))) };
+                break;
+            case "consGap":
+                if (st.ConsGap is not { } g || index < 0 || index >= g.Count) return;
+                next = st with { ConsGap = Replaced(g, index, new GapRow(G(0), G(1))) };
                 break;
             case "cons3w":
                 if (st.Cons3w is not { } w || index < 0 || index >= w.Count) return;

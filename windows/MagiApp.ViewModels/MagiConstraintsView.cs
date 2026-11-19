@@ -20,6 +20,15 @@ public static class MagiConstraintsView
         return null;
     }
 
+    /// <summary>シフトの間隔の日数（Kotlin <c>consGapInputError</c>）。かたまりどうしは必ず 2 日以上離れるので、2 以下は必ず満たされて意味が無い。</summary>
+    public static string? ConsGapInputError(string days, int dayCount = 0)
+    {
+        if (IntOrNull(days) is not { } d) return null;
+        if (d < 3) return "日数は 3 以上で入れてください（2 以下はいつも満たされます）";
+        if (dayCount >= 1 && dayCount < d) return $"日数は 3〜{dayCount} で入れてください（勤務表は {dayCount} 日です）";
+        return null;
+    }
+
     public static string? Cons2InputError(string count, int dayCount = 0)
     {
         if (IntOrNull(count) is not { } c) return null;
