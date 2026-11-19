@@ -20,6 +20,7 @@ bd.fair=20
 bd.weekly=214
 bd.c3w=0
 bd.extWish=0
+bd.gap=0
 cell 0,17=vio-c1
 cell 0,25=vio-c1
 cell 0,9=vio-c3m

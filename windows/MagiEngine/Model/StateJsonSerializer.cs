@@ -20,7 +20,7 @@ public static class StateJsonSerializer
         "shifts", "groups", "staff", "groupShift", "groupShiftApt", "schedule", "wishes", "staffRange",
         "needDay1", "needDay2", "cons1", "cons2", "cons3", "cons3n", "cons3m", "cons3mn",
         "cons41", "cons42", "shiftColors", "startDate", "endDate", "use2Patterns",
-        "skillGroups", "cons41s", "cons42s", "cons3w", "manualPins", "extWishes",
+        "skillGroups", "cons41s", "cons42s", "cons3w", "consGap", "manualPins", "extWishes",
     };
 
     /// <summary>Keys derived from `schedule`/edits that must be dropped before re-emitting the
@@ -185,6 +185,8 @@ public static class StateJsonSerializer
             new C42Row(OptString(it, "g1Kigou"), OptString(it, "g2Kigou"), OptString(it, "s1Kigou"), OptString(it, "s2Kigou")));
         var cons3w = MapObjects(ArrayOf(o, "cons3w"), "cons3w", it =>
             new C3wRow(OptString(it, "wishKigou"), OptString(it, "prevKigou")));
+        var consGap = MapObjects(ArrayOf(o, "consGap"), "consGap", it =>
+            new GapRow(OptString(it, "shiftKigou"), AsStr(Opt(it, "days"))));
         // [#41] 無いキー＝手動固定なし（古いデータはそのまま開く）。同じセルが重なれば後の行を採る。
         var pinMap = new Dictionary<(int, int), ManualPin>();
         var pinOrder = new List<(int, int)>();
@@ -233,7 +235,8 @@ public static class StateJsonSerializer
             Extras: extras,
             Cons3w: cons3w,
             ManualPins: manualPins,
-            ExtWishes: extWishes
+            ExtWishes: extWishes,
+            ConsGap: consGap
         );
     }
 
@@ -303,6 +306,7 @@ public static class StateJsonSerializer
         o["cons41s"] = ConsArr(state.Cons41s, it => Obj(("groupKigou", it.GroupKigou), ("shiftKigou", it.ShiftKigou), ("l", it.L), ("u", it.U)));
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
+        if ((state.ConsGap?.Count ?? 0) > 0 || o.ContainsKey("consGap")) o["consGap"] = ConsArr(state.ConsGap ?? Array.Empty<GapRow>(), it => Obj(("shiftKigou", it.ShiftKigou), ("days", it.Days)));
         o["manualPins"] = ManualPinsNode(state.ManualPins ?? Array.Empty<ManualPin>());
         if ((state.ExtWishes?.Count ?? 0) > 0 || o.ContainsKey("extWishes")) o["extWishes"] = ExtWishesNode(state.ExtWishes ?? Array.Empty<ExtWish>());
         return o.ToJsonString(PrettyOptions);
@@ -365,6 +369,7 @@ public static class StateJsonSerializer
         o["cons41s"] = ConsArr(state.Cons41s, it => Obj(("groupKigou", it.GroupKigou), ("shiftKigou", it.ShiftKigou), ("l", it.L), ("u", it.U)));
         o["cons42s"] = ConsArr(state.Cons42s, it => Obj(("g1Kigou", it.G1Kigou), ("g2Kigou", it.G2Kigou), ("s1Kigou", it.S1Kigou), ("s2Kigou", it.S2Kigou)));
         o["cons3w"] = ConsArr(state.Cons3w ?? Array.Empty<C3wRow>(), it => Obj(("wishKigou", it.WishKigou), ("prevKigou", it.PrevKigou)));
+        if ((state.ConsGap?.Count ?? 0) > 0) o["consGap"] = ConsArr(state.ConsGap!, it => Obj(("shiftKigou", it.ShiftKigou), ("days", it.Days)));
         o["manualPins"] = ConsArr(state.ManualPins ?? Array.Empty<ManualPin>(), it => new JsonObject { ["staff"] = it.Staff, ["day"] = it.Day, ["shift"] = it.Shift });
         if ((state.ExtWishes?.Count ?? 0) > 0) o["extWishes"] = ExtWishesNode(state.ExtWishes!);
 

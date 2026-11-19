@@ -21,3 +21,4 @@ fair=5
 weekly=180
 c3w=0
 extWish=0
+gap=0

@@ -110,7 +110,7 @@ internal static class C1EjectionChainPolish
     private static readonly string[] Families =
     {
         "c1", "c2", "c41", "c42", "c41s", "c42s", "c3", "c3n", "c3m", "c3mn",
-        "pref", "groupViol", "c3w", "apt", "fair", "weekly", "covO", "covU", "extWish",
+        "pref", "groupViol", "c3w", "apt", "fair", "weekly", "covO", "covU", "extWish", "gap",
     };
 
     private static long[] FamilyWeighted(DeltaEvaluator de)

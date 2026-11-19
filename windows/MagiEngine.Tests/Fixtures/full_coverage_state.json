@@ -318,6 +318,7 @@
     "B"
   ]}],
   "cons3w": [{"wishKigou": "A", "prevKigou": "B"}],
+  "consGap": [{"shiftKigou": "A", "days": "5"}],
   "extWishes": [{"staff": 0, "days": ["2026-10-01"], "shifts": ["B"]}],
   "cons41s": [{
     "groupKigou": "K0",

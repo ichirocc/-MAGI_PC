@@ -168,6 +168,11 @@ public sealed class Evaluator
                     if (_p.ExtWishBanned(i, j, a[i][j])) hard1 += 1;
         }
 
+        // ---- gap: シフトの間隔（SOFT, 3.727.109）。チェッカーと同じく担当でき個人上限が 0 でない職員だけ。
+        foreach (var c in _p.ConsGap)
+            for (int i = 0; i < S; i++)
+                if (_p.C1Applies(i, c.ShiftIdx)) soft += GapRule.Deficit(a[i], c.ShiftIdx, c.Days) * _w.Gap;
+
         // ---- pref / groupViol ----------------------------------------------------------------
         // pref: wished cell not honored -> display HARD（[監査#11②] 実現可能な希望のみ計上。
         //   不可能希望は計数から対称除外）。

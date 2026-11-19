@@ -102,6 +102,7 @@ public static class Ws1Ops
                 WishKigou = c.WishKigou == old ? newKigou : c.WishKigou,
                 PrevKigou = c.PrevKigou == old ? newKigou : c.PrevKigou,
             }).ToList(),
+            ConsGap = (s.ConsGap ?? Array.Empty<GapRow>()).Select(c => c.ShiftKigou == old ? c with { ShiftKigou = newKigou } : c).ToList(),
             // 拡張希望も記号で参照する（禁止シフトの集合）。
             ExtWishes = (s.ExtWishes ?? Array.Empty<ExtWish>()).Select(e => e with { Shifts = e.Shifts.Select(x => x == old ? newKigou : x).Distinct().ToList() }).ToList(),
         };
@@ -346,6 +347,7 @@ public static class Ws1Ops
         n += state.Cons41s.Count(c => c.ShiftKigou == kigou);
         n += state.Cons42s.Count(c => c.S1Kigou == kigou || c.S2Kigou == kigou);
         n += (state.Cons3w ?? Array.Empty<C3wRow>()).Count(c => c.WishKigou == kigou || c.PrevKigou == kigou);
+        n += (state.ConsGap ?? Array.Empty<GapRow>()).Count(c => c.ShiftKigou == kigou);
         return n;
     }
 

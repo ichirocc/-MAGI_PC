@@ -41,6 +41,10 @@ public sealed class DeltaEvaluator
     private long _sApt;    // [統一apt] 適切回数(双方向目標)の running total（SOFT）
     private long _sFair;   // [統一fair] グループ内公平化の running total（SOFT）
     private long _sWeekly; // [統一weekly] 曜日平準化の running total（SOFT）
+    // シフトの間隔(gap)の running total（SOFT）。_gapCur[r*S+i]＝規則 r の職員 i の不足日数。手は 1 行だけを動かすので、動くシフトの規則だけ行を数え直す。
+    private long _sGap, _dGap;
+    private int[] _gapCur = Array.Empty<int>(), _gapPendR = Array.Empty<int>(), _gapPendV = Array.Empty<int>();
+    private int _gapPendN;
     private long _scovO;   // [統一a] 過剰被覆(covO)の running total（SOFT）
     private long _covUTot; // [監査#4b] per-cell covU の総和（セル局所Δで維持）
 
@@ -180,7 +184,7 @@ public sealed class DeltaEvaluator
         ["c1"] = _sc1, ["c2"] = _sc2, ["c41"] = _sc41, ["c42"] = _sc42, ["c41s"] = _sc41s, ["c42s"] = _sc42s,
         ["c3"] = _sc3, ["c3n"] = _hc3n, ["c3m"] = _sc3m, ["c3mn"] = _sc3mn,
         ["pref"] = _hpref, ["groupViol"] = _hGrpV, ["c3w"] = _hc3w, ["apt"] = _sApt, ["fair"] = _sFair, ["weekly"] = _sWeekly,
-        ["covO"] = _scovO, ["covU"] = _covUTot, ["extWish"] = _hExt,
+        ["covO"] = _scovO, ["covU"] = _covUTot, ["extWish"] = _hExt, ["gap"] = _sGap,
     };
 
     /// <summary>
@@ -256,7 +260,7 @@ public sealed class DeltaEvaluator
         // [統一c1] c1 にも checker 重み(50)を適用（_sc1 は #fire 生カウント、canDoガード済）。
         // [統一apt/fair/weekly] _sApt(適切回数) _sFair(群内公平化) _sWeekly(曜日平準化) を SOFT に含める。
         // [3.522.0/HF77明示数値指示・全面見直し] 重み表全面改定（経緯は Android docs/history/3.4xx.md）。
-        long soft = WeightedSoft(_sc1, _sc2, _sc41, _sc42, _sc41s, _sc42s, _sc3, _sc3m, _sc3mn, _hct, _sApt, _sFair, _sWeekly, _scovO);
+        long soft = WeightedSoft(_sc1, _sc2, _sc41, _sc42, _sc41s, _sc42s, _sc3, _sc3m, _sc3mn, _hct, _sApt, _sFair, _sWeekly, _scovO, _sGap);
         // `Evaluator.FullEval` と同じ契約: soft が桁を超えると HARD へ繰り上がり、必須の数を取り違える（黙って誤った値を返さない）。
         if (soft < 0 || soft >= Evaluator.SCORE_HARD_UNIT)
             throw new InvalidOperationException($"soft={soft} が辞書式パックの桁({Evaluator.SCORE_HARD_UNIT})を超えました。回数の設定か重みを見直してください");
@@ -266,9 +270,9 @@ public sealed class DeltaEvaluator
     /// <summary>SOFT の重み付き和。線形なので合計にも差分にも同じ式を使う（ScoreFrom と PreviewMove の単一ソース）。</summary>
     private long WeightedSoft(
         long c1, long c2, long c41, long c42, long c41s, long c42s, long c3, long c3m, long c3mn,
-        long ct, long apt, long fair, long weekly, long covO)
+        long ct, long apt, long fair, long weekly, long covO, long gap)
         => c1 * _w.C1 + c2 * _w.C2 + c41 * _w.C41 + c42 * _w.C42 + c41s * _w.C41s + c42s * _w.C42s + c3 * _w.C3 + c3m * _w.C3m + c3mn * _w.C3mn
-           + ct + apt * _w.Apt + fair * _w.Fair + weekly * _w.Weekly + covO * _w.CovO;
+           + ct + apt * _w.Apt + fair * _w.Fair + weekly * _w.Weekly + covO * _w.CovO + gap * _w.Gap;
 
     /// <summary>Preview the score after moving (i,j) -&gt; nw, stashing deltas for <see cref="Commit"/>. No mutation of totals.</summary>
     internal long PreviewMove(int i, int j, int nw)
@@ -283,6 +287,7 @@ public sealed class DeltaEvaluator
         {
             _dC1 = 0; _dC2 = 0; _dC41 = 0; _dC42 = 0; _dC41s = 0; _dC42s = 0; _dC3 = 0; _dC3n = 0; _dC3m = 0; _dC3mn = 0;
             _dPref = 0; _dGrpV = 0; _dC3w = 0; _dExt = 0; _dCt = 0; _dApt = 0; _dFair = 0; _dWeekly = 0; _dCovO = 0; _nCovU = _covUTot;
+            _dGap = 0; _gapPendN = 0;
             return Score();
         }
 
@@ -299,6 +304,7 @@ public sealed class DeltaEvaluator
         // try/finally で復元を保証する。
         _a[i][j] = nw;
         long aC1 = 0, aC3 = 0, aC3n = 0, aC3m = 0, aC3mn = 0;
+        _dGap = 0; _gapPendN = 0;
         try
         {
             aC1 = C1Local(i, j, old, nw);
@@ -306,6 +312,14 @@ public sealed class DeltaEvaluator
             aC3n = C3Local(i, j, 1, old, nw);
             aC3m = C3Local(i, j, 2, old, nw);
             aC3mn = C3Local(i, j, 3, old, nw);
+            for (int r = 0; r < _p.ConsGap.Count; r++)
+            {
+                var c = _p.ConsGap[r];
+                if ((c.ShiftIdx != old && c.ShiftIdx != nw) || !_p.C1Applies(i, c.ShiftIdx)) continue;
+                int v = GapRule.Deficit(_a[i], c.ShiftIdx, c.Days);
+                _dGap += v - _gapCur[r * S + i];
+                _gapPendR[_gapPendN] = r; _gapPendV[_gapPendN] = v; _gapPendN++;
+            }
         }
         finally
         {
@@ -479,7 +493,7 @@ public sealed class DeltaEvaluator
 
         // [統一b] dCt(range) は SOFT へ移動（hard から除外）。
         long dHard = _dC3n + (_nCovU - _covUTot) + _dPref + _dGrpV + _dC3w + _dExt;
-        long dSoft = WeightedSoft(_dC1, _dC2, _dC41, _dC42, _dC41s, _dC42s, _dC3, _dC3m, _dC3mn, _dCt, _dApt, _dFair, _dWeekly, _dCovO);
+        long dSoft = WeightedSoft(_dC1, _dC2, _dC41, _dC42, _dC41s, _dC42s, _dC3, _dC3m, _dC3mn, _dCt, _dApt, _dFair, _dWeekly, _dCovO, _dGap);
         return Score() + dHard * Evaluator.SCORE_HARD_UNIT + dSoft;
     }
 
@@ -519,6 +533,8 @@ public sealed class DeltaEvaluator
             _sc1 += _dC1; _sc2 += _dC2; _sc41 += _dC41; _sc42 += _dC42; _sc41s += _dC41s; _sc42s += _dC42s;
             _sc3 += _dC3; _hc3n += _dC3n; _sc3m += _dC3m; _sc3mn += _dC3mn;
             _hpref += _dPref; _hGrpV += _dGrpV; _hc3w += _dC3w; _hExt += _dExt; _hct += _dCt; _sApt += _dApt; _sFair += _dFair; _sWeekly += _dWeekly; _scovO += _dCovO;
+            for (int t = 0; t < _gapPendN; t++) _gapCur[_gapPendR[t] * S + i] = _gapPendV[t];
+            _sGap += _dGap;
             _covUTot = _nCovU;
         }
         finally
@@ -550,6 +566,18 @@ public sealed class DeltaEvaluator
         _sc3m = C3All(_p.Cons3m, false); _sc3mn = C3All(_p.Cons3mn, true);
         _hpref = PrefAll(); _hGrpV = GroupViolAll(); _hc3w = C3wAll(); _hExt = ExtWishAll(); _hct = CtAll(); _sApt = AptAll(); _sFair = FairAll(); _sWeekly = WeeklyAll(); _scovO = CovOAll();
         _covUTot = CovUAll();
+        int nGap = _p.ConsGap.Count;
+        if (_gapCur.Length != nGap * S) { _gapCur = new int[nGap * S]; _gapPendR = new int[nGap]; _gapPendV = new int[nGap]; }
+        _sGap = 0;
+        for (int r = 0; r < nGap; r++)
+        {
+            var c = _p.ConsGap[r];
+            for (int i = 0; i < S; i++)
+            {
+                int v = _p.C1Applies(i, c.ShiftIdx) ? GapRule.Deficit(_a[i], c.ShiftIdx, c.Days) : 0;
+                _gapCur[r * S + i] = v; _sGap += v;
+            }
+        }
     }
 
     // ---- helpers ---------------------------------------------------------------

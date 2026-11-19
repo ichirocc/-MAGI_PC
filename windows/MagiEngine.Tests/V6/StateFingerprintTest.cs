@@ -117,6 +117,7 @@ public class StateFingerprintTest
         yield return ("群ペア禁止", b with { Cons42 = new List<C42Row> { new("G", "H", "休", "A") } });
         yield return ("スキル群ペア禁止", b with { Cons42s = new List<C42Row> { new("S", "S", "休", "A") } });
         yield return ("希望の前日に禁止", b with { Cons3w = new List<C3wRow> { new("休", "A") } });
+        yield return ("シフトの間隔", b with { ConsGap = new List<GapRow> { new("A", "5") } });
         yield return ("手動固定", b with { ManualPins = new List<ManualPin> { new(0, 0, 0) } });
     }
 
@@ -128,7 +129,7 @@ public class StateFingerprintTest
         var notInFingerprint = new HashSet<string> { "Schedule", "ShiftColors", "Extras" };   // 盤面は OfBoard／表示の色／未対応の欄の写し
         var covered = new HashSet<string> { "StartDate", "EndDate", "Shifts", "Groups", "StaffList", "Use2Patterns", "GroupShift", "GroupShiftApt", "Wishes",
             "StaffRange", "NeedDay1", "NeedDay2", "Cons1", "Cons2", "Cons3", "Cons3n", "Cons3m", "Cons3mn", "Cons41", "Cons42", "SkillGroups",
-            "Cons41s", "Cons42s", "Cons3w", "ManualPins", "ExtWishes" };
+            "Cons41s", "Cons42s", "Cons3w", "ConsGap", "ManualPins", "ExtWishes" };
         var ctor = typeof(MagiState).GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
         var fields = ctor.GetParameters().Select(p => p.Name!).ToHashSet();
         fields.ExceptWith(covered);

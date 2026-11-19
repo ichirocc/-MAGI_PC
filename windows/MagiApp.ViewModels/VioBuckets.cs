@@ -20,6 +20,7 @@ public static class VioBuckets
         new VioBucket("count", "回数", new HashSet<string> { "low", "high", "apt", "c2" }),
         new VioBucket("group", "グループルール", new HashSet<string> { "groupViol", "c41", "c42", "c41s", "c42s" }),
         new VioBucket("window", "期間の制約", new HashSet<string> { "c1" }),
+        new VioBucket("gap", "シフトの間隔", new HashSet<string> { "gap" }),
     };
 
     /// <summary>セル/日の場所マップを持たない族＝絞り込みの対象外（常に表示）。</summary>

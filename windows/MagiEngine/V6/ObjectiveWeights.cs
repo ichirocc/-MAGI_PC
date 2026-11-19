@@ -39,7 +39,7 @@ public static class ObjectiveWeights
     /// <summary>SOFT の族ごとの重み（long）。評価器と差分評価がホットパスで読む。</summary>
     public sealed class SoftSet
     {
-        public readonly long C1, C2, C3, C3m, C3mn, C41, C42, C41s, C42s, CovO, Low, High, Apt, Fair, Weekly, CovU;
+        public readonly long C1, C2, C3, C3m, C3mn, C41, C42, C41s, C42s, CovO, Low, High, Apt, Fair, Weekly, CovU, Gap;
 
         internal SoftSet(IReadOnlyList<(string Key, double Weight)> t)
         {
@@ -47,7 +47,7 @@ public static class ObjectiveWeights
             long W(string f) => d[f] == Math.Floor(d[f]) ? (long)d[f] : throw new InvalidOperationException($"{f} の重み {d[f]} は整数でない");
             C1 = W("c1"); C2 = W("c2"); C3 = W("c3"); C3m = W("c3m"); C3mn = W("c3mn");
             C41 = W("c41"); C42 = W("c42"); C41s = W("c41s"); C42s = W("c42s");
-            CovO = W("covO"); Low = W("low"); High = W("high"); Apt = W("apt"); Fair = W("fair"); Weekly = W("weekly"); CovU = W("covU");
+            CovO = W("covO"); Low = W("low"); High = W("high"); Apt = W("apt"); Fair = W("fair"); Weekly = W("weekly"); CovU = W("covU"); Gap = W("gap");
         }
     }
 

@@ -111,6 +111,13 @@ public static class StateFingerprint
             Mix(6);
             foreach (var m in pins.OrderBy(m => m.Staff).ThenBy(m => m.Day)) { Mix(m.Staff); Mix(m.Day); Mix(m.Shift); }
         }
+        // [3.727.109] シフトの間隔。無いときは混ぜない（行の無いデータの指紋は従来と同じ値）。
+        var gaps = st.ConsGap ?? Array.Empty<GapRow>();
+        if (gaps.Count > 0)
+        {
+            Mix(12);
+            foreach (var c in gaps) { Txt(c.ShiftKigou); Txt(c.Days); }
+        }
         // 拡張希望（最適化器の候補を変える）。無いときは混ぜない。
         var ext = st.ExtWishes ?? Array.Empty<ExtWish>();
         if (ext.Count > 0)

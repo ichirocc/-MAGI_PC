@@ -81,6 +81,8 @@ public sealed record C42Row(string G1Kigou, string G2Kigou, string S1Kigou, stri
 
 /// <summary>[3.542.0] 希望(ws3)で固定した WishKigou の前日に PrevKigou を置けない。素の連続禁止は Cons3n。</summary>
 public sealed record C3wRow(string WishKigou, string PrevKigou);
+/// <summary>[3.727.109] シフトの間隔: ShiftKigou のまとまり（続く日をひとかたまり）の最後の日から次のまとまりの最初の日まで Days 日以上空ける。</summary>
+public sealed record GapRow(string ShiftKigou, string Days);
 /// <summary>[#41] 手動固定 1 件＝職員 Staff の Day 日目を Shift に固定（最適化器は書き換えない。手の編集は可で、値はそれに追従する）。</summary>
 public sealed record ManualPin(int Staff, int Day, int Shift);
 
@@ -135,7 +137,9 @@ public sealed record MagiState(
     /// <summary>[#41] 手動固定（1 セル 1 件）。null＝空。採点・希望の意味は変えない。</summary>
     IReadOnlyList<ManualPin>? ManualPins = null,
     /// <summary>拡張希望（職員×日の集合×禁止シフトの集合）。null＝空。違反は必須の族 extWish（重み 8000、3.653.0）。</summary>
-    IReadOnlyList<ExtWish>? ExtWishes = null
+    IReadOnlyList<ExtWish>? ExtWishes = null,
+    /// <summary>[3.727.109] シフトの間隔（SOFT、件数＝足りない日数）。null＝空。</summary>
+    IReadOnlyList<GapRow>? ConsGap = null
 )
 {
     public int StaffCount => StaffList.Count;

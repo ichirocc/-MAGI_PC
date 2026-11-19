@@ -173,8 +173,10 @@ public static partial class V6HotfixPasses
                 if (p.C3wBanned(i, j, sched[i][j])) c3wC++;
                 if (p.HasExtBan && p.ExtWishBanned(i, j, sched[i][j])) extC++;
             }
-        total += c3nC + c3C + c3mC + c3mnC + c3wC + extC;
-        weighted += c3wC * ObjectiveWeights.Of("c3w") + extC * ObjectiveWeights.Of("extWish") +
+        long gapC = 0;                                             // シフトの間隔（行だけで決まる SOFT）
+        foreach (var c in p.ConsGap) if (p.C1Applies(i, c.ShiftIdx)) gapC += GapRule.Deficit(sched[i], c.ShiftIdx, c.Days);
+        total += c3nC + c3C + c3mC + c3mnC + c3wC + extC + gapC;
+        weighted += gapC * ObjectiveWeights.Of("gap") + c3wC * ObjectiveWeights.Of("c3w") + extC * ObjectiveWeights.Of("extWish") +
             c3nC * ObjectiveWeights.Of("c3n") +
             c3C * ObjectiveWeights.Of("c3") +
             c3mC * ObjectiveWeights.Of("c3m") +

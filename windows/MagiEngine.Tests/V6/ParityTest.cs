@@ -59,7 +59,7 @@ public class ParityTest
         Assert.Equal(expectedPacked, de.Score());
 
         var familyRaw = de.FamilyRaw();
-        Assert.Equal(19, familyRaw.Count); // 21 families - {low, high} (covered by RangeRaw below)
+        Assert.Equal(20, familyRaw.Count); // 22 families - {low, high} (covered by RangeRaw below)
         foreach (var (key, value) in familyRaw)
         {
             int expected = report.Breakdown.TryGetValue(key, out var bv) ? bv : 0;
@@ -74,7 +74,7 @@ public class ParityTest
         Assert.Equal(lowRaw * 120L + highRaw * 50L, de.RangeWeighted()); // [3.522.0] low 90→120
         Assert.Equal(lowExpected * 120L + highExpected * 50L, de.RangeWeighted());
 
-        // every one of the 21 families is accounted for exactly once across the two checks above
+        // every one of the 22 families is accounted for exactly once across the two checks above
         Assert.Equal(MirrorKeys.All.Count, familyRaw.Count + 2);
     }
 
@@ -207,6 +207,7 @@ public class ParityTest
             Extras: MinimalState.NoExtras,
             // [3.542.0] staff0 の希望(0,2)="A" の前日(0,1)は初期値 休 のまま → t=0 から c3w が1件立つ。
             Cons3w: new List<C3wRow> { new("A", "休") },
+            ConsGap: new List<GapRow> { new("A", "4") },
             // [3.653.0] staff2 は 12/3（日 2）に休を禁止（拡張希望）→ 初期値 休 のままなので t=0 から extWish が1件立つ。
             ExtWishes: new List<ExtWish> { new(2, new List<string> { "2025-12-03" }, new List<string> { "休" }) }
         );

@@ -12,7 +12,7 @@ public static class TierObjective
     {
         new[] { "groupViol", "covU", "c3n", "c3w", "pref", "extWish" },
         new[] { "low", "c1", "high", "c3mn" },
-        new[] { "c3", "c3m", "c41", "c42", "c41s", "c42s" },
+        new[] { "c3", "c3m", "c41", "c42", "c41s", "c42s", "gap" },
         new[] { "apt", "c2", "covO", "weekly", "fair" },
     };
 

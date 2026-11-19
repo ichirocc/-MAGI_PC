@@ -51,6 +51,14 @@ public sealed class C3w
     public C3w(int wishIdx, int prevIdx) { WishIdx = wishIdx; PrevIdx = prevIdx; }
 }
 
+/// <summary>[3.727.109] シフトの間隔: ShiftIdx のかたまりどうしを Days 日以上空ける（ConsGap, SOFT、<see cref="GapRule"/>）。</summary>
+public sealed class Gap
+{
+    public readonly int ShiftIdx;
+    public readonly int Days;
+    public Gap(int shiftIdx, int days) { ShiftIdx = shiftIdx; Days = days; }
+}
+
 /// <summary>
 /// Immutable, index-resolved view of a <see cref="MagiState"/> ready for fast evaluation.
 /// Faithfully mirrors the Kotlin/Android app's <c>Problem.kt</c> (which itself mirrors the Web
@@ -173,6 +181,7 @@ public sealed class Problem
     public IReadOnlyList<C3> Cons3m { get; }
     public IReadOnlyList<C3> Cons3mn { get; }
     public IReadOnlyList<C3w> Cons3w { get; }
+    public IReadOnlyList<Gap> ConsGap { get; }
     /// <summary>[3.542.0] C3wBan[i][j][k] = 翌日 j+1 が希望固定（WishFixed）の X で、Cons3w に (X→k) がある＝
     /// セル (i,j) に k を置くと違反。希望は探索中に動かないので盤面非依存の静的表。Cons3w が空なら null（評価・Δの分岐を無料にする）。</summary>
     public bool[][][]? C3wBan { get; }
@@ -469,6 +478,15 @@ public sealed class Problem
             else _unresolvedRows.Add(("希望の前日に禁止", $"{Mark(it.WishKigou, x >= 0)} の希望の前日は {Mark(it.PrevKigou, y >= 0)}"));
         }
         Cons3w = cons3wList;
+        var consGapList = new List<Gap>();
+        foreach (var it in state.ConsGap ?? Array.Empty<GapRow>())
+        {
+            int si = ShiftIdxOf(it.ShiftKigou);
+            int d = KotlinInterop.ToIntOrNull(it.Days.Trim()) ?? 0;
+            if (si >= 0 && d > 0) consGapList.Add(new Gap(si, d));
+            else _unresolvedRows.Add(("シフトの間隔", $"{Mark(it.ShiftKigou, si >= 0)} は次まで{it.Days}日以上空ける"));
+        }
+        ConsGap = consGapList;
         if (cons3wList.Count == 0)
         {
             C3wBan = null;

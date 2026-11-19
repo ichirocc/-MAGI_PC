@@ -95,7 +95,7 @@ public static class UnifiedViolationChecker
         ["covU"] = "vio-covU", ["covO"] = "vio-covO", ["pref"] = "vio-pref",
         ["low"] = "vio-low", ["high"] = "vio-high", ["groupViol"] = "vio-groupViol",
         ["aptLow"] = "vio-aptLow", ["aptHigh"] = "vio-aptHigh",
-        ["extWish"] = "vio-extWish",
+        ["extWish"] = "vio-extWish", ["gap"] = "vio-gap",
     };
 
     private static readonly IReadOnlyDictionary<string, double> ClassWeight =
@@ -364,6 +364,19 @@ public static class UnifiedViolationChecker
             for (int i = 0; i < p.S; i++)
                 for (int j = 0; j < p.T; j++)
                     if (p.ExtWishBanned(i, j, s[i][j])) { Inc("extWish"); Mark(i, j, "extWish"); }
+        }
+        // ---- gap: シフトの間隔（SOFT, 3.727.109）。近すぎるかたまりの最初の日を違反箇所にする。
+        foreach (var c in p.ConsGap)
+        {
+            for (int i = 0; i < p.S; i++)
+            {
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
+                int d = GapRule.Deficit(s[i], c.ShiftIdx, c.Days);
+                if (d <= 0) continue;
+                Inc("gap", d);
+                int ii = i;
+                GapRule.ViolatingStarts(s[i], c.ShiftIdx, c.Days, j => Mark(ii, j, "gap"));
+            }
         }
 
         // ---- pref: wished cell not honored ---------------------------------------------------
