@@ -555,8 +555,14 @@ public sealed partial class EditView : UserControl
                 var fg = k < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
                 var b = new Button
                 {
-                    Content = new TextBlock { Text = (sel ? "× " : "") + ui.ShiftSymbols[k], Foreground = new SolidColorBrush(fg), FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal },
-                    Background = new SolidColorBrush(bg), MinWidth = 72, MinHeight = 52,
+                    // 選んだ＝この日に入れないシフト: 色を薄くし記号に取り消し線（枠の色だけでは選んだかどうか見分けにくい、Android 3.727.110）
+                    Content = new TextBlock
+                    {
+                        Text = (sel ? "× " : "") + ui.ShiftSymbols[k], FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+                        Foreground = sel ? (Brush)Application.Current.Resources["MagiOnBackgroundBrush"] : new SolidColorBrush(fg),
+                        TextDecorations = sel ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None,
+                    },
+                    Background = new SolidColorBrush(sel ? Windows.UI.Color.FromArgb(0x59, bg.R, bg.G, bg.B) : bg), MinWidth = 72, MinHeight = 52,
                     BorderThickness = new Thickness(sel ? 3 : 2),
                     BorderBrush = sel ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
                     IsEnabled = editable,
@@ -571,6 +577,9 @@ public sealed partial class EditView : UserControl
             }
             ExtWishShiftHost.Children.Add(row);
         }
+        var remain = CellSheetLogic.ExtWishRemainText(ui.ShiftSymbols, _extWishSel);
+        ExtWishRemainTextBlock.Text = remain ?? "";
+        ExtWishRemainTextBlock.Visibility = remain is null ? Visibility.Collapsed : Visibility.Visible;
         AddExtWishButton.Content = CellSheetLogic.ExtWishApplyButton(_wishSelectedDays.Count);
         AddExtWishButton.IsEnabled = editable && _extWishSel.Count > 0;
     }
@@ -772,12 +781,18 @@ public sealed partial class EditView : UserControl
                 foreach (var k in idxs.Skip(start).Take(4))
                 {
                     var sel = _wishSelK == k;
+                    // 1 つ選んだら他を薄くする（枠と ✓ だけでは選んだシフトが見分けにくい、Android 3.727.110）
+                    var dim = _wishSelK >= 0 && !sel;
                     var bg = k < ui.ShiftColorHex.Count ? ColorHex.Parse(ui.ShiftColorHex[k], Colors.LightGray) : Colors.LightGray;
                     var fg = k < ui.ShiftTextHex.Count ? ColorHex.Parse(ui.ShiftTextHex[k], Colors.Black) : Colors.Black;
                     var b = new Button
                     {
-                        Content = new TextBlock { Text = (sel ? "✓ " : "") + ui.ShiftSymbols[k] + (warn ? " ⚠" : ""), Foreground = new SolidColorBrush(fg), FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal },
-                        Background = new SolidColorBrush(bg), MinWidth = 72, MinHeight = 52,
+                        Content = new TextBlock
+                        {
+                            Text = (sel ? "✓ " : "") + ui.ShiftSymbols[k] + (warn ? " ⚠" : ""), FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+                            Foreground = dim ? (Brush)Application.Current.Resources["MagiOnSurfaceVariantBrush"] : new SolidColorBrush(fg),
+                        },
+                        Background = new SolidColorBrush(dim ? Windows.UI.Color.FromArgb(0x59, bg.R, bg.G, bg.B) : bg), MinWidth = 72, MinHeight = 52,
                         BorderThickness = new Thickness(sel ? 3 : 2),
                         BorderBrush = warn ? (Brush)Application.Current.Resources["MagiErrorBrush"] : sel ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
                         IsEnabled = editable,

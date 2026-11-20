@@ -1884,6 +1884,14 @@ public static class CellSheetLogic
     /// <summary>[3.707.0 3b-4] 希望の入力パネルのボタン。</summary>
     public static string WishApplyButton(int days, string symbol) => $"{days}日を{symbol}の希望にする";
     public static string ExtWishApplyButton(int days) => $"{days}日を選んだシフト以外にする";
+    /// <summary>拡張希望で選んだ状態を文字で示す（選んだ＝入れないシフト。Kotlin <c>extWishRemainText</c>、Android 3.727.110）。何も選んでいなければ null。</summary>
+    public static string? ExtWishRemainText(IReadOnlyList<string> shifts, IReadOnlyCollection<int> selected)
+    {
+        if (selected.Count == 0) return null;
+        var remain = Enumerable.Range(0, shifts.Count).Where(k => !selected.Contains(k)).Select(k => shifts[k]).ToList();
+        return remain.Count == 0 ? "すべて選ぶと、この日に入れるシフトがなくなります"
+            : $"この日に入れるのは {string.Join("・", remain)} だけ（×のシフトは入りません）";
+    }
     public const string ClearSelectionButton = "選択を外す";
     public static string NeedApplyButton(int days) => $"{days}日に適用する";
 

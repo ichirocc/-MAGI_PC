@@ -24,6 +24,24 @@ public static class SmartInitialScheduler
     /// docs/history）。時間でなく状態数で切るのは、同じ入力なら必ず同じ初期解になる決定性を保つため。</summary>
     private const int MaxDpStates = 200_000;
 
+    /// <summary>③〜⑤で、置くとシフトの間隔（gap）の不足が 1 日増えるごとに足す罰（Kotlin <c>GAP_PENALTY</c>、Android 3.727.110）。</summary>
+    private const int GapPenalty = 10;
+
+    /// <summary>(i,j) に k を置いたときに増える gap の不足日数（空きセル -1 は k でない扱い）。</summary>
+    private static int GapIncrease(Problem p, int[] row, int i, int j, int k)
+    {
+        var inc = 0;
+        foreach (var c in p.ConsGap)
+        {
+            if (c.ShiftIdx != k || !p.C1Applies(i, k)) continue;
+            var before = GapRule.Deficit(row, k, c.Days);
+            var old = row[j]; row[j] = k;
+            inc += GapRule.Deficit(row, k, c.Days) - before;
+            row[j] = old;
+        }
+        return inc;
+    }
+
     /// <summary>DP内部状態のレコード（Kotlinの<c>solveConstructionDp</c>ローカル<c>data class Rec</c>
     /// に相当。C#はメソッド内でのローカル型宣言を許さないためクラス直下のprivateネスト型に置く —
     /// スコープの違いのみで意味は同一、この型を使うのは <see cref="SolveConstructionDp"/> だけ）。</summary>
@@ -116,7 +134,9 @@ public static class SmartInitialScheduler
                         if (schedule[i][j] >= 0 || !p.MayPlace(i, k) || p.ExtBanned(i, j, k)) continue;
                         int hi = p.RangeHi[i][k];
                         bool over = hi != int.MaxValue && counts[i][k] >= hi;
-                        int penalty = (over ? 1000 : 0) + counts[i][k] * 2;
+                        // 間隔の不足は同点のときだけの決め手（人員の穴埋めの選び方を変えると後の日の必須が増える）
+                        int penalty = ((over ? 1000 : 0) + counts[i][k] * 2) * 100 + GapIncrease(p, schedule[i], i, j, k) +
+                            (p.ConsGap.Count > 0 && p.MakesForbiddenRun(schedule, i, j, k) ? 50 : 0);
                         if (penalty < bestPenalty) { bestPenalty = penalty; bestI = i; }
                     }
                     if (bestI < 0) break;
@@ -145,6 +165,14 @@ public static class SmartInitialScheduler
                     int q = pos;
                     while (q < free.Count && p.ExtBanned(i, free[q], k)) q++;
                     if (q >= free.Count) break;
+                    // 間隔の不足が増えない日（禁止の並びも作らない日）があればそちらを先に
+                    if (p.ConsGap.Count > 0 && GapIncrease(p, schedule[i], i, free[q], k) > 0)
+                    {
+                        int r = q + 1;
+                        while (r < free.Count && (p.ExtBanned(i, free[r], k) || GapIncrease(p, schedule[i], i, free[r], k) > 0 ||
+                                p.MakesForbiddenRun(schedule, i, free[r], k))) r++;
+                        if (r < free.Count) q = r;
+                    }
                     if (q != pos) { int tq = free[q]; free[q] = free[pos]; free[pos] = tq; }
                     int j = free[pos++];
                     schedule[i][j] = k;
@@ -175,7 +203,9 @@ public static class SmartInitialScheduler
                     int demandBonus = p.CovUCell(k, j, covNow) > 0 ? -100 : 0;
                     // [3.345.0] 休は通常のシフト種の一つ＝残り埋めで優先しない（旧: 休だけ -10 のボーナス）。
                     //   実データ3件で hard/covO/covU/low/high/c1 が全て同一＝この優先は実質不活性だった。
-                    int penalty = (over ? 1000 : 0) + counts[i][k] + demandBonus;
+                    // 間隔の不足を避けた先が禁止の並びにならないよう、禁止の並びを作る候補は間隔より重く避ける
+                    int penalty = (over ? 1000 : 0) + counts[i][k] + demandBonus + GapPenalty * GapIncrease(p, schedule[i], i, j, k) +
+                        (p.ConsGap.Count > 0 && p.MakesForbiddenRun(schedule, i, j, k) ? 500 : 0);
                     if (penalty < bestPenalty) { bestPenalty = penalty; bestK = k; }
                 }
                 schedule[i][j] = bestK;

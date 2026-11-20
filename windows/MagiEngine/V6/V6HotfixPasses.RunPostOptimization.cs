@@ -374,6 +374,10 @@ public static partial class V6HotfixPasses
         // weekly は同日 2 者スワップでは動かない（曜日別の勤務/休が不変）→ 被覆保存の 2 職員×2 日 長方形交換。
         chain.Adopt(chain.Timed("後処理 曜日平準化(長方形交換)", "WeeklyRebalancePolish", work =>
             ApplyWeeklyRebalancePolish(state, work, maxPasses: p.WeeklyRebalancePasses, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
+        // シフトの間隔も同日 2 者スワップでは X を別の日へ動かせない → 同じ長方形交換で、起点を間隔の足りないかたまりにする（Android 3.727.110）。
+        if ((state.ConsGap?.Count ?? 0) > 0)
+            chain.Adopt(chain.Timed("後処理 シフトの間隔(gap)研磨(長方形交換)", "GapPolish", work =>
+                ApplyGapPolish(state, work, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));
         // 長方形交換（クロス日）が届かない同日内の割当先を Hungarian で再配置＝相補的なので両方走らせる。
         chain.Adopt(chain.Timed("後処理 交互最適化(日ブロック割当)", "AlternatingSoftPolish", work =>
             ApplyAlternatingSoftPolish(state, work, maxSweeps: p.AlternatingSweeps, shouldStop: ClusterStop, quantitativeRangeEval: p.QuantitativeRangeEval)));

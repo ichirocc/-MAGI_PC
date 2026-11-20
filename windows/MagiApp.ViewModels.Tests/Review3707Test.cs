@@ -63,6 +63,9 @@ public class Review3707Test
         Assert.Equal("11/24(火)のぶつかる希望を見る", CellSheetLogic.WishConflictLinkText("11/24(火)"));
         Assert.Equal("3日を夜の希望にする", CellSheetLogic.WishApplyButton(3, "夜"));
         Assert.Equal("2日を選んだシフト以外にする", CellSheetLogic.ExtWishApplyButton(2));
+        Assert.Null(CellSheetLogic.ExtWishRemainText(new[] { "休", "日", "夜" }, new HashSet<int>()));
+        Assert.Equal("この日に入れるのは 日 だけ（×のシフトは入りません）", CellSheetLogic.ExtWishRemainText(new[] { "休", "日", "夜" }, new HashSet<int> { 0, 2 }));
+        Assert.Equal("すべて選ぶと、この日に入れるシフトがなくなります", CellSheetLogic.ExtWishRemainText(new[] { "休", "日" }, new HashSet<int> { 0, 1 }));
         Assert.Equal("4日に適用する", CellSheetLogic.NeedApplyButton(4));
         Assert.Equal("⚠「夜」は佐藤さんの担当外です。希望は登録できますが、配置すると必須違反になります。", CellSheetLogic.WishOutOfScopeNote("夜", "佐藤"));
         Assert.Equal("拡張希望を登録できませんでした。希望のある日だけです。日かシフトを選び直して、もう一度登録してください。", CellSheetLogic.ExtWishFailedText("希望のある日だけです。"));
