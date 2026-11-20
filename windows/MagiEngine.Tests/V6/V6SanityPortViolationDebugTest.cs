@@ -58,8 +58,9 @@ public class V6SanityPortViolationDebugTest
         // [3.282.0] 計数を「違反ラン先頭のみ」→ checker の inc と同じ「違反窓ごと」へ是正。
         //   この盤面は窓j=0(休0回＝不足2)とj=1(休1回＝不足1)が違反＝breakdown c1=3 と厳密に一致する
         //   （旧実装は連続窓を1ランとして「1件」と表示し breakdown と食い違う第3の計数だった）。
-        Assert.Equal(3, report.Breakdown["c1"]);
-        Assert.Contains("s0 休(5日窓≥2)3件", summary);
+        //   [Android 3.727.111] 2 つの窓は続いているので 1 まとまり＝不足量の和 3 の 2 乗＝9 件。
+        Assert.Equal(9, report.Breakdown["c1"]);
+        Assert.Contains("s0 休(5日窓≥2)9件", summary);
         Assert.DoesNotContain("s1 ", summary);
     }
 

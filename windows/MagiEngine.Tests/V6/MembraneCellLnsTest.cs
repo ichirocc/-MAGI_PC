@@ -47,7 +47,7 @@ public class MembraneCellLnsTest
         var h = 0;
         unchecked { foreach (var c in text) h = 31 * h + c; }
         Assert.Equal(6, r.Applied);   // Android 3.727.79: c1＝窓の不足量で 1→6
-        Assert.Equal(1395822771, h);
+        Assert.Equal(1394130808, h);
     }
 
     [Fact]

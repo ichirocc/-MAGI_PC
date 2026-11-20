@@ -62,10 +62,10 @@ public class C1RepairAnalysisTest
         var s = PinFixture();
         var p = new Problem(s);
         var sched = s.Schedule.ToIntArray2D();
-        Assert.Equal(2, UnifiedViolationChecker.Check(s, sched).Breakdown.GetValueOrDefault("c1"));
+        Assert.Equal(4, UnifiedViolationChecker.Check(s, sched).Breakdown.GetValueOrDefault("c1"));   // [Android 3.727.111] 不足 1 の窓が 2 つ続く＝(1+1)²
         var v = C1RepairAnalysis.Analyze(p, sched).First(w => w.Staff == 0);
         var r = C1RepairAnalysis.SolveWindow(p, sched, v);
-        Assert.Equal(2, r.BaselineJointC1); // baseline は joint 2
+        Assert.Equal(4, r.BaselineJointC1); // baseline は joint 4
         Assert.Equal(1, r.MinJointC1); // coverage保存で joint 1 まで下げられる
         Assert.NotNull(r.Patch); // 改善手が出る
     }

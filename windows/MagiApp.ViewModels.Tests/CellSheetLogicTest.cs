@@ -106,7 +106,7 @@ public class CellSheetLogicTest
             StaffNames = St.StaffList.Select(x => x.Name).ToList(), ShiftSymbols = St.Shifts.Select(x => x.Kigou).ToList(),
             ViolationCellFamilies = Rep.CellFamilies,
         };
-        Assert.Equal("設定を緩めると、この禁止の並びを解消できる見込みです（上限 2件）", CellSheetLogic.RelaxHandoffLine(r, ui, Label));
+        Assert.Equal("設定を緩めると、この禁止の並びを解消できる見込みです（上限 1件）", CellSheetLogic.RelaxHandoffLine(r, ui, Label));
     }
 
     [Fact]

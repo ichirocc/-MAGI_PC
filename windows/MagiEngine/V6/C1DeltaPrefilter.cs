@@ -154,14 +154,7 @@ public static class C1DeltaPrefilter
             int x = c.ShiftIdx;
             if (x < 0 || x >= p.K || c.Day1 < 1 || c.Day1 > p.T || c.Day2 < 1) continue;
             if (!p.C1Applies(staff, x)) continue;
-            int j = 0;
-            while (j <= p.T - c.Day1)
-            {
-                int z = 0;
-                for (int l = 0; l < c.Day1; l++) if (row[j + l] == x) z++;
-                if (z < c.Day2) fires += c.Day2 - z;
-                j++;
-            }
+            fires += (int)C1Cost.RowCost(row, x, c.Day1, c.Day2);
         }
         return fires;
     }

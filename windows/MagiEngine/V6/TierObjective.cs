@@ -49,13 +49,7 @@ public static class TierObjective
             for (var i = 0; i < p.S; i++)
             {
                 if (!p.C1Applies(i, c.ShiftIdx)) continue;
-                var row = schedule[i];
-                for (var w = 0; w <= p.T - c.Day1; w++)
-                {
-                    var z = 0;
-                    for (var l = 0; l < c.Day1; l++) if (row[w + l] == c.ShiftIdx) z++;
-                    if (z < c.Day2) c1[i] += c.Day2 - z;
-                }
+                c1[i] += (int)C1Cost.RowCost(schedule[i], c.ShiftIdx, c.Day1, c.Day2);
             }
         }
         foreach (var c in p.Cons3mn)

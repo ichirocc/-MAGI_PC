@@ -121,15 +121,7 @@ internal static class CountChainPolish
             foreach (var c in p.Cons1)
             {
                 if (!p.C1Applies(s, c.ShiftIdx) || c.Day1 > p.T) continue;
-                int z = 0;
-                for (int l = 0; l < c.Day1; l++) if (row[l] == c.ShiftIdx) z++;
-                int j = 0;
-                while (j <= p.T - c.Day1)
-                {
-                    if (j > 0) { if (row[j - 1] == c.ShiftIdx) z--; if (row[j + c.Day1 - 1] == c.ShiftIdx) z++; }
-                    if (z < c.Day2) v += (c.Day2 - z) * wC1;
-                    j++;
-                }
+                v += C1Cost.RowCost(row, c.ShiftIdx, c.Day1, c.Day2) * wC1;
             }
             void Fam(IReadOnlyList<C3> list, bool forbidden, double w)
             {

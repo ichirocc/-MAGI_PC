@@ -265,14 +265,7 @@ public static class C1RepairAnalysis
                 foreach (var c in rules)
                 {
                     if (!p.C1Applies(i, c.ShiftIdx)) continue;
-                    int jj = 0;
-                    while (jj <= p.T - c.Day1)
-                    {
-                        int z = 0;
-                        for (int l = 0; l < c.Day1; l++) if (rows[mi][jj + l] == c.ShiftIdx) z++;
-                        if (z < c.Day2) total += c.Day2 - z;
-                        jj++;
-                    }
+                    total += (int)C1Cost.RowCost(rows[mi], c.ShiftIdx, c.Day1, c.Day2);
                 }
             }
             return total;

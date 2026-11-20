@@ -139,7 +139,7 @@ public class RelaxTrialTest
         var pS = st.Shifts.ToList().FindIndex(s => s.Kigou == "Pｼ");
         var cO = st.Shifts.ToList().FindIndex(s => s.Kigou == "Cｵ");
         var r = (RelaxTrial.Result)RelaxTrial.FirstWall(st, board);
-        Assert.Equal(new[] { new RelaxTrial.Relax(9, pS, 1), new RelaxTrial.Relax(10, cO, 1) }, r.Relaxes);
+        Assert.Equal(new[] { new RelaxTrial.Relax(10, cO, 1) }, r.Relaxes);   // [Android 3.727.111] 緩める上限は Cｵ の 1 件で足りる
         Assert.Equal(5, r.H0); Assert.Equal(4, r.Rr); Assert.Equal(1, r.Att);
         Assert.Equal(RelaxTrial.HandPlaced(st, board), r.Prerequisite);
         var ns = RelaxTrial.Apply(st, r.Prerequisite.Concat(r.Relaxes).ToList());

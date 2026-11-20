@@ -136,7 +136,7 @@ public class C1DeltaPrefilterTest
         var s = Single(3, 1, new List<IReadOnlyList<int>> { new List<int> { 2, 2, 2 } }, cons1: new List<C1Row> { new("2", "X", "1") });
         var p = new Problem(s);
         var sc = s.Schedule.ToIntArray2D();
-        Assert.Equal(-1, C1DeltaPrefilter.C1Delta(p, sc, 0, 0, 1));
+        Assert.Equal(-3, C1DeltaPrefilter.C1Delta(p, sc, 0, 0, 1));   // [Android 3.727.111] (1+1)²=4 → 1²
     }
 
     [Fact]

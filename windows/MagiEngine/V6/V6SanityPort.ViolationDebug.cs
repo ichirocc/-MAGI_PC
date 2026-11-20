@@ -343,18 +343,12 @@ public static partial class V6SanityPort
                 for (var i = 0; i < p.S; i++)
                 {
                     if (!p.C1Applies(i, c.ShiftIdx)) continue;
-                    var j = 0;
-                    while (j <= p.T - c.Day1)
+                    var v = (int)C1Cost.RowCost(s[i], c.ShiftIdx, c.Day1, c.Day2);
+                    if (v > 0)
                     {
-                        var z = 0;
-                        for (var l = 0; l < c.Day1; l++) if (s[i][j + l] == c.ShiftIdx) z++;
-                        if (z < c.Day2)
-                        {
-                            if (!perStaffRule.TryGetValue(i, out var rules))
-                                perStaffRule[i] = rules = new InsertionOrderDictionary<string, int>();
-                            rules[ruleLabel] = rules.GetValueOrDefault(ruleLabel, 0) + (c.Day2 - z);
-                        }
-                        j++;
+                        if (!perStaffRule.TryGetValue(i, out var rules))
+                            perStaffRule[i] = rules = new InsertionOrderDictionary<string, int>();
+                        rules[ruleLabel] = rules.GetValueOrDefault(ruleLabel, 0) + v;
                     }
                 }
             }

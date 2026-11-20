@@ -198,6 +198,7 @@ public static class UnifiedViolationChecker
                 for (int l = 0; l < c.Day1; l++) if (row[l] == c.ShiftIdx) z++;
                 // [3.395.0/高速化 移植元] 窓は1日ずつ滑るので「出た日を引き、入った日を足す」だけ
                 // （O(T)）。数える値は再スキャンと同じ＝結果は不変。
+                var acc = new C1Cost.Acc();
                 while (j <= p.T - c.Day1)
                 {
                     if (j > 0)
@@ -206,9 +207,9 @@ public static class UnifiedViolationChecker
                         if (row[j + c.Day1 - 1] == c.ShiftIdx) z++;
                     }
                     bool viol = z < c.Day2;
+                    acc.Add(c.Day2 - z);
                     if (viol)
                     {
-                        Inc("c1", c.Day2 - z);
                         if (!prevViol) { Mark(i, j, "c1"); runStart = j; }
                     }
                     else if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
@@ -216,6 +217,8 @@ public static class UnifiedViolationChecker
                     j++;
                 }
                 if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
+                var cost = acc.End();
+                if (cost > 0) Inc("c1", (int)cost);
             }
         }
 

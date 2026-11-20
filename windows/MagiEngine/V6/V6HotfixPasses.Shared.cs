@@ -133,14 +133,8 @@ public static partial class V6HotfixPasses
         foreach (var c in p.Cons1) // c1: d日窓で shiftIdx が day2 回未満
         {
             if (!p.C1Applies(i, c.ShiftIdx)) continue;
-            var j = 0;
-            while (j <= p.T - c.Day1)
-            {
-                var z = 0;
-                for (var l = 0; l < c.Day1; l++) if (sched[i][j + l] == c.ShiftIdx) z++;
-                if (z < c.Day2) { total += c.Day2 - z; weighted += (c.Day2 - z) * ObjectiveWeights.Of("c1"); }
-                j++;
-            }
+            var v = C1Cost.RowCost(sched[i], c.ShiftIdx, c.Day1, c.Day2);
+            total += v; weighted += v * ObjectiveWeights.Of("c1");
         }
         foreach (var c in p.Cons2) // c2
         {

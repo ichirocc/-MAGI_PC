@@ -658,14 +658,7 @@ public static partial class V6HotfixPasses
             {
                 var c = ri >= 0 && ri < pFin.Cons1.Count ? pFin.Cons1[ri] : null;
                 if (c == null || c.ShiftIdx != x || c.Day1 <= 0 || c.Day1 > pFin.T) return 0;
-                var n = 0;
-                for (var w = 0; w <= pFin.T - c.Day1; w++)
-                {
-                    var z = 0;
-                    for (var l = 0; l < c.Day1; l++) if (work[i][w + l] == x) z++;
-                    if (z < c.Day2) n += c.Day2 - z;
-                }
-                return n;
+                return (int)C1Cost.RowCost(work[i], x, c.Day1, c.Day2);
             }
             refreshed = plateau.RefreshedWithCounts(c1Left, RemainingOf);
         }

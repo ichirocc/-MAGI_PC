@@ -212,13 +212,16 @@ public static partial class V6SanityPort
             {
                 if (!p.C1Applies(i, x) || i >= schedule.Length) continue;
                 var row = schedule[i];
+                // 届かない不足を窓の順に並べ、c1 と同じくまとまりの和の 2 乗にする（実際の不足は各窓でこれ以上＝下限のまま）
+                var acc = new C1Cost.Acc();
                 for (var w = 0; w <= p.T - c.Day1; w++)
                 {
                     var reach = 0;
                     for (var j = w; j < w + c.Day1; j++)
                         if (p.WishLocked(i, j) ? row[j] == x : p.MayPlaceAt(i, j, x)) reach++;
-                    if (reach < c.Day2) n += c.Day2 - reach;
+                    acc.Add(c.Day2 - reach);
                 }
+                n += (int)acc.End();
             }
         }
         return n;

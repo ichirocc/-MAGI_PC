@@ -95,6 +95,8 @@ internal static class CheckerReferenceV0
                 for (int l = 0; l < c.Day1; l++) if (row[l] == c.ShiftIdx) z++;
                 // [3.395.0/高速化 移植元] 窓は1日ずつ滑るので「出た日を引き、入った日を足す」だけ
                 // （O(T)）。数える値は再スキャンと同じ＝結果は不変。
+                // [Android 3.727.111] 件数＝不足している窓が続くまとまりごとに「不足量の和」の 2 乗（本体の C1Cost とは別に書いた参照）。
+                int runSum = 0;
                 while (j <= p.T - c.Day1)
                 {
                     if (j > 0)
@@ -105,14 +107,14 @@ internal static class CheckerReferenceV0
                     bool viol = z < c.Day2;
                     if (viol)
                     {
-                        Inc("c1", c.Day2 - z);
+                        runSum += c.Day2 - z;
                         if (!prevViol) { Mark(i, j, "c1"); runStart = j; }
                     }
-                    else if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
+                    else if (prevViol) { c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 }); Inc("c1", runSum * runSum); runSum = 0; }
                     prevViol = viol;
                     j++;
                 }
-                if (prevViol) c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 });
+                if (prevViol) { c1Runs.Add(new[] { i, runStart, j - runStart, c.Day1 }); Inc("c1", runSum * runSum); }
             }
         }
 

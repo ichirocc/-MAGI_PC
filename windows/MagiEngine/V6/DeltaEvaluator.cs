@@ -614,17 +614,8 @@ public sealed class DeltaEvaluator
     private long C1At(int i, int j, C1 c)
     {
         if (!_p.C1Applies(i, c.ShiftIdx)) return 0L; // [統一] 担当不可は対象外(チェッカーと一致)
-        long tot = 0L;
-        int js0 = Math.Max(0, j - c.Day1 + 1), js1 = Math.Min(T - c.Day1, j);
-        int js = js0;
-        while (js <= js1)
-        {
-            int z = 0;
-            for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
-            if (z < c.Day2) tot += c.Day2 - z;
-            js++;
-        }
-        return tot;
+        // まとまりの 2 乗は日 j の外へつながるので、行全体の値（C1Cost）。前後の差が Δ になる。
+        return C1Cost.RowCost(_a[i], c.ShiftIdx, c.Day1, c.Day2);
     }
 
     /// <summary>c3 族 <paramref name="f"/>（0=c3, 1=c3n, 2=c3m, 3=c3mn）のうち old か nw を参照する規則の、セル (i,j) を含む窓の寄与。</summary>
@@ -673,14 +664,7 @@ public sealed class DeltaEvaluator
             for (int i = 0; i < S; i++)
             {
                 if (!_p.C1Applies(i, c.ShiftIdx)) continue; // [統一] 担当不可は対象外(チェッカーと一致)
-                int js = 0;
-                while (js <= T - c.Day1)
-                {
-                    int z = 0;
-                    for (int l = 0; l < c.Day1; l++) if (_a[i][js + l] == c.ShiftIdx) z++;
-                    if (z < c.Day2) tot += c.Day2 - z;
-                    js++;
-                }
+                tot += C1Cost.RowCost(_a[i], c.ShiftIdx, c.Day1, c.Day2);
             }
         }
         return tot;
