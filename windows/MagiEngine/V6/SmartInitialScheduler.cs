@@ -190,11 +190,11 @@ public static class SmartInitialScheduler
             for (int j = 0; j < p.T; j++)
             {
                 if (schedule[i][j] >= 0) continue;
-                int bestK = allowed.Length > 0 ? allowed[0] : restK;
+                int bestK = restK;
                 int bestPenalty = int.MaxValue;
                 foreach (int k in allowed)
                 {
-                    if (p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない（全部禁止なら従来の値）
+                    if (p.ExtBanned(i, j, k)) continue;   // 拡張希望の禁止へは置かない（全部禁止なら FallbackShift）
                     int hi = p.RangeHi[i][k];
                     bool over = hi != int.MaxValue && counts[i][k] >= hi;
                     int covNow = 0;
@@ -208,6 +208,7 @@ public static class SmartInitialScheduler
                         (p.ConsGap.Count > 0 && p.MakesForbiddenRun(schedule, i, j, k) ? 500 : 0);
                     if (penalty < bestPenalty) { bestPenalty = penalty; bestK = k; }
                 }
+                if (bestPenalty == int.MaxValue) bestK = FallbackShift(p, i, j, restK);
                 schedule[i][j] = bestK;
                 counts[i][bestK]++;
             }
@@ -345,5 +346,20 @@ public static class SmartInitialScheduler
         var result = new bool[t];
         for (int day = 0; day < t; day++) result[day] = ((chosen.Bits >>> day) & 1L) != 0L;
         return result;
+    }
+
+    /// <summary>
+    /// 置けるシフトがどれも禁止（拡張希望・日の上限 0）か、置けるシフトが無いマスに置くシフト（Kotlin <c>fallbackShift</c>、Android 3.727.119）。
+    /// 空欄にはできないので違反のいちばん軽いものを選ぶ: 担当できて拡張希望にも日の上限 0 にも当たらない → 日の上限 0 だけに当たる →
+    /// 置けるシフトのうち拡張希望に当たるもの → 担当できるシフト → 休。
+    /// </summary>
+    internal static int FallbackShift(Problem p, int i, int j, int restK)
+    {
+        var can = Enumerable.Range(0, p.K).Where(k => p.CanDo(i, k)).ToArray();
+        foreach (var k in can) if (!p.ExtWishBanned(i, j, k) && !p.DayCapBanned(i, j, k)) return k;
+        foreach (var k in can) if (!p.ExtWishBanned(i, j, k)) return k;
+        var allowed = p.AllowedShiftsForStaff(i);
+        if (allowed.Length > 0) return allowed[0];
+        return can.Length > 0 ? can[0] : restK;
     }
 }

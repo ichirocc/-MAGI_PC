@@ -43,6 +43,39 @@ public class SmartInitialSchedulerTest
             "既存の簡易作成はC1を考慮しないため違反が残るはず");
     }
 
+    /// <summary>休・X・Y の 3 種。Y は個人上限 0（担当はできるが置かない）。</summary>
+    private static MagiState ThreeShiftState(List<int> groupShift, List<ExtWish> ext) => MinimalState.Build(
+        startDate: "2026-01-01", endDate: "2026-01-11",
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", ""), new("Y", "Y", "", "") },
+        groups: new List<Group> { new("G", "G") },
+        staffList: new List<Staff> { new("a", 0) },
+        use2Patterns: false,
+        groupShift: new List<IReadOnlyList<int>> { groupShift },
+        groupShiftApt: new List<IReadOnlyList<string>> { new List<string> { "", "", "" } },
+        schedule: new List<IReadOnlyList<int>> { Enumerable.Repeat(-1, 11).ToList() },
+        staffRange: new Dictionary<string, Range> { ["0,2"] = new("0", "0") }) with { ExtWishes = ext };
+
+    [Fact]
+    public void AllPlaceableBannedFallsBackToLeastBadShift()
+    {
+        // 3 日目に 休・X を拡張希望で禁止 → 置けるシフトはすべて禁止。必須の拡張希望違反より、上限 0 の Y（上限超過＝要調整）を置く
+        var st = ThreeShiftState(new List<int> { 1, 1, 1 }, new List<ExtWish> { new(0, new List<string> { "2026-01-03" }, new List<string> { "休", "X" }) });
+        var r = SmartInitialScheduler.Generate(st);
+        Assert.Equal(2, r.Schedule[0][2]);
+        Assert.Equal(0, r.Report.Breakdown.GetValueOrDefault("extWish"));
+        Assert.Equal(0, r.Report.Hard);
+    }
+
+    [Fact]
+    public void NoPlaceableShiftAvoidsRestWhenRestIsNotAllowed()
+    {
+        // 休を担当できず、置けるシフトも無い（X 不可・Y は上限 0）→ 休（グループ外＝必須）でなく担当できる Y を置く
+        var st = ThreeShiftState(new List<int> { 0, 0, 1 }, new List<ExtWish>());
+        var r = SmartInitialScheduler.Generate(st);
+        Assert.All(Enumerable.Range(0, 11), d => Assert.Equal(2, r.Schedule[0][d]));
+        Assert.Equal(0, r.Report.Breakdown.GetValueOrDefault("groupViol"));
+    }
+
     [Fact]
     public void RespectsFeasibleWish()
     {
