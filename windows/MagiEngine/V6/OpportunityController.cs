@@ -14,8 +14,8 @@ internal sealed class OpportunityController
     private readonly IReadOnlyList<HypothesisEpochRole> _roles;
     private readonly Dictionary<string, Dictionary<HypothesisEpochRole, Arm>> _table = new();
 
-    /// <summary>必須 1 件を重みに直す値（必須の重みの桁＝covU 10000 に合わせる）。</summary>
-    public const double HardUnit = 10_000.0;
+    /// <summary>必須 1 件を重みに直す値（必須の重みの桁＝covU の重みに合わせる）。</summary>
+    public static readonly double HardUnit = MirrorKeys.WeightOf("covU");
     public const double Explore = 0.5;
 
     public OpportunityController(IReadOnlyList<HypothesisEpochRole> roles) => _roles = roles;
