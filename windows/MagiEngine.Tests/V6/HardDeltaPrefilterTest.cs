@@ -54,6 +54,11 @@ public class HardDeltaPrefilterTest
                 int expected = Hard(st, work) - Hard(st, before);
                 Assert.True(expected == HardDelta.SameDayPermutationDelta(p, work, j, staff, old), $"{res} trial={trial}");
                 Assert.True(expected == HardDelta.Delta(p, before, work), $"{res} trial={trial}");
+                if (C3nBitScan.Usable(p))
+                {
+                    var masks = Enumerable.Range(0, p.S).Select(i => C3nBitScan.BuildRowMask(p, work[i])).ToArray();
+                    Assert.True(expected == HardDelta.SameDayPermutationDeltaBits(p, work, masks, j, staff, old), $"{res} trial={trial} bits");
+                }
                 for (int t = 0; t < k; t++) work[staff[t]][j] = old[t];
             }
         }

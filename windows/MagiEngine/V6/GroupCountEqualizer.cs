@@ -61,20 +61,28 @@ public static class GroupCountEqualizer
         for (var i = 0; i < p.S; i++) for (var k = 0; k < p.K; k++) devCur += Sq(i, k, cnt[i][k]);
         var exCur = 0;
         var hardCur = 0;   // 元からの必須の増減
-        var cur = work.Copy2D(); var trial = work.Copy2D();
+        var cur = work.Copy2D();
+        var bits = C3nBitScan.Usable(p);   // 64 日以内＝禁止の並びをビットで数える（30 人・31 日が業務の上限）
+        var masks = bits ? Enumerable.Range(0, p.S).Select(i => C3nBitScan.BuildRowMask(p, cur[i])).ToArray() : Array.Empty<long[]>();
+        var old2 = new[] { new int[2], new int[2] }; var old3 = new[] { new int[3], new int[3] };   // 日ごとの元の値（2 人・3 人）
+        var locked = new bool[p.S * p.T];   // 希望・手動固定（毎手引くと重い）
+        for (var c = 0; c < locked.Length; c++) locked[c] = p.WishLocked(c / p.T, c % p.T);
+        int[] who2 = new int[2], who3 = new int[3], day1 = new int[1], day2 = new int[2];
         var bestDev = devCur;
         int[][]? best = null;
         var rnd = new JavaRandom(seed);
         const double t0 = 1.0, t1 = 0.02, wEx = 2.0, wHard = 20.0;
+        var cool = Math.Pow(t1 / t0, 1.0 / iters); var temp = t0;
         int[] ci2 = new int[12], ck = new int[12], cd = new int[12];   // この手での (職員,シフト) ごとの回数の増減
         for (var step = 0; step < iters; step++)
         {
+            temp *= cool;
             var gi = rnd.NextInt(pairTotal); var g = 0;
             while (gi >= pairW[g]) { gi -= pairW[g]; g++; }
             var m = groups[g];
             var kind = rnd.NextInt(3);
             var n = kind == 1 && m.Length >= 3 ? 3 : 2;
-            var who = new int[n];
+            var who = n == 2 ? who2 : who3;
             who[0] = m[rnd.NextInt(m.Length)];
             do { who[1] = m[rnd.NextInt(m.Length)]; } while (who[1] == who[0]);
             if (n == 3) do { who[2] = m[rnd.NextInt(m.Length)]; } while (who[2] == who[0] || who[2] == who[1]);
@@ -84,16 +92,13 @@ public static class GroupCountEqualizer
             {
                 int d2;
                 do { d2 = rnd.NextInt(p.T); } while (d2 == d1);
-                days = new[] { d1, d2 };
+                day2[0] = d1; day2[1] = d2; days = day2;
             }
-            else days = new[] { d1 };
-            if (days.Any(d => who.Any(i => p.WishLocked(i, d)))) continue;
+            else { day1[0] = d1; days = day1; }
+            var lockHit = false;
+            foreach (var d in days) for (var t = 0; t < n; t++) if (locked[who[t] * p.T + d]) lockHit = true;
+            if (lockHit) continue;
             bool ok = true, moved = false; var nc = 0;
-            void Add(int i, int k, int dd)
-            {
-                for (var e = 0; e < nc; e++) if (ci2[e] == i && ck[e] == k) { cd[e] += dd; return; }
-                ci2[nc] = i; ck[nc] = k; cd[nc] = dd; nc++;
-            }
             foreach (var d in days)
             {
                 for (var t = 0; t < n; t++)
@@ -102,7 +107,15 @@ public static class GroupCountEqualizer
                     if (from < 0 || from >= p.K || to < 0 || to >= p.K) { ok = false; break; }
                     if (from == to) continue;
                     if (!p.MayPlaceAt(who[t], d, to)) { ok = false; break; }
-                    Add(who[t], from, -1); Add(who[t], to, 1); moved = true;
+                    for (var q = 0; q < 2; q++)
+                    {
+                        int i = who[t], k = q == 0 ? from : to, dd = q == 0 ? -1 : 1;
+                        var e = 0;
+                        while (e < nc && !(ci2[e] == i && ck[e] == k)) e++;
+                        if (e == nc) { ci2[nc] = i; ck[nc] = k; cd[nc] = 0; nc++; }
+                        cd[e] += dd;
+                    }
+                    moved = true;
                 }
                 if (!ok) break;
             }
@@ -115,13 +128,22 @@ public static class GroupCountEqualizer
                 dDev += Sq(i, k, cnt[i][k] + dd) - Sq(i, k, cnt[i][k]);
                 dEx += Excess(i, k, cnt[i][k] + dd) - Excess(i, k, cnt[i][k]);
             }
-            foreach (var d in days) for (var t = 0; t < n; t++) trial[who[t]][d] = cur[who[(t + 1) % n]][d];
-            var dHard = HardDelta.Delta(p, cur, trial);
+            // その場で当てて、必須の差は変わった日だけ数える（同じ日の並べ替え＝日の人数は不変。2 日は 1 日ずつ当てて足す）
+            var dHard = 0;
+            for (var di = 0; di < days.Length; di++)
+            {
+                var d = days[di]; var o = (n == 2 ? old2 : old3)[di];
+                for (var t = 0; t < n; t++) o[t] = cur[who[t]][d];
+                for (var t = 0; t < n; t++)
+                {
+                    cur[who[t]][d] = o[(t + 1) % n];
+                    if (bits) C3nBitScan.Move(p, masks[who[t]], d, o[t], o[(t + 1) % n]);
+                }
+                dHard += bits ? HardDelta.SameDayPermutationDeltaBits(p, cur, masks, d, who, o) : HardDelta.SameDayPermutationDelta(p, cur, d, who, o);
+            }
             var df = dDev + wEx * dEx + wHard * dHard;
-            var temp = t0 * Math.Pow(t1 / t0, (double)step / iters);
             if (df <= 0 || rnd.NextDouble() < Math.Exp(-df / temp))
             {
-                foreach (var d in days) for (var t = 0; t < n; t++) cur[who[t]][d] = trial[who[t]][d];
                 for (var e = 0; e < nc; e++) cnt[ci2[e]][ck[e]] += cd[e];
                 devCur += dDev; exCur += dEx; hardCur += dHard;
                 if (exCur == 0 && hardCur <= 0 && devCur < bestDev - 1e-9)
@@ -131,7 +153,16 @@ public static class GroupCountEqualizer
                     for (var i = 0; i < p.S; i++) Array.Copy(cur[i], best[i], p.T);
                 }
             }
-            else foreach (var d in days) for (var t = 0; t < n; t++) trial[who[t]][d] = cur[who[t]][d];
+            else
+                for (var di = days.Length - 1; di >= 0; di--)
+                {
+                    var d = days[di]; var o = (n == 2 ? old2 : old3)[di];
+                    for (var t = 0; t < n; t++)
+                    {
+                        if (bits) C3nBitScan.Move(p, masks[who[t]], d, cur[who[t]][d], o[t]);
+                        cur[who[t]][d] = o[t];
+                    }
+                }
         }
         if (best is null) return false;
         for (var i = 0; i < p.S; i++) Array.Copy(best[i], work[i], p.T);

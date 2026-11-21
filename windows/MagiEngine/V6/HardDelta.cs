@@ -110,4 +110,22 @@ internal static class HardDelta
         }
         return d;
     }
+
+    /// <summary>
+    /// <see cref="SameDayPermutationDelta"/> のビット版（同値、Kotlin <c>sameDayPermutationDeltaBits</c>）。<paramref name="masks"/> は職員ごとの
+    /// <c>C3nBitScan.BuildRowMask</c> で、work と同じく適用後を持つ。呼び出し前に <c>C3nBitScan.Usable</c> を確かめる。
+    /// </summary>
+    public static int SameDayPermutationDeltaBits(Problem p, int[][] work, long[][] masks, int j, int[] staff, int[] old)
+    {
+        int d = 0;
+        for (int t = 0; t < staff.Length; t++)
+        {
+            int i = staff[t];
+            int n = V(p, work[i][j]), o = V(p, old[t]);
+            if (n == o) continue;
+            d += CellHard(p, i, j, n) - CellHard(p, i, j, o);
+            if (p.Cons3n.Count > 0) d += C3nBitScan.FiresCoveringDelta(p, masks[i], j, o, n);
+        }
+        return d;
+    }
 }

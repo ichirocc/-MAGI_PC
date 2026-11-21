@@ -68,6 +68,37 @@ internal static class C3nBitScan
         return full & valid;
     }
 
+    /// <summary>
+    /// 日 <paramref name="j"/> が oldK→newK（<paramref name="mask"/> はすでに newK）で、j を含む窓の禁止連続の数の増減（Kotlin <c>firesCoveringDelta</c>）。
+    /// <paramref name="mask"/> は呼び出し前後で不変。
+    /// </summary>
+    public static int FiresCoveringDelta(Problem p, long[] mask, int j, int oldK, int newK)
+    {
+        if (oldK == newK || j < 0 || j >= p.T) return 0;
+        int d = 0;
+        foreach (var c in p.Cons3n)
+        {
+            var seq = c.Seq;
+            int len = seq.Length;
+            if (len == 0 || len > p.T) continue;
+            // 日 j が oldK でも newK でもない並びは、j の書き換えで成否が変わらない
+            bool uses = false;
+            foreach (var x in seq) if (x == oldK || x == newK) { uses = true; break; }
+            if (!uses) continue;
+            long cover = RangeMask(Math.Max(0, j - len + 1), Math.Min(j, p.T - len));
+            if (cover == 0L) continue;
+            int after = System.Numerics.BitOperations.PopCount((ulong)(MatchMask(p, mask, c) & cover));
+            SetCell(p, mask, j, newK, oldK);
+            int before = System.Numerics.BitOperations.PopCount((ulong)(MatchMask(p, mask, c) & cover));
+            SetCell(p, mask, j, oldK, newK);
+            d += after - before;
+        }
+        return d;
+    }
+
+    /// <summary><paramref name="mask"/> の日 j を oldK→newK に書き換える（呼び出し側が行と一緒に保つ）。</summary>
+    public static void Move(Problem p, long[] mask, int j, int oldK, int newK) => SetCell(p, mask, j, oldK, newK);
+
     /// <summary>Row-wide c3n fire count (matches <see cref="C1DeltaPrefilter.StaffC3nFires"/>).</summary>
     public static int Fires(Problem p, long[] mask)
     {
