@@ -59,6 +59,31 @@ public class GroupCountEqualizerTest
     }
 
     [Fact]
+    public void monthWideChainWhenSingleSwapsAreBlocked()
+    {
+        // 休は 2 人とも 7 回固定。偶数日の D↔休 は 1 組では休の範囲を外れ、奇数日の 休↔A は D が動かない
+        // → 偶数日と奇数日の 2 組を合わせて初めて D がそろう（焼きなまし）。s2 は D 不可・A 14 回固定で動かない。
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Range(0, 14).Select(j => j % 2 == 0 ? 1 : 0).ToList(),
+            Enumerable.Range(0, 14).Select(j => j % 2 == 0 ? 0 : 2).ToList(),
+            Enumerable.Repeat(2, 14).ToList(),
+        };
+        var range = new Dictionary<string, MagiEngine.Model.Range>
+        {
+            ["0,0"] = new("7", "7"), ["1,0"] = new("7", "7"), ["2,1"] = new("0", "0"), ["2,2"] = new("14", "14"),
+        };
+        var st = State(sched, range);
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        Assert.Equal(0, GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 }, annealIters: 0).Swaps);
+        var r = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 });
+        var d = Enumerable.Range(0, 2).Select(i => r.Schedule[i].Count(x => x == 1)).ToList();
+        Assert.True(Math.Abs(d[0] - d[1]) <= 1, $"D の差が 1 以内: {string.Join(",", d)}");
+        Assert.Equal(new[] { 7, 7 }, Enumerable.Range(0, 2).Select(i => r.Schedule[i].Count(x => x == 0)).ToArray());
+        Assert.Equal(DayCounts(b, 14), DayCounts(r.Schedule, 14));
+    }
+
+    [Fact]
     public void keepsWishesRangesAndNeverAddsHard()
     {
         var rng = new Random(11);

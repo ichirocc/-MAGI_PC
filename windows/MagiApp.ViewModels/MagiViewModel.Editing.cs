@@ -139,15 +139,25 @@ public sealed partial class MagiViewModel
     /// <summary>
     /// グループ内の回数をそろえる（<see cref="GroupCountEqualizer"/>、Kotlin <c>equalizeGroupCounts</c>、Android 3.727.115）。
     /// 希望の反映と同じく利用者が押して上書きする操作＝採点で採否を決めない。必須違反は増やさず、個人の下限・上限は外さない。
+    /// 月全体の入れ替えを裏で計算する（Android 3.727.118）。
     /// </summary>
-    public void EqualizeGroupCounts(IReadOnlySet<int>? shifts = null)
+    public async Task EqualizeGroupCounts(IReadOnlySet<int>? shifts = null)
     {
         var st = _state;
         if (st is null) return;
         if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
         var sched = _currentSchedule;
         if (sched is null) return;
-        var r = GroupCountEqualizer.Apply(st, sched, shifts);
+        var snap = sched.Copy2D();
+        // 焼きなましで 1〜数秒かかるので画面を止めない。計算中に勤務表が変わったら当てない。
+        var r = await Task.Run(() => GroupCountEqualizer.Apply(st, snap, shifts));
+        if (!ReferenceEquals(_state, st) || !ReferenceEquals(_currentSchedule, sched)
+            || Enumerable.Range(0, sched.Length).Any(i => !sched[i].AsSpan().SequenceEqual(snap[i]))) return;
+        ApplyGroupEqualize(st, sched, shifts, r);
+    }
+
+    private void ApplyGroupEqualize(MagiState st, int[][] sched, IReadOnlySet<int>? shifts, GroupCountEqualizer.Result r)
+    {
         if (r.Swaps == 0) { PostOpNotice(CellSheetLogic.GroupEqualizeNone, undoable: false); return; }
         PushUndo();
         for (var i = 0; i < sched.Length; i++) for (var j = 0; j < sched[i].Length; j++) sched[i][j] = r.Schedule[i][j];

@@ -943,7 +943,7 @@ public sealed partial class EditView : UserControl
         foreach (var b in boxes) { b.Checked += (_, _) => Refresh(); b.Unchecked += (_, _) => Refresh(); }
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         var sel = Enumerable.Range(0, boxes.Count).Where(k => boxes[k].IsChecked == true).ToHashSet();
-        _vm.EqualizeGroupCounts(sel.Count < syms.Count ? sel : null);
+        await _vm.EqualizeGroupCounts(sel.Count < syms.Count ? sel : null);
     }
 
     private async void OnApplyWishesClick(object sender, RoutedEventArgs e)
