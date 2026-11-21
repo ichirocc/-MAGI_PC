@@ -919,7 +919,32 @@ public sealed partial class EditView : UserControl
     /// 相当・ConfirmAsync とは別の3択のため専用ダイアログ）。
     /// </summary>
     // [Android 3.727.115] グループ内の回数をそろえる（希望の反映と同じく押して上書き、元に戻せる）。
-    private void OnGroupEqualizeClick(object sender, RoutedEventArgs e) => _vm.EqualizeGroupCounts();
+    private async void OnGroupEqualizeClick(object sender, RoutedEventArgs e)
+    {
+        // [Android 3.727.116] そろえるシフトを選ぶ（最初は全部）。
+        var syms = _vm.Ui.ShiftSymbols;
+        var boxes = syms.Select(s => new CheckBox { Content = s, IsChecked = true, MinWidth = 72 }).ToList();
+        var wrap = new VariableSizedWrapGrid { Orientation = Orientation.Horizontal, ItemWidth = 96 };
+        foreach (var b in boxes) wrap.Children.Add(b);
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock { Text = CellSheetLogic.GroupEqualizePickNote, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(wrap);
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot, Title = CellSheetLogic.GroupEqualizeButton, Content = panel,
+            PrimaryButtonText = CellSheetLogic.GroupEqualizeConfirmText(syms.Count, syms.Count), CloseButtonText = "やめる", DefaultButton = ContentDialogButton.Primary,
+        };
+        void Refresh()
+        {
+            var n = boxes.Count(b => b.IsChecked == true);
+            dialog.PrimaryButtonText = CellSheetLogic.GroupEqualizeConfirmText(n, syms.Count);
+            dialog.IsPrimaryButtonEnabled = n > 0;
+        }
+        foreach (var b in boxes) { b.Checked += (_, _) => Refresh(); b.Unchecked += (_, _) => Refresh(); }
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var sel = Enumerable.Range(0, boxes.Count).Where(k => boxes[k].IsChecked == true).ToHashSet();
+        _vm.EqualizeGroupCounts(sel.Count < syms.Count ? sel : null);
+    }
 
     private async void OnApplyWishesClick(object sender, RoutedEventArgs e)
     {

@@ -11,7 +11,7 @@ public static class GroupCountEqualizer
 {
     public sealed record Result(int[][] Schedule, int Swaps, long SpreadBefore, long SpreadAfter);
 
-    private static double[][] Targets(Problem p, int[][] cnt)
+    private static double[][] Targets(Problem p, int[][] cnt, IReadOnlySet<int>? shifts)
     {
         var t = Enumerable.Range(0, p.S).Select(_ => Enumerable.Repeat(double.NaN, p.K).ToArray()).ToArray();
         foreach (var m in p.GroupMembers)
@@ -19,6 +19,7 @@ public static class GroupCountEqualizer
             if (m.Length < 2) continue;
             for (var k = 0; k < p.K; k++)
             {
+                if (shifts is not null && !shifts.Contains(k)) continue;
                 var el = m.Where(i => p.MayPlace(i, k)).ToArray();
                 if (el.Length < 2) continue;
                 var mean = el.Sum(i => cnt[i][k]) / (double)el.Length;
@@ -43,12 +44,13 @@ public static class GroupCountEqualizer
         return (long)Math.Round(d * 100, MidpointRounding.AwayFromZero);
     }
 
-    public static Result Apply(MagiState state, int[][] schedule, int maxSwaps = 2_000)
+    /// <param name="shifts">そろえるシフト（null＝全部、Android 3.727.116）。ほかのシフトの回数は入れ替えで動き得るが、個人の下限・上限は守る。</param>
+    public static Result Apply(MagiState state, int[][] schedule, IReadOnlySet<int>? shifts = null, int maxSwaps = 2_000)
     {
         var p = new Problem(state);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var cnt = Counts(p, work);
-        var tgt = Targets(p, cnt);
+        var tgt = Targets(p, cnt, shifts);
         var before = Dev(tgt, cnt);
         bool Movable(int i, int j) => !p.WishLocked(i, j);   // 希望固定と手動固定
         bool RangeOk(int i, int k, int d)

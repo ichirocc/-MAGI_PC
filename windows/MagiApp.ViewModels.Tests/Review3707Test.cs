@@ -64,6 +64,8 @@ public class Review3707Test
         Assert.Equal("3日を夜の希望にする", CellSheetLogic.WishApplyButton(3, "夜"));
         Assert.Equal("2日を選んだシフト以外にする", CellSheetLogic.ExtWishApplyButton(2));
         Assert.Equal("グループ内の回数をそろえました: 入れ替え 3件", CellSheetLogic.GroupEqualizeDoneText(3));
+        Assert.Equal("すべてのシフトをそろえる", CellSheetLogic.GroupEqualizeConfirmText(10, 10));
+        Assert.Equal("選んだ 2種類をそろえる", CellSheetLogic.GroupEqualizeConfirmText(2, 10));
         Assert.Null(CellSheetLogic.ExtWishRemainText(new[] { "休", "日", "夜" }, new HashSet<int>()));
         Assert.Equal("この日に入れるのは 日 だけ（×のシフトは入りません）", CellSheetLogic.ExtWishRemainText(new[] { "休", "日", "夜" }, new HashSet<int> { 0, 2 }));
         Assert.Equal("すべて選ぶと、この日に入れるシフトがなくなります", CellSheetLogic.ExtWishRemainText(new[] { "休", "日" }, new HashSet<int> { 0, 1 }));

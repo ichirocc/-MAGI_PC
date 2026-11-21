@@ -1898,6 +1898,9 @@ public static class CellSheetLogic
     public const string GroupEqualizeNote = "グループ内の回数（同じグループの人どうし・シフトごと）を、同じ日の入れ替えでそろえます。個人の下限・上限は外さず、必須違反は増やしません。要調整は増えることがあります。元に戻せます";
     public const string GroupEqualizeNone = "グループ内の回数はこれ以上そろえられません（希望・固定・個人の上下限・必須違反の増加で入れ替えられません）";
     public static string GroupEqualizeDoneText(int swaps) => $"グループ内の回数をそろえました: 入れ替え {swaps}件";
+    // [Android 3.727.116] そろえるシフトを選ぶ
+    public const string GroupEqualizePickNote = "回数をそろえるシフトを選びます（複数選べます）。選んでいないシフトの回数は入れ替えで動くことがありますが、個人の下限・上限は守ります";
+    public static string GroupEqualizeConfirmText(int picked, int total) => picked >= total ? "すべてのシフトをそろえる" : $"選んだ {picked}種類をそろえる";
     public static string NeedApplyButton(int days) => $"{days}日に適用する";
 
     /// <summary>[3.707.0 3b-5] 担当外のシフトを選んだときの注記。</summary>

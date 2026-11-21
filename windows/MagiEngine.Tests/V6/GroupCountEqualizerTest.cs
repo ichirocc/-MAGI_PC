@@ -41,6 +41,24 @@ public class GroupCountEqualizerTest
     }
 
     [Fact]
+    public void onlyPickedShiftsAreTargeted()
+    {
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Repeat(1, 14).ToList(), Enumerable.Repeat(0, 14).ToList(), Enumerable.Repeat(2, 14).ToList(), Enumerable.Repeat(0, 14).ToList(),
+        };
+        var st = State(sched);
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        var onlyD = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 });
+        var onlyA = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 2 });
+        var d = Enumerable.Range(0, 3).Select(i => onlyD.Schedule[i].Count(x => x == 1)).ToList();
+        Assert.True(d.Max() - d.Min() <= 1);
+        var a = Enumerable.Range(0, 3).Select(i => onlyA.Schedule[i].Count(x => x == 2)).ToList();
+        Assert.True(a.Max() - a.Min() <= 1);
+        Assert.Equal(0, GroupCountEqualizer.Apply(st, b, new HashSet<int>()).Swaps);
+    }
+
+    [Fact]
     public void keepsWishesRangesAndNeverAddsHard()
     {
         var rng = new Random(11);
