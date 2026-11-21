@@ -571,6 +571,7 @@ public static partial class V6NativeOptimizer
         var globalImproves = 0;
         // 役割ごとの全体最良の更新（回数・減った必須・減った重み、Android 3.727.121）。lockObj の中で足す
         var roleGains = new Dictionary<HypothesisEpochRole, long[]>();
+        var rogs = PolishGate.RogsController ? new OpportunityController(AdaptiveHypothesisEpochPolicy.EscapeRoleList()) : null;
         void CreditRole(HypothesisEpochRole role, ViolationReport before, ViolationReport after)
         {
             if (!roleGains.TryGetValue(role, out var g)) { g = new long[3]; roleGains[role] = g; }
@@ -616,6 +617,7 @@ public static partial class V6NativeOptimizer
                 var eliteReport = initialReports[i];
                 IReadOnlyList<MirrorLog> eliteLogs = Array.Empty<MirrorLog>();
                 var reassignments = 0;
+                HypothesisEpochRole? roleOverride = null;   // [rogs] 制御が選んだ役割（null＝従来の巡回）
                 var stagnantEpochs = 0;
                 var improvedPrevious = false;
                 var epoch = 0;
@@ -676,8 +678,10 @@ public static partial class V6NativeOptimizer
                     }
                     try
                     {
-                        var assignment = AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments);
+                        var assignment = roleOverride is { } ro ? AdaptiveHypothesisEpochPolicy.AssignmentOf(ro, reassignments)
+                            : AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments);
                         var epochT0 = NowMs();
+                        var phaseAtStart = rogs?.PhaseOf(eliteReport);
                         var roleSeed = AdaptiveHypothesisEpochPolicy.EpochSeed(baseSeed, i, epoch, reassignments);
                         // [3.282.0, Kotlin原本] エポック改善の基準線＝エポック開始時点の自己エリート。
                         var preEpochEliteReport = eliteReport;
@@ -850,6 +854,9 @@ public static partial class V6NativeOptimizer
                         {
                             reassignments++;
                             stagnantEpochs = 0;
+                            // [rogs] W0・W4 以外は、いまの最良に残る違反の局面で 1 秒あたり最も前進した役割へ
+                            if (rogs is not null && i % 8 != 0 && i % 8 != 4)
+                                lock (lockObj) roleOverride = rogs.Choose(rogs.PhaseOf(eliteReport), assignment.Role);
                             // [3.308.1/敵対検証, Kotlin原本] この分岐は常に基準量子へ戻す（旧
                             //   improvedPrevious = false）。roleChanged=true はその挙動を保つための
                             //   引数であって「役割が必ず変わる」という主張ではない。
@@ -864,6 +871,8 @@ public static partial class V6NativeOptimizer
                         //   到達しないため、その回の摂動＋フル検査の時間は秒合計に入らない）。
                         roleRuns[assignment.Role] = roleRuns.GetValueOrDefault(assignment.Role) + 1;
                         roleMillis[assignment.Role] = roleMillis.GetValueOrDefault(assignment.Role) + (NowMs() - epochT0);
+                        if (rogs is not null && phaseAtStart is not null)
+                            lock (lockObj) rogs.Record(phaseAtStart, assignment.Role, (NowMs() - epochT0) / 1000.0, preEpochEliteReport, eliteReport);
                         epoch++;
                     }
                     catch (OperationCanceledException) { throw; }
@@ -893,7 +902,7 @@ public static partial class V6NativeOptimizer
                     Reassignments: reassignments,
                     RoleRuns: roleRuns,
                     RoleMillis: roleMillis,
-                    LastRole: AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments).Role,
+                    LastRole: roleOverride ?? AdaptiveHypothesisEpochPolicy.AssignmentFor(i, reassignments).Role,
                     ExitReason: exitReason,
                     ExitAtSec: exitAtSec,
                     SurvivedStops: survivedStops,
@@ -966,6 +975,8 @@ public static partial class V6NativeOptimizer
         var budgetNote = string.Join(" ", roleTotals.OrderByDescending(e => e.Value).Select(e =>
             $"{AdaptiveHypothesisEpochPolicy.RoleName(e.Key)}={e.Value / 1000}s({e.Value * 100 / totalWorkerMs}%)"));
         // 役割別の全体最良の更新＝worker 秒と並べて投入時間あたりの効きを読む（Android 3.727.121）。最初の更新は入力からの差なので大きく出やすい。
+        string rogsNote = "";
+        if (rogs is not null) lock (lockObj) rogsNote = rogs.Summary();
         string gainNote;
         lock (lockObj)
             gainNote = roleGains.Count == 0 ? "なし" : string.Join(" ", roleGains.OrderByDescending(e => e.Value[2]).Select(e =>
@@ -991,7 +1002,8 @@ public static partial class V6NativeOptimizer
                 $"非同期適応仮説 archive={archive.Size()} 圧縮elite={compressedElites.Count} " +
                 $"ワーカー解={outcomes.Length}本(相異なる{distinctWorkers}本) 距離={distanceNote} / {exitNote} / " +
                 $"役割別worker秒(計{totalWorkerMs / 1000}s・実効外側並列={outerParallelism:F2}): {budgetNote} / " +
-                $"役割別の最良更新(回数・減った必須・減った重み・worker 1 分あたりの重み): {gainNote} / {roleNote}" +
+                $"役割別の最良更新(回数・減った必須・減った重み・worker 1 分あたりの重み): {gainNote} / " +
+                (rogs is null ? "" : $"役割の選び方(残り違反の局面ごとの試行・前進/秒): {rogsNote} / ") + $"{roleNote}" +
                 (firstError != null ? $" / 一部例外={firstError.Message}" : "") +
                 $" / 採用 HARD={globalReport.Hard} total={globalReport.Total}");
         // [3.409.17, Kotlin原本] エポック超過（役割名つき）は専用の [W] 行で出す。

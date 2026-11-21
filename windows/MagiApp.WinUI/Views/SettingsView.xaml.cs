@@ -107,6 +107,8 @@ public sealed partial class SettingsView : UserControl
             EjectionSecondsCombo.IsEnabled = !ui.Running && chainOn;
             SeesawRelinkToggle.IsOn = MagiEngine.V6.PolishGate.SeesawRelink;
             SeesawRelinkToggle.IsEnabled = !ui.Running;
+            RogsControllerToggle.IsOn = MagiEngine.V6.PolishGate.RogsController;
+            RogsControllerToggle.IsEnabled = !ui.Running;
             FloorShortStallToggle.IsOn = MagiEngine.V6.PolishGate.FloorShortStall;
             FloorShortStallToggle.IsEnabled = !ui.Running;
             C3nWallDeepCheckToggle.IsOn = MagiEngine.V6.PolishGate.C3nWallDeepCheck;
@@ -772,6 +774,12 @@ public sealed partial class SettingsView : UserControl
     {
         if (_syncingFromModel) return;
         MagiEngine.V6.PolishGate.SeesawRelink = SeesawRelinkToggle.IsOn;
+    }
+
+    private void OnRogsControllerToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        if (_syncingFromModel) return;
+        MagiEngine.V6.PolishGate.RogsController = RogsControllerToggle.IsOn;
     }
 
     private void OnFloorShortStallToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

@@ -89,6 +89,13 @@ public static class AdaptiveHypothesisEpochPolicy
         return new HypothesisEpochAssignment(role, AlgorithmFor(role), IntensityFor(role, reassignments));
     }
 
+    /// <summary><see cref="OpportunityController"/> が選ぶ候補（巡回と同じ役割、Android 3.727.122）。</summary>
+    public static IReadOnlyList<HypothesisEpochRole> EscapeRoleList() => CurrentEscapeRoles();
+
+    /// <summary>役割を指定した割り当て（<see cref="OpportunityController"/> 用。強度は巡回と同じく再配属回数で上がる）。</summary>
+    public static HypothesisEpochAssignment AssignmentOf(HypothesisEpochRole role, int reassignments) =>
+        new(role, AlgorithmFor(role), IntensityFor(role, reassignments));
+
     public static V6Algorithm AlgorithmFor(HypothesisEpochRole role) => role switch
     {
         HypothesisEpochRole.DayBlockAlns or HypothesisEpochRole.LargeDestroyAlns => V6Algorithm.Alns,

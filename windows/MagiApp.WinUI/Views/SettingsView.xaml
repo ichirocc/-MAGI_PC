@@ -103,6 +103,11 @@
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="仕上げのあと、他の案へ向けて少しずつ入れ替え、良くなれば採ります。どこかの項目が今より少ない勤務表は「他の案」に残します（最大 3 秒）" />
                     </StackPanel>
+                    <StackPanel Spacing="2">
+                        <ToggleSwitch x:Name="RogsControllerToggle" Header="残りの違反に合わせて探し方を選ぶ" OnContent="ON" OffContent="OFF" Toggled="OnRogsControllerToggled" />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
+                                   Text="探し方を替えるとき、いま残っている違反の種類で速く良くした探し方を選びます（211 秒以上の作成で使う並列の探し方）。試験中の機能です。" />
+                    </StackPanel>
                     <!-- [Android 3.727.41] 画面の無かった探索の切り替え（PolishGate、既定値は不変）。保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="FloorShortStallToggle" Header="必須が下限に届いたら早めに終える" OnContent="ON" OffContent="OFF" Toggled="OnFloorShortStallToggled" />

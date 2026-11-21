@@ -137,6 +137,8 @@ public static class PolishGate
 
     /// <summary>[Android 同名] シーソーの Path Relinking（<see cref="SeesawRelink"/>、docs/seesaw.md §6.3）を後処理の後に入れ、交換の候補を「他の案」にする。既定 <b>false</b>（測ってから採否）。</summary>
     public static volatile bool SeesawRelink = false;
+    /// <summary>[Android 同名] PORTFOLIO の役割を残り違反に合わせて選ぶ（<see cref="OpportunityController"/>、ROGS の最小版、Android 3.727.122）。既定 <b>false</b>（測ってから既定を決める）。</summary>
+    public static volatile bool RogsController = false;
 
     /// <summary>[Android 3.656.0 同期] 玉突き連鎖パイプライン（<see cref="EjectionChainPipeline"/>＝予察で当たった起点だけ深く探す）の焦点。
     /// OFF 以外のとき後処理に入れる（C# は従来の常時フルの玉突きを持たない）。既定 <b>BOTH</b>（Android 3.656.0 で昇格）。</summary>
