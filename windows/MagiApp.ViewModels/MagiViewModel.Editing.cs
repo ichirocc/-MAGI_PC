@@ -152,7 +152,11 @@ public sealed partial class MagiViewModel
         // 焼きなましで 1〜数秒かかるので画面を止めない。計算中に勤務表が変わったら当てない。
         var r = await Task.Run(() => GroupCountEqualizer.Apply(st, snap, shifts));
         if (!ReferenceEquals(_state, st) || !ReferenceEquals(_currentSchedule, sched)
-            || Enumerable.Range(0, sched.Length).Any(i => !sched[i].AsSpan().SequenceEqual(snap[i]))) return;
+            || Enumerable.Range(0, sched.Length).Any(i => !sched[i].AsSpan().SequenceEqual(snap[i])))
+        {
+            PostOpNotice(CellSheetLogic.GroupEqualizeStale, undoable: false);
+            return;
+        }
         ApplyGroupEqualize(st, sched, shifts, r);
     }
 

@@ -59,6 +59,35 @@ public class GroupCountEqualizerTest
     }
 
     [Fact]
+    public void threePersonRotationWhenEveryPairSwapIsBlocked()
+    {
+        // 休・D・A・B の 4 種。上限 0 で s0 は B 不可・s1 は D 不可・s2 は A 不可。毎日 s0=D・s1=A・s2=B
+        // → どの 2 人の入れ替えも誰かに置けないシフトが入る。3 人の回し（s0←A・s1←B・s2←D）だけが D を s0 から s2 へ渡せる。
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Repeat(1, 14).ToList(), Enumerable.Repeat(2, 14).ToList(), Enumerable.Repeat(3, 14).ToList(),
+        };
+        var st = MinimalState.Build(
+            startDate: "2026-12-01", endDate: "2026-12-14",
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            groups: new List<Group> { new("G0", "G0") },
+            staffList: Enumerable.Range(0, 3).Select(i => new Staff($"s{i}", 0)).ToList(),
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 } },
+            schedule: sched,
+            staffRange: new Dictionary<string, MagiEngine.Model.Range> { ["0,3"] = new("0", "0"), ["1,1"] = new("0", "0"), ["2,2"] = new("0", "0") });
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        Assert.Equal(0, GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 }, annealIters: 0).Swaps);
+        var r = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 });
+        var d = new[] { 0, 2 }.Select(i => r.Schedule[i].Count(x => x == 1)).ToList();
+        Assert.True(Math.Abs(d[0] - d[1]) <= 1, $"D の差が 1 以内: {string.Join(",", d)}");
+        for (var j = 0; j < 14; j++)
+        {
+            Assert.Equal(new HashSet<int> { 1, 2, 3 }, Enumerable.Range(0, 3).Select(i => r.Schedule[i][j]).ToHashSet());   // 日ごとの人数は不変
+            Assert.True(r.Schedule[0][j] != 3 && r.Schedule[1][j] != 1 && r.Schedule[2][j] != 2);   // 置けないシフトは入らない
+        }
+    }
+
+    [Fact]
     public void monthWideChainWhenSingleSwapsAreBlocked()
     {
         // 休は 2 人とも 7 回固定。偶数日の D↔休 は 1 組では休の範囲を外れ、奇数日の 休↔A は D が動かない

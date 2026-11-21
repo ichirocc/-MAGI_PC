@@ -45,26 +45,12 @@ public static class GroupCountEqualizer
     /// </summary>
     private static bool Anneal(Problem p, int[][] work, int[][] cnt0, double[][] tgt, int iters, long seed)
     {
-        // 日 D（と D2≥0 なら日 D2 にも同時に）Who の順でシフトを 1 つずつ回す（Who[t] が Who[t+1] のシフトを受け取る）。
-        // 2 人＝入れ替え、3 人＝3 人の回し。2 日＝前後の日の入れ替えを 1 手で（片方だけでは範囲を外れる組を通す）。日ごとの人数は変わらない。
-        var moves = new List<(int[] Who, int D, int D2)>();
-        foreach (var m in p.GroupMembers)
-            for (var d = 0; d < p.T; d++)
-            {
-                var free = m.Where(i => !p.WishLocked(i, d)).ToArray();
-                for (var ai = 0; ai < free.Length; ai++) for (var bi = ai + 1; bi < free.Length; bi++)
-                {
-                    int a = free[ai], b = free[bi];
-                    moves.Add((new[] { a, b }, d, -1));
-                    for (var d2 = d + 1; d2 < p.T; d2++) if (!p.WishLocked(a, d2) && !p.WishLocked(b, d2)) moves.Add((new[] { a, b }, d, d2));
-                    for (var ci = bi + 1; ci < free.Length; ci++)
-                    {
-                        moves.Add((new[] { a, b, free[ci] }, d, -1));
-                        moves.Add((new[] { a, free[ci], b }, d, -1));
-                    }
-                }
-            }
-        if (moves.Count == 0) return false;
+        // 手は 1 手ごとに無作為に作る（全部を先に並べると 30 人・31 日で数十万件になる）: 同じグループの 2 人の同じ日の入れ替え・
+        // 3 人の回し・同じ 2 人の前後 2 日をまとめた入れ替えを等しい割合で。希望・手動固定のマスに当たる手は捨てる。日ごとの人数は変わらない。
+        var groups = p.GroupMembers.Where(m => m.Length >= 2).ToArray();
+        if (groups.Length == 0 || p.T == 0) return false;
+        var pairW = groups.Select(m => m.Length * (m.Length - 1) / 2).ToArray();
+        var pairTotal = pairW.Sum();
         var cnt = cnt0.Select(r => (int[])r.Clone()).ToArray();
         int Lo(int i, int k) => p.RangeLo[i][k] == int.MinValue ? 0 : p.RangeLo[i][k];
         int Out(int i, int k, int n) => Math.Max(0, Lo(i, k) - n) + (p.RangeHi[i][k] == int.MaxValue ? 0 : Math.Max(0, n - p.RangeHi[i][k]));
@@ -83,9 +69,25 @@ public static class GroupCountEqualizer
         int[] ci2 = new int[12], ck = new int[12], cd = new int[12];   // この手での (職員,シフト) ごとの回数の増減
         for (var step = 0; step < iters; step++)
         {
-            var (who, d1, d2m) = moves[rnd.NextInt(moves.Count)];
-            var n = who.Length;
-            var days = d2m >= 0 ? new[] { d1, d2m } : new[] { d1 };
+            var gi = rnd.NextInt(pairTotal); var g = 0;
+            while (gi >= pairW[g]) { gi -= pairW[g]; g++; }
+            var m = groups[g];
+            var kind = rnd.NextInt(3);
+            var n = kind == 1 && m.Length >= 3 ? 3 : 2;
+            var who = new int[n];
+            who[0] = m[rnd.NextInt(m.Length)];
+            do { who[1] = m[rnd.NextInt(m.Length)]; } while (who[1] == who[0]);
+            if (n == 3) do { who[2] = m[rnd.NextInt(m.Length)]; } while (who[2] == who[0] || who[2] == who[1]);
+            var d1 = rnd.NextInt(p.T);
+            int[] days;
+            if (kind == 2 && p.T >= 2)
+            {
+                int d2;
+                do { d2 = rnd.NextInt(p.T); } while (d2 == d1);
+                days = new[] { d1, d2 };
+            }
+            else days = new[] { d1 };
+            if (days.Any(d => who.Any(i => p.WishLocked(i, d)))) continue;
             bool ok = true, moved = false; var nc = 0;
             void Add(int i, int k, int dd)
             {
@@ -155,6 +157,7 @@ public static class GroupCountEqualizer
         var cnt = Counts(p, work);
         var tgt = Targets(p, cnt, shifts);
         var before = Dev(tgt, cnt);
+        if (tgt.All(row => row.All(double.IsNaN))) return new Result(work, 0, before, before);   // そろえる (職員,シフト) が無い
         bool Movable(int i, int j) => !p.WishLocked(i, j);   // 希望固定と手動固定
         bool RangeOk(int i, int k, int d)
         {
