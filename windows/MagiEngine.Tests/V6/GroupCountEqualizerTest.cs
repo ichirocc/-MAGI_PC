@@ -37,7 +37,7 @@ public class GroupCountEqualizerTest
         Assert.Equal(DayCounts(b, 14), DayCounts(r.Schedule, 14));
         var d = Enumerable.Range(0, 3).Select(i => r.Schedule[i].Count(x => x == 1)).ToList();
         Assert.True(d.Max() - d.Min() <= 1);
-        Assert.Equal(sched[3], r.Schedule[3]);
+        // 1 人だけのグループ（s3）は目標を持たないが、別のグループとの入れ替えの相手にはなる＝日ごとの人数だけ確かめる
     }
 
     [Fact]
@@ -56,6 +56,32 @@ public class GroupCountEqualizerTest
         var a = Enumerable.Range(0, 3).Select(i => onlyA.Schedule[i].Count(x => x == 2)).ToList();
         Assert.True(a.Max() - a.Min() <= 1);
         Assert.Equal(0, GroupCountEqualizer.Apply(st, b, new HashSet<int>()).Swaps);
+    }
+
+    [Fact]
+    public void crossGroupPartnerMovesCountsTheOwnGroupCannot()
+    {
+        // 休・D・A・B。G0＝s0・s1・s2、G1＝s3。毎日 s0=D・s1=A・s2=A・s3=B。s1・s2 は B を置けず（上限 0）、s0 は A を置けない＝
+        // G0 の中ではどう入れ替えても D は s0 から動かない。G1 の s3 を介した入れ替えだけが D を渡せる（Android 3.727.122）。
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Repeat(1, 14).ToList(), Enumerable.Repeat(2, 14).ToList(), Enumerable.Repeat(2, 14).ToList(), Enumerable.Repeat(3, 14).ToList(),
+        };
+        var st = MinimalState.Build(
+            startDate: "2026-12-01", endDate: "2026-12-14",
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("D", "D", "", ""), new("A", "A", "", ""), new("B", "B", "", "") },
+            groups: new List<Group> { new("G0", "G0"), new("G1", "G1") },
+            staffList: Enumerable.Range(0, 4).Select(i => new Staff($"s{i}", i < 3 ? 0 : 1)).ToList(),
+            groupShift: new List<IReadOnlyList<int>> { new List<int> { 1, 1, 1, 1 }, new List<int> { 1, 1, 1, 1 } },
+            schedule: sched,
+            staffRange: new Dictionary<string, MagiEngine.Model.Range> { ["0,2"] = new("0", "0"), ["1,3"] = new("0", "0"), ["2,3"] = new("0", "0") });
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        Assert.Equal(0, GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 }, annealIters: 0).Swaps);
+        var r = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 });
+        var d = Enumerable.Range(0, 3).Select(i => r.Schedule[i].Count(x => x == 1)).ToList();
+        Assert.True(d.Max() - d.Min() < 14, $"G0 の D が 1 人に偏らない: {string.Join(",", d)}");
+        Assert.Equal(DayCounts(b, 14), DayCounts(r.Schedule, 14));
+        for (var j = 0; j < 14; j++) Assert.True(r.Schedule[0][j] != 2 && r.Schedule[1][j] != 3 && r.Schedule[2][j] != 3);
     }
 
     [Fact]

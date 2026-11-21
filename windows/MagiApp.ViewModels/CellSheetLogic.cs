@@ -1895,7 +1895,7 @@ public static class CellSheetLogic
     public const string ClearSelectionButton = "選択を外す";
     // [Android 3.727.115] グループ内の回数をそろえる（希望の反映と同じく押して上書きする操作）
     public const string GroupEqualizeButton = "グループ内の回数をそろえる";
-    public const string GroupEqualizeNote = "グループ内の回数（同じグループの人どうし・シフトごと）を、同じ日の入れ替えでそろえます。個人の下限・上限は外さず、必須違反は増やしません。要調整は増えることがあります。元に戻せます";
+    public const string GroupEqualizeNote = "グループ内の回数（同じグループの人どうし・シフトごと）を、同じ日の入れ替え（別のグループの人も使います）でそろえます。個人の下限・上限は外さず、必須違反は増やしません。要調整は増えることがあります。元に戻せます";
     public const string GroupEqualizeNone = "グループ内の回数はこれ以上そろえられません（希望・固定・個人の上下限・必須違反の増加で入れ替えられません）";
     public const string GroupEqualizeStale = "計算中に勤務表が変わったので、回数はそろえませんでした。もう一度押してください";
     public static string GroupEqualizeDoneText(int swaps) => $"グループ内の回数をそろえました: 入れ替え {swaps}件";
