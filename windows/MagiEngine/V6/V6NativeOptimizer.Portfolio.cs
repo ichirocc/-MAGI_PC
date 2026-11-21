@@ -569,6 +569,13 @@ public static partial class V6NativeOptimizer
         Exception? firstError = null;
         var hardZeroWinner = -1;
         var globalImproves = 0;
+        // 役割ごとの全体最良の更新（回数・減った必須・減った重み、Android 3.727.121）。lockObj の中で足す
+        var roleGains = new Dictionary<HypothesisEpochRole, long[]>();
+        void CreditRole(HypothesisEpochRole role, ViolationReport before, ViolationReport after)
+        {
+            if (!roleGains.TryGetValue(role, out var g)) { g = new long[3]; roleGains[role] = g; }
+            g[0]++; g[1] += before.Hard - after.Hard; g[2] += (long)Math.Round(before.WeightedScore - after.WeightedScore, MidpointRounding.AwayFromZero);
+        }
         var archive = new AdaptiveEliteArchive();
         var p = ScheduleUtil.CachedProblem(state, options.QuantitativeRangeEval);
 
@@ -714,6 +721,7 @@ public static partial class V6NativeOptimizer
                             sharedTrajectories[i] = start.Copy2D();
                             if (Better(startReport, globalReport) && p.KeepsExtBan(globalBest, start))
                             {
+                                CreditRole(assignment.Role, globalReport, startReport);
                                 globalBest = start.Copy2D();
                                 globalReport = startReport;
                                 globalLogs = eliteLogs;   // [3.278.0] 同上: グローバル側の stale ログも同期
@@ -807,6 +815,7 @@ public static partial class V6NativeOptimizer
                                 sharedTrajectories[i] = result.Schedule.Copy2D();
                                 if (Better(result.Report, globalReport) && p.KeepsExtBan(globalBest, result.Schedule))
                                 {
+                                    CreditRole(assignment.Role, globalReport, result.Report);
                                     globalBest = result.Schedule.Copy2D();
                                     globalReport = result.Report;
                                     globalLogs = result.PhaseLogs;
@@ -956,6 +965,15 @@ public static partial class V6NativeOptimizer
         var outerParallelism = ObservedOuterParallelism(totalWorkerMs, NowMs() - started);
         var budgetNote = string.Join(" ", roleTotals.OrderByDescending(e => e.Value).Select(e =>
             $"{AdaptiveHypothesisEpochPolicy.RoleName(e.Key)}={e.Value / 1000}s({e.Value * 100 / totalWorkerMs}%)"));
+        // 役割別の全体最良の更新＝worker 秒と並べて投入時間あたりの効きを読む（Android 3.727.121）。最初の更新は入力からの差なので大きく出やすい。
+        string gainNote;
+        lock (lockObj)
+            gainNote = roleGains.Count == 0 ? "なし" : string.Join(" ", roleGains.OrderByDescending(e => e.Value[2]).Select(e =>
+            {
+                var sec = roleTotals.GetValueOrDefault(e.Key) / 1000.0;
+                var perMin = sec > 0 ? $"{e.Value[2] * 60.0 / sec:F0}/分" : "-";
+                return $"{AdaptiveHypothesisEpochPolicy.RoleName(e.Key)}={e.Value[0]}回(必須-{e.Value[1]}・重み-{e.Value[2]}・{perMin})";
+            }));
         // [3.346.0/3.346.1/3.409.16, Kotlin原本] 締切前に離脱したワーカーを1行で明示する。
         var earlyExits = outcomes.Where(o => IsEarlyWorkerExit(o.ExitReason)).ToList();
         var survivedTotal = outcomes.Sum(o => o.SurvivedStops);
@@ -972,7 +990,8 @@ public static partial class V6NativeOptimizer
             message: $"合計iter={outcomes.Sum(o => o.Iterations)} 全体最良更新={Volatile.Read(ref globalImproves)}回 / " +
                 $"非同期適応仮説 archive={archive.Size()} 圧縮elite={compressedElites.Count} " +
                 $"ワーカー解={outcomes.Length}本(相異なる{distinctWorkers}本) 距離={distanceNote} / {exitNote} / " +
-                $"役割別worker秒(計{totalWorkerMs / 1000}s・実効外側並列={outerParallelism:F2}): {budgetNote} / {roleNote}" +
+                $"役割別worker秒(計{totalWorkerMs / 1000}s・実効外側並列={outerParallelism:F2}): {budgetNote} / " +
+                $"役割別の最良更新(回数・減った必須・減った重み・worker 1 分あたりの重み): {gainNote} / {roleNote}" +
                 (firstError != null ? $" / 一部例外={firstError.Message}" : "") +
                 $" / 採用 HARD={globalReport.Hard} total={globalReport.Total}");
         // [3.409.17, Kotlin原本] エポック超過（役割名つき）は専用の [W] 行で出す。
