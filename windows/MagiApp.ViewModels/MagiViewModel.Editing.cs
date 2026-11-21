@@ -136,6 +136,35 @@ public sealed partial class MagiViewModel
     /// 希望シフトを勤務表へ上書き反映（Web版の「希望で上書き」相当）。担当外の希望は
     /// <paramref name="includeOutOfScope"/>=true のときのみ反映。Undo・操作ログ付き。
     /// </summary>
+    /// <summary>
+    /// グループ内の回数をそろえる（<see cref="GroupCountEqualizer"/>、Kotlin <c>equalizeGroupCounts</c>、Android 3.727.115）。
+    /// 希望の反映と同じく利用者が押して上書きする操作＝採点で採否を決めない。必須違反は増やさず、個人の下限・上限は外さない。
+    /// </summary>
+    public void EqualizeGroupCounts()
+    {
+        var st = _state;
+        if (st is null) return;
+        if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
+        var sched = _currentSchedule;
+        if (sched is null) return;
+        var r = GroupCountEqualizer.Apply(st, sched);
+        if (r.Swaps == 0) { PostOpNotice(CellSheetLogic.GroupEqualizeNone, undoable: false); return; }
+        PushUndo();
+        for (var i = 0; i < sched.Length; i++) for (var j = 0; j < sched[i].Length; j++) sched[i][j] = r.Schedule[i][j];
+        _currentSchedule = sched;
+        _state = st.WithSchedule(sched);
+        AutoSave();
+        LogOp("I", $"グループ内の回数をそろえる: 入れ替え {r.Swaps}件（目標からのずれ {r.SpreadBefore}→{r.SpreadAfter}）");
+        Ui.MessageIsError = false;
+        Ui.HasResult = true;
+        Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;
+        Ui.EngineRan = false;
+        Ui.RelaxedBoard = false;
+        Ui.Schedule = sched.Select(row => (IReadOnlyList<int>)row.ToList()).ToList();
+        PostOpNotice(CellSheetLogic.GroupEqualizeDoneText(r.Swaps));
+        RefreshCheck();
+    }
+
     public void ApplyWishes(bool includeOutOfScope)
     {
         var st = _state;

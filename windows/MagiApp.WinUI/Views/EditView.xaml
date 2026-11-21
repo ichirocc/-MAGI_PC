@@ -138,6 +138,8 @@
                     <Button x:Name="ApplyWishesButton" Content="希望をすべて勤務表へ反映" Click="OnApplyWishesClick" />
                     <Button x:Name="ClearAllWishesButton" Content="希望をすべて削除" Click="OnClearAllWishesClick" />
                 </StackPanel>
+                <TextBlock x:Name="GroupEqualizeNoteText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" Margin="0,8,0,0" />
+                <Button x:Name="GroupEqualizeButton" Click="OnGroupEqualizeClick" />
                 <TextBlock x:Name="WishHintText" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
 
                 <TextBlock x:Name="NeedSectionTitle" Text="日別の必要人数（例外）" Style="{StaticResource MagiTitleSmallTextStyle}" Margin="0,8,0,0" />

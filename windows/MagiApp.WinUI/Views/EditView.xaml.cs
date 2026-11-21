@@ -486,6 +486,9 @@ public sealed partial class EditView : UserControl
         var rows = _vm.WishOverrides();
         RenderWishStaffSummary(ui, rows);
         ApplyWishesButton.IsEnabled = editable && rows.Count > 0;
+        GroupEqualizeNoteText.Text = CellSheetLogic.GroupEqualizeNote;
+        GroupEqualizeButton.Content = CellSheetLogic.GroupEqualizeButton;
+        GroupEqualizeButton.IsEnabled = editable;
         ClearAllWishesButton.IsEnabled = editable && rows.Count > 0;
         // [2026-09-10, 可読性] このファイルのFontSizeはMagiThemeタイポスケールの本文最小(14)まで
         //   引き上げ済み（一覧行/密グリッド用に10〜13へ据え置いていたのを解消。Button.FontSizeは
@@ -915,6 +918,9 @@ public sealed partial class EditView : UserControl
     /// 確認ダイアログで「含めて反映/除いて反映/キャンセル」を選ばせる（Kotlin原本の「希望で上書き」
     /// 相当・ConfirmAsync とは別の3択のため専用ダイアログ）。
     /// </summary>
+    // [Android 3.727.115] グループ内の回数をそろえる（希望の反映と同じく押して上書き、元に戻せる）。
+    private void OnGroupEqualizeClick(object sender, RoutedEventArgs e) => _vm.EqualizeGroupCounts();
+
     private async void OnApplyWishesClick(object sender, RoutedEventArgs e)
     {
         if (_syncingFromModel) return;

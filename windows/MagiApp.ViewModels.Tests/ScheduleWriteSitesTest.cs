@@ -13,6 +13,7 @@ public class ScheduleWriteSitesTest
         "LoadAsyncCoreAsync", "MakeUi", "ImportCsvCoreAsync",            // 読込・CSV 取込・UiState の組み立て
         "RunV6FullOptimizeCoreAsync", "RunSoftPolishCoreAsync", "RunInBackgroundCoreAsync", "ApplyBgResult",   // 最適化の採用
         "GenerateSmartInitialCoreAsync", "ApplyAlternative", "ApplyWishes",   // 下書き・別案・希望の反映
+        "EqualizeGroupCounts",   // グループ内の回数をそろえる（希望の反映と同じく押して上書き、Android 3.727.115）
         "ApplyStructure", "ApplyStructureWithMessage",                   // 編集タブ
         "RelaxAndApply", "RestoreBeforeRelax", "Restore",                // 設定の緩和と、その事後確認・保存失敗の復旧（Restore＝RelaxRollback の控え）
         "ApplyFixSuggestion",                                            // 改善手（FixApplyGate を通る）
