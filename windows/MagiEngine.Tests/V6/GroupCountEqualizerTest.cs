@@ -177,4 +177,45 @@ public class GroupCountEqualizerTest
             Assert.True(after.Hard <= before.Hard, name);
         }
     }
+
+    [Fact]
+    public void countsStaffHoldingAShiftTheyCannotTakeNewly()
+    {
+        // fair の母集団は「置ける人、またはいま入っている人」（Android 3.727.133）。s0 は D の上限 0 なのに 6 回入っていて、置けるのは s1 だけ
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Range(0, 14).Select(j => j < 6 ? 1 : 0).ToList(),
+            Enumerable.Repeat(0, 14).ToList(),
+            Enumerable.Repeat(2, 14).ToList(),
+            Enumerable.Repeat(0, 14).ToList(),
+        };
+        var range = new Dictionary<string, MagiEngine.Model.Range> { ["0,1"] = new("", "0"), ["2,1"] = new("", "0") };
+        var st = State(sched, range);
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        var before = UnifiedViolationChecker.Check(st, b);
+        var res = GroupCountEqualizer.Apply(st, b, new HashSet<int> { 1 });
+        var after = UnifiedViolationChecker.Check(st, res.Schedule);
+        Assert.True(res.Swaps > 0);
+        Assert.True(res.Schedule[0].Count(x => x == 1) < 6, "s0 の D が減る");
+        Assert.True(after.Breakdown.GetValueOrDefault("fair") <= before.Breakdown.GetValueOrDefault("fair"));
+        Assert.True(after.Hard <= before.Hard);
+        Assert.Equal(DayCounts(b, 14), DayCounts(res.Schedule, 14));
+    }
+
+    [Fact]
+    public void stopsWhenAsked()
+    {
+        var sched = new List<IReadOnlyList<int>>
+        {
+            Enumerable.Repeat(1, 14).ToList(),
+            Enumerable.Range(0, 14).Select(j => j % 2 == 0 ? 1 : 0).ToList(),
+            Enumerable.Repeat(0, 14).ToList(),
+            Enumerable.Repeat(2, 14).ToList(),
+        };
+        var st = State(sched);
+        var b = sched.Select(r => r.ToArray()).ToArray();
+        var res = GroupCountEqualizer.Apply(st, b, shouldStop: () => true);
+        Assert.Equal(0, res.Swaps);
+        Assert.Equal(b.Select(r => r.ToList()), res.Schedule.Select(r => r.ToList()));
+    }
 }

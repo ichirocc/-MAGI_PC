@@ -1480,7 +1480,7 @@ public sealed partial class HomeView : UserControl
             {
                 var l = lines[i];
                 var col = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-                col.Children.Add(new TextBlock { Text = $"案{i + 1}　" + (applied ? CellSheetLogic.AltAppliedTag : CellSheetLogic.AltTagAfterApply(l.Tag, anyApplied)), FontSize = 14, FontWeight = weight });
+                col.Children.Add(new TextBlock { Text = $"案{i + 1}　" + (applied ? CellSheetLogic.AltAppliedTag : CellSheetLogic.AltTagAfterApply(l.Tag, anyApplied)) + (l.Mark is null ? "" : "・" + l.Mark), FontSize = 14, FontWeight = weight });
                 if (l.Down is not null) col.Children.Add(new TextBlock { Text = l.Down, FontSize = 14, Opacity = applied ? 1.0 : 0.8, TextWrapping = TextWrapping.Wrap });
                 if (l.Up is not null) col.Children.Add(new TextBlock { Text = l.Up, FontSize = 14, Opacity = applied ? 1.0 : 0.8, TextWrapping = TextWrapping.Wrap });
                 row.Children.Add(col);

@@ -25,7 +25,7 @@ public class AltTradeTest
     [Fact]
     public void tradeLineSaysWhatImprovesFirstInUnits()
     {
-        Assert.Equal("期間の制約が 2件減り、上限超過が 1回増えます", CellSheetLogic.AltTradeLine(Cur, With(("c1", 3), ("high", 3)), L));
+        Assert.Equal("期間の制約を 2件減らすなら、上限超過を 1回譲ることになります", CellSheetLogic.AltTradeLine(Cur, With(("c1", 3), ("high", 3)), L));
         Assert.Equal("どの項目も今と同じか少なく、曜日の偏りが 2pt減ります", CellSheetLogic.AltTradeLine(Cur, With(("weekly", 8)), L));
         Assert.Equal("どの項目も今と同じか多い案です", CellSheetLogic.AltTradeLine(Cur, With(("high", 4)), L));
         Assert.Null(CellSheetLogic.AltTradeLine(Cur, Cur, L));
@@ -35,7 +35,7 @@ public class AltTradeTest
     public void manyFamiliesAreCappedAtTwo()
     {
         var alt = new Dictionary<string, int> { ["c1"] = 2, ["high"] = 1, ["weekly"] = 9, ["c3"] = 1, ["c3m"] = 1, ["low"] = 1 };
-        Assert.Equal("期間の制約が 3件・上限超過が 1回（ほか 1 項目）減り、守るとよい並びが 1件・推奨の並びが 1件（ほか 1 項目）増えます", CellSheetLogic.AltTradeLine(Cur, alt, L));
+        Assert.Equal("期間の制約を 3件・上限超過を 1回（ほか 1 項目）減らすなら、守るとよい並びを 1件・推奨の並びを 1件（ほか 1 項目）譲ることになります", CellSheetLogic.AltTradeLine(Cur, alt, L));
     }
 
     [Fact]
@@ -73,4 +73,31 @@ public class AltTradeTest
         Assert.Equal("元より良い", CellSheetLogic.AltTagAfterApply("今より良い", applied: true));
         Assert.Equal("今より良い", CellSheetLogic.AltTagAfterApply("今より良い", applied: false));
     }
+
+    /// <summary>両端と膝点（docs/seesaw.md §6.4）: 点が 3 つ以上なら交換率がいちばん変わる内側に札。</summary>
+    [Fact]
+    public void edgesAndKnee()
+    {
+        var c = new Dictionary<string, int> { ["c1"] = 10, ["high"] = 0 };
+        // 点 (c1, high) を c1 の少ない順に: 案3 (2,10)・案2 (4,4)・案1 (6,1)・今 (10,0)。率 3・1.5・0.25 → 変化は案2で 1.5、案1で 1.25
+        var alts = new List<(int, IReadOnlyDictionary<string, int>)>
+        {
+            (0, new Dictionary<string, int> { ["c1"] = 6, ["high"] = 1 }),
+            (0, new Dictionary<string, int> { ["c1"] = 4, ["high"] = 4 }),
+            (0, new Dictionary<string, int> { ["c1"] = 2, ["high"] = 10 }),
+        };
+        Assert.Equal(new string?[] { null, "釣り合いがよい", "期間の制約がいちばん少ない" }, CellSheetLogic.AltEdgeMarks(0, c, alts, L));
+    }
+
+    [Fact]
+    public void edgesOnlyWhenTwoPointsAndNothingForOtherHard()
+    {
+        var c = new Dictionary<string, int> { ["c1"] = 10, ["high"] = 0 };
+        IReadOnlyDictionary<string, int> a1 = new Dictionary<string, int> { ["c1"] = 6, ["high"] = 1 };
+        Assert.Equal(new string?[] { "期間の制約がいちばん少ない" }, CellSheetLogic.AltEdgeMarks(0, c, new[] { (0, a1) }, L));
+        Assert.Equal(new string?[] { null }, CellSheetLogic.AltEdgeMarks(0, c, new[] { (1, a1) }, L));
+        IReadOnlyDictionary<string, int> a2 = new Dictionary<string, int> { ["c1"] = 12, ["high"] = 1 };
+        Assert.Equal(new string?[] { null }, CellSheetLogic.AltEdgeMarks(0, c, new[] { (0, a2) }, L));   // 減る族が無い
+    }
 }
+

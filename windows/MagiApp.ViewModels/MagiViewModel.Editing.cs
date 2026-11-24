@@ -141,6 +141,9 @@ public sealed partial class MagiViewModel
     /// 希望の反映と同じく利用者が押して上書きする操作＝採点で採否を決めない。必須違反は増やさず、個人の下限・上限は外さない。
     /// 月全体の入れ替えを裏で計算する（Android 3.727.118）。
     /// </summary>
+    /// <summary>［グループ内の回数をそろえる］の計算中（二重起動を防ぐ）。</summary>
+    private bool _equalizeRunning;
+
     public async Task EqualizeGroupCounts(IReadOnlySet<int>? shifts = null)
     {
         var st = _state;
@@ -148,9 +151,14 @@ public sealed partial class MagiViewModel
         if (OptimizeInFlight()) { Ui.Message = BusyEditMessage(); Ui.MessageIsError = true; return; }
         var sched = _currentSchedule;
         if (sched is null) return;
+        // 計算中にもう一度押されたら新しく始めない（同じ盤面から計算が重なるだけ、Android 3.727.133）
+        if (_equalizeRunning) return;
         var snap = sched.Copy2D();
         // 焼きなましで 1〜数秒かかるので画面を止めない。計算中に勤務表が変わったら当てない。
-        var r = await Task.Run(() => GroupCountEqualizer.Apply(st, snap, shifts));
+        GroupCountEqualizer.Result r;
+        _equalizeRunning = true;
+        try { r = await Task.Run(() => GroupCountEqualizer.Apply(st, snap, shifts)); }
+        finally { _equalizeRunning = false; }
         // 計算中（1〜数秒）に作成が始まっていたら当てない＝作成中の盤面をその場で書き換えない（Android 3.727.125）
         if (OptimizeInFlight() || !ReferenceEquals(_state, st) || !ReferenceEquals(_currentSchedule, sched)
             || Enumerable.Range(0, sched.Length).Any(i => !sched[i].AsSpan().SequenceEqual(snap[i])))
@@ -266,13 +274,14 @@ public sealed partial class MagiViewModel
                 curRep is null || reps[k].Hard != curRep.Hard ? 2
                 : CellSheetLogic.AltTradeOf(curRep.Breakdown, reps[k].Breakdown) switch { CellSheetLogic.AltTrade.DOMINATES => 0, CellSheetLogic.AltTrade.TRADE => 1, _ => 2 }).ToList();
             var sorted = order.Select(k => source2[k]).ToList();
+            var marks = curRep is null ? null : CellSheetLogic.AltEdgeMarks(curRep.Hard, curRep.Breakdown, order.Select(k => (reps[k].Hard, (IReadOnlyDictionary<string, int>)reps[k].Breakdown)).ToList(), labelOf);
             var rs = order.Select((k, idx) =>
             {
                 var rep = reps[k];
                 var worse = curRep is not null && UnifiedViolationChecker.BetterReport(curRep, rep);
                 var trade = curRep is not null && rep.Hard == curRep.Hard ? CellSheetLogic.AltTradeLine(curRep.Breakdown, rep.Breakdown, labelOf) : null;
                 return (Text: CellSheetLogic.AlternativeSummary(idx + 1, AnalysisTriage.HardText(rep.Breakdown, rep.Hard), curRep?.Hard, rep.Hard, worse, curRep is not null && UnifiedViolationChecker.BetterReport(rep, curRep), trade), Worse: worse,
-                    Line: curRep is null ? null : CellSheetLogic.AltLineOf(curRep.Hard, curRep.Breakdown, rep.Hard, rep.Breakdown, labelOf));
+                    Line: curRep is null ? null : CellSheetLogic.AltLineOf(curRep.Hard, curRep.Breakdown, rep.Hard, rep.Breakdown, labelOf) with { Mark = marks![idx] });
             }).ToList();
             return (sorted, rs);
         });

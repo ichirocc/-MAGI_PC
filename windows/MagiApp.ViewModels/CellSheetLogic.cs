@@ -2263,14 +2263,14 @@ public static class CellSheetLogic
         return less && more ? AltTrade.TRADE : less ? AltTrade.DOMINATES : more ? AltTrade.DOMINATED : AltTrade.SAME;
     }
 
-    /// <summary>交換の説明（良くなる族を先に、譲る族を後に、件数で）。必須の件数が同じ案だけに付ける。族名は <paramref name="labelOf"/>。</summary>
+    /// <summary>交換の説明（良くしたい族を起点に、譲る族を後に、件数で。§6.4 の R5）。必須の件数が同じ案だけに付ける。族名は <paramref name="labelOf"/>。</summary>
     public static string? AltTradeLine(IReadOnlyDictionary<string, int> cur, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
     {
         var (down, up) = AltDeltas(cur, alt);
         string? Part(List<(string F, int V)> xs, string verb) => xs.Count == 0 ? null : AltDeltaPart(xs, "が ", labelOf) + verb;
         return AltTradeOf(cur, alt) switch
         {
-            AltTrade.TRADE => $"{Part(down, "減り")}、{Part(up, "増えます")}",
+            AltTrade.TRADE => $"{AltDeltaPart(down, "を ", labelOf)}減らすなら、{AltDeltaPart(up, "を ", labelOf)}譲ることになります",
             AltTrade.DOMINATES => $"どの項目も今と同じか少なく、{Part(down, "減ります")}",
             AltTrade.DOMINATED => "どの項目も今と同じか多い案です",
             _ => null,
@@ -2278,7 +2278,7 @@ public static class CellSheetLogic
     }
 
     /// <summary>カードの 1 案の行（札・減る・増える）。Kotlin <c>AltLine</c>。</summary>
-    public sealed record AltLine(string Tag, string? Down, string? Up);
+    public sealed record AltLine(string Tag, string? Down, string? Up, string? Mark = null);
 
     /// <summary>札は必須の多少、同じなら族の件数の比べ方。減る・増えるは件数の大きい 2 項目まで（docs/screen_spec.md §01「他の案」）。</summary>
     public static AltLine AltLineOf(int curHard, IReadOnlyDictionary<string, int> cur, int altHard, IReadOnlyDictionary<string, int> alt, Func<string, string> labelOf)
@@ -2311,6 +2311,43 @@ public static class CellSheetLogic
 
     /// <summary>案を反映したあとは札の「今」を「元」と読み替える（Kotlin <c>altTagAfterApply</c>）。</summary>
     public static string AltTagAfterApply(string tag, bool applied) => applied ? tag.Replace("今", "元") : tag;
+
+    /// <summary>
+    /// [Android 3.727.133 <c>altEdgeMarks</c>、docs/seesaw.md §6.4] 他の案の両端と膝点の札。必須の件数が今と同じ案を、案全体でいちばん減る族 A と
+    /// いちばん増える族 B で並べ（今の勤務表も点に入れ、A・B どちらでも他に劣る点は外す）、端に「A がいちばん少ない」「B がいちばん少ない」、
+    /// 点が 3 つ以上なら隣どうしの交換率がいちばん大きく変わる内側に「釣り合いがよい」。案ごとの札（今の勤務表には付けない）。
+    /// </summary>
+    public static IReadOnlyList<string?> AltEdgeMarks(int curHard, IReadOnlyDictionary<string, int> cur, IReadOnlyList<(int Hard, IReadOnlyDictionary<string, int> Bd)> alts, Func<string, string> labelOf)
+    {
+        var marks = new string?[alts.Count];
+        var same = Enumerable.Range(0, alts.Count).Where(k => alts[k].Hard == curHard).ToList();
+        if (same.Count == 0) return marks;
+        int D(int k, string f) => alts[k].Bd.GetValueOrDefault(f) - cur.GetValueOrDefault(f);
+        string? MaxBy(IEnumerable<string> fs, Func<string, int> key)
+        {
+            string? best = null; var bv = int.MinValue;
+            foreach (var f in fs) { var v = key(f); if (v > bv) { bv = v; best = f; } }
+            return best;
+        }
+        var a = MaxBy(MirrorKeys.All, f => same.Sum(k => Math.Max(0, -D(k, f))));
+        if (a is null || !same.Any(k => D(k, a) < 0)) return marks;
+        var b = MaxBy(MirrorKeys.All.Where(f => f != a), f => same.Sum(k => Math.Max(0, D(k, f))));
+        if (b is null || !same.Any(k => D(k, b) > 0)) return marks;
+        // 点: -1＝今の勤務表
+        var pts = new[] { -1 }.Concat(same).Select(k => (K: k, A: k < 0 ? cur.GetValueOrDefault(a) : alts[k].Bd.GetValueOrDefault(a), B: k < 0 ? cur.GetValueOrDefault(b) : alts[k].Bd.GetValueOrDefault(b))).ToList();
+        var front = pts.Where((p, pi) => !pts.Where((_, qi) => qi != pi).Any(q => q.A <= p.A && q.B <= p.B && (q.A < p.A || q.B < p.B)))
+            .GroupBy(p => (p.A, p.B)).Select(g => g.First()).OrderBy(p => p.A).ToList();
+        if (front.Count < 2) return marks;
+        if (front[0].K >= 0) marks[front[0].K] = $"{labelOf(a)}がいちばん少ない";
+        if (front[^1].K >= 0) marks[front[^1].K] = $"{labelOf(b)}がいちばん少ない";
+        if (front.Count >= 3)
+        {
+            var rate = Enumerable.Range(0, front.Count - 1).Select(i => (double)(front[i].B - front[i + 1].B) / (front[i + 1].A - front[i].A)).ToArray();
+            var knee = Enumerable.Range(1, front.Count - 2).OrderByDescending(i => Math.Abs(rate[i - 1] - rate[i])).ThenBy(i => i).First();
+            if (front[knee].K >= 0) marks[front[knee].K] = "釣り合いがよい";
+        }
+        return marks;
+    }
 
     /// <summary>すべての案が今より悪い（印の数が案の数と合うときだけ）。</summary>
     public static bool AlternativesAllWorse(IReadOnlyList<bool> worse, int n) => n > 0 && worse.Count == n && worse.All(w => w);

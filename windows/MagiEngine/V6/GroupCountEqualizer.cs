@@ -21,7 +21,7 @@ public static class GroupCountEqualizer
     /// 途中は個人の範囲を外れても必須が増えてもよい（罰として数える）が、採るのは「各 (職員,シフト) の範囲からの外れ量が元以下・
     /// 必須が元以下」の盤面のうち、目標からのずれがいちばん小さいものだけ。よりそろった盤面が見つかれば <paramref name="work"/> を書き換えて true。
     /// </summary>
-    private static bool Anneal(Problem p, int[][] work, int[][] cnt0, int[]?[][] elig, int iters, long seed, bool fastCool)
+    private static bool Anneal(Problem p, int[][] work, int[][] cnt0, int[]?[][] elig, int iters, long seed, bool fastCool, Func<bool>? shouldStop = null)
     {
         // 手は 1 手ごとに無作為に作る（全部を先に並べると 30 人・31 日で数十万件になる）: 2 人の同じ日の入れ替え・3 人の回し・
         // 同じ 2 人の前後 2 日をまとめた入れ替えを等しい割合で。1 人目はグループから、相手は半分は同じグループ・半分は誰でも
@@ -58,6 +58,7 @@ public static class GroupCountEqualizer
         int[] ci2 = new int[12], ck = new int[12], cd = new int[12];   // この手での (職員,シフト) ごとの回数の増減
         for (var step = 0; step < iters; step++)
         {
+            if ((step & 1023) == 0 && shouldStop?.Invoke() == true) break;   // 停止の合図を約 1,000 手ごとに見る（それまでの最良は残す）
             temp *= cool;
             var gi = rnd.NextInt(pairTotal); var g = 0;
             while (gi >= pairW[g]) { gi -= pairW[g]; g++; }
@@ -172,15 +173,16 @@ public static class GroupCountEqualizer
     private static int[][] Counts(Problem p, int[][] s) =>
         Enumerable.Range(0, p.S).Select(i => { var c = new int[p.K]; foreach (var k in s[i]) if (k >= 0 && k < p.K) c[k]++; return c; }).ToArray();
 
-    /// <summary>グループ×シフトごとの対象（置ける人・2 人以上）。シフトを選ばない・置ける人が 1 人以下なら null（Kotlin <c>eligible</c>）。</summary>
-    private static int[]?[][] Eligible(Problem p, IReadOnlySet<int>? shifts) =>
+    /// <summary>グループ×シフトごとの対象（2 人以上）。母集団は採点の fair と同じ「置ける人、またはいまそのシフトに入っている人」
+    /// （Kotlin <c>eligible</c>、Android 3.727.133）。シフトを選ばない・対象が 1 人以下なら null。</summary>
+    private static int[]?[][] Eligible(Problem p, IReadOnlySet<int>? shifts, int[][] cnt) =>
         Enumerable.Range(0, p.GroupMembers.Length).Select(g =>
         {
             var m = p.GroupMembers[g];
             return Enumerable.Range(0, p.K).Select(k =>
             {
                 if (m.Length < 2 || (shifts is not null && !shifts.Contains(k)) || !p.Bucket[g].Contains(k)) return null;
-                var el = m.Where(i => p.MayPlace(i, k)).ToArray();
+                var el = m.Where(i => p.MayPlace(i, k) || cnt[i][k] > 0).ToArray();
                 return el.Length >= 2 ? el : null;
             }).ToArray();
         }).ToArray();
@@ -198,12 +200,12 @@ public static class GroupCountEqualizer
 
     /// <param name="shifts">そろえるシフト（null＝全部、Android 3.727.116）。ほかのシフトの回数は入れ替えで動き得るが、個人の下限・上限は守る。</param>
     public static Result Apply(MagiState state, int[][] schedule, IReadOnlySet<int>? shifts = null, int maxSwaps = 2_000,
-        int annealIters = AnnealIters, long seed = 1L)
+        int annealIters = AnnealIters, long seed = 1L, Func<bool>? shouldStop = null)
     {
         var p = new Problem(state);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var cnt = Counts(p, work);
-        var elig = Eligible(p, shifts);
+        var elig = Eligible(p, shifts, cnt);
         var before = TotalDev(p, elig, cnt);
         if (elig.All(row => row.All(e => e is null))) return new Result(work, 0, before, before);   // そろえる (グループ,シフト) が無い
         bool Movable(int i, int j) => !p.WishLocked(i, j);   // 希望固定と手動固定
@@ -232,7 +234,7 @@ public static class GroupCountEqualizer
             return aft - bef;
         }
         var swaps = 0;
-        while (swaps < maxSwaps)
+        while (swaps < maxSwaps && shouldStop?.Invoke() != true)
         {
             for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) devNow[g][k] = elig[g][k] is not null ? GroupDev(p, g, k, cnt) : 0.0;
             var cands = new List<(double Gain, int A, int B, int D)>();
@@ -276,8 +278,9 @@ public static class GroupCountEqualizer
             for (var run = 0; run < AnnealRuns; run++)
             foreach (var fastCool in new[] { true, false })
             {
+                if (shouldStop?.Invoke() == true) break;
                 var w = work.Copy2D();
-                if (!Anneal(p, w, cnt, elig, annealIters, seed + run, fastCool)) continue;
+                if (!Anneal(p, w, cnt, elig, annealIters, seed + run, fastCool, shouldStop)) continue;
                 var dv = TotalDev(p, elig, Counts(p, w));
                 if (dv < bestRunDev) { bestRunDev = dv; bestRun = w; }
             }
