@@ -1895,9 +1895,9 @@ public static class CellSheetLogic
     public const string ClearSelectionButton = "選択を外す";
     // [Android 3.727.115] グループ内の回数をそろえる（希望の反映と同じく押して上書きする操作）
     public const string GroupEqualizeButton = "グループ内の回数をそろえる";
-    public const string GroupEqualizeNote = "グループ内の回数（同じグループの人どうし・シフトごと）を、同じ日の入れ替え（別のグループの人も使います）でそろえます。個人の下限・上限は外さず、必須違反は増やしません。要調整は増えることがあります。元に戻せます";
+    public const string GroupEqualizeNote = "グループ内の回数（同じグループの人どうし・シフトごと）を、同じ日の入れ替え（別のグループの人も使います）でそろえます。個人の範囲や適切回数の目標がある人は、その範囲の中の位置でそろえます（範囲が少なめの人は少なめのまま）。個人の下限・上限は外さず、必須違反は増やしません。要調整は増えることがあります。元に戻せます";
     public const string GroupEqualizeNone = "グループ内の回数はこれ以上そろえられません（希望・固定・個人の上下限・必須違反の増加で入れ替えられません）";
-    public const string GroupEqualizeStale = "計算中に勤務表が変わったので、回数はそろえませんでした。もう一度押してください";
+    public const string GroupEqualizeStale = "計算中に勤務表が変わったか作成が始まったので、回数はそろえませんでした。もう一度押してください";
     public static string GroupEqualizeDoneText(int swaps) => $"グループ内の回数をそろえました: 入れ替え {swaps}件";
     // [Android 3.727.116] そろえるシフトを選ぶ
     public const string GroupEqualizePickNote = "回数をそろえるシフトを選びます（複数選べます）。選んでいないシフトの回数は入れ替えで動くことがありますが、個人の下限・上限は守ります";

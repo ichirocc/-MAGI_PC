@@ -153,7 +153,9 @@ public static class V6LateOperators
                 var bad = false;
                 for (var kk = 0; kk < kN; kk++)
                 {
-                    if (ssn[i][kk] < p.RangeLo[i][kk] || ssn[i][kk] > p.RangeHi[i][kk]) { bad = true; break; }
+                    // チェッカーの low/high と同じ判定（下限は 0 と未設定を数えず、担当できないシフトの下限割れは数えない、Android 3.727.125）
+                    int lo = p.RangeLo[i][kk], hi = p.RangeHi[i][kk], n = ssn[i][kk];
+                    if ((lo != int.MinValue && lo != 0 && p.CanDo(i, kk) && n < lo) || (hi != int.MaxValue && n > hi)) { bad = true; break; }
                 }
                 if (bad) v.Add(i);
             }

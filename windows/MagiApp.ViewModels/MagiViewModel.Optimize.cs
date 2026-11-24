@@ -314,7 +314,10 @@ public sealed partial class MagiViewModel
             // 比べる基準はエンジンの番兵と同じ「個人上限0のセルを外した入力」（ユーザー決定 2026-10-06）。生の入力と比べると、
             //   上限0のセルが人員を満たしていた盤面では最適化の結果が毎回「悪化」に見えて前回へ戻っていた（実機 #9）。
             var (clearedInput, clearedCount) = V6NativeOptimizer.ClearCappedCells(st0, sched0);
-            var cmpReport = clearedCount > 0 ? UnifiedViolationChecker.Check(st0, clearedInput) : baseReport;
+            //   日の上限 0 のセルを残すほうが必須が少なければそちら（DayCapKeptBaseline＝エンジンの最終番兵と同じ、Android 3.727.130）。
+            var clearedReport = clearedCount > 0 ? UnifiedViolationChecker.Check(st0, clearedInput) : null;
+            var cmpReport = clearedReport is null ? baseReport
+                : V6NativeOptimizer.DayCapKeptBaseline(st0, sched0, clearedReport)?.Report ?? clearedReport;
             var inputBeatsResult = UnifiedViolationChecker.ReportComparer.Compare(cmpReport, res.Report) < 0;
             if (inputBeatsResult)
             {

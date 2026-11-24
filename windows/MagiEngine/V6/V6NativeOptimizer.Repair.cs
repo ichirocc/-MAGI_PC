@@ -44,9 +44,10 @@ public static partial class V6NativeOptimizer
         return outSched;
     }
 
-    /// <summary>[3.507.0] 個人上限 0 のセル（希望固定を除く）だけを置けるシフトへ戻した盤面と、その件数。最終番兵の「入力」基準に使う
-    /// （群外セルは触らない＝従来の基準のまま）。</summary>
-    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule, bool quantitativeRangeEval = false)
+    /// <summary>[3.507.0] 上限 0 のセル（IsCapZeroCell＝個人上限 0・実効の目安 0・日の上限人数 0。希望固定を除く）だけを置けるシフトへ
+    /// 戻した盤面と、その件数。最終番兵の「入力」基準に使う（群外セルは触らない＝従来の基準のまま）。
+    /// keepDayCap＝true なら日の上限 0（DayCapBanned）だけのセルは残す＝個人上限 0・目安 0 のセルだけ外す（Android 3.727.130）。</summary>
+    internal static (int[][] Schedule, int Count) ClearCappedCells(MagiState state, int[][] schedule, bool quantitativeRangeEval = false, bool keepDayCap = false)
     {
         var p = ScheduleUtil.CachedProblem(state, quantitativeRangeEval);
         var outSched = schedule.Select(r => r.ToArray()).ToArray();
@@ -58,10 +59,21 @@ public static partial class V6NativeOptimizer
             for (var j = 0; j < p.T; j++)
             {
                 var k = outSched[i][j];
-                if (p.IsCapZeroCell(i, j, k)) { outSched[i][j] = Refill(p, i, j, fallback); n++; }
+                if (p.IsCapZeroCell(i, j, k) && !(keepDayCap && p.MayPlace(i, k))) { outSched[i][j] = Refill(p, i, j, fallback); n++; }
             }
         }
         return (outSched, n);
+    }
+
+    /// <summary>
+    /// 比べる基準の別案: 日の上限 0 のセルを残した盤面（Kotlin <c>HardRepairCore.dayCapKeptBaseline</c>、Android 3.727.130）。上限 0 の日に置いて必須を減らした
+    /// 盤面（DayCapHardRelief の結果）を全部外すと基準の必須が増え、作り直しが必須の多い結果へ置き換えてしまう（sept2026）。必須がより少ないときだけ返す。
+    /// </summary>
+    internal static (int[][] Schedule, ViolationReport Report)? DayCapKeptBaseline(MagiState state, int[][] schedule, ViolationReport clearedReport, bool quantitativeRangeEval = false)
+    {
+        var kept = ClearCappedCells(state, schedule, quantitativeRangeEval, keepDayCap: true).Schedule;
+        var r = UnifiedViolationChecker.Check(state, kept, quantitativeRangeEval);
+        return r.Hard < clearedReport.Hard ? (kept, r) : null;
     }
 
     /// <summary>外したセルを何で埋めるか。[希望固定の徹底] 規則 A の間は、希望固定セル（未反映）は埋めシフトでなく希望へ戻す

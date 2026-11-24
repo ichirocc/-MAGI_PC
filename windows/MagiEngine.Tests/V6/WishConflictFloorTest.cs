@@ -204,7 +204,7 @@ public class WishConflictFloorTest
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var res = await V6FinalPort.HandleOptimize(st, 60, workers: 2, allowImpossible: true, wishFloorMode: WishFloorMode.E0B);
         Assert.Equal(1, res.Report.Hard);
-        Assert.Contains(res.Logs, l => l.Tag == "EarlyStop" && l.Message.Contains("希望衝突の床に到達＝E0B"));
+        Assert.Contains(res.Logs, l => l.Tag == "EarlyStop" && l.Message.Contains("必須の下限に到達＝希望衝突の床・後処理の研磨を省略"));
         Assert.Contains(res.Logs, l => l.Tag == "Watchdog" && l.Message.Contains("希望衝突の床1=到達"));
         Assert.Contains(res.Logs, l => l.Tag == "Watchdog" && System.Text.RegularExpressions.Regex.IsMatch(l.Message, "入力超えの最終改善=(なし|経過\\d+s)・"));
         Assert.True(sw.ElapsedMilliseconds < 55_000, $"早く返す: {sw.ElapsedMilliseconds}ms");

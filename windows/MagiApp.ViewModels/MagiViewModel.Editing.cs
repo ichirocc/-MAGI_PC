@@ -151,7 +151,8 @@ public sealed partial class MagiViewModel
         var snap = sched.Copy2D();
         // 焼きなましで 1〜数秒かかるので画面を止めない。計算中に勤務表が変わったら当てない。
         var r = await Task.Run(() => GroupCountEqualizer.Apply(st, snap, shifts));
-        if (!ReferenceEquals(_state, st) || !ReferenceEquals(_currentSchedule, sched)
+        // 計算中（1〜数秒）に作成が始まっていたら当てない＝作成中の盤面をその場で書き換えない（Android 3.727.125）
+        if (OptimizeInFlight() || !ReferenceEquals(_state, st) || !ReferenceEquals(_currentSchedule, sched)
             || Enumerable.Range(0, sched.Length).Any(i => !sched[i].AsSpan().SequenceEqual(snap[i])))
         {
             PostOpNotice(CellSheetLogic.GroupEqualizeStale, undoable: false);
@@ -169,7 +170,7 @@ public sealed partial class MagiViewModel
         _state = st.WithSchedule(sched);
         AutoSave();
         var which = shifts is null ? "全シフト" : string.Join("・", shifts.OrderBy(k => k).Select(k => k < st.Shifts.Count ? st.Shifts[k].Kigou : k.ToString()));
-        LogOp("I", $"グループ内の回数をそろえる（{which}）: 入れ替え {r.Swaps}件（目標からのずれ {r.SpreadBefore}→{r.SpreadAfter}）");
+        LogOp("I", $"グループ内の回数をそろえる（{which}）: 入れ替え {r.Swaps}件（グループ内の偏り {r.SpreadBefore}→{r.SpreadAfter}）");
         Ui.MessageIsError = false;
         Ui.HasResult = true;
         Ui.RanBeforeEdit = Ui.EngineRan || Ui.RanBeforeEdit;

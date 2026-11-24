@@ -123,18 +123,31 @@ public static partial class V6FinalPort
     }
 
     /// <summary>入口で個人上限 0 のセルを外した件数と、外す前後の必須件数（生の入力→外した入力）。</summary>
-    public sealed record CapZeroNotice(int Count, int HardBefore, int HardAfter)
+    /// <summary>入口で上限 0 のセルを外した件数と、外す前後の必須件数。件数の内訳は AptZero＝実効の目安 0、DayCap＝日の上限人数 0、残り＝個人上限 0（Android 3.727.130）。</summary>
+    public sealed record CapZeroNotice(int Count, int HardBefore, int HardAfter, int AptZero = 0, int DayCap = 0)
     {
         public bool RaisedHard => HardAfter > HardBefore;
+        private int Personal => Count - AptZero - DayCap;
+        private string What => string.Join("・", new[]
+        {
+            Personal > 0 ? $"個人上限0のセル{Personal}件" : null,
+            AptZero > 0 ? $"目安0のセル{AptZero}件" : null,
+            DayCap > 0 ? $"日の上限人数0のセル{DayCap}件" : null,
+        }.Where(s => s is not null));
 
         public string LogLine() => RaisedHard
-            ? $"入口: 個人上限0のセル{Count}件を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置かないため、入力の必須{HardBefore}件に戻らないことがあります"
-            : $"入口: 個人上限0のセル{Count}件を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置きません（表示・重みは不変）";
+            ? $"入口: {What}を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置かないため、入力の必須{HardBefore}件に戻らないことがあります"
+            : $"入口: {What}を外しました（必須 {HardBefore}→{HardAfter}）。最適化は上限0の勤務を置きません（表示・重みは不変）";
 
         public string? KeptNote() => !RaisedHard ? null
-            : $"今の勤務表には個人の上限0のシフトが{Count}件入っています（だれのどの日かはホームの『設定の見直し』に出ます）。" +
+            : (Personal == Count ? $"今の勤務表には個人の上限0のシフトが{Count}件入っています" : $"今の勤務表には上限0のシフトが{Count}件（{What}）入っています") +
+              "（だれのどの日かはホームの『設定の見直し』に出ます）。" +
               $"最適化は上限0の勤務を置かないため、必須{HardBefore}件まで戻らないことがあります。" +
-              "編集タブの『年間マスター』の『③ 回数（1人あたり）』で上限を見直すか、このまま使えます";
+              string.Join("か", new[]
+              {
+                  Personal + AptZero > 0 ? "編集タブの『年間マスター』の『③ 回数（1人あたり）』" : null,
+                  DayCap > 0 ? "その日の必要人数の『上限人数』" : null,
+              }.Where(s => s is not null)) + "で上限を見直すか、このまま使えます";
     }
 
     private static readonly IReadOnlyDictionary<string, string> EmptyOverrides = new Dictionary<string, string>();

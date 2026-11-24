@@ -14,7 +14,7 @@ public class PreRunCheckTextTest
     {
         var ui = new UiState { StaffNames = St.StaffList.Select(s => s.Name).ToList(), ShiftSymbols = St.Shifts.Select(s => s.Kigou).ToList(), StartDate = St.StartDate };
         var t = PreRunCheckText.Of(PreRunCheck.Build(St, St.Schedule.ToIntArray2D()), ui);
-        Assert.Equal("何度つくっても残る（9件）", t.FloorHeader);
+        Assert.Equal("何度つくっても残る（10件）", t.FloorHeader);
         Assert.Equal(new[]
         {
             "職員01 10/25・10/26・10/27 本人の希望「休→休→休」が禁止の並びに当たっています",
@@ -26,6 +26,7 @@ public class PreRunCheckTextTest
             "10/11(日) 必要人数と本人の希望の衝突（9件は同時に成立しません）（入れないシフトの指定が関係）",
             "10/29(木) 必要人数と本人の希望の衝突（7件は同時に成立しません）（入れないシフトの指定が関係）",
             "職員04 本人の希望と条件の組合せ（4件は同時に成立しません）",
+            "職員11 本人の希望と条件の組合せ（7件は同時に成立しません）",
         }, t.FloorRows.Select(r => r.Text));
         Assert.True(t.HasWishRows);
         Assert.Equal(PreRunCheckText.ZeroCapNoteText, t.ZeroCapNote);

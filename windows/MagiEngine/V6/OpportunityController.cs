@@ -27,7 +27,7 @@ internal sealed class OpportunityController
         string? top = null; var topV = double.MinValue;
         foreach (var k in keys)
         {
-            var v = r.Breakdown.GetValueOrDefault(k) * MirrorKeys.WeightOf(k);
+            var v = r.Breakdown.GetValueOrDefault(k) * ObjectiveWeights.Of(k);   // 採点の重み（方式で切り替わる、Android 3.727.125）
             if (v > topV) { topV = v; top = k; }
         }
         return top is null || r.Breakdown.GetValueOrDefault(top) == 0 ? (r.Hard > 0 ? "hard" : "soft") : top;

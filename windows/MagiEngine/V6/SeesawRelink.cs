@@ -14,6 +14,10 @@ public static class SeesawRelink
     public const int MaxTradeoffs = 3;
 
     /// <summary>a が b に優越する（21 族すべて a ≤ b、どれかで &lt;）。重みを使わない比較。</summary>
+    /// <summary>交換の候補になれるか。優越は必須の件数が同じ盤面どうしでだけ比べる（<c>docs/seesaw.md</c> I1、Android 3.727.129 後の敵対検証）。</summary>
+    public static bool IsTradeoff(ViolationReport best, ViolationReport r) =>
+        r.Hard == best.Hard && !Dominates(best, r) && !SameBreakdown(r, best);
+
     public static bool Dominates(ViolationReport a, ViolationReport b)
     {
         bool strict = false;
@@ -88,7 +92,7 @@ public static class SeesawRelink
                 if (undoHardIncrease && rep.Hard > curRep.Hard) { Undo(); continue; }
                 curRep = rep;
                 if (UnifiedViolationChecker.BetterReport(rep, bestRep)) { best = cur.Copy2D(); bestRep = rep; applied++; }
-                else if (rep.Hard == bestRep.Hard && !Dominates(bestRep, rep) && !SameBreakdown(rep, bestRep)) pool.Add((cur.Copy2D(), rep));
+                else if (IsTradeoff(bestRep, rep)) pool.Add((cur.Copy2D(), rep));
             }
         }
         var tradeoffs = PickTradeoffs(bestRep, pool);
@@ -100,7 +104,7 @@ public static class SeesawRelink
     /// <summary>交換の候補を選ぶ（Android の pickTradeoffs と同じ順・同じ規則）。</summary>
     internal static List<(int[][] Board, ViolationReport Rep)> PickTradeoffs(ViolationReport best, IReadOnlyList<(int[][] Board, ViolationReport Rep)> pool)
     {
-        var ok = pool.Where(c => c.Rep.Hard == best.Hard && !Dominates(best, c.Rep) && !SameBreakdown(c.Rep, best)).ToList();
+        var ok = pool.Where(c => IsTradeoff(best, c.Rep)).ToList();
         var nd0 = ok.Where(c => !ok.Any(o => !ReferenceEquals(o.Rep, c.Rep) && Dominates(o.Rep, c.Rep))).ToList();
         var seenVec = new HashSet<string>();
         var nd = new List<(int[][] Board, ViolationReport Rep)>();

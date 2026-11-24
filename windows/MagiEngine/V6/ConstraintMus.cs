@@ -212,12 +212,29 @@ public static class ConstraintMus
         return core;
     }
 
+    /// <summary>シフト x の窓ルールを満たす最少日数（固定の日付の位置まで見る、Android 3.727.128）。固定の日だけで満たせない窓は null、規則なし・t&gt;62 は 0（下限を弱める側＝健全）。</summary>
+    private static int? WindowMin(Problem p, int x, IReadOnlyList<WindowRule> rs, IReadOnlyList<WishPin> fixedPins)
+    {
+        if (rs.Count == 0 || p.T <= 0 || p.T > 62) return 0;
+        var pairs = rs.Select(r => (r.WindowDays, r.MinCount)).ToList();
+        if (fixedPins.Count == 0) return CachedMinDays(p.T, pairs) ?? 0;
+        var forced = new int[p.T];
+        Array.Fill(forced, -1);
+        foreach (var f in fixedPins) if (f.Day >= 0 && f.Day < p.T) forced[f.Day] = f.Shift == x ? 1 : 0;
+        return SmartInitialScheduler.MinDaysWithFixed(p.T, pairs, forced);
+    }
+
+    /// <summary>コア（1 人の職員の矛盾）で、シフト x の窓ルールを満たすのに要る最少日数（証明と同じ計算）。null＝固定の日だけで満たせない窓がある。画面の説明用。</summary>
+    public static int? WindowNeed(Problem p, int x, IReadOnlyList<Item> core) =>
+        WindowMin(p, x, core.OfType<WindowRule>().Where(r => r.Shift == x).ToList(), core.OfType<WishPin>().ToList());
+
     private static bool StaffProvablyInfeasible(Problem p, int[] allowed, List<Item> items)
     {
         var caps = new Dictionary<int, int>();
         var floors = new Dictionary<int, int>();
         var rules = new Dictionary<int, List<WindowRule>>();
         var pins = new Dictionary<int, int>();
+        var fixedPins = new List<WishPin>();
         foreach (var it in items)
         {
             switch (it)
@@ -234,20 +251,21 @@ public static class ConstraintMus
                     break;
                 case WishPin wp:
                     pins[wp.Shift] = pins.GetValueOrDefault(wp.Shift, 0) + 1;
+                    fixedPins.Add(wp);
                     break;
                 case DayNeed:
                     break;
             }
         }
-        // The window rule's exact minimum days (memoized per rule subset). null (computation
-        // impossible, e.g. t > 62) is treated as 0 — that weakens the lower bound, which stays
-        // sound (never a false positive).
-        int MinWin(int x)
+        // 窓の最少日数は固定の日付の位置まで見る（x の固定は回数に数え、別のシフトの固定の日には x を置けない、Android 3.727.128）
+        var demands = new Dictionary<int, int>();
+        foreach (var x in allowed)
         {
-            if (!rules.TryGetValue(x, out var rs) || rs.Count == 0) return 0;
-            return CachedMinDays(p.T, rs.Select(r => (r.WindowDays, r.MinCount)).ToList()) ?? 0;
+            var win = WindowMin(p, x, rules.TryGetValue(x, out var rs) ? rs : new List<WindowRule>(), fixedPins);
+            if (win is null) return true;   // D) 固定の日だけで窓の回数に届かない
+            demands[x] = Math.Max(Math.Max(floors.GetValueOrDefault(x, 0), win.Value), pins.GetValueOrDefault(x, 0));
         }
-        int Demand(int x) => Math.Max(Math.Max(floors.GetValueOrDefault(x, 0), MinWin(x)), pins.GetValueOrDefault(x, 0));
+        int Demand(int x) => demands[x];
 
         // A) demand lower bound > cap
         foreach (var x in allowed)

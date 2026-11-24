@@ -100,7 +100,7 @@ public static class C1RepairAnalysis
             if (x < 0 || x >= p.K || c.Day1 < 1 || c.Day1 > p.T || c.Day2 < 1) continue;
             for (int i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, x)) continue;
+                if (!p.C1Applies(i, x)) continue;
                 int j = 0;
                 while (j <= p.T - c.Day1)
                 {

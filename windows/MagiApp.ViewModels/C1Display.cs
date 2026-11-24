@@ -31,7 +31,7 @@ public static class C1Display
             if (c.Day1 <= 0 || c.Day1 > p.T) continue;
             for (var i = 0; i < p.S; i++)
             {
-                if (!p.CanDo(i, c.ShiftIdx)) continue;
+                if (!p.C1Applies(i, c.ShiftIdx)) continue;
                 var row = s[i];
                 var cand = new bool[p.T];
                 for (var d = 0; d < p.T; d++) cand[d] = row[d] != c.ShiftIdx && Changeable(p, i, d, c.ShiftIdx);

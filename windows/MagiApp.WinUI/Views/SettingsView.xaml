@@ -65,19 +65,12 @@
                         <Slider x:Name="WorkersSlider" Minimum="1" Maximum="16" StepFrequency="1"
                                 ValueChanged="OnWorkersChanged" />
                     </StackPanel>
-                    <ToggleSwitch x:Name="SoftPolishToggle" Header="仕上げ" OnContent="ON" OffContent="OFF"
-                                  Toggled="OnSoftPolishToggled" />
                     <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="AgentAutoToggle" OnContent="ON" OffContent="OFF" Toggled="OnAgentAutoToggled" />
                         <TextBlock x:Name="AgentAutoNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                     </StackPanel>
-                    <!-- [Android 3.727.24] 膜の細胞 LNS（PolishGate.MembraneCellLns、既定 ON）。保存しない・実行中は操作不可。 -->
-                    <StackPanel Spacing="2">
-                        <ToggleSwitch x:Name="MembraneToggle" Header="最後に職員をまとめて組み直す" OnContent="ON" OffContent="OFF" Toggled="OnMembraneToggled" />
-                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="違反の多い職員と同じグループの 5 名を全期間まとめて組み直し、良くなったときだけ採ります（膜の細胞 LNS、既定 ON・最長 8 秒）" />
-                    </StackPanel>
-                    <!-- [Android 3.656.0〜3.659.0・3.727.22 同期] 玉突きで直す（C# はパイプラインだけ）・他の案を手がかりに仕上げる。保存しない・実行中は操作不可。 -->
+                    <!-- [Android 3.727.126] 仕上げ・膜の細胞 LNS・他の案を手がかりに・早めに終える・ネイティブ加速は測って既定 ON＝画面から外し ON で固定。 -->
+                    <!-- [Android 3.656.0〜3.659.0・3.727.22 同期] 玉突きで直す（C# はパイプラインだけ）・保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
                         <ComboBox x:Name="EjectionChainCombo" Header="玉突きで直す（月全体）" SelectionChanged="OnEjectionChainChanged" HorizontalAlignment="Stretch">
                             <ComboBoxItem Content="しない" />
@@ -99,21 +92,11 @@
                         </ComboBox>
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <ToggleSwitch x:Name="SeesawRelinkToggle" Header="他の案を手がかりに仕上げる" OnContent="ON" OffContent="OFF" Toggled="OnSeesawRelinkToggled" />
-                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="仕上げのあと、他の案へ向けて少しずつ入れ替え、良くなれば採ります。どこかの項目が今より少ない勤務表は「他の案」に残します（最大 3 秒）" />
-                    </StackPanel>
-                    <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="RogsControllerToggle" Header="残りの違反に合わせて探し方を選ぶ" OnContent="ON" OffContent="OFF" Toggled="OnRogsControllerToggled" />
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
                                    Text="探し方を替えるとき、いま残っている違反の種類で速く良くした探し方を選びます（211 秒以上の作成で使う並列の探し方）。試験中の機能です。" />
                     </StackPanel>
                     <!-- [Android 3.727.41] 画面の無かった探索の切り替え（PolishGate、既定値は不変）。保存しない・実行中は操作不可。 -->
-                    <StackPanel Spacing="2">
-                        <ToggleSwitch x:Name="FloorShortStallToggle" Header="必須が下限に届いたら早めに終える" OnContent="ON" OffContent="OFF" Toggled="OnFloorShortStallToggled" />
-                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="必須の違反がこれ以上減らせない下限に届いたら、改善が止まった時点で早めに終えます（既定 ON）。OFF は時間いっぱい粘ります" />
-                    </StackPanel>
                     <StackPanel Spacing="2">
                         <ToggleSwitch x:Name="C3nWallDeepCheckToggle" Header="禁止の並びの壁を 1 手探索で確かめる" OnContent="ON" OffContent="OFF" Toggled="OnC3nWallDeepCheckToggled" />
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
@@ -145,9 +128,6 @@
                         </ComboBox>
                         <TextBlock x:Name="ObjectiveMethodNote" TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8" />
                     </StackPanel>
-                    <!-- ネイティブ加速はこの移植では常に対象外（C++加速層が無い）。設定データの往復互換のため表示専用で保持。 -->
-                    <ToggleSwitch x:Name="NativeAccelToggle" Header="ネイティブ加速（このC#移植では常に非該当）"
-                                  OnContent="ON" OffContent="OFF" IsEnabled="False" />
                     <StackPanel Spacing="4">
                         <TextBlock Text="最適化方式" />
                         <ComboBox x:Name="AlgorithmCombo" HorizontalAlignment="Stretch"

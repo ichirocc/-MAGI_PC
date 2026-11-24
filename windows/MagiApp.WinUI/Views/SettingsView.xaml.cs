@@ -90,12 +90,9 @@ public sealed partial class SettingsView : UserControl
             SaveFailedBanner.Visibility = saveFailed ? Visibility.Visible : Visibility.Collapsed;
             SaveFailedBannerText.Text = CellSheetLogic.HomeSaveFailedLine;
             ChangeBudgetButton.Style = saveFailed ? null : (Style)Application.Current.Resources["AccentButtonStyle"];
-            SoftPolishToggle.IsOn = ui.SoftPolish;
             AgentAutoToggle.IsOn = ui.AgentAuto;
             AgentAutoToggle.Header = AgentText.ToggleLabel;
             AgentAutoNote.Text = AgentText.ToggleNote;
-            MembraneToggle.IsOn = MagiEngine.V6.PolishGate.MembraneCellLns;
-            MembraneToggle.IsEnabled = !ui.Running;
             var chainOn = MagiViewModel.EjectionChainOn;
             EjectionChainCombo.SelectedIndex = chainOn ? 1 : 0;
             EjectionChainCombo.IsEnabled = !ui.Running;
@@ -105,12 +102,8 @@ public sealed partial class SettingsView : UserControl
             EjectionScopeCombo.IsEnabled = !ui.Running && chainOn;
             EjectionSecondsCombo.SelectedIndex = System.Array.IndexOf(EjectionSeconds, (int)(MagiEngine.V6.PolishGate.EjectionChainMaxMillis / 1000L));
             EjectionSecondsCombo.IsEnabled = !ui.Running && chainOn;
-            SeesawRelinkToggle.IsOn = MagiEngine.V6.PolishGate.SeesawRelink;
-            SeesawRelinkToggle.IsEnabled = !ui.Running;
             RogsControllerToggle.IsOn = MagiEngine.V6.PolishGate.RogsController;
             RogsControllerToggle.IsEnabled = !ui.Running;
-            FloorShortStallToggle.IsOn = MagiEngine.V6.PolishGate.FloorShortStall;
-            FloorShortStallToggle.IsEnabled = !ui.Running;
             C3nWallDeepCheckToggle.IsOn = MagiEngine.V6.PolishGate.C3nWallDeepCheck;
             C3nWallDeepCheckToggle.IsEnabled = !ui.Running;
             NormalStallCombo.SelectedIndex = System.Array.IndexOf(NormalStallFractions, MagiEngine.V6.PolishGate.NormalStallFraction);
@@ -121,7 +114,6 @@ public sealed partial class SettingsView : UserControl
             ObjectiveMethodCombo.IsEnabled = !ui.Running;
             ObjectiveMethodNote.Text = MagiViewModel.ObjectiveMethodNote;
         LeftHandToggle.IsOn = ui.LeftHand;
-            NativeAccelToggle.IsOn = ui.NativeAccel;
             var strengthTag = ui.SearchStrength.ToString();
             SearchStrengthCombo.SelectedItem = SearchStrengthCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string?)i.Tag == strengthTag);
             SearchStrengthCombo.IsEnabled = !ui.Running;
@@ -727,18 +719,6 @@ public sealed partial class SettingsView : UserControl
 
     private void OnLeftHandToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => _vm.Ui.LeftHand = LeftHandToggle.IsOn;
 
-    private void OnSoftPolishToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        _vm.SetSoftPolish(SoftPolishToggle.IsOn);
-    }
-
-    private void OnMembraneToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        MagiEngine.V6.PolishGate.MembraneCellLns = MembraneToggle.IsOn;
-    }
-
     private static readonly double[] NormalStallFractions = { 0.5, 0.7, 0.9 };
     private static readonly int[] EjectionSeconds = { 3, 6, 10 };
 
@@ -770,22 +750,10 @@ public sealed partial class SettingsView : UserControl
         MagiEngine.V6.PolishGate.EjectionChainMaxMillis = EjectionSeconds[EjectionSecondsCombo.SelectedIndex] * 1000L;
     }
 
-    private void OnSeesawRelinkToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        MagiEngine.V6.PolishGate.SeesawRelink = SeesawRelinkToggle.IsOn;
-    }
-
     private void OnRogsControllerToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (_syncingFromModel) return;
         MagiEngine.V6.PolishGate.RogsController = RogsControllerToggle.IsOn;
-    }
-
-    private void OnFloorShortStallToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
-    {
-        if (_syncingFromModel) return;
-        MagiEngine.V6.PolishGate.FloorShortStall = FloorShortStallToggle.IsOn;
     }
 
     private void OnC3nWallDeepCheckToggled(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

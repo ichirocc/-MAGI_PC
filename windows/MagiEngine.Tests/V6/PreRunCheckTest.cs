@@ -18,9 +18,10 @@ public class PreRunCheckTest
         Assert.Empty(s.ImpossibleWishes);
         Assert.Empty(s.ForcedShortfalls);
         Assert.Equal(new[] { 8, 9, 10, 28 }, s.DayProofs.Select(d => d.Day));
-        Assert.Equal(new[] { 3 }, s.StaffProofs.Select(c => c.Staff));
+        // 職員11（10）: 10/14〜20 のうち 6 日が勤務の希望＝「休 7日で2回以上」をその 7 日で満たせない（希望の日付の位置まで見る証明、Android 3.727.128）
+        Assert.Equal(new[] { 3, 10 }, s.StaffProofs.Select(c => c.Staff));
         Assert.Equal(new[] { (7, 1, 0), (10, 12, 0) }, s.WishOverCaps.Select(w => (w.Staff, w.Wished, w.Hi)));
-        Assert.Equal(9, s.FloorCount);
+        Assert.Equal(10, s.FloorCount);
         Assert.Equal(4, s.RerunClears.Count);
         Assert.Equal(new PreRunCheck.WallHint(22, 8, 7, 7), s.Wall);
         Assert.True(s.NeedsSheet);

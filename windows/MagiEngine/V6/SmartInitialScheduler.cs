@@ -136,7 +136,7 @@ public static class SmartInitialScheduler
                         bool over = hi != int.MaxValue && counts[i][k] >= hi;
                         // 間隔の不足は同点のときだけの決め手（人員の穴埋めの選び方を変えると後の日の必須が増える）
                         int penalty = ((over ? 1000 : 0) + counts[i][k] * 2) * 100 + GapIncrease(p, schedule[i], i, j, k) +
-                            (p.ConsGap.Count > 0 && p.MakesForbiddenRun(schedule, i, j, k) ? 50 : 0);
+                            (p.MakesForbiddenRun(schedule, i, j, k) ? 50 : 0);
                         if (penalty < bestPenalty) { bestPenalty = penalty; bestI = i; }
                     }
                     if (bestI < 0) break;
@@ -205,7 +205,7 @@ public static class SmartInitialScheduler
                     //   実データ3件で hard/covO/covU/low/high/c1 が全て同一＝この優先は実質不活性だった。
                     // 間隔の不足を避けた先が禁止の並びにならないよう、禁止の並びを作る候補は間隔より重く避ける
                     int penalty = (over ? 1000 : 0) + counts[i][k] + demandBonus + GapPenalty * GapIncrease(p, schedule[i], i, j, k) +
-                        (p.ConsGap.Count > 0 && p.MakesForbiddenRun(schedule, i, j, k) ? 500 : 0);
+                        (p.MakesForbiddenRun(schedule, i, j, k) ? 500 : 0);
                     if (penalty < bestPenalty) { bestPenalty = penalty; bestK = k; }
                 }
                 if (bestPenalty == int.MaxValue) bestK = FallbackShift(p, i, j, restK);
@@ -240,20 +240,32 @@ public static class SmartInitialScheduler
         if (t <= 0 || t > 62) return null;
         var valid = rules.Where(r => r.Days is >= 1 && r.Days <= t && r.Minimum > 0).ToList();
         if (valid.Count == 0) return null;
+        var free = new int[t];
+        Array.Fill(free, -1);
+        return MinDaysWithFixed(t, valid, free);
+    }
+
+    /// <summary>
+    /// <see cref="MinDaysForFullCompliance"/> に日ごとの固定を足したもの（Android 3.727.128）。forced: 1＝すでに x（回数に数える）・0＝x にできない・-1＝自由。
+    /// 同じ貪欲で厳密（総当たり照合）。固定の日のせいで満たせない窓があれば null。
+    /// </summary>
+    public static int? MinDaysWithFixed(int t, IReadOnlyList<(int Days, int Minimum)> rules, int[] forced)
+    {
         var chosen = new bool[t];
         var used = 0;
+        for (var j = 0; j < t; j++) if (forced[j] == 1) { chosen[j] = true; used++; }
         for (var end = 0; end < t; end++)
         {
-            foreach (var (days, minimum) in valid)
+            foreach (var (days, minimum) in rules)
             {
-                if (end + 1 < days) continue;
+                if (days < 1 || days > t || minimum <= 0 || end + 1 < days) continue;
                 var from = end - days + 1;
                 var cnt = 0;
                 for (var j = from; j <= end; j++) if (chosen[j]) cnt++;
                 var j2 = end;
                 while (cnt < minimum)
                 {
-                    while (j2 >= from && chosen[j2]) j2--;
+                    while (j2 >= from && (chosen[j2] || forced[j2] == 0)) j2--;
                     if (j2 < from) return null;
                     chosen[j2] = true;
                     used++;
@@ -356,8 +368,16 @@ public static class SmartInitialScheduler
     internal static int FallbackShift(Problem p, int i, int j, int restK)
     {
         var can = Enumerable.Range(0, p.K).Where(k => p.CanDo(i, k)).ToArray();
-        foreach (var k in can) if (!p.ExtWishBanned(i, j, k) && !p.DayCapBanned(i, j, k)) return k;
-        foreach (var k in can) if (!p.ExtWishBanned(i, j, k)) return k;
+        // 拡張希望に当たらないもののうち、個人上限 0（上限超過）と日の上限 0（人員過剰）は採点の重みの軽いほうを先に（Android 3.727.125）
+        double Cost(int k) => (!p.MayPlace(i, k) ? ObjectiveWeights.Of("high") : 0.0) + (p.DayCapBanned(i, j, k) ? ObjectiveWeights.Of("covO") : 0.0);
+        int? pick = null; var pickCost = double.MaxValue;
+        foreach (var k in can)
+        {
+            if (p.ExtWishBanned(i, j, k)) continue;
+            var c = Cost(k);
+            if (c < pickCost) { pickCost = c; pick = k; }
+        }
+        if (pick is { } pk) return pk;
         var allowed = p.AllowedShiftsForStaff(i);
         if (allowed.Length > 0) return allowed[0];
         return can.Length > 0 ? can[0] : restK;

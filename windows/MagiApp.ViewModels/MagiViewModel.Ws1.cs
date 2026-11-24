@@ -459,7 +459,7 @@ public sealed partial class MagiViewModel
             case "vio-c1":
                 foreach (var c in p.Cons1)
                 {
-                    if (!p.CanDo(i, c.ShiftIdx) || j + c.Day1 > p.T) continue;
+                    if (!p.C1Applies(i, c.ShiftIdx) || j + c.Day1 > p.T) continue;
                     var z = 0;
                     for (var l = 0; l < c.Day1; l++)
                     {

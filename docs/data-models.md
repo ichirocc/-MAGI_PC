@@ -45,6 +45,7 @@
 | `cons42` | `List<C42Row>` | 群ペア（同日併存不可） |
 | `skillGroups` | `List<Group>` = `[]` | スキルグループ（ユニットとは別の第2分類。担当可否には使わない） |
 | `cons41s` / `cons42s` | `List<C41Row>` / `List<C42Row>` = `[]` | スキル群版の C41 / C42 |
+| `consGap` | `List<GapRow>` = `[]` | シフトの間隔（3.727.109）。`shiftKigou` のかたまりどうしを `days` 日以上空ける（SOFT `gap`）。JSON キー無しは空（書き出しも行が無ければ省く）。CSV の種別は「シフト間隔」 |
 | `cons3w` | `List<C3wRow>` = `[]` | 希望の前日に禁止（3.542.0）。希望(`wishes`)で固定された `wishKigou` の前日セルが `prevKigou` なら違反（HARD `c3w`、c3n と同格）。JSON キー無しは空 |
 | `manualPins` | `List<ManualPin>` = `[]` | 手動固定（backlog #41）。JSON は `[{"staff":i,"day":j,"shift":k}, …]`＝職員 i・日 j をシフト k に固定（1 セル 1 件、重なれば後の行）。最適化器は書き換えない。手の編集で値が追従。採点は読まない。JSON キー無しは空（古いデータはそのまま開く）。保存は構造・制約の編集がなくても常に今の固定を書く（元のファイルに無く今も無ければキーを足さない）。構造編集（職員・シフトの削除/並べ替え・期間の変更）で添字が追従し、消えたシフト・期間外は落とす |
 | `shiftColors` | `Map<String, String>` = `{}` | 表示色の上書き。キー＝シフト記号 → `"#rrggbb"`（**表示のみ・エンジン無影響**。シフトの記号変更でキーを付け替え、シフト削除で取り除く）。特殊キー `"__vio__"` ＝違反色 |
@@ -64,12 +65,15 @@
 | `Shift` | `name: String`, `kigou: String`, `need1: String`, `need2: String`, `role: ShiftRole = None` | need1/need2 = P1/P2 の既定必要数（`""`/null＝要件なし）。`role`＝`ShiftRole{None,Rest}`（3.603.0、休の識別。詳細は下記） |
 | `Group` | `name: String`, `kigou: String` | kigou＝制約で使う記号 |
 | `Staff` | `name: String`, `groupIdx: Int`, `skillIdx: Int = -1`, `id: Int = 0` | **`id` は不変の職員 ID**（1 以上、2026-10-13 利用者決定）。並び替え・改名・同名でも同じ人を指す（相談の対象をこれで結ぶ）。JSON は `"staff": [{"id":1,"name":…}]`。読込（`StateParser.parse`）で、無い・重複（後に出た方）・0 以下の ID に、読み込み順に今の最大値＋1 から振る（古いデータは自動で付く）。保存はどの経路（全体保存・勤務表だけ・制約編集）でも `id` を書く。職員の追加は今の最大値＋1、並び替え・改名・削除・グループの付け替えでは保つ。名簿 CSV の取込で増えた職員も最大値＋1。CSV の列は変えない（ID は CSV に出さない）。`0`＝未採番（コード内で組み立てた値だけ。読込後は常に 1 以上）。groupIdx→ユニット群（担当可否/covU）、skillIdx→スキル群（C41s/C42s 専用）。**`skillIdx = -1` は「未所属」の正規の値で既定**（UI の「(なし)」・3.70.0。既定は backlog#38 で 0 → -1＝職員追加・名簿取込・`skillIdx` の無い JSON は -1、保存済みの明示の値はそのまま）。`ssk[i] == groupIdx(>=0)` が常に偽になるので cons41s/cons42s から安全に外れる。群削除時の再割当も `-1` へ寄せる（3.328.0）。スキル群が 0 件の状態で最初の 1 群を作るときは全員を `-1` にしてから足す（`Ws1Ops.addSkillGroup`、backlog#38） |
+
+> **職員の照合（2026-10-22 ユーザー決定「推奨で」＝Q-06 案 A、M-07 は解決済みとして閉じる）**：JSON・相談・変更案・修正の焦点は `Staff.id` で照合する。CSV（勤務表の重ね合わせ・名簿）は ID 列を持たず氏名で照合し、同姓同名はスキップして報告する（誤って結ばない）。名簿 CSV で改名すると別の職員として追加されるので、改名は編集画面で行う。
 | `Range` | `lo: String`, `hi: String` | 個人×シフトの下限/上限（LimMin/LimMax） |
 | `C1Row` | `day1: String`, `shiftKigou: String`, `day2: String` | 「day1 日窓で shiftKigou を day2 回」 |
 | `C2Row` | `shiftKigou: String`, `count: String` | 個人の shiftKigou 合計の目標 |
 | `C3Row` | `pattern: List<String>` | 連勤の列パターン（記号の並び） |
 | `C41Row` | `groupKigou: String`, `shiftKigou: String`, `l: String`, `u: String` | 群 X のシフト Y を1日に [l,u] 回 |
 | `C42Row` | `g1Kigou: String`, `g2Kigou: String`, `s1Kigou: String`, `s2Kigou: String` | 群 g1 の s1 と 群 g2 の s2 が同日併存不可 |
+| `GapRow` | `shiftKigou: String`, `days: String` | シフトの間隔の 1 行（日数は文字列のまま保存、`Problem` が 1 以上の整数だけ解決。画面は 3 以上で受け付ける） |
 | `C3wRow` | `wishKigou: String`, `prevKigou: String` | 希望で固定した wishKigou の前日に prevKigou を置けない（3.542.0） |
 | `ManualPin` | `staff: Int`, `day: Int`, `shift: Int` | 手動固定 1 件（backlog #41）。添字は `schedule` と同じ |
 
@@ -168,7 +172,7 @@
 
 **希望の試算（S5）**（5）：`lockedWishKeys`（希望で固定したセルのキー＝試算できる希望）,
 `wishSelfConflicts`（希望どうしの衝突）, `wishTrialRev`（試算が終わるたびに進む）, `wishTrialBusy`（試算中の行 `"i,j"`・null＝なし）,
-`wishCancelOutcome`（直近の「希望を外して再作成（元に戻せます）」の結果）
+`wishCancelOutcome`（直近の「希望を外して再作成する」の結果）
 
 **中断**（2）：`interruptedRun`, `interruptedInfo`
 

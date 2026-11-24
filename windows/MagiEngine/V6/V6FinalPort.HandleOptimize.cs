@@ -125,9 +125,19 @@ public static partial class V6FinalPort
         //   生の入力（上限超過 45 のまま）と比べると、外した代償のぶん結果が「悪化」に見えて入力へ戻ってしまう。
         var (cappedInput, cappedCount) = V6NativeOptimizer.ClearCappedCells(state, normInput, quantitativeRangeEval);
         var inputReport = UnifiedViolationChecker.Check(state, cappedInput, quantitativeRangeEval);
-        var capZero = cappedCount > 0
-            ? new CapZeroNotice(cappedCount, UnifiedViolationChecker.Check(state, normInput, quantitativeRangeEval).Hard, inputReport.Hard)
-            : null;
+        CapZeroNotice? capZero = null;
+        if (cappedCount > 0)
+        {
+            int aptZero = 0, dayCap = 0;
+            for (var i = 0; i < baseProblem.S; i++)
+                for (var j = 0; j < baseProblem.T; j++)
+                {
+                    var k = normInput[i][j];
+                    if (!baseProblem.IsCapZeroCell(i, j, k)) continue;
+                    if (baseProblem.MayPlace(i, k)) dayCap++; else if (baseProblem.RangeHi[i][k] != 0) aptZero++;
+                }
+            capZero = new CapZeroNotice(cappedCount, UnifiedViolationChecker.Check(state, normInput, quantitativeRangeEval).Hard, inputReport.Hard, aptZero, dayCap);
+        }
         IReadOnlyList<MirrorLog> cappedLog = capZero is not null
             ? new[] { new MirrorLog(tag: "CapZero", message: capZero.LogLine()) }
             : Array.Empty<MirrorLog>();
@@ -656,7 +666,7 @@ public static partial class V6FinalPort
             ? new List<MirrorLog>
             {
                 new(level: "I", tag: "EarlyStop",
-                    message: $"停滞検知: 改善が無いため早期終了（予算{seconds}s中 主探索を{(tChain1 - startMs) / 1000}sで停止・後処理の終了{(tPost1 - startMs) / 1000}s・" +
+                    message: $"停滞検知: 改善が無いため早期終了（予算{seconds}s中 主探索を{(tChain1 - startMs) / 1000}sで停止{(tChain1 >= searchDeadlineMs - 1_000L ? "＝探索の締切と同時で時間の節約なし" : "")}・後処理の終了{(tPost1 - startMs) / 1000}s・" +
                         $"停滞{wd.StagnationDurationMs / 1000}s無改善" +
                         // [3.375.0] 何回転ぶん空回りしたか。ここは検索終了時のスナップショットでなく
                         //   ログ構築時点の**最新値**を読む（Kotlin原本 stagnationIters.get() -
@@ -666,7 +676,7 @@ public static partial class V6FinalPort
                             : "") +
                         $"・発火種別={(wd.StagnationByOverride ? "猶予上書き" : "通常")}・解は最良を維持）" +
                         (Volatile.Read(ref e0Fired)
-                            ? $"（希望衝突の床に到達＝{(floorUp0 && wishFloorMode == WishFloorMode.Off ? "上限0込み" : WishFloorModeName(wishFloorMode))}{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
+                            ? $"（必須の下限に到達＝希望衝突の床{(wishFloorMode == WishFloorMode.E0B ? "・後処理の研磨を省略" : "")}）"
                             : "") +
                         // [3.281.0/A] c3n構造壁（証明つき）が短い閾値への移行理由だった場合はそれを明示。
                         (wd.StagnationWall
@@ -699,7 +709,14 @@ public static partial class V6FinalPort
         var safeStages = extSafeStages.Where(c => baseProblem.KeepsWishPins(cappedInput, c.Sched)).ToList();
         pinLog.AddRange(extSafeStages.Where(c => !safeStages.Contains(c)).Select(c => new MirrorLog(level: "W", tag: "Sentinel",
             message: $"{c.Label}の盤面が希望固定のセルを希望でない値へ変えていたため候補から外しました（多重防御）")));
-        var bestStage = PickBestStage(safeStages);
+        // 入力・各段が上限 0 の日に置いて必須を減らした盤面なら、それを残した版も候補に（全部外した版より必須が少ないときだけ、Android 3.727.130・3.727.131）。
+        //   日の上限 0 のセルは KeepsExtBan では禁止に数えるので、救済と同じく拡張希望の禁止だけで検査する（KeepsExtWishBan）。
+        var dayCapKept = new List<StageCandidate>();
+        if (V6NativeOptimizer.DayCapKeptBaseline(state, normInput, inputReport, quantitativeRangeEval) is { } ik)
+            dayCapKept.Add(new StageCandidate("入力（上限0の日を保つ）", ik.Schedule, ik.Report));
+        dayCapKept.AddRange(DayCapKeptStages(state, baseProblem, pinSafeStages, quantitativeRangeEval));
+        var bestStage = PickBestStage(safeStages.Concat(dayCapKept.Where(c => baseProblem.HoldsManualPins(c.Sched)
+            && baseProblem.KeepsExtWishBan(cappedInput, c.Sched) && baseProblem.KeepsWishPins(cappedInput, c.Sched))).ToList());
         // [Android 3.727.95] 上限 0 の日を守るせいで残る必須違反は、その日に置いて減らす（必須が減るときだけ）。
         var relief = DayCapHardRelief.Apply(state, bestStage.Sched, bestStage.Report, NowMs() + DayCapReliefMs);
         var finalSched = relief.Schedule;
@@ -962,7 +979,8 @@ public static partial class V6FinalPort
         {
             var nonCovU = wd.BestNonCovUHard;
             var wishReachedEnd = wd.BestHard == wishFloorLogged && (BestWishReached() || WishReachedOn(chained.Schedule, wd.BestHard));
-            var fired = wd.StagnationFired;
+            // 発火しても探索が締切まで走った（発火が締切の直前で、離脱の確認窓のあいだに締切が来た）なら時間は節約されていない＝締切どおりの終わり方（Android 3.727.129）
+            var fired = wd.StagnationFired && tChain1 < searchDeadlineMs - 1_000L;
             // 壁で止まったときだけ最終盤面を診断する（約 20 ms）。残存分析の `wallProof.DiagnoseBoard` とは別＝そちらは変えない。
             bool WallCertified()
             {

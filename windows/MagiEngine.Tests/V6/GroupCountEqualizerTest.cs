@@ -161,4 +161,20 @@ public class GroupCountEqualizerTest
             Assert.Equal(DayCounts(b, 14), DayCounts(r.Schedule, 14));
         }
     }
+
+    [Fact]
+    public void lowersCheckerFairOnRealData()
+    {
+        // ずれは採点の fair と同じ物差し＝押したあとチェッカーの fair が増えない・必須が増えない（Android 3.727.125）
+        foreach (var name in new[] { "golden_state.json", "oct2026_grid_state.json" })
+        {
+            var st = MagiEngine.Model.StateJsonSerializer.Parse(MagiEngine.Tests.Fixtures.FixtureLoader.ReadRaw(name));
+            var b = ScheduleUtil.NormalizeSchedule(st.Schedule.Select(r => r.ToArray()).ToArray(), new Problem(st));
+            var before = UnifiedViolationChecker.Check(st, b);
+            var r = GroupCountEqualizer.Apply(st, b);
+            var after = UnifiedViolationChecker.Check(st, r.Schedule);
+            Assert.True(after.Breakdown.GetValueOrDefault("fair") <= before.Breakdown.GetValueOrDefault("fair"), name);
+            Assert.True(after.Hard <= before.Hard, name);
+        }
+    }
 }

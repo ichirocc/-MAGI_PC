@@ -171,6 +171,21 @@ public static partial class V6SanityPort
     /// reordering it would only obscure that history for no benefit.
     /// </summary>
     /// <summary>[Android 3.727.94] t 日のどの w 日の窓にも r 回以上入れるのに要る最少回数（窓ごとに足りない分を窓の後ろから置く貪欲＝最適）。</summary>
+    /// <summary>職員 1 人の矛盾のコアに期間の制約が入るときの理由の一文（位置まで見た最少回数が上限を超える・固定の日だけで満たせない、Android 3.727.128）。無ければ null。</summary>
+    internal static string? StaffConflictReason(Problem p, IReadOnlyList<ConstraintMus.Item> core, Func<int, string> sym)
+    {
+        foreach (var x in core.OfType<ConstraintMus.WindowRule>().Select(r => r.Shift).Distinct())
+        {
+            var cap = core.OfType<ConstraintMus.RangeCap>().FirstOrDefault(c => c.Shift == x)?.Hi;
+            var withPins = core.Any(it => it is ConstraintMus.WishPin) ? "希望・固定の日付を含めると、" : "";
+            var need = ConstraintMus.WindowNeed(p, x, core);
+            string? r = need is null ? $"希望・固定の日で埋まり、期間の制約「{sym(x)}」を満たせない期間があります"
+                : cap is { } c2 && need > c2 ? $"{withPins}期間の制約を満たすには「{sym(x)}」が最少{need}回要ります。上限は{c2}回です" : null;
+            if (r is not null) return r;
+        }
+        return null;
+    }
+
     internal static int C1MinCount(int t, int w, int r)
     {
         if (w <= 0 || w > t || r <= 0) return 0;
@@ -422,7 +437,8 @@ public static partial class V6SanityPort
             {
                 if (c.Day1 <= 0 || c.Day1 > p.T || c.Day2 <= 0 || c.Day2 > c.Day1) continue;
                 var x = c.ShiftIdx;
-                var members = Enumerable.Range(0, p.S).Count(i => p.CanDo(i, x));
+                // 数えるのは期間の制約が掛かる人（C1Applies＝担当でき個人上限が 0 でない。チェッカーと同じ、Android 3.727.130）
+                var members = Enumerable.Range(0, p.S).Count(i => p.C1Applies(i, x));
                 if (members == 0) continue;
                 var cap = new int[p.T];
                 for (var j = 0; j < p.T; j++)
@@ -480,8 +496,9 @@ public static partial class V6SanityPort
                 var disjoint = p.T / c.Day1;
                 if (disjoint <= 0) continue;
                 var nCanDo = 0;
-                for (var s = 0; s < p.S; s++) if (p.CanDo(s, si)) nCanDo++;
-                if (nCanDo == 0) continue;   // 担当者ゼロは別の案内対象
+                // 要る回数は期間の制約が掛かる人（C1Applies）だけで数える。担当者ゼロは別の案内対象（Android 3.727.130）
+                for (var s = 0; s < p.S; s++) if (p.C1Applies(s, si)) nCanDo++;
+                if (nCanDo == 0) continue;
                 var demand = nCanDo * c.Day2 * disjoint;
                 var sym = Sym(si);
                 if (si == p.RestIdx)
@@ -1153,8 +1170,9 @@ public static partial class V6SanityPort
                 var name = Nm(sc.Staff);
                 var labels = string.Join(" ・ ", sc.Core.Select(ItemLabel));
                 var hints = string.Join(" / ", sc.Core.Take(2).Select(it => $"{RelaxPlace(it)}で{RelaxHint(it)}"));
+                var why = StaffConflictReason(p, sc.Core, Sym);
                 outList.Add(new SettingIssue(IssueKind.Wish, $"{name}さんの希望と条件の組合せ",
-                    $"次の{sc.Core.Count}件は同時に成立しません: {labels}",
+                    $"次の{sc.Core.Count}件は同時に成立しません{(why is null ? "" : $"（{why}）")}: {labels}",
                     $"{Place.Tab}で、いずれか1件を緩めてください（例: {hints}）"));
             }
             // 日別の証明（ConstraintMus の CanServe）はコアで固定されていない人を MayPlace で数える＝上限 0 の人を前提として名指しする。

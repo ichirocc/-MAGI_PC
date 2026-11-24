@@ -97,6 +97,25 @@ public static partial class V6FinalPort
         return res;
     }
 
+    /// <summary>
+    /// 上限 0 のセルを含む段（入力以外）ごとに、日の上限 0 のセルだけ残した盤面（DayCapKeptBaseline）を、全部外した盤面より必須が少ないときだけ
+    /// 候補に足す（Kotlin <c>dayCapKeptStages</c>、Android 3.727.131）。外した盤面を土台に DayCapHardRelief が同じセルを置き直すと、土台が探索の段に偏り
+    /// 後処理の良い盤面を取りこぼしていた（sept2026）。入力は呼び出し側が扱う。手動固定・拡張希望の禁止（日の上限 0 は除く）・希望固定の検査は呼び出し側。
+    /// </summary>
+    internal static List<StageCandidate> DayCapKeptStages(MagiEngine.Model.MagiState state, Problem p,
+        IReadOnlyList<StageCandidate> stages, bool quantitativeRangeEval)
+    {
+        var res = new List<StageCandidate>();
+        foreach (var st in stages.Skip(1))
+        {
+            if (p.CapZeroCells(st.Sched).Count == 0) continue;
+            var cleared = V6NativeOptimizer.ClearCappedCells(state, st.Sched, quantitativeRangeEval).Schedule;
+            var kept = V6NativeOptimizer.DayCapKeptBaseline(state, st.Sched, UnifiedViolationChecker.Check(state, cleared, quantitativeRangeEval), quantitativeRangeEval);
+            if (kept is { } k && p.HoldsManualPins(k.Schedule)) res.Add(new StageCandidate($"{st.Label}（上限0の日を保つ）", k.Schedule, k.Report));
+        }
+        return res;
+    }
+
     /// <summary>拡張希望の禁止を入力から新しく置いた段を外す。入力（先頭）は必ず残す。</summary>
     internal static List<StageCandidate> ExcludeExtBanStages(Problem p, int[][] input, IReadOnlyList<StageCandidate> stages) =>
         stages.Where((st, idx) => idx == 0 || p.KeepsExtBan(input, st.Sched)).ToList();

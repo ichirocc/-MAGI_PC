@@ -45,6 +45,28 @@ public class SeesawRelinkTest
         Assert.False(SeesawRelink.Dominates(a, a));
     }
 
+    /// <summary>交換の候補は必須の件数が本命と同じ盤面だけ（I1、Android <c>tradeoffNeedsTheSameHardCount</c>）。</summary>
+    [Fact]
+    public void tradeoffNeedsTheSameHardCount()
+    {
+        var state = State();
+        var a = UnifiedViolationChecker.Check(state, state.Schedule.Select(r => r.ToArray()).ToArray());
+        var soft = MirrorKeys.All.Where(k => !MirrorKeys.Hard.Contains(k)).ToList();
+        var down = soft.First(k => a.Breakdown.GetValueOrDefault(k) > 0);
+        var up = soft.First(k => k != down);
+        IReadOnlyDictionary<string, int> Moved(params (string F, int D)[] d)
+        {
+            var m = new Dictionary<string, int>(a.Breakdown);
+            foreach (var (f, x) in d) m[f] = a.Breakdown.GetValueOrDefault(f) + x;
+            return m;
+        }
+        Assert.True(SeesawRelink.IsTradeoff(a, a with { Breakdown = Moved((down, -1), (up, 1)) }));
+        var h = MirrorKeys.Hard[0];
+        Assert.False(SeesawRelink.IsTradeoff(a, a with { Breakdown = Moved((down, -1), (up, 1), (h, 1)), Hard = a.Hard + 1 }));
+        Assert.False(SeesawRelink.IsTradeoff(a, a with { Breakdown = Moved((up, 1)) }));
+        Assert.False(SeesawRelink.IsTradeoff(a, a));
+    }
+
     /// <summary>Kotlin と同じ盤面と同じ候補の数を出す（Android の同名テストと同じ指紋）。</summary>
     [Fact]
     public void MatchesKotlinOnSampleFixture()

@@ -3,37 +3,15 @@ using MagiEngine.Model;
 namespace MagiEngine.V6;
 
 /// <summary>
-/// グループ内の回数を、採点に関係なくそろえる（Kotlin <c>GroupCountEqualizer</c>、Android 3.727.115。希望の反映と同じく利用者が押して上書きする操作）。
-/// 手は同じ日・同じ勤務グループの 2 人のシフトの入れ替えだけ。各人の目標（置ける人の平均を個人の下限・上限へ収めた値）からのずれの 2 乗和が
-/// 最も減る入れ替えから当てる。希望・手動固定のマス、置けないシフト、個人の範囲から外れる手、必須違反が増える手は当てない。
-/// 1 組ずつ当てて止まったら、月全体（2 人・3 人・前後 2 日）の入れ替えを焼きなましで探す（<see cref="Anneal"/>、Android 3.727.118）。
+/// グループ内の回数を、採点の fair と同じ物差しでそろえる（Kotlin <c>GroupCountEqualizer</c>、Android 3.727.115・3.727.125。希望の反映と同じく利用者が押して上書きする操作）。
+/// 手は同じ日の 2 人のシフトの入れ替え＝日ごとのシフト別人数は変わらない。1 組ずつの段は同じグループの 2 人だけ、焼きなましは別のグループの人とも入れ替える。
+/// ずれは採点の fair と同じ値（<see cref="ScheduleUtil.FairDevOfBucket"/>）。最も減る入れ替えから当てる。希望・手動固定のマス、置けないシフト、
+/// 個人の範囲から外れる手、必須違反が増える手は当てない。1 組ずつ当てて止まったら、月全体（2 人・3 人・前後 2 日）の入れ替えを焼きなましで探す
+/// （<see cref="Anneal"/>、Android 3.727.118）。回数を固定して組み直す（CP-SAT、Android 3.727.124）は C# に CP-SAT が無いので移植しない。
 /// </summary>
 public static class GroupCountEqualizer
 {
     public sealed record Result(int[][] Schedule, int Swaps, long SpreadBefore, long SpreadAfter);
-
-    private static double[][] Targets(Problem p, int[][] cnt, IReadOnlySet<int>? shifts)
-    {
-        var t = Enumerable.Range(0, p.S).Select(_ => Enumerable.Repeat(double.NaN, p.K).ToArray()).ToArray();
-        foreach (var m in p.GroupMembers)
-        {
-            if (m.Length < 2) continue;
-            for (var k = 0; k < p.K; k++)
-            {
-                if (shifts is not null && !shifts.Contains(k)) continue;
-                var el = m.Where(i => p.MayPlace(i, k)).ToArray();
-                if (el.Length < 2) continue;
-                var mean = el.Sum(i => cnt[i][k]) / (double)el.Length;
-                foreach (var i in el)
-                {
-                    double lo = p.RangeLo[i][k] == int.MinValue ? 0 : p.RangeLo[i][k];
-                    double hi = p.RangeHi[i][k] == int.MaxValue ? double.MaxValue : p.RangeHi[i][k];
-                    t[i][k] = Math.Clamp(mean, lo, Math.Max(lo, hi));
-                }
-            }
-        }
-        return t;
-    }
 
     private const int AnnealIters = 400_000;
     private const int AnnealRuns = 3;
@@ -43,7 +21,7 @@ public static class GroupCountEqualizer
     /// 途中は個人の範囲を外れても必須が増えてもよい（罰として数える）が、採るのは「各 (職員,シフト) の範囲からの外れ量が元以下・
     /// 必須が元以下」の盤面のうち、目標からのずれがいちばん小さいものだけ。よりそろった盤面が見つかれば <paramref name="work"/> を書き換えて true。
     /// </summary>
-    private static bool Anneal(Problem p, int[][] work, int[][] cnt0, int[]?[][] elig, int iters, long seed)
+    private static bool Anneal(Problem p, int[][] work, int[][] cnt0, int[]?[][] elig, int iters, long seed, bool fastCool)
     {
         // 手は 1 手ごとに無作為に作る（全部を先に並べると 30 人・31 日で数十万件になる）: 2 人の同じ日の入れ替え・3 人の回し・
         // 同じ 2 人の前後 2 日をまとめた入れ替えを等しい割合で。1 人目はグループから、相手は半分は同じグループ・半分は誰でも
@@ -61,7 +39,7 @@ public static class GroupCountEqualizer
         for (var g = 0; g < p.GroupMembers.Length; g++) foreach (var i in p.GroupMembers[g]) groupOf[i] = g;
         int Excess(int i, int k, int n) => Math.Max(0, Out(i, k, n) - out0[i][k]);   // 範囲の外れ量のうち元を超えた分
         var devCur = 0.0;
-        for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) if (elig[g][k] is { } el0) devCur += GroupDev(p, el0, k, cnt);
+        for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) if (elig[g][k] is not null) devCur += GroupDev(p, g, k, cnt);
         int[] tg = new int[24], tk = new int[24];   // この手で変わる (グループ,シフト)
         var exCur = 0;
         var hardCur = 0;   // 元からの必須の増減
@@ -144,9 +122,9 @@ public static class GroupCountEqualizer
             }
             if (nt > 0)
             {
-                for (var q = 0; q < nt; q++) dDev -= GroupDev(p, elig[tg[q]][tk[q]]!, tk[q], cnt);
+                for (var q = 0; q < nt; q++) dDev -= GroupDev(p, tg[q], tk[q], cnt);
                 for (var e = 0; e < nc; e++) cnt[ci2[e]][ck[e]] += cd[e];
-                for (var q = 0; q < nt; q++) dDev += GroupDev(p, elig[tg[q]][tk[q]]!, tk[q], cnt);
+                for (var q = 0; q < nt; q++) dDev += GroupDev(p, tg[q], tk[q], cnt);
                 for (var e = 0; e < nc; e++) cnt[ci2[e]][ck[e]] -= cd[e];
             }
             // その場で当てて、必須の差は変わった日だけ数える（同じ日の並べ替え＝日の人数は不変。2 日は 1 日ずつ当てて足す）
@@ -184,6 +162,7 @@ public static class GroupCountEqualizer
                         cur[who[t]][d] = o[t];
                     }
                 }
+            if (fastCool) temp *= cool;   // 速く冷やす＝有効な手で 2 回（Android 3.727.125）
         }
         if (best is null) return false;
         for (var i = 0; i < p.S; i++) Array.Copy(best[i], work[i], p.T);
@@ -200,34 +179,21 @@ public static class GroupCountEqualizer
             var m = p.GroupMembers[g];
             return Enumerable.Range(0, p.K).Select(k =>
             {
-                if (m.Length < 2 || (shifts is not null && !shifts.Contains(k))) return null;
+                if (m.Length < 2 || (shifts is not null && !shifts.Contains(k)) || !p.Bucket[g].Contains(k)) return null;
                 var el = m.Where(i => p.MayPlace(i, k)).ToArray();
                 return el.Length >= 2 ? el : null;
             }).ToArray();
         }).ToArray();
 
-    /// <summary>グループ g・シフト k のずれ＝各人の「いまの平均を個人の下限・上限へ収めた値」からの 2 乗和（Kotlin <c>groupDev</c>）。</summary>
-    private static double GroupDev(Problem p, int[] el, int k, int[][] cnt)
-    {
-        var sum = 0;
-        foreach (var i in el) sum += cnt[i][k];
-        var mean = (double)sum / el.Length;
-        var d = 0.0;
-        foreach (var i in el)
-        {
-            double lo = p.RangeLo[i][k] == int.MinValue ? 0 : p.RangeLo[i][k];
-            double hi = p.RangeHi[i][k] == int.MaxValue ? double.MaxValue : p.RangeHi[i][k];
-            var e = cnt[i][k] - Math.Clamp(mean, lo, Math.Max(lo, hi));
-            d += e * e;
-        }
-        return d;
-    }
+    /// <summary>グループ g・シフト k のずれ＝採点の fair と同じ値（Kotlin <c>groupDev</c>、Android 3.727.125）。</summary>
+    private static double GroupDev(Problem p, int g, int k, int[][] cnt) =>
+        p.FairDevOfBucket(g, k, x => cnt[x][k], members: false).Total;
 
     private static long TotalDev(Problem p, int[]?[][] elig, int[][] cnt)
     {
         var d = 0.0;
-        for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) if (elig[g][k] is { } el) d += GroupDev(p, el, k, cnt);
-        return (long)Math.Round(d * 100, MidpointRounding.AwayFromZero);
+        for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) if (elig[g][k] is not null) d += GroupDev(p, g, k, cnt);
+        return (long)Math.Round(d, MidpointRounding.AwayFromZero);
     }
 
     /// <param name="shifts">そろえるシフト（null＝全部、Android 3.727.116）。ほかのシフトの回数は入れ替えで動き得るが、個人の下限・上限は守る。</param>
@@ -237,10 +203,9 @@ public static class GroupCountEqualizer
         var p = new Problem(state);
         var work = ScheduleUtil.NormalizeSchedule(schedule, p);
         var cnt = Counts(p, work);
-        var tgt = Targets(p, cnt, shifts);
         var elig = Eligible(p, shifts);
         var before = TotalDev(p, elig, cnt);
-        if (tgt.All(row => row.All(double.IsNaN))) return new Result(work, 0, before, before);   // そろえる (職員,シフト) が無い
+        if (elig.All(row => row.All(e => e is null))) return new Result(work, 0, before, before);   // そろえる (グループ,シフト) が無い
         bool Movable(int i, int j) => !p.WishLocked(i, j);   // 希望固定と手動固定
         bool RangeOk(int i, int k, int d)
         {
@@ -250,16 +215,26 @@ public static class GroupCountEqualizer
             var n0 = cnt[i][k];
             return Out(n0 + d) <= Out(n0);
         }
-        double Dsq(int i, int k, int d)
+        var groupOf = new int[p.S]; Array.Fill(groupOf, -1);
+        for (var g = 0; g < p.GroupMembers.Length; g++) foreach (var i in p.GroupMembers[g]) groupOf[i] = g;
+        var devNow = Enumerable.Range(0, elig.Length).Select(_ => new double[p.K]).ToArray();   // 1 巡ごとのグループ×シフトのずれ（入れ替え前）
+        // a・b（同じグループ）の同じ日の入れ替え x↔y で、そのグループの x・y のずれ（fair）がどれだけ変わるか（負＝そろう）
+        double SwapGain(int a, int b, int x, int y)
         {
-            var t = tgt[i][k];
-            if (double.IsNaN(t)) return 0.0;
-            var a = cnt[i][k] - t; var b = a + d;
-            return b * b - a * a;
+            var g = groupOf[a];
+            if (g < 0) return 0.0;
+            var ks = new[] { x, y }.Where(k => elig[g][k] is not null).ToArray();
+            if (ks.Length == 0) return 0.0;
+            var bef = 0.0; foreach (var k in ks) bef += devNow[g][k];
+            cnt[a][x]--; cnt[a][y]++; cnt[b][x]++; cnt[b][y]--;
+            var aft = 0.0; foreach (var k in ks) aft += GroupDev(p, g, k, cnt);
+            cnt[a][x]++; cnt[a][y]--; cnt[b][x]--; cnt[b][y]++;
+            return aft - bef;
         }
         var swaps = 0;
         while (swaps < maxSwaps)
         {
+            for (var g = 0; g < elig.Length; g++) for (var k = 0; k < p.K; k++) devNow[g][k] = elig[g][k] is not null ? GroupDev(p, g, k, cnt) : 0.0;
             var cands = new List<(double Gain, int A, int B, int D)>();
             foreach (var m in p.GroupMembers)
             {
@@ -272,7 +247,7 @@ public static class GroupCountEqualizer
                         int x = work[a][d], y = work[b][d];
                         if (x == y || x < 0 || x >= p.K || y < 0 || y >= p.K || !Movable(a, d) || !Movable(b, d)) continue;
                         if (!p.MayPlaceAt(a, d, y) || !p.MayPlaceAt(b, d, x)) continue;
-                        var gain = Dsq(a, x, -1) + Dsq(a, y, 1) + Dsq(b, x, 1) + Dsq(b, y, -1);
+                        var gain = SwapGain(a, b, x, y);
                         if (gain > -1e-9) continue;
                         if (!RangeOk(a, x, -1) || !RangeOk(a, y, 1) || !RangeOk(b, x, 1) || !RangeOk(b, y, -1)) continue;
                         cands.Add((gain, a, b, d));
@@ -294,13 +269,15 @@ public static class GroupCountEqualizer
             }
             if (!done) break;
         }
-        // 焼きなましは乱数で行き着く先が揺れるので、種を変えて AnnealRuns 回走らせ、いちばんそろった盤面を採る
+        // 焼きなましは乱数で行き着く先が揺れるので、種を変えて AnnealRuns 回走らせ、いちばんそろった盤面を採る。冷やし方は 2 通り
+        //   （速く冷やす＝有効な手で 2 回、ゆっくり＝1 手 1 回）を両方走らせる。速いほうを先に走らせ同点は先を残す（Android 3.727.125）。
         int[][]? bestRun = null; var bestRunDev = TotalDev(p, elig, cnt);
         if (annealIters > 0)
             for (var run = 0; run < AnnealRuns; run++)
+            foreach (var fastCool in new[] { true, false })
             {
                 var w = work.Copy2D();
-                if (!Anneal(p, w, cnt, elig, annealIters, seed + run)) continue;
+                if (!Anneal(p, w, cnt, elig, annealIters, seed + run, fastCool)) continue;
                 var dv = TotalDev(p, elig, Counts(p, w));
                 if (dv < bestRunDev) { bestRunDev = dv; bestRun = w; }
             }

@@ -110,6 +110,20 @@ public static class ScheduleUtil
     public static bool KeepsExtBan(this Problem p, int[][] baseSched, int[][] cand) => !p.HasExtBan || p.ExtBanNewCells(baseSched, cand).Count == 0;
 
     /// <summary>[#41] 盤面の手動固定セルがどれも固定の値か（最終番兵）。</summary>
+    /// <summary>拡張希望の禁止だけ（日の上限 0 は数えない）を baseSched から新しく置いていないか。日の上限 0 のセルを残す盤面
+    /// （DayCapHardRelief・DayCapKeptBaseline）の採否に使う＝救済と同じ基準（Android 3.727.131）。</summary>
+    public static bool KeepsExtWishBan(this Problem p, int[][] baseSched, int[][] cand)
+    {
+        if (p.ExtBan.Flat is null) return true;
+        for (var i = 0; i < Math.Min(p.S, Math.Min(baseSched.Length, cand.Length)); i++)
+            for (var j = 0; j < Math.Min(p.T, Math.Min(baseSched[i].Length, cand[i].Length)); j++)
+            {
+                var k = cand[i][j];
+                if (k != baseSched[i][j] && p.ExtWishBanned(i, j, k)) return false;
+            }
+        return true;
+    }
+
     public static bool HoldsManualPins(this Problem p, int[][] s)
     {
         if (!p.HasPins) return true;

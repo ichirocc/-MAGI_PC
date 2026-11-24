@@ -248,4 +248,78 @@ public class ConstraintMusTest
         Assert.Empty(ConstraintMus.AnalyzeStaffConflicts(new Problem(st)));
         Assert.Empty(ConstraintMus.AnalyzeDayConflicts(new Problem(st)));
     }
+
+    /// <summary>31 日・休の上限・「休 7日で2回以上」。休の希望 4・5・12〜14 日と、別のシフトの希望 10・11 日（1 始まり、Android 3.727.128）。</summary>
+    private static MagiState RestWindowState(string restHi) => State(
+        days: 31,
+        shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
+        wishes: new Dictionary<string, int> { ["0,3"] = 0, ["0,4"] = 0, ["0,11"] = 0, ["0,12"] = 0, ["0,13"] = 0, ["0,9"] = 1, ["0,10"] = 1 },
+        staffRange: new Dictionary<string, Range> { ["0,0"] = new Range(restHi, restHi) },
+        cons1: new List<C1Row> { new("7", "休", "2") });
+
+    [Fact]
+    public void windowMinimumCountsWishPositions()
+    {
+        // 位置を見ない最少は 8 回（上限 9 に収まる）。希望の日付を含めると 10 回要る＝上限 9 と期間の制約と希望は両立しない。
+        Assert.Equal(8, SmartInitialScheduler.MinDaysForFullCompliance(31, new List<(int, int)> { (7, 2) }));
+        var p = new Problem(RestWindowState("9"));
+        var core = Assert.Single(ConstraintMus.AnalyzeStaffConflicts(p)).Core;
+        Assert.Contains(core, it => it is ConstraintMus.RangeCap { Shift: 0, Hi: 9 });
+        Assert.Contains(core, it => it is ConstraintMus.WindowRule { Shift: 0 });
+        Assert.Contains(core, it => it is ConstraintMus.WishPin);
+        Assert.Equal("希望・固定の日付を含めると、期間の制約を満たすには「休」が最少10回要ります。上限は9回です",
+            V6SanityPort.StaffConflictReason(p, core, k => k == 0 ? "休" : "X"));
+        // 全部の希望を見ても 10 回＝上限 10 なら両立する（誤検知しない）
+        var allPins = Enumerable.Range(0, 31).Where(j => p.Wish[0][j] >= 0).Select(j => (ConstraintMus.Item)new ConstraintMus.WishPin(0, j, p.Wish[0][j])).ToList();
+        Assert.Equal(10, ConstraintMus.WindowNeed(p, 0, new List<ConstraintMus.Item> { new ConstraintMus.WindowRule(0, 7, 2) }.Concat(allPins).ToList()));
+        Assert.Empty(ConstraintMus.AnalyzeStaffConflicts(new Problem(RestWindowState("10"))));
+    }
+
+    [Fact]
+    public void windowBlockedByOtherWishesIsAConflict()
+    {
+        // 「休 4日で1回以上」の 4 日がすべて別のシフトの希望＝その窓は満たせない（上限が無くても矛盾）
+        var st = State(
+            days: 10,
+            shifts: new List<Shift> { new("休", "休", "", "", ShiftRole.Rest), new("X", "X", "", "") },
+            wishes: new Dictionary<string, int> { ["0,2"] = 1, ["0,3"] = 1, ["0,4"] = 1, ["0,5"] = 1 },
+            cons1: new List<C1Row> { new("4", "休", "1") });
+        var p = new Problem(st);
+        var sc = Assert.Single(ConstraintMus.AnalyzeStaffConflicts(p));
+        Assert.Single(sc.Core.OfType<ConstraintMus.WindowRule>());
+        Assert.Equal(4, sc.Core.OfType<ConstraintMus.WishPin>().Count());
+        Assert.Null(ConstraintMus.WindowNeed(p, 0, sc.Core));
+    }
+
+    /// <summary>固定の日つきの総当たり: forced 1 の日は必ず対象・0 の日は対象にしない、全窓を満たす最小日数（無ければ null）。</summary>
+    private static int? OracleFixed(int t, List<(int Days, int Minimum)> rules, int[] forced)
+    {
+        int? best = null;
+        for (var mask = 0; mask < 1 << t; mask++)
+        {
+            var bad = false;
+            for (var j = 0; j < t; j++) { var on = ((mask >> j) & 1) == 1; if ((forced[j] == 1 && !on) || (forced[j] == 0 && on)) bad = true; }
+            if (bad) continue;
+            var pc = System.Numerics.BitOperations.PopCount((uint)mask);
+            if (best is { } b && pc >= b) continue;
+            var ok = rules.All(r => r.Days < 1 || r.Days > t || r.Minimum <= 0 ||
+                Enumerable.Range(0, t - r.Days + 1).All(j0 => Enumerable.Range(j0, r.Days).Count(x => ((mask >> x) & 1) == 1) >= r.Minimum));
+            if (ok) best = pc;
+        }
+        return best;
+    }
+
+    [Fact]
+    public void fixedDaysMatchBruteForceOracle()
+    {
+        // 希望・手動固定の日付の位置まで見た最少日数（上限×期間の制約の証明が読む）も厳密であること（Kotlin MinDaysForFullComplianceTest）
+        var rnd = new JavaRandom(7);
+        for (var n = 0; n < 4000; n++)
+        {
+            var t = 1 + rnd.NextInt(12);
+            var rules = Enumerable.Range(0, 1 + rnd.NextInt(2)).Select(_ => { var w = 1 + rnd.NextInt(t); return (w, 1 + rnd.NextInt(w)); }).ToList();
+            var forced = Enumerable.Range(0, t).Select(_ => rnd.NextInt(4) switch { 0 => 1, 1 => 0, _ => -1 }).ToArray();
+            Assert.Equal(OracleFixed(t, rules, forced), SmartInitialScheduler.MinDaysWithFixed(t, rules, forced));
+        }
+    }
 }
