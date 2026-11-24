@@ -50,9 +50,12 @@ public static partial class V6NativeOptimizer
             },
             cancellationToken).ConfigureAwait(false);
         var repaired = Hf67HardRepair(state, res.Schedule, new JavaRandom(ActualSeed(options.Seed) ^ 0x5L), options.QuantitativeRangeEval);
-        // 拡張希望の禁止へ置いた修復は採らない
-        var outSched = p.KeepsExtBan(res.Schedule, repaired.Schedule) ? repaired.Schedule : res.Schedule;
-        var report = UnifiedViolationChecker.Check(state, outSched, options.QuantitativeRangeEval);
+        // 拡張希望の禁止へ置いた修復は採らない。修復は SA の結果より良いときだけ採る（入口の hf67 と同じ keep-best、Android 3.727.132）
+        var saReport = UnifiedViolationChecker.Check(state, res.Schedule, options.QuantitativeRangeEval);
+        var repairedReport = UnifiedViolationChecker.Check(state, repaired.Schedule, options.QuantitativeRangeEval);
+        var repairAdopted = p.KeepsExtBan(res.Schedule, repaired.Schedule) && !UnifiedViolationChecker.BetterReport(saReport, repairedReport);
+        var outSched = repairAdopted ? repaired.Schedule : res.Schedule;
+        var report = repairAdopted ? repairedReport : saReport;
         // [退化防止番兵 / 実機ログ起因, Kotlin原本コメント] runAlns と同じ入力比keep-best。従来 runV5 だけ
         //   番兵が無く、SA+修復が入力より悪化した結果をそのまま返していた。RSI++ は Phase1 Seed に runV5
         //   を使い、以降の各段は前段比 keep-best のため、Phase1 の劣化が全チェーンへ伝播し、最後に

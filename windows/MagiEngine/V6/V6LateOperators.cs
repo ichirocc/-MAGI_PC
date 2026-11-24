@@ -396,7 +396,8 @@ public static class V6LateOperators
                     var dKd = -1;
                     for (var kk = 0; kk < k; kk++)
                     {
-                        if (ssn[i1][kk] < p.RangeLo[i1][kk]) { dKd = kk; break; }
+                        // 不足しているシフトは置けるもの（MayPlace）だけ数える（Android 3.727.132）
+                        if (ssn[i1][kk] < p.RangeLo[i1][kk] && p.MayPlace(i1, kk)) { dKd = kk; break; }
                     }
                     if (dKd >= 0)
                     {
