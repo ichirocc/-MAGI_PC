@@ -559,12 +559,11 @@ public sealed partial class EditView : UserControl
                 var b = new Button
                 {
                     // 選んだ＝この日に入れないシフト: 色を薄くし記号に取り消し線（枠の色だけでは選んだかどうか見分けにくい、Android 3.727.110）
-                    Content = new TextBlock
+                    Content = StrikeIf(sel, new TextBlock
                     {
                         Text = (sel ? "× " : "") + ui.ShiftSymbols[k], FontWeight = sel ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
                         Foreground = sel ? (Brush)Application.Current.Resources["MagiOnBackgroundBrush"] : new SolidColorBrush(fg),
-                        TextDecorations = sel ? Windows.UI.Text.TextDecorations.Strikethrough : Windows.UI.Text.TextDecorations.None,
-                    },
+                    }),
                     Background = new SolidColorBrush(sel ? Windows.UI.Color.FromArgb(0x59, bg.R, bg.G, bg.B) : bg), MinWidth = 72, MinHeight = 52,
                     BorderThickness = new Thickness(sel ? 3 : 2),
                     BorderBrush = sel ? (Brush)Application.Current.Resources["MagiPrimaryBrush"] : new SolidColorBrush(Colors.Gray),
@@ -2853,4 +2852,12 @@ public sealed partial class EditView : UserControl
     // [HomeView.xaml.cs と同じ手筋] コードビハインドで組む TextBlock の意味階層スタイル参照。
     // private のためファイルを跨いで共有できず、同じ1行ヘルパーをこのファイルにも置く。
     private static Style StyleOf(string key) => (Style)Application.Current.Resources[key];
+
+    /// <summary>取り消し線を付ける。<c>Windows.UI.Text.TextDecorations</c> は Microsoft.WinUI と Windows SDK の両方にあり型名を書くと CS0433 になるので、
+    /// 型名を書かずに値（Strikethrough＝2）を足す。</summary>
+    private static TextBlock StrikeIf(bool on, TextBlock tb)
+    {
+        if (on) tb.TextDecorations += 2;
+        return tb;
+    }
 }
