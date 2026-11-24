@@ -108,7 +108,7 @@ public sealed partial class SettingsView : UserControl
             C3nWallDeepCheckToggle.IsEnabled = !ui.Running;
             NormalStallCombo.SelectedIndex = System.Array.IndexOf(NormalStallFractions, MagiEngine.V6.PolishGate.NormalStallFraction);
             NormalStallCombo.IsEnabled = !ui.Running;
-            WishFloorCombo.SelectedIndex = (int)MagiEngine.V6.PolishGate.WishConflictFloorMode;
+            WishFloorCombo.SelectedIndex = MagiEngine.V6.PolishGate.WishConflictFloorMode == MagiEngine.V6.WishFloorMode.E0B ? 1 : 0;
             WishFloorCombo.IsEnabled = !ui.Running;
             ObjectiveMethodCombo.SelectedIndex = MagiEngine.V6.ObjectiveWeights.Method == MagiEngine.V6.ObjectiveMethod.Priority ? 1 : 0;
             ObjectiveMethodCombo.IsEnabled = !ui.Running;
@@ -771,7 +771,7 @@ public sealed partial class SettingsView : UserControl
     private void OnWishFloorChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_syncingFromModel || WishFloorCombo.SelectedIndex < 0) return;
-        MagiEngine.V6.PolishGate.WishConflictFloorMode = (MagiEngine.V6.WishFloorMode)WishFloorCombo.SelectedIndex;
+        MagiEngine.V6.PolishGate.WishConflictFloorMode = WishFloorCombo.SelectedIndex == 1 ? MagiEngine.V6.WishFloorMode.E0B : MagiEngine.V6.WishFloorMode.Off;
     }
 
     private void OnObjectiveMethodChanged(object sender, SelectionChangedEventArgs e)

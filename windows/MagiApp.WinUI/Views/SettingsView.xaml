@@ -112,13 +112,13 @@
                                    Text="必須が残っているとき、改善がこの長さ（組む時間に対する割合）止まったら終えます。短いほど早く終わり、粘りは減ります" />
                     </StackPanel>
                     <StackPanel Spacing="2">
-                        <ComboBox x:Name="WishFloorCombo" Header="希望どうしの衝突で必須が止まったら" SelectionChanged="OnWishFloorChanged" HorizontalAlignment="Stretch">
-                            <ComboBoxItem Content="打ち切らない（既定）" />
-                            <ComboBoxItem Content="打ち切る" />
-                            <ComboBoxItem Content="打ち切って仕上げも省く" />
+                        <!-- [Android 3.727.129] 床に届いたら短い閾値で終えるのは常に有効（FloorCountsUpperZero＝true で wishOn は常に真）＝Off と E0A は同じ動き。違いのある 2 つだけ出す。 -->
+                        <ComboBox x:Name="WishFloorCombo" Header="必須がこれ以上減らないと分かったら" SelectionChanged="OnWishFloorChanged" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="早めに終える（既定）" />
+                            <ComboBoxItem Content="早めに終えて仕上げも省く" />
                         </ComboBox>
                         <TextBlock TextWrapping="Wrap" Style="{StaticResource MagiBodySmallTextStyle}" Opacity="0.8"
-                                   Text="希望どうしがぶつかって必須がこれ以上減らないとき、そこで打ち切るか。画面を開いて作るときだけ効き、閉じている間の作成には効きません（測定中・既定は打ち切らない）" />
+                                   Text="希望どうしの衝突で、必須がこれ以上減らないと分かったら、いつも早めに終えます。「仕上げも省く」は後処理の研磨も省いて、さらに早く返します（画面を開いて作るときだけ・測定中）" />
                     </StackPanel>
                     <!-- [Android 3.727.37/3.727.40] 直す順番（ObjectiveWeights.Method、アプリの既定＝優先順位）。保存しない・実行中は操作不可。 -->
                     <StackPanel Spacing="2">
