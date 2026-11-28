@@ -27,6 +27,70 @@ public static class SmartInitialScheduler
     /// <summary>③〜⑤で、置くとシフトの間隔（gap）の不足が 1 日増えるごとに足す罰（Kotlin <c>GAP_PENALTY</c>、Android 3.727.110）。</summary>
     private const int GapPenalty = 10;
 
+    /// <summary>③の前に、間隔の規則があり日ごとの必要人数があるシフトを月全体で先に配る（<see cref="DealSpaced"/>、Kotlin <c>spacedDeal</c>）。
+    /// 既定 true（Android 3.727.138）。</summary>
+    public static volatile bool SpacedDeal = true;
+
+    /// <summary>間隔で配る／詰めて配る（Kotlin <c>dealSpaced</c>、Android 3.727.137〜138）。日を順に見て、シフト X の必要人数が足りない日ごとに
+    /// 空いている職員から 1 人ずつ選ぶ: 前日も X でブロックを続けられる人（推奨・必須の並びの先頭の X の連続まで）を先に、次に前の X から
+    /// 間隔 N 日以上空いた人のうち、翌日がもう休の人→翌日が空きの人の順に、空きの長い人。選べる人がいなければ③に任せる。</summary>
+    private static int DealSpaced(Problem p, int[][] schedule, int restK)
+    {
+        var dealt = 0;
+        var counts = ScheduleUtil.CountMatrix(p, schedule);
+        var cov = ScheduleUtil.Coverage(p, schedule);
+        foreach (var g in p.ConsGap)
+        {
+            int x = g.ShiftIdx;
+            if (x < 0 || x >= p.K || g.Days <= 0) continue;
+            var blockMax = 1;
+            foreach (var c in p.Cons3.Concat(p.Cons3m))
+            {
+                var r = 0;
+                while (r < c.Seq.Length && c.Seq[r] == x) r++;
+                if (r > blockMax) blockMax = r;
+            }
+            for (int j = 0; j < p.T; j++)
+            {
+                while (p.CovUCell(x, j, cov[j][x]) > 0)
+                {
+                    int best = -1; long bestKey = long.MaxValue;
+                    for (int i = 0; i < p.S; i++)
+                    {
+                        if (schedule[i][j] >= 0 || !p.MayPlace(i, x) || p.ExtBanned(i, j, x)) continue;
+                        int hi = p.RangeHi[i][x];
+                        if (hi != int.MaxValue && counts[i][x] >= hi) continue;
+                        if (p.MakesForbiddenRun(schedule, i, j, x)) continue;
+                        int last = -1;
+                        for (int d = j - 1; d >= 0; d--) if (schedule[i][d] == x) { last = d; break; }
+                        int next = -1;
+                        for (int d = j + 1; d < p.T; d++) if (schedule[i][d] == x) { next = d; break; }
+                        if (next > j + 1 && next - j < g.Days) continue;
+                        long key;
+                        if (last == j - 1)
+                        {
+                            int run = 0;
+                            for (int d = j - 1; d >= 0 && schedule[i][d] == x; d--) run++;
+                            if (run >= blockMax) continue;
+                            key = 0L;
+                        }
+                        else
+                        {
+                            if (last >= 0 && j - last < g.Days) continue;
+                            long rest = last < 0 ? p.T + 1 : j - last;
+                            long tail = j + 1 >= p.T ? 0L : schedule[i][j + 1] == restK ? 0L : schedule[i][j + 1] < 0 ? 1L : 2L;
+                            key = tail * 10_000_000L + 1_000_000L - rest * 1_000L + counts[i][x];
+                        }
+                        if (key < bestKey) { bestKey = key; best = i; }
+                    }
+                    if (best < 0) break;
+                    schedule[best][j] = x; counts[best][x]++; cov[j][x]++; dealt++;
+                }
+            }
+        }
+        return dealt;
+    }
+
     /// <summary>(i,j) に k を置いたときに増える gap の不足日数（空きセル -1 は k でない扱い）。</summary>
     private static int GapIncrease(Problem p, int[] row, int i, int j, int k)
     {
@@ -109,6 +173,7 @@ public static class SmartInitialScheduler
 
         // ③ 日別必要人数(need1/need2=covUCellのOR)。不足の大きいシフトから、超過/回数の少ない職員を
         //   優先して埋める（GreedyMirrorSchedulerの充足フィルと同一ロジック）。
+        if (SpacedDeal && p.ConsGap.Count > 0) DealSpaced(p, schedule, restK);
         var counts = ScheduleUtil.CountMatrix(p, schedule);
         var cov = ScheduleUtil.Coverage(p, schedule);
         for (int j = 0; j < p.T; j++)
